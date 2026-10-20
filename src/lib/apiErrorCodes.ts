@@ -40,6 +40,14 @@ export const API_ERROR_CODES = [
   // §112). Nommé ici pour que le lecteur serveur, qui traduit la réponse de sa négociation par son
   // code (`apiErrorText`), dise la vraie raison à l'invité au lieu de « lecture impossible ».
   "share-streams",
+  // Le téléchargement hors ligne (revue de sécurité du 20/10/2026, `offline/jobs.ts`) : cinquante
+  // versions en vol par compte, et le droit Jellyfin « Autoriser les téléchargements » exigé d'un
+  // compte ordinaire. Sans code, la fenêtre citait le message français à tous les comptes.
+  "offline-limit",
+  "offline-forbidden",
+  // Un sixième transcodage en même temps sur un compte, refusé par le relais de flux
+  // (`transcodeBudget.ts`, 20/10/2026, revue de sécurité).
+  "transcode-limit",
 ] as const;
 
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];

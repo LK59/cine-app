@@ -499,7 +499,8 @@ naming the services behind; signed in, it shows every capability.
 mkdir cine-app && cd cine-app
 curl -o docker-compose.yml https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.example.yml
 docker compose up -d
-# then open http://<server>:3000 — the setup assistant asks for the rest
+# then open http://localhost:3000 on the server (or through an SSH tunnel) — the setup assistant
+# asks for the rest, starting with the one-time setup code printed in `docker compose logs cine-app`
 ```
 
 You need Docker, a running Jellyfin and a free TMDB key; Radarr and/or Sonarr are optional. You do
@@ -508,7 +509,7 @@ administrator account, asks for Jellyfin and TMDB (and offers Radarr, Sonarr and
 secrets are generated on first launch.
 Everything else is set later in **Management → Configuration**.
 
-The app listens on port `3000`; put an HTTPS reverse proxy in front of it (the guide has Nginx
+The example publishes port `3000` on the server's loopback only; put an HTTPS reverse proxy in front of it (the guide has Nginx
 Proxy Manager, Caddy and Traefik examples). Updating is `docker compose pull && docker compose up
 -d` — migrations run at startup.
 

@@ -45,10 +45,10 @@ const SESSIONS: Record<string, unknown> = {
 };
 vi.mock("@/lib/session", () => ({ verifySessionFull: async (token: string) => SESSIONS[token] ?? null }));
 
-function req(who: string, init: { form?: FormData; json?: unknown; url?: string } = {}): NextRequest {
+function req(who: string, init: { form?: FormData; json?: unknown; url?: string; headers?: Record<string, string> } = {}): NextRequest {
   return {
     cookies: { get: () => ({ value: who }) },
-    headers: new Headers({ "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Mobile/15E148 Safari/604.1" }),
+    headers: new Headers({ "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Mobile/15E148 Safari/604.1", ...init.headers }),
     nextUrl: new URL(init.url ?? "https://cine.example/api/reports"),
     formData: async () => init.form ?? new FormData(),
     json: async () => init.json ?? null,
@@ -381,6 +381,26 @@ describe("signalements — images", () => {
     expect(shown.headers.get("content-type")).toBe("image/webp");
     const other = await GET(req("sarah", { url: `https://cine.example/api/reports/${body.id}/images/${id}` }), imageParams(body.id, id));
     expect(other.status).toBe(404);
+  });
+
+  // Revue de sécurité du 20/10/2026 : gardée un an `immutable`, la capture se resservait depuis le
+  // cache du navigateur à un autre compte du même appareil, sans contrôle d'accès. Revalidée à
+  // chaque fois — un 304 sans corps pour qui y a droit, le refus pour les autres, même étiquette en main.
+  it("ne laisse pas la capture au cache du navigateur : revalidée, et le contrôle d'accès passe avant le 304", async () => {
+    const { default: sharp } = await import("sharp");
+    const png = await sharp({ create: { width: 10, height: 10, channels: 3, background: "#224488" } }).png().toBuffer();
+    const { body } = await create("lucas", AUDIO, { images: [new File([png], "capture.png", { type: "image/png" })] });
+    const { GET } = await import("@/app/api/reports/[id]/images/[imageId]/route");
+    const id = (body.images as { id: number }[])[0].id;
+    const url = `https://cine.example/api/reports/${body.id}/images/${id}`;
+    const shown = await GET(req("lucas", { url }), imageParams(body.id, id));
+    expect(shown.headers.get("cache-control")).toBe("private, no-cache");
+    const etag = shown.headers.get("etag");
+    expect(etag).toBeTruthy();
+    const again = await GET(req("lucas", { url, headers: { "if-none-match": etag! } }), imageParams(body.id, id));
+    expect(again.status).toBe(304);
+    const stranger = await GET(req("sarah", { url, headers: { "if-none-match": etag! } }), imageParams(body.id, id));
+    expect(stranger.status).toBe(404);
   });
 
   it("refuse ce qui n'est pas une image", async () => {

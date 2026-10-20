@@ -25,6 +25,18 @@ export async function GET(req: NextRequest, { params }: Params) {
   const file = reportFilePath(report.id, original ? image.original : image.file!);
   if (!file || !fs.existsSync(file)) return reportError("notFound", 404, "Image introuvable");
   const name = (image.originalName ?? "capture").replace(/[^\w.\- ]/g, "_");
+  /**
+   * `no-cache`, et non plus un an `immutable` (revue de sécurité du 20/10/2026) : gardée par le
+   * navigateur, la capture se resservait depuis son cache à quiconque ouvrait la même adresse sur
+   * le même navigateur — un compte suivant sur un appareil partagé —, sans repasser par le contrôle
+   * d'accès ci-dessus. Chaque affichage redemande donc ; l'étiquette (le fichier ne change jamais
+   * sous un même nom, mais sa date et sa taille suffisent à le nommer) garde ce retour à un 304 sans
+   * corps, *après* le contrôle d'accès.
+   */
+  const stat = fs.statSync(file);
+  const etag = `"${image.id}-${original ? "o" : "w"}-${stat.size}-${Math.floor(stat.mtimeMs)}"`;
+  const cacheHeaders = { "Cache-Control": "private, no-cache", ETag: etag };
+  if (req.headers.get("if-none-match") === etag) return new NextResponse(null, { status: 304, headers: cacheHeaders });
   return new NextResponse(fs.readFileSync(file), {
     headers: {
       // Le type par l'extension enregistrée, pas celui que la ligne a gardé du navigateur : les
@@ -33,7 +45,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       "X-Content-Type-Options": "nosniff",
       // Le bac à sable (`sandbox`) est posé par next.config.js : un en-tête de politique posé ici
       // serait écrasé par la règle générale du site.
-      "Cache-Control": "private, max-age=31536000, immutable",
+      ...cacheHeaders,
       ...(original ? { "Content-Disposition": `inline; filename="${name}"` } : {}),
     },
   });

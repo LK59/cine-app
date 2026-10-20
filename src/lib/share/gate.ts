@@ -91,7 +91,7 @@ export function shareRuleFor(method: string, pathname: string): { rule: Rule; ma
 }
 
 /** La requête reste-t-elle dans le titre du lien ? */
-export async function shareAllows(share: Share, method: string, url: URL): Promise<boolean> {
+export async function shareAllows(share: Share, method: string, url: { pathname: string; searchParams: URLSearchParams }): Promise<boolean> {
   const found = shareRuleFor(method, url.pathname);
   if (!found) return false;
   const { rule, match } = found;
@@ -122,16 +122,16 @@ export function sharePagePath(code: string): string {
  * a déjà refusé un lien révoqué ou passé). Une page autre que celle du lien y ramène ; une API hors
  * de la liste, ou hors du titre, répond 403.
  */
-export async function shareGate(req: NextRequest, session: SessionPayload): Promise<NextResponse> {
+export async function shareGate(req: NextRequest, session: SessionPayload, pathname = req.nextUrl.pathname): Promise<NextResponse> {
   const share = sharesDb.get(session.sh ?? "");
   if (!share) return NextResponse.json({ error: "Lien de partage inconnu" }, { status: 403 });
-  const { pathname } = req.nextUrl;
   if (!pathname.startsWith("/api/")) {
     // La page du lien est publique (elle demande le mot de passe) et passe avant ; toute autre page
     // — l'accueil, la gestion, une adresse tapée — ramène à la fiche partagée.
     return NextResponse.redirect(new URL(sharePagePath(share.code), req.url));
   }
-  if (!(await shareAllows(share, req.method, req.nextUrl))) {
+  // L'adresse décodée par le proxy : celle que Next servira (voir `proxy.ts`).
+  if (!(await shareAllows(share, req.method, { pathname, searchParams: req.nextUrl.searchParams }))) {
     return NextResponse.json({ error: "Ce lien ne donne accès qu'au titre partagé", code: "share-scope" }, { status: 403 });
   }
   return NextResponse.next();

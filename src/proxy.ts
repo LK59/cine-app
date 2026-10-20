@@ -13,7 +13,7 @@ import { castPassFor, castPreflightFor } from "@/lib/castToken";
 import { selfWarmPassFor } from "@/lib/selfWarm";
 import { fromLoopback } from "@/lib/trustedProxy";
 import { sessionDb } from "@/lib/db";
-import { forgetJellyfinToken, jellyfinTokenAlive } from "@/lib/jellyfinToken";
+import { forgetJellyfinToken, jellyfinTokenAlive, jellyfinTokenKnownDead } from "@/lib/jellyfinToken";
 import { revokeJellyfinDevices } from "@/lib/jellyfinRevoke";
 import { logAuthEvent } from "@/lib/eventLogs";
 import { crossSiteWrite } from "@/lib/crossSite";
@@ -228,6 +228,10 @@ const ADMIN_ONLY_READS: RegExp[] = [
   /^\/api\/admin\/offline(\/|$)/,
   // Les liens de partage : qui les a reçus, ce qu'ils ont regardé (DECISIONS.md §112).
   /^\/api\/admin\/shares(\/|$)/,
+  // La recherche de Radarr et de Sonarr (fiches complètes, chemins sur le disque) et la bibliothèque
+  // de Jellyfin (sa version exacte, ses compteurs) : la gestion seule les lit (revue du 20/10/2026).
+  /^\/api\/(radarr\/movies|sonarr\/series)\/lookup\/?$/,
+  /^\/api\/jellyfin\/library\/?$/,
 ];
 
 function isAdminOnlyRead(pathname: string): boolean {
@@ -364,7 +368,19 @@ async function imageOptimizerAllowed(req: NextRequest): Promise<boolean> {
 }
 
 export async function proxy(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+  /**
+   * L'adresse décodée, et c'est elle que toutes les règles lisent (20/10/2026, revue de sécurité).
+   * Next sert `/%61pi/settings` comme `/api/settings` quand l'adresse brute ne correspond à rien :
+   * comparé tel quel, ce chemin ne commençait pas par `/api/` et échappait aux règles des rôles. En
+   * production Next répondait 404 à ces adresses — rien n'était ouvert —, mais la porte ne doit pas
+   * dépendre de ce détail. Un encodage illisible ne va pas plus loin.
+   */
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(req.nextUrl.pathname);
+  } catch {
+    return NextResponse.json({ error: "Adresse invalide" }, { status: 400 });
+  }
 
   if (crossSiteWrite(req)) {
     return NextResponse.json({ error: "Requête refusée" }, { status: 403 });
@@ -458,7 +474,7 @@ export async function proxy(req: NextRequest) {
    * est celle du lien, sans glissement — réémise seulement si le lien a été prolongé.
    */
   if (session.role === "share") {
-    const gated = await shareGate(req, session);
+    const gated = await shareGate(req, session, pathname);
     if (gated.status !== 200 || gated.headers.get("location")) return gated;
     const share = sharesDb.get(session.sh ?? "");
     if (share && share.expiresAt !== session.exp) {
@@ -504,6 +520,29 @@ export async function proxy(req: NextRequest) {
    * prochaine page. La même question ferme aussi la session d'un compte désactivé ou dont le rôle a
    * changé dans Jellyfin : sans elle, la prolongation glissante recopiait le rôle de la connexion à vie.
    */
+  /**
+   * Sur une route d'API, la question n'est pas attendue — elle part en arrière-plan, au plus une fois
+   * par heure (`jellyfinTokenAlive` garde ses réponses) —, et seule une réponse déjà connue compte
+   * (revue de sécurité du 20/10/2026). Un client qui n'appelait que l'API n'était jamais revérifié :
+   * un administrateur rétrogradé ou désactivé dans Jellyfin, ou un cookie volé survivant au changement
+   * de mot de passe, gardait l'administration indéfiniment, la session se prolongeant d'elle-même.
+   * Un compte ordinaire au jeton mort garde son flux en cours (une position se rattrape, voir plus bas)
+   * mais sa session n'est plus prolongée ; un administrateur perd ses droits aussitôt.
+   */
+  let jellyfinDead = false;
+  if (pathname.startsWith("/api/") && session.jfToken) {
+    jellyfinDead = jellyfinTokenKnownDead(session.jti);
+    if (!jellyfinDead) void tokenStillAccepted(session);
+    if (jellyfinDead && session.role === "admin") {
+      void revokeJellyfinDevices([sessionDb.delete(session.jti)], "jeton refusé");
+      logAuthEvent("token-refused", { user: session.jfUser ?? session.u });
+      forgetJellyfinToken(session.jti);
+      const expired = NextResponse.json({ error: "unauthorized" }, { status: 401, headers: { [SESSION_EXPIRED_HEADER]: "1" } });
+      expired.cookies.delete(SESSION_COOKIE);
+      return expired;
+    }
+  }
+
   if (!pathname.startsWith("/api/") && session.jfToken && !(await tokenStillAccepted(session))) {
     // Son jeton est déjà refusé ; l'appareil, lui, reste inscrit chez Jellyfin : on le retire.
     void revokeJellyfinDevices([sessionDb.delete(session.jti)], "jeton refusé");
@@ -530,7 +569,7 @@ export async function proxy(req: NextRequest) {
    * `touch` n'écrit qu'au-delà d'une heure : `last_seen_at` était posé à la création et jamais
    * ensuite, et c'est pourtant lui qui décide du ménage.
    */
-  if (shouldRefresh(session)) {
+  if (shouldRefresh(session) && !jellyfinDead) {
     res.cookies.set(SESSION_COOKIE, await refreshSessionToken(session), {
       httpOnly: true,
       sameSite: "lax",

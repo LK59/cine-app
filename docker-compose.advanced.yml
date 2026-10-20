@@ -59,8 +59,9 @@ services:
 
     # Optional direct access without a reverse proxy.
     # If you use Nginx Proxy Manager, Traefik or Caddy, you can leave this commented.
+    # Loopback only (localhost or an SSH tunnel); dropping "127.0.0.1:" publishes it on every interface.
     # ports:
-    #   - "3000:3000"
+    #   - "127.0.0.1:3000:3000"
 
     networks:
       - media_net

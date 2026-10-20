@@ -31,6 +31,18 @@ export async function register() {
     const refusal = startupRefusal({ sessionSecret: config.app.sessionSecret, adminPassword: config.app.adminPassword });
     if (refusal) throw new Error(refusal);
 
+    // Le code d'installation (20/10/2026) : tant qu'aucun compte administrateur n'existe, tiré une
+    // fois et écrit dans les journaux du conteneur à chaque démarrage — l'assistant le demande pour
+    // créer ce compte, que le premier visiteur venu ne puisse pas le faire. Une installation qui a
+    // déjà un administrateur n'écrit rien. Gardé : un échec ici ne coûte que le code, que la route
+    // tire à son tour (ou refuse) — jamais le démarrage.
+    try {
+      const { announceSetupCode } = await import("./lib/settings/setupCode");
+      announceSetupCode();
+    } catch (error) {
+      console.error(`[setup] setup code unavailable: ${error instanceof Error ? error.message : error}`);
+    }
+
     const { startNotificationCron } = await import("./lib/notificationJobs");
     startNotificationCron();
 

@@ -27,7 +27,9 @@ Create an empty folder and save this as `docker-compose.yml` inside it. It is
 #
 #   1. Save this file as docker-compose.yml in an empty folder.
 #   2. docker compose up -d
-#   3. Open http://<server>:3000 — the setup assistant asks for everything else.
+#   3. Open http://localhost:3000 on the server (or through an SSH tunnel) — the setup assistant
+#      asks for everything else, starting with the one-time setup code printed in
+#      `docker compose logs cine-app`.
 #
 # No .env is needed: secrets are generated on first launch, and every setting is made in the app.
 # Each optional line below is commented, with what it is for. Guide: DEPLOYMENT.md. Variables: ENV.md.
@@ -37,11 +39,15 @@ services:
     container_name: cine-app              # the name the commands in the guide use
     restart: unless-stopped
 
-    # Direct access: http://<server>:3000. Change the left number if 3000 is taken ("3005:3000").
-    # Behind a reverse proxy on the same Docker network, delete these two lines (nothing published)
-    # and point the proxy at http://cine-app:3000.
+    # Published on the server itself only (127.0.0.1): open http://localhost:3000 there, or from
+    # another machine through an SSH tunnel (ssh -L 3000:localhost:3000 <server>). Change the first
+    # 3000 if it is taken ("127.0.0.1:3005:3000").
+    # To serve other machines, put a reverse proxy in front and set TRUSTED_PROXIES below: on the
+    # same Docker network, delete these two lines and point the proxy at http://cine-app:3000;
+    # outside Docker, point it at 127.0.0.1:3000. Removing "127.0.0.1:" publishes the port on every
+    # interface — your whole network, or the Internet if the host is exposed: only do it knowingly.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
 
     # The Docker network your reverse proxy (and ideally Jellyfin, Radarr…) is attached to, so they
     # reach each other by container name. Uncomment here and in `networks:` at the bottom.
@@ -93,12 +99,16 @@ mkdir cine-app && cd cine-app
 curl -o docker-compose.yml https://raw.githubusercontent.com/LK59/cine-app/main/docker-compose.example.yml
 ```
 
-As it stands, it works: port 3000 on the host, a named volume, UTC. What you may change before the
-first start:
+As it stands, it works: port 3000 on the server's loopback only, a named volume, UTC. What you may
+change before the first start:
 
-- **Port or proxy network.** Keep `ports` to open `http://<server>:3000` directly. If your reverse
-  proxy runs in Docker, uncomment `networks:` (in both places) with the name `docker network ls`
-  gives, and later delete `ports`: the proxy then reaches `http://cine-app:3000`.
+- **Port or proxy network.** As shipped, `http://localhost:3000` answers on the server itself only;
+  from your computer, open an SSH tunnel first (`ssh -L 3000:localhost:3000 <server>`) and browse
+  `http://localhost:3000`. To serve other machines, put a reverse proxy in front (step 3). If it
+  runs in Docker, uncomment `networks:` (in both places) with the name `docker network ls` gives,
+  and later delete `ports`: the proxy then reaches `http://cine-app:3000`. Publishing the port on
+  every interface (`"3000:3000"`) works too, but then anyone who can reach the host can reach the
+  app: do it only on a network you trust, and knowingly.
 - **Where the data lives.** The named volume `cine-data` needs nothing. To see the files in a
   `./data` folder instead, swap the two volume lines and create the folder for the container's user
   first: `mkdir data && sudo chown 1001:1001 data`. Without the `chown`, the container stops at once.
@@ -117,18 +127,26 @@ docker compose logs -f cine-app      # Ctrl-C stops following; the container kee
 ```
 
 A good start prints a few `[démarrage]` lines (secrets generated, poster cache linked) and the
-version. If the container stops, its last log line says why — most often a `./data` folder that
+version. On a new installation it also prints the **one-time setup code** the assistant asks for:
+
+```bash
+docker compose logs cine-app | grep "setup code"
+# [setup] One-time setup code: ABCD-EFGH-JKLM — enter it in the setup assistant to create the administrator account (valid until that account exists).
+``` If the container stops, its last log line says why — most often a `./data` folder that
 belongs to root (`sudo chown -R 1001:1001 data`, then `docker compose up -d` again). The other cases
 are listed in [DEPLOYMENT.md, step 2](DEPLOYMENT.md#2-start-the-container).
 
-> **Run the assistant (step 4) straight away.** Until its administrator account exists, anyone who
-> reaches the port can create it. Keep the port on your local network until then.
+> **Run the assistant (step 4) straight away.** Creating its administrator account needs the setup
+> code from the container logs, so a visitor who merely reaches the port cannot take it. The code
+> is printed at every start until that account exists, then it is gone.
 
 ## 3. Behind a reverse proxy
 
 The app speaks plain HTTP. Installing it on a phone's home screen, notifications and several player
 features need HTTPS, so in practice a reverse proxy sits in front. Point your hostname at
-`cine-app:3000` (proxy on the same Docker network) or `<server-ip>:3000` (proxy outside Docker).
+`cine-app:3000` (proxy on the same Docker network) or `127.0.0.1:3000` (proxy installed on the host,
+`ports` kept), and declare the proxy in `TRUSTED_PROXIES` (below): it is then the only one believed
+about visitors' addresses.
 
 **Nginx Proxy Manager** — *Proxy Hosts → Add*: scheme `http`, host `cine-app`, port `3000`; *SSL*:
 a certificate, *Force SSL*. In *Advanced*:
@@ -160,12 +178,13 @@ file, and `docker compose up -d`:
 
 ## 4. The setup assistant
 
-Open the address (`http://<server>:3000`, or your domain): every page leads to the assistant until
-it is finished. Each screen saves when you press **Next**; you can leave and come back.
+Open the address (`http://localhost:3000` through the tunnel, or your domain): every page leads to
+the assistant until it is finished. Each screen saves when you press **Next**; you can leave and come back.
 
 1. **Welcome** — the installation's language (French, English, Spanish, German).
-2. **Account** — the local administrator: a username and a password of 8 characters or more. It
-   opens Management even when Jellyfin is down, but it cannot play films.
+2. **Account** — the local administrator: the one-time setup code shown in the container logs
+   (`docker logs cine-app`), then a username and a password of 8 characters or more. It opens
+   Management even when Jellyfin is down, but it cannot play films.
 3. **Jellyfin** — address and API key. Addresses are seen **from inside the container**:
    `localhost` is the container itself. Use the container name on a shared Docker network
    (`http://jellyfin:8096`), otherwise the server's LAN address.

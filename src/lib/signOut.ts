@@ -22,34 +22,12 @@ import { forgetOfflineAccount } from "@/lib/offline/offlineEntry";
  * vers la connexion, c'est ce que la personne a demandé.
  */
 export async function signOut(go: (path: string) => void): Promise<void> {
-  // L'état du spectateur demandé d'avance n'est rangé que par titre, et partir vers la connexion
-  // ne recharge pas la page : le compte suivant, ouvrant le même film dans les trente secondes,
-  // reprenait à la position du compte qui venait de partir (chasse aux bugs du 22/09/2026).
-  forgetPrefetchedPlaybackState();
-  // La description des fichiers aussi : la route la refuse à un compte qui lit par le serveur.
-  forgetDirectInfo();
-  // Les recherches récentes ne sont rangées sous aucun compte : le suivant voyait ce que le
-  // précédent avait tapé et ouvert (audit du 26/09/2026).
-  forgetSearches();
-  // Les choix d'accueil gardés sur l'appareil (disposition, défilement guidé) : le compte suivant
-  // voyait un instant l'accueil du précédent, le temps que ses propres préférences arrivent
-  // (audit du 08/10/2026).
-  forgetHomeLayoutMirror();
-  forgetGuidedScrollMirror();
   // Le compte que l'entrée hors ligne des téléchargements montre (`offlineEntry.ts`, §109) : les
   // fichiers restent sur l'appareil, mais `/hors-ligne`, ouverte sans session, ne les montre plus.
+  // Propre au bouton : une session expirée garde cette entrée (`noteUnauthorized`) — la question
+  // des téléchargements n'est posée qu'à qui se déconnecte lui-même (20/10/2026).
   forgetOfflineAccount();
-  // Le catalogue gardé sur l'appareil part avec la session : un iPad partagé ne doit rien garder
-  // de la bibliothèque ni de la reprise de qui que ce soit. Borné : un stockage lent ne retient
-  // pas la personne sur la page qu'elle quitte.
-  // Les octets gardés pour la reprise instantanée aussi (`src/lib/resumeCache/`), dans le même délai.
-  // Sous quel compte retenir que les notifications étaient activées — voir `pushOnSignOut`.
-  const account = persistedCacheAccount();
-  // Les notifications de cet appareil aussi : sinon elles iraient au compte suivant.
-  await Promise.race([
-    Promise.all([clearPersistedCache(), clearResumeStore(), dropPushOnSignOut(account)]),
-    new Promise((resolve) => setTimeout(resolve, 500)),
-  ]);
+  await forgetAccountOnDevice(500);
   try {
     await fetch("/api/auth/logout", { method: "POST", headers: touchHintHeaders() });
   } catch {
@@ -58,6 +36,62 @@ export async function signOut(go: (path: string) => void): Promise<void> {
   go("/login");
 }
 
+/**
+ * Ce que l'appareil oublie du compte qui part — par le bouton (`signOut`) comme quand la session
+ * disparaît sous la page (`noteUnauthorized`, sept jours écoulés ou session fermée ailleurs).
+ *
+ * Seul le bouton nettoyait : une session expirée sur un iPad partagé laissait au compte suivant le
+ * catalogue, la reprise, les recherches et les notifications du précédent (revue de sécurité du
+ * 20/10/2026). Une seule fonction pour les deux sorties, pour qu'elles ne divergent plus.
+ *
+ * Ne lève jamais, et n'attend jamais plus de `budgetMs` : un stockage lent ne retient pas la
+ * personne sur la page qu'elle quitte. Chaque étape est gardée seule — une qui échoue ne prive pas
+ * les autres de leur effacement.
+ */
+export async function forgetAccountOnDevice(budgetMs: number): Promise<void> {
+  const step = (f: () => void) => {
+    try {
+      f();
+    } catch {
+      // Une étape de plus ou de moins : la sortie continue.
+    }
+  };
+  // L'état du spectateur demandé d'avance n'est rangé que par titre, et partir vers la connexion
+  // ne recharge pas la page : le compte suivant, ouvrant le même film dans les trente secondes,
+  // reprenait à la position du compte qui venait de partir (chasse aux bugs du 22/09/2026).
+  step(forgetPrefetchedPlaybackState);
+  // La description des fichiers aussi : la route la refuse à un compte qui lit par le serveur.
+  step(forgetDirectInfo);
+  // Les recherches récentes ne sont rangées sous aucun compte : le suivant voyait ce que le
+  // précédent avait tapé et ouvert (audit du 26/09/2026).
+  step(forgetSearches);
+  // Les choix d'accueil gardés sur l'appareil (disposition, défilement guidé) : le compte suivant
+  // voyait un instant l'accueil du précédent, le temps que ses propres préférences arrivent
+  // (audit du 08/10/2026).
+  step(forgetHomeLayoutMirror);
+  step(forgetGuidedScrollMirror);
+  // Le catalogue gardé sur l'appareil part avec la session : un iPad partagé ne doit rien garder
+  // de la bibliothèque ni de la reprise de qui que ce soit.
+  // Les octets gardés pour la reprise instantanée aussi (`src/lib/resumeCache/`), dans le même délai.
+  // Sous quel compte retenir que les notifications étaient activées — voir `pushOnSignOut`. Lu
+  // avant l'effacement, qui oublie le compte de la page.
+  let account: string | null = null;
+  step(() => {
+    account = persistedCacheAccount();
+  });
+  const guarded = (f: () => Promise<unknown>) => {
+    try {
+      return f().catch(() => {});
+    } catch {
+      return Promise.resolve();
+    }
+  };
+  // Les notifications de cet appareil aussi : sinon elles iraient au compte suivant.
+  await Promise.race([
+    Promise.all([guarded(clearPersistedCache), guarded(clearResumeStore), guarded(() => dropPushOnSignOut(account))]),
+    new Promise((resolve) => setTimeout(resolve, budgetMs)),
+  ]);
+}
 /**
  * Changer de compte recharge la page, en partant comme en arrivant.
  *

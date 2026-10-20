@@ -1781,7 +1781,10 @@
       "service_unavailable": "Este servicio no está disponible en este momento.",
       "network": "No se puede conectar con el servidor en este momento.",
       "person_not_found": "No se encontró a esta persona.",
-      "share-streams": "Este enlace ya se está reproduciendo en el número máximo de dispositivos. Inténtalo de nuevo cuando termine una reproducción."
+      "share-streams": "Este enlace ya se está reproduciendo en el número máximo de dispositivos. Inténtalo de nuevo cuando termine una reproducción.",
+      "offline-limit": "Ya tienes 50 descargas en curso. Deja que terminen algunas e inténtalo de nuevo.",
+      "offline-forbidden": "Esta cuenta no tiene permiso para descargar. Pídeselo al administrador.",
+      "transcode-limit": "Hay demasiadas reproducciones en curso en esta cuenta. Detén una e inténtalo de nuevo."
     }
   },
   "sse": {
@@ -2978,6 +2981,10 @@
       "mismatch": "Las dos contraseñas no coinciden.",
       "weak": "Al menos 8 caracteres.",
       "invalidUsername": "Letras, cifras, punto, guion, arroba o guion bajo — 64 como máximo.",
+      "code": "Código de instalación",
+      "codeHint": "Aparece en los registros del contenedor (docker logs cine-app).",
+      "badCode": "Código de instalación incorrecto. Cópialo de los registros del contenedor (docker logs cine-app).",
+      "rateLimited": "Demasiados intentos. Vuelve a intentarlo dentro de unos minutos.",
       "create": "Crear la cuenta",
       "signInTitle": "Inicia sesión para continuar",
       "signInText": "Ya existe una cuenta de administrador (la de tu .env o una creada aquí). Inicia sesión con ella para seguir con la configuración.",
@@ -3019,6 +3026,7 @@
     "off": "Desactivado",
     "errors": {
       "invalid-url": "Dirección no válida (http:// o https://).",
+      "secret-required": "La dirección ha cambiado: vuelve a introducir esta clave. La guardada nunca se envía a una dirección nueva.",
       "invalid": "Valor no válido.",
       "too-long": "Demasiado largo.",
       "unknown": "Ajuste desconocido.",

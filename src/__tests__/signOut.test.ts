@@ -52,6 +52,18 @@ describe("signOut", () => {
     cache.resetPersistentCacheForTests();
   });
 
+  // Revue de sécurité du 20/10/2026 : une session expirée efface ce que l'appareil garde du compte
+  // par la même fonction que le bouton — deux listes d'effacements finiraient par différer.
+  it("partage son effacement avec la session expirée, sauf l'entrée des téléchargements", () => {
+    const signOutSrc = readFileSync("src/lib/signOut.ts", "utf8");
+    const body = signOutSrc.slice(signOutSrc.indexOf("export async function signOut("), signOutSrc.indexOf("export async function forgetAccountOnDevice("));
+    expect(body).toContain("forgetAccountOnDevice(");
+    expect(body).toContain("forgetOfflineAccount()");
+    const expired = readFileSync("src/lib/sessionExpired.ts", "utf8");
+    expect(expired).toContain("forgetAccountOnDevice(");
+    expect(expired).not.toContain("forgetOfflineAccount");
+  });
+
   // Une seule façon de se déconnecter : trois copies non gardées, c'est ainsi que le défaut
   // existait trois fois.
   it("est la seule à appeler la déconnexion côté client", () => {

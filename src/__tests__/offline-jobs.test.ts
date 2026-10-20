@@ -23,7 +23,22 @@ vi.mock("@/lib/logger", async (importOriginal) => ({ ...(await importOriginal<ty
 
 import { getDb } from "@/lib/db";
 import { Writable } from "node:stream";
-import { enforceOfflineQuota, forgetOfflineJob, markOfflineFetched, offlineDir, offlineFile, offlineIndex, offlineJobFor, requestOfflineJob, type OfflineJob } from "@/lib/offline/jobs";
+import {
+  enforceOfflineQuota,
+  forgetOfflineJob,
+  listOfflineCopies,
+  markOfflineFetched,
+  OFFLINE_MAX_IN_FLIGHT,
+  OfflineRefusal,
+  offlineDir,
+  offlineFile,
+  offlineInFlight,
+  offlineIndex,
+  offlineJobFor,
+  releaseFetchedCopies,
+  requestOfflineJob,
+  type OfflineJob,
+} from "@/lib/offline/jobs";
 
 const ITEM = "a".repeat(32);
 const FIXTURE = fs.readFileSync(path.join(process.cwd(), "src/__tests__/fixtures/offline/jellyfin-like.mp4"));
@@ -301,5 +316,106 @@ describe("la place des versions sur le serveur (quota, 20/10/2026)", () => {
     markOfflineFetched("louis", "a");
     enforceOfflineQuota(50 * GB);
     expect(left()).toEqual(["a"]);
+  });
+});
+
+/**
+ * Revue de sécurité du 20/10/2026 : au plus cinquante versions en vol par compte (Louis : « genre 50
+ * downloads simultanés »), et une version que tous ont récupérée quitte le serveur peu après (« on
+ * libère automatiquement dès que possible dès que le client l'a »).
+ */
+describe("cinquante en vol, libérées dès que récupérées", () => {
+  const put = (id: string, status: string, accessedAt: number, item = ITEM) =>
+    getDb()
+      .prepare(
+        `INSERT INTO offline_jobs (id, item_id, file_version, audio_index, quality, codec, status, generation, bytes, expected_bytes, runtime_s, created_at, accessed_at)
+         VALUES (?, ?, 'v1', 1, 'standard', 'hevc', ?, 1, 1000, 1000, 3, ?, ?)`
+      )
+      .run(id, item, status, accessedAt, accessedAt);
+  const ask = (account: string, id: string) => getDb().prepare("INSERT INTO offline_requests (account, job_id, created_at) VALUES (?, ?, 0)").run(account, id);
+  const left = () => (getDb().prepare("SELECT id FROM offline_jobs ORDER BY id").all() as { id: string }[]).map((r) => r.id);
+  const hex = (n: number) => n.toString(16).padStart(32, "0");
+  /** `n` versions en vol pour ce compte, de titres tous différents de `ITEM` sauf la première. */
+  const fill = (account: string, n: number) => {
+    for (let i = 0; i < n; i++) {
+      put(`job${i}`, i % 3 === 0 ? "queued" : i % 3 === 1 ? "running" : "done", 1, i === 0 ? ITEM : hex(i + 1));
+      ask(account, `job${i}`);
+    }
+  };
+
+  it("la cinquante et unième est refusée (429 offline-limit), sans appel à Jellyfin", async () => {
+    process.env.OFFLINE_DOWNLOADS = "false";
+    upstream.mockImplementation(async () => json(itemJson()));
+    fill("louis", OFFLINE_MAX_IN_FLIGHT);
+    expect(offlineInFlight("louis")).toBe(50);
+    const refused = await requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 2, quality: "standard", codec: "hevc" }).catch((e: unknown) => e);
+    expect(refused).toBeInstanceOf(OfflineRefusal);
+    expect(refused).toMatchObject({ status: 429, code: "offline-limit", extra: { max: 50 } });
+    expect(upstream).not.toHaveBeenCalled();
+    // Un autre compte n'en est pas gêné, même pour la même version.
+    expect((await requestOfflineJob({ account: "mathis", itemId: ITEM, audioIndex: 1, quality: "standard", codec: "hevc" })).id).toBe("job0");
+  });
+
+  it("redemander une version déjà en vol n'en est pas une de plus ; une récupérée libère sa place", async () => {
+    process.env.OFFLINE_DOWNLOADS = "false";
+    upstream.mockImplementation(async () => json(itemJson()));
+    fill("louis", OFFLINE_MAX_IN_FLIGHT);
+    // La même version (titre, fichier, piste, qualité, codec) : acceptée, rien de neuf.
+    expect((await requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 1, quality: "standard", codec: "hevc" })).id).toBe("job0");
+    expect(offlineInFlight("louis")).toBe(50);
+    // Une version prête qu'il a récupérée entière ne compte plus : une nouvelle demande passe.
+    markOfflineFetched("louis", "job2");
+    expect(offlineInFlight("louis")).toBe(49);
+    await requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 2, quality: "standard", codec: "hevc" });
+    expect(offlineInFlight("louis")).toBe(50);
+    // Un échec ne compte pas non plus.
+    getDb().prepare("UPDATE offline_jobs SET status = 'failed' WHERE id = 'job1'").run();
+    expect(offlineInFlight("louis")).toBe(49);
+  });
+
+  it("une version récupérée par tous ses demandeurs quitte le serveur après le délai de grâce — pas avant, pas sans les autres", () => {
+    const GRACE = 5 * 60_000;
+    put("a", "done", 1000);
+    ask("louis", "a");
+    ask("mathis", "a");
+    put("b", "done", 1000); // retirée par tous avant la fin : gardée pour qui la redemanderait
+    put("c", "running", 1000);
+    ask("louis", "c");
+    markOfflineFetched("louis", "a");
+    markOfflineFetched("louis", "c"); // sans effet sur une version en préparation
+    releaseFetchedCopies(1000 + GRACE * 100);
+    expect(left()).toEqual(["a", "b", "c"]);
+    markOfflineFetched("mathis", "a");
+    // Pendant la grâce : l'appareil relit l'état juste après la dernière plage, il ne doit pas trouver 404.
+    releaseFetchedCopies(1000 + GRACE - 1);
+    expect(left()).toEqual(["a", "b", "c"]);
+    // L'Activité annonce l'effacement à cette date-là, pas dans trois jours.
+    expect(listOfflineCopies().find((c) => c.id === "a")?.expiresAt).toBe(1000 + GRACE);
+    releaseFetchedCopies(1000 + GRACE);
+    expect(left()).toEqual(["b", "c"]);
+  });
+
+  it("le dernier qui ne l'avait pas entière la retire : les autres l'ont, elle peut partir", () => {
+    put("a", "done", 1000);
+    ask("louis", "a");
+    ask("mathis", "a");
+    markOfflineFetched("louis", "a");
+    forgetOfflineJob("mathis", "a");
+    releaseFetchedCopies(1000 + 5 * 60_000);
+    expect(left()).toEqual([]);
+  });
+
+  it("redemandée par un compte qui l'avait récupérée, elle redevient « pas encore récupérée » pour lui", async () => {
+    process.env.OFFLINE_DOWNLOADS = "false";
+    upstream.mockImplementation(async () => json(itemJson()));
+    put("job0", "done", 1000);
+    ask("louis", "job0");
+    markOfflineFetched("louis", "job0");
+    expect(offlineInFlight("louis")).toBe(0);
+    expect((await requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 1, quality: "standard", codec: "hevc", now: 2000 })).id).toBe("job0");
+    expect(offlineInFlight("louis")).toBe(1);
+    // Il la télécharge de nouveau : elle reste.
+    releaseFetchedCopies(10 ** 12);
+    expect(left()).toEqual(["job0"]);
   });
 });

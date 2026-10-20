@@ -4,6 +4,7 @@ import { useSyncExternalStore } from "react";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 import { deviceStore, deviceStoreSupported, isDeviceStoreError, resetDeviceStore } from "./deviceStore";
 import { reportClientError } from "@/lib/reportClientError";
+import { withCode } from "@/lib/upstreamError";
 import { applyResumeRules } from "./resumeRules";
 import { storeOfflineSubtitles, type OfflineSubtitle } from "./subtitles";
 import { storeOfflineTrickplay, type OfflineTrickplay } from "./trickplay";
@@ -300,8 +301,10 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ itemId: request.itemId, audioIndex: request.audioIndex, quality: request.quality, codec: request.codec }),
   });
-  const body = (await res.json().catch(() => null)) as { job?: OfflineJob; error?: string } | null;
-  if (!res.ok || !body?.job) throw new Error(body?.error ?? `Erreur ${res.status}`);
+  const body = (await res.json().catch(() => null)) as { job?: OfflineJob; error?: string; code?: string } | null;
+  // Le code voyage avec l'erreur (`offline-limit`, `offline-forbidden`) : la fenêtre le traduit
+  // (`apiErrorText`) au lieu de citer le message français à tous les comptes.
+  if (!res.ok || !body?.job) throw withCode(new Error(body?.error ?? `Erreur ${res.status}`), body?.code);
   const job = body.job;
   // Un téléchargement déjà sur l'appareil pour ce titre est remplacé : un seul par titre.
   for (const old of downloads.filter((d) => d.itemId === request.itemId && d.id !== job.id)) await removeOfflineDownload(old.id);
@@ -653,6 +656,15 @@ export async function resumeOfflineDownload(id: string): Promise<void> {
 async function step(owner: string, d: OfflineDownload, signal: AbortSignal): Promise<void> {
   const res = await fetch(`/api/offline/jobs/${d.id}`, { signal, cache: "no-store" });
   if (res.status === 404) {
+    // Tout est déjà sur l'appareil : la copie du serveur a simplement été libérée, cinq minutes après
+    // la dernière lecture (revue du 20/10/2026, `releaseFetchedCopies`). Une page tuée entre le dernier
+    // morceau et ce contrôle, et revenue plus tard, ne doit pas déclarer « échec » un film complet.
+    if (d.serverDone && d.expectedBytes > 0 && d.bytes >= d.expectedBytes) {
+      const done = patch(d.id, { state: "done" });
+      if (done) await saveMeta(done);
+      if (done?.episode) await sweepWatchedBefore(done);
+      return;
+    }
     // La version n'existe plus sur le serveur : effacée par l'administrateur (Activité), ou expirée
     // après des jours en pause. On le dit, et « Réessayer » la redemande. Elle se redemandait toute
     // seule (un remède au retrait mal ordonné du 19/10/2026, corrigé à la source depuis) : une copie

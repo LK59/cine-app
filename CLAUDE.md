@@ -273,7 +273,9 @@ catalogue with no account's blocked tags removed, never leaves loopback.
 `http.createServer` and writes the socket's address into `x-cine-peer` on every request (overwriting
 whatever the client sent) and sets `CINE_PEER_HEADER=1`; `clientAddressOf` (`src/lib/trustedProxy.ts`)
 believes `X-Forwarded-For` only when that peer is in `TRUSTED_PROXIES` (address, IPv4 CIDR or a
-container name resolved every 5 min; until the name first resolves, the old last-entry rule).
+container name resolved every 5 min). Without a trusted proxy configured — or before its name first
+resolves — the last entry is believed only from a loopback or private peer (a reverse proxy on the
+Docker network); a direct client's own address is used otherwise (20/10/2026).
 `getClientIp`, `forwardedFor` and the proxy all read it. Under `next dev` there is no boot script, so
 `x-cine-peer` is ignored and the old rule applies. `/_next/image` needs a session since 2026-10-08
 (anyone could fill `data/image-cache`); only the loopback (`posterPrewarm`) passes without one.

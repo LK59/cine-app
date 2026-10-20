@@ -104,7 +104,11 @@ export function keepUnsentLine(id: string, kind: string, fields: Record<string, 
   const lines = read();
   // Déjà en file (un renvoi qui échoue encore) : elle y reste telle quelle, datée de son premier envoi.
   if (lines.some((l) => l.id === id)) return;
-  write([...lines, { id, kind, fields, at: now, account: persistedCacheAccount() }], now);
+  // Sans compte connu, la ligne n'est à personne : elle ne partirait qu'au nom du compte suivant
+  // (voir `sendQueued`). Mieux vaut la perdre que l'écrire sous un autre nom.
+  const account = persistedCacheAccount();
+  if (!account) return;
+  write([...lines, { id, kind, fields, at: now, account }], now);
 }
 
 /** Les lignes en file, telles qu'elles partiraient — pour les tests et la lecture. */
@@ -145,9 +149,18 @@ async function sendQueued(now: number): Promise<void> {
   if (!account) return;
   // Celles d'un autre compte attendent son retour : sur un iPad partagé, la séance d'une personne
   // ne doit pas s'écrire au nom d'une autre (même règle que `unsentStop`).
-  const mine = read()
-    .filter((l) => !l.account || l.account === account)
-    .slice(0, PER_FLUSH);
+  //
+  // Une ligne sans compte n'est plus envoyée au nom de qui se connecte ensuite (revue de sécurité du
+  // 20/10/2026) : sur un appareil partagé, la séance d'une personne s'écrivait sous le compte
+  // suivant. Elle est retirée de la file — il n'en naît plus (`keepUnsentLine`), celles d'avant partent ici.
+  const queued = read();
+  if (queued.some((l) => !l.account)) {
+    write(
+      queued.filter((l) => l.account),
+      now
+    );
+  }
+  const mine = queued.filter((l) => l.account === account).slice(0, PER_FLUSH);
   for (const line of mine) {
     let status: number | null = null;
     try {

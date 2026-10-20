@@ -141,13 +141,81 @@ export function settingProblem(key: string, value: string): string | null {
   return null;
 }
 
+// ─── Une adresse changée ne reçoit pas le secret enregistré ───────────────────
+
+/** Le code d'erreur d'un secret à ressaisir, et ce que disent les routes qui le refusent. */
+export const SECRET_REQUIRED = "secret-required";
+export const SECRET_REQUIRED_CODE = "settings-secret-required";
+
+/**
+ * Une adresse comparable : sans espaces ni barre finale, le schéma et l'hôte en minuscules
+ * (`HTTP://Radarr:7878/` est `http://radarr:7878`). Le chemin garde sa casse : il est celui du
+ * service. Illisible, l'adresse est rendue telle quelle (sans espaces ni barre finale).
+ */
+export function normalizeServiceUrl(url: string): string {
+  const trimmed = url.trim().replace(/\/+$/, "");
+  try {
+    // L'analyseur met déjà le schéma et l'hôte en minuscules ; l'identifiant éventuel compte.
+    const parsed = new URL(trimmed);
+    const auth = parsed.username ? `${parsed.username}${parsed.password ? `:${parsed.password}` : ""}@` : "";
+    return `${parsed.protocol}//${auth}${parsed.host.toLowerCase()}${parsed.pathname.replace(/\/+$/, "")}${parsed.search}`;
+  } catch {
+    return trimmed;
+  }
+}
+
+/**
+ * Les secrets à ressaisir parce que l'adresse de leur service change (20/10/2026).
+ *
+ * Un secret laissé vide reprend celui qui est enregistré — au test comme à l'enregistrement. Mais
+ * changer la seule adresse envoyait alors la clé d'administration de Jellyfin, de Radarr, de Sonarr…
+ * au nouvel hôte : un cookie administrateur volé devenait le vol de toutes les clés. L'adresse d'un
+ * groupe qui diffère de celle en vigueur exige donc que chacun de ses secrets *déjà renseignés* soit
+ * fourni à nouveau. Une adresse inchangée garde la règle d'avant ; un secret encore vide n'a rien à
+ * fuir, et l'assistant d'une installation neuve n'a rien à ressaisir.
+ *
+ * `given(key)` : la valeur soumise, vide si absente. Rend les clés de secret manquantes, par groupe
+ * dont l'adresse change (`changed`, pour le journal des actions de l'administrateur).
+ */
+export function secretsToResubmit(given: (key: string) => string, groups?: readonly string[]): { missing: string[]; changed: { group: string; urlKey: string }[] } {
+  const missing: string[] = [];
+  const changed: { group: string; urlKey: string }[] = [];
+  for (const def of SETTINGS) {
+    if (def.kind !== "url" || !def.inApp || def.key !== `${def.group.toUpperCase()}_URL`) continue;
+    if (groups && !groups.includes(def.group)) continue;
+    const next = given(def.key).trim();
+    // Pas d'adresse soumise (rien ne change), ou vidée : aucun hôte nouveau à qui parler.
+    if (next === "" || normalizeServiceUrl(next) === normalizeServiceUrl(settingValue(def.key))) continue;
+    changed.push({ group: def.group, urlKey: def.key });
+    for (const secret of SETTINGS) {
+      if (secret.group !== def.group || secret.kind !== "secret" || !secret.inApp) continue;
+      if (settingValue(secret.key).trim() === "") continue;
+      if (given(secret.key).trim() === "") missing.push(secret.key);
+    }
+  }
+  return { missing, changed };
+}
+
+/** L'hôte d'une adresse, pour le journal : jamais un identifiant qu'elle porterait (`user:pass@`). */
+export function urlForLog(url: string): string {
+  try {
+    const parsed = new URL(url.trim());
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return "(illisible)";
+  }
+}
+
 /**
  * Enregistre des réglages faits dans l'application. Un secret laissé vide n'est pas touché — le
  * champ d'un secret s'affiche vide, et l'enregistrer tel quel ne doit pas effacer la clé. Rien
- * n'est écrit si une seule valeur est refusée.
+ * n'est écrit si une seule valeur est refusée. Sauf quand l'adresse de son service change : le
+ * secret enregistré n'y suivrait pas sans être ressaisi (`secretsToResubmit`), il est demandé.
  */
 export function saveSettings(values: Record<string, unknown>): { errors: Record<string, string> } {
   const errors: Record<string, string> = {};
+  const givenString = (key: string) => (typeof values[key] === "string" ? (values[key] as string) : "");
+  for (const key of secretsToResubmit(givenString).missing) errors[key] = SECRET_REQUIRED;
   const writes: [string, string][] = [];
   for (const [key, raw] of Object.entries(values)) {
     if (typeof raw !== "string") {

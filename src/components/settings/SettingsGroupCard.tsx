@@ -210,6 +210,8 @@ export async function runServiceTest(group: TestableGroup, values: Draft): Promi
  */
 export function testFailureText(t: (key: string, vars?: Record<string, string>) => string, detail: string): string {
   if (detail === "invalid-url") return t("setup.errors.invalid-url");
+  // L'adresse diffère de celle enregistrée : la clé enregistrée n'y est pas envoyée (20/10/2026).
+  if (detail === "secret-required") return t("setup.errors.secret-required");
   return detail === "unauthorized" || detail === "unreachable" || detail === "timeout" ? t(`setup.testFail.${detail}`) : t("setup.testFail.other", { detail });
 }
 

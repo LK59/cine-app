@@ -499,6 +499,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    page: "9.1",
+    version: "9.3.4",
+    group: { fr: "Sécurité", en: "Security", es: "Seguridad", de: "Sicherheit" },
+    items: [
+      {
+        fr: "Sur un appareil partagé, une session terminée ne laisse plus les notifications ni les données du compte précédent.",
+        en: "On a shared device, an ended session no longer leaves the previous account's notifications or data behind.",
+        es: "En un dispositivo compartido, una sesión terminada ya no deja las notificaciones ni los datos de la cuenta anterior.",
+        de: "Auf einem gemeinsam genutzten Gerät hinterlässt eine beendete Sitzung keine Benachrichtigungen oder Daten des vorherigen Kontos mehr.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

@@ -1781,7 +1781,10 @@
       "service_unavailable": "This service isn't available right now.",
       "network": "Couldn't reach the server right now.",
       "person_not_found": "Person not found.",
-      "share-streams": "This link is already playing on the maximum number of devices. Try again once a playback has finished."
+      "share-streams": "This link is already playing on the maximum number of devices. Try again once a playback has finished.",
+      "offline-limit": "You already have 50 downloads in progress. Let a few finish, then try again.",
+      "offline-forbidden": "This account is not allowed to download. Ask the administrator.",
+      "transcode-limit": "Too many playbacks are running on this account. Stop one and try again."
     }
   },
   "sse": {
@@ -2978,6 +2981,10 @@
       "mismatch": "The two passwords don't match.",
       "weak": "At least 8 characters.",
       "invalidUsername": "Letters, digits, dot, dash, at sign or underscore — 64 at most.",
+      "code": "Setup code",
+      "codeHint": "Shown in the container logs (docker logs cine-app).",
+      "badCode": "Wrong setup code. Copy it from the container logs (docker logs cine-app).",
+      "rateLimited": "Too many attempts. Try again in a few minutes.",
       "create": "Create account",
       "signInTitle": "Sign in to continue",
       "signInText": "An administrator account already exists (the one in your .env, or one created here). Sign in with it to continue the setup.",
@@ -3019,6 +3026,7 @@
     "off": "Off",
     "errors": {
       "invalid-url": "Invalid address (http:// or https://).",
+      "secret-required": "The address changed: enter this key again. The saved one is never sent to a new address.",
       "invalid": "Invalid value.",
       "too-long": "Too long.",
       "unknown": "Unknown setting.",

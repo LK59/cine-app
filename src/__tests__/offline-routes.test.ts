@@ -17,9 +17,24 @@ const upstream = vi.fn();
 vi.mock("@/lib/jellyfinBreaker", () => ({ passJellyfinFetch: (...a: unknown[]) => upstream(...a) }));
 const visible = vi.fn();
 vi.mock("@/lib/itemVisibility", () => ({ assertVisible: (...a: unknown[]) => visible(...a) }));
+const downloading = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/transcodePolicy", () => ({ contentDownloadingAllowed: (...a: unknown[]) => downloading(...a) }));
 const jobs = vi.hoisted(() => ({ request: vi.fn(), jobFor: vi.fn(), forget: vi.fn(), touch: vi.fn() }));
+const Refusal = vi.hoisted(
+  () =>
+    class extends Error {
+      constructor(
+        message: string,
+        readonly status: number,
+        readonly code?: string,
+        readonly extra?: Record<string, unknown>
+      ) {
+        super(message);
+      }
+    }
+);
 vi.mock("@/lib/offline/jobs", () => ({
-  OfflineRefusal: class extends Error {},
+  OfflineRefusal: Refusal,
   requestOfflineJob: (...a: unknown[]) => jobs.request(...a),
   offlineJobFor: (...a: unknown[]) => jobs.jobFor(...a),
   forgetOfflineJob: (...a: unknown[]) => jobs.forget(...a),
@@ -46,6 +61,7 @@ beforeEach(() => {
   verify.mockResolvedValue({ u: "mathis", role: "user", jfId: "x", jti: "j" });
   visible.mockResolvedValue(null);
   jobs.request.mockResolvedValue({ id: JOB });
+  downloading.mockResolvedValue(true);
 });
 
 describe("POST /api/offline/jobs", () => {
@@ -64,6 +80,33 @@ describe("POST /api/offline/jobs", () => {
     expect((await POST(req({ itemId: ITEM, audioIndex: 1, quality: "ultra" }))).status).toBe(400);
     expect((await POST(req({ itemId: "../x", audioIndex: 1, quality: "high" }))).status).toBe(400);
     expect(jobs.request).not.toHaveBeenCalled();
+  });
+});
+
+describe("revue de sécurité du 20/10/2026", () => {
+  it("sans le droit Jellyfin de télécharger, un compte ordinaire est refusé (403 offline-forbidden) ; un administrateur passe", async () => {
+    downloading.mockResolvedValue(false);
+    const refused = await POST(req({ itemId: ITEM, audioIndex: 1, quality: "high" }));
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ code: "offline-forbidden" });
+    expect(downloading).toHaveBeenCalledWith("x");
+    // Jellyfin muet : non dans le doute, comme pour le fichier d'origine.
+    downloading.mockRejectedValue(new Error("injoignable"));
+    expect((await POST(req({ itemId: ITEM, audioIndex: 1, quality: "high" }))).status).toBe(403);
+    expect(jobs.request).not.toHaveBeenCalled();
+    verify.mockResolvedValue({ u: "louis", role: "admin", jfId: "y", jti: "j" });
+    expect((await POST(req({ itemId: ITEM, audioIndex: 1, quality: "high" }))).status).toBe(200);
+  });
+  it("la cinquante et unième version en vol : 429 { error, code: offline-limit, max: 50 }", async () => {
+    jobs.request.mockRejectedValue(new Refusal("Déjà 50 téléchargements en cours pour ce compte", 429, "offline-limit", { max: 50 }));
+    const res = await POST(req({ itemId: ITEM, audioIndex: 1, quality: "high" }));
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: "Déjà 50 téléchargements en cours pour ce compte", code: "offline-limit", max: 50 });
+    // Un refus sans code reste tel qu'il était : le message seul.
+    jobs.request.mockRejectedValue(new Refusal("Piste son inconnue", 400));
+    const plain = await POST(req({ itemId: ITEM, audioIndex: 1, quality: "high" }));
+    expect(plain.status).toBe(400);
+    expect(await plain.json()).toEqual({ error: "Piste son inconnue" });
   });
 });
 

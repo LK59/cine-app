@@ -56,7 +56,36 @@ export function noteUnauthorized(res: Response): void {
   if (isPublicPath(window.location.pathname)) return;
 
   leaving = true;
-  window.location.replace(expiredLoginUrl(window.location));
+  const target = expiredLoginUrl(window.location);
+  void forgetThenLeave(() => window.location.replace(target));
+}
+
+/** Le plus long qu'oublier le compte puisse retenir la redirection. */
+const FORGET_BUDGET_MS = 1000;
+
+/**
+ * Oublier le compte sur l'appareil, puis partir — en au plus une seconde, et quoi qu'il arrive.
+ *
+ * Seul le bouton « Se déconnecter » effaçait ce que l'appareil garde du compte : une session expirée
+ * ou fermée depuis un autre appareil laissait, sur un iPad partagé, le catalogue, la reprise, les
+ * recherches et l'abonnement aux notifications du précédent au compte suivant (revue de sécurité du
+ * 20/10/2026). La même fonction que le bouton (`forgetAccountOnDevice`), moins l'entrée des
+ * téléchargements hors ligne : le propriétaire a choisi de ne poser cette question qu'à la
+ * déconnexion volontaire.
+ *
+ * Importée à la demande : ce module est aussi lu par le proxy et les routes (la constante d'en-tête),
+ * qui n'ont rien à charger du stockage du navigateur.
+ */
+async function forgetThenLeave(leave: () => void): Promise<void> {
+  try {
+    await Promise.race([
+      import("@/lib/signOut").then((m) => m.forgetAccountOnDevice(FORGET_BUDGET_MS)),
+      new Promise((resolve) => setTimeout(resolve, FORGET_BUDGET_MS)),
+    ]);
+  } catch {
+    // Un module qui ne se charge pas (déploiement en cours, réseau coupé) ne retient pas la sortie.
+  }
+  leave();
 }
 
 /**

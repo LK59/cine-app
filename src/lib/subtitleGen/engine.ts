@@ -970,10 +970,27 @@ function verifyThenResume(jobId: string): Promise<void> {
   );
 }
 
-/** Reprendre une tâche en pause (un nouveau POST). Rend le statut après coup. */
-export function resumeJob(jobId: string): JobRow | null {
+/** Qui demande la reprise : le compte (`created_by` s'écrit sous ce même nom) et s'il administre. */
+export interface ResumeBy {
+  user: string;
+  admin: boolean;
+}
+
+/**
+ * Reprendre une tâche en pause (un nouveau POST). Rend le statut après coup.
+ *
+ * Seul le compte qui l'a lancée, ou un administrateur, la reprend (`by`) — pour tout autre, elle
+ * n'existe pas (`null`, un 404 qui ne dit rien de plus). Les identifiants de tâche circulent
+ * (rejoindre la génération d'un titre rend celui de la tâche d'un autre, le relevé aussi), et n'importe
+ * quel compte relançait ainsi une tâche mise en pause par le budget ou par ses erreurs — autant d'appels
+ * payants que son auteur n'avait pas redemandés (revue de sécurité du 20/10/2026). Un compte qui a
+ * seulement rejoint la tâche ne la relance donc plus : il attend son auteur, ou un administrateur.
+ * Sans `by` : un appel interne.
+ */
+export function resumeJob(jobId: string, by?: ResumeBy): JobRow | null {
   const job = jobsDb.get(jobId);
   if (!job) return null;
+  if (by && !by.admin && job.created_by !== by.user) return null;
   if (job.status !== "paused") return job;
   if (job.reason === "budget" && overBudget()) return job;
   if (!genAvailable()) return jobsDb.get(jobId);

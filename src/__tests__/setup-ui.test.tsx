@@ -69,11 +69,36 @@ describe("l'assistant de premier lancement", () => {
       </SWRConfig>,
     );
     await screen.findByText("setup.admin.create");
+    // Le code d'installation, avec où le trouver (20/10/2026).
+    expect(screen.getByText("setup.admin.codeHint")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("setup.admin.code"), { target: { value: " ABCD-EFGH-JKLM " } });
     fireEvent.change(screen.getByLabelText("setup.admin.password"), { target: { value: "un-mot-de-passe" } });
     fireEvent.change(screen.getByLabelText("setup.admin.confirm"), { target: { value: "un-mot-de-passe" } });
     fireEvent.click(screen.getByText("setup.admin.create"));
     await waitFor(() => expect(calls.some((c) => c.url === "/api/setup/admin")).toBe(true));
-    expect(JSON.parse(calls.find((c) => c.url === "/api/setup/admin")!.body!)).toEqual({ username: "admin", password: "un-mot-de-passe" });
+    expect(JSON.parse(calls.find((c) => c.url === "/api/setup/admin")!.body!)).toEqual({ setupCode: "ABCD-EFGH-JKLM", username: "admin", password: "un-mot-de-passe" });
+  });
+
+  it("dit où trouver le code quand il est refusé", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/setup/status") return new Response(JSON.stringify({ done: false, needsAdmin: true }), { status: 200 });
+        if (url === "/api/setup/admin") return new Response(JSON.stringify({ error: "invalid-setup-code" }), { status: 403 });
+        return new Response("{}", { status: 401 });
+      }),
+    );
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <SetupPage />
+      </SWRConfig>,
+    );
+    await screen.findByText("setup.admin.create");
+    fireEvent.change(screen.getByLabelText("setup.admin.code"), { target: { value: "mauvais" } });
+    fireEvent.change(screen.getByLabelText("setup.admin.password"), { target: { value: "un-mot-de-passe" } });
+    fireEvent.change(screen.getByLabelText("setup.admin.confirm"), { target: { value: "un-mot-de-passe" } });
+    fireEvent.click(screen.getByText("setup.admin.create"));
+    expect(await screen.findByText("setup.admin.badCode")).toBeTruthy();
   });
 
   it("refuse deux mots de passe différents sans rien envoyer", async () => {

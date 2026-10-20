@@ -28,6 +28,20 @@ const lines = () =>
     .map((l) => JSON.parse(l));
 
 describe("logPlaybackEvent", () => {
+  // Revue de sécurité du 20/10/2026 : une adresse de flux recopiée par le navigateur dans une ligne
+  // portait le jeton Jellyfin de la personne, ou le laissez-passer d'un téléviseur.
+  it("n'écrit ni jeton Jellyfin ni laissez-passer de diffusion, même dans un champ aplati", async () => {
+    const { logPlaybackEvent } = await import("@/lib/playerLog");
+    logPlaybackEvent("louis", "error", {
+      src: "/api/jellyfin/stream/abc/master.m3u8?MediaSourceId=1&ApiKey=secret1&castToken=secret2",
+      takeover: { url: "/stream?api_key=secret3" },
+      steps: "+0.1 s ouverture ?castToken=secret4&a=1",
+    });
+    const text = fs.readFileSync(path.join(dir, "logs", "player.log"), "utf8");
+    expect(text).not.toMatch(/secret/);
+    expect(lines()[0].src).toBe("/api/jellyfin/stream/abc/master.m3u8?MediaSourceId=1&castToken=-");
+  });
+
   it("écrit une ligne par événement, avec le compte et l'heure", async () => {
     const { logPlaybackEvent } = await import("@/lib/playerLog");
     logPlaybackEvent("louis", "fallback", { reason: "tampon refusé", path: "remux" });

@@ -14,6 +14,11 @@ import { fixVttTimestampMap } from "@/lib/vttTimestampMap";
 import { assertVisible } from "@/lib/itemVisibility";
 import { encodePlaylist } from "@/lib/playlistEncoding";
 import { noteMediaRead } from "@/lib/repliques/playbackActivity";
+import { filterStreamQuery, logDroppedStreamParams } from "@/lib/streamQuery";
+import { admitTranscode, shouldLogRefusal } from "@/lib/transcodeBudget";
+import { shareStreamRefusal } from "@/lib/share/guard";
+import { logError } from "@/lib/logger";
+import { errorBody } from "@/lib/apiErrorCodes";
 
 // Root cause found live via temporary request logging: right after a fresh remux job starts
 // (e.g. on an audio-track switch, which always requests a brand new PlaySessionId/ffmpeg job),
@@ -99,6 +104,19 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
   // décodage a eu lieu. Refusé ici, la chaîne n'est jamais assemblée.
   if (!isStreamPath(path)) return new NextResponse(null, { status: 400 });
 
+  /**
+   * La chaîne de requête réduite à ce que Jellyfin comprend (20/10/2026, revue de sécurité) — voir
+   * `filterStreamQuery`. Laissez-passer et jetons retirés d'abord, comme avant ; ce qui reste
+   * d'inconnu est écarté, et nommé une fois dans `server.log`.
+   */
+  const query = filterStreamQuery(stripAccessToken(withoutCastToken(req.nextUrl.search)));
+  const isStatic = query.params.get("static")?.toLowerCase() === "true";
+
+  // Le compte à qui ce transcodage est compté (`transcodeBudget.ts`) : la session, ou le compte que
+  // le laissez-passer d'un téléviseur désigne — le même, quand la page et le téléviseur lisent la
+  // même séance.
+  let account = pass ? (pass.jfId ?? `cast:${pass.user}`) : "";
+
   // Un téléviseur en diffusion n'a pas de cookie : son laissez-passer répond à sa place. Même
   // fonction que le proxy, jamais une seconde formulation — voir `castPassFor` (posée par `GET`).
   if (!castPass) {
@@ -110,6 +128,17 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
     // laissez-passer de diffusion n'y passe pas (il ne porte pas le `jfId`, voir là-bas).
     const refused = await assertVisible(session, itemId);
     if (refused) return refused;
+    /**
+     * Un lien de partage : trois lectures en même temps (DECISIONS.md §112), comptées aussi ici,
+     * sur le fichier lu par plages (20/10/2026). Le contrôle de l'ouverture (fiche, négociation)
+     * ne voyait pas un appareil qui rouvrait l'adresse du fichier, déjà connue, sans repasser par
+     * elle. L'appareil qui demande ne se compte pas : une lecture en cours n'est jamais coupée.
+     */
+    if (session.role === "share" && isStatic) {
+      const tooMany = shareStreamRefusal(session);
+      if (tooMany) return tooMany;
+    }
+    account = session.jfId;
   }
 
   // Des octets d'un film partent : l'indexation des répliques se tait (DECISIONS.md §88).
@@ -118,14 +147,13 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
   const restPath = path.join("/");
   // Le jeton d'une adresse ancienne ou recopiée ne repart pas : l'en-tête ci-dessous authentifie
   // la requête, et Jellyfin le lit avant la requête — voir `stripAccessToken`.
-  const target = `${config.jellyfin.url}/videos/${itemId}/${restPath}${stripAccessToken(withoutCastToken(req.nextUrl.search))}`;
+  const target = `${config.jellyfin.url}/videos/${itemId}/${restPath}${query.search}`;
   // Ceinture et bretelles : la question est reposée sur l'URL assemblée, celle que `fetch`
   // normalisera, et non sur les morceaux dont elle sort.
   if (!isUnderJellyfinPrefix(target, `${config.jellyfin.url}/videos/${itemId}/`)) {
     return new NextResponse(null, { status: 400 });
   }
 
-  const isStatic = req.nextUrl.searchParams.get("static") === "true";
   /**
    * Les décisions sur le chemin se prennent sans la casse (20/10/2026, revue de sécurité) : les routes
    * de Jellyfin n'y sont pas sensibles. `SUBTITLES.M3U8` échappait au test `.m3u8`, partait par la
@@ -135,6 +163,21 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
    */
   const lowerPath = restPath.toLowerCase();
   const isManifest = lowerPath.endsWith(".m3u8");
+
+  logDroppedStreamParams(query.dropped, { path: restPath.slice(0, 120) });
+
+  /**
+   * Cinq transcodages en même temps par compte (20/10/2026, revue de sécurité) : chaque
+   * `PlaySessionId` nouveau lançait un ffmpeg de plus chez Jellyfin, sans borne — voir
+   * `transcodeBudget.ts`. Une séance déjà active passe toujours ; seule une sixième est refusée.
+   */
+  if (isTranscodeRequest(lowerPath, isStatic)) {
+    const playSessionId = query.params.get("playsessionid") || `sans-id:${lowerPath}`;
+    if (!admitTranscode(account, playSessionId)) {
+      if (shouldLogRefusal(account)) logError("stream.transcode-limit", "Transcodages simultanés refusés pour ce compte", { account, itemId });
+      return NextResponse.json(errorBody("Trop de lectures transcodées en même temps sur ce compte", "transcode-limit"), { status: 429 });
+    }
+  }
 
   try {
     // Root cause found live: Safari issues a speculative byte-Range request for the manifest
@@ -309,6 +352,18 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
   } catch {
     return new NextResponse(null, { status: 502 });
   }
+}
+
+/**
+ * Une requête qui fait tourner (ou garde en vie) un transcodage chez Jellyfin : le maître, une
+ * variante ou un segment HLS — `static` n'y change rien, Jellyfin l'ignore là et un client qui
+ * l'ajouterait échapperait sinon au compte —, ou un `stream.*` progressif qui n'est pas `static`.
+ * Les sous-titres (`…/Subtitles/…`) n'en sont pas : une extraction de texte, pas une vidéo.
+ */
+function isTranscodeRequest(lowerPath: string, isStatic: boolean): boolean {
+  if (/(^|\/)subtitles\//.test(lowerPath)) return false;
+  if (lowerPath.endsWith(".m3u8") || lowerPath.startsWith("hls")) return true;
+  return !isStatic;
 }
 
 /** Un corps que Jellyfin écrit en texte — liste HLS, sous-titres, JSON, message d'erreur. */

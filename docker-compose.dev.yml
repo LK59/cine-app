@@ -40,6 +40,10 @@ services:
     volumes:
       # The working tree itself: this is what makes an edit visible without a rebuild.
       - .:/app
+      # …except the repository's history and hooks, read-only: `next dev` and every npm dependency
+      # run in this container, and a writable `.git/hooks` would let anything that compromises them
+      # plant a hook that runs on the host at the next commit.
+      - ./.git:/app/.git:ro
 
       # Same read-only media mounts as production, so the app sees the same library.
       - /mnt/media/video:/mnt/media/video:ro
@@ -56,6 +60,12 @@ services:
       - "${DEV_BIND:-127.0.0.1}:3001:3000"
     # Same identity as production so the SQLite database and its WAL stay writable by both.
     user: "1001:1000"
+    # The same hardening as production: it holds the same keys and the same database.
+    mem_limit: 3g
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - media_net
     restart: "no"

@@ -11,6 +11,7 @@ import { castProgressRelay } from "@/lib/castProgress";
 import { playbackDevice } from "@/lib/playbackDevice";
 import { recoverLostPosition } from "@/lib/lostStopPosition";
 import { takePrewarmSession } from "@/lib/prewarmSessions";
+import { forgetTranscode } from "@/lib/transcodeBudget";
 
 export async function POST(req: NextRequest) {
   if (!config.player.enabled) {
@@ -30,6 +31,8 @@ export async function POST(req: NextRequest) {
   const shareRefused = await shareRefusal(session, itemId);
   if (shareRefused) return shareRefused;
   const playSessionId = body?.playSessionId as string | undefined;
+  // Sa place parmi les cinq transcodages du compte se libère (`transcodeBudget.ts`, 20/10/2026).
+  forgetTranscode(session.jfId, playSessionId);
   const mediaSourceId = body?.mediaSourceId as string | undefined;
   const positionTicks = Number(body?.positionTicks) || 0;
   const client = isPlaybackClient(body?.client) ? body.client : PLAYBACK_CLIENTS.stable;

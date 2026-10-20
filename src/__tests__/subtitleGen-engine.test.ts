@@ -414,7 +414,10 @@ describe("les pauses", () => {
     expect(jobsDb.get(id)).toMatchObject({ status: "paused", reason: "unavailable" });
     expect(logText()).toContain('"kind":"retry"');
     behavior = translateAll;
-    expect(resume(id)?.status).toBe("running");
+    // Un autre compte ne la relance pas : pour lui, elle n'existe pas (revue de sécurité du 20/10/2026).
+    expect(resume(id, { user: "lucas", admin: false })).toBeNull();
+    expect(jobsDb.get(id)).toMatchObject({ status: "paused", reason: "unavailable" });
+    expect(resume(id, { user: "emma", admin: false })?.status).toBe("running");
     await settle();
     expect(jobsDb.get(id)!.status).toBe("done");
   });
@@ -436,6 +439,19 @@ describe("les pauses", () => {
     expect(jobsDb.get(id)).toMatchObject({ status: "paused", reason: "config" });
   });
 
+  it("un administrateur relance la tâche d'un autre compte", async () => {
+    behavior = async (call) => {
+      if (call.schemaName === "subtitle_batch") throw new ProviderError("rate", "limite");
+      return translateAll(call);
+    };
+    const id = await runJob();
+    expect(jobsDb.get(id)).toMatchObject({ status: "paused", reason: "unavailable" });
+    behavior = translateAll;
+    expect(resume(id, { user: "louis", admin: true })?.status).toBe("running");
+    await settle();
+    expect(jobsDb.get(id)!.status).toBe("done");
+  });
+
   it("met en pause `budget` quand le budget du mois est atteint, et refuse d'en lancer d'autres (402)", async () => {
     process.env.SUBTITLE_GEN_BUDGET_USD = "0.00001";
     const id = await runJob();
@@ -444,7 +460,7 @@ describe("les pauses", () => {
     const other = await createOrJoin(caller, { itemId: "d".repeat(32), target: "de" }, "emma:s1");
     expect(other).toMatchObject({ ok: false, status: 402, error: "budget" });
     // Reprendre ne passe pas outre.
-    expect(resume(id)).toMatchObject({ status: "paused", reason: "budget" });
+    expect(resume(id, { user: "emma", admin: false })).toMatchObject({ status: "paused", reason: "budget" });
     jf.name = "Film";
   });
 

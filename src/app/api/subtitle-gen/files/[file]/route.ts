@@ -21,5 +21,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ file
   if (refused) return refused;
   const text = readFinal(job.item_id, job.id, job.target, "vtt");
   if (text === null) return new NextResponse(null, { status: 404 });
-  return new NextResponse(text, { headers: { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "private, max-age=3600" } });
+  // `no-cache` (revue de sécurité du 20/10/2026) : gardé une heure, le sous-titre se resservait
+  // depuis le cache du navigateur à un autre compte du même appareil, sans repasser par
+  // `assertVisible` — les tags bloqués d'un compte ne valaient plus. Un fichier de quelques
+  // dizaines de Ko, relu à chaque ouverture : pas d'étiquette à tenir pour si peu.
+  return new NextResponse(text, { headers: { "Content-Type": "text/vtt; charset=utf-8", "Cache-Control": "private, no-cache" } });
 }

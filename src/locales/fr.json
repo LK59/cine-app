@@ -1781,7 +1781,10 @@
       "service_unavailable": "Ce service n'est pas disponible pour le moment.",
       "network": "Le serveur est injoignable pour le moment.",
       "person_not_found": "Personne introuvable.",
-      "share-streams": "Ce lien est déjà lu sur le nombre maximal d'appareils. Réessayez quand une lecture sera terminée."
+      "share-streams": "Ce lien est déjà lu sur le nombre maximal d'appareils. Réessayez quand une lecture sera terminée.",
+      "offline-limit": "Vous avez déjà 50 téléchargements en cours. Laissez-en finir quelques-uns, puis réessayez.",
+      "offline-forbidden": "Ce compte n'a pas le droit de télécharger. Demandez-le à l'administrateur.",
+      "transcode-limit": "Trop de lectures en cours sur ce compte. Arrêtez-en une puis réessayez."
     }
   },
   "sse": {
@@ -2978,6 +2981,10 @@
       "mismatch": "Les deux mots de passe ne correspondent pas.",
       "weak": "8 caractères au moins.",
       "invalidUsername": "Lettres, chiffres, point, tiret, arobase ou soulignement — 64 au plus.",
+      "code": "Code d'installation",
+      "codeHint": "Affiché dans les journaux du conteneur (docker logs cine-app).",
+      "badCode": "Code d'installation incorrect. Recopiez-le depuis les journaux du conteneur (docker logs cine-app).",
+      "rateLimited": "Trop d'essais. Réessayez dans quelques minutes.",
       "create": "Créer le compte",
       "signInTitle": "Connectez-vous pour continuer",
       "signInText": "Un compte administrateur existe déjà (celui de votre .env, ou un créé ici). Connectez-vous avec lui pour poursuivre la configuration.",
@@ -3019,6 +3026,7 @@
     "off": "Désactivé",
     "errors": {
       "invalid-url": "Adresse invalide (http:// ou https://).",
+      "secret-required": "L'adresse a changé : saisissez de nouveau cette clé. Celle qui est enregistrée n'est jamais envoyée à une nouvelle adresse.",
       "invalid": "Valeur invalide.",
       "too-long": "Trop long.",
       "unknown": "Réglage inconnu.",

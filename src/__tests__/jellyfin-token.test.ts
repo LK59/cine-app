@@ -86,14 +86,16 @@ describe("proxy — un jeton Jellyfin révoqué", () => {
     expect(mockSessionDb.delete).toHaveBeenCalledWith("s-1");
   });
 
-  // Fermer la session sur une route d'API couperait aussi le flux d'un film en cours.
-  it("ne touche à rien sur une route d'API, pas même la question", async () => {
+  // Fermer la session sur une route d'API couperait aussi le flux d'un film en cours : la question part
+  // en arrière-plan, sans être attendue, et seule une réponse déjà connue compte (revue du 20/10/2026 —
+  // un client qui n'appelait que l'API n'était jamais revérifié).
+  it("sur une route d'API : la question part sans être attendue, et un compte ordinaire garde son flux", async () => {
     mockVerify.mockResolvedValue(SESSION);
     mockJellyfin.checkUserToken.mockRejectedValue(refused());
     const { proxy } = await import("@/proxy");
     const res = await proxy(req("/api/jellyfin/stream/abc"));
     expect(res.status).toBe(200);
-    expect(mockJellyfin.checkUserToken).not.toHaveBeenCalled();
+    expect(mockJellyfin.checkUserToken).toHaveBeenCalledOnce();
     expect(mockSessionDb.delete).not.toHaveBeenCalled();
   });
 

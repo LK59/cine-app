@@ -1,4 +1,5 @@
 import { TIMELINE_MAX_CHARS } from "@/lib/playbackTimeline";
+import { redactLogText } from "@/lib/stripAccessToken";
 import path from "node:path";
 import { LOG_DIR, appendJsonLine, logGenerations } from "@/lib/logFile";
 
@@ -146,7 +147,7 @@ function clean(fields: Record<string, unknown>): Record<string, string | number 
     // chaîne compacte, hors du plafond des quarante — elle ne doit ni chasser les faits de la ligne
     // ni être chassée par eux. Bornée à part, comme `steps`.
     if (key === "timeline") {
-      if (typeof value === "string" && value) out[key] = value.slice(-TIMELINE_MAX_CHARS);
+      if (typeof value === "string" && value) out[key] = redactLogText(value.slice(-TIMELINE_MAX_CHARS));
       return;
     }
     const diag = key.startsWith("diag.");
@@ -166,7 +167,10 @@ function clean(fields: Record<string, unknown>): Record<string, string | number 
     else if (typeof value === "boolean") out[key] = value;
     // `steps` is the one long field: the device's own timeline of a track change, which is the
     // whole point of the line it rides on. Still bounded — by eight times the rest, not by trust.
-    else if (typeof value === "string" && value) out[key] = value.slice(0, key === "steps" ? 4000 : 500);
+    // Sans jeton (`redactLogText`, 20/10/2026) : une adresse de flux recopiée dans une trace porte
+    // `ApiKey=` ou `castToken=`. Retiré après la coupe, qui reste la même borne : un jeton coupé
+    // en fin de chaîne est encore reconnu à son nom, retiré jusqu'au bout.
+    else if (typeof value === "string" && value) out[key] = redactLogText(value.slice(0, key === "steps" ? 4000 : 500));
     else return;
     if (diag) keptDiag += 1;
     else kept += 1;

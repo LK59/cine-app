@@ -106,6 +106,18 @@ describe("POST /api/subtitle-gen/jobs/<id>/resume", () => {
   it("rend le statut d'après, raison comprise", async () => {
     s.resume.mockReturnValue({ id: JOB, status: "paused", reason: "budget" });
     expect(await (await RESUME(req(`/api/subtitle-gen/jobs/${JOB}/resume`), params({ jobId: JOB }))).json()).toEqual({ jobId: JOB, status: "paused", reason: "budget" });
+    // Le moteur reçoit qui demande : c'est lui qui refuse la tâche d'un autre compte.
+    expect(s.resume).toHaveBeenCalledWith(JOB, { user: "emma", admin: false });
+  });
+  it("la tâche d'un autre compte n'existe pas (404) ; un administrateur est annoncé comme tel", async () => {
+    s.resume.mockReturnValue(null);
+    const refused = await RESUME(req(`/api/subtitle-gen/jobs/${JOB}/resume`), params({ jobId: JOB }));
+    expect(refused.status).toBe(404);
+    expect(await refused.json()).toEqual({ error: "not-found" });
+    s.session = { u: "louis", jfUser: "louis", jfId: "jf-louis", role: "admin", jti: "j" };
+    s.resume.mockReturnValue({ id: JOB, status: "running", reason: null });
+    expect((await RESUME(req(`/api/subtitle-gen/jobs/${JOB}/resume`), params({ jobId: JOB }))).status).toBe(200);
+    expect(s.resume).toHaveBeenLastCalledWith(JOB, { user: "louis", admin: true });
   });
 });
 
@@ -115,6 +127,9 @@ describe("GET /api/subtitle-gen/files/<id>.vtt", () => {
     const res = await FILE(req(`/api/subtitle-gen/files/${JOB}.vtt`), params({ file: `${JOB}.vtt` }));
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toContain("text/vtt");
+    // Jamais resservi depuis le cache du navigateur sans repasser par `assertVisible` : un autre
+    // compte du même appareil l'aurait reçu malgré ses tags bloqués (revue du 20/10/2026).
+    expect(res.headers.get("Cache-Control")).toBe("private, no-cache");
     expect(await res.text()).toContain("Bonjour");
     s.session = null;
     expect((await FILE(req(`/api/subtitle-gen/files/${JOB}.vtt`), params({ file: `${JOB}.vtt` }))).status).toBe(401);

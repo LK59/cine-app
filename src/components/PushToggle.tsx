@@ -7,6 +7,7 @@ import { useErrorText } from "@/lib/useErrorText";
 import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
 import { isIosSafariBrowserTab } from "@/lib/iosInstall";
+import { persistedCacheAccount } from "@/lib/persistentCache";
 
 type State = "unsupported" | "needsInstall" | "denied" | "unsubscribed" | "subscribed" | "loading";
 
@@ -27,22 +28,31 @@ async function getVapidKey(): Promise<string | null> {
 }
 
 /** `onSubscribed` : l'abonnement vient d'être accepté par le serveur — voir `PushResumePrompt`. */
-/** Ce que ce navigateur a dit au serveur de son abonnement, et quand — voir `detect`. */
-const SENT_KEY = "cine-push-sent";
+/**
+ * Ce que ce navigateur a dit au serveur de son abonnement, et quand — voir `detect`.
+ *
+ * Par compte (revue de sécurité du 20/10/2026) : le serveur range un point de terminaison sous le
+ * compte qui l'a envoyé en dernier. Une seule clé pour l'appareil, et un second compte connecté le
+ * même jour ne renvoyait rien — l'abonnement restait rangé sous le premier, qui recevait les
+ * notifications de l'autre. Sans compte connu, on renvoie à chaque fois, comme avant le 08/10.
+ */
+const SENT_KEY_PREFIX = "cine-push-sent:";
 const RESEND_AFTER_MS = 24 * 3600_000;
 
-function shouldResendSubscription(endpoint: string): boolean {
+function shouldResendSubscription(endpoint: string, account: string | null): boolean {
+  if (!account) return true;
   try {
-    const sent = JSON.parse(localStorage.getItem(SENT_KEY) ?? "null") as { endpoint?: string; at?: number } | null;
+    const sent = JSON.parse(localStorage.getItem(SENT_KEY_PREFIX + account) ?? "null") as { endpoint?: string; at?: number } | null;
     return !sent || sent.endpoint !== endpoint || typeof sent.at !== "number" || Date.now() - sent.at > RESEND_AFTER_MS;
   } catch {
     return true;
   }
 }
 
-function noteSubscriptionSent(endpoint: string): void {
+function noteSubscriptionSent(endpoint: string, account: string | null): void {
+  if (!account) return;
   try {
-    localStorage.setItem(SENT_KEY, JSON.stringify({ endpoint, at: Date.now() }));
+    localStorage.setItem(SENT_KEY_PREFIX + account, JSON.stringify({ endpoint, at: Date.now() }));
   } catch {
     // Stockage indisponible : on renverra la prochaine fois, comme avant.
   }
@@ -92,12 +102,13 @@ export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {})
         // panneau se rouvre souvent, et chaque ouverture renvoyait le même abonnement — 64 envois
         // au journal du proxy pour quelques appareils.
         try {
-          if (shouldResendSubscription(existing.endpoint)) {
+          const account = persistedCacheAccount();
+          if (shouldResendSubscription(existing.endpoint, account)) {
             void apiAction("/api/push/subscribe", {
               method: "POST",
               body: JSON.stringify(existing.toJSON()),
             })
-              .then(() => noteSubscriptionSent(existing.endpoint))
+              .then(() => noteSubscriptionSent(existing.endpoint, account))
               .catch(() => {});
           }
         } catch {
@@ -143,7 +154,7 @@ export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {})
         throw error;
       }
 
-      noteSubscriptionSent(subscription.endpoint);
+      noteSubscriptionSent(subscription.endpoint, persistedCacheAccount());
       setSub(subscription);
       setState("subscribed");
       onSubscribed?.();

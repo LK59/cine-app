@@ -10,6 +10,13 @@ vi.mock("@/lib/config", () => ({
   config: { player: { enabled: true }, jellyfin: { url: "http://jf.test", apiKey: "key" } },
 }));
 
+// Les lignes de `server.log` (paramètres écartés, refus de transcodage), observées sans écrire.
+const mockLogError = vi.fn();
+vi.mock("@/lib/logger", () => ({ logError: (...args: unknown[]) => mockLogError(...args) }));
+// Le compte des lectures d'un lien de partage a ses propres tests ; ici, sa réponse est choisie.
+const mockShareStreamRefusal = vi.fn((..._args: unknown[]): Response | null => null);
+vi.mock("@/lib/share/guard", () => ({ shareStreamRefusal: (...args: unknown[]) => mockShareStreamRefusal(...args) }));
+
 const mockFetch = vi.fn();
 const validId = "b".repeat(32);
 
@@ -33,10 +40,13 @@ function upstream(status: number) {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   vi.stubGlobal("fetch", mockFetch);
   mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1" });
+  // Le compte des transcodages et la mémoire des noms écartés vivent sur `globalThis` : remis à zéro.
+  (await import("@/lib/transcodeBudget")).resetTranscodeBudget();
+  (await import("@/lib/streamQuery")).resetDroppedStreamParamLog();
 });
 
 async function get(path: string[] = ["hls1", "main", "0.mp4"]) {
@@ -245,5 +255,151 @@ describe("GET /api/jellyfin/stream — jeton dans l'adresse", () => {
     const text = await res.text();
     expect(text).not.toContain("key");
     expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+});
+
+/**
+ * Revue de sécurité du 20/10/2026 : le relais recopiait toute chaîne de requête vers Jellyfin, sous la
+ * clé d'administration. Un compte pouvait y écrire ses propres débit et définition, et lancer un
+ * ffmpeg par `PlaySessionId` inventé, sans borne.
+ */
+describe("GET /api/jellyfin/stream — paramètres permis et transcodages par compte", () => {
+  async function getUrl(url: string, path: string[]) {
+    const { GET } = await import("@/app/api/jellyfin/stream/[itemId]/[...path]/route");
+    return GET(fakeReq(url), { params: Promise.resolve({ itemId: validId, path }) });
+  }
+  const master = (ps: string, extra = "") =>
+    getUrl(`http://app/api/jellyfin/stream/${validId}/master.m3u8?PlaySessionId=${ps}&MediaSourceId=${validId}${extra}`, ["master.m3u8"]);
+
+  it("transmet tels quels les paramètres qu'écrit Jellyfin, options de codec comprises, sans la casse", async () => {
+    mockFetch.mockResolvedValue(upstream(200));
+    const query = [
+      "DeviceId=d", `MediaSourceId=${validId}`, "VideoCodec=hevc,h264", "AudioCodec=aac", "AudioStreamIndex=1", "VideoBitrate=139616000",
+      "AudioBitrate=384000", "MaxWidth=3840", "MaxHeight=2160", "MaxFramerate=23.976", "PlaySessionId=p", "SegmentContainer=mp4",
+      "MinSegments=1", "BreakOnNonKeyFrames=True", "TranscodingMaxAudioChannels=6", "RequireAvc=false", "Tag=abc",
+      "h264-profile=high,main", "hevc-level=153", "hevc-rangetype=SDR,HDR10", "av1-videobitdepth=10", "aac-audiochannels=6",
+      "TranscodeReasons=AudioCodecNotSupported", "segmentlength=6", "EnableAudioVbrEncoding=true",
+    ].join("&");
+    await getUrl(`http://app/api/jellyfin/stream/${validId}/master.m3u8?${query}`, ["master.m3u8"]);
+    expect(mockFetch.mock.calls[0][0]).toBe(`http://jf.test/videos/${validId}/master.m3u8?${query}`);
+    expect(mockLogError).not.toHaveBeenCalled();
+  });
+
+  it("écarte un paramètre inconnu, sans refuser la requête, et le nomme une seule fois au journal", async () => {
+    mockFetch.mockResolvedValue(upstream(200));
+    const res = await getUrl(`http://app/api/jellyfin/stream/${validId}/hls1/main/0.mp4?PlaySessionId=p&CpuCoreLimit=64&runtimeTicks=0&UserId=x&Params=a;b`, ["hls1", "main", "0.mp4"]);
+    expect(res.status).toBe(200);
+    expect(mockFetch.mock.calls[0][0]).toBe(`http://jf.test/videos/${validId}/hls1/main/0.mp4?PlaySessionId=p&runtimeTicks=0`);
+    expect(mockLogError.mock.calls.map((c) => c[0])).toEqual(["stream.param-dropped", "stream.param-dropped", "stream.param-dropped"]);
+    expect(mockLogError.mock.calls.map((c) => (c[2] as { param: string }).param)).toEqual(["CpuCoreLimit", "UserId", "Params"]);
+
+    await getUrl(`http://app/api/jellyfin/stream/${validId}/hls1/main/1.mp4?PlaySessionId=p&cpucorelimit=64`, ["hls1", "main", "1.mp4"]);
+    expect(mockLogError).toHaveBeenCalledTimes(3);
+  });
+
+  it("le laissez-passer et les jetons sont retirés comme avant, sans être signalés comme écartés", async () => {
+    mockFetch.mockResolvedValue(upstream(200));
+    await getUrl(`http://app/api/jellyfin/stream/${validId}/hls1/main/0.mp4?PlaySessionId=p&api_key=k&ApiKey=k`, ["hls1", "main", "0.mp4"]);
+    expect(mockFetch.mock.calls[0][0]).toBe(`http://jf.test/videos/${validId}/hls1/main/0.mp4?PlaySessionId=p`);
+    expect(mockLogError).not.toHaveBeenCalled();
+  });
+
+  it("un nom répété ne garde que son premier exemplaire — celui que Jellyfin lit", async () => {
+    mockFetch.mockResolvedValue(upstream(200));
+    await getUrl(`http://app/api/jellyfin/stream/${validId}/main.m3u8?PlaySessionId=a&playsessionid=b`, ["main.m3u8"]);
+    expect(mockFetch.mock.calls[0][0]).toBe(`http://jf.test/videos/${validId}/main.m3u8?PlaySessionId=a`);
+  });
+
+  it("refuse en 429 une sixième séance de transcodage du même compte ; un autre compte n'en est pas touché", async () => {
+    mockFetch.mockResolvedValue(upstream(200));
+    for (const ps of ["p1", "p2", "p3", "p4", "p5"]) expect((await master(ps)).status).toBe(200);
+    const refused = await master("p6");
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toMatchObject({ code: "transcode-limit" });
+    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(mockLogError.mock.calls.filter((c) => c[0] === "stream.transcode-limit")).toHaveLength(1);
+
+    // Une séance déjà ouverte continue : ses segments et ses variantes passent.
+    expect((await getUrl(`http://app/api/jellyfin/stream/${validId}/hls1/main/3.mp4?PlaySessionId=p2&runtimeTicks=0`, ["hls1", "main", "3.mp4"])).status).toBe(200);
+
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-2" });
+    expect((await master("p6")).status).toBe(200);
+  });
+
+  it("une lecture du fichier (`static=true`) n'est jamais un transcodage", async () => {
+    mockFetch.mockResolvedValue(upstream(206));
+    for (let i = 0; i < 8; i++) {
+      const res = await getUrl(`http://app/api/jellyfin/stream/${validId}/stream.mkv?static=true&mediaSourceId=${validId}&PlaySessionId=s${i}`, ["stream.mkv"]);
+      expect(res.status).toBe(206);
+    }
+    const { activeTranscodes } = await import("@/lib/transcodeBudget");
+    expect(activeTranscodes("jf-1")).toBe(0);
+  });
+
+  it("`static=true` ajouté à une adresse HLS ne la fait pas échapper au compte", async () => {
+    mockFetch.mockResolvedValue(upstream(200));
+    for (const ps of ["p1", "p2", "p3", "p4", "p5"]) expect((await master(ps, "&static=true")).status).toBe(200);
+    expect((await master("p6", "&static=true")).status).toBe(429);
+  });
+
+  it("un flux progressif sans `static` compte, lui", async () => {
+    mockFetch.mockResolvedValue(upstream(200));
+    for (const ps of ["p1", "p2", "p3", "p4", "p5"]) {
+      expect((await getUrl(`http://app/api/jellyfin/stream/${validId}/stream.mp4?PlaySessionId=${ps}&VideoCodec=h264`, ["stream.mp4"])).status).toBe(200);
+    }
+    expect((await getUrl(`http://app/api/jellyfin/stream/${validId}/stream.mp4?PlaySessionId=p6&VideoCodec=h264`, ["stream.mp4"])).status).toBe(429);
+  });
+
+  it("les sous-titres ne comptent pas", async () => {
+    mockFetch.mockResolvedValue(upstream(200));
+    for (const ps of ["p1", "p2", "p3", "p4", "p5"]) await master(ps);
+    const res = await getUrl(`http://app/api/jellyfin/stream/${validId}/${validId}/Subtitles/3/subtitles.m3u8?SegmentLength=30&PlaySessionId=autre`, [validId, "Subtitles", "3", "subtitles.m3u8"]);
+    expect(res.status).toBe(200);
+  });
+
+  it("une séance sans nouvelles depuis trois minutes rend sa place", async () => {
+    vi.useFakeTimers();
+    try {
+      mockFetch.mockResolvedValue(upstream(200));
+      for (const ps of ["p1", "p2", "p3", "p4", "p5"]) await master(ps);
+      expect((await master("p6")).status).toBe(429);
+      vi.advanceTimersByTime(3 * 60_000 + 1);
+      expect((await master("p6")).status).toBe(200);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("une séance arrêtée (`forgetTranscode`, appelé par la route d'arrêt) libère sa place tout de suite", async () => {
+    mockFetch.mockResolvedValue(upstream(200));
+    for (const ps of ["p1", "p2", "p3", "p4", "p5"]) await master(ps);
+    expect((await master("p6")).status).toBe(429);
+    (await import("@/lib/transcodeBudget")).forgetTranscode("jf-1", "p3");
+    expect((await master("p6")).status).toBe(200);
+  });
+
+  /**
+   * Un lien de partage : trois lectures en même temps (§112), comptées aussi sur le fichier lu par
+   * plages — un appareil qui rouvrait l'adresse du fichier ne repassait pas par l'ouverture.
+   */
+  it("un lien de partage déjà lu sur le maximum d'appareils est refusé sur le fichier lui-même", async () => {
+    mockFetch.mockResolvedValue(upstream(206));
+    const session = { jfId: "jf-share", role: "share", sh: "s1", jti: "j1" };
+    mockVerifySessionFull.mockResolvedValue(session);
+    mockShareStreamRefusal.mockReturnValueOnce(new Response(JSON.stringify({ code: "share-streams" }), { status: 429 }));
+    const file = `http://app/api/jellyfin/stream/${validId}/stream.mkv?static=true&mediaSourceId=${validId}`;
+    expect((await getUrl(file, ["stream.mkv"])).status).toBe(429);
+    expect(mockShareStreamRefusal).toHaveBeenCalledWith(session);
+    expect(mockFetch).not.toHaveBeenCalled();
+    // L'appareil déjà en lecture (refus `null`) passe.
+    expect((await getUrl(file, ["stream.mkv"])).status).toBe(206);
+  });
+
+  it("le compte des lectures d'un lien ne regarde ni les comptes du foyer, ni les segments HLS", async () => {
+    mockFetch.mockResolvedValue(upstream(200));
+    await getUrl(`http://app/api/jellyfin/stream/${validId}/stream.mkv?static=true`, ["stream.mkv"]);
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-share", role: "share", sh: "s1", jti: "j1" });
+    await master("p1");
+    expect(mockShareStreamRefusal).not.toHaveBeenCalled();
   });
 });

@@ -12,6 +12,12 @@ vi.mock("@/components/Toast", () => ({
   useToast: () => ({ error: toastError, success: vi.fn(), info: vi.fn() }),
 }));
 
+let pageAccount: string | null = null;
+vi.mock("@/lib/persistentCache", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/persistentCache")>()),
+  persistedCacheAccount: () => pageAccount,
+}));
+
 import { PushToggle } from "@/components/PushToggle";
 
 function stubServiceWorker(pushManager: {
@@ -180,5 +186,42 @@ describe("PushToggle", () => {
     await waitFor(() => expect(toastError).toHaveBeenCalledWith("Stockage indisponible"));
     expect(unsubscribe).toHaveBeenCalled();
     expect(screen.getByText("notifications.pushToggle.enable")).toBeInTheDocument();
+  });
+
+  /**
+   * « Déjà renvoyé aujourd'hui » se retient par compte (revue de sécurité du 20/10/2026).
+   *
+   * Le serveur range un point de terminaison sous le compte qui l'a envoyé en dernier. Avec une seule
+   * clé pour l'appareil, un second compte ouvrant son panneau le même jour ne renvoyait rien :
+   * l'abonnement restait rangé sous le premier, qui recevait les notifications de l'autre.
+   */
+  it("un autre compte sur le même appareil renvoie l'abonnement sous son nom", async () => {
+    localStorage.clear();
+    const existing = { endpoint: "https://push.example/1", toJSON: () => ({ endpoint: "https://push.example/1" }), unsubscribe: vi.fn() };
+    stubServiceWorker({ getSubscription: () => Promise.resolve(existing) });
+    stubNotification("granted");
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    vi.stubGlobal("fetch", fetchMock);
+    const posts = () => fetchMock.mock.calls.filter(([url, init]) => url === "/api/push/subscribe" && init?.method === "POST").length;
+
+    pageAccount = "louis";
+    render(<PushToggle />);
+    await waitFor(() => expect(posts()).toBe(1));
+    await waitFor(() => expect(localStorage.getItem("cine-push-sent:louis")).not.toBeNull());
+    cleanup();
+
+    // Le même compte, le même jour : rien à redire.
+    render(<PushToggle />);
+    await screen.findByText("notifications.pushToggle.enabled");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(posts()).toBe(1);
+    cleanup();
+
+    // Un autre compte : il réenregistre le point de terminaison sous lui.
+    pageAccount = "lucas";
+    render(<PushToggle />);
+    await waitFor(() => expect(posts()).toBe(2));
+    pageAccount = null;
+    localStorage.clear();
   });
 });

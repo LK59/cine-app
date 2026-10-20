@@ -513,7 +513,15 @@ self.addEventListener("notificationclose", () => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url ?? "/";
+  // Une adresse de ce site seulement (revue de sécurité du 20/10/2026) : la notification dit où
+  // aller, et un lien vers ailleurs — envoyé par erreur ou par un serveur compromis — s'ouvrait
+  // dans l'application installée comme si c'était elle. Ce qui n'est pas d'ici mène à l'accueil.
+  let url = event.notification.data?.url ?? "/";
+  try {
+    if (new URL(url, self.location.origin).origin !== self.location.origin) url = "/";
+  } catch {
+    url = "/";
+  }
   event.waitUntil(
     Promise.all([
       clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {

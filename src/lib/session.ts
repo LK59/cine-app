@@ -19,6 +19,11 @@ export async function verifySessionFull(
   if (!payload.jti || !sessionDb.exists(payload.jti)) return null;
   // Une session de partage ne vit pas plus que son lien : révoqué ou passé, elle tombe à la requête
   // suivante — un film en cours compris (DECISIONS.md §112). Une ligne lue par clé primaire.
-  if (payload.role === "share" && !shareIsActive(sharesDb.get(payload.sh ?? ""))) return null;
+  if (payload.role === "share" && !shareIsActive(sharesDb.get(payload.sh ?? ""))) {
+    // Et la ligne de session s'en va : les adresses de diffusion de ce lien (`castToken.ts`), qui ne
+    // regardent que l'existence de la session, meurent avec elle.
+    sessionDb.delete(payload.jti);
+    return null;
+  }
   return payload;
 }

@@ -1781,7 +1781,10 @@
       "service_unavailable": "Dieser Dienst ist gerade nicht verfügbar.",
       "network": "Der Server ist gerade nicht erreichbar.",
       "person_not_found": "Person nicht gefunden.",
-      "share-streams": "Dieser Link wird bereits auf der maximalen Anzahl von Geräten abgespielt. Versuchen Sie es erneut, wenn eine Wiedergabe beendet ist."
+      "share-streams": "Dieser Link wird bereits auf der maximalen Anzahl von Geräten abgespielt. Versuchen Sie es erneut, wenn eine Wiedergabe beendet ist.",
+      "offline-limit": "Sie haben bereits 50 Downloads in Bearbeitung. Lassen Sie einige abschließen und versuchen Sie es dann erneut.",
+      "offline-forbidden": "Dieses Konto darf keine Inhalte herunterladen. Wenden Sie sich an den Administrator.",
+      "transcode-limit": "Auf diesem Konto laufen zu viele Wiedergaben. Beenden Sie eine und versuchen Sie es erneut."
     }
   },
   "sse": {
@@ -2978,6 +2981,10 @@
       "mismatch": "Die beiden Passwörter stimmen nicht überein.",
       "weak": "Mindestens 8 Zeichen.",
       "invalidUsername": "Buchstaben, Ziffern, Punkt, Bindestrich, @ oder Unterstrich — höchstens 64.",
+      "code": "Einrichtungscode",
+      "codeHint": "Steht in den Protokollen des Containers (docker logs cine-app).",
+      "badCode": "Falscher Einrichtungscode. Bitte kopieren Sie ihn aus den Protokollen des Containers (docker logs cine-app).",
+      "rateLimited": "Zu viele Versuche. Bitte versuchen Sie es in einigen Minuten erneut.",
       "create": "Konto anlegen",
       "signInTitle": "Melden Sie sich an, um fortzufahren",
       "signInText": "Es gibt bereits ein Administratorkonto (das aus Ihrer .env oder ein hier angelegtes). Melden Sie sich damit an, um die Einrichtung fortzusetzen.",
@@ -3019,6 +3026,7 @@
     "off": "Aus",
     "errors": {
       "invalid-url": "Ungültige Adresse (http:// oder https://).",
+      "secret-required": "Die Adresse hat sich geändert: Bitte geben Sie diesen Schlüssel erneut ein. Der gespeicherte wird nie an eine neue Adresse gesendet.",
       "invalid": "Ungültiger Wert.",
       "too-long": "Zu lang.",
       "unknown": "Unbekannte Einstellung.",

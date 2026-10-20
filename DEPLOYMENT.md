@@ -48,7 +48,9 @@ Create an empty folder, save this as `docker-compose.yml` inside it. It is
 #
 #   1. Save this file as docker-compose.yml in an empty folder.
 #   2. docker compose up -d
-#   3. Open http://<server>:3000 — the setup assistant asks for everything else.
+#   3. Open http://localhost:3000 on the server (or through an SSH tunnel) — the setup assistant
+#      asks for everything else, starting with the one-time setup code printed in
+#      `docker compose logs cine-app`.
 #
 # No .env is needed: secrets are generated on first launch, and every setting is made in the app.
 # Each optional line below is commented, with what it is for. Guide: DEPLOYMENT.md. Variables: ENV.md.
@@ -58,11 +60,15 @@ services:
     container_name: cine-app              # the name the commands in the guide use
     restart: unless-stopped
 
-    # Direct access: http://<server>:3000. Change the left number if 3000 is taken ("3005:3000").
-    # Behind a reverse proxy on the same Docker network, delete these two lines (nothing published)
-    # and point the proxy at http://cine-app:3000.
+    # Published on the server itself only (127.0.0.1): open http://localhost:3000 there, or from
+    # another machine through an SSH tunnel (ssh -L 3000:localhost:3000 <server>). Change the first
+    # 3000 if it is taken ("127.0.0.1:3005:3000").
+    # To serve other machines, put a reverse proxy in front and set TRUSTED_PROXIES below: on the
+    # same Docker network, delete these two lines and point the proxy at http://cine-app:3000;
+    # outside Docker, point it at 127.0.0.1:3000. Removing "127.0.0.1:" publishes the port on every
+    # interface — your whole network, or the Internet if the host is exposed: only do it knowingly.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
 
     # The Docker network your reverse proxy (and ideally Jellyfin, Radarr…) is attached to, so they
     # reach each other by container name. Uncomment here and in `networks:` at the bottom.
@@ -114,7 +120,7 @@ Or download it: `curl -o docker-compose.yml https://raw.githubusercontent.com/LK
 
 | Line | When to change it |
 |---|---|
-| `ports` | Keep it to open `http://<server>:3000` directly, for the first test or when your proxy runs outside Docker. Delete it when a proxy on the same Docker network reaches `cine-app:3000`: nothing is then published on the host. |
+| `ports` | Published on the server's loopback only (`127.0.0.1:3000`): `http://localhost:3000` on the server, through an SSH tunnel (`ssh -L 3000:localhost:3000 <server>`), or from a reverse proxy installed on the host. Delete it when a proxy on the same Docker network reaches `cine-app:3000`: nothing is then published on the host. Removing `127.0.0.1:` publishes the port on every interface — anyone who reaches the host reaches the app; do it only on a network you trust, and set `TRUSTED_PROXIES` for any proxy in front. |
 | `networks` | Uncomment it to join the network your reverse proxy uses. If Jellyfin, Radarr and Sonarr are on it too, CineApp reaches them by container name (`http://jellyfin:8096`). `docker network ls` lists the networks; replace `proxy` with the real name, in both places. |
 | `cine-data` | The named volume is ready to use: Docker creates it with the right owner. The bind-mount variant keeps the data in a visible `./data` folder; create it first and give it to uid `1001`, or the container cannot write and stops at once. |
 | media mount | Only for Management → Statistics and the storage card. Mount the root Radarr and Sonarr use, read-only, at `/mnt/media/video`. Folders that are not world-readable need `user: "1001:<your gid>"`, see the [appendix](#file-permissions). |
@@ -140,10 +146,23 @@ A good start prints a few `[démarrage]` lines (secrets generated into `data/con
 poster cache linked), the version, and `Ready`. About a minute later `docker compose ps` reads
 `healthy`.
 
-Open `http://<server>:3000`: every page leads to the setup assistant until it is finished.
+Open `http://localhost:3000` (on the server, or through the SSH tunnel): every page leads to the
+setup assistant until it is finished.
 
-> **Run the assistant straight away.** Until its administrator account exists, anyone who can reach
-> the port can create it. Keep the port on your local network until that is done.
+On a new installation, the start also prints a **one-time setup code**, which the assistant asks for
+before it creates the administrator account:
+
+```
+[setup] One-time setup code: ABCD-EFGH-JKLM — enter it in the setup assistant to create the administrator account (valid until that account exists).
+```
+
+`docker compose logs cine-app | grep "setup code"` finds it again. It is printed at every start
+until the administrator account exists, kept meanwhile in `data/config/setup-code` (readable by the
+container's user only), and deleted once the account is created. An installation that already has
+an administrator — created by the assistant, or `APP_ADMIN_PASSWORD` in `.env` — never gets one.
+
+> **Run the assistant straight away.** The setup code keeps a visitor who merely reaches the port
+> from creating the administrator account, but nothing else is protected until that account exists.
 
 If the container stops at once, the last log line says why, in French, on purpose:
 
@@ -165,7 +184,7 @@ front of it.
 Whatever the proxy:
 
 1. Forward your hostname to `cine-app:3000` (proxy on the same Docker network) or to
-   `<server-ip>:3000` (proxy outside Docker, `ports` kept).
+   `127.0.0.1:3000` (proxy installed on the host, `ports` kept).
 2. Add to the compose file, then `docker compose up -d`:
    ```yaml
        environment:
@@ -241,7 +260,7 @@ assistant reopens where you stopped, until you press **Finish**.
 | Screen | What it asks |
 |---|---|
 | **Hello** | The language of the installation (French, English, Spanish, German). It becomes the language of the sign-in page and of every account that has not chosen one. Pick one, or press **Next** to keep the one shown. |
-| **1 · Account** | The local administrator account: a username and a password of eight characters or more, stored hashed. It opens Management even when Jellyfin is down. If an account already exists (one from a previous visit, or one fixed in `.env`), the screen asks you to sign in with it instead. |
+| **1 · Account** | The local administrator account: the one-time setup code printed in the container logs (`docker logs cine-app`, see [step 2](#2-start-the-container)), then a username and a password of eight characters or more, stored hashed. It opens Management even when Jellyfin is down. If an account already exists (one from a previous visit, or one fixed in `.env`), the screen asks you to sign in with it instead. |
 | **2 · Jellyfin** | Its address and API key (*Jellyfin → Dashboard → API Keys → +*), and optionally the public address used by the *Open in Jellyfin* links. Below, one playback choice: hand files the browser cannot play over to Jellyfin, which converts them — on by default. |
 | **3 · TMDB** | The API key (*themoviedb.org → Settings → API*). |
 | **4 · Library** | Optional. Radarr and/or Sonarr: address and API key (*Settings → General → API Key*). **Next** does not need them: without them the cinema shows what Jellyfin has, and the management pages that depend on them say they are not configured. |
@@ -489,6 +508,7 @@ The others: `auth.log` (sign-ins), `startup.log` (each opening of the cinema), `
 |---|---|
 | The container stops at once | [Step 2](#2-start-the-container): the last log line names the cause. |
 | Every page leads to `/setup` | The assistant is not finished: open it and press **Finish**. |
+| The assistant refuses the setup code | Copy it again from the container logs (`docker compose logs cine-app`, the line starting `[setup] One-time setup code:`); case, spaces and dashes do not matter. Deleting `data/config/setup-code` and restarting prints a new one. |
 | No Jellyfin account can sign in | Jellyfin's address, seen from the container: *Test connection* in Management → Configuration → Connections, or the shell check below. The local administrator account does not depend on Jellyfin and tells which half is broken. |
 | Sign-in works over `http://` but not behind the proxy, or the reverse | `COOKIE_SECURE`: `true` only when served over HTTPS. |
 | A page change fails, a reload of the same page works | The nginx header buffer, [step 3](#nginx-proxy-manager). |

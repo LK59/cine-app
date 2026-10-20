@@ -2,7 +2,9 @@
 #
 #   1. Save this file as docker-compose.yml in an empty folder.
 #   2. docker compose up -d
-#   3. Open http://<server>:3000 — the setup assistant asks for everything else.
+#   3. Open http://localhost:3000 on the server (or through an SSH tunnel) — the setup assistant
+#      asks for everything else, starting with the one-time setup code printed in
+#      `docker compose logs cine-app`.
 #
 # No .env is needed: secrets are generated on first launch, and every setting is made in the app.
 # Each optional line below is commented, with what it is for. Guide: DEPLOYMENT.md. Variables: ENV.md.
@@ -12,11 +14,15 @@ services:
     container_name: cine-app              # the name the commands in the guide use
     restart: unless-stopped
 
-    # Direct access: http://<server>:3000. Change the left number if 3000 is taken ("3005:3000").
-    # Behind a reverse proxy on the same Docker network, delete these two lines (nothing published)
-    # and point the proxy at http://cine-app:3000.
+    # Published on the server itself only (127.0.0.1): open http://localhost:3000 there, or from
+    # another machine through an SSH tunnel (ssh -L 3000:localhost:3000 <server>). Change the first
+    # 3000 if it is taken ("127.0.0.1:3005:3000").
+    # To serve other machines, put a reverse proxy in front and set TRUSTED_PROXIES below: on the
+    # same Docker network, delete these two lines and point the proxy at http://cine-app:3000;
+    # outside Docker, point it at 127.0.0.1:3000. Removing "127.0.0.1:" publishes the port on every
+    # interface — your whole network, or the Internet if the host is exposed: only do it knowingly.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
 
     # The Docker network your reverse proxy (and ideally Jellyfin, Radarr…) is attached to, so they
     # reach each other by container name. Uncomment here and in `networks:` at the bottom.

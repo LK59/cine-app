@@ -6,7 +6,7 @@ import { genAvailable, genSettings } from "./providers";
 import { TARGET_LANGUAGES, isTargetLanguage, twoLetter } from "./languages";
 import { orderCandidates, presentLanguages, isTextSubtitle } from "./source";
 import { DAILY_LIMIT, cuesDb, jobsDb, quotaDb, sameFile, spendDb, type JobRow, type JobStatus } from "./store";
-import { cancelJob, markStale, noteViewer, prepare, resumeJob, startEngine, viewersOf } from "./engine";
+import { cancelJob, markStale, noteViewer, prepare, resumeJob, startEngine, viewersOf, type ResumeBy } from "./engine";
 import { logGen } from "./log";
 import { fileUrlOf } from "./direct";
 
@@ -215,9 +215,9 @@ export function pollJob(jobId: string, since: number, position: number | undefin
 
 
 
-export function resume(jobId: string): JobRow | null {
+export function resume(jobId: string, by: ResumeBy): JobRow | null {
   engine();
-  return resumeJob(jobId);
+  return resumeJob(jobId, by);
 }
 
 export function cancel(jobId: string): JobRow | null {

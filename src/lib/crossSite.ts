@@ -19,7 +19,14 @@ import type { NextRequest } from "next/server";
  */
 export function crossSiteWrite(req: NextRequest): boolean {
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return false;
-  if (!req.nextUrl.pathname.startsWith("/api/") || !req.headers) return false;
+  // Décodée, comme les règles du proxy : `/%61pi/…` est servi comme `/api/…` (revue du 20/10/2026).
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(req.nextUrl.pathname);
+  } catch {
+    return true;
+  }
+  if (!pathname.startsWith("/api/") || !req.headers) return false;
   const site = req.headers.get("sec-fetch-site");
   if (site) return site !== "same-origin" && site !== "none";
   const origin = req.headers.get("origin");

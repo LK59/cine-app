@@ -9,6 +9,7 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { useToast } from "@/components/Toast";
 import { fetchDirectInfo } from "@/lib/directInfo";
 import { formatFileSize } from "@/lib/format";
+import { apiErrorText } from "@/lib/apiErrorText";
 import { useOfflineDownloadsEnabled } from "@/lib/offline/useOfflineEnabled";
 import { deviceStoreSupported } from "@/lib/offline/deviceStore";
 import {
@@ -407,7 +408,7 @@ function OfflineSeasonDownloadOn({
       // Relu à chaque épisode (`offlineEpisodesOf` lit l'état du moment, pas celui de ce rendu).
       () => offlineEpisodesOf(series.sonarrId, series.seriesTitle)
     ).then(({ failed }) => {
-      if (failed.length) toast.error(t("player.downloads.seasonFailed", { n: failed.length, error: failed[0].error }));
+      if (failed.length) toast.error(t("player.downloads.seasonFailed", { n: failed.length, error: apiErrorText(failed[0].cause, t, locale, failed[0].error) }));
     });
   };
 

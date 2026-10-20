@@ -78,6 +78,28 @@ function trimBackup(file: string): void {
   }
 }
 
+/**
+ * Les sauvegardes lisibles par leur propriétaire et son groupe seulement (revue de sécurité du
+ * 20/10/2026) : elles portent les réglages — clés des services comprises —, les sessions, les
+ * hachages. Écrites en 0644, n'importe quel compte de la machine les lisait. Le groupe garde la
+ * lecture : c'est celui de l'hôte, par lequel les sauvegardes externalisées les copient. Les copies
+ * faites à la main (« avant-… ») sont resserrées de même, jamais effacées.
+ */
+function restrictBackups(): void {
+  try {
+    fs.chmodSync(BACKUP_DIR, 0o750);
+    for (const f of fs.readdirSync(BACKUP_DIR)) {
+      try {
+        fs.chmodSync(path.join(BACKUP_DIR, f), 0o640);
+      } catch {
+        // Un fichier qui n'est pas à nous : on le laisse.
+      }
+    }
+  } catch (err) {
+    logError("db.backup.chmod", err);
+  }
+}
+
 export async function runDbBackup(options: { skipIfDone?: boolean } = {}): Promise<void> {
   try {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -85,9 +107,13 @@ export async function runDbBackup(options: { skipIfDone?: boolean } = {}): Promi
     // Au démarrage, la sauvegarde du jour est souvent déjà là : le conteneur est recréé à chaque
     // déploiement, plusieurs fois par jour, et chaque passage coûtait un compactage synchrone de
     // 630 ms (mesuré le 08/10/2026) — la boucle d'événements arrêtée, pour un fichier identique.
-    if (options.skipIfDone && fs.existsSync(file)) return;
+    if (options.skipIfDone && fs.existsSync(file)) {
+      restrictBackups();
+      return;
+    }
     await getDb().backup(file);
     trimBackup(file);
+    restrictBackups();
 
     // One file per day, named by ISO date — sorting the filenames is enough to find the
     // oldest ones, no need to stat/parse anything.

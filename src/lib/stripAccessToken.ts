@@ -31,3 +31,22 @@ export function stripAccessToken(text: string): string {
   // seul ne laisse rien.
   return text.replace(AFTER_AMP, "").replace(FIRST_THEN_MORE, "?").replace(FIRST_ALONE, "");
 }
+
+/**
+ * Le laissez-passer de diffusion (`castToken.ts`) dans une adresse : sa valeur est remplacée, le nom
+ * reste — on lit encore dans le journal qu'une adresse en portait un.
+ */
+const CAST_TOKEN = /([?&]castToken=)[^&\s"#]*/gi;
+
+/**
+ * Un texte venu du navigateur, avant qu'il n'entre dans un journal (revue de sécurité du 20/10/2026).
+ *
+ * Les lignes du lecteur et les erreurs du navigateur recopient des adresses — une source qui a
+ * échoué, la page ouverte, une pile — et ces adresses peuvent porter le jeton Jellyfin de la
+ * personne ou le laissez-passer d'un téléviseur. Les journaux se lisent, se copient dans un
+ * signalement, se gardent des semaines : un jeton n'a rien à y faire, quel que soit le chemin
+ * qui l'y a mis.
+ */
+export function redactLogText(text: string): string {
+  return stripAccessToken(text).replace(CAST_TOKEN, "$1-");
+}

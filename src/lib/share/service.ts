@@ -224,7 +224,12 @@ export async function sweepShares(now = Date.now()): Promise<void> {
   }
 }
 
-const SWEEP_EVERY_MS = 10 * 60_000;
+/**
+ * Chaque minute : une liste lue par clé, rien chez Jellyfin tant qu'aucun lien ne finit. Toutes les
+ * dix minutes laissaient une adresse de diffusion d'un lien expiré servir encore jusqu'à dix minutes
+ * (revue de sécurité du 20/10/2026) — elle ne vérifie que l'existence de la session.
+ */
+const SWEEP_EVERY_MS = 60_000;
 
 export function startShareSweep(): void {
   const run = () => void sweepShares().catch((err) => logError("share.sweep", err));

@@ -149,10 +149,10 @@ export default function SetupPage() {
     try {
       if (Object.keys(values).length > 0) {
         const res = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values }) });
-        const body = (await res.json().catch(() => null)) as (SettingsPayload & { errors?: Record<string, string> }) | null;
+        const body = (await res.json().catch(() => null)) as (SettingsPayload & { errors?: Record<string, string>; code?: string }) | null;
         if (!res.ok) {
           setErrors(body?.errors ?? {});
-          setProblem(t("setup.errors.save"));
+          setProblem(t(body?.code === "settings-secret-required" ? "setup.errors.secret-required" : "setup.errors.save"));
           return;
         }
         await refreshSettings();
@@ -440,6 +440,7 @@ function AdminStep({
   onNext: () => void;
 }) {
   const t = useT();
+  const [setupCode, setSetupCode] = useState("");
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -473,11 +474,18 @@ function AdminStep({
       const res = await fetch("/api/setup/admin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username.trim(), password }),
+        body: JSON.stringify({ setupCode: setupCode.trim(), username: username.trim(), password }),
       });
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
       if (!res.ok) {
-        setError(body?.error === "invalid-username" ? t("setup.admin.invalidUsername") : body?.error === "weak-password" ? t("setup.admin.weak") : t("setup.errors.save"));
+        // Le code d'installation refusé dit où le trouver ; trop d'essais dit d'attendre (20/10/2026).
+        const known: Record<string, string> = {
+          "invalid-username": "setup.admin.invalidUsername",
+          "weak-password": "setup.admin.weak",
+          "invalid-setup-code": "setup.admin.badCode",
+          "rate-limited": "setup.admin.rateLimited",
+        };
+        setError(t(known[body?.error ?? ""] ?? "setup.errors.save"));
         return;
       }
       await onCreated();
@@ -490,6 +498,21 @@ function AdminStep({
     <form onSubmit={create} className="settings-card rounded-2xl border border-white/10 bg-white/[0.03] p-5">
       <h2 className="mb-1 text-lg font-semibold text-white">{t("setup.admin.title")}</h2>
       <p className="mb-5 text-sm text-muted">{t("setup.admin.text")}</p>
+      {/* Le code d'installation : écrit dans les seuls journaux du conteneur, il prouve qu'on a la
+          main sur le serveur — sans lui, le premier visiteur venu devenait administrateur. */}
+      <label className="mb-1.5 block text-sm font-medium text-white" htmlFor="setup-code">{t("setup.admin.code")}</label>
+      <input
+        id="setup-code"
+        className="input"
+        autoComplete="one-time-code"
+        autoCapitalize="characters"
+        spellCheck={false}
+        placeholder="XXXX-XXXX-XXXX"
+        aria-describedby="setup-code-hint"
+        value={setupCode}
+        onChange={(e) => setSetupCode(e.target.value)}
+      />
+      <p id="setup-code-hint" className="mb-4 mt-1 text-xs text-subtle">{t("setup.admin.codeHint")}</p>
       <label className="mb-1.5 block text-sm font-medium text-white" htmlFor="setup-user">{t("setup.admin.username")}</label>
       <input id="setup-user" className="input mb-4" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
       <label className="mb-1.5 block text-sm font-medium text-white" htmlFor="setup-pass">{t("setup.admin.password")}</label>

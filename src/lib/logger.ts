@@ -1,4 +1,5 @@
 import path from "node:path";
+import { redactLogText } from "@/lib/stripAccessToken";
 import { LOG_DIR, appendJsonLine } from "@/lib/logFile";
 
 // Minimal structured logging — no external dependency, still readable via
@@ -108,7 +109,10 @@ export function logError(scope: string, err: unknown, context?: Record<string, u
 const CLIENT_FIELDS = ["source", "name", "url", "digest", "agent"] as const;
 
 export function logClientError(user: string, report: Record<string, unknown>): void {
-  const text = (value: unknown, max: number) => (typeof value === "string" && value ? value.slice(0, max) : undefined);
+  // Sans jeton (`redactLogText`, revue de sécurité du 20/10/2026) : le message d'une erreur réseau,
+  // l'adresse de la page ou une pile recopient des adresses qui peuvent porter `ApiKey=` ou
+  // `castToken=`. Après la coupe, qui reste la même borne.
+  const text = (value: unknown, max: number) => (typeof value === "string" && value ? redactLogText(value.slice(0, max)) : undefined);
   const entry: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
     level: "error",

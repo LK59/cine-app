@@ -11,7 +11,13 @@
 // vient d'un relais déclaré dans `TRUSTED_PROXIES` — une adresse, un réseau (`172.20.0.0/16`) ou un
 // nom de conteneur, résolu toutes les cinq minutes (les adresses Docker changent à chaque recréation).
 //
-// Sans `TRUSTED_PROXIES`, ou sous `next dev` (sans le démarrage), rien ne change : le dernier maillon.
+// Sous `next dev` (sans le démarrage), rien ne change : le dernier maillon.
+//
+// Sans `TRUSTED_PROXIES` (20/10/2026) : le dernier maillon n'est cru que d'une connexion venue de la
+// boucle locale ou d'un réseau privé — le relais typique, sur le même réseau Docker. Un client joint
+// directement depuis Internet (le port publié sur toutes les interfaces, sans relais) écrivait
+// l'en-tête qu'il voulait à chaque essai et échappait ainsi aux limites de connexion et d'échange de
+// code ; il garde désormais l'adresse de sa connexion.
 
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
@@ -82,6 +88,36 @@ export function forgetResolvedProxies(): void {
   resolved = null;
 }
 
+function ipv6Groups(ip: string): number[] | null {
+  // Sans zone (`fe80::1%eth0`) ; `::` développé en autant de zéros qu'il en manque.
+  const bare = ip.split("%")[0].toLowerCase();
+  if (isIP(bare) !== 6 || bare.includes(".")) return null;
+  const [head, tail] = bare.includes("::") ? bare.split("::") : [bare, null];
+  const left = head ? head.split(":") : [];
+  const right = tail ? tail.split(":") : [];
+  const missing = 8 - left.length - right.length;
+  if (tail === null ? left.length !== 8 : missing < 0) return null;
+  const groups = [...left, ...Array(tail === null ? 0 : missing).fill("0"), ...right].map((g) => parseInt(g, 16));
+  return groups.length === 8 && groups.every((g) => Number.isInteger(g) && g >= 0 && g <= 0xffff) ? groups : null;
+}
+
+/**
+ * Une adresse qu'Internet ne peut pas présenter : boucle locale (127/8, ::1), réseaux privés
+ * (RFC 1918, fc00::/7), lien local (169.254/16, fe80::/10) — là où vit un relais du même hôte.
+ */
+export function isPrivateAddress(address: string): boolean {
+  const ip = normalizeAddress(address);
+  const v4 = ipv4ToInt(ip);
+  if (v4 !== null) {
+    return ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16"].some((net) => addressMatches(ip, net));
+  }
+  const g = ipv6Groups(ip);
+  if (!g) return false;
+  if (g.slice(0, 7).every((x) => x === 0) && g[7] === 1) return true; // ::1
+  if ((g[0] & 0xfe00) === 0xfc00) return true; // fc00::/7
+  return (g[0] & 0xffc0) === 0xfe80; // fe80::/10
+}
+
 function lastForwarded(header: string | null): string | null {
   const last = header?.split(",").map((p) => p.trim()).filter(Boolean).at(-1);
   return last ?? null;
@@ -97,13 +133,18 @@ export function clientAddressOf(headers: { get(name: string): string | null }, r
   const raw = rawProxies ?? config.network?.trustedProxies ?? "";
   const peerRaw = peerHeaderTrusted() ? headers.get("x-cine-peer") : null;
   const forwarded = headers.get("x-forwarded-for");
-  if (!raw.trim() || !peerRaw) return lastForwarded(forwarded);
+  if (!peerRaw) return lastForwarded(forwarded);
   const peer = normalizeAddress(peerRaw);
-  const trusted = trustedEntries(raw);
-  // Le nom du relais n'est pas encore résolu (juste après un démarrage) : l'ancienne règle le temps
-  // de la résolution, plutôt que de compter tous les visiteurs sous l'adresse du relais — ils
-  // partageraient alors une seule limite de tentatives.
-  if (namesPending(raw)) return lastForwarded(forwarded);
+  // Lu avant `namesPending` : c'est cet appel qui lance la résolution des noms.
+  const trusted = raw.trim() ? trustedEntries(raw) : [];
+  // Aucun relais déclaré, ou son nom pas encore résolu (juste après un démarrage) : le dernier
+  // maillon, mais seulement d'une connexion locale ou privée — plutôt que de compter tous les
+  // visiteurs du relais sous son adresse (une seule limite de tentatives pour tous). Une connexion
+  // publique est le client lui-même : son en-tête ne prouve rien.
+  if (!raw.trim() || namesPending(raw)) {
+    if (!isPrivateAddress(peer)) return peer;
+    return lastForwarded(forwarded) ?? peer;
+  }
   const isTrusted = (address: string) => trusted.some((entry) => addressMatches(address, entry));
   if (!isTrusted(peer)) return peer;
   const chain = (forwarded ?? "").split(",").map((p) => p.trim()).filter(Boolean);

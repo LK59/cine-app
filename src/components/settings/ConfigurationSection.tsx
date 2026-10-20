@@ -47,10 +47,11 @@ export function ConfigurationSection({ cards, showMissing = false }: { cards: re
     setSaving(cardId(card));
     try {
       const res = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values }) });
-      const body = (await res.json().catch(() => null)) as { errors?: Record<string, string> } | null;
+      const body = (await res.json().catch(() => null)) as { errors?: Record<string, string>; code?: string } | null;
       if (!res.ok) {
         setErrors((e) => ({ ...e, ...(body?.errors ?? {}) }));
-        toast.error(t("setup.errors.save"));
+        // Une adresse changée sans sa clé : le message dit quoi faire, pas seulement « échec ».
+        toast.error(t(body?.code === "settings-secret-required" ? "setup.errors.secret-required" : "setup.errors.save"));
         return;
       }
       setErrors((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !(k in values))));

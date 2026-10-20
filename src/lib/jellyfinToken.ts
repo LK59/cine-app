@@ -106,6 +106,12 @@ export async function jellyfinTokenAlive(session: SessionPayload): Promise<boole
   }
 }
 
+/** Déjà su, sans rien demander : Jellyfin a refusé le jeton de cette session (proxy, routes d'API). */
+export function jellyfinTokenKnownDead(jti: string | undefined): boolean {
+  const known = jti ? verdicts.get(jti) : undefined;
+  return !!known && !known.alive;
+}
+
 /** La session vient d'être fermée : son verdict n'a plus d'objet. */
 export function forgetJellyfinToken(jti: string): void {
   verdicts.delete(jti);

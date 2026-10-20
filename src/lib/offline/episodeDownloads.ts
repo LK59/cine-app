@@ -159,9 +159,11 @@ export async function requestSeasonDownloads(
   choice: Omit<EpisodeChoice, "audioIndex">,
   labeller: TrackLabeller,
   downloads: () => OfflineDownload[]
-): Promise<{ started: number; failed: { episode: CinemaEpisode; error: string }[] }> {
+): Promise<{ started: number; failed: { episode: CinemaEpisode; error: string; cause: unknown }[] }> {
   let started = 0;
-  const failed: { episode: CinemaEpisode; error: string }[] = [];
+  // `cause` : l'erreur elle-même, avec son code — l'écran la traduit (`apiErrorText`) ; le message seul
+  // est celui du serveur, en français.
+  const failed: { episode: CinemaEpisode; error: string; cause: unknown }[] = [];
   for (const episode of episodes) {
     // Relu à chaque tour : un épisode demandé entre-temps (sa ligne, l'automatique) n'est pas redemandé.
     if (held(episode.jellyfinItemId, downloads())) continue;
@@ -169,7 +171,7 @@ export async function requestSeasonDownloads(
       await requestEpisodeDownload(series, episode, seasons, choice, labeller);
       started += 1;
     } catch (error) {
-      failed.push({ episode, error: error instanceof Error ? error.message : String(error) });
+      failed.push({ episode, error: error instanceof Error ? error.message : String(error), cause: error });
     }
   }
   return { started, failed };

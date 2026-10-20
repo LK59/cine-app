@@ -1629,6 +1629,25 @@ les tests d'API de la page Santé sautent les groupes d'un service non configur�
 configuré », neutres ; le lien vers Connexions n'existe que dans la gestion. Tests :
 `etat-non-configure.test.ts`, `etat-non-configure-ui.test.tsx`.
 
+**Complété le 20/10/2026** (sécurité). *Une adresse changée ne reçoit pas le secret enregistré* :
+un secret laissé vide reprend celui qui est gardé, au test comme à l'enregistrement — et changer la
+seule adresse d'un service envoyait sa clé (Jellyfin administrateur, Radarr, Sonarr, Jellyseerr,
+Bazarr, Jackett, mot de passe qBittorrent) à l'hôte saisi : un cookie administrateur volé valait
+toutes les clés. Quand `<GROUPE>_URL` diffère de l'adresse en vigueur (comparées sans espaces ni
+barre finale, schéma et hôte en minuscules : `normalizeServiceUrl`), chaque secret *déjà renseigné*
+du groupe doit être ressaisi ; sinon 400, `code: "settings-secret-required"`, `fields`, et
+`errors[clé] = "secret-required"` que la carte affiche sous le champ. Une seule règle,
+`secretsToResubmit` (`setup.ts`), lue par `saveSettings` et `/api/settings/test` ; adresse inchangée
+ou secret encore vide : rien ne change. Le déplacement est écrit par `logAdminAction` (hôte avant et
+après, sans identifiant ni secret). *Le compte administrateur de l'assistant exige un code
+d'installation* (`setupCode.ts`) : tiré au démarrage tant qu'aucun administrateur n'existe, gardé dans
+`data/config/setup-code` (0600), écrit dans les journaux du conteneur à chaque démarrage
+(`[setup] One-time setup code: …`), comparé en temps constant par `/api/setup/admin` et effacé
+dès le compte créé. Avant, le premier visiteur d'une installation neuve en devenait l'administrateur.
+Le compose minimal ne publie plus le port que sur `127.0.0.1`. Tests : `settings-secret-url.test.ts`,
+`setup-code.test.ts`, `setup-ui.test.tsx`, `trustedProxy.test.ts` (§57 : sans `TRUSTED_PROXIES`,
+`X-Forwarded-For` n'est cru que d'une connexion locale ou privée).
+
 **Décidé le 05/10/2026.**
 
 ## 49. Annuler une demande
@@ -5977,6 +5996,15 @@ Tests : `offline-fmp4`, `offline-trickplay`, `offline-engine`, `offline-jobs`, `
 `offline-downloads-page`, `offline-entry`, `serviceWorker-offline-entry`, `offline-page`,
 `proxy-offline-entry`, `cinemaRoute`, `cinemaRoute-normalize`, `playerNav`.
 
+
+**Limites et libération (20/10/2026, revue de sécurité, décision de Louis).** Un compte a au plus
+50 demandes en cours sur le serveur (en file, en préparation, ou prêtes et pas encore récupérées
+par lui) — de quoi prendre une saison ou une saga sans se sentir limité ; la 51ᵉ répond
+`offline-limit`. Une copie que tous ses demandeurs ont récupérée est effacée cinq minutes après la
+dernière lecture (`releaseFetchedCopies`) — le délai couvre le dernier contrôle de l'appareil et un
+dernier morceau redemandé —, et l'appareil qui a déjà tous ses octets ne prend pas ce 404 pour un
+échec. Un compte ordinaire sans le droit de téléchargement de Jellyfin est refusé
+(`offline-forbidden`), comme pour « Télécharger le fichier ».
 ## 110. La langue du son retenue par série
 
 **La règle (Louis, 20/10/2026).** Dans une série, changer la langue du son à la main dans deux épisodes
@@ -6089,3 +6117,33 @@ adresse (10 / 15 min) et par lien (20 / h) ; un refus ne dit jamais lequel des d
 Tests : `share-gate.test.ts` (parcourt toutes les routes de l'API, toutes méthodes : refus hors liste et
 hors titre ; chaque route « corps » appelle `shareRefusal`), `share-core.test.ts` (jeton, secrets, vie
 d'un lien, compte verrouillé, comptes écartés, trois lectures).
+
+## 113. La revue de sécurité du 20/10/2026
+
+**Ce qu'elle a changé, et où.** Une fuite critique d'abord (9.3.2) : le relais du flux renvoyait la
+clé d'administration de Jellyfin dans une liste de sous-titres demandée en majuscules — ses décisions
+se prennent sans la casse, et tout texte venu de Jellyfin est nettoyé avant de repartir ; la clé a été
+changée. Puis, approuvées par Louis :
+- le relais ne transmet à Jellyfin qu'une liste large de paramètres (`streamQuery.ts`, les inconnus
+  écartés et notés une fois, `stream.param-dropped`), et un compte a au plus cinq transcodages en
+  même temps (`transcodeBudget.ts`, `transcode-limit`) ; les lectures du fichier brut ne comptent pas ;
+- le proxy lit l'adresse décodée (`/%61pi/…` est servi comme `/api/…`), `crossSiteWrite` aussi ;
+- sur une route d'API, la validité du jeton Jellyfin est demandée en arrière-plan : un jeton mort ne
+  prolonge plus la session, et un administrateur perd ses droits aussitôt ;
+- les connexions sont freinées par préfixe IPv6 /64 et par compte (20 échecs par heure) ;
+- changer l'adresse d'un service dans les réglages exige de ressaisir sa clé (`secretsToResubmit`) ;
+- une installation neuve demande un code d'installation, affiché dans les journaux du conteneur
+  (`setupCode.ts`, §48) ; sans proxy de confiance, `X-Forwarded-For` n'est cru que d'un voisin privé ;
+- les liens de partage : trois lectures comptées aussi sur le fichier lui-même, et les sessions d'un
+  lien fini fermées dans la minute (les adresses de diffusion meurent avec elles) ;
+- la recherche Radarr/Sonarr et la bibliothèque Jellyfin réservées à la gestion ;
+- la relance d'une génération de sous-titres réservée à son auteur et à l'administrateur ;
+- une session finie autrement que par « Se déconnecter » oublie aussi le compte sur l'appareil
+  (`forgetAccountOnDevice`, partagée avec `signOut`) — téléchargements hors ligne exceptés ;
+- les jetons retirés des journaux du lecteur et des erreurs du navigateur (`redactLogText`) ;
+- les captures des signalements et les sous-titres générés revalidés au lieu d'être gardés ;
+- les sauvegardes en 0640, le dossier `data/` en 770, le conteneur de développement durci comme la
+  production (et `.git` en lecture seule), les actions GitHub figées par empreinte.
+
+**Laissé, exprès.** Les titres masqués (cosmétiques, voulu par Louis). Les paramètres de débit et de
+taille restent permis : la limite porte sur le nombre de transcodages, pas sur leur poids.

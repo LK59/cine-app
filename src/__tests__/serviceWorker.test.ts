@@ -98,4 +98,31 @@ describe("le service worker", () => {
     loadWorker(vi.fn().mockResolvedValue(new Response("{}")) as unknown as typeof fetch);
     expect(await through(new Request("https://cine.example/api/dashboard"))).toBeNull();
   });
+
+  // Revue de sécurité du 20/10/2026 : l'adresse portée par la notification s'ouvrait telle quelle
+  // dans l'application installée — une autre origine comprise.
+  it("n'ouvre depuis une notification qu'une adresse de ce site", async () => {
+    const opened: string[] = [];
+    vi.stubGlobal("clients", { matchAll: vi.fn().mockResolvedValue([]), openWindow: vi.fn(async (u: string) => void opened.push(u)) });
+    const scope = loadWorker(vi.fn() as unknown as typeof fetch) as unknown as Record<string, unknown>;
+    scope.location = { origin: "https://cine.example" };
+    scope.navigator = {};
+    scope.registration = { getNotifications: vi.fn().mockResolvedValue([]) };
+    const click = async (url: unknown) => {
+      let pending: Promise<unknown> = Promise.resolve();
+      (listeners.notificationclick as unknown as (e: unknown) => void)({
+        notification: { close: vi.fn(), data: { url } },
+        waitUntil: (p: Promise<unknown>) => { pending = p; },
+      });
+      await pending;
+    };
+    await click("/#film=12");
+    await click("https://ailleurs.example/piege");
+    await click("//ailleurs.example/piege");
+    await click("javascript:alert(1)");
+    await click("https://cine.example/gestion");
+    expect(opened).toEqual(["/#film=12", "/", "/", "/", "https://cine.example/gestion"]);
+    vi.unstubAllGlobals();
+  });
 });
+

@@ -108,6 +108,30 @@ describe("une ligne qui n'a pas pu partir", () => {
     expect(unsentLines()).toHaveLength(1);
   });
 
+  // Revue de sécurité du 20/10/2026 : une ligne sans compte partait au nom de qui se connectait
+  // ensuite — sur un appareil partagé, la séance d'une personne s'écrivait sous une autre.
+  it("une ligne sans compte n'est jamais envoyée sous le compte suivant", async () => {
+    // Une file d'avant le correctif, où une ligne sans compte attend.
+    localStorage.setItem(
+      "cine:unsent-lines",
+      JSON.stringify([
+        { id: "orpheline0000000", kind: "seek", fields: { n: 0 }, at: 1000, account: null },
+        { id: "louis00000000000", kind: "seek", fields: { n: 1 }, at: 1000, account: "louis" },
+      ])
+    );
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await flushUnsentLines(2000);
+    expect(bodies(fetchMock).map((b) => b.fields.n)).toEqual([1]);
+    expect(unsentLines()).toEqual([]);
+  });
+
+  it("ne garde pas une ligne écrite sans compte connu", () => {
+    account = null;
+    keepUnsentLine("bbbbbbbbbbbb", "seek", { n: 1 }, 1000);
+    expect(unsentLines()).toEqual([]);
+  });
+
   it("ne part pas par balise : le navigateur ne dit pas ce qu'elle est devenue", async () => {
     const beacon = vi.fn(() => true);
     Object.defineProperty(navigator, "sendBeacon", { value: beacon, configurable: true });

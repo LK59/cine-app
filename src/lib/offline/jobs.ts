@@ -46,6 +46,23 @@ const FAILED_KEEP_MS = 24 * 3600_000;
 const DISK_MARGIN = 5 * 1024 ** 3;
 const DEVICE_ID = "cine-offline";
 const STALL_MS = 120_000;
+/**
+ * Combien de versions un compte peut avoir « en vol » sur le serveur : en file, en préparation, ou
+ * prêtes mais pas encore récupérées entières par lui (revue de sécurité du 20/10/2026). Chaque
+ * demande est un transcodage complet, et rien ne bornait leur nombre — chaque titre × piste ×
+ * qualité × codec. Louis : « une limite haute… si on télécharge une série ou plusieurs films genre
+ * une saga faut pas se sentir limité, genre 50 downloads simultanés ». Ce qui est récupéré sort du
+ * compte et libère sa place (`releaseFetchedCopies`).
+ */
+export const OFFLINE_MAX_IN_FLIGHT = 50;
+/**
+ * Le délai entre la dernière plage servie et l'effacement d'une version que tous ses demandeurs ont
+ * récupérée. Pas zéro : l'appareil relit l'état de la version juste après avoir écrit la dernière
+ * plage (`downloads.ts`, `step`) et un 404 à ce moment le ferait passer en échec ; une plage coupée
+ * en route se redemande ; un second appareil du même compte télécharge peut-être encore (chaque plage
+ * servie repousse l'effacement, `touchOfflineJob`).
+ */
+const RELEASE_GRACE_MS = 5 * 60_000;
 
 export interface OfflineJob {
   id: string;
@@ -137,10 +154,28 @@ const identity = () => ({ client: "CineApp", device: "Téléchargements", device
 export class OfflineRefusal extends Error {
   constructor(
     message: string,
-    readonly status: number
+    readonly status: number,
+    /** Le code que l'écran traduit (`apiErrorCodes.ts`), et ce que la réponse ajoute (`max`). */
+    readonly code?: "offline-limit",
+    readonly extra?: Record<string, unknown>
   ) {
     super(message);
   }
+}
+
+const LIMIT_REACHED = `Déjà ${OFFLINE_MAX_IN_FLIGHT} téléchargements en cours pour ce compte`;
+const limitRefusal = () => new OfflineRefusal(LIMIT_REACHED, 429, "offline-limit", { max: OFFLINE_MAX_IN_FLIGHT });
+
+/** Une demande de ce compte dont la version occupe le serveur pour lui (`OFFLINE_MAX_IN_FLIGHT`). */
+const IN_FLIGHT = "(j.status IN ('queued', 'running') OR (j.status = 'done' AND r.fetched_at IS NULL))";
+
+/** Combien de versions ce compte a en vol. */
+export function offlineInFlight(account: string): number {
+  return (
+    getDb()
+      .prepare(`SELECT COUNT(*) AS n FROM offline_requests r JOIN offline_jobs j ON j.id = r.job_id WHERE r.account = ? AND ${IN_FLIGHT}`)
+      .get(account) as { n: number }
+  ).n;
 }
 
 /** Ce que Jellyfin dit du fichier : sa version, sa durée, ses pistes son. */
@@ -216,6 +251,19 @@ export async function requestOfflineJob(input: {
   now?: number;
 }): Promise<OfflineJob> {
   const now = input.now ?? Date.now();
+  // À la limite, refusé avant de déranger Jellyfin — sauf si ce compte a déjà en vol une version de
+  // ce titre à ces choix (quel que soit le fichier) : redemander la même n'est pas une demande de plus,
+  // et le contrôle exact se refait plus bas, une fois la version connue. Une saison de soixante
+  // épisodes demandés d'un coup ne fait ainsi que cinquante appels à Jellyfin, pas cent dix.
+  if (offlineInFlight(input.account) >= OFFLINE_MAX_IN_FLIGHT) {
+    const same = getDb()
+      .prepare(
+        `SELECT 1 FROM offline_requests r JOIN offline_jobs j ON j.id = r.job_id
+         WHERE r.account = ? AND j.item_id = ? AND j.audio_index = ? AND j.quality = ? AND j.codec = ? AND ${IN_FLIGHT} LIMIT 1`
+      )
+      .get(input.account, input.itemId, input.audioIndex, input.quality, input.codec);
+    if (!same) throw limitRefusal();
+  }
   const item = await describeItem(input.itemId);
   if (!item.audioIndexes.includes(input.audioIndex)) throw new OfflineRefusal("Piste son inconnue", 400);
   const db = getDb();
@@ -224,6 +272,15 @@ export async function requestOfflineJob(input: {
       "SELECT * FROM offline_jobs WHERE item_id = ? AND file_version = ? AND audio_index = ? AND quality = ? AND codec = ? ORDER BY created_at DESC LIMIT 1"
     )
     .get(input.itemId, item.fileVersion, input.audioIndex, input.quality, input.codec) as Row | undefined;
+  // Le contrôle exact, sans `await` d'ici à l'écriture de la demande : deux demandes parallèles ne
+  // passent pas toutes deux la cinquantième place. Une version que ce compte a déjà en vol ne compte
+  // pas une seconde fois.
+  const alreadyInFlight =
+    !!existing &&
+    !!getDb()
+      .prepare(`SELECT 1 FROM offline_requests r JOIN offline_jobs j ON j.id = r.job_id WHERE r.account = ? AND j.id = ? AND ${IN_FLIGHT}`)
+      .get(input.account, existing.id);
+  if (!alreadyInFlight && offlineInFlight(input.account) >= OFFLINE_MAX_IN_FLIGHT) throw limitRefusal();
   let id: string;
   // Ce que le journal dit de la version au moment de la demande : déjà prête (rien à préparer),
   // en préparation (un autre compte l'a demandée), relancée après un échec, ou nouvelle.
@@ -247,7 +304,12 @@ export async function requestOfflineJob(input: {
        VALUES (?, ?, ?, ?, ?, ?, 'queued', 1, 0, ?, ?, ?, ?)`
     ).run(id, input.itemId, item.fileVersion, input.audioIndex, input.quality, input.codec, expected, item.runtimeSeconds, now, now);
   }
-  db.prepare("INSERT OR IGNORE INTO offline_requests (account, job_id, created_at) VALUES (?, ?, ?)").run(input.account, id, now);
+  // Redemandée par un compte qui l'avait déjà récupérée (effacée de son appareil, un échec de son côté
+  // relancé) : il la télécharge de nouveau, elle redevient « pas encore récupérée » pour lui — sinon
+  // elle pouvait s'effacer du serveur sous ses pieds (`releaseFetchedCopies`, `enforceOfflineQuota`).
+  db.prepare(
+    "INSERT INTO offline_requests (account, job_id, created_at) VALUES (?, ?, ?) ON CONFLICT(account, job_id) DO UPDATE SET fetched_at = NULL"
+  ).run(input.account, id, now);
   const asked = offlineJobFor(input.account, id)!;
   void logOfflineEvent("requested", asked, { user: input.account, copy, expectedBytes: asked.expectedBytes });
   pump();
@@ -287,6 +349,8 @@ export function forgetOfflineJob(account: string, id: string): boolean {
     void logOfflineEvent(done ? "removed" : "cancelled", job, { user: account, status: row.status, bytes: job.bytes, ...(!done && { stopped }) });
   }
   if (stopped) dropJob(id);
+  // Le dernier qui ne l'avait pas encore entière s'en va : les autres l'ont, elle peut partir.
+  else if (row?.status === "done") scheduleRelease();
   return true;
 }
 
@@ -310,6 +374,8 @@ interface AdminRow extends Row {
   finished_at: number | null;
   accessed_at: number;
   accounts: string | null;
+  /** Les demandeurs qui ne l'ont pas encore entière (`listOfflineCopies` seulement). */
+  unfetched?: number;
 }
 
 /** Une version telle que l'Activité la montre à l'administrateur : son état, ses dates, ses comptes. */
@@ -335,7 +401,8 @@ export const OFFLINE_KEEP_DAYS = KEEP_MS / (24 * 3600_000);
 export function listOfflineCopies(): OfflineCopy[] {
   const rows = getDb()
     .prepare(
-      `SELECT j.*, (SELECT GROUP_CONCAT(account, char(10)) FROM (SELECT account FROM offline_requests r WHERE r.job_id = j.id ORDER BY r.created_at)) AS accounts
+      `SELECT j.*, (SELECT GROUP_CONCAT(account, char(10)) FROM (SELECT account FROM offline_requests r WHERE r.job_id = j.id ORDER BY r.created_at)) AS accounts,
+              (SELECT COUNT(*) FROM offline_requests r WHERE r.job_id = j.id AND r.fetched_at IS NULL) AS unfetched
        FROM offline_jobs j
        ORDER BY CASE j.status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END, j.accessed_at DESC`
     )
@@ -346,7 +413,13 @@ export function listOfflineCopies(): OfflineCopy[] {
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     accessedAt: row.accessed_at,
-    expiresAt: row.status === "done" ? row.accessed_at + KEEP_MS : row.status === "failed" ? (row.finished_at ?? row.created_at) + FAILED_KEEP_MS : null,
+    expiresAt:
+      row.status === "done"
+        ? // Récupérée par tous ses demandeurs : elle part après le délai de grâce (`releaseFetchedCopies`).
+          row.accessed_at + (row.accounts && row.unfetched === 0 ? RELEASE_GRACE_MS : KEEP_MS)
+        : row.status === "failed"
+          ? (row.finished_at ?? row.created_at) + FAILED_KEEP_MS
+          : null,
     accounts: row.accounts ? row.accounts.split("\n") : [],
   }));
 }
@@ -601,7 +674,46 @@ function readerOf(handle: fs.promises.FileHandle, size: number) {
  */
 export function markOfflineFetched(account: string, id: string, now = Date.now()): void {
   const changed = getDb().prepare("UPDATE offline_requests SET fetched_at = ? WHERE account = ? AND job_id = ? AND fetched_at IS NULL").run(now, account, id).changes;
-  if (changed > 0) enforceOfflineQuota();
+  if (changed > 0) {
+    enforceOfflineQuota();
+    scheduleRelease();
+  }
+}
+
+/**
+ * Libère le serveur des versions que tous leurs demandeurs ont récupérées entières (Louis, 20/10/2026 :
+ * « dès que le client a fini le téléchargement on supprime du serveur », « on libère automatiquement dès
+ * que possible dès que le client l'a »). Elles attendaient jusque-là trois jours, ou que le quota
+ * l'exige. `RELEASE_GRACE_MS` après la dernière plage servie (`accessed_at`), pour que l'appareil
+ * constate qu'il a fini et qu'un autre appareil du même compte termine. Une version qu'un demandeur
+ * n'a pas encore entière, ou que personne ne demande plus (retirée avant la fin : elle reste pour qui
+ * la redemanderait, jusqu'à son expiration), n'est pas touchée.
+ */
+export function releaseFetchedCopies(now = Date.now()): void {
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM offline_jobs j WHERE j.status = 'done' AND j.accessed_at <= ?
+         AND EXISTS (SELECT 1 FROM offline_requests r WHERE r.job_id = j.id)
+         AND NOT EXISTS (SELECT 1 FROM offline_requests r WHERE r.job_id = j.id AND r.fetched_at IS NULL)`
+    )
+    .all(now - RELEASE_GRACE_MS) as AdminRow[];
+  for (const row of rows) {
+    // La ligne `evicted` existante, avec sa raison : l'Activité la range déjà parmi les effacements.
+    void logOfflineEvent("evicted", fromRow(row), { accounts: accountsOf(row.id), bytes: row.bytes, lastAccess: row.accessed_at, reason: "récupéré par tous ses demandeurs", released: true });
+    dropJob(row.id);
+  }
+}
+
+/** Repasse après le délai de grâce ; le balayage de la demi-heure rattrape un redémarrage entre-temps. */
+function scheduleRelease(): void {
+  const timer = setTimeout(() => {
+    try {
+      releaseFetchedCopies();
+    } catch (error) {
+      logError("offline", error);
+    }
+  }, RELEASE_GRACE_MS + 1000);
+  timer.unref?.();
 }
 
 /**
@@ -642,6 +754,7 @@ export function sweepOfflineJobs(now = Date.now()): void {
     void logOfflineEvent("expired", fromRow(row), { accounts: accountsOf(row.id), status: row.status, bytes: row.bytes, lastAccess: row.accessed_at });
     dropJob(row.id);
   }
+  releaseFetchedCopies(now);
   enforceOfflineQuota();
   // Les fichiers sans ligne (une suppression interrompue) : effacés aussi.
   try {

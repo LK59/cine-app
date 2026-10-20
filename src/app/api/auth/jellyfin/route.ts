@@ -5,7 +5,7 @@ import { jellyfinIdentityAuth } from "@/lib/jellyfinAuth";
 import { config } from "@/lib/config";
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE, type Role } from "@/lib/auth";
 import { sessionDb, userPrefsDb } from "@/lib/db";
-import { checkRateLimit, rateLimitedResponse, refundRateLimit } from "@/lib/rateLimiter";
+import { accountRateLimitedResponse, checkAccountRateLimit, checkRateLimit, rateLimitedResponse, refundAccountRateLimit, refundRateLimit } from "@/lib/rateLimiter";
 import { LOCALE_COOKIE } from "@/lib/i18n";
 import { getClientIp } from "@/lib/api-helpers";
 import { passwordAttempts, hasLeadingSpace, readCredentials } from "@/lib/passwordAttempts";
@@ -34,6 +34,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Identifiants requis" }, { status: 400 });
   }
   const { username, password } = credentials;
+  // Et par compte, d'où que viennent les essais (revue du 20/10/2026, `checkAccountRateLimit`).
+  if (!checkAccountRateLimit(username)) {
+    refundRateLimit(ip);
+    return accountRateLimitedResponse(username);
+  }
   // « iPad · Safari » : l'indice tactile de la page de connexion distingue l'iPad du Mac. Le même
   // libellé va au journal des connexions, à la session et à Jellyfin.
   const device = requestDeviceLabel(req);
@@ -100,6 +105,7 @@ export async function POST(req: NextRequest) {
   // Une connexion réussie rend sa place au compteur : seuls les échecs comptent (BUREAU-2,
   // `refundRateLimit`).
   refundRateLimit(ip);
+  refundAccountRateLimit(username);
   const data = await jellyfinRes.json();
   const isAdmin = data.User?.Policy?.IsAdministrator === true;
   const jellyfinUsername: string = data.User?.Name ?? username;

@@ -28,6 +28,20 @@ function lines(): Record<string, unknown>[] {
 }
 
 describe("logClientError", () => {
+  // Revue de sécurité du 20/10/2026 : le message d'une erreur réseau ou une pile recopient l'adresse
+  // en cause, jeton compris.
+  it("n'écrit ni jeton Jellyfin ni laissez-passer de diffusion", async () => {
+    const { logClientError } = await import("@/lib/logger");
+    logClientError("mathis", {
+      message: "Load failed /api/jellyfin/stream/a?ApiKey=secret1",
+      url: "/api/subtitles/x.vtt?castToken=secret2",
+      stack: "Error\n    at f (https://cine.example/x.js?api_key=secret3:1)",
+    });
+    const text = fs.readFileSync(path.join(dir, "logs", "server.log"), "utf8");
+    expect(text).not.toMatch(/secret/);
+    expect(lines()[0].url).toBe("/api/subtitles/x.vtt?castToken=-");
+  });
+
   it("écrit une ligne `client` au nom du compte, avec sa pile sur une ligne", async () => {
     const { logClientError } = await import("@/lib/logger");
     logClientError("mathis", {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { config } from "@/lib/config";
-import { checkRateLimit, rateLimitedResponse, refundRateLimit } from "@/lib/rateLimiter";
+import { accountRateLimitedResponse, checkAccountRateLimit, checkRateLimit, rateLimitedResponse, refundAccountRateLimit, refundRateLimit } from "@/lib/rateLimiter";
 import { getClientIp } from "@/lib/api-helpers";
 import { timingSafeEquals } from "@/lib/timingSafeEquals";
 import { passwordAttempts, hasLeadingSpace, readCredentials } from "@/lib/passwordAttempts";
@@ -20,6 +20,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Identifiants requis" }, { status: 400 });
   }
   const { username, password } = credentials;
+  // Et par compte, d'où que viennent les essais (revue du 20/10/2026, `checkAccountRateLimit`).
+  if (!checkAccountRateLimit(username)) {
+    refundRateLimit(ip);
+    return accountRateLimitedResponse(username);
+  }
 
   // La forme donnée d'abord, la forme sans espace finale ensuite — voir `passwordAttempts`. Les
   // deux passent par `timingSafeEquals` : une comparaison qui s'arrête au premier caractère
@@ -43,5 +48,6 @@ export async function POST(req: NextRequest) {
 
   // Seuls les échecs comptent — voir `refundRateLimit` (BUREAU-2).
   refundRateLimit(ip);
+  refundAccountRateLimit(username);
   return adminSessionResponse(req, username, ip);
 }

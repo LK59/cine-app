@@ -9,6 +9,7 @@ import { useLocale, useT } from "@/components/TranslationProvider";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { useToast } from "@/components/Toast";
 import { fetcher } from "@/lib/swr";
+import { apiErrorText } from "@/lib/apiErrorText";
 import { fetchDirectInfo } from "@/lib/directInfo";
 import { formatDurationShort, formatFileSize } from "@/lib/format";
 import { findUnsentPositions } from "@/lib/unsentPosition";
@@ -460,6 +461,7 @@ export function OfflineChoiceSheet({
   episode,
 }: OfflineTitle & { open: boolean; onClose: () => void; episode?: OfflineEpisodeTarget }) {
   const t = useT();
+  const { locale } = useLocale();
   const toast = useToast();
   const labeller = useTrackLabeller();
   const { data: info, error: infoError } = useSWR(open ? ["offline-tracks", itemId] : null, () => fetchDirectInfo(itemId), { revalidateOnFocus: false });
@@ -481,7 +483,10 @@ export function OfflineChoiceSheet({
   const start = () => {
     const track = tracks.find((x) => x.index === chosen);
     if (!track) return;
-    const failed = (error: unknown) => toast.error(t("player.downloads.startFailed", { error: error instanceof Error ? error.message : String(error) }));
+    // Un refus nommé du serveur (cinquante en vol, droit de télécharger absent) dans la langue du
+    // compte ; tout autre échec, son message comme avant.
+    const failed = (error: unknown) =>
+      toast.error(t("player.downloads.startFailed", { error: apiErrorText(error, t, locale, error instanceof Error ? error.message : String(error)) }));
     if (episode) {
       requestEpisodeDownload(episode.series, episode.episode, episode.seasons, { language: null, audioIndex: track.index, quality, codec: offlineCodec(), autoNext }, labeller).catch(failed);
       return;
