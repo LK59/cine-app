@@ -243,11 +243,18 @@ export class PlayerLifecycle {
    * ferme une de temps à autre sur un échec de décodage qu'il n'explique pas. Seule une perte qui se
    * répète est finalement rapportée. Et le même endroit deux fois, c'est ce que la plateforme ne
    * peut pas prendre : le relire échouerait de même, la lecture reprend au-delà.
+   *
+   * Sauf avant la toute première image de la lecture (`sawPicture` faux, 20/10/2026) : là, ce n'est
+   * pas un passage abîmé mais un appareil qui ne démarre pas — un vieil iPad sur de la 4K Dolby
+   * Vision, deux fermetures avant une seule image décodée, et le concert d'Augustine reparti à
+   * 0:12. On rouvre au même endroit ; si ça échoue encore, le budget passe le film au lecteur
+   * serveur, comme pour toute perte qui se répète. Le saut reste pour les pertes en cours de film,
+   * celles pour lesquelles il existe (trois reconstructions mortes sur le même segment de 5,5 Mo).
    */
-  sourceLost(where: number, now: number): LossDecision {
+  sourceLost(where: number, now: number, sawPicture = true): LossDecision {
     if (this.isOver()) return { kind: "ignore" };
     if (!this.spendRebuild(now)) return { kind: "giveUp" };
-    const again = this.lastLossAt !== null && Math.abs(where - this.lastLossAt) < SAME_PLACE_SECONDS;
+    const again = sawPicture && this.lastLossAt !== null && Math.abs(where - this.lastLossAt) < SAME_PLACE_SECONDS;
     this.lastLossAt = where;
     return { kind: "rebuild", at: again ? where + REBUILD_STEP_SECONDS : where, from: where, skipped: again, attempt: this.rebuilds };
   }

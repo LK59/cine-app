@@ -190,7 +190,7 @@ stockée.
 | Après prêt : la piste voulue n'est pas celle ouverte | `requestAudioTrack` → `"rebuild"` | `pendingSwitchRef`, `restart` | Reconstruction |
 | Après prêt : la piste voulue n'est pas transportable | `!canCarryAudio` | `fallToStable` avec la piste demandée | Passé la main |
 | `onError(msg, "network")` du moteur | — | ligne `network`, `networkLost` | Réseau perdu |
-| `onError(msg)` avec `lost` | `lifecycle.spendRebuild` | ligne `rebuild` ; même endroit deux fois (< 3 s) → reprise 12 s plus loin | Reconstruction |
+| `onError(msg)` avec `lost` | `lifecycle.spendRebuild` | ligne `rebuild` ; même endroit deux fois (< 3 s) → reprise 12 s plus loin, sauf avant la première image de la lecture : rouverte sur place, puis lecteur serveur au bout du budget | Reconstruction |
 | `onError(msg)` sinon | — | `fallToStable` | Passé la main |
 | Retour au premier plan | `path === "remux"`, `lost`, `lifecycle.rebuildAt === null`, `lifecycle.spendRebuild` | ligne `rebuild` (`hiddenMs`), `restart`, en pause si retenu ou si le film était fini ; revérifié 400 ms plus tard | Reconstruction |
 | `networkLost` et en ligne | recul 0,8 s × 2ⁿ, plafond 30 s | `restart(networkLost.at)` | Reconstruction |

@@ -327,6 +327,20 @@ vi.mock("@/lib/webcodecs/remuxPlayback", () => ({
   }),
 }));
 
+// La lecture a-t-elle déjà montré une image ? Le vrai signal (`useIntroPlaybackStarted`), que
+// jsdom ne fait jamais lever seul ; un test de panne « en cours de film » le pose.
+const pictureSeen = vi.hoisted(() => ({ force: false }));
+vi.mock("@/lib/introEnd", async (original) => {
+  const real = await original<typeof import("@/lib/introEnd")>();
+  return {
+    ...real,
+    useIntroPlaybackStarted: (...args: Parameters<typeof real.useIntroPlaybackStarted>) => {
+      const started = real.useIntroPlaybackStarted(...args);
+      return pictureSeen.force || started;
+    },
+  };
+});
+
 import { noteWatching } from "@/lib/resumeRewind";
 import { resetIntroClocks } from "@/lib/playbackIntro";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
@@ -393,6 +407,7 @@ const settle = () => act(async () => void (await Promise.resolve()));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  pictureSeen.force = false;
   // Le titre des tests vient d'être joué sur cet appareil : pas de recul à l'ouverture, ce que
   // tous les tests d'avant ce réglage supposent. Ceux qui l'éprouvent vident ce souvenir.
   window.localStorage.removeItem("cine:last-watched");
@@ -867,7 +882,9 @@ describe("une source perdue", () => {
 
   it("reprend au-delà du passage qui vient d'échouer plutôt que de le relire", async () => {
     // Reading the identical bytes again is a guaranteed way to die again — the record showed
-    // three rebuilds each losing the source on the same segment.
+    // three rebuilds each losing the source on the same segment. En cours de film : la lecture a
+    // déjà montré une image.
+    pictureSeen.force = true;
     mount();
     await waitFor(() => expect(probes).toHaveLength(1));
 
@@ -879,6 +896,20 @@ describe("une source perdue", () => {
 
     await waitFor(() => expect(probes).toHaveLength(3));
     expect(probes[2].startSeconds).toBeCloseTo(112, 1);
+  });
+
+  it("avant la première image, rouvre au même endroit au lieu de sauter 12 s (Eras Tour, iPad, 20/10/2026)", async () => {
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+
+    remux.lost = true;
+    remux.position = 0.41;
+    act(() => probes[0].onError("fermée avant une image"));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    act(() => probes[1].onError("fermée encore"));
+
+    await waitFor(() => expect(probes).toHaveLength(3));
+    expect(probes[2].startSeconds).toBeCloseTo(0.41, 1);
   });
 
   it("rend son budget de reconstructions quand la lecture a tenu entre-temps", async () => {

@@ -26,6 +26,21 @@ describe("une source perdue", () => {
     expect(lifecycle.sourceLost(101, 1)).toEqual({ kind: "rebuild", at: 101 + REBUILD_STEP_SECONDS, from: 101, skipped: true, attempt: 2 });
   });
 
+  it("avant la première image, le même endroit qui échoue encore est rouvert sur place — pas 12 s plus loin (Eras Tour, iPad, 20/10/2026)", () => {
+    const lifecycle = new PlayerLifecycle();
+    // Deux fermetures à 0,41 s, sans une image décodée : le concert repartait à 0:12.
+    expect(lifecycle.sourceLost(0.41, 0, false)).toEqual({ kind: "rebuild", at: 0.41, from: 0.41, skipped: false, attempt: 1 });
+    expect(lifecycle.sourceLost(0.41, 1, false)).toEqual({ kind: "rebuild", at: 0.41, from: 0.41, skipped: false, attempt: 2 });
+    // Une fois la lecture partie, la règle d'avant revient : le même endroit deux fois est sauté.
+    expect(lifecycle.sourceLost(0.41, 2, true)).toMatchObject({ at: 0.41 + REBUILD_STEP_SECONDS, skipped: true });
+  });
+
+  it("avant la première image aussi, une perte qui se répète finit au lecteur serveur", () => {
+    const lifecycle = new PlayerLifecycle();
+    for (let i = 0; i < MAX_REBUILDS; i++) expect(lifecycle.sourceLost(0.41, i, false).kind).toBe("rebuild");
+    expect(lifecycle.sourceLost(0.41, MAX_REBUILDS, false)).toEqual({ kind: "giveUp" });
+  });
+
   it("ailleurs, ce n'est pas le même endroit", () => {
     const lifecycle = new PlayerLifecycle();
     lifecycle.sourceLost(100, 0);

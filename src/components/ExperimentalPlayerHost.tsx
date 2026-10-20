@@ -1870,6 +1870,11 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     if (introPlaying) finishIntro(thisIntro);
   }, [introPlaying, thisIntro]);
+  /** La lecture a montré sa première image et son horloge avance — lu par `sourceLost`. */
+  const pictureSeenRef = useRef(false);
+  useEffect(() => {
+    if (introPlaying) pictureSeenRef.current = true;
+  }, [introPlaying]);
   /**
    * La ligne `opening` : ce que la source a fait de l'appui jusqu'à six secondes après que le film
    * a bougé. Ajoutée le 10/10/2026 parce qu'un « second petit chargement » juste après l'ouverture,
@@ -3068,7 +3073,8 @@ export function ExperimentalPlayerHost({
         // it is used here too, and only a loss that keeps happening is finally reported.
         // Le même endroit deux fois, c'est ce que la plateforme ne peut pas prendre : la décision
         // (budget, saut au-delà du passage) est dans `lifecycle.sourceLost`.
-        const lost = remuxRef.current?.lost ? lifecycle.sourceLost(remuxRef.current.position || positionRef.current, Date.now()) : null;
+        // Avant la première image de la lecture, pas de saut au-delà : voir `sourceLost`.
+        const lost = remuxRef.current?.lost ? lifecycle.sourceLost(remuxRef.current.position || positionRef.current, Date.now(), pictureSeenRef.current) : null;
         if (lost?.kind === "ignore") return;
         if (lost?.kind === "rebuild") {
           const { at, from: where, skipped: again, attempt } = lost;
