@@ -555,6 +555,32 @@ describe("MseSource", () => {
     expect(audioBuffer.removed[0][0]).toBe(0);
   });
 
+  it("vide l'image et le son en même temps sur un saut, pas l'un après l'autre", async () => {
+    const video = fakeVideo();
+    const mse = await MseSource.attach(video, fakeRemuxer(50), PLAN, { onError: vi.fn() });
+    await flush();
+    const [videoBuffer, audioBuffer] = FakeSource.instances[0].buffers;
+    videoBuffer.setBuffered(0, 20);
+    audioBuffer.setBuffered(0, 20);
+    // Un retrait qui prend du temps, comme sur Safari (119 ms et 68 ms relevés sur un iPhone).
+    videoBuffer.busyMs = 60;
+    audioBuffer.busyMs = 60;
+    const startedAt = new Map<FakeBuffer, number>();
+    for (const buffer of [videoBuffer, audioBuffer]) {
+      const remove = buffer.remove.bind(buffer);
+      buffer.remove = (start: number, end: number) => {
+        if (!startedAt.has(buffer)) startedAt.set(buffer, performance.now());
+        remove(start, end);
+      };
+    }
+    await mse.seek(600);
+    expect(videoBuffer.removed).toHaveLength(1);
+    expect(audioBuffer.removed).toHaveLength(1);
+    // L'un après l'autre, le son attendait la fin de l'image : 60 ms au moins.
+    expect(Math.abs(startedAt.get(audioBuffer)! - startedAt.get(videoBuffer)!)).toBeLessThan(30);
+    mse.destroy();
+  });
+
   it("drops played media when the buffer is full rather than reporting a failure", async () => {
     const video = fakeVideo();
     const onError = vi.fn();

@@ -1830,13 +1830,19 @@ export class MseSource {
     // whatever was running has finished before this removal starts.
     // Chronométré piste par piste, de la demande à son `updateend` : la preuve au journal que le
     // vidage a eu lieu et ce qu'il a laissé, au lieu de la déduire du code (14/10/2026).
-    const clearMs: string[] = [];
-    for (const queue of [this.videoOps, this.audioOps]) {
-      if (!queue) continue;
-      const clearFrom = Date.now();
-      await this.clear(queue);
-      clearMs.push(`${queue === this.videoOps ? "vidéo" : "audio"} ${Date.now() - clearFrom} ms`);
-    }
+    // Les deux tampons en même temps : chacun a sa file et son `updating`, rien ne lie leurs
+    // retraits. L'un après l'autre, un saut attendait la somme — « vidéo 119 ms, audio 68 ms »
+    // sur un iPhone, 187 ms avant le premier octet du nouveau média (journal relu le 20/10/2026).
+    const clearFrom = Date.now();
+    const clearMs = (
+      await Promise.all(
+        [this.videoOps, this.audioOps].map(async (queue) => {
+          if (!queue) return null;
+          await this.clear(queue);
+          return `${queue === this.videoOps ? "vidéo" : "audio"} ${Date.now() - clearFrom} ms`;
+        })
+      )
+    ).filter((entry): entry is string => entry !== null);
     if (this.destroyed) return;
     try {
       trace(

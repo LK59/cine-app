@@ -1459,6 +1459,16 @@ export function ExperimentalPlayerHost({
     return sample && session.labSample ? labSampleInfo(sample, session.labSample.sizeBytes) : null;
   });
   const info = labInfo ?? fileInfo;
+  /**
+   * Quand la description du fichier est arrivée — la condition de tout le reste : le lecteur ne lit
+   * pas un octet du film avant elle. Pour la ligne `opening` (`infoMs`) : trois ouvertures sur 291
+   * attendaient 3 à 8 s avant d'ouvrir le fichier, sans rien dans la trace pour dire quoi (relu le
+   * 20/10/2026) — la trace repart de zéro à l'ouverture du fichier, après cette attente.
+   */
+  const infoAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (info && infoAtRef.current === null) infoAtRef.current = Date.now();
+  }, [info]);
 
   /**
    * Le nouvel essai après une coupure : une reconstruction si le fichier était ouvert, sinon une
@@ -1873,6 +1883,8 @@ export function ExperimentalPlayerHost({
         ...describeFileRef.current(),
         path: "remux",
         firstMoveMs: movedAt - introStartedAt,
+        // Depuis l'appui, comme `firstMoveMs` : 0 quand la fiche l'avait déjà préchargée.
+        ...(infoAtRef.current !== null ? { infoMs: Math.max(0, infoAtRef.current - introStartedAt) } : {}),
         // Ce que la lenteur a fait paraître pendant cette ouverture, et les choix faits (§78).
         ...slowFields(),
         steps: traceRecent(Date.now() - introStartedAt + 300).slice(-60).join(" | "),
