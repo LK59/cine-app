@@ -1783,7 +1783,6 @@
       "person_not_found": "Person nicht gefunden.",
       "share-streams": "Dieser Link wird bereits auf der maximalen Anzahl von Geräten abgespielt. Versuchen Sie es erneut, wenn eine Wiedergabe beendet ist.",
       "offline-limit": "Sie haben bereits 50 Downloads in Bearbeitung. Lassen Sie einige abschließen und versuchen Sie es dann erneut.",
-      "offline-forbidden": "Dieses Konto darf keine Inhalte herunterladen. Wenden Sie sich an den Administrator.",
       "transcode-limit": "Auf diesem Konto laufen zu viele Wiedergaben. Beenden Sie eine und versuchen Sie es erneut."
     }
   },

@@ -302,7 +302,7 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
     body: JSON.stringify({ itemId: request.itemId, audioIndex: request.audioIndex, quality: request.quality, codec: request.codec }),
   });
   const body = (await res.json().catch(() => null)) as { job?: OfflineJob; error?: string; code?: string } | null;
-  // Le code voyage avec l'erreur (`offline-limit`, `offline-forbidden`) : la fenêtre le traduit
+  // Le code voyage avec l'erreur (`offline-limit`) : la fenêtre le traduit
   // (`apiErrorText`) au lieu de citer le message français à tous les comptes.
   if (!res.ok || !body?.job) throw withCode(new Error(body?.error ?? `Erreur ${res.status}`), body?.code);
   const job = body.job;

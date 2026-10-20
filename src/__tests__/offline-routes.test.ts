@@ -84,18 +84,12 @@ describe("POST /api/offline/jobs", () => {
 });
 
 describe("revue de sécurité du 20/10/2026", () => {
-  it("sans le droit Jellyfin de télécharger, un compte ordinaire est refusé (403 offline-forbidden) ; un administrateur passe", async () => {
+  // Louis, 20/10/2026 : le téléchargement dans l'application est ouvert à tous ; le droit Jellyfin
+  // « Autoriser les téléchargements » ne règle que le fichier d'origine (`/api/player/download`).
+  it("le droit Jellyfin de télécharger n'est pas demandé : un compte qui ne l'a pas télécharge quand même", async () => {
     downloading.mockResolvedValue(false);
-    const refused = await POST(req({ itemId: ITEM, audioIndex: 1, quality: "high" }));
-    expect(refused.status).toBe(403);
-    expect(await refused.json()).toMatchObject({ code: "offline-forbidden" });
-    expect(downloading).toHaveBeenCalledWith("x");
-    // Jellyfin muet : non dans le doute, comme pour le fichier d'origine.
-    downloading.mockRejectedValue(new Error("injoignable"));
-    expect((await POST(req({ itemId: ITEM, audioIndex: 1, quality: "high" }))).status).toBe(403);
-    expect(jobs.request).not.toHaveBeenCalled();
-    verify.mockResolvedValue({ u: "louis", role: "admin", jfId: "y", jti: "j" });
     expect((await POST(req({ itemId: ITEM, audioIndex: 1, quality: "high" }))).status).toBe(200);
+    expect(downloading).not.toHaveBeenCalled();
   });
   it("la cinquante et unième version en vol : 429 { error, code: offline-limit, max: 50 }", async () => {
     jobs.request.mockRejectedValue(new Refusal("Déjà 50 téléchargements en cours pour ce compte", 429, "offline-limit", { max: 50 }));

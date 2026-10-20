@@ -1783,7 +1783,6 @@
       "person_not_found": "Personne introuvable.",
       "share-streams": "Ce lien est déjà lu sur le nombre maximal d'appareils. Réessayez quand une lecture sera terminée.",
       "offline-limit": "Vous avez déjà 50 téléchargements en cours. Laissez-en finir quelques-uns, puis réessayez.",
-      "offline-forbidden": "Ce compte n'a pas le droit de télécharger. Demandez-le à l'administrateur.",
       "transcode-limit": "Trop de lectures en cours sur ce compte. Arrêtez-en une puis réessayez."
     }
   },

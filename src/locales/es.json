@@ -1783,7 +1783,6 @@
       "person_not_found": "No se encontró a esta persona.",
       "share-streams": "Este enlace ya se está reproduciendo en el número máximo de dispositivos. Inténtalo de nuevo cuando termine una reproducción.",
       "offline-limit": "Ya tienes 50 descargas en curso. Deja que terminen algunas e inténtalo de nuevo.",
-      "offline-forbidden": "Esta cuenta no tiene permiso para descargar. Pídeselo al administrador.",
       "transcode-limit": "Hay demasiadas reproducciones en curso en esta cuenta. Detén una e inténtalo de nuevo."
     }
   },

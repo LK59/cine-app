@@ -1783,7 +1783,6 @@
       "person_not_found": "Person not found.",
       "share-streams": "This link is already playing on the maximum number of devices. Try again once a playback has finished.",
       "offline-limit": "You already have 50 downloads in progress. Let a few finish, then try again.",
-      "offline-forbidden": "This account is not allowed to download. Ask the administrator.",
       "transcode-limit": "Too many playbacks are running on this account. Stop one and try again."
     }
   },

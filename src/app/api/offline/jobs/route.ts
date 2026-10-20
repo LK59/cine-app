@@ -4,8 +4,6 @@ import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { assertVisible } from "@/lib/itemVisibility";
-import { contentDownloadingAllowed } from "@/lib/transcodePolicy";
-import { errorBody } from "@/lib/apiErrorCodes";
 import { OfflineRefusal, requestOfflineJob, type OfflineCodec, type OfflineQuality } from "@/lib/offline/jobs";
 
 /**
@@ -13,11 +11,10 @@ import { OfflineRefusal, requestOfflineJob, type OfflineCodec, type OfflineQuali
  * `GET /api/offline/jobs/<id>`. Ouvert à tous les comptes sauf réglage de l'installation, et
  * seulement pour un titre que le compte voit.
  *
- * Revue de sécurité du 20/10/2026 : un compte ordinaire doit aussi avoir le droit Jellyfin
- * « Autoriser les téléchargements » (`contentDownloadingAllowed`, non dans le doute), comme pour le
- * fichier d'origine (`/api/player/download`) — une version légère reste le film entier qui sort de
- * la bibliothèque, et chaque demande coûte un transcodage complet. Les administrateurs passent. Et
- * au plus `OFFLINE_MAX_IN_FLIGHT` versions en vol par compte (429 `offline-limit`, `jobs.ts`).
+ * Le droit Jellyfin « Autoriser les téléchargements » ne s'applique **pas** ici (Louis, 20/10/2026) :
+ * le téléchargement dans l'application est ouvert à tout le monde ; ce droit ne règle que le fichier
+ * d'origine (« Télécharger le fichier », `/api/player/download`). Au plus `OFFLINE_MAX_IN_FLIGHT`
+ * versions en vol par compte (429 `offline-limit`, `jobs.ts`).
  */
 export async function POST(req: NextRequest) {
   if (!config.player.enabled || !config.player.offlineDownloads) return NextResponse.json({ error: "Téléchargement hors ligne désactivé" }, { status: 404 });
@@ -26,9 +23,6 @@ export async function POST(req: NextRequest) {
   // Le temps de la bêta, aux administrateurs seulement, sauf si l'installation l'a ouvert à tous.
   if (!config.player.offlineDownloadsForEveryone && session.role !== "admin") {
     return NextResponse.json({ error: "Téléchargement hors ligne réservé aux administrateurs" }, { status: 403 });
-  }
-  if (session.role !== "admin" && !(await contentDownloadingAllowed(session.jfId).catch(() => false))) {
-    return NextResponse.json(errorBody("Téléchargement non autorisé pour ce compte", "offline-forbidden"), { status: 403 });
   }
   const body = (await req.json().catch(() => null)) as { itemId?: unknown; audioIndex?: unknown; quality?: unknown; codec?: unknown } | null;
   const itemId = body?.itemId;

@@ -44,7 +44,6 @@ export const API_ERROR_CODES = [
   // versions en vol par compte, et le droit Jellyfin « Autoriser les téléchargements » exigé d'un
   // compte ordinaire. Sans code, la fenêtre citait le message français à tous les comptes.
   "offline-limit",
-  "offline-forbidden",
   // Un sixième transcodage en même temps sur un compte, refusé par le relais de flux
   // (`transcodeBudget.ts`, 20/10/2026, revue de sécurité).
   "transcode-limit",

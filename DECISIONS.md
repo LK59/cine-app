@@ -6003,8 +6003,9 @@ par lui) — de quoi prendre une saison ou une saga sans se sentir limité ; la 
 `offline-limit`. Une copie que tous ses demandeurs ont récupérée est effacée cinq minutes après la
 dernière lecture (`releaseFetchedCopies`) — le délai couvre le dernier contrôle de l'appareil et un
 dernier morceau redemandé —, et l'appareil qui a déjà tous ses octets ne prend pas ce 404 pour un
-échec. Un compte ordinaire sans le droit de téléchargement de Jellyfin est refusé
-(`offline-forbidden`), comme pour « Télécharger le fichier ».
+échec. Le droit « Autoriser les téléchargements » de Jellyfin ne s'applique pas ici :
+le téléchargement dans l'application est ouvert à tous (Louis) ; ce droit ne règle que le fichier
+d'origine, « Télécharger le fichier » dans le lecteur.
 ## 110. La langue du son retenue par série
 
 **La règle (Louis, 20/10/2026).** Dans une série, changer la langue du son à la main dans deux épisodes
