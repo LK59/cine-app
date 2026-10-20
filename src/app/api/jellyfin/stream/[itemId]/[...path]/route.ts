@@ -126,7 +126,15 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
   }
 
   const isStatic = req.nextUrl.searchParams.get("static") === "true";
-  const isManifest = restPath.endsWith(".m3u8");
+  /**
+   * Les décisions sur le chemin se prennent sans la casse (20/10/2026, revue de sécurité) : les routes
+   * de Jellyfin n'y sont pas sensibles. `SUBTITLES.M3U8` échappait au test `.m3u8`, partait par la
+   * branche des segments, tel quel — et la liste de sous-titres que Jellyfin y écrit porte, dans
+   * chaque adresse, la clé d'administration avec laquelle ce relais l'interroge. N'importe quel
+   * compte, un invité de lien, un téléviseur la recevaient en clair.
+   */
+  const lowerPath = restPath.toLowerCase();
+  const isManifest = lowerPath.endsWith(".m3u8");
 
   try {
     // Root cause found live: Safari issues a speculative byte-Range request for the manifest
@@ -173,6 +181,18 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
 
     const contentType = res.headers.get("Content-Type") ?? "application/octet-stream";
 
+    /**
+     * Second verrou, indépendant du chemin : un texte venu de Jellyfin ne repart jamais tel quel.
+     * Une liste, des sous-titres, un message d'erreur peuvent recopier la clé d'administration de la
+     * requête ; ce qui n'est ni la liste ni un segment de sous-titres traités plus bas est lu en
+     * entier et nettoyé ici — même avec `static=true`. Les octets d'un film (vidéo, son, flux brut)
+     * ne sont jamais du texte et passent sans être lus.
+     */
+    if (!isManifest && !lowerPath.endsWith(".vtt") && isTextual(contentType)) {
+      const buf = Buffer.from(withoutAdminKey(stripAccessToken(await res.text())), "utf-8");
+      return new NextResponse(buf, { headers: { "Content-Type": contentType, "Cache-Control": "no-store", "Content-Length": String(buf.length) } });
+    }
+
     if (isManifest) {
       // HLS playlists can reference sibling segments/variant playlists with an
       // absolute "/videos/{itemId}/..." path (rather than one relative to this
@@ -202,7 +222,7 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
       const withPass = castPass
         ? withCastPass(castMasterPlaylist(rewritten), itemId, req.nextUrl.searchParams.get(CAST_TOKEN_PARAM) ?? "")
         : rewritten;
-      const buf = Buffer.from(withPass, "utf-8");
+      const buf = Buffer.from(withoutAdminKey(withPass), "utf-8");
 
       // Playlists are ALWAYS served whole, with Range requests deliberately ignored (a plain 200
       // full-body response is a valid answer to a Range request) and NO Accept-Ranges header.
@@ -229,8 +249,8 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
 
     // Un segment de sous-titres HLS : lu en entier (quelques centaines d'octets) pour corriger le
     // repère de temps que Jellyfin y écrit pour des segments `.ts` — voir `fixVttTimestampMap`.
-    if (restPath.endsWith(".vtt")) {
-      const buf = Buffer.from(fixVttTimestampMap(await res.text()), "utf-8");
+    if (lowerPath.endsWith(".vtt")) {
+      const buf = Buffer.from(withoutAdminKey(fixVttTimestampMap(await res.text())), "utf-8");
       return new NextResponse(buf, {
         headers: { "Content-Type": contentType, "Cache-Control": "private, max-age=21600", "Content-Length": String(buf.length) },
       });
@@ -290,3 +310,18 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
     return new NextResponse(null, { status: 502 });
   }
 }
+
+/** Un corps que Jellyfin écrit en texte — liste HLS, sous-titres, JSON, message d'erreur. */
+function isTextual(contentType: string): boolean {
+  return /mpegurl|^text\/|json|xml|javascript/i.test(contentType);
+}
+
+/**
+ * La clé d'administration, retirée où qu'elle soit écrite et sous quelque nom de paramètre : le
+ * nettoyage des paramètres (`stripAccessToken`) ne connaît que ceux qu'il nomme.
+ */
+function withoutAdminKey(text: string): string {
+  const key = config.jellyfin.apiKey;
+  return key ? text.split(key).join("") : text;
+}
+

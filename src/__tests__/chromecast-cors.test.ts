@@ -113,7 +113,8 @@ describe("route des segments — la position notée pour le relais du serveur", 
     `https://cine.example/api/jellyfin/stream/${itemId}/hls1/main/40.mp4?PlaySessionId=p&runtimeTicks=1200000000${token ? `&castToken=${token}` : ""}`;
 
   it("un segment servi à un laissez-passer est noté, avec le compte et l'identifiant Jellyfin signés", async () => {
-    mockFetch.mockResolvedValue(upstream());
+    // Un segment est de la vidéo : un texte serait lu et nettoyé à part (revue de sécurité du 20/10/2026).
+    mockFetch.mockResolvedValue(upstream("", { "Content-Type": "video/mp4" }));
     const { signCastToken } = await import("@/lib/castToken");
     const token = encodeURIComponent(await signCastToken(itemId, "louis", Date.now(), undefined, "jf-louis"));
     const { GET } = await import("@/app/api/jellyfin/stream/[itemId]/[...path]/route");
@@ -125,7 +126,8 @@ describe("route des segments — la position notée pour le relais du serveur", 
   });
 
   it("un laissez-passer d'avant (sans identifiant Jellyfin) : noté sans compte Jellyfin, donc sans relais", async () => {
-    mockFetch.mockResolvedValue(upstream());
+    // Un segment est de la vidéo : un texte serait lu et nettoyé à part (revue de sécurité du 20/10/2026).
+    mockFetch.mockResolvedValue(upstream("", { "Content-Type": "video/mp4" }));
     const { GET } = await import("@/app/api/jellyfin/stream/[itemId]/[...path]/route");
     await GET(req("GET", url(await pass()), null), { params: Promise.resolve({ itemId, path: segment }) });
     expect(noteCastSegment.mock.calls[0][0]).toMatchObject({ jfId: null });

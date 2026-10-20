@@ -226,4 +226,24 @@ describe("GET /api/jellyfin/stream — jeton dans l'adresse", () => {
     expect(text).toContain('URI="src/Subtitles/3/subtitles.m3u8?SegmentLength=30"');
     expect(text).toContain("\nhls1/main/0.mp4\n");
   });
+
+  // 20/10/2026, revue de sécurité : `SUBTITLES.M3U8` (Jellyfin ignore la casse) passait par la branche
+  // des segments, tel quel, avec la clé d'administration écrite dans chaque adresse.
+  it("une liste en majuscules est traitée comme une liste : sans jeton", async () => {
+    const playlist = ["#EXTM3U", "stream.vtt?CopyTimestamps=true&ApiKey=key", "stream.vtt?x=1&api_key=key", ""].join("\n");
+    mockFetch.mockResolvedValue({ ...upstream(200), text: async () => playlist });
+    const res = await getUrl(`http://app/api/jellyfin/stream/${validId}/${validId}/Subtitles/3/SUBTITLES.M3U8?SegmentLength=30`, [validId, "Subtitles", "3", "SUBTITLES.M3U8"]);
+    const text = await res.text();
+    expect(text).not.toMatch(/api_?key/i);
+    expect(text).not.toContain("key\n");
+  });
+
+  it("un texte venu de Jellyfin hors des listes ne repart jamais avec la clé, même en « static »", async () => {
+    const body = "erreur : http://jf/videos/x?api_key=key&a=1 et Token=key";
+    mockFetch.mockResolvedValue({ ...upstream(200), headers: { get: (h: string) => (h.toLowerCase() === "content-type" ? "text/plain" : null) }, text: async () => body });
+    const res = await getUrl(`http://app/api/jellyfin/stream/${validId}/stream.txt?static=true`, ["stream.txt"]);
+    const text = await res.text();
+    expect(text).not.toContain("key");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
 });
