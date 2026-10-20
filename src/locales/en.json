@@ -351,6 +351,19 @@
       "noServerError": "No errors this week.",
       "staleReloads": "+ {n} reload after a deploy|+ {n} reloads after a deploy"
     },
+    "period": {
+      "label": "Period",
+      "weekShort": "7 d",
+      "monthShort": "30 d",
+      "allShort": "All",
+      "month": "The last thirty days",
+      "all": "Since {date}",
+      "historyHint": "Cleared alerts included.",
+      "perWeek": "Sessions per week",
+      "perMonth": "Sessions per month",
+      "noRebuild": "No rebuild over this period.",
+      "noServerError": "No error over this period."
+    },
     "accounts": {
       "title": "Accounts ({n})",
       "admin": "admin",

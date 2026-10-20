@@ -62,7 +62,7 @@ export function clock(seconds: number | null | undefined): string {
  * « Wed, Thu » et « Sep 17 » au milieu d'une page en français (relu le 06/10/2026). La racine de
  * la page porte la langue choisie (`<html lang>`, layout).
  */
-function uiLocale(): string | undefined {
+export function uiLocale(): string | undefined {
   return typeof document !== "undefined" ? document.documentElement.lang || undefined : undefined;
 }
 
@@ -298,21 +298,32 @@ export function SeanceRow({ s, now, showUser = false }: { s: Seance; now: number
 }
 
 /** Une courbe en barres, sans bibliothèque : sept jours tiennent dans quelques `div`. */
-export function DayBars({ days }: { days: { day: string; seances: number; problems: number }[] }) {
+/**
+ * Les barres de séances : sept jours, trente, ou tout l'historique par semaine ou par mois
+ * (`bucket`). Au-delà de dix barres, l'étiquette ne se lit qu'une barre sur quelques-unes et le
+ * nombre passe dans l'infobulle — trente nombres en haut se chevauchaient sur un téléphone.
+ */
+export function DayBars({ days, bucket = "day" }: { days: { day: string; seances: number; problems: number }[]; bucket?: "day" | "week" | "month" }) {
   const max = Math.max(1, ...days.map((d) => d.seances));
+  const dense = days.length > 10;
+  const every = Math.ceil(days.length / 8);
+  const label = (day: string) => {
+    const date = new Date(day + "T12:00:00");
+    if (bucket === "month") return date.toLocaleDateString(uiLocale(), { month: "short" });
+    if (bucket === "week") return date.toLocaleDateString(uiLocale(), { day: "numeric", month: "short" });
+    return dense ? String(date.getDate()) : date.toLocaleDateString(uiLocale(), { weekday: "short" });
+  };
   return (
-    <div className="flex h-28 items-end gap-2">
-      {days.map((d) => (
-        <div key={d.day} className="flex flex-1 flex-col items-center gap-1" title={`${d.day} · ${d.seances} · ${d.problems}`}>
-          <span className="text-[11px] tabular-nums text-subtle">{d.seances || ""}</span>
+    <div className={`flex h-28 items-end ${dense ? "gap-0.5" : "gap-2"}`}>
+      {days.map((d, i) => (
+        <div key={d.day} className="flex min-w-0 flex-1 flex-col items-center gap-1" title={`${d.day} · ${d.seances} · ${d.problems}`}>
+          {!dense && <span className="text-[11px] tabular-nums text-subtle">{d.seances || ""}</span>}
           <div className="relative w-full overflow-hidden rounded-t bg-brand/70" style={{ height: `${Math.max(2, (d.seances / max) * 80)}px` }}>
             {d.problems > 0 && (
               <div className="absolute inset-x-0 bottom-0 bg-warning/80" style={{ height: `${Math.min(100, (d.problems / Math.max(1, d.seances)) * 100)}%` }} />
             )}
           </div>
-          <span className="text-[11px] text-subtle">
-            {new Date(d.day + "T12:00:00").toLocaleDateString(uiLocale(), { weekday: "short" })}
-          </span>
+          <span className="whitespace-nowrap text-[11px] text-subtle">{!dense || (days.length - 1 - i) % every === 0 ? label(d.day) : "\u00a0"}</span>
         </div>
       ))}
     </div>

@@ -30,7 +30,7 @@ import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
-import { AlertChip, Avatar, ConfirmButton, DayBars, Panel, PresenceBadge, Progress, SeanceRow, Tile, ago, clock, hours, latest, secs, type T } from "@/components/activity/parts";
+import { AlertChip, Avatar, ConfirmButton, DayBars, Panel, PresenceBadge, Progress, SeanceRow, Tile, ago, uiLocale, clock, hours, latest, secs, type T } from "@/components/activity/parts";
 import type { AccountSummary, WeekSignals, household } from "@/lib/activity/accounts";
 import type { ReportSummary } from "@/lib/reports";
 import { NOTIFICATION_CATEGORIES } from "@/lib/notifications";
@@ -343,6 +343,140 @@ function DownloadsPanel() {
   );
 }
 
+const PERIODS = [7, 30, "all"] as const;
+type Period = (typeof PERIODS)[number];
+
+function fmtDay(ms: number): string {
+  return new Date(ms).toLocaleDateString(uiLocale(), { day: "numeric", month: "long", year: "numeric" });
+}
+
+/**
+ * Les chiffres, sur la semaine (ceux de la vue d'ensemble, relus avec elle), trente jours ou depuis le
+ * début (`/api/admin/activity/period`, demandés seulement une fois choisis). La semaine suit
+ * « Effacer les alertes » ; les deux autres sont de l'historique et comptent tout.
+ */
+function PeriodSection({ week }: { week: WeekSignals }) {
+  const t = useT();
+  const [period, setPeriod] = useState<Period>(7);
+  const { data, isLoading } = useSWR<WeekSignals>(period === 7 ? null : `/api/admin/activity/period?period=${period}`, fetcher, { refreshInterval: 60_000 });
+  // En attendant la première réponse, la semaine reste affichée, estompée.
+  const s = period === 7 ? week : (data ?? week);
+  const loading = period !== 7 && !data && isLoading;
+  return (
+    <>
+      <div>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xs font-medium uppercase tracking-wide text-subtle">
+            {period === 7 ? t("activity.week.title") : period === 30 ? t("activity.period.month") : t("activity.period.all", { date: fmtDay(s.since) })}
+          </h2>
+          <div className="flex gap-1" role="tablist" aria-label={t("activity.period.label")}>
+            {PERIODS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                role="tab"
+                aria-selected={p === period}
+                onClick={() => setPeriod(p)}
+                className={`rounded-lg px-3 py-1 text-xs ${p === period ? "bg-white/15 text-white" : "text-muted hover:text-white"}`}
+              >
+                {t(`activity.period.${p === "all" ? "allShort" : p === 30 ? "monthShort" : "weekShort"}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+        {period !== 7 && <p className="-mt-1 mb-3 text-xs text-subtle">{t("activity.period.historyHint")}</p>}
+        <div className={`grid grid-cols-2 gap-3 md:grid-cols-4 transition-opacity ${loading ? "opacity-50" : ""}`}>
+          <Tile icon={Clapperboard} label={t("activity.week.seances")} value={s.seances} hint={t("activity.week.viewers", { n: s.viewers })} />
+          <Tile icon={Clock} label={t("activity.week.watched")} value={hours(s.watchedSeconds)} />
+          <Tile
+            icon={Hourglass}
+            label={t("activity.week.waits")}
+            value={s.waits}
+            hint={t("activity.week.waitsHint", { d: secs(s.waitedMs) })}
+            tone={s.waits > 20 ? "warn" : "default"}
+          />
+          <Tile
+            icon={FastForward}
+            label={t("activity.week.slowSeeks")}
+            value={s.slowSeeks}
+            hint={t("activity.week.slowSeeksHint", { n: s.seeks })}
+            tone={s.slowSeeks > 0 ? "warn" : "good"}
+          />
+          <Tile icon={Wrench} label={t("activity.week.rebuilds")} value={s.rebuilds} hint={t("activity.week.stalls", { n: s.stalls })} tone={s.rebuilds ? "warn" : "good"} />
+          <Tile icon={ServerCrash} label={t("activity.week.fallbacks")} value={s.fallbacks} hint={t("activity.week.lost", { n: s.lost })} tone={s.fallbacks ? "warn" : "good"} />
+          <Tile
+            icon={AlertTriangle}
+            label={t("activity.week.clientErrors")}
+            value={s.clientErrors}
+            hint={s.staleReloads ? t("activity.week.staleReloads", { n: s.staleReloads }) : undefined}
+            tone={s.clientErrors ? "bad" : "good"}
+          />
+          <Tile icon={KeyRound} label={t("activity.week.tokenRefusals")} value={s.tokenRefusals} tone={s.tokenRefusals ? "bad" : "good"} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Panel title={t(s.bucket === "week" ? "activity.period.perWeek" : s.bucket === "month" ? "activity.period.perMonth" : "activity.week.perDay")} icon={Activity} className="lg:col-span-2">
+          <div className="p-4">
+            <DayBars days={s.perDay} bucket={s.bucket} />
+            <p className="mt-3 flex gap-4 text-xs text-subtle">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-sm bg-brand/70" />
+                {t("activity.week.legendSeances")}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-sm bg-warning/80" />
+                {t("activity.week.legendProblems")}
+              </span>
+            </p>
+          </div>
+        </Panel>
+
+        <Panel title={t("activity.week.rebuildReasons")} icon={Wrench}>
+          {s.rebuildReasons.length ? (
+            <ul className="divide-y divide-white/5">
+              {s.rebuildReasons.map((r) => (
+                <li key={r.reason} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+                  <span className="truncate font-mono text-xs text-muted">{r.reason}</span>
+                  <span className="shrink-0 tabular-nums text-muted">{r.count}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="px-4 py-6 text-sm text-subtle">{t(period === 7 ? "activity.week.noRebuild" : "activity.period.noRebuild")}</p>
+          )}
+        </Panel>
+
+        <Panel
+          title={t("activity.week.serverErrors")}
+          icon={ServerCrash}
+          action={
+            <ActivityLink to={{ kind: "logs", preset: { source: "server" } }} className="text-xs text-accent-400 hover:underline">
+              {t("activity.logs.open")}
+            </ActivityLink>
+          }
+        >
+          {s.serverErrors.length ? (
+            <ul className="divide-y divide-white/5">
+              {s.serverErrors.map((e) => (
+                <li key={e.scope} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+                  <ActivityLink to={{ kind: "logs", preset: { source: "server", type: e.scope } }} className="truncate font-mono text-xs text-muted hover:text-white">
+                    {e.scope}
+                  </ActivityLink>
+                  <span className="shrink-0 tabular-nums text-muted">{e.count}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="px-4 py-6 text-sm text-subtle">{t(period === 7 ? "activity.week.noServerError" : "activity.period.noServerError")}</p>
+          )}
+        </Panel>
+      </div>
+
+    </>
+  );
+}
+
 /** La vue d'ensemble : en direct, à regarder, la semaine, les comptes, le fil des séances. */
 export function ActivityOverview() {
   const t = useT();
@@ -441,96 +575,8 @@ export function ActivityOverview() {
       {/* Le fichier ou l'appareil : le verdict de chaque titre qui a échoué. */}
       <DiagnosisPanel items={data.household.diagnosis} now={now} days={data.household.days} />
 
-      {/* 3. La semaine en chiffres. */}
-      <div>
-        <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-subtle">{t("activity.week.title")}</h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Tile icon={Clapperboard} label={t("activity.week.seances")} value={s.seances} hint={t("activity.week.viewers", { n: s.viewers })} />
-          <Tile icon={Clock} label={t("activity.week.watched")} value={hours(s.watchedSeconds)} />
-          <Tile
-            icon={Hourglass}
-            label={t("activity.week.waits")}
-            value={s.waits}
-            hint={t("activity.week.waitsHint", { d: secs(s.waitedMs) })}
-            tone={s.waits > 20 ? "warn" : "default"}
-          />
-          <Tile
-            icon={FastForward}
-            label={t("activity.week.slowSeeks")}
-            value={s.slowSeeks}
-            hint={t("activity.week.slowSeeksHint", { n: s.seeks })}
-            tone={s.slowSeeks > 0 ? "warn" : "good"}
-          />
-          <Tile icon={Wrench} label={t("activity.week.rebuilds")} value={s.rebuilds} hint={t("activity.week.stalls", { n: s.stalls })} tone={s.rebuilds ? "warn" : "good"} />
-          <Tile icon={ServerCrash} label={t("activity.week.fallbacks")} value={s.fallbacks} hint={t("activity.week.lost", { n: s.lost })} tone={s.fallbacks ? "warn" : "good"} />
-          <Tile
-            icon={AlertTriangle}
-            label={t("activity.week.clientErrors")}
-            value={s.clientErrors}
-            hint={s.staleReloads ? t("activity.week.staleReloads", { n: s.staleReloads }) : undefined}
-            tone={s.clientErrors ? "bad" : "good"}
-          />
-          <Tile icon={KeyRound} label={t("activity.week.tokenRefusals")} value={s.tokenRefusals} tone={s.tokenRefusals ? "bad" : "good"} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Panel title={t("activity.week.perDay")} icon={Activity} className="lg:col-span-2">
-          <div className="p-4">
-            <DayBars days={s.perDay} />
-            <p className="mt-3 flex gap-4 text-xs text-subtle">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-sm bg-brand/70" />
-                {t("activity.week.legendSeances")}
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-sm bg-warning/80" />
-                {t("activity.week.legendProblems")}
-              </span>
-            </p>
-          </div>
-        </Panel>
-
-        <Panel title={t("activity.week.rebuildReasons")} icon={Wrench}>
-          {s.rebuildReasons.length ? (
-            <ul className="divide-y divide-white/5">
-              {s.rebuildReasons.map((r) => (
-                <li key={r.reason} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
-                  <span className="truncate font-mono text-xs text-muted">{r.reason}</span>
-                  <span className="shrink-0 tabular-nums text-muted">{r.count}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="px-4 py-6 text-sm text-subtle">{t("activity.week.noRebuild")}</p>
-          )}
-        </Panel>
-
-        <Panel
-          title={t("activity.week.serverErrors")}
-          icon={ServerCrash}
-          action={
-            <ActivityLink to={{ kind: "logs", preset: { source: "server" } }} className="text-xs text-accent-400 hover:underline">
-              {t("activity.logs.open")}
-            </ActivityLink>
-          }
-        >
-          {s.serverErrors.length ? (
-            <ul className="divide-y divide-white/5">
-              {s.serverErrors.map((e) => (
-                <li key={e.scope} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
-                  <ActivityLink to={{ kind: "logs", preset: { source: "server", type: e.scope } }} className="truncate font-mono text-xs text-muted hover:text-white">
-                    {e.scope}
-                  </ActivityLink>
-                  <span className="shrink-0 tabular-nums text-muted">{e.count}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="px-4 py-6 text-sm text-subtle">{t("activity.week.noServerError")}</p>
-          )}
-        </Panel>
-      </div>
+      {/* 3. Les chiffres : la semaine, trente jours ou depuis le début. */}
+      <PeriodSection week={s} />
 
       {/* 4. Les comptes. */}
       <Panel title={t("activity.accounts.title", { n: accounts.length })} icon={Users}>

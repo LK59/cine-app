@@ -32,7 +32,7 @@ import { cachedJellyfinDevices } from "@/lib/server-cache";
  * part pour ne pas lever d'alerte : Sarah et Lucas en avaient chacun une le 23/09/2026, un jour
  * de déploiements, et elles se lisaient comme des pannes.
  */
-function isStaleClientChunk(r: LogRecord): boolean {
+export function isStaleClientChunk(r: LogRecord): boolean {
   return r.scope === "client" && isChunkLoadError({ message: String(r.message ?? ""), name: String(r.name ?? "") });
 }
 
@@ -228,75 +228,199 @@ export interface WeekSignals {
   tokenRefusals: number;
   serverErrors: { scope: string; count: number }[];
   rebuildReasons: { reason: string; count: number }[];
-  /** Les titres qui ont posé le plus de problèmes cette semaine. */
-  /** Les séances par jour, pour la courbe. */
+  /** Les séances par jour, pour la courbe — par semaine ou par mois sur tout l'historique (`bucket`). */
   perDay: { day: string; seances: number; problems: number }[];
+  /** Ce que couvre une barre de `perDay` ; absent : un jour. */
+  bucket?: "day" | "week" | "month";
 }
 
-/** Le bilan de la semaine : ce que le journal du lecteur et celui du serveur en disent. */
-export function weekSignals(now = Date.now(), clearedAt = alertsClearedAt()): WeekSignals {
-  const since = now - 7 * DAY;
-  // Les séances et le temps regardé restent ceux de la semaine ; seuls les incidents et les erreurs
-  // effacés ne se comptent plus (`alertsCleared.ts`).
-  const seances = acknowledgeSeances(buildSeances(readRecords("player", since)).filter((s) => s.start >= since), clearedAt);
-  const allServer = serverRecordsSince(since);
-  const server = allServer.filter(afterClear(clearedAt));
-  const sum = (f: (s: Seance) => number) => seances.reduce((n, s) => n + f(s), 0);
+/**
+ * Ce que comptent des séances et des lignes du serveur, sous une forme qui s'additionne d'un jour à
+ * l'autre : les spectateurs sont des noms (on n'additionne pas des « 3 spectateurs »), les causes des
+ * tables. Une seule façon de compter pour la semaine, les trente jours et tout l'historique
+ * (`activityHistory.ts`), qui en garde un par jour.
+ */
+export interface SignalTally {
+  seances: number;
+  viewers: string[];
+  watchedSeconds: number;
+  waits: number;
+  waitedMs: number;
+  slowSeeks: number;
+  seeks: number;
+  stalls: number;
+  rebuilds: number;
+  fallbacks: number;
+  errors: number;
+  lost: number;
+  audioSwitches: number;
+  problems: number;
+  clientErrors: number;
+  staleReloads: number;
+  tokenRefusals: number;
+  serverErrors: Record<string, number>;
+  rebuildReasons: Record<string, number>;
+}
 
-  const reasons = new Map<string, number>();
+export function emptyTally(): SignalTally {
+  return {
+    seances: 0, viewers: [], watchedSeconds: 0, waits: 0, waitedMs: 0, slowSeeks: 0, seeks: 0, stalls: 0, rebuilds: 0,
+    fallbacks: 0, errors: 0, lost: 0, audioSwitches: 0, problems: 0, clientErrors: 0, staleReloads: 0, tokenRefusals: 0,
+    serverErrors: {}, rebuildReasons: {},
+  };
+}
+
+/**
+ * Le compte de ces séances (déjà passées par `acknowledgeSeances` quand il le faut) et de ces lignes
+ * du serveur. Les erreurs effacées ne se comptent plus (`alertsCleared.ts`) ; les rechargements après
+ * un déploiement, qui n'en sont pas, se comptent toujours.
+ */
+export function tallySignals(seances: readonly Seance[], allServer: readonly LogRecord[], clearedAt = 0): SignalTally {
+  const t = emptyTally();
+  const viewers = new Set<string>();
   for (const s of seances) {
+    t.seances += 1;
+    viewers.add(s.user.toLowerCase());
+    t.watchedSeconds += s.watched ?? 0;
+    t.waits += s.stop?.waits ?? 0;
+    t.waitedMs += s.stop?.waitedMs ?? 0;
+    t.slowSeeks += s.slowSeeks;
+    t.seeks += s.seeks;
+    t.stalls += s.stalls;
+    t.rebuilds += s.rebuilds;
+    t.fallbacks += s.fallbacks;
+    t.errors += s.errors;
+    if (s.stop?.why === "lost") t.lost += 1;
+    t.audioSwitches += s.audioSwitches;
+    t.problems += problemsOf(s);
     for (const i of s.incidents) {
       if (i.kind !== "rebuild") continue;
       // Le motif sans son état détaillé : « InvalidStateError … (MediaSource closed, …) » est la
       // famille qui se compte. Les retours d'arrière-plan n'en sont plus (`backgroundRebuilds`).
       const family = i.reason.replace(/\s*\(.*$/, "").slice(0, 80) || "?";
-      reasons.set(family, (reasons.get(family) ?? 0) + 1);
+      t.rebuildReasons[family] = (t.rebuildReasons[family] ?? 0) + 1;
     }
   }
-  const scopes = new Map<string, number>();
-  for (const r of server) {
-    const scope = String(r.scope ?? "?");
-    if (scope === "client" || scope === "jellyfin-token") continue;
+  t.viewers = [...viewers].sort();
+  const fresh = afterClear(clearedAt);
+  for (const r of allServer) {
+    if (isStaleClientChunk(r)) {
+      t.staleReloads += 1;
+      continue;
+    }
+    if (!fresh(r)) continue;
+    if (r.scope === "client") t.clientErrors += 1;
+    else if (r.scope === "jellyfin-token") t.tokenRefusals += 1;
     // Les gestes de l'administrateur (`logAdminAction`, niveau « info ») vivent dans le même
     // journal : chaque session fermée comptait comme une erreur serveur (relu le 24/09/2026).
-    if (!isError(r)) continue;
-    scopes.set(scope, (scopes.get(scope) ?? 0) + 1);
+    else if (isError(r)) {
+      const scope = String(r.scope ?? "?");
+      t.serverErrors[scope] = (t.serverErrors[scope] ?? 0) + 1;
+    }
   }
-  const perDay: WeekSignals["perDay"] = [];
+  return t;
+}
+
+/** `into` augmenté de `add` — pour sommer des jours. */
+export function addTally(into: SignalTally, add: SignalTally): SignalTally {
+  const viewers = new Set([...into.viewers, ...add.viewers]);
+  const sumMaps = (a: Record<string, number>, b: Record<string, number>) => {
+    const out = { ...a };
+    for (const [k, n] of Object.entries(b)) out[k] = (out[k] ?? 0) + n;
+    return out;
+  };
+  return {
+    seances: into.seances + add.seances,
+    viewers: [...viewers].sort(),
+    watchedSeconds: into.watchedSeconds + add.watchedSeconds,
+    waits: into.waits + add.waits,
+    waitedMs: into.waitedMs + add.waitedMs,
+    slowSeeks: into.slowSeeks + add.slowSeeks,
+    seeks: into.seeks + add.seeks,
+    stalls: into.stalls + add.stalls,
+    rebuilds: into.rebuilds + add.rebuilds,
+    fallbacks: into.fallbacks + add.fallbacks,
+    errors: into.errors + add.errors,
+    lost: into.lost + add.lost,
+    audioSwitches: into.audioSwitches + add.audioSwitches,
+    problems: into.problems + add.problems,
+    clientErrors: into.clientErrors + add.clientErrors,
+    staleReloads: into.staleReloads + add.staleReloads,
+    tokenRefusals: into.tokenRefusals + add.tokenRefusals,
+    serverErrors: sumMaps(into.serverErrors, add.serverErrors),
+    rebuildReasons: sumMaps(into.rebuildReasons, add.rebuildReasons),
+  };
+}
+
+/** Le bilan affiché, à partir d'un compte et de ses barres. */
+export function signalsOf(t: SignalTally, since: number, perDay: WeekSignals["perDay"], bucket?: WeekSignals["bucket"]): WeekSignals {
+  const top = (m: Record<string, number>, n: number) => Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, n);
+  return {
+    since,
+    seances: t.seances,
+    viewers: t.viewers.length,
+    watchedSeconds: t.watchedSeconds,
+    waits: t.waits,
+    waitedMs: t.waitedMs,
+    slowSeeks: t.slowSeeks,
+    seeks: t.seeks,
+    stalls: t.stalls,
+    rebuilds: t.rebuilds,
+    fallbacks: t.fallbacks,
+    errors: t.errors,
+    lost: t.lost,
+    audioSwitches: t.audioSwitches,
+    clientErrors: t.clientErrors,
+    staleReloads: t.staleReloads,
+    tokenRefusals: t.tokenRefusals,
+    serverErrors: top(t.serverErrors, 8).map(([scope, count]) => ({ scope, count })),
+    rebuildReasons: top(t.rebuildReasons, 6).map(([reason, count]) => ({ reason, count })),
+    perDay,
+    ...(bucket ? { bucket } : {}),
+  };
+}
+
+/** Les débuts des `n` derniers jours locaux, aujourd'hui compris, du plus ancien au plus récent. */
+export function lastLocalDays(now: number, n: number): { day: string; start: number; end: number }[] {
   // Les bornes sont des minuits locaux calculés par le calendrier, jamais « minuit + 24 h » ni
   // « maintenant − d × 24 h » : aux changements d'heure un jour dure 23 ou 25 h, et une séance
   // à 23 h 30 le jour du passage à l'heure d'hiver comptait dans la semaine sans tomber dans
   // aucune barre (celle du passage à l'heure d'été débordait, elle, sur le lendemain).
   const today = new Date(now);
-  for (let d = 6; d >= 0; d--) {
+  const out: { day: string; start: number; end: number }[] = [];
+  for (let d = n - 1; d >= 0; d--) {
     const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - d);
     const end = new Date(today.getFullYear(), today.getMonth(), today.getDate() - d + 1).getTime();
-    const day = seances.filter((s) => s.start >= start.getTime() && s.start < end);
-    perDay.push({ day: localDay(start), seances: day.length, problems: day.reduce((n, s) => n + problemsOf(s), 0) });
+    out.push({ day: localDay(start), start: start.getTime(), end });
   }
+  return out;
+}
 
-  return {
-    since,
-    seances: seances.length,
-    viewers: new Set(seances.map((s) => s.user.toLowerCase())).size,
-    watchedSeconds: sum((s) => s.watched ?? 0),
-    waits: sum((s) => s.stop?.waits ?? 0),
-    waitedMs: sum((s) => s.stop?.waitedMs ?? 0),
-    slowSeeks: sum((s) => s.slowSeeks),
-    seeks: sum((s) => s.seeks),
-    stalls: sum((s) => s.stalls),
-    rebuilds: sum((s) => s.rebuilds),
-    fallbacks: sum((s) => s.fallbacks),
-    errors: sum((s) => s.errors),
-    lost: seances.filter((s) => s.stop?.why === "lost").length,
-    audioSwitches: sum((s) => s.audioSwitches),
-    clientErrors: server.filter((r) => r.scope === "client" && !isStaleClientChunk(r)).length,
-    staleReloads: allServer.filter(isStaleClientChunk).length,
-    tokenRefusals: server.filter((r) => r.scope === "jellyfin-token").length,
-    serverErrors: [...scopes].map(([scope, count]) => ({ scope, count })).sort((a, b) => b.count - a.count).slice(0, 8),
-    rebuildReasons: [...reasons].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count).slice(0, 6),
-    perDay,
-  };
+/**
+ * Le bilan des `days` derniers jours : ce que le journal du lecteur et celui du serveur en disent.
+ * La semaine (7) suit « Effacer les alertes » ; les trente jours passent `clearedAt = 0` — c'est de
+ * l'historique, pas une alerte.
+ */
+function signalsForDays(days: number, now: number, clearedAt: number): WeekSignals {
+  const since = now - days * DAY;
+  // Les séances et le temps regardé restent ceux de la période ; seuls les incidents et les erreurs
+  // effacés ne se comptent plus (`alertsCleared.ts`).
+  const seances = acknowledgeSeances(buildSeances(readRecords("player", since)).filter((s) => s.start >= since), clearedAt);
+  const perDay = lastLocalDays(now, days).map(({ day, start, end }) => {
+    const of = seances.filter((s) => s.start >= start && s.start < end);
+    return { day, seances: of.length, problems: of.reduce((n, s) => n + problemsOf(s), 0) };
+  });
+  return signalsOf(tallySignals(seances, serverRecordsSince(since), clearedAt), since, perDay);
+}
+
+/** Le bilan de la semaine : ce que le journal du lecteur et celui du serveur en disent. */
+export function weekSignals(now = Date.now(), clearedAt = alertsClearedAt()): WeekSignals {
+  return signalsForDays(7, now, clearedAt);
+}
+
+/** Les trente derniers jours, alertes effacées comprises. */
+export function monthSignals(now = Date.now()): WeekSignals {
+  return signalsForDays(30, now, 0);
 }
 
 // ─── Un compte ──────────────────────────────────────────────────────────────────────────────

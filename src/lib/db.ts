@@ -590,6 +590,16 @@ function migrate(db: Database.Database): void {
       PRIMARY KEY (account, series_id)
     );
   `);
+  // Le compte de chaque jour clos de l'Activité, pour « Depuis le début » (`activityHistory.ts`) :
+  // il survit à la rotation des journaux, il ne se recalcule donc pas — gardé dans la sauvegarde.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS activity_day_tallies (
+      day         TEXT    PRIMARY KEY,
+      version     INTEGER NOT NULL,
+      tally       TEXT    NOT NULL,
+      computed_at INTEGER NOT NULL
+    );
+  `);
   // Quand l'appareil de ce compte a reçu la version entière : le quota du serveur n'efface que ce que
   // tous ses demandeurs ont récupéré (20/10/2026).
   try { db.exec("ALTER TABLE offline_requests ADD COLUMN fetched_at INTEGER"); } catch { /* already exists */ }

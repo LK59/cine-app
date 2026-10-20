@@ -351,6 +351,19 @@
       "noServerError": "Keine Fehler diese Woche.",
       "staleReloads": "+ {n} Neuladen nach einem Update|+ {n}× neu geladen nach einem Update"
     },
+    "period": {
+      "label": "Zeitraum",
+      "weekShort": "7 T",
+      "monthShort": "30 T",
+      "allShort": "Alles",
+      "month": "Die letzten dreißig Tage",
+      "all": "Seit dem {date}",
+      "historyHint": "Gelöschte Warnungen eingeschlossen.",
+      "perWeek": "Sitzungen pro Woche",
+      "perMonth": "Sitzungen pro Monat",
+      "noRebuild": "Kein Neuaufbau in diesem Zeitraum.",
+      "noServerError": "Kein Fehler in diesem Zeitraum."
+    },
     "accounts": {
       "title": "Konten ({n})",
       "admin": "Admin",

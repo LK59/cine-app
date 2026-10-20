@@ -351,6 +351,19 @@
       "noServerError": "Ningún error esta semana.",
       "staleReloads": "+ {n} recarga tras un despliegue|+ {n} recargas tras un despliegue"
     },
+    "period": {
+      "label": "Periodo",
+      "weekShort": "7 d",
+      "monthShort": "30 d",
+      "allShort": "Todo",
+      "month": "Los últimos treinta días",
+      "all": "Desde el {date}",
+      "historyHint": "Alertas borradas incluidas.",
+      "perWeek": "Sesiones por semana",
+      "perMonth": "Sesiones por mes",
+      "noRebuild": "Ninguna reconstrucción en el periodo.",
+      "noServerError": "Ningún error en el periodo."
+    },
     "accounts": {
       "title": "Cuentas ({n})",
       "admin": "admin",

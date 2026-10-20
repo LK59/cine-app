@@ -351,6 +351,19 @@
       "noServerError": "Aucune erreur cette semaine.",
       "staleReloads": "+ {n} rechargement après un déploiement|+ {n} rechargements après un déploiement"
     },
+    "period": {
+      "label": "Période",
+      "weekShort": "7 j",
+      "monthShort": "30 j",
+      "allShort": "Tout",
+      "month": "Les trente derniers jours",
+      "all": "Depuis le {date}",
+      "historyHint": "Alertes effacées comprises.",
+      "perWeek": "Séances par semaine",
+      "perMonth": "Séances par mois",
+      "noRebuild": "Aucune reconstruction sur la période.",
+      "noServerError": "Aucune erreur sur la période."
+    },
     "accounts": {
       "title": "Comptes ({n})",
       "admin": "admin",

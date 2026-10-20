@@ -5990,3 +5990,36 @@ serveur dans cette séance de l'app) suit encore le choix de Jellyfin : son ouve
 `playback-state`. Un relais du natif garde la piste du natif.
 
 Tests : `series-language.test.ts` (règle, rangement par compte, route, ouverture), `jellyfin-playback-state-route`.
+
+## 111. Les chiffres de l'Activité sur 7 jours, 30 jours et depuis le début
+
+**La règle.** Le bloc des chiffres de la vue d'ensemble (séances, temps regardé, attentes, sauts
+lents, reconstructions, replis, erreurs, barres, causes) se choisit sur trois périodes : la semaine,
+inchangée et relue avec la vue d'ensemble toutes les vingt secondes ; trente jours ; et depuis le
+début. Les deux dernières ne se demandent qu'une fois choisies (`GET /api/admin/activity/period`,
+relues chaque minute). La semaine suit « Effacer les alertes » (§59) ; les deux autres sont de
+l'historique et comptent tout.
+
+**Une façon de compter.** `tallySignals` (`accounts.ts`) compte des séances et des lignes du serveur
+sous une forme qui s'additionne (spectateurs en noms, causes en tables), `addTally` somme,
+`signalsOf` met en forme. La semaine, les trente jours et l'historique passent tous par là.
+
+**Depuis le début : un compte par jour, gardé en base.** `allTimeSignals` (`activityHistory.ts`)
+garde le compte de chaque jour clos dans `activity_day_tallies`, et ne relit dans les journaux que
+les trois derniers jours et aujourd'hui. Relire tout à chaque appel aurait grandi avec les archives
+(jusqu'à 120 de 5 Mo pour le lecteur) ; le compte d'un jour fait quelques centaines d'octets, et il
+survit à la rotation des journaux. Mesuré le 20/10/2026 sur les journaux réels (depuis le 03/09,
+1 598 séances) : 376 ms une fois, pour remplir la table, puis 17 ms. Trente jours : 17 ms.
+
+**Ce que ça accepte.** Un jour est figé trois jours après sa fin : un arrêt perdu qu'iOS renvoie au
+lancement suivant (`why: "lost"`) arrive presque toujours avant. Ce qui arrive plus tard n'est pas
+recompté. Un changement de ce que compte `tallySignals` fait monter `TALLY_VERSION` : les jours gardés
+sont oubliés et recomptés depuis ce que les journaux ont encore. Le temps regardé n'existe que depuis
+le 21/09/2026 (les lignes `stop`) : l'historique d'avant compte des séances, pas des heures.
+
+**Différence voulue.** Les barres de l'historique sont des semaines (du lundi), des mois au-delà de
+vingt-six semaines.
+
+Tests : `activity-history.test.ts` (somme gardé + direct, jour sorti des archives, jours suivants,
+changement de version, trente jours), et ceux de la semaine (`activity-alerts-cleared`,
+`activity-perday-dst`, `activity-core`), inchangés.
