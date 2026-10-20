@@ -2393,7 +2393,7 @@
       "openShort": "Online-Seite",
       "storageTitle": "Auf diesem Gerät",
       "storageUsed": "{size} Downloads",
-      "storageFree": "etwa {size} noch verfügbar",
+      "storageFree": "noch {size} vom Browser erlaubt",
       "watched": "Bis zum Ende gesehen",
       "panelHint": "Was sich ohne Netz ansehen lässt, auf diesem Gerät.",
       "entryOnline": "Von diesem Gerät abgespielt",

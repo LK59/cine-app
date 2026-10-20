@@ -2393,7 +2393,7 @@
       "openShort": "Ficha en línea",
       "storageTitle": "En este dispositivo",
       "storageUsed": "{size} de descargas",
-      "storageFree": "unos {size} todavía disponibles",
+      "storageFree": "{size} más permitidos por el navegador",
       "watched": "Visto hasta el final",
       "panelHint": "Lo que se puede ver sin red, en este dispositivo.",
       "entryOnline": "Reproducido desde este dispositivo",

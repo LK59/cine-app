@@ -162,8 +162,10 @@ function Grid({ children }: { children: React.ReactNode }) {
 
 /**
  * La place sur l'appareil : ce que prennent les téléchargements de ce compte, et ce que le
- * navigateur dit pouvoir encore accorder à l'application (`navigator.storage.estimate`, une
- * estimation — Safari la donne large, d'où « environ »).
+ * navigateur dit pouvoir encore accorder à l'application (`navigator.storage.estimate`). Ce n'est pas
+ * la place libre du disque, et le libellé le dit (« autorisés par le navigateur ») : Chrome, Edge et
+ * Firefox sous Windows annonçaient tous « usage + 10 Gio » pile (startup.log, 09-10/2026) quand Safari
+ * sur iPhone donnait ~41 Go — « environ 10 Go encore disponibles » se lisait comme le disque du PC.
  */
 function StorageSummary({ downloads }: { downloads: OfflineDownload[] }) {
   const t = useT();
