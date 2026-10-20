@@ -1,6 +1,6 @@
 {
   "name": "cine-app",
-  "version": "9.3.5",
+  "version": "9.3.6",
   "private": true,
   "license": "AGPL-3.0-only",
   "scripts": {
