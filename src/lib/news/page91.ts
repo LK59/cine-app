@@ -35,10 +35,9 @@ export const NEWS_91_CONTENT: NewsContentByLang = {
         ],
       },
       {
-        title: "Compte et téléchargements",
+        title: "Compte",
         items: [
           "Une espace ajoutée par le clavier après votre identifiant n'empêche plus la connexion.",
-          "La place indiquée sur la page des téléchargements est celle que le navigateur autorise à l'application.",
         ],
       },
     ],
@@ -67,10 +66,9 @@ export const NEWS_91_CONTENT: NewsContentByLang = {
         ],
       },
       {
-        title: "Account and downloads",
+        title: "Account",
         items: [
           "A space added by the keyboard after your username no longer prevents signing in.",
-          "The space shown on the downloads page is what the browser allows the app to use.",
         ],
       },
     ],
@@ -99,10 +97,9 @@ export const NEWS_91_CONTENT: NewsContentByLang = {
         ],
       },
       {
-        title: "Cuenta y descargas",
+        title: "Cuenta",
         items: [
           "Un espacio añadido por el teclado tras tu usuario ya no impide iniciar sesión.",
-          "El espacio indicado en la página de descargas es el que el navegador permite usar a la aplicación.",
         ],
       },
     ],
@@ -131,10 +128,9 @@ export const NEWS_91_CONTENT: NewsContentByLang = {
         ],
       },
       {
-        title: "Konto und Downloads",
+        title: "Konto",
         items: [
           "Ein von der Tastatur hinter Ihrem Benutzernamen eingefügtes Leerzeichen verhindert die Anmeldung nicht mehr.",
-          "Der auf der Download-Seite angezeigte Platz ist der, den der Browser der App erlaubt.",
         ],
       },
     ],
