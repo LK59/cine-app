@@ -67,6 +67,12 @@ describe("readCredentials", () => {
     expect(readCredentials({ username: "louis", password: "secret " })).toEqual({ username: "louis", password: "secret " });
   });
 
+  it("rogne l'identifiant (l'espace que le clavier de l'iPad ajoute) mais jamais le mot de passe", () => {
+    expect(readCredentials({ username: "mathis ", password: "secret " })).toEqual({ username: "mathis", password: "secret " });
+    expect(readCredentials({ username: "  louis", password: "x" })).toEqual({ username: "louis", password: "x" });
+    expect(readCredentials({ username: "   ", password: "x" })).toBeNull();
+  });
+
   it("refuse ce qui n'est pas une chaîne au lieu de lever plus loin", () => {
     expect(readCredentials({ username: "louis", password: 1234 })).toBeNull();
     expect(readCredentials({ username: ["louis"], password: "x" })).toBeNull();

@@ -215,6 +215,12 @@ function absorb(s: Seance, r: LogRecord): void {
   s.start = Math.min(s.start, t);
   s.device ??= deviceLabel(str(r.agent), { touch: r.touch === true });
   if (r.player === "serveur") s.player = "serveur";
+  // Le nom complet d'un épisode, quand il arrive après coup : le lecteur serveur écrit sa première
+  // ligne sous le nom que lui a passé l'appelant (« Je ris, je ris, je ris »), et le reste sous
+  // celui de Jellyfin (« LOL : Qui rit, sort ! — S04E01 · Je ris, je ris, je ris »). Le même
+  // épisode paraissait sous deux noms dans la liste des séances (19/10/2026).
+  const named = str(r.title);
+  if (named && named !== s.title && named.endsWith(` · ${s.title}`)) s.title = named;
   const reason = str(r.reason) ?? str(r.message) ?? str(r.why) ?? "";
   switch (r.kind) {
     case "start":

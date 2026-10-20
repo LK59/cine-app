@@ -127,6 +127,15 @@ describe("la page Activité lit le journal du lecteur serveur", () => {
     expect(s.audioSwitches).toBe(1);
   });
 
+  it("un épisode ouvert sous son seul nom prend le nom complet que Jellyfin donne ensuite — une séance, un nom", () => {
+    const ep = { ...base, itemId: "lol", session: "s-lol" };
+    const lines = [
+      { ...ep, kind: "start", why: "open", title: "Je ris, je ris, je ris", _t: t0, _line: 1 },
+      { ...ep, kind: "stop", why: "close", title: "LOL : Qui rit, sort ! — S04E01 · Je ris, je ris, je ris", _t: t0 + 10_000, _line: 2 },
+    ] as unknown as LogRecord[];
+    expect(buildSeances(lines).map((x) => x.title)).toEqual(["LOL : Qui rit, sort ! — S04E01 · Je ris, je ris, je ris"]);
+  });
+
   it("le diagnostic « fichier ou appareil » compte les échelons comme des pannes, pas le changement de piste", () => {
     const [s] = buildSeances(ruby);
     // Le repli du natif (1) + deux échelons de l'échelle (2).

@@ -2904,6 +2904,17 @@ sources et vérifié sur la vraie bibliothèque (`hls-contrat.test.ts`) :
 Tests : `hls-contrat.test.ts` (vraie bibliothèque : ordre des écouteurs, drapeau, fatale), et dans
 `PlayerHost-hls-recovery.test.tsx` « hls.js 1.7 » — chacun échoue sans le correctif.
 
+**La marche de l'image (20/10/2026).** Après l'échelle du son, une erreur de décodage (`error` de
+l'élément code 3, ou les erreurs média de hls.js à bout de budget) relance une fois par ouverture
+avec l'image en H.264 seul (`H264_RUNG`, `videoH264Only` → la route déclare le seul H.264 et passe par
+le profil de la version allégée : SDR, 1080p au plus). Jamais pendant une diffusion. Et un fragment ne
+rend le budget des erreurs média que si l'élément tient une image (`readyState` ≥ 2) — la boucle (a)2
+prouvée ci-dessus est fermée. Pourquoi : un Android (Chrome 155) annonçait le HEVC 10 bits sans
+jamais le décoder ; le lecteur serveur copiait l'image HEVC et l'échelle ne changeait que le son —
+sept séances, de 4 à 109 reprises identiques, toutes à zéro seconde, quand ses films H.264 passaient.
+Tests : `PlayerHost-hls-recovery.test.tsx` (marche H.264, boucle (a)2 en `it`),
+`jellyfin-playback-start-route.test.ts` « la marche H.264 du client ».
+
 ## 68. « Améliorer les dialogues » : dans la chaîne audio, sur les canaux livrés — bêta, tous les comptes
 
 **Règle.** Le traitement des voix vit dans le ré-encodage du lecteur natif, entre le repli des

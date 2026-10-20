@@ -53,5 +53,11 @@ export function readCredentials(body: unknown): { username: string; password: st
   if (typeof username !== "string" || typeof password !== "string") return null;
   if (!username || !password) return null;
   if (username.length > MAX_USERNAME_LENGTH || password.length > MAX_PASSWORD_LENGTH) return null;
-  return { username, password };
+  // L'identifiant, lui, est rogné des deux côtés, sans essai préalable : Jellyfin refuse à la
+  // création tout nom qui commence ou finit par un blanc, donc aucun compte ne peut en dépendre. Le
+  // clavier de l'iPad ajoute une espace après un mot qu'il complète : dix refus de « mathis␣ » en
+  // une minute et demie le 19/10/2026, lus « mot de passe refusé ».
+  const name = username.trim();
+  if (!name) return null;
+  return { username: name, password };
 }

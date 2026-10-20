@@ -361,6 +361,27 @@ describe("POST /api/jellyfin/playback/start", () => {
     expect(profile.DirectPlayProfiles[0].AudioCodec).toBe("aac");
   });
 
+  it("la marche H.264 du client : ni HEVC ni HDR déclarés, 1080p au plus, même quand le navigateur dit lire le HEVC", async () => {
+    mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
+    mockJellyfin.getPlaybackInfo.mockResolvedValue({
+      PlaySessionId: "s",
+      MediaSources: [{ Id: "src-1", TranscodingUrl: "/videos/x/master.m3u8?VideoCodec=h264", MediaStreams: [] }],
+    });
+    const { POST } = await import("@/app/api/jellyfin/playback/start/route");
+    // Un Android qui annonce le HEVC 10 bits et ne le décode pas (19/10/2026).
+    await POST(fakeReq({ itemId: validId, codecSupport: { video: { "mp4/h264": true, "mp4/hevc": true, "mp4/hevc10": true }, audio: { aac: true } }, videoH264Only: true, maxBitrate: 120_000_000 }));
+    const profile = mockJellyfin.getPlaybackInfo.mock.calls[0][3].deviceProfile;
+    expect(profile.TranscodingProfiles[0].VideoCodec).toBe("h264");
+    expect(profile.DirectPlayProfiles[0].VideoCodec).toBe("h264");
+    const h264 = profile.CodecProfiles.find((p: { Codec: string }) => p.Codec === "h264");
+    expect(h264.Conditions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ Property: "VideoRangeType", Value: "SDR" }),
+        expect.objectContaining({ Property: "Width", Value: "1920" }),
+      ])
+    );
+  });
+
   it("labels playMethod DirectStream when the source's own video codec IS in the accepted VideoCodec list — a real copy, no re-encode", async () => {
     mockVerifySessionFull.mockResolvedValue({ jfId: "jf-1", jfToken: "tok" });
     mockJellyfin.getPlaybackInfo.mockResolvedValue({

@@ -217,6 +217,18 @@ const AUDIO_FALLBACK_RUNGS: string[][] = [
   ["eac3", "flac", "opus", "ac3"], // AAC only — forces a clean server transcode, always works
 ];
 
+/**
+ * Après l'échelle du son, une marche pour l'image : H.264 seul, ré-encodé par Jellyfin (`videoH264Only`,
+ * la route). Seulement sur une erreur de décodage (code 3, ou une erreur média de hls.js), une fois
+ * par ouverture.
+ *
+ * L'échelle ne touchait que le son et la vidéo restait copiée telle quelle : un Android 10 dont le
+ * décodeur HEVC s'était bloqué (19/10/2026, après une heure sans souci) a vu cinq ouvertures de titres
+ * HEVC, film 4K comme épisode 1080p, rejouer la même image illisible jusqu'à l'écran d'erreur — alors
+ * que ses films H.264 passaient dans la même soirée.
+ */
+const H264_RUNG = AUDIO_FALLBACK_RUNGS.length + 1;
+
 /** L'échelon final : AAC seul, et le son ré-encodé plutôt que copié — voir `forceAudioTranscode`. */
 function isLastAudioRung(index: number): boolean {
   return index === AUDIO_FALLBACK_RUNGS.length - 1;
@@ -573,6 +585,8 @@ interface StartOpts {
   resumeAt?: number;
   disableAudioCodecs?: string[];
   forceAudioTranscode?: boolean;
+  /** Le recours de l'image (`H264_RUNG`) : H.264 seul, ré-encodé par Jellyfin. Gardé par les relances. */
+  videoH264Only?: boolean;
   /** Pourquoi cette négociation — le `why` de la ligne `start` (`ServerStartWhy`). */
   cause?: ServerStartCause;
 }
@@ -1491,7 +1505,7 @@ function ActivePlayer({
       // le lecteur natif a faite pour la position du relais, reprise de même — si elle convient (même
       // position, même piste : `takeOrdinaryPrewarm`), et seulement pour la négociation qu'elle
       // remplace : hls.js, sans exclusion de son ni diffusion. Sinon elle est arrêtée chez Jellyfin.
-      const ordinaryUsable = !castSession && !bench && !nativeHls && disableAudioCodecs.length === 0 && !opts?.forceAudioTranscode;
+      const ordinaryUsable = !castSession && !bench && !nativeHls && disableAudioCodecs.length === 0 && !opts?.forceAudioTranscode && !opts?.videoH264Only;
       const warmedCandidate = cap.step
         ? takePrewarm(itemId)
         : takeOrdinaryPrewarm(itemId, ordinaryUsable ? opts?.resumeAt : undefined, opts?.audioStreamIndex);
@@ -1524,6 +1538,8 @@ function ActivePlayer({
           disableAudioCodecs,
           // Le dernier échelon de l'échelle : le son ré-encodé quoi qu'il soit — voir la route.
           ...(opts?.forceAudioTranscode ? { forceAudioTranscode: true } : {}),
+          // Le recours de l'image : H.264 seul — voir `H264_RUNG`.
+          ...(opts?.videoH264Only ? { videoH264Only: true } : {}),
           /**
            * Cette lecture part-elle vers un téléviseur ?
            *
@@ -2123,7 +2139,10 @@ function ActivePlayer({
         startup.buffered();
         disarmOutage();
         networkRetryCount.current = 0;
-        mediaRetryCount.current = 0;
+        // Un fragment reçu ne prouve pas qu'il se décode : seulement si l'élément tient une image.
+        // Remis à zéro à chaque fragment, le compte des erreurs média ne bornait plus rien sur un
+        // décodeur qui refuse tout — 109 reprises identiques en 20 s (Android, 19/10/2026).
+        if ((videoRef.current?.readyState ?? 0) >= HTMLMediaElement.HAVE_CURRENT_DATA) mediaRetryCount.current = 0;
         setReconnecting(false);
         // hls.js keeps refining this per fragment even with a single-rendition stream (no real
         // ABR ladder from Jellyfin's transcoder) — piggybacking on the same event that already
@@ -2203,6 +2222,10 @@ function ActivePlayer({
           case Hls.ErrorTypes.MEDIA_ERROR: {
             noteMediaFailure();
             if (mediaRetryCount.current >= MAX_MEDIA_RETRIES) {
+              if (escalateToH264Ref.current("hls.js : média")) {
+                hls.detachMedia();
+                return;
+              }
               // hls.js vient peut-être de rattacher l'élément à une MediaSource neuve : à son
               // ouverture, il rechargerait de lui-même (`autoStartLoad`) et l'élément (`autoPlay`)
               // repartirait sous l'écran d'erreur. Détaché, il reste vide — « Réessayer » repart de zéro.
@@ -2242,6 +2265,32 @@ function ActivePlayer({
   // deliberately frozen (it re-binds only on element remount), so calling startPlayback through
   // its closure directly would replay a stale itemId after an episode advance.
   const startPlaybackRef = useRef(startPlayback);
+  /**
+   * La marche H.264 (`H264_RUNG`) : vrai si elle part, faux si elle a déjà été tentée pour cette
+   * ouverture — ou si l'élément diffuse, où une relance romprait la route (voir l'écouteur d'erreur).
+   * Les deux écouteurs (élément, hls.js) peuvent signaler la même panne : le premier la prend.
+   */
+  const h264Tried = useRef(false);
+  const escalateToH264 = (trigger: string): boolean => {
+    if (h264Tried.current || lastPlaybackOpts.current?.videoH264Only || castActiveRef.current) return false;
+    h264Tried.current = true;
+    // Lue tout de suite : hls.js détache l'élément juste après, et le remet à zéro.
+    const at = livePosition(videoRef.current) ?? (lastKnownTime.current || lastPlaybackOpts.current?.resumeAt);
+    setReconnecting(true);
+    if (nativeErrorRetryTimer.current) clearTimeout(nativeErrorRetryTimer.current);
+    nativeErrorRetryTimer.current = setTimeout(() => {
+      if (castActiveRef.current) return;
+      startPlaybackRef.current({
+        ...lastPlaybackOpts.current,
+        resumeAt: at,
+        videoH264Only: true,
+        forceAudioTranscode: true,
+        cause: { why: "ladder", rung: H264_RUNG, trigger: `${trigger} → image en H.264` },
+      });
+    }, 1200);
+    return true;
+  };
+  const escalateToH264Ref = useRef(escalateToH264);
   useEffect(() => {
     startPlaybackRef.current = startPlayback;
   }, [startPlayback]);
@@ -3196,6 +3245,8 @@ function ActivePlayer({
         }, delay);
         return;
       }
+      // L'échelle du son épuisée sur une image que l'appareil ne décode pas : la marche H.264.
+      if (code === MediaError.MEDIA_ERR_DECODE && escalateToH264Ref.current(`élément : code ${code}`)) return;
       // Ladder exhausted. On WebKit, one final escalation before giving up: a fresh full page
       // reload — the only teardown that reliably releases every media-daemon session this page
       // has accumulated, including the zombie attempts each failed retry above just created —

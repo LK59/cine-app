@@ -143,20 +143,35 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** Les corps des négociations envoyées, dans l'ordre. */
+function negotiations(): Record<string, unknown>[] {
+  return (vi.mocked(fetch).mock.calls as unknown as [string, RequestInit | undefined][])
+    .filter(([url]) => url === "/api/jellyfin/playback/start")
+    .map(([, init]) => JSON.parse(String(init?.body ?? "{}")));
+}
+
 async function mounted() {
   render(<PlayerHost />);
   await waitFor(() => expect(fake.listeners.get("hlsError")?.length).toBeTruthy());
 }
 
 describe("hls.js — caractérisation", () => {
-  it("erreur média : recoverMediaError trois fois, puis l'écran d'erreur", async () => {
+  it("erreur média : recoverMediaError trois fois, puis l'image en H.264 — et l'écran d'erreur si elle échoue aussi", async () => {
     await mounted();
     for (let i = 0; i < 3; i++) fatal("mediaError");
     expect(fake.recoverMediaError).toHaveBeenCalledTimes(3);
     expect(document.body.textContent).not.toContain("player.playbackInterrupted");
     fatal("mediaError");
     expect(fake.recoverMediaError).toHaveBeenCalledTimes(3);
+    // Un décodeur qui refuse l'image (Android, 19/10/2026) : une négociation de plus, image en H.264.
+    await waitFor(() => expect(negotiations().at(-1)).toMatchObject({ videoH264Only: true, forceAudioTranscode: true }), { timeout: 3000 });
+    expect(document.body.textContent).not.toContain("player.playbackInterrupted");
+    const count = negotiations().length;
+    await waitFor(() => expect(fake.listeners.get("hlsError")?.length).toBeGreaterThan(1));
+    for (let i = 0; i < 4; i++) fatal("mediaError");
     await waitFor(() => expect(document.body.textContent).toContain("player.playbackInterrupted"));
+    // Une fois par ouverture : pas de seconde marche.
+    expect(negotiations()).toHaveLength(count);
   });
 
   it("erreur réseau : six relances au délai doublé (plafonné à 15 s), puis l'écran d'erreur", async () => {
@@ -177,8 +192,9 @@ describe("hls.js — caractérisation", () => {
     expect(document.body.textContent).toContain("player.playbackInterruptedCheckConnection");
   });
 
-  it("un fragment bufferisé rend tout leur budget aux deux compteurs", async () => {
+  it("un fragment bufferisé rend tout leur budget aux deux compteurs — quand l'élément tient une image", async () => {
     await mounted();
+    elementAt(120);
     for (let i = 0; i < 3; i++) fatal("mediaError");
     emit("hlsFragBuffered");
     fatal("mediaError");
@@ -188,9 +204,9 @@ describe("hls.js — caractérisation", () => {
 });
 
 describe("boucle (a)2 — les compteurs remis à zéro par chaque fragment", () => {
-  // Prouvée et non corrigée (§67, étape 2 : observation seulement) : une erreur média qui revient
-  // après chaque fragment est récupérée sans fin. À basculer en `it` quand le registre sera actif.
-  it.fails("une erreur média qui revient après chaque fragment n'est pas récupérée sans fin", async () => {
+  // Prouvée le 11/10 (§67), corrigée le 20/10/2026 : un fragment ne rend le budget des erreurs média
+  // que si l'élément tient une image. Sur un décodeur qui refusait tout, 109 reprises en 20 s.
+  it("une erreur média qui revient après chaque fragment n'est pas récupérée sans fin", async () => {
     await mounted();
     for (let cycle = 0; cycle < 10; cycle++) {
       emit("hlsFragBuffered");
@@ -272,7 +288,7 @@ describe("hls.js 1.7 — une seule récupération par incident, à la bonne posi
     expect(document.body.textContent).not.toContain("player.slowLink.unstable");
   });
 
-  it("les remises à zéro non fatales d'hls.js comptent au budget : trois, puis une fatale = l'écran d'erreur, élément détaché", async () => {
+  it("les remises à zéro non fatales d'hls.js comptent au budget : trois, puis une fatale = la marche H.264, élément détaché", async () => {
     await mounted();
     elementAt(1500);
     for (let i = 0; i < 3; i++) requiresReset(false);
@@ -281,9 +297,10 @@ describe("hls.js 1.7 — une seule récupération par incident, à la bonne posi
     requiresReset(true);
     expect(fake.recoverMediaError).not.toHaveBeenCalled();
     expect(fake.startLoad).not.toHaveBeenCalled();
-    // Sans le détachement, la MediaSource neuve d'hls.js rechargerait sous l'écran (`autoStartLoad`).
+    // Sans le détachement, la MediaSource neuve d'hls.js rechargerait sous la relance (`autoStartLoad`).
     expect(fake.detachMedia).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(document.body.textContent).toContain("player.playbackInterrupted"));
+    // À la position où l'élément en était.
+    await waitFor(() => expect(negotiations().at(-1)).toMatchObject({ videoH264Only: true, startTicks: 1500 * 10_000_000 }), { timeout: 3000 });
   });
 });
 

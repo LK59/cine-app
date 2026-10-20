@@ -174,6 +174,15 @@ export async function POST(req: NextRequest) {
    * Jellyfin — ce n'est pas encore une lecture. Le lecteur serveur l'annoncera s'il la reprend.
    */
   const prewarm = body?.prewarm === true;
+  /**
+   * Le recours de l'image (`H264_RUNG`, PlayerHost) : seul le H.264 est déclaré, et Jellyfin
+   * ré-encode toute autre image. Pour un appareil qui annonce le HEVC et ne le décode plus — un
+   * Android 10 dont le décodeur HEVC s'est bloqué un soir (19/10/2026) : chaque titre HEVC, film 4K
+   * comme épisode 1080p, finissait en erreur de décodage, et l'échelle du son rejouait la même image.
+   * Par le profil de la version allégée (§78) — sans HEVC déclaré, il donne du H.264 en SDR, 1080p au
+   * plus : la forme que tout décodeur matériel tient, et un ré-encodage que Jellyfin sait déjà faire.
+   */
+  const videoH264Only = body?.videoH264Only === true;
   const disableAudioCodecs = Array.isArray(body?.disableAudioCodecs)
     ? (body.disableAudioCodecs as unknown[]).filter((c): c is string => typeof c === "string" && /^[a-z0-9]{1,16}$/.test(c))
     : [];
@@ -184,7 +193,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const effectiveSupport: CodecSupport = {
-      video: codecSupport.video,
+      video: videoH264Only ? { "mp4/h264": true } : codecSupport.video,
       audio: Object.fromEntries(
         Object.entries(codecSupport.audio ?? {}).map(([codec, ok]) => [codec, disableAudioCodecs.includes(codec) ? false : ok])
       ),
@@ -200,7 +209,7 @@ export async function POST(req: NextRequest) {
         startTicks,
         deviceProfile: castTarget
           ? buildChromecastProfile(maxBitrate, { reencodeAudio })
-          : buildDeviceProfile(effectiveSupport, maxBitrate, { subtitlesInStream: forCast, reencodeAudio, ...(lighter ? { lighter: { targetBps: maxBitrate } } : {}) }),
+          : buildDeviceProfile(effectiveSupport, maxBitrate, { subtitlesInStream: forCast, reencodeAudio, ...(lighter || videoH264Only ? { lighter: { targetBps: maxBitrate } } : {}) }),
       });
     let info = await negotiate(forceAudioTranscode ? "stereo" : undefined);
     // Un son que Jellyfin copierait et que le navigateur refuserait — l'AAC à PCE, voir
