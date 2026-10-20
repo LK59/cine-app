@@ -74,7 +74,8 @@ describe("la page initiale, publiée par la migration", () => {
     const p90 = pages[0];
     // Complétée le 19/10 : la rotation en paysage d'abord, puis « Plus d'épisodes ».
     expect(p8672.content.fr.sections[0].entries.map((e) => e.title)).toEqual(["Écran en paysage", "Plus d'épisodes"]);
-    expect(p8672.content.fr.fixes).toEqual([]);
+    // Ses corrections viennent du registre (`fixesLedger.ts`), versé dans les pages publiées.
+    expect(p8672.content.fr.fixes.map((g) => g.title)).toEqual(["Navigation", "Téléphone et tablette", "Rapidité"]);
     expect(initial.seq).toBe(1);
     expect(initial.content.fr.sections[0].entries[0].title).toBe("Améliorer les dialogues");
     for (const lang of ["en", "es", "de"] as const) expect(initial.content[lang]?.sections.length).toBe(2);

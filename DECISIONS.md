@@ -3472,6 +3472,18 @@ plus » → la bonne section), `decisions-partagees.test.ts` (une seule décisio
 
 **Page complétée et republiée (19/10/2026, 8.68).** Une page déjà publiée par le code peut être complétée dans son fichier puis republiée une fois par un second marqueur (`republishNewsPage`, db.ts) : contenu et version remplacés, nouveau `seq` — chaque compte la revoit comme une page neuve, sans toucher `news_state`. Une installation qui ne l'avait pas encore la reçoit complète de `seedNewsPage` ; une page supprimée n'est pas recréée. Premier cas : la 8.67.2 (« Plus d'épisodes ») devenue 8.68 avec la rotation en paysage (`news-republish.test.ts`).
 
+
+**L'historique des corrections (20/10/2026, demande de Louis).** La liste « Optimisations et
+corrections de bugs » de chaque page publiée est complétée par un registre dans le code
+(`src/lib/news/fixesLedger.ts`) : chaque correction qu'un spectateur peut remarquer, avec la version
+qui l'a livrée et la page qui la couvre, dans les quatre langues. `applyFixesLedger` (db.ts) verse au
+démarrage chaque entrée encore absente (un marqueur par entrée) dans sa page, sur toute installation :
+la page garde son rang, la fenêtre ne se rouvre pour personne, rien n'est réécrit ni doublé. Une page
+nommée encore en brouillon fait attendre ses entrées. Rétroactif pour les 8.37 à 9.1.2 (relevé dans
+l'historique le 20/10/2026) ; actif ensuite : chaque déploiement qui corrige quelque chose de visible y
+ajoute ses entrées, pour la dernière page publiée. Hors du registre : l'administration, les outils,
+les fonctions nouvelles (leur place est la section « Nouveau »), un défaut introduit puis corrigé dans
+la même série de déploiements, et toujours les titres masqués. Tests : `news-fixes-ledger.test.ts`.
 ## 74. Une fiche est une entrée de la pile : son identité est son cran d'ouverture, pas son titre
 
 **Règle.** Rouvrir une fiche déjà présente dans la pile (la même personne depuis un de ses films, la

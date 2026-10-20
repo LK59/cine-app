@@ -5,11 +5,13 @@ import fs from "fs";
 import { getDefaultNotificationPreferences, type NotificationCategory } from "@/lib/notifications";
 import { DATA_DIR } from "@/lib/dataDir";
 import { INITIAL_NEWS_CONTENT, INITIAL_NEWS_SEED, INITIAL_NEWS_VERSION } from "@/lib/news/initialPage";
+import { createHash } from "node:crypto";
 import type { NewsContentByLang } from "@/lib/news/content";
 import { NEWS_848_CONTENT, NEWS_848_SEED, NEWS_848_VERSION } from "@/lib/news/page848";
 import { NEWS_864_CONTENT, NEWS_864_SEED, NEWS_864_VERSION } from "@/lib/news/page864";
 import { NEWS_90_CONTENT, NEWS_90_PUBLISH, NEWS_90_SEED, NEWS_90_VERSION } from "@/lib/news/page90";
 import { NEWS_91_CONTENT, NEWS_91_SEED, NEWS_91_VERSION } from "@/lib/news/page91";
+import { FIXES_LEDGER, ledgerMarker, ledgerTarget, withLedgerEntry, type FixLedgerEntry } from "@/lib/news/fixesLedger";
 import { NEWS_8672_CONTENT, NEWS_8672_FIRST_VERSION, NEWS_8672_REPUBLISH, NEWS_8672_SEED, NEWS_8672_VERSION } from "@/lib/news/page8672";
 
 // Réexporté, et défini ailleurs : le journal des erreurs a besoin du chemin et ne doit rien
@@ -649,6 +651,8 @@ function migrate(db: Database.Database): void {
   publishNewsDraft(db, NEWS_90_PUBLISH, NEWS_90_VERSION, NEWS_90_CONTENT);
   // En brouillon : Louis la publie depuis Activité → Nouveautés (20/10/2026).
   seedNewsPage(db, NEWS_91_SEED, NEWS_91_VERSION, NEWS_91_CONTENT, Date.now(), "draft");
+  // Les corrections livrées, ajoutées à l'historique des pages publiées (`fixesLedger.ts`).
+  applyFixesLedger(db);
   if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'onboarding-seed-louis'").get()) {
     const now = Date.now();
     db.prepare("INSERT OR IGNORE INTO onboarding (user_name, pending, updated_at) VALUES ('louis', 1, ?)").run(now);
@@ -668,6 +672,50 @@ function migrate(db: Database.Database): void {
  */
 export function seedInitialNews(db: Database.Database, now = Date.now()): void {
   seedNewsPage(db, INITIAL_NEWS_SEED, INITIAL_NEWS_VERSION, INITIAL_NEWS_CONTENT, now);
+}
+
+/**
+ * Le registre des corrections (`fixesLedger.ts`, DECISIONS.md §73) versé dans les pages publiées :
+ * chaque entrée une fois (son marqueur), dans sa page, sans changer son rang ni sa date — personne
+ * ne revoit la fenêtre, l'historique se complète. Une entrée dont aucune page n'est encore publiée
+ * attend le démarrage suivant. Une page modifiée à la main garde ses lignes : on ajoute, on ne
+ * réécrit rien, et un texte déjà présent n'est pas doublé.
+ */
+export function applyFixesLedger(db: Database.Database, ledger: readonly FixLedgerEntry[] = FIXES_LEDGER, now = Date.now()): void {
+  const hash = (text: string) => createHash("sha1").update(text).digest("hex").slice(0, 12);
+  const pending = ledger.filter((e) => !db.prepare("SELECT 1 FROM migrations_done WHERE name = ?").get(ledgerMarker(e, hash)));
+  if (pending.length === 0) return;
+  db.transaction(() => {
+    const pages = db.prepare("SELECT id, version, seq, content FROM news_pages WHERE status = 'published' AND seq IS NOT NULL").all() as {
+      id: number;
+      version: string;
+      seq: number;
+      content: string;
+    }[];
+    const contents = new Map<number, NewsContentByLang>();
+    // Une page nommée encore en brouillon (une installation où la 9.1 n'est pas publiée) : l'entrée
+    // l'attend, au lieu d'aller dans une page plus ancienne.
+    const drafts = new Set((db.prepare("SELECT version FROM news_pages WHERE status = 'draft'").all() as { version: string }[]).map((r) => r.version));
+    for (const entry of pending) {
+      if (entry.page && drafts.has(entry.page) && !pages.some((p) => p.version === entry.page)) continue;
+      const page = ledgerTarget(entry, pages);
+      if (!page) continue;
+      let content = contents.get(page.id);
+      if (!content) {
+        try {
+          content = JSON.parse(page.content) as NewsContentByLang;
+        } catch {
+          continue;
+        }
+      }
+      if (!content?.fr) continue;
+      contents.set(page.id, withLedgerEntry(content, entry));
+      db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES (?, ?)").run(ledgerMarker(entry, hash), now);
+    }
+    // Le contenu seul : ni rang, ni dates — rien de ce qui décide qui voit quoi ne bouge.
+    const update = db.prepare("UPDATE news_pages SET content = ? WHERE id = ?");
+    for (const [id, content] of contents) update.run(JSON.stringify(content), id);
+  })();
 }
 
 /**
