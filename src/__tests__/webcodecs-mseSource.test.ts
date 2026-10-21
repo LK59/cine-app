@@ -759,6 +759,33 @@ describe("MseSource", () => {
       await until(() => videoBuffer.removed.some(([s, e]) => s === 0 && e > 15 && e < 30), "un retrait derrière la tête");
     });
 
+    it("ne lève rien en élaguant l'arrière d'une source fermée", async () => {
+      // iPhone, 21/10/2026 : le décodeur tombé ferme la source, le battement suivant élaguait
+      // l'arrière, et `buffered` d'un tampon retiré levait InvalidStateError — un rejet non géré
+      // remonté au journal comme erreur navigateur, pour une panne que la reconstruction réparait.
+      vi.spyOn(navigator, "userAgent", "get").mockReturnValue(IPAD);
+      Object.defineProperty(navigator, "maxTouchPoints", { value: 5, configurable: true });
+      traceReset();
+      const video = fakeVideo();
+      const mse = await MseSource.attach(video, heavyRemuxer(200), PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+      await until(() => traceText().includes("budget WebKit mobile"), "le budget écrit dans la trace");
+      FakeSource.instances[0].readyState = "closed";
+      // L'élément, lui, répond encore : ce sont les tampons retirés qui lèvent.
+      const kept = video.buffered;
+      const frozen = { length: kept.length, start: (i: number) => kept.start(i), end: (i: number) => kept.end(i) };
+      Object.defineProperty(video, "buffered", { get: () => frozen, configurable: true });
+      for (const buffer of FakeSource.instances[0].buffers) {
+        Object.defineProperty(buffer, "buffered", {
+          get: () => {
+            throw new DOMException("The object is in an invalid state.", "InvalidStateError");
+          },
+          configurable: true,
+        });
+      }
+      (video as unknown as { currentTime: number }).currentTime = 60;
+      await expect((mse as unknown as { fill(): Promise<void> }).fill()).resolves.toBeUndefined();
+    });
+
     it("ne retire jamais le groupe d'images où se trouve la tête", async () => {
       // La norme MSE prolonge un retrait jusqu'à l'image clé suivante : avec un groupe de 28 s
       // ouvert à 10 s et la tête à 30 s, un retrait jusqu'à 30 − budget emportait l'image sous la

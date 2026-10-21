@@ -1576,6 +1576,10 @@ export class MseSource {
   private trimBehind(): void {
     const budget = this.budget;
     if (!budget || this.seekState.pending || this.video.seeking) return;
+    // Une source fermée (décodeur tombé sur iPhone, 21/10/2026) : `buffered` d'un tampon qui
+    // n'y est plus lève InvalidStateError, et la levée remontait de `runFill` en rejet non géré —
+    // une erreur navigateur au journal pour une panne que la reconstruction réparait déjà.
+    if (this.source.readyState === "closed") return;
     const wanted = this.video.currentTime - budget.behindSeconds;
     for (const queue of [this.videoOps, this.audioOps]) {
       const buffer = queue?.buffer;
