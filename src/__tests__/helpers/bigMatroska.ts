@@ -66,8 +66,12 @@ function simpleBlock(track: number, relative: number, isKey: boolean, data: Uint
   return el(0xa3, concat(header, data));
 }
 
-/** @param seconds grappes d'une seconde ; @param keyBytes taille de chaque image clé. */
-export function bigMatroska(seconds = 40, keyBytes = 300_000): Uint8Array {
+/**
+ * @param seconds grappes d'une seconde ; @param keyBytes taille de chaque image clé ;
+ * @param audioUntil dernière seconde portant du son — un doublage plus court que le générique, dont
+ * la queue n'a que de l'image (l'index, comme celui de mkvmerge, ne porte que sur la vidéo).
+ */
+export function bigMatroska(seconds = 40, keyBytes = 300_000, audioUntil = seconds): Uint8Array {
   const ebmlHeader = el(0x1a45dfa3, el(0x4286, uint(1)));
   const info = el(0x1549a966, concat(el(0x2ad7b1, uint(1_000_000, 4)), el(0x4489, f64(seconds * 1000))));
   const video = el(
@@ -101,7 +105,7 @@ export function bigMatroska(seconds = 40, keyBytes = 300_000): Uint8Array {
         concat(
           el(0xe7, uint(s * 1000, 4)),
           simpleBlock(1, 0, true, key),
-          simpleBlock(2, 0, true, new Uint8Array(2_000).fill(0x55)),
+          ...(s < audioUntil ? [simpleBlock(2, 0, true, new Uint8Array(2_000).fill(0x55))] : []),
           simpleBlock(1, 500, false, new Uint8Array(20_000).fill(0x33))
         )
       )
