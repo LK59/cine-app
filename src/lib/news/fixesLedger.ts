@@ -525,6 +525,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    page: "9.1",
+    version: "9.3.8",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "En revenant sur l'application après une longue mise en veille, un film reprend dans le lecteur habituel au lieu de basculer sur la version transcodée.",
+        en: "When coming back to the app after a long sleep, a film resumes in the usual player instead of switching to the transcoded version.",
+        es: "Al volver a la aplicación tras un largo reposo, la película se reanuda en el reproductor habitual en lugar de pasar a la versión transcodificada.",
+        de: "Bei der Rückkehr in die App nach längerem Ruhezustand wird ein Film im gewohnten Player fortgesetzt, statt zur transkodierten Version zu wechseln.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

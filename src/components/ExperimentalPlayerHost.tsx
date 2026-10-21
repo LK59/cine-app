@@ -3076,6 +3076,15 @@ export function ExperimentalPlayerHost({
           return;
         }
         if (dropDialogue(message)) return;
+        // Page cachée : la reconstruction attend le retour, comme une source fermée sans erreur —
+        // la vérification d'arrière-plan plus bas la fera, à la position et avec la retenue du
+        // retour. iPhone, 21/10/2026 : un réveil après 34 min d'écran verrouillé, un « Media failed
+        // to decode » avant que la page soit visible, et trois reconstructions refusées en 20 ms ont
+        // épuisé le budget et passé le film au lecteur serveur pour rien.
+        if (remuxRef.current?.lost && typeof document !== "undefined" && document.visibilityState === "hidden") {
+          trace(`source perdue page cachée — reconstruction au retour (${message})`);
+          return;
+        }
         // A closed source is not a fault to report, it is a pipeline to build again. Safari
         // closes one from time to time — a decode failure it will not explain, sometimes on a
         // seek, sometimes at a change of track — and everything that follows is wreckage. The

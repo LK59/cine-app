@@ -881,6 +881,36 @@ describe("une source perdue", () => {
     expect(String(rebuilt?.fields.steps)).toContain("l'élément a échoué");
   });
 
+  it("page cachée, attend le retour au lieu de griller ses reconstructions (iPhone, 21/10/2026)", async () => {
+    // Un réveil après 34 min d'écran verrouillé : Safari ferme la source sur un échec de décodage
+    // avant que la page soit visible, et chaque reconstruction tentée là échoue aussitôt — trois en
+    // 20 ms, puis le lecteur serveur pour rien.
+    const setVisibility = (state: "visible" | "hidden") => {
+      Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    };
+    try {
+      mount();
+      await waitFor(() => expect(probes).toHaveLength(1));
+      await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+
+      act(() => setVisibility("hidden"));
+      remux.lost = true;
+      remux.position = 2774;
+      for (let i = 0; i < 6; i++) act(() => probes[0].onError("Media failed to decode"));
+      await act(async () => {});
+      expect(probes).toHaveLength(1);
+      expect(onFallback).not.toHaveBeenCalled();
+
+      act(() => setVisibility("visible"));
+      await waitFor(() => expect(probes).toHaveLength(2), { timeout: 3000 });
+      expect(probes[1].startSeconds).toBeCloseTo(2774, 1);
+      expect(onFallback).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    }
+  });
+
   it("reprend au-delà du passage qui vient d'échouer plutôt que de le relire", async () => {
     // Reading the identical bytes again is a guaranteed way to die again — the record showed
     // three rebuilds each losing the source on the same segment. En cours de film : la lecture a
