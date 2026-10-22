@@ -21,6 +21,7 @@
 import type { ByteSource } from "./byteSource";
 import type { CuePoint, MatroskaFile, MatroskaTrack, MediaSample, TrackColour } from "./matroska";
 import { trace } from "./trace";
+import { rememberedHeaders } from "./rememberedHeaders";
 
 /**
  * Où vit chaque échantillon d'une piste, et quand il passe — le pendant, pour un MP4, des grappes
@@ -821,12 +822,12 @@ function buildCues(video: Mp4TrackIndex, all: Mp4TrackIndex[], starts: Map<numbe
   return cues;
 }
 
-const parsed = new Map<string, MatroskaFile>();
-const MAX_REMEMBERED_HEADERS = 4;
+// Les quatre derniers, comme `parseMatroska` — la même fabrique.
+const parsed = rememberedHeaders(4);
 
 /** Oublie la description d'un fichier — pour qui a des raisons de le croire changé. */
 export function forgetMp4Header(key: string): void {
-  parsed.delete(key);
+  parsed.forget(key);
 }
 
 /**
@@ -837,14 +838,7 @@ export async function parseMp4(source: ByteSource, key?: string): Promise<Matros
   const remembered = key === undefined ? undefined : parsed.get(key);
   if (remembered && remembered.segmentEnd <= source.size) return remembered;
   const file = await readMp4(source);
-  if (key !== undefined) {
-    parsed.set(key, file);
-    while (parsed.size > MAX_REMEMBERED_HEADERS) {
-      const oldest = parsed.keys().next().value;
-      if (oldest === undefined) break;
-      parsed.delete(oldest);
-    }
-  }
+  if (key !== undefined) parsed.remember(key, file);
   return file;
 }
 

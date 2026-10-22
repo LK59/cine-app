@@ -76,10 +76,6 @@ export function trace(step: string): void {
   }
 }
 
-export function traceSteps(): TraceStep[] {
-  return steps;
-}
-
 /** The record as text, one step per line, for the report the viewer copies. */
 export function traceText(): string {
   if (steps.length === 0) return "(aucune étape enregistrée)";

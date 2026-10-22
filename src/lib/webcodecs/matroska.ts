@@ -10,6 +10,7 @@ import { SlicedSource, type ByteSource } from "./byteSource";
 import { ID, TRACK_TYPE } from "./matroskaIds";
 import { forEachChild, readElementAt, readFloat, readString, readUint, readVarInt, readVarSize } from "./ebml";
 import type { Mp4Index } from "./mp4Demux";
+import { rememberedHeaders } from "./rememberedHeaders";
 
 export interface TrackColour {
   matrixCoefficients?: number;
@@ -330,12 +331,11 @@ async function parseTrackEntry(source: ByteSource, start: number, end: number): 
  * Small: a few tracks and their configuration records, plus the cue index, which runs to a couple
  * of hundred kilobytes on a long film. Four files, oldest evicted first.
  */
-const parsed = new Map<string, MatroskaFile>();
-const MAX_REMEMBERED_HEADERS = 4;
+const parsed = rememberedHeaders(4);
 
 /** Forgets a file's header — for a caller that has reason to believe it changed. */
 export function forgetMatroskaHeader(key: string): void {
-  parsed.delete(key);
+  parsed.forget(key);
 }
 
 /**
@@ -351,14 +351,7 @@ export async function parseMatroska(source: ByteSource, key?: string): Promise<M
   if (remembered && remembered.segmentEnd <= source.size) return remembered;
 
   const file = await readMatroska(source);
-  if (key !== undefined) {
-    parsed.set(key, file);
-    while (parsed.size > MAX_REMEMBERED_HEADERS) {
-      const oldest = parsed.keys().next().value;
-      if (oldest === undefined) break;
-      parsed.delete(oldest);
-    }
-  }
+  if (key !== undefined) parsed.remember(key, file);
   return file;
 }
 

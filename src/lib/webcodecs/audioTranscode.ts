@@ -17,6 +17,9 @@ import { SoftwareAudioTrack, type DecodedAudio } from "./softwareAudio";
 import type { ByteSource } from "./byteSource";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { trace } from "./trace";
+// Système Apple, pas moteur WebKit — voir `browserEngine.ts`, où elle vit depuis le 22/10/2026.
+import { appleAudioToolbox } from "./browserEngine";
+export { appleAudioToolbox };
 import { audioConfigFor } from "./codecConfig";
 import { containerAccepts } from "./mseSource";
 import { extractAudioSpecificConfig, opusSampleEntry, parseAacConfig } from "./mp4SampleEntries";
@@ -1124,18 +1127,6 @@ const APPLE_AAC_ORDER: Record<number, readonly number[]> = {
  */
 function appleAacCap(codec: string): number {
   return codec === TARGET_CODEC && appleAudioToolbox() ? 6 : Infinity;
-}
-
-/**
- * L'AAC sera-t-il encodé par AudioToolbox, l'encodeur d'Apple ? Oui sur tout système Apple, quel
- * que soit le navigateur : Safari, tout navigateur iOS (WebKit), Chrome sur macOS. iPadOS se
- * présente comme un Mac, ce qui tombe juste. Une question de système et non de moteur : c'est
- * l'encodeur de la plateforme qui décide, et Chrome sur Mac utilise le même.
- */
-export function appleAudioToolbox(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const agent = navigator.userAgent ?? "";
-  return /iPhone|iPad|iPod|Macintosh|Mac OS X/.test(agent) && !/Android/.test(agent);
 }
 
 /**

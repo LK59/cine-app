@@ -1,4 +1,9 @@
 import { isWebKitEngine } from "@/lib/webkitEngine";
+import { geckoVersion, isChromiumEngine } from "./browserEngine";
+
+// Écrits ici jusqu'au 22/10/2026, réunis depuis dans `browserEngine.ts` ; réexportés pour que
+// `aacConfig`, `aacPceProbe` et `persistentCache` n'aient pas changé.
+export { geckoVersion, isChromiumEngine };
 
 /**
  * Ce qu'un navigateur garde dans un tampon MediaSource, en octets — et ce qu'on lui demande en
@@ -88,13 +93,6 @@ export const CHROMIUM_ANDROID = {
 export const GECKO = { video: 150 * 1024 * 1024, audio: 20 * 1024 * 1024 };
 export const GECKO_BEFORE_130 = { video: 100 * 1024 * 1024, audio: 20 * 1024 * 1024 };
 
-/** Firefox et ses dérivés, avec leur version — jamais sur iOS, où Firefox est WebKit. */
-export function geckoVersion(userAgent: string): number | null {
-  if (isWebKitEngine(userAgent) || !/Gecko\/\d/.test(userAgent)) return null;
-  const match = /Firefox\/(\d+)/.exec(userAgent);
-  return match ? Number(match[1]) : null;
-}
-
 export interface SourceBufferQuota {
   /** Le moteur reconnu, pour la trace. */
   engine: string;
@@ -117,11 +115,6 @@ function chromiumAndroidTier(deviceMemory: number | undefined): { video: number;
   if (deviceMemory <= 1) return CHROMIUM_ANDROID.low;
   if (deviceMemory <= 4) return CHROMIUM_ANDROID.medium;
   return CHROMIUM_ANDROID.default;
-}
-
-/** Chromium sous un nom ou un autre — Chrome, Edge, Opera, Brave, Samsung Internet. Jamais sur iOS, où tout est WebKit. */
-export function isChromiumEngine(userAgent: string): boolean {
-  return !isWebKitEngine(userAgent) && /Chrom(e|ium)\/\d/.test(userAgent);
 }
 
 /**

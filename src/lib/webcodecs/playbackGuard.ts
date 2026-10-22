@@ -9,6 +9,7 @@
 // evidence behind it — every rule here was measured on a device, and the comments say which.
 
 import { trace } from "./trace";
+import { rangeAround } from "./timeRanges";
 import { LANDING_REACH_SECONDS, landingFor } from "./seekLifecycle";
 
 /**
@@ -91,10 +92,7 @@ export class PlaybackGuard {
 
   /** Whether a set of ranges covers a point. */
   private covers(ranges: TimeRanges, seconds: number): boolean {
-    for (let i = 0; i < ranges.length; i++) {
-      if (ranges.start(i) <= seconds && seconds < ranges.end(i)) return true;
-    }
-    return false;
+    return rangeAround(ranges, seconds, 0) >= 0;
   }
 
   /** Where a seek was served, until the playhead is actually standing on media. */

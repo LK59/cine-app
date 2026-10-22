@@ -30,8 +30,9 @@
  * 5.1 entier, pas en 3.0.
  */
 
-import { isWebKitEngine } from "@/lib/webkitEngine";
 import { isChromiumEngine } from "./bufferBudget";
+// Écrite ici jusqu'au 22/10/2026, à côté de sa seule lectrice ; même texte dans `browserEngine.ts`.
+import { appleWebKit } from "./browserEngine";
 
 /** Un élément du PCE, dans l'ordre du flux : son rang, sa nature (mono ou paire), son étiquette. */
 export interface PceElement {
@@ -430,13 +431,6 @@ export type AacPlan =
 // « Ruby » (« InternalAudioDecoderCocoa decoding failed »). Chromium décode par FFmpeg, mesuré.
 export function decodedOrderMeasuredHere(): boolean {
   return aacDecoderRouteHere() === "wasm" || !appleWebKit();
-}
-
-function appleWebKit(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const agent = navigator.userAgent ?? "";
-  const apple = /iPhone|iPad|iPod|Macintosh|Mac OS X/.test(agent) && !/Android/.test(agent);
-  return apple && isWebKitEngine(agent);
 }
 
 /**

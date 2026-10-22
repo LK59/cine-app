@@ -16,6 +16,7 @@ import { describeNetwork, isNetworkFailure, isReadAbandoned } from "./byteSource
 import { networkUnstable } from "@/lib/networkTrouble";
 import { isUnreadableZone, type UnreadableZone } from "./unreadableZone";
 import { BufferQueue } from "./bufferQueue";
+import { rangeAround } from "./timeRanges";
 import { PlaybackGuard } from "./playbackGuard";
 import { NO_INDEX_REACH_SECONDS, reachable, seekArrived } from "./seekArrival";
 import { LANDING_REACH_SECONDS, SeekLifecycle, landingFor } from "./seekLifecycle";
@@ -149,7 +150,6 @@ const STALL_REPORT_COOLDOWN_MS = 60_000;
  * ligne `stall`, qui ne voit qu'une horloge immobile.
  */
 const RUNAWAY_REPORT_SECONDS = 3;
-
 
 /** How much of the trace a stall line carries: enough to hold the seek or skip that led to it. */
 const STALL_TRACE_MS = 20_000;
@@ -383,14 +383,12 @@ export class MseSource {
    * Jusqu'où le lecteur de fichier a lu, **sur l'horloge du fichier** — celle de
    * `segment.endSeconds` et de `Remuxer.seekTo`, sans le décalage de présentation. Qui la compare
    * au tampon ou à la tête lui ajoute `delaySeconds` ; qui y range une position du lecteur le lui
-   * retire. Le commentaire la disait sur l'horloge du lecteur, et trois écrivains sur quatre l'ont
+   * retire (`toFileClock`). Le commentaire la disait sur l'horloge du lecteur, et trois écrivains sur quatre l'ont
    * cru : le nouvel essai d'une coupure réseau retirait le décalage une seconde fois, repartait du
    * groupe d'avant quand la lecture s'était arrêtée pile sur une image clé, et ce groupe, commencé
    * sous la tête, faisait vider les deux tampons (audit du 29/09/2026).
    */
   private readUpTo = 0;
-
-
   private seeksServed = 0;
   /**
    * Les retraits en cours de ce lecteur, par tampon — ce qui distingue, dans `bufferedchange`, nos
@@ -410,7 +408,6 @@ export class MseSource {
   private recoveryStreak = 0;
   private lastRecoveryAt = 0;
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
-  /** For the frozen-clock check: where the clock was, since when, and how often it was pushed. */
   /** How far ahead to fill. Lowered, for this file only, if the browser says it cannot hold it. */
   private targetBuffer = TARGET_BUFFER_SECONDS;
   /**
@@ -422,6 +419,7 @@ export class MseSource {
   private readonly audioRate = new ByteRate();
   /** Le dernier budget écrit dans la trace, pour ne l'écrire que lorsqu'il change vraiment. */
   private tracedBudget: BufferBudget | null = null;
+  /** For the frozen-clock check: where the clock was, since when, and how often it was pushed. */
   private lastClockAt = -1;
   private frozenSince: number | null = null;
   private frozenNudges = 0;
@@ -533,12 +531,12 @@ export class MseSource {
     return instance;
   }
 
-  /** Where the player's clock sits relative to the file's. Already applied to every seek here. */
   /** L'avance sous la tête, en secondes — ce que la réserve d'avance en mémoire (`MemoryReserve`) regarde avant de prendre le lien. */
   get bufferedLead(): number {
     return this.lead;
   }
 
+  /** Where the player's clock sits relative to the file's. Already applied to every seek here. */
   get presentationDelay(): number {
     return this.delaySeconds;
   }
@@ -717,10 +715,6 @@ export class MseSource {
       throw error;
     }
   }
-
-
-
-
 
   /** The clock moved: the guard decides what that means, the source reads on. */
   private readonly request = () => {
@@ -923,10 +917,6 @@ export class MseSource {
     }
   }
 
-
-
-
-
   private readonly onSeeking = () => {
     if (this.destroyed) return;
     const target = this.video.currentTime;
@@ -964,13 +954,28 @@ export class MseSource {
     return this.video.buffered;
   }
 
+  /**
+   * Une position du lecteur sur l'horloge du fichier — celle de `Remuxer.seekTo`, de
+   * `keyframeAtOrBefore` et de `readUpTo`. Écrite à la main sept fois avant le 22/10/2026 ; c'est
+   * précisément la conversion que « trois écrivains sur quatre » s'étaient trompés de sens (voir
+   * `readUpTo`).
+   */
+  private toFileClock(playerSeconds: number): number {
+    return Math.max(0, playerSeconds - this.delaySeconds);
+  }
+
+  /** La fin du film sur l'horloge du lecteur ; sans durée connue, aucune. */
+  private get playerEnd(): number {
+    return this.plan.durationSeconds > 0 ? this.plan.durationSeconds + this.delaySeconds : Infinity;
+  }
+
   /** How far the playhead is from the nearest media, or 0 when it is standing on some. */
   private distanceToMedia(seconds: number): number {
     const ranges = this.playable;
     if (ranges.length === 0) return Infinity;
+    if (rangeAround(ranges, seconds, 0) >= 0) return 0;
     let best = Infinity;
     for (let i = 0; i < ranges.length; i++) {
-      if (ranges.start(i) <= seconds && seconds < ranges.end(i)) return 0;
       best = Math.min(best, Math.abs(ranges.start(i) - seconds), Math.abs(ranges.end(i) - seconds));
     }
     return best;
@@ -1056,10 +1061,8 @@ export class MseSource {
   private bufferedEnd(): number {
     const ranges = this.playable;
     const now = this.anchor;
-    for (let i = 0; i < ranges.length; i++) {
-      if (ranges.start(i) <= now + 0.1 && now < ranges.end(i)) return ranges.end(i);
-    }
-    return now;
+    const i = rangeAround(ranges, now, 0.1);
+    return i >= 0 ? ranges.end(i) : now;
   }
 
   private fill(): Promise<void> {
@@ -1373,7 +1376,6 @@ export class MseSource {
     }
   }
 
-
   /**
    * Un retrait de ce lecteur, compté le temps qu'il dure — voir `onBufferedChange`.
    *
@@ -1488,9 +1490,9 @@ export class MseSource {
         return;
       }
       trace(`relecture de ce que le navigateur a retiré, depuis ${hole.toFixed(1)} s`);
-      this.remuxer.seekTo(Math.max(0, hole - this.delaySeconds));
+      this.remuxer.seekTo(this.toFileClock(hole));
       // Sur l'horloge du fichier, comme la lecture qui vient de lui être demandée.
-      this.readUpTo = Math.max(0, hole - this.delaySeconds);
+      this.readUpTo = this.toFileClock(hole);
       this.ended = false;
       this.trimBeforeNextAppend = true;
       void this.fill();
@@ -1678,7 +1680,7 @@ export class MseSource {
     if (until <= 0) return until;
     try {
       if (!this.remuxer.seekable) return unknown;
-      const file = this.remuxer.keyframeAtOrBefore(Math.max(0, this.video.currentTime - this.delaySeconds));
+      const file = this.remuxer.keyframeAtOrBefore(this.toFileClock(this.video.currentTime));
       if (file === null) return 0;
       return Math.min(until, file + this.delaySeconds - KEYFRAME_TRIM_MARGIN);
     } catch {
@@ -1719,7 +1721,7 @@ export class MseSource {
     // Gardé : une détection qui lève sur le chemin d'un saut ne doit pas devenir l'échec du saut.
     if (this.remuxer.seekable) {
       try {
-        this.remuxer.prepareSeek?.(Math.max(0, playerSeconds - this.delaySeconds));
+        this.remuxer.prepareSeek?.(this.toFileClock(playerSeconds));
       } catch {
         /* le saut se fera sans avance */
       }
@@ -1751,13 +1753,7 @@ export class MseSource {
     return this.pending;
   }
 
-
-
-
-
-
-
-    private async performSeek(requested: number): Promise<void> {
+  private async performSeek(requested: number): Promise<void> {
     if (this.destroyed) return;
 
     // Un saut demandé remplace l'ouverture, il ne s'y ajoute pas. Sans cette ligne, sauter avant
@@ -1768,7 +1764,7 @@ export class MseSource {
     // Clamped to the media, as a media element clamps its own currentTime. Without this, asking
     // for a time past the end sends the reader somewhere there is nothing to read, and the
     // recovery machinery then tries again and again to reach a place that does not exist.
-    const end = this.plan.durationSeconds > 0 ? this.plan.durationSeconds + this.delaySeconds : Infinity;
+    const end = this.playerEnd;
     const playerSeconds = Math.min(Math.max(0, requested), Math.max(0, end - 0.25));
 
     // A file with no index cannot be reached at a time. Restarting from the beginning and
@@ -1807,7 +1803,7 @@ export class MseSource {
     this.ended = false;
     this.seekState.serving(playerSeconds);
     // Sur l'horloge du fichier : là où le lecteur de fichier va être envoyé, plus bas.
-    this.readUpTo = Math.max(0, playerSeconds - this.delaySeconds);
+    this.readUpTo = this.toFileClock(playerSeconds);
     this.seeksServed += 1;
     // The refill starting below deserves the same grace as any other: without this the watchdog
     // sees a playhead on nothing, does not know a seek has just served it, and seeks again to
@@ -1877,7 +1873,7 @@ export class MseSource {
     this.trimBeforeNextAppend = false;
     this.networkHold = false;
 
-    this.remuxer.seekTo(Math.max(0, playerSeconds - this.delaySeconds));
+    this.remuxer.seekTo(this.toFileClock(playerSeconds));
     this.seekNetworkPending = true;
     this.appendsSinceSeek = 0;
     // Only when the element is not already there: reassigning would fire another seeking event
@@ -2068,19 +2064,6 @@ export class MseSource {
   }
 
   /**
-   * The safety net, and the only part of this that does not depend on being told anything.
-   *
-   * Everything else here reacts to an event: the element announcing a seek, the system asking
-   * for data, a buffer reporting an append. Each of those can fail to arrive — a browser that
-   * does not fire seeking in some state, a system that stops asking and never starts again, an
-   * append quietly rejected — and the symptom is always identical and always the same fault:
-   * the playhead is somewhere no media is, and the reader is filling somewhere else.
-   *
-   * So rather than trying to enumerate the causes, this watches the one fact that matters and
-   * seeks to wherever the viewer actually is. It is checked on a timer precisely because the
-   * failure mode is that no event comes.
-   */
-  /**
    * Arrivé : la tête est où le saut voulait qu'elle soit, et le saut n'est plus surveillé. Un
    * `seeked` loin de la cible, lui, ne vaut pas arrivée — voir `watchForHeadAway`.
    *
@@ -2096,6 +2079,19 @@ export class MseSource {
     this.seekState.arrive(this.video.currentTime);
   };
 
+  /**
+   * The safety net, and the only part of this that does not depend on being told anything.
+   *
+   * Everything else here reacts to an event: the element announcing a seek, the system asking
+   * for data, a buffer reporting an append. Each of those can fail to arrive — a browser that
+   * does not fire seeking in some state, a system that stops asking and never starts again, an
+   * append quietly rejected — and the symptom is always identical and always the same fault:
+   * the playhead is somewhere no media is, and the reader is filling somewhere else.
+   *
+   * So rather than trying to enumerate the causes, this watches the one fact that matters and
+   * seeks to wherever the viewer actually is. It is checked on a timer precisely because the
+   * failure mode is that no event comes.
+   */
   private readonly watchdog = () => {
     // A paused element is not stalled, and the frame it is showing is already on screen. Seeking
     // underneath it would move the picture for no reason and land the resume elsewhere.
@@ -2372,38 +2368,11 @@ export class MseSource {
     }
   }
 
-  /**
-   * The other kind of stall: playing, media under the playhead, and a clock that does not move.
-   *
-   * Everything above watches for a playhead standing on nothing, because that was every stall
-   * there had been. This one is the opposite shape and nothing could see it: an episode opened
-   * from the beginning reported itself as playing, with the playhead on the media and twenty
-   * seconds buffered ahead of it, and stayed at 0:00. The element was waiting on a seek to the
-   * exact first instant of the buffered range that never completed — so from here it looked
-   * perfectly healthy, which is why it went unnoticed until it was reported from a phone.
-   *
-   * Answered the same way as the other, and just as bluntly: ask for the position again, a
-   * fraction of a second further in, which is what completes a seek that never resolved.
-   */
-  /**
-   * Combien de temps laisser un saut en cours finir de décoder : ce qu'il a réellement à décoder.
-   *
-   * Le média sous la tête commence à l'image clé d'où le décodage repart ; la distance jusqu'à la
-   * tête est ce que le décodeur doit traverser avant de montrer quoi que ce soit. `FROZEN_SEEKING_MS`
-   * a été fixé pour le pire cas (neuf secondes de 4K dans 1917) et s'appliquait à tous : un saut
-   * dans une zone relue depuis une image clé à 2,8 s restait figé six secondes sous Safari avant
-   * d'être poussé — deux fois dans la même séance sur un Mac, une fois sur un iPhone (journal du
-   * 24/09/2026), là où la poussée le débloquait aussitôt. Une demi-seconde par seconde à décoder,
-   * au-dessus du délai ordinaire, plafonnée à l'ancien délai : 1917 retrouve exactement ses six
-   * secondes. Une plage qui commence loin derrière (un saut dans un long tampon continu) garde le
-   * plafond — la vraie image clé est inconnue, et on reste alors sur la prudence d'avant.
-   */
   /** Ce que le décodeur traverse depuis le début de la plage sous la tête ; inconnu, le plafond. */
   private decodeDistance(now: number): number {
     const ranges = this.playable;
-    for (let i = 0; i < ranges.length; i++) {
-      if (ranges.start(i) <= now && now < ranges.end(i)) return now - ranges.start(i);
-    }
+    const i = rangeAround(ranges, now, 0);
+    if (i >= 0) return now - ranges.start(i);
     return (FROZEN_SEEKING_MS - FROZEN_CLOCK_MS) / SEEKING_PATIENCE_PER_SECOND_MS;
   }
 
@@ -2442,17 +2411,42 @@ export class MseSource {
     }, OPENING_REASSERT_MS);
   }
 
+  /**
+   * Combien de temps laisser un saut en cours finir de décoder : ce qu'il a réellement à décoder.
+   *
+   * Le média sous la tête commence à l'image clé d'où le décodage repart ; la distance jusqu'à la
+   * tête est ce que le décodeur doit traverser avant de montrer quoi que ce soit. `FROZEN_SEEKING_MS`
+   * a été fixé pour le pire cas (neuf secondes de 4K dans 1917) et s'appliquait à tous : un saut
+   * dans une zone relue depuis une image clé à 2,8 s restait figé six secondes sous Safari avant
+   * d'être poussé — deux fois dans la même séance sur un Mac, une fois sur un iPhone (journal du
+   * 24/09/2026), là où la poussée le débloquait aussitôt. Une demi-seconde par seconde à décoder,
+   * au-dessus du délai ordinaire, plafonnée à l'ancien délai : 1917 retrouve exactement ses six
+   * secondes. Une plage qui commence loin derrière (un saut dans un long tampon continu) garde le
+   * plafond — la vraie image clé est inconnue, et on reste alors sur la prudence d'avant.
+   */
   private seekingPatienceMs(now: number): number {
     const ranges = this.playable;
-    for (let i = 0; i < ranges.length; i++) {
-      if (ranges.start(i) <= now && now < ranges.end(i)) {
-        const toDecode = now - ranges.start(i);
-        return Math.min(FROZEN_SEEKING_MS, FROZEN_CLOCK_MS + SEEKING_PATIENCE_PER_SECOND_MS * toDecode);
-      }
+    const i = rangeAround(ranges, now, 0);
+    if (i >= 0) {
+      const toDecode = now - ranges.start(i);
+      return Math.min(FROZEN_SEEKING_MS, FROZEN_CLOCK_MS + SEEKING_PATIENCE_PER_SECOND_MS * toDecode);
     }
     return FROZEN_SEEKING_MS;
   }
 
+  /**
+   * The other kind of stall: playing, media under the playhead, and a clock that does not move.
+   *
+   * Everything above watches for a playhead standing on nothing, because that was every stall
+   * there had been. This one is the opposite shape and nothing could see it: an episode opened
+   * from the beginning reported itself as playing, with the playhead on the media and twenty
+   * seconds buffered ahead of it, and stayed at 0:00. The element was waiting on a seek to the
+   * exact first instant of the buffered range that never completed — so from here it looked
+   * perfectly healthy, which is why it went unnoticed until it was reported from a phone.
+   *
+   * Answered the same way as the other, and just as bluntly: ask for the position again, a
+   * fraction of a second further in, which is what completes a seek that never resolved.
+   */
   private watchForFrozenClock(now: number): void {
     const moved = Math.abs(now - this.lastClockAt) > 0.05;
     if (moved || this.frozenSince === null) {
@@ -2586,9 +2580,9 @@ export class MseSource {
     try {
       if (!this.remuxer.seekable) return null;
       // Half a second on, so a head standing right on a keyframe does not pick that same one.
-      const fileSeconds = this.remuxer.keyframeAfter(Math.max(0, target - this.delaySeconds) + 0.5);
+      const fileSeconds = this.remuxer.keyframeAfter(this.toFileClock(target) + 0.5);
       if (fileSeconds === null) return null;
-      const end = this.plan.durationSeconds > 0 ? this.plan.durationSeconds + this.delaySeconds : Infinity;
+      const end = this.playerEnd;
       const next = fileSeconds + this.delaySeconds + NEXT_KEYFRAME_MARGIN;
       return next < end - 1 ? next : null;
     } catch {
@@ -2700,7 +2694,6 @@ export class MseSource {
     };
   }
 
-  /** What the technical panel shows. Enough to tell a stall apart from a refusal to fetch. */
   /**
    * What the element and the source have to say — the two things that know why an append was
    * refused, when the event itself carries nothing.
@@ -2726,8 +2719,9 @@ export class MseSource {
     return !this.destroyed && (this.stuck || this.source.readyState === "closed");
   }
 
-  /** Where the viewer was, for a caller that has to rebuild and wants to come back to it. */
   /**
+   * Where the viewer was, for a caller that has to rebuild and wants to come back to it.
+   *
    * Où le film en est — et, une fois la main passée à l'hôte, où il doit reprendre : la position
    * donnée à `handOver`, qui peut être la cible d'un saut parti ailleurs plutôt que la tête.
    */
@@ -2775,6 +2769,7 @@ export class MseSource {
     return `${dropped} / ${total} (${((dropped / total) * 100).toFixed(1)} %)`;
   }
 
+  /** What the technical panel shows. Enough to tell a stall apart from a refusal to fetch. */
   get debug(): Record<string, string> {
     // Reading a buffer whose source has closed throws, and the whole panel used to come back as
     // one "invalid state" line — at exactly the moment there was most to learn from it.

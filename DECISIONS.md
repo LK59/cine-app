@@ -2838,7 +2838,7 @@ lecture qui avance, stéréo, 3.0 et départ à 10:00.
 **Reste à entendre.** La synchronisation sur un Chrome de bureau et l'ordre des canaux du 3.0 (le
 décodeur Opus du navigateur lit lui-même la table de canaux du fichier — rien n'est permuté ici).
 
-**Une seule fonction.** `audioCodecString` / `opusCopyConsidered` (`remuxer.ts`) pour la décision,
+**Une seule fonction.** `audioCodecString` (`remuxer.ts`) / `opusCopyConsidered` (`browserEngine.ts`) pour la décision,
 lue par `naturalDelivery`, `deliveredAudio`, `plannedMimeTypes` et l'unification par fichier ;
 `audioSampleEntryFor` / `isOpusHead` / `dOps` (`mp4SampleEntries.ts`) pour l'entrée.
 Tests : `webcodecs-remuxer.test.ts` (« l'Opus copié tel quel »), `webcodecs-mp4SampleEntries.test.ts`

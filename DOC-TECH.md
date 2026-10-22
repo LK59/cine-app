@@ -2197,6 +2197,7 @@ Everything is in `src/lib/webcodecs/` unless stated otherwise.
 | `subtitleMarkup.ts` | Markup stripping, for internal tracks **and** files; text of a subtitle block (`subtitleText`) |
 | `playerTrack.ts` | A track as the interface sees it (`PlayerTrack`), read from the container |
 | `capabilities.ts` | What the device accepts, measured |
+| `browserEngine.ts` | The user-agent questions the engine asks (Chromium, Gecko, Apple system, Opus copy), each with its exact text; `isWebKitEngine` stays in `src/lib/webkitEngine.ts` |
 
 ### Server side and reporting
 

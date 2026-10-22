@@ -83,11 +83,6 @@ export function fixed16(value: number): Uint8Array {
   return u32(Math.round(value * 0x10000));
 }
 
-/** 8.8 fixed point, used for volume. */
-export function fixed8(value: number): Uint8Array {
-  return u16(Math.round(value * 0x100));
-}
-
 /**
  * The identity transformation matrix every track header carries.
  *

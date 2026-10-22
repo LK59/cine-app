@@ -20,7 +20,8 @@ import { clusterOffsetForTime, cueTimeAfter, cueTimeAtOrBefore } from "./matrosk
 import { isReadAbandoned, type NetworkWindow } from "./byteSource";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
 import { audioSampleEntryFor, isOpusHead, videoSampleEntry } from "./mp4SampleEntries";
-import { isWebKitEngine } from "@/lib/webkitEngine";
+// `opusCopyConsidered` (DECISIONS.md §66) et `geckoEngine` : écrits ici jusqu'au 22/10/2026.
+import { geckoEngine, opusCopyConsidered } from "./browserEngine";
 import {
   transcodeTargetCodec,
   AudioTranscoder,
@@ -172,22 +173,6 @@ function aacCodecString(codecPrivate: Uint8Array | null): string {
   // what all but a handful of files use.
   const objectType = codecPrivate && codecPrivate.length > 0 ? codecPrivate[0] >> 3 : 2;
   return `mp4a.40.${objectType === 31 ? 2 : objectType}`;
-}
-
-/**
- * Si une piste Opus peut être proposée telle quelle à ce navigateur (DECISIONS.md §66) — le reste de
- * la question (`containerAccepts`) est posé au navigateur, comme pour le FLAC ou l'AC-3.
- *
- * Jamais sur WebKit, et c'est une précaution, pas une capacité : Safari refusait l'Opus dans
- * MediaSource quand les 608 pistes Opus d'ici ont été recensées (21/09/2026), et rien n'a mesuré
- * depuis ce qu'un Safari qui répondrait « oui » ferait d'une entrée `Opus` copiée. Un iPhone garde
- * donc exactement son chemin d'avant — mono et stéréo décodés puis ré-encodés en AAC, multicanal au
- * lecteur serveur — tant que personne ne l'a prouvé sur un vrai appareil. Sans agent connu (Node),
- * même prudence.
- */
-function opusCopyConsidered(): boolean {
-  const agent = typeof navigator === "undefined" ? "" : (navigator.userAgent ?? "");
-  return agent !== "" && !isWebKitEngine(agent);
 }
 
 function audioCodecString(track: MatroskaTrack): string | null {
@@ -505,12 +490,6 @@ export function dialogueCanShape(track: MatroskaTrack): boolean {
   }
   if (track.codecId === "A_OPUS") return channels <= 3 || (channels === 6 && geckoEngine());
   return DIALOGUE_DECODERS.has(track.codecId);
-}
-
-/** Firefox (Gecko) — ni Chromium ni WebKit : Firefox sur iOS est un WebKit et n'en est pas. */
-function geckoEngine(): boolean {
-  const agent = typeof navigator === "undefined" ? "" : (navigator.userAgent ?? "");
-  return /Firefox\/\d/.test(agent) && !isWebKitEngine(agent) && !/Chrom(e|ium)\/\d/.test(agent);
 }
 
 const DIALOGUE_DECODERS = new Set(["A_AC3", "A_EAC3", "A_DTS", "A_DTS/EXPRESS", "A_DTS/LOSSLESS", "A_TRUEHD", "A_MLP", "A_FLAC"]);
@@ -1197,7 +1176,7 @@ export class Remuxer {
             // the next genuine one happens to be — up to ten seconds late. Reading from earlier
             // instead costs a few seconds of pictures nobody sees, and lands them where they
             // asked. Only ever on the file that lies: elsewhere this never runs.
-            if (this.seekTargetUs !== null && sample.timestampUs > this.seekTargetUs && this.backUp()) continue;
+            if (this.seekTargetUs !== null && sample.timestampUs > this.seekTargetUs) this.backUp();
             continue;
           }
           this.needKeyframe = false;
