@@ -241,9 +241,25 @@ describe("l'interruption d'une diffusion", () => {
 
   // Le drapeau est relu au moment d'agir, pas seulement à l'arrivée de l'erreur : entre les deux
   // il s'écoule plus d'une seconde, et c'est la fenêtre où le spectateur choisit son téléviseur.
-  it("relit le drapeau au moment où la reprise partirait", () => {
-    const timer = source.slice(source.indexOf("nativeErrorRetryTimer.current = setTimeout"));
-    expect(timer.slice(0, 1400)).toMatch(/if \(castActiveRef\.current\)/);
+  //
+  // Ce test prenait la *première* minuterie de reprise ; depuis la marche H.264 (59f56570, 20/10/2026)
+  // c'était elle, et la relecture de l'échelle pouvait disparaître sans qu'il échoue (audit du
+  // 22/10/2026). Chaque minuterie est maintenant vérifiée, avec leur nombre : une troisième ajoutée
+  // sans garde le fait échouer. Le comportement est gardé dans PlayerHost-echelle.test.tsx.
+  it("relit le drapeau au moment où la reprise partirait, dans chaque minuterie de reprise", () => {
+    const marker = "nativeErrorRetryTimer.current = setTimeout(() => {";
+    const bodies = source.split(marker).slice(1);
+    expect(bodies).toHaveLength(2);
+    for (const body of bodies) {
+      // La première instruction du rappel, commentaires mis à part.
+      const code = body.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "").trimStart();
+      expect(code.startsWith("if (castActiveRef.current)")).toBe(true);
+    }
+    // L'échelle du son, par un texte qui lui est propre : la raison écrite avant toute relance.
+    const ladder = source.slice(source.indexOf("const delay = 1200 * attempt"));
+    const abandon = ladder.indexOf("reprise abandonnée : une diffusion s'est établie entre-temps");
+    expect(abandon).toBeGreaterThan(-1);
+    expect(abandon).toBeLessThan(ladder.indexOf("startPlaybackRef.current("));
   });
 
   // Sans ça, le sélecteur ne se rouvrirait pas : son verrou est à un coup par lecteur.

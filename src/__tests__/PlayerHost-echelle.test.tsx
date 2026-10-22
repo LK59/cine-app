@@ -197,6 +197,59 @@ describe("échelle du son — caractérisation", () => {
   });
 });
 
+/**
+ * Le drapeau de diffusion relu au moment où la reprise partirait (panne du 19/09/2026, « ça bloque au
+ * bout d'environ trente secondes ») : entre l'erreur et la reprise il s'écoule plus d'une seconde, et
+ * c'est la fenêtre où le spectateur choisit son téléviseur. Une reprise qui part quand même rejoue
+ * `video.src = …` et rompt la route AirPlay qui vient de s'établir.
+ *
+ * Gardé jusqu'au 22/10/2026 par un test sur la source (castToken.test.ts) qui prenait la *première*
+ * minuterie de reprise : depuis la marche H.264 (59f56570), c'était elle, et la relecture de l'échelle
+ * pouvait disparaître sans qu'il échoue. Ici, le comportement, pour les deux minuteries.
+ */
+describe("une diffusion établie pendant le délai d'une reprise l'annule", () => {
+  /** La route AirPlay s'établit, comme Safari le signale. */
+  function castOn() {
+    const el = video();
+    Object.defineProperty(el, "webkitCurrentPlaybackTargetIsWireless", { configurable: true, value: true });
+    act(() => void el.dispatchEvent(new Event("webkitcurrentplaybacktargetiswirelesschanged")));
+  }
+  function failWith(code: number) {
+    const el = video();
+    Object.defineProperty(el, "error", { configurable: true, value: { code } });
+    act(() => void el.dispatchEvent(new Event("error")));
+  }
+  /** Plus que le délai de la marche (1,2 s) : la minuterie a eu le temps de partir. */
+  const pastDelay = () => act(() => new Promise((resolve) => setTimeout(resolve, 1700)));
+
+  it("échelle du son (code 4) : aucune renégociation, la raison au journal, plus de reconnexion", { timeout: 20_000 }, async () => {
+    stubFetch();
+    render(<PlayerHost />);
+    await nextNegotiation(1);
+    failWith(4);
+    castOn();
+    await pastDelay();
+    expect(negociations).toHaveLength(1);
+    const errors = reportPlayback.mock.calls.filter(([k]) => k === "error").map(([, f]) => (f as { reason?: string }).reason);
+    expect(errors).toContain("reprise abandonnée : une diffusion s'est établie entre-temps");
+    expect(document.body.textContent).not.toContain("player.reconnecting");
+  });
+
+  it("marche H.264 (code 3, échelle épuisée) : aucune renégociation", { timeout: 20_000 }, async () => {
+    stubFetch();
+    render(<PlayerHost />);
+    await nextNegotiation(1);
+    for (let n = 2; n <= 4; n++) {
+      failElement();
+      await nextNegotiation(n);
+    }
+    failWith(3);
+    castOn();
+    await pastDelay();
+    expect(negociations).toHaveLength(4);
+  });
+});
+
 describe("plus aucune exclusion de codec retenue d'une séance à l'autre (11/10/2026)", () => {
   it("une marche qui réussit vaut pour l'ouverture en cours ; la séance suivante repart de la marche 0", { timeout: 20_000 }, async () => {
     stubFetch();

@@ -998,6 +998,15 @@ function ActivePlayer({
   const subtitleSwitchesRef = useRef(0);
   /** Une image a joué dans cette séance — sinon le bilan dit combien de temps on a attendu. */
   const sessionPlayedRef = useRef(false);
+  /**
+   * Le saut de reprise que pose la négociation elle-même (`video.currentTime = resumeAt` à
+   * `loadeddata`), consommé par le `seeking` qu'il provoque : ce n'est pas un geste du spectateur.
+   * Sur hls.js, une renégociation en plein film (piste en place, « Réessayer », marche de l'échelle,
+   * bascule allégée) garde l'effet du décompte et son `playedOnce` : ce saut-là était compté au bilan
+   * (`seeks: 1` sans geste) et armait `runner.seekStarted()` (§78) — audit du 22/10/2026. Sur WebKit
+   * l'élément est remonté à chaque négociation et le décompte repart de zéro : rien n'y change.
+   */
+  const resumeSeekPendingRef = useRef(false);
   const [mountedAt] = useState(() => Date.now());
   const sessionStartedAtRef = useRef(mountedAt);
   /**
@@ -1411,6 +1420,7 @@ function ActivePlayer({
       setLoading(true);
       rebufferTimestamps.current = [];
       hasPlayedOnce.current = false;
+      resumeSeekPendingRef.current = false;
       lastSeekAt.current = 0;
       setBadConnection(false);
       setNetworkBitrate(null);
@@ -1748,6 +1758,7 @@ function ActivePlayer({
             // est celle d'avant ce saut.
             startup.resumeSeek();
             video.addEventListener("seeked", () => startup.resumePicture(), { once: true });
+            resumeSeekPendingRef.current = true;
             video.currentTime = resumeAt;
           }
           // Seeded here rather than waiting for the first 'timeupdate' — otherwise a progress
@@ -2325,20 +2336,21 @@ function ActivePlayer({
             // minutes (qui pouvait avoir expiré : la séance repartait en pleine qualité, 12/10/2026).
             JSON.stringify({ itemId, title, audioStreamIndex: id, resumeAt, server: true, carry: reloadCarryNow() } satisfies PlayerReloadIntent)
           );
+          // Tear the current media session down BEFORE reloading, not merely as a side effect of
+          // the page dying: iOS's media daemon (mediaserverd) releases HLS sessions asynchronously
+          // and independently of the page lifecycle, so a reload issued while the old stream is
+          // still actively playing can bring the new page up before the old session is gone.
+          // Starting teardown explicitly here buys that release as much head start as possible.
+          releaseHlsElement(video);
+          window.location.reload();
+          return;
         } catch {
-          // Storage unavailable (private browsing, quota). Contrairement à ce que ce commentaire
-          // disait depuis le 14/08, rien ne retombe sur le changement en place : l'élément est
-          // coupé et la page rechargée quand même, sans intention — elle revient sans séance.
-          // Écart connu (audit du 22/10/2026), laissé tel quel : le corriger change un comportement.
+          // Storage unavailable (private browsing, quota): falls through to the in-place switch
+          // below, which will most likely fail on WebKit and show the error screen with « Réessayer ».
+          // Coupure et rechargement sont dans le `try`, comme à la fin de l'échelle : du 14/08 au
+          // 22/10/2026 ils le suivaient, la page revenait sans intention et le film se fermait sans
+          // rien dire (audit du 22/10/2026).
         }
-        // Tear the current media session down BEFORE reloading, not merely as a side effect of
-        // the page dying: iOS's media daemon (mediaserverd) releases HLS sessions asynchronously
-        // and independently of the page lifecycle, so a reload issued while the old stream is
-        // still actively playing can bring the new page up before the old session is gone.
-        // Starting teardown explicitly here buys that release as much head start as possible.
-        releaseHlsElement(video);
-        window.location.reload();
-        return;
       }
       startPlayback({ audioStreamIndex: id, resumeAt, cause: { why: "audio" } });
     },
@@ -2938,11 +2950,15 @@ function ActivePlayer({
       }
     };
     const onSeeking = () => {
+      const resumeSeek = resumeSeekPendingRef.current;
+      resumeSeekPendingRef.current = false;
       if (!playedOnce) return;
       tallyRef.current.waitAbandoned();
       if (longTimer !== null) clearTimeout(longTimer);
       longTimer = null;
       waitStart = null;
+      // Le saut de reprise de la négociation : ni compté, ni traité comme un saut qui attend (§78).
+      if (resumeSeek) return;
       seekSince ??= Date.now();
       // Un saut attend son image : au-delà de 10 s, traité comme une ouverture (§78). Compté depuis le
       // premier d'une série de sauts.
@@ -3616,6 +3632,11 @@ function ActivePlayer({
              peut pas être éprouvée depuis le serveur. Voir `onCastReturn`. */
           onCastReturn={castSession ? handleCastReturn : undefined}
           castActive={castActive}
+          /* Le logo du titre à la place du titre écrit, comme l'hôte natif (d5652ddd) : celui de
+             l'ouverture, déjà là. Oublié ici jusqu'au 22/10/2026 — une ouverture sur six montrait le
+             titre écrit, et le lecteur changeait d'apparence en passant au serveur. Absent après un
+             rechargement WebKit : `PlayerTitle` retombe alors sur le titre écrit. */
+          logoUrl={session.introArt?.logoUrl ?? null}
         />
       )}
       {!isMini && (
