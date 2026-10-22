@@ -3187,9 +3187,30 @@ export function PlayerControls({
               // barre, qui garde le focus, une flèche ne faisait rien, ou ramenait le film d'où il
               // venait (chasse aux défauts du 13/10/2026). Retenue ici aussi pour qu'un lecteur
               // suspendu, dont la fenêtre ignore les touches, ne laisse pas l'input bouger seul.
+              //
+              // Les autres touches d'un curseur natif (Début, Fin, Page préc./suiv., ↑ ↓) déplaçaient la
+              // valeur de l'input sans saut : l'aperçu suivait, puis le tic suivant le ramenait à la
+              // vraie position (audit du lecteur, 22/10/2026 — jamais validées, même avant 31bf7599).
+              // Retenues ici aussi ; Début, Fin et les pages sautent par le même `skip` que les
+              // flèches (Début au commencement, Fin à la fin, une minute par page). ↑ ↓ ne sautent
+              // pas : sur une télécommande, ils ne font que montrer les commandes (l'écouteur de la
+              // fenêtre, qui ne traite aucune des quatre autres — rien n'est fait deux fois).
               onKeyDown={(e) => {
                 inputPointerRef.current = "keyboard";
                 if (e.key === "ArrowLeft" || e.key === "ArrowRight") e.preventDefault();
+                const barDelta =
+                  e.key === "Home" ? -Infinity
+                  : e.key === "End" ? Infinity
+                  : e.key === "PageUp" ? 60
+                  : e.key === "PageDown" ? -60
+                  : null;
+                if (barDelta === null && e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+                // Une combinaison reste au système, comme pour l'écouteur de la fenêtre.
+                if (e.ctrlKey || e.metaKey || e.altKey) return;
+                e.preventDefault();
+                if (barDelta === null || suspendedRef.current) return;
+                skip(barDelta);
+                showControls();
               }}
               // h-5 (20px), not h-1: the native range control keeps its visual groove thin and
               // vertically centered regardless of the element's own box height, so a taller box
