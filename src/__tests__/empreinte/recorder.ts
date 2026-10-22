@@ -308,6 +308,13 @@ export function installRecorder(options: { seed?: number; storageKeys?: RegExp }
       // Le dossier dit déjà la famille : le préfixe commun des `describe` (« empreinte — lecteur
       // natif : ») est retiré du nom.
       const name = slug((expect.getState().currentTestName ?? "scenario").replace(/^empreinte\s*—[^:>]*[:>]\s*/, ""));
+      // Une empreinte absente ferait réécrire le fichier en silence et passer le test : un scénario
+      // renommé ou un fichier effacé pendant un découpage ne prouverait plus rien. Elle n'est créée
+      // que sur demande (`EMPREINTE_UPDATE=1`), dans un commit qui dit pourquoi.
+      const file = `${process.cwd()}/src/__tests__/empreinte/__empreintes__/${family}/${name}.txt`;
+      if (!fs.existsSync(file) && process.env.EMPREINTE_UPDATE !== "1") {
+        throw new Error(`empreinte absente : ${family}/${name}.txt — EMPREINTE_UPDATE=1 pour la créer`);
+      }
       await expect(text).toMatchFileSnapshot(`./__empreintes__/${family}/${name}.txt`);
     },
     uninstall: () => {

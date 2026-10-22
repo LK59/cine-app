@@ -66,6 +66,8 @@ run and is a failure under CI. To see the raw thread of a scenario while writing
 - **A deliberate behaviour change updates the fingerprints in its own commit**, with the reason in
   the message (`npx vitest run src/__tests__/empreinte/ -u`, then read every changed file before
   committing). Never mix a refresh of the fingerprints with a refactoring.
+- **A missing fingerprint fails**: a renamed scenario or a deleted file would otherwise be rewritten
+  silently and prove nothing. A new scenario is recorded with `EMPREINTE_UPDATE=1`.
 
 What it does not see: real decoding, real networks, real engines. It fixes what the code decides
 given the same inputs; device testing remains the proof that the inputs are realistic.
