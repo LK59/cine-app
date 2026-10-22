@@ -563,6 +563,25 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    page: "9.1",
+    version: "9.3.12",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Changer de sous-titres pendant qu'un fichier de sous-titres charge n'affiche plus d'avertissement pour un sous-titre qu'on n'a plus choisi.",
+        en: "Changing subtitles while a subtitle file is loading no longer shows a warning about a subtitle you no longer chose.",
+        es: "Cambiar de subtítulos mientras se carga un archivo de subtítulos ya no muestra un aviso sobre un subtítulo que ya no está elegido.",
+        de: "Ein Untertitelwechsel, während eine Untertiteldatei lädt, zeigt keine Warnung mehr für einen nicht mehr gewählten Untertitel.",
+      },
+      {
+        fr: "Les menus « Dialogues » et « Qualité » du lecteur ont désormais un titre, comme les autres.",
+        en: "The player's \"Dialogue\" and \"Quality\" menus now have a title, like the others.",
+        es: "Los menús «Diálogos» y «Calidad» del reproductor ahora tienen título, como los demás.",
+        de: "Die Menüs „Dialoge“ und „Qualität“ des Players haben jetzt wie die anderen einen Titel.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
