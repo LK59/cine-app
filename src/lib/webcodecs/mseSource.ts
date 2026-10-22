@@ -1161,6 +1161,8 @@ export class MseSource {
         // précède l'endroit où la lecture s'était arrêtée, sur du média déjà là. Ce qu'il va
         // remplacer est retiré d'abord — jamais deux fois les mêmes images dans le tampon, ce qui
         // n'arrive nulle part ailleurs dans ce lecteur — et tout ce qui précède reste.
+        // Lu avant d'être effacé : ce segment relu n'entre pas dans la mesure du débit, plus bas.
+        const reread = this.trimBeforeNextAppend;
         if (this.trimBeforeNextAppend) {
           this.trimBeforeNextAppend = false;
           const from = this.remuxer.diagnostics().segmentStartSeconds + this.delaySeconds;
@@ -1202,7 +1204,14 @@ export class MseSource {
         // qu'il couvre depuis la fin du précédent.
         // Pas le premier après un saut ou une ouverture : il repart de l'image clé d'avant la cible,
         // et sa durée comptée depuis la cible gonflerait le débit.
-        if (this.appendsSinceSeek > 0) {
+        // Ni le premier relu (`reread`) après une éviction ou une coupure gardée, pour la même
+        // raison : `readUpTo` est alors le trou (`refillEvicted`), qui tombe n'importe où dans le
+        // segment. Ses octets couvraient tout le segment, sa durée seulement ce qui suit le trou —
+        // un débit ×2,5 à ×10 qui, dans la fenêtre de `ByteRate`, pouvait diviser par deux l'avance
+        // visée sur WebKit pendant une douzaine de segments, juste après une éviction (audit du
+        // 22/10/2026). `appendsSinceSeek` n'est pas remis à zéro pour autant : il règle aussi le
+        // nombre de traces après un saut.
+        if (this.appendsSinceSeek > 0 && !reread) {
           const covered = segment.endSeconds - this.readUpTo;
           this.videoRate.record(segment.video.reduce((n, f) => n + f.byteLength, 0), covered);
           if (segment.audio) this.audioRate.record(segment.audio.byteLength, covered);
@@ -1586,7 +1595,7 @@ export class MseSource {
     for (const queue of [this.videoOps, this.audioOps]) {
       const buffer = queue?.buffer;
       if (!queue || !buffer || buffer.buffered.length === 0) continue;
-      const until = queue === this.audioOps ? wanted : this.behindLimit(wanted, 0);
+      const until = this.behindCut(queue, wanted, 0);
       if (until <= 0) continue;
       if (buffer.buffered.start(0) >= until - TRIM_SLACK_SECONDS) continue;
       void this.removeRange(queue, 0, until).catch(() => {});
@@ -1688,17 +1697,33 @@ export class MseSource {
     }
   }
 
+  /**
+   * Jusqu'où retirer derrière la tête dans ce tampon — la règle commune à `trimBehind` et `evict`.
+   *
+   * Le son jusqu'à `wanted` exactement, chacune de ses trames étant une image clé ; l'image jusqu'à
+   * l'image clé de la tête (`behindLimit`), ou `unknown` sans index. `evict` bornait les deux
+   * tampons à celle de l'image, que `trimBehind` avait quittée pour le son le 01/10/2026 : sur un
+   * refus de quota, le son gardait derrière lui tout le groupe de la tête, et rien n'en partait
+   * quand l'image n'avait rien à céder (borne ≤ 0) — `quotaHit` mesurait ensuite sa nouvelle cible
+   * sur un tampon encombré de son inutile (audit du 22/10/2026).
+   */
+  private behindCut(queue: BufferQueue, wanted: number, unknown: number): number {
+    return queue === this.audioOps ? wanted : this.behindLimit(wanted, unknown);
+  }
+
   private evict(): void {
     // Sans index, le plafond est atteint quand même : on retire comme avant, faute de mieux.
     const wanted = this.video.currentTime - (this.budget?.behindSeconds ?? KEEP_BEHIND_SECONDS);
-    const until = this.behindLimit(wanted, wanted);
+    // Chaque tampon sa borne, et le `<= 0` testé pour chacun : celle de l'image ne dit rien de ce
+    // que le son peut céder. (Pas de `TRIM_SLACK_SECONDS` ici : sous un plafond plein, tout compte.)
+    const cuts = [this.videoOps, this.audioOps].flatMap((queue) => (queue ? [{ queue, until: this.behindCut(queue, wanted, wanted) }] : []));
+    const said = cuts.filter(({ until }) => until > 0).map(({ queue, until }) => `${queue === this.audioOps ? "son" : "image"} jusqu'à ${until.toFixed(1)} s`);
     // Traced either way, including when there is nothing to free: whether this ever happens on a
     // real device was, until now, unknowable from the record.
-    trace(`éviction demandée à ${this.video.currentTime.toFixed(1)} s — ${until <= 0 ? "rien derrière la tête" : `jusqu'à ${until.toFixed(1)} s`}`);
-    if (until <= 0) return;
-    for (const queue of [this.videoOps, this.audioOps]) {
-      const buffer = queue?.buffer;
-      if (!queue || !buffer || buffer.buffered.length === 0 || buffer.buffered.start(0) >= until) continue;
+    trace(`éviction demandée à ${this.video.currentTime.toFixed(1)} s — ${said.length === 0 ? "rien derrière la tête" : said.join(", ")}`);
+    for (const { queue, until } of cuts) {
+      const buffer = queue.buffer;
+      if (until <= 0 || !buffer || buffer.buffered.length === 0 || buffer.buffered.start(0) >= until) continue;
       // Queued rather than fired at the buffer directly: eviction is triggered by a full buffer
       // in the middle of an append, which is exactly when the buffer is busy.
       void this.removeRange(queue, 0, until).catch(() => {});

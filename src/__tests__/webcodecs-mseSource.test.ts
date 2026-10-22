@@ -3630,3 +3630,109 @@ describe("une coupure en pleine lecture, bornée (§97)", () => {
     mse.destroy();
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Audit du lecteur, 22/10/2026 : la relecture d'une éviction et le retrait sur refus de quota.
+// ---------------------------------------------------------------------------------------------
+
+describe("le débit mesuré après une relecture d'éviction", () => {
+  const setTime = (video: HTMLVideoElement, t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+
+  // Le premier segment relu repart de l'image clé d'avant le trou : ses octets couvrent tout le
+  // segment, mais sa durée était comptée depuis le trou (`readUpTo`). Trou à 25,7 s dans un segment
+  // de 24 à 26 s : 2 s d'octets sur 0,5 s, un débit ×4 qui, dans la fenêtre de `ByteRate`, divisait
+  // le budget WebKit de moitié pendant une douzaine de segments.
+  it("ne compte pas le segment relu, qui repart d'avant le trou", async () => {
+    FakeBuffer.managed = true;
+    const video = fakeVideo();
+    let index = 0;
+    const seeks: number[] = [];
+    // 1 000 octets par seconde d'image, 100 de son : deux secondes par segment.
+    const remuxer = Object.assign(fakeRemuxer(500), {
+      seeks,
+      seekTo: (at: number) => {
+        seeks.push(at);
+        index = Math.floor(at / 2);
+      },
+      diagnostics: () => ({ presentationDelaySeconds: 0.2, clampedSamples: 0, segmentStartSeconds: Math.max(0, index - 1) * 2 }),
+      nextSegment: async () => {
+        index += 1;
+        return { video: [new Uint8Array(2000)], audio: new Uint8Array(200), subtitles: [], endSeconds: index * 2 };
+      },
+    });
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    const internals = mse as unknown as {
+      fillTask: Promise<void> | null;
+      videoRate: { record(bytes: number, seconds: number): void };
+      audioRate: { record(bytes: number, seconds: number): void };
+    };
+    await until(() => internals.fillTask === null && video.buffered.length > 0 && video.buffered.end(0) >= 30, "le premier remplissage est fini");
+    setTime(video, 2);
+    const videoRecords = vi.spyOn(internals.videoRate, "record");
+    const audioRecords = vi.spyOn(internals.audioRate, "record");
+
+    FakeSource.instances[0].buffers[0].systemEvicts(25.7, 40);
+    await until(() => seeks.length > 0, "le lecteur de fichier renvoyé au trou");
+    await until(() => internals.fillTask === null && videoRecords.mock.calls.length >= 2, "la relecture envoyée et mesurée");
+
+    // Chaque segment mesuré l'est à son vrai débit ; le segment relu n'en fait pas partie.
+    for (const [bytes, seconds] of videoRecords.mock.calls) expect(bytes / seconds).toBeCloseTo(1000, 5);
+    for (const [bytes, seconds] of audioRecords.mock.calls) expect(bytes / seconds).toBeCloseTo(100, 5);
+    mse.destroy();
+  });
+});
+
+describe("le retrait sur refus de quota (`evict`) suit la règle de `trimBehind`", () => {
+  const setTime = (video: HTMLVideoElement, t: number) => ((video as unknown as { currentTime: number }).currentTime = t);
+
+  async function filled(keyframeAtOrBefore: (s: number) => number) {
+    const video = fakeVideo();
+    const remuxer = Object.assign(fakeRemuxer(20), { keyframeAtOrBefore });
+    const mse = await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    const internals = mse as unknown as { fillTask: Promise<void> | null; evict(): void };
+    await until(() => internals.fillTask === null && video.buffered.length > 0, "le remplissage fini");
+    const [videoBuffer, audioBuffer] = FakeSource.instances[0].buffers;
+    videoBuffer.setBuffered(0, 80);
+    audioBuffer.setBuffered(0, 80);
+    setTime(video, 60);
+    return { mse, internals, videoBuffer, audioBuffer, before: [videoBuffer.removed.length, audioBuffer.removed.length] };
+  }
+
+  // Aucune image clé connue sous la tête (`behindLimit` → 0) : l'image n'a rien à céder sans perdre
+  // celle qu'on voit, mais le son, dont chaque trame est une image clé, a tout ce qui précède
+  // `wanted`. Une seule borne pour les deux tampons, et un `until <= 0` sur celle de l'image, ne
+  // retiraient rien du tout.
+  it("retire le son derrière la tête même quand l'image n'a rien à céder", async () => {
+    const { mse, internals, videoBuffer, audioBuffer, before } = await filled(() => null as unknown as number);
+    internals.evict();
+    await flush();
+    expect(videoBuffer.removed.slice(before[0])).toEqual([]);
+    // 60 s − 30 s gardées derrière.
+    expect(audioBuffer.removed.slice(before[1])).toEqual([[0, 30]]);
+    mse.destroy();
+  });
+
+  // Un long groupe ouvert à 20 s : l'image s'arrête avant son image clé, le son va jusqu'à `wanted`.
+  // Borné comme l'image, il gardait dix secondes de plus derrière la tête, sous un plafond plein.
+  it("retire le son jusqu'à la limite exacte, l'image jusqu'à l'image clé de la tête", async () => {
+    const { mse, internals, videoBuffer, audioBuffer, before } = await filled((s) => (s >= 20 && s < 100 ? 20 : Math.floor(s / 2) * 2));
+    internals.evict();
+    await flush();
+    const [[videoFrom, videoUntil]] = videoBuffer.removed.slice(before[0]);
+    expect(videoFrom).toBe(0);
+    expect(videoUntil).toBeCloseTo(20 + 0.2 - 0.05, 5);
+    expect(audioBuffer.removed.slice(before[1])).toEqual([[0, 30]]);
+    mse.destroy();
+  });
+
+  // Sans index, rien ne change : on retire quand même jusqu'à `wanted`, faute de mieux.
+  it("sans index, retire les deux tampons jusqu'à la limite", async () => {
+    const { mse, internals, videoBuffer, audioBuffer, before } = await filled(() => 0);
+    Object.assign((mse as unknown as { remuxer: { seekable: boolean } }).remuxer, { seekable: false });
+    internals.evict();
+    await flush();
+    expect(videoBuffer.removed.slice(before[0])).toEqual([[0, 30]]);
+    expect(audioBuffer.removed.slice(before[1])).toEqual([[0, 30]]);
+    mse.destroy();
+  });
+});
