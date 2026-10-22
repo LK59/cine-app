@@ -1,0 +1,83 @@
+fetch GET /api/subtitle-gen/options?itemId=ep-1
+fetch GET /api/jellyfin/playback-state/ep-1
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522800000,"fields":{"itemId":"ep-1","title":"Épisode 1","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"non décidé","why":"lost","at":3290,"watched":0,"ended":false,"rebuild":0,"gaveUpAfterMs":0,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{}},"account":null}
+fetch GET /api/player/frame/ep-1
+step monté
+probe {"audioPreferences":null,"audioTrackNumber":null,"fileVersion":null,"startPaused":false,"startSeconds":3290,"streamUrl":"/stream.mkv","videoRangeType":"SDR"}
+log start {"itemId":"ep-1","title":"Épisode 1","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","reason":"remultiplexage → lecteur natif","openedInMs":0,"at":3290,"rebuild":0,"displayHdr":"inconnu","hdrLightCap":"natif","hdrChoice":"auto","wideGamut":"inconnu"}
+media video play
+fetch GET /api/jellyfin/chapters?itemId=ep-1
+fetch GET /api/jellyfin/trickplay/info?itemId=ep-1
+fetch POST /api/jellyfin/playback/playing {"client":"CineEngine By CineApp","itemId":"ep-1","playSessionId":"cine-engine-ep-1","mediaSourceId":"ep-1","playMethod":"DirectPlay","announce":true,"positionTicks":32900000000,"isPaused":false,"visible":true}
+storage local set cine:player-volume {"volume":1,"muted":false}
+storage local set cine:player-volume {"volume":1,"muted":false}
+dom ouverture
+    video
+    h1 "Épisode 1"
+    p "player.experimental.resumeAt:{\"time\":\"54 min 50\"}"
+    button "common.close"
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Épisode 1"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.nextEpisode"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=0 valuetext=player.seekValue:{"at":"0:00","total":"0:00"}
+trace élément : repart à 3290.00 s
+storage local set cine:last-watched {"film-1":1792522800000,"ep-1":1792522800000}
+fetch GET /api/jellyfin/playback-state/ep-2
+fetch GET /api/jellyfin/direct/ep-2
+step première image
+dom première image
+    video
+    h1 "Épisode 1"
+    p "player.experimental.resumeAt:{\"time\":\"54 min 50\"}"
+    button "common.close"
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Épisode 1"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.nextEpisode"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=3290 valuetext=player.seekValue:{"at":"54:50","total":"1:00:00"}
+log opening {"itemId":"ep-1","title":"Épisode 1","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","firstMoveMs":0,"infoMs":0,"steps":""}
+dom carte du générique
+    video
+    p "player.nextEpisodeIn:{\"n\":8}"
+    p "Épisode 2"
+    button "player.playNow"
+    button "common.close"
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Épisode 1"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.nextEpisode"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=3302 valuetext=player.seekValue:{"at":"55:02","total":"1:00:00"}
+storage local set cine:last-watched {"ep-1":1792522816000,"film-1":1792522800000}
+beacon /api/player/log stop {"itemId":"ep-1","title":"Épisode 1","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","why":"next","at":3309,"watched":20,"ended":false,"rebuild":0,"audio":1,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{"netMB":0,"recvMbps":0,"linkMbps":0,"linkBusyPct":0,"req":0,"readWaitS":0,"buildS":0,"audioS":0,"appendS":0,"longTaskS":0,"longTasks":0,"lagMaxMs":0,"slowestMs":0,"linkVerdict":"inconnue","linkS":0,"cores":12},"timeline":"3294,5,0,0,-,L;3299,10,0,0,-,L;3304,15,0,0,-,L;3309,20,0,0,-,L;3309,20,0,0,-,L"}
+storage local remove cine:unsent-stop:00000001
+keepOnStop
+fetch POST /api/jellyfin/playback/stop {"client":"CineEngine By CineApp","itemId":"ep-1","playSessionId":"cine-engine-ep-1","mediaSourceId":"ep-1","playMethod":"DirectPlay","announce":true,"positionTicks":33090000000,"isPaused":false,"visible":true}
+playback advance {"itemId":"ep-2","title":"Épisode 2"}

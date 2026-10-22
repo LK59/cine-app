@@ -1,0 +1,550 @@
+step ouverture à 2566
+source new
+trace attente de sourceopen
+trace MediaSource ouverte, création des tampons
+source addSourceBuffer video/mp4; codecs="hvc1.2.4.L150.90"
+source addSourceBuffer audio/mp4; codecs="ec-3"
+buffer vidéo append 1 1
+trace segment d'initialisation vidéo accepté
+buffer son append 1 2
+trace segment d'initialisation audio accepté
+remuxer seekTo 2566
+trace segment 1 construit — jusqu'à 2568.0 s, 1003 o vidéo en 1 fragment(s), 100 o audio
+source duration= 3600.2
+onSubtitles 1
+buffer vidéo append 1003 4
+buffer son append 100 104
+trace après envoi : tampon jusqu'à 2566.0 s, tête à 0.0 s
+trace segment 2 construit — jusqu'à 2570.0 s, 1004 o vidéo en 1 fragment(s), 101 o audio
+onSubtitles 1
+buffer vidéo append 1004 5
+buffer son append 101 105
+trace après envoi : tampon jusqu'à 2566.0 s, tête à 0.0 s
+trace segment 3 construit — jusqu'à 2572.0 s, 1005 o vidéo en 1 fragment(s), 102 o audio
+onSubtitles 1
+buffer vidéo append 1005 6
+buffer son append 102 106
+trace après envoi : tampon jusqu'à 2566.0 s, tête à 0.0 s
+trace segment 4 construit — jusqu'à 2574.0 s, 1006 o vidéo en 1 fragment(s), 100 o audio
+onSubtitles 1
+buffer vidéo append 1006 7
+buffer son append 100 107
+trace après envoi : tampon jusqu'à 2566.0 s, tête à 0.0 s
+onSubtitles 1
+buffer vidéo append 1000 8
+buffer son append 101 108
+trace après envoi : tampon jusqu'à 2566.0 s, tête à 0.0 s
+onSubtitles 1
+buffer vidéo append 1001 9
+buffer son append 102 109
+trace après envoi : tampon jusqu'à 2566.0 s, tête à 0.0 s
+onSubtitles 1
+buffer vidéo append 1002 10
+buffer son append 100 110
+onSubtitles 1
+buffer vidéo append 1003 11
+buffer son append 101 111
+trace saut demandé vers 2566.0 s (reprise 1) — tête à 0.0 s
+trace segment refusé, repris — (MediaSource open, readyState 4, réseau undefined)
+buffer vidéo remove 0 3601.2
+buffer son remove 0 3601.2
+trace vidage fait (vidéo 0 ms, audio 0 ms) — reste vidéo vide · audio vide
+remuxer seekTo 2565.8
+élément currentTime= 2566
+onSubtitles 1
+buffer vidéo append 1002 3
+buffer son append 102 103
+trace après envoi : tampon jusqu'à 2568.0 s, tête à 2566.0 s
+onSubtitles 1
+buffer vidéo append 1003 4
+buffer son append 100 104
+trace après envoi : tampon jusqu'à 2570.0 s, tête à 2566.0 s
+onSubtitles 1
+buffer vidéo append 1004 5
+buffer son append 101 105
+trace après envoi : tampon jusqu'à 2572.0 s, tête à 2566.0 s
+onSubtitles 1
+buffer vidéo append 1005 6
+buffer son append 102 106
+trace après envoi : tampon jusqu'à 2574.0 s, tête à 2566.0 s
+step saut à 2632
+trace saut demandé vers 2632.0 s (le viseur) — tête à 2566.0 s
+buffer vidéo remove 0 3601.2
+buffer son remove 0 3601.2
+trace vidage fait (vidéo 0 ms, audio 0 ms) — reste vidéo vide · audio vide
+remuxer seekTo 2631.8
+élément currentTime= 2632
+onSubtitles 1
+buffer vidéo append 1000 36
+buffer son append 102 136
+trace après envoi : tampon jusqu'à 2634.0 s, tête à 2632.0 s
+onSubtitles 1
+buffer vidéo append 1001 37
+buffer son append 100 137
+trace après envoi : tampon jusqu'à 2636.0 s, tête à 2632.0 s
+onSubtitles 1
+buffer vidéo append 1002 38
+buffer son append 101 138
+trace après envoi : tampon jusqu'à 2638.0 s, tête à 2632.0 s
+onSubtitles 1
+buffer vidéo append 1003 39
+buffer son append 102 139
+trace après envoi : tampon jusqu'à 2640.0 s, tête à 2632.0 s
+onSubtitles 1
+buffer vidéo append 1004 40
+buffer son append 100 140
+trace après envoi : tampon jusqu'à 2642.0 s, tête à 2632.0 s
+onSubtitles 1
+buffer vidéo append 1005 41
+buffer son append 101 141
+trace après envoi : tampon jusqu'à 2644.0 s, tête à 2632.0 s
+onSubtitles 1
+buffer vidéo append 1006 42
+buffer son append 102 142
+step lecture
+trace attente affichée (lecture demandée)
+onStarting 1792522800818
+step saut à 1294
+trace saut demandé vers 1294.0 s (le viseur) — tête à 2632.0 s
+buffer vidéo remove 0 3601.2
+buffer son remove 0 3601.2
+trace vidage fait (vidéo 0 ms, audio 0 ms) — reste vidéo vide · audio vide
+remuxer seekTo 1293.8
+élément currentTime= 1294
+onSubtitles 1
+buffer vidéo append 1003 135
+buffer son append 102 235
+trace après envoi : tampon jusqu'à 1296.0 s, tête à 1294.0 s
+onSubtitles 1
+buffer vidéo append 1004 136
+buffer son append 100 236
+trace après envoi : tampon jusqu'à 1298.0 s, tête à 1294.0 s
+onSubtitles 1
+buffer vidéo append 1005 137
+buffer son append 101 237
+trace après envoi : tampon jusqu'à 1300.0 s, tête à 1294.0 s
+onSubtitles 1
+buffer vidéo append 1006 138
+buffer son append 102 238
+trace après envoi : tampon jusqu'à 1302.0 s, tête à 1294.0 s
+onSubtitles 1
+buffer vidéo append 1000 139
+buffer son append 100 239
+trace après envoi : tampon jusqu'à 1304.0 s, tête à 1294.0 s
+onSubtitles 1
+buffer vidéo append 1001 140
+buffer son append 101 240
+trace après envoi : tampon jusqu'à 1306.0 s, tête à 1294.0 s
+onSubtitles 1
+buffer vidéo append 1002 141
+buffer son append 102 241
+onSubtitles 1
+buffer vidéo append 1003 142
+buffer son append 100 242
+onSubtitles 1
+buffer vidéo append 1004 143
+buffer son append 101 243
+onSubtitles 1
+buffer vidéo append 1005 144
+buffer son append 102 244
+trace saut parti ailleurs : visé 2632.0 s, tête à 1294.0 s — on y retourne — (MediaSource open, readyState 4, réseau undefined)
+onStall ["audioBuffered","diag","evictions","filling","frozenNudges","lead","netTrouble","networkState","onLine","position","readyState","recoveries","recoveryStreak","relaunch","runaway","seekTarget","seeking","sinceAppendMs","source","stalledMs","steps","streaming","videoBuffered"]
+trace saut demandé vers 2632.0 s (reprise 1) — tête à 1294.0 s
+buffer vidéo remove 0 3601.2
+buffer son remove 0 3601.2
+trace vidage fait (vidéo 0 ms, audio 0 ms) — reste vidéo vide · audio vide
+remuxer seekTo 2631.8
+élément currentTime= 2632
+onSubtitles 1
+buffer vidéo append 1000 36
+buffer son append 102 136
+trace après envoi : tampon jusqu'à 2634.0 s, tête à 2632.0 s
+onSubtitles 1
+buffer vidéo append 1001 37
+buffer son append 100 137
+trace après envoi : tampon jusqu'à 2636.0 s, tête à 2632.0 s
+onSubtitles 1
+buffer vidéo append 1002 38
+buffer son append 101 138
+trace après envoi : tampon jusqu'à 2638.0 s, tête à 2632.0 s
+onSubtitles 1
+buffer vidéo append 1003 39
+buffer son append 102 139
+trace après envoi : tampon jusqu'à 2640.0 s, tête à 2632.0 s
+onSubtitles 1
+buffer vidéo append 1004 40
+buffer son append 100 140
+trace après envoi : tampon jusqu'à 2642.0 s, tête à 2632.0 s
+onSubtitles 1
+buffer vidéo append 1005 41
+buffer son append 101 141
+trace après envoi : tampon jusqu'à 2644.0 s, tête à 2632.0 s
+onSubtitles 1
+buffer vidéo append 1006 42
+buffer son append 102 142
+onSubtitles 1
+buffer vidéo append 1000 43
+buffer son append 100 143
+onSubtitles 1
+buffer vidéo append 1001 44
+buffer son append 101 144
+onSubtitles 1
+buffer vidéo append 1002 45
+buffer son append 102 145
+onSubtitles 1
+buffer vidéo append 1003 46
+buffer son append 100 146
+onSubtitles 1
+buffer vidéo append 1004 47
+buffer son append 101 147
+onSubtitles 1
+buffer vidéo append 1005 48
+buffer son append 102 148
+onSubtitles 1
+buffer vidéo append 1006 49
+buffer son append 100 149
+onSubtitles 1
+buffer vidéo append 1000 50
+buffer son append 101 150
+trace attente levée (l'horloge a avancé)
+onStarting null
+onSubtitles 1
+buffer vidéo append 1001 51
+buffer son append 102 151
+step pause
+trace attente levée (mise en pause)
+onStarting null
+élément currentTime= 2635
+onSubtitles 1
+buffer vidéo append 1002 52
+buffer son append 100 152
+step saut à 1340
+trace saut demandé vers 1340.0 s (le viseur) — tête à 2635.0 s
+trace saut de l'élément vers 2635.0 s — vidéo 2632.00–2666.00 · audio 2632.00–2666.00
+trace saut demandé vers 2635.0 s (le viseur) — tête à 2635.0 s
+buffer vidéo remove 0 3601.2
+buffer son remove 0 3601.2
+trace vidage fait (vidéo 0 ms, audio 0 ms) — reste vidéo vide · audio vide
+remuxer seekTo 2634.8
+onSubtitles 1
+buffer vidéo append 1002 38
+buffer son append 101 138
+trace après envoi : tampon jusqu'à 2637.0 s, tête à 2635.0 s
+onSubtitles 1
+buffer vidéo append 1003 39
+buffer son append 102 139
+trace après envoi : tampon jusqu'à 2639.0 s, tête à 2635.0 s
+step pause
+trace attente levée (mise en pause)
+onStarting null
+élément currentTime= 2635
+onSubtitles 1
+buffer vidéo append 1004 40
+buffer son append 100 140
+trace après envoi : tampon jusqu'à 2641.0 s, tête à 2635.0 s
+onSubtitles 1
+buffer vidéo append 1005 41
+buffer son append 101 141
+trace après envoi : tampon jusqu'à 2643.0 s, tête à 2635.0 s
+onSubtitles 1
+buffer vidéo append 1006 42
+buffer son append 102 142
+trace après envoi : tampon jusqu'à 2645.0 s, tête à 2635.0 s
+step retour au réseau
+onSubtitles 1
+buffer vidéo append 1000 43
+buffer son append 100 143
+trace après envoi : tampon jusqu'à 2647.0 s, tête à 2635.0 s
+onSubtitles 1
+buffer vidéo append 1001 44
+buffer son append 101 144
+onSubtitles 1
+buffer vidéo append 1002 45
+buffer son append 102 145
+step retour au réseau
+onSubtitles 1
+buffer vidéo append 1003 46
+buffer son append 100 146
+onSubtitles 1
+buffer vidéo append 1004 47
+buffer son append 101 147
+step pause
+trace attente levée (mise en pause)
+onStarting null
+élément currentTime= 2635
+onSubtitles 1
+buffer vidéo append 1005 48
+buffer son append 102 148
+onSubtitles 1
+buffer vidéo append 1006 49
+buffer son append 100 149
+onSubtitles 1
+buffer vidéo append 1000 50
+buffer son append 101 150
+onSubtitles 1
+buffer vidéo append 1001 51
+buffer son append 102 151
+onSubtitles 1
+buffer vidéo append 1002 52
+buffer son append 100 152
+step pause
+trace attente levée (mise en pause)
+onStarting null
+élément currentTime= 2635
+step saut à 3382
+trace saut demandé vers 3382.0 s (le viseur) — tête à 2635.0 s
+buffer vidéo remove 0 3601.2
+buffer son remove 0 3601.2
+trace vidage fait (vidéo 0 ms, audio 0 ms) — reste vidéo vide · audio vide
+remuxer seekTo 3381.8
+élément currentTime= 3382
+élément currentTime= 3382
+onSubtitles 1
+buffer vidéo append 1004 155
+buffer son append 102 255
+trace après envoi : tampon jusqu'à 3384.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1005 156
+buffer son append 100 0
+trace après envoi : tampon jusqu'à 3386.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1006 157
+buffer son append 101 1
+trace après envoi : tampon jusqu'à 3388.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1000 158
+buffer son append 102 2
+trace après envoi : tampon jusqu'à 3390.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1001 159
+buffer son append 100 3
+trace après envoi : tampon jusqu'à 3392.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1002 160
+buffer son append 101 4
+trace après envoi : tampon jusqu'à 3394.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1003 161
+buffer son append 102 5
+onSubtitles 1
+buffer vidéo append 1004 162
+buffer son append 100 6
+onSubtitles 1
+buffer vidéo append 1005 163
+buffer son append 101 7
+onSubtitles 1
+buffer vidéo append 1006 164
+buffer son append 102 8
+onSubtitles 1
+buffer vidéo append 1000 165
+buffer son append 100 9
+onSubtitles 1
+buffer vidéo append 1001 166
+buffer son append 101 10
+onSubtitles 1
+buffer vidéo append 1002 167
+buffer son append 102 11
+onSubtitles 1
+buffer vidéo append 1003 168
+buffer son append 100 12
+onSubtitles 1
+buffer vidéo append 1004 169
+buffer son append 101 13
+step saut à 1333
+trace saut demandé vers 1333.0 s (le viseur) — tête à 3382.0 s
+trace saut de l'élément vers 3382.0 s — vidéo 3382.00–3412.00 · audio 3382.00–3412.00
+trace saut demandé vers 3382.0 s (le viseur) — tête à 3382.0 s
+buffer vidéo remove 0 3601.2
+buffer son remove 0 3601.2
+trace vidage fait (vidéo 0 ms, audio 0 ms) — reste vidéo vide · audio vide
+remuxer seekTo 3381.8
+onSubtitles 1
+buffer vidéo append 1004 155
+buffer son append 102 255
+trace après envoi : tampon jusqu'à 3384.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1005 156
+buffer son append 100 0
+trace après envoi : tampon jusqu'à 3386.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1006 157
+buffer son append 101 1
+trace après envoi : tampon jusqu'à 3388.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1000 158
+buffer son append 102 2
+trace après envoi : tampon jusqu'à 3390.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1001 159
+buffer son append 100 3
+trace après envoi : tampon jusqu'à 3392.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1002 160
+buffer son append 101 4
+trace après envoi : tampon jusqu'à 3394.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1003 161
+buffer son append 102 5
+onSubtitles 1
+buffer vidéo append 1004 162
+buffer son append 100 6
+onSubtitles 1
+buffer vidéo append 1005 163
+buffer son append 101 7
+onSubtitles 1
+buffer vidéo append 1006 164
+buffer son append 102 8
+onSubtitles 1
+buffer vidéo append 1000 165
+buffer son append 100 9
+onSubtitles 1
+buffer vidéo append 1001 166
+buffer son append 101 10
+onSubtitles 1
+buffer vidéo append 1002 167
+buffer son append 102 11
+onSubtitles 1
+buffer vidéo append 1003 168
+buffer son append 100 12
+step saut à 1211
+trace saut demandé vers 1211.0 s (le viseur) — tête à 3382.0 s
+trace saut de l'élément vers 3382.0 s — vidéo 3382.00–3410.00 · audio 3382.00–3410.00
+trace saut demandé vers 3382.0 s (le viseur) — tête à 3382.0 s
+buffer vidéo remove 0 3601.2
+buffer son remove 0 3601.2
+trace vidage fait (vidéo 0 ms, audio 0 ms) — reste vidéo vide · audio vide
+remuxer seekTo 3381.8
+onSubtitles 1
+buffer vidéo append 1004 155
+buffer son append 102 255
+trace après envoi : tampon jusqu'à 3384.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1005 156
+buffer son append 100 0
+trace après envoi : tampon jusqu'à 3386.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1006 157
+buffer son append 101 1
+trace après envoi : tampon jusqu'à 3388.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1000 158
+buffer son append 102 2
+trace après envoi : tampon jusqu'à 3390.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1001 159
+buffer son append 100 3
+trace après envoi : tampon jusqu'à 3392.0 s, tête à 3382.0 s
+step quota
+onSubtitles 1
+buffer vidéo append 1002 160
+buffer son append 101 4 QuotaExceededError
+trace éviction demandée à 3382.0 s — image jusqu'à 3352.0 s, son jusqu'à 3352.0 s
+trace tampon plein à 10.0 s : on vise 8 s pour ce fichier
+trace saut demandé vers 3382.0 s (reprise 1) — tête à 3382.0 s
+trace segment refusé, repris — (MediaSource open, readyState 4, réseau undefined)
+buffer vidéo remove 0 3601.2
+buffer son remove 0 3601.2
+trace vidage fait (vidéo 0 ms, audio 0 ms) — reste vidéo vide · audio vide
+remuxer seekTo 3381.8
+onSubtitles 1
+buffer vidéo append 1004 155
+buffer son append 102 255
+trace après envoi : tampon jusqu'à 3384.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1005 156
+buffer son append 100 0
+trace après envoi : tampon jusqu'à 3386.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1006 157
+buffer son append 101 1
+trace après envoi : tampon jusqu'à 3388.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1000 158
+buffer son append 102 2
+trace après envoi : tampon jusqu'à 3390.0 s, tête à 3382.0 s
+step pause
+trace attente levée (mise en pause)
+onStarting null
+élément currentTime= 3382
+step retour au réseau
+step saut à 758
+trace saut demandé vers 758.0 s (le viseur) — tête à 3382.0 s
+trace saut de l'élément vers 3382.0 s — vidéo 3382.00–3390.00 · audio 3382.00–3390.00
+trace saut demandé vers 3382.0 s (le viseur) — tête à 3382.0 s
+buffer vidéo remove 0 3601.2
+buffer son remove 0 3601.2
+trace vidage fait (vidéo 0 ms, audio 0 ms) — reste vidéo vide · audio vide
+remuxer seekTo 3381.8
+onSubtitles 1
+buffer vidéo append 1004 155
+buffer son append 102 255
+trace après envoi : tampon jusqu'à 3384.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1005 156
+buffer son append 100 0
+trace après envoi : tampon jusqu'à 3386.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1006 157
+buffer son append 101 1
+trace après envoi : tampon jusqu'à 3388.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1000 158
+buffer son append 102 2
+trace après envoi : tampon jusqu'à 3390.0 s, tête à 3382.0 s
+step lecture
+trace attente affichée (lecture demandée)
+onStarting 1792522822851
+step attente
+step saut à 639
+trace saut demandé vers 639.0 s (le viseur) — tête à 3382.0 s
+trace saut de l'élément vers 3382.0 s — vidéo 3382.00–3390.00 · audio 3382.00–3390.00
+trace saut demandé vers 3382.0 s (le viseur) — tête à 3382.0 s
+buffer vidéo remove 0 3601.2
+buffer son remove 0 3601.2
+trace vidage fait (vidéo 0 ms, audio 0 ms) — reste vidéo vide · audio vide
+remuxer seekTo 3381.8
+onSubtitles 1
+buffer vidéo append 1004 155
+buffer son append 102 255
+trace après envoi : tampon jusqu'à 3384.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1005 156
+buffer son append 100 0
+trace après envoi : tampon jusqu'à 3386.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1006 157
+buffer son append 101 1
+trace après envoi : tampon jusqu'à 3388.0 s, tête à 3382.0 s
+onSubtitles 1
+buffer vidéo append 1000 158
+buffer son append 102 2
+trace après envoi : tampon jusqu'à 3390.0 s, tête à 3382.0 s
+trace horloge figée à 3382.00 s avec 8.0 s en avance — on redemande la position
+élément currentTime= 3382.08
+trace attente levée (l'horloge a avancé)
+onStarting null
+step saut à 2047
+trace saut demandé vers 2047.0 s (le viseur) — tête à 3383.1 s
+trace saut de l'élément vers 3383.1 s — vidéo 3382.00–3390.00 · audio 3382.00–3390.00
+trace saut demandé vers 3383.1 s (le viseur) — tête à 3383.1 s
+buffer vidéo remove 0 3601.2
+buffer son remove 0 3601.2
+trace vidage fait (vidéo 0 ms, audio 0 ms) — reste vidéo vide · audio vide
+remuxer seekTo 3382.88
+onSubtitles 1
+buffer vidéo append 1005 156
+buffer son append 100 0
+trace après envoi : tampon jusqu'à 3385.1 s, tête à 3383.1 s
+onSubtitles 1
+buffer vidéo append 1006 157
+buffer son append 101 1
+trace après envoi : tampon jusqu'à 3387.1 s, tête à 3383.1 s
+onSubtitles 1
+buffer vidéo append 1000 158
+buffer son append 102 2
+trace après envoi : tampon jusqu'à 3389.1 s, tête à 3383.1 s
+onSubtitles 1
+buffer vidéo append 1001 159
+buffer son append 100 3
+trace après envoi : tampon jusqu'à 3391.1 s, tête à 3383.1 s
+état {"lost":false,"seekPending":false,"position":3383.08,"lead":8,"delay":0.2,"buffers":[[[3383.08,3391.08]],[[3383.08,3391.08]]]}

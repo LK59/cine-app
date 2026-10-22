@@ -1,0 +1,68 @@
+fetch GET /api/subtitle-gen/options?itemId=film-1
+fetch GET /api/jellyfin/playback-state/film-1
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522800000,"fields":{"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"non décidé","why":"lost","at":120,"watched":0,"ended":false,"rebuild":0,"gaveUpAfterMs":0,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{}},"account":null}
+fetch GET /api/player/frame/film-1
+step monté
+probe {"audioPreferences":null,"audioTrackNumber":null,"fileVersion":null,"startPaused":false,"startSeconds":120,"streamUrl":"/stream.mkv","videoRangeType":"SDR"}
+log start {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","reason":"remultiplexage → lecteur natif","openedInMs":0,"at":120,"rebuild":0,"displayHdr":"inconnu","hdrLightCap":"natif","hdrChoice":"auto","wideGamut":"inconnu"}
+media video play
+fetch GET /api/jellyfin/chapters?itemId=film-1
+fetch GET /api/jellyfin/trickplay/info?itemId=film-1
+fetch POST /api/jellyfin/playback/playing {"client":"CineEngine By CineApp","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1200000000,"isPaused":false,"visible":true}
+storage local set cine:player-volume {"volume":1,"muted":false}
+storage local set cine:player-volume {"volume":1,"muted":false}
+dom ouverture
+    video
+    h1 "Un film"
+    p "player.experimental.resumeAt:{\"time\":\"2 min 00\"}"
+    button "common.close"
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Un film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=0 valuetext=player.seekValue:{"at":"0:00","total":"0:00"}
+trace élément : repart à 120.00 s
+storage local set cine:last-watched {"film-1":1792522800000,"ep-1":1792522800000}
+step première image
+dom première image
+    video
+    h1 "Un film"
+    p "player.experimental.resumeAt:{\"time\":\"2 min 00\"}"
+    button "common.close"
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Un film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=120 valuetext=player.seekValue:{"at":"2:00","total":"1:00:00"}
+log opening {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","firstMoveMs":0,"infoMs":0,"steps":""}
+step pagehide bfcache
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522810000,"fields":{"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","why":"lost","at":130,"watched":10,"ended":false,"rebuild":0,"audio":1,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{"netMB":0,"recvMbps":0,"linkMbps":0,"linkBusyPct":0,"req":0,"readWaitS":0,"buildS":0,"audioS":0,"appendS":0,"longTaskS":0,"longTasks":0,"lagMaxMs":0,"slowestMs":0,"linkVerdict":"inconnue","linkS":0,"cores":12}},"account":null}
+beacon /api/player/log stop {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","why":"page","at":130,"watched":10,"ended":false,"rebuild":0,"audio":1,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{"netMB":0,"recvMbps":0,"linkMbps":0,"linkBusyPct":0,"req":0,"readWaitS":0,"buildS":0,"audioS":0,"appendS":0,"longTaskS":0,"longTasks":0,"lagMaxMs":0,"slowestMs":0,"linkVerdict":"inconnue","linkS":0,"cores":12},"timeline":"124,5,0,0,-,L;129,10,0,0,-,L;130,10,0,0,-,L"}
+storage local remove cine:unsent-stop:00000001
+keepOnStop
+fetch POST /api/jellyfin/playback/stop {"client":"CineEngine By CineApp","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1300000000,"isPaused":false,"visible":true}
+step pageshow
+storage local set cine:last-watched {"film-1":1792522816000,"ep-1":1792522800000}
+step démontage
+abort GET /api/subtitle-gen/options?itemId=film-1
+beacon /api/player/log stop {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","why":"unmount","at":133,"watched":18,"ended":false,"rebuild":0,"audio":1,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{"netMB":0,"recvMbps":0,"linkMbps":0,"linkBusyPct":0,"req":0,"readWaitS":0,"buildS":0,"audioS":0,"appendS":0,"longTaskS":0,"longTasks":0,"lagMaxMs":0,"slowestMs":0,"linkVerdict":"inconnue","linkS":0,"cores":12},"timeline":"124,5,0,0,-,L;129,10,0,0,-,L;130,10,0,0,-,L;130,15,0,0,-,L;133,18,0,-,-,A"}
+keepOnStop
+fetch POST /api/jellyfin/playback/stop {"client":"CineEngine By CineApp","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1330000000,"isPaused":false,"visible":true}
+remux destroy
+abort GET /api/player/frame/film-1

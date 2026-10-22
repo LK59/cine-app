@@ -1,0 +1,139 @@
+fetch GET /api/jellyfin/chapters?itemId=film
+fetch GET /api/jellyfin/trickplay/info?itemId=film
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522800000,"fields":{"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":120,"watched":0,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0,"gaveUpAfterMs":0},"account":null}
+step monté
+storage local set cine:player-volume {"volume":1,"muted":false}
+storage local set cine:player-volume {"volume":1,"muted":false}
+fetch POST /api/jellyfin/playback/start {"itemId":"film","maxBitrate":100000000,"startTicks":1200000000,"codecSupport":{},"disableAudioCodecs":[],"forCast":false,"nativeHls":true}
+log start {"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","why":"open","path":"serveur","reason":"transcodé par le serveur","hls":"natif","at":120,"startup":{"negotiateMs":0}}
+media video src= /api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf
+media video load
+media video play
+dom ouverture
+    video
+    track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false
+    track kind=subtitles srclang=eng label=Anglais — player.trackLabel.full src=/api/jellyfin/stream/film/subs/4.vtt default=false
+    h1 "Film"
+    p "player.experimental.resumeAt:{\"time\":\"2 min 00\"}"
+    button "common.close"
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    p "Film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=0 valuetext=player.seekValue:{"at":"0:00","total":"0:00"}
+media video currentTime= 120
+storage local set cine:last-watched {"film":1792522800000,"ep-1":1792522800000}
+step première image
+dom première image
+    video
+    track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false
+    track kind=subtitles srclang=eng label=Anglais — player.trackLabel.full src=/api/jellyfin/stream/film/subs/4.vtt default=false
+    h1 "Film"
+    p "player.experimental.resumeAt:{\"time\":\"2 min 00\"}"
+    button "common.close"
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=120 valuetext=player.seekValue:{"at":"2:00","total":"1:00:00"}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1200000000,"isPaused":false,"visible":true}
+step caché 3 s
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522810000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":130,"watched":10,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":1,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1300000000,"isPaused":false,"visible":false}
+storage local set cine:last-watched {"film":1792522815500,"ep-1":1792522800000}
+step caché 10 min
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522815500,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":16,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":3000,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522830000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":30,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":17500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522860000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":60,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":47500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522890000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":90,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":77500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522920000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":120,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":107500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522950000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":150,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":137500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522980000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":180,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":167500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523010000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":210,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":197500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523040000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":240,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":227500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523070000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":270,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":257500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523100000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":300,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":287500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523130000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":330,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":317500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523160000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":360,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":347500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523190000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":390,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":377500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523220000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":420,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":407500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523250000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":450,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":437500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523280000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":480,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":467500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523310000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":510,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":497500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523340000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":540,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":527500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523370000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":570,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":557500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+storage local set cine:unsent-stop:00000001 {"savedAt":1792523400000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":132,"watched":600,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":587500,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":false}
+dom au retour
+    video
+    track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false
+    track kind=subtitles srclang=eng label=Anglais — player.trackLabel.full src=/api/jellyfin/stream/film/subs/4.vtt default=false
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=132 valuetext=player.seekValue:{"at":"2:12","total":"1:00:00"}
+step croix
+beacon /api/player/log stop {"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"close","at":132,"watched":618,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":2,"backgroundMs":603000,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0,"timeline":"132,505,0,0,-,H;132,510,0,0,-,H;132,515,0,0,-,H;132,520,0,0,-,H;132,525,0,0,-,H;132,530,0,0,-,H;132,535,0,0,-,H;132,540,0,0,-,H;132,545,0,0,-,H;132,550,0,0,-,H;132,555,0,0,-,H;132,560,0,0,-,H;132,565,0,0,-,H;132,570,0,0,-,H;132,575,0,0,-,H;132,580,0,0,-,H;132,585,0,0,-,H;132,590,0,0,-,H;132,595,0,0,-,H;132,600,0,0,-,H;132,605,0,0,-,H;132,610,0,0,-,H;132,615,0,0,-,H;132,618,0,0,-,L"}
+storage local remove cine:unsent-stop:00000001
+fetch POST /api/jellyfin/playback/stop {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":true}
+refreshAfterPlayback {}
+playback close 1
+dom fermé
+    video
+    track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false
+    track kind=subtitles srclang=eng label=Anglais — player.trackLabel.full src=/api/jellyfin/stream/film/subs/4.vtt default=false
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=132 valuetext=player.seekValue:{"at":"2:12","total":"1:00:00"}

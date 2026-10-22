@@ -1,0 +1,165 @@
+step ouverture à 0
+source new
+trace attente de sourceopen
+trace MediaSource ouverte, création des tampons
+source addSourceBuffer video/mp4; codecs="hvc1.2.4.L150.90"
+source addSourceBuffer audio/mp4; codecs="ec-3"
+buffer vidéo append 1 1
+trace segment d'initialisation vidéo accepté
+buffer son append 1 2
+trace segment d'initialisation audio accepté
+trace segment 1 construit — jusqu'à 2.0 s, 1001 o vidéo en 1 fragment(s), 101 o audio
+source duration= 3600.2
+onSubtitles 1
+buffer vidéo append 1001 1
+buffer son append 101 101
+trace après envoi : tampon jusqu'à 2.0 s, tête à 0.0 s
+trace segment 2 construit — jusqu'à 4.0 s, 1002 o vidéo en 1 fragment(s), 102 o audio
+onSubtitles 1
+buffer vidéo append 1002 2
+buffer son append 102 102
+trace après envoi : tampon jusqu'à 4.0 s, tête à 0.0 s
+trace segment 3 construit — jusqu'à 6.0 s, 1003 o vidéo en 1 fragment(s), 100 o audio
+onSubtitles 1
+buffer vidéo append 1003 3
+buffer son append 100 103
+trace après envoi : tampon jusqu'à 6.0 s, tête à 0.0 s
+trace segment 4 construit — jusqu'à 8.0 s, 1004 o vidéo en 1 fragment(s), 101 o audio
+onSubtitles 1
+buffer vidéo append 1004 4
+buffer son append 101 104
+trace après envoi : tampon jusqu'à 8.0 s, tête à 0.0 s
+onSubtitles 1
+buffer vidéo append 1005 5
+buffer son append 102 105
+trace après envoi : tampon jusqu'à 10.0 s, tête à 0.0 s
+onSubtitles 1
+buffer vidéo append 1006 6
+buffer son append 100 106
+trace après envoi : tampon jusqu'à 12.0 s, tête à 0.0 s
+onSubtitles 1
+buffer vidéo append 1000 7
+buffer son append 101 107
+onSubtitles 1
+buffer vidéo append 1001 8
+buffer son append 102 108
+onSubtitles 1
+buffer vidéo append 1002 9
+buffer son append 100 109
+onSubtitles 1
+buffer vidéo append 1003 10
+buffer son append 101 110
+onSubtitles 1
+buffer vidéo append 1004 11
+buffer son append 102 111
+onSubtitles 1
+buffer vidéo append 1005 12
+buffer son append 100 112
+état {"lost":false,"seekPending":false,"position":0,"lead":24,"delay":0.2,"buffers":[[[0,24]],[[0,24]]]}
+onSubtitles 1
+buffer vidéo append 1006 13
+buffer son append 101 113
+onSubtitles 1
+buffer vidéo append 1000 14
+buffer son append 102 114
+onSubtitles 1
+buffer vidéo append 1001 15
+buffer son append 100 115
+trace horloge figée à 0.00 s avec 30.0 s en avance — on redemande la position
+élément currentTime= 0.08
+onSubtitles 1
+buffer vidéo append 1002 16
+buffer son append 101 116
+onSubtitles 1
+buffer vidéo append 1003 17
+buffer son append 102 117
+onSubtitles 1
+buffer vidéo append 1004 18
+buffer son append 100 118
+onSubtitles 1
+buffer vidéo append 1005 19
+buffer son append 101 119
+onSubtitles 1
+buffer vidéo append 1006 20
+buffer son append 102 120
+onSubtitles 1
+buffer vidéo append 1000 21
+buffer son append 100 121
+onSubtitles 1
+buffer vidéo append 1001 22
+buffer son append 101 122
+onSubtitles 1
+buffer vidéo append 1002 23
+buffer son append 102 123
+onSubtitles 1
+buffer vidéo append 1003 24
+buffer son append 100 124
+onSubtitles 1
+buffer vidéo append 1004 25
+buffer son append 101 125
+onSubtitles 1
+buffer vidéo append 1005 26
+buffer son append 102 126
+onSubtitles 1
+buffer vidéo append 1006 27
+buffer son append 100 127
+onSubtitles 1
+buffer vidéo append 1000 28
+buffer son append 101 128
+onSubtitles 1
+buffer vidéo append 1001 29
+buffer son append 102 129
+onSubtitles 1
+buffer vidéo append 1002 30
+buffer son append 100 130
+onSubtitles 1
+buffer vidéo append 1003 31
+buffer son append 101 131
+onSubtitles 1
+buffer vidéo append 1004 32
+buffer son append 102 132
+onSubtitles 1
+buffer vidéo append 1005 33
+buffer son append 100 133
+onSubtitles 1
+buffer vidéo append 1006 34
+buffer son append 101 134
+onSubtitles 1
+buffer vidéo append 1000 35
+buffer son append 102 135
+onSubtitles 1
+buffer vidéo append 1001 36
+buffer son append 100 136
+onSubtitles 1
+buffer vidéo append 1002 37
+buffer son append 101 137
+onSubtitles 1
+buffer vidéo append 1003 38
+buffer son append 102 138
+onSubtitles 1
+buffer vidéo append 1004 39
+buffer son append 100 139
+onSubtitles 1
+buffer vidéo append 1005 40
+buffer son append 101 140
+onSubtitles 1
+buffer vidéo append 1006 41
+buffer son append 102 141
+onSubtitles 1
+buffer vidéo append 1000 42
+buffer son append 100 142
+onSubtitles 1
+buffer vidéo append 1001 43
+buffer son append 101 143
+onSubtitles 1
+buffer vidéo append 1002 44
+buffer son append 102 144
+onSubtitles 1
+buffer vidéo append 1003 45
+buffer son append 100 145
+état {"lost":false,"seekPending":false,"position":60.08,"lead":29.92,"delay":0.2,"buffers":[[[0,90]],[[0,90]]]}
+step destruction
+trace attente levée (lecteur détruit)
+onStarting null
+source endOfStream
+élément removeAttribute src

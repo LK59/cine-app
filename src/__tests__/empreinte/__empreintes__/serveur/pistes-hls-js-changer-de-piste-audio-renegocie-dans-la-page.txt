@@ -1,0 +1,122 @@
+fetch GET /api/jellyfin/chapters?itemId=film
+fetch GET /api/jellyfin/trickplay/info?itemId=film
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522800000,"fields":{"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":120,"watched":0,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0,"gaveUpAfterMs":0},"account":null}
+step monté
+storage local set cine:player-volume {"volume":1,"muted":false}
+storage local set cine:player-volume {"volume":1,"muted":false}
+fetch POST /api/jellyfin/playback/start {"itemId":"film","maxBitrate":100000000,"startTicks":1200000000,"codecSupport":{},"disableAudioCodecs":[],"forCast":false,"nativeHls":false}
+log start {"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","why":"open","path":"serveur","reason":"transcodé par le serveur","hls":"hls.js","at":120,"startup":{"negotiateMs":0}}
+hls 1 new {"backBufferLength":90,"maxBufferLength":30,"maxMaxBufferLength":90}
+hls 1 loadSource /api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf
+hls 1 attachMedia
+dom ouverture
+    video
+    track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false
+    track kind=subtitles srclang=eng label=Anglais — player.trackLabel.full src=/api/jellyfin/stream/film/subs/4.vtt default=false
+    h1 "Film"
+    p "player.experimental.resumeAt:{\"time\":\"2 min 00\"}"
+    button "common.close"
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    p "Film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=0 valuetext=player.seekValue:{"at":"0:00","total":"0:00"}
+media video currentTime= 120
+storage local set cine:last-watched {"film":1792522800000,"ep-1":1792522800000}
+step première image
+dom première image
+    video
+    track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false
+    track kind=subtitles srclang=eng label=Anglais — player.trackLabel.full src=/api/jellyfin/stream/film/subs/4.vtt default=false
+    h1 "Film"
+    p "player.experimental.resumeAt:{\"time\":\"2 min 00\"}"
+    button "common.close"
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=120 valuetext=player.seekValue:{"at":"2:00","total":"1:00:00"}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1200000000,"isPaused":false,"visible":true}
+step audio → anglais
+dom menu player.audio
+    video
+    track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false
+    track kind=subtitles srclang=eng label=Anglais — player.trackLabel.full src=/api/jellyfin/stream/film/subs/4.vtt default=false
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "Français — 5.1"
+    button "Anglais — 2.0"
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=130 valuetext=player.seekValue:{"at":"2:10","total":"1:00:00"}
+step choix Anglais — 2.0
+fetch POST /api/player/series-language {"itemId":"film","language":"eng"}
+fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1300000000,"isPaused":false,"visible":true}
+hls 1 destroy
+fetch POST /api/jellyfin/playback/start {"itemId":"film","maxBitrate":100000000,"audioStreamIndex":2,"startTicks":1300000000,"codecSupport":{},"disableAudioCodecs":[],"forCast":false,"nativeHls":false}
+log start {"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","why":"audio","path":"serveur","reason":"transcodé par le serveur","hls":"hls.js","at":130,"audioStreamIndex":2,"startup":{"negotiateMs":0}}
+hls 2 new {"backBufferLength":90,"maxBufferLength":30,"maxMaxBufferLength":90}
+hls 2 loadSource /api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf
+hls 2 attachMedia
+media video currentTime= 130
+dom après changement
+    video
+    track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false
+    track kind=subtitles srclang=eng label=Anglais — player.trackLabel.full src=/api/jellyfin/stream/film/subs/4.vtt default=false
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=130 valuetext=player.seekValue:{"at":"2:10","total":"1:00:00"}
+step croix
+beacon /api/player/log stop {"diag":{"resumeAt":130,"resumeSeekMs":1000},"startup":{"negotiateMs":0,"bufferedMs":1000,"pictureMs":1000,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"close","at":132,"watched":13,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":1,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":1,"restartWhy":"audio×1","timeline":"124,5,0,0,-,L;129,10,0,0,-,L;132,13,0,0,-,L"}
+storage local remove cine:unsent-stop:00000001
+fetch POST /api/jellyfin/playback/stop {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1320000000,"isPaused":false,"visible":true}
+refreshAfterPlayback {}
+playback close 1
+dom fermé
+    video
+    track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false
+    track kind=subtitles srclang=eng label=Anglais — player.trackLabel.full src=/api/jellyfin/stream/film/subs/4.vtt default=false
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=132 valuetext=player.seekValue:{"at":"2:12","total":"1:00:00"}

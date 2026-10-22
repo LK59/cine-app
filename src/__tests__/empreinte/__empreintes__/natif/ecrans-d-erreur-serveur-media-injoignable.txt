@@ -1,0 +1,11 @@
+fetch GET /api/subtitle-gen/options?itemId=film-1
+fetch GET /api/jellyfin/playback-state/film-1
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522800000,"fields":{"itemId":"film-1","title":"Un film","container":"?","video":"? ?x? ?bit","range":"SDR","agent":"<agent>","session":"00000001","path":"non décidé","why":"lost","at":120,"watched":0,"ended":false,"rebuild":0,"gaveUpAfterMs":0,"error":"player.libraryUnreachable","waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{}},"account":null}
+fetch GET /api/player/frame/film-1
+dom injoignable
+    video
+    p "player.experimental.title"
+    p "player.libraryUnreachable"
+    div[role=status] "rapport"
+    button "player.experimental.switchToStable"
+    button "common.close"

@@ -683,6 +683,7 @@ watched and how far — see [Playback reporting](#playback-reporting).
 - [User-facing messages](#user-facing-messages)
 - [Diagnostics](#diagnostics)
 - [Verification harness](#verification-harness)
+- [Refactoring the player](#refactoring-the-player)
 - [Known limitations](#known-limitations)
 - [File map](#file-map)
 
@@ -2070,6 +2071,22 @@ them; only remuxing the files themselves would, and those belong to Radarr.
 
 Synthetic tests pass on files real ones fail; this harness exists because that gap is where the
 original defects lived.
+
+---
+
+## Refactoring the player
+
+`src/__tests__/empreinte/` is a behaviour fingerprint of the player: both hosts with their real
+controls, and `MseSource`, driven through scripted scenarios (opening, seeks, pause, track changes,
+subtitles, background, network loss, slow link, handover, cast, next episode, close, error
+screens). Each scenario writes one ordered thread — every log line with all its fields, every
+request, every storage write, every order given to the element and to what lies under the host,
+the local trace, and a summary of the controls' DOM — compared against a committed text file.
+Timers, clock and random draws are faked, so the thread is deterministic.
+
+The rule: **a pure move must not change any fingerprint**; a deliberate behaviour change updates
+the fingerprints in its own commit, with the reason. The folder's `README.md` lists what is
+recorded and how to run it.
 
 ---
 

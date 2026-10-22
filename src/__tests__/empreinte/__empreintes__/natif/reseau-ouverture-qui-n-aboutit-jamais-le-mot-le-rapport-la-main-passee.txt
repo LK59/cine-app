@@ -1,0 +1,33 @@
+fetch GET /api/subtitle-gen/options?itemId=film-1
+fetch GET /api/jellyfin/playback-state/film-1
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522800000,"fields":{"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"non décidé","why":"lost","at":120,"watched":0,"ended":false,"rebuild":0,"gaveUpAfterMs":0,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{}},"account":null}
+fetch GET /api/player/frame/film-1
+probe {"audioPreferences":null,"audioTrackNumber":null,"fileVersion":null,"startPaused":false,"startSeconds":120,"streamUrl":"/stream.mkv","videoRangeType":"SDR"}
+dom à 8 s
+    video
+    h1 "Un film"
+    p "player.experimental.resumeAt:{\"time\":\"2 min 00\"}"
+    p "player.experimental.stillWorking"
+    button "common.close"
+dom à 12 s
+    video
+    h1 "Un film"
+    p "player.experimental.resumeAt:{\"time\":\"2 min 00\"}"
+    p "player.experimental.stillWorking"
+    button "common.close"
+dom à 15 s
+    video
+    h1 "Un film"
+    p "player.experimental.resumeAt:{\"time\":\"2 min 00\"}"
+    p "player.experimental.stillWorking"
+    button "common.close"
+storage local set cine:unsent-stop-alive:00000001 1792522830000
+storage local remove cine:unsent-stop:00000001
+storage local remove cine:unsent-stop-alive:00000001
+trace repli : passage au lecteur stable — aucune image après 35 s
+log fallback {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","reason":"aucune image après 35 s","path":"non décidé","watched":0,"timeline":"120,5,0,0,-,P;120,10,0,0,-,P;120,15,0,0,-,P;120,20,0,0,-,P;120,25,0,0,-,P;120,30,0,0,-,P;120,35,0,0,-,P"}
+onFallback aucune image après 35 s null
+dom après 36 s
+    video
+    p "player.experimental.stillWorking"
+    div[role=status] "rapport"
