@@ -50,7 +50,20 @@ interface Saved {
 /** Un bilan d'un autre compte attend son retour — une semaine, pas davantage. */
 const OTHER_ACCOUNT_KEEP_MS = 7 * 24 * 3600_000;
 
-export function saveUnsentStop(session: string, fields: Record<string, unknown>, now = Date.now()): void {
+/**
+ * Les séances que cette page fait vivre en ce moment (22/10/2026).
+ *
+ * Un Mac endormi quatre heures au milieu d'un film ne donne aucun signe de vie ; à son réveil, la
+ * minuterie de `flushOrphanStops` passait avant celle de la séance, trouvait le bilan en plan et
+ * l'envoyait comme perdu — suivi une seconde plus tard du vrai `stop "close"` de la même séance
+ * (13 séances ainsi dans le journal d'octobre). Une séance que cette page tient encore n'est pas
+ * perdue, quel que soit son silence : seule une page tuée, dont ce module disparaît avec elle, en
+ * laisse une à renvoyer au lancement suivant.
+ */
+const livingHere = new Set<string>();
+
+export function saveUnsentStop(session: string, fields: Record<string, unknown>, now = Date.now(), { livesHere = false }: { livesHere?: boolean } = {}): void {
+  if (livesHere) livingHere.add(session);
   try {
     // Le build de la séance, gardé avec elle : le bilan part au lancement suivant, qui peut tourner
     // sur un autre code.
@@ -77,6 +90,7 @@ export function touchUnsentStop(session: string, now = Date.now()): void {
 }
 
 export function clearUnsentStop(session: string): void {
+  livingHere.delete(session);
   try {
     localStorage.removeItem(PREFIX + session);
     localStorage.removeItem(ALIVE_PREFIX + session);
@@ -119,6 +133,8 @@ export function findOrphanStops(now = Date.now(), account: string | null = persi
         localStorage.removeItem(ALIVE_PREFIX + key.slice(PREFIX.length));
         continue;
       }
+      // Tenue par cette page : vivante, même endormie — voir `livingHere`.
+      if (livingHere.has(key.slice(PREFIX.length))) continue;
       // Vivante tant que la séance donne signe de vie, même sans réécrire son bilan.
       const aliveAt = lastAlive(key, saved.savedAt);
       if (now - aliveAt < ORPHAN_AFTER_MS) continue;

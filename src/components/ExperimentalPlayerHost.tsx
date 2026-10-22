@@ -1866,7 +1866,7 @@ export function ExperimentalPlayerHost({
     let savedSignature: string | null = null;
     const save = (exact: boolean) => {
       if (!lifecycle.keepsUnsentStop()) return;
-      saveUnsentStop(sessionId, stopFields("lost", { exact }));
+      saveUnsentStop(sessionId, stopFields("lost", { exact }), Date.now(), { livesHere: true });
       savedSignature = signature();
     };
     const refresh = () => {

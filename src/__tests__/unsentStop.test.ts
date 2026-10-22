@@ -148,4 +148,24 @@ describe("un appareil partagé", () => {
       expect(localStorage.length).toBe(0);
     });
   });
+
+  describe("une séance que la page tient encore (22/10/2026)", () => {
+    // Un Mac endormi quatre heures en plein film : au réveil, le bilan partait « perdu » une seconde
+    // avant le vrai `stop "close"` de la même séance.
+    it("n'est jamais déclarée perdue par cette page, même après un long silence", async () => {
+      saveUnsentStop("vive", { itemId: "a" }, 0, { livesHere: true });
+      expect(findOrphanStops(4 * 3600_000)).toEqual([]);
+      const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+      await flushOrphanStops(4 * 3600_000);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("son arrêt la rend : un bilan resté ensuite redevient un bilan perdu", () => {
+      saveUnsentStop("vive", { itemId: "a" }, 0, { livesHere: true });
+      clearUnsentStop("vive");
+      saveUnsentStop("vive", { itemId: "a" }, 0);
+      expect(findOrphanStops(ORPHAN_AFTER_MS + 1)).toHaveLength(1);
+    });
+  });
 });
