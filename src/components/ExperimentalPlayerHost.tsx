@@ -82,37 +82,8 @@ import { useFrameFit } from "@/lib/frameFit";
 import { readDialogueMode, writeDialogueMode } from "@/lib/dialoguePreference";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import { noteWatching, openingPosition, rewound, AWAY_MS } from "@/lib/resumeRewind";
-import { warmNextEpisode } from "@/lib/nextEpisodeWarmup";
-import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
-
-/** À combien de la fin l'épisode suivant est préparé : de quoi finir bien avant le décompte. */
-const NEXT_EPISODE_WARMUP_SECONDS = 60;
-
-/**
- * L'épisode suivant, préparé une fois qu'on approche de la fin — voir `nextEpisodeWarmup.ts`.
- *
- * « La fin », c'est le générique quand on le connaît : c'est lui qui déclenche l'enchaînement, dix
- * secondes après. Comptée depuis la fin du fichier, la préparation arrivait après le passage pour
- * un générique de plus de 70 s. Et l'état du spectateur est redemandé tant qu'on attend (la
- * demande se limite elle-même à une toutes les 30 s) : préparé une minute avant, il était jugé
- * périmé au moment d'ouvrir, et redemandé (relu le 24/09/2026).
- */
-/**
- * La copie de secours du bilan (`unsentStop`) est réécrite quand la séance a gagné ce temps regardé
- * sans autre événement — ce qu'un plantage en plein écran perdrait au plus de `watched` (13/10/2026).
- */
-const UNSENT_STOP_WATCHED_STEP_S = 120;
-
-function warmNextNear(nextId: string | null, position: number, duration: number, creditsStart: number | null): void {
-  if (!nextId || !(duration > 0)) return;
-  const endsAt = creditsStart !== null && creditsStart > 0 && creditsStart < duration ? creditsStart : duration;
-  if (endsAt - position > NEXT_EPISODE_WARMUP_SECONDS) return;
-  void warmNextEpisode(nextId);
-  prefetchPlaybackState(nextId);
-}
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { PlayerTrack } from "@/lib/webcodecs/playerTrack";
-import type { RecoveryFacts } from "@/lib/webcodecs/mseSource";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 import type { PlaybackState } from "@/app/api/jellyfin/playback-state/[itemId]/route";
 import {
@@ -121,16 +92,10 @@ import {
   toPlayerTrack as externalToPlayerTrack,
   type ExternalSubtitleSource,
 } from "@/lib/webcodecs/externalSubtitles";
-import { chooseAudioTrack, chooseSubtitleTrack, normaliseLanguage, toJellyfinLanguage, trackLanguage } from "@/lib/trackPreferences";
+import { chooseAudioTrack, chooseSubtitleTrack, toJellyfinLanguage, trackLanguage } from "@/lib/trackPreferences";
 import { noteSeriesLanguage } from "@/lib/noteSeriesLanguage";
-import { labelAudioTracks, labelSubtitleTracks, languageName } from "@/lib/trackLabel";
-import {
-  isGeneratingTrack,
-  SubtitleGeneration,
-  type GenerationNotice,
-  type GenerationSnapshot,
-} from "@/lib/subtitleGen/generation";
-import type { SubtitleGenErrorCode } from "@/lib/subtitleGen/client";
+import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
+import { isGeneratingTrack, SubtitleGeneration } from "@/lib/subtitleGen/generation";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { useSleepTimer } from "@/lib/useSleepTimer";
 import { sleepTimerLogFields, sleepTimerStore, type SleepMode } from "@/lib/sleepTimer";
@@ -144,14 +109,7 @@ import { keepOnStop } from "@/lib/resumeCache/keepOnStop";
 import { MemoryReserve, reservePlanFacts } from "@/lib/webcodecs/memoryReserve";
 import { PlayerLifecycle } from "@/lib/playerLifecycle";
 import { notePceCopyWorked, pceDecisionFacts, takePceCopyRefusal } from "@/lib/webcodecs/aacPceProbe";
-import { takeAacDecodeRoute } from "@/lib/webcodecs/softwareAudio";
-
-/** Le décodeur d'un AAC à PCE décodé, pour la ligne `start` (DECISIONS.md §62) ; rien sinon. */
-function aacRouteFacts(): Record<string, unknown> {
-  const route = takeAacDecodeRoute();
-  return route ? { aacRoute: route } : {};
-}
-import { HostSeek, describeBufferedAround, seekDuration, type SeekTiming } from "@/lib/hostSeek";
+import { HostSeek, describeBufferedAround, type SeekTiming } from "@/lib/hostSeek";
 import { PlaybackIntro, type IntroPhase } from "@/components/player/PlaybackIntro";
 import { usePlaybackQuality } from "@/lib/playbackQuality";
 import { prewarmFields } from "@/lib/lighterPrewarm";
@@ -179,8 +137,25 @@ import { saveUnsentPosition } from "@/lib/unsentPosition";
 import { finishIntro, formatResumeClock, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
 import { useIntroPlaybackStarted } from "@/lib/introEnd";
 import { usePlayerBackClose } from "@/lib/playerHistory";
+import {
+  aacRouteFacts,
+  generationErrorText,
+  generationMenu,
+  jellyfinAudioIndex,
+  jellyfinSubtitleIndex,
+  leadAt,
+  noticeText,
+  seekElapsed,
+  seekLineFields,
+  syncFacts,
+  warmNextNear,
+} from "@/components/player/nativeHostHelpers";
 
-/** Which of the pipeline's own readings belong under the sound rather than under the stream. */
+/**
+ * La copie de secours du bilan (`unsentStop`) est réécrite quand la séance a gagné ce temps regardé
+ * sans autre événement — ce qu'un plantage en plein écran perdrait au plus de `watched` (13/10/2026).
+ */
+const UNSENT_STOP_WATCHED_STEP_S = 120;
 
 /** How long a threshold has to be crossed before anything is shown at all. */
 const SPINNER_AFTER_MS = 120;
@@ -240,197 +215,6 @@ function useElapsedSince(startedAt: number | null): number | null {
   }, [startedAt]);
 
   return startedAt === null ? null : Math.max(0, sampledAt - startedAt);
-}
-
-/** "1 h 12" — where the film will pick up, said the way a viewer thinks of it. */
-/**
- * Ce qu'on sait, en fin de séance, de l'accord entre le son et l'image.
- *
- * Un spectateur sur Chrome Android voyait le son se décaler peu à peu, et un saut le recaler
- * (22/09/2026) — sans que rien, nulle part, n'en garde la trace. Deux faits pour trancher : les
- * horloges du son ré-encodé (`audioSync`, voir `AudioTimingStats` ; absent quand le son est copié),
- * et les images que le navigateur a sautées (`frames`) — un appareil qui n'arrive plus à suivre
- * décale aussi l'image du son. Mesuré sans rien montrer, et sans jamais faire échouer la ligne
- * qui le porte.
- */
-/**
- * L'avance que l'élément voit sous sa tête — la plage qui la contient, jusqu'à sa fin. Au début
- * d'une attente, c'est ce qui dit si le média manquait ou s'il était là (voir playbackDiagnosis.ts).
- */
-function leadAt(element: HTMLVideoElement): number | null {
-  try {
-    const at = element.currentTime;
-    const ranges = element.buffered;
-    for (let i = 0; i < ranges.length; i++) {
-      if (ranges.start(i) <= at + 0.1 && ranges.end(i) > at) return Math.round((ranges.end(i) - at) * 100) / 100;
-    }
-    return 0;
-  } catch {
-    return null;
-  }
-}
-
-function syncFacts(
-  remux: {
-    audioTiming(): { sourceMs: number; encoderMs: number } | null;
-    recoveryFacts?(): RecoveryFacts | null;
-  } | null,
-  element: HTMLVideoElement | null
-): Record<string, unknown> {
-  const facts: Record<string, unknown> = {};
-  try {
-    const timing = remux?.audioTiming();
-    if (timing) facts.audioSync = timing;
-  } catch {
-    // Un pipeline déjà détruit : rien à dire.
-  }
-  try {
-    // Combien de fois la source a dû se reprendre sur la séance. Une séance à douze reprises et
-    // une séance à zéro se lisaient pareil ; les barreaux gravis ne sont écrits que s'il y en a eu.
-    const recovery = remux?.recoveryFacts?.();
-    if (recovery) {
-      facts.recoveries = recovery.recoveries;
-      facts.frozenNudges = recovery.frozenNudges;
-      if (recovery.escalations > 0) facts.escalations = recovery.escalations;
-      // Ce que Safari a retiré de lui-même (24/09/2026) : écrit seulement s'il y en a eu, comme
-      // les barreaux.
-      if (recovery.evictions > 0) {
-        facts.evictions = recovery.evictions;
-        facts.evictionsAhead = recovery.evictionsAhead;
-      }
-    }
-  } catch {
-    // Idem.
-  }
-  try {
-    const quality = element?.getVideoPlaybackQuality?.();
-    if (quality && quality.totalVideoFrames > 0) {
-      facts.frames = { total: quality.totalVideoFrames, dropped: quality.droppedVideoFrames };
-    }
-  } catch {
-    // Non pris en charge ici.
-  }
-  return facts;
-}
-
-
-/** "Français — VFF", falling back to whatever the file actually gives us. */
-/**
- * Jellyfin's stream index for one of the file's audio tracks, or undefined if it cannot be
- * named with confidence.
- *
- * The two lists describe the same file from two sides: the player reads Matroska track *numbers*
- * out of the container, Jellyfin reports ffmpeg stream *indices*. Neither converts into the
- * other — Matroska only requires a track number to be unique and positive, so the tempting
- * `index = number - 1` holds for files mkvmerge wrote and is arithmetic elsewhere. What is
- * reliable is the order: both lists enumerate the file's audio streams in the order the file
- * stores them, so the nth audio track here is the nth audio stream there.
- *
- * Returns undefined rather than a guess when the two disagree on how many audio streams exist.
- * The stable player then picks its own default — a film that opens in the wrong language is a
- * better failure than one that opens on a track chosen by a rule that did not hold.
- */
-function jellyfinAudioIndex(
-  fileTracks: PlayerTrack[],
-  jellyfinTracks: DirectPlayInfo["audio"] | undefined,
-  trackNumber: number
-): number | undefined {
-  if (!jellyfinTracks || jellyfinTracks.length !== fileTracks.length) return undefined;
-  const ordinal = fileTracks.findIndex((t) => t.number === trackNumber);
-  if (ordinal < 0) return undefined;
-  return jellyfinTracks[ordinal]?.index;
-}
-
-/**
- * Le sous-titre choisi, en index Jellyfin — pour que la version allégée le rallume (§78). Un fichier à
- * côté porte son index dans son adresse (`&index=`) ; une piste du conteneur, par son rang parmi
- * celles que Jellyfin liste dans le même ordre (comme `jellyfinAudioIndex`). `null` : aucun sous-titre,
- * ou un qu'on ne sait pas nommer — mieux vaut pas de sous-titre qu'un sous-titre dans une autre langue.
- */
-function jellyfinSubtitleIndex(
-  current: number | null,
-  fileTracks: PlayerTrack[],
-  embedded: number[] | undefined,
-  externals: { id: number; url: string }[]
-): number | null {
-  if (current === null) return null;
-  const external = externals.find((e) => e.id === current);
-  if (external) {
-    const match = /[?&]index=(\d+)/.exec(external.url);
-    return match ? Number(match[1]) : null;
-  }
-  if (!embedded || embedded.length !== fileTracks.length) return null;
-  const ordinal = fileTracks.findIndex((t) => t.number === current);
-  return ordinal >= 0 ? embedded[ordinal] ?? null : null;
-}
-
-/** Les raisons de pause que le serveur nomme ; toute autre se dit « en attente ». */
-const PAUSE_REASONS = new Set(["budget", "quota", "network", "config"]);
-
-/** Un message d'état de génération, en mots — voir `SubtitleGeneration.noticeAt`. */
-function noticeText(notice: GenerationNotice, t: (key: string, vars?: Record<string, string | number>) => string): string {
-  if (notice.kind === "preparing") return t("player.subtitleGen.preparing");
-  if (notice.kind === "resuming") return t("player.subtitleGen.resuming");
-  const reason = notice.reason && PAUSE_REASONS.has(notice.reason) ? notice.reason : "other";
-  return t("player.subtitleGen.paused", { reason: t(`player.subtitleGen.reasons.${reason}`) });
-}
-
-/** Un échec de génération, dit au spectateur — jamais une erreur de lecture. */
-function generationErrorText(
-  code: SubtitleGenErrorCode | "job-failed",
-  quotaLimit: number | null,
-  t: (key: string, vars?: Record<string, string | number>) => string
-): string {
-  if (code === "quota") return quotaLimit ? t("player.subtitleGen.errors.quota", { n: quotaLimit }) : t("player.subtitleGen.errors.quotaToday");
-  if (code === "budget") return t("player.subtitleGen.errors.budget");
-  if (code === "no-source") return t("player.subtitleGen.errors.noSource");
-  if (code === "network") return t("player.subtitleGen.errors.network");
-  return t("player.subtitleGen.errors.failed");
-}
-
-/**
- * Ce que le menu montre d'une génération de sous-titres : les entrées temporaires (avec leur
- * avancement discret), les langues qu'on peut encore demander, les générations à reprendre.
- *
- * Une langue ne se propose pas deux fois : ni si elle a déjà des sous-titres (`existing`), ni si une
- * génération la porte, ni si une piste générée est déjà dans la liste des externes. Une entrée
- * temporaire disparaît dès que sa piste finale y est — c'est la bascule (§70).
- */
-function generationMenu(
-  state: GenerationSnapshot,
-  externals: readonly ExternalSubtitleSource[],
-  locale: string,
-  t: (key: string, vars?: Record<string, string | number>) => string
-): {
-  entries: { track: PlayerTrack; detail: string | undefined }[];
-  targets: { code: string; label: string }[];
-  resumable: { code: string; label: string }[];
-} {
-  const generatedLanguages = new Set(externals.filter((s) => s.generated === true).map((s) => normaliseLanguage(s.language)));
-  const live = state.jobs.filter((job) => job.status !== "failed" && !job.finalized && !generatedLanguages.has(normaliseLanguage(job.target)));
-  const name = (code: string) => languageName(code, locale) ?? code.toUpperCase();
-  const entries = live.map((job) => ({
-    track: { number: job.id, codecId: "S_TEXT/UTF8", language: job.target, name: null, isDefault: false, isForced: false },
-    // Finie mais pas encore présentée par Jellyfin : « finalisation… » plutôt qu'un 100 % qui dure.
-    detail:
-      job.status === "done"
-        ? t("player.subtitleGen.finalizing")
-        : job.total > 0
-          ? t("player.subtitleGen.percent", { n: Math.min(99, Math.floor((job.done / job.total) * 100)) })
-          : undefined,
-  }));
-  const taken = new Set([
-    ...(state.options?.existing ?? []).map(normaliseLanguage),
-    ...state.jobs.filter((job) => job.status !== "failed").map((job) => normaliseLanguage(job.target)),
-    ...generatedLanguages,
-  ]);
-  const targets = state.options?.enabled
-    ? state.options.targets.filter((code) => !taken.has(normaliseLanguage(code))).map((code) => ({ code, label: name(code) }))
-    : [];
-  const resumable = live
-    .filter((job) => job.status === "paused" || job.status === "stale")
-    .map((job) => ({ code: job.target, label: name(job.target) }));
-  return { entries, targets, resumable };
 }
 
 /**
@@ -494,6 +278,9 @@ function useAudioLabels(fileTracks: PlayerTrack[], jellyfin: DirectPlayInfo["aud
 
 const TRANSITION = PLAYER_FRAME_TRANSITION;
 
+/** Le plus longtemps qu'une image figée reste à l'écran, quoi qu'il arrive. */
+const FREEZE_MAX_MS = 4000;
+
 /**
  * The native player: the same chrome as the stable one, over a <video> element fed by the remuxer
  * (MediaSource) instead of an HLS stream transcoded by the server.
@@ -503,15 +290,6 @@ const TRANSITION = PLAYER_FRAME_TRANSITION;
  * always says which files this path cannot handle. The controls are the stable player's,
  * unmodified: here they drive a real media element.
  */
-/** Le plus longtemps qu'une image figée reste à l'écran, quoi qu'il arrive. */
-const FREEZE_MAX_MS = 4000;
-
-/** La durée d'un saut, sans le temps passé en arrière-plan — voir `seekDuration` (hostSeek.ts). */
-function seekElapsed(tally: SessionTally, timing: SeekTiming): number {
-  const now = Date.now();
-  return seekDuration(timing, now, tally.hiddenMsSoFar(now));
-}
-
 export function ExperimentalPlayerHost({
   session,
   mode,
@@ -665,17 +443,6 @@ export function ExperimentalPlayerHost({
   /** Le lien tel que le panneau technique le montre en direct (§77) — lu avec les diagnostics. */
   const [linkLive, setLinkLive] = useState<LinkReading | null>(null);
   /**
-   * Steps aside for the stable player, once, without asking.
-   *
-   * A viewer cannot act on "the browser refused an operation on the buffer", and a button that
-   * says so is a dead end wearing the costume of a choice. The stable player negotiates with the
-   * server and will play this file; that is what a viewer wants and it is not a decision.
-   *
-   * The record is not softened with it. The reason travels to the player that takes over and is
-   * written into the trace, so a step down still leaves an account of itself — which was always
-   * the point of refusing silent fallbacks, rather than making anybody click.
-   */
-  /**
    * The network is gone, and the film is waiting for it rather than for anything else.
    *
    * Kept apart from every other failure because the answer is the opposite one: nothing about
@@ -728,6 +495,17 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     serverFallbackRef.current = serverFallback;
   }, [serverFallback]);
+  /**
+   * Steps aside for the stable player, once, without asking.
+   *
+   * A viewer cannot act on "the browser refused an operation on the buffer", and a button that
+   * says so is a dead end wearing the costume of a choice. The stable player negotiates with the
+   * server and will play this file; that is what a viewer wants and it is not a decision.
+   *
+   * The record is not softened with it. The reason travels to the player that takes over and is
+   * written into the trace, so a step down still leaves an account of itself — which was always
+   * the point of refusing silent fallbacks, rather than making anybody click.
+   */
   /**
    * Renoncer — et ce que « renoncer » veut dire dépend de l'installation.
    *
@@ -906,18 +684,6 @@ export function ExperimentalPlayerHost({
   const [pathReason, setPathReason] = useState<string | null>(null);
   // The picture is on the element once the native path is running.
   const onElement = path === "remux";
-  /**
-   * Le chemin retenu, noté au moment où il est choisi.
-   *
-   * Ce ref ne servait qu'au rapport d'échec, et il était recopié depuis l'état — donc un rendu
-   * après la décision. Un échec survenant dans cet intervalle se rapportait « non décidé », et
-   * neuf replis du journal disent exactement ça : le seul champ qui aurait dit ce que le lecteur
-   * tentait est vide sur les seules lectures qui ont échoué. `choosePath` l'écrit maintenant en
-   * même temps que l'état, dans l'effet qui décide — jamais pendant un rendu.
-   */
-  useEffect(() => {
-    if (path !== null) pathRef.current = path;
-  }, [path]);
   // Bumped to build the pipeline again from scratch. iOS takes the media resources back when the
   // page goes to the background, and a MediaSource it has closed cannot be reopened — so coming
   // back from a locked screen means starting over, at the position the viewer left.
@@ -941,16 +707,11 @@ export function ExperimentalPlayerHost({
     // l'endroit, si (chasse aux bugs du 22/09/2026).
     reportPlayback("seek", {
       ...describeFileRef.current(),
-      path: "remux",
-      from: Math.round(timing.from),
-      to: Math.round(timing.to),
-      buffered: timing.buffered,
-      ranges: timing.ranges,
-      ...(stillSeeking ? {} : { arrived: seekArrived(landedAt, timing.to) }),
-      ...(superseded ? { superseded: true } : {}),
-      landedAt: Math.round(landedAt * 10) / 10,
-      tookMs: seekElapsed(tally, timing),
-      steps: traceRecent(Date.now() - timing.startedAt + 500).join(" | "),
+      ...seekLineFields(tally, timing, {
+        ...(stillSeeking ? {} : { arrived: seekArrived(landedAt, timing.to) }),
+        ...(superseded ? { superseded: true } : {}),
+        landedAt: Math.round(landedAt * 10) / 10,
+      }),
     });
   };
   // Lu par le pipeline à travers une `ref` : le nommer dans ses dépendances le reconstruirait à
@@ -1261,7 +1022,6 @@ export function ExperimentalPlayerHost({
    */
   const pictureAtRef = useRef(0);
 
-  /** Builds the pipeline again from where the viewer is, keeping what they had chosen. */
   /**
    * Chronométrer un changement de piste audio — et **rien de plus**.
    *
@@ -1387,6 +1147,8 @@ export function ExperimentalPlayerHost({
   }, [frozen, ready]);
 
   /**
+   * Builds the pipeline again from where the viewer is, keeping what they had chosen.
+   *
    * Reconstruire le pipeline à `at`. `byViewer` : la demande vient du spectateur (réessayer, une
    * piste, le plafond HDR) — elle passe toujours ; une reconstruction automatique est refusée par
    * `lifecycle.restart` une fois la main passée ou pendant la fermeture.
@@ -1422,6 +1184,23 @@ export function ExperimentalPlayerHost({
     setRuntimeError(null);
     setRebuildCount((count) => count + 1);
   }, [lifecycle, background, tally]);
+
+  /**
+   * Reconstruire sur place à la demande du spectateur — une piste audio, « Améliorer les dialogues »,
+   * le plafond HDR : à la position voulue (un saut encore en chargement n'a pas encore déplacé la
+   * position lue), pause et image figée comprises. Un film à l'arrêt reste à l'arrêt : le spectateur a
+   * changé un réglage, pas lancé la lecture. Écrit une fois pour les trois gestes : la pause et l'image
+   * figée, nées pour la piste (`a68efdb6`), avaient manqué au plafond HDR — un film à l'arrêt y
+   * repartait sur un écran noir (`913125c3`).
+   */
+  const rebuildHereForViewer = useCallback(
+    (why: string) => {
+      lifecycle.setKeepPaused(videoElRef.current?.paused ?? false);
+      setFrozen(freezeFrame());
+      restart(intendedPosition(), why, true);
+    },
+    [lifecycle, freezeFrame, restart, intendedPosition]
+  );
 
   // Fetched once and then left alone. The description of a file does not change while it is
   // being watched, and every revalidation handed back a fresh object — which the effect below
@@ -1528,9 +1307,8 @@ export function ExperimentalPlayerHost({
   useEffect(() => {
     externalsRef.current = externals;
   }, [externals]);
-  const { locale: uiLocale } = useLocale();
   // Puis les générations en cours, en entrées temporaires (DECISIONS.md §70).
-  const generationView = useMemo(() => generationMenu(generationState, externals, uiLocale, t), [generationState, externals, uiLocale, t]);
+  const generationView = useMemo(() => generationMenu(generationState, externals, locale, t), [generationState, externals, locale, t]);
   const subtitleChoices = useMemo(
     () => [...tracks.subtitles, ...externals.map(externalToPlayerTrack), ...generationView.entries.map((entry) => entry.track)],
     [tracks.subtitles, externals, generationView]
@@ -1794,13 +1572,6 @@ export function ExperimentalPlayerHost({
     };
   }, [itemId]);
 
-  /**
-   * Un serveur absent se dit autrement qu'un fichier illisible.
-   *
-   * Les deux échouaient sur la même phrase, qui décrivait le symptôme sans nommer la cause — et
-   * quand la cause est « le serveur média est arrêté », c'est la seule chose que le spectateur ait
-   * besoin de savoir : il n'y a rien à réessayer tout de suite, et rien de cassé chez lui.
-   */
   /** L'erreur affichée est-elle celle d'une connexion trop lente ? Voir `slowLink`. */
   const slowShown = slowLink !== null && runtimeError === SLOW_LINK_REASON;
   /**
@@ -1812,6 +1583,13 @@ export function ExperimentalPlayerHost({
   // Une zone illisible sans lecteur serveur (§93) : la phrase du compte, dans sa langue, avec l'instant
   // — le motif technique reste au journal et sous « Signaler un problème ».
   const zoneError = runtimeError !== null && isUnreadableZoneReason(runtimeError) ? t("player.unreadableZone", { time: formatTime(zoneSecondsOf(runtimeError)) }) : null;
+  /**
+   * Un serveur absent se dit autrement qu'un fichier illisible (`errorMessage`, dernière ligne).
+   *
+   * Les deux échouaient sur la même phrase, qui décrivait le symptôme sans nommer la cause — et
+   * quand la cause est « le serveur média est arrêté », c'est la seule chose que le spectateur ait
+   * besoin de savoir : il n'y a rien à réessayer tout de suite, et rien de cassé chez lui.
+   */
   const error =
     zoneError ??
     runtimeError ??
@@ -1955,24 +1733,7 @@ export function ExperimentalPlayerHost({
   const [introCovering, setIntroCovering] = useState(() => introEligible && !isMini);
   const introCovers = introPhase === "waiting" && introCovering;
 
-  /**
-   * Comment la séance s'est terminée — la ligne `stop` du journal.
-   *
-   * Le type existait depuis le premier jour et rien ne l'envoyait : sur 503 lignes au 21/09, 444
-   * `start` et pas un seul `stop`. Un film vu jusqu'au bout et un film abandonné au bout de trente
-   * secondes laissaient donc exactement la même trace — et l'abandon silencieux, celui d'un
-   * spectateur qui ferme plutôt que de se plaindre, est précisément la panne qu'aucun autre
-   * enregistrement ne montre.
-   *
-   * Une seule fois par lecteur (il est remonté à chaque titre, voir la `key` de `PlayerHost`),
-   * par le premier qui arrive : la croix, l'épisode suivant, la page qui s'en va, et le démontage
-   * en dernier filet. Rien après un repli : la ligne `fallback` a déjà tout dit, et le lecteur
-   * stable prend la suite de la séance.
-   *
-   * Tout est lu par des refs : les appelants — un écouteur `pagehide`, un nettoyage d'effet —
-   * vivent plus longtemps que le rendu qui les a créés.
-   */
-  // « La ligne `stop` est partie » vit dans `lifecycle` (`claimStop`, `keepsUnsentStop`).
+  /** L'instant du montage — pour `gaveUpAfterMs`, dans le bilan d'une séance fermée avant l'image. */
   const mountedAtRef = useRef(0);
   useEffect(() => {
     mountedAtRef.current = Date.now();
@@ -2028,6 +1789,24 @@ export function ExperimentalPlayerHost({
     },
     [tally, watched, intendedPosition, slowFields]
   );
+  /**
+   * Comment la séance s'est terminée — la ligne `stop` du journal.
+   *
+   * Le type existait depuis le premier jour et rien ne l'envoyait : sur 503 lignes au 21/09, 444
+   * `start` et pas un seul `stop`. Un film vu jusqu'au bout et un film abandonné au bout de trente
+   * secondes laissaient donc exactement la même trace — et l'abandon silencieux, celui d'un
+   * spectateur qui ferme plutôt que de se plaindre, est précisément la panne qu'aucun autre
+   * enregistrement ne montre.
+   *
+   * Une seule fois par lecteur (il est remonté à chaque titre, voir la `key` de `PlayerHost`),
+   * par le premier qui arrive : la croix, l'épisode suivant, la page qui s'en va, et le démontage
+   * en dernier filet. Rien après un repli : la ligne `fallback` a déjà tout dit, et le lecteur
+   * stable prend la suite de la séance.
+   *
+   * Tout est lu par des refs : les appelants — un écouteur `pagehide`, un nettoyage d'effet —
+   * vivent plus longtemps que le rendu qui les a créés.
+   */
+  // « La ligne `stop` est partie » vit dans `lifecycle` (`claimStop`, `keepsUnsentStop`).
   const reportStop = useCallback(
     (why: "close" | "next" | "page" | "unmount") => {
       if (!lifecycle.claimStop()) return;
@@ -2478,10 +2257,25 @@ export function ExperimentalPlayerHost({
       return true;
     };
 
-    // A pipeline that has just become ready cannot owe a resume or a track change: whatever the
-    // previous one was waiting for died with it, and a wait nobody will ever answer is a spinner
-    // that never stops. Cleared where readiness is declared rather than in an effect watching
-    // for it, so nothing is left hanging for a render.
+    /**
+     * Un AAC à PCE copié tel quel que ce navigateur refuse, avant toute image de ce pipeline : la
+     * réponse est gardée (`takePceCopyRefusal`) et le pipeline reconstruit une seule fois en le
+     * décodant ; le lecteur serveur ne vient qu'après (DECISIONS.md §62). Écrit une fois pour ses
+     * deux appelants — l'erreur du moteur et l'échec de l'ouverture — dont la garde avait déjà dû
+     * être corrigée deux fois à l'identique (`a69ecaa6`). Seul `refused` les distingue au journal :
+     * « refusée » ou « refusée à l'ouverture ».
+     */
+    const pceRebuild = (message: string, refused: string): boolean => {
+      if ((!everReadyRef.current || pendingSwitchRef.current) && !pipelineShowedPicture && !pceRebuildRef.current && takePceCopyRefusal(message)) {
+        pceRebuildRef.current = true;
+        const at = positionRef.current || startSeconds;
+        reportPlayback("rebuild", { ...describeFileRef.current(), path: "remux", reason: `copie AAC à PCE ${refused} — ${message}`, at });
+        restart(at, "copie AAC à PCE refusée par le navigateur, décodée à la place");
+        return true;
+      }
+      return false;
+    };
+
     /**
      * Opens the film on the tracks the viewer's Jellyfin account asks for.
      *
@@ -2601,6 +2395,10 @@ export function ExperimentalPlayerHost({
       });
     };
 
+    // A pipeline that has just become ready cannot owe a resume or a track change: whatever the
+    // previous one was waiting for died with it, and a wait nobody will ever answer is a spinner
+    // that never stops. Cleared where readiness is declared rather than in an effect watching
+    // for it, so nothing is left hanging for a render.
     const declareReady = () => {
       setStartingAt(null);
       // The position this pipeline was built to resume at has now been used, and is cleared here
@@ -2663,6 +2461,16 @@ export function ExperimentalPlayerHost({
       if (lifecycle.isOver()) return playback.destroy();
 
       remuxRef.current = playback;
+      /*
+       * Le chemin retenu, noté au moment où il est choisi.
+       *
+       * Ce ref ne servait qu'au rapport d'échec, et il était recopié depuis l'état — donc un rendu
+       * après la décision. Un échec survenant dans cet intervalle se rapportait « non décidé », et
+       * neuf replis du journal disent exactement ça : le seul champ qui aurait dit ce que le lecteur
+       * tentait est vide sur les seules lectures qui ont échoué. Il est écrit ici, en même temps
+       * que l'état, dans l'effet qui décide — jamais pendant un rendu. (L'effet qui le recopiait
+       * encore depuis l'état, sans plus rien y changer, a été retiré le 22/10/2026.)
+       */
       pathRef.current = "remux";
       setPath("remux");
       announceStart("remux", "remultiplexage → lecteur natif");
@@ -2828,7 +2636,7 @@ export function ExperimentalPlayerHost({
           }
           if (networkUnstable()) setStallUnstable(true);
           // Un blocage qui dure : à 5 s, la bascule s'il tient au réseau (§78).
-          if (longWaitTimer !== null) clearTimeout(longWaitTimer);
+          clearLongWait();
           longWaitTimer = setTimeout(() => {
             longWaitTimer = null;
             const wait = diagCurrentWait();
@@ -2842,6 +2650,10 @@ export function ExperimentalPlayerHost({
        * message), jamais page cachée. Ceux d'un saut n'y entrent jamais : `onWaiting` ne les compte pas.
        */
       let longWaitTimer: ReturnType<typeof setTimeout> | null = null;
+      const clearLongWait = () => {
+        if (longWaitTimer !== null) clearTimeout(longWaitTimer);
+        longWaitTimer = null;
+      };
       /** L'attente en pleine lecture est finie (image, pause, saut, fin) : le mot s'en va avec elle. */
       const endStall = () => {
         if (stallAtRef.current === null) return;
@@ -2855,8 +2667,7 @@ export function ExperimentalPlayerHost({
         !networkUnstable() &&
         playbackLinkSlow(diagLinkMeasure(PLAYBACK_MEASURE_WINDOW_MS), needBpsRef.current);
       const endWait = (wait: { verdict: string; ms: number } | null) => {
-        if (longWaitTimer !== null) clearTimeout(longWaitTimer);
-        longWaitTimer = null;
+        clearLongWait();
         endStall();
         // Le tableau du simulateur de la page de test, s'il est allumé (rien sinon).
         if (wait && wait.ms > 1000) pushSlowLinkEvent(`blocage de ${Math.round(wait.ms)} ms (${wait.verdict})`);
@@ -2878,8 +2689,7 @@ export function ExperimentalPlayerHost({
         tally.waitAbandoned();
         diagWaitEnded(false);
         endStall();
-        if (longWaitTimer !== null) clearTimeout(longWaitTimer);
-        longWaitTimer = null;
+        clearLongWait();
         // Un saut en pleine lecture attend son image : traité comme une ouverture au-delà de 10 s (§78).
         if (playedOnce) runner.seekStarted();
       };
@@ -2923,19 +2733,8 @@ export function ExperimentalPlayerHost({
         }, 0);
         if (timing) {
           tally.seekArrived(seekElapsed(tally, timing));
-          reportPlayback("seek", {
-            ...describeFileRef.current(),
-            path: "remux",
-            from: Math.round(timing.from),
-            to: Math.round(timing.to),
-            buffered: timing.buffered,
-            ranges: timing.ranges,
-            tookMs: seekElapsed(tally, timing),
-            // Ce que la source a fait entre la demande et l'arrivée — et une demi-seconde avant,
-            // pour le geste qui l'a lancée. Un saut arrière suivi d'un blocage (22/09/2026) ne
-            // laissait au journal que « de 176 à 166 en 900 ms », sans rien de ce qui l'avait servi.
-            steps: traceRecent(Date.now() - timing.startedAt + 500).join(" | "),
-          });
+          // Les champs et leur ordre : `seekLineFields`, partagé avec `reportUnarrivedSeek`.
+          reportPlayback("seek", { ...describeFileRef.current(), ...seekLineFields(tally, timing) });
         }
       };
       element.addEventListener("timeupdate", onTime);
@@ -2950,8 +2749,7 @@ export function ExperimentalPlayerHost({
       unsubscribes.push(watchElementWaits(element, watched));
       unsubscribes.push(() => {
         // Le blocage de 5 s en attente meurt avec ce pipeline : il ne doit rien décider pour le suivant.
-        if (longWaitTimer !== null) clearTimeout(longWaitTimer);
-        longWaitTimer = null;
+        clearLongWait();
         element.removeEventListener("timeupdate", onTime);
         element.removeEventListener("play", onPlay);
         element.removeEventListener("pause", onPause);
@@ -3068,13 +2866,7 @@ export function ExperimentalPlayerHost({
         // Un AAC à PCE copié tel quel — hors Chromium, comme avant le 10/10/2026 — que ce navigateur
         // refuse à l'envoi, avant toute image : la réponse est gardée et le pipeline reconstruit une
         // seule fois en le décodant ; le lecteur serveur ne vient qu'après (DECISIONS.md §62).
-        if ((!everReadyRef.current || pendingSwitchRef.current) && !pipelineShowedPicture && !pceRebuildRef.current && takePceCopyRefusal(message)) {
-          pceRebuildRef.current = true;
-          const at = positionRef.current || startSeconds;
-          reportPlayback("rebuild", { ...describeFileRef.current(), path: "remux", reason: `copie AAC à PCE refusée — ${message}`, at });
-          restart(at, "copie AAC à PCE refusée par le navigateur, décodée à la place");
-          return;
-        }
+        if (pceRebuild(message, "refusée")) return;
         if (dropDialogue(message)) return;
         // Page cachée : la reconstruction attend le retour, comme une source fermée sans erreur —
         // la vérification d'arrière-plan plus bas la fera, à la position et avec la retenue du
@@ -3196,13 +2988,7 @@ export function ExperimentalPlayerHost({
         // n'arrivait jamais au `onError` du pipeline, et le film partait au lecteur serveur sans la
         // reconstruction prévue. Retenu pour cette forme, reconstruit une fois en décodant
         // (DECISIONS.md §62) ; le lecteur serveur ne vient qu'après.
-        if ((!everReadyRef.current || pendingSwitchRef.current) && !pipelineShowedPicture && !pceRebuildRef.current && takePceCopyRefusal(message)) {
-          pceRebuildRef.current = true;
-          const at = positionRef.current || startSeconds;
-          reportPlayback("rebuild", { ...describeFileRef.current(), path: "remux", reason: `copie AAC à PCE refusée à l'ouverture — ${message}`, at });
-          restart(at, "copie AAC à PCE refusée par le navigateur, décodée à la place");
-          return;
-        }
+        if (pceRebuild(message, "refusée à l'ouverture")) return;
         // Reconstruit pour une piste que le lecteur natif n'a finalement pas pu ouvrir — module
         // TrueHD injoignable, encodeur qui refuse : le lecteur serveur coûterait un film qui jouait
         // très bien, pour un choix de langue. On revient à la piste d'avant.
@@ -3742,15 +3528,11 @@ export function ExperimentalPlayerHost({
         to: id,
         startedAt: Date.now(),
       };
-      // Un film à l'arrêt reste à l'arrêt : le spectateur a changé de langue, pas lancé
-      // la lecture.
-      lifecycle.setKeepPaused(videoElRef.current?.paused ?? false);
       wantedAudioRef.current = id;
       setCurrentAudio(id);
-      setFrozen(freezeFrame());
-      // Là où le spectateur a demandé d'être, pas seulement là où il en était : un saut
-      // encore en chargement n'a pas encore déplacé la position lue.
-      restart(intendedPosition(), `piste ${id} — reconstruction sur elle`, true);
+      // Un film à l'arrêt reste à l'arrêt : le spectateur a changé de langue, pas lancé
+      // la lecture. Là où le spectateur a demandé d'être, pas seulement là où il en était.
+      rebuildHereForViewer(`piste ${id} — reconstruction sur elle`);
       return;
     }
     // Avant que le chemin natif ne soit en marche : retenue, et le pipeline qui s'ouvre la prend.
@@ -4282,9 +4064,7 @@ export function ExperimentalPlayerHost({
                       if (!remuxRef.current) return; // entre deux pipelines : le suivant le lira
                       // Le traitement est dans la chaîne audio : il faut la reconstruire, à la même
                       // position, comme pour un changement de piste — pause et image figée comprises.
-                      lifecycle.setKeepPaused(videoElRef.current?.paused ?? false);
-                      setFrozen(freezeFrame());
-                      restart(intendedPosition(), `dialogues améliorés : ${mode}`, true);
+                      rebuildHereForViewer(`dialogues améliorés : ${mode}`);
                     },
                   }
                 : undefined
@@ -4300,9 +4080,7 @@ export function ExperimentalPlayerHost({
                       // Le plafond est écrit dans l'en-tête du flux : il faut le reconstruire,
                       // à la même position, comme pour un changement de piste — pause et image
                       // figée comprises : sans elles, un film à l'arrêt repartait sur un écran noir.
-                      lifecycle.setKeepPaused(videoElRef.current?.paused ?? false);
-                      setFrozen(freezeFrame());
-                      restart(intendedPosition(), `plafond HDR ${choice}`, true);
+                      rebuildHereForViewer(`plafond HDR ${choice}`);
                     },
                   }
                 : undefined
