@@ -268,13 +268,14 @@ const DIALOGUE_CHOICES: { mode: DialogueMode; label: string }[] = [
 /** Combien de temps la confirmation de diffusion reste dépliée sans qu'on y touche. */
 const CAST_CONFIRM_MS = 4000;
 /**
- * Où se posent les invites flottantes (« Passer l'intro », l'épisode suivant, la minuterie) : au-dessus
- * du bas des commandes — titre, pilule et barre —, pour ne jamais les couvrir quand elles sont là.
- */
-/**
  * ±10 s : la flèche fait un tour autour du « 10 », qui reste immobile — un tour un peu trop loin,
  * puis posé. Joué au clic, après le geste liquide du bouton, sur la flèche seule.
  */
+/** Le nombre de planches d'aperçus : chacune en porte `tileWidth × tileHeight`. */
+function trickplayTileCount(info: TrickplayInfo): number {
+  return Math.ceil(info.thumbnailCount / (info.tileWidth * info.tileHeight));
+}
+
 function spinSkip(button: HTMLElement, turn: -1 | 1) {
   const arrow = button.querySelector<HTMLElement>(".player-skip-arrow");
   if (!arrow || typeof arrow.animate !== "function" || prefersReducedMotion()) return;
@@ -290,6 +291,10 @@ function spinSkip(button: HTMLElement, turn: -1 | 1) {
 // geste du système, et l'un prenait l'autre (02/10/2026). Partagé par tout ce qui se place au-dessus
 // de la rangée du bas, pour que l'écart reste le même partout.
 const BOTTOM_EDGE = "max(1.5rem, calc(env(safe-area-inset-bottom) + 0.5rem))";
+/**
+ * Où se posent les invites flottantes (« Passer l'intro », l'épisode suivant, la minuterie) : au-dessus
+ * du bas des commandes — titre, pilule et barre —, pour ne jamais les couvrir quand elles sont là.
+ */
 const PROMPT_BOTTOM = `calc(${BOTTOM_EDGE} + 8.5rem)`;
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 /** Masqués, les contrôles ne suivent la position qu'à ce rythme — voir `visibleRef`. */
@@ -315,10 +320,42 @@ const TOUCH_JITTER_PX = 1;
  */
 const TOUCH_SLOP_PX = 6;
 
+/** Les vues des menus du lecteur. */
+type MenuView =
+  | "audio"
+  | "subtitles"
+  | "speed"
+  | "chapters"
+  | "subtitleStyle"
+  | "hdrCap"
+  | "sleep"
+  | "dialogue"
+  | "subtitleGen"
+  | "subtitleGenOther"
+  | "dual"
+  | "dualPrimary"
+  | "dualSecond"
+  | "quality"
+  | "episodes"
+  | "more";
 /**
- * La flèche de ±10 s, avec son « 10 » dedans — dessinée en vecteurs, nette à toute taille : sans le
- * chiffre, rien ne disait de combien la flèche déplaçait le film.
+ * La vue d'où l'on vient, pour celles qui ont un « Retour » — et seulement elles : une vue absente
+ * d'ici (audio, sous-titres, « … », épisodes) est une racine, ouverte par un bouton de la barre.
  */
+const MENU_PARENT: Partial<Record<MenuView, MenuView>> = {
+  subtitleStyle: "subtitles",
+  subtitleGen: "subtitles",
+  dual: "subtitles",
+  subtitleGenOther: "subtitleGen",
+  dualPrimary: "dual",
+  dualSecond: "dual",
+  dialogue: "audio",
+  chapters: "more",
+  hdrCap: "more",
+  sleep: "more",
+  speed: "more",
+  quality: "more",
+};
 /** Le titre de chaque vue des menus, et son icône — celle du bouton qui l'ouvre. */
 const MENU_TITLES: Record<string, string> = {
   speed: "player.speed",
@@ -353,6 +390,10 @@ const MENU_ICONS: Record<string, React.ReactNode> = {
   hdrCap: <Sun size={20} />,
 };
 
+/**
+ * La flèche de ±10 s, avec son « 10 » dedans — dessinée en vecteurs, nette à toute taille : sans le
+ * chiffre, rien ne disait de combien la flèche déplaçait le film.
+ */
 function SkipGlyph({ direction }: { direction: "back" | "forward" }) {
   const Arrow = direction === "back" ? RotateCcw : RotateCw;
   // À la taille du bouton : 26 px dans un bouton de 48, 30 dans un de 56 — le chiffre suit, ≈ 10 puis
@@ -541,7 +582,8 @@ export function PlayerControls({
   }, [visible, hidden, onChromeEdges]);
   // Démonté (fermeture, passage au mini-lecteur), il n'y a plus de commandes à éviter.
   useEffect(() => () => onChromeEdges?.(null), [onChromeEdges]);
-  const [menu, setMenu] = useState<null | "audio" | "subtitles" | "speed" | "chapters" | "subtitleStyle" | "hdrCap" | "sleep" | "dialogue" | "subtitleGen" | "subtitleGenOther" | "dual" | "dualPrimary" | "dualSecond" | "quality" | "episodes" | "more">(null);
+  const [menu, setMenu] = useState<null | MenuView>(null);
+  const menuParent = menu ? MENU_PARENT[menu] : undefined;
   // Cachées par un écran d'erreur, les commandes restent montées (le lecteur serveur garde l'élément
   // pour « Réessayer ») et gardaient leur menu : le nouvel essai les rendait menu ouvert par-dessus le
   // film qui repart — et un menu ouvert suspend leur disparition, elles ne partaient plus (chasse
@@ -1302,13 +1344,6 @@ export function PlayerControls({
   }
 
   /**
-   * La souris quitte la fenêtre : les commandes partent aussitôt, sans attendre leurs trois secondes
-   * (demandé le 11/10/2026) — personne ne les regarde plus. Seulement pendant la lecture, sans menu
-   * ouvert ni glisser sur la barre, et jamais quand le clavier a le focus dans les commandes : on
-   * les parcourt alors à la télécommande ou au clavier. Un `pointerout` sans destination
-   * (`relatedTarget` nul) est la sortie de la page ; un doigt ne le déclenche jamais (`pointerType`).
-   */
-  /**
    * Si une sortie de la fenêtre doit cacher les commandes maintenant. Lue aussi par le `mouseleave`
    * de la barre de progression, qui suit le `pointerout` quand la souris sort par le bas : il les
    * rappelait pour cinq secondes juste après qu'elles étaient parties (chasse aux défauts, 11/10/2026).
@@ -1322,6 +1357,13 @@ export function PlayerControls({
     windowExitHidesRef.current = windowExitHides;
   });
 
+  /**
+   * La souris quitte la fenêtre : les commandes partent aussitôt, sans attendre leurs trois secondes
+   * (demandé le 11/10/2026) — personne ne les regarde plus. Seulement pendant la lecture, sans menu
+   * ouvert ni glisser sur la barre, et jamais quand le clavier a le focus dans les commandes : on
+   * les parcourt alors à la télécommande ou au clavier. Un `pointerout` sans destination
+   * (`relatedTarget` nul) est la sortie de la page ; un doigt ne le déclenche jamais (`pointerType`).
+   */
   useEffect(() => {
     function onPointerOut(e: PointerEvent) {
       if (e.pointerType !== "mouse" || e.relatedTarget !== null) return;
@@ -1366,6 +1408,14 @@ export function PlayerControls({
     } else video.pause();
   }
 
+  // Un saut, dit d'abord à l'hôte (`onSeekRequest` — le lecteur natif s'y prépare) puis fait sur
+  // l'élément. Ne touche pas l'état `currentTime` : `skip` et « Passer l'intro » laissent `seeked`
+  // le poser, seul `commitSeek` le pose lui-même.
+  function seekElement(video: HTMLVideoElement, time: number) {
+    onSeekRequest?.(time);
+    video.currentTime = time;
+  }
+
   // Plain buttons only — deliberately not a double-tap-the-edge-of-the-screen gesture (easy to
   // trigger by accident, and conflicts with the tap-to-toggle-controls handler on the same area).
   function skip(deltaSeconds: number) {
@@ -1381,8 +1431,7 @@ export function PlayerControls({
     const from = positionNow ? positionNow() : video.currentTime;
     const limit = video.duration || duration || from;
     const target = Math.min(Math.max(0, from + deltaSeconds), limit);
-    onSeekRequest?.(target);
-    video.currentTime = target;
+    seekElement(video, target);
   }
 
   // Split in two: dragging the seek bar only moves the thumb/displayed time locally (no real
@@ -1398,8 +1447,7 @@ export function PlayerControls({
   function commitSeek(value: number) {
     const video = videoRef.current;
     if (!video) return;
-    onSeekRequest?.(value);
-    video.currentTime = value;
+    seekElement(video, value);
     setCurrentTime(value);
   }
 
@@ -1450,8 +1498,7 @@ export function PlayerControls({
   useEffect(() => {
     // Gardées sur l'appareil : rien à faire venir.
     if (!trickplay || hasOfflineTrickplay) return;
-    const perTile = trickplay.tileWidth * trickplay.tileHeight;
-    const tileCount = Math.ceil(trickplay.thumbnailCount / perTile);
+    const tileCount = trickplayTileCount(trickplay);
     if (!(tileCount > 0)) return;
     const video = videoRef.current;
     let cancelled = false;
@@ -1573,8 +1620,7 @@ export function PlayerControls({
     if (!trickplay) return null;
     const tile = sharedTrickplayTileAt(trickplay, itemId, time);
     if (!offlineTrickplay) return tile;
-    const perTile = trickplay.tileWidth * trickplay.tileHeight;
-    const url = offlineTrickplay.urls[trickplayTileIndex(trickplay, time, Math.ceil(trickplay.thumbnailCount / perTile))];
+    const url = offlineTrickplay.urls[trickplayTileIndex(trickplay, time, trickplayTileCount(trickplay))];
     return url ? { ...tile, url } : null;
   }
   const previewTile = previewTime !== null ? trickplayTileAt(previewTime) : null;
@@ -1726,6 +1772,13 @@ export function PlayerControls({
       // n'est un raccourci du lecteur (23/09/2026).
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const active = document.activeElement;
+      // Lecture / pause, commandes rappelées ; empêché au `keydown` dans tous les cas.
+      const playPause = (ignoreRepeat: boolean) => {
+        e.preventDefault();
+        if (ignoreRepeat && e.repeat) return;
+        keyActionsRef.current.togglePlay();
+        showControls();
+      };
       // Un champ où l'on écrit garde ses touches — la recherche de sous-titres en a un, et une
       // espace y mettait le film en pause au lieu d'écrire.
       if (
@@ -1738,28 +1791,21 @@ export function PlayerControls({
       if (e.code === "Space" || e.code === "KeyK") {
         // Empêché au `keydown` : c'est ce qui retient aussi l'activation d'un bouton qui aurait le
         // focus (une espace l'active au relâchement, sauf si l'appui a été empêché).
-        e.preventDefault();
-        if (e.repeat) return;
-        keyActionsRef.current.togglePlay();
-        showControls();
+        playPause(true);
         return;
       }
       // Une télécommande (Fire TV, 10/10/2026) ne remplit pas toujours `code` : le nom de la touche,
       // ramené à sa forme moderne (`remoteKeys.ts`), fait foi à côté.
       const key = normalizeKey(e);
       if (key === "MediaPlayPause") {
-        e.preventDefault();
-        keyActionsRef.current.togglePlay();
-        showControls();
+        // La répétition n'est pas écartée ici, contrairement à l'espace et au centre du pavé.
+        playPause(false);
         return;
       }
       // Le centre du pavé, quand aucun bouton n'a le focus : lecture / pause, comme l'espace. Sur un
       // bouton focalisé, il garde son rôle — l'activer.
       if (key === "Enter" && (!active || active === document.body || active === document.documentElement)) {
-        e.preventDefault();
-        if (e.repeat) return;
-        keyActionsRef.current.togglePlay();
-        showControls();
+        playPause(true);
         return;
       }
       const left = e.code === "ArrowLeft" || key === "ArrowLeft" || key === "MediaRewind";
@@ -1852,10 +1898,7 @@ export function PlayerControls({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            if (videoRef.current) {
-              onSeekRequest?.(skipNow.end);
-              videoRef.current.currentTime = skipNow.end;
-            }
+            if (videoRef.current) seekElement(videoRef.current, skipNow.end);
           }}
           data-liquid
           className="player-pill pointer-events-auto absolute px-4 py-2.5 text-sm font-medium text-white"
@@ -2272,32 +2315,9 @@ export function PlayerControls({
                 </div>
               </>
             )}
-            {(menu === "chapters" ||
-              menu === "subtitleStyle" ||
-              menu === "hdrCap" ||
-              menu === "sleep" ||
-              menu === "speed" ||
-              menu === "dialogue" ||
-              menu === "quality" ||
-              menu === "subtitleGen" ||
-              menu === "subtitleGenOther" ||
-              menu === "dual" ||
-              menu === "dualPrimary" ||
-              menu === "dualSecond") && (
+            {menuParent && (
               <button
-                onClick={() =>
-                  setMenu(
-                    menu === "subtitleStyle" || menu === "subtitleGen" || menu === "dual"
-                      ? "subtitles"
-                      : menu === "subtitleGenOther"
-                        ? "subtitleGen"
-                        : menu === "dualPrimary" || menu === "dualSecond"
-                          ? "dual"
-                          : menu === "dialogue"
-                            ? "audio"
-                            : "more"
-                  )
-                }
+                onClick={() => setMenu(menuParent)}
                 className="flex w-full items-center gap-2 border-b border-white/10 px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10"
               >
                 <ArrowLeft size={14} /> {t('common.back')}
@@ -2305,8 +2325,9 @@ export function PlayerControls({
             )}
             {(menu === "audio" || menu === "subtitles") &&
               (menu === "audio" ? audioTracks : subtitleTracks).map((tr) => (
-                <button
+                <MenuOption
                   key={tr.id}
+                  on={(menu === "audio" ? currentAudioId : currentSubtitleId) === tr.id}
                   onClick={() => {
                     if (menu === "audio") onChangeAudio(tr.id);
                     // Le second pris comme principal : les deux s'échangent (§87).
@@ -2314,7 +2335,8 @@ export function PlayerControls({
                     else onChangeSubtitle(tr.id);
                     setMenu(null);
                   }}
-                  /**
+                >
+                  {/*
                    * Deux lignes plutôt qu'une coupure.
                    *
                    * Les étiquettes de pistes sont courtes par construction — langue, format
@@ -2322,10 +2344,7 @@ export function PlayerControls({
                    * que rien d'autre ne sépare : « Anglais — 5.1 (Mix 6-Tracks Original du
                    * LaserDisc) ». C'est précisément le cas où couper efface ce qu'on avait mis là
                    * pour choisir. Deux lignes suffisent à tout ce que la bibliothèque contient.
-                   */
-                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${(menu === "audio" ? currentAudioId : currentSubtitleId) === tr.id ? " font-semibold" : ""}`}
-                >
-                  <OptionCheck on={(menu === "audio" ? currentAudioId : currentSubtitleId) === tr.id} />
+                   */}
                   <span className="min-w-0 line-clamp-2">
                     {tr.label}
                     {tr.detail && (
@@ -2334,7 +2353,7 @@ export function PlayerControls({
                       </span>
                     )}
                   </span>
-                </button>
+                </MenuOption>
               ))}
             {/* Sous les pistes, comme sur l'Apple TV : c'est un réglage du son, il vivait dans le
                 menu « … » jusqu'au 11/10/2026. Le nom seul et un chevron, comme l'apparence des
@@ -2356,16 +2375,15 @@ export function PlayerControls({
               </div>
             )}
             {menu === "subtitles" && (
-              <button
+              <MenuOption
+                on={currentSubtitleId === null}
                 onClick={() => {
                   onChangeSubtitle(null);
                   setMenu(null);
                 }}
-                className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${currentSubtitleId === null ? " font-semibold" : ""}`}
               >
-                  <OptionCheck on={currentSubtitleId === null} />
                 {t('player.none')}
-              </button>
+              </MenuOption>
             )}
             {/* « Générer des sous-titres » : sous les pistes, comme « Améliorer les dialogues » sous
                 celles du son — le nom et un chevron vers le choix de la langue. La reprise d'une
@@ -2532,48 +2550,45 @@ export function PlayerControls({
             )}
             {menu === "dualPrimary" &&
               subtitleTracks.map((tr) => (
-                <button
+                <MenuOption
                   key={tr.id}
                   data-dual-primary={tr.id}
+                  on={currentSubtitleId === tr.id}
                   onClick={() => {
                     pickPrimary(tr.id);
                     setMenu("dual");
                   }}
-                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${currentSubtitleId === tr.id ? " font-semibold" : ""}`}
                 >
-                  <OptionCheck on={currentSubtitleId === tr.id} />
                   <span className="min-w-0 line-clamp-2">{tr.label}</span>
-                </button>
+                </MenuOption>
               ))}
             {menu === "dualSecond" && secondSubtitle && (
               <>
-                <button
+                <MenuOption
                   data-dual-second="none"
+                  on={secondId === null}
                   onClick={() => {
                     secondSubtitle.onChange(null);
                     setMenu("dual");
                   }}
-                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${secondId === null ? " font-semibold" : ""}`}
                 >
-                  <OptionCheck on={secondId === null} />
                   {t("player.none")}
-                </button>
+                </MenuOption>
                 {secondChoices.map((tr) => (
-                  <button
+                  <MenuOption
                     key={tr.id}
                     data-dual-second={tr.id}
+                    on={secondId === tr.id}
                     onClick={() => {
                       secondSubtitle.onChange(tr.id);
                       setMenu("dual");
                     }}
-                    className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${secondId === tr.id ? " font-semibold" : ""}`}
                   >
-                    <OptionCheck on={secondId === tr.id} />
                     <span className="min-w-0 line-clamp-2">
                       {tr.label}
                       {tr.detail && <span className="ml-2 text-xs tabular-nums text-white/50">{tr.detail}</span>}
                     </span>
-                  </button>
+                  </MenuOption>
                 ))}
                 {/* Générer le second, à la volée depuis la position — la même demande, les mêmes limites et
                     les mêmes messages que « Générer des sous-titres » (§70). */}
@@ -2629,34 +2644,32 @@ export function PlayerControls({
             {menu === "hdrCap" &&
               hdrCap &&
               HDR_CAP_CHOICES.map((choice) => (
-                <button
+                <MenuOption
                   key={String(choice)}
+                  on={hdrCap.current === choice}
                   onClick={() => {
                     setMenu(null);
                     if (choice !== hdrCap.current) hdrCap.onPick(choice);
                   }}
-                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${hdrCap.current === choice ? " font-semibold" : ""}`}
                 >
-                  <OptionCheck on={hdrCap.current === choice} />
                   {hdrCapLabel(choice)}
-                </button>
+                </MenuOption>
               ))}
             {menu === "sleep" &&
               // « Fin de l'épisode » seulement quand il y a un épisode après : sans lui, l'épisode
               // s'arrête déjà à sa fin, et l'option ne changerait rien.
               (["off", ...SLEEP_DURATIONS, ...(nextEpisode ? (["episode"] as const) : [])] as SleepMode[]).map((choice) => (
-                <button
+                <MenuOption
                   key={choice}
+                  on={sleepMode === choice}
                   onClick={() => {
                     setMenu(null);
                     // Rechoisir la durée en cours la relance en entier, comme « Continuer ».
                     sleepTimerStore.choose(choice);
                   }}
-                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${sleepMode === choice ? " font-semibold" : ""}`}
                 >
-                  <OptionCheck on={sleepMode === choice} />
                   {sleepLabel(choice)}
-                </button>
+                </MenuOption>
               ))}
             {/* Comme l'audio et les sous-titres : trois choix dans une liste, le courant en couleur.
                 Choisir reconstruit la lecture au même endroit (le traitement vit dans la chaîne audio)
@@ -2664,18 +2677,17 @@ export function PlayerControls({
             {menu === "quality" && (
               <>
                 {(["auto", "original"] as const).map((choice) => (
-                  <button
+                  <MenuOption
                     key={choice}
                     data-quality-choice={choice}
+                    on={quality === choice}
                     onClick={() => {
                       if (choice !== quality) writePlaybackQuality(choice);
                       setMenu(null);
                     }}
-                    className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${quality === choice ? " font-semibold" : ""}`}
                   >
-                  <OptionCheck on={quality === choice} />
                     {choice === "auto" ? t("player.quality.auto") : t("player.quality.original")}
-                  </button>
+                  </MenuOption>
                 ))}
                 <p className="border-t border-white/10 px-3 pt-2 pb-2 text-xs text-white/60">{t("player.quality.hint")}</p>
               </>
@@ -2683,18 +2695,17 @@ export function PlayerControls({
             {menu === "dialogue" && dialogue && (
               <>
                 {DIALOGUE_CHOICES.map(({ mode, label }) => (
-                  <button
+                  <MenuOption
                     key={mode}
                     data-dialogue-choice={mode}
+                    on={dialogue.mode === mode}
                     onClick={() => {
                       if (mode !== dialogue.mode) dialogue.onChange(mode);
                       setMenu(null);
                     }}
-                    className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${dialogue.mode === mode ? " font-semibold" : ""}`}
                   >
-                  <OptionCheck on={dialogue.mode === mode} />
                     {t(label)}
-                  </button>
+                  </MenuOption>
                 ))}
                 {dialogue.mode !== "off" && !dialogue.applies && (
                   <p data-dialogue-not-applied className="border-t border-white/10 px-3 pt-2 pb-2 text-xs text-white/60">
@@ -2705,14 +2716,9 @@ export function PlayerControls({
             )}
             {menu === "speed" &&
               PLAYBACK_SPEEDS.map((rate) => (
-                <button
-                  key={rate}
-                  onClick={() => changeSpeed(rate)}
-                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${speed === rate ? " font-semibold" : ""}`}
-                >
-                  <OptionCheck on={speed === rate} />
+                <MenuOption key={rate} on={speed === rate} onClick={() => changeSpeed(rate)}>
                   {rate === 1 ? t('player.speedNormal') : `${rate}x`}
-                </button>
+                </MenuOption>
               ))}
             {menu === "episodes" && episodesSeriesId && onPlayEpisode && (
               <PlayerEpisodesMenu
@@ -2729,14 +2735,12 @@ export function PlayerControls({
               chapters.map((ch, i) => {
                 const tile = trickplayTileAt(ch.start);
                 return (
-                  <button
+                  <MenuOption
                     key={i}
+                    align="center"
+                    on={currentTime >= ch.start && (chapters[i + 1] ? currentTime < chapters[i + 1].start : true)}
                     onClick={() => jumpToChapter(ch.start)}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${
-                      currentTime >= ch.start && (chapters[i + 1] ? currentTime < chapters[i + 1].start : true) ? " font-semibold" : ""
-                    }`}
                   >
-                    <OptionCheck on={currentTime >= ch.start && (chapters[i + 1] ? currentTime < chapters[i + 1].start : true)} />
                     {trickplay && (
                       <div
                         className="shrink-0 overflow-hidden rounded bg-black/40"
@@ -2759,7 +2763,7 @@ export function PlayerControls({
                     )}
                     <span className="min-w-0 flex-1 truncate">{ch.name ?? t("player.chapterN", { n: i + 1 })}</span>
                     <span className="shrink-0 tabular-nums text-white/50">{formatTime(ch.start)}</span>
-                  </button>
+                  </MenuOption>
                 );
               })}
           </LiquidMenu>
@@ -3331,13 +3335,6 @@ function OffsetRow({ label, seconds, onShift }: { label: string; seconds: number
   );
 }
 
-/**
- * L'option retenue d'un menu du lecteur : une coche, comme les menus d'iOS et de l'Apple TV
- * (13/10/2026). Elle était dite par la couleur d'accent sur un texte blanc ; l'accent devenu blanc
- * (§83), la piste choisie ne se distinguait plus des autres. La place est gardée sur chaque ligne
- * pour que les libellés restent alignés. `data-option-on` la désigne au menu, qui la fait
- * défiler dans son cadre à l'ouverture (`LiquidMenu`, LECTEUR-15).
- */
 /** Le temps restant, signé « − » (U+2212) tant qu'il en reste. */
 function remainingLabel(duration: number, currentTime: number): string {
   const left = Math.max(0, duration - currentTime);
@@ -3345,6 +3342,43 @@ function remainingLabel(duration: number, currentTime: number): string {
   return left >= 1 ? `\u2212${formatTime(left)}` : formatTime(0);
 }
 
+/**
+ * L'option retenue d'un menu du lecteur : une coche, comme les menus d'iOS et de l'Apple TV
+ * (13/10/2026). Elle était dite par la couleur d'accent sur un texte blanc ; l'accent devenu blanc
+ * (§83), la piste choisie ne se distinguait plus des autres. La place est gardée sur chaque ligne
+ * pour que les libellés restent alignés. `data-option-on` la désigne au menu, qui la fait
+ * défiler dans son cadre à l'ouverture (`LiquidMenu`, LECTEUR-15).
+ */
 function OptionCheck({ on }: { on: boolean }) {
   return <Check size={16} strokeWidth={2.5} aria-hidden data-option-on={on ? "" : undefined} className={`mt-0.5 shrink-0 ${on ? "" : "invisible"}`} />;
+}
+
+/**
+ * Une ligne de choix d'un menu du lecteur : sa coche, et le gras quand c'est l'option retenue. Écrite
+ * une fois pour toutes les listes (pistes, minuterie, vitesse…) ; les chapitres alignent au centre,
+ * pour leur vignette. Les `data-*` passent tels quels au bouton.
+ */
+function MenuOption({
+  on,
+  onClick,
+  align = "start",
+  children,
+  ...data
+}: {
+  on: boolean;
+  onClick: () => void;
+  align?: "start" | "center";
+  children: React.ReactNode;
+  [dataAttribute: `data-${string}`]: string | number;
+}) {
+  return (
+    <button
+      {...data}
+      onClick={onClick}
+      className={`flex w-full ${align === "center" ? "items-center" : "items-start"} gap-2 px-3 py-2 text-left text-sm text-white hover:bg-white/10${on ? " font-semibold" : ""}`}
+    >
+      <OptionCheck on={on} />
+      {children}
+    </button>
+  );
 }
