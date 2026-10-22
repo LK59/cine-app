@@ -98,7 +98,7 @@ import { CastResume } from "@/lib/castResume";
 import { castRouteActive } from "@/lib/castRoute";
 import { SessionTally, WatchedClock, newPlayerSessionId, watchElementWaits } from "@/lib/playerSessionTally";
 import { positionBucket, retrySignature } from "@/lib/retryLedger";
-import { noteWatching, openingPosition } from "@/lib/resumeRewind";
+import { noteWatching, openingPosition, pauseRewindTarget } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
@@ -1289,7 +1289,7 @@ function ActivePlayer({
     const save = () => {
       const id = logContext.current.session;
       if (!id || bench || closedRef.current || handedOverRef.current || stopAlreadySent()) return;
-      saveUnsentStop(id, stopFields("lost", false));
+      saveUnsentStop(id, stopFields("lost", false), Date.now(), { livesHere: true });
     };
     save();
     const timer = setInterval(save, 30_000);
@@ -2874,14 +2874,27 @@ function ActivePlayer({
         noteWatching(itemId);
       }
     };
+    // Après une longue pause, quelques secondes en arrière pour se remettre dans la scène — la règle
+    // du lecteur natif (`pauseRewindTarget`). Seule une pause sur une image compte : celle d'un
+    // changement de source (élément vidé) n'est pas une pause du spectateur.
+    let pausedAt: number | null = null;
     const onPause = () => {
-      if (!bench && !isSceneRef.current() && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) noteWatching(itemId);
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+      pausedAt = Date.now();
+      if (!bench && !isSceneRef.current()) noteWatching(itemId);
+    };
+    const onPlay = () => {
+      const target = !video.ended && !video.seeking && !bench ? pauseRewindTarget(pausedAt, Date.now(), video.currentTime, video.duration) : null;
+      pausedAt = null;
+      if (target !== null) video.currentTime = target;
     };
     video.addEventListener("timeupdate", onTimeUpdate);
     video.addEventListener("pause", onPause);
+    video.addEventListener("play", onPlay);
     return () => {
       video.removeEventListener("timeupdate", onTimeUpdate);
       video.removeEventListener("pause", onPause);
+      video.removeEventListener("play", onPlay);
     };
   }, [videoKey, itemId, bench, castResume]);
 

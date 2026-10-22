@@ -62,6 +62,19 @@ export function rewound(position: number, duration?: number | null): number {
 }
 
 /**
+ * Où repartir quand la lecture reprend après une pause — `null` pour ne pas bouger. Une seule règle
+ * pour les deux lecteurs : le natif la tenait seul, et le lecteur serveur (la télévision, AirPlay, un
+ * fichier que le natif ne porte pas) repartait pile où il s'était arrêté — une différence que
+ * personne ne pouvait voir venir, puisqu'on ne sait pas quel lecteur on a (22/10/2026). Les gardes
+ * propres à chaque lecteur (fin, saut en cours, banc) restent à l'appel.
+ */
+export function pauseRewindTarget(pausedAt: number | null, now: number, position: number, duration?: number | null): number | null {
+  if (pausedAt === null || now - pausedAt < AWAY_MS) return null;
+  const target = rewound(position, duration);
+  return target < position ? target : null;
+}
+
+/**
  * Où s'ouvre une reprise : la position, reculée si le titre a été quitté il y a assez longtemps.
  * Une seule fonction pour le lecteur qui s'ouvre et pour la reprise instantanée qui garde, en
  * arrière-plan, les octets de cette ouverture-là : deux calculs dériveraient, et les octets gardés

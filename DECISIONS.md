@@ -945,9 +945,17 @@ l'hôte passe par `openingPosition`, la reprise instantanée par `openingSpan`).
 
 **Voulu.** Le lecteur serveur ne recule pas un relais (la position exacte où le natif s'est
 arrêté, ou le retour d'une télé), ni un rechargement pour changer de piste ; et, faute de durée
-connue avant la négociation, il ne connaît pas l'exception de fin de film. Le retour d'une pause de
-plus de dix minutes pendant la lecture recule aussi, par
-`rewound` directement : c'est un autre moment (l'élément joue déjà), et rien n'y est gardé d'avance.
+connue avant la négociation, il ne connaît pas l'exception de fin de film.
+
+**Le retour d'une pause de plus de dix minutes** pendant la lecture recule aussi, dans **les deux
+lecteurs**, par `pauseRewindTarget(pauseDébut, maintenant, position, durée)` (sur `rewound`) : c'est un
+autre moment (l'élément joue déjà), et rien n'y est gardé d'avance. Le natif le faisait seul ; le lecteur
+serveur repartait pile où il s'était arrêté, une différence que personne ne pouvait voir venir — aligné
+le 22/10/2026 (`PlayerHost-audit-22-10.test.tsx`). Les gardes restent à l'appel : ni après la fin, ni
+pendant un saut, ni au banc. Le lecteur serveur ne compte qu'une pause sur une image
+(`readyState ≥ HAVE_CURRENT_DATA`) — la même garde que sa note `noteWatching` à la pause (a3733215) :
+un changement de source vide l'élément et émet un `pause` qui n'est pas celui du spectateur. Le natif
+n'a pas ce cas (il reconstruit sans mettre l'élément en pause sur une source vide) et note toujours.
 
 **Décidé le 25/09/2026**, avec la reprise instantanée.
 
@@ -1301,6 +1309,13 @@ par cet instant.
 
 **Tests.** `activity-diagnosis.test.ts` (bilan perdu, ligne renvoyée), `playerLog.test.ts`,
 `decisions-partagees.test.ts` (« un seul instant pour une ligne en retard »).
+
+**Une séance que la page tient encore n'est jamais déclarée perdue par elle** (22/10/2026,
+`livingHere` dans `unsentStop.ts`, `saveUnsentStop(…, { livesHere: true })` par les deux hôtes) : un
+Mac endormi des heures en plein film, réveillé, passait la minuterie des bilans en plan avant celle de
+la séance et envoyait son propre bilan « lost » une seconde avant le vrai `stop "close"` — 13 séances
+ainsi en octobre. Seule une page tuée, dont le module disparaît avec elle, laisse un bilan au
+lancement suivant.
 
 **Voulu.** Le fichier reste dans l'ordre d'arrivée — il est lu par `tail` et tourne par taille ;
 c'est la lecture qui replace. La file des lignes en attente (`src/lib/unsentLines.ts`) et celle des
@@ -3961,6 +3976,13 @@ rangé avec les connexions lentes, jamais contre le fichier.
 **Différent exprès.** Le serveur renonce à 20 s (son chien de garde), le natif à 35 s. Safari en HLS natif
 ne mesure rien : inchangé. Le préchauffage n'est pas bridé par le simulateur (seule la lecture l'est).
 
+**Le saut de reprise d'une renégociation n'est pas un saut du spectateur** (22/10/2026,
+`resumeSeekPendingRef` dans `PlayerHost.tsx`) : sur hls.js, l'élément n'est pas remonté, et le saut
+posé par `startPlayback` après un changement de piste en place, « Réessayer », une marche de l'échelle
+ou une bascule allégée comptait `seeks: 1` au bilan et armait `runner.seekStarted()`. Il annule
+toujours une attente en cours, sans compter. Les bilans hls.js comptent donc moins de sauts
+qu'avant cette date. WebKit n'était pas touché (son décompte repart à chaque négociation).
+
 **Décidé le 12/10/2026.**
 
 **Le panneau d'infos techniques dit ce qui est diffusé (12/10/2026, relevé de Louis).** En version allégée, « Fichier » décrivait la source (4K HEVC Dolby Vision 30 Mbit/s) pendant que l'appareil recevait du HEVC 720p SDR à 1,5 Mbit/s, le titre disait « Transcodage » sans la cause, et le rechargement direct effaçait la note « a cédé la main ». Pour toute lecture transcodée par le lecteur serveur, une section **« Diffusé »** (`describeJellyfinPlayback`, `playbackPanel.ts`) : codec et plage annoncés par la liste maître (`CODECS`, `VIDEO-RANGE` — hls.js : ses niveaux, `attrs` brut car son `videoRange` répond « SDR » par défaut ; Safari : la route les lit dans le maître qu'elle préchauffait déjà, `masterVariantFacts`, aucune requête de plus ; repris d'un préchauffage : son maître), taille décodée (`videoWidth × videoHeight`, suivie au `resize`), débit visé par Jellyfin (`VideoBitrate` + `AudioBitrate` de son adresse, `streamBitrate`). Plage sans maître : SDR en allégée (toujours convertie) ou d'une source SDR, sinon pas de ligne. « Fichier » devient « Fichier d'origine » (avec la plage de la source). Titre « Version allégée » + « Connexion lente : la vidéo est réencodée par le serveur à {débit}… » ; notes « Bascule automatique (connexion lente) à {position} » ou « reprise de la lecture précédente » (règle des deux minutes). La cause du relais et la position de la bascule voyagent dans l'intention (`carry.reason`, `carry.lighter.at`) à travers tout rechargement. **Le besoin du flux serveur** (`streamNeedBps`) est désormais ce débit visé quand Jellyfin transcode : `MediaStreams` décrit la source (vérifié sur la prod — une allégée à 1,5 d'un fichier à 6,8 y gardait 6,1 + 0,4), si bien qu'une séance allégée était jugée contre le débit d'origine (panneau « trop lente » sur un lien suffisant, palier suivant décidé contre le mauvais chiffre). Lecture directe et remultiplexage inchangés. Panneau natif : plus de « SDR » avant que le fichier soit décrit. **Tests** : `panneau-technique-allegee.test.tsx`, `jellyfin-playback-start-route.test.ts` (« panneau technique »).
@@ -4335,6 +4357,17 @@ accepté : pendant un film, l'avis de redémarrage arrive en 30 s au plus (10 s 
 plantée en plein écran sans passer en arrière-plan perd au plus 30 s de position et deux minutes de
 `watched` dans son bilan perdu.
 
+**Différent exprès entre les deux hôtes (déclaré le 22/10/2026).**
+- *Le bilan gardé.* Le natif le réécrit seulement s'il a changé, sinon `touchUnsentStop` ; copie exacte
+  à `pagehide`. Le lecteur serveur le réécrit entier toutes les 30 s et au passage en arrière-plan,
+  rien à `pagehide` : son bilan est petit (~1 Ko, sans centiles triés) et ne sert qu'à environ une
+  séance sur six. Aligner demanderait la signature du natif pour un gain de quelques octets.
+- *Une page mise en cache par le navigateur (bfcache).* Le natif envoie toujours `stop "page"` à
+  `pagehide`, et un `pageshow` persistant rouvre la séance (`lifecycle.reopenStop`) ; le lecteur
+  serveur n'envoie rien sur un `pagehide` persistant, le bilan gardé suffit (faf15338). Les deux
+  aboutissent au même dernier `stop` par séance, que la lecture garde ; le natif peut écrire un
+  `stop "page"` provisoire suivi d'un autre.
+
 **Décidé le 13/10/2026.**
 
 ## 85. La grille complète est faite de paquets de rangées entières
@@ -4505,6 +4538,11 @@ la fois », « générer comme second »), `PlayerHost-deuxSousTitres.test.tsx`,
 change rien au rendu d'avant, ni dans le natif (même arbre) ni dans le serveur (le navigateur dessine).
 Le second n'est pas transmis lors d'un passage du natif au serveur : la mémoire le réapplique à
 l'ouverture du serveur.
+
+Seul le lecteur serveur compte `subtitleSwitches` (principal **et** second) dans son bilan, et
+appelle `reportPositionNow` sur un changement du second (sans effet : le second n'est rien pour
+Jellyfin). La page Activité ne compte donc les changements de sous-titres que pour lui — déclaré le
+22/10/2026, à ajouter au natif (`SessionTally`) le jour où on les lit.
 
 **Décidé le 14/10/2026** (validé par Louis).
 
@@ -5234,6 +5272,14 @@ préparé ailleurs, Safari, allégé ≠ ordinaire), `scene-native.test.tsx`, `a
 `integrity-check.test.ts`, `repliques-engine.test.ts` (le verrou), `library-check-ui.test.tsx`,
 `decisions-partagees.test.ts`. Bancs : `zone-bench.spec.ts` (copies abîmées d'un extrait réel),
 `zone-regress-bench.spec.ts` (empreintes avant/après), `integrity-bench.spec.ts` (débit).
+
+**L'index audio emporté par un relais** (déclaré le 22/10/2026) : `takeoverNow`, utilisé par chaque
+`fallToStable` générique, la diffusion et le relais, prend la piste **qui joue** (`currentAudio`) ; le
+relais de zone, la bascule allégée avant la première image et `runner.attach` prennent la piste
+**voulue** (`wantedAudioRef`). Ils ne divergent que pendant une reconstruction vers une autre piste,
+et seul l'`onError` du moteur peut tomber dans cet intervalle — aucun cas sur 152 `fallback`
+d'octobre. Unifier sur la piste voulue serait le bon choix (le serveur transcode n'importe quelle
+piste) : c'est une décision de comportement, pas un nettoyage.
 
 **Décidé le 14/10/2026** (Louis).
 

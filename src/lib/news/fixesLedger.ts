@@ -538,6 +538,31 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    page: "9.1",
+    version: "9.3.11",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Le logo du titre s'affiche aussi dans le lecteur des téléviseurs, d'AirPlay et des fichiers transcodés.",
+        en: "The title logo now also shows in the player used for TVs, AirPlay and transcoded files.",
+        es: "El logotipo del título también aparece en el reproductor de los televisores, de AirPlay y de los archivos transcodificados.",
+        de: "Das Titellogo erscheint jetzt auch im Player für Fernseher, AirPlay und transkodierte Dateien.",
+      },
+      {
+        fr: "Après plus de dix minutes de pause, la lecture reprend cinq secondes plus tôt dans tous les cas, pour se remettre dans la scène.",
+        en: "After a pause of more than ten minutes, playback now always resumes five seconds earlier, to get back into the scene.",
+        es: "Tras más de diez minutos de pausa, la reproducción se reanuda siempre cinco segundos antes, para volver a la escena.",
+        de: "Nach mehr als zehn Minuten Pause setzt die Wiedergabe jetzt immer fünf Sekunden früher ein, um wieder in die Szene zu finden.",
+      },
+      {
+        fr: "Au clavier, les touches Début, Fin et Page précédente / suivante déplacent bien la lecture sur la barre de progression.",
+        en: "On a keyboard, the Home, End and Page Up / Page Down keys now move playback on the progress bar.",
+        es: "Con el teclado, las teclas Inicio, Fin y Re Pág / Av Pág ahora mueven la reproducción en la barra de progreso.",
+        de: "Auf der Tastatur verschieben Pos1, Ende und Bild auf / Bild ab jetzt die Wiedergabe auf der Fortschrittsleiste.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

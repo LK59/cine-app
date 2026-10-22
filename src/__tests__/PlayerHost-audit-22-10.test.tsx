@@ -230,3 +230,41 @@ describe("WebKit : changement de piste sans intention écrite", () => {
     expect(negociations).toHaveLength(1);
   });
 });
+
+describe("la reprise après une longue pause (22/10/2026)", () => {
+  // Le natif recule de cinq secondes après plus de dix minutes de pause ; le lecteur serveur repartait
+  // pile où il s'était arrêté. Même règle désormais (`pauseRewindTarget`).
+  function element(position: number) {
+    const el = video();
+    let at = position;
+    Object.defineProperty(el, "readyState", { configurable: true, get: () => 4 });
+    Object.defineProperty(el, "duration", { configurable: true, get: () => 5400 });
+    Object.defineProperty(el, "currentTime", { configurable: true, get: () => at, set: (v: number) => void (at = v) });
+    return () => at;
+  }
+
+  it("recule de cinq secondes au-delà de dix minutes", async () => {
+    render(<PlayerHost />);
+    await nextNegotiation(1);
+    loadAndResume();
+    const position = element(1000);
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    fire("pause");
+    now.mockReturnValue(1_000_000 + 11 * 60_000);
+    fire("play");
+    expect(position()).toBe(995);
+  });
+
+  it("ne bouge pas après une courte pause", async () => {
+    render(<PlayerHost />);
+    await nextNegotiation(1);
+    loadAndResume();
+    const position = element(1000);
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    fire("pause");
+    now.mockReturnValue(1_000_000 + 9 * 60_000);
+    fire("play");
+    expect(position()).toBe(1000);
+  });
+});
+

@@ -81,7 +81,7 @@ import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
 import { useFrameFit } from "@/lib/frameFit";
 import { readDialogueMode, writeDialogueMode } from "@/lib/dialoguePreference";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
-import { noteWatching, openingPosition, rewound, AWAY_MS } from "@/lib/resumeRewind";
+import { noteWatching, openingPosition, pauseRewindTarget } from "@/lib/resumeRewind";
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { PlayerTrack } from "@/lib/webcodecs/playerTrack";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
@@ -2587,18 +2587,10 @@ export function ExperimentalPlayerHost({
       const onPlay = () => {
         // Après une longue pause, quelques secondes en arrière pour se remettre dans la scène.
         // Pas après la fin — c'est « Revoir », ou un épisode relancé —, ni pendant un saut.
-        if (
-          pausedAt !== null &&
-          Date.now() - pausedAt >= AWAY_MS &&
-          !lifecycle.isEnded() &&
-          !element.seeking &&
-          !session.bench
-        ) {
-          const target = rewound(element.currentTime, element.duration);
-          if (target < element.currentTime) {
-            trace(`reprise après ${Math.round((Date.now() - pausedAt) / 60_000)} min de pause : ${target.toFixed(1)} s`);
-            element.currentTime = target;
-          }
+        const target = !lifecycle.isEnded() && !element.seeking && !session.bench ? pauseRewindTarget(pausedAt, Date.now(), element.currentTime, element.duration) : null;
+        if (target !== null && pausedAt !== null) {
+          trace(`reprise après ${Math.round((Date.now() - pausedAt) / 60_000)} min de pause : ${target.toFixed(1)} s`);
+          element.currentTime = target;
         }
         pausedAt = null;
         background.notePlaying();
