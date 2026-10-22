@@ -465,9 +465,8 @@ describe("les sous-titres et le réseau", () => {
     (swr = { data: info({ externalSubtitles: [{ id: -1, language: "spa", title: null, url: "/es.vtt" }], ...over }), error: undefined });
   const controls = () => screen.getByTestId("controls").dataset;
   /**
-   * Choisir une piste du film n'abandonne pas la demande d'un fichier encore en vol (seul un autre
-   * fichier, ou la fermeture, l'abandonne) : c'est la garde « le spectateur n'a pas changé d'avis »
-   * qui empêche le fichier arrivé trop tard de s'afficher.
+   * Un fichier arrivé malgré tout après le changement d'avis (une réponse que l'abandon n'arrête
+   * pas) : la garde « le spectateur n'a pas changé d'avis » l'empêche encore de s'afficher.
    */
   it("un fichier encore en vol quand on choisit une piste du film : arrivé trop tard, il ne s'affiche jamais", async () => {
     external();
@@ -490,6 +489,36 @@ describe("les sous-titres et le réseau", () => {
     expect(screen.getByText("Ligne du fichier.")).toBeTruthy();
     expect(screen.queryByText("Hola.")).toBeNull();
     expect(screen.getByTestId("controls").dataset.currentSubtitle).toBe("5");
+  });
+
+  /**
+   * Choisir une piste du film, ou rien, abandonne un fichier encore en vol comme le fait un autre
+   * fichier : seuls un autre fichier et la fermeture l'abandonnaient, et son échec tardif affichait
+   * « sous-titres indisponibles » pour un fichier que le spectateur avait quitté (22/10/2026).
+   */
+  it.each([
+    ["une piste du film", /^st:Français/],
+    ["aucun sous-titre", /^st:aucun$/],
+  ])("un fichier en vol quitté pour %s : abandonné, son échec tardif ne dit rien", async (_, choice) => {
+    external();
+    let signal: AbortSignal | undefined;
+    let fail: () => void = () => {};
+    rest = (url, init) => {
+      if (url !== "/es.vtt") return { ok: true, text: async () => "" };
+      signal = init!.signal!;
+      // Un échec réseau, pas un abandon : la demande échoue d'elle-même après le changement d'avis.
+      return new Promise((_, reject) => (fail = () => reject(new TypeError("Failed to fetch"))));
+    };
+    mount();
+    await ready();
+    await act(async () => void fireEvent.click(screen.getByText(/^st:Espagnol/)));
+    await waitFor(() => expect(signal).toBeDefined());
+
+    await act(async () => void fireEvent.click(screen.getByText(choice)));
+    await act(async () => fail());
+    await act(async () => {});
+    expect(screen.queryByText("externalSubtitlesUnavailable")).toBeNull();
+    expect(signal!.aborted).toBe(true);
   });
 
   it("un fichier en vol remplacé par un autre fichier : la première demande est abandonnée, sans avertissement", async () => {

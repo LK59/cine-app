@@ -870,12 +870,17 @@ export function ExperimentalPlayerHost({
       const generating = isGeneratingTrack(id);
       // Une génération que le second affiche reste sondée quand le principal change (§87).
       generation.activate(generating ? id : isGeneratingTrack(secondWantedRef.current) ? secondWantedRef.current : null);
+      // Un fichier encore en vol est abandonné quel que soit le nouveau choix — piste du film,
+      // aucun sous-titre ou génération compris, pas seulement un autre fichier : sinon son échec
+      // tardif affichait « sous-titres indisponibles » pour un fichier que le spectateur avait
+      // quitté (relevé le 22/10/2026).
+      subtitleFetchRef.current?.abort();
+      subtitleFetchRef.current = null;
       if (!external || generating) return;
       const source = sources.find((candidate) => candidate.id === id);
       if (!source) return;
       // Fetched on being chosen rather than up front: a film may carry half a dozen of these
       // and the viewer will read one of them.
-      subtitleFetchRef.current?.abort();
       const fetching = new AbortController();
       subtitleFetchRef.current = fetching;
       void ExternalSubtitleTrack.load(source, fetching.signal)

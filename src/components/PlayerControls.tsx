@@ -372,6 +372,10 @@ const MENU_TITLES: Record<string, string> = {
   chapters: "player.chapters",
   sleep: "player.sleep.title",
   hdrCap: "player.hdrCap.title",
+  // Le libellé de la ligne qui ouvre la vue : sans lui, ces deux vues étaient les seules sans
+  // titre, et rien au-dessus des choix ne disait ce qu'ils réglaient (audit du 22/10/2026).
+  dialogue: "player.dialogue.title",
+  quality: "player.quality.title",
 };
 const MENU_ICONS: Record<string, React.ReactNode> = {
   speed: <Gauge size={20} />,

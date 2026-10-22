@@ -146,8 +146,8 @@ const OFFSET = ["−0.5s", "+0.5s"];
 
 /**
  * Les seize vues des menus. `parent` : la vue où mène « Retour » ; `null`, une racine ouverte par un
- * bouton de la pilule. `title` vide pour « dialogue » et « quality » : elles n'ont pas de titre
- * aujourd'hui (l'audit le relève), et c'est ce qui est décrit ici.
+ * bouton de la pilule. Chaque vue a son titre — « dialogue » et « quality » n'en avaient pas
+ * (relevé par l'audit du 22/10/2026), elles portent celui de la ligne qui les ouvre.
  */
 const VIEWS: Record<string, View> = {
   audio: {
@@ -159,7 +159,7 @@ const VIEWS: Record<string, View> = {
   },
   dialogue: {
     path: [["nav", "audio"], ["sel", "[data-dialogue-row]"]],
-    title: "",
+    title: "player.dialogue.title",
     parent: "audio",
     rows: ["player.dialogue.off", "player.dialogue.enhance", "player.dialogue.further"],
     checked: ["player.dialogue.enhance"],
@@ -283,7 +283,7 @@ const VIEWS: Record<string, View> = {
   },
   quality: {
     path: [["nav", "more"], ["sel", "[data-quality-row]"]],
-    title: "",
+    title: "player.quality.title",
     parent: "more",
     rows: ["player.quality.auto", "player.quality.original"],
     checked: ["player.quality.auto"],
