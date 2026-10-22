@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync, readdirSync } from "fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "fs";
+import { posix } from "path";
 
 /**
  * Les décisions qui ont déjà dérivé, et qu'on empêche de dériver à nouveau.
@@ -20,6 +21,98 @@ import { readFileSync, readdirSync } from "fs";
  */
 
 const lire = (f: string) => readFileSync(f, "utf8");
+
+/** Le code sans les lignes de commentaire : un nom cité dans un commentaire n'est pas un appel. */
+const sansCommentaires = (src: string) =>
+  src
+    .split("\n")
+    .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
+    .join("\n");
+
+/**
+ * Les sources du lecteur, où que le découpage les range (22/10/2026).
+ *
+ * Ces règles lisaient `ExperimentalPlayerHost.tsx`, `PlayerHost.tsx` et `PlayerControls.tsx` à leur
+ * chemin : découper ces fichiers géants — ce que l'audit du lecteur prévoit — aurait cassé des tests
+ * dont la règle, elle, tenait toujours. Elles lisent maintenant un **ensemble** :
+ *
+ *  * `src/lib/webcodecs/**` — le moteur ;
+ *  * sous `src/components/`, tout fichier dont un segment du chemin contient « player » (casse
+ *    ignorée) : les hôtes, les commandes, `src/components/player/**` et ses sous-dossiers
+ *    (`player/native/…`, `player/server/…`), `offline/OfflinePlayerHost.tsx`.
+ *
+ * Une règle « personne ne fait X » parcourt tout l'ensemble. Une règle « chacun des deux lecteurs
+ * passe par Y » lit le **graphe d'imports** de l'hôte (`codeDe`) : son module d'entrée, retrouvé
+ * par son export et non par son chemin, et tout ce qu'il importe dans l'ensemble, sans entrer dans
+ * l'autre hôte ni dans les commandes, qu'ils partagent — sans quoi l'appel de l'un compterait pour
+ * l'autre. Un module extrait d'un hôte reste donc vu tant qu'il vit sous un dossier du lecteur ;
+ * sorti vers `src/lib/`, il quitte la vue et la règle échoue — c'est voulu : y ranger un morceau du
+ * lecteur, c'est l'ôter de ce que ces tests gardent.
+ */
+const SOURCES = () =>
+  (readdirSync("src", { recursive: true }) as string[])
+    .map((f) => `src/${f.replaceAll("\\", "/")}`)
+    .filter((f) => /\.tsx?$/.test(f) && !f.includes("__tests__"));
+const estDuLecteur = (f: string) =>
+  f.startsWith("src/lib/webcodecs/") ||
+  (f.startsWith("src/components/") && f.slice("src/components/".length).split("/").some((seg) => /player/i.test(seg)));
+const sourcesDuLecteur = () => SOURCES().filter(estDuLecteur);
+
+/** Le module de l'ensemble qui exporte `nom` — un seul, sinon la règle ne sait plus qui elle lit. */
+const entrees = new Map<string, string>();
+function entreeDe(nom: string): string {
+  const connue = entrees.get(nom);
+  if (connue) return connue;
+  const exporte = new RegExp(`export\\s+(?:default\\s+)?(?:async\\s+)?(?:function\\s+${nom}\\b|const\\s+${nom}\\b)`);
+  const hits = sourcesDuLecteur().filter((f) => exporte.test(lire(f)));
+  expect(hits, `le module du lecteur qui exporte ${nom}`).toHaveLength(1);
+  entrees.set(nom, hits[0]);
+  return hits[0];
+}
+
+function resoudre(depuis: string, spec: string): string | null {
+  let base: string;
+  if (spec.startsWith("@/")) base = `src/${spec.slice(2)}`;
+  else if (spec.startsWith(".")) base = posix.normalize(posix.join(posix.dirname(depuis), spec));
+  else return null;
+  for (const c of [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`]) {
+    if (existsSync(c) && statSync(c).isFile()) return c;
+  }
+  return null;
+}
+
+/** Les deux hôtes, celui hors ligne et les commandes : les frontières entre lesquelles `codeDe` lit. */
+const PIECES_DU_LECTEUR = ["ExperimentalPlayerHost", "PlayerHost", "OfflinePlayerHost", "PlayerControls"];
+
+/**
+ * Le code (sans commentaires) d'une pièce du lecteur : son module d'entrée et ce qu'il importe dans
+ * l'ensemble du lecteur, sans franchir les autres pièces. Chaque fichier y est précédé de son chemin.
+ */
+function codeDe(piece: string): string {
+  const bornes = new Set(PIECES_DU_LECTEUR.filter((p) => p !== piece).map(entreeDe));
+  const vus = new Set<string>();
+  const pile = [entreeDe(piece)];
+  while (pile.length > 0) {
+    const f = pile.pop()!;
+    if (vus.has(f)) continue;
+    vus.add(f);
+    for (const m of sansCommentaires(lire(f)).matchAll(/(?:\bfrom\s+|\bimport\s*\(\s*)["']([^"']+)["']/g)) {
+      const cible = resoudre(f, m[1]);
+      if (cible && estDuLecteur(cible) && !bornes.has(cible) && !vus.has(cible)) pile.push(cible);
+    }
+  }
+  return [...vus]
+    .sort()
+    .map((f) => `/* ${f} */\n${sansCommentaires(lire(f))}`)
+    .join("\n");
+}
+
+/** Les fichiers de tout l'ensemble du lecteur dont le code (sans commentaires) répond au motif. */
+const lecteurQui = (motif: RegExp) => sourcesDuLecteur().filter((f) => motif.test(sansCommentaires(lire(f))));
+
+const NATIF = "ExperimentalPlayerHost";
+const SERVEUR = "PlayerHost";
+const HOTES = [NATIF, SERVEUR];
 
 describe("un seul repli stéréo", () => {
   /**
@@ -312,8 +405,10 @@ describe("une seule règle de reprise, une seule d'épisode suivant, une seule c
     }
   });
 
-  it("le lecteur stable demande au serveur une position absente", () => {
-    expect(codeOnly("src/components/PlayerHost.tsx")).toContain("resolveResumeAt(itemId, initialResumeAt)");
+  // Le comportement (une position absente → `playback-state`, puis le recul) est éprouvé par
+  // `decisions-partagees-lecteur.test.tsx` ; ici, le seul porteur.
+  it("le lecteur stable demande au serveur une position absente, par `resolveResumeAt`", () => {
+    expect(codeDe(SERVEUR)).toMatch(/resolveResumeAt\(\s*\w+\s*,\s*\w+\s*\)/);
   });
 
   it("l'épisode suivant du cinéma vient de `nextEpisodeIn`", () => {
@@ -504,11 +599,11 @@ describe("ce que Lire trouve déjà prêt", () => {
   });
 
   it("le lecteur lit la description sous la clé que la fiche précharge", () => {
-    const host = code("src/components/ExperimentalPlayerHost.tsx");
-    expect(host).toContain("useSWR<DirectPlayInfo>([directInfoKey(itemId), openingId, infoAttempt], () => directInfoForOpening(itemId)");
-    expect(host).toContain("takePrefetchedPlaybackState(itemId) ?? fetchPlaybackState(itemId)");
-    // L'adresse écrite à la main, qui ferait précharger dans le vide.
-    expect(host).not.toMatch(/`\/api\/jellyfin\/(direct|playback-state)\//);
+    const host = codeDe(NATIF);
+    expect(host).toMatch(/useSWR<DirectPlayInfo>\(\s*\[\s*directInfoKey\((\w+)\)[^\]]*\]\s*,\s*\(\)\s*=>\s*directInfoForOpening\(\1\)/);
+    expect(host).toMatch(/takePrefetchedPlaybackState\((\w+)\)\s*\?\?\s*fetchPlaybackState\(\1\)/);
+    // L'adresse écrite à la main, qui ferait précharger dans le vide — nulle part dans le lecteur.
+    expect(lecteurQui(/`\/api\/jellyfin\/(direct|playback-state)\//)).toEqual([]);
   });
 });
 
@@ -726,13 +821,15 @@ describe("un seul « ce navigateur lira-t-il le HLS lui-même ? »", () => {
    * la première demandait WebKit, le second seulement `canPlayType`. Opera sous Windows
    * (25/09/2026) a été sondé comme hls.js puis servi au HLS intégré de Chromium, qui a refusé.
    */
-  it.each(["src/components/PlayerHost.tsx", "src/lib/codecSupport.ts"])("%s passe par playsHlsNatively", (f) => {
-    const code = lire(f)
-      .split("\n")
-      .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
-      .join("\n");
+  it("src/lib/codecSupport.ts passe par playsHlsNatively", () => {
+    const code = sansCommentaires(lire("src/lib/codecSupport.ts"));
     expect(code).toMatch(/playsHlsNatively\(/);
     expect(code).not.toMatch(/canPlayType\(\s*["']application\/vnd\.apple\.mpegurl/);
+  });
+
+  it("le lecteur serveur passe par playsHlsNatively, et personne dans le lecteur ne pose la question à sa façon", () => {
+    expect(codeDe(SERVEUR)).toMatch(/playsHlsNatively\(/);
+    expect(lecteurQui(/canPlayType\(\s*["']application\/vnd\.apple\.mpegurl/)).toEqual([]);
   });
 });
 
@@ -809,16 +906,15 @@ describe("une seule position d'ouverture pour le lecteur et pour la reprise inst
    * `openingPosition` — et la reprise instantanée, qui garde d'avance sans savoir quand on ouvrira,
    * par `openingSpan`, qui couvre toutes ses ouvertures possibles (28/09/2026).
    */
-  it.each([
-    ["src/components/ExperimentalPlayerHost.tsx", /openingPosition\(/],
-    ["src/lib/resumeCache/useResumeCache.ts", /openingSpan\(/],
-  ])("%s passe par le porteur, sans appeler awayFrom", (f, porteur) => {
-    const code = lire(f)
-      .split("\n")
-      .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
-      .join("\n");
-    expect(code).toMatch(porteur);
+  it("src/lib/resumeCache/useResumeCache.ts passe par openingSpan, sans appeler awayFrom", () => {
+    const code = sansCommentaires(lire("src/lib/resumeCache/useResumeCache.ts"));
+    expect(code).toMatch(/openingSpan\(/);
     expect(code).not.toMatch(/awayFrom\(/);
+  });
+
+  it("le lecteur natif passe par openingPosition, et personne dans le lecteur n'appelle awayFrom", () => {
+    expect(codeDe(NATIF)).toMatch(/openingPosition\(/);
+    expect(lecteurQui(/awayFrom\(/)).toEqual([]);
   });
 });
 
@@ -848,11 +944,13 @@ describe("un seul endroit rend le volume retenu", () => {
   // DECISIONS.md §35. Le lecteur serveur relisait la valeur à la main, le lecteur natif pas du
   // tout (29/09/2026) : les deux passent par `restoreRememberedVolume`, et la clé n'est lue nulle
   // part ailleurs.
-  it("les deux lecteurs appellent `restoreRememberedVolume`", () => {
-    for (const f of ["src/components/ExperimentalPlayerHost.tsx", "src/components/PlayerHost.tsx"]) {
-      expect([f, lire(f)]).toEqual([f, expect.stringContaining("restoreRememberedVolume(")]);
-      expect([f, /VOLUME_STORAGE_KEY/.test(lire(f))]).toEqual([f, false]);
-    }
+  // Le comportement est éprouvé par `remembered-volume.test.tsx` (natif) et
+  // `decisions-partagees-lecteur.test.tsx` (serveur). Les commandes, seules à écrire la clé, sont
+  // hors du graphe de chaque hôte (`codeDe`).
+  it.each(HOTES)("%s appelle `restoreRememberedVolume` et ne lit pas la clé lui-même", (hote) => {
+    const code = codeDe(hote);
+    expect(code).toMatch(/restoreRememberedVolume\(/);
+    expect(code).not.toMatch(/VOLUME_STORAGE_KEY|cine:player-volume/);
   });
 });
 
@@ -974,16 +1072,18 @@ describe("une seule minuterie de veille", () => {
   // `useSleepTimer`, et « Fin de l'épisode » se lit par `blocksAutoAdvance` — dans les commandes
   // (ni carte ni décompte) comme à la fin du fichier (l'hôte reste sur sa fin).
   it.each([
-    ["src/components/ExperimentalPlayerHost.tsx", /useSleepTimer\(/, /holdAtEndRef\.current\(\)/],
-    ["src/components/PlayerHost.tsx", /useSleepTimer\(/, /holdAtEnd\(\)/],
-  ])("%s monte useSleepTimer et lui demande la fin", (f, monte, fin) => {
-    const src = lire(f);
-    expect([f, monte.test(src), fin.test(src)]).toEqual([f, true, true]);
+    [NATIF, /holdAtEndRef\.current\(\)/],
+    [SERVEUR, /holdAtEnd\(\)/],
+  ])("%s monte useSleepTimer et lui demande la fin", (hote, fin) => {
+    const code = codeDe(hote);
+    expect([hote, /useSleepTimer\(/.test(code), fin.test(code)]).toEqual([hote, true, true]);
   });
 
+  // Que la carte disparaisse sous « Fin de l'épisode » est éprouvé à l'écran par
+  // `decisions-partagees-commandes.test.tsx` ; ici, que les commandes lisent le magasin et que le
+  // magasin décide par `blocksAutoAdvance`.
   it("les commandes retirent la carte de l'épisode suivant par la même règle", () => {
-    const src = lire("src/components/PlayerControls.tsx");
-    expect(src).toMatch(/const showNextUp =[^;]*!sleepBlocksAdvance;/);
+    expect(codeDe("PlayerControls")).toMatch(/useSyncExternalStore\([^)]*sleepBlocksAdvanceSnapshot/);
     expect(lire("src/lib/sleepTimer.ts")).toMatch(/sleepBlocksAdvanceSnapshot = \(\): boolean => blocksAutoAdvance\(state\)/);
   });
 
@@ -1077,10 +1177,10 @@ describe("une seule lecture des repères d'un épisode", () => {
     }
   );
 
+  // Un seul bouton, et le bon, est éprouvé à l'écran par `decisions-partagees-commandes.test.tsx`.
   it("un seul bouton « Passer… », décidé par `activeSkip`", () => {
-    const src = lire("src/components/PlayerControls.tsx");
-    expect(src).toMatch(/activeSkip\(currentTime, introSkip, recapSkip\)/);
-    expect(src).not.toMatch(/currentTime >= introSkip\.start/);
+    expect(codeDe("PlayerControls")).toMatch(/activeSkip\(\s*\w+\s*,\s*introSkip\s*,\s*recapSkip\s*\)/);
+    expect(lecteurQui(/(currentTime|time) >= (introSkip|recapSkip)\.start/)).toEqual([]);
   });
 });
 
@@ -1098,9 +1198,8 @@ describe("une seule recherche de ligne pour les sous-titres tenus en mémoire", 
   });
 
   it("les étiquettes des pistes générées passent par `trackLabel.ts`", () => {
-    const host = lire("src/components/ExperimentalPlayerHost.tsx");
-    expect(host).toMatch(/genere: t\("player\.trackLabel\.generated"\)/);
-    expect(host).not.toMatch(/— généré|— génération/);
+    expect(codeDe(NATIF)).toMatch(/genere: t\("player\.trackLabel\.generated"\)/);
+    expect(lecteurQui(/— généré|— génération/)).toEqual([]);
   });
 });
 
@@ -1181,18 +1280,19 @@ describe("une seule exécution de la connexion lente (§79)", () => {
   // DECISIONS.md §79. Les deux lecteurs exécutent les décisions de `slowLinkPolicy.ts` par
   // `SlowLinkRunner` : préchauffer, laisser tomber, l'écran final, le saut traité comme une ouverture.
   // Seule la bascule leur est propre. Écrite deux fois, la règle du saut avait déjà divergé.
-  const HOSTS = ["src/components/ExperimentalPlayerHost.tsx", "src/components/PlayerHost.tsx"];
+  it.each(HOTES)("%s passe par SlowLinkRunner", (hote) => {
+    expect(codeDe(hote)).toMatch(/new SlowLinkRunner\(/);
+  });
 
-  it.each(HOSTS)("%s passe par SlowLinkRunner et ne refait ni le préchauffage ni le saut", (f) => {
-    const src = lire(f);
-    expect(src).toMatch(/new SlowLinkRunner\(/);
-    expect(src).not.toMatch(/\bstartPrewarm\(/);
-    expect(src).not.toMatch(/prewarm\.state === "ready"/);
-    expect(src).not.toMatch(/SEEK_AS_OPENING_MS|SEEK_GIVE_UP_MS/);
+  it("personne dans le lecteur ne refait ni le préchauffage ni le saut", () => {
+    expect(lecteurQui(/\bstartPrewarm\(/)).toEqual([]);
+    expect(lecteurQui(/prewarm\.state === "ready"/)).toEqual([]);
+    expect(lecteurQui(/SEEK_AS_OPENING_MS|SEEK_GIVE_UP_MS/)).toEqual([]);
   });
 
   it("une seule mémoire de la version allégée : la règle des deux minutes (`playbackQuality.ts`)", () => {
-    for (const f of [...HOSTS, "src/lib/slowLinkPolicy.ts", "src/components/PlaybackProvider.tsx"]) {
+    expect(lecteurQui(/\b(noteLighter|lighterFor|capForLighter)\b/)).toEqual([]);
+    for (const f of ["src/lib/slowLinkPolicy.ts", "src/components/PlaybackProvider.tsx"]) {
       expect(lire(f), f).not.toMatch(/\b(noteLighter|lighterFor|capForLighter)\b/);
     }
     expect(lire("src/lib/playbackQuality.ts")).toMatch(/export function carriedLighter\(/);
@@ -1223,18 +1323,15 @@ describe("deux sous-titres : une apparence, une mémoire, pour les deux lecteurs
   // DECISIONS.md §87. Le lecteur natif et le lecteur serveur dessinent le second par le même calque
   // (`SubtitleLayer`) et retiennent le choix par les mêmes fonctions : un empilement ou une mémoire
   // écrits deux fois diffèreraient d'un lecteur à l'autre pour le même film.
-  const HOSTS = ["src/components/ExperimentalPlayerHost.tsx", "src/components/PlayerHost.tsx"];
-  it.each(HOSTS)("%s dessine par `SubtitleLayer` et retient par `rememberDual` / `pickRememberedDual`", (f) => {
-    const host = lire(f);
+  it.each(HOTES)("%s dessine par `SubtitleLayer` et retient par `rememberDual` / `pickRememberedDual`", (hote) => {
+    const host = codeDe(hote);
     expect(host).toMatch(/<SubtitleLayer/);
     expect(host).toMatch(/rememberDual\(/);
     expect(host).toMatch(/pickRememberedDual\(/);
   });
 
   it("la clé de la mémoire et la teinte du second ne sont écrites qu'une fois", () => {
-    for (const f of [...HOSTS, "src/components/PlayerControls.tsx", "src/components/player/SubtitleLayer.tsx"]) {
-      expect(lire(f)).not.toMatch(/cine:dual-subtitles|SECOND_SUBTITLE_SCALE|#e2e5e9/);
-    }
+    expect(lecteurQui(/cine:dual-subtitles|SECOND_SUBTITLE_SCALE|#e2e5e9/)).toEqual([]);
   });
 });
 
@@ -1303,7 +1400,7 @@ describe("la zone illisible : un motif, une détection, un relais préparé (§9
     const handover = lire("src/lib/unreadableZoneHandover.ts");
     expect(handover).toMatch(/\bstartPrewarm\(/);
     expect(handover).not.toMatch(/playback\/start/);
-    expect(lire("src/components/PlayerHost.tsx")).toMatch(/takeOrdinaryPrewarm\(/);
+    expect(codeDe(SERVEUR)).toMatch(/takeOrdinaryPrewarm\(/);
   });
 });
 
@@ -1344,8 +1441,8 @@ describe("le temps regardé s'arrête pendant une attente, dans les trois lecteu
   // DECISIONS.md §97. Une seule règle, `watchElementWaits` (`WatchedClock.stall`) : la coupure du
   // 15/10/2026 comptait 196 s d'image figée comme regardées sur le natif, et le lecteur serveur
   // faisait de même. La diffusion lit l'attente du récepteur (`remote.waiting`), sans élément local.
-  it.each(["src/components/ExperimentalPlayerHost.tsx", "src/components/PlayerHost.tsx"])("%s branche watchElementWaits", (f) => {
-    expect([f, /watchElementWaits\(/.test(lire(f))]).toEqual([f, true]);
+  it.each(HOTES)("%s branche watchElementWaits", (hote) => {
+    expect([hote, /watchElementWaits\(/.test(codeDe(hote))]).toEqual([hote, true]);
   });
 
   it("la diffusion Chromecast exclut toujours l'attente du récepteur", () => {
