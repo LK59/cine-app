@@ -3860,3 +3860,41 @@ describe("une coupure en pleine lecture", () => {
     expect(word()).not.toBeNull();
   });
 });
+
+/**
+ * Gardé jusqu'au 22/10/2026 par des lectures du texte de `ExperimentalPlayerHost.tsx`
+ * (upstreamUnreachable.test.ts, player-frame-no-select.test.ts) : ici, ce que le lecteur fait.
+ */
+describe("un serveur média absent (description du fichier en échec)", () => {
+  it("ne passe pas la main au lecteur serveur, qui a besoin du même Jellyfin, et dit la phrase partagée", async () => {
+    // Céder la place refaisait la même attente avant d'afficher le même échec.
+    const { withCode } = await import("@/lib/upstreamError");
+    const { UPSTREAM_UNREACHABLE } = await import("@/lib/http");
+    swr = { data: undefined, error: withCode(new Error("jellyfin.local ne répond pas (ECONNREFUSED)"), UPSTREAM_UNREACHABLE) };
+    mount();
+    // `errorMessage` (upstreamError.ts) : la même phrase que le lecteur serveur, jamais le texte brut.
+    await untilSettled(() => expect(screen.getByText("libraryUnreachable")).toBeTruthy());
+    await settle();
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain("ECONNREFUSED");
+  });
+
+  it("ni sur une coupure réseau, qui a son propre écran", async () => {
+    swr = { data: undefined, error: Object.assign(new Error("Failed to fetch"), { network: true }) };
+    mount();
+    await settle();
+    await settle();
+    expect(onFallback).not.toHaveBeenCalled();
+  });
+});
+
+describe("le cadre du lecteur natif ne sélectionne rien", () => {
+  // La règle CSS est dans globals.css (player-frame-no-select.test.ts).
+  it("la vidéo est dans le cadre marqué, racine du portail", async () => {
+    mount();
+    await settle();
+    const frame = document.querySelector("video")!.closest("[data-player-frame]");
+    expect(frame).not.toBeNull();
+    expect(frame!.parentElement).toBe(document.body);
+  });
+});

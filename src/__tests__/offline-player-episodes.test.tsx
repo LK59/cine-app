@@ -119,6 +119,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("le cadre du lecteur hors ligne ne sélectionne rien", () => {
+  // La règle CSS est dans globals.css (player-frame-no-select.test.ts) ; le texte du fichier n'est
+  // plus lu (22/10/2026), le cadre rendu l'est.
+  it("la vidéo est dans le cadre marqué", async () => {
+    list = [episode("e1", 1)];
+    await mount();
+    expect(document.querySelector("video")!.closest("[data-player-frame]")).not.toBeNull();
+  });
+});
+
 describe("lecteur hors ligne d'un épisode", () => {
   it("demande le suivant à la moitié, une seule fois", async () => {
     list = [episode("e1", 1)];

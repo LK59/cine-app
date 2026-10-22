@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { readFileSync } from "node:fs";
 import type { NextRequest } from "next/server";
 
 // Chasse aux bugs du 11/10/2026, zone 5 — le relais de reprise du serveur (castProgress.ts, §64).
@@ -54,12 +53,10 @@ beforeEach(() => {
 });
 
 describe("bughunt zone 5 — une lecture DANS LA PAGE passe par le relais", () => {
-  it("le lecteur serveur de la page charge l'adresse signée (castUrl), pas manifestUrl", () => {
-    // Le constat qui rend le reste réel : toute lecture du lecteur serveur dans la page — Fire TV,
-    // Mac Safari 17, Edge sans HEVC — demande ses segments avec le laissez-passer.
-    const host = readFileSync("src/components/PlayerHost.tsx", "utf8");
-    expect(host).toContain("const sourceUrl = data.castUrl ?? data.manifestUrl;");
-  });
+  // Le constat qui rend le reste réel — toute lecture du lecteur serveur dans la page (Fire TV,
+  // Mac Safari 17, Edge sans HEVC) demande ses segments avec le laissez-passer de `castUrl` — est
+  // gardé sur le lecteur rendu, WebKit et hls.js : PlayerHost-gardes.test.tsx (22/10/2026, plus
+  // sur le texte de PlayerHost.tsx).
 
   it("un segment demandé par la page (cookie + laissez-passer de castUrl) ne doit pas nourrir le relais ni porter CORS", async () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", jfId: "jf-louis", jti: "j1" });

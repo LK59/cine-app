@@ -85,21 +85,17 @@ describe("un amont injoignable", () => {
  * et c'est exactement le genre de décision qui dérive : corrigée d'un côté, oubliée de l'autre.
  */
 describe("la même phrase des deux côtés", () => {
-  it("la phrase est écrite à un seul endroit", async () => {
-    const { readFileSync } = await import("fs");
-    // Le lecteur natif y arrive par `errorMessage`, le stable en lisant le code de la réponse :
-    // deux chemins, une seule phrase, et le jour où elle change elle change une fois.
-    expect(readFileSync("src/lib/upstreamError.ts", "utf8")).toContain('t("player.libraryUnreachable")');
-    expect(readFileSync("src/components/PlayerHost.tsx", "utf8")).toContain('t("player.libraryUnreachable")');
-  });
-
-  it("le lecteur natif ne passe pas la main quand c'est le serveur qui manque", async () => {
-    const { readFileSync } = await import("fs");
-    // Le lecteur stable a besoin du même Jellyfin : lui céder la place refait la même attente
-    // avant d'afficher le même échec.
-    expect(readFileSync("src/components/ExperimentalPlayerHost.tsx", "utf8")).toMatch(
-      /if \(!isUpstreamUnreachable\(infoError\) && !isNetworkFailure\(infoError\)\) \{\s*\n\s*fallToStable\(/
-    );
+  // Le lecteur natif y arrive par `errorMessage`, le stable en lisant le code de la réponse : deux
+  // chemins, une seule phrase. Ce que chaque lecteur affiche — et que le natif ne passe pas la main
+  // au stable, qui a besoin du même Jellyfin — se vérifie sur les lecteurs rendus depuis le
+  // 22/10/2026, plus sur le texte de leurs fichiers : ExperimentalPlayerHost.test.tsx (« un serveur
+  // média absent ») et PlayerHost-gardes.test.tsx (« un serveur média absent se dit comme… »).
+  it("`errorMessage` rend la phrase de la panne amont, pas le message de l'erreur", async () => {
+    const { errorMessage } = await import("@/lib/upstreamError");
+    const t = (key: string) => key;
+    const down = withCode(new Error("jellyfin.local ne répond pas (ECONNREFUSED)"), UPSTREAM_UNREACHABLE);
+    expect(errorMessage(down, t, "repli", "fr")).toBe("player.libraryUnreachable");
+    expect(errorMessage(new Error("autre"), t, "repli", "fr")).not.toBe("player.libraryUnreachable");
   });
 });
 
@@ -123,7 +119,7 @@ describe("les écrans disent la même chose que le lecteur", () => {
   it.each([
     "src/components/cinema/CinemaClient.tsx",
     "src/components/cinema/mobile/CinemaMobileClient.tsx",
-    "src/components/ExperimentalPlayerHost.tsx",
+    // Le lecteur natif : sur son rendu, ExperimentalPlayerHost.test.tsx (22/10/2026).
   ])("%s passe par la phrase partagée plutôt que par la sienne", async (file) => {
     const { readFileSync } = await import("fs");
     expect(readFileSync(file, "utf8")).toMatch(/errorMessage\(\w+, t,/);

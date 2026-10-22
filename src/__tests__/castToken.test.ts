@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "fs";
 
 vi.mock("@/lib/config", () => ({ config: { app: { sessionSecret: "un-secret-de-test" } } }));
 
@@ -222,65 +221,13 @@ describe("le report du laissez-passer dans le manifeste", () => {
 });
 
 /**
- * Ce que le lecteur doit faire quand une diffusion s'interrompt.
- *
- * Testé sur la source, comme la pile des fiches : la faute possible est une *condition de rendu*
- * et un branchement, et les reproduire dans un DOM demanderait un élément `<video>`, une route
- * AirPlay et un téléviseur. La règle, elle, tient en quelques lignes — et c'est elle qui a été
- * écrite de travers deux fois.
+ * Ce que le lecteur doit faire quand une diffusion s'interrompt — ne jamais relancer tout seul,
+ * relire le drapeau dans chaque minuterie de reprise, relâcher le verrou du sélecteur à la relance,
+ * demander confirmation avant de changer de piste — était gardé ici sur le texte de
+ * `PlayerHost.tsx`. Depuis le 22/10/2026, sur le lecteur rendu : PlayerHost-gardes.test.tsx
+ * (« l'interruption d'une diffusion ») et PlayerHost-echelle.test.tsx (« une diffusion établie
+ * pendant le délai d'une reprise l'annule »).
  */
-describe("l'interruption d'une diffusion", () => {
-  const source = readFileSync("src/components/PlayerHost.tsx", "utf8");
-
-  it("ne relance jamais la lecture toute seule pendant une diffusion", () => {
-    // La première marche de l'échelle rejoue la requête, ce qui remonte l'élément sur WebKit —
-    // et un élément neuf n'a plus de route AirPlay. « Rattraper » et « couper » sont le même
-    // geste, donc l'échelle se tait.
-    expect(source).toMatch(/if \(castActiveRef\.current\) \{[\s\S]{0,400}setCastInterrupted\(true\);/);
-  });
-
-  // Le drapeau est relu au moment d'agir, pas seulement à l'arrivée de l'erreur : entre les deux
-  // il s'écoule plus d'une seconde, et c'est la fenêtre où le spectateur choisit son téléviseur.
-  //
-  // Ce test prenait la *première* minuterie de reprise ; depuis la marche H.264 (59f56570, 20/10/2026)
-  // c'était elle, et la relecture de l'échelle pouvait disparaître sans qu'il échoue (audit du
-  // 22/10/2026). Chaque minuterie est maintenant vérifiée, avec leur nombre : une troisième ajoutée
-  // sans garde le fait échouer. Le comportement est gardé dans PlayerHost-echelle.test.tsx.
-  it("relit le drapeau au moment où la reprise partirait, dans chaque minuterie de reprise", () => {
-    const marker = "nativeErrorRetryTimer.current = setTimeout(() => {";
-    const bodies = source.split(marker).slice(1);
-    expect(bodies).toHaveLength(2);
-    for (const body of bodies) {
-      // La première instruction du rappel, commentaires mis à part.
-      const code = body.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "").trimStart();
-      expect(code.startsWith("if (castActiveRef.current)")).toBe(true);
-    }
-    // L'échelle du son, par un texte qui lui est propre : la raison écrite avant toute relance.
-    const ladder = source.slice(source.indexOf("const delay = 1200 * attempt"));
-    const abandon = ladder.indexOf("reprise abandonnée : une diffusion s'est établie entre-temps");
-    expect(abandon).toBeGreaterThan(-1);
-    expect(abandon).toBeLessThan(ladder.indexOf("startPlaybackRef.current("));
-  });
-
-  // Sans ça, le sélecteur ne se rouvrirait pas : son verrou est à un coup par lecteur.
-  it("relâche le verrou du sélecteur avant de refaire la bascule", () => {
-    const relaunch = source.slice(source.indexOf("function relaunchCast()"));
-    expect(relaunch.slice(0, 700)).toMatch(/castAttempted\.current = false;/);
-    expect(relaunch.slice(0, 700)).toMatch(/startPlaybackRef\.current\(/);
-  });
-
-  /**
-   * Et le changement de piste audio prévient avant d'agir.
-   *
-   * Il recharge la page sur WebKit — la seule façon connue d'y ouvrir une seconde session HLS —
-   * donc il rompt la route sans exception. Le geste reste permis ; c'est la surprise qui ne l'est
-   * plus. Hors diffusion, rien ne s'interpose.
-   */
-  it("demande confirmation avant de changer de piste pendant une diffusion", () => {
-    expect(source).toMatch(/if \(castActiveRef\.current\) setPendingAudioTrack\(id\);\s*\n\s*else changeAudio\(id\);/);
-    expect(source).toMatch(/onChangeAudio=\{requestAudioChange\}/);
-  });
-});
 
 describe("le laissez-passer meurt avec la session qui l'a demandé (26/09/2026)", () => {
   it("vaut tant que la session existe, plus après", async () => {

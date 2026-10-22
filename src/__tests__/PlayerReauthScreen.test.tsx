@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
 
@@ -39,8 +37,6 @@ describe("le lecteur, session Jellyfin expirée", () => {
     expect(next).toBe("/#film=913&liste=1");
   });
 
-  it("est l'écran que le lecteur serveur montre", () => {
-    const src = readFileSync(join(process.cwd(), "src/components/PlayerHost.tsx"), "utf8");
-    expect(src).toContain("<PlayerReauthScreen onClose={handleClose} keyboard={!isMini} />");
-  });
+  // Que ce soit l'écran du lecteur serveur, refermé par sa croix et par Échap hors mini-lecteur, se
+  // vérifie sur le lecteur rendu : PlayerHost-gardes.test.tsx (22/10/2026, plus sur son texte).
 });
