@@ -11,8 +11,9 @@ import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { apiErrorText } from "@/lib/apiErrorText";
 import { withCode } from "@/lib/upstreamError";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
-import { useStableFallback, takeoverFor, castCarriedTo, castingNow, lighterNow, chromecastNow, returningFor, returnsPaused, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
+import { useStableFallback, takeoverFor, castCarriedTo, returningFor, returnsPaused, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
 import { ChromecastPlayer } from "@/components/player/ChromecastPlayer";
+import { choosePlayer } from "@/lib/playerRoute";
 import { publishHandedOver } from "@/lib/playerBench/bridge";
 import { PlayerControls, type Track } from "@/components/PlayerControls";
 import { restoreRememberedVolume } from "@/lib/rememberedVolume";
@@ -67,7 +68,9 @@ import { useAccountPreferencesLoader } from "@/lib/useAccountPreferences";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
-import { describeJellyfinPlayback, splitCodecs, type LighterOrigin } from "@/lib/playbackPanel";
+import { describeJellyfinPlayback, splitCodecs, type JellyfinPlayback, type LighterOrigin } from "@/lib/playbackPanel";
+import { PLAYER_FRAME_TRANSITION } from "@/lib/playerFrame";
+import { NETWORK_OUTAGE_GIVE_UP_MS } from "@/lib/networkOutage";
 import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
 import { playsHlsNatively } from "@/lib/webkitEngine";
 import { detectCodecSupport } from "@/lib/codecSupport";
@@ -111,32 +114,15 @@ import { PlayerReauthScreen } from "@/components/player/PlayerReauthScreen";
 /** Les adresses du flux du lecteur serveur, pour les entrées de ressources de Safari (§77). */
 const STREAM_PREFIX = "/api/jellyfin/stream/";
 
-export type PlayMethod = "DirectPlay" | "DirectStream" | "Transcode";
+export type PlayMethod = JellyfinPlayback["playMethod"];
 
-export interface PlaybackInfoSummary {
-  playMethod: PlayMethod;
-  transcodeReasons: string[];
-  container: string | null;
+/**
+ * Ce que la route de lecture rend au lecteur serveur : la description de `JellyfinPlayback`
+ * (`playbackPanel.ts`, la même que lit le panneau) — écrite ici en double jusqu'au 22/10/2026 —,
+ * plus ce que seule la négociation connaît.
+ */
+export interface PlaybackInfoSummary extends JellyfinPlayback {
   requestedVideoCodecs: string[];
-  video: {
-    codec: string | null;
-    profile: string | null;
-    width: number | null;
-    height: number | null;
-    bitDepth: number | null;
-    frameRate: number | null;
-    bitRate: number | null;
-    /** `VideoRangeType` de la source. */
-    rangeType?: string | null;
-  } | null;
-  audio: {
-    codec: string | null;
-    channels: number | null;
-    bitRate: number | null;
-    language: string | null;
-  } | null;
-  /** Le débit que Jellyfin vise en transcodage (vidéo + son) — le flux envoyé, pas la source. */
-  streamBitrate?: number | null;
   /** Ce que le maître annonce (HLS natif seulement : la route le lit en le préchauffant). */
   served?: { codecs: string | null; videoRange: string | null } | null;
 }
@@ -194,8 +180,11 @@ const MAX_NETWORK_RETRIES = 6;
  * avant ; au-delà, « Réessayer » repart de la position où l'image s'est figée (`lastKnownTime`).
  * Juste au-dessus des six relances (1 + 2 + 4 + 8 + 15 + 15 = 45 s), qui gardent la main là où hls.js
  * déclare la fatale lui-même (en ligne, serveur injoignable) : les deux bornes ne se croisent pas.
+ *
+ * La valeur est partagée avec le lecteur natif (`src/lib/networkOutage.ts`) ; exportée ici aussi,
+ * pour qui la lit au nom du lecteur serveur.
  */
-export const NETWORK_OUTAGE_GIVE_UP_MS = 48_000;
+export { NETWORK_OUTAGE_GIVE_UP_MS };
 
 // ── Audio-codec fallback ladder (native HLS path) ────────────────────────────────────────────
 // Ground truth from live testing: a device's own canPlayType() can overreport what its native
@@ -289,6 +278,17 @@ function takeCarriedExclusions(itemId: string, fromReload: boolean | undefined):
 /** Pour les tests : la purge se refait à la prochaine négociation. */
 export function __resetLegacyBlocklistPurgeForTests(): void {
   legacyBlocklistPurged = false;
+}
+
+/**
+ * Couper l'élément : pause, plus de source, `load()` pour que le navigateur lâche la session HLS.
+ * Écrit à l'identique à quatre endroits jusqu'au 22/10/2026 ; chaque appelant garde sa propre garde
+ * (`try`) et ce qui suit (rechargement ou non). Peut lever sur un élément déjà démonté.
+ */
+function releaseHlsElement(video: HTMLVideoElement): void {
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
 }
 
 /**
@@ -418,22 +418,10 @@ export function PlayerHost() {
   const back = returningFor(returning, session);
   const playing = back !== null ? { ...session, resumeAt: back, ...(returnsPaused(returning, session) ? { startPaused: true } : {}) } : session;
 
-  // Sans lecteur serveur, il n'y a pas d'aiguillage : le repli automatique désignerait un lecteur
-  // qui n'existe pas sur cette installation. Un
-  // fichier que le navigateur ne sait pas porter finit sur une erreur de lecture, pas sur un
-  // transcodage — c'est tout l'objet du réglage.
   const carried = castCarriedTo(takeover, session);
-  // Une page rechargée par le lecteur serveur (piste WebKit, escalade de l'échelle audio) revient
-  // à lui : le rechargement a effacé le relais qui l'avait choisi — voir `reloadedOnServer`.
-  const reloadedOnServer = session.reloadedOnServer === session.itemId;
-  // La version allégée (§78) : une bascule de cette lecture (`lighterNow`), ou héritée d'une séance
-  // allégée arrêtée il y a moins de deux minutes (`session.lighter`, posé à l'ouverture en
-  // « Automatique » seulement). Jamais pour le banc d'essai : il mesure le lecteur natif.
-  const lighter = lighterNow(takeover, session) || (session.lighter !== undefined && !session.bench);
-  const useNative =
-    !serverFallback ||
-    (!handedOver.includes(session.itemId) && !carried && !castingNow(takeover, session) && !reloadedOnServer && !lighter);
-  if (useNative) {
+  // Natif, Chromecast ou serveur : la règle vit dans `choosePlayer` (`playerRoute.ts`).
+  const route = choosePlayer(session, { serverFallback, handedOver, carried, takeover });
+  if (route === "native") {
     return (
       <ExperimentalPlayerHost
         // A different film is a different player. Without this, advancing to the next episode
@@ -453,7 +441,7 @@ export function PlayerHost() {
   // Vers un Chromecast, le relais n'est pas un lecteur mais une télécommande : le récepteur lit lui-même
   // le flux que Jellyfin lui prépare (DECISIONS.md §64). Même clé que le lecteur serveur, pour la
   // même raison : il enchaîne lui-même les épisodes, le relais reporté par `castCarriedTo`.
-  if (chromecastNow(takeover, carried, session)) {
+  if (route === "chromecast") {
     return (
       <ChromecastPlayer
         key={session.openId ?? 0}
@@ -736,11 +724,14 @@ function ActivePlayer({
   // (audit du 29/09/2026). Remise à faux seulement là où une séance s'ouvre vraiment : à la relance,
   // ou par `startPlayback`, dont la négociation en ouvre une neuve (autre épisode, autre piste).
   const endStoppedRef = useRef(false);
-  // Re-tested in isolation now that the Range/206 and manifest-prewarm bugs are both confirmed
-  // fixed — a previous attempt at this (ebc2d2d) was reverted after appearing not to help, but
-  // that test ran while the Range-truncation bug was still live, which may have masked whether
-  // this was actually necessary. Bumped to force a genuinely fresh <video> element (via the
-  // `key` prop below) for a track switch on WebKit, instead of reusing the same node.
+  // Un élément <video> neuf (par la `key` plus bas) à chaque négociation qui, sur WebKit, trouve
+  // une source déjà posée (`startPlayback`) : Réessayer, marches de l'échelle du son, marche H.264,
+  // relance de diffusion, bascule allégée. Né le 14/08 pour le changement de piste (ebc2d2d, retiré,
+  // puis remis pour être retesté isolément) — mais le changement de piste sur WebKit recharge la page
+  // depuis le même jour (`changeAudio`, dont le commentaire dit que l'échec est identique avec un
+  // élément neuf). Pour les autres relances, on ne sait pas s'il aide. Il n'est pas neutre pour
+  // autant : les effets qui écoutent l'élément se réinstallent sur lui, `PlayerControls` est clé
+  // dessus, `useServerDualSubtitles` le lit. Ne pas le retirer sans essai sur iPhone.
   const [videoKey, setVideoKey] = useState(0);
 
   const [error, setError] = useState<string | null>(null);
@@ -1258,9 +1249,7 @@ function ActivePlayer({
     if (video && castActiveRef.current) {
       closingRef.current = true;
       try {
-        video.pause();
-        video.removeAttribute("src");
-        video.load();
+        releaseHlsElement(video);
       } catch {
         // Déjà démonté : il n'y a plus rien à arrêter.
       }
@@ -2337,17 +2326,17 @@ function ActivePlayer({
             JSON.stringify({ itemId, title, audioStreamIndex: id, resumeAt, server: true, carry: reloadCarryNow() } satisfies PlayerReloadIntent)
           );
         } catch {
-          // Storage unavailable (private browsing, quota) — falls through to the in-place
-          // switch below, which will still surface the usual error+retry UI if it fails.
+          // Storage unavailable (private browsing, quota). Contrairement à ce que ce commentaire
+          // disait depuis le 14/08, rien ne retombe sur le changement en place : l'élément est
+          // coupé et la page rechargée quand même, sans intention — elle revient sans séance.
+          // Écart connu (audit du 22/10/2026), laissé tel quel : le corriger change un comportement.
         }
         // Tear the current media session down BEFORE reloading, not merely as a side effect of
         // the page dying: iOS's media daemon (mediaserverd) releases HLS sessions asynchronously
         // and independently of the page lifecycle, so a reload issued while the old stream is
         // still actively playing can bring the new page up before the old session is gone.
         // Starting teardown explicitly here buys that release as much head start as possible.
-        video.pause();
-        video.removeAttribute("src");
-        video.load();
+        releaseHlsElement(video);
         window.location.reload();
         return;
       }
@@ -2599,9 +2588,7 @@ function ActivePlayer({
     if (video && castActiveRef.current) {
       closingRef.current = true;
       try {
-        video.pause();
-        video.removeAttribute("src");
-        video.load();
+        releaseHlsElement(video);
       } catch {
         // Déjà démonté : il n'y a plus rien à arrêter.
       }
@@ -3123,9 +3110,9 @@ function ActivePlayer({
 
   // Bad-connection badge: a real stall mid-playback ('waiting' firing after the video has
   // already played at least once — excludes ordinary startup buffering) is logged with a
-  // timestamp; a periodic check then looks at how many landed in the last 60s, combined with
-  // the decoder's own dropped-frame ratio, to decide whether to show the badge. Both are actual
-  // measured signals, not a guess — see badConnection's own comment for why not a fabricated
+  // timestamp; a periodic check then looks at how many landed in the last 60s to decide whether
+  // to show the badge (the dropped-frame ratio no longer counts since LECTEUR-8, see below). A
+  // measured signal, not a guess — see badConnection's own comment for why not a fabricated
   // "latency" number.
   useEffect(() => {
     const video = videoRef.current;
@@ -3277,9 +3264,7 @@ function ActivePlayer({
               carry: reloadCarryNow(),
             } satisfies PlayerReloadIntent)
           );
-          video!.pause();
-          video!.removeAttribute("src");
-          video!.load();
+          releaseHlsElement(video!);
           window.location.reload();
           return;
         } catch {
@@ -3344,7 +3329,9 @@ function ActivePlayer({
   if (typeof document === "undefined") return null;
 
   const isMini = mode === "mini";
-  const TRANSITION = "top 300ms cubic-bezier(0.4,0,0.2,1), left 300ms cubic-bezier(0.4,0,0.2,1), width 300ms cubic-bezier(0.4,0,0.2,1), height 300ms cubic-bezier(0.4,0,0.2,1), border-radius 300ms cubic-bezier(0.4,0,0.2,1)";
+  // Le même mouvement que le lecteur natif et celui des téléchargements (`playerFrame.ts`) : la
+  // chaîne était recopiée ici au caractère près.
+  const TRANSITION = PLAYER_FRAME_TRANSITION;
 
   const style: React.CSSProperties = isMini
     ? {
@@ -3390,7 +3377,7 @@ function ActivePlayer({
         <>
           {/* Kept mounted even while `error` is showing, so `lastKnownTime`/hls state aren't
               lost and "Réessayer" can resume from where playback actually stopped, instead of
-              from the beginning. `key` changes (WebKit track switches only) intentionally force
+              from the beginning. `key` changes (WebKit renegotiations only) intentionally force
               a full remount — see videoKey's own comment above. */}
           <video
             key={videoKey}

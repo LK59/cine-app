@@ -184,7 +184,7 @@ const NETWORK_TRIM_MARGIN_SECONDS = 1;
  * envois refusés (`appendFailures` / `recover`), chaque reprise relançant la patience d'une minute par
  * lecture : quatre minutes et plus d'image figée, sans un mot, avant cet écran.
  */
-const NETWORK_OUTAGE_GIVE_UP_MS = 48_000;
+import { NETWORK_OUTAGE_GIVE_UP_MS } from "@/lib/networkOutage";
 /** « À court » : moins que cela devant la tête, ou l'élément qui n'a plus de quoi avancer. */
 const OUTAGE_STARVED_LEAD_SECONDS = 0.5;
 
