@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, type RefObject } from "react";
 import { noteViewerPresent } from "@/lib/autoAdvance";
 import { keyboardFocusWithin } from "@/lib/playerSkip";
 import type { MenuView } from "@/components/playerControls/PlayerSettingsMenu";
+import { useLatest } from "@/components/playerControls/useLatest";
 
 export function useAutoHide({
   visible,
@@ -56,14 +57,8 @@ export function useAutoHide({
   // fenêtre, survit au `return null`. Espace relançait l'élément en panne sous l'écran — et, retenu
   // au `keydown`, n'activait plus le bouton « Réessayer » qui avait le focus ; les flèches
   // déplaçaient la position d'où il allait reprendre (chasse aux défauts du 13/10/2026).
-  const suspendedRef = useRef(suspended || hidden);
-  useEffect(() => {
-    suspendedRef.current = suspended || hidden;
-  }, [suspended, hidden]);
-  const playingRef = useRef(playing);
-  useEffect(() => {
-    playingRef.current = playing;
-  }, [playing]);
+  const suspendedRef = useLatest(suspended || hidden);
+  const playingRef = useLatest(playing);
   /**
    * Un menu ouvert suspend la disparition.
    *
@@ -74,10 +69,7 @@ export function useAutoHide({
    */
   const menuOpenRef = useRef(false);
   // Lu par la minuterie de masquage : pendant une reprise, elle attend la première image.
-  const resumingRef = useRef(resuming);
-  useEffect(() => {
-    resumingRef.current = resuming;
-  }, [resuming]);
+  const resumingRef = useLatest(resuming);
   const showControls = useCallback(
     (delayMs: number = 3000) => {
       // Un geste vaut présence, et c'est ici qu'ils passent tous — un clic, une touche, un
@@ -100,7 +92,7 @@ export function useAutoHide({
         hideTimer.current = setTimeout(hide, delayMs);
       }
     },
-    [setVisible, setMenu]
+    [setVisible, setMenu, playingRef, resumingRef]
   );
 
   // Voir `menuOpenRef` : ouvert, le minuteur est suspendu ; refermé, le décompte normal reprend.
@@ -157,10 +149,7 @@ export function useAutoHide({
     if (!playingRef.current || menuOpenRef.current || seekingRef.current || suspendedRef.current) return false;
     return !keyboardFocusWithin(liquidRootRef.current);
   }
-  const windowExitHidesRef = useRef(windowExitHides);
-  useEffect(() => {
-    windowExitHidesRef.current = windowExitHides;
-  });
+  const windowExitHidesRef = useLatest(windowExitHides);
 
   /**
    * La souris quitte la fenêtre : les commandes partent aussitôt, sans attendre leurs trois secondes
@@ -178,7 +167,7 @@ export function useAutoHide({
     }
     window.addEventListener("pointerout", onPointerOut);
     return () => window.removeEventListener("pointerout", onPointerOut);
-  }, [setVisible]);
+  }, [setVisible, windowExitHidesRef]);
 
   useEffect(() => {
     return () => {

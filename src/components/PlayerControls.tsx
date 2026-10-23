@@ -19,6 +19,7 @@ import { BOTTOM_EDGE } from "@/components/playerControls/layout";
 import { usePlayerKeyboard } from "@/components/playerControls/usePlayerKeyboard";
 import { usePlaybackMirror, useElementMirror } from "@/components/playerControls/usePlaybackMirror";
 import { useVolumeControl } from "@/components/playerControls/useVolumeControl";
+import { useLatest } from "@/components/playerControls/useLatest";
 import { useAutoHide } from "@/components/playerControls/useAutoHide";
 import { PlayerSeekBar } from "@/components/playerControls/PlayerSeekBar";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
@@ -361,10 +362,7 @@ export function PlayerControls({
    * n'est affiché (« Passer l'intro », le compte à rebours de l'épisode suivant) ; affichés, le
    * `timeupdate` suivant les remet à la seconde près.
    */
-  const visibleRef = useRef(visible);
-  useEffect(() => {
-    visibleRef.current = visible;
-  }, [visible]);
+  const visibleRef = useLatest(visible);
   const topRowRef = useRef<HTMLDivElement>(null);
   const bottomRowRef = useRef<HTMLDivElement>(null);
   /**

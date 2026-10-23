@@ -4,8 +4,9 @@
  * Le clavier du lecteur, posé une fois sur la fenêtre. Sorti de `PlayerControls` tel quel.
  */
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, type RefObject } from "react";
 import { normalizeKey } from "@/lib/remoteKeys";
+import { useLatest } from "@/components/playerControls/useLatest";
 
 /**
  * Le clavier du lecteur : un jeu fixe, et rien d'autre (demandé le 04/10/2026).
@@ -26,10 +27,7 @@ export function usePlayerKeyboard(
 ) {
   // Les gestes du clavier lus au moment de la touche : `skip` dépend de `onSeekRequest`, qui peut
   // changer d'un rendu à l'autre, et l'écouteur, lui, n'est posé qu'une fois.
-  const keyActionsRef = useRef({ togglePlay, skip });
-  useEffect(() => {
-    keyActionsRef.current = { togglePlay, skip };
-  });
+  const keyActionsRef = useLatest({ togglePlay, skip });
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (suspendedRef.current) return;
@@ -88,5 +86,5 @@ export function usePlayerKeyboard(
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showControls, suspendedRef]);
+  }, [showControls, suspendedRef, keyActionsRef]);
 }
