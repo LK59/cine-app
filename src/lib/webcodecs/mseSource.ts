@@ -21,19 +21,19 @@ import { NO_INDEX_REACH_SECONDS, reachable, seekArrived } from "./seekArrival";
 import { LANDING_REACH_SECONDS, SeekLifecycle, landingFor } from "./seekLifecycle";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
 import {
-  FROZEN_CLOCK_MS, FROZEN_SEEKING_MS, FROZEN_OPENING_MS, OPENING_EDGE_SECONDS,
-  OPENING_REASSERT_MS, OPENING_PLAYING_GRACE_MS, SEEKING_PATIENCE_PER_SECOND_MS, FROZEN_STEP, MAX_FROZEN_NUDGES,
-  MIN_BUFFER_SECONDS, RECOVERY_WINDOW_MS, MAX_RECOVERY_ATTEMPTS, MAX_UNPLAYED_ATTEMPTS, PLAYED_TO_CLEAR_SECONDS,
-  NEXT_KEYFRAME_MARGIN, STALL_REPORT_MS, STALL_REPORT_COOLDOWN_MS, RUNAWAY_REPORT_SECONDS, STALL_TRACE_MS,
-  MAX_APPEND_FAILURES, NETWORK_KEEP_LEAD_SECONDS, NETWORK_RETRY_DELAYS_MS,
-  NETWORK_TRIM_MARGIN_SECONDS, NETWORK_OUTAGE_GIVE_UP_MS, OUTAGE_STARVED_LEAD_SECONDS, STALL_TIMEOUT_MS, WATCHDOG_MS,
-  EVICTION_REFILLS_PER_MINUTE, SOURCE_OPEN_TIMEOUT_MS, MISPLACED_SECONDS, FRUITLESS_APPENDS, PRE_ROLL_SECONDS,
-  TRACED_APPENDS, TRACED_APPENDS_PER_SEEK, KEEP_BEHIND_SECONDS, TRIM_SLACK_SECONDS, KEYFRAME_TRIM_MARGIN,
+  FROZEN_CLOCK_MS, FROZEN_SEEKING_MS, FROZEN_OPENING_MS, OPENING_EDGE_SECONDS, OPENING_REASSERT_MS,
+  OPENING_PLAYING_GRACE_MS, SEEKING_PATIENCE_PER_SECOND_MS, FROZEN_STEP, MAX_FROZEN_NUDGES, MIN_BUFFER_SECONDS,
+  PLAYED_TO_CLEAR_SECONDS, STALL_REPORT_MS, STALL_REPORT_COOLDOWN_MS, RUNAWAY_REPORT_SECONDS, STALL_TRACE_MS,
+  MAX_APPEND_FAILURES, NETWORK_KEEP_LEAD_SECONDS, NETWORK_RETRY_DELAYS_MS, NETWORK_TRIM_MARGIN_SECONDS,
+  NETWORK_OUTAGE_GIVE_UP_MS, OUTAGE_STARVED_LEAD_SECONDS, STALL_TIMEOUT_MS, WATCHDOG_MS, EVICTION_REFILLS_PER_MINUTE,
+  SOURCE_OPEN_TIMEOUT_MS, MISPLACED_SECONDS, FRUITLESS_APPENDS, PRE_ROLL_SECONDS, TRACED_APPENDS,
+  TRACED_APPENDS_PER_SEEK, KEEP_BEHIND_SECONDS, TRIM_SLACK_SECONDS, KEYFRAME_TRIM_MARGIN,
 } from "./mseTuning";
 import { frameQuality, playableSpans, spansAll, spansNear } from "./mseSpans";
 import { LossRecord, type SentFragment } from "./mseLossRecord";
 import { UnreadableZoneHold } from "./mseZoneHold";
 import { BufferPlanner } from "./mseBufferPlanner";
+import { RecoveryLadder } from "./mseRecoveryLadder";
 import type { MseCallbacks, RecoveryFacts } from "./mseTypes";
 import type { BufferBudget, ByteRate } from "./bufferBudget";
 
@@ -127,10 +127,8 @@ export class MseSource {
   /** Les relectures d'éviction de la dernière minute, et celle qui attend la lecture en cours. */
   private evictionRefills: number[] = [];
   private evictionRefillQueued = false;
-  private recoveries = 0;
-  private recoveryTarget = -1;
-  private recoveryStreak = 0;
-  private lastRecoveryAt = 0;
+  /** L'échelle des reprises — voir `RecoveryLadder`. */
+  private readonly ladder: RecoveryLadder;
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
   /**
    * La profondeur visée et le budget — voir `BufferPlanner`. Construit à la place des champs qu'il
@@ -174,16 +172,6 @@ export class MseSource {
     this.openingReassertTimer = null;
     this.openingReassertDone = true;
   }
-  /**
-   * Which rung of the recovery ladder has been climbed since the clock last really played: 0 none,
-   * 1 the keyframe step, 2 handed to the host for a rebuild. See `escalate`.
-   */
-  private escalation = 0;
-  private escalations = 0;
-  /** Recoveries since the clock last really played — see `MAX_UNPLAYED_ATTEMPTS`. */
-  private unplayedAttempts = 0;
-  /** Seconds the clock has genuinely run since the last recovery. */
-  private playedSinceTrouble = 0;
   /**
    * Handed to the host: nothing more this source can try. Reads as `lost`, so the host's own
    * rebuild — its budget, its skip past a place that failed twice — takes over from here.
@@ -270,6 +258,17 @@ export class MseSource {
       remuxer,
       callbacks,
       elementState: () => this.elementState(),
+    });
+    this.ladder = new RecoveryLadder({
+      seek: (playerSeconds, because) => this.seek(playerSeconds, because),
+      remuxer,
+      toFileClock: (playerSeconds) => this.toFileClock(playerSeconds),
+      get playerEnd() {
+        return self.playerEnd;
+      },
+      get delaySeconds() {
+        return self.delaySeconds;
+      },
     });
   }
 
@@ -1730,10 +1729,10 @@ export class MseSource {
     const delta = now - this.tickClockAt;
     this.tickClockAt = now;
     if (running && !this.video.seeking && delta > 0 && delta < 0.6) {
-      this.playedSinceTrouble += delta;
-      if (this.playedSinceTrouble >= PLAYED_TO_CLEAR_SECONDS) {
-        this.escalation = 0;
-        this.unplayedAttempts = 0;
+      this.ladder.playedSinceTrouble += delta;
+      if (this.ladder.playedSinceTrouble >= PLAYED_TO_CLEAR_SECONDS) {
+        this.ladder.escalation = 0;
+        this.ladder.unplayedAttempts = 0;
       }
     }
 
@@ -1864,9 +1863,9 @@ export class MseSource {
       stalledMs,
       ...state,
       filling: this.fillTask !== null,
-      recoveryStreak: this.recoveryStreak,
+      recoveryStreak: this.ladder.recoveryStreak,
       frozenNudges: this.frozenNudges,
-      recoveries: this.recoveries,
+      recoveries: this.ladder.recoveries,
       evictions: this.evictions,
       // Only ManagedMediaSource has the signal; plain MediaSource says so rather than `true`.
       streaming: typeof managed === "boolean" ? managed : "sans objet",
@@ -2052,93 +2051,11 @@ export class MseSource {
   }
 
   /**
-   * Seeks to where the viewer is, unless that has already been tried and did not help.
-   *
-   * Both recovery routes converge here so they share one limit. Without it, a target the file
-   * genuinely cannot serve — an index pointing somewhere the media is not — turns a recovery
-   * into a loop that seeks, fails to arrive, and seeks again as fast as it can.
+   * Voir `RecoveryLadder.recover`. Tout passe par ici, par `this.` : webcodecs-mseSource.test.ts
+   * remplace cette méthode sur l'instance.
    */
   private recover(target: number): boolean {
-    // The count only means anything while the attempts are rapid. The same position failing
-    // again a minute later is a fresh problem, not a spin — and treating it as one used to latch
-    // the guard shut, so the position stayed unreachable until the viewer seeked elsewhere.
-    //
-    // Measured from the last attempt that *went ahead*, never from the last call. It was
-    // refreshed on every call, abandoned ones included, and the watchdog calls every 250 ms: the
-    // window never ran out, and after the third attempt every later call gave up — the same latch
-    // this was written to remove, reached by another road (22/09/2026, a clock held at 166 s for
-    // nineteen seconds with nothing trying anything).
-    if (Date.now() - this.lastRecoveryAt > RECOVERY_WINDOW_MS) this.recoveryStreak = 0;
-
-    const sameSpot = Math.abs(target - this.recoveryTarget) < 1;
-    if ((sameSpot && this.recoveryStreak >= MAX_RECOVERY_ATTEMPTS) || this.unplayedAttempts >= MAX_UNPLAYED_ATTEMPTS) {
-      return this.escalate(target);
-    }
-    if (sameSpot) this.recoveryStreak += 1;
-    else {
-      this.recoveryTarget = target;
-      this.recoveryStreak = 1;
-    }
-    this.attempt(target, `reprise ${this.recoveryStreak}`);
-    return true;
-  }
-
-  /** One recovery seek, counted everywhere it has to be. */
-  private attempt(target: number, because: string): void {
-    this.lastRecoveryAt = Date.now();
-    this.recoveries += 1;
-    this.unplayedAttempts += 1;
-    this.playedSinceTrouble = 0;
-    void this.seek(target, because);
-  }
-
-  /**
-   * Asking for the same spot again has not helped: the next rung, or false when none is left.
-   *
-   * Giving up used to be the last word — traced, and then nothing, for as long as the viewer
-   * waited. The rungs, each tried once until the clock has really played again:
-   *
-   * 1. **The next keyframe past the head.** The same position re-read is the same group of
-   *    pictures decoded the same way; an open-GOP keyframe ten seconds on is a group nothing has
-   *    touched. A viewer loses a few seconds rather than the film.
-   * 2. **Nothing more here** — false, and the caller hands over (`handOver`) so the host rebuilds
-   *    the whole pipeline at the head, within its own budget.
-   *
-   * Still traced rather than shown, as the abandon always was: the remuxer's own index back-up
-   * regularly lands a position a moment after the source has given up on it, and a banner
-   * announced a failure to a viewer whose film was about to carry on.
-   */
-  private escalate(target: number): boolean {
-    if (this.escalation >= 1) return false;
-    this.escalation = 1;
-    this.escalations += 1;
-    trace(`reprise abandonnée après ${this.recoveryStreak} tentatives vers ${target.toFixed(1)} s`);
-    const next = this.nextKeyframeAfter(target);
-    if (next === null) return false;
-    trace(`reprise : image clé suivante, ${next.toFixed(1)} s`);
-    // Counted as the first attempt at the new spot, so it too gets three before the last rung.
-    this.recoveryTarget = next;
-    this.recoveryStreak = 1;
-    this.attempt(next, "reprise : image clé suivante");
-    return true;
-  }
-
-  /**
-   * The next indexed keyframe on the player's clock, far enough past `target` to be a different
-   * group, or null. Never throws: this runs on the path that is already failing.
-   */
-  private nextKeyframeAfter(target: number): number | null {
-    try {
-      if (!this.remuxer.seekable) return null;
-      // Half a second on, so a head standing right on a keyframe does not pick that same one.
-      const fileSeconds = this.remuxer.keyframeAfter(this.toFileClock(target) + 0.5);
-      if (fileSeconds === null) return null;
-      const end = this.playerEnd;
-      const next = fileSeconds + this.delaySeconds + NEXT_KEYFRAME_MARGIN;
-      return next < end - 1 ? next : null;
-    } catch {
-      return null;
-    }
+    return this.ladder.recover(target);
   }
 
   /**
@@ -2153,11 +2070,11 @@ export class MseSource {
     if (this.stuck || this.destroyed) return;
     this.stuck = true;
     this.handedOverAt = at;
-    this.escalation = 2;
-    this.escalations += 1;
+    this.ladder.escalation = 2;
+    this.ladder.escalations += 1;
     trace(`reprise impossible ici à ${at.toFixed(1)} s — reconstruction demandée ${this.elementState()}`);
     this.callbacks.onError(
-      `lecture bloquée à ${at.toFixed(1)} s après ${this.recoveries} reprises ${this.elementState()}`,
+      `lecture bloquée à ${at.toFixed(1)} s après ${this.ladder.recoveries} reprises ${this.elementState()}`,
       "playback"
     );
   }
@@ -2174,9 +2091,9 @@ export class MseSource {
   /** What the `stop` line wants to know of the recoveries over the whole session. */
   get recoveryFacts(): RecoveryFacts {
     return {
-      recoveries: this.recoveries,
+      recoveries: this.ladder.recoveries,
       frozenNudges: this.frozenNudgesTotal,
-      escalations: this.escalations,
+      escalations: this.ladder.escalations,
       evictions: this.evictions,
       evictionsAhead: this.evictionsAhead,
     };
@@ -2276,7 +2193,7 @@ export class MseSource {
       "Couleurs de l'image": this.frameColorSpace(),
       "MediaSource": `${this.source.readyState}${this.streamingWanted ? "" : " · en pause"}`,
       "Lecture en cours": this.fillTask ? "oui" : "non",
-      "Sauts servis": `${this.seeksServed}${this.recoveries > 0 ? ` · ${this.recoveries} reprises` : ""}`,
+      "Sauts servis": `${this.seeksServed}${this.ladder.recoveries > 0 ? ` · ${this.ladder.recoveries} reprises` : ""}`,
       ...this.guard.debug,
     };
   }
