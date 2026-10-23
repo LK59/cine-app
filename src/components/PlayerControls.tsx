@@ -1,6 +1,6 @@
 "use client";
 
-import { trickplayTileAt as sharedTrickplayTileAt, trickplayTileIndex, trickplayTileOrder, type TrickplayInfo } from "@/lib/trickplayTile";
+import type { TrickplayInfo } from "@/lib/trickplayTile";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech, Languages, Check, Layers } from "lucide-react";
@@ -11,9 +11,9 @@ import { formatTime } from "@/lib/playerClock";
 import { createLiquidPress, prefersReducedMotion } from "@/lib/liquidGlass/liquid";
 import { LiquidMenu } from "@/components/player/LiquidMenu";
 import { PlayerEpisodesMenu, usePrewarmEpisodes } from "@/components/player/PlayerEpisodesMenu";
-import { afterFirstPicture } from "@/lib/firstPicture";
 import { usePlayerItem } from "@/lib/usePlayerItem";
 import { useCastAvailability, type CastVideoElement } from "@/components/player/controls/useCastAvailability";
+import { useChapters, useTrickplay } from "@/components/player/controls/useTrickplay";
 import { PlayerDownloadRow } from "@/components/player/PlayerDownloadRow";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
 import {
@@ -265,11 +265,6 @@ const CAST_CONFIRM_MS = 4000;
  * ±10 s : la flèche fait un tour autour du « 10 », qui reste immobile — un tour un peu trop loin,
  * puis posé. Joué au clic, après le geste liquide du bouton, sur la flèche seule.
  */
-/** Le nombre de planches d'aperçus : chacune en porte `tileWidth × tileHeight`. */
-function trickplayTileCount(info: TrickplayInfo): number {
-  return Math.ceil(info.thumbnailCount / (info.tileWidth * info.tileHeight));
-}
-
 function spinSkip(button: HTMLElement, turn: -1 | 1) {
   const arrow = button.querySelector<HTMLElement>(".player-skip-arrow");
   if (!arrow || typeof arrow.animate !== "function" || prefersReducedMotion()) return;
@@ -696,7 +691,6 @@ export function PlayerControls({
     };
   }, [menu]);
   const [speed, setSpeed] = useState(1);
-  const [chapters, setChapters] = useState<{ start: number; name: string | null }[]>([]);
   const [bufferedEnd, setBufferedEnd] = useState(0);
   // Préférence générale, gardée d'une session à l'autre comme le volume : une taille de
   // sous-titres dont on a besoin ne dépend pas du film. Elle vit dans un magasin partagé, parce
@@ -926,22 +920,7 @@ export function PlayerControls({
     probeVolume(video);
   }, [videoRef, probeVolume]);
 
-  // Chapters — fetched once per item, same shape/lifecycle as the trickplay metadata below.
-  useEffect(() => {
-    if (lab) return;
-    let cancelled = false;
-    fetch(`/api/jellyfin/chapters?itemId=${itemId}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data) => {
-        if (!cancelled) setChapters(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {
-        if (!cancelled) setChapters([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [itemId, lab]);
+  const chapters = useChapters(itemId, lab);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1418,76 +1397,7 @@ export function PlayerControls({
     setCurrentTime(value);
   }
 
-  // Trickplay scrubbing preview — fetched once per item, not per hover: it's item-wide static
-  // metadata (grid layout + a handful of sprite-sheet tiles covering the whole runtime), so
-  // there's nothing to re-fetch as the seek bar is dragged, only tiles to look up locally.
-  const [fetchedTrickplay, setTrickplay] = useState<TrickplayInfo | null>(null);
-  const trickplay = offlineTrickplay?.info ?? fetchedTrickplay;
-  const hasOfflineTrickplay = offlineTrickplay !== null;
-  useEffect(() => {
-    if (lab || hasOfflineTrickplay) return;
-    let cancelled = false;
-    fetch(`/api/jellyfin/trickplay/info?itemId=${itemId}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!cancelled) setTrickplay(data);
-      })
-      .catch(() => {
-        if (!cancelled) setTrickplay(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [itemId, lab, hasOfflineTrickplay]);
-
-  // Pre-warms the browser's own HTTP cache with every trickplay sprite tile as soon as the
-  // metadata is known, instead of only fetching a tile the first time the seek bar is actually
-  // hovered — trades a bit of upfront bandwidth (a handful of small JPEGs — Jellyfin packs
-  // hundreds of thumbnails per tile) for the preview never showing a blank/loading frame on
-  // the first scrub. Fire-and-forget: nothing reads the Image objects, only their side effect
-  // of populating the cache under the same URL updatePreview will request later.
-  //
-  // Essayé le 08/10/2026 : chauffer au premier survol seulement (2,4 Mo de moins par ouverture).
-  // Rendu le jour même — une à deux secondes sans aperçu au premier contact, exactement ce que
-  // ce préchargement existe pour éviter.
-  //
-  // **Après la première image, la planche de la position d'abord, puis une à une** (15/10/2026,
-  // LECTEUR-6). Toutes partaient ensemble au montage, avant le film : sur un lien à 2 Mbit/s, neuf
-  // planches (≈ 7 Mo) occupaient le lien de 13 à 39 s, l'init du film n'était demandée qu'à 30 s, la
-  // première image arrivait à 42 s — le lien suffisait au film, pas au film plus les vignettes. Le
-  // préchargement reste automatique (ce n'est pas le « premier toucher » écarté le 08/10) ; seul son
-  // moment change : dès que l'élément joue (`playing`), ou qu'il a de quoi jouer hors d'un saut
-  // (`readyState` ≥ 3 — un film mis en pause à l'ouverture, ou un composant remonté sur un film qui
-  // joue). Pas sur le `canplay` de la position 0 que le lecteur serveur a avant de sauter à la reprise :
-  // `seeking` l'écarte, la planche choisie est celle de l'endroit où l'image arrive. Ensuite la plus
-  // proche d'abord, une requête à la fois — sur un bon lien elles sont toutes là en une seconde ou
-  // deux, bien avant le premier geste.
-  useEffect(() => {
-    // Gardées sur l'appareil : rien à faire venir.
-    if (!trickplay || hasOfflineTrickplay) return;
-    const tileCount = trickplayTileCount(trickplay);
-    if (!(tileCount > 0)) return;
-    const video = videoRef.current;
-    let cancelled = false;
-    const loadFrom = (order: number[]) => {
-      const next = order.shift();
-      if (cancelled || next === undefined) return;
-      const img = new Image();
-      // Échouée ou chargée, la suivante : l'aperçu demandera lui-même une planche manquante.
-      img.onload = img.onerror = () => loadFrom(order);
-      img.src = `/api/jellyfin/trickplay/tile?itemId=${itemId}&width=${trickplay.width}&index=${next}`;
-    };
-    const detach = afterFirstPicture(video, () => {
-      if (cancelled) return;
-      const position = video && Number.isFinite(video.currentTime) ? video.currentTime : 0;
-      const first = trickplayTileIndex(trickplay, position, tileCount);
-      loadFrom(trickplayTileOrder(first, tileCount));
-    });
-    return () => {
-      cancelled = true;
-      detach();
-    };
-  }, [trickplay, itemId, videoRef, hasOfflineTrickplay]);
+  const { trickplay, trickplayTileAt } = useTrickplay(itemId, lab, offlineTrickplay, videoRef);
 
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window === "undefined" ? 0 : window.innerWidth));
   useEffect(() => {
@@ -1578,18 +1488,6 @@ export function PlayerControls({
   const previewDisplayWidth = trickplay ? Math.round(trickplay.width * previewScale) : 160;
   const previewDisplayHeight = trickplay ? Math.round(trickplay.height * previewScale) : 90;
 
-  // Shared by the seek-bar hover preview and the chapters menu thumbnails below — same sprite
-  // lookup math, just called at a different `time`. Plain function, not useCallback: same
-  // reasoning as updatePreview above (nothing needs referential stability, and the React
-  // Compiler's memoization check gets confused by unrelated nearby state).
-  function trickplayTileAt(time: number): { url: string; bgX: number; bgY: number } | null {
-    // Le calcul est partagé avec les répliques de la recherche (`trickplayTile.ts`, §88).
-    if (!trickplay) return null;
-    const tile = sharedTrickplayTileAt(trickplay, itemId, time);
-    if (!offlineTrickplay) return tile;
-    const url = offlineTrickplay.urls[trickplayTileIndex(trickplay, time, trickplayTileCount(trickplay))];
-    return url ? { ...tile, url } : null;
-  }
   const previewTile = previewTime !== null ? trickplayTileAt(previewTime) : null;
 
   // Which chapter (if any) `time` currently falls inside — the last chapter whose start is
