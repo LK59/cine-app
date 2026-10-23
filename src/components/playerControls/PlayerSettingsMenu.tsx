@@ -7,23 +7,20 @@
  */
 
 import type { RefObject } from "react";
-import { Captions, AudioLines, MonitorSmartphone, Info, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, Speech, Languages, Layers } from "lucide-react";
+import { Captions, AudioLines, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Timer, ChevronRight, Speech, Languages, Layers } from "lucide-react";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
-import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
+import type { HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
-import { formatTime } from "@/lib/playerClock";
 import { LiquidMenu } from "@/components/player/LiquidMenu";
-import { PlayerEpisodesMenu } from "@/components/player/PlayerEpisodesMenu";
-import { PlayerDownloadRow } from "@/components/player/PlayerDownloadRow";
-import { noteViewerPresent } from "@/lib/autoAdvance";
 import { subtitleStyleStore, SUBTITLE_SIZES, SUBTITLE_COLORS, SUBTITLE_BACKGROUNDS, type SubtitleStyle } from "@/lib/subtitleStyle";
-import { writePlaybackQuality, type PlaybackQuality } from "@/lib/playbackQuality";
-import { SLEEP_DURATIONS, sleepTimerStore, type SleepMode } from "@/lib/sleepTimer";
+import type { PlaybackQuality } from "@/lib/playbackQuality";
+import type { SleepMode } from "@/lib/sleepTimer";
 import type { TrickplayInfo } from "@/lib/trickplayTile";
 import type { PlayerItemPayload } from "@/app/api/player/item/[itemId]/route";
 import type { SecondSubtitleMenu, SubtitleGenerationMenu, Track } from "@/components/PlayerControls";
 import { BOTTOM_EDGE } from "@/components/playerControls/layout";
 import { DialogueBeta, MenuOption, OffsetRow, SubtitleStyleGroup } from "@/components/playerControls/menuRows";
+import { chaptersView, episodesView, hdrCapHintView, hdrCapView, moreView, qualityView, sleepView, speedView } from "@/components/playerControls/menuViewsMore";
 
 /** « Améliorer les dialogues » : les trois choix du sous-menu, avec les mots et dans l'ordre de
  *  l'Apple TV (Désactivé / Améliorer / Améliorer davantage — demande de Louis, 11/10/2026). */
@@ -32,7 +29,6 @@ const DIALOGUE_CHOICES: { mode: DialogueMode; label: string }[] = [
   { mode: "on", label: "player.dialogue.enhance" },
   { mode: "strong", label: "player.dialogue.further" },
 ];
-const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
 /** Les vues des menus du lecteur. */
 export type MenuView =
@@ -108,51 +104,8 @@ const MENU_ICONS: Record<string, React.ReactNode> = {
   hdrCap: <Sun size={20} />,
 };
 
-export function PlayerSettingsMenu({
-  menu,
-  setMenu,
-  menuRef,
-  anchorRef,
-  showControls,
-  itemId,
-  playerItem,
-  downloadable,
-  audioTracks,
-  currentAudioId,
-  onChangeAudio,
-  subtitleTracks,
-  currentSubtitleId,
-  onChangeSubtitle,
-  subtitleOffset,
-  shiftSubtitles,
-  secondSubtitle,
-  secondId,
-  secondOffset,
-  shiftSecond,
-  subtitleGeneration,
-  subtitleStyle,
-  dialogue,
-  hdrCap,
-  frameFit,
-  quality,
-  speed,
-  changeSpeed,
-  sleepMode,
-  sleepMinutes,
-  nextEpisode,
-  onCastReturn,
-  castActive,
-  castSupported,
-  chromecast,
-  onTogglePlaybackInfo,
-  episodesSeriesId,
-  onPlayEpisode,
-  chapters,
-  jumpToChapter,
-  currentTime,
-  trickplay,
-  trickplayTileAt,
-}: {
+/** Ce que `PlayerControls` donne au menu. */
+export type SettingsMenuProps = {
   menu: MenuView;
   setMenu: (view: MenuView | null) => void;
   menuRef: RefObject<HTMLDivElement | null>;
@@ -196,16 +149,38 @@ export function PlayerSettingsMenu({
   currentTime: number;
   trickplay: TrickplayInfo | null;
   trickplayTileAt: (time: number) => { url: string; bgX: number; bgY: number } | null;
-}) {
+};
+/** Ce que reçoit chaque vue : les props du menu et la traduction. */
+export type MenuViewContext = SettingsMenuProps & { t: ReturnType<typeof useT> };
+
+export function PlayerSettingsMenu(props: SettingsMenuProps) {
+  const {
+    menu,
+    setMenu,
+    menuRef,
+    anchorRef,
+    showControls,
+    audioTracks,
+    currentAudioId,
+    onChangeAudio,
+    subtitleTracks,
+    currentSubtitleId,
+    onChangeSubtitle,
+    subtitleOffset,
+    shiftSubtitles,
+    secondSubtitle,
+    secondId,
+    secondOffset,
+    shiftSecond,
+    subtitleGeneration,
+    subtitleStyle,
+    dialogue,
+    castSupported,
+    chromecast,
+  } = props;
   const t = useT();
+  const v: MenuViewContext = { ...props, t };
   const menuParent = menu ? MENU_PARENT[menu] : undefined;
-  /** « Auto · 203 nits », « Natif », « 400 nits » — le réglage de luminosité HDR, en mots. */
-  const hdrCapLabel = (choice: HdrCapChoice): string =>
-    choice === "auto"
-      ? `${t("player.hdrCap.auto")}${hdrCap?.autoNits ? ` · ${hdrCap.autoNits} nits` : ` · ${t("player.hdrCap.native")}`}`
-      : choice === "native"
-        ? t("player.hdrCap.native")
-        : `${choice} nits`;
   /** Ce qu'on peut prendre comme second : toute piste du menu sauf le principal. */
   const secondChoices = (secondSubtitle?.tracks ?? subtitleTracks).filter((tr) => tr.id !== currentSubtitleId);
   const labelOf = (id: number | null) => (id === null ? t("player.none") : (subtitleTracks.find((tr) => tr.id === id)?.label ?? t("player.none")));
@@ -219,14 +194,6 @@ export function PlayerSettingsMenu({
     onChangeSubtitle(id);
     if (secondSubtitle && id === secondSubtitle.currentId) secondSubtitle.onChange(previous);
   }
-  const sleepLabel = (mode: SleepMode): string =>
-    mode === "off" ? t("player.sleep.off") : mode === "episode" ? t("player.sleep.episode") : t("player.sleep.minutes", { n: Number(mode) });
-  // Fixed small thumbnail size for the chapters menu — cropped to a consistent 16:9-ish box
-  // regardless of Jellyfin's actual trickplay tile resolution, so the list stays tidy even if
-  // that resolution ever changes.
-  const chapterThumbWidth = 64;
-  const chapterThumbScale = trickplay ? chapterThumbWidth / trickplay.width : 1;
-  const chapterThumbHeight = trickplay ? Math.round(trickplay.height * chapterThumbScale) : 36;
 
   return (
     <LiquidMenu
@@ -256,117 +223,7 @@ export function PlayerSettingsMenu({
       onClick={(e) => e.stopPropagation()}
       onClickCapture={() => showControls(10000)}
     >
-      {/* ⋮ : ce qu'on règle en regardant — chapitres, vitesse, minuterie —, puis, sous un trait
-          et en plus discret, ce qu'on ne touche que pour comprendre ou ajuster l'appareil.
-          Les réglages des sous-titres vivent dans le menu des sous-titres : ils avaient ici
-          la même icône que lui, et deux lignes de plus pour une question qui n'est pas d'ici. */}
-      {menu === "more" && (
-        <>
-          {chapters.length > 0 && (
-            <button
-              onClick={() => setMenu("chapters")}
-              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-            >
-              <ListVideo size={16} /> {t('player.chapters')}
-            </button>
-          )}
-          {/* La vitesse vit ici depuis le 11/10/2026 : un bouton à elle seule dans la barre pour
-              un réglage qu'on touche rarement. La vitesse courante reste lisible dans la ligne. */}
-          <button
-            data-player-nav="speed"
-            onClick={() => setMenu("speed")}
-            className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-          >
-            <Gauge size={16} /> {t("player.speed")} · {speed === 1 ? t("player.speedNormal") : `${speed}×`}
-          </button>
-          {/* Active, la lune à la place du chronomètre, et ce qui reste. Rien d'autre à l'écran
-              ne dit qu'une minuterie court. */}
-          <button
-            onClick={() => setMenu("sleep")}
-            className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-          >
-            {sleepMode === "off" ? <Timer size={16} /> : <Moon size={16} fill="currentColor" data-sleep-active="" />}
-            {t("player.sleep.title")}
-            {sleepMode === "episode"
-              ? ` · ${t("player.sleep.episode")}`
-              : sleepMinutes !== null
-                ? ` · ${t("player.sleep.minutes", { n: sleepMinutes })}`
-                : ""}
-          </button>
-          {/* Le retour, tant que cette séance existe pour diffuser. Il ne dépend d'aucun
-              événement — voir `onCastReturn` — et c'est précisément ce qui le rend sûr :
-              la seule partie de la diffusion qu'on ne puisse pas éprouver depuis ici est
-              la détection, et celle-ci s'en passe. La diffusion elle-même est en haut. */}
-          {onCastReturn && (
-            <button
-              onClick={() => {
-                onCastReturn();
-                setMenu(null);
-              }}
-              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-            >
-              <MonitorSmartphone size={16} />
-              {castActive ? t("player.castStop") : t("player.castReturn")}
-            </button>
-          )}
-          {frameFit && (
-            // Le menu reste ouvert : l'image glisse derrière, et c'est ce qu'on veut voir.
-            <button
-              type="button"
-              role="switch"
-              aria-checked={frameFit.on}
-              onClick={() => frameFit.onChange(!frameFit.on)}
-              className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-            >
-              <span className="flex items-center gap-3">
-                <Scan size={16} /> {t("player.frameFit")}
-              </span>
-              <span
-                aria-hidden
-                className={`relative inline-block h-5 w-9 shrink-0 rounded-full transition-colors ${frameFit.on ? "bg-white/80" : "bg-white/20"}`}
-              >
-                <span
-                  className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform ${frameFit.on ? "translate-x-4 bg-black" : "bg-white"}`}
-                />
-              </span>
-            </button>
-          )}
-          <div data-menu-secondary className="border-t border-white/[0.08]">
-            <button
-              onClick={() => {
-                onTogglePlaybackInfo();
-                setMenu(null);
-              }}
-              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white/85 hover:bg-white/10"
-            >
-              <Info size={16} /> {t('player.playbackInfo')}
-            </button>
-            {/* « Qualité » (§78) : Automatique — la vidéo allégée prend le relais d'elle-même sur une
-                connexion trop lente — ou Originale. Jamais de vidéo allégée à la demande. */}
-            <button
-              data-quality-row=""
-              onClick={() => setMenu("quality")}
-              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white/85 hover:bg-white/10"
-            >
-              <Gauge size={16} /> {t("player.quality.title")} · {quality === "original" ? t("player.quality.original") : t("player.quality.auto")}
-            </button>
-            {hdrCap && (
-              <button
-                onClick={() => setMenu("hdrCap")}
-                className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-white/85 hover:bg-white/10"
-              >
-                <Sun size={16} /> {t("player.hdrCap.title")} · {hdrCapLabel(hdrCap.current)}
-              </button>
-            )}
-            {/* Le fichier d'origine, au bureau seulement et pour un compte que Jellyfin autorise à
-                télécharger (19/10/2026) — la route le vérifie aussi, cacher la ligne n'est pas
-                interdire. Le navigateur le télécharge lui-même, avec sa reprise. */}
-            {downloadable && (
-              <PlayerDownloadRow itemId={itemId} sizeBytes={playerItem?.download?.sizeBytes ?? null} onStart={() => setMenu(null)} />
-            )}
-          </div>
-        </>
-      )}
+      {menu === "more" && moreView(v)}
       {menuParent && (
         <button
           onClick={() => setMenu(menuParent)}
@@ -690,60 +547,10 @@ export function PlayerSettingsMenu({
           />
         </>
       )}
-      {menu === "hdrCap" && hdrCap && (
-        <p className="max-w-64 px-3 pb-1 pt-2 text-xs text-white/60">{t("player.hdrCap.hint")}</p>
-      )}
-      {menu === "hdrCap" &&
-        hdrCap &&
-        HDR_CAP_CHOICES.map((choice) => (
-          <MenuOption
-            key={String(choice)}
-            on={hdrCap.current === choice}
-            onClick={() => {
-              setMenu(null);
-              if (choice !== hdrCap.current) hdrCap.onPick(choice);
-            }}
-          >
-            {hdrCapLabel(choice)}
-          </MenuOption>
-        ))}
-      {menu === "sleep" &&
-        // « Fin de l'épisode » seulement quand il y a un épisode après : sans lui, l'épisode
-        // s'arrête déjà à sa fin, et l'option ne changerait rien.
-        (["off", ...SLEEP_DURATIONS, ...(nextEpisode ? (["episode"] as const) : [])] as SleepMode[]).map((choice) => (
-          <MenuOption
-            key={choice}
-            on={sleepMode === choice}
-            onClick={() => {
-              setMenu(null);
-              // Rechoisir la durée en cours la relance en entier, comme « Continuer ».
-              sleepTimerStore.choose(choice);
-            }}
-          >
-            {sleepLabel(choice)}
-          </MenuOption>
-        ))}
-      {/* Comme l'audio et les sous-titres : trois choix dans une liste, le courant en couleur.
-          Choisir reconstruit la lecture au même endroit (le traitement vit dans la chaîne audio)
-          et referme le menu, comme un changement de piste. */}
-      {menu === "quality" && (
-        <>
-          {(["auto", "original"] as const).map((choice) => (
-            <MenuOption
-              key={choice}
-              data-quality-choice={choice}
-              on={quality === choice}
-              onClick={() => {
-                if (choice !== quality) writePlaybackQuality(choice);
-                setMenu(null);
-              }}
-            >
-              {choice === "auto" ? t("player.quality.auto") : t("player.quality.original")}
-            </MenuOption>
-          ))}
-          <p className="border-t border-white/10 px-3 pt-2 pb-2 text-xs text-white/60">{t("player.quality.hint")}</p>
-        </>
-      )}
+      {menu === "hdrCap" && hdrCapHintView(v)}
+      {menu === "hdrCap" && hdrCapView(v)}
+      {menu === "sleep" && sleepView(v)}
+      {menu === "quality" && qualityView(v)}
       {menu === "dialogue" && dialogue && (
         <>
           {DIALOGUE_CHOICES.map(({ mode, label }) => (
@@ -766,58 +573,9 @@ export function PlayerSettingsMenu({
           )}
         </>
       )}
-      {menu === "speed" &&
-        PLAYBACK_SPEEDS.map((rate) => (
-          <MenuOption key={rate} on={speed === rate} onClick={() => changeSpeed(rate)}>
-            {rate === 1 ? t('player.speedNormal') : `${rate}x`}
-          </MenuOption>
-        ))}
-      {menu === "episodes" && episodesSeriesId && onPlayEpisode && (
-        <PlayerEpisodesMenu
-          seriesId={episodesSeriesId}
-          currentItemId={itemId}
-          onPick={(episode) => {
-            setMenu(null);
-            noteViewerPresent();
-            onPlayEpisode(episode);
-          }}
-        />
-      )}
-      {menu === "chapters" &&
-        chapters.map((ch, i) => {
-          const tile = trickplayTileAt(ch.start);
-          return (
-            <MenuOption
-              key={i}
-              align="center"
-              on={currentTime >= ch.start && (chapters[i + 1] ? currentTime < chapters[i + 1].start : true)}
-              onClick={() => jumpToChapter(ch.start)}
-            >
-              {trickplay && (
-                <div
-                  className="shrink-0 overflow-hidden rounded bg-black/40"
-                  style={{ width: chapterThumbWidth, height: chapterThumbHeight }}
-                >
-                  {tile && (
-                    <div
-                      style={{
-                        width: trickplay.width,
-                        height: trickplay.height,
-                        transform: `scale(${chapterThumbScale})`,
-                        transformOrigin: "top left",
-                        backgroundImage: `url(${tile.url})`,
-                        backgroundPosition: `${tile.bgX}px ${tile.bgY}px`,
-                        backgroundSize: `${trickplay.width * trickplay.tileWidth}px ${trickplay.height * trickplay.tileHeight}px`,
-                      }}
-                    />
-                  )}
-                </div>
-              )}
-              <span className="min-w-0 flex-1 truncate">{ch.name ?? t("player.chapterN", { n: i + 1 })}</span>
-              <span className="shrink-0 tabular-nums text-white/50">{formatTime(ch.start)}</span>
-            </MenuOption>
-          );
-        })}
+      {menu === "speed" && speedView(v)}
+      {menu === "episodes" && episodesView(v)}
+      {menu === "chapters" && chaptersView(v)}
     </LiquidMenu>
   );
 }
