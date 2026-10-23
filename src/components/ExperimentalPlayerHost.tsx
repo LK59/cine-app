@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { AlertTriangle, RotateCw, WifiOff, X } from "lucide-react";
+import { X } from "lucide-react";
 import { playerBootstrapOptions, refreshAfterPlayback } from "@/lib/swr";
 import { directInfoForOpening } from "@/lib/directInfo";
 import { labSampleByFile, labSampleInfo } from "@/lib/labSamples";
@@ -71,7 +71,7 @@ import {
 import type { StableTakeover } from "@/lib/useStableFallback";
 import { useChromecast, useChromecastAllowed } from "@/lib/chromecast/useChromecast";
 import { chromecastSnapshot, requestChromecastSession } from "@/lib/chromecast/framework";
-import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
+import type { ReportInput } from "@/components/ExperimentalPlayerReport";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { PlayerEndScreen } from "@/components/player/PlayerEndScreen";
 import { useShareMode } from "@/components/ShareMode";
@@ -132,11 +132,20 @@ import {
 import { networkUnstable, subscribeNetworkTrouble } from "@/lib/networkTrouble";
 import { pushSlowLinkEvent } from "@/lib/slowLinkMonitor";
 import { saveUnsentPosition } from "@/lib/unsentPosition";
-import { finishIntro, formatResumeClock, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
+import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
 import { useIntroPlaybackStarted } from "@/lib/introEnd";
 import { usePlayerBackClose } from "@/lib/playerHistory";
 import { useAudioLabels, useElapsedSince, useSubtitleLabels } from "@/components/playerNative/nativeHostHooks";
 import { nativeFrameStyle } from "@/components/playerNative/nativeFrameStyle";
+import {
+  CenterWord,
+  NativeErrorScreen,
+  NativeWarning,
+  NetworkLostScreen,
+  OpeningSpinner,
+  SlowLinkScreen,
+  StuckReport,
+} from "@/components/playerNative/NativeOverlays";
 import {
   aacRouteFacts,
   generationErrorText,
@@ -3603,39 +3612,14 @@ export function ExperimentalPlayerHost({
           screen rather than the error one. The film is not lost: the position, the language and
           the subtitles are all still here, and pressing the button gives them back. */}
       {networkLost && !isMini && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 px-6 text-center">
-          <WifiOff className={online ? "text-slate-500" : "text-amber-400"} size={32} />
-          <div>
-            <p className="text-base font-medium text-white">
-              {online ? t("player.experimental.connectionBack") : t("player.experimental.connectionLost")}
-            </p>
-            <p className="mt-1 max-w-md text-sm leading-6 text-slate-400">
-              {online ? t("player.experimental.connectionBackBody") : t("player.experimental.connectionLostBody")}
-            </p>
-          </div>
-          <p className="text-xs text-slate-500">
-            {t("player.experimental.resumeAt", { time: formatResumeClock(networkLost.at) })}
-            {networkLost.audio !== null &&
-              ` · ${tracks.audio.find((a) => a.number === networkLost.audio)?.language ?? t("player.experimental.chosenTrack")}`}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => retryAfterNetwork(networkLost.at, "réessai demandé", true)}
-              className="btn-primary inline-flex items-center gap-2"
-            >
-              <RotateCw size={16} />
-              {t("player.experimental.retry")}
-            </button>
-            <button
-              type="button"
-              onClick={handleClose}
-              className="btn btn-ghost px-4 py-2"
-            >
-              {t("common.close")}
-            </button>
-          </div>
-        </div>
+        <NetworkLostScreen
+          t={t}
+          online={online}
+          networkLost={networkLost}
+          audioTracks={tracks.audio}
+          retryAfterNetwork={retryAfterNetwork}
+          onClose={handleClose}
+        />
       )}
 
       {/* La fin d'un film, ou d'un épisode retenu par la minuterie de veille — voir `endScreen`. */}
@@ -3673,66 +3657,29 @@ export function ExperimentalPlayerHost({
           serveur n'est pas en jeu ici : cet écran n'existe qu'en « Originale » ou sans version allégée
           permise. Réessayer rouvre au même endroit ; Fermer ferme le lecteur. */}
       {slowShown && slowLink && !networkLost && !isMini && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 px-6 text-center" data-slow-link-screen="">
-          <WifiOff className="text-amber-400" size={32} />
-          <p className="max-w-md text-base font-medium text-white">{t("player.slowLink.failed")}</p>
-          <div className="mt-1 flex flex-wrap items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                slowLog.choose("réessayer", Date.now() - openedAt);
-                setSlowLink(null);
-                retryAfterNetwork(positionRef.current, "réessai demandé après une connexion trop lente", true);
-              }}
-              className="btn-primary inline-flex items-center gap-2"
-            >
-              <RotateCw size={16} />
-              {t("player.experimental.retry")}
-            </button>
-            <button type="button" onClick={closeFromScreen} className="btn btn-ghost px-4 py-2">
-              {t("common.close")}
-            </button>
-          </div>
-        </div>
+        <SlowLinkScreen
+          t={t}
+          onRetry={() => {
+            slowLog.choose("réessayer", Date.now() - openedAt);
+            setSlowLink(null);
+            retryAfterNetwork(positionRef.current, "réessai demandé après une connexion trop lente", true);
+          }}
+          onClose={closeFromScreen}
+        />
       )}
 
       {error && !slowShown && !networkLost && !isMini && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 px-6 text-center">
-          <AlertTriangle className="text-amber-400" size={32} />
-          {/* Deux écrans, un seul gabarit. Là où un lecteur serveur existe, cet écran est une
-              proposition — « celui-ci n'y arrive pas, l'autre peut-être » — et le titre dit
-              lequel des deux a renoncé. Là où il n'en existe pas, c'est une fin de course : la
-              phrase ne doit désigner aucun lecteur, puisqu'il n'y a pas de second à essayer, et
-              le bouton qui y menait n'a plus de destination. */}
-          <p className="text-base font-medium text-white">
-            {serverFallback === false ? t("player.unplayable") : t("player.experimental.title")}
-          </p>
-          <p className="max-w-lg text-sm leading-6 text-slate-300">{error}</p>
-          <ExperimentalPlayerReport input={report} />
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
-            {serverFallback !== false && (
-              <button type="button" onClick={() => fallToStable(error ?? "demandé par le spectateur")} className="btn-primary">
-                {t("player.experimental.switchToStable")}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleClose}
-              className={serverFallback === false ? "btn-primary" : "btn btn-ghost px-4 py-2"}
-            >
-              {t("common.close")}
-            </button>
-          </div>
-        </div>
+        <NativeErrorScreen
+          t={t}
+          error={error}
+          serverFallback={serverFallback}
+          report={report}
+          onSwitchToStable={() => fallToStable(error ?? "demandé par le spectateur")}
+          onClose={handleClose}
+        />
       )}
 
-      {warning && !error && !isMini && (
-        <div className="pointer-events-none absolute inset-x-0 top-16 z-10 flex justify-center">
-          <span className="rounded-full bg-amber-500/15 px-3 py-1.5 text-xs text-amber-200 ring-1 ring-amber-400/30">
-            {warning.text}
-          </span>
-        </div>
-      )}
+      {warning && !error && !isMini && <NativeWarning text={warning.text} />}
 
       {/* The technical panel is this player's own: the stable one's reads Jellyfin's transcode
           session, and there is no transcode session here — everything below is what the browser
@@ -3977,37 +3924,20 @@ export function ExperimentalPlayerHost({
 
       {/* Rien sous l'écran de coupure : « Analyse du fichier… » et son cercle transparaissaient à
           travers son voile, deux messages contraires à la fois (vu sur iPhone le 21/09/2026). */}
-      {openingSpinner && !error && !networkLost && !isMini && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-            {/* Silent while the wait is too short to read. A sentence that appears and goes before
-                it can be finished is noise, not company. */}
-            {waitingWord && <p className="text-sm text-slate-400">{waitingWord}</p>}
-          </div>
-        </div>
-      )}
+      {openingSpinner && !error && !networkLost && !isMini && <OpeningSpinner waitingWord={waitingWord} />}
 
       {/* The wait has gone past explaining itself. The report is pointer-enabled where the
           spinner above is not: it exists to be selected and copied. */}
       {/* Pas sous l'écran de coupure non plus, comme la roue au-dessus : l'horloge de l'ouverture
           court pendant une coupure, et passé vingt secondes « le chargement n'aboutit pas » montait
           par-dessus « Connexion perdue » et ses boutons (chasse aux défauts du 13/10/2026). */}
-      {stuck && !error && !networkLost && !isMini && (
-        <div className="absolute inset-x-0 bottom-0 z-20 flex justify-center bg-gradient-to-t from-black/95 to-transparent px-6 pb-6 pt-16">
-          <ExperimentalPlayerReport input={report} />
-        </div>
-      )}
+      {stuck && !error && !networkLost && !isMini && <StuckReport report={report} />}
 
       {/* A resume long enough to deserve a word gets the word only: the controls are already
           showing the spinner, and a second one beside it is what this looked like at first. */}
       {/* Et une attente en pleine lecture, quand le réseau est en cause : le mot seul, sous la roue
           ou le fil des commandes — voir `stallWord`. */}
-      {!openingSpinner && centerWord && !error && !networkLost && !isMini && (
-        <div className="pointer-events-none absolute inset-x-0 top-1/2 mt-10 flex justify-center">
-          <p className="text-sm text-slate-400">{centerWord}</p>
-        </div>
-      )}
+      {!openingSpinner && centerWord && !error && !networkLost && !isMini && <CenterWord word={centerWord} />}
     </div>,
     document.body
   );
