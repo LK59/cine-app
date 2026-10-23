@@ -8,6 +8,7 @@ import { isGeneratingTrack, type SubtitleGeneration } from "@/lib/subtitleGen/ge
 import type { RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import { ExternalSubtitleTrack, isExternalTrack, type ExternalSubtitleSource } from "@/lib/webcodecs/externalSubtitles";
 import { noticeText } from "@/components/player/nativeHostHelpers";
+import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
 
 export function useNativeSubtitleLanes({
   generation,
@@ -91,7 +92,7 @@ export function useNativeSubtitleLanes({
       // lui-même le principal (les commandes rendent alors l'ancien principal comme second), ni à une
       // seconde génération : une seule est dessinée à la fois (§87).
       const second = secondWantedRef.current;
-      if (second !== null && (id === null || id === second || (isGeneratingTrack(id) && isGeneratingTrack(second)))) clearSecond();
+      if (second !== null && !secondSurvives(id, second, isGeneratingTrack(id) && isGeneratingTrack(second))) clearSecond();
       wantedSubtitleRef.current = id;
       // Un décalage corrige une piste, pas la suivante.
       subtitleOffsetRef.current = 0;
@@ -149,7 +150,7 @@ export function useNativeSubtitleLanes({
   const chooseSecond = useCallback(
     (id: number | null, sources: ExternalSubtitleSource[]) => {
       const primary = wantedSubtitleRef.current;
-      if (id !== null && (id === primary || primary === null)) return;
+      if (!secondAllowed(id, primary)) return;
       const generating = isGeneratingTrack(id);
       if (generating && isGeneratingTrack(primary)) return;
       clearSecond();

@@ -6,6 +6,7 @@ import { renderHook } from "@testing-library/react";
 import { rebuildLine } from "@/components/player/nativeHostHelpers";
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
 import { WatchedClock } from "@/lib/playerSessionTally";
+import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -20,6 +21,23 @@ describe("rebuildLine (§115, ligne rebuild)", () => {
 
   it("sans ajout, s'arrête à at", () => {
     expect(Object.keys(rebuildLine({}, "x", 0))).toEqual(["path", "reason", "at"]);
+  });
+});
+
+describe("dualSubtitleRules (§115, deux sous-titres — §87)", () => {
+  it("le second ne survit ni à un principal éteint, ni à devenir le principal, ni à une seconde génération", () => {
+    expect(secondSurvives(3, 5)).toBe(true);
+    expect(secondSurvives(null, 5)).toBe(false);
+    expect(secondSurvives(5, 5)).toBe(false);
+    expect(secondSurvives(3, 5, true)).toBe(false);
+  });
+
+  it("le second n'est jamais le principal, jamais sans principal ; l'éteindre est toujours permis", () => {
+    expect(secondAllowed(5, 3)).toBe(true);
+    expect(secondAllowed(3, 3)).toBe(false);
+    expect(secondAllowed(5, null)).toBe(false);
+    expect(secondAllowed(null, null)).toBe(true);
+    expect(secondAllowed(null, 3)).toBe(true);
   });
 });
 

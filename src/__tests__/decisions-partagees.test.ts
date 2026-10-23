@@ -1513,4 +1513,13 @@ describe("les doublons du lecteur fusionnés : une règle, un endroit (§115)", 
       expect([f, /useWatchedClockRun\(watched, playing\)/.test(sansCommentaires(lire(f)))]).toEqual([f, true]);
     }
   });
+
+  it.each(HOTES)("%s décide des deux sous-titres par secondSurvives et secondAllowed", (hote) => {
+    const code = codeDe(hote);
+    expect([hote, /secondSurvives\(/.test(code), /secondAllowed\(/.test(code)]).toEqual([hote, true, true]);
+  });
+
+  it("aucune copie de la règle des deux sous-titres hors du module", () => {
+    expect(lecteurQui(/id === primary \|\| primary === null|primary === null \|\| id === primary/)).toEqual(["src/components/player/session/dualSubtitleRules.ts"]);
+  });
 });

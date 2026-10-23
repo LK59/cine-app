@@ -4528,7 +4528,9 @@ dessine rien. Le `ChromecastPlayer` n'a pas d'entrée « Deux sous-titres ».
 (`src/components/player/SubtitleLayer.tsx`) ; `useServerDualSubtitles` ; `SecondSubtitleMenu` et les
 vues `dual` / `dualPrimary` / `dualSecond` et `pickPrimary` (`menuViewsDual.tsx`, appelées par
 `PlayerSettingsMenu`), `OffsetRow` (`menuRows.tsx`), tous dans `src/components/playerControls/` ;
-`.subtitle-dual`, `.subtitle-dual-text` (globals.css).
+`.subtitle-dual`, `.subtitle-dual-text` (globals.css) ; les deux règles « le second survit-il au
+nouveau principal » et « ce second est-il permis » dans `secondSurvives` / `secondAllowed`
+(`src/components/player/session/dualSubtitleRules.ts`, depuis le 23/10/2026, §115).
 
 **Appelants.** `ExperimentalPlayerHost` (`chooseSecond`, `showSecondAt`, `generationLane` — dans
 `playerNative/useNativeSubtitleLanes.ts` —, `applyDualMemory`) ; `PlayerHost` (`changeSecondSubtitle`, ré-application dans `startPlayback`).
@@ -6310,3 +6312,16 @@ lise. **Tests.** `player-regles-communes.test.ts`, `PlayerHost-temps-regarde`, `
 les empreintes (`watched` des `stop`) ; `decisions-partagees`. **Différent exprès.** Ce que « joue »
 veut dire : Chromecast exclut l'attente du récepteur (`remote.waiting`, §97) ; les attentes de
 l'élément passent par `watchElementWaits`, déjà commun.
+
+### Deux sous-titres : survie et permis du second
+
+**Règle.** Le second ne survit ni à un principal éteint, ni à devenir le principal ; il n'est jamais
+le principal, jamais sans principal. **Porteurs.** `secondSurvives`, `secondAllowed`
+(`src/components/player/session/dualSubtitleRules.ts`). **Appelants.** `chooseSubtitle` et
+`chooseSecond` (`useNativeSubtitleLanes`) ; `changeSubtitle` et `changeSecondSubtitle` (`ActivePlayer`).
+**Tests.** `player-regles-communes.test.ts`, `PlayerHost-deuxSousTitres.test.tsx`,
+`ExperimentalPlayerHost.test.tsx` (« deux sous-titres à la fois »), `decisions-partagees`.
+**Différent exprès.** La clause « deux générations » (`bothGenerating`, et le refus d'une seconde
+génération dans `chooseSecond`) : le natif seul (§70, §87). `subtitleSwitches` et `reportPositionNow`
+sur le second : le serveur seul (§87). **Laissé.** Un second refusé : le natif rappelle quand même
+`rememberDual` (la même mémoire réécrite), le serveur non — invisible, non tranché.

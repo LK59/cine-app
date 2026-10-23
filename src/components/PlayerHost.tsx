@@ -95,6 +95,7 @@ import type { SleepMode } from "@/lib/sleepTimer";
 import { CastResume } from "@/lib/castResume";
 import { SessionTally, WatchedClock, newPlayerSessionId, watchElementWaits } from "@/lib/playerSessionTally";
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
+import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 import { touchHintHeaders } from "@/lib/deviceLabel";
@@ -1770,8 +1771,9 @@ function ActivePlayer({
     if (!video) return;
     reportPositionNow();
     // Le second ne survit pas à un principal éteint, ni à devenir le principal (§87).
-    const wasDual = secondSubtitleRef.current !== null;
-    if (wasDual && (id === null || id === secondSubtitleRef.current)) {
+    const second = secondSubtitleRef.current;
+    const wasDual = second !== null;
+    if (second !== null && !secondSurvives(id, second)) {
       secondSubtitleRef.current = null;
       setSecondSubtitleId(null);
     }
@@ -1792,7 +1794,7 @@ function ActivePlayer({
   /** Le second sous-titre (§87) : jamais le principal, jamais sans principal. */
   const changeSecondSubtitle = useCallback((id: number | null) => {
     const primary = currentSubtitleRef.current;
-    if (id !== null && (primary === null || id === primary)) return;
+    if (!secondAllowed(id, primary)) return;
     reportPositionNow();
     subtitleSwitchesRef.current += 1;
     secondSubtitleRef.current = id;
