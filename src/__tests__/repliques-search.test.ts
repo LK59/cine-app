@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 
 /**
  * Chercher dans l'index des répliques (DECISIONS.md §88) : accents et casse ignorés, fautes de
@@ -54,6 +54,16 @@ beforeAll(async () => {
 });
 
 describe("la recherche", () => {
+  // La recherche élargie s'arrête au bout de 40 ms (`EXTRA_BUDGET_MS`, search.ts) : sous la charge d'une
+  // suite entière, ce budget s'épuisait avant la première tentative et « approximate » manquait. Ici,
+  // l'horloge est figée — ce qu'on vérifie, c'est ce que la recherche trouve, pas sa vitesse.
+  beforeEach(() => {
+    vi.spyOn(performance, "now").mockReturnValue(0);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("ignore les accents et la casse, dans les deux sens", () => {
     expect(searchDialogue("JE SUIS TON PERE").films.map((f) => f.itemId)).toContain(A);
     expect(searchDialogue("coeur").films[0]?.lines[0].text).toBe("Le Cœur a ses raisons.");
