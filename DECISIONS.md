@@ -4047,7 +4047,7 @@ préchargeait toutes les planches trickplay au montage, avant le film : sur un l
 de l'élément, ou dès `readyState` ≥ 3 hors d'un saut (film mis en pause à l'ouverture, commandes remontées sur
 un film qui joue) — jamais sur le `canplay` de la position 0 que le lecteur serveur a avant son saut de
 reprise. La planche de la position d'abord, puis les plus proches, **une requête à la fois**
-(`trickplayTileIndex`, `trickplayTileOrder`, `trickplayTile.ts`). Sur un bon lien, toutes sont là en une ou
+(`trickplayTileIndex`, `trickplayTileOrder`, `trickplayTile.ts` ; l'effet vit dans `useTrickplay`). Sur un bon lien, toutes sont là en une ou
 deux secondes. **Tests** : `PlayerControls.test.tsx` (« les vignettes de la barre, préchargées après la
 première image »).
 
@@ -4523,7 +4523,8 @@ dessine rien. Le `ChromecastPlayer` n'a pas d'entrée « Deux sous-titres ».
 **Porteurs.** `src/lib/dualSubtitles.ts` (`secondOverlayCss`, `primaryDualCss`, `SECOND_SUBTITLE_TINT`,
 `dualSubtitleMemory`, `rememberDual`, `pickRememberedDual`) ; `SubtitleLayer`
 (`src/components/player/SubtitleLayer.tsx`) ; `useServerDualSubtitles` ; `SecondSubtitleMenu` et les
-vues `dual` / `dualPrimary` / `dualSecond`, `OffsetRow`, `pickPrimary` (`PlayerControls`) ;
+vues `dual` / `dualPrimary` / `dualSecond` et `pickPrimary` (`PlayerSettingsMenu`), `OffsetRow`
+(`menuRows.tsx`), tous deux dans `src/components/playerControls/` ;
 `.subtitle-dual`, `.subtitle-dual-text` (globals.css).
 
 **Appelants.** `ExperimentalPlayerHost` (`chooseSecond`, `showSecondAt`, `generationLane`,
@@ -4644,7 +4645,7 @@ minute et par compte.
 `readTextTracks`, `bestTextTrack`), `sidecar.ts`, `fileSource.ts`, `store.ts`, `search.ts`,
 `disks.ts` (`diskOf`, `planQueues`), `playbackActivity.ts`, `library.ts` (`libraryFilms`,
 `containerPathOf`, `checkMoviesMount`), `languages.ts`, `text.ts` ; `src/lib/dialogueSearch.ts` ;
-`src/lib/trickplayTile.ts` (le calcul de vignette, partagé avec `PlayerControls`).
+`src/lib/trickplayTile.ts` (le calcul de vignette, partagé avec `useTrickplay`, `src/components/playerControls/`).
 
 **Appelants.** `instrumentation.ts` (`startRepliquesEngine`), `/api/repliques/admin` (réservée,
 `ADMIN_ONLY_READS`), `/api/repliques`, `PUT /api/settings`, le relais de flux (`noteMediaRead`),
@@ -5833,7 +5834,7 @@ paresseusement — la liste apparaissait vide puis se remplissait. Les `<img>` d
 
 ## 108. La barre de progression : au doigt, un glissement relatif ; à la souris, un saut au curseur
 
-**Règle.** Au toucher (`onTouchStart/Move/End/Cancel` du conteneur de la barre, `PlayerControls`) :
+**Règle.** Au toucher (`onTouchStart/Move/End/Cancel` du conteneur de la barre, `PlayerSeekBar`) :
 poser le doigt n'importe où sur la barre ne déplace rien — elle s'épaissit et la vignette montre la
 position **actuelle** ; glisser déplace la tête de lecture du même déplacement que le doigt (un pixel de
 doigt = un pixel de barre, `touchStartRef`), bornée à [0, durée] ; un toucher qui bouge de moins de
