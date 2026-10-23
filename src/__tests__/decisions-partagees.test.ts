@@ -377,9 +377,12 @@ describe("une seule règle de reprise, une seule d'épisode suivant, une seule c
       .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
       .join("\n");
 
+  // Le bouton de la fiche du téléphone est éprouvé rendu dans `fiche-telephone-lire.test.tsx`
+  // (23/10/2026) — position au serveur avant la réponse, la sienne après, zéro pour « Recommencer » — :
+  // son appel peut vivre hors de la fiche.
   it("la position de départ se calcule par `resumeAtFor`, pas à la main", () => {
+    expect(codeOnly("src/components/PlayButton.tsx")).toContain("resumeAtFor(");
     for (const f of ["src/components/PlayButton.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"]) {
-      expect([f, codeOnly(f)]).toEqual([f, expect.stringContaining("resumeAtFor(")]);
       expect([f, /!resumeKnown \? undefined/.test(codeOnly(f))]).toEqual([f, false]);
     }
   });
