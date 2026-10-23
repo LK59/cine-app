@@ -1,5 +1,6 @@
 "use client";
 
+import { APP_NAME } from "@/lib/appBuild";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR, { mutate as globalMutate } from "swr";
@@ -377,8 +378,12 @@ export function PlayerOnboarding({
         <div key={step} className="flex flex-1 animate-fade-in-up flex-col justify-center py-10 sm:min-h-[26rem] sm:flex-none">
           {step === "welcome" && (
             <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/icon-192.png" alt="" className="mb-6 h-16 w-16 rounded-2xl shadow-lg shadow-black/40" />
+              {/* Le logo et le nom de l'app (Laterna, 23/10/2026) : la première chose qu'un compte voit. */}
+              <div className="mb-6 flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/icon-192.png" alt="" className="h-16 w-16 rounded-2xl shadow-lg shadow-black/40" />
+                <span className="font-display text-2xl font-semibold tracking-tight text-white">{APP_NAME}</span>
+              </div>
               <h1 className="font-display text-3xl font-semibold leading-tight text-white">
                 {t("player.onboarding.welcomeTitle", { name })}
               </h1>
