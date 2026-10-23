@@ -11,10 +11,12 @@ import { verifySessionFull } from "@/lib/session";
  * titres sont ce qu'on lit le plus et ce qui porte le ton ; les changer change tout, pour un
  * fichier de police et rien d'autre.
  *
- * Bricolage Grotesque est un grotesque de titrage : des proportions un peu resserrées, de vraies
- * particularités de dessin aux grandes tailles, et assez neutre pour tenir à côté d'une affiche
- * sans lui faire concurrence. Inter reste pour tout le texte d'interface, où sa neutralité est
- * exactement ce qu'on veut.
+ * Outfit porte le nom et les titres depuis le renommage en Laterna (23/10/2026) : une géométrique
+ * aux formes rondes, de la même famille que le logo (le L dont la barre s'ouvre en faisceau), et
+ * assez sobre pour tenir à côté d'une affiche sans lui faire concurrence. Elle remplace Bricolage
+ * Grotesque, choisie du temps de CineApp. Inter reste pour tout le texte d'interface, où sa
+ * neutralité est exactement ce qu'on veut. Outfit n'a ni cyrillique ni vietnamien : ces caractères
+ * passent par la police de repli, comme avant pour le cyrillique.
  */
 import "./fonts/fonts.css";
 import "./globals.css";

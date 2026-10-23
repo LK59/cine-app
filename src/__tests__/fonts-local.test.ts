@@ -31,14 +31,14 @@ describe("polices servies depuis le dépôt", () => {
   it("pose les deux variables que l'interface emploie", () => {
     const css = fs.readFileSync(path.join(FONTS, "fonts.css"), "utf8");
     expect(css).toMatch(/--font-sans:\s*"Inter", "Inter Fallback"/);
-    expect(css).toMatch(/--font-display:\s*"Bricolage Grotesque", "Bricolage Grotesque Fallback"/);
+    expect(css).toMatch(/--font-display:\s*"Outfit", "Outfit Fallback"/);
     // Les polices de repli aux mesures ajustées : sans elles, le texte bouge quand la police arrive.
     expect(css).toMatch(/font-family:Inter Fallback;[^}]*size-adjust/);
-    expect(css).toMatch(/font-family:Bricolage Grotesque Fallback;[^}]*size-adjust/);
+    expect(css).toMatch(/font-family:Outfit Fallback;[^}]*size-adjust/);
   });
 
   it("porte les licences", () => {
-    for (const file of ["OFL-Inter.txt", "OFL-BricolageGrotesque.txt"]) {
+    for (const file of ["OFL-Inter.txt", "OFL-Outfit.txt"]) {
       expect(fs.readFileSync(path.join(FONTS, file), "utf8")).toMatch(/SIL Open Font License, Version 1\.1/);
     }
   });
