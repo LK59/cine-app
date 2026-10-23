@@ -696,16 +696,15 @@ describe("« Ma liste » ne se propose qu'à un titre qui a un identifiant TMDB"
   });
 
   // Le bouton lui-même n'est rendu que si la règle l'accepte — une garde dans le seul geste
-  // laisserait un bouton qui ne fait rien.
-  it.each([
-    ["src/components/cinema/CinemaSeriesDetail.tsx", /\{listable && \(\s*<button\s+data-detail-menu\s+onClick=\{toggleAddToList\}/],
-    ["src/components/cinema/mobile/CinemaMobileDetail.tsx", /\{canJoinWatchlist\(tmdbId\) && \(\s*<button type="button" onClick=\{toggleInList\}/],
-  ])("%s la demande avant de dessiner le bouton", (f, guarded) => {
-    const src = lire(f);
-    expect(src).toMatch(guarded);
-    // La forme exacte qui portait la faute sur la fiche du bureau.
-    expect(src).not.toMatch(/tmdbId: item\.tmdbId \?\? 0/);
-  });
+  // laisserait un bouton qui ne fait rien. Vérifié rendu, sur les quatre fiches de bibliothèque,
+  // dans `fiche-boutons-deux-etats.test.tsx` (23/10/2026) : le bouton peut vivre hors du fichier.
+  it.each(["src/components/cinema/CinemaSeriesDetail.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"])(
+    "%s n'envoie jamais le zéro",
+    (f) => {
+      // La forme exacte qui portait la faute sur la fiche du bureau.
+      expect(lire(f)).not.toMatch(/tmdbId: item\.tmdbId \?\? 0/);
+    }
+  );
 });
 
 describe("une seule animation de colonne pour les fiches du bureau", () => {
@@ -1478,11 +1477,10 @@ describe("les touches des fiches : une règle (§114.1)", () => {
 });
 
 describe("« Ma liste » : la fiche film du bureau demande aussi `canJoinWatchlist` (§6 bis, 23/10/2026)", () => {
-  // Elle s'en passait, « toujours munie d'un identifiant Radarr → TMDB » — faux depuis §89.
-  it("le bouton n'est rendu que si la règle l'accepte", () => {
-    const src = lire("src/components/cinema/CinemaMovieDetail.tsx");
-    expect(src).toMatch(/const listable = canJoinWatchlist\(item\.tmdbId\)/);
-    expect(src).toMatch(/\{listable && \(\s*<button\s+data-detail-menu\s+onClick=\{toggleAddToList\}/);
+  // Elle s'en passait, « toujours munie d'un identifiant Radarr → TMDB » — faux depuis §89. Le bouton
+  // absent sans identifiant est vérifié rendu (`fiche-boutons-deux-etats.test.tsx`) ; ici, le zéro.
+  it("n'envoie jamais le zéro", () => {
+    expect(lire("src/components/cinema/CinemaMovieDetail.tsx")).not.toMatch(/tmdbId: item\.tmdbId \?\? 0/);
   });
 });
 

@@ -37,12 +37,11 @@ describe("ToggleGlyph", () => {
   });
 });
 
+// Les fiches de titre (film et série du bureau, téléphone, fiche TMDB) sont regardées rendues, dans
+// `fiche-boutons-deux-etats.test.tsx` : chaque bouton « À voir » et « Vu » y porte le glyphe — leur
+// bouton peut vivre ailleurs que dans le fichier de la fiche (23/10/2026).
 describe("les boutons à deux états passent tous par ToggleGlyph", () => {
   it.each([
-    "src/components/cinema/CinemaMovieDetail.tsx",
-    "src/components/cinema/CinemaSeriesDetail.tsx",
-    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
-    "src/components/player/PlayerDiscoverSheet.tsx",
     "src/components/player/PlayerListAdd.tsx",
     "src/components/WatchlistButton.tsx",
   ])("%s", async (f) => {

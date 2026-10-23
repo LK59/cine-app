@@ -118,7 +118,12 @@ describe("fiche découverte, ordinateur — la mise en page d'une fiche film", (
   it("ne pose pas le focus d'arrivée sur « Demander », mais sur la ligne suivante", async () => {
     mount();
     await screen.findByRole("heading", { level: 1, name: "Matchbox – Le film" });
-    await vi.waitFor(() => expect(document.activeElement?.textContent).toContain("player.discover.addToList"));
+    // La ligne qui suit « Demander » dans le menu, quelle qu'elle soit — et pas « Demander ».
+    const request = screen.getByText("player.discover.request").closest("button")!;
+    const rows = Array.from(document.body.querySelectorAll<HTMLElement>("[data-detail-menu]"));
+    const next = rows[rows.indexOf(request) + 1];
+    expect(next).toBeDefined();
+    await vi.waitFor(() => expect(document.activeElement).toBe(next));
     expect(document.activeElement?.textContent).not.toContain("player.discover.request");
   });
 
