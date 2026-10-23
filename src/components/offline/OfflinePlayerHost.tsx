@@ -28,7 +28,7 @@ import { OfflineEngine } from "@/lib/offline/offlineEngine";
 import { reportClientError } from "@/lib/reportClientError";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
-import { refreshAfterPlayback } from "@/lib/swr";
+import { closePlayerSession } from "@/components/player/playerClose";
 import { refreshResumeThresholds } from "@/lib/offline/resumeRules";
 import { autoNextDue, downloadNextEpisode, offlineNextTarget, useOnline, watchedThrough } from "@/lib/offline/episodeDownloads";
 import { offlinePlayable, useTrackLabeller } from "@/components/offline/OfflineDownloadControl";
@@ -294,15 +294,20 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     return () => video.removeEventListener("timeupdate", onTime);
   }, []);
 
+  // La suite commune aux quatre hôtes (`closePlayerSession`, DECISIONS.md §114) — sans ligne `stop` :
+  // le lecteur hors ligne n'écrit pas au journal du lecteur. La fiche et « Reprendre » se relisent une
+  // fois l'arrêt pris par Jellyfin, comme après le lecteur en ligne.
   const handleClose = useCallback(() => {
-    if (closing) return;
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    setClosing(true);
-    const reported = stopReporting();
-    const openId = session.openId;
-    setTimeout(() => playback.close(openId), 200);
-    // La fiche et « Reprendre » se relisent une fois l'arrêt pris par Jellyfin, comme après le lecteur en ligne.
-    void refreshAfterPlayback(reported, itemId);
+    closePlayerSession({
+      claim: () => !closing,
+      leaveFullscreen: true,
+      stopReporting,
+      setClosing,
+      playback,
+      openId: session.openId,
+      itemId,
+      refresh: true,
+    });
   }, [closing, playback, session.openId, stopReporting, itemId]);
   usePlayerBackClose(handleClose);
 

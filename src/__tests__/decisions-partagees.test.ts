@@ -1449,3 +1449,36 @@ describe("le temps regardé s'arrête pendant une attente, dans les trois lecteu
     expect(lire("src/components/player/ChromecastPlayer.tsx")).toMatch(/const playing = [^;]*!remote\.waiting/);
   });
 });
+
+describe("une seule suite pour fermer le lecteur et passer à l'épisode suivant (§114)", () => {
+  // DECISIONS.md §114. Natif, serveur, hors ligne et Chromecast écrivaient chacun la fermeture
+  // (arrêt rapporté, fondu, `close(openId)` après 200 ms, relecture des vues) et l'épisode suivant
+  // (ligne `stop "next"`, arrêt, `advance`) ; chaque hôte garde sa garde et ses étapes propres, la
+  // suite vit dans `playerClose.ts` seulement.
+  const MODULE = "src/components/player/playerClose.ts";
+  const CHROMECAST = "src/components/player/ChromecastPlayer.tsx";
+  const entree = (piece: string) => sansCommentaires(lire(entreeDe(piece)));
+
+  it("seul le module ferme la lecture au terme du fondu et relit les vues", () => {
+    expect(lecteurQui(/close\(\s*openId\s*\)/)).toEqual([MODULE]);
+    expect(lecteurQui(/refreshAfterPlayback\(/)).toEqual([MODULE]);
+  });
+
+  it("seul le module enchaîne un épisode par `advance`", () => {
+    expect(lecteurQui(/playback\.advance\(/)).toEqual([MODULE]);
+  });
+
+  it.each([NATIF, SERVEUR, "OfflinePlayerHost"])("%s ferme par closePlayerSession", (hote) => {
+    expect([hote, /closePlayerSession\(/.test(entree(hote))]).toEqual([hote, true]);
+  });
+
+  it.each(HOTES)("%s passe à l'épisode suivant par advanceTo", (hote) => {
+    expect([hote, (entree(hote).match(/advanceTo\(/g) ?? []).length]).toEqual([hote, 2]);
+  });
+
+  it("Chromecast ferme et enchaîne par la même suite", () => {
+    const src = sansCommentaires(lire(CHROMECAST));
+    expect(src).toMatch(/closePlayerSession\(/);
+    expect(src).toMatch(/advanceTo\(/);
+  });
+});

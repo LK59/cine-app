@@ -7,7 +7,7 @@ import { useT, useLocale } from "@/components/TranslationProvider";
 import { formatTime } from "@/lib/playerClock";
 import { usePlaybackSession, stopOrphanSession } from "@/lib/usePlaybackSession";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
-import { refreshAfterPlayback } from "@/lib/swr";
+import { advanceTo, closePlayerSession } from "@/components/player/playerClose";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
@@ -462,19 +462,30 @@ export function ChromecastPlayer({
     };
   }, [handBack]);
 
-  /** Fermer : le bilan, l'arrêt chez Jellyfin, et le téléviseur arrêté — comme la croix d'AirPlay. */
-  const CLOSE_MS = 200;
+  /**
+   * Fermer : le bilan, l'arrêt chez Jellyfin, et le téléviseur arrêté — comme la croix d'AirPlay. La
+   * suite commune aux quatre hôtes (`closePlayerSession`, DECISIONS.md §114), sans fondu ni plein
+   * écran : la page n'est ici qu'une télécommande.
+   */
   const close = useCallback(
     (ended = false) => {
-      if (closedRef.current || handedBackRef.current) return;
-      closedRef.current = true;
-      generation.current++;
-      reportPlayback("stop", stopFields("close", ended));
-      const reported = stopPlaybackNow();
-      endChromecastSession(true);
-      const openId = session.openId;
-      setTimeout(() => playback.close(openId), CLOSE_MS);
-      void refreshAfterPlayback(reported, itemId);
+      closePlayerSession({
+        // Une main rendue au lecteur natif porte déjà la séance : rien à fermer d'ici.
+        claim: () => {
+          if (closedRef.current || handedBackRef.current) return false;
+          closedRef.current = true;
+          generation.current++;
+          return true;
+        },
+        leaveFullscreen: false,
+        reportStop: () => reportPlayback("stop", stopFields("close", ended)),
+        stopReporting: stopPlaybackNow,
+        release: () => endChromecastSession(true),
+        playback,
+        openId: session.openId,
+        itemId,
+        refresh: true,
+      });
     },
     [stopFields, stopPlaybackNow, session.openId, playback, itemId]
   );
@@ -487,13 +498,14 @@ export function ChromecastPlayer({
     finishRef.current = () => {
       if (closedRef.current || handedBackRef.current) return;
       lastKnownTime.current = Math.max(lastKnownTime.current, remote.duration || 0);
-      if (nextEpisode) {
-        reportPlayback("stop", stopFields("next", true));
-        stopPlaybackNow();
-        playback.advance(nextEpisode);
-        return;
-      }
-      close(true);
+      // La garde de la séance close est juste au-dessus, avant la position de fin.
+      const advanced = advanceTo(nextEpisode, {
+        over: false,
+        reportStop: () => reportPlayback("stop", stopFields("next", true)),
+        stopReporting: stopPlaybackNow,
+        playback,
+      });
+      if (!advanced) close(true);
     };
   }, [nextEpisode, stopFields, stopPlaybackNow, playback, close, remote.duration]);
 

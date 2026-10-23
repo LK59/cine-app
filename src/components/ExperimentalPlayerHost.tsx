@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { playerBootstrapOptions, refreshAfterPlayback } from "@/lib/swr";
+import { playerBootstrapOptions } from "@/lib/swr";
+import { advanceTo, closePlayerSession } from "@/components/player/playerClose";
 import { directInfoForOpening } from "@/lib/directInfo";
 import { labSampleByFile, labSampleInfo } from "@/lib/labSamples";
 import { directInfoKey, fetchPlaybackState, takePrefetchedPlaybackState } from "@/lib/playbackPrefetch";
@@ -1457,21 +1458,22 @@ export function ExperimentalPlayerHost({
   useEffect(() => () => subtitleFetchRef.current?.abort(), []);
   useEffect(() => () => secondFetchRef.current?.abort(), []);
 
+  // La suite commune aux quatre hôtes : `closePlayerSession` (DECISIONS.md §114).
   const handleClose = useCallback(() => {
-    // Plus aucune initiative pendant le fondu — voir `PlayerLifecycle.stepAside`. Et une seule
-    // fermeture : un second appui ne renvoie ni arrêt ni relecture des vues.
-    if (!lifecycle.noteClosing()) return;
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    reportStop("close");
-    const reported = stopPlaybackNow();
-    setClosing(true);
-    // Cette lecture-ci seulement : voir `close(openId)`.
-    const openId = session.openId;
-    setTimeout(() => playback.close(openId), 200);
-    // Voir PlayerHost : la fiche et la rangée « Reprendre » sont fausses dès qu'on quitte le film,
-    // et les deux lecteurs doivent les relire de la même façon. Pas après une scène (§91), qui ne
-    // les a pas changées.
-    if (!isSceneRef.current()) void refreshAfterPlayback(reported, itemId);
+    closePlayerSession({
+      // Plus aucune initiative pendant le fondu — voir `PlayerLifecycle.stepAside`. Et une seule
+      // fermeture : un second appui ne renvoie ni arrêt ni relecture des vues.
+      claim: () => lifecycle.noteClosing(),
+      leaveFullscreen: true,
+      reportStop: () => reportStop("close"),
+      stopReporting: stopPlaybackNow,
+      setClosing,
+      playback,
+      openId: session.openId,
+      itemId,
+      // Pas après une scène (§91), qui n'a rien changé de ce que montrent la fiche et « Reprendre ».
+      refresh: !isSceneRef.current(),
+    });
   }, [playback, stopPlaybackNow, itemId, reportStop, session.openId, lifecycle]);
   // Retour ferme le lecteur comme sa croix (`playerHistory.ts`) — écran de fin compris.
   usePlayerBackClose(handleClose);
@@ -1517,20 +1519,19 @@ export function ExperimentalPlayerHost({
     // Rien à enchaîner sur une séance close : le décompte de l'épisode suivant peut arriver à zéro
     // pendant le fondu de la croix, et l'épisode 2 était alors monté puis démonté aussitôt (faux
     // `stop unmount`, avance automatique comptée, flash). Même garde que `PlayerHost`.
-    if (!nextEpisode || lifecycle.isOver()) return;
-    reportStop("next");
-    stopPlaybackNow();
-    playback.advance(nextEpisode);
+    advanceTo(nextEpisode, { over: lifecycle.isOver(), reportStop: () => reportStop("next"), stopReporting: stopPlaybackNow, playback });
   }, [nextEpisode, playback, stopPlaybackNow, reportStop, lifecycle]);
 
   // Un épisode choisi dans le menu « Épisodes » (19/10/2026) : le même passage que l'épisode suivant —
   // arrêt rapporté (`next`), lecture coupée, `advance` —, avec la position que la liste connaît de lui.
   const handlePlayEpisode = useCallback(
     (episode: { itemId: string; title: string; resumeAt: number }) => {
-      if (lifecycle.isOver() || episode.itemId === itemId) return;
-      reportStop("next");
-      stopPlaybackNow();
-      playback.advance(episode);
+      advanceTo(episode, {
+        over: lifecycle.isOver() || episode.itemId === itemId,
+        reportStop: () => reportStop("next"),
+        stopReporting: stopPlaybackNow,
+        playback,
+      });
     },
     [itemId, playback, stopPlaybackNow, reportStop, lifecycle]
   );

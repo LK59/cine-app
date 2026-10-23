@@ -1180,7 +1180,8 @@ suivant, même si son décompte arrive à zéro pendant le fondu de 200 ms.
 états (`isOver` refuse aussi reconstructions, nouveaux essais réseau et bascule pendant le fondu),
 le lecteur serveur n'a pas cette machine. `isOver()` est aussi vrai après avoir passé la main au
 lecteur serveur : l'hôte natif n'enchaîne rien non plus dans ce cas, c'est le lecteur serveur qui
-porte alors la séance.
+porte alors la séance. La suite qui vient après la garde, elle, est commune aux quatre hôtes
+(`closePlayerSession`, `advanceTo`, §114) : chaque hôte lui passe sa garde.
 
 **Trouvé le 29/09/2026** par l'audit : le lecteur serveur tenait la garde depuis le 27/09, l'hôte
 natif non — un épisode suivant monté puis démonté aussitôt pendant le fondu (faux `stop unmount`,
@@ -6209,3 +6210,47 @@ changée. Puis, approuvées par Louis :
 
 **Laissé, exprès.** Les titres masqués (cosmétiques, voulu par Louis). Les paramètres de débit et de
 taille restent permis : la limite porte sur le nombre de transcodages, pas sur leur poids.
+
+## 114. Fermer le lecteur, passer à l'épisode suivant : une seule suite pour les quatre hôtes
+
+**Règle.** Fermer : la garde de l'hôte (§36), sortie du plein écran, ligne `stop "close"`, arrêt chez
+Jellyfin tout de suite (la position de la croix, pas celle où le fondu aura laissé `currentTime`),
+téléviseur arrêté, fondu, `playback.close(openId)` au bout de `PLAYER_CLOSE_MS` (200 ms) — cette
+lecture-là seulement —, et la relecture des vues (`refreshAfterPlayback`) lancée sans attendre.
+Épisode suivant (ou choisi dans le menu « Épisodes ») : rien sur une séance close, sinon ligne
+`stop "next"`, arrêt chez Jellyfin sans l'attendre, `playback.advance` — le lecteur reste ouvert.
+
+**Porteurs.** `closePlayerSession`, `advanceTo` et `PLAYER_CLOSE_MS` (`src/components/player/playerClose.ts`).
+
+**Appelants.** `handleClose`, `handleAdvance`, `handlePlayEpisode` de `ExperimentalPlayerHost` (natif)
+et de `PlayerHost` (`ActivePlayer`, serveur) ; `handleClose` de `OfflinePlayerHost` ; `close` et la fin
+du film (`finishRef`) de `ChromecastPlayer`.
+
+**Tests.** `player-close.test.ts` (ordre des étapes, garde refusée, `openId` lu à l'appel, étapes
+omises) ; `decisions-partagees.test.ts` (« une seule suite pour fermer le lecteur… » : `close(openId)`,
+`refreshAfterPlayback(` et `playback.advance(` n'apparaissent dans l'ensemble du lecteur que dans ce
+module) ; et, inchangés, `native-close-once.test.tsx`, `ChromecastPlayer.test.tsx`,
+`playerHistory.test.tsx`, les empreintes du natif et du serveur (fermeture, épisode suivant, menu
+« Épisodes »).
+
+**Voulu — ce qui reste à chaque hôte.**
+- La garde (`claim`) : `lifecycle.noteClosing()` pour le natif, `closedRef` pour le serveur, l'état
+  `closing` pour le hors ligne, `closedRef` ou la main rendue (`handedBackRef`) pour Chromecast, qui
+  y avance aussi sa génération. Pour l'épisode suivant : `lifecycle.isOver()` / `closedRef`, plus
+  l'épisode déjà à l'écran pour le menu « Épisodes » ; Chromecast teste sa garde avant de poser la
+  position de fin.
+- La ligne `stop` : celle de l'hôte (`reportStop`, ou `stopFields` pour Chromecast, `ended` compris) ;
+  aucune pour le hors ligne, qui n'écrit pas au journal du lecteur.
+- Le téléviseur (`release`) : l'élément HLS relâché en AirPlay (serveur, §94), la séance Chromecast
+  terminée.
+- Pas de fondu ni de sortie du plein écran pour Chromecast : la page n'y est qu'une télécommande.
+- Pas de relecture des vues après une scène (§91), natif et serveur.
+- L'épisode suivant hors ligne n'est pas un `advance` : `offlineNextTarget` ouvre une nouvelle séance
+  par `playback.play` (fichier de l'appareil ou lecture en ligne, §109) — `advance` garderait la
+  séance hors ligne de l'épisode quitté.
+
+**Trouvé le 22/10/2026** par l'audit du lecteur (D1, D2) : quatre copies de la fermeture, chacune avec
+son `200` ou son `CLOSE_MS`, et trois de l'épisode suivant. Fusionnées le 23/10/2026 sans changement
+de comportement (empreintes identiques). Le hors ligne arrêtait le rapport à Jellyfin après avoir
+demandé le fondu, les autres avant : l'ordre commun (arrêt puis fondu) ne change rien d'observable,
+les deux partant dans le même appel synchrone.

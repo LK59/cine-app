@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, useCallback, useSyncExternalStore
 import { Loader2 } from "lucide-react";
 import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession, stopOrphanSession } from "@/lib/usePlaybackSession";
-import { refreshAfterPlayback } from "@/lib/swr";
+import { advanceTo, closePlayerSession } from "@/components/player/playerClose";
 import { useSceneMode, isSceneNow, sceneCarryOf, type SceneSession } from "@/lib/sceneMode";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { apiErrorText } from "@/lib/apiErrorText";
@@ -921,63 +921,62 @@ function ActivePlayer({
   const handleAdvance = useCallback(() => {
     // Rien à enchaîner sur une séance qu'on vient de fermer : le compte à rebours de l'épisode
     // suivant peut arriver à zéro pendant le fondu.
-    if (!nextEpisode || closedRef.current) return;
-    reportStop("next");
-    stopPlaybackNow();
-    playback.advance(nextEpisode);
+    advanceTo(nextEpisode, { over: closedRef.current, reportStop: () => reportStop("next"), stopReporting: stopPlaybackNow, playback });
   }, [nextEpisode, playback, stopPlaybackNow, reportStop]);
 
   // Un épisode choisi dans le menu « Épisodes » (19/10/2026) : le même passage que l'épisode suivant —
   // arrêt rapporté (`next`), lecture coupée, `advance` —, avec la position que la liste connaît de lui.
   const handlePlayEpisode = useCallback(
     (episode: { itemId: string; title: string; resumeAt: number }) => {
-      if (closedRef.current || episode.itemId === itemId) return;
-      reportStop("next");
-      stopPlaybackNow();
-      playback.advance(episode);
+      advanceTo(episode, {
+        over: closedRef.current || episode.itemId === itemId,
+        reportStop: () => reportStop("next"),
+        stopReporting: stopPlaybackNow,
+        playback,
+      });
     },
     [itemId, playback, stopPlaybackNow, reportStop]
   );
 
-  // Fades out instead of vanishing instantly — an abrupt unmount back to the
-  // underlying page reads as a glitch, especially mid-transcode. Reports the
-  // stop position right now (not whenever React gets around to unmounting)
-  // so Jellyfin's resume point reflects the exact moment the user closed,
-  // not wherever currentTime drifts to during the fade delay.
-  const CLOSE_MS = 200;
+  // Fades out instead of vanishing instantly — an abrupt unmount back to the underlying page reads
+  // as a glitch, especially mid-transcode. La suite commune aux quatre hôtes : `closePlayerSession`
+  // (DECISIONS.md §114) ; ce qui est propre au lecteur serveur reste ici — sa garde, et AirPlay.
   const handleClose = useCallback(() => {
-    if (closedRef.current) return;
-    closedRef.current = true;
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    reportStop("close");
-    const reported = stopPlaybackNow();
-    /**
-     * En diffusion, fermer le lecteur arrête aussi le téléviseur.
-     *
-     * Retirer l'élément de la page ne coupe pas une session AirPlay : le téléviseur continuait de
-     * jouer sans nous, et la reprise suivante partait de l'instant de la croix, pas de celui où la
-     * télé s'était arrêtée — vingt secondes d'écart le 26/09/2026, les segments demandés par
-     * l'Apple TV après la fermeture en témoignent. Arrêté ici, la position rapportée juste
-     * au-dessus reste la bonne.
-     */
-    const video = videoRef.current;
-    if (video && castActiveRef.current) {
-      closingRef.current = true;
-      try {
-        releaseHlsElement(video);
-      } catch {
-        // Déjà démonté : il n'y a plus rien à arrêter.
-      }
-    }
-    setClosing(true);
-    // Cette lecture-ci seulement : voir `close(openId)`.
-    const openId = session.openId;
-    setTimeout(() => playback.close(openId), CLOSE_MS);
-    // La fiche et la rangée « Reprendre » décrivent ce film : elles sont fausses dès l'instant
-    // où on le quitte, et rien ne les relisait. Volontairement hors du chemin de la fermeture —
-    // l'écran doit partir tout de suite, la relecture peut attendre son tour.
-    // Une scène (§91) n'a rien changé de ce qu'elles montrent.
-    if (!isSceneRef.current()) void refreshAfterPlayback(reported, itemId);
+    closePlayerSession({
+      claim: () => {
+        if (closedRef.current) return false;
+        closedRef.current = true;
+        return true;
+      },
+      leaveFullscreen: true,
+      reportStop: () => reportStop("close"),
+      stopReporting: stopPlaybackNow,
+      /**
+       * En diffusion, fermer le lecteur arrête aussi le téléviseur.
+       *
+       * Retirer l'élément de la page ne coupe pas une session AirPlay : le téléviseur continuait de
+       * jouer sans nous, et la reprise suivante partait de l'instant de la croix, pas de celui où la
+       * télé s'était arrêtée — vingt secondes d'écart le 26/09/2026, les segments demandés par
+       * l'Apple TV après la fermeture en témoignent. Arrêté après l'arrêt rapporté, la position
+       * rapportée reste la bonne.
+       */
+      release: () => {
+        const video = videoRef.current;
+        if (!video || !castActiveRef.current) return;
+        closingRef.current = true;
+        try {
+          releaseHlsElement(video);
+        } catch {
+          // Déjà démonté : il n'y a plus rien à arrêter.
+        }
+      },
+      setClosing,
+      playback,
+      openId: session.openId,
+      itemId,
+      // Une scène (§91) n'a rien changé de ce que montrent la fiche et « Reprendre ».
+      refresh: !isSceneRef.current(),
+    });
   }, [playback, stopPlaybackNow, itemId, session.openId, reportStop]);
   // Retour ferme le lecteur comme sa croix (`playerHistory.ts`).
   usePlayerBackClose(handleClose);

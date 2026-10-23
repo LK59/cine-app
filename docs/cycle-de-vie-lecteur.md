@@ -105,9 +105,9 @@ terminé », sinon `loading` qui retombe dans `ActivePlayer`.
 | Route AirPlay établie / perdue | ligne `cast` / ligne `fallback` (`cast: true`) ; si la diffusion venait du natif, `onCastEnded(position, paused = true)` | `useCastRoute` (`player/server/`, appelé par `ActivePlayer`) |
 | Bouton « revenir sur le téléphone » | `onCastEnded(position)` → `stepBack` → le natif remonte | `PlayerHost` `handleCastReturn` |
 | Réduire / agrandir | `mode = mini` lève la pause de SWR et redemande les clés sans données ; `mode = full` la remet | `PlaybackProvider` |
-| Épisode suivant | l'arrêt est rapporté (sans l'attendre), `playback.advance` remplace l'objet `session` (`resumeAt: 0`) | les deux hôtes, `handleAdvance` |
+| Épisode suivant | l'arrêt est rapporté (sans l'attendre), `playback.advance` remplace l'objet `session` (`resumeAt: 0`) | les deux hôtes, `handleAdvance` → `advanceTo` (`player/playerClose.ts`, DECISIONS.md §114) |
 | Fin de fichier (serveur) | réduite ou sans épisode suivant → fermeture ; sinon `stop` Jellyfin seul, `resume()` si on relance | `ActivePlayer` écouteur `ended` |
-| Fermer | ligne `stop`, arrêt Jellyfin, fondu, `close(openId)` après 200 ms, `refreshAfterPlayback` | les deux hôtes, `handleClose` |
+| Fermer | ligne `stop`, arrêt Jellyfin, fondu, `close(openId)` après 200 ms (`PLAYER_CLOSE_MS`), `refreshAfterPlayback` | les deux hôtes, `handleClose` → `closePlayerSession` (`player/playerClose.ts`, §114) |
 | Retour du système (plein écran) | `popstate` quitte l'entrée du lecteur → la croix du lecteur monté (`usePlayerBackClose`) ; `close`/`minimize` rendent l'entrée, `play`/`expand` l'empilent, un rechargement voulu la reprend (DECISIONS.md §94) | `playerHistory.ts`, `PlaybackProvider` |
 | La séance passe à `null` | `RESUME_KEY` et `NEXT_UP_KEY` redemandés | `PlaybackProvider` effet `wasPlaying` |
 | `refreshAfterPlayback` | attend le rapport d'arrêt **puis** l'écran libre (au plus 3 s), puis revalide Reprendre, À suivre, la progression du titre et toutes les listes d'épisodes | `swr.ts` |
