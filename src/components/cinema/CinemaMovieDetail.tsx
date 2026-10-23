@@ -18,7 +18,7 @@ import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
-import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
+import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { detailColumnMotion } from "@/lib/sheetMotion";
 import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
@@ -258,11 +258,17 @@ export function CinemaMovieDetail({
   // « À voir » reste local : c'est une intention, et rien d'autre ne la connaît. « Vu » et
   // « Favori » sont partis chez Jellyfin (voir plus haut). Un titre peut donc être à la fois dans
   // la liste et marqué vu, ce que l'ancien schéma — un seul statut par titre — interdisait.
+  // Sans identifiant TMDB, la ligne n'est pas rendue — voir `canJoinWatchlist`. Un film que Jellyfin a
+  // seul (§89) peut n'en avoir aucun (`tmdbId: 0`) : l'appui envoyait ce zéro, la route répondait 400
+  // et la fiche en affichait l'erreur (audit du 23/10/2026).
+  const listable = canJoinWatchlist(item.tmdbId);
   function toggleAddToList() {
-    if (inList) removeFromWatchlist({ tmdbId: item.tmdbId, mediaType: "movie" });
+    if (!canJoinWatchlist(item.tmdbId)) return;
+    const tmdbId = item.tmdbId;
+    if (inList) removeFromWatchlist({ tmdbId, mediaType: "movie" });
     else
       addToWatchlist(
-        { tmdbId: item.tmdbId, mediaType: "movie", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
+        { tmdbId, mediaType: "movie", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
         "to_watch"
       );
   }
@@ -504,21 +510,23 @@ export function CinemaMovieDetail({
                 l'air d'être celle qu'on venait de désigner. La pastille change de forme (un plus
                 devient un marque-page coché) et de couleur ; la ligne, elle, reste disponible
                 pour dire ce qu'elle a toujours dit : où l'on se trouve. */}
-            <button
-              data-detail-menu
-              onClick={toggleAddToList}
-              aria-pressed={inList}
-              className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-            >
-              <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={16} />} offIcon={<Plus size={14} />} />
-              </span>
-              {/* Le libellé dit l'état, pas le geste : « À voir » ne distinguait pas un titre
-                  déjà enregistré d'un titre qui ne l'était pas. L'icône, elle, dit le geste. */}
-              <span className="text-sm font-medium">
-                {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
-              </span>
-            </button>
+            {listable && (
+              <button
+                data-detail-menu
+                onClick={toggleAddToList}
+                aria-pressed={inList}
+                className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
+              >
+                <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
+                  <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={16} />} offIcon={<Plus size={14} />} />
+                </span>
+                {/* Le libellé dit l'état, pas le geste : « À voir » ne distinguait pas un titre
+                    déjà enregistré d'un titre qui ne l'était pas. L'icône, elle, dit le geste. */}
+                <span className="text-sm font-medium">
+                  {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
+                </span>
+              </button>
+            )}
           </div>
 
         </div>

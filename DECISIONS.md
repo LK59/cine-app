@@ -219,9 +219,11 @@ maintenait cinq statuts et des notes (0 note sur 47 titres) est supprimée.
 
 **Qui peut y entrer.** Un titre qui a un identifiant TMDB — la liste est indexée dessus :
 `canJoinWatchlist` (`useAddToWatchlist.ts`). Sans lui, le bouton n'est pas rendu. Appelants : la
-fiche série du bureau, la fiche du téléphone (la fiche film du bureau a toujours un identifiant
-Radarr → TMDB). Corrigé le 21/09 : les deux envoyaient `tmdbId ?? 0`, la route répondait 400 et la
-fiche en affichait l'erreur brute, en français. Tests : `decisions-partagees.test.ts`.
+fiche film et la fiche série du bureau, la fiche du téléphone. Corrigé le 21/09 : les deux envoyaient
+`tmdbId ?? 0`, la route répondait 400 et la fiche en affichait l'erreur brute, en français. La fiche
+film du bureau s'en passait, « toujours munie d'un identifiant Radarr → TMDB » : faux depuis §89 — un
+film que Jellyfin a seul et que TMDB ne connaît pas porte `tmdbId: 0` ; elle le demande aussi depuis
+le 23/10/2026. Tests : `decisions-partagees.test.ts`, `fiche-film-a-voir-sans-tmdb.test.tsx`.
 
 ## 7. Refermer une fiche, et ce qu'on relit après une lecture
 

@@ -1476,3 +1476,12 @@ describe("les touches des fiches : une règle (§114.1)", () => {
     expect(sansCommentaires(lire("src/components/ActionSheet.tsx"))).toMatch(/window\.addEventListener\("keydown", onKey, true\)/);
   });
 });
+
+describe("« Ma liste » : la fiche film du bureau demande aussi `canJoinWatchlist` (§6 bis, 23/10/2026)", () => {
+  // Elle s'en passait, « toujours munie d'un identifiant Radarr → TMDB » — faux depuis §89.
+  it("le bouton n'est rendu que si la règle l'accepte", () => {
+    const src = lire("src/components/cinema/CinemaMovieDetail.tsx");
+    expect(src).toMatch(/const listable = canJoinWatchlist\(item\.tmdbId\)/);
+    expect(src).toMatch(/\{listable && \(\s*<button\s+data-detail-menu\s+onClick=\{toggleAddToList\}/);
+  });
+});
