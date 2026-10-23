@@ -11,6 +11,8 @@ import { NEWS_848_CONTENT, NEWS_848_SEED, NEWS_848_VERSION } from "@/lib/news/pa
 import { NEWS_864_CONTENT, NEWS_864_SEED, NEWS_864_VERSION } from "@/lib/news/page864";
 import { NEWS_90_CONTENT, NEWS_90_PUBLISH, NEWS_90_SEED, NEWS_90_VERSION } from "@/lib/news/page90";
 import { NEWS_91_CONTENT, NEWS_91_SEED, NEWS_91_VERSION } from "@/lib/news/page91";
+import { laternaNewsPage } from "@/lib/news/pageLaterna";
+import { config } from "@/lib/config";
 import { FIXES_LEDGER, ledgerMarker, ledgerTarget, withLedgerEntry, type FixLedgerEntry } from "@/lib/news/fixesLedger";
 import { NEWS_8672_CONTENT, NEWS_8672_FIRST_VERSION, NEWS_8672_REPUBLISH, NEWS_8672_SEED, NEWS_8672_VERSION } from "@/lib/news/page8672";
 
@@ -651,6 +653,10 @@ function migrate(db: Database.Database): void {
   publishNewsDraft(db, NEWS_90_PUBLISH, NEWS_90_VERSION, NEWS_90_CONTENT);
   // En brouillon : Louis la publie depuis Activité → Nouveautés (20/10/2026).
   seedNewsPage(db, NEWS_91_SEED, NEWS_91_VERSION, NEWS_91_CONTENT, Date.now(), "draft");
+  // Le renommage en Laterna (23/10/2026, §118) : seulement sur l'installation qui annonce sa nouvelle
+  // adresse (`NEWS_LATERNA_ADDRESS`), et en brouillon — Louis la publie depuis Activité → Nouveautés.
+  const laterna = laternaNewsPage(config.news.laternaAddress);
+  if (laterna) seedNewsPage(db, laterna.seed, laterna.version, laterna.content, Date.now(), "draft");
   // Les corrections livrées, ajoutées à l'historique des pages publiées (`fixesLedger.ts`).
   applyFixesLedger(db);
   if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'onboarding-seed-louis'").get()) {
