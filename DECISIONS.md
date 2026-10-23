@@ -6557,6 +6557,7 @@ diffusée, la reprise chez Jellyfin a donc bougé : sans relecture, la fiche et 
 l'ancienne position — une régression visible. La relecture ne peut suivre la règle des deux autres
 hôtes que si la diffusion d'une scène cesse elle aussi de rapporter sa position : une décision sur §91,
 hors de ce correctif (23/10/2026).
+
 ## 117. Les fiches de titre : une règle par geste (audit du 23/10/2026)
 
 L'audit des fiches (film et série du bureau, fiche du téléphone, écran des épisodes, fiche TMDB, fiche

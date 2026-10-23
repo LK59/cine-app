@@ -1635,6 +1635,9 @@ describe("les écarts entre les copies du lecteur, corrigés (§116)", () => {
   it.each(HOTES)("%s rapporte la lecture au registre des tentatives par habitWatch (§67)", (hote) => {
     // Plus d'appel en ligne dans un écouteur : la position passe par l'option de `habitWatch`.
     expect([hote, /habitWatch\(\{[\s\S]*?notePosition: \(seconds\) => [\w.]*retries\.notePosition\(seconds\)/.test(codeDe(hote))]).toEqual([hote, true]);
+  });
+});
+
 describe("les touches des fiches : une règle (§117.1)", () => {
   // Audit du 23/10/2026 : six écouteurs, trois listes de silences ; les fiches du bureau refermaient
   // sous la fenêtre « Partager ». Une fiche passe par `useSheetKeys` (ou `useSheetExit`, qui lit la
