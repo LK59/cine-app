@@ -8,7 +8,7 @@ log start {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1
 media video play
 fetch GET /api/jellyfin/chapters?itemId=film-1
 fetch GET /api/jellyfin/trickplay/info?itemId=film-1
-fetch POST /api/jellyfin/playback/playing {"client":"CineEngine By CineApp","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1200000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/playing {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1200000000,"isPaused":false,"visible":true}
 storage local set cine:player-volume {"volume":1,"muted":false}
 storage local set cine:player-volume {"volume":1,"muted":false}
 dom ouverture
@@ -71,7 +71,7 @@ dom menu player.subtitles
     button "player.moreOptions"
     input "player.seekLabel" type=range value=122 valuetext=player.seekValue:{"at":"2:02","total":"1:00:00"}
 step choix Français — player.trackLabel.full
-fetch POST /api/jellyfin/playback/progress {"client":"CineEngine By CineApp","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1220000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1220000000,"isPaused":false,"visible":true}
 remux selectSubtitleTrack 5
 step second : anglais
 dom vue deux sous-titres
@@ -158,7 +158,7 @@ dom menu player.subtitles
     button "player.moreOptions"
     input "player.seekLabel" type=range value=124 valuetext=player.seekValue:{"at":"2:04","total":"1:00:00"}
 step choix player.none
-fetch POST /api/jellyfin/playback/progress {"client":"CineEngine By CineApp","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1240000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1240000000,"isPaused":false,"visible":true}
 remux selectSubtitleTrack null
 storage local remove cine:dual-subtitles
 dom aucun
@@ -180,7 +180,7 @@ step croix
 beacon /api/player/log stop {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","why":"close","at":125,"watched":5,"ended":false,"rebuild":0,"audio":1,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{"netMB":0,"recvMbps":0,"linkMbps":0,"linkBusyPct":0,"req":0,"readWaitS":0,"buildS":0,"audioS":0,"appendS":0,"longTaskS":0,"longTasks":0,"lagMaxMs":0,"slowestMs":0,"linkVerdict":"inconnue","linkS":0,"cores":12},"timeline":"124,5,0,0,-,L;125,5,0,0,-,L"}
 storage local remove cine:unsent-stop:00000001
 keepOnStop
-fetch POST /api/jellyfin/playback/stop {"client":"CineEngine By CineApp","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1250000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/stop {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1250000000,"isPaused":false,"visible":true}
 refreshAfterPlayback {}
 playback close 1
 log opening {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","firstMoveMs":0,"infoMs":0,"steps":""}

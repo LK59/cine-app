@@ -8,7 +8,7 @@ log start {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1
 media video play
 fetch GET /api/jellyfin/chapters?itemId=film-1
 fetch GET /api/jellyfin/trickplay/info?itemId=film-1
-fetch POST /api/jellyfin/playback/playing {"client":"CineEngine By CineApp","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1200000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/playing {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1200000000,"isPaused":false,"visible":true}
 storage local set cine:player-volume {"volume":1,"muted":false}
 storage local set cine:player-volume {"volume":1,"muted":false}
 dom ouverture
@@ -53,7 +53,7 @@ dom première image
 log opening {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","firstMoveMs":0,"infoMs":0,"steps":""}
 storage local set cine:last-watched {"film-1":1792522816000,"ep-1":1792522800000}
 storage local set cine:unsent-stop:00000001 {"savedAt":1792522830000,"fields":{"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","why":"lost","at":149,"watched":30,"ended":false,"rebuild":0,"audio":1,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{"netMB":0,"recvMbps":0,"linkMbps":0,"linkBusyPct":0,"req":0,"readWaitS":0,"buildS":0,"audioS":0,"appendS":0,"longTaskS":0,"longTasks":0,"lagMaxMs":0,"slowestMs":0,"linkVerdict":"inconnue","linkS":0,"cores":12}},"account":null}
-fetch POST /api/jellyfin/playback/progress {"client":"CineEngine By CineApp","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1490000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1490000000,"isPaused":false,"visible":true}
 step panne
 storage local remove cine:unsent-stop:00000001
 trace repli : passage au lecteur stable — Media failed to decode

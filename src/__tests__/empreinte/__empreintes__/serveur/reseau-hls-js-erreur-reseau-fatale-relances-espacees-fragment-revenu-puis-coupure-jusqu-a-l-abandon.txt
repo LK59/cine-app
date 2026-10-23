@@ -49,7 +49,7 @@ dom première image
     button "player.subtitles"
     button "player.moreOptions"
     input "player.seekLabel" type=range value=120 valuetext=player.seekValue:{"at":"2:00","total":"1:00:00"}
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1200000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1200000000,"isPaused":false,"visible":true}
 step erreur réseau
 hls 1 startLoad 125
 hls 1 startLoad 125
@@ -57,7 +57,7 @@ step fragment revenu
 step hors ligne
 hls 1 startLoad 127
 storage local set cine:unsent-stop:00000001 {"savedAt":1792522830000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"bufferedMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":127,"watched":30,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"identicalRetries":2,"retryMotif":"hls.js : réseau","subtitleSwitches":0,"restarts":0},"account":null}
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1270000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1270000000,"isPaused":false,"visible":true}
 dom coupure 30 s
     video
     track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false
@@ -78,13 +78,13 @@ dom coupure 30 s
 hls 1 stopLoad
 hls 1 detachMedia
 storage local set cine:unsent-stop:00000001 {"savedAt":1792522860000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"bufferedMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":127,"watched":60,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"identicalRetries":2,"retryMotif":"hls.js : réseau","subtitleSwitches":0,"restarts":0},"account":null}
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1270000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1270000000,"isPaused":false,"visible":true}
 storage local set cine:unsent-stop:00000001 {"savedAt":1792522890000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"bufferedMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":127,"watched":90,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"identicalRetries":2,"retryMotif":"hls.js : réseau","subtitleSwitches":0,"restarts":0},"account":null}
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1270000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1270000000,"isPaused":false,"visible":true}
 storage local set cine:unsent-stop:00000001 {"savedAt":1792522920000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"bufferedMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":127,"watched":120,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"identicalRetries":2,"retryMotif":"hls.js : réseau","subtitleSwitches":0,"restarts":0},"account":null}
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1270000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1270000000,"isPaused":false,"visible":true}
 storage local set cine:unsent-stop:00000001 {"savedAt":1792522950000,"fields":{"diag":{"resumeAt":120,"resumeSeekMs":0},"startup":{"negotiateMs":0,"bufferedMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"lost","at":127,"watched":150,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"identicalRetries":2,"retryMotif":"hls.js : réseau","subtitleSwitches":0,"restarts":0},"account":null}
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1270000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1270000000,"isPaused":false,"visible":true}
 dom abandon
     video
     track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false

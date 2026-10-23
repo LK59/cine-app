@@ -49,7 +49,7 @@ dom première image
     button "player.subtitles"
     button "player.moreOptions"
     input "player.seekLabel" type=range value=120 valuetext=player.seekValue:{"at":"2:00","total":"1:00:00"}
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1200000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1200000000,"isPaused":false,"visible":true}
 step audio → anglais
 dom menu player.audio
     video
@@ -72,9 +72,9 @@ dom menu player.audio
     input "player.seekLabel" type=range value=130 valuetext=player.seekValue:{"at":"2:10","total":"1:00:00"}
 step choix Anglais — 2.0
 fetch POST /api/player/series-language {"itemId":"film","language":"eng"}
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1300000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1300000000,"isPaused":false,"visible":true}
 storage session set cine:player-reload-intent {"itemId":"film","title":"Film","audioStreamIndex":2,"resumeAt":130,"server":true,"carry":{}}
 media video pause
 media video load
 storage local set cine:last-watched {"film":1792522810000,"ep-1":1792522800000}
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1300000000,"isPaused":true,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1300000000,"isPaused":true,"visible":true}

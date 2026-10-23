@@ -49,7 +49,7 @@ dom première image
     button "player.subtitles"
     button "player.moreOptions"
     input "player.seekLabel" type=range value=120 valuetext=player.seekValue:{"at":"2:00","total":"1:00:00"}
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1200000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1200000000,"isPaused":false,"visible":true}
 step route sans fil
 log cast {"itemId":"film","title":"Film","player":"serveur","cast":true,"session":"00000001","agent":"<agent>","path":"serveur","reason":"diffusion établie","at":123}
 dom diffusion

@@ -9,7 +9,7 @@ hls 1 new {"backBufferLength":90,"maxBufferLength":30,"maxMaxBufferLength":90}
 hls 1 loadSource /api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf
 hls 1 attachMedia
 step lien lent
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":0,"isPaused":true,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":0,"isPaused":true,"visible":true}
 dom à 6 s
     video
     track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false
@@ -36,8 +36,8 @@ log start {"itemId":"film","title":"Film","player":"serveur","cast":false,"sessi
 hls 2 new {"backBufferLength":90,"maxBufferLength":30,"maxMaxBufferLength":90,"startPosition":0}
 hls 2 loadSource /api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf
 hls 2 attachMedia
-fetch POST /api/jellyfin/playback/stop {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":0,"isPaused":false,"visible":true}
-fetch POST /api/jellyfin/playback/playing {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","announce":true,"playMethod":"DirectStream","positionTicks":0,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/stop {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":0,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/playing {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","announce":true,"playMethod":"DirectStream","positionTicks":0,"isPaused":false,"visible":true}
 dom à 10 s
     video
     track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false

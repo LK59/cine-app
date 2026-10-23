@@ -50,7 +50,7 @@ dom première image
     button "player.moreOptions"
     input "player.seekLabel" type=range value=120 valuetext=player.seekValue:{"at":"2:00","total":"1:00:00"}
 step refus 1
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1200000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1200000000,"isPaused":false,"visible":true}
 fetch GET /api/jellyfin/chapters?itemId=film
 fetch GET /api/jellyfin/trickplay/info?itemId=film
 fetch POST /api/jellyfin/playback/start {"itemId":"film","maxBitrate":100000000,"startTicks":1200000000,"codecSupport":{},"disableAudioCodecs":[],"forCast":false,"nativeHls":true}
@@ -84,7 +84,7 @@ step refus 4
 storage session set cine:player-reload-intent {"itemId":"film","title":"Film","resumeAt":120,"attempt":1,"server":true,"carry":{}}
 media video#4 pause
 media video#4 load
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1200000000,"isPaused":true,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1200000000,"isPaused":true,"visible":true}
 dom au bout de l'échelle
     video
     track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false

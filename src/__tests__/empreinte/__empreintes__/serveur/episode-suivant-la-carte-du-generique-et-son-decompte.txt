@@ -51,7 +51,7 @@ dom première image
     button "player.nextEpisode"
     button "player.moreOptions"
     input "player.seekLabel" type=range value=3290 valuetext=player.seekValue:{"at":"54:50","total":"1:00:00"}
-fetch POST /api/jellyfin/playback/progress {"client":"CineApp","itemId":"ep-1","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":32900000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/progress {"client":"Laterna","itemId":"ep-1","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":32900000000,"isPaused":false,"visible":true}
 dom carte du générique
     video
     track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false
@@ -77,5 +77,5 @@ dom carte du générique
 storage local set cine:last-watched {"ep-1":1792522816000,"film":1792522800000}
 beacon /api/player/log stop {"diag":{"resumeAt":3290,"resumeSeekMs":0},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"ep-1","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"next","at":3309,"watched":20,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0,"timeline":"3294,5,0,0,-,L;3299,10,0,0,-,L;3304,15,0,0,-,L;3309,20,0,0,-,L;3309,20,0,0,-,L"}
 storage local remove cine:unsent-stop:00000001
-fetch POST /api/jellyfin/playback/stop {"client":"CineApp","itemId":"ep-1","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":33090000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/stop {"client":"Laterna","itemId":"ep-1","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":33090000000,"isPaused":false,"visible":true}
 playback advance {"itemId":"ep-2","title":"Épisode 2"}

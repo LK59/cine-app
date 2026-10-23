@@ -8,7 +8,7 @@ log start {"itemId":"ep-1","title":"Épisode 1","container":"mkv","video":"hevc 
 media video play
 fetch GET /api/jellyfin/chapters?itemId=ep-1
 fetch GET /api/jellyfin/trickplay/info?itemId=ep-1
-fetch POST /api/jellyfin/playback/playing {"client":"CineEngine By CineApp","itemId":"ep-1","playSessionId":"cine-engine-ep-1","mediaSourceId":"ep-1","playMethod":"DirectPlay","announce":true,"positionTicks":32900000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/playing {"client":"Lumen by Laterna","itemId":"ep-1","playSessionId":"cine-engine-ep-1","mediaSourceId":"ep-1","playMethod":"DirectPlay","announce":true,"positionTicks":32900000000,"isPaused":false,"visible":true}
 storage local set cine:player-volume {"volume":1,"muted":false}
 storage local set cine:player-volume {"volume":1,"muted":false}
 dom ouverture
@@ -79,5 +79,5 @@ storage local set cine:last-watched {"ep-1":1792522816000,"film-1":1792522800000
 beacon /api/player/log stop {"itemId":"ep-1","title":"Épisode 1","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","why":"next","at":3309,"watched":20,"ended":false,"rebuild":0,"audio":1,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{"netMB":0,"recvMbps":0,"linkMbps":0,"linkBusyPct":0,"req":0,"readWaitS":0,"buildS":0,"audioS":0,"appendS":0,"longTaskS":0,"longTasks":0,"lagMaxMs":0,"slowestMs":0,"linkVerdict":"inconnue","linkS":0,"cores":12},"timeline":"3294,5,0,0,-,L;3299,10,0,0,-,L;3304,15,0,0,-,L;3309,20,0,0,-,L;3309,20,0,0,-,L"}
 storage local remove cine:unsent-stop:00000001
 keepOnStop
-fetch POST /api/jellyfin/playback/stop {"client":"CineEngine By CineApp","itemId":"ep-1","playSessionId":"cine-engine-ep-1","mediaSourceId":"ep-1","playMethod":"DirectPlay","announce":true,"positionTicks":33090000000,"isPaused":false,"visible":true}
+fetch POST /api/jellyfin/playback/stop {"client":"Lumen by Laterna","itemId":"ep-1","playSessionId":"cine-engine-ep-1","mediaSourceId":"ep-1","playMethod":"DirectPlay","announce":true,"positionTicks":33090000000,"isPaused":false,"visible":true}
 playback advance {"itemId":"ep-2","title":"Épisode 2"}
