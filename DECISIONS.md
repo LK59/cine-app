@@ -6940,7 +6940,9 @@ réglage, pendant un film, lien des Nouveautés), `auth-routes.test.ts` (déconn
 partagé).
 
 **Voulu.** Pas de nouvel appareil Jellyfin ni de Quick Connect. Le bandeau ne se montre que sur
-l'ancienne adresse et se referme pour de bon ; le lien des Nouveautés ouvre le passage même refermé.
+l'ancienne adresse, sous la barre du haut, jamais pendant un film ni tant que l'écran d'accueil du compte
+reste « à faire » (comme l'invitation aux notifications : « Passer » ne l'éteint pas) ; il se referme
+pour de bon ; le lien des Nouveautés ouvre le passage même refermé.
 Depuis l'application installée, la nouvelle adresse s'ouvre dans le navigateur (`window.open`) ; sur
 iPhone, ce navigateur intégré n'est ni Safari ni l'application à venir, d'où le code et la phrase qui le
 dit. Un passage n'emporte ni téléchargements hors ligne, ni reprise sur l'appareil, ni catalogue gardé,
