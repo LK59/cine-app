@@ -1230,6 +1230,13 @@ saison ouverte »).
 l'ouverture les distingue. Le bureau reçoit les saisons possédées dès le montage, le téléphone les
 attend : c'est pourquoi l'un fige au montage et l'autre à la première réponse.
 
+**Voulu, chez l'invité (§112) : la saison de l'épisode à suivre.** La fiche d'un lien de partage au
+téléphone (`PhoneEpisodes`, `ShareTitleSheet.tsx`) ouvre la saison de l'épisode « À suivre » du compte
+du lien, et ne retombe sur `openingSeason` (sans manquantes : un lien ne demande rien à Sonarr) que si
+cet épisode n'est dans aucune saison. L'invité n'a que ce titre, et y revient pour reprendre où il en
+est ; le foyer garde la première saison possédée. Décidé par Louis le 23/10/2026 (audit des fiches,
+V8) : écart gardé, pas étendu au foyer.
+
 **Trouvé le 29/09/2026** par l'audit : le téléphone décidait sur la réunion des deux listes à
 chaque rendu, et une série dont seule la saison 15 est là sautait à la saison 1, vide, à l'arrivée
 des manquants ; le bureau décidait sur les possédées, mais posait le focus sur la première saison de

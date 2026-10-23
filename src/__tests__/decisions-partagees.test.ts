@@ -1552,3 +1552,12 @@ describe("le hors ligne d'une fiche n'est ouvert que par sa décision (§109, 23
     }
   );
 });
+
+describe("la saison ouverte de l'invité : un écart voulu, écrit (§38, 23/10/2026)", () => {
+  // L'invité ouvre la saison de son épisode à suivre ; il retombe sur la règle du foyer sinon. Si cet
+  // écart disparaît ou si l'invité cesse de retomber sur `openingSeason`, §38 ne dit plus vrai.
+  it("`PhoneEpisodes` préfère l'épisode à suivre, puis `openingSeason`", () => {
+    const code = sansCommentaires(lire("src/components/shareGuest/ShareTitleSheet.tsx"));
+    expect(code).toMatch(/ep\.jellyfinItemId === nextEpisodeId\)\)\?\.seasonNumber \?\? openingSeason\(/);
+  });
+});
