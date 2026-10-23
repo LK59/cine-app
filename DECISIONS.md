@@ -6231,16 +6231,19 @@ n'atteignent pas l'écran dessous.
 écoute en capture sur `window` (comme `CinemaDetailModal`) et arrête ces touches sans les annuler.
 `useSheetExit` (§7.1) appelle `sheetKeyBelongsElsewhere` avant de refermer.
 
-**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaEpisodeBrowser` ; par `useSheetExit` :
-`PlayerDiscoverSheet`, `PlayerPersonSheet`, `OfflineTitleSheet`.
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaEpisodeBrowser`, `CinemaMobileDetail` ;
+par `useSheetExit` : `PlayerDiscoverSheet`, `PlayerPersonSheet`, `OfflineTitleSheet`.
 
 **Corrigé le 23/10/2026.** Les fiches du bureau écoutaient sur `window` sans regarder ni la cible ni la
 feuille : Retour arrière dans le champ « Pour qui » de Partager refermait la fiche ; Échap fermait la
 feuille *et* la fiche ; une flèche dans Télécharger envoyait le focus sur « Lire », derrière la
 fenêtre, et Entrée lançait le film. Le téléphone et l'écran des épisodes avaient la garde
-`[data-action-sheet]`, recopiée ; elle vit ici.
+`[data-action-sheet]`, recopiée ; elle vit ici. La fiche du téléphone ne fermait que sur Échap : sur un
+iPad à clavier en interface tactile, Retour arrière refermait la fiche TMDB posée dessus, puis plus rien ;
+elle ferme aux deux touches depuis le même jour.
 
-**Tests.** `fiche-touches-feuilles.test.tsx`, `decisions-partagees.test.ts` (« les touches des fiches »).
+**Tests.** `fiche-touches-feuilles.test.tsx`, `fiche-telephone-retour-arriere.test.tsx`,
+`decisions-partagees.test.ts` (« les touches des fiches »).
 
 **Voulu.** La fiche série du bureau, dont l'adresse nomme l'écran des épisodes sans qu'il soit dessiné,
 referme ce cran-là (`cinemaClose({ episodes: false })`) et non la fiche (13/10/2026). La fiche d'un lien

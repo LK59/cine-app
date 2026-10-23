@@ -12,7 +12,7 @@ import { BookmarkCheck, Check, CircleCheck, Play, Plus, RotateCcw, Video, X } fr
 import { fetcher, progressKey } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
-import { sheetKeyBelongsElsewhere } from "@/lib/useSheetKeys";
+import { useSheetKeys } from "@/lib/useSheetKeys";
 import { arrivedByBack, markSheetLeaving, useSheetBehind, useRouteBehind } from "@/lib/cinemaRoute";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
 import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
@@ -298,21 +298,17 @@ export function CinemaMobileDetail({
   // Et rien non plus tant que le lecteur occupe l'écran : cette fiche reste montée dessous, et
   // Échap refermait le lecteur *et* elle — voir `playerHoldsKeyboard`, que les fiches du bureau
   // partagent.
+  // Retour arrière aussi depuis le 23/10/2026, comme toutes les autres fiches : sur un iPad à clavier
+  // en interface tactile, il refermait la fiche TMDB posée dessus, puis plus rien. Une feuille ouverte
+  // par-dessus (téléchargement hors ligne) se referme seule — la règle de toutes les fiches,
+  // `useSheetKeys` (§114.1).
   const playerOwnsKeyboard = playerHoldsKeyboard(playback);
-  useEffect(() => {
+  useSheetKeys({
     // La fiche du dessous n'écoute rien : deux écouteurs pour la même touche fermeraient les
     // deux d'un coup, ce qui remonterait de deux crans dans l'historique.
-    if (inert || playerOwnsKeyboard) return;
-    function onKey(e: KeyboardEvent) {
-      if (showTrailer) return;
-      // Une feuille ouverte par-dessus (téléchargement hors ligne) se referme seule à Échap — la
-      // règle de toutes les fiches (`sheetKeyBelongsElsewhere`, §114.1).
-      if (sheetKeyBelongsElsewhere(e)) return;
-      if (e.key === "Escape") requestClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, showTrailer, inert, playerOwnsKeyboard]);
+    listening: !inert && !playerOwnsKeyboard && !showTrailer,
+    onClose: requestClose,
+  });
 
   // Deliberately stays open underneath the player: dismissing the player should land back on
   // the sheet you started from, not on the browse grid behind it.

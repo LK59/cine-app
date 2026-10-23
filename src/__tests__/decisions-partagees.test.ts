@@ -1507,3 +1507,12 @@ describe("la pastille Partager : une règle (§114.3)", () => {
     expect([f, /item\.jellyfinItemId && (!fileMissing && )?\(\s*<ShareButton/.test(code)]).toEqual([f, false]);
   });
 });
+
+describe("la fiche du téléphone ferme aux mêmes touches que les autres (§114.1, 23/10/2026)", () => {
+  // Elle n'écoutait qu'Échap ; elle passe par la même règle que les fiches du bureau.
+  it("`CinemaMobileDetail` passe par `useSheetKeys` et ne pose pas d'écouteur de touches", () => {
+    const code = sansCommentaires(lire("src/components/cinema/mobile/CinemaMobileDetail.tsx"));
+    expect(code).toContain("useSheetKeys({");
+    expect(code).not.toMatch(/addEventListener\("keydown"/);
+  });
+});
