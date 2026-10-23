@@ -1,26 +1,26 @@
 "use client";
 
 /**
- * Les menus du lecteur, nés de la pilule des réglages : les vues (audio, sous-titres, « … » et leurs
- * sous-vues), leur titre, leur « Retour », et les lignes de choix qu'elles partagent. Sortis de
- * `PlayerControls` tels quels ; l'état du menu ouvert reste chez lui, qui le referme aussi.
+ * Les menus du lecteur, nés de la pilule des réglages : leur titre, leur « Retour », et l'aiguillage
+ * vers les vues (audio, sous-titres, « … » et leurs sous-vues), écrites dans `menuViews*.tsx`. Sortis
+ * de `PlayerControls` tels quels ; l'état du menu ouvert reste chez lui, qui le referme aussi.
  */
 
 import type { RefObject } from "react";
-import { Captions, AudioLines, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Timer, ChevronRight, Languages, Layers } from "lucide-react";
+import { Captions, AudioLines, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Timer, Languages, Layers } from "lucide-react";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import type { HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
 import { LiquidMenu } from "@/components/player/LiquidMenu";
-import { subtitleStyleStore, SUBTITLE_SIZES, SUBTITLE_COLORS, SUBTITLE_BACKGROUNDS, type SubtitleStyle } from "@/lib/subtitleStyle";
+import type { SubtitleStyle } from "@/lib/subtitleStyle";
 import type { PlaybackQuality } from "@/lib/playbackQuality";
 import type { SleepMode } from "@/lib/sleepTimer";
 import type { TrickplayInfo } from "@/lib/trickplayTile";
 import type { PlayerItemPayload } from "@/app/api/player/item/[itemId]/route";
 import type { SecondSubtitleMenu, SubtitleGenerationMenu, Track } from "@/components/PlayerControls";
 import { BOTTOM_EDGE } from "@/components/playerControls/layout";
-import { MenuOption, OffsetRow, SubtitleStyleGroup } from "@/components/playerControls/menuRows";
 import { dialogueRowView, dialogueView, tracksView } from "@/components/playerControls/menuViewsAudio";
+import { subtitleGenOtherView, subtitleGenRowsView, subtitleGenView, subtitleStyleView, subtitlesDisplayView, subtitlesNoneView } from "@/components/playerControls/menuViewsSubtitles";
 import { dualPrimaryView, dualRowView, dualSecondView, dualView } from "@/components/playerControls/menuViewsDual";
 import { chaptersView, episodesView, hdrCapHintView, hdrCapView, moreView, qualityView, sleepView, speedView } from "@/components/playerControls/menuViewsMore";
 
@@ -148,21 +148,7 @@ export type SettingsMenuProps = {
 export type MenuViewContext = SettingsMenuProps & { t: ReturnType<typeof useT> };
 
 export function PlayerSettingsMenu(props: SettingsMenuProps) {
-  const {
-    menu,
-    setMenu,
-    menuRef,
-    anchorRef,
-    showControls,
-    subtitleTracks,
-    currentSubtitleId,
-    onChangeSubtitle,
-    subtitleOffset,
-    shiftSubtitles,
-    secondSubtitle,
-    subtitleGeneration,
-    subtitleStyle,
-  } = props;
+  const { menu, setMenu, menuRef, anchorRef, showControls } = props;
   const t = useT();
   const v: MenuViewContext = { ...props, t };
   const menuParent = menu ? MENU_PARENT[menu] : undefined;
@@ -195,6 +181,11 @@ export function PlayerSettingsMenu(props: SettingsMenuProps) {
       onClick={(e) => e.stopPropagation()}
       onClickCapture={() => showControls(10000)}
     >
+      {/* Une ligne par emplacement, chaque vue à la place qu'elle occupait parmi les enfants du
+          menu. L'ordre compte : React rapproche ces enfants par leur position, et ce qui passe
+          d'une vue à l'autre sans être recréé (le « Retour », une piste de même clé entre l'audio
+          et les sous-titres) le doit à ces places. Une vue sur plusieurs lignes (les sous-titres)
+          y reste répartie pour la même raison. */}
       {menu === "more" && moreView(v)}
       {menuParent && (
         <button
@@ -206,139 +197,16 @@ export function PlayerSettingsMenu(props: SettingsMenuProps) {
       )}
       {(menu === "audio" || menu === "subtitles") && tracksView(v)}
       {menu === "audio" && dialogueRowView(v)}
-      {menu === "subtitles" && (
-        <MenuOption
-          on={currentSubtitleId === null}
-          onClick={() => {
-            onChangeSubtitle(null);
-            setMenu(null);
-          }}
-        >
-          {t('player.none')}
-        </MenuOption>
-      )}
-      {/* « Générer des sous-titres » : sous les pistes, comme « Améliorer les dialogues » sous
-          celles du son — le nom et un chevron vers le choix de la langue. La reprise d'une
-          génération en pause vit ici aussi : c'est là que le spectateur voit l'entrée en pause. */}
-      {menu === "subtitles" && subtitleGeneration && (
-        <div className="border-t border-white/10">
-          {subtitleGeneration.targets.length > 0 && (
-            <button
-              data-subtitle-gen-row
-              disabled={subtitleGeneration.busy}
-              onClick={() => setMenu("subtitleGen")}
-              className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <Languages size={16} className="shrink-0" />
-                <span className="truncate">{t("player.subtitleGen.generate")}</span>
-              </span>
-              <ChevronRight size={14} className="shrink-0 text-white/50" />
-            </button>
-          )}
-          {subtitleGeneration.resumable.map((entry) => (
-            <button
-              key={entry.code}
-              data-subtitle-gen-resume={entry.code}
-              onClick={() => {
-                subtitleGeneration.onResume(entry.code);
-                setMenu(null);
-              }}
-              className="block w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-            >
-              {t("player.subtitleGen.resume", { language: entry.label })}
-            </button>
-          ))}
-        </div>
-      )}
-      {/* La langue du compte d'abord, d'un geste ; les autres derrière « Autre langue… », pour
-          que le cas courant ne demande pas de parcourir une liste. */}
-      {menu === "subtitleGen" && subtitleGeneration && subtitleGeneration.targets.length > 0 && (
-        <>
-          <button
-            data-subtitle-gen-target={subtitleGeneration.targets[0].code}
-            disabled={subtitleGeneration.busy}
-            onClick={() => {
-              subtitleGeneration.onGenerate(subtitleGeneration.targets[0].code);
-              setMenu(null);
-            }}
-            className="block w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
-          >
-            {subtitleGeneration.targets[0].label}
-          </button>
-          {subtitleGeneration.targets.length > 1 && (
-            <button
-              data-subtitle-gen-other
-              onClick={() => setMenu("subtitleGenOther")}
-              className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-            >
-              {t("player.subtitleGen.otherLanguage")}
-              <ChevronRight size={14} className="shrink-0 text-white/50" />
-            </button>
-          )}
-        </>
-      )}
-      {menu === "subtitleGenOther" &&
-        subtitleGeneration &&
-        subtitleGeneration.targets.slice(1).map((target) => (
-          <button
-            key={target.code}
-            data-subtitle-gen-target={target.code}
-            disabled={subtitleGeneration.busy}
-            onClick={() => {
-              subtitleGeneration.onGenerate(target.code);
-              setMenu(null);
-            }}
-            className="block w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 disabled:opacity-50"
-          >
-            {target.label}
-          </button>
-        ))}
-      {/* Sous les pistes, ce qui règle leur affichage : l'apparence (une porte, la taille, la
-          couleur et le fond se réglant ensemble) et, une piste choisie, son décalage. */}
-      {menu === "subtitles" && (
-        <div className="border-t border-white/10">
-          <button
-            onClick={() => setMenu("subtitleStyle")}
-            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-          >
-            {t("player.subtitleStyle.title")}
-            <ChevronRight size={14} className="shrink-0 text-white/50" />
-          </button>
-          {currentSubtitleId !== null && (
-            <OffsetRow label={t("player.subtitleOffset")} seconds={subtitleOffset} onShift={shiftSubtitles} />
-          )}
-        </div>
-      )}
+      {menu === "subtitles" && subtitlesNoneView(v)}
+      {menu === "subtitles" && subtitleGenRowsView(v)}
+      {menu === "subtitleGen" && subtitleGenView(v)}
+      {menu === "subtitleGenOther" && subtitleGenOtherView(v)}
+      {menu === "subtitles" && subtitlesDisplayView(v)}
       {menu === "subtitles" && dualRowView(v)}
       {menu === "dual" && dualView(v)}
       {menu === "dualPrimary" && dualPrimaryView(v)}
       {menu === "dualSecond" && dualSecondView(v)}
-      {menu === "subtitleStyle" && (
-        <>
-          <SubtitleStyleGroup
-            label={t("player.subtitleSize")}
-            options={SUBTITLE_SIZES.map((s) => ({ value: s.value, label: t(`player.${s.labelKey}`) }))}
-            current={subtitleStyle.size}
-            onPick={(size) => subtitleStyleStore.set({ size })}
-          />
-          <SubtitleStyleGroup
-            label={t("player.subtitleStyle.colour")}
-            options={SUBTITLE_COLORS.map((c) => ({ value: c, label: t(`player.subtitleStyle.colours.${c}`) }))}
-            current={subtitleStyle.color}
-            onPick={(color) => subtitleStyleStore.set({ color })}
-          />
-          <SubtitleStyleGroup
-            label={t("player.subtitleStyle.background")}
-            options={SUBTITLE_BACKGROUNDS.map((b) => ({
-              value: b,
-              label: t(`player.subtitleStyle.backgrounds.${b}`),
-            }))}
-            current={subtitleStyle.background}
-            onPick={(background) => subtitleStyleStore.set({ background })}
-          />
-        </>
-      )}
+      {menu === "subtitleStyle" && subtitleStyleView(v)}
       {menu === "hdrCap" && hdrCapHintView(v)}
       {menu === "hdrCap" && hdrCapView(v)}
       {menu === "sleep" && sleepView(v)}
