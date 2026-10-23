@@ -6346,6 +6346,24 @@ le relais dans la page pour `handOver`. `window.location.reload()` aux deux site
 page du natif n'a pas d'élément HLS. **Laissé.** Si la coupure lève après l'écriture, l'intention reste
 écrite (rouverte au prochain rechargement) — comme avant, invisible en pratique.
 
+### Les saccades : le minuteur de 5 s et la bascule (§78)
+
+**Règle.** Un blocage en pleine lecture qui dure 5 s bascule s'il tient au réseau ; à sa fin, le 2e de
+plus d'une seconde en trois minutes préchauffe, le 3e bascule (`StutterWatch`) ; un blocage de plus
+d'une seconde est montré au simulateur de la page de test. Le minuteur s'arrête sans rien décider sur
+un saut et au départ du pipeline (natif) ou de l'effet (serveur). **Porteur.** `StallSignals`
+(`src/components/player/session/stallSignals.ts`) : `started`, `ended`, `cancel`. **Appelants.** Les
+écouteurs de `startRemux` (natif) et `useServerSessionWaits` (serveur). **Tests.**
+`player-regles-communes.test.ts`, `slowLinkPolicy`, les empreintes `connexion-lente-…` des deux lecteurs ;
+`decisions-partagees`. **Différent exprès.** Ce qui dit « réseau » : le verdict du diagnostic au natif ;
+au serveur, hls.js seulement et moins d'une seconde devant au début du blocage. La bascule nommée
+(`"long"` / `"repeated"`) au natif, sans nom au serveur. Le texte du simulateur (verdict ou « serveur »).
+Le mot sous la roue (`stallAt`, natif) et la pastille (`useRebufferBadge`, serveur), §97. Chaque hôte
+garde son décompte (`SessionTally`) et sa mesure des sauts. **Laissé, décisions à part (audit F1-3).**
+Le temps caché pendant un saut, retiré au natif et compté au serveur ; la fin d'un saut (`seeked` au
+natif, `playing` au serveur) ; la portée de « a déjà joué » (`playedOnce` par pipeline au natif, par
+effet au serveur — une renégociation hls.js en place le garde).
+
 ### Les habitudes de lecture (§28) et « ni banc ni scène »
 
 **Règle.** La lecture notée (`noteWatching`) toutes les quinze secondes en lecture et à chaque pause

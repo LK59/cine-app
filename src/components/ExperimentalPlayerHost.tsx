@@ -106,14 +106,13 @@ import { playsHlsNatively } from "@/lib/webkitEngine";
 import { pickMaxBitrate } from "@/lib/networkBitrate";
 import { SlowLinkRunner } from "@/lib/slowLinkRunner";
 import {
-  LONG_STALL_MS,
   PLAYBACK_MEASURE_WINDOW_MS,
   SlowLog,
   StutterWatch,
   playbackLinkSlow,
 } from "@/lib/slowLinkPolicy";
 import { networkUnstable } from "@/lib/networkTrouble";
-import { pushSlowLinkEvent } from "@/lib/slowLinkMonitor";
+import { StallSignals } from "@/components/player/session/stallSignals";
 import { saveUnsentPosition } from "@/lib/unsentPosition";
 import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
 import { useIntroPlaybackStarted } from "@/lib/introEnd";
@@ -2070,24 +2069,22 @@ export function ExperimentalPlayerHost({
           }
           if (networkUnstable()) setStallUnstable(true);
           // Un blocage qui dure : à 5 s, la bascule s'il tient au réseau (§78).
-          clearLongWait();
-          longWaitTimer = setTimeout(() => {
-            longWaitTimer = null;
+          stalls.started(() => {
             const wait = diagCurrentWait();
-            if (wait && stutter.longWait(Date.now(), networkStall(wait.verdict))) offerStutterRef.current("long");
-          }, LONG_STALL_MS);
+            return wait ? networkStall(wait.verdict) : null;
+          });
         }
       };
       /**
        * Les blocages en pleine lecture, pour la bascule sur des saccades (§78) : réseau d'après le
        * diagnostic, sous un débit mesuré inférieur au besoin, jamais pendant une coupure (elle a son
        * message), jamais page cachée. Ceux d'un saut n'y entrent jamais : `onWaiting` ne les compte pas.
+       * La règle de bascule et son minuteur de 5 s : `StallSignals`, commun aux deux lecteurs (§115).
        */
-      let longWaitTimer: ReturnType<typeof setTimeout> | null = null;
-      const clearLongWait = () => {
-        if (longWaitTimer !== null) clearTimeout(longWaitTimer);
-        longWaitTimer = null;
-      };
+      const stalls = new StallSignals(() => stutter, {
+        onSwitch: (kind) => offerStutterRef.current(kind),
+        onPrewarm: () => playbackDecisionRef.current(false, true),
+      });
       /** L'attente en pleine lecture est finie (image, pause, saut, fin) : le mot s'en va avec elle. */
       const endStall = () => {
         if (stallAtRef.current === null) return;
@@ -2099,15 +2096,12 @@ export function ExperimentalPlayerHost({
         !networkUnstable() &&
         playbackLinkSlow(diagLinkMeasure(PLAYBACK_MEASURE_WINDOW_MS), needBpsRef.current);
       const endWait = (wait: { verdict: string; ms: number } | null) => {
-        clearLongWait();
         endStall();
-        // Le tableau du simulateur de la page de test, s'il est allumé (rien sinon).
-        if (wait && wait.ms > 1000) pushSlowLinkEvent(`blocage de ${Math.round(wait.ms)} ms (${wait.verdict})`);
-        if (!wait) return;
-        // Le 2e blocage préchauffe, le 3e bascule (§78) — la règle de bascule, elle, est inchangée.
-        const signal = stutter.waitEndedSignal(Date.now(), wait.ms, networkStall(wait.verdict));
-        if (signal === "switch") offerStutterRef.current("repeated");
-        else if (signal === "prewarm") playbackDecisionRef.current(false, true);
+        // Le texte du simulateur de la page de test : la durée et le verdict du diagnostic.
+        stalls.ended(
+          Date.now(),
+          wait ? { ms: wait.ms, text: `blocage de ${Math.round(wait.ms)} ms (${wait.verdict})`, network: () => networkStall(wait.verdict) } : null
+        );
       };
       const onPlaying = () => {
         trace(`élément : repart à ${element.currentTime.toFixed(2)} s`);
@@ -2121,7 +2115,7 @@ export function ExperimentalPlayerHost({
         tally.waitAbandoned();
         diagWaitEnded(false);
         endStall();
-        clearLongWait();
+        stalls.cancel();
         // Un saut en pleine lecture attend son image : traité comme une ouverture au-delà de 10 s (§78).
         if (playedOnce) runner.seekStarted();
       };
@@ -2181,7 +2175,7 @@ export function ExperimentalPlayerHost({
       unsubscribes.push(watchElementWaits(element, watched));
       unsubscribes.push(() => {
         // Le blocage de 5 s en attente meurt avec ce pipeline : il ne doit rien décider pour le suivant.
-        clearLongWait();
+        stalls.cancel();
         element.removeEventListener("timeupdate", onTime);
         element.removeEventListener("play", onPlay);
         element.removeEventListener("pause", onPause);

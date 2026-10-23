@@ -13,6 +13,8 @@ import { audioReloadIntent, ladderReloadIntent, reloadServerPage } from "@/compo
 import { PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
 import { habitWatch, recordsResume } from "@/components/player/session/habitWatch";
 import { noteWatching } from "@/lib/resumeRewind";
+import { StallSignals } from "@/components/player/session/stallSignals";
+import { LONG_STALL_MS, StutterWatch } from "@/lib/slowLinkPolicy";
 
 vi.mock("@/lib/resumeRewind", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/resumeRewind")>()),
@@ -201,6 +203,62 @@ describe("habitWatch (§115, habitudes de lecture — §28)", () => {
       h.play(video);
       expect(video.currentTime).toBe(600);
     }
+  });
+});
+
+describe("StallSignals (§115, saccades — §78)", () => {
+  const setup = () => {
+    const stutter = new StutterWatch();
+    const onSwitch = vi.fn();
+    const onPrewarm = vi.fn();
+    const stalls = new StallSignals(() => stutter, { onSwitch, onPrewarm });
+    return { stutter, onSwitch, onPrewarm, stalls };
+  };
+  const wait = (ms: number, network = true) => ({ ms, text: `blocage de ${ms} ms (essai)`, network: () => network });
+
+  it("un blocage de 5 s qui tient au réseau bascule ; lu à l'échéance", () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    const { onSwitch, stalls } = setup();
+    let network: boolean | null = false;
+    stalls.started(() => network);
+    vi.advanceTimersByTime(LONG_STALL_MS);
+    expect(onSwitch).not.toHaveBeenCalled();
+    network = true;
+    stalls.started(() => network);
+    vi.advanceTimersByTime(LONG_STALL_MS);
+    expect(onSwitch).toHaveBeenCalledWith("long");
+  });
+
+  it("annulé par un saut, une fin de blocage ou le départ du pipeline : rien ne se décide", () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    const { onSwitch, stalls } = setup();
+    stalls.started(() => true);
+    stalls.cancel();
+    stalls.started(() => true);
+    stalls.ended(Date.now(), null);
+    vi.advanceTimersByTime(LONG_STALL_MS * 2);
+    expect(onSwitch).not.toHaveBeenCalled();
+  });
+
+  it("le 2e blocage de plus d'une seconde préchauffe, le 3e bascule ; le réseau seulement", () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    const { onSwitch, onPrewarm, stalls } = setup();
+    stalls.ended(Date.now(), wait(2000, false));
+    stalls.ended(Date.now(), wait(500));
+    stalls.ended(Date.now(), wait(2000));
+    expect(onPrewarm).not.toHaveBeenCalled();
+    stalls.ended(Date.now() + 1000, wait(2000));
+    expect(onPrewarm).toHaveBeenCalledTimes(1);
+    stalls.ended(Date.now() + 2000, wait(2000));
+    expect(onSwitch).toHaveBeenCalledWith("repeated");
+  });
+
+  it("le réseau n'est demandé qu'en fin de blocage, s'il y en avait un", () => {
+    const { stalls } = setup();
+    const network = vi.fn(() => false);
+    stalls.ended(0, null);
+    stalls.ended(0, { ms: 2000, text: "x", network });
+    expect(network).toHaveBeenCalledTimes(1);
   });
 });
 

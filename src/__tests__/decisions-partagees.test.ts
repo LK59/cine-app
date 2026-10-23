@@ -1531,6 +1531,12 @@ describe("les doublons du lecteur fusionnés : une règle, un endroit (§115)", 
     expect(/reloadServerPage\(/.test(codeDe(SERVEUR))).toBe(true);
   });
 
+  it("la bascule sur des saccades se décide dans StallSignals seulement (§78)", () => {
+    const MODULE = "src/components/player/session/stallSignals.ts";
+    expect(lecteurQui(/\.waitEndedSignal\(|\.longWait\(|\bLONG_STALL_MS\b|pushSlowLinkEvent\(/)).toEqual([MODULE]);
+    for (const hote of HOTES) expect([hote, /new StallSignals\(/.test(codeDe(hote))]).toEqual([hote, true]);
+  });
+
   it("les habitudes de lecture se notent dans habitWatch seulement (§28)", () => {
     const MODULE = "src/components/player/session/habitWatch.ts";
     expect(lecteurQui(/pauseRewindTarget\(/)).toEqual([MODULE]);

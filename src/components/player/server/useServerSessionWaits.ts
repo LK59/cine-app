@@ -2,10 +2,10 @@ import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "r
 import type Hls from "hls.js";
 import { bufferedAhead } from "@/lib/playbackTimeline";
 import type { LinkMeter } from "@/lib/slowLink";
-import { LONG_STALL_MS, PLAYBACK_MEASURE_WINDOW_MS, playbackLinkSlow, type StutterWatch } from "@/lib/slowLinkPolicy";
+import { PLAYBACK_MEASURE_WINDOW_MS, playbackLinkSlow, type StutterWatch } from "@/lib/slowLinkPolicy";
 import type { SlowLinkRunner } from "@/lib/slowLinkRunner";
 import type { SessionTally } from "@/lib/playerSessionTally";
-import { pushSlowLinkEvent } from "@/lib/slowLinkMonitor";
+import { StallSignals } from "@/components/player/session/stallSignals";
 
 /**
  * Les attentes et les sauts de la séance, pour son bilan — les règles du lecteur natif
@@ -60,7 +60,11 @@ export function useServerSessionWaits({
      * coupure, jamais page cachée. Les attentes d'un saut ne comptent jamais.
      */
     let waitStart: { at: number; ahead: number | null } | null = null;
-    let longTimer: ReturnType<typeof setTimeout> | null = null;
+    // La règle de bascule et son minuteur de 5 s : `StallSignals`, commune aux deux lecteurs (§115).
+    const stalls = new StallSignals(() => stutterRef.current, {
+      onSwitch: () => offerStutterRef.current(),
+      onPrewarm: () => playbackDecisionRef.current(false, true),
+    });
     const networkStall = (ahead: number | null) =>
       hlsRef.current !== null &&
       (ahead === null || ahead < 1) &&
@@ -68,16 +72,13 @@ export function useServerSessionWaits({
       !unstableRef.current &&
       playbackLinkSlow(linkMeterRef.current?.recentMeasure(PLAYBACK_MEASURE_WINDOW_MS), streamNeedRef.current);
     const endWait = (now: number) => {
-      if (longTimer !== null) clearTimeout(longTimer);
-      longTimer = null;
       const started = waitStart;
       waitStart = null;
-      if (started && now - started.at > 1000) pushSlowLinkEvent(`blocage de ${now - started.at} ms (serveur)`);
-      if (!started) return;
-      // Le 2e blocage préchauffe, le 3e bascule (§78) — la règle de bascule, elle, est inchangée.
-      const signal = stutterRef.current.waitEndedSignal(now, now - started.at, networkStall(started.ahead));
-      if (signal === "switch") offerStutterRef.current();
-      else if (signal === "prewarm") playbackDecisionRef.current(false, true);
+      // Le texte du simulateur de la page de test : la durée, et « serveur ».
+      stalls.ended(
+        now,
+        started ? { ms: now - started.at, text: `blocage de ${now - started.at} ms (serveur)`, network: () => networkStall(started.ahead) } : null
+      );
     };
     const onPlaying = () => {
       const now = Date.now();
@@ -98,11 +99,7 @@ export function useServerSessionWaits({
         tallyRef.current.waitStarted(Date.now());
         const ahead = bufferedAhead(video);
         waitStart = { at: Date.now(), ahead };
-        if (longTimer !== null) clearTimeout(longTimer);
-        longTimer = setTimeout(() => {
-          longTimer = null;
-          if (waitStart && networkStall(waitStart.ahead) && stutterRef.current.longWait(Date.now(), true)) offerStutterRef.current();
-        }, LONG_STALL_MS);
+        stalls.started(() => (waitStart ? networkStall(waitStart.ahead) : null));
       }
     };
     const onSeeking = () => {
@@ -110,8 +107,7 @@ export function useServerSessionWaits({
       resumeSeekPendingRef.current = false;
       if (!playedOnce) return;
       tallyRef.current.waitAbandoned();
-      if (longTimer !== null) clearTimeout(longTimer);
-      longTimer = null;
+      stalls.cancel();
       waitStart = null;
       // Le saut de reprise de la négociation : ni compté, ni traité comme un saut qui attend (§78).
       if (resumeSeek) return;
@@ -137,7 +133,7 @@ export function useServerSessionWaits({
     video.addEventListener("seeked", onSeeked);
     video.addEventListener("pause", onPause);
     return () => {
-      if (longTimer !== null) clearTimeout(longTimer);
+      stalls.cancel();
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("seeking", onSeeking);
