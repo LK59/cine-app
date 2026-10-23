@@ -484,7 +484,7 @@ banc ou une touche média y arriveraient, et le code le traite (`wantedAudioRef`
 | Ligne | Hôte natif | Lecteur serveur |
 |---|---|---|
 | `start` | une par pipeline (chaque reconstruction en écrit une, avec `rebuild`) | une par négociation |
-| `stop` | fermeture, épisode suivant, `pagehide`, démontage ; jamais après une bascule ; `why: "lost"` renvoyé au lancement suivant si iOS a tué la page | fermeture, épisode suivant, `pagehide`, démontage — **un seul par séance** (`stoppedSessionRef` : l'épisode suivant parti par le natif démonte ce lecteur, qui écrivait un second `stop "unmount"` à 0 s, 15/10/2026) ; une séance réellement allégée (son palier négocié) y est retenue deux minutes (`rememberLighter`, en « Automatique », par compte) |
+| `stop` | fermeture, épisode suivant, `pagehide`, démontage ; jamais après une bascule ; `why: "lost"` renvoyé au lancement suivant si iOS a tué la page | fermeture, épisode suivant, `pagehide`, démontage — **un seul par séance** (`stoppedSessionRef`, `useServerSessionRecord` dans `player/server/` : l'épisode suivant parti par le natif démonte ce lecteur, qui écrivait un second `stop "unmount"` à 0 s, 15/10/2026) ; une séance réellement allégée (son palier négocié) y est retenue deux minutes (`rememberLighter`, en « Automatique », par compte) |
 | `fallback` | bascule vers le serveur (`takeover`, `cast`, `watched`) | fin de diffusion (`cast: true`) |
 | `error` | bascule impossible (pas de lecteur serveur) | refus de négociation, reconnexion Jellyfin, pas d'image en 20 s, erreur pendant une diffusion |
 | `rebuild` | source perdue, retour d'arrière-plan (`hiddenMs`) — **pas** pour un changement de piste, le plafond HDR ni un nouvel essai réseau | — |

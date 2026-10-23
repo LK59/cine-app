@@ -4525,8 +4525,8 @@ dessine rien. Le `ChromecastPlayer` n'a pas d'entrée « Deux sous-titres ».
 **Porteurs.** `src/lib/dualSubtitles.ts` (`secondOverlayCss`, `primaryDualCss`, `SECOND_SUBTITLE_TINT`,
 `dualSubtitleMemory`, `rememberDual`, `pickRememberedDual`) ; `SubtitleLayer`
 (`src/components/player/SubtitleLayer.tsx`) ; `useServerDualSubtitles` ; `SecondSubtitleMenu` et les
-vues `dual` / `dualPrimary` / `dualSecond` et `pickPrimary` (`PlayerSettingsMenu`), `OffsetRow`
-(`menuRows.tsx`), tous deux dans `src/components/playerControls/` ;
+vues `dual` / `dualPrimary` / `dualSecond` et `pickPrimary` (`menuViewsDual.tsx`, appelées par
+`PlayerSettingsMenu`), `OffsetRow` (`menuRows.tsx`), tous dans `src/components/playerControls/` ;
 `.subtitle-dual`, `.subtitle-dual-text` (globals.css).
 
 **Appelants.** `ExperimentalPlayerHost` (`chooseSecond`, `showSecondAt`, `generationLane` — dans
