@@ -32,6 +32,7 @@ import {
   TRACED_APPENDS, TRACED_APPENDS_PER_SEEK, KEEP_BEHIND_SECONDS, TRIM_SLACK_SECONDS, KEYFRAME_TRIM_MARGIN,
   ZONE_MARGIN_SECONDS,
 } from "./mseTuning";
+import { frameQuality, playableSpans, signed, spansAll, spansNear } from "./mseSpans";
 import type { MseCallbacks, RecoveryFacts, UnreadableZoneEvent, UnreadableZoneNotice } from "./mseTypes";
 import { AUDIO_LANE_SHARE, ByteRate, currentSourceBufferQuota, laneBudget, tightest, type BufferBudget } from "./bufferBudget";
 
@@ -39,11 +40,6 @@ import { AUDIO_LANE_SHARE, ByteRate, currentSourceBufferQuota, laneBudget, tight
 // moving where they live should not mean touching a dozen call sites.
 export { containerAccepts, playabilityOf } from "./mseSupport";
 export type { MseCallbacks, RecoveryFacts, UnreadableZoneEvent, UnreadableZoneNotice } from "./mseTypes";
-
-/** Un écart en secondes, signé et arrondi au centième — pour le journal. */
-function signed(seconds: number): string {
-  return `${seconds >= 0 ? "+" : ""}${seconds.toFixed(2)}`;
-}
 
 export class MseSource {
   private readonly source: MediaSource | ManagedMediaSource;
@@ -575,29 +571,14 @@ export class MseSource {
     return facts;
   }
 
-  /** Les plages de ce tampon, toutes (quatre au plus), sans rapport à la tête. Ne lève jamais. */
-  private spansAll(buffer: SourceBuffer | null): string {
-    if (!buffer) return "aucun";
-    try {
-      const ranges = buffer.buffered;
-      if (ranges.length === 0) return "vide";
-      const spans: string[] = [];
-      for (let i = 0; i < ranges.length && i < 4; i++) spans.push(`${ranges.start(i).toFixed(2)}–${ranges.end(i).toFixed(2)}`);
-      if (ranges.length > 4) spans.push(`+${ranges.length - 4}`);
-      return spans.join(" · ");
-    } catch {
-      return "illisible (source fermée)";
-    }
-  }
-
   /** Voir `lastGoodBuffered`. Ne lève jamais. */
   private rememberBuffered(after: string): void {
     try {
       this.lastGoodBuffered = {
         at: Date.now(),
         after,
-        video: this.spansAll(this.videoBuffer),
-        audio: this.spansAll(this.audioBuffer),
+        video: spansAll(this.videoBuffer),
+        audio: spansAll(this.audioBuffer),
       };
     } catch {
       /* rien */
@@ -654,7 +635,7 @@ export class MseSource {
     // L'état des deux tampons au moment du geste (24/09/2026). Trois sauts de +10 s « dans le
     // chargé » ont trouvé, 0,7 s plus tard, la cible sans média — et rien ne disait si elle
     // l'avait vraiment été, ni dans quel tampon : la trace du saut le dit maintenant.
-    trace(`saut de l'élément vers ${target.toFixed(1)} s — vidéo ${this.spansNear(this.videoBuffer, target)} · audio ${this.audioBuffer ? this.spansNear(this.audioBuffer, target) : "aucun"}`);
+    trace(`saut de l'élément vers ${target.toFixed(1)} s — vidéo ${spansNear(this.videoBuffer, target)} · audio ${this.audioBuffer ? spansNear(this.audioBuffer, target) : "aucun"}`);
     // A deliberate move settles the question of where playback belongs — et c'est vrai aussi d'un
     // saut dans ce qui est déjà chargé. Oublié sur ce raccourci jusqu'au 22/09/2026 : pause, saut
     // en avant, Lecture, et la garde ramenait la tête à sa position de pause.
@@ -706,14 +687,6 @@ export class MseSource {
       best = Math.min(best, Math.abs(ranges.start(i) - seconds), Math.abs(ranges.end(i) - seconds));
     }
     return best;
-  }
-
-  /** The element's own playable ranges, written out. */
-  private playableSpans(): string {
-    const ranges = this.video.buffered;
-    const spans: string[] = [];
-    for (let i = 0; i < ranges.length; i++) spans.push(`${ranges.start(i).toFixed(2)}–${ranges.end(i).toFixed(1)}`);
-    return spans.join(" · ") || "vide";
   }
 
   private isBufferedAt(seconds: number): boolean {
@@ -1035,8 +1008,8 @@ export class MseSource {
         if (Number.isFinite(distance) && distance > MISPLACED_SECONDS) {
           trace(
             `reprise : média à ${distance.toFixed(1)} s de la tête (${this.anchor.toFixed(1)} s), ` +
-              `lecteur à ${this.readUpTo.toFixed(1)} s — vidéo ${this.spansNear(this.videoBuffer, this.anchor)} · ` +
-              `audio ${this.audioBuffer ? this.spansNear(this.audioBuffer, this.anchor) : "aucun"}`
+              `lecteur à ${this.readUpTo.toFixed(1)} s — vidéo ${spansNear(this.videoBuffer, this.anchor)} · ` +
+              `audio ${this.audioBuffer ? spansNear(this.audioBuffer, this.anchor) : "aucun"}`
           );
           // Vers la cible du saut en cours s'il y en a un, pas vers la tête partie ailleurs : c'était
           // une relecture pour rien, suivie de celle vers la cible (22/09/2026).
@@ -1598,7 +1571,7 @@ export class MseSource {
     if (this.destroyed) return;
     try {
       trace(
-        `vidage fait (${clearMs.join(", ")}) — reste vidéo ${this.spansAll(this.videoBuffer)} · audio ${this.spansAll(this.audioBuffer)}`
+        `vidage fait (${clearMs.join(", ")}) — reste vidéo ${spansAll(this.videoBuffer)} · audio ${spansAll(this.audioBuffer)}`
       );
     } catch {
       /* rien */
@@ -2097,27 +2070,11 @@ export class MseSource {
       networkState: this.video.networkState,
       seeking: this.video.seeking,
       source: this.source.readyState,
-      videoBuffered: this.spansNear(this.videoBuffer, now),
-      audioBuffered: this.audioBuffer ? this.spansNear(this.audioBuffer, now) : "aucun",
+      videoBuffered: spansNear(this.videoBuffer, now),
+      audioBuffered: this.audioBuffer ? spansNear(this.audioBuffer, now) : "aucun",
       lead: Math.round(this.lead * 100) / 100,
       sinceAppendMs: Date.now() - this.lastAppendAt,
     };
-  }
-
-  /** One buffer's ranges within half a minute of the head, written short. Never throws. */
-  private spansNear(buffer: SourceBuffer | null, at: number): string {
-    try {
-      const ranges = buffer?.buffered;
-      if (!ranges || ranges.length === 0) return "vide";
-      const spans: string[] = [];
-      for (let i = 0; i < ranges.length && spans.length < 4; i++) {
-        if (ranges.end(i) < at - 30 || ranges.start(i) > at + 30) continue;
-        spans.push(`${ranges.start(i).toFixed(2)}–${ranges.end(i).toFixed(2)}`);
-      }
-      return spans.join(" · ") || "rien près de la tête";
-    } catch {
-      return "illisible (source fermée)";
-    }
   }
 
   /** Ce que le décodeur traverse depuis le début de la plage sous la tête ; inconnu, le plafond. */
@@ -2512,15 +2469,6 @@ export class MseSource {
     }
   }
 
-  /** Images perdues sur images rendues, telles que l'élément lui-même les compte. */
-  private frameQuality(): string {
-    const quality = this.video.getVideoPlaybackQuality?.();
-    if (!quality) return "non mesurable ici";
-    const { droppedVideoFrames: dropped, totalVideoFrames: total } = quality;
-    if (total === 0) return "aucune image rendue";
-    return `${dropped} / ${total} (${((dropped / total) * 100).toFixed(1)} %)`;
-  }
-
   /** What the technical panel shows. Enough to tell a stall apart from a refusal to fetch. */
   get debug(): Record<string, string> {
     // Reading a buffer whose source has closed throws, and the whole panel used to come back as
@@ -2540,12 +2488,12 @@ export class MseSource {
       // The two facts that would have named the frozen-clock stall in one glance instead of
       // three reports: what the *element* can play — the intersection of the buffers, not the
       // video buffer alone — and whether it is waiting on a seek that never resolved.
-      "Lisible par l'élément": this.playableSpans(),
+      "Lisible par l'élément": playableSpans(this.video),
       "En cours de saut": this.video.seeking ? "oui" : "non",
       // La seule mesure qui sépare « le décodeur n'y arrive pas » de « la cadence du film ne
       // tombe pas juste sur celle de l'écran ». Sans elle, une lecture qui n'attend jamais et
       // dont le tampon a trente secondes d'avance ne dit toujours rien sur ce qu'on voit.
-      "Images perdues": this.frameQuality(),
+      "Images perdues": frameQuality(this.video),
       "Couleurs de l'image": this.frameColorSpace(),
       "MediaSource": `${this.source.readyState}${this.streamingWanted ? "" : " · en pause"}`,
       "Lecture en cours": this.fillTask ? "oui" : "non",
