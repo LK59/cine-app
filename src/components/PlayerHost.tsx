@@ -68,11 +68,18 @@ import {
   takeCarriedExclusions,
 } from "@/components/player/server/audioLadder";
 import { releaseHlsElement, reloadIntoServerPlayer } from "@/components/player/server/serverElement";
+import {
+  serverAudioTracks,
+  serverSubtitleTracks,
+  subtitleFacts,
+  subtitleFactsOf,
+  type ExternalSubtitleTrack,
+  type ServerAudioFacts,
+} from "@/components/player/server/serverTracks";
 
 /** Pas d'indice : l'état ordinaire d'un chargement (§78). */
 type LinkSignal = { hint: boolean; recvBps: number | null; needBps: number | null };
 const NO_LINK_SIGNAL: LinkSignal = { hint: false, recvBps: null, needBps: null };
-import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { useAccountPreferencesLoader } from "@/lib/useAccountPreferences";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
@@ -134,42 +141,6 @@ export interface PlaybackInfoSummary extends JellyfinPlayback {
   requestedVideoCodecs: string[];
   /** Ce que le maître annonce (HLS natif seulement : la route le lit en le préchauffant). */
   served?: { codecs: string | null; videoRange: string | null } | null;
-}
-
-interface ExternalSubtitleTrack {
-  index: number;
-  url: string;
-  /**
-   * L'étiquette construite ici, et non reçue du serveur.
-   *
-   * Elle sert deux fois : dans notre menu, et dans l'attribut `label` de la balise `<track>` —
-   * que le navigateur affiche dans **son propre** sélecteur, et que l'Apple TV montre en AirPlay.
-   * D'où l'importance qu'elle se tienne hors de notre interface aussi.
-   */
-  label: string;
-  language?: string | null;
-  title?: string | null;
-  isDefault: boolean;
-  isForced?: boolean;
-  isHearingImpaired?: boolean;
-  isExternal?: boolean;
-}
-
-/** Une piste de ce lecteur, dans les termes du choix des pistes (`trackPreferences`) — §87. */
-function subtitleFacts(st: ExternalSubtitleTrack) {
-  return {
-    number: st.index,
-    language: st.language ?? null,
-    name: st.title ?? null,
-    isDefault: st.isDefault,
-    isForced: st.isForced ?? false,
-    isHearingImpaired: st.isHearingImpaired,
-  };
-}
-
-function subtitleFactsOf(tracks: readonly ExternalSubtitleTrack[], id: number | null) {
-  const found = id === null ? undefined : tracks.find((st) => st.index === id);
-  return found ? subtitleFacts(found) : null;
 }
 
 const MAX_NETWORK_RETRIES = 6;
@@ -1557,35 +1528,8 @@ function ActivePlayer({
        * AirPlay, un tampon récalcitrant. C'est exactement le moment où un menu qui se met à
        * parler un autre vocabulaire ajoute de la confusion à une situation déjà dégradée.
        */
-      const faitsAudio = (data.audioTracks ?? []) as {
-        index: number;
-        language: string | null;
-        title: string | null;
-        codec: string | null;
-        channels: number | null;
-        profile: string | null;
-        isDefault: boolean;
-      }[];
-      setAudioTracks(
-        labelAudioTracks(
-          faitsAudio.map((t) => ({
-            number: t.index,
-            language: t.language,
-            name: t.title,
-            isDefault: t.isDefault,
-            isForced: false,
-            codecId: t.codec,
-            channels: t.channels,
-            profile: t.profile,
-          })),
-          {
-            locale,
-            originalLanguage: data.originalLanguage ?? null,
-            canaux: (n: number) => t("player.trackLabel.channels", { n }),
-            piste: (n: number) => t("player.trackLabel.track", { n }),
-          }
-        ).map((e) => ({ id: e.number, label: e.label }))
-      );
+      const faitsAudio = (data.audioTracks ?? []) as ServerAudioFacts[];
+      setAudioTracks(serverAudioTracks(faitsAudio, data.originalLanguage ?? null, locale, t));
       // La langue de chaque piste, pour dire au serveur celle choisie à la main (`changeAudio`).
       audioLanguagesRef.current = new Map(faitsAudio.map((t) => [t.index, t.language]));
       setCurrentAudioId(opts?.audioStreamIndex ?? data.audioTracks?.find((t: { isDefault: boolean }) => t.isDefault)?.index ?? null);
@@ -1810,31 +1754,7 @@ function ActivePlayer({
       // dominant case for an HEVC-in-mkv library, not the exception — so this isn't a narrow
       // DirectPlay-only fix, it's the primary path.
       const faitsSt = (data.subtitleTracks ?? []) as Omit<ExternalSubtitleTrack, "label">[];
-      const etiquettesSt = new Map(
-        labelSubtitleTracks(
-          faitsSt.map((st) => ({
-            number: st.index,
-            language: st.language ?? null,
-            name: st.title ?? null,
-            isDefault: st.isDefault,
-            isForced: st.isForced ?? false,
-            isHearingImpaired: st.isHearingImpaired,
-            isExternal: st.isExternal,
-          })),
-          {
-            locale,
-            forces: t("player.trackLabel.forced"),
-            complets: t("player.trackLabel.full"),
-            malentendants: t("player.trackLabel.sdh"),
-            externe: t("player.trackLabel.external"),
-            piste: (n: number) => t("player.trackLabel.track", { n }),
-          }
-        ).map((e) => [e.number, e.label])
-      );
-      const tracks: ExternalSubtitleTrack[] = faitsSt.map((st) => ({
-        ...st,
-        label: etiquettesSt.get(st.index) ?? String(st.index),
-      }));
+      const tracks = serverSubtitleTracks(faitsSt, locale, t);
       setExternalSubtitleTracks(tracks);
       setSubtitleTracks(tracks.map((st) => ({ id: st.index, label: st.label })));
       // Le sous-titre que le lecteur natif montrait, rallumé une fois quand la version allégée prend
