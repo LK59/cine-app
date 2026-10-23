@@ -118,6 +118,7 @@ import { ServerPlayerIntro } from "@/components/player/server/ServerPlayerIntro"
 import { useServerTimeline } from "@/components/player/server/useServerTimeline";
 import { useCastRoute } from "@/components/player/server/useCastRoute";
 import { useServerSessionWaits } from "@/components/player/server/useServerSessionWaits";
+import { useRebufferBadge } from "@/components/player/server/useRebufferBadge";
 import {
   CastAudioWarning,
   CastInterruptedScreen,
@@ -2648,45 +2649,7 @@ function ActivePlayer({
     return () => clearInterval(id);
   }, [lighterStep]);
 
-  // Bad-connection badge: a real stall mid-playback ('waiting' firing after the video has
-  // already played at least once — excludes ordinary startup buffering) is logged with a
-  // timestamp; a periodic check then looks at how many landed in the last 60s to decide whether
-  // to show the badge (the dropped-frame ratio no longer counts since LECTEUR-8, see below). A
-  // measured signal, not a guess — see badConnection's own comment for why not a fabricated
-  // "latency" number.
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const onPlaying = () => {
-      hasPlayedOnce.current = true;
-    };
-    const onSeeking = () => {
-      lastSeekAt.current = Date.now();
-    };
-    const onWaiting = () => {
-      if (hasPlayedOnce.current && Date.now() - lastSeekAt.current > 2000) rebufferTimestamps.current.push(Date.now());
-    };
-    video.addEventListener("playing", onPlaying);
-    video.addEventListener("seeking", onSeeking);
-    video.addEventListener("waiting", onWaiting);
-
-    const interval = setInterval(() => {
-      const cutoff = Date.now() - 60_000;
-      rebufferTimestamps.current = rebufferTimestamps.current.filter((t) => t > cutoff);
-      // Les attentes seules. Les images perdues (`getVideoPlaybackQuality`) allumaient aussi la
-      // pastille, au-delà de 2 % : c'est un décodeur ou un processeur qui ne suit pas — Fire TV,
-      // vieux téléphone, machine chargée —, pas le réseau. Passe de nuit du 15/10/2026 (LECTEUR-8) :
-      // « Connexion instable » toute une séance servie à 445 Mb/s, segments en 0,1–0,7 s.
-      setBadConnection(rebufferTimestamps.current.length >= 2);
-    }, 5000);
-
-    return () => {
-      video.removeEventListener("playing", onPlaying);
-      video.removeEventListener("seeking", onSeeking);
-      video.removeEventListener("waiting", onWaiting);
-      clearInterval(interval);
-    };
-  }, [videoKey]);
+  useRebufferBadge(videoRef, videoKey, hasPlayedOnce, lastSeekAt, rebufferTimestamps, setBadConnection);
 
   // The native <video> "error" event is the ONLY failure signal for the DirectPlay and native
   // Safari-HLS paths (both are a plain `video.src = manifestUrl`, no hls.js involved, so none of
