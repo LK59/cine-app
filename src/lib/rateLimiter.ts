@@ -16,9 +16,10 @@ setInterval(() => {
  * La clé d'une adresse (revue de sécurité du 20/10/2026) : une adresse IPv4 telle quelle, une IPv6
  * par son préfixe /64 — un abonné en reçoit un entier, et changer d'adresse à chaque essai y est
  * gratuit : compter l'adresse exacte ne freinait rien. Une IPv4 notée en IPv6 (`::ffff:1.2.3.4`)
- * redevient l'IPv4.
+ * redevient l'IPv4. `prefix: 48` regroupe par /48 — ce qu'un fournisseur peut confier à un seul
+ * client, et plusieurs /64 coûtent aussi peu qu'un (le passage, §119).
  */
-export function rateKey(ip: string): string {
+export function rateKey(ip: string, prefix: 64 | 48 = 64): string {
   const raw = ip.trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/%.*$/, "");
   const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(raw);
   if (mapped) return mapped[1];
@@ -27,7 +28,7 @@ export function rateKey(ip: string): string {
   const left = head ? head.split(":") : [];
   const right = tail ? tail.split(":") : [];
   const groups = raw.includes("::") ? [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right] : left;
-  return `${groups.slice(0, 4).map((g) => (g || "0").replace(/^0+(?=.)/, "")).join(":")}::/64`;
+  return `${groups.slice(0, prefix / 16).map((g) => (g || "0").replace(/^0+(?=.)/, "")).join(":")}::/${prefix}`;
 }
 
 export function checkRateLimit(rawIp: string): boolean {

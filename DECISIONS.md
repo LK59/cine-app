@@ -6885,8 +6885,10 @@ dans `auth.log` ; une demande remplace les secrets non servis de la même sessio
 **une seule écriture conditionnelle** (`UPDATE … WHERE used_at IS NULL AND expires_at > now RETURNING`),
 puis la session d'origine doit exister encore (une session fermée entre-temps invalide ses secrets) ;
 refus identiques (corps et code 401) pour inconnu, mal formé, expiré, déjà servi, session fermée, et
-d'au moins 400 ms (`passageTiming`) ; cinq échecs par adresse cliente en quinze minutes, cent échecs de
-code pour toute l'installation, puis 429 (`attempts.ts`, sur `globalThis`) ; `passage-received`,
+d'au moins 400 ms (`passageTiming`) ; cinq échecs par adresse cliente (une IPv6
+par son /48) en quinze minutes, 2 000 échecs de code pour toute l'installation — cent laissaient un
+anonyme fermer l'entrée par code au foyer ; à 2 000, chercher un code de 40 bits reste sans espoir
+(calcul dans `attempts.ts`) —, puis 429 (`attempts.ts`, sur `globalThis`) ; `passage-received`,
 `passage-refused`, `passage-blocked` dans `auth.log`. La session d'origine est gardée chiffrée
 (`encryptSecret`) dans la ligne le temps du passage ; la table est hors des sauvegardes
 (`DISPOSABLE_TABLES`). La destination est **toujours** celle du réglage (`passageTarget`, nom d'hôte
