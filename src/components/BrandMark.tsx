@@ -7,11 +7,16 @@ import { useId } from "react";
  *
  * Le même dessin que `tools/brand/icon.svg` (sans le triangle, trop fin à ces tailles), cadré sur
  * le glyphe pour qu'une `size` donnée soit la taille visible, comme celle d'une icône lucide. Les
- * couleurs sont celles du logo, écrites ici et non prises aux jetons : c'est une image, pas un état.
+ * couleurs sont celles du logo (23/10/2026) : L blanc cassé `#f5f5f4`, faisceau or `#fbbf24` qui
+ * s'estompe vers la droite — écrites ici et non prises aux jetons : c'est une image, pas un état.
  *
- * Les identifiants des dégradés passent par `useId` : deux logos dans la même page (le rail et la
- * barre du téléphone se croisent en paysage) se seraient sinon partagé le premier `id` rencontré,
- * et un `display: none` sur celui-là effaçait les couleurs de l'autre.
+ * Il ne se pose que sur le noir de l'app (rail, barres, en-têtes, tous `bg-ink` ou verre sombre) :
+ * sur un fond clair, le L blanc cassé disparaîtrait et il ne resterait que le faisceau. Aucun emploi
+ * sur fond clair aujourd'hui ; un fond clair demanderait le logo complet, avec son carré.
+ *
+ * L'identifiant du dégradé passe par `useId` : deux logos dans la même page (le rail et la barre du
+ * téléphone se croisent en paysage) se seraient sinon partagé le premier `id` rencontré, et un
+ * `display: none` sur celui-là effaçait les couleurs de l'autre.
  */
 export function BrandMark({
   size = 20,
@@ -24,7 +29,6 @@ export function BrandMark({
   title?: string;
 }) {
   const id = useId().replace(/:/g, "");
-  const bar = `brand-bar-${id}`;
   const beam = `brand-beam-${id}`;
   return (
     <svg
@@ -37,17 +41,13 @@ export function BrandMark({
       {...(title ? { role: "img", "aria-label": title } : { "aria-hidden": true, focusable: false })}
     >
       <defs>
-        <linearGradient id={bar} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#7c5cff" />
-          <stop offset="100%" stopColor="#38bdf8" />
-        </linearGradient>
         <linearGradient id={beam} x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#7c5cff" stopOpacity="0.95" />
-          <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.25" />
+          <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.85" />
+          <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.18" />
         </linearGradient>
       </defs>
       <polygon points="168,290 408,222 408,402 168,346" fill={`url(#${beam})`} />
-      <rect x="136" y="104" width="60" height="242" rx="18" fill={`url(#${bar})`} />
+      <rect x="136" y="104" width="60" height="242" rx="18" fill="#f5f5f4" />
     </svg>
   );
 }

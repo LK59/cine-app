@@ -4,14 +4,12 @@
        Le dessin (x 136–408, y 104–402, centre 272,253) est recentré et réduit à 0.86 : son point le
        plus éloigné du centre est alors à ~173 px, sous le rayon de la zone sûre. -->
   <defs>
-    <linearGradient id="gc" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7c5cff"/><stop offset="100%" stop-color="#38bdf8"/></linearGradient>
-    <linearGradient id="gcb" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#7c5cff" stop-opacity="0.95"/><stop offset="100%" stop-color="#38bdf8" stop-opacity="0.25"/></linearGradient>
+    <linearGradient id="beam" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#fbbf24" stop-opacity="0.85"/><stop offset="100%" stop-color="#fbbf24" stop-opacity="0.18"/></linearGradient>
   </defs>
-  <rect width="512" height="512" fill="#020617"/>
-  <rect width="512" height="512" fill="url(#gc)" fill-opacity="0.16"/>
+  <rect width="512" height="512" fill="#0a0a0c"/>
   <g transform="translate(256 256) scale(0.86) translate(-272 -253)">
-    <polygon points="168,290 408,222 408,402 168,346" fill="url(#gcb)"/>
-    <rect x="136" y="104" width="60" height="242" rx="18" fill="url(#gc)"/>
-    <path d="M318 282 L318 342 L366 312 Z" fill="#ffffff"/>
+    <polygon points="168,290 408,222 408,402 168,346" fill="url(#beam)"/>
+    <rect x="136" y="104" width="60" height="242" rx="18" fill="#f5f5f4"/>
+    <path d="M318 282 L318 342 L366 312 Z" fill="#0a0a0c"/>
   </g>
 </svg>

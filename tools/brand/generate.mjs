@@ -23,7 +23,7 @@ async function icon(out, source, size, { opaque = false } = {}) {
   let img = render(svg(source), size);
   // iOS attend un apple-touch-icon sans transparence : il arrondit les coins lui-même, et un coin
   // transparent devient noir chez lui.
-  if (opaque) img = img.flatten({ background: "#020617" }).removeAlpha();
+  if (opaque) img = img.flatten({ background: "#0a0a0c" }).removeAlpha();
   await img.png(PNG).toFile(join(PUBLIC, out));
   console.log(out, `${size}x${size}`);
 }
