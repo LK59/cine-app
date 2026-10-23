@@ -141,6 +141,7 @@ import { useNativeSessionRecord } from "@/components/playerNative/useNativeSessi
 import { useNativeSlowLink } from "@/components/playerNative/useNativeSlowLink";
 import { useNativeSubtitleLanes } from "@/components/playerNative/useNativeSubtitleLanes";
 import { useNativeSubtitleGeneration } from "@/components/playerNative/useNativeSubtitleGeneration";
+import { useNativeRecovery } from "@/components/playerNative/useNativeRecovery";
 import {
   CenterWord,
   NativeErrorScreen,
@@ -2431,75 +2432,20 @@ export function ExperimentalPlayerHost({
   // de lui, de `lifecycle` et de `fallToStable` — stables tous trois.
   }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, chooseSecond, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter, runner, zoneHandover, handZone]);
 
-  // Watches for the platform having taken the source away while the page was not on screen. The
-  // check runs on returning to the foreground, and once more a moment later: on iOS the closure
-  // is not always visible in the same task as the visibility change.
-  useEffect(() => {
-    if (path !== "remux") return;
-    const check = () => {
-      const playback = remuxRef.current;
-      if (!playback?.lost) return;
-      // Un retour qui laisse la lecture en pause (`holdPausedOnReturn`) : la reconstruction aussi,
-      // au même endroit un peu en arrière. Un film fini aussi : reconstruit en lecture, il rejouait
-      // tout seul ses deux dernières secondes et annonçait sa fin une seconde fois (24/09/2026).
-      // Les deux règles, et le budget, sont dans `lifecycle.backgroundLost`.
-      const at = lifecycle.backgroundLost(
-        { position: playback.position || positionRef.current, hold: background.currentHold() },
-        Date.now()
-      );
-      if (at === null) return;
-      // Écrit au journal, et plus seulement dans la trace : une reconstruction au retour se lisait
-      // comme une ouverture de plus, et combien de retours d'arrière-plan en coûtent une restait
-      // une question sans réponse (23/09/2026).
-      tally.backgroundRebuilt();
-      reportPlayback("rebuild", {
-        ...describeFileRef.current(),
-        path: "remux",
-        reason: "source fermée en arrière-plan",
-        at,
-        hiddenMs: tally.lastBackgroundMs,
-      });
-      restart(at, "la plateforme a fermé la source");
-    };
-    const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
-      check();
-      setTimeout(check, 400);
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [path, restart, lifecycle, background, tally]);
-
-  // Watched only while something is waiting on it: an idle player has no use for the news.
-  useEffect(() => {
-    if (!networkLost) return;
-    const update = () => setOnline(navigator.onLine !== false);
-    update();
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    return () => {
-      window.removeEventListener("online", update);
-      window.removeEventListener("offline", update);
-    };
-  }, [networkLost]);
-
-  // Back on its own, so the viewer does not have to notice before the film can.
-  //
-  // Espacé à chaque échec : « en ligne » dit que le téléphone a du réseau, pas que le serveur
-  // répond. Pendant un redéploiement — plusieurs par jour — le lecteur relançait toutes les
-  // 0,8 s, sans fin, une reconstruction vouée à échouer (relu le 22/09/2026). 0,8 s, puis 1,6,
-  // 3,2… jusqu'à 30 s ; le compte repart à zéro dès qu'une image est revenue.
-  useEffect(() => {
-    if (!networkLost || !online || lifecycle.isOver()) return;
-    const at = networkLost.at;
-    const delay = lifecycle.networkRetryDelay();
-    const id = setTimeout(() => {
-      if (!lifecycle.mayRebuild()) return;
-      lifecycle.noteNetworkRetry();
-      retryAfterNetwork(at, "le réseau est revenu");
-    }, delay);
-    return () => clearTimeout(id);
-  }, [networkLost, online, retryAfterNetwork, lifecycle]);
+  useNativeRecovery({
+    path,
+    restart,
+    lifecycle,
+    background,
+    tally,
+    networkLost,
+    online,
+    setOnline,
+    retryAfterNetwork,
+    remuxRef,
+    positionRef,
+    describeFileRef,
+  });
 
   /**
    * A notice withdraws itself.
