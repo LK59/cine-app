@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { NextRequest } from "next/server";
 
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
@@ -111,5 +111,47 @@ describe("POST /api/startup-timing", () => {
   it("n'écrit pas de champ `routes` quand rien n'y est lisible", async () => {
     await post({ cacheUsed: false, routes: { resume: { startMs: -1 } } });
     expect(mockLog.mock.calls.at(-1)![0]).not.toHaveProperty("routes");
+  });
+});
+
+/**
+ * L'adresse par laquelle l'application a été ouverte (23/10/2026, DECISIONS.md §119) : lue dans la
+ * requête par le serveur, jamais dans le corps ; `X-Forwarded-Host` seulement d'un relais de confiance.
+ */
+describe("POST /api/startup-timing — l'adresse ouverte", () => {
+  const withHeaders = async (headers: Record<string, string>, body: unknown = { cacheUsed: false }) => {
+    const { POST } = await import("@/app/api/startup-timing/route");
+    const req = fakeReq(body);
+    (req as unknown as { headers: Headers }).headers = new Headers(headers);
+    await POST(req);
+    return mockLog.mock.calls.at(-1)![0] as Record<string, unknown>;
+  };
+  // Un compte neuf par test : la limite d'ouvertures par compte (`startupTimingAllowed`) ne s'en mêle pas.
+  let n = 0;
+  beforeEach(() => {
+    n += 1;
+    mockVerifySessionFull.mockResolvedValue({ u: `adresse-${n}`, jfUser: `Adresse${n}`, role: "user" });
+  });
+  afterEach(() => {
+    delete process.env.CINE_PEER_HEADER;
+  });
+
+  it("écrit le nom d'hôte de la requête, sans port, et ignore celui du corps", async () => {
+    const line = await withHeaders({ host: "App.Example.org:443" }, { cacheUsed: false, host: "menteur.example" });
+    expect(line.host).toBe("app.example.org");
+  });
+
+  it("croit le relais de confiance, pas un client direct", async () => {
+    process.env.CINE_PEER_HEADER = "1";
+    // Le relais du réseau Docker (sans `TRUSTED_PROXIES` : une connexion privée).
+    expect((await withHeaders({ "x-cine-peer": "172.20.0.9", host: "cine-app:3000", "x-forwarded-host": "app.example.org" })).host).toBe("app.example.org");
+    // Un client joint directement écrit ce qu'il veut dans `X-Forwarded-Host` : on garde `Host`.
+    expect((await withHeaders({ "x-cine-peer": "203.0.113.7", host: "old.example.org", "x-forwarded-host": "app.example.org" })).host).toBe("old.example.org");
+  });
+
+  it("n'écrit rien d'un hôte qui n'est pas un nom", async () => {
+    for (const host of ["bad_host.example", "[::1]:3000", `${"a".repeat(300)}.example`]) {
+      expect(await withHeaders({ host })).not.toHaveProperty("host");
+    }
   });
 });

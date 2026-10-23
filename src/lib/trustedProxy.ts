@@ -154,6 +154,23 @@ export function clientAddressOf(headers: { get(name: string): string | null }, r
   return chain[0] ? normalizeAddress(chain[0]) : peer;
 }
 
+/**
+ * Les en-têtes `X-Forwarded-*` de cette requête viennent-ils d'un relais qu'on croit ? La règle de
+ * `clientAddressOf`, pour qui lit un autre de ces en-têtes (`X-Forwarded-Host`, `requestHost`) : un
+ * relais déclaré dans `TRUSTED_PROXIES` ; sans lui (ou son nom pas encore résolu), une connexion
+ * locale ou privée ; sous `next dev` (sans le démarrage), l'ancienne règle — cru.
+ */
+export function forwardedFromTrustedPeer(headers: { get(name: string): string | null }, rawProxies?: string): boolean {
+  const raw = rawProxies ?? config.network?.trustedProxies ?? "";
+  const peerRaw = peerHeaderTrusted() ? headers.get("x-cine-peer") : null;
+  if (!peerRaw) return true;
+  const peer = normalizeAddress(peerRaw);
+  // Lu avant `namesPending` : c'est cet appel qui lance la résolution des noms.
+  const trusted = raw.trim() ? trustedEntries(raw) : [];
+  if (!raw.trim() || namesPending(raw)) return isPrivateAddress(peer);
+  return trusted.some((entry) => addressMatches(peer, entry));
+}
+
 /** La connexion vient-elle de la machine elle-même (le préchauffage des affiches) ? `null` : on ne sait pas. */
 export function fromLoopback(headers: { get(name: string): string | null }): boolean | null {
   const peer = peerHeaderTrusted() ? headers.get("x-cine-peer") : null;

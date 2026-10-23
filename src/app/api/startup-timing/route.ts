@@ -4,6 +4,7 @@ import { verifySessionFull } from "@/lib/session";
 import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { logStartupTiming } from "@/lib/eventLogs";
 import { startupTimingAllowed } from "@/lib/writeLimits";
+import { requestHost } from "@/lib/publicOrigin";
 
 /**
  * Ce que l'ouverture du cinéma a coûté, cache de l'appareil ou réseau — voir `persistentCache.ts`.
@@ -93,6 +94,8 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: "Corps invalide" }, { status: 400 });
   const routes = routesOf(body.routes);
+  // L'adresse ouverte, d'après la requête et non le corps (§119) : un `host` du corps est ignoré.
+  const host = requestHost(req.headers);
   logStartupTiming({
     user: session.jfUser ?? session.u,
     device: requestDeviceLabel(req),
@@ -109,6 +112,7 @@ export async function POST(req: NextRequest) {
     // envoyées (`beforeHidden`, persistentCache.ts), et ceci dit pourquoi elles manquent.
     ...(ms(body.hiddenAtMs) !== null ? { hiddenAtMs: ms(body.hiddenAtMs) as number } : {}),
     standalone: body.standalone === true,
+    ...(host ? { host } : {}),
     ...(routes ? { routes } : {}),
     ...continueOf(body),
     ...storageOf(body.storage),

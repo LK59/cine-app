@@ -45,6 +45,12 @@ export function logStartupTiming(fields: {
   resumeMoved?: number;
   resumeProgressed?: number;
   standalone: boolean;
+  /**
+   * Le nom d'hôte par lequel l'application a été ouverte (23/10/2026, DECISIONS.md §119), lu par le
+   * serveur (`requestHost`), jamais envoyé par le navigateur : l'ancienne ou la nouvelle adresse.
+   * Absent des lignes d'avant, et d'une requête dont l'hôte n'est pas un nom valide.
+   */
+  host?: string;
   /** Le stockage de l'appareil — voir `storageFacts` (persistentCache.ts). */
   persist?: string;
   persisted?: boolean;
