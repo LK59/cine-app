@@ -26,6 +26,7 @@ import type { RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 import { syncFacts } from "@/components/player/nativeHostHelpers";
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
+import { recordsResume } from "@/components/player/session/habitWatch";
 import { timelinePosition, useSessionTimeline } from "@/components/player/session/useSessionTimeline";
 
 /**
@@ -168,7 +169,7 @@ export function useNativeSessionRecord({
         const remux = remuxRef.current;
         const file = remux?.reserveContext?.()?.file;
         // Ni pour une scène (§91) : ces octets servent une reprise qu'elle n'a pas posée.
-        if (kept && !stopFactsRef.current.ended && !bench && !isSceneRef.current()) {
+        if (kept && !stopFactsRef.current.ended && recordsResume(bench, isSceneRef.current)) {
           void keepOnStop(kept, remux?.heldBytes?.() ?? null, file ? { file, seconds: positionRef.current } : null);
         }
       } catch {

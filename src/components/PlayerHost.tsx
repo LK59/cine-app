@@ -96,6 +96,7 @@ import { CastResume } from "@/lib/castResume";
 import { SessionTally, WatchedClock, newPlayerSessionId, watchElementWaits } from "@/lib/playerSessionTally";
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
 import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
+import { recordsResume } from "@/components/player/session/habitWatch";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 import { touchHintHeaders } from "@/lib/deviceLabel";
@@ -1074,7 +1075,7 @@ function ActivePlayer({
       const closeOrphan = (data: { playSessionId?: string; mediaSourceId?: string } | null) => {
         // Un banc n'annonce rien : il n'y a rien à refermer.
         // Une scène (§91) non plus : cet arrêt écrirait sa position comme reprise.
-        if (bench || isSceneRef.current() || !data?.playSessionId || !data?.mediaSourceId) return;
+        if (!recordsResume(bench, isSceneRef.current) || !data?.playSessionId || !data?.mediaSourceId) return;
         void stopOrphanSession(
           { itemId, playSessionId: data.playSessionId, mediaSourceId: data.mediaSourceId },
           opts?.resumeAt ?? lastKnownTime.current
@@ -1840,7 +1841,7 @@ function ActivePlayer({
         // Un rechargement direct d'avant toute image est une ouverture qui a changé de lecteur : même recul.
         const opening = !fromReload || session.reloadCarry?.direct?.opening === true;
         // Ni pour une scène (§91) : elle part déjà cinq secondes avant la réplique.
-        const at = !mine && opening && !bench && !isSceneRef.current() ? openingPosition(itemId, resumeAt, null) : resumeAt;
+        const at = !mine && opening && recordsResume(bench, isSceneRef.current) ? openingPosition(itemId, resumeAt, null) : resumeAt;
         // Pourquoi cette première négociation : une page rechargée (piste WebKit, ou dernier
         // recours de l'échelle audio), le relais du lecteur natif — la séance qu'il passe, pas
         // l'épisode suivant que ce lecteur enchaîne ensuite —, ou une ouverture.

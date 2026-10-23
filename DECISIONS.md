@@ -930,7 +930,9 @@ quitter, et le lecteur ouvert une heure plus tard reculait vers une image clé a
 « mixte », relevée au journal le 28/09/2026.
 
 **Porteur.** `openingPosition(itemId, position, durée)` (`src/lib/resumeRewind.ts`), sur `awayFrom`
-et `rewound` ; `openingSpan(position, durée)` pour ce qu'on garde d'avance, sur `rewound`.
+et `rewound` ; `openingSpan(position, durée)` pour ce qu'on garde d'avance, sur `rewound`. La lecture
+notée (`noteWatching`) et le recul après une longue pause, pour les deux lecteurs : `habitWatch`
+(`src/components/player/session/habitWatch.ts`, depuis le 23/10/2026, §115).
 
 **Appelants.** `ExperimentalPlayerHost` (la position d'ouverture), le lecteur serveur
 (`ActivePlayer` dans `PlayerHost.tsx`, depuis le 27/09/2026 : il ouvrait pile à la position, et
@@ -6343,6 +6345,23 @@ le relais dans la page pour `handOver`. `window.location.reload()` aux deux site
 `reloadPage()` au relais — l'empreinte simule le second, pas le premier. Pas de coupure au relais : la
 page du natif n'a pas d'élément HLS. **Laissé.** Si la coupure lève après l'écriture, l'intention reste
 écrite (rouverte au prochain rechargement) — comme avant, invisible en pratique.
+
+### Les habitudes de lecture (§28) et « ni banc ni scène »
+
+**Règle.** La lecture notée (`noteWatching`) toutes les quinze secondes en lecture et à chaque pause
+qui compte ; à la reprise après une longue pause, le recul de `pauseRewindTarget` — ni sur un film fini,
+ni pendant un saut, ni pendant un banc. Rien de noté pendant un banc ni une scène (§91) : « ni banc ni
+scène » est `recordsResume(bench, isScene)`, la scène demandée seulement hors banc. **Porteurs.**
+`habitWatch`, `recordsResume` (`src/components/player/session/habitWatch.ts`). **Appelants.**
+`startRemux` (natif, un par pipeline) et `useServerPositionWatch` (serveur, un par `videoKey`) ;
+`recordsResume` aussi pour la position gardée d'une coupure, les octets de reprise oubliés à la fin,
+`keepOnStop`, la préparation de reprise du natif, l'annonce à Jellyfin et le recul d'ouverture du serveur.
+**Tests.** `player-regles-communes.test.ts`, `resumeRewind`, les empreintes (`storage local set
+cine:watching…`, `media … currentTime=` du recul) ; `decisions-partagees`. **Différent exprès.** Une
+pause sans image ne compte pas au serveur (`pauseCounts`, a3733215) ; « fini » est `lifecycle.isEnded()`
+au natif, `element.ended` au serveur ; le natif trace le recul (`onRewind`). **Laissé.** Le natif
+n'appelle toujours pas `tally.retries.notePosition` (§67 : « trois secondes jouées effacent les
+échecs », pour les deux lecteurs) — décision à part (audit F1-6).
 
 ### La chronologie de deux minutes
 

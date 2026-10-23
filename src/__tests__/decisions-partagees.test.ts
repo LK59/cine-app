@@ -1531,6 +1531,15 @@ describe("les doublons du lecteur fusionnés : une règle, un endroit (§115)", 
     expect(/reloadServerPage\(/.test(codeDe(SERVEUR))).toBe(true);
   });
 
+  it("les habitudes de lecture se notent dans habitWatch seulement (§28)", () => {
+    const MODULE = "src/components/player/session/habitWatch.ts";
+    expect(lecteurQui(/pauseRewindTarget\(/)).toEqual([MODULE]);
+    expect(lecteurQui(/notedAt\s*=/)).toEqual([MODULE]);
+    // « Ni banc ni scène » : nommé `recordsResume`, plus écrit à la main.
+    expect(lecteurQui(/!(session\.)?bench && !isSceneRef\.current\(\)|bench \|\| isSceneRef\.current\(\)/)).toEqual([]);
+    for (const hote of HOTES) expect([hote, /habitWatch\(/.test(codeDe(hote))]).toEqual([hote, true]);
+  });
+
   it("la chronologie de deux minutes s'installe dans useSessionTimeline seulement", () => {
     const MODULE = "src/components/player/session/useSessionTimeline.ts";
     expect(lecteurQui(/new PlaybackTimeline\(/)).toEqual([MODULE]);

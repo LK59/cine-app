@@ -11,6 +11,13 @@ import { timelinePosition, useSessionTimeline } from "@/components/player/sessio
 import { TIMELINE_EVERY_MS, clearTimelines, timelineFields } from "@/lib/playbackTimeline";
 import { audioReloadIntent, ladderReloadIntent, reloadServerPage } from "@/components/player/server/serverElement";
 import { PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
+import { habitWatch, recordsResume } from "@/components/player/session/habitWatch";
+import { noteWatching } from "@/lib/resumeRewind";
+
+vi.mock("@/lib/resumeRewind", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/resumeRewind")>()),
+  noteWatching: vi.fn(),
+}));
 
 afterEach(() => {
   vi.useRealTimers();
@@ -131,6 +138,69 @@ describe("intentions de rechargement du lecteur serveur (§115)", () => {
     const { video } = element(true);
     expect(reloadServerPage(() => audioReloadIntent({ itemId: "f", title: "F", audioStreamIndex: 1, resumeAt: 0, carry }), video)).toBe(false);
     expect(sessionStorage.getItem(PLAYER_RELOAD_INTENT_KEY)).not.toBeNull();
+  });
+});
+
+describe("habitWatch (§115, habitudes de lecture — §28)", () => {
+  const LONG_PAUSE_MS = 60 * 60_000;
+  const el = (over: Partial<HTMLVideoElement> = {}) =>
+    ({ paused: false, seeking: false, ended: false, currentTime: 600, duration: 3600, readyState: 4, ...over }) as HTMLVideoElement;
+
+  it("recordsResume : ni banc ni scène, la scène demandée seulement hors banc", () => {
+    const isScene = vi.fn(() => false);
+    expect(recordsResume(undefined, isScene)).toBe(true);
+    expect(recordsResume("banc", isScene)).toBe(false);
+    expect(isScene).toHaveBeenCalledTimes(1);
+    expect(recordsResume(undefined, () => true)).toBe(false);
+  });
+
+  it("note la lecture toutes les quinze secondes au plus, rien en pause ni pendant une scène", () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    const noted = vi.mocked(noteWatching);
+    noted.mockClear();
+    let scene = false;
+    const h = habitWatch({ itemId: "f", bench: undefined, isScene: () => scene, pauseCounts: () => true, isEnded: () => false });
+    h.time(el());
+    h.time(el());
+    expect(noted).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(1_016_000);
+    h.time(el({ paused: true }));
+    expect(noted).toHaveBeenCalledTimes(1);
+    scene = true;
+    h.time(el());
+    expect(noted).toHaveBeenCalledTimes(1);
+    scene = false;
+    h.time(el());
+    expect(noted).toHaveBeenCalledTimes(2);
+  });
+
+  it("recule après une longue pause comptée, et le dit ; une pause qui ne compte pas ne recule pas", () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    const onRewind = vi.fn();
+    const h = habitWatch({ itemId: "f", bench: undefined, isScene: () => false, pauseCounts: (e) => e.readyState >= 2, isEnded: (e) => e.ended, onRewind });
+    const video = el();
+    h.pause(video);
+    vi.setSystemTime(1_000_000 + LONG_PAUSE_MS);
+    h.play(video);
+    expect(video.currentTime).toBeLessThan(600);
+    expect(onRewind).toHaveBeenCalledWith(video.currentTime, 1_000_000);
+    const empty = el({ readyState: 0 });
+    h.pause(empty);
+    vi.setSystemTime(1_000_000 + 2 * LONG_PAUSE_MS);
+    h.play(empty);
+    expect(empty.currentTime).toBe(600);
+  });
+
+  it("ne recule ni un film fini, ni pendant un banc", () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    for (const options of [{ bench: undefined, ended: true }, { bench: "banc", ended: false }]) {
+      const h = habitWatch({ itemId: "f", bench: options.bench, isScene: () => false, pauseCounts: () => true, isEnded: () => options.ended });
+      const video = el();
+      h.pause(video);
+      vi.setSystemTime(Date.now() + LONG_PAUSE_MS);
+      h.play(video);
+      expect(video.currentTime).toBe(600);
+    }
   });
 });
 

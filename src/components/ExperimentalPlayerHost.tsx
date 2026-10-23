@@ -69,7 +69,8 @@ import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
 import { useFrameFit } from "@/lib/frameFit";
 import { readDialogueMode, writeDialogueMode } from "@/lib/dialoguePreference";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
-import { noteWatching, openingPosition, pauseRewindTarget } from "@/lib/resumeRewind";
+import { openingPosition } from "@/lib/resumeRewind";
+import { habitWatch, recordsResume } from "@/components/player/session/habitWatch";
 import { describeRemuxPlayback } from "@/lib/playbackPanel";
 import type { PlayerTrack } from "@/lib/webcodecs/playerTrack";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
@@ -966,7 +967,7 @@ export function ExperimentalPlayerHost({
         // La position de la coupure, gardée sur l'appareil : si rien ne repasse avant la fermeture,
         // elle part au retour du réseau ou au lancement suivant (`unsentPosition.ts`, §78).
         // Ni pour une scène (§91) : c'est la position que la séance ne doit pas écrire.
-        if (everReadyRef.current && !session.bench && !isSceneRef.current()) saveUnsentPosition(itemId, positionRef.current);
+        if (everReadyRef.current && recordsResume(session.bench, isSceneRef.current)) saveUnsentPosition(itemId, positionRef.current);
       }
       setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
       setPlaying(false);
@@ -1882,7 +1883,7 @@ export function ExperimentalPlayerHost({
     if (!openingDecidedRef.current) {
       openingDecidedRef.current = true;
       // Ni pour une scène (§91) : elle part déjà cinq secondes avant la réplique.
-      if (lifecycle.rebuildAt === null && !session.bench && !isSceneRef.current()) {
+      if (lifecycle.rebuildAt === null && recordsResume(session.bench, isSceneRef.current)) {
         // La même règle que celle qui choisit, en arrière-plan, quels octets garder pour une reprise
         // instantanée (`src/lib/resumeCache/`) : une seule fonction, pour que les deux ne visent
         // jamais deux positions différentes.
@@ -2011,30 +2012,30 @@ export function ExperimentalPlayerHost({
         reportAudioSwitch(playback.currentAudioTrack, playback.diagnostics["Audio"] ?? "", wantedAudio, Date.now(), playback, "refus");
       }
 
-      let notedAt = 0;
+      // La lecture notée et le recul après une longue pause : `habitWatch`, commun aux deux lecteurs
+      // (§28, §115). Ici, une pause compte toujours (même sans image), et le recul est tracé.
+      const habits = habitWatch({
+        itemId,
+        bench: session.bench,
+        isScene: () => isSceneRef.current(),
+        pauseCounts: () => true,
+        isEnded: () => lifecycle.isEnded(),
+        onRewind: (target, pausedAt) => trace(`reprise après ${Math.round((Date.now() - pausedAt) / 60_000)} min de pause : ${target.toFixed(1)} s`),
+      });
       const onTime = () => {
         positionRef.current = element.currentTime;
         showSubtitleAt(element.currentTime, (at, track) => playback.subtitleAt(at, track), playback.presentationDelay);
         // Retenu toutes les quinze secondes de lecture : ce qui distingue, à la prochaine
         // ouverture, un relais d'une vraie reprise (voir `resumeRewind.ts`).
-        if (!element.paused && !session.bench && !isSceneRef.current() && Date.now() - notedAt > 15_000) {
-          notedAt = Date.now();
-          noteWatching(itemId);
-        }
+        habits.time(element);
         warmNextNear(nextEpisodeIdRef.current, element.currentTime, element.duration, info.creditsStart ?? null);
       };
       // A warning about not being able to reach a position is obsolete the instant pictures are
       // moving again. Leaving it up made a recovered hiccup look like a lasting fault.
-      let pausedAt: number | null = null;
       const onPlay = () => {
         // Après une longue pause, quelques secondes en arrière pour se remettre dans la scène.
         // Pas après la fin — c'est « Revoir », ou un épisode relancé —, ni pendant un saut.
-        const target = !lifecycle.isEnded() && !element.seeking && !session.bench ? pauseRewindTarget(pausedAt, Date.now(), element.currentTime, element.duration) : null;
-        if (target !== null && pausedAt !== null) {
-          trace(`reprise après ${Math.round((Date.now() - pausedAt) / 60_000)} min de pause : ${target.toFixed(1)} s`);
-          element.currentTime = target;
-        }
-        pausedAt = null;
+        habits.play(element);
         background.notePlaying();
         setPlaying(true);
         setEnded(false);
@@ -2048,8 +2049,7 @@ export function ExperimentalPlayerHost({
         endWait(diagWaitEnded());
         // Un saut posé en pause a son image : il n'attend plus rien (§78).
         if (element.paused && !element.seeking) runner.seekDone();
-        pausedAt = Date.now();
-        if (!session.bench && !isSceneRef.current()) noteWatching(itemId);
+        habits.pause(element);
       };
       /**
        * Les attentes en pleine lecture — voir `SessionTally`. Ni celles d'un saut, qui a sa ligne,
@@ -2145,7 +2145,7 @@ export function ExperimentalPlayerHost({
         // défauts du 28/09). Elle s'arrête avec le pipeline.
         // Ni pour une scène (§91) : finie, elle ne dit rien de la reprise du vrai visionnage, dont
         // les octets gardés restent utiles (relecture du 14/10/2026).
-        if (!session.bench && !isSceneRef.current()) forgetResumeCache(itemId);
+        if (recordsResume(session.bench, isSceneRef.current)) forgetResumeCache(itemId);
       };
       // Le saut demandé est atteint : la position lue redevient la vérité.
       const onSeeked = () => {
