@@ -95,9 +95,9 @@ describe("la page Nouveautés de Laterna", () => {
     db.close();
   });
 
-  it("semée en brouillon seulement, et seulement avec l'adresse (Louis la publie lui-même)", () => {
+  it("semée publiée, et seulement avec l'adresse", () => {
     expect(NEWS_LATERNA_SEED).toBe("news-seed-laterna");
     const src = readFileSync("src/lib/db.ts", "utf8");
-    expect(src).toMatch(/const laterna = laternaNewsPage\(config\.news\?\.laternaAddress\);\s*if \(laterna\) seedNewsPage\(db, laterna\.seed, laterna\.version, laterna\.content, Date\.now\(\), "draft"\);/);
+    expect(src).toMatch(/const laterna = laternaNewsPage\(config\.news\?\.laternaAddress\);\s*if \(laterna\) seedNewsPage\(db, laterna\.seed, laterna\.version, laterna\.content\);/);
   });
 });

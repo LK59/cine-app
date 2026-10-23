@@ -584,7 +584,7 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
   },
   {
     version: "10.0.0",
-    page: "9.1",
+    page: "10.0",
     group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
     items: [
       {
@@ -603,7 +603,7 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
   },
   {
     version: "10.0.0",
-    page: "9.1",
+    page: "10.0",
     group: { fr: "Accueil et fiches", en: "Home and title pages", es: "Inicio y fichas", de: "Startseite und Titelseiten" },
     items: [
       {
@@ -646,7 +646,7 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
   },
   {
     version: "10.0.0",
-    page: "9.1",
+    page: "10.0",
     group: { fr: "Téléphone et tablette", en: "Phone and tablet", es: "Móvil y tableta", de: "Handy und Tablet" },
     items: [
       {
