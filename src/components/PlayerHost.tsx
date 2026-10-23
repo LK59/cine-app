@@ -22,7 +22,7 @@ import { usePlayerFocus } from "@/lib/usePlayerFocus";
 import { useViewportResizing } from "@/lib/useViewportResizing";
 import { pickMaxBitrate } from "@/lib/networkBitrate";
 import { ServerStartup, resourceEntries } from "@/lib/serverStartup";
-import { PlaybackTimeline, TIMELINE_EVERY_MS, bufferedAhead, elementState, registerTimeline } from "@/lib/playbackTimeline";
+import { bufferedAhead } from "@/lib/playbackTimeline";
 import {
   LinkMeter,
   SLOW_LINK_REASON,
@@ -122,6 +122,7 @@ import { SubtitleLayer } from "@/components/player/SubtitleLayer";
 import { dualSubtitleMemory, pickRememberedDual, rememberDual } from "@/lib/dualSubtitles";
 import { useServerDualSubtitles } from "@/lib/useServerDualSubtitles";
 import { ServerPlayerIntro } from "@/components/player/server/ServerPlayerIntro";
+import { useServerTimeline } from "@/components/player/server/useServerTimeline";
 import {
   CastAudioWarning,
   CastInterruptedScreen,
@@ -1135,29 +1136,8 @@ function ActivePlayer({
       reportStopRef.current("unmount");
     };
   }, []);
-  /**
-   * La chronologie des deux dernières minutes (§77) : un échantillon toutes les 5 s, en mémoire —
-   * débit d'après ce que hls.js reçoit (rien en HLS natif), tampon devant d'après `buffered`. Jointe
-   * par `reportPlayback` aux lignes de panne et au bilan. Une par séance : l'épisode suivant en
-   * ouvre une autre. Déclarée après l'arrêt au démontage, qui part donc encore avec elle.
-   */
-  useEffect(() => {
-    const timeline = new PlaybackTimeline(() => {
-      const video = videoRef.current;
-      return {
-        pos: video && Number.isFinite(video.currentTime) && video.currentTime > 0 ? video.currentTime : lastKnownTime.current,
-        recvMbps: linkMeterRef.current?.recentMbps(TIMELINE_EVERY_MS) ?? null,
-        aheadS: bufferedAhead(video),
-        reserveMB: null,
-        state: elementState(video),
-      };
-    }).start();
-    const unregister = registerTimeline(logSession.current.id, timeline);
-    return () => {
-      timeline.stop();
-      unregister();
-    };
-  }, [itemId]);
+  // Déclarée après l'arrêt au démontage, qui part donc encore avec elle (`useServerTimeline`).
+  useServerTimeline(itemId, videoRef, lastKnownTime, linkMeterRef, logSession);
 
   // (Re)starts playback, optionally at a specific audio track / resume point.
   // Jellyfin only ever transcodes ONE audio stream into the HLS output (unlike
