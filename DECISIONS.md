@@ -3742,7 +3742,8 @@ dans le diagnostic « fichier ou appareil » — et la raison se lit telle quell
 
 **Porteurs.** `slowLinkVerdict`, `LinkMeter`, `readLink` (`src/lib/slowLink.ts`) ; `ServerStartup`
 (`src/lib/serverStartup.ts`) ; `PlaybackTimeline`, `timelineFields` (`src/lib/playbackTimeline.ts`).
-**Appelants.** `ExperimentalPlayerHost` (`giveUpOnOpening`, l'écran, le panneau), `HttpByteSource`
+**Appelants.** `ExperimentalPlayerHost` (`giveUpOnOpening` dans `playerNative/useNativeSlowLink.ts`,
+l'écran, le panneau), `HttpByteSource`
 (`fetchWithRetries`), `PlayerHost` / `ActivePlayer` (chien de garde, `xhrSetup`, bilan, panneau),
 `reportPlayback`, `playerLog.clean`, `activity/seances.ts`, `playbackDiagnosis` (`diag.link*`).
 **Tests.** `slowLink.test.ts`, `ExperimentalPlayerHost.test.tsx` (« le lien, mesuré » : connexion
@@ -4337,8 +4338,8 @@ journal par heure de film.
 (`useMaintenance.ts`) ; `MemoryReserve` (`reservePlanFacts`, `ReserveRun`) et `diagReserve` /
 `diagSessionFacts({ exact })` (`playbackDiagnosis.ts`) ; `touchUnsentStop` (`unsentStop.ts`).
 
-**Appelants.** `ExperimentalPlayerHost` (ligne `start`, bilan de secours, `reportNow` aux changements de
-piste), `PlayerHost` (`reportNow` aux changements de piste), `ChromecastPlayer` (le même battement),
+**Appelants.** `ExperimentalPlayerHost` (ligne `start`, bilan de secours — `playerNative/useNativeSessionRecord.ts` —,
+`reportNow` aux changements de piste), `PlayerHost` (`reportNow` aux changements de piste), `ChromecastPlayer` (le même battement),
 `PresencePinger`, `useMaintenance`.
 
 **Tests.** `usePlaybackSession.test.ts` (30 s sans événement, ~120 par heure ; pause, reprise, sauts à la
@@ -4528,8 +4529,8 @@ vues `dual` / `dualPrimary` / `dualSecond` et `pickPrimary` (`PlayerSettingsMenu
 (`menuRows.tsx`), tous deux dans `src/components/playerControls/` ;
 `.subtitle-dual`, `.subtitle-dual-text` (globals.css).
 
-**Appelants.** `ExperimentalPlayerHost` (`chooseSecond`, `showSecondAt`, `generationLane`,
-`applyDualMemory`) ; `PlayerHost` (`changeSecondSubtitle`, ré-application dans `startPlayback`).
+**Appelants.** `ExperimentalPlayerHost` (`chooseSecond`, `showSecondAt`, `generationLane` — dans
+`playerNative/useNativeSubtitleLanes.ts` —, `applyDualMemory`) ; `PlayerHost` (`changeSecondSubtitle`, ré-application dans `startPlayback`).
 
 **Tests.** `PlayerControls-dualSubtitles.test.tsx` (porte, choix, coches, échange, désactiver, décalage
 par l'hôte et sur la piste, génération, liste imposée, note de diffusion), `dualSubtitles.test.tsx`
