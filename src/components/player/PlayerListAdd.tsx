@@ -177,7 +177,7 @@ function AddRow({ result, already }: { result: UnifiedSearchResult; already: boo
         aria-label={done ? t("player.lists.alreadyInList") : t("player.lists.addToWatch")}
         title={done ? t("player.lists.alreadyInList") : t("player.lists.addToWatch")}
         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors ${
-          done ? "text-brand" : "bg-white/10 text-white hover:bg-white/20 active:scale-95"
+          done ? "text-beam-mid" : "bg-white/10 text-white hover:bg-white/20 active:scale-95"
         }`}
       >
         <ToggleGlyph on={done} onIcon={<Check size={17} />} offIcon={<Plus size={18} />} />

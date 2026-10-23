@@ -79,7 +79,7 @@ export function TitleToggleIcon({ face, on, onClick, disabled, unknown }: Toggle
       data-liquid-pan="icon"
       className={unknown === undefined ? "flex w-16 flex-col items-center gap-1.5" : `flex w-16 flex-col items-center gap-1.5 ${unknown ? "opacity-40" : ""}`}
     >
-      <ToggleGlyph on={on} onIcon={<OnIcon size={22} className="text-brand" />} offIcon={<OffIcon size={22} className="text-white" />} />
+      <ToggleGlyph on={on} onIcon={<OnIcon size={22} className="text-beam-mid" />} offIcon={<OffIcon size={22} className="text-white" />} />
       <span className="text-center text-xs leading-tight text-muted">{on ? t(face.onLabel) : t(face.offLabel)}</span>
     </button>
   );
@@ -97,7 +97,7 @@ export function TitleToggleWide({ face, on, onClick, disabled }: Omit<ToggleProp
       aria-pressed={on}
       className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95 disabled:opacity-60"
     >
-      <ToggleGlyph on={on} onIcon={<OnIcon size={16} className="text-brand" />} offIcon={<OffIcon size={16} />} />
+      <ToggleGlyph on={on} onIcon={<OnIcon size={16} className="text-beam-mid" />} offIcon={<OffIcon size={16} />} />
       {on ? t(face.onLabel) : t(face.offLabel)}
     </button>
   );

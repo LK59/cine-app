@@ -9,12 +9,23 @@
   --color-accent-50: rgb(var(--accent-50));
   --color-accent-100: rgb(var(--accent-100));
   /* Le violet du logo — la couleur de marque, gardée hors de l'accent blanc (§83, 13/10/2026).
-     Il ne dit qu'une chose : « c'est à moi » — vu, dans ma liste, où j'en suis, ce qui m'attend
-     (§83, option B). Deux teintes : `brand` pour une coche, une icône ou une barre posée sur le
+     Il disait « c'est à moi » — vu, dans ma liste, où j'en suis, ce qui m'attend (§83, option B) ;
+     depuis le 23/10/2026 ces états portent le faisceau (`beam`, juste en dessous), et `brand` ne
+     reste qu'au clap, aux graphiques et à la gestion. Deux teintes : `brand` pour une coche, une icône ou une barre posée sur le
      noir (7,2:1 sur `ink`, une barre de 3 px s'y lit) ; `brand-strong` pour un fond plein qui porte
      un texte ou une icône blanche — `brand` sous du blanc ne fait que 2,8:1, `brand-strong` 4,9:1. */
   --color-brand: rgb(155 140 255);
   --color-brand-strong: rgb(110 90 230);
+  /* Le faisceau (23/10/2026, nouveau logo) : « c'est à moi » prend le dégradé du logo, violet → bleu,
+     de gauche à droite (`--beam`, `bg-beam`, plus bas) — mais seulement là où il se lit, sur une
+     barre ou un voile. Une icône, un point, une pastille de 16 à 28 px n'ont pas la place d'un
+     dégradé : ils prennent un aplat, et toujours le même, le milieu du dégradé.
+     `beam-mid` (#5a8cfc) pour une icône ou un point sur le noir : 6,2:1 sur `ink`. Sous du blanc il
+     ne fait que 3,2:1 — un fond qui porte un texte ou une icône blanche prend `beam-strong`, le
+     même milieu assombri : 4,8:1 sous le blanc, 4,1:1 sur `ink`. `brand` reste au logo (le clap),
+     aux graphiques et à la gestion, qui ne sont pas des états personnels. */
+  --color-beam-mid: rgb(90 140 252);
+  --color-beam-strong: rgb(66 104 232);
   --color-accent-400: rgb(var(--accent-400));
   --color-accent-500: rgb(var(--accent-500));
   --color-accent-600: rgb(var(--accent-600));
@@ -479,16 +490,28 @@
   @apply bg-accent-500/22 text-white;
 }
 
-/** Un ghost qui dit un état personnel — « dans ma liste », « vu » (§83, option B) : le voile violet
-    de la marque, et non le blanc de `btn-on`, qui reste celui d'une option retenue (onglet, vue). */
+/** Un ghost qui dit un état personnel — « dans ma liste », « vu » (§83, option B) : le voile de
+    la marque, et non le blanc de `btn-on`, qui reste celui d'une option retenue (onglet, vue).
+    Un aplat et non le faisceau (23/10/2026) : c'est une marque d'état, pas un « où j'en suis », et
+    il porte une icône blanche — `beam-strong`, le milieu assombri du dégradé du logo. */
 @utility btn-mine {
-  @apply bg-brand-strong/50 text-white;
+  @apply bg-beam-strong/50 text-white;
 }
 @media (hover: hover) {
   /* Après la règle de survol de `btn-ghost`, qui l'aurait sinon rendu gris sous le pointeur. */
   .btn-mine:hover:not(:disabled) {
-    @apply bg-brand-strong/65 text-white;
+    @apply bg-beam-strong/65 text-white;
   }
+}
+
+/** Le faisceau : le dégradé du logo, violet → bleu, orienté de gauche à droite comme une barre
+    qui avance (23/10/2026). Il ne peint que « où j'en suis » — les barres de reprise
+    (`ProgressFill`), le voile du bouton Reprendre, la partie lue du lecteur. Défini une fois,
+    `--beam` (`:root`, plus bas), jamais recopié dans un composant (`design-tokens.test.ts`). Il
+    couvre l'élément qui le porte : une barre lue à 20 % va déjà du violet au bleu — c'est le
+    faisceau entier qui s'allonge. */
+@utility bg-beam {
+  background-image: var(--beam);
 }
 
 @utility btn-danger {
@@ -644,6 +667,11 @@
     --accent-500: 255 255 255;
     --accent-600: 255 255 255;
     --accent-700: 212 212 212;
+  }
+  /* Le faisceau — les deux couleurs du logo, et le seul dégradé « à moi » (voir `bg-beam`).
+     Violet #7c5cff : 4,6:1 sur `ink` ; bleu #38bdf8 : 9,2:1. */
+  :root {
+    --beam: linear-gradient(to right, rgb(124 92 255), rgb(56 189 248));
   }
 }
 
@@ -1177,9 +1205,9 @@
    lequel WebKit ignore purement et simplement toute hauteur de piste demandée :
    la barre ne s'épaississait donc pas, et sur iOS elle ne le pouvait pas non
    plus faute de survol. La partie lue est maintenant un dégradé piloté par une
-   variable, et la barre réagit au doigt comme au curseur. La partie lue est
-   au violet de la marque — « où j'en suis » est un état personnel (§83,
-   option B) ; pas de pastille depuis le 19/10/2026 (plus bas).
+   variable, et la barre réagit au doigt comme au curseur. La partie lue porte
+   le faisceau du logo (23/10/2026) — « où j'en suis » est un état personnel
+   (§83, option B) ; pas de pastille depuis le 19/10/2026 (plus bas).
 
    Trois couches empilées, qui grandissent ensemble : le rail au repos, ce qui
    est déjà chargé, puis ce qui est lu. */
@@ -1203,13 +1231,14 @@
 .player-seek-rail { box-shadow: 0 1px 3px rgb(0 0 0 / 0.4), 0 0 0 0.5px rgb(0 0 0 / 0.15); }
 .player-seek:focus-visible { outline: 2px solid rgb(255 255 255 / 0.6); outline-offset: 4px; border-radius: 999px; }
 
-/* La partie lue est blanche (le texte de la barre) : un lecteur façon Apple s'efface devant l'image.
-   Violette du 13 au 14/10/2026 (§83, option B), rendue au blanc par Louis — dans le lecteur, la barre
-   est forcément la sienne, il n'y a rien dont la distinguer. */
+/* La partie lue porte le faisceau du logo (23/10/2026, avec le nouveau logo) : `--beam`, étiré sur la
+   seule partie lue — une image de fond large de `--played`, sans répétition —, le rail et le tampon
+   restent blancs translucides en dessous (`.player-seek-rail`, PlayerSeekBar). Violette du 13 au
+   14/10/2026 (§83, option B), puis blanche jusqu'au nouveau logo. */
 .player-seek::-webkit-slider-runnable-track {
   height: 8px;
   border-radius: 999px;
-  background: linear-gradient(to right, currentColor 0 var(--played, 0%), transparent var(--played, 0%) 100%);
+  background: var(--beam) 0 0 / var(--played, 0%) 100% no-repeat;
   transition: height 260ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 /* Épaissie tant que le doigt ou le curseur est sur la barre, et pas une milliseconde de plus.
@@ -1222,7 +1251,7 @@
 .player-seek:focus-visible::-webkit-slider-runnable-track { height: 12px; }
 
 /* Pas de pastille, nulle part (19/10/2026, Louis) : comme l'app TV d'Apple, la tête de lecture est le bout
-   de la partie blanche, qui s'épaissit quand on la saisit — rien de dessiné dessus, au doigt, à la souris
+   de la partie lue, qui s'épaissit quand on la saisit — rien de dessiné dessus, au doigt, à la souris
    ni au clavier (le contour `:focus-visible` de la barre reste pour le clavier). Le pouce natif garde sa
    taille, invisible : c'est encore lui que la souris attrape pour glisser. */
 .player-seek::-webkit-slider-thumb {
@@ -1238,7 +1267,7 @@
 .player-seek::-moz-range-track {
   height: 8px;
   border-radius: 999px;
-  background: linear-gradient(to right, currentColor 0 var(--played, 0%), transparent var(--played, 0%) 100%);
+  background: var(--beam) 0 0 / var(--played, 0%) 100% no-repeat;
   transition: height 260ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 [data-scrub] .player-seek::-moz-range-track { height: 12px; }
