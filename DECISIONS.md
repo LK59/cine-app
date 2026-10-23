@@ -623,6 +623,21 @@ commencée »).
 **Voulu.** Les annonces de téléchargement arrivent groupées (`torrentWatch.ts` : un lot après deux
 minutes de calme, au plus dix minutes) ; les nouveaux épisodes, une fois par série et par passage.
 
+**Les invitations flottantes à les activer (23/10/2026).** Une seule bannière du bas, `PushResumePrompt`
+(`src/components/player/PushResumePrompt.tsx`), pose l'une de deux questions, jamais les deux ensemble :
+la *reprise* (« vous les aviez activées avant de vous déconnecter », `pushOnSignOut`) passe d'abord ;
+sinon l'*application installée* — quand l'application tourne installée (`isInstalledApp`,
+`src/lib/iosInstall.ts` : `display-mode: standalone` ou `navigator.standalone`) et que cet appareil n'a
+aucun abonnement. Un abonnement appartient au contexte qui l'a pris : réglées dans un onglet de Safari,
+les notifications n'abonnaient pas l'application installée ensuite — ni une nouvelle adresse (§118).
+Communes : 3 s après le lancement, jamais pendant l'écran d'accueil (`/api/onboarding` en attente, qui
+a sa propre étape), seulement si le navigateur sait s'abonner (service worker, `PushManager`), jamais
+avec une permission refusée, jamais avec un abonnement actif ; le même `PushToggle`, la même fermeture.
+L'invitation de l'application installée se fait **une fois par appareil** : `cine:push-installed-offered`
+dans `localStorage`, posé à l'affichage (pas à la décision : l'écran d'accueil peut la retenir) ; une
+fermeture ou un refus ne la reposent pas ; un stockage illisible vaut « déjà faite ». Tests :
+`push-installed-prompt.test.tsx`, `InstallPrompt.test.tsx` (emplacement partagé).
+
 ---
 
 ## 18. Le titre d'un film ou d'une série

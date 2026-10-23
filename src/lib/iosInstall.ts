@@ -12,8 +12,19 @@ export function isIosSafariBrowserTab(): boolean {
   const ua = window.navigator.userAgent;
   const isIos = /iPad|iPhone|iPod/.test(ua) || (ua.includes("Macintosh") && "ontouchend" in document);
   if (!isIos) return false;
-  const isStandalone =
+  return !isInstalledApp();
+}
+
+/**
+ * L'application installée (écran d'accueil, application Android, application de bureau), et non un
+ * onglet : `display-mode: standalone`, ou `navigator.standalone` sur les iOS qui ne disent rien au
+ * premier. Le navigateur tient ses abonnements aux notifications par contexte — régler les
+ * notifications dans un onglet de Safari n'abonne pas l'application installée ensuite.
+ */
+export function isInstalledApp(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
     (window.navigator as Navigator & { standalone?: boolean }).standalone === true ||
-    (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches);
-  return !isStandalone;
+    (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches)
+  );
 }

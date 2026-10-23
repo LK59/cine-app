@@ -2362,6 +2362,11 @@
       "body": "You had them on for this device before signing out. Turn them back on?",
       "later": "Later"
     },
+    "pushInstalled": {
+      "title": "Notifications",
+      "body": "The app installed on this device doesn't receive notifications yet. Turn them on?",
+      "later": "Later"
+    },
     "sleep": {
       "title": "Sleep timer",
       "off": "Off",

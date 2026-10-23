@@ -2362,6 +2362,11 @@
       "body": "Vous les aviez activées sur cet appareil avant de vous déconnecter. Les réactiver ?",
       "later": "Plus tard"
     },
+    "pushInstalled": {
+      "title": "Notifications",
+      "body": "L'application installée sur cet appareil ne reçoit pas encore de notifications. Les activer ?",
+      "later": "Plus tard"
+    },
     "sleep": {
       "title": "Minuterie de veille",
       "off": "Désactivée",

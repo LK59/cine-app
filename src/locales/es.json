@@ -2362,6 +2362,11 @@
       "body": "Las tenías activadas en este dispositivo antes de cerrar sesión. ¿Volver a activarlas?",
       "later": "Más tarde"
     },
+    "pushInstalled": {
+      "title": "Notificaciones",
+      "body": "La aplicación instalada en este dispositivo todavía no recibe notificaciones. ¿Desea activarlas?",
+      "later": "Más tarde"
+    },
     "sleep": {
       "title": "Temporizador",
       "off": "Desactivado",
