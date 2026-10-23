@@ -47,13 +47,37 @@ sous-titres allumés puis éteints (menu) → arrière-plan simulé 6 s (`visibi
 Le retour près du début avant la fermeture est voulu : sous le seuil de reprise de Jellyfin, aucune
 position n'est gardée sur le compte de test, et le passage suivant trouve le même état.
 
+### Attendre une condition, pas une durée
+
+Chaque étape attend ce qu'elle peut **constater**, avec un plafond — jamais une durée fixe :
+
+| Étape | Condition attendue |
+|---|---|
+| ouvrir | la page a envoyé sa ligne `ouverture` (requête `/api/startup-timing` partie), puis le bouton de lecture est là, dans la fiche (`data-sheet-morph-root`) |
+| première image | l'horloge de l'élément avance ; l'issue est fixée plus tôt si une ligne `error` de la séance est écrite, ou si le lecteur serveur n'a rien montré 40 s après sa dernière négociation (son propre chien de garde est de 20 s) |
+| sauts | le saut est **parti** (`seeking`, ou la position a bougé de plus de 3 s), puis l'horloge avance ; plafond 60 s |
+| poses entre étapes | le film a joué 2 s (après la première image), 1,5 s (après chaque saut, la piste son, les sous-titres), 1 s (avant de fermer) **de film** — l'horloge de l'élément, pas la montre : ce qui est derrière la tête au saut de −10 s (`buffered`) en dépend |
+| menus | deux lectures de suite donnent les mêmes lignes ; après un choix, le menu est refermé |
+| piste son | la ligne `audio` de la séance (ou `start` du lecteur serveur, un relais, une erreur), puis l'horloge |
+| sous-titres | un fichier à côté du film est demandé au choix même : on attend sa réponse ; une piste du film ne demande rien (1 s pour voir partir une demande) |
+| épisode suivant | la ligne `start` du nouvel épisode, puis l'horloge |
+| fermer | la ligne `stop`, puis 500 ms sans nouvelle ligne de la séance |
+
+Restent fixes les gestes dont la durée est le geste : la pause (3 s, comptées une fois l'élément
+constaté arrêté) et l'arrière-plan (6 s).
+
+Les lignes d'une séance sont celles écrites depuis son début **et** portant l'agent de son
+navigateur (ou aucun agent : une erreur du serveur lui-même). `brut.json` garde, par séance,
+l'heure de chaque étape et de quelques repères (`timings`) : c'est ce qui dit où part le temps.
+
 ### Le compte
 
 Uniquement un compte Jellyfin **standard dédié aux tests**, jamais celui d'une personne réelle ni
 l'administrateur de `.env`. Ses identifiants sont lus dans un fichier (`user=` / `password=`)
 monté en lecture seule dans le conteneur Playwright ; ils ne sont ni affichés ni écrits. Le banc ne
 fait aucune action à effet réel : ni demande, ni signalement, ni réglage (l'écran d'accueil du
-compte est passé par « Passer », qui n'enregistre rien). Les seules écritures vers Jellyfin sont
+compte ne s'affiche pas : le banc pose d'avance dans `sessionStorage` ce qu'y écrit « Passer », qui
+n'enregistre rien côté serveur). Les seules écritures vers Jellyfin sont
 celles de toute lecture (séance, position) — sur ce compte — et la déconnexion à la fin de chaque
 profil rend l'appareil que la connexion avait inscrit.
 
@@ -63,24 +87,47 @@ profil rend l'appareil que la connexion avait inscrit.
 export REGRESS_WORK=/chemin/jetable/regress     # dossier de travail (sources, données, dépendances)
 export REGRESS_CREDS=/chemin/compte-de-test.txt # user=… / password=…
 # REGRESS_ENV (défaut .env du dépôt), REGRESS_DB (défaut data/cine.db), REGRESS_MEDIA, REGRESS_PORT
-# (3098), REGRESS_NETWORK (media_net), REGRESS_PROFILES, REGRESS_ONLY (clés de titres, virgules)
+# (3098), REGRESS_NETWORK (media_net), REGRESS_PROFILES, REGRESS_ONLY (clés de titres, virgules),
+# REGRESS_MODE=rapide (voir plus bas)
 
 tools/regress-lecteur/regress.sh run <ref A> $REGRESS_WORK/res-A
 tools/regress-lecteur/regress.sh run <ref B> $REGRESS_WORK/res-B
 tools/regress-lecteur/regress.sh compare $REGRESS_WORK/res-A $REGRESS_WORK/res-B   # sortie 1 si écart
 ```
 
-Pour itérer : `build`, `start`, `play <ref> <dossier>`, `stop`, `clean` séparément. Un passage
-complet dure environ une heure (36 séances, profils l'un après l'autre : les lignes d'une séance
-sont découpées dans le journal par position, deux navigateurs en même temps les mêleraient).
+Pour itérer : `build`, `start`, `play <ref> <dossier>`, `stop`, `clean` séparément. Donner un
+commit plutôt qu'une branche : le dossier de données et le conteneur sont nommés d'après le commit
+que la référence désigne **au moment de l'appel**, et une branche qui avance entre `start` et
+`play` fait lire à `play` un journal vide.
+
+Un passage complet dure **environ 35 minutes** (36 séances, profils l'un après l'autre, construction
+de l'image en cache et démarrage compris ; une heure et sept minutes avant le 23/10/2026).
+
+### Mode rapide
+
+`REGRESS_MODE=rapide` joue **Chromium et l'iPhone émulé** sur **quatre titres** — The Kissing Booth,
+Arthur et les Minimoys, Aftersun, The Knick —, 8 séances, **6 minutes** construction comprise. Il
+couvre : les deux interfaces (bureau à la souris, téléphone au toucher), les deux lecteurs (remux et
+lecteur serveur : Arthur, HEVC, part au lecteur serveur dans Chromium et au remux sur l'iPhone ; The
+Knick, DTS, l'inverse), le changement de piste par reconstruction et par renégociation, les
+sous-titres d'un fichier à côté (Aftersun) et d'une piste du film, l'épisode suivant. Il ne couvre
+pas : Firefox (le remux de tout, TrueHD compris), le WebKit bureau, la 4K Dolby Vision, les refus
+nommés (MP2, DTS seul).
+
+C'est l'outil d'un changement d'**interface** seul (commandes, menus, fiches). Pour toute retouche du
+lecteur, de la source MediaSource ou des relais : le passage complet. `REGRESS_PROFILES` /
+`REGRESS_ONLY`, s'ils sont posés, l'emportent sur ses choix. Un passage rapide se compare à un
+passage complet : chaque passage écrit `plan.json` (ce qu'il devait jouer), et la comparaison ne
+compte pas ce qu'un côté n'avait pas prévu (`·`).
 
 Le dossier de travail garde les dépendances de Playwright (`pw/`, écrites par root dans le
 conteneur) d'un passage à l'autre ; pour les retirer :
 `docker run --rm -v "$REGRESS_WORK:/w" alpine:3.22 rm -rf /w/pw`.
 
-Chaque dossier de résultats contient `brut.json` (lignes telles qu'écrites, issues des étapes),
-`normalise.json` (ce qui est comparé), `couverture.txt` (ce que chaque moteur a réellement
-exercé) et, en cas d'échec d'une étape, une capture d'écran.
+Chaque dossier de résultats contient `brut.json` (lignes telles qu'écrites, issues et heures des
+étapes), `normalise.json` (ce qui est comparé), `couverture.txt` (ce que chaque moteur a réellement
+exercé), `plan.json` (les couples profil × titre prévus) et, en cas d'échec d'une étape, une
+capture d'écran.
 
 ## Ce qui est comparé
 
@@ -93,33 +140,65 @@ erreurs) et les attentes par paliers (0 / 1-2 / 3-5 / 6+) ; côté navigateur, l
 étape et la nature de la source de l'élément (`blob` = MediaSource, `hls`, `url`).
 
 Écarté : horodatages, séances, build, version, agent, toutes les durées, débits, réserve, `diag.*`,
-`timeline`, la trace (`steps`), les positions exactes. Les lignes d'une séance sont rangées par
+`timeline`, la trace (`steps`), les positions exactes, et, d'une marche de l'échelle du lecteur
+serveur (`trigger`), le témoin qui l'a vue le premier (« élément : code 3 » ou « hls.js : média » :
+une course, tranchée tantôt d'un côté tantôt de l'autre par le même commit) — ce qu'elle fait
+(« → image en H.264 ») reste comparé. Les lignes d'une séance sont rangées par
 genre puis par ordre d'écriture : le moment où `opening` part par rapport aux premiers sauts dépend
 de la charge de la machine, pas du code.
 
 ## Bruit mesuré
 
-Deux passages du même commit (9.3.12, 22-23/10/2026), 9 titres × 4 profils = 36 séances, environ
-64 minutes chacun (construction de l'image en cache comprise) :
+Deux passages du même commit avec le parcours actuel (23/10/2026), 9 titres × 4 profils = 36
+séances, 2 097 s et 1 816 s (construction et démarrage compris), sur une machine où tournaient par
+moments les tests d'un autre chantier (charge moyenne 10 pour 12 cœurs) :
+**36 identiques sur 36**, instables connus compris.
 
-- **33 identiques** une fois mis à part ce qui dépend de la charge de la machine (`volatil`, ci-dessus).
-  Avant cette mise à part, les écarts étaient tous de cette nature : le nombre de sauts que hls.js
-  compte au lecteur serveur pour un même geste (5 ou 6, 9 ou 11), les attentes (palier 1-2 contre
-  3-5), une ligne `stall` de plus ou de moins, une reprise (`recoveries`) 0 ou 1.
-- **2 instables connus**, marqués `"instable": ["webkit"]` dans `titres.json` : les deux 4K Dolby
-  Vision les plus lourdes dans WebKit **bureau**. Le décodage HEVC 4K y est logiciel (GStreamer) et
-  n'a pas le temps réel à 1440×900 : selon la charge, la source se ferme (« Media failed to decode:
-  Failed to send data for decoding ») et le lecteur reconstruit 1 à 4 fois, ou se bloque et reprend.
-  Le même fichier dans le profil iPhone (même moteur, petit écran) est identique d'un passage à
-  l'autre. Un écart y est affiché `~`, jamais compté.
-- **1 écart isolé** : une fois, dans WebKit bureau, la session est tombée au milieu d'un titre (une
-  requête du flux refusée « due to access control checks », puis l'écran de connexion). Il est
-  désormais nommé « session perdue » dans les étapes. Un troisième passage de WebKit seul (18 min)
-  l'a redonné identique, comme les six autres titres stables de ce profil. S'il se reproduit,
-  repasser : un tel écart sur un seul titre n'est pas un comportement du lecteur.
+Ce que la comparaison met de côté, et pourquoi :
+
+- **`volatil`** (affiché, jamais compté) : ce qui dépend de la charge de la machine et non du code
+  — le nombre de sauts que hls.js compte au lecteur serveur pour un même geste (5 ou 6, 9 ou 11),
+  les attentes (palier 1-2 contre 3-5), une ligne `stall` de plus ou de moins, une reprise
+  (`recoveries`) 0 ou 1.
+- **Les instables connus**, marqués `"instable"` dans `titres.json` et affichés `~` : les deux 4K
+  Dolby Vision les plus lourdes dans WebKit bureau, et *Dirty Dancing* aussi dans le profil iPhone.
+  Le décodage HEVC 4K y est logiciel (GStreamer) et n'a pas toujours le temps réel : selon la charge,
+  la source se ferme (« Media failed to decode: Failed to send data for decoding ») et le lecteur
+  reconstruit 1 à 4 fois, ou se bloque et reprend, et l'instant où cela arrive tombe avant ou après
+  l'arrière-plan. Sur l'iPhone émulé, *Dirty Dancing* est sorti deux fois différent sur quatre
+  passages du parcours actuel (deux reconstructions, ou une source fermée en arrière-plan).
+- Le **témoin** d'une marche de l'échelle du lecteur serveur (voir « Ce qui est comparé »).
+
+Avant le 23/10/2026 (parcours à attentes fixes, 9.3.12) : 33 identiques sur deux passages de
+64 minutes, 2 instables, 1 écart isolé (une session tombée au milieu d'un titre dans WebKit,
+nommée depuis « session perdue » dans les étapes ; s'il se reproduit, repasser).
 
 Une comparaison qui sort `≠` sur un autre couple titre × profil est donc à lire : le diff montre la
 ligne qui a changé et les compteurs volatils des deux côtés.
+
+## Ce qui a été essayé
+
+Mesuré le 23/10/2026 — un passage complet durait 4 025 s, dont 3 787 s de séances :
+
+- **Gardé — les attentes sur conditions** (tableau plus haut). Le gros du temps n'était pas dans
+  les `sleep` eux-mêmes (~38 s par séance) mais dans ce qu'ils cachaient : Playwright met 2 à 3 s à
+  résoudre un sélecteur `:has()` ou un `getByRole` sur la page entière (l'accueil reste monté sous
+  le lecteur), à chaque ligne de menu lue — plus d'une minute par séance dans Firefox, qui passe de
+  1 297 s à ~390 s. Les menus, le bouton de lecture et la ligne choisie se lisent désormais en un
+  aller-retour (`page.evaluate`) et se désignent par une marque (`data-regress-pick`).
+- **Gardé — l'issue fixée plus tôt** : les cinq séances qui échouent toujours à la première image du
+  lecteur serveur durent 26 à 50 s au lieu de ~99 s, avec les mêmes lignes.
+- **Gardé — des poses en temps de film** : supprimer les poses entre étapes changeait ce qui est
+  enregistré (le `buffered` du saut de −10 s) et faisait échouer WebKit (une pause ignorée par le
+  lecteur serveur juste après un saut, une source fermée sur un saut lancé avant que le précédent
+  soit posé). Remplacées par « le film a joué N s », elles coûtent ce qu'elles coûtaient mais ne
+  dépendent plus de la charge.
+- **Écarté — deux voies en parallèle** (Chromium + Firefox d'un côté, WebKit + iPhone de l'autre,
+  même instance, lignes départagées par l'agent, un verrou par titre pour le compte commun) :
+  1 603 s au lieu de ~2 050 s, soit 25 % seulement, et **6 séances sur 36 différentes** d'un
+  passage à la file du même commit : sauts du lecteur serveur au-delà du plafond (le transcodage
+  4K de Jellyfin et le décodage logiciel de WebKit se disputent les cœurs), une source fermée sur
+  un 1080p dans l'iPhone émulé. Le gain ne vaut pas le bruit.
 
 ## Ce que le banc couvre vraiment
 
@@ -130,7 +209,7 @@ Mesuré le 22/10/2026 avec l'image Playwright 1.63 (`couverture.txt` le redonne 
 | **Chromium 153** (headless de Playwright ; le canal `chrome` stable installé dans l'image dit exactement la même chose) | H.264, AAC, FLAC, Opus ; **ni HEVC, ni AC-3/E-AC-3** ; `AudioEncoder` Opus | Tout fichier HEVC part au **lecteur serveur** (hls.js) sur le refus nommé `Vidéo non prise en charge par ce navigateur : video/mp4; codecs="hvc1…"` — relais, renégociation au changement de piste (`why: audio`), bilan serveur. Les fichiers H.264 prennent le **remux** : AC-3 et DTS décodés puis ré-encodés en Opus, le MP4 (H.264 + AAC) lu par `mp4Demux` |
 | **Firefox 155** | HEVC (4K 10 bits compris, couche de base des Dolby Vision), H.264, FLAC, Opus | Le **remux sur tout** : E-AC3, AC-3, DTS et **TrueHD** (décodeur WebAssembly) décodés puis ré-encodés en Opus, FLAC 24 bits copié tel quel ; MP2 refusé par son nom puis lecteur serveur |
 | **WebKit 26.6** (GTK, GStreamer) bureau | `ManagedMediaSource` (élément en `srcObject`), HEVC, H.264, AC-3, E-AC-3, FLAC ; **`AudioEncoder` présent mais inutilisable** (« AudioEncoder is not configured ») | Le **remux** avec son **copié** (AC-3, E-AC-3, FLAC). Tout ce qui demande un ré-encodage est refusé : un fichier en DTS seul part au lecteur serveur, un passage à la piste TrueHD est refusé (`audio` avec `applied: false`, l'ancienne piste continue). C'est le chemin d'un refus de piste, pas celui de Safari |
-| **iPhone émulé** (même WebKit, agent et écran d'iPhone, toucher) | comme WebKit bureau | Les mêmes chemins, avec l'interface du téléphone (fiche mobile, commandes au toucher) ; stable même en 4K |
+| **iPhone émulé** (même WebKit, agent et écran d'iPhone, toucher) | comme WebKit bureau | Les mêmes chemins, avec l'interface du téléphone (fiche mobile, commandes au toucher) ; stable en 4K sauf *Dirty Dancing* (voir « Bruit mesuré ») |
 
 Ce qui n'est **pas** exercé ici : le HLS natif de Safari (WebKit pour Linux joue le lecteur serveur
 par hls.js), le décodage Dolby Vision, l'encodeur AAC d'Apple et son ordre des canaux, le plafond
@@ -139,7 +218,8 @@ de 105 Mo des tampons de l'iPhone, la diffusion (AirPlay, Chromecast), le hors-l
 Constat, stable d'un passage à l'autre : pour deux fichiers H.264 (l'épisode en MP2 dans Chromium
 et WebKit, le film en DTS seul dans WebKit), le **lecteur serveur ne montre jamais sa première
 image** — `error` « pas de première image en 20 s », étape `image`, puis « Le chargement prend trop
-de temps ». Le même lecteur serveur joue les sources HEVC (Chromium), l'épisode en DTS (WebKit) et
+de temps » (pour le film en DTS seul, aucune ligne `error` : l'élément reste arrêté, et le banc
+conclut 40 s après la négociation). Le même lecteur serveur joue les sources HEVC (Chromium), l'épisode en DTS (WebKit) et
 l'épisode en MP2 dans Firefox. Rare en production (deux lignes dans le journal courant) ; à regarder
 à part, ce banc ne fait que le constater.
 

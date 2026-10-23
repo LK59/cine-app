@@ -11,7 +11,8 @@
 # REGRESS_ENV (.env de l'instance), REGRESS_DB (cine.db à recopier), REGRESS_MEDIA (bibliothèque,
 # montée en lecture seule), REGRESS_CREDS (fichier user=/password= du compte de test),
 # REGRESS_PORT (127.0.0.1 seulement, défaut 3098), REGRESS_NETWORK (défaut media_net),
-# REGRESS_PROFILES (défaut « chromium firefox webkit iphone »), REGRESS_TITLES (titres.json).
+# REGRESS_PROFILES (défaut « chromium firefox webkit iphone »), REGRESS_ONLY (clés de titres),
+# REGRESS_MODE=rapide (deux profils, quatre titres), REGRESS_TITLES (titres.json).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
