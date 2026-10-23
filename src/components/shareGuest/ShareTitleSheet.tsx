@@ -5,8 +5,6 @@ import dynamic from "next/dynamic";
 import useSWR from "swr";
 import { Check, ListVideo, Play, Video } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { formatDurationShort, formatMinutes } from "@/lib/format";
-import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { PlayButton } from "@/components/PlayButton";
@@ -18,22 +16,21 @@ import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CAST_CLASS, CAST_SHOWN, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
+import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CAST_CLASS, CAST_SHOWN, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaDetailPages, CinemaDetailTitle, PhoneSheetTitle } from "@/components/cinema/CinemaDetailPages";
+import { DesktopSheetBackdrop, DetailTrailerRow } from "@/components/cinema/DesktopSheetShell";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
 import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
-import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
-import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
-import { episodeResumeAt } from "@/lib/nextEpisode";
+import { useSheetPlay } from "@/lib/useSheetPlay";
+import { episodeRowFacts, playEpisodeFrom } from "@/lib/episodeRow";
 import { openingSeason, orderSeasons } from "@/lib/seasonOrder";
-import { sheetOverview, sheetRuntimeMinutes, sheetEpisodeRuntime, sheetLeadFacts, useSheetPlayFacts } from "@/lib/sheetFacts";
-import { useFileMissing } from "@/lib/missingFiles";
+import { sheetOverview, sheetRuntimeMinutes, sheetEpisodeRuntime, sheetLeadFacts } from "@/lib/sheetFacts";
 import { FadeInImg } from "@/components/FadeInImg";
 import { PosterImage } from "@/components/PosterImage";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
-import type { CinemaEpisode, CinemaEpisodesPayload, CinemaSeason } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
+import type { CinemaEpisode, CinemaSeason } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import type { ShareTitlePayload } from "@/app/api/share/title/route";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
@@ -76,9 +73,6 @@ interface TitleInfo {
 
 type Facts = ReturnType<typeof useShareSheetFacts>;
 
-/** L'adresse de la liste des épisodes — la même clé que la fiche série et le menu du lecteur. */
-const episodesKeyOf = (seriesId: string) => `/api/cinema/series/${seriesId}/episodes`;
-
 /**
  * Ce que les deux dispositions lisent : la description (accroche, distribution, bande-annonce), la
  * position, l'épisode que Lire lancerait — par les mêmes fonctions que les fiches de l'application
@@ -88,43 +82,35 @@ function useShareSheetFacts(payload: ShareTitlePayload) {
   const series = payload.kind === "series" ? payload.item : null;
   const movie = payload.kind === "movie" ? payload.item : null;
   const item: CinemaMovie | CinemaSeries = payload.item;
-  // Un titre que Jellyfin a seul (§89) n'a ni Radarr ni Sonarr : rien à demander.
-  const infoKey = item.source === "jellyfin" ? null : movie ? `/api/radarr/movies/${movie.radarrId}/info` : `/api/sonarr/series/${series!.sonarrId}/info`;
+  // Un titre que Jellyfin a seul (§89) aussi : ces routes le décrivent par TMDB, sous son identifiant
+  // réservé, et la porte des liens accepte cette adresse pour le titre du lien (la règle `radarr` /
+  // `sonarr` compare le nombre gardé par le lien). La fiche ne demandait rien, et l'invité n'avait ni
+  // distribution ni repli d'accroche ou de bande-annonce, que le foyer a (audit du 23/10/2026).
+  const infoKey = movie ? `/api/radarr/movies/${movie.radarrId}/info` : `/api/sonarr/series/${series!.sonarrId}/info`;
   const { data: info, error: infoError } = useSWR<TitleInfo>(infoKey, fetcher);
-  const infoSettled = infoKey === null || info !== undefined || infoError !== undefined;
+  const infoSettled = info !== undefined || infoError !== undefined;
   const late = useLateArrival(infoSettled);
   const lead = sheetLeadFacts(item, info, infoSettled);
 
   // La position d'un film (Jellyfin, par le compte du lien) ; rien pour une série, dont c'est la liste
   // des épisodes qui dit où l'on en est.
   const { progress } = useJellyfinItemState(movie ? movie.jellyfinItemId : null);
-  const episodesKey = series ? episodesKeyOf(series.jellyfinItemId) : null;
-  const { data: episodesData, error: episodesError } = useSWR<CinemaEpisodesPayload>(episodesKey, fetcher);
-  const play = useSheetPlayFacts(
-    series
-      ? { kind: "series", jellyfinItemId: series.jellyfinItemId, sonarrId: series.sonarrId, firstEpisode: series.firstEpisode }
-      : { kind: "movie", jellyfinItemId: item.jellyfinItemId },
-    item.title,
-    series
-      ? episodesData
-        ? { kind: "series", known: true, episode: episodesData.nextEpisode }
-        : undefined
-      : progress
-        ? { kind: "movie", known: progress.known === true, resumeTicks: progress.resumeTicks, runtimeTicks: progress.runtimeTicks }
-        : undefined
-  );
-  // Une série jamais commencée : la ligne de lecture garde sa place jusqu'à la liste des épisodes.
-  const playPending = !!series && !play.targetId && episodesData === undefined && episodesError === undefined;
   // Les lectures du lien sont prises ailleurs : Lire est remplacé par la phrase, avant que le serveur
   // ne refuse l'ouverture (`shareStreamRefusal`).
   const full = payload.playingElsewhere >= payload.maxStreams;
-  const fileMissing = useFileMissing(play.targetId);
-  // Ce que Lire va demander, demandé dès l'ouverture — comme une fiche du foyer. Pas quand le lien est
-  // plein : la description serait refusée de toute façon.
-  usePlaybackPrefetch(full ? null : play.targetId);
-  // Relu à l'appel, pas figé au rendu — l'épisode suivant à la fin d'un épisode (`useNextEpisodeFromCache`).
-  const nextOf = useNextEpisodeFromCache(episodesKeyOf(item.jellyfinItemId));
-  const getNextEpisode = series ? nextOf : undefined;
+  // Le bouton Lire d'une fiche du foyer (`useSheetPlay`) : la place tenue d'une série jamais commencée,
+  // l'attente d'un S1·É1 supposé — sauf si la liste a échoué : la supposition part alors plutôt qu'un
+  // appui qui ne part jamais —, le fichier introuvable, l'épisode suivant relu à la fin d'un épisode.
+  // Ce que Lire va demander est demandé dès l'ouverture, sauf quand le lien est plein : la description
+  // serait refusée de toute façon. Sans copie hors ligne : l'invité n'a ni téléchargement ni lecteur
+  // hors ligne.
+  const sheetPlay = useSheetPlay(
+    series
+      ? { kind: "series", jellyfinItemId: series.jellyfinItemId, title: item.title, sonarrId: series.sonarrId, firstEpisode: series.firstEpisode }
+      : { kind: "movie", jellyfinItemId: item.jellyfinItemId, title: item.title, progress },
+    { prefetch: !full, offline: false }
+  );
+  const { facts: play, playPending, fileMissing, getNextEpisode, episodesData } = sheetPlay;
   const runtimeMinutes = movie ? sheetRuntimeMinutes(movie.runtimeMinutes, info?.tmdb?.runtime) : null;
   const episodeRuntime = series ? sheetEpisodeRuntime(series.episodeRuntime, info?.tmdb?.runtime) : null;
   return {
@@ -140,9 +126,9 @@ function useShareSheetFacts(payload: ShareTitlePayload) {
     fileMissing,
     getNextEpisode,
     episodesData,
-    // « Lire S1·É1 » supposé d'après le catalogue attend la liste — sauf si elle a échoué : la règle
-    // de la fiche série du foyer, qui lance alors la supposition plutôt qu'un appui qui ne part jamais.
-    episodesError: episodesError as unknown,
+    waitForServer: sheetPlay.waitForServer,
+    /** « Reprendre S2:É3 · 30 min » : le libellé des fiches du foyer. */
+    playLabel: sheetPlay.label,
     runtimeMinutes,
     episodeRuntime,
     cast: info?.tmdb?.cast ?? [],
@@ -223,25 +209,16 @@ function DesktopLayout({ payload, facts }: { payload: ShareTitlePayload; facts: 
   }, [playerOwnsKeyboard, showEpisodes, showTrailer, showSynopsis]);
 
   function playEpisode(ep: CinemaEpisode) {
-    playback.play({ itemId: ep.jellyfinItemId, title: ep.title, resumeAt: episodeResumeAt(ep), getNextEpisode: facts.getNextEpisode });
+    playEpisodeFrom(playback, ep, facts.getNextEpisode);
   }
 
-  const label = formatContinueLabel(t, play.resumeTicks, play.runtimeTicks, play.seasonNumber, play.episodeNumber, play.rewatch);
+  const label = facts.playLabel;
   const metaRuntime = movie ? runtimeLabel(facts.runtimeMinutes, false) : runtimeLabel(facts.episodeRuntime?.minutes, true);
 
   return (
     <div ref={containerRef} data-share-sheet="desktop" className="fixed inset-0 overflow-hidden bg-ink animate-fade-in" style={{ paddingLeft: "var(--player-rail, 0px)" }}>
-      {item.backdropUrl && <FadeInImg src={item.backdropUrl} alt="" data-sheet-photo="" className="absolute inset-0 h-full w-full object-cover" />}
-      <div
-        className="absolute inset-x-0 bottom-0 backdrop-blur-md"
-        style={{
-          height: "45%",
-          maskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
-          WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
-        }}
-      />
-      <div data-sheet-veil="" className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
-      <div data-sheet-veil="" className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
+      {/* Le fond des fiches du bureau, sans la marque de la continuité (§61) : rien ne s'y relaie. */}
+      <DesktopSheetBackdrop src={item.backdropUrl} />
 
       <CinemaDetailPages
         first={
@@ -283,7 +260,7 @@ function DesktopLayout({ payload, facts }: { payload: ShareTitlePayload; facts: 
                       resumeKnown={play.resumeKnown}
                       unavailable={facts.fileMissing}
                       reserve
-                      waitForServer={play.guessed && facts.episodesError === undefined}
+                      waitForServer={facts.waitForServer}
                       getNextEpisode={facts.getNextEpisode}
                       variant="row"
                       label={label}
@@ -306,22 +283,7 @@ function DesktopLayout({ payload, facts }: { payload: ShareTitlePayload; facts: 
                 </>
               )}
 
-              {!lead.trailerKnown && (
-                <div aria-hidden="true" data-sheet-reserved="" className={`${MENU_ROW} ${MENU_ROW_INACTIVE} invisible`}>
-                  <span className={MENU_BADGE}>
-                    <Video size={14} />
-                  </span>
-                  <span className="text-sm font-medium">{t("cinema.trailer")}</span>
-                </div>
-              )}
-              {lead.trailerKey && (
-                <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${lead.trailerLate ? late.fade : ""}`}>
-                  <span className={MENU_BADGE}>
-                    <Video size={14} />
-                  </span>
-                  <span className="text-sm font-medium">{t("cinema.trailer")}</span>
-                </button>
-              )}
+              <DetailTrailerRow lead={lead} late={late} onOpen={() => setShowTrailer(true)} />
 
               {series && seasons.length > 0 && (
                 <button data-detail-menu onClick={() => setShowEpisodes(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}>
@@ -400,7 +362,7 @@ function PhoneLayout({ payload, facts }: { payload: ShareTitlePayload; facts: Fa
   const until = useAvailableUntil(payload.expiresAt);
   const { item, movie, series, lead, late, play } = facts;
   const metaRuntime = movie ? runtimeLabel(facts.runtimeMinutes, false) : runtimeLabel(facts.episodeRuntime?.minutes, true);
-  const label = formatContinueLabel(t, play.resumeTicks, play.runtimeTicks, play.seasonNumber, play.episodeNumber, play.rewatch);
+  const label = facts.playLabel;
 
   return (
     <div data-share-sheet="phone" className="safe-x min-h-dvh bg-ink animate-fade-in">
@@ -444,7 +406,7 @@ function PhoneLayout({ payload, facts }: { payload: ShareTitlePayload; facts: Fa
                 resumeKnown={play.resumeKnown}
                 unavailable={facts.fileMissing}
                 reserve
-                waitForServer={play.guessed && facts.episodesError === undefined}
+                waitForServer={facts.waitForServer}
                 getNextEpisode={facts.getNextEpisode}
                 iconSize={18}
                 label={label}
@@ -491,7 +453,7 @@ function PhoneLayout({ payload, facts }: { payload: ShareTitlePayload; facts: Fa
             seasons={facts.episodesData.seasons}
             nextEpisodeId={facts.episodesData.nextEpisode?.itemId}
             disabled={facts.full}
-            onPlay={(ep) => playback.play({ itemId: ep.jellyfinItemId, title: ep.title, resumeAt: episodeResumeAt(ep), getNextEpisode: facts.getNextEpisode })}
+            onPlay={(ep) => playEpisodeFrom(playback, ep, facts.getNextEpisode)}
           />
         )}
       </div>
@@ -544,7 +506,10 @@ function PhoneEpisodes({
         </div>
       )}
       <div className="space-y-4">
-        {episodes.map((episode) => (
+        {episodes.map((episode) => {
+          // Le temps restant ou la durée, et « À suivre » : la règle des trois listes (`episodeRowFacts`).
+          const row = episodeRowFacts(episode, nextEpisodeId);
+          return (
           <button
             key={episode.jellyfinItemId}
             type="button"
@@ -573,21 +538,22 @@ function PhoneEpisodes({
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-white">
                 {episode.episodeNumber}. {episode.title}
-                {episode.jellyfinItemId === nextEpisodeId && (
+                {row.isNext && (
                   <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-400">
                     {t("cinema.nextUpBadge")}
                   </span>
                 )}
               </p>
-              {episode.resumeTicks && episode.runtimeTicks && !episode.watched ? (
-                <p className="mt-0.5 text-xs text-accent-400">{t("cinema.timeRemaining", { time: formatDurationShort(episode.runtimeTicks - episode.resumeTicks) })}</p>
+              {row.remaining !== null ? (
+                <p className="mt-0.5 text-xs text-accent-400">{t("cinema.timeRemaining", { time: row.remaining })}</p>
               ) : (
-                episode.runtimeMinutes && <p className="mt-0.5 text-xs text-subtle">{formatMinutes(episode.runtimeMinutes)}</p>
+                row.runtime !== null && <p className="mt-0.5 text-xs text-subtle">{row.runtime}</p>
               )}
               {episode.overview && <p className="mt-1 line-clamp-3 text-xs leading-5 text-muted">{episode.overview}</p>}
             </div>
           </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

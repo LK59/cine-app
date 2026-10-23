@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, type CSSProperties } from "react";
+import { sheetKeyBelongsElsewhere } from "@/lib/useSheetKeys";
 
 /**
  * La sortie d'une fiche que la coquille garde montée pendant son animation — fiche personne,
@@ -38,6 +39,10 @@ export function useSheetExit(
     if (leaving || !listening) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape" && e.key !== "Backspace") return;
+      // Une feuille posée par-dessus, ou Retour arrière dans un champ : la touche n'est pas pour la
+      // fiche (`sheetKeyBelongsElsewhere`, la règle de toutes les fiches — §117). Écouté en capture
+      // avant la feuille, cet écouteur refermait sinon la fiche sous elle.
+      if (sheetKeyBelongsElsewhere(e)) return;
       e.preventDefault();
       e.stopPropagation();
       close();

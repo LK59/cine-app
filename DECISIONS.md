@@ -219,9 +219,11 @@ maintenait cinq statuts et des notes (0 note sur 47 titres) est supprimée.
 
 **Qui peut y entrer.** Un titre qui a un identifiant TMDB — la liste est indexée dessus :
 `canJoinWatchlist` (`useAddToWatchlist.ts`). Sans lui, le bouton n'est pas rendu. Appelants : la
-fiche série du bureau, la fiche du téléphone (la fiche film du bureau a toujours un identifiant
-Radarr → TMDB). Corrigé le 21/09 : les deux envoyaient `tmdbId ?? 0`, la route répondait 400 et la
-fiche en affichait l'erreur brute, en français. Tests : `decisions-partagees.test.ts`.
+fiche film et la fiche série du bureau, la fiche du téléphone. Corrigé le 21/09 : les deux envoyaient
+`tmdbId ?? 0`, la route répondait 400 et la fiche en affichait l'erreur brute, en français. La fiche
+film du bureau s'en passait, « toujours munie d'un identifiant Radarr → TMDB » : faux depuis §89 — un
+film que Jellyfin a seul et que TMDB ne connaît pas porte `tmdbId: 0` ; elle le demande aussi depuis
+le 23/10/2026. Tests : `decisions-partagees.test.ts`, `fiche-film-a-voir-sans-tmdb.test.tsx`.
 
 ## 7. Refermer une fiche, et ce qu'on relit après une lecture
 
@@ -1037,7 +1039,8 @@ de 16 px au repos, qui grandissent jusqu'à 28 px quand on la tire vers le bas.
 **Pourquoi.** Elle était collée en haut de l'écran et carrée, alors que la fiche personne se posait
 déjà en carte arrondie. Et la moitié des titres d'une rangée de saga ouvre la fiche de
 bibliothèque, l'autre moitié la fiche TMDB, sans que rien dans le geste dise laquelle : les deux
-doivent avoir la même forme.
+doivent avoir la même forme. Depuis le 23/10/2026, cela vaut aussi pour « À voir » et « Vu » : mêmes
+mots, mêmes icônes, même ordre, même message (§117.4).
 
 **Porteurs.** `.phone-sheet-frame` (`globals.css` : position et hauteur, dans les unités
 d'`app-viewport`) et `phoneSheetCorner` (`src/lib/sheetMotion.ts`).
@@ -1229,6 +1232,13 @@ saison ouverte »).
 **Voulu.** La liste des pastilles réunit toujours possédées et manquantes (`orderSeasons`) : seule
 l'ouverture les distingue. Le bureau reçoit les saisons possédées dès le montage, le téléphone les
 attend : c'est pourquoi l'un fige au montage et l'autre à la première réponse.
+
+**Voulu, chez l'invité (§112) : la saison de l'épisode à suivre.** La fiche d'un lien de partage au
+téléphone (`PhoneEpisodes`, `ShareTitleSheet.tsx`) ouvre la saison de l'épisode « À suivre » du compte
+du lien, et ne retombe sur `openingSeason` (sans manquantes : un lien ne demande rien à Sonarr) que si
+cet épisode n'est dans aucune saison. L'invité n'a que ce titre, et y revient pour reprendre où il en
+est ; le foyer garde la première saison possédée. Décidé par Louis le 23/10/2026 (audit des fiches,
+V8) : écart gardé, pas étendu au foyer.
 
 **Trouvé le 29/09/2026** par l'audit : le téléphone décidait sur la réunion des deux listes à
 chaque rendu, et une série dont seule la saison 15 est là sautait à la saison 1, vide, à l'arrivée
@@ -6185,6 +6195,14 @@ Tests : `share-gate.test.ts` (parcourt toutes les routes de l'API, toutes métho
 hors titre ; chaque route « corps » appelle `shareRefusal`), `share-core.test.ts` (jeton, secrets, vie
 d'un lien, compte verrouillé, comptes écartés, trois lectures).
 
+**Un titre que Jellyfin a seul (§89).** La fiche de l'invité demande sa description comme celle du foyer
+(distribution, repli d'accroche et de bande-annonce), sous son identifiant réservé : la porte l'accepte
+déjà — la règle `radarr` / `sonarr` compare le nombre de l'adresse à celui que le lien a gardé à sa
+création, réservé compris (la pastille Partager envoie `item.radarrId` / `item.sonarrId`), et refuse tout
+autre nombre. Rien n'a été élargi pour cela. Elle sautait ces titres (« rien à demander »), prémisse
+démentie par §89 (audit des fiches, 23/10/2026, V9). Un lien créé sans identifiant reçoit un refus, et la
+fiche reste sur le catalogue, comme pour un titre de Radarr. Tests : `share-guest-jellyfin-seul.test.tsx`.
+
 ## 113. La revue de sécurité du 20/10/2026
 
 **Ce qu'elle a changé, et où.** Une fuite critique d'abord (9.3.2) : le relais du flux renvoyait la
@@ -6539,3 +6557,211 @@ diffusée, la reprise chez Jellyfin a donc bougé : sans relecture, la fiche et 
 l'ancienne position — une régression visible. La relecture ne peut suivre la règle des deux autres
 hôtes que si la diffusion d'une scène cesse elle aussi de rapporter sa position : une décision sur §91,
 hors de ce correctif (23/10/2026).
+## 117. Les fiches de titre : une règle par geste (audit du 23/10/2026)
+
+L'audit des fiches (film et série du bureau, fiche du téléphone, écran des épisodes, fiche TMDB, fiche
+d'un lien de partage, fiche hors ligne) a trouvé chaque geste décidé jusqu'à quatre fois. Chaque
+sous-section dit la règle, sa fonction, ses appelants, ses tests et ce qui diffère exprès.
+
+### 117.1 Les touches d'une fiche
+
+**Règle.** Échap et Retour arrière referment une fiche ; les flèches parcourent son menu. Une fiche se
+tait quand elle est recouverte (une autre fiche, le lecteur — §7.3 —, une fenêtre à elle), et pour
+toute touche quand une feuille (`ActionSheet` : Télécharger, la gestion d'un téléchargement, Partager)
+est posée par-dessus. Retour arrière dans un champ de saisie efface une lettre et ne referme rien.
+Une feuille ouverte garde ses touches : Échap ne referme qu'elle, les flèches, Entrée et Retour arrière
+n'atteignent pas l'écran dessous.
+
+**Porteurs.** `useSheetKeys` et `sheetKeyBelongsElsewhere` (`src/lib/useSheetKeys.ts`) ; `ActionSheet`
+écoute en capture sur `window` (comme `CinemaDetailModal`) et arrête ces touches sans les annuler.
+`useSheetExit` (§7.1) appelle `sheetKeyBelongsElsewhere` avant de refermer.
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaEpisodeBrowser`, `CinemaMobileDetail` ;
+par `useSheetExit` : `PlayerDiscoverSheet`, `PlayerPersonSheet`, `OfflineTitleSheet`.
+
+**Corrigé le 23/10/2026.** Les fiches du bureau écoutaient sur `window` sans regarder ni la cible ni la
+feuille : Retour arrière dans le champ « Pour qui » de Partager refermait la fiche ; Échap fermait la
+feuille *et* la fiche ; une flèche dans Télécharger envoyait le focus sur « Lire », derrière la
+fenêtre, et Entrée lançait le film. Le téléphone et l'écran des épisodes avaient la garde
+`[data-action-sheet]`, recopiée ; elle vit ici. La fiche du téléphone ne fermait que sur Échap : sur un
+iPad à clavier en interface tactile, Retour arrière refermait la fiche TMDB posée dessus, puis plus rien ;
+elle ferme aux deux touches depuis le même jour.
+
+**Tests.** `fiche-touches-feuilles.test.tsx`, `fiche-telephone-retour-arriere.test.tsx`,
+`decisions-partagees.test.ts` (« les touches des fiches »).
+
+**Voulu.** La fiche série du bureau, dont l'adresse nomme l'écran des épisodes sans qu'il soit dessiné,
+referme ce cran-là (`cinemaClose({ episodes: false })`) et non la fiche (13/10/2026). La fiche d'un lien
+de partage n'a pas de fermeture : elle est la page.
+
+### 117.2 La reprise d'un téléchargement depuis la fiche
+
+**Règle.** « Lire le fichier téléchargé » part de la même position partout sur la fiche — la ligne de
+tête comme la feuille de gestion d'un téléchargement en cours : celle de Jellyfin s'il a répondu (et
+que rien n'attend d'être envoyé), sinon celle de l'appareil.
+
+**Porteur.** `sharedResumeSeconds(download, ticks, known)` (`OfflineDownloadControl.tsx`, §109).
+`OfflineDownloadControl` exige `onlineKnown` à côté de `onlineResumeTicks` : `null` dit aussi bien
+« jamais commencé » que « pas de réponse ».
+
+**Appelants.** `CinemaMovieDetail`, `CinemaMobileDetail` (les deux lignes, `OfflinePlayButton` et
+`OfflineDownloadControl`, reçoivent `facts.resumeKnown`).
+
+**Corrigé le 23/10/2026.** La feuille de gestion ne recevait que la position : Jellyfin injoignable, un
+film commencé, téléchargement en pause, repartait du début depuis la feuille alors que la ligne de tête
+disait « Reprendre ».
+
+**Tests.** `offline-gestion-reprise.test.tsx`, `decisions-partagees.test.ts`.
+
+### 117.3 La pastille « Partager » d'une fiche
+
+**Règle.** Administrateur seul (§112). Un film se partage s'il a un fichier ; une série, toujours — on
+partage la série entière, quel que soit l'état de l'épisode « À suivre ».
+
+**Porteur.** `shareableFrom(kind, { jellyfinItemId, fileMissing })` (`src/components/share/ShareControl.tsx`).
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail` (film et série).
+
+**Corrigé le 23/10/2026.** Le téléphone cachait la pastille d'une série dont l'épisode à suivre avait
+perdu son fichier (la condition du film recopiée) ; le bureau la gardait.
+
+**Tests.** `fiche-partager-pastille.test.tsx`, `decisions-partagees.test.ts`.
+
+### 117.4 « À voir » et « Vu » : une forme, un crochet
+
+**Règle.** Sur toute fiche de titre — bibliothèque ou TMDB, bureau ou téléphone —, « À voir » dit
+« À voir » éteint et « Dans ma liste » allumé, avec un plus qui devient un marque-page coché ; « Vu »
+dit « Marquer comme vu » éteint et « Vu » allumé, avec une coche qui devient un cercle coché, et
+annonce son état (`aria-pressed`). L'ordre est celui de la mise en page : au bureau « Vu » puis
+« À voir », au téléphone « À voir » puis « Vu ». Un ajout dit « Ajouté à ma liste », un retrait
+« Retiré de ma liste », d'où qu'ils viennent ; « À voir » est optimiste et ne se grise pas.
+
+**Porteurs.** `WATCHLIST_FACE`, `WATCHED_FACE` et leurs trois dessins `TitleToggleRow` (menu du
+bureau), `TitleToggleIcon` (icône du téléphone), `TitleToggleWide` (bouton de la fiche TMDB au
+téléphone) — `src/components/cinema/TitleToggles.tsx` ; `useWatchlistToggle`
+(`src/lib/useWatchlistToggle.ts`, sur `useAddToWatchlist` et `canJoinWatchlist`) pour l'écriture de
+« À voir ».
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`, `PlayerDiscoverSheet` —
+les quatre pour les dessins comme pour `useWatchlistToggle` (les trois fiches de bibliothèque recopiaient
+`useWatchlistStatusMap` + `useAddToWatchlist` + la garde + la charge utile ; fusionnées le même jour,
+DOM témoin identique).
+
+**Corrigé le 23/10/2026.** Dans une rangée de saga ou une filmographie, un titre possédé ouvre la fiche
+de bibliothèque et un titre absent la fiche TMDB : le même geste changeait de mots (« Ajouter à ma
+liste »), d'icônes (marque-page, œil barré), de place (la liste avant « Vu » au bureau) et de message
+(« Ajouté à « Ma liste » », par `usePlayerTitleActions.setStatus`, grisé pendant l'écriture). Et le
+bouton « Vu » éteint des fiches de bibliothèque disait « Vu », comme allumé : `cinema.markWatched`
+dit désormais « Marquer comme vu » dans les quatre langues.
+
+**Tests.** `fiche-a-voir-vu-forme.test.tsx` (le vrai dictionnaire français), `fiche-boutons-deux-etats.test.tsx`,
+`decisions-partagees.test.ts`.
+
+**Voulu.** La source de « Vu » reste double (§51) : Jellyfin pour un titre de la bibliothèque
+(`useJellyfinItemState`, qui attend d'avoir lu — d'où l'estompé), la copie locale pour un titre TMDB
+(`useTitleWatched`). L'estompé d'un « Vu » non lu vaut 50 % au bureau, 40 % au téléphone. La fiche
+TMDB du téléphone garde ses boutons pleine largeur sous « Demander » : la mise en page diffère, pas
+la forme des deux gestes. `usePlayerTitleActions.setStatus` reste l'écriture de « Ma liste » hors des
+fiches (le panneau du lecteur, l'ajout à une liste).
+
+### 117.5 Le hors ligne d'une fiche ne dépend que de sa décision
+
+**Règle.** « Télécharger » et « Lire le fichier téléchargé » paraissent sur la fiche d'un film quand le
+hors ligne est ouvert (`useOfflineDownloadsEnabled`, §109) — au bureau comme au téléphone, sans garde à
+elles.
+
+**Corrigé le 23/10/2026.** La fiche du téléphone ajoutait la lecture intégrée (`playerEnabled &&`) aux
+deux lignes, celle du bureau non : deux endroits pour une décision. Invisible aujourd'hui —
+`useOfflineDownloadsEnabled` lit la même configuration et exige déjà `playerEnabled` —, mais la
+première à changer aurait dérivé de l'autre. La place de « Lire » encore tenue au téléphone
+(`playPending`) reste la condition de la ligne de tête : c'est la mise en page qui l'attend.
+
+**Tests.** `fiche-hors-ligne-sans-garde-lecteur.test.tsx`, `decisions-partagees.test.ts`.
+
+### 117.6 La ligne d'un épisode
+
+**Règle.** Une ligne d'épisode dit le temps qui reste d'un épisode commencé et pas fini, sinon sa durée
+quand on la connaît ; elle porte « À suivre » sur l'épisode que Lire lancerait. Un appui lance
+l'épisode là où il en est (`episodeResumeAt`, zéro dit explicitement), avec la suite de la série.
+
+**Porteurs.** `episodeRowFacts(ep, nextEpisodeId)` et `playEpisodeFrom(playback, ep, getNextEpisode)`
+(`src/lib/episodeRow.ts`).
+
+**Appelants.** `CinemaEpisodeBrowser` (bureau, et l'invité au bureau), `CinemaMobileDetail`,
+`ShareTitleSheet` (`PhoneEpisodes`, et le lancement au bureau) ; `CinemaSeriesDetail` pour le
+lancement depuis l'écran des épisodes.
+
+**Fusionné le 23/10/2026.** La règle du temps était écrite trois fois, le lancement quatre ; identiques
+ce jour-là. DOM témoin identique avant et après.
+
+**Tests.** `episodeRow.test.ts`, `decisions-partagees.test.ts`.
+
+**Voulu.** Chaque liste garde son dessin (colonne de saisons au bureau, pastilles au téléphone) et sa
+garde de lecture intégrée ; l'invité ajoute « lien plein ». Le menu « Épisodes » du lecteur a sa propre
+ligne (§107), hors de ce registre.
+
+### 117.7 Le bouton Lire d'une fiche : un crochet
+
+**Règle.** Celles de §1 (d'où part une lecture), §2 (l'épisode suivant), §12 (ce que Lire trouve prêt)
+et §29 (ce qu'une fiche montre avant le réseau), demandées une fois pour toutes les fiches : la réponse
+de Jellyfin traduite en faits (« connu » = Jellyfin a répondu), la place tenue d'une série jamais
+commencée, l'attente d'un S1·É1 supposé (sauf liste en panne), le fichier introuvable, la copie hors
+ligne en tête, le code « S1:É5 », le libellé (« Lire en ligne » derrière un téléchargement, sinon celui
+de « Continuer à regarder »), le préchargement du seul titre du bouton, et l'épisode suivant relu dans la
+liste à la fin d'un épisode.
+
+**Porteur.** `useSheetPlay(title, { prefetch, offline })` (`src/lib/useSheetPlay.ts`), sur
+`useSheetPlayFacts`, `useFileMissing`, `useOfflinePlayable`, `usePlaybackPrefetch`,
+`useNextEpisodeFromCache`. La position d'un film vient de la réponse de `useJellyfinItemState`, que la
+fiche tient déjà pour « Vu » (même clé) ; la fiche du téléphone la lisait une seconde fois.
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`, `ShareTitleSheet`.
+
+**Fusionné le 23/10/2026.** Quatre copies d'une vingtaine de lignes, identiques ce jour-là. DOM témoin
+identique avant et après (68 rendus, reprises de l'appareil comprises).
+
+**Tests.** `useSheetPlay.test.tsx` (les six cas), `fiche-lire-avant-reseau.test.tsx` (rendu, fiche par
+fiche), `decisions-partagees.test.ts`.
+
+**Voulu.** Le téléphone tient aussi la place de Lire tant que la configuration n'est pas lue
+(`playerEnabled === undefined`) : c'est sa mise en page qui l'attend, pas une règle de lecture. L'invité
+ne prépare rien quand son lien est plein (`prefetch: false`) et ne compte aucune copie hors ligne
+(`offline: false`).
+
+**À trancher : le gros bouton du téléphone n'est pas `PlayButton`.** La fiche du téléphone garde son
+propre bouton Lire (§29) — le même calcul (`resumeAtFor`, `useQueuedPlay`, faits de `useSheetPlay`),
+mais une garde de plus : un appui retenu sur un S1·É1 supposé ne part pas si, la réponse arrivée,
+l'épisode qu'elle désigne a perdu son fichier (`launch` revérifie `fileMissing` au départ). `PlayButton`
+ne vérifie le fichier qu'à l'appui, et lance alors l'épisode du serveur quoi qu'il en soit (fiches du
+bureau, invité). Fusionner imposerait l'une des deux règles à l'autre écran : ce n'est plus un simple
+déplacement, et le geste liquide du bouton ne peut se vérifier qu'à l'œil sur iPhone. Laissé le
+23/10/2026 (audit des fiches, P3) ; `fiche-telephone-lire.test.tsx` tient le comportement du téléphone.
+
+### 117.8 L'habillage des fiches du bureau
+
+**Règle.** Les deux fiches du bureau — film et série — ont le même cycle de vie : arrivée par un retour
+sans animation (`arrivedByBack`, lu une fois au montage), fermeture différée par `requestClose` (Échap,
+Retour arrière, le bouton Retour, la poignée), trajet ou continuité à l'ouverture et à la fermeture
+(§61), poignée au doigt seulement et jamais dessous, focus rendu à la première action au retour du
+lecteur (§7.3), drapeau « le spectateur a bougé lui-même » remis à zéro à chaque titre (§74). Et le même
+écran : la couche plein écran, le fond (photo, flou localisé, deux voiles), la poignée, le bouton Retour.
+
+**Porteurs.** `src/components/cinema/DesktopSheetShell.tsx` : `useDesktopSheetShell`, `DesktopSheetFrame`
+(la racine), `DesktopSheetBackdrop` (le fond), `SheetBackButton` (le bouton Retour), `DetailTrailerRow`
+(la ligne Bande-annonce et sa place tenue).
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail` (tout) ; `PlayerDiscoverSheet` (le fond, le
+bouton Retour), `ShareTitleSheet` (le fond, la ligne Bande-annonce), `CinemaEpisodeBrowser` (le bouton
+Retour).
+
+**Fusionné le 23/10/2026.** ~170 lignes identiques entre le film et la série, cinq copies du fond, quatre
+du bouton Retour, trois de la ligne Bande-annonce. DOM témoin identique avant et après.
+
+**Tests.** `fiche-bureau-poignee.test.tsx`, `sheetMorph-desktop-sheets.test.tsx`,
+`sheetMorph-continuity.test.tsx`, `series-detail-episodes-*.test.tsx`, `decisions-partagees.test.ts`.
+
+**Voulu.** Le fond de la fiche TMDB ne floute qu'à partir de `md` (`blur="md:backdrop-blur-md"`) et son
+bouton Retour est `absolute` (sa racine s'anime au téléphone) ; celui d'un lien de partage n'a pas la
+marque `data-sheet-settle` (rien ne s'y relaie). Chaque fiche garde son effet de focus d'arrivée, dont
+les déclencheurs diffèrent (la série attend aussi sa liste d'épisodes et se tait sous leur écran). La
+fiche hors ligne (`OfflineTitleSheet`) garde son fond, hors du témoin de cette fusion.

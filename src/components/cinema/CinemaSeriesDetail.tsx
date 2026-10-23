@@ -1,45 +1,37 @@
 "use client";
 
-import { ShareButton } from "@/components/share/ShareControl";
-import { useEffect, useRef, useState } from "react";
+import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ArrowLeft, BookmarkCheck, Check, CircleCheck, ListVideo, Plus, Video } from "lucide-react";
+import { ListVideo } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaCastRow } from "@/components/cinema/CinemaCastRow";
 import { detailColumnMotion } from "@/lib/sheetMotion";
-import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
-import { useCinemaRoute, cinemaNavigate, cinemaClose, useSheetBehind, useRouteBehind, arrivedByBack } from "@/lib/cinemaRoute";
+import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
-import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
-import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
-import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
-import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
-import { useDelayedClose } from "@/lib/useDelayedClose";
-import { useIsTouch } from "@/lib/useIsMobile";
+import { useWatchlistToggle } from "@/lib/useWatchlistToggle";
+import { useSheetKeys } from "@/lib/useSheetKeys";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
-import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
-import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
-import { CinemaLogo } from "@/components/cinema/CinemaLogo";
-import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
-import { episodeResumeAt } from "@/lib/nextEpisode";
-import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
+import type { CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
+import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
+import { useDesktopSheetShell, DesktopSheetFrame, DetailTrailerRow } from "@/components/cinema/DesktopSheetShell";
+import { playEpisodeFrom } from "@/lib/episodeRow";
+import { useSheetPlay } from "@/lib/useSheetPlay";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
-import { sheetOverview, useSheetPlayFacts, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
-import { useFileMissing } from "@/lib/missingFiles";
-import { OfflinePlayButton, offlinePlayLabels, sharedResumeSeconds, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
-import { FadeInImg } from "@/components/FadeInImg";
-import { ToggleGlyph } from "@/components/ToggleGlyph";
+import { sheetOverview, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
+import { OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
+import { TitleToggleRow, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
 import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
@@ -92,10 +84,6 @@ export function CinemaSeriesDetail({
   underneath?: boolean;
 }) {
   const t = useT();
-  const containerRef = useRef<HTMLDivElement>(null);
-  /** Vrai dès que le spectateur a lui-même déplacé le focus — voir l'effet plus bas. */
-  const userMovedFocus = useRef(false);
-
   const [showTrailer, setShowTrailer] = useState(false);
   const [showSynopsis, setShowSynopsis] = useState(false);
   // In the URL like every other Cinema layer, so Back closes the season browser and returns to
@@ -111,73 +99,45 @@ export function CinemaSeriesDetail({
   // sans fondu. La description ne sert qu'à défaut — voir `sheetLeadFacts`.
   const lead = sheetLeadFacts(item, info, info !== undefined || infoError !== undefined);
   const episodeRuntime = sheetEpisodeRuntime(item.episodeRuntime, info?.tmdb?.runtime);
-  const { data: episodesData, error: episodesError } = useSWR<CinemaEpisodesPayload>(`/api/cinema/series/${item.jellyfinItemId}/episodes`, fetcher);
+  // L'épisode que Lire lancerait : celui du serveur quand la liste est là, sinon celui que « À
+  // suivre » ou « Reprendre », gardés sur l'appareil, connaissent déjà ; une série jamais commencée
+  // garde la place de sa ligne (`playPending`) ; le fichier introuvable, la copie hors ligne en tête
+  // (comme un film, Louis 19/10/2026), le préchargement du seul épisode du bouton principal, et la
+  // suite de la série relue à la fin d'un épisode — le bouton Lire de toutes les fiches, `useSheetPlay`.
+  const {
+    facts,
+    episodesData,
+    playPending,
+    waitForServer,
+    fileMissing,
+    offlinePlayable,
+    episodeCode: offlineEpisodeCode,
+    label: playLabel,
+    getNextEpisode,
+  } = useSheetPlay({ kind: "series", jellyfinItemId: item.jellyfinItemId, title: item.title, sonarrId: item.sonarrId, firstEpisode: item.firstEpisode });
   /** L'écran des épisodes est-il vraiment dessiné — il lui faut sa liste, pas seulement l'adresse. */
   const episodesShown = showEpisodes && !!episodesData?.seasons;
-  // L'épisode que Lire lancerait : celui du serveur quand la liste est là, sinon celui que « À
-  // suivre » ou « Reprendre », gardés sur l'appareil, connaissent déjà — voir `sheetFacts.ts`.
-  const facts = useSheetPlayFacts(
-    { kind: "series", jellyfinItemId: item.jellyfinItemId, sonarrId: item.sonarrId, firstEpisode: item.firstEpisode },
-    item.title,
-    episodesData ? { kind: "series", known: true, episode: episodesData.nextEpisode } : undefined
-  );
-  // Une série jamais commencée : rien d'autre que la liste des épisodes ne dit quel épisode lire.
-  // Sa ligne garde sa place en attendant, plutôt que de surgir.
-  const playPending = !facts.targetId && episodesData === undefined && episodesError === undefined;
-  const fileMissing = useFileMissing(facts.targetId);
-  // L'épisode que Lire lancerait, s'il est téléchargé : en tête, comme un film (Louis, 19/10/2026).
-  const offlinePlayable = useOfflinePlayable(facts.targetId);
-  const offlineEpisodeCode =
-    facts.seasonNumber != null && facts.episodeNumber != null ? t("cinema.episodeShort", { episode: facts.episodeNumber, season: facts.seasonNumber }) : null;
-  // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
-  // L'épisode du bouton principal seulement, pas chaque ligne de la liste.
-  usePlaybackPrefetch(facts.targetId);
   // Marquer une série vue coche la série entière chez Jellyfin, ce qui est exactement le geste
   // qu'on veut : « je l'ai finie », et ses applications le sauront aussi.
   const { watched, known: flagsKnown, busy: flagsBusy, toggleWatched } = useJellyfinItemState(item.jellyfinItemId, "series");
-  // Same fix as CinemaMovieDetail: without an initialStatus, Vu/À voir always opened looking
-  // un-toggled even for a series already on the watchlist. item.tmdbId can be null (Sonarr
-  // doesn't always resolve one) — bulk-status has nothing to look up then, same as toggleWatched/
-  // toggleAddToList below already treat that case (tmdbId ?? 0).
-  const statusMap = useWatchlistStatusMap(item.tmdbId ? [{ mediaType: "series", tmdbId: item.tmdbId }] : []);
-  const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist(
-    item.tmdbId ? statusMap[`series:${item.tmdbId}`] ?? null : null
-  );
-
-  // Same exit-animation delay as CinemaMovieDetail — see that hook's own doc comment.
-  // Pas d'animation de sortie quand c'est une autre fiche qui attend derrière : la sortie
-  // découvrirait l'accueil deux dixièmes de seconde avant que la précédente n'entre par-dessus.
-  // Voir `useSheetBehind`.
-  // Monté parce qu'on revient dessus, et non parce qu'on l'ouvre : pas d'animation d'entrée. Il
-  // n'ouvre rien, il se découvre — voir `arrivedByBack`. Lu une seule fois, au montage.
-  const [revealed] = useState(() => arrivedByBack());
-  const sheetBehind = useSheetBehind();
-  /**
-   * Sur un ordinateur, la fiche relaie l'aperçu sans rien déplacer : le fond reste, le logo glisse
-   * à sa place, le contenu change (`useDesktopContinuity`). Sur l'iPad, la carte touchée devient le
-   * visuel plein écran, et la fiche y retourne (DECISIONS.md §61) — la même décision que la fiche du
-   * téléphone et la fiche TMDB. La fermeture rend l'adresse aussitôt :
-   * c'est une copie de la fiche qui s'efface pendant que l'image revole vers l'affiche. Sans fiche
-   * dessinée derrière (une fiche TMDB, une personne), l'échange se fait d'un coup, comme avant.
-   */
-  const behindIsDrawn = useRouteBehind() !== null;
-  const { closing, requestClose } = useDelayedClose(onClose, 0);
-  const morph = useSheetTransition({
-    layout: "desktop",
-    rootRef: containerRef,
-    imageRef: containerRef,
-    active: !underneath,
-    leaving: closing,
-    revealed,
-    instantExit: sheetBehind && !behindIsDrawn,
+  // « À voir » : son état de départ, la garde `canJoinWatchlist` et l'écriture, par le crochet de
+  // toutes les fiches (`useWatchlistToggle`, §117.4). « Vu » et « Favori » sont chez Jellyfin (plus
+  // haut) : un titre peut être à la fois dans la liste et marqué vu.
+  // Sans identifiant TMDB — Sonarr n'en résout pas toujours un —, pas de ligne.
+  const { listable, inList, toggle: toggleAddToList } = useWatchlistToggle({
+    mediaType: "series",
+    tmdbId: item.tmdbId,
+    title: item.title,
+    year: item.year,
+    posterPath: item.posterUrl,
   });
 
-  /**
-   * Refermer au doigt : la poignée du haut, écrite une fois pour les deux fiches du bureau.
-   * Inerte à la souris, et inerte aussi sous une fiche posée par-dessus — un écran qui s'en va
-   * n'a pas d'avis, et celui du dessous non plus.
-   */
-  const { style: gripStyle, grip } = useSheetGrip(requestClose, useIsTouch() && !underneath);
+  // L'habillage des deux fiches du bureau (`useDesktopSheetShell`) : l'arrivée par un retour, la
+  // fermeture différée (Échap/Retour arrière, le bouton Retour, la poignée passent tous par
+  // `requestClose`), le trajet ou la continuité (§61), la poignée au doigt, le focus rendu au retour
+  // du lecteur, et le drapeau « le spectateur a bougé lui-même » remis à zéro à chaque titre.
+  const shell = useDesktopSheetShell({ subjectKey: item.sonarrId, underneath, onClose });
+  const { containerRef, userHasMovedFocus, markUserMovedFocus, revealed, morph, requestClose, playerOwnsKeyboard } = shell;
 
   // Drives both the second snap section and the chevron pointing at it: with nothing similar in
   // the library there's no second screen, so neither should exist.
@@ -186,14 +146,6 @@ export function CinemaSeriesDetail({
   const cast = info?.tmdb?.cast ?? [];
   const runtimeLabel = useRuntimeLabel();
   const hasBelow = hasSimilar || cast.length > 0;
-
-  // Un titre similaire rouvre la même fiche sur un autre film : c'est une arrivée, et le
-  // drapeau doit repartir de zéro. Sans cela, un spectateur venu d'un titre similaire — donc
-  // ayant forcément bougé le focus pour l'atteindre — n'était plus jamais ramené sur la lecture.
-  // Déclaré avant l'effet de focus : les effets s'exécutent dans leur ordre de déclaration.
-  useEffect(() => {
-    userMovedFocus.current = false;
-  }, [item.sonarrId]);
 
   const playerEnabled = usePlayerEnabled();
   // Re-runs once playerEnabled AND episodesData (Play only renders once nextEpisode is known —
@@ -206,87 +158,45 @@ export function CinemaSeriesDetail({
       // (rechargement, lien), il pose le focus sur sa saison, puis `nextEpisode` arrive et relançait
       // cet effet — le focus repartait sur « À suivre », caché dessous, et plus aucune flèche ne
       // bougeait rien. Sa fermeture rend elle-même la main à la première action.
-      if (underneath || showEpisodes || userMovedFocus.current) return;
+      if (underneath || showEpisodes || userHasMovedFocus()) return;
       focusFirstAction(containerRef.current);
     });
     return () => cancelAnimationFrame(frame);
-  }, [playerEnabled, lead.trailerKey, episodesData?.nextEpisode, facts.targetId, item.sonarrId, underneath, showEpisodes]);
+  }, [playerEnabled, lead.trailerKey, episodesData?.nextEpisode, facts.targetId, item.sonarrId, underneath, showEpisodes, containerRef, userHasMovedFocus]);
 
-  // Same as CinemaMovieDetail — see its own note. The sheet stays open under the player so
-  // closing the player comes back here, and stands down from the keyboard while it's up there.
+  // Échap et Retour arrière referment, les flèches parcourent le menu — et rien quand une feuille
+  // est posée par-dessus ou qu'on tape dans un champ : la règle de toutes les fiches, `useSheetKeys`.
+  useSheetKeys({
+    // CinemaEpisodeBrowser has its own Escape handler (also on window) that closes just
+    // itself — same guard TrailerModal needed, for the same reason.
+    listening: !underneath && !showTrailer && !playerOwnsKeyboard && !(showEpisodes && episodesShown),
+    // L'adresse dit « épisodes » mais l'écran n'est pas dessiné : sa liste n'est pas encore là
+    // (rechargement, retour sur cette entrée) ou n'arrivera pas (Jellyfin en panne). Personne
+    // n'écoutait alors Échap — la fiche s'effaçait devant un écran absent, et la touche restait
+    // morte pour de bon si la liste échouait (13/10/2026). C'est ce cran-là qu'Échap referme, et
+    // les flèches n'ont rien à parcourir.
+    onClose: showEpisodes ? () => cinemaClose({ episodes: false }) : requestClose,
+    onKey: showEpisodes
+      ? undefined
+      : (e) => {
+          // The similar-titles row below the menu takes the arrow keys when focus is in it (and
+          // claims the Down that enters it from the last menu row) — see similarRowKeyNav.
+          if (similarRowKeyNav(e, containerRef.current)) return;
+
+          if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+          markUserMovedFocus();
+          detailMenuArrowNav(e, containerRef.current);
+        },
+  });
+
+  // `getNextEpisode` (plus haut) : the episode right after `currentItemId` in flat (season, episode)
+  // order — same "next up" semantics PlayButton and PlayerHost's credits-time auto-advance expect,
+  // powered by the same season/episode list "Plus d'épisodes" already needs.
   const playback = usePlayback();
-  const playerOwnsKeyboard = playerHoldsKeyboard(playback);
-  const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
-  useEffect(() => {
-    if (!underneath && wasPlayerFullScreen.current && !playerOwnsKeyboard) {
-      focusFirstAction(containerRef.current);
-    }
-    wasPlayerFullScreen.current = playerOwnsKeyboard;
-  }, [playerOwnsKeyboard, underneath]);
-
-  useEffect(() => {
-    if (underneath) return;
-    function onKey(e: KeyboardEvent) {
-      // CinemaEpisodeBrowser has its own Escape handler (also on window) that closes just
-      // itself — same guard TrailerModal needed, for the same reason.
-      if (showTrailer || playerOwnsKeyboard) return;
-      if (showEpisodes) {
-        // L'adresse dit « épisodes » mais l'écran n'est pas dessiné : sa liste n'est pas encore
-        // là (rechargement, retour sur cette entrée) ou n'arrivera pas (Jellyfin en panne). Personne
-        // n'écoutait alors Échap — la fiche s'effaçait devant un écran absent, et la touche restait
-        // morte pour de bon si la liste échouait (13/10/2026). C'est ce cran-là qu'Échap referme.
-        if (!episodesShown && (e.key === "Escape" || e.key === "Backspace")) {
-          e.preventDefault();
-          cinemaClose({ episodes: false });
-        }
-        return;
-      }
-      if (e.key === "Escape" || e.key === "Backspace") {
-        e.preventDefault();
-        requestClose();
-        return;
-      }
-      // The similar-titles row below the menu takes the arrow keys when focus is in it (and
-      // claims the Down that enters it from the last menu row) — see similarRowKeyNav.
-      if (similarRowKeyNav(e, containerRef.current)) return;
-
-      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-      userMovedFocus.current = true;
-      detailMenuArrowNav(e, containerRef.current);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, showTrailer, showEpisodes, episodesShown, playerOwnsKeyboard, underneath]);
-
-  // « Vu » et « Favori » vivent chez Jellyfin — voir useJellyfinItemState. « À voir » reste
-  // local : c'est une intention, et rien d'autre ne la connaît.
-  // Sans identifiant TMDB, la ligne n'est pas rendue — voir `canJoinWatchlist`. Ce `?? 0` envoyait
-  // un 400 à la route, et la fiche en affichait l'erreur brute.
-  const listable = canJoinWatchlist(item.tmdbId);
-  function toggleAddToList() {
-    if (!canJoinWatchlist(item.tmdbId)) return;
-    const tmdbId = item.tmdbId;
-    if (inList) removeFromWatchlist({ tmdbId, mediaType: "series" });
-    else
-      addToWatchlist(
-        { tmdbId, mediaType: "series", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
-        "to_watch"
-      );
-  }
-
-  // The episode right after `currentItemId` in flat (season, episode) order — same "next up"
-  // semantics PlayButton's getNextEpisode already expects (see PlayerHost's own credits-time
-  // auto-advance), powered here by the same season/episode list "Plus d'épisodes" already needs.
-  // Relu à l'appel, pas figé au rendu : voir `useNextEpisodeFromCache`.
-  const getNextEpisode = useNextEpisodeFromCache(`/api/cinema/series/${item.jellyfinItemId}/episodes`);
 
   function playEpisode(ep: CinemaEpisode) {
-    playback.play({
-      itemId: ep.jellyfinItemId,
-      title: ep.title,
-      resumeAt: episodeResumeAt(ep),
-      getNextEpisode,
-    });
+    // Là où il en est, avec la suite de la série : le lancement des listes d'épisodes (`playEpisodeFrom`).
+    playEpisodeFrom(playback, ep, getNextEpisode);
     // L'écran des épisodes reste ouvert sous le lecteur (voir `CinemaEpisodeBrowser`), comme sur le
     // téléphone. Il était refermé ici, par `history.back()` — qui, depuis que le lecteur a son entrée
     // d'historique (§94, 15/10), retirait celle-ci à peine posée : le lecteur se fermait aussitôt et
@@ -295,53 +205,24 @@ export function CinemaSeriesDetail({
 
   if (typeof document === "undefined") return null;
 
-  const inList = addedStatus === "to_watch";
   const playTargetId = facts.targetId;
 
   return createPortal(
-    <div
-      ref={containerRef}
-      className={`fixed inset-0 overflow-hidden bg-ink ${revealed || morph.handlesEntry ? "" : "animate-fade-in"}`}
-      // Le rail du lecteur est posé sur le bord gauche de l'écran, au-dessus de cette fiche :
-      // sans ce retrait, la colonne de texte et le bouton Retour passeraient dessous. La variable
-      // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
-      inert={underneath}
-      aria-hidden={underneath || undefined}
-      style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)", ...gripStyle }}
+    // La couche plein écran, son fond, la poignée et le bouton Retour : `DesktopSheetFrame`.
+    <DesktopSheetFrame
+      containerRef={containerRef}
+      revealed={revealed}
+      handlesEntry={morph.handlesEntry}
+      gripStyle={shell.gripStyle}
+      grip={shell.grip}
+      onBack={requestClose}
+      underneath={underneath}
+      backdropUrl={item.backdropUrl}
     >
-      {item.backdropUrl && (
-        <FadeInImg src={item.backdropUrl} alt="" data-sheet-photo="" className="absolute inset-0 h-full w-full object-cover" />
-      )}
-      <div
-        data-sheet-settle=""
-        className="absolute inset-x-0 bottom-0 backdrop-blur-md"
-        style={{
-          height: "45%",
-          maskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
-          WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
-        }}
-      />
-      {/* Deux voiles à étapes explicites plutôt qu'un dégradé en trois arrêts : voir
-          CinemaDetailLayout, où la raison de chaque pourcentage est écrite. */}
-      <div data-sheet-veil="" className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
-      <div data-sheet-veil="" className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
-
-      {/* Posée avant le bouton Retour, et non après : les deux sont au même rang, et le dernier
-          dessiné reçoit les appuis — la poignée traverse toute la largeur, le bouton doit rester
-          au-dessus d'elle. Voir `useSheetGrip`. */}
-      {grip}
-
-      <button
-        onClick={requestClose}
-        className="btn btn-ghost fixed z-10 rounded-full bg-black/55 px-3 py-2 float-edge"
-        style={{ top: "max(1rem, env(safe-area-inset-top))", left: "calc(1rem + var(--player-rail, 0px))" }}
-      >
-        <ArrowLeft size={16} /> {t("cinema.back")}
-      </button>
 
       {/* Partager la série entière par un lien (DECISIONS.md §112) : une pastille discrète en face du
           retour, hors du menu de la fiche — administrateur seul. */}
-      {item.jellyfinItemId && (
+      {shareableFrom("series", { jellyfinItemId: item.jellyfinItemId, fileMissing }) && (
         <ShareButton
           variant="icon"
           iconClassName="btn btn-ghost fixed z-10 rounded-full bg-black/55 p-2.5 float-edge"
@@ -432,7 +313,7 @@ export function CinemaSeriesDetail({
                 unavailable={fileMissing}
                 reserve
                 // « Lire S1·É1 » supposé d'après le catalogue : un appui attend la réponse du serveur.
-                waitForServer={facts.guessed && episodesError === undefined}
+                waitForServer={waitForServer}
                 getNextEpisode={getNextEpisode}
                 variant="row"
                 // PlayButton's own default label (elapsed time, no episode code) is meant for
@@ -440,11 +321,8 @@ export function CinemaSeriesDetail({
                 // one reads exactly like the Continue Watching row's cards (same helper, "Lire
                 // EpX SX" / "Reprendre EpX SX - 30min restants"), since a user landing here from
                 // that row would otherwise see two different labels for the same episode.
-                label={
-                  offlinePlayable && !fileMissing
-                    ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, facts.resumeTicks, facts.resumeKnown), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done", offlineEpisodeCode).online
-                    : formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks, facts.seasonNumber, facts.episodeNumber, facts.rewatch)
-                }
+                // (Un fichier introuvable : `PlayButton` dit « Fichier introuvable » avant tout libellé.)
+                label={playLabel}
                 // La même ligne que les autres : c'est le sélecteur qui se peint en blanc.
                 className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
               />
@@ -476,22 +354,7 @@ export function CinemaSeriesDetail({
             )}
 
             {/* Sa place est tenue, invisible et hors du clavier, tant que la description n'est pas là. */}
-            {!lead.trailerKnown && (
-              <div aria-hidden="true" data-sheet-reserved="" className={`${MENU_ROW} ${MENU_ROW_INACTIVE} invisible`}>
-                <span className={MENU_BADGE}>
-                  <Video size={14} />
-                </span>
-                <span className="text-sm font-medium">{t("cinema.trailer")}</span>
-              </div>
-            )}
-            {lead.trailerKey && (
-              <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${lead.trailerLate ? late.fade : ""}`}>
-                <span className={MENU_BADGE}>
-                  <Video size={14} />
-                </span>
-                <span className="text-sm font-medium">{t("cinema.trailer")}</span>
-              </button>
-            )}
+            <DetailTrailerRow lead={lead} late={late} onOpen={() => setShowTrailer(true)} />
 
             {episodesData?.seasons && episodesData.seasons.length > 0 && (
               <button data-detail-menu onClick={() => setShowEpisodes(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}>
@@ -502,45 +365,13 @@ export function CinemaSeriesDetail({
               </button>
             )}
 
-            <button
-              data-detail-menu
-              onClick={toggleWatched}
-              disabled={flagsBusy}
-              aria-pressed={watched}
-              // Estompé tant que Jellyfin n'a pas répondu : ce bouton écrit, et proposer d'écrire
-              // une valeur qu'on n'a pas lue est la façon la plus sûre de la changer par erreur.
-              className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${flagsKnown ? "" : "opacity-50"}`}
-            >
-              <span className={watched ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                <ToggleGlyph on={watched} onIcon={<CircleCheck size={16} />} offIcon={<Check size={14} />} />
-              </span>
-              <span className="text-sm font-medium">
-                {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
-              </span>
-            </button>
+            {/* « Vu » puis « À voir » : la forme de toutes les fiches (`TitleToggles`, §117.4). Estompé
+                tant que Jellyfin n'a pas répondu : ce bouton écrit, et proposer d'écrire une valeur
+                qu'on n'a pas lue est la façon la plus sûre de la changer par erreur. */}
+            <TitleToggleRow face={WATCHED_FACE} on={watched} onClick={toggleWatched} disabled={flagsBusy} unknown={!flagsKnown} />
 
-            {/* L'état tient dans la pastille, et non dans la ligne entière.
-                Une ligne pleine d'accent criait plus fort que le repère de sélection lui-même :
-                sur un menu parcouru à la télécommande, la ligne « déjà dans ma liste » avait donc
-                l'air d'être celle qu'on venait de désigner. La pastille change de forme (un plus
-                devient un marque-page coché) et de couleur ; la ligne, elle, reste disponible
-                pour dire ce qu'elle a toujours dit : où l'on se trouve. */}
-            {listable && (
-              <button
-                data-detail-menu
-                onClick={toggleAddToList}
-                aria-pressed={inList}
-                className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-              >
-                <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                  <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={16} />} offIcon={<Plus size={14} />} />
-                </span>
-                {/* Le libellé dit l'état, pas le geste. */}
-                <span className="text-sm font-medium">
-                  {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
-                </span>
-              </button>
-            )}
+            {/* L'état tient dans la pastille, et non dans la ligne entière — voir la fiche film. */}
+            {listable && <TitleToggleRow face={WATCHLIST_FACE} on={inList} onClick={toggleAddToList} />}
           </div>
 
         </div>
@@ -604,7 +435,7 @@ export function CinemaSeriesDetail({
           <CinemaRatingsLine imdbId={info?.imdbId} />
         </CinemaDetailModal>
       )}
-    </div>,
+    </DesktopSheetFrame>,
     document.body
   );
 }

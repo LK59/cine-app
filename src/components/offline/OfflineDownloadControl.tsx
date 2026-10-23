@@ -80,6 +80,14 @@ export interface OfflineTitle {
 }
 
 interface Props extends OfflineTitle {
+  /**
+   * Jellyfin a-t-il répondu sur la position (`resumeKnown` des faits de la fiche) ? Obligatoire, et à
+   * côté de `onlineResumeTicks` : `null` dit aussi bien « jamais commencé » que « pas de réponse », et
+   * la feuille de gestion, qui ne recevait que la position, lisait le second comme le premier — un film
+   * commencé repartait du début depuis « Lire le fichier téléchargé » quand Jellyfin était injoignable,
+   * alors que la ligne de tête (`OfflinePlayButton`) reprenait bien (audit du 23/10/2026).
+   */
+  onlineKnown: boolean;
   /** `row` : une ligne du menu de la fiche au bureau ; `wide` : un bouton pleine largeur au téléphone. */
   variant: "row" | "wide";
   rowClassName?: string;
@@ -103,8 +111,12 @@ export function offlinePlayable(d: OfflineDownload, online = typeof navigator ==
  * Le téléchargement lisible d'un titre, s'il y en a un — ce qui fait passer « Lire » à « Lire en
  * ligne » et met « Lire le fichier téléchargé » en tête de la fiche (Louis, 19/10/2026).
  */
-export function useOfflinePlayable(itemId: string | null | undefined): OfflineDownload | null {
-  const enabled = useOfflineDownloadsEnabled();
+export function useOfflinePlayable(
+  itemId: string | null | undefined,
+  /** Faux : un écran sans hors ligne (l'invité) — rien de demandé, `null`. */
+  active = true
+): OfflineDownload | null {
+  const enabled = useOfflineDownloadsEnabled(active);
   const download = useOfflineDownloadFor(itemId);
   // Présent dès la demande (grisé tant que rien n'est lisible), absent après un échec.
   return enabled && download && download.state !== "failed" ? download : null;
@@ -250,7 +262,7 @@ export function OfflineDownloadControl(props: Props) {
   return enabled && supported ? <OfflineDownloadControlOn {...props} /> : null;
 }
 
-function OfflineDownloadControlOn({ variant, rowClassName = "", badgeClassName = "", wideSpacing = "mb-2", ...title }: Props) {
+function OfflineDownloadControlOn({ variant, rowClassName = "", badgeClassName = "", wideSpacing = "mb-2", onlineKnown, ...title }: Props) {
   const t = useT();
   const download = useOfflineDownloadFor(title.itemId);
   const playback = usePlayback();
@@ -261,9 +273,10 @@ function OfflineDownloadControlOn({ variant, rowClassName = "", badgeClassName =
     void initOfflineDownloads();
   }, []);
 
-  // La même reprise que « Lire le fichier téléchargé » en tête de la fiche (`sharedResumeSeconds`).
+  // La même reprise que « Lire le fichier téléchargé » en tête de la fiche (`sharedResumeSeconds`),
+  // avec la même réponse de Jellyfin — connue ou non.
   const playDownloaded = (d: OfflineDownload) =>
-    playback.play({ itemId: d.itemId, title: d.title, resumeAt: sharedResumeSeconds(d, title.onlineResumeTicks), offline: { id: d.id } });
+    playback.play({ itemId: d.itemId, title: d.title, resumeAt: sharedResumeSeconds(d, title.onlineResumeTicks, onlineKnown), offline: { id: d.id } });
 
   let icon = <Download size={variant === "row" ? 14 : 16} />;
   let label = t("player.downloads.download");

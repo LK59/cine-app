@@ -282,6 +282,7 @@ describe("le violet de la marque dit ce qui est à moi", () => {
     "src/components/cinema/ProgressFill.tsx", "src/components/PlayButton.tsx", "src/components/cinema/detailMenu.ts",
     "src/components/cinema/CinemaEpisodeBrowser.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx",
     "src/components/player/PlayerDiscoverSheet.tsx", "src/components/player/PlayerListAdd.tsx",
+    "src/components/cinema/TitleToggles.tsx", // « À voir » et « Vu » allumés, la forme commune des fiches (§117.4)
     "src/components/player/PlayerEpisodesMenu.tsx", // « Vu » d'un épisode dans le menu « Épisodes » du lecteur, comme sur la fiche
     "src/components/offline/OfflineTitleSheet.tsx", // « Vu » d'un épisode dans la fiche hors ligne, comme sur la fiche en ligne
     "src/components/shareGuest/ShareTitleSheet.tsx", // « Vu » d'un épisode sur la fiche d'un lien de partage (§112), comme sur la fiche du téléphone

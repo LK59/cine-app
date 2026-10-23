@@ -1,44 +1,34 @@
 "use client";
 
-import { ShareButton } from "@/components/share/ShareControl";
-import { useEffect, useRef, useState } from "react";
+import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ArrowLeft, BookmarkCheck, Check, CircleCheck, Plus, Video } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { formatMinutes } from "@/lib/format";
-import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaCollectionRow, useCinemaCollection } from "@/components/cinema/CinemaCollectionRow";
 import { CinemaCastRow } from "@/components/cinema/CinemaCastRow";
 import { PlayButton } from "@/components/PlayButton";
-import { usePlayback } from "@/components/PlaybackProvider";
-import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
-import { useAddToWatchlist } from "@/lib/useAddToWatchlist";
-import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
+import { useWatchlistToggle } from "@/lib/useWatchlistToggle";
 import { detailColumnMotion } from "@/lib/sheetMotion";
-import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
-import { cinemaNavigate, useSheetBehind, useRouteBehind, arrivedByBack } from "@/lib/cinemaRoute";
-import { useDelayedClose } from "@/lib/useDelayedClose";
-import { useIsTouch } from "@/lib/useIsMobile";
+import { useSheetKeys } from "@/lib/useSheetKeys";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
-import { OfflineDownloadControl, OfflinePlayButton, offlinePlayLabels, sharedResumeSeconds, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
-import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
-import { CinemaLogo } from "@/components/cinema/CinemaLogo";
-import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
+import { OfflineDownloadControl, OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
+import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
+import { useDesktopSheetShell, DesktopSheetFrame, DetailTrailerRow } from "@/components/cinema/DesktopSheetShell";
+import { useSheetPlay } from "@/lib/useSheetPlay";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival } from "@/components/cinema/CinemaDetailExtras";
-import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts, sheetLeadFacts } from "@/lib/sheetFacts";
-import { useFileMissing } from "@/lib/missingFiles";
-import { FadeInImg } from "@/components/FadeInImg";
-import { ToggleGlyph } from "@/components/ToggleGlyph";
+import { sheetOverview, sheetRuntimeMinutes, sheetLeadFacts } from "@/lib/sheetFacts";
+import { TitleToggleRow, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
 import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
@@ -90,10 +80,6 @@ export function CinemaMovieDetail({
   underneath?: boolean;
 }) {
   const t = useT();
-  const containerRef = useRef<HTMLDivElement>(null);
-  /** Vrai dès que le spectateur a lui-même déplacé le focus — voir l'effet plus bas. */
-  const userMovedFocus = useRef(false);
-
   const [showTrailer, setShowTrailer] = useState(false);
   const [showSynopsis, setShowSynopsis] = useState(false);
   const { data: info, error: infoError } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
@@ -114,64 +100,30 @@ export function CinemaMovieDetail({
   const { progress, watched, known: flagsKnown, busy: flagsBusy, toggleWatched } =
     useJellyfinItemState(item.jellyfinItemId);
   // Ce que Jellyfin a dit de la position, sinon ce que la reprise gardée sur l'appareil en sait :
-  // « Reprendre · 1 h 10 restantes » dès l'ouverture, sans rien affirmer — voir `sheetFacts.ts`.
-  const facts = useSheetPlayFacts(
-    { kind: "movie", jellyfinItemId: item.jellyfinItemId },
-    item.title,
-    progress ? { kind: "movie", known: progress?.known === true, resumeTicks: progress.resumeTicks, runtimeTicks: progress.runtimeTicks } : undefined
-  );
-  // Grisé seulement si Jellyfin a répondu que le fichier n'existe plus — voir `missingFiles.ts`.
-  const fileMissing = useFileMissing(item.jellyfinItemId);
-  const offlinePlayable = useOfflinePlayable(item.jellyfinItemId);
-  // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
-  usePlaybackPrefetch(item.jellyfinItemId);
-  // Without this, Vu/À voir always opened looking un-toggled even for a title already on the
-  // watchlist — useAddToWatchlist only reflects whatever status is handed to it as initialStatus
-  // (see its own doc comment), and nothing was passing one here, unlike every other surface that
-  // uses this hook (PosterCard, recommendations).
-  const statusMap = useWatchlistStatusMap([{ mediaType: "movie", tmdbId: item.tmdbId }]);
-  const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist(statusMap[`movie:${item.tmdbId}`] ?? null);
+  // « Reprendre · 1 h 10 restantes » dès l'ouverture, sans rien affirmer ; le fichier introuvable,
+  // la copie hors ligne, le préchargement — le bouton Lire de toutes les fiches, `useSheetPlay`.
+  const { facts, fileMissing, offlinePlayable, label: playLabel } = useSheetPlay({ kind: "movie", jellyfinItemId: item.jellyfinItemId, title: item.title, progress });
+  // « À voir » : son état de départ, la garde `canJoinWatchlist` et l'écriture, par le crochet de
+  // toutes les fiches (`useWatchlistToggle`, §117.4). « Vu » et « Favori » sont chez Jellyfin (plus
+  // haut) : un titre peut être à la fois dans la liste et marqué vu.
+  // Sans identifiant TMDB — un film que Jellyfin a seul (§89) peut n'en avoir aucun —, pas de ligne.
+  const { listable, inList, toggle: toggleAddToList } = useWatchlistToggle({
+    mediaType: "movie",
+    tmdbId: item.tmdbId,
+    title: item.title,
+    year: item.year,
+    posterPath: item.posterUrl,
+  });
   // item.logoUrl comes bulk-included in the /api/cinema/movies payload now (see CinemaHero's own
   // note) — known synchronously, prefetched alongside backdrops by CinemaClient's warm-up
   // effect. A failed logo shows the written title and retries on its own (`useImageRetry`).
 
-  // Keeps this overlay mounted for one exit animation's worth of time after a close is
-  // requested, instead of vanishing the instant onClose fires — see the hook's own doc comment.
-  // Every close trigger below (Escape/Backspace, the back button, the auto-close-on-play effect)
-  // calls requestClose() instead of onClose directly now.
-  // Pas d'animation de sortie quand c'est une autre fiche qui attend derrière : la sortie
-  // découvrirait l'accueil deux dixièmes de seconde avant que la précédente n'entre par-dessus.
-  // Voir `useSheetBehind`.
-  // Monté parce qu'on revient dessus, et non parce qu'on l'ouvre : pas d'animation d'entrée. Il
-  // n'ouvre rien, il se découvre — voir `arrivedByBack`. Lu une seule fois, au montage.
-  const [revealed] = useState(() => arrivedByBack());
-  const sheetBehind = useSheetBehind();
-  /**
-   * Sur un ordinateur, la fiche relaie l'aperçu sans rien déplacer : le fond reste, le logo glisse
-   * à sa place, le contenu change (`useDesktopContinuity`). Sur l'iPad, la carte touchée devient le
-   * visuel plein écran, et la fiche y retourne (DECISIONS.md §61) — la même décision que la fiche du
-   * téléphone et la fiche TMDB. La fermeture rend l'adresse aussitôt :
-   * c'est une copie de la fiche qui s'efface pendant que l'image revole vers l'affiche. Sans fiche
-   * dessinée derrière (une fiche TMDB, une personne), l'échange se fait d'un coup, comme avant.
-   */
-  const behindIsDrawn = useRouteBehind() !== null;
-  const { closing, requestClose } = useDelayedClose(onClose, 0);
-  const morph = useSheetTransition({
-    layout: "desktop",
-    rootRef: containerRef,
-    imageRef: containerRef,
-    active: !underneath,
-    leaving: closing,
-    revealed,
-    instantExit: sheetBehind && !behindIsDrawn,
-  });
-
-  /**
-   * Refermer au doigt : la poignée du haut, écrite une fois pour les deux fiches du bureau.
-   * Inerte à la souris, et inerte aussi sous une fiche posée par-dessus — un écran qui s'en va
-   * n'a pas d'avis, et celui du dessous non plus.
-   */
-  const { style: gripStyle, grip } = useSheetGrip(requestClose, useIsTouch() && !underneath);
+  // L'habillage des deux fiches du bureau (`useDesktopSheetShell`) : l'arrivée par un retour, la
+  // fermeture différée (Échap/Retour arrière, le bouton Retour, la poignée passent tous par
+  // `requestClose`), le trajet ou la continuité (§61), la poignée au doigt, le focus rendu au retour
+  // du lecteur, et le drapeau « le spectateur a bougé lui-même » remis à zéro à chaque titre.
+  const shell = useDesktopSheetShell({ subjectKey: item.radarrId, underneath, onClose });
+  const { containerRef, userHasMovedFocus, markUserMovedFocus, revealed, morph, requestClose, playerOwnsKeyboard } = shell;
 
   // Drives both the second snap section and the chevron pointing at it: with nothing similar in
   // the library there's no second screen, so neither should exist.
@@ -183,6 +135,7 @@ export function CinemaMovieDetail({
   // défilement ne le suivait que pour les titres similaires : une saga seule n'était pas annoncée.
   const hasBelow = hasSimilar || collection.parts.length > 0 || cast.length > 0;
 
+
   // Lands focus on the first menu row as soon as the overlay opens — a TV remote user should
   // never need to press Down before Play is reachable. PlayButton itself only renders once
   // usePlayerEnabled() resolves (it starts false while /api/config/public is in flight, same
@@ -191,14 +144,7 @@ export function CinemaMovieDetail({
   // played the trailer instead of the film. Re-running once playerEnabled flips true (and once
   // trailerKey is known, which can also reorder what's "first") re-targets focus at whichever
   // row is now actually first, catching that race instead of freezing on its initial guess.
-  // Un titre similaire rouvre la même fiche sur un autre film : c'est une arrivée, et le
-  // drapeau doit repartir de zéro. Sans cela, un spectateur venu d'un titre similaire — donc
-  // ayant forcément bougé le focus pour l'atteindre — n'était plus jamais ramené sur la lecture.
-  // Déclaré avant l'effet de focus : les effets s'exécutent dans leur ordre de déclaration.
-  useEffect(() => {
-    userMovedFocus.current = false;
-  }, [item.radarrId]);
-
+  // (Le drapeau `userMovedFocus` repart de zéro à chaque titre, dans `useDesktopSheetShell`.)
   const playerEnabled = usePlayerEnabled();
   useEffect(() => {
     /**
@@ -212,130 +158,49 @@ export function CinemaMovieDetail({
      * cliqué, la première ligne reste la bonne cible.
      */
     const frame = requestAnimationFrame(() => {
-      if (underneath || userMovedFocus.current) return;
+      if (underneath || userHasMovedFocus()) return;
       focusFirstAction(containerRef.current);
     });
     return () => cancelAnimationFrame(frame);
-  }, [playerEnabled, lead.trailerKey, item.radarrId, underneath]);
+  }, [playerEnabled, lead.trailerKey, item.radarrId, underneath, containerRef, userHasMovedFocus]);
 
-  // Stays open underneath the player instead of closing when Lecture starts, so dismissing the
-  // player lands you back on the sheet you started from rather than on the browse grid. What
-  // originally forced the close was this component's own Up/Down handler fighting
-  // PlayerControls' for the keyboard — every arrow press ran here too, found the player's
-  // focused control wasn't one of ITS [data-detail-menu] buttons, and yanked focus back to
-  // Lecture. The handler now stands down while the player is full-screen instead, and takes the
-  // keyboard back (and the focus with it) the moment the player is gone.
-  const playback = usePlayback();
-  const playerOwnsKeyboard = playerHoldsKeyboard(playback);
-  const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
-  useEffect(() => {
-    if (!underneath && wasPlayerFullScreen.current && !playerOwnsKeyboard) {
-      focusFirstAction(containerRef.current);
-    }
-    wasPlayerFullScreen.current = playerOwnsKeyboard;
-  }, [playerOwnsKeyboard, underneath]);
-
-  useEffect(() => {
-    if (underneath) return;
-    function onKey(e: KeyboardEvent) {
-      // The player is on top and owns the keyboard — see above.
-      if (playerOwnsKeyboard) return;
-      // TrailerModal has its own Escape handler (also on window) that closes just itself —
-      // without this guard, Escape while the trailer is open closed BOTH it and this whole
-      // detail overlay at once, since nothing stops this listener from also firing on the same
-      // keypress.
-      if (showTrailer || showSynopsis) return;
-      if (e.key === "Escape" || e.key === "Backspace") {
-        e.preventDefault();
-        requestClose();
-        return;
-      }
+  // Échap et Retour arrière referment, les flèches parcourent le menu — et rien quand une feuille
+  // est posée par-dessus ou qu'on tape dans un champ : la règle de toutes les fiches, `useSheetKeys`.
+  useSheetKeys({
+    // The player is on top and owns the keyboard — see above. TrailerModal has its own Escape
+    // handler (also on window) that closes just itself — without this guard, Escape while the
+    // trailer is open closed BOTH it and this whole detail overlay at once.
+    listening: !underneath && !playerOwnsKeyboard && !showTrailer && !showSynopsis,
+    onClose: requestClose,
+    onKey: (e) => {
       // The similar-titles row below the menu takes the arrow keys when focus is in it (and
       // claims the Down that enters it from the last menu row) — see similarRowKeyNav.
       if (similarRowKeyNav(e, containerRef.current)) return;
 
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-      userMovedFocus.current = true;
+      markUserMovedFocus();
       detailMenuArrowNav(e, containerRef.current);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, showTrailer, showSynopsis, playerOwnsKeyboard, underneath]);
-
-  // « À voir » reste local : c'est une intention, et rien d'autre ne la connaît. « Vu » et
-  // « Favori » sont partis chez Jellyfin (voir plus haut). Un titre peut donc être à la fois dans
-  // la liste et marqué vu, ce que l'ancien schéma — un seul statut par titre — interdisait.
-  function toggleAddToList() {
-    if (inList) removeFromWatchlist({ tmdbId: item.tmdbId, mediaType: "movie" });
-    else
-      addToWatchlist(
-        { tmdbId: item.tmdbId, mediaType: "movie", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
-        "to_watch"
-      );
-  }
+    },
+  });
 
   if (typeof document === "undefined") return null;
 
-  const inList = addedStatus === "to_watch";
-
   return createPortal(
-    // z-index as inline style, not a Tailwind class — arbitrary-value classes weren't making it
-    // into the production CSS bundle (see CinemaClient's own note). Just above CinemaClient's own
-    // z-45 browse layer, both still well below PlayerHost's z-80 — pressing Lecture needs the
-    // player to end up on TOP of this, not hidden behind it (see CinemaClient's z-index note).
-    <div
-      ref={containerRef}
-      className={`fixed inset-0 overflow-hidden bg-ink ${revealed || morph.handlesEntry ? "" : "animate-fade-in"}`}
-      // Le rail du lecteur est posé sur le bord gauche de l'écran, au-dessus de cette fiche :
-      // sans ce retrait, la colonne de texte et le bouton Retour passeraient dessous. La variable
-      // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
-      inert={underneath}
-      aria-hidden={underneath || undefined}
-      style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)", ...gripStyle }}
+    // La couche plein écran, son fond, la poignée et le bouton Retour : `DesktopSheetFrame`.
+    <DesktopSheetFrame
+      containerRef={containerRef}
+      revealed={revealed}
+      handlesEntry={morph.handlesEntry}
+      gripStyle={shell.gripStyle}
+      grip={shell.grip}
+      onBack={requestClose}
+      underneath={underneath}
+      backdropUrl={item.backdropUrl}
     >
-      {item.backdropUrl && (
-        <FadeInImg src={item.backdropUrl} alt="" data-sheet-photo="" className="absolute inset-0 h-full w-full object-cover" />
-      )}
-      {/* Localized, gradually-eased blur — not a global filter on the image, and not a flat
-          rectangle either (a plain backdrop-blur-md div has a hard visible seam where it starts,
-          which is what looked broken here). backdrop-blur blurs whatever renders behind THIS div
-          (the sharp img above); the mask ramps that blur in from nothing to full over the top
-          half of the div instead of switching on all at once, and the whole zone sits low and
-          short — only behind the synopsis/menu, not across the middle of the image. */}
-      <div
-        data-sheet-settle=""
-        className="absolute inset-x-0 bottom-0 backdrop-blur-md"
-        style={{
-          height: "45%",
-          maskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
-          WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
-        }}
-      />
-      {/* Deux voiles à étapes explicites plutôt qu'un dégradé en trois arrêts : voir
-          CinemaDetailLayout, où la raison de chaque pourcentage est écrite. */}
-      <div data-sheet-veil="" className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
-      <div data-sheet-veil="" className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
-
-      {/* Posée avant le bouton Retour, et non après : les deux sont au même rang, et le dernier
-          dessiné reçoit les appuis — la poignée traverse toute la largeur, le bouton doit rester
-          au-dessus d'elle. Voir `useSheetGrip`. */}
-      {grip}
-
-      {/* z-10, explicitly above the content column below: that column spans the full height
-          (flex items-center, for vertical centering) and — even with a transparent background —
-          would otherwise sit on top of this button in DOM/paint order and silently eat every
-          mouse click aimed at it, leaving only the Escape/Backspace keyboard path working. */}
-      <button
-        onClick={requestClose}
-        className="btn btn-ghost fixed z-10 rounded-full bg-black/55 px-3 py-2 float-edge"
-        style={{ top: "max(1rem, env(safe-area-inset-top))", left: "calc(1rem + var(--player-rail, 0px))" }}
-      >
-        <ArrowLeft size={16} /> {t("cinema.back")}
-      </button>
 
       {/* Partager ce film par un lien (DECISIONS.md §112) : une pastille discrète en face du retour,
           hors du menu de la fiche — administrateur seul, rien pour les autres. */}
-      {item.jellyfinItemId && !fileMissing && (
+      {shareableFrom("movie", { jellyfinItemId: item.jellyfinItemId, fileMissing }) && (
         <ShareButton
           variant="icon"
           iconClassName="btn btn-ghost fixed z-10 rounded-full bg-black/55 p-2.5 float-edge"
@@ -420,11 +285,7 @@ export function CinemaMovieDetail({
               // Same override as CinemaSeriesDetail's own Play button — see its doc comment —
               // so a movie opened from the Continue Watching row and one opened from its own
               // poster card show the identical "Reprendre - 1h10 restants" wording.
-              label={
-                offlinePlayable
-                  ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, facts.resumeTicks, facts.resumeKnown), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done").online
-                  : formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks)
-              }
+              label={playLabel}
               // La même ligne que les autres : c'est le sélecteur qui se peint en blanc, pas
               // elle. Deux blancs à l'écran — un fixe et un mobile — se disputaient le sens.
               className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
@@ -455,22 +316,7 @@ export function CinemaMovieDetail({
             />
 
             {/* Sa place est tenue, invisible et hors du clavier, tant que la description n'est pas là. */}
-            {!lead.trailerKnown && (
-              <div aria-hidden="true" data-sheet-reserved="" className={`${MENU_ROW} ${MENU_ROW_INACTIVE} invisible`}>
-                <span className={MENU_BADGE}>
-                  <Video size={14} />
-                </span>
-                <span className="text-sm font-medium">{t("cinema.trailer")}</span>
-              </div>
-            )}
-            {lead.trailerKey && (
-              <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${lead.trailerLate ? late.fade : ""}`}>
-                <span className={MENU_BADGE}>
-                  <Video size={14} />
-                </span>
-                <span className="text-sm font-medium">{t("cinema.trailer")}</span>
-              </button>
-            )}
+            <DetailTrailerRow lead={lead} late={late} onOpen={() => setShowTrailer(true)} />
 
             {/* Le téléchargement hors ligne (bêta, 19/10/2026) : Lire, Bande-annonce, puis Télécharger (Louis). */}
             {!fileMissing && (
@@ -485,47 +331,20 @@ export function CinemaMovieDetail({
                 posterUrl={item.posterUrl ?? null}
                 runtimeMinutes={item.runtimeMinutes ?? null}
                 onlineResumeTicks={facts.resumeTicks}
+                onlineKnown={facts.resumeKnown}
               />
             )}
 
-            <button
-              data-detail-menu
-              onClick={toggleWatched}
-              disabled={flagsBusy}
-              aria-pressed={watched}
-              // Estompé tant que Jellyfin n'a pas répondu : ce bouton écrit, et proposer d'écrire
-              // une valeur qu'on n'a pas lue est la façon la plus sûre de la changer par erreur.
-              className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${flagsKnown ? "" : "opacity-50"}`}
-            >
-              <span className={watched ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                <ToggleGlyph on={watched} onIcon={<CircleCheck size={16} />} offIcon={<Check size={14} />} />
-              </span>
-              <span className="text-sm font-medium">
-                {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
-              </span>
-            </button>
+            {/* « Vu » puis « À voir » : la forme de toutes les fiches (`TitleToggles`, §117.4). Estompé
+                tant que Jellyfin n'a pas répondu : ce bouton écrit, et proposer d'écrire une valeur
+                qu'on n'a pas lue est la façon la plus sûre de la changer par erreur. */}
+            <TitleToggleRow face={WATCHED_FACE} on={watched} onClick={toggleWatched} disabled={flagsBusy} unknown={!flagsKnown} />
 
             {/* L'état tient dans la pastille, et non dans la ligne entière.
                 Une ligne pleine d'accent criait plus fort que le repère de sélection lui-même :
                 sur un menu parcouru à la télécommande, la ligne « déjà dans ma liste » avait donc
-                l'air d'être celle qu'on venait de désigner. La pastille change de forme (un plus
-                devient un marque-page coché) et de couleur ; la ligne, elle, reste disponible
-                pour dire ce qu'elle a toujours dit : où l'on se trouve. */}
-            <button
-              data-detail-menu
-              onClick={toggleAddToList}
-              aria-pressed={inList}
-              className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-            >
-              <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={16} />} offIcon={<Plus size={14} />} />
-              </span>
-              {/* Le libellé dit l'état, pas le geste : « À voir » ne distinguait pas un titre
-                  déjà enregistré d'un titre qui ne l'était pas. L'icône, elle, dit le geste. */}
-              <span className="text-sm font-medium">
-                {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
-              </span>
-            </button>
+                l'air d'être celle qu'on venait de désigner. */}
+            {listable && <TitleToggleRow face={WATCHLIST_FACE} on={inList} onClick={toggleAddToList} />}
           </div>
 
         </div>
@@ -583,7 +402,7 @@ export function CinemaMovieDetail({
           <CinemaRatingsLine imdbId={info?.imdbId} />
         </CinemaDetailModal>
       )}
-    </div>,
+    </DesktopSheetFrame>,
     document.body
   );
 }

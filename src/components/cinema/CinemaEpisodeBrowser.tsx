@@ -3,15 +3,17 @@
 import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Play, Check } from "lucide-react";
+import { Play, Check } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
-import { formatDurationShort, formatMinutes } from "@/lib/format";
+import { episodeRowFacts } from "@/lib/episodeRow";
 import { useDelayedClose } from "@/lib/useDelayedClose";
+import { useSheetKeys } from "@/lib/useSheetKeys";
 import { useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { usePlayerSeriesRequests } from "@/lib/usePlayerSeriesRequests";
 import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes";
 import { useT } from "@/components/TranslationProvider";
+import { SheetBackButton } from "@/components/cinema/DesktopSheetShell";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
@@ -142,17 +144,13 @@ export function CinemaEpisodeBrowser({
   // Left/Right move between the season list and the episode list; Up/Down cycle within
   // whichever one currently has focus — same roving-focus convention as the player's own
   // directional nav and CinemaMovieDetail's vertical menu.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (playerOwnsKeyboard) return;
-      // Une feuille ouverte depuis une ligne (téléchargement hors ligne) a ses touches : Échap la
-      // referme, elle — pas cet écran derrière elle (règle 2 des fiches).
-      if (document.querySelector("[data-action-sheet]")) return;
-      if (e.key === "Escape" || e.key === "Backspace") {
-        e.preventDefault();
-        requestClose();
-        return;
-      }
+  // Échap et Retour arrière referment ; une feuille ouverte depuis une ligne (téléchargement hors
+  // ligne) a ses touches — Échap la referme, elle, pas cet écran derrière elle (règle 2 des fiches).
+  // La règle de toutes les fiches : `useSheetKeys`.
+  useSheetKeys({
+    listening: !playerOwnsKeyboard,
+    onClose: requestClose,
+    onKey: (e) => {
       const active = document.activeElement as HTMLElement | null;
       const inSeasons = active?.getAttribute("data-episode-season") === "true";
       const inEpisodes = active?.getAttribute("data-episode-item") === "true";
@@ -193,10 +191,8 @@ export function CinemaEpisodeBrowser({
         const next = e.key === "ArrowDown" ? items[Math.min(idx + 1, items.length - 1)] : items[Math.max(idx - 1, 0)];
         next?.focus();
       }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, selectedSeason, playerOwnsKeyboard]);
+    },
+  });
 
   if (typeof document === "undefined") return null;
 
@@ -209,13 +205,7 @@ export function CinemaEpisodeBrowser({
       // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
       style={{ zIndex: 49, paddingLeft: "var(--player-rail, 0px)" }}
     >
-      <button
-        onClick={requestClose}
-        className="btn btn-ghost fixed z-10 rounded-full bg-black/55 px-3 py-2 float-edge"
-        style={{ top: "max(1rem, env(safe-area-inset-top))", left: "calc(1rem + var(--player-rail, 0px))" }}
-      >
-        <ArrowLeft size={16} /> {t("cinema.back")}
-      </button>
+      <SheetBackButton onClick={requestClose} />
 
       {/* No position:fixed descendants here (the back button above is a sibling) — safe to
           transform, unlike the outer root (see globals.css's own note on this pitfall). */}
@@ -273,7 +263,10 @@ export function CinemaEpisodeBrowser({
                 <OfflineSeasonDownload series={offlineSeries} seasons={seasons} seasonNumber={displayedSeason} posterUrl={posterUrl} size="desktop" />
               </div>
             )}
-            {episodes.map((ep) => (
+            {episodes.map((ep) => {
+              // Le temps restant ou la durée, et « À suivre » : la règle des trois listes (`episodeRowFacts`).
+              const row = episodeRowFacts(ep, nextEpisodeId);
+              return (
               // La ligne est un conteneur, et non plus un bouton : le bouton de téléchargement est à
               // côté de celui de l'épisode, jamais dedans (un bouton dans un bouton n'est pas du HTML
               // valide). L'épisode garde `data-episode-item` et tout ce que les flèches en attendent.
@@ -306,21 +299,17 @@ export function CinemaEpisodeBrowser({
                     <span className="text-sm font-medium text-white">
                       {ep.episodeNumber}. {ep.title}
                     </span>
-                    {ep.jellyfinItemId === nextEpisodeId && (
+                    {row.isNext && (
                       <span className="shrink-0 rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-400 ring-1 ring-accent-500/40">
                         {t("cinema.nextUpBadge")}
                       </span>
                     )}
                     {/* A started episode says what's LEFT, not how long it is — the number you
                         actually want before pressing play. Untouched ones keep the runtime. */}
-                    {ep.resumeTicks && ep.runtimeTicks && !ep.watched ? (
-                      <span className="shrink-0 text-xs text-accent-400">
-                        {t("cinema.timeRemaining", { time: formatDurationShort(ep.runtimeTicks - ep.resumeTicks) })}
-                      </span>
+                    {row.remaining !== null ? (
+                      <span className="shrink-0 text-xs text-accent-400">{t("cinema.timeRemaining", { time: row.remaining })}</span>
                     ) : (
-                      ep.runtimeMinutes && (
-                        <span className="shrink-0 text-xs text-subtle">{formatMinutes(ep.runtimeMinutes)}</span>
-                      )
+                      row.runtime !== null && <span className="shrink-0 text-xs text-subtle">{row.runtime}</span>
                     )}
                   </div>
                   {ep.overview && <p className="mt-1 line-clamp-2 text-xs text-muted">{ep.overview}</p>}
@@ -328,7 +317,8 @@ export function CinemaEpisodeBrowser({
               </button>
               {offlineSeries && <OfflineEpisodeButton series={offlineSeries} seasons={seasons} episode={ep} posterUrl={posterUrl} size="desktop" />}
               </div>
-            ))}
+              );
+            })}
 
             <CinemaMissingEpisodes
               season={missing.seasonOf(displayedSeason)}

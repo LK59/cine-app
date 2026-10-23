@@ -263,17 +263,12 @@ describe("un seul geste tactile de fermeture sur les fiches du bureau", () => {
    * `CinemaDetailLayout`. La poignée du 20/09/2026 est arrivée par le même besoin et part au même
    * endroit ; ce test interdit la troisième copie.
    */
+  // Que chaque fiche ait la poignée — au doigt seulement, jamais dessous, branchée sur sa fermeture —
+  // est éprouvé rendu dans `fiche-bureau-poignee.test.tsx` (23/10/2026) : l'appel peut vivre hors des
+  // fiches. Ici, qu'aucune ne câble le geste elle-même.
   it("aucune des deux fiches ne câble le geste elle-même", () => {
     for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"]) {
-      const src = lire(f);
-      expect(src).toMatch(/useSheetGrip/);
-      expect(src).not.toMatch(/useSwipeToDismiss/);
-    }
-  });
-
-  it("la poignée ne s'arme qu'au doigt", () => {
-    for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"]) {
-      expect(lire(f)).toMatch(/useSheetGrip\(requestClose, useIsTouch\(\)/);
+      expect(lire(f)).not.toMatch(/useSwipeToDismiss/);
     }
   });
 
@@ -382,9 +377,12 @@ describe("une seule règle de reprise, une seule d'épisode suivant, une seule c
       .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
       .join("\n");
 
+  // Le bouton de la fiche du téléphone est éprouvé rendu dans `fiche-telephone-lire.test.tsx`
+  // (23/10/2026) — position au serveur avant la réponse, la sienne après, zéro pour « Recommencer » — :
+  // son appel peut vivre hors de la fiche.
   it("la position de départ se calcule par `resumeAtFor`, pas à la main", () => {
+    expect(codeOnly("src/components/PlayButton.tsx")).toContain("resumeAtFor(");
     for (const f of ["src/components/PlayButton.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"]) {
-      expect([f, codeOnly(f)]).toEqual([f, expect.stringContaining("resumeAtFor(")]);
       expect([f, /!resumeKnown \? undefined/.test(codeOnly(f))]).toEqual([f, false]);
     }
   });
@@ -398,10 +396,11 @@ describe("une seule règle de reprise, une seule d'épisode suivant, une seule c
     }
   });
 
+  // Le comportement (une réponse `known: false` laisse la position au serveur) est éprouvé fiche par
+  // fiche dans `fiche-lire-avant-reseau.test.tsx` (23/10/2026) : la règle peut vivre hors des fiches.
   it("« connu » veut dire que Jellyfin a répondu, pas que la requête est revenue", () => {
     for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"]) {
       expect([f, /progress !== undefined/.test(codeOnly(f))]).toEqual([f, false]);
-      expect([f, codeOnly(f)]).toEqual([f, expect.stringContaining("progress?.known === true")]);
     }
   });
 
@@ -412,15 +411,12 @@ describe("une seule règle de reprise, une seule d'épisode suivant, une seule c
   });
 
   it("l'épisode suivant du cinéma vient de `nextEpisodeIn`", () => {
-    // Les deux fiches de série passent par `useNextEpisodeFromCache`, qui l'appelle au moment où
-    // l'épisode se termine (25/09/2026).
-    for (const f of [
-      "src/components/cinema/CinemaSeriesDetail.tsx",
-      "src/components/cinema/mobile/CinemaMobileDetail.tsx",
-      "src/lib/playSeriesNextEpisode.ts",
-    ]) {
-      expect([f, codeOnly(f)]).toEqual([f, expect.stringMatching(/nextEpisodeIn\(|useNextEpisodeFromCache\(/)]);
-      expect([f, /flat\.findIndex/.test(codeOnly(f))]).toEqual([f, false]);
+    // Les fiches de série lisent l'épisode suivant dans leur liste au moment où l'épisode se termine
+    // (25/09/2026) — éprouvé rendu, fiche par fiche, dans `fiche-lire-avant-reseau.test.tsx`.
+    const f = "src/lib/playSeriesNextEpisode.ts";
+    expect([f, codeOnly(f)]).toEqual([f, expect.stringMatching(/nextEpisodeIn\(|useNextEpisodeFromCache\(/)]);
+    for (const g of [f, "src/components/cinema/CinemaSeriesDetail.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"]) {
+      expect([g, /flat\.findIndex/.test(codeOnly(g))]).toEqual([g, false]);
     }
   });
 
@@ -531,16 +527,19 @@ describe("une seule animation de fiche qu'on tire", () => {
 });
 
 describe("une seule façon de savoir que le lecteur tient le clavier", () => {
-  // La fiche du téléphone l'avait oublié : Échap refermait le lecteur *et* elle.
+  // La fiche du téléphone l'avait oublié : Échap refermait le lecteur *et* elle. Les deux fiches du
+  // bureau sont éprouvées rendues dans `fiche-bureau-sous-lecteur.test.tsx` (23/10/2026) — muettes sous
+  // le film, le clavier et le focus repris après — : l'appel peut vivre hors de leur fichier.
   it.each([
     "src/components/cinema/mobile/CinemaMobileDetail.tsx",
-    "src/components/cinema/CinemaMovieDetail.tsx",
-    "src/components/cinema/CinemaSeriesDetail.tsx",
     "src/components/cinema/CinemaEpisodeBrowser.tsx",
   ])("%s", (f) => {
     const src = lire(f);
     expect(src).toContain("playerHoldsKeyboard(playback)");
     expect(src).not.toMatch(/playerOwnsKeyboard = playback\.mode === "full"/);
+  });
+  it.each(["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"])("%s ne lit pas le mode à la main", (f) => {
+    expect(lire(f)).not.toMatch(/playerOwnsKeyboard = playback\.mode === "full"/);
   });
 });
 
@@ -587,15 +586,22 @@ describe("ce que Lire trouve déjà prêt", () => {
       .map((f) => `src/${f}`)
       .filter((f) => /\.tsx?$/.test(f) && !f.includes("__tests__"));
 
-  it("les trois fiches, et elles seules, préparent la lecture", () => {
+  // Que chaque fiche prépare bien la lecture de ce que Lire lancerait est éprouvé rendu dans
+  // `fiche-lire-avant-reseau.test.tsx` (23/10/2026). Ici, « elles seules » : l'appel ne vit que dans
+  // les fiches — ou dans le crochet de leur bouton Lire, que seules les fiches appellent.
+  const FICHES_LIRE = [
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    // La fiche d'un lien de partage (§112) : une fiche, avec le seul titre de son bouton principal.
+    "src/components/shareGuest/ShareTitleSheet.tsx",
+  ];
+  it("les fiches, et elles seules, préparent la lecture", () => {
     const hits = sources().filter((f) => f !== "src/lib/usePlaybackPrefetch.ts" && /usePlaybackPrefetch\(/.test(code(f)));
-    expect(hits.sort()).toEqual([
-      "src/components/cinema/CinemaMovieDetail.tsx",
-      "src/components/cinema/CinemaSeriesDetail.tsx",
-      "src/components/cinema/mobile/CinemaMobileDetail.tsx",
-      // La fiche d'un lien de partage (§112) : une fiche, avec le seul titre de son bouton principal.
-      "src/components/shareGuest/ShareTitleSheet.tsx",
-    ]);
+    expect(hits.length).toBeGreaterThan(0);
+    for (const f of hits) expect([...FICHES_LIRE, "src/lib/useSheetPlay.ts"]).toContain(f);
+    const viaHook = sources().filter((f) => f !== "src/lib/useSheetPlay.ts" && /useSheetPlay\(/.test(code(f)));
+    for (const f of viaHook) expect(FICHES_LIRE).toContain(f);
   });
 
   it("le lecteur lit la description sous la clé que la fiche précharge", () => {
@@ -696,16 +702,15 @@ describe("« Ma liste » ne se propose qu'à un titre qui a un identifiant TMDB"
   });
 
   // Le bouton lui-même n'est rendu que si la règle l'accepte — une garde dans le seul geste
-  // laisserait un bouton qui ne fait rien.
-  it.each([
-    ["src/components/cinema/CinemaSeriesDetail.tsx", /\{listable && \(\s*<button\s+data-detail-menu\s+onClick=\{toggleAddToList\}/],
-    ["src/components/cinema/mobile/CinemaMobileDetail.tsx", /\{canJoinWatchlist\(tmdbId\) && \(\s*<button type="button" onClick=\{toggleInList\}/],
-  ])("%s la demande avant de dessiner le bouton", (f, guarded) => {
-    const src = lire(f);
-    expect(src).toMatch(guarded);
-    // La forme exacte qui portait la faute sur la fiche du bureau.
-    expect(src).not.toMatch(/tmdbId: item\.tmdbId \?\? 0/);
-  });
+  // laisserait un bouton qui ne fait rien. Vérifié rendu, sur les quatre fiches de bibliothèque,
+  // dans `fiche-boutons-deux-etats.test.tsx` (23/10/2026) : le bouton peut vivre hors du fichier.
+  it.each(["src/components/cinema/CinemaSeriesDetail.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"])(
+    "%s n'envoie jamais le zéro",
+    (f) => {
+      // La forme exacte qui portait la faute sur la fiche du bureau.
+      expect(lire(f)).not.toMatch(/tmdbId: item\.tmdbId \?\? 0/);
+    }
+  );
 });
 
 describe("une seule animation de colonne pour les fiches du bureau", () => {
@@ -928,12 +933,14 @@ describe("une seule décision pour ce qu'une fiche montre avant le réseau", () 
     "src/components/cinema/CinemaMovieDetail.tsx",
     "src/components/cinema/CinemaSeriesDetail.tsx",
     "src/components/cinema/mobile/CinemaMobileDetail.tsx",
-  ])("%s passe par useSheetPlayFacts, sheetOverview, useFileMissing et useLateArrival", (f) => {
+  ])("%s passe par sheetOverview et useLateArrival", (f) => {
+    // `useSheetPlayFacts` et `useFileMissing` : éprouvés rendus dans `fiche-lire-avant-reseau.test.tsx`
+    // (23/10/2026) — le libellé de l'appareil avant le réseau, Lire grisé sur un fichier introuvable.
     const code = lire(f)
       .split("\n")
       .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
       .join("\n");
-    for (const porteur of ["useSheetPlayFacts(", "sheetOverview(", "useFileMissing(", "useLateArrival("]) {
+    for (const porteur of ["sheetOverview(", "useLateArrival("]) {
       expect([f, porteur, code.includes(porteur)]).toEqual([f, porteur, true]);
     }
     expect(code).not.toMatch(/info\?\.tmdb\?\.overview \|\|/);
@@ -1142,8 +1149,11 @@ describe("une seule ouverture de fiche (§61)", () => {
   it.each(SHEETS)("%s passe par useSheetMorph, sans sortie CSS à elle", (f) => {
     const src = lire(f);
     // Directement, ou par `useSheetTransition` — qui choisit au montage entre lui et la continuité
-    // du fond au bureau, et l'appelle toujours.
-    expect(src).toMatch(/useSheetMorph\(\{|useSheetTransition\(\{/);
+    // du fond au bureau, et l'appelle toujours —, dans la fiche ou dans l'habillage commun des fiches du
+    // bureau qu'elle importe (`DesktopSheetShell.tsx`, 23/10/2026). Le trajet lui-même est éprouvé
+    // rendu, fiche par fiche, dans `sheetMorph-desktop-sheets.test.tsx` et `cinema-mobile-detail-keys`.
+    const shell = /from "@\/components\/cinema\/DesktopSheetShell"/.test(src) ? lire("src/components/cinema/DesktopSheetShell.tsx") : "";
+    expect(`${src}\n${shell}`).toMatch(/useSheetMorph\(\{|useSheetTransition\(\{/);
     expect(src).not.toMatch(/"sheet-out"/);
     expect(src).not.toMatch(/\? "animate-fade-out"/);
   });
@@ -1625,5 +1635,225 @@ describe("les écarts entre les copies du lecteur, corrigés (§116)", () => {
   it.each(HOTES)("%s rapporte la lecture au registre des tentatives par habitWatch (§67)", (hote) => {
     // Plus d'appel en ligne dans un écouteur : la position passe par l'option de `habitWatch`.
     expect([hote, /habitWatch\(\{[\s\S]*?notePosition: \(seconds\) => [\w.]*retries\.notePosition\(seconds\)/.test(codeDe(hote))]).toEqual([hote, true]);
+describe("les touches des fiches : une règle (§117.1)", () => {
+  // Audit du 23/10/2026 : six écouteurs, trois listes de silences ; les fiches du bureau refermaient
+  // sous la fenêtre « Partager ». Une fiche passe par `useSheetKeys` (ou `useSheetExit`, qui lit la
+  // même règle) et n'écoute plus le clavier elle-même ; la garde `[data-action-sheet]` n'est écrite
+  // qu'une fois.
+  const FICHES = [
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/CinemaEpisodeBrowser.tsx",
+  ];
+  it.each(FICHES)("%s passe par `useSheetKeys` et ne pose pas d'écouteur de touches", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("useSheetKeys({")]).toEqual([f, true]);
+    expect([f, /addEventListener\("keydown"/.test(code)]).toEqual([f, false]);
+  });
+
+  it("la garde d'une feuille ouverte n'est écrite que dans `useSheetKeys.ts`", () => {
+    const hits = SOURCES().filter((f) => sansCommentaires(lire(f)).includes('querySelector("[data-action-sheet]")'));
+    expect(hits).toEqual(["src/lib/useSheetKeys.ts"]);
+  });
+
+  it("`useSheetExit` lit la même règle, et `ActionSheet` garde ses touches en capture", () => {
+    expect(sansCommentaires(lire("src/lib/useSheetExit.ts"))).toContain("sheetKeyBelongsElsewhere(e)");
+    expect(sansCommentaires(lire("src/components/ActionSheet.tsx"))).toMatch(/window\.addEventListener\("keydown", onKey, true\)/);
+  });
+});
+
+describe("« Ma liste » : la fiche film du bureau demande aussi `canJoinWatchlist` (§6 bis, 23/10/2026)", () => {
+  // Elle s'en passait, « toujours munie d'un identifiant Radarr → TMDB » — faux depuis §89. Le bouton
+  // absent sans identifiant est vérifié rendu (`fiche-boutons-deux-etats.test.tsx`) ; ici, le zéro.
+  it("n'envoie jamais le zéro", () => {
+    expect(lire("src/components/cinema/CinemaMovieDetail.tsx")).not.toMatch(/tmdbId: item\.tmdbId \?\? 0/);
+  });
+});
+
+describe("la reprise d'un téléchargement : la position et sa réponse vont ensemble (§117.2)", () => {
+  // La feuille de gestion ne recevait que la position, et lisait « pas de réponse » comme « zéro ».
+  it("`OfflineDownloadControl` exige `onlineKnown`, et le passe à `sharedResumeSeconds`", () => {
+    const src = sansCommentaires(lire("src/components/offline/OfflineDownloadControl.tsx"));
+    expect(src).toMatch(/\n\s*onlineKnown: boolean;/);
+    expect(src).toMatch(/sharedResumeSeconds\(d, title\.onlineResumeTicks, onlineKnown\)/);
+  });
+});
+
+describe("la pastille Partager : une règle (§117.3)", () => {
+  // Trois conditions recopiées, dont celle du téléphone avait pris celle du film pour une série.
+  it.each([
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+  ])("%s passe par `shareableFrom`", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, /\{shareableFrom\([^)]*\) && \(\s*<ShareButton/.test(code)]).toEqual([f, true]);
+    expect([f, /item\.jellyfinItemId && (!fileMissing && )?\(\s*<ShareButton/.test(code)]).toEqual([f, false]);
+  });
+});
+
+describe("la fiche du téléphone ferme aux mêmes touches que les autres (§117.1, 23/10/2026)", () => {
+  // Elle n'écoutait qu'Échap ; elle passe par la même règle que les fiches du bureau.
+  it("`CinemaMobileDetail` passe par `useSheetKeys` et ne pose pas d'écouteur de touches", () => {
+    const code = sansCommentaires(lire("src/components/cinema/mobile/CinemaMobileDetail.tsx"));
+    expect(code).toContain("useSheetKeys({");
+    expect(code).not.toMatch(/addEventListener\("keydown"/);
+  });
+});
+
+describe("« À voir » et « Vu » : une forme, un crochet d'écriture (§117.4)", () => {
+  // Audit du 23/10/2026 : la fiche TMDB et les fiches de bibliothèque disaient le même geste avec
+  // d'autres mots, d'autres icônes, dans un autre ordre, et l'écrivaient par deux crochets.
+  const FICHES = [
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx",
+  ];
+  it.each(FICHES)("%s dessine ses deux boutons par `TitleToggles`, sans écrire leurs mots", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, /<TitleToggle(Row|Icon|Wide) face=\{WATCHED_FACE\}/.test(code), /<TitleToggle(Row|Icon|Wide) face=\{WATCHLIST_FACE\}/.test(code)]).toEqual([f, true, true]);
+    expect([f, /cinema\.markWatched|cinema\.watchedState|cinema\.inMyList|watchlist\.statuses\.toWatch|player\.discover\.(addToList|inList|watched|markWatched)/.test(code)]).toEqual([f, false]);
+  });
+
+  it("le glyphe qui confirme le geste est posé par `TitleToggles`", () => {
+    expect(sansCommentaires(lire("src/components/cinema/TitleToggles.tsx"))).toContain("<ToggleGlyph on={");
+  });
+
+  it("la fiche TMDB écrit « À voir » par `useWatchlistToggle`, plus par `setStatus`", () => {
+    const code = sansCommentaires(lire("src/components/player/PlayerDiscoverSheet.tsx"));
+    expect(code).toContain("useWatchlistToggle(");
+    expect(code).not.toMatch(/setStatus\(/);
+  });
+});
+
+describe("le hors ligne d'une fiche n'est ouvert que par sa décision (§109, 23/10/2026)", () => {
+  // La fiche du téléphone ajoutait la lecture intégrée (`playerEnabled &&`) aux deux lignes hors
+  // ligne ; le bureau non. La décision vit dans `useOfflineDownloadsEnabled`, et nulle part ailleurs.
+  it.each(["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"])(
+    "%s ne garde ni « Télécharger » ni « Lire le fichier téléchargé » par la lecture intégrée",
+    (f) => {
+      const code = sansCommentaires(lire(f));
+      expect([f, /playerEnabled && offlinePlayable|playerEnabled && \(\s*<OfflineDownloadControl/.test(code)]).toEqual([f, false]);
+    }
+  );
+});
+
+describe("la saison ouverte de l'invité : un écart voulu, écrit (§38, 23/10/2026)", () => {
+  // L'invité ouvre la saison de son épisode à suivre ; il retombe sur la règle du foyer sinon. Si cet
+  // écart disparaît ou si l'invité cesse de retomber sur `openingSeason`, §38 ne dit plus vrai.
+  it("`PhoneEpisodes` préfère l'épisode à suivre, puis `openingSeason`", () => {
+    const code = sansCommentaires(lire("src/components/shareGuest/ShareTitleSheet.tsx"));
+    expect(code).toMatch(/ep\.jellyfinItemId === nextEpisodeId\)\)\?\.seasonNumber \?\? openingSeason\(/);
+  });
+});
+
+describe("« À voir » : un crochet pour les quatre fiches (§117.4)", () => {
+  // Les trois fiches de bibliothèque recopiaient le même câblage (`useWatchlistStatusMap` +
+  // `useAddToWatchlist` + garde + charge utile), la fiche TMDB en avait un autre (`setStatus`).
+  it.each([
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx",
+  ])("%s passe par `useWatchlistToggle`, et par lui seul", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("useWatchlistToggle(")]).toEqual([f, true]);
+    expect([f, /useAddToWatchlist\(|useWatchlistStatusMap\(|addToWatchlist\(|removeFromWatchlist\(/.test(code)]).toEqual([f, false]);
+  });
+});
+
+describe("la ligne d'un épisode : une règle, un lancement (§117.6)", () => {
+  // Le temps restant écrit trois fois, le lancement d'un épisode quatre (audit du 23/10/2026).
+  const LISTES = [
+    "src/components/cinema/CinemaEpisodeBrowser.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/shareGuest/ShareTitleSheet.tsx",
+  ];
+  it.each(LISTES)("%s passe par `episodeRowFacts` et n'écrit pas le temps restant", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("episodeRowFacts(")]).toEqual([f, true]);
+    expect([f, /formatDurationShort\((ep|episode)\.runtimeTicks/.test(code)]).toEqual([f, false]);
+  });
+
+  it.each([
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/shareGuest/ShareTitleSheet.tsx",
+  ])("%s lance un épisode par `playEpisodeFrom`", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("playEpisodeFrom(")]).toEqual([f, true]);
+    expect([f, /resumeAt: episodeResumeAt\(/.test(code)]).toEqual([f, false]);
+  });
+});
+
+describe("le bouton Lire des fiches : un crochet (§117.7)", () => {
+  // Les quatre fiches recopiaient la même traduction de la réponse de Jellyfin, la place tenue,
+  // l'attente, le fichier, le hors ligne, le code d'épisode, le libellé, le préchargement, la suite.
+  const FICHES = [
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/shareGuest/ShareTitleSheet.tsx",
+  ];
+  it.each(FICHES)("%s passe par `useSheetPlay`, et n'en refait aucune pièce", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("useSheetPlay(")]).toEqual([f, true]);
+    for (const piece of ["useSheetPlayFacts(", "useFileMissing(", "usePlaybackPrefetch(", "useNextEpisodeFromCache(", "useOfflinePlayable(", "formatContinueLabel(", "offlinePlayLabels("]) {
+      expect([f, piece, code.includes(piece)]).toEqual([f, piece, false]);
+    }
+    expect([f, /known: progress\??\.known === true/.test(code)]).toEqual([f, false]);
+  });
+});
+
+describe("l'habillage des fiches du bureau : une écriture (§117.8)", () => {
+  // Le film et la série du bureau étaient identiques ligne pour ligne sur ~170 lignes ; le fond, en
+  // cinq copies ; le bouton Retour, en quatre ; la ligne Bande-annonce, en trois.
+  const FICHES = ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"];
+  it.each(FICHES)("%s passe par `useDesktopSheetShell` et `DesktopSheetFrame`, sans réécrire leur cycle de vie", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("useDesktopSheetShell({"), code.includes("<DesktopSheetFrame")]).toEqual([f, true, true]);
+    for (const piece of ["useSheetTransition(", "useSheetGrip(", "useDelayedClose(", "arrivedByBack(", "wasPlayerFullScreen"]) {
+      expect([f, piece, code.includes(piece)]).toEqual([f, piece, false]);
+    }
+  });
+
+  it.each([
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx",
+    "src/components/shareGuest/ShareTitleSheet.tsx",
+  ])("%s ne dessine plus le fond des fiches du bureau à la main", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, /maskImage: "linear-gradient\(to bottom, transparent 0%, black 60%\)"/.test(code)]).toEqual([f, false]);
+    expect([f, /background: (VERTICAL|HORIZONTAL)_VEIL/.test(code)]).toEqual([f, false]);
+  });
+
+  it.each([
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/shareGuest/ShareTitleSheet.tsx",
+  ])("%s pose la ligne Bande-annonce par `DetailTrailerRow`", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("<DetailTrailerRow")]).toEqual([f, true]);
+    expect([f, /onClick=\{\(\) => setShowTrailer\(true\)\} className=\{`\$\{MENU_ROW\}/.test(code)]).toEqual([f, false]);
+  });
+
+  it.each([
+    "src/components/cinema/CinemaEpisodeBrowser.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx",
+    "src/components/cinema/DesktopSheetShell.tsx",
+  ])("%s : un seul bouton Retour des écrans pleins du bureau", (f) => {
+    const code = sansCommentaires(lire(f));
+    if (f.endsWith("DesktopSheetShell.tsx")) expect(code).toMatch(/export function SheetBackButton\(/);
+    else expect([f, code.includes("<SheetBackButton")]).toEqual([f, true]);
+    // La flèche et le mot, écrits à la main : une seconde copie du bouton (la croix du téléphone,
+    // `aria-label`, n'en est pas une).
+    const copies = (code.match(/<ArrowLeft size=\{16\} \/> \{t\("cinema\.back"\)\}/g) ?? []).length;
+    expect([f, copies]).toEqual([f, f.endsWith("DesktopSheetShell.tsx") ? 1 : 0]);
+  });
+
+  it("le crochet tient le clavier du lecteur par `playerHoldsKeyboard` (§7.3)", () => {
+    expect(sansCommentaires(lire("src/components/cinema/DesktopSheetShell.tsx"))).toContain("playerHoldsKeyboard(playback)");
   });
 });
