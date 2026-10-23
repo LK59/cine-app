@@ -64,7 +64,9 @@ export function PassageBanner() {
       {!closed && mode === "closed" && onboarding?.pending !== true && !open && (
         <div
           className="pointer-events-none fixed inset-x-0 top-0 z-60 flex justify-center px-3"
-          style={{ paddingTop: "max(env(safe-area-inset-top), 0.75rem)" }}
+          // Sous la barre du haut (logo, Films/Séries, téléchargements), pas dessus : posé au bord, il
+          // recouvrait ses boutons sur téléphone (essai de bout en bout, 23/10/2026).
+          style={{ paddingTop: "calc(max(env(safe-area-inset-top), 0.75rem) + 3.5rem)" }}
         >
           <div role="region" aria-label={t("passage.banner.text")} data-passage-banner="" className="glass-panel pointer-events-auto flex items-center gap-2 rounded-full py-1 pl-4 pr-1 shadow-glow">
             <span className="text-[12px] text-white/85">{t("passage.banner.text")}</span>

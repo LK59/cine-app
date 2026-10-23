@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   const kind: PassageKind = body && typeof body === "object" && "code" in body ? "code" : "token";
 
   if (passageBlocked(ip, kind)) {
-    logAuthEvent("passage-blocked", { user: "?", ip, device, kind });
+    logAuthEvent("passage-blocked", { user: "?", ip, device, via: kind });
     await settle(started);
     return NextResponse.json({ error: "Trop d'essais, réessayez dans un quart d'heure", code: "rate_limited" }, { status: 429 });
   }
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   const redeemed = secret ? await redeemPassage(kind, secret, device).catch(() => null) : null;
   if (!redeemed) {
     notePassageFailure(ip, kind);
-    logAuthEvent("passage-refused", { user: "?", ip, device, kind });
+    logAuthEvent("passage-refused", { user: "?", ip, device, via: kind });
     await settle(started);
     return NextResponse.json(REFUSED, { status: 401 });
   }
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     forgetBeat(previous.jti);
     void revokeJellyfinDevices([sessionDb.delete(previous.jti)], "remplacée par un passage");
   }
-  logAuthEvent("passage-received", { user: redeemed.user, ip, device, role: redeemed.role, kind });
+  logAuthEvent("passage-received", { user: redeemed.user, ip, device, role: redeemed.role, via: kind });
   const lang = userPrefsDb.getLang(redeemed.userId, config.app.language);
   await settle(started);
   const res = NextResponse.json({ ok: true, role: redeemed.role });

@@ -205,6 +205,19 @@ describe("POST /api/passage/redeem — l'entrée", () => {
     expect(((await blocked.json()) as { code: string }).code).toBe("rate_limited");
   });
 
+  // Trouvé à l'essai de bout en bout : le champ `kind: "code"` remplaçait l'événement dans auth.log.
+  it("« passage reçu » et « passage refusé » au journal des connexions, sous leur nom", async () => {
+    const { cookie, user } = await household();
+    const { code } = (await (await create(cookie)).json()) as { code: string };
+    await redeem({ code });
+    await redeem({ code });
+    const fs = await import("node:fs");
+    const { AUTH_LOG } = await import("@/lib/eventLogs");
+    const lines = fs.readFileSync(AUTH_LOG(), "utf8").trim().split("\n").slice(-2).map((l) => JSON.parse(l));
+    expect(lines[0]).toMatchObject({ kind: "passage-received", user, via: "code" });
+    expect(lines[1]).toMatchObject({ kind: "passage-refused", via: "code" });
+  });
+
   it("un refus prend au moins le délai plancher", async () => {
     const { passageTiming } = await import("@/lib/passage/attempts");
     passageTiming.floorMs = 120;

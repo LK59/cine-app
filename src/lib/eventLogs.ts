@@ -134,7 +134,9 @@ export type AuthEvent =
 /** Ne lève jamais : un journal qui échoue ne doit pas empêcher quelqu'un de se connecter. */
 export function logAuthEvent(kind: AuthEvent, fields: { user: string; device?: string | null; ip?: string | null } & Record<string, unknown>): void {
   try {
-    appendJsonLine(AUTH_LOG(), { timestamp: new Date().toISOString(), kind, ...fields }, { keep: EVENT_LOG_KEEP });
+    // `kind` écrit en dernier aussi : un champ du même nom (le passage écrivait `kind: "code"`, §119)
+    // remplaçait l'événement, et la ligne devenait illisible pour l'activité.
+    appendJsonLine(AUTH_LOG(), Object.assign({ timestamp: new Date().toISOString(), kind }, fields, { kind }), { keep: EVENT_LOG_KEEP });
   } catch {
     /* le disque plein ne doit pas bloquer une connexion */
   }
