@@ -36,12 +36,12 @@ describe("le menu d'une fiche en mode cinéma", () => {
   /**
    * Le fond ne marque plus « où l'on est » : il ne dit qu'un état déjà acquis — vu, dans ma
    * liste —, et un état personnel est au violet de la marque (DECISIONS.md §83, option B) : un
-   * fond plein `beam-strong` (l'aplat du faisceau) et une icône blanche à elle, lisibles au repos comme sous le
+   * fond plein `brand-strong` et une icône blanche à elle, lisibles au repos comme sous le
    * sélecteur blanc. Le blanc reste au repère de position.
    */
   it("garde le violet de la marque pour l'état, et le blanc pour le repère de position", () => {
     expect(MENU_ROW_INACTIVE).not.toContain("accent");
-    expect(MENU_BADGE_ACTIVE.split(/\s+/)).toContain("bg-beam-strong");
+    expect(MENU_BADGE_ACTIVE.split(/\s+/)).toContain("bg-brand-strong");
     expect(MENU_BADGE_ACTIVE).not.toContain("accent");
     expect(MENU_BADGE).not.toContain("accent");
     expect(MENU_BADGE).not.toContain("brand");

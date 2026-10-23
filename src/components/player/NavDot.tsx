@@ -13,7 +13,7 @@ export function NavDot() {
   const t = useT();
   return (
     <>
-      <span aria-hidden className="absolute -right-1 -top-0.5 h-2.5 w-2.5 rounded-full bg-beam-mid ring-2 ring-ink" />
+      <span aria-hidden className="absolute -right-1 -top-0.5 h-2.5 w-2.5 rounded-full bg-brand ring-2 ring-ink" />
       <span className="sr-only">{`, ${t("report.ui.unread")}`}</span>
     </>
   );

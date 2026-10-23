@@ -49,16 +49,14 @@ export const MENU_BADGE =
 /**
  * La pastille d'une action déjà accomplie : dans ma liste, déjà vu.
  *
- * Un état personnel, donc la couleur de la marque (§83, option B) : fond plein `beam-strong` —
- * l'aplat du faisceau, le milieu assombri du dégradé du logo, puisqu'un rond de 28 px n'a pas la
- * place d'un dégradé (23/10/2026 ; `brand-strong`, violet, avant) —, icône blanche — la sienne, pas
- * celle de la ligne, qui devient noire sous le sélecteur blanc. Blanc sur `beam-strong` fait
- * 4,8:1, et la pastille se détache aussi bien du sélecteur blanc que de la ligne sombre au repos.
- * (Elle suivait le texte, `bg-current/35`, du 13/10 au matin à l'option B : blanc parmi le blanc,
- * rien ne distinguait « vu » de « marquer vu ».)
+ * Un état personnel, donc le violet de la marque (§83, option B) : fond plein `brand-strong`,
+ * icône blanche — la sienne, pas celle de la ligne, qui devient noire sous le sélecteur blanc.
+ * Blanc sur `brand-strong` fait 4,9:1, et le violet se détache aussi bien du sélecteur blanc que
+ * de la ligne sombre au repos. (Il suivait le texte, `bg-current/35`, du 13/10 au matin à
+ * l'option B : blanc parmi le blanc, rien ne distinguait « vu » de « marquer vu ».)
  */
 export const MENU_BADGE_ACTIVE =
-  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-beam-strong text-white ring-1 ring-beam-mid/50 " +
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-strong text-white ring-1 ring-brand/50 " +
   "transition-[color,background-color,box-shadow] duration-200 [@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8";
 
 /**

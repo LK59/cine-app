@@ -208,15 +208,11 @@ describe("l'accent est blanc neutre", () => {
   });
 });
 
-// Option B, validée par Louis le 13/10/2026 (DECISIONS.md §83) : le blanc reste aux actions, et la
-// couleur de la marque dit ce qui est *à moi* — vu, dans ma liste, où j'en suis, ce qui m'attend.
-// Depuis le nouveau logo (23/10/2026), cette couleur est son dégradé, violet → bleu : le faisceau
-// (`--beam`, `bg-beam`) sur une barre ou un voile, son aplat (`beam-mid`, `beam-strong`) sur une
-// icône, un point ou une pastille. Le violet `brand` ne reste qu'au clap, aux graphiques et à la
-// gestion. Trois fautes à garder : la couleur « à moi » qui se répand hors de ces états (un
-// copier-coller suffit, et la règle ne veut plus rien dire), un dégradé recopié dans un composant
-// (deux définitions divergent), et un texte blanc sur une teinte claire, illisible.
-describe("le dégradé du logo (ou son aplat) dit ce qui est à moi", () => {
+// Option B, validée par Louis le 13/10/2026 (DECISIONS.md §83) : le blanc reste aux actions, et le
+// violet du logo dit ce qui est *à moi* — vu, dans ma liste, où j'en suis, ce qui m'attend. Deux
+// fautes à garder : le violet qui se répand hors de ces états (un copier-coller suffit, et la
+// règle ne veut plus rien dire), et un texte blanc sur le violet clair, illisible à 2,8:1.
+describe("le violet de la marque dit ce qui est à moi", () => {
   const theme = readFileSync("src/app/globals.css", "utf8");
   const rgbOf = (name: string) => {
     const m = theme.match(new RegExp(`--color-${name}:\\s*rgb\\((\\d+) (\\d+) (\\d+)\\)`));
@@ -236,63 +232,35 @@ describe("le dégradé du logo (ou son aplat) dit ce qui est à moi", () => {
   };
   const INK = [10, 10, 12];
   const WHITE = [255, 255, 255];
-  const VIOLET = [124, 92, 255]; // #7c5cff, le départ du logo
-  const BLUE = [56, 189, 248]; // #38bdf8, son arrivée
 
-  it("le faisceau est le dégradé du logo, de gauche à droite, défini une fois", () => {
-    const defs = [...theme.matchAll(/--beam:\s*([^;]+);/g)].map((m) => m[1].trim());
-    expect(defs).toEqual([`linear-gradient(to right, rgb(${VIOLET.join(" ")}), rgb(${BLUE.join(" ")}))`]);
-    expect(theme).toMatch(/@utility bg-beam \{\s*background-image: var\(--beam\);\s*\}/);
-  });
-
-  it("ses deux bouts se lisent sur le noir, comme barre", () => {
-    // Une barre est un élément graphique : 3:1 suffit (WCAG 1.4.11) ; le violet passe même 4,5:1.
-    expect(contrast(VIOLET, INK)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(BLUE, INK)).toBeGreaterThanOrEqual(4.5);
-  });
-
-  it("l'aplat est le milieu du dégradé, et se lit sur le noir", () => {
-    const mid = rgbOf("beam-mid");
-    VIOLET.forEach((v, i) => expect(Math.abs(mid[i] - (v + BLUE[i]) / 2)).toBeLessThanOrEqual(1));
-    expect(contrast(mid, INK)).toBeGreaterThanOrEqual(4.5);
-  });
-
-  it("l'aplat appuyé porte un texte blanc lisible, et reste de la même teinte", () => {
-    const strong = rgbOf("beam-strong");
-    expect(contrast(strong, WHITE)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(strong, INK)).toBeGreaterThanOrEqual(3);
-    // Assombri, pas déteint : le bleu domine, le rouge reste le plus faible — comme au milieu.
-    expect(strong[2]).toBeGreaterThan(strong[1]);
-    expect(strong[1]).toBeGreaterThan(strong[0]);
-  });
-
-  it("le violet du logo reste au clap, et se lit sur le noir", () => {
+  it("le violet est celui du logo, et se lit sur le noir", () => {
     expect(rgbOf("brand")).toEqual([155, 140, 255]);
     expect(contrast(rgbOf("brand"), INK)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("la teinte appuyée porte un texte blanc lisible", () => {
     expect(contrast(rgbOf("brand-strong"), WHITE)).toBeGreaterThanOrEqual(4.5);
   });
 
-  // Chaque surface « à moi » passe par le faisceau ou son aplat — et par la pièce commune quand il y en a une.
+  // Chaque surface « à moi » passe par le violet — et par la pièce commune quand il y en a une.
   it.each([
-    ["src/components/cinema/ProgressFill.tsx", /\bbg-beam\b(?!-)/], // Reprendre : cartes, bannière, épisodes — le faisceau
-    ["src/components/PlayButton.tsx", /\bbg-beam opacity-35\b/], // le voile du bouton Reprendre — le faisceau
-    ["src/components/PlayButton.tsx", /\bbg-beam-strong\b/], // la barre de « Reprendre » d'une ligne de menu, 3 px sous le sélecteur blanc — aplat
-    ["src/components/cinema/detailMenu.ts", /\bbg-beam-strong\b/], // « Vu », « Dans ma liste » des menus des fiches
-    ["src/components/cinema/TitleToggles.tsx", /\btext-beam-mid\b/], // « À voir » et « Vu » allumés
-    ["src/components/player/NavDot.tsx", /\bbg-beam-mid\b/], // la pastille d'un onglet
-    ["src/components/player/PlayerAccountPanel.tsx", /\bbg-beam-strong\b/], // les compteurs
-    ["src/components/reports/ReportParts.tsx", /\bbg-beam-mid\b/], // un signalement non lu
+    ["src/components/cinema/ProgressFill.tsx", /\bbg-brand\b/], // Reprendre : cartes, bannière, épisodes
+    ["src/components/cinema/detailMenu.ts", /\bbg-brand-strong\b/], // « Vu », « Dans ma liste » des menus des fiches
+    ["src/components/PlayButton.tsx", /\bbg-brand-strong\b/], // la barre de « Reprendre » d'une ligne de menu
+    ["src/components/player/NavDot.tsx", /\bbg-brand\b/], // la pastille d'un onglet
+    ["src/components/player/PlayerAccountPanel.tsx", /\bbg-brand-strong\b/], // les compteurs
+    ["src/components/reports/ReportParts.tsx", /\bbg-brand\b/], // un signalement non lu
     ["src/components/WatchlistButton.tsx", /\bbtn-mine\b/], // dans ma liste
-    ["src/components/cinema/CinemaEpisodeBrowser.tsx", /\bbg-beam-strong\b/], // la coche d'un épisode vu
-    ["src/components/cinema/mobile/CinemaMobileDetail.tsx", /\bbg-beam-strong\b/],
-  ])("%s porte la couleur « à moi »", (path, pattern) => {
+    ["src/components/cinema/CinemaEpisodeBrowser.tsx", /\bbg-brand-strong\b/], // la coche d'un épisode vu
+    ["src/components/cinema/mobile/CinemaMobileDetail.tsx", /\bbg-brand-strong\b/],
+  ])("%s porte le violet", (path, pattern) => {
     expect(readFileSync(path, "utf8")).toMatch(pattern);
   });
 
-  it("la partie lue du lecteur porte le faisceau (23/10/2026), `btn-mine` son aplat", () => {
-    expect(theme).toMatch(/\.player-seek::-webkit-slider-runnable-track \{[^}]*background: var\(--beam\) 0 0 \/ var\(--played, 0%\) 100% no-repeat;/);
-    expect(theme).toMatch(/\.player-seek::-moz-range-track \{[^}]*background: var\(--beam\) 0 0 \/ var\(--played, 0%\) 100% no-repeat;/);
-    expect(theme).toMatch(/@utility btn-mine \{\s*@apply bg-beam-strong\/\d+ text-white;/);
+  it("la partie lue du lecteur reste blanche (14/10/2026), `btn-mine` est violet", () => {
+    expect(theme).toMatch(/\.player-seek::-webkit-slider-runnable-track \{[^}]*currentColor 0 var\(--played/);
+    expect(theme).toMatch(/\.player-seek::-moz-range-track \{[^}]*currentColor 0 var\(--played/);
+    expect(theme).toMatch(/@utility btn-mine \{\s*@apply bg-brand-strong\/\d+ text-white;/);
   });
 
   function everySource(dir: string): string[] {
@@ -302,17 +270,15 @@ describe("le dégradé du logo (ou son aplat) dit ce qui est à moi", () => {
       return /\.tsx?$/.test(name) ? [path] : [];
     });
   }
-  const PREFIX = "(?:bg|text|ring|border|fill|stroke|from|to|via|outline|decoration)";
-  const classesOf = (family: string) =>
-    new RegExp(`(?:^|[\\s"'\`:])(${PREFIX}-${family}(?:\\/\\d+)?)(?=[\\s"'\`]|$)`, "g");
-  const BRAND = classesOf("brand(?:-strong)?");
-  const BEAM = classesOf("beam(?:-mid|-strong)?");
-  const sources = everySource("src").map((path) => ({ path, text: readFileSync(path, "utf8") }));
-  const usesOf = (re: RegExp) => sources.flatMap(({ path, text }) => [...text.matchAll(re)].map((m) => ({ path, cls: m[1] })));
+  const BRAND = /(?:^|[\s"'`:])((?:bg|text|ring|border|fill|stroke|from|to|via|outline|decoration)-brand(?:-strong)?(?:\/\d+)?)(?=[\s"'`]|$)/g;
+  const uses = everySource("src").flatMap((path) =>
+    [...readFileSync(path, "utf8").matchAll(BRAND)].map((m) => ({ path, cls: m[1] })),
+  );
 
-  // Les seuls fichiers où le faisceau (ou son aplat) a droit de cité : les états personnels.
+  // Les seuls fichiers où le violet a droit de cité : le logo (le clap), et les états personnels.
   // Un nouvel emploi ajoute sa ligne ici — et dit, en la justifiant, que c'est bien « à moi ».
-  const MINE = [
+  const ALLOWED = [
+    "src/components/Sidebar.tsx", "src/components/player/PlayerRail.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx", // le logo
     "src/components/cinema/ProgressFill.tsx", "src/components/PlayButton.tsx", "src/components/cinema/detailMenu.ts",
     "src/components/cinema/CinemaEpisodeBrowser.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx",
     "src/components/player/PlayerDiscoverSheet.tsx", "src/components/player/PlayerListAdd.tsx",
@@ -321,57 +287,24 @@ describe("le dégradé du logo (ou son aplat) dit ce qui est à moi", () => {
     "src/components/offline/OfflineTitleSheet.tsx", // « Vu » d'un épisode dans la fiche hors ligne, comme sur la fiche en ligne
     "src/components/shareGuest/ShareTitleSheet.tsx", // « Vu » d'un épisode sur la fiche d'un lien de partage (§112), comme sur la fiche du téléphone
     "src/components/player/NavDot.tsx", "src/components/player/PlayerAccountPanel.tsx", "src/components/reports/ReportParts.tsx",
-  ];
-  // Et ceux où le violet du logo reste : le clap, les « Vu » de la gestion, les graphiques.
-  const BRAND_ONLY = [
-    "src/components/Sidebar.tsx", "src/components/player/PlayerRail.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx", // le logo
     "src/app/(dashboard)/radarr/[id]/page.tsx", "src/app/(dashboard)/sonarr/[id]/page.tsx", // « Vu » dans la gestion
     // Les graphiques (14/10/2026, Louis) : l'accent devenu blanc les avait décolorés — séances par jour
     // de l'Activité ; ajouts mensuels, qualité, langues et encodage des Statistiques.
     "src/components/activity/parts.tsx", "src/components/activity/views/ActivityOverview.tsx", "src/app/(dashboard)/stats/page.tsx",
   ];
 
-  it("pas de faisceau ailleurs que dans un état personnel", () => {
-    const uses = usesOf(BEAM);
+  it("pas de violet ailleurs", () => {
     expect(uses.length).toBeGreaterThan(10);
-    expect(uses.filter((u) => !MINE.includes(u.path)).map((u) => `${u.path}: ${u.cls}`)).toEqual([]);
+    expect(uses.filter((u) => !ALLOWED.includes(u.path)).map((u) => `${u.path}: ${u.cls}`)).toEqual([]);
   });
 
-  it("pas de violet ailleurs qu'au logo, à la gestion et aux graphiques — un état personnel n'y revient pas", () => {
-    const uses = usesOf(BRAND);
-    expect(uses.length).toBeGreaterThan(5);
-    expect(uses.filter((u) => !BRAND_ONLY.includes(u.path)).map((u) => `${u.path}: ${u.cls}`)).toEqual([]);
-  });
-
-  it("le dégradé n'est jamais recopié : ni `var(--beam)` ni un dégradé de ses couleurs dans un composant", () => {
-    // Un logo dessiné en ligne peut porter ses couleurs (c'est le logo) ; un dégradé CSS ou Tailwind
-    // fait avec elles, non : c'est le faisceau recopié, et deux copies divergent.
-    const COLOR = String.raw`(?:#7c5cff|#38bdf8|124[ ,]+92[ ,]+255|56[ ,]+189[ ,]+248)`;
-    const COPY = new RegExp(String.raw`var\(--beam\)|gradient\([^)]*${COLOR}|(?:from|via|to)-\[${COLOR}`, "i");
-    expect(sources.filter(({ text }) => COPY.test(text)).map(({ path }) => path)).toEqual([]);
-    expect(COPY.test("background: linear-gradient(90deg, #7C5CFF, #38bdf8)")).toBe(true);
-    expect(COPY.test("bg-gradient-to-r from-[#7c5cff] to-[#38bdf8]")).toBe(true);
-    expect(COPY.test('<stop stopColor="#7c5cff" />')).toBe(false);
-    // Et une seule fois dans le thème : `--beam`, que l'utilitaire et la barre du lecteur lisent.
-    expect(theme.match(/rgb\(124 92 255\)/g)).toHaveLength(1);
-    expect(theme.match(/rgb\(56 189 248\)/g)).toHaveLength(1);
-  });
-
-  it("jamais de texte blanc sur une teinte claire de la marque", () => {
-    const LIGHT = /(?:^|\s)bg-(?:brand|beam-mid|beam)(?:\/(?:[5-9]\d|100))?(?:\s|$)/;
-    const bad = sources.flatMap(({ path, text }) =>
-      text
+  it("jamais de texte blanc sur le violet clair", () => {
+    const bad = everySource("src").flatMap((path) =>
+      readFileSync(path, "utf8")
         .split(/["'`]|\$\{|\}/)
-        .filter((chunk) => LIGHT.test(chunk) && /(?:^|\s)text-white(?:\s|$)/.test(chunk))
+        .filter((chunk) => /(?:^|\s)bg-brand(?:\/(?:[5-9]\d|100))?(?:\s|$)/.test(chunk) && /(?:^|\s)text-white(?:\s|$)/.test(chunk))
         .map((chunk) => `${path}: ${chunk.trim()}`),
     );
     expect(bad).toEqual([]);
-  });
-
-  it("le test reconnaît les fautes qu'il garde", () => {
-    expect([..."x bg-beam-mid y".matchAll(BEAM)].map((m) => m[1])).toEqual(["bg-beam-mid"]);
-    expect([...'"text-beam-strong/50"'.matchAll(BEAM)].map((m) => m[1])).toEqual(["text-beam-strong/50"]);
-    expect([..."a bg-beam opacity-35".matchAll(BEAM)].map((m) => m[1])).toEqual(["bg-beam"]);
-    expect([..."ring-brand/50".matchAll(BRAND)].map((m) => m[1])).toEqual(["ring-brand/50"]);
   });
 });

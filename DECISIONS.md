@@ -4297,16 +4297,15 @@ Le badge rouge « Nouveau » et les couleurs des sites liés depuis une fiche pe
 barre de reprise d'une barre de téléchargement. La règle devient à trois termes :
 - **Blanc** : ce qu'on *fait* — boutons principaux, focus, onglets et puces retenus, interrupteurs,
   liens, la pilule des barres de navigation. Inchangé.
-- **Violet de la marque** (celui du logo ; le **faisceau**, son dégradé, depuis le 23/10/2026 — plus
-  bas) : ce qui est *à moi* — la coche et l'état « Vu » (cartes,
+- **Violet de la marque** (celui du logo) : ce qui est *à moi* — la coche et l'état « Vu » (cartes,
   fiches, épisodes, menus des fiches), « Dans ma liste » (bouton `btn-mine`, icônes, pastille du
   menu), les barres de progression de reprise (cartes Reprendre, bannière, fiches, épisodes, ligne
   « Reprendre » du menu), les pastilles
   de compteur (signalements, réponses non lues, Activité). Le téléchargement en cours, une jauge,
   un graphique ne sont pas « à moi » et restent blancs ou à leurs teintes.
-  La partie lue de la barre du lecteur (et du mini-lecteur), violette un jour, avait été rendue au
-  blanc le 14/10/2026 par Louis (un lecteur façon Apple s'efface devant l'image) ; elle porte le
-  faisceau depuis le 23/10/2026 (plus bas). `design-tokens.test.ts`.
+  **Sauf la partie lue de la barre du lecteur (et du mini-lecteur), rendue au blanc le 14/10/2026
+  par Louis** : violette un jour, seul élément coloré pendant un film ; un lecteur façon Apple
+  s'efface devant l'image, et dans le lecteur la barre est forcément la sienne. `design-tokens.test.ts`.
 - **Rouge, orange, vert** : `danger`, `warning`, `success`, et rien d'autre — « Vu » en vert dans
   les fiches de la gestion passe au violet, « déjà dans la liste » aussi.
 
@@ -4325,42 +4324,6 @@ Porteurs : `ProgressFill` (toutes les barres de reprise des cartes, de la banni�
 `NavDot`. Tests : `design-tokens.test.ts` (« le violet de la marque dit ce qui est à moi » : teintes
 et contrastes, chaque surface porte le violet, **aucun violet hors d'une liste de fichiers tenue à
 la main**, jamais de texte blanc sur `brand`), `cinemaDetailMenu.test.ts`.
-
-**Le faisceau : le dégradé du nouveau logo dit ce qui est à moi (23/10/2026).** Avec le nouveau logo
-(dégradé violet `#7c5cff` → bleu `#38bdf8`), la couleur « à moi » devient ce dégradé, orienté de
-gauche à droite comme une barre qui avance. La règle à trois termes ne change pas, seul son second
-terme change de matière :
-- **Le faisceau** — là où un dégradé se lit, sur une barre ou un voile, c'est-à-dire « où j'en
-  suis » : les barres de reprise (`ProgressFill` : cartes Reprendre, bannière, épisodes), le voile
-  du bouton Reprendre (`PlayButton`, `bg-beam opacity-35` — l'opacité, la pastille étant vide, pour
-  ne pas écrire un second dégradé), la **partie lue** de la barre du lecteur (`.player-seek` : le
-  dégradé étiré sur la seule largeur `--played` ; rail et tampon restent blancs translucides).
-- **Son aplat** — une icône, un point, une pastille de 14 à 28 px n'ont pas la place d'un dégradé :
-  le **milieu du dégradé**, toujours le même. `beam-mid` = `rgb(90 140 252)` pour une icône ou un
-  point sur le noir (6,2:1 sur `ink`) : « Vu »/« À voir » allumés de `TitleToggles` (icônes du
-  téléphone, bouton large), `PlayerListAdd`, `NavDot`, le point « non lu » de `ReportParts`.
-  `beam-strong` = `rgb(66 104 232)`, le même milieu assombri, pour un fond qui porte un texte ou une
-  icône blanche (4,8:1 sous le blanc, 4,1:1 sur `ink`) : `MENU_BADGE_ACTIVE` (anneau `beam-mid/50`),
-  les coches d'épisode vu (`CinemaEpisodeBrowser`, `CinemaMobileDetail`, `OfflineTitleSheet`,
-  `ShareTitleSheet`, `PlayerEpisodesMenu`), les compteurs de `PlayerAccountPanel`, `btn-mine`
-  (`/50`, `/65` au survol). **La barre « Reprendre » d'une ligne de menu reste un aplat**
-  (`beam-strong`) : 3 px sous le sélecteur blanc, le bout bleu du faisceau y tomberait à 2,1:1.
-
-Une seule définition : `--beam` (`:root`, `globals.css`), lue par l'utilitaire `bg-beam` et par la
-barre du lecteur ; aucun composant n'écrit de dégradé. Contrastes : le violet du faisceau fait
-4,6:1 sur `ink`, le bleu 9,2:1 ; un texte noir sur le voile du bouton blanc reste au-delà de 12:1 ;
-sur une affiche claire, la barre de reprise garde le contraste qu'avait `brand` (≈ 3,7:1 au bout
-violet, ≈ 1,8:1 au bout bleu contre 2,4:1 pour l'ancien violet, sur le rail blanc à 25 %).
-`brand` / `brand-strong` restent au clap du logo, aux « Vu » de la gestion et aux graphiques de
-l'Activité et des Statistiques — ni états personnels du cinéma, ni changés.
-
-Tests : `design-tokens.test.ts`, « le dégradé du logo (ou son aplat) dit ce qui est à moi » —
-`--beam` est exactement le dégradé du logo et n'est défini qu'une fois ; `beam-mid` est le milieu
-des deux couleurs ; contrastes ; chaque surface porte le faisceau ou son aplat ; la partie lue du
-lecteur et `btn-mine` ; **aucune classe `beam` hors de la liste des états personnels, aucune classe
-`brand` hors du logo, de la gestion et des graphiques** (un état personnel n'y revient pas) ;
-**aucun `var(--beam)` ni dégradé de ses couleurs recopié dans un composant** ; jamais de texte blanc
-sur `brand`, `beam-mid` ou `bg-beam`. `cinemaDetailMenu.test.ts` attend `bg-beam-strong`.
 
 **Seule exception : le logo de l'application reste violet (Louis, 13/10/2026).** Icônes PWA (`public/icon-*.png`, SVG), favicon, écrans de lancement et logo de la page de connexion (qui affiche `icon-512.png`) gardent le clap violet : c'est la marque. Tout le reste de l'interface suit l'accent blanc neutre.
 

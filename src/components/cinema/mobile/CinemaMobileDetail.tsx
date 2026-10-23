@@ -695,7 +695,7 @@ export function CinemaMobileDetail({
                       </span>
                     )}
                     {episode.watched && (
-                      <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-beam-strong">
+                      <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-strong">
                         <Check size={10} className="text-white" />
                       </span>
                     )}

@@ -156,12 +156,9 @@ export function PlayButton({
       title={label}
     >
       {variant === "primary" && progressPct !== null && (
-        // Un voile du faisceau, la couleur de « où j'en suis » (§83, option B ; dégradé du logo depuis
-        // le 23/10/2026) : le bouton principal est blanc depuis le 13/10/2026, et le voile blanc
-        // d'avant n'y laissait plus rien voir. L'opacité et non une teinte à 35 % : la pastille est
-        // vide, et c'est la seule façon d'éclaircir un dégradé sans en écrire un second. Le texte
-        // noir reste à plus de 12:1 sur ses deux bouts.
-        <span className="absolute inset-y-0 left-0 bg-beam opacity-35" style={{ width: `${progressPct}%` }} />
+        // Un voile violet, la couleur de « où j'en suis » (§83, option B) : le bouton principal est
+        // blanc depuis le 13/10/2026, et le voile blanc d'avant n'y laissait plus rien voir.
+        <span className="absolute inset-y-0 left-0 bg-brand/35" style={{ width: `${progressPct}%` }} />
       )}
       {/* Où l'on en est, dans le bouton qui reprend — et nulle part ailleurs.
           Une barre posée au-dessus, dans la colonne, flottait entre le titre et le synopsis sans
@@ -169,11 +166,9 @@ export function PlayButton({
           repos comme sous le sélecteur blanc, puisqu'elle porte sa propre couleur. */}
       {variant === "row" && progressPct !== null && (
         <span className="absolute inset-x-0 bottom-0 h-[3px] overflow-hidden rounded-b-lg bg-current/15">
-          {/* La couleur de la reprise (§83, option B) en aplat, et non le faisceau : sous le
-              sélecteur blanc, le bout bleu du dégradé tomberait à 2,1:1 sur 3 px. `beam-strong`, le
-              milieu assombri du dégradé, se lit au repos sur le fond sombre (4,1:1) comme sous le
-              blanc (4,8:1). */}
-          <span className="block h-full bg-beam-strong" style={{ width: `${progressPct}%` }} />
+          {/* Le violet de la reprise (§83, option B), en teinte appuyée : lisible au repos sur le
+              fond sombre comme sous le sélecteur blanc (4,9:1), où `brand` ne ferait que 2,8:1. */}
+          <span className="block h-full bg-brand-strong" style={{ width: `${progressPct}%` }} />
         </span>
       )}
       {variant === "row" ? (

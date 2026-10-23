@@ -288,7 +288,7 @@ export function CinemaEpisodeBrowser({
                     </span>
                   )}
                   {ep.watched && (
-                    <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-beam-strong">
+                    <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand-strong">
                       <Check size={12} className="text-white" />
                     </span>
                   )}
