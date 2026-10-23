@@ -288,6 +288,14 @@
  * pas la place d'un texte à l'écran — et la moitié des `h2` de cette app sont des libellés de
  * carte, qui doivent rester en Inter.
  */
+/** Le faisceau : le dégradé du logo, violet → bleu, de gauche à droite (23/10/2026). Il ne peint que
+    la barre de progression des vignettes (`ProgressFill`) — décision de Louis : ni les boutons, ni
+    les marques « vu » / « à voir », ni la barre du lecteur, qui reste blanche (§83). Les deux
+    couleurs sont celles du logo ; violet 4,6:1 et bleu 9,2:1 sur `ink`. */
+@utility bg-beam {
+  background-image: linear-gradient(to right, rgb(124 92 255), rgb(56 189 248));
+}
+
 @utility font-display {
   font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   letter-spacing: -0.02em;

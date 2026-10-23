@@ -4329,6 +4329,13 @@ la main**, jamais de texte blanc sur `brand`), `cinemaDetailMenu.test.ts`.
 
 ---
 
+**Le faisceau (23/10/2026, nouveau logo).** La barre de progression d'une vignette (`ProgressFill` : cartes,
+rangées, bannière, épisodes) porte le dégradé du logo, violet → bleu (`bg-beam`, globals.css). C'est la
+seule surface qui le porte, sur décision du propriétaire : un premier essai l'étendait au voile du bouton
+Reprendre, aux marques « vu » / « à voir », aux pastilles et à la partie lue du lecteur ; il a été retiré
+le jour même. Ces surfaces gardent le violet, et la barre du lecteur reste blanche. Test :
+`design-tokens.test.ts` (« le faisceau ne sert qu'à la barre de progression des vignettes »).
+
 ## 84. Pendant un film, un seul battement — et rien au journal qui ne soit lu
 
 **Règle.** Pendant une lecture, le navigateur ne parle au serveur que lorsque quelque chose arrive,

@@ -244,7 +244,7 @@ describe("le violet de la marque dit ce qui est à moi", () => {
 
   // Chaque surface « à moi » passe par le violet — et par la pièce commune quand il y en a une.
   it.each([
-    ["src/components/cinema/ProgressFill.tsx", /\bbg-brand\b/], // Reprendre : cartes, bannière, épisodes
+    ["src/components/cinema/ProgressFill.tsx", /\bbg-beam\b/], // Reprendre : cartes, bannière, épisodes — le faisceau du logo (23/10/2026)
     ["src/components/cinema/detailMenu.ts", /\bbg-brand-strong\b/], // « Vu », « Dans ma liste » des menus des fiches
     ["src/components/PlayButton.tsx", /\bbg-brand-strong\b/], // la barre de « Reprendre » d'une ligne de menu
     ["src/components/player/NavDot.tsx", /\bbg-brand\b/], // la pastille d'un onglet
@@ -306,5 +306,13 @@ describe("le violet de la marque dit ce qui est à moi", () => {
         .map((chunk) => `${path}: ${chunk.trim()}`),
     );
     expect(bad).toEqual([]);
+  });
+
+  // Le faisceau du logo (23/10/2026) ne peint que la barre de progression d'une vignette : décision du
+  // propriétaire, qui a écarté les boutons, les marques « vu » / « à voir » et la barre du lecteur.
+  it("le faisceau ne sert qu'à la barre de progression des vignettes", () => {
+    const porteurs = everySource("src").filter((path) => /(?:^|[\s"'`])bg-beam(?:[\s"'`]|$)/.test(readFileSync(path, "utf8")));
+    expect(porteurs).toEqual(["src/components/cinema/ProgressFill.tsx"]);
+    expect(theme).toMatch(/@utility bg-beam \{\s*background-image: linear-gradient\(to right, rgb\(124 92 255\), rgb\(56 189 248\)\);/);
   });
 });
