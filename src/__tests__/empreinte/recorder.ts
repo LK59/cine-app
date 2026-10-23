@@ -131,6 +131,11 @@ export function installRecorder(options: { seed?: number; storageKeys?: RegExp }
     return `${hex}-0000-4000-8000-000000000000` as `${string}-${string}-${string}-${string}-${string}`;
   };
   if (typeof crypto !== "undefined") vi.spyOn(crypto, "randomUUID").mockImplementation(randomUUID);
+  // Le nombre de cœurs entre dans `diag.cores` du bilan : 12 sur la machine où les empreintes ont été
+  // enregistrées, 4 sur celle de la CI — toutes les empreintes natives y différaient. Fixé ici.
+  if (typeof navigator !== "undefined" && "hardwareConcurrency" in navigator) {
+    vi.spyOn(Object.getPrototypeOf(navigator), "hardwareConcurrency", "get").mockReturnValue(12);
+  }
 
   // --- réseau ---------------------------------------------------------------------------------
   const fetchStub = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
