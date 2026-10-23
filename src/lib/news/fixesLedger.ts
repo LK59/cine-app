@@ -651,6 +651,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.0.1",
+    page: "10.0",
+    group: { fr: "Téléphone et tablette", en: "Phone and tablet", es: "Móvil y tableta", de: "Handy und Tablet" },
+    items: [
+      {
+        fr: "Sur iPhone et iPad, le changement d'adresse explique d'abord comment installer Laterna ; les notifications se proposent ensuite, dans l'app installée.",
+        en: "On iPhone and iPad, the address change first explains how to install Laterna; notifications are offered afterwards, in the installed app.",
+        es: "En iPhone y iPad, el cambio de dirección explica primero cómo instalar Laterna; las notificaciones se ofrecen después, en la app instalada.",
+        de: "Auf iPhone und iPad erklärt der Adresswechsel zuerst, wie Laterna installiert wird; Mitteilungen werden danach in der installierten App angeboten.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
