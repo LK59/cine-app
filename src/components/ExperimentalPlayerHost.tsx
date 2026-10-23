@@ -97,7 +97,6 @@ import { isGeneratingTrack, SubtitleGeneration } from "@/lib/subtitleGen/generat
 import { useWakeLock } from "@/lib/useWakeLock";
 import { useSleepTimer } from "@/lib/useSleepTimer";
 import { sleepTimerLogFields, sleepTimerStore, type SleepMode } from "@/lib/sleepTimer";
-import { registerBenchBridge } from "@/lib/playerBench/bridge";
 import { seekArrived } from "@/lib/webcodecs/seekArrival";
 import { SessionTally, WatchedClock, newPlayerSessionId, watchElementWaits } from "@/lib/playerSessionTally";
 import { positionBucket, retryMotif, retrySignature } from "@/lib/retryLedger";
@@ -137,6 +136,7 @@ import { useIntroPlaybackStarted } from "@/lib/introEnd";
 import { usePlayerBackClose } from "@/lib/playerHistory";
 import { useAudioLabels, useElapsedSince, useSubtitleLabels } from "@/components/playerNative/nativeHostHooks";
 import { nativeFrameStyle } from "@/components/playerNative/nativeFrameStyle";
+import { useNativeBenchBridge } from "@/components/playerNative/useNativeBenchBridge";
 import {
   CenterWord,
   NativeErrorScreen,
@@ -3438,22 +3438,13 @@ export function ExperimentalPlayerHost({
    * Le banc d'essai — voir `playerBench/bridge.ts`. Ce qu'il lit est recopié ici à chaque rendu,
    * par un effet et non pendant le rendu ; le pont lui-même n'est posé qu'une fois par séance.
    */
-  const benchStateRef = useRef<{
-    seek: (seconds: number) => void;
-    changeAudio: (id: number) => void;
-    changeSubtitle: (id: number | null) => void;
-    ready: boolean;
-    path: string | null;
-    error: string | null;
-    audio: { id: number; label: string }[];
-    subtitles: { id: number; label: string }[];
-    currentAudio: number | null;
-    currentSubtitle: number | null;
-    subtitle: string | null;
-    fps: number | null;
-  } | null>(null);
-  useEffect(() => {
-    benchStateRef.current = {
+  useNativeBenchBridge({
+    bench: session.bench,
+    itemId,
+    videoElRef,
+    remuxRef,
+    lastVideoElRef,
+    live: () => ({
       seek: noteSeekRequest,
       changeAudio: changeAudioTrack,
       changeSubtitle: (id) => chooseSubtitle(id, externals),
@@ -3466,47 +3457,8 @@ export function ExperimentalPlayerHost({
       currentSubtitle,
       subtitle,
       fps: info?.video?.frameRate ?? null,
-    };
+    }),
   });
-  useEffect(() => {
-    if (!session.bench) return;
-    const state = () => benchStateRef.current;
-    const media = () => videoElRef.current;
-    return registerBenchBridge({
-      itemId,
-      media,
-      path: () => state()?.path ?? null,
-      ready: () => state()?.ready ?? false,
-      error: () => state()?.error ?? null,
-      duration: () => {
-        const d = media()?.duration ?? 0;
-        return Number.isFinite(d) ? d : 0;
-      },
-      // Comme les commandes : le signal d'abord, puis l'élément (voir `commitSeek`).
-      seek: (seconds) => {
-        state()?.seek(seconds);
-        const element = media();
-        if (element) element.currentTime = seconds;
-      },
-      audioTracks: () => state()?.audio ?? [],
-      currentAudio: () => state()?.currentAudio ?? null,
-      changeAudio: (id) => state()?.changeAudio(id),
-      subtitleTracks: () => state()?.subtitles ?? [],
-      currentSubtitle: () => state()?.currentSubtitle ?? null,
-      changeSubtitle: (id) => state()?.changeSubtitle(id),
-      subtitleText: () => state()?.subtitle ?? null,
-      frames: () => {
-        try {
-          return videoElRef.current?.getVideoPlaybackQuality?.().totalVideoFrames ?? null;
-        } catch {
-          return null;
-        }
-      },
-      nominalFps: () => state()?.fps ?? null,
-      trace: (ms) => traceRecent(ms).join(" | "),
-      facts: () => syncFacts(remuxRef.current, videoElRef.current ?? lastVideoElRef.current),
-    });
-  }, [session.bench, itemId]);
 
   // Les bandes noires incrustées dans le fichier : l'image est agrandie jusqu'au bord le plus
   // proche, sans rien couper — voir `frameFit`. Pas dans le mini-lecteur, qui remplit déjà sa
