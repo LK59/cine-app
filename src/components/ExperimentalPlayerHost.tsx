@@ -2012,7 +2012,8 @@ export function ExperimentalPlayerHost({
       }
 
       // La lecture notée et le recul après une longue pause : `habitWatch`, commun aux deux lecteurs
-      // (§28, §115). Ici, une pause compte toujours (même sans image), et le recul est tracé.
+      // (§28, §115). Ici, une pause compte toujours (même sans image), et le recul est tracé. Et la
+      // position rapportée au registre des tentatives, que le natif ne nourrissait pas (§67, §116).
       const habits = habitWatch({
         itemId,
         bench: session.bench,
@@ -2020,6 +2021,7 @@ export function ExperimentalPlayerHost({
         pauseCounts: () => true,
         isEnded: () => lifecycle.isEnded(),
         onRewind: (target, pausedAt) => trace(`reprise après ${Math.round((Date.now() - pausedAt) / 60_000)} min de pause : ${target.toFixed(1)} s`),
+        notePosition: (seconds) => tally.retries.notePosition(seconds),
       });
       const onTime = () => {
         positionRef.current = element.currentTime;

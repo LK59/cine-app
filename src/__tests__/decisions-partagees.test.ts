@@ -1584,4 +1584,9 @@ describe("les écarts entre les copies du lecteur, corrigés (§116)", () => {
     expect(codeDe(SERVEUR)).toMatch(/switchGap: switchGapRef/);
     expect(codeDe(SERVEUR)).toMatch(/reloadGap: reloadGapRef/);
   });
+
+  it.each(HOTES)("%s rapporte la lecture au registre des tentatives par habitWatch (§67)", (hote) => {
+    // Plus d'appel en ligne dans un écouteur : la position passe par l'option de `habitWatch`.
+    expect([hote, /habitWatch\(\{[\s\S]*?notePosition: \(seconds\) => [\w.]*retries\.notePosition\(seconds\)/.test(codeDe(hote))]).toEqual([hote, true]);
+  });
 });

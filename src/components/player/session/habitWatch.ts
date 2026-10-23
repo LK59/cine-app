@@ -3,7 +3,13 @@
 // `ExperimentalPlayerHost.tsx`) et le lecteur serveur (`useServerPositionWatch`) : la lecture notée
 // toutes les quinze secondes et à la pause, et le recul de quelques secondes à la reprise après une
 // longue pause. Chaque hôte garde ce qui l'entoure dans ses écouteurs (position suivie, sous-titres,
-// registre des échecs, téléviseur…).
+// téléviseur…).
+//
+// Et la lecture rapportée au registre des tentatives (§67, `RetryLedger.notePosition`) : « trois
+// secondes jouées effacent les échecs » vaut pour les deux lecteurs, mais seul le serveur le
+// nourrissait depuis le 11/10/2026 (9a51259a) — au natif, une reconstruction qui suivait des minutes
+// de lecture au même passage se comptait « tentative identique ». Passé par ici le 23/10/2026
+// (audit F1-6, §116) pour que le même écouteur porte les deux.
 import { noteWatching, pauseRewindTarget } from "@/lib/resumeRewind";
 
 /**
@@ -29,6 +35,12 @@ export interface HabitWatchOptions {
   isEnded: (element: HTMLVideoElement) => boolean;
   /** Le recul va être appliqué : le natif l'écrit dans sa trace (le serveur n'en a pas). */
   onRewind?: (target: number, pausedAt: number) => void;
+  /**
+   * La position à chaque `timeupdate`, pour le registre des tentatives de la séance
+   * (`tally.retries.notePosition`) — banc et scène compris, comme avant au serveur. Les deux hôtes le
+   * passent (`decisions-partagees`) ; facultatif pour qui ne tient pas de registre.
+   */
+  notePosition?: (seconds: number) => void;
 }
 
 /** Un par élément écouté (un pipeline du natif, un `videoKey` du serveur) : il porte `notedAt` et `pausedAt`. */
@@ -37,7 +49,7 @@ export function habitWatch(options: HabitWatchOptions): {
   play(element: HTMLVideoElement): void;
   pause(element: HTMLVideoElement): void;
 } {
-  const { itemId, bench, isScene, pauseCounts, isEnded, onRewind } = options;
+  const { itemId, bench, isScene, pauseCounts, isEnded, onRewind, notePosition } = options;
   // Retenu toutes les quinze secondes de lecture, et à la pause : ce qui distingue, à la prochaine
   // ouverture, un retour rapide (un relais) d'une vraie reprise (`resumeRewind.ts`). Sans lui, le
   // lecteur serveur aurait reculé à chaque ouverture, même une minute après l'avoir quitté.
@@ -45,6 +57,8 @@ export function habitWatch(options: HabitWatchOptions): {
   let pausedAt: number | null = null;
   return {
     time(element) {
+      // Trois secondes vraiment jouées : la preuve qui efface les échecs du registre (§67).
+      notePosition?.(element.currentTime);
       if (!element.paused && recordsResume(bench, isScene) && Date.now() - notedAt > 15_000) {
         notedAt = Date.now();
         noteWatching(itemId);

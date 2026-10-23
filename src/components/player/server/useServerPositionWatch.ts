@@ -39,6 +39,8 @@ export function useServerPositionWatch(
       isScene: () => isSceneRef.current(),
       pauseCounts: (element) => element.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA,
       isEnded: (element) => element.ended,
+      // Le décompte de la séance en cours, relu à chaque fois : il est remplacé à chaque titre.
+      notePosition: (seconds) => tallyRef.current.retries.notePosition(seconds),
     });
     const onTimeUpdate = () => {
       // Pas tant que rien n'est chargé : un changement de source remet l'élément à zéro et émet
@@ -46,8 +48,6 @@ export function useServerPositionWatch(
       // battement (relevé le 23/09/2026). La position semée par `startPlayback` tient jusque-là.
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
       lastKnownTimeRef.current = video.currentTime;
-      // Trois secondes vraiment jouées : la preuve qui efface les échecs du registre (§67).
-      tallyRef.current.retries.notePosition(video.currentTime);
       castResume.observed(video.currentTime);
       habits.time(video);
     };

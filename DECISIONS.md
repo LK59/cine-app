@@ -6394,7 +6394,7 @@ cine:watching…`, `media … currentTime=` du recul) ; `decisions-partagees`. *
 pause sans image ne compte pas au serveur (`pauseCounts`, a3733215) ; « fini » est `lifecycle.isEnded()`
 au natif, `element.ended` au serveur ; le natif trace le recul (`onRewind`). **Laissé.** Le natif
 n'appelle toujours pas `tally.retries.notePosition` (§67 : « trois secondes jouées effacent les
-échecs », pour les deux lecteurs) — décision à part (audit F1-6).
+échecs », pour les deux lecteurs) — décision à part (audit F1-6) — faite, §116.
 
 ### La chronologie de deux minutes
 
@@ -6458,3 +6458,17 @@ chaque titre (§115). **Porteur.** `ServerTitleSession.switchGap` / `reloadGap`,
 d'un épisode enchaîné en place portait celles de l'épisode d'avant. **Laissé.** Les instants de départ
 (`switchedAtRef`, `reloadDecidedAtRef`) : remis à nul à la première image, ils ne survivent à un
 titre que si celui-ci n'en a jamais eu — non tranché.
+
+### Le natif nourrit le registre des tentatives (audit F1-6, §67)
+
+**Règle.** « Trois secondes jouées effacent les échecs » (§67) vaut pour les deux lecteurs : la position
+de chaque `timeupdate` va au registre de la séance (`tally.retries.notePosition`). **Porteur.**
+`habitWatch` (option `notePosition`, `src/components/player/session/habitWatch.ts`). **Appelants.**
+`startRemux` (natif, `tally.retries`) et `useServerPositionWatch` (serveur, le décompte de la séance en
+cours relu à chaque fois). **Avant.** Depuis `9a51259a` (11/10/2026), seul le serveur l'appelait : au
+natif, une reconstruction automatique qui suivait des minutes de lecture au même passage (même motif,
+même piste, même case de dix secondes) se comptait « tentative identique » — `identicalRetries` et
+`retryMotif` des `stop` natifs surcomptés, et la trace « tentative identique n°… » à tort. Le registre
+reste en observation : rien n'en décide. **Différent exprès.** Le serveur ne rapporte que sur une image
+(`readyState ≥ HAVE_CURRENT_DATA`, la garde de son écouteur) ; le natif à chaque `timeupdate` — un
+recul ou un saut n'y prouve rien de toute façon (`notePosition` ne compte qu'une avance continue).
