@@ -16,6 +16,7 @@ import { groupOfflineDownloads, offlineRemainingSeconds, type OfflineSeriesGroup
 import { BACKDROP_FILE, LOGO_FILE, POSTER_FILE, SERIES_POSTER_FILE, offlineImage } from "@/lib/offline/artwork";
 import { OfflineTitleSheet } from "./OfflineTitleSheet";
 import { useOfflineImage } from "./useOfflineImage";
+import { PassageDownloadsCard } from "@/components/passage/PassageDownloads";
 import { offlinePlayable, offlineProgress, offlineStatusLabel, touchDevice } from "./OfflineDownloadControl";
 
 /**
@@ -79,6 +80,8 @@ export function OfflineDownloadsView({ onOpenTitle }: { onOpenTitle?: (target: O
           onOpenTitle={onOpenTitle}
         />
       )}
+      {/* Après un passage d'adresse (§119) : « Retélécharger vos N téléchargements », tant qu'on ne l'a pas fermé. */}
+      <PassageDownloadsCard />
       <StorageSummary downloads={downloads} />
       {downloads.length === 0 ? (
         <PlayerEmptyState icon={Download} message={t("player.downloads.empty")} />

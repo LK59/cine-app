@@ -45,8 +45,9 @@ export async function POST(req: NextRequest) {
   if (!perAccount(session.u)) {
     return NextResponse.json({ error: "Trop de demandes, réessayez plus tard", code: "rate_limited" }, { status: 429 });
   }
-  const body = (await req.json().catch(() => null)) as { settings?: unknown; pushEndpoint?: unknown } | null;
-  const result = await createPassage(session, { settings: body?.settings, pushEndpoint: body?.pushEndpoint });
+  const body = (await req.json().catch(() => null)) as { settings?: unknown; pushEndpoint?: unknown; downloads?: unknown } | null;
+  // `downloads` : la liste des téléchargements de ce compte sur cet appareil — jamais les fichiers.
+  const result = await createPassage(session, { settings: body?.settings, pushEndpoint: body?.pushEndpoint, downloads: body?.downloads });
   if (!result.ok) {
     return NextResponse.json(
       result.reason === "relogin"

@@ -9,6 +9,7 @@ import { isInstalledApp, isIosSafariBrowserTab } from "@/lib/iosInstall";
 import { passageFlags } from "@/lib/passage/client";
 import { installPlatform, PassageInstallSteps } from "@/components/passage/PassageInstallHelp";
 import { useOldAddress } from "@/lib/passage/useOldAddress";
+import { PROMPT_RANK, useFloatingPromptTurn } from "@/lib/floatingPromptTurn";
 
 const DISMISS_KEY = "cine-install-prompt-dismissed-until";
 const SNOOZE_DAYS = 21;
@@ -58,7 +59,11 @@ export function InstallPrompt() {
 
   // Pas pendant l'assistant de premier lancement (05/10/2026) : sur un iPhone, la bannière couvrait
   // ses boutons, et l'installation n'a de sens qu'une fois l'application prête.
-  if (!show || old !== false || pathname?.startsWith("/setup")) return null;
+  const shown = !!show && old === false && !pathname?.startsWith("/setup");
+  // Une invitation à la fois (`floatingPromptTurn`) : l'aide d'installation est une étape, elle
+  // s'annonce et les invitations (notifications, retélécharger après un passage) l'attendent.
+  useFloatingPromptTurn("install", PROMPT_RANK.step, shown);
+  if (!show || !shown) return null;
 
   // Une cible de 44 px (la croix en faisait 13) et un nom : c'était la seule sortie de la bannière.
   const close = (
@@ -84,7 +89,7 @@ export function InstallPrompt() {
             <Share size={16} className="shrink-0 text-accent-400" />
             {t("passage.install.title")}
           </p>
-          <PassageInstallSteps platform={installPlatform()} size="banner" />
+          <PassageInstallSteps platform={installPlatform()} size="banner" downloads={passageFlags.carriedDownloads()} />
           <div className="absolute right-1 top-1">{close}</div>
         </div>
       </div>

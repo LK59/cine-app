@@ -374,12 +374,37 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
   void runLoop();
 }
 
-/** Annuler ou supprimer : le fichier quitte l'appareil, et le serveur sait que ce compte n'en veut plus. */
-export function removeOfflineDownload(id: string): Promise<void> {
+/** La liste chargée, telle quelle (le passage la lit pour l'emporter, §119). */
+export function currentOfflineDownloads(): readonly OfflineDownload[] {
+  return downloads;
+}
+
+/**
+ * Annuler ou supprimer : le fichier quitte l'appareil, et le serveur sait que ce compte n'en veut plus.
+ *
+ * `server: false` — l'appareil seul (le passage, §119) : le fichier est parti sur la nouvelle adresse,
+ * où **le même compte** tient peut-être la même demande (`offline_requests` est par compte et par
+ * version, pas par adresse). La retirer ici l'arracherait à la nouvelle adresse.
+ */
+export function removeOfflineDownload(id: string, options: { server?: boolean } = {}): Promise<void> {
   const owner = account;
+  const tellServer = options.server !== false;
   downloads = downloads.filter((d) => d.id !== id);
   emit();
   claimed.get(id)?.abort();
+  if (!tellServer) {
+    const removal = (async () => {
+      if (owner) {
+        forgetOfflineImages(owner, id);
+        await deviceStore.remove(owner, id).catch(() => {});
+      }
+    })();
+    removals.set(id, removal);
+    void removal.finally(() => {
+      if (removals.get(id) === removal) removals.delete(id);
+    });
+    return removal;
+  }
   // Le retrait de la demande d'abord, et retenu : un nouveau téléchargement du même titre l'attend
   // (`startOfflineDownload`). Envoyé après le ménage de l'appareil, il arrivait après la nouvelle
   // demande — même version, même identifiant — et l'effaçait : « Préparation » sans fin, puis

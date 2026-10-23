@@ -9,6 +9,7 @@ import { NEWS_KEY } from "@/lib/news/events";
 import { NEWS_SHOW_DELAY_MS, shouldOfferNews } from "@/lib/news/decide";
 import type { NewsPageView, NewsPayload } from "@/lib/news/content";
 import { NewsDialog } from "@/components/news/NewsDialog";
+import { PROMPT_RANK, useFloatingPromptTurn } from "@/lib/floatingPromptTurn";
 
 /**
  * Ouvre la fenêtre des Nouveautés quand il le faut — monté une fois par la coquille du cinéma,
@@ -56,6 +57,8 @@ export function NewsGate() {
     setShown({ pages: data.pages.filter((p) => data.unseen.includes(p.id)), auto: !data.relaunched });
   }
 
+  // Une invitation à la fois (`floatingPromptTurn`) : la fenêtre ouverte, les invitations attendent.
+  useFloatingPromptTurn("news", PROMPT_RANK.step, phase === "open" && !!shown && shown.pages.length > 0);
   if (phase !== "open" || !shown) return null;
   const pages = shown.pages;
   if (pages.length === 0) return null;

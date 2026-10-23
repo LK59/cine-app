@@ -3691,6 +3691,17 @@
       "removeOld": "Delete the old CineApp icon from your Home Screen.",
       "notifications": "Notifications will be offered afterwards in the Laterna app."
     },
+    "downloads": {
+      "again": "Your downloads will be offered to you again in Laterna.",
+      "offerOne": "Re-download your download ({size})?",
+      "offerMany": "Re-download your {n} downloads ({size})?",
+      "offerBody": "The ones from the old address, with the same quality and language choices.",
+      "relaunch": "Re-download",
+      "later": "Later",
+      "dismiss": "Close",
+      "freedOne": "1 download removed from the old address: it is in Laterna.",
+      "freedMany": "{n} downloads removed from the old address: they are in Laterna."
+    },
     "loginLink": "Coming from the old address? Transfer code"
   }
 }

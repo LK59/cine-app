@@ -122,6 +122,9 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // pour l'appelant lui-même, et « réglages posés » n'efface que ceux de sa session.
   "POST /api/passage",
   "POST /api/passage/arrival",
+  // L'ancienne adresse a libéré sa place (§119) : une ligne au journal, pour les seuls titres attestés
+  // à la session de l'appelant.
+  "POST /api/passage/fetched",
 ]);
 
 /**

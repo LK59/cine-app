@@ -654,6 +654,15 @@ function migrate(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_passage_arrivals_created ON passage_arrivals(created_at);
   `);
+  // Les téléchargements hors ligne que le passage emporte (la liste, jamais les fichiers), et de quoi
+  // libérer l'ancienne adresse sans rien perdre (§119, 23/10/2026) : `origin_jti`, la session de
+  // l'ancienne adresse dont l'arrivée est issue ; `fetched`, les titres que cette session d'arrivée a
+  // récupérés entiers (`{ itemId: jobId }`, noté à la dernière plage servie).
+  try { db.exec("ALTER TABLE passages ADD COLUMN downloads TEXT"); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE passage_arrivals ADD COLUMN downloads TEXT"); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE passage_arrivals ADD COLUMN origin_jti TEXT"); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE passage_arrivals ADD COLUMN fetched TEXT"); } catch { /* already exists */ }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_passage_arrivals_origin ON passage_arrivals(origin_jti)");
   // Le compte de chaque jour clos de l'Activité, pour « Depuis le début » (`activityHistory.ts`) :
   // il survit à la rotation des journaux, il ne se recalcule donc pas — gardé dans la sauvegarde.
   db.exec(`

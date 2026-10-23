@@ -36,7 +36,12 @@ async function redeem(
       headers: { "Content-Type": "application/json", ...touchHintHeaders() },
       body: JSON.stringify(replace ? { ...body, replace: true } : body),
     });
-    if (res.ok) return "ok";
+    if (res.ok) {
+      // Le passage emporte des téléchargements : l'aide d'installation qui suit le dit d'une phrase.
+      const data = (await res.json().catch(() => null)) as { downloads?: unknown } | null;
+      passageFlags.noteCarriedDownloads(data?.downloads === true);
+      return "ok";
+    }
     if (res.status === 409) return "confirm";
     return res.status === 429 ? "rateLimited" : res.status >= 500 ? "network" : "invalid";
   } catch {

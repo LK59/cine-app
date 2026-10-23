@@ -5,6 +5,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { markOfflineFetched, offlineFile, offlineJobFor, touchOfflineJob } from "@/lib/offline/jobs";
 import { noteOfflineServed } from "@/lib/offline/events";
+import { notePassageFetched } from "@/lib/passage/service";
 
 const JOB_ID = /^[0-9a-f]{32}$/;
 
@@ -43,7 +44,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ jobI
   // la première fois pour ce compte, jamais une par plage (`noteOfflineServed`).
   noteOfflineServed(session.u, job, end);
   // Et pour le quota du serveur : une version que tous ses appareils ont entière peut s'effacer.
-  if (done && end === written - 1) markOfflineFetched(session.u, jobId);
+  if (done && end === written - 1) {
+    markOfflineFetched(session.u, jobId);
+    // Une session arrivée par un passage : la preuve que l'ancienne adresse attend pour effacer sa
+    // propre copie de ce titre (§119, `passageFetchedFor`). Dans sa garde : jamais au prix des octets.
+    try {
+      notePassageFetched(session.jti, session.u, job.itemId, jobId);
+    } catch {
+      /* rien de noté : l'ancienne adresse garde son fichier */
+    }
+  }
   const stream = fs.createReadStream(offlineFile(jobId), { start, end });
   return new NextResponse(Readable.toWeb(stream) as ReadableStream, { status: 206, headers });
 }

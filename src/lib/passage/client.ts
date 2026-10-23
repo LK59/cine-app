@@ -2,19 +2,32 @@
 
 import { readPassageSettings, type PassageSettings } from "./settings";
 import { persistedCacheAccount } from "@/lib/persistentCache";
+import { collectPassageDownloads } from "./offer";
+import type { PassageDownload } from "./downloads";
 
 /**
  * Le passage d'adresse côté navigateur (DECISIONS.md §119) — ce que l'ancienne adresse rassemble, et
  * ce que la nouvelle se rappelle entre deux pages.
  */
 
-/** Le jour local où le bandeau a été refermé sur cet appareil (par adresse — `localStorage` l'est). */
+/**
+ * Le bandeau refermé sur cet appareil (par adresse — `localStorage` l'est) : « AAAA-MM-JJ|génération »,
+ * le jour local de la fermeture et la génération du bandeau à ce moment-là.
+ */
 export const PASSAGE_BANNER_CLOSED_KEY = "cine:passage-banner-closed-day";
 /**
- * La clé de la 10.0.0, où une fermeture valait pour toujours : oubliée avec la 10.0.1 (souhait du
- * propriétaire, 23/10/2026 — chacun revoit le bandeau dès la mise en ligne), et effacée au passage.
+ * La génération de la proposition de passer (DECISIONS.md §119). Une fermeture faite sous une
+ * génération plus ancienne ne cache rien : **incrémenter cette constante relance la proposition chez
+ * tout le monde** dès la mise en ligne, sans changer de clé. 1 : la 10.0.1 (sa valeur n'avait pas de
+ * génération, lue comme 1) ; 2 : les téléchargements suivent le passage.
+ */
+export const PASSAGE_BANNER_GENERATION = 2;
+/**
+ * La clé de la 10.0.0, où une fermeture valait pour toujours : jamais relue, effacée au lancement.
  */
 export const PASSAGE_BANNER_CLOSED_LEGACY_KEY = "cine:passage-banner-closed";
+/** Arrivé par un passage qui emporte des téléchargements (onglet) : l'aide d'installation le dit. */
+export const PASSAGE_CARRIED_DOWNLOADS_KEY = "cine:passage-carried-downloads";
 /** Les réglages arrivés déjà posés sur ce stockage : la date de l'arrivée (`passageArrival`). */
 export const PASSAGE_APPLIED_KEY = "cine:passage-applied";
 /** Arrivé par le passage dans cet onglet : l'aide « Ajouter à l'écran d'accueil » se montre aussitôt. */
@@ -25,8 +38,12 @@ export function formatPassageCode(code: string): string {
   return code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
 }
 
-/** Les réglages de l'appareil (liste blanche) et son abonnement aux notifications, s'il en a un. */
-export async function collectPassageInput(): Promise<{ settings: PassageSettings; pushEndpoint: string | null }> {
+/**
+ * Les réglages de l'appareil (liste blanche), son abonnement aux notifications s'il en a un, et la
+ * liste de ses téléchargements hors ligne de ce compte (`collectPassageDownloads`) — jamais les fichiers.
+ */
+export async function collectPassageInput(): Promise<{ settings: PassageSettings; pushEndpoint: string | null; downloads: PassageDownload[] }> {
+  const downloads = await collectPassageDownloads();
   let settings: PassageSettings = {};
   try {
     settings = readPassageSettings(window.localStorage, persistedCacheAccount());
@@ -43,7 +60,7 @@ export async function collectPassageInput(): Promise<{ settings: PassageSettings
   } catch {
     pushEndpoint = null;
   }
-  return { settings, pushEndpoint };
+  return { settings, pushEndpoint, downloads };
 }
 
 /**
@@ -88,18 +105,27 @@ export function localDay(now: Date = new Date()): string {
  * Le bandeau refermé **aujourd'hui** (DECISIONS.md §119) : fermé à la croix ou après « Passer », il
  * revient le lendemain, une fois par jour, tant que l'appareil ouvre l'ancienne adresse (souhait du
  * propriétaire, 23/10/2026 — refermé pour toujours, il laissait des appareils sur l'ancienne adresse
- * sans plus rien leur dire). La clé garde le jour de la fermeture ; la clé de la 10.0.0 est oubliée
- * et effacée : une fermeture d'avant la 10.0.1 ne cache plus rien.
+ * sans plus rien leur dire). La clé garde le jour de la fermeture **et la génération du bandeau**
+ * (`PASSAGE_BANNER_GENERATION`) : une fermeture d'une génération plus ancienne — ou sans génération,
+ * celle de la 10.0.1 — ne cache rien. La clé de la 10.0.0 est oubliée et effacée.
  */
-function bannerClosedToday(): boolean {
+export function bannerClosedToday(stored: string | null, day: string = localDay(), generation: number = PASSAGE_BANNER_GENERATION): boolean {
+  if (stored === null) return false;
+  const [closedDay, gen] = stored.split("|");
+  const closedGeneration = gen === undefined ? 1 : Number(gen);
+  return closedDay === day && Number.isInteger(closedGeneration) && closedGeneration >= generation;
+}
+
+function readBannerClosed(): boolean {
   if (flag("local", PASSAGE_BANNER_CLOSED_LEGACY_KEY) !== null) flag("local", PASSAGE_BANNER_CLOSED_LEGACY_KEY, null);
-  const stored = flag("local", PASSAGE_BANNER_CLOSED_KEY);
-  return stored !== null && stored === localDay();
+  return bannerClosedToday(flag("local", PASSAGE_BANNER_CLOSED_KEY));
 }
 
 export const passageFlags = {
-  bannerClosed: bannerClosedToday,
-  closeBanner: () => void flag("local", PASSAGE_BANNER_CLOSED_KEY, localDay()),
+  bannerClosed: readBannerClosed,
+  closeBanner: () => void flag("local", PASSAGE_BANNER_CLOSED_KEY, `${localDay()}|${PASSAGE_BANNER_GENERATION}`),
+  carriedDownloads: () => flag("session", PASSAGE_CARRIED_DOWNLOADS_KEY) !== null,
+  noteCarriedDownloads: (carried: boolean) => void flag("session", PASSAGE_CARRIED_DOWNLOADS_KEY, carried ? "1" : null),
   installHelpWanted: () => flag("session", PASSAGE_INSTALL_HELP_KEY) !== null,
   wantInstallHelp: () => void flag("session", PASSAGE_INSTALL_HELP_KEY, "1"),
   installHelpShown: () => void flag("session", PASSAGE_INSTALL_HELP_KEY, null),

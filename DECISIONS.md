@@ -6169,6 +6169,15 @@ dernier morceau redemandé —, et l'appareil qui a déjà tous ses octets ne pr
 échec. Le droit « Autoriser les téléchargements » de Jellyfin ne s'applique pas ici :
 le téléchargement dans l'application est ouvert à tous (Louis) ; ce droit ne règle que le fichier
 d'origine, « Télécharger le fichier » dans le lecteur.
+
+**Le passage d'adresse (23/10/2026, §119.2).** Les fichiers ne changent pas d'adresse (l'OPFS est par
+origine) : le passage emporte la **liste** des téléchargements terminés ou en cours de ce compte sur
+l'appareil ; la nouvelle adresse propose une fois de les retélécharger aux mêmes choix, par
+`startOfflineDownload` ; l'ancienne efface les siens titre par titre quand le serveur atteste que la
+nouvelle les a récupérés (`/api/passage/fetched`) — sur l'appareil seul quand la version est la même
+(`removeOfflineDownload(id, { server: false })` : la demande du serveur est celle du compte, commune
+aux deux adresses). La page des téléchargements porte l'invitation laissée pour « Plus tard »
+(`PassageDownloadsCard`).
 ## 110. La langue du son retenue par série
 
 **La règle (Louis, 20/10/2026).** Dans une série, changer la langue du son à la main dans deux épisodes
@@ -7038,12 +7047,16 @@ reste « à faire » (comme l'invitation aux notifications : « Passer » ne l'�
 Nouveautés ouvre le passage même refermé. **Refermé, il revient le lendemain** (souhait du propriétaire,
 23/10/2026 — il se refermait pour de bon) : la croix, ou un appui sur « Passer », le cachent pour la
 journée, et il reparaît une fois par jour tant que l'appareil ouvre l'ancienne adresse.
-`cine:passage-banner-closed-day` garde le jour local de la fermeture (`AAAA-MM-JJ`, fuseau de
-l'appareil, `localDay`, `passageFlags.bannerClosed`). L'ancienne clé de la 10.0.0,
-`cine:passage-banner-closed`, n'est jamais relue — toute fermeture d'avant la 10.0.1 est oubliée, pour
-que chacun revoie le bandeau à la mise en ligne (souhait du propriétaire) — et s'efface au premier
-lancement. Lu au montage : un onglet laissé ouvert passé minuit attend le lancement suivant. Tests :
-`passage-banner.test.tsx` (fermé aujourd'hui, le lendemain, « Passer », ancienne clé oubliée).
+`cine:passage-banner-closed-day` garde le jour local de la fermeture **et la génération du bandeau**,
+`AAAA-MM-JJ|génération` (fuseau de l'appareil, `localDay`, `passageFlags.bannerClosed`,
+`bannerClosedToday`). **Relancer la proposition chez tout le monde** : il suffit d'incrémenter
+`PASSAGE_BANNER_GENERATION` (`src/lib/passage/client.ts`) — une fermeture d'une génération plus
+ancienne ne cache rien, sans changer de clé. Génération 1 : la 10.0.1 (sa valeur, sans `|`, se lit
+comme 1) ; génération 2 : les téléchargements suivent le passage (ci-dessous) — toute fermeture d'avant
+est oubliée. La clé de la 10.0.0, `cine:passage-banner-closed`, n'est jamais relue et s'efface au
+premier lancement. Lu au montage : un onglet laissé ouvert passé minuit attend le lancement suivant.
+Tests : `passage-banner.test.tsx` (fermé aujourd'hui, le lendemain, « Passer », ancienne clé oubliée,
+génération plus ancienne, la règle seule).
 Depuis l'application installée, la nouvelle adresse s'ouvre dans le navigateur (`window.open`) ; sur
 iPhone, ce navigateur intégré n'est ni Safari ni l'application à venir, d'où le code et la phrase qui le
 dit.
@@ -7062,8 +7075,8 @@ navigateur ; 2) ouvrir la nouvelle icône et coller le code de passage si elle d
 dans l'app Laterna : c'est là, une fois installée, que l'invitation « application installée sans
 abonnement » les propose (§17), et rien d'autre ne la masque (l'aide d'installation ne s'y montre pas).
 Tests : `InstallPrompt.test.tsx` (aussitôt, trois gestes, vue intégrée, application installée,
-Android, ordinateur, fermeture), `passage-entry.test.tsx` (le lien marque l'onglet). Un passage n'emporte ni téléchargements hors ligne, ni reprise sur l'appareil, ni catalogue gardé,
-ni bilans ou lignes en attente.
+Android, ordinateur, fermeture), `passage-entry.test.tsx` (le lien marque l'onglet). Un passage n'emporte ni reprise sur l'appareil, ni catalogue gardé,
+ni bilans ou lignes en attente ; des téléchargements hors ligne, **la liste seulement** (§119.2).
 
 **Décidé le 23/10/2026.**
 
@@ -7109,5 +7122,91 @@ passage demandé / reçu, rien sans nouvelle adresse).
 **Voulu.** `publicOrigin` (l'adresse donnée au téléviseur) garde sa lecture d'avant : elle n'est pas
 un journal et n'a pas changé ici. Un compte passé qui rouvre ensuite l'ancienne reste « passé » ; les
 deux dates sont côte à côte.
+
+**Décidé le 23/10/2026.**
+
+### 119.2 Les téléchargements hors ligne suivent le passage
+
+**Règle.** Les fichiers ne traversent pas : chaque adresse a son propre stockage (OPFS), et sur iPhone
+l'application installée a le sien. Le passage emporte donc **la liste** des téléchargements de ce
+compte sur cet appareil — terminés ou en cours (en préparation, en téléchargement, en pause ; jamais un
+échec) —, la nouvelle adresse propose de les **retélécharger** aux mêmes choix, et l'ancienne libère sa
+place **seulement quand le serveur atteste** que ce même compte les a récupérés de l'autre côté.
+
+**Au départ.** La fenêtre « Passer » (`collectPassageInput` → `collectPassageDownloads`) joint la liste
+à la demande (`POST /api/passage`, `downloads`) : par titre, l'identifiant Jellyfin, la qualité, le
+codec, la piste son, le titre, la taille attendue, l'année, la durée, les pistes nommées, et pour un
+épisode sa place dans la série (de quoi grouper la page des téléchargements avant toute réponse).
+Revalidée champ par champ des deux côtés (`cleanPassageDownloads`, `src/lib/passage/downloads.ts` :
+identifiant au format Jellyfin, qualité et codec dans leur énumération, piste entière ; une entrée hors
+format est ignorée, les autres passent), une par titre, **50 au plus** (`PASSAGE_DOWNLOADS_MAX`), 64 Ko
+au plus pour le paquet. Gardée avec les secrets (`passages.downloads`), puis avec la session jumelle
+(`passage_arrivals.downloads`, 30 jours au plus, comme les réglages). La fenêtre et l'aide
+d'installation (`PassageInstallSteps`, `downloads`) disent en une phrase, **seulement s'il y en a** :
+« Vos téléchargements vous seront proposés à nouveau dans Laterna. » (l'échange répond `downloads:
+true`, retenu dans l'onglet : `passageFlags.carriedDownloads`).
+
+**À l'arrivée.** `GET /api/passage/arrival` rend la liste **filtrée par le serveur** : une seule question
+à Jellyfin sous l'identité du compte (`availablePassageItems`, `/Users/{jfId}/Items?Ids=`), où Jellyfin
+applique ses droits et les tags bloqués du compte (§54) ; un titre supprimé ou masqué disparaît sans
+bruit, jamais nommé. Jellyfin muet : la liste n'est pas rendue, l'arrivée la reposera. `PassageArrival`
+la garde sur ce stockage (`cine:passage-downloads`, `keepPassageOffer`) puis le serveur l'oublie (`POST
+… { downloads: true }`) : **proposée une seule fois**. Sur iPhone/iPad, seulement dans l'application
+installée — un onglet de Safari la rangerait dans le stockage qu'on va quitter, et l'application
+installée la reçoit par sa propre arrivée (le code ouvre sa propre session jumelle). L'invitation
+(`PassageDownloadsPrompt`) : « Retélécharger vos N téléchargements (X Go) ? », un appui relance chacun
+par le chemin normal (`relaunchPassageDownloads` → `startOfflineDownload` : droits, limite de 50, copie
+du serveur reprise si elle existe encore ; un refus passe sans bruit ; un titre déjà sur l'appareil
+n'est pas redemandé). « Plus tard » la laisse en tête de la page des téléchargements
+(`PassageDownloadsCard`) jusqu'à ce qu'on la ferme. Jamais pendant un film, ni pendant l'écran
+d'accueil d'un premier lancement, ni par-dessus l'aide d'installation, les Nouveautés ou l'invitation
+aux notifications : **une invitation flottante à la fois** (`useFloatingPromptTurn`,
+`src/lib/floatingPromptTurn.ts` — rang 0 pour les étapes qui ne cèdent jamais, l'aide d'installation et
+les Nouveautés ; 1 les notifications ; 2 le passage).
+
+**La preuve pour effacer l'ancienne adresse.** Chaque échange écrit désormais une ligne d'arrivée,
+même sans réglages, avec la session d'origine (`passage_arrivals.origin_jti`). Quand une session
+**venue d'un passage** reçoit la dernière plage d'une version finie (`/api/offline/jobs/<id>/file`, là
+où `markOfflineFetched` est noté), le titre et la version sont notés sur **sa** ligne d'arrivée
+(`notePassageFetched`, `passage_arrivals.fetched`, `{ itemId: jobId }`, 200 au plus). Au lancement de
+l'ancienne adresse (`PassageDownloadsCleanup`, `freeOldAddressDownloads`), l'appareil demande `GET
+/api/passage/fetched?items=…` : le serveur ne répond que pour les arrivées dont l'origine est **la
+session qui demande** et le compte **lui-même** (`passageFetchedFor`). Sûre parce que : le serveur l'a
+servie (pas une déclaration de l'appareil) ; à ce compte ; à une session dont le cookie n'existe que sur
+la nouvelle adresse ; issue du passage de cet appareil-là (une autre session du même compte — un autre
+appareil — n'atteste rien) ; après le passage par construction. `offline_requests.fetched_at` n'aurait pas
+suffi : commune à toutes les adresses et à tous les appareils du compte, et effacée avec la copie du
+serveur cinq minutes après la dernière plage (`releaseFetchedCopies`). Effacement **titre par titre**,
+la lecture relue avant chacun (jamais pendant une lecture, hors ligne comprise) ; même version des deux
+côtés : retrait sur l'appareil seul (`removeOfflineDownload(id, { server: false })` — la demande du
+serveur est celle du compte, commune aux deux adresses) ; une autre version : retrait ordinaire. Puis
+une ligne au journal (`POST /api/passage/fetched`, `server.log`, `scope: "offline"`, `event:
+"passage-freed"`, les seuls titres attestés) et un mot : « N téléchargements effacés de l'ancienne
+adresse : ils sont dans Laterna ». Sans attestation (30 jours passés, reconnecté depuis, jamais
+retéléchargé), rien ne s'efface. Sur iPhone, supprimer l'ancienne icône efface déjà tout ; ceci sert
+surtout Android et l'ordinateur.
+
+**Porteurs.** `src/lib/passage/downloads.ts` (liste, validation), `src/lib/passage/offer.ts` (navigateur :
+départ, invitation gardée, relance, effacement), `service.ts` (`availablePassageItems`,
+`notePassageFetched`, `passageFetchedFor`, `passageArrival`, `ackPassageArrival`),
+`src/components/passage/PassageDownloads.tsx`, `src/lib/floatingPromptTurn.ts`.
+
+**Appelants.** `PassageDialog`, `PassageArrival`, `PassageEntry` (`noteCarriedDownloads`), `InstallPrompt`,
+`PlayerShell`, `OfflineDownloadsView`, `PushResumePrompt` et `NewsGate` (le tour des invitations) ;
+routes `/api/passage`, `/api/passage/redeem`, `/api/passage/arrival`, `/api/passage/fetched` (GET lecture
+du compte ; POST au journal, écriture d'un compte ordinaire), `/api/offline/jobs/<id>/file`.
+
+**Tests.** `passage-downloads.test.ts` (liste validée, entrées hors format ignorées, rendue à la seule
+jumelle, titre masqué ignoré, Jellyfin muet, proposée une fois ; attestation après la dernière plage
+servie à la jumelle seulement, pas à l'ancienne adresse, rien pour un autre compte ni un autre appareil
+du même compte, ni pour un lien de partage ; ligne au journal), `passage-downloads-client.test.tsx`
+(liste du compte, sans échec ; relance aux mêmes choix, refus silencieux, déjà là ; invitation une fois,
+« Plus tard » vers la page, pas pendant un film ni l'accueil, pas par-dessus l'aide d'installation ;
+effacement attesté seulement, jamais pendant une lecture, même version gardée au serveur ; phrase de
+l'aide et de la fenêtre seulement avec des téléchargements), `passage-banner.test.tsx` (génération).
+
+**Voulu.** Pas de suivi de plus que la colonne `fetched` d'une ligne d'arrivée déjà là ; pas de transfert
+de fichiers ; la relance est un geste, jamais automatique (une saison en 4G n'est pas une surprise
+qu'on fait à quelqu'un).
 
 **Décidé le 23/10/2026.**

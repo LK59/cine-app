@@ -10,6 +10,7 @@ import { persistedCacheAccount } from "@/lib/persistentCache";
 import { forgetPushWasOn, pushWasOn } from "@/lib/pushOnSignOut";
 import { ABOVE_BOTTOM_BAR, PROMPT_CLOSE_CLASS } from "@/lib/floatingPrompt";
 import { canOfferPush, isInstalledApp } from "@/lib/iosInstall";
+import { PROMPT_RANK, useFloatingPromptTurn } from "@/lib/floatingPromptTurn";
 
 /** Laissé au lancement le temps de s'installer, comme l'invitation à installer l'application. */
 const SHOW_DELAY_MS = 3000;
@@ -92,7 +93,10 @@ export function PushResumePrompt() {
     return () => clearTimeout(timer);
   }, []);
 
-  const visible = prompt !== null && !closed && onboarding?.pending === false;
+  // Une invitation à la fois (`floatingPromptTurn`) : pas par-dessus l'aide d'installation ni les
+  // Nouveautés ; l'invitation de retélécharger après un passage attend la sienne.
+  const turn = useFloatingPromptTurn("push", PROMPT_RANK.push, prompt !== null && !closed && onboarding?.pending === false);
+  const visible = prompt !== null && !closed && onboarding?.pending === false && turn;
   const reason = prompt?.reason ?? null;
 
   // L'invitation de l'application installée compte comme faite dès qu'elle s'affiche — pas quand elle

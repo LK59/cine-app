@@ -1,7 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createSessionToken, decryptSecret, encryptSecret, type Role, type SessionPayload } from "@/lib/auth";
 import { getDb, pushDb, sessionDb } from "@/lib/db";
+import { config } from "@/lib/config";
+import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
+import { isJellyfinId, jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { cleanPassageSettings, type PassageSettings } from "./settings";
+import { cleanPassageDownloads, type PassageDownload } from "./downloads";
 
 /**
  * Le passage d'une adresse à l'autre, en un appui (DECISIONS.md §119).
@@ -84,7 +89,7 @@ export function prunePassages(now = Date.now()): void {
 
 export async function createPassage(
   session: SessionPayload,
-  input: { settings?: unknown; pushEndpoint?: unknown },
+  input: { settings?: unknown; pushEndpoint?: unknown; downloads?: unknown },
   now = Date.now()
 ): Promise<CreatePassageResult> {
   // Le foyer seulement : un lien de partage ne voyage pas (§112) — et la porte des liens le refuse
@@ -119,16 +124,19 @@ export async function createPassage(
   const tokenExpiresAt = now + PASSAGE_TOKEN_TTL_MS;
   const codeExpiresAt = now + PASSAGE_CODE_TTL_MS;
   const settingsJson = Object.keys(settings).length ? JSON.stringify(settings) : null;
+  // Les téléchargements de ce compte sur cet appareil — la liste seulement, revalidée et bornée.
+  const downloads = cleanPassageDownloads(input.downloads);
+  const downloadsJson = downloads.length ? JSON.stringify(downloads) : null;
 
   const db = getDb();
   const insert = db.prepare(
-    "INSERT INTO passages (hash, kind, user_id, origin_jti, sealed, settings, push_endpoint, created_at, expires_at, used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)"
+    "INSERT INTO passages (hash, kind, user_id, origin_jti, sealed, settings, push_endpoint, downloads, created_at, expires_at, used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)"
   );
   db.transaction(() => {
     // Une nouvelle demande remplace les précédentes de cette session : un seul code valable à la fois.
     db.prepare("DELETE FROM passages WHERE origin_jti = ? AND used_at IS NULL").run(session.jti);
-    insert.run(hashSecret("token", token), "token", session.u, session.jti, sealed, settingsJson, endpoint, now, tokenExpiresAt);
-    insert.run(hashSecret("code", code), "code", session.u, session.jti, sealed, settingsJson, endpoint, now, codeExpiresAt);
+    insert.run(hashSecret("token", token), "token", session.u, session.jti, sealed, settingsJson, endpoint, downloadsJson, now, tokenExpiresAt);
+    insert.run(hashSecret("code", code), "code", session.u, session.jti, sealed, settingsJson, endpoint, downloadsJson, now, codeExpiresAt);
   })();
   prunePassages(now);
   return { ok: true, token, code, tokenExpiresAt, codeExpiresAt };
@@ -143,6 +151,8 @@ export interface RedeemedPassage {
   userId: string;
   /** Les appareils Jellyfin des sessions expirées effacées au passage, à révoquer. */
   expiredDevices: string[];
+  /** Le passage emporte des téléchargements : l'aide d'installation le dit (§119). */
+  downloads: boolean;
 }
 
 /**
@@ -159,8 +169,10 @@ export async function redeemPassage(kind: PassageKind, secret: string, device: s
   // l'écriture conditionnelle ci-dessous ne l'aurait de toute façon pas servi.
   prunePassages(now);
   const row = db
-    .prepare("UPDATE passages SET used_at = ? WHERE hash = ? AND kind = ? AND used_at IS NULL AND expires_at > ? RETURNING origin_jti, sealed, settings, push_endpoint")
-    .get(now, hashSecret(kind, secret), kind, now) as { origin_jti: string; sealed: string; settings: string | null; push_endpoint: string | null } | undefined;
+    .prepare("UPDATE passages SET used_at = ? WHERE hash = ? AND kind = ? AND used_at IS NULL AND expires_at > ? RETURNING origin_jti, sealed, settings, push_endpoint, downloads")
+    .get(now, hashSecret(kind, secret), kind, now) as
+    | { origin_jti: string; sealed: string; settings: string | null; push_endpoint: string | null; downloads: string | null }
+    | undefined;
   if (!row) return null;
   const origin = sessionDb.get(row.origin_jti);
   if (!origin) return null;
@@ -174,39 +186,139 @@ export async function redeemPassage(kind: PassageKind, secret: string, device: s
 
   const { token, jti } = await createSessionToken(sealed.u, sealed.role, sealed.jfUser, sealed.jfId, sealed.jfToken, sealed.jsCookie);
   const expiredDevices = sessionDb.create(jti, origin.userId, device, origin.jfDevice);
-  if (row.settings || row.push_endpoint) {
-    db.prepare("INSERT OR REPLACE INTO passage_arrivals (jti, user_id, settings, push_endpoint, created_at) VALUES (?, ?, ?, ?, ?)").run(
-      jti,
-      sealed.u,
-      row.settings,
-      row.push_endpoint,
-      now
-    );
-  }
-  return { token, jti, role: sealed.role, user: sealed.jfUser ?? sealed.u, userId: origin.userId, expiredDevices };
-}
-
-/** Les réglages qu'une session d'arrivée doit encore poser sur son appareil, et leur date. */
-export function passageArrival(jti: string): { at: number; settings: PassageSettings } | null {
-  const row = getDb().prepare("SELECT settings, created_at FROM passage_arrivals WHERE jti = ?").get(jti) as
-    | { settings: string | null; created_at: number }
-    | undefined;
-  if (!row?.settings) return null;
-  try {
-    return { at: row.created_at, settings: cleanPassageSettings(JSON.parse(row.settings)) };
-  } catch {
-    return null;
-  }
+  // Toujours une ligne d'arrivée, même sans réglages : elle porte la session d'origine
+  // (`origin_jti`), d'où l'ancienne adresse apprend ce que celle-ci a récupéré (`passageFetchedFor`)
+  // — et les téléchargements emportés, à proposer une fois.
+  db.prepare(
+    "INSERT OR REPLACE INTO passage_arrivals (jti, user_id, settings, push_endpoint, downloads, origin_jti, fetched, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)"
+  ).run(jti, sealed.u, row.settings, row.push_endpoint, row.downloads, row.origin_jti, now);
+  return { token, jti, role: sealed.role, user: sealed.jfUser ?? sealed.u, userId: origin.userId, expiredDevices, downloads: !!row.downloads };
 }
 
 /**
- * Les réglages ont été posés. Dans l'application installée, c'est fini : ils sont effacés. Dans un
- * onglet, ils restent (au plus `PASSAGE_ARRIVAL_TTL_MS`) — sur Android et sur ordinateur,
- * l'application installée ensuite partage la session de l'onglet et les posera à son tour.
+ * Ce qu'une session d'arrivée doit encore poser sur son appareil, et la date de l'arrivée : les
+ * réglages, et la liste des téléchargements emportés — non filtrée : `availablePassageItems` en
+ * retire ce que le compte ne voit plus avant de la montrer. `null` s'il ne reste rien.
  */
-export function ackPassageArrival(jti: string, installed: boolean): void {
-  if (!installed) return;
-  getDb().prepare("UPDATE passage_arrivals SET settings = NULL WHERE jti = ?").run(jti);
+export function passageArrival(jti: string): { at: number; settings?: PassageSettings; downloads?: PassageDownload[] } | null {
+  const row = getDb().prepare("SELECT settings, downloads, created_at FROM passage_arrivals WHERE jti = ?").get(jti) as
+    | { settings: string | null; downloads: string | null; created_at: number }
+    | undefined;
+  if (!row) return null;
+  const parse = (value: string | null): unknown => {
+    try {
+      return value ? (JSON.parse(value) as unknown) : null;
+    } catch {
+      return null;
+    }
+  };
+  const settings = row.settings ? cleanPassageSettings(parse(row.settings)) : null;
+  const downloads = row.downloads ? cleanPassageDownloads(parse(row.downloads)) : [];
+  if (!settings && !downloads.length) return null;
+  return { at: row.created_at, ...(settings ? { settings } : {}), ...(downloads.length ? { downloads } : {}) };
+}
+
+/**
+ * Posé sur l'appareil. Les réglages : dans l'application installée, c'est fini, ils sont effacés ;
+ * dans un onglet, ils restent (au plus `PASSAGE_ARRIVAL_TTL_MS`) — sur Android et sur ordinateur,
+ * l'application installée ensuite partage la session de l'onglet et les posera à son tour.
+ * Les téléchargements : effacés dès qu'un appareil les a pris (`downloads: true`) — proposés une
+ * seule fois ; le navigateur garde l'invitation de son côté jusqu'à ce qu'on la ferme.
+ */
+export function ackPassageArrival(jti: string, installed: boolean, taken: { settings?: boolean; downloads?: boolean } = {}): void {
+  const db = getDb();
+  if (installed && taken.settings !== false) db.prepare("UPDATE passage_arrivals SET settings = NULL WHERE jti = ?").run(jti);
+  if (taken.downloads === true) db.prepare("UPDATE passage_arrivals SET downloads = NULL WHERE jti = ?").run(jti);
+}
+
+/** Au plus tant de titres notés récupérés par une même arrivée. */
+const FETCHED_MAX = 200;
+
+/**
+ * Une session venue d'un passage vient de recevoir la dernière plage d'une version hors ligne finie
+ * (`/api/offline/jobs/<id>/file`) : noté sur sa ligne d'arrivée, titre → version. C'est la preuve
+ * qu'attend l'ancienne adresse pour effacer ses propres fichiers (`passageFetchedFor`) : servie par
+ * le serveur, à ce compte, à une session de la nouvelle adresse (son cookie n'existe que là) issue du
+ * passage de cet appareil-là. Une session ordinaire n'a pas de ligne d'arrivée : une lecture par clé
+ * primaire, rien d'écrit.
+ *
+ * Gardée à part de `offline_requests.fetched_at` exprès : cette ligne-là disparaît avec la copie du
+ * serveur, cinq minutes après la dernière plage (`releaseFetchedCopies`), et elle est commune à tous
+ * les appareils du compte — elle ne dit ni d'où, ni quand l'ancienne adresse rouvrira.
+ */
+export function notePassageFetched(jti: string, user: string, itemId: string, jobId: string): void {
+  const db = getDb();
+  const row = db.prepare("SELECT fetched FROM passage_arrivals WHERE jti = ? AND user_id = ? AND origin_jti IS NOT NULL").get(jti, user) as
+    | { fetched: string | null }
+    | undefined;
+  if (!row) return;
+  let fetched: Record<string, string> = {};
+  try {
+    const parsed = row.fetched ? (JSON.parse(row.fetched) as unknown) : {};
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) fetched = parsed as Record<string, string>;
+  } catch {
+    fetched = {};
+  }
+  if (fetched[itemId] === jobId) return;
+  delete fetched[itemId];
+  fetched[itemId] = jobId;
+  const keys = Object.keys(fetched);
+  for (const key of keys.slice(0, Math.max(0, keys.length - FETCHED_MAX))) delete fetched[key];
+  db.prepare("UPDATE passage_arrivals SET fetched = ? WHERE jti = ?").run(JSON.stringify(fetched), jti);
+}
+
+/**
+ * Parmi ces titres, ceux que **ce compte** a récupérés entiers sur la nouvelle adresse, par une
+ * session issue d'un passage parti de **cette session** (`originJti` : celle de l'appareil qui
+ * demande) — titre → version récupérée. Un autre compte, une autre session (un autre appareil du
+ * même compte) n'ont aucune arrivée issue de celle-ci : ils n'apprennent rien.
+ */
+export function passageFetchedFor(originJti: string, user: string, itemIds: readonly string[]): Record<string, string> {
+  const rows = getDb().prepare("SELECT fetched FROM passage_arrivals WHERE origin_jti = ? AND user_id = ? AND fetched IS NOT NULL").all(originJti, user) as {
+    fetched: string;
+  }[];
+  const wanted = new Set(itemIds);
+  const out: Record<string, string> = {};
+  for (const row of rows) {
+    try {
+      const parsed = JSON.parse(row.fetched) as Record<string, unknown>;
+      for (const [itemId, jobId] of Object.entries(parsed)) if (wanted.has(itemId) && typeof jobId === "string") out[itemId] = jobId;
+    } catch {
+      /* ligne abîmée : elle n'atteste rien */
+    }
+  }
+  return out;
+}
+
+/**
+ * Parmi ces titres, ceux que ce compte voit encore : une seule question à Jellyfin, **sous son
+ * identité** (`/Users/{jfId}/Items?Ids=`) — Jellyfin y applique lui-même ses droits, son contrôle
+ * parental et les tags bloqués du compte (§54), sans copie des règles ici ; un titre supprimé n'y est
+ * plus. Le compte administrateur local, sans identité Jellyfin, n'apprend que l'existence. `null` :
+ * Jellyfin n'a pas répondu — rien n'est montré, l'arrivée reposera la question au lancement suivant.
+ */
+export async function availablePassageItems(session: Pick<SessionPayload, "role" | "jfId">, itemIds: readonly string[]): Promise<Set<string> | null> {
+  const ids = itemIds.filter((id) => isJellyfinId(id));
+  if (!ids.length) return new Set();
+  if (session.role !== "admin" && session.role !== "user") return new Set();
+  if (!session.jfId && session.role !== "admin") return new Set();
+  try {
+    const base = session.jfId ? `${config.jellyfin.url}/Users/${jellyfinIdSegment(session.jfId)}/Items` : `${config.jellyfin.url}/Items`;
+    const res = await passJellyfinFetch(`${base}?Ids=${ids.map((id) => jellyfinIdSegment(id)).join(",")}&EnableImages=false&EnableUserData=false`, {
+      headers: jellyfinAuthHeaders(config.jellyfin.apiKey),
+      signal: AbortSignal.timeout(8000),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      await res.arrayBuffer().catch(() => undefined);
+      return res.status >= 400 && res.status < 500 ? new Set() : null;
+    }
+    const page = (await res.json()) as { Items?: { Id?: string }[] };
+    const seen = new Set((page.Items ?? []).map((i) => (i.Id ?? "").replace(/-/g, "").toLowerCase()));
+    return new Set(ids.filter((id) => seen.has(id.toLowerCase())));
+  } catch {
+    return null;
+  }
 }
 
 /**

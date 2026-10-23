@@ -75,7 +75,8 @@ export async function POST(req: NextRequest) {
   logAuthEvent("passage-received", { user: redeemed.user, ip, device, role: redeemed.role, via: kind });
   const lang = userPrefsDb.getLang(redeemed.userId, config.app.language);
   await settle(started);
-  const res = NextResponse.json({ ok: true, role: redeemed.role });
+  // `downloads` : le passage emporte des téléchargements — l'aide d'installation le dit d'une phrase.
+  const res = NextResponse.json({ ok: true, role: redeemed.role, downloads: redeemed.downloads });
   setSignedInCookies(res, redeemed.token, lang);
   return res;
 }

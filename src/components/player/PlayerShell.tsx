@@ -76,6 +76,10 @@ const PushResumePrompt = dynamic(() => import("./PushResumePrompt").then((m) => 
 // emportés posés à l'arrivée sur la nouvelle. Chacun ne rend rien hors de son cas.
 const PassageBanner = dynamic(() => import("@/components/passage/PassageBanner").then((m) => m.PassageBanner), { ssr: false });
 const PassageArrival = dynamic(() => import("@/components/passage/PassageArrival").then((m) => m.PassageArrival), { ssr: false });
+// Les téléchargements hors ligne suivent le passage : l'invitation à retélécharger sur la nouvelle
+// adresse, la place libérée sur l'ancienne une fois le serveur témoin de la récupération.
+const PassageDownloadsPrompt = dynamic(() => import("@/components/passage/PassageDownloads").then((m) => m.PassageDownloadsPrompt), { ssr: false });
+const PassageDownloadsCleanup = dynamic(() => import("@/components/passage/PassageDownloads").then((m) => m.PassageDownloadsCleanup), { ssr: false });
 // Les décodeurs du lecteur, une fois l'écran installé, à chaque démarrage : l'écran d'accueil seul
 // ne concerne qu'un premier lancement, et le 21/09/2026 le décodeur FLAC arrivait par un
 // déploiement que presque personne ne verrait passer par là. `ssr: false` n'est pas un détail :
@@ -301,6 +305,8 @@ export function PlayerShell() {
       <PushResumePrompt />
       <PassageBanner />
       <PassageArrival />
+      <PassageDownloadsPrompt />
+      <PassageDownloadsCleanup />
       <NewsGate />
       <DecoderWarmup delayMs={DECODER_WARMUP_MS} />
       {/* Montés le temps de leur sortie : l'adresse change avant eux — un retour du navigateur

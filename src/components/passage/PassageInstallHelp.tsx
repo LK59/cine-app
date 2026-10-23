@@ -25,11 +25,21 @@ export function installPlatform(): InstallPlatform {
  * d'abord « Ouvrir dans Safari » (la boussole) ; sur Android, le menu du navigateur ; ailleurs, les
  * deux ; 2) ouvrir la nouvelle icône, et coller le code de passage si elle demande de se connecter ;
  * 3) supprimer l'ancienne icône. Sur iPhone/iPad, une ligne de plus : les notifications viendront
- * dans l'application installée — ici, rien ne les propose (`canOfferPush`, §17).
+ * dans l'application installée — ici, rien ne les propose (`canOfferPush`, §17). Et, seulement si
+ * le passage emporte des téléchargements hors ligne, qu'ils seront proposés de nouveau dans Laterna.
  *
  * Une seule écriture pour la page `/passage` et pour la bannière de l'arrivée (`InstallPrompt`).
  */
-export function PassageInstallSteps({ platform, size = "page" }: { platform: InstallPlatform; size?: "page" | "banner" }) {
+export function PassageInstallSteps({
+  platform,
+  size = "page",
+  downloads = false,
+}: {
+  platform: InstallPlatform;
+  size?: "page" | "banner";
+  /** Le passage emporte des téléchargements hors ligne : une phrase dit qu'ils seront proposés de nouveau. */
+  downloads?: boolean;
+}) {
   const t = useT();
   const text = size === "page" ? "text-[13px]" : "text-[12.5px]";
   return (
@@ -43,6 +53,11 @@ export function PassageInstallSteps({ platform, size = "page" }: { platform: Ins
         <li>{t("passage.install.removeOld")}</li>
       </ol>
       {platform === "ios" && <p className="mt-2 text-[12px] leading-snug text-slate-400">{t("passage.install.notifications")}</p>}
+      {downloads && (
+        <p data-passage-downloads-note="" className="mt-2 text-[12px] leading-snug text-slate-400">
+          {t("passage.downloads.again")}
+        </p>
+      )}
     </>
   );
 }

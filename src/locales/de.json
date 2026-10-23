@@ -3691,6 +3691,17 @@
       "removeOld": "Löschen Sie das alte CineApp-Symbol von Ihrem Home-Bildschirm.",
       "notifications": "Benachrichtigungen werden Ihnen danach in der Laterna-App angeboten."
     },
+    "downloads": {
+      "again": "Ihre Downloads werden Ihnen in Laterna erneut angeboten.",
+      "offerOne": "Ihren Download erneut herunterladen ({size})?",
+      "offerMany": "Ihre {n} Downloads erneut herunterladen ({size})?",
+      "offerBody": "Die von der alten Adresse, mit derselben Qualität und Sprache.",
+      "relaunch": "Erneut herunterladen",
+      "later": "Später",
+      "dismiss": "Schließen",
+      "freedOne": "1 Download von der alten Adresse gelöscht: Er ist in Laterna.",
+      "freedMany": "{n} Downloads von der alten Adresse gelöscht: Sie sind in Laterna."
+    },
     "loginLink": "Sie kommen von der alten Adresse? Wechselcode"
   }
 }

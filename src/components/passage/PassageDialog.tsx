@@ -36,12 +36,15 @@ export function PassageDialog({ target, onClose }: { target: string; onClose: ()
   const [state, setState] = useState<State>({ kind: "loading" });
   const [copied, setCopied] = useState(false);
   const [installedIos] = useState(() => isInstalledApp() && isAppleTouchDevice());
+  // Des téléchargements de ce compte sur l'appareil : une phrase dit qu'ils seront proposés de nouveau.
+  const [carried, setCarried] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const input = await collectPassageInput();
+        if (!cancelled) setCarried(input.downloads.length > 0);
         const res = await fetch("/api/passage", {
           method: "POST",
           headers: { "Content-Type": "application/json", ...touchHintHeaders() },
@@ -99,6 +102,11 @@ export function PassageDialog({ target, onClose }: { target: string; onClose: ()
         </button>
         <h2 className="pr-8 text-base font-semibold text-white">{t("passage.dialog.title", { host })}</h2>
         <p className="mt-1.5 text-[13px] leading-snug text-muted">{t("passage.dialog.body")}</p>
+        {carried && (
+          <p data-passage-downloads-note="" className="mt-1.5 text-[13px] leading-snug text-muted">
+            {t("passage.downloads.again")}
+          </p>
+        )}
 
         {state.kind === "loading" && <p className="mt-5 text-sm text-subtle">{t("passage.dialog.preparing")}</p>}
         {state.kind === "error" && (

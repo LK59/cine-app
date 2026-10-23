@@ -3691,6 +3691,17 @@
       "removeOld": "Supprimez l'ancienne icône CineApp de votre écran d'accueil.",
       "notifications": "Les notifications se proposeront ensuite dans l'app Laterna."
     },
+    "downloads": {
+      "again": "Vos téléchargements vous seront proposés à nouveau dans Laterna.",
+      "offerOne": "Retélécharger votre téléchargement ({size}) ?",
+      "offerMany": "Retélécharger vos {n} téléchargements ({size}) ?",
+      "offerBody": "Ceux de l'ancienne adresse, avec les mêmes choix de qualité et de langue.",
+      "relaunch": "Retélécharger",
+      "later": "Plus tard",
+      "dismiss": "Fermer",
+      "freedOne": "1 téléchargement effacé de l'ancienne adresse : il est dans Laterna.",
+      "freedMany": "{n} téléchargements effacés de l'ancienne adresse : ils sont dans Laterna."
+    },
     "loginLink": "Vous venez de l'ancienne adresse ? Code de passage"
   }
 }
