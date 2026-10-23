@@ -12,9 +12,9 @@ import { createLiquidPress, prefersReducedMotion } from "@/lib/liquidGlass/liqui
 import { LiquidMenu } from "@/components/player/LiquidMenu";
 import { PlayerEpisodesMenu, usePrewarmEpisodes } from "@/components/player/PlayerEpisodesMenu";
 import { usePlayerItem } from "@/lib/usePlayerItem";
-import { useCastAvailability, type CastVideoElement } from "@/components/player/controls/useCastAvailability";
-import { useChapters, useTrickplay } from "@/components/player/controls/useTrickplay";
-import { PlayerTopBar } from "@/components/player/controls/PlayerTopBar";
+import { useCastAvailability, type CastVideoElement } from "@/components/playerControls/useCastAvailability";
+import { useChapters, useTrickplay } from "@/components/playerControls/useTrickplay";
+import { PlayerTopBar } from "@/components/playerControls/PlayerTopBar";
 import { PlayerDownloadRow } from "@/components/player/PlayerDownloadRow";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
 import {
