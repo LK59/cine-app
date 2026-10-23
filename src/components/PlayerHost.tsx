@@ -97,6 +97,7 @@ import { SessionTally, WatchedClock, newPlayerSessionId, watchElementWaits } fro
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
 import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
 import { recordsResume } from "@/components/player/session/habitWatch";
+import { startServerTitleSession, type ServerTitleRefs } from "@/components/player/server/serverTitleSession";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 import { touchHintHeaders } from "@/lib/deviceLabel";
@@ -781,24 +782,32 @@ function ActivePlayer({
    * la fin d'une diffusion (sa ligne `fallback` le dit). Ni bilan perdu gardé, ni `stop` au démontage.
    */
   const handedOverRef = useRef(false);
+  /** Les références de la séance par titre — remises à zéro ensemble (`serverTitleSession.ts`, §115). */
+  const titleRefs = useMemo<ServerTitleRefs>(
+    () => ({
+      tally: tallyRef,
+      restarts: restartsRef,
+      subtitleSwitches: subtitleSwitchesRef,
+      played: sessionPlayedRef,
+      startedAt: sessionStartedAtRef,
+      slowLog: slowLogRef,
+      stutter: stutterRef,
+      recovery: recoveryRef,
+      lighterCleared: lighterClearedRef,
+    }),
+    [tallyRef, restartsRef, subtitleSwitchesRef, sessionPlayedRef, sessionStartedAtRef, slowLogRef, stutterRef, recoveryRef, lighterClearedRef]
+  );
   useEffect(() => {
     if (logSession.current.itemId !== itemId) {
-      logSession.current = { itemId, id: newPlayerSessionId() };
-      tallyRef.current = new SessionTally();
-      restartsRef.current = {};
-      subtitleSwitchesRef.current = 0;
-      sessionPlayedRef.current = false;
-      sessionStartedAtRef.current = Date.now();
+      startServerTitleSession(itemId, logSession, titleRefs);
+      // La main rendue reste à part : elle appartient à la garde « un seul `stop` par séance »
+      // (`useServerSessionRecord`), dont la fusion avec le natif n'est pas tranchée (audit F1-4).
       handedOverRef.current = false;
-      slowLogRef.current = new SlowLog();
-      stutterRef.current = new StutterWatch();
-      recoveryRef.current = new LinkRecovery();
-      lighterClearedRef.current = false;
     }
     // `cast` ne se lit plus « séance ouverte pour diffuser » seulement : une route établie depuis
     // les commandes de la vidéo compte aussi, pour les lignes qui suivent (arrêt compris).
     logContext.current = { itemId, title, cast: castSession || castActive, bench: session.bench, scene: scene.logFields, session: logSession.current.id, agent };
-  }, [itemId, title, castSession, castActive, session.bench, agent, scene.logFields]);
+  }, [itemId, title, castSession, castActive, session.bench, agent, scene.logFields, titleRefs]);
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
   const [recapSkip, setRecapSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);

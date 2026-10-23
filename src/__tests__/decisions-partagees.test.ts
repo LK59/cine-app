@@ -1531,6 +1531,13 @@ describe("les doublons du lecteur fusionnés : une règle, un endroit (§115)", 
     expect(/reloadServerPage\(/.test(codeDe(SERVEUR))).toBe(true);
   });
 
+  it("la séance par titre du lecteur serveur repart de zéro par startServerTitleSession seulement", () => {
+    const serveur = sansCommentaires(lire(entreeDe(SERVEUR)));
+    expect(serveur).toMatch(/startServerTitleSession\(/);
+    // Plus aucune remise à zéro une par une dans l'hôte.
+    expect(serveur).not.toMatch(/tallyRef\.current = new SessionTally\(\)|slowLogRef\.current = new SlowLog\(\)|stutterRef\.current = new StutterWatch\(\)/);
+  });
+
   it("la bascule sur des saccades se décide dans StallSignals seulement (§78)", () => {
     const MODULE = "src/components/player/session/stallSignals.ts";
     expect(lecteurQui(/\.waitEndedSignal\(|\.longWait\(|\bLONG_STALL_MS\b|pushSlowLinkEvent\(/)).toEqual([MODULE]);

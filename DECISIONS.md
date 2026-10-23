@@ -6346,6 +6346,21 @@ le relais dans la page pour `handOver`. `window.location.reload()` aux deux site
 page du natif n'a pas d'élément HLS. **Laissé.** Si la coupure lève après l'écriture, l'intention reste
 écrite (rouverte au prochain rechargement) — comme avant, invisible en pratique.
 
+### La séance par titre du lecteur serveur
+
+**Règle.** Le lecteur serveur enchaîne l'épisode suivant sans être démonté : à chaque titre, une séance
+du journal neuve (identifiant d'abord), et tout ce qui la décrit repart de zéro — décompte, relances,
+changements de sous-titres, image jouée, début, lenteur (`SlowLog`, `StutterWatch`, `LinkRecovery`),
+palier effacé. **Porteurs.** `ServerTitleSession`, `newServerTitleSession`, `startServerTitleSession`
+(`src/components/player/server/serverTitleSession.ts`) : un champ ajouté au type sans sa remise à zéro
+ne compile plus. **Appelant.** L'effet du contexte du journal de `ActivePlayer`, avec `titleRefs`.
+**Tests.** `player-regles-communes.test.ts`, les empreintes « épisode suivant » du serveur,
+`decisions-partagees`. **Différent exprès.** Le natif n'en a pas : son hôte est remonté à chaque
+titre. **Laissé.** `handedOverRef`, remis à zéro à côté : il appartient à la garde « un seul `stop` »
+(audit F1-4, `StopGate`, non tranché). `switchGapRef` et `reloadGapRef` ne sont toujours pas remis à
+zéro — le `stop` d'un épisode enchaîné en place porte `switchGapMs` / `reloadGapMs` de l'épisode
+d'avant : une correction à part (audit F1-8).
+
 ### Les saccades : le minuteur de 5 s et la bascule (§78)
 
 **Règle.** Un blocage en pleine lecture qui dure 5 s bascule s'il tient au réseau ; à sa fin, le 2e de

@@ -5,7 +5,8 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { rebuildLine } from "@/components/player/nativeHostHelpers";
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
-import { WatchedClock } from "@/lib/playerSessionTally";
+import { SessionTally, WatchedClock } from "@/lib/playerSessionTally";
+import { newServerTitleSession, startServerTitleSession, type ServerTitleRefs } from "@/components/player/server/serverTitleSession";
 import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
 import { timelinePosition, useSessionTimeline } from "@/components/player/session/useSessionTimeline";
 import { TIMELINE_EVERY_MS, clearTimelines, timelineFields } from "@/lib/playbackTimeline";
@@ -259,6 +260,25 @@ describe("StallSignals (§115, saccades — §78)", () => {
     stalls.ended(0, null);
     stalls.ended(0, { ms: 2000, text: "x", network });
     expect(network).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("startServerTitleSession (§115, séance par titre du lecteur serveur)", () => {
+  it("une séance du journal neuve, et chaque référence remise à sa valeur de départ", () => {
+    vi.useFakeTimers({ now: 2_000_000 });
+    const fresh = newServerTitleSession();
+    const refs = Object.fromEntries(Object.keys(fresh).map((k) => [k, { current: "ancien" }])) as unknown as ServerTitleRefs;
+    const logSession = { current: { itemId: "ep1", id: "s1" } };
+    startServerTitleSession("ep2", logSession, refs);
+    expect(logSession.current.itemId).toBe("ep2");
+    expect(logSession.current.id).not.toBe("s1");
+    for (const key of Object.keys(fresh) as (keyof ServerTitleRefs)[]) expect([key, refs[key].current]).not.toEqual([key, "ancien"]);
+    expect(refs.subtitleSwitches.current).toBe(0);
+    expect(refs.played.current).toBe(false);
+    expect(refs.lighterCleared.current).toBe(false);
+    expect(refs.restarts.current).toEqual({});
+    expect(refs.startedAt.current).toBe(2_000_000);
+    expect(refs.tally.current).toBeInstanceOf(SessionTally);
   });
 });
 
