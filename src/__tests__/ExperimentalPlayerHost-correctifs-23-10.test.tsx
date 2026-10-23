@@ -293,3 +293,34 @@ describe("le registre des tentatives entend la lecture du natif (F1-6, §67)", (
     expect(logged("stop")[0].fields.identicalRetries).toBe(1);
   });
 });
+
+describe("« a renoncé » ne vaut que pour une séance qui n'a jamais joué (F1-4)", () => {
+  // `gaveUpAfterMs` se lisait sur le `ready` du pipeline courant, que `restart` remet à faux : une
+  // séance fermée pendant une reconstruction « avait renoncé depuis le montage » après avoir joué
+  // une heure. Le serveur le lit sur l'image jouée dans la séance.
+  // Les commandes sont masquées tant que rien ne joue : la séance se termine par le démontage, dont
+  // le bilan (`stop "unmount"`) est construit par le même `stopFields` que celui de la croix.
+  it("fermé pendant une reconstruction, après avoir joué : pas de gaveUpAfterMs", async () => {
+    const { unmount } = mount();
+    await ready();
+    await playFrom(118, 120);
+    remux.lost = true;
+    remux.position = 120;
+    // Le pipeline reconstruit ne s'ouvre jamais.
+    nextProbe = () => ({ path: "remux", start: () => new Promise(() => {}), discard: vi.fn() });
+    act(() => probes[0].onError("la source est morte"));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    unmount();
+    await waitFor(() => expect(logged("stop")).toHaveLength(1));
+    expect(logged("stop")[0].fields.gaveUpAfterMs).toBeUndefined();
+  });
+
+  it("fermé avant la toute première image : gaveUpAfterMs", async () => {
+    nextProbe = () => ({ path: "remux", start: () => new Promise(() => {}), discard: vi.fn() });
+    const { unmount } = mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    unmount();
+    await waitFor(() => expect(logged("stop")).toHaveLength(1));
+    expect(typeof logged("stop")[0].fields.gaveUpAfterMs).toBe("number");
+  });
+});

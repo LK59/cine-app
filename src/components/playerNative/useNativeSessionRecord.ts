@@ -28,6 +28,7 @@ import { syncFacts } from "@/components/player/nativeHostHelpers";
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
 import { recordsResume } from "@/components/player/session/habitWatch";
 import { timelinePosition, useSessionTimeline } from "@/components/player/session/useSessionTimeline";
+import { gaveUpFields } from "@/components/player/session/gaveUp";
 
 /**
  * La copie de secours du bilan (`unsentStop`) est réécrite quand la séance a gagné ce temps regardé
@@ -60,6 +61,7 @@ export function useNativeSessionRecord({
   positionRef,
   isSceneRef,
   mountedAtRef,
+  everReadyRef,
 }: {
   itemId: string;
   bench: string | undefined;
@@ -86,6 +88,8 @@ export function useNativeSessionRecord({
   isSceneRef: RefObject<() => boolean>;
   /** L'instant du montage, posé ici par le premier effet — lu aussi par la lenteur (§78). */
   mountedAtRef: RefObject<number>;
+  /** Une image a été jouée dans la séance (posé par l'hôte à la première image de chaque pipeline). */
+  everReadyRef: RefObject<boolean>;
 }) {
   useEffect(() => {
     mountedAtRef.current = Date.now();
@@ -120,8 +124,9 @@ export function useNativeSessionRecord({
         ended: facts.ended,
         rebuild: facts.rebuilds,
         ...(facts.audio !== null ? { audio: facts.audio } : {}),
-        // Fermé avant la première image : combien de temps le spectateur a attendu avant de renoncer.
-        ...(facts.ready ? {} : { gaveUpAfterMs: now - mountedAtRef.current }),
+        // Fermé avant la première image de la séance — pas celle du pipeline courant, qu'une
+        // reconstruction remet à faux : combien de temps le spectateur a attendu avant de renoncer.
+        ...gaveUpFields(everReadyRef.current, now, mountedAtRef.current),
         ...(facts.error ? { error: facts.error } : {}),
         // Attentes, sauts, changements de piste : le confort de la séance en quelques chiffres.
         ...tally.summary(now),
@@ -135,7 +140,7 @@ export function useNativeSessionRecord({
         ...slowFields(),
       };
     },
-    [tally, watched, intendedPosition, slowFields, describeFileRef, pathRef, remuxRef, videoElRef, lastVideoElRef, mountedAtRef]
+    [tally, watched, intendedPosition, slowFields, describeFileRef, pathRef, remuxRef, videoElRef, lastVideoElRef, mountedAtRef, everReadyRef]
   );
   /**
    * Comment la séance s'est terminée — la ligne `stop` du journal.

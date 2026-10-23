@@ -1457,6 +1457,7 @@ export function ExperimentalPlayerHost({
     positionRef,
     isSceneRef,
     mountedAtRef,
+    everReadyRef,
   });
 
   const { stop: stopPlaybackNow, resume: resumePlaybackSession, savePaused, reportNow: reportPositionNow } = usePlaybackSession(

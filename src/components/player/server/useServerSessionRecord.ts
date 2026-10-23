@@ -16,6 +16,7 @@ import { serverStopFields, type ServerPlayerContext, type ServerStartWhy, type S
 import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
 import { sleepTimerLogFields, sleepTimerStore } from "@/lib/sleepTimer";
 import type { SessionTally, WatchedClock } from "@/lib/playerSessionTally";
+import { gaveUpFields } from "@/components/player/session/gaveUp";
 
 export function useServerSessionRecord({
   videoRef,
@@ -96,7 +97,7 @@ export function useServerSessionRecord({
         subtitleSwitches: subtitleSwitchesRef.current,
         restarts: restartsRef.current,
         error: errorRef.current,
-        ...(sessionPlayedRef.current ? {} : { gaveUpAfterMs: now - sessionStartedAtRef.current }),
+        ...gaveUpFields(sessionPlayedRef.current, now, sessionStartedAtRef.current),
       }),
       // Ce que la lenteur a fait paraître et les choix faits (§78), et la mémoire allégée effacée.
       ...slowLogRef.current.fields(),

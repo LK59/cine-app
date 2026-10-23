@@ -6472,3 +6472,14 @@ même piste, même case de dix secondes) se comptait « tentative identique » �
 reste en observation : rien n'en décide. **Différent exprès.** Le serveur ne rapporte que sur une image
 (`readyState ≥ HAVE_CURRENT_DATA`, la garde de son écouteur) ; le natif à chaque `timeupdate` — un
 recul ou un saut n'y prouve rien de toute façon (`notePosition` ne compte qu'une avance continue).
+
+### « A renoncé » : une séance qui n'a jamais joué (audit F1-4)
+
+**Règle.** `gaveUpAfterMs` (le temps entre l'ouverture et la fermeture) n'est au bilan que si aucune
+image n'a été jouée dans la séance. **Porteur.** `gaveUpFields(played, now, since)`
+(`src/components/player/session/gaveUp.ts`). **Appelants.** `useNativeSessionRecord` (natif :
+`everReadyRef`, depuis le montage) et `useServerSessionRecord` (serveur : `sessionPlayedRef`, depuis le
+début de la séance par titre). **Avant.** Le natif le lisait sur le `ready` du pipeline courant, que
+`restart` remet à faux : une séance fermée pendant une reconstruction « avait renoncé » depuis le
+montage, après avoir joué. **Laissé.** La signature de la copie gardée (`unsentStop`) lit toujours le
+`ready` du pipeline : elle ne décide que du moment de la réécrire.

@@ -1585,6 +1585,13 @@ describe("les écarts entre les copies du lecteur, corrigés (§116)", () => {
     expect(codeDe(SERVEUR)).toMatch(/reloadGap: reloadGapRef/);
   });
 
+  it("« a renoncé » (gaveUpAfterMs) se décide dans gaveUpFields seulement, sur la séance", () => {
+    expect(lecteurQui(/gaveUpAfterMs:/)).toEqual(["src/components/player/session/gaveUp.ts"]);
+    for (const hote of HOTES) expect([hote, /gaveUpFields\(/.test(codeDe(hote))]).toEqual([hote, true]);
+    // Le natif ne le lit plus sur le `ready` du pipeline courant.
+    expect(sansCommentaires(lire("src/components/playerNative/useNativeSessionRecord.ts"))).toMatch(/gaveUpFields\(everReadyRef\.current,/);
+  });
+
   it.each(HOTES)("%s rapporte la lecture au registre des tentatives par habitWatch (§67)", (hote) => {
     // Plus d'appel en ligne dans un écouteur : la position passe par l'option de `habitWatch`.
     expect([hote, /habitWatch\(\{[\s\S]*?notePosition: \(seconds\) => [\w.]*retries\.notePosition\(seconds\)/.test(codeDe(hote))]).toEqual([hote, true]);
