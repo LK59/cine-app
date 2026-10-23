@@ -802,8 +802,10 @@ function ActivePlayer({
       stutter: stutterRef,
       recovery: recoveryRef,
       lighterCleared: lighterClearedRef,
+      switchGap: switchGapRef,
+      reloadGap: reloadGapRef,
     }),
-    [tallyRef, restartsRef, subtitleSwitchesRef, sessionPlayedRef, sessionStartedAtRef, slowLogRef, stutterRef, recoveryRef, lighterClearedRef]
+    [tallyRef, restartsRef, subtitleSwitchesRef, sessionPlayedRef, sessionStartedAtRef, slowLogRef, stutterRef, recoveryRef, lighterClearedRef, switchGapRef, reloadGapRef]
   );
   useEffect(() => {
     if (logSession.current.itemId !== itemId) {

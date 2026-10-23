@@ -23,12 +23,13 @@ vi.mock("@/components/ExperimentalPlayerHost", () => ({ ExperimentalPlayerHost: 
 const controls = vi.hoisted(() => ({ logoUrl: undefined as string | null | undefined }));
 vi.mock("@/components/PlayerControls", () => ({
   VOLUME_STORAGE_KEY: "volume",
-  PlayerControls: (props: { onClose: () => void; onChangeAudio: (id: number) => void; logoUrl?: string | null }) => {
+  PlayerControls: (props: { onClose: () => void; onChangeAudio: (id: number) => void; onAdvance?: () => void; logoUrl?: string | null }) => {
     controls.logoUrl = props.logoUrl;
     return (
       <div data-testid="commandes">
         <button onClick={props.onClose}>fermer</button>
         <button onClick={() => props.onChangeAudio(2)}>piste</button>
+        {props.onAdvance && <button onClick={props.onAdvance}>suivant</button>}
       </div>
     );
   },
@@ -196,5 +197,35 @@ describe("fermer pendant qu'un saut charge (F1-4)", () => {
     expect(jellyfin.position?.()).toBe(1000);
     const stop = await stopLine(getByText);
     expect(stop.at).toBe(1000);
+  });
+});
+
+describe("l'épisode enchaîné en place repart sans les mesures du précédent (F1-8)", () => {
+  // `switchGapMs` (bascule allégée → première image) et `reloadGapMs` (rechargement direct → première
+  // image) n'étaient pas remis à zéro avec le reste de la séance par titre : le `stop` de l'épisode
+  // suivant, enchaîné sans démonter le lecteur, portait ceux de l'épisode d'avant.
+  it("le stop de l'épisode 2 ne porte ni switchGapMs ni reloadGapMs de l'épisode 1", { timeout: 20_000 }, async () => {
+    const now = Date.now();
+    playback.session = {
+      itemId: "ep-1",
+      openId: 1,
+      resumeAt: 600,
+      title: "Épisode 1",
+      reloadCarry: { switchedAt: now - 500, direct: { decidedAt: now - 800, opening: false } },
+      getNextEpisode: () => ({ itemId: "ep-2", title: "Épisode 2" }),
+    };
+    const { getByText, rerender } = render(<PlayerHost />);
+    await nextNegotiation(1);
+    loadAndResume();
+    act(() => void getByText("suivant").click());
+    playback.session = { itemId: "ep-2", openId: 1, resumeAt: 0, title: "Épisode 2" };
+    rerender(<PlayerHost />);
+    await nextNegotiation(2);
+    loadAndResume();
+    act(() => void getByText("fermer").click());
+    await waitFor(() => expect(reportPlayback.mock.calls.filter(([k]) => k === "stop")).toHaveLength(2));
+    const [premier, second] = reportPlayback.mock.calls.filter(([k]) => k === "stop").map(([, f]) => f as Record<string, unknown>);
+    expect([premier.itemId, typeof premier.switchGapMs, typeof premier.reloadGapMs]).toEqual(["ep-1", "number", "number"]);
+    expect([second.itemId, second.switchGapMs, second.reloadGapMs]).toEqual(["ep-2", undefined, undefined]);
   });
 });

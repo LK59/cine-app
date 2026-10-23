@@ -1576,4 +1576,12 @@ describe("les écarts entre les copies du lecteur, corrigés (§116)", () => {
     // Le bilan du serveur ne lit plus la position connue seule.
     expect(sansCommentaires(lire("src/components/player/server/useServerSessionRecord.ts"))).not.toMatch(/lastKnownTime/);
   });
+
+  it("les interruptions de bascule et de rechargement repartent de zéro avec la séance par titre du serveur", () => {
+    const seance = sansCommentaires(lire("src/components/player/server/serverTitleSession.ts"));
+    expect(seance).toMatch(/switchGap: null/);
+    expect(seance).toMatch(/reloadGap: null/);
+    expect(codeDe(SERVEUR)).toMatch(/switchGap: switchGapRef/);
+    expect(codeDe(SERVEUR)).toMatch(/reloadGap: reloadGapRef/);
+  });
 });

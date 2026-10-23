@@ -23,6 +23,13 @@ export interface ServerTitleSession {
   stutter: StutterWatch;
   recovery: LinkRecovery;
   lighterCleared: boolean;
+  /**
+   * L'interruption d'une bascule allégée, puis d'un rechargement direct, jusqu'à la première image
+   * (`switchGapMs`, `reloadGapMs` au bilan). Oubliées ici jusqu'au 23/10/2026 (audit F1-8, §116) : le
+   * `stop` d'un épisode enchaîné en place portait celles de l'épisode d'avant.
+   */
+  switchGap: number | null;
+  reloadGap: number | null;
 }
 
 /** Les références de l'hôte qui portent chaque champ. */
@@ -40,6 +47,8 @@ export function newServerTitleSession(): ServerTitleSession {
     stutter: new StutterWatch(),
     recovery: new LinkRecovery(),
     lighterCleared: false,
+    switchGap: null,
+    reloadGap: null,
   };
 }
 

@@ -6359,7 +6359,7 @@ ne compile plus. **Appelant.** L'effet du contexte du journal de `ActivePlayer`,
 titre. **Laissé.** `handedOverRef`, remis à zéro à côté : il appartient à la garde « un seul `stop` »
 (audit F1-4, `StopGate`, non tranché). `switchGapRef` et `reloadGapRef` ne sont toujours pas remis à
 zéro — le `stop` d'un épisode enchaîné en place porte `switchGapMs` / `reloadGapMs` de l'épisode
-d'avant : une correction à part (audit F1-8).
+d'avant : une correction à part (audit F1-8) — faite, §116.
 
 ### Les saccades : le minuteur de 5 s et la bascule (§78)
 
@@ -6447,3 +6447,14 @@ fermé pendant un saut qui charge, la position d'avant le saut partait au journa
 n'a pas de cible demandée : ses commandes posent `currentTime` sur l'élément, qui la dit aussitôt.
 **Laissé.** Les autres lectures de `lastKnownTime` du serveur (changement de piste, relais, diffusion,
 minuterie) — hors de ce correctif.
+
+### L'épisode enchaîné en place : `switchGapMs` et `reloadGapMs` repartent de zéro (audit F1-8)
+
+**Règle.** L'interruption mesurée d'une bascule allégée (`switchGapMs`) et d'un rechargement direct
+(`reloadGapMs`) appartient à la séance par titre du lecteur serveur, remise à zéro avec le reste à
+chaque titre (§115). **Porteur.** `ServerTitleSession.switchGap` / `reloadGap`,
+`startServerTitleSession` (`src/components/player/server/serverTitleSession.ts`). **Appelant.**
+`ActivePlayer` (`titleRefs`). **Avant.** Les deux références n'étaient jamais remises à zéro : le `stop`
+d'un épisode enchaîné en place portait celles de l'épisode d'avant. **Laissé.** Les instants de départ
+(`switchedAtRef`, `reloadDecidedAtRef`) : remis à nul à la première image, ils ne survivent à un
+titre que si celui-ci n'en a jamais eu — non tranché.
