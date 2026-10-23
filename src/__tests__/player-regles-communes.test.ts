@@ -7,6 +7,8 @@ import { rebuildLine } from "@/components/player/nativeHostHelpers";
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
 import { WatchedClock } from "@/lib/playerSessionTally";
 import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
+import { timelinePosition, useSessionTimeline } from "@/components/player/session/useSessionTimeline";
+import { TIMELINE_EVERY_MS, clearTimelines, timelineFields } from "@/lib/playbackTimeline";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -38,6 +40,39 @@ describe("dualSubtitleRules (§115, deux sous-titres — §87)", () => {
     expect(secondAllowed(5, null)).toBe(false);
     expect(secondAllowed(null, null)).toBe(true);
     expect(secondAllowed(null, 3)).toBe(true);
+  });
+});
+
+describe("useSessionTimeline (§115, chronologie de deux minutes)", () => {
+  afterEach(() => clearTimelines());
+
+  it("timelinePosition : currentTime fini et au-delà de zéro, sinon la position suivie", () => {
+    const at = (t: number) => ({ currentTime: t }) as HTMLVideoElement;
+    expect(timelinePosition(at(12.5), 3)).toBe(12.5);
+    expect(timelinePosition(at(0), 3)).toBe(3);
+    expect(timelinePosition(at(Number.NaN), 3)).toBe(3);
+    expect(timelinePosition(null, 3)).toBe(3);
+  });
+
+  it("une chronologie par clé, inscrite sous la séance lue dans l'effet, arrêtée au changement de clé", () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    let session = "s1";
+    const sessionOf = () => session;
+    const sample = () => ({ pos: 1, recvMbps: null, aheadS: null, reserveMB: null, state: "L" as const });
+    const { rerender, unmount } = renderHook(({ key }) => useSessionTimeline(key, sessionOf, sample), { initialProps: { key: "ep1" } });
+    vi.advanceTimersByTime(TIMELINE_EVERY_MS);
+    expect(timelineFields("stop", { session: "s1" }).timeline).toBeTruthy();
+    // Même clé : rien ne se réinstalle, la séance n'est pas relue.
+    session = "s2";
+    rerender({ key: "ep1" });
+    expect(timelineFields("stop", { session: "s2" }).timeline).toBeUndefined();
+    // Clé neuve (épisode suivant en place) : la séance relue dans l'effet.
+    rerender({ key: "ep2" });
+    vi.advanceTimersByTime(TIMELINE_EVERY_MS);
+    expect(timelineFields("stop", { session: "s2" }).timeline).toBeTruthy();
+    expect(timelineFields("stop", { session: "s1" }).timeline).toBeUndefined();
+    unmount();
+    expect(timelineFields("stop", { session: "s2" }).timeline).toBeUndefined();
   });
 });
 

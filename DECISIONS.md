@@ -6313,6 +6313,21 @@ les empreintes (`watched` des `stop`) ; `decisions-partagees`. **Différent expr
 veut dire : Chromecast exclut l'attente du récepteur (`remote.waiting`, §97) ; les attentes de
 l'élément passent par `watchElementWaits`, déjà commun.
 
+### La chronologie de deux minutes
+
+**Règle.** Une chronologie (§77) par séance, un échantillon toutes les 5 s, inscrite sous l'identifiant
+de séance du journal, arrêtée et désinscrite au démontage ou à l'ouverture d'une autre ; la position
+d'un échantillon est `currentTime` s'il est fini et au-delà de zéro, sinon celle que l'hôte suit.
+**Porteurs.** `useSessionTimeline(key, sessionOf, sample)` et `timelinePosition`
+(`src/components/player/session/useSessionTimeline.ts`). **Appelants.** `useNativeSessionRecord`
+(natif) et `useServerTimeline` (serveur), chacun à la place de sa copie — après l'arrêt écrit au
+démontage, qui part donc encore avec elle. **Tests.** Le champ `timeline` de toutes les lignes des
+empreintes (`stop`, `network`, `stall`…) ; `player-regles-communes.test.ts` ; `decisions-partagees`.
+**Différent exprès.** La clé : l'identifiant de séance pour le natif (son hôte est remonté à chaque
+titre), `itemId` pour le serveur, qui enchaîne l'épisode suivant en place et lit l'identifiant dans
+l'effet. L'échantillon : débit `diag` et réserve pour le natif, débit d'hls.js et pas de réserve pour
+le serveur ; l'attente du diagnostic dans l'état du natif seulement.
+
 ### Deux sous-titres : survie et permis du second
 
 **Règle.** Le second ne survit ni à un principal éteint, ni à devenir le principal ; il n'est jamais

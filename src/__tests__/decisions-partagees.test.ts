@@ -1519,6 +1519,13 @@ describe("les doublons du lecteur fusionnés : une règle, un endroit (§115)", 
     expect([hote, /secondSurvives\(/.test(code), /secondAllowed\(/.test(code)]).toEqual([hote, true, true]);
   });
 
+  it("la chronologie de deux minutes s'installe dans useSessionTimeline seulement", () => {
+    const MODULE = "src/components/player/session/useSessionTimeline.ts";
+    expect(lecteurQui(/new PlaybackTimeline\(/)).toEqual([MODULE]);
+    expect(lecteurQui(/registerTimeline\(/)).toEqual([MODULE]);
+    for (const hote of HOTES) expect([hote, /useSessionTimeline\(/.test(codeDe(hote))]).toEqual([hote, true]);
+  });
+
   it("aucune copie de la règle des deux sous-titres hors du module", () => {
     expect(lecteurQui(/id === primary \|\| primary === null|primary === null \|\| id === primary/)).toEqual(["src/components/player/session/dualSubtitleRules.ts"]);
   });

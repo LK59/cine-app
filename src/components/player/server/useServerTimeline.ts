@@ -1,6 +1,7 @@
-import { useEffect, type RefObject } from "react";
+import { useCallback, type RefObject } from "react";
 import type { LinkMeter } from "@/lib/slowLink";
-import { PlaybackTimeline, TIMELINE_EVERY_MS, bufferedAhead, elementState, registerTimeline } from "@/lib/playbackTimeline";
+import { TIMELINE_EVERY_MS, bufferedAhead, elementState } from "@/lib/playbackTimeline";
+import { timelinePosition, useSessionTimeline } from "@/components/player/session/useSessionTimeline";
 
 /**
  * La chronologie des deux dernières minutes (§77) : un échantillon toutes les 5 s, en mémoire —
@@ -9,30 +10,29 @@ import { PlaybackTimeline, TIMELINE_EVERY_MS, bufferedAhead, elementState, regis
  * ouvre une autre. Déclarée après l'arrêt au démontage, qui part donc encore avec elle.
  *
  * Les références reçues sont celles de l'hôte, stables : listées dans les dépendances pour la règle,
- * l'effet ne se réinstalle toujours qu'au changement de titre.
+ * l'effet ne se réinstalle toujours qu'au changement de titre. L'effet est `useSessionTimeline`,
+ * commun aux deux lecteurs (§115) ; ici, l'échantillon du serveur : pas de réserve, pas de diagnostic
+ * d'attente, et l'identifiant de la séance du journal lu dans l'effet (l'épisode suivant en place).
  */
 export function useServerTimeline(
   itemId: string,
   videoRef: RefObject<HTMLVideoElement | null>,
-  lastKnownTime: RefObject<number>,
+  lastKnownTimeRef: RefObject<number>,
   linkMeterRef: RefObject<LinkMeter | null>,
-  logSession: RefObject<{ itemId: string; id: string }>
+  logSessionRef: RefObject<{ itemId: string; id: string }>
 ): void {
-  useEffect(() => {
-    const timeline = new PlaybackTimeline(() => {
-      const video = videoRef.current;
-      return {
-        pos: video && Number.isFinite(video.currentTime) && video.currentTime > 0 ? video.currentTime : lastKnownTime.current,
-        recvMbps: linkMeterRef.current?.recentMbps(TIMELINE_EVERY_MS) ?? null,
-        aheadS: bufferedAhead(video),
-        reserveMB: null,
-        state: elementState(video),
-      };
-    }).start();
-    const unregister = registerTimeline(logSession.current.id, timeline);
-    return () => {
-      timeline.stop();
-      unregister();
+  // Suffixés `Ref` ici (l'hôte les nomme `lastKnownTime` et `logSession`) : le compilateur de React ne
+  // reconnaît une référence lue dans un `useCallback` qu'à ce nom.
+  const sessionOf = useCallback(() => logSessionRef.current.id, [logSessionRef]);
+  const sample = useCallback(() => {
+    const video = videoRef.current;
+    return {
+      pos: timelinePosition(video, lastKnownTimeRef.current),
+      recvMbps: linkMeterRef.current?.recentMbps(TIMELINE_EVERY_MS) ?? null,
+      aheadS: bufferedAhead(video),
+      reserveMB: null,
+      state: elementState(video),
     };
-  }, [itemId, videoRef, lastKnownTime, linkMeterRef, logSession]);
+  }, [videoRef, lastKnownTimeRef, linkMeterRef]);
+  useSessionTimeline(itemId, sessionOf, sample);
 }

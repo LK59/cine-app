@@ -14,7 +14,7 @@ import {
   diagSessionFacts,
   diagWaiting,
 } from "@/lib/webcodecs/playbackDiagnosis";
-import { PlaybackTimeline, TIMELINE_EVERY_MS, bufferedAhead, elementState, registerTimeline } from "@/lib/playbackTimeline";
+import { TIMELINE_EVERY_MS, bufferedAhead, elementState } from "@/lib/playbackTimeline";
 import type { BackgroundWatch } from "@/lib/backgroundReturn";
 import type { SessionTally, WatchedClock } from "@/lib/playerSessionTally";
 import { saveUnsentStop, clearUnsentStop, touchUnsentStop } from "@/lib/unsentStop";
@@ -26,6 +26,7 @@ import type { RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 import { syncFacts } from "@/components/player/nativeHostHelpers";
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
+import { timelinePosition, useSessionTimeline } from "@/components/player/session/useSessionTimeline";
 
 /**
  * La copie de secours du bilan (`unsentStop`) est réécrite quand la séance a gagné ce temps regardé
@@ -337,24 +338,21 @@ export function useNativeSessionRecord({
   /**
    * La chronologie des deux dernières minutes (§77) : un échantillon toutes les 5 s, en mémoire,
    * joint par `reportPlayback` aux lignes de panne et au bilan. Déclarée après l'arrêt et la mesure
-   * ci-dessus : au démontage, la ligne `stop` part encore avec elle.
+   * ci-dessus : au démontage, la ligne `stop` part encore avec elle. L'effet est `useSessionTimeline`,
+   * commun aux deux lecteurs (§115) ; l'échantillon est celui du natif : débit et réserve d'après la
+   * mesure `diag`, l'attente d'après le diagnostic.
    */
-  useEffect(() => {
-    const timeline = new PlaybackTimeline(() => {
-      const video = videoElRef.current;
-      return {
-        pos: video && Number.isFinite(video.currentTime) && video.currentTime > 0 ? video.currentTime : positionRef.current,
-        recvMbps: diagRecentMbps(TIMELINE_EVERY_MS),
-        aheadS: bufferedAhead(video),
-        reserveMB: diagReserveAheadMB(),
-        state: elementState(video, diagWaiting()),
-      };
-    }).start();
-    const unregister = registerTimeline(sessionId, timeline);
-    return () => {
-      timeline.stop();
-      unregister();
+  const timelineSession = useCallback(() => sessionId, [sessionId]);
+  const timelineSample = useCallback(() => {
+    const video = videoElRef.current;
+    return {
+      pos: timelinePosition(video, positionRef.current),
+      recvMbps: diagRecentMbps(TIMELINE_EVERY_MS),
+      aheadS: bufferedAhead(video),
+      reserveMB: diagReserveAheadMB(),
+      state: elementState(video, diagWaiting()),
     };
-  }, [sessionId, positionRef, videoElRef]);
+  }, [positionRef, videoElRef]);
+  useSessionTimeline(sessionId, timelineSession, timelineSample);
   return { reportStop };
 }
