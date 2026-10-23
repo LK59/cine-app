@@ -8,7 +8,7 @@ import { persistedCacheAccount } from "@/lib/persistentCache";
  * ce que la nouvelle se rappelle entre deux pages.
  */
 
-/** Le bandeau refermé sur cet appareil : une fois pour toutes (par adresse — `localStorage` l'est). */
+/** Le jour local où le bandeau a été refermé sur cet appareil (par adresse — `localStorage` l'est). */
 export const PASSAGE_BANNER_CLOSED_KEY = "cine:passage-banner-closed";
 /** Les réglages arrivés déjà posés sur ce stockage : la date de l'arrivée (`passageArrival`). */
 export const PASSAGE_APPLIED_KEY = "cine:passage-applied";
@@ -73,9 +73,32 @@ function flag(storage: "local" | "session", key: string, value?: string | null):
   return null;
 }
 
+/** Le jour local de l'appareil, « AAAA-MM-JJ » (son fuseau, pas UTC). */
+export function localDay(now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+/**
+ * Le bandeau refermé **aujourd'hui** (DECISIONS.md §119) : fermé à la croix ou après « Passer », il
+ * revient le lendemain, une fois par jour, tant que l'appareil ouvre l'ancienne adresse (souhait du
+ * propriétaire, 23/10/2026 — refermé pour toujours, il laissait des appareils sur l'ancienne adresse
+ * sans plus rien leur dire). La clé garde le jour de la fermeture ; une valeur d'avant ce changement
+ * (« 1 », une date en millisecondes) vaut « fermé aujourd'hui » et est réécrite avec ce jour, pour
+ * revenir dès demain.
+ */
+function bannerClosedToday(): boolean {
+  const stored = flag("local", PASSAGE_BANNER_CLOSED_KEY);
+  if (stored === null) return false;
+  const today = localDay();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(stored)) return stored === today;
+  flag("local", PASSAGE_BANNER_CLOSED_KEY, today);
+  return true;
+}
+
 export const passageFlags = {
-  bannerClosed: () => flag("local", PASSAGE_BANNER_CLOSED_KEY) !== null,
-  closeBanner: () => void flag("local", PASSAGE_BANNER_CLOSED_KEY, String(Date.now())),
+  bannerClosed: bannerClosedToday,
+  closeBanner: () => void flag("local", PASSAGE_BANNER_CLOSED_KEY, localDay()),
   installHelpWanted: () => flag("session", PASSAGE_INSTALL_HELP_KEY) !== null,
   wantInstallHelp: () => void flag("session", PASSAGE_INSTALL_HELP_KEY, "1"),
   installHelpShown: () => void flag("session", PASSAGE_INSTALL_HELP_KEY, null),

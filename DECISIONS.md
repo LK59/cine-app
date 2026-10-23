@@ -6980,8 +6980,15 @@ partagé).
 
 **Voulu.** Pas de nouvel appareil Jellyfin ni de Quick Connect. Le bandeau ne se montre que sur
 l'ancienne adresse, sous la barre du haut, jamais pendant un film ni tant que l'écran d'accueil du compte
-reste « à faire » (comme l'invitation aux notifications : « Passer » ne l'éteint pas) ; il se referme
-pour de bon ; le lien des Nouveautés ouvre le passage même refermé.
+reste « à faire » (comme l'invitation aux notifications : « Passer » ne l'éteint pas) ; le lien des
+Nouveautés ouvre le passage même refermé. **Refermé, il revient le lendemain** (souhait du propriétaire,
+23/10/2026 — il se refermait pour de bon) : la croix, ou un appui sur « Passer », le cachent pour la
+journée, et il reparaît une fois par jour tant que l'appareil ouvre l'ancienne adresse.
+`cine:passage-banner-closed` garde le jour local de la fermeture (`AAAA-MM-JJ`, fuseau de l'appareil,
+`localDay`) ; une valeur d'avant ce changement (« 1 », une date en millisecondes) vaut « fermé
+aujourd'hui » et est réécrite avec ce jour (`passageFlags.bannerClosed`). Lu au montage : un onglet
+laissé ouvert passé minuit attend le lancement suivant. Tests : `passage-banner.test.tsx` (fermé
+aujourd'hui, le lendemain, « Passer », ancienne valeur).
 Depuis l'application installée, la nouvelle adresse s'ouvre dans le navigateur (`window.open`) ; sur
 iPhone, ce navigateur intégré n'est ni Safari ni l'application à venir, d'où le code et la phrase qui le
 dit.

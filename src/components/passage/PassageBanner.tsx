@@ -16,8 +16,8 @@ import { PassageDialog } from "./PassageDialog";
  * Seulement quand l'installation annonce une nouvelle adresse (`GET /api/passage`, tiré du réglage
  * du déploiement), jamais sur la nouvelle elle-même (l'hôte de la page comparé à celui de la
  * destination), jamais pendant un film (le lecteur ouvert, plein écran ou réduit) ni par-dessus
- * l'écran d'accueil d'un premier lancement. Refermé, il ne
- * revient plus sur cet appareil (`cine:passage-banner-closed`).
+ * l'écran d'accueil d'un premier lancement. Refermé — à la croix ou après « Passer » —, il revient le
+ * lendemain, une fois par jour (`cine:passage-banner-closed`, le jour local : `passageFlags`).
  *
  * Il porte aussi la fenêtre du passage pour le lien de la page Nouveautés (`openPassageFor`) : ce
  * lien l'ouvre même bandeau refermé, puisque c'est un geste explicite.
@@ -70,7 +70,16 @@ export function PassageBanner() {
         >
           <div role="region" aria-label={t("passage.banner.text")} data-passage-banner="" className="glass-panel pointer-events-auto flex items-center gap-2 rounded-full py-1 pl-4 pr-1 shadow-glow">
             <span className="text-[12px] text-white/85">{t("passage.banner.text")}</span>
-            <button type="button" onClick={() => setOpen(true)} data-passage-open="" className="rounded-full bg-white px-3 py-1 text-[12px] font-semibold text-black hover:bg-white/90">
+            <button
+              type="button"
+              onClick={() => {
+                // « Passer » vaut une fermeture pour la journée : la fenêtre refermée, le bandeau ne
+                // revient que demain.
+                passageFlags.closeBanner();
+                setClosed(true);
+                setOpen(true);
+              }}
+              data-passage-open="" className="rounded-full bg-white px-3 py-1 text-[12px] font-semibold text-black hover:bg-white/90">
               {t("passage.banner.action")}
             </button>
             <button
