@@ -2159,7 +2159,7 @@ D'où la couverture qui tient jusqu'au film qui bouge, et trois silences :
   l'hôte leur passe (natif : calque ou grâce ; serveur : calque, signalé par `onCoverChange`) — les
   vraies attentes en cours de film les gardent ;
 - **le gel des départs du début** est attaqué à la source : la position est redemandée une fois
-  100 ms après l'atterrissage de l'ouverture si rien n'a bougé (`OPENING_REASSERT_MS`, `MseSource`),
+  100 ms après l'atterrissage de l'ouverture si rien n'a bougé (`OPENING_REASSERT_MS`, `FrozenClockWatch` dans `mseFrozenClock.ts`),
   au bord du média seulement ; la poussée de 400 ms reste le filet. Mesuré ce jour-là : WarGames, La
   Flamme, Drive ouverts en 14 à 373 ms, figés jusqu'à la poussée (`frozenNudges: 1`), que le chien de
   garde à 250 ms ne livrait qu'à 500 ms. **Jamais sur un élément qui repart** : un `playing` ou un
@@ -5158,7 +5158,7 @@ un transcodeur qui la verrait à son tour n'a rien à décider.
 **Le motif**, écrit une fois (`unreadableZoneMessage`) : « zone illisible dans le fichier vers 234,9 s
 (octet 169510505) » — une décimale à virgule, l'octet entier. C'est ce que l'Activité groupe.
 
-**Le relais** (`MseSource.holdAtZone`, `ZoneHandover`, `ExperimentalPlayerHost.handZone`). L'erreur ne
+**Le relais** (`UnreadableZoneHold.holdAtZone`, `ZoneHandover`, `ExperimentalPlayerHost.handZone`). L'erreur ne
 passe **ni** par les reprises d'envoi raté (elle serait relue trois fois), **ni** par la reconstruction
 (`lost` reste faux ; une zone arrivée sur une source fermée entre-temps relaie quand même), ni par
 « dialogues améliorés » ou le retour de piste. La lecture en avance la rencontre ~30 s avant la tête :
@@ -5256,8 +5256,8 @@ l'indexation attend.
 `isUnreadableZone`, `isUnreadableZoneReason`, `zoneSecondsOf`), `ebml.ts` (`readElementHeader`,
 `UNREADABLE`, `forEachChild(…, onUnreadable)`), `sampleReader.ts` (`SampleReaderOptions`),
 `matroska.ts` (`segmentSized`), `mediaFile.ts` (`createSampleReader(…, options)`), `remuxer.ts` (lecteur
-principal strict, `resumeAfterByte`), `mseSource.ts` (`holdAtZone`, `checkZoneArrival`, `arriveAtZone`,
-`UnreadableZoneNotice`), `remuxPlayback.ts`, `src/lib/unreadableZoneHandover.ts` (`ZoneHandover`),
+principal strict, `resumeAfterByte`), `mseZoneHold.ts` (`holdAtZone`, `checkZoneArrival`, `arriveAtZone`),
+`mseTypes.ts` (`UnreadableZoneNotice`, réexporté par `mseSource.ts`), `mseSource.ts` (`performSeek`), `remuxPlayback.ts`, `src/lib/unreadableZoneHandover.ts` (`ZoneHandover`),
 `lighterPrewarm.ts` (`step: null`, `takeOrdinaryPrewarm`), `ExperimentalPlayerHost` (`handZone`,
 `zoneHandover`), `PlayerHost` (`ActivePlayer.startPlayback`), `activity/seances.ts`, `activity/diagnosis.ts`,
 `Diagnosis.tsx` ; `src/lib/integrity/` (`scan.ts`, `library.ts`, `store.ts`, `engine.ts`),

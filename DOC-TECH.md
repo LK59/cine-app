@@ -1078,6 +1078,16 @@ The guard never speaks of bytes; it decides *when* the playhead should move, and
 the only thing that moves media. The source hands it a narrow view of itself (`GuardHost`): three
 reads and two verbs.
 
+`mseSource.ts` keeps the orchestration — opening, filling, seeks, eviction, the network hold, the
+watchdog, teardown — and delegates, synchronously, to pieces moved out of it unchanged, each given
+the same kind of narrow view: `mseRecoveryLadder.ts` (the recovery ladder), `mseFrozenClock.ts` (the
+frozen clock and the opening re-request), `mseBufferPlanner.ts` (fill target and byte budget),
+`mseZoneHold.ts` (an unreadable zone, §93), `mseLossRecord.ts` (what a `rebuild` line carries);
+`mseTuning.ts` holds every constant with the reason for its value, `mseSpans.ts` the range
+formatting, `mseTypes.ts` the callbacks and facts promised to the host. The names tests read on the
+instance (`frozenSince`, `targetBuffer`, `sentFragments`…) stay there as accessors, and `recover`
+is still called through `this.` everywhere.
+
 **Buffering.**
 
 - MediaSource allows only one operation at a time per buffer; everything goes through
@@ -1126,7 +1136,7 @@ reads and two verbs.
   further on. Three nudges of 0.08 s; past those, a real recovery (below), once per 1.5 s. The
   recovery's own 0.08 s step is not playback: counted as such, it reset the nudges after every
   recovery, and a frozen picture took four minutes to reach the stable player (24/09).
-- **The recovery ladder** (`recover` → `escalate` → `handOver`, `mseSource.ts`). Both kinds of
+- **The recovery ladder** (`recover` → `escalate`, `mseRecoveryLadder.ts`; `handOver`, `mseSource.ts`). Both kinds of
   stall climb the same rungs, and no rung is ever a dead end:
   1. seek to the head again, buffers cleared and re-read — **three times** at one spot within 5 s;
   2. **the next indexed keyframe** past the head (`Remuxer.keyframeAfter`, `cueTimeAfter`), 0.1 s
@@ -2200,6 +2210,9 @@ Everything is in `src/lib/webcodecs/` unless stated otherwise.
 | `bufferQueue.ts` | One operation at a time per buffer |
 | `playbackGuard.ts` | The element's clock: pause, resume, landing, resumed start |
 | `mseSource.ts` | MediaSource, buffers, filling, seeks, recovery |
+| `mseRecoveryLadder.ts`, `mseFrozenClock.ts` | The recovery ladder; the frozen clock and the opening re-request |
+| `mseBufferPlanner.ts`, `mseZoneHold.ts`, `mseLossRecord.ts` | Fill target and byte budget; an unreadable zone (§93); what a `rebuild` line carries |
+| `mseTuning.ts`, `mseSpans.ts`, `mseTypes.ts` | The source's constants, range formatting, and the types promised to the host |
 | `bufferBudget.ts` | The fill target in bytes, per engine (WebKit's per-buffer cap) |
 | `seekLifecycle.ts`, `seekArrival.ts` | A seek's state, and the two rules of arrival — see [Seek lifecycle](#seek-lifecycle) |
 | `memoryReserve.ts` | The lead reserve in memory — see [The lead reserve](#the-lead-reserve-in-memory) |
