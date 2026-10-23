@@ -642,6 +642,22 @@ export function ExperimentalPlayerHost({
    * spectateur qui change de langue sur un film arrêté ne veut pas qu'il reparte tout seul.
    */
   const pendingSwitchRef = useRef<{ from: number | null; fromLabel: string; to: number; startedAt: number } | null>(null);
+  /**
+   * Démarrer un changement de piste qui reconstruit : d'où il part, vers où, depuis quand, et la piste
+   * voulue retenue pour le pipeline suivant — écrit une fois pour ses deux appelants (23/10/2026,
+   * §115) : la piste voulue autre que celle ouverte (ouverture) et le menu. Ce qui les distingue reste
+   * à eux : le menu affiche la piste tout de suite (`setCurrentAudio`, l'écart déclaré au §93) et
+   * reconstruit sur place pour le spectateur ; l'ouverture demande `mayRebuild()` d'abord.
+   */
+  const beginAudioSwitch = useCallback((playback: RemuxPlayback, to: number) => {
+    pendingSwitchRef.current = {
+      from: playback.currentAudioTrack,
+      fromLabel: playback.diagnostics["Audio"] ?? "",
+      to,
+      startedAt: Date.now(),
+    };
+    wantedAudioRef.current = to;
+  }, []);
   // « Rester en pause » vit dans `lifecycle.keepPaused` : vrai d'emblée au retour d'une diffusion
   // arrêtée d'elle-même — le film attend sur le téléphone au lieu d'y repartir tout seul
   // (`PlaybackSession.startPaused`).
@@ -1987,13 +2003,7 @@ export function ExperimentalPlayerHost({
           ? playback.requestAudioTrack(wantedAudio)
           : null;
       if (openingSwitch === "rebuild" && wantedAudio !== null && lifecycle.mayRebuild()) {
-        pendingSwitchRef.current = {
-          from: playback.currentAudioTrack,
-          fromLabel: playback.diagnostics["Audio"] ?? "",
-          to: wantedAudio,
-          startedAt: Date.now(),
-        };
-        wantedAudioRef.current = wantedAudio;
+        beginAudioSwitch(playback, wantedAudio);
         restart(startSeconds, `piste ${wantedAudio} voulue, autre que celle ouverte — reconstruction sur elle`);
         return;
       }
@@ -2427,7 +2437,7 @@ export function ExperimentalPlayerHost({
   // le temps regardé, 28/09/2026). `stutter` et `runner` aussi (§78) : créés une fois au montage.
   // `zoneHandover` et `handZone` (§93) : le premier créé une fois au montage, le second ne dépend que
   // de lui, de `lifecycle` et de `fallToStable` — stables tous trois.
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, chooseSecond, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter, runner, zoneHandover, handZone, enterNetworkLost, clearStall]);
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, chooseSecond, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter, runner, zoneHandover, handZone, enterNetworkLost, clearStall, beginAudioSwitch]);
 
   useNativeRecovery({
     path,
@@ -2641,13 +2651,7 @@ export function ExperimentalPlayerHost({
         return;
       }
       if (request !== "rebuild") return;
-      pendingSwitchRef.current = {
-        from: playback.currentAudioTrack ?? null,
-        fromLabel: playback.diagnostics["Audio"] ?? "",
-        to: id,
-        startedAt: Date.now(),
-      };
-      wantedAudioRef.current = id;
+      beginAudioSwitch(playback, id);
       setCurrentAudio(id);
       // Un film à l'arrêt reste à l'arrêt : le spectateur a changé de langue, pas lancé
       // la lecture. Là où le spectateur a demandé d'être, pas seulement là où il en était.

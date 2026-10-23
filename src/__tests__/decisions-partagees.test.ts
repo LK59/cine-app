@@ -1519,6 +1519,11 @@ describe("les doublons du lecteur fusionnés : une règle, un endroit (§115)", 
     expect([hote, /secondSurvives\(/.test(code), /secondAllowed\(/.test(code)]).toEqual([hote, true, true]);
   });
 
+  it("le natif démarre un changement de piste par beginAudioSwitch seulement", () => {
+    expect(occurrences(/pendingSwitchRef\.current = \{/)).toBe(1);
+    expect((sansCommentaires(lire(entreeDe(NATIF))).match(/beginAudioSwitch\(/g) ?? []).length).toBe(2);
+  });
+
   it("la chronologie de deux minutes s'installe dans useSessionTimeline seulement", () => {
     const MODULE = "src/components/player/session/useSessionTimeline.ts";
     expect(lecteurQui(/new PlaybackTimeline\(/)).toEqual([MODULE]);

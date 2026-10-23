@@ -6313,6 +6313,17 @@ les empreintes (`watched` des `stop`) ; `decisions-partagees`. **Différent expr
 veut dire : Chromecast exclut l'attente du récepteur (`remote.waiting`, §97) ; les attentes de
 l'élément passent par `watchElementWaits`, déjà commun.
 
+### Démarrer un changement de piste (lecteur natif)
+
+**Règle.** Un changement de piste qui reconstruit note d'où il part (piste et étiquette), vers où et
+depuis quand (`pendingSwitchRef`, pour la ligne `audio` du pipeline suivant), et retient la piste
+voulue (`wantedAudioRef`). **Porteur.** `beginAudioSwitch(playback, to)`, `useCallback` de
+`ExperimentalPlayerHost`. **Appelants.** La piste voulue autre que celle ouverte (`startRemux`) et le
+menu (`changeAudioTrack`). **Tests.** Les empreintes `pistes-…` du natif (ligne `audio`) ;
+`decisions-partagees`. **Différent exprès.** Le menu affiche la piste tout de suite (`setCurrentAudio`,
+§93) et reconstruit sur place, pause et image figée comprises (`rebuildHereForViewer`) ; l'ouverture
+demande `mayRebuild()` avant de rien écrire.
+
 ### La chronologie de deux minutes
 
 **Règle.** Une chronologie (§77) par séance, un échantillon toutes les 5 s, inscrite sous l'identifiant
