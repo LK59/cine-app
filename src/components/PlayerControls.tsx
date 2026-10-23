@@ -3,7 +3,7 @@
 import type { TrickplayInfo } from "@/lib/trickplayTile";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, X, Captions, AudioLines, Cast, MonitorSmartphone, Loader2, PictureInPicture2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech, Languages, Check, Layers } from "lucide-react";
+import { Play, Pause, Maximize, Minimize, X, Captions, AudioLines, MonitorSmartphone, Loader2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech, Languages, Check, Layers } from "lucide-react";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
@@ -14,6 +14,7 @@ import { PlayerEpisodesMenu, usePrewarmEpisodes } from "@/components/player/Play
 import { usePlayerItem } from "@/lib/usePlayerItem";
 import { useCastAvailability, type CastVideoElement } from "@/components/player/controls/useCastAvailability";
 import { useChapters, useTrickplay } from "@/components/player/controls/useTrickplay";
+import { PlayerTopBar } from "@/components/player/controls/PlayerTopBar";
 import { PlayerDownloadRow } from "@/components/player/PlayerDownloadRow";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
 import {
@@ -259,8 +260,6 @@ const DIALOGUE_CHOICES: { mode: DialogueMode; label: string }[] = [
   { mode: "on", label: "player.dialogue.enhance" },
   { mode: "strong", label: "player.dialogue.further" },
 ];
-/** Combien de temps la confirmation de diffusion reste dépliée sans qu'on y touche. */
-const CAST_CONFIRM_MS = 4000;
 /**
  * ±10 s : la flèche fait un tour autour du « 10 », qui reste immobile — un tour un peu trop loin,
  * puis posé. Joué au clic, après le geste liquide du bouton, sur la flèche seule.
@@ -598,16 +597,6 @@ export function PlayerControls({
   const menuRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
-  /**
-   * La pilule de diffusion dépliée en « Passer sur AirPlay · Confirmer » — lecteur natif seulement.
-   *
-   * Passer sur AirPlay quitte le lecteur natif pour le lecteur serveur : un geste qui coûte une
-   * nouvelle ouverture, et le bouton est voisin de celui du mini-lecteur, sous le même pouce. Le
-   * premier appui demande, le second fait. Le lecteur serveur, lui, ouvre le sélecteur du système
-   * au premier appui : il n'y a rien à quitter.
-   */
-  const [castConfirm, setCastConfirm] = useState(false);
-  const castPillRef = useRef<HTMLDivElement>(null);
   // Le verre liquide (DECISIONS.md §45) : la pilule des réglages, d'où naissent les menus.
   const settingsPillRef = useRef<HTMLDivElement>(null);
   const liquidRootRef = useRef<HTMLDivElement>(null);
@@ -645,19 +634,6 @@ export function PlayerControls({
     };
     // Rebranché quand les commandes réapparaissent : cachées (`hidden`), leur racine n'existe pas.
   }, [hidden]);
-  useEffect(() => {
-    if (!castConfirm) return;
-    // Repliée d'elle-même au bout de quatre secondes, ou par un appui ailleurs.
-    const timer = setTimeout(() => setCastConfirm(false), CAST_CONFIRM_MS);
-    const onPointerDown = (e: PointerEvent) => {
-      if (!castPillRef.current?.contains(e.target as Node)) setCastConfirm(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener("pointerdown", onPointerDown, true);
-    };
-  }, [castConfirm]);
   // Un menu ouvert se referme dès qu'un doigt se pose ailleurs, et non au clic qui suit le
   // relâchement : le retour part tout de suite, d'où en est l'ouverture (demandé le 07/10/2026).
   // Le clic qui suit est retenu — il ne fait que refermer, comme les menus du système : sans cela,
@@ -1884,162 +1860,24 @@ export function PlayerControls({
             le garde lisible sur une image claire, sans voile sur le reste de l'image. */}
         <div className="player-fade pointer-events-none absolute inset-x-0 top-0 h-[140px] bg-gradient-to-b from-black/55 to-transparent lg:h-[180px]" />
         <div className="player-fade pointer-events-none absolute inset-x-0 bottom-0 h-[180px] bg-gradient-to-t from-black/60 via-black/25 to-transparent lg:h-[240px]" />
-        {/* En haut : fermer, puis — à distance, pour que le pouce ne prenne pas l'un pour l'autre — la
-            pilule de la diffusion et du mini-lecteur ; à droite, le son seul. Le reste est en bas,
-            près de la barre, comme sur l'Apple TV. Marges : 16, 24 puis 32 px, plus les bords sûrs
-            (encoche en paysage, Dynamic Island en portrait). */}
-        <div
-          data-player-navgroup="topbar"
-          ref={topRowRef}
-          className={`player-chrome-x ${visible ? "pointer-events-auto translate-y-0" : "pointer-events-none -translate-y-1"} player-spring flex items-center justify-between gap-3 pb-4 motion-reduce:translate-y-0`}
-          // Capture phase: children stopPropagation() in the bubble phase, which is exactly why
-          // the old timer never got reset by button use — capture fires on the way DOWN, before
-          // any child handler, so every top-bar interaction reliably re-arms the long timer.
-          onClickCapture={() => showControls(10000)}
-          style={{ paddingTop: "max(1rem, calc(env(safe-area-inset-top) + 1rem))" }}
-        >
-          <div className="flex min-w-0 items-center gap-4 max-[379px]:gap-3">
-            <button
-              data-player-nav="close"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCloseClick();
-              }}
-              aria-label={t("common.close")}
-              data-liquid
-              className="player-fade player-pill player-pill-btn player-pill-solo shrink-0"
-            >
-              <X size={24} />
-            </button>
-            <div ref={castPillRef} data-cast-pill data-liquid className="player-fade player-pill flex min-w-0 items-center p-1">
-              {/* Les deux boutons au repos, et la confirmation qui prend leur place : deux segments
-                  toujours là, l'un se resserrant pendant que l'autre s'ouvre — la pilule grandit
-                  d'un geste au lieu de sauter d'une largeur à l'autre. */}
-              <div
-                className={`player-pill-seg flex items-center gap-1 ${castConfirm ? "player-pill-seg-closed" : ""}`}
-                inert={castConfirm}
-                aria-hidden={castConfirm || undefined}
-              >
-                {chromecast && (
-                  <button
-                    data-player-nav="chromecast"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // Dans le geste même : la liste des récepteurs de Chrome ne s'ouvre qu'ainsi.
-                      chromecast.onRequest();
-                    }}
-                    aria-label={t("player.chromecast.button")}
-                    title={t("player.chromecast.button")}
-                    data-active={chromecast.active ? "" : undefined}
-                    className="player-pill-btn"
-                  >
-                    <Cast size={22} />
-                  </button>
-                )}
-                {/* Le bouton de diffusion du navigateur (Remote Playback) se tait quand celui du
-                    Chromecast est là : deux icônes identiques pour deux chemins, l'un des deux ne
-                    menant nulle part sur un flux MediaSource. AirPlay n'est jamais concerné — il
-                    n'existe pas là où le Chromecast se propose. */}
-                {castSupported && !(chromecast && castKind === "remote") && (
-                  <button
-                    data-player-nav="cast"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // Le lecteur serveur joue une adresse : le sélecteur s'ouvre tout de suite, dans
-                      // ce geste même — `showCastPicker` l'appelle avant tout `await`, ce qu'iOS exige.
-                      // Le lecteur natif doit d'abord céder la place (`onCastRequest`) : on demande.
-                      if (onCastRequest) setCastConfirm(true);
-                      else void showCastPicker();
-                    }}
-                    aria-label={t("player.cast")}
-                    data-active={castActive ? "" : undefined}
-                    className="player-pill-btn"
-                  >
-                    <Cast size={22} />
-                  </button>
-                )}
-                <button
-                  data-player-nav="minimize"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleMinimizeClick();
-                  }}
-                  title={t('player.minimize')}
-                  aria-label={t('player.minimize')}
-                  className="player-pill-btn"
-                >
-                  <PictureInPicture2 size={22} />
-                </button>
-              </div>
-              <div
-                data-cast-confirm={castConfirm ? "open" : "closed"}
-                className={`player-pill-seg flex min-w-0 items-center gap-2 ${castConfirm ? "" : "player-pill-seg-closed"}`}
-                inert={!castConfirm}
-                aria-hidden={!castConfirm || undefined}
-              >
-                <span className="min-w-0 truncate pl-3 text-sm text-white/90 max-[379px]:text-[13px]">
-                  {t(castKind === "airplay" ? "player.castConfirm.airplay" : "player.castConfirm.remote")}
-                </span>
-                <button
-                  data-player-nav="cast-confirm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCastConfirm(false);
-                    // Exactement le chemin d'avant : le lecteur natif cède la place au lecteur
-                    // serveur, qui ouvre le sélecteur quand son élément est prêt.
-                    onCastRequest?.();
-                  }}
-                  className="player-capsule shrink-0"
-                >
-                  {t("player.castConfirm.confirm")}
-                </button>
-              </div>
-            </div>
-          </div>
-          {/* Le son, seul à droite. Au bureau, le curseur se replie et se déplie sous le pointeur ou
-              au clavier (`.player-volume`, globals.css) — à gauche du bouton, qui reste sous le
-              pointeur (LECTEUR-13, 15/10/2026) ; partout ailleurs — doigt, tablette, écran
-              tactile — il reste déplié, et sur iPhone il n'y a que le bouton, iOS ignorant le
-              volume d'une page. Jamais une fonction réservée au survol. Le temps d'une confirmation
-              de diffusion, sur un écran étroit, il cède sa place à la pilule qui s'ouvre. */}
-          <div data-liquid className={`player-fade player-volume player-pill flex shrink-0 items-center p-1 ${castConfirm ? "max-sm:hidden" : ""}`}>
-            <button
-              data-player-nav="mute"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleMute();
-              }}
-              aria-label={t("player.mute")}
-              className="player-pill-btn"
-            >
-              {/* Les deux icônes toujours là, l'une qui part pendant que l'autre arrive (`player-swap`). */}
-              <span className="player-swap" aria-hidden>
-                <span data-off={muted || volume === 0 ? "" : undefined}><Volume2 size={22} /></span>
-                <span data-off={muted || volume === 0 ? undefined : ""}><VolumeX size={22} /></span>
-              </span>
-            </button>
-            {/* Four pixels tall is a target a finger cannot land on, let alone drag along: every
-                touch became a tap, and a tap on a range input jumps straight to the end it
-                landed nearest. Twenty is the same bar with room to hold on to. */}
-            {volumeSettable && (
-              <span className="player-volume-slider flex items-center">
-                <input
-                  data-player-nav="volume"
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={muted ? 0 : volume}
-                  onChange={(e) => changeVolume(Number(e.target.value))}
-                  onClick={(e) => e.stopPropagation()}
-                  aria-label={t("player.volume")}
-                  className="mr-3 h-5 w-20 cursor-pointer accent-white"
-                  style={{ WebkitTouchCallout: "none", touchAction: "none" }}
-                />
-              </span>
-            )}
-          </div>
-        </div>
+        <PlayerTopBar
+          rowRef={topRowRef}
+          visible={visible}
+          showControls={showControls}
+          onClose={handleCloseClick}
+          onMinimize={handleMinimizeClick}
+          chromecast={chromecast}
+          castSupported={castSupported}
+          castKind={castKind}
+          castActive={castActive}
+          onCastRequest={onCastRequest}
+          showCastPicker={showCastPicker}
+          muted={muted}
+          volume={volume}
+          volumeSettable={volumeSettable}
+          toggleMute={toggleMute}
+          changeVolume={changeVolume}
+        />
 
         {menu && (
           <LiquidMenu
