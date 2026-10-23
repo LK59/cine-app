@@ -13,6 +13,7 @@ import { LiquidMenu } from "@/components/player/LiquidMenu";
 import { PlayerEpisodesMenu, usePrewarmEpisodes } from "@/components/player/PlayerEpisodesMenu";
 import { afterFirstPicture } from "@/lib/firstPicture";
 import { usePlayerItem } from "@/lib/usePlayerItem";
+import { useCastAvailability, type CastVideoElement } from "@/components/player/controls/useCastAvailability";
 import { PlayerDownloadRow } from "@/components/player/PlayerDownloadRow";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
 import {
@@ -90,13 +91,6 @@ export interface SecondSubtitleMenu {
   offset?: { seconds: number; onShift: (deltaSeconds: number) => void };
   /** « Générer — <langue> » comme second (lecteur natif, §70) : absent, rien à générer. */
   generation?: { targets: { code: string; label: string }[]; busy: boolean; onGenerate: (code: string) => void };
-}
-
-// AirPlay (Safari, webkit-prefixed) isn't in lib.dom's HTMLVideoElement typings — unlike the
-// standard Remote Playback API (Chrome/Edge's actual Chromecast entry point for a plain
-// <video>), which `video.remote` already covers natively.
-interface CastVideoElement extends HTMLVideoElement {
-  webkitShowPlaybackTargetPicker?: () => void;
 }
 
 interface PlayerControlsProps {
@@ -609,9 +603,6 @@ export function PlayerControls({
   const menuRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
-  const [castSupported, setCastSupported] = useState(false);
-  /** AirPlay (WebKit) ou Remote Playback : ne change que le mot de la confirmation. */
-  const [castKind, setCastKind] = useState<"airplay" | "remote">("remote");
   /**
    * La pilule de diffusion dépliée en « Passer sur AirPlay · Confirmer » — lecteur natif seulement.
    *
@@ -1106,37 +1097,7 @@ export function PlayerControls({
     video.addEventListener("ended", onEnded);
     onProgress(); // seed immediately — otherwise the bar stays empty until the next chunk lands
 
-    // Cast — AirPlay (Safari, webkit-prefixed) where available, else the standard Remote
-    // Playback API (Chrome/Edge's real Chromecast entry point for a <video>). Never both: a
-    // browser that has AirPlay is Safari, which doesn't meaningfully implement Remote Playback,
-    // so checking AirPlay first and only falling back avoids ever probing the one that doesn't
-    // apply.
-    const castVideo = video as CastVideoElement;
-    let remoteWatchId: number | undefined;
-    // La promesse d'abonnement peut se résoudre après le démontage : l'identifiant arrivait alors
-    // trop tard pour être annulé, et l'abonnement survivait au lecteur (23/09/2026).
-    let unmounted = false;
-    if (typeof castVideo.webkitShowPlaybackTargetPicker === "function") {
-      setCastSupported(true);
-      setCastKind("airplay");
-    } else if (castVideo.remote) {
-      const remote = castVideo.remote;
-      remote
-        .watchAvailability((available) => {
-          if (!unmounted) setCastSupported(available);
-        })
-        .then((id) => {
-          if (unmounted) remote.cancelWatchAvailability(id).catch(() => {});
-          else remoteWatchId = id;
-        })
-        .catch(() => {
-          if (!unmounted) setCastSupported(false); // NotSupportedError — no cast receivers reachable at all
-        });
-    }
-
     return () => {
-      unmounted = true;
-      if (remoteWatchId !== undefined) castVideo.remote?.cancelWatchAvailability(remoteWatchId).catch(() => {});
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("waiting", onWaiting);
@@ -1155,6 +1116,8 @@ export function PlayerControls({
       video.removeEventListener("ended", onEnded);
     };
   }, [videoRef, probeVolume]);
+
+  const { castSupported, castKind } = useCastAvailability(videoRef);
 
   useEffect(() => {
     function onFsChange() {
