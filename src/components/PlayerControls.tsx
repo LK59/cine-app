@@ -3,7 +3,7 @@
 import type { TrickplayInfo } from "@/lib/trickplayTile";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Maximize, Minimize, X, Captions, AudioLines, MonitorSmartphone, Loader2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech, Languages, Check, Layers } from "lucide-react";
+import { Play, Pause, Maximize, Minimize, Captions, AudioLines, MonitorSmartphone, Loader2, Info, RotateCcw, RotateCw, Gauge, ListVideo, EllipsisVertical, ArrowLeft, Sun, Scan, Moon, Timer, ChevronRight, SkipForward, Speech, Languages, Check, Layers } from "lucide-react";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import { HDR_CAP_CHOICES, type HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
@@ -15,6 +15,8 @@ import { usePlayerItem } from "@/lib/usePlayerItem";
 import { useCastAvailability, type CastVideoElement } from "@/components/playerControls/useCastAvailability";
 import { useChapters, useTrickplay } from "@/components/playerControls/useTrickplay";
 import { PlayerTopBar } from "@/components/playerControls/PlayerTopBar";
+import { PlayerPrompts } from "@/components/playerControls/PlayerPrompts";
+import { BOTTOM_EDGE } from "@/components/playerControls/layout";
 import { PlayerDownloadRow } from "@/components/player/PlayerDownloadRow";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
 import {
@@ -274,16 +276,6 @@ function spinSkip(button: HTMLElement, turn: -1 | 1) {
   );
 }
 
-// Le bord bas des commandes : 8 px au-dessus de la barre d'accueil d'iOS (ou 1,5 rem sans elle).
-// Collée au bord sûr, la barre de progression se trouvait sous le pouce qui allait chercher le
-// geste du système, et l'un prenait l'autre (02/10/2026). Partagé par tout ce qui se place au-dessus
-// de la rangée du bas, pour que l'écart reste le même partout.
-const BOTTOM_EDGE = "max(1.5rem, calc(env(safe-area-inset-bottom) + 0.5rem))";
-/**
- * Où se posent les invites flottantes (« Passer l'intro », l'épisode suivant, la minuterie) : au-dessus
- * du bas des commandes — titre, pilule et barre —, pour ne jamais les couvrir quand elles sont là.
- */
-const PROMPT_BOTTOM = `calc(${BOTTOM_EDGE} + 8.5rem)`;
 const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 /** Masqués, les contrôles ne suivent la position qu'à ce rythme — voir `visibleRef`. */
 const HIDDEN_UPDATE_MS = 1000;
@@ -1733,112 +1725,19 @@ export function PlayerControls({
         </>
       )}
 
-      {/* Skip-intro and next-up prompts stay visible even when the rest of the
-          controls have auto-hidden — they're time-sensitive, not navigation. */}
-      {skipNow && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (videoRef.current) seekElement(videoRef.current, skipNow.end);
-          }}
-          data-liquid
-          className="player-pill pointer-events-auto absolute px-4 py-2.5 text-sm font-medium text-white"
-          style={{
-            bottom: PROMPT_BOTTOM,
-            right: "max(1rem, env(safe-area-inset-right))",
-          }}
-        >
-          {skipNow.kind === "recap" ? t("player.skipRecap") : t("player.skipIntro")}
-        </button>
-      )}
-
-      {/* Les trente dernières secondes de la minuterie de veille : une ligne, à la place de rien.
-          Visible commandes masquées — c'est précisément quand personne ne les regarde qu'elle sert. */}
-      {sleepWarning !== null && (
-        <div
-          data-player-surface-ignore
-          onClick={(e) => e.stopPropagation()}
-          className="player-pill pointer-events-auto absolute flex items-center gap-2 py-1.5 pl-3.5 pr-1.5 text-xs text-white/80"
-          style={{
-            bottom: PROMPT_BOTTOM,
-            left: "max(1rem, env(safe-area-inset-left))",
-          }}
-        >
-          <Moon size={12} aria-hidden />
-          <span className="tabular-nums">{t("player.sleep.warning", { n: sleepWarning })}</span>
-          <span aria-hidden>·</span>
-          <button
-            type="button"
-            onClick={() => {
-              noteViewerPresent();
-              sleepTimerStore.continue();
-            }}
-            className="rounded-full px-2 py-0.5 font-medium text-white hover:bg-white/10"
-          >
-            {t("player.sleep.continue")}
-          </button>
-        </div>
-      )}
-
-      {/* La question, à la place de l'épisode suivant. Elle occupe tout l'écran plutôt qu'un coin :
-          si personne n'est là, autant que la pièce cesse d'être éclairée par un film qui joue. */}
-      {askStillThere && nextEpisode && (
-        <div
-          // Un clic sur son fond n'est pas un clic sur l'image : il ne met rien en pause derrière.
-          data-player-surface-ignore
-          className="pointer-events-auto absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-black/80 px-6 text-center">
-          <p className="text-lg font-medium text-white">{t("player.stillThere")}</p>
-          <p className="max-w-sm text-sm text-slate-400">{t("player.stillThereHint")}</p>
-          <button
-            type="button"
-            onClick={() => {
-              noteViewerPresent();
-              requestAdvance();
-            }}
-            className="btn-primary px-6"
-          >
-            {t("player.stillThereContinue")}
-          </button>
-        </div>
-      )}
-
-      {showNextUp && !askStillThere && nextEpisode && (
-        <div
-          // Ses boutons ne doivent pas atteindre le fond, dont l'appui montre ou cache les commandes —
-          // ni son double-clic le plein écran (`data-player-surface-ignore`, 11/10/2026).
-          data-player-surface-ignore
-          onClick={(e) => e.stopPropagation()}
-          // Le verre des pilules, et une entrée qui rebondit (`glass-pop`) : une carte opaque à part
-          // était la dernière surface du lecteur à ne pas en être (04/10/2026).
-          className="nav-glass glass-pop pointer-events-auto absolute w-72 max-w-[calc(100vw-2rem)] rounded-[22px] p-4"
-          style={{
-            bottom: PROMPT_BOTTOM,
-            right: "max(1rem, env(safe-area-inset-right))",
-          }}
-        >
-          <p className="mb-1 text-xs text-slate-400">{t('player.nextEpisodeIn', { n: nextUpCountdown })}</p>
-          <p className="mb-3 truncate text-sm font-medium text-white">{nextEpisode.title}</p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                noteViewerPresent();
-                requestAdvance();
-              }}
-              className="btn-primary flex-1 justify-center py-1.5 text-xs"
-            >
-              {t('player.playNow')}
-            </button>
-            <button
-              onClick={() => setNextUpDismissed(true)}
-              // Une icône seule : sans nom, un lecteur d'écran n'annonçait que « bouton » (13/10/2026).
-              aria-label={t("common.close")}
-              className="rounded-lg bg-white/10 px-3 py-1.5 text-xs text-white hover:bg-white/20"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-      )}
+      <PlayerPrompts
+        skipNow={skipNow}
+        onSkip={(end) => {
+          if (videoRef.current) seekElement(videoRef.current, end);
+        }}
+        sleepWarning={sleepWarning}
+        askStillThere={askStillThere}
+        showNextUp={showNextUp}
+        nextEpisode={nextEpisode}
+        nextUpCountdown={nextUpCountdown}
+        requestAdvance={requestAdvance}
+        onDismissNextUp={() => setNextUpDismissed(true)}
+      />
 
       {/* Cachées, les commandes ne prennent plus les appuis : l'opacité ne change rien à ce qu'on
           touche, et un appui au milieu de l'écran pour les faire revenir mettait le film en pause —
