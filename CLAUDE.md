@@ -10,6 +10,14 @@ plays films in the browser through its own remuxing player, and gives the admini
 interface for running the stack itself. Next.js 16 (App Router) + React 19, TypeScript, Tailwind 4,
 SQLite. One container, deployed by `docker compose`, image published to GHCR.
 
+The app is called **Laterna**, its player engine **Lumen** (`APP_NAME` / `ENGINE_NAME`, `appBuild.ts`;
+DECISIONS §118). It was called CineApp until 10.0: the repository, the image, the container, the
+package and every key stored on a device or in `data/` (`cine:*`, `cine-reprise-2`, `cine.db`, the
+session cookie) keep the old name on purpose — renaming them would sign everyone out or wipe their
+devices. Jellyfin knows the app as « Laterna » / « Lumen by Laterna », and the old client names
+(« CineApp », « CineEngine By CineApp ») are accepted forever in one place (`playbackClients.ts`),
+since a device registered before the rename keeps its name until it signs in again.
+
 | | Address | Audience |
 |---|---|---|
 | Cinema | `/` — route group `(player)` | Every Jellyfin account |
@@ -67,6 +75,18 @@ measured and rejected — `vi.mock` doubles leaked between files and 30 to 60 te
 The DOM matchers load only under jsdom (`vitest.setup.ts`). `clearMocks` is pinned to `false` in
 `vitest.config.ts` — that is Vitest 4's default, kept deliberately when moving to 5 so that no
 test quietly changed meaning; flipping it is a decision to take by reading the tests it affects.
+
+**Two nets guard the player against regressions, and a refactor of it needs both.** The behaviour
+fingerprints (`src/__tests__/empreinte/`, part of `npm test`; README there) record, under fake
+timers, every log line, request, storage write and element order of 49 scenarios for the native
+host, the server player and `MseSource` — a pure move must leave every file identical, and a missing
+fingerprint fails. The real-browser bench (`tools/regress-lecteur/`, README there) builds a commit
+into a throwaway instance and plays nine hard titles in Chromium, Firefox, WebKit and an emulated
+iPhone, then compares the normalised `player.log` lines with a baseline: about 35 minutes for the
+full run, 6 for `REGRESS_MODE=rapide` (interface-only changes). Run it on an otherwise quiet machine
+— under load from a parallel test suite it reported 6 false differences out of 34 — and pass it a
+commit, not a branch. Launched from a worktree, point `REGRESS_ENV`/`REGRESS_DB` at the main
+checkout's `.env` and `data/cine.db`.
 
 **Benches sit beside the suite, all skipped unless given a file or a library root.**
 `reprise.spec.ts` proves, on a real file, that the bytes the resume cache keeps reopen it at a
@@ -299,6 +319,9 @@ to `/login`, so iOS silently fell back to its own background and nothing appeare
 **A redirect is not a failure — it leaves no trace.** When something served over HTTP behaves
 oddly, ask what the URL actually returns before reading any more code. The list is written twice,
 because Next demands a literal string for its `matcher`; a test compares the two.
+The icons, the maskable icon, the notification badge and the 42 launch images are generated from the
+SVG sources in `tools/brand/` (`generate.mjs`, README there) — never edited by hand; `brand-assets.test.ts`
+checks every file the manifest, `layout.tsx`, `sw.js` and the push code name exists at its size.
 
 **API routes are thin** (~59 lines average). Logic lives in `src/lib`:
 
@@ -354,6 +377,15 @@ through `syncWatched`, never a third path.
 **Cinema navigation lives in the URL hash** (`src/lib/cinemaRoute.ts`): open sheet, tab, panels.
 `cinemaClose` goes through `history.back()`, and each entry records what it covers, so a sheet
 stays drawn under the one above it.
+
+**The player's files were split by pure moves in October 2026** (9.3.13, 9.3.14, 10.0): the hosts keep
+their orchestration and call pieces placed exactly where their hooks were, so effect order is
+unchanged — `src/components/playerControls/` (controls), `src/components/player/server/` (server
+player), `src/components/playerNative/` (native host), `src/lib/webcodecs/mse*.ts` (engine, with
+pass-through accessors for the private members tests drive), and rules both players share in
+`src/components/player/session/` and `src/components/player/playerClose.ts` (DECISIONS §114–§116).
+`playerControls/` and `playerNative/` sit outside `src/components/player/` on purpose: the colour
+rule of `design-tokens.test.ts` reads that folder, and the controls carry hand-written text colours.
 
 **The player** has its own reference: read `DOC-TECH.md` before touching `src/lib/webcodecs/`,
 and `docs/cycle-de-vie-lecteur.md` before touching `ExperimentalPlayerHost`, `PlayerHost` or the
