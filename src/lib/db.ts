@@ -655,7 +655,8 @@ function migrate(db: Database.Database): void {
   seedNewsPage(db, NEWS_91_SEED, NEWS_91_VERSION, NEWS_91_CONTENT, Date.now(), "draft");
   // Le renommage en Laterna (23/10/2026, §118) : seulement sur l'installation qui annonce sa nouvelle
   // adresse (`NEWS_LATERNA_ADDRESS`), et en brouillon — Louis la publie depuis Activité → Nouveautés.
-  const laterna = laternaNewsPage(config.news.laternaAddress);
+  // `?.` : une configuration partielle (doublures de test) ne doit pas faire échouer `migrate()`.
+  const laterna = laternaNewsPage(config.news?.laternaAddress);
   if (laterna) seedNewsPage(db, laterna.seed, laterna.version, laterna.content, Date.now(), "draft");
   // Les corrections livrées, ajoutées à l'historique des pages publiées (`fixesLedger.ts`).
   applyFixesLedger(db);
