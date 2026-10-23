@@ -142,7 +142,7 @@
     "allQualities": "All qualities",
     "notDownloaded": "Not downloaded",
     "installPrompt": {
-      "title": "Install CineApp",
+      "title": "Install Laterna",
       "body": "Add the app to your Home Screen to enable notifications and faster launches.",
       "steps": "Tap Share, then \"Add to Home Screen\".",
       "dismiss": "Later"
@@ -413,8 +413,8 @@
       },
       "watched": "{d} watched",
       "legacy": "reconstructed",
-      "serverPlayer": "Server player",
-      "nativePlayer": "Native player ({path})",
+      "serverPlayer": "Server player · PlaybackBridge",
+      "nativePlayer": "Lumen · native player ({path})",
       "watchedLabel": "Watched",
       "endedAt": "stopped at {at} · {why}",
       "waitsHint": "{d} in total · longest {max}",
@@ -1127,13 +1127,13 @@
       "tmdb": "TMDB",
       "multiSource": "Multi-source",
       "system": "System",
-      "jellyfinApi": "Jellyfin API (CineApp)"
+      "jellyfinApi": "Jellyfin API (Laterna)"
     },
     "capabilitiesTitle": "What's working right now",
     "basedOn": "Based on",
     "capabilities": {
       "watchJellyfin": "Watch via Jellyfin",
-      "watchCineApp": "Watch via CineApp",
+      "watchCineApp": "Watch via Laterna",
       "auth": "Authentication",
       "movieLibrary": "Movie management",
       "seriesLibrary": "Series management",
@@ -1936,7 +1936,19 @@
         "stream": "The stream",
         "device": "What this device accepts",
         "served": "Streamed",
-        "fileOriginal": "The original file"
+        "fileOriginal": "The original file",
+        "decode": "Decoding",
+        "buffers": "The buffers",
+        "playback": "Playback"
+      },
+      "engineRoles": {
+        "PlaybackCore": "orchestration",
+        "MuxCore": "remux and containers",
+        "AudioCore": "audio decoding",
+        "BufferCore": "buffer management",
+        "StreamCore": "network and byte reading",
+        "CodecBridge": "codec compatibility",
+        "PlaybackBridge": "playback fallback (server player)"
       },
       "range": "Range",
       "tracks": "Tracks",
@@ -2462,8 +2474,8 @@
       "panelHint": "What you can watch without a network, on this device.",
       "entryOnline": "Played from this device",
       "entryOffline": "Offline · played from this device",
-      "openApp": "Open Cine App",
-      "entryNoAccount": "No downloads to show here. Open Cine App with a network connection and sign in: your downloads will appear there, then here.",
+      "openApp": "Open Laterna",
+      "entryNoAccount": "No downloads to show here. Open Laterna with a network connection and sign in: your downloads will appear there, then here.",
       "accessDownloads": "Go to downloads",
       "pause": "Pause",
       "resumeDownload": "Resume the download",
@@ -2948,11 +2960,13 @@
     }
   },
   "signature": {
+    "poweredBy": "powered by {engine}",
+    "engineRole": "Media Playback Engine",
     "by": "by",
     "sourceLink": "Source code on GitHub (new tab)"
   },
   "setup": {
-    "title": "Welcome to CineApp",
+    "title": "Welcome to Laterna",
     "subtitle": "A few settings and your cinema is ready.",
     "progress": "Step {n} of {total}",
     "steps": {
@@ -2966,7 +2980,7 @@
       "finish": "Finish"
     },
     "welcome": {
-      "text": "This assistant helps you connect CineApp to your services. It stays open until you click “Finish”: you can leave and come back.",
+      "text": "This assistant helps you connect Laterna to your services. It stays open until you click “Finish”: you can leave and come back.",
       "language": "Interface language",
       "urls": "Addresses are seen from inside the container: on a shared Docker network, use the container name (http://radarr:7878); otherwise the server's IP address. “localhost” means the container itself.",
       "env": "A value already present in your .env fills its field automatically."
@@ -3278,7 +3292,7 @@
   },
   "news": {
     "title": "What's New",
-    "subtitle": "CineApp {version}",
+    "subtitle": "Laterna {version}",
     "improvements": "Improvements",
     "fixesTitle": "Optimizations and bug fixes",
     "seeMore": "See more",
@@ -3288,7 +3302,7 @@
     "publishedOn": "Published {date}",
     "empty": "Nothing new yet.",
     "loadError": "Couldn't load what's new.",
-    "accountHint": "What changed in CineApp, version by version.",
+    "accountHint": "What changed in Laterna, version by version.",
     "open": "View"
   },
   "config": {

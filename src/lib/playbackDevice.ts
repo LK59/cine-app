@@ -13,7 +13,8 @@
 //    l'appareil sont mis à jour). L'éviction qui avait motivé des identifiants séparés vit dans
 //    `SessionManager.GetAuthorizationToken`, appelé seulement par `AuthenticateByName`, jamais ici ;
 //  - une session Jellyfin est clé par `Client + DeviceId + UserId` (`GetSessionKey`) : le lecteur
-//    serveur (« CineApp ») et le lecteur natif (« CineEngine By CineApp ») restent deux sessions
+//    serveur (« Laterna », autrefois « CineApp ») et le lecteur natif (« Lumen by Laterna », autrefois
+//    « CineEngine By CineApp ») restent deux sessions
 //    distinctes sous le même appareil.
 //
 // Une session ouverte avant qu'on garde son appareil n'en a pas : elle garde l'ancien identifiant

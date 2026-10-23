@@ -10,6 +10,7 @@ import { LOCALE_COOKIE, type Locale } from "@/lib/i18n";
 import { SETTINGS_BY_KEY, availableFeatures, type SettingGroup, type SettingView, type TestableGroup } from "@/lib/settings/schema";
 import { groupsToTest } from "@/lib/settings/wizardTests";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
+import { APP_NAME } from "@/lib/appBuild";
 
 /**
  * L'assistant de premier lancement (DECISIONS.md §48).
@@ -387,7 +388,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       />
       <div className="relative mx-auto w-full max-w-xl">
         <header className="mb-8 text-center">
-          <p className="font-display text-sm font-semibold tracking-tight text-accent-400">CineApp</p>
+          <p className="font-display text-sm font-semibold tracking-tight text-accent-400">{APP_NAME}</p>
           <p className="mt-1 text-xs text-subtle">{t("setup.subtitle")}</p>
         </header>
         {children}

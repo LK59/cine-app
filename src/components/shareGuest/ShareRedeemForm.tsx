@@ -7,6 +7,7 @@ import { useT } from "@/components/TranslationProvider";
 import { hardNavigate } from "@/lib/signOut";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
+import { APP_NAME } from "@/lib/appBuild";
 
 /** Le code d'un lien : dix signes, sans 0/o ni 1/l/i (`share/store.ts`). Tapé, il est mis en minuscules. */
 const CODE_PATTERN = "[a-zA-Z2-9]{10}";
@@ -82,7 +83,7 @@ export function ShareRedeemForm({ code: fixedCode, household }: { code: string |
         <div className="mb-8 flex flex-col items-center text-center">
           {/* eslint-disable-next-line @next/next/no-img-element -- l’icône de l’application, servie sans session (ACTIFS_PUBLICS), comme sur la page de connexion */}
           <img src="/icon-512.png" alt="" width={64} height={64} className="mb-4 h-16 w-16 rounded-2xl" />
-          <h1 className="font-display text-3xl font-bold tracking-tight text-white">Cine App</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-white">{APP_NAME}</h1>
           {/* La même phrase pour tout code, existant ou non : rien du titre avant le mot de passe. */}
           <p className="mt-2 text-sm text-slate-400">{t("share.guest.tagline")}</p>
         </div>

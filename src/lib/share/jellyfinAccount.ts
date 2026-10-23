@@ -1,3 +1,4 @@
+import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import crypto from "node:crypto";
 import { config } from "@/lib/config";
 import { upstreamSignal, UPSTREAM_TIMEOUT_MS } from "@/lib/http";
@@ -157,7 +158,7 @@ export async function signInShareAccount(
     headers: {
       ...forwarded,
       "Content-Type": "application/json",
-      Authorization: jellyfinIdentityAuth({ client: "CineApp", device: jellyfinDeviceName(deviceLabel), deviceId, version: APP_VERSION }),
+      Authorization: jellyfinIdentityAuth({ client: PLAYBACK_CLIENTS.stable, device: jellyfinDeviceName(deviceLabel), deviceId, version: APP_VERSION }),
     },
     body: JSON.stringify({ Username: name, Pw: password }),
     signal: upstreamSignal(AUTH_TIMEOUT_MS),

@@ -164,7 +164,7 @@ describe("usePlaybackSession", () => {
     // one negotiates nothing, so without this it reported against a session Jellyfin never knew.
     renderHook(() => usePlaybackSession(() => 0, { ...session, announce: true, client: PLAYBACK_CLIENTS.engine }));
     expect(bodies("playing")).toHaveLength(1);
-    expect(bodies("playing")[0].client).toBe("CineEngine By CineApp");
+    expect(bodies("playing")[0].client).toBe("Lumen by Laterna");
   });
 
   it("ne l'annonce pas deux fois pour le lecteur qui l'a déjà fait", () => {
@@ -276,7 +276,7 @@ describe("usePlaybackSession", () => {
   it("porte le nom du lecteur qui joue vraiment", () => {
     renderHook(() => usePlaybackSession(() => 0, { ...session, client: PLAYBACK_CLIENTS.engine }));
     act(() => void vi.advanceTimersByTime(1_000));
-    expect(bodies("progress")[0].client).toBe("CineEngine By CineApp");
+    expect(bodies("progress")[0].client).toBe("Lumen by Laterna");
   });
 
   it("se tait tant qu'il n'y a rien à raconter", () => {

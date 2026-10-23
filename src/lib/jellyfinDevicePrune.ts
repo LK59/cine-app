@@ -7,7 +7,8 @@
 // 29/09/2026 : trente-deux appareils « CineApp », dont treize pour un seul compte, et vingt-sept
 // qu'aucune session enregistrée ne réclamait plus.
 //
-// Ne tombe que ce qui remplit les trois conditions à la fois — `AppName` « CineApp », identifiant
+// Ne tombe que ce qui remplit les trois conditions à la fois — `AppName` l'un des nôtres (« Laterna »,
+// ou « CineApp », son nom d'avant : `isOwnAppName`, playbackClients.ts), identifiant
 // `cine-app-…` (le nôtre), dernière activité lisible et vieille de plus de trente jours. La
 // télévision, Jellyfin web, les applications mobiles ne sont jamais touchées ; une date absente ou
 // illisible non plus : on ne supprime pas ce qu'on ne sait pas dater.
@@ -23,6 +24,7 @@
 // sans s'être déconnecté. D'où la liste des appareils des sessions encore valides, lue avant de
 // supprimer quoi que ce soit.
 
+import { isOwnAppName } from "@/lib/playbackClients";
 import { config } from "@/lib/config";
 import { sessionDb } from "@/lib/db";
 import { logAuthEvent } from "@/lib/eventLogs";
@@ -66,7 +68,7 @@ export function selectPrunableDevices(
   const chosen: PrunableDevice[] = [];
   for (const device of devices) {
     if (chosen.length >= limit) break;
-    if (device.AppName !== "CineApp") continue;
+    if (!isOwnAppName(device.AppName)) continue;
     if (typeof device.Id !== "string" || !device.Id.startsWith("cine-app-")) continue;
     if (protectedIds.has(device.Id)) continue;
     if (typeof device.DateLastActivity !== "string") continue;
@@ -116,7 +118,7 @@ export async function pruneJellyfinDevices(now = Date.now()): Promise<{ deleted:
   }
 
   if (deleted) {
-    console.info(`[jellyfin.device-prune] ${deleted} appareil(s) CineApp inactif(s) depuis 30 jours supprimé(s)`);
+    console.info(`[jellyfin.device-prune] ${deleted} appareil(s) Laterna inactif(s) depuis 30 jours supprimé(s)`);
     // Au journal des connexions, compte par compte : c'est là que l'activité lit la vie des
     // sessions et de leurs jetons, et un jeton qui disparaît sans déconnexion doit s'y expliquer.
     for (const [user, count] of byUser) logAuthEvent("devices-pruned", { user, count });

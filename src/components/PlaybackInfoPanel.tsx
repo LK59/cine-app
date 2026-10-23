@@ -5,6 +5,8 @@ import { X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { describeCapabilities, probeCapabilities } from "@/lib/webcodecs/capabilities";
 import { ExperimentalPlayerReport, type ReportInput } from "@/components/ExperimentalPlayerReport";
+import { brickRoleKey, type EngineBrick } from "@/lib/engineBricks";
+import { ENGINE_NAME } from "@/lib/appBuild";
 
 export interface PanelRow {
   label: string;
@@ -14,6 +16,8 @@ export interface PanelRow {
 export interface PanelSection {
   title: string;
   rows: PanelRow[];
+  /** La brique de Lumen sous laquelle la section s'affiche (`engineBricks.ts`) — un libellé seulement. */
+  brick?: EngineBrick;
 }
 
 /**
@@ -29,6 +33,11 @@ export interface PanelSection {
 export interface PlaybackPanelData {
   /** La ligne à lire avant toutes les autres : comment ce fichier est lu. */
   headline: { name: string; detail: string; tone: "good" | "warn" | "neutral" };
+  /**
+   * Qui se décrit : PlaybackCore quand Lumen lit le fichier dans le navigateur, PlaybackBridge pour
+   * le lecteur serveur — montré à côté de la ligne de tête, un libellé seulement.
+   */
+  brick?: EngineBrick;
   /** Pourquoi, quand il y a un pourquoi : raisons de transcodage, chemin retenu, repli. */
   notes: string[];
   sections: PanelSection[];
@@ -54,12 +63,29 @@ function Row({ label, value }: PanelRow) {
   );
 }
 
+/**
+ * Le nom d'une brique de Lumen, discret, à droite d'un intitulé ; son rôle (« gestion des tampons »)
+ * en info-bulle et pour les lecteurs d'écran. Un nom propre : jamais traduit, jamais en capitales.
+ */
+function BrickTag({ brick }: { brick: EngineBrick }) {
+  const t = useT();
+  const role = t(brickRoleKey(brick));
+  return (
+    <span title={role} aria-label={`${brick} — ${role}`} className="font-mono text-[10px] normal-case tracking-normal text-slate-500/80" data-engine-brick={brick}>
+      {brick}
+    </span>
+  );
+}
+
 /** Vingt lignes d'affilée, c'est une liste ; en cinq groupes, c'est une réponse. */
-function Section({ title, rows }: PanelSection) {
+function Section({ title, rows, brick }: PanelSection) {
   if (rows.length === 0) return null;
   return (
     <section className="border-t border-white/5 pt-2.5 first:border-0 first:pt-0">
-      <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">{title}</h3>
+      <h3 className="mb-1 flex items-baseline justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+        <span>{title}</span>
+        {brick && <BrickTag brick={brick} />}
+      </h3>
       <dl>
         {rows.map((row) => (
           <Row key={row.label} {...row} />
@@ -116,7 +142,15 @@ export function PlaybackInfoPanel({
       onClick={(e) => e.stopPropagation()}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-sm font-medium text-white">{t("player.info.title")}</p>
+        <p className="text-sm font-medium text-white">
+          {t("player.info.title")}
+          {/* Le lecteur se présente : Lumen quand le navigateur lit le fichier lui-même. */}
+          {data.brick && data.brick !== "PlaybackBridge" && (
+            <span className="ml-2 text-[11px] font-normal text-slate-500" title={t("signature.engineRole")}>
+              {ENGINE_NAME}
+            </span>
+          )}
+        </p>
         {/* Le panneau couvre les commandes : sans ce bouton, le seul moyen d'en sortir était de
             fermer le lecteur. */}
         <button
@@ -130,7 +164,10 @@ export function PlaybackInfoPanel({
       </div>
 
       <div className={`rounded-lg px-3 py-2 ring-1 ring-inset ${TONES[data.headline.tone]}`}>
-        <p className="text-[13px] font-medium leading-tight">{data.headline.name}</p>
+        <p className="flex items-baseline justify-between gap-2 text-[13px] font-medium leading-tight">
+          <span>{data.headline.name}</span>
+          {data.brick && <BrickTag brick={data.brick} />}
+        </p>
         <p className="mt-0.5 text-[11px] opacity-70">{data.headline.detail}</p>
       </div>
 
@@ -144,7 +181,7 @@ export function PlaybackInfoPanel({
         {data.sections.map((section) => (
           <Section key={section.title} {...section} />
         ))}
-        <Section title={t("player.info.sections.device")} rows={capabilityRows} />
+        <Section title={t("player.info.sections.device")} rows={capabilityRows} brick="CodecBridge" />
       </div>
 
       {/* Gardé là où on peut l'atteindre pendant la lecture : les fautes qui restent à traquer

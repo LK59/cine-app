@@ -37,7 +37,7 @@ describe("POST /api/jellyfin/playback/playing", () => {
     expect(res.status).toBe(200);
     // Reported with the viewer's own token, never the admin key: this is their watch history.
     expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith(
-      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", "DirectPlay", "CineEngine By CineApp", NO_DEVICE
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", "DirectPlay", "Lumen by Laterna", NO_DEVICE
     );
   });
 
@@ -45,7 +45,7 @@ describe("POST /api/jellyfin/playback/playing", () => {
     const { POST } = await import("@/app/api/jellyfin/playback/playing/route");
     await POST(fakeReq({ ...complete, client: "Netflix" }));
     expect(mockJellyfin.reportPlaybackStart).toHaveBeenCalledWith(
-      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", "DirectPlay", "CineApp", NO_DEVICE
+      "jf-1", "0123456789abcdef0123456789abcdef", "tok", "s", "m", "DirectPlay", "Laterna", NO_DEVICE
     );
   });
 

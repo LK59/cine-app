@@ -1,6 +1,7 @@
 import type { PlaybackPanelData, PanelSection } from "@/components/PlaybackInfoPanel";
 import type { LinkReading } from "@/lib/slowLink";
 import { formatTime } from "@/lib/playerClock";
+import { brickOfDiagnostic, type EngineBrick } from "@/lib/engineBricks";
 
 /** La fonction de traduction, passée plutôt qu'appelée : ces constructeurs restent purs. */
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
@@ -21,9 +22,16 @@ export function formatBitrate(bitRate: number | null | undefined): string {
   return `${(bitRate / 1_000_000).toFixed(1)} Mb/s`;
 }
 
-/** Une section sans ligne utile ne vaut pas son titre. */
-function section(title: string, rows: { label: string; value: string | null }[]): PanelSection {
-  return { title, rows: rows.filter((r) => r.value !== null).map((r) => ({ label: r.label, value: r.value! })) };
+/**
+ * Une section sans ligne utile ne vaut pas son titre. `brick` : la brique du moteur sous laquelle
+ * elle s'affiche (`engineBricks.ts`) — un libellé, rien d'autre.
+ */
+function section(title: string, rows: { label: string; value: string | null }[], brick?: EngineBrick): PanelSection {
+  return {
+    title,
+    rows: rows.filter((r) => r.value !== null).map((r) => ({ label: r.label, value: r.value! })),
+    ...(brick ? { brick } : {}),
+  };
 }
 
 /**
@@ -211,11 +219,14 @@ export function describeJellyfinPlayback(
         { label: t("player.info.bitrate"), value: servedBitrate ? formatBitrate(servedBitrate) : null },
         { label: t("player.info.range"), value: servedRange(info, served, lighter !== null) },
         { label: t("player.info.audio"), value: codecName(served?.audioCodec) },
-      ])
+      ], "PlaybackBridge")
     : null;
 
   return {
     headline,
+    // Le lecteur serveur est le repli de lecture : sa ligne de tête et ce qu'il diffuse vont sous
+    // PlaybackBridge ; le fichier et le son sont décrits par Jellyfin, pas par une brique de Lumen.
+    brick: "PlaybackBridge",
     notes,
     sections: [
       ...(servedSection && servedSection.rows.length > 0 ? [servedSection] : []),
@@ -252,7 +263,7 @@ export function describeJellyfinPlayback(
         },
         { label: t("player.info.estimatedBitrate"), value: networkBitrate ? formatBitrate(networkBitrate) : null },
         ...linkRows(link, t),
-      ]),
+      ], "StreamCore"),
     ],
   };
 }
@@ -270,18 +281,29 @@ export interface RemuxPlayback {
   link?: LinkReading | null;
 }
 
-/** Les deux lignes de diagnostic qui parlent du son plutôt que du transport. */
-export const AUDIO_ROWS = ["Traitement audio", "Décalage de présentation"];
-
-/** Ce que le lecteur natif sait de sa lecture, dans le même modèle. */
+/**
+ * Ce que le lecteur natif sait de sa lecture, dans le même modèle — rangé sous les briques de Lumen
+ * (`engineBricks.ts`) : le fichier (MuxCore), le son (AudioCore), le décodage (CodecBridge), les
+ * tampons (BufferCore), la lecture (PlaybackCore), le flux (StreamCore). Les lignes de diagnostic
+ * gardent leurs intitulés ; une ligne qu'aucune brique ne réclame reste dans « Le flux ».
+ */
 export function describeRemuxPlayback(info: RemuxPlayback, t: Translate): Omit<PlaybackPanelData, "report"> {
   const headline =
     info.path === null
       ? { name: t("player.info.paths.pendingName"), detail: t("player.info.paths.pendingDetail"), tone: "neutral" as const }
       : { name: t("player.info.paths.remuxName"), detail: t("player.info.paths.remuxDetail"), tone: "good" as const };
+  const diagnostics = Object.entries(info.diagnostics).map(([label, value]) => ({ label, value, brick: brickOfDiagnostic(label) }));
+  const rowsOf = (brick: EngineBrick) => diagnostics.filter((d) => d.brick === brick).map(({ label, value }) => ({ label, value }));
+  // Les sections que seules les lignes de diagnostic remplissent : absentes tant qu'elles sont vides.
+  const optional = [
+    section(t("player.info.sections.decode"), rowsOf("CodecBridge"), "CodecBridge"),
+    section(t("player.info.sections.buffers"), rowsOf("BufferCore"), "BufferCore"),
+    section(t("player.info.sections.playback"), rowsOf("PlaybackCore"), "PlaybackCore"),
+  ].filter((s) => s.rows.length > 0);
 
   return {
     headline,
+    brick: "PlaybackCore",
     // Affichée que le chemin ait abouti ou non : un repli dont la raison est invisible équivaut
     // à un repli silencieux.
     notes: info.pathReason ? [info.pathReason] : [],
@@ -299,18 +321,18 @@ export function describeRemuxPlayback(info: RemuxPlayback, t: Translate): Omit<P
           label: t("player.info.tracks"),
           value: t("player.info.tracksValue", { audio: info.audioTrackCount, subtitles: info.subtitleTrackCount }),
         },
-      ]),
+        ...rowsOf("MuxCore"),
+      ], "MuxCore"),
       section(t("player.info.sections.sound"), [
         { label: t("player.info.track"), value: info.currentAudioCodec ?? t("player.info.noDecodableTrack") },
-        ...AUDIO_ROWS.filter((k) => k in info.diagnostics).map((k) => ({ label: k, value: info.diagnostics[k] })),
-      ]),
+        ...rowsOf("AudioCore"),
+      ], "AudioCore"),
+      ...optional,
       section(t("player.info.sections.stream"), [
         { label: t("player.info.serverTranscode"), value: t("player.info.serverTranscodeNo") },
         ...linkRows(info.link, t),
-        ...Object.entries(info.diagnostics)
-          .filter(([label]) => !AUDIO_ROWS.includes(label))
-          .map(([label, value]) => ({ label, value })),
-      ]),
+        ...rowsOf("StreamCore"),
+      ], "StreamCore"),
     ],
   };
 }

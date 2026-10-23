@@ -31,11 +31,19 @@ export function displayVersion(version: string): string {
 }
 
 /**
- * La signature de l'application — « CineApp 8.1 by LK59 · GitHub » —, écrite ici une fois pour
- * ses trois emplacements (panneau Compte du cinéma, page de connexion, menu de la gestion ; voir
- * `AppSignature` et DECISIONS.md). `package.json` n'a ni `author` ni `repository` à relire : c'est
- * donc ici qu'ils vivent. Le nom s'écrit d'un seul mot, comme une marque, et n'est pas traduit.
+ * La signature de l'application — « Laterna 9.4 par LK59 · propulsé par Lumen · GitHub » —, écrite
+ * ici une fois pour ses trois emplacements (panneau Compte du cinéma, page de connexion, menu de la
+ * gestion ; voir `AppSignature` et DECISIONS.md §41). `package.json` n'a ni `author` ni `repository`
+ * à relire : c'est donc ici qu'ils vivent. Les noms s'écrivent d'un seul mot, comme des marques, et
+ * ne se traduisent pas.
+ *
+ * L'application s'appelait « CineApp » (« Cine App » dans le manifeste et les titres de page)
+ * jusqu'à la 9.4. Ce qui est enregistré sous l'ancien nom le garde — clés `cine:*` du navigateur,
+ * caches `cine-static-*`, dossiers OPFS, cookie, `cine.db`, identifiants d'appareil `cine-app-…` —,
+ * et les noms annoncés à Jellyfin, anciens compris, vivent dans `playbackClients.ts`.
  */
-export const APP_NAME = "CineApp";
+export const APP_NAME = "Laterna";
+/** Le moteur de lecture du navigateur (remux, son, tampons, réseau), nommé là où l'application se présente. */
+export const ENGINE_NAME = "Lumen";
 export const APP_AUTHOR = "LK59";
 export const APP_REPOSITORY_URL = "https://github.com/LK59/cine-app";

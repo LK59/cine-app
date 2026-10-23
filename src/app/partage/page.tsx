@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { ShareRedeemForm } from "@/components/shareGuest/ShareRedeemForm";
+import { APP_NAME } from "@/lib/appBuild";
 
 /**
  * « J'ai un code de partage » (DECISIONS.md §112) : le code et le mot de passe d'un lien, tapés à la
@@ -10,7 +11,7 @@ import { ShareRedeemForm } from "@/components/shareGuest/ShareRedeemForm";
  *
  * Hors du groupe `(player)`, dont la coquille exige une session et lance le catalogue avec le HTML.
  */
-export const metadata: Metadata = { title: "Cine App", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: APP_NAME, robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 export default async function ShareEntryPage() {

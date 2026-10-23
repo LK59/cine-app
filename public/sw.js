@@ -479,7 +479,7 @@ self.addEventListener("push", (event) => {
   let data = {};
   try { data = event.data?.json() ?? {}; } catch {}
 
-  const title = data.title ?? "Cine App";
+  const title = data.title ?? "Laterna";
   const options = {
     body: data.body ?? "",
     icon: data.icon ?? "/icon-192.png",

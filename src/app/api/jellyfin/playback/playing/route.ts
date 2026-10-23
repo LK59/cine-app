@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { isJellyfinId } from "@/lib/jellyfinPath";
-import { PLAYBACK_CLIENTS, isPlaybackClient } from "@/lib/playbackClients";
+import { PLAYBACK_CLIENTS, currentPlaybackClient } from "@/lib/playbackClients";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { shareRefusal } from "@/lib/share/guard";
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   const playSessionId = body?.playSessionId as string | undefined;
   const mediaSourceId = body?.mediaSourceId as string | undefined;
   const playMethod = (body?.playMethod as "DirectPlay" | "DirectStream" | "Transcode" | undefined) ?? "DirectPlay";
-  const client = isPlaybackClient(body?.client) ? body.client : PLAYBACK_CLIENTS.stable;
+  const client = currentPlaybackClient(body?.client) ?? PLAYBACK_CLIENTS.stable;
   if (!isJellyfinId(itemId) || !playSessionId || !mediaSourceId) {
     return NextResponse.json({ error: "Paramètres invalides" }, { status: 400 });
   }

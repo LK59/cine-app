@@ -142,7 +142,7 @@
     "allQualities": "Toutes les qualités",
     "notDownloaded": "Non téléchargé",
     "installPrompt": {
-      "title": "Installer CineApp",
+      "title": "Installer Laterna",
       "body": "Ajoutez l'app à votre écran d'accueil pour activer les notifications et un lancement plus rapide.",
       "steps": "Appuyez sur Partager, puis \"Sur l'écran d'accueil\".",
       "dismiss": "Plus tard"
@@ -413,8 +413,8 @@
       },
       "watched": "{d} regardé",
       "legacy": "reconstituée",
-      "serverPlayer": "Lecteur serveur",
-      "nativePlayer": "Lecteur natif ({path})",
+      "serverPlayer": "Lecteur serveur · PlaybackBridge",
+      "nativePlayer": "Lumen · lecteur natif ({path})",
       "watchedLabel": "Regardé",
       "endedAt": "arrêt à {at} · {why}",
       "waitsHint": "{d} au total · la plus longue {max}",
@@ -1127,13 +1127,13 @@
       "tmdb": "TMDB",
       "multiSource": "Multi-source",
       "system": "Système",
-      "jellyfinApi": "API Jellyfin (CineApp)"
+      "jellyfinApi": "API Jellyfin (Laterna)"
     },
     "capabilitiesTitle": "Ce qui fonctionne en ce moment",
     "basedOn": "Basé sur",
     "capabilities": {
       "watchJellyfin": "Regarder via Jellyfin",
-      "watchCineApp": "Regarder via CineApp",
+      "watchCineApp": "Regarder via Laterna",
       "auth": "Authentification",
       "movieLibrary": "Gestion des films",
       "seriesLibrary": "Gestion des séries",
@@ -1936,7 +1936,19 @@
         "stream": "Le flux",
         "device": "Ce que l'appareil accepte",
         "served": "Diffusé",
-        "fileOriginal": "Le fichier d'origine"
+        "fileOriginal": "Le fichier d'origine",
+        "decode": "Le décodage",
+        "buffers": "Les tampons",
+        "playback": "La lecture"
+      },
+      "engineRoles": {
+        "PlaybackCore": "orchestration",
+        "MuxCore": "remux et conteneurs",
+        "AudioCore": "décodage audio",
+        "BufferCore": "gestion des tampons",
+        "StreamCore": "réseau et lecture des octets",
+        "CodecBridge": "compatibilité des codecs",
+        "PlaybackBridge": "repli de lecture (lecteur serveur)"
       },
       "range": "Plage",
       "tracks": "Pistes",
@@ -2462,8 +2474,8 @@
       "panelHint": "Ce qui se regarde sans réseau, sur cet appareil.",
       "entryOnline": "Lu depuis cet appareil",
       "entryOffline": "Hors ligne · lu depuis cet appareil",
-      "openApp": "Ouvrir Cine App",
-      "entryNoAccount": "Aucun téléchargement à montrer ici. Ouvrez Cine App avec du réseau et connectez-vous : vos téléchargements y apparaîtront, puis ici.",
+      "openApp": "Ouvrir Laterna",
+      "entryNoAccount": "Aucun téléchargement à montrer ici. Ouvrez Laterna avec du réseau et connectez-vous : vos téléchargements y apparaîtront, puis ici.",
       "accessDownloads": "Accéder aux téléchargements",
       "pause": "Mettre en pause",
       "resumeDownload": "Reprendre le téléchargement",
@@ -2948,11 +2960,13 @@
     }
   },
   "signature": {
+    "poweredBy": "propulsé par {engine}",
+    "engineRole": "Moteur de lecture",
     "by": "par",
     "sourceLink": "Code source sur GitHub (nouvel onglet)"
   },
   "setup": {
-    "title": "Bienvenue dans CineApp",
+    "title": "Bienvenue dans Laterna",
     "subtitle": "Quelques réglages, et votre cinéma est prêt.",
     "progress": "Étape {n} sur {total}",
     "steps": {
@@ -2966,7 +2980,7 @@
       "finish": "Terminer"
     },
     "welcome": {
-      "text": "Cet assistant vous guide pour brancher CineApp sur vos services. Il reste ouvert tant que vous n'avez pas cliqué sur « Terminer » : vous pouvez le quitter et y revenir.",
+      "text": "Cet assistant vous guide pour brancher Laterna sur vos services. Il reste ouvert tant que vous n'avez pas cliqué sur « Terminer » : vous pouvez le quitter et y revenir.",
       "language": "Langue de l'interface",
       "urls": "Les adresses demandées sont vues depuis le conteneur : sur un réseau Docker partagé, utilisez le nom du conteneur (http://radarr:7878) ; sinon l'adresse IP du serveur. « localhost » désigne le conteneur lui-même.",
       "env": "Une valeur déjà présente dans votre .env remplit le champ automatiquement."
@@ -3278,7 +3292,7 @@
   },
   "news": {
     "title": "Nouveautés",
-    "subtitle": "CineApp {version}",
+    "subtitle": "Laterna {version}",
     "improvements": "Améliorations",
     "fixesTitle": "Optimisations et corrections de bugs",
     "seeMore": "Voir plus",
@@ -3288,7 +3302,7 @@
     "publishedOn": "Publiée le {date}",
     "empty": "Aucune nouveauté pour l'instant.",
     "loadError": "Impossible de charger les nouveautés.",
-    "accountHint": "Ce qui a changé dans CineApp, version par version.",
+    "accountHint": "Ce qui a changé dans Laterna, version par version.",
     "open": "Voir"
   },
   "config": {

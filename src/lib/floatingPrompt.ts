@@ -1,5 +1,5 @@
 /**
- * Où se posent les bannières flottantes du bas de l'écran — « Installer CineApp » et « Réactiver les
+ * Où se posent les bannières flottantes du bas de l'écran — « Installer Laterna » et « Réactiver les
  * notifications » : au-dessus de la barre du bas du cinéma, jamais dessus.
  *
  * Posées au bord de l'écran, elles recouvraient exactement la pilule : Accueil, Recherche, Ma liste

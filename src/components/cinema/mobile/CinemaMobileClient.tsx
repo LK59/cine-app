@@ -78,6 +78,7 @@ import type { PlayerDiscoverPayload, DiscoveryItem } from "@/app/api/player/disc
 import type { CinemaNextUpPayload } from "@/app/api/cinema/next-up/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { ProgressFill } from "@/components/cinema/ProgressFill";
+import { APP_NAME } from "@/lib/appBuild";
 import { episodeStartFrom, movieStartFrom, useContinueRow, type CinemaResumeItem, type ShownContinueEntry } from "@/lib/useContinueRow";
 import { useArrivalFade } from "@/lib/useArrivalFade";
 
@@ -646,7 +647,7 @@ export function CinemaMobileClient() {
           <Clapperboard size={16} className="shrink-0 text-brand" />
           {/* Le nom cède la place quand il n'y en a pas : il était coupé en « C. » sur un iPhone SE
               tant que deux ronds tenaient la droite (07/10/2026). Le logo seul suffit à le dire. */}
-          <span className="truncate font-display text-sm font-semibold tracking-tight max-[340px]:hidden">Cine App</span>
+          <span className="truncate font-display text-sm font-semibold tracking-tight max-[340px]:hidden">{APP_NAME}</span>
         </button>
 
         {/* Au centre, et non plus poussés à gauche : ce sont les deux onglets de la bibliothèque,

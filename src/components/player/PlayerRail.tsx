@@ -10,6 +10,7 @@ import { inHiddenTab } from "@/lib/keptTabs";
 import { useRef } from "react";
 import { useLiquidLens } from "@/lib/liquidGlass/useLiquidLens";
 import type { PlayerPanel } from "./playerNav";
+import { APP_NAME } from "@/lib/appBuild";
 
 /**
  * Le rail du lecteur — desktop.
@@ -106,7 +107,7 @@ export function PlayerRail() {
       {/* Le logo seul, posé sur l'axe de la pilule : un repère, pas une entrée. Le nom reste dit. */}
       <div className="flex h-16 items-center justify-center">
         <Clapperboard size={22} className="text-brand" aria-hidden />
-        <span className="sr-only">Cine App</span>
+        <span className="sr-only">{APP_NAME}</span>
       </div>
 
       <div ref={railRef} className="player-rail nav-glass pointer-events-auto absolute left-0 top-1/2 flex -translate-y-1/2 flex-col gap-1 overflow-hidden p-1">

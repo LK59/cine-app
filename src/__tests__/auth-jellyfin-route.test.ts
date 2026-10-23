@@ -61,7 +61,7 @@ describe("POST /api/auth/jellyfin", () => {
     await POST(fakeReq({ username: "louis", password: "x" }, { "user-agent": ipad, "x-cine-touch": "1" }));
     const auth = ((vi.mocked(global.fetch).mock.calls[0][1] as RequestInit).headers as Record<string, string>).Authorization;
     expect(auth).toContain('Device="iPad%20%C2%B7%20Safari"');
-    expect(auth).toContain('Client="CineApp"');
+    expect(auth).toContain('Client="Laterna"');
     expect(auth).not.toContain("Server");
     // Le même libellé va à la session (panneau Compte) — et donc au journal des connexions.
     expect(mockSessionDb.create).toHaveBeenCalledWith("jti-1", "jf-1", "iPad · Safari", expect.stringMatching(/^cine-app-/));

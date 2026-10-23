@@ -1,3 +1,4 @@
+import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
@@ -149,7 +150,7 @@ const shared = globalThis as typeof globalThis & { [LIVE_KEY]?: Live };
 const live: Live = (shared[LIVE_KEY] ??= { running: new Map(), indexes: new Map(), timers: [], started: false });
 live.indexes ??= new Map();
 
-const identity = () => ({ client: "CineApp", device: "Téléchargements", deviceId: DEVICE_ID, version: APP_VERSION });
+const identity = () => ({ client: PLAYBACK_CLIENTS.stable, device: "Téléchargements", deviceId: DEVICE_ID, version: APP_VERSION });
 
 export class OfflineRefusal extends Error {
   constructor(

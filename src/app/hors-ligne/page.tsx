@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { OfflineEntryScreen } from "@/components/offline/OfflineEntryScreen";
+import { APP_NAME } from "@/lib/appBuild";
 
 /**
  * L'entrée hors ligne des téléchargements (bêta, DECISIONS.md §109).
@@ -14,7 +15,7 @@ import { OfflineEntryScreen } from "@/components/offline/OfflineEntryScreen";
  * ici il n'y a que la racine — les traductions, `PlaybackProvider` et le lecteur, ce qu'il faut pour
  * lire un fichier de l'appareil, et rien qui attende le serveur.
  */
-export const metadata: Metadata = { title: "Cine App" };
+export const metadata: Metadata = { title: APP_NAME };
 
 export default function OfflineEntryPage() {
   return <OfflineEntryScreen />;

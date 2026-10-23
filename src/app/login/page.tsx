@@ -9,6 +9,7 @@ import { hardNavigate, nextWithFragment, safeNextPath } from "@/lib/signOut";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { AppSignature } from "@/components/AppSignature";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
+import { APP_NAME } from "@/lib/appBuild";
 
 export default function LoginPage() {
   return (
@@ -102,7 +103,7 @@ function LoginForm() {
               dit que l'écran n'est pas passé en niveaux de gris (10/10/2026). */}
           {/* eslint-disable-next-line @next/next/no-img-element -- l’icône de l’application (PWA et écran de lancement), servie sans session (ACTIFS_PUBLICS), rien à optimiser */}
           <img src="/icon-512.png" alt="" width={64} height={64} className="mb-4 h-16 w-16 rounded-2xl" />
-          <h1 className="font-display text-3xl font-bold tracking-tight text-white">Cine App</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-white">{APP_NAME}</h1>
           <p className="mt-2 text-sm text-slate-400">{t("auth.tagline")}</p>
         </div>
 

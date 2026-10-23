@@ -5,6 +5,7 @@ import { verifySessionFull } from "@/lib/session";
 import { isShareCode, sharesDb } from "@/lib/share/store";
 import { ShareRedeemForm } from "@/components/shareGuest/ShareRedeemForm";
 import { ShareTitleView } from "@/components/shareGuest/ShareTitleView";
+import { APP_NAME } from "@/lib/appBuild";
 
 /**
  * La page d'un lien de partage (DECISIONS.md §112) — `/partage/<code>`.
@@ -17,7 +18,7 @@ import { ShareTitleView } from "@/components/shareGuest/ShareTitleView";
  * Une session de partage d'un autre lien, ou un compte du foyer, reçoit le formulaire : entrer ce code
  * remplacera sa session sur cet appareil, et le formulaire prévient un compte du foyer avant.
  */
-export const metadata: Metadata = { title: "Cine App", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: APP_NAME, robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 export default async function SharePage({ params }: { params: Promise<{ code: string }> }) {

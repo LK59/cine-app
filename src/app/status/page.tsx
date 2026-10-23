@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Clapperboard } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { CapabilitySection } from "@/components/CapabilityStatus";
+import { APP_NAME } from "@/lib/appBuild";
 
 // Standalone — deliberately outside the (dashboard) route group, so it renders with none of
 // the Sidebar/MobileNav chrome that assumes a logged-in session. Reachable without logging in
@@ -60,7 +61,7 @@ function StatusScreen({ back }: { back: string }) {
               <Clapperboard size={22} />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-white">Cine App</h1>
+              <h1 className="text-lg font-semibold text-white">{APP_NAME}</h1>
               <p className="text-xs text-slate-400">{t('health.pageTitle')}</p>
             </div>
           </div>

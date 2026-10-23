@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
 <meta name="color-scheme" content="dark" />
-<title>Cine App</title>
+<title>Laterna</title>
 <!--
   La page « Pas de connexion », servie par le service worker quand une navigation échoue.
 
@@ -78,7 +78,7 @@
   <main class="wrap">
     <div id="spinner" class="spinner" hidden></div>
     <h1 id="title">Pas de connexion</h1>
-    <p id="text">Cine App n'a pas pu joindre le serveur. Vérifiez votre connexion réseau et réessayez.</p>
+    <p id="text">Laterna n'a pas pu joindre le serveur. Vérifiez votre connexion réseau et réessayez.</p>
     <button id="downloads" type="button" hidden>Accéder aux téléchargements</button>
     <button id="retry" type="button">Réessayer</button>
     <p id="waiting" class="waiting">La page reviendra d'elle-même dès que le serveur répondra.</p>
@@ -88,39 +88,39 @@
     var TEXTS = {
       fr: {
         title: "Pas de connexion",
-        text: "Cine App n'a pas pu joindre le serveur. Vérifiez votre connexion réseau et réessayez.",
+        text: "Laterna n'a pas pu joindre le serveur. Vérifiez votre connexion réseau et réessayez.",
         retry: "Réessayer",
         waiting: "La page reviendra d'elle-même dès que le serveur répondra.",
         downloads: "Accéder aux téléchargements",
         waitTitle: "Le serveur tarde à répondre",
-        waitText: "Cine App s'ouvrira dès qu'il répondra. En attendant, vos téléchargements sont sur cet appareil."
+        waitText: "Laterna s'ouvrira dès qu'il répondra. En attendant, vos téléchargements sont sur cet appareil."
       },
       en: {
         title: "No connection",
-        text: "Cine App couldn't reach the server. Check your network connection and try again.",
+        text: "Laterna couldn't reach the server. Check your network connection and try again.",
         retry: "Try again",
         waiting: "This page will come back on its own as soon as the server answers.",
         downloads: "Go to downloads",
         waitTitle: "The server is slow to respond",
-        waitText: "Cine App will open as soon as it answers. In the meantime, your downloads are on this device."
+        waitText: "Laterna will open as soon as it answers. In the meantime, your downloads are on this device."
       },
       es: {
         title: "Sin conexión",
-        text: "Cine App no ha podido contactar con el servidor. Comprueba tu conexión de red e inténtalo de nuevo.",
+        text: "Laterna no ha podido contactar con el servidor. Comprueba tu conexión de red e inténtalo de nuevo.",
         retry: "Reintentar",
         waiting: "La página volverá sola en cuanto el servidor responda.",
         downloads: "Ir a las descargas",
         waitTitle: "El servidor tarda en responder",
-        waitText: "Cine App se abrirá en cuanto responda. Mientras tanto, tus descargas están en este dispositivo."
+        waitText: "Laterna se abrirá en cuanto responda. Mientras tanto, tus descargas están en este dispositivo."
       },
       de: {
         title: "Keine Verbindung",
-        text: "Cine App konnte den Server nicht erreichen. Prüfen Sie Ihre Netzwerkverbindung und versuchen Sie es erneut.",
+        text: "Laterna konnte den Server nicht erreichen. Prüfen Sie Ihre Netzwerkverbindung und versuchen Sie es erneut.",
         retry: "Erneut versuchen",
         waiting: "Die Seite kommt von selbst zurück, sobald der Server antwortet.",
         downloads: "Zu den Downloads",
         waitTitle: "Der Server antwortet nur langsam",
-        waitText: "Cine App öffnet sich, sobald er antwortet. Bis dahin sind Ihre Downloads auf diesem Gerät."
+        waitText: "Laterna öffnet sich, sobald er antwortet. Bis dahin sind Ihre Downloads auf diesem Gerät."
       }
     };
 
@@ -138,7 +138,7 @@
     var lang = pickLang();
     var t = TEXTS[lang];
     document.documentElement.lang = lang;
-    document.title = "Cine App — " + t.title;
+    document.title = "Laterna — " + t.title;
     ["title", "text", "retry", "waiting", "downloads"].forEach(function (id) {
       document.getElementById(id).textContent = t[id];
     });
@@ -188,7 +188,7 @@
       document.getElementById("waiting").hidden = false;
       document.getElementById("title").textContent = t.title;
       document.getElementById("text").textContent = t.text;
-      document.title = "Cine App — " + t.title;
+      document.title = "Laterna — " + t.title;
     }
     if (waitingMode) {
       document.getElementById("spinner").hidden = false;
@@ -196,7 +196,7 @@
       document.getElementById("waiting").hidden = true;
       document.getElementById("title").textContent = t.waitTitle;
       document.getElementById("text").textContent = t.waitText;
-      document.title = "Cine App — " + t.waitTitle;
+      document.title = "Laterna — " + t.waitTitle;
       fetch("/__sw/attente?url=" + encodeURIComponent(String(location.href).split("#")[0]), { cache: "no-store" })
         .then(function (res) {
           return res.json();

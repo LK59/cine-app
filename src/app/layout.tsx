@@ -34,6 +34,7 @@ import { ClientErrorListener } from "@/components/ClientErrorListener";
 import { RemoteControlSupport } from "@/components/RemoteControlSupport";
 import { PresencePinger } from "@/components/PresencePinger";
 import { ShareModeProvider } from "@/components/ShareMode";
+import { APP_NAME } from "@/lib/appBuild";
 
 // Portrait iOS splash screens, keyed by CSS width/height/DPR so Safari picks
 // the right one for the device at launch (avoids the blank flash).
@@ -80,7 +81,7 @@ const SPLASH_SCREENS: { width: number; height: number; dpr: number }[] = [
 ];
 
 export const metadata: Metadata = {
-  title: "Cine App",
+  title: APP_NAME,
   // Ce que voit quelqu'un à qui on partage le lien, et ce que l'écran de connexion dit déjà.
   description: "Vos films et vos séries.",
   manifest: "/manifest.json",
@@ -94,7 +95,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Cine App",
+    title: APP_NAME,
   },
 };
 

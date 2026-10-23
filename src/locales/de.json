@@ -142,7 +142,7 @@
     "allQualities": "Alle Qualitäten",
     "notDownloaded": "Nicht heruntergeladen",
     "installPrompt": {
-      "title": "CineApp installieren",
+      "title": "Laterna installieren",
       "body": "Fügen Sie die App zum Home-Bildschirm hinzu, um Benachrichtigungen und einen schnelleren Start zu aktivieren.",
       "steps": "Tippen Sie auf Teilen, dann auf \"Zum Home-Bildschirm\".",
       "dismiss": "Später"
@@ -413,8 +413,8 @@
       },
       "watched": "{d} geschaut",
       "legacy": "rekonstruiert",
-      "serverPlayer": "Server-Player",
-      "nativePlayer": "Nativer Player ({path})",
+      "serverPlayer": "Server-Player · PlaybackBridge",
+      "nativePlayer": "Lumen · nativer Player ({path})",
       "watchedLabel": "Geschaut",
       "endedAt": "gestoppt bei {at} · {why}",
       "waitsHint": "{d} insgesamt · längste {max}",
@@ -1127,13 +1127,13 @@
       "tmdb": "TMDB",
       "multiSource": "Multi-Quelle",
       "system": "System",
-      "jellyfinApi": "Jellyfin-API (CineApp)"
+      "jellyfinApi": "Jellyfin-API (Laterna)"
     },
     "capabilitiesTitle": "Was gerade funktioniert",
     "basedOn": "Basiert auf",
     "capabilities": {
       "watchJellyfin": "Ansehen über Jellyfin",
-      "watchCineApp": "Ansehen über CineApp",
+      "watchCineApp": "Ansehen über Laterna",
       "auth": "Authentifizierung",
       "movieLibrary": "Filmverwaltung",
       "seriesLibrary": "Serienverwaltung",
@@ -1936,7 +1936,19 @@
         "stream": "Der Datenstrom",
         "device": "Was dieses Gerät akzeptiert",
         "served": "Übertragen",
-        "fileOriginal": "Die Originaldatei"
+        "fileOriginal": "Die Originaldatei",
+        "decode": "Die Dekodierung",
+        "buffers": "Die Puffer",
+        "playback": "Die Wiedergabe"
+      },
+      "engineRoles": {
+        "PlaybackCore": "Orchestrierung",
+        "MuxCore": "Remux und Container",
+        "AudioCore": "Audiodekodierung",
+        "BufferCore": "Pufferverwaltung",
+        "StreamCore": "Netzwerk und Byte-Lesen",
+        "CodecBridge": "Codec-Kompatibilität",
+        "PlaybackBridge": "Wiedergabe-Ausweichweg (Server-Player)"
       },
       "range": "Bereich",
       "tracks": "Spuren",
@@ -2462,8 +2474,8 @@
       "panelHint": "Was sich ohne Netz ansehen lässt, auf diesem Gerät.",
       "entryOnline": "Von diesem Gerät abgespielt",
       "entryOffline": "Offline · von diesem Gerät abgespielt",
-      "openApp": "Cine App öffnen",
-      "entryNoAccount": "Hier gibt es keine Downloads. Öffnen Sie Cine App mit Netzverbindung und melden Sie sich an: Ihre Downloads erscheinen dort und dann hier.",
+      "openApp": "Laterna öffnen",
+      "entryNoAccount": "Hier gibt es keine Downloads. Öffnen Sie Laterna mit Netzverbindung und melden Sie sich an: Ihre Downloads erscheinen dort und dann hier.",
       "accessDownloads": "Zu den Downloads",
       "pause": "Pausieren",
       "resumeDownload": "Download fortsetzen",
@@ -2948,11 +2960,13 @@
     }
   },
   "signature": {
+    "poweredBy": "angetrieben von {engine}",
+    "engineRole": "Wiedergabe-Engine",
     "by": "von",
     "sourceLink": "Quellcode auf GitHub (neuer Tab)"
   },
   "setup": {
-    "title": "Willkommen bei CineApp",
+    "title": "Willkommen bei Laterna",
     "subtitle": "Ein paar Einstellungen, und Ihr Kino ist bereit.",
     "progress": "Schritt {n} von {total}",
     "steps": {
@@ -2966,7 +2980,7 @@
       "finish": "Fertig"
     },
     "welcome": {
-      "text": "Dieser Assistent hilft Ihnen, CineApp mit Ihren Diensten zu verbinden. Er bleibt offen, bis Sie auf „Fertigstellen“ klicken: Sie können ihn verlassen und zurückkehren.",
+      "text": "Dieser Assistent hilft Ihnen, Laterna mit Ihren Diensten zu verbinden. Er bleibt offen, bis Sie auf „Fertigstellen“ klicken: Sie können ihn verlassen und zurückkehren.",
       "language": "Sprache der Oberfläche",
       "urls": "Adressen werden aus dem Container heraus gesehen: In einem gemeinsamen Docker-Netzwerk den Containernamen (http://radarr:7878), sonst die IP-Adresse des Servers. „localhost“ bezeichnet den Container selbst.",
       "env": "Ein Wert, der bereits in Ihrer .env steht, füllt sein Feld automatisch."
@@ -3278,7 +3292,7 @@
   },
   "news": {
     "title": "Neuigkeiten",
-    "subtitle": "CineApp {version}",
+    "subtitle": "Laterna {version}",
     "improvements": "Verbesserungen",
     "fixesTitle": "Optimierungen und Fehlerbehebungen",
     "seeMore": "Mehr anzeigen",
@@ -3288,7 +3302,7 @@
     "publishedOn": "Veröffentlicht am {date}",
     "empty": "Noch keine Neuigkeiten.",
     "loadError": "Neuigkeiten konnten nicht geladen werden.",
-    "accountHint": "Was sich in CineApp geändert hat, Version für Version.",
+    "accountHint": "Was sich in Laterna geändert hat, Version für Version.",
     "open": "Ansehen"
   },
   "config": {

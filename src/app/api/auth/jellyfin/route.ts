@@ -1,3 +1,4 @@
+import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { revokeJellyfinDevices } from "@/lib/jellyfinRevoke";
 import { NextRequest, NextResponse } from "next/server";
 import { jellyfinDeviceName, requestDeviceLabel } from "@/lib/deviceLabel";
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
           "Content-Type": "application/json",
           // Le vrai nom de l'appareil, plus « Server » : le tableau de bord de Jellyfin montrait
           // tous les comptes sur un même appareil anonyme (29/09/2026).
-          Authorization: jellyfinIdentityAuth({ client: "CineApp", device: jellyfinDeviceName(device), deviceId, version: APP_VERSION }),
+          Authorization: jellyfinIdentityAuth({ client: PLAYBACK_CLIENTS.stable, device: jellyfinDeviceName(device), deviceId, version: APP_VERSION }),
         },
         body: JSON.stringify({ Username: username, Pw: candidate }),
         signal: upstreamSignal(JELLYFIN_AUTH_TIMEOUT_MS),

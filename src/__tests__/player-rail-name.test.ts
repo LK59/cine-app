@@ -7,7 +7,7 @@ import path from "node:path";
 describe("le rail du cinéma", () => {
   it("porte le nom entier de l'application", () => {
     const src = fs.readFileSync(path.resolve(__dirname, "../components/player/PlayerRail.tsx"), "utf8");
-    expect(src).toMatch(/>\s*Cine App\s*</);
+    expect(src).toMatch(/>\s*\{APP_NAME\}\s*</);
     expect(src).not.toMatch(/>\s*Cine\s*</);
   });
 });

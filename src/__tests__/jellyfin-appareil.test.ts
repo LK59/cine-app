@@ -121,14 +121,14 @@ describe("l'en-tête des rapports de lecture", () => {
   // connexion. Sans risque d'éviction — voir playbackDevice.ts pour la preuve dans le source.
   it("s'annonce sous l'appareil de la connexion et son vrai nom", async () => {
     const { jellyfin } = await import("@/lib/clients/jellyfin");
-    await jellyfin.reportPlaybackProgress("u1", "item", "jeton", "ps", "ms", 1, "DirectPlay", "CineEngine By CineApp", false, {
+    await jellyfin.reportPlaybackProgress("u1", "item", "jeton", "ps", "ms", 1, "DirectPlay", "Lumen by Laterna", false, {
       name: "iPad · Safari",
       id: "cine-app-1234",
     });
     const auth = sentAuth();
     expect(auth).toContain('DeviceId="cine-app-1234"');
     expect(auth).toContain('Device="iPad%20%C2%B7%20Safari"');
-    expect(auth).toContain('Client="CineEngine By CineApp"');
+    expect(auth).toContain('Client="Lumen by Laterna"');
     expect(auth).not.toContain('Device="Navigateur"');
     expect(auth).not.toContain("Server");
   });
@@ -136,17 +136,17 @@ describe("l'en-tête des rapports de lecture", () => {
   it("les deux lecteurs gardent le même appareil : Jellyfin les distingue par leur nom de client", async () => {
     const { jellyfin } = await import("@/lib/clients/jellyfin");
     const device = { name: "Mac · Chrome", id: "cine-app-1234" };
-    await jellyfin.reportPlaybackStart("u1", "item", "jeton", "ps", "ms", "Transcode", "CineApp", device);
-    await jellyfin.reportPlaybackStopped("u1", "item", "jeton", "ps", "ms", 0, "CineEngine By CineApp", device);
+    await jellyfin.reportPlaybackStart("u1", "item", "jeton", "ps", "ms", "Transcode", "Laterna", device);
+    await jellyfin.reportPlaybackStopped("u1", "item", "jeton", "ps", "ms", 0, "Lumen by Laterna", device);
     const auths = vi.mocked(global.fetch).mock.calls.map((c) => ((c[1] as RequestInit).headers as Record<string, string>).Authorization);
     expect(auths.every((a) => a.includes('DeviceId="cine-app-1234"'))).toBe(true);
-    expect(auths[0]).toContain('Client="CineApp"');
-    expect(auths[1]).toContain('Client="CineEngine By CineApp"');
+    expect(auths[0]).toContain('Client="Laterna"');
+    expect(auths[1]).toContain('Client="Lumen by Laterna"');
   });
 
   it("sans appareil connu (session ancienne), garde l'identifiant par compte d'avant", async () => {
     const { jellyfin } = await import("@/lib/clients/jellyfin");
-    await jellyfin.reportPlaybackStopped("u1", "item", "jeton", "ps", "ms", 0, "CineEngine By CineApp", { name: "Navigateur", id: null });
+    await jellyfin.reportPlaybackStopped("u1", "item", "jeton", "ps", "ms", 0, "Lumen by Laterna", { name: "Navigateur", id: null });
     expect(sentAuth()).toContain('DeviceId="cine-engine-u1"');
   });
 });

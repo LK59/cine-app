@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { isJellyfinId } from "@/lib/jellyfinPath";
-import { PLAYBACK_CLIENTS, isPlaybackClient } from "@/lib/playbackClients";
+import { PLAYBACK_CLIENTS, currentPlaybackClient } from "@/lib/playbackClients";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { shareRefusal } from "@/lib/share/guard";
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   const playMethod = (body?.playMethod as "DirectPlay" | "DirectStream" | "Transcode" | undefined) ?? "Transcode";
   // Chosen by the browser, so matched against the two names this app plays under rather than
   // passed through: it lands in Jellyfin's session list and its history.
-  const client = isPlaybackClient(body?.client) ? body.client : PLAYBACK_CLIENTS.stable;
+  const client = currentPlaybackClient(body?.client) ?? PLAYBACK_CLIENTS.stable;
   const isPaused = body?.isPaused === true;
 
   if (!isJellyfinId(itemId) || !playSessionId || !mediaSourceId || !Number.isFinite(positionTicks)) {

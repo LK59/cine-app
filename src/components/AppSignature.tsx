@@ -1,18 +1,19 @@
 "use client";
 
-import { APP_AUTHOR, APP_NAME, APP_REPOSITORY_URL, APP_VERSION, displayVersion } from "@/lib/appBuild";
+import { APP_AUTHOR, APP_NAME, APP_REPOSITORY_URL, APP_VERSION, ENGINE_NAME, displayVersion } from "@/lib/appBuild";
 import { useT } from "@/components/TranslationProvider";
 
 /**
- * « CineApp 8.1 by LK59 · GitHub » — la signature, en une ligne discrète.
+ * « Laterna 9.4 par LK59 · propulsé par Lumen · GitHub » — la signature, en une ligne discrète.
  *
  * Un seul composant pour ses trois emplacements (DECISIONS.md §41) : le bas du panneau Compte du
  * cinéma, la page de connexion, le bas du menu de la gestion (barre latérale au bureau, feuille
  * « Plus » sur téléphone). Écrite à la main à trois endroits, elle aurait fini par annoncer trois
  * versions différentes — c'est exactement ainsi que Jellyfin a affiché « 1.0.0 » pendant des mois.
  *
- * Seul « by » se traduit (« par », « por », « von » — `signature.by`) ; le nom, l'auteur et
- * « GitHub » sont des noms propres et restent tels quels. La version suit chaque build (`APP_VERSION`, lue dans `package.json`) et vaut « dev » hors build. Rien ici
+ * Seuls « by » et « powered by » se traduisent (`signature.by`, `signature.poweredBy`) ; le nom,
+ * le moteur, l'auteur et « GitHub » sont des noms propres et restent tels quels. Le rôle du moteur
+ * (« Moteur de lecture », `signature.engineRole`) est son info-bulle : la ligne reste courte. La version suit chaque build (`APP_VERSION`, lue dans `package.json`) et vaut « dev » hors build. Rien ici
  * n'est secret : la page de connexion est publique, et la version se lit déjà dans `/sw.js?v=`.
  *
  * La couleur est la plus pâle de l'interface : cette ligne ne doit jamais attirer l'œil avant ce
@@ -23,6 +24,8 @@ export function AppSignature({ className = "" }: { className?: string }) {
   return (
     <p className={`text-[11px] leading-5 text-white/30 ${className}`} data-app-signature>
       {APP_NAME} {displayVersion(APP_VERSION)} {t("signature.by")} {APP_AUTHOR}{" "}
+      <span aria-hidden>·</span>{" "}
+      <span title={t("signature.engineRole")}>{t("signature.poweredBy", { engine: ENGINE_NAME })}</span>{" "}
       <span aria-hidden>·</span>{" "}
       <a
         href={APP_REPOSITORY_URL}

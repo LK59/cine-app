@@ -16,7 +16,7 @@ import { OfflineDownloadsView } from "./OfflineDownloadsView";
  *
  * Le même contenu que le panneau du cinéma (`OfflineDownloadsView`), dans un cadre à lui : ni
  * barre, ni rail, ni fiche — rien ici ne peut attendre le serveur. Le compte est celui de la
- * session quand le serveur a rendu la page, sinon celui retenu sur l'appareil ; « Ouvrir Cine App »
+ * session quand le serveur a rendu la page, sinon celui retenu sur l'appareil ; « Ouvrir Laterna »
  * repart vers l'accueil, qui revient dès que le réseau répond.
  */
 

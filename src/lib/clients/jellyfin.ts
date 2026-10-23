@@ -3,7 +3,7 @@ import { withoutShareAccounts } from "@/lib/share/accounts";
 import type { PlaybackDevice } from "@/lib/playbackDevice";
 import type { NamedItem } from "@/lib/displayTitle";
 
-export { PLAYBACK_CLIENTS, isPlaybackClient, type PlaybackClient } from "@/lib/playbackClients";
+export { PLAYBACK_CLIENTS, isPlaybackClient, currentPlaybackClient, type PlaybackClient } from "@/lib/playbackClients";
 
 import { config } from "@/lib/config";
 import { fetchJson as fetchJsonRaw } from "@/lib/http";

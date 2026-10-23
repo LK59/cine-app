@@ -119,7 +119,7 @@ describe("l'ouverture", () => {
     await mount();
     await waitFor(() => expect(screen.getByText(/player.chromecast.playingOn/)).toBeTruthy());
     expect(screen.getByText(/Salon/)).toBeTruthy();
-    expect(sessionInfo.at(-1)).toMatchObject({ itemId: ITEM, playSessionId: "play-1", mediaSourceId: "src-1", client: "CineApp" });
+    expect(sessionInfo.at(-1)).toMatchObject({ itemId: ITEM, playSessionId: "play-1", mediaSourceId: "src-1", client: "Laterna" });
   });
 
   it("un chargement refusé par le récepteur : l'erreur dite, et la ligne au journal avec son code", async () => {

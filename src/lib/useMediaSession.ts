@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { APP_NAME } from "@/lib/appBuild";
 
 /**
  * Tells the system what is playing, and takes its buttons.
@@ -62,7 +63,7 @@ export function useMediaSession(info: MediaSessionInfo | null): void {
     try {
       media.metadata = new MediaMetadata({
         title: track,
-        artist: album || "Cine App",
+        artist: album || APP_NAME,
         album,
         artwork: artworkUrl ? [{ src: artworkUrl, sizes: "512x512", type: "image/jpeg" }] : [],
       });
