@@ -3647,8 +3647,9 @@
   },
   "passage": {
     "banner": {
-      "text": "Laterna tiene una nueva dirección",
-      "action": "Pasar",
+      "text": "CineApp ahora es Laterna",
+      "detail": "1 minuto · cuenta, ajustes y descargas te acompañan",
+      "action": "Ir",
       "close": "Cerrar"
     },
     "dialog": {

@@ -10,18 +10,11 @@ vi.mock("@/components/PlaybackProvider", () => ({ usePlaybackMode: () => passage
 vi.mock("@/components/passage/PassageDialog", () => ({ PassageDialog: () => <div data-testid="passage-dialog" /> }));
 
 import { PassageBanner } from "@/components/passage/PassageBanner";
-import {
-  PASSAGE_BANNER_CLOSED_KEY,
-  PASSAGE_BANNER_CLOSED_LEGACY_KEY,
-  PASSAGE_BANNER_GENERATION,
-  bannerClosedToday,
-  localDay,
-  openPassageFor,
-} from "@/lib/passage/client";
+import { PASSAGE_BANNER_CLOSED_KEYS, openPassageFor } from "@/lib/passage/client";
 
 /**
- * Le bandeau « Laterna a une nouvelle adresse — Passer » (DECISIONS.md §119) : sur l'ancienne adresse
- * seulement, refermé pour la journée, jamais pendant un film, absent sans réglage.
+ * Le bandeau « CineApp devient Laterna — Y aller » (DECISIONS.md §119) : sur l'ancienne adresse
+ * seulement, refermé pour ce lancement, jamais pendant un film, absent sans réglage.
  */
 beforeEach(() => {
   passage.target = "https://app.example.org";
@@ -44,79 +37,37 @@ describe("PassageBanner", () => {
     expect(screen.getByTestId("passage-dialog")).toBeTruthy();
   });
 
-  // 23/10/2026 (souhait du propriétaire) : refermé, il revient le lendemain, une fois par jour.
-  describe("une fois par jour", () => {
-    beforeEach(() => {
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(new Date(2026, 9, 23, 22, 30));
-    });
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+  // 24/10/2026 (souhait du propriétaire) : refermé, il revient au lancement suivant — plus rien
+  // n'est gardé sur l'appareil.
+  describe("à chaque lancement", () => {
     const relaunch = () => {
       cleanup();
       render(<PassageBanner />);
     };
 
-    it("fermé à la croix : caché aujourd'hui, de retour le lendemain", () => {
+    it("fermé à la croix : caché pour ce lancement, de retour au suivant", () => {
       render(<PassageBanner />);
       fireEvent.click(screen.getByLabelText("passage.banner.close"));
       expect(banner()).toBeNull();
-      expect(localStorage.getItem(PASSAGE_BANNER_CLOSED_KEY)).toBe("2026-10-23|2");
-      relaunch();
-      expect(banner()).toBeNull();
-      vi.setSystemTime(new Date(2026, 9, 23, 23, 59));
-      relaunch();
-      expect(banner()).toBeNull();
-      vi.setSystemTime(new Date(2026, 9, 24, 0, 1));
+      expect(localStorage.length).toBe(0);
       relaunch();
       expect(banner()).not.toBeNull();
     });
 
-    it("« Passer » vaut une fermeture pour la journée", () => {
+    it("« Y aller » vaut une fermeture pour ce lancement", () => {
       render(<PassageBanner />);
       fireEvent.click(screen.getByText("passage.banner.action"));
       expect(screen.getByTestId("passage-dialog")).toBeTruthy();
-      expect(localStorage.getItem(PASSAGE_BANNER_CLOSED_KEY)).toBe("2026-10-23|2");
-      relaunch();
       expect(banner()).toBeNull();
-      vi.setSystemTime(new Date(2026, 9, 25, 9, 0));
       relaunch();
       expect(banner()).not.toBeNull();
     });
 
-    it("une fermeture de la 10.0.0 (ancienne clé) ne cache plus rien, et l'ancienne clé est effacée", () => {
-      for (const old of ["1", String(Date.now() - 86_400_000 * 10), "2026-10-23"]) {
-        vi.setSystemTime(new Date(2026, 9, 23, 12, 0));
-        localStorage.setItem(PASSAGE_BANNER_CLOSED_LEGACY_KEY, old);
-        relaunch();
-        expect([old, banner() !== null]).toEqual([old, true]);
-        expect(localStorage.getItem(PASSAGE_BANNER_CLOSED_LEGACY_KEY)).toBeNull();
-        localStorage.clear();
-      }
-    });
-
-    // La génération (§119) : incrémenter `PASSAGE_BANNER_GENERATION` relance la proposition chez tous.
-    it("une fermeture d'une génération plus ancienne ne cache rien — celle de la 10.0.1, sans génération, comprise", () => {
-      vi.setSystemTime(new Date(2026, 9, 23, 12, 0));
-      for (const old of ["2026-10-23", "2026-10-23|1", `2026-10-23|${PASSAGE_BANNER_GENERATION - 1}`]) {
-        localStorage.setItem(PASSAGE_BANNER_CLOSED_KEY, old);
-        relaunch();
-        expect([old, banner() !== null]).toEqual([old, true]);
-      }
-      localStorage.setItem(PASSAGE_BANNER_CLOSED_KEY, `2026-10-23|${PASSAGE_BANNER_GENERATION}`);
+    it("une fermeture gardée par une 10.0.x ne cache rien, et ses clés sont effacées", () => {
+      for (const key of PASSAGE_BANNER_CLOSED_KEYS) localStorage.setItem(key, "2026-10-24|2");
       relaunch();
-      expect(banner()).toBeNull();
-    });
-
-    it("la règle seule : même jour et génération au moins égale", () => {
-      expect(bannerClosedToday(null, "2026-10-23", 2)).toBe(false);
-      expect(bannerClosedToday("2026-10-23|2", "2026-10-23", 2)).toBe(true);
-      expect(bannerClosedToday("2026-10-23|2", "2026-10-24", 2)).toBe(false);
-      expect(bannerClosedToday("2026-10-23|2", "2026-10-23", 3)).toBe(false);
-      expect(bannerClosedToday("2026-10-23", "2026-10-23", 1)).toBe(true);
-      expect(bannerClosedToday("2026-10-23", "2026-10-23", 2)).toBe(false);
-      expect(bannerClosedToday("2026-10-23|x", "2026-10-23", 2)).toBe(false);
+      expect(banner()).not.toBeNull();
+      for (const key of PASSAGE_BANNER_CLOSED_KEYS) expect(localStorage.getItem(key)).toBeNull();
     });
   });
 
@@ -142,8 +93,8 @@ describe("PassageBanner", () => {
   });
 
   it("le lien de la page Nouveautés vers la nouvelle adresse ouvre le passage, même bandeau refermé", () => {
-    localStorage.setItem(PASSAGE_BANNER_CLOSED_KEY, `${localDay()}|${PASSAGE_BANNER_GENERATION}`);
     render(<PassageBanner />);
+    fireEvent.click(screen.getByLabelText("passage.banner.close"));
     expect(banner()).toBeNull();
     let handled = false;
     act(() => {

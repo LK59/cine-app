@@ -6951,7 +6951,7 @@ coûte plus rien fait tomber les grands écrans à 4,9 ; un aplat en coûte 2,9.
 
 **Règle.** Sur l'ancienne adresse d'une installation qui en annonce une nouvelle (§118,
 `NEWS_LATERNA_ADDRESS`), un compte du foyer passe à la nouvelle sans mot de passe, connecté, avec les
-réglages de son appareil, et sans recevoir ses notifications deux fois. L'appui (« Passer » du bandeau,
+réglages de son appareil, et sans recevoir ses notifications deux fois. L'appui (« Y aller » du bandeau,
 ou l'adresse dans la carte « Une nouvelle adresse » des Nouveautés) demande au serveur **deux secrets à
 usage unique**, rangés hachés (SHA-256) dans `passages` : un **jeton** de 32 octets
 (`crypto.randomBytes`, deux minutes), placé dans le **fragment** de l'adresse ouverte
@@ -7044,19 +7044,15 @@ partagé).
 **Voulu.** Pas de nouvel appareil Jellyfin ni de Quick Connect. Le bandeau ne se montre que sur
 l'ancienne adresse, sous la barre du haut, jamais pendant un film ni tant que l'écran d'accueil du compte
 reste « à faire » (comme l'invitation aux notifications : « Passer » ne l'éteint pas) ; le lien des
-Nouveautés ouvre le passage même refermé. **Refermé, il revient le lendemain** (souhait du propriétaire,
-23/10/2026 — il se refermait pour de bon) : la croix, ou un appui sur « Passer », le cachent pour la
-journée, et il reparaît une fois par jour tant que l'appareil ouvre l'ancienne adresse.
-`cine:passage-banner-closed-day` garde le jour local de la fermeture **et la génération du bandeau**,
-`AAAA-MM-JJ|génération` (fuseau de l'appareil, `localDay`, `passageFlags.bannerClosed`,
-`bannerClosedToday`). **Relancer la proposition chez tout le monde** : il suffit d'incrémenter
-`PASSAGE_BANNER_GENERATION` (`src/lib/passage/client.ts`) — une fermeture d'une génération plus
-ancienne ne cache rien, sans changer de clé. Génération 1 : la 10.0.1 (sa valeur, sans `|`, se lit
-comme 1) ; génération 2 : les téléchargements suivent le passage (ci-dessous) — toute fermeture d'avant
-est oubliée. La clé de la 10.0.0, `cine:passage-banner-closed`, n'est jamais relue et s'efface au
-premier lancement. Lu au montage : un onglet laissé ouvert passé minuit attend le lancement suivant.
-Tests : `passage-banner.test.tsx` (fermé aujourd'hui, le lendemain, « Passer », ancienne clé oubliée,
-génération plus ancienne, la règle seule).
+Nouveautés ouvre le passage même refermé. **Refermé, il revient au lancement suivant** (souhait du
+propriétaire, 24/10/2026) : la croix, ou un appui sur « Y aller », le cachent pour la page en cours
+seulement, rien n'est gardé sur l'appareil. Il s'était d'abord refermé pour de bon (10.0.0), puis pour la
+journée (10.0.1 à 10.0.3, avec une génération pour le relancer) : le lendemain du lancement, un seul
+compte sur six avait passé. Les clés de ces versions (`PASSAGE_BANNER_CLOSED_KEYS`) ne sont plus relues
+et s'effacent au montage (`passageFlags.forgetBannerClosed`). Son texte dit l'ancien nom que porte encore
+l'icône de l'écran d'accueil (« CineApp devient Laterna ») et ce que le passage emporte ; « Passer » se
+lisait comme « ignorer » à côté de la croix. Tests : `passage-banner.test.tsx` (croix, « Y aller »,
+anciennes clés effacées).
 Depuis l'application installée, la nouvelle adresse s'ouvre dans le navigateur (`window.open`) ; sur
 iPhone, ce navigateur intégré n'est ni Safari ni l'application à venir, d'où le code et la phrase qui le
 dit.
@@ -7133,7 +7129,7 @@ compte sur cet appareil — terminés ou en cours (en préparation, en télécha
 échec) —, la nouvelle adresse propose de les **retélécharger** aux mêmes choix, et l'ancienne libère sa
 place **seulement quand le serveur atteste** que ce même compte les a récupérés de l'autre côté.
 
-**Au départ.** La fenêtre « Passer » (`collectPassageInput` → `collectPassageDownloads`) joint la liste
+**Au départ.** La fenêtre du passage (`collectPassageInput` → `collectPassageDownloads`) joint la liste
 à la demande (`POST /api/passage`, `downloads`) : par titre, l'identifiant Jellyfin, la qualité, le
 codec, la piste son, le titre, la taille attendue, l'année, la durée, les pistes nommées, et pour un
 épisode sa place dans la série (de quoi grouper la page des téléchargements avant toute réponse).
