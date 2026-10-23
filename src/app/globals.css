@@ -8,13 +8,18 @@
 @theme {
   --color-accent-50: rgb(var(--accent-50));
   --color-accent-100: rgb(var(--accent-100));
-  /* Le violet du logo — la couleur de marque, gardée hors de l'accent blanc (§83, 13/10/2026).
-     Il ne dit qu'une chose : « c'est à moi » — vu, dans ma liste, où j'en suis, ce qui m'attend
-     (§83, option B). Deux teintes : `brand` pour une coche, une icône ou une barre posée sur le
-     noir (7,2:1 sur `ink`, une barre de 3 px s'y lit) ; `brand-strong` pour un fond plein qui porte
-     un texte ou une icône blanche — `brand` sous du blanc ne fait que 2,8:1, `brand-strong` 4,9:1. */
-  --color-brand: rgb(155 140 255);
-  --color-brand-strong: rgb(110 90 230);
+  /* L'or de la lanterne — le faisceau du logo, gardé hors de l'accent blanc (§83 ; violet du
+     13/10 au 23/10/2026). Il ne dit qu'une chose : « c'est à moi » — vu, dans ma liste, où j'en
+     suis, ce qui m'attend (§83, option B). Deux teintes :
+     - `brand`, l'or plein, pour une coche, une icône, un point ou une barre posés sur le noir
+       (11,8:1 sur `ink`), et pour un fond plein qui porte une icône ou un chiffre **noir** (`text-ink`,
+       11,8:1). Jamais de blanc dessus : 1,7:1.
+     - `brand-strong`, un ambre sombre, là où l'or se pose sur du blanc — la barre de « Reprendre »
+       d'une ligne de menu sous le sélecteur blanc, le liseré de la pastille d'état (5,0:1 contre le
+       blanc, 3,9:1 sur `ink`). Un texte blanc y serait lisible (5,0:1), mais l'or plein à icône noire
+       est préféré : l'ambre brun sous du blanc paraît terne. */
+  --color-brand: rgb(251 191 36);
+  --color-brand-strong: rgb(180 83 9);
   --color-accent-400: rgb(var(--accent-400));
   --color-accent-500: rgb(var(--accent-500));
   --color-accent-600: rgb(var(--accent-600));
@@ -288,12 +293,12 @@
  * pas la place d'un texte à l'écran — et la moitié des `h2` de cette app sont des libellés de
  * carte, qui doivent rester en Inter.
  */
-/** Le faisceau : le dégradé du logo, violet → bleu, de gauche à droite (23/10/2026). Il ne peint que
-    la barre de progression des vignettes (`ProgressFill`) — décision de Louis : ni les boutons, ni
-    les marques « vu » / « à voir », ni la barre du lecteur, qui reste blanche (§83). Les deux
-    couleurs sont celles du logo ; violet 4,6:1 et bleu 9,2:1 sur `ink`. */
+/** Le faisceau : un dégradé or, ambre → or pâle, de gauche à droite (23/10/2026, l'or du logo). Il
+    ne peint que la barre de progression des vignettes (`ProgressFill`) — décision de Louis : ni les
+    boutons, ni les marques « vu » / « à voir », ni la barre du lecteur, qui reste blanche (§83).
+    Ambre 9,2:1 et or pâle 15,9:1 sur `ink`. */
 @utility bg-beam {
-  background-image: linear-gradient(to right, rgb(124 92 255), rgb(56 189 248));
+  background-image: linear-gradient(to right, rgb(245 158 11), rgb(253 230 138));
 }
 
 @utility font-display {
@@ -487,15 +492,17 @@
   @apply bg-accent-500/22 text-white;
 }
 
-/** Un ghost qui dit un état personnel — « dans ma liste », « vu » (§83, option B) : le voile violet
-    de la marque, et non le blanc de `btn-on`, qui reste celui d'une option retenue (onglet, vue). */
+/** Un ghost qui dit un état personnel — « dans ma liste », « vu » (§83, option B) : l'or plein de la
+    marque, texte et icône noirs (11,8:1 ; le blanc sur l'or ne ferait que 1,7:1), et non le blanc de
+    `btn-on`, qui reste celui d'une option retenue (onglet, vue). Jusqu'au 23/10/2026, un voile violet
+    sous un texte blanc. */
 @utility btn-mine {
-  @apply bg-brand-strong/50 text-white;
+  @apply bg-brand text-ink;
 }
 @media (hover: hover) {
   /* Après la règle de survol de `btn-ghost`, qui l'aurait sinon rendu gris sous le pointeur. */
   .btn-mine:hover:not(:disabled) {
-    @apply bg-brand-strong/65 text-white;
+    @apply bg-brand/85 text-ink;
   }
 }
 

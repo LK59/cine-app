@@ -35,13 +35,14 @@ describe("le menu d'une fiche en mode cinéma", () => {
 
   /**
    * Le fond ne marque plus « où l'on est » : il ne dit qu'un état déjà acquis — vu, dans ma
-   * liste —, et un état personnel est au violet de la marque (DECISIONS.md §83, option B) : un
-   * fond plein `brand-strong` et une icône blanche à elle, lisibles au repos comme sous le
-   * sélecteur blanc. Le blanc reste au repère de position.
+   * liste —, et un état personnel est à l'or de la marque (DECISIONS.md §83, option B) : un
+   * fond or plein `brand`, une icône noire à elle et un liseré `brand-strong`, lisibles au repos
+   * comme sous le sélecteur blanc. Le blanc reste au repère de position.
    */
-  it("garde le violet de la marque pour l'état, et le blanc pour le repère de position", () => {
+  it("garde l'or de la marque pour l'état, et le blanc pour le repère de position", () => {
     expect(MENU_ROW_INACTIVE).not.toContain("accent");
-    expect(MENU_BADGE_ACTIVE.split(/\s+/)).toContain("bg-brand-strong");
+    expect(MENU_BADGE_ACTIVE.split(/\s+/)).toContain("bg-brand");
+    expect(MENU_BADGE_ACTIVE.split(/\s+/)).toContain("ring-brand-strong");
     expect(MENU_BADGE_ACTIVE).not.toContain("accent");
     expect(MENU_BADGE).not.toContain("accent");
     expect(MENU_BADGE).not.toContain("brand");
@@ -49,12 +50,12 @@ describe("le menu d'une fiche en mode cinéma", () => {
 
   /**
    * Les pastilles doivent rester lisibles sous le sélecteur blanc : la neutre se teinte du
-   * texte de sa ligne ; l'active, violette, porte son propre blanc — la ligne devient noire sous
-   * le sélecteur, et une icône noire sur ce violet tomberait sous 4,5:1.
+   * texte de sa ligne ; l'active, or, porte son propre noir (11,8:1) — fixe, qu'elle soit sur la
+   * ligne sombre ou sous le sélecteur blanc ; un blanc sur l'or tomberait à 1,7:1 (23/10/2026).
    */
-  it("laisse la pastille neutre suivre sa ligne, et donne son blanc à l'active", () => {
+  it("laisse la pastille neutre suivre sa ligne, et donne son noir à l'active", () => {
     expect(MENU_BADGE).toContain("bg-current/15");
-    expect(textColours(MENU_BADGE_ACTIVE)).toEqual(["text-white"]);
+    expect(textColours(MENU_BADGE_ACTIVE)).toEqual(["text-ink"]);
   });
 
   it("permet aux enfants d'une ligne de réagir à son focus", () => {

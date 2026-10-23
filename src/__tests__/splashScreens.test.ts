@@ -40,7 +40,8 @@ describe("écrans de lancement iOS", () => {
      * quelques kilo-octets, celles qui portent le logo en pèsent plusieurs dizaines. C'est la
      * différence entre l'écran noir qu'on avait — indiscernable de l'absence d'image — et un vrai
      * écran de lancement. Le contenu lui-même a été vérifié en décodant deux images à la main le
-     * 20/09/2026 : fond `#0a0a0c` en haut et en bas, violet du logo au centre.
+     * 20/09/2026 : fond `#0a0a0c` en haut et en bas, le logo au centre (L blanc et faisceau or depuis
+     * le 23/10/2026).
      */
     const fichiers = readdirSync("public/splash");
     expect(fichiers.length).toBeGreaterThanOrEqual(declares.length * 2);
@@ -48,10 +49,12 @@ describe("écrans de lancement iOS", () => {
       const png = readFileSync(`public/splash/${nom}`);
       expect(png.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
       // Rapporté à la surface, parce qu'un aplat se compresse proportionnellement à elle :
-      // mesuré, un noir uni coûte 2,9 Ko par mégapixel, une image portant le logo 7,8.
+      // mesuré, un noir uni coûte 2,9 Ko par mégapixel, une image portant le logo 7,8. Le logo du
+      // 23/10/2026 a un carré du noir même de l'écran, qui ne coûte plus rien : 4,9 à 8,2 Ko
+      // par mégapixel sur les 42 écrans. Le seuil passe de 5 à 4, toujours au-dessus de l'aplat.
       const [w, h] = nom.match(/(\d+)-(\d+)\.png$/)!.slice(1).map(Number);
       const koParMegapixel = png.length / 1024 / ((w * h) / 1e6);
-      expect(koParMegapixel).toBeGreaterThan(5);
+      expect(koParMegapixel).toBeGreaterThan(4);
     }
   });
 

@@ -451,7 +451,7 @@ function PeriodSection({ week }: { week: WeekSignals }) {
             <DayBars days={s.perDay} bucket={s.bucket} />
             <p className="mt-3 flex gap-4 text-xs text-subtle">
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-sm bg-brand/70" />
+                <span className="h-2 w-2 rounded-sm bg-white/60" />
                 {t("activity.week.legendSeances")}
               </span>
               <span className="inline-flex items-center gap-1.5">

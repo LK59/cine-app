@@ -470,8 +470,8 @@ function EpisodeRow({ download: d, size }: { download: OfflineDownload; size: "p
             </span>
           )}
           {d.watchedToEnd && (
-            <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-strong">
-              <Check size={10} className="text-white" />
+            <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand">
+              <Check size={10} className="text-ink" />
             </span>
           )}
           <CinemaEpisodeProgress

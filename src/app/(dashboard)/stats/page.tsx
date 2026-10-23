@@ -91,7 +91,7 @@ function MonthlyGrowthChart({ monthlyGrowth }: { monthlyGrowth: { month: string;
                   {fmtSize(m.bytes)}
                 </span>
               )}
-              <span className="block w-full rounded-t-sm bg-brand/70" style={{ height: `${barPx}px` }} />
+              <span className="block w-full rounded-t-sm bg-white/60" style={{ height: `${barPx}px` }} />
               <span className="text-[11px] leading-none text-subtle">{monthLabel(m.month, t)}</span>
             </button>
           );
@@ -433,7 +433,7 @@ export default function StatsPage() {
   }
   const bucketOrder = ["4K / UHD", "1080p", "720p", "SD"];
   const bucketColors: Record<string, string> = {
-    "4K / UHD": "bg-brand",
+    "4K / UHD": "bg-white/80",
     "1080p": "bg-sky-500",
     "720p": "bg-emerald-500",
     "SD": "bg-white/30",
@@ -548,13 +548,13 @@ export default function StatsPage() {
                     >
                       {total > 0 && (
                         <span className={`pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg bg-surface px-1.5 py-0.5 text-[11px] text-white shadow-glow transition-opacity ${additionsTip.tipClass(m)}`}>
-                          {mv > 0 && <span className="text-brand">{mv}F </span>}
+                          {mv > 0 && <span className="text-white">{mv}F </span>}
                           {sv > 0 && <span className="text-sky-400">{sv}S</span>}
                         </span>
                       )}
                       <span className="flex w-full flex-col overflow-hidden rounded-t-sm" style={{ height: `${barPx}px` }}>
                         {sv > 0 && <span className="block w-full bg-sky-500" style={{ flex: sv }} />}
-                        {mv > 0 && <span className="block w-full bg-brand" style={{ flex: mv }} />}
+                        {mv > 0 && <span className="block w-full bg-white/80" style={{ flex: mv }} />}
                       </span>
                       <span className="text-[11px] leading-none text-subtle">{monthLabel(m, t)}</span>
                     </button>
@@ -562,7 +562,7 @@ export default function StatsPage() {
                 })}
               </div>
               <div className="mt-2 flex gap-4 text-xs text-muted">
-                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-brand" /> {t('stats.monthlyLegend.movies')}</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-white/80" /> {t('stats.monthlyLegend.movies')}</span>
                 <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" /> {t('stats.monthlyLegend.series')}</span>
               </div>
             </div>
@@ -595,7 +595,7 @@ export default function StatsPage() {
                     const count = lib.languages[cat] ?? 0;
                     if (!count) return null;
                     const labels = { vfvo: t('stats.audioLang.vfvo'), vf: t('stats.audioLang.vf'), vo: t('stats.audioLang.vo'), vofr: t('stats.audioLang.vofr'), other: t('stats.audioLang.other') };
-                    const colors = { vfvo: "bg-brand", vf: "bg-emerald-500", vo: "bg-sky-500", vofr: "bg-amber-500", other: "bg-white/30" };
+                    const colors = { vfvo: "bg-white/80", vf: "bg-emerald-500", vo: "bg-sky-500", vofr: "bg-amber-500", other: "bg-white/30" };
                     return (
                       <HBar key={cat} label={labels[cat]} value={count}
                         max={lib.movies.withFile} color={colors[cat]} fmt={(n) => t('stats.movieQualityCount', { n })} />
@@ -611,7 +611,7 @@ export default function StatsPage() {
                 <h2 className="mb-3 text-sm font-semibold text-white">{t('stats.videoEncoding')}</h2>
                 <div className="card p-4 space-y-3">
                   <HBar label="H.265 / HEVC" value={lib.codecs.hevc} max={lib.movies.withFile}
-                    color="bg-brand" fmt={(n) => t('stats.movieQualityCount', { n })} />
+                    color="bg-white/80" fmt={(n) => t('stats.movieQualityCount', { n })} />
                   <HBar label="H.264 / AVC" value={lib.codecs.h264} max={lib.movies.withFile}
                     color="bg-sky-500" fmt={(n) => t('stats.movieQualityCount', { n })} />
                   {lib.codecs.other > 0 && (

@@ -498,7 +498,7 @@ export default function SonarrSeriesDetailPage() {
                 <span key={g} className="badge bg-white/10 text-muted backdrop-blur-xs">{g}</span>
               ))}
               {jfItem && (
-                <span className={`badge ${isWatched ? "bg-brand-strong/30 text-brand" : "bg-white/10 text-muted"}`}>
+                <span className={`badge ${isWatched ? "bg-brand/15 text-brand" : "bg-white/10 text-muted"}`}>
                   {isWatched ? t('sonarr.seriesWatched') : t('sonarr.seriesNotWatched')}
                 </span>
               )}

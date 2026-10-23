@@ -208,11 +208,13 @@ describe("l'accent est blanc neutre", () => {
   });
 });
 
-// Option B, validée par Louis le 13/10/2026 (DECISIONS.md §83) : le blanc reste aux actions, et le
-// violet du logo dit ce qui est *à moi* — vu, dans ma liste, où j'en suis, ce qui m'attend. Deux
-// fautes à garder : le violet qui se répand hors de ces états (un copier-coller suffit, et la
-// règle ne veut plus rien dire), et un texte blanc sur le violet clair, illisible à 2,8:1.
-describe("le violet de la marque dit ce qui est à moi", () => {
+// Option B, validée par Louis le 13/10/2026 (DECISIONS.md §83) : le blanc reste aux actions, et la
+// couleur de la marque dit ce qui est *à moi* — vu, dans ma liste, où j'en suis, ce qui m'attend.
+// Violette jusqu'au 23/10/2026, or depuis : la lumière de la lanterne du logo. Deux fautes à garder :
+// l'or qui se répand hors de ces états (un copier-coller suffit, et la règle ne veut plus rien dire),
+// et du blanc posé sur l'or plein, illisible à 1,7:1 — texte dans la même chaîne, ou icône blanche
+// dans une pastille or.
+describe("l'or de la marque dit ce qui est à moi", () => {
   const theme = readFileSync("src/app/globals.css", "utf8");
   const rgbOf = (name: string) => {
     const m = theme.match(new RegExp(`--color-${name}:\\s*rgb\\((\\d+) (\\d+) (\\d+)\\)`));
@@ -233,34 +235,47 @@ describe("le violet de la marque dit ce qui est à moi", () => {
   const INK = [10, 10, 12];
   const WHITE = [255, 255, 255];
 
-  it("le violet est celui du logo, et se lit sur le noir", () => {
-    expect(rgbOf("brand")).toEqual([155, 140, 255]);
+  it("l'or est celui du logo, et se lit sur le noir", () => {
+    expect(rgbOf("brand")).toEqual([251, 191, 36]); // #fbbf24, le faisceau du logo
+    expect(contrast(rgbOf("brand"), INK)).toBeGreaterThanOrEqual(4.5); // 11,8:1
+  });
+
+  // Une pastille or porte une icône ou un chiffre noir : 11,8:1. Le blanc n'y fait que 1,7:1.
+  it("l'or plein porte une icône noire lisible, jamais une blanche", () => {
     expect(contrast(rgbOf("brand"), INK)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(rgbOf("brand"), WHITE)).toBeLessThan(3);
   });
 
-  it("la teinte appuyée porte un texte blanc lisible", () => {
-    expect(contrast(rgbOf("brand-strong"), WHITE)).toBeGreaterThanOrEqual(4.5);
+  // L'ambre sombre se pose sur du blanc (la barre d'une ligne sous le sélecteur) : 5,0:1. Même
+  // famille que l'or — chaud, rouge > vert > bleu —, pas une seconde couleur.
+  it("la teinte appuyée se lit contre le blanc, et reste un or", () => {
+    const strong = rgbOf("brand-strong");
+    expect(contrast(strong, WHITE)).toBeGreaterThanOrEqual(4.5);
+    expect(strong[0] > strong[1] && strong[1] > strong[2]).toBe(true);
   });
 
-  // Chaque surface « à moi » passe par le violet — et par la pièce commune quand il y en a une.
+  // Chaque surface « à moi » passe par l'or — et par la pièce commune quand il y en a une.
+  // `bg-brand(?![-\w])` : l'or plein, pas `bg-brand-strong`.
   it.each([
     ["src/components/cinema/ProgressFill.tsx", /\bbg-beam\b/], // Reprendre : cartes, bannière, épisodes — le faisceau du logo (23/10/2026)
-    ["src/components/cinema/detailMenu.ts", /\bbg-brand-strong\b/], // « Vu », « Dans ma liste » des menus des fiches
+    ["src/components/cinema/detailMenu.ts", /\bbg-brand text-ink\b/], // « Vu », « Dans ma liste » des menus des fiches
     ["src/components/PlayButton.tsx", /\bbg-brand-strong\b/], // la barre de « Reprendre » d'une ligne de menu
-    ["src/components/player/NavDot.tsx", /\bbg-brand\b/], // la pastille d'un onglet
-    ["src/components/player/PlayerAccountPanel.tsx", /\bbg-brand-strong\b/], // les compteurs
-    ["src/components/reports/ReportParts.tsx", /\bbg-brand\b/], // un signalement non lu
+    ["src/components/PlayButton.tsx", /\bbg-brand\/35\b/], // le voile du bouton Reprendre
+    ["src/components/player/NavDot.tsx", /\bbg-brand(?![-\w])/], // la pastille d'un onglet
+    ["src/components/player/PlayerAccountPanel.tsx", /\bbg-brand px-1\.5 text-\[11px\] font-semibold text-ink\b/], // les compteurs
+    ["src/components/reports/ReportParts.tsx", /\bbg-brand(?![-\w])/], // un signalement non lu
     ["src/components/WatchlistButton.tsx", /\bbtn-mine\b/], // dans ma liste
-    ["src/components/cinema/CinemaEpisodeBrowser.tsx", /\bbg-brand-strong\b/], // la coche d'un épisode vu
-    ["src/components/cinema/mobile/CinemaMobileDetail.tsx", /\bbg-brand-strong\b/],
-  ])("%s porte le violet", (path, pattern) => {
+    ["src/components/cinema/CinemaEpisodeBrowser.tsx", /\bbg-brand(?![-\w])/], // la coche d'un épisode vu
+    ["src/components/cinema/mobile/CinemaMobileDetail.tsx", /\bbg-brand(?![-\w])/],
+    ["src/components/cinema/TitleToggles.tsx", /\btext-brand\b/], // « À voir » et « Vu » allumés, or sur le noir
+  ])("%s porte l'or", (path, pattern) => {
     expect(readFileSync(path, "utf8")).toMatch(pattern);
   });
 
-  it("la partie lue du lecteur reste blanche (14/10/2026), `btn-mine` est violet", () => {
+  it("la partie lue du lecteur reste blanche (14/10/2026), `btn-mine` est l'or plein à texte noir", () => {
     expect(theme).toMatch(/\.player-seek::-webkit-slider-runnable-track \{[^}]*currentColor 0 var\(--played/);
     expect(theme).toMatch(/\.player-seek::-moz-range-track \{[^}]*currentColor 0 var\(--played/);
-    expect(theme).toMatch(/@utility btn-mine \{\s*@apply bg-brand-strong\/\d+ text-white;/);
+    expect(theme).toMatch(/@utility btn-mine \{\s*@apply bg-brand text-ink;/);
   });
 
   function everySource(dir: string): string[] {
@@ -275,7 +290,7 @@ describe("le violet de la marque dit ce qui est à moi", () => {
     [...readFileSync(path, "utf8").matchAll(BRAND)].map((m) => ({ path, cls: m[1] })),
   );
 
-  // Les seuls fichiers où le violet a droit de cité : le logo (le clap), et les états personnels.
+  // Les seuls fichiers où l'or a droit de cité : les états personnels.
   // Un nouvel emploi ajoute sa ligne ici — et dit, en la justifiant, que c'est bien « à moi ».
   const ALLOWED = [
     "src/components/Sidebar.tsx", "src/components/player/PlayerRail.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx", // le logo
@@ -288,17 +303,17 @@ describe("le violet de la marque dit ce qui est à moi", () => {
     "src/components/shareGuest/ShareTitleSheet.tsx", // « Vu » d'un épisode sur la fiche d'un lien de partage (§112), comme sur la fiche du téléphone
     "src/components/player/NavDot.tsx", "src/components/player/PlayerAccountPanel.tsx", "src/components/reports/ReportParts.tsx",
     "src/app/(dashboard)/radarr/[id]/page.tsx", "src/app/(dashboard)/sonarr/[id]/page.tsx", // « Vu » dans la gestion
-    // Les graphiques (14/10/2026, Louis) : l'accent devenu blanc les avait décolorés — séances par jour
-    // de l'Activité ; ajouts mensuels, qualité, langues et encodage des Statistiques.
-    "src/components/activity/parts.tsx", "src/components/activity/views/ActivityOverview.tsx", "src/app/(dashboard)/stats/page.tsx",
+    // Les graphiques de l'Activité et des Statistiques portaient le violet du 14 au 23/10/2026 ; une
+    // barre de séances n'est pas « à moi », et l'or y aurait touché le `warning` des problèmes : ils
+    // sont passés au blanc neutre, et ne figurent plus ici.
   ];
 
-  it("pas de violet ailleurs", () => {
+  it("pas d'or ailleurs", () => {
     expect(uses.length).toBeGreaterThan(10);
     expect(uses.filter((u) => !ALLOWED.includes(u.path)).map((u) => `${u.path}: ${u.cls}`)).toEqual([]);
   });
 
-  it("jamais de texte blanc sur le violet clair", () => {
+  it("jamais de texte blanc sur l'or plein", () => {
     const bad = everySource("src").flatMap((path) =>
       readFileSync(path, "utf8")
         .split(/["'`]|\$\{|\}/)
@@ -308,11 +323,29 @@ describe("le violet de la marque dit ce qui est à moi", () => {
     expect(bad).toEqual([]);
   });
 
-  // Le faisceau du logo (23/10/2026) ne peint que la barre de progression d'une vignette : décision du
+  // Une pastille or (une coche d'épisode vu) porte une icône enfant : sa couleur est dans un autre
+  // morceau de chaîne, que le test d'au-dessus ne voit pas. Une icône blanche y tomberait à 1,7:1.
+  const WHITE_IN_GOLD = /\bbg-brand(?:\/(?:[5-9]\d|100))?["'`][^<]{0,40}>\s*<\w+[^>]*\btext-white\b/g;
+  it("ni d'icône blanche dans une pastille or", () => {
+    const bad = everySource("src").flatMap((path) =>
+      [...readFileSync(path, "utf8").matchAll(WHITE_IN_GOLD)].map((m) => `${path}: ${m[0]}`),
+    );
+    expect(bad).toEqual([]);
+    expect('rounded-full bg-brand">\n  <Check size={10} className="text-white" />'.match(WHITE_IN_GOLD)).toHaveLength(1);
+    expect('rounded-full bg-brand">\n  <Check size={10} className="text-ink" />'.match(WHITE_IN_GOLD)).toBeNull();
+  });
+
+  // Le faisceau (23/10/2026) ne peint que la barre de progression d'une vignette : décision du
   // propriétaire, qui a écarté les boutons, les marques « vu » / « à voir » et la barre du lecteur.
+  // Un dégradé or, ambre #f59e0b → or pâle #fde68a, chacun lisible sur le noir.
   it("le faisceau ne sert qu'à la barre de progression des vignettes", () => {
     const porteurs = everySource("src").filter((path) => /(?:^|[\s"'`])bg-beam(?:[\s"'`]|$)/.test(readFileSync(path, "utf8")));
     expect(porteurs).toEqual(["src/components/cinema/ProgressFill.tsx"]);
-    expect(theme).toMatch(/@utility bg-beam \{\s*background-image: linear-gradient\(to right, rgb\(124 92 255\), rgb\(56 189 248\)\);/);
+    const m = theme.match(/@utility bg-beam \{\s*background-image: linear-gradient\(to right, rgb\((\d+) (\d+) (\d+)\), rgb\((\d+) (\d+) (\d+)\)\);/);
+    expect(m).not.toBeNull();
+    const [from, to] = [m!.slice(1, 4).map(Number), m!.slice(4, 7).map(Number)];
+    expect(from).toEqual([245, 158, 11]);
+    expect(to).toEqual([253, 230, 138]);
+    for (const stop of [from, to]) expect(contrast(stop, INK)).toBeGreaterThanOrEqual(4.5);
   });
 });

@@ -49,14 +49,14 @@ export const MENU_BADGE =
 /**
  * La pastille d'une action déjà accomplie : dans ma liste, déjà vu.
  *
- * Un état personnel, donc le violet de la marque (§83, option B) : fond plein `brand-strong`,
- * icône blanche — la sienne, pas celle de la ligne, qui devient noire sous le sélecteur blanc.
- * Blanc sur `brand-strong` fait 4,9:1, et le violet se détache aussi bien du sélecteur blanc que
- * de la ligne sombre au repos. (Il suivait le texte, `bg-current/35`, du 13/10 au matin à
- * l'option B : blanc parmi le blanc, rien ne distinguait « vu » de « marquer vu ».)
+ * Un état personnel, donc l'or de la marque (§83, option B) : fond or plein `brand`, icône noire
+ * — la sienne, `text-ink`, 11,8:1 — et un liseré `brand-strong` qui la détache du sélecteur blanc,
+ * où l'or seul ne ferait que 1,7:1. (Il suivait le texte, `bg-current/35`, du 13/10 au matin à
+ * l'option B : blanc parmi le blanc, rien ne distinguait « vu » de « marquer vu » ; violet à icône
+ * blanche jusqu'au 23/10/2026.)
  */
 export const MENU_BADGE_ACTIVE =
-  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-strong text-white ring-1 ring-brand/50 " +
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-ink ring-1 ring-brand-strong " +
   "transition-[color,background-color,box-shadow] duration-200 [@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8";
 
 /**

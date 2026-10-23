@@ -4347,7 +4347,7 @@ Porteurs : `ProgressFill` (toutes les barres de reprise des cartes, de la banni�
 et contrastes, chaque surface porte le violet, **aucun violet hors d'une liste de fichiers tenue à
 la main**, jamais de texte blanc sur `brand`), `cinemaDetailMenu.test.ts`.
 
-**Seule exception : le logo de l'application reste violet (Louis, 13/10/2026).** Icônes PWA (`public/icon-*.png`, SVG), favicon, écrans de lancement et logo de la page de connexion (qui affiche `icon-512.png`) gardent le clap violet : c'est la marque. Tout le reste de l'interface suit l'accent blanc neutre.
+**Seule exception : le logo de l'application reste violet (Louis, 13/10/2026).** Icônes PWA (`public/icon-*.png`, SVG), favicon, écrans de lancement et logo de la page de connexion (qui affiche `icon-512.png`) gardent le clap violet : c'est la marque. Tout le reste de l'interface suit l'accent blanc neutre. *(Remplacé le 23/10/2026 : voir « L'or » plus bas.)*
 
 ---
 
@@ -4357,6 +4357,44 @@ seule surface qui le porte, sur décision du propriétaire : un premier essai l'
 Reprendre, aux marques « vu » / « à voir », aux pastilles et à la partie lue du lecteur ; il a été retiré
 le jour même. Ces surfaces gardent le violet, et la barre du lecteur reste blanche. Test :
 `design-tokens.test.ts` (« le faisceau ne sert qu'à la barre de progression des vignettes »).
+
+**L'or (23/10/2026, décision du propriétaire).** « Ce qui est à moi » passe du violet à l'**or**, et le
+logo devient « aplat et faisceau or » (§118) : **le logo : L blanc, faisceau or — la lumière de la
+lanterne est la couleur de ce qui est à moi.** Raison : sortir du registre violet/cyan des produits
+d'IA. L'accent reste blanc, la barre du lecteur reste blanche ; la règle à trois termes ne change pas,
+seule la couleur du deuxième terme change. Les paragraphes plus haut qui disent « violet » se lisent
+« or » depuis ce jour, avec les valeurs qui suivent.
+- `brand` = `rgb(251 191 36)` (`#fbbf24`), l'or plein : icône, coche, point ou barre sur le noir
+  (11,8:1 sur `ink`), **et fond plein sous une icône ou un chiffre noir** (`text-ink`, 11,8:1). Le blanc
+  sur l'or ne fait que 1,7:1 : il n'y en a nulle part. Pastille d'état des menus (`MENU_BADGE_ACTIVE` :
+  `bg-brand text-ink ring-1 ring-brand-strong`), coche d'un épisode vu (fiches bureau, téléphone,
+  hors ligne, partage, menu « Épisodes » du lecteur : or plein, `Check` noire), compteurs du panneau
+  Compte (or, chiffre noir), `btn-mine` (or plein, texte et icône noirs ; survol `bg-brand/85`).
+- `brand-strong` = `rgb(180 83 9)` (`#b45309`), un ambre sombre de la même famille : là où l'or se pose
+  sur du blanc — la barre « Reprendre » d'une ligne de menu, lisible sous le sélecteur blanc (5,0:1
+  contre le blanc, 3,9:1 sur `ink`, où l'or plein ne ferait que 1,7:1 sous le sélecteur) et le liseré
+  de la pastille d'état. Un blanc y serait lisible (5,0:1), mais l'or plein à icône noire est préféré
+  partout où une surface porte un signe : l'ambre brun sous du blanc paraît terne.
+- Le voile du bouton Reprendre reste `brand/35` sur le bouton blanc, texte noir (plus de 15:1).
+  « Vu » dans les fiches de la gestion : `bg-brand/15 text-brand` (était `bg-brand-strong/30`).
+- `bg-beam` (la barre de progression des vignettes, `ProgressFill`, seule porteuse) : dégradé or de
+  gauche à droite, `#f59e0b` → `#fde68a` (9,2:1 et 15,9:1 sur `ink`).
+- **Les graphiques quittent la couleur de la marque** : les séances par jour de l'Activité (barres et
+  légende), les ajouts mensuels, la qualité, les langues et l'encodage des Statistiques portaient le
+  violet depuis le 14/10 ; une barre de graphique n'est pas « à moi », et l'or y aurait touché le
+  `warning` (`#fcd34d`) des problèmes posés sur les mêmes barres. La série principale y est un blanc
+  neutre (`bg-white/60` pour une série seule, `bg-white/80` à côté des séries bleues et vertes, que
+  le reste garde). Ces trois fichiers sortent de la liste de `design-tokens.test.ts`.
+- À surveiller à l'œil : l'or plein (`#fbbf24`) et le `warning` (`#fcd34d`) sont voisins. Aucune
+  surface ne les met aujourd'hui côte à côte ; un état d'alerte posé sur une vignette à barre or
+  serait le premier.
+
+Tests : `design-tokens.test.ts` (« l'or de la marque dit ce qui est à moi » : l'or vaut `#fbbf24` et se
+lit sur le noir, il porte une icône noire et pas une blanche, `brand-strong` se lit contre le blanc et
+reste chaud ; chaque surface porte l'or ; aucun or hors de la liste ; jamais de texte blanc sur l'or
+plein ; **ni d'icône blanche dans une pastille or** — nouveau, le test d'avant ne voyait pas l'icône
+enfant ; le faisceau : ses deux arrêts, lisibles sur le noir, une seule porteuse),
+`cinemaDetailMenu.test.ts` (la pastille active est `bg-brand`, liseré `brand-strong`, texte `text-ink`).
 
 ## 84. Pendant un film, un seul battement — et rien au journal qui ne soit lu
 
@@ -6878,7 +6916,21 @@ les 42 écrans de lancement) sont toutes produites par `tools/brand/generate.mjs
 barre du téléphone, barre latérale de la gestion, état des services, assistant) est `BrandMark`
 (`src/components/BrandMark.tsx`) ; `offline.html`, qui ne peut rien importer, en recopie le dessin.
 Les `Clapperboard` restants (menu « Lecture », séances, signalements, capacité « trailers ») ne sont
-pas le logo. Mêmes adresses qu'avant, plus `icon-maskable-512.png` et `badge-96.png` (dans
+pas le logo.
+
+**Ses couleurs (23/10/2026, « aplat et faisceau or »)** : le logo : L blanc, faisceau or — la lumière de
+la lanterne est la couleur de ce qui est à moi (§83, « L'or »). Fond `#0a0a0c` (le noir de l'app, le
+carré arrondi ; plein carré pour `icon-flat` et la maskable), L blanc cassé plein `#f5f5f4`, faisceau or
+`#fbbf24` en dégradé de gauche à droite (opacité 0,85 → 0,18), triangle de lecture `#0a0a0c` dans le
+faisceau. Les variantes 48/32/16 gardent leurs formes (pas de triangle à 32 et 16) ; le badge reste une
+silhouette blanche sur transparent. Raison : sortir du registre violet/cyan des produits d'IA. Le
+dégradé violet → bleu du 23/10 au matin n'existe plus nulle part. `BrandMark` reprend le L et le
+faisceau, sans fond : il ne se pose que sur le noir (sur un fond clair, le L blanc cassé disparaîtrait ;
+aucun emploi de ce genre). Sur les écrans de lancement, le carré du logo est du noir même de l'écran et
+ne se voit plus : le dessin reste à sa place dans le carré (28 % du petit côté, centré), donc
+légèrement à droite et en bas du centre optique — même proportion qu'avant. Le seuil de
+`splashScreens.test.ts` (poids par mégapixel, sonde contre l'aplat) passe de 5 à 4 Ko : un carré qui ne
+coûte plus rien fait tomber les grands écrans à 4,9 ; un aplat en coûte 2,9. Mêmes adresses qu'avant, plus `icon-maskable-512.png` et `badge-96.png` (dans
 `ACTIFS_PUBLICS`) ; `CACHE_NAME` non relevé (voir l'en-tête de `sw.js`). Tests : `brand-assets.test.ts`
 (chaque image référencée existe à ses dimensions), `splashScreens.test.ts`.
 

@@ -156,8 +156,9 @@ export function PlayButton({
       title={label}
     >
       {variant === "primary" && progressPct !== null && (
-        // Un voile violet, la couleur de « où j'en suis » (§83, option B) : le bouton principal est
-        // blanc depuis le 13/10/2026, et le voile blanc d'avant n'y laissait plus rien voir.
+        // Un voile or, la couleur de « où j'en suis » (§83, option B ; violet jusqu'au 23/10/2026) :
+        // le bouton principal est blanc depuis le 13/10/2026, et le voile blanc d'avant n'y laissait
+        // plus rien voir. Son texte reste noir : sur l'or à 35 % posé sur le blanc, plus de 15:1.
         <span className="absolute inset-y-0 left-0 bg-brand/35" style={{ width: `${progressPct}%` }} />
       )}
       {/* Où l'on en est, dans le bouton qui reprend — et nulle part ailleurs.
@@ -166,8 +167,8 @@ export function PlayButton({
           repos comme sous le sélecteur blanc, puisqu'elle porte sa propre couleur. */}
       {variant === "row" && progressPct !== null && (
         <span className="absolute inset-x-0 bottom-0 h-[3px] overflow-hidden rounded-b-lg bg-current/15">
-          {/* Le violet de la reprise (§83, option B), en teinte appuyée : lisible au repos sur le
-              fond sombre comme sous le sélecteur blanc (4,9:1), où `brand` ne ferait que 2,8:1. */}
+          {/* L'or de la reprise (§83, option B), en teinte appuyée : lisible au repos sur le fond
+              sombre (3,9:1) comme sous le sélecteur blanc (5,0:1), où l'or plein ne ferait que 1,7:1. */}
           <span className="block h-full bg-brand-strong" style={{ width: `${progressPct}%` }} />
         </span>
       )}

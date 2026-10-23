@@ -135,8 +135,8 @@ export function PlayerEpisodesMenu({
                 <img src={ep.thumbnailUrl} alt="" className="h-full w-full object-cover" />
               )}
               {ep.watched && (
-                <span className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-brand-strong">
-                  <Check size={9} className="text-white" />
+                <span className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-brand">
+                  <Check size={9} className="text-ink" />
                 </span>
               )}
               <CinemaEpisodeProgress resumeTicks={ep.resumeTicks} runtimeTicks={ep.runtimeTicks} watched={ep.watched} />

@@ -117,7 +117,7 @@ function ReportRows() {
           </button>
           <button type="button" onClick={() => cinemaNavigate({ account: false, report: "liste" })} className="btn btn-ghost btn-sm">
             {t("player.account.reportMine")}
-            {mine > 0 && <span className="rounded-full bg-brand-strong px-1.5 text-[11px] font-semibold text-white">{mine}</span>}
+            {mine > 0 && <span className="rounded-full bg-brand px-1.5 text-[11px] font-semibold text-ink">{mine}</span>}
           </button>
         </div>
       </Row>
@@ -233,7 +233,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
               >
                 <UsersRound size={16} />
                 {t("player.account.openActivity")}
-                {badge.admin > 0 && <span className="rounded-full bg-brand-strong px-1.5 text-[11px] font-semibold text-white">{badge.admin}</span>}
+                {badge.admin > 0 && <span className="rounded-full bg-brand px-1.5 text-[11px] font-semibold text-ink">{badge.admin}</span>}
               </button>
             </Section>
             <MaintenanceSection />
