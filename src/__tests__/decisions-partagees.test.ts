@@ -263,17 +263,12 @@ describe("un seul geste tactile de fermeture sur les fiches du bureau", () => {
    * `CinemaDetailLayout`. La poignée du 20/09/2026 est arrivée par le même besoin et part au même
    * endroit ; ce test interdit la troisième copie.
    */
+  // Que chaque fiche ait la poignée — au doigt seulement, jamais dessous, branchée sur sa fermeture —
+  // est éprouvé rendu dans `fiche-bureau-poignee.test.tsx` (23/10/2026) : l'appel peut vivre hors des
+  // fiches. Ici, qu'aucune ne câble le geste elle-même.
   it("aucune des deux fiches ne câble le geste elle-même", () => {
     for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"]) {
-      const src = lire(f);
-      expect(src).toMatch(/useSheetGrip/);
-      expect(src).not.toMatch(/useSwipeToDismiss/);
-    }
-  });
-
-  it("la poignée ne s'arme qu'au doigt", () => {
-    for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"]) {
-      expect(lire(f)).toMatch(/useSheetGrip\(requestClose, useIsTouch\(\)/);
+      expect(lire(f)).not.toMatch(/useSwipeToDismiss/);
     }
   });
 
@@ -1148,8 +1143,11 @@ describe("une seule ouverture de fiche (§61)", () => {
   it.each(SHEETS)("%s passe par useSheetMorph, sans sortie CSS à elle", (f) => {
     const src = lire(f);
     // Directement, ou par `useSheetTransition` — qui choisit au montage entre lui et la continuité
-    // du fond au bureau, et l'appelle toujours.
-    expect(src).toMatch(/useSheetMorph\(\{|useSheetTransition\(\{/);
+    // du fond au bureau, et l'appelle toujours —, dans la fiche ou dans l'habillage commun des fiches du
+    // bureau qu'elle importe (`DesktopSheetShell.tsx`, 23/10/2026). Le trajet lui-même est éprouvé
+    // rendu, fiche par fiche, dans `sheetMorph-desktop-sheets.test.tsx` et `cinema-mobile-detail-keys`.
+    const shell = /from "@\/components\/cinema\/DesktopSheetShell"/.test(src) ? lire("src/components/cinema/DesktopSheetShell.tsx") : "";
+    expect(`${src}\n${shell}`).toMatch(/useSheetMorph\(\{|useSheetTransition\(\{/);
     expect(src).not.toMatch(/"sheet-out"/);
     expect(src).not.toMatch(/\? "animate-fade-out"/);
   });
