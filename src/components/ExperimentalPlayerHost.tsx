@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { X } from "lucide-react";
 import { playerBootstrapOptions, refreshAfterPlayback } from "@/lib/swr";
 import { directInfoForOpening } from "@/lib/directInfo";
 import { labSampleByFile, labSampleInfo } from "@/lib/labSamples";
@@ -36,34 +35,23 @@ import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlay
 import { NATIVE_PATH } from "@/lib/webcodecs/pathSelector";
 import { trace, traceKeepAcrossReset, traceRecent } from "@/lib/webcodecs/trace";
 import {
-  diagBegin,
-  diagEnd,
   diagLinkMeasure,
   diagNeedBps,
-  diagRecentMbps,
-  diagReserveAheadMB,
-  diagSessionFacts,
   diagCurrentWait,
   diagWaitEnded,
   diagWaitStarted,
-  diagWaiting,
 } from "@/lib/webcodecs/playbackDiagnosis";
-import { PlaybackTimeline, TIMELINE_EVERY_MS, bufferedAhead, elementState, registerTimeline } from "@/lib/playbackTimeline";
 import { BackgroundWatch } from "@/lib/backgroundReturn";
 import { isNetworkFailure } from "@/lib/webcodecs/byteSource";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 import {
-  SLOW_LINK_LIGHTER_REASON,
   SLOW_LINK_REASON,
-  SLOW_LINK_STUTTER_REASON,
   armOpeningMeter,
   disarmOpeningMeter,
   fileNeedBps,
-  slowLinkFields,
   frozenReading,
   readLink,
-  type LinkMeasure,
   type LinkMeter,
   type LinkReading,
   type SlowLink,
@@ -96,13 +84,12 @@ import { noteSeriesLanguage } from "@/lib/noteSeriesLanguage";
 import { isGeneratingTrack, SubtitleGeneration } from "@/lib/subtitleGen/generation";
 import { useWakeLock } from "@/lib/useWakeLock";
 import { useSleepTimer } from "@/lib/useSleepTimer";
-import { sleepTimerLogFields, sleepTimerStore, type SleepMode } from "@/lib/sleepTimer";
+import type { SleepMode } from "@/lib/sleepTimer";
 import { seekArrived } from "@/lib/webcodecs/seekArrival";
 import { SessionTally, WatchedClock, newPlayerSessionId, watchElementWaits } from "@/lib/playerSessionTally";
 import { positionBucket, retryMotif, retrySignature } from "@/lib/retryLedger";
-import { saveUnsentStop, clearUnsentStop, touchUnsentStop } from "@/lib/unsentStop";
-import { forgetResumeCache, openDiskChunks, openingFacts, type FileIdentity } from "@/lib/resumeCache/diskChunks";
-import { keepOnStop } from "@/lib/resumeCache/keepOnStop";
+import { clearUnsentStop } from "@/lib/unsentStop";
+import { forgetResumeCache, openDiskChunks, openingFacts } from "@/lib/resumeCache/diskChunks";
 import { MemoryReserve, reservePlanFacts } from "@/lib/webcodecs/memoryReserve";
 import { PlayerLifecycle } from "@/lib/playerLifecycle";
 import { notePceCopyWorked, pceDecisionFacts, takePceCopyRefusal } from "@/lib/webcodecs/aacPceProbe";
@@ -115,20 +102,15 @@ import { isUnreadableZoneReason, zoneSecondsOf } from "@/lib/webcodecs/unreadabl
 import { formatTime } from "@/lib/playerClock";
 import { playsHlsNatively } from "@/lib/webkitEngine";
 import { pickMaxBitrate } from "@/lib/networkBitrate";
-import { SlowLinkRunner, type SlowLinkHost } from "@/lib/slowLinkRunner";
+import { SlowLinkRunner } from "@/lib/slowLinkRunner";
 import {
   LONG_STALL_MS,
   PLAYBACK_MEASURE_WINDOW_MS,
   SlowLog,
   StutterWatch,
-  decideOpening,
-  decidePlayback,
-  type LighterStep,
-  mbps,
-  measuredBps,
   playbackLinkSlow,
 } from "@/lib/slowLinkPolicy";
-import { networkUnstable, subscribeNetworkTrouble } from "@/lib/networkTrouble";
+import { networkUnstable } from "@/lib/networkTrouble";
 import { pushSlowLinkEvent } from "@/lib/slowLinkMonitor";
 import { saveUnsentPosition } from "@/lib/unsentPosition";
 import { finishIntro, introAllowedFor, introCaption, introFinished, introKey, startIntroClock } from "@/lib/playbackIntro";
@@ -153,12 +135,9 @@ import {
 } from "@/components/playerNative/NativeOverlays";
 import {
   aacRouteFacts,
-  generationErrorText,
   generationMenu,
   jellyfinAudioIndex,
-  jellyfinSubtitleIndex,
   leadAt,
-  noticeText,
   seekElapsed,
   seekLineFields,
   syncFacts,
