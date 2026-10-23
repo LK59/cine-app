@@ -96,7 +96,7 @@ dom saut en pause
     button "player.moreOptions"
     input "player.seekLabel" type=range value=140 valuetext=player.seekValue:{"at":"2:20","total":"1:00:00"}
 step croix
-beacon /api/player/log stop {"diag":{"resumeAt":120,"resumeSeekMs":0,"resumePictureMs":5300},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"close","at":140,"watched":11,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":1,"seekWaitMs":3100,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0,"timeline":"124,5,0,0,-,L;148,10,0,0,-,L;140,11,0,0,-,P"}
+beacon /api/player/log stop {"diag":{"resumeAt":120,"resumeSeekMs":0,"resumePictureMs":5300},"startup":{"negotiateMs":0,"pictureMs":0,"stage":"image"},"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","path":"serveur","why":"close","at":140,"watched":11,"duration":3600,"ended":false,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":2,"seekWaitMs":1100,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"subtitleSwitches":0,"restarts":0,"timeline":"124,5,0,0,-,L;148,10,0,0,-,L;140,11,0,0,-,P"}
 storage local remove cine:unsent-stop:00000001
 fetch POST /api/jellyfin/playback/stop {"client":"CineApp","itemId":"film","playSessionId":"seance-jf","mediaSourceId":"source","playMethod":"DirectStream","positionTicks":1400000000,"isPaused":false,"visible":true}
 refreshAfterPlayback {}
