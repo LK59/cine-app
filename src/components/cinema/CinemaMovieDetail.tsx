@@ -484,6 +484,7 @@ export function CinemaMovieDetail({
                 posterUrl={item.posterUrl ?? null}
                 runtimeMinutes={item.runtimeMinutes ?? null}
                 onlineResumeTicks={facts.resumeTicks}
+                onlineKnown={facts.resumeKnown}
               />
             )}
 

@@ -6245,3 +6245,22 @@ fenêtre, et Entrée lançait le film. Le téléphone et l'écran des épisodes 
 **Voulu.** La fiche série du bureau, dont l'adresse nomme l'écran des épisodes sans qu'il soit dessiné,
 referme ce cran-là (`cinemaClose({ episodes: false })`) et non la fiche (13/10/2026). La fiche d'un lien
 de partage n'a pas de fermeture : elle est la page.
+
+### 114.2 La reprise d'un téléchargement depuis la fiche
+
+**Règle.** « Lire le fichier téléchargé » part de la même position partout sur la fiche — la ligne de
+tête comme la feuille de gestion d'un téléchargement en cours : celle de Jellyfin s'il a répondu (et
+que rien n'attend d'être envoyé), sinon celle de l'appareil.
+
+**Porteur.** `sharedResumeSeconds(download, ticks, known)` (`OfflineDownloadControl.tsx`, §109).
+`OfflineDownloadControl` exige `onlineKnown` à côté de `onlineResumeTicks` : `null` dit aussi bien
+« jamais commencé » que « pas de réponse ».
+
+**Appelants.** `CinemaMovieDetail`, `CinemaMobileDetail` (les deux lignes, `OfflinePlayButton` et
+`OfflineDownloadControl`, reçoivent `facts.resumeKnown`).
+
+**Corrigé le 23/10/2026.** La feuille de gestion ne recevait que la position : Jellyfin injoignable, un
+film commencé, téléchargement en pause, repartait du début depuis la feuille alors que la ligne de tête
+disait « Reprendre ».
+
+**Tests.** `offline-gestion-reprise.test.tsx`, `decisions-partagees.test.ts`.

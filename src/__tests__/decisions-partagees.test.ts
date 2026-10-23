@@ -1485,3 +1485,12 @@ describe("« Ma liste » : la fiche film du bureau demande aussi `canJoinWatchli
     expect(src).toMatch(/\{listable && \(\s*<button\s+data-detail-menu\s+onClick=\{toggleAddToList\}/);
   });
 });
+
+describe("la reprise d'un téléchargement : la position et sa réponse vont ensemble (§114.2)", () => {
+  // La feuille de gestion ne recevait que la position, et lisait « pas de réponse » comme « zéro ».
+  it("`OfflineDownloadControl` exige `onlineKnown`, et le passe à `sharedResumeSeconds`", () => {
+    const src = sansCommentaires(lire("src/components/offline/OfflineDownloadControl.tsx"));
+    expect(src).toMatch(/\n\s*onlineKnown: boolean;/);
+    expect(src).toMatch(/sharedResumeSeconds\(d, title\.onlineResumeTicks, onlineKnown\)/);
+  });
+});

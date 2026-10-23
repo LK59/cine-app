@@ -633,6 +633,7 @@ export function CinemaMobileDetail({
             posterUrl={item.posterUrl ?? null}
             runtimeMinutes={"runtimeMinutes" in item ? (item.runtimeMinutes ?? null) : null}
             onlineResumeTicks={resumeTicks}
+            onlineKnown={resumeKnown}
           />
         )}
 
