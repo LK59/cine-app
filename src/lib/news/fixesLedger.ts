@@ -650,12 +650,6 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
     group: { fr: "Téléphone et tablette", en: "Phone and tablet", es: "Móvil y tableta", de: "Handy und Tablet" },
     items: [
       {
-        fr: "La pastille « Partager » d'une série reste visible même si l'épisode à suivre a perdu son fichier.",
-        en: "A series' \"Share\" badge stays visible even if the next episode has lost its file.",
-        es: "La pastilla «Compartir» de una serie sigue visible aunque el siguiente episodio haya perdido su archivo.",
-        de: "Das „Teilen“-Abzeichen einer Serie bleibt sichtbar, auch wenn die nächste Folge ihre Datei verloren hat.",
-      },
-      {
         fr: "La touche Retour arrière d'un clavier ferme aussi la fiche d'un titre.",
         en: "A keyboard's Backspace key also closes a title page.",
         es: "La tecla Retroceso de un teclado también cierra la ficha de un título.",

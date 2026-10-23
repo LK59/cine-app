@@ -22,20 +22,19 @@ describe("la page Nouveautés de Laterna", () => {
     }
   });
 
-  it("quatre cartes de même forme dans chaque langue, des titres qui tiennent seuls", () => {
+  it("deux cartes de même forme dans chaque langue, des titres qui tiennent seuls", () => {
     const shape = (lang: (typeof NEWS_LANGS)[number]) => content[lang]!.sections.map((s) => s.entries.map((e) => e.icon));
     for (const lang of NEWS_LANGS) {
-      expect(shape(lang), lang).toEqual([["sparkles", "phone", "wrench", "heart"]]);
+      expect(shape(lang), lang).toEqual([["sparkles", "phone"]]);
       for (const entry of content[lang]!.sections.flatMap((s) => s.entries)) {
         // Une phrase qui commence par une majuscule passe sous le titre : rien n'est coupé en deux.
         expect(entry.text.charAt(0), `${lang} ${entry.title}`).toMatch(/[A-ZÀ-Ý]/);
         expect(entry.title, lang).not.toMatch(/[,:]$/);
       }
     }
-    expect(content.fr.sections[0].entries.map((e) => [e.title, e.text]).slice(2)).toEqual([
-      ["À refaire sur l'appareil", "Vos téléchargements et les notifications."],
-      ["Ce qui vous suit", "Votre historique, vos reprises, vos listes et vos films vus."],
-    ]);
+    // Ni « à refaire » ni « ce qui vous suit » (Louis, 23/10/2026) : personne n'a encore téléchargé, une
+    // invitation propose les notifications, et une liste de ce qui suit en oublierait toujours un.
+    expect(content.fr.sections[0].entries.map((e) => e.title)).toEqual(["CineApp devient Laterna", "Une nouvelle adresse : app.example.org"]);
   });
 
   it("dit le nom, le moteur et l'adresse du réglage — vouvoiement, ni réglage d'appareil, ni brique, ni client", () => {
