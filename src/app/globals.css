@@ -497,12 +497,12 @@
     `btn-on`, qui reste celui d'une option retenue (onglet, vue). Jusqu'au 23/10/2026, un voile violet
     sous un texte blanc. */
 @utility btn-mine {
-  @apply bg-brand text-ink;
+  @apply bg-white/10 text-brand;
 }
 @media (hover: hover) {
   /* Après la règle de survol de `btn-ghost`, qui l'aurait sinon rendu gris sous le pointeur. */
   .btn-mine:hover:not(:disabled) {
-    @apply bg-brand/85 text-ink;
+    @apply bg-white/15 text-brand;
   }
 }
 

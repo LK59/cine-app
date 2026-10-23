@@ -258,9 +258,9 @@ describe("l'or de la marque dit ce qui est à moi", () => {
   // `bg-brand(?![-\w])` : l'or plein, pas `bg-brand-strong`.
   it.each([
     ["src/components/cinema/ProgressFill.tsx", /\bbg-beam\b/], // Reprendre : cartes, bannière, épisodes — le faisceau du logo (23/10/2026)
-    ["src/components/cinema/detailMenu.ts", /\bbg-brand text-ink\b/], // « Vu », « Dans ma liste » des menus des fiches
+    ["src/components/cinema/detailMenu.ts", /\bbg-ink text-brand ring-1 ring-brand\/60\b/], // « Vu », « Dans ma liste » des menus des fiches
     ["src/components/PlayButton.tsx", /\bbg-brand-strong\b/], // la barre de « Reprendre » d'une ligne de menu
-    ["src/components/PlayButton.tsx", /\bbg-brand\/35\b/], // le voile du bouton Reprendre
+    ["src/components/PlayButton.tsx", /absolute bottom-0 left-0 h-\[3px\] bg-brand-strong/], // le trait or du bouton Reprendre — discret, pas un voile (23/10/2026)
     ["src/components/player/NavDot.tsx", /\bbg-brand(?![-\w])/], // la pastille d'un onglet
     ["src/components/player/PlayerAccountPanel.tsx", /\bbg-brand px-1\.5 text-\[11px\] font-semibold text-ink\b/], // les compteurs
     ["src/components/reports/ReportParts.tsx", /\bbg-brand(?![-\w])/], // un signalement non lu
@@ -272,10 +272,10 @@ describe("l'or de la marque dit ce qui est à moi", () => {
     expect(readFileSync(path, "utf8")).toMatch(pattern);
   });
 
-  it("la partie lue du lecteur reste blanche (14/10/2026), `btn-mine` est l'or plein à texte noir", () => {
+  it("la partie lue du lecteur reste blanche (14/10/2026), `btn-mine` est un fantôme à or discret", () => {
     expect(theme).toMatch(/\.player-seek::-webkit-slider-runnable-track \{[^}]*currentColor 0 var\(--played/);
     expect(theme).toMatch(/\.player-seek::-moz-range-track \{[^}]*currentColor 0 var\(--played/);
-    expect(theme).toMatch(/@utility btn-mine \{\s*@apply bg-brand text-ink;/);
+    expect(theme).toMatch(/@utility btn-mine \{\s*@apply bg-white\/10 text-brand;/);
   });
 
   function everySource(dir: string): string[] {

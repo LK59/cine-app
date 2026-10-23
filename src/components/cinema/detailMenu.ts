@@ -56,7 +56,7 @@ export const MENU_BADGE =
  * blanche jusqu'au 23/10/2026.)
  */
 export const MENU_BADGE_ACTIVE =
-  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-ink ring-1 ring-brand-strong " +
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-brand ring-1 ring-brand/60 " +
   "transition-[color,background-color,box-shadow] duration-200 [@media(min-height:820px)]:h-8 [@media(min-height:820px)]:w-8";
 
 /**

@@ -4396,6 +4396,8 @@ plein ; **ni d'icône blanche dans une pastille or** — nouveau, le test d'avan
 enfant ; le faisceau : ses deux arrêts, lisibles sur le noir, une seule porteuse),
 `cinemaDetailMenu.test.ts` (la pastille active est `bg-brand`, liseré `brand-strong`, texte `text-ink`).
 
+**L'or, discret (23/10/2026, le propriétaire).** « L'or discrètement, pas en énorme sur les boutons de reprise » : le bouton Reprendre porte un trait or de 3 px à son pied (`bg-brand-strong`, 5,0:1 contre le blanc) au lieu d'un voile sur toute sa hauteur ; « Dans ma liste » (`btn-mine`) est un bouton fantôme à icône et texte or (`bg-white/10 text-brand`) et non un aplat or ; la pastille d'état des menus est un rond sombre cerclé d'or à icône or (`bg-ink text-brand ring-brand/60`), lisible sur la ligne sombre comme sous le sélecteur blanc. Les petites marques (coches d'épisode vu, compteurs) gardent l'or plein à signe noir.
+
 ## 84. Pendant un film, un seul battement — et rien au journal qui ne soit lu
 
 **Règle.** Pendant une lecture, le navigateur ne parle au serveur que lorsque quelque chose arrive,
