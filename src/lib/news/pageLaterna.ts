@@ -20,7 +20,7 @@ import type { NewsContentByLang } from "./content";
  * `NEWS_LATERNA_VERSION` : la version qui livrera le renommage, à ajuster au moment de publier si ce
  * n'est pas celle-ci.
  */
-export const NEWS_LATERNA_VERSION = "9.4";
+export const NEWS_LATERNA_VERSION = "10.0";
 /** Le marqueur dans `migrations_done` : posé une fois, la page n'est plus jamais réécrite. */
 export const NEWS_LATERNA_SEED = "news-seed-laterna";
 

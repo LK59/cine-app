@@ -582,6 +582,87 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.0.0",
+    page: "9.1",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Fermer le lecteur pendant qu'un saut se charge garde la position visée : « Reprendre » repart au bon endroit.",
+        en: "Closing the player while a jump is loading keeps the position you aimed for: \"Resume\" starts at the right place.",
+        es: "Cerrar el reproductor mientras se carga un salto conserva la posición elegida: «Reanudar» empieza en el lugar correcto.",
+        de: "Wird der Player geschlossen, während ein Sprung lädt, bleibt die gewählte Position erhalten: „Fortsetzen“ beginnt an der richtigen Stelle.",
+      },
+      {
+        fr: "Fermer deux fois de suite le lecteur des téléchargements (double appui, Retour puis croix) ne le ferme plus qu'une fois.",
+        en: "Closing the downloads player twice in a row (double tap, Back then the cross) now closes it only once.",
+        es: "Cerrar dos veces seguidas el reproductor de descargas (doble toque, Atrás y luego la cruz) ya solo lo cierra una vez.",
+        de: "Den Player für Downloads zweimal hintereinander zu schließen (Doppeltippen, Zurück und dann das Kreuz) schließt ihn nur noch einmal.",
+      },
+    ],
+  },
+  {
+    version: "10.0.0",
+    page: "9.1",
+    group: { fr: "Accueil et fiches", en: "Home and title pages", es: "Inicio y fichas", de: "Startseite und Titelseiten" },
+    items: [
+      {
+        fr: "Sur ordinateur, la touche Retour arrière dans la fenêtre « Partager » efface une lettre au lieu de fermer la fiche.",
+        en: "On a computer, Backspace in the \"Share\" window deletes a letter instead of closing the page.",
+        es: "En el ordenador, la tecla Retroceso en la ventana «Compartir» borra una letra en lugar de cerrar la ficha.",
+        de: "Am Computer löscht die Rücktaste im Fenster „Teilen“ einen Buchstaben, statt die Titelseite zu schließen.",
+      },
+      {
+        fr: "Échap dans « Télécharger », la gestion d'un téléchargement ou « Partager » ne ferme que cette fenêtre, et les flèches restent dedans.",
+        en: "Escape in \"Download\", a download's options or \"Share\" closes only that window, and the arrow keys stay inside it.",
+        es: "Escape en «Descargar», las opciones de una descarga o «Compartir» solo cierra esa ventana, y las flechas se quedan dentro.",
+        de: "Escape in „Herunterladen“, den Optionen eines Downloads oder „Teilen“ schließt nur dieses Fenster, und die Pfeiltasten bleiben darin.",
+      },
+      {
+        fr: "« Lire le fichier téléchargé » reprend au bon endroit même quand le serveur ne répond pas.",
+        en: "\"Play the downloaded file\" resumes at the right place even when the server does not answer.",
+        es: "«Reproducir el archivo descargado» se reanuda en el lugar correcto aunque el servidor no responda.",
+        de: "„Heruntergeladene Datei abspielen“ setzt an der richtigen Stelle fort, auch wenn der Server nicht antwortet.",
+      },
+      {
+        fr: "« À voir » et « Vu » ont la même forme sur toutes les fiches, et « Vu » éteint dit « Marquer comme vu ».",
+        en: "\"Watchlist\" and \"Watched\" look the same on every title page, and an unset \"Watched\" says \"Mark as watched\".",
+        es: "«Por ver» y «Visto» tienen la misma forma en todas las fichas, y «Visto» apagado dice «Marcar como visto».",
+        de: "„Merkliste“ und „Gesehen“ sehen auf allen Titelseiten gleich aus, und ein ausgeschaltetes „Gesehen“ heißt „Als gesehen markieren“.",
+      },
+      {
+        fr: "Un film inconnu de la base de films ne propose plus « À voir », qui renvoyait une erreur.",
+        en: "A film unknown to the film database no longer offers \"Watchlist\", which returned an error.",
+        es: "Una película desconocida para la base de películas ya no ofrece «Por ver», que devolvía un error.",
+        de: "Ein Film, den die Filmdatenbank nicht kennt, bietet „Merkliste“ nicht mehr an, das einen Fehler zurückgab.",
+      },
+      {
+        fr: "Le bouton Lire d'une série ne lance plus un épisode dont le fichier a disparu.",
+        en: "A series' Play button no longer starts an episode whose file has gone missing.",
+        es: "El botón Reproducir de una serie ya no inicia un episodio cuyo archivo ha desaparecido.",
+        de: "Die Abspieltaste einer Serie startet keine Folge mehr, deren Datei verschwunden ist.",
+      },
+    ],
+  },
+  {
+    version: "10.0.0",
+    page: "9.1",
+    group: { fr: "Téléphone et tablette", en: "Phone and tablet", es: "Móvil y tableta", de: "Handy und Tablet" },
+    items: [
+      {
+        fr: "La pastille « Partager » d'une série reste visible même si l'épisode à suivre a perdu son fichier.",
+        en: "A series' \"Share\" badge stays visible even if the next episode has lost its file.",
+        es: "La pastilla «Compartir» de una serie sigue visible aunque el siguiente episodio haya perdido su archivo.",
+        de: "Das „Teilen“-Abzeichen einer Serie bleibt sichtbar, auch wenn die nächste Folge ihre Datei verloren hat.",
+      },
+      {
+        fr: "La touche Retour arrière d'un clavier ferme aussi la fiche d'un titre.",
+        en: "A keyboard's Backspace key also closes a title page.",
+        es: "La tecla Retroceso de un teclado también cierra la ficha de un título.",
+        de: "Die Rücktaste einer Tastatur schließt auch die Titelseite.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
