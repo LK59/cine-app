@@ -32,7 +32,7 @@ import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuAr
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
-import { episodeResumeAt } from "@/lib/nextEpisode";
+import { playEpisodeFrom } from "@/lib/episodeRow";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, useSheetPlayFacts, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
@@ -259,12 +259,8 @@ export function CinemaSeriesDetail({
   const getNextEpisode = useNextEpisodeFromCache(`/api/cinema/series/${item.jellyfinItemId}/episodes`);
 
   function playEpisode(ep: CinemaEpisode) {
-    playback.play({
-      itemId: ep.jellyfinItemId,
-      title: ep.title,
-      resumeAt: episodeResumeAt(ep),
-      getNextEpisode,
-    });
+    // Là où il en est, avec la suite de la série : le lancement des listes d'épisodes (`playEpisodeFrom`).
+    playEpisodeFrom(playback, ep, getNextEpisode);
     // L'écran des épisodes reste ouvert sous le lecteur (voir `CinemaEpisodeBrowser`), comme sur le
     // téléphone. Il était refermé ici, par `history.back()` — qui, depuis que le lecteur a son entrée
     // d'historique (§94, 15/10), retirait celle-ci à peine posée : le lecteur se fermait aussitôt et

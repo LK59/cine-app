@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { ArrowLeft, Play, Check } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
-import { formatDurationShort, formatMinutes } from "@/lib/format";
+import { episodeRowFacts } from "@/lib/episodeRow";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useSheetKeys } from "@/lib/useSheetKeys";
 import { useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
@@ -268,7 +268,10 @@ export function CinemaEpisodeBrowser({
                 <OfflineSeasonDownload series={offlineSeries} seasons={seasons} seasonNumber={displayedSeason} posterUrl={posterUrl} size="desktop" />
               </div>
             )}
-            {episodes.map((ep) => (
+            {episodes.map((ep) => {
+              // Le temps restant ou la durée, et « À suivre » : la règle des trois listes (`episodeRowFacts`).
+              const row = episodeRowFacts(ep, nextEpisodeId);
+              return (
               // La ligne est un conteneur, et non plus un bouton : le bouton de téléchargement est à
               // côté de celui de l'épisode, jamais dedans (un bouton dans un bouton n'est pas du HTML
               // valide). L'épisode garde `data-episode-item` et tout ce que les flèches en attendent.
@@ -301,21 +304,17 @@ export function CinemaEpisodeBrowser({
                     <span className="text-sm font-medium text-white">
                       {ep.episodeNumber}. {ep.title}
                     </span>
-                    {ep.jellyfinItemId === nextEpisodeId && (
+                    {row.isNext && (
                       <span className="shrink-0 rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-400 ring-1 ring-accent-500/40">
                         {t("cinema.nextUpBadge")}
                       </span>
                     )}
                     {/* A started episode says what's LEFT, not how long it is — the number you
                         actually want before pressing play. Untouched ones keep the runtime. */}
-                    {ep.resumeTicks && ep.runtimeTicks && !ep.watched ? (
-                      <span className="shrink-0 text-xs text-accent-400">
-                        {t("cinema.timeRemaining", { time: formatDurationShort(ep.runtimeTicks - ep.resumeTicks) })}
-                      </span>
+                    {row.remaining !== null ? (
+                      <span className="shrink-0 text-xs text-accent-400">{t("cinema.timeRemaining", { time: row.remaining })}</span>
                     ) : (
-                      ep.runtimeMinutes && (
-                        <span className="shrink-0 text-xs text-subtle">{formatMinutes(ep.runtimeMinutes)}</span>
-                      )
+                      row.runtime !== null && <span className="shrink-0 text-xs text-subtle">{row.runtime}</span>
                     )}
                   </div>
                   {ep.overview && <p className="mt-1 line-clamp-2 text-xs text-muted">{ep.overview}</p>}
@@ -323,7 +322,8 @@ export function CinemaEpisodeBrowser({
               </button>
               {offlineSeries && <OfflineEpisodeButton series={offlineSeries} seasons={seasons} episode={ep} posterUrl={posterUrl} size="desktop" />}
               </div>
-            ))}
+              );
+            })}
 
             <CinemaMissingEpisodes
               season={missing.seasonOf(displayedSeason)}

@@ -1576,3 +1576,27 @@ describe("« À voir » : un crochet pour les quatre fiches (§114.4)", () => {
     expect([f, /useAddToWatchlist\(|useWatchlistStatusMap\(|addToWatchlist\(|removeFromWatchlist\(/.test(code)]).toEqual([f, false]);
   });
 });
+
+describe("la ligne d'un épisode : une règle, un lancement (§114.6)", () => {
+  // Le temps restant écrit trois fois, le lancement d'un épisode quatre (audit du 23/10/2026).
+  const LISTES = [
+    "src/components/cinema/CinemaEpisodeBrowser.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/shareGuest/ShareTitleSheet.tsx",
+  ];
+  it.each(LISTES)("%s passe par `episodeRowFacts` et n'écrit pas le temps restant", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("episodeRowFacts(")]).toEqual([f, true]);
+    expect([f, /formatDurationShort\((ep|episode)\.runtimeTicks/.test(code)]).toEqual([f, false]);
+  });
+
+  it.each([
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/shareGuest/ShareTitleSheet.tsx",
+  ])("%s lance un épisode par `playEpisodeFrom`", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("playEpisodeFrom(")]).toEqual([f, true]);
+    expect([f, /resumeAt: episodeResumeAt\(/.test(code)]).toEqual([f, false]);
+  });
+});

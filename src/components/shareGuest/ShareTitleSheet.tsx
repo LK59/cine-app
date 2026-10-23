@@ -5,7 +5,6 @@ import dynamic from "next/dynamic";
 import useSWR from "swr";
 import { Check, ListVideo, Play, Video } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { formatDurationShort, formatMinutes } from "@/lib/format";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
@@ -25,7 +24,7 @@ import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress
 import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
-import { episodeResumeAt } from "@/lib/nextEpisode";
+import { episodeRowFacts, playEpisodeFrom } from "@/lib/episodeRow";
 import { openingSeason, orderSeasons } from "@/lib/seasonOrder";
 import { sheetOverview, sheetRuntimeMinutes, sheetEpisodeRuntime, sheetLeadFacts, useSheetPlayFacts } from "@/lib/sheetFacts";
 import { useFileMissing } from "@/lib/missingFiles";
@@ -226,7 +225,7 @@ function DesktopLayout({ payload, facts }: { payload: ShareTitlePayload; facts: 
   }, [playerOwnsKeyboard, showEpisodes, showTrailer, showSynopsis]);
 
   function playEpisode(ep: CinemaEpisode) {
-    playback.play({ itemId: ep.jellyfinItemId, title: ep.title, resumeAt: episodeResumeAt(ep), getNextEpisode: facts.getNextEpisode });
+    playEpisodeFrom(playback, ep, facts.getNextEpisode);
   }
 
   const label = formatContinueLabel(t, play.resumeTicks, play.runtimeTicks, play.seasonNumber, play.episodeNumber, play.rewatch);
@@ -494,7 +493,7 @@ function PhoneLayout({ payload, facts }: { payload: ShareTitlePayload; facts: Fa
             seasons={facts.episodesData.seasons}
             nextEpisodeId={facts.episodesData.nextEpisode?.itemId}
             disabled={facts.full}
-            onPlay={(ep) => playback.play({ itemId: ep.jellyfinItemId, title: ep.title, resumeAt: episodeResumeAt(ep), getNextEpisode: facts.getNextEpisode })}
+            onPlay={(ep) => playEpisodeFrom(playback, ep, facts.getNextEpisode)}
           />
         )}
       </div>
@@ -547,7 +546,10 @@ function PhoneEpisodes({
         </div>
       )}
       <div className="space-y-4">
-        {episodes.map((episode) => (
+        {episodes.map((episode) => {
+          // Le temps restant ou la durée, et « À suivre » : la règle des trois listes (`episodeRowFacts`).
+          const row = episodeRowFacts(episode, nextEpisodeId);
+          return (
           <button
             key={episode.jellyfinItemId}
             type="button"
@@ -576,21 +578,22 @@ function PhoneEpisodes({
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-white">
                 {episode.episodeNumber}. {episode.title}
-                {episode.jellyfinItemId === nextEpisodeId && (
+                {row.isNext && (
                   <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-400">
                     {t("cinema.nextUpBadge")}
                   </span>
                 )}
               </p>
-              {episode.resumeTicks && episode.runtimeTicks && !episode.watched ? (
-                <p className="mt-0.5 text-xs text-accent-400">{t("cinema.timeRemaining", { time: formatDurationShort(episode.runtimeTicks - episode.resumeTicks) })}</p>
+              {row.remaining !== null ? (
+                <p className="mt-0.5 text-xs text-accent-400">{t("cinema.timeRemaining", { time: row.remaining })}</p>
               ) : (
-                episode.runtimeMinutes && <p className="mt-0.5 text-xs text-subtle">{formatMinutes(episode.runtimeMinutes)}</p>
+                row.runtime !== null && <p className="mt-0.5 text-xs text-subtle">{row.runtime}</p>
               )}
               {episode.overview && <p className="mt-1 line-clamp-3 text-xs leading-5 text-muted">{episode.overview}</p>}
             </div>
           </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

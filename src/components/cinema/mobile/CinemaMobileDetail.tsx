@@ -27,7 +27,6 @@ import { useIsShortViewport } from "@/lib/useIsMobile";
 import { usePlayerSeriesRequests } from "@/lib/usePlayerSeriesRequests";
 import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
-import { formatDurationShort, formatMinutes } from "@/lib/format";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { CinemaSimilarRow, useCinemaSimilar } from "@/components/cinema/CinemaSimilarRow";
@@ -44,7 +43,7 @@ import { PhoneSheetTitle } from "@/components/cinema/CinemaDetailPages";
 import { resumeAtFor } from "@/lib/resumePosition";
 import { useQueuedPlay } from "@/lib/useQueuedPlay";
 import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
-import { episodeResumeAt } from "@/lib/nextEpisode";
+import { episodeRowFacts, playEpisodeFrom } from "@/lib/episodeRow";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
@@ -394,13 +393,9 @@ export function CinemaMobileDetail({
     else playQueued();
   }
 
+  // Là où il en est, avec la suite de la série : le lancement des listes d'épisodes (`playEpisodeFrom`).
   function playEpisode(episode: CinemaEpisode) {
-    playback.play({
-      itemId: episode.jellyfinItemId,
-      title: episode.title,
-      resumeAt: episodeResumeAt(episode),
-      getNextEpisode,
-    });
+    playEpisodeFrom(playback, episode, getNextEpisode);
   }
 
   if (typeof document === "undefined") return null;
@@ -708,7 +703,10 @@ export function CinemaMobileDetail({
             )}
 
             <div className="space-y-4">
-              {(belowFold ? episodes : episodes.slice(0, EPISODES_FIRST)).map((episode) => (
+              {(belowFold ? episodes : episodes.slice(0, EPISODES_FIRST)).map((episode) => {
+                // Le temps restant ou la durée, et « À suivre » : la règle des trois listes (`episodeRowFacts`).
+                const row = episodeRowFacts(episode, nextEpisode?.itemId);
+                return (
                 // Un conteneur et deux boutons côte à côte : l'épisode, et son téléchargement à droite —
                 // jamais un bouton dans un autre.
                 <div key={episode.jellyfinItemId} data-episode-row="" className="flex items-start gap-1">
@@ -749,7 +747,7 @@ export function CinemaMobileDetail({
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-white">
                       {episode.episodeNumber}. {episode.title}
-                      {episode.jellyfinItemId === nextEpisode?.itemId && (
+                      {row.isNext && (
                         // D'un bloc : coupée entre « À » et « suivre », l'étiquette se dessinait en deux
                         // morceaux sur deux lignes (Louis, 19/10/2026).
                         <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-accent-600/25 px-2 py-0.5 text-xs font-medium text-accent-400">
@@ -759,14 +757,10 @@ export function CinemaMobileDetail({
                     </p>
                     {/* Remaining time on a started episode, runtime otherwise — same rule as the
                         desktop season browser. */}
-                    {episode.resumeTicks && episode.runtimeTicks && !episode.watched ? (
-                      <p className="mt-0.5 text-xs text-accent-400">
-                        {t("cinema.timeRemaining", { time: formatDurationShort(episode.runtimeTicks - episode.resumeTicks) })}
-                      </p>
+                    {row.remaining !== null ? (
+                      <p className="mt-0.5 text-xs text-accent-400">{t("cinema.timeRemaining", { time: row.remaining })}</p>
                     ) : (
-                      episode.runtimeMinutes && (
-                        <p className="mt-0.5 text-xs text-subtle">{formatMinutes(episode.runtimeMinutes)}</p>
-                      )
+                      row.runtime !== null && <p className="mt-0.5 text-xs text-subtle">{row.runtime}</p>
                     )}
                     {episode.overview && <p className="mt-1 line-clamp-3 text-xs leading-5 text-muted">{episode.overview}</p>}
                   </div>
@@ -774,7 +768,8 @@ export function CinemaMobileDetail({
                 {/* À hauteur de la vignette (72 px) : centré sur elle, pas sur le synopsis. */}
                 {offlineSeries && <OfflineEpisodeButton series={offlineSeries} seasons={seasons} episode={episode} posterUrl={item.posterUrl} size="phone" className="mt-4" />}
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {belowFold && (

@@ -6348,3 +6348,25 @@ première à changer aurait dérivé de l'autre. La place de « Lire » encore t
 (`playPending`) reste la condition de la ligne de tête : c'est la mise en page qui l'attend.
 
 **Tests.** `fiche-hors-ligne-sans-garde-lecteur.test.tsx`, `decisions-partagees.test.ts`.
+
+### 114.6 La ligne d'un épisode
+
+**Règle.** Une ligne d'épisode dit le temps qui reste d'un épisode commencé et pas fini, sinon sa durée
+quand on la connaît ; elle porte « À suivre » sur l'épisode que Lire lancerait. Un appui lance
+l'épisode là où il en est (`episodeResumeAt`, zéro dit explicitement), avec la suite de la série.
+
+**Porteurs.** `episodeRowFacts(ep, nextEpisodeId)` et `playEpisodeFrom(playback, ep, getNextEpisode)`
+(`src/lib/episodeRow.ts`).
+
+**Appelants.** `CinemaEpisodeBrowser` (bureau, et l'invité au bureau), `CinemaMobileDetail`,
+`ShareTitleSheet` (`PhoneEpisodes`, et le lancement au bureau) ; `CinemaSeriesDetail` pour le
+lancement depuis l'écran des épisodes.
+
+**Fusionné le 23/10/2026.** La règle du temps était écrite trois fois, le lancement quatre ; identiques
+ce jour-là. DOM témoin identique avant et après.
+
+**Tests.** `episodeRow.test.ts`, `decisions-partagees.test.ts`.
+
+**Voulu.** Chaque liste garde son dessin (colonne de saisons au bureau, pastilles au téléphone) et sa
+garde de lecture intégrée ; l'invité ajoute « lien plein ». Le menu « Épisodes » du lecteur a sa propre
+ligne (§107), hors de ce registre.
