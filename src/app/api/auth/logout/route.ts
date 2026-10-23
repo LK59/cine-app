@@ -31,14 +31,19 @@ export async function POST(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const payload = await verifySessionToken(token);
   if (payload?.jti) {
-    // L'appareil connu de la session, lu avant de la fermer : `delete` ne le rend que si plus
+    // La ligne de la session, lue avant de la fermer : `delete` ne rend l'appareil que si plus
     // aucune session ne s'en sert — une session jumelle ouverte par le passage d'adresse (§119)
     // garde le même. Dans ce cas, rien n'est révoqué, et surtout pas le jeton par repli.
-    const known = sessionDb.get(payload.jti)?.jfDevice ?? null;
+    // Le repli par le jeton ne vaut que pour une ligne **encore là et sans appareil** (session
+    // ouverte avant qu'on le garde). Une ligne absente, c'est une session déjà fermée — par
+    // « Déconnecter les autres appareils » ou par l'administrateur — dont le jeton peut encore
+    // servir à une jumelle : il révoquait alors le jeton partagé et coupait la jumelle (relecture
+    // de sécurité du 23/10/2026).
+    const row = sessionDb.get(payload.jti);
     const device = sessionDb.delete(payload.jti);
     forgetBeat(payload.jti);
     if (device) void revokeJellyfinDevices([device], "déconnexion");
-    else if (!known) void revokeJellyfinToken(payload.jfToken, "déconnexion");
+    else if (row && !row.jfDevice) void revokeJellyfinToken(payload.jfToken, "déconnexion");
     logAuthEvent("logout", { user: payload.jfUser ?? payload.u, ip: getClientIp(req), device: requestDeviceLabel(req) });
   }
   const res = NextResponse.json({ ok: true });

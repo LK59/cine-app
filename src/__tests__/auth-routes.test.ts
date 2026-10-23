@@ -117,6 +117,7 @@ describe("POST /api/auth/logout", () => {
   });
 
   it("révoque le jeton lui-même pour une session ouverte avant qu'on garde son appareil", async () => {
+    mockSessionDb.get.mockReturnValueOnce({ userId: "abc", jfDevice: null } as never);
     mockSessionDb.delete.mockReturnValueOnce(null as never);
     const { createSessionToken } = await import("@/lib/auth");
     const { token } = await createSessionToken("louis", "admin", "louis", "abc", "jf-token");
@@ -129,6 +130,20 @@ describe("POST /api/auth/logout", () => {
   // et le repli par le jeton ne doit pas le révoquer à sa place.
   it("ne révoque rien quand une autre session se sert encore du même appareil", async () => {
     mockSessionDb.get.mockReturnValueOnce({ userId: "abc", jfDevice: "cine-app-1234" } as never);
+    mockSessionDb.delete.mockReturnValueOnce(null as never);
+    const { createSessionToken } = await import("@/lib/auth");
+    const { token } = await createSessionToken("louis", "admin", "louis", "abc", "jf-token");
+    const { POST } = await import("@/app/api/auth/logout/route");
+    await POST(fakeReq({ cookie: token }));
+    expect(mockRevoke.devices).not.toHaveBeenCalled();
+    expect(mockRevoke.token).not.toHaveBeenCalled();
+  });
+
+  // Relecture de sécurité du 23/10/2026 : la ligne d'origine déjà fermée (« Déconnecter les autres
+  // appareils », l'administrateur), la déconnexion révoquait le jeton par repli — celui que la
+  // jumelle du passage partage encore.
+  it("ne révoque pas le jeton quand la ligne de la session a déjà disparu", async () => {
+    mockSessionDb.get.mockReturnValueOnce(null as never);
     mockSessionDb.delete.mockReturnValueOnce(null as never);
     const { createSessionToken } = await import("@/lib/auth");
     const { token } = await createSessionToken("louis", "admin", "louis", "abc", "jf-token");

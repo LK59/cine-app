@@ -6897,8 +6897,10 @@ l'adresse, le client n'en fournit jamais — pas de redirection ouverte.
 Connect dépend d'un réglage du serveur Jellyfin). Les deux sessions partagent donc l'appareil, et
 **l'appareil ne tombe qu'avec la dernière session qui s'en sert** : `sessionDb.delete`, `deleteForUser`
 et le ménage de `create` ne rendent un appareil à révoquer que si plus aucune ligne de `sessions` ne le
-porte (`orphanDevices`). La déconnexion ne se rabat sur la révocation par jeton que pour une session sans
-appareil connu ; une session dans ce cas (ouverte avant le 24/09/2026) ne peut pas demander de passage
+porte (`orphanDevices`). La déconnexion ne se rabat sur la révocation par jeton que pour une session dont la
+ligne existe encore sans appareil connu — une ligne absente est une session déjà fermée (« Déconnecter
+les autres appareils », l'administrateur), et son jeton peut servir encore à une jumelle : rien n'est
+révoqué (relecture du 23/10/2026) ; une session dans ce cas (ouverte avant le 24/09/2026) ne peut pas demander de passage
 (`passage-relogin` : se reconnecter une fois). Le ménage des appareils (`jellyfinDevicePrune`) épargne
 déjà tout appareil d'une session vivante (`liveJfDevices`).
 

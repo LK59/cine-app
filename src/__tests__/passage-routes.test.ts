@@ -9,7 +9,7 @@ import { NextRequest } from "next/server";
 const revoked = vi.hoisted(() => [] as unknown[]);
 vi.mock("@/lib/jellyfinRevoke", () => ({
   revokeJellyfinDevices: vi.fn(async (devices: unknown) => void revoked.push(devices)),
-  revokeJellyfinToken: vi.fn(async () => undefined),
+  revokeJellyfinToken: vi.fn(async (token: unknown) => void revoked.push(token)),
 }));
 
 const TARGET = "app.example.org";
@@ -267,5 +267,24 @@ describe("POST /api/push/subscribe après un passage", () => {
     const res = await POST(request("POST", "/api/push/subscribe", { cookie: twin, host: TARGET, body: { endpoint: NEW, keys: { p256dh: "p".repeat(20), auth: "a".repeat(10) } } }));
     expect(res.status).toBe(200);
     expect(pushDb.getByUser(user).map((s) => s.endpoint)).toEqual([NEW]);
+  });
+});
+
+describe("POST /api/auth/logout et la session jumelle", () => {
+  // Relecture de sécurité du 23/10/2026 : la ligne d'origine déjà fermée (« Déconnecter les autres
+  // appareils », l'administrateur), la déconnexion de l'origine révoquait le jeton par repli — celui
+  // que la jumelle partage — et la coupait de Jellyfin.
+  it("ligne d'origine déjà fermée : la jumelle reste valide, ni jeton ni appareil révoqué", async () => {
+    const { cookie, jti } = await household();
+    const { code } = (await (await create(cookie)).json()) as { code: string };
+    const twin = (await redeem({ code })).cookies.get("cine_session")!.value;
+    const { sessionDb } = await import("@/lib/db");
+    sessionDb.delete(jti);
+    const { POST } = await import("@/app/api/auth/logout/route");
+    expect((await POST(request("POST", "/api/auth/logout", { cookie }))).status).toBe(200);
+    const { verifySessionFull } = await import("@/lib/session");
+    expect(await verifySessionFull(twin)).toMatchObject({ jfToken: "jeton-jellyfin" });
+    // (L'ouverture de la jumelle passe une liste vide d'appareils expirés : aplatie.)
+    expect(revoked.flat()).toEqual([]);
   });
 });
