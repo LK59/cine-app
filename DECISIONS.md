@@ -6264,3 +6264,17 @@ film commencé, téléchargement en pause, repartait du début depuis la feuille
 disait « Reprendre ».
 
 **Tests.** `offline-gestion-reprise.test.tsx`, `decisions-partagees.test.ts`.
+
+### 114.3 La pastille « Partager » d'une fiche
+
+**Règle.** Administrateur seul (§112). Un film se partage s'il a un fichier ; une série, toujours — on
+partage la série entière, quel que soit l'état de l'épisode « À suivre ».
+
+**Porteur.** `shareableFrom(kind, { jellyfinItemId, fileMissing })` (`src/components/share/ShareControl.tsx`).
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail` (film et série).
+
+**Corrigé le 23/10/2026.** Le téléphone cachait la pastille d'une série dont l'épisode à suivre avait
+perdu son fichier (la condition du film recopiée) ; le bureau la gardait.
+
+**Tests.** `fiche-partager-pastille.test.tsx`, `decisions-partagees.test.ts`.

@@ -1,6 +1,6 @@
 "use client";
 
-import { ShareButton } from "@/components/share/ShareControl";
+import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -333,7 +333,7 @@ export function CinemaSeriesDetail({
 
       {/* Partager la série entière par un lien (DECISIONS.md §112) : une pastille discrète en face du
           retour, hors du menu de la fiche — administrateur seul. */}
-      {item.jellyfinItemId && (
+      {shareableFrom("series", { jellyfinItemId: item.jellyfinItemId, fileMissing }) && (
         <ShareButton
           variant="icon"
           iconClassName="btn btn-ghost fixed z-10 rounded-full bg-black/55 p-2.5 float-edge"

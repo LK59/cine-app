@@ -1494,3 +1494,16 @@ describe("la reprise d'un téléchargement : la position et sa réponse vont ens
     expect(src).toMatch(/sharedResumeSeconds\(d, title\.onlineResumeTicks, onlineKnown\)/);
   });
 });
+
+describe("la pastille Partager : une règle (§114.3)", () => {
+  // Trois conditions recopiées, dont celle du téléphone avait pris celle du film pour une série.
+  it.each([
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+  ])("%s passe par `shareableFrom`", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, /\{shareableFrom\([^)]*\) && \(\s*<ShareButton/.test(code)]).toEqual([f, true]);
+    expect([f, /item\.jellyfinItemId && (!fileMissing && )?\(\s*<ShareButton/.test(code)]).toEqual([f, false]);
+  });
+});

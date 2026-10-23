@@ -61,6 +61,18 @@ interface Props extends ShareTitle {
   wideSpacing?: string;
 }
 
+/**
+ * Ce titre peut-il être partagé depuis sa fiche ? Un film, s'il a un fichier : un lien vers un film
+ * introuvable n'ouvrirait qu'un bouton grisé. Une série, toujours : on partage la série entière, et
+ * l'épisode « À suivre » qui a perdu son fichier n'en dit rien — la fiche du téléphone cachait
+ * pourtant la pastille d'une telle série, la condition du film recopiée, quand celle du bureau la
+ * gardait (audit du 23/10/2026, DECISIONS.md §114.3).
+ */
+export function shareableFrom(kind: "movie" | "series", { jellyfinItemId, fileMissing }: { jellyfinItemId: string | null | undefined; fileMissing: boolean }): boolean {
+  if (!jellyfinItemId) return false;
+  return kind === "series" || !fileMissing;
+}
+
 export function ShareButton(props: Props) {
   const { isReadOnly } = useRole();
   // Présentation seulement : `proxy.ts` et `adminOnly` refusent la création à tout autre compte.

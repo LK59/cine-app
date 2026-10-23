@@ -1,6 +1,6 @@
 "use client";
 
-import { ShareButton } from "@/components/share/ShareControl";
+import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
 import { OfflineDownloadControl, OfflinePlayButton, offlinePlayLabels, sharedResumeSeconds, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
 import { OfflineEpisodeButton, OfflineSeasonDownload } from "@/components/offline/OfflineEpisodeDownload";
 import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
@@ -518,7 +518,7 @@ export function CinemaMobileDetail({
         </button>
         {/* Partager ce titre par un lien (DECISIONS.md §112) : une pastille de verre à côté de la croix,
             hors des boutons de la fiche — administrateur seul, film ou série entière. */}
-        {item.jellyfinItemId && !fileMissing && (
+        {shareableFrom(isSeries ? "series" : "movie", { jellyfinItemId: item.jellyfinItemId, fileMissing }) && (
           <ShareButton
             variant="icon"
             {...NOT_THE_HANDLE}
