@@ -763,8 +763,8 @@ profil négocié avec Jellyfin décrit le pipeline qui lira réellement le flux.
 **Porteur.** `playsHlsNatively` (`src/lib/webkitEngine.ts`).
 
 **Appelants.** `src/lib/codecSupport.ts` (`isNativeHlsBrowser`) ; `src/components/PlayerHost.tsx`
-(le choix hls.js / natif, le remontage de l'élément, le rechargement au changement de piste et
-en fin d'échelle).
+(le choix hls.js / natif, le remontage de l'élément, le rechargement au changement de piste) et
+`src/components/player/server/useElementErrorLadder.ts` (le rechargement en fin d'échelle).
 
 **Tests.** `webkitEngine.test.ts`, `decisions-partagees.test.ts`.
 
@@ -935,7 +935,7 @@ et `rewound` ; `openingSpan(position, durée)` pour ce qu'on garde d'avance, sur
 **Appelants.** `ExperimentalPlayerHost` (la position d'ouverture), le lecteur serveur
 (`ActivePlayer` dans `PlayerHost.tsx`, depuis le 27/09/2026 : il ouvrait pile à la position, et
 ne retenait pas quand un titre venait d'être joué — il note désormais `noteWatching` comme le
-natif) et `targetsFrom` (`src/lib/resumeCache/useResumeCache.ts`, ce qu'on garde). Deux calculs viseraient deux positions :
+natif, par `useServerPositionWatch`, `player/server/`) et `targetsFrom` (`src/lib/resumeCache/useResumeCache.ts`, ce qu'on garde). Deux calculs viseraient deux positions :
 les octets gardés ne seraient plus ceux que le lecteur lit, et l'ouverture redeviendrait « mixte »
 sans que rien ne casse — seul le journal (`openedFrom`) le dirait.
 
@@ -2233,7 +2233,7 @@ sous la ligne, après 8 s.
 
 Ses appelants :
 - `ExperimentalPlayerHost` ;
-- `ServerPlayerIntro` dans `PlayerHost.tsx` ;
+- `ServerPlayerIntro` (`src/components/player/server/ServerPlayerIntro.tsx`), monté par le lecteur serveur ;
 - le lot G de `IntroLots.tsx`.
 
 `PlaybackProvider` pose `introArt` et l'horloge.
@@ -2894,8 +2894,9 @@ séance. L'ancienne clé est effacée une fois par page (`purgeLegacyAudioBlockl
 **Porteurs.** `RetryLedger`, `retrySignature`, `positionBucket`, `retryMotif` (`retryLedger.ts`),
 tenu par `SessionTally.retries` (`playerSessionTally.ts`, le décompte partagé des deux lecteurs) ; lu
 par `restart` (`ExperimentalPlayerHost`, reconstructions automatiques seulement), l'écouteur
-d'erreur et les erreurs hls.js de `PlayerHost`. `learnedExclusions`, `purgeLegacyAudioBlocklist`
-(`PlayerHost`).
+d'erreur (`useElementErrorLadder`) et les erreurs hls.js (`wireServerHls`) du lecteur serveur
+(`src/components/player/server/`). `learnedExclusions` (`PlayerHost`), `purgeLegacyAudioBlocklist`
+et les marches (`player/server/audioLadder.ts`).
 
 **Volontairement à part.** La coupure réseau (attente voulue et visible — bornée à 48 s de silence en pleine lecture depuis le 15/10/2026, §97) ; les gestes du
 spectateur (réessayer, piste, plafond HDR) ; `mseSource` et `playbackGuard`, déjà bornés ; le
