@@ -39,16 +39,37 @@ function Badge({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * L'hôte de `link` rendu cliquable là où il paraît dans un texte de l'entrée — l'adresse s'ouvre dans
+ * une nouvelle fenêtre (depuis l'application installée, le navigateur), le reste du texte inchangé.
+ */
+function withLink(text: string, link: string | undefined): React.ReactNode {
+  if (!link) return text;
+  const host = new URL(link).host;
+  const parts = text.split(host);
+  if (parts.length === 1) return text;
+  return parts.flatMap((part, i) =>
+    i === 0
+      ? [part]
+      : [
+          <a key={i} href={link} target="_blank" rel="noopener noreferrer" className="underline decoration-white/40 underline-offset-2 hover:decoration-white">
+            {host}
+          </a>,
+          part,
+        ],
+  );
+}
+
 export function NewsEntryRow({ entry }: { entry: NewsEntry }) {
   const inline = continuesTitle(entry.text);
   return (
     <li className="flex gap-3.5">
       <EntryIcon icon={NEWS_ICON_COMPONENTS[entry.icon]} />
       <p className="min-w-0 pt-[7px] text-[15px] leading-snug text-white/75">
-        <strong className="font-semibold text-white">{entry.title}</strong>
+        <strong className="font-semibold text-white">{withLink(entry.title, entry.link)}</strong>
         {entry.badge && <Badge>{entry.badge}</Badge>}
-        {inline && entry.text ? joinContinuation(entry.text) : null}
-        {!inline && entry.text && <span className="mt-1 block text-[14px] leading-snug text-muted">{entry.text}</span>}
+        {inline && entry.text ? withLink(joinContinuation(entry.text), entry.link) : null}
+        {!inline && entry.text && <span className="mt-1 block text-[14px] leading-snug text-muted">{withLink(entry.text, entry.link)}</span>}
       </p>
     </li>
   );

@@ -607,16 +607,10 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
     group: { fr: "Accueil et fiches", en: "Home and title pages", es: "Inicio y fichas", de: "Startseite und Titelseiten" },
     items: [
       {
-        fr: "Sur ordinateur, la touche Retour arrière dans la fenêtre « Partager » efface une lettre au lieu de fermer la fiche.",
-        en: "On a computer, Backspace in the \"Share\" window deletes a letter instead of closing the page.",
-        es: "En el ordenador, la tecla Retroceso en la ventana «Compartir» borra una letra en lugar de cerrar la ficha.",
-        de: "Am Computer löscht die Rücktaste im Fenster „Teilen“ einen Buchstaben, statt die Titelseite zu schließen.",
-      },
-      {
-        fr: "Échap dans « Télécharger », la gestion d'un téléchargement ou « Partager » ne ferme que cette fenêtre, et les flèches restent dedans.",
-        en: "Escape in \"Download\", a download's options or \"Share\" closes only that window, and the arrow keys stay inside it.",
-        es: "Escape en «Descargar», las opciones de una descarga o «Compartir» solo cierra esa ventana, y las flechas se quedan dentro.",
-        de: "Escape in „Herunterladen“, den Optionen eines Downloads oder „Teilen“ schließt nur dieses Fenster, und die Pfeiltasten bleiben darin.",
+        fr: "Échap dans « Télécharger » ou la gestion d'un téléchargement ne ferme que cette fenêtre, et les flèches restent dedans.",
+        en: "Escape in \"Download\" or a download's options closes only that window, and the arrow keys stay inside it.",
+        es: "Escape en «Descargar» o en las opciones de una descarga solo cierra esa ventana, y las flechas se quedan dentro.",
+        de: "Escape in „Herunterladen“ oder den Optionen eines Downloads schließt nur dieses Fenster, und die Pfeiltasten bleiben darin.",
       },
       {
         fr: "« Lire le fichier téléchargé » reprend au bon endroit même quand le serveur ne répond pas.",

@@ -60,6 +60,7 @@ export function laternaNewsContent(address: string): NewsContentByLang {
             },
             {
               icon: "phone",
+              link: `https://${address}/`,
               title: `Une nouvelle adresse : ${address}`,
               text: `L'ancienne adresse continue de fonctionner, rien ne presse. Pour passer à la nouvelle : ouvrez ${address}, connectez-vous, ajoutez-la à votre écran d'accueil et supprimez l'ancienne icône.`,
               badge: "",
@@ -83,6 +84,7 @@ export function laternaNewsContent(address: string): NewsContentByLang {
             },
             {
               icon: "phone",
+              link: `https://${address}/`,
               title: `A new address: ${address}`,
               text: `The old address keeps working, there's no rush. To switch to the new one: open ${address}, sign in, add it to your home screen and delete the old icon.`,
               badge: "",
@@ -106,6 +108,7 @@ export function laternaNewsContent(address: string): NewsContentByLang {
             },
             {
               icon: "phone",
+              link: `https://${address}/`,
               title: `Una nueva dirección: ${address}`,
               text: `La dirección antigua sigue funcionando, no hay prisa. Para pasar a la nueva: abra ${address}, inicie sesión, añádala a su pantalla de inicio y borre el icono antiguo.`,
               badge: "",
@@ -129,6 +132,7 @@ export function laternaNewsContent(address: string): NewsContentByLang {
             },
             {
               icon: "phone",
+              link: `https://${address}/`,
               title: `Eine neue Adresse: ${address}`,
               text: `Die alte Adresse funktioniert weiter, es eilt nicht. Zum Wechsel: Öffnen Sie ${address}, melden Sie sich an, fügen Sie die Adresse zum Home-Bildschirm hinzu und löschen Sie das alte Symbol.`,
               badge: "",

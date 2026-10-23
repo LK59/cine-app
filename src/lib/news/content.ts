@@ -52,6 +52,23 @@ export interface NewsEntry {
   text: string;
   /** Une pastille après le titre (« bêta »), vide sinon. */
   badge: string;
+  /**
+   * Une adresse https que l'entrée cite (23/10/2026, la page Laterna) : là où son hôte paraît dans le
+   * titre ou la phrase, il devient un lien qui l'ouvre. Absente sinon.
+   */
+  link?: string;
+}
+
+/** Une adresse https sans identifiants, bornée — sinon rien : le contenu vient aussi de l'éditeur. */
+export function newsLink(raw: unknown): string | undefined {
+  if (typeof raw !== "string" || raw.length > 200) return undefined;
+  try {
+    const url = new URL(raw.trim());
+    if (url.protocol !== "https:" || url.username || url.password) return undefined;
+    return url.href;
+  } catch {
+    return undefined;
+  }
 }
 
 export interface NewsSection {
@@ -136,11 +153,13 @@ export function sanitizeContent(raw: unknown): NewsContent {
         .slice(0, NEWS_LIMITS.entries)
         .map((e) => {
           const eo = obj(e);
+          const link = newsLink(eo.link);
           return {
             icon: isNewsIcon(eo.icon) ? eo.icon : "sparkles",
             title: str(eo.title, NEWS_LIMITS.entryTitle),
             text: str(eo.text, NEWS_LIMITS.entryText),
             badge: str(eo.badge, NEWS_LIMITS.badge),
+            ...(link ? { link } : {}),
           } satisfies NewsEntry;
         })
         .filter((e) => e.title !== "");
