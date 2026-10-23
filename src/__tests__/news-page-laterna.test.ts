@@ -23,7 +23,7 @@ describe("la page Nouveautés de Laterna", () => {
     for (const lang of NEWS_LANGS) expect(shape(lang), lang).toEqual(shape("fr"));
   });
 
-  it("dit le nom, le moteur et la nouvelle adresse — sans vocabulaire d'infrastructure, l'allemand au vouvoiement", () => {
+  it("dit le nom, le moteur et la nouvelle adresse — sans vocabulaire d'infrastructure, vouvoiement, ni brique ni client", () => {
     for (const lang of NEWS_LANGS) {
       const text = JSON.stringify(NEWS_LATERNA_CONTENT[lang]);
       expect(text, lang).toContain("Laterna");
@@ -31,7 +31,14 @@ describe("la page Nouveautés de Laterna", () => {
       expect(text, lang).toContain("app.laterna.fr");
       expect(text, lang).not.toMatch(/masqu|dashboard|tableau de bord|\bstack\b|domaine|domain|cache|PWA|OPFS|cookie/i);
     }
+    // Vouvoiement partout : « vous », « usted », « Sie ».
+    expect(JSON.stringify(NEWS_LATERNA_CONTENT.fr)).not.toMatch(/\b(tu|ton|ta|tes|toi)\b|-toi\b/);
+    expect(JSON.stringify(NEWS_LATERNA_CONTENT.es)).not.toMatch(/\b(tú|tu|tus|te)\b/);
     expect(JSON.stringify(NEWS_LATERNA_CONTENT.de)).not.toMatch(/\b(du|dein|deine|dich|dir)\b/);
+    // Ni brique du moteur ni client Jellyfin sur cette page.
+    for (const lang of NEWS_LANGS) {
+      expect(JSON.stringify(NEWS_LATERNA_CONTENT[lang])).not.toMatch(/PlaybackCore|MuxCore|AudioCore|BufferCore|StreamCore|CodecBridge|PlaybackBridge|Lumen by Laterna/);
+    }
   });
 
   it("n'est pas encore semée : rien ne la publie avant le signal", () => {

@@ -1,6 +1,6 @@
 # Laterna
 
-*Formerly CineApp. Its in-browser playback engine is **Lumen**.*
+*Its in-browser playback engine is **Lumen**.*
 
 Self-hosted PWA that turns a Radarr / Sonarr / Bazarr / Jackett / qBittorrent / Jellyfin /
 Jellyseerr stack into **two interfaces on one container**: a Netflix-style front end everyone in
@@ -595,9 +595,9 @@ can be revoked immediately rather than only on expiry. A few things are worth kn
   a working Jellyfin token rather than just a Laterna session.
 - **Sessions slide.** The cookie is reissued past a day of age, keeping the same session id, so
   daily use never ends in a weekly sign-out.
-- **Each sign-in is a Jellyfin device** (`Laterna` — `CineApp` before 9.4 —, id `cine-app-…`),
-  revoked at sign-out. One a session never signed out of is removed by a daily task once it has
-  been idle for 30 days — never another client's, never one still tied to a live session.
+- **Each sign-in is a Jellyfin device** (`Laterna`, id `cine-app-…`), revoked at sign-out. One a
+  session never signed out of is removed by a daily task once it has been idle for 30 days —
+  never another client's, never one still tied to a live session.
 - **Writes from another page are refused.** The cookie is `SameSite=Lax`, which stops a
   third-party site but not a sibling subdomain of the same domain. Every write to `/api/` is
   checked in `src/proxy.ts`: `Sec-Fetch-Site` must say `same-origin` (or, from a browser that does

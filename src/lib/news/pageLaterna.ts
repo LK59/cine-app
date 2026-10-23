@@ -1,21 +1,20 @@
 import type { NewsContentByLang } from "./content";
 
 /**
- * La page du renommage — CineApp devient Laterna, son moteur de lecture s'appelle Lumen, et la
- * nouvelle adresse (l'ancienne continue de marcher). Préparée le 23/10/2026, **pas encore branchée** :
- * rien ne l'appelle, elle n'existe sur aucune installation tant que `db.ts` ne la sème pas
- * (`seedNewsPage(db, NEWS_LATERNA_SEED, NEWS_LATERNA_VERSION, NEWS_LATERNA_CONTENT)`, à côté des autres,
- * DECISIONS.md §73 et §118).
+ * La page du renommage — CineApp devient Laterna, ses films sont lus par Lumen, et la nouvelle
+ * adresse (l'ancienne continue de marcher). Texte du propriétaire (23/10/2026), traduit en en/es/de.
+ * Préparée, **pas encore branchée** : rien ne l'appelle, elle n'existe sur aucune installation tant
+ * que `db.ts` ne la sème pas (`seedNewsPage(db, NEWS_LATERNA_SEED, NEWS_LATERNA_VERSION,
+ * NEWS_LATERNA_CONTENT)`, à côté des autres, DECISIONS.md §73 et §118).
+ *
+ * Vouvoiement voulu par le propriétaire : « vous » en français, « usted » en espagnol, « Sie » en
+ * allemand, l'anglais neutre.
+ * Ni nom de brique ni nom de client Jellyfin ici, ni vocabulaire d'infrastructure, ni titres masqués.
  *
  * `NEWS_LATERNA_VERSION` : la version qui livrera le renommage, à ajuster au moment de publier si ce
  * n'est pas celle-ci. L'adresse est écrite une fois (`NEW_ADDRESS`) : elle vaut pour l'installation
  * de référence, pas pour une autre — semée telle quelle, la page irait aussi aux installations de
  * l'image publique.
- *
- * Ce que l'appareil perd en changeant d'adresse vient de ce que le navigateur range par adresse :
- * la session, l'application installée, l'abonnement aux notifications, les téléchargements hors
- * ligne et les réglages gardés sur l'appareil (sous-titres, dialogues, interface). Sans vocabulaire
- * d'infrastructure (test des dictionnaires), et sans mentionner les titres masqués.
  */
 export const NEWS_LATERNA_VERSION = "9.4";
 /** Le marqueur dans `migrations_done` : posé une fois, la page n'est plus jamais réécrite. */
@@ -27,53 +26,36 @@ export const NEWS_LATERNA_CONTENT: NewsContentByLang = {
   fr: {
     sections: [
       {
-        title: "Nouveau nom",
+        title: "Nouveau",
         entries: [
           {
             icon: "sparkles",
-            title: "L'application s'appelle désormais Laterna",
-            text: "Même application, même compte, mêmes films et séries : seul le nom change. Le logo, vos listes et vos reprises ne bougent pas.",
-            badge: "",
-          },
-          {
-            icon: "speed",
-            title: "Propulsée par Lumen",
-            text: "Lumen, c'est le nom du moteur de lecture qui lit vos films directement dans le navigateur. Rien à faire de votre côté.",
-            badge: "",
-          },
-        ],
-      },
-      {
-        title: "Nouvelle adresse",
-        entries: [
-          {
-            icon: "heart",
-            title: `Laterna s'ouvre aussi sur ${NEW_ADDRESS}`,
-            text: "L'ancienne adresse continue de marcher : rien ne presse. Passez à la nouvelle quand vous voulez.",
+            title: "CineApp devient Laterna",
+            text: "Même cinéma, nouveau nom : Laterna, d'après la lanterne magique, l'ancêtre du cinéma. Les films sont lus par Lumen, son moteur de lecture.",
             badge: "",
           },
           {
             icon: "phone",
-            title: "Sur iPhone et iPad",
-            text: `L'icône garde son ancien nom tant que vous ne la réinstallez pas. Pour passer à la nouvelle adresse : ouvrez ${NEW_ADDRESS} dans Safari, Partager → Sur l'écran d'accueil, puis supprimez l'ancienne icône.`,
-            badge: "",
-          },
-          {
-            icon: "phone",
-            title: "Sur Android",
-            text: `L'application installée prend le nouveau nom d'elle-même. Pour passer à la nouvelle adresse : ouvrez ${NEW_ADDRESS} dans Chrome, installez l'application, puis désinstallez l'ancienne.`,
+            title: `Une nouvelle adresse : ${NEW_ADDRESS}`,
+            text: `L'ancienne adresse continue de fonctionner, rien ne presse. Pour passer à la nouvelle : ouvrez ${NEW_ADDRESS}, connectez-vous, ajoutez-la à votre écran d'accueil et supprimez l'ancienne icône.`,
             badge: "",
           },
           {
             icon: "wrench",
-            title: "Ce qu'il faut refaire sur la nouvelle adresse",
-            text: "Se reconnecter, réactiver les notifications, télécharger de nouveau les films gardés hors ligne, et refaire les réglages de cet appareil (sous-titres, dialogues, interface).",
+            title: "Sur cet appareil,",
+            text: "il faudra refaire vos téléchargements et réactiver les notifications, ainsi que les réglages propres à l'appareil : langue, volume, style des sous-titres.",
+            badge: "",
+          },
+          {
+            icon: "heart",
+            title: "Votre historique, vos reprises, vos listes et vos films vus",
+            text: "vous suivent.",
             badge: "",
           },
           {
             icon: "bell",
-            title: "Les notifications en double",
-            text: "Activées sur les deux adresses, elles arrivent deux fois : coupez-les sur l'ancienne une fois la nouvelle installée.",
+            title: "Si possible,",
+            text: "changez d'adresse quand aucun téléchargement n'est en cours.",
             badge: "",
           },
         ],
@@ -85,53 +67,36 @@ export const NEWS_LATERNA_CONTENT: NewsContentByLang = {
   en: {
     sections: [
       {
-        title: "New name",
+        title: "New",
         entries: [
           {
             icon: "sparkles",
-            title: "The app is now called Laterna",
-            text: "Same app, same account, same films and series: only the name changes. The logo, your lists and where you left off stay as they are.",
-            badge: "",
-          },
-          {
-            icon: "speed",
-            title: "Powered by Lumen",
-            text: "Lumen is the name of the playback engine that plays your films right in the browser. Nothing to do on your side.",
-            badge: "",
-          },
-        ],
-      },
-      {
-        title: "New address",
-        entries: [
-          {
-            icon: "heart",
-            title: `Laterna also opens at ${NEW_ADDRESS}`,
-            text: "The old address keeps working: there is no rush. Switch to the new one whenever you like.",
+            title: "CineApp becomes Laterna",
+            text: "Same cinema, new name: Laterna, after the magic lantern, the ancestor of cinema. Films are played by Lumen, its playback engine.",
             badge: "",
           },
           {
             icon: "phone",
-            title: "On iPhone and iPad",
-            text: `The icon keeps its old name until you reinstall it. To switch to the new address: open ${NEW_ADDRESS} in Safari, Share → Add to Home Screen, then remove the old icon.`,
-            badge: "",
-          },
-          {
-            icon: "phone",
-            title: "On Android",
-            text: `The installed app takes the new name on its own. To switch to the new address: open ${NEW_ADDRESS} in Chrome, install the app, then uninstall the old one.`,
+            title: `A new address: ${NEW_ADDRESS}`,
+            text: `The old address keeps working, there's no rush. To switch to the new one: open ${NEW_ADDRESS}, sign in, add it to your home screen and delete the old icon.`,
             badge: "",
           },
           {
             icon: "wrench",
-            title: "What to set up again at the new address",
-            text: "Sign in again, turn notifications back on, download your offline films again, and redo this device's settings (subtitles, dialogue, layout).",
+            title: "On this device,",
+            text: "you'll need to redo your downloads and turn notifications back on, along with the device's own settings: language, volume, subtitle style.",
+            badge: "",
+          },
+          {
+            icon: "heart",
+            title: "Your history, where you left off, your lists and the films you've watched",
+            text: "come with you.",
             badge: "",
           },
           {
             icon: "bell",
-            title: "Duplicate notifications",
-            text: "Turned on at both addresses, they arrive twice: turn them off at the old one once the new one is installed.",
+            title: "If you can,",
+            text: "switch while no download is in progress.",
             badge: "",
           },
         ],
@@ -143,53 +108,36 @@ export const NEWS_LATERNA_CONTENT: NewsContentByLang = {
   es: {
     sections: [
       {
-        title: "Nuevo nombre",
+        title: "Novedades",
         entries: [
           {
             icon: "sparkles",
-            title: "La aplicación ahora se llama Laterna",
-            text: "La misma aplicación, la misma cuenta, las mismas películas y series: solo cambia el nombre. El logotipo, tus listas y lo que estabas viendo no cambian.",
-            badge: "",
-          },
-          {
-            icon: "speed",
-            title: "Impulsada por Lumen",
-            text: "Lumen es el nombre del motor de reproducción que reproduce tus películas directamente en el navegador. No tienes que hacer nada.",
-            badge: "",
-          },
-        ],
-      },
-      {
-        title: "Nueva dirección",
-        entries: [
-          {
-            icon: "heart",
-            title: `Laterna también se abre en ${NEW_ADDRESS}`,
-            text: "La dirección antigua sigue funcionando: no hay prisa. Cambia a la nueva cuando quieras.",
+            title: "CineApp pasa a llamarse Laterna",
+            text: "El mismo cine, un nombre nuevo: Laterna, por la linterna mágica, la antepasada del cine. Las películas las reproduce Lumen, su motor de reproducción.",
             badge: "",
           },
           {
             icon: "phone",
-            title: "En iPhone y iPad",
-            text: `El icono conserva su nombre antiguo hasta que lo reinstales. Para cambiar a la nueva dirección: abre ${NEW_ADDRESS} en Safari, Compartir → Añadir a pantalla de inicio, y elimina el icono antiguo.`,
-            badge: "",
-          },
-          {
-            icon: "phone",
-            title: "En Android",
-            text: `La aplicación instalada adopta el nuevo nombre por sí sola. Para cambiar a la nueva dirección: abre ${NEW_ADDRESS} en Chrome, instala la aplicación y desinstala la antigua.`,
+            title: `Una nueva dirección: ${NEW_ADDRESS}`,
+            text: `La dirección antigua sigue funcionando, no hay prisa. Para pasar a la nueva: abra ${NEW_ADDRESS}, inicie sesión, añádala a su pantalla de inicio y borre el icono antiguo.`,
             badge: "",
           },
           {
             icon: "wrench",
-            title: "Lo que hay que volver a hacer en la nueva dirección",
-            text: "Volver a iniciar sesión, reactivar las notificaciones, descargar de nuevo las películas sin conexión y rehacer los ajustes de este dispositivo (subtítulos, diálogos, interfaz).",
+            title: "En este dispositivo,",
+            text: "tendrá que volver a hacer sus descargas y reactivar las notificaciones, además de los ajustes propios del dispositivo: idioma, volumen, estilo de los subtítulos.",
+            badge: "",
+          },
+          {
+            icon: "heart",
+            title: "Su historial, lo que estaba viendo, sus listas y sus películas vistas",
+            text: "le acompañan.",
             badge: "",
           },
           {
             icon: "bell",
-            title: "Notificaciones duplicadas",
-            text: "Activadas en las dos direcciones, llegan dos veces: desactívalas en la antigua una vez instalada la nueva.",
+            title: "Si puede,",
+            text: "haga el cambio cuando no haya ninguna descarga en curso.",
             badge: "",
           },
         ],
@@ -201,53 +149,36 @@ export const NEWS_LATERNA_CONTENT: NewsContentByLang = {
   de: {
     sections: [
       {
-        title: "Neuer Name",
+        title: "Neu",
         entries: [
           {
             icon: "sparkles",
-            title: "Die App heißt jetzt Laterna",
-            text: "Gleiche App, gleiches Konto, gleiche Filme und Serien: Nur der Name ändert sich. Das Logo, Ihre Listen und Ihr Wiedergabestand bleiben, wie sie sind.",
-            badge: "",
-          },
-          {
-            icon: "speed",
-            title: "Angetrieben von Lumen",
-            text: "Lumen ist der Name der Wiedergabe-Engine, die Ihre Filme direkt im Browser abspielt. Sie müssen nichts tun.",
-            badge: "",
-          },
-        ],
-      },
-      {
-        title: "Neue Adresse",
-        entries: [
-          {
-            icon: "heart",
-            title: `Laterna öffnet sich auch unter ${NEW_ADDRESS}`,
-            text: "Die alte Adresse funktioniert weiter: Es eilt nicht. Wechseln Sie zur neuen, wann Sie möchten.",
+            title: "Aus CineApp wird Laterna",
+            text: "Dasselbe Kino, ein neuer Name: Laterna, nach der Laterna magica, dem Vorläufer des Kinos. Die Filme spielt Lumen ab, seine Wiedergabe-Engine.",
             badge: "",
           },
           {
             icon: "phone",
-            title: "Auf iPhone und iPad",
-            text: `Das Symbol behält seinen alten Namen, bis Sie es neu installieren. Zum Wechsel: ${NEW_ADDRESS} in Safari öffnen, Teilen → Zum Home-Bildschirm, dann das alte Symbol entfernen.`,
-            badge: "",
-          },
-          {
-            icon: "phone",
-            title: "Auf Android",
-            text: `Die installierte App übernimmt den neuen Namen von selbst. Zum Wechsel: ${NEW_ADDRESS} in Chrome öffnen, die App installieren, dann die alte deinstallieren.`,
+            title: `Eine neue Adresse: ${NEW_ADDRESS}`,
+            text: `Die alte Adresse funktioniert weiter, es eilt nicht. Zum Wechsel: Öffnen Sie ${NEW_ADDRESS}, melden Sie sich an, fügen Sie die Adresse zum Home-Bildschirm hinzu und löschen Sie das alte Symbol.`,
             badge: "",
           },
           {
             icon: "wrench",
-            title: "Was unter der neuen Adresse neu einzurichten ist",
-            text: "Erneut anmelden, Benachrichtigungen wieder einschalten, Offline-Filme neu herunterladen und die Einstellungen dieses Geräts neu vornehmen (Untertitel, Dialoge, Oberfläche).",
+            title: "Auf diesem Gerät",
+            text: "müssen Sie Ihre Downloads neu anlegen und die Benachrichtigungen wieder einschalten, ebenso die gerätespezifischen Einstellungen: Sprache, Lautstärke, Untertitelstil.",
+            badge: "",
+          },
+          {
+            icon: "heart",
+            title: "Ihr Verlauf, Ihre Wiedergabestände, Ihre Listen und Ihre gesehenen Filme",
+            text: "kommen mit.",
             badge: "",
           },
           {
             icon: "bell",
-            title: "Doppelte Benachrichtigungen",
-            text: "Unter beiden Adressen eingeschaltet, kommen sie zweimal: Schalten Sie sie unter der alten aus, sobald die neue installiert ist.",
+            title: "Wenn möglich,",
+            text: "wechseln Sie, während kein Download läuft.",
             badge: "",
           },
         ],
