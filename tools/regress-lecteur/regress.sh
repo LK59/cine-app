@@ -25,6 +25,12 @@ PORT="${REGRESS_PORT:-3098}"
 NETWORK="${REGRESS_NETWORK:-media_net}"
 PW_IMAGE="${REGRESS_PW_IMAGE:-mcr.microsoft.com/playwright:v1.63.0-noble}"
 PW_VERSION="${REGRESS_PW_VERSION:-1.63.0}"
+# Le mode rapide (README, « Mode rapide ») : deux profils, quatre titres — pour un changement
+# d'interface seul. REGRESS_PROFILES / REGRESS_ONLY, s'ils sont posés, l'emportent.
+if [ "${REGRESS_MODE:-complet}" = rapide ]; then
+  REGRESS_PROFILES="${REGRESS_PROFILES:-chromium iphone}"
+  REGRESS_ONLY="${REGRESS_ONLY:-kissing-booth,arthur,aftersun,the-knick}"
+fi
 
 # Le nom du conteneur et de l'image se lisent dans `docker ps` : une instance oubliée se retrouve.
 slug() { git -C "$REPO" rev-parse --short=8 "$1^{commit}"; }
@@ -97,7 +103,7 @@ play() {
     -v "$WORK/pw/node_modules:/w/node_modules:ro" \
     -v "$HERE:/tool:ro" -v "$CREDS:/creds.txt:ro" -v "$data/logs:/logs:ro" -v "$out:/out" \
     -e BASE="http://localhost:$PORT" -e PROFILES="${REGRESS_PROFILES:-chromium firefox webkit iphone}" \
-    -e TITLES="/tool/${REGRESS_TITLES:-titres.json}" -e ONLY="${REGRESS_ONLY:-}" \
+    -e TITLES="/tool/${REGRESS_TITLES:-titres.json}" -e ONLY="${REGRESS_ONLY:-}" -e LANES="${REGRESS_LANES:-}" \
     -w /w "$PW_IMAGE" sh -c "cp /tool/scenario.mjs /w/ && node /w/scenario.mjs"
   python3 -I "$HERE/normalise.py" "$out"
 }
