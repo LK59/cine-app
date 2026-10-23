@@ -13,7 +13,8 @@ débits, la réserve, `diag.*`, `timeline`, `steps` (la trace), les positions ex
 Mis à part (`volatil`, affiché par la comparaison, jamais compté comme un écart) : ce qui dépend de
 la charge de la machine et non du code, mesuré en passant deux fois le même commit — les lignes
 `stall`, les `waits` et `recoveries` du bilan, et les `seeks` du lecteur serveur (hls.js en
-compte un nombre variable pour un même geste).
+compte un nombre variable pour un même geste). Du `trigger` d'une marche de l'échelle, seul ce
+qu'elle fait est gardé, pas le témoin qui l'a déclenchée.
 
 Les lignes d'une séance sont rangées par genre (dans un ordre fixe), puis dans leur ordre d'écriture :
 l'instant où part `opening` par rapport aux premiers sauts dépend de la machine, pas du code.
@@ -69,6 +70,12 @@ def normalise_line(raw):
             out[k] = raw[k]
     # Ce qui compte d'une position, c'est début ou pas.
     if kind == "start":
+        # Une marche de l'échelle du lecteur serveur : ce qu'elle fait (« → image en H.264 ») est
+        # comparé ; lequel des deux témoins l'a vue le premier (« élément : code 3 », « hls.js :
+        # média ») est une course entre l'élément et hls.js, tranchée tantôt d'un côté tantôt de
+        # l'autre par le même commit (passages du 22/10 contre ceux du 23/10).
+        if isinstance(raw.get("trigger"), str) and "→" in raw["trigger"]:
+            out["trigger"] = "→" + raw["trigger"].split("→", 1)[1]
         out["at"] = "0" if not raw.get("at") else ">0"
         if "deviceBytes" in raw:
             out["deviceBytes"] = "0" if not raw["deviceBytes"] else ">0"

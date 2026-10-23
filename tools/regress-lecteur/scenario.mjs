@@ -360,9 +360,13 @@ async function menuChoose(page, profile, nav, pick) {
   if (!choice) {
     // Un appui hors du menu le referme (`toggleControls` : menu ouvert → fermé, sans pause).
     // Échap ne le ferme pas, et le menu recouvre son propre bouton.
+    // Seulement s'il est encore ouvert : refermé entre-temps (les commandes qui se masquent, sur une
+    // machine chargée), ce clic à la souris sur l'image mettait le film en pause (§65).
     const vp = page.viewportSize();
-    if (profile === "iphone") await page.touchscreen.tap(vp.width / 2, vp.height * 0.3);
-    else await page.mouse.click(vp.width / 2, vp.height * 0.3);
+    if ((await menuRows(page)).length > 0) {
+      if (profile === "iphone") await page.touchscreen.tap(vp.width / 2, vp.height * 0.3);
+      else await page.mouse.click(vp.width / 2, vp.height * 0.3);
+    }
     const closeUntil = Date.now() + 2000;
     while (Date.now() < closeUntil && (await menuRows(page)).length > 0) await sleep(POLL);
     return { outcome: "rien à choisir", rows: rows.length };
@@ -455,9 +459,11 @@ async function playCase(browser, def, state, profile, title) {
   });
   const page = await ctx.newPage();
   cx.agent = await page.evaluate(() => navigator.userAgent).catch(() => null);
-  // L'ouverture du cinéma est finie quand la page a envoyé sa ligne `ouverture` (startup.log).
+  // L'ouverture du cinéma est finie quand la page envoie sa ligne `ouverture` (startup.log). Le
+  // départ de la requête suffit, et lui seul se voit partout : envoyée en `keepalive`, Chromium la
+  // fait partir hors de la page et Playwright n'en voit jamais la fin (20 s perdues par séance).
   let startupSent = false;
-  page.on("requestfinished", (r) => {
+  page.on("request", (r) => {
     if (r.url().includes("/api/startup-timing")) startupSent = true;
   });
   const consoleErrors = [];
