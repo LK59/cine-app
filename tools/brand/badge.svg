@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="108 89 328 328">
+  <!-- Le badge Android : une silhouette dont seul l'alpha compte (le système la teinte). Le glyphe
+       sans fond, en blanc ; le faisceau s'estompe vers la droite pour que la barre reste lisible là
+       où les deux se touchent. Cadré sur le glyphe (x 136–408, y 104–402). -->
+  <defs>
+    <linearGradient id="b" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#ffffff" stop-opacity="1"/><stop offset="100%" stop-color="#ffffff" stop-opacity="0.5"/></linearGradient>
+  </defs>
+  <polygon points="168,290 408,222 408,402 168,346" fill="url(#b)"/>
+  <rect x="136" y="104" width="60" height="242" rx="18" fill="#ffffff"/>
+</svg>

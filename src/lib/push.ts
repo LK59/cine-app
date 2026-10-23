@@ -36,7 +36,7 @@ async function dispatchPush(subs: ReturnType<typeof pushDb.getAll>, payload: Pus
         }
         await sendWebPush(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          { ...payload, icon: payload.icon ?? "/icon-192.png", badge: "/icon-192.png" }
+          { ...payload, icon: payload.icon ?? "/icon-192.png", badge: "/badge-96.png" }
         );
         tally.sent += 1;
       } catch (err: unknown) {

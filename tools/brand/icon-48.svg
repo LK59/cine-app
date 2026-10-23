@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- De 48 à 95 px : barre un peu plus large, triangle plus grand, pas de voile. -->
+  <defs>
+    <linearGradient id="gc" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7c5cff"/><stop offset="100%" stop-color="#38bdf8"/></linearGradient>
+    <linearGradient id="gcb" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#7c5cff" stop-opacity="0.95"/><stop offset="100%" stop-color="#38bdf8" stop-opacity="0.25"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#020617"/>
+  <polygon points="168,290 408,222 408,402 168,346" fill="url(#gcb)"/>
+  <rect x="136" y="104" width="64" height="242" rx="18" fill="url(#gc)"/>
+  <path d="M314 276 L314 348 L372 312 Z" fill="#ffffff"/>
+</svg>

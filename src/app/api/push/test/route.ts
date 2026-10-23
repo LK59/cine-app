@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       try {
         const res = await sendWebPush(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          { title: `🎬 ${APP_NAME}`, body: "Les notifications push fonctionnent !", icon: "/icon-192.png", badge: "/icon-192.png", tag: "test", url: "/" }
+          { title: `🎬 ${APP_NAME}`, body: "Les notifications push fonctionnent !", icon: "/icon-192.png", badge: "/badge-96.png", tag: "test", url: "/" }
         );
         return { endpoint: sub.endpoint.slice(0, 40) + "…", status: res.statusCode, ok: true };
       } catch (err: unknown) {

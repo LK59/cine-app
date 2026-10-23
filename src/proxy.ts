@@ -610,6 +610,10 @@ const ACTIFS_PUBLICS = [
   "offline.html",
   "icon-192.png",
   "icon-512.png",
+  // L'icône que le système découpe lui-même (manifeste, `purpose: maskable`), et le badge
+  // monochrome des notifications Android : l'un comme l'autre demandés hors de toute page.
+  "icon-maskable-512.png",
+  "badge-96.png",
   "icon.svg",
   "apple-touch-icon.png",
   "splash/",
@@ -648,6 +652,6 @@ export const HORS_PROXY = ["api/reports"];
  */
 export const config = {
   matcher: [
-    "/((?!_next/static|favicon.ico|favicon.svg|favicon-32.png|manifest.json|sw.js|offline.html|icon-192.png|icon-512.png|icon.svg|apple-touch-icon.png|splash/|api/reports).*)",
+    "/((?!_next/static|favicon.ico|favicon.svg|favicon-32.png|manifest.json|sw.js|offline.html|icon-192.png|icon-512.png|icon-maskable-512.png|badge-96.png|icon.svg|apple-touch-icon.png|splash/|api/reports).*)",
   ],
 };

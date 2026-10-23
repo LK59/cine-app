@@ -24,6 +24,12 @@
 // une navigation qui échoue y donne accès depuis la page « Pas de connexion », et une navigation
 // qui tarde plus de six secondes sur un tel appareil affiche cette page en mode « attente », qui
 // reprend la réponse dès qu'elle arrive. Le cache de l'application, lui, ne change pas.)
+// (23/10/2026, sans changer de nom : le logo Laterna. Les icônes gardent leurs adresses, et ce worker
+// les demande au réseau d'abord — le cache ne sert qu'hors ligne —, Next les sert sans durée de vie
+// (`max-age=0`) : un appareil connecté reçoit les nouvelles dès sa prochaine requête. `install`
+// recharge PRECACHE de toute façon. Le badge des notifications devient `/badge-96.png`, silhouette
+// blanche. Ce qu'aucun nom de cache ne change : l'icône déjà posée sur un écran d'accueil iOS,
+// qu'iOS ne relit jamais — il faut la reposer.)
 const CACHE_NAME = "cine-app-v12";
 const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png", "/offline.html"];
 
@@ -483,7 +489,9 @@ self.addEventListener("push", (event) => {
   const options = {
     body: data.body ?? "",
     icon: data.icon ?? "/icon-192.png",
-    badge: "/icon-192.png",
+    // Android ne garde du badge que son alpha et le teinte lui-même : une silhouette blanche sur
+    // transparent. L'icône en couleur qu'il recevait jusqu'au 23/10/2026 s'y lisait en carré plein.
+    badge: "/badge-96.png",
     tag: data.tag ?? "cine-app",
     data: { url: data.url ?? "/" },
     vibrate: [200, 100, 200],
