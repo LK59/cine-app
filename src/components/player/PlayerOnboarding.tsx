@@ -15,6 +15,7 @@ import { useLocale, useT } from "@/components/TranslationProvider";
 import { useErrorText } from "@/lib/useErrorText";
 import { useToast } from "@/components/Toast";
 import { PushToggle } from "@/components/PushToggle";
+import { useInstallHintText } from "@/lib/passage/useOldAddress";
 import { LanguageSelect, SubtitleModeSelect, NotificationChoices } from "./accountControls";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
 import { OPEN_ONBOARDING_EVENT } from "./onboardingEvents";
@@ -132,6 +133,7 @@ export function PlayerOnboarding({
   onDone: () => void;
 }) {
   const t = useT();
+  const installHint = useInstallHintText();
   const errorText = useErrorText();
   const toast = useToast();
   const { locale, setLocale } = useLocale();
@@ -435,7 +437,7 @@ export function PlayerOnboarding({
                   // Sur iPhone, une page ouverte dans Safari ne peut pas s'abonner : il faut
                   // l'application installée. On le dit, et on laisse passer.
                   <p className="glass-sheen rounded-2xl px-4 py-3.5 text-sm leading-relaxed text-muted">
-                    {t("player.onboarding.notifInstall")}
+                    {installHint}
                   </p>
                 )}
                 <NotificationChoices />

@@ -2344,6 +2344,7 @@
       "notifTitle": "Notifications",
       "notifText": "Être prévenu quand quelque chose arrive pour vous.",
       "notifInstall": "Sur iPhone, ajoutez d'abord l'application à l'écran d'accueil (Partager → Sur l'écran d'accueil), puis activez les notifications depuis Compte.",
+      "notifInstallElsewhere": "Sur iPhone, les notifications passent par l'application de l'écran d'accueil : installez-la depuis la nouvelle adresse, {host}, et non depuis celle-ci.",
       "doneTitle": "C'est prêt",
       "doneText": "Vous retrouverez tous ces réglages dans Compte, quand vous voulez."
     },

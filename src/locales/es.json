@@ -2344,6 +2344,7 @@
       "notifTitle": "Notificaciones",
       "notifText": "Recibe un aviso cuando llegue algo para ti.",
       "notifInstall": "En iPhone, añade primero la aplicación a la pantalla de inicio (Compartir → Añadir a pantalla de inicio) y activa las notificaciones desde Cuenta.",
+      "notifInstallElsewhere": "En iPhone, las notificaciones pasan por la aplicación de la pantalla de inicio: instálela desde la nueva dirección, {host}, y no desde esta.",
       "doneTitle": "Todo listo",
       "doneText": "Encontrarás todos estos ajustes en Cuenta, cuando quieras."
     },

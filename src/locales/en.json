@@ -2344,6 +2344,7 @@
       "notifTitle": "Notifications",
       "notifText": "Get told when something arrives for you.",
       "notifInstall": "On iPhone, first add the app to your Home Screen (Share → Add to Home Screen), then turn notifications on from Account.",
+      "notifInstallElsewhere": "On iPhone, notifications go through the Home Screen app: install it from the new address, {host}, not from this one.",
       "doneTitle": "You're all set",
       "doneText": "All of these settings are in Account, whenever you want."
     },

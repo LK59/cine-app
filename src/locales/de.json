@@ -2344,6 +2344,7 @@
       "notifTitle": "Benachrichtigungen",
       "notifText": "Erfahren Sie es, wenn etwas für Sie ankommt.",
       "notifInstall": "Fügen Sie die App auf dem iPhone zuerst zum Home-Bildschirm hinzu (Teilen → Zum Home-Bildschirm) und aktivieren Sie dann die Benachrichtigungen unter Konto.",
+      "notifInstallElsewhere": "Auf dem iPhone laufen Benachrichtigungen über die App auf dem Home-Bildschirm: Installieren Sie sie von der neuen Adresse, {host}, nicht von dieser.",
       "doneTitle": "Alles bereit",
       "doneText": "Alle diese Einstellungen finden Sie jederzeit unter Konto."
     },

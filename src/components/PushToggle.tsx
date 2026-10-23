@@ -7,6 +7,7 @@ import { useErrorText } from "@/lib/useErrorText";
 import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
 import { isIosSafariBrowserTab } from "@/lib/iosInstall";
+import { useInstallHintText } from "@/lib/passage/useOldAddress";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 
 type State = "unsupported" | "needsInstall" | "denied" | "unsubscribed" | "subscribed" | "loading";
@@ -63,6 +64,7 @@ export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {})
   const [sub, setSub] = useState<PushSubscription | null>(null);
   const swReg = useRef<ServiceWorkerRegistration | null>(null);
   const t = useT();
+  const installHint = useInstallHintText();
   const errorText = useErrorText();
   const toast = useToast();
 
@@ -184,7 +186,7 @@ export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {})
 
   // La même phrase que l'accueil, qui renvoie justement ici une fois l'application installée.
   if (state === "needsInstall") return (
-    <p className="text-sm leading-relaxed text-muted">{t("player.onboarding.notifInstall")}</p>
+    <p className="text-sm leading-relaxed text-muted">{installHint}</p>
   );
 
   if (state === "unsupported") return (

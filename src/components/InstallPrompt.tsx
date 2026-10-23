@@ -8,6 +8,7 @@ import { ABOVE_BOTTOM_BAR, PROMPT_CLOSE_CLASS } from "@/lib/floatingPrompt";
 import { isInstalledApp, isIosSafariBrowserTab } from "@/lib/iosInstall";
 import { passageFlags } from "@/lib/passage/client";
 import { installPlatform } from "@/components/passage/PassageInstallHelp";
+import { useOldAddress } from "@/lib/passage/useOldAddress";
 
 const DISMISS_KEY = "cine-install-prompt-dismissed-until";
 const SNOOZE_DAYS = 21;
@@ -27,6 +28,9 @@ export function InstallPrompt() {
   const t = useT();
   const [show, setShow] = useState<"ios" | "passage" | null>(null);
   const pathname = usePathname();
+  // Sur l'ancienne adresse d'une installation qui en annonce une nouvelle (§119), jamais : elle
+  // pousserait à installer l'adresse qu'on quitte. Tant qu'on ne sait pas, on attend.
+  const { old } = useOldAddress();
 
   useEffect(() => {
     if (passageFlags.installHelpWanted() && !isInstalledApp() && installPlatform() !== "other") {
@@ -53,7 +57,7 @@ export function InstallPrompt() {
 
   // Pas pendant l'assistant de premier lancement (05/10/2026) : sur un iPhone, la bannière couvrait
   // ses boutons, et l'installation n'a de sens qu'une fois l'application prête.
-  if (!show || pathname?.startsWith("/setup")) return null;
+  if (!show || old !== false || pathname?.startsWith("/setup")) return null;
 
   const passage = show === "passage";
   const android = passage && installPlatform() === "android";

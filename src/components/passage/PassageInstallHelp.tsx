@@ -4,6 +4,7 @@ import { useSyncExternalStore } from "react";
 import { Share } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { isInstalledApp } from "@/lib/iosInstall";
+import { useOldAddress } from "@/lib/passage/useOldAddress";
 
 export type InstallPlatform = "ios" | "android" | "other";
 
@@ -29,7 +30,9 @@ export function PassageInstallHelp({ className = "" }: { className?: string }) {
   // Lus après l'hydratation seulement : le serveur ne connaît ni l'appareil ni le mode d'affichage.
   const platform = useSyncExternalStore(never, installPlatform, () => null);
   const installed = useSyncExternalStore(never, isInstalledApp, () => true);
-  if (installed || platform === null) return null;
+  // Ni sur l'ancienne adresse (§119) : on y installerait ce qu'on quitte.
+  const { old } = useOldAddress();
+  if (installed || platform === null || old !== false) return null;
   return (
     <div data-passage-install="" className={`rounded-xl border border-white/10 bg-white/[0.04] p-4 text-left ${className}`}>
       <p className="flex items-center gap-2 text-sm font-semibold text-white">
