@@ -38,6 +38,12 @@ export const PUBLIC_PATHS = [
   // titre avant le mot de passe ; ce qui suit passe par la porte des liens (`share/gate.ts`).
   "/partage",
   "/api/share/redeem",
+  // Le passage d'une adresse à l'autre (DECISIONS.md §119), côté nouvelle adresse : on y arrive sans
+  // session. La page lit le jeton dans le fragment (que rien ne transmet au serveur) ou fait recopier
+  // le code ; l'entrée l'échange contre une session. Seulement l'entrée : la demande
+  // (`/api/passage`) et les réglages d'arrivée (`/api/passage/arrival`) exigent une session.
+  "/passage",
+  "/api/passage/redeem",
 ] as const;
 
 /** Vrai pour une de ces adresses, et pour tout ce qu'elle contient. */

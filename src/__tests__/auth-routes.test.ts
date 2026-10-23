@@ -9,7 +9,7 @@ vi.mock("@/lib/rateLimiter", async (importOriginal) => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
 }));
 
-const mockSessionDb = { create: vi.fn(), delete: vi.fn() };
+const mockSessionDb = { create: vi.fn(), delete: vi.fn(), get: vi.fn() };
 const mockUserPrefsDb = { getLang: vi.fn(() => "fr") };
 vi.mock("@/lib/db", () => ({
   sessionDb: mockSessionDb,
@@ -123,6 +123,19 @@ describe("POST /api/auth/logout", () => {
     const { POST } = await import("@/app/api/auth/logout/route");
     await POST(fakeReq({ cookie: token }));
     expect(mockRevoke.token).toHaveBeenCalledWith("jf-token", "déconnexion");
+  });
+
+  // Le passage d'adresse (§119) : la session jumelle garde l'appareil, `delete` ne le rend donc pas —
+  // et le repli par le jeton ne doit pas le révoquer à sa place.
+  it("ne révoque rien quand une autre session se sert encore du même appareil", async () => {
+    mockSessionDb.get.mockReturnValueOnce({ userId: "abc", jfDevice: "cine-app-1234" } as never);
+    mockSessionDb.delete.mockReturnValueOnce(null as never);
+    const { createSessionToken } = await import("@/lib/auth");
+    const { token } = await createSessionToken("louis", "admin", "louis", "abc", "jf-token");
+    const { POST } = await import("@/app/api/auth/logout/route");
+    await POST(fakeReq({ cookie: token }));
+    expect(mockRevoke.devices).not.toHaveBeenCalled();
+    expect(mockRevoke.token).not.toHaveBeenCalled();
   });
 
   it("does not throw when the cookie is garbage", async () => {

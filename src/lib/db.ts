@@ -625,6 +625,35 @@ function migrate(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_shares_jf_user ON shares(jf_user_id);
   `);
+  // Le passage d'une adresse à l'autre (DECISIONS.md §119). `passages` : un secret par ligne — le
+  // jeton du lien (2 min) ou le code à recopier (15 min) —, gardé haché (SHA-256), à usage unique,
+  // avec la session d'origine chiffrée (`encryptSecret`) pour en ouvrir une jumelle. `passage_arrivals` :
+  // ce qu'une session ouverte par un passage doit encore faire sur son appareil — les réglages à poser,
+  // l'abonnement aux notifications de l'ancienne adresse à retirer quand celle-ci s'abonne.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS passages (
+      hash          TEXT    PRIMARY KEY,
+      kind          TEXT    NOT NULL CHECK (kind IN ('token', 'code')),
+      user_id       TEXT    NOT NULL,
+      origin_jti    TEXT    NOT NULL,
+      sealed        TEXT    NOT NULL,
+      settings      TEXT,
+      push_endpoint TEXT,
+      created_at    INTEGER NOT NULL,
+      expires_at    INTEGER NOT NULL,
+      used_at       INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_passages_expires ON passages(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_passages_origin ON passages(origin_jti);
+    CREATE TABLE IF NOT EXISTS passage_arrivals (
+      jti           TEXT    PRIMARY KEY,
+      user_id       TEXT    NOT NULL,
+      settings      TEXT,
+      push_endpoint TEXT,
+      created_at    INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_passage_arrivals_created ON passage_arrivals(created_at);
+  `);
   // Le compte de chaque jour clos de l'Activité, pour « Depuis le début » (`activityHistory.ts`) :
   // il survit à la rotation des journaux, il ne se recalcule donc pas — gardé dans la sauvegarde.
   db.exec(`
@@ -1446,6 +1475,17 @@ export const migrationDb = {
   },
 };
 
+/**
+ * Les appareils Jellyfin de cette liste dont plus aucune session ne se sert — ceux qu'on peut
+ * révoquer. Depuis le passage d'une adresse à l'autre (DECISIONS.md §119), la session d'origine et
+ * celle que le passage a ouverte partagent un appareil, donc un jeton : se déconnecter de l'une ne
+ * doit pas couper l'autre. L'appareil ne tombe qu'avec la dernière session qui s'en sert.
+ */
+function orphanDevices(devices: (string | null | undefined)[]): string[] {
+  const used = getDb().prepare("SELECT 1 FROM sessions WHERE jf_device = ? LIMIT 1");
+  return [...new Set(devices.filter((d): d is string => !!d))].filter((d) => !used.get(d));
+}
+
 export const sessionDb = {
   /**
    * Ouvre une session. Rend les appareils Jellyfin des sessions expirées que ce passage a effacées,
@@ -1459,7 +1499,7 @@ export const sessionDb = {
     // Opportunistic cleanup of expired sessions
     const expired = db.prepare("SELECT jf_device FROM sessions WHERE last_seen_at < ? AND jf_device IS NOT NULL").all(now - SESSION_MAX_AGE_MS) as { jf_device: string }[];
     db.prepare("DELETE FROM sessions WHERE last_seen_at < ?").run(now - SESSION_MAX_AGE_MS);
-    return expired.map((r) => r.jf_device);
+    return orphanDevices(expired.map((r) => r.jf_device));
   },
 
   /**
@@ -1520,11 +1560,20 @@ export const sessionDb = {
     return rows.map((r) => r.jf_device);
   },
 
-  /** Ferme une session. Rend l'appareil Jellyfin qui lui était lié, s'il est connu. */
+  /**
+   * Ferme une session. Rend l'appareil Jellyfin qui lui était lié, s'il est connu et que plus aucune
+   * session ne s'en sert (`orphanDevices`, le passage §119).
+   */
   delete(jti: string): string | null {
     const row = getDb().prepare("SELECT jf_device FROM sessions WHERE jti = ?").get(jti) as { jf_device: string | null } | undefined;
     getDb().prepare("DELETE FROM sessions WHERE jti = ?").run(jti);
-    return row?.jf_device ?? null;
+    return orphanDevices([row?.jf_device])[0] ?? null;
+  },
+
+  /** Le compte et l'appareil Jellyfin d'une session — pour le passage (`passage/service.ts`). */
+  get(jti: string): { userId: string; jfDevice: string | null } | null {
+    const row = getDb().prepare("SELECT user_id, jf_device FROM sessions WHERE jti = ?").get(jti) as { user_id: string; jf_device: string | null } | undefined;
+    return row ? { userId: row.user_id, jfDevice: row.jf_device ?? null } : null;
   },
 
   /** Toutes les sessions d'un compte, la plus récente d'abord — pour la page d'activité. */
@@ -1547,7 +1596,10 @@ export const sessionDb = {
   deleteForUser(userId: string): { jti: string; jfDevice: string | null }[] {
     const rows = getDb().prepare("SELECT jti, jf_device FROM sessions WHERE user_id = ?").all(userId) as { jti: string; jf_device: string | null }[];
     getDb().prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
-    return rows.map((r) => ({ jti: r.jti, jfDevice: r.jf_device }));
+    // Le passage ne partage un appareil qu'au sein d'un même compte ; filtré quand même par la même
+    // règle que `delete`, qui ne coûte rien.
+    const orphans = new Set(orphanDevices(rows.map((r) => r.jf_device)));
+    return rows.map((r) => ({ jti: r.jti, jfDevice: r.jf_device && orphans.has(r.jf_device) ? r.jf_device : null }));
   },
 
   countOthers(userId: string, currentJti: string): number {

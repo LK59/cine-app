@@ -507,7 +507,11 @@
         "closedByAdmin": "{n} session fermée par {by}|{n} sessions fermées par {by}",
         "devicesPruned": "{n} appareil inactif retiré|{n} appareils inactifs retirés",
         "passwordChanged": "Mot de passe changé · {n} session fermée|Mot de passe changé · {n} sessions fermées",
-        "newAccountTags": "Tags posés : {tags}"
+        "newAccountTags": "Tags posés : {tags}",
+        "passageRequested": "Passage demandé vers {to}",
+        "passageReceived": "Arrivé par le passage",
+        "passageRefused": "Passage refusé",
+        "passageBlocked": "Passage freiné (trop d'essais)"
       },
       "notif": {
         "recipients": "{n} destinataire|{n} destinataires",
@@ -683,7 +687,11 @@
         "token-refused": "Jeton refusé",
         "expired": "Session expirée",
         "devices-pruned": "{n} appareil inactif retiré de Jellyfin|{n} appareils inactifs retirés de Jellyfin",
-        "password-changed": "Mot de passe administrateur changé"
+        "password-changed": "Mot de passe administrateur changé",
+        "passage-requested": "Passage demandé",
+        "passage-received": "Arrivé par le passage",
+        "passage-refused": "Passage refusé",
+        "passage-blocked": "Passage freiné"
       }
     },
     "habits": {
@@ -3616,5 +3624,48 @@
         "generic": "Le lien n'a pas pu être créé."
       }
     }
+  },
+  "passage": {
+    "banner": {
+      "text": "Laterna a une nouvelle adresse",
+      "action": "Passer",
+      "close": "Fermer"
+    },
+    "dialog": {
+      "title": "Passer à {host}",
+      "body": "Vous restez connecté, avec les réglages de cet appareil, et vos notifications suivent sans doublon.",
+      "codeLabel": "Votre code de passage",
+      "codeHint": "Valable 15 minutes, une seule fois. Si {host} vous demande de vous connecter, collez ce code.",
+      "open": "Copier le code et ouvrir {host}",
+      "copied": "Code copié",
+      "installedIos": "Sur iPhone et iPad, l'app de l'écran d'accueil a son propre espace : ouvrez {host} dans Safari, ajoutez-la à l'écran d'accueil (Partager, puis « Sur l'écran d'accueil »), ouvrez-la, puis collez ce code.",
+      "preparing": "Préparation du passage…",
+      "relogin": "Déconnectez-vous puis reconnectez-vous une fois sur cette adresse, et réessayez.",
+      "rateLimited": "Trop de demandes. Réessayez dans une heure.",
+      "error": "Le passage n'a pas pu être préparé. Réessayez.",
+      "close": "Fermer"
+    },
+    "page": {
+      "title": "Bienvenue sur la nouvelle adresse",
+      "working": "Connexion en cours…",
+      "refused": "Ce lien de passage n'est plus valable. Saisissez votre code de passage, ou connectez-vous.",
+      "codeLabel": "Code de passage",
+      "codeIntro": "Vous venez de l'ancienne adresse ? Saisissez le code affiché là-bas.",
+      "submit": "Valider",
+      "submitting": "Vérification…",
+      "invalid": "Ce code n'est pas valable. Vérifiez-le, ou demandez-en un nouveau sur l'ancienne adresse.",
+      "rateLimited": "Trop d'essais. Réessayez dans un quart d'heure.",
+      "network": "Le serveur ne répond pas. Vérifiez votre connexion.",
+      "signedIn": "Vous êtes connecté sur cette adresse.",
+      "toApp": "Ouvrir Laterna",
+      "toLogin": "Se connecter avec un mot de passe"
+    },
+    "install": {
+      "title": "Ajoutez Laterna à votre écran d'accueil",
+      "ios": "Sur iPhone ou iPad, dans Safari : touchez Partager, puis « Sur l'écran d'accueil ».",
+      "android": "Sur Android : ouvrez le menu du navigateur, puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».",
+      "then": "Ouvrez ensuite l'app depuis l'écran d'accueil ; si elle vous demande de vous connecter, collez votre code de passage. Vous pourrez alors supprimer l'ancienne icône."
+    },
+    "loginLink": "Vous venez de l'ancienne adresse ? Code de passage"
   }
 }

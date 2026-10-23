@@ -736,6 +736,15 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
       return t("activity.line.auth.devicesPruned", { n: numOf(line.count) ?? 0 });
     case "password-changed":
       return join(t("activity.line.auth.passwordChanged", { n: numOf(line.closedSessions) ?? 0 }), strOf(line.ip));
+    // Le passage d'adresse (DECISIONS.md §119).
+    case "passage-requested":
+      return join(t("activity.line.auth.passageRequested", { to: strOf(line.to) ?? "?" }), strOf(line.device), strOf(line.ip));
+    case "passage-received":
+      return join(t("activity.line.auth.passageReceived"), strOf(line.device), strOf(line.ip));
+    case "passage-refused":
+      return join(t("activity.line.auth.passageRefused"), strOf(line.device), strOf(line.ip));
+    case "passage-blocked":
+      return join(t("activity.line.auth.passageBlocked"), strOf(line.device), strOf(line.ip));
     case "new-account-tags":
       return t("activity.line.auth.newAccountTags", { tags: Array.isArray(line.tags) ? line.tags.join(", ") : "?" });
     // Le journal des ouvertures (`startup.log`).

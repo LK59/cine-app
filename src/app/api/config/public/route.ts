@@ -3,6 +3,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { configuredServices } from "@/lib/services";
+import { passageTarget } from "@/lib/passage/target";
 
 /**
  * Ce que l'interface a besoin de savoir avant d'afficher quoi que ce soit.
@@ -29,6 +30,9 @@ export async function GET(req: NextRequest) {
     offlineDownloads: config.player.offlineDownloads && (config.player.offlineDownloadsForEveryone || session?.role === "admin"),
     // La disposition de l'accueil, réglée par l'exploitant (DECISIONS.md §52).
     homeContinueHero: config.home.continueHero,
+    // La nouvelle adresse du passage (DECISIONS.md §119), nom d'hôte seul : la page de connexion y
+    // propose le code de passage. Publique comme la page Nouveautés qui l'annonce à tous les comptes.
+    passageHost: passageTarget(config.news?.laternaAddress)?.host ?? null,
     ...(session ? { configured: configuredServices(config) } : {}),
   });
 }

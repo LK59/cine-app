@@ -72,6 +72,10 @@ const PlayerOnboardingGate = dynamic(() => import("./PlayerOnboarding").then((m)
 // La fenêtre des Nouveautés : la décision est légère, la fenêtre elle-même n'arrive qu'avec elle.
 const NewsGate = dynamic(() => import("./NewsGate").then((m) => m.NewsGate), { ssr: false });
 const PushResumePrompt = dynamic(() => import("./PushResumePrompt").then((m) => m.PushResumePrompt), { ssr: false });
+// Le passage d'une adresse à l'autre (DECISIONS.md §119) : le bandeau sur l'ancienne, les réglages
+// emportés posés à l'arrivée sur la nouvelle. Chacun ne rend rien hors de son cas.
+const PassageBanner = dynamic(() => import("@/components/passage/PassageBanner").then((m) => m.PassageBanner), { ssr: false });
+const PassageArrival = dynamic(() => import("@/components/passage/PassageArrival").then((m) => m.PassageArrival), { ssr: false });
 // Les décodeurs du lecteur, une fois l'écran installé, à chaque démarrage : l'écran d'accueil seul
 // ne concerne qu'un premier lancement, et le 21/09/2026 le décodeur FLAC arrivait par un
 // déploiement que presque personne ne verrait passer par là. `ssr: false` n'est pas un détail :
@@ -295,6 +299,8 @@ export function PlayerShell() {
       {isMobile ? <PlayerBottomBar /> : <PlayerRail />}
       <PlayerOnboardingGate />
       <PushResumePrompt />
+      <PassageBanner />
+      <PassageArrival />
       <NewsGate />
       <DecoderWarmup delayMs={DECODER_WARMUP_MS} />
       {/* Montés le temps de leur sortie : l'adresse change avant eux — un retour du navigateur

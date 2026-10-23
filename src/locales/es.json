@@ -507,7 +507,11 @@
         "closedByAdmin": "{n} sesión cerrada por {by}|{n} sesiones cerradas por {by}",
         "devicesPruned": "{n} dispositivo inactivo eliminado|{n} dispositivos inactivos eliminados",
         "passwordChanged": "Contraseña cambiada · {n} sesión cerrada|Contraseña cambiada · {n} sesiones cerradas",
-        "newAccountTags": "Etiquetas aplicadas: {tags}"
+        "newAccountTags": "Etiquetas aplicadas: {tags}",
+        "passageRequested": "Paso solicitado a {to}",
+        "passageReceived": "Llegada por un paso",
+        "passageRefused": "Paso rechazado",
+        "passageBlocked": "Paso frenado (demasiados intentos)"
       },
       "notif": {
         "recipients": "{n} destinatario|{n} destinatarios",
@@ -683,7 +687,11 @@
         "token-refused": "Token rechazado",
         "expired": "Sesión caducada",
         "devices-pruned": "{n} dispositivo inactivo eliminado de Jellyfin|{n} dispositivos inactivos eliminados de Jellyfin",
-        "password-changed": "Contraseña de administrador cambiada"
+        "password-changed": "Contraseña de administrador cambiada",
+        "passage-requested": "Paso solicitado",
+        "passage-received": "Llegada por un paso",
+        "passage-refused": "Paso rechazado",
+        "passage-blocked": "Paso frenado"
       }
     },
     "habits": {
@@ -3616,5 +3624,48 @@
         "generic": "No se pudo crear el enlace."
       }
     }
+  },
+  "passage": {
+    "banner": {
+      "text": "Laterna tiene una nueva dirección",
+      "action": "Pasar",
+      "close": "Cerrar"
+    },
+    "dialog": {
+      "title": "Pasar a {host}",
+      "body": "Usted sigue con la sesión iniciada, con los ajustes de este dispositivo, y sus notificaciones le siguen sin duplicados.",
+      "codeLabel": "Su código de paso",
+      "codeHint": "Válido 15 minutos, una sola vez. Si {host} le pide iniciar sesión, pegue este código.",
+      "open": "Copiar el código y abrir {host}",
+      "copied": "Código copiado",
+      "installedIos": "En iPhone y iPad, la app de la pantalla de inicio tiene su propio espacio: abra {host} en Safari, añádala a la pantalla de inicio (Compartir y luego «Añadir a pantalla de inicio»), ábrala y pegue este código.",
+      "preparing": "Preparando el paso…",
+      "relogin": "Cierre sesión y vuelva a iniciarla una vez en esta dirección, y vuelva a intentarlo.",
+      "rateLimited": "Demasiadas solicitudes. Vuelva a intentarlo dentro de una hora.",
+      "error": "No se ha podido preparar el paso. Vuelva a intentarlo.",
+      "close": "Cerrar"
+    },
+    "page": {
+      "title": "Bienvenido a la nueva dirección",
+      "working": "Iniciando sesión…",
+      "refused": "Este enlace de paso ya no es válido. Introduzca su código de paso o inicie sesión.",
+      "codeLabel": "Código de paso",
+      "codeIntro": "¿Viene de la dirección antigua? Introduzca el código que se muestra allí.",
+      "submit": "Confirmar",
+      "submitting": "Comprobando…",
+      "invalid": "Este código no es válido. Compruébelo o pida uno nuevo en la dirección antigua.",
+      "rateLimited": "Demasiados intentos. Vuelva a intentarlo dentro de un cuarto de hora.",
+      "network": "El servidor no responde. Compruebe su conexión.",
+      "signedIn": "Ha iniciado sesión en esta dirección.",
+      "toApp": "Abrir Laterna",
+      "toLogin": "Iniciar sesión con una contraseña"
+    },
+    "install": {
+      "title": "Añada Laterna a su pantalla de inicio",
+      "ios": "En iPhone o iPad, en Safari: toque Compartir y luego «Añadir a pantalla de inicio».",
+      "android": "En Android: abra el menú del navegador y luego «Instalar aplicación» o «Añadir a pantalla de inicio».",
+      "then": "Después abra la app desde la pantalla de inicio; si le pide iniciar sesión, pegue su código de paso. Entonces podrá borrar el icono antiguo."
+    },
+    "loginLink": "¿Viene de la dirección antigua? Código de paso"
   }
 }

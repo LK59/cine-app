@@ -15,6 +15,9 @@ const mockPushDb = {
   removeByUserEndpointPrefix: vi.fn(),
 };
 vi.mock("@/lib/db", () => ({ pushDb: mockPushDb }));
+// Le remplacement de l'abonnement d'un passage d'adresse a ses propres tests (`passage.test.ts`).
+const mockReplaceArrived = vi.fn();
+vi.mock("@/lib/passage/service", () => ({ replaceArrivedPushEndpoint: (...a: unknown[]) => mockReplaceArrived(...a) }));
 
 function fakeReq(opts: { cookie?: string; body?: unknown }): NextRequest {
   return {

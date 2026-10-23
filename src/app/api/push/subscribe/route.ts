@@ -4,6 +4,8 @@ import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { pushDb } from "@/lib/db";
 import { isAllowedPushEndpoint, MAX_PUSH_SUBSCRIPTIONS_PER_USER } from "@/lib/pushEndpoint";
+import { replaceArrivedPushEndpoint } from "@/lib/passage/service";
+import { logError } from "@/lib/logger";
 
 async function getUser(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -37,6 +39,14 @@ export async function POST(req: NextRequest) {
   pushDb.upsert(session.u, endpoint, p256dh, auth);
   // Rien ne bornait le nombre d'abonnements d'un compte, et chaque notification part vers tous.
   pushDb.trimForUser(session.u, MAX_PUSH_SUBSCRIPTIONS_PER_USER, endpoint);
+  // Arrivé par le passage d'adresse (DECISIONS.md §119) : l'abonnement que cet appareil avait sur
+  // l'ancienne adresse est retiré maintenant que la nouvelle reçoit — de ce compte seulement. Dans
+  // sa propre garde : l'abonnement qu'on vient d'enregistrer ne doit pas échouer pour lui.
+  try {
+    replaceArrivedPushEndpoint(session.jti, session.u, endpoint);
+  } catch (error) {
+    logError("push.passage", error);
+  }
   return NextResponse.json({ ok: true });
 }
 

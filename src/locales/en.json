@@ -507,7 +507,11 @@
         "closedByAdmin": "{n} session closed by {by}|{n} sessions closed by {by}",
         "devicesPruned": "{n} inactive device removed|{n} inactive devices removed",
         "passwordChanged": "Password changed · {n} session closed|Password changed · {n} sessions closed",
-        "newAccountTags": "Tags applied: {tags}"
+        "newAccountTags": "Tags applied: {tags}",
+        "passageRequested": "Switch requested to {to}",
+        "passageReceived": "Arrived through a switch",
+        "passageRefused": "Switch refused",
+        "passageBlocked": "Switch throttled (too many attempts)"
       },
       "notif": {
         "recipients": "{n} recipient|{n} recipients",
@@ -683,7 +687,11 @@
         "token-refused": "Token refused",
         "expired": "Session expired",
         "devices-pruned": "{n} inactive device removed from Jellyfin|{n} inactive devices removed from Jellyfin",
-        "password-changed": "Administrator password changed"
+        "password-changed": "Administrator password changed",
+        "passage-requested": "Switch requested",
+        "passage-received": "Arrived through a switch",
+        "passage-refused": "Switch refused",
+        "passage-blocked": "Switch throttled"
       }
     },
     "habits": {
@@ -3616,5 +3624,48 @@
         "generic": "The link couldn't be created."
       }
     }
+  },
+  "passage": {
+    "banner": {
+      "text": "Laterna has a new address",
+      "action": "Switch",
+      "close": "Close"
+    },
+    "dialog": {
+      "title": "Switch to {host}",
+      "body": "You stay signed in, with this device's settings, and your notifications follow without duplicates.",
+      "codeLabel": "Your transfer code",
+      "codeHint": "Valid for 15 minutes, once. If {host} asks you to sign in, paste this code.",
+      "open": "Copy the code and open {host}",
+      "copied": "Code copied",
+      "installedIos": "On iPhone and iPad, the Home Screen app has its own space: open {host} in Safari, add it to your Home Screen (Share, then “Add to Home Screen”), open it, then paste this code.",
+      "preparing": "Preparing the switch…",
+      "relogin": "Sign out and sign in once more on this address, then try again.",
+      "rateLimited": "Too many requests. Try again in an hour.",
+      "error": "The switch couldn't be prepared. Try again.",
+      "close": "Close"
+    },
+    "page": {
+      "title": "Welcome to the new address",
+      "working": "Signing you in…",
+      "refused": "This transfer link is no longer valid. Enter your transfer code, or sign in.",
+      "codeLabel": "Transfer code",
+      "codeIntro": "Coming from the old address? Enter the code shown there.",
+      "submit": "Confirm",
+      "submitting": "Checking…",
+      "invalid": "This code isn't valid. Check it, or request a new one on the old address.",
+      "rateLimited": "Too many attempts. Try again in fifteen minutes.",
+      "network": "The server isn't responding. Check your connection.",
+      "signedIn": "You're signed in on this address.",
+      "toApp": "Open Laterna",
+      "toLogin": "Sign in with a password"
+    },
+    "install": {
+      "title": "Add Laterna to your Home Screen",
+      "ios": "On iPhone or iPad, in Safari: tap Share, then “Add to Home Screen”.",
+      "android": "On Android: open the browser menu, then “Install app” or “Add to Home screen”.",
+      "then": "Then open the app from your Home Screen; if it asks you to sign in, paste your transfer code. You can then delete the old icon."
+    },
+    "loginLink": "Coming from the old address? Transfer code"
   }
 }

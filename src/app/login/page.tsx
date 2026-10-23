@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Activity, Eye, EyeOff } from "lucide-react";
@@ -30,6 +30,22 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [showLocalForm, setShowLocalForm] = useState(false);
   const reason = searchParams.get("reason");
+  // Sur la nouvelle adresse d'un passage (DECISIONS.md §119) : « Vous venez de l'ancienne adresse ? »,
+  // vers le code de passage. L'application installée sur iPhone n'a pas la session de Safari ; c'est
+  // par ici qu'on y entre sans mot de passe.
+  const [passageHere, setPassageHere] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/config/public")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { passageHost?: string | null } | null) => {
+        if (!cancelled && data?.passageHost && data.passageHost === window.location.host) setPassageHere(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function submit(endpoint: string) {
     setLoading(true);
@@ -286,6 +302,17 @@ function LoginForm() {
         >
           {t("share.guest.loginButton")}
         </Link>
+
+        {passageHere && (
+          <Link
+            href="/passage"
+            data-passage-login-link=""
+            data-liquid-pan="wide"
+            className="settings-glass-btn mx-auto mt-3 block w-fit rounded-full px-3.5 py-1.5 text-xs text-slate-300 transition-colors hover:text-white"
+          >
+            {t("passage.loginLink")}
+          </Link>
+        )}
 
         {/* Sous le formulaire et les recours : rien de ce qu'elle montre n'est privé — la
             version se lit déjà dans `/sw.js?v=`, public lui aussi (DECISIONS.md §41). */}

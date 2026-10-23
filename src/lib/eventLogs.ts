@@ -123,7 +123,13 @@ export type AuthEvent =
   | "share-revoked"
   | "share-extended"
   | "share-expired"
-  | "share-deleted";
+  | "share-deleted"
+  // Le passage d'une adresse à l'autre (DECISIONS.md §119) : demandé sur l'ancienne, reçu sur la
+  // nouvelle, refusé (secret inconnu, expiré ou déjà servi — sans dire lequel), freiné (trop d'essais).
+  | "passage-requested"
+  | "passage-received"
+  | "passage-refused"
+  | "passage-blocked";
 
 /** Ne lève jamais : un journal qui échoue ne doit pas empêcher quelqu'un de se connecter. */
 export function logAuthEvent(kind: AuthEvent, fields: { user: string; device?: string | null; ip?: string | null } & Record<string, unknown>): void {

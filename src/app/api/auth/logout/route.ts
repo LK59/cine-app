@@ -31,10 +31,14 @@ export async function POST(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const payload = await verifySessionToken(token);
   if (payload?.jti) {
+    // L'appareil connu de la session, lu avant de la fermer : `delete` ne le rend que si plus
+    // aucune session ne s'en sert — une session jumelle ouverte par le passage d'adresse (§119)
+    // garde le même. Dans ce cas, rien n'est révoqué, et surtout pas le jeton par repli.
+    const known = sessionDb.get(payload.jti)?.jfDevice ?? null;
     const device = sessionDb.delete(payload.jti);
     forgetBeat(payload.jti);
     if (device) void revokeJellyfinDevices([device], "déconnexion");
-    else void revokeJellyfinToken(payload.jfToken, "déconnexion");
+    else if (!known) void revokeJellyfinToken(payload.jfToken, "déconnexion");
     logAuthEvent("logout", { user: payload.jfUser ?? payload.u, ip: getClientIp(req), device: requestDeviceLabel(req) });
   }
   const res = NextResponse.json({ ok: true });

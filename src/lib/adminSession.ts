@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { revokeJellyfinDevices } from "@/lib/jellyfinRevoke";
 import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { config } from "@/lib/config";
-import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/auth";
+import { createSessionToken } from "@/lib/auth";
 import { sessionDb, userPrefsDb } from "@/lib/db";
-import { LOCALE_COOKIE } from "@/lib/i18n";
 import { logAuthEvent } from "@/lib/eventLogs";
+import { setSignedInCookies } from "@/lib/sessionCookies";
 
 /**
  * Ouvre une session administrateur locale et la pose dans la réponse — la seule écriture de ces
@@ -20,18 +20,6 @@ export async function adminSessionResponse(req: NextRequest, username: string, i
   logAuthEvent("login", { user: username, ip, device: requestDeviceLabel(req), role: "admin", local: true });
   const lang = userPrefsDb.getLang(username, config.app.language);
   const res = NextResponse.json({ ok: true, role: "admin" });
-  res.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: config.app.cookieSecure,
-    maxAge: SESSION_MAX_AGE,
-    path: "/",
-  });
-  res.cookies.set(LOCALE_COOKIE, lang, {
-    sameSite: "lax",
-    secure: config.app.cookieSecure,
-    maxAge: SESSION_MAX_AGE,
-    path: "/",
-  });
+  setSignedInCookies(res, token, lang);
   return res;
 }

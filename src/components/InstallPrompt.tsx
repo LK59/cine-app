@@ -5,34 +5,47 @@ import { usePathname } from "next/navigation";
 import { Share, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { ABOVE_BOTTOM_BAR, PROMPT_CLOSE_CLASS } from "@/lib/floatingPrompt";
-import { isIosSafariBrowserTab } from "@/lib/iosInstall";
+import { isInstalledApp, isIosSafariBrowserTab } from "@/lib/iosInstall";
+import { passageFlags } from "@/lib/passage/client";
+import { installPlatform } from "@/components/passage/PassageInstallHelp";
 
 const DISMISS_KEY = "cine-install-prompt-dismissed-until";
 const SNOOZE_DAYS = 21;
 const SHOW_DELAY_MS = 4000;
+/** Juste arrivé par le passage : l'aide tout de suite, le temps que l'accueil se dessine. */
+const PASSAGE_DELAY_MS = 800;
 
 // Discreet nudge for iOS: Safari has no beforeinstallprompt event, so the only
 // way to "install" is Share -> Add to Home Screen, which we can't trigger
 // programmatically — we just have to explain it once in a dismissible way.
 // This matters because iOS only allows Web Push for home-screen-installed PWAs.
+//
+// Juste après un passage d'adresse (DECISIONS.md §119, `cine:passage-install-help` dans l'onglet) :
+// montrée aussitôt, même mise de côté plus tôt, sur iPhone/iPad comme sur Android — la nouvelle
+// adresse est une application à installer de nouveau — avec la suite (ouvrir l'app, coller le code).
 export function InstallPrompt() {
   const t = useT();
-  const [show, setShow] = useState(false);
+  const [show, setShow] = useState<"ios" | "passage" | null>(null);
   const pathname = usePathname();
 
   useEffect(() => {
+    if (passageFlags.installHelpWanted() && !isInstalledApp() && installPlatform() !== "other") {
+      const timer = setTimeout(() => setShow("passage"), PASSAGE_DELAY_MS);
+      return () => clearTimeout(timer);
+    }
     if (!isIosSafariBrowserTab()) return;
     try {
       const dismissedUntil = Number(localStorage.getItem(DISMISS_KEY) ?? 0);
       if (Date.now() < dismissedUntil) return;
     } catch {}
 
-    const timer = setTimeout(() => setShow(true), SHOW_DELAY_MS);
+    const timer = setTimeout(() => setShow("ios"), SHOW_DELAY_MS);
     return () => clearTimeout(timer);
   }, []);
 
   function dismiss() {
-    setShow(false);
+    if (show === "passage") passageFlags.installHelpShown();
+    setShow(null);
     try {
       localStorage.setItem(DISMISS_KEY, String(Date.now() + SNOOZE_DAYS * 86400000));
     } catch {}
@@ -42,18 +55,30 @@ export function InstallPrompt() {
   // ses boutons, et l'installation n'a de sens qu'une fois l'application prête.
   if (!show || pathname?.startsWith("/setup")) return null;
 
+  const passage = show === "passage";
+  const android = passage && installPlatform() === "android";
+
   return (
     <div
       className="fixed inset-x-0 bottom-0 z-60 flex justify-center px-3 pb-3 pointer-events-none"
       // Au-dessus de la barre du bas du cinéma, pas dessus — voir `ABOVE_BOTTOM_BAR`.
       style={{ paddingBottom: ABOVE_BOTTOM_BAR }}
     >
-      <div className="glass-panel pointer-events-auto flex max-w-sm items-start gap-3 rounded-2xl px-4 py-3 shadow-glow">
+      <div data-install-prompt={show} className="glass-panel pointer-events-auto flex max-w-sm items-start gap-3 rounded-2xl px-4 py-3 shadow-glow">
         <Share size={16} className="mt-0.5 shrink-0 text-accent-400" />
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-white">{t("common.installPrompt.title")}</p>
-          <p className="mt-0.5 text-[11px] leading-snug text-slate-400">{t("common.installPrompt.body")}</p>
-          <p className="mt-1 text-[11px] leading-snug text-slate-500">{t("common.installPrompt.steps")}</p>
+          <p className="text-xs font-semibold text-white">{passage ? t("passage.install.title") : t("common.installPrompt.title")}</p>
+          {passage ? (
+            <>
+              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">{android ? t("passage.install.android") : t("passage.install.ios")}</p>
+              <p className="mt-1 text-[11px] leading-snug text-slate-500">{t("passage.install.then")}</p>
+            </>
+          ) : (
+            <>
+              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">{t("common.installPrompt.body")}</p>
+              <p className="mt-1 text-[11px] leading-snug text-slate-500">{t("common.installPrompt.steps")}</p>
+            </>
+          )}
         </div>
         {/* Une cible de 44 px (la croix en faisait 13) et un nom : c'était la seule sortie de la
             bannière. */}

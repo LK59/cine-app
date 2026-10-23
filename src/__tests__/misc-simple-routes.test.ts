@@ -55,6 +55,8 @@ describe("GET /api/config/public", () => {
       // Lu avant que le moindre lecteur soit monté : c'est lui qui dit lequel des deux existe.
       playerServerFallback: false,
       homeContinueHero: false,
+      // Pas de nouvelle adresse dans cette configuration : rien à proposer à la connexion (§119).
+      passageHost: null,
       configured: {
         radarr: true,
         sonarr: false,

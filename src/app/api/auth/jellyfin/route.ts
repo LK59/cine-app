@@ -4,10 +4,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { jellyfinDeviceName, requestDeviceLabel } from "@/lib/deviceLabel";
 import { jellyfinIdentityAuth } from "@/lib/jellyfinAuth";
 import { config } from "@/lib/config";
-import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE, type Role } from "@/lib/auth";
+import { createSessionToken, type Role } from "@/lib/auth";
 import { sessionDb, userPrefsDb } from "@/lib/db";
 import { accountRateLimitedResponse, checkAccountRateLimit, checkRateLimit, rateLimitedResponse, refundAccountRateLimit, refundRateLimit } from "@/lib/rateLimiter";
-import { LOCALE_COOKIE } from "@/lib/i18n";
+import { setSignedInCookies } from "@/lib/sessionCookies";
 import { getClientIp } from "@/lib/api-helpers";
 import { passwordAttempts, hasLeadingSpace, readCredentials } from "@/lib/passwordAttempts";
 import { loginToJellyseerr } from "@/lib/jellyseerrIdentity";
@@ -143,18 +143,6 @@ export async function POST(req: NextRequest) {
   if (expired.length) logAuthEvent("expired", { user: jellyfinUsername, count: expired.length });
   const lang = userPrefsDb.getLang(userId, config.app.language);
   const res = NextResponse.json({ ok: true, role });
-  res.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: config.app.cookieSecure,
-    maxAge: SESSION_MAX_AGE,
-    path: "/",
-  });
-  res.cookies.set(LOCALE_COOKIE, lang, {
-    sameSite: "lax",
-    secure: config.app.cookieSecure,
-    maxAge: SESSION_MAX_AGE,
-    path: "/",
-  });
+  setSignedInCookies(res, token, lang);
   return res;
 }

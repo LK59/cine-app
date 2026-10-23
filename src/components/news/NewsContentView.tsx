@@ -4,6 +4,7 @@ import { ChevronRight, Wrench } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { continuesTitle, hasFixes, joinContinuation, type NewsContent, type NewsEntry } from "@/lib/news/content";
 import { NEWS_ICON_COMPONENTS } from "./newsIcons";
+import { openPassageFor } from "@/lib/passage/client";
 
 /**
  * Le contenu d'une page de Nouveautés — le même dessin dans la fenêtre et dans Compte → Nouveautés
@@ -52,7 +53,18 @@ function withLink(text: string, link: string | undefined): React.ReactNode {
     i === 0
       ? [part]
       : [
-          <a key={i} href={link} target="_blank" rel="noopener noreferrer" className="underline decoration-white/40 underline-offset-2 hover:decoration-white">
+          <a
+            key={i}
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            // L'adresse de destination du passage (DECISIONS.md §119) ouvre la fenêtre du passage —
+            // on y arrive connecté — plutôt que l'adresse nue. Sans passage monté, le lien s'ouvre.
+            onClick={(e) => {
+              if (openPassageFor(link)) e.preventDefault();
+            }}
+            className="underline decoration-white/40 underline-offset-2 hover:decoration-white"
+          >
             {host}
           </a>,
           part,

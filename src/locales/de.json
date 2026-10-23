@@ -507,7 +507,11 @@
         "closedByAdmin": "{n} Sitzung von {by} geschlossen|{n} Sitzungen von {by} geschlossen",
         "devicesPruned": "{n} inaktives Gerät entfernt|{n} inaktive Geräte entfernt",
         "passwordChanged": "Passwort geändert · {n} Sitzung geschlossen|Passwort geändert · {n} Sitzungen geschlossen",
-        "newAccountTags": "Tags gesetzt: {tags}"
+        "newAccountTags": "Tags gesetzt: {tags}",
+        "passageRequested": "Wechsel zu {to} angefordert",
+        "passageReceived": "Über einen Wechsel angekommen",
+        "passageRefused": "Wechsel abgelehnt",
+        "passageBlocked": "Wechsel gebremst (zu viele Versuche)"
       },
       "notif": {
         "recipients": "{n} Empfänger|{n} Empfänger",
@@ -683,7 +687,11 @@
         "token-refused": "Token abgelehnt",
         "expired": "Sitzung abgelaufen",
         "devices-pruned": "{n} inaktives Gerät aus Jellyfin entfernt|{n} inaktive Geräte aus Jellyfin entfernt",
-        "password-changed": "Administratorpasswort geändert"
+        "password-changed": "Administratorpasswort geändert",
+        "passage-requested": "Wechsel angefordert",
+        "passage-received": "Über einen Wechsel angekommen",
+        "passage-refused": "Wechsel abgelehnt",
+        "passage-blocked": "Wechsel gebremst"
       }
     },
     "habits": {
@@ -3616,5 +3624,48 @@
         "generic": "Der Link konnte nicht erstellt werden."
       }
     }
+  },
+  "passage": {
+    "banner": {
+      "text": "Laterna hat eine neue Adresse",
+      "action": "Wechseln",
+      "close": "Schließen"
+    },
+    "dialog": {
+      "title": "Zu {host} wechseln",
+      "body": "Sie bleiben angemeldet, mit den Einstellungen dieses Geräts, und Ihre Benachrichtigungen kommen ohne Doppel mit.",
+      "codeLabel": "Ihr Wechselcode",
+      "codeHint": "15 Minuten gültig, nur einmal. Wenn {host} Sie zur Anmeldung auffordert, fügen Sie diesen Code ein.",
+      "open": "Code kopieren und {host} öffnen",
+      "copied": "Code kopiert",
+      "installedIos": "Auf iPhone und iPad hat die App auf dem Home-Bildschirm einen eigenen Bereich: Öffnen Sie {host} in Safari, fügen Sie die Adresse zum Home-Bildschirm hinzu (Teilen, dann „Zum Home-Bildschirm“), öffnen Sie sie und fügen Sie diesen Code ein.",
+      "preparing": "Wechsel wird vorbereitet…",
+      "relogin": "Melden Sie sich ab und einmal neu an dieser Adresse an, dann versuchen Sie es erneut.",
+      "rateLimited": "Zu viele Anfragen. Versuchen Sie es in einer Stunde erneut.",
+      "error": "Der Wechsel konnte nicht vorbereitet werden. Versuchen Sie es erneut.",
+      "close": "Schließen"
+    },
+    "page": {
+      "title": "Willkommen unter der neuen Adresse",
+      "working": "Anmeldung läuft…",
+      "refused": "Dieser Wechsellink ist nicht mehr gültig. Geben Sie Ihren Wechselcode ein oder melden Sie sich an.",
+      "codeLabel": "Wechselcode",
+      "codeIntro": "Sie kommen von der alten Adresse? Geben Sie den dort angezeigten Code ein.",
+      "submit": "Bestätigen",
+      "submitting": "Wird geprüft…",
+      "invalid": "Dieser Code ist nicht gültig. Prüfen Sie ihn oder fordern Sie unter der alten Adresse einen neuen an.",
+      "rateLimited": "Zu viele Versuche. Versuchen Sie es in einer Viertelstunde erneut.",
+      "network": "Der Server antwortet nicht. Prüfen Sie Ihre Verbindung.",
+      "signedIn": "Sie sind unter dieser Adresse angemeldet.",
+      "toApp": "Laterna öffnen",
+      "toLogin": "Mit Passwort anmelden"
+    },
+    "install": {
+      "title": "Fügen Sie Laterna zum Home-Bildschirm hinzu",
+      "ios": "Auf iPhone oder iPad, in Safari: Tippen Sie auf Teilen, dann auf „Zum Home-Bildschirm“.",
+      "android": "Auf Android: Öffnen Sie das Browsermenü, dann „App installieren“ oder „Zum Startbildschirm hinzufügen“.",
+      "then": "Öffnen Sie die App dann über den Home-Bildschirm; wenn sie Sie zur Anmeldung auffordert, fügen Sie Ihren Wechselcode ein. Danach können Sie das alte Symbol löschen."
+    },
+    "loginLink": "Sie kommen von der alten Adresse? Wechselcode"
   }
 }

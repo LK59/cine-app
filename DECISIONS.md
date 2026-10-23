@@ -6861,3 +6861,89 @@ pas le logo. Mêmes adresses qu'avant, plus `icon-maskable-512.png` et `badge-96
 (chaque image référencée existe à ses dimensions), `splashScreens.test.ts`.
 
 **Décidé le 23/10/2026.**
+
+## 119. Le passage d'une adresse à l'autre, en un appui
+
+**Règle.** Sur l'ancienne adresse d'une installation qui en annonce une nouvelle (§118,
+`NEWS_LATERNA_ADDRESS`), un compte du foyer passe à la nouvelle sans mot de passe, connecté, avec les
+réglages de son appareil, et sans recevoir ses notifications deux fois. L'appui (« Passer » du bandeau,
+ou l'adresse dans la carte « Une nouvelle adresse » des Nouveautés) demande au serveur **deux secrets à
+usage unique**, rangés hachés (SHA-256) dans `passages` : un **jeton** de 32 octets
+(`crypto.randomBytes`, deux minutes), placé dans le **fragment** de l'adresse ouverte
+(`/passage#t=…` — ni le proxy ni aucun journal ne voient un fragment), et un **code** de 8 caractères
+Crockford (`XXXX-XXXX`, quinze minutes), copié au même appui. L'un ou l'autre, présenté à
+`/api/passage/redeem` (POST de même origine), ouvre une session **jumelle** de celle d'origine — même
+compte, même rôle, même jeton Jellyfin et même appareil Jellyfin, nouveau `jti` —, posée comme une
+connexion (`setSignedInCookies`). Le code existe pour l'iPhone : une application installée y a son
+propre stockage, ni les cookies ni le `localStorage` de Safari (WebKit ne documente la copie des cookies
+qu'à l'ajout au Dock de macOS, pas sur l'écran d'accueil d'iOS) ; elle y entre par la page de connexion
+(« Vous venez de l'ancienne adresse ? Code de passage », montrée seulement sur la nouvelle adresse).
+
+**Sécurité.** Demande : session vivante du foyer seulement (`admin`, `user` — jamais `share`, dont la
+porte la refuse et la route aussi), même origine, dix par heure et par compte, ligne `passage-requested`
+dans `auth.log` ; une demande remplace les secrets non servis de la même session. Échange : consommé par
+**une seule écriture conditionnelle** (`UPDATE … WHERE used_at IS NULL AND expires_at > now RETURNING`),
+puis la session d'origine doit exister encore (une session fermée entre-temps invalide ses secrets) ;
+refus identiques (corps et code 401) pour inconnu, mal formé, expiré, déjà servi, session fermée, et
+d'au moins 400 ms (`passageTiming`) ; cinq échecs par adresse cliente en quinze minutes, cent échecs de
+code pour toute l'installation, puis 429 (`attempts.ts`, sur `globalThis`) ; `passage-received`,
+`passage-refused`, `passage-blocked` dans `auth.log`. La session d'origine est gardée chiffrée
+(`encryptSecret`) dans la ligne le temps du passage ; la table est hors des sauvegardes
+(`DISPOSABLE_TABLES`). La destination est **toujours** celle du réglage (`passageTarget`, nom d'hôte
+validé par `laternaAddress`, `https` sauf `http://` écrit dans le réglage) : le serveur construit
+l'adresse, le client n'en fournit jamais — pas de redirection ouverte.
+
+**La connexion Jellyfin.** Le passage ne peut pas obtenir de nouveau jeton sans mot de passe (Quick
+Connect dépend d'un réglage du serveur Jellyfin). Les deux sessions partagent donc l'appareil, et
+**l'appareil ne tombe qu'avec la dernière session qui s'en sert** : `sessionDb.delete`, `deleteForUser`
+et le ménage de `create` ne rendent un appareil à révoquer que si plus aucune ligne de `sessions` ne le
+porte (`orphanDevices`). La déconnexion ne se rabat sur la révocation par jeton que pour une session sans
+appareil connu ; une session dans ce cas (ouverte avant le 24/09/2026) ne peut pas demander de passage
+(`passage-relogin` : se reconnecter une fois). Le ménage des appareils (`jellyfinDevicePrune`) épargne
+déjà tout appareil d'une session vivante (`liveJfDevices`).
+
+**Réglages.** Liste blanche, `PASSAGE_SETTINGS` (`src/lib/passage/settings.ts`), par noms logiques :
+volume, style des sous-titres, deux sous-titres, interface (Tactile/Ordinateur), agrandissement des
+bandes noires, « Améliorer les dialogues », plafond HDR, qualité « Originale » (rangée sous le compte
+d'arrivée). Chaque valeur validée à la demande et à l'arrivée ; 2 Ko au plus. Ce qui suit déjà le compte
+côté serveur (langue, disposition de l'accueil, défilement guidé) n'y est pas. Gardés avec la session
+d'arrivée (`passage_arrivals`, 30 jours au plus) et posés **au lancement du cinéma** (`PassageArrival`)
+sur tout stockage qui ne les a pas encore (`cine:passage-applied`) — application installée comprise —,
+puis la page se recharge une fois (jamais pendant un film) ; effacés quand l'application installée les
+a posés.
+
+**Notifications.** L'abonnement de l'appareil sur l'ancienne adresse voyage avec le passage s'il est
+rangé sous ce compte ; quand la nouvelle adresse s'abonne (`POST /api/push/subscribe`), il est retiré
+**pour ce compte seulement** (`replaceArrivedPushEndpoint`, `removeForUser`), dans sa propre garde.
+
+**Porteurs.** `src/lib/passage/service.ts` (secrets, échange, arrivée, notifications, ménage),
+`settings.ts` (liste blanche), `target.ts` (destination), `attempts.ts` (frein), `client.ts` (navigateur) ;
+`sessionDb.get` / `orphanDevices` (`db.ts`) ; `setSignedInCookies` (`src/lib/sessionCookies.ts`), seule
+écriture des cookies d'une connexion.
+
+**Appelants.** Routes `/api/passage` (GET destination, POST demande), `/api/passage/redeem` (publique),
+`/api/passage/arrival` ; `/api/push/subscribe` ; `/api/auth/logout` ; `/api/auth/jellyfin` et
+`adminSessionResponse` (cookies) ; `/api/config/public` (`passageHost`) ; `PassageBanner`,
+`PassageDialog`, `PassageArrival` (dans `PlayerShell`), page `/passage` (`PassageEntry`,
+`PassageInstallHelp`), lien de la page de connexion, `InstallPrompt` (l'aide d'installation aussitôt
+après l'arrivée, iPhone/iPad et Android), `NewsContentView` (le lien de la destination ouvre le passage).
+Chemins publics : `/passage`, `/api/passage/redeem` ; écritures d'un compte ordinaire : `POST
+/api/passage`, `POST /api/passage/arrival`.
+
+**Tests.** `passage-service.test.ts` (secrets hachés, durées, usage unique, concurrence, session fermée,
+jumelle, appareil partagé, liste blanche, notifications d'un seul compte, ménage, table), `passage-routes.test.ts`
+(demande : foyer, `share`, sans session, autre site, limite, journal ; échange : cookies identiques à une
+connexion, refus identiques, expiré, autre site, blocage au sixième essai, délai plancher, session
+précédente fermée ; arrivée ; abonnement remplacé), `passage-proxy.test.ts` (chemins publics, même origine,
+compte ordinaire, lien de partage), `passage-banner.test.tsx` (affiché, refermé, nouvelle adresse, sans
+réglage, pendant un film, lien des Nouveautés), `auth-routes.test.ts` (déconnexion sans révoquer un appareil
+partagé).
+
+**Voulu.** Pas de nouvel appareil Jellyfin ni de Quick Connect. Le bandeau ne se montre que sur
+l'ancienne adresse et se referme pour de bon ; le lien des Nouveautés ouvre le passage même refermé.
+Depuis l'application installée, la nouvelle adresse s'ouvre dans le navigateur (`window.open`) ; sur
+iPhone, ce navigateur intégré n'est ni Safari ni l'application à venir, d'où le code et la phrase qui le
+dit. Un passage n'emporte ni téléchargements hors ligne, ni reprise sur l'appareil, ni catalogue gardé,
+ni bilans ou lignes en attente.
+
+**Décidé le 23/10/2026.**

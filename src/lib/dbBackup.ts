@@ -39,7 +39,9 @@ function backupFileName(date = new Date()): string {
  * Retirées de la *copie*, jamais de la base vivante : les deux vues d'état lisent sept jours de
  * relevés bruts, et c'est exactement ce qu'il faut leur laisser.
  */
-const DISPOSABLE_TABLES = ["service_checks", "capability_checks"] as const;
+// `passages` : des secrets de deux à quinze minutes, avec une session chiffrée — rien qu'une
+// restauration doive faire revivre (DECISIONS.md §119).
+const DISPOSABLE_TABLES = ["service_checks", "capability_checks", "passages"] as const;
 
 /**
  * Les caches de consultation du disque, retirés de la copie eux aussi (08/10/2026) : filmographies,
