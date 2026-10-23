@@ -94,6 +94,7 @@ import { useSleepTimer } from "@/lib/useSleepTimer";
 import type { SleepMode } from "@/lib/sleepTimer";
 import { CastResume } from "@/lib/castResume";
 import { SessionTally, WatchedClock, newPlayerSessionId, watchElementWaits } from "@/lib/playerSessionTally";
+import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
 import { touchHintHeaders } from "@/lib/deviceLabel";
@@ -802,11 +803,7 @@ function ActivePlayer({
   const [playing, setPlaying] = useState(false);
   // Le temps joué, porté par ses lignes `stop` et de fin de diffusion — voir `WatchedClock`.
   const [watched] = useState(() => new WatchedClock());
-  useEffect(() => {
-    if (!playing) return;
-    watched.run(Date.now());
-    return () => watched.halt(Date.now());
-  }, [playing, watched]);
+  useWatchedClockRun(watched, playing);
   // Tant que ça joue, l'écran reste allumé — voir useWakeLock pour ce que chaque chemin
   // obtient déjà tout seul et ce qu'il n'obtient pas.
   useWakeLock(playing);

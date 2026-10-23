@@ -12,6 +12,7 @@ import { reportPlayback } from "@/lib/reportPlayback";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { SessionTally, WatchedClock, newPlayerSessionId } from "@/lib/playerSessionTally";
+import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
 import { noteWatching } from "@/lib/resumeRewind";
 import type { StableTakeover } from "@/lib/useStableFallback";
 import {
@@ -170,11 +171,7 @@ export function ChromecastPlayer({
   }, [itemId, title, bench, agent]);
 
   const playing = phase === "playing" && !remote.paused && !remote.waiting;
-  useEffect(() => {
-    if (!playing) return;
-    watched.run(Date.now());
-    return () => watched.halt(Date.now());
-  }, [playing, watched]);
+  useWatchedClockRun(watched, playing);
 
   const { stop: stopPlaybackNow } = usePlaybackSession(
     useCallback(() => lastKnownTime.current, []),

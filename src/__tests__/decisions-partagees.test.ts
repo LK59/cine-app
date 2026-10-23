@@ -1506,4 +1506,11 @@ describe("les doublons du lecteur fusionnés : une règle, un endroit (§115)", 
   it("le mot d'attente du natif s'efface par clearStall seulement", () => {
     expect(occurrences(/setStallAt\(null\)/)).toBe(1);
   });
+
+  it("l'horloge du temps regardé se met en marche dans useWatchedClockRun seulement", () => {
+    expect(lecteurQui(/\.run\(Date\.now\(\)\)|\.halt\(Date\.now\(\)\)/)).toEqual(["src/components/player/session/useWatchedClockRun.ts"]);
+    for (const f of ["src/components/playerNative/useNativeSessionRecord.ts", entreeDe(SERVEUR), "src/components/player/ChromecastPlayer.tsx"]) {
+      expect([f, /useWatchedClockRun\(watched, playing\)/.test(sansCommentaires(lire(f)))]).toEqual([f, true]);
+    }
+  });
 });

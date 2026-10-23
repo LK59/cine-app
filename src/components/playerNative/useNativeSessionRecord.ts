@@ -25,6 +25,7 @@ import { sleepTimerLogFields, sleepTimerStore } from "@/lib/sleepTimer";
 import type { RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
 import { syncFacts } from "@/components/player/nativeHostHelpers";
+import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
 
 /**
  * La copie de secours du bilan (`unsentStop`) est réécrite quand la séance a gagné ce temps regardé
@@ -87,11 +88,7 @@ export function useNativeSessionRecord({
   useEffect(() => {
     mountedAtRef.current = Date.now();
   }, [mountedAtRef]);
-  useEffect(() => {
-    if (!playing) return;
-    watched.run(Date.now());
-    return () => watched.halt(Date.now());
-  }, [playing, watched]);
+  useWatchedClockRun(watched, playing);
   /** Le fichier tel que le cache de reprise l'identifie — pour `keepOnStop`, lu à l'arrêt. */
   const keepFileRef = useRef<FileIdentity | null>(null);
   useEffect(() => {

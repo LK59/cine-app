@@ -6299,3 +6299,14 @@ les étendre est une décision à part (audit F2-1). Voir aussi §97.
 Les empreintes du natif (mot « Connexion perdue ou instable… » sous la roue) ; `decisions-partagees`
 (un seul `setStallAt(null)`). **Laissé.** La remise à neuf d'un essai (`setOpenedAt`,
 `setNetworkLost(null)`), écrite dans `restart` et `retryAfterNetwork` : deux lignes, pas une règle.
+
+### L'horloge du temps regardé en marche
+
+**Règle.** `WatchedClock.run` quand l'hôte joue, `halt` quand il cesse ou au démontage. **Porteur.**
+`useWatchedClockRun(watched, playing)` (`src/components/player/session/useWatchedClockRun.ts`).
+**Appelants.** `useNativeSessionRecord` (natif), `ActivePlayer` (serveur), `ChromecastPlayer` — chacun à
+la place exacte de sa copie : au démontage, l'horloge s'arrête avant que le `stop "unmount"` ne la
+lise. **Tests.** `player-regles-communes.test.ts`, `PlayerHost-temps-regarde`, `playerSessionTally`,
+les empreintes (`watched` des `stop`) ; `decisions-partagees`. **Différent exprès.** Ce que « joue »
+veut dire : Chromecast exclut l'attente du récepteur (`remote.waiting`, §97) ; les attentes de
+l'élément passent par `watchElementWaits`, déjà commun.
