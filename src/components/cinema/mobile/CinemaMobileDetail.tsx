@@ -570,8 +570,10 @@ export function CinemaMobileDetail({
         )}
         {/* Un téléchargement lisible passe en tête, en blanc, et « Lire » devient « Lire en ligne »
             (Louis, 19/10/2026). */}
-        {/* Même si la bibliothèque a perdu le fichier : la copie de l'appareil est alors la seule lisible (§109). */}
-        {!playPending && playerEnabled && offlinePlayable && <OfflinePlayButton download={offlinePlayable} onlineResumeTicks={resumeTicks} onlineKnown={resumeKnown} episodeCode={offlineEpisodeCode} variant="wide" />}
+        {/* Même si la bibliothèque a perdu le fichier : la copie de l'appareil est alors la seule lisible (§109).
+            Sans garde de lecture intégrée à elle : le hors ligne n'est ouvert que par sa propre décision
+            (`useOfflineDownloadsEnabled`, §109), comme au bureau (audit du 23/10/2026). */}
+        {!playPending && offlinePlayable && <OfflinePlayButton download={offlinePlayable} onlineResumeTicks={resumeTicks} onlineKnown={resumeKnown} episodeCode={offlineEpisodeCode} variant="wide" />}
         {!playPending && playerEnabled && playTargetId && (
           <button
             type="button"
@@ -618,7 +620,8 @@ export function CinemaMobileDetail({
         )}
         {/* Le téléchargement hors ligne (bêta, 19/10/2026), films seulement pour l'instant : sous la
             bande-annonce, collé à elle (la marge de 1rem de la bande-annonce reste sous le bloc). */}
-        {!isSeries && !fileMissing && playerEnabled && (
+        {/* Ni garde de lecture intégrée : voir « Lire le fichier téléchargé » plus haut. */}
+        {!isSeries && !fileMissing && (
           <OfflineDownloadControl
             variant="wide"
             wideSpacing={lead.trailerKey ? "-mt-2 mb-4" : "mb-4"}

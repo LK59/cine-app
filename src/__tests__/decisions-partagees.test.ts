@@ -1540,3 +1540,15 @@ describe("« À voir » et « Vu » : une forme, un crochet d'écriture (§114.4
     expect(code).not.toMatch(/setStatus\(/);
   });
 });
+
+describe("le hors ligne d'une fiche n'est ouvert que par sa décision (§109, 23/10/2026)", () => {
+  // La fiche du téléphone ajoutait la lecture intégrée (`playerEnabled &&`) aux deux lignes hors
+  // ligne ; le bureau non. La décision vit dans `useOfflineDownloadsEnabled`, et nulle part ailleurs.
+  it.each(["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"])(
+    "%s ne garde ni « Télécharger » ni « Lire le fichier téléchargé » par la lecture intégrée",
+    (f) => {
+      const code = sansCommentaires(lire(f));
+      expect([f, /playerEnabled && offlinePlayable|playerEnabled && \(\s*<OfflineDownloadControl/.test(code)]).toEqual([f, false]);
+    }
+  );
+});

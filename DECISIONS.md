@@ -6316,3 +6316,17 @@ dit désormais « Marquer comme vu » dans les quatre langues.
 TMDB du téléphone garde ses boutons pleine largeur sous « Demander » : la mise en page diffère, pas
 la forme des deux gestes. `usePlayerTitleActions.setStatus` reste l'écriture de « Ma liste » hors des
 fiches (le panneau du lecteur, l'ajout à une liste).
+
+### 114.5 Le hors ligne d'une fiche ne dépend que de sa décision
+
+**Règle.** « Télécharger » et « Lire le fichier téléchargé » paraissent sur la fiche d'un film quand le
+hors ligne est ouvert (`useOfflineDownloadsEnabled`, §109) — au bureau comme au téléphone, sans garde à
+elles.
+
+**Corrigé le 23/10/2026.** La fiche du téléphone ajoutait la lecture intégrée (`playerEnabled &&`) aux
+deux lignes, celle du bureau non : deux endroits pour une décision. Invisible aujourd'hui —
+`useOfflineDownloadsEnabled` lit la même configuration et exige déjà `playerEnabled` —, mais la
+première à changer aurait dérivé de l'autre. La place de « Lire » encore tenue au téléphone
+(`playPending`) reste la condition de la ligne de tête : c'est la mise en page qui l'attend.
+
+**Tests.** `fiche-hors-ligne-sans-garde-lecteur.test.tsx`, `decisions-partagees.test.ts`.
