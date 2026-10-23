@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (key: string) => key }));
-const passage = vi.hoisted(() => ({ target: "https://app.example.org" as string | null, mode: "closed" as "closed" | "full" | "mini" }));
-vi.mock("swr", () => ({ default: () => ({ data: { target: passage.target } }) }));
+const passage = vi.hoisted(() => ({ target: "https://app.example.org" as string | null, mode: "closed" as "closed" | "full" | "mini", onboarding: false }));
+vi.mock("swr", () => ({ default: (key: string) => ({ data: key === "/api/onboarding" ? { pending: passage.onboarding } : { target: passage.target } }) }));
 vi.mock("@/components/PlaybackProvider", () => ({ usePlaybackMode: () => passage.mode }));
 // La fenêtre elle-même demande un passage au serveur : ici, seulement savoir qu'elle s'ouvre.
 vi.mock("@/components/passage/PassageDialog", () => ({ PassageDialog: () => <div data-testid="passage-dialog" /> }));
@@ -19,6 +19,7 @@ import { PASSAGE_BANNER_CLOSED_KEY, openPassageFor } from "@/lib/passage/client"
 beforeEach(() => {
   passage.target = "https://app.example.org";
   passage.mode = "closed";
+  passage.onboarding = false;
   localStorage.clear();
 });
 
@@ -79,6 +80,12 @@ describe("PassageBanner", () => {
     expect(screen.getByTestId("passage-dialog")).toBeTruthy();
     // Une autre adresse n'est pas le passage : le lien s'ouvre comme avant.
     expect(openPassageFor("https://ailleurs.example.org/")).toBe(false);
+  });
+
+  it("pas par-dessus l'écran d'accueil d'un premier lancement", () => {
+    passage.onboarding = true;
+    render(<PassageBanner />);
+    expect(banner()).toBeNull();
   });
 
   it("sans bandeau monté, le lien n'est pas pris en charge", () => {
