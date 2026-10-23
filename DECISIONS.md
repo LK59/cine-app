@@ -6984,11 +6984,12 @@ reste « à faire » (comme l'invitation aux notifications : « Passer » ne l'�
 Nouveautés ouvre le passage même refermé. **Refermé, il revient le lendemain** (souhait du propriétaire,
 23/10/2026 — il se refermait pour de bon) : la croix, ou un appui sur « Passer », le cachent pour la
 journée, et il reparaît une fois par jour tant que l'appareil ouvre l'ancienne adresse.
-`cine:passage-banner-closed` garde le jour local de la fermeture (`AAAA-MM-JJ`, fuseau de l'appareil,
-`localDay`) ; une valeur d'avant ce changement (« 1 », une date en millisecondes) vaut « fermé
-aujourd'hui » et est réécrite avec ce jour (`passageFlags.bannerClosed`). Lu au montage : un onglet
-laissé ouvert passé minuit attend le lancement suivant. Tests : `passage-banner.test.tsx` (fermé
-aujourd'hui, le lendemain, « Passer », ancienne valeur).
+`cine:passage-banner-closed-day` garde le jour local de la fermeture (`AAAA-MM-JJ`, fuseau de
+l'appareil, `localDay`, `passageFlags.bannerClosed`). L'ancienne clé de la 10.0.0,
+`cine:passage-banner-closed`, n'est jamais relue — toute fermeture d'avant la 10.0.1 est oubliée, pour
+que chacun revoie le bandeau à la mise en ligne (souhait du propriétaire) — et s'efface au premier
+lancement. Lu au montage : un onglet laissé ouvert passé minuit attend le lancement suivant. Tests :
+`passage-banner.test.tsx` (fermé aujourd'hui, le lendemain, « Passer », ancienne clé oubliée).
 Depuis l'application installée, la nouvelle adresse s'ouvre dans le navigateur (`window.open`) ; sur
 iPhone, ce navigateur intégré n'est ni Safari ni l'application à venir, d'où le code et la phrase qui le
 dit.

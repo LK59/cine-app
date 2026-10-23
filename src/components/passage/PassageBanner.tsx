@@ -17,7 +17,7 @@ import { PassageDialog } from "./PassageDialog";
  * du déploiement), jamais sur la nouvelle elle-même (l'hôte de la page comparé à celui de la
  * destination), jamais pendant un film (le lecteur ouvert, plein écran ou réduit) ni par-dessus
  * l'écran d'accueil d'un premier lancement. Refermé — à la croix ou après « Passer » —, il revient le
- * lendemain, une fois par jour (`cine:passage-banner-closed`, le jour local : `passageFlags`).
+ * lendemain, une fois par jour (`cine:passage-banner-closed-day`, le jour local : `passageFlags`).
  *
  * Il porte aussi la fenêtre du passage pour le lien de la page Nouveautés (`openPassageFor`) : ce
  * lien l'ouvre même bandeau refermé, puisque c'est un geste explicite.

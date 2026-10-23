@@ -10,7 +10,7 @@ vi.mock("@/components/PlaybackProvider", () => ({ usePlaybackMode: () => passage
 vi.mock("@/components/passage/PassageDialog", () => ({ PassageDialog: () => <div data-testid="passage-dialog" /> }));
 
 import { PassageBanner } from "@/components/passage/PassageBanner";
-import { PASSAGE_BANNER_CLOSED_KEY, openPassageFor } from "@/lib/passage/client";
+import { PASSAGE_BANNER_CLOSED_KEY, PASSAGE_BANNER_CLOSED_LEGACY_KEY, openPassageFor } from "@/lib/passage/client";
 
 /**
  * Le bandeau « Laterna a une nouvelle adresse — Passer » (DECISIONS.md §119) : sur l'ancienne adresse
@@ -78,15 +78,13 @@ describe("PassageBanner", () => {
       expect(banner()).not.toBeNull();
     });
 
-    it("une valeur d'avant (« 1 », une date en ms) : cachée aujourd'hui seulement", () => {
-      for (const old of ["1", String(Date.now() - 86_400_000 * 10)]) {
+    it("une fermeture de la 10.0.0 (ancienne clé) ne cache plus rien, et l'ancienne clé est effacée", () => {
+      for (const old of ["1", String(Date.now() - 86_400_000 * 10), "2026-10-23"]) {
         vi.setSystemTime(new Date(2026, 9, 23, 12, 0));
-        localStorage.setItem(PASSAGE_BANNER_CLOSED_KEY, old);
-        relaunch();
-        expect([old, banner()]).toEqual([old, null]);
-        vi.setSystemTime(new Date(2026, 9, 24, 8, 0));
+        localStorage.setItem(PASSAGE_BANNER_CLOSED_LEGACY_KEY, old);
         relaunch();
         expect([old, banner() !== null]).toEqual([old, true]);
+        expect(localStorage.getItem(PASSAGE_BANNER_CLOSED_LEGACY_KEY)).toBeNull();
         localStorage.clear();
       }
     });
@@ -114,7 +112,8 @@ describe("PassageBanner", () => {
   });
 
   it("le lien de la page Nouveautés vers la nouvelle adresse ouvre le passage, même bandeau refermé", () => {
-    localStorage.setItem(PASSAGE_BANNER_CLOSED_KEY, "1");
+    localStorage.setItem(PASSAGE_BANNER_CLOSED_KEY, "2026-10-23");
+    vi.setSystemTime?.(new Date(2026, 9, 23, 12, 0));
     render(<PassageBanner />);
     expect(banner()).toBeNull();
     let handled = false;

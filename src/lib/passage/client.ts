@@ -9,7 +9,12 @@ import { persistedCacheAccount } from "@/lib/persistentCache";
  */
 
 /** Le jour local où le bandeau a été refermé sur cet appareil (par adresse — `localStorage` l'est). */
-export const PASSAGE_BANNER_CLOSED_KEY = "cine:passage-banner-closed";
+export const PASSAGE_BANNER_CLOSED_KEY = "cine:passage-banner-closed-day";
+/**
+ * La clé de la 10.0.0, où une fermeture valait pour toujours : oubliée avec la 10.0.1 (souhait du
+ * propriétaire, 23/10/2026 — chacun revoit le bandeau dès la mise en ligne), et effacée au passage.
+ */
+export const PASSAGE_BANNER_CLOSED_LEGACY_KEY = "cine:passage-banner-closed";
 /** Les réglages arrivés déjà posés sur ce stockage : la date de l'arrivée (`passageArrival`). */
 export const PASSAGE_APPLIED_KEY = "cine:passage-applied";
 /** Arrivé par le passage dans cet onglet : l'aide « Ajouter à l'écran d'accueil » se montre aussitôt. */
@@ -83,17 +88,13 @@ export function localDay(now: Date = new Date()): string {
  * Le bandeau refermé **aujourd'hui** (DECISIONS.md §119) : fermé à la croix ou après « Passer », il
  * revient le lendemain, une fois par jour, tant que l'appareil ouvre l'ancienne adresse (souhait du
  * propriétaire, 23/10/2026 — refermé pour toujours, il laissait des appareils sur l'ancienne adresse
- * sans plus rien leur dire). La clé garde le jour de la fermeture ; une valeur d'avant ce changement
- * (« 1 », une date en millisecondes) vaut « fermé aujourd'hui » et est réécrite avec ce jour, pour
- * revenir dès demain.
+ * sans plus rien leur dire). La clé garde le jour de la fermeture ; la clé de la 10.0.0 est oubliée
+ * et effacée : une fermeture d'avant la 10.0.1 ne cache plus rien.
  */
 function bannerClosedToday(): boolean {
+  if (flag("local", PASSAGE_BANNER_CLOSED_LEGACY_KEY) !== null) flag("local", PASSAGE_BANNER_CLOSED_LEGACY_KEY, null);
   const stored = flag("local", PASSAGE_BANNER_CLOSED_KEY);
-  if (stored === null) return false;
-  const today = localDay();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(stored)) return stored === today;
-  flag("local", PASSAGE_BANNER_CLOSED_KEY, today);
-  return true;
+  return stored !== null && stored === localDay();
 }
 
 export const passageFlags = {
