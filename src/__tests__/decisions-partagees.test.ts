@@ -524,16 +524,19 @@ describe("une seule animation de fiche qu'on tire", () => {
 });
 
 describe("une seule façon de savoir que le lecteur tient le clavier", () => {
-  // La fiche du téléphone l'avait oublié : Échap refermait le lecteur *et* elle.
+  // La fiche du téléphone l'avait oublié : Échap refermait le lecteur *et* elle. Les deux fiches du
+  // bureau sont éprouvées rendues dans `fiche-bureau-sous-lecteur.test.tsx` (23/10/2026) — muettes sous
+  // le film, le clavier et le focus repris après — : l'appel peut vivre hors de leur fichier.
   it.each([
     "src/components/cinema/mobile/CinemaMobileDetail.tsx",
-    "src/components/cinema/CinemaMovieDetail.tsx",
-    "src/components/cinema/CinemaSeriesDetail.tsx",
     "src/components/cinema/CinemaEpisodeBrowser.tsx",
   ])("%s", (f) => {
     const src = lire(f);
     expect(src).toContain("playerHoldsKeyboard(playback)");
     expect(src).not.toMatch(/playerOwnsKeyboard = playback\.mode === "full"/);
+  });
+  it.each(["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"])("%s ne lit pas le mode à la main", (f) => {
+    expect(lire(f)).not.toMatch(/playerOwnsKeyboard = playback\.mode === "full"/);
   });
 });
 
