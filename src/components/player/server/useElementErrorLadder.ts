@@ -1,14 +1,13 @@
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { useT } from "@/components/TranslationProvider";
-import { PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { serverFailureFields, type ServerPlayerContext } from "@/lib/serverPlayerLog";
 import { positionBucket, retrySignature } from "@/lib/retryLedger";
 import type { SessionTally } from "@/lib/playerSessionTally";
 import { playsHlsNatively } from "@/lib/webkitEngine";
-import type { PlayerReloadIntent, ReloadCarry } from "@/lib/serverReload";
+import type { ReloadCarry } from "@/lib/serverReload";
 import { AUDIO_FALLBACK_RUNGS, isLastAudioRung } from "@/components/player/server/audioLadder";
-import { releaseHlsElement } from "@/components/player/server/serverElement";
+import { ladderReloadIntent, reloadServerPage } from "@/components/player/server/serverElement";
 import type { StartOpts } from "@/components/player/server/startOpts";
 
 // The native <video> "error" event is the ONLY failure signal for the DirectPlay and native
@@ -161,26 +160,20 @@ export function useElementErrorLadder({
       // Strictly bounded by the attempt counter carried in the intent so two exhausted ladders
       // can never reload-loop forever.
       if ((reloadAttempt ?? 0) < 1 && playsHlsNatively(video)) {
-        try {
-          const audioIdx = lastPlaybackOpts.current?.audioStreamIndex;
-          sessionStorage.setItem(
-            PLAYER_RELOAD_INTENT_KEY,
-            JSON.stringify({
+        const reloaded = reloadServerPage(
+          () =>
+            ladderReloadIntent({
               itemId,
               title,
               resumeAt: lastKnownTime.current || lastPlaybackOpts.current?.resumeAt || 0,
               attempt: (reloadAttempt ?? 0) + 1,
-              server: true,
-              ...(audioIdx !== undefined ? { audioStreamIndex: audioIdx } : {}),
+              audioStreamIndex: lastPlaybackOpts.current?.audioStreamIndex,
               carry: reloadCarryNow(),
-            } satisfies PlayerReloadIntent)
-          );
-          releaseHlsElement(video!);
-          window.location.reload();
-          return;
-        } catch {
-          // Storage unavailable — fall through to the error UI below.
-        }
+            }),
+          video!
+        );
+        if (reloaded) return;
+        // Storage unavailable — fall through to the error UI below.
       }
       setReconnecting(false);
       setLoading(false);

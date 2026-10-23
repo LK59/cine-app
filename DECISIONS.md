@@ -6324,6 +6324,26 @@ menu (`changeAudioTrack`). **Tests.** Les empreintes `pistes-…` du natif (lign
 §93) et reconstruit sur place, pause et image figée comprises (`rebuildHereForViewer`) ; l'ouverture
 demande `mayRebuild()` avant de rien écrire.
 
+### Les intentions de rechargement du lecteur serveur
+
+**Règle.** Une intention écrite dans `sessionStorage` (`PLAYER_RELOAD_INTENT_KEY`) que la page
+rechargée relit ; depuis une page qui lit déjà le lecteur serveur, l'intention, la coupure de
+l'élément (`releaseHlsElement`, avant le rechargement : mediaserverd libère les sessions HLS de
+façon asynchrone) et le rechargement sous une seule garde — si quoi que ce soit lève, l'appelant
+garde son chemin d'avant. **Porteurs.** `reloadIntoServerPlayer` (la seule écriture),
+`reloadServerPage`, `audioReloadIntent`, `ladderReloadIntent` (`src/components/player/server/serverElement.ts`)
+et `directReloadIntent` (`serverReload.ts`). **Appelants.** `handOver` (relais natif → serveur,
+`reloadPage()`), `changeAudio` sur WebKit (`audioReloadIntent`), la fin de l'échelle du son sur WebKit
+(`useElementErrorLadder`, `ladderReloadIntent`). **Tests.** L'empreinte
+`pistes-webkit-…-recharge-la-page.txt` (`storage session set …`, ordre des clés), `PlayerHost-echelle`,
+`rechargement-webkit-lecteur-serveur`, `player-regles-communes.test.ts`, `decisions-partagees`.
+**Différent exprès.** L'ordre des clés de chaque intention (historique, figé par l'empreinte). Ce qui
+suit un échec : le changement de piste en place pour `changeAudio`, l'écran d'erreur pour l'échelle,
+le relais dans la page pour `handOver`. `window.location.reload()` aux deux sites du lecteur serveur,
+`reloadPage()` au relais — l'empreinte simule le second, pas le premier. Pas de coupure au relais : la
+page du natif n'a pas d'élément HLS. **Laissé.** Si la coupure lève après l'écriture, l'intention reste
+écrite (rouverte au prochain rechargement) — comme avant, invisible en pratique.
+
 ### La chronologie de deux minutes
 
 **Règle.** Une chronologie (§77) par séance, un échantillon toutes les 5 s, inscrite sous l'identifiant

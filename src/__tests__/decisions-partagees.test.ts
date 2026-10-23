@@ -1524,6 +1524,13 @@ describe("les doublons du lecteur fusionnés : une règle, un endroit (§115)", 
     expect((sansCommentaires(lire(entreeDe(NATIF))).match(/beginAudioSwitch\(/g) ?? []).length).toBe(2);
   });
 
+  it("l'intention de rechargement du lecteur serveur s'écrit dans serverElement seulement", () => {
+    const MODULE = "src/components/player/server/serverElement.ts";
+    expect(lecteurQui(/setItem\(\s*PLAYER_RELOAD_INTENT_KEY/)).toEqual([MODULE]);
+    expect(lecteurQui(/window\.location\.reload\(\)/).filter((f) => f.includes("/server/") || f === entreeDe(SERVEUR))).toEqual([MODULE]);
+    expect(/reloadServerPage\(/.test(codeDe(SERVEUR))).toBe(true);
+  });
+
   it("la chronologie de deux minutes s'installe dans useSessionTimeline seulement", () => {
     const MODULE = "src/components/player/session/useSessionTimeline.ts";
     expect(lecteurQui(/new PlaybackTimeline\(/)).toEqual([MODULE]);

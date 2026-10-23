@@ -9,6 +9,8 @@ import { WatchedClock } from "@/lib/playerSessionTally";
 import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
 import { timelinePosition, useSessionTimeline } from "@/components/player/session/useSessionTimeline";
 import { TIMELINE_EVERY_MS, clearTimelines, timelineFields } from "@/lib/playbackTimeline";
+import { audioReloadIntent, ladderReloadIntent, reloadServerPage } from "@/components/player/server/serverElement";
+import { PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -73,6 +75,62 @@ describe("useSessionTimeline (§115, chronologie de deux minutes)", () => {
     expect(timelineFields("stop", { session: "s1" }).timeline).toBeUndefined();
     unmount();
     expect(timelineFields("stop", { session: "s2" }).timeline).toBeUndefined();
+  });
+});
+
+describe("intentions de rechargement du lecteur serveur (§115)", () => {
+  afterEach(() => {
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+  });
+  const carry = { lighter: { targetBps: 4_000_000, tier: 2, real: true } };
+
+  it("le changement de piste WebKit garde l'ordre de ses clés", () => {
+    const intent = audioReloadIntent({ itemId: "f", title: "Film", audioStreamIndex: 3, resumeAt: 42, carry });
+    expect(Object.keys(intent)).toEqual(["itemId", "title", "audioStreamIndex", "resumeAt", "server", "carry"]);
+    expect(intent.server).toBe(true);
+  });
+
+  it("la fin de l'échelle garde l'ordre de ses clés, la piste seulement si la séance en avait une", () => {
+    const base = { itemId: "f", title: "Film", resumeAt: 42, attempt: 1, carry };
+    expect(Object.keys(ladderReloadIntent({ ...base, audioStreamIndex: 2 }))).toEqual(["itemId", "title", "resumeAt", "attempt", "server", "audioStreamIndex", "carry"]);
+    expect(Object.keys(ladderReloadIntent({ ...base, audioStreamIndex: undefined }))).toEqual(["itemId", "title", "resumeAt", "attempt", "server", "carry"]);
+  });
+
+  const element = (fail = false) => {
+    const steps: string[] = [];
+    const video = {
+      pause: () => {
+        steps.push("pause");
+        if (fail) throw new Error("démonté");
+      },
+      removeAttribute: (name: string) => steps.push(`remove ${name}`),
+      load: () => steps.push("load"),
+    } as unknown as HTMLVideoElement;
+    return { video, steps };
+  };
+
+  it("reloadServerPage : l'intention écrite, puis l'élément coupé — vrai", () => {
+    const { video, steps } = element();
+    const intent = audioReloadIntent({ itemId: "f", title: "Film", audioStreamIndex: 3, resumeAt: 42, carry });
+    expect(reloadServerPage(() => intent, video)).toBe(true);
+    expect(JSON.parse(sessionStorage.getItem(PLAYER_RELOAD_INTENT_KEY) ?? "null")).toEqual(intent);
+    expect(steps).toEqual(["pause", "remove src", "load"]);
+  });
+
+  it("reloadServerPage : stockage refusé — faux, l'élément intact", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("quota");
+    });
+    const { video, steps } = element();
+    expect(reloadServerPage(() => ladderReloadIntent({ itemId: "f", title: "F", resumeAt: 0, attempt: 1, audioStreamIndex: undefined, carry }), video)).toBe(false);
+    expect(steps).toEqual([]);
+  });
+
+  it("reloadServerPage : l'élément qui lève — faux (l'intention reste écrite, comme avant)", () => {
+    const { video } = element(true);
+    expect(reloadServerPage(() => audioReloadIntent({ itemId: "f", title: "F", audioStreamIndex: 1, resumeAt: 0, carry }), video)).toBe(false);
+    expect(sessionStorage.getItem(PLAYER_RELOAD_INTENT_KEY)).not.toBeNull();
   });
 });
 

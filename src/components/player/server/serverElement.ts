@@ -3,7 +3,7 @@
  * couper la session HLS de l'élément, et écrire l'intention qu'une page rechargée relira.
  */
 import { PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
-import type { PlayerReloadIntent } from "@/lib/serverReload";
+import type { PlayerReloadIntent, ReloadCarry } from "@/lib/serverReload";
 
 /**
  * Couper l'élément : pause, plus de source, `load()` pour que le navigateur lâche la session HLS.
@@ -23,6 +23,79 @@ export function releaseHlsElement(video: HTMLVideoElement): void {
 export function reloadIntoServerPlayer(intent: PlayerReloadIntent): boolean {
   try {
     sessionStorage.setItem(PLAYER_RELOAD_INTENT_KEY, JSON.stringify(intent));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/*
+ * Les intentions des trois rechargements (23/10/2026, DECISIONS.md §115) : le relais natif → serveur
+ * (`directReloadIntent`, `serverReload.ts`), le changement de piste sur WebKit (`audioReloadIntent`) et
+ * la fin de l'échelle du son (`ladderReloadIntent`). Chacune garde l'ordre de ses clés d'avant : il
+ * est figé par l'empreinte (`storage session set …`).
+ */
+
+/**
+ * Le changement de piste sur WebKit (`changeAudio`, `PlayerHost.tsx`). `server` : la page rechargée
+ * revient au lecteur serveur — voir `reloadedOnServer`. `carry.lighter` : le palier en cours voyage
+ * avec la piste, pas par la mémoire des deux minutes (qui pouvait avoir expiré : la séance repartait
+ * en pleine qualité, 12/10/2026).
+ */
+export function audioReloadIntent(input: {
+  itemId: string;
+  title: string;
+  audioStreamIndex: number;
+  resumeAt: number;
+  carry: ReloadCarry;
+}): PlayerReloadIntent {
+  const { itemId, title, audioStreamIndex, resumeAt, carry } = input;
+  return { itemId, title, audioStreamIndex, resumeAt, server: true, carry };
+}
+
+/**
+ * La fin de l'échelle du son sur WebKit (`useElementErrorLadder`) : `attempt` borne les rechargements
+ * (deux échelles épuisées ne bouclent jamais), la piste seulement si la séance en demandait une.
+ */
+export function ladderReloadIntent(input: {
+  itemId: string;
+  title: string;
+  resumeAt: number;
+  attempt: number;
+  audioStreamIndex: number | undefined;
+  carry: ReloadCarry;
+}): PlayerReloadIntent {
+  const { itemId, title, resumeAt, attempt, audioStreamIndex, carry } = input;
+  return {
+    itemId,
+    title,
+    resumeAt,
+    attempt,
+    server: true,
+    ...(audioStreamIndex !== undefined ? { audioStreamIndex } : {}),
+    carry,
+  };
+}
+
+/**
+ * Recharger la page sur le lecteur serveur depuis une page qui le lit déjà : l'intention écrite,
+ * l'élément coupé, la page rechargée — le tout sous une seule garde. Faux si quoi que ce soit lève
+ * (stockage refusé, élément démonté) : l'appelant garde son chemin d'avant (le changement en place,
+ * ou l'écran d'erreur). Couper l'élément *avant* de recharger, et pas seulement en laissant la page
+ * mourir : le démon média d'iOS (mediaserverd) libère les sessions HLS de façon asynchrone et
+ * indépendante de la page — un rechargement lancé pendant que l'ancien flux joue encore peut faire
+ * monter la nouvelle page avant que l'ancienne session soit partie ; commencer la coupure ici lui
+ * donne autant d'avance que possible.
+ *
+ * `intentOf` est appelée sous la garde, comme l'intention l'était dans le `try` de chaque site.
+ * `window.location.reload()` et non `reloadPage()` : c'est ce que ces deux sites ont toujours appelé,
+ * et l'empreinte du lecteur serveur simule `reloadPage` (une ligne de plus sinon).
+ */
+export function reloadServerPage(intentOf: () => PlayerReloadIntent, video: HTMLVideoElement): boolean {
+  try {
+    if (!reloadIntoServerPlayer(intentOf())) return false;
+    releaseHlsElement(video);
+    window.location.reload();
     return true;
   } catch {
     return false;

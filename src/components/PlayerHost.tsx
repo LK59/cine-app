@@ -44,7 +44,7 @@ import {
   type LighterStep,
 } from "@/lib/slowLinkPolicy";
 import { cancelPrewarm, carryPrewarmAcrossReload, discardTakenPrewarm, prewarmFields, prewarmFits, takeOrdinaryPrewarm, takePrewarm, warmSegmentAt, type Prewarm } from "@/lib/lighterPrewarm";
-import { directReloadIntent, reloadLighterOf, reloadPage, shouldReloadDirect, type PlayerReloadIntent } from "@/lib/serverReload";
+import { directReloadIntent, reloadLighterOf, reloadPage, shouldReloadDirect } from "@/lib/serverReload";
 import { SlowLinkRunner, type SeekSignal, type SlowLinkHost } from "@/lib/slowLinkRunner";
 import { forgetLighterCarry, readPlaybackQuality, usePlaybackQuality } from "@/lib/playbackQuality";
 import { livePosition } from "@/lib/hlsRecovery";
@@ -56,7 +56,7 @@ import {
   purgeLegacyAudioBlocklist,
   takeCarriedExclusions,
 } from "@/components/player/server/audioLadder";
-import { releaseHlsElement, reloadIntoServerPlayer } from "@/components/player/server/serverElement";
+import { audioReloadIntent, releaseHlsElement, reloadIntoServerPlayer, reloadServerPage } from "@/components/player/server/serverElement";
 import {
   serverAudioTracks,
   serverSubtitleTracks,
@@ -73,7 +73,7 @@ import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
 import { describeJellyfinPlayback, splitCodecs, type JellyfinPlayback, type LighterOrigin } from "@/lib/playbackPanel";
 import { PLAYER_FRAME_TRANSITION } from "@/lib/playerFrame";
 import { NETWORK_OUTAGE_GIVE_UP_MS } from "@/lib/networkOutage";
-import { usePlayback, PLAYER_RELOAD_INTENT_KEY } from "@/components/PlaybackProvider";
+import { usePlayback } from "@/components/PlaybackProvider";
 import { playsHlsNatively } from "@/lib/webkitEngine";
 import { detectCodecSupport } from "@/lib/codecSupport";
 import { useT, useLocale } from "@/components/TranslationProvider";
@@ -1672,29 +1672,18 @@ function ActivePlayer({
       // WebKit, et non « sait lire du HLS » : Chrome Android répond oui à la seconde question et
       // rechargeait donc la page à chaque changement de piste. Voir isWebKitEngine.
       if (video && playsHlsNatively(video)) {
-        try {
-          sessionStorage.setItem(
-            PLAYER_RELOAD_INTENT_KEY,
-            // `server` : la page rechargée revient au lecteur serveur — voir `reloadedOnServer`.
-            // `carry.lighter` : le palier en cours voyage avec la piste, pas par la mémoire des deux
-            // minutes (qui pouvait avoir expiré : la séance repartait en pleine qualité, 12/10/2026).
-            JSON.stringify({ itemId, title, audioStreamIndex: id, resumeAt, server: true, carry: reloadCarryNow() } satisfies PlayerReloadIntent)
-          );
-          // Tear the current media session down BEFORE reloading, not merely as a side effect of
-          // the page dying: iOS's media daemon (mediaserverd) releases HLS sessions asynchronously
-          // and independently of the page lifecycle, so a reload issued while the old stream is
-          // still actively playing can bring the new page up before the old session is gone.
-          // Starting teardown explicitly here buys that release as much head start as possible.
-          releaseHlsElement(video);
-          window.location.reload();
-          return;
-        } catch {
-          // Storage unavailable (private browsing, quota): falls through to the in-place switch
-          // below, which will most likely fail on WebKit and show the error screen with « Réessayer ».
-          // Coupure et rechargement sont dans le `try`, comme à la fin de l'échelle : du 14/08 au
-          // 22/10/2026 ils le suivaient, la page revenait sans intention et le film se fermait sans
-          // rien dire (audit du 22/10/2026).
-        }
+        // Tear the current media session down BEFORE reloading, not merely as a side effect of
+        // the page dying: iOS's media daemon (mediaserverd) releases HLS sessions asynchronously
+        // and independently of the page lifecycle, so a reload issued while the old stream is
+        // still actively playing can bring the new page up before the old session is gone.
+        // Starting teardown explicitly here buys that release as much head start as possible.
+        // (`reloadServerPage` : intention, coupure, rechargement, sous une seule garde.)
+        if (reloadServerPage(() => audioReloadIntent({ itemId, title, audioStreamIndex: id, resumeAt, carry: reloadCarryNow() }), video)) return;
+        // Storage unavailable (private browsing, quota): falls through to the in-place switch
+        // below, which will most likely fail on WebKit and show the error screen with « Réessayer ».
+        // Coupure et rechargement sont dans le `try`, comme à la fin de l'échelle : du 14/08 au
+        // 22/10/2026 ils le suivaient, la page revenait sans intention et le film se fermait sans
+        // rien dire (audit du 22/10/2026).
       }
       startPlayback({ audioStreamIndex: id, resumeAt, cause: { why: "audio" } });
     },
