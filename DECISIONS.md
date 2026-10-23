@@ -6889,7 +6889,11 @@ d'au moins 400 ms (`passageTiming`) ; cinq échecs par adresse cliente (une IPv6
 par son /48) en quinze minutes, 2 000 échecs de code pour toute l'installation — cent laissaient un
 anonyme fermer l'entrée par code au foyer ; à 2 000, chercher un code de 40 bits reste sans espoir
 (calcul dans `attempts.ts`) —, puis 429 (`attempts.ts`, sur `globalThis`) ; `passage-received`,
-`passage-refused`, `passage-blocked` dans `auth.log`. La session d'origine est gardée chiffrée
+`passage-refused`, `passage-blocked` dans `auth.log`. Un navigateur déjà connecté sur la nouvelle
+adresse (session vivante, lien de partage compris) n'échange rien sans accord : `/passage` demande
+« Changer de compte » / « Rester sur mon compte » sans nommer le compte du lien, et la route répond 409
+(`passage-confirm`) sans `replace: true`, avant de lire le secret — ni consommé ni compté comme échec
+(un lien piégé connectait la victime au compte de l'attaquant, relecture du 23/10/2026). La session d'origine est gardée chiffrée
 (`encryptSecret`) dans la ligne le temps du passage ; la table est hors des sauvegardes
 (`DISPOSABLE_TABLES`). La destination est **toujours** celle du réglage (`passageTarget`, nom d'hôte
 validé par `laternaAddress`, `https` sauf `http://` écrit dans le réglage) : le serveur construit

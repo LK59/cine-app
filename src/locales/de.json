@@ -3658,6 +3658,9 @@
       "rateLimited": "Zu viele Versuche. Versuchen Sie es in einer Viertelstunde erneut.",
       "network": "Der Server antwortet nicht. Prüfen Sie Ihre Verbindung.",
       "signedIn": "Sie sind unter dieser Adresse angemeldet.",
+      "confirm": "Sie sind auf diesem Gerät bereits angemeldet. Zum Konto dieses Links wechseln? Ihre aktuelle Sitzung wird beendet.",
+      "confirmSwitch": "Konto wechseln",
+      "confirmStay": "Bei meinem Konto bleiben",
       "toApp": "Laterna öffnen",
       "toLogin": "Mit Passwort anmelden"
     },

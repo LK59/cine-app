@@ -35,13 +35,24 @@ export async function POST(req: NextRequest) {
   if (crossSiteWrite(req)) return NextResponse.json({ error: "Requête refusée" }, { status: 403 });
   const ip = getClientIp(req);
   const device = requestDeviceLabel(req);
-  const body = (await req.json().catch(() => null)) as { token?: unknown; code?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { token?: unknown; code?: unknown; replace?: unknown } | null;
   const kind: PassageKind = body && typeof body === "object" && "code" in body ? "code" : "token";
 
   if (passageBlocked(ip, kind)) {
     logAuthEvent("passage-blocked", { user: "?", ip, device, via: kind });
     await settle(started);
     return NextResponse.json({ error: "Trop d'essais, réessayez dans un quart d'heure", code: "rate_limited" }, { status: 429 });
+  }
+
+  // Un navigateur **déjà connecté** sur cette adresse n'échange rien sans le dire : un lien
+  // `/passage#t=<jeton d'un autre compte>` connectait la victime au compte de l'attaquant en fermant
+  // sa session (relecture de sécurité du 23/10/2026). Sans `replace: true` — que seul l'appui sur
+  // « Changer de compte » de la page envoie —, réponse 409 avant toute lecture du secret : il n'est
+  // pas consommé, l'essai ne compte pas comme un échec, et la réponse ne dit rien du secret.
+  const previous = await verifySessionToken(req.cookies.get(SESSION_COOKIE)?.value).catch(() => null);
+  const live = previous?.jti && sessionDb.exists(previous.jti) ? previous : null;
+  if (live && body?.replace !== true) {
+    return NextResponse.json({ error: "Déjà connecté sur cet appareil", code: "passage-confirm" }, { status: 409 });
   }
 
   const rawToken = body?.token;
@@ -57,10 +68,9 @@ export async function POST(req: NextRequest) {
   void revokeJellyfinDevices(redeemed.expiredDevices, "session expirée");
   // La session que ce navigateur avait sur cette adresse — un autre compte, un lien de partage — est
   // fermée comme par une déconnexion, pas seulement recouverte dans le cookie.
-  const previous = await verifySessionToken(req.cookies.get(SESSION_COOKIE)?.value).catch(() => null);
-  if (previous?.jti && previous.jti !== redeemed.jti) {
-    forgetBeat(previous.jti);
-    void revokeJellyfinDevices([sessionDb.delete(previous.jti)], "remplacée par un passage");
+  if (live && live.jti !== redeemed.jti) {
+    forgetBeat(live.jti);
+    void revokeJellyfinDevices([sessionDb.delete(live.jti)], "remplacée par un passage");
   }
   logAuthEvent("passage-received", { user: redeemed.user, ip, device, role: redeemed.role, via: kind });
   const lang = userPrefsDb.getLang(redeemed.userId, config.app.language);

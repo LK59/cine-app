@@ -3658,6 +3658,9 @@
       "rateLimited": "Too many attempts. Try again in fifteen minutes.",
       "network": "The server isn't responding. Check your connection.",
       "signedIn": "You're signed in on this address.",
+      "confirm": "You're already signed in on this device. Switch to the account of this link? Your current session will be closed.",
+      "confirmSwitch": "Switch account",
+      "confirmStay": "Stay on my account",
       "toApp": "Open Laterna",
       "toLogin": "Sign in with a password"
     },

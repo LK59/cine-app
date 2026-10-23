@@ -3658,6 +3658,9 @@
       "rateLimited": "Demasiados intentos. Vuelva a intentarlo dentro de un cuarto de hora.",
       "network": "El servidor no responde. Compruebe su conexión.",
       "signedIn": "Ha iniciado sesión en esta dirección.",
+      "confirm": "Ya ha iniciado sesión en este dispositivo. ¿Cambiar a la cuenta de este enlace? Su sesión actual se cerrará.",
+      "confirmSwitch": "Cambiar de cuenta",
+      "confirmStay": "Quedarme en mi cuenta",
       "toApp": "Abrir Laterna",
       "toLogin": "Iniciar sesión con una contraseña"
     },

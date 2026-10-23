@@ -11,7 +11,7 @@ import { isInstalledApp } from "@/lib/iosInstall";
 import { APP_NAME } from "@/lib/appBuild";
 import { PassageInstallHelp } from "./PassageInstallHelp";
 
-type Phase = "starting" | "working" | "refused" | "code" | "signed";
+type Phase = "starting" | "working" | "confirm" | "refused" | "code" | "signed";
 
 /** Le jeton du fragment (`#t=…`), effacé de l'adresse aussitôt lu : il ne doit rester ni dans l'historique ni dans une copie de l'adresse. */
 function takeFragmentToken(): string | null {
@@ -20,16 +20,24 @@ function takeFragmentToken(): string | null {
   return match?.[1] ?? null;
 }
 
-/** Échange un secret ; rend `"ok"`, ou la raison du refus à afficher. */
-async function redeem(body: { token: string } | { code: string }): Promise<"ok" | "invalid" | "rateLimited" | "network"> {
+/**
+ * Échange un secret ; rend `"ok"`, `"confirm"` quand le serveur attend que la personne déjà connectée
+ * ici accepte de changer de compte (409, rien n'a été consommé), ou la raison du refus à afficher.
+ * `replace` n'est envoyé qu'après cet accord.
+ */
+async function redeem(
+  body: { token: string } | { code: string },
+  replace: boolean,
+): Promise<"ok" | "confirm" | "invalid" | "rateLimited" | "network"> {
   try {
     const res = await fetch("/api/passage/redeem", {
       method: "POST",
       // L'indice tactile : l'appareil de la session se nomme comme à une connexion (`deviceLabel.ts`).
       headers: { "Content-Type": "application/json", ...touchHintHeaders() },
-      body: JSON.stringify(body),
+      body: JSON.stringify(replace ? { ...body, replace: true } : body),
     });
     if (res.ok) return "ok";
+    if (res.status === 409) return "confirm";
     return res.status === 429 ? "rateLimited" : res.status >= 500 ? "network" : "invalid";
   } catch {
     return "network";
@@ -53,7 +61,16 @@ export function PassageEntry({ signedIn }: { signedIn: boolean }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState<"invalid" | "rateLimited" | "network" | null>(null);
   const [loading, setLoading] = useState(false);
+  // Le secret en attente de l'accord de la personne déjà connectée ici, et cet accord une fois donné.
+  const pending = useRef<{ token: string } | { code: string } | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
 
+  // Un lien `/passage#t=…` peut venir de n'importe qui : ouvert dans un navigateur **déjà connecté**,
+  // il remplaçait la session de la personne par le compte du lien sans rien lui demander (relecture de
+  // sécurité du 23/10/2026). Connecté, on demande d'abord ; sans accord, rien n'est envoyé et le jeton
+  // reste intact. Le serveur tient la même règle (409 sans `replace`), pour un `signedIn` périmé ou
+  // une session de lien de partage. Le compte du jeton n'est pas nommé : on ne le connaît pas avant
+  // l'échange, et l'échange est justement ce qui attend.
   useEffect(() => {
     void (async () => {
       const token = takeFragmentToken();
@@ -61,20 +78,45 @@ export function PassageEntry({ signedIn }: { signedIn: boolean }) {
         setPhase(signedIn ? "signed" : "code");
         return;
       }
+      if (signedIn) {
+        pending.current = { token };
+        setPhase("confirm");
+        return;
+      }
       setPhase("working");
-      const result = await redeem({ token });
+      const result = await redeem({ token }, false);
       if (result === "ok") return arrive();
+      if (result === "confirm") {
+        pending.current = { token };
+        return setPhase("confirm");
+      }
       setPhase("refused");
       if (result !== "invalid") setError(result);
     })();
   }, [signedIn]);
 
+  async function confirmSwitch() {
+    const body = pending.current;
+    pending.current = null;
+    setConfirmed(true);
+    if (!body) return setPhase("code");
+    setPhase("working");
+    const result = await redeem(body, true);
+    if (result === "ok") return arrive();
+    setPhase("refused");
+    if (result !== "invalid" && result !== "confirm") setError(result);
+  }
+
   async function submitCode() {
     setLoading(true);
     setError(null);
-    const result = await redeem({ code });
+    const result = await redeem({ code }, confirmed);
     if (result === "ok") return arrive();
     setLoading(false);
+    if (result === "confirm") {
+      pending.current = { code };
+      return setPhase("confirm");
+    }
     setError(result);
   }
 
@@ -103,6 +145,30 @@ export function PassageEntry({ signedIn }: { signedIn: boolean }) {
             <p role="status" className="text-center text-sm text-slate-300">
               {t("passage.page.working")}
             </p>
+          )}
+
+          {phase === "confirm" && (
+            <>
+              <p className="text-center text-sm text-slate-200">{t("passage.page.confirm")}</p>
+              <button
+                type="button"
+                data-passage-confirm=""
+                onClick={() => void confirmSwitch()}
+                data-liquid-pan="wide"
+                className="flex w-full items-center justify-center rounded-full bg-white py-3 text-base font-semibold text-black hover:bg-white/90"
+              >
+                {t("passage.page.confirmSwitch")}
+              </button>
+              <button
+                type="button"
+                data-passage-stay=""
+                onClick={() => hardNavigate("/")}
+                data-liquid-pan="wide"
+                className="settings-glass-btn flex w-full items-center justify-center rounded-full py-3 text-base font-medium text-slate-200"
+              >
+                {t("passage.page.confirmStay")}
+              </button>
+            </>
           )}
 
           {phase === "signed" && (
@@ -163,7 +229,7 @@ export function PassageEntry({ signedIn }: { signedIn: boolean }) {
             </form>
           )}
 
-          {phase !== "starting" && phase !== "working" && <PassageInstallHelp />}
+          {phase !== "starting" && phase !== "working" && phase !== "confirm" && <PassageInstallHelp />}
         </div>
 
         {showCode && (

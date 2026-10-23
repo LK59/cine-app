@@ -3658,6 +3658,9 @@
       "rateLimited": "Trop d'essais. Réessayez dans un quart d'heure.",
       "network": "Le serveur ne répond pas. Vérifiez votre connexion.",
       "signedIn": "Vous êtes connecté sur cette adresse.",
+      "confirm": "Vous êtes déjà connecté sur cet appareil. Passer au compte de ce lien ? Votre session actuelle sera fermée.",
+      "confirmSwitch": "Changer de compte",
+      "confirmStay": "Rester sur mon compte",
       "toApp": "Ouvrir Laterna",
       "toLogin": "Se connecter avec un mot de passe"
     },

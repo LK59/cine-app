@@ -233,9 +233,40 @@ describe("POST /api/passage/redeem — l'entrée", () => {
     const { sessionDb } = await import("@/lib/db");
     const other = await createSessionToken("sarah", "user", "sarah", "jf-sarah", "jt-sarah");
     sessionDb.create(other.jti, "jf-sarah", null, "cine-app-sarah");
-    expect((await redeem({ token: url.split("#t=")[1] }, { cookie: other.token })).status).toBe(200);
+    expect((await redeem({ token: url.split("#t=")[1], replace: true }, { cookie: other.token })).status).toBe(200);
     expect(sessionDb.exists(other.jti)).toBe(false);
     expect(revoked).toContainEqual(["cine-app-sarah"]);
+  });
+
+  // Relecture de sécurité du 23/10/2026 : un lien `/passage#t=<jeton d'un autre compte>` connectait un
+  // navigateur déjà connecté au compte du lien, en fermant sa session, sans rien lui demander.
+  it("déjà connecté : sans accord (`replace`), 409 — rien d'échangé, rien de fermé, le jeton intact", async () => {
+    const { cookie } = await household();
+    const { url, code } = (await (await create(cookie)).json()) as { url: string; code: string };
+    const token = url.split("#t=")[1];
+    const { createSessionToken } = await import("@/lib/auth");
+    const { sessionDb } = await import("@/lib/db");
+    const victim = await createSessionToken("sarah", "user", "sarah", "jf-sarah", "jt-sarah");
+    sessionDb.create(victim.jti, "jf-sarah", null, "cine-app-sarah");
+    for (const body of [{ token }, { code }, { token, replace: "oui" }]) {
+      const res = await redeem(body, { cookie: victim.token });
+      expect(res.status).toBe(409);
+      expect(((await res.json()) as { code: string }).code).toBe("passage-confirm");
+      expect(res.cookies.get("cine_session")).toBeUndefined();
+    }
+    expect(sessionDb.exists(victim.jti)).toBe(true);
+    expect(revoked.flat()).toEqual([]);
+    // Ni consommé ni compté comme un échec : le même jeton passe encore, avec l'accord.
+    expect((await redeem({ token, replace: true }, { cookie: victim.token })).status).toBe(200);
+    expect(sessionDb.exists(victim.jti)).toBe(false);
+  });
+
+  it("un cookie de session déjà fermée ne demande pas d'accord", async () => {
+    const { cookie } = await household();
+    const { url } = (await (await create(cookie)).json()) as { url: string };
+    const { createSessionToken } = await import("@/lib/auth");
+    const gone = await createSessionToken("sarah", "user", "sarah", "jf-sarah", "jt-sarah");
+    expect((await redeem({ token: url.split("#t=")[1] }, { cookie: gone.token })).status).toBe(200);
   });
 });
 
