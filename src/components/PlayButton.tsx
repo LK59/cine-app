@@ -97,9 +97,12 @@ export function PlayButton({
   // Un appui retenu tant que la cible n'est qu'une supposition — voir `waitForServer`. La position :
   // un nombre dès qu'on sait, et rien du tout quand on ne sait pas. Zéro veut dire « depuis le
   // début » et ne doit être dit que par quelqu'un qui en est sûr — voir `resumeKnown`.
-  const play = useQueuedPlay(waitForServer, () =>
-    playback.play({ itemId, title, resumeAt: resumeAtFor({ fromStart: restart, known: resumeKnown, resumeTicks }), getNextEpisode })
-  );
+  // `unavailable` relu au départ, comme le bouton du téléphone (§117.7, 23/10/2026) : un appui retenu
+  // sur un S1·É1 supposé partait vers l'épisode répondu même quand son fichier avait disparu.
+  const play = useQueuedPlay(waitForServer, () => {
+    if (unavailable) return;
+    playback.play({ itemId, title, resumeAt: resumeAtFor({ fromStart: restart, known: resumeKnown, resumeTicks }), getNextEpisode });
+  });
   const t = useT();
   const playerEnabled = usePlayerEnabledState();
 

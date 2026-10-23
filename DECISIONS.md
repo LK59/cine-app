@@ -6729,14 +6729,14 @@ fiche), `decisions-partagees.test.ts`.
 ne prépare rien quand son lien est plein (`prefetch: false`) et ne compte aucune copie hors ligne
 (`offline: false`).
 
-**À trancher : le gros bouton du téléphone n'est pas `PlayButton`.** La fiche du téléphone garde son
-propre bouton Lire (§29) — le même calcul (`resumeAtFor`, `useQueuedPlay`, faits de `useSheetPlay`),
-mais une garde de plus : un appui retenu sur un S1·É1 supposé ne part pas si, la réponse arrivée,
-l'épisode qu'elle désigne a perdu son fichier (`launch` revérifie `fileMissing` au départ). `PlayButton`
-ne vérifie le fichier qu'à l'appui, et lance alors l'épisode du serveur quoi qu'il en soit (fiches du
-bureau, invité). Fusionner imposerait l'une des deux règles à l'autre écran : ce n'est plus un simple
-déplacement, et le geste liquide du bouton ne peut se vérifier qu'à l'œil sur iPhone. Laissé le
-23/10/2026 (audit des fiches, P3) ; `fiche-telephone-lire.test.tsx` tient le comportement du téléphone.
+**Le gros bouton du téléphone n'est pas `PlayButton`, mais suit la même règle.** La fiche du téléphone
+garde son propre bouton Lire (§29) — le même calcul (`resumeAtFor`, `useQueuedPlay`, faits de
+`useSheetPlay`) : son geste liquide ne se vérifie qu'à l'œil sur iPhone, et le fusionner n'est pas un
+simple déplacement. La seule règle qui différait est alignée (tranché le 23/10/2026) : un appui retenu sur
+un S1·É1 supposé ne part pas si, la réponse arrivée, l'épisode qu'elle désigne a perdu son fichier — le
+téléphone revérifiait `fileMissing` au départ (`launch`), `PlayButton` relit désormais `unavailable` au
+départ de la même façon (fiches du bureau, invité), au lieu de lancer un épisode qui échouait dans le
+lecteur. `fiche-telephone-lire.test.tsx` et `PlayButton-fichier-perdu.test.tsx` tiennent les deux.
 
 ### 117.8 L'habillage des fiches du bureau
 
