@@ -74,7 +74,7 @@ export type CreatePassageResult =
 
 /**
  * Le ménage : les secrets expirés (utilisés ou non) et les arrivées trop vieilles, par lots bornés —
- * appelé à chaque demande, comme `sessionDb.create` fait le sien.
+ * appelé à chaque demande et à chaque échange, comme `sessionDb.create` fait le sien.
  */
 export function prunePassages(now = Date.now()): void {
   const db = getDb();
@@ -154,6 +154,10 @@ export interface RedeemedPassage {
  */
 export async function redeemPassage(kind: PassageKind, secret: string, device: string | null, now = Date.now()): Promise<RedeemedPassage | null> {
   const db = getDb();
+  // Le ménage à l'échange aussi, pas seulement à la demande : une installation où l'on essaie des
+  // codes sans plus rien demander gardait ses lignes expirées. Il n'efface que ce qui a expiré —
+  // l'écriture conditionnelle ci-dessous ne l'aurait de toute façon pas servi.
+  prunePassages(now);
   const row = db
     .prepare("UPDATE passages SET used_at = ? WHERE hash = ? AND kind = ? AND used_at IS NULL AND expires_at > ? RETURNING origin_jti, sealed, settings, push_endpoint")
     .get(now, hashSecret(kind, secret), kind, now) as { origin_jti: string; sealed: string; settings: string | null; push_endpoint: string | null } | undefined;

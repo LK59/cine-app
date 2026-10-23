@@ -6926,6 +6926,9 @@ a posés.
 rangé sous ce compte ; quand la nouvelle adresse s'abonne (`POST /api/push/subscribe`), il est retiré
 **pour ce compte seulement** (`replaceArrivedPushEndpoint`, `removeForUser`), dans sa propre garde.
 
+Le ménage des secrets expirés (`prunePassages`) passe à chaque demande **et** à chaque échange, réussi
+ou non.
+
 **Porteurs.** `src/lib/passage/service.ts` (secrets, échange, arrivée, notifications, ménage),
 `settings.ts` (liste blanche), `target.ts` (destination), `attempts.ts` (frein), `client.ts` (navigateur) ;
 `sessionDb.get` / `orphanDevices` (`db.ts`) ; `setSignedInCookies` (`src/lib/sessionCookies.ts`), seule

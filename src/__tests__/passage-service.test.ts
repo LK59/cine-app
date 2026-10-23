@@ -1,5 +1,13 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { SessionPayload } from "@/lib/auth";
+
+// Sa propre base : les fichiers tournent en parallèle et plusieurs vident `sessions` avant chaque
+// test — dans le dossier commun de la suite, ils effaçaient les sessions les uns des autres.
+vi.hoisted(() => {
+  const { mkdtempSync } = require("node:fs") as typeof import("node:fs");
+  const { tmpdir } = require("node:os") as typeof import("node:os");
+  process.env.DATA_DIR = mkdtempSync(`${tmpdir()}/cine-passage-service-`);
+});
 
 /**
  * Le cœur du passage d'adresse (DECISIONS.md §119) : les secrets (hachés, usage unique, durées), la
@@ -283,6 +291,13 @@ describe("le ménage", () => {
     prunePassages(NOW + 3 * 60_000);
     expect((getDb().prepare("SELECT kind FROM passages").all() as { kind: string }[]).map((r) => r.kind)).toEqual(["code"]);
     prunePassages(NOW + 16 * 60_000);
+    expect(getDb().prepare("SELECT COUNT(*) AS n FROM passages").get()).toEqual({ n: 0 });
+  });
+
+  it("l'échange fait aussi le ménage, même refusé", async () => {
+    const { createPassage, redeemPassage, getDb } = await lib();
+    await createPassage(await household(), {}, NOW);
+    expect(await redeemPassage("code", "ZZZZZZZZ", null, NOW + 16 * 60_000)).toBeNull();
     expect(getDb().prepare("SELECT COUNT(*) AS n FROM passages").get()).toEqual({ n: 0 });
   });
 

@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 
+// Sa propre base : les fichiers tournent en parallèle et plusieurs vident `sessions` avant chaque
+// test — dans le dossier commun de la suite, ils effaçaient les sessions les uns des autres.
+vi.hoisted(() => {
+  const { mkdtempSync } = require("node:fs") as typeof import("node:fs");
+  const { tmpdir } = require("node:os") as typeof import("node:os");
+  process.env.DATA_DIR = mkdtempSync(`${tmpdir()}/cine-passage-routes-`);
+});
+
 /**
  * Les routes du passage d'adresse (DECISIONS.md §119) — demande, entrée, réglages d'arrivée — sur la
  * vraie base et les vrais jetons de session. Jellyfin n'est jamais appelé : la révocation est doublée.

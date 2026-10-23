@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
+// Sa propre base : les fichiers tournent en parallèle et plusieurs vident `sessions` avant chaque
+// test — dans le dossier commun de la suite, ils effaçaient les sessions les uns des autres.
+vi.hoisted(() => {
+  const { mkdtempSync } = require("node:fs") as typeof import("node:fs");
+  const { tmpdir } = require("node:os") as typeof import("node:os");
+  process.env.DATA_DIR = mkdtempSync(`${tmpdir()}/cine-passage-activity-`);
+});
+
 /**
  * Fermer une session depuis l'Activité ferme aussi ses jumelles du passage d'adresse (DECISIONS.md
  * §119) — relecture de sécurité du 23/10/2026 : fermer l'une seule laissait l'autre ouverte sur le
