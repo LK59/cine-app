@@ -21,12 +21,6 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 const BASE = process.env.BASE || "http://localhost:3098";
 const PROFILES = (process.env.PROFILES || "chromium firefox webkit iphone").split(/\s+/).filter(Boolean);
-// Les voies : des groupes de profils joués en même temps (`LANES="chromium iphone,firefox webkit"`),
-// chaque voie ses profils l'un après l'autre. Par défaut une seule voie : tous les profils à la file.
-const LANES = (process.env.LANES || "")
-  .split(",")
-  .map((l) => l.split(/\s+/).filter((p) => PROFILES.includes(p)))
-  .filter((l) => l.length);
 const TITLES = JSON.parse(fs.readFileSync(process.env.TITLES || "/tool/titres.json", "utf8"));
 const ONLY = (process.env.ONLY || "").split(",").filter(Boolean);
 const LOGS = "/logs";
@@ -56,6 +50,12 @@ const PROFILE_DEFS = {
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/**
+ * Le plafond d'un saut. Au lecteur serveur, un saut relance chez Jellyfin le transcodage d'un 4K
+ * HEVC en H.264 : machine chargée, 30 s ne suffisaient pas toujours (« délai dépassé » d'un passage
+ * sur l'autre, même commit). Un plafond ne coûte rien quand le saut arrive.
+ */
+const SEEK_CAP_MS = 60000;
 const POLL = 100;
 const logSize = (name) => {
   try {
@@ -73,14 +73,15 @@ const logSlice = (name, from) => {
   }
 };
 /**
- * La séance en cours (contexte asynchrone : deux voies jouent chacune la leur) — ses heures, ses
- * clics forcés, l'agent de son navigateur et où commencent ses lignes dans les journaux.
+ * La séance en cours — ses heures, ses clics forcés, l'agent de son navigateur et où commencent
+ * ses lignes dans les journaux.
  */
 const caseCtx = new AsyncLocalStorage();
 /**
  * Une ligne de journal est à la séance si elle porte son agent, ou pas d'agent du tout (une erreur
  * du serveur lui-même). Chaque ligne du lecteur porte `agent`, et les quatre profils en ont quatre
- * différents : deux voies écrivant dans le même journal se départagent ainsi.
+ * différents : une ligne tardive d'un autre profil (ou d'un autre navigateur ouvert sur l'instance)
+ * ne s'attribue pas à cette séance.
  */
 const isMine = (raw) => {
   const agent = caseCtx.getStore()?.agent;
@@ -317,7 +318,7 @@ async function seekBar(page, profile, fraction) {
   mark("· barre");
   const before = await video(page);
   await page.mouse.click(box.x + box.width * fraction, box.y + box.height / 2);
-  return (await waitSeek(page, before?.t ?? 0, 30000)) ? "fait" : "délai dépassé";
+  return (await waitSeek(page, before?.t ?? 0, SEEK_CAP_MS)) ? "fait" : "délai dépassé";
 }
 
 const OPTIONS = "button:has(> svg.lucide-check)";
@@ -527,7 +528,7 @@ async function playCase(browser, def, state, profile, title) {
     await showControls(page, profile);
     const beforeBack = await video(page);
     await page.keyboard.press("ArrowLeft");
-    step("saut −10 s", (await waitSeek(page, beforeBack?.t ?? 0, 30000)) ? "fait" : "délai dépassé");
+    step("saut −10 s", (await waitSeek(page, beforeBack?.t ?? 0, SEEK_CAP_MS)) ? "fait" : "délai dépassé");
     await settle(page, 1.5);
 
     // La pause : 3 s pleines une fois l'élément constaté arrêté (la durée est le geste).
@@ -629,41 +630,6 @@ async function playCase(browser, def, state, profile, title) {
 }
 
 const results = [];
-/**
- * Un titre n'est joué que par une voie à la fois : le compte de test est commun, et une lecture en
- * cours pose une reprise sur le titre (« Recommencer depuis le début », « À suivre » d'un autre
- * épisode) que l'autre voie lirait.
- */
-const titleLocks = new Map();
-async function withTitle(key, fn) {
-  const prev = titleLocks.get(key) ?? Promise.resolve();
-  let release;
-  const mine = new Promise((r) => (release = r));
-  titleLocks.set(key, prev.then(() => mine));
-  await prev;
-  try {
-    return await fn();
-  } finally {
-    release();
-  }
-}
-
-/** Attend que « Reprendre » du compte ne montre plus ce titre (au plus 20 s) ; dit s'il en est sorti. */
-async function waitResumeClear(browser, def, state, title) {
-  const ctx = await browser.newContext({ ...def.ctx, storageState: state });
-  try {
-    const until = Date.now() + 20000;
-    for (;;) {
-      const res = await ctx.request.get(`${BASE}/api/jellyfin/resume`).catch(() => null);
-      const items = res && res.ok() ? (await res.json().catch(() => ({}))).items ?? [] : null;
-      if (items && !items.some((i) => i.name === title.title)) return true;
-      if (Date.now() >= until) return false;
-      await sleep(500);
-    }
-  } finally {
-    await ctx.close().catch(() => {});
-  }
-}
 
 async function runCase(browser, def, state, profile, version, title) {
   const cx = {
@@ -677,12 +643,6 @@ async function runCase(browser, def, state, profile, version, title) {
     const r = await playCase(browser, def, state, profile, title);
     // Ce que la fermeture de la page envoie encore (un `stop` de page fermée) : le journal au calme.
     await waitLogsQuiet(1000, 3000);
-    // Le titre n'est rendu qu'une fois sorti de « Reprendre » sur le compte : la position des sauts
-    // (75 %) y reste un moment après la fermeture, et la séance suivante sur ce titre — l'autre voie,
-    // tout de suite — en préchargeait l'ouverture sur l'appareil (`openedFrom: mixte`).
-    const clear = await waitResumeClear(browser, def, state, title);
-    mark(clear ? "· reprise du compte vide" : "· reprise du compte encore là");
-    r.timings = cx.timings;
     const out = {
       profile,
       version,
@@ -697,35 +657,32 @@ async function runCase(browser, def, state, profile, version, title) {
   });
 }
 
-const order = (r) => PROFILES.indexOf(r.profile) * 1000 + TITLES.findIndex((t) => t.key === r.key);
-const save = () => fs.writeFileSync(`${OUT}/brut.json`, JSON.stringify([...results].sort((a, b) => order(a) - order(b)), null, 1));
-
-async function runLane(profiles) {
-  for (const profile of profiles) {
-    const def = PROFILE_DEFS[profile];
-    if (!def) throw new Error(`profil inconnu : ${profile}`);
-    const browser = await def.type.launch(def.launch);
-    const version = browser.version();
-    const state = await login(browser, def);
-    const titles = await resolveTitles(browser, def, state);
-    for (const title of titles) {
-      if (ONLY.length && !ONLY.includes(title.key)) continue;
-      if (!title.hash) {
-        results.push({ profile, version, key: title.key, title: title.title, steps: [{ step: "titre", outcome: "absent du catalogue" }] });
-        continue;
-      }
-      results.push(await withTitle(title.key, () => runCase(browser, def, state, profile, version, title)));
-      save();
-    }
-    await logout(browser, def, state);
-    await browser.close();
-  }
-}
-
 // Ce que ce passage doit jouer : la comparaison ne compte pas comme manquant ce qu'un passage
 // partiel (mode rapide, REGRESS_ONLY, REGRESS_PROFILES) n'a jamais prévu de jouer.
-const lanes = LANES.length ? LANES : [PROFILES];
-const planned = lanes.flat().flatMap((p) => TITLES.filter((t) => !ONLY.length || ONLY.includes(t.key)).map((t) => `${p}/${t.key}`));
+const planned = PROFILES.flatMap((p) => TITLES.filter((t) => !ONLY.length || ONLY.includes(t.key)).map((t) => `${p}/${t.key}`));
 fs.writeFileSync(`${OUT}/plan.json`, JSON.stringify(planned, null, 1));
-await Promise.all(lanes.map(runLane));
-save();
+
+// Les profils l'un après l'autre. Deux voies en parallèle (deux navigateurs en même temps sur la
+// même instance) ont été essayées le 23/10/2026 et écartées : 25 % de temps gagné seulement, et
+// 6 séances sur 36 sorties autrement que les passages à la file — décodage 4K de WebKit et
+// transcodage de Jellyfin se disputant la machine (README, « Ce qui a été essayé »).
+for (const profile of PROFILES) {
+  const def = PROFILE_DEFS[profile];
+  if (!def) throw new Error(`profil inconnu : ${profile}`);
+  const browser = await def.type.launch(def.launch);
+  const version = browser.version();
+  const state = await login(browser, def);
+  const titles = await resolveTitles(browser, def, state);
+  for (const title of titles) {
+    if (ONLY.length && !ONLY.includes(title.key)) continue;
+    if (!title.hash) {
+      results.push({ profile, version, key: title.key, title: title.title, steps: [{ step: "titre", outcome: "absent du catalogue" }] });
+      continue;
+    }
+    results.push(await runCase(browser, def, state, profile, version, title));
+    fs.writeFileSync(`${OUT}/brut.json`, JSON.stringify(results, null, 1));
+  }
+  await logout(browser, def, state);
+  await browser.close();
+}
+fs.writeFileSync(`${OUT}/brut.json`, JSON.stringify(results, null, 1));
