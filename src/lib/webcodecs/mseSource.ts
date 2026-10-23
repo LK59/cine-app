@@ -10,7 +10,6 @@
 import { playerWarning } from "./playerWarning";
 import type { Remuxer, RemuxPlan } from "./remuxer";
 import { trace, traceRecent } from "./trace";
-import { fragmentTimes } from "./fragmentProbe";
 import { diagInterval, diagNow, diagStallFacts } from "./playbackDiagnosis";
 import { describeNetwork, isNetworkFailure, isReadAbandoned } from "./byteSource";
 import { networkUnstable } from "@/lib/networkTrouble";
@@ -26,13 +25,14 @@ import {
   OPENING_REASSERT_MS, OPENING_PLAYING_GRACE_MS, SEEKING_PATIENCE_PER_SECOND_MS, FROZEN_STEP, MAX_FROZEN_NUDGES,
   MIN_BUFFER_SECONDS, RECOVERY_WINDOW_MS, MAX_RECOVERY_ATTEMPTS, MAX_UNPLAYED_ATTEMPTS, PLAYED_TO_CLEAR_SECONDS,
   NEXT_KEYFRAME_MARGIN, STALL_REPORT_MS, STALL_REPORT_COOLDOWN_MS, RUNAWAY_REPORT_SECONDS, STALL_TRACE_MS,
-  SENT_FRAGMENTS_KEPT, MAX_APPEND_FAILURES, NETWORK_KEEP_LEAD_SECONDS, NETWORK_RETRY_DELAYS_MS,
+  MAX_APPEND_FAILURES, NETWORK_KEEP_LEAD_SECONDS, NETWORK_RETRY_DELAYS_MS,
   NETWORK_TRIM_MARGIN_SECONDS, NETWORK_OUTAGE_GIVE_UP_MS, OUTAGE_STARVED_LEAD_SECONDS, STALL_TIMEOUT_MS, WATCHDOG_MS,
   EVICTION_REFILLS_PER_MINUTE, SOURCE_OPEN_TIMEOUT_MS, MISPLACED_SECONDS, FRUITLESS_APPENDS, PRE_ROLL_SECONDS,
   TRACED_APPENDS, TRACED_APPENDS_PER_SEEK, KEEP_BEHIND_SECONDS, TRIM_SLACK_SECONDS, KEYFRAME_TRIM_MARGIN,
   ZONE_MARGIN_SECONDS,
 } from "./mseTuning";
-import { frameQuality, playableSpans, signed, spansAll, spansNear } from "./mseSpans";
+import { frameQuality, playableSpans, spansAll, spansNear } from "./mseSpans";
+import { LossRecord, type SentFragment } from "./mseLossRecord";
 import type { MseCallbacks, RecoveryFacts, UnreadableZoneEvent, UnreadableZoneNotice } from "./mseTypes";
 import { AUDIO_LANE_SHARE, ByteRate, currentSourceBufferQuota, laneBudget, tightest, type BufferBudget } from "./bufferBudget";
 
@@ -234,6 +234,16 @@ export class MseSource {
       },
       callbacks.onStarting
     );
+    this.loss = new LossRecord({
+      video,
+      get videoBuffer() {
+        return self.videoBuffer;
+      },
+      get audioBuffer() {
+        return self.audioBuffer;
+      },
+      stateFacts: (now) => this.stateFacts(now),
+    });
   }
 
   static async attach(
@@ -275,24 +285,22 @@ export class MseSource {
   private seekNetworkPending = false;
 
   /**
-   * Les plages des deux tampons après la dernière opération réussie — envoi ou retrait —, pour la
-   * ligne d'une perte (`failureFacts`).
-   *
-   * Relevées à ce moment-là parce qu'après la fermeture de la source elles ne se lisent plus : le
-   * « Media failed to decode » de Lucifer S01E05 sur un iPhone (14/10/2026) n'a laissé que
-   * « illisible (source fermée) », la source étant déjà fermée quand l'élément a signalé son
-   * erreur. Purement informatif : rien ne lit ce relevé hors du journal.
+   * Le relevé d'une perte — voir `LossRecord`. Les fragments envoyés restent lisibles ici sous leur
+   * nom : `performSeek` les vide, et webcodecs-mseSource.test.ts les lit sur l'instance.
    */
-  private lastGoodBuffered: { at: number; after: string; video: string; audio: string } | null = null;
-  /**
-   * Les derniers fragments vidéo envoyés depuis le dernier vidage : numéro, début (dts/pts, horloge
-   * de l'élément) et rang depuis le saut — de quoi dire, à l'échec, dans quel fragment était la
-   * tête et lequel venait de partir. Bornés, et vidés avec les tampons qu'ils décrivent.
-   */
-  private sentFragments: { n: number; seq: number | null; dts: number; pts: number; at: number }[] = [];
-  private fragmentsSinceSeek = 0;
-  /** Les faits propres à l'échec, relevés avec `lossSnapshot` — voir `failureFacts`. */
-  private lossFailure: Record<string, unknown> | null = null;
+  private readonly loss: LossRecord;
+  private get sentFragments(): SentFragment[] {
+    return this.loss.sentFragments;
+  }
+  private set sentFragments(fragments: SentFragment[]) {
+    this.loss.sentFragments = fragments;
+  }
+  private get fragmentsSinceSeek(): number {
+    return this.loss.fragmentsSinceSeek;
+  }
+  private set fragmentsSinceSeek(n: number) {
+    this.loss.fragmentsSinceSeek = n;
+  }
 
   private async open(startSeconds: number): Promise<void> {
     // AirPlay cannot carry a managed stream, and Safari refuses to attach one until this is set.
@@ -482,147 +490,13 @@ export class MseSource {
     this.noteLoss();
   };
 
-  /**
-   * L'état au moment où la plateforme a lâché la source, gardé pour la ligne `rebuild`.
-   *
-   * Pris ici et pas au moment d'écrire la ligne : l'hôte ne l'apprend qu'au prochain envoi refusé,
-   * quand les tampons sont déjà détachés et illisibles. Le 23/09/2026, trois « Media failed to
-   * decode » sur un iPhone 12 (Love Story, 4K) n'ont laissé que leur motif — ni les tampons, ni ce
-   * qui venait d'être envoyé —, et rien ne permettait de dire si nos données y étaient pour
-   * quelque chose. Le premier des deux événements l'emporte : c'est lui qui a vu les tampons.
-   */
-  private lossSnapshot: Record<string, unknown> | null = null;
-
   private noteLoss(): void {
-    // Relevés au premier signal, comme l'état : c'est lui qui a vu l'élément au moment de l'échec.
-    this.lossFailure ??= this.failureFacts();
-    if (this.lossSnapshot) return;
-    try {
-      this.lossSnapshot = this.stateFacts(this.video.currentTime);
-    } catch {
-      /* le journal ne vaut pas un lecteur */
-    }
+    this.loss.noteLoss();
   }
 
-  /**
-   * Ce qu'un échec de décodage laisse à dire, en plus de l'état (14/10/2026) : les tampons au
-   * dernier envoi réussi, les images comptées par l'élément, son message d'erreur, et la place de
-   * la tête dans les fragments envoyés — pour dire si c'est l'image ou le son qui a lâché, et où.
-   *
-   * Chaque fait dans sa propre garde : une lecture qui lève perd ce fait-là, jamais les autres, et
-   * jamais la ligne. Ne lève pas.
-   */
-  private failureFacts(): Record<string, unknown> {
-    const facts: Record<string, unknown> = {};
-    const now = Date.now();
-    let head = NaN;
-    try {
-      head = this.video.currentTime;
-    } catch {
-      /* rien */
-    }
-    try {
-      const seen = this.lastGoodBuffered;
-      if (seen) {
-        facts.lastBuffered = `vidéo ${seen.video} · audio ${seen.audio} — après ${seen.after}, ${now - seen.at} ms avant`;
-      }
-    } catch {
-      /* rien */
-    }
-    try {
-      const quality = this.video.getVideoPlaybackQuality?.();
-      if (quality) {
-        const corrupted = (quality as { corruptedVideoFrames?: number }).corruptedVideoFrames;
-        facts.videoQuality =
-          `total ${quality.totalVideoFrames} · perdues ${quality.droppedVideoFrames}` +
-          (typeof corrupted === "number" ? ` · corrompues ${corrupted}` : "");
-      }
-    } catch {
-      /* rien */
-    }
-    try {
-      const failure = this.video.error;
-      if (failure) facts.mediaError = `${failure.code}${failure.message ? ` « ${failure.message.slice(0, 300)} »` : ""}`;
-    } catch {
-      /* rien */
-    }
-    try {
-      const last = this.sentFragments.at(-1);
-      if (last) {
-        const offset = Number.isFinite(head) ? ` · tête ${signed(head - last.pts)} s` : "";
-        facts.lastFragment =
-          `n°${last.seq ?? "?"} (${last.n}e depuis le saut) dts ${last.dts.toFixed(3)} pts ${last.pts.toFixed(3)}` +
-          `${offset} · envoyé ${now - last.at} ms avant`;
-      }
-      if (Number.isFinite(head)) {
-        // Celui dont la première image est la dernière à ne pas dépasser la tête : le fragment
-        // qui la contient, si la tête est bien dans ce qui a été envoyé depuis le vidage.
-        let under: (typeof this.sentFragments)[number] | null = null;
-        for (const fragment of this.sentFragments) {
-          if (fragment.pts <= head && (!under || fragment.pts >= under.pts)) under = fragment;
-        }
-        if (under) {
-          facts.headFragment = `n°${under.seq ?? "?"} (${under.n}e) pts ${under.pts.toFixed(3)} · tête ${signed(head - under.pts)} s`;
-        }
-      }
-    } catch {
-      /* rien */
-    }
-    return facts;
-  }
-
-  /** Voir `lastGoodBuffered`. Ne lève jamais. */
-  private rememberBuffered(after: string): void {
-    try {
-      this.lastGoodBuffered = {
-        at: Date.now(),
-        after,
-        video: spansAll(this.videoBuffer),
-        audio: spansAll(this.audioBuffer),
-      };
-    } catch {
-      /* rien */
-    }
-  }
-
-  /** Un fragment vidéo accepté par le tampon — voir `sentFragments`. Ne lève jamais. */
-  private rememberFragment(data: Uint8Array): void {
-    try {
-      const times = fragmentTimes(data);
-      if (!times) return;
-      this.fragmentsSinceSeek += 1;
-      this.sentFragments.push({ n: this.fragmentsSinceSeek, ...times, at: Date.now() });
-      if (this.sentFragments.length > SENT_FRAGMENTS_KEPT) this.sentFragments.shift();
-    } catch {
-      /* rien */
-    }
-  }
-
-  /**
-   * Ce qu'une ligne `rebuild` porte en plus de son motif : l'état relevé à la perte, et les vingt
-   * dernières secondes de la trace — les envois, les sauts, l'erreur de l'élément, dans l'ordre.
-   */
+  /** Voir `LossRecord.lossReport`. */
   lossReport(): Record<string, unknown> {
-    // Chaque part dans sa garde (14/10/2026) : un état illisible — une source déjà détachée — ne
-    // doit plus emporter avec lui les faits de l'échec ni la trace, qui sont faits pour ce cas-là.
-    let state: Record<string, unknown> = {};
-    try {
-      state = this.lossSnapshot ?? this.stateFacts(this.video.currentTime);
-    } catch {
-      /* le journal ne vaut pas un lecteur */
-    }
-    let failure: Record<string, unknown> = {};
-    try {
-      failure = this.lossFailure ?? this.failureFacts();
-    } catch {
-      /* idem */
-    }
-    try {
-      // `steps` reste le dernier champ de la ligne.
-      return { ...state, ...failure, steps: traceRecent(STALL_TRACE_MS).join(" | ") };
-    } catch {
-      return { ...state, ...failure };
-    }
+    return this.loss.lossReport();
   }
 
   private readonly onSeeking = () => {
@@ -1064,8 +938,8 @@ export class MseSource {
       diagInterval("append", sentFrom, data.byteLength);
       // Pour le journal d'une perte seulement — voir `lastGoodBuffered`, `sentFragments`.
       const video = queue === this.videoOps;
-      if (video) this.rememberFragment(data);
-      this.rememberBuffered(video ? "envoi vidéo" : "envoi audio");
+      if (video) this.loss.rememberFragment(data);
+      this.loss.rememberBuffered(video ? "envoi vidéo" : "envoi audio");
       this.appendFailures = 0;
       this.networkRetries = 0;
       if (this.outageHold) {
@@ -1103,7 +977,7 @@ export class MseSource {
     // Une branche à part, pour le journal d'une perte (`lastGoodBuffered`) : la promesse rendue
     // garde exactement son enchaînement, et un retrait refusé ne relève rien.
     removal.then(
-      () => this.rememberBuffered("retrait"),
+      () => this.loss.rememberBuffered("retrait"),
       () => {}
     );
     return removal
