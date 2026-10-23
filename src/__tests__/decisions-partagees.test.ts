@@ -398,10 +398,11 @@ describe("une seule règle de reprise, une seule d'épisode suivant, une seule c
     }
   });
 
+  // Le comportement (une réponse `known: false` laisse la position au serveur) est éprouvé fiche par
+  // fiche dans `fiche-lire-avant-reseau.test.tsx` (23/10/2026) : la règle peut vivre hors des fiches.
   it("« connu » veut dire que Jellyfin a répondu, pas que la requête est revenue", () => {
     for (const f of ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"]) {
       expect([f, /progress !== undefined/.test(codeOnly(f))]).toEqual([f, false]);
-      expect([f, codeOnly(f)]).toEqual([f, expect.stringContaining("progress?.known === true")]);
     }
   });
 
@@ -412,15 +413,12 @@ describe("une seule règle de reprise, une seule d'épisode suivant, une seule c
   });
 
   it("l'épisode suivant du cinéma vient de `nextEpisodeIn`", () => {
-    // Les deux fiches de série passent par `useNextEpisodeFromCache`, qui l'appelle au moment où
-    // l'épisode se termine (25/09/2026).
-    for (const f of [
-      "src/components/cinema/CinemaSeriesDetail.tsx",
-      "src/components/cinema/mobile/CinemaMobileDetail.tsx",
-      "src/lib/playSeriesNextEpisode.ts",
-    ]) {
-      expect([f, codeOnly(f)]).toEqual([f, expect.stringMatching(/nextEpisodeIn\(|useNextEpisodeFromCache\(/)]);
-      expect([f, /flat\.findIndex/.test(codeOnly(f))]).toEqual([f, false]);
+    // Les fiches de série lisent l'épisode suivant dans leur liste au moment où l'épisode se termine
+    // (25/09/2026) — éprouvé rendu, fiche par fiche, dans `fiche-lire-avant-reseau.test.tsx`.
+    const f = "src/lib/playSeriesNextEpisode.ts";
+    expect([f, codeOnly(f)]).toEqual([f, expect.stringMatching(/nextEpisodeIn\(|useNextEpisodeFromCache\(/)]);
+    for (const g of [f, "src/components/cinema/CinemaSeriesDetail.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"]) {
+      expect([g, /flat\.findIndex/.test(codeOnly(g))]).toEqual([g, false]);
     }
   });
 
@@ -587,15 +585,22 @@ describe("ce que Lire trouve déjà prêt", () => {
       .map((f) => `src/${f}`)
       .filter((f) => /\.tsx?$/.test(f) && !f.includes("__tests__"));
 
-  it("les trois fiches, et elles seules, préparent la lecture", () => {
+  // Que chaque fiche prépare bien la lecture de ce que Lire lancerait est éprouvé rendu dans
+  // `fiche-lire-avant-reseau.test.tsx` (23/10/2026). Ici, « elles seules » : l'appel ne vit que dans
+  // les fiches — ou dans le crochet de leur bouton Lire, que seules les fiches appellent.
+  const FICHES_LIRE = [
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    // La fiche d'un lien de partage (§112) : une fiche, avec le seul titre de son bouton principal.
+    "src/components/shareGuest/ShareTitleSheet.tsx",
+  ];
+  it("les fiches, et elles seules, préparent la lecture", () => {
     const hits = sources().filter((f) => f !== "src/lib/usePlaybackPrefetch.ts" && /usePlaybackPrefetch\(/.test(code(f)));
-    expect(hits.sort()).toEqual([
-      "src/components/cinema/CinemaMovieDetail.tsx",
-      "src/components/cinema/CinemaSeriesDetail.tsx",
-      "src/components/cinema/mobile/CinemaMobileDetail.tsx",
-      // La fiche d'un lien de partage (§112) : une fiche, avec le seul titre de son bouton principal.
-      "src/components/shareGuest/ShareTitleSheet.tsx",
-    ]);
+    expect(hits.length).toBeGreaterThan(0);
+    for (const f of hits) expect([...FICHES_LIRE, "src/lib/useSheetPlay.ts"]).toContain(f);
+    const viaHook = sources().filter((f) => f !== "src/lib/useSheetPlay.ts" && /useSheetPlay\(/.test(code(f)));
+    for (const f of viaHook) expect(FICHES_LIRE).toContain(f);
   });
 
   it("le lecteur lit la description sous la clé que la fiche précharge", () => {
@@ -927,12 +932,14 @@ describe("une seule décision pour ce qu'une fiche montre avant le réseau", () 
     "src/components/cinema/CinemaMovieDetail.tsx",
     "src/components/cinema/CinemaSeriesDetail.tsx",
     "src/components/cinema/mobile/CinemaMobileDetail.tsx",
-  ])("%s passe par useSheetPlayFacts, sheetOverview, useFileMissing et useLateArrival", (f) => {
+  ])("%s passe par sheetOverview et useLateArrival", (f) => {
+    // `useSheetPlayFacts` et `useFileMissing` : éprouvés rendus dans `fiche-lire-avant-reseau.test.tsx`
+    // (23/10/2026) — le libellé de l'appareil avant le réseau, Lire grisé sur un fichier introuvable.
     const code = lire(f)
       .split("\n")
       .filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l))
       .join("\n");
-    for (const porteur of ["useSheetPlayFacts(", "sheetOverview(", "useFileMissing(", "useLateArrival("]) {
+    for (const porteur of ["sheetOverview(", "useLateArrival("]) {
       expect([f, porteur, code.includes(porteur)]).toEqual([f, porteur, true]);
     }
     expect(code).not.toMatch(/info\?\.tmdb\?\.overview \|\|/);
