@@ -3,7 +3,8 @@
 import { useSignOut } from "@/components/offline/useSignOut";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Clapperboard, LogOut, Search } from "lucide-react";
+import { LogOut, Search } from "lucide-react";
+import { BrandMark } from "@/components/BrandMark";
 import { NAV_PARTS, activeNavHref } from "@/components/navItems";
 import { prefetchRoute } from "@/lib/prefetch";
 import { useT } from "@/components/TranslationProvider";
@@ -41,7 +42,7 @@ export function Sidebar() {
         <BackToCinema className="mb-4" />
 
         <div className="mb-4 flex shrink-0 items-center gap-2.5 px-2">
-          <Clapperboard size={20} className="text-brand" aria-hidden />
+          <BrandMark size={22} />
           <span className="text-base font-semibold text-white">{APP_NAME}</span>
         </div>
 

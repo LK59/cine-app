@@ -13,11 +13,14 @@ describe("CinemaBrowseSheet — réglages sans backdrop-filter", () => {
   });
 });
 
-// Le logo de l'application garde son violet (§83) : les claps du rail, de la barre du téléphone et
-// de la barre latérale de la gestion étaient passés au blanc avec l'accent.
-describe("logo de l'application — violet de marque", () => {
+// Le logo de l'application garde ses couleurs (§83) : les claps du rail, de la barre du téléphone et
+// de la barre latérale de la gestion étaient passés au blanc avec l'accent. Depuis le 23/10/2026, le
+// logo y est le glyphe Laterna (`BrandMark`), qui porte ses couleurs lui-même.
+describe("logo de l'application — en couleurs", () => {
   it.each(["src/components/cinema/mobile/CinemaMobileClient.tsx", "src/components/player/PlayerRail.tsx", "src/components/Sidebar.tsx"])("%s", (file) => {
-    expect(readFileSync(file, "utf8")).toMatch(/<Clapperboard[^>]*text-brand/);
+    const source = readFileSync(file, "utf8");
+    expect(source).toMatch(/<BrandMark\b/);
+    expect(source).not.toMatch(/<Clapperboard\b/);
   });
 });
 

@@ -3,7 +3,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Clapperboard } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { BrandMark } from "@/components/BrandMark";
 import { useT } from "@/components/TranslationProvider";
 import { CapabilitySection } from "@/components/CapabilityStatus";
 import { APP_NAME } from "@/lib/appBuild";
@@ -57,9 +58,8 @@ function StatusScreen({ back }: { back: string }) {
       <div className="mx-auto max-w-4xl">
         <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-accent-600/20 p-2 text-accent-400">
-              <Clapperboard size={22} />
-            </div>
+            {/* Le logo, sans le pavé gris qui portait le clap : le glyphe a ses propres couleurs. */}
+            <BrandMark size={34} />
             <div>
               <h1 className="text-lg font-semibold text-white">{APP_NAME}</h1>
               <p className="text-xs text-slate-400">{t('health.pageTitle')}</p>

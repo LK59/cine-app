@@ -203,24 +203,39 @@ function LoginForm() {
           <p className="mt-4 text-center text-xs leading-5 text-slate-500">{t("auth.hint")}</p>
         </div>
 
-        {/* La porte de service. Elle existe pour le jour où Jellyfin ne répond plus, et elle ne
-            s'adresse qu'à une personne : elle reste donc repliée et discrète. */}
-        <div className="mt-6">
-          {!showLocalForm ? (
+        {/* La porte de service et l'état des services, côte à côte sur une ligne (23/10/2026) : deux
+            recours discrets pour le jour où quelque chose ne répond pas. La porte de service existe
+            pour le jour où Jellyfin ne répond plus et ne s'adresse qu'à une personne : elle reste
+            repliée, et son formulaire s'ouvre sous la ligne, sur toute la largeur. `flex-wrap` : sur
+            un écran étroit, le second bouton passe à la ligne plutôt que de déborder. */}
+        <div className="mt-6" data-login-recours="">
+          <div className="flex flex-wrap items-center justify-center gap-2">
             <button
-              onClick={() => setShowLocalForm(true)}
+              type="button"
+              onClick={() => setShowLocalForm((v) => !v)}
+              aria-expanded={showLocalForm}
+              aria-controls="login-local-form"
               data-liquid-pan="wide"
-              className="settings-glass-btn mx-auto block rounded-full px-3.5 py-1.5 text-xs text-slate-400 transition-colors hover:text-slate-200"
+              className="settings-glass-btn rounded-full px-3.5 py-1.5 text-xs text-slate-400 transition-colors hover:text-slate-200"
             >
               {t("auth.local.heading")}
             </button>
-          ) : (
+            <Link
+              href="/status"
+              data-liquid-pan="wide"
+              className="settings-glass-btn flex w-fit items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs text-slate-400 transition-colors hover:text-slate-200"
+            >
+              <Activity size={13} /> {t("auth.statusLink")}
+            </Link>
+          </div>
+          {showLocalForm && (
             <form
+              id="login-local-form"
               onSubmit={(e) => {
                 e.preventDefault();
                 submit("/api/auth/login");
               }}
-              className="card settings-card space-y-3 p-5"
+              className="card settings-card mt-3 w-full space-y-3 p-5"
             >
               <p className="text-xs font-medium text-slate-400">{t("auth.local.heading")}</p>
               <input
@@ -272,17 +287,9 @@ function LoginForm() {
           {t("share.guest.loginButton")}
         </Link>
 
-        <Link
-          href="/status"
-          data-liquid-pan="wide"
-          className="settings-glass-btn mx-auto mt-8 flex w-fit items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs text-slate-400 transition-colors hover:text-slate-200"
-        >
-          <Activity size={13} /> {t("auth.statusLink")}
-        </Link>
-
-        {/* Sous le formulaire, après le lien d'état : rien de ce qu'elle montre n'est privé — la
+        {/* Sous le formulaire et les recours : rien de ce qu'elle montre n'est privé — la
             version se lit déjà dans `/sw.js?v=`, public lui aussi (DECISIONS.md §41). */}
-        <AppSignature className="mt-4 text-center" />
+        <AppSignature className="mt-8 text-center" />
       </div>
     </main>
   );

@@ -6842,4 +6842,15 @@ seul, `laternaAddress`), jamais une valeur du code. Préparée le 23/10/2026, **
 elle se publiera par deux lignes dans `migrate()` (`db.ts`), à côté des autres pages. Tests :
 `news-page-laterna.test.ts`.
 
+**Le logo** (« le L-faisceau », 23/10/2026) remplace le clap partout où le clap *était le logo* : les
+images de `public/` (icônes, favicon, icône Apple, icône maskable à part, badge des notifications,
+les 42 écrans de lancement) sont toutes produites par `tools/brand/generate.mjs` depuis les SVG de
+`tools/brand/` — jamais retouchées à la main —, et le glyphe sans fond posé dans l'interface (rail,
+barre du téléphone, barre latérale de la gestion, état des services, assistant) est `BrandMark`
+(`src/components/BrandMark.tsx`) ; `offline.html`, qui ne peut rien importer, en recopie le dessin.
+Les `Clapperboard` restants (menu « Lecture », séances, signalements, capacité « trailers ») ne sont
+pas le logo. Mêmes adresses qu'avant, plus `icon-maskable-512.png` et `badge-96.png` (dans
+`ACTIFS_PUBLICS`) ; `CACHE_NAME` non relevé (voir l'en-tête de `sw.js`). Tests : `brand-assets.test.ts`
+(chaque image référencée existe à ses dimensions), `splashScreens.test.ts`.
+
 **Décidé le 23/10/2026.**

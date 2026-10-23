@@ -11,6 +11,7 @@ import { SETTINGS_BY_KEY, availableFeatures, type SettingGroup, type SettingView
 import { groupsToTest } from "@/lib/settings/wizardTests";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 import { APP_NAME } from "@/lib/appBuild";
+import { BrandMark } from "@/components/BrandMark";
 
 /**
  * L'assistant de premier lancement (DECISIONS.md §48).
@@ -387,7 +388,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         }}
       />
       <div className="relative mx-auto w-full max-w-xl">
-        <header className="mb-8 text-center">
+        <header className="mb-8 flex flex-col items-center text-center">
+          <BrandMark size={32} className="mb-2" />
           <p className="font-display text-sm font-semibold tracking-tight text-accent-400">{APP_NAME}</p>
           <p className="mt-1 text-xs text-subtle">{t("setup.subtitle")}</p>
         </header>

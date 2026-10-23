@@ -1,6 +1,6 @@
 "use client";
 
-import { Clapperboard } from "lucide-react";
+import { BrandMark } from "@/components/BrandMark";
 import { useCinemaRoute } from "@/lib/cinemaRoute";
 import { useT } from "@/components/TranslationProvider";
 import { PLAYER_NAV, activePanel, openPanel } from "./playerNav";
@@ -106,7 +106,7 @@ export function PlayerRail() {
     >
       {/* Le logo seul, posé sur l'axe de la pilule : un repère, pas une entrée. Le nom reste dit. */}
       <div className="flex h-16 items-center justify-center">
-        <Clapperboard size={22} className="text-brand" aria-hidden />
+        <BrandMark size={24} />
         <span className="sr-only">{APP_NAME}</span>
       </div>
 
