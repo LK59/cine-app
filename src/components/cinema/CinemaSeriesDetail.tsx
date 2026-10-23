@@ -1,26 +1,22 @@
 "use client";
 
 import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ArrowLeft, ListVideo, Video } from "lucide-react";
+import { ListVideo } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaCastRow } from "@/components/cinema/CinemaCastRow";
 import { detailColumnMotion } from "@/lib/sheetMotion";
-import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
-import { useCinemaRoute, cinemaNavigate, cinemaClose, useSheetBehind, useRouteBehind, arrivedByBack } from "@/lib/cinemaRoute";
+import { useCinemaRoute, cinemaNavigate, cinemaClose } from "@/lib/cinemaRoute";
 import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
-import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { useWatchlistToggle } from "@/lib/useWatchlistToggle";
-import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useSheetKeys } from "@/lib/useSheetKeys";
-import { useIsTouch } from "@/lib/useIsMobile";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
@@ -28,14 +24,13 @@ import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
-import { CinemaLogo } from "@/components/cinema/CinemaLogo";
+import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
+import { useDesktopSheetShell, DesktopSheetFrame, DetailTrailerRow } from "@/components/cinema/DesktopSheetShell";
 import { playEpisodeFrom } from "@/lib/episodeRow";
 import { useSheetPlay } from "@/lib/useSheetPlay";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
 import { OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
-import { FadeInImg } from "@/components/FadeInImg";
 import { TitleToggleRow, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
 import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
 
@@ -89,10 +84,6 @@ export function CinemaSeriesDetail({
   underneath?: boolean;
 }) {
   const t = useT();
-  const containerRef = useRef<HTMLDivElement>(null);
-  /** Vrai dès que le spectateur a lui-même déplacé le focus — voir l'effet plus bas. */
-  const userMovedFocus = useRef(false);
-
   const [showTrailer, setShowTrailer] = useState(false);
   const [showSynopsis, setShowSynopsis] = useState(false);
   // In the URL like every other Cinema layer, so Back closes the season browser and returns to
@@ -141,40 +132,12 @@ export function CinemaSeriesDetail({
     posterPath: item.posterUrl,
   });
 
-  // Same exit-animation delay as CinemaMovieDetail — see that hook's own doc comment.
-  // Pas d'animation de sortie quand c'est une autre fiche qui attend derrière : la sortie
-  // découvrirait l'accueil deux dixièmes de seconde avant que la précédente n'entre par-dessus.
-  // Voir `useSheetBehind`.
-  // Monté parce qu'on revient dessus, et non parce qu'on l'ouvre : pas d'animation d'entrée. Il
-  // n'ouvre rien, il se découvre — voir `arrivedByBack`. Lu une seule fois, au montage.
-  const [revealed] = useState(() => arrivedByBack());
-  const sheetBehind = useSheetBehind();
-  /**
-   * Sur un ordinateur, la fiche relaie l'aperçu sans rien déplacer : le fond reste, le logo glisse
-   * à sa place, le contenu change (`useDesktopContinuity`). Sur l'iPad, la carte touchée devient le
-   * visuel plein écran, et la fiche y retourne (DECISIONS.md §61) — la même décision que la fiche du
-   * téléphone et la fiche TMDB. La fermeture rend l'adresse aussitôt :
-   * c'est une copie de la fiche qui s'efface pendant que l'image revole vers l'affiche. Sans fiche
-   * dessinée derrière (une fiche TMDB, une personne), l'échange se fait d'un coup, comme avant.
-   */
-  const behindIsDrawn = useRouteBehind() !== null;
-  const { closing, requestClose } = useDelayedClose(onClose, 0);
-  const morph = useSheetTransition({
-    layout: "desktop",
-    rootRef: containerRef,
-    imageRef: containerRef,
-    active: !underneath,
-    leaving: closing,
-    revealed,
-    instantExit: sheetBehind && !behindIsDrawn,
-  });
-
-  /**
-   * Refermer au doigt : la poignée du haut, écrite une fois pour les deux fiches du bureau.
-   * Inerte à la souris, et inerte aussi sous une fiche posée par-dessus — un écran qui s'en va
-   * n'a pas d'avis, et celui du dessous non plus.
-   */
-  const { style: gripStyle, grip } = useSheetGrip(requestClose, useIsTouch() && !underneath);
+  // L'habillage des deux fiches du bureau (`useDesktopSheetShell`) : l'arrivée par un retour, la
+  // fermeture différée (Échap/Retour arrière, le bouton Retour, la poignée passent tous par
+  // `requestClose`), le trajet ou la continuité (§61), la poignée au doigt, le focus rendu au retour
+  // du lecteur, et le drapeau « le spectateur a bougé lui-même » remis à zéro à chaque titre.
+  const shell = useDesktopSheetShell({ subjectKey: item.sonarrId, underneath, onClose });
+  const { containerRef, userHasMovedFocus, markUserMovedFocus, revealed, morph, requestClose, playerOwnsKeyboard } = shell;
 
   // Drives both the second snap section and the chevron pointing at it: with nothing similar in
   // the library there's no second screen, so neither should exist.
@@ -183,14 +146,6 @@ export function CinemaSeriesDetail({
   const cast = info?.tmdb?.cast ?? [];
   const runtimeLabel = useRuntimeLabel();
   const hasBelow = hasSimilar || cast.length > 0;
-
-  // Un titre similaire rouvre la même fiche sur un autre film : c'est une arrivée, et le
-  // drapeau doit repartir de zéro. Sans cela, un spectateur venu d'un titre similaire — donc
-  // ayant forcément bougé le focus pour l'atteindre — n'était plus jamais ramené sur la lecture.
-  // Déclaré avant l'effet de focus : les effets s'exécutent dans leur ordre de déclaration.
-  useEffect(() => {
-    userMovedFocus.current = false;
-  }, [item.sonarrId]);
 
   const playerEnabled = usePlayerEnabled();
   // Re-runs once playerEnabled AND episodesData (Play only renders once nextEpisode is known —
@@ -203,23 +158,11 @@ export function CinemaSeriesDetail({
       // (rechargement, lien), il pose le focus sur sa saison, puis `nextEpisode` arrive et relançait
       // cet effet — le focus repartait sur « À suivre », caché dessous, et plus aucune flèche ne
       // bougeait rien. Sa fermeture rend elle-même la main à la première action.
-      if (underneath || showEpisodes || userMovedFocus.current) return;
+      if (underneath || showEpisodes || userHasMovedFocus()) return;
       focusFirstAction(containerRef.current);
     });
     return () => cancelAnimationFrame(frame);
-  }, [playerEnabled, lead.trailerKey, episodesData?.nextEpisode, facts.targetId, item.sonarrId, underneath, showEpisodes]);
-
-  // Same as CinemaMovieDetail — see its own note. The sheet stays open under the player so
-  // closing the player comes back here, and stands down from the keyboard while it's up there.
-  const playback = usePlayback();
-  const playerOwnsKeyboard = playerHoldsKeyboard(playback);
-  const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
-  useEffect(() => {
-    if (!underneath && wasPlayerFullScreen.current && !playerOwnsKeyboard) {
-      focusFirstAction(containerRef.current);
-    }
-    wasPlayerFullScreen.current = playerOwnsKeyboard;
-  }, [playerOwnsKeyboard, underneath]);
+  }, [playerEnabled, lead.trailerKey, episodesData?.nextEpisode, facts.targetId, item.sonarrId, underneath, showEpisodes, containerRef, userHasMovedFocus]);
 
   // Échap et Retour arrière referment, les flèches parcourent le menu — et rien quand une feuille
   // est posée par-dessus ou qu'on tape dans un champ : la règle de toutes les fiches, `useSheetKeys`.
@@ -241,7 +184,7 @@ export function CinemaSeriesDetail({
           if (similarRowKeyNav(e, containerRef.current)) return;
 
           if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-          userMovedFocus.current = true;
+          markUserMovedFocus();
           detailMenuArrowNav(e, containerRef.current);
         },
   });
@@ -249,6 +192,7 @@ export function CinemaSeriesDetail({
   // `getNextEpisode` (plus haut) : the episode right after `currentItemId` in flat (season, episode)
   // order — same "next up" semantics PlayButton and PlayerHost's credits-time auto-advance expect,
   // powered by the same season/episode list "Plus d'épisodes" already needs.
+  const playback = usePlayback();
 
   function playEpisode(ep: CinemaEpisode) {
     // Là où il en est, avec la suite de la série : le lancement des listes d'épisodes (`playEpisodeFrom`).
@@ -264,45 +208,17 @@ export function CinemaSeriesDetail({
   const playTargetId = facts.targetId;
 
   return createPortal(
-    <div
-      ref={containerRef}
-      className={`fixed inset-0 overflow-hidden bg-ink ${revealed || morph.handlesEntry ? "" : "animate-fade-in"}`}
-      // Le rail du lecteur est posé sur le bord gauche de l'écran, au-dessus de cette fiche :
-      // sans ce retrait, la colonne de texte et le bouton Retour passeraient dessous. La variable
-      // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
-      inert={underneath}
-      aria-hidden={underneath || undefined}
-      style={{ zIndex: 47, paddingLeft: "var(--player-rail, 0px)", ...gripStyle }}
+    // La couche plein écran, son fond, la poignée et le bouton Retour : `DesktopSheetFrame`.
+    <DesktopSheetFrame
+      containerRef={containerRef}
+      revealed={revealed}
+      handlesEntry={morph.handlesEntry}
+      gripStyle={shell.gripStyle}
+      grip={shell.grip}
+      onBack={requestClose}
+      underneath={underneath}
+      backdropUrl={item.backdropUrl}
     >
-      {item.backdropUrl && (
-        <FadeInImg src={item.backdropUrl} alt="" data-sheet-photo="" className="absolute inset-0 h-full w-full object-cover" />
-      )}
-      <div
-        data-sheet-settle=""
-        className="absolute inset-x-0 bottom-0 backdrop-blur-md"
-        style={{
-          height: "45%",
-          maskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
-          WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
-        }}
-      />
-      {/* Deux voiles à étapes explicites plutôt qu'un dégradé en trois arrêts : voir
-          CinemaDetailLayout, où la raison de chaque pourcentage est écrite. */}
-      <div data-sheet-veil="" className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
-      <div data-sheet-veil="" className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
-
-      {/* Posée avant le bouton Retour, et non après : les deux sont au même rang, et le dernier
-          dessiné reçoit les appuis — la poignée traverse toute la largeur, le bouton doit rester
-          au-dessus d'elle. Voir `useSheetGrip`. */}
-      {grip}
-
-      <button
-        onClick={requestClose}
-        className="btn btn-ghost fixed z-10 rounded-full bg-black/55 px-3 py-2 float-edge"
-        style={{ top: "max(1rem, env(safe-area-inset-top))", left: "calc(1rem + var(--player-rail, 0px))" }}
-      >
-        <ArrowLeft size={16} /> {t("cinema.back")}
-      </button>
 
       {/* Partager la série entière par un lien (DECISIONS.md §112) : une pastille discrète en face du
           retour, hors du menu de la fiche — administrateur seul. */}
@@ -438,22 +354,7 @@ export function CinemaSeriesDetail({
             )}
 
             {/* Sa place est tenue, invisible et hors du clavier, tant que la description n'est pas là. */}
-            {!lead.trailerKnown && (
-              <div aria-hidden="true" data-sheet-reserved="" className={`${MENU_ROW} ${MENU_ROW_INACTIVE} invisible`}>
-                <span className={MENU_BADGE}>
-                  <Video size={14} />
-                </span>
-                <span className="text-sm font-medium">{t("cinema.trailer")}</span>
-              </div>
-            )}
-            {lead.trailerKey && (
-              <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${lead.trailerLate ? late.fade : ""}`}>
-                <span className={MENU_BADGE}>
-                  <Video size={14} />
-                </span>
-                <span className="text-sm font-medium">{t("cinema.trailer")}</span>
-              </button>
-            )}
+            <DetailTrailerRow lead={lead} late={late} onOpen={() => setShowTrailer(true)} />
 
             {episodesData?.seasons && episodesData.seasons.length > 0 && (
               <button data-detail-menu onClick={() => setShowEpisodes(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}>
@@ -534,7 +435,7 @@ export function CinemaSeriesDetail({
           <CinemaRatingsLine imdbId={info?.imdbId} />
         </CinemaDetailModal>
       )}
-    </div>,
+    </DesktopSheetFrame>,
     document.body
   );
 }

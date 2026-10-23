@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { liquidButtonRef } from "@/lib/liquidGlass/liquid";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { ArrowLeft, Plus, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, X } from "lucide-react";
+import { Plus, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack, useRouteBehind, useSheetBehind } from "@/lib/cinemaRoute";
 import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
@@ -19,8 +19,6 @@ import { SHEET_OUT_MS, sheetMotionClass, detailColumnMotion, phoneSheetCorner, p
 import { useSheetExit } from "@/lib/useSheetExit";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
 import {
-  HORIZONTAL_VEIL,
-  VERTICAL_VEIL,
   COLUMN_STYLE,
   MENU_STYLE,
   COLUMN_GAP,
@@ -34,6 +32,7 @@ import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine, PhoneSheetT
 import { similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaTagline, CinemaDownloading, useRuntimeLabel, useReleaseLabel, DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
 import { FadeInImg } from "@/components/FadeInImg";
+import { DesktopSheetBackdrop, SheetBackButton } from "@/components/cinema/DesktopSheetShell";
 import { TitleToggleRow, TitleToggleWide, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
 import { useWatchlistToggle } from "@/lib/useWatchlistToggle";
 
@@ -372,41 +371,16 @@ export function PlayerDiscoverSheet({
         paddingRight: "env(safe-area-inset-right, 0px)",
       }}
     >
-      {data?.backdrop && (
-        <FadeInImg src={data.backdrop} alt="" data-sheet-photo="" className="absolute inset-0 h-full w-full object-cover" />
-      )}
-      <div
-        data-sheet-settle=""
-        // Grand écran seulement : sur téléphone cette fiche arrive en glissant, souvent au milieu
-        // d'une cascade acteur → film → acteur, et un flou sur la moitié de l'écran se recalcule
-        // à chaque image du mouvement. Les deux voiles suffisent à la lecture du texte.
-        className="absolute inset-x-0 bottom-0 md:backdrop-blur-md"
-        style={{
-          height: "45%",
-          maskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
-          WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
-        }}
-      />
-      <div data-sheet-veil="" className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
-      <div data-sheet-veil="" className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
+      {/* Le fond des fiches du bureau (`DesktopSheetBackdrop`), flouté au grand écran seulement : sur
+          téléphone cette fiche arrive en glissant, souvent au milieu d'une cascade acteur → film →
+          acteur, et un flou sur la moitié de l'écran se recalcule à chaque image du mouvement. Les
+          deux voiles suffisent à la lecture du texte. */}
+      <DesktopSheetBackdrop src={data?.backdrop} settle blur="md:backdrop-blur-md" />
 
-      <button
-        onClick={requestClose}
-        // `absolute`, pas `fixed` : sur téléphone la racine s'anime en translation, et un enfant
-        // `fixed` se positionnerait alors par rapport à la fenêtre plutôt qu'à elle.
-        //
-        // Mais un enfant absolu se cale sur la boîte de *bordure*, pas sur la boîte de contenu :
-        // il ignore le `padding-left` qui réserve le rail, et le bouton passait donc dessous. Le
-        // retrait est écrit dans sa position — même correctif que la fiche personne, même cause,
-        // et le commentaire d'origine portait ici aussi l'hypothèse fausse.
-        className="btn btn-ghost absolute z-10 rounded-full bg-black/55 px-3 py-2 float-edge"
-        style={{
-          top: "max(1rem, env(safe-area-inset-top))",
-          left: "calc(1rem + var(--player-rail, 0px))",
-        }}
-      >
-        <ArrowLeft size={16} /> {t("cinema.back")}
-      </button>
+      {/* `absolute`, pas `fixed` : sur téléphone la racine s'anime en translation, et un enfant
+          `fixed` se positionnerait alors par rapport à la fenêtre plutôt qu'à elle. Le retrait du rail
+          est écrit dans sa position — voir `SheetBackButton`, même correctif que la fiche personne. */}
+      <SheetBackButton onClick={requestClose} position="absolute" />
 
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center">

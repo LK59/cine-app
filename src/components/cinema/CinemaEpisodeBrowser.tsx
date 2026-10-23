@@ -3,7 +3,7 @@
 import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Play, Check } from "lucide-react";
+import { Play, Check } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
 import { episodeRowFacts } from "@/lib/episodeRow";
@@ -13,6 +13,7 @@ import { useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { usePlayerSeriesRequests } from "@/lib/usePlayerSeriesRequests";
 import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes";
 import { useT } from "@/components/TranslationProvider";
+import { SheetBackButton } from "@/components/cinema/DesktopSheetShell";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
@@ -204,13 +205,7 @@ export function CinemaEpisodeBrowser({
       // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
       style={{ zIndex: 49, paddingLeft: "var(--player-rail, 0px)" }}
     >
-      <button
-        onClick={requestClose}
-        className="btn btn-ghost fixed z-10 rounded-full bg-black/55 px-3 py-2 float-edge"
-        style={{ top: "max(1rem, env(safe-area-inset-top))", left: "calc(1rem + var(--player-rail, 0px))" }}
-      >
-        <ArrowLeft size={16} /> {t("cinema.back")}
-      </button>
+      <SheetBackButton onClick={requestClose} />
 
       {/* No position:fixed descendants here (the back button above is a sibling) — safe to
           transform, unlike the outer root (see globals.css's own note on this pitfall). */}

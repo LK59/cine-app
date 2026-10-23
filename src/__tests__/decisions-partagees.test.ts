@@ -1627,3 +1627,55 @@ describe("le bouton Lire des fiches : un crochet (§114.7)", () => {
     expect([f, /known: progress\??\.known === true/.test(code)]).toEqual([f, false]);
   });
 });
+
+describe("l'habillage des fiches du bureau : une écriture (§114.8)", () => {
+  // Le film et la série du bureau étaient identiques ligne pour ligne sur ~170 lignes ; le fond, en
+  // cinq copies ; le bouton Retour, en quatre ; la ligne Bande-annonce, en trois.
+  const FICHES = ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"];
+  it.each(FICHES)("%s passe par `useDesktopSheetShell` et `DesktopSheetFrame`, sans réécrire leur cycle de vie", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("useDesktopSheetShell({"), code.includes("<DesktopSheetFrame")]).toEqual([f, true, true]);
+    for (const piece of ["useSheetTransition(", "useSheetGrip(", "useDelayedClose(", "arrivedByBack(", "wasPlayerFullScreen"]) {
+      expect([f, piece, code.includes(piece)]).toEqual([f, piece, false]);
+    }
+  });
+
+  it.each([
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx",
+    "src/components/shareGuest/ShareTitleSheet.tsx",
+  ])("%s ne dessine plus le fond des fiches du bureau à la main", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, /maskImage: "linear-gradient\(to bottom, transparent 0%, black 60%\)"/.test(code)]).toEqual([f, false]);
+    expect([f, /background: (VERTICAL|HORIZONTAL)_VEIL/.test(code)]).toEqual([f, false]);
+  });
+
+  it.each([
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/shareGuest/ShareTitleSheet.tsx",
+  ])("%s pose la ligne Bande-annonce par `DetailTrailerRow`", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("<DetailTrailerRow")]).toEqual([f, true]);
+    expect([f, /onClick=\{\(\) => setShowTrailer\(true\)\} className=\{`\$\{MENU_ROW\}/.test(code)]).toEqual([f, false]);
+  });
+
+  it.each([
+    "src/components/cinema/CinemaEpisodeBrowser.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx",
+    "src/components/cinema/DesktopSheetShell.tsx",
+  ])("%s : un seul bouton Retour des écrans pleins du bureau", (f) => {
+    const code = sansCommentaires(lire(f));
+    if (f.endsWith("DesktopSheetShell.tsx")) expect(code).toMatch(/export function SheetBackButton\(/);
+    else expect([f, code.includes("<SheetBackButton")]).toEqual([f, true]);
+    // La flèche et le mot, écrits à la main : une seconde copie du bouton (la croix du téléphone,
+    // `aria-label`, n'en est pas une).
+    const copies = (code.match(/<ArrowLeft size=\{16\} \/> \{t\("cinema\.back"\)\}/g) ?? []).length;
+    expect([f, copies]).toEqual([f, f.endsWith("DesktopSheetShell.tsx") ? 1 : 0]);
+  });
+
+  it("le crochet tient le clavier du lecteur par `playerHoldsKeyboard` (§7.3)", () => {
+    expect(sansCommentaires(lire("src/components/cinema/DesktopSheetShell.tsx"))).toContain("playerHoldsKeyboard(playback)");
+  });
+});

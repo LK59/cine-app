@@ -16,8 +16,9 @@ import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
-import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CAST_CLASS, CAST_SHOWN, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
+import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CAST_CLASS, CAST_SHOWN, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaDetailPages, CinemaDetailTitle, PhoneSheetTitle } from "@/components/cinema/CinemaDetailPages";
+import { DesktopSheetBackdrop, DetailTrailerRow } from "@/components/cinema/DesktopSheetShell";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
 import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
@@ -216,17 +217,8 @@ function DesktopLayout({ payload, facts }: { payload: ShareTitlePayload; facts: 
 
   return (
     <div ref={containerRef} data-share-sheet="desktop" className="fixed inset-0 overflow-hidden bg-ink animate-fade-in" style={{ paddingLeft: "var(--player-rail, 0px)" }}>
-      {item.backdropUrl && <FadeInImg src={item.backdropUrl} alt="" data-sheet-photo="" className="absolute inset-0 h-full w-full object-cover" />}
-      <div
-        className="absolute inset-x-0 bottom-0 backdrop-blur-md"
-        style={{
-          height: "45%",
-          maskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
-          WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 60%)",
-        }}
-      />
-      <div data-sheet-veil="" className="absolute inset-0" style={{ background: VERTICAL_VEIL }} />
-      <div data-sheet-veil="" className="absolute inset-0" style={{ background: HORIZONTAL_VEIL }} />
+      {/* Le fond des fiches du bureau, sans la marque de la continuité (§61) : rien ne s'y relaie. */}
+      <DesktopSheetBackdrop src={item.backdropUrl} />
 
       <CinemaDetailPages
         first={
@@ -291,22 +283,7 @@ function DesktopLayout({ payload, facts }: { payload: ShareTitlePayload; facts: 
                 </>
               )}
 
-              {!lead.trailerKnown && (
-                <div aria-hidden="true" data-sheet-reserved="" className={`${MENU_ROW} ${MENU_ROW_INACTIVE} invisible`}>
-                  <span className={MENU_BADGE}>
-                    <Video size={14} />
-                  </span>
-                  <span className="text-sm font-medium">{t("cinema.trailer")}</span>
-                </div>
-              )}
-              {lead.trailerKey && (
-                <button data-detail-menu onClick={() => setShowTrailer(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${lead.trailerLate ? late.fade : ""}`}>
-                  <span className={MENU_BADGE}>
-                    <Video size={14} />
-                  </span>
-                  <span className="text-sm font-medium">{t("cinema.trailer")}</span>
-                </button>
-              )}
+              <DetailTrailerRow lead={lead} late={late} onOpen={() => setShowTrailer(true)} />
 
               {series && seasons.length > 0 && (
                 <button data-detail-menu onClick={() => setShowEpisodes(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}>

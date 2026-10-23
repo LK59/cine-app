@@ -6398,3 +6398,32 @@ fiche), `decisions-partagees.test.ts`.
 (`playerEnabled === undefined`) : c'est sa mise en page qui l'attend, pas une règle de lecture. L'invité
 ne prépare rien quand son lien est plein (`prefetch: false`) et ne compte aucune copie hors ligne
 (`offline: false`). « Lire » au téléphone garde son bouton à lui jusqu'à P3 (§29).
+
+### 114.8 L'habillage des fiches du bureau
+
+**Règle.** Les deux fiches du bureau — film et série — ont le même cycle de vie : arrivée par un retour
+sans animation (`arrivedByBack`, lu une fois au montage), fermeture différée par `requestClose` (Échap,
+Retour arrière, le bouton Retour, la poignée), trajet ou continuité à l'ouverture et à la fermeture
+(§61), poignée au doigt seulement et jamais dessous, focus rendu à la première action au retour du
+lecteur (§7.3), drapeau « le spectateur a bougé lui-même » remis à zéro à chaque titre (§74). Et le même
+écran : la couche plein écran, le fond (photo, flou localisé, deux voiles), la poignée, le bouton Retour.
+
+**Porteurs.** `src/components/cinema/DesktopSheetShell.tsx` : `useDesktopSheetShell`, `DesktopSheetFrame`
+(la racine), `DesktopSheetBackdrop` (le fond), `SheetBackButton` (le bouton Retour), `DetailTrailerRow`
+(la ligne Bande-annonce et sa place tenue).
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail` (tout) ; `PlayerDiscoverSheet` (le fond, le
+bouton Retour), `ShareTitleSheet` (le fond, la ligne Bande-annonce), `CinemaEpisodeBrowser` (le bouton
+Retour).
+
+**Fusionné le 23/10/2026.** ~170 lignes identiques entre le film et la série, cinq copies du fond, quatre
+du bouton Retour, trois de la ligne Bande-annonce. DOM témoin identique avant et après.
+
+**Tests.** `fiche-bureau-poignee.test.tsx`, `sheetMorph-desktop-sheets.test.tsx`,
+`sheetMorph-continuity.test.tsx`, `series-detail-episodes-*.test.tsx`, `decisions-partagees.test.ts`.
+
+**Voulu.** Le fond de la fiche TMDB ne floute qu'à partir de `md` (`blur="md:backdrop-blur-md"`) et son
+bouton Retour est `absolute` (sa racine s'anime au téléphone) ; celui d'un lien de partage n'a pas la
+marque `data-sheet-settle` (rien ne s'y relaie). Chaque fiche garde son effet de focus d'arrivée, dont
+les déclencheurs diffèrent (la série attend aussi sa liste d'épisodes et se tait sous leur écran). La
+fiche hors ligne (`OfflineTitleSheet`) garde son fond, hors du témoin de cette fusion.
