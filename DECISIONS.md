@@ -6209,3 +6209,37 @@ changée. Puis, approuvées par Louis :
 
 **Laissé, exprès.** Les titres masqués (cosmétiques, voulu par Louis). Les paramètres de débit et de
 taille restent permis : la limite porte sur le nombre de transcodages, pas sur leur poids.
+
+## 114. Les fiches de titre : une règle par geste (audit du 23/10/2026)
+
+L'audit des fiches (film et série du bureau, fiche du téléphone, écran des épisodes, fiche TMDB, fiche
+d'un lien de partage, fiche hors ligne) a trouvé chaque geste décidé jusqu'à quatre fois. Chaque
+sous-section dit la règle, sa fonction, ses appelants, ses tests et ce qui diffère exprès.
+
+### 114.1 Les touches d'une fiche
+
+**Règle.** Échap et Retour arrière referment une fiche ; les flèches parcourent son menu. Une fiche se
+tait quand elle est recouverte (une autre fiche, le lecteur — §7.3 —, une fenêtre à elle), et pour
+toute touche quand une feuille (`ActionSheet` : Télécharger, la gestion d'un téléchargement, Partager)
+est posée par-dessus. Retour arrière dans un champ de saisie efface une lettre et ne referme rien.
+Une feuille ouverte garde ses touches : Échap ne referme qu'elle, les flèches, Entrée et Retour arrière
+n'atteignent pas l'écran dessous.
+
+**Porteurs.** `useSheetKeys` et `sheetKeyBelongsElsewhere` (`src/lib/useSheetKeys.ts`) ; `ActionSheet`
+écoute en capture sur `window` (comme `CinemaDetailModal`) et arrête ces touches sans les annuler.
+`useSheetExit` (§7.1) appelle `sheetKeyBelongsElsewhere` avant de refermer.
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaEpisodeBrowser` ; par `useSheetExit` :
+`PlayerDiscoverSheet`, `PlayerPersonSheet`, `OfflineTitleSheet`.
+
+**Corrigé le 23/10/2026.** Les fiches du bureau écoutaient sur `window` sans regarder ni la cible ni la
+feuille : Retour arrière dans le champ « Pour qui » de Partager refermait la fiche ; Échap fermait la
+feuille *et* la fiche ; une flèche dans Télécharger envoyait le focus sur « Lire », derrière la
+fenêtre, et Entrée lançait le film. Le téléphone et l'écran des épisodes avaient la garde
+`[data-action-sheet]`, recopiée ; elle vit ici.
+
+**Tests.** `fiche-touches-feuilles.test.tsx`, `decisions-partagees.test.ts` (« les touches des fiches »).
+
+**Voulu.** La fiche série du bureau, dont l'adresse nomme l'écran des épisodes sans qu'il soit dessiné,
+referme ce cran-là (`cinemaClose({ episodes: false })`) et non la fiche (13/10/2026). La fiche d'un lien
+de partage n'a pas de fermeture : elle est la page.

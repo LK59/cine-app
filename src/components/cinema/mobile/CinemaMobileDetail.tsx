@@ -12,6 +12,7 @@ import { BookmarkCheck, Check, CircleCheck, Play, Plus, RotateCcw, Video, X } fr
 import { fetcher, progressKey } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
+import { sheetKeyBelongsElsewhere } from "@/lib/useSheetKeys";
 import { arrivedByBack, markSheetLeaving, useSheetBehind, useRouteBehind } from "@/lib/cinemaRoute";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
 import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
@@ -304,8 +305,9 @@ export function CinemaMobileDetail({
     if (inert || playerOwnsKeyboard) return;
     function onKey(e: KeyboardEvent) {
       if (showTrailer) return;
-      // Une feuille ouverte par-dessus (téléchargement hors ligne) se referme seule à Échap.
-      if (document.querySelector("[data-action-sheet]")) return;
+      // Une feuille ouverte par-dessus (téléchargement hors ligne) se referme seule à Échap — la
+      // règle de toutes les fiches (`sheetKeyBelongsElsewhere`, §114.1).
+      if (sheetKeyBelongsElsewhere(e)) return;
       if (e.key === "Escape") requestClose();
     }
     window.addEventListener("keydown", onKey);

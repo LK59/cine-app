@@ -8,6 +8,7 @@ import { PosterImage } from "@/components/PosterImage";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
 import { formatDurationShort, formatMinutes } from "@/lib/format";
 import { useDelayedClose } from "@/lib/useDelayedClose";
+import { useSheetKeys } from "@/lib/useSheetKeys";
 import { useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { usePlayerSeriesRequests } from "@/lib/usePlayerSeriesRequests";
 import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes";
@@ -142,17 +143,13 @@ export function CinemaEpisodeBrowser({
   // Left/Right move between the season list and the episode list; Up/Down cycle within
   // whichever one currently has focus — same roving-focus convention as the player's own
   // directional nav and CinemaMovieDetail's vertical menu.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (playerOwnsKeyboard) return;
-      // Une feuille ouverte depuis une ligne (téléchargement hors ligne) a ses touches : Échap la
-      // referme, elle — pas cet écran derrière elle (règle 2 des fiches).
-      if (document.querySelector("[data-action-sheet]")) return;
-      if (e.key === "Escape" || e.key === "Backspace") {
-        e.preventDefault();
-        requestClose();
-        return;
-      }
+  // Échap et Retour arrière referment ; une feuille ouverte depuis une ligne (téléchargement hors
+  // ligne) a ses touches — Échap la referme, elle, pas cet écran derrière elle (règle 2 des fiches).
+  // La règle de toutes les fiches : `useSheetKeys`.
+  useSheetKeys({
+    listening: !playerOwnsKeyboard,
+    onClose: requestClose,
+    onKey: (e) => {
       const active = document.activeElement as HTMLElement | null;
       const inSeasons = active?.getAttribute("data-episode-season") === "true";
       const inEpisodes = active?.getAttribute("data-episode-item") === "true";
@@ -193,10 +190,8 @@ export function CinemaEpisodeBrowser({
         const next = e.key === "ArrowDown" ? items[Math.min(idx + 1, items.length - 1)] : items[Math.max(idx - 1, 0)];
         next?.focus();
       }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, selectedSeason, playerOwnsKeyboard]);
+    },
+  });
 
   if (typeof document === "undefined") return null;
 

@@ -24,6 +24,7 @@ import { detailColumnMotion } from "@/lib/sheetMotion";
 import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
 import { cinemaNavigate, useSheetBehind, useRouteBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { useDelayedClose } from "@/lib/useDelayedClose";
+import { useSheetKeys } from "@/lib/useSheetKeys";
 import { useIsTouch } from "@/lib/useIsMobile";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
@@ -235,21 +236,15 @@ export function CinemaMovieDetail({
     wasPlayerFullScreen.current = playerOwnsKeyboard;
   }, [playerOwnsKeyboard, underneath]);
 
-  useEffect(() => {
-    if (underneath) return;
-    function onKey(e: KeyboardEvent) {
-      // The player is on top and owns the keyboard — see above.
-      if (playerOwnsKeyboard) return;
-      // TrailerModal has its own Escape handler (also on window) that closes just itself —
-      // without this guard, Escape while the trailer is open closed BOTH it and this whole
-      // detail overlay at once, since nothing stops this listener from also firing on the same
-      // keypress.
-      if (showTrailer || showSynopsis) return;
-      if (e.key === "Escape" || e.key === "Backspace") {
-        e.preventDefault();
-        requestClose();
-        return;
-      }
+  // Échap et Retour arrière referment, les flèches parcourent le menu — et rien quand une feuille
+  // est posée par-dessus ou qu'on tape dans un champ : la règle de toutes les fiches, `useSheetKeys`.
+  useSheetKeys({
+    // The player is on top and owns the keyboard — see above. TrailerModal has its own Escape
+    // handler (also on window) that closes just itself — without this guard, Escape while the
+    // trailer is open closed BOTH it and this whole detail overlay at once.
+    listening: !underneath && !playerOwnsKeyboard && !showTrailer && !showSynopsis,
+    onClose: requestClose,
+    onKey: (e) => {
       // The similar-titles row below the menu takes the arrow keys when focus is in it (and
       // claims the Down that enters it from the last menu row) — see similarRowKeyNav.
       if (similarRowKeyNav(e, containerRef.current)) return;
@@ -257,10 +252,8 @@ export function CinemaMovieDetail({
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
       userMovedFocus.current = true;
       detailMenuArrowNav(e, containerRef.current);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, showTrailer, showSynopsis, playerOwnsKeyboard, underneath]);
+    },
+  });
 
   // « À voir » reste local : c'est une intention, et rien d'autre ne la connaît. « Vu » et
   // « Favori » sont partis chez Jellyfin (voir plus haut). Un titre peut donc être à la fois dans

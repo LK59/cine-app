@@ -1449,3 +1449,30 @@ describe("le temps regardé s'arrête pendant une attente, dans les trois lecteu
     expect(lire("src/components/player/ChromecastPlayer.tsx")).toMatch(/const playing = [^;]*!remote\.waiting/);
   });
 });
+
+describe("les touches des fiches : une règle (§114.1)", () => {
+  // Audit du 23/10/2026 : six écouteurs, trois listes de silences ; les fiches du bureau refermaient
+  // sous la fenêtre « Partager ». Une fiche passe par `useSheetKeys` (ou `useSheetExit`, qui lit la
+  // même règle) et n'écoute plus le clavier elle-même ; la garde `[data-action-sheet]` n'est écrite
+  // qu'une fois.
+  const FICHES = [
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/CinemaEpisodeBrowser.tsx",
+  ];
+  it.each(FICHES)("%s passe par `useSheetKeys` et ne pose pas d'écouteur de touches", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("useSheetKeys({")]).toEqual([f, true]);
+    expect([f, /addEventListener\("keydown"/.test(code)]).toEqual([f, false]);
+  });
+
+  it("la garde d'une feuille ouverte n'est écrite que dans `useSheetKeys.ts`", () => {
+    const hits = SOURCES().filter((f) => sansCommentaires(lire(f)).includes('querySelector("[data-action-sheet]")'));
+    expect(hits).toEqual(["src/lib/useSheetKeys.ts"]);
+  });
+
+  it("`useSheetExit` lit la même règle, et `ActionSheet` garde ses touches en capture", () => {
+    expect(sansCommentaires(lire("src/lib/useSheetExit.ts"))).toContain("sheetKeyBelongsElsewhere(e)");
+    expect(sansCommentaires(lire("src/components/ActionSheet.tsx"))).toMatch(/window\.addEventListener\("keydown", onKey, true\)/);
+  });
+});

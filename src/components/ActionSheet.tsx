@@ -126,11 +126,30 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
     };
   }, [show, role]);
 
+  /**
+   * Ouverte, la feuille garde ses touches : Échap ne referme qu'elle, et les flèches, Entrée et Retour
+   * arrière n'atteignent pas l'écran dessous.
+   *
+   * Elle écoutait Échap sur `document`, en bulle, sans rien arrêter : posée sur une fiche du bureau
+   * (Partager, Télécharger, la gestion d'un téléchargement), Échap refermait la feuille *et* la fiche,
+   * une flèche envoyait le focus sur « Lire » derrière elle — Entrée lançait alors le film — et Retour
+   * arrière dans le champ « Pour qui » refermait la fiche (audit du 23/10/2026, DECISIONS.md §114).
+   * Écoutée en capture sur `window`, comme `CinemaDetailModal` le fait pour ses fenêtres : avant les
+   * écouteurs des fiches, posés en bulle. Arrêtées et non annulées : le champ efface toujours, le
+   * groupe radio avance toujours, le bouton s'active toujours.
+   */
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key.startsWith("Arrow") || e.key === "Enter" || e.key === "Backspace") e.stopPropagation();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [open, onClose]);
 
   // ── Swipe-to-close ────────────────────────────────────────────────────────

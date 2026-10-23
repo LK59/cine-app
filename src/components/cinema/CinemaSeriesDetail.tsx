@@ -21,6 +21,7 @@ import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
 import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
+import { useSheetKeys } from "@/lib/useSheetKeys";
 import { useIsTouch } from "@/lib/useIsMobile";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
@@ -224,39 +225,30 @@ export function CinemaSeriesDetail({
     wasPlayerFullScreen.current = playerOwnsKeyboard;
   }, [playerOwnsKeyboard, underneath]);
 
-  useEffect(() => {
-    if (underneath) return;
-    function onKey(e: KeyboardEvent) {
-      // CinemaEpisodeBrowser has its own Escape handler (also on window) that closes just
-      // itself — same guard TrailerModal needed, for the same reason.
-      if (showTrailer || playerOwnsKeyboard) return;
-      if (showEpisodes) {
-        // L'adresse dit « épisodes » mais l'écran n'est pas dessiné : sa liste n'est pas encore
-        // là (rechargement, retour sur cette entrée) ou n'arrivera pas (Jellyfin en panne). Personne
-        // n'écoutait alors Échap — la fiche s'effaçait devant un écran absent, et la touche restait
-        // morte pour de bon si la liste échouait (13/10/2026). C'est ce cran-là qu'Échap referme.
-        if (!episodesShown && (e.key === "Escape" || e.key === "Backspace")) {
-          e.preventDefault();
-          cinemaClose({ episodes: false });
-        }
-        return;
-      }
-      if (e.key === "Escape" || e.key === "Backspace") {
-        e.preventDefault();
-        requestClose();
-        return;
-      }
-      // The similar-titles row below the menu takes the arrow keys when focus is in it (and
-      // claims the Down that enters it from the last menu row) — see similarRowKeyNav.
-      if (similarRowKeyNav(e, containerRef.current)) return;
+  // Échap et Retour arrière referment, les flèches parcourent le menu — et rien quand une feuille
+  // est posée par-dessus ou qu'on tape dans un champ : la règle de toutes les fiches, `useSheetKeys`.
+  useSheetKeys({
+    // CinemaEpisodeBrowser has its own Escape handler (also on window) that closes just
+    // itself — same guard TrailerModal needed, for the same reason.
+    listening: !underneath && !showTrailer && !playerOwnsKeyboard && !(showEpisodes && episodesShown),
+    // L'adresse dit « épisodes » mais l'écran n'est pas dessiné : sa liste n'est pas encore là
+    // (rechargement, retour sur cette entrée) ou n'arrivera pas (Jellyfin en panne). Personne
+    // n'écoutait alors Échap — la fiche s'effaçait devant un écran absent, et la touche restait
+    // morte pour de bon si la liste échouait (13/10/2026). C'est ce cran-là qu'Échap referme, et
+    // les flèches n'ont rien à parcourir.
+    onClose: showEpisodes ? () => cinemaClose({ episodes: false }) : requestClose,
+    onKey: showEpisodes
+      ? undefined
+      : (e) => {
+          // The similar-titles row below the menu takes the arrow keys when focus is in it (and
+          // claims the Down that enters it from the last menu row) — see similarRowKeyNav.
+          if (similarRowKeyNav(e, containerRef.current)) return;
 
-      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-      userMovedFocus.current = true;
-      detailMenuArrowNav(e, containerRef.current);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, showTrailer, showEpisodes, episodesShown, playerOwnsKeyboard, underneath]);
+          if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+          userMovedFocus.current = true;
+          detailMenuArrowNav(e, containerRef.current);
+        },
+  });
 
   // « Vu » et « Favori » vivent chez Jellyfin — voir useJellyfinItemState. « À voir » reste
   // local : c'est une intention, et rien d'autre ne la connaît.
