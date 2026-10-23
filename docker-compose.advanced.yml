@@ -1,4 +1,4 @@
-# CineApp — the advanced deployment: a shared Docker network, a bind-mounted ./data, a media
+# Laterna — the advanced deployment: a shared Docker network, a bind-mounted ./data, a media
 # folder, an .env file and hardening. For the minimal one (named volume, no .env, setup
 # assistant), see docker-compose.example.yml. Guide: DEPLOYMENT.md (appendix). Variables: ENV.md.
 #

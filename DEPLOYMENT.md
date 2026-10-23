@@ -1,4 +1,4 @@
-# Installing CineApp
+# Installing Laterna
 
 One compose file, one container, then everything is set in the browser.
 
@@ -30,7 +30,7 @@ repository, install Node, or write an `.env` file.
 | **Reads** | your media folder, read-only and optional, for storage statistics only |
 | **Health check** | `GET /api/ping` answers when the server is up and can read its database |
 
-CineApp is a front end. It downloads and transcodes nothing itself: it talks to the services you
+Laterna is a front end. It downloads and transcodes nothing itself: it talks to the services you
 already run. The one thing it stores beyond its own state is the lighter copies Jellyfin prepares
 for offline downloads, kept a few days in its data volume. Jellyfin (accounts and playback), TMDB (posters, synopses) and Radarr or
 Sonarr (the library) are needed; everything else is optional, and a service left unconfigured is
@@ -44,7 +44,7 @@ Create an empty folder, save this as `docker-compose.yml` inside it. It is
 [`docker-compose.example.yml`](docker-compose.example.yml), unchanged:
 
 ```yaml
-# CineApp — the minimal deployment.
+# Laterna — the minimal deployment.
 #
 #   1. Save this file as docker-compose.yml in an empty folder.
 #   2. docker compose up -d
@@ -121,7 +121,7 @@ Or download it: `curl -o docker-compose.yml https://raw.githubusercontent.com/LK
 | Line | When to change it |
 |---|---|
 | `ports` | Published on the server's loopback only (`127.0.0.1:3000`): `http://localhost:3000` on the server, through an SSH tunnel (`ssh -L 3000:localhost:3000 <server>`), or from a reverse proxy installed on the host. Delete it when a proxy on the same Docker network reaches `cine-app:3000`: nothing is then published on the host. Removing `127.0.0.1:` publishes the port on every interface — anyone who reaches the host reaches the app; do it only on a network you trust, and set `TRUSTED_PROXIES` for any proxy in front. |
-| `networks` | Uncomment it to join the network your reverse proxy uses. If Jellyfin, Radarr and Sonarr are on it too, CineApp reaches them by container name (`http://jellyfin:8096`). `docker network ls` lists the networks; replace `proxy` with the real name, in both places. |
+| `networks` | Uncomment it to join the network your reverse proxy uses. If Jellyfin, Radarr and Sonarr are on it too, Laterna reaches them by container name (`http://jellyfin:8096`). `docker network ls` lists the networks; replace `proxy` with the real name, in both places. |
 | `cine-data` | The named volume is ready to use: Docker creates it with the right owner. The bind-mount variant keeps the data in a visible `./data` folder; create it first and give it to uid `1001`, or the container cannot write and stops at once. |
 | media mount | Only for Management → Statistics and the storage card. Mount the root Radarr and Sonarr use, read-only, at `/mnt/media/video`. Folders that are not world-readable need `user: "1001:<your gid>"`, see the [appendix](#file-permissions). |
 | `TZ` | Your [time zone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones), for log timestamps and scheduled tasks. Times shown in the app follow each viewer's device. |
@@ -129,7 +129,7 @@ Or download it: `curl -o docker-compose.yml https://raw.githubusercontent.com/LK
 | `mem_limit` | Optional ceiling. Normal use stays in the low hundreds of megabytes: transcoding is Jellyfin's, and the player repackages files in the browser. |
 
 **Addresses are seen from inside the container.** When the assistant asks for Jellyfin's address,
-`localhost` means the CineApp container itself. Use the container name on a shared Docker network,
+`localhost` means the Laterna container itself. Use the container name on a shared Docker network,
 otherwise the server's LAN address (`http://192.168.1.10:8096`). A public `https://` address works
 too, at the cost of a round trip through the proxy for every call.
 
@@ -193,7 +193,7 @@ Whatever the proxy:
    ```
    `COOKIE_SECURE=true` sends session cookies over HTTPS only: never set it while you still open
    the app over `http://`, or no sign-in works. `TRUSTED_PROXIES` names the only machine allowed to
-   tell CineApp a visitor's address (`X-Forwarded-For`) — sign-in limits and logs depend on it. It
+   tell Laterna a visitor's address (`X-Forwarded-For`) — sign-in limits and logs depend on it. It
    takes a container name (resolved every five minutes), an address or an IPv4 network,
    comma-separated.
 3. Once the proxy works, delete the `ports` lines if the proxy is on the Docker network.
@@ -237,7 +237,7 @@ events. Then `TRUSTED_PROXIES=caddy`.
 
 ### Traefik
 
-Labels on the CineApp service, with Traefik on the same network:
+Labels on the Laterna service, with Traefik on the same network:
 
 ```yaml
     labels:
@@ -249,6 +249,18 @@ Labels on the CineApp service, with Traefik on the same network:
 ```
 
 Traefik needs nothing else. Then `TRUSTED_PROXIES=traefik`.
+
+### More than one address
+
+The same container can be served under several public addresses at once — an old name kept while a
+new one is introduced, for instance. Nothing in the application names its own address: share links,
+links in notifications, the address handed to a television and the cross-site check all follow the
+address the request came in on. Add the second name to the same proxy host (with a certificate that
+covers it), keeping `Host` or `X-Forwarded-Host` and `X-Forwarded-Proto` as above.
+
+For the browser, each address is a separate site: signing in, the installed app, notifications and
+downloads kept for offline viewing belong to the address they were made on, and must be redone on
+the other one. A device that has notifications turned on at both addresses receives them twice.
 
 ---
 
@@ -366,7 +378,7 @@ exist. The provider bills per token — a few cents for a feature film with the 
 monthly budget (5 US dollars by default) pauses jobs once reached, and each account may start 50
 a day. The finished file is kept in `data/subtitles/` and handed to Jellyfin, which writes it next
 to the video so every Jellyfin client sees it; Jellyfin needs write access to its media folders
-for that, otherwise CineApp serves its own copy. Image subtitles (PGS, VobSub) cannot be
+for that, otherwise Laterna serves its own copy. Image subtitles (PGS, VobSub) cannot be
 translated, and nothing is transcribed from the audio.
 
 **Dialogue search.** Type a line you remember in the cinema search — three words or more, or
@@ -399,7 +411,7 @@ in French: [docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md
 them on in **Account → Notifications**, on each device. On iPhone and iPad, add the app to the Home
 Screen first, then turn them on from inside it.
 
-### Account → Administration — CineApp and its users
+### Account → Administration — Laterna and its users
 
 In the cinema's Account panel, for administrators:
 
@@ -569,7 +581,7 @@ stays `:ro`: this grants reading, never writing.
 
 If your services do not share a Docker network, best first:
 
-1. Create one (`docker network create media`) and attach CineApp, the proxy and the services to it.
+1. Create one (`docker network create media`) and attach Laterna, the proxy and the services to it.
 2. Use LAN addresses for the services in the assistant, and no `networks:` block.
 3. `network_mode: host` works, but gives up isolation and the `ports` mapping.
 
@@ -587,7 +599,7 @@ docker image rm ghcr.io/lk59/cine-app:latest
 ```
 
 Nothing was written outside the volume and this folder, and nothing was changed in Radarr, Sonarr
-or Jellyfin beyond the API key you created and the devices CineApp sign-ins register in Jellyfin —
+or Jellyfin beyond the API key you created and the devices Laterna sign-ins register in Jellyfin —
 both visible, and revocable, in Jellyfin's dashboard.
 
 ---

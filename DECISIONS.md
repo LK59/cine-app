@@ -1288,11 +1288,14 @@ vide ne disait rien non plus, et une coupure réseau devenait un rejet non gér�
 
 ## 41. La signature de l'application
 
-**Règle.** Une ligne discrète — « CineApp 8.1 par LK59 · GitHub » — s'affiche à trois endroits et
+**Règle.** Une ligne discrète — « Laterna 9.4 par LK59 · propulsé par Lumen · GitHub » (« CineApp 8.1
+par LK59 · GitHub » avant le renommage, §118) — s'affiche à trois endroits et
 à trois seulement : tout en bas du panneau Compte du cinéma, sous le formulaire de la page de
 connexion, et en bas du menu de la gestion. La version est celle du build (`displayVersion(APP_VERSION)`,
-« dev » hors build) ; seul « by » se traduit (« par », « por », « von ») ; « GitHub » mène au dépôt
-dans un nouvel onglet (`noopener noreferrer`). Pas de pied de page global.
+« dev » hors build) ; seuls « by » (« par », « por », « von ») et « powered by » (« propulsé par »,
+« impulsado por », « angetrieben von », `signature.poweredBy`) se traduisent ; le rôle du moteur
+(« Moteur de lecture », `signature.engineRole`) est l'info-bulle de « propulsé par Lumen » ; « GitHub »
+mène au dépôt dans un nouvel onglet (`noopener noreferrer`). Pas de pied de page global.
 
 **Porteur.** `AppSignature` (`src/components/AppSignature.tsx`) ; le nom, l'auteur et l'adresse du
 dépôt dans `src/lib/appBuild.ts` (`APP_NAME`, `APP_AUTHOR`, `APP_REPOSITORY_URL`) — `package.json`
@@ -6766,3 +6769,54 @@ bouton Retour est `absolute` (sa racine s'anime au téléphone) ; celui d'un lie
 marque `data-sheet-settle` (rien ne s'y relaie). Chaque fiche garde son effet de focus d'arrivée, dont
 les déclencheurs diffèrent (la série attend aussi sa liste d'épisodes et se tait sous leur écran). La
 fiche hors ligne (`OfflineTitleSheet`) garde son fond, hors du témoin de cette fusion.
+
+## 118. Le nom : Laterna, son moteur Lumen — et les anciens noms reconnus pour toujours
+
+**Règle.** L'application s'appelle **Laterna** ; son moteur de lecture dans le navigateur, **Lumen**
+(« Moteur de lecture », `signature.engineRole`). Le nom affiché s'écrit une fois, `APP_NAME`, et le
+moteur `ENGINE_NAME` (`src/lib/appBuild.ts`) ; le manifeste, `offline.html` et `sw.js`, qui ne peuvent
+rien importer, l'écrivent en toutes lettres. Jellyfin voit deux clients, « Laterna » (lecteur serveur,
+connexion, partage, téléchargements) et « Lumen by Laterna » (lecteur natif). Les noms d'avant
+— « CineApp », « CineEngine By CineApp » — restent reconnus **pour toujours** : un corps de rapport qui
+en porte un est rapporté sous son successeur (un onglet resté sur l'ancienne version ouvrirait sinon
+une seconde séance chez Jellyfin, qui clé ses séances par client), et le ménage des appareils traite
+`AppName` « CineApp » comme « Laterna ». Ce qui est enregistré garde l'ancien nom : clés `cine:*` /
+`cine-*` du navigateur, IndexedDB, dossiers OPFS, caches du service worker (`CACHE_NAME` non relevé),
+cookie de session, `cine.db`, `DATA_DIR`, identifiants d'appareil `cine-app-…`.
+
+**Porteurs.** `src/lib/playbackClients.ts` — `PLAYBACK_CLIENTS`, `LEGACY_PLAYBACK_CLIENTS`,
+`OWN_APP_NAMES`, `isPlaybackClient`, `currentPlaybackClient`, `isOwnAppName` : la seule liste des noms
+annoncés à Jellyfin, anciens compris. `src/lib/appBuild.ts` — `APP_NAME`, `ENGINE_NAME`.
+`src/lib/engineBricks.ts` — les briques de Lumen (PlaybackCore, MuxCore, AudioCore, BufferCore,
+StreamCore, CodecBridge, PlaybackBridge), **libellés d'affichage seulement** : `brickOfDiagnostic` dit
+sous quelle brique s'affiche chaque ligne de diagnostic existante ; aucun champ de journal, clé, fichier
+ni variable ne porte ces noms.
+
+**Appelants.** Routes `/api/jellyfin/playback/{playing,progress,stop}` (`currentPlaybackClient`),
+`jellyfinDevicePrune.ts` (`isOwnAppName`), `/api/auth/jellyfin`, `share/jellyfinAccount.ts`,
+`offline/jobs.ts` (`PLAYBACK_CLIENTS.stable`) ; `AppSignature` (§41), `layout.tsx`, connexion, assistant,
+partage, état, hors ligne, rail, barre du téléphone, `useMediaSession`, notification d'essai ;
+`describeRemuxPlayback` / `describeJellyfinPlayback` et `PlaybackInfoPanel` (les briques) ;
+`ActivitySeance` (« Lumen · lecteur natif », « Lecteur serveur · PlaybackBridge »).
+
+**Tests.** `playback-clients-noms.test.ts` (les quatre noms, le successeur d'un ancien, les appareils
+des deux noms au ménage, et aucun de ces noms écrit en dur ailleurs dans `src/`), `engine-bricks.test.tsx`,
+`AppSignature.test.tsx`, les tests des routes de rapport (un corps « CineEngine By CineApp » rapporté
+« Lumen by Laterna »).
+
+**Voulu.** Dans le panneau technique, le lecteur serveur n'étiquette que ce qui relève de Lumen — sa
+tête (PlaybackBridge), « Diffusé » (PlaybackBridge), « Le flux » (StreamCore), « Ce que l'appareil
+accepte » (CodecBridge) — : le fichier et le son y sont décrits par Jellyfin. Les pages de Nouveautés
+déjà publiées ne sont pas réécrites (« CineApp » y reste). Le dépôt, l'image, le conteneur et le `name`
+de `package.json` gardent `cine-app` jusqu'à un renommage décidé à part.
+
+**Deux adresses.** Une installation peut être servie sous plusieurs adresses publiques à la fois
+(l'ancienne gardée à côté de la nouvelle). Rien n'en dépend côté serveur : lien de partage
+(`window.location.origin`), adresse donnée au téléviseur (`publicOrigin`, lue à chaque requête), liens
+des notifications (relatifs), manifeste (`id`, `start_url`, `scope` relatifs — l'`id` ne change pas),
+cookies sans `Domain`, `crossSiteWrite` comparé à l'hôte de la requête, CSP en `'self'`, récepteur
+Chromecast par défaut de Google. Côté navigateur, chaque adresse est un site à part : session,
+application installée, abonnement aux notifications et téléchargements hors ligne sont à refaire sur la
+nouvelle ; un appareil abonné aux notifications sur les deux adresses les reçoit deux fois.
+
+**Décidé le 23/10/2026.**

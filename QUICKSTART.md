@@ -23,7 +23,7 @@ Create an empty folder and save this as `docker-compose.yml` inside it. It is
 [`docker-compose.example.yml`](docker-compose.example.yml), unchanged:
 
 ```yaml
-# CineApp — the minimal deployment.
+# Laterna — the minimal deployment.
 #
 #   1. Save this file as docker-compose.yml in an empty folder.
 #   2. docker compose up -d

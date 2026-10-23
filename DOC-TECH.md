@@ -1,5 +1,19 @@
 # The native player — technical reference
 
+The application is **Laterna**; its in-browser playback engine is **Lumen**. The engine's parts are
+named, for display only, in the player's technical panel and the Activity page — none of these
+names appears in a log field, a key, a file or a variable (`src/lib/engineBricks.ts`):
+
+| Part | Role | Mainly |
+|---|---|---|
+| PlaybackCore | orchestration | `RemuxPlayback`, `ExperimentalPlayerHost`, seeks, pauses, resumes |
+| MuxCore | remux and containers | `mediaFile.ts`, `remuxer.ts`, the file's index |
+| AudioCore | audio decoding | `softwareAudio.ts`, the TrueHD and AAC WebAssembly modules, re-encoding |
+| BufferCore | buffer management | `mseSource.ts`, `bufferBudget.ts`, `MemoryReserve` |
+| StreamCore | network and byte reading | `HttpByteSource`, the resume cache, the link measurement |
+| CodecBridge | codec compatibility | the browser probes (`capabilities.ts`), hardware decoding |
+| PlaybackBridge | playback fallback | the server player (`PlayerHost`, Jellyfin transcoding) |
+
 This document opens with a map of the whole application — both interfaces, the server, the
 player, the caches, the logs and the gate — and then becomes the native player's reference.
 
@@ -1679,9 +1693,13 @@ being correct for this player alone.
   not closing a film.
 - **Pause is reported honestly.** A film paused for an hour is not an hour of viewing.
 - **Each player reports under its own name.** Jellyfin names a client from each request's
-  authorization header, so one account can show which of the two is running: `CineApp` for the one
-  that hands the file to Jellyfin, `CineEngine By CineApp` for the one that reads it here. The name
-  comes from the browser, so it is **compared against those two**, never forwarded as-is.
+  authorization header, so one account can show which of the two is running: `Laterna` for the one
+  that hands the file to Jellyfin, `Lumen by Laterna` for the one that reads it here. The name
+  comes from the browser, so it is **compared against those two**, never forwarded as-is. The names
+  used before the rename (`CineApp`, `CineEngine By CineApp`) are still accepted and reported under
+  their successors — a tab left open across the update keeps sending them — and the daily device
+  clean-up treats devices registered as `CineApp` like `Laterna` ones. All four live in
+  `src/lib/playbackClients.ts`, nowhere else.
 
 Intro skipping and next-episode come from Jellyfin's **media segments** (`/MediaSegments/{id}`,
 Jellyfin 12), with the old Intro Skipper endpoint (`/Episode/{id}/Timestamps`) as a fallback — on

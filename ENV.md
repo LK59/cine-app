@@ -1,6 +1,6 @@
 # Configuration variables
 
-Every variable CineApp reads, what it does, its default, and where else it can be set.
+Every variable Laterna reads, what it does, its default, and where else it can be set.
 
 **You do not need a `.env` file.** A new installation is configured in the browser: the setup
 assistant at first launch, then **Management → Configuration**. The variables below are for two
@@ -87,7 +87,7 @@ Set in the app: **Management → Configuration → Playback**. Applied without a
 
 | Variable | Default | Role |
 |---|---|---|
-| `PLAYER_ENABLED` | `true` | Films play inside CineApp. The browser reads the file and plays it natively: the server only serves bytes. `false` removes in-app playback; the *Open in Jellyfin* links remain. |
+| `PLAYER_ENABLED` | `true` | Films play inside Laterna. The browser reads the file and plays it natively: the server only serves bytes. `false` removes in-app playback; the *Open in Jellyfin* links remain. |
 | `PLAYER_SERVER_FALLBACK` | `true` | A file the browser cannot play is handed to Jellyfin, which converts it if it must. `false` guarantees no playback ever starts a transcode: such files show a playback error, and casting and the lighter version for slow connections are not offered. |
 | `PLAYER_AUTO_FRAME` | `true` | Enlarges the picture over black bars baked into the file. Needs Jellyfin's trickplay images; without them the picture is shown as it is. |
 | `CHROMECAST_FOR_EVERYONE` | `true` | `true`: every account sees the Chromecast button. `false`: administrators only. |
@@ -142,7 +142,7 @@ Configuration → New accounts**.
 |---|---|---|
 | `APP_LANGUAGE` | `en` | `fr`, `en`, `es` or `de`. The sign-in page and every account without a language of its own. The setup assistant's first screen sets it. |
 | `HOME_CONTINUE_HERO` | `false` | The home banner shows what the account is watching first, completed by the latest additions. |
-| `NEW_ACCOUNT_BLOCKED_TAGS` | — | Jellyfin tags blocked automatically on each account created after the first start, comma-separated. Existing accounts and administrators are never changed. Blocked tags hide titles in CineApp as in Jellyfin. |
+| `NEW_ACCOUNT_BLOCKED_TAGS` | — | Jellyfin tags blocked automatically on each account created after the first start, comma-separated. Existing accounts and administrators are never changed. Blocked tags hide titles in Laterna as in Jellyfin. |
 
 ## Application
 

@@ -1,4 +1,4 @@
-# CineApp — the minimal deployment.
+# Laterna — the minimal deployment.
 #
 #   1. Save this file as docker-compose.yml in an empty folder.
 #   2. docker compose up -d

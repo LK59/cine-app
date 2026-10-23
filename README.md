@@ -1,4 +1,6 @@
-# Cine App
+# Laterna
+
+*Formerly CineApp. Its in-browser playback engine is **Lumen**.*
 
 Self-hosted PWA that turns a Radarr / Sonarr / Bazarr / Jackett / qBittorrent / Jellyfin /
 Jellyseerr stack into **two interfaces on one container**: a Netflix-style front end everyone in
@@ -275,7 +277,7 @@ of the player, in French: [PRESENTATION-LECTEUR.md](PRESENTATION-LECTEUR.md).
 ## Downloads for offline viewing
 
 *Beta.* A film, an episode or a whole season can be downloaded from its page to watch without a
-network, or on a link too weak for streaming. CineApp does not copy the original file: Jellyfin
+network, or on a link too weak for streaming. Laterna does not copy the original file: Jellyfin
 prepares a lighter version through its transcoding API — *Standard* (720p, about 2 Mbit/s) or
 *High* (1080p, about 4 Mbit/s), with the one audio track chosen at download — and the device keeps
 it in the browser's private storage, together with its text subtitles, scrubbing previews, artwork
@@ -552,7 +554,7 @@ items, the calendar, queues, download client, indexers, statistics, service stat
 Cinema reads its own routes, which apply the account's restrictions.
 
 **Jellyfin's parental control is honoured everywhere.** A tag blocked in an account's Jellyfin policy
-(*Blocked tags*) hides the tagged titles in Cine App as it does in Jellyfin: from the catalogue, the
+(*Blocked tags*) hides the tagged titles in Laterna as it does in Jellyfin: from the catalogue, the
 search, the discovery rows, filmographies, sagas and similar titles, and the title's own routes
 answer as if it did not exist. New Jellyfin accounts can receive a set of blocked tags
 automatically: list them in *Management → Configuration → New accounts* (`NEW_ACCOUNT_BLOCKED_TAGS`). Within five
@@ -590,12 +592,12 @@ can be revoked immediately rather than only on expiry. A few things are worth kn
 
 - **The Jellyfin token and the Jellyseerr cookie travel inside it, encrypted** (AES-GCM, key
   derived from `SESSION_SECRET`). Signing is not hiding: without this, a stolen cookie handed over
-  a working Jellyfin token rather than just a Cine App session.
+  a working Jellyfin token rather than just a Laterna session.
 - **Sessions slide.** The cookie is reissued past a day of age, keeping the same session id, so
   daily use never ends in a weekly sign-out.
-- **Each sign-in is a Jellyfin device** (`CineApp`, id `cine-app-…`), revoked at sign-out. One a
-  session never signed out of is removed by a daily task once it has been idle for 30 days —
-  never another client's, never one still tied to a live session.
+- **Each sign-in is a Jellyfin device** (`Laterna` — `CineApp` before 9.4 —, id `cine-app-…`),
+  revoked at sign-out. One a session never signed out of is removed by a daily task once it has
+  been idle for 30 days — never another client's, never one still tied to a live session.
 - **Writes from another page are refused.** The cookie is `SameSite=Lax`, which stops a
   third-party site but not a sibling subdomain of the same domain. Every write to `/api/` is
   checked in `src/proxy.ts`: `Sec-Fetch-Site` must say `same-origin` (or, from a browser that does
@@ -624,7 +626,7 @@ can be revoked immediately rather than only on expiry. A few things are worth kn
   connection comes from a proxy listed in `TRUSTED_PROXIES` (a container name, an address or a
   network). Without it, any container on the same Docker network could claim a different address
   on every attempt. See [DEPLOYMENT.md](DEPLOYMENT.md#3-put-it-behind-a-reverse-proxy).
-- **Signing your other devices out affects Cine App only.** The Jellyfin sessions those logins
+- **Signing your other devices out affects Laterna only.** The Jellyfin sessions those logins
   opened are left alone — deliberately: nobody clicking that button expects to lose Jellyfin
   with it.
 
@@ -762,7 +764,7 @@ Beside them: `auth.log`, `startup.log`, `notifications.log`, `subtitle-gen.log` 
 
 ## License
 
-Cine App is free software under the [GNU Affero General Public License v3.0](LICENSE)
+Laterna is free software under the [GNU Affero General Public License v3.0](LICENSE)
 (`AGPL-3.0-only`). You may use, study, modify and share it; if you run a modified version for other
 people over a network, you must offer them its source code under the same license. Third-party
 code keeps its own license, listed above.
