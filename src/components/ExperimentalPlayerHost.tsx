@@ -1,6 +1,5 @@
 "use client";
 
-import { PLAYER_FRAME_TRANSITION } from "@/lib/playerFrame";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
@@ -137,6 +136,7 @@ import { finishIntro, formatResumeClock, introAllowedFor, introCaption, introFin
 import { useIntroPlaybackStarted } from "@/lib/introEnd";
 import { usePlayerBackClose } from "@/lib/playerHistory";
 import { useAudioLabels, useElapsedSince, useSubtitleLabels } from "@/components/playerNative/nativeHostHooks";
+import { nativeFrameStyle } from "@/components/playerNative/nativeFrameStyle";
 import {
   aacRouteFacts,
   generationErrorText,
@@ -194,8 +194,6 @@ const WARNING_MS = 6000;
 
 // Le budget de reconstructions, le saut au-delà d'un passage fautif et « le même endroit » vivent
 // désormais dans `playerLifecycle.ts`, avec les décisions qui s'en servent.
-
-const TRANSITION = PLAYER_FRAME_TRANSITION;
 
 /** Le plus longtemps qu'une image figée reste à l'écran, quoi qu'il arrive. */
 const FREEZE_MAX_MS = 4000;
@@ -3339,36 +3337,7 @@ export function ExperimentalPlayerHost({
     running: ready && !error,
   };
 
-  const style: React.CSSProperties = isMini
-    ? {
-        position: "fixed",
-        top: pos.y,
-        left: pos.x,
-        width: size.width,
-        height: size.height,
-        borderRadius: 16,
-        zIndex: 80,
-        overflow: "hidden",
-        boxShadow: "0 10px 30px rgba(0,0,0,.5)",
-        transition: isDragging || resizing ? "none" : TRANSITION,
-        touchAction: "none",
-      }
-    : {
-        position: "fixed",
-        top: 0,
-        left: 0,
-        width: "100vw",
-        borderRadius: 0,
-        zIndex: 80,
-        background: "black",
-        transition: resizing
-          ? "opacity 220ms ease-out, transform 220ms cubic-bezier(0.32, 0.72, 0, 1)"
-          : `${TRANSITION}, opacity 220ms ease-out, transform 220ms cubic-bezier(0.32, 0.72, 0, 1)`,
-        opacity: revealed && !closing ? 1 : 0,
-        // Une échelle très légère : assez pour que l'œil suive le passage d'un écran à l'autre,
-        // pas assez pour que ça ressemble à un effet.
-        transform: revealed && !closing ? "scale(1)" : "scale(0.985)",
-      };
+  const style = nativeFrameStyle({ isMini, pos, size, isDragging, resizing, revealed, closing });
 
   /**
    * Un saut demandé depuis les commandes — ou depuis le banc d'essai, qui passe par ici pour que
