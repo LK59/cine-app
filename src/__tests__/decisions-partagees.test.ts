@@ -1482,3 +1482,14 @@ describe("une seule suite pour fermer le lecteur et passer à l'épisode suivant
     expect(src).toMatch(/advanceTo\(/);
   });
 });
+
+describe("les doublons du lecteur fusionnés : une règle, un endroit (§115)", () => {
+  // DECISIONS.md §115. Chaque règle ci-dessous était écrite deux à quatre fois entre les deux
+  // lecteurs, ou dans la boucle de reconstruction du natif ; elle vit dans un seul module.
+  const HELPERS = "src/components/player/nativeHostHelpers.ts";
+
+  it("la ligne `rebuild` se construit dans rebuildLine seulement", () => {
+    expect(lecteurQui(/reportPlayback\(\s*"rebuild",\s*\{/)).toEqual([]);
+    expect(lecteurQui(/path: "remux", reason\b/)).toEqual([HELPERS]);
+  });
+});

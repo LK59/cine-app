@@ -4,6 +4,7 @@
 // 23/10/2026, appelé à la même place : l'écouteur `visibilitychange` est posé dans le même ordre.
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { reportPlayback } from "@/lib/reportPlayback";
+import { rebuildLine } from "@/components/player/nativeHostHelpers";
 import type { BackgroundWatch } from "@/lib/backgroundReturn";
 import type { PlayerLifecycle } from "@/lib/playerLifecycle";
 import type { SessionTally } from "@/lib/playerSessionTally";
@@ -57,13 +58,7 @@ export function useNativeRecovery({
       // comme une ouverture de plus, et combien de retours d'arrière-plan en coûtent une restait
       // une question sans réponse (23/09/2026).
       tally.backgroundRebuilt();
-      reportPlayback("rebuild", {
-        ...describeFileRef.current(),
-        path: "remux",
-        reason: "source fermée en arrière-plan",
-        at,
-        hiddenMs: tally.lastBackgroundMs,
-      });
+      reportPlayback("rebuild", rebuildLine(describeFileRef.current(), "source fermée en arrière-plan", at, { hiddenMs: tally.lastBackgroundMs }));
       restart(at, "la plateforme a fermé la source");
     };
     const onVisible = () => {

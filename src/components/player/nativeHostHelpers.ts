@@ -258,3 +258,22 @@ export function seekLineFields(tally: SessionTally, timing: SeekTiming, between:
     steps: traceRecent(Date.now() - timing.startedAt + 500).join(" | "),
   };
 }
+
+/**
+ * Les champs d'une ligne `rebuild` — écrits une seule fois pour ses quatre émetteurs : dialogues
+ * améliorés impossibles, AAC à PCE refusé, source perdue (`onError`) et source fermée en
+ * arrière-plan (`useNativeRecovery`). Le préfixe est le même partout et dans le même ordre : la
+ * description du fichier, `path`, `reason`, `at` ; puis ce que chacun ajoute (`extra`), à la place
+ * qu'il occupait déjà dans la ligne — l'ordre des clés n'a pas bougé (23/10/2026).
+ *
+ * `path: "remux"` : la reconstruction d'arrière-plan l'a toujours écrit ; la source perdue, non —
+ * sans lui, une ligne sur deux n'avait pas de chemin, et tout regroupement par chemin la perdait.
+ */
+export function rebuildLine(
+  file: Record<string, unknown>,
+  reason: string,
+  at: number,
+  extra: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return { ...file, path: "remux", reason, at, ...extra };
+}

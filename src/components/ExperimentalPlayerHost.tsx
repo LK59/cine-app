@@ -139,6 +139,7 @@ import {
   generationMenu,
   jellyfinAudioIndex,
   leadAt,
+  rebuildLine,
   seekElapsed,
   seekLineFields,
   syncFacts,
@@ -1649,7 +1650,7 @@ export function ExperimentalPlayerHost({
       setDialogueMode("off");
       const at = positionRef.current || startSeconds;
       trace(`dialogues améliorés impossibles ici (${why}) — reprise sans eux`);
-      reportPlayback("rebuild", { ...describeFileRef.current(), path: "remux", reason: `dialogues améliorés impossibles — ${why}`, at });
+      reportPlayback("rebuild", rebuildLine(describeFileRef.current(), `dialogues améliorés impossibles — ${why}`, at));
       showWarning(tRef.current("player.dialogue.unavailable"));
       restart(at, "dialogues améliorés impossibles, reprise sans eux");
       return true;
@@ -1667,7 +1668,7 @@ export function ExperimentalPlayerHost({
       if ((!everReadyRef.current || pendingSwitchRef.current) && !pipelineShowedPicture && !pceRebuildRef.current && takePceCopyRefusal(message)) {
         pceRebuildRef.current = true;
         const at = positionRef.current || startSeconds;
-        reportPlayback("rebuild", { ...describeFileRef.current(), path: "remux", reason: `copie AAC à PCE ${refused} — ${message}`, at });
+        reportPlayback("rebuild", rebuildLine(describeFileRef.current(), `copie AAC à PCE ${refused} — ${message}`, at));
         restart(at, "copie AAC à PCE refusée par le navigateur, décodée à la place");
         return true;
       }
@@ -2279,21 +2280,18 @@ export function ExperimentalPlayerHost({
         if (lost?.kind === "ignore") return;
         if (lost?.kind === "rebuild") {
           const { at, from: where, skipped: again, attempt } = lost;
-          reportPlayback("rebuild", {
-            ...describeFileRef.current(),
-            // Comme la reconstruction d'arrière-plan : sans lui, une ligne sur deux n'avait pas de
-            // chemin, et tout regroupement par chemin la perdait.
-            path: "remux",
-            reason: message,
-            at,
-            attempt,
-            skipped: again,
-            // Un retour d'arrière-plan récent, s'il y en a un — voir `backgroundFacts`.
-            ...tally.backgroundFacts(Date.now()),
-            // Les tampons et la trace au moment de la perte : sans eux, un « Media failed to
-            // decode » ne disait pas si c'étaient nos données ou l'appareil (23/09/2026).
-            ...remuxRef.current?.lossReport(),
-          });
+          reportPlayback(
+            "rebuild",
+            rebuildLine(describeFileRef.current(), message, at, {
+              attempt,
+              skipped: again,
+              // Un retour d'arrière-plan récent, s'il y en a un — voir `backgroundFacts`.
+              ...tally.backgroundFacts(Date.now()),
+              // Les tampons et la trace au moment de la perte : sans eux, un « Media failed to
+              // decode » ne disait pas si c'étaient nos données ou l'appareil (23/09/2026).
+              ...remuxRef.current?.lossReport(),
+            })
+          );
           restart(
             at,
             `la source a été perdue (${attempt})` +

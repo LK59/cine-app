@@ -6254,3 +6254,24 @@ son `200` ou son `CLOSE_MS`, et trois de l'épisode suivant. Fusionnées le 23/1
 de comportement (empreintes identiques). Le hors ligne arrêtait le rapport à Jellyfin après avoir
 demandé le fondu, les autres avant : l'ordre commun (arrêt puis fondu) ne change rien d'observable,
 les deux partant dans le même appel synchrone.
+
+## 115. Les doublons du lecteur : chaque règle écrite une seule fois
+
+L'audit du lecteur du 23/10/2026 (fusions) a relevé des règles écrites deux à quatre fois — entre le
+lecteur natif et le lecteur serveur, ou dans la boucle de reconstruction du natif. Celles qui ne
+demandaient qu'un déplacement ont été fusionnées une par une, **sans aucun changement de
+comportement** : les 49 empreintes du lecteur sont restées identiques à l'octet à chaque commit.
+Les écarts que l'audit a trouvés entre les copies (une garde présente d'un côté, une remise à zéro
+oubliée…) ne sont **pas** corrigés ici : chacun est une décision à part, notée sous la règle qu'il
+touche. Tests communs : `player-regles-communes.test.ts` (ce que rend chaque module) et
+`decisions-partagees.test.ts` (« les doublons du lecteur fusionnés… » : la copie ne revient pas).
+
+### La ligne `rebuild`
+
+**Règle.** La description du fichier, `path: "remux"`, `reason`, `at`, puis ce que chaque émetteur
+ajoute, à sa place d'avant. **Porteur.** `rebuildLine` (`src/components/player/nativeHostHelpers.ts`).
+**Appelants.** `dropDialogue` et `pceRebuild` (avant la première image), la source perdue de `onError`
+(`attempt`, `skipped`, `backgroundFacts`, `lossReport`), la source fermée en arrière-plan
+(`useNativeRecovery`, `hiddenMs`). **Tests.** Les empreintes `arriere-plan-…-source-perdue` et
+`reseau-source-perdue-a-repetition…` ; `decisions-partagees` (aucun `reportPlayback("rebuild", {`).
+**Laissé.** `pceRebuild` écrit sa ligne avant de demander `mayRebuild()` (audit F2-3) — décision à part.
