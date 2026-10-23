@@ -7,14 +7,12 @@ import { useT } from "@/components/TranslationProvider";
 import { ABOVE_BOTTOM_BAR, PROMPT_CLOSE_CLASS } from "@/lib/floatingPrompt";
 import { isInstalledApp, isIosSafariBrowserTab } from "@/lib/iosInstall";
 import { passageFlags } from "@/lib/passage/client";
-import { installPlatform } from "@/components/passage/PassageInstallHelp";
+import { installPlatform, PassageInstallSteps } from "@/components/passage/PassageInstallHelp";
 import { useOldAddress } from "@/lib/passage/useOldAddress";
 
 const DISMISS_KEY = "cine-install-prompt-dismissed-until";
 const SNOOZE_DAYS = 21;
 const SHOW_DELAY_MS = 4000;
-/** Juste arrivé par le passage : l'aide tout de suite, le temps que l'accueil se dessine. */
-const PASSAGE_DELAY_MS = 800;
 
 // Discreet nudge for iOS: Safari has no beforeinstallprompt event, so the only
 // way to "install" is Share -> Add to Home Screen, which we can't trigger
@@ -22,8 +20,10 @@ const PASSAGE_DELAY_MS = 800;
 // This matters because iOS only allows Web Push for home-screen-installed PWAs.
 //
 // Juste après un passage d'adresse (DECISIONS.md §119, `cine:passage-install-help` dans l'onglet) :
-// montrée aussitôt, même mise de côté plus tôt, sur iPhone/iPad comme sur Android — la nouvelle
-// adresse est une application à installer de nouveau — avec la suite (ouvrir l'app, coller le code).
+// montrée **aussitôt** et en grand, même mise de côté plus tôt, sur iPhone/iPad comme sur Android — la
+// nouvelle adresse est une application à installer de nouveau — avec les trois gestes numérotés
+// (`PassageInstallSteps`). Elle passait après 0,8 s, en petit ; sur l'iPhone du propriétaire (10.0.0)
+// elle n'est jamais venue, et l'invitation aux notifications a pris sa place (voir `isInstalledApp`).
 export function InstallPrompt() {
   const t = useT();
   const [show, setShow] = useState<"ios" | "passage" | null>(null);
@@ -34,7 +34,8 @@ export function InstallPrompt() {
 
   useEffect(() => {
     if (passageFlags.installHelpWanted() && !isInstalledApp() && installPlatform() !== "other") {
-      const timer = setTimeout(() => setShow("passage"), PASSAGE_DELAY_MS);
+      // Le premier tour après le montage (l'hydratation passée), pas plus tard.
+      const timer = setTimeout(() => setShow("passage"), 0);
       return () => clearTimeout(timer);
     }
     if (!isIosSafariBrowserTab()) return;
@@ -59,8 +60,36 @@ export function InstallPrompt() {
   // ses boutons, et l'installation n'a de sens qu'une fois l'application prête.
   if (!show || old !== false || pathname?.startsWith("/setup")) return null;
 
-  const passage = show === "passage";
-  const android = passage && installPlatform() === "android";
+  // Une cible de 44 px (la croix en faisait 13) et un nom : c'était la seule sortie de la bannière.
+  const close = (
+    <button type="button" onClick={dismiss} aria-label={t("common.close")} className={`${PROMPT_CLOSE_CLASS} text-slate-500 hover:text-slate-200`}>
+      <X size={13} />
+    </button>
+  );
+
+  if (show === "passage") {
+    return (
+      <div
+        className="fixed inset-x-0 bottom-0 z-60 flex justify-center px-3 pb-3 pointer-events-none"
+        // Au-dessus de la barre du bas du cinéma, pas dessus — voir `ABOVE_BOTTOM_BAR`.
+        style={{ paddingBottom: ABOVE_BOTTOM_BAR }}
+      >
+        <div
+          role="dialog"
+          aria-label={t("passage.install.title")}
+          data-install-prompt="passage"
+          className="glass-panel pointer-events-auto relative w-full max-w-md rounded-2xl border border-accent-400/30 px-4 py-4 pr-12 shadow-glow"
+        >
+          <p className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Share size={16} className="shrink-0 text-accent-400" />
+            {t("passage.install.title")}
+          </p>
+          <PassageInstallSteps platform={installPlatform()} size="banner" />
+          <div className="absolute right-1 top-1">{close}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -71,29 +100,11 @@ export function InstallPrompt() {
       <div data-install-prompt={show} className="glass-panel pointer-events-auto flex max-w-sm items-start gap-3 rounded-2xl px-4 py-3 shadow-glow">
         <Share size={16} className="mt-0.5 shrink-0 text-accent-400" />
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-white">{passage ? t("passage.install.title") : t("common.installPrompt.title")}</p>
-          {passage ? (
-            <>
-              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">{android ? t("passage.install.android") : t("passage.install.ios")}</p>
-              <p className="mt-1 text-[11px] leading-snug text-slate-500">{t("passage.install.then")}</p>
-            </>
-          ) : (
-            <>
-              <p className="mt-0.5 text-[11px] leading-snug text-slate-400">{t("common.installPrompt.body")}</p>
-              <p className="mt-1 text-[11px] leading-snug text-slate-500">{t("common.installPrompt.steps")}</p>
-            </>
-          )}
+          <p className="text-xs font-semibold text-white">{t("common.installPrompt.title")}</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-slate-400">{t("common.installPrompt.body")}</p>
+          <p className="mt-1 text-[11px] leading-snug text-slate-500">{t("common.installPrompt.steps")}</p>
         </div>
-        {/* Une cible de 44 px (la croix en faisait 13) et un nom : c'était la seule sortie de la
-            bannière. */}
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label={t("common.close")}
-          className={`${PROMPT_CLOSE_CLASS} text-slate-500 hover:text-slate-200`}
-        >
-          <X size={13} />
-        </button>
+        {close}
       </div>
     </div>
   );

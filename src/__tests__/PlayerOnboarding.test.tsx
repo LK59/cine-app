@@ -207,3 +207,48 @@ describe("l'accueil au clavier", () => {
     }
   });
 });
+
+// L'étape des notifications suit la règle commune des invitations (DECISIONS.md §17, `canOfferPush`) :
+// sur iPhone/iPad hors de l'application installée, la phrase qui renvoie à l'installation — même quand
+// la page expose `PushManager` (la vue intégrée où « Passer » ouvre la nouvelle adresse, 23/10/2026).
+describe("l'étape des notifications", () => {
+  const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1";
+  const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36";
+  let standalone = false;
+  beforeEach(() => {
+    standalone = false;
+    window.matchMedia = ((q: string) => ({ matches: q.includes("standalone") && standalone, media: q, addEventListener: () => {}, removeEventListener: () => {} })) as never;
+    Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: { getRegistration: async () => undefined } });
+    (window as unknown as { PushManager: unknown }).PushManager = function PushManager() {};
+  });
+  afterEach(() => {
+    delete (navigator as unknown as { userAgent?: string }).userAgent;
+    delete (window as unknown as { PushManager?: unknown }).PushManager;
+  });
+  async function notificationStep(ua: string) {
+    Object.defineProperty(navigator, "userAgent", { configurable: true, get: () => ua });
+    me = { username: "admin", jfUser: null };
+    draw();
+    await screen.findByText("player.onboarding.welcomeTitle:Admin");
+    await waitFor(() => expect(called("/api/auth/me")).toBe(true));
+    next();
+    await screen.findByText("player.onboarding.notifTitle");
+  }
+
+  it("iPhone hors de l'application installée : la phrase d'installation, pas l'interrupteur", async () => {
+    await notificationStep(IPHONE);
+    expect(screen.getByText("player.onboarding.notifInstall")).toBeTruthy();
+    expect(screen.queryByTestId("push")).toBeNull();
+  });
+
+  it("iPhone dans l'application installée : l'interrupteur", async () => {
+    standalone = true;
+    await notificationStep(IPHONE);
+    expect(screen.getByTestId("push")).toBeTruthy();
+  });
+
+  it("Android dans un onglet : l'interrupteur, comme avant", async () => {
+    await notificationStep(ANDROID);
+    expect(screen.getByTestId("push")).toBeTruthy();
+  });
+});

@@ -3,27 +3,53 @@
 import { useSyncExternalStore } from "react";
 import { Share } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
-import { isInstalledApp } from "@/lib/iosInstall";
+import { isAppleTouchDevice, isInstalledApp } from "@/lib/iosInstall";
 import { useOldAddress } from "@/lib/passage/useOldAddress";
 
 export type InstallPlatform = "ios" | "android" | "other";
 
 const never = () => () => {};
 
-/** iPhone / iPad (l'iPad qui se dit Mac compris), Android, ou le reste. */
+/** iPhone / iPad (l'iPad qui se dit Mac compris, `isAppleTouchDevice`), Android, ou le reste. */
 export function installPlatform(): InstallPlatform {
   if (typeof navigator === "undefined") return "other";
-  const ua = navigator.userAgent;
-  if (/iPad|iPhone|iPod/.test(ua) || (ua.includes("Macintosh") && typeof document !== "undefined" && "ontouchend" in document)) return "ios";
-  if (/Android/i.test(ua)) return "android";
+  if (isAppleTouchDevice()) return "ios";
+  if (/Android/i.test(navigator.userAgent)) return "android";
   return "other";
 }
 
 /**
- * « Ajoutez Laterna à votre écran d'accueil », dit pour l'appareil qu'on tient (DECISIONS.md §119) —
- * sur la page `/passage` et, juste après l'arrivée, dans la bannière d'installation (`InstallPrompt`).
- * iPhone/iPad : Partager, puis « Sur l'écran d'accueil » ; Android : le menu du navigateur. Ailleurs,
- * les deux. Rien dans l'application déjà installée.
+ * Les trois gestes qui finissent un passage d'adresse (DECISIONS.md §119), numérotés, dits pour
+ * l'appareil qu'on tient : 1) ajouter Laterna à l'écran d'accueil — sur iPhone/iPad, depuis Safari :
+ * « Passer » ouvre la nouvelle adresse dans la vue intégrée de l'ancienne application, d'où il faut
+ * d'abord « Ouvrir dans Safari » (la boussole) ; sur Android, le menu du navigateur ; ailleurs, les
+ * deux ; 2) ouvrir la nouvelle icône, et coller le code de passage si elle demande de se connecter ;
+ * 3) supprimer l'ancienne icône. Sur iPhone/iPad, une ligne de plus : les notifications viendront
+ * dans l'application installée — ici, rien ne les propose (`canOfferPush`, §17).
+ *
+ * Une seule écriture pour la page `/passage` et pour la bannière de l'arrivée (`InstallPrompt`).
+ */
+export function PassageInstallSteps({ platform, size = "page" }: { platform: InstallPlatform; size?: "page" | "banner" }) {
+  const t = useT();
+  const text = size === "page" ? "text-[13px]" : "text-[12.5px]";
+  return (
+    <>
+      <ol className={`mt-2 list-decimal space-y-1.5 pl-5 ${text} leading-snug text-slate-200 marker:font-semibold marker:text-accent-400`}>
+        <li>
+          {platform !== "android" && <span className="block">{t("passage.install.iosAdd")}</span>}
+          {platform !== "ios" && <span className={`block ${platform === "other" ? "mt-1" : ""}`}>{t("passage.install.androidAdd")}</span>}
+        </li>
+        <li>{t("passage.install.open")}</li>
+        <li>{t("passage.install.removeOld")}</li>
+      </ol>
+      {platform === "ios" && <p className="mt-2 text-[12px] leading-snug text-slate-400">{t("passage.install.notifications")}</p>}
+    </>
+  );
+}
+
+/**
+ * « Ajoutez Laterna à votre écran d'accueil » sur la page `/passage`. Rien dans l'application déjà
+ * installée, ni sur l'ancienne adresse.
  */
 export function PassageInstallHelp({ className = "" }: { className?: string }) {
   const t = useT();
@@ -39,9 +65,7 @@ export function PassageInstallHelp({ className = "" }: { className?: string }) {
         <Share size={15} className="shrink-0 text-accent-400" />
         {t("passage.install.title")}
       </p>
-      {platform !== "android" && <p className="mt-2 text-[13px] leading-snug text-slate-300">{t("passage.install.ios")}</p>}
-      {platform !== "ios" && <p className="mt-2 text-[13px] leading-snug text-slate-300">{t("passage.install.android")}</p>}
-      <p className="mt-2 text-[12px] leading-snug text-slate-400">{t("passage.install.then")}</p>
+      <PassageInstallSteps platform={platform} />
     </div>
   );
 }

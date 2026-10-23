@@ -638,6 +638,26 @@ dans `localStorage`, posé à l'affichage (pas à la décision : l'écran d'accu
 fermeture ou un refus ne la reposent pas ; un stockage illisible vaut « déjà faite ». Tests :
 `push-installed-prompt.test.tsx`, `InstallPrompt.test.tsx` (emplacement partagé).
 
+**Où l'on peut les proposer : `canOfferPush()` (`src/lib/iosInstall.ts`, 23/10/2026).** Une seule
+fonction dit si une invitation — la bannière (reprise comme application installée), l'étape de l'écran
+d'accueil, le bouton « Activer » de `PushToggle` — a le droit de paraître : sur iPhone et iPad
+(`isAppleTouchDevice`, l'iPad qui se dit Mac compris), **jamais hors de l'application installée** ;
+ailleurs, dès que le navigateur sait s'abonner (service worker, `PushManager`), comme avant. Là où elle
+répond non sur iPhone, l'étape d'accueil et l'interrupteur disent la phrase d'installation
+(`useInstallHintText`), la bannière se tait. Trouvé sur l'iPhone du propriétaire en 10.0.0 : « Passer »
+(§119) ouvre la nouvelle adresse dans la vue intégrée de l'ancienne application installée ; cette vue
+se dit « standalone » et expose `PushManager`, et la bannière « l'application installée ne reçoit pas
+encore de notifications » y est apparue à la place de l'aide à l'installation — dans un contexte qu'on
+allait quitter, dont l'abonnement n'aurait jamais servi à l'application Laterna. D'où aussi la règle de
+`isInstalledApp` : sur iPhone/iPad, un onglet **ouvert par un lien de passage** (`cine:passage-link-tab`
+dans `sessionStorage`, posé par `PassageEntry` dès qu'il lit le jeton) n'est pas l'application de
+l'écran d'accueil, quoi qu'en dise `display-mode` — iOS n'ouvre jamais une application de l'écran
+d'accueil par un lien. Sur Android, où un lien peut ouvrir l'application installée, rien ne change.
+Les trois copies du test « service worker et `PushManager` » ont disparu ; `decisions-partagees.test.ts`
+empêche qu'elles reviennent (et que l'iPhone soit reconnu ailleurs qu'à `isAppleTouchDevice` dans ces
+écrans). Tests : `push-offer-ios.test.tsx` (règle, bannière, interrupteur), `PlayerOnboarding.test.tsx`
+(étape des notifications).
+
 ---
 
 ## 18. Le titre d'un film ou d'une série
@@ -6964,7 +6984,23 @@ reste « à faire » (comme l'invitation aux notifications : « Passer » ne l'�
 pour de bon ; le lien des Nouveautés ouvre le passage même refermé.
 Depuis l'application installée, la nouvelle adresse s'ouvre dans le navigateur (`window.open`) ; sur
 iPhone, ce navigateur intégré n'est ni Safari ni l'application à venir, d'où le code et la phrase qui le
-dit. Un passage n'emporte ni téléchargements hors ligne, ni reprise sur l'appareil, ni catalogue gardé,
+dit.
+
+**L'arrivée hors application installée (23/10/2026).** Sur l'iPhone du propriétaire en 10.0.0, la vue
+intégrée s'est dite « standalone » : la page s'est crue l'application Laterna installée, n'a pas montré
+l'aide d'installation et a proposé les notifications (§17). Désormais l'arrivée par le lien marque
+l'onglet (`noteOpenedByPassageLink`), et sur iPhone/iPad `isInstalledApp` le lit comme un onglet ; l'aide
+d'installation (`InstallPrompt`, mode « passage ») paraît **dès le montage** — plus de délai de 0,8 s —,
+plus grande que la bannière ordinaire, refermable, avec trois gestes numérotés écrits une fois
+(`PassageInstallSteps`, partagé avec `PassageInstallHelp` de la page `/passage`) : 1) ajouter Laterna à
+l'écran d'accueil — sur iPhone/iPad, « si cette page s'est ouverte dans l'app, touchez d'abord la
+boussole « Ouvrir dans Safari » », puis Partager → « Sur l'écran d'accueil » ; sur Android, le menu du
+navigateur ; 2) ouvrir la nouvelle icône et coller le code de passage si elle demande de se connecter ;
+3) supprimer l'ancienne icône CineApp. Sur iPhone/iPad, une ligne dit que les notifications viendront
+dans l'app Laterna : c'est là, une fois installée, que l'invitation « application installée sans
+abonnement » les propose (§17), et rien d'autre ne la masque (l'aide d'installation ne s'y montre pas).
+Tests : `InstallPrompt.test.tsx` (aussitôt, trois gestes, vue intégrée, application installée,
+Android, ordinateur, fermeture), `passage-entry.test.tsx` (le lien marque l'onglet). Un passage n'emporte ni téléchargements hors ligne, ni reprise sur l'appareil, ni catalogue gardé,
 ni bilans ou lignes en attente.
 
 **Décidé le 23/10/2026.**

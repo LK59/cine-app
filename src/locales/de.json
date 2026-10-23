@@ -3685,9 +3685,11 @@
     },
     "install": {
       "title": "Fügen Sie Laterna zum Home-Bildschirm hinzu",
-      "ios": "Auf iPhone oder iPad, in Safari: Tippen Sie auf Teilen, dann auf „Zum Home-Bildschirm“.",
-      "android": "Auf Android: Öffnen Sie das Browsermenü, dann „App installieren“ oder „Zum Startbildschirm hinzufügen“.",
-      "then": "Öffnen Sie die App dann über den Home-Bildschirm; wenn sie Sie zur Anmeldung auffordert, fügen Sie Ihren Wechselcode ein. Danach können Sie das alte Symbol löschen."
+      "iosAdd": "Auf iPhone oder iPad: Wenn sich diese Seite in der App geöffnet hat, tippen Sie zuerst auf den Kompass, „In Safari öffnen“. Tippen Sie dann in Safari auf Teilen und anschließend auf „Zum Home-Bildschirm“.",
+      "androidAdd": "Auf Android: Öffnen Sie das Browsermenü und dann „App installieren“ oder „Zum Startbildschirm hinzufügen“.",
+      "open": "Öffnen Sie das neue Laterna-Symbol. Wenn es Sie zur Anmeldung auffordert, fügen Sie Ihren Wechselcode ein.",
+      "removeOld": "Löschen Sie das alte CineApp-Symbol von Ihrem Home-Bildschirm.",
+      "notifications": "Benachrichtigungen werden Ihnen danach in der Laterna-App angeboten."
     },
     "loginLink": "Sie kommen von der alten Adresse? Wechselcode"
   }

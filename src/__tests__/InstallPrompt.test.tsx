@@ -100,3 +100,70 @@ describe("bannière « Installer »", () => {
     expect(src).toContain("PROMPT_CLOSE_CLASS");
   });
 });
+
+// Après un passage d'adresse (DECISIONS.md §119) : l'aide d'installation aussitôt, en grand, avec les
+// trois gestes — et dans la vue intégrée de l'ancienne application aussi, qui se dit « standalone »
+// (iPhone du propriétaire, 23/10/2026 : l'invitation aux notifications y avait pris sa place).
+describe("l'aide d'installation après un passage", () => {
+  const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36";
+  const DESKTOP = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36";
+  beforeEach(() => {
+    sessionStorage.clear();
+    sessionStorage.setItem("cine:passage-install-help", "1");
+  });
+  const standaloneMedia = () =>
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("standalone"), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+  function arrive() {
+    const view = render(<InstallPrompt />);
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+    return view;
+  }
+  const banner = () => document.querySelector('[data-install-prompt="passage"]');
+
+  it("iPhone, onglet : tout de suite, les trois gestes numérotés, et les notifications renvoyées à l'app installée", () => {
+    arrive();
+    expect(banner()).not.toBeNull();
+    const steps = [...banner()!.querySelectorAll("ol > li")].map((li) => li.textContent);
+    expect(steps).toEqual(["passage.install.iosAdd", "passage.install.open", "passage.install.removeOld"]);
+    expect(banner()!.textContent).toContain("passage.install.notifications");
+    expect(banner()!.textContent).not.toContain("passage.install.androidAdd");
+  });
+
+  it("iPhone, vue intégrée arrivée par le lien (« standalone ») : affichée aussi", () => {
+    standaloneMedia();
+    sessionStorage.setItem("cine:passage-link-tab", "1");
+    arrive();
+    expect(banner()).not.toBeNull();
+  });
+
+  it("dans l'application installée (sans lien de passage) : rien", () => {
+    standaloneMedia();
+    arrive();
+    expect(banner()).toBeNull();
+  });
+
+  it("Android : le menu du navigateur, sans la ligne des notifications ; ordinateur : rien", () => {
+    vi.stubGlobal("navigator", { ...window.navigator, userAgent: ANDROID });
+    const view = arrive();
+    const steps = [...banner()!.querySelectorAll("ol > li")].map((li) => li.textContent);
+    expect(steps[0]).toBe("passage.install.androidAdd");
+    expect(banner()!.textContent).not.toContain("passage.install.notifications");
+    view.unmount();
+    vi.stubGlobal("navigator", { ...window.navigator, userAgent: DESKTOP });
+    arrive();
+    expect(banner()).toBeNull();
+  });
+
+  it("se referme, et ne revient pas dans cet onglet", () => {
+    const view = arrive();
+    act(() => {
+      screen.getByRole("button", { name: "common.close" }).click();
+    });
+    expect(banner()).toBeNull();
+    view.unmount();
+    arrive();
+    expect(banner()).toBeNull();
+  });
+});

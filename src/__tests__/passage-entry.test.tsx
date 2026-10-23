@@ -8,6 +8,7 @@ const nav = vi.hoisted(() => ({ to: [] as string[] }));
 vi.mock("@/lib/signOut", () => ({ hardNavigate: (to: string) => void nav.to.push(to) }));
 
 import { PassageEntry } from "@/components/passage/PassageEntry";
+import { isInstalledApp } from "@/lib/iosInstall";
 
 /**
  * La page `/passage` devant un navigateur déjà connecté (DECISIONS.md §119, relecture de sécurité du
@@ -63,5 +64,26 @@ describe("PassageEntry — déjà connecté", () => {
     render(<PassageEntry signedIn={false} />);
     await screen.findByText("passage.page.confirm");
     expect(nav.to).toEqual([]);
+  });
+});
+
+// iPhone du propriétaire, 23/10/2026 : « Passer » ouvre la nouvelle adresse dans la vue intégrée de
+// l'ancienne application, qui se dit « standalone ». L'arrivée par le lien marque l'onglet : il n'est
+// pas l'application de l'écran d'accueil, et l'aide d'installation est demandée pour l'accueil.
+describe("PassageEntry — arrivée par le lien sur iPhone", () => {
+  afterEach(() => {
+    delete (navigator as unknown as { userAgent?: string }).userAgent;
+    sessionStorage.clear();
+  });
+
+  it("la vue intégrée « standalone » demande l'aide d'installation, et ne se lit plus comme installée", async () => {
+    sessionStorage.clear();
+    Object.defineProperty(navigator, "userAgent", { configurable: true, get: () => "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1" });
+    window.matchMedia = ((q: string) => ({ matches: q.includes("standalone"), media: q, addEventListener: () => {}, removeEventListener: () => {} })) as never;
+    expect(isInstalledApp()).toBe(true);
+    render(<PassageEntry signedIn={false} />);
+    await waitFor(() => expect(nav.to).toEqual(["/"]));
+    expect(isInstalledApp()).toBe(false);
+    expect(sessionStorage.getItem("cine:passage-install-help")).not.toBeNull();
   });
 });

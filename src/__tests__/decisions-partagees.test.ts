@@ -1860,3 +1860,29 @@ describe("l'habillage des fiches du bureau : une écriture (§117.8)", () => {
     expect(sansCommentaires(lire("src/components/cinema/DesktopSheetShell.tsx"))).toContain("playerHoldsKeyboard(playback)");
   });
 });
+
+describe("proposer les notifications : une règle (§17, `canOfferPush`)", () => {
+  // 23/10/2026, iPhone du propriétaire en 10.0.0 : la bannière des notifications testait elle-même
+  // « service worker et PushManager », l'étape d'accueil aussi, l'interrupteur aussi — trois copies, et
+  // aucune ne savait que sur iPhone, hors de l'application installée, il ne faut rien proposer.
+  it("seul `iosInstall.ts` décide si le navigateur sait s'abonner", () => {
+    const copies = SOURCES().filter((f) => f !== "src/lib/iosInstall.ts" && /["']PushManager["']\s+in\s+window/.test(sansCommentaires(lire(f))));
+    expect(copies).toEqual([]);
+  });
+
+  it.each(["src/components/player/PushResumePrompt.tsx", "src/components/player/PlayerOnboarding.tsx", "src/components/PushToggle.tsx"])(
+    "%s passe par `canOfferPush()`",
+    (f) => {
+      expect([f, sansCommentaires(lire(f)).includes("canOfferPush()")]).toEqual([f, true]);
+    }
+  );
+
+  it("l'installation, le passage et les notifications reconnaissent l'iPhone et l'iPad par `isAppleTouchDevice` seulement", () => {
+    const lieux = SOURCES().filter(
+      (f) => f.startsWith("src/components/passage/") || /(InstallPrompt|PushToggle|PushResumePrompt|PlayerOnboarding)\.tsx$/.test(f)
+    );
+    expect(lieux.length).toBeGreaterThan(4);
+    const copies = lieux.filter((f) => /iPad\|iPhone/.test(sansCommentaires(lire(f))));
+    expect(copies).toEqual([]);
+  });
+});

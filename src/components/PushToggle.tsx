@@ -6,7 +6,7 @@ import { useT } from "@/components/TranslationProvider";
 import { useErrorText } from "@/lib/useErrorText";
 import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
-import { isIosSafariBrowserTab } from "@/lib/iosInstall";
+import { canOfferPush, isIosSafariBrowserTab } from "@/lib/iosInstall";
 import { useInstallHintText } from "@/lib/passage/useOldAddress";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 
@@ -69,9 +69,11 @@ export function PushToggle({ onSubscribed }: { onSubscribed?: () => void } = {})
   const toast = useToast();
 
   const detect = useCallback(async () => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+    if (typeof window === "undefined" || !canOfferPush()) {
       // Sur iPhone, ce n'est pas le navigateur qui ne sait pas : c'est l'application qui n'est pas
-      // installée (15/10/2026, passe de nuit, MOBILE-4) — voir `isIosSafariBrowserTab`.
+      // installée (15/10/2026, passe de nuit, MOBILE-4) — voir `isIosSafariBrowserTab`. Et même quand
+      // la page expose `PushManager` (la vue intégrée d'une autre application, 23/10/2026), pas de
+      // bouton : la règle commune `canOfferPush` (DECISIONS.md §17).
       setState(isIosSafariBrowserTab() ? "needsInstall" : "unsupported"); return;
     }
     if (Notification.permission === "denied") { setState("denied"); return; }

@@ -7,7 +7,7 @@ import { hardNavigate } from "@/lib/signOut";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 import { passageFlags } from "@/lib/passage/client";
-import { isInstalledApp } from "@/lib/iosInstall";
+import { isInstalledApp, noteOpenedByPassageLink } from "@/lib/iosInstall";
 import { APP_NAME } from "@/lib/appBuild";
 import { PassageInstallHelp } from "./PassageInstallHelp";
 
@@ -78,6 +78,9 @@ export function PassageEntry({ signedIn }: { signedIn: boolean }) {
         setPhase(signedIn ? "signed" : "code");
         return;
       }
+      // Ouvert par le lien : sur iPhone/iPad, cet onglet n'est pas l'application de l'écran d'accueil,
+      // même s'il se dit « standalone » (la vue intégrée de l'ancienne application) — `isInstalledApp`.
+      noteOpenedByPassageLink();
       if (signedIn) {
         pending.current = { token };
         setPhase("confirm");

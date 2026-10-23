@@ -16,6 +16,7 @@ import { useErrorText } from "@/lib/useErrorText";
 import { useToast } from "@/components/Toast";
 import { PushToggle } from "@/components/PushToggle";
 import { useInstallHintText } from "@/lib/passage/useOldAddress";
+import { canOfferPush } from "@/lib/iosInstall";
 import { LanguageSelect, SubtitleModeSelect, NotificationChoices } from "./accountControls";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
 import { OPEN_ONBOARDING_EVENT } from "./onboardingEvents";
@@ -243,7 +244,9 @@ export function PlayerOnboarding({
     primaryRef.current?.focus({ preventScroll: true });
   }, [step, primaryDisabled]);
 
-  const pushSupported = typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
+  // La règle commune des invitations (DECISIONS.md §17) : sur iPhone/iPad hors de l'application
+  // installée, pas de bouton qui demanderait la permission — la phrase qui renvoie à l'installation.
+  const pushSupported = canOfferPush();
 
   async function next() {
     if (busy) return;

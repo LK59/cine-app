@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { ArrowRight, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { collectPassageInput, formatPassageCode } from "@/lib/passage/client";
-import { isInstalledApp } from "@/lib/iosInstall";
+import { isAppleTouchDevice, isInstalledApp } from "@/lib/iosInstall";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 
 interface Prepared {
@@ -15,11 +15,6 @@ interface Prepared {
 }
 
 type State = { kind: "loading" } | { kind: "ready"; passage: Prepared } | { kind: "error"; which: "relogin" | "rateLimited" | "error" };
-
-function isAppleMobile(): boolean {
-  const ua = navigator.userAgent;
-  return /iPad|iPhone|iPod/.test(ua) || (ua.includes("Macintosh") && "ontouchend" in document);
-}
 
 /**
  * La fenêtre du passage, sur l'ancienne adresse (DECISIONS.md §119).
@@ -40,7 +35,7 @@ export function PassageDialog({ target, onClose }: { target: string; onClose: ()
   const host = new URL(target).host;
   const [state, setState] = useState<State>({ kind: "loading" });
   const [copied, setCopied] = useState(false);
-  const [installedIos] = useState(() => isInstalledApp() && isAppleMobile());
+  const [installedIos] = useState(() => isInstalledApp() && isAppleTouchDevice());
 
   useEffect(() => {
     let cancelled = false;

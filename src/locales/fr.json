@@ -3685,9 +3685,11 @@
     },
     "install": {
       "title": "Ajoutez Laterna à votre écran d'accueil",
-      "ios": "Sur iPhone ou iPad, dans Safari : touchez Partager, puis « Sur l'écran d'accueil ».",
-      "android": "Sur Android : ouvrez le menu du navigateur, puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».",
-      "then": "Ouvrez ensuite l'app depuis l'écran d'accueil ; si elle vous demande de vous connecter, collez votre code de passage. Vous pourrez alors supprimer l'ancienne icône."
+      "iosAdd": "Sur iPhone ou iPad : si cette page s'est ouverte dans l'app, touchez d'abord la boussole « Ouvrir dans Safari ». Puis, dans Safari, touchez Partager, puis « Sur l'écran d'accueil ».",
+      "androidAdd": "Sur Android : ouvrez le menu du navigateur, puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».",
+      "open": "Ouvrez la nouvelle icône Laterna. Si elle vous demande de vous connecter, collez votre code de passage.",
+      "removeOld": "Supprimez l'ancienne icône CineApp de votre écran d'accueil.",
+      "notifications": "Les notifications se proposeront ensuite dans l'app Laterna."
     },
     "loginLink": "Vous venez de l'ancienne adresse ? Code de passage"
   }

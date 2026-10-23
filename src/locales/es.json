@@ -3685,9 +3685,11 @@
     },
     "install": {
       "title": "Añada Laterna a su pantalla de inicio",
-      "ios": "En iPhone o iPad, en Safari: toque Compartir y luego «Añadir a pantalla de inicio».",
-      "android": "En Android: abra el menú del navegador y luego «Instalar aplicación» o «Añadir a pantalla de inicio».",
-      "then": "Después abra la app desde la pantalla de inicio; si le pide iniciar sesión, pegue su código de paso. Entonces podrá borrar el icono antiguo."
+      "iosAdd": "En iPhone o iPad: si esta página se abrió dentro de la app, toque primero la brújula, «Abrir en Safari». Luego, en Safari, toque Compartir y después «Añadir a pantalla de inicio».",
+      "androidAdd": "En Android: abra el menú del navegador y luego «Instalar aplicación» o «Añadir a pantalla de inicio».",
+      "open": "Abra el nuevo icono de Laterna. Si le pide iniciar sesión, pegue su código de paso.",
+      "removeOld": "Elimine el antiguo icono de CineApp de su pantalla de inicio.",
+      "notifications": "Las notificaciones se le propondrán después en la app Laterna."
     },
     "loginLink": "¿Viene de la dirección antigua? Código de paso"
   }

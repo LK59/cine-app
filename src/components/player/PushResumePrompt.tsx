@@ -9,7 +9,7 @@ import { fetcher } from "@/lib/swr";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 import { forgetPushWasOn, pushWasOn } from "@/lib/pushOnSignOut";
 import { ABOVE_BOTTOM_BAR, PROMPT_CLOSE_CLASS } from "@/lib/floatingPrompt";
-import { isInstalledApp } from "@/lib/iosInstall";
+import { canOfferPush, isInstalledApp } from "@/lib/iosInstall";
 
 /** Laissé au lancement le temps de s'installer, comme l'invitation à installer l'application. */
 const SHOW_DELAY_MS = 3000;
@@ -58,7 +58,8 @@ type PushPromptReason = "resume" | "installed";
  * (`INSTALLED_PUSH_OFFERED_KEY`, posée à l'affichage : une fermeture ou un refus ne la reposent pas).
  *
  * Communes aux deux : jamais pendant l'écran d'accueil — qui a sa propre étape de notifications —,
- * seulement si l'appareil peut s'abonner (service worker, `PushManager`), jamais quand la permission
+ * seulement là où l'on peut les proposer (`canOfferPush` : le navigateur sait s'abonner, et sur
+ * iPhone/iPad c'est l'application installée), jamais quand la permission
  * est refusée (elle ne se redemande pas d'ici), jamais quand un abonnement existe déjà. Une seule
  * bannière, donc jamais les deux questions ensemble.
  */
@@ -74,7 +75,9 @@ export function PushResumePrompt() {
       const resume = pushWasOn(who);
       const installed = !resume && isInstalledApp() && !installedOfferMade();
       if (!resume && !installed) return;
-      if (!("serviceWorker" in navigator) || !("PushManager" in window) || Notification.permission === "denied") {
+      // `canOfferPush` (DECISIONS.md §17) : sur iPhone/iPad hors de l'application installée, jamais —
+      // la vue intégrée où « Passer » ouvre la nouvelle adresse expose pourtant `PushManager`.
+      if (!canOfferPush() || Notification.permission === "denied") {
         if (resume) forgetPushWasOn(who);
         return;
       }

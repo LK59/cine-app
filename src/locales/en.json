@@ -3685,9 +3685,11 @@
     },
     "install": {
       "title": "Add Laterna to your Home Screen",
-      "ios": "On iPhone or iPad, in Safari: tap Share, then “Add to Home Screen”.",
-      "android": "On Android: open the browser menu, then “Install app” or “Add to Home screen”.",
-      "then": "Then open the app from your Home Screen; if it asks you to sign in, paste your transfer code. You can then delete the old icon."
+      "iosAdd": "On iPhone or iPad: if this page opened inside the app, first tap the compass, “Open in Safari”. Then, in Safari, tap Share, then “Add to Home Screen”.",
+      "androidAdd": "On Android: open the browser menu, then “Install app” or “Add to Home screen”.",
+      "open": "Open the new Laterna icon. If it asks you to sign in, paste your transfer code.",
+      "removeOld": "Delete the old CineApp icon from your Home Screen.",
+      "notifications": "Notifications will be offered afterwards in the Laterna app."
     },
     "loginLink": "Coming from the old address? Transfer code"
   }
