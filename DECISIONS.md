@@ -6834,4 +6834,12 @@ Chromecast par défaut de Google. Côté navigateur, chaque adresse est un site 
 application installée, abonnement aux notifications et téléchargements hors ligne sont à refaire sur la
 nouvelle ; un appareil abonné aux notifications sur les deux adresses les reçoit deux fois.
 
+**La page Nouveautés du renommage** (`src/lib/news/pageLaterna.ts`) ne va qu'à l'installation dont le
+déploiement donne la nouvelle adresse : `NEWS_LATERNA_ADDRESS` (`.env`, déploiement seulement, hors du
+schéma des réglages et de `.env.example` — `config.news.laternaAddress`, lue par `envOnly`). Sans elle,
+`laternaNewsPage` rend `null` et rien n'est semé ; l'adresse affichée est celle du réglage (nom d'hôte
+seul, `laternaAddress`), jamais une valeur du code. Préparée le 23/10/2026, **pas encore branchée** :
+elle se publiera par deux lignes dans `migrate()` (`db.ts`), à côté des autres pages. Tests :
+`news-page-laterna.test.ts`.
+
 **Décidé le 23/10/2026.**

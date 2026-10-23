@@ -263,6 +263,15 @@ export const config = {
       return optional("VAPID_SUBJECT", "mailto:admin@example.com");
     },
   },
+  news: {
+    // La nouvelle adresse publique annoncée par la page Nouveautés du renommage (`news/pageLaterna.ts`,
+    // DECISIONS.md §118). Déploiement seulement, hors du schéma des réglages et de `.env.example` : elle
+    // ne vaut que pour l'installation de référence ; vide — toute autre installation —, la page n'est
+    // pas semée. Lue au démarrage, par la migration qui sème les pages.
+    get laternaAddress() {
+      return envOnly("NEWS_LATERNA_ADDRESS", "");
+    },
+  },
 };
 
 export { required };
