@@ -850,6 +850,24 @@
         "evicted": "Effacé du serveur (place)"
       }
     },
+    "addressChange": {
+      "title": "Changement d'adresse",
+      "intro": "Qui ouvre l'application sur la nouvelle adresse ({host}) depuis le {date}, et qui passe encore par l'ancienne. Les ouvertures d'avant ce jour comptent pour l'ancienne adresse ; les suivantes sans adresse notée restent « inconnues ».",
+      "summary": "{moved} sur {total} passés · {installed} avec l'app installée",
+      "status": {
+        "movedInstalled": "Passé, app installée",
+        "moved": "Passé, pas encore installé",
+        "old": "Encore sur l'ancienne adresse",
+        "unknown": "Ouvert depuis, adresse inconnue",
+        "never": "Jamais ouvert depuis le changement"
+      },
+      "lastOld": "Ancienne adresse",
+      "lastNew": "Nouvelle adresse",
+      "passage": "Passage",
+      "requested": "demandé {when}",
+      "received": "reçu {when}",
+      "none": "Aucun compte."
+    },
     "shares": {
       "title": "Partages",
       "open": "Ouvrir",

@@ -6968,3 +6968,48 @@ dit. Un passage n'emporte ni téléchargements hors ligne, ni reprise sur l'appa
 ni bilans ou lignes en attente.
 
 **Décidé le 23/10/2026.**
+
+### 119.1 Qui est passé : le suivi dans l'Activité
+
+**Règle.** L'administrateur sait, compte par compte, qui ouvre déjà la nouvelle adresse et qui passe
+encore par l'ancienne — de quoi savoir quand l'ancienne peut s'éteindre. Chaque ligne `ouverture` de
+`startup.log` porte `host`, le nom d'hôte de la requête **lu par le serveur** (`requestHost`,
+`src/lib/publicOrigin.ts`) : `X-Forwarded-Host` seulement d'un relais de confiance
+(`forwardedFromTrustedPeer`, `src/lib/trustedProxy.ts` — la règle de `clientAddressOf`, §57), sinon
+`Host` ; réduit au nom (ni port ni schéma), en minuscules, validé comme un nom DNS, sinon absent. Un
+`host` envoyé dans le corps est ignoré. La vue « Changement d'adresse » de la vue d'ensemble de
+l'Activité (`AddressChangePanel`, route `GET /api/admin/activity/address`, `adminOnly`) ne s'affiche que
+si `NEWS_LATERNA_ADDRESS` est réglée — sans elle la route rend `newHost: null` sans lire aucun journal.
+Une ligne par compte actif du foyer (`getUsers` écarte les liens de partage, §112 ; un compte désactivé
+n'y est pas) : dernière ouverture sur l'ancienne adresse, sur la nouvelle, la nouvelle ouverte en
+application installée (`standalone`) ou non, dernier passage demandé / reçu (`auth.log`, depuis le
+changement). Statut, dans cet ordre de tri : « Encore sur l'ancienne adresse », « Jamais ouvert depuis
+le changement », « Ouvert depuis, adresse inconnue », « Passé, pas encore installé », « Passé, app
+installée » ; à statut égal, le plus récemment vu d'abord. Lu par `readRecords` (archives comprises),
+sans aucun stockage de plus.
+
+**Les lignes d'avant `host`.** `ADDRESS_CHANGE_START` = le 23/10/2026 à minuit, heure du foyer (le
+déploiement de la 10.0, premier jour où deux adresses ont existé). Une ouverture sans `host` d'avant
+cette date vaut l'ancienne adresse (il n'y en avait qu'une) ; d'après, « adresse inconnue » — entre la
+10.0 et la version qui écrit `host`, elle peut être l'une ou l'autre, et ne fait donc ni un « encore sur
+l'ancienne » ni un « jamais ouvert ». « Depuis le changement » se compte depuis cette date ; une
+ouverture de l'ancienne adresse d'avant ne fait pas « encore sur l'ancienne ».
+
+**Porteurs.** `src/lib/activity/addressChange.ts` (`addressOf`, `addressChangeRows`, `addressChange`,
+`newHostOf`) ; `requestHost` ; `forwardedFromTrustedPeer`.
+
+**Appelants.** `/api/startup-timing` (écrit `host`), `/api/admin/activity/address`,
+`ActivityOverview` (`AddressChangePanel`, `src/components/activity/AddressChange.tsx`).
+
+**Tests.** `startup-timing-route.test.ts` (nom d'hôte sans port, corps ignoré, relais de confiance contre
+client direct, hôte invalide omis), `activity-address-change.test.ts` (statuts depuis des lignes
+factices, lignes sans `host` avant et après, passages d'avant ignorés, comptes de partage et autres
+genres de ligne écartés, tri ; route refusée sans session, à un compte ordinaire et à un lien de
+partage, muette sans réglage), `activity-address-change-view.test.tsx` (statuts lisibles dans l'ordre,
+passage demandé / reçu, rien sans nouvelle adresse).
+
+**Voulu.** `publicOrigin` (l'adresse donnée au téléviseur) garde sa lecture d'avant : elle n'est pas
+un journal et n'a pas changé ici. Un compte passé qui rouvre ensuite l'ancienne reste « passé » ; les
+deux dates sont côte à côte.
+
+**Décidé le 23/10/2026.**

@@ -850,6 +850,24 @@
         "evicted": "Borrado del servidor (espacio)"
       }
     },
+    "addressChange": {
+      "title": "Cambio de dirección",
+      "intro": "Quién abre la aplicación en la nueva dirección ({host}) desde el {date}, y quién sigue usando la antigua. Las aperturas anteriores a ese día cuentan para la dirección antigua; las posteriores sin dirección registrada quedan como «desconocidas».",
+      "summary": "{moved} de {total} cambiados · {installed} con la app instalada",
+      "status": {
+        "movedInstalled": "Cambiado, app instalada",
+        "moved": "Cambiado, aún sin instalar",
+        "old": "Todavía en la dirección antigua",
+        "unknown": "Abierto desde entonces, dirección desconocida",
+        "never": "No abierto desde el cambio"
+      },
+      "lastOld": "Dirección antigua",
+      "lastNew": "Dirección nueva",
+      "passage": "Paso",
+      "requested": "solicitado {when}",
+      "received": "recibido {when}",
+      "none": "Ninguna cuenta."
+    },
     "shares": {
       "title": "Compartidos",
       "open": "Abrir",

@@ -850,6 +850,24 @@
         "evicted": "Removed from the server (space)"
       }
     },
+    "addressChange": {
+      "title": "Address change",
+      "intro": "Who opens the app at the new address ({host}) since {date}, and who still uses the old one. Openings before that day count for the old address; later ones with no recorded address stay \"unknown\".",
+      "summary": "{moved} of {total} moved · {installed} with the app installed",
+      "status": {
+        "movedInstalled": "Moved, app installed",
+        "moved": "Moved, not installed yet",
+        "old": "Still on the old address",
+        "unknown": "Opened since, address unknown",
+        "never": "Not opened since the change"
+      },
+      "lastOld": "Old address",
+      "lastNew": "New address",
+      "passage": "Switch",
+      "requested": "requested {when}",
+      "received": "received {when}",
+      "none": "No accounts."
+    },
     "shares": {
       "title": "Shares",
       "open": "Open",

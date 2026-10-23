@@ -47,6 +47,7 @@ import { DOWNLOADS_ADMIN_KEY, DownloadsTiles } from "@/components/activity/views
 import type { DownloadsOverview } from "@/lib/activity/offlineDownloads";
 import { SharesTiles, type SharesOverview } from "@/components/activity/views/ActivityShares";
 import { SHARE_ADMIN_KEY } from "@/components/share/shareClient";
+import { AddressChangePanel } from "@/components/activity/AddressChange";
 
 interface Overview {
   now: number;
@@ -603,6 +604,9 @@ export function ActivityOverview() {
 
       {/* Les liens de partage : ceux qui vivent, et ce qui joue en ce moment (§112). */}
       <SharesPanel />
+
+      {/* Le changement d'adresse : qui est passé à la nouvelle, qui ouvre encore l'ancienne (§119). */}
+      <AddressChangePanel />
 
       {/* Le fichier ou l'appareil : le verdict de chaque titre qui a échoué. */}
       <DiagnosisPanel items={data.household.diagnosis} now={now} days={data.household.days} />
