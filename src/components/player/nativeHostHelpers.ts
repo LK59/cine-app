@@ -4,7 +4,8 @@
 import { warmNextEpisode } from "@/lib/nextEpisodeWarmup";
 import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
 import { takeAacDecodeRoute } from "@/lib/webcodecs/softwareAudio";
-import { seekDuration, type SeekTiming } from "@/lib/hostSeek";
+import type { SeekTiming } from "@/lib/hostSeek";
+import { seekElapsed } from "@/components/player/session/seekElapsed";
 import { traceRecent } from "@/lib/webcodecs/trace";
 import { normaliseLanguage } from "@/lib/trackPreferences";
 import { languageName } from "@/lib/trackLabel";
@@ -230,11 +231,8 @@ export function generationMenu(
   return { entries, targets, resumable };
 }
 
-/** La durée d'un saut, sans le temps passé en arrière-plan — voir `seekDuration` (hostSeek.ts). */
-export function seekElapsed(tally: SessionTally, timing: SeekTiming): number {
-  const now = Date.now();
-  return seekDuration(timing, now, tally.hiddenMsSoFar(now));
-}
+// La durée d'un saut : commune aux deux lecteurs depuis le 23/10/2026 (`player/session/seekElapsed.ts`).
+export { seekElapsed };
 
 /**
  * Les champs d'une ligne `seek`, après la description du fichier — écrits une seule fois pour ses

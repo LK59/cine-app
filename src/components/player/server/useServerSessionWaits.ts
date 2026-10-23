@@ -6,13 +6,21 @@ import { PLAYBACK_MEASURE_WINDOW_MS, playbackLinkSlow, type StutterWatch } from 
 import type { SlowLinkRunner } from "@/lib/slowLinkRunner";
 import type { SessionTally } from "@/lib/playerSessionTally";
 import { StallSignals } from "@/components/player/session/stallSignals";
+import { seekElapsed, seekStart, type SeekStart } from "@/components/player/session/seekElapsed";
 
 /**
  * Les attentes et les sauts de la séance, pour son bilan — les règles du lecteur natif
  * (`SessionTally`) : une attente compte à partir de 250 ms, en pleine lecture seulement (ni
- * l'ouverture ni un saut) ; un saut compte du geste à la reprise de l'image, ou au `seeked` s'il
- * arrive en pause. Les sauts de l'ouverture (la position de reprise posée par `startPlayback`)
- * précèdent la première lecture et ne comptent pas.
+ * l'ouverture ni un saut) ; un saut compte du geste à son arrivée (`seeked`), sans le temps passé en
+ * arrière-plan entre les deux (`seekElapsed`, commun aux deux lecteurs). Les sauts de l'ouverture (la
+ * position de reprise posée par `startPlayback`) précèdent la première lecture et ne comptent pas.
+ *
+ * « En pleine lecture » : depuis la première image de la négociation en cours (`hasPlayedOnceRef`,
+ * remis à faux par `startPlayback`), comme le natif par pipeline. Sur hls.js, une renégociation en
+ * place (piste, « Réessayer », marche de l'échelle, bascule allégée) garde l'élément et cet effet :
+ * un drapeau local survivait, et ses attentes d'avant la première image comptaient comme `waits` et
+ * nourrissaient les saccades (§78). Alignés le 23/10/2026 (audit F1-3, DECISIONS.md §116) : jusque-là,
+ * un saut se terminait à la reprise de l'image (`playing`) et comptait l'arrière-plan.
  *
  * Les références et le setter reçus sont ceux de l'hôte, stables : listés dans les dépendances
  * pour la règle, ils ne réarment rien de plus que `videoKey` et `runner`.
@@ -32,6 +40,7 @@ export function useServerSessionWaits({
   sessionPlayedRef,
   tallyRef,
   resumeSeekPendingRef,
+  hasPlayedOnceRef,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   videoKey: number;
@@ -47,12 +56,13 @@ export function useServerSessionWaits({
   sessionPlayedRef: RefObject<boolean>;
   tallyRef: RefObject<SessionTally>;
   resumeSeekPendingRef: RefObject<boolean>;
+  /** Une image depuis la dernière négociation — posé ici et par `useRebufferBadge`, remis à faux par `startPlayback`. */
+  hasPlayedOnceRef: RefObject<boolean>;
 }): void {
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    let playedOnce = false;
-    let seekSince: number | null = null;
+    let seekSince: SeekStart | null = null;
     /**
      * Les saccades (§78), hls.js seulement — c'est lui qui compte ses octets. Une attente est du
      * réseau quand le tampon était vide en son début (moins d'une seconde devant : sinon c'est le
@@ -83,19 +93,15 @@ export function useServerSessionWaits({
     const onPlaying = () => {
       const now = Date.now();
       setAwaitingTap(false);
-      playedOnce = true;
+      hasPlayedOnceRef.current = true;
       sessionPlayedRef.current = true;
       tallyRef.current.waitEnded(now);
       endWait(now);
       // L'image est là : un saut qui l'attendait n'attend plus (§78).
       runner.seekDone();
-      if (seekSince !== null) {
-        tallyRef.current.seekArrived(now - seekSince);
-        seekSince = null;
-      }
     };
     const onWaiting = () => {
-      if (playedOnce && !video.seeking && seekSince === null) {
+      if (hasPlayedOnceRef.current && !video.seeking && seekSince === null) {
         tallyRef.current.waitStarted(Date.now());
         const ahead = bufferedAhead(video);
         waitStart = { at: Date.now(), ahead };
@@ -105,13 +111,13 @@ export function useServerSessionWaits({
     const onSeeking = () => {
       const resumeSeek = resumeSeekPendingRef.current;
       resumeSeekPendingRef.current = false;
-      if (!playedOnce) return;
+      if (!hasPlayedOnceRef.current) return;
       tallyRef.current.waitAbandoned();
       stalls.cancel();
       waitStart = null;
       // Le saut de reprise de la négociation : ni compté, ni traité comme un saut qui attend (§78).
       if (resumeSeek) return;
-      seekSince ??= Date.now();
+      seekSince ??= seekStart(tallyRef.current);
       // Un saut attend son image : au-delà de 10 s, traité comme une ouverture (§78). Compté depuis le
       // premier d'une série de sauts.
       if (runner.seekPending === null) runner.seekStarted();
@@ -119,8 +125,9 @@ export function useServerSessionWaits({
     const onSeeked = () => {
       // Posé en pause, ou de quoi repartir aussitôt : ce saut n'attend plus son image (§78).
       if (video.paused || video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) runner.seekDone();
-      if (seekSince === null || !video.paused) return;
-      tallyRef.current.seekArrived(Date.now() - seekSince);
+      // Arrivé : la mesure s'arrête ici, en lecture comme en pause — la règle du natif.
+      if (seekSince === null) return;
+      tallyRef.current.seekArrived(seekElapsed(tallyRef.current, seekSince));
       seekSince = null;
     };
     const onPause = () => {
@@ -140,5 +147,5 @@ export function useServerSessionWaits({
       video.removeEventListener("seeked", onSeeked);
       video.removeEventListener("pause", onPause);
     };
-  }, [videoKey, runner, videoRef, hlsRef, unstableRef, linkMeterRef, streamNeedRef, stutterRef, offerStutterRef, playbackDecisionRef, setAwaitingTap, sessionPlayedRef, tallyRef, resumeSeekPendingRef]);
+  }, [videoKey, runner, videoRef, hlsRef, unstableRef, linkMeterRef, streamNeedRef, stutterRef, offerStutterRef, playbackDecisionRef, setAwaitingTap, sessionPlayedRef, tallyRef, resumeSeekPendingRef, hasPlayedOnceRef]);
 }

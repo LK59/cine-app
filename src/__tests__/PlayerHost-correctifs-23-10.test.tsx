@@ -229,3 +229,86 @@ describe("l'épisode enchaîné en place repart sans les mesures du précédent 
     expect([second.itemId, second.switchGapMs, second.reloadGapMs]).toEqual(["ep-2", undefined, undefined]);
   });
 });
+
+describe("la mesure des sauts du lecteur serveur, alignée sur le natif (F1-3)", () => {
+  // Trois écarts avec les règles du natif que `useServerSessionWaits` disait suivre : le temps passé en
+  // arrière-plan pendant un saut compté comme attente, la fin d'un saut lue à la reprise de l'image
+  // (`playing`) plutôt qu'à son arrivée (`seeked`), et « a déjà joué » qui survivait à une
+  // renégociation hls.js en place — ses attentes d'avant la première image comptaient comme `waits`.
+  const setVisibility = (state: "visible" | "hidden") => {
+    Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+    act(() => void document.dispatchEvent(new Event("visibilitychange")));
+  };
+  afterEach(() => {
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+  });
+
+  it("un saut se mesure à son arrivée (seeked), pas à la reprise de l'image", { timeout: 20_000 }, async () => {
+    const { getByText } = render(<PlayerHost />);
+    await nextNegotiation(1);
+    loadAndResume();
+    // En pleine lecture : jsdom laisse `paused` à vrai, et un saut en pause s'arrêtait déjà à `seeked`.
+    Object.defineProperty(video(), "paused", { configurable: true, get: () => false });
+    const now = vi.spyOn(Date, "now").mockReturnValue(5_000_000);
+    fire("seeking");
+    now.mockReturnValue(5_000_300);
+    fire("seeked");
+    now.mockReturnValue(5_000_900);
+    fire("playing");
+    now.mockRestore();
+    const stop = await stopLine(getByText);
+    expect([stop.seeks, stop.seekWaitMs]).toEqual([1, 300]);
+  });
+
+  it("le temps passé en arrière-plan pendant un saut n'est pas compté", { timeout: 20_000 }, async () => {
+    const { getByText } = render(<PlayerHost />);
+    await nextNegotiation(1);
+    loadAndResume();
+    const now = vi.spyOn(Date, "now").mockReturnValue(5_000_000);
+    fire("seeking");
+    now.mockReturnValue(5_000_200);
+    setVisibility("hidden");
+    now.mockReturnValue(5_060_200);
+    setVisibility("visible");
+    now.mockReturnValue(5_060_500);
+    fire("seeked");
+    fire("playing");
+    now.mockRestore();
+    const stop = await stopLine(getByText);
+    expect([stop.seeks, stop.seekWaitMs]).toEqual([1, 500]);
+  });
+
+  it("hls.js, renégocié en place : l'attente avant la première image n'est pas une attente en pleine lecture", { timeout: 20_000 }, async () => {
+    const { getByText } = render(<PlayerHost />);
+    await nextNegotiation(1);
+    loadAndResume();
+    act(() => void getByText("piste").click());
+    await nextNegotiation(2);
+    fire("loadeddata");
+    fire("seeking");
+    fire("seeked");
+    const now = vi.spyOn(Date, "now").mockReturnValue(5_000_000);
+    fire("waiting");
+    now.mockReturnValue(5_001_000);
+    fire("playing");
+    now.mockRestore();
+    const stop = await stopLine(getByText);
+    expect(stop.waits ?? 0).toBe(0);
+  });
+
+  it("une attente après la première image de la renégociation compte toujours", { timeout: 20_000 }, async () => {
+    const { getByText } = render(<PlayerHost />);
+    await nextNegotiation(1);
+    loadAndResume();
+    act(() => void getByText("piste").click());
+    await nextNegotiation(2);
+    loadAndResume();
+    const now = vi.spyOn(Date, "now").mockReturnValue(5_000_000);
+    fire("waiting");
+    now.mockReturnValue(5_001_000);
+    fire("playing");
+    now.mockRestore();
+    const stop = await stopLine(getByText);
+    expect(stop.waits).toBe(1);
+  });
+});

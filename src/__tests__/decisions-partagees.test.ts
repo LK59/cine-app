@@ -1592,6 +1592,19 @@ describe("les écarts entre les copies du lecteur, corrigés (§116)", () => {
     expect(sansCommentaires(lire("src/components/playerNative/useNativeSessionRecord.ts"))).toMatch(/gaveUpFields\(everReadyRef\.current,/);
   });
 
+  it("la durée d'un saut se mesure par seekElapsed seulement, sans l'arrière-plan, pour les deux lecteurs", () => {
+    // Chaque `seekArrived(` du lecteur reçoit la durée de `seekElapsed`.
+    for (const f of lecteurQui(/\.seekArrived\(/)) {
+      const appels = sansCommentaires(lire(f)).match(/\.seekArrived\([^;]*/g) ?? [];
+      for (const appel of appels) expect([f, appel.includes("seekElapsed(")]).toEqual([f, true]);
+    }
+    expect(lecteurQui(/export function seekElapsed\(/)).toEqual(["src/components/player/session/seekElapsed.ts"]);
+    const attentes = sansCommentaires(lire("src/components/player/server/useServerSessionWaits.ts"));
+    // « A déjà joué » est celui de la négociation en cours, pas un drapeau de l'effet.
+    expect(attentes).not.toMatch(/let playedOnce/);
+    expect(attentes).toMatch(/hasPlayedOnceRef\.current/);
+  });
+
   it.each(HOTES)("%s rapporte la lecture au registre des tentatives par habitWatch (§67)", (hote) => {
     // Plus d'appel en ligne dans un écouteur : la position passe par l'option de `habitWatch`.
     expect([hote, /habitWatch\(\{[\s\S]*?notePosition: \(seconds\) => [\w.]*retries\.notePosition\(seconds\)/.test(codeDe(hote))]).toEqual([hote, true]);

@@ -2108,6 +2108,7 @@ function ActivePlayer({
     sessionPlayedRef,
     tallyRef,
     resumeSeekPendingRef,
+    hasPlayedOnceRef: hasPlayedOnce,
   });
 
   /** La coupure en cours, lue par les rappels figés (§78). */

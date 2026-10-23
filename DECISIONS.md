@@ -6377,7 +6377,7 @@ Le mot sous la roue (`stallAt`, natif) et la pastille (`useRebufferBadge`, serve
 garde son décompte (`SessionTally`) et sa mesure des sauts. **Laissé, décisions à part (audit F1-3).**
 Le temps caché pendant un saut, retiré au natif et compté au serveur ; la fin d'un saut (`seeked` au
 natif, `playing` au serveur) ; la portée de « a déjà joué » (`playedOnce` par pipeline au natif, par
-effet au serveur — une renégociation hls.js en place le garde).
+effet au serveur — une renégociation hls.js en place le garde) — alignés, §116.
 
 ### Les habitudes de lecture (§28) et « ni banc ni scène »
 
@@ -6483,3 +6483,23 @@ début de la séance par titre). **Avant.** Le natif le lisait sur le `ready` du
 `restart` remet à faux : une séance fermée pendant une reconstruction « avait renoncé » depuis le
 montage, après avoir joué. **Laissé.** La signature de la copie gardée (`unsentStop`) lit toujours le
 `ready` du pipeline : elle ne décide que du moment de la réécrire.
+
+### La mesure des sauts et des attentes du lecteur serveur, alignée sur le natif (audit F1-3)
+
+**Règle.** Un saut se mesure du geste à son arrivée (`seeked`), en lecture comme en pause, sans le
+temps passé en arrière-plan entre les deux ; une attente ne compte qu'en pleine lecture, c'est-à-dire
+depuis la première image de la négociation (serveur) ou du pipeline (natif) en cours. **Porteurs.**
+`seekStart`, `seekElapsed` (`src/components/player/session/seekElapsed.ts`, sur `seekDuration` de
+`hostSeek.ts`) ; `hasPlayedOnce` de `ActivePlayer`, remis à faux par `startPlayback` (déjà celui de la
+pastille « Connexion instable », `useRebufferBadge`). **Appelants.** `useServerSessionWaits` (serveur) ;
+`onSeeked` et `reportUnarrivedSeek` du natif (`seekElapsed`, réexporté par `nativeHostHelpers`).
+**Avant.** Le serveur arrêtait la mesure à la reprise de l'image (`playing`, ou `seeked` en pause),
+comptait l'absence d'une page cachée pendant le saut (`seekWaitMs`, tuile « attente des sauts » de
+l'Activité), et sur hls.js son « a déjà joué » vivait avec l'effet : une renégociation en place (piste,
+« Réessayer », marche de l'échelle, bascule allégée) le gardait, ses attentes d'avant la première
+image comptaient comme `waits` et nourrissaient les saccades (§78). **Différent exprès.** Le début d'un
+saut : au geste pour le natif (`noteSeekRequest`, `HostSeek`), à l'événement `seeking` après une
+première image pour le serveur ; le serveur n'a pas de ligne `seek` ni de `resumes` (une attente
+avant la première image d'une renégociation n'y est comptée nulle part). **Empreinte.**
+`serveur/sauts-et-pause-sauts-clavier-bouton-10-en-pause.txt` : `seekWaitMs` des `stop` — voir le commit
+des empreintes qui suit.
