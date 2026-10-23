@@ -67,6 +67,7 @@ import {
   purgeLegacyAudioBlocklist,
   takeCarriedExclusions,
 } from "@/components/player/server/audioLadder";
+import { releaseHlsElement, reloadIntoServerPlayer } from "@/components/player/server/serverElement";
 
 /** Pas d'indice : l'état ordinaire d'un chargement (§78). */
 type LinkSignal = { hint: boolean; recvBps: number | null; needBps: number | null };
@@ -197,29 +198,6 @@ export { NETWORK_OUTAGE_GIVE_UP_MS };
 // Réexportés : les tests les importent d'ici.
 export { LEGACY_AUDIO_BLOCKLIST_KEY, purgeLegacyAudioBlocklist, __resetLegacyBlocklistPurgeForTests } from "@/components/player/server/audioLadder";
 
-/**
- * Couper l'élément : pause, plus de source, `load()` pour que le navigateur lâche la session HLS.
- * Écrit à l'identique à quatre endroits jusqu'au 22/10/2026 ; chaque appelant garde sa propre garde
- * (`try`) et ce qui suit (rechargement ou non). Peut lever sur un élément déjà démonté.
- */
-function releaseHlsElement(video: HTMLVideoElement): void {
-  video.pause();
-  video.removeAttribute("src");
-  video.load();
-}
-
-/**
- * Écrit l'intention que la page rechargée relira (`PlaybackProvider`). Faux si le stockage la refuse :
- * l'appelant garde alors son chemin d'avant (la lecture dans la page, ou l'écran d'erreur).
- */
-function reloadIntoServerPlayer(intent: PlayerReloadIntent): boolean {
-  try {
-    sessionStorage.setItem(PLAYER_RELOAD_INTENT_KEY, JSON.stringify(intent));
-    return true;
-  } catch {
-    return false;
-  }
-}
 const MAX_MEDIA_RETRIES = 3;
 
 // The single, always-mounted playback engine for the whole app (mounted once in the
