@@ -1,7 +1,7 @@
 "use client";
 
 import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
-import { OfflineDownloadControl, OfflinePlayButton, offlinePlayLabels, sharedResumeSeconds, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
+import { OfflineDownloadControl, OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
 import { OfflineEpisodeButton, OfflineSeasonDownload } from "@/components/offline/OfflineEpisodeDownload";
 import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -9,8 +9,7 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
 import { Check, Play, RotateCcw, Video, X } from "lucide-react";
-import { fetcher, progressKey } from "@/lib/swr";
-import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
+import { fetcher } from "@/lib/swr";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useSheetKeys } from "@/lib/useSheetKeys";
 import { arrivedByBack, markSheetLeaving, useSheetBehind, useRouteBehind } from "@/lib/cinemaRoute";
@@ -37,17 +36,14 @@ import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
-import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
-import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
+import type { CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { PhoneSheetTitle } from "@/components/cinema/CinemaDetailPages";
 import { resumeAtFor } from "@/lib/resumePosition";
 import { useQueuedPlay } from "@/lib/useQueuedPlay";
-import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
 import { episodeRowFacts, playEpisodeFrom } from "@/lib/episodeRow";
-import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
+import { useSheetPlay } from "@/lib/useSheetPlay";
 import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
-import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
-import { useFileMissing } from "@/lib/missingFiles";
+import { sheetOverview, sheetRuntimeMinutes, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
 import { FadeInImg } from "@/components/FadeInImg";
 import { useImageRetry } from "@/lib/useImageRetry";
 import { TitleToggleIcon, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
@@ -211,28 +207,6 @@ export function CinemaMobileDetail({
   const runtimeMinutes = isSeries ? seriesRuntime.minutes : sheetRuntimeMinutes((item as CinemaMovie).runtimeMinutes, info?.tmdb?.runtime);
   const runtimeLate = isSeries && seriesRuntime.late;
 
-  // Movies carry their resume point on a per-user endpoint (the library payload is shared across
-  // viewers); a series' equivalent is whichever episode Jellyfin says is next up.
-  const { data: progress } = useSWR<CinemaProgressPayload>(
-    // Voir `progressKey` : la même clé que celle que la relecture après lecture invalide.
-    isSeries ? null : progressKey(item.jellyfinItemId),
-    fetcher
-  );
-  const { data: episodesData, error: episodesError } = useSWR<CinemaEpisodesPayload>(
-    isSeries ? `/api/cinema/series/${item.jellyfinItemId}/episodes` : null,
-    fetcher
-  );
-
-  // « À voir » : son état de départ, la garde `canJoinWatchlist` et l'écriture, par le crochet de
-  // toutes les fiches (`useWatchlistToggle`, §114.4). « Vu » et « Favori » sont chez Jellyfin (plus
-  // haut) : un titre peut être à la fois dans la liste et marqué vu.
-  const { listable, inList, toggle: toggleInList } = useWatchlistToggle({
-    mediaType: isSeries ? "series" : "movie",
-    tmdbId: item.tmdbId,
-    title: item.title,
-    year: item.year,
-    posterPath: item.posterUrl,
-  });
   /**
    * « Vu » vient de Jellyfin, comme sur les fiches du bureau.
    *
@@ -244,8 +218,33 @@ export function CinemaMobileDetail({
    * Une seule vérité par information : « vu » et « favori » chez Jellyfin, qui les tient déjà pour
    * ses propres applications, et « à voir » dans la liste locale, qui est une intention que
    * Jellyfin ne connaît pas.
+   *
+   * La même réponse porte la position d'un film (`progress`, sur `progressKey` — la clé que la
+   * relecture après lecture invalide) : elle était lue une seconde fois ici, à la même clé.
    */
-  const { watched, known: watchedKnown, busy: watchedBusy, toggleWatched } = useJellyfinItemState(item.jellyfinItemId, isSeries ? "series" : "movie");
+  const { progress, watched, known: watchedKnown, busy: watchedBusy, toggleWatched } = useJellyfinItemState(item.jellyfinItemId, isSeries ? "series" : "movie");
+  /**
+   * Ce que Lire lance et ce qu'il annonce : ce que le serveur a dit, sinon ce que « Reprendre » et
+   * « À suivre », gardés sur l'appareil, savent déjà ; une série, sa liste d'épisodes — le bouton
+   * Lire de toutes les fiches, `useSheetPlay` (§114.7).
+   */
+  const sheetPlay = useSheetPlay(
+    isSeries
+      ? { kind: "series", jellyfinItemId: item.jellyfinItemId, title: item.title, sonarrId: (item as CinemaSeries).sonarrId, firstEpisode: (item as CinemaSeries).firstEpisode }
+      : { kind: "movie", jellyfinItemId: item.jellyfinItemId, title: item.title, progress }
+  );
+  const { facts, episodesData } = sheetPlay;
+
+  // « À voir » : son état de départ, la garde `canJoinWatchlist` et l'écriture, par le crochet de
+  // toutes les fiches (`useWatchlistToggle`, §114.4). « Vu » et « Favori » sont chez Jellyfin (plus
+  // haut) : un titre peut être à la fois dans la liste et marqué vu.
+  const { listable, inList, toggle: toggleInList } = useWatchlistToggle({
+    mediaType: isSeries ? "series" : "movie",
+    tmdbId: item.tmdbId,
+    title: item.title,
+    year: item.year,
+    posterPath: item.posterUrl,
+  });
 
   /**
    * Le visuel de la bannière, gardé tel qu'il était à l'ouverture : des données fraîches qui en
@@ -316,24 +315,6 @@ export function CinemaMobileDetail({
   // the sheet you started from, not on the browse grid behind it.
 
   const nextEpisode = episodesData?.nextEpisode;
-  /**
-   * Ce que Lire lance et ce qu'il annonce : ce que le serveur a dit, sinon ce que « Reprendre » et
-   * « À suivre », gardés sur l'appareil, savent déjà — la même décision que les deux fiches du
-   * bureau, dans `sheetFacts.ts`.
-   */
-  const facts = useSheetPlayFacts(
-    isSeries
-      ? { kind: "series", jellyfinItemId: item.jellyfinItemId, sonarrId: (item as CinemaSeries).sonarrId, firstEpisode: (item as CinemaSeries).firstEpisode }
-      : { kind: "movie", jellyfinItemId: item.jellyfinItemId },
-    item.title,
-    isSeries
-      ? episodesData
-        ? { kind: "series", known: true, episode: episodesData.nextEpisode }
-        : undefined
-      : progress
-        ? { kind: "movie", known: progress?.known === true, resumeTicks: progress.resumeTicks, runtimeTicks: progress.runtimeTicks }
-        : undefined
-  );
   const resumeTicks = facts.resumeTicks;
   /**
    * Sait-on s'il y a une reprise, ou attend-on encore la réponse ?
@@ -346,32 +327,16 @@ export function CinemaMobileDetail({
   // quand Jellyfin n'a pas répondu, et ce silence se lisait « aucune reprise » — voir
   // `resumeAtFor`.
   const resumeKnown = facts.resumeKnown;
-  const runtimeTicks = facts.runtimeTicks;
   const hasResume = facts.hasResume;
   const playTargetId = facts.targetId;
   const playTargetTitle = facts.title;
-  // Grisé seulement si Jellyfin a répondu que le fichier n'existe plus — voir `missingFiles.ts`.
-  const fileMissing = useFileMissing(playTargetId);
-  // Le film, ou l'épisode que Lire lancerait : téléchargé, il passe en tête comme un film (Louis,
-  // 19/10/2026 — l'état de l'épisode en cours de téléchargement n'apparaissait que sur sa ligne).
-  const offlinePlayable = useOfflinePlayable(isSeries ? playTargetId : item.jellyfinItemId);
-  const offlineEpisodeCode =
-    isSeries && facts.seasonNumber != null && facts.episodeNumber != null
-      ? t("cinema.episodeShort", { episode: facts.episodeNumber, season: facts.seasonNumber })
-      : null;
+  // Grisé seulement si Jellyfin a répondu que le fichier n'existe plus ; le film, ou l'épisode que
+  // Lire lancerait, téléchargé, passe en tête comme un film (Louis, 19/10/2026) ; la suite de la
+  // série, relue à la fin d'un épisode — voir `useSheetPlay`.
+  const { fileMissing, offlinePlayable, episodeCode: offlineEpisodeCode, getNextEpisode } = sheetPlay;
   // La place du bouton est tenue tant qu'on ne sait ni si la lecture est ouverte, ni — pour une
   // série jamais commencée — quel épisode elle lancerait.
-  const playPending =
-    playerEnabled === undefined || (!playTargetId && isSeries && episodesData === undefined && episodesError === undefined);
-  // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
-  // Le titre du bouton principal seulement — le film, ou l'épisode à reprendre —, pas chaque
-  // ligne d'épisode.
-  usePlaybackPrefetch(playTargetId);
-
-  // Flat (season, episode) order — powers the player's own credits-time auto-advance, same
-  // contract PlayButton/PlayerHost already expect on desktop.
-  // Relu à l'appel, pas figé au rendu : voir `useNextEpisodeFromCache`.
-  const getNextEpisode = useNextEpisodeFromCache(`/api/cinema/series/${item.jellyfinItemId}/episodes`);
+  const playPending = playerEnabled === undefined || sheetPlay.playPending;
 
   function launch(fromStart: boolean) {
     if (!playTargetId || fileMissing) return;
@@ -387,7 +352,7 @@ export function CinemaMobileDetail({
   }
   // « Lire S1·É1 » supposé d'après le catalogue : un appui attend la réponse du serveur, et lance
   // ce qu'elle dit — voir `useQueuedPlay`. « Recommencer » n'existe que pour une reprise connue.
-  const playQueued = useQueuedPlay(facts.guessed && episodesError === undefined, () => launch(false));
+  const playQueued = useQueuedPlay(sheetPlay.waitForServer, () => launch(false));
   function play(fromStart = false) {
     if (fromStart) launch(true);
     else playQueued();
@@ -572,11 +537,7 @@ export function CinemaMobileDetail({
             } ${fileMissing ? "cursor-not-allowed opacity-45" : ""}`}
           >
             <Play size={offlinePlayable ? 16 : 18} fill="currentColor" />
-            {fileMissing
-              ? t("cinema.fileMissing")
-              : offlinePlayable
-                ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, resumeTicks, resumeKnown), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done", offlineEpisodeCode).online
-                : formatContinueLabel(t, resumeTicks, runtimeTicks, facts.seasonNumber, facts.episodeNumber, facts.rewatch)}
+            {fileMissing ? t("cinema.fileMissing") : sheetPlay.label}
           </button>
         )}
 

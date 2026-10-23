@@ -111,8 +111,12 @@ export function offlinePlayable(d: OfflineDownload, online = typeof navigator ==
  * Le téléchargement lisible d'un titre, s'il y en a un — ce qui fait passer « Lire » à « Lire en
  * ligne » et met « Lire le fichier téléchargé » en tête de la fiche (Louis, 19/10/2026).
  */
-export function useOfflinePlayable(itemId: string | null | undefined): OfflineDownload | null {
-  const enabled = useOfflineDownloadsEnabled();
+export function useOfflinePlayable(
+  itemId: string | null | undefined,
+  /** Faux : un écran sans hors ligne (l'invité) — rien de demandé, `null`. */
+  active = true
+): OfflineDownload | null {
+  const enabled = useOfflineDownloadsEnabled(active);
   const download = useOfflineDownloadFor(itemId);
   // Présent dès la demande (grisé tant que rien n'est lisible), absent après un échec.
   return enabled && download && download.state !== "failed" ? download : null;

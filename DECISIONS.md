@@ -6370,3 +6370,31 @@ ce jour-là. DOM témoin identique avant et après.
 **Voulu.** Chaque liste garde son dessin (colonne de saisons au bureau, pastilles au téléphone) et sa
 garde de lecture intégrée ; l'invité ajoute « lien plein ». Le menu « Épisodes » du lecteur a sa propre
 ligne (§107), hors de ce registre.
+
+### 114.7 Le bouton Lire d'une fiche : un crochet
+
+**Règle.** Celles de §1 (d'où part une lecture), §2 (l'épisode suivant), §12 (ce que Lire trouve prêt)
+et §29 (ce qu'une fiche montre avant le réseau), demandées une fois pour toutes les fiches : la réponse
+de Jellyfin traduite en faits (« connu » = Jellyfin a répondu), la place tenue d'une série jamais
+commencée, l'attente d'un S1·É1 supposé (sauf liste en panne), le fichier introuvable, la copie hors
+ligne en tête, le code « S1:É5 », le libellé (« Lire en ligne » derrière un téléchargement, sinon celui
+de « Continuer à regarder »), le préchargement du seul titre du bouton, et l'épisode suivant relu dans la
+liste à la fin d'un épisode.
+
+**Porteur.** `useSheetPlay(title, { prefetch, offline })` (`src/lib/useSheetPlay.ts`), sur
+`useSheetPlayFacts`, `useFileMissing`, `useOfflinePlayable`, `usePlaybackPrefetch`,
+`useNextEpisodeFromCache`. La position d'un film vient de la réponse de `useJellyfinItemState`, que la
+fiche tient déjà pour « Vu » (même clé) ; la fiche du téléphone la lisait une seconde fois.
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`, `ShareTitleSheet`.
+
+**Fusionné le 23/10/2026.** Quatre copies d'une vingtaine de lignes, identiques ce jour-là. DOM témoin
+identique avant et après (68 rendus, reprises de l'appareil comprises).
+
+**Tests.** `useSheetPlay.test.tsx` (les six cas), `fiche-lire-avant-reseau.test.tsx` (rendu, fiche par
+fiche), `decisions-partagees.test.ts`.
+
+**Voulu.** Le téléphone tient aussi la place de Lire tant que la configuration n'est pas lue
+(`playerEnabled === undefined`) : c'est sa mise en page qui l'attend, pas une règle de lecture. L'invité
+ne prépare rien quand son lien est plein (`prefetch: false`) et ne compte aucune copie hors ligne
+(`offline: false`). « Lire » au téléphone garde son bouton à lui jusqu'à P3 (§29).

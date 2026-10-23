@@ -8,7 +8,6 @@ import useSWR from "swr";
 import { ArrowLeft, Video } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { formatMinutes } from "@/lib/format";
-import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
@@ -29,14 +28,13 @@ import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
-import { OfflineDownloadControl, OfflinePlayButton, offlinePlayLabels, sharedResumeSeconds, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
+import { OfflineDownloadControl, OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
-import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
+import { useSheetPlay } from "@/lib/useSheetPlay";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival } from "@/components/cinema/CinemaDetailExtras";
-import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts, sheetLeadFacts } from "@/lib/sheetFacts";
-import { useFileMissing } from "@/lib/missingFiles";
+import { sheetOverview, sheetRuntimeMinutes, sheetLeadFacts } from "@/lib/sheetFacts";
 import { FadeInImg } from "@/components/FadeInImg";
 import { TitleToggleRow, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
 import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
@@ -114,17 +112,9 @@ export function CinemaMovieDetail({
   const { progress, watched, known: flagsKnown, busy: flagsBusy, toggleWatched } =
     useJellyfinItemState(item.jellyfinItemId);
   // Ce que Jellyfin a dit de la position, sinon ce que la reprise gardée sur l'appareil en sait :
-  // « Reprendre · 1 h 10 restantes » dès l'ouverture, sans rien affirmer — voir `sheetFacts.ts`.
-  const facts = useSheetPlayFacts(
-    { kind: "movie", jellyfinItemId: item.jellyfinItemId },
-    item.title,
-    progress ? { kind: "movie", known: progress?.known === true, resumeTicks: progress.resumeTicks, runtimeTicks: progress.runtimeTicks } : undefined
-  );
-  // Grisé seulement si Jellyfin a répondu que le fichier n'existe plus — voir `missingFiles.ts`.
-  const fileMissing = useFileMissing(item.jellyfinItemId);
-  const offlinePlayable = useOfflinePlayable(item.jellyfinItemId);
-  // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
-  usePlaybackPrefetch(item.jellyfinItemId);
+  // « Reprendre · 1 h 10 restantes » dès l'ouverture, sans rien affirmer ; le fichier introuvable,
+  // la copie hors ligne, le préchargement — le bouton Lire de toutes les fiches, `useSheetPlay`.
+  const { facts, fileMissing, offlinePlayable, label: playLabel } = useSheetPlay({ kind: "movie", jellyfinItemId: item.jellyfinItemId, title: item.title, progress });
   // « À voir » : son état de départ, la garde `canJoinWatchlist` et l'écriture, par le crochet de
   // toutes les fiches (`useWatchlistToggle`, §114.4). « Vu » et « Favori » sont chez Jellyfin (plus
   // haut) : un titre peut être à la fois dans la liste et marqué vu.
@@ -403,11 +393,7 @@ export function CinemaMovieDetail({
               // Same override as CinemaSeriesDetail's own Play button — see its doc comment —
               // so a movie opened from the Continue Watching row and one opened from its own
               // poster card show the identical "Reprendre - 1h10 restants" wording.
-              label={
-                offlinePlayable
-                  ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, facts.resumeTicks, facts.resumeKnown), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done").online
-                  : formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks)
-              }
+              label={playLabel}
               // La même ligne que les autres : c'est le sélecteur qui se peint en blanc, pas
               // elle. Deux blancs à l'écran — un fixe et un mobile — se disputaient le sens.
               className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}

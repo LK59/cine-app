@@ -1607,3 +1607,22 @@ describe("la ligne d'un épisode : une règle, un lancement (§114.6)", () => {
     expect([f, /resumeAt: episodeResumeAt\(/.test(code)]).toEqual([f, false]);
   });
 });
+
+describe("le bouton Lire des fiches : un crochet (§114.7)", () => {
+  // Les quatre fiches recopiaient la même traduction de la réponse de Jellyfin, la place tenue,
+  // l'attente, le fichier, le hors ligne, le code d'épisode, le libellé, le préchargement, la suite.
+  const FICHES = [
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/shareGuest/ShareTitleSheet.tsx",
+  ];
+  it.each(FICHES)("%s passe par `useSheetPlay`, et n'en refait aucune pièce", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("useSheetPlay(")]).toEqual([f, true]);
+    for (const piece of ["useSheetPlayFacts(", "useFileMissing(", "usePlaybackPrefetch(", "useNextEpisodeFromCache(", "useOfflinePlayable(", "formatContinueLabel(", "offlinePlayLabels("]) {
+      expect([f, piece, code.includes(piece)]).toEqual([f, piece, false]);
+    }
+    expect([f, /known: progress\??\.known === true/.test(code)]).toEqual([f, false]);
+  });
+});

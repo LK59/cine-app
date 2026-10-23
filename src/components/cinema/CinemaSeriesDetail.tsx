@@ -18,7 +18,6 @@ import { usePlayback } from "@/components/PlaybackProvider";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { useWatchlistToggle } from "@/lib/useWatchlistToggle";
-import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useSheetKeys } from "@/lib/useSheetKeys";
 import { useIsTouch } from "@/lib/useIsMobile";
@@ -27,17 +26,15 @@ import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
-import type { CinemaEpisodesPayload, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
+import type { CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
-import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
 import { playEpisodeFrom } from "@/lib/episodeRow";
-import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
+import { useSheetPlay } from "@/lib/useSheetPlay";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
-import { sheetOverview, useSheetPlayFacts, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
-import { useFileMissing } from "@/lib/missingFiles";
-import { OfflinePlayButton, offlinePlayLabels, sharedResumeSeconds, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
+import { sheetOverview, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
+import { OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
 import { FadeInImg } from "@/components/FadeInImg";
 import { TitleToggleRow, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
 import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
@@ -111,27 +108,24 @@ export function CinemaSeriesDetail({
   // sans fondu. La description ne sert qu'à défaut — voir `sheetLeadFacts`.
   const lead = sheetLeadFacts(item, info, info !== undefined || infoError !== undefined);
   const episodeRuntime = sheetEpisodeRuntime(item.episodeRuntime, info?.tmdb?.runtime);
-  const { data: episodesData, error: episodesError } = useSWR<CinemaEpisodesPayload>(`/api/cinema/series/${item.jellyfinItemId}/episodes`, fetcher);
+  // L'épisode que Lire lancerait : celui du serveur quand la liste est là, sinon celui que « À
+  // suivre » ou « Reprendre », gardés sur l'appareil, connaissent déjà ; une série jamais commencée
+  // garde la place de sa ligne (`playPending`) ; le fichier introuvable, la copie hors ligne en tête
+  // (comme un film, Louis 19/10/2026), le préchargement du seul épisode du bouton principal, et la
+  // suite de la série relue à la fin d'un épisode — le bouton Lire de toutes les fiches, `useSheetPlay`.
+  const {
+    facts,
+    episodesData,
+    playPending,
+    waitForServer,
+    fileMissing,
+    offlinePlayable,
+    episodeCode: offlineEpisodeCode,
+    label: playLabel,
+    getNextEpisode,
+  } = useSheetPlay({ kind: "series", jellyfinItemId: item.jellyfinItemId, title: item.title, sonarrId: item.sonarrId, firstEpisode: item.firstEpisode });
   /** L'écran des épisodes est-il vraiment dessiné — il lui faut sa liste, pas seulement l'adresse. */
   const episodesShown = showEpisodes && !!episodesData?.seasons;
-  // L'épisode que Lire lancerait : celui du serveur quand la liste est là, sinon celui que « À
-  // suivre » ou « Reprendre », gardés sur l'appareil, connaissent déjà — voir `sheetFacts.ts`.
-  const facts = useSheetPlayFacts(
-    { kind: "series", jellyfinItemId: item.jellyfinItemId, sonarrId: item.sonarrId, firstEpisode: item.firstEpisode },
-    item.title,
-    episodesData ? { kind: "series", known: true, episode: episodesData.nextEpisode } : undefined
-  );
-  // Une série jamais commencée : rien d'autre que la liste des épisodes ne dit quel épisode lire.
-  // Sa ligne garde sa place en attendant, plutôt que de surgir.
-  const playPending = !facts.targetId && episodesData === undefined && episodesError === undefined;
-  const fileMissing = useFileMissing(facts.targetId);
-  // L'épisode que Lire lancerait, s'il est téléchargé : en tête, comme un film (Louis, 19/10/2026).
-  const offlinePlayable = useOfflinePlayable(facts.targetId);
-  const offlineEpisodeCode =
-    facts.seasonNumber != null && facts.episodeNumber != null ? t("cinema.episodeShort", { episode: facts.episodeNumber, season: facts.seasonNumber }) : null;
-  // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
-  // L'épisode du bouton principal seulement, pas chaque ligne de la liste.
-  usePlaybackPrefetch(facts.targetId);
   // Marquer une série vue coche la série entière chez Jellyfin, ce qui est exactement le geste
   // qu'on veut : « je l'ai finie », et ses applications le sauront aussi.
   const { watched, known: flagsKnown, busy: flagsBusy, toggleWatched } = useJellyfinItemState(item.jellyfinItemId, "series");
@@ -252,11 +246,9 @@ export function CinemaSeriesDetail({
         },
   });
 
-  // The episode right after `currentItemId` in flat (season, episode) order — same "next up"
-  // semantics PlayButton's getNextEpisode already expects (see PlayerHost's own credits-time
-  // auto-advance), powered here by the same season/episode list "Plus d'épisodes" already needs.
-  // Relu à l'appel, pas figé au rendu : voir `useNextEpisodeFromCache`.
-  const getNextEpisode = useNextEpisodeFromCache(`/api/cinema/series/${item.jellyfinItemId}/episodes`);
+  // `getNextEpisode` (plus haut) : the episode right after `currentItemId` in flat (season, episode)
+  // order — same "next up" semantics PlayButton and PlayerHost's credits-time auto-advance expect,
+  // powered by the same season/episode list "Plus d'épisodes" already needs.
 
   function playEpisode(ep: CinemaEpisode) {
     // Là où il en est, avec la suite de la série : le lancement des listes d'épisodes (`playEpisodeFrom`).
@@ -405,7 +397,7 @@ export function CinemaSeriesDetail({
                 unavailable={fileMissing}
                 reserve
                 // « Lire S1·É1 » supposé d'après le catalogue : un appui attend la réponse du serveur.
-                waitForServer={facts.guessed && episodesError === undefined}
+                waitForServer={waitForServer}
                 getNextEpisode={getNextEpisode}
                 variant="row"
                 // PlayButton's own default label (elapsed time, no episode code) is meant for
@@ -413,11 +405,8 @@ export function CinemaSeriesDetail({
                 // one reads exactly like the Continue Watching row's cards (same helper, "Lire
                 // EpX SX" / "Reprendre EpX SX - 30min restants"), since a user landing here from
                 // that row would otherwise see two different labels for the same episode.
-                label={
-                  offlinePlayable && !fileMissing
-                    ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, facts.resumeTicks, facts.resumeKnown), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done", offlineEpisodeCode).online
-                    : formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks, facts.seasonNumber, facts.episodeNumber, facts.rewatch)
-                }
+                // (Un fichier introuvable : `PlayButton` dit « Fichier introuvable » avant tout libellé.)
+                label={playLabel}
                 // La même ligne que les autres : c'est le sélecteur qui se peint en blanc.
                 className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
               />
