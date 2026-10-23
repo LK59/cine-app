@@ -576,6 +576,15 @@ export function ExperimentalPlayerHost({
   const [stallAt, setStallAt] = useState<number | null>(null);
   const [stallUnstable, setStallUnstable] = useState(false);
   const stallAtRef = useRef<number | null>(null);
+  /**
+   * La fin du mot d'attente — écrite une fois pour ses deux appelants (23/10/2026, §115) : `restart`,
+   * sans condition, et `endStall` (image, pause, saut, fin), seulement si une attente était notée.
+   */
+  const clearStall = useCallback(() => {
+    stallAtRef.current = null;
+    setStallAt(null);
+    setStallUnstable(false);
+  }, []);
   // Why this file is being played the way it is. Kept for the panel on *both* paths: a fallback
   // whose reason is only visible on the path that was not taken explains nothing at all.
   const [pathReason, setPathReason] = useState<string | null>(null);
@@ -898,12 +907,10 @@ export function ExperimentalPlayerHost({
     // sont déjà retirés. Resté vrai, `playing` comptait ce temps comme regardé et le rapportait
     // à Jellyfin « en lecture » (relu le 24/09/2026). Le pipeline suivant le repasse à vrai.
     setPlaying(false);
-    stallAtRef.current = null;
-    setStallAt(null);
-    setStallUnstable(false);
+    clearStall();
     setRuntimeError(null);
     setRebuildCount((count) => count + 1);
-  }, [lifecycle, background, tally]);
+  }, [lifecycle, background, tally, clearStall]);
 
   /**
    * Reconstruire sur place à la demande du spectateur — une piste audio, « Améliorer les dialogues »,
@@ -2074,9 +2081,7 @@ export function ExperimentalPlayerHost({
       /** L'attente en pleine lecture est finie (image, pause, saut, fin) : le mot s'en va avec elle. */
       const endStall = () => {
         if (stallAtRef.current === null) return;
-        stallAtRef.current = null;
-        setStallAt(null);
-        setStallUnstable(false);
+        clearStall();
       };
       const networkStall = (verdict: string) =>
         verdict === "réseau" &&
@@ -2422,7 +2427,7 @@ export function ExperimentalPlayerHost({
   // le temps regardé, 28/09/2026). `stutter` et `runner` aussi (§78) : créés une fois au montage.
   // `zoneHandover` et `handZone` (§93) : le premier créé une fois au montage, le second ne dépend que
   // de lui, de `lifecycle` et de `fallToStable` — stables tous trois.
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, chooseSecond, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter, runner, zoneHandover, handZone, enterNetworkLost]);
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, chooseSecond, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter, runner, zoneHandover, handZone, enterNetworkLost, clearStall]);
 
   useNativeRecovery({
     path,

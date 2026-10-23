@@ -1502,4 +1502,8 @@ describe("les doublons du lecteur fusionnés : une règle, un endroit (§115)", 
     expect(occurrences(/lifecycle\.noteNetworkLost\(\)/)).toBe(1);
     expect((sansCommentaires(lire(entreeDe(NATIF))).match(/enterNetworkLost\(/g) ?? []).length).toBe(3);
   });
+
+  it("le mot d'attente du natif s'efface par clearStall seulement", () => {
+    expect(occurrences(/setStallAt\(null\)/)).toBe(1);
+  });
 });

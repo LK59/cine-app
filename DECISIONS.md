@@ -6290,3 +6290,12 @@ paramètre. **Laissé.** La ligne `network` et la position gardée (`line`) rest
 moteur, comme le dit « Ce que chaque couche écrit au journal » (docs/cycle-de-vie-lecteur.md) : un
 pipeline de reconstruction dont l'ouverture échoue faute de réseau n'écrit ni l'une ni l'autre —
 les étendre est une décision à part (audit F2-1). Voir aussi §97.
+
+### La fin du mot d'attente (lecteur natif)
+
+**Règle.** `stallAtRef` remis à nul, `stallAt` et `stallUnstable` effacés ensemble. **Porteur.**
+`clearStall`, `useCallback` de `ExperimentalPlayerHost`. **Appelants.** `restart` (sans condition) et
+`endStall` du pipeline (image, pause, saut, fin — seulement si une attente était notée). **Tests.**
+Les empreintes du natif (mot « Connexion perdue ou instable… » sous la roue) ; `decisions-partagees`
+(un seul `setStallAt(null)`). **Laissé.** La remise à neuf d'un essai (`setOpenedAt`,
+`setNetworkLost(null)`), écrite dans `restart` et `retryAfterNetwork` : deux lignes, pas une règle.
