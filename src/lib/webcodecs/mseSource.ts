@@ -21,19 +21,18 @@ import { NO_INDEX_REACH_SECONDS, reachable, seekArrived } from "./seekArrival";
 import { LANDING_REACH_SECONDS, SeekLifecycle, landingFor } from "./seekLifecycle";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
 import {
-  FROZEN_CLOCK_MS, FROZEN_SEEKING_MS, FROZEN_OPENING_MS, OPENING_EDGE_SECONDS, OPENING_REASSERT_MS,
-  OPENING_PLAYING_GRACE_MS, SEEKING_PATIENCE_PER_SECOND_MS, FROZEN_STEP, MAX_FROZEN_NUDGES, MIN_BUFFER_SECONDS,
-  PLAYED_TO_CLEAR_SECONDS, STALL_REPORT_MS, STALL_REPORT_COOLDOWN_MS, RUNAWAY_REPORT_SECONDS, STALL_TRACE_MS,
-  MAX_APPEND_FAILURES, NETWORK_KEEP_LEAD_SECONDS, NETWORK_RETRY_DELAYS_MS, NETWORK_TRIM_MARGIN_SECONDS,
-  NETWORK_OUTAGE_GIVE_UP_MS, OUTAGE_STARVED_LEAD_SECONDS, STALL_TIMEOUT_MS, WATCHDOG_MS, EVICTION_REFILLS_PER_MINUTE,
-  SOURCE_OPEN_TIMEOUT_MS, MISPLACED_SECONDS, FRUITLESS_APPENDS, PRE_ROLL_SECONDS, TRACED_APPENDS,
-  TRACED_APPENDS_PER_SEEK, KEEP_BEHIND_SECONDS, TRIM_SLACK_SECONDS, KEYFRAME_TRIM_MARGIN,
+  FROZEN_SEEKING_MS, MIN_BUFFER_SECONDS, PLAYED_TO_CLEAR_SECONDS, STALL_REPORT_MS, STALL_REPORT_COOLDOWN_MS,
+  RUNAWAY_REPORT_SECONDS, STALL_TRACE_MS, MAX_APPEND_FAILURES, NETWORK_KEEP_LEAD_SECONDS, NETWORK_RETRY_DELAYS_MS,
+  NETWORK_TRIM_MARGIN_SECONDS, NETWORK_OUTAGE_GIVE_UP_MS, OUTAGE_STARVED_LEAD_SECONDS, STALL_TIMEOUT_MS, WATCHDOG_MS,
+  EVICTION_REFILLS_PER_MINUTE, SOURCE_OPEN_TIMEOUT_MS, MISPLACED_SECONDS, FRUITLESS_APPENDS, PRE_ROLL_SECONDS,
+  TRACED_APPENDS, TRACED_APPENDS_PER_SEEK, KEEP_BEHIND_SECONDS, TRIM_SLACK_SECONDS, KEYFRAME_TRIM_MARGIN,
 } from "./mseTuning";
 import { frameQuality, playableSpans, spansAll, spansNear } from "./mseSpans";
 import { LossRecord, type SentFragment } from "./mseLossRecord";
 import { UnreadableZoneHold } from "./mseZoneHold";
 import { BufferPlanner } from "./mseBufferPlanner";
 import { RecoveryLadder } from "./mseRecoveryLadder";
+import { FrozenClockWatch } from "./mseFrozenClock";
 import type { MseCallbacks, RecoveryFacts } from "./mseTypes";
 import type { BufferBudget, ByteRate } from "./bufferBudget";
 
@@ -153,24 +152,29 @@ export class MseSource {
   private get audioRate(): ByteRate {
     return this.planner.audioRate;
   }
-  /** For the frozen-clock check: where the clock was, since when, and how often it was pushed. */
-  private lastClockAt = -1;
-  private frozenSince: number | null = null;
-  private frozenNudges = 0;
-  /** Every push over the session, for the `stop` line — the one above resets when the clock moves. */
-  private frozenNudgesTotal = 0;
-  /** La position redemandée une fois après l'atterrissage de l'ouverture — voir `OPENING_REASSERT_MS`. */
-  private openingReassertTimer: ReturnType<typeof setTimeout> | null = null;
-  private openingReassertDone = false;
-  /** Le dernier `playing` de l'élément — voir `OPENING_PLAYING_GRACE_MS`. */
-  private lastPlayingAt = 0;
-
-  /** Le placement de l'ouverture a abouti de lui-même (`playing`, `seeked`) : plus rien à redemander. */
-  private settleOpeningReassert(): void {
-    if (this.openingReassertTimer === null) return;
-    clearTimeout(this.openingReassertTimer);
-    this.openingReassertTimer = null;
-    this.openingReassertDone = true;
+  /**
+   * L'horloge figée et la position redemandée à l'ouverture — voir `FrozenClockWatch`.
+   * `frozenSince`, `frozenNudges` et `lastPlayingAt` restent lisibles et écrivables ici sous leur
+   * nom : webcodecs-mseSource.test.ts les lit, et recule les deux instants pour simuler le temps.
+   */
+  private readonly clock: FrozenClockWatch;
+  private get frozenSince(): number | null {
+    return this.clock.frozenSince;
+  }
+  private set frozenSince(at: number | null) {
+    this.clock.frozenSince = at;
+  }
+  private get frozenNudges(): number {
+    return this.clock.frozenNudges;
+  }
+  private set frozenNudges(n: number) {
+    this.clock.frozenNudges = n;
+  }
+  private get lastPlayingAt(): number {
+    return this.clock.lastPlayingAt;
+  }
+  private set lastPlayingAt(at: number) {
+    this.clock.lastPlayingAt = at;
   }
   /**
    * Handed to the host: nothing more this source can try. Reads as `lost`, so the host's own
@@ -269,6 +273,22 @@ export class MseSource {
       get delaySeconds() {
         return self.delaySeconds;
       },
+    });
+    this.clock = new FrozenClockWatch({
+      get destroyed() {
+        return self.destroyed;
+      },
+      video,
+      guard: this.guard,
+      seekState: this.seekState,
+      get lead() {
+        return self.lead;
+      },
+      get playable() {
+        return self.playable;
+      },
+      recover: (target) => this.recover(target),
+      handOver: (at) => this.handOver(at),
     });
   }
 
@@ -489,15 +509,15 @@ export class MseSource {
    * back — which is precisely what that machinery spends its time getting right.
    */
   private readonly onResumed = () => {
-    this.frozenSince = null;
-    this.lastClockAt = -1;
+    this.clock.frozenSince = null;
+    this.clock.lastClockAt = -1;
   };
 
   /** `playing` : l'élément repart vraiment — `play` n'est que la demande. */
   private readonly onPlaying = () => {
     this.onResumed();
-    this.lastPlayingAt = Date.now();
-    this.settleOpeningReassert();
+    this.clock.lastPlayingAt = Date.now();
+    this.clock.settleOpeningReassert();
   };
 
   private readonly onPlay = () => {
@@ -932,7 +952,7 @@ export class MseSource {
       // Une coupure en pleine lecture (§97) : tenue, bornée par le temps — jamais l'échelle des
       // envois refusés, qui relançait la patience d'une minute à chaque reprise. Avant la première
       // image de ce pipeline, l'ouverture garde son chemin d'avant : l'hôte a le sien (35 s, §77/§78).
-      if (isNetworkFailure(error) && this.lastPlayingAt > 0) {
+      if (isNetworkFailure(error) && this.clock.lastPlayingAt > 0) {
         this.holdThroughOutage(generation, error);
         return;
       }
@@ -1590,7 +1610,7 @@ export class MseSource {
    * nouvel essai de l'hôte au retour du réseau. Un lien lent livre ses morceaux : jamais ici.
    */
   private watchForOutage(): void {
-    if (this.networkGaveUp || this.stuck || this.destroyed || this.ended || this.lastPlayingAt === 0) return;
+    if (this.networkGaveUp || this.stuck || this.destroyed || this.ended || this.clock.lastPlayingAt === 0) return;
     if (this.video.paused) return;
     if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
     const starved = this.lead < OUTAGE_STARVED_LEAD_SECONDS || (typeof this.video.readyState === "number" && this.video.readyState < 3);
@@ -1641,7 +1661,7 @@ export class MseSource {
    */
   private readonly onSeeked = () => {
     if (this.destroyed) return;
-    this.settleOpeningReassert();
+    this.clock.settleOpeningReassert();
     this.seekState.arrive(this.video.currentTime);
   };
 
@@ -1864,7 +1884,7 @@ export class MseSource {
       ...state,
       filling: this.fillTask !== null,
       recoveryStreak: this.ladder.recoveryStreak,
-      frozenNudges: this.frozenNudges,
+      frozenNudges: this.clock.frozenNudges,
       recoveries: this.ladder.recoveries,
       evictions: this.evictions,
       // Only ManagedMediaSource has the signal; plain MediaSource says so rather than `true`.
@@ -1918,136 +1938,14 @@ export class MseSource {
     };
   }
 
-  /** Ce que le décodeur traverse depuis le début de la plage sous la tête ; inconnu, le plafond. */
-  private decodeDistance(now: number): number {
-    const ranges = this.playable;
-    const i = rangeAround(ranges, now, 0);
-    if (i >= 0) return now - ranges.start(i);
-    return (FROZEN_SEEKING_MS - FROZEN_CLOCK_MS) / SEEKING_PATIENCE_PER_SECOND_MS;
-  }
-
-  /**
-   * Arme, une seule fois par source, la position redemandée 100 ms après l'atterrissage de
-   * l'ouverture — voir `OPENING_REASSERT_MS`.
-   *
-   * Seulement pour l'ouverture (la garde attend encore sa première image, près de là où elle s'est
-   * ouverte) et seulement au bord du média : une reprise posée loin derrière son image clé décode
-   * vraiment, et la relancer recommencerait ce décodage. Le pas est celui de la poussée (+0,08 s),
-   * le seul qui ait été vu libérer ce gel ; il est compté comme un placement (`headPlaced`), pas
-   * comme de la lecture, et ne consomme pas la poussée de 400 ms, qui reste le filet.
-   */
+  /** Voir `FrozenClockWatch.armOpeningReassert`. */
   private armOpeningReassert(at: number): void {
-    if (this.openingReassertDone || this.openingReassertTimer !== null || this.destroyed) return;
-    if (!this.guard.awaitingFirstPicture || this.decodeDistance(at) >= OPENING_EDGE_SECONDS) return;
-    this.openingReassertTimer = setTimeout(() => {
-      this.openingReassertTimer = null;
-      this.openingReassertDone = true;
-      if (this.destroyed || this.video.paused || !this.guard.awaitingFirstPicture) return;
-      const now = this.video.currentTime;
-      // Parti de lui-même : rien à faire. Ni sur un élément qui a de quoi avancer et ne saute plus
-      // (`readyState` ≥ 3) : il démarre, et le relancer le refigerait — voir `OPENING_PLAYING_GRACE_MS`.
-      if (!this.video.seeking && Math.abs(now - at) > 0.05) return;
-      if (!this.video.seeking && this.video.readyState >= 3) return;
-      if (this.decodeDistance(now) >= OPENING_EDGE_SECONDS || this.lead < 1) return;
-      const target = now + FROZEN_STEP;
-      trace(`ouverture : rien n'a bougé 100 ms après l'atterrissage à ${now.toFixed(2)} s — position redemandée`);
-      this.guard.forgetPause();
-      this.seekState.moved(target);
-      this.guard.headPlaced(target);
-      this.video.currentTime = target;
-      // Le pas n'est pas de la lecture, et la poussée de 400 ms se mesure depuis lui.
-      this.lastClockAt = target;
-      this.frozenSince = Date.now();
-    }, OPENING_REASSERT_MS);
+    this.clock.armOpeningReassert(at);
   }
 
-  /**
-   * Combien de temps laisser un saut en cours finir de décoder : ce qu'il a réellement à décoder.
-   *
-   * Le média sous la tête commence à l'image clé d'où le décodage repart ; la distance jusqu'à la
-   * tête est ce que le décodeur doit traverser avant de montrer quoi que ce soit. `FROZEN_SEEKING_MS`
-   * a été fixé pour le pire cas (neuf secondes de 4K dans 1917) et s'appliquait à tous : un saut
-   * dans une zone relue depuis une image clé à 2,8 s restait figé six secondes sous Safari avant
-   * d'être poussé — deux fois dans la même séance sur un Mac, une fois sur un iPhone (journal du
-   * 24/09/2026), là où la poussée le débloquait aussitôt. Une demi-seconde par seconde à décoder,
-   * au-dessus du délai ordinaire, plafonnée à l'ancien délai : 1917 retrouve exactement ses six
-   * secondes. Une plage qui commence loin derrière (un saut dans un long tampon continu) garde le
-   * plafond — la vraie image clé est inconnue, et on reste alors sur la prudence d'avant.
-   */
-  private seekingPatienceMs(now: number): number {
-    const ranges = this.playable;
-    const i = rangeAround(ranges, now, 0);
-    if (i >= 0) {
-      const toDecode = now - ranges.start(i);
-      return Math.min(FROZEN_SEEKING_MS, FROZEN_CLOCK_MS + SEEKING_PATIENCE_PER_SECOND_MS * toDecode);
-    }
-    return FROZEN_SEEKING_MS;
-  }
-
-  /**
-   * The other kind of stall: playing, media under the playhead, and a clock that does not move.
-   *
-   * Everything above watches for a playhead standing on nothing, because that was every stall
-   * there had been. This one is the opposite shape and nothing could see it: an episode opened
-   * from the beginning reported itself as playing, with the playhead on the media and twenty
-   * seconds buffered ahead of it, and stayed at 0:00. The element was waiting on a seek to the
-   * exact first instant of the buffered range that never completed — so from here it looked
-   * perfectly healthy, which is why it went unnoticed until it was reported from a phone.
-   *
-   * Answered the same way as the other, and just as bluntly: ask for the position again, a
-   * fraction of a second further in, which is what completes a seek that never resolved.
-   */
+  /** Voir `FrozenClockWatch.watchForFrozenClock`. */
   private watchForFrozenClock(now: number): void {
-    const moved = Math.abs(now - this.lastClockAt) > 0.05;
-    if (moved || this.frozenSince === null) {
-      this.lastClockAt = now;
-      this.frozenSince = moved || this.frozenSince === null ? Date.now() : this.frozenSince;
-      if (moved) this.frozenNudges = 0;
-      return;
-    }
-    const ordinary = this.video.seeking ? this.seekingPatienceMs(now) : FROZEN_CLOCK_MS;
-    // Seulement une tête posée au bord du média, le cas mesuré : une reprise posée loin derrière son
-    // image clé décode vraiment, et la pousser relancerait ce décodage (22/09/2026, « une seconde de
-    // lecture pour deux de chargement »).
-    const patience =
-      this.guard.awaitingFirstPicture && this.frozenNudges === 0 && this.decodeDistance(now) < OPENING_EDGE_SECONDS
-        ? FROZEN_OPENING_MS
-        : ordinary;
-    if (Date.now() - this.frozenSince < patience) return;
-    // Un élément tout juste reparti produit encore sa première image : la poussée de l'ouverture
-    // l'attend — voir `OPENING_PLAYING_GRACE_MS`.
-    if (patience === FROZEN_OPENING_MS && Date.now() - this.lastPlayingAt < OPENING_PLAYING_GRACE_MS) return;
-    // Only when there is plainly something to play: a clock that is not moving because the
-    // buffer ran dry is an ordinary wait, and the fill loop is already on it.
-    if (this.lead < 1) return;
-    this.frozenSince = Date.now();
-    if (this.frozenNudges >= MAX_FROZEN_NUDGES) {
-      // Three pushes did not free it. This used to be the end of it — `return`, for as long as
-      // the clock stayed put, which is to say for ever. Now it is the start of the recovery
-      // ladder: the position asked for again the heavy way, buffers cleared and read afresh,
-      // then the next keyframe, then a rebuild. Paced by `frozenSince`, once per 1.5 s at most.
-      trace(`horloge figée à ${now.toFixed(2)} s malgré ${this.frozenNudges} poussées — reprise`);
-      if (!this.recover(now + FROZEN_STEP)) this.handOver(now);
-      // Même raison que pour la poussée ci-dessous : la reprise pose l'horloge 0,08 s plus loin,
-      // et ce pas-là passait pour de la lecture. Les poussées repartaient à zéro après chaque
-      // reprise — trois poussées, une reprise, trois poussées… — et une image figée mettait quatre
-      // minutes à gravir l'échelle jusqu'au lecteur serveur au lieu d'une et demie (relu le
-      // 24/09/2026, mesuré : 62 s → 21 s hors saut, 242 s → 96 s pendant un saut).
-      this.lastClockAt = now + FROZEN_STEP;
-      return;
-    }
-
-    this.frozenNudges += 1;
-    this.frozenNudgesTotal += 1;
-    trace(`horloge figée à ${now.toFixed(2)} s avec ${this.lead.toFixed(1)} s en avance — on redemande la position`);
-    this.guard.forgetPause();
-    this.seekState.moved(now + FROZEN_STEP);
-    this.guard.headPlaced(now + FROZEN_STEP);
-    this.video.currentTime = now + FROZEN_STEP;
-    // Le mouvement se mesure depuis là où la poussée a mis l'horloge. Mesuré depuis `now`, les
-    // 0,08 s de la poussée passaient pour de la lecture et remettaient le compteur à zéro : douze
-    // poussées sur 1917, jamais une reprise.
-    this.lastClockAt = now + FROZEN_STEP;
+    this.clock.watchForFrozenClock(now);
   }
 
   /**
@@ -2092,7 +1990,7 @@ export class MseSource {
   get recoveryFacts(): RecoveryFacts {
     return {
       recoveries: this.ladder.recoveries,
-      frozenNudges: this.frozenNudgesTotal,
+      frozenNudges: this.clock.frozenNudgesTotal,
       escalations: this.ladder.escalations,
       evictions: this.evictions,
       evictionsAhead: this.evictionsAhead,
@@ -2216,8 +2114,8 @@ export class MseSource {
     if (typeof window !== "undefined" && typeof window.removeEventListener === "function") window.removeEventListener("online", this.onOnline);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.watchdogTimer = null;
-    if (this.openingReassertTimer) clearTimeout(this.openingReassertTimer);
-    this.openingReassertTimer = null;
+    if (this.clock.openingReassertTimer) clearTimeout(this.clock.openingReassertTimer);
+    this.clock.openingReassertTimer = null;
     if (this.networkRetryTimer) clearTimeout(this.networkRetryTimer);
     this.networkRetryTimer = null;
     this.video.removeEventListener("error", this.onElementError);
