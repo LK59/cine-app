@@ -15,12 +15,11 @@ import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useSheetKeys } from "@/lib/useSheetKeys";
 import { arrivedByBack, markSheetLeaving, useSheetBehind, useRouteBehind } from "@/lib/cinemaRoute";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
-import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
+import { useWatchlistToggle } from "@/lib/useWatchlistToggle";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { sheetMotionClass, phoneSheetCorner, phoneSheetShadow } from "@/lib/sheetMotion";
 import { useSheetMorph } from "@/lib/sheetMorph/useSheetMorph";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
-import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
 import { usePlayerEnabledState } from "@/lib/usePlayerEnabled";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { PosterImage } from "@/components/PosterImage";
@@ -225,11 +224,16 @@ export function CinemaMobileDetail({
     fetcher
   );
 
-  const tmdbId = item.tmdbId ?? 0;
-  const statusMap = useWatchlistStatusMap(tmdbId ? [{ mediaType: isSeries ? "series" : "movie", tmdbId }] : []);
-  const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist(
-    tmdbId ? statusMap[`${isSeries ? "series" : "movie"}:${tmdbId}`] ?? null : null
-  );
+  // « À voir » : son état de départ, la garde `canJoinWatchlist` et l'écriture, par le crochet de
+  // toutes les fiches (`useWatchlistToggle`, §114.4). « Vu » et « Favori » sont chez Jellyfin (plus
+  // haut) : un titre peut être à la fois dans la liste et marqué vu.
+  const { listable, inList, toggle: toggleInList } = useWatchlistToggle({
+    mediaType: isSeries ? "series" : "movie",
+    tmdbId: item.tmdbId,
+    title: item.title,
+    year: item.year,
+    posterPath: item.posterUrl,
+  });
   /**
    * « Vu » vient de Jellyfin, comme sur les fiches du bureau.
    *
@@ -243,7 +247,6 @@ export function CinemaMobileDetail({
    * Jellyfin ne connaît pas.
    */
   const { watched, known: watchedKnown, busy: watchedBusy, toggleWatched } = useJellyfinItemState(item.jellyfinItemId, isSeries ? "series" : "movie");
-  const inList = addedStatus === "to_watch";
 
   /**
    * Le visuel de la bannière, gardé tel qu'il était à l'ouverture : des données fraîches qui en
@@ -398,18 +401,6 @@ export function CinemaMobileDetail({
       resumeAt: episodeResumeAt(episode),
       getNextEpisode,
     });
-  }
-
-  function toggleInList() {
-    // Le bouton n'est pas rendu sans identifiant TMDB (voir `canJoinWatchlist`) ; la garde reste,
-    // pour qu'aucun chemin ne renvoie le `0` que la route refusait d'un 400.
-    if (!canJoinWatchlist(tmdbId)) return;
-    if (inList) removeFromWatchlist({ tmdbId, mediaType: isSeries ? "series" : "movie" });
-    else
-      addToWatchlist(
-        { tmdbId, mediaType: isSeries ? "series" : "movie", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
-        "to_watch"
-      );
   }
 
   if (typeof document === "undefined") return null;
@@ -652,9 +643,7 @@ export function CinemaMobileDetail({
           {/* Deux coches identiques côte à côte, dont l'une servait à la fois d'« ajouter » et
               d'« ajouté » : rien ne distinguait les deux boutons ni les deux états. « À voir » puis
               « Vu », la forme de toutes les fiches (`TitleToggles`, §114.4). */}
-          {canJoinWatchlist(tmdbId) && (
-            <TitleToggleIcon face={WATCHLIST_FACE} on={inList} onClick={toggleInList} />
-          )}
+          {listable && <TitleToggleIcon face={WATCHLIST_FACE} on={inList} onClick={toggleInList} />}
           {/* Estompé tant qu'on ignore l'état : proposer « marquer comme vu » sans l'avoir lu,
               c'est proposer d'écrire une valeur qu'on a devinée. */}
           <TitleToggleIcon face={WATCHED_FACE} on={watched} onClick={toggleWatched} disabled={watchedBusy} unknown={!watchedKnown} />

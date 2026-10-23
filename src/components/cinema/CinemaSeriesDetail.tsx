@@ -17,8 +17,7 @@ import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
-import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
-import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
+import { useWatchlistToggle } from "@/lib/useWatchlistToggle";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useSheetKeys } from "@/lib/useSheetKeys";
@@ -136,14 +135,17 @@ export function CinemaSeriesDetail({
   // Marquer une série vue coche la série entière chez Jellyfin, ce qui est exactement le geste
   // qu'on veut : « je l'ai finie », et ses applications le sauront aussi.
   const { watched, known: flagsKnown, busy: flagsBusy, toggleWatched } = useJellyfinItemState(item.jellyfinItemId, "series");
-  // Same fix as CinemaMovieDetail: without an initialStatus, Vu/À voir always opened looking
-  // un-toggled even for a series already on the watchlist. item.tmdbId can be null (Sonarr
-  // doesn't always resolve one) — bulk-status has nothing to look up then, same as toggleWatched/
-  // toggleAddToList below already treat that case (tmdbId ?? 0).
-  const statusMap = useWatchlistStatusMap(item.tmdbId ? [{ mediaType: "series", tmdbId: item.tmdbId }] : []);
-  const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist(
-    item.tmdbId ? statusMap[`series:${item.tmdbId}`] ?? null : null
-  );
+  // « À voir » : son état de départ, la garde `canJoinWatchlist` et l'écriture, par le crochet de
+  // toutes les fiches (`useWatchlistToggle`, §114.4). « Vu » et « Favori » sont chez Jellyfin (plus
+  // haut) : un titre peut être à la fois dans la liste et marqué vu.
+  // Sans identifiant TMDB — Sonarr n'en résout pas toujours un —, pas de ligne.
+  const { listable, inList, toggle: toggleAddToList } = useWatchlistToggle({
+    mediaType: "series",
+    tmdbId: item.tmdbId,
+    title: item.title,
+    year: item.year,
+    posterPath: item.posterUrl,
+  });
 
   // Same exit-animation delay as CinemaMovieDetail — see that hook's own doc comment.
   // Pas d'animation de sortie quand c'est une autre fiche qui attend derrière : la sortie
@@ -250,22 +252,6 @@ export function CinemaSeriesDetail({
         },
   });
 
-  // « Vu » et « Favori » vivent chez Jellyfin — voir useJellyfinItemState. « À voir » reste
-  // local : c'est une intention, et rien d'autre ne la connaît.
-  // Sans identifiant TMDB, la ligne n'est pas rendue — voir `canJoinWatchlist`. Ce `?? 0` envoyait
-  // un 400 à la route, et la fiche en affichait l'erreur brute.
-  const listable = canJoinWatchlist(item.tmdbId);
-  function toggleAddToList() {
-    if (!canJoinWatchlist(item.tmdbId)) return;
-    const tmdbId = item.tmdbId;
-    if (inList) removeFromWatchlist({ tmdbId, mediaType: "series" });
-    else
-      addToWatchlist(
-        { tmdbId, mediaType: "series", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
-        "to_watch"
-      );
-  }
-
   // The episode right after `currentItemId` in flat (season, episode) order — same "next up"
   // semantics PlayButton's getNextEpisode already expects (see PlayerHost's own credits-time
   // auto-advance), powered here by the same season/episode list "Plus d'épisodes" already needs.
@@ -287,7 +273,6 @@ export function CinemaSeriesDetail({
 
   if (typeof document === "undefined") return null;
 
-  const inList = addedStatus === "to_watch";
   const playTargetId = facts.targetId;
 
   return createPortal(

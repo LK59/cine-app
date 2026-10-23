@@ -1561,3 +1561,18 @@ describe("la saison ouverte de l'invité : un écart voulu, écrit (§38, 23/10/
     expect(code).toMatch(/ep\.jellyfinItemId === nextEpisodeId\)\)\?\.seasonNumber \?\? openingSeason\(/);
   });
 });
+
+describe("« À voir » : un crochet pour les quatre fiches (§114.4)", () => {
+  // Les trois fiches de bibliothèque recopiaient le même câblage (`useWatchlistStatusMap` +
+  // `useAddToWatchlist` + garde + charge utile), la fiche TMDB en avait un autre (`setStatus`).
+  it.each([
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx",
+  ])("%s passe par `useWatchlistToggle`, et par lui seul", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, code.includes("useWatchlistToggle(")]).toEqual([f, true]);
+    expect([f, /useAddToWatchlist\(|useWatchlistStatusMap\(|addToWatchlist\(|removeFromWatchlist\(/.test(code)]).toEqual([f, false]);
+  });
+});

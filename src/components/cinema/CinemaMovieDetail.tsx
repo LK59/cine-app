@@ -18,8 +18,7 @@ import { PlayButton } from "@/components/PlayButton";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
-import { canJoinWatchlist, useAddToWatchlist } from "@/lib/useAddToWatchlist";
-import { useWatchlistStatusMap } from "@/lib/useWatchlistStatusMap";
+import { useWatchlistToggle } from "@/lib/useWatchlistToggle";
 import { detailColumnMotion } from "@/lib/sheetMotion";
 import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
 import { cinemaNavigate, useSheetBehind, useRouteBehind, arrivedByBack } from "@/lib/cinemaRoute";
@@ -126,12 +125,17 @@ export function CinemaMovieDetail({
   const offlinePlayable = useOfflinePlayable(item.jellyfinItemId);
   // Ce que Lire va demander, demandé dès l'ouverture de la fiche — voir `usePlaybackPrefetch`.
   usePlaybackPrefetch(item.jellyfinItemId);
-  // Without this, Vu/À voir always opened looking un-toggled even for a title already on the
-  // watchlist — useAddToWatchlist only reflects whatever status is handed to it as initialStatus
-  // (see its own doc comment), and nothing was passing one here, unlike every other surface that
-  // uses this hook (PosterCard, recommendations).
-  const statusMap = useWatchlistStatusMap([{ mediaType: "movie", tmdbId: item.tmdbId }]);
-  const { addedStatus, addToWatchlist, removeFromWatchlist } = useAddToWatchlist(statusMap[`movie:${item.tmdbId}`] ?? null);
+  // « À voir » : son état de départ, la garde `canJoinWatchlist` et l'écriture, par le crochet de
+  // toutes les fiches (`useWatchlistToggle`, §114.4). « Vu » et « Favori » sont chez Jellyfin (plus
+  // haut) : un titre peut être à la fois dans la liste et marqué vu.
+  // Sans identifiant TMDB — un film que Jellyfin a seul (§89) peut n'en avoir aucun —, pas de ligne.
+  const { listable, inList, toggle: toggleAddToList } = useWatchlistToggle({
+    mediaType: "movie",
+    tmdbId: item.tmdbId,
+    title: item.title,
+    year: item.year,
+    posterPath: item.posterUrl,
+  });
   // item.logoUrl comes bulk-included in the /api/cinema/movies payload now (see CinemaHero's own
   // note) — known synchronously, prefetched alongside backdrops by CinemaClient's warm-up
   // effect. A failed logo shows the written title and retries on its own (`useImageRetry`).
@@ -255,27 +259,7 @@ export function CinemaMovieDetail({
     },
   });
 
-  // « À voir » reste local : c'est une intention, et rien d'autre ne la connaît. « Vu » et
-  // « Favori » sont partis chez Jellyfin (voir plus haut). Un titre peut donc être à la fois dans
-  // la liste et marqué vu, ce que l'ancien schéma — un seul statut par titre — interdisait.
-  // Sans identifiant TMDB, la ligne n'est pas rendue — voir `canJoinWatchlist`. Un film que Jellyfin a
-  // seul (§89) peut n'en avoir aucun (`tmdbId: 0`) : l'appui envoyait ce zéro, la route répondait 400
-  // et la fiche en affichait l'erreur (audit du 23/10/2026).
-  const listable = canJoinWatchlist(item.tmdbId);
-  function toggleAddToList() {
-    if (!canJoinWatchlist(item.tmdbId)) return;
-    const tmdbId = item.tmdbId;
-    if (inList) removeFromWatchlist({ tmdbId, mediaType: "movie" });
-    else
-      addToWatchlist(
-        { tmdbId, mediaType: "movie", title: item.title, year: item.year, posterPath: item.posterUrl, voteAverage: null },
-        "to_watch"
-      );
-  }
-
   if (typeof document === "undefined") return null;
-
-  const inList = addedStatus === "to_watch";
 
   return createPortal(
     // z-index as inline style, not a Tailwind class — arbitrary-value classes weren't making it

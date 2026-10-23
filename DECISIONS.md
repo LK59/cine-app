@@ -6313,7 +6313,10 @@ téléphone) — `src/components/cinema/TitleToggles.tsx` ; `useWatchlistToggle`
 (`src/lib/useWatchlistToggle.ts`, sur `useAddToWatchlist` et `canJoinWatchlist`) pour l'écriture de
 « À voir ».
 
-**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`, `PlayerDiscoverSheet`.
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`, `PlayerDiscoverSheet` —
+les quatre pour les dessins comme pour `useWatchlistToggle` (les trois fiches de bibliothèque recopiaient
+`useWatchlistStatusMap` + `useAddToWatchlist` + la garde + la charge utile ; fusionnées le même jour,
+DOM témoin identique).
 
 **Corrigé le 23/10/2026.** Dans une rangée de saga ou une filmographie, un titre possédé ouvre la fiche
 de bibliothèque et un titre absent la fiche TMDB : le même geste changeait de mots (« Ajouter à ma
