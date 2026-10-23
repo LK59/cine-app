@@ -6190,6 +6190,14 @@ Tests : `share-gate.test.ts` (parcourt toutes les routes de l'API, toutes métho
 hors titre ; chaque route « corps » appelle `shareRefusal`), `share-core.test.ts` (jeton, secrets, vie
 d'un lien, compte verrouillé, comptes écartés, trois lectures).
 
+**Un titre que Jellyfin a seul (§89).** La fiche de l'invité demande sa description comme celle du foyer
+(distribution, repli d'accroche et de bande-annonce), sous son identifiant réservé : la porte l'accepte
+déjà — la règle `radarr` / `sonarr` compare le nombre de l'adresse à celui que le lien a gardé à sa
+création, réservé compris (la pastille Partager envoie `item.radarrId` / `item.sonarrId`), et refuse tout
+autre nombre. Rien n'a été élargi pour cela. Elle sautait ces titres (« rien à demander »), prémisse
+démentie par §89 (audit des fiches, 23/10/2026, V9). Un lien créé sans identifiant reçoit un refus, et la
+fiche reste sur le catalogue, comme pour un titre de Radarr. Tests : `share-guest-jellyfin-seul.test.tsx`.
+
 ## 113. La revue de sécurité du 20/10/2026
 
 **Ce qu'elle a changé, et où.** Une fuite critique d'abord (9.3.2) : le relais du flux renvoyait la

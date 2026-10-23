@@ -88,10 +88,13 @@ function useShareSheetFacts(payload: ShareTitlePayload) {
   const series = payload.kind === "series" ? payload.item : null;
   const movie = payload.kind === "movie" ? payload.item : null;
   const item: CinemaMovie | CinemaSeries = payload.item;
-  // Un titre que Jellyfin a seul (§89) n'a ni Radarr ni Sonarr : rien à demander.
-  const infoKey = item.source === "jellyfin" ? null : movie ? `/api/radarr/movies/${movie.radarrId}/info` : `/api/sonarr/series/${series!.sonarrId}/info`;
+  // Un titre que Jellyfin a seul (§89) aussi : ces routes le décrivent par TMDB, sous son identifiant
+  // réservé, et la porte des liens accepte cette adresse pour le titre du lien (la règle `radarr` /
+  // `sonarr` compare le nombre gardé par le lien). La fiche ne demandait rien, et l'invité n'avait ni
+  // distribution ni repli d'accroche ou de bande-annonce, que le foyer a (audit du 23/10/2026).
+  const infoKey = movie ? `/api/radarr/movies/${movie.radarrId}/info` : `/api/sonarr/series/${series!.sonarrId}/info`;
   const { data: info, error: infoError } = useSWR<TitleInfo>(infoKey, fetcher);
-  const infoSettled = infoKey === null || info !== undefined || infoError !== undefined;
+  const infoSettled = info !== undefined || infoError !== undefined;
   const late = useLateArrival(infoSettled);
   const lead = sheetLeadFacts(item, info, infoSettled);
 
