@@ -1324,6 +1324,8 @@ n'a ni `author` ni `repository`.
 **Voulu.** La page de connexion est publique et la montre quand même : la version s'y lit déjà par
 `/sw.js?v=`. Au bureau, alignée à gauche sous « Déconnexion » ; ailleurs, centrée.
 
+**La vitrine (23/10/2026).** La signature mène aussi à `laterna.fr` (`APP_WEBSITE_URL`, `appBuild.ts`), le site du projet : « Laterna 10.0 par LK59 · propulsé par Lumen · laterna.fr · GitHub ».
+
 ## 42. L'instant qu'une ligne du journal du lecteur décrit
 
 **Règle.** Le serveur date chaque ligne de `player.log` à son arrivée (`timestamp`), jamais le

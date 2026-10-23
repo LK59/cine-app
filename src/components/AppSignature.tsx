@@ -1,10 +1,11 @@
 "use client";
 
-import { APP_AUTHOR, APP_NAME, APP_REPOSITORY_URL, APP_VERSION, ENGINE_NAME, displayVersion } from "@/lib/appBuild";
+import { APP_AUTHOR, APP_NAME, APP_REPOSITORY_URL, APP_VERSION, APP_WEBSITE_URL, ENGINE_NAME, displayVersion } from "@/lib/appBuild";
 import { useT } from "@/components/TranslationProvider";
 
 /**
- * « Laterna 9.4 par LK59 · propulsé par Lumen · GitHub » — la signature, en une ligne discrète.
+ * « Laterna 10.0 par LK59 · propulsé par Lumen · laterna.fr · GitHub » — la signature, en une ligne
+ * discrète ; « laterna.fr » mène à la vitrine du projet (23/10/2026).
  *
  * Un seul composant pour ses trois emplacements (DECISIONS.md §41) : le bas du panneau Compte du
  * cinéma, la page de connexion, le bas du menu de la gestion (barre latérale au bureau, feuille
@@ -26,6 +27,10 @@ export function AppSignature({ className = "" }: { className?: string }) {
       {APP_NAME} {displayVersion(APP_VERSION)} {t("signature.by")} {APP_AUTHOR}{" "}
       <span aria-hidden>·</span>{" "}
       <span title={t("signature.engineRole")}>{t("signature.poweredBy", { engine: ENGINE_NAME })}</span>{" "}
+      <span aria-hidden>·</span>{" "}
+      <a href={APP_WEBSITE_URL} target="_blank" rel="noopener noreferrer" className="rounded-sm transition-colors hover:text-white/60 focus-visible:text-white/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60">
+        {new URL(APP_WEBSITE_URL).host}
+      </a>{" "}
       <span aria-hidden>·</span>{" "}
       <a
         href={APP_REPOSITORY_URL}

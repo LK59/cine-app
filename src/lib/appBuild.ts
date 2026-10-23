@@ -47,3 +47,5 @@ export const APP_NAME = "Laterna";
 export const ENGINE_NAME = "Lumen";
 export const APP_AUTHOR = "LK59";
 export const APP_REPOSITORY_URL = "https://github.com/LK59/cine-app";
+/** Le site du projet, sa vitrine (23/10/2026) : ce qu'est Laterna, comment l'installer. */
+export const APP_WEBSITE_URL = "https://laterna.fr";
