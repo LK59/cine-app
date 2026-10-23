@@ -6423,3 +6423,27 @@ le principal, jamais sans principal. **Porteurs.** `secondSurvives`, `secondAllo
 génération dans `chooseSecond`) : le natif seul (§70, §87). `subtitleSwitches` et `reportPositionNow`
 sur le second : le serveur seul (§87). **Laissé.** Un second refusé : le natif rappelle quand même
 `rememberDual` (la même mémoire réécrite), le serveur non — invisible, non tranché.
+
+## 116. Les écarts entre les copies du lecteur, corrigés
+
+L'audit des fusions du 23/10/2026 (§115) a laissé de côté, sans les corriger, les écarts trouvés
+entre les copies d'une règle. Ceux que le propriétaire a validés sont corrigés ici, un commit chacun,
+chacun prouvé par un test qui échouait avant. Tests : `PlayerHost-correctifs-23-10.test.tsx`
+(serveur), `ExperimentalPlayerHost-correctifs-23-10.test.tsx` (natif), et la règle qui empêche
+chaque écart de revenir dans `decisions-partagees.test.ts` (« les écarts entre les copies du
+lecteur, corrigés »).
+
+### Fermer pendant qu'un saut charge : la cible du saut (audit F1-4)
+
+**Règle.** La position de la ligne `stop` et du rapport à Jellyfin (battements, arrêt) est la cible
+d'un saut en cours — celle que les commandes ont demandée et pas encore atteinte, sinon celle vers
+laquelle l'élément cherche (`seeking`) —, la position suivie sinon. **Porteur.** `intendedPosition`
+(`src/components/player/session/intendedPosition.ts`). **Appelants.** `HostSeek.intendedPosition`
+(natif, avec la cible demandée), `positionNow` de `ActivePlayer` (serveur, sans cible demandée :
+`usePlaybackSession`, `useServerSessionRecord`, la position de la bascule allégée). **Avant.** Le
+serveur rapportait `lastKnownTime`, que `timeupdate` ne bouge plus tant que l'élément n'a pas d'image :
+fermé pendant un saut qui charge, la position d'avant le saut partait au journal et à Jellyfin, et
+« Reprendre » y revenait. Le natif l'avait corrigé le 22/09/2026. **Différent exprès.** Le serveur
+n'a pas de cible demandée : ses commandes posent `currentTime` sur l'élément, qui la dit aussitôt.
+**Laissé.** Les autres lectures de `lastKnownTime` du serveur (changement de piste, relais, diffusion,
+minuterie) — hors de ce correctif.

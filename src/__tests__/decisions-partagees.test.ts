@@ -1564,3 +1564,16 @@ describe("les doublons du lecteur fusionnés : une règle, un endroit (§115)", 
     expect(lecteurQui(/id === primary \|\| primary === null|primary === null \|\| id === primary/)).toEqual(["src/components/player/session/dualSubtitleRules.ts"]);
   });
 });
+
+describe("les écarts entre les copies du lecteur, corrigés (§116)", () => {
+  // DECISIONS.md §116. Chaque écart que l'audit des fusions (23/10/2026) a trouvé entre les copies
+  // d'une règle, corrigé une fois validé, garde ici la forme qui l'empêche de revenir.
+  it("la position du bilan et du rapport à Jellyfin passe par intendedPosition, pour les deux lecteurs", () => {
+    const MODULE = "src/components/player/session/intendedPosition.ts";
+    expect(lecteurQui(/\.seeking && Number\.isFinite\([^)]*currentTime\)/)).toEqual([MODULE]);
+    expect(lire("src/lib/hostSeek.ts")).toMatch(/return intendedPosition\(this\.requested,/);
+    expect(codeDe(SERVEUR)).toMatch(/intendedPosition\(null, videoRef\.current, lastKnownTime\.current\)/);
+    // Le bilan du serveur ne lit plus la position connue seule.
+    expect(sansCommentaires(lire("src/components/player/server/useServerSessionRecord.ts"))).not.toMatch(/lastKnownTime/);
+  });
+});

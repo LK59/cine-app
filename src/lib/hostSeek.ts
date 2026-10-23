@@ -1,4 +1,5 @@
 import { seekArrived } from "@/lib/webcodecs/seekArrival";
+import { intendedPosition } from "@/components/player/session/intendedPosition";
 
 /**
  * Les sauts vus par l'hôte natif : ce que le spectateur a demandé et pas encore atteint, et la
@@ -78,12 +79,11 @@ export class HostSeek {
    * Où en est le film selon ce que le spectateur a demandé, pas seulement selon ce qu'il a vu.
    *
    * Un saut lancé par autre chose que les commandes (le système, la télécommande) : l'élément dit
-   * déjà où il va, la position lue ne le saura qu'une fois le saut fini.
+   * déjà où il va, la position lue ne le saura qu'une fois le saut fini. La règle est commune aux
+   * deux lecteurs (`intendedPosition`, `player/session/`) ; seul le natif connaît la cible demandée.
    */
   intendedPosition(element: { seeking: boolean; currentTime: number } | null, position: number): number {
-    if (this.requested !== null) return this.requested;
-    if (element?.seeking) return element.currentTime;
-    return position;
+    return intendedPosition(this.requested, element, position);
   }
 
   /**

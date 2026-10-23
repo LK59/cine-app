@@ -20,7 +20,7 @@ import type { SessionTally, WatchedClock } from "@/lib/playerSessionTally";
 export function useServerSessionRecord({
   videoRef,
   logContext,
-  lastKnownTime,
+  positionNow,
   watched,
   tallyRef,
   subtitleSwitchesRef,
@@ -41,7 +41,8 @@ export function useServerSessionRecord({
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   logContext: RefObject<ServerPlayerContext>;
-  lastKnownTime: RefObject<number>;
+  /** La position du bilan : la cible d'un saut en cours, sinon la position connue (`intendedPosition`). */
+  positionNow: () => number;
   watched: WatchedClock;
   tallyRef: RefObject<SessionTally>;
   subtitleSwitchesRef: RefObject<number>;
@@ -87,7 +88,7 @@ export function useServerSessionRecord({
       // La reprise (LECTEUR-2) : ce que l'image à la position demandée a coûté, sous `diag` avec le lien.
       const resumeDiag = startupRef.current?.resumeFields() ?? {};
       const diagFields = Object.keys(resumeDiag).length ? { diag: { ...("diag" in linkDiag ? linkDiag.diag : {}), ...resumeDiag } } : linkDiag;
-      return { ...diagFields, ...(startupRef.current?.fields(true) ?? {}), ...serverStopFields(logContext.current, why, lastKnownTime.current, consume ? watched.take(now) : watched.seconds(now), {
+      return { ...diagFields, ...(startupRef.current?.fields(true) ?? {}), ...serverStopFields(logContext.current, why, positionNow(), consume ? watched.take(now) : watched.seconds(now), {
         ...sleepTimerLogFields(sleepTimerStore.get()),
         duration: video?.duration,
         ended: video?.ended ?? false,
@@ -103,7 +104,7 @@ export function useServerSessionRecord({
       ...(reloadGapRef.current !== null ? { reloadGapMs: reloadGapRef.current } : {}),
       ...(lighterClearedRef.current ? { lighterCleared: true } : {}) };
     },
-    [watched, videoRef, linkMeterRef, streamNeedRef, startupRef, logContext, lastKnownTime, tallyRef, subtitleSwitchesRef, restartsRef, errorRef, sessionPlayedRef, sessionStartedAtRef, slowLogRef, switchGapRef, reloadGapRef, lighterClearedRef]
+    [watched, videoRef, linkMeterRef, streamNeedRef, startupRef, logContext, positionNow, tallyRef, subtitleSwitchesRef, restartsRef, errorRef, sessionPlayedRef, sessionStartedAtRef, slowLogRef, switchGapRef, reloadGapRef, lighterClearedRef]
   );
   /** La main est rendue au lecteur natif (fin de diffusion) : la copie gardée n'a plus lieu d'être. */
   const markHandedOver = useCallback(() => {

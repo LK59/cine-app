@@ -97,6 +97,7 @@ import { SessionTally, WatchedClock, newPlayerSessionId, watchElementWaits } fro
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
 import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
 import { recordsResume } from "@/components/player/session/habitWatch";
+import { intendedPosition } from "@/components/player/session/intendedPosition";
 import { startServerTitleSession, type ServerTitleRefs } from "@/components/player/server/serverTitleSession";
 import { noteWatching, openingPosition } from "@/lib/resumeRewind";
 import { resolveResumeAt } from "@/lib/resumePosition";
@@ -453,6 +454,13 @@ function ActivePlayer({
   // oubliait la position, le film quittait « Reprendre », et cliquer sur « Reprendre » pour se
   // raviser aussitôt effaçait donc précisément ce qu'on venait de vouloir reprendre.
   const lastKnownTime = useRef(initialResumeAt ?? 0);
+  /**
+   * La position du bilan `stop` et du rapport à Jellyfin : pendant un saut qui charge, sa cible —
+   * `lastKnownTime` ne bouge plus tant que l'élément n'a pas d'image, et fermer à ce moment rapportait
+   * la position d'avant le saut (« Reprendre » y revenait). La règle du natif (22/09/2026), commune
+   * depuis le 23/10/2026 (`intendedPosition`, §115).
+   */
+  const positionNow = useCallback(() => intendedPosition(null, videoRef.current, lastKnownTime.current), []);
   /** La reprise que l'élément n'a pas encore prise — reposée sur le téléviseur s'il la manque. */
   const [castResume] = useState(() => new CastResume());
   const loadWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -849,7 +857,8 @@ function ActivePlayer({
   const playMethod = playbackInfo?.playMethod ?? "Transcode";
 
   const { stop: stopPlaybackNow, resume: resumePlaybackSession, savePaused, reportNow: reportPositionNow } = usePlaybackSession(
-    useCallback(() => lastKnownTime.current, []),
+    // La cible d'un saut en cours plutôt que la position d'avant — voir `positionNow`.
+    positionNow,
     // Named as this app rather than as its engine: this player hands the file to Jellyfin, which
     // is what the server's own dashboard should show.
     // Rien pour un banc d'essai, comme le lecteur natif : il saute à la fin des films, et ses
@@ -903,7 +912,7 @@ function ActivePlayer({
   const { stopFields, markHandedOver, stopAlreadySent, reportStop } = useServerSessionRecord({
     videoRef,
     logContext,
-    lastKnownTime,
+    positionNow,
     watched,
     tallyRef,
     subtitleSwitchesRef,
@@ -2153,13 +2162,10 @@ function ActivePlayer({
       // Pendant un saut, la cible du saut : la position connue ne bouge plus (`timeupdate` l'ignore tant
       // que l'élément n'a pas d'image), et un saut resté sans image se préchauffait puis basculait à la
       // position d'avant le saut — le spectateur revenait en arrière de tout ce qu'il avait sauté (13/10/2026).
-      position: () => {
-        const video = videoRef.current;
-        return video?.seeking && Number.isFinite(video.currentTime) ? video.currentTime : lastKnownTime.current;
-      },
+      position: positionNow,
       seekSignal: setSeekSignal,
     } satisfies SlowLinkHost);
-  }, [runner, itemId, startPlayback, t, noteLighterOrigin]);
+  }, [runner, itemId, startPlayback, t, noteLighterOrigin, positionNow]);
 
   /**
    * Les saccades en pleine lecture (§78) : un problème visible (`StutterWatch`). `decidePlayback` :
