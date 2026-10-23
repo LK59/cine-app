@@ -119,6 +119,7 @@ import { useServerSessionWaits } from "@/components/player/server/useServerSessi
 import { useRebufferBadge } from "@/components/player/server/useRebufferBadge";
 import { useElementErrorLadder } from "@/components/player/server/useElementErrorLadder";
 import type { StartOpts } from "@/components/player/server/startOpts";
+import { negotiationBody } from "@/components/player/server/negotiationBody";
 import {
   CastAudioWarning,
   CastInterruptedScreen,
@@ -1284,38 +1285,19 @@ function ActivePlayer({
         // L'indice tactile : cette négociation annonce la séance à Jellyfin, sous le nom de
         // l'appareil — un iPad s'y nommerait « Mac » sans lui (`deviceLabel.ts`).
         headers: { "Content-Type": "application/json", ...touchHintHeaders() },
-        body: JSON.stringify({
-          itemId,
-          // Abaissé seulement en version allégée (§78) : le palier de ce titre, demandé par le
-          // spectateur ou hérité d'une séance allégée de moins de deux minutes — le serveur en tire
-          // le codec (HEVC ou H.264), le SDR et la largeur maximale. Sans palier, la demande d'avant.
-          maxBitrate: cap.maxBitrate,
-          ...(cap.step ? { lighter: true } : {}),
-          audioStreamIndex: opts?.audioStreamIndex,
-          startTicks: opts?.resumeAt ? Math.floor(opts.resumeAt * 10_000_000) : undefined,
-          codecSupport,
-          disableAudioCodecs,
-          // Le dernier échelon de l'échelle : le son ré-encodé quoi qu'il soit — voir la route.
-          ...(opts?.forceAudioTranscode ? { forceAudioTranscode: true } : {}),
-          // Le recours de l'image : H.264 seul — voir `H264_RUNG`.
-          ...(opts?.videoH264Only ? { videoH264Only: true } : {}),
-          /**
-           * Cette lecture part-elle vers un téléviseur ?
-           *
-           * Le serveur en tire deux conséquences : les sous-titres entrent dans le manifeste — le
-           * récepteur ne voit rien de ce que la page dessine — et l'adresse revient absolue et
-           * signée, puisque c'est lui qui ira la chercher, sans notre cookie.
-           */
-          forCast: castSession,
-          // Lets the server skip its manifest pre-warm for us — see the route. hls.js retries a
-          // slow first manifest patiently; Safari's native pipeline does not, which is who that
-          // pre-warm was built for.
-          nativeHls,
-          // Rien d'annoncé à Jellyfin pour un banc d'essai — voir la route.
-          ...(bench ? { bench: true } : {}),
-          // Ni annonce pour une scène (§91) : la séance s'annoncera si elle devient une lecture.
-          ...(isSceneRef.current() ? { scene: true } : {}),
-        }),
+        body: JSON.stringify(
+          negotiationBody({
+            itemId,
+            cap,
+            opts,
+            codecSupport,
+            disableAudioCodecs,
+            castSession,
+            nativeHls,
+            bench,
+            scene: isSceneRef.current(),
+          })
+        ),
       });
       // Avant la lecture du corps, donc avant setNeedsReauth / setError : l'échec d'une
       // négociation déjà remplacée n'a rien à afficher, c'est la nouvelle qui décide. Sa réussite
