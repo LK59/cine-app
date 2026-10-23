@@ -1,0 +1,11 @@
+[
+  { "key": "exorciste", "kind": "movie", "title": "L'Exorciste", "year": 1973, "why": "Dolby Vision 4K HEVC, six pistes son E-AC3/AC-3 en 1.0 et 5.1 — la référence pathologique", "instable": ["webkit"] },
+  { "key": "dirty-dancing", "kind": "movie", "title": "Dirty Dancing", "year": 1987, "why": "Dolby Vision 4K HEVC avec blocs Matroska sans image (strayUnits), deux AC-3 5.1", "instable": ["webkit"] },
+  { "key": "braveheart", "kind": "movie", "title": "Braveheart", "year": 1995, "why": "TrueHD 7.1 (décodeur WebAssembly) et E-AC3 5.1, Dolby Vision 4K" },
+  { "key": "blanche-neige", "kind": "movie", "title": "Blanche comme neige", "year": 2019, "why": "H.264 SDR, DTS 5.1 seul (décodé puis ré-encodé)" },
+  { "key": "arthur", "kind": "movie", "title": "Arthur et les Minimoys", "year": 2006, "why": "HEVC 1080p SDR, deux FLAC 24 bits 5.1" },
+  { "key": "aftersun", "kind": "movie", "title": "Aftersun", "year": 2022, "why": "MP4 H.264 + AAC stéréo, sous-titres externes" },
+  { "key": "kissing-booth", "kind": "movie", "title": "The Kissing Booth", "year": 2018, "why": "H.264 SDR, deux AC-3 5.1" },
+  { "key": "the-knick", "kind": "series", "title": "The Knick", "year": 2014, "why": "épisode H.264, deux DTS 5.1, épisode suivant" },
+  { "key": "des-gens-bien", "kind": "series", "title": "Des gens bien", "year": 2022, "why": "épisode H.264 en MP2 : refus nommé du remux, relais au lecteur serveur" }
+]
