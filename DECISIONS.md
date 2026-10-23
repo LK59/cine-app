@@ -6275,3 +6275,18 @@ ajoute, à sa place d'avant. **Porteur.** `rebuildLine` (`src/components/player/
 (`useNativeRecovery`, `hiddenMs`). **Tests.** Les empreintes `arriere-plan-…-source-perdue` et
 `reseau-source-perdue-a-repetition…` ; `decisions-partagees` (aucun `reportPlayback("rebuild", {`).
 **Laissé.** `pceRebuild` écrit sa ligne avant de demander `mayRebuild()` (audit F2-3) — décision à part.
+
+### Entrer en coupure (lecteur natif)
+
+**Règle.** Rien si la séance est close ou la main passée (`isOver`) ; sinon la trace, `noteNetworkLost`,
+l'écran « connexion perdue » à la position et sur la piste voulue du moment, la lecture arrêtée.
+**Porteur.** `enterNetworkLost(message, traced, line?)`, `useCallback` de `ExperimentalPlayerHost`.
+**Appelants.** La description du fichier impossible à obtenir (`onError` de SWR), l'erreur réseau du
+moteur (`onError`, `kind === "network"`), l'ouverture impossible (`.catch` du sondage). **Tests.**
+Les empreintes `reseau-…` du natif et « une coupure signalée pendant l'attache… » de
+`ExperimentalPlayerHost.test.tsx` ; `decisions-partagees` (un seul `setNetworkLost({`). **Différent
+exprès.** La phrase de la trace, propre à chaque chemin (figée par les empreintes), passée en
+paramètre. **Laissé.** La ligne `network` et la position gardée (`line`) restent au seul chemin du
+moteur, comme le dit « Ce que chaque couche écrit au journal » (docs/cycle-de-vie-lecteur.md) : un
+pipeline de reconstruction dont l'ouverture échoue faute de réseau n'écrit ni l'une ni l'autre —
+les étendre est une décision à part (audit F2-1). Voir aussi §97.

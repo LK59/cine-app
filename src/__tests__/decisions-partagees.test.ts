@@ -1492,4 +1492,14 @@ describe("les doublons du lecteur fusionnés : une règle, un endroit (§115)", 
     expect(lecteurQui(/reportPlayback\(\s*"rebuild",\s*\{/)).toEqual([]);
     expect(lecteurQui(/path: "remux", reason\b/)).toEqual([HELPERS]);
   });
+
+  /** Combien de fois `motif` apparaît dans tout l'ensemble du lecteur (code sans commentaires). */
+  const occurrences = (motif: RegExp) =>
+    sourcesDuLecteur().reduce((n, f) => n + (sansCommentaires(lire(f)).match(new RegExp(motif.source, "g")) ?? []).length, 0);
+
+  it("le natif entre en coupure par enterNetworkLost seulement", () => {
+    expect(occurrences(/setNetworkLost\(\{/)).toBe(1);
+    expect(occurrences(/lifecycle\.noteNetworkLost\(\)/)).toBe(1);
+    expect((sansCommentaires(lire(entreeDe(NATIF))).match(/enterNetworkLost\(/g) ?? []).length).toBe(3);
+  });
 });

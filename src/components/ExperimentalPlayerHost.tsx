@@ -922,6 +922,35 @@ export function ExperimentalPlayerHost({
     [lifecycle, freezeFrame, restart, intendedPosition]
   );
 
+  /**
+   * Entrer en coupure : l'écran « connexion perdue », à la position et sur la piste du moment —
+   * écrit une seule fois pour ses trois chemins (23/10/2026, DECISIONS.md §115) : la description du
+   * fichier impossible à obtenir (SWR), l'erreur réseau du moteur en pleine lecture, l'ouverture du
+   * fichier impossible. Rien une fois la main passée ou pendant la fermeture : une coupure n'a plus
+   * d'écran à montrer. `traced` : la phrase de la trace, propre à chaque chemin.
+   *
+   * `line` : la ligne `network` et la position gardée — le moteur seulement, « pas pendant le sondage
+   * ou l'attache » (docs/cycle-de-vie-lecteur.md) ; les étendre aux deux autres chemins est une
+   * décision à part.
+   */
+  const enterNetworkLost = useCallback(
+    (message: string, traced: string, line = false) => {
+      if (lifecycle.isOver()) return;
+      trace(traced);
+      lifecycle.noteNetworkLost();
+      if (line) {
+        reportPlayback("network", { ...describeFileRef.current(), reason: message, at: positionRef.current });
+        // La position de la coupure, gardée sur l'appareil : si rien ne repasse avant la fermeture,
+        // elle part au retour du réseau ou au lancement suivant (`unsentPosition.ts`, §78).
+        // Ni pour une scène (§91) : c'est la position que la séance ne doit pas écrire.
+        if (everReadyRef.current && !session.bench && !isSceneRef.current()) saveUnsentPosition(itemId, positionRef.current);
+      }
+      setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
+      setPlaying(false);
+    },
+    [lifecycle, itemId, session.bench]
+  );
+
   // Fetched once and then left alone. The description of a file does not change while it is
   // being watched, and every revalidation handed back a fresh object — which the effect below
   // depends on, so the whole pipeline was torn down and rebuilt behind the viewer's back: a
@@ -950,12 +979,9 @@ export function ExperimentalPlayerHost({
     // `asNetworkFailure`). Posé ici, dans le rappel de SWR, plutôt que par un effet qui lirait
     // l'erreur après coup.
     onError: (cause: unknown) => {
-      if (!isNetworkFailure(cause) || lifecycle.isOver()) return;
+      if (!isNetworkFailure(cause)) return;
       const message = cause instanceof Error ? cause.message : "réseau indisponible";
-      trace(`réseau : description du fichier impossible à obtenir — ${message}`);
-      lifecycle.noteNetworkLost();
-      setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
-      setPlaying(false);
+      enterNetworkLost(message, `réseau : description du fichier impossible à obtenir — ${message}`);
     },
   });
   // Un extrait du test de qualité hors ligne se décrit lui-même (`labSamples.ts`) : sa description
@@ -2241,17 +2267,9 @@ export function ExperimentalPlayerHost({
         }
         // A network failure is not this path's fault and not this path's to fix.
         if (kind === "network") {
-          // Le lecteur a passé la main ou se ferme : une coupure n'a plus d'écran à montrer.
-          if (lifecycle.isOver()) return;
-          trace(`réseau : lecture interrompue — ${message}`);
-          lifecycle.noteNetworkLost();
-          reportPlayback("network", { ...describeFileRef.current(), reason: message, at: positionRef.current });
-          // La position de la coupure, gardée sur l'appareil : si rien ne repasse avant la fermeture,
-          // elle part au retour du réseau ou au lancement suivant (`unsentPosition.ts`, §78).
-          // Ni pour une scène (§91) : c'est la position que la séance ne doit pas écrire.
-          if (everReadyRef.current && !session.bench && !isSceneRef.current()) saveUnsentPosition(itemId, positionRef.current);
-          setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
-          setPlaying(false);
+          // Le lecteur a passé la main ou se ferme : une coupure n'a plus d'écran à montrer
+          // (`enterNetworkLost` le vérifie). Ligne `network` et position gardée : ici seulement.
+          enterNetworkLost(message, `réseau : lecture interrompue — ${message}`, true);
           return;
         }
         // Un AAC à PCE copié tel quel — hors Chromium, comme avant le 10/10/2026 — que ce navigateur
@@ -2363,11 +2381,7 @@ export function ExperimentalPlayerHost({
         // A file that could not even be opened because there is no network is not a file this
         // player cannot play. It gets the waiting screen, like a cut that happens mid-film.
         if (isNetworkFailure(cause)) {
-          if (lifecycle.isOver()) return;
-          trace(`réseau : ouverture impossible — ${message}`);
-          lifecycle.noteNetworkLost();
-          setNetworkLost({ message, at: positionRef.current, audio: wantedAudioRef.current });
-          setPlaying(false);
+          enterNetworkLost(message, `réseau : ouverture impossible — ${message}`);
           return;
         }
         // Un AAC à PCE copié tel quel que ce navigateur refuse PENDANT l'ouverture — avant même que
@@ -2408,7 +2422,7 @@ export function ExperimentalPlayerHost({
   // le temps regardé, 28/09/2026). `stutter` et `runner` aussi (§78) : créés une fois au montage.
   // `zoneHandover` et `handZone` (§93) : le premier créé une fois au montage, le second ne dépend que
   // de lui, de `lifecycle` et de `fallToStable` — stables tous trois.
-  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, chooseSecond, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter, runner, zoneHandover, handZone]);
+  }, [info, infoError, playbackState, fallToStable, restart, session.resumeAt, rebuildCount, showSubtitleAt, showWarning, showPipelineWarning, chooseSubtitle, chooseSecond, lifecycle, seeks, background, reportAudioSwitch, tally, watched, reopenAfterEnd, itemId, session.bench, stutter, runner, zoneHandover, handZone, enterNetworkLost]);
 
   useNativeRecovery({
     path,
