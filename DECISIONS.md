@@ -6527,3 +6527,15 @@ natif garde `lifecycle.noteClosing()`, Chromecast sa garde qui avance aussi sa g
 d'avant et passaient — deux arrêts chez Jellyfin, deux relectures des vues, deux `playback.close`.
 **Voulu.** `closing` reste l'état du fondu (et la garde de la fermeture sur un téléchargement supprimé).
 **Tests.** `offline-player-close-once.test.tsx`.
+
+### Chromecast relit les vues après une scène — laissé, exprès (§91)
+
+**Constat.** Natif et serveur ne relisent pas les vues à la fermeture d'une scène (`refresh:
+!isSceneRef.current()`) ; `ChromecastPlayer` passe `refresh: true`. **Pourquoi ce n'est pas aligné.**
+Ce n'est pas un oubli : §91 exclut la diffusion exprès (« le téléviseur écrit sa propre position »), et
+`ChromecastPlayer` annonce et rapporte la séance à Jellyfin même pendant une scène (sa séance passée à
+`usePlaybackSession` n'est nulle que pour un banc ; il ne tient pas d'horloge de scène). Après une scène
+diffusée, la reprise chez Jellyfin a donc bougé : sans relecture, la fiche et « Reprendre » montreraient
+l'ancienne position — une régression visible. La relecture ne peut suivre la règle des deux autres
+hôtes que si la diffusion d'une scène cesse elle aussi de rapporter sa position : une décision sur §91,
+hors de ce correctif (23/10/2026).
