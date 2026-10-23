@@ -13,7 +13,7 @@ import { trace, traceRecent } from "./trace";
 import { diagInterval, diagNow, diagStallFacts } from "./playbackDiagnosis";
 import { describeNetwork, isNetworkFailure, isReadAbandoned } from "./byteSource";
 import { networkUnstable } from "@/lib/networkTrouble";
-import { isUnreadableZone, type UnreadableZone } from "./unreadableZone";
+import { isUnreadableZone } from "./unreadableZone";
 import { BufferQueue } from "./bufferQueue";
 import { rangeAround } from "./timeRanges";
 import { PlaybackGuard } from "./playbackGuard";
@@ -29,11 +29,11 @@ import {
   NETWORK_TRIM_MARGIN_SECONDS, NETWORK_OUTAGE_GIVE_UP_MS, OUTAGE_STARVED_LEAD_SECONDS, STALL_TIMEOUT_MS, WATCHDOG_MS,
   EVICTION_REFILLS_PER_MINUTE, SOURCE_OPEN_TIMEOUT_MS, MISPLACED_SECONDS, FRUITLESS_APPENDS, PRE_ROLL_SECONDS,
   TRACED_APPENDS, TRACED_APPENDS_PER_SEEK, KEEP_BEHIND_SECONDS, TRIM_SLACK_SECONDS, KEYFRAME_TRIM_MARGIN,
-  ZONE_MARGIN_SECONDS,
 } from "./mseTuning";
 import { frameQuality, playableSpans, spansAll, spansNear } from "./mseSpans";
 import { LossRecord, type SentFragment } from "./mseLossRecord";
-import type { MseCallbacks, RecoveryFacts, UnreadableZoneEvent, UnreadableZoneNotice } from "./mseTypes";
+import { UnreadableZoneHold } from "./mseZoneHold";
+import type { MseCallbacks, RecoveryFacts } from "./mseTypes";
 import { AUDIO_LANE_SHARE, ByteRate, currentSourceBufferQuota, laneBudget, tightest, type BufferBudget } from "./bufferBudget";
 
 // Kept exported from here as well: every caller of these already reaches for this module, and
@@ -176,13 +176,8 @@ export class MseSource {
    * rebuild — its budget, its skip past a place that failed twice — takes over from here.
    */
   private stuck = false;
-  /**
-   * La zone illisible qui tient la lecture (§93) : plus rien n'est lu, la tête finit ce qui est là,
-   * et le relais part à `switchAt`. Levée par un saut qui la quitte.
-   */
-  private zone: UnreadableZoneNotice | null = null;
-  /** Le relais pour une zone est parti : cette source n'a plus rien à faire. */
-  private zoneHanded = false;
+  /** La zone illisible (§93) — voir `UnreadableZoneHold`. */
+  private readonly zones: UnreadableZoneHold;
   /** Où reprendre après `handOver` — voir `position`. */
   private handedOverAt: number | null = null;
   /** For the stall line: where the clock was, since when, and whether this stall was written. */
@@ -243,6 +238,25 @@ export class MseSource {
         return self.audioBuffer;
       },
       stateFacts: (now) => this.stateFacts(now),
+    });
+    this.zones = new UnreadableZoneHold({
+      get destroyed() {
+        return self.destroyed;
+      },
+      get delaySeconds() {
+        return self.delaySeconds;
+      },
+      get anchor() {
+        return self.anchor;
+      },
+      get lead() {
+        return self.lead;
+      },
+      bufferedEnd: () => this.bufferedEnd(),
+      video,
+      remuxer,
+      callbacks,
+      elementState: () => this.elementState(),
     });
   }
 
@@ -653,7 +667,7 @@ export class MseSource {
 
   private async runFill(): Promise<void> {
     // Une zone illisible : le lecteur de fichier est resté devant elle, et il n'y a rien d'autre à lire.
-    if (this.destroyed || this.ended || this.networkHold || this.networkGaveUp || this.zone || this.zoneHanded) return;
+    if (this.destroyed || this.ended || this.networkHold || this.networkGaveUp || this.zones.zone || this.zones.zoneHanded) return;
     // À chaque battement d'horloge aussi, pas seulement après un envoi : une avance bornée par la
     // place du son (`audioRoom`) n'envoie plus rien, et l'arrière qui la bornait ne serait alors
     // retiré qu'une fois l'avance tombée au plancher.
@@ -896,7 +910,7 @@ export class MseSource {
       // même endroit relirait les mêmes zéros, trois fois. Ce qui est déjà là se joue ; la main
       // passe au lecteur serveur à la fin de ce qui est sûr.
       if (isUnreadableZone(error)) {
-        if (this.generation === generation) this.holdAtZone(error);
+        if (this.generation === generation) this.zones.holdAtZone(error);
         return;
       }
       // Une lecture coupée par un saut : ce n'est pas un segment refusé, et il n'y a rien à
@@ -1384,19 +1398,19 @@ export class MseSource {
     // Une zone illisible tient la lecture (§93). Un saut dedans — entre le relais prévu et le
     // premier point d'index qui la suit — passe la main tout de suite, là où il visait ; tout autre
     // saut la quitte : le lecteur de fichier repart d'ailleurs, et la retrouvera s'il y revient.
-    if (this.zone) {
-      const zone = this.zone;
+    if (this.zones.zone) {
+      const zone = this.zones.zone;
       if (playerSeconds >= zone.switchAt && (zone.resumeAfter === null || playerSeconds < zone.resumeAfter)) {
         this.seekState.served(requested);
         this.seekState.drop();
-        this.arriveAtZone(playerSeconds, "saut dans la zone");
+        this.zones.arriveAtZone(playerSeconds, "saut dans la zone");
         return;
       }
-      this.zone = null;
+      this.zones.zone = null;
       trace(`zone illisible quittée par un saut vers ${playerSeconds.toFixed(1)} s`);
-      this.notifyZone({ kind: "left", zone, target: playerSeconds });
+      this.zones.notifyZone({ kind: "left", zone, target: playerSeconds });
     }
-    if (this.zoneHanded) return;
+    if (this.zones.zoneHanded) return;
 
     this.generation += 1;
     this.ended = false;
@@ -1697,7 +1711,7 @@ export class MseSource {
     if (this.destroyed) return;
     // Une zone illisible (§93) : la main est passée, ou elle passe quand la tête arrive au relais —
     // jamais une reprise au bout de ce qui est sûr, qui relirait la zone.
-    if (this.zoneHanded || (this.zone && this.checkZoneArrival())) return;
+    if (this.zones.zoneHanded || (this.zones.zone && this.zones.checkZoneArrival())) return;
     if (!this.video.seeking && this.seekState.intent === null) this.lastPlayedAt = this.video.currentTime;
     // Before anything returns early: a stall is exactly the case where every check below has
     // decided there is nothing to do, and that decision is what the log line has to show.
@@ -2171,69 +2185,6 @@ export class MseSource {
     } catch {
       return null;
     }
-  }
-
-  /**
-   * La lecture en avance vient d'atteindre une zone illisible (§93). Plus rien n'est lu ; ce qui est
-   * dans les tampons se joue jusqu'à la fin de ce qui est sûr (`switchAt`), où la main passe. Rien à
-   * jouer avant — une ouverture, un saut tombé dedans — : tout de suite.
-   */
-  private holdAtZone(error: UnreadableZone): void {
-    if (this.zoneHanded || this.destroyed) return;
-    const delay = this.delaySeconds;
-    const head = this.anchor;
-    const lead = this.lead;
-    const safe = error.safeSeconds + delay - ZONE_MARGIN_SECONDS;
-    const switchAt = lead > ZONE_MARGIN_SECONDS ? Math.max(head, Math.min(safe, this.bufferedEnd() - ZONE_MARGIN_SECONDS)) : head;
-    let resumeAfter: number | null = null;
-    try {
-      const after = this.remuxer.resumeAfterByte(error.byteOffset);
-      resumeAfter = after === null ? null : after + delay;
-    } catch {
-      resumeAfter = null;
-    }
-    this.zone = { message: error.message, byteOffset: error.byteOffset, zoneSeconds: error.seconds + delay, switchAt, resumeAfter };
-    trace(
-      `${error.message} — tête à ${head.toFixed(1)} s, ${lead.toFixed(1)} s d'avance, relais à ${switchAt.toFixed(1)} s` +
-        (resumeAfter !== null ? `, film lisible de nouveau à ${resumeAfter.toFixed(1)} s` : ", aucun point d'index après")
-    );
-    this.notifyZone({ kind: "held", zone: this.zone });
-    this.checkZoneArrival();
-  }
-
-  private notifyZone(event: UnreadableZoneEvent): void {
-    // Une préparation qui lève ne doit pas devenir l'échec de la lecture.
-    try {
-      this.callbacks.onUnreadableZone?.(event);
-    } catch {
-      /* rien */
-    }
-  }
-
-  /** La tête est-elle au relais — ou n'y a-t-il plus rien à jouer avant ? Passe la main si oui. */
-  private checkZoneArrival(): boolean {
-    const zone = this.zone;
-    if (!zone || this.zoneHanded || this.destroyed) return false;
-    if (this.anchor < zone.switchAt && this.lead > 0) return false;
-    this.arriveAtZone(zone.switchAt, "tête arrivée au relais");
-    return true;
-  }
-
-  /** Une fois : la main passe à l'hôte (`onError`, `facts.unreadableZone`), qui relaie au lecteur serveur. */
-  private arriveAtZone(resumeAt: number, why: string): void {
-    const zone = this.zone;
-    if (!zone || this.zoneHanded || this.destroyed) return;
-    this.zoneHanded = true;
-    const head = this.video.currentTime;
-    trace(`zone illisible : ${why} à ${head.toFixed(1)} s — relais à ${resumeAt.toFixed(1)} s ${this.elementState()}`);
-    this.callbacks.onError(zone.message, "playback", {
-      unreadableZone: true,
-      zoneByte: zone.byteOffset,
-      zoneSeconds: Math.round(zone.zoneSeconds * 10) / 10,
-      resumeAt: Math.round(resumeAt * 1000) / 1000,
-      at: Math.round(head * 10) / 10,
-      ...(zone.resumeAfter !== null ? { resumeAfter: Math.round(zone.resumeAfter * 10) / 10 } : {}),
-    });
   }
 
   /**
