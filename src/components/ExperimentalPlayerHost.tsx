@@ -1713,9 +1713,16 @@ export function ExperimentalPlayerHost({
      * deux appelants — l'erreur du moteur et l'échec de l'ouverture — dont la garde avait déjà dû
      * être corrigée deux fois à l'identique (`a69ecaa6`). Seul `refused` les distingue au journal :
      * « refusée » ou « refusée à l'ouverture ».
+     *
+     * La main passée ou la fermeture en cours : le refus est retenu (c'est un fait sur ce navigateur),
+     * mais rien n'est écrit ni reconstruit — la règle de `c1a8160c`, que `dropDialogue` et
+     * `revertFailedSwitch` suivaient déjà. Jusqu'au 23/10/2026 (audit F2-3, §116), la ligne `rebuild`
+     * partait, puis `restart` refusait (« reprise refusée ») : une reconstruction écrite qui n'a
+     * jamais eu lieu.
      */
     const pceRebuild = (message: string, refused: string): boolean => {
       if ((!everReadyRef.current || pendingSwitchRef.current) && !pipelineShowedPicture && !pceRebuildRef.current && takePceCopyRefusal(message)) {
+        if (!lifecycle.mayRebuild()) return true;
         pceRebuildRef.current = true;
         const at = positionRef.current || startSeconds;
         reportPlayback("rebuild", rebuildLine(describeFileRef.current(), `copie AAC à PCE ${refused} — ${message}`, at));

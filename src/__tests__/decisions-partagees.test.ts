@@ -1605,6 +1605,16 @@ describe("les écarts entre les copies du lecteur, corrigés (§116)", () => {
     expect(attentes).toMatch(/hasPlayedOnceRef\.current/);
   });
 
+  it("chaque reconstruction avant la première image du natif demande mayRebuild() avant d'écrire (F2-3)", () => {
+    const natif = sansCommentaires(lire(entreeDe(NATIF)));
+    for (const nom of ["dropDialogue", "pceRebuild"]) {
+      const corps = natif.slice(natif.indexOf(`const ${nom} = (`));
+      const garde = corps.indexOf("lifecycle.mayRebuild()");
+      const ligne = corps.indexOf('reportPlayback("rebuild"');
+      expect([nom, garde > 0 && garde < ligne]).toEqual([nom, true]);
+    }
+  });
+
   it.each(HOTES)("%s rapporte la lecture au registre des tentatives par habitWatch (§67)", (hote) => {
     // Plus d'appel en ligne dans un écouteur : la position passe par l'option de `habitWatch`.
     expect([hote, /habitWatch\(\{[\s\S]*?notePosition: \(seconds\) => [\w.]*retries\.notePosition\(seconds\)/.test(codeDe(hote))]).toEqual([hote, true]);

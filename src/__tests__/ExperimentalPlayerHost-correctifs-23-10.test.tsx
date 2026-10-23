@@ -151,6 +151,7 @@ vi.mock("@/lib/webcodecs/remuxPlayback", () => ({
 
 import { noteWatching } from "@/lib/resumeRewind";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
+import * as pce from "@/lib/webcodecs/aacPceProbe";
 
 function info(over: Info = {}): Info {
   return {
@@ -322,5 +323,45 @@ describe("« a renoncé » ne vaut que pour une séance qui n'a jamais joué (F1
     unmount();
     await waitFor(() => expect(logged("stop")).toHaveLength(1));
     expect(typeof logged("stop")[0].fields.gaveUpAfterMs).toBe("number");
+  });
+});
+
+describe("la reconstruction PCE demande d'abord si elle peut encore reconstruire (F2-3)", () => {
+  // La règle de c1a8160c (27/09/2026) : qui prépare une reconstruction demande `mayRebuild()` avant
+  // d'écrire quoi que ce soit — `dropDialogue` et `revertFailedSwitch` le font. `pceRebuild`, venu
+  // après, écrivait sa ligne `rebuild` puis laissait `restart` refuser (« reprise refusée ») : une
+  // ligne pour une reconstruction qui n'a jamais eu lieu, après la main passée.
+  const REFUSED = "Le navigateur a refusé une opération sur le tampon. (MediaSource closed, élément code 4, readyState 0, réseau 3)";
+  afterEach(() => {
+    pce.__testing.reset();
+    localStorage.clear();
+  });
+
+  it("un refus du PCE après la main passée : ni ligne rebuild, ni reconstruction", async () => {
+    pce.__testing.reset();
+    // Ce pipeline ne donne jamais d'image.
+    nextProbe = () => ({ path: "remux", start: () => new Promise(() => {}), discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    // Une première panne passe la main au lecteur serveur…
+    act(() => probes[0].onError("panne du décodeur"));
+    await waitFor(() => expect(logged("fallback")).toHaveLength(1));
+    // … puis le même pipeline, qui avait copié le PCE tel quel, signale le refus de sa copie.
+    pce.notePceDecision("copy", true, pce.PROBE_ASC);
+    act(() => probes[0].onError(REFUSED));
+    await act(async () => {});
+    expect(logged("rebuild")).toEqual([]);
+    expect(probes).toHaveLength(1);
+  });
+
+  it("[témoin] avant la main passée, le refus reconstruit une fois en décodant, avec sa ligne", async () => {
+    pce.__testing.reset();
+    nextProbe = () => ({ path: "remux", start: () => new Promise(() => {}), discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    pce.notePceDecision("copy", true, pce.PROBE_ASC);
+    act(() => probes[0].onError(REFUSED));
+    await waitFor(() => expect(probes).toHaveLength(2));
+    expect(logged("rebuild")).toHaveLength(1);
   });
 });

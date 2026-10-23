@@ -6278,7 +6278,7 @@ ajoute, à sa place d'avant. **Porteur.** `rebuildLine` (`src/components/player/
 (`attempt`, `skipped`, `backgroundFacts`, `lossReport`), la source fermée en arrière-plan
 (`useNativeRecovery`, `hiddenMs`). **Tests.** Les empreintes `arriere-plan-…-source-perdue` et
 `reseau-source-perdue-a-repetition…` ; `decisions-partagees` (aucun `reportPlayback("rebuild", {`).
-**Laissé.** `pceRebuild` écrit sa ligne avant de demander `mayRebuild()` (audit F2-3) — décision à part.
+**Laissé.** `pceRebuild` écrit sa ligne avant de demander `mayRebuild()` (audit F2-3) — décision à part — faite, §116.
 
 ### Entrer en coupure (lecteur natif)
 
@@ -6503,3 +6503,15 @@ première image pour le serveur ; le serveur n'a pas de ligne `seek` ni de `resu
 avant la première image d'une renégociation n'y est comptée nulle part). **Empreinte.**
 `serveur/sauts-et-pause-sauts-clavier-bouton-10-en-pause.txt` : `seekWaitMs` des `stop` — voir le commit
 des empreintes qui suit.
+
+### La reconstruction PCE demande `mayRebuild()` avant d'écrire (audit F2-3)
+
+**Règle.** Qui prépare une reconstruction avant la première image demande `lifecycle.mayRebuild()`
+avant d'écrire quoi que ce soit (la règle de `c1a8160c`, 27/09/2026). **Porteur.** `pceRebuild`
+(`ExperimentalPlayerHost`, local à l'effet du pipeline), comme `dropDialogue` et `revertFailedSwitch`.
+**Avant.** `pceRebuild`, venu après la règle, écrivait sa ligne `rebuild` puis laissait `restart`
+refuser (« reprise refusée ») : une ligne au journal pour une reconstruction qui n'a jamais eu lieu,
+après la main passée ou pendant le fondu de fermeture. **Voulu.** Le refus du PCE reste retenu
+(`takePceCopyRefusal`, avant la garde) : c'est un fait sur ce navigateur, que la prochaine ouverture
+doit connaître. Le message est rendu comme traité (`true`) : la main est déjà passée, rien d'autre à
+faire. **Laissé.** `failOver` (audit F2-4), non tranché.
