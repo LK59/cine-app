@@ -661,6 +661,7 @@
       "appSessions": "App-Sitzungen ({n})",
       "unknownDevice": "Unbekanntes Gerät",
       "sessionDates": "geöffnet {opened} · gesehen {seen}",
+      "twinOf": "Zwilling von „{device}“ (Adresswechsel) – sie werden gemeinsam beendet",
       "devices": "Geräte des Medienservers ({n})",
       "closeHint": "Eine Sitzung zu schließen meldet dieses Gerät von der App ab und widerruft das Token dieser Anmeldung; die anderen Apps der Person bleiben unberührt.",
       "historyHint": "über {n} Tage"

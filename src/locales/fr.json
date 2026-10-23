@@ -661,6 +661,7 @@
       "appSessions": "Sessions de l'application ({n})",
       "unknownDevice": "Appareil inconnu",
       "sessionDates": "ouverte {opened} · vue {seen}",
+      "twinOf": "Jumelle de « {device} » (changement d'adresse) — elles se ferment ensemble",
       "devices": "Appareils du serveur média ({n})",
       "closeHint": "Fermer une session déconnecte cet appareil de l'application et révoque le jeton que cette connexion avait obtenu ; les autres applications de la personne ne sont pas touchées.",
       "historyHint": "sur {n} jours"

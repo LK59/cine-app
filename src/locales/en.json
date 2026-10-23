@@ -661,6 +661,7 @@
       "appSessions": "App sessions ({n})",
       "unknownDevice": "Unknown device",
       "sessionDates": "opened {opened} · seen {seen}",
+      "twinOf": "Twin of “{device}” (address change) — they close together",
       "devices": "Media server devices ({n})",
       "closeHint": "Closing a session signs that device out of the app and revokes the token that sign-in obtained; the person's other apps are untouched.",
       "historyHint": "over {n} days"

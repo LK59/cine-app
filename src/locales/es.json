@@ -661,6 +661,7 @@
       "appSessions": "Sesiones de la aplicación ({n})",
       "unknownDevice": "Dispositivo desconocido",
       "sessionDates": "abierta {opened} · vista {seen}",
+      "twinOf": "Gemela de «{device}» (cambio de dirección): se cierran juntas",
       "devices": "Dispositivos del servidor multimedia ({n})",
       "closeHint": "Cerrar una sesión desconecta ese dispositivo de la aplicación y revoca el token que obtuvo ese inicio de sesión; las demás aplicaciones de la persona no se ven afectadas.",
       "historyHint": "en {n} días"

@@ -48,11 +48,11 @@ export async function POST(req: NextRequest, { params }: Params) {
       case "closeSessions": {
         // Une déconnexion complète, imposée : le jeton Jellyfin de chaque connexion fermée est
         // révoqué avec elle (`jellyfinRevoke.ts`) — il devra se reconnecter.
-        const mine = sessionDb.listForUser(id).map((s) => s.jti);
+        // Une seule session (`jti`) se ferme avec ses jumelles du passage d'adresse (§119) : même
+        // compte, même appareil Jellyfin, donc même jeton. Fermer l'une seule laissait l'autre
+        // ouverte et l'appareil non révoqué (relecture de sécurité du 23/10/2026).
         const closed = body.jti
-          ? mine.includes(body.jti)
-            ? [{ jti: body.jti, jfDevice: sessionDb.delete(body.jti) }]
-            : []
+          ? typeof body.jti === "string" ? sessionDb.deleteWithTwins(id, body.jti) : []
           : sessionDb.deleteForUser(id);
         for (const { jti } of closed) {
           forgetBeat(jti);

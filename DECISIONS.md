@@ -6901,7 +6901,9 @@ porte (`orphanDevices`). La déconnexion ne se rabat sur la révocation par jeto
 ligne existe encore sans appareil connu — une ligne absente est une session déjà fermée (« Déconnecter
 les autres appareils », l'administrateur), et son jeton peut servir encore à une jumelle : rien n'est
 révoqué (relecture du 23/10/2026) ; une session dans ce cas (ouverte avant le 24/09/2026) ne peut pas demander de passage
-(`passage-relogin` : se reconnecter une fois). Le ménage des appareils (`jellyfinDevicePrune`) épargne
+(`passage-relogin` : se reconnecter une fois). Fermer une session depuis l'Activité ferme aussi ses
+jumelles (même compte, même `jf_device` : `sessionDb.deleteWithTwins`), puis révoque l'appareil ; la
+liste des sessions d'un compte dit « Jumelle de … » (`appSessionsOf`, `twinsForUser`). Le ménage des appareils (`jellyfinDevicePrune`) épargne
 déjà tout appareil d'une session vivante (`liveJfDevices`).
 
 **Réglages.** Liste blanche, `PASSAGE_SETTINGS` (`src/lib/passage/settings.ts`), par noms logiques :

@@ -1602,6 +1602,43 @@ export const sessionDb = {
     return rows.map((r) => ({ jti: r.jti, jfDevice: r.jf_device && orphans.has(r.jf_device) ? r.jf_device : null }));
   },
 
+  /**
+   * Fermer une session **et ses jumelles** — les sessions du même compte qui portent le même appareil
+   * Jellyfin, ouvertes par le passage d'adresse (§119). Pour l'Activité : fermer l'une seule laissait
+   * l'autre ouverte sur le même jeton, et l'appareil n'était donc pas révoqué — une « fermeture »
+   * qui ne coupait rien (relecture de sécurité du 23/10/2026). Rend les `jti` fermés, l'appareil
+   * attaché à une seule entrée s'il n'a plus de session (`orphanDevices`). Rien si la session
+   * n'appartient pas à ce compte.
+   */
+  deleteWithTwins(userId: string, jti: string): { jti: string; jfDevice: string | null }[] {
+    const db = getDb();
+    const row = db.prepare("SELECT jf_device FROM sessions WHERE jti = ? AND user_id = ?").get(jti, userId) as { jf_device: string | null } | undefined;
+    if (!row) return [];
+    const rows = row.jf_device
+      ? (db.prepare("SELECT jti FROM sessions WHERE user_id = ? AND jf_device = ?").all(userId, row.jf_device) as { jti: string }[])
+      : [{ jti }];
+    const del = db.prepare("DELETE FROM sessions WHERE jti = ?");
+    db.transaction(() => { for (const r of rows) del.run(r.jti); })();
+    const orphan = orphanDevices([row.jf_device])[0] ?? null;
+    return rows.map((r, i) => ({ jti: r.jti, jfDevice: i === 0 ? orphan : null }));
+  },
+
+  /**
+   * Pour chaque session d'un compte, les autres sessions du même compte sur le même appareil
+   * Jellyfin — ses jumelles du passage (§119). L'Activité les montre, puisqu'elles se ferment ensemble.
+   */
+  twinsForUser(userId: string): Map<string, string[]> {
+    const rows = getDb()
+      .prepare("SELECT jti, jf_device FROM sessions WHERE user_id = ? AND jf_device IS NOT NULL")
+      .all(userId) as { jti: string; jf_device: string }[];
+    const out = new Map<string, string[]>();
+    for (const r of rows) {
+      const twins = rows.filter((o) => o.jf_device === r.jf_device && o.jti !== r.jti).map((o) => o.jti);
+      if (twins.length) out.set(r.jti, twins);
+    }
+    return out;
+  },
+
   countOthers(userId: string, currentJti: string): number {
     const row = getDb().prepare("SELECT COUNT(*) as n FROM sessions WHERE user_id = ? AND jti != ?").get(userId, currentJti) as { n: number };
     return row.n;

@@ -471,6 +471,20 @@ function mediaEntry(item: JellyfinItemLike): MediaEntry {
 type Part<T> = { ok: true; value: T } | { ok: false };
 const part = async <T>(p: Promise<T>): Promise<Part<T>> => p.then((value) => ({ ok: true as const, value }), () => ({ ok: false as const }));
 
+/**
+ * Les sessions de l'application d'un compte, chacune avec l'appareil de ses jumelles du passage
+ * d'adresse (§119) quand elle en a : elles partagent un jeton Jellyfin et se ferment ensemble, la
+ * liste le dit pour qu'une fermeture qui en emporte deux ne surprenne pas.
+ */
+export function appSessionsOf(userId: string) {
+  const list = sessionDb.listForUser(userId);
+  const twins = sessionDb.twinsForUser(userId);
+  return list.map((s) => {
+    const other = twins.get(s.jti)?.map((jti) => list.find((o) => o.jti === jti)).find(Boolean);
+    return { ...s, twinOf: other ? (other.device ?? "") : null };
+  });
+}
+
 export async function accountDetail(id: string, now = Date.now(), clearedAt = alertsClearedAt()) {
   const users = await jellyfin.getUsers().catch(() => [] as JellyfinUser[]);
   const user = users.find((u) => u.Id === id);
@@ -528,7 +542,7 @@ export async function accountDetail(id: string, now = Date.now(), clearedAt = al
     },
     presence: presenceOf(name, now),
     nowPlaying: sessions.ok ? nowPlayingFrom(sessions.value.find((s) => s.UserId === id && s.NowPlayingItem)) : null,
-    appSessions: sessionDb.listForUser(id).map((s) => ({ ...s, jti: s.jti })),
+    appSessions: appSessionsOf(id),
     devices: devices.ok
       ? devices.value
           .filter((d: JellyfinDevice) => d.LastUserId === id || d.LastUserName?.toLowerCase() === lower)

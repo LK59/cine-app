@@ -486,6 +486,11 @@ export function ActivityAccount({ id }: { id: string }) {
                       <span className="text-xs text-subtle">
                         {t("activity.account.sessionDates", { opened: ago(s.createdAt, now, t), seen: ago(s.lastSeenAt, now, t) })}
                       </span>
+                      {s.twinOf !== null && (
+                        <span className="block text-xs text-subtle">
+                          {t("activity.account.twinOf", { device: s.twinOf || t("activity.account.unknownDevice") })}
+                        </span>
+                      )}
                     </span>
                     <ConfirmButton label={t("activity.actions.close")} confirm={t("activity.actions.confirm")} danger onConfirm={() => act("closeSessions", undefined, undefined, s.jti)} />
                   </li>
