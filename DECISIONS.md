@@ -1037,7 +1037,8 @@ de 16 px au repos, qui grandissent jusqu'à 28 px quand on la tire vers le bas.
 **Pourquoi.** Elle était collée en haut de l'écran et carrée, alors que la fiche personne se posait
 déjà en carte arrondie. Et la moitié des titres d'une rangée de saga ouvre la fiche de
 bibliothèque, l'autre moitié la fiche TMDB, sans que rien dans le geste dise laquelle : les deux
-doivent avoir la même forme.
+doivent avoir la même forme. Depuis le 23/10/2026, cela vaut aussi pour « À voir » et « Vu » : mêmes
+mots, mêmes icônes, même ordre, même message (§114.4).
 
 **Porteurs.** `.phone-sheet-frame` (`globals.css` : position et hauteur, dans les unités
 d'`app-viewport`) et `phoneSheetCorner` (`src/lib/sheetMotion.ts`).
@@ -6281,3 +6282,37 @@ partage la série entière, quel que soit l'état de l'épisode « À suivre ».
 perdu son fichier (la condition du film recopiée) ; le bureau la gardait.
 
 **Tests.** `fiche-partager-pastille.test.tsx`, `decisions-partagees.test.ts`.
+
+### 114.4 « À voir » et « Vu » : une forme, un crochet
+
+**Règle.** Sur toute fiche de titre — bibliothèque ou TMDB, bureau ou téléphone —, « À voir » dit
+« À voir » éteint et « Dans ma liste » allumé, avec un plus qui devient un marque-page coché ; « Vu »
+dit « Marquer comme vu » éteint et « Vu » allumé, avec une coche qui devient un cercle coché, et
+annonce son état (`aria-pressed`). L'ordre est celui de la mise en page : au bureau « Vu » puis
+« À voir », au téléphone « À voir » puis « Vu ». Un ajout dit « Ajouté à ma liste », un retrait
+« Retiré de ma liste », d'où qu'ils viennent ; « À voir » est optimiste et ne se grise pas.
+
+**Porteurs.** `WATCHLIST_FACE`, `WATCHED_FACE` et leurs trois dessins `TitleToggleRow` (menu du
+bureau), `TitleToggleIcon` (icône du téléphone), `TitleToggleWide` (bouton de la fiche TMDB au
+téléphone) — `src/components/cinema/TitleToggles.tsx` ; `useWatchlistToggle`
+(`src/lib/useWatchlistToggle.ts`, sur `useAddToWatchlist` et `canJoinWatchlist`) pour l'écriture de
+« À voir ».
+
+**Appelants.** `CinemaMovieDetail`, `CinemaSeriesDetail`, `CinemaMobileDetail`, `PlayerDiscoverSheet`.
+
+**Corrigé le 23/10/2026.** Dans une rangée de saga ou une filmographie, un titre possédé ouvre la fiche
+de bibliothèque et un titre absent la fiche TMDB : le même geste changeait de mots (« Ajouter à ma
+liste »), d'icônes (marque-page, œil barré), de place (la liste avant « Vu » au bureau) et de message
+(« Ajouté à « Ma liste » », par `usePlayerTitleActions.setStatus`, grisé pendant l'écriture). Et le
+bouton « Vu » éteint des fiches de bibliothèque disait « Vu », comme allumé : `cinema.markWatched`
+dit désormais « Marquer comme vu » dans les quatre langues.
+
+**Tests.** `fiche-a-voir-vu-forme.test.tsx` (le vrai dictionnaire français), `fiche-boutons-deux-etats.test.tsx`,
+`decisions-partagees.test.ts`.
+
+**Voulu.** La source de « Vu » reste double (§51) : Jellyfin pour un titre de la bibliothèque
+(`useJellyfinItemState`, qui attend d'avoir lu — d'où l'estompé), la copie locale pour un titre TMDB
+(`useTitleWatched`). L'estompé d'un « Vu » non lu vaut 50 % au bureau, 40 % au téléphone. La fiche
+TMDB du téléphone garde ses boutons pleine largeur sous « Demander » : la mise en page diffère, pas
+la forme des deux gestes. `usePlayerTitleActions.setStatus` reste l'écriture de « Ma liste » hors des
+fiches (le panneau du lecteur, l'ajout à une liste).

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { liquidButtonRef } from "@/lib/liquidGlass/liquid";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
-import { ArrowLeft, Plus, Bookmark, BookmarkCheck, Eye, EyeOff, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, X } from "lucide-react";
+import { ArrowLeft, Plus, Clock, CalendarClock, CircleCheck, CircleAlert, CircleSlash, Play, X } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack, useRouteBehind, useSheetBehind } from "@/lib/cinemaRoute";
 import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
@@ -17,7 +17,7 @@ import { useIsMobile } from "@/lib/useIsMobile";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
 import { SHEET_OUT_MS, sheetMotionClass, detailColumnMotion, phoneSheetCorner, phoneSheetShadow } from "@/lib/sheetMotion";
 import { useSheetExit } from "@/lib/useSheetExit";
-import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
 import {
   HORIZONTAL_VEIL,
   VERTICAL_VEIL,
@@ -34,7 +34,8 @@ import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine, PhoneSheetT
 import { similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaTagline, CinemaDownloading, useRuntimeLabel, useReleaseLabel, DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
 import { FadeInImg } from "@/components/FadeInImg";
-import { ToggleGlyph } from "@/components/ToggleGlyph";
+import { TitleToggleRow, TitleToggleWide, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
+import { useWatchlistToggle } from "@/lib/useWatchlistToggle";
 
 const STATE_ICON: Record<PlayerRequestState, React.ElementType> = {
   unreleased: CalendarClock,
@@ -82,8 +83,15 @@ export function PlayerDiscoverSheet({
   const runtimeLabel = useRuntimeLabel();
   const releaseLabel = useReleaseLabel();
 
-  const { busy, setStatus, request } = usePlayerTitleActions(
+  const { busy, request } = usePlayerTitleActions(
     data ? { tmdbId, type: mediaType, title: data.title, year: data.year, poster: data.poster, rating: data.rating } : null
+  );
+  // « À voir » par le même crochet que les fiches de bibliothèque (`useWatchlistToggle`, §114.4) :
+  // optimiste, et le même message — il passait par `setStatus`, grisé pendant l'écriture et dit
+  // « Ajouté à « Ma liste » ». L'état de départ est celui que la réponse du titre porte.
+  const watchlist = useWatchlistToggle(
+    { mediaType, tmdbId, title: data?.title ?? "", year: data?.year ?? null, posterPath: data?.poster ?? null, voteAverage: data?.rating ?? null },
+    { status: data?.watchlistStatus ?? null }
   );
   // « Demander » passe par une confirmation, la même partout (§95, `useRequestConfirmation`).
   const confirmRequest = useRequestConfirmation(
@@ -177,7 +185,6 @@ export function PlayerDiscoverSheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [isMobile, leaving, showSynopsis, confirmRequest.open]);
 
-  const inList = data?.watchlistStatus === "to_watch";
   /**
    * La distribution, construite une fois par réponse et non à chaque rendu.
    *
@@ -329,26 +336,10 @@ export function PlayerDiscoverSheet({
             </button>
           )}
 
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void setStatus(inList ? null : "to_watch")}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95 disabled:opacity-60"
-          >
-            <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={16} className="text-brand" />} offIcon={<Bookmark size={16} />} />
-            {inList ? t("player.discover.inList") : t("player.discover.addToList")}
-          </button>
-
-          <button
-            type="button"
-            disabled={watchedState.busy}
-            onClick={() => void watchedState.toggle()}
-            aria-pressed={watchedState.watched}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-white transition-transform active:scale-95 disabled:opacity-60"
-          >
-            <ToggleGlyph on={watchedState.watched} onIcon={<Eye size={16} className="text-brand" />} offIcon={<EyeOff size={16} />} />
-            {watchedState.watched ? t("player.discover.watched") : t("player.discover.markWatched")}
-          </button>
+          {/* « À voir » puis « Vu », dans les mots, les icônes et l'ordre de la fiche de bibliothèque du
+              téléphone (`TitleToggles`, §114.4) : rien dans le geste ne dit laquelle des deux s'ouvre. */}
+          <TitleToggleWide face={WATCHLIST_FACE} on={watchlist.inList} onClick={watchlist.toggle} />
+          <TitleToggleWide face={WATCHED_FACE} on={watchedState.watched} onClick={() => void watchedState.toggle()} disabled={watchedState.busy} />
 
 
           <CinemaTagline text={data.tagline} className="mb-1.5" />
@@ -504,34 +495,11 @@ export function PlayerDiscoverSheet({
                 </button>
               )}
 
-              <button
-                data-detail-menu
-                disabled={busy}
-                onClick={() => void setStatus(inList ? null : "to_watch")}
-                className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-              >
-                <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                  <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={14} />} offIcon={<Bookmark size={14} />} />
-                </span>
-                <span className="text-sm font-medium">
-                  {inList ? t("player.discover.inList") : t("player.discover.addToList")}
-                </span>
-              </button>
-
-              <button
-                data-detail-menu
-                disabled={watchedState.busy}
-                onClick={() => void watchedState.toggle()}
-                aria-pressed={watchedState.watched}
-                className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-              >
-                <span className={watchedState.watched ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                  <ToggleGlyph on={watchedState.watched} onIcon={<Eye size={14} />} offIcon={<EyeOff size={14} />} />
-                </span>
-                <span className="text-sm font-medium">
-                  {watchedState.watched ? t("player.discover.watched") : t("player.discover.markWatched")}
-                </span>
-              </button>
+              {/* « Vu » puis « À voir », dans les mots, les icônes et l'ordre des fiches de bibliothèque du
+                  bureau (`TitleToggles`, §114.4) : un titre de saga sur trois ouvre cette fiche, les
+                  autres celle de la bibliothèque, et rien dans le geste ne dit laquelle. */}
+              <TitleToggleRow face={WATCHED_FACE} on={watchedState.watched} onClick={() => void watchedState.toggle()} disabled={watchedState.busy} />
+              <TitleToggleRow face={WATCHLIST_FACE} on={watchlist.inList} onClick={watchlist.toggle} />
 
             </div>
             </div>

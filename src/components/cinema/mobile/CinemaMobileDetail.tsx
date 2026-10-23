@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { BookmarkCheck, Check, CircleCheck, Play, Plus, RotateCcw, Video, X } from "lucide-react";
+import { Check, Play, RotateCcw, Video, X } from "lucide-react";
 import { fetcher, progressKey } from "@/lib/swr";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { useDelayedClose } from "@/lib/useDelayedClose";
@@ -52,7 +52,7 @@ import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts, sheetLeadFacts, 
 import { useFileMissing } from "@/lib/missingFiles";
 import { FadeInImg } from "@/components/FadeInImg";
 import { useImageRetry } from "@/lib/useImageRetry";
-import { ToggleGlyph } from "@/components/ToggleGlyph";
+import { TitleToggleIcon, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
 
 /** Un visage sans personne : ce qui donne sa hauteur à la place tenue de la distribution. */
 const RESERVED_CAST: CinemaCastMember[] = [{ tmdbId: 0, name: "\u00a0", character: "\u00a0", photoUrl: null }];
@@ -647,31 +647,14 @@ export function CinemaMobileDetail({
             with the primary white one above. */}
         <div className="mb-6 flex items-start gap-8">
           {/* Deux coches identiques côte à côte, dont l'une servait à la fois d'« ajouter » et
-              d'« ajouté » : rien ne distinguait les deux boutons ni les deux états. Un plus qui
-              devient un marque-page coché se lit d'un coup d'œil, et le libellé dit l'état. */}
+              d'« ajouté » : rien ne distinguait les deux boutons ni les deux états. « À voir » puis
+              « Vu », la forme de toutes les fiches (`TitleToggles`, §114.4). */}
           {canJoinWatchlist(tmdbId) && (
-            <button type="button" onClick={toggleInList} aria-pressed={inList} data-liquid-pan="icon" className="flex w-16 flex-col items-center gap-1.5">
-              <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={22} className="text-brand" />} offIcon={<Plus size={22} className="text-white" />} />
-              <span className="text-center text-xs leading-tight text-muted">
-                {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
-              </span>
-            </button>
+            <TitleToggleIcon face={WATCHLIST_FACE} on={inList} onClick={toggleInList} />
           )}
           {/* Estompé tant qu'on ignore l'état : proposer « marquer comme vu » sans l'avoir lu,
               c'est proposer d'écrire une valeur qu'on a devinée. */}
-          <button
-            type="button"
-            onClick={toggleWatched}
-            disabled={watchedBusy}
-            aria-pressed={watched}
-            data-liquid-pan="icon"
-            className={`flex w-16 flex-col items-center gap-1.5 ${watchedKnown ? "" : "opacity-40"}`}
-          >
-            <ToggleGlyph on={watched} onIcon={<CircleCheck size={22} className="text-brand" />} offIcon={<Check size={22} className="text-white" />} />
-            <span className="text-center text-xs leading-tight text-muted">
-              {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
-            </span>
-          </button>
+          <TitleToggleIcon face={WATCHED_FACE} on={watched} onClick={toggleWatched} disabled={watchedBusy} unknown={!watchedKnown} />
         </div>
 
         {/* Des visages plutôt qu'une ligne de noms : chacun ouvre la fiche de la personne, posée

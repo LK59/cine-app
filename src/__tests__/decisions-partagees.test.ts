@@ -1514,3 +1514,29 @@ describe("la fiche du téléphone ferme aux mêmes touches que les autres (§114
     expect(code).not.toMatch(/addEventListener\("keydown"/);
   });
 });
+
+describe("« À voir » et « Vu » : une forme, un crochet d'écriture (§114.4)", () => {
+  // Audit du 23/10/2026 : la fiche TMDB et les fiches de bibliothèque disaient le même geste avec
+  // d'autres mots, d'autres icônes, dans un autre ordre, et l'écrivaient par deux crochets.
+  const FICHES = [
+    "src/components/cinema/CinemaMovieDetail.tsx",
+    "src/components/cinema/CinemaSeriesDetail.tsx",
+    "src/components/cinema/mobile/CinemaMobileDetail.tsx",
+    "src/components/player/PlayerDiscoverSheet.tsx",
+  ];
+  it.each(FICHES)("%s dessine ses deux boutons par `TitleToggles`, sans écrire leurs mots", (f) => {
+    const code = sansCommentaires(lire(f));
+    expect([f, /<TitleToggle(Row|Icon|Wide) face=\{WATCHED_FACE\}/.test(code), /<TitleToggle(Row|Icon|Wide) face=\{WATCHLIST_FACE\}/.test(code)]).toEqual([f, true, true]);
+    expect([f, /cinema\.markWatched|cinema\.watchedState|cinema\.inMyList|watchlist\.statuses\.toWatch|player\.discover\.(addToList|inList|watched|markWatched)/.test(code)]).toEqual([f, false]);
+  });
+
+  it("le glyphe qui confirme le geste est posé par `TitleToggles`", () => {
+    expect(sansCommentaires(lire("src/components/cinema/TitleToggles.tsx"))).toContain("<ToggleGlyph on={");
+  });
+
+  it("la fiche TMDB écrit « À voir » par `useWatchlistToggle`, plus par `setStatus`", () => {
+    const code = sansCommentaires(lire("src/components/player/PlayerDiscoverSheet.tsx"));
+    expect(code).toContain("useWatchlistToggle(");
+    expect(code).not.toMatch(/setStatus\(/);
+  });
+});

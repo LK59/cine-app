@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ArrowLeft, BookmarkCheck, Check, CircleCheck, Plus, Video } from "lucide-react";
+import { ArrowLeft, Video } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { formatMinutes } from "@/lib/format";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
@@ -31,7 +31,7 @@ import { useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import { OfflineDownloadControl, OfflinePlayButton, offlinePlayLabels, sharedResumeSeconds, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
-import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
+import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
 import { HORIZONTAL_VEIL, VERTICAL_VEIL, COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal, useSheetGrip } from "@/components/cinema/CinemaDetailLayout";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
@@ -39,7 +39,7 @@ import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival } from "
 import { sheetOverview, sheetRuntimeMinutes, useSheetPlayFacts, sheetLeadFacts } from "@/lib/sheetFacts";
 import { useFileMissing } from "@/lib/missingFiles";
 import { FadeInImg } from "@/components/FadeInImg";
-import { ToggleGlyph } from "@/components/ToggleGlyph";
+import { TitleToggleRow, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
 import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
@@ -488,46 +488,16 @@ export function CinemaMovieDetail({
               />
             )}
 
-            <button
-              data-detail-menu
-              onClick={toggleWatched}
-              disabled={flagsBusy}
-              aria-pressed={watched}
-              // Estompé tant que Jellyfin n'a pas répondu : ce bouton écrit, et proposer d'écrire
-              // une valeur qu'on n'a pas lue est la façon la plus sûre de la changer par erreur.
-              className={`${MENU_ROW} ${MENU_ROW_INACTIVE} ${flagsKnown ? "" : "opacity-50"}`}
-            >
-              <span className={watched ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                <ToggleGlyph on={watched} onIcon={<CircleCheck size={16} />} offIcon={<Check size={14} />} />
-              </span>
-              <span className="text-sm font-medium">
-                {watched ? t("cinema.watchedState") : t("cinema.markWatched")}
-              </span>
-            </button>
+            {/* « Vu » puis « À voir » : la forme de toutes les fiches (`TitleToggles`, §114.4). Estompé
+                tant que Jellyfin n'a pas répondu : ce bouton écrit, et proposer d'écrire une valeur
+                qu'on n'a pas lue est la façon la plus sûre de la changer par erreur. */}
+            <TitleToggleRow face={WATCHED_FACE} on={watched} onClick={toggleWatched} disabled={flagsBusy} unknown={!flagsKnown} />
 
             {/* L'état tient dans la pastille, et non dans la ligne entière.
                 Une ligne pleine d'accent criait plus fort que le repère de sélection lui-même :
                 sur un menu parcouru à la télécommande, la ligne « déjà dans ma liste » avait donc
-                l'air d'être celle qu'on venait de désigner. La pastille change de forme (un plus
-                devient un marque-page coché) et de couleur ; la ligne, elle, reste disponible
-                pour dire ce qu'elle a toujours dit : où l'on se trouve. */}
-            {listable && (
-              <button
-                data-detail-menu
-                onClick={toggleAddToList}
-                aria-pressed={inList}
-                className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}
-              >
-                <span className={inList ? MENU_BADGE_ACTIVE : MENU_BADGE}>
-                  <ToggleGlyph on={inList} onIcon={<BookmarkCheck size={16} />} offIcon={<Plus size={14} />} />
-                </span>
-                {/* Le libellé dit l'état, pas le geste : « À voir » ne distinguait pas un titre
-                    déjà enregistré d'un titre qui ne l'était pas. L'icône, elle, dit le geste. */}
-                <span className="text-sm font-medium">
-                  {inList ? t("cinema.inMyList") : t("watchlist.statuses.toWatch")}
-                </span>
-              </button>
-            )}
+                l'air d'être celle qu'on venait de désigner. */}
+            {listable && <TitleToggleRow face={WATCHLIST_FACE} on={inList} onClick={toggleAddToList} />}
           </div>
 
         </div>
