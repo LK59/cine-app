@@ -6515,3 +6515,15 @@ après la main passée ou pendant le fondu de fermeture. **Voulu.** Le refus du 
 (`takePceCopyRefusal`, avant la garde) : c'est un fait sur ce navigateur, que la prochaine ouverture
 doit connaître. Le message est rendu comme traité (`true`) : la main est déjà passée, rien d'autre à
 faire. **Laissé.** `failOver` (audit F2-4), non tranché.
+
+### Le lecteur hors ligne ne se ferme qu'une fois (§36, §114)
+
+**Règle.** La garde de fermeture d'un hôte est une référence, notée fermée dans l'appel même : un
+second appel dans le même tour (double appui, Retour puis croix) la trouve prise. **Porteur.**
+`claimOnce(ref)` (`src/components/player/playerClose.ts`). **Appelants.** `handleClose` de
+`OfflinePlayerHost` et de `ActivePlayer` (serveur, déplacement pur de sa garde écrite en ligne). Le
+natif garde `lifecycle.noteClosing()`, Chromecast sa garde qui avance aussi sa génération.
+**Avant.** Le hors ligne lisait l'état React `closing` : les deux appels voyaient la valeur du rendu
+d'avant et passaient — deux arrêts chez Jellyfin, deux relectures des vues, deux `playback.close`.
+**Voulu.** `closing` reste l'état du fondu (et la garde de la fermeture sur un téléchargement supprimé).
+**Tests.** `offline-player-close-once.test.tsx`.

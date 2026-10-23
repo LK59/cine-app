@@ -28,7 +28,7 @@ import { OfflineEngine } from "@/lib/offline/offlineEngine";
 import { reportClientError } from "@/lib/reportClientError";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
-import { closePlayerSession } from "@/components/player/playerClose";
+import { claimOnce, closePlayerSession } from "@/components/player/playerClose";
 import { refreshResumeThresholds } from "@/lib/offline/resumeRules";
 import { autoNextDue, downloadNextEpisode, offlineNextTarget, useOnline, watchedThrough } from "@/lib/offline/episodeDownloads";
 import { offlinePlayable, useTrackLabeller } from "@/components/offline/OfflineDownloadControl";
@@ -297,9 +297,15 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
   // La suite commune aux quatre hôtes (`closePlayerSession`, DECISIONS.md §114) — sans ligne `stop` :
   // le lecteur hors ligne n'écrit pas au journal du lecteur. La fiche et « Reprendre » se relisent une
   // fois l'arrêt pris par Jellyfin, comme après le lecteur en ligne.
+  //
+  // La garde est une référence (`claimOnce`), comme au serveur : elle lisait l'état `closing`, et deux
+  // fermetures dans le même tour (double appui, Retour puis croix) passaient toutes les deux — deux
+  // arrêts chez Jellyfin, deux relectures, deux `playback.close` (audit des fusions, 23/10/2026, §116).
+  // `closing` reste ce qu'il est : le fondu.
+  const closedRef = useRef(false);
   const handleClose = useCallback(() => {
     closePlayerSession({
-      claim: () => !closing,
+      claim: () => claimOnce(closedRef),
       leaveFullscreen: true,
       stopReporting,
       setClosing,
@@ -308,7 +314,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
       itemId,
       refresh: true,
     });
-  }, [closing, playback, session.openId, stopReporting, itemId]);
+  }, [playback, session.openId, stopReporting, itemId]);
   usePlayerBackClose(handleClose);
 
   const handleExpand = useCallback(() => playback.expand(), [playback]);

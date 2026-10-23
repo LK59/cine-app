@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, useCallback, useSyncExternalStore
 import { Loader2 } from "lucide-react";
 import { createPortal, flushSync } from "react-dom";
 import { usePlaybackSession, stopOrphanSession } from "@/lib/usePlaybackSession";
-import { advanceTo, closePlayerSession } from "@/components/player/playerClose";
+import { claimOnce, advanceTo, closePlayerSession } from "@/components/player/playerClose";
 import { useSceneMode, isSceneNow, sceneCarryOf, type SceneSession } from "@/lib/sceneMode";
 import { UPSTREAM_UNREACHABLE } from "@/lib/http";
 import { apiErrorText } from "@/lib/apiErrorText";
@@ -962,11 +962,7 @@ function ActivePlayer({
   // (DECISIONS.md §114) ; ce qui est propre au lecteur serveur reste ici — sa garde, et AirPlay.
   const handleClose = useCallback(() => {
     closePlayerSession({
-      claim: () => {
-        if (closedRef.current) return false;
-        closedRef.current = true;
-        return true;
-      },
+      claim: () => claimOnce(closedRef),
       leaveFullscreen: true,
       reportStop: () => reportStop("close"),
       stopReporting: stopPlaybackNow,

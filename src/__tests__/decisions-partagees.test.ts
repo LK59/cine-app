@@ -1615,6 +1615,13 @@ describe("les écarts entre les copies du lecteur, corrigés (§116)", () => {
     }
   });
 
+  it("la garde de fermeture n'est jamais un état React : serveur et hors ligne par claimOnce (§36)", () => {
+    for (const hote of [SERVEUR, "OfflinePlayerHost"]) {
+      expect([hote, /claim: \(\) => claimOnce\(closedRef\)/.test(sansCommentaires(lire(entreeDe(hote))))]).toEqual([hote, true]);
+    }
+    expect(lecteurQui(/claim: \(\) => !closing/)).toEqual([]);
+  });
+
   it.each(HOTES)("%s rapporte la lecture au registre des tentatives par habitWatch (§67)", (hote) => {
     // Plus d'appel en ligne dans un écouteur : la position passe par l'option de `habitWatch`.
     expect([hote, /habitWatch\(\{[\s\S]*?notePosition: \(seconds\) => [\w.]*retries\.notePosition\(seconds\)/.test(codeDe(hote))]).toEqual([hote, true]);

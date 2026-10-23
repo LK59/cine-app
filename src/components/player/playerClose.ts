@@ -10,8 +10,10 @@ import { refreshAfterPlayback } from "@/lib/swr";
  * étapes près. Les étapes qui diffèrent le font exprès, et restent au site d'appel :
  *
  *  * **la garde** est celle de chaque hôte (§36) — `lifecycle.noteClosing()` pour le natif, qui la
- *    range avec sa machine à états ; `closedRef` pour le serveur et la diffusion ; l'état `closing`
- *    pour le hors ligne. Ce module ne la tient pas : il la demande (`claim`) ;
+ *    range avec sa machine à états ; une référence pour le serveur et le hors ligne (`claimOnce`) et
+ *    pour la diffusion, qui y avance aussi sa génération. Ce module ne la tient pas : il la demande
+ *    (`claim`). Jamais un état React : deux appels dans le même tour le liraient tous deux d'avant
+ *    (le hors ligne, jusqu'au 23/10/2026 — §116) ;
  *  * **la ligne `stop`** : le hors ligne n'écrit pas au journal du lecteur ;
  *  * **le téléviseur** (`release`) : l'arrêt AirPlay du serveur, la fin de séance Chromecast ;
  *  * **le fondu** (`setClosing`) : la télécommande Chromecast n'a pas d'image à faire disparaître ;
@@ -54,6 +56,18 @@ export interface PlayerCloseSteps {
   itemId: string;
   /** Relire la fiche, « Reprendre » et les listes — faux après une scène (§91). */
   refresh: boolean;
+}
+
+/**
+ * La garde d'un hôte qui la tient dans une référence : vrai la première fois seulement, et la
+ * référence notée fermée aussitôt — un second appel dans le même tour (double appui, Retour puis
+ * croix) la trouve déjà prise. Un état React ne le permet pas : le second appel lit encore la valeur
+ * du rendu d'avant (le hors ligne, deux arrêts et deux relectures jusqu'au 23/10/2026, §116).
+ */
+export function claimOnce(closed: { current: boolean }): boolean {
+  if (closed.current) return false;
+  closed.current = true;
+  return true;
 }
 
 /** Ferme le lecteur ; faux si la garde de l'hôte a refusé (déjà fermé). */
