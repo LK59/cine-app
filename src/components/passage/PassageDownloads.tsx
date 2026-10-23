@@ -183,25 +183,31 @@ export function PassageDownloadsCleanup() {
   }, [mode]);
   const { old } = useOldAddress();
   const enabled = useOfflineDownloadsEnabled();
-  const [done, setDone] = useState(false);
+  // Une fois par chargement. Une référence et non un état : posé en état, il relançait l'effet, dont
+  // le nettoyage jetait la réponse — les fichiers partaient sans que le mot paraisse (essai de bout en
+  // bout du 23/10/2026).
+  const started = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [freed, setFreed] = useState(0);
   const [closed, setClosed] = useState(false);
   useEffect(() => {
-    if (done || old !== true || !enabled || mode !== "closed" || !deviceStoreSupported()) return;
-    let cancelled = false;
+    if (started.current || old !== true || !enabled || mode !== "closed" || !deviceStoreSupported()) return;
     const timer = setTimeout(() => {
-      setDone(true);
+      started.current = true;
       void freeOldAddressDownloads(() => modeRef.current !== "closed")
         .then((removed) => {
-          if (!cancelled && removed.length) setFreed(removed.length);
+          if (mounted.current && removed.length) setFreed(removed.length);
         })
         .catch(() => undefined);
     }, SHOW_DELAY_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [done, old, enabled, mode]);
+    return () => clearTimeout(timer);
+  }, [old, enabled, mode]);
   const wanted = freed > 0 && !closed && mode === "closed";
   const turn = useFloatingPromptTurn("passage-freed", PROMPT_RANK.passage, wanted);
   useEffect(() => {

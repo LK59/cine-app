@@ -122,7 +122,11 @@ beforeEach(() => {
   resetFloatingPrompts();
   globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     calls.push({ url: String(url), init });
-    if (String(url).startsWith("/api/passage/fetched?")) return Response.json({ fetched });
+    if (String(url).startsWith("/api/passage/fetched?")) {
+      // Une vraie réponse prend du temps : la page a le loisir de se redessiner avant.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return Response.json({ fetched });
+    }
     return Response.json({ ok: true });
   }) as typeof fetch;
 });
@@ -285,17 +289,46 @@ describe("sur l'ancienne adresse : l'effacement", () => {
     expect(removed.map((d) => d.itemId)).toEqual([A]);
   });
 
-  it("le mot « effacés de l'ancienne adresse », seulement là, et pas pendant un film", async () => {
+  it("le mot « effacés de l'ancienne adresse », même quand la page se redessine pendant la question", async () => {
     store.list = [download("j1", A), download("j2", B)];
     fetched = { [A]: "j1", [B]: "j2" };
     env.old = true;
     vi.useFakeTimers();
     render(<PassageDownloadsCleanup />);
+    // Le délai du lancement, puis la réponse du serveur dans un second temps : entre les deux, la
+    // page se redessine (essai de bout en bout du 23/10/2026 : le fichier partait, le mot jamais).
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(2510);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
     });
     expect(document.querySelector("[data-passage-downloads-freed]")?.textContent).toContain("passage.downloads.freedMany");
     expect(store.list).toEqual([]);
+  });
+
+  it("le mot attend la fin d'un film", async () => {
+    store.list = [download("j1", A)];
+    fetched = { [A]: "j1" };
+    env.old = true;
+    env.mode = "full";
+    vi.useFakeTimers();
+    const view = render(<PassageDownloadsCleanup />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(store.remove).not.toHaveBeenCalled();
+    expect(document.querySelector("[data-passage-downloads-freed]")).toBeNull();
+    env.mode = "closed";
+    view.rerender(<PassageDownloadsCleanup />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2510);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(store.remove).toHaveBeenCalledTimes(1);
+    expect(document.querySelector("[data-passage-downloads-freed]")?.textContent).toContain("passage.downloads.freedOne");
   });
 
   it("sur la nouvelle adresse, rien n'est demandé ni effacé", async () => {
