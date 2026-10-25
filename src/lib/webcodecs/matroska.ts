@@ -138,6 +138,44 @@ async function payload(source: ByteSource, element: { offset: number; size: numb
   return source.read(element.offset, element.size);
 }
 
+/** Les entrées d'un SeekHead (`offset`…`end`, sa charge utile), en positions absolues dans `into`. */
+export async function readSeekHead(source: ByteSource, offset: number, end: number, segmentDataStart: number, into: Map<number, number>): Promise<void> {
+  await forEachChild(source, offset, end, async (seek) => {
+    if (seek.id !== ID.Seek) return "continue";
+    let id = 0;
+    let position = -1;
+    await forEachChild(source, seek.offset, seek.offset + (seek.size ?? 0), async (s) => {
+      if (s.id === ID.SeekID) id = readUint(await payload(source, s));
+      if (s.id === ID.SeekPosition) position = readUint(await payload(source, s));
+      return "continue";
+    });
+    if (id && position >= 0) into.set(id, segmentDataStart + position);
+    return "continue";
+  });
+}
+
+/**
+ * Un SeekHead qui renvoie à un second SeekHead : celui du début ne liste que l'autre, rangé en fin de
+ * fichier, qui dit où sont les pistes et l'index. C'est ce que laissent les outils Matroska quand un
+ * en-tête modifié ne tient plus à sa place — les pistes réécrites à la fin, l'ancienne place vidée
+ * (`Void`) —, et la spécification le permet. Sans ce renvoi suivi, trois épisodes de *Barry* (S03E02,
+ * E06, E08) ne livraient « aucune piste lisible » au lecteur comme au contrôle d'intégrité, alors que
+ * ffprobe et Jellyfin les lisent (25/10/2026).
+ *
+ * Un seul saut, et seulement quand il manque quelque chose (`needed`) : un fichier ordinaire, dont
+ * l'en-tête a tout donné, ne paie pas une lecture de plus. Ce que le premier SeekHead a déjà dit
+ * n'est jamais remplacé.
+ */
+export async function followSeekHeadLink(source: ByteSource, segmentDataStart: number, positions: Map<number, number>, needed: boolean): Promise<void> {
+  const at = positions.get(ID.SeekHead);
+  if (!needed || at === undefined || at >= source.size) return;
+  const el = await readElementAt(source, at);
+  if (!el || el.id !== ID.SeekHead || el.size === null) return;
+  const found = new Map<number, number>();
+  await readSeekHead(source, el.offset, Math.min(el.offset + el.size, source.size), segmentDataStart, found);
+  for (const [id, position] of found) if (!positions.has(id)) positions.set(id, position);
+}
+
 async function parseTrackEntry(source: ByteSource, start: number, end: number): Promise<MatroskaTrack | null> {
   const track: MatroskaTrack = {
     number: 0,
@@ -462,18 +500,7 @@ async function readMatroska(source: ByteSource): Promise<MatroskaFile> {
   await forEachChild(source, segmentDataStart, segmentEnd, async (el) => {
     switch (el.id) {
       case ID.SeekHead:
-        await forEachChild(source, el.offset, el.offset + (el.size ?? 0), async (seek) => {
-          if (seek.id !== ID.Seek) return "continue";
-          let id = 0;
-          let position = -1;
-          await forEachChild(source, seek.offset, seek.offset + (seek.size ?? 0), async (s) => {
-            if (s.id === ID.SeekID) id = readUint(await payload(source, s));
-            if (s.id === ID.SeekPosition) position = readUint(await payload(source, s));
-            return "continue";
-          });
-          if (id && position >= 0) seekPositions.set(id, segmentDataStart + position);
-          return "continue";
-        });
+        await readSeekHead(source, el.offset, el.offset + (el.size ?? 0), segmentDataStart, seekPositions);
         return "continue";
 
       case ID.Info: {
@@ -524,6 +551,8 @@ async function readMatroska(source: ByteSource): Promise<MatroskaFile> {
     }
     return "continue";
   });
+
+  await followSeekHeadLink(source, segmentDataStart, seekPositions, file.tracks.length === 0 || file.cues.length === 0);
 
   // Un en-tête sans durée : la durée est dans les étiquettes de chaque piste (`DURATION`), une
   // convention de mkvmerge et de ffmpeg. Lues seulement dans ce cas — elles sont souvent en fin de

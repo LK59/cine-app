@@ -1,6 +1,6 @@
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
 import { forEachChild, readElementAt, readElementId, readUint, readVarSize } from "@/lib/webcodecs/ebml";
-import { parseBlock, type MatroskaFile, type MatroskaTrack } from "@/lib/webcodecs/matroska";
+import { followSeekHeadLink, parseBlock, readSeekHead, type MatroskaFile, type MatroskaTrack } from "@/lib/webcodecs/matroska";
 import { ID } from "@/lib/webcodecs/matroskaIds";
 import { SampleReader } from "@/lib/webcodecs/sampleReader";
 import { languageCode } from "./languages";
@@ -204,20 +204,7 @@ async function readHeader(source: ByteSource): Promise<Header> {
     if (el.size === null) return "continue";
     const end = el.offset + el.size;
     if (el.id === ID.SeekHead) {
-      const head = await YieldingSlice.of(source, el.offset, end);
-      await forEachChild(head, el.offset, end, async (entry) => {
-        if (entry.id !== ID.Seek || entry.size === null) return "continue";
-        let id = 0;
-        let position = -1;
-        await forEachChild(head, entry.offset, entry.offset + entry.size, async (s) => {
-          if (s.size === null) return "continue";
-          if (s.id === ID.SeekID) id = readUint(await head.read(s.offset, s.size));
-          if (s.id === ID.SeekPosition) position = readUint(await head.read(s.offset, s.size));
-          return "continue";
-        });
-        if (id && position >= 0) seek.set(id, file.segmentDataStart + position);
-        return "continue";
-      });
+      await readSeekHead(await YieldingSlice.of(source, el.offset, end), el.offset, end, file.segmentDataStart, seek);
     } else if (el.id === ID.Info) {
       await forEachChild(source, el.offset, end, async (info) => {
         if (info.id === ID.TimestampScale && info.size !== null) file.timestampScaleNs = readUint(await source.read(info.offset, info.size)) || 1_000_000;
@@ -230,6 +217,8 @@ async function readHeader(source: ByteSource): Promise<Header> {
     }
     return "continue";
   });
+  // Un SeekHead qui renvoie à un autre, en fin de fichier — voir `followSeekHeadLink`.
+  await followSeekHeadLink(source, file.segmentDataStart, seek, file.tracks.length === 0 || !cues);
   // Les pistes ou l'index rangés après les images : le SeekHead dit où.
   for (const [id, at] of [[ID.Tracks, seek.get(ID.Tracks)], [ID.Cues, seek.get(ID.Cues)]] as const) {
     if (at === undefined || at >= source.size) continue;

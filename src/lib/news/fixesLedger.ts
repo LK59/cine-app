@@ -664,6 +664,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.0.5",
+    page: "10.0",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Des fichiers dont les pistes avaient été rangées en fin de fichier s'ouvrent de nouveau dans le lecteur de l'app.",
+        en: "Files whose tracks had been moved to the end of the file open again in the app's player.",
+        es: "Los archivos cuyas pistas se habían colocado al final del archivo vuelven a abrirse en el reproductor de la app.",
+        de: "Dateien, deren Spuren ans Dateiende verschoben worden waren, öffnen sich wieder im Player der App.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

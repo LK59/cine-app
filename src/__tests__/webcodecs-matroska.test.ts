@@ -88,7 +88,7 @@ function elUnknownSize(id: number, payload: Uint8Array): Uint8Array {
   return concat(idBytes(id), new Uint8Array([0xff]), payload);
 }
 
-function buildFile(options: { unknownSizeClusters?: boolean; cueShift?: number } = {}): Uint8Array {
+function buildFile(options: { unknownSizeClusters?: boolean; cueShift?: number; linkedSeekHead?: boolean } = {}): Uint8Array {
   const cluster = options.unknownSizeClusters ? elUnknownSize : el;
   const ebmlHeader = el(0x1a45dfa3, el(0x4286, uint(1)));
 
@@ -159,6 +159,32 @@ function buildFile(options: { unknownSizeClusters?: boolean; cueShift?: number }
       0x114d9b74,
       el(0x4dbb, concat(el(0x53ab, idBytes(0x1c53bb6b)), el(0x53ac, uint(cuesPosition, 6))))
     );
+
+  // Le cas des outils qui réécrivent un en-tête trop grand pour sa place : le SeekHead du début ne
+  // renvoie qu'à un second, en fin de fichier ; les pistes sont réécrites à la fin et leur ancienne
+  // place vidée (`Void`). Ainsi sont faits trois épisodes de *Barry* (25/10/2026).
+  if (options.linkedSeekHead) {
+    const seek = (id: number, position: number) => el(0x4dbb, concat(el(0x53ab, idBytes(id)), el(0x53ac, uint(position, 6))));
+    const headLength = el(0x114d9b74, seek(0x114d9b74, 0)).length;
+    const voided = el(0xec, new Uint8Array(tracks.length));
+    const c0 = headLength + info.length + voided.length;
+    const c1 = c0 + cluster0.length;
+    const cues = cuesFor(c0, c1);
+    const cuesAt = c1 + cluster1.length;
+    const tracksAt = cuesAt + cues.length;
+    const tailAt = tracksAt + tracks.length;
+    const payload = concat(
+      el(0x114d9b74, seek(0x114d9b74, tailAt)),
+      info,
+      voided,
+      cluster0,
+      cluster1,
+      cues,
+      tracks,
+      el(0x114d9b74, concat(seek(0x1c53bb6b, cuesAt), seek(0x1654ae6b, tracksAt)))
+    );
+    return concat(ebmlHeader, el(0x18538067, payload));
+  }
 
   const seekHeadLength = seekHeadFor(0).length;
   const cluster0Position = seekHeadLength + info.length + tracks.length;
@@ -260,6 +286,31 @@ describe("parseMatroska", () => {
 
   it("refuses a file that isn't Matroska rather than reading garbage as structure", async () => {
     await expect(parseMatroska(new MemoryByteSource(new Uint8Array([0, 1, 2, 3])))).rejects.toThrow();
+  });
+});
+
+describe("un SeekHead qui renvoie à un autre en fin de fichier", () => {
+  // Les pistes réécrites à la fin, l'ancienne place vidée : le lecteur comme le contrôle d'intégrité
+  // n'y trouvaient « aucune piste lisible », ffprobe et Jellyfin si (Barry S03, 25/10/2026).
+  const linked = () => new MemoryByteSource(buildFile({ linkedSeekHead: true }));
+
+  it("suit le renvoi : les pistes et l'index rangés à la fin sont trouvés", async () => {
+    const file = await parseMatroska(linked());
+    expect(file.tracks.map((t) => t.codecId)).toEqual(["V_MPEGH/ISO/HEVC", "A_EAC3"]);
+    expect(file.cues.map((c) => c.timeUs)).toEqual([0, 5_000_000]);
+    expect(file.durationSeconds).toBe(12);
+  });
+
+  it("lit les images aux positions de l'index suivi", async () => {
+    const file = await parseMatroska(linked());
+    const reader = new SampleReader(linked(), file, file.cues[1].clusterOffset);
+    const first = await reader.next();
+    expect([first?.trackNumber, first?.timestampUs, first?.isKey]).toEqual([1, 5_000_000, true]);
+  });
+
+  it("la recherche de répliques suit le même renvoi", async () => {
+    const { openMatroskaText } = await import("@/lib/repliques/mkvText");
+    await expect(openMatroskaText(linked())).resolves.toBeTruthy();
   });
 });
 
