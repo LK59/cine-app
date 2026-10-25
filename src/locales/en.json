@@ -3646,25 +3646,37 @@
     }
   },
   "passage": {
-    "banner": {
-      "text": "CineApp is now Laterna",
-      "detail": "1 minute · account, settings and downloads come along",
-      "action": "Go",
-      "close": "Close"
-    },
-    "dialog": {
-      "title": "Switch to {host}",
-      "body": "You stay signed in, with this device's settings, and your notifications follow without duplicates.",
-      "codeLabel": "Your transfer code",
-      "codeHint": "Valid for 15 minutes, once. If {host} asks you to sign in, paste this code.",
-      "open": "Copy the code and open {host}",
+    "screen": {
+      "tabTitle": "CineApp is now Laterna",
+      "tabBody": "Same account, same settings: nothing to redo.",
+      "continue": "Continue to Laterna",
+      "busy": "Signing in…",
+      "appTitle": "Install the new Laterna app",
+      "appBody": "This CineApp app has been replaced. 1 minute, follow the steps.",
+      "open": "I've read it, open Laterna",
+      "preparing": "Preparing…",
       "copied": "Code copied",
-      "installedIos": "On iPhone and iPad, the Home Screen app has its own space: open {host} in Safari, add it to your Home Screen (Share, then “Add to Home Screen”), open it, then paste this code.",
-      "preparing": "Preparing the switch…",
-      "relogin": "Sign out and sign in once more on this address, then try again.",
+      "already": "Already have the Laterna icon? Open it, then delete this one.",
+      "relogin": "Sign out and sign in again once here, then try again.",
       "rateLimited": "Too many requests. Try again in an hour.",
-      "error": "The switch couldn't be prepared. Try again.",
-      "close": "Close"
+      "error": "That didn't work. Check your connection and try again.",
+      "step": {
+        "open": "Read everything, then tap the button at the bottom.",
+        "iosSafari": "Tap the compass, bottom right.",
+        "iosShare": "Tap Share",
+        "iosAdd": "then “Add to Home Screen”",
+        "iosOpen": "Open the Laterna icon. If it asks for a code, paste this one:",
+        "androidInstall": "Tap “Install”.",
+        "desktopInstall": "Click “Install” in the address bar.",
+        "openIcon": "Open the Laterna icon.",
+        "remove": {
+          "ios": "Delete the CineApp icon: long-press, “Remove App”.",
+          "android": "Uninstall the CineApp icon: long-press, “Uninstall”.",
+          "desktop": "Uninstall the CineApp app from its ⋮ menu."
+        },
+        "openIos": "Read everything, then tap the button at the bottom. It copies your code.",
+        "iosConfirm": "then “Add”."
+      }
     },
     "page": {
       "title": "Welcome to the new address",

@@ -6951,7 +6951,7 @@ coûte plus rien fait tomber les grands écrans à 4,9 ; un aplat en coûte 2,9.
 
 **Règle.** Sur l'ancienne adresse d'une installation qui en annonce une nouvelle (§118,
 `NEWS_LATERNA_ADDRESS`), un compte du foyer passe à la nouvelle sans mot de passe, connecté, avec les
-réglages de son appareil, et sans recevoir ses notifications deux fois. L'appui (« Y aller » du bandeau,
+réglages de son appareil, et sans recevoir ses notifications deux fois. L'appui (l'écran du passage, `PassageScreen`,
 ou l'adresse dans la carte « Une nouvelle adresse » des Nouveautés) demande au serveur **deux secrets à
 usage unique**, rangés hachés (SHA-256) dans `passages` : un **jeton** de 32 octets
 (`crypto.randomBytes`, deux minutes), placé dans le **fragment** de l'adresse ouverte
@@ -7043,16 +7043,31 @@ partagé).
 
 **Voulu.** Pas de nouvel appareil Jellyfin ni de Quick Connect. Le bandeau ne se montre que sur
 l'ancienne adresse, sous la barre du haut, jamais pendant un film ni tant que l'écran d'accueil du compte
-reste « à faire » (comme l'invitation aux notifications : « Passer » ne l'éteint pas) ; le lien des
-Nouveautés ouvre le passage même refermé. **Refermé, il revient au lancement suivant** (souhait du
-propriétaire, 24/10/2026) : la croix, ou un appui sur « Y aller », le cachent pour la page en cours
-seulement, rien n'est gardé sur l'appareil. Il s'était d'abord refermé pour de bon (10.0.0), puis pour la
-journée (10.0.1 à 10.0.3, avec une génération pour le relancer) : le lendemain du lancement, un seul
-compte sur six avait passé. Les clés de ces versions (`PASSAGE_BANNER_CLOSED_KEYS`) ne sont plus relues
-et s'effacent au montage (`passageFlags.forgetBannerClosed`). Son texte dit l'ancien nom que porte encore
-l'icône de l'écran d'accueil (« CineApp devient Laterna ») et ce que le passage emporte ; « Passer » se
-lisait comme « ignorer » à côté de la croix. Tests : `passage-banner.test.tsx` (croix, « Y aller »,
-anciennes clés effacées).
+reste « à faire » (comme l'invitation aux notifications : « Passer » ne l'éteint pas), et rien sans
+réponse de `/api/passage` — hors connexion, les téléchargements de l'ancienne restent lisibles.
+**Depuis le 25/10/2026 (10.1.0) c'est un écran plein, sans croix** (`PassageScreen`, rendu par
+`PassageBanner`) : le passage est obligatoire sur l'ancienne adresse (souhait du propriétaire). Un
+bandeau refermable l'avait précédé — pour de bon (10.0.0), pour la journée (10.0.1 à 10.0.3), pour le
+lancement (10.0.4) — et deux jours après, des comptes passés rouvraient encore l'ancienne icône,
+d'autres n'avaient jamais essayé. Deux formes, selon `isInstalledApp` :
+- **un onglet** : un seul gros bouton ; l'appui demande le passage et ouvre la nouvelle adresse dans
+  le même onglet (`location.assign`), connecté — rien n'est demandé au serveur avant l'appui ;
+- **l'application installée** : elle est liée à son adresse pour toujours, il faut en installer une
+  autre. Des étapes numérotées, une phrase courte chacune, pour l'appareil qu'on tient (iPhone/iPad :
+  boussole, Partager, « Sur l'écran d'accueil », le code montré en gros, supprimer CineApp ; Android et
+  ordinateur : « Installer », sans code — le navigateur partage la connexion avec l'application qu'il
+  installe), puis **le bouton après la dernière étape** (« J'ai lu, ouvrir Laterna ») : en tête, on
+  touchait l'étape 1 et on quittait l'écran sans avoir lu la suite. Le passage est demandé dès
+  l'affichage, parce que la copie du code et l'ouverture doivent avoir lieu *dans* l'appui.
+Le lien des Nouveautés est pris en charge tant que l'écran est là. Les clés de fermeture du bandeau
+(`PASSAGE_BANNER_CLOSED_KEYS`) ne sont plus relues et s'effacent au montage. Une installation sans
+nouvelle adresse annoncée n'a rien de tout cela. Tests : `passage-banner.test.tsx` (onglet sans
+demande avant l'appui, échec dit sur place, étapes iPhone et code, bouton après les étapes, ailleurs
+sans code, film, accueil, nouvelle adresse, hors connexion, anciennes clés, lien des Nouveautés).
+**« Installée », dans la vue « Changement d'adresse »** (§119.1) se lit dans `installedApp`, envoyé
+avec chaque ouverture depuis le 25/10/2026 (`isInstalledApp`) : `standalone` est vrai aussi dans la vue
+intégrée qu'ouvre le passage sur iPhone, et un compte qui n'avait fait qu'y passer se lisait installé.
+Les lignes d'avant ne comptent que loin (5 min) d'un passage reçu par ce compte (`installedOpening`).
 Depuis l'application installée, la nouvelle adresse s'ouvre dans le navigateur (`window.open`) ; sur
 iPhone, ce navigateur intégré n'est ni Safari ni l'application à venir, d'où le code et la phrase qui le
 dit.

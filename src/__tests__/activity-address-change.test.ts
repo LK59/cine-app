@@ -18,7 +18,7 @@ vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: { getUsers: () => getUsers(
 const news = { laternaAddress: "" };
 vi.mock("@/lib/config", () => ({ config: { news } }));
 
-import { ADDRESS_CHANGE_START, addressChangeRows, addressOf, newHostOf } from "@/lib/activity/addressChange";
+import { ADDRESS_CHANGE_START, addressChangeRows, addressOf, installedOpening, newHostOf } from "@/lib/activity/addressChange";
 
 const NEW = "app.example.org";
 const DAY = 86_400_000;
@@ -77,6 +77,24 @@ describe("le statut de chaque compte", () => {
   it("ne compte pas un passage d'avant le changement", () => {
     const rows = addressChangeRows(["Lucas"], [], [auth("lucas", "passage-requested", ADDRESS_CHANGE_START - DAY)], NEW);
     expect(rows[0].passageRequested).toBeNull();
+  });
+
+  // 25/10/2026 : sur iPhone, la vue intégrée qu'ouvre le passage depuis l'ancienne application se dit
+  // `standalone` — un compte qui n'avait fait qu'y passer se lisait « installé ».
+  it("« installée » : `installedApp` quand la ligne le porte, sinon `standalone` loin d'un passage reçu", () => {
+    const at = after(1);
+    expect(installedOpening({ _t: at, standalone: true, installedApp: false }, [])).toBe(false);
+    expect(installedOpening({ _t: at, standalone: false, installedApp: true }, [])).toBe(true);
+    expect(installedOpening({ _t: at + 60_000, standalone: true }, [at])).toBe(false);
+    expect(installedOpening({ _t: at + 6 * 60_000, standalone: true }, [at])).toBe(true);
+    expect(installedOpening({ _t: at, standalone: false }, [])).toBe(false);
+    const rows = addressChangeRows(
+      ["Nath", "Mathis"],
+      [open("nath", at + 30_000, { host: NEW, standalone: true }), open("mathis", at + DAY, { host: NEW, standalone: true })],
+      [auth("nath", "passage-received", at), auth("mathis", "passage-received", at)],
+      NEW,
+    );
+    expect(Object.fromEntries(rows.map((r) => [r.user, r.status]))).toEqual({ Nath: "moved", Mathis: "movedInstalled" });
   });
 
   it("réduit la nouvelle adresse du réglage à son nom d'hôte", () => {

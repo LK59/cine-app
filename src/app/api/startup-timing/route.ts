@@ -112,6 +112,7 @@ export async function POST(req: NextRequest) {
     // envoyées (`beforeHidden`, persistentCache.ts), et ceci dit pourquoi elles manquent.
     ...(ms(body.hiddenAtMs) !== null ? { hiddenAtMs: ms(body.hiddenAtMs) as number } : {}),
     standalone: body.standalone === true,
+    ...(typeof body.installedApp === "boolean" ? { installedApp: body.installedApp } : {}),
     ...(host ? { host } : {}),
     ...(routes ? { routes } : {}),
     ...continueOf(body),

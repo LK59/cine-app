@@ -3646,25 +3646,37 @@
     }
   },
   "passage": {
-    "banner": {
-      "text": "CineApp heißt jetzt Laterna",
-      "detail": "1 Minute · Konto, Einstellungen und Downloads kommen mit",
-      "action": "Jetzt wechseln",
-      "close": "Schließen"
-    },
-    "dialog": {
-      "title": "Zu {host} wechseln",
-      "body": "Sie bleiben angemeldet, mit den Einstellungen dieses Geräts, und Ihre Benachrichtigungen kommen ohne Doppel mit.",
-      "codeLabel": "Ihr Wechselcode",
-      "codeHint": "15 Minuten gültig, nur einmal. Wenn {host} Sie zur Anmeldung auffordert, fügen Sie diesen Code ein.",
-      "open": "Code kopieren und {host} öffnen",
+    "screen": {
+      "tabTitle": "CineApp heißt jetzt Laterna",
+      "tabBody": "Gleiches Konto, gleiche Einstellungen: nichts neu einzurichten.",
+      "continue": "Weiter zu Laterna",
+      "busy": "Anmeldung…",
+      "appTitle": "Installieren Sie die neue Laterna-App",
+      "appBody": "Diese CineApp-App wurde ersetzt. 1 Minute, folgen Sie den Schritten.",
+      "open": "Gelesen, Laterna öffnen",
+      "preparing": "Wird vorbereitet…",
       "copied": "Code kopiert",
-      "installedIos": "Auf iPhone und iPad hat die App auf dem Home-Bildschirm einen eigenen Bereich: Öffnen Sie {host} in Safari, fügen Sie die Adresse zum Home-Bildschirm hinzu (Teilen, dann „Zum Home-Bildschirm“), öffnen Sie sie und fügen Sie diesen Code ein.",
-      "preparing": "Wechsel wird vorbereitet…",
-      "relogin": "Melden Sie sich ab und einmal neu an dieser Adresse an, dann versuchen Sie es erneut.",
+      "already": "Haben Sie das Laterna-Symbol schon? Öffnen Sie es und löschen Sie dann dieses hier.",
+      "relogin": "Melden Sie sich hier einmal ab und wieder an, dann versuchen Sie es erneut.",
       "rateLimited": "Zu viele Anfragen. Versuchen Sie es in einer Stunde erneut.",
-      "error": "Der Wechsel konnte nicht vorbereitet werden. Versuchen Sie es erneut.",
-      "close": "Schließen"
+      "error": "Das hat nicht geklappt. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+      "step": {
+        "open": "Lesen Sie alles, dann tippen Sie unten auf die Taste.",
+        "iosSafari": "Tippen Sie unten rechts auf den Kompass.",
+        "iosShare": "Tippen Sie auf Teilen",
+        "iosAdd": "dann „Zum Home-Bildschirm“",
+        "iosOpen": "Öffnen Sie das Laterna-Symbol. Fragt es nach einem Code, fügen Sie diesen ein:",
+        "androidInstall": "Tippen Sie auf „Installieren“.",
+        "desktopInstall": "Klicken Sie in der Adressleiste auf „Installieren“.",
+        "openIcon": "Öffnen Sie das Laterna-Symbol.",
+        "remove": {
+          "ios": "Löschen Sie das CineApp-Symbol: lange drücken, „App entfernen“.",
+          "android": "Deinstallieren Sie das CineApp-Symbol: lange drücken, „Deinstallieren“.",
+          "desktop": "Deinstallieren Sie die CineApp-App über ihr ⋮-Menü."
+        },
+        "openIos": "Lesen Sie alles, dann tippen Sie unten auf die Taste. Sie kopiert Ihren Code.",
+        "iosConfirm": "dann „Hinzufügen“."
+      }
     },
     "page": {
       "title": "Willkommen unter der neuen Adresse",

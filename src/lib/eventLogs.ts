@@ -46,6 +46,11 @@ export function logStartupTiming(fields: {
   resumeProgressed?: number;
   standalone: boolean;
   /**
+   * L'application installée, hors de la vue intégrée qu'ouvre un lien de passage (`isInstalledApp`,
+   * 25/10/2026) — `standalone` s'y dit vrai sur iPhone. Absent des lignes d'avant.
+   */
+  installedApp?: boolean;
+  /**
    * Le nom d'hôte par lequel l'application a été ouverte (23/10/2026, DECISIONS.md §119), lu par le
    * serveur (`requestHost`), jamais envoyé par le navigateur : l'ancienne ou la nouvelle adresse.
    * Absent des lignes d'avant, et d'une requête dont l'hôte n'est pas un nom valide.

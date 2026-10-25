@@ -3646,25 +3646,37 @@
     }
   },
   "passage": {
-    "banner": {
-      "text": "CineApp devient Laterna",
-      "detail": "1 minute · compte, réglages et téléchargements suivent",
-      "action": "Y aller",
-      "close": "Fermer"
-    },
-    "dialog": {
-      "title": "Passer à {host}",
-      "body": "Vous restez connecté, avec les réglages de cet appareil, et vos notifications suivent sans doublon.",
-      "codeLabel": "Votre code de passage",
-      "codeHint": "Valable 15 minutes, une seule fois. Si {host} vous demande de vous connecter, collez ce code.",
-      "open": "Copier le code et ouvrir {host}",
+    "screen": {
+      "tabTitle": "CineApp devient Laterna",
+      "tabBody": "Même compte, mêmes réglages : rien à refaire.",
+      "continue": "Continuer sur Laterna",
+      "busy": "Connexion…",
+      "appTitle": "Installez la nouvelle app Laterna",
+      "appBody": "Cette app CineApp est remplacée. 1 minute, suivez les étapes.",
+      "open": "J'ai lu, ouvrir Laterna",
+      "preparing": "Préparation…",
       "copied": "Code copié",
-      "installedIos": "Sur iPhone et iPad, l'app de l'écran d'accueil a son propre espace : ouvrez {host} dans Safari, ajoutez-la à l'écran d'accueil (Partager, puis « Sur l'écran d'accueil »), ouvrez-la, puis collez ce code.",
-      "preparing": "Préparation du passage…",
-      "relogin": "Déconnectez-vous puis reconnectez-vous une fois sur cette adresse, et réessayez.",
+      "already": "Vous avez déjà l'icône Laterna ? Ouvrez-la, puis supprimez celle-ci.",
+      "relogin": "Déconnectez-vous puis reconnectez-vous une fois ici, et réessayez.",
       "rateLimited": "Trop de demandes. Réessayez dans une heure.",
-      "error": "Le passage n'a pas pu être préparé. Réessayez.",
-      "close": "Fermer"
+      "error": "Ça n'a pas marché. Vérifiez votre connexion et réessayez.",
+      "step": {
+        "open": "Lisez tout, puis touchez le bouton en bas.",
+        "iosSafari": "Touchez la boussole, en bas à droite.",
+        "iosShare": "Touchez Partager",
+        "iosAdd": "puis « Sur l'écran d'accueil »",
+        "iosOpen": "Ouvrez l'icône Laterna. Si elle demande un code, collez celui-ci :",
+        "androidInstall": "Touchez « Installer ».",
+        "desktopInstall": "Cliquez sur « Installer » dans la barre d'adresse.",
+        "openIcon": "Ouvrez l'icône Laterna.",
+        "remove": {
+          "ios": "Supprimez l'icône CineApp : appui long, « Supprimer l'app ».",
+          "android": "Désinstallez l'icône CineApp : appui long, « Désinstaller ».",
+          "desktop": "Désinstallez l'app CineApp depuis son menu ⋮."
+        },
+        "openIos": "Lisez tout, puis touchez le bouton en bas. Il copie votre code.",
+        "iosConfirm": "puis « Ajouter »."
+      }
     },
     "page": {
       "title": "Bienvenue sur la nouvelle adresse",

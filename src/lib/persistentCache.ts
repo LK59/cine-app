@@ -1,5 +1,6 @@
 "use client";
 
+import { isInstalledApp } from "@/lib/iosInstall";
 import type { Middleware } from "swr";
 import { MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/catalogueKeys";
 import { geckoVersion } from "@/lib/webcodecs/bufferBudget";
@@ -747,6 +748,10 @@ function reportTiming(): void {
       : {}),
     ...(firstHiddenAt !== null && (timing.networkMs === null || timing.networkMs >= firstHiddenAt) ? { hiddenAtMs: firstHiddenAt } : {}),
     standalone: typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches === true,
+    // L'application installée, vraiment (25/10/2026, DECISIONS.md §119) : `standalone` se dit vrai
+    // aussi dans la vue intégrée qu'ouvre le passage depuis l'ancienne application sur iPhone — la vue
+    // « Changement d'adresse » comptait installé un compte qui n'avait fait qu'y passer.
+    installedApp: isInstalledApp(),
   };
   const send = (storage: Record<string, string | number | boolean>) => {
     try {

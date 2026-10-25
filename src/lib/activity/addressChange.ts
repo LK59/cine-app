@@ -6,6 +6,7 @@
 // la nouvelle, ni qu'il y a installé l'application. Les ouvertures du cinéma (`startup.log`, ligne
 // `ouverture`) portent depuis ce jour le nom d'hôte de la requête (`host`, lu par le serveur) et
 // déjà `standalone` : de quoi le dire compte par compte. Lecture seule, aucun stockage de plus.
+// « Installée » se lit dans `installedApp` depuis le 25/10/2026 — voir `installedOpening`.
 
 import { readRecords, type LogRecord } from "@/lib/activity/logReader";
 import { laternaAddress } from "@/lib/news/pageLaterna";
@@ -76,6 +77,20 @@ export function addressOf(r: Pick<LogRecord, "_t"> & { host?: unknown }, newHost
 
 const max = (a: number | null, b: number): number => (a === null || b > a ? b : a);
 
+/** Une ouverture dans les minutes qui suivent un passage reçu : la vue intégrée de l'ancienne application. */
+const PASSAGE_VIEW_MS = 5 * 60 * 1000;
+
+/**
+ * Une ouverture de l'application installée. `installedApp` le dit depuis le 25/10/2026 ; avant,
+ * seul `standalone` existait, vrai aussi dans la vue intégrée qu'ouvre le passage sur iPhone — une
+ * telle ligne ne compte que loin d'un passage reçu par ce compte.
+ */
+export function installedOpening(r: { _t: number; standalone?: unknown; installedApp?: unknown }, passagesReceived: readonly number[]): boolean {
+  if (typeof r.installedApp === "boolean") return r.installedApp;
+  if (r.standalone !== true) return false;
+  return !passagesReceived.some((at) => r._t >= at && r._t - at <= PASSAGE_VIEW_MS);
+}
+
 /**
  * Le calcul, à partir de lignes déjà lues — pour les tests, des lignes factices. `users` : les
  * comptes du foyer, par nom (le `user` des deux journaux est le nom Jellyfin), comparés sans casse.
@@ -85,6 +100,13 @@ export function addressChangeRows(users: readonly string[], startup: readonly Lo
   for (const user of users) {
     rows.set(user.toLowerCase(), { user, status: "never", lastOld: null, lastNew: null, newInstalled: false, lastUnknown: null, passageRequested: null, passageReceived: null });
   }
+  // Les passages reçus par compte, pour lire les ouvertures d'avant `installedApp` (ci-dessous).
+  const received = new Map<string, number[]>();
+  for (const r of auth) {
+    if (r.kind !== "passage-received") continue;
+    const key = String(r.user ?? "").toLowerCase();
+    received.set(key, [...(received.get(key) ?? []), r._t]);
+  }
   for (const r of startup) {
     if (r.kind !== "ouverture") continue;
     const row = rows.get(String(r.user ?? "").toLowerCase());
@@ -92,7 +114,7 @@ export function addressChangeRows(users: readonly string[], startup: readonly Lo
     const where = addressOf(r, newHost);
     if (where === "new") {
       row.lastNew = max(row.lastNew, r._t);
-      if (r.standalone === true) row.newInstalled = true;
+      if (installedOpening(r, received.get(String(r.user ?? "").toLowerCase()) ?? [])) row.newInstalled = true;
     } else if (where === "old") row.lastOld = max(row.lastOld, r._t);
     else row.lastUnknown = max(row.lastUnknown, r._t);
   }

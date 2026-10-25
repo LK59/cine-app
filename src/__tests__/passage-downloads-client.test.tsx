@@ -21,7 +21,7 @@ vi.mock("@/lib/persistentCache", () => ({ persistedCacheAccount: () => "lea" }))
 vi.mock("@/lib/passage/useOldAddress", () => ({ useOldAddress: () => ({ old: env.old, host: "app.example.org" }) }));
 vi.mock("@/lib/offline/useOfflineEnabled", () => ({ useOfflineDownloadsEnabled: () => env.enabled }));
 vi.mock("@/lib/offline/deviceStore", () => ({ deviceStoreSupported: () => true }));
-// La fenêtre « Passer » : ce qu'elle rassemble est doublé, seule sa phrase est regardée ici.
+// L'écran du passage : ce qu'il rassemble est doublé, seule sa phrase est regardée ici.
 const dialog = vi.hoisted(() => ({ downloads: [] as unknown[] }));
 vi.mock("@/lib/passage/client", () => ({
   collectPassageInput: async () => ({ settings: {}, pushEndpoint: null, downloads: dialog.downloads }),
@@ -62,7 +62,7 @@ import {
 } from "@/lib/passage/offer";
 import { PassageDownloadsCleanup, PassageDownloadsPrompt, PassageDownloadsCard } from "@/components/passage/PassageDownloads";
 import { PassageInstallSteps } from "@/components/passage/PassageInstallHelp";
-import { PassageDialog } from "@/components/passage/PassageDialog";
+import { PassageScreen } from "@/components/passage/PassageScreen";
 import { resetFloatingPrompts, useFloatingPromptTurn, PROMPT_RANK } from "@/lib/floatingPromptTurn";
 
 const A = "a".repeat(32);
@@ -354,10 +354,10 @@ describe("l'aide du passage", () => {
     expect(document.querySelector("[data-passage-downloads-note]")?.textContent).toBe("passage.downloads.again");
   });
 
-  it("la fenêtre « Passer » le dit aussi, seulement avec des téléchargements sur l'appareil", async () => {
+  it("l'écran du passage de l'application installée le dit aussi, seulement avec des téléchargements sur l'appareil", async () => {
     for (const [downloads, expected] of [[[], false], [[carried(A)], true]] as const) {
       dialog.downloads = [...downloads];
-      const view = render(<PassageDialog target="https://app.example.org" onClose={() => {}} />);
+      const view = render(<PassageScreen target="https://app.example.org" installed />);
       await act(async () => {
         await Promise.resolve();
         await Promise.resolve();
