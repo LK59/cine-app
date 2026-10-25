@@ -6,6 +6,7 @@ import { pushDb } from "@/lib/db";
 import { isAllowedPushEndpoint, MAX_PUSH_SUBSCRIPTIONS_PER_USER } from "@/lib/pushEndpoint";
 import { replaceArrivedPushEndpoint } from "@/lib/passage/service";
 import { logError } from "@/lib/logger";
+import { getLocaleFromCookie } from "@/lib/i18n";
 
 async function getUser(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
@@ -36,7 +37,8 @@ export async function POST(req: NextRequest) {
   // iPhone et un Mac se désabonnaient l'un l'autre, et le panneau Compte renvoie l'abonnement à
   // chaque ouverture (23/09/2026). Un abonnement périmé répond 410 au premier envoi, et il est
   // alors supprimé (`shouldRemovePushSubscription`).
-  pushDb.upsert(session.u, endpoint, p256dh, auth);
+  // La langue de l'interface de cet appareil, pour que ses notifications partent dans la sienne.
+  pushDb.upsert(session.u, endpoint, p256dh, auth, getLocaleFromCookie(req.headers.get("cookie") ?? ""));
   // Rien ne bornait le nombre d'abonnements d'un compte, et chaque notification part vers tous.
   pushDb.trimForUser(session.u, MAX_PUSH_SUBSCRIPTIONS_PER_USER, endpoint);
   // Arrivé par le passage d'adresse (DECISIONS.md §119) : l'abonnement que cet appareil avait sur

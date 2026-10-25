@@ -1457,6 +1457,10 @@
       "enabled": "Notifications activées",
       "disable": "Désactiver",
       "enable": "Activer les notifications"
+    },
+    "requestAvailable": {
+      "title": "🎬 Votre demande est disponible",
+      "body": "{title} est maintenant disponible"
     }
   },
   "bazarr": {

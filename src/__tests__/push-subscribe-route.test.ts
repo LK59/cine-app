@@ -19,8 +19,9 @@ vi.mock("@/lib/db", () => ({ pushDb: mockPushDb }));
 const mockReplaceArrived = vi.fn();
 vi.mock("@/lib/passage/service", () => ({ replaceArrivedPushEndpoint: (...a: unknown[]) => mockReplaceArrived(...a) }));
 
-function fakeReq(opts: { cookie?: string; body?: unknown }): NextRequest {
+function fakeReq(opts: { cookie?: string; body?: unknown; lang?: string }): NextRequest {
   return {
+    headers: new Headers(opts.lang ? { cookie: `cine_session=t; cine-lang=${opts.lang}` } : {}),
     cookies: { get: (name: string) => (name === "cine_session" && opts.cookie ? { value: opts.cookie } : undefined) },
     json: async () => opts.body ?? null,
   } as unknown as NextRequest;
@@ -53,7 +54,7 @@ describe("POST /api/push/subscribe", () => {
       body: { endpoint: "https://fcm.googleapis.com/fcm/send/ep", keys: { p256dh: "p", auth: "a" } },
     }));
     expect(res.status).toBe(200);
-    expect(mockPushDb.upsert).toHaveBeenCalledWith("louis", "https://fcm.googleapis.com/fcm/send/ep", "p", "a");
+    expect(mockPushDb.upsert).toHaveBeenCalledWith("louis", "https://fcm.googleapis.com/fcm/send/ep", "p", "a", null);
     // Plafonné à dix appareils, celui-ci toujours gardé.
     expect(mockPushDb.trimForUser).toHaveBeenCalledWith("louis", 10, "https://fcm.googleapis.com/fcm/send/ep");
   });
@@ -87,7 +88,7 @@ describe("POST /api/push/subscribe", () => {
       body: { endpoint: "https://web.push.apple.com/abc", keys: { p256dh: "p", auth: "a" } },
     }));
     expect(mockPushDb.removeByUserEndpointPrefix).not.toHaveBeenCalled();
-    expect(mockPushDb.upsert).toHaveBeenCalledWith("louis", "https://web.push.apple.com/abc", "p", "a");
+    expect(mockPushDb.upsert).toHaveBeenCalledWith("louis", "https://web.push.apple.com/abc", "p", "a", null);
   });
 });
 
@@ -115,5 +116,15 @@ describe("DELETE /api/push/subscribe", () => {
     await DELETE(fakeReq({ cookie: "t", body: {} }));
     expect(mockPushDb.removeByUser).toHaveBeenCalledWith("louis");
     expect(mockPushDb.remove).not.toHaveBeenCalled();
+  });
+});
+
+// 25/10/2026 : la notification part dans la langue de l'appareil, lue au renvoi de l'abonnement.
+describe("POST /api/push/subscribe — la langue de l'appareil", () => {
+  it("garde la langue de l'interface (`cine-lang`) avec l'abonnement", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", role: "admin", jti: "j" });
+    const { POST } = await import("@/app/api/push/subscribe/route");
+    await POST(fakeReq({ cookie: "t", lang: "en", body: { endpoint: "https://web.push.apple.com/x", keys: { p256dh: "p", auth: "a" } } }));
+    expect(mockPushDb.upsert).toHaveBeenCalledWith("louis", "https://web.push.apple.com/x", "p", "a", "en");
   });
 });

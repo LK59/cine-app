@@ -173,6 +173,9 @@ function migrate(db: Database.Database): void {
 
   // Additive migrations — safe to run multiple times
   try { db.exec("ALTER TABLE watchlist ADD COLUMN vote_average REAL"); } catch { /* already exists */ }
+  // La langue de l'interface de l'appareil abonné (25/10/2026) : une notification part dans la langue
+  // de qui la reçoit. Nulle pour un abonnement d'avant, relue au prochain envoi de l'abonnement.
+  try { db.exec("ALTER TABLE push_subscriptions ADD COLUMN lang TEXT"); } catch { /* already exists */ }
   try { db.exec("ALTER TABLE maintenance ADD COLUMN expires_at INTEGER"); } catch { /* already exists */ }
   // « iPhone · Safari » — de quoi reconnaître une session dans le panneau Compte (voir `deviceLabel`).
   try { db.exec("ALTER TABLE sessions ADD COLUMN device TEXT"); } catch { /* already exists */ }
@@ -1101,6 +1104,8 @@ export interface PushSubscription {
   p256dh: string;
   auth: string;
   createdAt: number;
+  /** La langue de l'interface de l'appareil à l'abonnement (`cine-lang`) ; nulle si inconnue. */
+  lang: string | null;
 }
 
 /**
@@ -1109,20 +1114,30 @@ export interface PushSubscription {
  * notifications aux administrateurs ne partaient vers personne, les catégories coupées par un
  * compte partaient quand même, et le journal ne nommait aucun destinataire (29/09/2026).
  */
-const PUSH_COLUMNS = "id, user_id AS userId, endpoint, p256dh, auth, created_at AS createdAt";
+const PUSH_COLUMNS = "id, user_id AS userId, endpoint, p256dh, auth, created_at AS createdAt, lang";
 
 export const pushDb = {
-  upsert(userId: string, endpoint: string, p256dh: string, auth: string): void {
+  upsert(userId: string, endpoint: string, p256dh: string, auth: string, lang: string | null = null): void {
     const db = getDb();
     db.prepare(`
-      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth
-    `).run(userId, endpoint, p256dh, auth, Date.now());
+      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at, lang)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth,
+        lang = COALESCE(excluded.lang, push_subscriptions.lang)
+    `).run(userId, endpoint, p256dh, auth, Date.now(), lang);
   },
 
   remove(endpoint: string): void {
     getDb().prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(endpoint);
+  },
+
+  /**
+   * La langue des abonnements de ce compte qui n'en ont pas — ceux d'avant le 25/10/2026 —, lue à
+   * l'ouverture du cinéma. Une langue déjà connue n'est jamais remplacée : elle est celle de
+   * l'appareil, celle-ci n'est que celle du compte ailleurs.
+   */
+  fillMissingLang(userId: string, lang: string): void {
+    getDb().prepare("UPDATE push_subscriptions SET lang = ? WHERE user_id = ? AND lang IS NULL").run(lang, userId);
   },
 
   /**

@@ -658,6 +658,18 @@ empêche qu'elles reviennent (et que l'iPhone soit reconnu ailleurs qu'à `isApp
 écrans). Tests : `push-offer-ios.test.tsx` (règle, bannière, interrupteur), `PlayerOnboarding.test.tsx`
 (étape des notifications).
 
+**Dans la langue de chaque appareil (25/10/2026).** Une notification peut être écrite par langue
+(`LocalizedPush`, `push.ts`) : chaque abonnement la reçoit dans la langue de son interface (colonne
+`lang` de `push_subscriptions`), le français quand elle est inconnue ; le journal garde la version
+française. La langue vient du cookie `cine-lang` quand l'appareil renvoie lui-même son abonnement
+(`/api/push/subscribe`), et, pour les abonnements d'avant ce jour, de l'ouverture du cinéma
+(`/api/startup-timing`, `fillMissingLang`, qui ne remplit qu'une langue vide) — **jamais un
+réabonnement demandé** pour l'obtenir. Seule « Votre demande est disponible » s'en sert pour
+l'instant, titre traduit compris (`getTitleNames`, le titre de Radarr/Sonarr à défaut), et elle est
+vérifiée toutes les 5 minutes (`REQUEST_CHECK_MS`) au lieu de toutes les heures : un film arrivé juste
+après un passage attendait jusqu'à une heure. Tests : `push-realdb.test.ts`, `notificationJobs.test.ts`,
+`push-subscribe-route.test.ts`.
+
 ---
 
 ## 18. Le titre d'un film ou d'une série

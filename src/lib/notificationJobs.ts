@@ -5,6 +5,8 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { sonarr } from "@/lib/clients/sonarr";
 import { logError } from "@/lib/logger";
 import { sendPushToUser } from "@/lib/push";
+import { LOCALES, loadLocaleDict, type Locale } from "@/lib/i18n";
+import { getTitleNames, localizedTitle } from "@/lib/titleNames";
 
 /**
  * Où mène une notification.
@@ -250,10 +252,27 @@ export function isRequestedSeriesAvailable(
   });
 }
 
+/** « Votre demande est disponible », dans les quatre langues (`notifications.requestAvailable`). */
+type RequestTexts = Partial<Record<Locale, { title?: string; body?: string }>>;
+
+async function requestTexts(): Promise<RequestTexts> {
+  const out: RequestTexts = {};
+  for (const locale of LOCALES) {
+    const dict = await loadLocaleDict(locale);
+    out[locale] = (dict.notifications as { requestAvailable?: { title?: string; body?: string } } | undefined)?.requestAvailable;
+  }
+  return out;
+}
+
+function requestText(texts: RequestTexts, locale: Locale, key: "title" | "body"): string {
+  return texts[locale]?.[key] ?? texts.fr?.[key] ?? (key === "title" ? "🎬 Votre demande est disponible" : "{title} est maintenant disponible");
+}
+
 export async function checkRequestAvailability(): Promise<void> {
   try {
     const pending = pendingRequestDb.getAll();
     if (pending.length === 0) return;
+    const texts = await requestTexts();
 
     const [movies, series] = await Promise.all([
       cachedMovies().catch(() => []),
@@ -279,13 +298,17 @@ export async function checkRequestAvailability(): Promise<void> {
 
       if (!available || !title) continue;
 
-      await sendPushToUser(req.userId, {
-        title: "🎬 Votre demande est disponible",
-        body: `${title} est maintenant disponible`,
+      // Dans la langue de chaque appareil, titre compris (25/10/2026) : Radarr et Sonarr ne
+      // connaissent que le titre anglais — « A Clockwork Orange » pour un compte en français.
+      const names = getTitleNames(req.tmdbId, req.mediaType === "movie" ? "movie" : "series");
+      const known = title;
+      await sendPushToUser(req.userId, (locale) => ({
+        title: requestText(texts, locale, "title"),
+        body: requestText(texts, locale, "body").replace("{title}", localizedTitle(names, locale, known).title),
         url: playerUrl(req.mediaType === "movie" ? "movie" : "series", req.tmdbId),
         tag: `request-available-${req.mediaType}-${req.tmdbId}`,
         category: "request-available",
-      });
+      }));
       pendingRequestDb.remove(req.id);
     }
   } catch (err) {
@@ -307,6 +330,8 @@ export async function checkRequestAvailability(): Promise<void> {
 //  - le reste à trente jours, en particulier les titres traduits (`tmdb:titles`, quatorze jours
 //    étalés) : effacé trop tôt, un titre retomberait sur son nom d'origine le temps d'être redemandé.
 const DAY_MS = 24 * 3600_000;
+/** Le rythme de la vérification des demandes — voir `startNotificationCron`. */
+export const REQUEST_CHECK_MS = 5 * 60_000;
 const OBSOLETE_KEYS = ["search:person-credits:[0-9]*", "credits:movie:*", "credits:tv:*"];
 const SHORT_LIVED_KEYS = ["search:*", "credits:*", "hero:*", "tmdb:person:*", "person:*", "enriched:*", "frame:*", "info:*"];
 
@@ -332,8 +357,13 @@ export function startNotificationCron(): void {
   const interval = setInterval(async () => {
     await checkWatchlistAvailability();
     await checkNewEpisodes();
-    await checkRequestAvailability();
     cleanupDiskCache();
   }, 3600_000);
   interval.unref?.();
+
+  // Les demandes, toutes les 5 minutes (25/10/2026) : à l'heure, un film arrivé juste après un
+  // passage attendait jusqu'à une heure sa notification. Elle ne relit que les listes déjà gardées
+  // en mémoire (`cachedMovies`/`cachedSeries`), et rien quand aucune demande n'attend.
+  const requests = setInterval(() => void checkRequestAvailability(), REQUEST_CHECK_MS);
+  requests.unref?.();
 }

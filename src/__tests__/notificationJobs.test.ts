@@ -12,7 +12,9 @@ const mockAvailabilityNotifDb = {
 };
 const mockKvCacheDb = { cleanup: vi.fn() };
 const mockDb = { prepare: vi.fn() };
+const mockPendingRequestDb = { getAll: vi.fn((): unknown[] => []), remove: vi.fn() };
 vi.mock("@/lib/db", () => ({
+  pendingRequestDb: mockPendingRequestDb,
   availabilityNotifDb: mockAvailabilityNotifDb,
   kvCacheDb: mockKvCacheDb,
   getDb: () => mockDb,
@@ -46,6 +48,11 @@ vi.mock("@/lib/push", () => ({
 }));
 
 vi.mock("@/lib/logger", () => ({ logError: vi.fn() }));
+const mockTitleNames = vi.fn((): Record<string, string> => ({}));
+vi.mock("@/lib/titleNames", async (orig) => ({
+  ...(await orig<typeof import("@/lib/titleNames")>()),
+  getTitleNames: () => mockTitleNames(),
+}));
 
 const mockSonarrHistory = vi.fn();
 vi.mock("@/lib/clients/sonarr", () => ({
@@ -378,5 +385,25 @@ describe("isRequestedSeriesAvailable", () => {
   it("ne dit rien d'une série sans saison diffusée", async () => {
     const { isRequestedSeriesAvailable } = await import("@/lib/notificationJobs");
     expect(isRequestedSeriesAvailable({ seasons: [season(0, 0, 0)] }, null)).toBe(false);
+  });
+});
+
+// 25/10/2026 : « Votre demande est disponible » dans la langue de l'appareil, titre traduit compris —
+// Radarr ne connaît que le titre anglais.
+describe("checkRequestAvailability — dans la langue de chacun", () => {
+  it("écrit le texte et le titre de chaque langue, et retire la demande", async () => {
+    mockPendingRequestDb.getAll.mockReturnValue([{ id: 9, userId: "oscar", mediaType: "movie", tmdbId: 185, seasons: null }]);
+    mockCachedMovies.mockResolvedValue([{ tmdbId: 185, title: "A Clockwork Orange", hasFile: true }]);
+    mockCachedSeries.mockResolvedValue([]);
+    mockTitleNames.mockReturnValue({ fr: "Orange mécanique", de: "Uhrwerk Orange" });
+    const { checkRequestAvailability } = await import("@/lib/notificationJobs");
+    await checkRequestAvailability();
+    expect(mockSendPushToUser).toHaveBeenCalledTimes(1);
+    const [user, build] = mockSendPushToUser.mock.calls[0] as [string, (l: string) => { title: string; body: string; category: string }];
+    expect(user).toBe("oscar");
+    expect(build("fr")).toMatchObject({ title: "🎬 Votre demande est disponible", body: "Orange mécanique est maintenant disponible", category: "request-available" });
+    expect(build("en").body).toBe("A Clockwork Orange is now available");
+    expect(build("de")).toMatchObject({ title: "🎬 Ihre Anfrage ist verfügbar", body: "Uhrwerk Orange ist jetzt verfügbar" });
+    expect(mockPendingRequestDb.remove).toHaveBeenCalledWith(9);
   });
 });

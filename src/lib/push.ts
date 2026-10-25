@@ -4,6 +4,7 @@ import type { NotificationCategory } from "@/lib/notifications";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { config } from "@/lib/config";
 import { logNotificationSent } from "@/lib/eventLogs";
+import { LOCALES, type Locale } from "@/lib/i18n";
 
 export interface PushPayload {
   title: string;
@@ -15,8 +16,22 @@ export interface PushPayload {
   category?: NotificationCategory;
 }
 
-async function dispatchPush(subs: ReturnType<typeof pushDb.getAll>, payload: PushPayload): Promise<void> {
+/**
+ * Une notification écrite dans chaque langue (25/10/2026) : chaque appareil reçoit celle de son
+ * interface (`lang` de l'abonnement), le français quand elle est inconnue — un abonnement d'avant ce
+ * jour, jusqu'à ce que l'appareil le renvoie.
+ */
+export type LocalizedPush = (locale: Locale) => PushPayload;
+
+function payloadFor(payload: PushPayload | LocalizedPush, lang: string | null): PushPayload {
+  if (typeof payload !== "function") return payload;
+  return payload(LOCALES.includes(lang as Locale) ? (lang as Locale) : "fr");
+}
+
+async function dispatchPush(subs: ReturnType<typeof pushDb.getAll>, input: PushPayload | LocalizedPush): Promise<void> {
   if (subs.length === 0) return;
+  // Le journal garde la version française : il se lit ici, et une seule ligne par envoi.
+  const payload = payloadFor(input, "fr");
 
   const userPrefs = new Map<string, Record<string, boolean>>();
   const uniqueUsers = [...new Set(subs.map((s) => s.userId))];
@@ -34,9 +49,10 @@ async function dispatchPush(subs: ReturnType<typeof pushDb.getAll>, payload: Pus
           tally.muted = true;
           return;
         }
+        const own = payloadFor(input, sub.lang);
         await sendWebPush(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          { ...payload, icon: payload.icon ?? "/icon-192.png", badge: "/badge-96.png" }
+          { ...own, icon: own.icon ?? "/icon-192.png", badge: "/badge-96.png" }
         );
         tally.sent += 1;
       } catch (err: unknown) {
@@ -55,7 +71,7 @@ export async function sendPushToAll(payload: PushPayload): Promise<void> {
   await dispatchPush(pushDb.getAll(), payload);
 }
 
-export async function sendPushToUser(userId: string, payload: PushPayload): Promise<void> {
+export async function sendPushToUser(userId: string, payload: PushPayload | LocalizedPush): Promise<void> {
   if (!isWebPushConfigured()) return;
   await dispatchPush(pushDb.getByUser(userId), payload);
 }

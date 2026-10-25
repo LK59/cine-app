@@ -5,6 +5,9 @@ import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { logStartupTiming } from "@/lib/eventLogs";
 import { startupTimingAllowed } from "@/lib/writeLimits";
 import { requestHost } from "@/lib/publicOrigin";
+import { pushDb } from "@/lib/db";
+import { getLocaleFromCookie } from "@/lib/i18n";
+import { logError } from "@/lib/logger";
 
 /**
  * Ce que l'ouverture du cinéma a coûté, cache de l'appareil ou réseau — voir `persistentCache.ts`.
@@ -96,6 +99,15 @@ export async function POST(req: NextRequest) {
   const routes = routesOf(body.routes);
   // L'adresse ouverte, d'après la requête et non le corps (§119) : un `host` du corps est ignoré.
   const host = requestHost(req.headers);
+  // La langue de l'interface, pour les notifications de ce compte dont l'abonnement ne la dit pas
+  // encore (25/10/2026) : rien n'est réabonné, seule la colonne vide est remplie. Dans sa garde —
+  // une mesure ne doit pas échouer pour elle.
+  try {
+    const lang = getLocaleFromCookie(req.headers.get("cookie") ?? "");
+    if (lang) pushDb.fillMissingLang(session.u, lang);
+  } catch (error) {
+    logError("push.lang", error);
+  }
   logStartupTiming({
     user: session.jfUser ?? session.u,
     device: requestDeviceLabel(req),
