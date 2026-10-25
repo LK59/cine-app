@@ -28,8 +28,6 @@ import { PassageScreen } from "./PassageScreen";
 export function PassageBanner() {
   const mode = usePlaybackMode();
   const { data } = useSWR<{ target: string | null }>("/api/passage", fetcher, { revalidateOnFocus: false });
-  // Pas par-dessus l'écran d'accueil d'un premier lancement, comme l'invitation aux notifications.
-  const { data: onboarding } = useSWR<{ pending?: boolean }>("/api/onboarding", fetcher, { revalidateOnFocus: false });
   // Lu une fois : monté sans rendu serveur (`PlayerShell`), l'adresse de la page ne change pas.
   const [here] = useState(() => (typeof window === "undefined" ? "" : window.location.host));
   const [installed] = useState(() => isInstalledApp());
@@ -48,7 +46,11 @@ export function PassageBanner() {
     passageFlags.forgetBannerClosed();
   }, []);
 
-  const shown = elsewhere && target !== null && mode === "closed" && onboarding?.pending !== true;
+  // Même par-dessus l'accueil d'un premier lancement (25/10/2026) : un compte qui le passe sans le
+  // finir le revoit à chaque ouverture, et l'écran qui l'attendait ne venait jamais — un compte a
+  // continué de regarder sur l'ancienne adresse toute la soirée. L'accueil reste dû au compte, côté
+  // serveur, et s'ouvre sur la nouvelle adresse.
+  const shown = elsewhere && target !== null && mode === "closed";
 
   useEffect(() => {
     if (!shown || !targetHost) return;

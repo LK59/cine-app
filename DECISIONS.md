@@ -7071,11 +7071,15 @@ d'autres n'avaient jamais essayé. Deux formes, selon `isInstalledApp` :
   installe), puis **le bouton après la dernière étape** (« J'ai lu, ouvrir Laterna ») : en tête, on
   touchait l'étape 1 et on quittait l'écran sans avoir lu la suite. Le passage est demandé dès
   l'affichage, parce que la copie du code et l'ouverture doivent avoir lieu *dans* l'appui.
+L'écran, lui, ne cède **pas** à l'écran d'accueil du compte encore « à faire » (10.1.3) : il est
+dessiné par-dessus (couche 75 contre 70), et l'accueil, dû au compte côté serveur, s'ouvre sur la
+nouvelle adresse. L'attendre laissait un compte qui passe l'accueil sans le finir regarder sur
+l'ancienne adresse indéfiniment — c'est arrivé le soir même de la 10.1.0.
 Le lien des Nouveautés est pris en charge tant que l'écran est là. Les clés de fermeture du bandeau
 (`PASSAGE_BANNER_CLOSED_KEYS`) ne sont plus relues et s'effacent au montage. Une installation sans
 nouvelle adresse annoncée n'a rien de tout cela. Tests : `passage-banner.test.tsx` (onglet sans
 demande avant l'appui, échec dit sur place, étapes iPhone et code, bouton après les étapes, ailleurs
-sans code, film, accueil, nouvelle adresse, hors connexion, anciennes clés, lien des Nouveautés).
+sans code, film, même sur un accueil dû, nouvelle adresse, hors connexion, anciennes clés, lien des Nouveautés).
 **« Installée », dans la vue « Changement d'adresse »** (§119.1) se lit dans `installedApp`, envoyé
 avec chaque ouverture depuis le 25/10/2026 (`isInstalledApp`) : `standalone` est vrai aussi dans la vue
 intégrée qu'ouvre le passage sur iPhone, et un compte qui n'avait fait qu'y passer se lisait installé.

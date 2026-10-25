@@ -118,7 +118,7 @@ describe("PassageBanner", () => {
     });
   });
 
-  it("jamais pendant un film, plein écran ou réduit, ni sur l'accueil d'un premier lancement", () => {
+  it("jamais pendant un film, plein écran ou réduit", () => {
     for (const installed of [false, true]) {
       app.installed = installed;
       for (const mode of ["full", "mini"] as const) {
@@ -128,11 +128,16 @@ describe("PassageBanner", () => {
         view.unmount();
       }
       passage.mode = "closed";
-      passage.onboarding = true;
+    }
+  });
+
+  it("même quand l'accueil d'un premier lancement est encore dû : passé sans être fini, il revient à chaque ouverture", () => {
+    passage.onboarding = true;
+    for (const installed of [false, true]) {
+      app.installed = installed;
       const view = render(<PassageBanner />);
-      expect(screenOf()).toBeNull();
+      expect(screenOf()).not.toBeNull();
       view.unmount();
-      passage.onboarding = false;
     }
   });
 
