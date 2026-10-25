@@ -221,6 +221,11 @@ the resume seek; since 2026-10-15 a resumed session's `stop` also carries `diag.
 `fallback`, `rebuild`, `network` and `stop` carry `timeline`, the last two minutes sampled every 5 s in
 memory (`pos,s,Mb/s,ahead,reserveMB,state;…`, `playbackTimeline.ts`) — no extra line is ever sent for it.
 Since 2026-10-14 a source loss's `rebuild` (and the `fallback`/`error` that ends a run of them) also carries `lastBuffered` (both buffers' ranges after the last successful append or removal — once the source has closed they read « illisible »), `videoQuality` (`getVideoPlaybackQuality` at the failure), `mediaError` (code and `MediaError.message`), and `lastFragment`/`headFragment` (the fragment last sent and the one under the head: `mfhd` number, rank since the seek, first dts/pts and the head's offset, read from the moof by `fragmentProbe.ts`), each in its own guard; a seek's trace says « vidage fait » with each buffer's removal time and what is left in it.
+`docker logs cine-app` itself (since 2026-10-25) carries one readable line per background action —
+`[tâche] what happened · key=value` through `taskLog` (`src/lib/taskLog.ts`): the schedule at startup,
+notifications sent and to whom, torrents, a service going down or coming back, the daily backup,
+offline preparations, generated subtitles, the integrity and quotes passes, the library check, share
+links ending. Never one per tick: a check that finds nothing stays silent. `server.log` keeps its JSON.
 `data/logs/auth.log` (since 2026-09-24) records sign-ins, refusals, sign-outs, closed sessions and
 refused tokens, with device and address; `data/logs/notifications.log` records every push sent,
 with what happened to it per account (delivered, failed, subscription removed, turned off). Both are

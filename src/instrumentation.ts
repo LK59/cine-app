@@ -121,6 +121,16 @@ export async function register() {
       console.error("hors ligne: démarrage", error);
     }
 
+    // Ce qui tourne en arrière-plan, et à quel rythme — la première ligne à lire dans `docker logs`
+    // (25/10/2026). Chaque tâche écrit ensuite une ligne par action (`taskLog`), jamais par tour.
+    const { taskLog } = await import("./lib/taskLog");
+    taskLog(
+      "tâches",
+      "planifiées : services 1 min · torrents 15 s · demandes disponibles 5 min · « à voir » et nouveaux épisodes 1 h · " +
+        "nouveaux comptes 5 min · liens de partage 1 min · sauvegarde 1×/jour · appareils Jellyfin 1×/jour · " +
+        "listes de la bibliothèque relues avant d'expirer · hors ligne, sous-titres générés, répliques et intégrité selon leur file"
+    );
+
     // Non-blocking cache warmup — fire and forget, never delays startup
     setTimeout(() => {
       import("./lib/server-cache").then(async ({ cachedMovies, cachedSeries }) => {

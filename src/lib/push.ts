@@ -1,4 +1,5 @@
 import { notificationPrefsDb, pushDb } from "@/lib/db";
+import { taskLog } from "@/lib/taskLog";
 import { isWebPushConfigured, sendWebPush, shouldRemovePushSubscription } from "@/lib/webPush";
 import type { NotificationCategory } from "@/lib/notifications";
 import { jellyfin } from "@/lib/clients/jellyfin";
@@ -64,6 +65,8 @@ async function dispatchPush(subs: ReturnType<typeof pushDb.getAll>, input: PushP
     })
   );
   logNotificationSent({ category: payload.category ?? null, title: payload.title, body: payload.body, recipients: [...outcome.values()] });
+  const who = [...outcome.values()].map((o) => (o.muted && o.sent === 0 ? `${o.user} (coupée)` : o.failed > 0 ? `${o.user} (${o.sent} envoyée, ${o.failed} en échec)` : o.user));
+  taskLog("notifications", `${payload.title} — ${payload.body}`, { pour: who });
 }
 
 export async function sendPushToAll(payload: PushPayload): Promise<void> {

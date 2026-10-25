@@ -1,4 +1,5 @@
 import { cachedTorrents } from "@/lib/server-cache";
+import { taskLog } from "@/lib/taskLog";
 import { sendPushToAdmins } from "@/lib/push";
 import { logError } from "@/lib/logger";
 import { kvCacheDb } from "@/lib/db";
@@ -215,6 +216,8 @@ export function startTorrentWatch(): void {
       logError("notifications.torrents", err);
     }
     if (!due) return;
+    for (const name of due.started) taskLog("torrents", "démarré", { nom: name });
+    for (const name of due.completed) taskLog("torrents", "terminé", { nom: name });
     try {
       if (due.started.length > 0) {
         await sendPushToAdmins({ ...summarizeTorrents(due.started, "started"), tag: "torrent-started", url: "/qbittorrent", category: "torrent-started" });

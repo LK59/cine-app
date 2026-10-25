@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { taskLog } from "@/lib/taskLog";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -62,12 +63,14 @@ export function startLibraryCheck(): Promise<void> {
   if (state.running) return state.running;
   state.startedAt = Date.now();
   state.progress = { step: "load", done: 0, total: 0 };
+  taskLog("contrôle bibliothèque", "analyse lancée");
   // En témoin du coupe-circuit (§92) : quatre appels lourds en parallèle sur un Jellyfin occupé
   // dépassaient leur délai ensemble et ouvraient la panne pour tout le cinéma (relecture du 14/10/2026).
   state.running = asJellyfinWitness(runOnce)
     .then((result) => {
       libraryCheckDb.set(result);
       state.error = null;
+      taskLog("contrôle bibliothèque", "analyse terminée", { s: state.startedAt ? Math.round((Date.now() - state.startedAt) / 1000) : null });
     })
     .catch((err: unknown) => {
       state.error = { at: Date.now(), message: err instanceof Error ? err.message : String(err) };

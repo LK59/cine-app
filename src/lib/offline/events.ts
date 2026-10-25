@@ -1,4 +1,5 @@
 import { config } from "@/lib/config";
+import { taskError, taskLog } from "@/lib/taskLog";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
@@ -174,8 +175,10 @@ export async function logOfflineEvent(
       audio: naming?.audio[job.audioIndex] ?? null,
       ...rest,
     };
-    if (level === "error") console.error(JSON.stringify(entry));
-    else console.log(JSON.stringify(entry));
+    const line = `${entry.message}${entry.title ? ` — ${entry.title}` : ""}`;
+    const details = { compte: rest.user ?? rest.accounts, qualité: job.quality, codec: job.codec, Mo: typeof rest.bytes === "number" ? Math.round(rest.bytes / 1e6) : null };
+    if (level === "error") taskError("hors ligne", line, details);
+    else taskLog("hors ligne", line, details);
     appendJsonLine(SERVER_LOG_FILE, entry, { keep: SERVER_LOG_KEEP });
   } catch {
     /* une ligne perdue ne coûte rien au téléchargement */

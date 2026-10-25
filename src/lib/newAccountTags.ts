@@ -14,6 +14,7 @@
 // cinéma relit (`blockedTagsOf`) et que les applications Jellyfin appliquent.
 
 import { config } from "@/lib/config";
+import { taskLog } from "@/lib/taskLog";
 import { knownAccountsDb } from "@/lib/db";
 import { withoutShareAccounts } from "@/lib/share/accounts";
 import { logAuthEvent } from "@/lib/eventLogs";
@@ -96,7 +97,10 @@ export async function applyNewAccountTags(): Promise<{ tagged: string[] }> {
     }
   }
   // Le cinéma relit les tags bloqués toutes les deux minutes : qu'il voie ceux-ci dès maintenant.
-  if (tagged.length > 0) forgetBlockedTags();
+  if (tagged.length > 0) {
+    forgetBlockedTags();
+    taskLog("nouveaux comptes", "tags bloqués appliqués", { comptes: tagged });
+  }
   return { tagged };
 }
 

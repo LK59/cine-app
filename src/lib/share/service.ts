@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { taskLog } from "@/lib/taskLog";
 import { createShareSessionToken, decryptSecret, encryptSecret } from "@/lib/auth";
 import { knownAccountsDb, sessionDb } from "@/lib/db";
 import { logAuthEvent } from "@/lib/eventLogs";
@@ -213,10 +214,12 @@ export async function sweepShares(now = Date.now()): Promise<void> {
         closeSessions(share);
         await setShareAccountDisabled(share.jfUserId, true);
         sharesDb.setDisabled(share.id, now);
+        taskLog("partages", share.revokedAt === null ? "lien expiré, compte désactivé" : "lien révoqué, compte désactivé", { lien: share.label });
         if (share.revokedAt === null) logAuthEvent("share-expired", { user: share.jfUserName ?? "?", share: share.id, label: share.label });
       } else if (now - endedAt > DELETE_AFTER_MS) {
         await deleteShareAccount(share.jfUserId);
         sharesDb.setDeleted(share.id, now);
+        taskLog("partages", "compte d'un lien fini effacé", { lien: share.label });
       }
     } catch (err) {
       logError("share.sweep", err, { share: share.id });

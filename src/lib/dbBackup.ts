@@ -1,4 +1,5 @@
 import fs from "fs";
+import { taskLog } from "@/lib/taskLog";
 import Database from "better-sqlite3";
 import path from "path";
 import { getDb, DATA_DIR } from "@/lib/db";
@@ -111,8 +112,10 @@ export async function runDbBackup(options: { skipIfDone?: boolean } = {}): Promi
     // 630 ms (mesuré le 08/10/2026) — la boucle d'événements arrêtée, pour un fichier identique.
     if (options.skipIfDone && fs.existsSync(file)) {
       restrictBackups();
+      taskLog("sauvegarde", "celle du jour existe déjà", { fichier: path.basename(file) });
       return;
     }
+    const startedAt = Date.now();
     await getDb().backup(file);
     trimBackup(file);
     restrictBackups();
@@ -124,6 +127,7 @@ export async function runDbBackup(options: { skipIfDone?: boolean } = {}): Promi
       .sort();
     const stale = files.slice(0, Math.max(0, files.length - RETENTION_DAYS));
     for (const f of stale) fs.rmSync(path.join(BACKUP_DIR, f), { force: true });
+    taskLog("sauvegarde", "base copiée", { fichier: path.basename(file), Mo: Math.round(fs.statSync(file).size / 1e6), s: (Date.now() - startedAt) / 1000, effacées: stale.length || null });
   } catch (err) {
     logError("db.backup", err);
   }

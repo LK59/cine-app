@@ -1,4 +1,5 @@
 import { logError, SERVER_LOG_FILE, SERVER_LOG_KEEP } from "@/lib/logger";
+import { taskError, taskLog } from "@/lib/taskLog";
 import { appendJsonLine } from "@/lib/logFile";
 import { acquireDiskReads, diskReadsState, type DiskLease } from "@/lib/backgroundDiskReads";
 import { mustWaitForPlayback } from "@/lib/repliques/playbackActivity";
@@ -106,7 +107,7 @@ const live: Live = (shared[LIVE_KEY] ??= {
 
 function info(message: string, context: Record<string, unknown> = {}): void {
   const entry = { timestamp: new Date().toISOString(), level: "info", scope: "integrite", message, ...context };
-  console.log(JSON.stringify(entry));
+  taskLog("intégrité", message, context);
   appendJsonLine(SERVER_LOG_FILE, entry, { keep: SERVER_LOG_KEEP });
 }
 

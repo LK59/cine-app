@@ -25,6 +25,7 @@
 // supprimer quoi que ce soit.
 
 import { isOwnAppName } from "@/lib/playbackClients";
+import { taskLog } from "@/lib/taskLog";
 import { config } from "@/lib/config";
 import { sessionDb } from "@/lib/db";
 import { logAuthEvent } from "@/lib/eventLogs";
@@ -118,7 +119,7 @@ export async function pruneJellyfinDevices(now = Date.now()): Promise<{ deleted:
   }
 
   if (deleted) {
-    console.info(`[jellyfin.device-prune] ${deleted} appareil(s) Laterna inactif(s) depuis 30 jours supprimé(s)`);
+    taskLog("appareils Jellyfin", `${deleted} appareil(s) Laterna inactif(s) depuis 30 jours supprimé(s)`);
     // Au journal des connexions, compte par compte : c'est là que l'activité lit la vie des
     // sessions et de leurs jetons, et un jeton qui disparaît sans déconnexion doit s'y expliquer.
     for (const [user, count] of byUser) logAuthEvent("devices-pruned", { user, count });

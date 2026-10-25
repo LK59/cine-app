@@ -1,4 +1,5 @@
 import { catalogueMembers } from "@/lib/catalogueMembers";
+import { taskLog } from "@/lib/taskLog";
 import { asJellyfinWitness } from "@/lib/jellyfinBreaker";
 import {
   cachedJellyfinFirstEpisodes,
@@ -30,6 +31,7 @@ export function startCatalogueWarm(): void {
     // à la première ouverture comme avant.
     // En témoin, comme les relectures du minuteur (`refreshKeptCache`) : quatre listes entières
     // demandées ensemble au démarrage ne doivent pas suffire à déclarer Jellyfin en panne.
+    const startedAt = Date.now();
     void asJellyfinWitness(() =>
       Promise.allSettled([
         catalogueMembers(),
@@ -42,6 +44,7 @@ export function startCatalogueWarm(): void {
       // `selfWarm.ts`. Importé ici et pas en tête : le module tire `node:crypto`.
       .then(() => import("@/lib/selfWarm"))
       .then(({ runSelfWarm }) => runSelfWarm())
+      .then(() => taskLog("catalogue", "listes et catalogues chargés en mémoire", { s: (Date.now() - startedAt) / 1000 }))
       .catch(() => {});
   }, FIRST_READ_DELAY_MS);
   (first as { unref?: () => void }).unref?.();

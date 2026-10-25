@@ -2,6 +2,7 @@ import { runAllServiceChecks, computeCapabilities, type CapabilityResult } from 
 import { isConfiguredCheck } from "@/lib/statusOverall";
 import { statusHistoryDb } from "@/lib/db";
 import { logError } from "@/lib/logger";
+import { taskLog } from "@/lib/taskLog";
 
 // 60s gives incident detection (see statusHistory.ts) fine enough granularity to tell a brief
 // container restart apart from a real outage — a longer interval would blur the two together.
@@ -52,6 +53,32 @@ export function getLastStatusSnapshot(): StatusSnapshot | null {
   return (globalThis as SnapshotHolder)[SNAPSHOT_KEY] ?? null;
 }
 
+/**
+ * Ce que le journal du conteneur dit des services (25/10/2026) : leur état au premier relevé, puis
+ * seulement ce qui change — une panne, un retour. Sur `globalThis`, pour la même raison que l'instantané.
+ */
+const LAST_STATUS_KEY = Symbol.for("cine-app.statusLastLogged");
+type LastStatusHolder = { [LAST_STATUS_KEY]?: Map<string, string> };
+const STATUS_WORDS: Record<string, string> = { ok: "en ligne", degraded: "dégradé", down: "en panne" };
+
+export function noteServiceChanges(services: Record<string, { name?: string; status: string; error?: string | null; latencyMs?: number | null }>): void {
+  const holder = globalThis as LastStatusHolder;
+  const first = !holder[LAST_STATUS_KEY];
+  const last = (holder[LAST_STATUS_KEY] ??= new Map());
+  const configured = Object.entries(services).filter(([, r]) => isConfiguredCheck(r as Parameters<typeof isConfiguredCheck>[0]));
+  if (first) {
+    const notOk = configured.filter(([, r]) => r.status !== "ok").map(([key, r]) => `${r.name ?? key} ${STATUS_WORDS[r.status] ?? r.status}`);
+    taskLog("services", `${configured.length - notOk.length}/${configured.length} en ligne`, { hors: notOk });
+  }
+  for (const [key, r] of configured) {
+    const before = last.get(key);
+    last.set(key, r.status);
+    if (first || before === r.status) continue;
+    const word = r.status === "ok" ? "rétabli" : STATUS_WORDS[r.status] ?? r.status;
+    taskLog("services", `${r.name ?? key} : ${word}`, { erreur: r.status === "ok" ? null : r.error, ms: r.latencyMs });
+  }
+}
+
 export async function runStatusPoll(): Promise<void> {
   try {
     const services = await runAllServiceChecks();
@@ -64,6 +91,8 @@ export async function runStatusPoll(): Promise<void> {
       Object.fromEntries(Object.entries(services).filter(([, r]) => isConfiguredCheck(r)).map(([key, r]) => [key, { status: r.status, latencyMs: r.latencyMs }])),
       checkedAt
     );
+
+    noteServiceChanges(services);
 
     const capabilities = computeCapabilities(services);
     (globalThis as SnapshotHolder)[SNAPSHOT_KEY] = { capabilities, checkedAt };

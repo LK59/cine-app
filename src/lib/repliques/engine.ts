@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { taskError, taskLog } from "@/lib/taskLog";
 import { config } from "@/lib/config";
 import { logError, SERVER_LOG_FILE, SERVER_LOG_KEEP } from "@/lib/logger";
 import { appendJsonLine } from "@/lib/logFile";
@@ -159,7 +160,7 @@ live.requests ??= 0;
 
 function info(message: string, context: Record<string, unknown> = {}): void {
   const entry = { timestamp: new Date().toISOString(), level: "info", scope: "repliques", message, ...context };
-  console.log(JSON.stringify(entry));
+  taskLog("répliques", message, context);
   appendJsonLine(SERVER_LOG_FILE, entry, { keep: SERVER_LOG_KEEP });
 }
 
