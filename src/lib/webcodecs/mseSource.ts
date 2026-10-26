@@ -33,6 +33,7 @@ import { UnreadableZoneHold } from "./mseZoneHold";
 import { BufferPlanner } from "./mseBufferPlanner";
 import { RecoveryLadder } from "./mseRecoveryLadder";
 import { FrozenClockWatch } from "./mseFrozenClock";
+import { OpeningStartHold } from "./mseStartHold";
 import type { MseCallbacks, RecoveryFacts } from "./mseTypes";
 import type { BufferBudget, ByteRate } from "./bufferBudget";
 
@@ -101,6 +102,12 @@ export class MseSource {
    * ouverture au début, qui n'a personne à attendre.
    */
   private pendingStart: number | null = null;
+  /**
+   * Le départ d'une ouverture depuis le début, retenu jusqu'à la première image — voir
+   * `OpeningStartHold` (26/10/2026). `null` pour une reprise, une ouverture laissée à l'arrêt, et
+   * dès que le départ est permis.
+   */
+  private startHold: OpeningStartHold | null = null;
   private lastAppendAt = 0;
   /**
    * Jusqu'où le lecteur de fichier a lu, **sur l'horloge du fichier** — celle de
@@ -228,8 +235,10 @@ export class MseSource {
         noteSeekTarget: (seconds) => {
           // Un pas volontaire autour de la cible la déplace : ce n'est pas un départ.
           this.seekState.moved(seconds);
-          // L'atterrissage de l'ouverture depuis le début passe par là (`nudgeIntoBuffer`).
-          this.armOpeningReassert(seconds);
+          // L'atterrissage de l'ouverture depuis le début passe par là (`nudgeIntoBuffer`). Pas
+          // pendant que son départ est retenu : l'élément est à l'arrêt et ne partira qu'avec son
+          // image — la position redemandée relancerait le saut qu'on attend (`OpeningStartHold`).
+          if (!this.startHold?.holding) this.armOpeningReassert(seconds);
         },
       },
       callbacks.onStarting
@@ -313,6 +322,15 @@ export class MseSource {
   /** L'avance sous la tête, en secondes — ce que la réserve d'avance en mémoire (`MemoryReserve`) regarde avant de prendre le lien. */
   get bufferedLead(): number {
     return this.lead;
+  }
+
+  /**
+   * Le départ retenu d'une ouverture depuis le début — voir `OpeningStartHold` : la promesse que
+   * l'hôte attend avant d'appeler `play()`, ou `null` quand rien n'est retenu (une reprise, une
+   * ouverture laissée à l'arrêt, un départ déjà permis), et alors rien ne change pour lui.
+   */
+  openingHold(): Promise<void> | null {
+    return this.startHold?.holding ? this.startHold.released : null;
   }
 
   /** Where the player's clock sits relative to the file's. Already applied to every seek here. */
@@ -453,6 +471,22 @@ export class MseSource {
       // posée : c'est là que le film s'ouvre vraiment, et l'annoncer ici la placerait à un endroit
       // où la tête n'ira pas.
       if (this.pendingStart === null) this.guard.opened(this.video.currentTime, !this.startPaused);
+      // Et son départ attend l'image (26/10/2026) : l'atterrissage se fait élément à l'arrêt, et
+      // l'hôte n'appelle `play()` qu'ensuite (`openingHold`). Une reprise n'en a pas besoin — sa
+      // tête est posée avant le départ, et elle ne s'est jamais figée là (0 sur 221) ; une
+      // ouverture laissée à l'arrêt n'a pas de départ à retenir.
+      if (this.pendingStart === null && !this.startPaused) {
+        this.startHold = new OpeningStartHold({
+          video: this.video,
+          headOnMedia: () => this.isBufferedAt(this.video.currentTime),
+          released: (timedOut) => {
+            this.startHold = null;
+            // Parti sur une borne, sans image : le départ redevient celui d'avant, et la position
+            // redemandée de l'ouverture avec lui (`OPENING_REASSERT_MS`).
+            if (timedOut) this.armOpeningReassert(this.video.currentTime);
+          },
+        });
+      }
 
       // The element's own verdict, recorded when it is delivered. Everything so far learned of it
       // second-hand, when some later operation tripped over the wreckage — so the report showed the
@@ -843,6 +877,8 @@ export class MseSource {
         // démarrage à réclamer.
         this.placePendingStart();
         this.guard.nudgeIntoBuffer();
+        // La tête vient peut-être d'atterrir : le départ retenu regarde si son image est là.
+        this.startHold?.check();
         this.lastAppendAt = Date.now();
 
         if (this.seekNetworkPending) {
@@ -864,7 +900,9 @@ export class MseSource {
         // There is something to play now, which there was not when the element was first asked
         // to. Only acts on a start the element abandoned; a viewer's own pause is left alone.
         // À chaque envoi, et non plus au rythme de la trace : les deux étaient liés par accident.
-        this.guard.mediaArrived();
+        // Sauf pendant que le départ d'une ouverture depuis le début est retenu : relancé ici, il
+        // partirait avant son image, ce que la retenue existe pour éviter (`OpeningStartHold`).
+        if (!this.startHold?.holding) this.guard.mediaArrived();
         const lanes = this.laneProgress();
         if (depth > deepestSoFar + 0.01 || lanes > furthestLanes + 0.01) {
           deepestSoFar = Math.max(deepestSoFar, depth);
@@ -2101,6 +2139,9 @@ export class MseSource {
     if (this.destroyed) return;
     this.destroyed = true;
     this.guard.destroy();
+    // Résolue, pas abandonnée : l'hôte qui l'attend revérifie et ne lance rien.
+    this.startHold?.destroy();
+    this.startHold = null;
     this.generation += 1;
 
     this.source.removeEventListener("startstreaming", this.request);

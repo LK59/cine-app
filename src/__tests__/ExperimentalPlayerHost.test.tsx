@@ -296,6 +296,8 @@ function fakeRemux(over: Record<string, unknown> = {}) {
     currentAudioTrack: 1,
     // Par défaut ce chemin porte tout : les tests qui examinent le refus le disent eux-mêmes.
     canCarryAudio: vi.fn(() => true),
+    // Rien de retenu au départ (`MseSource.openingHold`) : l'hôte lance aussitôt, comme avant.
+    openingHold: vi.fn(() => null),
     // Tout changement de piste reconstruit le lecteur ; seul un fichier sans index en cours de
     // film le refuse, et les tests qui l'examinent le disent eux-mêmes.
     requestAudioTrack: vi.fn((id: number): "rebuild" | "refused" | null => (id === fake.currentAudioTrack ? null : "rebuild")),
@@ -3896,5 +3898,65 @@ describe("le cadre du lecteur natif ne sélectionne rien", () => {
     const frame = document.querySelector("video")!.closest("[data-player-frame]");
     expect(frame).not.toBeNull();
     expect(frame!.parentElement).toBe(document.body);
+  });
+});
+
+describe("le départ d'une ouverture depuis le début, retenu jusqu'à la première image (26/10/2026)", () => {
+  // 57 départs de 0 sur 377 restaient figés juste après `playing` : l'élément, lancé dès l'attache,
+  // jouait déjà quand l'atterrissage posait la tête à 0,25 s. La source retient le départ
+  // (`MseSource.openingHold`) ; l'hôte attend avant le même `play()` qu'avant.
+  function held() {
+    let permit = () => {};
+    const promise = new Promise<void>((resolve) => {
+      permit = resolve;
+    });
+    remux = fakeRemux({ openingHold: vi.fn(() => promise) });
+    return { promise, permit };
+  }
+  const wait = (ms: number) => act(async () => void (await new Promise((resolve) => setTimeout(resolve, ms))));
+
+  it("n'appelle play() qu'une fois le départ permis", async () => {
+    const hold = held();
+    mount({ resumeAt: 0 });
+    await waitFor(() => expect(remux.openingHold).toHaveBeenCalledTimes(1));
+    await wait(50);
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    await act(async () => {
+      hold.permit();
+      await hold.promise;
+    });
+    await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1));
+  });
+
+  it("les commandes restent en chargement pendant la retenue, pas sur « Lecture »", async () => {
+    const hold = held();
+    mount({ resumeAt: 0 });
+    await waitFor(() => expect(remux.openingHold).toHaveBeenCalledTimes(1));
+    await wait(20);
+    expect(screen.getByTestId("controls").dataset.loading).toBe("true");
+    await act(async () => {
+      hold.permit();
+      await hold.promise;
+    });
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+  });
+
+  it("ne lance rien quand le lecteur est fermé pendant la retenue", async () => {
+    const hold = held();
+    const view = mount({ resumeAt: 0 });
+    await waitFor(() => expect(remux.openingHold).toHaveBeenCalledTimes(1));
+    view.unmount();
+    await act(async () => {
+      hold.permit();
+      await hold.promise;
+    });
+    await wait(20);
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+  });
+
+  it("rien de retenu (une reprise) : play() aussitôt, comme avant", async () => {
+    mount({ resumeAt: 1200 });
+    await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1));
+    expect(remux.openingHold).toHaveBeenCalledTimes(1);
   });
 });

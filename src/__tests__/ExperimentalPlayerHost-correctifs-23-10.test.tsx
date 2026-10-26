@@ -120,6 +120,8 @@ function fakeRemux(over: Record<string, unknown> = {}) {
     ],
     currentAudioTrack: 1,
     canCarryAudio: vi.fn(() => true),
+    // Rien de retenu au départ (`MseSource.openingHold`) : l'hôte lance aussitôt, comme avant.
+    openingHold: vi.fn(() => null),
     requestAudioTrack: vi.fn(() => null),
     selectSubtitleTrack: vi.fn(),
     // Le principal (pas de piste donnée) dit « Ligne du fichier. », le second (piste 6) « Line. ».

@@ -13,6 +13,7 @@ source duration= 3600.2
 onSubtitles 1
 buffer vidéo append 1001 1
 buffer son append 101 101
+trace ouverture : départ permis (élément déjà lancé) — tête à 0.00 s, readyState 4, après 40 ms
 trace après envoi : tampon jusqu'à 2.0 s, tête à 0.0 s
 trace segment 2 construit — jusqu'à 4.0 s, 1002 o vidéo en 1 fragment(s), 102 o audio
 onSubtitles 1
