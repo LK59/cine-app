@@ -273,6 +273,15 @@ export function notePassageFetched(jti: string, user: string, itemId: string, jo
  * demande) — titre → version récupérée. Un autre compte, une autre session (un autre appareil du
  * même compte) n'ont aucune arrivée issue de celle-ci : ils n'apprennent rien.
  */
+/**
+ * La session qui demande est-elle passée — un de ses passages a-t-il ouvert une session sur la nouvelle
+ * adresse (`passage_arrivals.origin_jti`) ? L'ancienne adresse en déduit que ses téléchargements
+ * inachevés ne serviront plus (26/10/2026) : la nouvelle repart de zéro, elle a son propre stockage.
+ */
+export function passageArrivedFrom(originJti: string, user: string): boolean {
+  return !!getDb().prepare("SELECT 1 FROM passage_arrivals WHERE origin_jti = ? AND user_id = ? LIMIT 1").get(originJti, user);
+}
+
 export function passageFetchedFor(originJti: string, user: string, itemIds: readonly string[]): Record<string, string> {
   const rows = getDb().prepare("SELECT fetched FROM passage_arrivals WHERE origin_jti = ? AND user_id = ? AND fetched IS NOT NULL").all(originJti, user) as {
     fetched: string;

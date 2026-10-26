@@ -104,6 +104,7 @@ const carried = (itemId: string) => ({
 });
 
 let fetched: Record<string, string> = {};
+let arrived = false;
 const calls: { url: string; init?: RequestInit }[] = [];
 
 beforeEach(() => {
@@ -117,6 +118,7 @@ beforeEach(() => {
   store.start.mockResolvedValue(undefined);
   store.remove.mockReset();
   fetched = {};
+  arrived = false;
   calls.length = 0;
   localStorage.clear();
   resetFloatingPrompts();
@@ -125,7 +127,7 @@ beforeEach(() => {
     if (String(url).startsWith("/api/passage/fetched?")) {
       // Une vraie réponse prend du temps : la page a le loisir de se redessiner avant.
       await new Promise((resolve) => setTimeout(resolve, 50));
-      return Response.json({ fetched });
+      return Response.json({ fetched, arrived });
     }
     return Response.json({ ok: true });
   }) as typeof fetch;
@@ -268,6 +270,24 @@ describe("sur l'ancienne adresse : l'effacement", () => {
     // Une ligne au journal pour ce qui a été effacé.
     const log = calls.find((c) => c.url === "/api/passage/fetched" && c.init?.method === "POST");
     expect(JSON.parse(String(log?.init?.body))).toEqual({ removed: [A, B] });
+  });
+
+  it("passée, la session efface aussi ses téléchargements inachevés, de l'appareil seulement, sans les compter", async () => {
+    store.list = [download("fini", A), download("moitie", B, { state: "downloading" }), download("pause", C, { state: "paused" })];
+    arrived = true;
+    const removed = await freeOldAddressDownloads(() => false);
+    expect(removed).toEqual([]);
+    expect(store.remove.mock.calls).toEqual([
+      ["moitie", { server: false }],
+      ["pause", { server: false }],
+    ]);
+    expect(store.list.map((d) => d.id)).toEqual(["fini"]);
+  });
+
+  it("pas encore passée, un téléchargement inachevé reste", async () => {
+    store.list = [download("moitie", B, { state: "downloading" })];
+    expect(await freeOldAddressDownloads(() => false)).toEqual([]);
+    expect(store.remove).not.toHaveBeenCalled();
   });
 
   it("sans attestation, rien ne s'efface", async () => {

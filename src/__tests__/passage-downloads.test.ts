@@ -179,7 +179,7 @@ describe("l'attestation de l'ancienne adresse", () => {
   async function fetchedFor(cookie: string, items: string[]) {
     const route = await import("@/app/api/passage/fetched/route");
     const res = await route.GET(request("GET", `/api/passage/fetched?items=${items.join(",")}`, { cookie }));
-    return { status: res.status, body: (await res.json()) as { fetched?: Record<string, string> } };
+    return { status: res.status, body: (await res.json()) as { fetched?: Record<string, string>; arrived?: boolean } };
   }
 
   /** Une version finie de `itemId`, demandée par `account`, son fichier écrit. */
@@ -213,6 +213,16 @@ describe("l'attestation de l'ancienne adresse", () => {
     expect((await fetchedFor(origin.cookie, [A])).body.fetched).toEqual({});
     expect(await serve(twin, "bytes=500-999")).toBe(206);
     expect((await fetchedFor(origin.cookie, [A, B])).body.fetched).toEqual({ [A]: JOB });
+  });
+
+  it("`arrived` : seulement la session dont un passage a ouvert une session sur la nouvelle adresse", async () => {
+    const origin = await household();
+    expect((await fetchedFor(origin.cookie, [A])).body.arrived).toBe(false);
+    const { twin } = await passWith(origin.cookie, [entry(A)]);
+    expect((await fetchedFor(origin.cookie, [A])).body.arrived).toBe(true);
+    const otherDevice = await household("user", origin.user);
+    expect((await fetchedFor(otherDevice.cookie, [A])).body.arrived).toBe(false);
+    expect((await fetchedFor(twin, [A])).body.arrived).toBe(false);
   });
 
   it("la dernière plage servie à l'ancienne adresse elle-même n'atteste rien", async () => {

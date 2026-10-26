@@ -186,6 +186,7 @@ export function initOfflineDownloads(): Promise<void> {
 
 async function load(current: string): Promise<void> {
   account = current;
+  sessionLost = false;
   const ids = await deviceStore.list(current).catch(() => [] as string[]);
   const loaded: OfflineDownload[] = [];
   for (const id of ids) {
@@ -585,7 +586,17 @@ let workers = 0;
 const elsewhere = new Map<string, number>();
 const ELSEWHERE_MS = 30_000;
 
+/**
+ * La session de cette page a été refusée (401) : les téléchargements s'arrêtent jusqu'au prochain
+ * chargement de la page ou du compte (`load`). Ils réessayaient toutes les 60 s sans fin : l'ancienne
+ * adresse d'un iPhone, sa session refusée, a frappé 75 fois en cinq heures (25/10/2026). Le reste de la
+ * page mène déjà à la connexion ; rien n'est perdu, la reprise part de ce qui est sur l'appareil.
+ */
+let sessionLost = false;
+const isSessionLost = (error: unknown) => error instanceof Error && (error.message === "état 401" || error.message === "fichier 401");
+
 function waiting(): OfflineDownload[] {
+  if (sessionLost) return [];
   const now = Date.now();
   return downloads
     .filter((d) => (d.state === "preparing" || d.state === "downloading") && !claimed.has(d.id) && !((elsewhere.get(d.id) ?? 0) > now))
@@ -648,8 +659,12 @@ async function worker(owner: string): Promise<void> {
         failures = 0;
         resetDeviceStore();
       }
-      // Session perdue : inutile d'insister toutes les cinq secondes.
-      await sleep(error instanceof Error && error.message === "état 401" ? 60_000 : 5000, control.signal);
+      // Session perdue : on s'arrête là (`sessionLost`).
+      if (isSessionLost(error)) {
+        sessionLost = true;
+        return;
+      }
+      await sleep(5000, control.signal);
     } finally {
       if (claimed.get(next.id) === control) claimed.delete(next.id);
     }

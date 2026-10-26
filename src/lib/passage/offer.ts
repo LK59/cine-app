@@ -193,7 +193,8 @@ export async function relaunchPassageDownloads(
  * Sur l'ancienne adresse : efface de l'appareil les téléchargements que **le serveur atteste**
  * récupérés entiers par ce compte sur la nouvelle adresse, par une session issue du passage de
  * cette session (`GET /api/passage/fetched`). Titre par titre, et `playing()` relu avant chacun :
- * jamais pendant une lecture. Rend les titres effacés.
+ * jamais pendant une lecture. Rend les titres effacés. Une session passée efface aussi ses
+ * téléchargements inachevés (`arrived`), sans les compter dans ce qui est rendu.
  *
  * Quand la nouvelle adresse a repris la **même** version (même identifiant), le retrait reste sur
  * l'appareil : la demande du serveur est celle du compte, commune aux deux adresses, et la retirer
@@ -211,7 +212,7 @@ export async function freeOldAddressDownloads(playing: () => boolean): Promise<O
   const itemIds = [...new Set(mine.map((d) => d.itemId.toLowerCase()))].slice(0, PASSAGE_DOWNLOADS_MAX * 2);
   const res = await fetch(`/api/passage/fetched?items=${itemIds.join(",")}`, { cache: "no-store" }).catch(() => null);
   if (!res?.ok) return [];
-  const { fetched } = ((await res.json().catch(() => null)) ?? {}) as { fetched?: Record<string, string> };
+  const { fetched, arrived } = ((await res.json().catch(() => null)) ?? {}) as { fetched?: Record<string, string>; arrived?: boolean };
   if (!fetched || typeof fetched !== "object") return [];
   const removed: OfflineDownload[] = [];
   for (const d of mine) {
@@ -221,6 +222,18 @@ export async function freeOldAddressDownloads(playing: () => boolean): Promise<O
     if (playing() || offlineAccount() !== who) break;
     await removeOfflineDownload(d.id, { server: d.id !== jobId });
     removed.push(d);
+  }
+  // Passée, cette session ne finira plus ses téléchargements inachevés : la nouvelle adresse a son
+  // propre stockage et repart de zéro. Un iPhone gardait ainsi 660 Mo d'un épisode à moitié reçu,
+  // invisible sous l'écran du passage (26/10/2026). Retirés de l'appareil seulement : la demande du
+  // serveur est celle du compte, que la nouvelle adresse a peut-être reprise. Hors du mot « ils sont
+  // dans Laterna » et de la ligne au journal — ils n'y sont pas.
+  if (arrived === true) {
+    for (const d of mine) {
+      if (d.state === "done" || removed.includes(d) || !currentOfflineDownloads().some((c) => c.id === d.id)) continue;
+      if (playing() || offlineAccount() !== who) break;
+      await removeOfflineDownload(d.id, { server: false });
+    }
   }
   if (removed.length) {
     void fetch("/api/passage/fetched", {

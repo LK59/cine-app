@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { isJellyfinId } from "@/lib/jellyfinPath";
-import { passageFetchedFor } from "@/lib/passage/service";
+import { passageArrivedFrom, passageFetchedFor } from "@/lib/passage/service";
 import { PASSAGE_DOWNLOADS_MAX } from "@/lib/passage/downloads";
 import { crossSiteWrite } from "@/lib/crossSite";
 import { appendJsonLine } from "@/lib/logFile";
@@ -13,7 +13,7 @@ import { requestHost } from "@/lib/publicOrigin";
  * L'attestation qu'attend l'ancienne adresse pour libérer sa place (DECISIONS.md §119).
  *
  * `GET ?items=<id>,<id>…` (au plus `2 × PASSAGE_DOWNLOADS_MAX` identifiants Jellyfin) :
- * `{ fetched: { <itemId>: <jobId> } }` — parmi ces titres, ceux que **ce compte** a récupérés entiers
+ * `{ fetched: { <itemId>: <jobId> }, arrived }` — parmi ces titres, ceux que **ce compte** a récupérés entiers
  * sur la nouvelle adresse, par une session issue d'un passage parti de **la session qui demande**
  * (`passageFetchedFor`). Rien d'autre ne s'y lit : un autre compte, une autre session du même compte
  * (un autre appareil) reçoivent `{ fetched: {} }`, comme une session qui n'est jamais passée. Foyer
@@ -27,7 +27,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Demande invalide" }, { status: 400 });
   }
   const fetched = passageFetchedFor(session.jti, session.u, raw.map((id) => id.toLowerCase()));
-  return NextResponse.json({ fetched }, { headers: { "Cache-Control": "private, no-store" } });
+  // `arrived` : cette session est passée (`passageArrivedFrom`) — ses téléchargements inachevés ici ne
+  // serviront plus.
+  const arrived = passageArrivedFrom(session.jti, session.u);
+  return NextResponse.json({ fetched, arrived }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 /**

@@ -7087,6 +7087,15 @@ Les lignes d'avant ne comptent que loin (5 min) d'un passage reçu par ce compte
 Depuis l'application installée, la nouvelle adresse s'ouvre dans le navigateur (`window.open`) ; sur
 iPhone, ce navigateur intégré n'est ni Safari ni l'application à venir, d'où le code et la phrase qui le
 dit.
+**Les téléchargements inachevés de l'ancienne adresse** (10.1.7) : une session passée — un de ses
+passages a ouvert une session sur la nouvelle adresse, `arrived` de `GET /api/passage/fetched`
+(`passageArrivedFrom`) — les efface de l'appareil au lancement suivant (`freeOldAddressDownloads`),
+jamais pendant une lecture, sans toucher la demande du serveur (la nouvelle adresse l'a peut-être
+reprise) et sans les compter dans le mot « ils sont dans Laterna ». Un iPhone gardait 660 Mo d'un
+épisode à moitié reçu sous l'écran du passage. Et une session refusée (401) arrête la boucle des
+téléchargements jusqu'au prochain chargement (`sessionLost`, `downloads.ts`) : elle réessayait toutes
+les 60 s sans fin. Tests : `passage-downloads.test.ts`, `passage-downloads-client.test.tsx`,
+`offline-session-perdue.test.ts`.
 
 **L'arrivée hors application installée (23/10/2026).** Sur l'iPhone du propriétaire en 10.0.0, la vue
 intégrée s'est dite « standalone » : la page s'est crue l'application Laterna installée, n'a pas montré
