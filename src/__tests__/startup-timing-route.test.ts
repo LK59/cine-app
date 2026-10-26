@@ -60,6 +60,15 @@ describe("POST /api/startup-timing", () => {
     expect(mockLog.mock.calls[1][0]).not.toHaveProperty("hiddenAtMs");
   });
 
+  it("écrit le type de navigation connu, et rien d'autre (26/10/2026)", async () => {
+    // Un compte à part : le plafond d'écritures par compte (`startupTimingAllowed`) est partagé par le fichier.
+    mockVerifySessionFull.mockResolvedValue({ u: "nav", jfUser: "Nav", role: "user" });
+    await post({ cacheUsed: true, navType: "reload" });
+    expect(mockLog).toHaveBeenCalledWith(expect.objectContaining({ navType: "reload" }));
+    await post({ cacheUsed: true, navType: "<script>" });
+    expect(mockLog.mock.calls[1][0]).not.toHaveProperty("navType");
+  });
+
   it("borne ce qui vient du navigateur", async () => {
     await post({ cacheUsed: "oui", cacheMs: -5, networkMs: Number.NaN, build: "x".repeat(200) });
     expect(mockLog).toHaveBeenCalledWith(expect.objectContaining({ cacheUsed: false, cacheMs: null, networkMs: null }));

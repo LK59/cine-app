@@ -9,6 +9,9 @@ import { pushDb } from "@/lib/db";
 import { getLocaleFromCookie } from "@/lib/i18n";
 import { logError } from "@/lib/logger";
 
+/** Le type de navigation de l'ouverture (`PerformanceNavigationTiming.type`) : rien d'autre n'est écrit. */
+const NAV_TYPES = new Set(["navigate", "reload", "back_forward", "prerender"]);
+
 /**
  * Ce que l'ouverture du cinéma a coûté, cache de l'appareil ou réseau — voir `persistentCache.ts`.
  *
@@ -125,6 +128,7 @@ export async function POST(req: NextRequest) {
     ...(ms(body.hiddenAtMs) !== null ? { hiddenAtMs: ms(body.hiddenAtMs) as number } : {}),
     standalone: body.standalone === true,
     ...(typeof body.installedApp === "boolean" ? { installedApp: body.installedApp } : {}),
+    ...(typeof body.navType === "string" && NAV_TYPES.has(body.navType) ? { navType: body.navType } : {}),
     ...(host ? { host } : {}),
     ...(routes ? { routes } : {}),
     ...continueOf(body),

@@ -35,7 +35,22 @@ function reloadIfSafe(served: string | null, moment: { filmOpen: boolean; benchR
   if (!mayReloadNow({ ...moment, typing: typing(), unsaved: unsaved() })) return;
   if (alreadyReloadedFor(served)) return;
   markReloadedFor(served);
-  window.location.reload();
+  refreshPage(window.location);
+}
+
+/**
+ * Charger la nouvelle version : une navigation vers la même adresse plutôt qu'un rechargement
+ * (26/10/2026). Sur un rechargement, WebKit fait revalider auprès du serveur chaque image demandée
+ * pendant le chargement, même fraîche en cache — les affiches et logos de TMDB, qui ne se disent pas
+ * `immutable` : sur un lien lent, la bannière restait sans image ni logo le temps de l'aller-retour,
+ * et ce rechargement a lieu précisément au retour au premier plan après un déploiement. Le HTML n'est
+ * jamais mis en cache et les fichiers du code changent de nom à chaque build : la navigation apporte
+ * bien la nouvelle version. Avec un `#…` (une fiche ouverte), une navigation vers la même adresse ne
+ * serait qu'un saut dans la page : le rechargement reste.
+ */
+export function refreshPage(location: Pick<Location, "hash" | "href" | "replace" | "reload">): void {
+  if (location.hash) location.reload();
+  else location.replace(location.href);
 }
 
 function typing(): boolean {

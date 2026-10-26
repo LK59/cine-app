@@ -752,6 +752,9 @@ function reportTiming(): void {
     // aussi dans la vue intégrée qu'ouvre le passage depuis l'ancienne application sur iPhone — la vue
     // « Changement d'adresse » comptait installé un compte qui n'avait fait qu'y passer.
     installedApp: isInstalledApp(),
+    // Ouverture, rechargement ou retour (26/10/2026) : un rechargement fait revalider à WebKit chaque
+    // image déjà en cache — la bannière sans image ni logo au lancement, sur un lien lent, en venait-elle ?
+    ...navigationTypeField(),
   };
   const send = (storage: Record<string, string | number | boolean>) => {
     try {
@@ -766,6 +769,16 @@ function reportTiming(): void {
   };
   // Les mesures d'ouverture sont déjà prises : attendre le stockage ne les change pas.
   void storageFacts(typeof navigator !== "undefined" ? navigator.storage : undefined, currentAccount).then(send, () => send({}));
+}
+
+/** `navigate` / `reload` / `back_forward` / `prerender`, ou rien si le navigateur ne le dit pas. */
+function navigationTypeField(): { navType?: string } {
+  try {
+    const entry = performance.getEntriesByType?.("navigation")[0] as PerformanceNavigationTiming | undefined;
+    return typeof entry?.type === "string" ? { navType: entry.type } : {};
+  } catch {
+    return {};
+  }
 }
 
 /** Pour les tests : repartir d'une page neuve. */
