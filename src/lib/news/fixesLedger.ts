@@ -709,6 +709,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.3.0",
+    page: "10.0",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Un épisode lancé depuis le début ne reste plus figé sur sa première image : la lecture attend que l'image soit prête pour partir.",
+        en: "An episode started from the beginning no longer freezes on its first picture: playback now waits for the picture to be ready before starting.",
+        es: "Un episodio iniciado desde el principio ya no se queda congelado en su primera imagen: la reproducción espera a que la imagen esté lista para arrancar.",
+        de: "Eine von Anfang an gestartete Folge bleibt nicht mehr auf ihrem ersten Bild stehen: Die Wiedergabe wartet, bis das Bild bereit ist.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
