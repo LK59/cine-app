@@ -2009,3 +2009,70 @@ body:has(.gestion-liquid) .glass-window {
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* L'écran de l'épisode suivant (`PlayerNextUp`, 26/10/2026) : la surface de l'image réduite par un
+   `transform` (le compositeur seul, l'image continue), l'épisode suivant à côté. Paysage : l'image à
+   gauche, centrée en hauteur ; portrait : la bande en haut, l'épisode dessous. Les commandes se
+   retirent tant qu'il est là — « Regarder le générique » les rend avec l'image entière. */
+.player-squeezable {
+  transform-origin: 0 0;
+  transition: transform 650ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.player-squeezed {
+  transform: translate(4%, 28%) scale(0.44);
+}
+.player-next-up-picture {
+  left: 4%;
+  top: 28%;
+  width: 44%;
+  height: 44%;
+}
+.player-next-up-panel {
+  left: 52%;
+  right: max(4%, calc(env(safe-area-inset-right, 0px) + 1rem));
+  top: 50%;
+  max-width: 28rem;
+  transform: translateY(-50%);
+  animation: player-next-up-in 500ms 150ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.player-next-up-overview {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+@keyframes player-next-up-in {
+  from { opacity: 0; translate: 12px 0; }
+  to { opacity: 1; translate: 0 0; }
+}
+/* Un téléphone couché : trop peu de hauteur pour la miniature — la vidéo réduite suffit. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .player-next-up-thumb { display: none; }
+  .player-next-up-overview { -webkit-line-clamp: 2; }
+}
+@media (orientation: portrait) {
+  .player-squeezable { transform-origin: 50% 0; }
+  .player-squeezed { transform: translateY(-17%) scale(0.92); }
+  .player-next-up-picture {
+    left: 4vw;
+    width: 92vw;
+    top: calc(29% - 92vw * 9 / 32);
+    height: calc(92vw * 9 / 16);
+  }
+  .player-next-up-panel {
+    left: max(1.25rem, env(safe-area-inset-left, 0px));
+    right: max(1.25rem, env(safe-area-inset-right, 0px));
+    top: calc(29% + 92vw * 9 / 32 + 1.75rem);
+    max-width: none;
+    transform: none;
+  }
+  .player-next-up-thumb { width: 58%; }
+}
+[data-player-frame]:has([data-player-next-up]) .player-chrome {
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-squeezable { transition: none; }
+  .player-next-up-panel { animation: none; }
+}

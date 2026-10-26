@@ -2721,7 +2721,8 @@ export function ExperimentalPlayerHost({
       {/* Deux cadres autour des surfaces : l'extérieur coupe ce qui déborde, l'intérieur porte
           l'agrandissement (`frameFitState`). Posé sur un cadre plutôt que sur chaque surface, il ne
           touche pas à leurs propres transitions d'opacité. */}
-      <div className="relative h-full w-full overflow-hidden">
+      {/* `data-player-picture` : la surface que l'écran de l'épisode suivant réduit (`PlayerNextUp`). */}
+      <div data-player-picture className="relative h-full w-full overflow-hidden">
         <div className="relative h-full w-full" style={frameFitState.style}>
           <video
             ref={videoElRef}

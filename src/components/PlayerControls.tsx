@@ -14,6 +14,7 @@ import { useCastAvailability, type CastVideoElement } from "@/components/playerC
 import { useChapters, useTrickplay } from "@/components/playerControls/useTrickplay";
 import { PlayerTopBar } from "@/components/playerControls/PlayerTopBar";
 import { PlayerPrompts } from "@/components/playerControls/PlayerPrompts";
+import { PlayerNextUp } from "@/components/playerControls/PlayerNextUp";
 import { PlayerSettingsMenu, type MenuView } from "@/components/playerControls/PlayerSettingsMenu";
 import { BOTTOM_EDGE } from "@/components/playerControls/layout";
 import { usePlayerKeyboard } from "@/components/playerControls/usePlayerKeyboard";
@@ -959,6 +960,22 @@ export function PlayerControls({
         </>
       )}
 
+      {showNextUp && !askStillThere && nextEpisode && !castActive && (
+        <PlayerNextUp
+          key={nextEpisode.itemId}
+          videoRef={videoRef}
+          seriesId={playerItem?.seriesId ?? null}
+          nextEpisode={nextEpisode}
+          countdown={nextUpCountdown}
+          total={NEXT_UP_COUNTDOWN_S}
+          running={nextUpRunning}
+          onPlay={() => {
+            noteViewerPresent();
+            requestAdvance();
+          }}
+          onWatchCredits={() => setNextUpDismissed(true)}
+        />
+      )}
       <PlayerPrompts
         skipNow={skipNow}
         onSkip={(end) => {
@@ -966,7 +983,8 @@ export function PlayerControls({
         }}
         sleepWarning={sleepWarning}
         askStillThere={askStillThere}
-        showNextUp={showNextUp}
+        // La petite carte ne reste que pour une diffusion : l'image est sur le téléviseur.
+        showNextUp={showNextUp && !!castActive}
         nextEpisode={nextEpisode}
         nextUpCountdown={nextUpCountdown}
         requestAdvance={requestAdvance}

@@ -117,17 +117,27 @@ describe("PlayerControls — l'épisode suivant, demandé deux fois de suite", (
 });
 
 describe("PlayerControls — la carte de l'épisode suivant", () => {
-  it("nomme sa croix, qui n'est qu'une icône", async () => {
+  it("pendant une diffusion, la petite carte nomme sa croix, qui n'est qu'une icône", async () => {
     // Sans nom, un lecteur d'écran annonçait « bouton » à côté de « Lire maintenant » : rien ne disait
-    // que celui-ci écartait la carte.
+    // que celui-ci écartait la carte. Hors diffusion, c'est l'écran de l'épisode suivant (26/10/2026).
     stubMediaFetches();
     let video: HTMLVideoElement | null = null;
     const { getByText } = render(
-      <Harness creditsStart={50} nextEpisode={{ itemId: "ep2", title: "Épisode 2" }} onVideoRef={(v) => (video = v)} />
+      <Harness castActive creditsStart={50} nextEpisode={{ itemId: "ep2", title: "Épisode 2" }} onVideoRef={(v) => (video = v)} />
     );
     await withPosition(video!);
     const card = getByText("Épisode 2").parentElement!;
     expect(within(card).getByRole("button", { name: "common.close" })).toBeTruthy();
+  });
+
+  it("hors diffusion, l'écran de l'épisode suivant : « Regarder le générique » est nommé, sur le bouton comme sur l'image réduite", async () => {
+    stubMediaFetches();
+    let video: HTMLVideoElement | null = null;
+    const { getAllByRole } = render(
+      <Harness creditsStart={50} nextEpisode={{ itemId: "ep2", title: "Épisode 2" }} onVideoRef={(v) => (video = v)} />
+    );
+    await withPosition(video!);
+    expect(getAllByRole("button", { name: "player.nextUp.watchCredits" })).toHaveLength(2);
   });
 });
 

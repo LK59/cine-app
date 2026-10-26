@@ -1836,6 +1836,12 @@
     "nextEpisode": "Nächste Folge",
     "nextEpisodeIn": "Nächste Folge · {n}s",
     "playNow": "Jetzt abspielen",
+    "nextUp": {
+      "label": "Nächste Folge",
+      "play": "Abspielen",
+      "watchCredits": "Abspann ansehen",
+      "runtime": "{n} Min."
+    },
     "moreOptions": "Weitere Optionen",
     "minimize": "Verkleinern",
     "playbackInfo": "Wiedergabeinfo",

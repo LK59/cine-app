@@ -2838,6 +2838,14 @@ d'un quart de seconde entre ses deux clics (ce que fait YouTube). Un clic qui re
 touche pas à la lecture. Quand la souris quitte la fenêtre pendant la lecture, les commandes partent
 aussitôt — sauf menu ouvert, glisser en cours ou focus clavier dans les commandes.
 
+**L'écran de l'épisode suivant** (10.2.0, 26/10/2026) remplace la petite carte du générique : la
+surface de l'image (`data-player-picture` dans le natif, l'élément dans le serveur) est réduite par un
+`transform` (`player-squeezed`, globals.css), l'épisode suivant est mis en avant (miniature, code,
+résumé, durée — la liste du menu « Épisodes »), « Lire » porte le décompte en anneau, « Regarder le
+générique » et un appui sur l'image réduite rendent l'image entière. Le moment, le décompte, « Vous êtes
+toujours là ? » et la minuterie de veille ne changent pas (`PlayerControls`). Pendant une diffusion, la
+petite carte reste : l'image est sur le téléviseur. `PlayerNextUp.tsx` ; tests `player-next-up.test.tsx`.
+
 **L'épisode suivant à tout moment.** Un bouton dans la pilule des réglages, pendant un épisode qui a
 une suite, par le même `onAdvance` que la carte du générique (le stop rapporté est `next`, à la
 position courante) ; absent quand la minuterie de veille arrête la série à la fin de l'épisode.

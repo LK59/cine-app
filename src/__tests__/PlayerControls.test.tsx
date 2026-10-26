@@ -944,7 +944,8 @@ describe("PlayerControls", () => {
 
     Object.defineProperty(video, "currentTime", { value: 55, configurable: true });
     act(() => video.dispatchEvent(new Event("timeupdate")));
-    const dismiss = screen.getByText("Next Ep").closest("div")!.querySelector("button:last-child")!;
+    // « Regarder le générique » de l'écran de l'épisode suivant (26/10/2026).
+    const dismiss = document.querySelector("[data-player-next-up-credits]") as HTMLButtonElement;
     await user.click(dismiss);
 
     expect(screen.queryByText("Next Ep")).not.toBeInTheDocument();

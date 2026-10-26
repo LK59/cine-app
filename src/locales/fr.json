@@ -1836,6 +1836,12 @@
     "nextEpisode": "Épisode suivant",
     "nextEpisodeIn": "Épisode suivant · {n}s",
     "playNow": "Lire maintenant",
+    "nextUp": {
+      "label": "Épisode suivant",
+      "play": "Lire",
+      "watchCredits": "Regarder le générique",
+      "runtime": "{n} min"
+    },
     "moreOptions": "Plus d’options",
     "minimize": "Réduire",
     "playbackInfo": "Infos techniques",

@@ -1836,6 +1836,12 @@
     "nextEpisode": "Next episode",
     "nextEpisodeIn": "Next episode · {n}s",
     "playNow": "Play now",
+    "nextUp": {
+      "label": "Next episode",
+      "play": "Play",
+      "watchCredits": "Watch credits",
+      "runtime": "{n} min"
+    },
     "moreOptions": "More options",
     "minimize": "Minimize",
     "playbackInfo": "Playback info",
