@@ -6,7 +6,7 @@ storage local set cine:player-volume {"volume":1,"muted":false}
 storage local set cine:player-volume {"volume":1,"muted":false}
 fetch POST /api/jellyfin/playback/start {"itemId":"film","maxBitrate":100000000,"startTicks":1200000000,"codecSupport":{},"disableAudioCodecs":[],"forCast":false,"nativeHls":true}
 log start {"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","why":"open","path":"serveur","reason":"transcodé par le serveur","hls":"natif","at":120,"startup":{"negotiateMs":0}}
-media video src= /api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf
+media video src= /api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf#t=120
 media video load
 media video play
 dom ouverture
@@ -55,7 +55,7 @@ fetch GET /api/jellyfin/chapters?itemId=film
 fetch GET /api/jellyfin/trickplay/info?itemId=film
 fetch POST /api/jellyfin/playback/start {"itemId":"film","maxBitrate":100000000,"startTicks":1200000000,"codecSupport":{},"disableAudioCodecs":[],"forCast":false,"nativeHls":true}
 log start {"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","why":"ladder","rung":1,"trigger":"élément : code 4","path":"serveur","reason":"transcodé par le serveur","hls":"natif","at":120,"retry":1,"startup":{"negotiateMs":0}}
-media video#2 src= /api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf
+media video#2 src= /api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf#t=120
 media video#2 load
 media video#2 play
 storage local set cine:player-volume {"volume":1,"muted":false}
@@ -65,7 +65,7 @@ fetch GET /api/jellyfin/chapters?itemId=film
 fetch GET /api/jellyfin/trickplay/info?itemId=film
 fetch POST /api/jellyfin/playback/start {"itemId":"film","maxBitrate":100000000,"startTicks":1200000000,"codecSupport":{},"disableAudioCodecs":["eac3","flac","opus"],"forCast":false,"nativeHls":true}
 log start {"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","why":"ladder","rung":2,"trigger":"élément : code 4","path":"serveur","reason":"transcodé par le serveur","hls":"natif","at":120,"retry":2,"startup":{"negotiateMs":0}}
-media video#3 src= /api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf
+media video#3 src= /api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf#t=120
 media video#3 load
 media video#3 play
 storage local set cine:player-volume {"volume":1,"muted":false}
@@ -75,7 +75,7 @@ fetch GET /api/jellyfin/chapters?itemId=film
 fetch GET /api/jellyfin/trickplay/info?itemId=film
 fetch POST /api/jellyfin/playback/start {"itemId":"film","maxBitrate":100000000,"startTicks":1200000000,"codecSupport":{},"disableAudioCodecs":["eac3","flac","opus","ac3"],"forceAudioTranscode":true,"forCast":false,"nativeHls":true}
 log start {"itemId":"film","title":"Film","player":"serveur","cast":false,"session":"00000001","agent":"<agent>","why":"ladder","rung":3,"trigger":"élément : code 4","path":"serveur","reason":"transcodé par le serveur","hls":"natif","at":120,"retry":3,"startup":{"negotiateMs":0}}
-media video#4 src= /api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf
+media video#4 src= /api/jellyfin/stream/film/master.m3u8?DeviceId=appareil-1&MediaSourceId=source&PlaySessionId=seance-jf#t=120
 media video#4 load
 media video#4 play
 storage local set cine:player-volume {"volume":1,"muted":false}
