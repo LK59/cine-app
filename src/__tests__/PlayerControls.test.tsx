@@ -952,6 +952,55 @@ describe("PlayerControls", () => {
     expect(onAdvance).not.toHaveBeenCalled();
   });
 
+  it("pendant le générique regardé, un bouton discret passe à la suite ; à la fin, l'écran revient (26/10/2026)", async () => {
+    stubMediaFetches();
+    let video!: HTMLVideoElement;
+    const onAdvance = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Harness
+        creditsStart={50}
+        nextEpisode={{ itemId: "next-1", title: "Next Ep" }}
+        onAdvance={onAdvance}
+        onVideoRef={(v) => { video = v; }}
+      />
+    );
+    Object.defineProperty(video, "duration", { value: 100, configurable: true });
+    Object.defineProperty(video, "currentTime", { value: 55, configurable: true, writable: true });
+    act(() => video.dispatchEvent(new Event("durationchange")));
+    act(() => video.dispatchEvent(new Event("timeupdate")));
+    await user.click(document.querySelector("[data-player-next-up-credits]") as HTMLButtonElement);
+    expect(document.querySelector("[data-player-next-up]")).toBeNull();
+    const pill = document.querySelector("[data-player-credits-next]") as HTMLButtonElement;
+    expect(pill).not.toBeNull();
+    // À la toute fin, l'écran revient, et le bouton discret s'efface.
+    Object.defineProperty(video, "currentTime", { value: 99.5, configurable: true, writable: true });
+    act(() => video.dispatchEvent(new Event("timeupdate")));
+    expect(document.querySelector("[data-player-next-up]")).not.toBeNull();
+    expect(document.querySelector("[data-player-credits-next]")).toBeNull();
+    expect(onAdvance).not.toHaveBeenCalled();
+  });
+
+  it("le bouton discret du générique passe à l'épisode suivant", async () => {
+    stubMediaFetches();
+    let video!: HTMLVideoElement;
+    const onAdvance = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Harness
+        creditsStart={50}
+        nextEpisode={{ itemId: "next-1", title: "Next Ep" }}
+        onAdvance={onAdvance}
+        onVideoRef={(v) => { video = v; }}
+      />
+    );
+    Object.defineProperty(video, "currentTime", { value: 55, configurable: true });
+    act(() => video.dispatchEvent(new Event("timeupdate")));
+    await user.click(document.querySelector("[data-player-next-up-credits]") as HTMLButtonElement);
+    await user.click(document.querySelector("[data-player-credits-next]") as HTMLButtonElement);
+    expect(onAdvance).toHaveBeenCalledTimes(1);
+  });
+
   it("mute button toggles video.muted", async () => {
     stubMediaFetches();
     let video!: HTMLVideoElement;

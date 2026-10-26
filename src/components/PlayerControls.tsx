@@ -3,7 +3,7 @@
 import type { TrickplayInfo } from "@/lib/trickplayTile";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Maximize, Minimize, Captions, AudioLines, Loader2, RotateCcw, RotateCw, EllipsisVertical, SkipForward, Layers } from "lucide-react";
+import { Play, Pause, Maximize, Minimize, Captions, AudioLines, Loader2, RotateCcw, RotateCw, EllipsisVertical, SkipForward, Layers, ChevronRight } from "lucide-react";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import type { HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
@@ -16,7 +16,7 @@ import { PlayerTopBar } from "@/components/playerControls/PlayerTopBar";
 import { PlayerPrompts } from "@/components/playerControls/PlayerPrompts";
 import { PlayerNextUp } from "@/components/playerControls/PlayerNextUp";
 import { PlayerSettingsMenu, type MenuView } from "@/components/playerControls/PlayerSettingsMenu";
-import { BOTTOM_EDGE } from "@/components/playerControls/layout";
+import { BOTTOM_EDGE, PROMPT_BOTTOM } from "@/components/playerControls/layout";
 import { usePlayerKeyboard } from "@/components/playerControls/usePlayerKeyboard";
 import { usePlaybackMirror, useElementMirror } from "@/components/playerControls/usePlaybackMirror";
 import { useVolumeControl } from "@/components/playerControls/useVolumeControl";
@@ -544,8 +544,12 @@ export function PlayerControls({
   const sleepMinutes = useSyncExternalStore(sleepTimerStore.subscribe, sleepMinutesSnapshot, sleepNullServerSnapshot);
   const sleepWarning = useSyncExternalStore(sleepTimerStore.subscribe, sleepWarningSnapshot, sleepNullServerSnapshot);
   const sleepBlocksAdvance = useSyncExternalStore(sleepTimerStore.subscribe, sleepBlocksAdvanceSnapshot, sleepFalseServerSnapshot);
-  const showNextUp =
-    nextUpFrom != null && currentTime >= nextUpFrom && !!nextEpisode && !nextUpDismissed && !sleepBlocksAdvance;
+  // « Regarder le générique » écarte l'écran jusqu'à la fin de l'épisode, où il revient avec son
+  // décompte : le générique regardé jusqu'au bout enchaîne quand même (26/10/2026).
+  const inCredits = nextUpFrom != null && currentTime >= nextUpFrom && !!nextEpisode && !sleepBlocksAdvance;
+  const showNextUp = inCredits && (!nextUpDismissed || atEnd);
+  // Pendant le générique regardé : un bouton discret pour passer quand même à la suite.
+  const creditsNextPill = inCredits && nextUpDismissed && !atEnd && !castActive;
 
   // Le décompte repart de zéro quand la carte s'en va — un retour en arrière avant le générique —,
   // sans quoi il reprenait là où il en était, à trois secondes au lieu de dix.
@@ -973,8 +977,30 @@ export function PlayerControls({
             noteViewerPresent();
             requestAdvance();
           }}
-          onWatchCredits={() => setNextUpDismissed(true)}
+          onWatchCredits={() => {
+            setNextUpDismissed(true);
+            // Les commandes, le temps de voir où l'on en est : revenir au générique les montrait cachées.
+            showControls();
+          }}
         />
+      )}
+      {creditsNextPill && nextEpisode && (
+        <button
+          type="button"
+          data-player-surface-ignore
+          data-player-credits-next=""
+          onClick={(e) => {
+            e.stopPropagation();
+            noteViewerPresent();
+            requestAdvance();
+          }}
+          data-liquid
+          className="player-pill pointer-events-auto absolute z-30 flex items-center gap-1.5 py-2.5 pl-4 pr-3 text-sm font-medium text-white"
+          style={{ bottom: PROMPT_BOTTOM, right: "max(1rem, env(safe-area-inset-right))" }}
+        >
+          {t("player.nextUp.label")}
+          <ChevronRight size={16} aria-hidden />
+        </button>
       )}
       <PlayerPrompts
         skipNow={skipNow}
