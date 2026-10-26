@@ -27,6 +27,11 @@ export interface StartupFacts {
   fragMbps?: number;
   bufferedMs?: number;
   pictureMs?: number;
+  /**
+   * Safari, HLS natif : le numéro du premier segment média demandé (l'init, `-1`, mis à part). Une
+   * reprise qui part du bon endroit (`#t=`, `resumeFragment`) le montre ici : 351 et non 0.
+   */
+  firstSegment?: number;
 }
 
 const round = (v: number) => Math.round(v);
@@ -114,7 +119,7 @@ export class ServerStartup {
   // reprise, posé juste après. Sans préchauffage, hls.js montrait d'abord le début du film, et ce que la
   // reprise coûtait (le second démarrage de ffmpeg chez Jellyfin, 1,85 à 3,8 s mesurées) ne se lisait
   // nulle part. Ces instants le disent, au bilan (`diag.resume*`, hors du plafond des quarante).
-  private resume: { at: number; kickMs?: number; kickSegment?: number; seekMs?: number; pictureMs?: number } | null = null;
+  private resume: { at: number; kickMs?: number; kickSegment?: number; fragment?: boolean; seekMs?: number; pictureMs?: number } | null = null;
 
   /** Une ouverture à `at` secondes (> 0) : la reprise sera suivie. */
   resumeAsked(at: number): void {
@@ -129,6 +134,13 @@ export class ServerStartup {
       if (!this.resume || this.resume.kickMs !== undefined) return;
       this.resume.kickMs = this.now();
       this.resume.kickSegment = segment;
+    });
+  }
+
+  /** Safari, HLS natif : l'adresse a reçu `#t=` (`withStartFragment`) pour partir de la reprise. */
+  resumeFragment(): void {
+    this.safe(() => {
+      if (this.resume) this.resume.fragment = true;
     });
   }
 
@@ -158,6 +170,7 @@ export class ServerStartup {
       return {
         resumeAt: Math.round(r.at * 10) / 10,
         ...(r.kickMs !== undefined ? { resumeKickMs: r.kickMs, resumeKickSegment: r.kickSegment ?? -1 } : {}),
+        ...(r.fragment ? { resumeFragment: 1 } : {}),
         ...(r.seekMs !== undefined ? { resumeSeekMs: r.seekMs } : {}),
         ...(r.pictureMs !== undefined ? { resumePictureMs: r.pictureMs } : {}),
       };
@@ -190,6 +203,12 @@ export class ServerStartup {
         this.facts.variantMs = round(variant.responseEnd - this.t0);
         if (size(variant)) this.facts.variantKB = kb(size(variant));
       }
+      const numbered = segments
+        .map((e) => /\/(-?\d+)\.(?:mp4|m4s|ts)$/.exec(new URL(e.name, "http://x").pathname)?.[1])
+        .filter((n): n is string => n !== undefined)
+        .map(Number)
+        .find((n) => n >= 0);
+      if (numbered !== undefined) this.facts.firstSegment ??= numbered;
       const frag = segments[0];
       if (frag && this.facts.fragMs === undefined) {
         this.facts.fragAskedMs ??= round(frag.startTime - this.t0);

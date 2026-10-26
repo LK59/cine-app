@@ -189,7 +189,8 @@ describe("une lecture dans la page charge l'adresse signée (bughunt zone 5, §6
     reponse = { ...reponseBase, castUrl: CAST_URL };
     render(<PlayerHost />);
     await nextNegotiation(1);
-    expect(video().src).toBe(CAST_URL);
+    // Le `#t=` d'une reprise (`withStartFragment`) ne part pas sur le réseau : l'adresse demandée reste celle-ci.
+    expect(video().src.split("#")[0]).toBe(CAST_URL);
   });
 
   it("hls.js : la source chargée est `castUrl`", async () => {
@@ -409,5 +410,23 @@ describe("la croix coupe un élément encore en chargement", () => {
     load.mockClear();
     act(() => void getByText("fermer").click());
     expect(load).not.toHaveBeenCalled();
+  });
+});
+
+describe("Safari reprend au bon segment (26/10/2026)", () => {
+  it("une reprise en HLS natif part de sa position par `#t=`", { timeout: 20_000 }, async () => {
+    engine.nativeHls = true;
+    render(<PlayerHost />);
+    await nextNegotiation(1);
+    await waitFor(() => expect(video().getAttribute("src")).toMatch(/#t=120$/));
+  });
+
+  it("une diffusion garde son adresse telle quelle", { timeout: 20_000 }, async () => {
+    engine.nativeHls = true;
+    relais.takeover = { resumeAt: 600, cast: true, owner: playback.session };
+    render(<PlayerHost />);
+    await nextNegotiation(1);
+    await waitFor(() => expect(video().getAttribute("src")).toBeTruthy());
+    expect(video().getAttribute("src")).not.toContain("#t=");
   });
 });

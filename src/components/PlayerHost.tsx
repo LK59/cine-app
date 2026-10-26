@@ -56,7 +56,7 @@ import {
   purgeLegacyAudioBlocklist,
   takeCarriedExclusions,
 } from "@/components/player/server/audioLadder";
-import { audioReloadIntent, releaseHlsElement, reloadIntoServerPlayer, reloadServerPage } from "@/components/player/server/serverElement";
+import { audioReloadIntent, releaseHlsElement, reloadIntoServerPlayer, reloadServerPage, withStartFragment } from "@/components/player/server/serverElement";
 import {
   serverAudioTracks,
   serverSubtitleTracks,
@@ -1560,7 +1560,9 @@ function ActivePlayer({
       // Safari (desktop + iOS) plays HLS natively — hls.js is only needed where
       // that's absent (Chrome/Firefox).
       if (nativeHls) {
-        video.src = sourceUrl;
+        const fragmented = !castSession && withStartFragment(sourceUrl, resumeAt) !== sourceUrl;
+        if (fragmented) startup.resumeFragment();
+        video.src = fragmented ? withStartFragment(sourceUrl, resumeAt) : sourceUrl;
         // Reassigning .src alone doesn't reliably tear down Safari's existing
         // HLS session when only the query string changes (e.g. switching
         // audio track) — force a clean reload so it actually picks up the

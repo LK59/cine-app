@@ -17,6 +17,23 @@ export function releaseHlsElement(video: HTMLVideoElement): void {
 }
 
 /**
+ * L'adresse du flux pour Safari (HLS natif), avec la position de départ en fragment (`#t=`, Media
+ * Fragments) quand la séance reprend au milieu (26/10/2026).
+ *
+ * Sur Safari, ce n'est pas nous qui demandons les segments : il commençait par le segment 0, Jellyfin
+ * lançait ffmpeg au début du film, puis — le saut de reprise posé au `loadeddata` — le relançait à la
+ * position (17 reprises sur 20 du 18 au 26/10, image à la reprise en 8,6 s médiane contre 3,9 s pour
+ * la première image). hls.js part déjà du bon segment depuis le 15/10 (`warmSegmentAt`). Le fragment
+ * ne quitte pas l'appareil (il n'est jamais envoyé au serveur) ; s'il est ignoré, le saut du
+ * `loadeddata` reste en place, et c'est l'ouverture d'avant. Jamais pour une diffusion : l'adresse
+ * part au téléviseur, qui a sa propre reprise (`castResume`).
+ */
+export function withStartFragment(url: string, resumeAt: number | undefined): string {
+  if (typeof resumeAt !== "number" || !Number.isFinite(resumeAt) || resumeAt <= 0 || url.includes("#")) return url;
+  return `${url}#t=${Math.floor(resumeAt * 1000) / 1000}`;
+}
+
+/**
  * Écrit l'intention que la page rechargée relira (`PlaybackProvider`). Faux si le stockage la refuse :
  * l'appelant garde alors son chemin d'avant (la lecture dans la page, ou l'écran d'erreur).
  */
