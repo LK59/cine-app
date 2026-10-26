@@ -20,9 +20,6 @@ dom ouverture
     button "player.castConfirm.confirm" inert
     button "player.mute"
     input "player.volume" type=range value=1
-    button "10"
-    button "player.play"
-    button "10"
     p "Un film"
     button "player.audio"
     button "player.subtitles"
