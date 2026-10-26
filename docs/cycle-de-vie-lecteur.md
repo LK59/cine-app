@@ -310,6 +310,16 @@ segment de la reprise (jusqu'à ses en-têtes ; transcodage seulement) — un `a
 négociation suivante, le chien de garde et le démontage). Réussi : `startPosition`. Échoué : rien, l'ouverture
 d'avant. Le saut de `loadeddata` reste posé (il ne bouge plus qu'à l'intérieur du segment).
 
+Safari (HLS natif) ne se laisse pas dicter ses segments : une reprise y reçoit son adresse avec
+`#t=<position>` (`withStartFragment`, 26/10/2026), hors diffusion — s'il le respecte, il demande le
+segment de la reprise d'abord, et Jellyfin ne lance ffmpeg qu'une fois ; ignoré, l'ouverture d'avant.
+La preuve au journal : `diag.resumeFragment` et `startup.firstSegment` (le premier segment média demandé).
+
+La croix coupe aussi l'élément (`releaseHlsElement`) quand il n'a pas encore d'image
+(`readyState < HAVE_CURRENT_DATA`) : retiré de la page en plein chargement, iOS continuait de demander les
+segments une trentaine de secondes, et Jellyfin relançait un encodage pour lui (26/10/2026). Avec une
+image, il reste au fondu, comme avant ; en diffusion, il est toujours coupé.
+
 hls.js 1.7.3 (14/10/2026, `hlsRecovery.ts`, DECISIONS.md §67) — trois choses que l'écouteur d'erreur
 suppose désormais :
 - hls.js remet lui-même la MediaSource à zéro sur `MEDIA_SOURCE_REQUIRES_RESET` (drapeau

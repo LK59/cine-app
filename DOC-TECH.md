@@ -764,6 +764,15 @@ end, its description, its resume state and its file header and index are fetched
 the opening looks for them, so it starts without the round trips to a distant server. No picture is
 read, and the source closes without taking the current film's handover slot (`close(false)`).
 
+**The next-episode screen** (`PlayerNextUp.tsx`, 10.2.0, DECISIONS §65): when the credits start, the
+picture surface (`data-player-picture` on the native host, the element itself on the server player)
+is shrunk by a CSS `transform` (`player-squeezed`) — the compositor alone, playback never touched —
+and the next episode is shown beside it from the « Épisodes » menu's list (thumbnail, code, overview,
+runtime), with « Lire » carrying the 10 s countdown. « Regarder le générique » (or a tap on the shrunk
+picture) restores it and shows the controls; a discreet « Épisode suivant » pill stays for the rest
+of the credits, and the screen comes back with its countdown at the very end. While casting, the
+small card stays: the picture is on the television.
+
 **Casting goes through the server player** (AirPlay, Chromecast): a MediaSource stream cannot be
 sent to a television, so the host hands over with `cast: true` and takes the film back when the
 route ends. That handover belongs to the playback that asked for it — the takeover carries its
@@ -786,7 +795,10 @@ has no menu for the stream's subtitle renditions — a viewer changed subtitles 
 iPhone over two evenings and watched without. The native player's handover carries the subtitle's
 Jellyfin index, language and forced flag (`castSubtitleOf`); the server player sends it as
 `burnSubtitle`, and the route negotiates with an `Encode` subtitle profile (`burnSubtitles`), which
-re-encodes the picture. The next episode of a cast carries the language only (`castCarriedTo`), and the
+re-encodes the picture. Before the first picture Jellyfin extracts the subtitle from the file (once per
+file — 11 s for a 2.3 GB 4K episode) and starts a slower encode (6.9 s to the first segment against 1.8 s
+without, measured on 26/10/2026), and the device picker only opens with the picture: the server
+player says so meanwhile (`castSubtitlePrep`). The next episode of a cast carries the language only (`castCarriedTo`), and the
 route finds the same subtitle by language and flag (`castSubtitleStream`), with a second negotiation;
 none in that language, the cast goes as before. Changing subtitles during the cast says that the
 picture carries the one chosen at launch and offers to come back to the phone

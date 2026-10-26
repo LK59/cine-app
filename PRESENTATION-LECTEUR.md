@@ -9,7 +9,7 @@ multicanal compris, sans que le serveur réencode quoi que ce soit.**
 | 🎬 **0 transcodage serveur** | dans le cas courant : le serveur envoie des octets, l'appareil fait le reste |
 | 🔊 **10 familles audio** | lues sur l'appareil, copiées telles quelles ou décodées sur place — AAC, Dolby Digital, Dolby Digital Plus, Dolby TrueHD, MLP, DTS, DTS-HD, DTS Express, FLAC, Opus |
 | 📱 **4K HDR10 et Dolby Vision** | sur iPhone, iPad et Mac, en natif, sans conversion de l'image |
-| 🧪 **5 387 tests automatisés** | dans le dépôt, plus des bancs de mesure qui passent de vrais films au crible |
+| 🧪 **7 156 tests automatisés** | dans le dépôt, plus des bancs de mesure qui passent de vrais films au crible |
 
 Environ **39 000 lignes de TypeScript** pour le lecteur seul (dont 17 000 pour le moteur de
 remultiplexage et d'audio), et **cinq décodeurs audio** compilés en WebAssembly, chargés seulement
@@ -271,11 +271,12 @@ marche.
 
 | Fonction | |
 |---|---|
-| **AirPlay** | Depuis un iPhone, un iPad ou un Mac. La télévision lit le flux du serveur ; une image HDR reste HDR. Fermer le lecteur arrête aussi la télévision |
+| **AirPlay** | Depuis un iPhone, un iPad ou un Mac. La télévision lit le flux du serveur ; une image HDR reste HDR. Le sous-titre affiché sur le téléphone est incrusté dans l'image de la télévision (le démarrage prend alors une quinzaine de secondes de plus, et le lecteur le dit). Fermer le lecteur arrête aussi la télévision |
 | **Chromecast** (bêta) | Depuis Chrome et Edge (ordinateur, Android). La page devient une télécommande : langue, sous-titres texte, position |
 | **Reprise suivie à la télévision** | Pendant une diffusion, le serveur note la position d'après ce que la télévision demande, même si le téléphone se tait |
 | **Reprise instantanée** | Les premiers mégaoctets des films de « Reprendre » et « À suivre » sont gardés sur l'appareil (au plus 64 Mo par titre). Le film démarre sans attendre le réseau |
 | **Épisode suivant préparé** | Pendant le générique, l'en-tête du prochain épisode est déjà chargé |
+| **Écran de l'épisode suivant** | Au générique, la vidéo se réduit et l'épisode suivant s'affiche (miniature, résumé, durée) avec un décompte de 10 s. « Regarder le générique » rend l'image entière, un bouton discret reste pour passer à la suite, et l'écran revient à la fin du générique |
 | **Avance en mémoire** | Après une minute de film, le lecteur prend de l'avance par rafales — jusqu'à cinq minutes de film, 150 Mo au plus sur iPhone —, puis laisse la radio se reposer. En mémoire vive seulement : rien n'use le stockage de l'appareil |
 | **Changement de langue en cours de film** | Le lecteur se reconstruit à la même position, pause conservée |
 | **Préférences du compte** | Langue audio et de sous-titres, reprise là où le film s'était arrêté, quel que soit l'appareil |
@@ -295,7 +296,7 @@ Désactivé sans clé d'accès ; un budget mensuel et une limite quotidienne par
 
 | | |
 |---|---|
-| **Tests** | 5 387 tests automatisés dans 559 fichiers, lancés avant chaque déploiement et à chaque publication |
+| **Tests** | 7 156 tests automatisés dans 750 fichiers, lancés avant chaque déploiement et à chaque publication |
 | **Bancs sur vrais fichiers** | quatorze bancs, hors de la suite : octets produits relus par `ffmpeg`, coût de chaque étape, niveau de chaque canal comparé à `ffmpeg`, recensement des formats d'une bibliothèque entière |
 | **Banc d'appareil** | lancé depuis le cinéma, il lit de vrais films sur l'appareil à tester : ouverture, sauts, rafales de sauts, pause, changement de piste, sous-titres — et mesure l'horloge du film contre les images affichées |
 | **Journal de lecture** | chaque appareil dit ce qu'il a fait : chemin pris, relais, attentes et leur cause (réseau, calcul ou décodeur), débit reçu, deux dernières minutes de lecture |
@@ -316,5 +317,5 @@ images clés, livraison audio, ordre des canaux — est dans [`DOC-TECH.md`](DOC
 - **ASS / SSA** : texte seul, sans mise en forme.
 - **Anciens formats** (`.avi` en MPEG-4 ASP, VP9, MP3…) : lus par le lecteur serveur, qui
   réencode.
-- **Choisir les sous-titres depuis le téléphone pendant un AirPlay** n'atteint pas encore la
-  télévision : on les choisit sur la télévision.
+- **Changer de sous-titres pendant un AirPlay** : le sous-titre est incrusté au lancement de la
+  diffusion ; pour en changer, on revient sur le téléphone et on relance la diffusion.

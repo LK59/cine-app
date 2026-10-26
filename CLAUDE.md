@@ -198,7 +198,9 @@ a tab left open all day wrote an evening of stalls with the morning's code, and 
 proxy's `/sw.js?v=` requests said so. Since the same day `rebuild`, `fallback`, `error` and `stall` lines
 carry `shownAgoMs` / `lastHiddenMs` (or `hiddenNow`), and the trace records each trip to the
 background with the element's state — a decode failure just after an unlock read like any other. Such a tab now reloads itself when nothing is playing
-(`src/lib/staleBuild.ts`). Both files are one
+(`src/lib/staleBuild.ts`) — by navigating to the same address rather than `location.reload()` when there
+is no `#` (`refreshPage`, `BuildRefresh.tsx`, 26/10/2026): on a reload WebKit revalidates every image
+already cached, and the home banner stood empty for a round trip to TMDB on a slow link. Both files are one
 JSON object per line, rotated at 5 MB (`src/lib/logFile.ts`) — `player.log` keeping five archives
 (`.1` newest … `.5`), `server.log` three — and read with `tail`/`jq`; `logGenerations` lists a log
 and its archives oldest first for any reader.
@@ -233,7 +235,8 @@ written by `src/lib/eventLogs.ts` and read by the activity panel like the others
 `data/logs/startup.log` (since 2026-09-25, same module) records each opening of the cinema: whether
 it was drawn from the catalogue kept on the device (`src/lib/persistentCache.ts`, IndexedDB, one per
 account, seven days, wiped at sign-out) and how old that cache was, and when the cache and then the
-network answered (`cacheMs`, `networkMs`, from navigation start). Since 2026-10-10 it splits that
+network answered (`cacheMs`, `networkMs`, from navigation start), and since 2026-10-26 how the page was
+reached (`navType`: `navigate` / `reload` / `back_forward`). Since 2026-10-10 it splits that
 wait: `bootMs` (when the cache read starts — JavaScript boot), `idbMs` (the IndexedDB read itself)
 and `resumeNetworkMs` (« Reprendre » from the network). The same day showed the device was never
 the problem: the home's routes answered together in 4.3 s because folder matching (§47) scanned the

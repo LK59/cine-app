@@ -64,6 +64,12 @@ plus loin de la même suite y est.
 - **Un onglet à la fois** télécharge pour un compte ; l'écran est gardé allumé tant qu'un
   téléchargement visible avance ; l'application demande au navigateur un stockage persistant au
   premier téléchargement.
+- **Session refusée.** Si le serveur ne reconnaît plus la session, les téléchargements s'arrêtent
+  jusqu'au prochain chargement de la page, au lieu de réessayer sans fin ; rien n'est perdu.
+- **Changement d'adresse.** Les téléchargements partent avec le passage (la liste, pas les fichiers :
+  la nouvelle adresse les retélécharge). Sur l'ancienne adresse, un titre est effacé une fois récupéré
+  entier sur la nouvelle, et les téléchargements inachevés le sont dès que le passage est fait
+  (DECISIONS.md §119).
 
 ## Ce qui est gardé avec le fichier
 
