@@ -2341,6 +2341,8 @@
     "castRelaunch": "Restart the cast",
     "castAudioWarning": "Changing the audio track reloads the player, so the cast to your device will stop. You can start it again right after, from the cast button.",
     "castAudioContinue": "Change anyway",
+    "castSubtitleWarning": "On the TV, subtitles are burned into the picture when the cast starts. To change them, come back to the phone, choose them, then start the cast again.",
+    "castSubtitleReturn": "Back to the phone",
     "trackLabel": {
       "channels": "{n} channels",
       "track": "Track {n}",

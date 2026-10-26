@@ -106,6 +106,7 @@ import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
 import { SubtitleLayer } from "@/components/player/SubtitleLayer";
 import { dualSubtitleMemory, pickRememberedDual, rememberDual } from "@/lib/dualSubtitles";
 import { useServerDualSubtitles } from "@/lib/useServerDualSubtitles";
+import type { CastSubtitle } from "@/lib/castSubtitle";
 import { ServerPlayerIntro } from "@/components/player/server/ServerPlayerIntro";
 import { useServerTimeline } from "@/components/player/server/useServerTimeline";
 import { useCastRoute } from "@/components/player/server/useCastRoute";
@@ -119,6 +120,7 @@ import { NO_LINK_SIGNAL, STREAM_PREFIX, makeFireWatchdog, startLinkWatch, type L
 import { useServerPositionWatch } from "@/components/player/server/useServerPositionWatch";
 import {
   CastAudioWarning,
+  CastSubtitleWarning,
   CastInterruptedScreen,
   LighterNotices,
   ServerWaitPill,
@@ -709,6 +711,15 @@ function ActivePlayer({
       return typeof carried === "number" ? carried : null;
     })()
   );
+  /**
+   * Le sous-titre à incruster dans l'image du téléviseur (AirPlay, `castSubtitle.ts`), pour une séance
+   * ouverte pour diffuser. Lu par `startPlayback`, dont les dépendances sont figées ; tenu à jour avant
+   * l'effet qui négocie, comme `sessionLighterRef`.
+   */
+  const castSubtitleRef = useRef<CastSubtitle | undefined>(castSession ? mine?.castSubtitle : undefined);
+  useEffect(() => {
+    castSubtitleRef.current = castSession ? mine?.castSubtitle : undefined;
+  }, [castSession, mine]);
   const takeSubtitleCarry = useCallback(() => {
     const value = subtitleCarryRef.current;
     subtitleCarryRef.current = null;
@@ -1179,6 +1190,7 @@ function ActivePlayer({
             codecSupport,
             disableAudioCodecs,
             castSession,
+            castSubtitle: castSubtitleRef.current,
             nativeHls,
             bench,
             scene: isSceneRef.current(),
@@ -1471,6 +1483,9 @@ function ActivePlayer({
       setSubtitleTracks(tracks.map((st) => ({ id: st.index, label: st.label })));
       // Le sous-titre que le lecteur natif montrait, rallumé une fois quand la version allégée prend
       // le relais (§78) — seulement s'il existe dans ce flux ; sinon aucun, comme avant.
+      // Le sous-titre incrusté dans l'image du téléviseur, coché aussi dans le menu du téléphone : c'est
+      // celui que le téléviseur montre.
+      if (typeof data.burnedSubtitle === "number") subtitleCarryRef.current = data.burnedSubtitle;
       const carriedSubtitle = takeSubtitleCarry();
       const carried = carriedSubtitle !== null && tracks.some((st) => st.index === carriedSubtitle) ? carriedSubtitle : null;
       // « Deux sous-titres » retenu sur l'appareil (§87), réappliqué à chaque négociation si ses langues
@@ -1796,6 +1811,21 @@ function ActivePlayer({
     setCurrentSubtitleId(id);
     if (wasDual) rememberDual(subtitleFactsOf(externalSubtitleTracks, id), subtitleFactsOf(externalSubtitleTracks, secondSubtitleRef.current));
   }, [externalSubtitleTracks, reportPositionNow, castActive]);
+
+  /**
+   * Changer de sous-titre pendant une diffusion ouverte pour diffuser : le téléviseur garde celui qui a
+   * été incrusté au lancement (`castSubtitle.ts`), le menu du téléphone n'y change rien. On le dit, et
+   * on propose de revenir sur le téléphone pour choisir puis relancer (`CastSubtitleWarning`). Hors
+   * diffusion, rien ne s'interpose.
+   */
+  const [pendingSubtitle, setPendingSubtitle] = useState(false);
+  const requestSubtitleChange = useCallback(
+    (id: number | null) => {
+      if (castSession && castActiveRef.current) setPendingSubtitle(true);
+      else changeSubtitle(id);
+    },
+    [castSession, changeSubtitle]
+  );
 
   /** Le second sous-titre (§87) : jamais le principal, jamais sans principal. */
   const changeSecondSubtitle = useCallback((id: number | null) => {
@@ -2401,6 +2431,15 @@ function ActivePlayer({
               }}
             />
           )}
+          {pendingSubtitle && !isMini && (
+            <CastSubtitleWarning
+              onCancel={() => setPendingSubtitle(false)}
+              onReturn={() => {
+                setPendingSubtitle(false);
+                handleCastReturn();
+              }}
+            />
+          )}
           {castInterrupted && !isMini && <CastInterruptedScreen onQuit={handleClose} onRelaunch={relaunchCast} />}
           {/* L'écran d'erreur et la pastille de connexion instable restent ici : leurs teintes d'état
               (`text-red-400`, `text-amber-300`) sont hors du relevé de `design-tokens.test.ts`, qui
@@ -2456,7 +2495,7 @@ function ActivePlayer({
         session={session}
         allowed={!castSession}
         loading={loading}
-        trouble={!!error || needsReauth || castInterrupted || pendingAudioTrack !== null}
+        trouble={!!error || needsReauth || castInterrupted || pendingAudioTrack !== null || pendingSubtitle}
         hidden={isMini}
         resumeSeconds={initialResumeAt ?? null}
         videoRef={videoRef}
@@ -2500,7 +2539,7 @@ function ActivePlayer({
           onChangeAudio={requestAudioChange}
           subtitleTracks={subtitleTracks}
           currentSubtitleId={currentSubtitleId}
-          onChangeSubtitle={changeSubtitle}
+          onChangeSubtitle={requestSubtitleChange}
           secondSubtitle={{ currentId: secondSubtitleId, onChange: changeSecondSubtitle }}
           hidden={!!error || needsReauth}
           loading={loading}

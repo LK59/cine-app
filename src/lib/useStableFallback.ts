@@ -1,6 +1,7 @@
 "use client";
 
 import type { LighterStep } from "@/lib/slowLinkPolicy";
+import { castSubtitleForAnotherFile, type CastSubtitle } from "@/lib/castSubtitle";
 import { useCallback, useEffect, useState } from "react";
 
 /** How long the word stays up. Long enough to read, short enough not to become furniture. */
@@ -75,6 +76,11 @@ export interface StableTakeover {
    * Absent : le lecteur serveur garde son défaut, comme avant.
    */
   subtitleStreamIndex?: number | null;
+  /**
+   * Le sous-titre à incruster dans l'image envoyée au téléviseur (AirPlay, `castSubtitle.ts`) : celui
+   * que le téléphone montrait au moment de diffuser. Absent : aucun, le flux est celui d'avant.
+   */
+  castSubtitle?: CastSubtitle;
   /** Une génération de sous-titres était en cours au passage : le lecteur serveur le dit, brièvement. */
   subtitleGenerating?: boolean;
   /** L'instant de la bascule (`Date.now()`) : le lecteur serveur mesure l'interruption jusqu'à son image. */
@@ -130,8 +136,15 @@ export function castCarriedTo(
   const owner = takeover?.owner as { itemId?: string; openId?: number } | undefined;
   if (!takeover?.cast || !owner || owner === session) return null;
   if (owner.openId === undefined || owner.openId !== session.openId || owner.itemId === session.itemId) return null;
-  // Un autre fichier : ni sa position ni sa piste ne valent ici. Depuis le début, piste par défaut.
-  return { ...takeover, owner: session, resumeAt: session.resumeAt ?? 0, audioStreamIndex: undefined };
+  // Un autre fichier : ni sa position ni sa piste ne valent ici. Depuis le début, piste par défaut. Le
+  // sous-titre incrusté se retrouve par sa langue, pas par un index qui ne vaut que pour l'autre fichier.
+  return {
+    ...takeover,
+    owner: session,
+    resumeAt: session.resumeAt ?? 0,
+    audioStreamIndex: undefined,
+    ...(takeover.castSubtitle ? { castSubtitle: castSubtitleForAnotherFile(takeover.castSubtitle) } : {}),
+  };
 }
 
 export interface StableFallback {

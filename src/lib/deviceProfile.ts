@@ -73,9 +73,18 @@ const SAFE_VIDEO_RANGES = "SDR|HDR10|HDR10Plus|HLG|DOVIWithHDR10|DOVIWithHDR10Pl
  * piste que le récepteur sait afficher — et que le téléphone continue de choisir, puisque ces
  * pistes apparaissent elles aussi dans `video.textTracks`.
  */
+/** Les formats que Jellyfin peut incruster, texte et images : tous, puisqu'on ré-encode de toute façon. */
+const BURNED_SUBTITLE_FORMATS = ["srt", "subrip", "ass", "ssa", "vtt", "webvtt", "sub", "smi", "ttml", "mov_text", "pgssub", "dvdsub", "dvbsub"];
+
 export interface DeviceProfileOptions {
   /** Les sous-titres doivent voyager dans le flux, pas à côté. */
   subtitlesInStream?: boolean;
+  /**
+   * Le sous-titre demandé est incrusté dans l'image (AirPlay, `castSubtitle.ts`) : un récepteur de
+   * téléviseur n'a souvent aucun menu pour choisir une piste du manifeste. L'image est alors
+   * ré-encodée. L'emporte sur `subtitlesInStream`.
+   */
+  burnSubtitles?: boolean;
   /**
    * Le son doit être ré-encodé en AAC — jamais copié : en stéréo (`"stereo"`), ou en gardant
    * l'ambiance (`"surround"`).
@@ -195,7 +204,9 @@ export function buildDeviceProfile(
     // being direct-played, where the browser has no way to read them itself) as sidecar VTT,
     // served through the app's existing /api/jellyfin/stream/subtitle proxy. "Hls" covers the
     // Transcode path, where subtitles are embedded as a switchable HLS rendition instead.
-    SubtitleProfiles: options.subtitlesInStream
+    SubtitleProfiles: options.burnSubtitles
+      ? BURNED_SUBTITLE_FORMATS.map((Format) => ({ Format, Method: "Encode" }))
+      : options.subtitlesInStream
       ? // Seul `Hls` : laisser `External` dans la liste rendrait à Jellyfin le droit de servir le
         // fichier à côté, c'est-à-dire exactement ce que le téléviseur ne saura pas lire.
         [{ Format: "vtt", Method: "Hls" }]

@@ -23,10 +23,11 @@ vi.mock("@/components/PlaybackInfoPanel", () => ({ PlaybackInfoPanel: () => null
 vi.mock("@/components/ExperimentalPlayerHost", () => ({ ExperimentalPlayerHost: () => <div data-testid="natif" /> }));
 vi.mock("@/components/PlayerControls", () => ({
   VOLUME_STORAGE_KEY: "volume",
-  PlayerControls: (props: { onClose: () => void; onChangeAudio: (id: number) => void }) => (
+  PlayerControls: (props: { onClose: () => void; onChangeAudio: (id: number) => void; onChangeSubtitle: (id: number | null) => void; onCastReturn?: () => void }) => (
     <div data-testid="commandes">
       <button onClick={props.onClose}>fermer</button>
       <button onClick={() => props.onChangeAudio(2)}>piste</button>
+      <button onClick={() => props.onChangeSubtitle(null)}>sous-titre</button>
     </div>
   ),
 }));
@@ -304,6 +305,39 @@ describe("l'interruption d'une diffusion", () => {
     await nextNegotiation(2);
     expect(negociations[1].audioStreamIndex).toBe(2);
     expect(text()).not.toContain("player.castAudioWarning");
+  });
+
+  /** Le sous-titre incrusté dans l'image du téléviseur (`castSubtitle.ts`, 26/10/2026). */
+  it("une séance ouverte pour diffuser demande l'incrustation du sous-titre que le natif montrait", { timeout: 20_000 }, async () => {
+    const castSubtitle = { index: 5, language: "fra", forced: false };
+    relais.takeover = { resumeAt: 600, cast: true, owner: playback.session, castSubtitle };
+    render(<PlayerHost />);
+    await nextNegotiation(1);
+    expect(negociations[0]).toMatchObject({ forCast: true, burnSubtitle: castSubtitle });
+  });
+
+  it("changer de sous-titre pendant la diffusion le dit, et propose de revenir sur le téléphone", { timeout: 20_000 }, async () => {
+    relais.takeover = { resumeAt: 600, cast: true, owner: playback.session };
+    const { getByText } = render(<PlayerHost />);
+    await nextNegotiation(1);
+    fire("loadeddata");
+    castOn();
+    act(() => void getByText("sous-titre").click());
+    expect(text()).toContain("player.castSubtitleWarning");
+    act(() => void getByText("common.cancel").click());
+    expect(text()).not.toContain("player.castSubtitleWarning");
+    act(() => void getByText("sous-titre").click());
+    act(() => void getByText("player.castSubtitleReturn").click());
+    expect(text()).not.toContain("player.castSubtitleWarning");
+    expect(lines("fallback").map((l) => l.reason)).toContain("fin de diffusion (retour demandé sur le téléphone)");
+  });
+
+  it("hors diffusion, un sous-titre choisi s'applique sans question", { timeout: 20_000 }, async () => {
+    const { getByText } = render(<PlayerHost />);
+    await nextNegotiation(1);
+    fire("loadeddata");
+    act(() => void getByText("sous-titre").click());
+    expect(text()).not.toContain("player.castSubtitleWarning");
   });
 
   it("pendant une diffusion, la confirmation d'abord : « Annuler » ne change rien, « Continuer » change la piste", { timeout: 20_000 }, async () => {

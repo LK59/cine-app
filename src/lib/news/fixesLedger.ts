@@ -677,6 +677,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.1.4",
+    page: "10.0",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Les sous-titres choisis sur le téléphone s'affichent sur la télévision quand on diffuse avec AirPlay.",
+        en: "Subtitles chosen on the phone now show on the TV when casting with AirPlay.",
+        es: "Los subtítulos elegidos en el teléfono se muestran en el televisor al emitir con AirPlay.",
+        de: "Auf dem Telefon gewählte Untertitel erscheinen beim Übertragen per AirPlay auf dem Fernseher.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

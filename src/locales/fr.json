@@ -2341,6 +2341,8 @@
     "castRelaunch": "Relancer la diffusion",
     "castAudioWarning": "Changer de piste audio recharge le lecteur : la diffusion vers l'appareil va s'arrêter. Vous pourrez la relancer juste après, depuis le bouton de diffusion.",
     "castAudioContinue": "Changer quand même",
+    "castSubtitleWarning": "Sur la télévision, les sous-titres sont incrustés dans l'image au lancement de la diffusion. Pour les changer, revenez sur le téléphone, choisissez-les, puis relancez la diffusion.",
+    "castSubtitleReturn": "Revenir sur le téléphone",
     "trackLabel": {
       "channels": "{n} canaux",
       "track": "Piste {n}",

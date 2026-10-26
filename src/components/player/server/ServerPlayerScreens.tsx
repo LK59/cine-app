@@ -36,6 +36,30 @@ export function CastAudioWarning({ onCancel, onContinue }: { onCancel: () => voi
   );
 }
 
+/**
+ * Changer de sous-titre pendant une diffusion AirPlay : le téléviseur reçoit le sous-titre incrusté
+ * dans l'image au lancement (`castSubtitle.ts`), le menu du téléphone n'y change rien. On le dit, et
+ * on propose le chemin qui marche : revenir sur le téléphone, choisir, relancer la diffusion.
+ */
+export function CastSubtitleWarning({ onCancel, onReturn }: { onCancel: () => void; onReturn: () => void }) {
+  const t = useT();
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 px-6 text-center">
+      <div className="max-w-md">
+        <p className="mb-4 text-sm text-white">{t("player.castSubtitleWarning")}</p>
+        <div className="flex justify-center gap-3">
+          <button type="button" onClick={onCancel} className="btn btn-ghost px-4 py-2">
+            {t("common.cancel")}
+          </button>
+          <button type="button" onClick={onReturn} className="btn-primary inline-flex justify-center">
+            {t("player.castSubtitleReturn")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CastInterruptedScreen({ onQuit, onRelaunch }: { onQuit: () => void; onRelaunch: () => void }) {
   const t = useT();
   return (

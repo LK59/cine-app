@@ -779,9 +779,18 @@ the next launch resumed from the moment of the close. Jellyfin stamps every WebV
 `X-TIMESTAMP-MAP=MPEGTS:900000` — the ten-second offset of MPEG-TS segments — while our segments
 are fMP4 with the file's own timestamps (`-copyts -start_at_zero`); the relay rewrites it to
 `MPEGTS:0` (`fixVttTimestampMap`), or an Apple TV shows each subtitle ten seconds late. The phone
-draws its own subtitles and never showed the offset. **Choosing subtitles from the phone does not
-reach the television yet**: the phone's menu drives its own `<track>` elements, the television
-reads the stream's subtitle renditions — pick them on the television meanwhile. Playlists (`.m3u8`)
+draws its own subtitles and never showed the offset. **The subtitle shown on the phone when casting
+starts is burned into the television's picture** (`castSubtitle.ts`, since 26/10/2026): the phone's
+menu drives its own `<track>` elements, and a television's AirPlay receiver (TCL, Samsung, LG) often
+has no menu for the stream's subtitle renditions — a viewer changed subtitles eight times from an
+iPhone over two evenings and watched without. The native player's handover carries the subtitle's
+Jellyfin index, language and forced flag (`castSubtitleOf`); the server player sends it as
+`burnSubtitle`, and the route negotiates with an `Encode` subtitle profile (`burnSubtitles`), which
+re-encodes the picture. The next episode of a cast carries the language only (`castCarriedTo`), and the
+route finds the same subtitle by language and flag (`castSubtitleStream`), with a second negotiation;
+none in that language, the cast goes as before. Changing subtitles during the cast says that the
+picture carries the one chosen at launch and offers to come back to the phone
+(`CastSubtitleWarning`) — a new choice needs a new cast, since a renegotiation breaks the AirPlay route on WebKit. Playlists (`.m3u8`)
 leave the relay compressed (brotli, else gzip, by `Accept-Encoding` — `encodePlaylist`, DECISIONS §76):
 Jellyfin repeats the whole request on every segment line, and an episode's playlist was 954 KB in clear.
 

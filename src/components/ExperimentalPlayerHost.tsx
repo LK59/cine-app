@@ -136,6 +136,7 @@ import {
 } from "@/components/playerNative/NativeOverlays";
 import {
   aacRouteFacts,
+  castSubtitleOf,
   generationMenu,
   jellyfinAudioIndex,
   leadAt,
@@ -2964,7 +2965,18 @@ export function ExperimentalPlayerHost({
               // lui-même : se tromper dans ce sens donne une bascule, jamais une fausse erreur.
               serverFallback === false
                 ? undefined
-                : () => fallToStable("diffusion demandée", { ...takeoverNow(), cast: true })
+                : () => {
+                    // Le sous-titre montré ici, incrusté dans l'image du téléviseur : il n'a pas d'autre
+                    // moyen d'en avoir un (`castSubtitle.ts`). Absent sans sous-titre — le relais d'avant.
+                    const castSubtitle = castSubtitleOf(
+                      currentSubtitle,
+                      tracks.subtitles,
+                      info?.embeddedSubtitleIndexes,
+                      externals,
+                      isGeneratingTrack(currentSubtitle) || generationView.entries.some((e) => e.track.number === currentSubtitle)
+                    );
+                    fallToStable("diffusion demandée", { ...takeoverNow(), cast: true, ...(castSubtitle ? { castSubtitle } : {}) });
+                  }
             }
             chromecast={chromecastAllowed && chromecastState.devices ? { active: chromecastState.connected, onRequest: requestChromecast } : undefined}
             currentAudioId={currentAudio}

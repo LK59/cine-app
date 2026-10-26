@@ -1,6 +1,7 @@
 import type { CodecSupport } from "@/lib/codecSupport";
 import type { LighterStep } from "@/lib/slowLinkPolicy";
 import type { StartOpts } from "@/components/player/server/startOpts";
+import type { CastSubtitle } from "@/lib/castSubtitle";
 
 /**
  * Le corps de la demande `/api/jellyfin/playback/start` du lecteur serveur — champ pour champ, dans
@@ -13,6 +14,7 @@ export function negotiationBody({
   codecSupport,
   disableAudioCodecs,
   castSession,
+  castSubtitle,
   nativeHls,
   bench,
   scene,
@@ -23,6 +25,8 @@ export function negotiationBody({
   codecSupport: CodecSupport;
   disableAudioCodecs: string[];
   castSession: boolean;
+  /** Le sous-titre à incruster dans l'image du téléviseur (AirPlay) — absent, le corps d'avant. */
+  castSubtitle?: CastSubtitle;
   nativeHls: boolean;
   bench: string | undefined;
   scene: boolean;
@@ -50,6 +54,9 @@ export function negotiationBody({
      * signée, puisque c'est lui qui ira la chercher, sans notre cookie.
      */
     forCast: castSession,
+    // Incrusté dans l'image, puisqu'un téléviseur n'a souvent aucun menu pour choisir une piste du
+    // manifeste (`castSubtitle.ts`).
+    ...(castSession && castSubtitle ? { burnSubtitle: castSubtitle } : {}),
     // Lets the server skip its manifest pre-warm for us — see the route. hls.js retries a
     // slow first manifest patiently; Safari's native pipeline does not, which is who that
     // pre-warm was built for.

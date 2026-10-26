@@ -7,7 +7,8 @@ import { takeAacDecodeRoute } from "@/lib/webcodecs/softwareAudio";
 import type { SeekTiming } from "@/lib/hostSeek";
 import { seekElapsed } from "@/components/player/session/seekElapsed";
 import { traceRecent } from "@/lib/webcodecs/trace";
-import { normaliseLanguage } from "@/lib/trackPreferences";
+import { normaliseLanguage, toJellyfinLanguage, trackLanguage } from "@/lib/trackPreferences";
+import type { CastSubtitle } from "@/lib/castSubtitle";
 import { languageName } from "@/lib/trackLabel";
 import type { SessionTally } from "@/lib/playerSessionTally";
 import type { PlayerTrack } from "@/lib/webcodecs/playerTrack";
@@ -160,6 +161,31 @@ export function jellyfinSubtitleIndex(
   if (!embedded || embedded.length !== fileTracks.length) return null;
   const ordinal = fileTracks.findIndex((t) => t.number === current);
   return ordinal >= 0 ? embedded[ordinal] ?? null : null;
+}
+
+/**
+ * Le sous-titre que le téléphone montre, à incruster dans l'image du téléviseur (`castSubtitle.ts`).
+ *
+ * `undefined` sans sous-titre, pour une piste en cours de génération (Jellyfin ne la connaît pas
+ * encore), ou quand l'index Jellyfin ne se retrouve pas : la diffusion part alors comme avant.
+ */
+export function castSubtitleOf(
+  current: number | null,
+  fileTracks: PlayerTrack[],
+  embedded: number[] | undefined,
+  externals: { id: number; url: string; language: string | null }[],
+  generating: boolean
+): CastSubtitle | undefined {
+  if (current === null || generating) return undefined;
+  const index = jellyfinSubtitleIndex(current, fileTracks, embedded, externals);
+  if (index === null) return undefined;
+  const external = externals.find((e) => e.id === current);
+  const track = external ? null : fileTracks.find((t) => t.number === current);
+  return {
+    index,
+    language: toJellyfinLanguage(external ? external.language : track ? trackLanguage(track) : null),
+    forced: track?.isForced === true,
+  };
 }
 
 /** Les raisons de pause que le serveur nomme ; toute autre se dit « en attente ». */

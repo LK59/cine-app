@@ -23,6 +23,7 @@ import { signCastToken, CAST_TOKEN_PARAM } from "@/lib/castToken";
 import { masterVariantFacts } from "@/lib/playbackPanel";
 import { forwardedFor } from "@/lib/clientAddress";
 import { transcodeTargetBps } from "@/lib/slowLink";
+import { castSubtitleStream, parseCastSubtitle } from "@/lib/castSubtitle";
 
 // Both "no Jellyfin identity in session" and "Jellyfin rejected our stored
 // token" boil down to the same user-facing action: log back in with Jellyfin
@@ -145,6 +146,11 @@ export async function POST(req: NextRequest) {
   const castTarget = castTargetOf(body?.castTarget);
   const forCast = body?.forCast === true || castTarget !== null;
   /**
+   * Le sous-titre à incruster dans l'image d'une diffusion AirPlay (`castSubtitle.ts`) — jamais pour
+   * un Chromecast, qui reçoit le sien à côté, ni hors diffusion. Absent, rien ne change.
+   */
+  const burnWanted = forCast && castTarget === null ? parseCastSubtitle(body?.burnSubtitle) : null;
+  /**
    * Une lecture du banc d'essai : rien n'est annoncé à Jellyfin.
    *
    * Le banc saute à la fin des films ; annoncée, la séance aurait pu marquer le film vu et poser
@@ -205,25 +211,46 @@ export async function POST(req: NextRequest) {
     };
     const { jfId, jfToken } = session;
     const item = itemId;
+    // Le sous-titre à incruster dans l'image d'une diffusion AirPlay (`castSubtitle.ts`) : son index
+    // dans ce fichier, connu d'avance quand le téléphone diffuse le film qu'il lisait.
+    let burnIndex = burnWanted?.index;
     const negotiate = (reencodeAudio: "stereo" | "surround" | undefined) =>
       jellyfin.getPlaybackInfo(jfId, item, jfToken, {
         maxBitrate,
         mediaSourceId: item,
         audioStreamIndex,
-        subtitleStreamIndex,
+        subtitleStreamIndex: burnIndex ?? subtitleStreamIndex,
         startTicks,
         deviceProfile: castTarget
           ? buildChromecastProfile(maxBitrate, { reencodeAudio })
-          : buildDeviceProfile(effectiveSupport, maxBitrate, { subtitlesInStream: forCast, reencodeAudio, ...(lighter || videoH264Only ? { lighter: { targetBps: maxBitrate } } : {}) }),
+          : buildDeviceProfile(effectiveSupport, maxBitrate, {
+              subtitlesInStream: forCast,
+              ...(burnIndex !== undefined ? { burnSubtitles: true } : {}),
+              reencodeAudio,
+              ...(lighter || videoH264Only ? { lighter: { targetBps: maxBitrate } } : {}),
+            }),
       });
-    let info = await negotiate(forceAudioTranscode ? "stereo" : undefined);
+    let reencode: "stereo" | "surround" | undefined = forceAudioTranscode ? "stereo" : undefined;
+    let info = await negotiate(reencode);
+    // L'index demandé ne désigne pas ce sous-titre dans ce fichier (l'épisode suivant d'une
+    // diffusion n'apporte que la langue) : le bon, retrouvé par sa langue, et une seconde demande.
+    // Aucun de cette langue : la diffusion part sans incrustation, comme avant.
+    let burnedSubtitle: number | null = null;
+    if (burnWanted) {
+      burnedSubtitle = castSubtitleStream(info.MediaSources?.[0]?.MediaStreams, burnWanted);
+      if (burnedSubtitle !== (burnIndex ?? null)) {
+        burnIndex = burnedSubtitle ?? undefined;
+        info = await negotiate(reencode);
+      }
+    }
     // Un son que Jellyfin copierait et que le navigateur refuserait — l'AAC à PCE, voir
     // `audioNeedsReencode` : renégocié aussitôt, ré-encodé en 5.1 standard (`"surround"`, voir
     // `reencodeAudio`). Une seconde demande à Jellyfin pour ces fichiers-là seulement, plutôt que
     // quatre essais perdus et une erreur au bout de vingt secondes (« Elle s'appelle Ruby », Fire TV,
     // 10/10/2026).
     if (!forceAudioTranscode && audioNeedsReencode(chosenAudioStream(info.MediaSources?.[0], audioStreamIndex))) {
-      info = await negotiate("surround");
+      reencode = "surround";
+      info = await negotiate(reencode);
     }
     const source = info.MediaSources?.[0];
     if (!source) {
@@ -467,6 +494,8 @@ export async function POST(req: NextRequest) {
        */
       sourceBitrateBps: typeof source.Bitrate === "number" && source.Bitrate > 0 ? source.Bitrate : null,
       subtitleTracks,
+      /** Le sous-titre incrusté dans l'image (index Jellyfin), pour une diffusion AirPlay qui en a demandé un. */
+      ...(burnedSubtitle !== null ? { burnedSubtitle } : {}),
       audioTracks,
       /**
        * La langue de tournage, pour la mention « (VO) » — la même que sur le lecteur natif.

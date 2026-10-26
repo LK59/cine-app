@@ -2341,6 +2341,8 @@
     "castRelaunch": "Übertragung neu starten",
     "castAudioWarning": "Ein Wechsel der Tonspur lädt den Player neu, die Übertragung an das Gerät wird daher beendet. Sie können sie direkt danach über die Übertragungsschaltfläche neu starten.",
     "castAudioContinue": "Trotzdem wechseln",
+    "castSubtitleWarning": "Auf dem Fernseher werden die Untertitel beim Start der Übertragung ins Bild eingebrannt. Um sie zu ändern, kehren Sie zum Telefon zurück, wählen Sie sie aus und starten Sie die Übertragung neu.",
+    "castSubtitleReturn": "Zurück zum Telefon",
     "trackLabel": {
       "channels": "{n} Kanäle",
       "track": "Spur {n}",

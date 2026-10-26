@@ -2341,6 +2341,8 @@
     "castRelaunch": "Reiniciar la emisión",
     "castAudioWarning": "Cambiar de pista de audio recarga el reproductor, así que la emisión al dispositivo se detendrá. Podrás reiniciarla justo después, desde el botón de emisión.",
     "castAudioContinue": "Cambiar de todos modos",
+    "castSubtitleWarning": "En el televisor, los subtítulos se incrustan en la imagen al iniciar la emisión. Para cambiarlos, vuelve al teléfono, elígelos y reinicia la emisión.",
+    "castSubtitleReturn": "Volver al teléfono",
     "trackLabel": {
       "channels": "{n} canales",
       "track": "Pista {n}",
