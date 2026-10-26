@@ -6,7 +6,6 @@ fetch GET /api/player/frame/film-1
 step monté
 probe {"audioPreferences":null,"audioTrackNumber":null,"fileVersion":null,"startPaused":false,"startSeconds":0,"streamUrl":"/stream.mkv","videoRangeType":"SDR"}
 log start {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","reason":"remultiplexage → lecteur natif","openedInMs":0,"at":0,"rebuild":0,"displayHdr":"inconnu","hdrLightCap":"natif","hdrChoice":"auto","wideGamut":"inconnu"}
-media video play
 fetch GET /api/jellyfin/chapters?itemId=film-1
 fetch GET /api/jellyfin/trickplay/info?itemId=film-1
 fetch POST /api/jellyfin/playback/playing {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":0,"isPaused":false,"visible":true}
@@ -22,13 +21,16 @@ dom ouverture
     button "player.mute"
     input "player.volume" type=range value=1
     button "10"
-    button "player.pause"
+    button "player.play"
     button "10"
     p "Un film"
     button "player.audio"
     button "player.subtitles"
     button "player.moreOptions"
     input "player.seekLabel" type=range value=0 valuetext=player.seekValue:{"at":"0:00","total":"0:00"}
+step image posée, élément à l'arrêt
+step départ permis
+media video play
 trace élément : repart à 0.00 s
 storage local set cine:last-watched {"film-1":1792522800000}
 step première image
