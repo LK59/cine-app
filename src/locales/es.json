@@ -1897,6 +1897,7 @@
     "offline": "Estás sin conexión",
     "stillLoading": "Sigue cargando, no cierres el reproductor…",
     "compatPrep": "Preparando una versión compatible con este dispositivo…",
+    "castSubtitlePrep": "Preparando los subtítulos para el televisor… puede tardar unos veinte segundos.",
     "reconnecting": "Reconectando…",
     "loadingTooLong": "Esto está tardando demasiado. Inténtalo de nuevo.",
     "slowLink": {

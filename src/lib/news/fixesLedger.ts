@@ -690,6 +690,25 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.1.5",
+    page: "10.0",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Avant une diffusion AirPlay avec sous-titres, un message explique l'attente pendant leur préparation pour la télévision.",
+        en: "Before an AirPlay cast with subtitles, a message now explains the wait while they are prepared for the TV.",
+        es: "Antes de emitir con AirPlay con subtítulos, un mensaje explica la espera mientras se preparan para el televisor.",
+        de: "Vor einer AirPlay-Übertragung mit Untertiteln erklärt eine Meldung die Wartezeit, während sie für den Fernseher vorbereitet werden.",
+      },
+      {
+        fr: "Fermer le lecteur avant la première image arrête bien le chargement de la vidéo.",
+        en: "Closing the player before the first picture now really stops the video from loading.",
+        es: "Cerrar el reproductor antes de la primera imagen detiene de verdad la carga del vídeo.",
+        de: "Wird der Player vor dem ersten Bild geschlossen, wird das Laden des Videos jetzt wirklich beendet.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

@@ -1897,6 +1897,7 @@
     "offline": "Vous êtes hors ligne",
     "stillLoading": "Le chargement est toujours en cours, ne fermez pas le lecteur…",
     "compatPrep": "Préparation d'une version compatible avec cet appareil…",
+    "castSubtitlePrep": "Préparation des sous-titres pour le téléviseur… cela peut prendre une vingtaine de secondes.",
     "reconnecting": "Reconnexion…",
     "loadingTooLong": "Le chargement prend trop de temps. Réessayez.",
     "slowLink": {

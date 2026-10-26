@@ -1897,6 +1897,7 @@
     "offline": "You're offline",
     "stillLoading": "Still loading, don't close the player…",
     "compatPrep": "Preparing a version this device can play…",
+    "castSubtitlePrep": "Preparing subtitles for the TV… this can take up to twenty seconds.",
     "reconnecting": "Reconnecting…",
     "loadingTooLong": "This is taking too long. Try again.",
     "slowLink": {

@@ -95,12 +95,14 @@ export function ServerWaitPill({
   isOffline,
   seekHint,
   compatPrep,
+  castSubtitlePrep,
   loadingLong,
   hlsJs,
 }: {
   isOffline: boolean;
   seekHint: boolean | undefined;
   compatPrep: boolean;
+  castSubtitlePrep: boolean;
   loadingLong: boolean;
   hlsJs: boolean;
 }) {
@@ -115,6 +117,8 @@ export function ServerWaitPill({
           ? t('player.offline')
           : seekHint
             ? t("player.slowLink.hint")
+            : castSubtitlePrep
+            ? t("player.castSubtitlePrep")
             : compatPrep
             ? t("player.compatPrep")
             : loadingLong

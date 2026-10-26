@@ -858,6 +858,14 @@ function ActivePlayer({
    * (elle a ses propres mots), ni une diffusion.
    */
   const compatPrep = loading && !!fallbackReason && !lighterStep && !castSession && playbackInfo?.playMethod === "Transcode";
+  /**
+   * Une diffusion dont le sous-titre est incrusté (AirPlay, `castSubtitle.ts`) : avant la première
+   * image, Jellyfin extrait le sous-titre du fichier (une fois par fichier, 11 s pour un épisode 4K de
+   * 2,3 Go) puis démarre un encodage plus lent (6,9 s contre 1,8 s au premier morceau, mesuré le
+   * 26/10/2026), et le sélecteur d'appareils n'ouvre qu'une fois l'image là. Sans un mot, la roue
+   * tournait dix-sept secondes et la diffusion a été abandonnée avant que la télé soit proposée.
+   */
+  const castSubtitlePrep = loading && castSession && !!mine?.castSubtitle;
   const [showPlaybackInfo, setShowPlaybackInfo] = useState(false);
   // Le lien en direct dans le panneau technique (§77), lu seulement quand il est ouvert.
   useEffect(() => {
@@ -988,7 +996,10 @@ function ActivePlayer({
        */
       release: () => {
         const video = videoRef.current;
-        if (!video || !castActiveRef.current) return;
+        // Aussi un élément qui n'a pas encore d'image : retiré de la page en plein chargement, iOS
+        // continuait de demander les morceaux — trente secondes après la croix et un second encodage
+        // 4K lancé pour rien chez Jellyfin (26/10/2026). Sans image, il n'y a rien à fondre.
+        if (!video || !(castActiveRef.current || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA)) return;
         closingRef.current = true;
         try {
           releaseHlsElement(video);
@@ -2468,8 +2479,8 @@ function ActivePlayer({
           {/* Sous l'ouverture, la pastille n'a pas de place : posée à mi-écran, elle tombait sur la
               ligne de chargement (iPhone de Louis, 10/10/2026). L'ouverture dit le même mot, sous sa
               ligne — voir `note` ci-dessous. */}
-          {!error && !isMini && !introCovering && (isOffline || reconnecting || (loading && loadingLong) || seekSignal?.hint || compatPrep) && (
-            <ServerWaitPill isOffline={isOffline} seekHint={seekSignal?.hint} compatPrep={compatPrep} loadingLong={loadingLong} hlsJs={hlsJs} />
+          {!error && !isMini && !introCovering && (isOffline || reconnecting || (loading && loadingLong) || seekSignal?.hint || compatPrep || castSubtitlePrep) && (
+            <ServerWaitPill isOffline={isOffline} seekHint={seekSignal?.hint} compatPrep={compatPrep} castSubtitlePrep={castSubtitlePrep} loadingLong={loadingLong} hlsJs={hlsJs} />
           )}
           {/* Non-interactive by design — a measured signal (recent rebuffers, see badConnection's
               own comment), not a settings toggle with a detail

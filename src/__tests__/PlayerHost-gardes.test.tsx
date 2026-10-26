@@ -358,4 +358,56 @@ describe("l'interruption d'une diffusion", () => {
     await nextNegotiation(2);
     expect(negociations[1].audioStreamIndex).toBe(2);
   });
+
+  /**
+   * Nath, 26/10/2026 : l'incrustation retarde la première image d'une quinzaine de secondes, le
+   * sélecteur AirPlay attend cette image, et la roue tournait sans un mot.
+   */
+  it("une diffusion au sous-titre incrusté dit pourquoi elle attend, jusqu'à la première image", { timeout: 20_000 }, async () => {
+    relais.takeover = { resumeAt: 600, cast: true, owner: playback.session, castSubtitle: { index: 3, language: "fra", forced: true } };
+    render(<PlayerHost />);
+    await nextNegotiation(1);
+    expect(text()).toContain("player.castSubtitlePrep");
+    fire("loadeddata");
+    fire("playing");
+    expect(text()).not.toContain("player.castSubtitlePrep");
+  });
+
+  it("sans sous-titre à incruster, la diffusion n'annonce rien de tel", { timeout: 20_000 }, async () => {
+    relais.takeover = { resumeAt: 600, cast: true, owner: playback.session };
+    render(<PlayerHost />);
+    await nextNegotiation(1);
+    expect(text()).not.toContain("player.castSubtitlePrep");
+  });
+});
+
+describe("la croix coupe un élément encore en chargement", () => {
+  /**
+   * Retiré de la page avant sa première image, l'élément d'iOS continuait de demander les morceaux
+   * trente secondes après la croix, et Jellyfin relançait un encodage 4K pour lui (26/10/2026).
+   */
+  it("sans image, la croix retire la source de l'élément", { timeout: 20_000 }, async () => {
+    engine.nativeHls = true;
+    const { getByText } = render(<PlayerHost />);
+    await nextNegotiation(1);
+    const el = video();
+    const load = vi.mocked(HTMLMediaElement.prototype.load);
+    load.mockClear();
+    act(() => void getByText("fermer").click());
+    expect(el.hasAttribute("src")).toBe(false);
+    expect(load).toHaveBeenCalled();
+  });
+
+  it("avec une image, la croix laisse l'élément au fondu, comme avant", { timeout: 20_000 }, async () => {
+    engine.nativeHls = true;
+    const { getByText } = render(<PlayerHost />);
+    await nextNegotiation(1);
+    const el = video();
+    fire("loadeddata");
+    Object.defineProperty(el, "readyState", { configurable: true, value: HTMLMediaElement.HAVE_ENOUGH_DATA });
+    const load = vi.mocked(HTMLMediaElement.prototype.load);
+    load.mockClear();
+    act(() => void getByText("fermer").click());
+    expect(load).not.toHaveBeenCalled();
+  });
 });
