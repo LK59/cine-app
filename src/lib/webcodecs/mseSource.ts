@@ -518,6 +518,7 @@ export class MseSource {
     this.onResumed();
     this.clock.lastPlayingAt = Date.now();
     this.clock.settleOpeningReassert();
+    this.clock.armOpeningGracePush();
   };
 
   private readonly onPlay = () => {
@@ -2116,6 +2117,8 @@ export class MseSource {
     this.watchdogTimer = null;
     if (this.clock.openingReassertTimer) clearTimeout(this.clock.openingReassertTimer);
     this.clock.openingReassertTimer = null;
+    if (this.clock.openingGraceTimer) clearTimeout(this.clock.openingGraceTimer);
+    this.clock.openingGraceTimer = null;
     if (this.networkRetryTimer) clearTimeout(this.networkRetryTimer);
     this.networkRetryTimer = null;
     this.video.removeEventListener("error", this.onElementError);

@@ -42,6 +42,8 @@ export class FrozenClockWatch {
   private openingReassertDone = false;
   /** Le dernier `playing` de l'élément — voir `OPENING_PLAYING_GRACE_MS`. */
   lastPlayingAt = 0;
+  /** La poussée de l'ouverture au bout du délai de grâce — voir `armOpeningGracePush`. */
+  openingGraceTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Le placement de l'ouverture a abouti de lui-même (`playing`, `seeked`) : plus rien à redemander. */
   settleOpeningReassert(): void {
@@ -92,6 +94,35 @@ export class FrozenClockWatch {
       this.lastClockAt = target;
       this.frozenSince = Date.now();
     }, OPENING_REASSERT_MS);
+  }
+
+  /**
+   * La poussée de l'ouverture, pile au bout du délai de grâce qui suit `playing` (26/10/2026).
+   *
+   * Elle attendait le passage suivant du chien de garde, toutes les 250 ms : sur iPhone, les départs
+   * du début figés (69 % en Dolby Vision) étaient poussés 750 ms en médiane après `playing`, au lieu
+   * des 600 voulus, puis la première image venait encore ~500 ms plus tard (journal relu le
+   * 26/10/2026 : 43 départs figés). Le seuil ne change pas — un départ sain montre son image 250 ms
+   * après `playing` (450 ms pour neuf sur dix), et une poussée sur un élément qui démarre le refige,
+   * d'où `OPENING_PLAYING_GRACE_MS` —, seul le retard du chien de garde disparaît. Une seule fois, à
+   * l'ouverture, au bord du média, avant toute autre poussée ; le chien de garde reste le filet.
+   */
+  armOpeningGracePush(): void {
+    if (this.openingGraceTimer !== null) clearTimeout(this.openingGraceTimer);
+    this.openingGraceTimer = null;
+    if (this.host.destroyed || !this.host.guard.awaitingFirstPicture || this.frozenNudges > 0) return;
+    const at = this.host.video.currentTime;
+    if (this.decodeDistance(at) >= OPENING_EDGE_SECONDS) return;
+    this.openingGraceTimer = setTimeout(() => {
+      this.openingGraceTimer = null;
+      if (this.host.destroyed || this.host.video.paused || !this.host.guard.awaitingFirstPicture || this.frozenNudges > 0) return;
+      const now = this.host.video.currentTime;
+      // Parti : rien à faire.
+      if (Math.abs(now - at) > 0.05) return;
+      if (this.host.lead < 1) return;
+      this.frozenSince = Date.now();
+      this.nudge(now);
+    }, OPENING_PLAYING_GRACE_MS);
   }
 
   /**
@@ -170,6 +201,11 @@ export class FrozenClockWatch {
       return;
     }
 
+    this.nudge(now);
+  }
+
+  /** Redemander la position un pas plus loin — la poussée, du chien de garde ou de l'ouverture. */
+  private nudge(now: number): void {
     this.frozenNudges += 1;
     this.frozenNudgesTotal += 1;
     trace(`horloge figée à ${now.toFixed(2)} s avec ${this.host.lead.toFixed(1)} s en avance — on redemande la position`);

@@ -2429,6 +2429,42 @@ describe("l'échelle des reprises", () => {
       expect(video.currentTime).toBe(head);
     });
 
+    // 26/10/2026 : la poussée de l'ouverture attendait le passage suivant du chien de garde — 750 ms
+    // en médiane après `playing` sur iPhone au lieu des 600 voulus. Elle a désormais sa minuterie.
+    it("après `playing`, une ouverture figée est poussée au bout du délai de grâce, sans attendre le chien de garde", async () => {
+      const { video, internals } = await opened();
+      const head = video.buffered.start(0) + 0.04;
+      internals.guard.opened(head);
+      setTime(video, head);
+      video.dispatchEvent(new Event("playing"));
+      await tick(450);
+      expect(video.currentTime).toBe(head);
+      await tick(250);
+      expect(video.currentTime).toBeCloseTo(head + 0.08, 5);
+    });
+
+    it("un élément parti pendant le délai de grâce n'est pas poussé", async () => {
+      const { video, internals } = await opened();
+      const head = video.buffered.start(0) + 0.04;
+      internals.guard.opened(head);
+      setTime(video, head);
+      video.dispatchEvent(new Event("playing"));
+      await tick(300);
+      setTime(video, head + 0.3);
+      await tick(400);
+      expect(video.currentTime).toBe(head + 0.3);
+    });
+
+    it("une reprise posée loin de son image clé n'a pas cette poussée", async () => {
+      const { video, internals } = await opened();
+      const head = video.buffered.start(0) + 2.8;
+      internals.guard.opened(head);
+      setTime(video, head);
+      video.dispatchEvent(new Event("playing"));
+      await tick(700);
+      expect(video.currentTime).toBe(head);
+    });
+
     it("ne relance pas non plus un élément qui a de quoi avancer et ne saute plus quand elle tombe en retard", async () => {
       const { video, internals } = await opened();
       const head = video.buffered.start(0) + 0.04;

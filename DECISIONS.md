@@ -2232,7 +2232,10 @@ D'où la couverture qui tient jusqu'au film qui bouge, et trois silences :
   pas de quoi avancer (`readyState` < 3) ; et la poussée de 400 ms laisse 600 ms à un élément tout
   juste reparti (`OPENING_PLAYING_GRACE_MS`). Mathis, iPhone, 8.32.9 : la minuterie, retardée par le
   fil principal, tombait 283–348 ms après l'atterrissage, dans l'instant même du `playing` de Safari ;
-  son pas relançait le saut et coûtait ~1,1 s jusqu'à la première image.
+  son pas relançait le saut et coûtait ~1,1 s jusqu'à la première image. **Depuis 10.2.3**
+  (26/10/2026), cette poussée d'après `playing` a sa propre minuterie (`armOpeningGracePush`) : elle
+  attendait le passage suivant du chien de garde, 750 ms en médiane au lieu de 600 (43 départs figés
+  sur iPhone, 69 % des départs du début en Dolby Vision). Le seuil ne change pas.
 
 **Ce qu'elle ne fait jamais.**
 - **Retarder la lecture.** C'est un calque posé sur l'élément vidéo : le fichier s'ouvre dessous
