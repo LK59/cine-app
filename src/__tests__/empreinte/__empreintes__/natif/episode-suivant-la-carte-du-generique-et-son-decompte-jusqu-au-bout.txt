@@ -57,10 +57,11 @@ dom première image
 log opening {"itemId":"ep-1","title":"Épisode 1","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","firstMoveMs":0,"infoMs":0,"steps":""}
 dom carte du générique
     video
-    p "player.nextEpisodeIn:{\"n\":8}"
+    button "player.nextUp.watchCredits"
+    p "player.nextUp.label"
     p "Épisode 2"
-    button "player.playNow"
-    button "common.close"
+    button "player.nextUp.play8"
+    button "player.nextUp.watchCredits"
     button "common.close"
     button "player.minimize"
     button "player.castConfirm.confirm" inert

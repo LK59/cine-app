@@ -56,10 +56,11 @@ dom carte du générique
     video
     track kind=subtitles srclang=fre label=Français — player.trackLabel.full src=/api/jellyfin/stream/film/subs/3.vtt default=false
     track kind=subtitles srclang=eng label=Anglais — player.trackLabel.full src=/api/jellyfin/stream/film/subs/4.vtt default=false
-    p "player.nextEpisodeIn:{\"n\":8}"
+    button "player.nextUp.watchCredits"
+    p "player.nextUp.label"
     p "Épisode 2"
-    button "player.playNow"
-    button "common.close"
+    button "player.nextUp.play8"
+    button "player.nextUp.watchCredits"
     button "common.close"
     button "player.minimize"
     button "player.castConfirm.confirm" inert
