@@ -1367,8 +1367,14 @@ export function ExperimentalPlayerHost({
    * surtout sur les reprises, ne laissait rien : moins de 250 ms, hors du bilan (`waits`), et la
    * trace n'était écrite qu'au-delà de cinq secondes de blocage (`stall`). Une par séance ouverte.
    */
+  // Une réouverture du même titre dans la même lecture (épisode d'avant puis suivant, retour d'une
+  // diffusion) n'a pas d'ouverture animée, et n'écrivait donc pas cette ligne non plus : les démarrages
+  // figés d'un aller-retour entre deux épisodes ne laissaient rien (26/10/2026). Elle part désormais à
+  // chaque montage, comptée depuis lui, marquée `reopened`.
+  const [mountedAt] = useState(() => Date.now());
+  const openingFrom = introEligible ? introStartedAt : mountedAt;
   useEffect(() => {
-    if (!introPlaying || !introEligible) return;
+    if (!introPlaying) return;
     const movedAt = Date.now();
     let sent = false;
     // Six secondes après le premier mouvement, ou à la fermeture si elle vient avant : les essais
@@ -1379,12 +1385,13 @@ export function ExperimentalPlayerHost({
       reportPlayback("opening", {
         ...describeFileRef.current(),
         path: "remux",
-        firstMoveMs: movedAt - introStartedAt,
+        firstMoveMs: movedAt - openingFrom,
         // Depuis l'appui, comme `firstMoveMs` : 0 quand la fiche l'avait déjà préchargée.
-        ...(infoAtRef.current !== null ? { infoMs: Math.max(0, infoAtRef.current - introStartedAt) } : {}),
+        ...(infoAtRef.current !== null ? { infoMs: Math.max(0, infoAtRef.current - openingFrom) } : {}),
+        ...(introEligible ? {} : { reopened: true }),
         // Ce que la lenteur a fait paraître pendant cette ouverture, et les choix faits (§78).
         ...slowFields(),
-        steps: traceRecent(Date.now() - introStartedAt + 300).slice(-60).join(" | "),
+        steps: traceRecent(Date.now() - openingFrom + 300).slice(-60).join(" | "),
       });
     };
     const timer = window.setTimeout(send, 6000);
@@ -1392,7 +1399,7 @@ export function ExperimentalPlayerHost({
       window.clearTimeout(timer);
       send();
     };
-  }, [introPlaying, introEligible, introStartedAt, slowFields]);
+  }, [introPlaying, introEligible, openingFrom, slowFields]);
   /**
    * La version allégée existe-t-elle ici, et le lecteur a-t-il le droit d'y passer de lui-même (§78) ?
    * Un lecteur serveur sur l'installation, le transcodage vidéo permis au compte (`lighterAllowed` de
