@@ -3928,6 +3928,19 @@ describe("le départ d'une ouverture depuis le début, retenu jusqu'à la premi�
     await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1));
   });
 
+  it("les commandes restent en chargement pendant la retenue, pas sur « Lecture »", async () => {
+    const hold = held();
+    mount({ resumeAt: 0 });
+    await waitFor(() => expect(remux.openingHold).toHaveBeenCalledTimes(1));
+    await wait(20);
+    expect(screen.getByTestId("controls").dataset.loading).toBe("true");
+    await act(async () => {
+      hold.permit();
+      await hold.promise;
+    });
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+  });
+
   it("ne lance rien quand le lecteur est fermé pendant la retenue", async () => {
     const hold = held();
     const view = mount({ resumeAt: 0 });

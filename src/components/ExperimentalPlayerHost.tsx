@@ -271,6 +271,10 @@ export function ExperimentalPlayerHost({
   const takeoverNowRef = useRef<() => StableTakeover | undefined>(() => undefined);
 
   const [ready, setReady] = useState(false);
+  // Le départ d'une ouverture depuis le début, retenu jusqu'à sa première image (`OpeningStartHold`) :
+  // toujours un chargement pour les commandes. Sans lui, prêt et en pause, le gros bouton montrait
+  // « Lecture » le temps de la retenue — à une réouverture, où aucune animation ne le couvre.
+  const [startHeld, setStartHeld] = useState(false);
   // Lu par la mesure des reprises, dans un rappel de la source posé une fois.
   const readyRef = useRef(false);
   useEffect(() => {
@@ -920,6 +924,7 @@ export function ExperimentalPlayerHost({
     setOpenedAt(Date.now());
     setNetworkLost(null);
     setReady(false);
+    setStartHeld(false);
     // Rien ne joue pendant une reconstruction, et l'élément démonté ne le dira pas : ses écouteurs
     // sont déjà retirés. Resté vrai, `playing` comptait ce temps comme regardé et le rapportait
     // à Jellyfin « en lecture » (relu le 24/09/2026). Le pipeline suivant le repasse à vrai.
@@ -2216,7 +2221,9 @@ export function ExperimentalPlayerHost({
       // (fermeture, reconstruction, coupure) est relu avant le même `play()` qu'avant.
       const held = playback.openingHold();
       if (held) {
+        setStartHeld(true);
         await held;
+        setStartHeld(false);
         if (cancelled || lifecycle.isOver() || lifecycle.isNetworkLost()) return;
       }
       await element.play().catch(() => {});
@@ -3076,7 +3083,7 @@ export function ExperimentalPlayerHost({
             // (04/10/2026) : les commandes restent, lecture/pause passe aussitôt sur pause et reste
             // touchable, et la reprise se dit par un anneau autour du bouton et le fil du haut —
             // voir `resuming` dans PlayerControls.
-            loading={!ready}
+            loading={!ready || startHeld}
             resuming={ready && startingAt !== null}
             openingQuiet={openingQuiet}
             // Jellyfin's own analysis of the episode, fetched alongside the file's description.
