@@ -586,6 +586,14 @@ export class RemuxPlayback {
     this.currentSubtitle = trackNumber;
   }
 
+  /**
+   * Voir `MseSource.openingHold` : ce que l'hôte attend avant `play()` à une ouverture depuis le
+   * début (26/10/2026), ou `null` — sans source aussi : il n'y a alors rien à retenir.
+   */
+  openingHold(): Promise<void> | null {
+    return this.mse?.openingHold() ?? null;
+  }
+
   /** See MseSource.lost: the platform took the source, and only a rebuild brings it back. */
   /** Voir `MseSource.seekPending`. Faux sans source : il n'y a alors rien en cours. */
   get seekPending(): boolean {

@@ -188,6 +188,8 @@ function fakeRemux(over: Record<string, unknown> = {}) {
     currentAudioTrack: 1,
     // Par défaut ce chemin porte tout : les tests qui examinent le refus le disent eux-mêmes.
     canCarryAudio: vi.fn(() => true),
+    // Rien de retenu au départ (`MseSource.openingHold`) : l'hôte lance aussitôt, comme avant.
+    openingHold: vi.fn(() => null),
     // Tout changement de piste reconstruit le lecteur ; seul un fichier sans index en cours de
     // film le refuse, et les tests qui l'examinent le disent eux-mêmes.
     requestAudioTrack: vi.fn((id: number): "rebuild" | "refused" | null => (id === fake.currentAudioTrack ? null : "rebuild")),

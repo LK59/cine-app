@@ -57,6 +57,8 @@ function fakeRemux() {
     subtitleTracks: [],
     currentAudioTrack: 1,
     canCarryAudio: vi.fn(() => true),
+    // Rien de retenu au départ (`MseSource.openingHold`) : l'hôte lance aussitôt, comme avant.
+    openingHold: vi.fn(() => null),
     requestAudioTrack: vi.fn(() => null),
     selectSubtitleTrack: vi.fn(),
     subtitleAt: vi.fn(() => null),

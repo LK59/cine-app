@@ -2209,6 +2209,16 @@ export function ExperimentalPlayerHost({
       // Une coupure signalée pendant l'attache : l'écran de coupure est là, et le nouvel essai
       // rouvrira à sa position — ce qui est en tampon ne doit pas jouer derrière lui.
       if (lifecycle.isNetworkLost()) return;
+      // Une ouverture depuis le début part avec sa première image, pas avant (26/10/2026,
+      // `OpeningStartHold`) : lancé dès l'attache, l'élément jouait déjà quand l'atterrissage posait
+      // la tête à 0,25 s, et l'horloge restait figée là jusqu'à la poussée de l'ouverture — 57 départs
+      // de 0 sur 377, aucune reprise. La retenue est bornée ; ce qui a pu changer pendant ce temps
+      // (fermeture, reconstruction, coupure) est relu avant le même `play()` qu'avant.
+      const held = playback.openingHold();
+      if (held) {
+        await held;
+        if (cancelled || lifecycle.isOver() || lifecycle.isNetworkLost()) return;
+      }
       await element.play().catch(() => {});
     };
 

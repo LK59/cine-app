@@ -107,7 +107,11 @@ type Callbacks = {
   onStall?: (facts: Record<string, unknown>) => void;
   startSeconds: number;
 };
-const pipe = vi.hoisted(() => ({ probes: [] as unknown[], next: null as null | ((options: Record<string, unknown>) => unknown) }));
+const pipe = vi.hoisted(() => ({
+  probes: [] as unknown[],
+  next: null as null | ((options: Record<string, unknown>) => unknown),
+  hold: null as Promise<void> | null,
+}));
 
 function fakeRemux(over: Record<string, unknown> = {}) {
   const fake = {
@@ -129,6 +133,9 @@ function fakeRemux(over: Record<string, unknown> = {}) {
     lost: false,
     lossReport: () => ({ videoBuffered: "10.00–14.00" }),
     position: 0,
+    // Le départ retenu d'une ouverture depuis le début (`MseSource.openingHold`) : rien de retenu,
+    // sauf dans le scénario qui le dit (`pipe.hold`).
+    openingHold: () => pipe.hold,
     ...over,
   };
   return fake;
@@ -309,6 +316,7 @@ beforeEach(() => {
   writePlaybackQuality("auto");
   rec.entries.length = 0;
   pipe.probes = [];
+  pipe.hold = null;
   warm.list = [];
   data.info = info();
   data.error = undefined;
@@ -349,7 +357,28 @@ describe("empreinte — lecteur natif : ouverture et fermeture", () => {
 
   it("depuis le début (reprise 0), titre pas joué récemment sur l'appareil", async () => {
     localStorage.removeItem("cine:last-watched");
-    await openAndPlay({ resumeAt: 0 }, 0);
+    // Le départ retenu jusqu'à la première image (26/10/2026, `MseSource.openingHold`) : l'hôte
+    // n'appelle `play()` qu'une fois la source d'accord, l'image déjà là, l'élément encore à l'arrêt.
+    let permit = () => {};
+    pipe.hold = new Promise<void>((resolve) => {
+      permit = resolve;
+    });
+    mount({ resumeAt: 0 });
+    rec.step("monté");
+    await rec.flush();
+    rec.dom("ouverture");
+    rec.step("image posée, élément à l'arrêt");
+    rec.media(video(), { duration: 3600, readyState: 4 });
+    for (const type of ["loadedmetadata", "durationchange", "loadeddata", "canplay"]) await media(type, 0);
+    rec.step("départ permis");
+    permit();
+    pipe.hold = null;
+    await rec.flush();
+    if (!video().paused) await media("playing", 0);
+    await media("timeupdate", 0);
+    await rec.flush();
+    rec.step("première image");
+    rec.dom("première image");
     await play(5);
     await closeByCross();
     await fingerprint();

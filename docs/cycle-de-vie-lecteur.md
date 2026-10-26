@@ -140,7 +140,7 @@ stockée.
 | Refusé avant ouverture | `info.refusedReason` → `fallToStable` ; description introuvable (hors service injoignable) → `fallToStable` ; service injoignable → écran d'erreur, pas de bascule |
 | Sondage | `probePlaybackPath` en cours ; `path === null`, `ready === false` |
 | Attache | `probe.start(element)` attendu dans `startRemux` |
-| Prêt, pas encore parti | `ready` vrai (`declareReady`) ; `startingAt` posé (roue de reprise) ou `lifecycle.keepPaused` consommé (reste en pause) |
+| Prêt, pas encore parti | `ready` vrai (`declareReady`) ; `startingAt` posé (roue de reprise) ou `lifecycle.keepPaused` consommé (reste en pause) ; pour une ouverture depuis le début, `playback.openingHold()` attendu avant `play()` (élément à l'arrêt, sans roue : sous le calque d'ouverture quand il y en a un) |
 | Lecture | `playing` vrai, `ended` faux |
 | Pause du spectateur | `playing` faux, `viewerPausedAtRef` posé |
 | Attente en pleine lecture | aucun état React : `tally.waitingSince`, et `onStall` du moteur à 5 s |
@@ -222,6 +222,7 @@ si elle a changé.
 | Sondage | `probePlaybackPath`, `pathSelector.ts` | source d'octets, en-tête, choix de la piste audio, `tryRemux` : soit un `PathProbe`, soit un refus nommé |
 | Attache | `RemuxPlayback.start`, `MseSource.attach` | `sourceopen` (15 s max), deux `SourceBuffer`, segments d'initialisation ; **`attach` se résout avant le moindre segment média** |
 | Ouverture différée | `pendingStart` | le lecteur de fichier est déjà à la position de reprise, la tête attend que le média arrive ; pendant cette phase, chien de garde et détecteurs se taisent |
+| Départ retenu | `startHold` (`OpeningStartHold`, mseStartHold.ts) | ouverture depuis le début seulement (ni `pendingStart`, ni `startPaused`) : la tête atterrit élément à l'arrêt, `mediaArrived` ne relance rien et la position redemandée n'est pas armée ; le départ est permis quand le saut d'atterrissage est fini et l'image décodée (`seeked`/`loadeddata`/`canplay` avec `readyState` ≥ 2, ou `requestVideoFrameCallback`), quand l'élément a été lancé par un autre, ou par une borne (1 s après l'atterrissage, 15 s depuis l'ouverture — la position redemandée est alors armée). Trace « ouverture : départ permis (…) ». Raison : 57 départs de 0 sur 377 figés juste après `playing`, aucune reprise (26/10/2026) |
 | Remplissage | `runFill` | boucle tant que l'avance est sous la cible (budget en octets, `bufferBudget.ts`) ; s'arrête dès qu'un saut est demandé |
 | Lecture stable | — | pas de remplissage en cours ; relancé par `timeupdate`, `waiting`, `playing`, `startstreaming`, `play` ; chien de garde toutes les 250 ms |
 | Saut | `performSeek` | voir ci-dessous |
@@ -345,6 +346,7 @@ suppose désormais :
 |---|---|---|
 | `probePlaybackPath(options)` | avant tout | rejette avec un refus nommé, une erreur réseau, `ReadAbandoned` ou une erreur d'en-tête |
 | `probe.start(video)` / `probe.discard()` | une fois, après le sondage | `start` se résout avant tout média ; rejette après avoir tout nettoyé |
+| `playback.openingHold()` | une fois, juste avant le `play()` de l'ouverture | `null` (rien à retenir : l'hôte lance aussitôt, comme avant) ou une promesse qui se résout au départ permis ou à la destruction ; après elle, l'hôte revérifie `cancelled`, `isOver()`, `isNetworkLost()` |
 | `playback.destroy()` | n'importe quand, idempotent | |
 | `requestAudioTrack(n)` | n'importe quand | `"rebuild"`, `"refused"` ou `null` (détruit) — l'hôte reconstruit |
 | `canCarryAudio(n)`, `selectSubtitleTrack`, `subtitleAt` | n'importe quand | |
