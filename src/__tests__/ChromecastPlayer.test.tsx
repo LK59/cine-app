@@ -270,3 +270,51 @@ describe("réduit", () => {
     expect(playback.expand).toHaveBeenCalled();
   });
 });
+
+/**
+ * Un récepteur qui accepte le chargement et ne lit jamais (27/10/2026) : un Freebox Player POP a pris
+ * un épisode en E-AC3 copié, lu le premier segment, puis plus rien — la page tournait sans fin.
+ */
+describe("un téléviseur qui accepte sans lire", () => {
+  it("relance une fois avec le son en AAC, puis dit l'échec au lieu de tourner sans fin", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await mount();
+    expect(negotiations[0].forceAudioTranscode).toBeUndefined();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(25_000);
+    });
+    await waitFor(() => expect(fake.loads).toHaveLength(2));
+    expect(negotiations[1]).toMatchObject({ castTarget: "chromecast", forceAudioTranscode: true, audioStreamIndex: 1, startTicks: 12_000_000_000 });
+    expect(linesOf("start")[1]).toMatchObject({ why: "ladder", rung: 1, trigger: "aucune image en 25 s → son en AAC" });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(25_000);
+    });
+    await waitFor(() => expect(linesOf("error")).toHaveLength(1));
+    expect(linesOf("error")[0]).toMatchObject({ target: "chromecast", reason: "chromecast : le téléviseur n'a pas démarré la lecture" });
+    expect(fake.loads).toHaveLength(2);
+  });
+
+  it("une image à temps : rien ne bouge", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await mount();
+    act(() => fake.play(1200));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(fake.loads).toHaveLength(1);
+    expect(linesOf("error")).toHaveLength(0);
+  });
+
+  it("le son AAC reste acquis pour les relances suivantes de ce téléviseur", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await mount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(25_000);
+    });
+    await waitFor(() => expect(fake.loads).toHaveLength(2));
+    act(() => fake.play(1210));
+    fireEvent.change(screen.getAllByRole("combobox")[0], { target: { value: "2" } });
+    await waitFor(() => expect(fake.loads).toHaveLength(3));
+    expect(negotiations[2]).toMatchObject({ audioStreamIndex: 2, forceAudioTranscode: true });
+  });
+});

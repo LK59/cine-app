@@ -187,6 +187,33 @@ const RELAY_THROUGH_WORKER = (() => {
 })();
 const RELAYED_API = new Set(["/api/cinema/movies", "/api/cinema/series", "/api/release-notes"]);
 
+/**
+ * Une même image demandée plusieurs fois à la fois n'est téléchargée qu'une fois.
+ *
+ * Sans worker, la page réunit d'elle-même les demandes simultanées d'une même image (la bannière,
+ * son décodage anticipé, la fiche préparée) ; relayées, chacune devenait un téléchargement — le
+ * premier lancement du relais a demandé chaque logo de la bannière cinq à sept fois dans la même
+ * seconde. Une copie de la réponse pour chacune ; l'entrée est oubliée dix secondes après la
+ * réponse, quand le cache HTTP a pris le relais, et tout de suite après un échec.
+ */
+const relayInflight = new Map();
+const RELAY_SHARE_MS = 10_000;
+
+function relay(request) {
+  if (request.destination !== "image") return fetch(request);
+  const key = `${request.mode} ${request.url}`;
+  let pending = relayInflight.get(key);
+  if (!pending) {
+    pending = fetch(request);
+    relayInflight.set(key, pending);
+    pending.then(
+      () => setTimeout(() => relayInflight.delete(key), RELAY_SHARE_MS),
+      () => relayInflight.delete(key)
+    );
+  }
+  return pending.then((response) => response.clone());
+}
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
@@ -197,7 +224,7 @@ self.addEventListener("fetch", (event) => {
   }
   // Pas le code (`/_next/static/`, images comprises) : il a son propre cache, plus bas.
   if (RELAY_THROUGH_WORKER && !url.pathname.startsWith("/_next/static/") && (event.request.destination === "image" || RELAYED_API.has(url.pathname))) {
-    event.respondWith(fetch(event.request));
+    event.respondWith(relay(event.request));
     return;
   }
   if (url.pathname.startsWith("/api/")) return;

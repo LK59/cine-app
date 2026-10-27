@@ -741,6 +741,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.5.1",
+    page: "10.0",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Une diffusion Chromecast que le téléviseur accepte sans jamais démarrer est relancée avec un son qu'il sait lire, puis l'échec est dit au lieu d'un chargement sans fin.",
+        en: "A Chromecast cast that the TV accepts but never starts is relaunched with sound it can play, and a failure is then shown instead of endless loading.",
+        es: "Una emisión Chromecast que el televisor acepta pero nunca inicia se relanza con un sonido que puede reproducir, y si falla se indica en lugar de cargar sin fin.",
+        de: "Eine Chromecast-Übertragung, die der Fernseher annimmt, aber nie startet, wird mit einem Ton neu gestartet, den er abspielen kann; danach wird ein Fehler angezeigt statt endlos zu laden.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

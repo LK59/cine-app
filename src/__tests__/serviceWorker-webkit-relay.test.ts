@@ -89,6 +89,25 @@ describe("le relais WebKit du service worker", () => {
     expect(put).not.toHaveBeenCalled();
   });
 
+  it("ne télécharge qu'une fois une image demandée plusieurs fois à la fois, une copie pour chacune", async () => {
+    const network = vi.fn().mockImplementation(async () => new Response("octets"));
+    loadWorker(SAFARI_IPHONE, network as unknown as typeof fetch);
+    const url = "https://cine.example/_next/image?url=x&w=640&q=75";
+    const answers = await Promise.all([1, 2, 3].map(() => through(request(url, "image"))));
+    expect(network).toHaveBeenCalledTimes(1);
+    expect(await Promise.all(answers.map((a) => a!.text()))).toEqual(["octets", "octets", "octets"]);
+  });
+
+  it("redemande après un échec, au lieu de resservir l'échec", async () => {
+    const network = vi.fn().mockRejectedValueOnce(new TypeError("réseau")).mockResolvedValue(new Response("x"));
+    loadWorker(SAFARI_IPHONE, network as unknown as typeof fetch);
+    const url = "https://cine.example/_next/image?url=y&w=640&q=75";
+    await expect(through(request(url, "image"))).rejects.toThrow("réseau");
+    await new Promise((x) => setTimeout(x, 0));
+    expect(await through(request(url, "image"))).not.toBeNull();
+    expect(network).toHaveBeenCalledTimes(2);
+  });
+
   it("relaie aussi sous Chrome pour iOS, qui est WebKit", async () => {
     const network = vi.fn().mockResolvedValue(new Response("x"));
     loadWorker(CHROME_IOS, network as unknown as typeof fetch);

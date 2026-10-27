@@ -7310,7 +7310,10 @@ lui-même les images (toutes origines, sauf le code `/_next/static/` qui a son c
 que l'ouverture redemande et que le serveur confirme d'un 304 : les deux catalogues et les Nouveautés
 (`RELAYED_API`). Rien n'est rangé dans un cache du worker : c'est le cache HTTP qui garde, comme
 partout ailleurs. Le flux vidéo, les envois et le reste de `/api/` passent toujours à côté du worker.
-Ailleurs que sur WebKit, rien ne change. Tests : `serviceWorker-webkit-relay.test.ts`.
+Ailleurs que sur WebKit, rien ne change. Une même image demandée plusieurs fois à la fois n'est
+téléchargée qu'une fois (`relay`, une copie de la réponse pour chacune) : sans worker la page les
+réunissait d'elle-même, relayées chacune partait — chaque logo de la bannière cinq à sept fois au
+premier lancement (10.5.1). Tests : `serviceWorker-webkit-relay.test.ts`.
 
 **Avec lui.** Les Nouveautés ont une étiquette (`cachedJson`, une entrée par compte) au lieu de
 `no-store` : 81 Ko à chaque lancement pour savoir s'il y avait du nouveau. Et les logos et l'affiche
@@ -7325,5 +7328,26 @@ pendant le défilement a été la première cause des saccades sur téléphone (
 bannière en grand écran reste l'adresse de la fiche (`keepSheetBanners` la garde décodée) : le
 convertir le ferait télécharger deux fois. Pas de cache d'images tenu par le worker : le relais rend au
 cache HTTP son travail, sans seconde copie à borner et à vider.
+
+**Décidé le 27/10/2026.**
+
+## 122. Un Chromecast qui accepte sans lire : une relance en AAC, puis une erreur dite
+
+**Le constat (27/10/2026).** Un Freebox Player POP (Android TV, Chromecast intégré) a accepté un
+épisode — H.264 1080p transcodé, E-AC3 5.1 copié (§64) —, lu la liste, l'en-tête et le premier
+segment, puis plus rien : ni erreur ni lecture, le logo de diffusion sur le téléviseur et une page qui
+tournait sans fin. Le kit de Google ne dit pas quels sons un récepteur décode, et le récepteur n'a
+rien signalé.
+
+**La règle** (`ChromecastPlayer`, `CAST_NO_PICTURE_MS`). Un chargement accepté qui n'a pas d'image —
+ni `PLAYING` ni `PAUSED` — au bout de 25 s est relancé une fois avec le son ré-encodé en AAC stéréo
+(`forceAudioTranscode`), journalisé `why: "ladder"`, `rung: 1`, avec son déclencheur ; le choix reste
+acquis pour ce téléviseur le temps de la diffusion (piste, sous-titre, épisode suivant). Sans image
+encore, l'erreur est dite et écrite (« le téléviseur n'a pas démarré la lecture »). Un fichier servi
+tel quel n'est pas relancé : il n'a pas de son à ré-encoder.
+
+**Voulu.** Le profil du Chromecast garde AC-3 et E-AC3 copiés : la plupart des récepteurs les
+décodent ou les passent au téléviseur, et un ré-encodage pour tous coûterait le 5.1 à tous. La
+relance n'est qu'une réponse à un récepteur muet, pas une détection.
 
 **Décidé le 27/10/2026.**

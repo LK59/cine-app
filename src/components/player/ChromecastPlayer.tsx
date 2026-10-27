@@ -74,7 +74,18 @@ interface StartOptions {
   /** Le sous-titre texte à allumer dès le chargement. */
   textSubtitle?: number | null;
   why: ServerStartWhy;
+  /** Le palier de `noPictureWatchdog` : ce qui l'a déclenché, pour la ligne `start`. */
+  trigger?: string;
 }
+
+/**
+ * Sans image au bout de ce délai après un chargement accepté, le récepteur est tenu pour bloqué
+ * (27/10/2026). Un Freebox Player POP (Android TV) a accepté un épisode — H.264 1080p, E-AC3 5.1
+ * copié —, lu la liste, l'en-tête et le premier segment, puis plus rien : ni erreur ni lecture, et la
+ * page tournait sans fin. Le kit ne dit pas quels sons un récepteur décode ; le seul signe est
+ * l'absence d'image.
+ */
+const CAST_NO_PICTURE_MS = 25_000;
 
 /**
  * La diffusion vers un Chromecast, pilotée depuis la page — DECISIONS.md §64.
@@ -149,6 +160,17 @@ export function ChromecastPlayer({
   const currentAudioRef = useRef<number | null>(null);
   const currentSubtitleRef = useRef<number | null>(null);
   const subtitlesRef = useRef<ChromecastSubtitleFacts[]>([]);
+  /** Le récepteur a lu ou mis en pause le média chargé : il a une image. */
+  const pictureRef = useRef(false);
+  /**
+   * Le son ré-encodé en AAC stéréo pour ce téléviseur, depuis qu'un chargement est resté sans image
+   * (`CAST_NO_PICTURE_MS`) : gardé pour les relances qui suivent — une piste, un sous-titre, l'épisode
+   * suivant —, qui buteraient sur le même son.
+   */
+  const aacAudioRef = useRef(false);
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** `start` lui-même, pour la relance que décide son propre délai. */
+  const startRef = useRef<(opts: StartOptions) => Promise<void>>(async () => {});
 
   // Le journal : une séance par titre, la même que celle du lecteur natif qui a passé la main.
   const agent = typeof navigator === "undefined" ? undefined : navigator.userAgent;
@@ -234,6 +256,7 @@ export function ChromecastPlayer({
             codecSupport: { video: {}, audio: {} },
             nativeHls: true,
             castTarget: "chromecast",
+            ...(aacAudioRef.current ? { forceAudioTranscode: true } : {}),
             ...(bench ? { bench: true } : {}),
           }),
         });
@@ -343,7 +366,11 @@ export function ChromecastPlayer({
       const cast = currentChromecastSession();
       const globals = chromecastGlobals();
       reportPlayback("start", {
-        ...serverStartFields(logContext.current, { directPlay: isDirectPlay, nativeHls: true, resumeAt: opts.resumeAt, audioStreamIndex: opts.audioStreamIndex }, { why: opts.why }),
+        ...serverStartFields(
+          logContext.current,
+          { directPlay: isDirectPlay, nativeHls: true, resumeAt: opts.resumeAt, audioStreamIndex: opts.audioStreamIndex },
+          { why: opts.why, ...(opts.why === "ladder" ? { rung: 1, trigger: opts.trigger } : {}) }
+        ),
         hls: isDirectPlay ? "aucun" : "récepteur",
         ...(device ? { device } : {}),
       });
@@ -355,6 +382,8 @@ export function ChromecastPlayer({
 
       setPhase("loading");
       loadingRef.current = true;
+      pictureRef.current = false;
+      if (watchdogRef.current) clearTimeout(watchdogRef.current);
       const spec = chromecastMediaSpec({
         castUrl,
         isDirectPlay,
@@ -379,6 +408,20 @@ export function ChromecastPlayer({
       loadingRef.current = false;
       if (mine !== generation.current) return;
       setPhase("playing");
+      // Accepté n'est pas lu : sans image au bout du délai, une relance avec le son en AAC stéréo —
+      // ce que tous les récepteurs décodent —, puis une erreur dite plutôt qu'une attente sans fin.
+      watchdogRef.current = setTimeout(() => {
+        watchdogRef.current = null;
+        if (mine !== generation.current || closedRef.current || handedBackRef.current || pictureRef.current) return;
+        if (!aacAudioRef.current && !isDirectPlay) {
+          aacAudioRef.current = true;
+          void startRef.current({ ...opts, why: "ladder", trigger: `aucune image en ${CAST_NO_PICTURE_MS / 1000} s → son en AAC` });
+          return;
+        }
+        reportPlayback("error", serverFailureFields(logContext.current, "chromecast : le téléviseur n'a pas démarré la lecture", device ? { device } : {}));
+        setError("le téléviseur n'a pas démarré la lecture");
+        setPhase("error");
+      }, CAST_NO_PICTURE_MS);
       if (!establishedRef.current) {
         establishedRef.current = true;
         reportPlayback("cast", { ...castEstablishedFields(logContext.current, opts.resumeAt), ...(device ? { device } : {}) });
@@ -386,6 +429,9 @@ export function ChromecastPlayer({
     },
     [itemId, bench, locale, t, session.title, device, handBack]
   );
+  useEffect(() => {
+    startRef.current = start;
+  }, [start]);
 
   // L'ouverture, puis chaque épisode suivant (le même composant, un autre `itemId`).
   const takeoverRef = useRef(takeover);
@@ -419,6 +465,7 @@ export function ChromecastPlayer({
     const events = globals.framework.RemotePlayerEventType;
     const read = () => {
       const loaded = player.isMediaLoaded;
+      if (loaded && (player.playerState === "PLAYING" || player.playerState === "PAUSED")) pictureRef.current = true;
       if (loaded && Number.isFinite(player.currentTime) && player.currentTime > 0 && !loadingRef.current) lastKnownTime.current = player.currentTime;
       pausedRef.current = player.isPaused;
       setRemote({
@@ -520,6 +567,7 @@ export function ChromecastPlayer({
     const life = lifeRef.current;
     const token = ++life.mounts;
     return () => {
+      if (watchdogRef.current) clearTimeout(watchdogRef.current);
       setTimeout(() => {
         if (life.mounts !== token || closedRef.current || handedBackRef.current) return;
         closedRef.current = true;
