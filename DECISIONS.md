@@ -7281,7 +7281,9 @@ minutes passent une lecture en orange — ni un relais, ni une connexion lente.
 
 **Voulu.** Lecture seule : aucune action (pause, relance de service) — chacune serait une porte
 d'écriture ouverte par un fichier de réglages sur un ordinateur. Le profil « Laterna » (la page des
-lectures) se crée dans l'appli Stream Deck et s'exporte : son format n'est pas documenté, il n'est pas
-fabriqué à la main.
+lectures) a été créé dans l'appli Stream Deck et exporté, puis livré avec le plugin
+(`profiles/Laterna.streamDeckProfile`, plugin 1.1) : son format n'est pas documenté, il n'est pas
+fabriqué à la main — pour le changer, le refaire dans l'appli et l'exporter de nouveau. Le paquet
+installable est rangé dans `streamdeck-plugin/release/`, reconstruit à chaque version du plugin.
 
 **Décidé le 27/10/2026.**

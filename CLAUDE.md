@@ -300,7 +300,13 @@ the server itself** (`selfWarm.ts`, since 2026-10-15): at startup it asks its ow
 (`GET /api/cinema/movies`, `/api/cinema/series`) over loopback — peer checked through `x-cine-peer`,
 plus a per-process token in `process.env` — so the routes' own module copies load every title's data
 before the first viewer does (390 ms of route after each deploy otherwise). The answer, the whole
-catalogue with no account's blocked tags removed, never leaves loopback.
+catalogue with no account's blocked tags removed, never leaves loopback. **And a Stream Deck**
+(since 2026-10-27, DECISIONS §120): `/api/streamdeck` is in `PUBLIC_PATHS`, and every route under it
+checks a bearer token of its own first (`verifyStreamDeckToken`, `src/lib/streamdeck/tokens.ts` —
+created per device in Configuration → Administration, kept as a SHA-256, revocable). It reads the
+plays in progress and the posters of titles playing, nothing else; `streamdeck.test.ts` fails if a
+route in that folder forgets the check. The plugin itself lives in `streamdeck-plugin/` (its own
+package, outside the image, the typecheck and the lint).
 
 **Client addresses come from the connection** (DECISIONS §57). `server-boot/boot.mjs` wraps
 `http.createServer` and writes the socket's address into `x-cine-peer` on every request (overwriting

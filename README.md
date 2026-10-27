@@ -454,6 +454,7 @@ Lists, discovery and recommendations are Cinema's: Management has no watchlist o
 <img src="docs/screenshots/gestion-person-search-1.png" width="49%"> <img src="docs/screenshots/gestion-person-search-2.png" width="49%">
 -->
 
+- **Stream Deck plugin** — what is playing right now, on the keys of a Stream Deck (see below)
 - Installable PWA, Web Push including iOS Safari / Apple Web Push
 - Four interface languages — French, English, Spanish, German, the video player included
 - Mobile-first navigation with haptic feedback (Android/Chromium only)
@@ -464,6 +465,26 @@ Lists, discovery and recommendations are Cinema's: Management has no watchlist o
      Then uncomment:
 <img src="docs/screenshots/gestion-mobile-nav.png" height="320">
 -->
+
+## Stream Deck
+
+A plugin for the Elgato Stream Deck app (7.6 or later, Windows or macOS) follows what is playing,
+read-only. The package is [`streamdeck-plugin/release/fr.laterna.streamdeck.streamDeckPlugin`](streamdeck-plugin/release/fr.laterna.streamdeck.streamDeckPlugin):
+a double-click installs it.
+
+- **Plays** — one key with the number of plays in progress: grey when nobody watches, white
+  otherwise, orange when one of them is in trouble right now (a recent wait, error or rebuild —
+  playing through the server is a path like any other, never trouble). Pressing it opens the plays
+  page.
+- **The plays page** — a profile delivered with the plugin, laid out for a Stream Deck Neo: one
+  play per key (poster, who, what, progress), the last key to go back, and the Infobar summing up.
+  Pressing a play spreads it over the eight keys: title, who and on what device, position, path
+  (device, server, TV or another Jellyfin app) and picture, bitrate, incidents, audio and subtitles.
+
+It does not use a session. Create a token per device in *Management → Configuration →
+Administration → Stream Deck* (shown once, revocable), then paste the address and the token into
+the settings of any Laterna key. The token opens only `/api/streamdeck` — the plays in progress and
+the posters of what is playing — and nothing else. Building the plugin: [streamdeck-plugin/README.md](streamdeck-plugin/README.md).
 
 ---
 
