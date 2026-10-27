@@ -6,8 +6,9 @@ de chacune. Lecture seule.
 ## Actions
 
 - **Lectures** — le nombre de lectures en cours (gris : aucune ; blanc ; orange : une lecture a un
-  souci en ce moment). Appuyer ouvre la page des lectures (profil « Laterna »), ou l'Activité dans le
-  navigateur tant que le profil n'est pas livré.
+  souci en ce moment). Appuyer ouvre la page des lectures : le profil « Laterna » livré avec le plugin
+  (`profiles/Laterna.streamDeckProfile`, exporté de l'appli Stream Deck — huit « Case » et le
+  « Bandeau » sur un Neo). Sur une autre page, la touche ← y ramène.
 - **Case** — une touche de la page des lectures ; sa place sur l'appareil décide ce qu'elle montre.
   En liste : une lecture par touche (affiche, prénom, titre, progression), la dernière touche pour
   revenir (ou pour la page suivante au-delà de sept lectures). Sur une lecture : titre, qui et sur

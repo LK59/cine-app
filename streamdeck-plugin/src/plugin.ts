@@ -50,10 +50,13 @@ type Settings = { url?: string; token?: string };
 type Problem = "réglages" | "jeton" | "hors ligne" | null;
 type View = { kind: "list"; page: number } | { kind: "detail"; playId: string };
 
-/** Le profil livré avec le plugin : la page « Lectures » et le détail, sur les huit touches du Neo. */
-const PROFILE = "Laterna";
-/** Faux tant que le profil n'est pas livré dans le dossier du plugin : la touche ouvre alors l'Activité. */
-const HAS_PROFILE = false;
+/**
+ * Le profil livré avec le plugin (`profiles/Laterna.streamDeckProfile`) : la page « Lectures » et le
+ * détail, sur les huit touches du Neo et son Infobar. Créé dans l'appli Stream Deck et exporté — son
+ * format n'est pas documenté. Le nom est son chemin dans le dossier du plugin, sans l'extension.
+ */
+const PROFILE = "profiles/Laterna";
+const HAS_PROFILE = true;
 const POLL_MS = 5_000;
 const COLORS = { bg: "#0b0b0f", text: "#ffffff", muted: "#a1a1aa", faint: "#52525b", trouble: "#ff9f0a", gold: "#d4a64a" };
 const PATH_LABEL: Record<PlayPath, string> = { appareil: "Appareil", serveur: "Serveur", "télé": "Télé", jellyfin: "Jellyfin" };
@@ -323,7 +326,8 @@ class CountAction extends SingletonAction {
   }
   override async onKeyDown(ev: KeyDownEvent): Promise<void> {
     view = { kind: "list", page: 0 };
-    if (HAS_PROFILE) await streamDeck.profiles.switchToProfile(ev.action.device.id, PROFILE);
+    // Page 0 : celle des huit cases, quelle que soit la page laissée la dernière fois.
+    if (HAS_PROFILE) await streamDeck.profiles.switchToProfile(ev.action.device.id, PROFILE, 0);
     else openActivity();
     void poll();
   }
