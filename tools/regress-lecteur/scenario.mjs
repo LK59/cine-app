@@ -23,6 +23,11 @@ const BASE = process.env.BASE || "http://localhost:3098";
 const PROFILES = (process.env.PROFILES || "chromium firefox webkit iphone").split(/\s+/).filter(Boolean);
 const TITLES = JSON.parse(fs.readFileSync(process.env.TITLES || "/tool/titres.json", "utf8"));
 const ONLY = (process.env.ONLY || "").split(",").filter(Boolean);
+// Un plan explicite, séance par séance (`profil/titre`, virgules) : les niveaux `moyen` et `complet`
+// de regress.sh. Posé, il remplace le produit PROFILES × ONLY — chaque navigateur ne joue que ce qui
+// lui apprend quelque chose (27/10/2026).
+const PLAN = (process.env.PLAN || "").split(",").filter(Boolean);
+const inPlan = (profile, key) => (PLAN.length ? PLAN.includes(`${profile}/${key}`) : !ONLY.length || ONLY.includes(key));
 const LOGS = "/logs";
 const OUT = "/out";
 
@@ -659,7 +664,7 @@ async function runCase(browser, def, state, profile, version, title) {
 
 // Ce que ce passage doit jouer : la comparaison ne compte pas comme manquant ce qu'un passage
 // partiel (mode rapide, REGRESS_ONLY, REGRESS_PROFILES) n'a jamais prévu de jouer.
-const planned = PROFILES.flatMap((p) => TITLES.filter((t) => !ONLY.length || ONLY.includes(t.key)).map((t) => `${p}/${t.key}`));
+const planned = PROFILES.flatMap((p) => TITLES.filter((t) => inPlan(p, t.key)).map((t) => `${p}/${t.key}`));
 fs.writeFileSync(`${OUT}/plan.json`, JSON.stringify(planned, null, 1));
 
 // Les profils l'un après l'autre. Deux voies en parallèle (deux navigateurs en même temps sur la
@@ -669,12 +674,13 @@ fs.writeFileSync(`${OUT}/plan.json`, JSON.stringify(planned, null, 1));
 for (const profile of PROFILES) {
   const def = PROFILE_DEFS[profile];
   if (!def) throw new Error(`profil inconnu : ${profile}`);
+  if (!TITLES.some((t) => inPlan(profile, t.key))) continue;
   const browser = await def.type.launch(def.launch);
   const version = browser.version();
   const state = await login(browser, def);
   const titles = await resolveTitles(browser, def, state);
   for (const title of titles) {
-    if (ONLY.length && !ONLY.includes(title.key)) continue;
+    if (!inPlan(profile, title.key)) continue;
     if (!title.hash) {
       results.push({ profile, version, key: title.key, title: title.title, steps: [{ step: "titre", outcome: "absent du catalogue" }] });
       continue;

@@ -82,8 +82,10 @@ timers, every log line, request, storage write and element order of 49 scenarios
 host, the server player and `MseSource` — a pure move must leave every file identical, and a missing
 fingerprint fails. The real-browser bench (`tools/regress-lecteur/`, README there) builds a commit
 into a throwaway instance and plays nine hard titles in Chromium, Firefox, WebKit and an emulated
-iPhone, then compares the normalised `player.log` lines with a baseline: about 35 minutes for the
-full run, 6 for `REGRESS_MODE=rapide` (interface-only changes). Run it on an otherwise quiet machine
+iPhone, then compares the normalised `player.log` lines with a baseline. Three levels
+(`REGRESS_MODE`): `rapide`, 6 minutes (interface only, or a dependency its own bench already proved);
+`moyen`, ~18 (a targeted player change); `complet`, ~32 (a split, merge or redesign of the player).
+A validated run is kept as the reference and only the candidate is played. Run it on an otherwise quiet machine
 — under load from a parallel test suite it reported 6 false differences out of 34 — and pass it a
 commit, not a branch. Launched from a worktree, point `REGRESS_ENV`/`REGRESS_DB` at the main
 checkout's `.env` and `data/cine.db`.

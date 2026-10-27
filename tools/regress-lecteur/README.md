@@ -88,7 +88,7 @@ export REGRESS_WORK=/chemin/jetable/regress     # dossier de travail (sources, d
 export REGRESS_CREDS=/chemin/compte-de-test.txt # user=… / password=…
 # REGRESS_ENV (défaut .env du dépôt), REGRESS_DB (défaut data/cine.db), REGRESS_MEDIA, REGRESS_PORT
 # (3098), REGRESS_NETWORK (media_net), REGRESS_PROFILES, REGRESS_ONLY (clés de titres, virgules),
-# REGRESS_MODE=rapide (voir plus bas)
+# REGRESS_PLAN (séances profil/titre, virgules), REGRESS_MODE=rapide|moyen|complet (voir plus bas)
 
 tools/regress-lecteur/regress.sh run <ref A> $REGRESS_WORK/res-A
 tools/regress-lecteur/regress.sh run <ref B> $REGRESS_WORK/res-B
@@ -100,25 +100,50 @@ commit plutôt qu'une branche : le dossier de données et le conteneur sont nomm
 que la référence désigne **au moment de l'appel**, et une branche qui avance entre `start` et
 `play` fait lire à `play` un journal vide.
 
-Un passage complet dure **environ 35 minutes** (36 séances, profils l'un après l'autre, construction
+Un passage complet dure **environ 32 minutes** (33 séances depuis le 27/10/2026, 36 avant, profils l'un après l'autre, construction
 de l'image en cache et démarrage compris ; une heure et sept minutes avant le 23/10/2026).
 
-### Mode rapide
+### Trois niveaux
 
-`REGRESS_MODE=rapide` joue **Chromium et l'iPhone émulé** sur **quatre titres** — The Kissing Booth,
-Arthur et les Minimoys, Aftersun, The Knick —, 8 séances, **6 minutes** construction comprise. Il
-couvre : les deux interfaces (bureau à la souris, téléphone au toucher), les deux lecteurs (remux et
-lecteur serveur : Arthur, HEVC, part au lecteur serveur dans Chromium et au remux sur l'iPhone ; The
-Knick, DTS, l'inverse), le changement de piste par reconstruction et par renégociation, les
-sous-titres d'un fichier à côté (Aftersun) et d'une piste du film, l'épisode suivant. Il ne couvre
-pas : Firefox (le remux de tout, TrueHD compris), le WebKit bureau, la 4K Dolby Vision, les refus
-nommés (MP2, DTS seul).
+`REGRESS_MODE` choisit les séances selon ce qui a changé (27/10/2026) :
 
-C'est l'outil d'un changement d'**interface** seul (commandes, menus, fiches). Pour toute retouche du
-lecteur, de la source MediaSource ou des relais : le passage complet. `REGRESS_PROFILES` /
-`REGRESS_ONLY`, s'ils sont posés, l'emportent sur ses choix. Un passage rapide se compare à un
-passage complet : chaque passage écrit `plan.json` (ce qu'il devait jouer), et la comparaison ne
-compte pas ce qu'un côté n'avait pas prévu (`·`).
+| Niveau | Séances | Durée | Pour |
+|---|---|---|---|
+| `rapide` | 8 | ~6 min | une retouche d'interface seule ; une dépendance déjà prouvée par son propre banc |
+| `moyen` | 14 | ~18 min | une retouche ciblée du lecteur |
+| `complet` (défaut) | 33 | ~32 min | une découpe, une fusion ou une refonte du lecteur, de la source MediaSource, des relais |
+
+**`rapide`** joue Chromium et l'iPhone émulé sur quatre titres — The Kissing Booth, Arthur et les
+Minimoys, Aftersun, The Knick. Il couvre : les deux interfaces (bureau à la souris, téléphone au
+toucher), les deux lecteurs (Arthur, HEVC, part au lecteur serveur dans Chromium et au remux sur
+l'iPhone ; The Knick, DTS, l'inverse), le changement de piste par reconstruction et par
+renégociation, les sous-titres d'un fichier à côté (Aftersun) et d'une piste du film, l'épisode
+suivant. Il ne couvre pas : Firefox (le remux de tout, TrueHD compris), le WebKit bureau, la 4K
+Dolby Vision, les refus nommés (MP2, DTS seul).
+
+**`moyen`** joue chaque profil sur ce qu'il est seul à éprouver, sans doublon :
+Chromium — AC-3, le relais HEVC, DTS et l'épisode suivant, le refus MP2 ; Firefox — TrueHD en
+WebAssembly, FLAC 24 bits, MP4 et sous-titres externes ; WebKit bureau — Dolby Vision 4K à six
+pistes, les blocs sans image, DTS ; iPhone — TrueHD ré-encodé, MP4, DTS et épisode suivant, le
+relais MP2 en HLS natif.
+
+**`complet`** joue les neuf titres sur les quatre profils, moins trois séances qui n'apprennent rien :
+Des gens bien sur Firefox et WebKit bureau (le refus MP2 est nommé avant tout navigateur, le relais
+est le même que dans Chromium ; l'iPhone le garde, il le prend en HLS natif) et Blanche comme neige
+sur WebKit bureau (aucune image dans les passages de référence, 60 s d'attente à chaque fois ;
+l'iPhone la garde).
+
+`REGRESS_PLAN` (`chromium/arthur,iphone/the-knick`…) remplace le niveau ; `REGRESS_PROFILES` /
+`REGRESS_ONLY` l'emportent sur `rapide`. Un passage partiel se compare à un passage complet : chaque
+passage écrit `plan.json` (ce qu'il devait jouer), et la comparaison ne compte pas ce qu'un côté
+n'avait pas prévu (`·`).
+
+### Une référence gardée
+
+Un passage réussi sert de référence aux suivants : on ne rejoue que le candidat, et on le compare à
+la dernière référence. Ranger le dossier de résultats d'un passage validé hors du dossier de travail
+jetable, nommé d'après son commit. Si un cas diffère, rejouer ce cas seul (`REGRESS_PLAN`) sur le
+commit de la référence et sur le candidat : l'écart vient-il du code, ou de ce qui a changé depuis ?
 
 Le dossier de travail garde les dépendances de Playwright (`pw/`, écrites par root dans le
 conteneur) d'un passage à l'autre ; pour les retirer :

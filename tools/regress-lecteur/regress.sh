@@ -12,7 +12,7 @@
 # montée en lecture seule), REGRESS_CREDS (fichier user=/password= du compte de test),
 # REGRESS_PORT (127.0.0.1 seulement, défaut 3098), REGRESS_NETWORK (défaut media_net),
 # REGRESS_PROFILES (défaut « chromium firefox webkit iphone »), REGRESS_ONLY (clés de titres),
-# REGRESS_MODE=rapide (deux profils, quatre titres), REGRESS_TITLES (titres.json).
+# REGRESS_MODE=rapide|moyen|complet (README, « Trois niveaux »), REGRESS_TITLES (titres.json).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,12 +26,36 @@ PORT="${REGRESS_PORT:-3098}"
 NETWORK="${REGRESS_NETWORK:-media_net}"
 PW_IMAGE="${REGRESS_PW_IMAGE:-mcr.microsoft.com/playwright:v1.63.0-noble}"
 PW_VERSION="${REGRESS_PW_VERSION:-1.63.0}"
-# Le mode rapide (README, « Mode rapide ») : deux profils, quatre titres — pour un changement
-# d'interface seul. REGRESS_PROFILES / REGRESS_ONLY, s'ils sont posés, l'emportent.
-if [ "${REGRESS_MODE:-complet}" = rapide ]; then
-  REGRESS_PROFILES="${REGRESS_PROFILES:-chromium iphone}"
-  REGRESS_ONLY="${REGRESS_ONLY:-kissing-booth,arthur,aftersun,the-knick}"
-fi
+# Trois niveaux (README, « Trois niveaux »). REGRESS_PROFILES / REGRESS_ONLY, s'ils sont posés,
+# l'emportent sur `rapide` ; REGRESS_PLAN (`profil/titre`, virgules) sur les trois.
+# - rapide : deux profils, quatre titres — interface seule, ou dépendance prouvée par son propre banc ;
+# - moyen : les quatre profils, chacun sur ce qu'il est seul à éprouver — retouche ciblée du lecteur ;
+# - complet : tout, moins les séances dont l'issue ne dépend pas du navigateur (Des gens bien, refus
+#   MP2 nommé : le même relais partout sauf l'iPhone, qui le prend en HLS natif) ou qui ne montrent
+#   jamais d'image dans les passages de référence (Blanche comme neige sur WebKit bureau : 60 s
+#   d'attente à chaque fois ; gardée sur l'iPhone) — découpe ou refonte du lecteur.
+case "${REGRESS_MODE:-complet}" in
+  rapide)
+    REGRESS_PROFILES="${REGRESS_PROFILES:-chromium iphone}"
+    REGRESS_ONLY="${REGRESS_ONLY:-kissing-booth,arthur,aftersun,the-knick}"
+    ;;
+  moyen)
+    REGRESS_PLAN="${REGRESS_PLAN:-chromium/kissing-booth,chromium/arthur,chromium/the-knick,chromium/des-gens-bien,firefox/braveheart,firefox/arthur,firefox/aftersun,webkit/exorciste,webkit/dirty-dancing,webkit/the-knick,iphone/braveheart,iphone/aftersun,iphone/the-knick,iphone/des-gens-bien}"
+    ;;
+  complet)
+    if [ -z "${REGRESS_PLAN:-}" ] && [ -z "${REGRESS_PROFILES:-}" ] && [ -z "${REGRESS_ONLY:-}" ]; then
+      plan=""
+      for p in chromium firefox webkit iphone; do
+        for t in exorciste dirty-dancing braveheart blanche-neige arthur aftersun kissing-booth the-knick des-gens-bien; do
+          case "$p/$t" in firefox/des-gens-bien|webkit/des-gens-bien|webkit/blanche-neige) continue ;; esac
+          plan="$plan${plan:+,}$p/$t"
+        done
+      done
+      REGRESS_PLAN="$plan"
+    fi
+    ;;
+  *) echo "REGRESS_MODE inconnu : $REGRESS_MODE (rapide, moyen, complet)" >&2; exit 2 ;;
+esac
 
 # Le nom du conteneur et de l'image se lisent dans `docker ps` : une instance oubliée se retrouve.
 slug() { git -C "$REPO" rev-parse --short=8 "$1^{commit}"; }
@@ -104,7 +128,7 @@ play() {
     -v "$WORK/pw/node_modules:/w/node_modules:ro" \
     -v "$HERE:/tool:ro" -v "$CREDS:/creds.txt:ro" -v "$data/logs:/logs:ro" -v "$out:/out" \
     -e BASE="http://localhost:$PORT" -e PROFILES="${REGRESS_PROFILES:-chromium firefox webkit iphone}" \
-    -e TITLES="/tool/${REGRESS_TITLES:-titres.json}" -e ONLY="${REGRESS_ONLY:-}" \
+    -e TITLES="/tool/${REGRESS_TITLES:-titres.json}" -e ONLY="${REGRESS_ONLY:-}" -e PLAN="${REGRESS_PLAN:-}" \
     -w /w "$PW_IMAGE" sh -c "cp /tool/scenario.mjs /w/ && node /w/scenario.mjs"
   python3 -I "$HERE/normalise.py" "$out"
 }
