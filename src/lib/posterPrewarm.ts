@@ -18,11 +18,16 @@
 
 import { cachedJellyfinSeriesAdmin, cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { matchSeries } from "@/lib/catalogueMembers";
-import { getTitleArt } from "@/lib/title-art";
+import { getTitleArt, logoForLocale } from "@/lib/title-art";
 import { cataloguePoster } from "@/lib/images";
 import { LOCALES, type Locale } from "@/lib/i18n";
 import { readOverride } from "@/lib/settings/store";
 import { config } from "@/lib/config";
+import { BANNER_WIDTH, isOptimizable, variantPath } from "@/lib/optimizedImage";
+import { getTitleNames } from "@/lib/titleNames";
+
+// Déplacés dans `optimizedImage.ts` (l'écran en a besoin aussi), relus d'ici par les tests.
+export { isOptimizable, QUALITY, variantPath } from "@/lib/optimizedImage";
 
 /**
  * Les largeurs préparées par défaut. Relevées dans le journal du relais le 25/09/2026 sur 8 329
@@ -32,8 +37,6 @@ import { config } from "@/lib/config";
  * défaut) : une largeur hors liste serait refusée par l'optimiseur.
  */
 export const DEFAULT_WIDTHS = [384, 750];
-/** La qualité par défaut de next/image, la seule que les écrans demandent (`q=75`). */
-export const QUALITY = 75;
 /** Deux à la fois : le serveur est partagé avec la lecture, et rien ne presse. */
 export const CONCURRENCY = 2;
 /** Au-delà de ce nombre d'échecs d'affilée, l'optimiseur est considéré comme hors service. */
@@ -42,17 +45,6 @@ const MAX_CONSECUTIVE_FAILURES = 5;
 const FIRST_RUN_DELAY_MS = 60_000;
 /** Puis un passage régulier : les titres ajoutés entre-temps, et rien d'autre. */
 const INTERVAL_MS = 30 * 60_000;
-
-/**
- * Les hôtes que l'optimiseur accepte — les mêmes que `images.remotePatterns` dans next.config.js.
- * Une adresse ailleurs serait refusée par Next ; la demander ne coûterait qu'un 400, mais n'aurait
- * aucun sens.
- */
-const OPTIMIZABLE = [/^https:\/\/image\.tmdb\.org\/t\/p\//, /^https:\/\/artworks\.thetvdb\.com\/banners\//];
-
-export function isOptimizable(url: string | null | undefined): url is string {
-  return typeof url === "string" && OPTIMIZABLE.some((re) => re.test(url));
-}
 
 export interface PrewarmSettings {
   enabled: boolean;
@@ -79,11 +71,6 @@ export function prewarmSettings(env: Record<string, string | undefined> = proces
     : ["fr", env.APP_LANGUAGE ?? "fr"];
   const locales = [...new Set(wanted)].filter((l): l is Locale => (LOCALES as string[]).includes(l));
   return { enabled, widths: widths.length ? widths : DEFAULT_WIDTHS, locales: locales.length ? locales : ["fr"] };
-}
-
-/** L'adresse que next/image demande pour cette affiche et cette largeur — à l'octet près. */
-export function variantPath(url: string, width: number, quality = QUALITY): string {
-  return `/_next/image?url=${encodeURIComponent(url)}&w=${width}&q=${quality}`;
 }
 
 /**
@@ -115,6 +102,31 @@ export async function collectPosterUrls(locales: Locale[]): Promise<string[]> {
       const url = cataloguePoster("series", art.posterByLang, s.images, locale, jellyfinBySonarr.get(s.id));
       if (isOptimizable(url)) urls.add(url);
     }
+  }
+  return [...urls];
+}
+
+/**
+ * Les logos et les affiches sans texte de tout le catalogue, que la bannière et les fiches demandent
+ * à l'optimiseur en `BANNER_WIDTH` (27/10/2026, `bannerImage`) : par la même règle que les routes
+ * (`logoForLocale`), dans les mêmes langues que les affiches. N'importe quel titre peut passer dans
+ * la bannière — une reprise, un ajout récent —, d'où tout le catalogue plutôt que la liste du jour.
+ */
+export async function collectBannerUrls(locales: Locale[]): Promise<string[]> {
+  const [movies, series] = await Promise.all([cachedMovies(), cachedSeries()]);
+  const urls = new Set<string>();
+  const add = (url: string | null | undefined) => {
+    if (isOptimizable(url) && !/\.svg$/i.test(url)) urls.add(url);
+  };
+  const titles: { tmdbId: number; type: "movie" | "series" }[] = [
+    ...movies.filter((m) => m.hasFile).map((m) => ({ tmdbId: m.tmdbId, type: "movie" as const })),
+    ...series.filter((s) => s.tmdbId).map((s) => ({ tmdbId: s.tmdbId ?? 0, type: "series" as const })),
+  ];
+  for (const { tmdbId, type } of titles) {
+    const art = await getTitleArt(tmdbId, type);
+    const names = getTitleNames(tmdbId, type);
+    for (const locale of locales) add(logoForLocale(art, names, locale));
+    add(art.posterTextlessUrl);
   }
   return [...urls];
 }
@@ -227,6 +239,17 @@ export function startPosterPrewarm(settings: PrewarmSettings = prewarmSettings(p
           `[affiches] ${result.prepared} préparées, ${result.alreadyDone} déjà faites, ${result.failed} en échec` +
             `${result.stoppedEarly ? " (optimiseur injoignable : arrêt)" : ""} — ${urls.length} affiches × ` +
             `${settings.widths.join("/")} px, ${(result.ms / 1000).toFixed(1)} s`
+        );
+      }
+      if (result.stoppedEarly) return;
+      // Puis les logos et les affiches de la bannière, à leur seule largeur (`bannerImage`).
+      const banner = await collectBannerUrls(settings.locales);
+      const logos = await prewarmPosters(banner, { widths: [BANNER_WIDTH], base, done });
+      if (logos.prepared > 0 || logos.failed > 0) {
+        console.log(
+          `[affiches] bannière : ${logos.prepared} préparées, ${logos.alreadyDone} déjà faites, ${logos.failed} en échec` +
+            `${logos.stoppedEarly ? " (optimiseur injoignable : arrêt)" : ""} — ${banner.length} logos et affiches × ` +
+            `${BANNER_WIDTH} px, ${(logos.ms / 1000).toFixed(1)} s`
         );
       }
     } catch (error) {

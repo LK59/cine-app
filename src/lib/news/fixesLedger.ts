@@ -722,6 +722,25 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.5.0",
+    page: "10.0",
+    group: { fr: "Rapidité", en: "Speed", es: "Rapidez", de: "Geschwindigkeit" },
+    items: [
+      {
+        fr: "Sur iPhone, iPad et Mac, Laterna ne retélécharge plus à chaque ouverture les images et le catalogue déjà reçus : l'accueil s'affiche plus vite, surtout sur une connexion lente.",
+        en: "On iPhone, iPad and Mac, Laterna no longer downloads the images and catalogue it already has at every launch: the home screen shows up faster, especially on a slow connection.",
+        es: "En iPhone, iPad y Mac, Laterna ya no vuelve a descargar en cada apertura las imágenes y el catálogo que ya tiene: la pantalla de inicio aparece antes, sobre todo con una conexión lenta.",
+        de: "Auf iPhone, iPad und Mac lädt Laterna bereits erhaltene Bilder und den Katalog nicht mehr bei jedem Start neu: Der Startbildschirm erscheint schneller, besonders bei langsamer Verbindung.",
+      },
+      {
+        fr: "Les logos et l'affiche de la bannière sont bien plus légers : ils apparaissent plus tôt sur une connexion lente.",
+        en: "The banner's logos and poster are much lighter: they appear sooner on a slow connection.",
+        es: "Los logotipos y el póster del banner pesan mucho menos: aparecen antes con una conexión lenta.",
+        de: "Die Logos und das Plakat des Banners sind deutlich kleiner: Sie erscheinen bei langsamer Verbindung früher.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

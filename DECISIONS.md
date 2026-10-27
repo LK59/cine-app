@@ -7287,3 +7287,43 @@ fabriqué à la main — pour le changer, le refaire dans l'appli et l'exporter 
 installable est rangé dans `streamdeck-plugin/release/`, reconstruit à chaque version du plugin.
 
 **Décidé le 27/10/2026.**
+
+## 121. Safari et son cache : le worker relaie, et la bannière passe en WebP
+
+**Le constat (27/10/2026).** Sur un lien lent, l'accueil d'un iPhone affichait le catalogue (gardé sur
+l'appareil) mais ni l'affiche ni le logo de la bannière, même pour des titres déjà vus. Le journal du
+relais l'a expliqué : sur iPhone et sur le Safari du Mac, **le cache HTTP n'était jamais relu d'un
+lancement à l'autre**. Le catalogue repartait en entier à chaque ouverture (90 réponses complètes pour
+7 « pas changé » en deux jours sur iPhone, contre 13 pour 18 sous Windows), et les images servies
+`immutable` pour un an étaient retéléchargées à chaque lancement — trois lancements en quarante
+secondes compris : ~1,5 Mo déjà reçus, devant la bannière. Les en-têtes n'y étaient pour rien
+(capturés sur le serveur, rejoués à l'identique).
+
+**La cause, reproduite sous Playwright.** WebKit relit son cache sans service worker, ou avec un
+worker qui répond `respondWith(fetch(request))`. Avec un worker qui a un gestionnaire `fetch` mais
+**laisse passer** la requête sans répondre — ce que le nôtre faisait pour les images et `/api/` —,
+WebKit redemande tout au lancement suivant, sans même une requête conditionnelle. Chromium relit son
+cache dans les trois cas.
+
+**La règle.** Sur WebKit seulement (`RELAY_THROUGH_WORKER`, `public/sw.js`), le worker relaie
+lui-même les images (toutes origines, sauf le code `/_next/static/` qui a son cache) et trois réponses
+que l'ouverture redemande et que le serveur confirme d'un 304 : les deux catalogues et les Nouveautés
+(`RELAYED_API`). Rien n'est rangé dans un cache du worker : c'est le cache HTTP qui garde, comme
+partout ailleurs. Le flux vidéo, les envois et le reste de `/api/` passent toujours à côté du worker.
+Ailleurs que sur WebKit, rien ne change. Tests : `serviceWorker-webkit-relay.test.ts`.
+
+**Avec lui.** Les Nouveautés ont une étiquette (`cachedJson`, une entrée par compte) au lieu de
+`no-store` : 81 Ko à chaque lancement pour savoir s'il y avait du nouveau. Et les logos et l'affiche
+de la bannière du téléphone passent par l'optimiseur en WebP (`bannerImage`, `optimizedImage.ts`) :
+80 à 280 Ko de PNG par logo chez TMDB, quatre à six fois moins converti. Les logos le sont **à la
+source** (`logoForScreen`, toutes les routes qui en rendent un) pour qu'un titre ait partout la même
+adresse — bannière, fiche, ouverture de la lecture ; l'affiche de la bannière dans `heroPoster`. Le
+préchauffage (`posterPrewarm`) les prépare à `BANNER_WIDTH`.
+
+**Voulu.** Les affiches des rangées restent servies par TMDB en direct : les convertir à la demande
+pendant le défilement a été la première cause des saccades sur téléphone (02/09/2026). Le fond de la
+bannière en grand écran reste l'adresse de la fiche (`keepSheetBanners` la garde décodée) : le
+convertir le ferait télécharger deux fois. Pas de cache d'images tenu par le worker : le relais rend au
+cache HTTP son travail, sans seconde copie à borner et à vider.
+
+**Décidé le 27/10/2026.**

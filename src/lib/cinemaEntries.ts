@@ -1,7 +1,7 @@
 import { canonicalGenres } from "@/lib/genres";
 import { backdropUrl, tmdbResize, cataloguePoster, seriesBackdrop } from "@/lib/images";
 import type { Locale } from "@/lib/i18n";
-import { getTitleArt, logoForLocale } from "@/lib/title-art";
+import { getTitleArt, logoForScreen } from "@/lib/title-art";
 import { catalogueExtras, getTitleExtras, type TitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
 import { getImdbRating } from "@/lib/imdb-rating";
 import { tvEpisodeRuntime } from "@/lib/tvRuntime";
@@ -44,7 +44,7 @@ export async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string, loca
     posterUrl: cataloguePoster("movie", art.posterByLang, m.images, locale),
     backdropUrl: tmdbResize(backdropUrl(m.images, "full"), "w1280"),
     // Le logo de la langue du titre affiché — voir `logoForLocale` (DECISIONS.md §58).
-    logoUrl: logoForLocale(art, names, locale),
+    logoUrl: logoForScreen(art, names, locale),
     posterTextlessUrl: art.posterTextlessUrl,
     // Dans la langue de qui regarde quand TMDB la connaît — voir `TitleOverviews`.
     overview: localizedOverview(getTitleOverviews(m.tmdbId, "movie"), locale, m.overview ?? null),
@@ -123,7 +123,7 @@ export async function toCinemaSeries(
     // Redimensionné par Jellyfin plutôt que l'original de TheTVDB — voir `seriesBackdrop`.
     backdropUrl: seriesBackdrop(jellyfinItem, s.images),
     // Le logo de la langue du titre affiché — voir `logoForLocale` (DECISIONS.md §58).
-    logoUrl: logoForLocale(art, names, locale),
+    logoUrl: logoForScreen(art, names, locale),
     posterTextlessUrl: art.posterTextlessUrl,
     // Dans la langue de qui regarde quand TMDB la connaît — voir `TitleOverviews`.
     overview: localizedOverview(getTitleOverviews(s.tmdbId, "series"), locale, s.overview ?? null),

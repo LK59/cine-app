@@ -34,6 +34,7 @@ vi.mock("@/lib/logger", () => ({ logError: (...a: unknown[]) => logError(...a) }
 vi.mock("@/lib/title-art", () => ({
   getTitleArt: async () => ({ posterByLang: {}, posterTextlessUrl: null }),
   logoForLocale: () => null,
+  logoForScreen: () => null,
 }));
 vi.mock("@/lib/imdb-rating", () => ({ getImdbRating: async () => null }));
 const session = vi.fn();

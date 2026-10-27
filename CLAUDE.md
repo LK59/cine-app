@@ -777,7 +777,11 @@ Four rules, each of which cost a real failure:
   the version history in that file's header says why each bump happened. Since v12 the app's code lives in
   per-build caches (`cine-static-<build>`, the build number rides on `/sw.js?v=`): the current
   generation and the previous one, an unchanged file carried over without a download — so a
-  deploy no longer needs a bump, and the cache no longer grows. Images are left to the HTTP cache.
+  deploy no longer needs a bump, and the cache no longer grows. Images are left to the HTTP cache —
+  which WebKit only reads back across launches when the worker *answers* the request: on WebKit the
+  worker relays images and the two catalogues + Nouveautés through `respondWith(fetch(request))`
+  (`RELAY_THROUGH_WORKER`, DECISIONS §121); a request it lets fall through was re-downloaded in full
+  at every iPhone launch.
 - **`SESSION_SECRET`.** Startup exits on the default value rather than warning — a forged admin
   session is not a log line. The check runs in `server-boot/boot.mjs` before the server is imported
   (rules in `server-boot/startupChecks.mjs`, re-exported by `src/lib/sessionSecret.ts`): thrown from

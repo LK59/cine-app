@@ -81,6 +81,7 @@ vi.mock("@/lib/title-art", async (importOriginal) => ({
   namesWithDetail: (await importOriginal<typeof import("@/lib/title-art")>()).namesWithDetail,
   getTitleArt: async () => ({ logoUrl: "https://image.tmdb.org/t/p/w500/logo.png", posterTextlessUrl: null, posterByLang: {} }),
   logoForLocale: (art: { logoUrl: string | null }) => art.logoUrl,
+  logoForScreen: (art: { logoUrl: string | null }) => art.logoUrl,
 }));
 vi.mock("@/lib/titleNames", () => ({ getTitleNames: () => ({}) }));
 

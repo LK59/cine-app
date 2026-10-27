@@ -30,6 +30,10 @@
 // recharge PRECACHE de toute façon. Le badge des notifications devient `/badge-96.png`, silhouette
 // blanche. Ce qu'aucun nom de cache ne change : l'icône déjà posée sur un écran d'accueil iOS,
 // qu'iOS ne relit jamais — il faut la reposer.)
+// (27/10/2026, sans changer de nom : sur WebKit, les images et trois réponses de l'ouverture passent
+// par `respondWith(fetch(…))` au lieu de passer à côté du worker — sans quoi WebKit ne relisait pas
+// son cache HTTP d'un lancement à l'autre. Voir `RELAY_THROUGH_WORKER`. Aucun cache de ce worker ne
+// change.)
 const CACHE_NAME = "cine-app-v12";
 const PRECACHE = ["/manifest.json", "/icon-192.png", "/icon-512.png", "/offline.html"];
 
@@ -153,12 +157,47 @@ function staticResponse(request) {
   );
 }
 
+/**
+ * WebKit : ce que ce worker laisse passer sans répondre n'est jamais relu dans le cache HTTP d'un
+ * lancement à l'autre (27/10/2026).
+ *
+ * Relevé au journal du relais : sur iPhone et sur le Safari du Mac, le catalogue repartait en entier
+ * à chaque ouverture (90 réponses complètes pour 7 « pas changé » en deux jours, contre 13 pour 18
+ * sous Windows), et les images servies `immutable` pour un an — fonds des séries, vignettes de
+ * Reprendre — étaient retéléchargées à chaque lancement, trois lancements en quarante secondes
+ * compris. Sur un lien lent, la bannière attendait derrière 1,5 Mo déjà reçus la veille.
+ * Reproduit sous Playwright : WebKit sans worker, ou avec un worker qui répond
+ * `respondWith(fetch(request))`, relit son cache (304, image non redemandée) ; avec un worker qui
+ * ne répond pas, il redemande tout, sans même une requête conditionnelle. Chromium relit son cache
+ * dans les trois cas.
+ *
+ * D'où le relais, sur WebKit seulement — ailleurs rien ne change : les images (toutes origines :
+ * TMDB aussi), et les quelques réponses que l'ouverture redemande et que le serveur sait
+ * confirmer d'un 304 (`ETag`). Le flux vidéo, les envois et le reste de `/api/` continuent de
+ * passer sans le worker. Une requête relayée garde ses en-têtes (le `If-None-Match` posé à la
+ * main de `catalogueRefresh` compris) et un échec réseau reste un échec réseau.
+ */
+const RELAY_THROUGH_WORKER = (() => {
+  try {
+    const ua = self.navigator.userAgent;
+    return /AppleWebKit/.test(ua) && !/Chrome\/|Chromium\//.test(ua);
+  } catch {
+    return false;
+  }
+})();
+const RELAYED_API = new Set(["/api/cinema/movies", "/api/cinema/series", "/api/release-notes"]);
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
   // La page d'attente demande ici si la navigation qu'elle remplace a abouti — voir `navigate`.
   if (url.pathname === WAIT_PATH) {
     event.respondWith(waitingState(url.searchParams.get("url") || ""));
+    return;
+  }
+  // Pas le code (`/_next/static/`, images comprises) : il a son propre cache, plus bas.
+  if (RELAY_THROUGH_WORKER && !url.pathname.startsWith("/_next/static/") && (event.request.destination === "image" || RELAYED_API.has(url.pathname))) {
+    event.respondWith(fetch(event.request));
     return;
   }
   if (url.pathname.startsWith("/api/")) return;
@@ -185,7 +224,8 @@ self.addEventListener("fetch", (event) => {
    * Les images passent sans s'arrêter : le navigateur les garde déjà un an (l'optimiseur répond
    * `max-age` d'un an, les affiches du cinéma sont des adresses stables), et le worker en rangeait
    * une seconde copie — chaque grande image de bannière vue, pour toujours. C'est le cache HTTP
-   * qui fait ce travail, sans rien compter en double.
+   * qui fait ce travail, sans rien compter en double. (Sur WebKit, elles sont relayées plus haut
+   * pour qu'il le fasse vraiment — voir `RELAY_THROUGH_WORKER`.)
    */
   if (url.pathname.startsWith("/_next/image") || event.request.destination === "image") return;
 

@@ -34,6 +34,7 @@ vi.mock("@/lib/blockedTags", async (importOriginal) => ({
 vi.mock("@/lib/title-art", () => ({
   getTitleArt: async () => ({ posterByLang: {}, posterTextlessUrl: null }),
   logoForLocale: () => null,
+  logoForScreen: () => null,
 }));
 
 vi.mock("@/lib/imdb-rating", () => ({ getImdbRating: async () => null }));

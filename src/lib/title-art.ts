@@ -1,4 +1,5 @@
 import { tmdb, TMDB_IMAGE_BASE, type TmdbImage } from "@/lib/clients/tmdb";
+import { BANNER_WIDTH, bannerImage } from "@/lib/optimizedImage";
 import { withPersistentCache } from "@/lib/server-cache";
 import { kvCacheDb } from "@/lib/db";
 import { logoIsDark, logoLook, type LogoLook } from "@/lib/logoLuminance";
@@ -202,6 +203,16 @@ export function logoForLocale(art: TitleArt, names: TitleNames, locale: Locale):
     if (lang && byLang[lang]) return byLang[lang];
   }
   return Object.values(byLang)[0] ?? null;
+}
+
+/**
+ * Le logo tel que les écrans le reçoivent : celui de `logoForLocale`, en WebP par l'optimiseur
+ * (`bannerImage`, 27/10/2026). Toutes les routes qui rendent un logo passent par ici — catalogue,
+ * fiches, lecteur —, pour qu'un même titre ait partout la même adresse : la bannière, la fiche qui
+ * s'ouvre dessus et l'ouverture de la lecture se le passent par le cache du navigateur.
+ */
+export function logoForScreen(art: TitleArt, names: TitleNames, locale: Locale): string | null {
+  return bannerImage(logoForLocale(art, names, locale), BANNER_WIDTH);
 }
 
 function pickTextlessPoster(posters: TmdbImage[]): string | null {

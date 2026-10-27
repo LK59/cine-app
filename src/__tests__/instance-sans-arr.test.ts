@@ -34,7 +34,7 @@ vi.mock("@/lib/server-cache", async (importOriginal) => ({
   cachedJellyfinRecentEpisodes: async () => [],
   cachedJellyfinPlayedAmong: async () => new Set<string>(),
 }));
-vi.mock("@/lib/title-art", () => ({ getTitleArt: async () => ({ posterByLang: {}, posterTextlessUrl: null }), logoForLocale: () => null }));
+vi.mock("@/lib/title-art", () => ({ getTitleArt: async () => ({ posterByLang: {}, posterTextlessUrl: null }), logoForLocale: () => null, logoForScreen: () => null }));
 vi.mock("@/lib/imdb-rating", () => ({ getImdbRating: async () => null }));
 vi.mock("@/lib/session", () => ({ verifySessionFull: async () => null }));
 

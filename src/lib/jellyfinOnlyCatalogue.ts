@@ -5,7 +5,7 @@ import { canonicalGenres } from "@/lib/genres";
 import { cataloguePoster, seriesBackdrop } from "@/lib/images";
 import { getImdbRating } from "@/lib/imdb-rating";
 import type { Locale } from "@/lib/i18n";
-import { getTitleArt, logoForLocale } from "@/lib/title-art";
+import { getTitleArt, logoForScreen } from "@/lib/title-art";
 import { tvEpisodeRuntime } from "@/lib/tvRuntime";
 import { catalogueExtras, getTitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
 
@@ -42,7 +42,7 @@ export async function jellyfinOnlyCinemaMovie(t: JellyfinOnlyTitle, locale: Loca
     year: item.ProductionYear ?? 0,
     posterUrl: cataloguePoster("movie", art.posterByLang, undefined, locale, item),
     backdropUrl: seriesBackdrop(item, undefined),
-    logoUrl: logoForLocale(art, names, locale),
+    logoUrl: logoForScreen(art, names, locale),
     posterTextlessUrl: art.posterTextlessUrl,
     overview: localizedOverview(getTitleOverviews(tmdbId, "movie"), locale, item.Overview?.trim() || null),
     ...catalogueExtras(getTitleExtras(tmdbId, "movie"), locale),
@@ -78,7 +78,7 @@ export async function jellyfinOnlyCinemaSeries(
     year: item.ProductionYear ?? 0,
     posterUrl: cataloguePoster("series", art.posterByLang, undefined, locale, item),
     backdropUrl: seriesBackdrop(item, undefined),
-    logoUrl: logoForLocale(art, names, locale),
+    logoUrl: logoForScreen(art, names, locale),
     posterTextlessUrl: art.posterTextlessUrl,
     overview: localizedOverview(getTitleOverviews(tmdbId, "series"), locale, item.Overview?.trim() || null),
     // La même règle que la route des séries (`tvEpisodeRuntime`), sans durée Sonarr : celle de Jellyfin

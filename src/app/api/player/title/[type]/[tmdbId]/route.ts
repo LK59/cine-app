@@ -4,7 +4,7 @@ import { createTmdbClient, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
 import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { playableLibrary, playableId } from "@/lib/playerLibrary";
 import { getTmdbLocale, LOCALE_COOKIE, localeOf } from "@/lib/i18n";
-import { getTitleArt, logoForLocale, namesWithDetail, type TitleArt } from "@/lib/title-art";
+import { getTitleArt, logoForScreen, namesWithDetail, type TitleArt } from "@/lib/title-art";
 import { getTitleNames } from "@/lib/titleNames";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
@@ -206,7 +206,7 @@ function pickLogo(
   if (!art) return null;
   try {
     const locale = localeOf(req);
-    return logoForLocale(art, namesWithDetail(getTitleNames(tmdbId, type), locale, fromDetail), locale);
+    return logoForScreen(art, namesWithDetail(getTitleNames(tmdbId, type), locale, fromDetail), locale);
   } catch {
     return null;
   }

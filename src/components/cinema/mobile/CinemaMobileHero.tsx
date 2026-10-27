@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Info, Play } from "lucide-react";
 import { PosterImage } from "@/components/PosterImage";
+import { BANNER_WIDTH, bannerImage } from "@/lib/optimizedImage";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { heroSignature, resolveHeroCarousel, upcomingImages, useDecodeAhead, useHeroOrder } from "@/lib/heroCarousel";
 import { useCarouselDrag, carouselTransform, CAROUSEL_MS, CAROUSEL_TRANSITION } from "@/lib/useCarouselDrag";
@@ -40,7 +41,10 @@ type Item = CinemaMovie | CinemaSeries;
  * qui le porte. Et si TMDB n'a pas de version sans texte, l'affiche ordinaire fait l'affaire.
  */
 function heroPoster(item: { posterUrl: string | null; posterTextlessUrl?: string | null; logoUrl: string | null }): string | null {
-  return item.logoUrl ? item.posterTextlessUrl ?? item.posterUrl : item.posterUrl;
+  // En WebP par l'optimiseur (27/10/2026, `bannerImage`) : 65 à 120 Ko en JPEG chez TMDB, et c'est
+  // ce que la bannière attend sur un lien lent. Le fond du grand écran, lui, reste l'adresse de la
+  // fiche (`keepSheetBanners` la garde décodée) : la convertir ici la ferait télécharger deux fois.
+  return bannerImage(item.logoUrl ? item.posterTextlessUrl ?? item.posterUrl : item.posterUrl, BANNER_WIDTH);
 }
 
 // Hors du composant : stables, pour que la bannière ne relance rien à chaque rendu.

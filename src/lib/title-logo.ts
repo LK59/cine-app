@@ -1,4 +1,4 @@
-import { getTitleArt, logoForLocale } from "@/lib/title-art";
+import { getTitleArt, logoForScreen } from "@/lib/title-art";
 import { getTitleNames } from "@/lib/titleNames";
 import type { Locale } from "@/lib/i18n";
 
@@ -17,9 +17,10 @@ export async function getTitleLogo(tmdbId: number, mediaType: "movie" | "series"
 }
 
 /**
- * Le logo qui va avec le titre affiché dans cette langue (09/10/2026, DECISIONS.md §58) — le même que
+ * Le logo qui va avec le titre affiché dans cette langue (09/10/2026, DECISIONS.md §58), en WebP
+ * (`logoForScreen`, 27/10/2026) — le même que
  * celui du catalogue : le lecteur et la fiche montrent le même logo.
  */
 export async function getTitleLogoFor(tmdbId: number, mediaType: "movie" | "series", locale: Locale): Promise<string | null> {
-  return logoForLocale(await getTitleArt(tmdbId, mediaType), getTitleNames(tmdbId, mediaType), locale);
+  return logoForScreen(await getTitleArt(tmdbId, mediaType), getTitleNames(tmdbId, mediaType), locale);
 }
