@@ -754,6 +754,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.5.2",
+    page: "10.0",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Pendant une diffusion Chromecast, les listes de pistes audio et de sous-titres sont de nouveau lisibles.",
+        en: "During a Chromecast cast, the audio and subtitle track lists are readable again.",
+        es: "Durante una emisión Chromecast, las listas de pistas de audio y subtítulos vuelven a ser legibles.",
+        de: "Während einer Chromecast-Übertragung sind die Listen der Ton- und Untertitelspuren wieder lesbar.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

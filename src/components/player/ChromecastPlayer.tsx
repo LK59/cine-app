@@ -722,6 +722,8 @@ export function ChromecastPlayer({
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
+            {/* Les options prennent le fond sombre et le texte blanc de `globals.css` (`select option`) :
+                un `text-black` posé ici les rendait illisibles, noir sur sombre (27/10/2026). */}
             {audioTracks.length > 1 && (
               <label className="player-pill flex items-center gap-2 px-3 py-1 text-sm">
                 <span className="text-subtle">{t("player.audio")}</span>
@@ -732,7 +734,7 @@ export function ChromecastPlayer({
                   disabled={phase === "negotiating"}
                 >
                   {audioTracks.map((a) => (
-                    <option key={a.id} value={a.id} className="text-black">
+                    <option key={a.id} value={a.id}>
                       {a.label}
                     </option>
                   ))}
@@ -748,11 +750,11 @@ export function ChromecastPlayer({
                   onChange={(e) => changeSubtitle(e.target.value === "" ? null : Number(e.target.value))}
                   disabled={phase === "negotiating"}
                 >
-                  <option value="" className="text-black">
+                  <option value="">
                     {t("player.none")}
                   </option>
                   {subtitles.map((s) => (
-                    <option key={s.index} value={s.index} className="text-black">
+                    <option key={s.index} value={s.index}>
                       {s.label}
                     </option>
                   ))}
