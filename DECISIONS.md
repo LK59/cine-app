@@ -3542,6 +3542,14 @@ même ligne (« **Le logo du titre dans le lecteur**, en bas à gauche. ») ; si
 langue vide retombe sur le français (`contentFor`). Les icônes sont des noms à nous (`NEWS_ICONS`), traduits
 en icônes lucide côté navigateur seulement : la base ne dépend pas du nom d'un composant.
 
+**Une page discrète** (27/10/2026, `seedQuietNewsPage`, page « 10.5 »). Publiée par le code comme les
+autres, mais chaque compte qui avait tout vu est réglé sur elle dans la même transaction : elle s'ajoute
+à Compte → Nouveautés sans ouvrir la fenêtre (consigne du propriétaire : mettre à jour les Nouveautés
+sans les republier). Un compte qui avait déjà des pages à voir garde son retard — elle s'empile avec
+elles —, et un compte jamais croisé la reçoit comme toute page récente. Le registre des corrections
+vise désormais cette page (`page: "10.5"`) ; elle reprend au mot près celles de la 10.1 à la 10.5,
+que le registre ne double pas en les versant ensuite (`withLedgerEntry`).
+
 **« Voir plus ›».** Dans la fenêtre, l'entrée des corrections ne montre que sa phrase ; « Voir plus » ferme
 la fenêtre (`closedBy: "voir-plus"`) et ouvre Compte → Nouveautés (`#nouveautes=corrections:<id>`, la
 page la plus récente) sur la liste complète. Compte → Nouveautés rouvre tout : la dernière page entière,

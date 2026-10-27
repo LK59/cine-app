@@ -710,6 +710,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
     ],
   },
   {
+    version: "10.1.6",
+    page: "10.5",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Sur iPhone, iPad et Mac, un film repris par le serveur démarre directement à sa position.",
+        en: "On iPhone, iPad and Mac, a film resumed through the server starts straight at its position.",
+        es: "En iPhone, iPad y Mac, una película reanudada a través del servidor arranca directamente en su posición.",
+        de: "Auf iPhone, iPad und Mac startet ein über den Server fortgesetzter Film direkt an seiner Position.",
+      },
+    ],
+  },
+  {
     version: "10.3.0",
     page: "10.0",
     group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },

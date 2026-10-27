@@ -29,6 +29,7 @@ import { newsDb, newsFor } from "@/lib/news/store";
 import { INITIAL_NEWS_CONTENT, INITIAL_NEWS_SEED, INITIAL_NEWS_VERSION } from "@/lib/news/initialPage";
 import { NEWS_848_CONTENT, NEWS_848_SEED, NEWS_848_VERSION } from "@/lib/news/page848";
 import { NEWS_90_VERSION } from "@/lib/news/page90";
+import { NEWS_105_VERSION } from "@/lib/news/page105";
 import { NEWS_864_VERSION } from "@/lib/news/page864";
 import { NEWS_8672_VERSION } from "@/lib/news/page8672";
 import { STARTUP_LOG } from "@/lib/eventLogs";
@@ -67,11 +68,13 @@ describe("la page initiale, publiée par la migration", () => {
     // La 8.64 est publiée d'office sur toute installation qui prend l'image (Louis, 15/10/2026).
     // La 8.67.2 aussi (Louis, 18/10/2026).
     // La 9.0 (téléchargements hors ligne) aussi, publiée pour tous le 20/10/2026 (`publishNewsDraft`).
-    expect(pages.map((p) => p.version)).toEqual([NEWS_90_VERSION, NEWS_8672_VERSION, NEWS_864_VERSION, INITIAL_NEWS_VERSION]);
-    const initial = pages[3];
-    const p864 = pages[2];
-    const p8672 = pages[1];
-    const p90 = pages[0];
+    // La 10.5 aussi, mais sans fenêtre (`seedQuietNewsPage`, 27/10/2026) : aucun compte n'existe encore ici.
+    expect(pages.map((p) => p.version)).toEqual([NEWS_105_VERSION, NEWS_90_VERSION, NEWS_8672_VERSION, NEWS_864_VERSION, INITIAL_NEWS_VERSION]);
+    const initial = pages[4];
+    const p864 = pages[3];
+    const p8672 = pages[2];
+    const p90 = pages[1];
+    const p105 = pages[0];
     // Complétée le 19/10 : la rotation en paysage d'abord, puis « Plus d'épisodes ».
     expect(p8672.content.fr.sections[0].entries.map((e) => e.title)).toEqual(["Écran en paysage", "Plus d'épisodes"]);
     // Ses corrections viennent du registre (`fixesLedger.ts`), versé dans les pages publiées.
@@ -84,11 +87,11 @@ describe("la page initiale, publiée par la migration", () => {
     expect(draft.content.fr.sections[0].entries[0].title).toBe("Connexion lente");
     for (const lang of ["en", "es", "de"] as const) expect(draft.content[lang]?.sections.length).toBe(1);
     // En brouillon, elle ne s'annonce à personne.
-    expect(newsFor("un-compte-quelconque").unseen).toEqual([p90.id, p8672.id, p864.id]);
+    expect(newsFor("un-compte-quelconque").unseen).toEqual([p105.id, p90.id, p8672.id]);
     // Publiée depuis Activité : un compte qui n'a rien vu reçoit les trois, la plus récente d'abord.
     newsDb.publish(draft.id);
     // Trois au plus (FIRST_VIEW_PAGES) : les plus anciennes restent dans Compte → Nouveautés.
-    expect(newsFor("un-autre").unseen).toEqual([draft.id, p90.id, p8672.id]);
+    expect(newsFor("un-autre").unseen).toEqual([draft.id, p105.id, p90.id]);
   });
 
   it("second démarrage : rien ne change — ni nouvelle page, ni republication, ni réarmement", () => {
@@ -172,7 +175,7 @@ describe("le drapeau par compte", () => {
     newsDb.publish(b);
     expect(newsFor("en-retard").unseen).toEqual([b, a]);
     // Arrivé après coup : les trois dernières fusionnées (FIRST_VIEW_PAGES), pas tout l'historique.
-    expect(newsFor("tout-neuf").unseen).toEqual([b, a, newsDb.published().find((p) => p.version === NEWS_848_VERSION)!.id]);
+    expect(newsFor("tout-neuf").unseen).toEqual([b, a, newsDb.published()[2].id]);
     // Republier ne change rien.
     expect(newsDb.publish(b)).toBe(newsDb.latestSeq());
     newsDb.markSeen("en-retard", [b, a]);

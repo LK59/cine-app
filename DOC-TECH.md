@@ -402,7 +402,9 @@ flowchart LR
 
 A MediaSource stream cannot leave the tab, so a television always gets the server's stream; the
 page becomes a remote control (Chromecast) or hands its element's route over (AirPlay). The server
-keeps the resume point when the page goes quiet. Details: [Path selection](#path-selection)
+keeps the resume point when the page goes quiet. A Chromecast that accepts the load and shows no
+picture within 25 s is relaunched once with its sound re-encoded to AAC stereo, then the failure is
+said — the Cast kit names no receiver's decoders (`CAST_NO_PICTURE_MS`, DECISIONS §122). Details: [Path selection](#path-selection)
 (casting paragraphs), [DECISIONS §64](DECISIONS.md).
 
 ### 4. The life of one playback
@@ -526,8 +528,13 @@ flowchart TB
 The cinema opens on what the device kept, then the network corrects it; the catalogue is frozen on
 purpose (it changes daily), only the resume and next-up feeds follow focus. While a film fills the
 screen SWR is paused, which is why the player's own queries carry `playerBootstrapOptions` and why
-closing the player revalidates explicitly. Details: CLAUDE.md "Known pitfalls",
-[DECISIONS §7, §27, §29, §51, §55, §86](DECISIONS.md).
+closing the player revalidates explicitly. The network's own answers lean on the browser's HTTP
+cache — the catalogue's `ETag` (a 304 when nothing changed), images `immutable` for a year — and on
+WebKit that cache is only read back across launches when the service worker *answers* the request:
+it relays images and the two catalogues + Nouveautés itself there (`RELAY_THROUGH_WORKER`,
+`public/sw.js`); a request it lets fall through was downloaded in full at every iPhone launch. The
+banner's logos and poster go through the image optimiser as WebP (`bannerImage`). Details: CLAUDE.md
+"Known pitfalls", [DECISIONS §7, §27, §29, §51, §55, §86, §121](DECISIONS.md).
 
 ### 6. Logs and observability
 

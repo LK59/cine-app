@@ -15,6 +15,7 @@ vi.mock("@/lib/dataDir", () => ({ DATA_DIR: dir }));
 import { getDb, publishNewsDraft } from "@/lib/db";
 import { newsDb, newsFor } from "@/lib/news/store";
 import { NEWS_90_CONTENT, NEWS_90_PUBLISH, NEWS_90_VERSION } from "@/lib/news/page90";
+import { NEWS_105_VERSION } from "@/lib/news/page105";
 
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
@@ -24,7 +25,8 @@ describe("publication de la page 9.0", () => {
     const pages = newsDb.all().filter((p) => p.version === NEWS_90_VERSION);
     expect(pages).toHaveLength(1);
     expect(pages[0].status).toBe("published");
-    expect(pages[0].seq).toBe(Math.max(...newsDb.published().map((p) => p.seq!)));
+    // La plus récente de son temps : seule la 10.5, publiée après elle sans fenêtre (27/10/2026), la dépasse.
+    expect(pages[0].seq).toBe(Math.max(...newsDb.published().filter((p) => p.version !== NEWS_105_VERSION).map((p) => p.seq!)));
     expect(newsFor("quelquun").unseen).toContain(pages[0].id);
     // Un redémarrage ne la republie pas.
     newsDb.markSeen("quelquun", [pages[0].id]);

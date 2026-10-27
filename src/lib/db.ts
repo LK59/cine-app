@@ -12,6 +12,7 @@ import { NEWS_864_CONTENT, NEWS_864_SEED, NEWS_864_VERSION } from "@/lib/news/pa
 import { NEWS_90_CONTENT, NEWS_90_PUBLISH, NEWS_90_SEED, NEWS_90_VERSION } from "@/lib/news/page90";
 import { NEWS_91_CONTENT, NEWS_91_SEED, NEWS_91_VERSION } from "@/lib/news/page91";
 import { laternaNewsPage } from "@/lib/news/pageLaterna";
+import { NEWS_105_CONTENT, NEWS_105_SEED, NEWS_105_VERSION } from "@/lib/news/page105";
 import { config } from "@/lib/config";
 import { FIXES_LEDGER, ledgerMarker, ledgerTarget, withLedgerEntry, type FixLedgerEntry } from "@/lib/news/fixesLedger";
 import { NEWS_8672_CONTENT, NEWS_8672_FIRST_VERSION, NEWS_8672_REPUBLISH, NEWS_8672_SEED, NEWS_8672_VERSION } from "@/lib/news/page8672";
@@ -712,6 +713,9 @@ function migrate(db: Database.Database): void {
   // `?.` : une configuration partielle (doublures de test) ne doit pas faire échouer `migrate()`.
   const laterna = laternaNewsPage(config.news?.laternaAddress);
   if (laterna) seedNewsPage(db, laterna.seed, laterna.version, laterna.content);
+  // Les versions 10.1 à 10.5 (27/10/2026) : publiée partout, consultable dans Compte → Nouveautés, sans
+  // ouvrir la fenêtre (Louis : mettre à jour, ne pas republier). Avant le registre, qui la complète.
+  seedQuietNewsPage(db, NEWS_105_SEED, NEWS_105_VERSION, NEWS_105_CONTENT);
   // Les corrections livrées, ajoutées à l'historique des pages publiées (`fixesLedger.ts`).
   applyFixesLedger(db);
   if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'onboarding-seed-louis'").get()) {
@@ -810,6 +814,27 @@ export function seedNewsPage(
     db.prepare(
       "INSERT INTO news_pages (version, content, status, seq, created_at, updated_at, published_at) VALUES (?, ?, 'published', ?, ?, ?, ?)"
     ).run(version, JSON.stringify(content), max + 1, now, now, now);
+    db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES (?, ?)").run(seed, now);
+  })();
+}
+
+/**
+ * Une page publiée **sans fenêtre** (27/10/2026) : la même que `seedNewsPage`, mais chaque compte qui
+ * avait tout vu jusque-là est réglé sur elle dans la même transaction — elle s'ajoute à Compte →
+ * Nouveautés sans que la fenêtre s'ouvre au lancement. Un compte qui avait déjà des pages à voir
+ * garde son retard (elle s'empile avec les autres), et un compte jamais croisé la reçoit comme toute
+ * page récente, à son premier passage (`stateOf`). Une fois, par son marqueur.
+ */
+export function seedQuietNewsPage(db: Database.Database, seed: string, version: string, content: NewsContentByLang, now = Date.now()): void {
+  if (db.prepare("SELECT 1 FROM migrations_done WHERE name = ?").get(seed)) return;
+  db.transaction(() => {
+    const max = (db.prepare("SELECT COALESCE(MAX(seq), 0) AS m FROM news_pages").get() as { m: number }).m;
+    db.prepare(
+      "INSERT INTO news_pages (version, content, status, seq, created_at, updated_at, published_at) VALUES (?, ?, 'published', ?, ?, ?, ?)"
+    ).run(version, JSON.stringify(content), max + 1, now, now, now);
+    // « Tout vu », c'est avoir vu la dernière page *publiée* : une page dépubliée garde son rang, et ne compte pas.
+    const published = (db.prepare("SELECT COALESCE(MAX(seq), 0) AS m FROM news_pages WHERE status = 'published' AND seq <= ?").get(max) as { m: number }).m;
+    db.prepare("UPDATE news_state SET seen_seq = ? WHERE seen_seq >= ?").run(max + 1, published);
     db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES (?, ?)").run(seed, now);
   })();
 }
