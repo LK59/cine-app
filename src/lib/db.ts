@@ -679,6 +679,18 @@ function migrate(db: Database.Database): void {
   // Quand l'appareil de ce compte a reçu la version entière : le quota du serveur n'efface que ce que
   // tous ses demandeurs ont récupéré (20/10/2026).
   try { db.exec("ALTER TABLE offline_requests ADD COLUMN fetched_at INTEGER"); } catch { /* already exists */ }
+  // Les jetons du Stream Deck (27/10/2026, `src/lib/streamdeck/tokens.ts`) : une ligne par appareil,
+  // l'empreinte seule — le jeton lui-même n'est montré qu'une fois, à la création.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS streamdeck_tokens (
+      id           TEXT    PRIMARY KEY,
+      name         TEXT    NOT NULL,
+      hash         TEXT    NOT NULL UNIQUE,
+      created_by   TEXT    NOT NULL,
+      created_at   INTEGER NOT NULL,
+      last_used_at INTEGER
+    );
+  `);
   seedInitialNews(db);
   // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
   seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");

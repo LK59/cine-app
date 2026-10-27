@@ -3729,5 +3729,22 @@
       "freedMany": "{n} Downloads von der alten Adresse gelöscht: Sie sind in Laterna."
     },
     "loginLink": "Sie kommen von der alten Adresse? Wechselcode"
+  },
+  "streamdeck": {
+    "title": "Stream Deck",
+    "hint": "Ein Token pro Stream Deck: Es dient nur dazu, laufende Wiedergaben zu verfolgen, sonst nichts. Geben Sie es mit der Adresse unten im Plugin ein.",
+    "address": "Adresse für das Plugin",
+    "name": "Gerätename (z. B. Büro-PC)",
+    "create": "Token erstellen",
+    "created": "Kopieren Sie dieses Token jetzt: Es wird nie wieder angezeigt.",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "empty": "Noch kein Token.",
+    "lastUsed": "verwendet {when}",
+    "never": "nie verwendet",
+    "revoke": "Widerrufen",
+    "revoked": "Token widerrufen: Dieses Stream Deck sieht nichts mehr.",
+    "limit": "Höchstens zehn Tokens: Widerrufen Sie zuerst eines.",
+    "error": "Im Moment nicht möglich. Versuchen Sie es erneut."
   }
 }

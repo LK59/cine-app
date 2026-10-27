@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- « Aplat et faisceau or » (23/10/2026) : le noir de l'app, un L blanc cassé plein, un faisceau or
+       qui s'estompe vers la droite, le triangle de lecture découpé dedans, du noir du fond. -->
+  <defs>
+    <linearGradient id="beam" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#fbbf24" stop-opacity="0.85"/><stop offset="100%" stop-color="#fbbf24" stop-opacity="0.18"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#0a0a0c"/>
+  <polygon points="168,290 408,222 408,402 168,346" fill="url(#beam)"/>
+  <rect x="136" y="104" width="60" height="242" rx="18" fill="#f5f5f4"/>
+  <path d="M318 282 L318 342 L366 312 Z" fill="#0a0a0c"/>
+</svg>

@@ -13,6 +13,9 @@ node_modules
 .env.local
 npm-debug.log*
 
+# Le plugin Stream Deck : un paquet à part, installé sur l'ordinateur où le Stream Deck est branché.
+streamdeck-plugin
+
 # Copies de travail d'agents : un dépôt entier chacune, avec des tests qui tourneraient au build.
 .claude
 

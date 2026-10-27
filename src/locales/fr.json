@@ -3729,5 +3729,22 @@
       "freedMany": "{n} téléchargements effacés de l'ancienne adresse : ils sont dans Laterna."
     },
     "loginLink": "Vous venez de l'ancienne adresse ? Code de passage"
+  },
+  "streamdeck": {
+    "title": "Stream Deck",
+    "hint": "Un jeton par Stream Deck : il ne sert qu'à suivre les lectures en cours, rien d'autre. À saisir dans le plugin avec l'adresse ci-dessous.",
+    "address": "Adresse à saisir dans le plugin",
+    "name": "Nom de l'appareil (ex. PC du bureau)",
+    "create": "Créer un jeton",
+    "created": "Copiez ce jeton maintenant : il ne sera plus jamais affiché.",
+    "copy": "Copier",
+    "copied": "Copié",
+    "empty": "Aucun jeton pour l'instant.",
+    "lastUsed": "utilisé {when}",
+    "never": "jamais utilisé",
+    "revoke": "Révoquer",
+    "revoked": "Jeton révoqué : ce Stream Deck ne voit plus rien.",
+    "limit": "Dix jetons au plus : révoquez-en un d'abord.",
+    "error": "Impossible pour le moment. Réessayez."
   }
 }

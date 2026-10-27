@@ -3729,5 +3729,22 @@
       "freedMany": "{n} descargas borradas de la dirección antigua: están en Laterna."
     },
     "loginLink": "¿Viene de la dirección antigua? Código de paso"
+  },
+  "streamdeck": {
+    "title": "Stream Deck",
+    "hint": "Un token por Stream Deck: solo sirve para seguir las reproducciones en curso, nada más. Introdúcelo en el plugin con la dirección de abajo.",
+    "address": "Dirección para el plugin",
+    "name": "Nombre del dispositivo (p. ej. PC de la oficina)",
+    "create": "Crear un token",
+    "created": "Copia este token ahora: no se volverá a mostrar.",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "empty": "Todavía no hay ningún token.",
+    "lastUsed": "usado {when}",
+    "never": "nunca usado",
+    "revoke": "Revocar",
+    "revoked": "Token revocado: este Stream Deck ya no ve nada.",
+    "limit": "Diez tokens como máximo: revoca uno primero.",
+    "error": "No es posible ahora. Inténtalo de nuevo."
   }
 }

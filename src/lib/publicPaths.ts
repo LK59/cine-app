@@ -44,6 +44,11 @@ export const PUBLIC_PATHS = [
   // (`/api/passage`) et les réglages d'arrivée (`/api/passage/arrival`) exigent une session.
   "/passage",
   "/api/passage/redeem",
+  // Le plugin Stream Deck (27/10/2026) : pas de cookie, un jeton à lui. Chaque route de ce dossier
+  // vérifie le jeton avant tout (`verifyStreamDeckToken`) et ne sert que des lectures — les lectures
+  // en cours et leurs affiches. Un oubli de vérification dans une nouvelle route l'ouvrirait à tous :
+  // `streamdeck-routes.test.ts` les parcourt toutes.
+  "/api/streamdeck",
 ] as const;
 
 /** Vrai pour une de ces adresses, et pour tout ce qu'elle contient. */

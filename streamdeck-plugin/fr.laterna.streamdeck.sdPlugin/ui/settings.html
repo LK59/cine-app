@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Laterna</title>
+    <style>
+      body { margin: 0; padding: 12px 10px; font: 13px "Segoe UI", -apple-system, sans-serif; color: #d4d4d8; background: #2d2d2d; }
+      label { display: block; margin: 10px 0 4px; color: #a1a1aa; font-size: 12px; }
+      input { box-sizing: border-box; width: 100%; padding: 6px 8px; border: 1px solid #3f3f46; border-radius: 4px; background: #3d3d3d; color: #fff; font: inherit; }
+      p { margin: 10px 0 0; color: #a1a1aa; font-size: 12px; line-height: 1.4; }
+    </style>
+  </head>
+  <body>
+    <!-- Réglages communs à toutes les touches du plugin : l'adresse de Laterna et le jeton créé dans
+         Configuration → Administration → Stream Deck. Gardés par l'appli Stream Deck (réglages globaux). -->
+    <label for="url">Adresse de Laterna</label>
+    <input id="url" type="url" placeholder="https://…" autocomplete="off" spellcheck="false" />
+    <label for="token">Jeton</label>
+    <input id="token" type="password" placeholder="ltn_sd_…" autocomplete="off" spellcheck="false" />
+    <p>Le jeton se crée dans Laterna : Configuration → Administration → Stream Deck. Les touches disent
+      si la connexion passe : « Réglages » (incomplets), « Jeton refusé », « Hors ligne ».</p>
+    <script>
+      let socket = null;
+      let uuid = null;
+      const url = document.getElementById("url");
+      const token = document.getElementById("token");
+
+      function save() {
+        if (!socket) return;
+        const settings = { url: url.value.trim(), token: token.value.trim() };
+        socket.send(JSON.stringify({ event: "setGlobalSettings", context: uuid, payload: settings }));
+      }
+
+      // Appelée par l'appli Stream Deck à l'ouverture des réglages.
+      // eslint-disable-next-line no-unused-vars
+      function connectElgatoStreamDeckSocket(port, propertyInspectorUUID, registerEvent) {
+        uuid = propertyInspectorUUID;
+        socket = new WebSocket(`ws://127.0.0.1:${port}`);
+        socket.onopen = () => {
+          socket.send(JSON.stringify({ event: registerEvent, uuid }));
+          socket.send(JSON.stringify({ event: "getGlobalSettings", context: uuid }));
+        };
+        socket.onmessage = (message) => {
+          const data = JSON.parse(message.data);
+          if (data.event !== "didReceiveGlobalSettings") return;
+          const settings = data.payload?.settings ?? {};
+          url.value = settings.url ?? "";
+          token.value = settings.token ?? "";
+        };
+      }
+
+      url.addEventListener("change", save);
+      token.addEventListener("change", save);
+    </script>
+  </body>
+</html>

@@ -3729,5 +3729,22 @@
       "freedMany": "{n} downloads removed from the old address: they are in Laterna."
     },
     "loginLink": "Coming from the old address? Transfer code"
+  },
+  "streamdeck": {
+    "title": "Stream Deck",
+    "hint": "One token per Stream Deck: it can only follow what is playing, nothing else. Enter it in the plugin with the address below.",
+    "address": "Address to enter in the plugin",
+    "name": "Device name (e.g. office PC)",
+    "create": "Create a token",
+    "created": "Copy this token now: it will never be shown again.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "empty": "No token yet.",
+    "lastUsed": "used {when}",
+    "never": "never used",
+    "revoke": "Revoke",
+    "revoked": "Token revoked: this Stream Deck no longer sees anything.",
+    "limit": "Ten tokens at most: revoke one first.",
+    "error": "Not possible right now. Try again."
   }
 }

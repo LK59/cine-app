@@ -7257,3 +7257,31 @@ de fichiers ; la relance est un geste, jamais automatique (une saison en 4G n'es
 qu'on fait à quelqu'un).
 
 **Décidé le 23/10/2026.**
+
+## 120. Le Stream Deck : un jeton à lui, qui ne lit que les lectures en cours
+
+**La règle.** Un plugin Stream Deck (`streamdeck-plugin/`, paquet à part, jamais dans l'image) suit les
+lectures en cours : une touche compte, une page montre une lecture par touche, et chaque lecture se
+détaille sur les huit touches d'un Stream Deck Neo (et son Infobar). Il ne présente pas de session mais
+un **jeton** créé dans Configuration → Administration (`StreamDeckCard`), un par appareil, montré une
+fois, gardé en empreinte SHA-256 (`streamdeck/tokens.ts`, table `streamdeck_tokens`), révocable.
+
+**Ce qu'il ouvre, et rien d'autre.** `/api/streamdeck` est dans `PUBLIC_PATHS` : le proxy laisse passer,
+et **chaque route du dossier vérifie le jeton avant tout** (`verifyStreamDeckToken`) — un test parcourt
+le dossier et échoue si une route l'oublie. Deux routes, en lecture : `plays` (les lectures en cours,
+`streamdeck/plays.ts`) et `image` (l'affiche d'un titre **en cours de lecture** seulement : le jeton ne
+parcourt pas le catalogue). La gestion des jetons (`/api/admin/streamdeck/tokens`) est à
+l'administrateur (`adminOnly`, et le proxy refuse ses écritures à un compte ordinaire).
+
+**Ce que montre une lecture.** Jellyfin dit qui regarde quoi et où il en est — la télévision du salon
+comprise ; les séances de `player.log` complètent celles de Laterna (chemin, image, incidents). **Le
+lecteur serveur n'est pas un échec** (souhait du propriétaire) : « Serveur » est un chemin, affiché
+comme « Appareil » ou « Télé ». Seuls une attente, une erreur ou une reconstruction des deux dernières
+minutes passent une lecture en orange — ni un relais, ni une connexion lente.
+
+**Voulu.** Lecture seule : aucune action (pause, relance de service) — chacune serait une porte
+d'écriture ouverte par un fichier de réglages sur un ordinateur. Le profil « Laterna » (la page des
+lectures) se crée dans l'appli Stream Deck et s'exporte : son format n'est pas documenté, il n'est pas
+fabriqué à la main.
+
+**Décidé le 27/10/2026.**

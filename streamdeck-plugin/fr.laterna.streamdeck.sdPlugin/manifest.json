@@ -1,0 +1,84 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "UUID": "fr.laterna.streamdeck",
+  "Name": "Laterna",
+  "Version": "1.0.0.0",
+  "Author": "Laterna",
+  "Description": "Les lectures en cours sur Laterna : combien, qui regarde quoi, et le détail de chacune.",
+  "Icon": "imgs/plugin",
+  "Category": "Laterna",
+  "CategoryIcon": "imgs/category",
+  "CodePath": "bin/plugin.js",
+  "PropertyInspectorPath": "ui/settings.html",
+  "SDKVersion": 3,
+  "Software": {
+    "MinimumVersion": "7.6"
+  },
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    },
+    {
+      "Platform": "mac",
+      "MinimumVersion": "13"
+    }
+  ],
+  "Nodejs": {
+    "Version": "24",
+    "Debug": "enabled"
+  },
+  "Actions": [
+    {
+      "UUID": "fr.laterna.streamdeck.count",
+      "Name": "Lectures",
+      "Tooltip": "Le nombre de lectures en cours ; appuyer ouvre la page des lectures.",
+      "Icon": "imgs/action",
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "States": [
+        {
+          "Image": "imgs/key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "fr.laterna.streamdeck.slot",
+      "Name": "Case",
+      "Tooltip": "Une touche de la page des lectures : sa place décide ce qu'elle montre.",
+      "Icon": "imgs/action",
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "States": [
+        {
+          "Image": "imgs/key",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "UUID": "fr.laterna.streamdeck.infobar",
+      "Name": "Bandeau",
+      "Tooltip": "L'Infobar du Stream Deck Neo : le résumé de la page des lectures.",
+      "Icon": "imgs/action",
+      "Controllers": [
+        "Neo"
+      ],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "States": [
+        {
+          "Image": "imgs/key",
+          "ShowTitle": false
+        }
+      ]
+    }
+  ]
+}

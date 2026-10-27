@@ -4,8 +4,9 @@ import { useT } from "@/components/TranslationProvider";
 import { ConfigurationPage } from "@/components/settings/ConfigurationSection";
 import { AdminPasswordCard } from "@/components/settings/AdminPasswordCard";
 import { PwaUpdateCard, SearchDebugCard } from "@/components/settings/AdminTools";
+import { StreamDeckCard } from "@/components/settings/StreamDeckCard";
 
-/** Configuration → Administration : le mot de passe du compte local, la recherche de débogage, la version. */
+/** Configuration → Administration : le mot de passe du compte local, la recherche de débogage, la version, les jetons du Stream Deck. */
 export default function AdministrationPage() {
   const t = useT();
   return (
@@ -13,6 +14,7 @@ export default function AdministrationPage() {
       <AdminPasswordCard />
       <SearchDebugCard />
       <PwaUpdateCard />
+      <StreamDeckCard />
     </ConfigurationPage>
   );
 }

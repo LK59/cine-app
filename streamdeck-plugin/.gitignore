@@ -1,0 +1,4 @@
+node_modules/
+dist/
+fr.laterna.streamdeck.sdPlugin/bin/
+fr.laterna.streamdeck.sdPlugin/logs/

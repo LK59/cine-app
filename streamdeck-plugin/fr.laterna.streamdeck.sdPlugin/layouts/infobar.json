@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/layout.json",
+  "id": "fr.laterna.streamdeck.infobar",
+  "controller": "Neo",
+  "items": [
+    { "key": "left", "type": "text", "rect": [8, 0, 110, 50], "alignment": "left", "font": { "size": 16, "weight": 600 }, "color": "#ffffff", "text-overflow": "ellipsis", "value": "Laterna" },
+    { "key": "right", "type": "text", "rect": [118, 0, 106, 50], "alignment": "right", "font": { "size": 14, "weight": 500 }, "color": "#a1a1aa", "text-overflow": "ellipsis", "value": "" }
+  ]
+}
