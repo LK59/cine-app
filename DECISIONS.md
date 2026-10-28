@@ -7445,8 +7445,8 @@ worker (revue du 20/10/2026).
 
 **Ce qui est mesuré.** Sur la ligne `opening` : `swMs`, ce que le service worker a coûté à la
 première requête du flux (`fetchStart − workerStart`, `streamRequestTiming.ts`), ou `sw: "hors"` si
-elle n'en a touché aucun. Dans la trace de l'ouverture : « capacités : lisible/illisible,
-fluide/pas fluide, économe/pas économe », la réponse de `mediaCapabilities.decodingInfo` pour la
+elle n'en a touché aucun. `mcSmooth` / `mcEfficient` (et `mcSupported: false` s'il y a lieu), aussi
+tracés « capacités : lisible/illisible, fluide/pas fluide, économe/pas économe » : la réponse de `mediaCapabilities.decodingInfo` pour la
 taille, le débit et le HDR du fichier (`decodingInfo.ts`, posée à l'attachement de MediaSource).
 
 **Pourquoi.** Deux pistes à juger sur pièces avant d'y toucher : déclarer au worker les adresses

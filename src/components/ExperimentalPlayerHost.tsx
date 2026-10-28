@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { playerBootstrapOptions } from "@/lib/swr";
 import { watchFirstStreamRequest, type StreamRequestWatch } from "@/lib/streamRequestTiming";
+import { decodingFields } from "@/lib/webcodecs/decodingInfo";
 import { advanceTo, closePlayerSession } from "@/components/player/playerClose";
 import { directInfoForOpening } from "@/lib/directInfo";
 import { labSampleByFile, labSampleInfo } from "@/lib/labSamples";
@@ -1404,6 +1405,7 @@ export function ExperimentalPlayerHost({
         ...(infoAtRef.current !== null ? { infoMs: Math.max(0, infoAtRef.current - openingFrom) } : {}),
         ...(introEligible ? {} : { reopened: true }),
         ...(streamTimingRef.current?.fields() ?? {}),
+        ...decodingFields(),
         // Ce que la lenteur a fait paraître pendant cette ouverture, et les choix faits (§78).
         ...slowFields(),
         steps: traceRecent(Date.now() - openingFrom + 300).slice(-60).join(" | "),

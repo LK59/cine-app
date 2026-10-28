@@ -10,7 +10,7 @@ const traced: string[] = [];
 vi.mock("@/lib/webcodecs/trace", () => ({ trace: (line: string) => traced.push(line) }));
 
 import { watchFirstStreamRequest } from "@/lib/streamRequestTiming";
-import { probeDecodingInfo } from "@/lib/webcodecs/decodingInfo";
+import { decodingFields, probeDecodingInfo } from "@/lib/webcodecs/decodingInfo";
 import type { MatroskaTrack } from "@/lib/webcodecs/matroska";
 
 /** Un observateur qui livre d'un coup les entrées qu'on lui donne. */
@@ -65,6 +65,7 @@ describe("ce que le navigateur prédit de la lecture", () => {
       video: expect.objectContaining({ width: 3840, height: 1632, bitrate: 10_000_000, transferFunction: "pq", colorGamut: "rec2020" }),
     });
     expect(traced[0]).toMatch(/^capacités : lisible, pas fluide, économe/);
+    expect(decodingFields()).toEqual({ mcSmooth: false, mcEfficient: true });
   });
 
   it("sans l'API, ou sur un refus : rien", async () => {
@@ -75,5 +76,6 @@ describe("ce que le navigateur prédit de la lecture", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(traced).toEqual([]);
+    expect(decodingFields()).toEqual({});
   });
 });

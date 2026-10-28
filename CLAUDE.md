@@ -230,7 +230,7 @@ delivered < half the stream's bitrate); since §78 the same day, a slow link is 
 its own, and what it did rides on the lines already sent — `slowLink` (a bounded `event +12.3 s
 (recv/need)` thread: hint, pre-warm, switch, screen, « instable ») and `slowChoice` on `opening`,
 `fallback`, `error`, `stop` and the server's `start`, plus `lighterMbps`/`lighterTier`/`lighterCarried`/
-`lighterCleared`, `switch.*`, `prewarm.*`, `switchGapMs` and `quality`; since 2026-10-28 `opening` also carries `swMs` (what the service worker cost the first stream request, or `sw: "hors"`) and its steps the browser's `decodingInfo` verdict (« capacités : … », DECISIONS §126) — measured only; server-player `start`/`error`/`stop` carry `startup.*` (lists,
+`lighterCleared`, `switch.*`, `prewarm.*`, `switchGapMs` and `quality`; since 2026-10-28 `opening` also carries `swMs` (what the service worker cost the first stream request, or `sw: "hors"`) and `mcSmooth`/`mcEfficient`, the browser's `decodingInfo` verdict for the file (DECISIONS §126) — measured only; server-player `start`/`error`/`stop` carry `startup.*` (lists,
 first segment, picture, ms from the request, and `startup.stage` on a failure — `startup.pictureMs` is the picture *before*
 the resume seek; since 2026-10-15 a resumed session's `stop` also carries `diag.resumeAt`, `diag.resumeSeekMs` and
 `diag.resumePictureMs`, the picture at the resume position); `stall`, `error`,
