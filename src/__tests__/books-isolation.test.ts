@@ -304,6 +304,8 @@ describe("la politique de sécurité", () => {
     expect(books).not.toMatch(/https?:\/\//);
     expect(books).toMatch(/script-src 'self' 'unsafe-inline'(;|$)/);
     expect(books).toMatch(/object-src 'none'/);
+    // Posée dans un cadre par le cinéma (§128) : par notre seule origine.
+    expect(books).toMatch(/frame-ancestors 'self'(;|$)/);
     // La règle des livres vient après la générale : la dernière qui pose l'en-tête l'emporte.
     expect(rules.findIndex((r) => r.source === "/livres")).toBeGreaterThan(rules.findIndex((r) => r.source === "/(.*)"));
     // La page hors ligne des livres ouvre le même lecteur : la même politique.
