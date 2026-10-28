@@ -75,9 +75,11 @@ export interface EnrichRecord {
 /**
  * La version des règles de correspondance. Une ligne faite par des règles plus anciennes est réévaluée —
  * les remplies d'abord : la v1 a donné à « La Tour des anges » (Pullman, tome 2) le résumé du tome 1,
- * par un volume qu'elle avait cru le même (10.9.0, 28/10/2026).
+ * par un volume qu'elle avait cru le même (10.9.0, 28/10/2026). La v3 cherche en texte libre : la v2 ne
+ * trouvait rien, Google ne répondant plus à ses opérateurs (`intitle:`, `inauthor:`, `isbn:` → 0 résultat,
+ * mesuré en production le 28/10/2026).
  */
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 // ─── La correspondance ────────────────────────────────────────────────────────────────────────
 
@@ -136,12 +138,23 @@ export function tomeOf(text: string): number | null {
  * Un candidat retenu : le même titre, un auteur commun, et rien de ce qui trahit un autre livre — une
  * analyse, une intégrale, un autre tome, un résumé qui parle d'un autre titre de l'auteur et pas du nôtre.
  */
-export function acceptable(target: Pick<EnrichTarget, "name" | "authors" | "index" | "siblings">, v: GoogleVolume, viaIsbn = false, titles: readonly string[] = [target.name]): boolean {
+/** Le volume porte-t-il l'ISBN du livre ? */
+export function sameIsbn(target: { isbn?: string | null }, v: GoogleVolume): boolean {
+  const ours = target.isbn?.replace(/[^0-9Xx]/g, "").toUpperCase();
+  if (!ours || (ours.length !== 10 && ours.length !== 13)) return false;
+  return (v.volumeInfo?.industryIdentifiers ?? []).some((i) => i.identifier?.replace(/[^0-9Xx]/g, "").toUpperCase() === ours);
+}
+
+export function acceptable(target: Pick<EnrichTarget, "name" | "authors" | "index" | "siblings"> & { isbn?: string | null }, v: GoogleVolume, viaIsbn = false, titles: readonly string[] = [target.name]): boolean {
   const info = v.volumeInfo;
   if (!info?.title) return false;
   const text = fold(`${info.title} ${info.subtitle ?? ""}`);
   if (STUDY.test(text) || STUDY_PUBLISHERS.test(fold(info.publisher ?? ""))) return false;
+  // Le même ISBN que le livre : c'est cette édition.
+  if (sameIsbn(target, v)) return true;
   if (OMNIBUS.test(text)) return false;
+  // Une adaptation (une BD « La Tour des Anges (Tome 1) » à trois auteurs) : plus d'auteurs que le livre et un tome dans le titre.
+  if ((info.authors?.length ?? 0) > Math.max(1, target.authors.length) && tomeOf(`${info.title} ${info.subtitle ?? ""}`) !== null) return false;
   // Plusieurs titres de l'auteur dans le titre ou le sous-titre : un recueil.
   const siblings = target.siblings ?? [];
   if (siblings.filter((t) => titleKey(t).length >= 6 && text.includes(titleKey(t))).length >= 1 && !titles.some((t) => titleKey(t) === titleKey(info.title as string))) return false;
@@ -167,12 +180,27 @@ export function acceptable(target: Pick<EnrichTarget, "name" | "authors" | "inde
   return titles.some((t) => titlesMatch(t, info.title as string, siblings)) && authorsMatch(target.authors, info.authors);
 }
 
-/** Le meilleur des candidats retenus : en français d'abord, avec un résumé ensuite. */
+/**
+ * Le meilleur des candidats retenus, parmi tous ceux de la réponse (le bon n'est souvent pas le premier :
+ * des magazines, des études, d'autres langues l'entourent) : le même ISBN, puis le français, puis un
+ * résumé, le plus long, puis le moins d'auteurs en plus des nôtres.
+ */
 export function bestCandidate(target: EnrichTarget, items: readonly GoogleVolume[], viaIsbn = false, titles: readonly string[] = [target.name]): GoogleVolume | null {
   const ok = items.filter((v) => acceptable(target, v, viaIsbn, titles));
   if (ok.length === 0) return null;
-  const score = (v: GoogleVolume) => (v.volumeInfo?.language === "fr" ? 2 : 0) + (v.volumeInfo?.description ? 1 : 0);
-  return [...ok].sort((a, b) => score(b) - score(a))[0];
+  const key = (v: GoogleVolume): number[] => [
+    sameIsbn(target, v) ? 1 : 0,
+    v.volumeInfo?.language === "fr" ? 1 : 0,
+    v.volumeInfo?.description ? 1 : 0,
+    v.volumeInfo?.description?.length ?? 0,
+    -Math.max(0, (v.volumeInfo?.authors?.length ?? 0) - target.authors.length),
+  ];
+  return [...ok].sort((a, b) => {
+    const x = key(a);
+    const y = key(b);
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return y[i] - x[i];
+    return 0;
+  })[0];
 }
 
 /**
@@ -346,56 +374,62 @@ function blockToday(now = new Date()): void {
 class QuotaError extends Error {}
 class RetryLaterError extends Error {}
 
-/** Une recherche. `q` est encodé une seule fois, par `URLSearchParams` ; la clé va dans l'en-tête. */
+/** Les tentatives d'une même requête quand Google répond 503 (« Service temporarily unavailable ») : une sur deux, mesuré. */
+const ATTEMPTS = 3;
+
+/**
+ * Une recherche, en texte libre : `q` est encodé une seule fois, par `URLSearchParams` ; la clé va dans
+ * l'en-tête. Un 503 ou une coupure est retenté jusqu'à trois fois, à 1,5–3 s d'écart (chaque tentative
+ * compte dans le quota du jour), puis la file s'arrête quelques minutes.
+ */
 async function search(q: string, lang: string | null): Promise<GoogleVolume[]> {
-  const params = new URLSearchParams({ q, maxResults: "10", printType: "books", fields: FIELDS });
+  const params = new URLSearchParams({ q, maxResults: "20", printType: "books", fields: FIELDS });
   if (lang) params.set("langRestrict", lang);
-  countRequest();
-  let res: Response;
-  try {
-    res = await state().fetcher(`${API}?${params}`, {
-      headers: { "X-Goog-Api-Key": config.books.googleKey, Accept: "application/json" },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      cache: "no-store",
-    });
-  } catch (error) {
-    throw new RetryLaterError(redact(error instanceof Error ? error.message : String(error)));
+  let last = "";
+  for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+    if (attempt > 0) await pause(1500 + Math.round(Math.random() * 1500));
+    countRequest();
+    let res: Response;
+    try {
+      res = await state().fetcher(`${API}?${params}`, {
+        headers: { "X-Goog-Api-Key": config.books.googleKey, Accept: "application/json" },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        cache: "no-store",
+      });
+    } catch (error) {
+      last = redact(error instanceof Error ? error.message : String(error));
+      continue;
+    }
+    if (res.status === 429 || res.status === 403) {
+      await res.body?.cancel().catch(() => {});
+      throw new QuotaError(`Google Books a répondu ${res.status}`);
+    }
+    if (res.status >= 500) {
+      await res.body?.cancel().catch(() => {});
+      last = `Google Books a répondu ${res.status}`;
+      continue;
+    }
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      return [];
+    }
+    const body = (await res.json().catch(() => ({}))) as { items?: GoogleVolume[] };
+    return Array.isArray(body.items) ? body.items : [];
   }
-  if (res.status === 429 || res.status === 403) {
-    await res.body?.cancel().catch(() => {});
-    throw new QuotaError(`Google Books a répondu ${res.status}`);
-  }
-  if (!res.ok) {
-    await res.body?.cancel().catch(() => {});
-    if (res.status >= 500) throw new RetryLaterError(`Google Books a répondu ${res.status}`);
-    return [];
-  }
-  const body = (await res.json().catch(() => ({}))) as { items?: GoogleVolume[] };
-  return Array.isArray(body.items) ? body.items : [];
+  throw new RetryLaterError(last);
 }
 
-/** Un livre : l'ISBN d'abord, sinon titre et auteur — en français d'abord, puis sans restriction. Deux requêtes au plus. */
 /**
- * Un livre, en deux requêtes au plus : l'ISBN d'abord quand Jellyfin le connaît ; puis le titre et l'auteur
- * — le titre nettoyé de ce qu'un nom de fichier y ajoute (`titleVariants`) : la variante la plus probable
- * en français, puis la suivante (ou la même sans restriction de langue). Un candidat est comparé à toutes
- * les variantes du titre.
+ * Un livre, en deux requêtes au plus, **en texte libre** : `<titre> <auteur>` — Google ne répond plus à
+ * `intitle:`, `inauthor:` ni `isbn:` (0 résultat, mesuré en production le 28/10/2026). D'abord la variante
+ * la plus probable du titre (`titleVariants`) en français, puis la suivante (ou la même sans restriction de
+ * langue) si rien n'est retenu. L'ISBN du livre sert à reconnaître la bonne édition parmi les réponses.
  */
 async function lookup(target: EnrichTarget): Promise<GoogleVolume | null> {
   const titles = titleVariants(target.name, target.series ?? null);
-  const isbn = target.isbn?.replace(/[^0-9Xx]/g, "");
-  let budget = 2;
-  if (isbn && (isbn.length === 10 || isbn.length === 13)) {
-    budget -= 1;
-    const hit = bestCandidate(target, await search(`isbn:${isbn}`, null), true, titles);
-    if (hit) return hit;
-    await pause(GAP_MS);
-  }
-  // Le nom de famille : le dernier mot de l'auteur, remis dans l'ordre courant par `bookAuthors` (« Coben »).
-  const surname = tokens(fold(target.authors[0] ?? "")).at(-1) ?? "";
-  const query = (title: string) => `intitle:${title}${surname ? ` inauthor:${surname}` : ""}`;
-  const tries: [string, string | null][] = [[query(titles[0]), "fr"]];
-  if (budget > 1) tries.push(titles[1] ? [query(titles[1]), null] : [query(titles[0]), null]);
+  const author = (target.authors[0] ?? "").trim();
+  const query = (title: string) => `${title} ${author}`.trim();
+  const tries: [string, string | null][] = [[query(titles[0]), "fr"], titles[1] ? [query(titles[1]), "fr"] : [query(titles[0]), null]];
   for (let i = 0; i < tries.length; i++) {
     if (i > 0) await pause(GAP_MS);
     const hit = bestCandidate(target, await search(tries[i][0], tries[i][1]), false, titles);

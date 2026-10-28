@@ -7660,6 +7660,7 @@ un titre, un auteur ni une couverture existante (les corrections faites à la ma
   nom de l'auteur (« L'inconnu de la forêt de Harlan Coben »), ni un éditeur d'études (lePetitLitteraire,
   Encyclopaedia Universalis…). Le français d'abord, un résumé ensuite. Sinon : « sans correspondance »,
   rien n'est rempli.
+- *Règles v3 (28/10/2026)* : Google ne répond plus à ses opérateurs (`intitle:`, `inauthor:`, `isbn:` → 0 résultat, mesuré en production) ; la recherche est en texte libre, `<titre> <auteur>`, 20 réponses, en français puis la variante suivante ou sans restriction. Le bon volume est choisi parmi toutes (même ISBN, puis français, puis résumé le plus long, puis le moins d’auteurs en plus) ; une adaptation à plus d’auteurs que le livre et un tome dans le titre est refusée. Un 503 (une requête sur deux, mesuré) est retenté trois fois à 1,5–3 s, chaque tentative comptant dans le quota.
 - *Règles v2 (28/10/2026)*, après la première passe en production : « La Tour des anges » (Pullman, tome 2)
   avait reçu le résumé du tome 1 et le genre « Arctic regions ». Désormais : titre égal, ou le nôtre suivi
   d'un sous-titre après « : » / « - » qui n'est pas un autre titre de l'auteur (fini « l'un contient

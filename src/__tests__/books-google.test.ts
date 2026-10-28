@@ -107,13 +107,17 @@ describe("la file", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("l'ISBN d'abord ; la clé dans l'en-tête, jamais dans l'adresse ; le livre noté une fois", async () => {
-    google((u) => new Response(JSON.stringify({ items: u.searchParams.get("q") === "isbn:9782266154956" ? [vol("Dans les bois", ["Harlan Coben"])] : [] })));
+  it("texte libre, 20 réponses ; l'ISBN du livre reconnaît son édition ; la clé dans l'en-tête, jamais dans l'adresse ; le livre noté une fois", async () => {
+    const edition = vol("Dans les bois", ["Harlan Coben"], { industryIdentifiers: [{ type: "ISBN_13", identifier: "9782266154956" }], description: "court mais suffisant pour être retenu, une phrase." }, "edition");
+    const other = vol("Dans les bois", ["Harlan Coben"], { description: "Un résumé beaucoup plus long que celui de l'édition attendue, mais ce n'est pas la nôtre : elle n'a pas notre ISBN." }, "autre");
+    google(() => new Response(JSON.stringify({ items: [other, edition] })));
     __testing.state().targets = async () => [target({ isbn: "978-2-266-15495-6" })];
     await __testing.run("essai");
     expect(calls).toHaveLength(1);
     expect(calls[0].url).not.toContain(KEY);
-    expect(new URL(calls[0].url).searchParams.get("q")).toBe("isbn:9782266154956");
+    expect(new URL(calls[0].url).searchParams.get("q")).toBe("Dans les bois Harlan Coben");
+    expect(new URL(calls[0].url).searchParams.get("maxResults")).toBe("20");
+    expect(enrichOf("a".repeat(32))?.overview).toContain("court mais suffisant");
     expect(new Headers(calls[0].init.headers).get("x-goog-api-key")).toBe(KEY);
     expect(enrichOf("a".repeat(32))).toMatchObject({ status: "filled", year: 2007 });
     // Une seconde passe : rien de redemandé.
@@ -126,7 +130,7 @@ describe("la file", () => {
     __testing.state().targets = async () => [target()];
     await __testing.run("essai");
     expect(calls).toHaveLength(2);
-    expect(new URL(calls[0].url).searchParams.get("q")).toBe("intitle:Dans les bois inauthor:coben");
+    expect(new URL(calls[0].url).searchParams.get("q")).toBe("Dans les bois Harlan Coben");
     expect(new URL(calls[0].url).searchParams.get("langRestrict")).toBe("fr");
     expect(new URL(calls[1].url).searchParams.has("langRestrict")).toBe(false);
     expect(enrichOf("a".repeat(32))).toMatchObject({ status: "nomatch", overview: null });
@@ -137,7 +141,9 @@ describe("la file", () => {
     google(() => new Response("", { status: 503 }));
     await __testing.run("essai");
     expect(enrichOf("a".repeat(32))).toBeNull();
-    expect(calls).toHaveLength(1);
+    // Trois tentatives de la même requête, puis la file s'arrête (reprise plus tard).
+    expect(calls).toHaveLength(3);
+    expect(__testing.quota().requests).toBe(3);
     calls = [];
     google(() => new Response("", { status: 429 }));
     await __testing.run("essai");
@@ -247,5 +253,47 @@ describe("règles v2 : les cas réels de la première passe en production", () =
     expect(order[0]).toContain("La Tour des anges");
     // Sans correspondance avec les nouvelles règles : le mauvais résumé est effacé.
     expect(enrichOf("a".repeat(32))).toMatchObject({ status: "nomatch", overview: null });
+  });
+});
+
+describe("règles v3 : les réponses réelles de Google en texte libre", () => {
+  const desc = (n: number) => "Lorem ipsum dolor sit amet, ".repeat(Math.ceil(n / 28)).slice(0, n);
+  it("« Charlotte » : la bonne édition au milieu des études, des autres langues et des magazines", () => {
+    const t = target({ name: "Charlotte", authors: ["David Foenkinos"] });
+    const items = [
+      vol("Charlotte", ["David Foenkinos"], { subtitle: "by David Foenkinos", language: "en", description: desc(200) }, "en"),
+      vol("Charlotte by David Foenkinos", ["Laurence Lissoir"], { subtitle: "Analysis", description: desc(300) }, "analyse"),
+      vol("Paris Match", ["Collectif"], { description: desc(500) }, "magazine"),
+      vol("Charlotte", ["David Foenkinos"], { subtitle: "roman", language: "fr", description: desc(260) }, "roman"),
+      vol("Charlotte", ["David Foenkinos"], { language: "de", description: desc(900) }, "de"),
+      vol("Charlotte", ["David Foenkinos"], { language: "fr", description: desc(812) }, "fr-long"),
+    ];
+    expect(bestCandidate(t, items)?.id).toBe("fr-long");
+  });
+  it("« La tour des anges » : le roman, ni la BD (tome 1, trois auteurs) ni « Lyra et les oiseaux »", () => {
+    const t = target({ name: "La Tour des anges", authors: ["Philip Pullman"], series: "À la croisée des mondes", index: 2, siblings: ["Les Royaumes du Nord", "Lyra et les oiseaux"] });
+    const items = [
+      vol("La Tour des Anges (Tome 1)", ["Philip Pullman", "Stéphane Melchior", "Thomas Gilbert"], { description: desc(400) }, "bd"),
+      vol("Lyra et les oiseaux", ["Philip Pullman"], { description: desc(700) }, "lyra"),
+      vol("À la croisée des mondes (Tome 2) - La Tour des Anges", ["Philip Pullman"], { description: desc(600) }, "serie"),
+      vol("La tour des anges", ["Philip Pullman"], { description: desc(329) }, "court"),
+      vol("La tour des anges", ["Philip Pullman"], { description: desc(1986) }, "long"),
+      vol("La tour des anges", ["Philip Pullman"], { description: desc(546) }, "moyen"),
+    ];
+    expect(bestCandidate(t, items)?.id).toBe("long");
+    expect(acceptable(t, items[0])).toBe(false);
+  });
+  it("« Dans les bois » : trouvé parmi les magazines", () => {
+    const items = [vol("Le Point", ["Collectif"]), vol("Télérama", ["Collectif"]), vol("Dans les bois", ["Harlan Coben"], { description: desc(937) }, "bon")];
+    expect(bestCandidate(target(), items)?.id).toBe("bon");
+  });
+  it("un 503 sur deux : la même requête est retentée, et le livre est rempli", async () => {
+    let n = 0;
+    google(() => (++n % 2 === 1 ? new Response("", { status: 503 }) : new Response(JSON.stringify({ items: [vol("Dans les bois", ["Harlan Coben"])] }))));
+    __testing.state().targets = async () => [target()];
+    await __testing.run("essai");
+    expect(calls).toHaveLength(2);
+    expect(new URL(calls[0].url).search).toBe(new URL(calls[1].url).search);
+    expect(enrichOf("a".repeat(32))?.status).toBe("filled");
   });
 });
