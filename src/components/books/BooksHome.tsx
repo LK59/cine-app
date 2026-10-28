@@ -12,7 +12,7 @@ import { BookRequestButton } from "./BookRequests";
 import { BookSheetHost } from "./BookSheet";
 import { cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { useTvGridNav } from "@/lib/useTvGridNav";
-import { ReaderFrame, openReaderFrame } from "./ReaderFrame";
+import { ReaderFrame, openReaderFrame, standbyReaderFrame } from "./ReaderFrame";
 import { lazyNow } from "./lazyNow";
 import type { ComponentProps } from "react";
 import type { BooksScreen as BooksScreenType } from "./BooksScreen";
@@ -180,10 +180,10 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
       )}
       {/* La fiche d'un livre, portée dans `body` : hors de l'accueil rendu inerte. Une seule à la fois :
           la grille complète ouverte a la sienne. */}
-      {!route.booksAll && <BookSheetHost books={shown} onRead={(_book, id, cover) => void readFromHome(id, cover)} />}
+      {!route.booksAll && <BookSheetHost books={shown} onRead={(_book, id, cover) => void readFromHome(id, cover)} onReadIntent={standbyReaderFrame} />}
       {route.booksAll &&
         typeof document !== "undefined" &&
-        createPortal(<BooksBrowse embedded={{ filter: route.booksAll, onRead: (id, cover) => void readFromHome(id, cover) }} />, document.body)}
+        createPortal(<BooksBrowse embedded={{ filter: route.booksAll, onRead: (id, cover) => void readFromHome(id, cover), onReadIntent: standbyReaderFrame }} />, document.body)}
       {/* Le lecteur, tant que l'adresse le nomme : un cadre posé sur tout le cinéma, tenu hors de React. */}
       {route.book && route.reading && <ReaderFrame key={route.book} id={route.book} />}
     </div>

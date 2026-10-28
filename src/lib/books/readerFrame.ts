@@ -26,9 +26,14 @@ const APP = "laterna-livres";
 const VERSION = 1;
 const BOOK_ID = /^[0-9a-f]{32}$/;
 
-/** L'adresse du cadre : la page des livres, ouverte pour lire ce livre. */
-export function readerFrameUrl(id: string): string {
-  return `/livres?${READER_FRAME_PARAM}=1#livre=${id}&lire=1`;
+/**
+ * L'adresse du cadre : la page des livres, ouverte pour lire ce livre — ou, sans `&lire=1`, prête à le
+ * lire : son code et le fichier sont chargés, le livre attend `open` du cinéma (la fiche ouverte depuis
+ * un instant, `standbyReaderFrame`). Un cadre en attente n'ouvre pas le livre : ouvrir, c'est aussi
+ * enregistrer une position, et un livre seulement regardé entrerait dans « Continuer la lecture ».
+ */
+export function readerFrameUrl(id: string, reading = true): string {
+  return `/livres?${READER_FRAME_PARAM}=1#livre=${id}${reading ? "&lire=1" : ""}`;
 }
 
 /** Du cadre au cinéma : `hello` (le cadre écoute), `ready` (première page ou erreur affichée), `saved` (une position est enregistrée), `close`. */
@@ -40,18 +45,27 @@ export interface FrameMessage {
   book: string;
 }
 
-/** Du cinéma au cadre : les marges de l'écran (encoche, barre d'accueil), qu'un cadre ne reçoit pas. */
+/**
+ * Du cinéma au cadre : les marges de l'écran (encoche, barre d'accueil), qu'un cadre ne reçoit pas ; et
+ * `open` — « Lire » touché, le cadre en attente ouvre le livre.
+ */
 export interface Insets {
   top: number;
   right: number;
   bottom: number;
   left: number;
 }
-export interface ParentMessage extends Insets {
+export interface InsetsMessage extends Insets {
   app: typeof APP;
   v: typeof VERSION;
   kind: "insets";
 }
+export interface OpenMessage {
+  app: typeof APP;
+  v: typeof VERSION;
+  kind: "open";
+}
+export type ParentMessage = InsetsMessage | OpenMessage;
 
 const FRAME_KINDS: readonly FrameKind[] = ["hello", "ready", "saved", "close"];
 const MAX_INSET = 400;
@@ -67,8 +81,12 @@ export function frameMessage(kind: FrameKind, book: string): FrameMessage {
   return { app: APP, v: VERSION, kind, book };
 }
 
-export function parentMessage(insets: Insets): ParentMessage {
+export function insetsMessage(insets: Insets): InsetsMessage {
   return { app: APP, v: VERSION, kind: "insets", top: insets.top, right: insets.right, bottom: insets.bottom, left: insets.left };
+}
+
+export function openMessage(): OpenMessage {
+  return { app: APP, v: VERSION, kind: "open" };
 }
 
 /** Un message du cadre, ou `null` s'il n'en a pas exactement la forme. */
@@ -82,11 +100,12 @@ export function parseFrameMessage(data: unknown): FrameMessage | null {
 
 /** Un message du cinéma, ou `null`. */
 export function parseParentMessage(data: unknown): ParentMessage | null {
+  if (exactKeys(data, ["app", "v", "kind"])) return data.app === APP && data.v === VERSION && data.kind === "open" ? openMessage() : null;
   if (!exactKeys(data, ["app", "v", "kind", "top", "right", "bottom", "left"])) return null;
   if (data.app !== APP || data.v !== VERSION || data.kind !== "insets") return null;
   const sides = [data.top, data.right, data.bottom, data.left];
   if (!sides.every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= MAX_INSET)) return null;
-  return parentMessage({ top: data.top as number, right: data.right as number, bottom: data.bottom as number, left: data.left as number });
+  return insetsMessage({ top: data.top as number, right: data.right as number, bottom: data.bottom as number, left: data.left as number });
 }
 
 /**

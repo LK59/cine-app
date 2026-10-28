@@ -16,7 +16,7 @@ import { BOOK_SORTS, NO_SERIES, type BookSort } from "@/lib/books/grouping";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
 import { BookCover } from "./BookCover";
-import { BookSheetHost } from "./BookSheet";
+import { BookSheetHost, type ReadIntent } from "./BookSheet";
 import { BooksGrid, GRID_CHUNK } from "./BooksGrid";
 import { BookRequestButton, BookRequestsPanel, useBookRequestsEnabled } from "./BookRequests";
 
@@ -83,7 +83,7 @@ function filtersToString(f: Filters): string {
  * fenêtre du dessus — il dit au cinéma qu'il est prêt, qu'une position est enregistrée, qu'il faut
  * refermer (`tellCinema`), et reçoit de lui les marges de l'écran.
  */
-export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead: (id: string, cover: HTMLElement | null) => void } } = {}) {
+export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead: (id: string, cover: HTMLElement | null) => void; onReadIntent?: ReadIntent } } = {}) {
   const t = useT();
   const route = useCinemaRoute();
   const [filters, setFilters] = useState<Filters>(() => (embedded ? filtersFrom(new URLSearchParams(embedded.filter === "1" ? "" : embedded.filter)) : filtersFromAddress()));
@@ -93,11 +93,14 @@ export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead:
   // Ses pages ne sont pas demandées, le lecteur a le réseau pour lui seul.
   const [readerOnly] = useState(() => {
     try {
-      return !embedded && (framed || new URLSearchParams(window.location.search).get("retour") === "1") && /(?:^#|&)lire=1(?:&|$)/.test(window.location.hash);
+      return !embedded && (framed || (new URLSearchParams(window.location.search).get("retour") === "1" && /(?:^#|&)lire=1(?:&|$)/.test(window.location.hash)));
     } catch {
       return false;
     }
   });
+  // Le cadre préparé depuis la fiche (sans `&lire=1`) n'ouvre le livre qu'à `open` : ouvrir enregistre
+  // une position, et un livre seulement regardé entrerait dans « Continuer la lecture ».
+  const [opened, setOpened] = useState(false);
   // Dans le cadre : les marges de l'écran viennent du cinéma (un cadre n'a pas celles de l'encoche ni de la
   // barre d'accueil), posées en variables que le lecteur lit avant `env()` (`insetVar`). Puis `hello` : le
   // cinéma répond dès que cette écoute existe, pas avant.
@@ -107,6 +110,10 @@ export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead:
     const onMessage = (event: MessageEvent) => {
       const msg = acceptFromParent(event, window.parent, window.location.origin);
       if (!msg) return;
+      if (msg.kind === "open") {
+        setOpened(true);
+        return;
+      }
       const root = document.documentElement.style;
       for (const side of ["top", "right", "bottom", "left"] as const) root.setProperty(`--reader-inset-${side}`, insetValue(msg[side], side));
     };
@@ -115,13 +122,14 @@ export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead:
     return () => window.removeEventListener("message", onMessage);
   }, [framed, route.book]);
   // Le fichier et le code du lecteur demandés dès le premier rendu, pas après le code de la page puis
-  // celui du lecteur (`readerPreload.ts`, mesuré le 28/10/2026).
+  // celui du lecteur (`readerPreload.ts`, mesuré le 28/10/2026) — et dans le cadre en attente, avant même
+  // « Lire ».
   useEffect(() => {
-    if (embedded || !route.book || !route.reading) return;
+    if (embedded || !route.book || !(route.reading || framed)) return;
     void preloadBookFile(route.book);
     void BookReader.preload().catch(() => {});
     void import("@/lib/books/foliate/view.js").catch(() => {});
-  }, [embedded, route.book, route.reading]);
+  }, [embedded, framed, route.book, route.reading]);
   const { serie, auteur, genre, tri } = filters;
   const [query, setQuery] = useState("");
   // Le filtre tapé part au serveur un quart de seconde après la dernière frappe, pas à chaque lettre.
@@ -244,7 +252,9 @@ export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead:
     return () => window.removeEventListener("keydown", onKey);
   }, [embedded, route.book]);
 
-  if (readerOnly && route.book && route.reading) {
+  // Le cadre en attente ne montre rien : il est invisible, et son livre attend `open`.
+  if (framed && !(route.book && (route.reading || opened))) return null;
+  if (readerOnly && route.book && (route.reading || opened)) {
     const book = route.book;
     return createPortal(
       <BookReader
@@ -383,7 +393,7 @@ export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead:
       {requestsEnabled && requestsOpen && <BookRequestsPanel onClose={() => setRequestsOpen(false)} />}
 
       {/* La fiche d'après l'adresse, dans le cycle de vie des fiches de films (`BookSheetHost`). */}
-      <BookSheetHost books={known} onRead={embedded ? (_book, id, cover) => embedded.onRead(id, cover) : openReader} />
+      <BookSheetHost books={known} onRead={embedded ? (_book, id, cover) => embedded.onRead(id, cover) : openReader} onReadIntent={embedded?.onReadIntent} />
       {/* Porté dans `body`, comme le lecteur des films : sous l'écran, qui est `fixed` et donc son
           propre contexte d'empilement, il passait sous les invitations flottantes de l'application
           (« Installer », z-60) quel que soit son propre z-index. */}

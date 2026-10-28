@@ -5,16 +5,23 @@ import { useSWRConfig } from "swr";
 import { useT } from "@/components/TranslationProvider";
 import { cinemaClose, cinemaNavigate, readCinemaRoute } from "@/lib/cinemaRoute";
 import { readerOpening, readerPageColor } from "@/lib/books/readerOpening";
-import { BOOKS_PROGRESS_EVENT, acceptFromFrame, parentMessage, readerFrameUrl, type Insets } from "@/lib/books/readerFrame";
+import { BOOKS_PROGRESS_EVENT, acceptFromFrame, insetsMessage, openMessage, readerFrameUrl, type Insets } from "@/lib/books/readerFrame";
 
 /**
  * Le lecteur de livres posé sur le cinéma, dans un cadre de la même origine (DECISIONS.md §127 et §128).
  *
- * Ouvrir : la couverture grandit en première page (`readerOpening`) et, **pendant** ce temps, le cadre
- * `/livres?cadre=1#livre=…&lire=1` se charge, invisible, sous le calque — puis l'adresse du cinéma nomme
- * le lecteur (`&lire=1`, une seule entrée d'historique) et le cadre paraît. Le calque reste jusqu'à ce que
- * le cadre dise que sa première page est là (`ready`). L'adresse n'est poussée qu'après l'animation, comme
- * le faisait la page des livres : la fiche reste dessous pendant que la couverture grandit.
+ * Préparer : la fiche ouverte depuis un instant (l'intention de lire, comme le fichier demandé d'avance),
+ * le cadre `/livres?cadre=1#livre=…` naît invisible et inerte, charge le code de la page, du lecteur et de
+ * foliate-js et le fichier — sans ouvrir le livre, qui attend `open`. Les deux documents partagent le
+ * même fil : chargé ainsi à l'avance, ce travail ne tombe plus pendant que la couverture grandit (mesuré
+ * le 28/10/2026, iPhone émulé : ~0,75 s jusqu'à la première page en le chargeant à « Lire », ~0,45 s
+ * préparé). La fiche refermée, le cadre est retiré.
+ *
+ * Ouvrir : la couverture grandit en première page (`readerOpening`) et le cadre reçoit `open` (ou se
+ * charge à ce moment, s'il n'était pas prêt) ; puis l'adresse du cinéma nomme le lecteur (`&lire=1`, une
+ * seule entrée d'historique) et le cadre paraît. Le calque reste jusqu'à ce que le cadre dise que sa
+ * première page est là (`ready`). L'adresse n'est poussée qu'après l'animation, comme le faisait la page
+ * des livres : la fiche reste dessous pendant que la couverture grandit.
  *
  * Refermer : le cadre le demande (`close` — sa croix, Échap), ou Retour (le bouton d'Android, le
  * navigateur) ramène l'entrée d'en dessous ; dans les deux cas c'est l'adresse qui décide
@@ -51,7 +58,15 @@ interface Held {
   id: string;
   root: HTMLDivElement;
   frame: HTMLIFrameElement;
+  /** Le cadre a dit `hello` : il écoute. */
+  listening: boolean;
+  /** Le livre est (ou sera) ouvert dans le cadre : par son adresse, ou `open` demandé. */
+  opened: boolean;
+  /** `open` attend que le cadre écoute. */
+  openPending: boolean;
   ready: boolean;
+  /** « Lire » l'a pris : la fiche qui se referme ne le retire plus. */
+  claimed: boolean;
   /** Le calque d'ouverture, rendu par `readerOpening` à la fin de son animation. */
   opening: Promise<() => void> | null;
   /** L'adresse nomme le lecteur : `close` passe par elle. */
@@ -92,36 +107,72 @@ function finishOpening(h: Held): void {
   if (opening) void opening.then((done) => done()).catch(() => {});
 }
 
-/** Le cadre de ce livre : celui qui se prépare déjà, ou un nouveau (lien direct, rechargement, Suivant). */
-function hold(id: string): Held {
+function post(h: Held, message: unknown): void {
+  try {
+    h.frame.contentWindow?.postMessage(message, window.location.origin);
+  } catch {
+    /* cadre en train de partir */
+  }
+}
+
+/** Le livre s'ouvre dans le cadre : tout de suite s'il écoute, sinon à son `hello`. */
+function requestOpen(h: Held): void {
+  if (h.opened) return;
+  h.opened = true;
+  if (h.listening) post(h, openMessage());
+  else h.openPending = true;
+}
+
+/**
+ * Le cadre de ce livre : celui qui se prépare déjà, ou un nouveau — en attente (`reading` faux, la fiche),
+ * ou ouvert d'emblée (lien direct, rechargement, Suivant).
+ */
+function hold(id: string, reading: boolean): Held {
   if (held?.id === id) return held;
   release();
   const root = document.createElement("div");
   root.setAttribute("data-reader-frame", "");
+  // Invisible et inerte tant qu'il n'est pas montré : ni toucher, ni Tab, ni lecteur d'écran n'y entrent.
   Object.assign(root.style, { position: "fixed", inset: "0", zIndex: "390", background: readerPageColor(), opacity: "0", pointerEvents: "none" });
+  root.inert = true;
   const frame = document.createElement("iframe");
   frame.setAttribute("allow", FRAME_ALLOW);
   frame.setAttribute("referrerpolicy", "same-origin");
   Object.assign(frame.style, { position: "absolute", inset: "0", width: "100%", height: "100%", border: "0", display: "block", background: "transparent" });
   // L'adresse avant l'insertion : la première navigation d'un cadre neuf remplace son `about:blank`, elle
   // n'ajoute rien à l'historique de la fenêtre.
-  frame.src = readerFrameUrl(id);
+  frame.src = readerFrameUrl(id, reading);
   root.appendChild(frame);
 
-  const h: Held = { id, root, frame, ready: false, opening: null, adopted: false, closeRequested: false, onReady: null, refresh: null, stop: () => {} };
-  const sendInsets = () => {
-    try {
-      frame.contentWindow?.postMessage(parentMessage(measureInsets()), window.location.origin);
-    } catch {
-      /* cadre en train de partir */
-    }
+  const h: Held = {
+    id,
+    root,
+    frame,
+    listening: false,
+    opened: reading,
+    openPending: false,
+    ready: false,
+    claimed: false,
+    opening: null,
+    adopted: false,
+    closeRequested: false,
+    onReady: null,
+    refresh: null,
+    stop: () => {},
   };
+  const sendInsets = () => post(h, insetsMessage(measureInsets()));
   const onMessage = (event: MessageEvent) => {
     if (held !== h) return;
     const msg = acceptFromFrame(event, frame.contentWindow, window.location.origin);
     if (!msg || msg.book !== id) return;
-    if (msg.kind === "hello") sendInsets();
-    else if (msg.kind === "ready") {
+    if (msg.kind === "hello") {
+      h.listening = true;
+      sendInsets();
+      if (h.openPending) {
+        h.openPending = false;
+        post(h, openMessage());
+      }
+    } else if (msg.kind === "ready") {
       h.ready = true;
       h.onReady?.();
     } else if (msg.kind === "saved") h.refresh?.();
@@ -151,14 +202,28 @@ function release(): void {
 }
 
 /**
- * « Lire » depuis le cinéma : la couverture grandit pendant que le cadre se charge dessous, puis
- * l'adresse nomme le lecteur. Une fiche refermée pendant l'animation (Échap, Retour) l'emporte : le
- * cadre est retiré, rien n'est poussé.
+ * La fiche d'un livre ouverte depuis un instant : le lecteur se prépare (`BookSheet`, intention de lire).
+ * Rend ce qui le retire — sauf si « Lire » l'a pris entre-temps.
+ */
+export function standbyReaderFrame(id: string): () => void {
+  if (held && held.id !== id && held.claimed) return () => {};
+  const h = hold(id, false);
+  return () => {
+    if (held === h && !h.claimed) release();
+  };
+}
+
+/**
+ * « Lire » depuis le cinéma : la couverture grandit pendant que le livre s'ouvre dans le cadre (préparé
+ * depuis la fiche, ou chargé maintenant), puis l'adresse nomme le lecteur. Une fiche refermée pendant
+ * l'animation (Échap, Retour) l'emporte : le cadre est retiré, rien n'est poussé.
  */
 export async function openReaderFrame(id: string, cover: HTMLElement | null): Promise<void> {
   const opening = readerOpening(cover);
-  const h = hold(id);
+  const h = hold(id, true);
+  h.claimed = true;
   h.opening = opening;
+  requestOpen(h);
   await opening.catch(() => {});
   if (held !== h) return;
   const route = readCinemaRoute();
@@ -181,8 +246,10 @@ export function ReaderFrame({ id }: { id: string }) {
   }, [id, title]);
 
   useEffect(() => {
-    const h = hold(id);
+    const h = hold(id, true);
+    h.claimed = true;
     h.adopted = true;
+    requestOpen(h);
     h.frame.title = titleRef.current;
     // La position lue : la fiche (`/api/books/<id>`), l'accueil des livres et la grille ouverte par-dessus.
     const refresh = () => {
@@ -191,6 +258,7 @@ export function ReaderFrame({ id }: { id: string }) {
       window.dispatchEvent(new Event(BOOKS_PROGRESS_EVENT));
     };
     h.refresh = refresh;
+    h.root.inert = false;
     Object.assign(h.root.style, { opacity: "1", pointerEvents: "auto" });
     const reveal = () => {
       finishOpening(h);

@@ -253,7 +253,8 @@ describe("l'accueil ne charge rien des livres", () => {
     expect(reader).toMatch(/import\("@\/lib\/books\/foliate\/view\.js"\)/);
     // La page des livres (`BooksScreen`, sous sa propre politique) demande foliate-js d'avance quand elle
     // s'ouvre pour lire (`readerPreload.ts`) — seulement là, jamais dans la grille ni le cinéma.
-    expect(read("src/components/books/BooksScreen.tsx")).toMatch(/if \(embedded \|\| !route\.book \|\| !route\.reading\) return;\s*void preloadBookFile\(route\.book\);\s*void BookReader\.preload\(\)\.catch\(\(\) => \{\}\);\s*void import\("@\/lib\/books\/foliate\/view\.js"\)/);
+    // Et le cadre du lecteur préparé depuis la fiche du cinéma (§128), qui est cette même page.
+    expect(read("src/components/books/BooksScreen.tsx")).toMatch(/if \(embedded \|\| !route\.book \|\| !\(route\.reading \|\| framed\)\) return;\s*void preloadBookFile\(route\.book\);\s*void BookReader\.preload\(\)\.catch\(\(\) => \{\}\);\s*void import\("@\/lib\/books\/foliate\/view\.js"\)/);
     for (const file of users.filter((f) => !f.endsWith("BookReader.tsx") && !f.endsWith("BooksScreen.tsx"))) {
       for (const line of read(file).split("\n").filter((l) => /books\/foliate\/view/.test(l))) expect(line, file).toMatch(/^import type /);
     }

@@ -12,8 +12,8 @@ const mutate = vi.fn();
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
 vi.mock("swr", () => ({ useSWRConfig: () => ({ mutate }) }));
 
-import { acceptFromFrame, acceptFromParent, frameMessage, isFramedReader, parentMessage, parseFrameMessage, parseParentMessage, readerFrameUrl, tellCinema } from "@/lib/books/readerFrame";
-import { ReaderFrame, openReaderFrame, __testing } from "@/components/books/ReaderFrame";
+import { acceptFromFrame, acceptFromParent, frameMessage, isFramedReader, insetsMessage, openMessage, parseFrameMessage, parseParentMessage, readerFrameUrl, tellCinema } from "@/lib/books/readerFrame";
+import { ReaderFrame, openReaderFrame, standbyReaderFrame, __testing } from "@/components/books/ReaderFrame";
 import { cinemaNavigate, readCinemaRoute } from "@/lib/cinemaRoute";
 
 const ID = "ab".repeat(16);
@@ -60,7 +60,7 @@ describe("les messages", () => {
   });
 
   it("du cinéma : des marges, des nombres finis et bornés", () => {
-    const ok = parentMessage({ top: 47, right: 0, bottom: 34, left: 0 });
+    const ok = insetsMessage({ top: 47, right: 0, bottom: 34, left: 0 });
     expect(parseParentMessage(ok)).toEqual(ok);
     for (const value of [
       { ...ok, top: -1 },
@@ -73,8 +73,13 @@ describe("les messages", () => {
       { app: ok.app, v: ok.v, kind: ok.kind, top: 1, right: 1, bottom: 1 },
       null,
       "insets",
+      { ...openMessage(), extra: 1 },
+      { ...openMessage(), kind: "navigate" },
+      { app: "autre", v: 1, kind: "open" },
+      { app: "laterna-livres", kind: "open" },
     ])
       expect(parseParentMessage(value), JSON.stringify(value)).toBeNull();
+    expect(parseParentMessage(openMessage())).toEqual(openMessage());
   });
 
   it("acceptés seulement de notre origine et de la fenêtre attendue", () => {
@@ -87,7 +92,7 @@ describe("les messages", () => {
     expect(acceptFromFrame({ origin, source: window, data }, frame, origin)).toBeNull();
     expect(acceptFromFrame({ origin, source: null, data }, frame, origin)).toBeNull();
     expect(acceptFromFrame({ origin, source: frame, data }, null, origin)).toBeNull();
-    const insets = parentMessage({ top: 1, right: 2, bottom: 3, left: 4 });
+    const insets = insetsMessage({ top: 1, right: 2, bottom: 3, left: 4 });
     expect(acceptFromParent({ origin, source: frame, data: insets }, frame, origin)).toEqual(insets);
     expect(acceptFromParent({ origin: "https://ailleurs.example", source: frame, data: insets }, frame, origin)).toBeNull();
     expect(acceptFromParent({ origin, source: window, data: insets }, frame, origin)).toBeNull();
@@ -129,6 +134,34 @@ describe("le cadre posé sur le cinéma", () => {
     for (const feature of ["camera", "microphone", "geolocation", "payment", "fullscreen"]) expect(allow).toContain(`${feature} 'none'`);
     expect(allow).not.toMatch(/\*|'self'|'src'/);
     expect(frame.hasAttribute("sandbox")).toBe(false);
+  });
+
+  it("préparé depuis la fiche : invisible, inerte, le livre fermé — `open` à « Lire », une fois que le cadre écoute", async () => {
+    act(() => cinemaNavigate({ book: ID, reading: false }));
+    const undo = standbyReaderFrame(ID);
+    const frame = frameNow();
+    expect(frame.getAttribute("src")).toBe(`/livres?cadre=1#livre=${ID}`);
+    const root = frame.parentElement as HTMLElement;
+    expect(root.style.opacity).toBe("0");
+    expect(root.style.pointerEvents).toBe("none");
+    expect(root.inert).toBe(true);
+    const post = vi.spyOn(frame.contentWindow as Window, "postMessage").mockImplementation(() => {});
+    // La fiche refermée sans lire : le cadre part.
+    undo();
+    expect(document.querySelector("[data-reader-frame]")).toBeNull();
+
+    standbyReaderFrame(ID);
+    const again = frameNow();
+    const post2 = vi.spyOn(again.contentWindow as Window, "postMessage").mockImplementation(() => {});
+    const opening = openReaderFrame(ID, null);
+    // Le même cadre, pas un second ; `open` attend que le cadre écoute.
+    expect(document.querySelectorAll("[data-reader-frame]")).toHaveLength(1);
+    expect(post2).not.toHaveBeenCalledWith(openMessage(), expect.anything());
+    send(frameMessage("hello", ID));
+    expect(post2).toHaveBeenCalledWith(openMessage(), window.location.origin);
+    await act(() => opening);
+    expect(readCinemaRoute()).toMatchObject({ book: ID, reading: true });
+    expect(post).not.toHaveBeenCalled();
   });
 
   it("une fiche refermée pendant que la couverture grandit : rien n'est poussé, le cadre est retiré", async () => {
