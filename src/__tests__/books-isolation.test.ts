@@ -4,6 +4,15 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { NextRequest } from "next/server";
 
+// Une base à soi (« Afficher les livres » y est écrit) : la base du dossier commun est ouverte par
+// d'autres fichiers en même temps, et une écriture de plus y provoquait des « database is locked ».
+await vi.hoisted(async () => {
+  const fsp = await import("node:fs");
+  const os = await import("node:os");
+  const p = await import("node:path");
+  process.env.DATA_DIR = fsp.mkdtempSync(p.join(os.tmpdir(), "laterna-books-isolation-"));
+});
+
 /**
  * L'option « Livres » (DECISIONS.md §127) coupée ne change rien, et ne s'ouvre jamais à un lien de
  * partage. Ce que ce fichier prouve :
