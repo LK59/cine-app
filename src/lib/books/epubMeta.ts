@@ -1,5 +1,6 @@
 import { inflateRawSync } from "node:zlib";
 import { config } from "@/lib/config";
+import { primaryLanguage } from "@/lib/books/metadata";
 import { getDb } from "@/lib/db";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
@@ -34,7 +35,11 @@ export interface EpubMeta {
   creators: string[];
   /** Le chemin de l'image de couverture dans le zip ; `null` : l'EPUB n'en déclare pas. */
   coverPath: string | null;
+  /** La langue (`dc:language`, sous-étiquette principale : « fr », « en ») ; absente si l'EPUB n'en dit rien. */
+  language?: string;
 }
+
+export { primaryLanguage };
 
 interface ZipEntry {
   name: string;
@@ -187,7 +192,9 @@ export function parseOpf(opf: string, opfPath = ""): EpubMeta {
     (coverId ? items.find((tag) => attr(tag, "id") === coverId && /^image\//i.test(attr(tag, "media-type") ?? "image/")) : undefined) ??
     items.find((tag) => /\bcover-image\b/i.test(attr(tag, "properties") ?? ""));
   const href = coverItem ? attr(coverItem, "href") : undefined;
+  const language = primaryLanguage(decodeXml(/<(?:dc:)?language\b[^>]*>([^<]*)<\/(?:dc:)?language>/i.exec(opf)?.[1] ?? ""));
   return {
+    ...(language ? { language } : {}),
     series,
     seriesIndex: series && Number.isFinite(index) ? index : null,
     subjects,
@@ -223,6 +230,7 @@ interface Row {
   subjects: string;
   creators: string | null;
   cover_path: string | null;
+  language: string | null;
   failed: number;
   checked_at: number;
 }
@@ -231,7 +239,7 @@ export type KnownMeta = Map<string, { etag: string; meta: EpubMeta | null; faile
 
 /** Ce qui est connu, par livre (identifiant en minuscules) — une seule requête pour toute la bibliothèque. */
 export function knownMeta(): KnownMeta {
-  const rows = getDb().prepare("SELECT item_id, etag, series, series_index, subjects, creators, cover_path, failed, checked_at FROM book_meta").all() as Row[];
+  const rows = getDb().prepare("SELECT item_id, etag, series, series_index, subjects, creators, cover_path, language, failed, checked_at FROM book_meta").all() as Row[];
   return new Map(
     rows.map((r) => [
       r.item_id,
@@ -239,10 +247,7 @@ export function knownMeta(): KnownMeta {
         etag: r.etag,
         failed: r.failed === 1,
         checkedAt: r.checked_at,
-        meta:
-          r.failed === 1
-            ? null
-            : { series: r.series, seriesIndex: r.series_index, subjects: safeList(r.subjects), creators: safeList(r.creators ?? "[]"), coverPath: r.cover_path },
+        meta: r.failed === 1 ? null : metaOfRow(r),
       },
     ])
   );
@@ -250,9 +255,20 @@ export function knownMeta(): KnownMeta {
 
 /** Ce qui est connu d'un seul livre — la route de couverture. */
 export function metaOf(id: string): { etag: string; meta: EpubMeta | null } | null {
-  const r = getDb().prepare("SELECT item_id, etag, series, series_index, subjects, creators, cover_path, failed, checked_at FROM book_meta WHERE item_id = ?").get(id) as Row | undefined;
+  const r = getDb().prepare("SELECT item_id, etag, series, series_index, subjects, creators, cover_path, language, failed, checked_at FROM book_meta WHERE item_id = ?").get(id) as Row | undefined;
   if (!r) return null;
-  return { etag: r.etag, meta: r.failed === 1 ? null : { series: r.series, seriesIndex: r.series_index, subjects: safeList(r.subjects), creators: safeList(r.creators ?? "[]"), coverPath: r.cover_path } };
+  return { etag: r.etag, meta: r.failed === 1 ? null : metaOfRow(r) };
+}
+
+function metaOfRow(r: Row): EpubMeta {
+  return {
+    series: r.series,
+    seriesIndex: r.series_index,
+    subjects: safeList(r.subjects),
+    creators: safeList(r.creators ?? "[]"),
+    coverPath: r.cover_path,
+    ...(r.language ? { language: r.language } : {}),
+  };
 }
 
 function safeList(json: string): string[] {
@@ -271,13 +287,14 @@ function flush(rows: Pending[]): void {
   if (rows.length === 0) return;
   const db = getDb();
   const stmt = db.prepare(
-    `INSERT INTO book_meta (item_id, etag, series, series_index, subjects, creators, cover_path, failed, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO book_meta (item_id, etag, series, series_index, subjects, creators, cover_path, language, failed, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(item_id) DO UPDATE SET etag = excluded.etag, series = excluded.series, series_index = excluded.series_index,
-       subjects = excluded.subjects, creators = excluded.creators, cover_path = excluded.cover_path, failed = excluded.failed, checked_at = excluded.checked_at`
+       subjects = excluded.subjects, creators = excluded.creators, cover_path = excluded.cover_path, language = excluded.language,
+       failed = excluded.failed, checked_at = excluded.checked_at`
   );
   db.transaction(() => {
     for (const r of rows) {
-      stmt.run(r.id, r.etag, r.meta?.series ?? null, r.meta?.seriesIndex ?? null, JSON.stringify(r.meta?.subjects ?? []), JSON.stringify(r.meta?.creators ?? []), r.meta?.coverPath ?? null, r.meta ? 0 : 1, r.at);
+      stmt.run(r.id, r.etag, r.meta?.series ?? null, r.meta?.seriesIndex ?? null, JSON.stringify(r.meta?.subjects ?? []), JSON.stringify(r.meta?.creators ?? []), r.meta?.coverPath ?? null, r.meta?.language ?? null, r.meta ? 0 : 1, r.at);
     }
   })();
 }

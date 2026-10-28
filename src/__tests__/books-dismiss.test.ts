@@ -8,7 +8,7 @@ await vi.hoisted(async () => {
   process.env.DATA_DIR = fsp.mkdtempSync(p.join(os.tmpdir(), "laterna-books-dismiss-"));
 });
 
-import { dismissedAt, dismissProgress, progressByBook, readProgress, saveProgress } from "@/lib/books/progress";
+import { dismissedAt, dismissProgress, forgetUnstarted, progressByBook, readProgress, saveProgress } from "@/lib/books/progress";
 import { buildIndex, resumeFrom } from "@/lib/books/bookIndex";
 import type { LibraryItem } from "@/lib/books/library";
 
@@ -41,5 +41,24 @@ describe("retirer un livre de « Continuer la lecture »", () => {
     dismissProgress("louis", "b".repeat(32), 2000);
     expect(readProgress("kab", "b".repeat(32))?.dismissed).toBe(false);
     expect(dismissProgress("louis", "c".repeat(32), 2000)).toBeNull();
+  });
+});
+
+describe("moins d'un pour cent : pas commencé", () => {
+  it("une position d'avant la règle, sous 1 %, n'est pas dans « Continuer la lecture »", async () => {
+    const id = "d".repeat(32);
+    saveProgress("lou", id, CFI, 0.006, false, 1000);
+    const index = await buildIndex([{ Id: id, Name: "Le Bal", Type: "Book", People: [], library: "l" } as LibraryItem]);
+    expect(resumeFrom(index, progressByBook("lou"))).toEqual([]);
+    saveProgress("lou", id, CFI, 0.012, false, 2000);
+    expect(resumeFrom(index, progressByBook("lou")).map((b) => b.id)).toEqual([id]);
+  });
+  it("revenu au début : la position s'efface, sauf pour un livre terminé", () => {
+    saveProgress("lou", "e".repeat(32), CFI, 0.5, false, 1000);
+    expect(forgetUnstarted("lou", "e".repeat(32))).toBe(true);
+    expect(readProgress("lou", "e".repeat(32))).toBeNull();
+    saveProgress("lou", "f".repeat(32), CFI, 1, true, 1000);
+    expect(forgetUnstarted("lou", "f".repeat(32))).toBe(false);
+    expect(readProgress("lou", "f".repeat(32))?.finished).toBe(true);
   });
 });

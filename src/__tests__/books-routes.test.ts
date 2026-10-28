@@ -46,6 +46,7 @@ import { GET as listGET } from "@/app/api/books/route";
 import { GET as detailGET } from "@/app/api/books/[id]/route";
 import { GET as fileGET } from "@/app/api/books/[id]/file/route";
 import { GET as progressGET, POST as progressPOST } from "@/app/api/books/[id]/progress/route";
+import { addBookmark, listBookmarks } from "@/lib/books/bookmarks";
 import { GET as homeGET } from "@/app/api/books/home/route";
 import { GET as facetsGET } from "@/app/api/books/facets/route";
 import { GET as searchGET } from "@/app/api/books/search/route";
@@ -395,6 +396,27 @@ describe("la position de lecture", () => {
     markPlayed.mockRejectedValue(new Error("down"));
     expect((await post({ cfi: "epubcfi(/6/40)", fraction: 1, finished: true })).status).toBe(200);
     expect((await (await progressGET(req(), params(BOOK))).json()).progress.fraction).toBe(1);
+  });
+
+  it("première page : rien n'est écrit — un livre ouvert puis refermé n'est pas commencé", async () => {
+    expect(await (await post({ cfi: "epubcfi(/6/2!/4/2)", fraction: 0 })).json()).toMatchObject({ ok: true, notStarted: true });
+    expect((await post({ cfi: "epubcfi(/6/2!/4/8)", fraction: 0.004 })).status).toBe(200);
+    expect(getDb().prepare("SELECT COUNT(*) AS n FROM book_progress").get()).toEqual({ n: 0 });
+  });
+
+  it("revenu à la première page puis refermé : redevient « pas commencé », les signets restent", async () => {
+    await post({ cfi: "epubcfi(/6/8!/4/2)", fraction: 0.3 });
+    addBookmark("lecteur", BOOK, { cfi: "epubcfi(/6/8!/4/2)", fraction: 0.3, chapter: "II", excerpt: "…" });
+    await post({ cfi: "epubcfi(/6/2!/4/2)", fraction: 0 });
+    expect(getDb().prepare("SELECT COUNT(*) AS n FROM book_progress").get()).toEqual({ n: 0 });
+    expect((await (await progressGET(req(), params(BOOK))).json()).progress).toBeNull();
+    expect(listBookmarks("lecteur", BOOK)).toHaveLength(1);
+  });
+
+  it("un livre terminé revenu à sa première page reste lu", async () => {
+    await post({ cfi: "epubcfi(/6/40)", fraction: 1, finished: true });
+    await post({ cfi: "epubcfi(/6/2)", fraction: 0 });
+    expect((await (await progressGET(req(), params(BOOK))).json()).progress).toMatchObject({ finished: true, fraction: 1 });
   });
 
   it("ne s'écrit pas sur un élément que le compte ne voit pas", async () => {

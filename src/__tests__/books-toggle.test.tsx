@@ -75,10 +75,10 @@ describe("la bascule", () => {
 describe("useBooksMode", () => {
   it("option coupée (ou pas encore lue) : aucun troisième bouton, aucun mode", () => {
     const { result, rerender } = renderHook(({ inAddress }) => useBooksMode(inAddress), { initialProps: { inAddress: undefined as boolean | undefined } });
-    expect(result.current).toEqual({ active: false, toggle: undefined });
+    expect(result.current).toEqual({ active: false, visited: false, toggle: undefined });
     config.data = { booksEnabled: false };
     rerender({ inAddress: undefined });
-    expect(result.current).toEqual({ active: false, toggle: undefined });
+    expect(result.current).toEqual({ active: false, visited: false, toggle: undefined });
     expect(navigate).not.toHaveBeenCalled();
   });
   it("option coupée et `#livres=1` restée dans l'adresse : le mode en est retiré", () => {
@@ -96,6 +96,18 @@ describe("useBooksMode", () => {
     await vi.waitFor(() => expect(navigate).toHaveBeenLastCalledWith({ books: true, film: null, serie: null }, "replace"));
     result.current.toggle!.onLeave("series");
     expect(navigate).toHaveBeenLastCalledWith({ books: false, booksAll: null, tab: "series", film: null, serie: null }, "replace");
+  });
+});
+
+describe("l'accueil des livres gardé après la première visite", () => {
+  it("monté à la première ouverture, puis gardé caché quand on revient aux films", () => {
+    config.data = { booksEnabled: true };
+    const { result, rerender } = renderHook(({ inAddress }) => useBooksMode(inAddress), { initialProps: { inAddress: false as boolean } });
+    expect(result.current.visited).toBe(false);
+    rerender({ inAddress: true });
+    expect(result.current).toMatchObject({ active: true, visited: true });
+    rerender({ inAddress: false });
+    expect(result.current).toMatchObject({ active: false, visited: true });
   });
 });
 

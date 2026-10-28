@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { bookIdOf, booksCaller } from "@/lib/books/guard";
 import { bookFor, forgetPlayed } from "@/lib/books/library";
-import { dismissedAt, dismissProgress, readProgress, saveProgress, validProgressInput } from "@/lib/books/progress";
+import { dismissedAt, dismissProgress, forgetUnstarted, readProgress, saveProgress, validProgressInput, MIN_STARTED_FRACTION } from "@/lib/books/progress";
 import { logError } from "@/lib/logger";
 
 /**
@@ -53,6 +53,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Ni un retrait de « Continuer la lecture » fait depuis : une page lue avant ne l'y remet pas.
     const dismissed = dismissedAt(caller.u, id);
     if (dismissed !== null && dismissed > input.at) return NextResponse.json({ ok: true, kept: true });
+  }
+  // Encore sur sa première page (`MIN_STARTED_FRACTION`) : pas commencé (28/10/2026). Rien n'est écrit pour
+  // un livre qu'on vient d'ouvrir ; un livre revenu à son début redevient « pas commencé » (`forgetUnstarted`
+  // — les signets restent). Un livre ouvert puis refermé sur sa couverture n'entre plus dans « Continuer la
+  // lecture ».
+  if (!input.finished && input.fraction < MIN_STARTED_FRACTION) {
+    forgetUnstarted(caller.u, id);
+    return NextResponse.json({ ok: true, notStarted: true });
   }
   const { firstFinish } = saveProgress(caller.u, id, input.cfi, input.fraction, input.finished);
   if (firstFinish && caller.jfId) {

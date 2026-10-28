@@ -6,7 +6,7 @@ import { blockedTagsOf, carriesBlockedTag } from "@/lib/blockedTags";
 import type { SessionPayload } from "@/lib/auth";
 import type { BookDetail, BookSummary } from "@/lib/books/types";
 import { knownMeta, type EpubMeta } from "@/lib/books/epubMeta";
-import { bookAuthors, bookGenres, decideSeries } from "@/lib/books/metadata";
+import { bookAuthors, bookGenres, decideSeries, primaryLanguage } from "@/lib/books/metadata";
 import { normId } from "@/lib/books/rights";
 import type { EnrichRecord } from "@/lib/books/googleBooks";
 
@@ -60,6 +60,11 @@ export interface JellyfinBookItem {
 export interface LibraryItem extends JellyfinBookItem {
   /** La bibliothèque Jellyfin (dossier virtuel) qui le contient, identifiant normalisé. */
   library: string;
+  /**
+   * La langue des métadonnées de cette bibliothèque (`LibraryOptions.PreferredMetadataLanguage`), quand
+   * l'administrateur l'a réglée : la langue présumée d'un livre dont l'EPUB n'en déclare pas (Google Books).
+   */
+  libraryLanguage?: string;
 }
 
 export type BookCaller = Pick<SessionPayload, "role" | "jfId">;
@@ -164,13 +169,17 @@ const PAGE_CONCURRENCY = 3;
  * sans résumés, trois pages en parallèle. Ce que chaque compte en voit, c'est `rights.ts` qui le décide.
  */
 export async function fetchLibrary(): Promise<LibraryItem[]> {
-  const folders = await getJson<{ ItemId?: string; CollectionType?: string | null }[]>(`${config.jellyfin.url}/Library/VirtualFolders`);
+  const folders = await getJson<{ ItemId?: string; CollectionType?: string | null; LibraryOptions?: { PreferredMetadataLanguage?: string | null } }[]>(
+    `${config.jellyfin.url}/Library/VirtualFolders`
+  );
   if (!folders.body) throw new Error(`Jellyfin a répondu ${folders.status}`);
   // Les bibliothèques qui ne peuvent pas contenir de livres ne sont pas parcourues.
   const libraries = folders.body.filter((f) => typeof f.ItemId === "string" && !["movies", "tvshows", "music", "musicvideos", "homevideos", "boxsets", "playlists", "livetv"].includes(f.CollectionType ?? ""));
   const out: LibraryItem[] = [];
   for (const lib of libraries) {
     const library = normId(lib.ItemId as string);
+    // Dans la même réponse, sans appel de plus.
+    const libraryLanguage = primaryLanguage(lib.LibraryOptions?.PreferredMetadataLanguage);
     const page = async (start: number) => {
       const params = new URLSearchParams({
         ParentId: lib.ItemId as string,
@@ -197,7 +206,7 @@ export async function fetchLibrary(): Promise<LibraryItem[]> {
       for (const b of batch) pages.push(b.Items ?? []);
     }
     for (const items of pages) {
-      for (const item of items) if (item.Type === "Book" && typeof item.Id === "string") out.push({ ...item, library });
+      for (const item of items) if (item.Type === "Book" && typeof item.Id === "string") out.push(libraryLanguage ? { ...item, library, libraryLanguage } : { ...item, library });
     }
   }
   return out;

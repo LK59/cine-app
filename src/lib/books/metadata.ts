@@ -155,3 +155,11 @@ function readableName(name: string): string {
   const comma = /^([^,]+),\s*([^,]+)$/.exec(trimmed);
   return comma ? `${comma[2]} ${comma[1]}` : trimmed;
 }
+
+/** « fr-FR », « FRE », « fra » → « fr » ; le reste en minuscules, tel quel. */
+export function primaryLanguage(raw: string | null | undefined): string | undefined {
+  const head = (raw ?? "").trim().toLowerCase().split(/[-_]/)[0];
+  if (!head) return undefined;
+  const iso2: Record<string, string> = { fre: "fr", fra: "fr", eng: "en", ger: "de", deu: "de", spa: "es", ita: "it", dut: "nl", nld: "nl", por: "pt" };
+  return iso2[head] ?? head;
+}

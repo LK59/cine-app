@@ -40,6 +40,18 @@ export function readProgress(account: string, itemId: string): BookProgress | nu
   return row ? toProgress(row) : null;
 }
 
+export { MIN_STARTED_FRACTION } from "@/lib/books/types";
+
+/**
+ * Le lecteur est revenu à la première page et a refermé (`MIN_STARTED_FRACTION`) : le livre redevient
+ * « pas commencé » — sa position est effacée, il quitte « Continuer la lecture » et rouvrira au début, là
+ * où on l'a laissé. Les signets sont dans leur propre table : ils restent. Un livre déjà terminé garde
+ * sa ligne (il reste « lu ») ; rien n'y est changé. Rend `true` si une position a été effacée.
+ */
+export function forgetUnstarted(account: string, itemId: string): boolean {
+  return getDb().prepare("DELETE FROM book_progress WHERE account = ? AND item_id = ? AND finished_at IS NULL").run(account, itemId).changes > 0;
+}
+
 /**
  * Écrit la position. `finished` : le lecteur a montré la dernière page — la date est gardée la
  * première fois seulement. Rend `true` quand c'est cette écriture-ci qui termine le livre (la route

@@ -317,3 +317,27 @@ describe("une bibliothèque à deux racines, dont un lot de milliers d'EPUB", ()
     expect(filterBooks([lu, copie, autre], "central")).toHaveLength(2);
   });
 });
+
+describe("la langue d'un livre, pour Google Books", () => {
+  it("celle de l'EPUB d'abord, sinon celle des métadonnées de sa bibliothèque Jellyfin", async () => {
+    const { enrichTargets, __testing: indexTesting } = await import("@/lib/books/bookIndex");
+    indexTesting.reset();
+    const db = (await import("@/lib/db")).getDb();
+    db.prepare("DELETE FROM book_meta").run();
+    // L'EPUB du premier déclare l'allemand ; le second n'en dit rien.
+    db.prepare("INSERT INTO book_meta (item_id, etag, series, series_index, subjects, creators, cover_path, language, failed, checked_at) VALUES (?, 'e', NULL, NULL, '[]', '[]', NULL, 'de', 0, 1)").run("5".repeat(32));
+    upstream.mockImplementation(async (url: string) => {
+      if (url.endsWith("/Library/VirtualFolders"))
+        return new Response(JSON.stringify([{ ItemId: "l".repeat(32), CollectionType: "books", LibraryOptions: { PreferredMetadataLanguage: "en-US" } }]), { status: 200 });
+      if (!url.includes("ParentId")) return new Response(JSON.stringify({ Items: [], TotalRecordCount: 0 }), { status: 200 });
+      const items = [
+        { Id: "5".repeat(32), Name: "Der Vorleser", Type: "Book", People: [{ Name: "Bernhard Schlink", Type: "Author" }] },
+        { Id: "6".repeat(32), Name: "Lunatic Cafe", Type: "Book", People: [{ Name: "Laurell K. Hamilton", Type: "Author" }] },
+      ];
+      return new Response(JSON.stringify({ Items: items, TotalRecordCount: 2 }), { status: 200 });
+    });
+    const targets = await enrichTargets();
+    expect(Object.fromEntries(targets.map((t) => [t.name, t.language]))).toEqual({ "Der Vorleser": "de", "Lunatic Cafe": "en" });
+    indexTesting.reset();
+  });
+});

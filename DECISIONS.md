@@ -7623,6 +7623,12 @@ coupés compris. Seule écriture ouverte aux comptes : `POST /api/books/requests
 fin) : Jellyfin ne sait garder que des durées. Envoyée au fil de la lecture (regroupée, 1,5 s), à la
 fermeture et à `pagehide` (`sendBeacon`). Le livre fini la première fois, il est noté « lu » chez
 Jellyfin pour ce compte (`markPlayed`) ; un échec de cet appel ne perd pas la position.
+*Pas commencé (28/10/2026)* : sous 1 % (`MIN_STARTED_FRACTION`, `types.ts`), un livre n'est pas commencé.
+La route n'écrit rien pour un livre qu'on vient d'ouvrir ; revenu à sa première page et refermé, il redevient
+« pas commencé » (`forgetUnstarted` efface sa position, sauf s'il est terminé ; les signets restent, dans
+leur table). `resumeFrom`, `continueReading` et la barre des cartes appliquent le même seuil, aussi aux
+positions écrites avant la règle. Ouvert pour voir puis refermé, un livre entrait dans « Continuer la
+lecture ».
 
 **Les transitions (28/10/2026, mesurées avant d'être changées).** Sur 6 400 livres, iPhone émulé
 (WebKit) et ordinateur (Chromium), cache chaud :
@@ -7649,6 +7655,16 @@ Jellyfin pour ce compte (`markPlayed`) ; un échec de cet appel ne perd pas la p
   ni la politique du cinéma ouverte aux cadres `blob:` : le lecteur est posé sur le cinéma dans un cadre de
   la même origine, la page `/livres` telle quelle (§128). Refermer : ~50 ms sur iPhone, ~20 ms à
   l'ordinateur, sans rechargement.
+- *Les « mini blocages » (28/10/2026, mesurés : un minuteur de 16 ms en retard, et la trace de Chromium).*
+  La couverture floue derrière l'en-tête d'une fiche (`blur-3xl` sur l'image entière) coûtait 250 à 400 ms
+  de fil principal à chaque ouverture et fermeture de fiche (Chromium ; le voile retiré, plus rien) : elle
+  est faite une fois en une image de 16 × 24 points étirée (`coverWash.ts`), que le calque du trajet garde.
+  Les menus de « Tous les livres » ne créent leurs milliers d'options qu'à l'approche du doigt ou du focus.
+  Les rangées de l'accueil sautent leur mise en page hors de l'écran (`content-visibility`, comme celles des
+  films) et ne se redessinent plus à chaque changement d'adresse (`memo`). Après la première visite,
+  l'accueil des livres reste monté, caché, quand on revient aux films : y retourner ne refait ni requête ni
+  rendu. Le cadre du lecteur qui se prépare sous une fiche est `visibility: hidden` en plus d'être
+  transparent et sans pointeur : sur iPhone, la fiche du livre ne défilait plus au doigt pendant ce temps.
 
 **Google Books, en option (`googleBooks.ts`).** `BOOKS_GOOGLE_ENRICH` (coupée par défaut) et
 `GOOGLE_BOOKS_API_KEY` (un secret, comme la clé TMDB : jamais renvoyé au navigateur), dans la même carte
@@ -7666,7 +7682,18 @@ un titre, un auteur ni une couverture existante (les corrections faites à la ma
   nom de l'auteur (« L'inconnu de la forêt de Harlan Coben »), ni un éditeur d'études (lePetitLitteraire,
   Encyclopaedia Universalis…). Le français d'abord, un résumé ensuite. Sinon : « sans correspondance »,
   rien n'est rempli.
-- *Règles v3 (28/10/2026)* : Google ne répond plus à ses opérateurs (`intitle:`, `inauthor:`, `isbn:` → 0 résultat, mesuré en production) ; la recherche est en texte libre, `<titre> <auteur>`, 20 réponses, en français puis la variante suivante ou sans restriction. Le bon volume est choisi parmi toutes (même ISBN, puis français, puis résumé le plus long, puis le moins d’auteurs en plus) ; une adaptation à plus d’auteurs que le livre et un tome dans le titre est refusée. Un 503 (une requête sur deux, mesuré) est retenté trois fois à 1,5–3 s, chaque tentative comptant dans le quota.
+- *Règles v4 (28/10/2026) — la langue du livre, jamais supposée.* Chaque livre a une langue, choisie dans
+  cet ordre : celle que son EPUB déclare (`dc:language`, colonne `book_meta.language`, ramenée à deux
+  lettres : `fre`, `fra`, `fr-FR` → `fr`), sinon celle des métadonnées de sa bibliothèque Jellyfin
+  (`LibraryOptions.PreferredMetadataLanguage`, lue dans la réponse `/Library/VirtualFolders` déjà demandée),
+  sinon celle de l'installation (`APP_LANGUAGE`) — `targetLanguage`. Cette langue sert à tout : la
+  recherche est restreinte à elle (`langRestrict`), le classement préfère ses volumes, et un résumé n'est
+  pris que d'un volume dans cette langue. Un volume d'une autre langue donne encore l'année, l'image ou les
+  genres. Rien n'est écrit en dur : une installation allemande cherche en allemand, un livre anglais dans
+  une installation française garde son résumé anglais. Le cas qui l'a fait naître : « Lunatic Café »
+  (Hamilton, édition française) avait reçu le résumé anglais d'un volume anglais, faute de candidat
+  français décrit. Les lignes des règles v3 sont réévaluées (et vidées faute de mieux).
+- *Règles v3 (28/10/2026)* : Google ne répond plus à ses opérateurs (`intitle:`, `inauthor:`, `isbn:` → 0 résultat, mesuré en production) ; la recherche est en texte libre, `<titre> <auteur>`, 20 réponses, dans la langue du livre (v4 ; le français jusque-là) puis la variante suivante ou sans restriction. Le bon volume est choisi parmi toutes (même ISBN, puis la langue du livre, puis résumé le plus long, puis le moins d’auteurs en plus) ; une adaptation à plus d’auteurs que le livre et un tome dans le titre est refusée. Un 503 (une requête sur deux, mesuré) est retenté trois fois à 1,5–3 s, chaque tentative comptant dans le quota.
 - *Règles v2 (28/10/2026)*, après la première passe en production : « La Tour des anges » (Pullman, tome 2)
   avait reçu le résumé du tome 1 et le genre « Arctic regions ». Désormais : titre égal, ou le nôtre suivi
   d'un sous-titre après « : » / « - » qui n'est pas un autre titre de l'auteur (fini « l'un contient

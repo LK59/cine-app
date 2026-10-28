@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { lazyNow } from "./lazyNow";
 import useSWR, { preload } from "swr";
 import { LayoutGrid } from "lucide-react";
@@ -21,6 +21,11 @@ import { cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 export interface BooksMode {
   /** La catégorie Livres est affichée (option allumée et `#livres=1`). */
   active: boolean;
+  /**
+   * La catégorie a déjà été ouverte : son accueil reste monté, caché, quand on revient aux films — la
+   * bascule devient un simple changement de visibilité, dans les deux sens (28/10/2026).
+   */
+  visited: boolean;
   /** Ce que la bascule reçoit ; `undefined` option coupée — elle garde alors ses deux boutons. */
   toggle: { active: boolean; onSelect: () => void; onLeave: (mode: "movies" | "series") => void; onIntent: () => void } | undefined;
 }
@@ -60,9 +65,13 @@ export function useBooksMode(inAddress: boolean | undefined): BooksMode {
   useEffect(() => {
     if (known && !enabled && (inAddress || bookInAddress)) cinemaNavigate({ books: false, book: null, reading: false, booksAll: null }, "replace");
   }, [known, enabled, inAddress, bookInAddress]);
-  if (!enabled) return { active: false, toggle: undefined };
-  const active = inAddress === true;
-  return { active, toggle: { active, onSelect: enter, onLeave: leave, onIntent: intent } };
+  const active = enabled && inAddress === true;
+  // Retenu par un état, posé pendant le rendu (la forme dérivée que React permet) : une fois ouverte, la
+  // catégorie garde son accueil monté jusqu'au départ de l'écran.
+  const [visited, setVisited] = useState(false);
+  if (active && !visited) setVisited(true);
+  if (!enabled) return { active: false, visited: false, toggle: undefined };
+  return { active, visited, toggle: { active, onSelect: enter, onLeave: leave, onIntent: intent } };
 }
 
 const BooksSearchLazy = lazyNow(() => import("./BooksSearch").then((m) => m.BooksSearch));

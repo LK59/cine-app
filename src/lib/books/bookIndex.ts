@@ -10,6 +10,7 @@ import { allows, rightsKey, rightsOf, type BookRights } from "@/lib/books/rights
 import { authorIndex, filterBooks, foldText, genreIndex, groupBooks, homeRows, preferredCopy, sortBooks, type BookSort, type HomeRows } from "@/lib/books/grouping";
 import { duplicateKey, nameKey, titleKey } from "@/lib/books/metadata";
 import type { BookProgress, BookSummary } from "@/lib/books/types";
+import { MIN_STARTED_FRACTION } from "@/lib/books/types";
 
 /** Les métadonnées qui refont l'index : celles de l'EPUB, et celles de Google Books (option). */
 const metaVersion = () => epubMetaVersion() * 1_000_000 + enrichVersion();
@@ -65,6 +66,11 @@ interface Entry {
   isbn: string | null;
   /** L'EPUB déclare-t-il une couverture ? `null` : pas encore lu. */
   epubCover: boolean | null;
+  /**
+   * La langue du livre : celle que l'EPUB déclare (`dc:language`), sinon celle des métadonnées de sa
+   * bibliothèque ; `null` : ni l'une ni l'autre (Google Books prend alors la langue de l'installation).
+   */
+  language: string | null;
 }
 
 interface Base {
@@ -114,6 +120,7 @@ async function buildBase(items: readonly LibraryItem[]): Promise<Base> {
     entries.push({
       isbn,
       epubCover: k ? (k.meta ? !!k.meta.coverPath : false) : null,
+      language: k?.meta?.language ?? item.libraryLanguage ?? null,
       book,
       hay: foldText(`${book.name} ${book.seriesName ?? ""} ${book.authors.join(" ")}`),
       library: item.library,
@@ -313,6 +320,7 @@ export async function enrichTargets(): Promise<EnrichTarget[]> {
     name: e.book.name,
     authors: e.book.authors,
     isbn: e.isbn,
+    language: e.language,
     series: e.book.seriesName,
     index: e.book.index,
     siblings: (byAuthor.get(nameKey(e.book.authors[0] ?? "")) ?? []).filter((t) => titleKey(t) !== titleKey(e.book.name)).slice(0, 80),
@@ -368,7 +376,8 @@ const EMPTY_COPIES: ReadonlyMap<string, BookSummary> = new Map();
 /** « Continuer la lecture » : d'après les positions de ce compte, les livres que l'index connaît encore. */
 export function resumeFrom(index: BookIndex, progress: Map<string, BookProgress>, limit = 12): BookSummary[] {
   return [...progress.entries()]
-    .filter(([, p]) => !p.finished && !p.dismissed && p.fraction > 0)
+    // Moins d'un pour cent : pas commencé (`MIN_STARTED_FRACTION`), même pour une position d'avant cette règle.
+    .filter(([, p]) => !p.finished && !p.dismissed && p.fraction >= MIN_STARTED_FRACTION)
     .sort((a, b) => b[1].updatedAt - a[1].updatedAt)
     .flatMap(([id, p]) => {
       // Une copie cachée commencée reste ici : c'est elle qu'on lisait.

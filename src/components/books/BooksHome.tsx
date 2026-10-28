@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import useSWR from "swr";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
@@ -14,7 +14,7 @@ import { cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { useTvGridNav } from "@/lib/useTvGridNav";
 import { ReaderFrame, openReaderFrame, standbyReaderFrame } from "./ReaderFrame";
 import { lazyNow } from "./lazyNow";
-import type { ComponentProps } from "react";
+import type { ComponentProps, CSSProperties } from "react";
 import type { BooksScreen as BooksScreenType } from "./BooksScreen";
 import { createPortal } from "react-dom";
 
@@ -63,10 +63,22 @@ export interface BooksHomePayload {
   hidden: number;
 }
 
+/**
+ * La place réservée d'une rangée de livres hors de l'écran : titre, couverture 2:3 (112 px de large au
+ * téléphone, 160 au plus sur ordinateur), deux lignes sous la couverture. `auto` retient ensuite la vraie.
+ */
+const BOOK_ROW_CONTAINMENT: CSSProperties = { contentVisibility: "auto", containIntrinsicSize: "auto 250px" };
+const BOOK_ROW_CONTAINMENT_DESKTOP: CSSProperties = { contentVisibility: "auto", containIntrinsicSize: "auto 330px" };
+
 const EMPTY: BookSummary[] = [];
 const EMPTY_ROWS: HomeRow[] = [];
 
-export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
+/**
+ * `hidden` : la catégorie a été quittée pour les films ou les séries — l'accueil reste monté, caché et
+ * inerte, ses rangées et ses images prêtes pour le retour (la bascule n'est plus qu'un changement de
+ * visibilité). Caché, il n'a ni fiche, ni lecteur, ni clavier.
+ */
+export function BooksHome({ variant, hidden: paneHidden = false }: { variant: "desktop" | "mobile"; hidden?: boolean }) {
   const t = useT();
   const { data, error, isLoading, mutate } = useSWR<BooksHomePayload>(BOOKS_HOME_KEY, fetcher, { revalidateOnFocus: true });
   const resume = data?.resume ?? EMPTY;
@@ -83,7 +95,7 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
   const route = useCinemaRoute();
   const sheetOpen = !!route.book;
   // Les flèches du clavier, comme sur les rangées de films (`useTvGridNav`, attributs `data-tv-*`).
-  useTvGridNav(desktop && !sheetOpen);
+  useTvGridNav(desktop && !sheetOpen && !paneHidden);
 
   return (
     <div
@@ -93,9 +105,11 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
           ? { left: "var(--player-rail, 0px)", paddingTop: "calc(max(1rem, env(safe-area-inset-top)) + 4.5rem)" }
           : { paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6rem)" }
       }
-      data-books-home
+      data-books-home={paneHidden ? undefined : ""}
+      data-books-home-kept={paneHidden ? "" : undefined}
+      hidden={paneHidden}
       // Sous une fiche, l'accueil des livres ne répond plus (la règle des fiches de films).
-      inert={sheetOpen}
+      inert={sheetOpen || paneHidden}
     >
       {isLoading && !data && (
         <div className={`${pad} flex gap-3 pt-2`} aria-hidden>
@@ -180,18 +194,22 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
       )}
       {/* La fiche d'un livre, portée dans `body` : hors de l'accueil rendu inerte. Une seule à la fois :
           la grille complète ouverte a la sienne. */}
-      {!route.booksAll && <BookSheetHost books={shown} onRead={(_book, id, cover) => void readFromHome(id, cover)} onReadIntent={standbyReaderFrame} />}
-      {route.booksAll &&
+      {!paneHidden && !route.booksAll && <BookSheetHost books={shown} onRead={(_book, id, cover) => void readFromHome(id, cover)} onReadIntent={standbyReaderFrame} />}
+      {!paneHidden && route.booksAll &&
         typeof document !== "undefined" &&
         createPortal(<BooksBrowse embedded={{ filter: route.booksAll, onRead: (id, cover) => void readFromHome(id, cover), onReadIntent: standbyReaderFrame }} />, document.body)}
       {/* Le lecteur, tant que l'adresse le nomme : un cadre posé sur tout le cinéma, tenu hors de React. */}
-      {route.book && route.reading && <ReaderFrame key={route.book} id={route.book} />}
+      {!paneHidden && route.book && route.reading && <ReaderFrame key={route.book} id={route.book} />}
     </div>
   );
 }
 
-/** Une rangée de l'accueil : son titre, son « Tout voir », et au plus vingt couvertures. */
-function Row({
+/**
+ * Une rangée de l'accueil : son titre, son « Tout voir », et au plus vingt couvertures. Mémorisée : ses
+ * propriétés ne changent qu'avec la réponse de l'accueil, et changer de catégorie, ouvrir ou fermer une
+ * fiche (l'adresse change, l'accueil se redessine) ne refait plus chaque carte de chaque rangée.
+ */
+const Row = memo(function Row({
   title,
   count,
   filter,
@@ -215,7 +233,10 @@ function Row({
   const rowKey = filter;
   const t = useT();
   return (
-    <section className="mb-8">
+    // Mise en page sautée loin de l'écran (`content-visibility`, la règle des rangées de films) : à l'entrée
+    // dans les livres, seules les rangées visibles se mettent en page — mesuré le 28/10/2026, la bascule
+    // Films → Livres refaisait d'un coup la mise en page de toutes les rangées (850 boîtes sur 910).
+    <section className="mb-8" style={desktop ? BOOK_ROW_CONTAINMENT_DESKTOP : BOOK_ROW_CONTAINMENT}>
       <div className={`${pad} mb-3 flex items-baseline gap-3`}>
         <h2 className="truncate font-display text-lg font-semibold">{title}</h2>
         {count && <span className="shrink-0 text-sm text-subtle">{count}</span>}
@@ -253,4 +274,4 @@ function Row({
       </div>
     </section>
   );
-}
+});

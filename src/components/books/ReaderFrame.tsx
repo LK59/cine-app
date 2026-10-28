@@ -133,7 +133,11 @@ function hold(id: string, reading: boolean): Held {
   const root = document.createElement("div");
   root.setAttribute("data-reader-frame", "");
   // Invisible et inerte tant qu'il n'est pas montré : ni toucher, ni Tab, ni lecteur d'écran n'y entrent.
-  Object.assign(root.style, { position: "fixed", inset: "0", zIndex: "390", background: readerPageColor(), opacity: "0", pointerEvents: "none" });
+  // `visibility: hidden` en plus de l'opacité (28/10/2026) : sur iPhone, un cadre transparent posé sur
+  // tout l'écran prenait le défilement au doigt même avec `pointer-events: none` — la fiche du livre, sous
+  // lui pendant qu'il se prépare, ne défilait plus (les boutons, eux, répondaient). Caché, il est toujours
+  // mis en page et chargé, mais n'entre plus dans le tri des gestes.
+  Object.assign(root.style, { position: "fixed", inset: "0", zIndex: "390", background: readerPageColor(), opacity: "0", pointerEvents: "none", visibility: "hidden" });
   root.inert = true;
   const frame = document.createElement("iframe");
   frame.setAttribute("allow", FRAME_ALLOW);
@@ -259,7 +263,7 @@ export function ReaderFrame({ id }: { id: string }) {
     };
     h.refresh = refresh;
     h.root.inert = false;
-    Object.assign(h.root.style, { opacity: "1", pointerEvents: "auto" });
+    Object.assign(h.root.style, { opacity: "1", pointerEvents: "auto", visibility: "visible" });
     const reveal = () => {
       finishOpening(h);
       // Le clavier au lecteur : le document du cadre a déjà mis le focus sur sa page.

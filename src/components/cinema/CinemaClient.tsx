@@ -1248,7 +1248,7 @@ export function CinemaClient() {
 
       <CinemaModeToggle mode={mediaType} onChange={setMediaType} books={books.toggle} />
       {/* La catégorie Livres recouvre la bannière et les rangées (DECISIONS.md §127). */}
-      {books.active && <BooksHomeLazy variant="desktop" />}
+      {books.visited && <BooksHomeLazy variant="desktop" hidden={!books.active} />}
       {/* Jellyfin en panne : sous le sélecteur, centré comme lui (§92). */}
       <div className="pointer-events-none fixed z-10 -translate-x-1/2" style={{ top: "calc(max(1rem, env(safe-area-inset-top)) + 3rem)", left: "calc(50% + var(--player-rail, 0px) / 2)" }}>
         <CatalogueOutageBanner outage={outage} />

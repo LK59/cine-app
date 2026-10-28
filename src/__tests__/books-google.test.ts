@@ -11,10 +11,16 @@ await vi.hoisted(async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "laterna-books-google-"));
 });
 const KEY = "AIzaSy-secret-cle-de-test-0123456789";
-const cfg = vi.hoisted(() => ({ books: true, enrich: true, key: "AIzaSy-secret-cle-de-test-0123456789" }));
+const cfg = vi.hoisted(() => ({ books: true, enrich: true, key: "AIzaSy-secret-cle-de-test-0123456789", lang: "fr" }));
 vi.mock("@/lib/config", () => ({
   config: {
     jellyfin: { url: "http://jf", apiKey: "k" },
+    // La langue de l'installation (`APP_LANGUAGE`) : celle d'un livre dont ni l'EPUB ni la bibliothèque ne disent rien.
+    app: {
+      get language() {
+        return cfg.lang;
+      },
+    },
     books: {
       get enabled() {
         return cfg.books;
@@ -295,5 +301,73 @@ describe("règles v3 : les réponses réelles de Google en texte libre", () => {
     expect(calls).toHaveLength(2);
     expect(new URL(calls[0].url).search).toBe(new URL(calls[1].url).search);
     expect(enrichOf("a".repeat(32))?.status).toBe("filled");
+  });
+});
+
+describe("règles v4 : un résumé seulement dans la langue du livre", () => {
+  const english = "You don't volunteer for slugfests with vampires, werewolves and zombies unless you want to end up dead.";
+  const lunatic = () => target({ name: "Lunatic Café", authors: ["Laurell K. Hamilton"], series: "Anita Blake", index: 4 });
+  it("« Lunatic Café » (édition française) : le volume anglais donne l'année et l'image, pas son résumé", () => {
+    const items = [vol("Lunatic Cafe", ["Laurell K. Hamilton"], { language: "en", description: english, publishedDate: "1996-04-01" }, "frtAPgAACAAJ")];
+    const hit = bestCandidate(lunatic(), items);
+    expect(hit?.id).toBe("frtAPgAACAAJ");
+    const r = recordOf(hit!, lunatic());
+    expect(r.overview).toBeNull();
+    expect(r.year).toBe(1996);
+    expect(r.coverUrl).not.toBeNull();
+  });
+  it("un volume français sans résumé l'emporte sur un anglais décrit, et un français décrit sur les deux", () => {
+    const en = vol("Lunatic Café", ["Laurell K. Hamilton"], { language: "en", description: english }, "en");
+    const frBare = vol("Lunatic Café", ["Laurell K. Hamilton"], { language: "fr", description: undefined }, "fr-nu");
+    const frDesc = vol("Lunatic Café", ["Laurell K. Hamilton"], { language: "fr", description: "Anita Blake enquête sur des disparitions de loups-garous à Saint-Louis." }, "fr");
+    expect(bestCandidate(lunatic(), [en, frBare])?.id).toBe("fr-nu");
+    expect(bestCandidate(lunatic(), [en, frBare, frDesc])?.id).toBe("fr");
+    expect(recordOf(frDesc, lunatic()).overview).toMatch(/^Anita Blake/);
+  });
+  it("la langue de l'EPUB décide : un livre anglais prend le résumé anglais ; sans langue déclarée, le livre est français", () => {
+    const en = vol("Lunatic Cafe", ["Laurell K. Hamilton"], { language: "en", description: english }, "en");
+    expect(recordOf(en, { language: "en-US" }).overview).toBe(english);
+    expect(recordOf(en, { language: "eng" }).overview).toBe(english);
+    expect(recordOf(en, {}).overview).toBeNull();
+    expect(recordOf(vol("X", ["Y"], { language: undefined }), {}).overview).toBeNull();
+  });
+  it("une ligne remplie par les règles v3 avec un résumé anglais est réévaluée, et vidée faute de mieux", async () => {
+    const id = "a".repeat(32);
+    getDb()
+      .prepare("INSERT INTO book_enrich (item_id, sig, rules, status, overview, genres, year, cover_url, google_id, checked_at) VALUES (?, ?, 3, 'filled', ?, '[]', 1996, NULL, 'frtAPgAACAAJ', 1)")
+      .run(id, "sig-ancienne", english);
+    google(() => new Response(JSON.stringify({ items: [vol("Lunatic Cafe", ["Laurell K. Hamilton"], { language: "en", description: english, publishedDate: "1996-04-01" }, "frtAPgAACAAJ")] })));
+    __testing.state().targets = async () => [lunatic()];
+    await __testing.run("essai");
+    expect(enrichOf(id)).toMatchObject({ status: "filled", overview: null, year: 1996 });
+  });
+});
+
+describe("la langue du livre, et rien de supposé français", () => {
+  const english = "You don't volunteer for slugfests with vampires, werewolves and zombies unless you want to end up dead.";
+  afterEach(() => {
+    cfg.lang = "fr";
+  });
+  it("un livre anglais dans une installation française : cherché en anglais, il garde son résumé anglais", async () => {
+    google(() => new Response(JSON.stringify({ items: [vol("Lunatic Cafe", ["Laurell K. Hamilton"], { language: "en", description: english }, "en")] })));
+    __testing.state().targets = async () => [target({ name: "Lunatic Cafe", authors: ["Laurell K. Hamilton"], language: "en" })];
+    await __testing.run("essai");
+    expect(new URL(calls[0].url).searchParams.get("langRestrict")).toBe("en");
+    expect(enrichOf("a".repeat(32))?.overview).toBe(english);
+  });
+  it("un livre français n'a jamais le résumé anglais", async () => {
+    google(() => new Response(JSON.stringify({ items: [vol("Lunatic Café", ["Laurell K. Hamilton"], { language: "en", description: english }, "en")] })));
+    __testing.state().targets = async () => [target({ name: "Lunatic Café", authors: ["Laurell K. Hamilton"], language: "fr" })];
+    await __testing.run("essai");
+    expect(new URL(calls[0].url).searchParams.get("langRestrict")).toBe("fr");
+    expect(enrichOf("a".repeat(32))?.overview).toBeNull();
+  });
+  it("une installation en allemand, livre sans langue connue : la recherche est restreinte à l'allemand", async () => {
+    cfg.lang = "de";
+    google(() => new Response(JSON.stringify({ items: [vol("Dans les bois", ["Harlan Coben"], { language: "de", description: "Eine Beschreibung, die lang genug ist, um behalten zu werden, mit mehreren Sätzen." })] })));
+    __testing.state().targets = async () => [target()];
+    await __testing.run("essai");
+    expect(new URL(calls[0].url).searchParams.get("langRestrict")).toBe("de");
+    expect(enrichOf("a".repeat(32))?.overview).toMatch(/^Eine Beschreibung/);
   });
 });

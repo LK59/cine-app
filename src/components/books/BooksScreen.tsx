@@ -424,11 +424,31 @@ const FILTER_BASE =
   "h-9 shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500";
 const FILTER_FIELD = `${FILTER_BASE} placeholder:text-subtle`;
 
-/** Un choix de la grille, en liste native : des milliers d'auteurs s'y parcourent au clavier comme au doigt. */
+/**
+ * Un choix de la grille, en liste native : des milliers d'auteurs s'y parcourent au clavier comme au doigt.
+ *
+ * Ses options ne sont créées qu'à l'approche (doigt posé, focus, survol) : la liste des auteurs d'une grande
+ * bibliothèque, ce sont des milliers d'éléments, et les créer à l'ouverture de « Tous les livres » figeait
+ * l'iPhone 300 à 450 ms au milieu de l'animation (mesuré le 28/10/2026, 6 400 livres). Fermée, la liste ne
+ * montre que le choix en cours ; le doigt posé la remplit avant que le système ne l'ouvre.
+ */
 function Picker({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  const [full, setFull] = useState(false);
+  const fill = () => {
+    if (!full) setFull(true);
+  };
+  const shown = full ? options : options.filter((o, i) => i === 0 || o.value === value);
   return (
-    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={`${FILTER_BASE} max-w-[14rem]`}>
-      {options.map((o) => (
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onPointerDown={fill}
+      onPointerEnter={fill}
+      onFocus={fill}
+      className={`${FILTER_BASE} max-w-[14rem]`}
+    >
+      {shown.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}
         </option>

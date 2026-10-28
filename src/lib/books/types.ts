@@ -4,6 +4,13 @@
  * et l'option coupée n'y laisse aucune trace.
  */
 
+/**
+ * En deçà, un livre n'est pas commencé (28/10/2026) : ouvert, feuilleté sur sa première page puis refermé,
+ * il n'a rien à faire dans « Continuer la lecture » ni à compter comme entamé. Un pour cent : la deuxième
+ * page d'un livre court, quelques pages d'un long.
+ */
+export const MIN_STARTED_FRACTION = 0.01;
+
 /** Où en est ce compte dans un livre — gardé par l'application, pas par Jellyfin. */
 export interface BookProgress {
   /** La position exacte (EPUB CFI), celle que le lecteur rouvre. */

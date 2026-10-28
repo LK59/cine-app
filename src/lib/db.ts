@@ -786,6 +786,8 @@ function migrate(db: Database.Database): void {
   // Les auteurs et la couverture de l'OPF sont venus après la série : une base d'essai antérieure les gagne ici.
   try { db.exec("ALTER TABLE book_meta ADD COLUMN creators TEXT NOT NULL DEFAULT '[]'"); } catch { /* already exists */ }
   try { db.exec("ALTER TABLE book_meta ADD COLUMN cover_path TEXT"); } catch { /* already exists */ }
+  // La langue de l'EPUB (`dc:language`) : Google Books ne donne un résumé que dans la langue du livre.
+  try { db.exec("ALTER TABLE book_meta ADD COLUMN language TEXT"); } catch { /* already exists */ }
   seedInitialNews(db);
   // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
   seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");

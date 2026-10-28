@@ -234,7 +234,8 @@ describe("l'accueil ne charge rien des livres", () => {
     expect(mode).toMatch(/lazyNow\(\(\) => import\("\.\/BooksDownloads"\)/);
     // Rendu seulement quand la catégorie est affichée, donc l'option allumée.
     for (const file of ["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx"]) {
-      expect(read(file), file).toMatch(/\{books\.active && <BooksHomeLazy variant="(desktop|mobile)" \/>\}/);
+      // Montée à la première ouverture de la catégorie (et gardée, cachée, ensuite) — jamais avant.
+      expect(read(file), file).toMatch(/\{books\.visited && <BooksHomeLazy variant="(desktop|mobile)" hidden=\{!books\.active\} \/>\}/);
     }
   });
   it("foliate-js n'est chargé que par le lecteur, et le lecteur seulement à l'ouverture d'un livre", () => {

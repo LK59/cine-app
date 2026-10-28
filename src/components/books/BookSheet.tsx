@@ -18,6 +18,7 @@ import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookDetail, BookSummary } from "@/lib/books/types";
 import { BookCover, coverUrl } from "./BookCover";
 import { BookDownloadButton } from "./BookDownload";
+import { useCoverWash } from "./coverWash";
 import { preloadBookFile, saveData } from "@/lib/books/readerPreload";
 
 /**
@@ -151,6 +152,10 @@ function BookSheet({
   const long = overview.length > 420;
   const genres = book?.genres ?? [];
 
+  // Seule celle de Jellyfin existe à coup sûr ; celle de l'EPUB peut manquer, et `BookCover` sait alors en dessiner une.
+  const url = book?.coverTag ? coverUrl(book) : null;
+  const washed = useCoverWash(url);
+
   if (typeof document === "undefined") return null;
 
   const info = (
@@ -239,8 +244,6 @@ function BookSheet({
     </button>
   );
 
-  // Seule celle de Jellyfin existe à coup sûr ; celle de l'EPUB peut manquer, et `BookCover` sait alors en dessiner une.
-  const url = book?.coverTag ? coverUrl(book) : null;
   // La couverture : c'est elle qui vole depuis la carte touchée (`data-sheet-photo`), et elle encore
   // qui grandit en première page à l'ouverture du lecteur (`readerOpening`).
   const cover = (
@@ -256,11 +259,12 @@ function BookSheet({
     </div>
   );
 
-  // La couverture floue derrière l'en-tête : la fiche prend la couleur du livre.
-  const backdrop = url ? (
+  // La couverture floue derrière l'en-tête : la fiche prend la couleur du livre. Un lavis fait une fois
+  // (`useCoverWash`) plutôt qu'un flou CSS repeint à chaque ouverture et fermeture.
+  const backdrop = washed ? (
     <div className="pointer-events-none absolute inset-x-0 top-0 h-80 overflow-hidden opacity-50" aria-hidden data-sheet-veil="">
-      {/* eslint-disable-next-line @next/next/no-img-element -- la même image, floue. */}
-      <img src={url} alt="" className="absolute inset-0 h-full w-full scale-125 object-cover blur-3xl" />
+      {/* eslint-disable-next-line @next/next/no-img-element -- une image `data:` de 16 × 24 points, étirée. */}
+      <img src={washed} alt="" className="absolute inset-0 h-full w-full scale-125 object-cover" />
       <div className="absolute inset-0 bg-linear-to-b from-transparent via-ink/60 to-ink" />
     </div>
   ) : null;

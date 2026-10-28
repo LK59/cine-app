@@ -690,7 +690,7 @@ export function CinemaMobileClient() {
           dessous. Le retrait de la zone sûre s'y ajoute, l'indicateur d'accueil en mangeant déjà
           une partie. */}
       {/* La catégorie Livres prend la place des rangées, qui restent montées dessous (§127). */}
-      {books.active && <BooksHomeLazy variant="mobile" />}
+      {books.visited && <BooksHomeLazy variant="mobile" hidden={!books.active} />}
       <div
         ref={rowsScrollRef}
         className={`flex-1 overflow-y-auto overscroll-contain ${books.active ? "hidden" : ""}`}

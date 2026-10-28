@@ -1,4 +1,4 @@
-import type { BookSummary } from "@/lib/books/types";
+import { MIN_STARTED_FRACTION, type BookSummary } from "@/lib/books/types";
 import { duplicateKey, fold, nameKey, titleCare } from "@/lib/books/metadata";
 
 /**
@@ -42,7 +42,7 @@ export function groupBooks(books: readonly BookSummary[]): BookGroup[] {
 /** « Continuer la lecture » : commencés, pas finis, le plus récent d'abord. */
 export function continueReading(books: readonly BookSummary[], limit = 12): BookSummary[] {
   return books
-    .filter((b) => b.progress && !b.progress.finished && b.progress.fraction > 0)
+    .filter((b) => b.progress && !b.progress.finished && b.progress.fraction >= MIN_STARTED_FRACTION)
     .sort((a, b) => (b.progress?.updatedAt ?? 0) - (a.progress?.updatedAt ?? 0))
     .slice(0, limit);
 }

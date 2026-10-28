@@ -2,7 +2,7 @@ import { config } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import { logError } from "@/lib/logger";
 import { taskLog } from "@/lib/taskLog";
-import { bookGenres, fold, nameKey, titleKey } from "@/lib/books/metadata";
+import { bookGenres, fold, nameKey, primaryLanguage, titleKey } from "@/lib/books/metadata";
 import { plainOverview } from "@/lib/books/library";
 
 /**
@@ -55,6 +55,8 @@ export interface EnrichTarget {
   name: string;
   authors: string[];
   isbn: string | null;
+  /** La langue du livre (EPUB, puis bibliothèque Jellyfin) ; inconnue, celle de l'installation (`targetLanguage`). */
+  language?: string | null;
   /** La série et le tome que l'EPUB déclare, quand il les déclare : un volume d'un autre tome est refusé. */
   series?: string | null;
   index?: number | null;
@@ -79,7 +81,25 @@ export interface EnrichRecord {
  * trouvait rien, Google ne répondant plus à ses opérateurs (`intitle:`, `inauthor:`, `isbn:` → 0 résultat,
  * mesuré en production le 28/10/2026).
  */
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
+
+/**
+ * La langue d'un livre, pour la recherche (`langRestrict`), le classement des réponses et le résumé (v4,
+ * 28/10/2026 : un résumé n'est pris que dans la langue du livre — « Lunatic Café », édition française, avait
+ * reçu le résumé anglais d'un volume anglais, faute de candidat français décrit ; un volume d'une autre
+ * langue peut encore donner l'année ou l'image). Dans l'ordre : la langue que l'EPUB déclare
+ * (`dc:language`), celle des métadonnées de sa bibliothèque Jellyfin (`EnrichTarget.language` porte déjà
+ * l'une ou l'autre), puis celle de l'installation (`APP_LANGUAGE`). Rien n'est supposé français : une
+ * installation allemande cherche en allemand.
+ */
+export function targetLanguage(target: Pick<EnrichTarget, "language">): string {
+  return primaryLanguage(target.language) ?? primaryLanguage(config.app?.language) ?? "en";
+}
+
+/** Ce volume est-il dans la langue du livre ? Une langue absente de la réponse n'est pas la bonne. */
+export function sameLanguage(target: Pick<EnrichTarget, "language">, v: GoogleVolume): boolean {
+  return primaryLanguage(v.volumeInfo?.language) === targetLanguage(target);
+}
 
 // ─── La correspondance ────────────────────────────────────────────────────────────────────────
 
@@ -182,7 +202,7 @@ export function acceptable(target: Pick<EnrichTarget, "name" | "authors" | "inde
 
 /**
  * Le meilleur des candidats retenus, parmi tous ceux de la réponse (le bon n'est souvent pas le premier :
- * des magazines, des études, d'autres langues l'entourent) : le même ISBN, puis le français, puis un
+ * des magazines, des études, d'autres langues l'entourent) : le même ISBN, puis la langue du livre, puis un
  * résumé, le plus long, puis le moins d'auteurs en plus des nôtres.
  */
 export function bestCandidate(target: EnrichTarget, items: readonly GoogleVolume[], viaIsbn = false, titles: readonly string[] = [target.name]): GoogleVolume | null {
@@ -190,9 +210,10 @@ export function bestCandidate(target: EnrichTarget, items: readonly GoogleVolume
   if (ok.length === 0) return null;
   const key = (v: GoogleVolume): number[] => [
     sameIsbn(target, v) ? 1 : 0,
-    v.volumeInfo?.language === "fr" ? 1 : 0,
-    v.volumeInfo?.description ? 1 : 0,
-    v.volumeInfo?.description?.length ?? 0,
+    sameLanguage(target, v) ? 1 : 0,
+    // Un résumé ne compte que dans la langue du livre (v4) : ailleurs, il ne sera pas pris.
+    sameLanguage(target, v) && v.volumeInfo?.description ? 1 : 0,
+    sameLanguage(target, v) ? (v.volumeInfo?.description?.length ?? 0) : 0,
     -Math.max(0, (v.volumeInfo?.authors?.length ?? 0) - target.authors.length),
   ];
   return [...ok].sort((a, b) => {
@@ -266,8 +287,11 @@ export function googleGenres(categories: readonly string[]): string[] {
   return out.slice(0, 6);
 }
 
-/** Ce qu'un volume apporte. L'image : la plus grande proposée, en https, agrandie quand Google le permet. */
-export function recordOf(v: GoogleVolume): EnrichRecord {
+/**
+ * Ce qu'un volume apporte. L'image : la plus grande proposée, en https, agrandie quand Google le permet.
+ * Le résumé : seulement si le volume est dans la langue du livre (`sameLanguage`, v4).
+ */
+export function recordOf(v: GoogleVolume, target: Pick<EnrichTarget, "language"> = {}): EnrichRecord {
   const info = v.volumeInfo ?? {};
   const links = info.imageLinks ?? {};
   let cover = links.large ?? links.medium ?? links.small ?? links.thumbnail ?? links.smallThumbnail ?? null;
@@ -276,7 +300,7 @@ export function recordOf(v: GoogleVolume): EnrichRecord {
     if (/[?&]zoom=1\b/.test(cover) && !links.large && !links.medium) cover = cover.replace(/([?&])zoom=1\b/, "$1zoom=2");
   }
   const year = Number.parseInt(info.publishedDate?.slice(0, 4) ?? "", 10);
-  const overview = plainOverview(info.description ?? "") || null;
+  const overview = sameLanguage(target, v) ? plainOverview(info.description ?? "") || null : null;
   return {
     status: "filled",
     overview: overview && overview.length > 40 ? overview.slice(0, 6000) : null,
@@ -422,14 +446,15 @@ async function search(q: string, lang: string | null): Promise<GoogleVolume[]> {
 /**
  * Un livre, en deux requêtes au plus, **en texte libre** : `<titre> <auteur>` — Google ne répond plus à
  * `intitle:`, `inauthor:` ni `isbn:` (0 résultat, mesuré en production le 28/10/2026). D'abord la variante
- * la plus probable du titre (`titleVariants`) en français, puis la suivante (ou la même sans restriction de
+ * la plus probable du titre (`titleVariants`) dans la langue du livre (`targetLanguage`), puis la suivante (ou la même sans restriction de
  * langue) si rien n'est retenu. L'ISBN du livre sert à reconnaître la bonne édition parmi les réponses.
  */
 async function lookup(target: EnrichTarget): Promise<GoogleVolume | null> {
   const titles = titleVariants(target.name, target.series ?? null);
   const author = (target.authors[0] ?? "").trim();
   const query = (title: string) => `${title} ${author}`.trim();
-  const tries: [string, string | null][] = [[query(titles[0]), "fr"], titles[1] ? [query(titles[1]), "fr"] : [query(titles[0]), null]];
+  const lang = targetLanguage(target);
+  const tries: [string, string | null][] = [[query(titles[0]), lang], titles[1] ? [query(titles[1]), lang] : [query(titles[0]), null]];
   for (let i = 0; i < tries.length; i++) {
     if (i > 0) await pause(GAP_MS);
     const hit = bestCandidate(target, await search(tries[i][0], tries[i][1]), false, titles);
@@ -520,7 +545,7 @@ async function run(why: string): Promise<void> {
       try {
         const hit = await lookup(target);
         if (hit) {
-          save(target.id, signature(target), recordOf(hit), hit.id ?? null);
+          save(target.id, signature(target), recordOf(hit, target), hit.id ?? null);
           stats.filled += 1;
           s.version += 1;
         } else {
