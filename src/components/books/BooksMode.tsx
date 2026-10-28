@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import dynamic from "next/dynamic";
+import { lazyNow } from "./lazyNow";
 import useSWR, { preload } from "swr";
 import { LayoutGrid } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
@@ -25,7 +25,13 @@ export interface BooksMode {
   toggle: { active: boolean; onSelect: () => void; onLeave: (mode: "movies" | "series") => void; onIntent: () => void } | undefined;
 }
 
-const enter = () => cinemaNavigate({ books: true, film: null, serie: null }, "replace");
+// Entrer : le code de l'accueil des livres d'abord (déjà là d'ordinaire, demandé à l'intention), pour
+// qu'il paraisse au rendu même qui suit — sans les 300 ms qu'une suspension coûtait (`lazyNow`).
+const enter = () => {
+  void BooksHomeLazy.preload()
+    .catch(() => {})
+    .finally(() => cinemaNavigate({ books: true, film: null, serie: null }, "replace"));
+};
 const leave = (tab: "movies" | "series") => cinemaNavigate({ books: false, booksAll: null, tab, film: null, serie: null }, "replace");
 
 /**
@@ -38,7 +44,7 @@ let intended = false;
 const intent = () => {
   if (intended) return;
   intended = true;
-  void import("./BooksHome").catch(() => {
+  void BooksHomeLazy.preload().catch(() => {
     intended = false;
   });
   void preload("/api/books/home", fetcher).catch(() => {});
@@ -59,7 +65,7 @@ export function useBooksMode(inAddress: boolean | undefined): BooksMode {
   return { active, toggle: { active, onSelect: enter, onLeave: leave, onIntent: intent } };
 }
 
-const BooksSearchLazy = dynamic(() => import("./BooksSearch").then((m) => m.BooksSearch), { ssr: false });
+const BooksSearchLazy = lazyNow(() => import("./BooksSearch").then((m) => m.BooksSearch));
 
 /**
  * La section « Livres » de la recherche de l'application : rien, et aucun code des livres chargé, tant
@@ -71,7 +77,7 @@ export function BooksSearchEntry({ query }: { query: string }) {
   return <BooksSearchLazy query={query} />;
 }
 
-const BooksDownloadsLazy = dynamic(() => import("./BooksDownloads").then((m) => m.BooksDownloads), { ssr: false });
+const BooksDownloadsLazy = lazyNow(() => import("./BooksDownloads").then((m) => m.BooksDownloads));
 
 // Ce que la page des téléchargements sait des livres sans rien charger d'eux : combien l'appareil en
 // garde (`offlineBooks.ts` l'écrit), et si les livres étaient affichés pour ce compte au dernier passage
@@ -118,8 +124,8 @@ export function BooksDownloadsEntry({ present }: { present: boolean }) {
   return present ? <BooksDownloadsLazy /> : null;
 }
 
-/** L'accueil des livres, chargé seulement dans la catégorie Livres. */
-export const BooksHomeLazy = dynamic(() => import("./BooksHome").then((m) => m.BooksHome), { ssr: false });
+/** L'accueil des livres, chargé seulement dans la catégorie Livres (ou à l'intention de l'ouvrir). */
+export const BooksHomeLazy = lazyNow(() => import("./BooksHome").then((m) => m.BooksHome));
 
 /**
  * « Tous les livres », le rond de « Tous les films / séries » dans la catégorie Livres : il mène à la

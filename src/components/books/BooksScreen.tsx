@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import dynamic from "next/dynamic";
+import { lazyNow } from "./lazyNow";
 import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
 import { ChevronLeft } from "lucide-react";
@@ -30,14 +30,12 @@ import { BookRequestButton, BookRequestsPanel, useBookRequestsEnabled } from "./
  * Le lecteur est un morceau à part, chargé à la première ouverture d'un livre : la grille ne
  * télécharge rien de foliate-js.
  */
-const BookReader = dynamic(() => import("./BookReader").then((m) => m.BookReader), {
-  ssr: false,
-  loading: () => (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-ink">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-    </div>
-  ),
-});
+const BookReader = lazyNow(
+  () => import("./BookReader").then((m) => m.BookReader),
+  <div className="fixed inset-0 z-[300] flex items-center justify-center bg-ink">
+    <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+  </div>
+);
 
 export const BOOKS_KEY = "/api/books";
 const QUERY_DEBOUNCE_MS = 250;
@@ -98,6 +96,7 @@ export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead:
   useEffect(() => {
     if (embedded || !route.book || !route.reading) return;
     void preloadBookFile(route.book);
+    void BookReader.preload().catch(() => {});
     void import("@/lib/books/foliate/view.js").catch(() => {});
   }, [embedded, route.book, route.reading]);
   const { serie, auteur, genre, tri } = filters;

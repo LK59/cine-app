@@ -87,12 +87,13 @@ describe("useBooksMode", () => {
     expect(result.current.active).toBe(false);
     expect(navigate).toHaveBeenCalledWith({ books: false, book: null, reading: false, booksAll: null }, "replace");
   });
-  it("option allumée : entrer et sortir écrivent le mode dans l'adresse, l'onglet seulement en sortant", () => {
+  it("option allumée : entrer et sortir écrivent le mode dans l'adresse, l'onglet seulement en sortant", async () => {
     config.data = { booksEnabled: true };
     const { result } = renderHook(() => useBooksMode(true));
     expect(result.current.active).toBe(true);
+    // Entrer attend le code de l'accueil des livres (sans Suspense, `lazyNow`), puis écrit l'adresse.
     result.current.toggle!.onSelect();
-    expect(navigate).toHaveBeenLastCalledWith({ books: true, film: null, serie: null }, "replace");
+    await vi.waitFor(() => expect(navigate).toHaveBeenLastCalledWith({ books: true, film: null, serie: null }, "replace"));
     result.current.toggle!.onLeave("series");
     expect(navigate).toHaveBeenLastCalledWith({ books: false, booksAll: null, tab: "series", film: null, serie: null }, "replace");
   });

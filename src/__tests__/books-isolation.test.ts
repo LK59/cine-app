@@ -228,10 +228,10 @@ describe("l'accueil ne charge rien des livres", () => {
   it("`BooksMode` ne contient rien des livres : l'accueil des livres n'est chargé que dans leur catégorie", () => {
     const mode = read("src/components/books/BooksMode.tsx");
     const staticImports = [...mode.matchAll(/^import .* from ["']([^"']+)["'];$/gm)].map((m) => m[1]);
-    expect(staticImports.sort()).toEqual(["@/components/TranslationProvider", "@/lib/cinemaRoute", "@/lib/swr", "lucide-react", "next/dynamic", "react", "swr"]);
-    expect(mode).toMatch(/dynamic\(\(\) => import\("\.\/BooksHome"\)/);
-    expect(mode).toMatch(/dynamic\(\(\) => import\("\.\/BooksSearch"\)/);
-    expect(mode).toMatch(/dynamic\(\(\) => import\("\.\/BooksDownloads"\)/);
+    expect(staticImports.sort()).toEqual(["./lazyNow", "@/components/TranslationProvider", "@/lib/cinemaRoute", "@/lib/swr", "lucide-react", "react", "swr"]);
+    expect(mode).toMatch(/lazyNow\(\(\) => import\("\.\/BooksHome"\)/);
+    expect(mode).toMatch(/lazyNow\(\(\) => import\("\.\/BooksSearch"\)/);
+    expect(mode).toMatch(/lazyNow\(\(\) => import\("\.\/BooksDownloads"\)/);
     // Rendu seulement quand la catégorie est affichée, donc l'option allumée.
     for (const file of ["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx"]) {
       expect(read(file), file).toMatch(/\{books\.active && <BooksHomeLazy variant="(desktop|mobile)" \/>\}/);
@@ -253,11 +253,11 @@ describe("l'accueil ne charge rien des livres", () => {
     expect(reader).toMatch(/import\("@\/lib\/books\/foliate\/view\.js"\)/);
     // La page des livres (`BooksScreen`, sous sa propre politique) demande foliate-js d'avance quand elle
     // s'ouvre pour lire (`readerPreload.ts`) — seulement là, jamais dans la grille ni le cinéma.
-    expect(read("src/components/books/BooksScreen.tsx")).toMatch(/if \(embedded \|\| !route\.book \|\| !route\.reading\) return;\s*void preloadBookFile\(route\.book\);\s*void import\("@\/lib\/books\/foliate\/view\.js"\)/);
+    expect(read("src/components/books/BooksScreen.tsx")).toMatch(/if \(embedded \|\| !route\.book \|\| !route\.reading\) return;\s*void preloadBookFile\(route\.book\);\s*void BookReader\.preload\(\)\.catch\(\(\) => \{\}\);\s*void import\("@\/lib\/books\/foliate\/view\.js"\)/);
     for (const file of users.filter((f) => !f.endsWith("BookReader.tsx") && !f.endsWith("BooksScreen.tsx"))) {
       for (const line of read(file).split("\n").filter((l) => /books\/foliate\/view/.test(l))) expect(line, file).toMatch(/^import type /);
     }
-    expect(read("src/components/books/BooksScreen.tsx")).toMatch(/dynamic\(\(\) => import\("\.\/BookReader"\)/);
+    expect(read("src/components/books/BooksScreen.tsx")).toMatch(/lazyNow\(\s*\(\) => import\("\.\/BookReader"\)/);
   });
   it("rien des livres au lancement : ni requête partie avec la page, ni cache gardé sur l'appareil, ni préchauffage du serveur", () => {
     for (const file of ["src/lib/earlyFetch.ts", "src/lib/persistentCache.ts", "src/lib/catalogueWarm.ts", "src/lib/selfWarm.ts"]) {

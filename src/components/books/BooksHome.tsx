@@ -13,7 +13,9 @@ import { BookSheetHost } from "./BookSheet";
 import { cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { useTvGridNav } from "@/lib/useTvGridNav";
 import { openReaderPage } from "@/lib/books/readerOpening";
-import dynamic from "next/dynamic";
+import { lazyNow } from "./lazyNow";
+import type { ComponentProps } from "react";
+import type { BooksScreen as BooksScreenType } from "./BooksScreen";
 import { createPortal } from "react-dom";
 
 /**
@@ -40,11 +42,14 @@ const readFromHome = openReaderPage;
  * besoin d'aucune politique de sécurité à elle — seul le lecteur en a une. Elle chargeait tout le
  * document `/livres` (~0,6 s sur iPhone), et son retour rechargeait tout le cinéma (~0,7 s).
  */
-const BooksBrowse = dynamic(() => import("./BooksScreen").then((m) => m.BooksScreen), { ssr: false });
+const BooksBrowse = lazyNow<NonNullable<ComponentProps<typeof BooksScreenType>>>(() => import("./BooksScreen").then((m) => m.BooksScreen));
 
 /** « Tout voir » d'une rangée : la grille, filtrée comme la rangée. */
 export function openBooksBrowse(filter: string): void {
-  cinemaNavigate({ booksAll: filter || "1", book: null, reading: false });
+  // Le code de la grille d'abord : elle paraît au rendu qui suit l'adresse (`lazyNow`).
+  void BooksBrowse.preload()
+    .catch(() => {})
+    .finally(() => cinemaNavigate({ booksAll: filter || "1", book: null, reading: false }));
 }
 
 export const BOOKS_HOME_KEY = "/api/books/home";

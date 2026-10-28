@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import dynamic from "next/dynamic";
+import { lazyNow } from "./lazyNow";
 import { BookOpen, ChevronLeft, Trash2 } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import {
@@ -20,7 +20,7 @@ import { DrawnCover } from "./BookCover";
 import { useBookRemoval } from "./BookDownload";
 import { flushOutbox, listenForReconnect } from "@/lib/books/bookSync";
 
-const BookReader = dynamic(() => import("./BookReader").then((m) => m.BookReader), { ssr: false });
+const BookReader = lazyNow(() => import("./BookReader").then((m) => m.BookReader));
 
 /**
  * Les livres gardés sur l'appareil, lisibles sans réseau (DECISIONS.md §127) — la page `/livres/hors-ligne`.
