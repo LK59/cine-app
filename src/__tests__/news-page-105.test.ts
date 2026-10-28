@@ -1,4 +1,15 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// Sa propre base : ce fichier vide `news_pages` et `news_state` à chaque test, et la base commune des
+// tests est écrite par d'autres fichiers en même temps — l'image a refusé de se construire sur un
+// « database is locked » ici (28/10/2026).
+await vi.hoisted(async () => {
+  const fsp = await import("node:fs");
+  const os = await import("node:os");
+  const p = await import("node:path");
+  process.env.DATA_DIR = fsp.mkdtempSync(p.join(os.tmpdir(), "laterna-news-105-"));
+});
+
 import { getDb, seedQuietNewsPage, applyFixesLedger } from "@/lib/db";
 import { NEWS_105_CONTENT, NEWS_105_SEED, NEWS_105_VERSION } from "@/lib/news/page105";
 import { FIXES_LEDGER, compareVersions } from "@/lib/news/fixesLedger";
