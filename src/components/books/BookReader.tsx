@@ -365,7 +365,9 @@ export function BookReader({ id, title, onClose, onSaved, offline = false }: { i
       try {
         listenForReconnect();
         // Ce qui attendait d'un livre lu hors ligne part d'abord : la position du serveur en tient compte.
-        if (!offline) await flushOutbox().catch(() => {});
+        // Sur la page hors ligne, sans l'attendre : le réseau peut manquer, la lecture n'attend pas.
+        if (offline) void flushOutbox().catch(() => {});
+        else await flushOutbox().catch(() => {});
         const [progressRes, local, foliate, cfiTools] = await Promise.all([
           offline
             ? { progress: null }
@@ -494,7 +496,8 @@ export function BookReader({ id, title, onClose, onSaved, offline = false }: { i
       }
       const run = searchRun.current;
       setSearchProgress(0);
-      const iter = view.search({ query: query.trim() });
+      // Les trouvailles cernées d'ambre sur la page, comme dans la liste — le rouge de foliate-js criait.
+      const iter = view.search({ query: query.trim(), drawOptions: { color: "rgb(217 160 38)" } });
       searchIter.current = iter;
       void (async () => {
         let found = 0;

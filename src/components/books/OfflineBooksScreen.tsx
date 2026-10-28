@@ -17,6 +17,7 @@ import {
   type OfflineBook,
 } from "@/lib/books/offlineBooks";
 import { DrawnCover } from "./BookCover";
+import { flushOutbox, listenForReconnect } from "@/lib/books/bookSync";
 
 const BookReader = dynamic(() => import("./BookReader").then((m) => m.BookReader), { ssr: false });
 
@@ -55,6 +56,9 @@ export function OfflineBooksScreen() {
       if (!cancelled && live && live !== remembered) await loadOfflineBooks(live);
     });
     warmOfflineBooksPage();
+    // Ce qui a été lu ici sans réseau repart dès qu'il revient — et tout de suite s'il est déjà là.
+    listenForReconnect();
+    void flushOutbox().catch(() => {});
     return () => {
       cancelled = true;
     };

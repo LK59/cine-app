@@ -80,7 +80,7 @@ export interface FoliateView extends HTMLElement {
   next: (distance?: number) => Promise<void>;
   prev: (distance?: number) => Promise<void>;
   /** Cherche dans tout le texte du livre, chapitre par chapitre ; chaque trouvaille est soulignée sur la page. */
-  search: (options: { query: string; index?: number }) => AsyncGenerator<FoliateSearchResult, void, undefined>;
+  search: (options: { query: string; index?: number; drawOptions?: { color?: string } }) => AsyncGenerator<FoliateSearchResult, void, undefined>;
   clearSearch: () => void;
 }
 
