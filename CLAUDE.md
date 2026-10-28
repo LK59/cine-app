@@ -65,6 +65,13 @@ dependencies whose install scripts may run, each at its exact version: npm 12 bl
 by default, and npm 11 only warns. Upgrading `better-sqlite3` or `unrs-resolver` means approving the
 new version too (`npm install-scripts approve <pkg>`), or the next npm installs it without its script.
 
+**Two TypeScripts, on purpose** (since 28/10/2026): `tsc` — `npm run typecheck`, the gate, CI — is
+TypeScript 7 (`@typescript/native`, ~3 s against 28 s), while the package named `typescript` is the
+TypeScript 6 compatibility package (`@typescript/typescript6`), whose API typescript-eslint and
+`next build`'s own type check import. TypeScript 7.0 has no such API, and typescript-eslint refuses
+it outright. The code passes both; `npx tsc6 --noEmit` runs the other one. Once 7.1 ships its API and
+typescript-eslint supports it, the alias goes and `typescript` becomes 7.x.
+
 The suite writes into a throwaway `DATA_DIR` (`vitest.config.ts`): the gate mounts the whole
 repository, `data/` included, and tests calling `logError` used to append Vitest mock errors to
 the production `server.log`. A test fails if that isolation disappears.
