@@ -3,7 +3,7 @@ import { errorBody } from "@/lib/apiErrorCodes";
 import { SESSION_COOKIE } from "@/lib/auth"
 import { verifySessionFull } from "@/lib/session";
 import { pushDb } from "@/lib/db";
-import { isAllowedPushEndpoint, MAX_PUSH_SUBSCRIPTIONS_PER_USER } from "@/lib/pushEndpoint";
+import { isAllowedPushEndpoint, MAX_PUSH_SUBSCRIPTIONS_PER_USER, pushOrigin } from "@/lib/pushEndpoint";
 import { replaceArrivedPushEndpoint } from "@/lib/passage/service";
 import { logError } from "@/lib/logger";
 import { getLocaleFromCookie } from "@/lib/i18n";
@@ -38,7 +38,9 @@ export async function POST(req: NextRequest) {
   // chaque ouverture (23/09/2026). Un abonnement périmé répond 410 au premier envoi, et il est
   // alors supprimé (`shouldRemovePushSubscription`).
   // La langue de l'interface de cet appareil, pour que ses notifications partent dans la sienne.
-  pushDb.upsert(session.u, endpoint, p256dh, auth, getLocaleFromCookie(req.headers.get("cookie") ?? ""));
+  // Et l'adresse du site où il s'est abonné — celle où une notification déclarative rouvrira l'app
+  // (`pushOrigin`).
+  pushDb.upsert(session.u, endpoint, p256dh, auth, getLocaleFromCookie(req.headers.get("cookie") ?? ""), pushOrigin(req.headers.get("origin")));
   // Rien ne bornait le nombre d'abonnements d'un compte, et chaque notification part vers tous.
   pushDb.trimForUser(session.u, MAX_PUSH_SUBSCRIPTIONS_PER_USER, endpoint);
   // Arrivé par le passage d'adresse (DECISIONS.md §119) : l'abonnement que cet appareil avait sur

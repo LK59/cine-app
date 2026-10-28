@@ -19,9 +19,9 @@ vi.mock("@/lib/db", () => ({ pushDb: mockPushDb }));
 const mockReplaceArrived = vi.fn();
 vi.mock("@/lib/passage/service", () => ({ replaceArrivedPushEndpoint: (...a: unknown[]) => mockReplaceArrived(...a) }));
 
-function fakeReq(opts: { cookie?: string; body?: unknown; lang?: string }): NextRequest {
+function fakeReq(opts: { cookie?: string; body?: unknown; lang?: string; origin?: string }): NextRequest {
   return {
-    headers: new Headers(opts.lang ? { cookie: `cine_session=t; cine-lang=${opts.lang}` } : {}),
+    headers: new Headers({ ...(opts.lang ? { cookie: `cine_session=t; cine-lang=${opts.lang}` } : {}), ...(opts.origin ? { origin: opts.origin } : {}) }),
     cookies: { get: (name: string) => (name === "cine_session" && opts.cookie ? { value: opts.cookie } : undefined) },
     json: async () => opts.body ?? null,
   } as unknown as NextRequest;
@@ -54,7 +54,7 @@ describe("POST /api/push/subscribe", () => {
       body: { endpoint: "https://fcm.googleapis.com/fcm/send/ep", keys: { p256dh: "p", auth: "a" } },
     }));
     expect(res.status).toBe(200);
-    expect(mockPushDb.upsert).toHaveBeenCalledWith("louis", "https://fcm.googleapis.com/fcm/send/ep", "p", "a", null);
+    expect(mockPushDb.upsert).toHaveBeenCalledWith("louis", "https://fcm.googleapis.com/fcm/send/ep", "p", "a", null, null);
     // Plafonné à dix appareils, celui-ci toujours gardé.
     expect(mockPushDb.trimForUser).toHaveBeenCalledWith("louis", 10, "https://fcm.googleapis.com/fcm/send/ep");
   });
@@ -88,7 +88,7 @@ describe("POST /api/push/subscribe", () => {
       body: { endpoint: "https://web.push.apple.com/abc", keys: { p256dh: "p", auth: "a" } },
     }));
     expect(mockPushDb.removeByUserEndpointPrefix).not.toHaveBeenCalled();
-    expect(mockPushDb.upsert).toHaveBeenCalledWith("louis", "https://web.push.apple.com/abc", "p", "a", null);
+    expect(mockPushDb.upsert).toHaveBeenCalledWith("louis", "https://web.push.apple.com/abc", "p", "a", null, null);
   });
 });
 
@@ -125,6 +125,19 @@ describe("POST /api/push/subscribe — la langue de l'appareil", () => {
     mockVerifySessionFull.mockResolvedValue({ u: "louis", role: "admin", jti: "j" });
     const { POST } = await import("@/app/api/push/subscribe/route");
     await POST(fakeReq({ cookie: "t", lang: "en", body: { endpoint: "https://web.push.apple.com/x", keys: { p256dh: "p", auth: "a" } } }));
-    expect(mockPushDb.upsert).toHaveBeenCalledWith("louis", "https://web.push.apple.com/x", "p", "a", "en");
+    expect(mockPushDb.upsert).toHaveBeenCalledWith("louis", "https://web.push.apple.com/x", "p", "a", "en", null);
+  });
+});
+
+// 28/10/2026 : le site où l'appareil s'abonne, pour l'adresse complète d'une notification déclarative.
+describe("POST /api/push/subscribe — le site de l'appareil", () => {
+  it("garde l'origine de l'envoi, et rien d'autre qu'une origine HTTPS", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "louis", role: "admin", jti: "j" });
+    const { POST } = await import("@/app/api/push/subscribe/route");
+    const body = { endpoint: "https://web.push.apple.com/x", keys: { p256dh: "p", auth: "a" } };
+    await POST(fakeReq({ cookie: "t", origin: "https://app.laterna.fr", body }));
+    expect(mockPushDb.upsert).toHaveBeenLastCalledWith("louis", "https://web.push.apple.com/x", "p", "a", null, "https://app.laterna.fr");
+    await POST(fakeReq({ cookie: "t", origin: "http://app.laterna.fr", body }));
+    expect(mockPushDb.upsert).toHaveBeenLastCalledWith("louis", "https://web.push.apple.com/x", "p", "a", null, null);
   });
 });

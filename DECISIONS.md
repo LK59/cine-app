@@ -7414,3 +7414,44 @@ c'est un vrai saut, à sa cible exacte.
 image… »).
 
 **Décidé le 28/10/2026.**
+
+## 125. Les notifications, aussi sous la forme que le système affiche lui-même
+
+**Règle.** Un abonnement dont on connaît le site (`origin`, lu dans l'en-tête `Origin` à chaque envoi
+de l'abonnement, `pushOrigin`) reçoit le message sous la forme déclarative de WebKit
+(`declarativePush`, `src/lib/push.ts`) : `web_push: 8030`, une `notification` toute rédigée dont
+`navigate` est l'adresse complète de son site, et `mutable: true`. Les champs d'avant restent au
+premier niveau. Un abonnement dont le site est inconnu reçoit exactement l'ancien message.
+
+**Pourquoi.** Sur iPhone (Safari 18.4 et plus), le système affiche la `notification` lui-même si
+notre service worker ne le fait pas à temps : une notification n'est plus perdue parce que le
+worker n'a pas pu se réveiller, et iOS n'a plus de raison de retirer l'abonnement d'un site dont
+les messages n'aboutissent pas. `mutable` : le worker reçoit toujours l'événement et affiche la
+sienne — icône, badge, vibration, clic, comme avant ; la version du système n'est qu'un filet.
+Chrome, Firefox, un iPhone plus ancien et un worker resté sur l'ancien code lisent les champs
+d'avant. Personne n'est invité à se réabonner : le site s'apprend au renvoi que le panneau Compte
+fait déjà à chaque ouverture.
+
+**Voulu.** Le site de l'abonnement plutôt que celui de la configuration : une même instance répond
+sous deux adresses (§119), et l'app installée d'un appareil est celle de l'adresse où il s'est
+abonné. Une adresse de notification qui sortirait du site ramène à son accueil, comme le clic du
+worker (revue du 20/10/2026).
+
+**Tests.** `push-declarative.test.ts`, `push-subscribe-route.test.ts`.
+
+**Décidé le 28/10/2026.**
+
+## 126. Deux mesures à l'ouverture, qui ne décident de rien
+
+**Ce qui est mesuré.** Sur la ligne `opening` : `swMs`, ce que le service worker a coûté à la
+première requête du flux (`fetchStart − workerStart`, `streamRequestTiming.ts`), ou `sw: "hors"` si
+elle n'en a touché aucun. Dans la trace de l'ouverture : « capacités : lisible/illisible,
+fluide/pas fluide, économe/pas économe », la réponse de `mediaCapabilities.decodingInfo` pour la
+taille, le débit et le HDR du fichier (`decodingInfo.ts`, posée à l'attachement de MediaSource).
+
+**Pourquoi.** Deux pistes à juger sur pièces avant d'y toucher : déclarer au worker les adresses
+qu'il ne doit jamais voir (« static routing », Safari 27) ne vaut que si son réveil coûte vraiment
+à l'ouverture ; proposer la version allégée d'emblée ne vaut que si « pas fluide » prédit les
+attentes réellement mesurées.
+
+**Décidé le 28/10/2026.**

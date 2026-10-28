@@ -812,6 +812,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.6.0",
+    page: "10.5",
+    group: { fr: "Notifications", en: "Notifications", es: "Notificaciones", de: "Benachrichtigungen" },
+    items: [
+      {
+        fr: "Sur iPhone et iPad, les notifications arrivent de façon plus sûre, même quand l'app n'a pas pu se réveiller à temps.",
+        en: "On iPhone and iPad, notifications arrive more reliably, even when the app could not wake up in time.",
+        es: "En iPhone y iPad, las notificaciones llegan de forma más fiable, incluso cuando la app no ha podido activarse a tiempo.",
+        de: "Auf iPhone und iPad kommen Benachrichtigungen zuverlässiger an, auch wenn die App nicht rechtzeitig aktiv werden konnte.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

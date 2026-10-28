@@ -177,6 +177,10 @@ function migrate(db: Database.Database): void {
   // La langue de l'interface de l'appareil abonné (25/10/2026) : une notification part dans la langue
   // de qui la reçoit. Nulle pour un abonnement d'avant, relue au prochain envoi de l'abonnement.
   try { db.exec("ALTER TABLE push_subscriptions ADD COLUMN lang TEXT"); } catch { /* already exists */ }
+  // L'adresse du site où l'appareil s'est abonné (28/10/2026) : une notification déclarative dit où
+  // ouvrir l'app par une adresse complète, et deux adresses servent la même instance (§119). Nulle
+  // pour un abonnement d'avant, relue au prochain envoi de l'abonnement.
+  try { db.exec("ALTER TABLE push_subscriptions ADD COLUMN origin TEXT"); } catch { /* already exists */ }
   try { db.exec("ALTER TABLE maintenance ADD COLUMN expires_at INTEGER"); } catch { /* already exists */ }
   // « iPhone · Safari » — de quoi reconnaître une session dans le panneau Compte (voir `deviceLabel`).
   try { db.exec("ALTER TABLE sessions ADD COLUMN device TEXT"); } catch { /* already exists */ }
@@ -1143,6 +1147,8 @@ export interface PushSubscription {
   createdAt: number;
   /** La langue de l'interface de l'appareil à l'abonnement (`cine-lang`) ; nulle si inconnue. */
   lang: string | null;
+  /** L'adresse du site où l'appareil s'est abonné (`https://…`) ; nulle si inconnue. */
+  origin: string | null;
 }
 
 /**
@@ -1151,17 +1157,18 @@ export interface PushSubscription {
  * notifications aux administrateurs ne partaient vers personne, les catégories coupées par un
  * compte partaient quand même, et le journal ne nommait aucun destinataire (29/09/2026).
  */
-const PUSH_COLUMNS = "id, user_id AS userId, endpoint, p256dh, auth, created_at AS createdAt, lang";
+const PUSH_COLUMNS = "id, user_id AS userId, endpoint, p256dh, auth, created_at AS createdAt, lang, origin";
 
 export const pushDb = {
-  upsert(userId: string, endpoint: string, p256dh: string, auth: string, lang: string | null = null): void {
+  upsert(userId: string, endpoint: string, p256dh: string, auth: string, lang: string | null = null, origin: string | null = null): void {
     const db = getDb();
     db.prepare(`
-      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at, lang)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at, lang, origin)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth,
-        lang = COALESCE(excluded.lang, push_subscriptions.lang)
-    `).run(userId, endpoint, p256dh, auth, Date.now(), lang);
+        lang = COALESCE(excluded.lang, push_subscriptions.lang),
+        origin = COALESCE(excluded.origin, push_subscriptions.origin)
+    `).run(userId, endpoint, p256dh, auth, Date.now(), lang, origin);
   },
 
   remove(endpoint: string): void {

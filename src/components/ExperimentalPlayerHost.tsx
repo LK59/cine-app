@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExtern
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { playerBootstrapOptions } from "@/lib/swr";
+import { watchFirstStreamRequest, type StreamRequestWatch } from "@/lib/streamRequestTiming";
 import { advanceTo, closePlayerSession } from "@/components/player/playerClose";
 import { directInfoForOpening } from "@/lib/directInfo";
 import { labSampleByFile, labSampleInfo } from "@/lib/labSamples";
@@ -1378,6 +1379,14 @@ export function ExperimentalPlayerHost({
   // chaque montage, comptée depuis lui, marquée `reopened`.
   const [mountedAt] = useState(() => Date.now());
   const openingFrom = introEligible ? introStartedAt : mountedAt;
+  // Ce que le service worker a coûté à la première requête du flux (`swMs`) — voir `streamRequestTiming.ts`.
+  const [mountedPerf] = useState(() => (typeof performance !== "undefined" ? performance.now() : 0));
+  const streamTimingRef = useRef<StreamRequestWatch | null>(null);
+  useEffect(() => {
+    const watch = watchFirstStreamRequest(mountedPerf);
+    streamTimingRef.current = watch;
+    return () => watch.stop();
+  }, [mountedPerf]);
   useEffect(() => {
     if (!introPlaying) return;
     const movedAt = Date.now();
@@ -1394,6 +1403,7 @@ export function ExperimentalPlayerHost({
         // Depuis l'appui, comme `firstMoveMs` : 0 quand la fiche l'avait déjà préchargée.
         ...(infoAtRef.current !== null ? { infoMs: Math.max(0, infoAtRef.current - openingFrom) } : {}),
         ...(introEligible ? {} : { reopened: true }),
+        ...(streamTimingRef.current?.fields() ?? {}),
         // Ce que la lenteur a fait paraître pendant cette ouverture, et les choix faits (§78).
         ...slowFields(),
         steps: traceRecent(Date.now() - openingFrom + 300).slice(-60).join(" | "),

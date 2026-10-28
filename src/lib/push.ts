@@ -24,6 +24,44 @@ export interface PushPayload {
  */
 export type LocalizedPush = (locale: Locale) => PushPayload;
 
+/**
+ * Le même message, lisible aussi par le système (28/10/2026) — la « notification déclarative » de
+ * WebKit (Safari 18.4 et plus, iOS et Mac) : `web_push: 8030` et une `notification` toute rédigée,
+ * qu'iOS affiche lui-même si notre service worker ne le fait pas à temps. Sans elle, un worker qui
+ * échoue à réveiller ou à répondre perd la notification, et iOS peut retirer l'abonnement d'un site
+ * dont les messages n'aboutissent pas.
+ *
+ * `mutable` : le service worker reçoit toujours l'événement et affiche la sienne — icône, badge,
+ * vibration, clic, exactement comme avant ; la version du système n'est qu'un filet. Les champs
+ * d'avant restent au premier niveau : un navigateur qui ne connaît pas la forme déclarative (Chrome,
+ * Firefox, un iPhone plus ancien) et un worker resté sur l'ancien code les lisent comme toujours.
+ *
+ * `navigate` doit être une adresse complète : celle du site où l'appareil s'est abonné
+ * (`pushOrigin`). Une adresse qui en sortirait ramène à son accueil — comme le clic du worker.
+ */
+export function declarativePush(message: PushPayload, origin: string, lang: string | null) {
+  let navigate = `${origin}/`;
+  try {
+    const target = new URL(message.url ?? "/", origin);
+    if (target.origin === origin) navigate = target.href;
+  } catch {
+    /* l'accueil */
+  }
+  return {
+    ...message,
+    web_push: 8030,
+    mutable: true,
+    notification: {
+      title: message.title,
+      body: message.body,
+      navigate,
+      ...(message.tag ? { tag: message.tag } : {}),
+      ...(lang ? { lang } : {}),
+      silent: false,
+    },
+  };
+}
+
 function payloadFor(payload: PushPayload | LocalizedPush, lang: string | null): PushPayload {
   if (typeof payload !== "function") return payload;
   return payload(LOCALES.includes(lang as Locale) ? (lang as Locale) : "fr");
@@ -51,9 +89,10 @@ async function dispatchPush(subs: ReturnType<typeof pushDb.getAll>, input: PushP
           return;
         }
         const own = payloadFor(input, sub.lang);
+        const message = { ...own, icon: own.icon ?? "/icon-192.png", badge: "/badge-96.png" };
         await sendWebPush(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          { ...own, icon: own.icon ?? "/icon-192.png", badge: "/badge-96.png" }
+          sub.origin ? declarativePush(message, sub.origin, sub.lang) : message
         );
         tally.sent += 1;
       } catch (err: unknown) {

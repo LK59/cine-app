@@ -36,3 +36,24 @@ export function isAllowedPushEndpoint(endpoint: unknown): endpoint is string {
 
 /** Au plus tant d'appareils abonnés par compte ; au-delà, les plus anciens sont retirés. */
 export const MAX_PUSH_SUBSCRIPTIONS_PER_USER = 10;
+
+/**
+ * L'adresse du site où l'appareil s'abonne, lue dans l'en-tête `Origin` de son envoi — ou null.
+ *
+ * Une notification déclarative (`declarativePush`) dit où ouvrir l'app par une adresse complète, et
+ * une même instance peut répondre sous deux adresses (§119) : celle où l'appareil s'est abonné est
+ * celle de son app installée. Seulement une origine nue en HTTPS (HTTP en local) : rien d'autre ne
+ * finira dans une notification.
+ */
+export function pushOrigin(header: string | null): string | null {
+  if (!header || header.length > 200) return null;
+  try {
+    const url = new URL(header);
+    const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.protocol !== "https:" && !(local && url.protocol === "http:")) return null;
+    if (url.origin !== header.replace(/\/$/, "")) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}

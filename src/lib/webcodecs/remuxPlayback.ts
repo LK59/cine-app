@@ -5,6 +5,7 @@
 // public surface of a second player — a WebCodecs engine painting a canvas — so the component
 // could branch once between the two; that engine was removed on 2026-09-24 (docs/lecteur-canvas.md).
 
+import { probeDecodingInfo } from "./decodingInfo";
 import type { DialogueMode } from "./dialogueEnhance";
 import { displayIsHdr, hdrLightCap } from "./hdrDisplay";
 import { NO_INDEX_REACH_SECONDS, reachable } from "./seekArrival";
@@ -421,6 +422,8 @@ export class RemuxPlayback {
     trace(`attachement de MediaSource — ${plan.videoMimeType} + ${plan.audioMimeType ?? "aucun audio"}`);
     // Le débit que ce fichier demande, et l'élément dont on compte les images — voir playbackDiagnosis.ts.
     diagMedia(this.source.size, plan.durationSeconds, this.video);
+    // Mesuré seulement : ce que le navigateur prédit (fluide, économe) entre dans la trace de l'ouverture.
+    probeDecodingInfo(plan.videoMimeType, this.videoTrack, this.source.size, plan.durationSeconds);
     this.mse = await MseSource.attach(
       this.video,
       this.remuxer,
