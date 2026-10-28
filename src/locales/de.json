@@ -3765,6 +3765,7 @@
     "empty": "Noch keine Bücher.",
     "continue": "Weiterlesen",
     "removeFromContinue": "Aus „Weiterlesen“ entfernen",
+    "downloadEpub": "EPUB-Datei",
     "seriesTome": "{series} · Band {n}",
     "percentRead": "{pct} % gelesen",
     "others": "Weitere Bücher",

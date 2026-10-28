@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import useSWR, { useSWRConfig } from "swr";
-import { BookOpen, Check, X } from "lucide-react";
+import { BookOpen, Check, FileDown, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
 import { arrivedByBack, cinemaClose, useCinemaRoute } from "@/lib/cinemaRoute";
@@ -18,8 +18,11 @@ import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookDetail, BookSummary } from "@/lib/books/types";
 import { BookCover, coverUrl } from "./BookCover";
 import { BookDownloadButton } from "./BookDownload";
+import { isInstalledApp } from "@/lib/iosInstall";
 import { useCoverWash } from "./coverWash";
 import { preloadBookFile, saveData } from "@/lib/books/readerPreload";
+
+const noopSubscribe = () => () => {};
 
 /**
  * La fiche d'un livre (DECISIONS.md §127), dans le cycle de vie des fiches de l'application
@@ -89,6 +92,8 @@ function BookSheet({
   const { data: detail, error, mutate } = useSWR<BookDetail>(`/api/books/${id}`, fetcher);
   const { mutate: mutateKey } = useSWRConfig();
   const [removing, setRemoving] = useState(false);
+  // Lu après le premier rendu : le serveur ne sait pas si la page est l'app installée.
+  const installed = useSyncExternalStore(noopSubscribe, isInstalledApp, () => true);
   const book: BookSummary | null = detail ?? summary;
   const containerRef = useRef<HTMLDivElement>(null);
   const coverRef = useRef<HTMLDivElement>(null);
@@ -214,6 +219,18 @@ function BookSheet({
         )}
         {/* Le livre gardé sur l'appareil, pour le lire sans réseau. */}
         {book && <BookDownloadButton book={book} />}
+        {/* Le fichier d'origine, pour une liseuse (câble, Calibre…) : dans un navigateur seulement — l'app
+            installée, sur iPhone surtout, n'a pas de gestionnaire de téléchargements où le retrouver. */}
+        {book && !installed && (
+          <a
+            {...NOT_THE_HANDLE}
+            href={`/api/books/${id}/file?telecharger=1`}
+            download
+            className="flex items-center gap-1.5 text-sm text-subtle transition-colors hover:text-white"
+          >
+            <FileDown size={15} aria-hidden /> {t("books.downloadEpub")}
+          </a>
+        )}
       </div>
       {error && !detail && <p className="mt-8 text-sm text-subtle">{t("books.detailError")}</p>}
       {overview && (
