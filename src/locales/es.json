@@ -3830,6 +3830,11 @@
       "larger": "Texto más grande"
     },
     "browseAll": "Todos los libros",
-    "seeAll": "Ver todo"
+    "seeAll": "Ver todo",
+    "recent": "Añadidos recientemente",
+    "moreSeries": "{n} series más en Todos los libros",
+    "searchPlaceholder": "Título, serie, autor",
+    "clearFilter": "Quitar el filtro",
+    "noMatch": "Ningún libro coincide."
   }
 }

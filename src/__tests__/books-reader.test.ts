@@ -110,6 +110,7 @@ const book = (over: Partial<BookSummary>): BookSummary => ({
   index: null,
   year: null,
   authors: [],
+  addedAt: null,
   played: false,
   progress: null,
   ...over,

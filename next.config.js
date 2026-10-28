@@ -175,7 +175,7 @@ const nextConfig = {
         // script venu d'un `blob:`. Les scripts du livre ne s'exécutent de toute façon pas : le cadre n'a
         // pas `allow-scripts` (`src/lib/books/foliate/README.md`), et le contenu est nettoyé avant
         // (`src/lib/books/sanitize.ts`). `'unsafe-inline'` reste pour les scripts de Next, comme ailleurs.
-        // On n'y arrive que par un vrai chargement de page (`BooksNavButton`, un lien ordinaire) : une
+        // On n'y arrive que par un vrai chargement de page (liens ordinaires de `BooksMode` et `BooksHome`) : une
         // navigation côté client garderait le document de l'accueil, et sa politique.
         source: "/livres",
         headers: [

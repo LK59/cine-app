@@ -25,6 +25,8 @@ export interface BookSummary {
   index: number | null;
   year: number | null;
   authors: string[];
+  /** Ajouté à la bibliothèque (ms), pour « Derniers ajouts » ; `null` : inconnu. */
+  addedAt: number | null;
   /** Lu selon Jellyfin, pour ce compte. */
   played: boolean;
   progress: BookProgress | null;

@@ -19,7 +19,17 @@ import type { BookDetail, BookSummary } from "@/lib/books/types";
  * lancement de l'application, et une liste gardée ici devrait suivre les droits de chaque compte.
  */
 
-const FIELDS = "Tags,Genres,People,Overview,SeriesName,ProductionYear,ImageTags";
+const FIELDS = "Tags,Genres,People,Overview,SeriesName,ProductionYear,ImageTags,DateCreated";
+/**
+ * La grille n'a besoin ni des résumés ni des genres — le gros de la réponse, de loin : ils viennent avec
+ * la fiche (`bookFor`). Une bibliothèque de plusieurs milliers d'EPUB ne voyage ainsi qu'en titres,
+ * séries, auteurs et empreintes de couverture.
+ */
+const LIST_FIELDS = "Tags,People,SeriesName,ProductionYear,ImageTags,DateCreated";
+/** Les livres sont demandés par pages : une réponse par millier, jamais toute la bibliothèque d'un bloc. */
+export const LIST_PAGE = 1000;
+/** Une borne de sécurité : au-delà, la grille s'arrête plutôt que de demander sans fin. */
+const LIST_MAX = 50_000;
 const TIMEOUT_MS = 10_000;
 
 interface JellyfinBookItem {
@@ -34,6 +44,7 @@ interface JellyfinBookItem {
   Genres?: string[] | null;
   People?: { Name?: string; Type?: string }[] | null;
   Overview?: string | null;
+  DateCreated?: string | null;
   UserData?: { Played?: boolean } | null;
 }
 
@@ -86,6 +97,7 @@ function summaryOf(item: JellyfinBookItem): BookSummary {
     year: typeof item.ProductionYear === "number" ? item.ProductionYear : null,
     authors: (item.People ?? []).filter((p) => p.Type === "Author" && p.Name).map((p) => p.Name as string),
     played: item.UserData?.Played === true,
+    addedAt: item.DateCreated ? Date.parse(item.DateCreated) || null : null,
     progress: null,
   };
 }
@@ -95,8 +107,10 @@ function summaryOf(item: JellyfinBookItem): BookSummary {
  * après les autres), puis par nom — deux livres au même tome (un hors-série numéroté comme son voisin)
  * restent dans un ordre stable.
  */
+// Une seule fois : un tri de plusieurs milliers de livres en ferait sinon une par comparaison.
+const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+
 export function compareBooks(a: BookSummary, b: BookSummary): number {
-  const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
   if (a.seriesName !== b.seriesName) {
     if (a.seriesName === null) return 1;
     if (b.seriesName === null) return -1;
@@ -113,18 +127,28 @@ export function compareBooks(a: BookSummary, b: BookSummary): number {
 
 /** Les livres que ce compte voit, dans l'ordre de la grille. */
 export async function listBooks(caller: BookCaller): Promise<BookSummary[]> {
-  const params = new URLSearchParams({
-    IncludeItemTypes: "Book",
-    Recursive: "true",
-    Fields: FIELDS,
-    EnableUserData: "true",
-    SortBy: "SortName",
-  });
-  const { status, body } = await getJson<{ Items?: JellyfinBookItem[] }>(`${itemsBase(caller)}?${params}`);
-  if (!body) throw new Error(`Jellyfin a répondu ${status}`);
+  const items: JellyfinBookItem[] = [];
+  for (let start = 0; start < LIST_MAX; start += LIST_PAGE) {
+    const params = new URLSearchParams({
+      IncludeItemTypes: "Book",
+      Recursive: "true",
+      Fields: LIST_FIELDS,
+      EnableUserData: "true",
+      EnableImageTypes: "Primary",
+      SortBy: "SortName",
+      StartIndex: String(start),
+      Limit: String(LIST_PAGE),
+    });
+    const { status, body } = await getJson<{ Items?: JellyfinBookItem[]; TotalRecordCount?: number }>(`${itemsBase(caller)}?${params}`);
+    if (!body) throw new Error(`Jellyfin a répondu ${status}`);
+    const page = body.Items ?? [];
+    items.push(...page);
+    const total = typeof body.TotalRecordCount === "number" ? body.TotalRecordCount : 0;
+    if (page.length < LIST_PAGE || items.length >= total) break;
+  }
   const blocked = caller.jfId ? await blockedTagsOf(caller.jfId) : [];
   return withoutFolderSeries(
-    (body.Items ?? []).filter((item) => item.Type === "Book" && typeof item.Id === "string" && !carriesBlockedTag(item.Tags, blocked)).map(summaryOf)
+    items.filter((item) => item.Type === "Book" && typeof item.Id === "string" && !carriesBlockedTag(item.Tags, blocked)).map(summaryOf)
   ).sort(compareBooks);
 }
 

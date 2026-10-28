@@ -7492,6 +7492,15 @@ réponse est `private`. Une session de lien de partage (§112) n'atteint rien : 
 une seconde fois. Seule écriture ouverte aux comptes : `POST /api/books/{id}/progress`, sa propre
 position.
 
+**À l'échelle de plusieurs milliers d'EPUB.** La liste est demandée à Jellyfin par pages de mille
+(`LIST_PAGE`), sans résumés ni genres — ils viennent avec la fiche. L'accueil reste borné (`homeRows`) :
+« Continuer la lecture », « Derniers ajouts » quand la bibliothèque dépasse quarante livres, au plus
+huit rangées de séries (celles où l'on lit, puis les plus récemment enrichies) et « Autres livres »,
+vingt couvertures chacune, avec leur « Tout voir » (`/livres?serie=…`). La grille complète se
+cherche (titre, série, auteur, sans accents ni casse, `filterBooks`) et se dessine par morceaux de 90
+(`BooksGrid`, un repère à l'approche du bas en ajoute 90) ; les couvertures se chargent à l'approche,
+à 500 px de large. `books-scale.test.tsx` le prouve sur 5 000 livres.
+
 **La position.** Table `book_progress` (compte de l'application, livre, CFI EPUB, fraction, date,
 fin) : Jellyfin ne sait garder que des durées. Envoyée au fil de la lecture (regroupée, 1,5 s), à la
 fermeture et à `pagehide` (`sendBeacon`). Le livre fini la première fois, il est noté « lu » chez

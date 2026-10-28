@@ -3830,6 +3830,11 @@
       "larger": "Larger text"
     },
     "browseAll": "All books",
-    "seeAll": "See all"
+    "seeAll": "See all",
+    "recent": "Recently added",
+    "moreSeries": "{n} more series in All books",
+    "searchPlaceholder": "Title, series, author",
+    "clearFilter": "Clear filter",
+    "noMatch": "No book matches."
   }
 }

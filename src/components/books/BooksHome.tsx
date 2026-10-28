@@ -4,15 +4,16 @@ import { useMemo } from "react";
 import useSWR from "swr";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
-import { continueReading, groupBooks } from "@/lib/books/grouping";
+import { NO_SERIES, homeRows } from "@/lib/books/grouping";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
 import { BookCover } from "./BookCover";
 
 /**
  * L'accueil de la catégorie Livres (option, DECISIONS.md §127), à la place des rangées de films ou
- * de séries : « Continuer la lecture », puis une rangée par série dans l'ordre des tomes, puis les
- * autres livres. Pas de bannière : une couverture n'est pas une image de fond, et le carrousel des
+ * de séries : « Continuer la lecture », « Derniers ajouts » dans une grande bibliothèque, puis des
+ * rangées de séries dans l'ordre des tomes et « Autres livres » — chacune bornée (`homeRows`) avec son
+ * « Tout voir » vers la grille filtrée (`/livres?serie=…`). Pas de bannière : une couverture n'est pas une image de fond, et le carrousel des
  * films et séries n'est pas touché.
  *
  * Un livre touché ouvre sa fiche sur la page des livres (`/livres`), par un vrai chargement : le
@@ -28,10 +29,12 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
   const t = useT();
   const { data, error, isLoading, mutate } = useSWR<{ books: BookSummary[] }>("/api/books", fetcher, { revalidateOnFocus: true });
   const books = useMemo(() => data?.books ?? [], [data]);
-  const groups = useMemo(() => groupBooks(books), [books]);
-  const resume = useMemo(() => continueReading(books), [books]);
+  // Borné quelle que soit la bibliothèque : quelques rangées de vingt livres, le reste à un « Tout voir ».
+  const { resume, recent, rows, hiddenGroups } = useMemo(() => homeRows(books), [books]);
   const desktop = variant === "desktop";
   const pad = desktop ? "px-8 lg:px-12" : "px-4";
+  // L'accroche des rangées tient compte de la marge : sans elle, la première carte se collait au bord.
+  const snapPad = desktop ? "scroll-px-8 lg:scroll-px-12" : "scroll-px-4";
   const card = desktop ? "w-36 lg:w-40" : "w-28";
 
   return (
@@ -64,7 +67,7 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
       {resume.length > 0 && (
         <section className="mb-8">
           <h2 className={`${pad} mb-3 font-display text-lg font-semibold`}>{t("books.continue")}</h2>
-          <div className={`${pad} scrollbar-none flex snap-x gap-4 overflow-x-auto pb-2`}>
+          <div className={`${pad} ${snapPad} scrollbar-none flex snap-x gap-4 overflow-x-auto pb-2`}>
             {resume.map((book) => {
               const pct = Math.round((book.progress?.fraction ?? 0) * 100);
               return (
@@ -96,36 +99,81 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
         </section>
       )}
 
-      {groups.map((group) => (
-        <section key={group.key} className="mb-8">
-          <div className={`${pad} mb-3 flex items-baseline gap-3`}>
-            <h2 className="font-display text-lg font-semibold">{group.series ?? t("books.others")}</h2>
-            {group.series && <span className="text-sm text-subtle">{group.books.length === 1 ? t("books.volumesOne") : t("books.volumes", { n: group.books.length })}</span>}
-            <a href="/livres" className="ml-auto text-sm text-subtle transition-colors hover:text-white">
-              {t("books.seeAll")}
-            </a>
-          </div>
-          <div className={`${pad} scrollbar-none flex snap-x gap-3 overflow-x-auto pb-2 ${desktop ? "gap-4" : ""}`}>
-            {group.books.map((book) => {
-              const pct = book.progress && !book.progress.finished ? Math.round(book.progress.fraction * 100) : 0;
-              return (
-                <button key={book.id} type="button" onClick={() => openBookFromHome(book.id)} className={`group ${card} shrink-0 snap-start text-left`}>
-                  <div className="relative overflow-hidden rounded-lg shadow-lg shadow-black/40 transition-transform duration-200 group-hover:scale-[1.03] group-active:scale-[0.96]">
-                    <BookCover book={book} />
-                    {pct > 0 && (
-                      <div className="absolute inset-x-0 bottom-0 h-1 bg-black/50">
-                        <div className="h-full bg-white" style={{ width: `${pct}%` }} />
-                      </div>
-                    )}
-                  </div>
-                  <p className="mt-2 line-clamp-2 text-sm font-medium leading-snug">{displayTitle(book)}</p>
-                  {book.index !== null && book.seriesName && <p className="mt-0.5 text-xs text-subtle">{t("books.tome", { n: book.index })}</p>}
-                </button>
-              );
-            })}
-          </div>
-        </section>
+      {recent.length > 0 && <Row title={t("books.recent")} href="/livres" books={recent} pad={pad} snapPad={snapPad} card={card} desktop={desktop} />}
+
+      {rows.map((group) => (
+        <Row
+          key={group.key}
+          title={group.series ?? t("books.others")}
+          count={group.series ? (group.total === 1 ? t("books.volumesOne") : t("books.volumes", { n: group.total })) : undefined}
+          href={`/livres?serie=${encodeURIComponent(group.series ?? NO_SERIES)}`}
+          books={group.books}
+          pad={pad}
+          snapPad={snapPad}
+          card={card}
+          desktop={desktop}
+        />
       ))}
+      {hiddenGroups > 0 && (
+        <div className={`${pad} pb-4`}>
+          <a href="/livres" className="inline-flex h-10 items-center rounded-full bg-white/10 px-5 text-sm font-semibold text-white transition-colors hover:bg-white/15">
+            {t("books.moreSeries", { n: hiddenGroups })}
+          </a>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Une rangée de l'accueil : son titre, son « Tout voir », et au plus vingt couvertures. */
+function Row({
+  title,
+  count,
+  href,
+  books,
+  pad,
+  snapPad,
+  card,
+  desktop,
+}: {
+  title: string;
+  count?: string;
+  href: string;
+  books: BookSummary[];
+  pad: string;
+  snapPad: string;
+  card: string;
+  desktop: boolean;
+}) {
+  const t = useT();
+  return (
+    <section className="mb-8">
+      <div className={`${pad} mb-3 flex items-baseline gap-3`}>
+        <h2 className="truncate font-display text-lg font-semibold">{title}</h2>
+        {count && <span className="shrink-0 text-sm text-subtle">{count}</span>}
+        <a href={href} className="ml-auto shrink-0 text-sm text-subtle transition-colors hover:text-white">
+          {t("books.seeAll")}
+        </a>
+      </div>
+      <div className={`${pad} ${snapPad} scrollbar-none flex snap-x overflow-x-auto pb-2 ${desktop ? "gap-4" : "gap-3"}`}>
+        {books.map((book) => {
+          const pct = book.progress && !book.progress.finished ? Math.round(book.progress.fraction * 100) : 0;
+          return (
+            <button key={book.id} type="button" onClick={() => openBookFromHome(book.id)} className={`group ${card} shrink-0 snap-start text-left`}>
+              <div className="relative overflow-hidden rounded-lg shadow-lg shadow-black/40 transition-transform duration-200 group-hover:scale-[1.03] group-active:scale-[0.96]">
+                <BookCover book={book} />
+                {pct > 0 && (
+                  <div className="absolute inset-x-0 bottom-0 h-1 bg-black/50">
+                    <div className="h-full bg-white" style={{ width: `${pct}%` }} />
+                  </div>
+                )}
+              </div>
+              <p className="mt-2 line-clamp-2 text-sm font-medium leading-snug">{displayTitle(book)}</p>
+              {book.index !== null && book.seriesName && <p className="mt-0.5 text-xs text-subtle">{t("books.tome", { n: book.index })}</p>}
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
