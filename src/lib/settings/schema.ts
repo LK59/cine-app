@@ -100,6 +100,7 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "OFFLINE_DOWNLOADS_FOR_EVERYONE", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   // La place que les versions préparées peuvent prendre sur le serveur, en Go (20/10/2026) : au-delà,
   // les plus anciennes que tous les appareils ont entièrement récupérées s'effacent (`jobs.ts`).
+  { key: "OFFLINE_SERVER_QUOTA_GB", group: "playback", kind: "number", need: "optional", fallback: "50", inApp: true, placeholder: "50" },
   // Les livres (option, DECISIONS.md §127) : une grille des EPUB de Jellyfin et un lecteur dans
   // l'application. Coupée par défaut — une installation qui n'a pas de livres n'en voit rien, ni
   // entrée, ni page, ni route : tout répond « introuvable ».
@@ -107,7 +108,6 @@ export const SETTINGS: readonly SettingDef[] = [
   // « Demander un livre » (§127) : un ticket à l'administrateur, qui ajoute le livre à la main.
   // Coupée par défaut ; sans effet tant que `BOOKS_ENABLED` est coupée.
   { key: "BOOKS_REQUESTS_ENABLED", group: "playback", kind: "boolean", need: "optional", fallback: "false", inApp: true },
-  { key: "OFFLINE_SERVER_QUOTA_GB", group: "playback", kind: "number", need: "optional", fallback: "50", inApp: true, placeholder: "50" },
   { key: "PLAYER_AUTO_FRAME", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   // L'application que le Chromecast ouvre (DECISIONS.md §64) : vide, le récepteur public de Google.
   // Pas un secret — l'identifiant d'un récepteur qu'une installation a enregistré elle-même.

@@ -12,6 +12,7 @@ import { NEWS_864_CONTENT, NEWS_864_SEED, NEWS_864_VERSION } from "@/lib/news/pa
 import { NEWS_90_CONTENT, NEWS_90_PUBLISH, NEWS_90_SEED, NEWS_90_VERSION } from "@/lib/news/page90";
 import { NEWS_91_CONTENT, NEWS_91_SEED, NEWS_91_VERSION } from "@/lib/news/page91";
 import { laternaNewsPage } from "@/lib/news/pageLaterna";
+import { booksNewsPage } from "@/lib/news/page107";
 import { NEWS_105_CONTENT, NEWS_105_SEED, NEWS_105_VERSION } from "@/lib/news/page105";
 import { config } from "@/lib/config";
 import { FIXES_LEDGER, ledgerMarker, ledgerTarget, withLedgerEntry, type FixLedgerEntry } from "@/lib/news/fixesLedger";
@@ -768,6 +769,10 @@ function migrate(db: Database.Database): void {
   // `?.` : une configuration partielle (doublures de test) ne doit pas faire échouer `migrate()`.
   const laterna = laternaNewsPage(config.news?.laternaAddress);
   if (laterna) seedNewsPage(db, laterna.seed, laterna.version, laterna.content);
+  // Les livres et la 10.6 (28/10/2026, §127) : la même seule installation, en brouillon — Louis la
+  // publie depuis Activité → Nouveautés le soir où il allume l'option.
+  const books = booksNewsPage(config.news?.laternaAddress);
+  if (books) seedNewsPage(db, books.seed, books.version, books.content, Date.now(), "draft");
   // Les versions 10.1 à 10.5 (27/10/2026) : publiée partout, consultable dans Compte → Nouveautés, sans
   // ouvrir la fenêtre (Louis : mettre à jour, ne pas republier). Avant le registre, qui la complète.
   seedQuietNewsPage(db, NEWS_105_SEED, NEWS_105_VERSION, NEWS_105_CONTENT);
