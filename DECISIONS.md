@@ -7644,6 +7644,34 @@ Jellyfin pour ce compte (`markPlayed`) ; un échec de cet appel ne perd pas la p
   d'un autre compte. L'enlever — ou mettre le lecteur dans le document du cinéma, ce qui demanderait
   d'ouvrir sa politique de sécurité aux cadres `blob:` — est un choix à faire, pas un correctif.
 
+**Google Books, en option (`googleBooks.ts`).** `BOOKS_GOOGLE_ENRICH` (coupée par défaut) et
+`GOOGLE_BOOKS_API_KEY` (un secret, comme la clé TMDB : jamais renvoyé au navigateur), dans la même carte
+que les livres, ou dans `.env`. Rien ne part sans les livres allumés, l'option allumée et une clé ;
+l'allumer depuis la Configuration lance la file sans redémarrage. Elle ne comble que **ce qui manque** —
+le résumé, la couverture (ni Jellyfin ni l'EPUB n'en ont), les genres (par `bookGenres`), l'année —, posé
+au moment de répondre sur les champs vides : Jellyfin et l'EPUB l'emportent toujours, et rien ne touche
+un titre, un auteur ni une couverture existante (les corrections faites à la main dans Jellyfin restent).
+- *La recherche* : l'ISBN quand Jellyfin le connaît (`isbn:…`), sinon `intitle:<titre> inauthor:<nom>`,
+  encodé une fois par `URLSearchParams` — en français d'abord, puis sans restriction ; deux requêtes par
+  livre au plus.
+- *Mieux vaut rien qu'un mauvais résumé* : un candidat n'est retenu que si son titre est le même (égal,
+  ou l'un contient l'autre à 80 % des mots, article ignoré) et qu'un auteur est le nôtre (le nom de
+  famille au moins) ; jamais une analyse, un résumé, une fiche de lecture, un guide, un titre qui porte le
+  nom de l'auteur (« L'inconnu de la forêt de Harlan Coben »), ni un éditeur d'études (lePetitLitteraire,
+  Encyclopaedia Universalis…). Le français d'abord, un résumé ensuite. Sinon : « sans correspondance »,
+  rien n'est rempli.
+- *Le quota* : un livre à la fois, 2 s au moins entre deux requêtes, 900 requêtes par jour au plus
+  (compteur en base, `book_enrich_quota`, remis à zéro à **minuit heure du serveur**, pas à minuit heure du
+  Pacifique comme le compte Google — d'où la marge sous les 1 000). Chaque livre n'est essayé qu'une fois,
+  « sans correspondance » compris (`book_enrich`), sauf si son titre, son auteur ou son ISBN changent.
+  429 ou 403 : arrêt jusqu'au lendemain ; 503 ou réseau : reprise cinq minutes plus tard, le livre non
+  compté comme essayé. L'ordre : les livres sans résumé chez Jellyfin d'abord, puis sans couverture, puis
+  sans genres ni année.
+- *La clé* part dans l'en-tête `X-Goog-Api-Key`, jamais dans l'adresse ; toute erreur est passée par
+  `redact` avant un journal. Une ligne `[livres] Google Books` par passe dans `docker logs`, jamais une par
+  requête. L'image de couverture est l'image publique du volume, sans la clé, réduite et gardée avec les
+  autres (`googleCover`).
+
 **Signets, recherche, lecture hors ligne.**
 - *Signets* : le signet de la barre du haut marque la page lue (plein quand elle l'est) ; la liste est un
   onglet du panneau de la table des matières — chapitre, quelques mots, pourcentage. Gardés par compte

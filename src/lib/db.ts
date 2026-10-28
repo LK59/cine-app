@@ -748,6 +748,26 @@ function migrate(db: Database.Database): void {
       checked_at   INTEGER NOT NULL
     );
   `);
+  // Ce que Google Books a donné d'un livre (§127, `googleBooks.ts`) : une ligne par livre essayé, « sans
+  // correspondance » compris ; `sig` : les métadonnées au moment de l'essai — elles changent, on réessaie.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS book_enrich (
+      item_id    TEXT    PRIMARY KEY,
+      sig        TEXT    NOT NULL,
+      status     TEXT    NOT NULL CHECK (status IN ('filled', 'nomatch')),
+      overview   TEXT,
+      genres     TEXT    NOT NULL DEFAULT '[]',
+      year       INTEGER,
+      cover_url  TEXT,
+      google_id  TEXT,
+      checked_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS book_enrich_quota (
+      day        TEXT    PRIMARY KEY,
+      requests   INTEGER NOT NULL DEFAULT 0,
+      blocked    INTEGER NOT NULL DEFAULT 0
+    );
+  `);
   // Les signets d'un compte dans un livre (§127) : une page par ligne, bornés par livre (`bookmarks.ts`).
   db.exec(`
     CREATE TABLE IF NOT EXISTS book_bookmarks (

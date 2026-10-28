@@ -269,6 +269,14 @@ export const config = {
     get requests() {
       return optional("BOOKS_ENABLED", "false") === "true" && optional("BOOKS_REQUESTS_ENABLED", "false") === "true";
     },
+    // Google Books (§127) : l'option, les livres et la clé, les trois — sans quoi rien ne part.
+    get googleEnrich() {
+      return optional("BOOKS_ENABLED", "false") === "true" && optional("BOOKS_GOOGLE_ENRICH", "false") === "true" && optional("GOOGLE_BOOKS_API_KEY", "") !== "";
+    },
+    // Jamais copiée ailleurs ni écrite dans un journal : relue à chaque appel (§48).
+    get googleKey() {
+      return optional("GOOGLE_BOOKS_API_KEY", "");
+    },
   },
   push: {
     get subject() {

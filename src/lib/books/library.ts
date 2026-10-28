@@ -8,6 +8,7 @@ import type { BookDetail, BookSummary } from "@/lib/books/types";
 import { knownMeta, type EpubMeta } from "@/lib/books/epubMeta";
 import { bookAuthors, bookGenres, decideSeries } from "@/lib/books/metadata";
 import { normId } from "@/lib/books/rights";
+import type { EnrichRecord } from "@/lib/books/googleBooks";
 
 /**
  * Les livres de Jellyfin, vus par un compte (DECISIONS.md §127).
@@ -28,7 +29,7 @@ const FIELDS = "Tags,Genres,People,Overview,SeriesName,ProductionYear,ImageTags,
  * (`bookFor`). Une bibliothèque de plusieurs milliers d'EPUB ne voyage ainsi qu'en titres, séries,
  * auteurs, genres et empreintes (couverture, fichier).
  */
-const LIST_FIELDS = "Tags,Genres,People,ProductionYear,ImageTags,DateCreated,Etag,OfficialRating";
+const LIST_FIELDS = "Tags,Genres,People,ProductionYear,ImageTags,DateCreated,Etag,OfficialRating,ProviderIds";
 /** Les livres sont demandés par pages : une réponse par millier, jamais toute la bibliothèque d'un bloc. */
 export const LIST_PAGE = 1000;
 /** Une borne de sécurité : au-delà, la grille s'arrête plutôt que de demander sans fin. */
@@ -51,6 +52,8 @@ export interface JellyfinBookItem {
   Etag?: string | null;
   UserData?: { Played?: boolean } | null;
   OfficialRating?: string | null;
+  /** Les identifiants que Jellyfin connaît (l'ISBN, quand l'EPUB le déclare) — Google Books part de lui. */
+  ProviderIds?: Record<string, string> | null;
 }
 
 /** Un livre de la bibliothèque commune, avec ce qu'il faut pour décider qui le voit (`rights.ts`). */
@@ -104,10 +107,14 @@ export function plainOverview(raw: string | null | undefined): string {
  * sinon les `dc:creator` de l'OPF (`bookAuthors`). Les genres : ceux de Jellyfin et les sujets de
  * l'EPUB, regroupés (`bookGenres`).
  */
-export function summaryOf(item: JellyfinBookItem, meta: EpubMeta | null = null): BookSummary {
+export function summaryOf(item: JellyfinBookItem, meta: EpubMeta | null = null, enrich: EnrichRecord | null = null): BookSummary {
   const people = (item.People ?? []).filter((p) => p.Type === "Author" && p.Name).map((p) => p.Name as string);
   const seriesName = decideSeries({ opfSeries: meta?.series });
   const index = seriesName ? (meta?.seriesIndex ?? null) : null;
+  // Google Books (option, `googleBooks.ts`) ne comble que ce qui manque : l'année et les genres de
+  // Jellyfin et de l'EPUB l'emportent toujours.
+  const ownGenres = bookGenres([...(item.Genres ?? []), ...(meta?.subjects ?? [])]);
+  const filled = enrich?.status === "filled" ? enrich : null;
   return {
     id: item.Id.toLowerCase(),
     name: item.Name?.trim() || "—",
@@ -115,9 +122,9 @@ export function summaryOf(item: JellyfinBookItem, meta: EpubMeta | null = null):
     fileTag: item.Etag ?? null,
     seriesName,
     index,
-    year: typeof item.ProductionYear === "number" ? item.ProductionYear : null,
+    year: typeof item.ProductionYear === "number" ? item.ProductionYear : (filled?.year ?? null),
     authors: bookAuthors(people, meta?.creators),
-    genres: bookGenres([...(item.Genres ?? []), ...(meta?.subjects ?? [])]),
+    genres: ownGenres.length > 0 ? ownGenres : (filled?.genres ?? []),
     played: item.UserData?.Played === true,
     addedAt: item.DateCreated ? Date.parse(item.DateCreated) || null : null,
     progress: null,
@@ -196,6 +203,23 @@ export async function fetchLibrary(): Promise<LibraryItem[]> {
   return out;
 }
 
+/**
+ * Les livres sans résumé chez Jellyfin (`HasOverview=false`), pour Google Books (option) : les premiers
+ * à compléter. Des identifiants seuls, par pages de mille, avec la clé du serveur.
+ */
+export async function booksWithoutOverview(): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let start = 0; start < LIST_MAX; start += LIST_PAGE) {
+    const params = new URLSearchParams({ IncludeItemTypes: "Book", Recursive: "true", HasOverview: "false", EnableImages: "false", Fields: "", StartIndex: String(start), Limit: String(LIST_PAGE) });
+    const { status, body } = await getJson<{ Items?: { Id?: string }[]; TotalRecordCount?: number }>(`${config.jellyfin.url}/Items?${params}`);
+    if (!body) throw new Error(`Jellyfin a répondu ${status}`);
+    const page = body.Items ?? [];
+    for (const i of page) if (typeof i.Id === "string") out.add(i.Id.toLowerCase());
+    if (page.length < LIST_PAGE) break;
+  }
+  return out;
+}
+
 const PLAYED_TTL_MS = 2 * 60_000;
 const PLAYED_KEY = Symbol.for("laterna.books.played");
 type PlayedCache = Map<string, { ids: Set<string>; at: number }>;
@@ -247,5 +271,8 @@ export async function bookFor(caller: BookCaller, id: string): Promise<BookDetai
   if (!item || item.Type !== "Book" || typeof item.Id !== "string") return null;
   if (caller.jfId && carriesBlockedTag(item.Tags, await blockedTagsOf(caller.jfId))) return null;
   const meta = knownMeta().get(item.Id.toLowerCase())?.meta ?? null;
-  return { ...summaryOf(item, meta), overview: plainOverview(item.Overview) };
+  // Le résumé de Google Books (option) seulement quand Jellyfin n'en a pas.
+  const enrich = (await import("@/lib/books/googleBooks")).enrichOf(item.Id.toLowerCase());
+  const own = plainOverview(item.Overview);
+  return { ...summaryOf(item, meta, enrich), overview: own || (enrich?.status === "filled" ? (enrich.overview ?? "") : "") };
 }

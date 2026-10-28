@@ -308,7 +308,9 @@ search. Series, authors and covers missing from Jellyfin are read from the EPUB 
 large libraries (thousands of files) are indexed once on the server for every account (each account
 only sees the Jellyfin libraries and tags it may see) and sent to devices a page at a time. The reader
 also has bookmarks (kept per account), search inside the book, and offline reading: « Download » keeps
-a book on the device, readable without a connection from the downloads page.
+a book on the device, readable without a connection from the downloads page. Optionally (off by default,
+`BOOKS_GOOGLE_ENRICH` with a `GOOGLE_BOOKS_API_KEY`), Google Books fills in what Jellyfin and the EPUB
+lack — summary, cover, genres, year — never overwriting existing data, within a daily request budget.
 
 ## Keyboard and remote
 

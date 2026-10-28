@@ -3196,6 +3196,8 @@
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Téléchargement hors ligne ouvert à tous les comptes (sinon administrateurs seulement)",
       "BOOKS_ENABLED": "Livres : les EPUB de Jellyfin et un lecteur dans l'application (bêta)",
       "BOOKS_REQUESTS_ENABLED": "Demandes de livres : « Demander un livre », traité à la main par l'administrateur",
+      "BOOKS_GOOGLE_ENRICH": "Livres : compléter par Google Books ce qui manque (résumé, couverture, genres, année)",
+      "GOOGLE_BOOKS_API_KEY": "Clé API Google Books",
       "OFFLINE_SERVER_QUOTA_GB": "Place maximale des téléchargements sur le serveur (Go)",
       "PLAYER_AUTO_FRAME": "Agrandir l'image au-dessus des bandes noires",
       "CAST_RECEIVER_APP_ID": "Récepteur Chromecast (identifiant d'application, vide = celui de Google)",

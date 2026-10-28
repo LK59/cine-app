@@ -47,6 +47,9 @@ export function prewarmBooks(why: string): Promise<void> {
       const { warmSharedIndex } = await import("@/lib/books/bookIndex");
       const count = await warmSharedIndex();
       taskLog("livres", "index préparé", { why, books: count, s: (Date.now() - startedAt) / 1000 });
+      // Google Books (option) part derrière l'index, sans rien faire si elle est coupée.
+      const { startGoogleEnrich } = await import("@/lib/books/googleBooks");
+      startGoogleEnrich(why);
     } catch (err) {
       // Jellyfin absent : la première ouverture le construira, comme avant. Mais dit : un préchauffage
       // qui échouait en silence laissait chaque compte payer la première construction (28/10/2026).

@@ -108,6 +108,11 @@ export const SETTINGS: readonly SettingDef[] = [
   // « Demander un livre » (§127) : un ticket à l'administrateur, qui ajoute le livre à la main.
   // Coupée par défaut ; sans effet tant que `BOOKS_ENABLED` est coupée.
   { key: "BOOKS_REQUESTS_ENABLED", group: "playback", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  // Compléter les livres par Google Books (§127) : résumé, couverture, genres, année — seulement ce qui
+  // manque, jamais ce que Jellyfin ou l'EPUB disent. Coupée par défaut ; rien ne part sans les livres
+  // allumés et une clé.
+  { key: "BOOKS_GOOGLE_ENRICH", group: "playback", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  { key: "GOOGLE_BOOKS_API_KEY", group: "playback", kind: "secret", need: "optional", fallback: "", inApp: true },
   { key: "PLAYER_AUTO_FRAME", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   // L'application que le Chromecast ouvre (DECISIONS.md §64) : vide, le récepteur public de Google.
   // Pas un secret — l'identifiant d'un récepteur qu'une installation a enregistré elle-même.

@@ -66,6 +66,10 @@ export async function PUT(req: NextRequest) {
   }
   invalidateByPrefix("");
   // Les livres allumés à l'instant (§127) : leur index se prépare tout de suite, sans redémarrage.
+  // Google Books (§127) allumé, ou sa clé posée : la file part sans redémarrage — rien si l'option ne le permet pas.
+  if ((values.BOOKS_GOOGLE_ENRICH !== undefined || values.GOOGLE_BOOKS_API_KEY !== undefined) && config.books.googleEnrich) {
+    void import("@/lib/books/googleBooks").then(({ startGoogleEnrich }) => startGoogleEnrich("option allumée")).catch(() => {});
+  }
   if (values.BOOKS_ENABLED !== undefined && config.books.enabled) {
     void import("@/lib/books/prewarm").then(({ prewarmBooks }) => prewarmBooks("option allumée")).catch(() => {});
   }

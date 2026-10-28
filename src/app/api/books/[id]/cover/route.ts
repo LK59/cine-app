@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { bookIdOf, booksCaller } from "@/lib/books/guard";
 import { bookIndex } from "@/lib/books/bookIndex";
-import { epubCover } from "@/lib/books/covers";
+import { epubCover, googleCover } from "@/lib/books/covers";
+import { enrichOf } from "@/lib/books/googleBooks";
+import { config } from "@/lib/config";
 
 /**
  * La couverture d'un livre tirée de son EPUB (option, DECISIONS.md §127), quand Jellyfin n'en a pas —
@@ -23,7 +25,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   } catch {
     return new NextResponse(null, { status: 502 });
   }
-  const image = fileTag ? await epubCover(id, fileTag) : null;
+  let image = fileTag ? await epubCover(id, fileTag) : null;
+  // Ni Jellyfin ni l'EPUB : celle de Google Books, quand l'option est allumée et qu'elle en a trouvé une.
+  if (!image && config.books.googleEnrich) {
+    const found = enrichOf(id);
+    if (found?.status === "filled" && found.coverUrl) image = await googleCover(id, found.coverUrl);
+  }
   if (!image) return new NextResponse(null, { status: 404, headers: { "Cache-Control": "private, max-age=3600" } });
   const pinned = req.nextUrl.searchParams.get("v") === fileTag;
   return new NextResponse(new Uint8Array(image), {

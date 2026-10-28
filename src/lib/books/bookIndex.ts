@@ -2,12 +2,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { DATA_DIR } from "@/lib/dataDir";
 import type { BookCaller, LibraryItem } from "@/lib/books/library";
-import { compareBooks, fetchLibrary, summaryOf } from "@/lib/books/library";
-import { knownMeta, metaVersion, scheduleMetaReads, staleMeta } from "@/lib/books/epubMeta";
+import { booksWithoutOverview, compareBooks, fetchLibrary, summaryOf } from "@/lib/books/library";
+import { knownMeta, metaVersion as epubMetaVersion, scheduleMetaReads, staleMeta } from "@/lib/books/epubMeta";
+import { enrichVersion, knownEnrich, type EnrichTarget } from "@/lib/books/googleBooks";
+
 import { allows, rightsKey, rightsOf, type BookRights } from "@/lib/books/rights";
 import { authorIndex, filterBooks, foldText, genreIndex, groupBooks, homeRows, preferredCopy, sortBooks, type BookSort, type HomeRows } from "@/lib/books/grouping";
 import { duplicateKey } from "@/lib/books/metadata";
 import type { BookProgress, BookSummary } from "@/lib/books/types";
+
+/** Les métadonnées qui refont l'index : celles de l'EPUB, et celles de Google Books (option). */
+const metaVersion = () => epubMetaVersion() * 1_000_000 + enrichVersion();
 
 /**
  * L'index des livres, **un seul pour tous les comptes**, en mémoire (DECISIONS.md §127).
@@ -56,6 +61,10 @@ interface Entry {
   library: string;
   tags: string[];
   rated: boolean;
+  /** L'ISBN que Jellyfin connaît, pour Google Books (option). */
+  isbn: string | null;
+  /** L'EPUB déclare-t-il une couverture ? `null` : pas encore lu. */
+  epubCover: boolean | null;
 }
 
 interface Base {
@@ -93,11 +102,18 @@ const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: tr
 /** L'index commun fait d'une liste d'éléments — par tranches, la boucle reprend la main entre deux. */
 async function buildBase(items: readonly LibraryItem[]): Promise<Base> {
   const known = knownMeta();
+  const enriched = knownEnrich();
   const entries: Entry[] = [];
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    const book = summaryOf(item, known.get(item.Id.toLowerCase())?.meta ?? null);
+    const id = item.Id.toLowerCase();
+    const k = known.get(id);
+    const book = summaryOf(item, k?.meta ?? null, enriched.get(id) ?? null);
+    const providers = item.ProviderIds ?? {};
+    const isbn = Object.entries(providers).find(([key]) => /^isbn/i.test(key))?.[1] ?? null;
     entries.push({
+      isbn,
+      epubCover: k ? (k.meta ? !!k.meta.coverPath : false) : null,
       book,
       hay: foldText(`${book.name} ${book.seriesName ?? ""} ${book.authors.join(" ")}`),
       library: item.library,
@@ -273,6 +289,29 @@ export async function warmSharedIndex(): Promise<number> {
   const base = await sharedBase();
   const view = await bookIndex({ role: "admin", jfId: undefined });
   return view.books.length || base.entries.length;
+}
+
+/**
+ * Les livres que Google Books (option, `googleBooks.ts`) pourrait compléter, et ce qui leur manque —
+ * vus de toute la bibliothèque, sans droits de compte : ce qui est trouvé n'est montré qu'à qui voit le
+ * livre. Les copies d'un même livre comptent chacune (l'une peut avoir un résumé, l'autre non).
+ */
+export async function enrichTargets(): Promise<EnrichTarget[]> {
+  const base = await sharedBase();
+  const noOverview = await booksWithoutOverview();
+  return base.entries.map((e) => ({
+    id: e.book.id,
+    name: e.book.name,
+    authors: e.book.authors,
+    isbn: e.isbn,
+    needs: {
+      overview: noOverview.has(e.book.id),
+      // La couverture seulement quand ni Jellyfin ni l'EPUB n'en ont — et l'EPUB déjà lu.
+      cover: !e.book.coverTag && e.epubCover === false,
+      genres: e.book.genres.length === 0,
+      year: e.book.year === null,
+    },
+  }));
 }
 
 /** Le garder chaud : le redemander suffit — vieilli, il se refait derrière. */

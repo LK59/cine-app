@@ -28,6 +28,7 @@ const CONCURRENCY = 2;
 /** Un échec passager (Jellyfin absent) : pas de marque sur le disque, seulement un répit en mémoire. */
 const RETRY_MS = 10 * 60_000;
 const PRUNE_EVERY = 50;
+const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 
 interface State {
   inflight: Map<string, Promise<Buffer | null>>;
@@ -127,6 +128,46 @@ async function make(id: string, fileTag: string, name: string): Promise<Buffer |
     logError("books/cover", error, { itemId: id, where: "réduction de l'image" });
     return null;
   }
+}
+
+/**
+ * La couverture de Google Books (option, `googleBooks.ts`), quand ni Jellyfin ni l'EPUB n'en ont : l'image
+ * publique du volume (sans la clé), réduite et gardée comme celles des EPUB, nommée par son adresse. Rien
+ * ne part l'option coupée ; une image qui ne vient pas n'est pas redemandée avant dix minutes.
+ */
+export async function googleCover(id: string, url: string): Promise<Buffer | null> {
+  const s = state();
+  const name = `${id}-g-${createHash("sha256").update(url).digest("hex").slice(0, 12)}`;
+  try {
+    return await fs.promises.readFile(path.join(DIR, `${name}.webp`));
+  } catch {
+    /* pas encore faite */
+  }
+  const failed = s.failedAt.get(name);
+  if (failed && Date.now() - failed < RETRY_MS) return null;
+  const running = s.inflight.get(name);
+  if (running) return running;
+  const job = slot(async () => {
+    try {
+      if (!/^https:\/\/[a-z0-9.-]+\.(google|googleusercontent|gstatic)\.com\//i.test(url)) return null;
+      const res = await fetch(url, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
+      if (!res.ok) throw new Error(`image ${res.status}`);
+      const source = Buffer.from(await res.arrayBuffer());
+      if (source.byteLength > MAX_SOURCE_BYTES) throw new Error("image trop grande");
+      const { default: sharp } = await import("sharp");
+      const out = await sharp(source, { failOn: "none", limitInputPixels: 50_000_000 }).resize({ width: WIDTH, withoutEnlargement: true }).webp({ quality: 78 }).toBuffer();
+      await fs.promises.mkdir(DIR, { recursive: true });
+      const tmp = path.join(DIR, `${name}.${process.pid}.tmp`);
+      await fs.promises.writeFile(tmp, out);
+      await fs.promises.rename(tmp, path.join(DIR, `${name}.webp`));
+      return out;
+    } catch {
+      s.failedAt.set(name, Date.now());
+      return null;
+    }
+  }).finally(() => s.inflight.delete(name));
+  s.inflight.set(name, job);
+  return job;
 }
 
 /** Garde le dossier sous ses bornes : les plus anciennes partent d'abord. */
