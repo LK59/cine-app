@@ -125,8 +125,15 @@ describe("la configuration publique", () => {
     expect((await call()).bookRequests).toBe(false);
     process.env.BOOKS_REQUESTS_ENABLED = "true";
     expect((await call()).bookRequests).toBe(true);
+    // « Afficher les livres » coupé pour ce compte : ni la catégorie, ni les demandes — mais le réglage
+    // reste offert dans le Compte, pour le rallumer.
+    const { userPrefsDb } = await import("@/lib/db");
+    userPrefsDb.setShowBooks("x", false);
+    expect(await call()).toMatchObject({ booksEnabled: false, bookRequests: false, booksAvailable: true });
+    userPrefsDb.setShowBooks("x", true);
+    expect(await call()).toMatchObject({ booksEnabled: true, booksAvailable: true });
     mockVerify.mockResolvedValue({ u: "partage", role: "share", sh: "s", jti: "j" });
-    expect((await call()).booksEnabled).toBe(false);
+    expect(await call()).toMatchObject({ booksEnabled: false, booksAvailable: false });
   });
 });
 
@@ -179,8 +186,8 @@ describe("une session de partage", () => {
 describe("l'accueil ne charge rien des livres", () => {
   const BOOK_IMPORT = /from\s+["']@\/(components|lib)\/books\/([^"']+)["']|import\(\s*["']([^"']*books[^"']*)["']\s*\)/g;
 
-  it("les deux écrans du cinéma n'importent des livres que `BooksMode`", () => {
-    for (const file of ["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx"]) {
+  it("les deux écrans du cinéma et la recherche n'importent des livres que `BooksMode`", () => {
+    for (const file of ["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx", "src/components/player/PlayerSearchPanel.tsx"]) {
       const found = [...read(file).matchAll(BOOK_IMPORT)].map((m) => m[0]);
       expect(found, file).toEqual([`from "@/components/books/BooksMode"`]);
     }
@@ -190,6 +197,7 @@ describe("l'accueil ne charge rien des livres", () => {
     const staticImports = [...mode.matchAll(/^import .* from ["']([^"']+)["'];$/gm)].map((m) => m[1]);
     expect(staticImports.sort()).toEqual(["@/components/TranslationProvider", "@/lib/cinemaRoute", "@/lib/swr", "lucide-react", "next/dynamic", "react", "swr"]);
     expect(mode).toMatch(/dynamic\(\(\) => import\("\.\/BooksHome"\)/);
+    expect(mode).toMatch(/dynamic\(\(\) => import\("\.\/BooksSearch"\)/);
     // Rendu seulement quand la catégorie est affichée, donc l'option allumée.
     for (const file of ["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx"]) {
       expect(read(file), file).toMatch(/\{books\.active && <BooksHomeLazy variant="(desktop|mobile)" \/>\}/);
@@ -214,12 +222,20 @@ describe("l'accueil ne charge rien des livres", () => {
     }
     expect(read("src/components/books/BooksScreen.tsx")).toMatch(/dynamic\(\(\) => import\("\.\/BookReader"\)/);
   });
-  it("le cache gardé sur l'appareil n'est pas touché ; l'adresse du cinéma ne gagne qu'un champ facultatif", () => {
+  it("rien des livres au lancement : ni requête partie avec la page, ni cache gardé sur l'appareil, ni préchauffage du serveur", () => {
+    for (const file of ["src/lib/earlyFetch.ts", "src/lib/persistentCache.ts", "src/lib/catalogueWarm.ts", "src/lib/selfWarm.ts", "src/instrumentation.ts"]) {
+      if (fs.existsSync(path.join(process.cwd(), file))) expect(read(file), file).not.toMatch(/books|livres|\/api\/book/i);
+    }
+  });
+  it("le cache gardé sur l'appareil n'est pas touché ; l'adresse du cinéma ne gagne que des champs facultatifs", () => {
     expect(read("src/lib/persistentCache.ts")).not.toMatch(/book|livre/i);
     // `tab` reste films ou séries : les livres sont un mode à part (`books`, `#livres=1`).
     const route = read("src/lib/cinemaRoute.ts");
     expect(route).toMatch(/tab: "movies" \| "series";/);
-    expect(route.match(/livres|books/g)?.length).toBeLessThanOrEqual(10);
+    // Trois champs facultatifs, absents de la route tant que l'adresse ne les nomme pas (`books-sheet.test.tsx`).
+    expect(route).toMatch(/\bbooks\?: boolean;/);
+    expect(route).toMatch(/\bbook\?: string \| null;/);
+    expect(route).toMatch(/\breading\?: boolean;/);
   });
 });
 

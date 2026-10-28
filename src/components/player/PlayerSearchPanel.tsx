@@ -24,6 +24,7 @@ import { escapeClears } from "@/lib/escapeClears";
 import { fetcher } from "@/lib/swr";
 import { dialogueSearchUrl, useDialogueSearch, wantsDialogueSearch, type DialogueResponse } from "@/lib/dialogueSearch";
 import { DialogueResults } from "./DialogueResults";
+import { BooksSearchEntry } from "@/components/books/BooksMode";
 
 type Filter = "all" | "movie" | "series" | "person" | "dialogue";
 
@@ -500,6 +501,10 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
         {showDialogue && (
           <DialogueResults data={dialogue.data} stale={dialogue.stale} loading={dialogue.loading} failed={dialogue.failed} query={typed} moviesByItem={moviesByItem} />
         )}
+
+        {/* Les livres (option, DECISIONS.md §127) : une section sous les films et les séries, rien
+            tant qu'elle est coupée. */}
+        {searching && (filter === "all" || filter === "movie" || filter === "series") && <BooksSearchEntry query={localQuery} />}
 
         {isLoading && searching && filter !== "dialogue" && (
           <div className="mt-10 flex justify-center">

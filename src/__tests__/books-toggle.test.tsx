@@ -8,8 +8,19 @@ import { render, screen, cleanup, fireEvent, renderHook } from "@testing-library
  * un mode (`#livres=1`) sans toucher à `tab`.
  */
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
-const config = vi.hoisted(() => ({ data: undefined as { booksEnabled?: boolean } | undefined }));
-vi.mock("swr", () => ({ default: () => ({ data: config.data }) }));
+const config = vi.hoisted(() => ({ data: undefined as { booksEnabled?: boolean } | undefined, keys: [] as unknown[] }));
+vi.mock("swr", () => ({
+  default: (key: unknown) => {
+    config.keys.push(key);
+    return { data: config.data };
+  },
+}));
+// Le module de la section « Livres » de la recherche : s'il était chargé, ce serait par là.
+const searchLoaded = vi.hoisted(() => vi.fn());
+vi.mock("@/components/books/BooksSearch", () => {
+  searchLoaded();
+  return { BooksSearch: () => <div data-books-search /> };
+});
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/cinemaRoute", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/cinemaRoute")>();
@@ -17,12 +28,13 @@ vi.mock("@/lib/cinemaRoute", async (importOriginal) => {
 });
 
 import { CinemaModeToggle } from "@/components/cinema/CinemaModeToggle";
-import { useBooksMode } from "@/components/books/BooksMode";
+import { BooksSearchEntry, useBooksMode } from "@/components/books/BooksMode";
 
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   config.data = undefined;
+  config.keys = [];
 });
 
 describe("la bascule", () => {
@@ -73,7 +85,7 @@ describe("useBooksMode", () => {
     config.data = { booksEnabled: false };
     const { result } = renderHook(() => useBooksMode(true));
     expect(result.current.active).toBe(false);
-    expect(navigate).toHaveBeenCalledWith({ books: false }, "replace");
+    expect(navigate).toHaveBeenCalledWith({ books: false, book: null, reading: false }, "replace");
   });
   it("option allumée : entrer et sortir écrivent le mode dans l'adresse, l'onglet seulement en sortant", () => {
     config.data = { booksEnabled: true };
@@ -83,6 +95,21 @@ describe("useBooksMode", () => {
     expect(navigate).toHaveBeenLastCalledWith({ books: true, film: null, serie: null }, "replace");
     result.current.toggle!.onLeave("series");
     expect(navigate).toHaveBeenLastCalledWith({ books: false, tab: "series", film: null, serie: null }, "replace");
+  });
+});
+
+describe("la recherche de l'application", () => {
+  it("option coupée : la section « Livres » ne rend rien, ne charge rien et ne demande rien", async () => {
+    for (const data of [undefined, { booksEnabled: false }]) {
+      config.data = data;
+      const { container } = render(<BooksSearchEntry query="cherub" />);
+      expect(container.innerHTML).toBe("");
+      cleanup();
+    }
+    await new Promise((r) => setTimeout(r, 20));
+    expect(searchLoaded).not.toHaveBeenCalled();
+    // La seule clé lue : la configuration publique, déjà en cache pour tout l'accueil.
+    expect(new Set(config.keys)).toEqual(new Set(["/api/config/public"]));
   });
 });
 

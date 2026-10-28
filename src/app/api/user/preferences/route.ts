@@ -15,7 +15,9 @@ export async function GET(req: NextRequest) {
   // et ce que le serveur donne par défaut — l'écran du Compte montre les deux.
   const own = userPrefsDb.getHomeLayout(userId);
   const homeDefaults = { continueHero: config.home.continueHero };
-  return NextResponse.json({ lang, guidedScroll, homeOwn: own, homeDefaults });
+  // « Afficher les livres » (DECISIONS.md §127), suivi d'un appareil à l'autre comme le reste.
+  const showBooks = userPrefsDb.getShowBooks(userId);
+  return NextResponse.json({ lang, guidedScroll, showBooks, homeOwn: own, homeDefaults });
 }
 
 export async function PUT(req: NextRequest) {
@@ -33,6 +35,12 @@ export async function PUT(req: NextRequest) {
   if (typeof body?.guidedScroll === "boolean") {
     userPrefsDb.setGuidedScroll(userId, body.guidedScroll);
     return NextResponse.json({ ok: true, guidedScroll: body.guidedScroll });
+  }
+
+  // « Afficher les livres » (DECISIONS.md §127) : une mise à jour à elle seule.
+  if (typeof body?.showBooks === "boolean") {
+    userPrefsDb.setShowBooks(userId, body.showBooks);
+    return NextResponse.json({ ok: true, showBooks: body.showBooks });
   }
 
   // La disposition de l'accueil : un booléen choisit, `null` rend la main au serveur.

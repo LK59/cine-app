@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { Check, Loader2, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
-import { foldText } from "@/lib/books/grouping";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
 
@@ -42,14 +41,17 @@ const STATUS_STYLE: Record<BookRequestView["status"], string> = {
   refused: "bg-danger/15 text-danger",
 };
 
-/** Un livre de la bibliothèque dont le titre ressemble à celui demandé : « peut-être déjà là ». */
-function likelyMatch(request: BookRequestView, books: readonly BookSummary[]): BookSummary | null {
-  const wanted = foldText(request.title).replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
-  if (wanted.length < 3) return null;
-  return books.find((b) => foldText(b.name).includes(wanted) || foldText(displayTitle(b)) === wanted) ?? null;
+/**
+ * Un livre de la bibliothèque dont le titre ressemble à celui demandé : « peut-être déjà là » — demandé
+ * à la recherche des livres (l'index du serveur), pas à une liste gardée sur l'appareil.
+ */
+function useLikelyMatch(request: BookRequestView): BookSummary | null {
+  const wanted = request.title.replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
+  const { data } = useSWR<{ books: BookSummary[] }>(request.status === "pending" && wanted.length >= 3 ? `/api/books/search?q=${encodeURIComponent(wanted)}` : null, fetcher);
+  return data?.books[0] ?? null;
 }
 
-export function BookRequestsPanel({ initialTitle = "", books = [], onClose }: { initialTitle?: string; books?: readonly BookSummary[]; onClose: () => void }) {
+export function BookRequestsPanel({ initialTitle = "", onClose }: { initialTitle?: string; onClose: () => void }) {
   const t = useT();
   const { data, mutate } = useSWR<{ mine: BookRequestView[]; all?: BookRequestView[] }>(REQUESTS_KEY, fetcher);
   const [tab, setTab] = useState<"ask" | "mine" | "all">("ask");
@@ -155,7 +157,7 @@ export function BookRequestsPanel({ initialTitle = "", books = [], onClose }: { 
             </div>
           )}
 
-          {tab === "all" && data?.all && <AdminList requests={data.all} books={books} onChanged={() => void mutate()} />}
+          {tab === "all" && data?.all && <AdminList requests={data.all} onChanged={() => void mutate()} />}
         </div>
       </div>
     </div>,
@@ -202,7 +204,7 @@ function RequestRow({ request, children }: { request: BookRequestView; children?
   );
 }
 
-function AdminList({ requests, books, onChanged }: { requests: BookRequestView[]; books: readonly BookSummary[]; onChanged: () => void }) {
+function AdminList({ requests, onChanged }: { requests: BookRequestView[]; onChanged: () => void }) {
   const t = useT();
   if (requests.length === 0) return <p className="py-8 text-center text-sm text-subtle">{t("books.requests.noneAll")}</p>;
   return (
@@ -210,18 +212,18 @@ function AdminList({ requests, books, onChanged }: { requests: BookRequestView[]
       {requests.map((r) => (
         <RequestRow key={r.id} request={r}>
           <p className="mt-1 text-xs text-subtle">{t("books.requests.by", { user: r.account })}</p>
-          <AdminActions request={r} books={books} onChanged={onChanged} />
+          <AdminActions request={r} onChanged={onChanged} />
         </RequestRow>
       ))}
     </div>
   );
 }
 
-function AdminActions({ request, books, onChanged }: { request: BookRequestView; books: readonly BookSummary[]; onChanged: () => void }) {
+function AdminActions({ request, onChanged }: { request: BookRequestView; onChanged: () => void }) {
   const t = useT();
   const [reply, setReply] = useState(request.reply);
   const [busy, setBusy] = useState(false);
-  const match = useMemo(() => (request.status === "pending" ? likelyMatch(request, books) : null), [request, books]);
+  const match = useLikelyMatch(request);
 
   async function answer(status: "added" | "refused" | "pending") {
     setBusy(true);
@@ -263,7 +265,7 @@ function AdminActions({ request, books, onChanged }: { request: BookRequestView;
 }
 
 /** Le bouton « Demander un livre », rendu seulement quand les demandes sont ouvertes. */
-export function BookRequestButton({ books, label, initialTitle, className }: { books?: readonly BookSummary[]; label?: string; initialTitle?: string; className?: string }) {
+export function BookRequestButton({ label, initialTitle, className }: { label?: string; initialTitle?: string; className?: string }) {
   const t = useT();
   const enabled = useBookRequestsEnabled();
   const [open, setOpen] = useState(false);
@@ -273,7 +275,7 @@ export function BookRequestButton({ books, label, initialTitle, className }: { b
       <button type="button" onClick={() => setOpen(true)} className={className ?? "inline-flex h-10 items-center rounded-full bg-white/10 px-5 text-sm font-semibold text-white transition-colors hover:bg-white/15"}>
         {label ?? t("books.requests.button")}
       </button>
-      {open && <BookRequestsPanel books={books} initialTitle={initialTitle} onClose={() => setOpen(false)} />}
+      {open && <BookRequestsPanel initialTitle={initialTitle} onClose={() => setOpen(false)} />}
     </>
   );
 }

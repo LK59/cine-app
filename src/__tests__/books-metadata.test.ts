@@ -5,8 +5,8 @@ import { randomBytes } from "node:crypto";
 /**
  * Les métadonnées des livres (DECISIONS.md §127). Jellyfin donne à un livre le nom de son dossier pour
  * série : rangée par auteur (`/livres/<Auteur>/…`), une bibliothèque faisait de chaque roman isolé un
- * tome de la « série » de son auteur. La série vient donc d'abord de l'EPUB (OPF), lue par plages, et
- * celle de Jellyfin n'est crue que si elle n'est ni un auteur du livre ni un dossier de bibliothèque.
+ * tome de la « série » de son auteur. La série vient donc de l'EPUB seul (OPF), lue par plages — avec
+ * ses auteurs et sa couverture, que Jellyfin n'a pas toujours.
  */
 await vi.hoisted(async () => {
   const fs = await import("node:fs");
@@ -18,8 +18,9 @@ vi.mock("@/lib/config", () => ({ config: { jellyfin: { url: "http://jf", apiKey:
 const upstream = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/jellyfinBreaker", () => ({ passJellyfinFetch: (...a: unknown[]) => upstream(...a), jellyfinFetch: (...a: unknown[]) => upstream(...a) }));
 
-import { bookGenres, decideSeries, nameKey } from "@/lib/books/metadata";
+import { bookAuthors, bookGenres, decideSeries, nameKey } from "@/lib/books/metadata";
 import { knownMeta, parseOpf, readEpubMeta, scheduleMetaReads, staleMeta, __testing } from "@/lib/books/epubMeta";
+import { epubCover } from "@/lib/books/covers";
 import { authorIndex, filterBooks, homeRows, sortBooks } from "@/lib/books/grouping";
 import type { BookSummary } from "@/lib/books/types";
 
@@ -48,26 +49,48 @@ describe("les genres", () => {
     ]);
     expect(bookGenres([])).toEqual([]);
   });
+  it("les synonymes ramenés à un libellé, les étiquettes et le rayonnage écartés", () => {
+    expect(bookGenres(["SF", "Science-Fiction", "science fiction"])).toEqual(["Science-fiction"]);
+    expect(bookGenres(["Polar", "Policier", "Thriller"])).toEqual(["Policier", "Thriller"]);
+    expect(bookGenres(["Fantasy", "Fantastique"])).toEqual(["Fantasy", "Fantastique"]);
+    expect(bookGenres(["Lang:fr", "Fiction", "Roman", "9782266154956", "isbn:978", "http://x"])).toEqual([]);
+  });
 });
 
 describe("l'OPF", () => {
   it("Calibre (EPUB 2)", () => {
     const opf = `<package><metadata><dc:subject>Aventure</dc:subject><dc:subject>Espionnage</dc:subject>
       <meta name="calibre:series" content="Cherub"/><meta name="calibre:series_index" content="10.0"/></metadata></package>`;
-    expect(parseOpf(opf)).toEqual({ series: "Cherub", seriesIndex: 10, subjects: ["Aventure", "Espionnage"] });
+    expect(parseOpf(opf)).toEqual({ series: "Cherub", seriesIndex: 10, subjects: ["Aventure", "Espionnage"], creators: [], coverPath: null });
   });
   it("EPUB 3 : belongs-to-collection et group-position", () => {
     const opf = `<package><metadata><meta property="belongs-to-collection" id="c01">Les Rougon-Macquart</meta>
       <meta refines="#c01" property="collection-type">series</meta><meta refines="#c01" property="group-position">7</meta></metadata></package>`;
-    expect(parseOpf(opf)).toEqual({ series: "Les Rougon-Macquart", seriesIndex: 7, subjects: [] });
+    expect(parseOpf(opf)).toEqual({ series: "Les Rougon-Macquart", seriesIndex: 7, subjects: [], creators: [], coverPath: null });
   });
   it("sans série : rien, pas même un rang", () => {
-    expect(parseOpf(`<package><metadata><meta name="calibre:series_index" content="8.5"/></metadata></package>`)).toEqual({ series: null, seriesIndex: null, subjects: [] });
+    expect(parseOpf(`<package><metadata><meta name="calibre:series_index" content="8.5"/></metadata></package>`)).toEqual({ series: null, seriesIndex: null, subjects: [], creators: [], coverPath: null });
+  });
+  it("les auteurs (dc:creator, rôle « aut » ou sans rôle) et la couverture, EPUB 2 ou 3", () => {
+    const epub2 = `<package><metadata><dc:creator opf:role="aut">Vargas, Fred</dc:creator><dc:creator opf:role="ill">Un illustrateur</dc:creator>
+      <meta name="cover" content="img-c"/></metadata><manifest><item id="img-c" href="../Images/couv%201.jpg" media-type="image/jpeg"/></manifest></package>`;
+    expect(parseOpf(epub2, "OEBPS/Text/content.opf")).toMatchObject({ creators: ["Vargas, Fred"], coverPath: "OEBPS/Images/couv 1.jpg" });
+    const epub3 = `<package><metadata><dc:creator>Guillaume Musso</dc:creator></metadata><manifest>
+      <item id="x" href="cover.png" media-type="image/png" properties="cover-image"/></manifest></package>`;
+    expect(parseOpf(epub3, "content.opf")).toMatchObject({ creators: ["Guillaume Musso"], coverPath: "cover.png" });
+  });
+});
+
+describe("les auteurs à afficher", () => {
+  it("ceux de Jellyfin d'abord, sinon ceux de l'OPF, « Nom, Prénom » remis dans l'ordre", () => {
+    expect(bookAuthors(["Fred Vargas"], ["Autre"])).toEqual(["Fred Vargas"]);
+    expect(bookAuthors([], ["Vargas, Fred"])).toEqual(["Fred Vargas"]);
+    expect(bookAuthors([], undefined)).toEqual([]);
   });
 });
 
 /** Un petit zip écrit à la main : de quoi éprouver la lecture par plages de bout en bout. */
-function zip(files: Record<string, string>): Buffer {
+function zip(files: Record<string, string | Buffer>): Buffer {
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];
   let offset = 0;
@@ -128,7 +151,7 @@ describe("la lecture de l'OPF par plages", () => {
   beforeEach(() => vi.clearAllMocks());
   it("lit la série sans télécharger le livre", async () => {
     serve(EPUB);
-    expect(await readEpubMeta("a".repeat(32))).toEqual({ series: "Cherub", seriesIndex: 3, subjects: ["Espionnage"] });
+    expect(await readEpubMeta("a".repeat(32))).toEqual({ series: "Cherub", seriesIndex: 3, subjects: ["Espionnage"], creators: [], coverPath: null });
     // La fin, le conteneur, l'OPF : bien moins que le livre, dont le chapitre pèse 400 Ko.
     expect(served).toBeLessThan(EPUB.length / 3);
   });
@@ -142,12 +165,80 @@ describe("la lecture de l'OPF par plages", () => {
     expect(staleMeta([{ id, etag: "e1" }], known)).toEqual([]);
     expect(staleMeta([{ id, etag: "e2" }], known)).toEqual([{ id, etag: "e2" }]);
   });
+  it("la file attend pendant qu'un film joue, deux lectures à la fois au plus, écrites par lots", async () => {
+    const q = __testing.queue();
+    const realReader = q.reader;
+    const realPlaying = q.playing;
+    let playing = true;
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const read = vi.fn(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => setTimeout(r, 1));
+      inFlight -= 1;
+      return { series: null, seriesIndex: null, subjects: [], creators: [], coverPath: null };
+    });
+    q.reader = read;
+    q.playing = () => playing;
+    q.pausedUntil = 0;
+    try {
+      const items = Array.from({ length: 60 }, (_, i) => ({ id: (i + 1).toString(16).padStart(32, "f"), etag: "e" }));
+      const version = q.version;
+      scheduleMetaReads(items);
+      await new Promise((r) => setTimeout(r, 20));
+      expect(read).not.toHaveBeenCalled();
+      playing = false;
+      q.pausedUntil = 0;
+      __testing.pump();
+      await vi.waitFor(() => expect(knownMeta().get(items[59].id)).toBeDefined(), { timeout: 5000 });
+      expect(read).toHaveBeenCalledTimes(60);
+      expect(maxInFlight).toBeLessThanOrEqual(2);
+      // Soixante lectures, quelques transactions seulement.
+      expect(q.version - version).toBeLessThanOrEqual(4);
+    } finally {
+      q.reader = realReader;
+      q.playing = realPlaying;
+    }
+  });
+});
+
+describe("la couverture tirée de l'EPUB", () => {
+  beforeEach(() => vi.clearAllMocks());
+  it("réduite en WebP, gardée sur le disque, jamais refaite ; un EPUB sans couverture ne l'est jamais non plus", async () => {
+    const { default: sharp } = await import("sharp");
+    const png = await sharp({ create: { width: 900, height: 1350, channels: 3, background: "#336699" } }).png().toBuffer();
+    const withCover = zip({
+      mimetype: "application/epub+zip",
+      "META-INF/container.xml": `<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>`,
+      "OEBPS/content.opf": `<package><metadata><meta name="cover" content="c"/></metadata><manifest><item id="c" href="img/cover.png" media-type="image/png"/></manifest></package>`,
+      "OEBPS/img/cover.png": png,
+    });
+    serve(withCover);
+    const id = "c".repeat(32);
+    const out = await epubCover(id, "etag-1");
+    expect(out).not.toBeNull();
+    const info = await sharp(out as Buffer).metadata();
+    expect(info.format).toBe("webp");
+    expect(info.width).toBe(360);
+    const calls = upstream.mock.calls.length;
+    expect(await epubCover(id, "etag-1")).toEqual(out);
+    expect(upstream.mock.calls.length).toBe(calls);
+
+    serve(EPUB);
+    const bare = "d".repeat(32);
+    expect(await epubCover(bare, "etag-1")).toBeNull();
+    const after = upstream.mock.calls.length;
+    expect(await epubCover(bare, "etag-1")).toBeNull();
+    expect(upstream.mock.calls.length).toBe(after);
+  });
 });
 
 const book = (over: Partial<BookSummary>): BookSummary => ({
   id: Math.random().toString(16).slice(2).padEnd(32, "0"),
   name: "x",
   coverTag: null,
+  fileTag: null,
   seriesName: null,
   index: null,
   year: null,
@@ -196,7 +287,7 @@ describe("les rangées d'une bibliothèque rangée par auteur", () => {
 describe("une bibliothèque à deux racines, dont un lot de milliers d'EPUB", () => {
   beforeEach(() => vi.clearAllMocks());
   it("le dossier du lot n'est jamais une série ; l'auteur vient des métadonnées, pas du dossier", async () => {
-    const { listBooks } = await import("@/lib/books/library");
+    const { bookIndex } = await import("@/lib/books/bookIndex");
     upstream.mockImplementation(async (url: string) => {
       if (!url.includes("IncludeItemTypes")) return new Response("[]", { status: 200 });
       const items = [
@@ -205,8 +296,8 @@ describe("une bibliothèque à deux racines, dont un lot de milliers d'EPUB", ()
       ];
       return new Response(JSON.stringify({ Items: items, TotalRecordCount: 2 }), { status: 200 });
     });
-    const books = await listBooks({ role: "user", jfId: "c".repeat(32) });
-    expect(books.map((b) => [b.name, b.seriesName, b.index, b.authors])).toEqual([
+    const { books } = await bookIndex({ role: "user", jfId: "c".repeat(32) });
+    expect(books.map((b: BookSummary) => [b.name, b.seriesName, b.index, b.authors])).toEqual([
       ["Central Park", null, null, ["Guillaume Musso"]],
       ["L'appel de l'ange", null, null, ["Guillaume Musso"]],
     ]);

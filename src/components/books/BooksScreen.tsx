@@ -1,19 +1,21 @@
 "use client";
 
-import { useDeferredValue, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { ChevronLeft, Search, X } from "lucide-react";
+import useSWRInfinite from "swr/infinite";
+import { ChevronLeft } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
-import { closeBookRoute, openBookRoute, useBookRoute } from "@/lib/books/bookRoute";
-import { BOOK_SORTS, NO_SERIES, authorIndex, continueReading, filterBooks, genreIndex, groupBooks, sortBooks, type BookSort } from "@/lib/books/grouping";
+import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
+import { readerOpening } from "@/lib/books/readerOpening";
+import { BOOK_SORTS, NO_SERIES, type BookSort } from "@/lib/books/grouping";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
 import { BookCover } from "./BookCover";
-import { BookSheet, type MorphOrigin } from "./BookSheet";
-import { BooksGrid } from "./BooksGrid";
+import { BookSheetHost } from "./BookSheet";
+import { BooksGrid, GRID_CHUNK } from "./BooksGrid";
 import { BookRequestButton, BookRequestsPanel, useBookRequestsEnabled } from "./BookRequests";
 
 /**
@@ -21,7 +23,8 @@ import { BookRequestButton, BookRequestsPanel, useBookRequestsEnabled } from "./
  * (titre, série, auteur), le filtre d'une série venu de l'accueil (`?serie=`), « Continuer la
  * lecture » quand rien n'est filtré, puis toutes les séries dans l'ordre des tomes (`BooksGrid`,
  * dessinée par morceaux). La fiche et le lecteur
- * s'ouvrent par-dessus, chacun avec son entrée d'historique (`bookRoute.ts`).
+ * s'ouvrent par-dessus, chacun avec son entrée d'historique — l'adresse et le cycle de vie des fiches
+ * de films (`cinemaRoute`, `BookSheetHost`).
  *
  * Le lecteur est un morceau à part, chargé à la première ouverture d'un livre : la grille ne
  * télécharge rien de foliate-js.
@@ -36,6 +39,17 @@ const BookReader = dynamic(() => import("./BookReader").then((m) => m.BookReader
 });
 
 export const BOOKS_KEY = "/api/books";
+const QUERY_DEBOUNCE_MS = 250;
+const EMPTY: BookSummary[] = [];
+const NO_FACETS = { series: [] as string[], authors: [] as string[], genres: [] as string[] };
+
+interface BooksPage {
+  total: number;
+  library: number;
+  books: BookSummary[];
+  seriesCounts: Record<string, number>;
+  resume?: BookSummary[];
+}
 
 /** Les filtres et le tri de l'adresse (`/livres?serie=…&auteur=…&genre=…&tri=…`) — le « Tout voir » des rangées y mène. */
 function filtersFromAddress(): { serie: string | null; auteur: string | null; genre: string | null; tri: BookSort } {
@@ -50,30 +64,45 @@ function filtersFromAddress(): { serie: string | null; auteur: string | null; ge
 
 export function BooksScreen() {
   const t = useT();
-  const route = useBookRoute();
-  const { data, error, isLoading, mutate } = useSWR<{ books: BookSummary[] }>(BOOKS_KEY, fetcher, { revalidateOnFocus: true });
-  const books = useMemo(() => data?.books ?? [], [data]);
+  const route = useCinemaRoute();
   const [filters, setFilters] = useState(filtersFromAddress);
   const { serie, auteur, genre, tri } = filters;
   const [query, setQuery] = useState("");
-  // La saisie reste vive ; le filtre de plusieurs milliers de livres suit juste derrière.
-  const deferredQuery = useDeferredValue(query);
-  const filtered = useMemo(
-    () => sortBooks(filterBooks(books, { query: deferredQuery, serie, auteur, genre }), tri),
-    [books, deferredQuery, serie, auteur, genre, tri]
+  // Le filtre tapé part au serveur un quart de seconde après la dernière frappe, pas à chaque lettre.
+  const [typed, setTyped] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setTyped(query.trim()), QUERY_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+  const params = useMemo(() => {
+    const p = new URLSearchParams();
+    if (typed) p.set("q", typed);
+    if (serie) p.set("serie", serie);
+    if (auteur) p.set("auteur", auteur);
+    if (genre) p.set("genre", genre);
+    if (tri !== "series") p.set("tri", tri);
+    return p.toString();
+  }, [typed, serie, auteur, genre, tri]);
+  // La grille par pages (`/api/books?offset=…`) : la bibliothèque entière ne voyage jamais d'un bloc.
+  const { data: pages, error, isLoading, isValidating, setSize, mutate } = useSWRInfinite<BooksPage>(
+    (i, previous: BooksPage | null) => (previous && previous.books.length < GRID_CHUNK ? null : `${BOOKS_KEY}?${params}${params ? "&" : ""}offset=${i * GRID_CHUNK}&limit=${GRID_CHUNK}`),
+    fetcher,
+    { revalidateFirstPage: false, revalidateOnFocus: false }
   );
-  const filtering = deferredQuery.trim() !== "" || serie !== null || auteur !== null || genre !== null;
-  // Les choix des filtres : chaque série, chaque auteur (rapproché), chaque genre de la bibliothèque.
-  const choices = useMemo(() => {
-    const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
-    const sorted = (xs: string[]) => [...new Set(xs)].sort(collator.compare);
-    return {
-      series: sorted(groupBooks(books).flatMap((g) => (g.series ? [g.series] : []))),
-      authors: sorted([...authorIndex(books).values()].map((a) => a.label)),
-      genres: sorted([...genreIndex(books).values()].map((g) => g.label)),
-    };
-  }, [books]);
-  const resume = useMemo(() => (filtering ? [] : continueReading(books)), [books, filtering]);
+  const data = pages?.[0];
+  const books = useMemo(() => pages?.flatMap((page) => page.books) ?? [], [pages]);
+  const seriesCounts = useMemo(() => Object.assign({}, ...(pages ?? []).map((page) => page.seriesCounts)) as Record<string, number>, [pages]);
+  const total = data?.total ?? 0;
+  const library = data?.library ?? 0;
+  const more = books.length < total;
+  const loadMore = useCallback(() => {
+    if (!isValidating) void setSize((n) => n + 1);
+  }, [isValidating, setSize]);
+  const filtering = typed !== "" || serie !== null || auteur !== null || genre !== null;
+  // Les choix des menus, calculés par le serveur une fois (`/api/books/facets`).
+  const { data: facets } = useSWR<{ series: string[]; authors: string[]; genres: string[] }>("/api/books/facets", fetcher);
+  const choices = facets ?? NO_FACETS;
+  const resume = filtering ? EMPTY : (data?.resume ?? EMPTY);
   // « Mes demandes » ouvert d'emblée : c'est là que mène la notification d'une demande (`?demandes=1`).
   const requestsEnabled = useBookRequestsEnabled();
   const [requestsOpen, setRequestsOpen] = useState(() => {
@@ -83,13 +112,36 @@ export function BooksScreen() {
       return false;
     }
   });
-  // Où la couverture touchée était à l'écran : la fiche en part (et y revient).
-  const [origin, setOrigin] = useState<MorphOrigin | null>(null);
-
-  const open = (book: BookSummary, el: HTMLElement) => {
-    const cover = el.querySelector("[data-book-cover]") ?? el;
-    setOrigin({ id: book.id, rect: cover.getBoundingClientRect() });
-    openBookRoute({ book: book.id, reading: false });
+  // La fiche s'ouvre d'une entrée d'historique, comme celle d'un film ; d'où elle part, c'est l'appui
+  // lui-même qui le dit (`sheetMorph/source.ts`), la carte n'a rien à transmettre.
+  const open = (book: BookSummary) => cinemaNavigate({ book: book.id, reading: false });
+  // Le lecteur : la couverture grandit en première page (`readerOpening`), puis l'adresse le nomme.
+  const openReader = async (_book: BookSummary | null, _id: string, cover: HTMLElement | null) => {
+    const done = await readerOpening(cover);
+    cinemaNavigate({ reading: true });
+    window.setTimeout(done, 450);
+  };
+  /**
+   * Refermer le lecteur : un retour, comme une fiche. Arrivé directement de l'accueil du cinéma
+   * (`?retour=1`, `BooksHome`), sans rien d'empilé ici, c'est à l'accueil qu'on revient — où la fiche
+   * du livre attend.
+   */
+  const closeReader = () => {
+    const fromHome = new URLSearchParams(window.location.search).get("retour") === "1";
+    const depth = (window.history.state as Record<string, unknown> | null)?.cinemaDepth;
+    if (fromHome && !(typeof depth === "number" && depth > 0)) {
+      let sameSite = false;
+      try {
+        sameSite = new URL(document.referrer).origin === window.location.origin;
+      } catch {
+        /* pas de provenance lisible */
+      }
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- un vrai chargement, exprès : l'accueil a sa propre politique de sécurité.
+      if (!sameSite) window.location.assign(`/#livres=1&livre=${route.book ?? ""}`);
+      else window.history.back();
+      return;
+    }
+    cinemaClose({ reading: false });
   };
   const setFilter = (key: "serie" | "auteur" | "genre" | "tri", value: string | null) => {
     setFilters((f) => ({ ...f, [key]: key === "tri" ? ((value as BookSort | null) ?? "series") : value || null }));
@@ -100,7 +152,11 @@ export function BooksScreen() {
     window.history.replaceState(window.history.state, "", url);
   };
 
-  const selected = route.book ? (books.find((b) => b.id === route.book) ?? null) : null;
+  const known = useMemo(() => [...resume, ...books], [resume, books]);
+  const listed = route.book ? (known.find((b) => b.id === route.book) ?? null) : null;
+  // Un livre ouvert hors des pages reçues (depuis l'accueil, la recherche) : sa fiche le dit — la même clé que celle de `BookSheet`.
+  const { data: detail } = useSWR<BookSummary>(route.book && !listed ? `/api/books/${route.book}` : null, fetcher);
+  const selected = listed ?? detail ?? null;
 
   return (
     <div className="fixed inset-0 overflow-y-auto overscroll-contain bg-ink text-white" style={{ paddingTop: "env(safe-area-inset-top)" }}>
@@ -112,51 +168,41 @@ export function BooksScreen() {
             <ChevronLeft size={19} aria-hidden />
           </a>
           <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{t("books.browseAll")}</h1>
-          {books.length > 0 && <span className="ml-auto text-sm text-subtle">{books.length === 1 ? t("books.countOne") : t("books.count", { n: books.length })}</span>}
+          {data && total > 0 && <span className="ml-auto text-sm text-subtle">{total === 1 ? t("books.countOne") : t("books.count", { n: total })}</span>}
         </div>
-        {books.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <label className="relative min-w-0 flex-1 sm:max-w-md">
-              <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-subtle" aria-hidden />
+        {library > 0 && (
+          // Les réglages de la grille, comme ceux de « Voir tout » des films (`CinemaBrowseSheet`) : une
+          // ligne qui défile — le filtre de la grille (pas une seconde recherche : celle de l'application
+          // trouve aussi les livres), le tri, le genre, l'auteur, la série — mêmes champs, mêmes libellés.
+          <div className="relative -mx-1 mt-3">
+            <div className="scrollbar-none flex gap-2 overflow-x-auto px-1 pb-1">
               <input
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={t("books.searchPlaceholder")}
-                aria-label={t("books.searchPlaceholder")}
-                className="h-10 w-full rounded-full bg-white/10 pl-10 pr-4 text-sm text-white placeholder:text-subtle focus:bg-white/15 focus:outline-none"
-                enterKeyHint="search"
-              />
-            </label>
-            <BookRequestButton books={books} />
-          </div>
-        )}
-        {books.length > 0 && (
-          <div className="scrollbar-none -mx-4 mt-2 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
-            <Picker label={t("books.sortBy")} value={tri} onChange={(v) => setFilter("tri", v)} options={BOOK_SORTS.map((s) => ({ value: s, label: t(`books.sorts.${s}`) }))} />
-            <Picker
-              label={t("books.filterSeries")}
-              value={serie ?? ""}
-              onChange={(v) => setFilter("serie", v)}
-              options={[{ value: "", label: t("books.filterSeries") }, ...choices.series.map((x) => ({ value: x, label: x })), { value: NO_SERIES, label: t("books.others") }]}
-            />
-            <Picker label={t("books.filterAuthor")} value={auteur ?? ""} onChange={(v) => setFilter("auteur", v)} options={[{ value: "", label: t("books.filterAuthor") }, ...choices.authors.map((x) => ({ value: x, label: x }))]} />
-            {choices.genres.length > 0 && (
-              <Picker label={t("books.filterGenre")} value={genre ?? ""} onChange={(v) => setFilter("genre", v)} options={[{ value: "", label: t("books.filterGenre") }, ...choices.genres.map((x) => ({ value: x, label: x }))]} />
-            )}
-            {(serie || auteur || genre) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setFilter("serie", null);
-                  setFilter("auteur", null);
-                  setFilter("genre", null);
+                onKeyDown={(e) => {
+                  if (e.key === "Escape" && query) {
+                    e.stopPropagation();
+                    setQuery("");
+                  }
                 }}
-                className="flex h-9 shrink-0 items-center gap-1 rounded-full px-3 text-sm text-subtle hover:text-white"
-              >
-                <X size={14} aria-hidden /> {t("books.clearFilter")}
-              </button>
-            )}
+                placeholder={t("player.browse.filter")}
+                aria-label={t("player.browse.filter")}
+                className={`${FILTER_FIELD} w-40`}
+              />
+              <Picker label={t("player.browse.sort")} value={tri} onChange={(v) => setFilter("tri", v)} options={BOOK_SORTS.map((s) => ({ value: s, label: t(`books.sorts.${s}`) }))} />
+              {choices.genres.length > 0 && (
+                <Picker label={t("player.browse.genre")} value={genre ?? ""} onChange={(v) => setFilter("genre", v)} options={[{ value: "", label: t("player.browse.allGenres") }, ...choices.genres.map((x) => ({ value: x, label: x }))]} />
+              )}
+              <Picker label={t("books.filterAuthor")} value={auteur ?? ""} onChange={(v) => setFilter("auteur", v)} options={[{ value: "", label: t("books.allAuthors") }, ...choices.authors.map((x) => ({ value: x, label: x }))]} />
+              <Picker
+                label={t("books.filterSeries")}
+                value={serie ?? ""}
+                onChange={(v) => setFilter("serie", v)}
+                options={[{ value: "", label: t("books.allSeries") }, ...choices.series.map((x) => ({ value: x, label: x })), { value: NO_SERIES, label: t("books.others") }]}
+              />
+              <BookRequestButton className="h-9 shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 text-sm font-medium text-white hover:bg-white/10" />
+            </div>
           </div>
         )}
       </header>
@@ -171,12 +217,13 @@ export function BooksScreen() {
             </button>
           </div>
         )}
-        {data && books.length === 0 && <p className="mx-auto mt-24 max-w-sm px-6 text-center text-muted">{t("books.empty")}</p>}
-        {data && books.length > 0 && filtered.length === 0 && (
+        {data && library === 0 && <p className="mx-auto mt-24 max-w-sm px-6 text-center text-muted">{t("books.empty")}</p>}
+        {data && library > 0 && total === 0 && (
+
           <div className="mx-auto mt-16 flex max-w-sm flex-col items-center gap-4 px-6 text-center">
             <p className="text-muted">{t("books.noMatch")}</p>
             {/* La recherche vide mène à la demande, le titre déjà tapé. */}
-            <BookRequestButton books={books} label={t("books.requests.notFound")} initialTitle={deferredQuery.trim()} />
+            <BookRequestButton label={t("books.requests.notFound")} initialTitle={typed} />
           </div>
         )}
 
@@ -188,7 +235,8 @@ export function BooksScreen() {
                 <button
                   key={book.id}
                   type="button"
-                  onClick={(e) => open(book, e.currentTarget)}
+                  data-sheet-source=""
+                  onClick={() => open(book)}
                   className="group flex w-[17.5rem] shrink-0 snap-start items-center gap-4 rounded-2xl bg-white/5 p-3 text-left transition-transform duration-200 active:scale-[0.97] sm:w-[20rem]"
                 >
                   <div data-book-cover className="w-20 shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40">
@@ -213,37 +261,20 @@ export function BooksScreen() {
         )}
 
         {/* Remontée à chaque filtre : la grille repart de son premier morceau. */}
-        <BooksGrid key={`${serie ?? ""}|${auteur ?? ""}|${genre ?? ""}|${tri}|${deferredQuery}`} books={filtered} onOpen={open} flat={tri !== "series"} />
+        <BooksGrid key={params} books={books} onOpen={open} flat={tri !== "series"} more={more} onMore={loadMore} seriesCounts={seriesCounts} />
       </main>
 
-      {requestsEnabled && requestsOpen && <BookRequestsPanel books={books} onClose={() => setRequestsOpen(false)} />}
+      {requestsEnabled && requestsOpen && <BookRequestsPanel onClose={() => setRequestsOpen(false)} />}
 
-      {/* Portés dans `body`, comme le lecteur des films : sous l'écran, qui est `fixed` et donc son
-          propre contexte d'empilement, la fiche et le lecteur passaient sous les invitations
-          flottantes de l'application (« Installer », z-60) quel que soit leur propre z-index. */}
-      {route.book &&
-        createPortal(
-          <BookSheet
-            key={route.book}
-            id={route.book}
-            summary={selected}
-            origin={origin?.id === route.book ? origin : null}
-            hidden={route.reading}
-            onRead={() => openBookRoute({ book: route.book, reading: true })}
-            onClose={closeBookRoute}
-          />,
-          document.body
-        )}
+      {/* La fiche d'après l'adresse, dans le cycle de vie des fiches de films (`BookSheetHost`). */}
+      <BookSheetHost books={known} onRead={openReader} />
+      {/* Porté dans `body`, comme le lecteur des films : sous l'écran, qui est `fixed` et donc son
+          propre contexte d'empilement, il passait sous les invitations flottantes de l'application
+          (« Installer », z-60) quel que soit son propre z-index. */}
       {route.book &&
         route.reading &&
         createPortal(
-          <BookReader
-            key={route.book}
-            id={route.book}
-            title={selected ? displayTitle(selected) : ""}
-            onClose={closeBookRoute}
-            onSaved={() => void mutate()}
-          />,
+          <BookReader key={route.book} id={route.book} title={selected ? displayTitle(selected) : ""} onClose={closeReader} onSaved={() => void mutate()} />,
           document.body
         )}
     </div>
@@ -260,18 +291,18 @@ function GridSkeleton() {
   );
 }
 
+// Les champs de « Voir tout » des films (`CinemaBrowseSheet`, `FILTER_BASE`), recopiés : sans le flou
+// d'arrière-plan des `input` / `select` globaux, qui accrochait le défilement sur iPhone.
+const FILTER_BASE =
+  "h-9 shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500";
+const FILTER_FIELD = `${FILTER_BASE} placeholder:text-subtle`;
+
 /** Un choix de la grille, en liste native : des milliers d'auteurs s'y parcourent au clavier comme au doigt. */
 function Picker({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
-  const active = value !== "" && value !== "series";
   return (
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={`h-9 max-w-[14rem] shrink-0 cursor-pointer appearance-none truncate rounded-full px-4 text-sm font-medium focus:outline-none ${active ? "bg-white text-ink" : "bg-white/10 text-white"}`}
-    >
+    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={`${FILTER_BASE} max-w-[14rem]`}>
       {options.map((o) => (
-        <option key={o.value} value={o.value} className="bg-surface text-white">
+        <option key={o.value} value={o.value}>
           {o.label}
         </option>
       ))}

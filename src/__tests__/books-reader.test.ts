@@ -13,7 +13,6 @@ import {
 } from "@/lib/books/readerPrefs";
 import { continueReading, groupBooks } from "@/lib/books/grouping";
 import { compareBooks, plainOverview } from "@/lib/books/library";
-import { bookRouteHash, parseBookRoute } from "@/lib/books/bookRoute";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
 
@@ -106,6 +105,7 @@ const book = (over: Partial<BookSummary>): BookSummary => ({
   id: "0".repeat(32),
   name: "x",
   coverTag: null,
+  fileTag: null,
   seriesName: null,
   index: null,
   year: null,
@@ -145,16 +145,6 @@ describe("la grille", () => {
   it("un résumé en HTML devient du texte", () => {
     expect(plainOverview("<p>Un&nbsp;<i>résumé</i></p><p>L&#39;autre &amp; fin</p>")).toBe("Un résumé\nL'autre & fin");
     expect(plainOverview(null)).toBe("");
-  });
-});
-
-describe("l'adresse de la page des livres", () => {
-  it("fiche et lecteur dans le fragment, un identifiant mal formé ne vaut rien", () => {
-    const id = "ab".repeat(16);
-    expect(parseBookRoute(`#livre=${id}`)).toEqual({ book: id, reading: false });
-    expect(parseBookRoute(`#livre=${id}&lire`)).toEqual({ book: id, reading: true });
-    expect(parseBookRoute("#livre=../../x&lire")).toEqual({ book: null, reading: false });
-    expect(bookRouteHash({ book: id, reading: true })).toBe(`#livre=${id}&lire`);
   });
 });
 

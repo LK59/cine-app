@@ -2273,6 +2273,8 @@
       "interfaceDesktop": "Ordenador",
       "guidedScroll": "Desplazamiento guiado",
       "guidedScrollHint": "En el ordenador, el inicio se ajusta a una fila entera y las fichas a una página entera. Desactivado, la página se desplaza libremente.",
+      "showBooks": "Mostrar los libros",
+      "showBooksHint": "Una tercera categoría junto a las películas y las series, y los libros en la búsqueda. En todos sus dispositivos.",
       "home": {
         "continueHero": "Mostrar lo que estoy viendo en el banner del inicio",
         "continueHeroHint": "Lo que estás viendo encabeza el inicio; si hay poco, los títulos destacados completan."

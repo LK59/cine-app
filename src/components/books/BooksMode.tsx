@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { LayoutGrid } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher, playerBootstrapOptions } from "@/lib/swr";
-import { cinemaNavigate } from "@/lib/cinemaRoute";
+import { cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 
 /**
  * Ce que l'accueil du cinéma sait des livres (option, DECISIONS.md §127) — et rien de plus : ce module
@@ -34,12 +34,25 @@ export function useBooksMode(inAddress: boolean | undefined): BooksMode {
   const known = data !== undefined;
   // Une adresse `#livres=1` sur une installation où l'option est coupée (lien gardé, option retirée
   // depuis) : le mode est retiré de l'adresse, et l'accueil reste celui des films et séries.
+  const bookInAddress = !!useCinemaRoute().book;
   useEffect(() => {
-    if (known && !enabled && inAddress) cinemaNavigate({ books: false }, "replace");
-  }, [known, enabled, inAddress]);
+    if (known && !enabled && (inAddress || bookInAddress)) cinemaNavigate({ books: false, book: null, reading: false }, "replace");
+  }, [known, enabled, inAddress, bookInAddress]);
   if (!enabled) return { active: false, toggle: undefined };
   const active = inAddress === true;
   return { active, toggle: { active, onSelect: enter, onLeave: leave } };
+}
+
+const BooksSearchLazy = dynamic(() => import("./BooksSearch").then((m) => m.BooksSearch), { ssr: false });
+
+/**
+ * La section « Livres » de la recherche de l'application : rien, et aucun code des livres chargé, tant
+ * que l'option est coupée — la recherche reste alors exactement ce qu'elle était.
+ */
+export function BooksSearchEntry({ query }: { query: string }) {
+  const { data } = useSWR<{ booksEnabled?: boolean }>("/api/config/public", fetcher, playerBootstrapOptions);
+  if (data?.booksEnabled !== true) return null;
+  return <BooksSearchLazy query={query} />;
 }
 
 /** L'accueil des livres, chargé seulement dans la catégorie Livres. */

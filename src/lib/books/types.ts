@@ -20,6 +20,11 @@ export interface BookSummary {
   name: string;
   /** L'empreinte de la couverture chez Jellyfin (`ImageTags.Primary`) — `null` : pas de couverture. */
   coverTag: string | null;
+  /**
+   * L'empreinte du fichier chez Jellyfin (`Etag`) : la couverture tirée de l'EPUB quand Jellyfin n'en a
+   * pas (`/api/books/<id>/cover?v=…`) se garde tant que le fichier ne change pas.
+   */
+  fileTag: string | null;
   seriesName: string | null;
   /** Le tome dans la série ; `null` quand Jellyfin n'en connaît pas. */
   index: number | null;

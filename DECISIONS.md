@@ -7475,9 +7475,16 @@ Retour et rechargement le gardent, et une installation sans livres ne voit jamai
 livres (`BooksHome`, morceau à part) que dans la catégorie : la grille des films et séries reste
 montée dessous, inerte, sa bannière à l'arrêt (`gridOnTop` au bureau, `heroCovered` au téléphone).
 Option coupée, `useBooksMode` ignore le champ et le retire de l'adresse. « Tous les livres » mène à
-la grille complète (`/livres`) ; un livre touché depuis l'accueil ouvre sa fiche là-bas
-(`/livres?retour=1#livre=…`), et la fermer ramène à l'accueil. Ces passages sont de vrais chargements
-de page : le lecteur ne vit que sous la politique de sécurité de `/livres` (plus bas). Les livres ne s'appuient sur aucun champ propre à un greffon de Jellyfin : titre,
+la grille complète (`/livres`). **La fiche d'un livre est une fiche du cinéma** : nommée par l'adresse
+(`#livre=<id>`, `&lire=1` pour le lecteur — deux autres champs facultatifs de `cinemaRoute`), ouverte par
+une entrée d'historique, refermée par `cinemaClose` (un seul retour en vol), avec les pièces du cycle de
+vie des fiches (CLAUDE.md) : `useSheetTransition` (la couverture touchée devient la fiche au téléphone et
+à l'iPad, continuité au bureau), `useSheetExit`, `useSwipeToDismiss`, `useExitDelay`, `arrivedByBack`
+lu au montage, une `key` par livre, la barre du bas effacée dessous (`setOfflineSheetOpen`). « Lire » fait
+grandir la couverture en première page (`readerOpening.ts`, rien si le système demande moins de
+mouvement). Depuis l'accueil, le lecteur s'ouvre sur `/livres?retour=1#livre=…&lire=1` et le refermer y
+ramène, fiche ouverte : ce passage est un vrai chargement de page, le lecteur ne vivant que sous la
+politique de sécurité de `/livres` (plus bas). Tests : `books-sheet.test.tsx`. Les livres ne s'appuient sur aucun champ propre à un greffon de Jellyfin : titre,
 auteur (`People` de type `Author`), série et tome (`SeriesName`, `IndexNumber`), année, résumé et
 couverture sont ce que Jellyfin lit lui-même dans l'EPUB ; un tome, un auteur ou une couverture
 absents sont prévus.
@@ -7492,12 +7499,33 @@ réponse est `private`. Une session de lien de partage (§112) n'atteint rien : 
 une seconde fois. Seule écriture ouverte aux comptes : `POST /api/books/{id}/progress`, sa propre
 position.
 
-**À l'échelle de plusieurs milliers d'EPUB.** La liste est demandée à Jellyfin par pages de mille
-(`LIST_PAGE`), sans résumés — ils viennent avec la fiche. L'accueil reste borné (`homeRows`, ci-dessous) ;
-la grille complète se cherche (titre, série, auteur, sans accents ni casse), se filtre et se trie
-(`filterBooks`, `sortBooks`) et se dessine par morceaux de 90 (`BooksGrid`, un repère à l'approche du bas
-en ajoute 90) ; les couvertures se chargent à l'approche, à 500 px de large. `books-scale.test.tsx` le
-prouve sur 5 000 livres.
+**« Afficher les livres », par compte.** Compte → Interface, à côté de la disposition de l'accueil
+(§52), montré seulement l'option allumée (`booksAvailable`) : gardé par le serveur
+(`user_preferences.show_books`, `NULL` = oui), donc le même sur tous les appareils du compte. Coupé, la
+configuration publique répond `booksEnabled: false` (et `bookRequests: false`) pour ce compte : c'est la
+clé que lisent la bascule, la recherche et les demandes, et tout se passe comme l'option coupée — deux
+boutons, pas de section dans la recherche, aucun code des livres chargé, aucune requête. Les routes,
+elles, restent ouvertes à ce compte : c'est un affichage, pas un droit (`showBooks.ts`).
+
+**À l'échelle de plusieurs milliers d'EPUB, sans jamais ralentir le reste.** Rien des livres ne part
+au lancement : ni dans `earlyFetch`, ni dans le catalogue, ni dans le cache gardé sur l'appareil, ni dans
+les préchauffages du serveur (`catalogueWarm`, `selfWarm`) — un test le vérifie. Le serveur garde, par
+compte et en mémoire, un **index** (`bookIndex.ts`) : la liste demandée à Jellyfin par pages de mille
+(`LIST_PAGE`) sans résumés, triée, le texte de recherche de chaque livre déjà replié, l'accueil déjà
+calculé et les choix des menus. Il naît à la première ouverture de la catégorie, se construit par
+tranches de quatre cents livres en rendant la main à la boucle entre deux, sert cinq minutes puis se
+refait derrière la réponse (une préparation à la fois), et se refait depuis les éléments déjà reçus quand
+des métadonnées d'EPUB arrivent (au plus toutes les vingt secondes) ; vingt-quatre comptes au plus. Le
+téléphone n'en reçoit que des morceaux : l'accueil (`/api/books/home`, une douzaine de rangées de vingt),
+une page de la grille (`/api/books?offset=…&limit=…`, 200 au plus, filtrée et triée par le serveur, avec
+le vrai nombre de tomes des séries de la page), les choix des menus (`/api/books/facets`), douze
+résultats de recherche (`/api/books/search`). La grille demande sa page suivante à l'approche du bas ; ses
+cartes hors du champ ne sont ni mises en page ni peintes (`content-visibility: auto`) ; les couvertures
+se chargent à l'approche. Mesuré (`books-scale.test.tsx`, suite en parallèle) : l'index de 6 400 livres en
+~160 ms, la plus longue tranche ~25–30 ms ; une page triée et une recherche ~4 ms ; 5 000 OPF par la
+file en 200 transactions, boucle au plus ~30 ms. Le « Tout voir » est la grille complète, réglée comme
+« Voir tout » des films (`CinemaBrowseSheet`, recopié et non modifié) : « Filtrer… » (un filtre de la
+grille, pas une seconde recherche), tri, genre, auteur, série — des listes, pas de puces.
 
 **La série, l'auteur, le genre : jamais le dossier.** Jellyfin donne à un livre le nom du dossier qui le
 contient pour série : l'auteur dans une bibliothèque rangée par auteur (`/livres/<Auteur>/…`, ce que fait
@@ -7507,10 +7535,23 @@ tome viennent donc de l'EPUB seul — `calibre:series` / `calibre:series_index`,
 dire pas de série (`decideSeries`). L'OPF est lu par plages à travers le relais de Jellyfin (la fin du
 zip, `container.xml`, l'OPF : quelques dizaines de kilo-octets), une fois par fichier (`book_meta`, clé
 `Etag`), en arrière-plan, deux à la fois ; la grille ne l'attend jamais — un livre pas encore lu s'affiche
-sans série, et la prend au chargement suivant (`epubMeta.ts`). Les auteurs sont les `People` de Jellyfin
-(qu'il tire de l'EPUB), jamais un nom de dossier, rapprochés quel que soit l'ordre des mots (« Muchamore
-Robert », `nameKey`). Les genres réunissent ceux de Jellyfin et les sujets de l'EPUB, coupés (« Policier/
-Thriller »), débarrassés des mots de format, dédoublonnés (`bookGenres`). Rien ne suppose une seule
+sans série, et la prend au chargement suivant (`epubMeta.ts`). Cette file ne démarre qu'à la demande de
+l'index (jamais au lancement), se met en pause tant qu'un film joue (`anyPlaybackBeat`, comme les
+répliques, §88) et écrit par lots de vingt-cinq dans une transaction courte. Les auteurs sont les `People`
+de Jellyfin, sinon les `dc:creator` de l'OPF (Jellyfin n'en a que pour une partie des livres que l'EPUB
+décrit pourtant ; « Nom, Prénom » remis dans l'ordre, `bookAuthors`) — jamais un nom de dossier —,
+rapprochés quel que soit l'ordre des mots (« Muchamore Robert », `nameKey`). Les genres réunissent ceux
+de Jellyfin et les sujets de l'EPUB, coupés (« Policier/Thriller »), synonymes ramenés à un libellé
+(« SF », « Science-Fiction » → « Science-fiction » ; « Polar » → « Policier » ; « Fantasy » et
+« Fantastique », « Policier » et « Thriller » restent distincts), débarrassés des mots de format ou de
+langue (« Fiction », « Roman », « Lang:fr ») et des valeurs qui ont l'air d'étiquettes ou d'ISBN
+(`bookGenres`) ; un genre porté par un seul livre n'est ni une rangée ni un choix de menu. **La
+couverture** : celle de Jellyfin ; sinon celle que l'OPF déclare (`meta name="cover"`,
+`properties="cover-image"`), faite à la première demande de la carte — jamais en masse — lue par plages,
+réduite par `sharp` (360 px, WebP), gardée sous `DATA_DIR/book-covers` (bornée en nombre et en octets,
+un EPUB sans couverture marqué pour ne pas être relu ; `covers.ts`, `/api/books/<id>/cover`, vérifié contre
+l'index du compte) ; sinon une couverture dessinée — titre et auteur sur une couleur tirée du titre
+(`BookCover`), jamais une tuile grise. Rien ne suppose une seule
 racine : une bibliothèque peut en avoir plusieurs, et un même livre (même titre, même auteur) présent dans
 deux n'apparaît qu'une fois dans les rangées — celui où l'on a lu, sinon le mieux décrit (`dedupeBooks`) —,
 les deux restant dans la grille. L'accueil montre, dans l'ordre et chaque rangée cachée quand elle est
@@ -7519,6 +7560,12 @@ tome), par auteur (deux livres et plus, par année ; pas quand tous ses livres s
 montrée), par genre (trois livres et plus) — dix au plus, les plus fournies, chacune avec son « Tout
 voir » (`/livres?serie=`, `auteur=`, `genre=`, `tri=`). Les titres sont ceux de Jellyfin (les métadonnées
 de l'EPUB), jamais les noms de fichiers. Tests : `books-metadata.test.ts`.
+
+**La recherche.** Une seule : celle de l'application (la loupe) gagne une section « Livres » sous les
+films et les séries, quand les livres sont affichés pour ce compte (`BooksSearchEntry`, rien sinon — ni
+rendu, ni code, ni requête). Sa propre requête, partie 300 ms après la dernière frappe
+(`/api/books/search`, l'index en mémoire, même limite par compte que la recherche des films) : les films
+et séries ne l'attendent jamais. Un livre touché y ouvre sa fiche dans la catégorie Livres.
 
 **Demander un livre.** Une seconde option, `BOOKS_REQUESTS_ENABLED` (même carte, coupée par défaut,
 sans effet tant que les livres sont coupés — `config.books.requests`). Un ticket, traité à la main :
@@ -7543,7 +7590,7 @@ Jellyfin pour ce compte (`markPlayed`) ; un échec de cet appel ne perd pas la p
 **Le lecteur.** foliate-js, copié à un commit précis (`src/lib/books/foliate/`, README et
 `UPSTREAM`) : pas de paquet npm, et seuls les fichiers de l'EPUB. Pages en colonnes (deux côte à côte
 sur un écran large et couché, si l'on veut) ou défilement continu ; toucher à gauche ou à droite,
-glisser, molette, flèches ; Échap ou Retour referment (fragment d'adresse, `bookRoute.ts`). Réglages
+glisser, molette, flèches ; Échap ou Retour referment (`&lire=1` dans l'adresse du cinéma). Réglages
 gardés par appareil (`localStorage`, chaque accès gardé) : changement de page (glisser, fondu, page
 3D, aucun, défilement — fondu par défaut si le système demande moins de mouvement), taille, police
 (celle du livre, Literata, Georgia, Outfit, système ; Literata et Outfit servies depuis
@@ -7577,7 +7624,9 @@ d'ailleurs.
 rien des livres dans l'accueil, politique générale intacte), `books-sanitize.test.ts` (chapitre
 piégé, `fixtures/books/piege.xhtml`), `books-reader.test.ts` (réglages, grille, adresse, correctifs
 de foliate-js, titre affiché), `books-toggle.test.tsx` (deux boutons option coupée, troisième et mode
-Livres allumée, adresse). En vrais navigateurs : `tools/livres-securite/` (Chromium, Firefox, WebKit ; un EPUB
+Livres allumée, adresse ; la section de la recherche coupée), `books-sheet.test.tsx` (cycle de vie de
+la fiche), `books-scale.test.tsx` (index, pages, file des OPF, mesures de la boucle),
+`books-metadata.test.ts` (OPF, auteurs, genres, couverture), `books-requests.test.ts`. En vrais navigateurs : `tools/livres-securite/` (Chromium, Firefox, WebKit ; un EPUB
 piégé et un espion qui compte ce qui l'atteint).
 
 **Voulu.** Ni page Nouveautés, ni entrée au registre des corrections : une option qu'une

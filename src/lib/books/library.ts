@@ -5,8 +5,8 @@ import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { blockedTagsOf, carriesBlockedTag } from "@/lib/blockedTags";
 import type { SessionPayload } from "@/lib/auth";
 import type { BookDetail, BookSummary } from "@/lib/books/types";
-import { knownMeta, scheduleMetaReads, staleMeta, type EpubMeta } from "@/lib/books/epubMeta";
-import { bookGenres, decideSeries } from "@/lib/books/metadata";
+import { knownMeta, type EpubMeta } from "@/lib/books/epubMeta";
+import { bookAuthors, bookGenres, decideSeries } from "@/lib/books/metadata";
 
 /**
  * Les livres de Jellyfin, vus par un compte (DECISIONS.md §127).
@@ -17,8 +17,8 @@ import { bookGenres, decideSeries } from "@/lib/books/metadata";
  * tags bloqués du compte n'existe pas — la même fonction que le catalogue, `carriesBlockedTag`.
  *
  * L'administrateur local (sans identité Jellyfin) voit la bibliothèque entière, comme partout ailleurs
- * (`assertVisible`). Aucun cache : une grille de livres est lue à l'ouverture de la page, pas à chaque
- * lancement de l'application, et une liste gardée ici devrait suivre les droits de chaque compte.
+ * (`assertVisible`). La liste est gardée par compte, en mémoire, par l'index (`bookIndex.ts`) : jamais
+ * lue au lancement de l'application, seulement quand la catégorie Livres s'ouvre.
  */
 
 const FIELDS = "Tags,Genres,People,Overview,SeriesName,ProductionYear,ImageTags,DateCreated,Etag";
@@ -34,7 +34,7 @@ export const LIST_PAGE = 1000;
 const LIST_MAX = 50_000;
 const TIMEOUT_MS = 10_000;
 
-interface JellyfinBookItem {
+export interface JellyfinBookItem {
   Id: string;
   Name?: string;
   Type?: string;
@@ -93,21 +93,22 @@ export function plainOverview(raw: string | null | undefined): string {
 /**
  * Un livre pour l'écran. La série et le tome : ceux de l'EPUB, quand on l'a lu (`epubMeta.ts`,
  * `decideSeries`) — jamais le dossier où Jellyfin l'a trouvé. Les auteurs : les `People` de Jellyfin,
- * qu'il tire de l'EPUB. Les genres : ceux de Jellyfin et les sujets de l'EPUB, regroupés (`bookGenres`).
+ * sinon les `dc:creator` de l'OPF (`bookAuthors`). Les genres : ceux de Jellyfin et les sujets de
+ * l'EPUB, regroupés (`bookGenres`).
  */
-function summaryOf(item: JellyfinBookItem, meta: EpubMeta | null = null): BookSummary {
-  const authors = (item.People ?? []).filter((p) => p.Type === "Author" && p.Name).map((p) => p.Name as string);
-  // La série et le tome viennent de l'EPUB seul (`decideSeries`) : jamais du dossier où Jellyfin l'a trouvé.
+export function summaryOf(item: JellyfinBookItem, meta: EpubMeta | null = null): BookSummary {
+  const people = (item.People ?? []).filter((p) => p.Type === "Author" && p.Name).map((p) => p.Name as string);
   const seriesName = decideSeries({ opfSeries: meta?.series });
   const index = seriesName ? (meta?.seriesIndex ?? null) : null;
   return {
     id: item.Id.toLowerCase(),
     name: item.Name?.trim() || "—",
     coverTag: item.ImageTags?.Primary ?? null,
+    fileTag: item.Etag ?? null,
     seriesName,
     index,
     year: typeof item.ProductionYear === "number" ? item.ProductionYear : null,
-    authors,
+    authors: bookAuthors(people, meta?.creators),
     genres: bookGenres([...(item.Genres ?? []), ...(meta?.subjects ?? [])]),
     played: item.UserData?.Played === true,
     addedAt: item.DateCreated ? Date.parse(item.DateCreated) || null : null,
@@ -138,8 +139,11 @@ export function compareBooks(a: BookSummary, b: BookSummary): number {
   return collator.compare(a.name, b.name);
 }
 
-/** Les livres que ce compte voit, dans l'ordre de la grille. */
-export async function listBooks(caller: BookCaller): Promise<BookSummary[]> {
+/**
+ * Les livres que ce compte voit, tels que Jellyfin les décrit — par pages de mille, sans résumés, moins
+ * ceux qui portent un de ses tags bloqués. L'index (`bookIndex.ts`) en fait la grille.
+ */
+export async function fetchBookItems(caller: BookCaller): Promise<JellyfinBookItem[]> {
   const items: JellyfinBookItem[] = [];
   for (let start = 0; start < LIST_MAX; start += LIST_PAGE) {
     const params = new URLSearchParams({
@@ -155,16 +159,12 @@ export async function listBooks(caller: BookCaller): Promise<BookSummary[]> {
     const { status, body } = await getJson<{ Items?: JellyfinBookItem[]; TotalRecordCount?: number }>(`${itemsBase(caller)}?${params}`);
     if (!body) throw new Error(`Jellyfin a répondu ${status}`);
     const page = body.Items ?? [];
-    items.push(...page);
+    for (const item of page) items.push(item);
     const total = typeof body.TotalRecordCount === "number" ? body.TotalRecordCount : 0;
     if (page.length < LIST_PAGE || items.length >= total) break;
   }
   const blocked = caller.jfId ? await blockedTagsOf(caller.jfId) : [];
-  const books = items.filter((item) => item.Type === "Book" && typeof item.Id === "string" && !carriesBlockedTag(item.Tags, blocked));
-  const known = knownMeta();
-  // Les OPF pas encore lus partent en arrière-plan ; la grille de cette fois-ci fait sans.
-  scheduleMetaReads(staleMeta(books.map((b) => ({ id: b.Id.toLowerCase(), etag: b.Etag ?? null })), known));
-  return books.map((item) => summaryOf(item, known.get(item.Id.toLowerCase())?.meta ?? null)).sort(compareBooks);
+  return items.filter((item) => item.Type === "Book" && typeof item.Id === "string" && !carriesBlockedTag(item.Tags, blocked));
 }
 
 /**

@@ -77,6 +77,13 @@ export interface CinemaRoute {
    * changent pas. Ignoré quand l'option est coupée (`useBooksMode`).
    */
   books?: boolean;
+  /**
+   * La fiche d'un livre (`#livre=<id>`), et son lecteur par-dessus (`&lire=1`) — même historique que
+   * les fiches de films : Retour, Échap et le bouton Retour d'Android la referment de la même façon.
+   * Facultatifs et absents par défaut, comme `books`.
+   */
+  book?: string | null;
+  reading?: boolean;
 }
 
 /**
@@ -297,6 +304,13 @@ function readNumber(params: URLSearchParams, key: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/** La fiche d'un livre et son lecteur, s'ils sont dans l'adresse — rien sinon (§127). */
+function bookOf(params: URLSearchParams): Pick<CinemaRoute, "book" | "reading"> {
+  const id = params.get("livre");
+  if (!id || !/^[0-9a-f]{32}$/i.test(id)) return {};
+  return params.get("lire") === "1" ? { book: id.toLowerCase(), reading: true } : { book: id.toLowerCase() };
+}
+
 function parse(hash: string): CinemaRoute {
   const params = new URLSearchParams(hash.replace(/^#/, ""));
   const serie = readNumber(params, "serie");
@@ -322,6 +336,7 @@ function parse(hash: string): CinemaRoute {
     downloads: params.get("telechargements") === "1",
     // Seulement quand il est là : une route sans livres reste exactement ce qu'elle était.
     ...(params.get("livres") === "1" ? { books: true } : {}),
+    ...bookOf(params),
   };
 }
 
@@ -346,6 +361,10 @@ function serialize(route: CinemaRoute): string {
   if (route.news) params.set("nouveautes", route.news);
   if (route.downloads) params.set("telechargements", "1");
   if (route.books) params.set("livres", "1");
+  if (route.book) {
+    params.set("livre", route.book);
+    if (route.reading) params.set("lire", "1");
+  }
   const query = params.toString();
   return query ? `#${query}` : "";
 }

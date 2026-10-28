@@ -16,6 +16,8 @@ const mockUserPrefsDb = {
   setGuidedScroll: vi.fn(),
   getHomeLayout: vi.fn(() => ({ continueHero: true })),
   setHomeLayout: vi.fn(),
+  getShowBooks: vi.fn(() => true),
+  setShowBooks: vi.fn(),
 };
 const mockSessionDb = { countOthers: vi.fn(), deleteOthers: vi.fn(), listOthers: vi.fn(() => []), find: vi.fn((): unknown => null) };
 vi.mock("@/lib/db", () => ({
@@ -178,6 +180,19 @@ describe("/api/user/preferences", () => {
     const res = await PUT(fakeReq({ body: { guidedScroll: false } }));
     expect(res.status).toBe(200);
     expect(mockUserPrefsDb.setGuidedScroll).toHaveBeenCalledWith("jf-3", false);
+    expect(mockUserPrefsDb.setLang).not.toHaveBeenCalled();
+  });
+
+  // « Afficher les livres » (DECISIONS.md §127) : une préférence du compte, oui par défaut, suivie
+  // d'un appareil à l'autre.
+  it("GET dit « Afficher les livres » du compte, et PUT le coupe seul", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "emma", jfId: "jf-3", role: "user" });
+    const { GET, PUT } = await import("@/app/api/user/preferences/route");
+    expect((await (await GET(fakeReq())).json()).showBooks).toBe(true);
+    const res = await PUT(fakeReq({ body: { showBooks: false } }));
+    expect(res.status).toBe(200);
+    expect(mockUserPrefsDb.setShowBooks).toHaveBeenCalledWith("jf-3", false);
+    expect(mockUserPrefsDb.setGuidedScroll).not.toHaveBeenCalled();
     expect(mockUserPrefsDb.setLang).not.toHaveBeenCalled();
   });
 

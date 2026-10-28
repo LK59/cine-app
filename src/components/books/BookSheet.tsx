@@ -1,121 +1,98 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { BookOpen, Check, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
+import { arrivedByBack, cinemaClose, useCinemaRoute } from "@/lib/cinemaRoute";
+import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
+import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
+import { useSheetExit } from "@/lib/useSheetExit";
+import { useExitDelay } from "@/lib/useExitDelay";
+import { SHEET_OUT_MS, SHEET_UNMOUNT_SLACK_MS, detailColumnMotion, phoneSheetCorner, phoneSheetShadow, sheetMotionClass } from "@/lib/sheetMotion";
+import { useIsMobile } from "@/lib/useIsMobile";
+import { setOfflineSheetOpen } from "@/lib/offline/offlineSheetOpen";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookDetail, BookSummary } from "@/lib/books/types";
-import { BookCover } from "./BookCover";
-
-/** D'où la fiche part : la couverture touchée, à sa place à l'écran. */
-export interface MorphOrigin {
-  id: string;
-  rect: DOMRect;
-}
-
-const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
-
-/** La transformation qui pose `el` (à sa place finale) sur `from`. */
-function poseOn(el: HTMLElement, from: DOMRect): string {
-  const to = el.getBoundingClientRect();
-  if (to.width === 0 || from.width === 0) return "none";
-  const sx = from.width / to.width;
-  const sy = from.height / to.height;
-  return `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${sx}, ${sy})`;
-}
-
-const reducedMotion = () => {
-  try {
-    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  } catch {
-    return false;
-  }
-};
+import { BookCover, coverUrl } from "./BookCover";
 
 /**
- * La fiche d'un livre (DECISIONS.md §127) : couverture, titre, auteur, série et tome, année, résumé,
- * genres, et « Lire » / « Reprendre » avec l'avancement.
+ * La fiche d'un livre (DECISIONS.md §127), dans le cycle de vie des fiches de l'application
+ * (CLAUDE.md, « The sheet lifecycle ») — les mêmes pièces que la fiche d'un titre, réutilisées telles
+ * quelles :
  *
- * La couverture touchée devient celle de la fiche, et la fiche y revient en se fermant — la même idée
- * que les fiches des films (§61), écrite ici en petit : ni rangées qui reculent, ni continuité de
- * bannière, rien de ce que le cinéma partage. Une fiche qui se ferme n'a plus d'avis : ni touches, ni
- * pointeur. Cachée sous le lecteur (`hidden`), elle reste montée pour réapparaître telle quelle.
+ * - l'adresse : `#livre=<id>` (`cinemaRoute`), ouverte d'une entrée d'historique, refermée par
+ *   `cinemaClose` — Retour, Échap et le bouton Retour d'Android la referment comme une fiche de film,
+ *   un seul `history.back()` en vol ;
+ * - l'entrée et la sortie : `useSheetTransition` (§61) — sur téléphone et iPad la couverture touchée
+ *   devient la fiche, et la fiche y retourne ; sur un ordinateur, la continuité du bureau ;
+ * - `arrivedByBack` lu une fois au montage : revenue par un retour (du lecteur), elle se découvre ;
+ * - le glisser vers le bas (`useSwipeToDismiss`, dont la prise de pointeur est `usePointerCapture`) ;
+ * - `useSheetExit` : une fiche qui sort n'écoute plus ni touches ni pointeur ;
+ * - montée par `BookSheetHost` avec `useExitDelay`, une instance par livre (`key`).
  */
-export function BookSheet({
+
+const EXIT_DESKTOP_MS = 200;
+
+/** La fiche d'après l'adresse : montée tant qu'elle est nommée, gardée le temps de sa sortie. */
+export function BookSheetHost({ books, onRead }: { books: readonly BookSummary[]; onRead: (book: BookSummary | null, id: string, cover: HTMLElement | null) => void }) {
+  const route = useCinemaRoute();
+  const isMobile = useIsMobile();
+  const open = !!route.book && !route.reading;
+  const exit = useExitDelay(open, isMobile ? SHEET_OUT_MS + SHEET_UNMOUNT_SLACK_MS : EXIT_DESKTOP_MS);
+  // Le livre montré : retenu pendant la sortie, quand l'adresse ne le nomme plus.
+  const [shown, setShown] = useState<string | null>(route.book ?? null);
+  if (route.book && route.book !== shown) setShown(route.book);
+  if (!exit.render || !shown) return null;
+  const summary = books.find((b) => b.id === shown) ?? null;
+  return <BookSheet key={shown} id={shown} summary={summary} leaving={exit.leaving} hidden={!!route.reading} onRead={(cover) => onRead(summary, shown, cover)} />;
+}
+
+function BookSheet({
   id,
   summary,
-  origin,
+  leaving,
   hidden,
   onRead,
-  onClose,
 }: {
   id: string;
   summary: BookSummary | null;
-  origin: MorphOrigin | null;
+  leaving: boolean;
   hidden: boolean;
-  onRead: () => void;
-  onClose: () => void;
+  onRead: (cover: HTMLElement | null) => void;
 }) {
   const t = useT();
+  const isMobile = useIsMobile();
   const { data: detail, error } = useSWR<BookDetail>(`/api/books/${id}`, fetcher);
-  // La série telle que la grille l'a jugée (`withoutFolderSeries`) : la fiche seule ne voit pas les
-  // voisins du livre, et répéterait le nom du dossier.
-  const book: BookSummary | null = detail ? (summary ? { ...detail, seriesName: summary.seriesName } : detail) : summary;
+  const book: BookSummary | null = detail ?? summary;
+  const containerRef = useRef<HTMLDivElement>(null);
   const coverRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const backdropRef = useRef<HTMLDivElement>(null);
-  const [closing, setClosing] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  // L'entrée : la couverture part de la carte, le reste de la fiche monte en fondu.
-  useLayoutEffect(() => {
-    if (reducedMotion()) return;
-    const panel = panelRef.current;
-    backdropRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: "ease-out" });
-    panel?.animate([{ opacity: 0, transform: "translateY(24px)" }, { opacity: 1, transform: "none" }], { duration: 340, easing: EASE });
-    const cover = coverRef.current;
-    if (cover && origin) {
-      cover.animate([{ transform: poseOn(cover, origin.rect), transformOrigin: "0 0" }, { transform: "none", transformOrigin: "0 0" }], { duration: 460, easing: EASE });
-    }
-    // À l'ouverture seulement : la fiche ne rejoue pas son entrée quand le livre arrive du réseau.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const close = () => {
-    if (closing) return;
-    if (reducedMotion()) {
-      onClose();
-      return;
-    }
-    setClosing(true);
-    const cover = coverRef.current;
-    // La carte d'origine, si elle est encore à l'écran : la grille a pu défiler derrière la fiche.
-    const card = origin ? document.querySelector(`[data-book-id="${origin.id}"] [data-book-cover]`) : null;
-    const target = card?.getBoundingClientRect() ?? null;
-    const visible = target && target.bottom > 0 && target.top < window.innerHeight;
-    const runs: Promise<unknown>[] = [];
-    if (cover && visible) {
-      runs.push(cover.animate([{ transform: "none", transformOrigin: "0 0" }, { transform: poseOn(cover, target), transformOrigin: "0 0" }], { duration: 380, easing: EASE, fill: "forwards" }).finished);
-    }
-    const panel = panelRef.current;
-    runs.push(panel?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: visible ? 260 : 200, easing: "ease-in", fill: "forwards" }).finished ?? Promise.resolve());
-    runs.push(backdropRef.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, easing: "ease-in", fill: "forwards" }).finished ?? Promise.resolve());
-    void Promise.allSettled(runs).then(onClose);
-  };
-
-  useEffect(() => {
-    if (hidden || closing) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        close();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+  const close = () => cinemaClose({ book: null, reading: false });
+  const exit = useSheetExit(close, { leaving, listening: !hidden });
+  const swipe = useSwipeToDismiss(exit.requestClose, { addressed: true });
+  // Revenue sur elle par un retour (le lecteur refermé) : elle se découvre, rien ne vole.
+  const [revealed] = useState(() => arrivedByBack());
+  const morph = useSheetTransition({
+    layout: isMobile ? "phone" : "desktop",
+    rootRef: containerRef,
+    imageRef: isMobile ? coverRef : containerRef,
+    active: !hidden,
+    leaving,
+    revealed,
+    ready: !!summary?.coverTag || !!detail,
   });
+
+  // La barre du bas du téléphone s'efface sous une fiche ; elle ne lit que les fiches de films dans
+  // l'adresse, et ce signal, posé pour les fiches qui n'y sont pas (`offlineSheetOpen.ts`).
+  useEffect(() => {
+    if (leaving) return;
+    setOfflineSheetOpen(true);
+    return () => setOfflineSheetOpen(false);
+  }, [leaving]);
 
   const progress = book?.progress ?? null;
   const pct = progress ? Math.round(progress.fraction * 100) : 0;
@@ -123,101 +100,153 @@ export function BookSheet({
   const readLabel = progress && !progress.finished && pct > 0 ? t("books.resume", { pct }) : finished ? t("books.readAgain") : t("books.read");
   const overview = detail?.overview ?? "";
   const long = overview.length > 420;
+  const genres = book?.genres ?? [];
 
-  return (
-    <div className="fixed inset-0 z-[200]" style={{ visibility: hidden ? "hidden" : "visible", pointerEvents: closing || hidden ? "none" : "auto" }} aria-hidden={hidden}>
-      <div ref={backdropRef} className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={close} />
+  if (typeof document === "undefined") return null;
+
+  const info = (
+    <div className={detailColumnMotion({ leaving, revealed: revealed || morph.handlesEntry })} data-sheet-content="">
+      {book?.seriesName && (
+        <p className="text-sm font-medium uppercase tracking-wide text-subtle">
+          {book.index !== null ? t("books.seriesTome", { series: book.seriesName, n: book.index }) : book.seriesName}
+        </p>
+      )}
+      <h2 className="mt-1 text-balance font-display text-2xl font-semibold leading-tight sm:text-3xl">{book ? displayTitle(book) : ""}</h2>
+      <p className="mt-2 text-muted">{[book?.authors.length ? book.authors.join(", ") : null, book?.year ?? null].filter(Boolean).join(" · ")}</p>
+      <div className="mt-5 flex flex-col items-center gap-3 sm:items-start">
+        <button
+          type="button"
+          {...NOT_THE_HANDLE}
+          onClick={() => onRead(coverRef.current)}
+          disabled={!book}
+          className="flex items-center gap-2 rounded-full bg-white px-6 py-2.5 font-semibold text-ink transition-transform active:scale-95 disabled:opacity-50"
+        >
+          <BookOpen size={18} aria-hidden />
+          {readLabel}
+        </button>
+        {progress && !progress.finished && pct > 0 && (
+          <div className="h-1 w-48 overflow-hidden rounded-full bg-white/15">
+            <div className="h-full rounded-full bg-white" style={{ width: `${pct}%` }} />
+          </div>
+        )}
+        {finished && (
+          <p className="flex items-center gap-1.5 text-sm text-subtle">
+            <Check size={15} aria-hidden /> {t("books.finished")}
+          </p>
+        )}
+      </div>
+      {error && !detail && <p className="mt-8 text-sm text-subtle">{t("books.detailError")}</p>}
+      {overview && (
+        <div className="mt-8 text-left">
+          <p className={`whitespace-pre-line text-pretty leading-relaxed text-muted ${long && !expanded ? "line-clamp-6" : ""}`}>{overview}</p>
+          {long && (
+            <button type="button" {...NOT_THE_HANDLE} onClick={() => setExpanded((v) => !v)} className="mt-2 text-sm font-semibold text-white">
+              {expanded ? t("books.less") : t("books.more")}
+            </button>
+          )}
+        </div>
+      )}
+      {genres.length > 0 && (
+        <div className="mt-6 flex flex-wrap justify-center gap-2 sm:justify-start">
+          {genres.map((g) => (
+            <span key={g} className="chip text-xs">
+              {g}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const closeButton = (
+    <button type="button" {...NOT_THE_HANDLE} onClick={exit.requestClose} aria-label={t("books.close")} className="nav-glass absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full text-white">
+      <X size={18} aria-hidden />
+    </button>
+  );
+
+  // Seule celle de Jellyfin existe à coup sûr ; celle de l'EPUB peut manquer, et `BookCover` sait alors en dessiner une.
+  const url = book?.coverTag ? coverUrl(book) : null;
+  // La couverture : c'est elle qui vole depuis la carte touchée (`data-sheet-photo`), et elle encore
+  // qui grandit en première page à l'ouverture du lecteur (`readerOpening`).
+  const cover = (
+    <div ref={coverRef} data-book-sheet-cover className="relative mx-auto w-40 shrink-0 overflow-hidden rounded-lg shadow-2xl shadow-black/60 sm:mx-0 sm:w-56" style={{ aspectRatio: "2 / 3" }}>
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element -- relais d'images déjà dimensionné par Jellyfin.
+        <img src={url} alt="" data-sheet-photo="" draggable={false} className="absolute inset-0 h-full w-full object-cover" />
+      ) : book ? (
+        <BookCover book={book} eager />
+      ) : (
+        <div className="absolute inset-0 animate-pulse bg-surface" />
+      )}
+    </div>
+  );
+
+  // La couverture floue derrière l'en-tête : la fiche prend la couleur du livre.
+  const backdrop = url ? (
+    <div className="pointer-events-none absolute inset-x-0 top-0 h-80 overflow-hidden opacity-50" aria-hidden data-sheet-veil="">
+      {/* eslint-disable-next-line @next/next/no-img-element -- la même image, floue. */}
+      <img src={url} alt="" className="absolute inset-0 h-full w-full scale-125 object-cover blur-3xl" />
+      <div className="absolute inset-0 bg-linear-to-b from-transparent via-ink/60 to-ink" />
+    </div>
+  ) : null;
+
+  if (isMobile) {
+    return createPortal(
       <div
+        ref={containerRef}
         role="dialog"
         aria-modal="true"
         aria-label={book ? displayTitle(book) : ""}
-        className="pointer-events-none absolute inset-0 flex items-end justify-center sm:items-center sm:p-8"
+        aria-hidden={hidden}
+        className={`phone-sheet-frame safe-x fixed inset-x-0 overflow-y-auto overscroll-contain bg-ink ring-1 ring-white/10 ${sheetMotionClass({ swipe, leaving, revealed: revealed || morph.handlesEntry, out: "" })}`}
+        style={{
+          zIndex: 48,
+          visibility: hidden ? "hidden" : undefined,
+          ...exit.style,
+          transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
+          transition: swipe.dragging ? "none" : "transform 280ms cubic-bezier(0.32, 0.72, 0, 1), border-radius 200ms ease-out",
+          borderTopLeftRadius: phoneSheetCorner(swipe.offset),
+          borderTopRightRadius: phoneSheetCorner(swipe.offset),
+          boxShadow: phoneSheetShadow(swipe.offset),
+        }}
       >
-        <div
-          ref={panelRef}
-          className="pointer-events-auto relative flex max-h-[calc(100%-env(safe-area-inset-top)-2.5rem)] w-full flex-col overflow-hidden rounded-t-2xl bg-ink shadow-2xl shadow-black/60 sm:max-h-[88vh] sm:max-w-3xl sm:rounded-2xl"
-        >
-          {/* La couverture en grand, floue, derrière l'en-tête : la fiche prend la couleur du livre. */}
-          {book?.coverTag && (
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-72 overflow-hidden opacity-50" aria-hidden>
-              <div className="absolute inset-0 scale-125 blur-3xl">
-                <BookCover book={book} className="h-full w-full !aspect-auto" eager />
-              </div>
-              <div className="absolute inset-0 bg-gradient-to-b from-transparent via-ink/60 to-ink" />
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={close}
-            aria-label={t("books.close")}
-            className="nav-glass absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full text-white"
-          >
-            <X size={18} aria-hidden />
-          </button>
+        {/* La poignée du geste : tout l'en-tête, la couverture comprise. */}
+        <div className="relative px-5 pb-2 pt-8" {...swipe.handlers} style={{ touchAction: "none" }}>
+          {backdrop}
+          <div className="relative">{cover}</div>
+        </div>
+        {closeButton}
+        <div className="relative px-5 pb-[calc(env(safe-area-inset-bottom)+2rem)] pt-4 text-center">{info}</div>
+      </div>,
+      document.body
+    );
+  }
 
-          <div className="relative overflow-y-auto overscroll-contain px-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-8 sm:px-8 sm:pb-8">
-            <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start sm:gap-8">
-              <div ref={coverRef} className="w-40 shrink-0 overflow-hidden rounded-lg shadow-2xl shadow-black/60 sm:w-56">
-                {book ? <BookCover book={book} eager /> : <div className="aspect-[2/3] animate-pulse bg-surface" />}
-              </div>
-              <div className="min-w-0 flex-1 text-center sm:pt-2 sm:text-left">
-                {book?.seriesName && (
-                  <p className="text-sm font-medium uppercase tracking-wide text-subtle">
-                    {book.index !== null ? t("books.seriesTome", { series: book.seriesName, n: book.index }) : book.seriesName}
-                  </p>
-                )}
-                <h2 className="mt-1 text-balance font-display text-2xl font-semibold leading-tight sm:text-3xl">{book ? displayTitle(book) : ""}</h2>
-                <p className="mt-2 text-muted">
-                  {[book?.authors.length ? book.authors.join(", ") : null, book?.year ?? null].filter(Boolean).join(" · ")}
-                </p>
-
-                <div className="mt-5 flex flex-col items-center gap-3 sm:items-start">
-                  <button
-                    type="button"
-                    onClick={onRead}
-                    disabled={!book}
-                    className="flex items-center gap-2 rounded-full bg-white px-6 py-2.5 font-semibold text-ink transition-transform active:scale-95 disabled:opacity-50"
-                  >
-                    <BookOpen size={18} aria-hidden />
-                    {readLabel}
-                  </button>
-                  {progress && !progress.finished && pct > 0 && (
-                    <div className="h-1 w-48 overflow-hidden rounded-full bg-white/15">
-                      <div className="h-full rounded-full bg-white" style={{ width: `${pct}%` }} />
-                    </div>
-                  )}
-                  {finished && (
-                    <p className="flex items-center gap-1.5 text-sm text-subtle">
-                      <Check size={15} aria-hidden /> {t("books.finished")}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {error && !detail && <p className="mt-8 text-center text-sm text-subtle">{t("books.detailError")}</p>}
-            {overview && (
-              <div className="mt-8">
-                <p className={`whitespace-pre-line text-pretty leading-relaxed text-muted ${long && !expanded ? "line-clamp-6" : ""}`}>{overview}</p>
-                {long && (
-                  <button type="button" onClick={() => setExpanded((v) => !v)} className="mt-2 text-sm font-semibold text-white">
-                    {expanded ? t("books.less") : t("books.more")}
-                  </button>
-                )}
-              </div>
-            )}
-            {detail && detail.genres.length > 0 && (
-              <div className="mt-6 flex flex-wrap justify-center gap-2 sm:justify-start">
-                {detail.genres.map((g) => (
-                  <span key={g} className="rounded-full bg-white/10 px-3 py-1 text-xs text-muted">
-                    {g}
-                  </span>
-                ))}
-              </div>
-            )}
+  return createPortal(
+    <div
+      ref={containerRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={book ? displayTitle(book) : ""}
+      aria-hidden={hidden}
+      className={`fixed inset-0 flex items-center justify-center bg-black/70 p-8 backdrop-blur-sm ${revealed || morph.handlesEntry ? "" : "animate-fade-in"}`}
+      style={{ zIndex: 48, visibility: hidden ? "hidden" : undefined, ...exit.style }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) exit.requestClose();
+      }}
+    >
+      <div className="relative flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-ink shadow-2xl shadow-black/60">
+        {backdrop}
+        {closeButton}
+        <div className="relative overflow-y-auto overscroll-contain px-8 pb-8 pt-8">
+          <div className="flex items-start gap-8">
+            {cover}
+            <div className="min-w-0 flex-1 pt-2">{info}</div>
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
+

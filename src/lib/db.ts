@@ -284,6 +284,8 @@ function migrate(db: Database.Database): void {
   // ne pas recopier la table.
   try { db.exec("ALTER TABLE user_preferences ADD COLUMN home_browse_button INTEGER"); } catch { /* already exists */ }
   try { db.exec("ALTER TABLE user_preferences ADD COLUMN home_continue_hero INTEGER"); } catch { /* already exists */ }
+  // « Afficher les livres » (DECISIONS.md §127) : NULL = oui, 0 = ce compte n'en veut pas.
+  try { db.exec("ALTER TABLE user_preferences ADD COLUMN show_books INTEGER"); } catch { /* already exists */ }
   // La colonne a existé le temps d'une version qui révoquait le jeton Jellyfin en même temps que
   // la session. Ce n'est plus le cas — se déconnecter de Cine App ne doit pas toucher à Jellyfin —
   // et un secret qu'on ne lit plus n'a rien à faire au repos : elle est vidée à chaque démarrage.
@@ -736,10 +738,15 @@ function migrate(db: Database.Database): void {
       series       TEXT,
       series_index REAL,
       subjects     TEXT    NOT NULL DEFAULT '[]',
+      creators     TEXT    NOT NULL DEFAULT '[]',
+      cover_path   TEXT,
       failed       INTEGER NOT NULL DEFAULT 0,
       checked_at   INTEGER NOT NULL
     );
   `);
+  // Les auteurs et la couverture de l'OPF sont venus après la série : une base d'essai antérieure les gagne ici.
+  try { db.exec("ALTER TABLE book_meta ADD COLUMN creators TEXT NOT NULL DEFAULT '[]'"); } catch { /* already exists */ }
+  try { db.exec("ALTER TABLE book_meta ADD COLUMN cover_path TEXT"); } catch { /* already exists */ }
   seedInitialNews(db);
   // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
   seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");
@@ -998,6 +1005,24 @@ export const userPrefsDb = {
         ${column} = excluded.${column},
         updated_at = excluded.updated_at
     `).run(userId, value === null ? null : value ? 1 : 0, Date.now());
+  },
+
+  /** « Afficher les livres » (DECISIONS.md §127) : oui tant que le compte ne l'a pas coupé. */
+  getShowBooks(userId: string): boolean {
+    const row = getDb()
+      .prepare("SELECT show_books FROM user_preferences WHERE user_id = ?")
+      .get(userId) as { show_books: number | null } | undefined;
+    return row?.show_books !== 0;
+  },
+
+  setShowBooks(userId: string, on: boolean): void {
+    getDb().prepare(`
+      INSERT INTO user_preferences (user_id, lang, show_books, updated_at)
+      VALUES (?, NULL, ?, ?)
+      ON CONFLICT (user_id) DO UPDATE SET
+        show_books = excluded.show_books,
+        updated_at = excluded.updated_at
+    `).run(userId, on ? 1 : 0, Date.now());
   },
 
   setGuidedScroll(userId: string, on: boolean): void {

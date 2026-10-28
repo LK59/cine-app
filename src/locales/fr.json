@@ -2273,6 +2273,8 @@
       "interfaceDesktop": "Ordinateur",
       "guidedScroll": "Défilement guidé",
       "guidedScrollHint": "Sur ordinateur, l'accueil se cale sur une rangée entière et les fiches sur une page entière. Coupé, la page défile librement.",
+      "showBooks": "Afficher les livres",
+      "showBooksHint": "Une troisième catégorie à côté des films et des séries, et les livres dans la recherche. Sur tous vos appareils.",
       "home": {
         "continueHero": "Afficher mes reprises dans la bannière d'accueil",
         "continueHeroHint": "Ce que vous regardez passe en tête de l'accueil ; s'il y en a peu, les titres « À la une » complètent."

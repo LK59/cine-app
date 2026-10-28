@@ -46,13 +46,19 @@ import { GET as listGET } from "@/app/api/books/route";
 import { GET as detailGET } from "@/app/api/books/[id]/route";
 import { GET as fileGET } from "@/app/api/books/[id]/file/route";
 import { GET as progressGET, POST as progressPOST } from "@/app/api/books/[id]/progress/route";
+import { GET as homeGET } from "@/app/api/books/home/route";
+import { GET as facetsGET } from "@/app/api/books/facets/route";
+import { GET as searchGET } from "@/app/api/books/search/route";
+import { GET as coverGET } from "@/app/api/books/[id]/cover/route";
+import { __testing as indexTesting } from "@/lib/books/bookIndex";
+import { __testing as metaTesting } from "@/lib/books/epubMeta";
 import { getDb } from "@/lib/db";
 
 const BOOK = "a".repeat(32);
 const MOVIE = "b".repeat(32);
 const JF = "c".repeat(32);
-const req = (body?: string) =>
-  ({ cookies: { get: () => ({ value: "t" }) }, headers: new Headers(), signal: new AbortController().signal, text: async () => body ?? "" }) as unknown as NextRequest;
+const req = (body?: string, url = "http://l/api/books") =>
+  ({ cookies: { get: () => ({ value: "t" }) }, headers: new Headers(), nextUrl: new URL(url), signal: new AbortController().signal, text: async () => body ?? "" }) as unknown as NextRequest;
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 const bookItem = (over: Record<string, unknown> = {}) => ({
@@ -93,6 +99,9 @@ beforeEach(() => {
   markPlayed.mockResolvedValue(undefined);
   getDb().prepare("DELETE FROM book_progress").run();
   getDb().prepare("DELETE FROM book_meta").run();
+  // L'index est gardé par compte, en mémoire : chaque essai repart d'une bibliothèque neuve.
+  indexTesting.reset();
+  metaTesting.queue().waiting.clear();
   jellyfinAnswers([bookItem()]);
 });
 
@@ -106,8 +115,12 @@ describe("l'option coupée", () => {
       (await fileGET(req(), params(BOOK))).status,
       (await progressGET(req(), params(BOOK))).status,
       (await progressPOST(req(valid), params(BOOK))).status,
+      (await homeGET(req())).status,
+      (await facetsGET(req())).status,
+      (await searchGET(req())).status,
+      (await coverGET(req(), params(BOOK))).status,
     ];
-    expect(statuses).toEqual([404, 404, 404, 404, 404]);
+    expect(statuses).toEqual([404, 404, 404, 404, 404, 404, 404, 404, 404]);
     expect(upstream).not.toHaveBeenCalled();
     expect(verify).not.toHaveBeenCalled();
     expect(getDb().prepare("SELECT COUNT(*) AS n FROM book_progress").get()).toEqual({ n: 0 });
@@ -179,6 +192,52 @@ describe("GET /api/books", () => {
     const res = await listGET(req());
     expect(res.status).toBe(502);
     expect(JSON.stringify(await res.json())).not.toContain("jf");
+  });
+});
+
+describe("l'index du compte : l'accueil, les pages, la recherche", () => {
+  const many = (n: number) =>
+    Array.from({ length: n }, (_, i) => bookItem({ Id: (i + 1).toString(16).padStart(32, "0"), Name: `Livre ${String(i).padStart(4, "0")}`, DateCreated: new Date(1_700_000_000_000 + i * 1000).toISOString() }));
+
+  it("Jellyfin n'est demandé qu'une fois : l'accueil, les pages, les choix et la recherche viennent de la mémoire", async () => {
+    jellyfinAnswers(many(300));
+    await homeGET(req());
+    const calls = upstream.mock.calls.length;
+    await listGET(req(undefined, "http://l/api/books?offset=120&limit=120"));
+    await facetsGET(req());
+    for (const q of ["li", "liv", "livre", "livre 02"]) await searchGET(req(undefined, `http://l/api/books/search?q=${encodeURIComponent(q)}`));
+    expect(upstream.mock.calls.length).toBe(calls);
+  });
+
+  it("une page bornée, avec le total ; l'accueil borné quelle que soit la bibliothèque", async () => {
+    jellyfinAnswers(many(450));
+    const page = await (await listGET(req(undefined, "http://l/api/books?offset=400&limit=500"))).json();
+    expect(page.total).toBe(450);
+    expect(page.books).toHaveLength(50);
+    const capped = await (await listGET(req(undefined, "http://l/api/books?limit=5000"))).json();
+    expect(capped.books).toHaveLength(200);
+    const home = await (await homeGET(req())).json();
+    expect(home.total).toBe(450);
+    expect(home.recent.length).toBeLessThanOrEqual(20);
+    expect(home.recent[0].name).toBe("Livre 0449");
+    expect(JSON.stringify(home).length).toBeLessThan(200_000);
+  });
+
+  it("la recherche : douze au plus, rien sous deux lettres", async () => {
+    jellyfinAnswers(many(100));
+    expect((await (await searchGET(req(undefined, "http://l/api/books/search?q=l"))).json()).books).toEqual([]);
+    expect((await (await searchGET(req(undefined, "http://l/api/books/search?q=livre"))).json()).books).toHaveLength(12);
+    const exact = (await (await searchGET(req(undefined, "http://l/api/books/search?q=livre%200042"))).json()).books;
+    expect(exact.map((b: { name: string }) => b.name)).toEqual(["Livre 0042"]);
+  });
+
+  it("une couverture n'est servie que pour un livre de l'index du compte", async () => {
+    jellyfinAnswers([bookItem({ Etag: null })]);
+    expect((await coverGET(req(), params("9".repeat(32)))).status).toBe(404);
+    // Ce livre-ci, sans empreinte de fichier : rien à faire, et rien demandé à Jellyfin pour lui.
+    const before = upstream.mock.calls.length;
+    expect((await coverGET(req(), params(BOOK))).status).toBe(404);
+    expect(upstream.mock.calls.slice(before).some(([u]) => String(u).includes("/Download"))).toBe(false);
   });
 });
 

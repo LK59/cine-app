@@ -302,7 +302,10 @@ device. Each account sees the books its Jellyfin account may see, minus its bloc
 positions are kept by Laterna, and a finished book is marked played in Jellyfin. Share links never
 reach books. Book content is untrusted: it is sanitized, shown in frames that cannot run scripts, and
 under a page-specific Content Security Policy — see DECISIONS.md §127 and `tools/livres-securite/`.
-Turned off, every books address answers 404 and nothing of it loads.
+Turned off, every books address answers 404 and nothing of it loads. Each account can also hide books
+for itself (Account → Interface, « Show books »), on all its devices. Books also appear in the app's
+search. Series, authors and covers missing from Jellyfin are read from the EPUB itself in the background;
+large libraries (thousands of files) are indexed on the server and sent to devices a page at a time.
 
 ## Keyboard and remote
 

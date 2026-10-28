@@ -4,39 +4,70 @@ import { useMemo } from "react";
 import useSWR from "swr";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
-import { homeRows } from "@/lib/books/grouping";
+import type { HomeRow } from "@/lib/books/grouping";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
 import { BookCover } from "./BookCover";
 import { BookRequestButton } from "./BookRequests";
+import { BookSheetHost } from "./BookSheet";
+import { cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
+import { useTvGridNav } from "@/lib/useTvGridNav";
+import { readerOpening } from "@/lib/books/readerOpening";
 
 /**
  * L'accueil de la catégorie Livres (option, DECISIONS.md §127), à la place des rangées de films ou
  * de séries : « Continuer la lecture », « Récemment ajoutés », puis des rangées de séries (dans l'ordre
- * des tomes), d'auteurs (par année) et de genres — bornées (`homeRows`), chacune avec son « Tout voir »
+ * des tomes), d'auteurs (par année) et de genres — calculées par le serveur (`/api/books/home`, quelques
+ * rangées de vingt livres : jamais la bibliothèque entière sur le téléphone), chacune avec son « Tout voir »
  * vers la grille filtrée (`/livres?serie=…`, `auteur=…`, `genre=…`). Pas de bannière : une couverture n'est pas une image de fond, et le carrousel des
  * films et séries n'est pas touché.
  *
- * Un livre touché ouvre sa fiche sur la page des livres (`/livres`), par un vrai chargement : le
- * lecteur affiche ses chapitres dans des cadres `blob:` que seule la politique de sécurité de cette
- * page permet. `retour=1` : y fermer la fiche ramène ici plutôt qu'à la grille complète.
+ * Un livre touché ouvre sa fiche ici même, comme un film : `#livre=<id>` dans l'adresse du cinéma, la
+ * couverture qui devient la fiche (`BookSheetHost`). « Lire » mène à la page des livres par un vrai
+ * chargement — le lecteur affiche ses chapitres dans des cadres `blob:` que seule la politique de
+ * sécurité de cette page permet ; `retour=1` : le refermer ramène ici, sur la fiche.
  */
-export function openBookFromHome(id: string): void {
-  // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- un vrai chargement, exprès (politique de la page des livres).
-  window.location.assign(`/livres?retour=1#livre=${id}`);
+function openBook(id: string): void {
+  cinemaNavigate({ book: id, reading: false });
 }
+
+async function readFromHome(id: string, cover: HTMLElement | null): Promise<void> {
+  await readerOpening(cover);
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- un vrai chargement, exprès (politique de la page des livres).
+  window.location.assign(`/livres?retour=1#livre=${id}&lire=1`);
+}
+
+export const BOOKS_HOME_KEY = "/api/books/home";
+
+export interface BooksHomePayload {
+  total: number;
+  resume: BookSummary[];
+  recent: BookSummary[];
+  rows: HomeRow[];
+  hidden: number;
+}
+
+const EMPTY: BookSummary[] = [];
+const EMPTY_ROWS: HomeRow[] = [];
 
 export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
   const t = useT();
-  const { data, error, isLoading, mutate } = useSWR<{ books: BookSummary[] }>("/api/books", fetcher, { revalidateOnFocus: true });
-  const books = useMemo(() => data?.books ?? [], [data]);
-  // Borné quelle que soit la bibliothèque : quelques rangées de vingt livres, le reste à un « Tout voir ».
-  const { resume, recent, rows, hidden } = useMemo(() => homeRows(books), [books]);
+  const { data, error, isLoading, mutate } = useSWR<BooksHomePayload>(BOOKS_HOME_KEY, fetcher, { revalidateOnFocus: true });
+  const resume = data?.resume ?? EMPTY;
+  const recent = data?.recent ?? EMPTY;
+  const rows = data?.rows ?? EMPTY_ROWS;
+  const hidden = data?.hidden ?? 0;
+  // Ce que la fiche peut montrer d'emblée, avant sa propre réponse : les livres déjà à l'écran.
+  const shown = useMemo(() => [...resume, ...recent, ...rows.flatMap((r) => r.books)], [resume, recent, rows]);
   const desktop = variant === "desktop";
   const pad = desktop ? "px-8 lg:px-12" : "px-4";
   // L'accroche des rangées tient compte de la marge : sans elle, la première carte se collait au bord.
   const snapPad = desktop ? "scroll-px-8 lg:scroll-px-12" : "scroll-px-4";
   const card = desktop ? "w-36 lg:w-40" : "w-28";
+  const route = useCinemaRoute();
+  const sheetOpen = !!route.book;
+  // Les flèches du clavier, comme sur les rangées de films (`useTvGridNav`, attributs `data-tv-*`).
+  useTvGridNav(desktop && !sheetOpen);
 
   return (
     <div
@@ -47,6 +78,8 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
           : { paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6rem)" }
       }
       data-books-home
+      // Sous une fiche, l'accueil des livres ne répond plus (la règle des fiches de films).
+      inert={sheetOpen}
     >
       {isLoading && !data && (
         <div className={`${pad} flex gap-3 pt-2`} aria-hidden>
@@ -63,7 +96,7 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
           </button>
         </div>
       )}
-      {data && books.length === 0 && <p className="mx-auto mt-24 max-w-sm px-6 text-center text-muted">{t("books.empty")}</p>}
+      {data && data.total === 0 && <p className="mx-auto mt-24 max-w-sm px-6 text-center text-muted">{t("books.empty")}</p>}
 
       {resume.length > 0 && (
         <section className="mb-8">
@@ -75,7 +108,8 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
                 <button
                   key={book.id}
                   type="button"
-                  onClick={() => openBookFromHome(book.id)}
+                  data-sheet-source=""
+                  onClick={() => openBook(book.id)}
                   className={`flex ${desktop ? "w-[20rem]" : "w-[17rem]"} shrink-0 snap-start items-center gap-4 rounded-2xl bg-white/5 p-3 text-left transition-transform duration-200 active:scale-[0.97]`}
                 >
                   <div className="w-20 shrink-0 overflow-hidden rounded-lg shadow-lg shadow-black/40">
@@ -118,7 +152,7 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
       {/* Ce qu'on ne trouve pas se demande (option des demandes, §127) — rien quand elle est coupée. */}
       {data && (
         <div className={`${pad} pb-6`}>
-          <BookRequestButton books={books} label={t("books.requests.notFoundHome")} />
+          <BookRequestButton label={t("books.requests.notFoundHome")} />
         </div>
       )}
       {hidden > 0 && (
@@ -128,6 +162,8 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
           </a>
         </div>
       )}
+      {/* La fiche d'un livre, portée dans `body` : hors de l'accueil rendu inerte. */}
+      <BookSheetHost books={shown} onRead={(_book, id, cover) => void readFromHome(id, cover)} />
     </div>
   );
 }
@@ -152,6 +188,8 @@ function Row({
   card: string;
   desktop: boolean;
 }) {
+  // La rangée, pour la navigation au clavier (`useTvGridNav`) : son « Tout voir » la nomme d'une façon unique.
+  const rowKey = href;
   const t = useT();
   return (
     <section className="mb-8">
@@ -163,10 +201,19 @@ function Row({
         </a>
       </div>
       <div className={`${pad} ${snapPad} scrollbar-none flex snap-x overflow-x-auto pb-2 ${desktop ? "gap-4" : "gap-3"}`}>
-        {books.map((book) => {
+        {books.map((book, i) => {
           const pct = book.progress && !book.progress.finished ? Math.round(book.progress.fraction * 100) : 0;
           return (
-            <button key={book.id} type="button" onClick={() => openBookFromHome(book.id)} className={`group ${card} shrink-0 snap-start text-left`}>
+            <button
+              key={book.id}
+              type="button"
+              data-sheet-source=""
+              data-tv-card=""
+              data-tv-row={rowKey}
+              data-tv-col={i}
+              onClick={() => openBook(book.id)}
+              className={`group ${card} shrink-0 snap-start text-left focus-visible:outline-none`}
+            >
               <div className="relative overflow-hidden rounded-lg shadow-lg shadow-black/40 transition-transform duration-200 group-hover:scale-[1.03] group-active:scale-[0.96]">
                 <BookCover book={book} />
                 {pct > 0 && (

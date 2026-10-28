@@ -2273,6 +2273,8 @@
       "interfaceDesktop": "Computer",
       "guidedScroll": "Geführtes Scrollen",
       "guidedScrollHint": "Am Computer rastet die Startseite auf eine ganze Reihe und die Titelseiten auf eine ganze Seite ein. Aus: Die Seite scrollt frei.",
+      "showBooks": "Bücher anzeigen",
+      "showBooksHint": "Eine dritte Kategorie neben Filmen und Serien sowie Bücher in der Suche. Auf allen Ihren Geräten.",
       "home": {
         "continueHero": "Laufende Titel im Startseiten-Banner zeigen",
         "continueHeroHint": "Was Sie gerade schauen, steht oben auf der Startseite; ist es wenig, ergänzen Titel aus „Im Fokus“."

@@ -4,6 +4,7 @@ import { verifySessionFull } from "@/lib/session";
 import { config } from "@/lib/config";
 import { configuredServices } from "@/lib/services";
 import { passageTarget } from "@/lib/passage/target";
+import { userPrefsDb } from "@/lib/db";
 
 /**
  * Ce que l'interface a besoin de savoir avant d'afficher quoi que ce soit.
@@ -18,6 +19,11 @@ export async function GET(req: NextRequest) {
   // L'interface tient une absence pour « branché » (`useConfiguredServices`), et l'écran de
   // connexion n'en a pas besoin.
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
+  // Les livres : l'option de l'installation, pour tout compte du foyer — jamais pour un lien de partage,
+  // qui ne sort pas de son titre (§112) —, puis le choix du compte (« Afficher les livres », Compte →
+  // Interface). Lu en base seulement l'option allumée : coupée, cette route ne fait rien de plus qu'avant.
+  const booksAvailable = config.books?.enabled === true && !!session && session.role !== "share";
+  const booksShown = booksAvailable && userPrefsDb.getShowBooks(session.jfId ?? session.u);
   return NextResponse.json({
     defaultLang: config.app.language,
     playerEnabled: config.player.enabled,
@@ -28,11 +34,13 @@ export async function GET(req: NextRequest) {
     // Le téléchargement hors ligne (bêta) : le bouton des fiches et le gestionnaire n'existent qu'avec lui.
     // Et pour ce compte-ci : administrateurs seulement tant que l'installation ne l'a pas ouvert à tous.
     offlineDownloads: config.player.offlineDownloads && (config.player.offlineDownloadsForEveryone || session?.role === "admin"),
-    // L'option « Livres » (DECISIONS.md §127) : la catégorie Livres de la bascule n'existe qu'avec elle. Pour tout
-    // compte du foyer ; jamais pour un lien de partage, qui ne sort pas de son titre (§112).
-    booksEnabled: config.books?.enabled === true && session?.role !== "share",
-    // « Demander un livre » : seulement avec les livres eux-mêmes, et jamais pour un lien de partage.
-    bookRequests: config.books?.requests === true && session?.role !== "share",
+    // L'option « Livres » (DECISIONS.md §127) : la catégorie Livres de la bascule, la section de la
+    // recherche et tout le code des livres n'existent qu'avec `booksEnabled` — l'option ET le choix du compte.
+    booksEnabled: booksShown,
+    // Le réglage « Afficher les livres » du Compte n'a de sens que l'option allumée.
+    booksAvailable,
+    // « Demander un livre » : seulement avec les livres eux-mêmes.
+    bookRequests: config.books?.requests === true && booksShown,
     // La disposition de l'accueil, réglée par l'exploitant (DECISIONS.md §52).
     homeContinueHero: config.home.continueHero,
     // La nouvelle adresse du passage (DECISIONS.md §119), nom d'hôte seul : la page de connexion y
