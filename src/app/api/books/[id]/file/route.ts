@@ -16,6 +16,9 @@ import { bookFor } from "@/lib/books/library";
  * du compte et tags bloqués de l'application). Un film ou un épisode demandé ici répond 404 : cette
  * route ne relaie que des livres.
  *
+ * `?telecharger=1` (bouton « Fichier EPUB » de la fiche, hors application installée — 29/10/2026) : le
+ * même fichier, en pièce jointe nommée « Titre - Auteur.epub », pour une liseuse (câble, Calibre…).
+ *
  * Rien de la réponse de Jellyfin n'est recopié hormis le type et la taille : ni ses en-têtes, ni son
  * adresse, ni la clé. `private` : la réponse dépend du compte qui la demande.
  */
@@ -56,10 +59,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Une heure dans le cache du navigateur seul : refermer puis rouvrir le livre ne le retélécharge
     // pas ; un droit retiré vaut au plus tard à l'heure suivante, sur l'appareil qui l'avait déjà.
     "Cache-Control": "private, max-age=3600",
-    "Content-Disposition": "inline",
+    "Content-Disposition": req.nextUrl.searchParams.get("telecharger") === "1" ? attachment(visible) : "inline",
     "X-Content-Type-Options": "nosniff",
   };
   const length = upstream.headers.get("content-length");
   if (length && /^\d+$/.test(length)) headers["Content-Length"] = length;
   return new NextResponse(upstream.body, { status: 200, headers });
+}
+
+/**
+ * « Titre - Auteur.epub » : le nom encodé (RFC 5987 — l'apostrophe aussi, fréquente dans un titre) pour les accents, une version ASCII pour les
+ * navigateurs qui ne lisent que `filename`. Les caractères qu'un système de fichiers refuse sont retirés.
+ */
+function attachment(book: { name: string; authors: readonly string[] }): string {
+  const base = [book.name, book.authors[0]].filter(Boolean).join(" - ").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 150) || "livre";
+  const ascii = base.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]/g, "_");
+  return `attachment; filename="${ascii}.epub"; filename*=UTF-8''${encodeURIComponent(`${base}.epub`).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
 }

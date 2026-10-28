@@ -349,6 +349,15 @@ describe("GET /api/books/[id]/file", () => {
     expect(new Headers(download[1].headers).get("authorization")).toContain("MediaBrowser");
     expect(new Headers(download[1].headers).get("x-emby-token")).toBeNull();
   });
+  it("« Fichier EPUB » (29/10/2026) : le même fichier en pièce jointe « Titre - Auteur.epub », apostrophes et accents encodés", async () => {
+    expect((await fileGET(req(), params(BOOK))).headers.get("content-disposition")).toBe("inline");
+    jellyfinAnswers([bookItem({ Name: "L'Île au trésor", People: [{ Name: "Robert Louis Stevenson", Type: "Author" }] })]);
+    const res = await fileGET(req(undefined, `http://l/api/books/${BOOK}/file?telecharger=1`), params(BOOK));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-disposition")).toBe(
+      `attachment; filename="L'Ile au tresor - Robert Louis Stevenson.epub"; filename*=UTF-8''L%27%C3%8Ele%20au%20tr%C3%A9sor%20-%20Robert%20Louis%20Stevenson.epub`
+    );
+  });
   it("ne relaie jamais autre chose qu'un livre : un film demandé ici répond 404 sans téléchargement", async () => {
     jellyfinAnswers([bookItem({ Id: MOVIE, Type: "Movie" })]);
     expect((await fileGET(req(), params(MOVIE))).status).toBe(404);
