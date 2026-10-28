@@ -3784,6 +3784,8 @@
       "lessThanMinute": "Menos de un minuto en este capítulo",
       "minutesLeft": "Quedan {n} min en este capítulo",
       "minuteLeft": "Queda 1 min en este capítulo",
+      "drmError": "Este libro está protegido (DRM) y no se puede leer aquí.",
+      "notEpubError": "Este archivo no es un EPUB legible.",
       "openError": "No se pudo abrir este libro.",
       "contents": "Índice",
       "settings": "Ajustes de lectura",

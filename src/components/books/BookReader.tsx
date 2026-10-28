@@ -38,6 +38,8 @@ import {
 } from "@/lib/books/bookSync";
 import { offlineBookFile, rememberedBookAccount } from "@/lib/books/offlineBooks";
 import { preloadBookFile } from "@/lib/books/readerPreload";
+import { reportClientError } from "@/lib/reportClientError";
+import { EpubProblemError, epubProblem, type EpubProblem } from "@/lib/books/epubCheck";
 import type { BookProgress } from "@/lib/books/types";
 import { ReaderSearchPanel, ReaderSettingsPanel, ReaderTocPanel, type SearchGroup } from "./ReaderPanels";
 
@@ -172,6 +174,8 @@ export function BookReader({ id, title, onClose, onSaved, offline = false }: { i
   const systemDark = useSyncExternalStore(subscribeDark, darkSnapshot, () => true);
   const [prefs, setPrefs] = useState<ReaderPrefs>(() => loadReaderPrefs(prefersReducedMotion()));
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  // Pourquoi il ne s'ouvre pas, quand on le sait : un livre protégé, un fichier qui n'est pas un EPUB.
+  const [problem, setProblem] = useState<EpubProblem | null>(null);
   const [chrome, setChrome] = useState(true);
   const [panel, setPanel] = useState<null | "toc" | "bookmarks" | "settings" | "search">(null);
   const [bookmarks, setBookmarks] = useState<StoredBookmark[]>([]);
@@ -390,6 +394,9 @@ export function BookReader({ id, title, onClose, onSaved, offline = false }: { i
         if (!blob) throw new Error(offline ? "pas de copie sur l'appareil" : "fichier indisponible");
         if (cancelled || !stage) return;
         loadBookmarks();
+        // Un fichier qu'on ne lira jamais le dit clairement (`epubCheck.ts`), avant foliate-js.
+        const known = await epubProblem(blob).catch(() => null);
+        if (known) throw new EpubProblemError(known);
         book = await foliate.makeBook(new File([blob], `${id}.epub`, { type: "application/epub+zip" }));
         if (cancelled) return;
         // La première barrière, avant que le moindre chapitre ne devienne un document.
@@ -440,8 +447,14 @@ export function BookReader({ id, title, onClose, onSaved, offline = false }: { i
         setStatus("ready");
         showChrome(true);
         rootRef.current?.focus({ preventScroll: true });
-      } catch {
-        if (!cancelled) setStatus("error");
+      } catch (error) {
+        // Ce qui a empêché le livre de s'ouvrir arrive dans `server.log` : « Ce livre n'a pas pu être
+        // ouvert » seul ne disait pas si c'était le fichier, foliate-js ou le nettoyage (28/10/2026).
+        if (!cancelled) {
+          if (error instanceof EpubProblemError) setProblem(error.problem);
+          else reportClientError(error, "component:BookReader", { book: id });
+          setStatus("error");
+        }
       }
     }
     void open();
@@ -861,7 +874,7 @@ export function BookReader({ id, title, onClose, onSaved, offline = false }: { i
       )}
       {status === "error" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
-          <p className="max-w-sm opacity-80">{t("books.reader.openError")}</p>
+          <p className="max-w-sm opacity-80">{problem === "drm" ? t("books.reader.drmError") : problem === "not-epub" ? t("books.reader.notEpubError") : t("books.reader.openError")}</p>
           <button type="button" onClick={close} className="rounded-full px-5 py-2 text-sm font-semibold" style={{ background: colors.fg, color: colors.bg }}>
             {t("books.close")}
           </button>

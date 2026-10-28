@@ -7672,6 +7672,17 @@ un titre, un auteur ni une couverture existante (les corrections faites à la ma
   requête. L'image de couverture est l'image publique du volume, sans la clé, réduite et gardée avec les
   autres (`googleCover`).
 
+**Un livre qui ne s'ouvre pas le dit (28/10/2026).** Un échantillon de 300 EPUB tirés au hasard du lot
+de production (dont « Skidamarink », écrit par Word avec ses espaces de noms Office et un `preview.wmf`
+absent) s'ouvre en entier dans le vrai lecteur — Chromium 301/301, WebKit 76/76 — : foliate-js relit
+déjà en HTML un chapitre XHTML mal formé, comme le nettoyage, et ignore une ressource absente. L'échec
+vu en production n'a donc pas été reproduit sur le fichier ; deux choses le diront la prochaine fois :
+la cause de chaque échec du lecteur part dans `server.log` (`reportClientError`, `component:BookReader`),
+et un refus de Jellyfin au téléchargement y est écrit par la route du fichier. Un livre qu'on ne lira
+jamais le dit avant foliate-js (`epubCheck.ts`) : « protégé (DRM) » — `rights.xml`, `sinf.xml`, ou un
+`encryption.xml` qui chiffre des chapitres (l'obfuscation de polices seule n'en est pas un) — ou « pas un
+EPUB lisible ».
+
 **Signets, recherche, lecture hors ligne.**
 - *Signets* : le signet de la barre du haut marque la page lue (plein quand elle l'est) ; la liste est un
   onglet du panneau de la table des matières — chapitre, quelques mots, pourcentage. Gardés par compte

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logError } from "@/lib/logger";
 import { config } from "@/lib/config";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
@@ -43,6 +44,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return new NextResponse(null, { status: 502 });
   }
   if (!upstream.ok || !upstream.body) {
+    // Dans `server.log` : un livre qui ne s'ouvre pas parce que Jellyfin ne le rend pas se distingue
+    // ainsi d'un fichier que le lecteur ne sait pas lire (28/10/2026).
+    logError("books/file", new Error(`Jellyfin a répondu ${upstream.status} au téléchargement`), { itemId: id });
     await upstream.body?.cancel().catch(() => {});
     return new NextResponse(null, { status: upstream.status === 404 ? 404 : 502 });
   }
