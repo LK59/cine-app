@@ -24,7 +24,7 @@ vi.mock("@/lib/offline/downloads", () => ({ initOfflineDownloads: () => init(), 
 vi.mock("@/components/offline/OfflineDownloadsView", () => ({ OfflineDownloadsView: () => <p>liste des téléchargements</p> }));
 vi.mock("@/components/offline/OfflineDownloadControl", () => ({ BetaBadge: () => <span>bêta</span> }));
 
-import { forgetOfflineAccount, rememberOfflineAccount, rememberedOfflineAccount, OFFLINE_ENTRY_PATH } from "@/lib/offline/offlineEntry";
+import { deviceKeepsDownloads, forgetOfflineAccount, rememberOfflineAccount, rememberedOfflineAccount, OFFLINE_BOOKS_COUNT_KEY, OFFLINE_ENTRY_PATH } from "@/lib/offline/offlineEntry";
 import { OfflineEntryScreen } from "@/components/offline/OfflineEntryScreen";
 import { SlowLaunchDownloads, SLOW_LAUNCH_MS } from "@/components/offline/SlowLaunchDownloads";
 import { isPublicPath } from "@/lib/publicPaths";
@@ -86,6 +86,15 @@ describe("/hors-ligne", () => {
     expect(adopt).not.toHaveBeenCalled();
     expect(screen.getByText("player.downloads.entryNoAccount")).toBeTruthy();
   });
+
+  it("sans compte de films retenu mais avec un livre gardé, montre la page (la section des livres y est)", async () => {
+    localStorage.setItem(OFFLINE_BOOKS_COUNT_KEY, "1");
+    await act(async () => {
+      render(<OfflineEntryScreen />);
+    });
+    expect(screen.queryByText("player.downloads.entryNoAccount")).toBeNull();
+    expect(screen.getByText("liste des téléchargements")).toBeTruthy();
+  });
 });
 
 describe("« Accéder aux téléchargements » sur l'écran de chargement", () => {
@@ -111,6 +120,26 @@ describe("« Accéder aux téléchargements » sur l'écran de chargement", () =
     render(<SlowLaunchDownloads />);
     act(() => vi.advanceTimersByTime(SLOW_LAUNCH_MS * 3));
     expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  // 29/10/2026 : un iPhone qui ne gardait qu'un livre, lancé sans réseau, ne proposait pas les
+  // téléchargements — la décision ne lisait que le nombre de films.
+  it("apparaît aussi quand l'appareil ne garde qu'un livre", () => {
+    vi.useFakeTimers();
+    rememberOfflineAccount("louis", 0);
+    localStorage.setItem(OFFLINE_BOOKS_COUNT_KEY, "1");
+    render(<SlowLaunchDownloads />);
+    act(() => vi.advanceTimersByTime(SLOW_LAUNCH_MS));
+    expect(screen.getByRole("button", { name: "player.downloads.accessDownloads" })).toBeTruthy();
+  });
+
+  it("un livre seul, sans compte de films retenu : la même décision", () => {
+    expect(deviceKeepsDownloads()).toBe(false);
+    localStorage.setItem(OFFLINE_BOOKS_COUNT_KEY, "2");
+    expect(deviceKeepsDownloads()).toBe(true);
+    localStorage.setItem(OFFLINE_BOOKS_COUNT_KEY, "0");
+    rememberOfflineAccount("louis", 3);
+    expect(deviceKeepsDownloads()).toBe(true);
   });
 
   it("monté par l'écran de chargement, l'attente du catalogue des deux accueils et l'écran sans catalogue", () => {

@@ -69,13 +69,61 @@ export function forgetOfflineAccount(): void {
 }
 
 /**
+ * Combien de livres l'appareil garde (option « Livres », DECISIONS.md §127) — écrit par `offlineBooks.ts`
+ * à chaque relecture de son dossier, lu ici sans rien charger des livres. Les livres sont des
+ * téléchargements comme les films : la page des téléchargements les montre dans leur section.
+ */
+export const OFFLINE_BOOKS_COUNT_KEY = "laterna:books:offline-count";
+
+/**
+ * Les livres étaient-ils affichés pour ce compte au dernier passage en ligne (« 1 » / « 0 ») ? Sans réseau la
+ * configuration ne répond pas : c'est ce que la page des téléchargements suit pour montrer leur section.
+ */
+export const OFFLINE_BOOKS_SHOWN_KEY = "laterna:books:shown";
+
+/** Le message qui demande au service worker de garder la page hors ligne des livres (`/livres/hors-ligne`). */
+export const WARM_OFFLINE_BOOKS_ENTRY = "cine:warm-offline-books";
+
+export function keptBooksCount(): number {
+  try {
+    const n = Number(localStorage.getItem(OFFLINE_BOOKS_COUNT_KEY) ?? 0);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * L'appareil garde-t-il quelque chose à ouvrir sans réseau — un film, un épisode **ou un livre** ? C'est
+ * la question que posent l'écran de chargement (« Accéder aux téléchargements ») et la garde de l'entrée
+ * hors ligne. Elle ne lisait que les films : un appareil qui ne gardait qu'un livre n'avait, lancé sans
+ * réseau, ni l'entrée gardée ni le bouton qui y mène (iPhone, 29/10/2026).
+ */
+export function deviceKeepsDownloads(): boolean {
+  return (rememberedOfflineAccount()?.downloads ?? 0) > 0 || keptBooksCount() > 0;
+}
+
+function postToWorker(type: string): void {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  void navigator.serviceWorker.ready.then((registration) => registration.active?.postMessage({ type })).catch(() => {});
+}
+
+/**
  * Demande au service worker de garder `/hors-ligne` et tout son code pour ce build — une fois par
- * build, il ne refait rien si c'est déjà fait. Seulement quand il y a des téléchargements : sans eux
- * la page n'a rien à montrer, et ce code (quelques Mo) n'a pas à être gardé sur tous les appareils.
+ * build, il ne refait rien si c'est déjà fait. Seulement quand il y a des téléchargements (films ou
+ * livres, `deviceKeepsDownloads`) : sans eux la page n'a rien à montrer, et ce code (quelques Mo) n'a
+ * pas à être gardé sur tous les appareils.
  */
 export function warmOfflineEntry(): void {
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
-  void navigator.serviceWorker.ready
-    .then((registration) => registration.active?.postMessage({ type: WARM_OFFLINE_ENTRY }))
-    .catch(() => {});
+  postToWorker(WARM_OFFLINE_ENTRY);
+}
+
+/**
+ * Les deux entrées d'un appareil qui garde des livres : `/hors-ligne` — celle que la page « Pas de
+ * connexion » et l'écran de chargement ouvrent, où les livres ont leur section — et `/livres/hors-ligne`,
+ * la seule qui les lise sans réseau (sous la politique de sécurité des livres).
+ */
+export function warmBooksOfflineEntries(): void {
+  postToWorker(WARM_OFFLINE_ENTRY);
+  postToWorker(WARM_OFFLINE_BOOKS_ENTRY);
 }

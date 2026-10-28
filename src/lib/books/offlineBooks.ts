@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { BookSummary } from "@/lib/books/types";
+import { OFFLINE_BOOKS_COUNT_KEY, OFFLINE_BOOKS_SHOWN_KEY, WARM_OFFLINE_BOOKS_ENTRY, warmBooksOfflineEntries } from "@/lib/offline/offlineEntry";
 
 /**
  * Les livres gardés sur l'appareil pour les lire sans réseau (DECISIONS.md §127).
@@ -21,11 +22,11 @@ import type { BookSummary } from "@/lib/books/types";
 const ROOT = "laterna-books";
 const ACCOUNT_KEY = "laterna:books:offline-account";
 /** Combien de livres l'appareil garde : lu par la page des téléchargements sans rien charger d'autre. */
-export const OFFLINE_COUNT_KEY = "laterna:books:offline-count";
+export const OFFLINE_COUNT_KEY = OFFLINE_BOOKS_COUNT_KEY;
 /** La marge laissée au navigateur en plus du livre. */
 const MARGIN_BYTES = 50 * 1024 * 1024;
 /** Le message qui demande au service worker de garder la page hors ligne des livres. */
-export const WARM_OFFLINE_BOOKS = "cine:warm-offline-books";
+export const WARM_OFFLINE_BOOKS = WARM_OFFLINE_BOOKS_ENTRY;
 export const OFFLINE_BOOKS_PATH = "/livres/hors-ligne";
 
 export interface OfflineBook {
@@ -234,7 +235,16 @@ export async function saveOfflineBook(book: BookSummary, title: string, coverUrl
     await m.close();
     books = [meta, ...books.filter((b) => b.id !== book.id)];
     noteCount();
-    warmOfflineBooksPage();
+    // Les deux entrées hors ligne, pas seulement celle des livres : lancée sans réseau, l'app ouvre
+    // `offline.html`, dont le bouton « Accéder aux téléchargements » ne paraît que si `/hors-ligne` est
+    // gardée — et elle ne l'était que pour un appareil qui gardait un film (29/10/2026).
+    warmBooksOfflineEntries();
+    try {
+      // Un livre vient d'arriver : les livres sont affichés pour ce compte, la page hors ligne doit le savoir.
+      localStorage.setItem(OFFLINE_BOOKS_SHOWN_KEY, "1");
+    } catch {
+      /* rien */
+    }
   } catch (error) {
     await removeFolder(account, book.id);
     throw error;

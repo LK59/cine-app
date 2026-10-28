@@ -110,7 +110,9 @@ export class FixedLayout extends HTMLElement {
         const left = this.#left ?? {}
         const right = this.#center ?? this.#right ?? {}
         const target = side === 'left' ? left : right
-        const { width, height } = this.getBoundingClientRect()
+        // LATERNA PATCH: the layout box, not the drawn one — a 3D page turn on `<foliate-view>` around
+        // this element must not resize the pages it lays out (see `layoutRect` in paginator.js).
+        const { offsetWidth: width, offsetHeight: height } = this
         const portrait = this.spread !== 'both' && this.spread !== 'portrait'
             && height > width
         this.#portrait = portrait

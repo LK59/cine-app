@@ -7,7 +7,7 @@ import { cinemaNavigate } from "@/lib/cinemaRoute";
 import { useOfflineDownloadsEnabled } from "@/lib/offline/useOfflineEnabled";
 import { deviceStoreSupported } from "@/lib/offline/deviceStore";
 import { initOfflineDownloads, offlineAccount, useOfflineDownloads } from "@/lib/offline/downloads";
-import { rememberOfflineAccount, warmOfflineEntry } from "@/lib/offline/offlineEntry";
+import { keptBooksCount, rememberOfflineAccount, warmOfflineEntry } from "@/lib/offline/offlineEntry";
 import { ProgressRing, offlineProgress } from "./OfflineDownloadControl";
 
 /**
@@ -43,7 +43,8 @@ export function OfflineDownloadsButton() {
   useEffect(() => {
     if (!account) return;
     rememberOfflineAccount(account, count);
-    if (count > 0) warmOfflineEntry();
+    // Les livres gardés comptent aussi (`deviceKeepsDownloads`) : leur section est dans cette même page.
+    if (count > 0 || keptBooksCount() > 0) warmOfflineEntry();
   }, [account, count]);
 
   if (!enabled || !supported) return null;

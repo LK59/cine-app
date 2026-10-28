@@ -202,6 +202,19 @@ const makeMarginals = (length, part) => Array.from({ length }, () => {
     return div
 })
 
+// LATERNA PATCH: the paginator's own boxes are measured without the transforms of the page around
+// them. `getBoundingClientRect()` returns the box as drawn: while the reader turned the page in 3D
+// (`rotateY` on `<foliate-view>`, `pageTurn.ts`) the container measured almost 0 px wide at the moment
+// the next chapter was laid out, and the chapter came out in columns one word wide across the whole
+// screen (iPhone, 29/10/2026). The layout box (`offsetWidth` / `offsetHeight`) ignores transforms; the
+// drawn rectangle is kept when the two agree, for its fractional precision.
+const layoutRect = el => {
+    const rect = el.getBoundingClientRect()
+    const width = el.offsetWidth, height = el.offsetHeight
+    if (Math.abs(rect.width - width) <= 1 && Math.abs(rect.height - height) <= 1) return rect
+    return { width, height }
+}
+
 const setStylesImportant = (el, styles) => {
     const { style } = el
     for (const [k, v] of Object.entries(styles)) style.setProperty(k, v, 'important')
@@ -686,7 +699,7 @@ export class Paginator extends HTMLElement {
         // this is needed because the iframe does not fill the whole element
         this.#background.style.background = background
 
-        const { width, height } = this.#container.getBoundingClientRect()
+        const { width, height } = layoutRect(this.#container)
         const size = vertical ? height : width
 
         const style = getComputedStyle(this.#top)
@@ -775,10 +788,10 @@ export class Paginator extends HTMLElement {
             : scrolled ? 'height' : 'width'
     }
     get size() {
-        return this.#container.getBoundingClientRect()[this.sideProp]
+        return layoutRect(this.#container)[this.sideProp]
     }
     get viewSize() {
-        return this.#view.element.getBoundingClientRect()[this.sideProp]
+        return layoutRect(this.#view.element)[this.sideProp]
     }
     get start() {
         return Math.abs(this.#container[this.scrollProp])

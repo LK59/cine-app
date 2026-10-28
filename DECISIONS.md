@@ -7546,7 +7546,12 @@ Fondation » et « Prélude à Fondation ») et parfois entre deux racines. Les 
 le lot est partagé, les effacer le ferait retélécharger — et l'index n'en montre qu'un partout : rangées,
 pages, nombres, menus, recherche. La clé (`duplicateKey`) : le titre sans accents, casse, ponctuation ni
 « _ », sans article en tête (le, la, les, l', un, une, the…), et le premier auteur quel que soit l'ordre de
-ses noms (« Asimov,Isaac » = « Isaac Asimov »). La copie montrée (`preferredCopy`) : celle que ce compte a
+ses noms (« Asimov,Isaac » = « Isaac Asimov »). Depuis le 29/10/2026 (des paires Stephen King de la
+production), elle ôte aussi un sous-titre de fin qui ne dit que le genre ou la forme (« : roman », « : a
+novel », « (poche) », « - nouvelles »…) et le « s » final de chaque mot de plus de trois lettres, « œ »
+écrit « oe » (« Coeur perdu en Atlantide » = « Coeurs perdus en Atlantide »). Jamais une édition
+« illustrée » ni un tome (« Rêves et cauchemars (Tome 1) » peut être la moitié d'une édition coupée), et
+« Brume » ≠ « Brume ; La Faucheuse: nouvelles » (`books-mise-en-page.test.ts`). La copie montrée (`preferredCopy`) : celle que ce compte a
 commencée ou marquée d'un signet (`accountCopies`, au moment de répondre), puis celle qui a une
 couverture, puis le titre le plus soigné (accents, apostrophes, pas de « _ », le plus complet). La taille
 du fichier n'entre pas en compte : la liste ne la demande pas à Jellyfin. Dédoublonné après les droits, et
@@ -7753,6 +7758,18 @@ EPUB lisible ».
   `/livres/hors-ligne` : une page publique que le service worker garde et sert sans réseau, comme
   `/hors-ligne`, **avec sa politique de sécurité** (celle des livres) — une page gardée sans elle n'est
   pas servie. L'entrée des films n'est pas touchée.
+  **Un livre est un téléchargement** (29/10/2026) : un iPhone qui ne gardait qu'un livre, lancé sans
+  réseau, ne proposait rien — chaque décision « a des téléchargements » ne lisait que les films. Le
+  bouton de `offline.html` ne paraît que si `/hors-ligne` est gardée, et elle ne l'était que pour un
+  appareil qui gardait un film ; `SlowLaunchDownloads` ne lisait que leur nombre ; `/hors-ligne` sans
+  compte des films retenu disait « aucun compte » ; et sa section des livres suivait sans réseau un
+  « affichés pour ce compte » (`laterna:books:shown`) que seule la page des téléchargements écrivait.
+  Une règle, `deviceKeepsDownloads` (`offlineEntry.ts`) : des films **ou** des livres
+  (`laterna:books:offline-count`). Garder un livre fait garder les deux entrées
+  (`warmBooksOfflineEntries`) ; le cinéma les refait garder au lancement si l'appareil garde des livres,
+  et retient `laterna:books:shown` (`useBooksMode`) ; `/hors-ligne` montre sa page quand l'appareil
+  garde un livre. Sans livre, tout est comme avant : `offline-entry.test.tsx`, et le banc Chromium
+  (un livre seul, hors ligne, lancement à froid : bouton, section Livres, lecture).
 
 **Le lecteur.** foliate-js, copié à un commit précis (`src/lib/books/foliate/`, README et
 `UPSTREAM`) : pas de paquet npm, et seuls les fichiers de l'EPUB. Pages en colonnes (deux côte à côte
@@ -7889,5 +7906,33 @@ qui est déjà là. La page des livres seule n'a pas changé de comportement.
 
 **Pas sûr, à regarder sur un vrai iPhone en application installée** : le défilement continu, le pincement
 et les marges dans un cadre (Playwright n'émule ni l'encoche ni le zoom de la page).
+
+**La page 3D couchait le chapitre en colonnes d'un mot** (iPhone, 29/10/2026, et reproduit dans WebKit,
+dans le cadre comme sur `/livres`). Le retournement fait pivoter `<foliate-view>` (`rotateY`), et foliate-js
+mesurait sa boîte par `getBoundingClientRect()` — la boîte *dessinée*. Au milieu du geste, la page de
+profil mesure presque 0 px de large : un chapitre posé à ce moment recevait une colonne d'une trentaine de
+pixels (`column-width: 36px` mesuré), et la page, le nombre de pages et la position étaient calculés sur
+cette largeur. Ni le cadre ni un `ResizeObserver` n'y étaient pour rien : une transformation ne change pas
+la mise en page, seulement ce que ce rectangle en dit. Correctif à la source, dans foliate-js
+(`layoutRect`, `paginator.js` ; même chose dans `fixed-layout.js`) : la largeur du conteneur, la taille d'une
+page et celle de la vue viennent de `offsetWidth` / `offsetHeight`, qui ignorent les transformations — le
+rectangle dessiné reste pris quand les deux s'accordent, pour ses fractions de pixel. L'animation peut
+donc tourner l'élément mesuré sans rien lui faire mesurer de faux, quel que soit le moment où un chapitre
+se pose (le geste, un toucher en attente, une rotation pendant le geste — qui donne, elle, une vraie
+taille). Le pincement (une `scale` sur la même vue) en profite aussi.
+
+**« Deux pages » n'en montrait qu'une** sur un iPhone couché (Auto en montrait deux). Le lecteur passait
+`max-inline-size="min(680px, 520px)"`, que foliate-js relit par `parseFloat` (une propriété personnalisée
+n'est pas calculée) : `NaN`, une largeur de colonne invalide, aucune colonne. Désormais un nombre en
+pixels (`paginatorColumns`, `readerPrefs.ts`). La règle : Une page, toujours une ; Auto, deux dès que deux
+largeurs de lecture tiennent (680 px avec la marge moyenne : un iPhone 15 couché oui, un iPhone SE couché
+non) ; Deux pages, deux sur tout écran couché (colonne bornée à 520 px). Debout, une seule page quel que
+soit le choix — c'est foliate-js (`--_max-column-count-portrait`) : deux colonnes sur la largeur d'un
+téléphone debout ne font plus des lignes.
+
+Banc en vrai navigateur (WebKit, iPhone émulé, dans le cadre et sur `/livres`) : huit tours en page 3D,
+glisser, fondu et aucun, puis couché, trois tours, redressé — à chaque fois la colonne visible fait la
+largeur de la page moins les marges, et une ligne porte plus de cinq mots ; les trois dispositions
+couché et debout.
 
 **Décidé le 28/10/2026.**

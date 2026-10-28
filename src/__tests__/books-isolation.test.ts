@@ -228,7 +228,8 @@ describe("l'accueil ne charge rien des livres", () => {
   it("`BooksMode` ne contient rien des livres : l'accueil des livres n'est chargé que dans leur catégorie", () => {
     const mode = read("src/components/books/BooksMode.tsx");
     const staticImports = [...mode.matchAll(/^import .* from ["']([^"']+)["'];$/gm)].map((m) => m[1]);
-    expect(staticImports.sort()).toEqual(["./lazyNow", "@/components/TranslationProvider", "@/lib/cinemaRoute", "@/lib/swr", "lucide-react", "react", "swr"]);
+    // `offlineEntry` : quelques clés de l’appareil et un message au worker, rien des livres (§127, entrées hors ligne).
+    expect(staticImports.sort()).toEqual(["./lazyNow", "@/components/TranslationProvider", "@/lib/cinemaRoute", "@/lib/offline/offlineEntry", "@/lib/swr", "lucide-react", "react", "swr"]);
     expect(mode).toMatch(/lazyNow\(\(\) => import\("\.\/BooksHome"\)/);
     expect(mode).toMatch(/lazyNow\(\(\) => import\("\.\/BooksSearch"\)/);
     expect(mode).toMatch(/lazyNow\(\(\) => import\("\.\/BooksDownloads"\)/);

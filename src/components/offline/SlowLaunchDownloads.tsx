@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
-import { OFFLINE_ENTRY_PATH, rememberedOfflineAccount } from "@/lib/offline/offlineEntry";
+import { OFFLINE_ENTRY_PATH, deviceKeepsDownloads } from "@/lib/offline/offlineEntry";
 
 /** Combien d'attente avant de proposer les téléchargements — un lancement ordinaire est bien en deçà. */
 export const SLOW_LAUNCH_MS = 5000;
@@ -13,8 +13,8 @@ export const SLOW_LAUNCH_MS = 5000;
  *
  * Au bout de cinq secondes sans catalogue — le réseau traîne, ou le serveur ne répond plus après
  * avoir servi la page —, un bouton mène à l'entrée hors ligne (`/hors-ligne`), qui ne demande rien au
- * serveur. **Seulement si ce compte a des téléchargements sur l'appareil** (le nombre retenu par le
- * cinéma, `offlineEntry.ts`, lu sans réseau) : pour tous les autres, ce serait un bouton vers une
+ * serveur. **Seulement si l'appareil garde des téléchargements** — films (le nombre retenu par le
+ * cinéma) ou livres (depuis le 29/10/2026), lus sans réseau (`deviceKeepsDownloads`) : pour tous les autres, ce serait un bouton vers une
  * page vide au moment précis où l'on attend autre chose. L'attente continue derrière : rien n'est
  * interrompu tant qu'on ne touche pas le bouton.
  *
@@ -27,7 +27,7 @@ export function SlowLaunchDownloads({ delayMs = SLOW_LAUNCH_MS, placement = "flo
   const [show, setShow] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => {
-      if ((rememberedOfflineAccount()?.downloads ?? 0) > 0) setShow(true);
+      if (deviceKeepsDownloads()) setShow(true);
     }, delayMs);
     return () => clearTimeout(timer);
   }, [delayMs]);

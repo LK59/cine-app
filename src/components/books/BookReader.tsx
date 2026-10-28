@@ -9,6 +9,7 @@ import { turnPage, type TurnSide } from "@/lib/books/pageTurn";
 import {
   FONT_SIZE_RANGE,
   MARGIN_LAYOUT,
+  paginatorColumns,
   THEME_COLORS,
   loadReaderPrefs,
   readerCss,
@@ -126,11 +127,9 @@ function applyLayout(view: FoliateView, prefs: ReaderPrefs): void {
   r.setAttribute("flow", prefs.turn === "scroll" ? "scrolled" : "paginated");
   r.setAttribute("margin", layout.margin);
   r.setAttribute("gap", layout.gap);
-  // Une page : une colonne de largeur de lecture, centrée par foliate-js même sur un grand écran.
-  // Deux pages : la largeur d'une colonne est bornée plus court, pour que deux tiennent dès qu'un
-  // écran couché le permet (un iPad), au lieu d'attendre la largeur d'un ordinateur.
-  r.setAttribute("max-inline-size", prefs.layout === "double" ? `min(${layout.maxInlineSize}, 520px)` : layout.maxInlineSize);
-  r.setAttribute("max-column-count", prefs.layout === "single" ? "1" : "2");
+  const columns = paginatorColumns(prefs);
+  r.setAttribute("max-inline-size", columns.maxInlineSize);
+  r.setAttribute("max-column-count", columns.maxColumnCount);
   if (prefs.turn === "slide" || prefs.turn === "scroll") r.setAttribute("animated", "");
   else r.removeAttribute("animated");
 }

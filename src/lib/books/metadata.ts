@@ -34,9 +34,36 @@ export function titleKey(title: string): string {
   return fold(title.replace(/_/g, " ")).replace(LEADING_ARTICLE, "").trim();
 }
 
-/** Deux livres de même clé sont deux copies d'un même livre : titre (`titleKey`) et premier auteur (`nameKey`). */
+/**
+ * Un sous-titre de fin qui ne dit que le genre ou la forme du livre, pas un autre livre : « Bazaar: roman »,
+ * « Dreamcatcher: a novel », « (poche) ». Jamais « illustrée » : une édition illustrée est gardée à part,
+ * exprès. Jamais un tome : « Rêves et cauchemars (Tome 1) » peut être la moitié d'une édition coupée en
+ * deux, pas une copie du livre entier.
+ */
+const GENERIC_SUBTITLE = /^(?:(?:un|une|a|an) )?(?:roman|romans|recit|recits|nouvelle|nouvelles|novel|novella|thriller|poche|livre de poche|edition de poche|(?:nouvelle )?edition(?: (?:revue|augmentee|integrale|originale|definitive|de poche|poche))?)$/;
+
+/** Le titre sans son sous-titre générique de fin (`GENERIC_SUBTITLE`), après « : » ou entre parenthèses. */
+function withoutGenericSubtitle(title: string): string {
+  const m = /^(.+?)(?:\s*:\s*|\s[-–—]\s+)([^:()[\]]+?)\s*$|^(.+?)\s*[([]\s*([^()[\]]+?)\s*[)\]]\s*$/.exec(title);
+  if (!m) return title;
+  const head = m[1] ?? m[3];
+  const tail = fold(m[2] ?? m[4] ?? "");
+  return head && GENERIC_SUBTITLE.test(tail) ? head : title;
+}
+
+/**
+ * Deux livres de même clé sont deux copies d'un même livre : titre et premier auteur (`nameKey`). Le titre
+ * est celui de `titleKey`, plus deux replis mesurés sur une vraie bibliothèque (29/10/2026, Stephen King) :
+ * le sous-titre générique de fin (« Désolation » = « Désolation: roman ») et le pluriel — le « s » final
+ * de chaque mot ôté (« Coeur perdu en Atlantide » = « Coeurs perdus en Atlantide »), « œ » écrit « oe ».
+ * Rien de plus large : « Brume » et « Brume ; La Faucheuse: nouvelles » restent deux livres.
+ */
 export function duplicateKey(book: { name: string; authors: readonly string[] }): string {
-  return `${titleKey(book.name)}|${nameKey(book.authors[0] ?? "")}`;
+  const title = titleKey(withoutGenericSubtitle(book.name.trim()).replace(/œ/gi, "oe").replace(/æ/gi, "ae"))
+    .split(" ")
+    .map((w) => (w.length > 3 ? w.replace(/s$/, "") : w))
+    .join(" ");
+  return `${title}|${nameKey(book.authors[0] ?? "")}`;
 }
 
 /**

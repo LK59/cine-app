@@ -108,6 +108,28 @@ export const MARGIN_LAYOUT: Record<ReaderMargin, { margin: string; gap: string; 
   large: { margin: "72px", gap: "11%", maxInlineSize: "600px" },
 };
 
+/** « Deux pages » : la largeur d'une colonne bornée plus court, pour que deux tiennent sur un écran couché. */
+const DOUBLE_MAX_INLINE_PX = 520;
+
+/**
+ * Les colonnes que le paginateur reçoit pour la disposition choisie. Une page : une colonne de largeur de
+ * lecture, centrée même sur un grand écran. Auto : deux dès que deux largeurs de lecture tiennent. Deux
+ * pages : la largeur d'une colonne bornée à 520 px, pour que deux tiennent dès qu'un écran est couché (un
+ * iPhone, un iPad). Debout, foliate-js en montre toujours une (`--_max-column-count-portrait`), quel que
+ * soit le choix : deux colonnes sur la largeur d'un téléphone debout ne font plus des lignes.
+ *
+ * Un nombre en pixels, jamais une expression : foliate-js relit `max-inline-size` par `parseFloat` (une
+ * propriété personnalisée n'est pas calculée), et le `min(680px, 520px)` d'avant y donnait `NaN` — une
+ * largeur de colonne invalide, et « Deux pages » ne montrait qu'une page sur un iPhone couché (29/10/2026).
+ */
+export function paginatorColumns(prefs: Pick<ReaderPrefs, "layout" | "margin">): { maxInlineSize: string; maxColumnCount: string } {
+  const reading = MARGIN_LAYOUT[prefs.margin].maxInlineSize;
+  return {
+    maxInlineSize: prefs.layout === "double" ? `${Math.min(parseFloat(reading), DOUBLE_MAX_INLINE_PX)}px` : reading,
+    maxColumnCount: prefs.layout === "single" ? "1" : "2",
+  };
+}
+
 /** La pile de chaque police ; `book` n'en impose aucune. Literata et Outfit sont servies par l'application. */
 export const FONT_STACKS: Record<Exclude<ReaderFont, "book">, string> = {
   literata: `"Laterna Literata", Georgia, serif`,

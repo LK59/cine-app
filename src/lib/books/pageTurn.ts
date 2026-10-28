@@ -10,6 +10,11 @@ import type { ReaderTurn } from "@/lib/books/readerPrefs";
  * navigateur s'en charge, la page ne se recompose pas pendant l'animation — ce qui tient les 60 images
  * par seconde d'un iPhone.
  *
+ * L'élément qui tourne est celui que foliate-js mesure : il le fait par sa boîte de mise en page, que les
+ * transformations ne changent pas (`layoutRect`, correctif local de `paginator.js`). Avant, il lisait la
+ * boîte dessinée — presque 0 px de large quand la page 3D passe de profil — et un chapitre posé à ce
+ * moment sortait en colonnes d'un mot (iPhone, 29/10/2026).
+ *
  * `slide` est l'exception : à l'intérieur d'un chapitre, c'est foliate-js qui fait glisser ses colonnes
  * (attribut `animated`), un vrai glissement continu ; au passage d'un chapitre au suivant, que foliate-js
  * pose sans transition, la nouvelle page entre en glissant.

@@ -7,6 +7,7 @@ import { LayoutGrid } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher, playerBootstrapOptions } from "@/lib/swr";
 import { cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
+import { OFFLINE_BOOKS_COUNT_KEY, OFFLINE_BOOKS_SHOWN_KEY, keptBooksCount, warmBooksOfflineEntries } from "@/lib/offline/offlineEntry";
 
 /**
  * Ce que l'accueil du cinéma sait des livres (option, DECISIONS.md §127) — et rien de plus : ce module
@@ -65,6 +66,20 @@ export function useBooksMode(inAddress: boolean | undefined): BooksMode {
   useEffect(() => {
     if (known && !enabled && (inAddress || bookInAddress)) cinemaNavigate({ books: false, book: null, reading: false, booksAll: null }, "replace");
   }, [known, enabled, inAddress, bookInAddress]);
+  // Au lancement en ligne : retenir si les livres sont affichés pour ce compte (la page des téléchargements
+  // le suit sans réseau), et, sur un appareil qui garde des livres, faire garder les deux entrées hors
+  // ligne. Ce n'était fait qu'en gardant un livre ou en ouvrant la page des téléchargements : un appareil
+  // qui ne gardait qu'un livre, lancé sans réseau, n'avait ni l'une ni le bouton qui y mène (29/10/2026).
+  // Le worker ne refait rien d'une entrée déjà gardée pour ce build.
+  useEffect(() => {
+    if (!known) return;
+    try {
+      localStorage.setItem(OFFLINE_BOOKS_SHOWN_KEY, enabled ? "1" : "0");
+    } catch {
+      /* sans mémoire : hors ligne, la section suivra le dernier état connu */
+    }
+    if (enabled && keptBooksCount() > 0) warmBooksOfflineEntries();
+  }, [known, enabled]);
   const active = enabled && inAddress === true;
   // Retenu par un état, posé pendant le rendu (la forme dérivée que React permet) : une fois ouverte, la
   // catégorie garde son accueil monté jusqu'au départ de l'écran.
@@ -91,8 +106,8 @@ const BooksDownloadsLazy = lazyNow(() => import("./BooksDownloads").then((m) => 
 // Ce que la page des téléchargements sait des livres sans rien charger d'eux : combien l'appareil en
 // garde (`offlineBooks.ts` l'écrit), et si les livres étaient affichés pour ce compte au dernier passage
 // en ligne — sans réseau, la configuration ne répond pas.
-const COUNT_KEY = "laterna:books:offline-count";
-const SHOWN_KEY = "laterna:books:shown";
+const COUNT_KEY = OFFLINE_BOOKS_COUNT_KEY;
+const SHOWN_KEY = OFFLINE_BOOKS_SHOWN_KEY;
 const readKey = (key: string) => () => {
   try {
     return localStorage.getItem(key);

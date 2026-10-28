@@ -7,7 +7,7 @@ import { useT } from "@/components/TranslationProvider";
 import { adoptSignedOutAccount } from "@/lib/persistentCache";
 import { deviceStoreSupported } from "@/lib/offline/deviceStore";
 import { initOfflineDownloads, offlineAccount } from "@/lib/offline/downloads";
-import { rememberedOfflineAccount } from "@/lib/offline/offlineEntry";
+import { keptBooksCount, rememberedOfflineAccount } from "@/lib/offline/offlineEntry";
 import { BetaBadge } from "./OfflineDownloadControl";
 import { OfflineDownloadsView } from "./OfflineDownloadsView";
 
@@ -35,6 +35,7 @@ export function OfflineEntryScreen() {
   const t = useT();
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine !== false, () => true);
   const supported = useSyncExternalStore(noSubscribe, deviceStoreSupported, () => true);
+  const booksKept = useSyncExternalStore(noSubscribe, () => keptBooksCount() > 0, () => false);
   // `null` tant que la liste n'est pas lue ; ensuite, le compte dont elle vient (ou aucun).
   const [account, setAccount] = useState<string | null | undefined>(undefined);
 
@@ -97,9 +98,11 @@ export function OfflineEntryScreen() {
           <div className="flex justify-center py-16" aria-busy="true">
             <span className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-white" aria-hidden />
           </div>
-        ) : account === null ? (
+        ) : account === null && !booksKept ? (
           <Notice text={t("player.downloads.entryNoAccount")} />
         ) : (
+          // Sans compte des films retenu — téléchargements de films fermés à ce compte, ou jamais ouverts —
+          // l'appareil peut garder des livres : la page les montre dans leur section (29/10/2026).
           <OfflineDownloadsView />
         )}
       </div>

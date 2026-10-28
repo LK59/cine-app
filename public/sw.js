@@ -316,7 +316,7 @@ self.addEventListener("fetch", (event) => {
 // serveur ; le worker la garde ici, avec tout son code, pour qu'elle s'ouvre sans réseau.
 //
 // - **Quand** : à la demande du cinéma (`cine:warm-offline-entry`), qu'il n'envoie que s'il y a des
-//   téléchargements sur l'appareil — ce code (2,7 Mo compressés) n'a pas à être gardé partout. Une fois
+//   téléchargements sur l'appareil — films ou, depuis le 29/10/2026, livres (`deviceKeepsDownloads`) — ce code (2,7 Mo compressés) n'a pas à être gardé partout. Une fois
 //   par build : elle vit dans le cache du build (`STATIC_CACHE`), avec le code qu'elle charge, si
 //   bien que la page et ses fichiers sont toujours de la même génération.
 // - **Comment** : la page est demandée **sans cookie** (`credentials: "omit"`) — rendue comme pour un
