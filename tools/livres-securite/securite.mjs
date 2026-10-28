@@ -39,7 +39,7 @@ async function run(name, engine) {
   page.on("console", (m) => consoleLines.push(m.text()));
   ctx.on("page", (p) => popups.push(p.url()));
 
-  await page.goto(`${BASE}/livres#livre=${BOOK}&lire`);
+  await page.goto(`${BASE}/livres#livre=${BOOK}&lire=1`);
   // Le chapitre piégé est affiché quand son texte est lisible dans le cadre.
   await page.waitForFunction(() => {
     const v = document.querySelector("foliate-view");

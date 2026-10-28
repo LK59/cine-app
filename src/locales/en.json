@@ -3884,6 +3884,8 @@
       "year": "By year"
     },
     "filterSeries": "Series",
+    "allAuthors": "All authors",
+    "allSeries": "All series",
     "filterAuthor": "Author",
     "filterGenre": "Genre"
   }

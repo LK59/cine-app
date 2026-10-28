@@ -3884,6 +3884,8 @@
       "year": "Por año"
     },
     "filterSeries": "Serie",
+    "allAuthors": "Todos los autores",
+    "allSeries": "Todas las series",
     "filterAuthor": "Autor",
     "filterGenre": "Género"
   }
