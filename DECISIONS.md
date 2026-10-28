@@ -7622,6 +7622,28 @@ fin) : Jellyfin ne sait garder que des durées. Envoyée au fil de la lecture (r
 fermeture et à `pagehide` (`sendBeacon`). Le livre fini la première fois, il est noté « lu » chez
 Jellyfin pour ce compte (`markPlayed`) ; un échec de cet appel ne perd pas la position.
 
+**Les transitions (28/10/2026, mesurées avant d'être changées).** Sur 6 400 livres, iPhone émulé
+(WebKit) et ordinateur (Chromium), cache chaud :
+- *« Tous les livres » s'ouvre par-dessus l'accueil* (`#tous=…`, `booksAll` dans l'adresse du cinéma),
+  sans changer de page : la grille n'a pas besoin de la politique de sécurité du lecteur. Elle chargeait
+  le document `/livres` (~0,55 s), et son retour rechargeait tout le cinéma (~0,65 s) ; le retour est
+  maintenant de 70 ms. Seule la lecture passe encore par la page `/livres`.
+- *Aucun morceau des livres ne passe par Suspense* (`lazyNow`) : React retient l'apparition de ce qui
+  était suspendu 300 ms au moins. La catégorie Livres, « Tous les livres » et le lecteur l'attendaient,
+  alors que leur code et leurs données arrivaient en 10 à 40 ms.
+- *« Lire » → première page* : ~1,4 s → ~0,42 s (iPhone), ~1,1 s → ~0,25 s (ordinateur). La page des livres
+  est demandée pendant que la couverture grandit (`openReaderPage`), le fichier du livre dès qu'on reste
+  0,6 s sur sa fiche (`readerPreload.ts`, gardé aussi une heure par le navigateur ; rien en économie de
+  données), et la page des livres ouverte pour lire ne demande que le lecteur : son code, foliate-js et le
+  fichier partent au premier rendu, en même temps ; la grille n'est pas chargée derrière.
+- *La catégorie Livres se prépare à l'intention* (survol, doigt posé, focus du bouton) ; la fiche paraît
+  sans attendre sa propre réponse quand la carte suffit.
+- *Ce qui reste* : refermer le lecteur recharge le cinéma (~0,5 s). Le cache d'aller-retour des navigateurs
+  ne le garde pas : son document est servi `Cache-Control: no-store` (Chromium le dit :
+  `response-cache-control-no-store`), ce qui empêche aussi de revenir, après une déconnexion, sur la page
+  d'un autre compte. L'enlever — ou mettre le lecteur dans le document du cinéma, ce qui demanderait
+  d'ouvrir sa politique de sécurité aux cadres `blob:` — est un choix à faire, pas un correctif.
+
 **Signets, recherche, lecture hors ligne.**
 - *Signets* : le signet de la barre du haut marque la page lue (plein quand elle l'est) ; la liste est un
   onglet du panneau de la table des matières — chapitre, quelques mots, pourcentage. Gardés par compte
