@@ -74,7 +74,10 @@ typescript-eslint supports it, the alias goes and `typescript` becomes 7.x.
 
 The suite writes into a throwaway `DATA_DIR` (`vitest.config.ts`): the gate mounts the whole
 repository, `data/` included, and tests calling `logError` used to append Vitest mock errors to
-the production `server.log`. A test fails if that isolation disappears.
+the production `server.log`. A test fails if that isolation disappears. That directory is shared by
+every file of the run: a file that empties or rewrites whole tables gives itself its own `DATA_DIR`
+(`await vi.hoisted(...)` before importing `@/lib/db`, as `news-page-105.test.ts` does) — sharing it made
+the image build fail on « database is locked » under load.
 
 `set -e` and no pipes: `npm test | grep` swallows the exit code, and a red test has been pushed
 that way before. Read the gate's exit status before committing.
@@ -414,6 +417,38 @@ pass-through accessors for the private members tests drive), and rules both play
 `src/components/player/session/` and `src/components/player/playerClose.ts` (DECISIONS §114–§116).
 `playerControls/` and `playerNative/` sit outside `src/components/player/` on purpose: the colour
 rule of `design-tokens.test.ts` reads that folder, and the controls carry hand-written text colours.
+
+**Books are an option, off by default, kept apart from the cinema** (DECISIONS §127–§128, since
+28/10/2026): `BOOKS_ENABLED`, `BOOKS_REQUESTS_ENABLED`, `BOOKS_GOOGLE_ENRICH` + `GOOGLE_BOOKS_API_KEY`.
+Everything lives in `src/lib/books/`, `src/components/books/`, `/api/books/*` and the `/livres` page
+(outside the `(player)` group). The cinema imports one light module (`BooksMode.tsx`), and books are a
+*mode* in the address (`#livres=1`, `#livre=<id>&lire=1`, `#tous=…`), never a third value of `tab` —
+widening `"movies" | "series"` would ripple through twenty places. Turned off, every books route answers
+404 and no books code loads; `books-isolation.test.ts` fails otherwise.
+- **One shared index** (`bookIndex.ts`): the library read once with the server key, kept on disk
+  (`DATA_DIR/book-index.json`), prepared after the catalogue warm-up (`prewarm.ts`) and when the option is
+  switched on, refreshed in the background. Each account gets a filtered view (`rights.ts`): its Jellyfin
+  libraries and blocked tags; a session with no Jellyfin id that is not an admin sees nothing. A failed
+  preparation goes to `server.log` — it once failed silently and every account paid the first build.
+- **Jellyfin names the series after the parent folder**, so an author folder (Readarr/Bookshelf) or a pack
+  folder became a « series ». Series and authors come from the EPUB's OPF (`epubMeta.ts`, read in the
+  background, slowed — not stopped — while a film plays), never from folders. Duplicates of one book
+  (same folded title and first author) are hidden in the index, not deleted: a seeding pack would
+  re-download a deleted file.
+- **The reader** is foliate-js, vendored in `src/lib/books/foliate/` (outside the lint). EPUB content is
+  untrusted: sanitized, chapter frames without `allow-scripts`, and the `/livres` page's own CSP
+  (`frame-src blob:`, nothing external). That page opens in a same-origin frame laid over the cinema
+  (`ReaderFrame.tsx`, messages checked in `readerFrame.ts`), so closing a book reloads nothing; the global
+  CSP gained only `frame-src 'self'` for it. `tools/livres-securite/` opens a trapped EPUB in Chromium,
+  Firefox and WebKit, standalone and framed — run it after touching the reader, its CSP or the sanitizer.
+- **Google Books** (`googleBooks.ts`) only fills what is missing, one request every two seconds, 900 a day,
+  key in the `X-Goog-Api-Key` header. Measured on 28/10/2026: its field operators (`intitle:`, `inauthor:`,
+  `isbn:`) return nothing with a key, so queries are free text and the right edition is picked among
+  twenty candidates by title, author, tome and language; a summary is only taken in the book's own
+  language. Rules carry a version (`RULES_VERSION`): bumping it re-evaluates what an older rule filled.
+- **Logs**: `docker logs` carries `[livres]` lines (index prepared, Google Books passes); `server.log`
+  carries `books/meta` (unreadable EPUBs), `books/file` (Jellyfin refusing a download) and
+  `component:BookReader` (why a book did not open).
 
 **The player** has its own reference: read `DOC-TECH.md` before touching `src/lib/webcodecs/`,
 and `docs/cycle-de-vie-lecteur.md` before touching `ExperimentalPlayerHost`, `PlayerHost` or the

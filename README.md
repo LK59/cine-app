@@ -309,8 +309,18 @@ large libraries (thousands of files) are indexed once on the server for every ac
 only sees the Jellyfin libraries and tags it may see) and sent to devices a page at a time. The reader
 also has bookmarks (kept per account), search inside the book, and offline reading: « Download » keeps
 a book on the device, readable without a connection from the downloads page. Optionally (off by default,
-`BOOKS_GOOGLE_ENRICH` with a `GOOGLE_BOOKS_API_KEY`), Google Books fills in what Jellyfin and the EPUB
-lack — summary, cover, genres, year — never overwriting existing data, within a daily request budget.
+`BOOKS_GOOGLE_ENRICH` with a `GOOGLE_BOOKS_API_KEY`, set in `.env` or in Configuration), Google Books
+fills in what Jellyfin and the EPUB lack — summary, cover, genres, year — never overwriting existing
+data, within a daily request budget (900 requests, one every two seconds, stopped for the day on a
+quota error). A match must agree on title and author and is never a study guide, an omnibus or
+another volume; a summary is only taken in the book's own language (the EPUB's, else the library's
+metadata language, else the instance's), so the rule works for any language. The key is sent in a
+header, never in an address or a log.
+
+The reader opens in a same-origin frame laid over the home screen, so closing a book returns at once to
+where you were, without reloading anything; the global policy only gained `frame-src 'self'` for that
+(DECISIONS.md §128). A book is « started » once past its first page: one opened and closed on page one,
+or below 1 %, stays unread and out of « Continue reading », which a book's sheet can also remove it from.
 
 ## Keyboard and remote
 
