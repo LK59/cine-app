@@ -68,6 +68,16 @@ describe("ce que le navigateur prédit de la lecture", () => {
     expect(decodingFields()).toEqual({ mcSmooth: false, mcEfficient: true });
   });
 
+  it("un SDR ne décrit ni courbe ni gamme : BT.709 n'est pas « srgb »", async () => {
+    const decodingInfo = vi.fn(async () => ({ supported: true, smooth: true, powerEfficient: true }));
+    vi.stubGlobal("navigator", { mediaCapabilities: { decodingInfo } });
+    const sdr = { video: { width: 1920, height: 1080, colour: { transferCharacteristics: 1, primaries: 1 } }, defaultDurationNs: null } as unknown as MatroskaTrack;
+    probeDecodingInfo("video/mp4", sdr, 1_000_000_000, 6000);
+    const asked = (decodingInfo.mock.calls[0] as unknown as [{ video: Record<string, unknown> }])[0].video;
+    expect(asked).not.toHaveProperty("transferFunction");
+    expect(asked).not.toHaveProperty("colorGamut");
+  });
+
   it("sans l'API, ou sur un refus : rien", async () => {
     vi.stubGlobal("navigator", {});
     probeDecodingInfo("video/mp4", track, 1, 1);
