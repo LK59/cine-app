@@ -11,6 +11,7 @@ import { createLiquidPress, prefersReducedMotion } from "@/lib/liquidGlass/liqui
 import { usePrewarmEpisodes } from "@/components/player/PlayerEpisodesMenu";
 import { usePlayerItem } from "@/lib/usePlayerItem";
 import { useCastAvailability, type CastVideoElement } from "@/components/playerControls/useCastAvailability";
+import { useSystemPip } from "@/components/playerControls/useSystemPip";
 import { useChapters, useTrickplay } from "@/components/playerControls/useTrickplay";
 import { PlayerTopBar } from "@/components/playerControls/PlayerTopBar";
 import { PlayerPrompts } from "@/components/playerControls/PlayerPrompts";
@@ -631,6 +632,7 @@ export function PlayerControls({
 
 
   const { castSupported, castKind } = useCastAvailability(videoRef);
+  const { pipSupported, pipActive, togglePip } = useSystemPip(videoRef);
 
   useEffect(() => {
     function onFsChange() {
@@ -1043,6 +1045,7 @@ export function PlayerControls({
           showControls={showControls}
           onClose={handleCloseClick}
           onMinimize={handleMinimizeClick}
+          pip={{ supported: pipSupported, active: pipActive, toggle: togglePip }}
           chromecast={chromecast}
           castSupported={castSupported}
           castKind={castKind}

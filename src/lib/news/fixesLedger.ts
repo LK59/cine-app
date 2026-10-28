@@ -793,6 +793,25 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.6.0",
+    page: "10.5",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Sur ordinateur et sur Android, un bouton « Image dans l'image » garde le film à l'écran pendant que vous faites autre chose. « Réduire » prend une flèche vers le bas.",
+        en: "On computers and Android, a “Picture in Picture” button keeps the film on screen while you do something else. “Minimize” now shows a down arrow.",
+        es: "En ordenador y en Android, un botón «Imagen en imagen» mantiene la película en pantalla mientras hace otra cosa. «Minimizar» pasa a una flecha hacia abajo.",
+        de: "Auf dem Computer und unter Android hält eine Schaltfläche „Bild-in-Bild“ den Film sichtbar, während Sie etwas anderes tun. „Verkleinern“ zeigt jetzt einen Pfeil nach unten.",
+      },
+      {
+        fr: "Revenir de 10 secondes juste après un saut repart aussitôt, sans recharger.",
+        en: "Going back 10 seconds right after a jump now resumes at once, without reloading.",
+        es: "Retroceder 10 segundos justo después de un salto reanuda al instante, sin recargar.",
+        de: "Unmittelbar nach einem Sprung 10 Sekunden zurückzuspringen, geht jetzt sofort weiter, ohne neu zu laden.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

@@ -7372,3 +7372,45 @@ décodent ou les passent au téléviseur, et un ré-encodage pour tous coûterai
 relance n'est qu'une réponse à un récepteur muet, pas une détection.
 
 **Décidé le 27/10/2026.**
+
+## 123. L'image dans l'image du système, à côté du mini-lecteur
+
+**Règle.** Le lecteur propose l'image dans l'image du système (bouton à l'icône PiP, en haut à
+droite) seulement là où le système l'accepte vraiment : `document.pictureInPictureEnabled`, un
+élément qui ne l'interdit pas, et sur WebKit `webkitSupportsPresentationMode("picture-in-picture")`.
+C'est cette dernière qui décide sur WebKit : dans l'app installée depuis Safari sur iPhone et iPad,
+`pictureInPictureEnabled` répond vrai mais `requestPictureInPicture()` échoue ou ne fait rien —
+défaut d'Apple ouvert (WebKit 303885, 280627), toujours là en iOS 27.2 ; la question préfixée y
+répond faux. Le jour où Apple corrige, le bouton apparaît seul. Firefox n'expose pas l'API : pas de
+bouton. « Réduire » (le mini-lecteur de l'app) a pris un chevron : deux icônes PiP pour deux
+gestes se seraient lues comme un seul. Pendant l'image dans l'image du système, « Réduire » est
+masqué — déplacer la vidéo dans le mini-lecteur l'en ferait sortir.
+
+**Porteurs.** `useSystemPip` et `systemPipAvailable` (`src/components/playerControls/useSystemPip.ts`) ;
+`PlayerTopBar` (le bouton, le chevron) ; branché dans `PlayerControls`, donc les trois lecteurs
+(natif, serveur, hors ligne).
+
+**Tests.** `useSystemPip.test.tsx`.
+
+**Voulu.** Pas de bouton dans le mini-lecteur : il n'a pas l'élément sous la main, et un appui le
+rouvre en grand. La lecture en arrière-plan reste hors de portée de l'app installée sur iPhone : iOS
+y met en pause toute vidéo cachée, sans API pour l'en empêcher.
+
+**Décidé le 28/10/2026.**
+
+## 124. Un saut à une image du chargé est posé sur le chargé
+
+**Règle.** Dans le lecteur natif, un saut qui tombe à moins d'une image (1/24 s, `ONE_FRAME_S`)
+*avant* le début d'une zone chargée pose la tête sur ce début (`startJustAfter`, `MseSource.onSeeking`)
+au lieu de tout relire. Après un saut, la zone chargée commence à l'image clé de son arrivée, et un
+« −10 s » qui retombait dessus la manquait de quelques millisecondes — l'audio y commence 30 ms avant
+l'image : 1,2 à 1,5 s d'attente en 4K pour une image d'écart (*Braveheart* sur Firefox, au banc).
+
+**Voulu.** Ce n'est pas un saut calé sur une image clé (refusé le 20/10/2026) : la cible ne bouge que
+d'une image au plus, seulement vers l'avant et seulement vers du média déjà là. Au-delà d'une image,
+c'est un vrai saut, à sa cible exacte.
+
+**Tests.** `webcodecs-mseSource.test.ts` (« pose la tête sur le début du chargé… », « au-delà d'une
+image… »).
+
+**Décidé le 28/10/2026.**

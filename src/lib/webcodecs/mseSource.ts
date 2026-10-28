@@ -15,14 +15,14 @@ import { describeNetwork, isNetworkFailure, isReadAbandoned } from "./byteSource
 import { networkUnstable } from "@/lib/networkTrouble";
 import { isUnreadableZone } from "./unreadableZone";
 import { BufferQueue } from "./bufferQueue";
-import { rangeAround } from "./timeRanges";
+import { rangeAround, startJustAfter } from "./timeRanges";
 import { PlaybackGuard } from "./playbackGuard";
 import { NO_INDEX_REACH_SECONDS, reachable, seekArrived } from "./seekArrival";
 import { LANDING_REACH_SECONDS, SeekLifecycle, landingFor } from "./seekLifecycle";
 import { containerAccepts, playabilityOf, sourceConstructor, type MediaSourceCtor } from "./mseSupport";
 import {
   FROZEN_SEEKING_MS, MIN_BUFFER_SECONDS, PLAYED_TO_CLEAR_SECONDS, STALL_REPORT_MS, STALL_REPORT_COOLDOWN_MS,
-  RUNAWAY_REPORT_SECONDS, STALL_TRACE_MS, MAX_APPEND_FAILURES, NETWORK_KEEP_LEAD_SECONDS, NETWORK_RETRY_DELAYS_MS,
+  RUNAWAY_REPORT_SECONDS, STALL_TRACE_MS, MAX_APPEND_FAILURES, NETWORK_KEEP_LEAD_SECONDS, NETWORK_RETRY_DELAYS_MS, ONE_FRAME_S,
   NETWORK_TRIM_MARGIN_SECONDS, NETWORK_OUTAGE_GIVE_UP_MS, OUTAGE_STARVED_LEAD_SECONDS, STALL_TIMEOUT_MS, WATCHDOG_MS,
   EVICTION_REFILLS_PER_MINUTE, SOURCE_OPEN_TIMEOUT_MS, MISPLACED_SECONDS, FRUITLESS_APPENDS, PRE_ROLL_SECONDS,
   TRACED_APPENDS, TRACED_APPENDS_PER_SEEK, KEEP_BEHIND_SECONDS, TRIM_SLACK_SECONDS, KEYFRAME_TRIM_MARGIN,
@@ -601,6 +601,21 @@ export class MseSource {
     // chargée pendant une rafale se retrouvait ramené à l'avant-dernière position (trouvé par le
     // fuzz le 24/09/2026, graine 30054481). Par la voie normale, le dernier geste l'emporte.
     if (this.isBufferedAt(target) && this.seekState.requested === null) return void this.fill();
+    // À moins d'une image avant le début de ce qui est chargé : la tête est posée sur ce début plutôt
+    // que de tout relire (28/10/2026). Après un saut, la zone chargée commence à l'image clé de son
+    // arrivée, et un « −10 s » qui retombe dessus la manquait de quelques millisecondes — l'audio
+    // y commence 30 ms avant l'image (Braveheart sur Firefox, au banc) — : un saut complet, 1,2 à
+    // 1,5 s d'attente en 4K, pour une image d'écart. Ce n'est pas un saut calé sur une image clé :
+    // la cible ne bouge que d'une image au plus, et seulement vers du média déjà là. Le `seeking`
+    // que ce déplacement provoque repasse ici, sur du chargé.
+    if (this.seekState.requested === null) {
+      const edge = startJustAfter(this.playable, target, ONE_FRAME_S);
+      if (edge !== null) {
+        trace(`saut à ${Math.round((edge - target) * 1000)} ms du chargé — posé sur son début (${edge.toFixed(2)} s)`);
+        this.video.currentTime = edge;
+        return;
+      }
+    }
     void this.seek(target);
   };
 

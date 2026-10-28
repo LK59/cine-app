@@ -286,6 +286,21 @@
   button:not(:disabled):active {
     transform: scale(0.96);
   }
+
+  /* ─── Des coupures de ligne soignées (28/10/2026) ───────────────────────────
+     Un titre sur deux lignes était coupé au dernier mot qui tenait — « Le Seigneur des Anneaux :
+     la Communauté de » / « l'Anneau » ; `balance` égalise les lignes. Un paragraphe finissait
+     parfois sur un mot seul ; `pretty` l'évite. Un navigateur qui ne connaît pas la valeur
+     l'ignore et coupe comme avant (`balance` : Safari 17.5, `pretty` : Safari 26) — rien ne
+     casse ailleurs. La couche `base` : une classe d'un composant l'emporte. */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
 }
 
 /**

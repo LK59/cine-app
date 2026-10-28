@@ -961,6 +961,42 @@ describe("MseSource", () => {
     expect(buffer.removed).toEqual([]);
   });
 
+  // 28/10/2026, Braveheart sur Firefox au banc : un « −10 s » juste après un saut retombe sur le
+  // début de la zone chargée — l'image clé de ce saut — à 30 ms près, et toute la zone était relue.
+  it("pose la tête sur le début du chargé quand le saut tombe à moins d'une image avant", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await flush();
+    const buffers = FakeSource.instances[0].buffers;
+    for (const b of buffers) b.setBuffered(100.6, 140);
+    const buffer = buffers[0];
+    buffer.removed.length = 0;
+
+    (video as unknown as { currentTime: number }).currentTime = 100.57;
+    video.dispatchEvent(new Event("seeking"));
+    await flush();
+    expect(video.currentTime).toBeCloseTo(100.6, 5);
+    // Le `seeking` que ce déplacement provoque : sur du chargé, rien à relire.
+    video.dispatchEvent(new Event("seeking"));
+    await flush();
+    expect(remuxer.seeks).toEqual([]);
+    expect(buffer.removed).toEqual([]);
+  });
+
+  it("au-delà d'une image avant le chargé, c'est un vrai saut : la cible n'est pas déplacée", async () => {
+    const video = fakeVideo();
+    const remuxer = fakeRemuxer(500, 0.2);
+    await MseSource.attach(video, remuxer, PLAN, { onError: vi.fn() });
+    await flush();
+    for (const b of FakeSource.instances[0].buffers) b.setBuffered(100.6, 140);
+
+    (video as unknown as { currentTime: number }).currentTime = 100.5;
+    video.dispatchEvent(new Event("seeking"));
+    await flush();
+    expect(remuxer.seeks).toEqual([100.3]);
+  });
+
   it("does not serve its own seek twice", async () => {
     const video = fakeVideo();
     const remuxer = fakeRemuxer(500);

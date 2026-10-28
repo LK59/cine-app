@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { X, Cast, PictureInPicture2, Volume2, VolumeX } from "lucide-react";
+import { X, Cast, ChevronDown, PictureInPicture2, Volume2, VolumeX } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 
 /** Combien de temps la confirmation de diffusion reste dépliée sans qu'on y touche. */
@@ -18,6 +18,7 @@ export function PlayerTopBar({
   showControls,
   onClose,
   onMinimize,
+  pip,
   chromecast,
   castSupported,
   castKind,
@@ -35,6 +36,8 @@ export function PlayerTopBar({
   showControls: (delayMs?: number) => void;
   onClose: () => void;
   onMinimize: () => void;
+  /** L'image dans l'image du système — voir `useSystemPip`. Absente, pas de bouton. */
+  pip?: { supported: boolean; active: boolean; toggle: () => void };
   chromecast?: { active: boolean; onRequest: () => void };
   castSupported: boolean;
   castKind: "airplay" | "remote";
@@ -147,18 +150,42 @@ export function PlayerTopBar({
                 <Cast size={22} />
               </button>
             )}
-            <button
-              data-player-nav="minimize"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMinimize();
-              }}
-              title={t('player.minimize')}
-              aria-label={t('player.minimize')}
-              className="player-pill-btn"
-            >
-              <PictureInPicture2 size={22} />
-            </button>
+            {/* L'image dans l'image du système porte l'icône que tout le monde lui connaît ;
+                « Réduire » (le mini-lecteur de l'app) a pris le chevron le 28/10/2026 — deux
+                icônes identiques pour deux gestes différents se seraient lues comme un seul. */}
+            {pip?.supported && (
+              <button
+                data-player-nav="pip"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Dans le geste même : le système refuse une demande qui n'en vient pas.
+                  pip.toggle();
+                }}
+                title={t("player.pip")}
+                aria-label={t("player.pip")}
+                aria-pressed={pip.active}
+                data-active={pip.active ? "" : undefined}
+                className="player-pill-btn"
+              >
+                <PictureInPicture2 size={22} />
+              </button>
+            )}
+            {/* Masqué pendant l'image dans l'image du système : déplacer la vidéo dans le
+                mini-lecteur l'en ferait sortir. */}
+            {!pip?.active && (
+              <button
+                data-player-nav="minimize"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMinimize();
+                }}
+                title={t('player.minimize')}
+                aria-label={t('player.minimize')}
+                className="player-pill-btn"
+              >
+                <ChevronDown size={24} />
+              </button>
+            )}
           </div>
           <div
             data-cast-confirm={castConfirm ? "open" : "closed"}

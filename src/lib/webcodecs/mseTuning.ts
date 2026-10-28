@@ -222,3 +222,9 @@ export const KEYFRAME_TRIM_MARGIN = 0.05;
  * qui est sûr, pour qu'aucune image touchée n'arrive au décodeur.
  */
 export const ZONE_MARGIN_SECONDS = 0.5;
+
+/**
+ * Une image, au plus lent du cinéma (24 images/s) : l'écart qu'un saut peut avoir avec le début de
+ * ce qui est chargé et être posé dessus plutôt que tout relire — voir `MseSource.onSeeking`.
+ */
+export const ONE_FRAME_S = 1 / 24;

@@ -21,3 +21,17 @@ export function rangeAround(ranges: TimeRanges, x: number, slack: number): numbe
   }
   return -1;
 }
+
+/**
+ * Le début de la plage qui commence *juste après* `x` — à `slack` secondes au plus —, ou null.
+ *
+ * Pour un saut qui tombe au bord avant de ce qui est chargé : `rangeAround(…, 0)` le dit hors du
+ * média, alors qu'il en est à moins d'une image. Voir `MseSource.onSeeking`.
+ */
+export function startJustAfter(ranges: TimeRanges, x: number, slack: number): number | null {
+  for (let i = 0; i < ranges.length; i++) {
+    const start = ranges.start(i);
+    if (start > x && start - x <= slack && x < ranges.end(i)) return start;
+  }
+  return null;
+}
