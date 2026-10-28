@@ -785,7 +785,11 @@ function migrate(db: Database.Database): void {
   // Les livres et la 10.6 (28/10/2026, §127) : la même seule installation, en brouillon — Louis la
   // publie depuis Activité → Nouveautés le soir où il allume l'option.
   const books = booksNewsPage(config.news?.laternaAddress);
-  if (books) seedNewsPage(db, books.seed, books.version, books.content, Date.now(), "draft");
+  if (books) {
+    seedNewsPage(db, books.seed, books.version, books.content, Date.now(), "draft");
+    // Signets, recherche dans le livre et lecture hors ligne ajoutés le soir même, avant publication.
+    refreshNewsDraft(db, books.refresh, books.version, books.content);
+  }
   // Les versions 10.1 à 10.5 (27/10/2026) : publiée partout, consultable dans Compte → Nouveautés, sans
   // ouvrir la fenêtre (Louis : mettre à jour, ne pas republier). Avant le registre, qui la complète.
   seedQuietNewsPage(db, NEWS_105_SEED, NEWS_105_VERSION, NEWS_105_CONTENT);
@@ -943,6 +947,19 @@ export function republishNewsPage(
         page.id
       );
     }
+    db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES (?, ?)").run(marker, now);
+  })();
+}
+
+/**
+ * Un brouillon semé par `seedNewsPage`, complété dans le code avant d'être publié : son contenu est
+ * remplacé, il reste brouillon. Une page déjà publiée (ou effacée) n'est pas touchée — l'administrateur
+ * l'a vue et choisie telle quelle. Une fois, par son marqueur.
+ */
+export function refreshNewsDraft(db: Database.Database, marker: string, version: string, content: NewsContentByLang, now = Date.now()): void {
+  if (db.prepare("SELECT 1 FROM migrations_done WHERE name = ?").get(marker)) return;
+  db.transaction(() => {
+    db.prepare("UPDATE news_pages SET content = ?, updated_at = ? WHERE version = ? AND status = 'draft'").run(JSON.stringify(content), now, version);
     db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES (?, ?)").run(marker, now);
   })();
 }

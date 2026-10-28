@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import Database from "better-sqlite3";
 import { NEWS_LANGS, sanitizeContent } from "@/lib/news/content";
-import { booksNewsPage, NEWS_107_CONTENT, NEWS_107_SEED, NEWS_107_VERSION } from "@/lib/news/page107";
-import { seedNewsPage } from "@/lib/db";
+import { booksNewsPage, NEWS_107_CONTENT, NEWS_107_REFRESH, NEWS_107_SEED, NEWS_107_VERSION } from "@/lib/news/page107";
+import { refreshNewsDraft, seedNewsPage } from "@/lib/db";
 
 /**
  * La page « 10.7 » (les livres, §127, et la 10.6) : seulement sur l'installation qui annonce sa
@@ -34,7 +34,7 @@ describe("la page Nouveautés 10.7", () => {
 
   it("n'existe que sur l'installation qui annonce sa nouvelle adresse", () => {
     for (const none of [undefined, null, "", "cine-app"]) expect(booksNewsPage(none), String(none)).toBeNull();
-    expect(booksNewsPage("app.example.org")).toEqual({ seed: NEWS_107_SEED, version: NEWS_107_VERSION, content: NEWS_107_CONTENT });
+    expect(booksNewsPage("app.example.org")).toEqual({ seed: NEWS_107_SEED, refresh: NEWS_107_REFRESH, version: NEWS_107_VERSION, content: NEWS_107_CONTENT });
   });
 
   it("est semée en brouillon, une seule fois", () => {
@@ -49,5 +49,21 @@ describe("la page Nouveautés 10.7", () => {
     seedNewsPage(db, page.seed, page.version, page.content, 2, "draft");
     const rows = db.prepare("SELECT version, status, seq FROM news_pages").all();
     expect(rows).toEqual([{ version: "10.7", status: "draft", seq: null }]);
+  });
+
+  it("un brouillon semé plus tôt prend le contenu complété ; une page déjà publiée n'est pas touchée", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE migrations_done (name TEXT PRIMARY KEY, done_at INTEGER NOT NULL);
+      CREATE TABLE news_pages (id INTEGER PRIMARY KEY AUTOINCREMENT, version TEXT NOT NULL, content TEXT NOT NULL,
+        status TEXT NOT NULL, seq INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, published_at INTEGER);
+    `);
+    db.prepare("INSERT INTO news_pages (version, content, status, seq, created_at, updated_at) VALUES ('10.7', '{\"old\":1}', 'draft', NULL, 1, 1)").run();
+    db.prepare("INSERT INTO news_pages (version, content, status, seq, created_at, updated_at) VALUES ('10.7', '{\"kept\":1}', 'published', 3, 1, 1)").run();
+    refreshNewsDraft(db, "m", "10.7", NEWS_107_CONTENT, 2);
+    refreshNewsDraft(db, "m", "10.7", { fr: { sections: [], fixesSummary: "", fixes: [] } }, 3);
+    const rows = db.prepare("SELECT status, content FROM news_pages ORDER BY id").all() as { status: string; content: string }[];
+    expect(JSON.parse(rows[0].content)).toEqual(NEWS_107_CONTENT);
+    expect(rows[1].content).toBe('{"kept":1}');
   });
 });

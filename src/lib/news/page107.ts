@@ -19,6 +19,8 @@ import { laternaAddress } from "./pageLaterna";
 export const NEWS_107_VERSION = "10.7";
 /** Le marqueur dans `migrations_done` : posé une fois, la page n'est plus jamais réécrite. */
 export const NEWS_107_SEED = "news-seed-10.7-livres";
+/** Le brouillon complété le soir même (signets, recherche, hors ligne), avant publication : `refreshNewsDraft`. */
+export const NEWS_107_REFRESH = "news-refresh-10.7-livres-signets";
 /** Les corrections reprises du registre : à partir de cette version (ce que la page 10.5 n'annonçait pas). */
 const FIXES_FROM = "10.5.6";
 
@@ -59,6 +61,12 @@ export const NEWS_107_CONTENT: NewsContentByLang = {
             icon: "next",
             title: "Votre lecture vous suit",
             text: "Le livre rouvre à la bonne page, sur tous vos appareils, et « Continuer la lecture » vous attend en haut.",
+            badge: "",
+          },
+          {
+            icon: "phone",
+            title: "Signets, recherche et hors ligne",
+            text: "Marquez une page d'un signet, cherchez un mot dans tout le livre, et téléchargez-le pour le lire sans réseau.",
             badge: "",
           },
           {
@@ -132,6 +140,12 @@ export const NEWS_107_CONTENT: NewsContentByLang = {
             badge: "",
           },
           {
+            icon: "phone",
+            title: "Bookmarks, search and offline",
+            text: "Bookmark a page, search a word across the whole book, and download it to read without a connection.",
+            badge: "",
+          },
+          {
             icon: "search",
             title: "Everything is easy to find",
             text: "Search finds books too, below films and series. “See all” sorts and filters by genre, author or series.",
@@ -199,6 +213,12 @@ export const NEWS_107_CONTENT: NewsContentByLang = {
             icon: "next",
             title: "Su lectura le sigue",
             text: "El libro se abre en la página correcta en todos sus dispositivos, y «Seguir leyendo» le espera arriba.",
+            badge: "",
+          },
+          {
+            icon: "phone",
+            title: "Marcadores, búsqueda y sin conexión",
+            text: "Marque una página, busque una palabra en todo el libro y descárguelo para leerlo sin conexión.",
             badge: "",
           },
           {
@@ -272,6 +292,12 @@ export const NEWS_107_CONTENT: NewsContentByLang = {
             badge: "",
           },
           {
+            icon: "phone",
+            title: "Lesezeichen, Suche und offline",
+            text: "Setzen Sie Lesezeichen, suchen Sie ein Wort im ganzen Buch und laden Sie es herunter, um es ohne Verbindung zu lesen.",
+            badge: "",
+          },
+          {
             icon: "search",
             title: "Alles ist schnell gefunden",
             text: "Die Suche findet auch Bücher, unter Filmen und Serien. „Alle anzeigen“ sortiert und filtert nach Genre, Autor oder Reihe.",
@@ -321,6 +347,6 @@ export const NEWS_107_CONTENT: NewsContentByLang = {
 };
 
 /** La page, sur la seule installation qui annonce sa nouvelle adresse ; `null` partout ailleurs. */
-export function booksNewsPage(rawAddress: string | null | undefined): { seed: string; version: string; content: NewsContentByLang } | null {
-  return laternaAddress(rawAddress) ? { seed: NEWS_107_SEED, version: NEWS_107_VERSION, content: NEWS_107_CONTENT } : null;
+export function booksNewsPage(rawAddress: string | null | undefined): { seed: string; refresh: string; version: string; content: NewsContentByLang } | null {
+  return laternaAddress(rawAddress) ? { seed: NEWS_107_SEED, refresh: NEWS_107_REFRESH, version: NEWS_107_VERSION, content: NEWS_107_CONTENT } : null;
 }
