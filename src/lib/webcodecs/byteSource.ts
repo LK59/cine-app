@@ -455,6 +455,15 @@ function takeHandover(url: string): Handover | null {
 }
 
 /**
+ * Des morceaux de ce fichier attendent-ils la prochaine source ? Regardé sans les prendre : qui ne
+ * fait que préparer un fichier (`sheetHeaderWarmup`) s'abstient plutôt que de vider le relais que la
+ * vraie réouverture, juste après un film, aurait trouvé.
+ */
+export function holdsHandover(url: string): boolean {
+  return handover !== null && handover.url === url;
+}
+
+/**
  * La réserve d'avance (`MemoryReserve`) passe aussi : une reconstruction — changement de piste, reprise
  * après une erreur — la retrouve au lieu de retélécharger jusqu'à 150 Mo (chasse aux défauts du 28/09).
  * La réserve de la nouvelle source rend d'elle-même ce qui ne sert plus à sa position.

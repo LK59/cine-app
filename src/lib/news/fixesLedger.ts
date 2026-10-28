@@ -780,6 +780,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.5.6",
+    page: "10.5",
+    group: { fr: "Rapidité", en: "Speed", es: "Rapidez", de: "Geschwindigkeit" },
+    items: [
+      {
+        fr: "Un film ou un épisode jamais commencé démarre plus vite : sa fiche prépare le début du fichier pendant que vous la lisez.",
+        en: "A film or episode you have never started begins sooner: its page prepares the start of the file while you read it.",
+        es: "Una película o un episodio que nunca ha empezado arranca antes: su ficha prepara el inicio del archivo mientras la lee.",
+        de: "Ein Film oder eine Folge, die Sie noch nie begonnen haben, startet schneller: Die Seite bereitet den Anfang der Datei vor, während Sie sie lesen.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

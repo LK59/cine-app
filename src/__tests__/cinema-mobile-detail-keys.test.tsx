@@ -13,7 +13,7 @@ import { SWRConfig } from "swr";
  */
 let mode: "idle" | "mini" | "full" = "idle";
 const playMock = vi.fn();
-vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode, play: playMock }) }));
+vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode, play: playMock }), usePlaybackMode: () => mode }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr" }) }));
 vi.mock("@/lib/swr", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/swr")>()),

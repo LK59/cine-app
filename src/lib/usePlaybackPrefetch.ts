@@ -5,6 +5,8 @@ import { fetchDirectInfo } from "@/lib/directInfo";
 import { clearFileMissing, isFileMissing, markFileMissing } from "@/lib/missingFiles";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
+import { scheduleSheetHeaderWarmup } from "@/lib/sheetHeaderWarmup";
+import { usePlaybackMode } from "@/components/PlaybackProvider";
 
 /**
  * La fiche ouverte prépare ce que « Lire » va demander — la seule fonction qui le fait.
@@ -20,12 +22,19 @@ import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
  *   fichier, et un fichier remplacé entre-temps s'ouvrait sur ses anciens octets (30/09/2026) ;
  * - l'état du spectateur, gardé trente secondes et pris une seule fois — voir `playbackPrefetch.ts`.
  *
+ * Et depuis le 28/10/2026, après une seconde de fiche, l'en-tête et l'index du fichier lui-même
+ * (`sheetHeaderWarmup.ts`) — dans un effet à part : il s'arrête quand un film s'ouvre, et le
+ * relancer à la fermeture du film ne doit pas redemander l'état du spectateur, qui serait lu avant
+ * que l'arrêt n'ait écrit la nouvelle position.
+ *
  * Toujours, depuis le 13/10/2026 : le lecteur natif est le chemin de chaque ouverture. Le choix
  * « lecteur legacy » d'un compte, qui envoyait toutes ses lectures au lecteur serveur (lequel ne lit
  * ni l'une ni l'autre), a disparu — il n'y a plus de réponse à attendre avant de préparer.
  */
 export function usePlaybackPrefetch(itemId: string | null | undefined): void {
   const enabled = usePlayerEnabled();
+  // Plein écran ou réduit : le réseau est au film.
+  const filmOpen = usePlaybackMode() !== "closed";
 
   useEffect(() => {
     if (!enabled || !itemId) return;
@@ -40,4 +49,9 @@ export function usePlaybackPrefetch(itemId: string | null | undefined): void {
       }
     );
   }, [enabled, itemId]);
+
+  useEffect(() => {
+    if (!enabled || !itemId || filmOpen) return;
+    return scheduleSheetHeaderWarmup(itemId);
+  }, [enabled, itemId, filmOpen]);
 }

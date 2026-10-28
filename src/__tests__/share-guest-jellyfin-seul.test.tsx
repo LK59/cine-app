@@ -14,7 +14,7 @@ import { SWRConfig } from "swr";
  * `radarr` / `sonarr` compare le nombre de l'adresse à celui que le lien a gardé, réservé compris), et
  * ce test le prouve sans rien y changer — puis que la fiche s'en sert, comme au foyer.
  */
-vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: "idle", play: vi.fn() }) }));
+vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: "idle", play: vi.fn() }), usePlaybackMode: () => "closed" }));
 vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerEnabled: () => true, usePlayerEnabledState: () => true, usePlayerServerFallback: () => true }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr" }) }));
 let mobile = false;

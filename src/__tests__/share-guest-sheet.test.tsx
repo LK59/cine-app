@@ -15,7 +15,7 @@ import { SWRConfig } from "swr";
  */
 
 const play = vi.fn();
-vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: "idle", play }) }));
+vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: "idle", play }), usePlaybackMode: () => "closed" }));
 vi.mock("@/lib/usePlayerEnabled", () => ({
   usePlayerEnabled: () => true,
   usePlayerEnabledState: () => true,

@@ -12,7 +12,7 @@ import { SWRConfig } from "swr";
  * puis plus rien. Elle passe par la même règle (`useSheetKeys`).
  */
 let mode: "idle" | "full" = "idle";
-vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode, play: vi.fn() }) }));
+vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode, play: vi.fn() }), usePlaybackMode: () => mode }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr" }) }));
 vi.mock("@/lib/swr", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/swr")>()),

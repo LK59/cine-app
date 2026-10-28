@@ -11,7 +11,7 @@ import { SWRConfig } from "swr";
  * dans la même image que l'appui, que la mesure de départ du trajet forçait. Rien de cela n'est à
  * l'écran pendant l'ouverture.
  */
-vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: "idle", play: vi.fn() }) }));
+vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: "idle", play: vi.fn() }), usePlaybackMode: () => "closed" }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr" }) }));
 vi.mock("@/lib/swr", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/swr")>()),

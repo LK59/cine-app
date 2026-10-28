@@ -499,6 +499,19 @@ contrôle les sert : *Ted Lasso* S04E09 ouvert en 1080p chez Lucas après son re
 (30/09/2026). Une fois ouverte, la description ne bouge plus pendant le film — le fichier ne change
 pas sous lui, et la revalider reconstruisait le lecteur.
 
+**L'en-tête aussi (28/10/2026).** Après une seconde de fiche, le même titre fait lire l'en-tête et
+l'index de son fichier (`scheduleSheetHeaderWarmup`, `src/lib/sheetHeaderWarmup.ts`), gardés là où
+l'ouverture les cherche déjà — le cache d'en-têtes de `parseMatroska`, sous `mediaHeaderKey`, comme
+l'épisode suivant (`warmNextEpisode`). Mesuré du 20 au 28/10 : un titre lu depuis le réseau bougeait
+2,4 s après l'appui (médiane, 10,8 s au neuvième décile), contre 1,2 s depuis l'appareil, et
+l'en-tête avec l'index en prenait 1,1 s (6 s sur un lien lent). Un fichier à la fois ; arrêté à la
+fermeture de la fiche, quand un film s'ouvre, page cachée ou économiseur de données ; rien écrit sur
+l'appareil, les octets lus meurent avec la source (`close(false)`) — reste l'en-tête analysé.
+**Jamais au prix du relais** : un film tout juste fermé laisse ses octets à sa réouverture
+(`handover`), et `HttpByteSource.open` les prendrait ; `holdsHandover` le dit sans les prendre. Effet
+à part dans `usePlaybackPrefetch` : relancé à la fermeture d'un film, il ne redemande pas l'état du
+spectateur. Tests : `sheetHeaderWarmup.test.ts`, `usePlaybackPrefetch-warmup.test.tsx`.
+
 ---
 
 ## 13. L'animation de la colonne d'une fiche du bureau

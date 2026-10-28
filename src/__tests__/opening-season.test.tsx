@@ -18,7 +18,7 @@ vi.mock("@/lib/usePlayerSeriesRequests", () => ({
     seasonOf: (n: number) => missingSeasons.find((s) => s.seasonNumber === n),
   }),
 }));
-vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: "idle", play: vi.fn() }) }));
+vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: "idle", play: vi.fn() }), usePlaybackMode: () => "closed" }));
 vi.mock("@/components/TranslationProvider", () => ({
   useT: () => (k: string, v?: { n?: number }) => (v?.n != null ? `${k}:${v.n}` : k),
   useLocale: () => ({ locale: "fr" }),
