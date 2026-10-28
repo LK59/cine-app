@@ -25,6 +25,7 @@ import {
   flushOutbox,
   listenForReconnect,
   mergeBookmarks,
+  outbox,
   pendingBookmarks,
   rememberBookmarks,
   rememberedBookmarks,
@@ -35,7 +36,8 @@ import {
   type ProgressBody,
   type StoredBookmark,
 } from "@/lib/books/bookSync";
-import { offlineBookFile } from "@/lib/books/offlineBooks";
+import { offlineBookFile, rememberedBookAccount } from "@/lib/books/offlineBooks";
+import { preloadBookFile } from "@/lib/books/readerPreload";
 import type { BookProgress } from "@/lib/books/types";
 import { ReaderSearchPanel, ReaderSettingsPanel, ReaderTocPanel, type SearchGroup } from "./ReaderPanels";
 
@@ -364,27 +366,28 @@ export function BookReader({ id, title, onClose, onSaved, offline = false }: { i
     async function open() {
       try {
         listenForReconnect();
-        // Ce qui attendait d'un livre lu hors ligne part d'abord : la position du serveur en tient compte.
-        // Sur la page hors ligne, sans l'attendre : le réseau peut manquer, la lecture n'attend pas.
+        // Tout part en même temps (mesuré le 28/10/2026 : le fichier n'était demandé qu'après le code du
+        // lecteur, le compte et la copie de l'appareil, l'un après l'autre — près d'une seconde perdue).
+        // La copie de l'appareil d'abord, cherchée sous le compte retenu (sans réseau, quelques
+        // millisecondes) ; sinon le fichier, peut-être déjà demandé par la fiche (`readerPreload.ts`).
+        const remembered = rememberedBookAccount();
+        let local = remembered ? await offlineBookFile(id, remembered).catch(() => null) : null;
+        if (!local && offline) local = await offlineBookFile(id).catch(() => null);
+        const file: Promise<Blob | null> = local ? Promise.resolve(local) : offline ? Promise.resolve(null) : preloadBookFile(id);
+        // Ce qui attendait d'un livre lu hors ligne part avant de lire la position du serveur, qui en
+        // tient compte — seulement s'il y a quelque chose, et jamais attendu sur la page hors ligne.
         if (offline) void flushOutbox().catch(() => {});
-        else await flushOutbox().catch(() => {});
-        const [progressRes, local, foliate, cfiTools] = await Promise.all([
+        else if (outbox().length > 0) await flushOutbox().catch(() => {});
+        const [progressRes, blob, foliate, cfiTools] = await Promise.all([
           offline
             ? { progress: null }
             : fetch(`/api/books/${id}/progress`).then((r) => (r.ok ? (r.json() as Promise<{ progress: BookProgress | null }>) : { progress: null })).catch(() => ({ progress: null })),
-          offlineBookFile(id).catch(() => null),
+          file,
           import("@/lib/books/foliate/view.js"),
           import("@/lib/books/foliate/epubcfi.js"),
         ]);
         cfiRef.current = cfiTools;
-        // La copie de l'appareil d'abord ; le réseau sinon — jamais pour la page hors ligne.
-        let blob: Blob | null = local;
-        if (!blob) {
-          if (offline) throw new Error("pas de copie sur l'appareil");
-          const fileRes = await fetch(`/api/books/${id}/file`);
-          if (!fileRes.ok) throw new Error(`file ${fileRes.status}`);
-          blob = await fileRes.blob();
-        }
+        if (!blob) throw new Error(offline ? "pas de copie sur l'appareil" : "fichier indisponible");
         if (cancelled || !stage) return;
         loadBookmarks();
         book = await foliate.makeBook(new File([blob], `${id}.epub`, { type: "application/epub+zip" }));

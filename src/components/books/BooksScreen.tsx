@@ -10,6 +10,7 @@ import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { readerOpening } from "@/lib/books/readerOpening";
+import { preloadBookFile } from "@/lib/books/readerPreload";
 import { BOOK_SORTS, NO_SERIES, type BookSort } from "@/lib/books/grouping";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
@@ -51,21 +52,54 @@ interface BooksPage {
   resume?: BookSummary[];
 }
 
-/** Les filtres et le tri de l'adresse (`/livres?serie=…&auteur=…&genre=…&tri=…`) — le « Tout voir » des rangées y mène. */
-function filtersFromAddress(): { serie: string | null; auteur: string | null; genre: string | null; tri: BookSort } {
+type Filters = { serie: string | null; auteur: string | null; genre: string | null; tri: BookSort };
+
+/** Les filtres et le tri (`serie=…&auteur=…&genre=…&tri=…`) — de l'adresse de la page, ou de `#tous=…` dans le cinéma. */
+function filtersFrom(p: URLSearchParams): Filters {
+  const tri = p.get("tri") as BookSort | null;
+  return { serie: p.get("serie"), auteur: p.get("auteur"), genre: p.get("genre"), tri: tri && BOOK_SORTS.includes(tri) ? tri : "series" };
+}
+function filtersFromAddress(): Filters {
   try {
-    const p = new URLSearchParams(window.location.search);
-    const tri = p.get("tri") as BookSort | null;
-    return { serie: p.get("serie"), auteur: p.get("auteur"), genre: p.get("genre"), tri: tri && BOOK_SORTS.includes(tri) ? tri : "series" };
+    return filtersFrom(new URLSearchParams(window.location.search));
   } catch {
     return { serie: null, auteur: null, genre: null, tri: "series" };
   }
 }
+function filtersToString(f: Filters): string {
+  const p = new URLSearchParams();
+  if (f.serie) p.set("serie", f.serie);
+  if (f.auteur) p.set("auteur", f.auteur);
+  if (f.genre) p.set("genre", f.genre);
+  if (f.tri !== "series") p.set("tri", f.tri);
+  return p.toString();
+}
 
-export function BooksScreen() {
+/**
+ * `embedded` : la grille ouverte par-dessus l'accueil du cinéma (`#tous=…`, `BooksHome`), sans changer de
+ * page. Ses filtres vivent alors dans l'adresse du cinéma ; « Lire » mène à la page des livres comme depuis
+ * l'accueil (`openReaderPage`), et le retour la referme d'un pas d'historique.
+ */
+export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead: (id: string, cover: HTMLElement | null) => void } } = {}) {
   const t = useT();
   const route = useCinemaRoute();
-  const [filters, setFilters] = useState(filtersFromAddress);
+  const [filters, setFilters] = useState<Filters>(() => (embedded ? filtersFrom(new URLSearchParams(embedded.filter === "1" ? "" : embedded.filter)) : filtersFromAddress()));
+  // Arrivé de l'accueil du cinéma pour lire (`?retour=1`) : la grille n'est pas montrée — refermer le
+  // lecteur ramène à l'accueil. Ses pages ne sont pas demandées, le lecteur a le réseau pour lui seul.
+  const [readerOnly] = useState(() => {
+    try {
+      return !embedded && new URLSearchParams(window.location.search).get("retour") === "1" && /(?:^#|&)lire=1(?:&|$)/.test(window.location.hash);
+    } catch {
+      return false;
+    }
+  });
+  // Le fichier et le code du lecteur demandés dès le premier rendu, pas après le code de la page puis
+  // celui du lecteur (`readerPreload.ts`, mesuré le 28/10/2026).
+  useEffect(() => {
+    if (embedded || !route.book || !route.reading) return;
+    void preloadBookFile(route.book);
+    void import("@/lib/books/foliate/view.js").catch(() => {});
+  }, [embedded, route.book, route.reading]);
   const { serie, auteur, genre, tri } = filters;
   const [query, setQuery] = useState("");
   // Le filtre tapé part au serveur un quart de seconde après la dernière frappe, pas à chaque lettre.
@@ -85,7 +119,8 @@ export function BooksScreen() {
   }, [typed, serie, auteur, genre, tri]);
   // La grille par pages (`/api/books?offset=…`) : la bibliothèque entière ne voyage jamais d'un bloc.
   const { data: pages, error, isLoading, isValidating, setSize, mutate } = useSWRInfinite<BooksPage>(
-    (i, previous: BooksPage | null) => (previous && previous.books.length < GRID_CHUNK ? null : `${BOOKS_KEY}?${params}${params ? "&" : ""}offset=${i * GRID_CHUNK}&limit=${GRID_CHUNK}`),
+    (i, previous: BooksPage | null) =>
+      readerOnly || (previous && previous.books.length < GRID_CHUNK) ? null : `${BOOKS_KEY}?${params}${params ? "&" : ""}offset=${i * GRID_CHUNK}&limit=${GRID_CHUNK}`,
     fetcher,
     { revalidateFirstPage: false, revalidateOnFocus: false }
   );
@@ -100,14 +135,14 @@ export function BooksScreen() {
   }, [isValidating, setSize]);
   const filtering = typed !== "" || serie !== null || auteur !== null || genre !== null;
   // Les choix des menus, calculés par le serveur une fois (`/api/books/facets`).
-  const { data: facets } = useSWR<{ series: string[]; authors: string[]; genres: string[] }>("/api/books/facets", fetcher);
+  const { data: facets } = useSWR<{ series: string[]; authors: string[]; genres: string[] }>(readerOnly ? null : "/api/books/facets", fetcher);
   const choices = facets ?? NO_FACETS;
   const resume = filtering ? EMPTY : (data?.resume ?? EMPTY);
   // « Mes demandes » ouvert d'emblée : c'est là que mène la notification d'une demande (`?demandes=1`).
   const requestsEnabled = useBookRequestsEnabled();
   const [requestsOpen, setRequestsOpen] = useState(() => {
     try {
-      return new URLSearchParams(window.location.search).get("demandes") === "1";
+      return !embedded && new URLSearchParams(window.location.search).get("demandes") === "1";
     } catch {
       return false;
     }
@@ -144,7 +179,13 @@ export function BooksScreen() {
     cinemaClose({ reading: false });
   };
   const setFilter = (key: "serie" | "auteur" | "genre" | "tri", value: string | null) => {
-    setFilters((f) => ({ ...f, [key]: key === "tri" ? ((value as BookSort | null) ?? "series") : value || null }));
+    const next: Filters = { ...filters, [key]: key === "tri" ? ((value as BookSort | null) ?? "series") : value || null };
+    setFilters(next);
+    if (embedded) {
+      // Dans le cinéma, l'adresse du cinéma suit (`#tous=…`) : un retour ou un rechargement retrouvent la même grille.
+      cinemaNavigate({ booksAll: filtersToString(next) || "1" }, "replace");
+      return;
+    }
     // L'adresse suit : un rechargement, un retour, un lien gardé retrouvent la même grille.
     const url = new URL(window.location.href);
     if (value && !(key === "tri" && value === "series")) url.searchParams.set(key, value);
@@ -158,15 +199,43 @@ export function BooksScreen() {
   const { data: detail } = useSWR<BookSummary>(route.book && !listed ? `/api/books/${route.book}` : null, fetcher);
   const selected = listed ?? detail ?? null;
 
+  // Dans le cinéma, Échap referme la grille — pas quand une fiche est ouverte par-dessus, qui a le sien.
+  useEffect(() => {
+    if (!embedded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !route.book && !e.defaultPrevented) cinemaClose({ booksAll: null });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [embedded, route.book]);
+
+  if (readerOnly && route.book && route.reading)
+    return createPortal(
+      <BookReader key={route.book} id={route.book} title={selected ? displayTitle(selected) : ""} onClose={closeReader} onSaved={() => void mutate()} />,
+      document.body
+    );
+
   return (
-    <div className="fixed inset-0 overflow-y-auto overscroll-contain bg-ink text-white" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+    <div
+      className={`fixed inset-0 overflow-y-auto overscroll-contain bg-ink text-white ${embedded ? "z-[47]" : ""}`}
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+      data-books-browse={embedded ? "" : undefined}
+      // Sous une fiche, la grille ne répond plus (la règle des fiches de films).
+      inert={embedded && !!route.book}
+    >
       <header className="sticky top-0 z-10 bg-gradient-to-b from-ink via-ink/95 to-ink/0 px-4 pb-5 pt-4 sm:px-8">
         <div className="flex items-center gap-3">
-          {/* Un lien ordinaire : retour au document de l'accueil, et à sa politique de sécurité. */}
-          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- un vrai chargement, exprès : la page des livres a sa propre politique de sécurité, qu'une navigation de Next garderait. */}
-          <a href="/#livres=1" aria-label={t("books.back")} className="nav-glass flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white">
-            <ChevronLeft size={19} aria-hidden />
-          </a>
+          {embedded ? (
+            <button type="button" onClick={() => cinemaClose({ booksAll: null })} aria-label={t("books.back")} className="nav-glass flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white">
+              <ChevronLeft size={19} aria-hidden />
+            </button>
+          ) : (
+            // Un lien ordinaire : retour au document de l'accueil, et à sa politique de sécurité.
+            // eslint-disable-next-line @next/next/no-html-link-for-pages -- un vrai chargement, exprès : la page des livres a sa propre politique de sécurité, qu'une navigation de Next garderait.
+            <a href="/#livres=1" aria-label={t("books.back")} className="nav-glass flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white">
+              <ChevronLeft size={19} aria-hidden />
+            </a>
+          )}
           <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">{t("books.browseAll")}</h1>
           {data && total > 0 && <span className="ml-auto text-sm text-subtle">{total === 1 ? t("books.countOne") : t("books.count", { n: total })}</span>}
         </div>
@@ -267,11 +336,12 @@ export function BooksScreen() {
       {requestsEnabled && requestsOpen && <BookRequestsPanel onClose={() => setRequestsOpen(false)} />}
 
       {/* La fiche d'après l'adresse, dans le cycle de vie des fiches de films (`BookSheetHost`). */}
-      <BookSheetHost books={known} onRead={openReader} />
+      <BookSheetHost books={known} onRead={embedded ? (_book, id, cover) => embedded.onRead(id, cover) : openReader} />
       {/* Porté dans `body`, comme le lecteur des films : sous l'écran, qui est `fixed` et donc son
           propre contexte d'empilement, il passait sous les invitations flottantes de l'application
           (« Installer », z-60) quel que soit son propre z-index. */}
-      {route.book &&
+      {!embedded &&
+        route.book &&
         route.reading &&
         createPortal(
           <BookReader key={route.book} id={route.book} title={selected ? displayTitle(selected) : ""} onClose={closeReader} onSaved={() => void mutate()} />,

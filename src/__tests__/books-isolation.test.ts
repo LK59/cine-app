@@ -251,7 +251,10 @@ describe("l'accueil ne charge rien des livres", () => {
     // Les types (`import type`) ne chargent rien ; le seul import réel est dynamique, dans le lecteur.
     const reader = read("src/components/books/BookReader.tsx");
     expect(reader).toMatch(/import\("@\/lib\/books\/foliate\/view\.js"\)/);
-    for (const file of users.filter((f) => !f.endsWith("BookReader.tsx"))) {
+    // La page des livres (`BooksScreen`, sous sa propre politique) demande foliate-js d'avance quand elle
+    // s'ouvre pour lire (`readerPreload.ts`) — seulement là, jamais dans la grille ni le cinéma.
+    expect(read("src/components/books/BooksScreen.tsx")).toMatch(/if \(embedded \|\| !route\.book \|\| !route\.reading\) return;\s*void preloadBookFile\(route\.book\);\s*void import\("@\/lib\/books\/foliate\/view\.js"\)/);
+    for (const file of users.filter((f) => !f.endsWith("BookReader.tsx") && !f.endsWith("BooksScreen.tsx"))) {
       for (const line of read(file).split("\n").filter((l) => /books\/foliate\/view/.test(l))) expect(line, file).toMatch(/^import type /);
     }
     expect(read("src/components/books/BooksScreen.tsx")).toMatch(/dynamic\(\(\) => import\("\.\/BookReader"\)/);

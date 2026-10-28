@@ -2,7 +2,7 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
-import useSWR from "swr";
+import useSWR, { preload } from "swr";
 import { LayoutGrid } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher, playerBootstrapOptions } from "@/lib/swr";
@@ -22,11 +22,27 @@ export interface BooksMode {
   /** La catégorie Livres est affichée (option allumée et `#livres=1`). */
   active: boolean;
   /** Ce que la bascule reçoit ; `undefined` option coupée — elle garde alors ses deux boutons. */
-  toggle: { active: boolean; onSelect: () => void; onLeave: (mode: "movies" | "series") => void } | undefined;
+  toggle: { active: boolean; onSelect: () => void; onLeave: (mode: "movies" | "series") => void; onIntent: () => void } | undefined;
 }
 
 const enter = () => cinemaNavigate({ books: true, film: null, serie: null }, "replace");
-const leave = (tab: "movies" | "series") => cinemaNavigate({ books: false, tab, film: null, serie: null }, "replace");
+const leave = (tab: "movies" | "series") => cinemaNavigate({ books: false, booksAll: null, tab, film: null, serie: null }, "replace");
+
+/**
+ * L'intention d'ouvrir les livres — le survol, le doigt posé, le focus du bouton Livres : leur accueil
+ * (son code et ses rangées) se prépare avant le clic. Mesuré le 28/10/2026 : ~270 ms entre le clic et
+ * les premières couvertures sur iPhone, cache chaud, faute de l'avoir fait. Rien avant ce geste : la
+ * catégorie fermée, rien des livres n'est chargé.
+ */
+let intended = false;
+const intent = () => {
+  if (intended) return;
+  intended = true;
+  void import("./BooksHome").catch(() => {
+    intended = false;
+  });
+  void preload("/api/books/home", fetcher).catch(() => {});
+};
 
 export function useBooksMode(inAddress: boolean | undefined): BooksMode {
   const { data } = useSWR<{ booksEnabled?: boolean }>("/api/config/public", fetcher, playerBootstrapOptions);
@@ -36,11 +52,11 @@ export function useBooksMode(inAddress: boolean | undefined): BooksMode {
   // depuis) : le mode est retiré de l'adresse, et l'accueil reste celui des films et séries.
   const bookInAddress = !!useCinemaRoute().book;
   useEffect(() => {
-    if (known && !enabled && (inAddress || bookInAddress)) cinemaNavigate({ books: false, book: null, reading: false }, "replace");
+    if (known && !enabled && (inAddress || bookInAddress)) cinemaNavigate({ books: false, book: null, reading: false, booksAll: null }, "replace");
   }, [known, enabled, inAddress, bookInAddress]);
   if (!enabled) return { active: false, toggle: undefined };
   const active = inAddress === true;
-  return { active, toggle: { active, onSelect: enter, onLeave: leave } };
+  return { active, toggle: { active, onSelect: enter, onLeave: leave, onIntent: intent } };
 }
 
 const BooksSearchLazy = dynamic(() => import("./BooksSearch").then((m) => m.BooksSearch), { ssr: false });
@@ -115,8 +131,17 @@ export function BooksBrowseAllButton() {
   const t = useT();
   const label = t("books.browseAll");
   return (
-    <a href="/livres" aria-label={label} title={label} data-liquid className="nav-glass flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white">
+    // La grille par-dessus l'accueil, sans changer de page (`#tous=1`) : elle n'a pas besoin de la
+    // politique de sécurité du lecteur, seule raison de la page `/livres`.
+    <button
+      type="button"
+      onClick={() => cinemaNavigate({ booksAll: "1", book: null, reading: false })}
+      aria-label={label}
+      title={label}
+      data-liquid
+      className="nav-glass flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white"
+    >
       <LayoutGrid size={17} aria-hidden />
-    </a>
+    </button>
   );
 }

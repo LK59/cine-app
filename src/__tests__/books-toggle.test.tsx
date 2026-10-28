@@ -85,7 +85,7 @@ describe("useBooksMode", () => {
     config.data = { booksEnabled: false };
     const { result } = renderHook(() => useBooksMode(true));
     expect(result.current.active).toBe(false);
-    expect(navigate).toHaveBeenCalledWith({ books: false, book: null, reading: false }, "replace");
+    expect(navigate).toHaveBeenCalledWith({ books: false, book: null, reading: false, booksAll: null }, "replace");
   });
   it("option allumée : entrer et sortir écrivent le mode dans l'adresse, l'onglet seulement en sortant", () => {
     config.data = { booksEnabled: true };
@@ -94,7 +94,7 @@ describe("useBooksMode", () => {
     result.current.toggle!.onSelect();
     expect(navigate).toHaveBeenLastCalledWith({ books: true, film: null, serie: null }, "replace");
     result.current.toggle!.onLeave("series");
-    expect(navigate).toHaveBeenLastCalledWith({ books: false, tab: "series", film: null, serie: null }, "replace");
+    expect(navigate).toHaveBeenLastCalledWith({ books: false, booksAll: null, tab: "series", film: null, serie: null }, "replace");
   });
 });
 

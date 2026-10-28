@@ -43,7 +43,7 @@ export function CinemaModeToggle({
    * (`#livres=1`) : quitter les livres pour un onglet passe par `onLeave`, qui retire le mode et
    * choisit l'onglet d'un seul geste.
    */
-  books?: { active: boolean; onSelect: () => void; onLeave: (mode: "movies" | "series") => void };
+  books?: { active: boolean; onSelect: () => void; onLeave: (mode: "movies" | "series") => void; onIntent?: () => void };
 }) {
   const t = useT();
   const moviesRef = useRef<HTMLButtonElement>(null);
@@ -131,6 +131,10 @@ export function CinemaModeToggle({
         <button
           ref={booksRef}
           onClick={() => select("books")}
+          // L'intention (survol, doigt posé, focus) : l'accueil des livres se prépare avant le clic.
+          onPointerEnter={books.onIntent}
+          onPointerDown={books.onIntent}
+          onFocus={books.onIntent}
           data-lens="books"
           onKeyDown={onKeyDown}
           data-tv-escape-up={shown === "books" ? "true" : undefined}

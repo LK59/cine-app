@@ -37,6 +37,13 @@ describe("l'adresse", () => {
     expect(readCinemaRoute().book).toBeUndefined();
     window.location.hash = "#tab=series";
     expect("book" in readCinemaRoute()).toBe(false);
+    expect("booksAll" in readCinemaRoute()).toBe(false);
+  });
+  it("« Tous les livres » par-dessus l'accueil, avec ses filtres : `#tous=…`", () => {
+    act(() => cinemaNavigate({ books: true, booksAll: "auteur=Guillaume%20Musso&tri=year" }));
+    expect(readCinemaRoute()).toMatchObject({ books: true, booksAll: "auteur=Guillaume%20Musso&tri=year" });
+    act(() => cinemaNavigate({ booksAll: null }));
+    expect("booksAll" in readCinemaRoute()).toBe(false);
   });
 });
 
@@ -76,5 +83,22 @@ describe("la fiche", () => {
     const { getByText } = render(<BookSheetHost books={[book]} onRead={onRead} />);
     fireEvent.click(getByText("books.read"));
     expect(onRead).toHaveBeenCalledWith(book, ID, expect.any(HTMLElement));
+  });
+});
+
+describe("la lecture préparée d'avance", () => {
+  it("le fichier d'un livre n'est demandé qu'une fois, trois livres gardés au plus ; un échec se redemande", async () => {
+    const { preloadBookFile, __testing } = await import("@/lib/books/readerPreload");
+    __testing.reset();
+    const fetchSpy = vi.fn(async (url: string) => (url.includes("dead") ? new Response("", { status: 404 }) : new Response("PK")));
+    vi.stubGlobal("fetch", fetchSpy);
+    await Promise.all([preloadBookFile("a"), preloadBookFile("a")]);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    for (const id of ["b", "c", "d"]) await preloadBookFile(id);
+    expect(__testing.held.size).toBe(3);
+    expect(await preloadBookFile("dead")).toBeNull();
+    await preloadBookFile("dead");
+    expect(fetchSpy.mock.calls.filter(([u]) => String(u).includes("dead"))).toHaveLength(2);
+    vi.unstubAllGlobals();
   });
 });

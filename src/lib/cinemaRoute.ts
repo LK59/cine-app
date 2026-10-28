@@ -84,6 +84,12 @@ export interface CinemaRoute {
    */
   book?: string | null;
   reading?: boolean;
+  /**
+   * « Tous les livres » ouvert par-dessus l'accueil (`#tous=…`), avec ses filtres et son tri en
+   * paramètres (`auteur=…&tri=year`, « 1 » sans filtre) : la grille complète sans changer de page
+   * (§127). Facultatif et absent par défaut, comme `books`.
+   */
+  booksAll?: string | null;
 }
 
 /**
@@ -336,6 +342,7 @@ function parse(hash: string): CinemaRoute {
     downloads: params.get("telechargements") === "1",
     // Seulement quand il est là : une route sans livres reste exactement ce qu'elle était.
     ...(params.get("livres") === "1" ? { books: true } : {}),
+    ...(params.get("tous") ? { booksAll: (params.get("tous") as string).slice(0, 500) } : {}),
     ...bookOf(params),
   };
 }
@@ -361,6 +368,7 @@ function serialize(route: CinemaRoute): string {
   if (route.news) params.set("nouveautes", route.news);
   if (route.downloads) params.set("telechargements", "1");
   if (route.books) params.set("livres", "1");
+  if (route.booksAll) params.set("tous", route.booksAll);
   if (route.book) {
     params.set("livre", route.book);
     if (route.reading) params.set("lire", "1");

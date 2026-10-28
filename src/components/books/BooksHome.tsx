@@ -12,14 +12,16 @@ import { BookRequestButton } from "./BookRequests";
 import { BookSheetHost } from "./BookSheet";
 import { cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { useTvGridNav } from "@/lib/useTvGridNav";
-import { readerOpening } from "@/lib/books/readerOpening";
+import { openReaderPage } from "@/lib/books/readerOpening";
+import dynamic from "next/dynamic";
+import { createPortal } from "react-dom";
 
 /**
  * L'accueil de la catégorie Livres (option, DECISIONS.md §127), à la place des rangées de films ou
  * de séries : « Continuer la lecture », « Récemment ajoutés », puis des rangées de séries (dans l'ordre
  * des tomes), d'auteurs (par année) et de genres — calculées par le serveur (`/api/books/home`, quelques
  * rangées de vingt livres : jamais la bibliothèque entière sur le téléphone), chacune avec son « Tout voir »
- * vers la grille filtrée (`/livres?serie=…`, `auteur=…`, `genre=…`). Pas de bannière : une couverture n'est pas une image de fond, et le carrousel des
+ * vers la grille filtrée, ouverte par-dessus (`#tous=serie=…`, `auteur=…`, `genre=…`). Pas de bannière : une couverture n'est pas une image de fond, et le carrousel des
  * films et séries n'est pas touché.
  *
  * Un livre touché ouvre sa fiche ici même, comme un film : `#livre=<id>` dans l'adresse du cinéma, la
@@ -31,10 +33,18 @@ function openBook(id: string): void {
   cinemaNavigate({ book: id, reading: false });
 }
 
-async function readFromHome(id: string, cover: HTMLElement | null): Promise<void> {
-  await readerOpening(cover);
-  // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- un vrai chargement, exprès (politique de la page des livres).
-  window.location.assign(`/livres?retour=1#livre=${id}&lire=1`);
+const readFromHome = openReaderPage;
+
+/**
+ * « Tous les livres » par-dessus l'accueil, sans changer de page (`#tous=…`, 28/10/2026) : la grille n'a
+ * besoin d'aucune politique de sécurité à elle — seul le lecteur en a une. Elle chargeait tout le
+ * document `/livres` (~0,6 s sur iPhone), et son retour rechargeait tout le cinéma (~0,7 s).
+ */
+const BooksBrowse = dynamic(() => import("./BooksScreen").then((m) => m.BooksScreen), { ssr: false });
+
+/** « Tout voir » d'une rangée : la grille, filtrée comme la rangée. */
+export function openBooksBrowse(filter: string): void {
+  cinemaNavigate({ booksAll: filter || "1", book: null, reading: false });
 }
 
 export const BOOKS_HOME_KEY = "/api/books/home";
@@ -134,14 +144,14 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
         </section>
       )}
 
-      {recent.length > 0 && <Row title={t("books.recent")} href="/livres?tri=recent" books={recent} pad={pad} snapPad={snapPad} card={card} desktop={desktop} />}
+      {recent.length > 0 && <Row title={t("books.recent")} filter="tri=recent" books={recent} pad={pad} snapPad={snapPad} card={card} desktop={desktop} />}
 
       {rows.map((group) => (
         <Row
           key={group.key}
           title={group.title}
           count={group.kind === "series" ? t("books.volumes", { n: group.total }) : t("books.count", { n: group.total })}
-          href={`/livres?${group.filter.param}=${encodeURIComponent(group.filter.value)}`}
+          filter={`${group.filter.param}=${encodeURIComponent(group.filter.value)}`}
           books={group.books}
           pad={pad}
           snapPad={snapPad}
@@ -157,13 +167,17 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
       )}
       {hidden > 0 && (
         <div className={`${pad} pb-4`}>
-          <a href="/livres" className="inline-flex h-10 items-center rounded-full bg-white/10 px-5 text-sm font-semibold text-white transition-colors hover:bg-white/15">
+          <button type="button" onClick={() => openBooksBrowse("1")} className="inline-flex h-10 items-center rounded-full bg-white/10 px-5 text-sm font-semibold text-white transition-colors hover:bg-white/15">
             {t("books.moreRows", { n: hidden })}
-          </a>
+          </button>
         </div>
       )}
-      {/* La fiche d'un livre, portée dans `body` : hors de l'accueil rendu inerte. */}
-      <BookSheetHost books={shown} onRead={(_book, id, cover) => void readFromHome(id, cover)} />
+      {/* La fiche d'un livre, portée dans `body` : hors de l'accueil rendu inerte. Une seule à la fois :
+          la grille complète ouverte a la sienne. */}
+      {!route.booksAll && <BookSheetHost books={shown} onRead={(_book, id, cover) => void readFromHome(id, cover)} />}
+      {route.booksAll &&
+        typeof document !== "undefined" &&
+        createPortal(<BooksBrowse embedded={{ filter: route.booksAll, onRead: (id, cover) => void readFromHome(id, cover) }} />, document.body)}
     </div>
   );
 }
@@ -172,7 +186,7 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
 function Row({
   title,
   count,
-  href,
+  filter,
   books,
   pad,
   snapPad,
@@ -181,7 +195,8 @@ function Row({
 }: {
   title: string;
   count?: string;
-  href: string;
+  /** Les filtres de « Tout voir » (`auteur=…`, `tri=recent`). */
+  filter: string;
   books: BookSummary[];
   pad: string;
   snapPad: string;
@@ -189,16 +204,16 @@ function Row({
   desktop: boolean;
 }) {
   // La rangée, pour la navigation au clavier (`useTvGridNav`) : son « Tout voir » la nomme d'une façon unique.
-  const rowKey = href;
+  const rowKey = filter;
   const t = useT();
   return (
     <section className="mb-8">
       <div className={`${pad} mb-3 flex items-baseline gap-3`}>
         <h2 className="truncate font-display text-lg font-semibold">{title}</h2>
         {count && <span className="shrink-0 text-sm text-subtle">{count}</span>}
-        <a href={href} className="ml-auto shrink-0 text-sm text-subtle transition-colors hover:text-white">
+        <button type="button" onClick={() => openBooksBrowse(filter)} className="ml-auto shrink-0 text-sm text-subtle transition-colors hover:text-white">
           {t("books.seeAll")}
-        </a>
+        </button>
       </div>
       <div className={`${pad} ${snapPad} scrollbar-none flex snap-x overflow-x-auto pb-2 ${desktop ? "gap-4" : "gap-3"}`}>
         {books.map((book, i) => {

@@ -18,6 +18,19 @@ function reducedMotion(): boolean {
   }
 }
 
+/**
+ * Depuis le cinéma : la couverture grandit et la page des livres est demandée **en même temps** — pas
+ * après l'animation (380 ms), qui s'ajoutait au chargement (mesuré le 28/10/2026). Le navigateur garde la
+ * page affichée, et l'animation qui court sur le compositeur, jusqu'à ce que la suivante se peigne. Un vrai
+ * chargement, exprès : le lecteur ne vit que sous la politique de sécurité de `/livres`.
+ */
+export async function openReaderPage(id: string, cover: HTMLElement | null): Promise<void> {
+  void readerOpening(cover);
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- un vrai chargement, exprès (politique de la page des livres).
+  window.location.assign(`/livres?retour=1#livre=${id}&lire=1`);
+}
+
 export async function readerOpening(cover: HTMLElement | null): Promise<() => void> {
   const noop = () => {};
   if (!cover || typeof document === "undefined" || reducedMotion()) return noop;

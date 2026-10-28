@@ -18,6 +18,7 @@ import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookDetail, BookSummary } from "@/lib/books/types";
 import { BookCover, coverUrl } from "./BookCover";
 import { BookDownloadButton } from "./BookDownload";
+import { preloadBookFile, saveData } from "@/lib/books/readerPreload";
 
 /**
  * La fiche d'un livre (DECISIONS.md §127), dans le cycle de vie des fiches de l'application
@@ -36,6 +37,8 @@ import { BookDownloadButton } from "./BookDownload";
  */
 
 const EXIT_DESKTOP_MS = 200;
+/** Combien de temps sur une fiche avant de préparer la lecture. */
+const READ_INTENT_MS = 350;
 
 /** La fiche d'après l'adresse : montée tant qu'elle est nommée, gardée le temps de sa sortie. */
 export function BookSheetHost({ books, onRead }: { books: readonly BookSummary[]; onRead: (book: BookSummary | null, id: string, cover: HTMLElement | null) => void }) {
@@ -86,11 +89,25 @@ function BookSheet({
     active: !hidden,
     leaving,
     revealed,
-    ready: !!summary?.coverTag || !!detail,
+    // Ce que la carte savait suffit pour paraître : la fiche n'attend plus sa propre réponse (un aller-
+    // retour de plus pour chaque livre sans couverture de Jellyfin, mesuré le 28/10/2026).
+    ready: !!summary || !!detail,
   });
 
   // La barre du bas du téléphone s'efface sous une fiche ; elle ne lit que les fiches de films dans
   // l'adresse, et ce signal, posé pour les fiches qui n'y sont pas (`offlineSheetOpen.ts`).
+  // Rester un instant sur la fiche, c'est souvent lire : le fichier du livre et le code du lecteur sont
+  // demandés d'avance (`readerPreload.ts`) — « Lire » n'attend plus que la page. Pas sur une connexion
+  // qui demande l'économie de données.
+  useEffect(() => {
+    if (leaving || hidden || saveData()) return;
+    const timer = window.setTimeout(() => {
+      void preloadBookFile(id);
+      void import("./BookReader").catch(() => {});
+    }, READ_INTENT_MS);
+    return () => window.clearTimeout(timer);
+  }, [id, leaving, hidden]);
+
   useEffect(() => {
     if (leaving) return;
     setOfflineSheetOpen(true);
