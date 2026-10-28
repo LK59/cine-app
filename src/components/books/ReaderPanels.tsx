@@ -12,6 +12,7 @@ import {
   THEMES,
   THEME_COLORS,
   TURNS,
+  zoomedFontSize,
   type ReaderPrefs,
 } from "@/lib/books/readerPrefs";
 import type { FoliateTocItem } from "@/lib/books/foliate/view";
@@ -174,6 +175,37 @@ export function ReaderSettingsPanel({ prefs, colors, onChange, onClose }: { pref
   const t = useT();
   return (
     <PanelFrame colors={colors} title={t("books.reader.settings")} onClose={onClose} side="right">
+      {/* La taille d'abord, comme dans Livres d'Apple : un petit « A », un grand « A », un pas par
+          appui — le même pas et les mêmes bornes que le curseur dessous, le clavier et le pincement. */}
+      <Row label={t("books.reader.fontSize")} value={`${prefs.fontSize} %`}>
+        <div className="flex items-stretch gap-2">
+          <button
+            type="button"
+            onClick={() => onChange({ fontSize: zoomedFontSize(prefs.fontSize - FONT_SIZE_RANGE.step, 1) })}
+            disabled={prefs.fontSize <= FONT_SIZE_RANGE.min}
+            aria-label={t("books.reader.smaller")}
+            className="flex h-12 flex-1 items-center justify-center rounded-xl text-base transition-transform active:scale-95 disabled:opacity-35"
+            style={{ background: colors.dark ? "rgb(255 255 255 / 0.08)" : "rgb(0 0 0 / 0.06)" }}
+          >
+            A
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange({ fontSize: zoomedFontSize(prefs.fontSize + FONT_SIZE_RANGE.step, 1) })}
+            disabled={prefs.fontSize >= FONT_SIZE_RANGE.max}
+            aria-label={t("books.reader.larger")}
+            className="flex h-12 flex-1 items-center justify-center rounded-xl text-2xl transition-transform active:scale-95 disabled:opacity-35"
+            style={{ background: colors.dark ? "rgb(255 255 255 / 0.08)" : "rgb(0 0 0 / 0.06)" }}
+          >
+            A
+          </button>
+        </div>
+        <div className="mt-3">
+          <Slider value={prefs.fontSize} {...FONT_SIZE_RANGE} onChange={(fontSize) => onChange({ fontSize })} label={t("books.reader.fontSize")} colors={colors} />
+        </div>
+        <p className="mt-1.5 text-xs opacity-60">{t("books.reader.zoomHint")}</p>
+      </Row>
+
       <Row label={t("books.reader.theme")}>
         <div role="radiogroup" aria-label={t("books.reader.theme")} className="flex justify-between gap-2">
           {THEMES.map((theme) => {
@@ -199,19 +231,6 @@ export function ReaderSettingsPanel({ prefs, colors, onChange, onClose }: { pref
             );
           })}
         </div>
-      </Row>
-
-      <Row label={t("books.reader.fontSize")} value={`${prefs.fontSize} %`}>
-        <Slider
-          value={prefs.fontSize}
-          {...FONT_SIZE_RANGE}
-          onChange={(fontSize) => onChange({ fontSize })}
-          label={t("books.reader.fontSize")}
-          colors={colors}
-          left={<span className="w-4 text-center text-xs">A</span>}
-          right={<span className="w-4 text-center text-xl">A</span>}
-        />
-        <p className="mt-1.5 text-xs opacity-60">{t("books.reader.zoomHint")}</p>
       </Row>
 
       <Row label={t("books.reader.font")}>

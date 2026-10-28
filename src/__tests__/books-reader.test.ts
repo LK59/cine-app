@@ -42,7 +42,7 @@ describe("les réglages du lecteur", () => {
       brightness: 0.4,
       warmth: 1,
     });
-    expect(normalizeReaderPrefs({ fontSize: 113 }).fontSize).toBe(115);
+    expect(normalizeReaderPrefs({ fontSize: 113 }).fontSize).toBe(110);
     expect(normalizeReaderPrefs(null)).toEqual(defaultReaderPrefs(false));
   });
   it("un stockage qui lève rend les valeurs par défaut, et l'écriture ne lève pas", () => {
@@ -60,9 +60,9 @@ describe("les réglages du lecteur", () => {
   it("relit ce qu'il a écrit", () => {
     const store = new Map<string, string>();
     vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) });
-    saveReaderPrefs({ ...defaultReaderPrefs(false), theme: "sepia", fontSize: 135 });
+    saveReaderPrefs({ ...defaultReaderPrefs(false), theme: "sepia", fontSize: 130 });
     expect(JSON.parse(store.get(READER_PREFS_KEY) ?? "{}").theme).toBe("sepia");
-    expect(loadReaderPrefs()).toMatchObject({ theme: "sepia", fontSize: 135 });
+    expect(loadReaderPrefs()).toMatchObject({ theme: "sepia", fontSize: 130 });
   });
   it("une page, deux pages, auto ; l'ancien interrupteur « deux pages » coupé devient « une page »", () => {
     expect(normalizeReaderPrefs({}).layout).toBe("auto");
@@ -70,8 +70,8 @@ describe("les réglages du lecteur", () => {
     expect(normalizeReaderPrefs({ spread: false }).layout).toBe("single");
     expect(normalizeReaderPrefs({ layout: "triple" }).layout).toBe("auto");
   });
-  it("le zoom écrit la taille du curseur : bornée, au pas de 5", () => {
-    expect(zoomedFontSize(100, 1.37)).toBe(135);
+  it("le zoom écrit la taille du curseur : bornée, au pas de 10", () => {
+    expect(zoomedFontSize(100, 1.37)).toBe(140);
     expect(zoomedFontSize(150, 10)).toBe(200);
     expect(zoomedFontSize(100, 0.1)).toBe(70);
     expect(zoomedFontSize(120, 0)).toBe(120);

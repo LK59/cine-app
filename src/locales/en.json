@@ -3825,7 +3825,9 @@
         "single": "One page",
         "double": "Two pages"
       },
-      "zoomHint": "Pinch or Ctrl/⌘ + scroll for text size"
+      "zoomHint": "Pinch or Ctrl/⌘ + scroll for text size",
+      "smaller": "Smaller text",
+      "larger": "Larger text"
     },
     "browseAll": "All books",
     "seeAll": "See all"

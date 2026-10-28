@@ -6,6 +6,14 @@ import type { NextRequest } from "next/server";
  * servent que des livres que le compte voit chez Jellyfin, moins ses tags bloqués (§54), relaient le
  * fichier avec la clé du serveur sans jamais la laisser paraître, et gardent la position de chacun.
  */
+// Une base à soi : celle du dossier commun de la suite est ouverte par d'autres fichiers en même
+// temps, et deux écrivains s'y bloquaient (« database is locked » dans un autre test).
+await vi.hoisted(async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "laterna-books-routes-"));
+});
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
 const verify = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => verify(...a) }));

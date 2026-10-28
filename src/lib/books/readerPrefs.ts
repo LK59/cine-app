@@ -36,7 +36,8 @@ export interface ReaderPrefs {
 
 export const READER_PREFS_KEY = "laterna:books:reader";
 
-export const FONT_SIZE_RANGE = { min: 70, max: 200, step: 5 } as const;
+// Un pas pour tout ce qui change la taille : le curseur, les deux « A », le clavier, le pincement.
+export const FONT_SIZE_RANGE = { min: 70, max: 200, step: 10 } as const;
 export const LINE_HEIGHT_RANGE = { min: 1.1, max: 2.1, step: 0.05 } as const;
 export const MARGINS: readonly ReaderMargin[] = ["small", "medium", "large"];
 export const THEMES: readonly ReaderTheme[] = ["auto", "light", "sepia", "dark", "black"];

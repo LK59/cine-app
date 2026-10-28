@@ -7,6 +7,7 @@ import { usePointerCapture } from "@/lib/usePointerCapture";
 import { isSanitizedType, sanitizeResource } from "@/lib/books/sanitize";
 import { turnPage, type TurnSide } from "@/lib/books/pageTurn";
 import {
+  FONT_SIZE_RANGE,
   MARGIN_LAYOUT,
   THEME_COLORS,
   loadReaderPrefs,
@@ -466,7 +467,7 @@ export function BookReader({ id, title, onClose, onSaved }: { id: string; title:
       // Ctrl/⌘ + « + », « - », « 0 » : la taille du texte, pas le zoom de la page.
       if ((e.ctrlKey || e.metaKey) && ["+", "=", "-", "0"].includes(e.key) && status === "ready") {
         e.preventDefault();
-        const step = e.key === "-" ? -10 : 10;
+        const step = e.key === "-" ? -FONT_SIZE_RANGE.step : FONT_SIZE_RANGE.step;
         setPrefs((p) => ({ ...p, fontSize: e.key === "0" ? 100 : zoomedFontSize(p.fontSize + step, 1) }));
         return;
       }

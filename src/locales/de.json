@@ -3825,7 +3825,9 @@
         "single": "Eine Seite",
         "double": "Zwei Seiten"
       },
-      "zoomHint": "Ziehen Sie zwei Finger zusammen oder nutzen Sie Strg/⌘ + Mausrad für die Textgröße"
+      "zoomHint": "Ziehen Sie zwei Finger zusammen oder nutzen Sie Strg/⌘ + Mausrad für die Textgröße",
+      "smaller": "Kleinerer Text",
+      "larger": "Größerer Text"
     },
     "browseAll": "Alle Bücher",
     "seeAll": "Alle anzeigen"
