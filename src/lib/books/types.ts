@@ -13,6 +13,8 @@ export interface BookProgress {
   updatedAt: number;
   /** Arrivé au bout au moins une fois (et noté « lu » chez Jellyfin). */
   finished: boolean;
+  /** Retiré de « Continuer la lecture » depuis la dernière page lue (la position reste). */
+  dismissed?: boolean;
 }
 
 export interface BookSummary {

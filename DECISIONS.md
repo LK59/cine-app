@@ -7627,6 +7627,10 @@ Jellyfin pour ce compte (`markPlayed`) ; un échec de cet appel ne perd pas la p
   onglet du panneau de la table des matières — chapitre, quelques mots, pourcentage. Gardés par compte
   côté serveur (`book_bookmarks`, cinq cents par livre au plus, `POST /api/books/<id>/bookmarks`, aussi
   pour retirer — même règle de proxy que la position).
+- *Retirer de « Continuer la lecture »* : un lien de la fiche du livre (pas d'appui long, que les cartes
+  de films n'ont pas de façon évidente). La position reste, le livre quitte la rangée
+  (`book_progress.dismissed_at`, `DELETE /api/books/<id>/progress`, même règle de proxy) et y revient à la
+  prochaine page lue ; une position renvoyée hors ligne, lue avant le retrait, ne l'y remet pas.
 - *Recherche dans le livre* : `search` de foliate-js, chapitre par chapitre (un `await` entre deux),
   résultats avec leur contexte sous le titre du chapitre, trouvailles soulignées sur la page ; chaque
   frappe arrête la recherche précédente, et elle s'arrête d'elle-même à trois cents trouvailles.

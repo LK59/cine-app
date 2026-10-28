@@ -3762,6 +3762,7 @@
     "retry": "Try again",
     "empty": "No books yet.",
     "continue": "Continue reading",
+    "removeFromContinue": "Remove from “Continue reading”",
     "seriesTome": "{series} · Book {n}",
     "percentRead": "{pct}% read",
     "others": "Other books",

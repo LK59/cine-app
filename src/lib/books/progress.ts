@@ -16,6 +16,7 @@ interface Row {
   fraction: number;
   updated_at: number;
   finished_at: number | null;
+  dismissed_at: number | null;
 }
 
 const toProgress = (row: Row): BookProgress => ({
@@ -23,17 +24,18 @@ const toProgress = (row: Row): BookProgress => ({
   fraction: row.fraction,
   updatedAt: row.updated_at,
   finished: row.finished_at !== null,
+  dismissed: row.dismissed_at !== null,
 });
 
 /** Les positions d'un compte, par livre. */
 export function progressByBook(account: string): Map<string, BookProgress> {
-  const rows = getDb().prepare("SELECT item_id, cfi, fraction, updated_at, finished_at FROM book_progress WHERE account = ?").all(account) as Row[];
+  const rows = getDb().prepare("SELECT item_id, cfi, fraction, updated_at, finished_at, dismissed_at FROM book_progress WHERE account = ?").all(account) as Row[];
   return new Map(rows.map((row) => [row.item_id, toProgress(row)]));
 }
 
 export function readProgress(account: string, itemId: string): BookProgress | null {
   const row = getDb()
-    .prepare("SELECT item_id, cfi, fraction, updated_at, finished_at FROM book_progress WHERE account = ? AND item_id = ?")
+    .prepare("SELECT item_id, cfi, fraction, updated_at, finished_at, dismissed_at FROM book_progress WHERE account = ? AND item_id = ?")
     .get(account, itemId) as Row | undefined;
   return row ? toProgress(row) : null;
 }
@@ -52,10 +54,26 @@ export function saveProgress(account: string, itemId: string, cfi: string, fract
       `INSERT INTO book_progress (account, item_id, cfi, fraction, updated_at, finished_at)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(account, item_id) DO UPDATE SET cfi = excluded.cfi, fraction = excluded.fraction,
-         updated_at = excluded.updated_at, finished_at = excluded.finished_at`
+         updated_at = excluded.updated_at, finished_at = excluded.finished_at, dismissed_at = NULL`
     ).run(account, itemId, cfi, fraction, now, finishedAt);
     return { firstFinish: finished && (before?.finished_at ?? null) === null };
   })();
+}
+
+/**
+ * « Retirer de Continuer la lecture » : la position reste (le livre rouvre où il en était), mais il
+ * quitte la rangée jusqu'à la prochaine page lue, qui l'y remet (`saveProgress`). Rend l'heure posée,
+ * ou `null` s'il n'y avait pas de position.
+ */
+export function dismissProgress(account: string, itemId: string, now = Date.now()): number | null {
+  const changed = getDb().prepare("UPDATE book_progress SET dismissed_at = ? WHERE account = ? AND item_id = ?").run(now, account, itemId).changes;
+  return changed > 0 ? now : null;
+}
+
+/** L'heure du retrait, si le livre est retiré de la rangée. */
+export function dismissedAt(account: string, itemId: string): number | null {
+  const row = getDb().prepare("SELECT dismissed_at FROM book_progress WHERE account = ? AND item_id = ?").get(account, itemId) as { dismissed_at: number | null } | undefined;
+  return row?.dismissed_at ?? null;
 }
 
 /** Une position plausible : une CFI EPUB bornée, une fraction entre 0 et 1. */

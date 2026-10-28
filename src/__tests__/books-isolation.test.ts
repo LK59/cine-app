@@ -201,14 +201,15 @@ describe("une session de partage", () => {
     const page = await proxy(req("GET", "/livres"));
     expect(page.headers.get("location")).toContain("/partage/abcdefghjk");
   });
-  it("un compte du foyer peut écrire sa position et ses signets, et rien d'autre sous /api/books", async () => {
+  it("un compte du foyer peut écrire sa position et ses signets, retirer un livre de sa rangée, et rien d'autre sous /api/books", async () => {
     mockVerify.mockResolvedValue({ u: "lecteur", role: "user", jfId: "x", jti: "j", exp: EXPIRES });
     const { proxy } = await import("@/proxy");
     expect((await proxy(req("POST", `/api/books/${BOOK}/progress`))).status).toBe(200);
     expect((await proxy(req("POST", `/api/books/${BOOK}/bookmarks`))).status).toBe(200);
     expect((await proxy(req("DELETE", `/api/books/${BOOK}/bookmarks`))).status).toBe(403);
     expect((await proxy(req("POST", `/api/books/${BOOK}/file`))).status).toBe(403);
-    expect((await proxy(req("DELETE", `/api/books/${BOOK}/progress`))).status).toBe(403);
+    // « Retirer de Continuer la lecture » (fiche du livre, 28/10/2026) : sous le compte de la session.
+    expect((await proxy(req("DELETE", `/api/books/${BOOK}/progress`))).status).toBe(200);
     // Demander un livre : la demande, oui ; y répondre, non.
     expect((await proxy(req("POST", "/api/books/requests"))).status).toBe(200);
     expect((await proxy(req("PATCH", "/api/books/requests/1"))).status).toBe(403);

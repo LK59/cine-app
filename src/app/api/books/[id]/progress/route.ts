@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { bookIdOf, booksCaller } from "@/lib/books/guard";
 import { bookFor, forgetPlayed } from "@/lib/books/library";
-import { readProgress, saveProgress, validProgressInput } from "@/lib/books/progress";
+import { dismissedAt, dismissProgress, readProgress, saveProgress, validProgressInput } from "@/lib/books/progress";
 import { logError } from "@/lib/logger";
 
 /**
@@ -50,6 +50,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (input.at !== null) {
     const held = readProgress(caller.u, id);
     if (held && held.updatedAt > input.at) return NextResponse.json({ ok: true, kept: true });
+    // Ni un retrait de « Continuer la lecture » fait depuis : une page lue avant ne l'y remet pas.
+    const dismissed = dismissedAt(caller.u, id);
+    if (dismissed !== null && dismissed > input.at) return NextResponse.json({ ok: true, kept: true });
   }
   const { firstFinish } = saveProgress(caller.u, id, input.cfi, input.fraction, input.finished);
   if (firstFinish && caller.jfId) {
@@ -57,5 +60,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Le badge « Lu » de la grille vient de Jellyfin, gardé deux minutes : on le redemande.
     forgetPlayed(caller.jfId);
   }
+  return NextResponse.json({ ok: true });
+}
+
+/**
+ * « Retirer de Continuer la lecture » (fiche du livre) : pour le compte de la session seulement. La
+ * position reste — le livre rouvre où il en était —, il revient dans la rangée à la prochaine page lue.
+ */
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const caller = await booksCaller(req);
+  if (caller instanceof NextResponse) return caller;
+  const id = bookIdOf((await params).id);
+  if (!id) return new NextResponse(null, { status: 400 });
+  dismissProgress(caller.u, id);
   return NextResponse.json({ ok: true });
 }

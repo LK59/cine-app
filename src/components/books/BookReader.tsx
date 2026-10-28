@@ -868,7 +868,9 @@ export function BookReader({ id, title, onClose, onSaved, offline = false }: { i
       {/* La barre du haut. */}
       <div
         className="absolute inset-x-0 top-0 z-10 border-b backdrop-blur-xl transition-[transform,opacity] duration-300 ease-out"
-        style={{ ...barStyle, paddingTop: "env(safe-area-inset-top)", transform: chromeShown ? "none" : "translateY(-100%)", opacity: chromeShown ? 1 : 0 }}
+        // Un peu plus bas que la zone sûre là où elle existe (iPhone, app installée) : le flou que Safari
+        // pose sous la barre d'état mordait sur les boutons (28/10/2026). Rien de plus sur un écran sans encoche.
+        style={{ ...barStyle, paddingTop: "calc(env(safe-area-inset-top) + min(0.5rem, env(safe-area-inset-top)))", transform: chromeShown ? "none" : "translateY(-100%)", opacity: chromeShown ? 1 : 0 }}
         aria-hidden={!chromeShown}
       >
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-2 px-3">

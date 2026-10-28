@@ -713,6 +713,9 @@ function migrate(db: Database.Database): void {
       PRIMARY KEY (account, item_id)
     );
   `);
+  // « Retirer de Continuer la lecture » (28/10/2026) : la position est gardée, le livre quitte la rangée
+  // jusqu'à la prochaine page lue.
+  try { db.exec("ALTER TABLE book_progress ADD COLUMN dismissed_at INTEGER"); } catch { /* already exists */ }
   // Les demandes de livres (option, §127, `src/lib/books/requests.ts`) : un ticket par livre demandé,
   // traité à la main par l'administrateur. Même raison que la table au-dessus pour la créer coupée.
   db.exec(`

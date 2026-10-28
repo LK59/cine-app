@@ -252,8 +252,8 @@ describe("GET /api/books", () => {
   });
 
   it("joint la position de ce compte, et de lui seul", async () => {
-    getDb().prepare("INSERT INTO book_progress VALUES (?, ?, ?, ?, ?, ?)").run("lecteur", BOOK, "epubcfi(/6/2)", 0.4, 1, null);
-    getDb().prepare("INSERT INTO book_progress VALUES (?, ?, ?, ?, ?, ?)").run("autre", BOOK, "epubcfi(/6/8)", 0.9, 1, null);
+    getDb().prepare("INSERT INTO book_progress (account, item_id, cfi, fraction, updated_at, finished_at) VALUES (?, ?, ?, ?, ?, ?)").run("lecteur", BOOK, "epubcfi(/6/2)", 0.4, 1, null);
+    getDb().prepare("INSERT INTO book_progress (account, item_id, cfi, fraction, updated_at, finished_at) VALUES (?, ?, ?, ?, ?, ?)").run("autre", BOOK, "epubcfi(/6/8)", 0.9, 1, null);
     const { books } = await (await listGET(req())).json();
     expect(books[0].progress).toMatchObject({ cfi: "epubcfi(/6/2)", fraction: 0.4, finished: false });
   });

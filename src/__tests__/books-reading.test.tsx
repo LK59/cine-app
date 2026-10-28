@@ -106,7 +106,7 @@ describe("les signets, côté serveur", () => {
 
 describe("une position lue hors ligne, renvoyée plus tard", () => {
   it("n'efface pas celle, plus récente, qu'un autre appareil a écrite entre-temps", async () => {
-    getDb().prepare("INSERT INTO book_progress VALUES (?, ?, ?, ?, ?, ?)").run("lecteur", BOOK, "epubcfi(/6/20)", 0.6, 2000, null);
+    getDb().prepare("INSERT INTO book_progress (account, item_id, cfi, fraction, updated_at, finished_at) VALUES (?, ?, ?, ?, ?, ?)").run("lecteur", BOOK, "epubcfi(/6/20)", 0.6, 2000, null);
     await progressPOST(req({ cfi: "epubcfi(/6/4)", fraction: 0.1, at: 1000 }), params(BOOK));
     expect((await (await progressGET(req(), params(BOOK))).json()).progress.cfi).toBe("epubcfi(/6/20)");
     await progressPOST(req({ cfi: "epubcfi(/6/30)", fraction: 0.8, at: Date.now() }), params(BOOK));

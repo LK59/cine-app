@@ -3762,6 +3762,7 @@
     "retry": "Reintentar",
     "empty": "Todavía no hay libros.",
     "continue": "Seguir leyendo",
+    "removeFromContinue": "Quitar de «Seguir leyendo»",
     "seriesTome": "{series} · Tomo {n}",
     "percentRead": "{pct} % leído",
     "others": "Otros libros",

@@ -9,7 +9,7 @@ import { render, cleanup, act, fireEvent } from "@testing-library/react";
  * puis gardée le temps de sa sortie, et muette pendant cette sortie.
  */
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
-vi.mock("swr", () => ({ default: () => ({ data: undefined, error: undefined }) }));
+vi.mock("swr", () => ({ default: () => ({ data: undefined, error: undefined, mutate: () => {} }), useSWRConfig: () => ({ mutate: () => {} }) }));
 vi.mock("@/lib/useIsMobile", () => ({ useIsMobile: () => false }));
 // Le trajet de la couverture est éprouvé par ses propres tests ; ici, seul le cycle de vie compte.
 vi.mock("@/lib/sheetMorph/desktopContinuity", () => ({ useSheetTransition: () => ({ handlesEntry: false, settled: true }) }));

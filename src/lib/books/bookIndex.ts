@@ -317,7 +317,7 @@ const EMPTY_COPIES: ReadonlyMap<string, BookSummary> = new Map();
 /** « Continuer la lecture » : d'après les positions de ce compte, les livres que l'index connaît encore. */
 export function resumeFrom(index: BookIndex, progress: Map<string, BookProgress>, limit = 12): BookSummary[] {
   return [...progress.entries()]
-    .filter(([, p]) => !p.finished && p.fraction > 0)
+    .filter(([, p]) => !p.finished && !p.dismissed && p.fraction > 0)
     .sort((a, b) => b[1].updatedAt - a[1].updatedAt)
     .flatMap(([id, p]) => {
       // Une copie cachée commencée reste ici : c'est elle qu'on lisait.

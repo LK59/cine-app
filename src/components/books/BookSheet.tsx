@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { BookOpen, Check, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
@@ -66,7 +66,9 @@ function BookSheet({
 }) {
   const t = useT();
   const isMobile = useIsMobile();
-  const { data: detail, error } = useSWR<BookDetail>(`/api/books/${id}`, fetcher);
+  const { data: detail, error, mutate } = useSWR<BookDetail>(`/api/books/${id}`, fetcher);
+  const { mutate: mutateKey } = useSWRConfig();
+  const [removing, setRemoving] = useState(false);
   const book: BookSummary | null = detail ?? summary;
   const containerRef = useRef<HTMLDivElement>(null);
   const coverRef = useRef<HTMLDivElement>(null);
@@ -129,6 +131,28 @@ function BookSheet({
           <div className="h-1 w-48 overflow-hidden rounded-full bg-white/15">
             <div className="h-full rounded-full bg-white" style={{ width: `${pct}%` }} />
           </div>
+        )}
+        {/* Retirer de « Continuer la lecture » : la position reste, le livre revient à la prochaine page lue. */}
+        {progress && !progress.finished && !progress.dismissed && pct > 0 && (
+          <button
+            type="button"
+            {...NOT_THE_HANDLE}
+            disabled={removing}
+            onClick={() => {
+              setRemoving(true);
+              void fetch(`/api/books/${id}/progress`, { method: "DELETE" })
+                .then((res) => {
+                  if (!res.ok) return;
+                  void mutate();
+                  void mutateKey("/api/books/home");
+                })
+                .catch(() => {})
+                .finally(() => setRemoving(false));
+            }}
+            className="flex items-center gap-1.5 text-sm text-subtle transition-colors hover:text-white disabled:opacity-50"
+          >
+            <X size={15} aria-hidden /> {t("books.removeFromContinue")}
+          </button>
         )}
         {finished && (
           <p className="flex items-center gap-1.5 text-sm text-subtle">
