@@ -1,5 +1,6 @@
 import { config } from "@/lib/config";
 import { taskLog } from "@/lib/taskLog";
+import { logError } from "@/lib/logger";
 
 /**
  * L'index des livres préparé d'avance (DECISIONS.md §127) : personne n'attend sa première construction.
@@ -46,8 +47,10 @@ export function prewarmBooks(why: string): Promise<void> {
       const { warmSharedIndex } = await import("@/lib/books/bookIndex");
       const count = await warmSharedIndex();
       taskLog("livres", "index préparé", { why, books: count, s: (Date.now() - startedAt) / 1000 });
-    } catch {
-      // Jellyfin absent : la première ouverture le construira, comme avant.
+    } catch (err) {
+      // Jellyfin absent : la première ouverture le construira, comme avant. Mais dit : un préchauffage
+      // qui échouait en silence laissait chaque compte payer la première construction (28/10/2026).
+      logError("livres.prechauffage", err, { why });
     } finally {
       s.running = null;
     }

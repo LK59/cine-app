@@ -28,6 +28,8 @@ export interface BookRights {
 }
 
 export const ALL_RIGHTS: BookRights = { folders: null, tags: [], blockUnrated: false, blockRated: false };
+/** Aucune bibliothèque : ce que voit une session qui n'est ni administrateur ni un compte Jellyfin. */
+const NO_RIGHTS: BookRights = { folders: new Set(), tags: [], blockUnrated: false, blockRated: false };
 
 interface Policy {
   EnableAllFolders?: boolean;
@@ -74,7 +76,9 @@ async function policyOf(jfId: string, now: number): Promise<Policy> {
 
 /** Les droits de ce compte ; l'administrateur local (sans identité Jellyfin) voit tout, comme partout. */
 export async function rightsOf(caller: BookCaller, now = Date.now()): Promise<BookRights> {
-  if (!caller.jfId) return ALL_RIGHTS;
+  // Sans compte Jellyfin, tous les droits pour l'administrateur (le préchauffage, l'administrateur du
+  // `.env`) — et aucun pour qui que ce soit d'autre : une session sans identifiant ne voit rien.
+  if (!caller.jfId) return caller.role === "admin" ? ALL_RIGHTS : NO_RIGHTS;
   const [policy, tags] = await Promise.all([policyOf(caller.jfId, now), blockedTagsOf(caller.jfId)]);
   const all = policy.EnableAllFolders !== false;
   return {
