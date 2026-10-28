@@ -5,7 +5,8 @@ import type { BookCaller, LibraryItem } from "@/lib/books/library";
 import { compareBooks, fetchLibrary, summaryOf } from "@/lib/books/library";
 import { knownMeta, metaVersion, scheduleMetaReads, staleMeta } from "@/lib/books/epubMeta";
 import { allows, rightsKey, rightsOf, type BookRights } from "@/lib/books/rights";
-import { authorIndex, dedupeBooks, filterBooks, foldText, genreIndex, groupBooks, homeRows, sortBooks, type BookSort, type HomeRows } from "@/lib/books/grouping";
+import { authorIndex, filterBooks, foldText, genreIndex, groupBooks, homeRows, preferredCopy, sortBooks, type BookSort, type HomeRows } from "@/lib/books/grouping";
+import { duplicateKey } from "@/lib/books/metadata";
 import type { BookProgress, BookSummary } from "@/lib/books/types";
 
 /**
@@ -35,8 +36,13 @@ import type { BookProgress, BookSummary } from "@/lib/books/types";
 
 export interface BookIndex {
   builtAt: number;
+  /** Les livres montrés : une copie par livre (`duplicateKey`, `preferredCopy`). */
   books: BookSummary[];
   byId: Map<string, BookSummary>;
+  /** Tous les livres permis, copies cachées comprises : une position ou un lien direct les ouvre encore. */
+  all: Map<string, BookSummary>;
+  /** Une copie cachée → celle montrée à sa place. */
+  hiddenTo: Map<string, string>;
   /** Le titre, la série et les auteurs, repliés (`foldText`), dans l'ordre de `books`. */
   hay: string[];
   home: Omit<HomeRows, "resume">;
@@ -107,24 +113,48 @@ async function buildBase(items: readonly LibraryItem[]): Promise<Base> {
   return { builtAt: Date.now(), entries };
 }
 
-/** La vue d'un ensemble de droits : les livres permis, l'accueil, les choix des menus. */
+/**
+ * La vue d'un ensemble de droits : les livres permis — une copie par livre —, l'accueil, les choix des
+ * menus. Les copies d'un même livre (un lot qui contient deux fois « Les cavernes d'acier », deux racines)
+ * restent sur le disque — un lot partagé les redemanderait — et dans `all` ; seule la meilleure est
+ * montrée partout (rangées, pages, nombres, menus, recherche). Dédoublonnées **après** les droits : la
+ * copie qu'un compte voit est montrée même si l'autre lui est interdite.
+ */
 async function buildView(base: Base, rights: BookRights): Promise<BookIndex> {
-  const books: BookSummary[] = [];
-  const hay: string[] = [];
+  const permitted: Entry[] = [];
   for (let i = 0; i < base.entries.length; i++) {
     const e = base.entries[i];
-    if (allows(rights, e)) {
-      books.push(e.book);
-      hay.push(e.hay);
-    }
+    if (allows(rights, e)) permitted.push(e);
     if (i % (YIELD_EVERY * 4) === YIELD_EVERY * 4 - 1) await yieldToLoop();
   }
   await yieldToLoop();
-  // Le dédoublonnage d'abord, la boucle reprenant la main avant les rangées : à 6 400 livres, les deux d'un bloc
-  // tenaient la boucle ~30 ms (le double sous charge).
-  const deduped = dedupeBooks(books);
+  // Une copie par livre — la boucle reprenant la main avant les rangées : à 6 400 livres, dédoublonner
+  // et calculer les rangées d'un bloc la tenaient ~30 ms (le double sous charge).
+  const best = new Map<string, BookSummary>();
+  for (let i = 0; i < permitted.length; i++) {
+    const book = permitted[i].book;
+    const key = duplicateKey(book);
+    const held = best.get(key);
+    best.set(key, held ? preferredCopy(held, book) : book);
+    if (i % (YIELD_EVERY * 2) === YIELD_EVERY * 2 - 1) await yieldToLoop();
+  }
+  const shown = new Set(best.values());
+  const books: BookSummary[] = [];
+  const hay: string[] = [];
+  const all = new Map<string, BookSummary>();
+  const hiddenTo = new Map<string, string>();
+  for (const e of permitted) {
+    all.set(e.book.id, e.book);
+    if (shown.has(e.book)) {
+      books.push(e.book);
+      hay.push(e.hay);
+    } else {
+      const kept = best.get(duplicateKey(e.book));
+      if (kept) hiddenTo.set(e.book.id, kept.id);
+    }
+  }
   await yieldToLoop();
-  const computed = homeRows(deduped, { deduped: true });
+  const computed = homeRows(books, { deduped: true });
   const home = { recent: computed.recent, rows: computed.rows, hidden: computed.hidden };
   await yieldToLoop();
   const sorted = (xs: Iterable<string>) => [...new Set(xs)].sort(collator.compare);
@@ -135,7 +165,7 @@ async function buildView(base: Base, rights: BookRights): Promise<BookIndex> {
   await yieldToLoop();
   const authors = sorted([...authorIndex(books).values()].map((a) => a.label));
   const facets = { series, authors, genres };
-  return { builtAt: Date.now(), books, byId: new Map(books.map((b) => [b.id, b])), hay, home, facets };
+  return { builtAt: Date.now(), books, byId: new Map(books.map((b) => [b.id, b])), all, hiddenTo, home, facets, hay };
 }
 
 /** Pour les tests et les mesures : l'index d'une liste, vu avec tous les droits. */
@@ -203,43 +233,86 @@ async function sharedBase(now = Date.now()): Promise<Base> {
   return s.base;
 }
 
-/** Ce que ce compte voit de l'index commun. Lève si ses droits ne peuvent pas être lus (la route dit 502). */
+/**
+ * Ce que ce compte voit de l'index commun. Lève si ses droits ne peuvent pas être lus (la route dit 502).
+ * La vue de ses droits est servie telle qu'elle est quand l'index commun vient d'être refait : la neuve
+ * se calcule derrière (un filtre de l'index, quelques dizaines de millisecondes rendues à la boucle par
+ * tranches) et sert la demande suivante. Seule la toute première vue d'un ensemble de droits est attendue.
+ */
 export async function bookIndex(caller: BookCaller, now = Date.now()): Promise<BookIndex> {
   const [base, rights] = await Promise.all([sharedBase(now), rightsOf(caller, now)]);
   const s = shared();
   const key = rightsKey(rights);
   const held = s.views.get(key);
-  if (held && held.baseAt === base.builtAt) {
-    held.usedAt = now;
-    return held.view;
-  }
+  if (held) held.usedAt = now;
+  if (held && held.baseAt === base.builtAt) return held.view;
   const pendingKey = `${key}@${base.builtAt}`;
   let job = s.viewPending.get(pendingKey);
   if (!job) {
-    job = buildView(base, rights).finally(() => s.viewPending.delete(pendingKey));
+    job = buildView(base, rights)
+      .then((view) => {
+        s.views.set(key, { baseAt: base.builtAt, view, usedAt: Date.now() });
+        if (s.views.size > MAX_VIEWS) {
+          const oldest = [...s.views.entries()].sort((a, b) => a[1].usedAt - b[1].usedAt)[0];
+          s.views.delete(oldest[0]);
+        }
+        return view;
+      })
+      .finally(() => s.viewPending.delete(pendingKey));
     s.viewPending.set(pendingKey, job);
   }
-  const view = await job;
-  s.views.set(key, { baseAt: base.builtAt, view, usedAt: now });
-  if (s.views.size > MAX_VIEWS) {
-    const oldest = [...s.views.entries()].sort((a, b) => a[1].usedAt - b[1].usedAt)[0];
-    s.views.delete(oldest[0]);
+  if (held) {
+    job.catch(() => {});
+    return held.view;
   }
-  return view;
+  return job;
+}
+
+/** Le préchauffage (`prewarm.ts`) : l'index commun construit, et la vue « tous droits » avec lui. Rend le nombre de livres. */
+export async function warmSharedIndex(): Promise<number> {
+  const base = await sharedBase();
+  const view = await bookIndex({ role: "admin", jfId: undefined });
+  return view.books.length || base.entries.length;
+}
+
+/** Le garder chaud : le redemander suffit — vieilli, il se refait derrière. */
+export async function keepSharedIndexWarm(): Promise<void> {
+  await sharedBase();
+}
+
+/**
+ * Les copies cachées que ce compte a commencées ou marquées : chez lui, c'est elle qui est montrée à la
+ * place de l'autre — sa position et ses signets la suivent.
+ */
+export function accountCopies(index: BookIndex, ids: Iterable<string>): Map<string, BookSummary> {
+  const swap = new Map<string, BookSummary>();
+  for (const id of ids) {
+    const shownId = index.hiddenTo.get(id);
+    const twin = index.all.get(id);
+    if (shownId && twin) swap.set(shownId, twin);
+  }
+  return swap;
 }
 
 /**
  * Ce qui est propre à ce compte, posé sur des livres de l'index (copies : l'index est partagé) — sa
  * position de lecture, et « lu » selon Jellyfin.
  */
-export function withProgress(books: readonly BookSummary[], progress: Map<string, BookProgress>, played: ReadonlySet<string> = EMPTY_SET): BookSummary[] {
-  return books.map((b) => {
+export function withProgress(
+  books: readonly BookSummary[],
+  progress: Map<string, BookProgress>,
+  played: ReadonlySet<string> = EMPTY_SET,
+  copies: ReadonlyMap<string, BookSummary> = EMPTY_COPIES
+): BookSummary[] {
+  return books.map((shown) => {
+    const b = copies.get(shown.id) ?? shown;
     const p = progress.get(b.id);
     const isPlayed = played.has(b.id);
     return p || isPlayed ? { ...b, progress: p ?? b.progress, played: isPlayed || b.played } : b;
   });
 }
 const EMPTY_SET: ReadonlySet<string> = new Set();
+const EMPTY_COPIES: ReadonlyMap<string, BookSummary> = new Map();
 
 /** « Continuer la lecture » : d'après les positions de ce compte, les livres que l'index connaît encore. */
 export function resumeFrom(index: BookIndex, progress: Map<string, BookProgress>, limit = 12): BookSummary[] {
@@ -247,7 +320,8 @@ export function resumeFrom(index: BookIndex, progress: Map<string, BookProgress>
     .filter(([, p]) => !p.finished && p.fraction > 0)
     .sort((a, b) => b[1].updatedAt - a[1].updatedAt)
     .flatMap(([id, p]) => {
-      const book = index.byId.get(id);
+      // Une copie cachée commencée reste ici : c'est elle qu'on lisait.
+      const book = index.all.get(id);
       return book ? [{ ...book, progress: p }] : [];
     })
     .slice(0, limit);

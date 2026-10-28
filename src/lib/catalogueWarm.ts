@@ -45,7 +45,12 @@ export function startCatalogueWarm(): void {
       .then(() => import("@/lib/selfWarm"))
       .then(({ runSelfWarm }) => runSelfWarm())
       .then(() => taskLog("catalogue", "listes et catalogues chargés en mémoire", { s: (Date.now() - startedAt) / 1000 }))
-      .catch(() => {});
+      .catch(() => {})
+      // Fini, réussi ou non : ce qui attend son tour pour ne pas lui faire concurrence peut partir. Un
+      // symbole partagé plutôt qu'un import : ce module ne dépend de rien d'autre.
+      .finally(() => {
+        (globalThis as unknown as Record<symbol, unknown>)[Symbol.for("laterna.catalogueWarmedAt")] = Date.now();
+      });
   }, FIRST_READ_DELAY_MS);
   (first as { unref?: () => void }).unref?.();
 }

@@ -22,6 +22,34 @@ export function nameKey(name: string): string {
   return fold(name).split(" ").filter(Boolean).sort().join(" ");
 }
 
+/** Les articles qui ne font pas un titre différent : « Le Roi de fer » et « Roi de fer ». */
+const LEADING_ARTICLE = /^(?:le|la|les|l|un|une|des|the|a|an)\s+/;
+
+/**
+ * La clé d'un titre pour reconnaître deux copies d'un même livre : sans accents ni casse, la ponctuation
+ * et « _ » en espaces (« L'amour, vous connaissez » = « L'amour vous connaissez _ »), sans article en tête
+ * (« La Pays des fourrures » = « Le pays des fourrures »).
+ */
+export function titleKey(title: string): string {
+  return fold(title.replace(/_/g, " ")).replace(LEADING_ARTICLE, "").trim();
+}
+
+/** Deux livres de même clé sont deux copies d'un même livre : titre (`titleKey`) et premier auteur (`nameKey`). */
+export function duplicateKey(book: { name: string; authors: readonly string[] }): string {
+  return `${titleKey(book.name)}|${nameKey(book.authors[0] ?? "")}`;
+}
+
+/**
+ * Le soin d'un titre : des accents et des apostrophes (« Prélude à Fondation » plutôt que « Prelude a
+ * Fondation »), pas de « _ » (un nom de fichier recopié), puis la longueur (« Le Roi de fer » plutôt que
+ * « Roi de fer »).
+ */
+export function titleCare(title: string): number {
+  const accents = (title.match(/[À-ÖØ-öø-ÿŒœ’']/g) ?? []).length;
+  const scars = (title.match(/[_]/g) ?? []).length + (/\s[^\p{L}\p{N}\s]\s*$/u.test(title) ? 1 : 0);
+  return accents * 10 - scars * 50 + title.trim().length;
+}
+
 /**
  * La série à afficher pour un livre : celle que l'EPUB déclare lui-même (OPF — `calibre:series`, ou
  * `belongs-to-collection` en EPUB 3), et elle seule. Jamais celle de Jellyfin : il donne au livre le nom

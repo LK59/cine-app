@@ -1,5 +1,5 @@
 import type { BookSummary } from "@/lib/books/types";
-import { fold, nameKey } from "@/lib/books/metadata";
+import { duplicateKey, fold, nameKey, titleCare } from "@/lib/books/metadata";
 
 /**
  * Les livres en rangées et en grille (DECISIONS.md §127), pensés pour une bibliothèque de plusieurs
@@ -111,18 +111,34 @@ const byNewest = (a: BookSummary, b: BookSummary) => (b.addedAt ?? 0) - (a.added
  * pas de quoi remplir sa part la laisse aux autres. Chacune réduite à `perRow` livres.
  */
 /**
- * Le même livre posé à deux endroits — une bibliothèque à deux racines (`/livres` et un dossier de
- * lots), le même titre du même auteur dans les deux — n'apparaît qu'une fois dans les rangées. Le
- * gardé : celui où l'on a lu, sinon le mieux décrit (couverture, série, genres, année). La grille
- * complète les montre tous les deux : aucun n'est perdu.
+ * Lequel montrer de deux copies d'un même livre (`duplicateKey`) : celle où l'on a lu, puis celle qui a une
+ * couverture, puis le titre le plus soigné (`titleCare`), puis la mieux décrite ; à égalité, toujours la
+ * même (l'identifiant).
+ */
+export function preferredCopy(a: BookSummary, b: BookSummary): BookSummary {
+  const read = (x: BookSummary) => (x.progress && x.progress.fraction > 0 ? 1 : 0);
+  const order = [
+    read(b) - read(a),
+    (b.coverTag ? 1 : 0) - (a.coverTag ? 1 : 0),
+    titleCare(b.name) - titleCare(a.name),
+    (b.seriesName ? 1 : 0) + b.genres.length + (b.year ? 1 : 0) - ((a.seriesName ? 1 : 0) + a.genres.length + (a.year ? 1 : 0)),
+  ];
+  for (const d of order) if (d !== 0) return d > 0 ? b : a;
+  return a.id <= b.id ? a : b;
+}
+
+/**
+ * Le même livre en plusieurs copies — deux racines (`/livres` et un dossier de lots), ou deux fichiers
+ * d'un même lot (« Les cavernes d acier » et « Les cavernes d'acier ») — n'apparaît qu'une fois. Les
+ * fichiers restent sur le disque (un lot partagé les redemanderait) ; la copie montrée est
+ * `preferredCopy`. L'index le fait pour toute la bibliothèque (`bookIndex.ts`) ; ici, pour une liste.
  */
 export function dedupeBooks(books: readonly BookSummary[]): BookSummary[] {
-  const score = (b: BookSummary) => (b.progress && b.progress.fraction > 0 ? 100 : 0) + (b.coverTag ? 10 : 0) + (b.seriesName ? 5 : 0) + b.genres.length + (b.year ? 1 : 0);
   const best = new Map<string, BookSummary>();
   for (const b of books) {
-    const key = `${fold(b.name)}|${nameKey(b.authors[0] ?? "")}`;
+    const key = duplicateKey(b);
     const held = best.get(key);
-    if (!held || score(b) > score(held)) best.set(key, b);
+    best.set(key, held ? preferredCopy(held, b) : b);
   }
   const kept = new Set(best.values());
   return books.filter((b) => kept.has(b));

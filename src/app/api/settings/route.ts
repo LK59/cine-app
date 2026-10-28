@@ -15,6 +15,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { logAdminAction } from "@/lib/logger";
 import { invalidateByPrefix } from "@/lib/server-cache";
+import { config } from "@/lib/config";
 import { checkMoviesMount } from "@/lib/repliques/library";
 
 /**
@@ -64,6 +65,10 @@ export async function PUT(req: NextRequest) {
     }
   }
   invalidateByPrefix("");
+  // Les livres allumés à l'instant (§127) : leur index se prépare tout de suite, sans redémarrage.
+  if (values.BOOKS_ENABLED !== undefined && config.books.enabled) {
+    void import("@/lib/books/prewarm").then(({ prewarmBooks }) => prewarmBooks("option allumée")).catch(() => {});
+  }
   return NextResponse.json({ ok: true, settings: allSettingViews(), missing: missingRequiredSettings() });
 }
 

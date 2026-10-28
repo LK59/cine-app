@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { booksCaller } from "@/lib/books/guard";
-import { bookIndex, searchIndex, withProgress } from "@/lib/books/bookIndex";
+import { accountCopies, bookIndex, searchIndex, withProgress } from "@/lib/books/bookIndex";
 import { progressByBook } from "@/lib/books/progress";
 import { playedBooksOf } from "@/lib/books/library";
+import { bookmarkedBooks } from "@/lib/books/bookmarks";
 import { createRateLimiter } from "@/lib/rateLimiter";
 
 const SEARCH_LIMIT = 12;
@@ -22,7 +23,9 @@ export async function GET(req: NextRequest) {
   if (!searchAllowed(`books:${caller.u}`)) return NextResponse.json({ error: "Trop de recherches" }, { status: 429 });
   try {
     const [index, played] = await Promise.all([bookIndex(caller), playedBooksOf(caller)]);
-    const books = withProgress(searchIndex(index, q, SEARCH_LIMIT), progressByBook(caller.u), played);
+    const progress = progressByBook(caller.u);
+    const copies = accountCopies(index, [...progress.keys(), ...bookmarkedBooks(caller.u)]);
+    const books = withProgress(searchIndex(index, q, SEARCH_LIMIT), progress, played, copies);
     return NextResponse.json({ books }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
     return NextResponse.json({ error: "Bibliothèque injoignable" }, { status: 502 });

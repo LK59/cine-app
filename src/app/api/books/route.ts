@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { booksCaller } from "@/lib/books/guard";
-import { bookIndex, pageOf, resumeFrom, withProgress } from "@/lib/books/bookIndex";
+import { accountCopies, bookIndex, pageOf, resumeFrom, withProgress } from "@/lib/books/bookIndex";
 import { progressByBook } from "@/lib/books/progress";
 import { playedBooksOf } from "@/lib/books/library";
+import { bookmarkedBooks } from "@/lib/books/bookmarks";
 import { BOOK_SORTS, type BookSort } from "@/lib/books/grouping";
 
 /**
@@ -20,6 +21,8 @@ export async function GET(req: NextRequest) {
   try {
     const [index, played] = await Promise.all([bookIndex(caller), playedBooksOf(caller)]);
     const progress = progressByBook(caller.u);
+    // Une copie cachée que ce compte a commencée ou marquée est montrée chez lui à la place de l'autre.
+    const copies = accountCopies(index, [...progress.keys(), ...bookmarkedBooks(caller.u)]);
     const query = {
       query: clip(p.get("q")) ?? "",
       serie: clip(p.get("serie")),
@@ -35,7 +38,7 @@ export async function GET(req: NextRequest) {
       {
         total: page.total,
         library: index.books.length,
-        books: withProgress(page.books, progress, played),
+        books: withProgress(page.books, progress, played, copies),
         seriesCounts: page.seriesCounts,
         ...(first ? { resume: resumeFrom(index, progress) } : {}),
       },

@@ -7526,7 +7526,29 @@ préparation à la fois), et se refait depuis les éléments déjà reçus quand
 (au plus toutes les vingt secondes). Une copie des éléments reçus est gardée sur le disque
 (`DATA_DIR/book-index.json`, un jour au plus) : après un redémarrage, la première ouverture part d'elle
 pendant que Jellyfin est relu. Chaque ensemble de droits a sa **vue** (livres permis, accueil, choix des
-menus), calculée une fois et partagée par les comptes qui ont les mêmes droits ; vingt-quatre vues au plus. Le
+menus), calculée une fois et partagée par les comptes qui ont les mêmes droits ; vingt-quatre vues au plus ;
+une vue servie pendant que la suivante se calcule derrière, quand l'index commun vient d'être refait.
+
+**Préparé d'avance** (`prewarm.ts`) : option allumée, l'index commun est construit en arrière-plan après
+les préchauffages du catalogue (`catalogueWarm`, `selfWarm` — jamais en même temps qu'eux ; trente secondes
+après le démarrage, puis toutes les cinq secondes tant qu'ils tournent, deux minutes au plus), et aussitôt
+quand l'administrateur allume l'option (`/api/settings`), sans redémarrage. Puis redemandé toutes les
+quatre minutes, ce qui le refait derrière s'il a vieilli : une ouverture trouve toujours le dernier index
+construit. Seule la toute première construction d'une installation neuve peut être attendue. Option
+coupée, rien n'est importé ni lancé (`books-warm.test.ts`). Mesuré sur 6 400 livres synthétiques : ~115 ms
+de construction, la boucle jamais tenue plus de ~16 ms, et l'accueil servi de l'index chaud en 0,3 ms.
+
+**Une copie par livre.** La bibliothèque de production a des doublons, surtout dans un même lot
+(« Les cavernes d acier » et « Les cavernes d'acier », « Le Roi de fer » et « Roi de fer », « Prelude a
+Fondation » et « Prélude à Fondation ») et parfois entre deux racines. Les fichiers restent sur le disque —
+le lot est partagé, les effacer le ferait retélécharger — et l'index n'en montre qu'un partout : rangées,
+pages, nombres, menus, recherche. La clé (`duplicateKey`) : le titre sans accents, casse, ponctuation ni
+« _ », sans article en tête (le, la, les, l', un, une, the…), et le premier auteur quel que soit l'ordre de
+ses noms (« Asimov,Isaac » = « Isaac Asimov »). La copie montrée (`preferredCopy`) : celle que ce compte a
+commencée ou marquée d'un signet (`accountCopies`, au moment de répondre), puis celle qui a une
+couverture, puis le titre le plus soigné (accents, apostrophes, pas de « _ », le plus complet). La taille
+du fichier n'entre pas en compte : la liste ne la demande pas à Jellyfin. Dédoublonné après les droits, et
+les copies cachées restent lisibles (une position, un lien direct, leur couverture). Le
 téléphone n'en reçoit que des morceaux : l'accueil (`/api/books/home`, une douzaine de rangées de vingt),
 une page de la grille (`/api/books?offset=…&limit=…`, 200 au plus, filtrée et triée par le serveur, avec
 le vrai nombre de tomes des séries de la page), les choix des menus (`/api/books/facets`), douze

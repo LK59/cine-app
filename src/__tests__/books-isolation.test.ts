@@ -256,9 +256,15 @@ describe("l'accueil ne charge rien des livres", () => {
     expect(read("src/components/books/BooksScreen.tsx")).toMatch(/dynamic\(\(\) => import\("\.\/BookReader"\)/);
   });
   it("rien des livres au lancement : ni requête partie avec la page, ni cache gardé sur l'appareil, ni préchauffage du serveur", () => {
-    for (const file of ["src/lib/earlyFetch.ts", "src/lib/persistentCache.ts", "src/lib/catalogueWarm.ts", "src/lib/selfWarm.ts", "src/instrumentation.ts"]) {
+    for (const file of ["src/lib/earlyFetch.ts", "src/lib/persistentCache.ts", "src/lib/catalogueWarm.ts", "src/lib/selfWarm.ts"]) {
       if (fs.existsSync(path.join(process.cwd(), file))) expect(read(file), file).not.toMatch(/books|livres|\/api\/book/i);
     }
+    // Le démarrage ne nomme les livres qu'en un endroit : le préchauffage de leur index, importé et
+    // lancé seulement l'option allumée (`books-warm.test.ts` éprouve qu'il ne fait rien sinon).
+    const boot = read("src/instrumentation.ts");
+    const code = boot.split("\n").filter((l) => !/^\s*\/\//.test(l)).join("\n");
+    expect(code.match(/books/g)).toHaveLength(2);
+    expect(code).toMatch(/if \(config\.books\?\.enabled === true\) \{\s*const \{ startBooksPrewarm \} = await import\("\.\/lib\/books\/prewarm"\);\s*startBooksPrewarm\(\);\s*\}/);
   });
   it("le cache gardé sur l'appareil n'est pas touché ; l'adresse du cinéma ne gagne que des champs facultatifs", () => {
     expect(read("src/lib/persistentCache.ts")).not.toMatch(/book|livre/i);

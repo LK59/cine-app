@@ -16,7 +16,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!id) return new NextResponse(null, { status: 400 });
   let fileTag: string | null;
   try {
-    const book = (await bookIndex(caller)).byId.get(id);
+    // Une copie cachée (doublon d'un même livre) a aussi sa couverture : elle reste lisible.
+    const book = (await bookIndex(caller)).all.get(id);
     if (!book) return new NextResponse(null, { status: 404 });
     fileTag = book.fileTag;
   } catch {

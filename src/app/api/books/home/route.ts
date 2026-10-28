@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { booksCaller } from "@/lib/books/guard";
-import { bookIndex, resumeFrom, withProgress } from "@/lib/books/bookIndex";
+import { accountCopies, bookIndex, resumeFrom, withProgress } from "@/lib/books/bookIndex";
 import { progressByBook } from "@/lib/books/progress";
 import { playedBooksOf } from "@/lib/books/library";
+import { bookmarkedBooks } from "@/lib/books/bookmarks";
 
 /**
  * L'accueil de la catégorie Livres (option, DECISIONS.md §127), déjà calculé par le serveur
@@ -16,12 +17,14 @@ export async function GET(req: NextRequest) {
   try {
     const [index, played] = await Promise.all([bookIndex(caller), playedBooksOf(caller)]);
     const progress = progressByBook(caller.u);
+    // Une copie cachée que ce compte a commencée ou marquée est montrée chez lui à la place de l'autre.
+    const copies = accountCopies(index, [...progress.keys(), ...bookmarkedBooks(caller.u)]);
     return NextResponse.json(
       {
         total: index.books.length,
         resume: resumeFrom(index, progress),
-        recent: withProgress(index.home.recent, progress, played),
-        rows: index.home.rows.map((row) => ({ ...row, books: withProgress(row.books, progress, played) })),
+        recent: withProgress(index.home.recent, progress, played, copies),
+        rows: index.home.rows.map((row) => ({ ...row, books: withProgress(row.books, progress, played, copies) })),
         hidden: index.home.hidden,
       },
       { headers: { "Cache-Control": "private, no-store" } }

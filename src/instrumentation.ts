@@ -82,6 +82,14 @@ export async function register() {
     const { startCatalogueWarm } = await import("./lib/catalogueWarm");
     startCatalogueWarm();
 
+    // L'index des livres (option, DECISIONS.md §127), préparé après les préchauffages du catalogue pour
+    // qu'aucun lecteur n'attende sa première construction. Option coupée : rien n'est importé ni lancé
+    // (l'allumer depuis la Configuration le prépare aussitôt, `/api/settings`).
+    if (config.books?.enabled === true) {
+      const { startBooksPrewarm } = await import("./lib/books/prewarm");
+      startBooksPrewarm();
+    }
+
     // Les sous-titres générés (DECISIONS.md §69) : les tâches en cours reprennent là où elles
     // étaient — lignes acquises gardées — et les fichiers finis continuent vers Jellyfin. Gardé :
     // une base illisible ne doit pas empêcher le serveur de démarrer.

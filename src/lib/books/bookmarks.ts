@@ -70,6 +70,11 @@ export function addBookmark(account: string, itemId: string, b: { cfi: string; f
   })();
 }
 
+/** Les livres où ce compte a au moins un signet. */
+export function bookmarkedBooks(account: string): string[] {
+  return (getDb().prepare("SELECT DISTINCT item_id FROM book_bookmarks WHERE account = ?").all(account) as { item_id: string }[]).map((r) => r.item_id);
+}
+
 export function removeBookmark(account: string, itemId: string, cfi: string): void {
   getDb().prepare("DELETE FROM book_bookmarks WHERE account = ? AND item_id = ? AND cfi = ?").run(account, itemId, cfi);
 }
