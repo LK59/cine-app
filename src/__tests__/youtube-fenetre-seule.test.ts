@@ -52,9 +52,10 @@ describe("YouTube dans l'application", () => {
     expect(embeds).toEqual([join("src", "components", "TrailerModal.tsx")]);
   });
 
-  it("une CSP réduite au cadre de cette fenêtre", async () => {
+  // `'self'` en plus depuis le 28/10/2026 : le lecteur de livres posé sur le cinéma (DECISIONS.md §128).
+  it("une CSP réduite au cadre de cette fenêtre (et à nos propres pages)", async () => {
     const policy = await csp();
-    expect(policy["frame-src"]).toBe("frame-src https://www.youtube-nocookie.com");
+    expect(policy["frame-src"]).toBe("frame-src 'self' https://www.youtube-nocookie.com");
     for (const directive of ["script-src", "img-src", "connect-src"]) {
       expect(policy[directive], directive).not.toMatch(/youtube/);
     }

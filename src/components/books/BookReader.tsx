@@ -38,6 +38,7 @@ import {
 } from "@/lib/books/bookSync";
 import { offlineBookFile, rememberedBookAccount } from "@/lib/books/offlineBooks";
 import { preloadBookFile } from "@/lib/books/readerPreload";
+import { insetVar } from "@/lib/books/readerFrame";
 import type { BookProgress } from "@/lib/books/types";
 import { ReaderSearchPanel, ReaderSettingsPanel, ReaderTocPanel, type SearchGroup } from "./ReaderPanels";
 
@@ -167,7 +168,25 @@ function chapterMarks(view: FoliateView, toc: FoliateTocItem[]): number[] {
   }
 }
 
-export function BookReader({ id, title, onClose, onSaved, offline = false }: { id: string; title: string; onClose: () => void; onSaved?: () => void; offline?: boolean }) {
+/**
+ * `onReady` : la première page est affichée, ou l'erreur — ce que montre le lecteur est là. Le cadre posé
+ * sur le cinéma le lui dit, qui retire alors le calque de l'ouverture (`ReaderFrame`, §128).
+ */
+export function BookReader({
+  id,
+  title,
+  onClose,
+  onSaved,
+  onReady,
+  offline = false,
+}: {
+  id: string;
+  title: string;
+  onClose: () => void;
+  onSaved?: () => void;
+  onReady?: () => void;
+  offline?: boolean;
+}) {
   const t = useT();
   const systemDark = useSyncExternalStore(subscribeDark, darkSnapshot, () => true);
   const [prefs, setPrefs] = useState<ReaderPrefs>(() => loadReaderPrefs(prefersReducedMotion()));
@@ -209,10 +228,12 @@ export function BookReader({ id, title, onClose, onSaved, offline = false }: { i
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onSavedRef = useRef(onSaved);
+  const onReadyRef = useRef(onReady);
 
   useEffect(() => {
     prefsRef.current = prefs;
     onSavedRef.current = onSaved;
+    onReadyRef.current = onReady;
   });
 
   const theme = resolvedTheme(prefs.theme, systemDark);
@@ -438,10 +459,14 @@ export function BookReader({ id, title, onClose, onSaved, offline = false }: { i
         if (cancelled) return;
         setMarks(chapterMarks(view, items));
         setStatus("ready");
+        onReadyRef.current?.();
         showChrome(true);
         rootRef.current?.focus({ preventScroll: true });
       } catch {
-        if (!cancelled) setStatus("error");
+        if (!cancelled) {
+          setStatus("error");
+          onReadyRef.current?.();
+        }
       }
     }
     void open();
@@ -822,7 +847,7 @@ export function BookReader({ id, title, onClose, onSaved, offline = false }: { i
 
       <div
         className="absolute inset-0"
-        style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)", paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)", perspective: "2200px" }}
+        style={{ paddingTop: insetVar("top"), paddingBottom: insetVar("bottom"), paddingLeft: insetVar("left"), paddingRight: insetVar("right"), perspective: "2200px" }}
       >
         <div ref={stageRef} className="relative h-full w-full" style={{ transformStyle: "preserve-3d" }} />
         <div ref={shadeRef} className="pointer-events-none absolute inset-0 bg-black opacity-0" aria-hidden />
@@ -873,7 +898,7 @@ export function BookReader({ id, title, onClose, onSaved, offline = false }: { i
         className="absolute inset-x-0 top-0 z-10 border-b backdrop-blur-xl transition-[transform,opacity] duration-300 ease-out"
         // Un peu plus bas que la zone sûre là où elle existe (iPhone, app installée) : le flou que Safari
         // pose sous la barre d'état mordait sur les boutons (28/10/2026). Rien de plus sur un écran sans encoche.
-        style={{ ...barStyle, paddingTop: "calc(env(safe-area-inset-top) + min(0.5rem, env(safe-area-inset-top)))", transform: chromeShown ? "none" : "translateY(-100%)", opacity: chromeShown ? 1 : 0 }}
+        style={{ ...barStyle, paddingTop: `calc(${insetVar("top")} + min(0.5rem, ${insetVar("top")}))`, transform: chromeShown ? "none" : "translateY(-100%)", opacity: chromeShown ? 1 : 0 }}
         aria-hidden={!chromeShown}
       >
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-2 px-3">
@@ -928,7 +953,7 @@ export function BookReader({ id, title, onClose, onSaved, offline = false }: { i
       {/* La barre du bas : où l'on en est, les chapitres marqués, le temps qui reste au chapitre. */}
       <div
         className="absolute inset-x-0 bottom-0 z-10 border-t backdrop-blur-xl transition-[transform,opacity] duration-300 ease-out"
-        style={{ ...barStyle, paddingBottom: "env(safe-area-inset-bottom)", transform: chromeShown && panel !== "settings" ? "none" : "translateY(100%)", opacity: chromeShown && panel !== "settings" ? 1 : 0 }}
+        style={{ ...barStyle, paddingBottom: insetVar("bottom"), transform: chromeShown && panel !== "settings" ? "none" : "translateY(100%)", opacity: chromeShown && panel !== "settings" ? 1 : 0 }}
         aria-hidden={!chromeShown}
       >
         <div className="mx-auto max-w-5xl px-5 pb-3 pt-3">

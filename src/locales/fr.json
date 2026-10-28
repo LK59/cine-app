@@ -3783,6 +3783,7 @@
       "minutesLeft": "{n} min restantes dans ce chapitre",
       "minuteLeft": "1 min restante dans ce chapitre",
       "openError": "Ce livre n'a pas pu être ouvert.",
+      "frame": "Lecture",
       "contents": "Table des matières",
       "settings": "Réglages de lecture",
       "position": "Position dans le livre",

@@ -3783,6 +3783,7 @@
       "minutesLeft": "{n} min left in this chapter",
       "minuteLeft": "1 min left in this chapter",
       "openError": "This book could not be opened.",
+      "frame": "Reading",
       "contents": "Contents",
       "settings": "Reading settings",
       "position": "Position in the book",

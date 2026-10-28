@@ -4,8 +4,9 @@ import { THEME_COLORS, loadReaderPrefs, resolvedTheme } from "@/lib/books/reader
  * L'ouverture du lecteur depuis la fiche (DECISIONS.md §127) : la couverture grandit jusqu'à
  * l'écran entier et devient la première page — la couleur du thème de lecture choisi —, le lecteur
  * paraît dessous. Seuls `transform` et `opacity` bougent, sur un calque à part ; « Réduire les
- * animations » saute tout. Rend une fonction qui retire le calque (le lecteur est là) ; quand la
- * page change de document (l'accueil mène à `/livres`), le calque part avec elle.
+ * animations » saute tout. Rend une fonction qui retire le calque (le lecteur est là). Depuis le
+ * cinéma, le lecteur paraît dans un cadre posé dessous (`ReaderFrame.tsx`, §128), qui retire le calque
+ * quand sa première page est affichée.
  */
 const GROW_MS = 380;
 const EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
@@ -18,17 +19,15 @@ function reducedMotion(): boolean {
   }
 }
 
-/**
- * Depuis le cinéma : la couverture grandit et la page des livres est demandée **en même temps** — pas
- * après l'animation (380 ms), qui s'ajoutait au chargement (mesuré le 28/10/2026). Le navigateur garde la
- * page affichée, et l'animation qui court sur le compositeur, jusqu'à ce que la suivante se peigne. Un vrai
- * chargement, exprès : le lecteur ne vit que sous la politique de sécurité de `/livres`.
- */
-export async function openReaderPage(id: string, cover: HTMLElement | null): Promise<void> {
-  void readerOpening(cover);
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- un vrai chargement, exprès (politique de la page des livres).
-  window.location.assign(`/livres?retour=1#livre=${id}&lire=1`);
+/** La couleur de la page : celle du thème de lecture choisi sur cet appareil. */
+export function readerPageColor(): string {
+  let systemDark = true;
+  try {
+    systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  } catch {
+    /* sombre par défaut, comme l'application */
+  }
+  return THEME_COLORS[resolvedTheme(loadReaderPrefs().theme, systemDark)].bg;
 }
 
 export async function readerOpening(cover: HTMLElement | null): Promise<() => void> {
@@ -36,13 +35,7 @@ export async function readerOpening(cover: HTMLElement | null): Promise<() => vo
   if (!cover || typeof document === "undefined" || reducedMotion()) return noop;
   const rect = cover.getBoundingClientRect();
   if (rect.width === 0) return noop;
-  let systemDark = true;
-  try {
-    systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  } catch {
-    /* sombre par défaut, comme l'application */
-  }
-  const page = THEME_COLORS[resolvedTheme(loadReaderPrefs().theme, systemDark)].bg;
+  const page = readerPageColor();
   const layer = document.createElement("div");
   layer.setAttribute("aria-hidden", "true");
   layer.setAttribute("data-reader-opening", "");

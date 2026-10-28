@@ -283,15 +283,21 @@ describe("l'accueil ne charge rien des livres", () => {
 });
 
 describe("la politique de sécurité", () => {
-  it("la générale garde ses cadres YouTube seuls ; celle des livres permet `blob:` et rien d'extérieur", async () => {
+  it("la générale ne gagne que nos propres pages en cadre (le lecteur, §128) ; celle des livres permet `blob:` et rien d'extérieur", async () => {
     // Par son chemin : le fichier est du JavaScript sans types, que la vérification de `next build` refuserait importé en clair.
     const configUrl = pathToFileURL(path.join(process.cwd(), "next.config.js")).href;
     const nextConfig = (await import(/* @vite-ignore */ configUrl)).default as { headers: () => Promise<{ source: string; headers: { key: string; value: string }[] }[]> };
     const rules = await nextConfig.headers();
     const csp = (source: string) => rules.find((r) => r.source === source)?.headers.find((h) => h.key === "Content-Security-Policy")?.value ?? "";
     const general = csp("/(.*)");
-    expect(general).toMatch(/frame-src https:\/\/www\.youtube-nocookie\.com(;|$)/);
-    expect(general).not.toMatch(/frame-src[^;]*blob:/);
+    // Exactement : notre origine et la fenêtre de bande-annonce. Pas de `blob:`, pas de `data:`, rien d'autre.
+    expect(general).toMatch(/(^|; )frame-src 'self' https:\/\/www\.youtube-nocookie\.com(;|$)/);
+    expect(general.split(";").map((d) => d.trim()).filter((d) => d.startsWith("frame-src"))).toEqual(["frame-src 'self' https://www.youtube-nocookie.com"]);
+    // (`blob:` reste ailleurs — images, médias, workers —, jamais pour les cadres.)
+    expect(general).not.toMatch(/frame-src[^;]*blob:|child-src/);
+    expect(general).not.toMatch(/frame-src[^;]*(data:|\*)/);
+    // Le cinéma lui-même reste inencadrable ; la page des livres ne l'est que par notre origine.
+    expect(general).toMatch(/frame-ancestors 'none'/);
     const books = csp("/livres");
     expect(books).toMatch(/frame-src blob:(;|$)/);
     expect(books).not.toMatch(/https?:\/\//);

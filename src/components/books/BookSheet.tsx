@@ -137,6 +137,8 @@ function BookSheet({
         <button
           type="button"
           {...NOT_THE_HANDLE}
+          // Le lecteur refermé rend le focus ici (`ReaderFrame`).
+          data-book-read=""
           onClick={() => onRead(coverRef.current)}
           disabled={!book}
           className="flex items-center gap-2 rounded-full bg-white px-6 py-2.5 font-semibold text-ink transition-transform active:scale-95 disabled:opacity-50"

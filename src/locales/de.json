@@ -3783,6 +3783,7 @@
       "minutesLeft": "Noch {n} Min. in diesem Kapitel",
       "minuteLeft": "Noch 1 Min. in diesem Kapitel",
       "openError": "Dieses Buch konnte nicht geöffnet werden.",
+      "frame": "Leseansicht",
       "contents": "Inhaltsverzeichnis",
       "settings": "Leseeinstellungen",
       "position": "Position im Buch",
