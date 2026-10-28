@@ -3193,6 +3193,7 @@
       "OFFLINE_DOWNLOADS": "Offline downloads in the app (beta)",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Offline downloads open to every account (otherwise administrators only)",
       "BOOKS_ENABLED": "Books: Jellyfin's EPUB files and an in-app reader (beta)",
+      "BOOKS_REQUESTS_ENABLED": "Book requests: “Request a book”, handled by hand by the administrator",
       "OFFLINE_SERVER_QUOTA_GB": "Maximum server space for downloads (GB)",
       "PLAYER_AUTO_FRAME": "Enlarge the picture over black bars",
       "CAST_RECEIVER_APP_ID": "Chromecast receiver (application ID, empty = Google's)",
@@ -3835,6 +3836,42 @@
     "moreSeries": "{n} more series in All books",
     "searchPlaceholder": "Title, series, author",
     "clearFilter": "Clear filter",
-    "noMatch": "No book matches."
+    "noMatch": "No book matches.",
+    "requests": {
+      "title": "Book requests",
+      "ask": "Request",
+      "mine": "My requests",
+      "all": "All requests",
+      "intro": "The book is added by hand: give what it takes to find it.",
+      "fieldTitle": "Title",
+      "fieldAuthor": "Author",
+      "fieldNote": "Note (series, volume, edition, language…)",
+      "notePlaceholder": "Optional",
+      "error": "The request could not be sent. Please try again.",
+      "limit": "You have already made many requests today. Please try again tomorrow.",
+      "send": "Send request",
+      "sent": "Request sent. You will be notified of the answer.",
+      "none": "You have not requested anything yet.",
+      "noneAll": "No requests yet.",
+      "by": "Requested by {user}",
+      "maybeHere": "Maybe already here: “{title}”",
+      "replyPlaceholder": "A word for the person (optional)",
+      "markAdded": "Added",
+      "markRefused": "Declined",
+      "reopen": "Set back to pending",
+      "button": "Request a book",
+      "notFound": "Can't find it? Request it",
+      "notFoundHome": "A book missing? Request it",
+      "status": {
+        "pending": "Pending",
+        "added": "Added",
+        "refused": "Declined"
+      },
+      "push": {
+        "adminTitle": "Book request from {user}",
+        "addedTitle": "Your requested book has arrived",
+        "refusedTitle": "Book request declined"
+      }
+    }
   }
 }

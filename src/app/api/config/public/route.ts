@@ -31,6 +31,8 @@ export async function GET(req: NextRequest) {
     // L'option « Livres » (DECISIONS.md §127) : la catégorie Livres de la bascule n'existe qu'avec elle. Pour tout
     // compte du foyer ; jamais pour un lien de partage, qui ne sort pas de son titre (§112).
     booksEnabled: config.books?.enabled === true && session?.role !== "share",
+    // « Demander un livre » : seulement avec les livres eux-mêmes, et jamais pour un lien de partage.
+    bookRequests: config.books?.requests === true && session?.role !== "share",
     // La disposition de l'accueil, réglée par l'exploitant (DECISIONS.md §52).
     homeContinueHero: config.home.continueHero,
     // La nouvelle adresse du passage (DECISIONS.md §119), nom d'hôte seul : la page de connexion y

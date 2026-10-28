@@ -710,6 +710,23 @@ function migrate(db: Database.Database): void {
       PRIMARY KEY (account, item_id)
     );
   `);
+  // Les demandes de livres (option, §127, `src/lib/books/requests.ts`) : un ticket par livre demandé,
+  // traité à la main par l'administrateur. Même raison que la table au-dessus pour la créer coupée.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS book_requests (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      account    TEXT    NOT NULL,
+      user_id    TEXT    NOT NULL,
+      title      TEXT    NOT NULL,
+      author     TEXT    NOT NULL DEFAULT '',
+      note       TEXT    NOT NULL DEFAULT '',
+      status     TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'added', 'refused')),
+      reply      TEXT    NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_book_requests_account ON book_requests(account, created_at);
+  `);
   seedInitialNews(db);
   // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
   seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");

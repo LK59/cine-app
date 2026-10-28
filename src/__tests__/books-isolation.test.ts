@@ -58,6 +58,7 @@ const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8")
 beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.BOOKS_ENABLED;
+  delete process.env.BOOKS_REQUESTS_ENABLED;
   shares.current = SHARE;
 });
 
@@ -65,6 +66,7 @@ describe("coupée par défaut", () => {
   it("le schéma la déclare réglable dans l'application, coupée", async () => {
     const { SETTINGS_BY_KEY } = await import("@/lib/settings/schema");
     expect(SETTINGS_BY_KEY.get("BOOKS_ENABLED")).toMatchObject({ kind: "boolean", inApp: true, fallback: "false", group: "playback" });
+    expect(SETTINGS_BY_KEY.get("BOOKS_REQUESTS_ENABLED")).toMatchObject({ kind: "boolean", inApp: true, fallback: "false", group: "playback" });
   });
   it("sans réglage ni `.env`, `config.books.enabled` est faux ; `.env` l'allume, relu à chaque accès", async () => {
     const { config } = await import("@/lib/config");
@@ -119,6 +121,10 @@ describe("la configuration publique", () => {
     expect((await call()).booksEnabled).toBe(false);
     process.env.BOOKS_ENABLED = "true";
     expect((await call()).booksEnabled).toBe(true);
+    // Les demandes : coupées par défaut, ouvertes seulement avec les livres.
+    expect((await call()).bookRequests).toBe(false);
+    process.env.BOOKS_REQUESTS_ENABLED = "true";
+    expect((await call()).bookRequests).toBe(true);
     mockVerify.mockResolvedValue({ u: "partage", role: "share", sh: "s", jti: "j" });
     expect((await call()).booksEnabled).toBe(false);
   });
@@ -133,6 +139,9 @@ describe("une session de partage", () => {
       ["GET", `/api/books/${BOOK}/file`],
       ["GET", `/api/books/${BOOK}/progress`],
       ["POST", `/api/books/${BOOK}/progress`],
+      ["GET", "/api/books/requests"],
+      ["POST", "/api/books/requests"],
+      ["PATCH", "/api/books/requests/1"],
     ]) {
       expect(shareRuleFor(method, p), `${method} ${p}`).toBeNull();
     }
@@ -146,6 +155,9 @@ describe("une session de partage", () => {
       ["GET", `/api/books/${BOOK}`],
       ["GET", `/api/books/${BOOK}/file`],
       ["POST", `/api/books/${BOOK}/progress`],
+      ["GET", "/api/books/requests"],
+      ["POST", "/api/books/requests"],
+      ["PATCH", "/api/books/requests/1"],
     ]) {
       expect((await proxy(req(method, p))).status, `${method} ${p}`).toBe(403);
     }
@@ -158,6 +170,9 @@ describe("une session de partage", () => {
     expect((await proxy(req("POST", `/api/books/${BOOK}/progress`))).status).toBe(200);
     expect((await proxy(req("POST", `/api/books/${BOOK}/file`))).status).toBe(403);
     expect((await proxy(req("DELETE", `/api/books/${BOOK}/progress`))).status).toBe(403);
+    // Demander un livre : la demande, oui ; y répondre, non.
+    expect((await proxy(req("POST", "/api/books/requests"))).status).toBe(200);
+    expect((await proxy(req("PATCH", "/api/books/requests/1"))).status).toBe(403);
   });
 });
 

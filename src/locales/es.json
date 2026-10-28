@@ -3193,6 +3193,7 @@
       "OFFLINE_DOWNLOADS": "Descargas sin conexión en la app (beta)",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Descargas sin conexión abiertas a todas las cuentas (si no, solo administradores)",
       "BOOKS_ENABLED": "Libros: los EPUB de Jellyfin y un lector en la app (beta)",
+      "BOOKS_REQUESTS_ENABLED": "Solicitudes de libros: «Solicitar un libro», gestionadas a mano por el administrador",
       "OFFLINE_SERVER_QUOTA_GB": "Espacio máximo de las descargas en el servidor (GB)",
       "PLAYER_AUTO_FRAME": "Ampliar la imagen sobre las bandas negras",
       "CAST_RECEIVER_APP_ID": "Receptor de Chromecast (ID de aplicación, vacío = el de Google)",
@@ -3835,6 +3836,42 @@
     "moreSeries": "{n} series más en Todos los libros",
     "searchPlaceholder": "Título, serie, autor",
     "clearFilter": "Quitar el filtro",
-    "noMatch": "Ningún libro coincide."
+    "noMatch": "Ningún libro coincide.",
+    "requests": {
+      "title": "Solicitudes de libros",
+      "ask": "Solicitar",
+      "mine": "Mis solicitudes",
+      "all": "Todas las solicitudes",
+      "intro": "El libro se añade a mano: indique lo necesario para encontrarlo.",
+      "fieldTitle": "Título",
+      "fieldAuthor": "Autor",
+      "fieldNote": "Nota (serie, tomo, edición, idioma…)",
+      "notePlaceholder": "Opcional",
+      "error": "No se pudo enviar la solicitud. Inténtelo de nuevo.",
+      "limit": "Ya ha hecho muchas solicitudes hoy. Inténtelo mañana.",
+      "send": "Enviar la solicitud",
+      "sent": "Solicitud enviada. Se le avisará de la respuesta.",
+      "none": "Todavía no ha solicitado nada.",
+      "noneAll": "Todavía no hay solicitudes.",
+      "by": "Solicitado por {user}",
+      "maybeHere": "Quizá ya está: «{title}»",
+      "replyPlaceholder": "Unas palabras para la persona (opcional)",
+      "markAdded": "Añadido",
+      "markRefused": "Rechazado",
+      "reopen": "Volver a pendiente",
+      "button": "Solicitar un libro",
+      "notFound": "¿No lo encuentra? Solicítelo",
+      "notFoundHome": "¿Falta un libro? Solicítelo",
+      "status": {
+        "pending": "Pendiente",
+        "added": "Añadido",
+        "refused": "Rechazado"
+      },
+      "push": {
+        "adminTitle": "Solicitud de libro de {user}",
+        "addedTitle": "Ha llegado el libro solicitado",
+        "refusedTitle": "Solicitud de libro rechazada"
+      }
+    }
   }
 }

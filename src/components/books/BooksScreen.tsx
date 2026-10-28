@@ -14,6 +14,7 @@ import type { BookSummary } from "@/lib/books/types";
 import { BookCover } from "./BookCover";
 import { BookSheet, type MorphOrigin } from "./BookSheet";
 import { BooksGrid } from "./BooksGrid";
+import { BookRequestButton, BookRequestsPanel, useBookRequestsEnabled } from "./BookRequests";
 
 /**
  * La grille complète des livres (option, DECISIONS.md §127), « Tous les livres » : une recherche
@@ -57,6 +58,15 @@ export function BooksScreen() {
   const filtered = useMemo(() => filterBooks(books, deferredQuery, serie), [books, deferredQuery, serie]);
   const filtering = deferredQuery.trim() !== "" || serie !== null;
   const resume = useMemo(() => (filtering ? [] : continueReading(books)), [books, filtering]);
+  // « Mes demandes » ouvert d'emblée : c'est là que mène la notification d'une demande (`?demandes=1`).
+  const requestsEnabled = useBookRequestsEnabled();
+  const [requestsOpen, setRequestsOpen] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("demandes") === "1";
+    } catch {
+      return false;
+    }
+  });
   // Où la couverture touchée était à l'écran : la fiche en part (et y revient).
   const [origin, setOrigin] = useState<MorphOrigin | null>(null);
 
@@ -102,6 +112,7 @@ export function BooksScreen() {
                 enterKeyHint="search"
               />
             </label>
+            <BookRequestButton books={books} />
             {serie !== null && (
               <button type="button" onClick={clearSerie} className="flex h-10 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-semibold text-ink">
                 {serieLabel}
@@ -123,7 +134,13 @@ export function BooksScreen() {
           </div>
         )}
         {data && books.length === 0 && <p className="mx-auto mt-24 max-w-sm px-6 text-center text-muted">{t("books.empty")}</p>}
-        {data && books.length > 0 && filtered.length === 0 && <p className="mx-auto mt-16 max-w-sm px-6 text-center text-muted">{t("books.noMatch")}</p>}
+        {data && books.length > 0 && filtered.length === 0 && (
+          <div className="mx-auto mt-16 flex max-w-sm flex-col items-center gap-4 px-6 text-center">
+            <p className="text-muted">{t("books.noMatch")}</p>
+            {/* La recherche vide mène à la demande, le titre déjà tapé. */}
+            <BookRequestButton books={books} label={t("books.requests.notFound")} initialTitle={deferredQuery.trim()} />
+          </div>
+        )}
 
         {resume.length > 0 && (
           <section className="mb-10">
@@ -160,6 +177,8 @@ export function BooksScreen() {
         {/* Remontée à chaque filtre : la grille repart de son premier morceau. */}
         <BooksGrid key={`${serie ?? ""}|${deferredQuery}`} books={filtered} onOpen={open} />
       </main>
+
+      {requestsEnabled && requestsOpen && <BookRequestsPanel books={books} onClose={() => setRequestsOpen(false)} />}
 
       {/* Portés dans `body`, comme le lecteur des films : sous l'écran, qui est `fixed` et donc son
           propre contexte d'empilement, la fiche et le lecteur passaient sous les invitations

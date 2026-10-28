@@ -3193,6 +3193,7 @@
       "OFFLINE_DOWNLOADS": "Téléchargement hors ligne dans l'application (bêta)",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Téléchargement hors ligne ouvert à tous les comptes (sinon administrateurs seulement)",
       "BOOKS_ENABLED": "Livres : les EPUB de Jellyfin et un lecteur dans l'application (bêta)",
+      "BOOKS_REQUESTS_ENABLED": "Demandes de livres : « Demander un livre », traité à la main par l'administrateur",
       "OFFLINE_SERVER_QUOTA_GB": "Place maximale des téléchargements sur le serveur (Go)",
       "PLAYER_AUTO_FRAME": "Agrandir l'image au-dessus des bandes noires",
       "CAST_RECEIVER_APP_ID": "Récepteur Chromecast (identifiant d'application, vide = celui de Google)",
@@ -3835,6 +3836,42 @@
     "moreSeries": "{n} autres séries dans Tous les livres",
     "searchPlaceholder": "Titre, série, auteur",
     "clearFilter": "Retirer le filtre",
-    "noMatch": "Aucun livre ne correspond."
+    "noMatch": "Aucun livre ne correspond.",
+    "requests": {
+      "title": "Demandes de livres",
+      "ask": "Demander",
+      "mine": "Mes demandes",
+      "all": "Toutes les demandes",
+      "intro": "Le livre sera ajouté à la main : donnez ce qu'il faut pour le retrouver.",
+      "fieldTitle": "Titre",
+      "fieldAuthor": "Auteur",
+      "fieldNote": "Note (série, tome, édition, langue…)",
+      "notePlaceholder": "Facultatif",
+      "error": "La demande n'a pas pu être envoyée. Réessayez.",
+      "limit": "Vous avez déjà fait beaucoup de demandes aujourd'hui. Réessayez demain.",
+      "send": "Envoyer la demande",
+      "sent": "Demande envoyée. Vous serez prévenu de la réponse.",
+      "none": "Vous n'avez encore rien demandé.",
+      "noneAll": "Aucune demande pour l'instant.",
+      "by": "Demandé par {user}",
+      "maybeHere": "Peut-être déjà là : « {title} »",
+      "replyPlaceholder": "Un mot pour la personne (facultatif)",
+      "markAdded": "Ajouté",
+      "markRefused": "Refusé",
+      "reopen": "Remettre en attente",
+      "button": "Demander un livre",
+      "notFound": "Vous ne le trouvez pas ? Demandez-le",
+      "notFoundHome": "Un livre manque ? Demandez-le",
+      "status": {
+        "pending": "En attente",
+        "added": "Ajouté",
+        "refused": "Refusé"
+      },
+      "push": {
+        "adminTitle": "Demande de livre de {user}",
+        "addedTitle": "Le livre demandé est arrivé",
+        "refusedTitle": "Demande de livre refusée"
+      }
+    }
   }
 }

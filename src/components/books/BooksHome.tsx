@@ -8,6 +8,7 @@ import { NO_SERIES, homeRows } from "@/lib/books/grouping";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
 import { BookCover } from "./BookCover";
+import { BookRequestButton } from "./BookRequests";
 
 /**
  * L'accueil de la catégorie Livres (option, DECISIONS.md §127), à la place des rangées de films ou
@@ -114,6 +115,12 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
           desktop={desktop}
         />
       ))}
+      {/* Ce qu'on ne trouve pas se demande (option des demandes, §127) — rien quand elle est coupée. */}
+      {data && (
+        <div className={`${pad} pb-6`}>
+          <BookRequestButton books={books} label={t("books.requests.notFoundHome")} />
+        </div>
+      )}
       {hiddenGroups > 0 && (
         <div className={`${pad} pb-4`}>
           <a href="/livres" className="inline-flex h-10 items-center rounded-full bg-white/10 px-5 text-sm font-semibold text-white transition-colors hover:bg-white/15">

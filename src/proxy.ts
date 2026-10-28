@@ -152,6 +152,9 @@ const GUEST_ALLOWED_PATTERNS: RegExp[] = [
   // Sa propre position dans un livre (option « Livres », DECISIONS.md §127) : la route n'écrit que
   // sous le compte de la session, et répond 404 tant que l'option est coupée.
   /^POST \/api\/books\/[0-9a-f]{32}\/progress$/,
+  // Demander un livre (§127) : un ticket rangé sous le compte de la session. Répondre à une demande
+  // (`PATCH /api/books/requests/<id>`) reste à l'administrateur.
+  /^POST \/api\/books\/requests$/,
 ];
 
 function isAllowedForEveryone(method: string, pathname: string): boolean {

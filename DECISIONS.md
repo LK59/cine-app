@@ -7501,6 +7501,21 @@ cherche (titre, série, auteur, sans accents ni casse, `filterBooks`) et se dess
 (`BooksGrid`, un repère à l'approche du bas en ajoute 90) ; les couvertures se chargent à l'approche,
 à 500 px de large. `books-scale.test.tsx` le prouve sur 5 000 livres.
 
+**Demander un livre.** Une seconde option, `BOOKS_REQUESTS_ENABLED` (même carte, coupée par défaut,
+sans effet tant que les livres sont coupés — `config.books.requests`). Un ticket, traité à la main :
+titre (requis), auteur, note, bornés, vingt par jour et par compte (`requests.ts`, table
+`book_requests`) ; aucune base de livres consultée, Jellyseerr jamais touché. Le bouton est dans la
+catégorie Livres, dans la grille complète et sous une recherche vide (« Vous ne le trouvez pas ?
+Demandez-le », titre déjà rempli) ; « Mes demandes » montre l'état de chacune. L'administrateur voit
+toutes les demandes au même endroit (onglet « Toutes les demandes », celles en attente d'abord), les
+marque « ajouté » ou « refusé » avec un mot ; un livre de la bibliothèque au titre voisin est signalé
+(« Peut-être déjà là »). Les notifications reprennent le chemin des signalements — `report-new` aux
+administrateurs, `report-reply` à qui a demandé, dans la langue de chacun de ses appareils — plutôt
+qu'une catégorie nouvelle, qui aurait ajouté une case dans Compte sur toute installation, livres
+coupés compris. Seule écriture ouverte aux comptes : `POST /api/books/requests` ; répondre
+(`PATCH /api/books/requests/<id>`) reste à l'administrateur, au proxy et dans la route. Tests :
+`books-requests.test.ts`.
+
 **La position.** Table `book_progress` (compte de l'application, livre, CFI EPUB, fraction, date,
 fin) : Jellyfin ne sait garder que des durées. Envoyée au fil de la lecture (regroupée, 1,5 s), à la
 fermeture et à `pagehide` (`sendBeacon`). Le livre fini la première fois, il est noté « lu » chez

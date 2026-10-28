@@ -104,6 +104,9 @@ export const SETTINGS: readonly SettingDef[] = [
   // l'application. Coupée par défaut — une installation qui n'a pas de livres n'en voit rien, ni
   // entrée, ni page, ni route : tout répond « introuvable ».
   { key: "BOOKS_ENABLED", group: "playback", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  // « Demander un livre » (§127) : un ticket à l'administrateur, qui ajoute le livre à la main.
+  // Coupée par défaut ; sans effet tant que `BOOKS_ENABLED` est coupée.
+  { key: "BOOKS_REQUESTS_ENABLED", group: "playback", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   { key: "OFFLINE_SERVER_QUOTA_GB", group: "playback", kind: "number", need: "optional", fallback: "50", inApp: true, placeholder: "50" },
   { key: "PLAYER_AUTO_FRAME", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   // L'application que le Chromecast ouvre (DECISIONS.md §64) : vide, le récepteur public de Google.

@@ -3193,6 +3193,7 @@
       "OFFLINE_DOWNLOADS": "Offline-Downloads in der App (Beta)",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Offline-Downloads für alle Konten (sonst nur Administratoren)",
       "BOOKS_ENABLED": "Bücher: die EPUB-Dateien von Jellyfin und ein Lesemodus in der App (Beta)",
+      "BOOKS_REQUESTS_ENABLED": "Buchwünsche: „Buch wünschen“, von der Administration von Hand bearbeitet",
       "OFFLINE_SERVER_QUOTA_GB": "Maximaler Serverplatz für Downloads (GB)",
       "PLAYER_AUTO_FRAME": "Bild über schwarze Balken vergrößern",
       "CAST_RECEIVER_APP_ID": "Chromecast-Empfänger (Anwendungs-ID, leer = der von Google)",
@@ -3835,6 +3836,42 @@
     "moreSeries": "{n} weitere Reihen unter Alle Bücher",
     "searchPlaceholder": "Titel, Reihe, Autor",
     "clearFilter": "Filter entfernen",
-    "noMatch": "Kein Buch entspricht Ihrer Suche."
+    "noMatch": "Kein Buch entspricht Ihrer Suche.",
+    "requests": {
+      "title": "Buchwünsche",
+      "ask": "Wünschen",
+      "mine": "Meine Wünsche",
+      "all": "Alle Wünsche",
+      "intro": "Das Buch wird von Hand hinzugefügt: Geben Sie an, was zum Finden nötig ist.",
+      "fieldTitle": "Titel",
+      "fieldAuthor": "Autor",
+      "fieldNote": "Hinweis (Reihe, Band, Ausgabe, Sprache …)",
+      "notePlaceholder": "Optional",
+      "error": "Der Wunsch konnte nicht gesendet werden. Bitte versuchen Sie es erneut.",
+      "limit": "Sie haben heute schon viele Wünsche geäußert. Bitte versuchen Sie es morgen erneut.",
+      "send": "Wunsch senden",
+      "sent": "Wunsch gesendet. Sie werden über die Antwort benachrichtigt.",
+      "none": "Sie haben noch nichts gewünscht.",
+      "noneAll": "Noch keine Wünsche.",
+      "by": "Gewünscht von {user}",
+      "maybeHere": "Vielleicht schon da: „{title}“",
+      "replyPlaceholder": "Ein Wort an die Person (optional)",
+      "markAdded": "Hinzugefügt",
+      "markRefused": "Abgelehnt",
+      "reopen": "Wieder offen",
+      "button": "Buch wünschen",
+      "notFound": "Nicht gefunden? Wünschen Sie es sich",
+      "notFoundHome": "Fehlt ein Buch? Wünschen Sie es sich",
+      "status": {
+        "pending": "Offen",
+        "added": "Hinzugefügt",
+        "refused": "Abgelehnt"
+      },
+      "push": {
+        "adminTitle": "Buchwunsch von {user}",
+        "addedTitle": "Ihr gewünschtes Buch ist da",
+        "refusedTitle": "Buchwunsch abgelehnt"
+      }
+    }
   }
 }

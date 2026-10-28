@@ -264,6 +264,11 @@ export const config = {
     get enabled() {
       return optional("BOOKS_ENABLED", "false") === "true";
     },
+    // « Demander un livre » : un ticket que l'administrateur traite à la main. Coupée par défaut, et
+    // sans effet tant que les livres eux-mêmes sont coupés.
+    get requests() {
+      return optional("BOOKS_ENABLED", "false") === "true" && optional("BOOKS_REQUESTS_ENABLED", "false") === "true";
+    },
   },
   push: {
     get subject() {
