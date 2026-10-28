@@ -727,6 +727,19 @@ function migrate(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_book_requests_account ON book_requests(account, created_at);
   `);
+  // Ce que chaque EPUB dit de sa série et de ses sujets (§127, `src/lib/books/epubMeta.ts`), lu une fois
+  // par fichier (`etag` de Jellyfin) : un cache, régénérable — il se relit tout seul s'il disparaît.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS book_meta (
+      item_id      TEXT    PRIMARY KEY,
+      etag         TEXT    NOT NULL,
+      series       TEXT,
+      series_index REAL,
+      subjects     TEXT    NOT NULL DEFAULT '[]',
+      failed       INTEGER NOT NULL DEFAULT 0,
+      checked_at   INTEGER NOT NULL
+    );
+  `);
   seedInitialNews(db);
   // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
   seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");

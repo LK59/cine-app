@@ -7501,6 +7501,25 @@ cherche (titre, série, auteur, sans accents ni casse, `filterBooks`) et se dess
 (`BooksGrid`, un repère à l'approche du bas en ajoute 90) ; les couvertures se chargent à l'approche,
 à 500 px de large. `books-scale.test.tsx` le prouve sur 5 000 livres.
 
+**La série, l'auteur, le genre : ne pas croire `SeriesName`.** Jellyfin donne à un livre le nom du
+dossier qui le contient : rangée par auteur (`/livres/<Auteur>/<livre>.epub`, ce que fait le greffon des
+livres), une bibliothèque faisait de chaque roman isolé un tome de la « série » de son auteur. La série
+vient d'abord de l'EPUB lui-même — `calibre:series` / `calibre:series_index`, ou en EPUB 3
+`belongs-to-collection` / `group-position` —, lu par plages à travers le relais de Jellyfin (la fin du zip,
+`container.xml`, l'OPF : quelques dizaines de kilo-octets), une fois par fichier (`book_meta`, clé
+`Etag`), en arrière-plan, deux à la fois ; la grille ne l'attend jamais (`epubMeta.ts`). À défaut, celle
+de Jellyfin, seulement si elle n'est ni le nom d'un auteur du livre (dans n'importe quel ordre des mots :
+« Muchamore Robert ») ni celui d'un dossier racine de bibliothèque ; sinon aucune (`decideSeries`). Les
+auteurs se rapprochent de même (`nameKey`). Les genres réunissent ceux de Jellyfin et les sujets de
+l'EPUB, coupés (« Policier/Thriller »), débarrassés des mots de format, dédoublonnés (`bookGenres`).
+L'accueil montre, dans l'ordre et chaque rangée cachée quand elle est vide : « Continuer la lecture »,
+« Récemment ajoutés », une rangée par série (deux livres et plus, par tome), par auteur (deux livres et
+plus, par année ; pas quand tous ses livres sont dans une série déjà montrée), par genre (trois livres et
+plus) — dix au plus, les plus fournies, chacune avec son « Tout voir » (`/livres?serie=`, `auteur=`,
+`genre=`, `tri=`). La grille complète se trie (série, titre, auteur, ajout, année) et se filtre (série,
+auteur, genre, recherche). Les titres sont ceux de Jellyfin (les métadonnées de l'EPUB), jamais les noms de
+fichiers. Tests : `books-metadata.test.ts`.
+
 **Demander un livre.** Une seconde option, `BOOKS_REQUESTS_ENABLED` (même carte, coupée par défaut,
 sans effet tant que les livres sont coupés — `config.books.requests`). Un ticket, traité à la main :
 titre (requis), auteur, note, bornés, vingt par jour et par compte (`requests.ts`, table

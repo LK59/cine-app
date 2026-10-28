@@ -25,6 +25,8 @@ export interface BookSummary {
   index: number | null;
   year: number | null;
   authors: string[];
+  /** Les genres regroupés (Jellyfin et sujets de l'EPUB, `bookGenres`) ; vide quand on n'en sait rien. */
+  genres: string[];
   /** Ajouté à la bibliothèque (ms), pour « Derniers ajouts » ; `null` : inconnu. */
   addedAt: number | null;
   /** Lu selon Jellyfin, pour ce compte. */
@@ -34,5 +36,4 @@ export interface BookSummary {
 
 export interface BookDetail extends BookSummary {
   overview: string;
-  genres: string[];
 }

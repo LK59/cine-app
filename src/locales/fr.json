@@ -3833,7 +3833,6 @@
     "browseAll": "Tous les livres",
     "seeAll": "Tout voir",
     "recent": "Derniers ajouts",
-    "moreSeries": "{n} autres séries dans Tous les livres",
     "searchPlaceholder": "Titre, série, auteur",
     "clearFilter": "Retirer le filtre",
     "noMatch": "Aucun livre ne correspond.",
@@ -3872,6 +3871,18 @@
         "addedTitle": "Le livre demandé est arrivé",
         "refusedTitle": "Demande de livre refusée"
       }
-    }
+    },
+    "moreRows": "Et {n} autres dans Tous les livres",
+    "sortBy": "Trier",
+    "sorts": {
+      "series": "Par série",
+      "title": "Par titre",
+      "author": "Par auteur",
+      "recent": "Récemment ajoutés",
+      "year": "Par année"
+    },
+    "filterSeries": "Série",
+    "filterAuthor": "Auteur",
+    "filterGenre": "Genre"
   }
 }

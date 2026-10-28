@@ -8,7 +8,7 @@ import { ChevronLeft, Search, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
 import { closeBookRoute, openBookRoute, useBookRoute } from "@/lib/books/bookRoute";
-import { NO_SERIES, continueReading, filterBooks } from "@/lib/books/grouping";
+import { BOOK_SORTS, NO_SERIES, authorIndex, continueReading, filterBooks, genreIndex, groupBooks, sortBooks, type BookSort } from "@/lib/books/grouping";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
 import { BookCover } from "./BookCover";
@@ -37,12 +37,14 @@ const BookReader = dynamic(() => import("./BookReader").then((m) => m.BookReader
 
 export const BOOKS_KEY = "/api/books";
 
-/** La série demandée dans l'adresse (`/livres?serie=…`, depuis le « Tout voir » d'une rangée de l'accueil). */
-function serieFromAddress(): string | null {
+/** Les filtres et le tri de l'adresse (`/livres?serie=…&auteur=…&genre=…&tri=…`) — le « Tout voir » des rangées y mène. */
+function filtersFromAddress(): { serie: string | null; auteur: string | null; genre: string | null; tri: BookSort } {
   try {
-    return new URLSearchParams(window.location.search).get("serie");
+    const p = new URLSearchParams(window.location.search);
+    const tri = p.get("tri") as BookSort | null;
+    return { serie: p.get("serie"), auteur: p.get("auteur"), genre: p.get("genre"), tri: tri && BOOK_SORTS.includes(tri) ? tri : "series" };
   } catch {
-    return null;
+    return { serie: null, auteur: null, genre: null, tri: "series" };
   }
 }
 
@@ -51,12 +53,26 @@ export function BooksScreen() {
   const route = useBookRoute();
   const { data, error, isLoading, mutate } = useSWR<{ books: BookSummary[] }>(BOOKS_KEY, fetcher, { revalidateOnFocus: true });
   const books = useMemo(() => data?.books ?? [], [data]);
-  const [serie, setSerie] = useState<string | null>(serieFromAddress);
+  const [filters, setFilters] = useState(filtersFromAddress);
+  const { serie, auteur, genre, tri } = filters;
   const [query, setQuery] = useState("");
   // La saisie reste vive ; le filtre de plusieurs milliers de livres suit juste derrière.
   const deferredQuery = useDeferredValue(query);
-  const filtered = useMemo(() => filterBooks(books, deferredQuery, serie), [books, deferredQuery, serie]);
-  const filtering = deferredQuery.trim() !== "" || serie !== null;
+  const filtered = useMemo(
+    () => sortBooks(filterBooks(books, { query: deferredQuery, serie, auteur, genre }), tri),
+    [books, deferredQuery, serie, auteur, genre, tri]
+  );
+  const filtering = deferredQuery.trim() !== "" || serie !== null || auteur !== null || genre !== null;
+  // Les choix des filtres : chaque série, chaque auteur (rapproché), chaque genre de la bibliothèque.
+  const choices = useMemo(() => {
+    const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+    const sorted = (xs: string[]) => [...new Set(xs)].sort(collator.compare);
+    return {
+      series: sorted(groupBooks(books).flatMap((g) => (g.series ? [g.series] : []))),
+      authors: sorted([...authorIndex(books).values()].map((a) => a.label)),
+      genres: sorted([...genreIndex(books).values()].map((g) => g.label)),
+    };
+  }, [books]);
   const resume = useMemo(() => (filtering ? [] : continueReading(books)), [books, filtering]);
   // « Mes demandes » ouvert d'emblée : c'est là que mène la notification d'une demande (`?demandes=1`).
   const requestsEnabled = useBookRequestsEnabled();
@@ -75,16 +91,16 @@ export function BooksScreen() {
     setOrigin({ id: book.id, rect: cover.getBoundingClientRect() });
     openBookRoute({ book: book.id, reading: false });
   };
-  const clearSerie = () => {
-    setSerie(null);
-    // L'adresse suit : un rechargement ne remettrait pas le filtre retiré.
+  const setFilter = (key: "serie" | "auteur" | "genre" | "tri", value: string | null) => {
+    setFilters((f) => ({ ...f, [key]: key === "tri" ? ((value as BookSort | null) ?? "series") : value || null }));
+    // L'adresse suit : un rechargement, un retour, un lien gardé retrouvent la même grille.
     const url = new URL(window.location.href);
-    url.searchParams.delete("serie");
+    if (value && !(key === "tri" && value === "series")) url.searchParams.set(key, value);
+    else url.searchParams.delete(key);
     window.history.replaceState(window.history.state, "", url);
   };
 
   const selected = route.book ? (books.find((b) => b.id === route.book) ?? null) : null;
-  const serieLabel = serie === NO_SERIES ? t("books.others") : serie;
 
   return (
     <div className="fixed inset-0 overflow-y-auto overscroll-contain bg-ink text-white" style={{ paddingTop: "env(safe-area-inset-top)" }}>
@@ -113,10 +129,32 @@ export function BooksScreen() {
               />
             </label>
             <BookRequestButton books={books} />
-            {serie !== null && (
-              <button type="button" onClick={clearSerie} className="flex h-10 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-semibold text-ink">
-                {serieLabel}
-                <X size={15} aria-label={t("books.clearFilter")} />
+          </div>
+        )}
+        {books.length > 0 && (
+          <div className="scrollbar-none -mx-4 mt-2 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+            <Picker label={t("books.sortBy")} value={tri} onChange={(v) => setFilter("tri", v)} options={BOOK_SORTS.map((s) => ({ value: s, label: t(`books.sorts.${s}`) }))} />
+            <Picker
+              label={t("books.filterSeries")}
+              value={serie ?? ""}
+              onChange={(v) => setFilter("serie", v)}
+              options={[{ value: "", label: t("books.filterSeries") }, ...choices.series.map((x) => ({ value: x, label: x })), { value: NO_SERIES, label: t("books.others") }]}
+            />
+            <Picker label={t("books.filterAuthor")} value={auteur ?? ""} onChange={(v) => setFilter("auteur", v)} options={[{ value: "", label: t("books.filterAuthor") }, ...choices.authors.map((x) => ({ value: x, label: x }))]} />
+            {choices.genres.length > 0 && (
+              <Picker label={t("books.filterGenre")} value={genre ?? ""} onChange={(v) => setFilter("genre", v)} options={[{ value: "", label: t("books.filterGenre") }, ...choices.genres.map((x) => ({ value: x, label: x }))]} />
+            )}
+            {(serie || auteur || genre) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilter("serie", null);
+                  setFilter("auteur", null);
+                  setFilter("genre", null);
+                }}
+                className="flex h-9 shrink-0 items-center gap-1 rounded-full px-3 text-sm text-subtle hover:text-white"
+              >
+                <X size={14} aria-hidden /> {t("books.clearFilter")}
               </button>
             )}
           </div>
@@ -175,7 +213,7 @@ export function BooksScreen() {
         )}
 
         {/* Remontée à chaque filtre : la grille repart de son premier morceau. */}
-        <BooksGrid key={`${serie ?? ""}|${deferredQuery}`} books={filtered} onOpen={open} />
+        <BooksGrid key={`${serie ?? ""}|${auteur ?? ""}|${genre ?? ""}|${tri}|${deferredQuery}`} books={filtered} onOpen={open} flat={tri !== "series"} />
       </main>
 
       {requestsEnabled && requestsOpen && <BookRequestsPanel books={books} onClose={() => setRequestsOpen(false)} />}
@@ -219,5 +257,24 @@ function GridSkeleton() {
         <div key={i} className="aspect-[2/3] animate-pulse rounded-lg bg-surface" />
       ))}
     </div>
+  );
+}
+
+/** Un choix de la grille, en liste native : des milliers d'auteurs s'y parcourent au clavier comme au doigt. */
+function Picker({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  const active = value !== "" && value !== "series";
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`h-9 max-w-[14rem] shrink-0 cursor-pointer appearance-none truncate rounded-full px-4 text-sm font-medium focus:outline-none ${active ? "bg-white text-ink" : "bg-white/10 text-white"}`}
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value} className="bg-surface text-white">
+          {o.label}
+        </option>
+      ))}
+    </select>
   );
 }

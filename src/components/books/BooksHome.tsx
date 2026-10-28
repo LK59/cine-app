@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import useSWR from "swr";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
-import { NO_SERIES, homeRows } from "@/lib/books/grouping";
+import { homeRows } from "@/lib/books/grouping";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
 import { BookCover } from "./BookCover";
@@ -12,9 +12,9 @@ import { BookRequestButton } from "./BookRequests";
 
 /**
  * L'accueil de la catégorie Livres (option, DECISIONS.md §127), à la place des rangées de films ou
- * de séries : « Continuer la lecture », « Derniers ajouts » dans une grande bibliothèque, puis des
- * rangées de séries dans l'ordre des tomes et « Autres livres » — chacune bornée (`homeRows`) avec son
- * « Tout voir » vers la grille filtrée (`/livres?serie=…`). Pas de bannière : une couverture n'est pas une image de fond, et le carrousel des
+ * de séries : « Continuer la lecture », « Récemment ajoutés », puis des rangées de séries (dans l'ordre
+ * des tomes), d'auteurs (par année) et de genres — bornées (`homeRows`), chacune avec son « Tout voir »
+ * vers la grille filtrée (`/livres?serie=…`, `auteur=…`, `genre=…`). Pas de bannière : une couverture n'est pas une image de fond, et le carrousel des
  * films et séries n'est pas touché.
  *
  * Un livre touché ouvre sa fiche sur la page des livres (`/livres`), par un vrai chargement : le
@@ -31,7 +31,7 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
   const { data, error, isLoading, mutate } = useSWR<{ books: BookSummary[] }>("/api/books", fetcher, { revalidateOnFocus: true });
   const books = useMemo(() => data?.books ?? [], [data]);
   // Borné quelle que soit la bibliothèque : quelques rangées de vingt livres, le reste à un « Tout voir ».
-  const { resume, recent, rows, hiddenGroups } = useMemo(() => homeRows(books), [books]);
+  const { resume, recent, rows, hidden } = useMemo(() => homeRows(books), [books]);
   const desktop = variant === "desktop";
   const pad = desktop ? "px-8 lg:px-12" : "px-4";
   // L'accroche des rangées tient compte de la marge : sans elle, la première carte se collait au bord.
@@ -100,14 +100,14 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
         </section>
       )}
 
-      {recent.length > 0 && <Row title={t("books.recent")} href="/livres" books={recent} pad={pad} snapPad={snapPad} card={card} desktop={desktop} />}
+      {recent.length > 0 && <Row title={t("books.recent")} href="/livres?tri=recent" books={recent} pad={pad} snapPad={snapPad} card={card} desktop={desktop} />}
 
       {rows.map((group) => (
         <Row
           key={group.key}
-          title={group.series ?? t("books.others")}
-          count={group.series ? (group.total === 1 ? t("books.volumesOne") : t("books.volumes", { n: group.total })) : undefined}
-          href={`/livres?serie=${encodeURIComponent(group.series ?? NO_SERIES)}`}
+          title={group.title}
+          count={group.kind === "series" ? t("books.volumes", { n: group.total }) : t("books.count", { n: group.total })}
+          href={`/livres?${group.filter.param}=${encodeURIComponent(group.filter.value)}`}
           books={group.books}
           pad={pad}
           snapPad={snapPad}
@@ -121,10 +121,10 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
           <BookRequestButton books={books} label={t("books.requests.notFoundHome")} />
         </div>
       )}
-      {hiddenGroups > 0 && (
+      {hidden > 0 && (
         <div className={`${pad} pb-4`}>
           <a href="/livres" className="inline-flex h-10 items-center rounded-full bg-white/10 px-5 text-sm font-semibold text-white transition-colors hover:bg-white/15">
-            {t("books.moreSeries", { n: hiddenGroups })}
+            {t("books.moreRows", { n: hidden })}
           </a>
         </div>
       )}

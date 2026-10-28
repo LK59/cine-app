@@ -1,9 +1,10 @@
 import type { BookSummary } from "@/lib/books/types";
+import { fold, nameKey } from "@/lib/books/metadata";
 
 /**
  * Les livres en rangées et en grille (DECISIONS.md §127), pensés pour une bibliothèque de plusieurs
  * milliers d'EPUB : l'accueil ne montre que des rangées bornées, chacune avec son « Tout voir », et la
- * grille complète se filtre et se dessine par morceaux.
+ * grille complète se filtre, se trie et se dessine par morceaux.
  */
 
 export interface BookGroup {
@@ -16,7 +17,7 @@ export interface BookGroup {
 export const NO_SERIES = "*autres";
 
 /**
- * Une rangée par série, dans l'ordre où le serveur les a triées (série, tome, nom — `compareBooks`),
+ * Une section par série, dans l'ordre où le serveur les a triées (série, tome, nom — `compareBooks`),
  * puis une pour les livres sans série. Un livre sans tome reste dans sa série, après les tomes numérotés.
  */
 export function groupBooks(books: readonly BookSummary[]): BookGroup[] {
@@ -27,8 +28,8 @@ export function groupBooks(books: readonly BookSummary[]): BookGroup[] {
       others.push(book);
       continue;
     }
-    // La casse seule ne fait pas deux séries (« CHERUB » et « Cherub »).
-    const key = book.seriesName.toLocaleLowerCase();
+    // La casse et les accents seuls ne font pas deux séries (« CHERUB » et « Cherub »).
+    const key = fold(book.seriesName);
     const group = bySeries.get(key) ?? { key: `s:${key}`, series: book.seriesName, books: [] };
     group.books.push(book);
     bySeries.set(key, group);
@@ -46,37 +47,125 @@ export function continueReading(books: readonly BookSummary[], limit = 12): Book
     .slice(0, limit);
 }
 
-export interface HomeRows {
-  resume: BookSummary[];
-  /** Les derniers arrivés, quand la bibliothèque est assez grande pour qu'ils s'y perdent. */
-  recent: BookSummary[];
-  /** Les séries montrées, chacune réduite à `perRow` livres ; `total` dit combien elle en a. */
-  rows: (BookGroup & { total: number })[];
-  /** Combien de séries (ou « autres ») ne tiennent pas sur l'accueil — la grille complète les montre. */
-  hiddenGroups: number;
+/** Les auteurs d'une bibliothèque, rapprochés quel que soit l'ordre des mots ; le libellé est la forme la plus fréquente. */
+export function authorIndex(books: readonly BookSummary[]): Map<string, { label: string; books: BookSummary[] }> {
+  type Entry = { forms: Map<string, number>; books: BookSummary[] };
+  const out = new Map<string, Entry>();
+  for (const book of books) {
+    for (const author of new Set(book.authors)) {
+      const key = nameKey(author);
+      if (!key) continue;
+      const entry: Entry = out.get(key) ?? { forms: new Map(), books: [] };
+      entry.forms.set(author, (entry.forms.get(author) ?? 0) + 1);
+      entry.books.push(book);
+      out.set(key, entry);
+    }
+  }
+  return new Map([...out].map(([key, e]) => [key, { label: [...e.forms].sort((a, b) => b[1] - a[1])[0][0], books: e.books }]));
 }
 
+/** Les genres d'une bibliothèque, regroupés sans accents ni casse. */
+export function genreIndex(books: readonly BookSummary[]): Map<string, { label: string; books: BookSummary[] }> {
+  const out = new Map<string, { label: string; books: BookSummary[] }>();
+  for (const book of books) {
+    for (const genre of book.genres) {
+      const key = fold(genre);
+      const entry = out.get(key) ?? { label: genre, books: [] };
+      entry.books.push(book);
+      out.set(key, entry);
+    }
+  }
+  return out;
+}
+
+export type RowKind = "series" | "author" | "genre";
+
+export interface HomeRow {
+  key: string;
+  kind: RowKind;
+  title: string;
+  /** Ce que « Tout voir » met dans l'adresse de la grille (`serie`, `auteur`, `genre`). */
+  filter: { param: "serie" | "auteur" | "genre"; value: string };
+  total: number;
+  books: BookSummary[];
+}
+
+export interface HomeRows {
+  resume: BookSummary[];
+  recent: BookSummary[];
+  rows: HomeRow[];
+  /** Combien de séries, d'auteurs et de genres n'ont pas trouvé place — la grille complète les montre. */
+  hidden: number;
+}
+
+const byYear = (a: BookSummary, b: BookSummary) => (a.year ?? 9999) - (b.year ?? 9999) || a.name.localeCompare(b.name);
+const byNewest = (a: BookSummary, b: BookSummary) => (b.addedAt ?? 0) - (a.addedAt ?? 0);
+
 /**
- * L'accueil de la catégorie Livres, borné quelle que soit la taille de la bibliothèque : au plus
- * `maxRows` rangées de séries — celles où l'on a lu en dernier, puis les plus récemment enrichies —, de
- * `perRow` livres chacune, et les livres sans série en une rangée « Autres livres » bornée de même. Le
- * reste est dans la grille complète, à un « Tout voir ».
+ * L'accueil de la catégorie Livres, dans l'ordre voulu, chaque rangée cachée quand elle est vide :
+ * « Continuer la lecture », « Récemment ajoutés », une rangée par **série** (deux livres au moins, dans
+ * l'ordre des tomes), une par **auteur** (deux livres au moins, par année ; pas quand tous ses livres sont
+ * déjà dans une même série montrée), une par **genre** (trois livres au moins). Borné quelle que soit la
+ * bibliothèque : au plus `maxRows` rangées de séries, d'auteurs et de genres, les plus fournies d'abord,
+ * partagées entre les trois — les séries d'abord, puis les auteurs, puis les genres ; une sorte qui n'a
+ * pas de quoi remplir sa part la laisse aux autres. Chacune réduite à `perRow` livres.
  */
-export function homeRows(books: readonly BookSummary[], { maxRows = 8, perRow = 20 } = {}): HomeRows {
-  const groups = groupBooks(books);
-  const lastRead = (g: BookGroup) => Math.max(0, ...g.books.map((b) => (b.progress && !b.progress.finished ? b.progress.updatedAt : 0)));
-  const lastAdded = (g: BookGroup) => Math.max(0, ...g.books.map((b) => b.addedAt ?? 0));
-  const series = groups.filter((g) => g.series !== null);
-  const others = groups.find((g) => g.series === null) ?? null;
-  // Une petite bibliothèque garde l'ordre alphabétique ; une grande montre ce qui bouge.
-  const ranked = series.length > maxRows ? [...series].sort((a, b) => lastRead(b) - lastRead(a) || lastAdded(b) - lastAdded(a)) : series;
-  const shown = ranked.slice(0, maxRows);
-  const rows = [...shown, ...(others ? [others] : [])].map((g) => ({ ...g, total: g.books.length, books: g.books.slice(0, perRow) }));
-  const recent =
-    books.length > perRow * 2
-      ? [...books].filter((b) => b.addedAt !== null).sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0)).slice(0, perRow)
-      : [];
-  return { resume: continueReading(books), recent, rows, hiddenGroups: series.length - shown.length };
+export function homeRows(books: readonly BookSummary[], { maxRows = 10, perRow = 20 } = {}): HomeRows {
+  const largest = <T extends { books: BookSummary[] }>(xs: T[]) => [...xs].sort((a, b) => b.books.length - a.books.length);
+
+  const series = largest(groupBooks(books).filter((g) => g.series !== null && g.books.length >= 2));
+  const authors = largest([...authorIndex(books).entries()].map(([key, v]) => ({ key, ...v })).filter((a) => a.books.length >= 2));
+  const genres = largest([...genreIndex(books).entries()].map(([key, v]) => ({ key, ...v })).filter((g) => g.books.length >= 3));
+
+  // Les parts : moitié aux séries, puis aux auteurs, le reste aux genres ; ce qui n'est pas pris passe aux suivants.
+  const share = { series: Math.ceil(maxRows * 0.4), author: Math.ceil(maxRows * 0.3) };
+  const pickedSeries = series.slice(0, share.series);
+  const shownSeries = new Set(pickedSeries.map((g) => g.key));
+  const usefulAuthors = authors.filter((a) => {
+    const keys = new Set(a.books.map((b) => (b.seriesName ? `s:${fold(b.seriesName)}` : "-")));
+    return !(keys.size === 1 && shownSeries.has([...keys][0]));
+  });
+  const pickedAuthors = usefulAuthors.slice(0, share.author + Math.max(0, share.series - pickedSeries.length));
+  const pickedGenres = genres.slice(0, Math.max(0, maxRows - pickedSeries.length - pickedAuthors.length));
+  // Des genres en manque : leur place revient aux séries puis aux auteurs restants.
+  let spare = maxRows - pickedSeries.length - pickedAuthors.length - pickedGenres.length;
+  const moreSeries = series.slice(pickedSeries.length, pickedSeries.length + Math.max(0, spare));
+  spare -= moreSeries.length;
+  const moreAuthors = usefulAuthors.slice(pickedAuthors.length, pickedAuthors.length + Math.max(0, spare));
+
+  const rows: HomeRow[] = [
+    ...[...pickedSeries, ...moreSeries].map((g) => ({
+      key: g.key,
+      kind: "series" as const,
+      title: g.series as string,
+      filter: { param: "serie" as const, value: g.series as string },
+      total: g.books.length,
+      books: g.books.slice(0, perRow),
+    })),
+    ...[...pickedAuthors, ...moreAuthors].map((a) => ({
+      key: `a:${a.key}`,
+      kind: "author" as const,
+      title: a.label,
+      filter: { param: "auteur" as const, value: a.label },
+      total: a.books.length,
+      books: [...a.books].sort(byYear).slice(0, perRow),
+    })),
+    ...pickedGenres.map((g) => ({
+      key: `g:${g.key}`,
+      kind: "genre" as const,
+      title: g.label,
+      filter: { param: "genre" as const, value: g.label },
+      total: g.books.length,
+      books: [...g.books].sort(byNewest).slice(0, perRow),
+    })),
+  ];
+  const recent = [...books].filter((b) => b.addedAt !== null).sort(byNewest).slice(0, perRow);
+  return {
+    resume: continueReading(books),
+    recent,
+    rows,
+    hidden: series.length + usefulAuthors.length + genres.length - rows.length,
+  };
 }
 
 /** Sans accents ni casse : « Dérive » se trouve en tapant « derive ». */
@@ -84,21 +173,65 @@ export function foldText(text: string): string {
   return text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase();
 }
 
+export type BookSort = "series" | "title" | "author" | "recent" | "year";
+export const BOOK_SORTS: readonly BookSort[] = ["series", "title", "author", "recent", "year"];
+
+export interface BookFilters {
+  query?: string;
+  serie?: string | null;
+  auteur?: string | null;
+  genre?: string | null;
+}
+
 /**
- * La grille filtrée : par série (`serie`, dont `NO_SERIES`), puis par les mots tapés — chacun doit se
- * trouver dans le titre, la série ou un auteur.
+ * La grille filtrée : par série (`serie`, dont `NO_SERIES`), par auteur (dans n'importe quel ordre des
+ * mots), par genre, puis par les mots tapés — chacun doit se trouver dans le titre, la série ou un auteur.
  */
-export function filterBooks(books: readonly BookSummary[], query: string, serie: string | null = null): BookSummary[] {
+export function filterBooks(books: readonly BookSummary[], query: string | BookFilters, serie: string | null = null): BookSummary[] {
+  const f: BookFilters = typeof query === "string" ? { query, serie } : query;
   let out = books as BookSummary[];
-  if (serie === NO_SERIES) out = out.filter((b) => !b.seriesName);
-  else if (serie) {
-    const key = serie.toLocaleLowerCase();
-    out = out.filter((b) => b.seriesName?.toLocaleLowerCase() === key);
+  if (f.serie === NO_SERIES) out = out.filter((b) => !b.seriesName);
+  else if (f.serie) {
+    const key = fold(f.serie);
+    out = out.filter((b) => b.seriesName && fold(b.seriesName) === key);
   }
-  const words = foldText(query).split(/\s+/).filter(Boolean);
+  if (f.auteur) {
+    const key = nameKey(f.auteur);
+    out = out.filter((b) => b.authors.some((a) => nameKey(a) === key));
+  }
+  if (f.genre) {
+    const key = fold(f.genre);
+    out = out.filter((b) => b.genres.some((g) => fold(g) === key));
+  }
+  const words = foldText(f.query ?? "").split(/\s+/).filter(Boolean);
   if (words.length === 0) return out;
   return out.filter((b) => {
     const hay = foldText([b.name, b.seriesName ?? "", ...b.authors].join(" "));
     return words.every((w) => hay.includes(w));
   });
+}
+
+const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
+
+/** Un tri de la grille ; `series` garde l'ordre du serveur (séries, tomes), les autres donnent une grille à plat. */
+export function sortBooks(books: readonly BookSummary[], sort: BookSort): BookSummary[] {
+  const list = [...books];
+  switch (sort) {
+    case "series":
+      return list;
+    case "title":
+      return list.sort((a, b) => collator.compare(a.name, b.name));
+    case "author":
+      return list.sort((a, b) => collator.compare(lastName(a.authors[0] ?? "~"), lastName(b.authors[0] ?? "~")) || collator.compare(a.name, b.name));
+    case "recent":
+      return list.sort(byNewest);
+    case "year":
+      return list.sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || collator.compare(a.name, b.name));
+  }
+}
+
+/** Le mot sous lequel ranger un auteur : le dernier (« Guillaume Musso » → « Musso »). */
+function lastName(name: string): string {
+  const words = name.trim().split(/\s+/);
+  return words[words.length - 1] ?? name;
 }

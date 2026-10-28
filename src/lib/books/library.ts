@@ -5,6 +5,8 @@ import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { blockedTagsOf, carriesBlockedTag } from "@/lib/blockedTags";
 import type { SessionPayload } from "@/lib/auth";
 import type { BookDetail, BookSummary } from "@/lib/books/types";
+import { knownMeta, scheduleMetaReads, staleMeta, type EpubMeta } from "@/lib/books/epubMeta";
+import { bookGenres, decideSeries } from "@/lib/books/metadata";
 
 /**
  * Les livres de Jellyfin, vus par un compte (DECISIONS.md §127).
@@ -19,13 +21,13 @@ import type { BookDetail, BookSummary } from "@/lib/books/types";
  * lancement de l'application, et une liste gardée ici devrait suivre les droits de chaque compte.
  */
 
-const FIELDS = "Tags,Genres,People,Overview,SeriesName,ProductionYear,ImageTags,DateCreated";
+const FIELDS = "Tags,Genres,People,Overview,SeriesName,ProductionYear,ImageTags,DateCreated,Etag";
 /**
- * La grille n'a besoin ni des résumés ni des genres — le gros de la réponse, de loin : ils viennent avec
- * la fiche (`bookFor`). Une bibliothèque de plusieurs milliers d'EPUB ne voyage ainsi qu'en titres,
- * séries, auteurs et empreintes de couverture.
+ * La grille n'a pas besoin des résumés — le gros de la réponse, de loin : ils viennent avec la fiche
+ * (`bookFor`). Une bibliothèque de plusieurs milliers d'EPUB ne voyage ainsi qu'en titres, séries,
+ * auteurs, genres et empreintes (couverture, fichier).
  */
-const LIST_FIELDS = "Tags,People,SeriesName,ProductionYear,ImageTags,DateCreated";
+const LIST_FIELDS = "Tags,Genres,People,SeriesName,ProductionYear,ImageTags,DateCreated,Etag";
 /** Les livres sont demandés par pages : une réponse par millier, jamais toute la bibliothèque d'un bloc. */
 export const LIST_PAGE = 1000;
 /** Une borne de sécurité : au-delà, la grille s'arrête plutôt que de demander sans fin. */
@@ -45,6 +47,7 @@ interface JellyfinBookItem {
   People?: { Name?: string; Type?: string }[] | null;
   Overview?: string | null;
   DateCreated?: string | null;
+  Etag?: string | null;
   UserData?: { Played?: boolean } | null;
 }
 
@@ -87,19 +90,47 @@ export function plainOverview(raw: string | null | undefined): string {
     .trim();
 }
 
-function summaryOf(item: JellyfinBookItem): BookSummary {
+/**
+ * Un livre pour l'écran. La série : celle de l'EPUB quand on l'a lue (`epubMeta.ts`), sinon celle de
+ * Jellyfin si elle n'est pas un nom de dossier (`decideSeries`) ; le tome suit la même source. Les
+ * genres : ceux de Jellyfin et les sujets de l'EPUB, regroupés (`bookGenres`).
+ */
+function summaryOf(item: JellyfinBookItem, meta: EpubMeta | null = null, libraryFolders: readonly string[] = []): BookSummary {
+  const authors = (item.People ?? []).filter((p) => p.Type === "Author" && p.Name).map((p) => p.Name as string);
+  const seriesName = decideSeries({ opfSeries: meta?.series, jellyfinSeries: item.SeriesName, authors, libraryFolders });
+  const fromOpf = !!meta?.series && seriesName === meta.series.trim();
+  const index = fromOpf ? (meta?.seriesIndex ?? null) : seriesName && typeof item.IndexNumber === "number" ? item.IndexNumber : null;
   return {
     id: item.Id.toLowerCase(),
     name: item.Name?.trim() || "—",
     coverTag: item.ImageTags?.Primary ?? null,
-    seriesName: item.SeriesName?.trim() || null,
-    index: typeof item.IndexNumber === "number" ? item.IndexNumber : null,
+    seriesName,
+    index,
     year: typeof item.ProductionYear === "number" ? item.ProductionYear : null,
-    authors: (item.People ?? []).filter((p) => p.Type === "Author" && p.Name).map((p) => p.Name as string),
+    authors,
+    genres: bookGenres([...(item.Genres ?? []), ...(meta?.subjects ?? [])]),
     played: item.UserData?.Played === true,
     addedAt: item.DateCreated ? Date.parse(item.DateCreated) || null : null,
     progress: null,
   };
+}
+
+/**
+ * Les noms des dossiers racines des bibliothèques de Jellyfin : un livre posé directement dedans reçoit
+ * leur nom pour série. Lus avec la clé du serveur, gardés dix minutes ; une panne rend la dernière liste.
+ */
+let foldersCache: { at: number; names: string[] } | null = null;
+async function libraryFolderNames(now = Date.now()): Promise<string[]> {
+  if (foldersCache && now - foldersCache.at < 10 * 60_000) return foldersCache.names;
+  try {
+    const { body } = await getJson<{ Name?: string; Locations?: string[] }[]>(`${config.jellyfin.url}/Library/VirtualFolders`);
+    if (!Array.isArray(body)) return foldersCache?.names ?? [];
+    const names = body.flatMap((f) => [f.Name ?? "", ...(f.Locations ?? []).map((l) => l.split(/[\\/]/).filter(Boolean).pop() ?? "")]).filter(Boolean);
+    foldersCache = { at: now, names };
+    return names;
+  } catch {
+    return foldersCache?.names ?? [];
+  }
 }
 
 /**
@@ -147,9 +178,12 @@ export async function listBooks(caller: BookCaller): Promise<BookSummary[]> {
     if (page.length < LIST_PAGE || items.length >= total) break;
   }
   const blocked = caller.jfId ? await blockedTagsOf(caller.jfId) : [];
-  return withoutFolderSeries(
-    items.filter((item) => item.Type === "Book" && typeof item.Id === "string" && !carriesBlockedTag(item.Tags, blocked)).map(summaryOf)
-  ).sort(compareBooks);
+  const books = items.filter((item) => item.Type === "Book" && typeof item.Id === "string" && !carriesBlockedTag(item.Tags, blocked));
+  const known = knownMeta();
+  // Les OPF pas encore lus partent en arrière-plan ; la grille de cette fois-ci fait sans.
+  scheduleMetaReads(staleMeta(books.map((b) => ({ id: b.Id.toLowerCase(), etag: b.Etag ?? null })), known));
+  const folders = await libraryFolderNames();
+  return withoutFolderSeries(books.map((item) => summaryOf(item, known.get(item.Id.toLowerCase())?.meta ?? null, folders))).sort(compareBooks);
 }
 
 /**
@@ -181,5 +215,6 @@ export async function bookFor(caller: BookCaller, id: string): Promise<BookDetai
   const item = caller.jfId ? body : body.Items?.[0];
   if (!item || item.Type !== "Book" || typeof item.Id !== "string") return null;
   if (caller.jfId && carriesBlockedTag(item.Tags, await blockedTagsOf(caller.jfId))) return null;
-  return { ...summaryOf(item), overview: plainOverview(item.Overview), genres: (item.Genres ?? []).filter(Boolean) };
+  const meta = knownMeta().get(item.Id.toLowerCase())?.meta ?? null;
+  return { ...summaryOf(item, meta, await libraryFolderNames()), overview: plainOverview(item.Overview) };
 }

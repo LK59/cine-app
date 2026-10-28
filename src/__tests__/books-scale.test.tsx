@@ -7,10 +7,17 @@ import { render, cleanup, act } from "@testing-library/react";
  * La liste est demandée à Jellyfin par pages et sans résumés, l'accueil reste borné, la grille ne
  * dessine qu'un morceau à la fois et la recherche trouve par titre, série ou auteur.
  */
+// Une base à soi (le cache des OPF y est lu) : celle du dossier commun est ouverte par d'autres fichiers.
+await vi.hoisted(async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "laterna-books-scale-"));
+});
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
 vi.mock("@/lib/config", () => ({ config: { jellyfin: { url: "http://jf", apiKey: "k" } } }));
 const upstream = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/jellyfinBreaker", () => ({ jellyfinFetch: (...a: unknown[]) => upstream(...a) }));
+vi.mock("@/lib/jellyfinBreaker", () => ({ jellyfinFetch: (...a: unknown[]) => upstream(...a), passJellyfinFetch: (...a: unknown[]) => upstream(...a) }));
 vi.mock("@/lib/blockedTags", () => ({ blockedTagsOf: async () => [], carriesBlockedTag: () => false }));
 
 import { LIST_PAGE, listBooks } from "@/lib/books/library";
@@ -38,6 +45,7 @@ function library(): BookSummary[] {
       index: inSeries ? (i % 10) + 1 : null,
       year: 2000 + (i % 25),
       authors: [i % 7 === 0 ? "Élodie Durand" : `Auteur ${i % 50}`],
+      genres: [["Policier", "Thriller", "Jeunesse", "Science-fiction", "Fantasy"][i % 5]],
       addedAt: 1_700_000_000_000 + i * 1000,
       played: false,
       progress: i === 3321 ? { cfi: "epubcfi(/6/2)", fraction: 0.3, updatedAt: 5, finished: false } : null,
@@ -47,7 +55,7 @@ function library(): BookSummary[] {
 }
 
 describe("la liste demandée à Jellyfin", () => {
-  it("par pages, sans résumé ni genres, jusqu'au total annoncé", async () => {
+  it("par pages, sans résumé, jusqu'au total annoncé", async () => {
     const total = 2500;
     upstream.mockImplementation(async (url: string) => {
       const params = new URL(url).searchParams;
@@ -58,32 +66,34 @@ describe("la liste demandée à Jellyfin", () => {
     });
     const books = await listBooks({ role: "user", jfId: "a".repeat(32) });
     expect(books).toHaveLength(total);
-    expect(upstream).toHaveBeenCalledTimes(Math.ceil(total / LIST_PAGE));
-    const urls = upstream.mock.calls.map(([u]) => new URL(u as string));
+    const urls = upstream.mock.calls.map(([u]) => new URL(u as string)).filter((u) => u.searchParams.has("StartIndex"));
+    expect(urls).toHaveLength(Math.ceil(total / LIST_PAGE));
     expect(urls.map((u) => u.searchParams.get("StartIndex"))).toEqual(["0", "1000", "2000"]);
     for (const u of urls) {
-      expect(u.searchParams.get("Fields")).not.toMatch(/Overview|Genres/);
+      expect(u.searchParams.get("Fields")).not.toMatch(/Overview/);
       expect(u.searchParams.get("Limit")).toBe(String(LIST_PAGE));
     }
   });
 });
 
 describe("l'accueil d'une grande bibliothèque", () => {
-  it("reste borné : quelques rangées de vingt livres, les autres séries à un « Tout voir »", () => {
+  it("reste borné : au plus dix rangées de séries, d'auteurs et de genres, vingt livres chacune", () => {
     const books = library();
-    const { rows, recent, hiddenGroups, resume } = homeRows(books);
-    expect(rows.length).toBeLessThanOrEqual(9);
+    const { rows, recent, hidden, resume } = homeRows(books);
+    expect(rows.length).toBeLessThanOrEqual(10);
     for (const row of rows) expect(row.books.length).toBeLessThanOrEqual(20);
-    // Les livres sans série : une rangée bornée comme les autres, jamais une rangée de mille.
-    const others = rows.find((r) => r.series === null);
-    expect(others?.total).toBe(1000);
-    expect(others?.books).toHaveLength(20);
-    expect(hiddenGroups).toBe(400 - 8);
+    // Des trois sortes, dans l'ordre : séries, auteurs, genres.
+    const kinds = rows.map((r) => r.kind);
+    expect(kinds).toEqual([...kinds].sort((a, b) => ["series", "author", "genre"].indexOf(a) - ["series", "author", "genre"].indexOf(b)));
+    expect(new Set(kinds)).toEqual(new Set(["series", "author", "genre"]));
+    // Les livres sans série ne forment jamais une rangée de mille.
+    expect(rows.every((r) => r.title !== "books.others")).toBe(true);
+    expect(hidden).toBeGreaterThan(400);
     expect(recent).toHaveLength(20);
     expect(recent[0].addedAt).toBe(Math.max(...books.map((b) => b.addedAt ?? 0)));
-    // La série où l'on lit passe en tête.
-    expect(rows[0].series).toBe("Série 332");
     expect(resume.map((b) => b.id)).toEqual([hex(3322)]);
+    // Chaque rangée sait où mène son « Tout voir ».
+    for (const r of rows) expect(["serie", "auteur", "genre"]).toContain(r.filter.param);
   });
 });
 

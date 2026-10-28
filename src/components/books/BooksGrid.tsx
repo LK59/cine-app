@@ -17,11 +17,12 @@ export const GRID_CHUNK = 90;
  * approche de l'écran (`IntersectionObserver`, 1 500 px d'avance). Les couvertures se chargent à
  * l'approche (`loading="lazy"`). Remontée à chaque recherche (`key` chez l'appelant) : on repart du haut.
  */
-export function BooksGrid({ books, onOpen }: { books: readonly BookSummary[]; onOpen: (book: BookSummary, el: HTMLElement) => void }) {
+export function BooksGrid({ books, onOpen, flat = false }: { books: readonly BookSummary[]; onOpen: (book: BookSummary, el: HTMLElement) => void; flat?: boolean }) {
   const t = useT();
   const [limit, setLimit] = useState(GRID_CHUNK);
   const sentinel = useRef<HTMLDivElement>(null);
-  const groups = useMemo(() => groupBooks(books), [books]);
+  // Triée autrement que par séries (`flat`), la grille est une seule section, dans l'ordre reçu.
+  const groups = useMemo(() => (flat ? [{ key: "all", series: null, books: [...books] }] : groupBooks(books)), [books, flat]);
   const more = books.length > limit;
 
   useEffect(() => {
@@ -50,10 +51,12 @@ export function BooksGrid({ books, onOpen }: { books: readonly BookSummary[]; on
     <>
       {shown.map(({ group, books: part }) => (
         <section key={group.key} className="mb-10">
-          <div className="mb-3 flex items-baseline gap-3 px-4 sm:px-8">
-            <h2 className="font-display text-lg font-semibold">{group.series ?? t("books.others")}</h2>
-            {group.series && <span className="text-sm text-subtle">{group.books.length === 1 ? t("books.volumesOne") : t("books.volumes", { n: group.books.length })}</span>}
-          </div>
+          {!flat && (
+            <div className="mb-3 flex items-baseline gap-3 px-4 sm:px-8">
+              <h2 className="font-display text-lg font-semibold">{group.series ?? t("books.others")}</h2>
+              {group.series && <span className="text-sm text-subtle">{group.books.length === 1 ? t("books.volumesOne") : t("books.volumes", { n: group.books.length })}</span>}
+            </div>
+          )}
           <div className="grid grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] gap-x-3 gap-y-6 px-4 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] sm:gap-x-5 sm:px-8 lg:grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))]">
             {part.map((book) => (
               <BookCard key={book.id} book={book} onOpen={onOpen} />
@@ -86,7 +89,11 @@ export function BookCard({ book, onOpen }: { book: BookSummary; onOpen: (book: B
         )}
       </div>
       <p className="mt-2 line-clamp-2 text-sm font-medium leading-snug">{displayTitle(book)}</p>
-      {book.index !== null && book.seriesName && <p className="mt-0.5 text-xs text-subtle">{t("books.tome", { n: book.index })}</p>}
+      {book.index !== null && book.seriesName ? (
+        <p className="mt-0.5 text-xs text-subtle">{t("books.tome", { n: book.index })}</p>
+      ) : book.authors[0] ? (
+        <p className="mt-0.5 truncate text-xs text-subtle">{book.authors[0]}</p>
+      ) : null}
     </button>
   );
 }

@@ -3833,7 +3833,6 @@
     "browseAll": "All books",
     "seeAll": "See all",
     "recent": "Recently added",
-    "moreSeries": "{n} more series in All books",
     "searchPlaceholder": "Title, series, author",
     "clearFilter": "Clear filter",
     "noMatch": "No book matches.",
@@ -3872,6 +3871,18 @@
         "addedTitle": "Your requested book has arrived",
         "refusedTitle": "Book request declined"
       }
-    }
+    },
+    "moreRows": "And {n} more in All books",
+    "sortBy": "Sort",
+    "sorts": {
+      "series": "By series",
+      "title": "By title",
+      "author": "By author",
+      "recent": "Recently added",
+      "year": "By year"
+    },
+    "filterSeries": "Series",
+    "filterAuthor": "Author",
+    "filterGenre": "Genre"
   }
 }
