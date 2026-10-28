@@ -768,6 +768,8 @@ function migrate(db: Database.Database): void {
       blocked    INTEGER NOT NULL DEFAULT 0
     );
   `);
+  // La version des règles de correspondance qui a fait la ligne (§127) : plus ancienne, elle est réévaluée.
+  try { db.exec("ALTER TABLE book_enrich ADD COLUMN rules INTEGER NOT NULL DEFAULT 1"); } catch { /* already exists */ }
   // Les signets d'un compte dans un livre (§127) : une page par ligne, bornés par livre (`bookmarks.ts`).
   db.exec(`
     CREATE TABLE IF NOT EXISTS book_bookmarks (

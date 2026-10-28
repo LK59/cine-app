@@ -32,7 +32,7 @@ const logged = vi.hoisted(() => [] as string[]);
 vi.mock("@/lib/logger", () => ({ logError: (_s: string, e: unknown) => logged.push(String((e as Error)?.message ?? e)) }));
 vi.mock("@/lib/taskLog", () => ({ taskLog: (...a: unknown[]) => logged.push(JSON.stringify(a)) }));
 
-import { __testing, acceptable, bestCandidate, enrichOf, recordOf, redact, startGoogleEnrich, titlesMatch, type EnrichTarget, type GoogleVolume } from "@/lib/books/googleBooks";
+import { __testing, acceptable, bestCandidate, enrichOf, googleGenres, recordOf, redact, signature, startGoogleEnrich, titleVariants, titlesMatch, type EnrichTarget, type GoogleVolume } from "@/lib/books/googleBooks";
 import { summaryOf } from "@/lib/books/library";
 import { getDb } from "@/lib/db";
 
@@ -187,5 +187,65 @@ describe("l'administration", () => {
     // Réglables dans l'application, coupée par défaut ; la clé est un secret (jamais renvoyée au navigateur).
     expect(SETTINGS_BY_KEY.get("BOOKS_GOOGLE_ENRICH")).toMatchObject({ kind: "boolean", fallback: "false", inApp: true });
     expect(SETTINGS_BY_KEY.get("GOOGLE_BOOKS_API_KEY")).toMatchObject({ kind: "secret", need: "optional", inApp: true });
+  });
+});
+
+describe("règles v2 : les cas réels de la première passe en production", () => {
+  const pullman = target({
+    name: "La Tour des anges",
+    authors: ["Philip Pullman"],
+    series: "À la croisée des mondes",
+    index: 2,
+    siblings: ["Les Royaumes du Nord", "Le Miroir d'ambre"],
+  });
+  it("« La Tour des anges » ne prend ni l'intégrale, ni le tome 1, ni un résumé du tome 1", () => {
+    const lyra = "Pourquoi la jeune Lyra, élevée dans l'atmosphère confinée du prestigieux Jordan College, est-elle l'objet de tant d'attentions ? Les Royaumes du Nord l'attendent.";
+    expect(acceptable(pullman, vol("À la croisée des mondes", ["Philip Pullman"], { subtitle: "Les Royaumes du Nord ; La Tour des anges ; Le Miroir d'ambre" }))).toBe(false);
+    expect(acceptable(pullman, vol("À la croisée des mondes - L'intégrale", ["Philip Pullman"]))).toBe(false);
+    expect(acceptable(pullman, vol("La Tour des anges", ["Philip Pullman"], { subtitle: "À la croisée des mondes, tome 1" }))).toBe(false);
+    expect(acceptable(pullman, vol("La Tour des anges", ["Philip Pullman"], { description: lyra }))).toBe(false);
+    expect(acceptable(pullman, vol("La Tour des anges : la croisée des mondes 1-3", ["Philip Pullman"]))).toBe(false);
+    // Le bon volume passe.
+    expect(acceptable(pullman, vol("La Tour des anges", ["Philip Pullman"], { subtitle: "À la croisée des mondes, tome 2", description: "Will, douze ans, fuit son monde et découvre une ville étrange." }))).toBe(true);
+  });
+  it("plus de « l'un contient l'autre » : un sous-titre après « : » seulement, et jamais un autre titre de l'auteur", () => {
+    expect(titlesMatch("La Tour des anges", "La Tour des anges : roman")).toBe(true);
+    expect(titlesMatch("La Tour des anges", "La Tour des anges et autres récits")).toBe(false);
+    expect(titlesMatch("Les Royaumes du Nord", "Les Royaumes du Nord - La Tour des anges", ["La Tour des anges"])).toBe(false);
+  });
+  it("les titres préfixés par un code ou un numéro de série sont nettoyés", () => {
+    expect(titleVariants("APE18 5 L'or maudit du pharaon")[0]).toBe("L'or maudit du pharaon");
+    expect(titleVariants("Alex Cross 03 Jack et Jill")).toEqual(expect.arrayContaining(["Jack et Jill"]));
+    expect(titleVariants("L'accro du shopping 3 dit oui")[0]).toBe("L'accro du shopping dit oui");
+    expect(titleVariants("Accro du shopping 5 a un bébé")[0]).toBe("Accro du shopping a un bébé");
+    expect(titleVariants("Dans les bois")).toEqual(["Dans les bois"]);
+    // Une variante nettoyée trouve « L'accro du shopping a un bébé » (article de tête ignoré).
+    const t = target({ name: "Accro du shopping 5 a un bébé", authors: ["Sophie Kinsella"] });
+    expect(acceptable(t, vol("L'accro du shopping a un bébé", ["Sophie Kinsella"]), false, titleVariants(t.name))).toBe(true);
+  });
+  it("les catégories anglaises sont ramenées au vocabulaire, le reste laissé", () => {
+    expect(googleGenres(["Arctic regions"])).toEqual([]);
+    expect(googleGenres(["Fiction / General"])).toEqual([]);
+    expect(googleGenres(["Fiction / Mystery & Detective / General"])).toEqual(["Policier"]);
+    expect(googleGenres(["Juvenile Fiction / Fantasy & Magic"])).toEqual(["Fantasy", "Jeunesse"]);
+    expect(googleGenres(["Fiction / Science Fiction / Space Opera", "Fiction / Thrillers / Suspense"])).toEqual(["Science-fiction", "Thriller"]);
+    expect(recordOf(vol("X", ["Y"], { categories: ["Arctic regions"] })).genres).toEqual([]);
+  });
+  it("les lignes faites par les règles v1 sont réévaluées, les remplies d'abord", async () => {
+    const insert = getDb().prepare("INSERT INTO book_enrich (item_id, sig, rules, status, overview, genres, checked_at) VALUES (?, ?, 1, ?, ?, '[\"Arctic regions\"]', 1)");
+    insert.run("c".repeat(32), signature({ ...pullman, name: "Autre" }), "nomatch", null);
+    insert.run("a".repeat(32), signature(pullman), "filled", "Pourquoi la jeune Lyra…");
+    // Une ligne v1 ne montre plus un genre hors du vocabulaire.
+    expect(enrichOf("a".repeat(32))?.genres).toEqual([]);
+    const order: string[] = [];
+    google((u) => {
+      order.push(u.searchParams.get("q") ?? "");
+      return new Response(JSON.stringify({ items: [] }));
+    });
+    __testing.state().targets = async () => [{ ...pullman, id: "c".repeat(32), name: "Autre" }, pullman];
+    await __testing.run("essai");
+    expect(order[0]).toContain("La Tour des anges");
+    // Sans correspondance avec les nouvelles règles : le mauvais résumé est effacé.
+    expect(enrichOf("a".repeat(32))).toMatchObject({ status: "nomatch", overview: null });
   });
 });

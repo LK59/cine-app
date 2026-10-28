@@ -55,6 +55,11 @@ export interface EnrichTarget {
   name: string;
   authors: string[];
   isbn: string | null;
+  /** La série et le tome que l'EPUB déclare, quand il les déclare : un volume d'un autre tome est refusé. */
+  series?: string | null;
+  index?: number | null;
+  /** Les autres titres du même auteur dans la bibliothèque : un résumé qui parle d'eux et pas de nous est refusé. */
+  siblings?: string[];
   /** Ce qui manque à ce livre — l'ordre de la file en dépend. */
   needs: { overview: boolean; cover: boolean; genres: boolean; year: boolean };
 }
@@ -67,25 +72,40 @@ export interface EnrichRecord {
   coverUrl: string | null;
 }
 
+/**
+ * La version des règles de correspondance. Une ligne faite par des règles plus anciennes est réévaluée —
+ * les remplies d'abord : la v1 a donné à « La Tour des anges » (Pullman, tome 2) le résumé du tome 1,
+ * par un volume qu'elle avait cru le même (10.9.0, 28/10/2026).
+ */
+export const RULES_VERSION = 2;
+
 // ─── La correspondance ────────────────────────────────────────────────────────────────────────
 
 /** Une analyse, un résumé, un guide : jamais le livre lui-même. */
 const STUDY = /\b(analyse|analysis|resume|resumes|summary|fiche de lecture|fiches de lecture|etude de l oeuvre|etude|commentaire|commentaires|guide|explication|explications|lecture analytique|profil d une oeuvre|questionnaire|dossier pedagogique|bac francais)\b/;
 const STUDY_PUBLISHERS = /lepetitlitteraire|le petit litteraire|encyclopaedia universalis|50minutes|50 minutes|primento|bac de francais|ilovelire|les fiches de lecture/;
+/** Une intégrale, un coffret, plusieurs tomes en un : jamais le volume qu'on cherche. */
+const OMNIBUS = /\b(integrale|integral|trilogie|tetralogie|saga complete|coffret|omnibus|box set|boxed set|edition complete|collection complete|oeuvres completes|(?:tomes?|volumes?|vol|livres?|books?) \d{1,2} (?:(?:a|et|to|and) )?\d{1,2})\b|\b\d{1,2} (?:(?:a|et) )?\d{1,2}$/;
 
 const tokens = (s: string) => s.split(" ").filter((t) => t.length > 0);
 
-/** Les titres sont-ils ceux d'un même livre ? Égaux, ou l'un contient l'autre à 80 % des mots au moins (article ignoré). */
-export function titlesMatch(a: string, b: string): boolean {
-  const x = titleKey(a);
-  const y = titleKey(b);
+/**
+ * Les titres sont-ils ceux d'un même livre ? Égaux (sans article de tête, ponctuation ni accents) ; ou le
+ * leur est le nôtre suivi d'un sous-titre après « : » ou « - » — et ce sous-titre n'est pas le titre d'un
+ * autre livre du même auteur. Plus de « l'un contient l'autre » : c'est par là qu'un volume de la série
+ * entière était passé pour le tome 2 (v1).
+ */
+export function titlesMatch(ours: string, theirs: string, siblings: readonly string[] = []): boolean {
+  const x = titleKey(ours);
+  const y = titleKey(theirs);
   if (!x || !y) return false;
   if (x === y) return true;
-  if (!(x.includes(y) || y.includes(x))) return false;
-  const tx = new Set(tokens(x));
-  const ty = new Set(tokens(y));
-  const common = [...tx].filter((t) => ty.has(t)).length;
-  return common / Math.max(tx.size, ty.size) >= 0.8;
+  const cut = /\s(?::|-|–|—)\s|:\s/.exec(theirs);
+  if (!cut) return false;
+  const head = titleKey(theirs.slice(0, cut.index));
+  const tail = titleKey(theirs.slice(cut.index + cut[0].length));
+  if (head !== x) return false;
+  return !siblings.some((t) => titleKey(t) && tail.includes(titleKey(t)));
 }
 
 /** Un des auteurs est-il le nôtre ? Au moins le nom de famille (le dernier mot, dans un ordre ou l'autre). */
@@ -105,12 +125,26 @@ export function authorsMatch(ours: readonly string[], theirs: readonly string[] 
   return false;
 }
 
-/** Un candidat retenu : le même titre, un auteur commun, et pas une analyse du livre. */
-export function acceptable(target: Pick<EnrichTarget, "name" | "authors">, v: GoogleVolume, viaIsbn = false): boolean {
+/** Le numéro de tome qu'un titre ou un sous-titre annonce (« tome 1 », « T2 », « vol. 3 », « livre 1 », « #4 »), ou `null`. */
+export function tomeOf(text: string): number | null {
+  const m = /\b(?:tome|t|vol|volume|livre|book|episode|partie)\s*(\d{1,3})\b|#\s*(\d{1,3})\b/.exec(fold(text).replace(/(\d)\s*(er|e|eme|nd)\b/g, "$1"));
+  const n = m ? Number(m[1] ?? m[2]) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Un candidat retenu : le même titre, un auteur commun, et rien de ce qui trahit un autre livre — une
+ * analyse, une intégrale, un autre tome, un résumé qui parle d'un autre titre de l'auteur et pas du nôtre.
+ */
+export function acceptable(target: Pick<EnrichTarget, "name" | "authors" | "index" | "siblings">, v: GoogleVolume, viaIsbn = false, titles: readonly string[] = [target.name]): boolean {
   const info = v.volumeInfo;
   if (!info?.title) return false;
   const text = fold(`${info.title} ${info.subtitle ?? ""}`);
   if (STUDY.test(text) || STUDY_PUBLISHERS.test(fold(info.publisher ?? ""))) return false;
+  if (OMNIBUS.test(text)) return false;
+  // Plusieurs titres de l'auteur dans le titre ou le sous-titre : un recueil.
+  const siblings = target.siblings ?? [];
+  if (siblings.filter((t) => titleKey(t).length >= 6 && text.includes(titleKey(t))).length >= 1 && !titles.some((t) => titleKey(t) === titleKey(info.title as string))) return false;
   // « L'inconnu de la forêt de Harlan Coben » : un titre qui porte le nom de son auteur est un ouvrage sur le livre.
   for (const author of target.authors) {
     const key = fold(author);
@@ -118,17 +152,90 @@ export function acceptable(target: Pick<EnrichTarget, "name" | "authors">, v: Go
     const reversed = tokens(key).reverse().join(" ");
     if (reversed.length >= 5 && fold(info.title).includes(reversed)) return false;
   }
+  // Un autre tome : le nôtre est connu (OPF), le leur est écrit — ils diffèrent.
+  const theirTome = tomeOf(`${info.title} ${info.subtitle ?? ""}`);
+  if (target.index != null && theirTome !== null && theirTome !== Math.round(target.index)) return false;
+  // Un résumé qui nomme un autre titre de l'auteur sans nommer le nôtre parle d'un autre livre.
+  const about = fold(info.description ?? "");
+  if (about) {
+    const ours = titles.map(titleKey).filter((t) => t.length >= 4);
+    const mentionsOurs = ours.some((t) => about.includes(t));
+    if (!mentionsOurs && siblings.some((t) => titleKey(t).length >= 8 && about.includes(titleKey(t)))) return false;
+  }
   // Par l'ISBN, le titre peut différer (sous-titre, édition) : l'auteur suffit, s'il est donné.
   if (viaIsbn) return target.authors.length === 0 || authorsMatch(target.authors, info.authors);
-  return titlesMatch(target.name, info.title) && authorsMatch(target.authors, info.authors);
+  return titles.some((t) => titlesMatch(t, info.title as string, siblings)) && authorsMatch(target.authors, info.authors);
 }
 
 /** Le meilleur des candidats retenus : en français d'abord, avec un résumé ensuite. */
-export function bestCandidate(target: EnrichTarget, items: readonly GoogleVolume[], viaIsbn = false): GoogleVolume | null {
-  const ok = items.filter((v) => acceptable(target, v, viaIsbn));
+export function bestCandidate(target: EnrichTarget, items: readonly GoogleVolume[], viaIsbn = false, titles: readonly string[] = [target.name]): GoogleVolume | null {
+  const ok = items.filter((v) => acceptable(target, v, viaIsbn, titles));
   if (ok.length === 0) return null;
   const score = (v: GoogleVolume) => (v.volumeInfo?.language === "fr" ? 2 : 0) + (v.volumeInfo?.description ? 1 : 0);
   return [...ok].sort((a, b) => score(b) - score(a))[0];
+}
+
+/**
+ * Les titres à essayer pour un livre : le sien, puis débarrassé de ce que les noms de fichiers et les
+ * lots y ajoutent — un code de série en tête (« APE18 »), un numéro (« 03 », « 5 », « T3 », « Tome 3 : »),
+ * le nom de la série en tête (« Alex Cross 03 Jack et Jill » → « Jack et Jill »). Sans doublons, le plus
+ * probable d'abord.
+ */
+export function titleVariants(name: string, series: string | null = null): string[] {
+  const out: string[] = [];
+  const add = (t: string) => {
+    const clean = t.replace(/\s+/g, " ").replace(/^[\s:.,–—-]+|[\s:.,–—-]+$/g, "").trim();
+    if (clean.length >= 2 && !out.some((x) => titleKey(x) === titleKey(clean))) out.push(clean);
+  };
+  const original = name.trim();
+  // Les codes et numéros en tête, ou isolés dans les premiers mots.
+  const words = original.split(/\s+/);
+  const isCode = (w: string) => /^[A-Za-z]{1,6}\d{1,4}$/.test(w) || /^\d{1,3}$/.test(w) || /^T\d{1,3}$/i.test(w);
+  let k = 0;
+  while (k < words.length && (isCode(words[k]) || /^(tome|t\.?)$/i.test(words[k]))) k += 1;
+  const lead = words.slice(k).join(" ").replace(/^[:.\-–—]\s*/, "");
+  // Un numéro au milieu des premiers mots (« L'accro du shopping 3 dit oui ») : retiré, et ce qui suit.
+  const mid = /^(.{3,60}?)\s+(?:(?:tome|t\.?)\s*)?\d{1,3}\s*[:.\-–—]?\s+(.+)$/i.exec(lead);
+  if (mid) add(`${mid[1]} ${mid[2]}`);
+  if (lead !== original) add(lead);
+  if (series) {
+    const s = titleKey(series);
+    const rest = titleKey(lead).startsWith(s) ? lead.slice(lead.toLowerCase().indexOf(" ", series.length - 1)).trim() : "";
+    if (s && rest) add(rest.replace(/^(?:(?:tome|t\.?)\s*)?\d{1,3}\s*[:.\-–—]?\s*/i, ""));
+  }
+  if (mid) add(mid[2]);
+  add(original);
+  return out;
+}
+
+/**
+ * Les genres de Google, ramenés au vocabulaire des genres de l'application par une table explicite — ses
+ * catégories sont souvent celles des libraires anglo-saxons (« Fiction / Mystery & Detective / General »,
+ * « Arctic regions »). Ce qui n'y figure pas est laissé.
+ */
+const GENRE_MAP: [RegExp, string][] = [
+  [/\b(mystery|detective|crime|policier|policiers|polar|roman policier)\b/, "Policier"],
+  [/\b(thriller|thrillers|suspense)\b/, "Thriller"],
+  [/\b(science fiction|science-fiction|sf)\b/, "Science-fiction"],
+  [/\b(fantasy|fantasie)\b/, "Fantasy"],
+  [/\b(fantastique)\b/, "Fantastique"],
+  [/\b(romance|romantic|sentimental)\b/, "Romance"],
+  [/\b(historical|historique|history)\b/, "Historique"],
+  [/\b(juvenile|young adult|jeunesse)\b/, "Jeunesse"],
+  [/\b(horror|horreur|epouvante)\b/, "Horreur"],
+  [/\b(biography|autobiography|biographie)\b/, "Biographie"],
+  [/\b(action|adventure|aventure|aventures)\b/, "Aventure"],
+  [/\b(humor|humour|humorous)\b/, "Humour"],
+  [/\b(espionage|espionnage)\b/, "Espionnage"],
+  [/\b(war|military|guerre)\b/, "Guerre"],
+];
+export function googleGenres(categories: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const raw of categories) {
+    const key = fold(raw);
+    for (const [re, label] of GENRE_MAP) if (re.test(key) && !out.includes(label)) out.push(label);
+  }
+  return out.slice(0, 6);
 }
 
 /** Ce qu'un volume apporte. L'image : la plus grande proposée, en https, agrandie quand Google le permet. */
@@ -145,7 +252,7 @@ export function recordOf(v: GoogleVolume): EnrichRecord {
   return {
     status: "filled",
     overview: overview && overview.length > 40 ? overview.slice(0, 6000) : null,
-    genres: bookGenres(info.categories ?? []),
+    genres: bookGenres(googleGenres(info.categories ?? [])),
     year: Number.isFinite(year) && year > 1000 && year < 3000 ? year : null,
     coverUrl: cover,
   };
@@ -168,6 +275,7 @@ export function redact(text: string, key = config.books?.googleKey ?? ""): strin
 interface Row {
   item_id: string;
   sig: string;
+  rules: number | null;
   status: "filled" | "nomatch";
   overview: string | null;
   genres: string;
@@ -176,10 +284,13 @@ interface Row {
 }
 
 /** Ce qui est connu de chaque livre essayé. */
-export function knownEnrich(): Map<string, EnrichRecord & { sig: string }> {
+/** Les genres que l'application connaît : une ligne d'avant la table des genres (v1) n'en montre pas d'autres. */
+const KNOWN_GENRES = new Set(GENRE_MAP.map(([, label]) => label));
+
+export function knownEnrich(): Map<string, EnrichRecord & { sig: string; rules: number }> {
   let rows: Row[] = [];
   try {
-    rows = getDb().prepare("SELECT item_id, sig, status, overview, genres, year, cover_url FROM book_enrich").all() as Row[];
+    rows = getDb().prepare("SELECT item_id, sig, rules, status, overview, genres, year, cover_url FROM book_enrich").all() as Row[];
   } catch {
     return new Map();
   }
@@ -188,11 +299,11 @@ export function knownEnrich(): Map<string, EnrichRecord & { sig: string }> {
       let genres: string[] = [];
       try {
         const g = JSON.parse(r.genres) as unknown;
-        genres = Array.isArray(g) ? g.filter((x): x is string => typeof x === "string") : [];
+        genres = Array.isArray(g) ? g.filter((x): x is string => typeof x === "string" && KNOWN_GENRES.has(x)) : [];
       } catch {
         /* rien */
       }
-      return [r.item_id, { sig: r.sig, status: r.status, overview: r.overview, genres, year: r.year, coverUrl: r.cover_url }];
+      return [r.item_id, { sig: r.sig, rules: r.rules ?? 1, status: r.status, overview: r.overview, genres, year: r.year, coverUrl: r.cover_url }];
     })
   );
 }
@@ -204,11 +315,11 @@ export function enrichOf(id: string): EnrichRecord | null {
 function save(id: string, sig: string, rec: EnrichRecord, googleId: string | null): void {
   getDb()
     .prepare(
-      `INSERT INTO book_enrich (item_id, sig, status, overview, genres, year, cover_url, google_id, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(item_id) DO UPDATE SET sig = excluded.sig, status = excluded.status, overview = excluded.overview, genres = excluded.genres,
+      `INSERT INTO book_enrich (item_id, sig, rules, status, overview, genres, year, cover_url, google_id, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(item_id) DO UPDATE SET sig = excluded.sig, rules = excluded.rules, status = excluded.status, overview = excluded.overview, genres = excluded.genres,
          year = excluded.year, cover_url = excluded.cover_url, google_id = excluded.google_id, checked_at = excluded.checked_at`
     )
-    .run(id, sig, rec.status, rec.overview, JSON.stringify(rec.genres), rec.year, rec.coverUrl, googleId, Date.now());
+    .run(id, sig, RULES_VERSION, rec.status, rec.overview, JSON.stringify(rec.genres), rec.year, rec.coverUrl, googleId, Date.now());
 }
 
 /** Le jour du compteur : minuit heure du serveur (le fuseau du foyer). */
@@ -264,21 +375,33 @@ async function search(q: string, lang: string | null): Promise<GoogleVolume[]> {
 }
 
 /** Un livre : l'ISBN d'abord, sinon titre et auteur — en français d'abord, puis sans restriction. Deux requêtes au plus. */
+/**
+ * Un livre, en deux requêtes au plus : l'ISBN d'abord quand Jellyfin le connaît ; puis le titre et l'auteur
+ * — le titre nettoyé de ce qu'un nom de fichier y ajoute (`titleVariants`) : la variante la plus probable
+ * en français, puis la suivante (ou la même sans restriction de langue). Un candidat est comparé à toutes
+ * les variantes du titre.
+ */
 async function lookup(target: EnrichTarget): Promise<GoogleVolume | null> {
+  const titles = titleVariants(target.name, target.series ?? null);
   const isbn = target.isbn?.replace(/[^0-9Xx]/g, "");
+  let budget = 2;
   if (isbn && (isbn.length === 10 || isbn.length === 13)) {
-    const hit = bestCandidate(target, await search(`isbn:${isbn}`, null), true);
+    budget -= 1;
+    const hit = bestCandidate(target, await search(`isbn:${isbn}`, null), true, titles);
     if (hit) return hit;
     await pause(GAP_MS);
   }
   // Le nom de famille : le dernier mot de l'auteur, remis dans l'ordre courant par `bookAuthors` (« Coben »).
   const surname = tokens(fold(target.authors[0] ?? "")).at(-1) ?? "";
-  const q = `intitle:${target.name.trim()}${surname ? ` inauthor:${surname}` : ""}`;
-  const fr = bestCandidate(target, await search(q, "fr"));
-  if (fr) return fr;
-  if (isbn) return null; // déjà deux requêtes
-  await pause(GAP_MS);
-  return bestCandidate(target, await search(q, null));
+  const query = (title: string) => `intitle:${title}${surname ? ` inauthor:${surname}` : ""}`;
+  const tries: [string, string | null][] = [[query(titles[0]), "fr"]];
+  if (budget > 1) tries.push(titles[1] ? [query(titles[1]), null] : [query(titles[0]), null]);
+  for (let i = 0; i < tries.length; i++) {
+    if (i > 0) await pause(GAP_MS);
+    const hit = bestCandidate(target, await search(tries[i][0], tries[i][1]), false, titles);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 // ─── La file ───────────────────────────────────────────────────────────────────────────────
@@ -336,7 +459,19 @@ async function run(why: string): Promise<void> {
   let stop: string | null = null;
   try {
     const known = knownEnrich();
-    const queue = ordered(await s.targets()).filter((t) => known.get(t.id)?.sig !== signature(t));
+    // À essayer : jamais essayés, métadonnées changées, ou essayés par des règles plus anciennes — ceux
+    // que d'anciennes règles ont remplis d'abord (un mauvais résumé se corrige avant tout le reste).
+    const due = (t: EnrichTarget) => {
+      const k = known.get(t.id);
+      return !k || k.sig !== signature(t) || k.rules < RULES_VERSION;
+    };
+    const stale = (t: EnrichTarget) => {
+      const k = known.get(t.id);
+      return k && k.rules < RULES_VERSION && k.status === "filled" ? 0 : 1;
+    };
+    const all = await s.targets();
+    const recheck = all.filter((t) => stale(t) === 0 && due(t));
+    const queue = [...recheck, ...ordered(all).filter((t) => due(t) && stale(t) === 1)];
     for (const target of queue) {
       if (!config.books?.googleEnrich) {
         stop = "option coupée";

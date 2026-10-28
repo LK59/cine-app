@@ -7660,6 +7660,17 @@ un titre, un auteur ni une couverture existante (les corrections faites à la ma
   nom de l'auteur (« L'inconnu de la forêt de Harlan Coben »), ni un éditeur d'études (lePetitLitteraire,
   Encyclopaedia Universalis…). Le français d'abord, un résumé ensuite. Sinon : « sans correspondance »,
   rien n'est rempli.
+- *Règles v2 (28/10/2026)*, après la première passe en production : « La Tour des anges » (Pullman, tome 2)
+  avait reçu le résumé du tome 1 et le genre « Arctic regions ». Désormais : titre égal, ou le nôtre suivi
+  d'un sous-titre après « : » / « - » qui n'est pas un autre titre de l'auteur (fini « l'un contient
+  l'autre ») ; jamais une intégrale, un coffret, une trilogie, « tomes 1 à 3 », un recueil qui cite d'autres
+  titres de l'auteur ; jamais un autre tome que celui de l'EPUB (`tomeOf`) ; jamais un résumé qui nomme un
+  autre titre de l'auteur sans nommer le nôtre. Les genres passent par une table explicite vers le
+  vocabulaire de l'application (`googleGenres`) — le reste est laissé. Les titres préfixés par un nom de
+  fichier sont nettoyés avant la recherche (`titleVariants` : « APE18 5 L'or maudit du pharaon », « Alex
+  Cross 03 Jack et Jill », « L'accro du shopping 3 dit oui »), toujours deux requêtes au plus. Chaque
+  ligne porte la version des règles (`rules`) : celles d'une version plus ancienne sont réévaluées, les
+  remplies d'abord, dans le même quota — un mauvais résumé est remplacé ou effacé.
 - *Le quota* : un livre à la fois, 2 s au moins entre deux requêtes, 900 requêtes par jour au plus
   (compteur en base, `book_enrich_quota`, remis à zéro à **minuit heure du serveur**, pas à minuit heure du
   Pacifique comme le compte Google — d'où la marge sous les 1 000). Chaque livre n'est essayé qu'une fois,

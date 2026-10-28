@@ -8,7 +8,7 @@ import { enrichVersion, knownEnrich, type EnrichTarget } from "@/lib/books/googl
 
 import { allows, rightsKey, rightsOf, type BookRights } from "@/lib/books/rights";
 import { authorIndex, filterBooks, foldText, genreIndex, groupBooks, homeRows, preferredCopy, sortBooks, type BookSort, type HomeRows } from "@/lib/books/grouping";
-import { duplicateKey } from "@/lib/books/metadata";
+import { duplicateKey, nameKey, titleKey } from "@/lib/books/metadata";
 import type { BookProgress, BookSummary } from "@/lib/books/types";
 
 /** Les métadonnées qui refont l'index : celles de l'EPUB, et celles de Google Books (option). */
@@ -299,11 +299,23 @@ export async function warmSharedIndex(): Promise<number> {
 export async function enrichTargets(): Promise<EnrichTarget[]> {
   const base = await sharedBase();
   const noOverview = await booksWithoutOverview();
+  // Les titres de chaque auteur : un résumé qui parle d'un autre de ses livres et pas du nôtre est refusé.
+  const byAuthor = new Map<string, string[]>();
+  for (const e of base.entries) {
+    const key = nameKey(e.book.authors[0] ?? "");
+    if (!key) continue;
+    const list = byAuthor.get(key) ?? [];
+    list.push(e.book.name);
+    byAuthor.set(key, list);
+  }
   return base.entries.map((e) => ({
     id: e.book.id,
     name: e.book.name,
     authors: e.book.authors,
     isbn: e.isbn,
+    series: e.book.seriesName,
+    index: e.book.index,
+    siblings: (byAuthor.get(nameKey(e.book.authors[0] ?? "")) ?? []).filter((t) => titleKey(t) !== titleKey(e.book.name)).slice(0, 80),
     needs: {
       overview: noOverview.has(e.book.id),
       // La couverture seulement quand ni Jellyfin ni l'EPUB n'en ont — et l'EPUB déjà lu.
