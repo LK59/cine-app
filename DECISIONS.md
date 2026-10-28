@@ -7455,3 +7455,92 @@ qu'il ne doit jamais voir (« static routing », Safari 27) ne vaut que si son r
 attentes réellement mesurées.
 
 **Décidé le 28/10/2026.**
+
+## 127. Les livres : une option, coupée par défaut, sans rien toucher du cinéma
+
+**Règle.** `BOOKS_ENABLED` (Configuration → Lecture, ou `.env` ; coupée par défaut, relue à chaque
+accès comme tout réglage, §48) ajoute une troisième catégorie à la bascule de l'accueil — Films,
+Séries, Livres — et une page `/livres` : les EPUB que Jellyfin range comme livres
+(`IncludeItemTypes=Book`), une fiche par livre, et un lecteur dans l'application. Coupée, rien
+n'existe : toutes les routes `/api/books/*` répondent 404 sans lire de session ni appeler Jellyfin,
+la page répond 404, la bascule rend ses deux boutons d'avant et l'accueil ne charge aucun code des
+livres. Ni catalogue, ni cache gardé sur l'appareil, ni lecteur vidéo, ni recherche ne sont touchés :
+tout vit dans `src/lib/books/`, `src/components/books/`, `src/app/api/books/` et `src/app/livres/`.
+
+**Une catégorie, pas un onglet.** `tab` reste `movies | series` : une vingtaine d'endroits le lisent
+(adresse, onglets gardés, bannière, disposition, top 10, grille complète…). Les livres sont un mode
+posé par-dessus, un champ facultatif de l'adresse du cinéma (`books`, `#livres=1`, absent sinon) :
+Retour et rechargement le gardent, et une installation sans livres ne voit jamais la clé. Les deux
+écrans n'importent que `BooksMode` (le mode, le rond « Tous les livres ») et ne chargent l'accueil des
+livres (`BooksHome`, morceau à part) que dans la catégorie : la grille des films et séries reste
+montée dessous, inerte, sa bannière à l'arrêt (`gridOnTop` au bureau, `heroCovered` au téléphone).
+Option coupée, `useBooksMode` ignore le champ et le retire de l'adresse. « Tous les livres » mène à
+la grille complète (`/livres`) ; un livre touché depuis l'accueil ouvre sa fiche là-bas
+(`/livres?retour=1#livre=…`), et la fermer ramène à l'accueil. Ces passages sont de vrais chargements
+de page : le lecteur ne vit que sous la politique de sécurité de `/livres` (plus bas). Les livres ne s'appuient sur aucun champ propre à un greffon de Jellyfin : titre,
+auteur (`People` de type `Author`), série et tome (`SeriesName`, `IndexNumber`), année, résumé et
+couverture sont ce que Jellyfin lit lui-même dans l'EPUB ; un tome, un auteur ou une couverture
+absents sont prévus.
+
+**Qui voit quoi.** Tout compte du foyer, `user` compris. La grille et chaque livre sont demandés à
+Jellyfin **sous l'identité du compte** (`/Users/{jfId}/Items`, droits et contrôle parental de
+Jellyfin), puis filtrés par ses tags bloqués (§54, `carriesBlockedTag`). Le fichier est relayé
+depuis `/Items/{id}/Download` avec la clé du serveur, seulement après avoir vérifié que l'élément est
+un `Book` visible de ce compte ; rien de la réponse de Jellyfin n'est recopié hormis la taille, et la
+réponse est `private`. Une session de lien de partage (§112) n'atteint rien : aucune règle de
+`shareGate` ne nomme les livres, la page la renvoie à la fiche de son lien, et les routes la refusent
+une seconde fois. Seule écriture ouverte aux comptes : `POST /api/books/{id}/progress`, sa propre
+position.
+
+**La position.** Table `book_progress` (compte de l'application, livre, CFI EPUB, fraction, date,
+fin) : Jellyfin ne sait garder que des durées. Envoyée au fil de la lecture (regroupée, 1,5 s), à la
+fermeture et à `pagehide` (`sendBeacon`). Le livre fini la première fois, il est noté « lu » chez
+Jellyfin pour ce compte (`markPlayed`) ; un échec de cet appel ne perd pas la position.
+
+**Le lecteur.** foliate-js, copié à un commit précis (`src/lib/books/foliate/`, README et
+`UPSTREAM`) : pas de paquet npm, et seuls les fichiers de l'EPUB. Pages en colonnes (deux côte à côte
+sur un écran large et couché, si l'on veut) ou défilement continu ; toucher à gauche ou à droite,
+glisser, molette, flèches ; Échap ou Retour referment (fragment d'adresse, `bookRoute.ts`). Réglages
+gardés par appareil (`localStorage`, chaque accès gardé) : changement de page (glisser, fondu, page
+3D, aucun, défilement — fondu par défaut si le système demande moins de mouvement), taille, police
+(celle du livre, Literata, Georgia, Outfit, système ; Literata et Outfit servies depuis
+`public/books/fonts`), interligne, marges, justification, thème (auto, clair, sépia, sombre, noir),
+lumière et chaleur (deux voiles sur la page). Changer un réglage garde la position : foliate-js
+repagine autour de l'endroit lu.
+
+**La sécurité : trois barrières, chacune suffisante pour l'essentiel.** Un EPUB est du XHTML venu
+d'ailleurs.
+1. *Le nettoyage* (`sanitize.ts`), branché sur le chargeur de foliate-js avant que le moindre chapitre
+   devienne un document : plus de script, plus d'attribut `on…`, plus de cadre, d'objet ni de
+   rafraîchissement, plus aucune adresse qui sorte du livre (seuls restent les `blob:` de cette
+   origine, les ancres, les chemins relatifs et les images `data:`), dans le XHTML, le SVG et le CSS.
+   Les ressources de type script ne sont même pas extraites.
+2. *Le cadre sans `allow-scripts`*. foliate-js ajoute `allow-scripts` à cause d'un défaut de WebKit
+   (218086 : sans lui, les écouteurs posés depuis la page sur le document du cadre ne se déclenchent
+   pas) ; ce correctif local le retire, et le lecteur prend tous les gestes sur une couche de sa
+   propre page — un lien touché est retrouvé par `elementFromPoint` sur le document du chapitre, que
+   `allow-same-origin` permet de lire. `allow-same-origin` sans `allow-scripts` ne donne rien au
+   livre : c'est la page qui lit le cadre, jamais l'inverse, puisque rien ne s'exécute dedans. Un lien
+   externe ne s'ouvre jamais.
+3. *La politique de la page* : `/livres` a sa propre règle dans `next.config.js`, qui remplace la
+   générale pour cette adresse seulement (la générale garde `frame-src` YouTube seul) : `frame-src
+   blob:`, et images, polices, feuilles de style et connexions limitées à l'application et à `blob:`.
+   Un document `blob:` hérite de la politique de la page qui l'a créé : c'est aussi celle des
+   chapitres. On n'arrive sur `/livres` que par un vrai chargement (lien ordinaire, pas de navigation
+   de Next) : sinon le document — et la politique — de l'accueil resteraient en place.
+
+**Tests.** `books-routes.test.ts` (option coupée, droits, tags bloqués, relais, position, « lu »),
+`books-isolation.test.ts` (défaut coupé, page absente, configuration publique, liens de partage,
+rien des livres dans l'accueil, politique générale intacte), `books-sanitize.test.ts` (chapitre
+piégé, `fixtures/books/piege.xhtml`), `books-reader.test.ts` (réglages, grille, adresse, correctifs
+de foliate-js, titre affiché), `books-toggle.test.tsx` (deux boutons option coupée, troisième et mode
+Livres allumée, adresse). En vrais navigateurs : `tools/livres-securite/` (Chromium, Firefox, WebKit ; un EPUB
+piégé et un espion qui compte ce qui l'atteint).
+
+**Voulu.** Ni page Nouveautés, ni entrée au registre des corrections : une option qu'une
+installation allume elle-même. Pas de sélection de texte ni de surlignage (la couche de gestes les
+empêche ; une version future pourrait les faire depuis la page). Les livres à mise en page fixe
+passent par le même lecteur sans réglages de texte utiles. Seul l'EPUB : les autres formats de
+foliate-js ne sont pas copiés.
+
+**Décidé le 28/10/2026.**

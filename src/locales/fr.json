@@ -3192,6 +3192,7 @@
       "PLAYER_SERVER_FALLBACK": "Relais vers Jellyfin pour les fichiers que le navigateur ne lit pas",
       "OFFLINE_DOWNLOADS": "Téléchargement hors ligne dans l'application (bêta)",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Téléchargement hors ligne ouvert à tous les comptes (sinon administrateurs seulement)",
+      "BOOKS_ENABLED": "Livres : les EPUB de Jellyfin et un lecteur dans l'application (bêta)",
       "OFFLINE_SERVER_QUOTA_GB": "Place maximale des téléchargements sur le serveur (Go)",
       "PLAYER_AUTO_FRAME": "Agrandir l'image au-dessus des bandes noires",
       "CAST_RECEIVER_APP_ID": "Récepteur Chromecast (identifiant d'application, vide = celui de Google)",
@@ -3747,5 +3748,86 @@
     "revoked": "Jeton révoqué : ce Stream Deck ne voit plus rien.",
     "limit": "Dix jetons au plus : révoquez-en un d'abord.",
     "error": "Impossible pour le moment. Réessayez."
+  },
+  "books": {
+    "nav": "Livres",
+    "back": "Retour à l'accueil",
+    "title": "Livres",
+    "count": "{n} livres",
+    "countOne": "1 livre",
+    "error": "La bibliothèque des livres ne répond pas pour le moment.",
+    "retry": "Réessayer",
+    "empty": "Aucun livre pour l'instant.",
+    "continue": "Continuer la lecture",
+    "seriesTome": "{series} · Tome {n}",
+    "percentRead": "{pct} % lu",
+    "others": "Autres livres",
+    "volumes": "{n} tomes",
+    "volumesOne": "1 tome",
+    "finishedBadge": "Lu",
+    "tome": "Tome {n}",
+    "close": "Fermer",
+    "resume": "Reprendre · {pct} %",
+    "readAgain": "Relire",
+    "read": "Lire",
+    "finished": "Lu jusqu'au bout",
+    "detailError": "Les détails de ce livre n'ont pas pu être chargés.",
+    "less": "Moins",
+    "more": "Plus",
+    "reader": {
+      "lessThanMinute": "Moins d'une minute dans ce chapitre",
+      "minutesLeft": "{n} min restantes dans ce chapitre",
+      "minuteLeft": "1 min restante dans ce chapitre",
+      "openError": "Ce livre n'a pas pu être ouvert.",
+      "contents": "Table des matières",
+      "settings": "Réglages de lecture",
+      "position": "Position dans le livre",
+      "percent": "{pct} %",
+      "noContents": "Ce livre n'a pas de table des matières.",
+      "theme": "Thème",
+      "themes": {
+        "auto": "Auto",
+        "light": "Clair",
+        "sepia": "Sépia",
+        "dark": "Sombre",
+        "black": "Noir"
+      },
+      "fontSize": "Taille du texte",
+      "font": "Police",
+      "fonts": {
+        "book": "Du livre",
+        "literata": "Literata",
+        "georgia": "Georgia",
+        "outfit": "Outfit",
+        "system": "Système"
+      },
+      "lineHeight": "Interligne",
+      "margins": "Marges",
+      "marginSizes": {
+        "small": "Étroites",
+        "medium": "Moyennes",
+        "large": "Larges"
+      },
+      "turn": "Changement de page",
+      "turns": {
+        "slide": "Glisser",
+        "fade": "Fondu",
+        "flip": "Page 3D",
+        "none": "Aucun",
+        "scroll": "Défilement"
+      },
+      "justify": "Texte justifié",
+      "brightness": "Luminosité",
+      "warmth": "Lumière chaude",
+      "layout": "Pages",
+      "layouts": {
+        "auto": "Auto",
+        "single": "Une page",
+        "double": "Deux pages"
+      },
+      "zoomHint": "Pincez ou Ctrl/⌘ + molette pour la taille du texte"
+    },
+    "browseAll": "Tous les livres",
+    "seeAll": "Tout voir"
   }
 }

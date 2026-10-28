@@ -3192,6 +3192,7 @@
       "PLAYER_SERVER_FALLBACK": "Hand files the browser can't play over to Jellyfin",
       "OFFLINE_DOWNLOADS": "Offline downloads in the app (beta)",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Offline downloads open to every account (otherwise administrators only)",
+      "BOOKS_ENABLED": "Books: Jellyfin's EPUB files and an in-app reader (beta)",
       "OFFLINE_SERVER_QUOTA_GB": "Maximum server space for downloads (GB)",
       "PLAYER_AUTO_FRAME": "Enlarge the picture over black bars",
       "CAST_RECEIVER_APP_ID": "Chromecast receiver (application ID, empty = Google's)",
@@ -3747,5 +3748,86 @@
     "revoked": "Token revoked: this Stream Deck no longer sees anything.",
     "limit": "Ten tokens at most: revoke one first.",
     "error": "Not possible right now. Try again."
+  },
+  "books": {
+    "nav": "Books",
+    "back": "Back to home",
+    "title": "Books",
+    "count": "{n} books",
+    "countOne": "1 book",
+    "error": "The book library is not responding right now.",
+    "retry": "Try again",
+    "empty": "No books yet.",
+    "continue": "Continue reading",
+    "seriesTome": "{series} · Book {n}",
+    "percentRead": "{pct}% read",
+    "others": "Other books",
+    "volumes": "{n} books",
+    "volumesOne": "1 book",
+    "finishedBadge": "Read",
+    "tome": "Book {n}",
+    "close": "Close",
+    "resume": "Resume · {pct}%",
+    "readAgain": "Read again",
+    "read": "Read",
+    "finished": "Finished",
+    "detailError": "This book's details could not be loaded.",
+    "less": "Less",
+    "more": "More",
+    "reader": {
+      "lessThanMinute": "Less than a minute left in this chapter",
+      "minutesLeft": "{n} min left in this chapter",
+      "minuteLeft": "1 min left in this chapter",
+      "openError": "This book could not be opened.",
+      "contents": "Contents",
+      "settings": "Reading settings",
+      "position": "Position in the book",
+      "percent": "{pct}%",
+      "noContents": "This book has no table of contents.",
+      "theme": "Theme",
+      "themes": {
+        "auto": "Auto",
+        "light": "Light",
+        "sepia": "Sepia",
+        "dark": "Dark",
+        "black": "Black"
+      },
+      "fontSize": "Text size",
+      "font": "Font",
+      "fonts": {
+        "book": "Original",
+        "literata": "Literata",
+        "georgia": "Georgia",
+        "outfit": "Outfit",
+        "system": "System"
+      },
+      "lineHeight": "Line spacing",
+      "margins": "Margins",
+      "marginSizes": {
+        "small": "Narrow",
+        "medium": "Medium",
+        "large": "Wide"
+      },
+      "turn": "Page turn",
+      "turns": {
+        "slide": "Slide",
+        "fade": "Fade",
+        "flip": "3D page",
+        "none": "None",
+        "scroll": "Scroll"
+      },
+      "justify": "Justified text",
+      "brightness": "Brightness",
+      "warmth": "Warm light",
+      "layout": "Pages",
+      "layouts": {
+        "auto": "Auto",
+        "single": "One page",
+        "double": "Two pages"
+      },
+      "zoomHint": "Pinch or Ctrl/⌘ + scroll for text size"
+    },
+    "browseAll": "All books",
+    "seeAll": "See all"
   }
 }

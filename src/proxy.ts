@@ -149,6 +149,9 @@ const GUEST_ALLOWED_PATTERNS: RegExp[] = [
   /^POST \/api\/subtitle-gen\/jobs\/[0-9a-f]{32}\/(poll|resume)$/,
   // Le compte retire sa propre demande ; la route ne touche qu'aux siennes.
   /^DELETE \/api\/offline\/jobs\/[0-9a-f]{32}$/,
+  // Sa propre position dans un livre (option « Livres », DECISIONS.md §127) : la route n'écrit que
+  // sous le compte de la session, et répond 404 tant que l'option est coupée.
+  /^POST \/api\/books\/[0-9a-f]{32}\/progress$/,
 ];
 
 function isAllowedForEveryone(method: string, pathname: string): boolean {

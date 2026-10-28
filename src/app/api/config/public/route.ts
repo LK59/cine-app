@@ -28,6 +28,9 @@ export async function GET(req: NextRequest) {
     // Le téléchargement hors ligne (bêta) : le bouton des fiches et le gestionnaire n'existent qu'avec lui.
     // Et pour ce compte-ci : administrateurs seulement tant que l'installation ne l'a pas ouvert à tous.
     offlineDownloads: config.player.offlineDownloads && (config.player.offlineDownloadsForEveryone || session?.role === "admin"),
+    // L'option « Livres » (DECISIONS.md §127) : l'entrée de l'accueil n'existe qu'avec elle. Pour tout
+    // compte du foyer ; jamais pour un lien de partage, qui ne sort pas de son titre (§112).
+    booksEnabled: config.books?.enabled === true && session?.role !== "share",
     // La disposition de l'accueil, réglée par l'exploitant (DECISIONS.md §52).
     homeContinueHero: config.home.continueHero,
     // La nouvelle adresse du passage (DECISIONS.md §119), nom d'hôte seul : la page de connexion y

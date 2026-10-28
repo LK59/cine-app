@@ -1,6 +1,7 @@
 "use client";
 
 import { OfflineDownloadsButton } from "@/components/offline/OfflineDownloadsButton";
+import { BooksBrowseAllButton, BooksHomeLazy, useBooksMode } from "@/components/books/BooksMode";
 import { SlowLaunchDownloads } from "@/components/offline/SlowLaunchDownloads";
 import { onRealHover } from "@/lib/pointerHover";
 import { HeroBackdrop } from "@/components/cinema/HeroBackdrop";
@@ -361,6 +362,8 @@ export function CinemaClient() {
   // leaving Cinema Mode — see lib/cinemaRoute for why the hash and not query params.
   const route = useCinemaRoute();
   const mediaType = route.tab;
+  // Les livres (option, §127) : un mode posé sur l'accueil, sans rien changer à `tab`.
+  const books = useBooksMode(route.books);
 
   // Paused while the detail overlay owns Up/Down/Escape for its own vertical menu (see the
   // hook's own doc comment) AND while the player is open. The player closes CinemaMovieDetail
@@ -380,7 +383,7 @@ export function CinemaClient() {
   // grille est-elle dessus ? » : ouvert, il la recouvre, et elle ne devait plus écouter les
   // flèches ni Entrée derrière lui (23/09/2026).
   const [resumeMenu, setResumeMenu] = useState<{ id: string; title: string; poster: string | null } | null>(null);
-  const gridOnTop = gridIsTop(route, playback.mode) && resumeMenu === null;
+  const gridOnTop = gridIsTop(route, playback.mode) && resumeMenu === null && !books.active;
   // "replace": the tab is a filter on the screen you're already on, not a screen of its own —
   // Back from a title should return to the grid, not undo a tab switch.
   /**
@@ -1243,7 +1246,9 @@ export function CinemaClient() {
           gauche, avec le reste de la navigation. Deux boutons flottants de moins par-dessus les
           affiches, et un seul endroit où l'on va chercher où aller. */}
 
-      <CinemaModeToggle mode={mediaType} onChange={setMediaType} />
+      <CinemaModeToggle mode={mediaType} onChange={setMediaType} books={books.toggle} />
+      {/* La catégorie Livres recouvre la bannière et les rangées (DECISIONS.md §127). */}
+      {books.active && <BooksHomeLazy variant="desktop" />}
       {/* Jellyfin en panne : sous le sélecteur, centré comme lui (§92). */}
       <div className="pointer-events-none fixed z-10 -translate-x-1/2" style={{ top: "calc(max(1rem, env(safe-area-inset-top)) + 3rem)", left: "calc(50% + var(--player-rail, 0px) / 2)" }}>
         <CatalogueOutageBanner outage={outage} />
@@ -1255,7 +1260,7 @@ export function CinemaClient() {
         {/* Le gestionnaire des téléchargements hors ligne (bêta), à côté de « Tous les… » (Louis, 19/10/2026). */}
         <CinemaShortcutsGuide />
         <OfflineDownloadsButton />
-        <CinemaBrowseAllButton mediaType={mediaType} compact />
+        {books.active ? <BooksBrowseAllButton /> : <CinemaBrowseAllButton mediaType={mediaType} compact />}
       </div>
 
       {/* La recherche est rendue par la coquille du lecteur (PlayerShell), pas ici : c'est le
@@ -1297,7 +1302,7 @@ export function CinemaClient() {
         // Tout ce qui recouvre la grille la rend inerte : ni Tab, ni un clic égaré, ni un focus
         // programmé ne peuvent plus atteindre une affiche cachée. Pas sous le lecteur plein écran
         // — voir `gridIsTop` : la carte qui l'a lancé doit garder le focus pour le retour.
-        inert={coversGrid(route)}
+        inert={coversGrid(route) || books.active}
         /**
          * La molette agit partout, même sur l'aperçu du haut.
          *

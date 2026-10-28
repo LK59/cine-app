@@ -166,6 +166,44 @@ const nextConfig = {
         ],
       },
       {
+        // La page des livres (option, DECISIONS.md §127), et elle seule : la politique générale n'y est
+        // pas élargie, elle y est remplacée (la dernière règle qui pose un en-tête l'emporte). Le lecteur
+        // affiche chaque chapitre dans un cadre `blob:` (foliate-js) — d'où `frame-src blob:` — et un
+        // document `blob:` hérite de la politique de la page qui l'a créé : c'est donc aussi celle des
+        // livres. Elle ferme ce qu'un EPUB pourrait vouloir charger : aucune image, police, feuille de
+        // style ni connexion hors de l'application (les ressources du livre sont des `blob:`), aucun
+        // script venu d'un `blob:`. Les scripts du livre ne s'exécutent de toute façon pas : le cadre n'a
+        // pas `allow-scripts` (`src/lib/books/foliate/README.md`), et le contenu est nettoyé avant
+        // (`src/lib/books/sanitize.ts`). `'unsafe-inline'` reste pour les scripts de Next, comme ailleurs.
+        // On n'y arrive que par un vrai chargement de page (`BooksNavButton`, un lien ordinaire) : une
+        // navigation côté client garderait le document de l'accueil, et sa politique.
+        source: "/livres",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline'",
+              "style-src 'self' 'unsafe-inline' blob:",
+              "font-src 'self' blob: data:",
+              "img-src 'self' blob: data:",
+              "media-src 'self' blob:",
+              "connect-src 'self'",
+              "frame-src blob:",
+              "child-src blob:",
+              "worker-src 'self'",
+              "object-src 'none'",
+              // `'self'` et non `'none'` : les chapitres `blob:` héritent aussi de cette directive, et
+              // WebKit l'applique à leur propre cadre — avec `'none'`, il refusait d'afficher le moindre
+              // chapitre (vérifié le 28/10/2026). La page reste inencadrable par tout autre site.
+              "frame-ancestors 'self'",
+              "base-uri 'self'",
+              "form-action 'none'",
+            ].join("; "),
+          },
+        ],
+      },
+      {
         // Les captures jointes à un signalement, et surtout leurs originaux, envoyés par n'importe
         // quel compte et ouverts dans la session de l'administrateur. Placée après la règle
         // générale, cette politique la remplace (la dernière règle qui pose un en-tête l'emporte) :

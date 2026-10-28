@@ -3192,6 +3192,7 @@
       "PLAYER_SERVER_FALLBACK": "Pasar a Jellyfin los archivos que el navegador no reproduce",
       "OFFLINE_DOWNLOADS": "Descargas sin conexión en la app (beta)",
       "OFFLINE_DOWNLOADS_FOR_EVERYONE": "Descargas sin conexión abiertas a todas las cuentas (si no, solo administradores)",
+      "BOOKS_ENABLED": "Libros: los EPUB de Jellyfin y un lector en la app (beta)",
       "OFFLINE_SERVER_QUOTA_GB": "Espacio máximo de las descargas en el servidor (GB)",
       "PLAYER_AUTO_FRAME": "Ampliar la imagen sobre las bandas negras",
       "CAST_RECEIVER_APP_ID": "Receptor de Chromecast (ID de aplicación, vacío = el de Google)",
@@ -3747,5 +3748,86 @@
     "revoked": "Token revocado: este Stream Deck ya no ve nada.",
     "limit": "Diez tokens como máximo: revoca uno primero.",
     "error": "No es posible ahora. Inténtalo de nuevo."
+  },
+  "books": {
+    "nav": "Libros",
+    "back": "Volver al inicio",
+    "title": "Libros",
+    "count": "{n} libros",
+    "countOne": "1 libro",
+    "error": "La biblioteca de libros no responde en este momento.",
+    "retry": "Reintentar",
+    "empty": "Todavía no hay libros.",
+    "continue": "Seguir leyendo",
+    "seriesTome": "{series} · Tomo {n}",
+    "percentRead": "{pct} % leído",
+    "others": "Otros libros",
+    "volumes": "{n} tomos",
+    "volumesOne": "1 tomo",
+    "finishedBadge": "Leído",
+    "tome": "Tomo {n}",
+    "close": "Cerrar",
+    "resume": "Continuar · {pct} %",
+    "readAgain": "Volver a leer",
+    "read": "Leer",
+    "finished": "Leído hasta el final",
+    "detailError": "No se pudieron cargar los detalles de este libro.",
+    "less": "Menos",
+    "more": "Más",
+    "reader": {
+      "lessThanMinute": "Menos de un minuto en este capítulo",
+      "minutesLeft": "Quedan {n} min en este capítulo",
+      "minuteLeft": "Queda 1 min en este capítulo",
+      "openError": "No se pudo abrir este libro.",
+      "contents": "Índice",
+      "settings": "Ajustes de lectura",
+      "position": "Posición en el libro",
+      "percent": "{pct} %",
+      "noContents": "Este libro no tiene índice.",
+      "theme": "Tema",
+      "themes": {
+        "auto": "Auto",
+        "light": "Claro",
+        "sepia": "Sepia",
+        "dark": "Oscuro",
+        "black": "Negro"
+      },
+      "fontSize": "Tamaño del texto",
+      "font": "Fuente",
+      "fonts": {
+        "book": "Del libro",
+        "literata": "Literata",
+        "georgia": "Georgia",
+        "outfit": "Outfit",
+        "system": "Sistema"
+      },
+      "lineHeight": "Interlineado",
+      "margins": "Márgenes",
+      "marginSizes": {
+        "small": "Estrechos",
+        "medium": "Medios",
+        "large": "Anchos"
+      },
+      "turn": "Cambio de página",
+      "turns": {
+        "slide": "Deslizar",
+        "fade": "Fundido",
+        "flip": "Página 3D",
+        "none": "Ninguno",
+        "scroll": "Desplazamiento"
+      },
+      "justify": "Texto justificado",
+      "brightness": "Brillo",
+      "warmth": "Luz cálida",
+      "layout": "Páginas",
+      "layouts": {
+        "auto": "Auto",
+        "single": "Una página",
+        "double": "Dos páginas"
+      },
+      "zoomHint": "Pellizque o Ctrl/⌘ + rueda para el tamaño del texto"
+    },
+    "browseAll": "Todos los libros",
+    "seeAll": "Ver todo"
   }
 }

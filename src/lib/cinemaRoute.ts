@@ -70,6 +70,13 @@ export interface CinemaRoute {
    * l'onglet allumé reste l'Accueil, et en ouvrir un le referme.
    */
   downloads: boolean;
+  /**
+   * Les livres (option, DECISIONS.md §127), troisième catégorie de la bascule : un mode posé sur
+   * l'accueil (`#livres=1`), pas un onglet — `tab` garde films ou séries, que tout le cinéma lit.
+   * Facultatif et absent par défaut : l'adresse et la route d'une installation sans livres ne
+   * changent pas. Ignoré quand l'option est coupée (`useBooksMode`).
+   */
+  books?: boolean;
 }
 
 /**
@@ -313,6 +320,8 @@ function parse(hash: string): CinemaRoute {
     report: params.get("signalement"),
     news: params.get("nouveautes"),
     downloads: params.get("telechargements") === "1",
+    // Seulement quand il est là : une route sans livres reste exactement ce qu'elle était.
+    ...(params.get("livres") === "1" ? { books: true } : {}),
   };
 }
 
@@ -336,6 +345,7 @@ function serialize(route: CinemaRoute): string {
   if (route.report) params.set("signalement", route.report);
   if (route.news) params.set("nouveautes", route.news);
   if (route.downloads) params.set("telechargements", "1");
+  if (route.books) params.set("livres", "1");
   const query = params.toString();
   return query ? `#${query}` : "";
 }

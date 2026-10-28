@@ -291,6 +291,19 @@ stay in the foreground while a download arrives. Open to every account by defaul
 installation with `OFFLINE_DOWNLOADS`, administrators only with `OFFLINE_DOWNLOADS_FOR_EVERYONE=false` — see
 [docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md) (in French).
 
+## Books (optional)
+
+Off by default. With `BOOKS_ENABLED` turned on (Configuration → Playback, or `.env`), the home
+screen's Movies / Series switch gains a third category, « Books »: the EPUB files of Jellyfin's book
+libraries, grouped by series in volume order, with a « Continue reading » row, a full grid
+(`/livres`), a sheet per book and an in-app reader — pages or continuous scroll, a choice of page-turn animation, text size, font,
+line spacing, margins, justification, light / sepia / dark / black themes and dimming, all kept per
+device. Each account sees the books its Jellyfin account may see, minus its blocked tags; reading
+positions are kept by Laterna, and a finished book is marked played in Jellyfin. Share links never
+reach books. Book content is untrusted: it is sanitized, shown in frames that cannot run scripts, and
+under a page-specific Content Security Policy — see DECISIONS.md §127 and `tools/livres-securite/`.
+Turned off, every books address answers 404 and nothing of it loads.
+
 ## Keyboard and remote
 
 The home screen is fully drivable with the arrow keys: focus moves across and between rows, the

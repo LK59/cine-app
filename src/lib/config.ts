@@ -258,6 +258,13 @@ export const config = {
       return optional("REPLIQUES_LANGUAGES", "fr,original");
     },
   },
+  // Les livres (option, DECISIONS.md §127) : coupée par défaut. Relue à chaque accès, comme le reste —
+  // la couper ferme la page et les routes à la requête suivante, sans redémarrage.
+  books: {
+    get enabled() {
+      return optional("BOOKS_ENABLED", "false") === "true";
+    },
+  },
   push: {
     get subject() {
       return optional("VAPID_SUBJECT", "mailto:admin@example.com");

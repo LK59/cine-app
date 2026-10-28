@@ -696,6 +696,20 @@ function migrate(db: Database.Database): void {
       last_used_at INTEGER
     );
   `);
+  // Où en est chaque compte dans chaque livre (option « Livres », DECISIONS.md §127,
+  // `src/lib/books/progress.ts`). Créée même l'option coupée : une table vide ne coûte rien, et
+  // l'allumer plus tard n'a pas à attendre un redémarrage.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS book_progress (
+      account     TEXT    NOT NULL,
+      item_id     TEXT    NOT NULL,
+      cfi         TEXT    NOT NULL,
+      fraction    REAL    NOT NULL,
+      updated_at  INTEGER NOT NULL,
+      finished_at INTEGER,
+      PRIMARY KEY (account, item_id)
+    );
+  `);
   seedInitialNews(db);
   // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
   seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");

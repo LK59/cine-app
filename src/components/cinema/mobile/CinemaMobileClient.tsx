@@ -1,6 +1,7 @@
 "use client";
 
 import { OfflineDownloadsButton } from "@/components/offline/OfflineDownloadsButton";
+import { BooksBrowseAllButton, BooksHomeLazy, useBooksMode } from "@/components/books/BooksMode";
 import { SlowLaunchDownloads } from "@/components/offline/SlowLaunchDownloads";
 import useSWR from "swr";
 import { memo, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
@@ -173,6 +174,8 @@ export function CinemaMobileClient() {
   // close a sheet instead of leaving Cinema Mode — see lib/cinemaRoute.
   const route = useCinemaRoute();
   const mediaType = route.tab;
+  // Les livres (option, §127) : un mode posé sur l'accueil, sans rien changer à `tab`.
+  const books = useBooksMode(route.books);
   /**
    * L'onglet que le contenu montre — en retard d'un rendu sur celui qu'on a choisi.
    *
@@ -603,7 +606,8 @@ export function CinemaMobileClient() {
       route.discover !== null ||
       route.person !== null ||
       route.downloads ||
-      accountScreenOpen(route)
+      accountScreenOpen(route) ||
+      books.active
   );
 
   if (typeof document === "undefined") return null;
@@ -648,7 +652,8 @@ export function CinemaMobileClient() {
           <BrandMark size={18} />
           {/* Le nom cède la place quand il n'y en a pas : il était coupé en « C. » sur un iPhone SE
               tant que deux ronds tenaient la droite (07/10/2026). Le logo seul suffit à le dire. */}
-          <span className="truncate font-display text-sm font-semibold tracking-tight max-[340px]:hidden">{APP_NAME}</span>
+          {/* Trois catégories (les livres, §127) prennent la place du nom jusqu'aux grands téléphones. */}
+          <span className={`truncate font-display text-sm font-semibold tracking-tight ${books.toggle ? "max-[440px]:hidden" : "max-[340px]:hidden"}`}>{APP_NAME}</span>
         </button>
 
         {/* Au centre, et non plus poussés à gauche : ce sont les deux onglets de la bibliothèque,
@@ -657,7 +662,7 @@ export function CinemaMobileClient() {
             (26/09/2026) : deux pastilles séparées, l'une pleine et l'autre en contour, étaient le
             seul sélecteur de l'app à avoir cette forme. 36 px de haut, comme la loupe : la barre
             garde sa hauteur. */}
-        <CinemaModeToggle placement="inline" mode={mediaType} onChange={setMediaType} />
+        <CinemaModeToggle placement="inline" mode={mediaType} onChange={setMediaType} books={books.toggle} />
         {/* À droite, le catalogue entier à un geste (DECISIONS.md §52). La loupe qui était là
             ouvrait la même recherche que l'onglet « Recherche » de la barre du bas, toujours à
             portée de pouce : retirée le 08/10/2026. Toujours affiché depuis le 13/10/2026 : l'option
@@ -665,7 +670,7 @@ export function CinemaMobileClient() {
         <div className="ml-auto flex items-center gap-2">
           {/* Le gestionnaire des téléchargements hors ligne (bêta), à côté de « Tous les… » (Louis, 19/10/2026). */}
           <OfflineDownloadsButton />
-          <CinemaBrowseAllButton mediaType={mediaType} compact />
+          {books.active ? <BooksBrowseAllButton /> : <CinemaBrowseAllButton mediaType={mediaType} compact />}
         </div>
         {/* Le nouvel onglet se construit : un fil fin sous la barre, le temps que ses rangées
             arrivent (`shownTab`). Rien ne clignote si c'est immédiat — il n'apparaît qu'après
@@ -684,9 +689,11 @@ export function CinemaMobileClient() {
       {/* La barre du bas flotte par-dessus : sans cette réserve, la dernière rangée finissait
           dessous. Le retrait de la zone sûre s'y ajoute, l'indicateur d'accueil en mangeant déjà
           une partie. */}
+      {/* La catégorie Livres prend la place des rangées, qui restent montées dessous (§127). */}
+      {books.active && <BooksHomeLazy variant="mobile" />}
       <div
         ref={rowsScrollRef}
-        className="flex-1 overflow-y-auto overscroll-contain"
+        className={`flex-1 overflow-y-auto overscroll-contain ${books.active ? "hidden" : ""}`}
         style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${short ? "4.5rem" : "6rem"})` }}
       >
         {loading && (

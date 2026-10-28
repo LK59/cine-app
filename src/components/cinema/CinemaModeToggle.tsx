@@ -24,6 +24,7 @@ export function CinemaModeToggle({
   onChange,
   placement = "floating",
   trailing,
+  books,
 }: {
   mode: "movies" | "series";
   onChange: (mode: "movies" | "series") => void;
@@ -35,13 +36,28 @@ export function CinemaModeToggle({
    * téléphone place elle-même ses voisins.
    */
   trailing?: ReactNode;
+  /**
+   * Les livres, troisième catégorie (option, DECISIONS.md §127) — absent quand l'option est coupée :
+   * la bascule rend alors exactement ses deux boutons. Les livres ne sont pas un onglet de plus
+   * (`tab` reste films ou séries, que tout le cinéma lit) mais un mode posé par-dessus
+   * (`#livres=1`) : quitter les livres pour un onglet passe par `onLeave`, qui retire le mode et
+   * choisit l'onglet d'un seul geste.
+   */
+  books?: { active: boolean; onSelect: () => void; onLeave: (mode: "movies" | "series") => void };
 }) {
   const t = useT();
   const moviesRef = useRef<HTMLButtonElement>(null);
   const seriesRef = useRef<HTMLButtonElement>(null);
+  const booksRef = useRef<HTMLButtonElement>(null);
+  const shown: "movies" | "series" | "books" = books?.active ? "books" : mode;
+  const select = (key: string) => {
+    if (key === "books") books?.onSelect();
+    else if (books?.active) books.onLeave(key as "movies" | "series");
+    else onChange(key as "movies" | "series");
+  };
   const barRef = useRef<HTMLDivElement>(null);
   const lensRef = useRef<HTMLSpanElement>(null);
-  useLiquidLens({ barRef, lensRef, active: mode, onDragSelect: (key) => onChange(key as "movies" | "series"), settleSpring: TOGGLE_SETTLE });
+  useLiquidLens({ barRef, lensRef, active: shown, onDragSelect: select, settleSpring: TOGGLE_SETTLE });
 
   // Switching segments only updated `mode` — the DOM focus itself stayed put on whichever
   // <button> the keypress originated from, which is a plain React prop change, not something
@@ -53,9 +69,12 @@ export function CinemaModeToggle({
   function onKeyDown(e: React.KeyboardEvent<HTMLButtonElement>) {
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
-      const next = mode === "movies" ? "series" : "movies";
-      onChange(next);
-      (next === "movies" ? moviesRef : seriesRef).current?.focus();
+      // Les catégories en boucle, dans l'ordre affiché (deux sans les livres).
+      const order: ("movies" | "series" | "books")[] = books ? ["movies", "series", "books"] : ["movies", "series"];
+      const at = order.indexOf(shown);
+      const next = order[(at + (e.key === "ArrowLeft" ? order.length - 1 : 1)) % order.length];
+      select(next);
+      (next === "movies" ? moviesRef : next === "series" ? seriesRef : booksRef).current?.focus();
     }
   }
 
@@ -84,30 +103,45 @@ export function CinemaModeToggle({
           d'écran (15/10/2026, passe de nuit, ROBUSTESSE-11). */}
       <button
         ref={moviesRef}
-        onClick={() => onChange("movies")}
+        onClick={() => select("movies")}
         data-lens="movies"
         onKeyDown={onKeyDown}
-        data-tv-escape-up={mode === "movies" ? "true" : undefined}
-        aria-pressed={mode === "movies"}
+        data-tv-escape-up={shown === "movies" ? "true" : undefined}
+        aria-pressed={shown === "movies"}
         className={`relative z-[1] rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${TV_NAV_RING} ${
-          mode === "movies" ? "text-white" : "text-muted hover:text-white"
+          shown === "movies" ? "text-white" : "text-muted hover:text-white"
         }`}
       >
         {t("cinema.moviesTab")}
       </button>
       <button
         ref={seriesRef}
-        onClick={() => onChange("series")}
+        onClick={() => select("series")}
         data-lens="series"
         onKeyDown={onKeyDown}
-        data-tv-escape-up={mode === "series" ? "true" : undefined}
-        aria-pressed={mode === "series"}
+        data-tv-escape-up={shown === "series" ? "true" : undefined}
+        aria-pressed={shown === "series"}
         className={`relative z-[1] rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${TV_NAV_RING} ${
-          mode === "series" ? "text-white" : "text-muted hover:text-white"
+          shown === "series" ? "text-white" : "text-muted hover:text-white"
         }`}
       >
         {t("cinema.seriesTab")}
       </button>
+      {books && (
+        <button
+          ref={booksRef}
+          onClick={() => select("books")}
+          data-lens="books"
+          onKeyDown={onKeyDown}
+          data-tv-escape-up={shown === "books" ? "true" : undefined}
+          aria-pressed={shown === "books"}
+          className={`relative z-[1] rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${TV_NAV_RING} ${
+            shown === "books" ? "text-white" : "text-muted hover:text-white"
+          }`}
+        >
+          {t("books.nav")}
+        </button>
+      )}
     </div>
   );
   if (!grouped) return bar;
