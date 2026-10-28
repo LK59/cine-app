@@ -23,29 +23,13 @@ export function nameKey(name: string): string {
 }
 
 /**
- * La série à afficher pour un livre :
- * 1. celle de l'EPUB lui-même (OPF), quand on l'a lue ;
- * 2. sinon celle de Jellyfin, **seulement** si elle n'est pas en fait le nom d'un dossier — Jellyfin
- *    donne au livre le nom du dossier qui le contient, et une bibliothèque rangée par auteur faisait de
- *    chaque roman isolé un tome de la « série » de son auteur ; d'où le refus d'une série qui porte le
- *    nom d'un auteur du livre (dans n'importe quel ordre) ou d'un dossier racine de bibliothèque ;
- * 3. sinon aucune.
+ * La série à afficher pour un livre : celle que l'EPUB déclare lui-même (OPF — `calibre:series`, ou
+ * `belongs-to-collection` en EPUB 3), et elle seule. Jamais celle de Jellyfin : il donne au livre le nom
+ * du dossier qui le contient — l'auteur dans une bibliothèque rangée par auteur, « 6000 Romans Ebook en
+ * Epub Pack » pour un lot déposé d'un bloc. Pas de série dans l'EPUB, pas de série.
  */
-export function decideSeries(input: {
-  opfSeries: string | null | undefined;
-  jellyfinSeries: string | null | undefined;
-  authors: readonly string[];
-  libraryFolders: readonly string[];
-}): string | null {
-  const opf = input.opfSeries?.trim();
-  if (opf) return opf;
-  const jf = input.jellyfinSeries?.trim();
-  if (!jf) return null;
-  const key = nameKey(jf);
-  if (!key) return null;
-  if (input.authors.some((a) => nameKey(a) === key)) return null;
-  if (input.libraryFolders.some((f) => nameKey(f) === key)) return null;
-  return jf;
+export function decideSeries(input: { opfSeries: string | null | undefined }): string | null {
+  return input.opfSeries?.trim() || null;
 }
 
 /** Ce qui n'est pas un genre : des mots de format ou de rayonnage, que trop de fichiers portent. */

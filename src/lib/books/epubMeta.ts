@@ -116,7 +116,7 @@ const decodeXml = (s: string) =>
 /** La série, son rang et les sujets d'un OPF — Calibre (EPUB 2) ou `belongs-to-collection` (EPUB 3). */
 export function parseOpf(opf: string): EpubMeta {
   const metaContent = (name: string) => {
-    for (const tag of opf.match(/<meta\b[^>]*>/gi) ?? []) {
+    for (const tag of opf.match(/<(?:[\w-]+:)?meta\b[^>]*>/gi) ?? []) {
       const n = /\bname\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1];
       if (n?.toLowerCase() === name) return decodeXml(/\bcontent\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1] ?? "");
     }
@@ -127,18 +127,18 @@ export function parseOpf(opf: string): EpubMeta {
   if (!series) {
     // EPUB 3 : <meta property="belongs-to-collection" id="c1">Série</meta>, puis
     // <meta refines="#c1" property="group-position">3</meta>.
-    const coll = /<meta\b[^>]*property\s*=\s*["']belongs-to-collection["'][^>]*>([^<]*)<\/meta>/i.exec(opf);
+    const coll = /<(?:[\w-]+:)?meta\b[^>]*property\s*=\s*["']belongs-to-collection["'][^>]*>([^<]*)<\/(?:[\w-]+:)?meta>/i.exec(opf);
     if (coll) {
       series = decodeXml(coll[1]) || null;
       const id = /\bid\s*=\s*["']([^"']+)["']/i.exec(coll[0])?.[1];
       if (id) {
-        const pos = new RegExp(`<meta\\b[^>]*refines\\s*=\\s*["']#${id.replace(/[^\w-]/g, "")}["'][^>]*property\\s*=\\s*["']group-position["'][^>]*>([^<]*)<`, "i").exec(opf)
-          ?? new RegExp(`<meta\\b[^>]*property\\s*=\\s*["']group-position["'][^>]*refines\\s*=\\s*["']#${id.replace(/[^\w-]/g, "")}["'][^>]*>([^<]*)<`, "i").exec(opf);
+        const pos = new RegExp(`<(?:[\\w-]+:)?meta\\b[^>]*refines\\s*=\\s*["']#${id.replace(/[^\w-]/g, "")}["'][^>]*property\\s*=\\s*["']group-position["'][^>]*>([^<]*)<`, "i").exec(opf)
+          ?? new RegExp(`<(?:[\\w-]+:)?meta\\b[^>]*property\\s*=\\s*["']group-position["'][^>]*refines\\s*=\\s*["']#${id.replace(/[^\w-]/g, "")}["'][^>]*>([^<]*)<`, "i").exec(opf);
         if (pos) index = Number.parseFloat(pos[1]);
       }
     }
   }
-  const subjects = [...opf.matchAll(/<dc:subject\b[^>]*>([^<]*)<\/dc:subject>/gi)].map((m) => decodeXml(m[1])).filter(Boolean);
+  const subjects = [...opf.matchAll(/<(?:dc:)?subject\b[^>]*>([^<]*)<\/(?:dc:)?subject>/gi)].map((m) => decodeXml(m[1])).filter(Boolean);
   return { series, seriesIndex: series && Number.isFinite(index) ? index : null, subjects };
 }
 

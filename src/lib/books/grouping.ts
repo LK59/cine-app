@@ -110,7 +110,26 @@ const byNewest = (a: BookSummary, b: BookSummary) => (b.addedAt ?? 0) - (a.added
  * partagées entre les trois — les séries d'abord, puis les auteurs, puis les genres ; une sorte qui n'a
  * pas de quoi remplir sa part la laisse aux autres. Chacune réduite à `perRow` livres.
  */
-export function homeRows(books: readonly BookSummary[], { maxRows = 10, perRow = 20 } = {}): HomeRows {
+/**
+ * Le même livre posé à deux endroits — une bibliothèque à deux racines (`/livres` et un dossier de
+ * lots), le même titre du même auteur dans les deux — n'apparaît qu'une fois dans les rangées. Le
+ * gardé : celui où l'on a lu, sinon le mieux décrit (couverture, série, genres, année). La grille
+ * complète les montre tous les deux : aucun n'est perdu.
+ */
+export function dedupeBooks(books: readonly BookSummary[]): BookSummary[] {
+  const score = (b: BookSummary) => (b.progress && b.progress.fraction > 0 ? 100 : 0) + (b.coverTag ? 10 : 0) + (b.seriesName ? 5 : 0) + b.genres.length + (b.year ? 1 : 0);
+  const best = new Map<string, BookSummary>();
+  for (const b of books) {
+    const key = `${fold(b.name)}|${nameKey(b.authors[0] ?? "")}`;
+    const held = best.get(key);
+    if (!held || score(b) > score(held)) best.set(key, b);
+  }
+  const kept = new Set(best.values());
+  return books.filter((b) => kept.has(b));
+}
+
+export function homeRows(input: readonly BookSummary[], { maxRows = 10, perRow = 20 } = {}): HomeRows {
+  const books = dedupeBooks(input);
   const largest = <T extends { books: BookSummary[] }>(xs: T[]) => [...xs].sort((a, b) => b.books.length - a.books.length);
 
   const series = largest(groupBooks(books).filter((g) => g.series !== null && g.books.length >= 2));

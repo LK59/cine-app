@@ -12,7 +12,7 @@ import {
   saveReaderPrefs,
 } from "@/lib/books/readerPrefs";
 import { continueReading, groupBooks } from "@/lib/books/grouping";
-import { compareBooks, plainOverview, withoutFolderSeries } from "@/lib/books/library";
+import { compareBooks, plainOverview } from "@/lib/books/library";
 import { bookRouteHash, parseBookRoute } from "@/lib/books/bookRoute";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
@@ -141,10 +141,6 @@ describe("la grille", () => {
       book({ name: "jamais" }),
     ]);
     expect(list.map((b) => b.name)).toEqual(["récent", "ancien"]);
-  });
-  it("une « série » d'un seul livre sans tome est le nom de son dossier : le livre n'a pas de série", () => {
-    const out = withoutFolderSeries([book({ name: "racine", seriesName: "books" }), book({ name: "hs", seriesName: "Cherub" }), book({ name: "t1", seriesName: "Cherub", index: 1 }), book({ name: "seul numéroté", seriesName: "Saga", index: 1 })]);
-    expect(out.map((b) => b.seriesName)).toEqual([null, "Cherub", "Cherub", "Saga"]);
   });
   it("un résumé en HTML devient du texte", () => {
     expect(plainOverview("<p>Un&nbsp;<i>résumé</i></p><p>L&#39;autre &amp; fin</p>")).toBe("Un résumé\nL'autre & fin");

@@ -92,6 +92,7 @@ beforeEach(() => {
   verify.mockResolvedValue({ u: "lecteur", role: "user", jfId: JF, jti: "j" });
   markPlayed.mockResolvedValue(undefined);
   getDb().prepare("DELETE FROM book_progress").run();
+  getDb().prepare("DELETE FROM book_meta").run();
   jellyfinAnswers([bookItem()]);
 });
 
@@ -145,6 +146,11 @@ describe("GET /api/books", () => {
 
   it("retire ce qui n'est pas un livre et ce qui porte un tag bloqué du compte ; trie par série, tome, nom", async () => {
     blocked.tags = ["prive"];
+    // La série vient de l'EPUB (déjà lu, `book_meta`), jamais du `SeriesName` de Jellyfin — « Cherub »
+    // pour tous ici, le nom de leur dossier.
+    const meta = getDb().prepare("INSERT INTO book_meta (item_id, etag, series, series_index, subjects, failed, checked_at) VALUES (?, 'e', ?, ?, '[]', 0, 1)");
+    meta.run("2".repeat(32), "Cherub", 2);
+    meta.run("6".repeat(32), "Cherub", 1);
     jellyfinAnswers([
       bookItem({ Id: "1".repeat(32), Name: "Sans tome", IndexNumber: null }),
       bookItem({ Id: "2".repeat(32), Name: "Tome 2", IndexNumber: 2 }),
@@ -155,6 +161,7 @@ describe("GET /api/books", () => {
     ]);
     const { books } = await (await listGET(req())).json();
     expect(books.map((b: { name: string }) => b.name)).toEqual(["Tome 1", "Tome 2", "Sans tome", "Seul"]);
+    expect(books.map((b: { seriesName: string | null }) => b.seriesName)).toEqual(["Cherub", "Cherub", null, null]);
     const seul = books[3];
     expect(seul).toMatchObject({ seriesName: null, index: null, authors: [], coverTag: null });
     expect(books[0].authors).toEqual(["Robert Muchamore"]);
@@ -178,7 +185,9 @@ describe("GET /api/books", () => {
 describe("GET /api/books/[id]", () => {
   it("le résumé en texte, les genres, la série et le tome", async () => {
     const body = await (await detailGET(req(), params(BOOK))).json();
-    expect(body).toMatchObject({ name: "Le grand jeu", seriesName: "Cherub", index: 10, overview: "Un résumé & plus", genres: ["Aventure"] });
+    expect(body).toMatchObject({ name: "Le grand jeu", seriesName: null, index: null, overview: "Un résumé & plus", genres: ["Aventure"] });
+    getDb().prepare("INSERT INTO book_meta (item_id, etag, series, series_index, subjects, failed, checked_at) VALUES (?, 'e', 'Cherub', 10, '[\"Espionnage\"]', 0, 1)").run(BOOK);
+    expect(await (await detailGET(req(), params(BOOK))).json()).toMatchObject({ seriesName: "Cherub", index: 10, genres: ["Aventure", "Espionnage"] });
   });
   it("un élément qui n'est pas un livre, hors des droits ou caché par un tag : 404", async () => {
     jellyfinAnswers([bookItem({ Id: MOVIE, Type: "Movie" })]);

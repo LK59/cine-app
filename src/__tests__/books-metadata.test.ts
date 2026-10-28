@@ -23,21 +23,13 @@ import { knownMeta, parseOpf, readEpubMeta, scheduleMetaReads, staleMeta, __test
 import { authorIndex, filterBooks, homeRows, sortBooks } from "@/lib/books/grouping";
 import type { BookSummary } from "@/lib/books/types";
 
-describe("la série à croire", () => {
-  const folders = ["Livres", "books"];
-  it("celle de l'EPUB d'abord", () => {
-    expect(decideSeries({ opfSeries: "Cherub", jellyfinSeries: "Robert Muchamore", authors: ["Robert Muchamore"], libraryFolders: folders })).toBe("Cherub");
+describe("la série à croire : celle de l'EPUB, et elle seule", () => {
+  it("l'OPF dit la série", () => {
+    expect(decideSeries({ opfSeries: " Cherub " })).toBe("Cherub");
   });
-  it("un dossier d'auteur n'est pas une série — dans n'importe quel ordre des mots", () => {
-    expect(decideSeries({ opfSeries: null, jellyfinSeries: "Guillaume Musso", authors: ["Guillaume Musso"], libraryFolders: folders })).toBeNull();
-    expect(decideSeries({ opfSeries: null, jellyfinSeries: "Robert Muchamore", authors: ["Muchamore Robert"], libraryFolders: folders })).toBeNull();
-    expect(decideSeries({ opfSeries: null, jellyfinSeries: "GUILLAUME  MUSSÔ", authors: ["Guillaume Musso"], libraryFolders: folders })).toBeNull();
-  });
-  it("un dossier racine de bibliothèque non plus", () => {
-    expect(decideSeries({ opfSeries: null, jellyfinSeries: "books", authors: ["X"], libraryFolders: folders })).toBeNull();
-  });
-  it("une vraie série rangée dans son propre dossier reste une série", () => {
-    expect(decideSeries({ opfSeries: null, jellyfinSeries: "Cherub", authors: ["Robert Muchamore"], libraryFolders: folders })).toBe("Cherub");
+  it("sans série dans l'EPUB, aucune — quel que soit le dossier (auteur, lot, racine)", () => {
+    expect(decideSeries({ opfSeries: null })).toBeNull();
+    expect(decideSeries({ opfSeries: "" })).toBeNull();
   });
   it("les noms se rapprochent sans ordre ni accents", () => {
     expect(nameKey("Muchamore Robert")).toBe(nameKey("Robert  Muchamore"));
@@ -198,5 +190,36 @@ describe("les rangées d'une bibliothèque rangée par auteur", () => {
     expect(sortBooks(books, "year")[0].year).toBe(2018);
     expect(sortBooks(books, "title")[0].name).toBe("100 jours en enfer");
     expect(sortBooks(books, "author")[0].authors[0]).toBe("Robert Muchamore");
+  });
+});
+
+describe("une bibliothèque à deux racines, dont un lot de milliers d'EPUB", () => {
+  beforeEach(() => vi.clearAllMocks());
+  it("le dossier du lot n'est jamais une série ; l'auteur vient des métadonnées, pas du dossier", async () => {
+    const { listBooks } = await import("@/lib/books/library");
+    upstream.mockImplementation(async (url: string) => {
+      if (!url.includes("IncludeItemTypes")) return new Response("[]", { status: 200 });
+      const items = [
+        { Id: "1".repeat(32), Name: "Central Park", Type: "Book", SeriesName: "6000 Romans Ebook en Epub Pack", People: [{ Name: "Guillaume Musso", Type: "Author" }] },
+        { Id: "2".repeat(32), Name: "L'appel de l'ange", Type: "Book", SeriesName: "Guillaume Musso", IndexNumber: 3, People: [{ Name: "Guillaume Musso", Type: "Author" }] },
+      ];
+      return new Response(JSON.stringify({ Items: items, TotalRecordCount: 2 }), { status: 200 });
+    });
+    const books = await listBooks({ role: "user", jfId: "c".repeat(32) });
+    expect(books.map((b) => [b.name, b.seriesName, b.index, b.authors])).toEqual([
+      ["Central Park", null, null, ["Guillaume Musso"]],
+      ["L'appel de l'ange", null, null, ["Guillaume Musso"]],
+    ]);
+  });
+  it("un même livre dans les deux racines : une fois dans les rangées, deux fois dans la grille", () => {
+    const lu = book({ name: "Central Park", authors: ["Guillaume Musso"], addedAt: 1, progress: { cfi: "epubcfi(/6/2)", fraction: 0.4, updatedAt: 3, finished: false } });
+    const copie = book({ name: "CENTRAL PARK", authors: ["Musso Guillaume"], addedAt: 2, coverTag: "t", genres: ["Thriller"] });
+    const autre = book({ name: "La jeune fille et la nuit", authors: ["Guillaume Musso"], addedAt: 0 });
+    const { recent, rows, resume } = homeRows([lu, copie, autre]);
+    // Celui où l'on a lu l'emporte sur la copie mieux décrite.
+    expect(recent.map((b) => b.id)).toEqual([lu.id, autre.id]);
+    expect(resume.map((b) => b.id)).toEqual([lu.id]);
+    expect(rows.find((r) => r.kind === "author")?.books).toHaveLength(2);
+    expect(filterBooks([lu, copie, autre], "central")).toHaveLength(2);
   });
 });

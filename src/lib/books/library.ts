@@ -27,7 +27,7 @@ const FIELDS = "Tags,Genres,People,Overview,SeriesName,ProductionYear,ImageTags,
  * (`bookFor`). Une bibliothèque de plusieurs milliers d'EPUB ne voyage ainsi qu'en titres, séries,
  * auteurs, genres et empreintes (couverture, fichier).
  */
-const LIST_FIELDS = "Tags,Genres,People,SeriesName,ProductionYear,ImageTags,DateCreated,Etag";
+const LIST_FIELDS = "Tags,Genres,People,ProductionYear,ImageTags,DateCreated,Etag";
 /** Les livres sont demandés par pages : une réponse par millier, jamais toute la bibliothèque d'un bloc. */
 export const LIST_PAGE = 1000;
 /** Une borne de sécurité : au-delà, la grille s'arrête plutôt que de demander sans fin. */
@@ -91,15 +91,15 @@ export function plainOverview(raw: string | null | undefined): string {
 }
 
 /**
- * Un livre pour l'écran. La série : celle de l'EPUB quand on l'a lue (`epubMeta.ts`), sinon celle de
- * Jellyfin si elle n'est pas un nom de dossier (`decideSeries`) ; le tome suit la même source. Les
- * genres : ceux de Jellyfin et les sujets de l'EPUB, regroupés (`bookGenres`).
+ * Un livre pour l'écran. La série et le tome : ceux de l'EPUB, quand on l'a lu (`epubMeta.ts`,
+ * `decideSeries`) — jamais le dossier où Jellyfin l'a trouvé. Les auteurs : les `People` de Jellyfin,
+ * qu'il tire de l'EPUB. Les genres : ceux de Jellyfin et les sujets de l'EPUB, regroupés (`bookGenres`).
  */
-function summaryOf(item: JellyfinBookItem, meta: EpubMeta | null = null, libraryFolders: readonly string[] = []): BookSummary {
+function summaryOf(item: JellyfinBookItem, meta: EpubMeta | null = null): BookSummary {
   const authors = (item.People ?? []).filter((p) => p.Type === "Author" && p.Name).map((p) => p.Name as string);
-  const seriesName = decideSeries({ opfSeries: meta?.series, jellyfinSeries: item.SeriesName, authors, libraryFolders });
-  const fromOpf = !!meta?.series && seriesName === meta.series.trim();
-  const index = fromOpf ? (meta?.seriesIndex ?? null) : seriesName && typeof item.IndexNumber === "number" ? item.IndexNumber : null;
+  // La série et le tome viennent de l'EPUB seul (`decideSeries`) : jamais du dossier où Jellyfin l'a trouvé.
+  const seriesName = decideSeries({ opfSeries: meta?.series });
+  const index = seriesName ? (meta?.seriesIndex ?? null) : null;
   return {
     id: item.Id.toLowerCase(),
     name: item.Name?.trim() || "—",
@@ -113,24 +113,6 @@ function summaryOf(item: JellyfinBookItem, meta: EpubMeta | null = null, library
     addedAt: item.DateCreated ? Date.parse(item.DateCreated) || null : null,
     progress: null,
   };
-}
-
-/**
- * Les noms des dossiers racines des bibliothèques de Jellyfin : un livre posé directement dedans reçoit
- * leur nom pour série. Lus avec la clé du serveur, gardés dix minutes ; une panne rend la dernière liste.
- */
-let foldersCache: { at: number; names: string[] } | null = null;
-async function libraryFolderNames(now = Date.now()): Promise<string[]> {
-  if (foldersCache && now - foldersCache.at < 10 * 60_000) return foldersCache.names;
-  try {
-    const { body } = await getJson<{ Name?: string; Locations?: string[] }[]>(`${config.jellyfin.url}/Library/VirtualFolders`);
-    if (!Array.isArray(body)) return foldersCache?.names ?? [];
-    const names = body.flatMap((f) => [f.Name ?? "", ...(f.Locations ?? []).map((l) => l.split(/[\\/]/).filter(Boolean).pop() ?? "")]).filter(Boolean);
-    foldersCache = { at: now, names };
-    return names;
-  } catch {
-    return foldersCache?.names ?? [];
-  }
 }
 
 /**
@@ -182,20 +164,7 @@ export async function listBooks(caller: BookCaller): Promise<BookSummary[]> {
   const known = knownMeta();
   // Les OPF pas encore lus partent en arrière-plan ; la grille de cette fois-ci fait sans.
   scheduleMetaReads(staleMeta(books.map((b) => ({ id: b.Id.toLowerCase(), etag: b.Etag ?? null })), known));
-  const folders = await libraryFolderNames();
-  return withoutFolderSeries(books.map((item) => summaryOf(item, known.get(item.Id.toLowerCase())?.meta ?? null, folders))).sort(compareBooks);
-}
-
-/**
- * Une « série » d'un seul livre, sans tome, n'en est pas une. Jellyfin donne à un EPUB sans série
- * déclarée le nom du dossier qui le contient : un livre posé à la racine de la bibliothèque se
- * retrouvait seul dans une série nommée comme le dossier (« books »). Le livre d'une vraie série, lui,
- * a ses voisins ou son numéro.
- */
-export function withoutFolderSeries(books: BookSummary[]): BookSummary[] {
-  const count = new Map<string, number>();
-  for (const b of books) if (b.seriesName) count.set(b.seriesName.toLocaleLowerCase(), (count.get(b.seriesName.toLocaleLowerCase()) ?? 0) + 1);
-  return books.map((b) => (b.seriesName && b.index === null && count.get(b.seriesName.toLocaleLowerCase()) === 1 ? { ...b, seriesName: null } : b));
+  return books.map((item) => summaryOf(item, known.get(item.Id.toLowerCase())?.meta ?? null)).sort(compareBooks);
 }
 
 /**
@@ -216,5 +185,5 @@ export async function bookFor(caller: BookCaller, id: string): Promise<BookDetai
   if (!item || item.Type !== "Book" || typeof item.Id !== "string") return null;
   if (caller.jfId && carriesBlockedTag(item.Tags, await blockedTagsOf(caller.jfId))) return null;
   const meta = knownMeta().get(item.Id.toLowerCase())?.meta ?? null;
-  return { ...summaryOf(item, meta, await libraryFolderNames()), overview: plainOverview(item.Overview) };
+  return { ...summaryOf(item, meta), overview: plainOverview(item.Overview) };
 }
