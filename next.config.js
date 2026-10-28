@@ -176,7 +176,13 @@ const nextConfig = {
               // cadres que créait l'API iframe (bande-annonce de fond) sont partis avec elle ; seuls
               // les cadres que notre page crée relèvent d'ici, pas ceux que l'embed ouvre lui-même.
               // Vérifié : l'embed youtube-nocookie répond 200, sans redirection vers www.youtube.com.
-              "frame-src https://www.youtube-nocookie.com",
+              //
+              // `'self'` depuis le 28/10/2026 (DECISIONS.md §128) : le lecteur de livres s'ouvre dans un
+              // cadre posé sur le cinéma — la page `/livres`, de notre origine, qui garde sa propre
+              // politique (celle-ci ne s'applique qu'aux cadres que le cinéma crée, pas à ce qu'ils
+              // contiennent). Rien d'autre : ni `blob:`, ni `data:`, ni autre hôte — les cadres `blob:` des
+              // chapitres restent permis par la seule politique de `/livres`.
+              "frame-src 'self' https://www.youtube-nocookie.com",
               // blob: est obligatoire ici, et pour deux raisons plutôt qu'une : hls.js
               // construit son démultiplexeur depuis un Blob (injectWorker,
               // hls.js/dist/hls.js:15931, et PlayerHost.tsx ne désactive pas enableWorker), et
@@ -201,7 +207,8 @@ const nextConfig = {
         // script venu d'un `blob:`. Les scripts du livre ne s'exécutent de toute façon pas : le cadre n'a
         // pas `allow-scripts` (`src/lib/books/foliate/README.md`), et le contenu est nettoyé avant
         // (`src/lib/books/sanitize.ts`). `'unsafe-inline'` reste pour les scripts de Next, comme ailleurs.
-        // On n'y arrive que par un vrai chargement de page (liens ordinaires de `BooksMode` et `BooksHome`) : une
+        // On n'y arrive que par un vrai chargement de page — un lien ordinaire, ou le cadre que le cinéma pose
+        // pour lire (`ReaderFrame`, §128 ; `frame-ancestors 'self'` le permet à notre seule origine) : une
         // navigation côté client garderait le document de l'accueil, et sa politique.
         source: "/livres",
         headers: BOOKS_HEADERS,

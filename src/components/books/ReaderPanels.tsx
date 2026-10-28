@@ -17,6 +17,7 @@ import {
   type ReaderPrefs,
 } from "@/lib/books/readerPrefs";
 import type { FoliateTocItem } from "@/lib/books/foliate/view";
+import { insetVar } from "@/lib/books/readerFrame";
 
 type Colors = { bg: string; fg: string; link: string; dark: boolean };
 
@@ -37,7 +38,7 @@ function PanelFrame({ colors, title, onClose, children, side }: { colors: Colors
         background: colors.dark ? "rgb(24 24 27 / 0.97)" : "rgb(252 251 249 / 0.97)",
         color: colors.fg,
         borderColor: colors.dark ? "rgb(255 255 255 / 0.08)" : "rgb(0 0 0 / 0.08)",
-        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingBottom: insetVar("bottom"),
       }}
       role="dialog"
       aria-label={title}

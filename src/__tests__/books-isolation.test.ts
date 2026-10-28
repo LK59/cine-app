@@ -253,7 +253,8 @@ describe("l'accueil ne charge rien des livres", () => {
     expect(reader).toMatch(/import\("@\/lib\/books\/foliate\/view\.js"\)/);
     // La page des livres (`BooksScreen`, sous sa propre politique) demande foliate-js d'avance quand elle
     // s'ouvre pour lire (`readerPreload.ts`) — seulement là, jamais dans la grille ni le cinéma.
-    expect(read("src/components/books/BooksScreen.tsx")).toMatch(/if \(embedded \|\| !route\.book \|\| !route\.reading\) return;\s*void preloadBookFile\(route\.book\);\s*void BookReader\.preload\(\)\.catch\(\(\) => \{\}\);\s*void import\("@\/lib\/books\/foliate\/view\.js"\)/);
+    // Et le cadre du lecteur préparé depuis la fiche du cinéma (§128), qui est cette même page.
+    expect(read("src/components/books/BooksScreen.tsx")).toMatch(/if \(embedded \|\| !route\.book \|\| !\(route\.reading \|\| framed\)\) return;\s*void preloadBookFile\(route\.book\);\s*void BookReader\.preload\(\)\.catch\(\(\) => \{\}\);\s*void import\("@\/lib\/books\/foliate\/view\.js"\)/);
     for (const file of users.filter((f) => !f.endsWith("BookReader.tsx") && !f.endsWith("BooksScreen.tsx"))) {
       for (const line of read(file).split("\n").filter((l) => /books\/foliate\/view/.test(l))) expect(line, file).toMatch(/^import type /);
     }
@@ -283,20 +284,28 @@ describe("l'accueil ne charge rien des livres", () => {
 });
 
 describe("la politique de sécurité", () => {
-  it("la générale garde ses cadres YouTube seuls ; celle des livres permet `blob:` et rien d'extérieur", async () => {
+  it("la générale ne gagne que nos propres pages en cadre (le lecteur, §128) ; celle des livres permet `blob:` et rien d'extérieur", async () => {
     // Par son chemin : le fichier est du JavaScript sans types, que la vérification de `next build` refuserait importé en clair.
     const configUrl = pathToFileURL(path.join(process.cwd(), "next.config.js")).href;
     const nextConfig = (await import(/* @vite-ignore */ configUrl)).default as { headers: () => Promise<{ source: string; headers: { key: string; value: string }[] }[]> };
     const rules = await nextConfig.headers();
     const csp = (source: string) => rules.find((r) => r.source === source)?.headers.find((h) => h.key === "Content-Security-Policy")?.value ?? "";
     const general = csp("/(.*)");
-    expect(general).toMatch(/frame-src https:\/\/www\.youtube-nocookie\.com(;|$)/);
-    expect(general).not.toMatch(/frame-src[^;]*blob:/);
+    // Exactement : notre origine et la fenêtre de bande-annonce. Pas de `blob:`, pas de `data:`, rien d'autre.
+    expect(general).toMatch(/(^|; )frame-src 'self' https:\/\/www\.youtube-nocookie\.com(;|$)/);
+    expect(general.split(";").map((d) => d.trim()).filter((d) => d.startsWith("frame-src"))).toEqual(["frame-src 'self' https://www.youtube-nocookie.com"]);
+    // (`blob:` reste ailleurs — images, médias, workers —, jamais pour les cadres.)
+    expect(general).not.toMatch(/frame-src[^;]*blob:|child-src/);
+    expect(general).not.toMatch(/frame-src[^;]*(data:|\*)/);
+    // Le cinéma lui-même reste inencadrable ; la page des livres ne l'est que par notre origine.
+    expect(general).toMatch(/frame-ancestors 'none'/);
     const books = csp("/livres");
     expect(books).toMatch(/frame-src blob:(;|$)/);
     expect(books).not.toMatch(/https?:\/\//);
     expect(books).toMatch(/script-src 'self' 'unsafe-inline'(;|$)/);
     expect(books).toMatch(/object-src 'none'/);
+    // Posée dans un cadre par le cinéma (§128) : par notre seule origine.
+    expect(books).toMatch(/frame-ancestors 'self'(;|$)/);
     // La règle des livres vient après la générale : la dernière qui pose l'en-tête l'emporte.
     expect(rules.findIndex((r) => r.source === "/livres")).toBeGreaterThan(rules.findIndex((r) => r.source === "/(.*)"));
     // La page hors ligne des livres ouvre le même lecteur : la même politique.

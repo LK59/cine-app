@@ -11,11 +11,12 @@ import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { readerOpening } from "@/lib/books/readerOpening";
 import { preloadBookFile } from "@/lib/books/readerPreload";
+import { BOOKS_PROGRESS_EVENT, acceptFromParent, insetValue, isFramedReader, tellCinema } from "@/lib/books/readerFrame";
 import { BOOK_SORTS, NO_SERIES, type BookSort } from "@/lib/books/grouping";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
 import { BookCover } from "./BookCover";
-import { BookSheetHost } from "./BookSheet";
+import { BookSheetHost, type ReadIntent } from "./BookSheet";
 import { BooksGrid, GRID_CHUNK } from "./BooksGrid";
 import { BookRequestButton, BookRequestsPanel, useBookRequestsEnabled } from "./BookRequests";
 
@@ -75,30 +76,60 @@ function filtersToString(f: Filters): string {
 
 /**
  * `embedded` : la grille ouverte par-dessus l'accueil du cinéma (`#tous=…`, `BooksHome`), sans changer de
- * page. Ses filtres vivent alors dans l'adresse du cinéma ; « Lire » mène à la page des livres comme depuis
- * l'accueil (`openReaderPage`), et le retour la referme d'un pas d'historique.
+ * page. Ses filtres vivent alors dans l'adresse du cinéma ; « Lire » ouvre le lecteur dans un cadre comme
+ * depuis l'accueil (`openReaderFrame`), et le retour la referme d'un pas d'historique.
+ *
+ * La page est aussi ce cadre (`?cadre=1`, §128) : le lecteur seul, qui ne touche pas à l'historique de la
+ * fenêtre du dessus — il dit au cinéma qu'il est prêt, qu'une position est enregistrée, qu'il faut
+ * refermer (`tellCinema`), et reçoit de lui les marges de l'écran.
  */
-export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead: (id: string, cover: HTMLElement | null) => void } } = {}) {
+export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead: (id: string, cover: HTMLElement | null) => void; onReadIntent?: ReadIntent } } = {}) {
   const t = useT();
   const route = useCinemaRoute();
   const [filters, setFilters] = useState<Filters>(() => (embedded ? filtersFrom(new URLSearchParams(embedded.filter === "1" ? "" : embedded.filter)) : filtersFromAddress()));
-  // Arrivé de l'accueil du cinéma pour lire (`?retour=1`) : la grille n'est pas montrée — refermer le
-  // lecteur ramène à l'accueil. Ses pages ne sont pas demandées, le lecteur a le réseau pour lui seul.
+  const [framed] = useState(() => !embedded && isFramedReader());
+  // Arrivé de l'accueil du cinéma pour lire (`?retour=1`, une adresse d'avant le cadre gardée quelque part),
+  // ou le cadre posé sur le cinéma : la grille n'est pas montrée — refermer le lecteur ramène au cinéma.
+  // Ses pages ne sont pas demandées, le lecteur a le réseau pour lui seul.
   const [readerOnly] = useState(() => {
     try {
-      return !embedded && new URLSearchParams(window.location.search).get("retour") === "1" && /(?:^#|&)lire=1(?:&|$)/.test(window.location.hash);
+      return !embedded && (framed || (new URLSearchParams(window.location.search).get("retour") === "1" && /(?:^#|&)lire=1(?:&|$)/.test(window.location.hash)));
     } catch {
       return false;
     }
   });
-  // Le fichier et le code du lecteur demandés dès le premier rendu, pas après le code de la page puis
-  // celui du lecteur (`readerPreload.ts`, mesuré le 28/10/2026).
+  // Le cadre préparé depuis la fiche (sans `&lire=1`) n'ouvre le livre qu'à `open` : ouvrir enregistre
+  // une position, et un livre seulement regardé entrerait dans « Continuer la lecture ».
+  const [opened, setOpened] = useState(false);
+  // Dans le cadre : les marges de l'écran viennent du cinéma (un cadre n'a pas celles de l'encoche ni de la
+  // barre d'accueil), posées en variables que le lecteur lit avant `env()` (`insetVar`). Puis `hello` : le
+  // cinéma répond dès que cette écoute existe, pas avant.
   useEffect(() => {
-    if (embedded || !route.book || !route.reading) return;
+    if (!framed || !route.book) return;
+    const book = route.book;
+    const onMessage = (event: MessageEvent) => {
+      const msg = acceptFromParent(event, window.parent, window.location.origin);
+      if (!msg) return;
+      if (msg.kind === "open") {
+        setOpened(true);
+        return;
+      }
+      const root = document.documentElement.style;
+      for (const side of ["top", "right", "bottom", "left"] as const) root.setProperty(`--reader-inset-${side}`, insetValue(msg[side], side));
+    };
+    window.addEventListener("message", onMessage);
+    tellCinema("hello", book);
+    return () => window.removeEventListener("message", onMessage);
+  }, [framed, route.book]);
+  // Le fichier et le code du lecteur demandés dès le premier rendu, pas après le code de la page puis
+  // celui du lecteur (`readerPreload.ts`, mesuré le 28/10/2026) — et dans le cadre en attente, avant même
+  // « Lire ».
+  useEffect(() => {
+    if (embedded || !route.book || !(route.reading || framed)) return;
     void preloadBookFile(route.book);
     void BookReader.preload().catch(() => {});
     void import("@/lib/books/foliate/view.js").catch(() => {});
-  }, [embedded, route.book, route.reading]);
+  }, [embedded, framed, route.book, route.reading]);
   const { serie, auteur, genre, tri } = filters;
   const [query, setQuery] = useState("");
   // Le filtre tapé part au serveur un quart de seconde après la dernière frappe, pas à chaque lettre.
@@ -132,6 +163,14 @@ export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead:
   const loadMore = useCallback(() => {
     if (!isValidating) void setSize((n) => n + 1);
   }, [isValidating, setSize]);
+  // Dans le cinéma, la grille ouverte par-dessus l'accueil relit ses pages quand le lecteur du cadre a
+  // enregistré une position (`ReaderFrame`) : « Continuer la lecture » et les pourcentages suivent.
+  useEffect(() => {
+    if (!embedded) return;
+    const onProgress = () => void mutate();
+    window.addEventListener(BOOKS_PROGRESS_EVENT, onProgress);
+    return () => window.removeEventListener(BOOKS_PROGRESS_EVENT, onProgress);
+  }, [embedded, mutate]);
   const filtering = typed !== "" || serie !== null || auteur !== null || genre !== null;
   // Les choix des menus, calculés par le serveur une fois (`/api/books/facets`).
   const { data: facets } = useSWR<{ series: string[]; authors: string[]; genres: string[] }>(readerOnly ? null : "/api/books/facets", fetcher);
@@ -158,9 +197,14 @@ export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead:
   /**
    * Refermer le lecteur : un retour, comme une fiche. Arrivé directement de l'accueil du cinéma
    * (`?retour=1`, `BooksHome`), sans rien d'empilé ici, c'est à l'accueil qu'on revient — où la fiche
-   * du livre attend.
+   * du livre attend. Dans le cadre posé sur le cinéma, c'est le cinéma qui referme : le cadre le lui
+   * demande, sans toucher à l'historique.
    */
   const closeReader = () => {
+    if (framed) {
+      if (route.book) tellCinema("close", route.book);
+      return;
+    }
     const fromHome = new URLSearchParams(window.location.search).get("retour") === "1";
     const depth = (window.history.state as Record<string, unknown> | null)?.cinemaDepth;
     if (fromHome && !(typeof depth === "number" && depth > 0)) {
@@ -208,11 +252,25 @@ export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead:
     return () => window.removeEventListener("keydown", onKey);
   }, [embedded, route.book]);
 
-  if (readerOnly && route.book && route.reading)
+  // Le cadre en attente ne montre rien : il est invisible, et son livre attend `open`.
+  if (framed && !(route.book && (route.reading || opened))) return null;
+  if (readerOnly && route.book && (route.reading || opened)) {
+    const book = route.book;
     return createPortal(
-      <BookReader key={route.book} id={route.book} title={selected ? displayTitle(selected) : ""} onClose={closeReader} onSaved={() => void mutate()} />,
+      <BookReader
+        key={book}
+        id={book}
+        title={selected ? displayTitle(selected) : ""}
+        onClose={closeReader}
+        onSaved={() => {
+          void mutate();
+          if (framed) tellCinema("saved", book);
+        }}
+        onReady={framed ? () => tellCinema("ready", book) : undefined}
+      />,
       document.body
     );
+  }
 
   return (
     <div
@@ -335,7 +393,7 @@ export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead:
       {requestsEnabled && requestsOpen && <BookRequestsPanel onClose={() => setRequestsOpen(false)} />}
 
       {/* La fiche d'après l'adresse, dans le cycle de vie des fiches de films (`BookSheetHost`). */}
-      <BookSheetHost books={known} onRead={embedded ? (_book, id, cover) => embedded.onRead(id, cover) : openReader} />
+      <BookSheetHost books={known} onRead={embedded ? (_book, id, cover) => embedded.onRead(id, cover) : openReader} onReadIntent={embedded?.onReadIntent} />
       {/* Porté dans `body`, comme le lecteur des films : sous l'écran, qui est `fixed` et donc son
           propre contexte d'empilement, il passait sous les invitations flottantes de l'application
           (« Installer », z-60) quel que soit son propre z-index. */}

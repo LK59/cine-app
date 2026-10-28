@@ -12,7 +12,7 @@ import { BookRequestButton } from "./BookRequests";
 import { BookSheetHost } from "./BookSheet";
 import { cinemaNavigate, useCinemaRoute } from "@/lib/cinemaRoute";
 import { useTvGridNav } from "@/lib/useTvGridNav";
-import { openReaderPage } from "@/lib/books/readerOpening";
+import { ReaderFrame, openReaderFrame, standbyReaderFrame } from "./ReaderFrame";
 import { lazyNow } from "./lazyNow";
 import type { ComponentProps } from "react";
 import type { BooksScreen as BooksScreenType } from "./BooksScreen";
@@ -27,15 +27,16 @@ import { createPortal } from "react-dom";
  * films et séries n'est pas touché.
  *
  * Un livre touché ouvre sa fiche ici même, comme un film : `#livre=<id>` dans l'adresse du cinéma, la
- * couverture qui devient la fiche (`BookSheetHost`). « Lire » mène à la page des livres par un vrai
- * chargement — le lecteur affiche ses chapitres dans des cadres `blob:` que seule la politique de
- * sécurité de cette page permet ; `retour=1` : le refermer ramène ici, sur la fiche.
+ * couverture qui devient la fiche (`BookSheetHost`). « Lire » ouvre la page des livres dans un cadre
+ * posé par-dessus (`ReaderFrame`, `&lire=1`) — le lecteur affiche ses chapitres dans des cadres `blob:`
+ * que seule la politique de sécurité de cette page permet, et le cadre la garde ; le refermer retire le
+ * cadre, et la fiche est là, dessous, sans que rien n'ait été rechargé (§128).
  */
 function openBook(id: string): void {
   cinemaNavigate({ book: id, reading: false });
 }
 
-const readFromHome = openReaderPage;
+const readFromHome = openReaderFrame;
 
 /**
  * « Tous les livres » par-dessus l'accueil, sans changer de page (`#tous=…`, 28/10/2026) : la grille n'a
@@ -179,10 +180,12 @@ export function BooksHome({ variant }: { variant: "desktop" | "mobile" }) {
       )}
       {/* La fiche d'un livre, portée dans `body` : hors de l'accueil rendu inerte. Une seule à la fois :
           la grille complète ouverte a la sienne. */}
-      {!route.booksAll && <BookSheetHost books={shown} onRead={(_book, id, cover) => void readFromHome(id, cover)} />}
+      {!route.booksAll && <BookSheetHost books={shown} onRead={(_book, id, cover) => void readFromHome(id, cover)} onReadIntent={standbyReaderFrame} />}
       {route.booksAll &&
         typeof document !== "undefined" &&
-        createPortal(<BooksBrowse embedded={{ filter: route.booksAll, onRead: (id, cover) => void readFromHome(id, cover) }} />, document.body)}
+        createPortal(<BooksBrowse embedded={{ filter: route.booksAll, onRead: (id, cover) => void readFromHome(id, cover), onReadIntent: standbyReaderFrame }} />, document.body)}
+      {/* Le lecteur, tant que l'adresse le nomme : un cadre posé sur tout le cinéma, tenu hors de React. */}
+      {route.book && route.reading && <ReaderFrame key={route.book} id={route.book} />}
     </div>
   );
 }
