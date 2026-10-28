@@ -9,7 +9,7 @@
 //
 //   docker run --rm -v "$PWD":/app -v /mnt/media/video:/media:ro -w /app \
 //     -e REPRISE_FILE="/media/movies/…mkv" -e REPRISE_AT=4120 \
-//     node:24-alpine sh -c "npx vitest run reprise.spec.ts"
+//     node:26-alpine sh -c "npx vitest run reprise.spec.ts"
 
 import { openSync, readSync, closeSync, statSync } from "node:fs";
 import { describe, expect, it } from "vitest";

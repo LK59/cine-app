@@ -38,7 +38,7 @@ jobs:
         with:
           # Matches the Dockerfile's runtime, so a syntax or API difference can't pass here and
           # fail there.
-          node-version: 24
+          node-version: 26
           cache: npm
 
       - name: Install dependencies

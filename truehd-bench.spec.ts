@@ -6,7 +6,7 @@
 //
 //   docker run --rm -v "$PWD":/app -v /mnt/media/video:/media:ro -w /app \
 //     -e THD_FILE="/media/movies/Top Gun - Maverick (2022)/Top Gun - Maverick (2022).mkv" \
-//     -e THD_FROM=600 node:24-alpine npx vitest run truehd-bench.spec.ts
+//     -e THD_FROM=600 node:26-alpine npx vitest run truehd-bench.spec.ts
 //   ffmpeg -ss 600 -t 10 -i "…mkv" -map 0:a:0 \
 //     -af astats=measure_overall=none:measure_perchannel=RMS_level -f null -
 //

@@ -55,7 +55,7 @@ quand ça ne passe pas : « Réglages » (adresse ou jeton manquants), « Jeton 
 Sans Node sur l'hôte, par Docker, depuis ce dossier :
 
 ```sh
-docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/w -w /w node:24-alpine \
+docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/w -w /w node:26-alpine \
   sh -c 'npm ci && npx tsc --noEmit -p tsconfig.json && npx rollup -c \
          && npx streamdeck validate fr.laterna.streamdeck.sdPlugin \
          && npx streamdeck pack fr.laterna.streamdeck.sdPlugin --output dist --force'

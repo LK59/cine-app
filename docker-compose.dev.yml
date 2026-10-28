@@ -25,7 +25,7 @@ networks:
 
 services:
   cine-app-dev:
-    image: node:24-alpine
+    image: node:26-alpine
     container_name: cine-app-dev
     working_dir: /app
     env_file:

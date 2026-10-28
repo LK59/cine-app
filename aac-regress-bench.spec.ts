@@ -7,7 +7,7 @@
 // versions du code, les lignes doivent être identiques pour tout AAC standard.
 //
 //   docker run --rm -v "$PWD":/app -v /mnt/media/video:/media:ro -w /app \
-//     -e AAC_FILES=/app/aac-files.txt -e AAC_OUT=/app/aac-out.jsonl node:24-alpine npx vitest run aac-regress-bench.spec.ts
+//     -e AAC_FILES=/app/aac-files.txt -e AAC_OUT=/app/aac-out.jsonl node:26-alpine npx vitest run aac-regress-bench.spec.ts
 import { describe, it } from "vitest";
 import { openSync, readSync, statSync, closeSync, readFileSync, appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";

@@ -5,7 +5,7 @@ dossier. Aucune n'est retouchée à la main : pour changer le logo, changer les 
 
 ```sh
 docker run --rm --name cine-logo-brand -v "$PWD":/app -v "$PWD/node_modules":/app/node_modules \
-  -w /app node:24-alpine node tools/brand/generate.mjs
+  -w /app node:26-alpine node tools/brand/generate.mjs
 ```
 
 (Depuis la racine du dépôt ; `sharp` est celui de l'application. Sans `node_modules` sur l'hôte,

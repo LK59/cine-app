@@ -5,12 +5,12 @@
 # est remise à 0.0.0 : deux manifestes qui ne diffèrent que par elle donnent les mêmes octets, et
 # BuildKit réutilise l'installation. La vraie version reste dans le `package.json` copié avec le
 # reste du code (`COPY . .`), où l'application la lit.
-FROM node:24-alpine AS manifest
+FROM node:26-alpine AS manifest
 WORKDIR /m
 COPY package.json package-lock.json* ./
 RUN node -e 'const fs=require("fs");for(const f of ["package.json","package-lock.json"]){if(!fs.existsSync(f))continue;const j=JSON.parse(fs.readFileSync(f,"utf8"));j.version="0.0.0";if(j.packages&&j.packages[""])j.packages[""].version="0.0.0";fs.writeFileSync(f,JSON.stringify(j,null,2)+"\n")}'
 
-FROM node:24-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /app
 # Build tools required for native modules (better-sqlite3)
 RUN apk add --no-cache python3 make g++
@@ -19,7 +19,7 @@ COPY --from=manifest /m/ ./
 # place, so a dependency change re-downloads only what actually changed.
 RUN --mount=type=cache,target=/root/.npm npm install
 
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 # Le repère du build, repris tel quel dans les réglages. `.git` n'entre pas dans le contexte de
 # build (voir .dockerignore), donc le hash ne peut venir que d'ici :
 #   BUILD_REF=$(tools/build-ref.sh) docker compose build
@@ -36,7 +36,7 @@ RUN npm test
 # The image cache the server writes at runtime lives in a volume (docker-compose.yml), not here.
 RUN npm run build
 
-FROM node:24-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 RUN addgroup -g 1001 cineapp && adduser -u 1001 -G cineapp -s /bin/sh -D cineapp

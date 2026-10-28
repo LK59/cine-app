@@ -16,7 +16,7 @@
 // avant §93), il montre l'ancien comportement — « fin du fichier » au milieu du film, ou un trou.
 //
 //   docker run --rm --name cine-zone-bench -v "$PWD":/app -v <dossier>:/zone -w /app \
-//     -e ZONE_BENCH_DIR=/zone node:24-alpine npx vitest run zone-bench.spec.ts
+//     -e ZONE_BENCH_DIR=/zone node:26-alpine npx vitest run zone-bench.spec.ts
 import { describe, it } from "vitest";
 import { readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { openMediaFile } from "@/lib/webcodecs/mediaFile";

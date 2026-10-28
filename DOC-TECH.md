@@ -2092,7 +2092,7 @@ jq -s 'map(select(.kind == "stop" and .session)) | group_by(.session) | map(last
 docker run --rm -v "$PWD":/app -v /tmp/bench:/bench -v /mnt/media/video:/media:ro -w /app \
   -e BENCH_FILE="/media/tv/…/file.mkv" -e BENCH_FROM=1951 -e BENCH_COUNT=6 \
   -e BENCH_OUT=/bench/out -e BENCH_EXPECT_START=1943.3 \
-  node:24-alpine sh -c "npx vitest run bench.spec.ts"
+  node:26-alpine sh -c "npx vitest run bench.spec.ts"
 ```
 
 Then, on a machine with ffmpeg: decode `<out>.video.mp4` requiring zero errors, and compare **the
@@ -2107,7 +2107,7 @@ sequence of gaps between presentation timestamps** against ffprobe's reading of 
 
 ```bash
 docker run --rm -v "$PWD":/app -v /mnt/media/video:/media:ro -w /app \
-  -e COUT_FILE="/media/movies/…/file.mkv" node:24-alpine npx vitest run cout.spec.ts
+  -e COUT_FILE="/media/movies/…/file.mkv" node:26-alpine npx vitest run cout.spec.ts
 ```
 
 It reports reads, bytes and milliseconds for four moments: reading the header, opening the

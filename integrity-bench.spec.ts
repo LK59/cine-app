@@ -9,7 +9,7 @@
 // calcul seul. Rien n'est écrit hors de INTEGRITY_BENCH_OUT.
 //
 //   docker run --rm --name cine-integrity-bench -v "$PWD":/app -v /mnt/media/video:/media:ro -w /app \
-//     -e INTEGRITY_BENCH_FILES=/app/f.txt -e INTEGRITY_BENCH_OUT=/app/out.jsonl node:24-alpine \
+//     -e INTEGRITY_BENCH_FILES=/app/f.txt -e INTEGRITY_BENCH_OUT=/app/out.jsonl node:26-alpine \
 //     npx vitest run integrity-bench.spec.ts
 import { describe, it } from "vitest";
 import { appendFileSync, readFileSync } from "node:fs";

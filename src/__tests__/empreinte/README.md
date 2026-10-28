@@ -52,7 +52,7 @@ user agent is written `<agent>`.
 ## Running it
 
 ```sh
-docker run --rm -v "$PWD":/app -w /app node:24-alpine npx vitest run src/__tests__/empreinte/
+docker run --rm -v "$PWD":/app -w /app node:26-alpine npx vitest run src/__tests__/empreinte/
 ```
 
 It is part of `npm test`, so the gate runs it. A missing fingerprint file is written on a local

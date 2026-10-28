@@ -22,7 +22,7 @@
 //   prend pas tel quel, donc ce qui passe par un décodeur.
 //
 //   docker run --rm --cpus=3 --name mb-bench -v "$PWD":/app -v /mnt/media/video:/mnt/media/video:ro -w /app \
-//     -e MB_FILES=/app/mb-files.txt -e MB_OUT=/app/mb-out.jsonl node:24-alpine \
+//     -e MB_FILES=/app/mb-files.txt -e MB_OUT=/app/mb-out.jsonl node:26-alpine \
 //     npx vitest run mediabunny-regress-bench.spec.ts
 //
 // `MB_SECONDS` raccourcit la fenêtre (60 par défaut), `MB_NO_REMUX=1` saute la troisième partie.

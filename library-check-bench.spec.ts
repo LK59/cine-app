@@ -8,7 +8,7 @@
 //   docker exec cine-app env | grep -E '^(JELLYFIN|RADARR|SONARR|TMDB)_' > /tmp/x/env
 //   docker run --rm --network media_net --env-file /tmp/x/env -v "$PWD":/app -w /app --tmpfs /banc \
 //     -v /mnt/media/video:/mnt/media/video:ro -e LIBRARY_CHECK_LIVE=/banc -e LIBRARY_CHECK_OUT=/app/…/out.json \
-//     node:24-alpine npx vitest run library-check-bench.spec.ts
+//     node:26-alpine npx vitest run library-check-bench.spec.ts
 import { describe, it } from "vitest";
 import { writeFileSync } from "node:fs";
 

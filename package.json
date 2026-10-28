@@ -50,5 +50,9 @@
   "overrides": {
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true,
+    "unrs-resolver@1.12.2": true
   }
 }

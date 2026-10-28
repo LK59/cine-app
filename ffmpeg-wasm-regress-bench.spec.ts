@@ -17,7 +17,7 @@
 //
 //   docker run --rm -v "$PWD":/app -v /mnt/media/video:/media:ro -w /app \
 //     -e FFW_LIST=/app/liste.tsv -e FFW_OUT=/app/avant.jsonl \
-//     node:24-alpine npx vitest run ffmpeg-wasm-regress-bench.spec.ts
+//     node:26-alpine npx vitest run ffmpeg-wasm-regress-bench.spec.ts
 //   ffmpeg -ss <début> -t 60 -i "…mkv" -map 0:<piste> \
 //     -af astats=measure_overall=none:measure_perchannel=RMS_level -f null -
 //

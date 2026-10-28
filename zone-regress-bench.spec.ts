@@ -20,7 +20,7 @@
 //
 //   docker run --rm --name cine-zone-regress -v "$PWD":/app -v /mnt/media/video:/media:ro -w /app \
 //     -e ZONE_REGRESS_FILES=/app/files.txt -e ZONE_REGRESS_OUT=/app/out.jsonl \
-//     node:24-alpine npx vitest run zone-regress-bench.spec.ts
+//     node:26-alpine npx vitest run zone-regress-bench.spec.ts
 import { describe, it } from "vitest";
 import { appendFileSync, closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { createHash, type Hash } from "node:crypto";

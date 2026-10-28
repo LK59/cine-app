@@ -6,7 +6,7 @@
 // chacune de ses parties, à froid (premier passage, journaux lus et analysés) puis à chaud.
 //
 //   docker run --rm -v "$PWD":/app -w /app --tmpfs /banc -v "$PWD/data/logs":/banc/logs:ro \
-//     -e ACTIVITE_BANC=/banc node:24-alpine npx vitest run activite-bench.spec.ts
+//     -e ACTIVITE_BANC=/banc node:26-alpine npx vitest run activite-bench.spec.ts
 //
 // `DATA_DIR` pointe vers un dossier jetable dont seul `logs/` est monté, en lecture seule : la base
 // y est neuve et vide, rien n'est écrit dans les vrais journaux.

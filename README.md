@@ -669,7 +669,7 @@ Only relevant if you are modifying the code — deploying needs none of this.
 # Once, and after every dependency change: install node_modules into the working tree.
 # Alpine, like every container below, so the native better-sqlite3 module matches; the build
 # tools are needed because npm rebuilds it from source (the Dockerfile's deps stage does the same).
-docker run --rm -v "$PWD":/app -w /app node:24-alpine sh -c \
+docker run --rm -v "$PWD":/app -w /app node:26-alpine sh -c \
   'apk add --no-cache python3 make g++ && npm ci'
 
 # Iterate — hot reload against the working tree. Published on the server's loopback (3001) unless
@@ -679,11 +679,11 @@ docker run --rm -v "$PWD":/app -w /app node:24-alpine sh -c \
 docker compose -f docker-compose.dev.yml up
 
 # The gate — identical to CI's verify job. Run it before every commit.
-docker run --rm -v "$PWD":/app -w /app node:24-alpine sh -c \
+docker run --rm -v "$PWD":/app -w /app node:26-alpine sh -c \
   'set -e; npm run typecheck; npm run lint -- --max-warnings=0; npm test'
 
 # One test file
-docker run --rm -v "$PWD":/app -w /app node:24-alpine npx vitest run src/__tests__/<file>
+docker run --rm -v "$PWD":/app -w /app node:26-alpine npx vitest run src/__tests__/<file>
 ```
 
 `set -e` and no pipes: `npm test | grep` swallows the exit code, and a red test has been pushed

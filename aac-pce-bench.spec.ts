@@ -14,7 +14,7 @@
 //    standard), à envoyer à un vrai MediaSource — le second sert de témoin.
 //
 //   docker run --rm -v "$PWD":/app -v /dev/shm:/shm -w /app \
-//     -e AAC_PCE_OUT=/shm/aacpce -e AAC_PCE_FILE=/shm/eq51.mkv node:24-alpine npx vitest run aac-pce-bench.spec.ts
+//     -e AAC_PCE_OUT=/shm/aacpce -e AAC_PCE_FILE=/shm/eq51.mkv node:26-alpine npx vitest run aac-pce-bench.spec.ts
 //   ffmpeg -i /shm/aacpce.rewrite.audio.mp4 -af astats=measure_overall=none:measure_perchannel=RMS_level -f null -
 //
 // Mesuré le 10/10/2026 : décision `rewrite`, configuration réécrite `11 b0 56 e5 00` identique à

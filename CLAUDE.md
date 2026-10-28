@@ -42,11 +42,11 @@ Hiding the management button is presentation, not security.
 docker compose -f docker-compose.dev.yml up
 
 # The gate — identical to CI's verify job. Run it before every commit.
-docker run --rm -v "$PWD":/app -w /app node:24-alpine sh -c \
+docker run --rm -v "$PWD":/app -w /app node:26-alpine sh -c \
   'set -e; npm run typecheck; npm run lint -- --max-warnings=0; npm test'
 
 # One test file
-docker run --rm -v "$PWD":/app -w /app node:24-alpine npx vitest run src/__tests__/<file>
+docker run --rm -v "$PWD":/app -w /app node:26-alpine npx vitest run src/__tests__/<file>
 
 # Deploy (the Dockerfile runs the tests before building). BUILD_REF names the build in the logs'
 # `build` field: the short commit, `-dirty` if tracked files differ; without it, a timestamp.
@@ -59,6 +59,11 @@ The dependency install is cached across deploys because the `manifest` stage fee
 with `package.json` / `package-lock.json` whose `version` is reset to 0.0.0. Copied as-is, the
 version bump that precedes every deploy invalidated the whole layer: ~2 GB of build cache per
 deploy, 138 GB after two weeks (cleared 08/10/2026).
+
+The image and the gate run Node 26 (since 28/10/2026). `allowScripts` in `package.json` lists the
+dependencies whose install scripts may run, each at its exact version: npm 12 blocks every other one
+by default, and npm 11 only warns. Upgrading `better-sqlite3` or `unrs-resolver` means approving the
+new version too (`npm install-scripts approve <pkg>`), or the next npm installs it without its script.
 
 The suite writes into a throwaway `DATA_DIR` (`vitest.config.ts`): the gate mounts the whole
 repository, `data/` included, and tests calling `logError` used to append Vitest mock errors to

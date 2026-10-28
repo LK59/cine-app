@@ -17,7 +17,7 @@
 // demande d'en traverser 2,8 Mo, parce que les treize pistes y sont tressées ensemble.
 //
 //   docker run --rm -v "$PWD":/app -v /mnt/media/video:/media:ro -w /app \
-//     -e COUT_FILE="/media/movies/…mkv" node:24-alpine npx vitest run cout.spec.ts
+//     -e COUT_FILE="/media/movies/…mkv" node:26-alpine npx vitest run cout.spec.ts
 import { openSync, readSync, closeSync, statSync } from "node:fs";
 import { describe, it } from "vitest";
 import { parseMatroska } from "@/lib/webcodecs/matroska";

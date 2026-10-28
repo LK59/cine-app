@@ -5,7 +5,7 @@
 // accepte ou non un PCE tel quel. Ne remultiplexe rien.
 //
 //   docker run --rm -v "$PWD":/app -v /mnt/media/video:/media:ro -w /app \
-//     -e AAC_CENSUS=/app/liste.txt node:24-alpine npx vitest run aac-census-bench.spec.ts
+//     -e AAC_CENSUS=/app/liste.txt node:26-alpine npx vitest run aac-census-bench.spec.ts
 import { describe, it } from "vitest";
 import { openSync, readSync, statSync, closeSync, readFileSync } from "node:fs";
 import { openMediaFile } from "@/lib/webcodecs/mediaFile";

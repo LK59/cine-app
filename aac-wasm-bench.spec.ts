@@ -7,7 +7,7 @@
 //
 //   docker run --rm -v "$PWD":/app -v /mnt/media/video:/media:ro -w /app \
 //     -e AAC_FILE="/media/movies/Ruby Sparks (2012)/Ruby Sparks (2012).mkv" -e AAC_FROM=600 \
-//     node:24-alpine npx vitest run aac-wasm-bench.spec.ts
+//     node:26-alpine npx vitest run aac-wasm-bench.spec.ts
 //   ffmpeg -ss 600 -t 10 -i "…mkv" -map 0:a:0 \
 //     -af astats=measure_overall=none:measure_perchannel=RMS_level -f null -
 //
