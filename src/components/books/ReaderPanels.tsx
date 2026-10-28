@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import {
@@ -20,7 +21,8 @@ import type { FoliateTocItem } from "@/lib/books/foliate/view";
 type Colors = { bg: string; fg: string; link: string; dark: boolean };
 
 /**
- * Les deux panneaux du lecteur de livres (DECISIONS.md §127) : la table des matières et les réglages.
+ * Les panneaux du lecteur de livres (DECISIONS.md §127) : la table des matières et les signets, la
+ * recherche dans le texte, les réglages.
  * Sur téléphone, une feuille qui monte du bas et laisse voir la page au-dessus ; sur un grand écran,
  * un panneau sur le côté. Chaque réglage s'applique à la page derrière, aussitôt : on règle en lisant.
  */
@@ -54,20 +56,40 @@ function PanelFrame({ colors, title, onClose, children, side }: { colors: Colors
   );
 }
 
+export interface ReaderBookmark {
+  cfi: string;
+  fraction: number;
+  chapter: string;
+  excerpt: string;
+}
+
+/**
+ * La table des matières et les signets, deux onglets d'un même panneau : on y cherche un endroit du
+ * livre, qu'il vienne de l'auteur ou de soi.
+ */
 export function ReaderTocPanel({
   toc,
   currentHref,
   colors,
   onPick,
   onClose,
+  bookmarks,
+  onPickBookmark,
+  onRemoveBookmark,
+  initialTab = "toc",
 }: {
   toc: FoliateTocItem[];
   currentHref: string | null;
   colors: Colors;
   onPick: (href: string) => void;
   onClose: () => void;
+  bookmarks: ReaderBookmark[];
+  onPickBookmark: (cfi: string) => void;
+  onRemoveBookmark: (cfi: string) => void;
+  initialTab?: "toc" | "bookmarks";
 }) {
   const t = useT();
+  const [tab, setTab] = useState<"toc" | "bookmarks">(initialTab);
   const rows: { item: FoliateTocItem; depth: number }[] = [];
   const walk = (items: FoliateTocItem[] | null | undefined, depth: number) => {
     for (const item of items ?? []) {
@@ -76,28 +98,166 @@ export function ReaderTocPanel({
     }
   };
   walk(toc, 0);
+  const tabs = [
+    { id: "toc" as const, label: t("books.reader.contents") },
+    { id: "bookmarks" as const, label: bookmarks.length > 0 ? `${t("books.reader.bookmarks")} · ${bookmarks.length}` : t("books.reader.bookmarks") },
+  ];
   return (
-    <PanelFrame colors={colors} title={t("books.reader.contents")} onClose={onClose} side="left">
-      {rows.length === 0 && <p className="py-6 text-center text-sm opacity-60">{t("books.reader.noContents")}</p>}
-      <ul className="-mx-2">
-        {rows.map(({ item, depth }, i) => {
-          const current = !!item.href && item.href === currentHref;
-          return (
-            <li key={`${i}:${item.href ?? ""}`}>
-              <button
-                type="button"
-                disabled={!item.href}
-                onClick={() => item.href && onPick(item.href)}
-                className="w-full rounded-lg px-2 py-2.5 text-left text-[15px] leading-snug transition-colors hover:bg-black/5 disabled:opacity-50"
-                style={{ paddingLeft: `${0.5 + depth * 1}rem`, fontWeight: current ? 600 : 400, background: current ? (colors.dark ? "rgb(255 255 255 / 0.08)" : "rgb(0 0 0 / 0.06)") : undefined }}
-                aria-current={current ? "location" : undefined}
-              >
-                {item.label?.trim() || "—"}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+    <PanelFrame colors={colors} title={tab === "toc" ? t("books.reader.contents") : t("books.reader.bookmarks")} onClose={onClose} side="left">
+      <div role="tablist" className="mb-3 flex gap-1 rounded-full p-1" style={{ background: colors.dark ? "rgb(255 255 255 / 0.08)" : "rgb(0 0 0 / 0.06)" }}>
+        {tabs.map((x) => (
+          <button
+            key={x.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === x.id}
+            onClick={() => setTab(x.id)}
+            className="h-8 flex-1 rounded-full text-sm font-medium transition-colors"
+            style={tab === x.id ? { background: colors.fg, color: colors.bg } : undefined}
+          >
+            {x.label}
+          </button>
+        ))}
+      </div>
+      {tab === "toc" ? (
+        <>
+          {rows.length === 0 && <p className="py-6 text-center text-sm opacity-60">{t("books.reader.noContents")}</p>}
+          <ul className="-mx-2">
+            {rows.map(({ item, depth }, i) => {
+              const current = !!item.href && item.href === currentHref;
+              return (
+                <li key={`${i}:${item.href ?? ""}`}>
+                  <button
+                    type="button"
+                    disabled={!item.href}
+                    onClick={() => item.href && onPick(item.href)}
+                    className="w-full rounded-lg px-2 py-2.5 text-left text-[15px] leading-snug transition-colors hover:bg-black/5 disabled:opacity-50"
+                    style={{ paddingLeft: `${0.5 + depth * 1}rem`, fontWeight: current ? 600 : 400, background: current ? (colors.dark ? "rgb(255 255 255 / 0.08)" : "rgb(0 0 0 / 0.06)") : undefined }}
+                    aria-current={current ? "location" : undefined}
+                  >
+                    {item.label?.trim() || "—"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      ) : (
+        <>
+          {bookmarks.length === 0 && <p className="py-6 text-center text-sm leading-relaxed opacity-60">{t("books.reader.noBookmarks")}</p>}
+          <ul className="-mx-2" data-reader-bookmarks>
+            {bookmarks.map((b) => (
+              <li key={b.cfi} className="flex items-start gap-1">
+                <button type="button" onClick={() => onPickBookmark(b.cfi)} className="min-w-0 flex-1 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-black/5">
+                  <span className="flex items-baseline gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{b.chapter || "—"}</span>
+                    <span className="shrink-0 text-xs tabular-nums opacity-60">{t("books.reader.percent", { pct: Math.round(b.fraction * 100) })}</span>
+                  </span>
+                  {b.excerpt && <span className="mt-0.5 line-clamp-2 block text-sm leading-snug opacity-70">{b.excerpt}</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onRemoveBookmark(b.cfi)}
+                  aria-label={t("books.reader.removeBookmark")}
+                  className="mt-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full opacity-60 transition-opacity hover:opacity-100"
+                >
+                  <X size={15} aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </PanelFrame>
+  );
+}
+
+export interface SearchGroup {
+  label: string;
+  items: { cfi: string; pre: string; match: string; post: string }[];
+}
+
+/**
+ * La recherche dans le texte du livre. Les résultats arrivent chapitre par chapitre, avec leur
+ * contexte ; l'avancement est dit tant que la recherche parcourt le livre, et elle s'arrête d'un geste.
+ */
+export function ReaderSearchPanel({
+  colors,
+  query,
+  onQuery,
+  groups,
+  progress,
+  onPick,
+  onStop,
+  onClose,
+}: {
+  colors: Colors;
+  query: string;
+  onQuery: (q: string) => void;
+  groups: SearchGroup[];
+  /** De 0 à 1 pendant la recherche ; `null` quand elle est finie ou arrêtée. */
+  progress: number | null;
+  onPick: (cfi: string) => void;
+  onStop: () => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const count = groups.reduce((n, g) => n + g.items.length, 0);
+  return (
+    <PanelFrame colors={colors} title={t("books.reader.search")} onClose={onClose} side="right">
+      <input
+        type="search"
+        // Le champ prend le clavier dès l'ouverture : on ouvre ce panneau pour taper.
+        autoFocus
+        value={query}
+        onChange={(e) => onQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && query) {
+            e.stopPropagation();
+            onQuery("");
+          }
+        }}
+        placeholder={t("books.reader.searchPlaceholder")}
+        aria-label={t("books.reader.search")}
+        className="h-11 w-full rounded-xl px-4 text-[15px] outline-none"
+        style={{ background: colors.dark ? "rgb(255 255 255 / 0.08)" : "rgb(0 0 0 / 0.06)", color: colors.fg }}
+      />
+      <div className="mt-2 flex h-6 items-center justify-between text-xs opacity-70" aria-live="polite">
+        <span>
+          {progress !== null
+            ? t("books.reader.searching", { pct: Math.round(progress * 100) })
+            : query.trim().length >= 2
+              ? count === 0
+                ? t("books.reader.searchNone")
+                : t("books.reader.searchCount", { n: count })
+              : ""}
+        </span>
+        {progress !== null && (
+          <button type="button" onClick={onStop} className="rounded-full px-2 py-0.5 font-medium underline-offset-2 hover:underline">
+            {t("books.reader.searchStop")}
+          </button>
+        )}
+      </div>
+      <div data-reader-search-results>
+        {groups.map((g, gi) => (
+          <section key={`${gi}:${g.label}`} className="mt-3">
+            <h3 className="mb-1 truncate text-xs font-semibold uppercase tracking-wide opacity-60">{g.label || "—"}</h3>
+            <ul className="-mx-2">
+              {g.items.map((r) => (
+                <li key={r.cfi}>
+                  <button type="button" onClick={() => onPick(r.cfi)} className="w-full rounded-lg px-2 py-2 text-left text-sm leading-snug transition-colors hover:bg-black/5">
+                    <span className="opacity-70">{r.pre}</span>
+                    <mark className="rounded-sm px-0.5 font-semibold" style={{ background: colors.dark ? "rgb(250 204 21 / 0.35)" : "rgb(250 204 21 / 0.55)", color: "inherit" }}>
+                      {r.match}
+                    </mark>
+                    <span className="opacity-70">{r.post}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
     </PanelFrame>
   );
 }
@@ -264,6 +424,7 @@ export function ReaderSettingsPanel({ prefs, colors, onChange, onClose }: { pref
 
       <div className="py-1">
         <Switch on={prefs.justify} onChange={(justify) => onChange({ justify })} label={t("books.reader.justify")} colors={colors} />
+        <Switch on={prefs.tapTurns} onChange={(tapTurns) => onChange({ tapTurns })} label={t("books.reader.tapTurns")} colors={colors} />
       </div>
 
       <Row label={t("books.reader.brightness")} value={`${Math.round(prefs.brightness * 100)} %`}>

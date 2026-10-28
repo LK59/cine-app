@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { booksCaller } from "@/lib/books/guard";
 import { bookIndex, pageOf, resumeFrom, withProgress } from "@/lib/books/bookIndex";
 import { progressByBook } from "@/lib/books/progress";
+import { playedBooksOf } from "@/lib/books/library";
 import { BOOK_SORTS, type BookSort } from "@/lib/books/grouping";
 
 /**
@@ -17,7 +18,7 @@ export async function GET(req: NextRequest) {
   const tri = p.get("tri") as BookSort | null;
   const clip = (v: string | null) => (v ? v.slice(0, 200) : null);
   try {
-    const index = await bookIndex(caller);
+    const [index, played] = await Promise.all([bookIndex(caller), playedBooksOf(caller)]);
     const progress = progressByBook(caller.u);
     const query = {
       query: clip(p.get("q")) ?? "",
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
       {
         total: page.total,
         library: index.books.length,
-        books: withProgress(page.books, progress),
+        books: withProgress(page.books, progress, played),
         seriesCounts: page.seriesCounts,
         ...(first ? { resume: resumeFrom(index, progress) } : {}),
       },

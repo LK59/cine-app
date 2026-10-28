@@ -7489,9 +7489,16 @@ auteur (`People` de type `Author`), série et tome (`SeriesName`, `IndexNumber`)
 couverture sont ce que Jellyfin lit lui-même dans l'EPUB ; un tome, un auteur ou une couverture
 absents sont prévus.
 
-**Qui voit quoi.** Tout compte du foyer, `user` compris. La grille et chaque livre sont demandés à
-Jellyfin **sous l'identité du compte** (`/Users/{jfId}/Items`, droits et contrôle parental de
-Jellyfin), puis filtrés par ses tags bloqués (§54, `carriesBlockedTag`). Le fichier est relayé
+**Qui voit quoi.** Tout compte du foyer, `user` compris. La bibliothèque est lue **une fois pour tous**
+avec la clé du serveur (`fetchLibrary`, bibliothèque par bibliothèque), et chaque compte n'en voit que
+ce que ses droits permettent (`rights.ts`) : ses bibliothèques Jellyfin (`EnableAllFolders` /
+`EnabledFolders` de sa politique, relue toutes les deux minutes), ses tags bloqués (§54, la même
+fonction `carriesBlockedTag`), et le contrôle parental par classification au plus prudent (`BlockUnratedItems`
+qui nomme les livres cache ceux sans classification ; un âge maximal cache tout livre classé). Une
+politique illisible sans copie connue : 502, rien n'est montré. Un livre seul (fiche, fichier, position,
+signets) est toujours demandé sous l'identité du compte (`/Users/{jfId}/Items/{id}`), Jellyfin
+appliquant ses propres droits, puis les tags bloqués. « Lu » vient de Jellyfin par compte, une requête
+qui ne rend que les livres lus, gardée deux minutes (`playedBooksOf`). Le fichier est relayé
 depuis `/Items/{id}/Download` avec la clé du serveur, seulement après avoir vérifié que l'élément est
 un `Book` visible de ce compte ; rien de la réponse de Jellyfin n'est recopié hormis la taille, et la
 réponse est `private`. Une session de lien de partage (§112) n'atteint rien : aucune règle de
@@ -7509,13 +7516,17 @@ elles, restent ouvertes à ce compte : c'est un affichage, pas un droit (`showBo
 
 **À l'échelle de plusieurs milliers d'EPUB, sans jamais ralentir le reste.** Rien des livres ne part
 au lancement : ni dans `earlyFetch`, ni dans le catalogue, ni dans le cache gardé sur l'appareil, ni dans
-les préchauffages du serveur (`catalogueWarm`, `selfWarm`) — un test le vérifie. Le serveur garde, par
-compte et en mémoire, un **index** (`bookIndex.ts`) : la liste demandée à Jellyfin par pages de mille
-(`LIST_PAGE`) sans résumés, triée, le texte de recherche de chaque livre déjà replié, l'accueil déjà
-calculé et les choix des menus. Il naît à la première ouverture de la catégorie, se construit par
-tranches de quatre cents livres en rendant la main à la boucle entre deux, sert cinq minutes puis se
-refait derrière la réponse (une préparation à la fois), et se refait depuis les éléments déjà reçus quand
-des métadonnées d'EPUB arrivent (au plus toutes les vingt secondes) ; vingt-quatre comptes au plus. Le
+les préchauffages du serveur (`catalogueWarm`, `selfWarm`) — un test le vérifie. Le serveur garde **un
+seul index** en mémoire (`bookIndex.ts`) : la liste demandée à Jellyfin par pages de mille (`LIST_PAGE`,
+trois en parallèle) sans résumés, triée, le texte de recherche de chaque livre déjà replié. Par compte,
+il était lu par chaque compte après chaque redémarrage — sept pages, ~5 s chacun en production (6 403
+EPUB). Il naît à la première ouverture de la catégorie, se construit par tranches de quatre cents livres
+en rendant la main à la boucle entre deux, sert cinq minutes puis se refait derrière la réponse (une
+préparation à la fois), et se refait depuis les éléments déjà reçus quand des métadonnées d'EPUB arrivent
+(au plus toutes les vingt secondes). Une copie des éléments reçus est gardée sur le disque
+(`DATA_DIR/book-index.json`, un jour au plus) : après un redémarrage, la première ouverture part d'elle
+pendant que Jellyfin est relu. Chaque ensemble de droits a sa **vue** (livres permis, accueil, choix des
+menus), calculée une fois et partagée par les comptes qui ont les mêmes droits ; vingt-quatre vues au plus. Le
 téléphone n'en reçoit que des morceaux : l'accueil (`/api/books/home`, une douzaine de rangées de vingt),
 une page de la grille (`/api/books?offset=…&limit=…`, 200 au plus, filtrée et triée par le serveur, avec
 le vrai nombre de tomes des séries de la page), les choix des menus (`/api/books/facets`), douze
@@ -7536,8 +7547,10 @@ dire pas de série (`decideSeries`). L'OPF est lu par plages à travers le relai
 zip, `container.xml`, l'OPF : quelques dizaines de kilo-octets), une fois par fichier (`book_meta`, clé
 `Etag`), en arrière-plan, deux à la fois ; la grille ne l'attend jamais — un livre pas encore lu s'affiche
 sans série, et la prend au chargement suivant (`epubMeta.ts`). Cette file ne démarre qu'à la demande de
-l'index (jamais au lancement), se met en pause tant qu'un film joue (`anyPlaybackBeat`, comme les
-répliques, §88) et écrit par lots de vingt-cinq dans une transaction courte. Les auteurs sont les `People`
+l'index (jamais au lancement), lit deux livres à la fois, **ralentit à un livre par seconde tant qu'un
+film joue** (`anyPlaybackBeat`) et écrit par lots de vingt-cinq dans une transaction courte. Elle
+s'arrêtait tout à fait pendant un film : seize livres sur 6 403 en une heure en production, trois films
+jouant presque sans cesse ; un livre lu coûte trois petites requêtes de plages, rien qu'un film remarque. Les auteurs sont les `People`
 de Jellyfin, sinon les `dc:creator` de l'OPF (Jellyfin n'en a que pour une partie des livres que l'EPUB
 décrit pourtant ; « Nom, Prénom » remis dans l'ordre, `bookAuthors`) — jamais un nom de dossier —,
 rapprochés quel que soit l'ordre des mots (« Muchamore Robert », `nameKey`). Les genres réunissent ceux
@@ -7587,6 +7600,28 @@ fin) : Jellyfin ne sait garder que des durées. Envoyée au fil de la lecture (r
 fermeture et à `pagehide` (`sendBeacon`). Le livre fini la première fois, il est noté « lu » chez
 Jellyfin pour ce compte (`markPlayed`) ; un échec de cet appel ne perd pas la position.
 
+**Signets, recherche, lecture hors ligne.**
+- *Signets* : le signet de la barre du haut marque la page lue (plein quand elle l'est) ; la liste est un
+  onglet du panneau de la table des matières — chapitre, quelques mots, pourcentage. Gardés par compte
+  côté serveur (`book_bookmarks`, cinq cents par livre au plus, `POST /api/books/<id>/bookmarks`, aussi
+  pour retirer — même règle de proxy que la position).
+- *Recherche dans le livre* : `search` de foliate-js, chapitre par chapitre (un `await` entre deux),
+  résultats avec leur contexte sous le titre du chapitre, trouvailles soulignées sur la page ; chaque
+  frappe arrête la recherche précédente, et elle s'arrête d'elle-même à trois cents trouvailles.
+- *Toucher les bords* : « Tourner les pages en touchant les bords », réglage de l'appareil, allumé par
+  défaut. Les zones restent 30 % / 40 % / 30 % (`tapAction`) ; coupé, un toucher ne fait que montrer
+  ou cacher les barres (glisser, le clavier et la molette tournent toujours).
+- *Hors ligne* : « Télécharger » sur la fiche garde l'EPUB dans l'OPFS du site
+  (`laterna-books/<compte>/<livre>/`, `offlineBooks.ts`), à part des téléchargements de films, qui n'en
+  savent rien ; la place est demandée au navigateur avant. Le lecteur ouvre la copie de l'appareil quand
+  il y en a une. Sans réseau, la position et les signets attendent dans une file de l'appareil
+  (`bookSync.ts`, `laterna:books:outbox`) et repartent au retour ; une position renvoyée tard n'écrase
+  pas une plus récente (`at`). Les livres gardés ont leur section dans la page des téléchargements
+  (rien de chargé quand l'appareil n'en garde pas, `useOfflineBooksPresent`), et s'ouvrent dans
+  `/livres/hors-ligne` : une page publique que le service worker garde et sert sans réseau, comme
+  `/hors-ligne`, **avec sa politique de sécurité** (celle des livres) — une page gardée sans elle n'est
+  pas servie. L'entrée des films n'est pas touchée.
+
 **Le lecteur.** foliate-js, copié à un commit précis (`src/lib/books/foliate/`, README et
 `UPSTREAM`) : pas de paquet npm, et seuls les fichiers de l'EPUB. Pages en colonnes (deux côte à côte
 sur un écran large et couché, si l'on veut) ou défilement continu ; toucher à gauche ou à droite,
@@ -7626,7 +7661,11 @@ piégé, `fixtures/books/piege.xhtml`), `books-reader.test.ts` (réglages, grill
 de foliate-js, titre affiché), `books-toggle.test.tsx` (deux boutons option coupée, troisième et mode
 Livres allumée, adresse ; la section de la recherche coupée), `books-sheet.test.tsx` (cycle de vie de
 la fiche), `books-scale.test.tsx` (index, pages, file des OPF, mesures de la boucle),
-`books-metadata.test.ts` (OPF, auteurs, genres, couverture), `books-requests.test.ts`. En vrais navigateurs : `tools/livres-securite/` (Chromium, Firefox, WebKit ; un EPUB
+`books-metadata.test.ts` (OPF, auteurs, genres, couverture, file ralentie pendant un film),
+`books-requests.test.ts`, `books-reading.test.tsx` (bords, signets, file hors ligne, section des
+téléchargements), `serviceWorker-offline-entry.test.ts` (page hors ligne des livres et sa politique),
+et dans `books-routes.test.ts` un livre d'une bibliothèque interdite ou porteur d'un tag bloqué, absent
+de toutes les routes pour ce compte. En vrais navigateurs : `tools/livres-securite/` (Chromium, Firefox, WebKit ; un EPUB
 piégé et un espion qui compte ce qui l'atteint).
 
 **Voulu.** Ni page Nouveautés, ni entrée au registre des corrections : une option qu'une

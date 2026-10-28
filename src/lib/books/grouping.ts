@@ -128,8 +128,9 @@ export function dedupeBooks(books: readonly BookSummary[]): BookSummary[] {
   return books.filter((b) => kept.has(b));
 }
 
-export function homeRows(input: readonly BookSummary[], { maxRows = 10, perRow = 20 } = {}): HomeRows {
-  const books = dedupeBooks(input);
+export function homeRows(input: readonly BookSummary[], { maxRows = 10, perRow = 20, deduped = false } = {}): HomeRows {
+  // `deduped` : déjà dédoublonnés par l'appelant (l'index le fait à part, pour rendre la main à la boucle entre deux).
+  const books = deduped ? (input as BookSummary[]) : dedupeBooks(input);
   const largest = <T extends { books: BookSummary[] }>(xs: T[]) => [...xs].sort((a, b) => b.books.length - a.books.length);
 
   const series = largest(groupBooks(books).filter((g) => g.series !== null && g.books.length >= 2));

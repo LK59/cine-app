@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronLeft, List, Type } from "lucide-react";
+import { Bookmark, ChevronLeft, List, Search, Type } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { usePointerCapture } from "@/lib/usePointerCapture";
 import { isSanitizedType, sanitizeResource } from "@/lib/books/sanitize";
@@ -16,11 +16,28 @@ import {
   readerFontFaces,
   resolvedTheme,
   saveReaderPrefs,
+  tapAction,
   type ReaderPrefs,
 } from "@/lib/books/readerPrefs";
-import type { FoliateBook, FoliateDataDetail, FoliateLoadDetail, FoliateRelocateDetail, FoliateTocItem, FoliateView } from "@/lib/books/foliate/view";
+import type { FoliateBook, FoliateDataDetail, FoliateLoadDetail, FoliateRelocateDetail, FoliateSearchResult, FoliateTocItem, FoliateView } from "@/lib/books/foliate/view";
+import {
+  beaconProgress,
+  flushOutbox,
+  listenForReconnect,
+  mergeBookmarks,
+  pendingBookmarks,
+  rememberBookmarks,
+  rememberedBookmarks,
+  rememberedPosition,
+  rememberPosition,
+  sendBookOp,
+  type BookmarkBody,
+  type ProgressBody,
+  type StoredBookmark,
+} from "@/lib/books/bookSync";
+import { offlineBookFile } from "@/lib/books/offlineBooks";
 import type { BookProgress } from "@/lib/books/types";
-import { ReaderSettingsPanel, ReaderTocPanel } from "./ReaderPanels";
+import { ReaderSearchPanel, ReaderSettingsPanel, ReaderTocPanel, type SearchGroup } from "./ReaderPanels";
 
 /**
  * Le lecteur de livres (DECISIONS.md §127), plein écran, au-dessus de la fiche.
@@ -39,8 +56,38 @@ import { ReaderSettingsPanel, ReaderTocPanel } from "./ReaderPanels";
  * héritent : trois barrières, chacune suffisante pour l'essentiel.
  *
  * La position est envoyée au fil de la lecture (regroupée, 1,5 s) et à la fermeture, au masquage de
- * la page et à `pagehide` (`sendBeacon`, qui part même d'une page qu'iOS est en train de tuer).
+ * la page et à `pagehide` (`sendBeacon`, qui part même d'une page qu'iOS est en train de tuer). Sans
+ * réseau, elle attend dans la file de l'appareil, comme les signets (`bookSync.ts`), et repart au
+ * retour du réseau. Le livre s'ouvre de la copie gardée sur l'appareil quand il y en a une
+ * (`offlineBooks.ts`) — sans réseau, c'est la seule source, et la page hors ligne des livres
+ * (`/livres/hors-ligne`) n'ouvre que celle-là (`offline`).
  */
+
+/** Au-delà, la recherche s'arrête : un mot courant ne doit pas dessiner des milliers de lignes. */
+const SEARCH_MAX_RESULTS = 300;
+const SEARCH_DEBOUNCE_MS = 350;
+
+interface Page {
+  start: string;
+  end: string;
+  fraction: number;
+  chapter: string;
+  excerpt: string;
+}
+type CfiTools = typeof import("@/lib/books/foliate/epubcfi.js");
+
+/** Le signet de la page montrée, s'il y en a un : son adresse tombe entre le début et la fin de la page. */
+function bookmarkOn(page: Page | null, list: readonly StoredBookmark[], cfi: CfiTools | null): string | null {
+  if (!page || !cfi) return null;
+  for (const b of list) {
+    try {
+      if (cfi.compare(b.cfi, page.start) >= 0 && cfi.compare(b.cfi, page.end) <= 0) return b.cfi;
+    } catch {
+      /* une adresse illisible n'est sur aucune page */
+    }
+  }
+  return null;
+}
 
 const SAVE_DELAY_MS = 1500;
 const CHROME_AUTOHIDE_MS = 3200;
@@ -118,13 +165,18 @@ function chapterMarks(view: FoliateView, toc: FoliateTocItem[]): number[] {
   }
 }
 
-export function BookReader({ id, title, onClose, onSaved }: { id: string; title: string; onClose: () => void; onSaved?: () => void }) {
+export function BookReader({ id, title, onClose, onSaved, offline = false }: { id: string; title: string; onClose: () => void; onSaved?: () => void; offline?: boolean }) {
   const t = useT();
   const systemDark = useSyncExternalStore(subscribeDark, darkSnapshot, () => true);
   const [prefs, setPrefs] = useState<ReaderPrefs>(() => loadReaderPrefs(prefersReducedMotion()));
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [chrome, setChrome] = useState(true);
-  const [panel, setPanel] = useState<null | "toc" | "settings">(null);
+  const [panel, setPanel] = useState<null | "toc" | "bookmarks" | "settings" | "search">(null);
+  const [bookmarks, setBookmarks] = useState<StoredBookmark[]>([]);
+  const [markedCfi, setMarkedCfi] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchGroups, setSearchGroups] = useState<SearchGroup[]>([]);
+  const [searchProgress, setSearchProgress] = useState<number | null>(null);
   const [place, setPlace] = useState<Place>({ fraction: 0, chapter: "", minutesLeft: null, section: -1 });
   const [toc, setToc] = useState<FoliateTocItem[]>([]);
   const [marks, setMarks] = useState<number[]>([]);
@@ -144,7 +196,13 @@ export function BookReader({ id, title, onClose, onSaved }: { id: string; title:
   const queued = useRef<TurnSide | null>(null);
   const sectionRef = useRef(-1);
   const lastFraction = useRef(0);
-  const pending = useRef<{ cfi: string; fraction: number; finished: boolean } | null>(null);
+  const pending = useRef<ProgressBody | null>(null);
+  const pageRef = useRef<Page | null>(null);
+  const bookmarksRef = useRef<StoredBookmark[]>([]);
+  const cfiRef = useRef<CfiTools | null>(null);
+  const searchRun = useRef(0);
+  const searchIter = useRef<AsyncGenerator<FoliateSearchResult, void, undefined> | null>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sent = useRef<string>("");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -165,22 +223,18 @@ export function BookReader({ id, title, onClose, onSaved }: { id: string; title:
       saveTimer.current = null;
       const p = pending.current;
       if (!p) return;
-      const body = JSON.stringify(p);
-      if (body === sent.current) return;
-      sent.current = body;
-      const url = `/api/books/${id}/progress`;
-      if (beacon && typeof navigator.sendBeacon === "function") {
-        navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
+      const signature = `${p.cfi}|${p.finished}`;
+      if (signature === sent.current) return;
+      sent.current = signature;
+      rememberPosition(id, p);
+      if (beacon) {
+        beaconProgress(id, p);
         return;
       }
-      void fetch(url, { method: "POST", body, headers: { "Content-Type": "application/json" }, keepalive: true })
-        .then((res) => {
-          if (res.ok) onSavedRef.current?.();
-          else sent.current = "";
-        })
-        .catch(() => {
-          sent.current = "";
-        });
+      // Sans réseau, ou le serveur en panne : la position attend dans la file de l'appareil.
+      void sendBookOp({ kind: "progress", id, body: p }).then((res) => {
+        if (res?.ok) onSavedRef.current?.();
+      });
     },
     [id]
   );
@@ -195,6 +249,54 @@ export function BookReader({ id, title, onClose, onSaved }: { id: string; title:
     if (hideTimer.current) clearTimeout(hideTimer.current);
     setChrome(false);
   }, []);
+
+  // ── Les signets ──────────────────────────────────────────────────────────────────────────
+  // La liste montrée : celle du serveur, corrigée de ce qui attend encore dans la file de l'appareil.
+  const applyBookmarks = useCallback((list: StoredBookmark[]) => {
+    bookmarksRef.current = list;
+    setBookmarks(list);
+    setMarkedCfi(bookmarkOn(pageRef.current, list, cfiRef.current));
+  }, []);
+  const fromServer = useCallback(
+    (list: StoredBookmark[]) => {
+      rememberBookmarks(id, list);
+      applyBookmarks(mergeBookmarks(list, pendingBookmarks(id)));
+    },
+    [id, applyBookmarks]
+  );
+  const loadBookmarks = useCallback(() => {
+    applyBookmarks(mergeBookmarks(rememberedBookmarks(id), pendingBookmarks(id)));
+    if (offline) return;
+    void fetch(`/api/books/${id}/bookmarks`)
+      .then((r) => (r.ok ? (r.json() as Promise<{ bookmarks: StoredBookmark[] }>) : null))
+      .then((data) => {
+        if (data) fromServer(data.bookmarks);
+      })
+      .catch(() => {});
+  }, [id, offline, applyBookmarks, fromServer]);
+  const writeBookmark = useCallback(
+    (body: BookmarkBody) => {
+      applyBookmarks(mergeBookmarks(bookmarksRef.current, [body]));
+      void sendBookOp({ kind: "bookmark", id, body }).then(async (res) => {
+        if (!res?.ok) return;
+        try {
+          fromServer(((await res.json()) as { bookmarks: StoredBookmark[] }).bookmarks);
+        } catch {
+          /* la liste montrée reste celle d'avant la réponse */
+        }
+      });
+    },
+    [id, applyBookmarks, fromServer]
+  );
+  const toggleBookmark = useCallback(() => {
+    if (markedCfi) {
+      writeBookmark({ cfi: markedCfi, remove: true });
+      return;
+    }
+    const page = pageRef.current;
+    if (!page) return;
+    writeBookmark({ cfi: page.start, fraction: page.fraction, chapter: page.chapter, excerpt: page.excerpt });
+  }, [markedCfi, writeBookmark]);
 
   // ── L'ouverture du livre ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -224,7 +326,23 @@ export function BookReader({ id, title, onClose, onSaved }: { id: string; title:
       lastFraction.current = fraction;
       if (d.cfi) {
         const finished = fraction >= 0.995 || view?.renderer.atEnd === true;
-        pending.current = { cfi: d.cfi, fraction, finished };
+        pending.current = { cfi: d.cfi, fraction, finished, at: Date.now() };
+        // La page montrée, pour son signet : son début, sa fin, quelques mots de son texte.
+        const tools = cfiRef.current;
+        if (tools) {
+          let excerpt = "";
+          try {
+            excerpt = (d.range?.toString() ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+          } catch {
+            /* pas de texte lisible sur cette page */
+          }
+          try {
+            pageRef.current = { start: tools.collapse(d.cfi), end: tools.collapse(d.cfi, true), fraction, chapter: d.tocItem?.label?.trim() ?? "", excerpt };
+          } catch {
+            pageRef.current = null;
+          }
+          setMarkedCfi(bookmarkOn(pageRef.current, bookmarksRef.current, tools));
+        }
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => flush(false), finished ? 0 : SAVE_DELAY_MS);
       }
@@ -245,14 +363,28 @@ export function BookReader({ id, title, onClose, onSaved }: { id: string; title:
 
     async function open() {
       try {
-        const [progressRes, fileRes, foliate] = await Promise.all([
-          fetch(`/api/books/${id}/progress`).then((r) => (r.ok ? (r.json() as Promise<{ progress: BookProgress | null }>) : { progress: null })).catch(() => ({ progress: null })),
-          fetch(`/api/books/${id}/file`),
+        listenForReconnect();
+        // Ce qui attendait d'un livre lu hors ligne part d'abord : la position du serveur en tient compte.
+        if (!offline) await flushOutbox().catch(() => {});
+        const [progressRes, local, foliate, cfiTools] = await Promise.all([
+          offline
+            ? { progress: null }
+            : fetch(`/api/books/${id}/progress`).then((r) => (r.ok ? (r.json() as Promise<{ progress: BookProgress | null }>) : { progress: null })).catch(() => ({ progress: null })),
+          offlineBookFile(id).catch(() => null),
           import("@/lib/books/foliate/view.js"),
+          import("@/lib/books/foliate/epubcfi.js"),
         ]);
-        if (!fileRes.ok) throw new Error(`file ${fileRes.status}`);
-        const blob = await fileRes.blob();
+        cfiRef.current = cfiTools;
+        // La copie de l'appareil d'abord ; le réseau sinon — jamais pour la page hors ligne.
+        let blob: Blob | null = local;
+        if (!blob) {
+          if (offline) throw new Error("pas de copie sur l'appareil");
+          const fileRes = await fetch(`/api/books/${id}/file`);
+          if (!fileRes.ok) throw new Error(`file ${fileRes.status}`);
+          blob = await fileRes.blob();
+        }
         if (cancelled || !stage) return;
+        loadBookmarks();
         book = await foliate.makeBook(new File([blob], `${id}.epub`, { type: "application/epub+zip" }));
         if (cancelled) return;
         // La première barrière, avant que le moindre chapitre ne devienne un document.
@@ -287,7 +419,11 @@ export function BookReader({ id, title, onClose, onSaved }: { id: string; title:
         setToc(items);
         const fileTitle = book.metadata?.title;
         if (typeof fileTitle === "string" && fileTitle.trim()) setMetaTitle(fileTitle.trim());
-        const cfi = progressRes.progress && !progressRes.progress.finished ? progressRes.progress.cfi : null;
+        // La position la plus récente : celle du serveur, ou celle de l'appareil si on a lu ici depuis, hors ligne.
+        const server = progressRes.progress;
+        const kept = rememberedPosition(id);
+        let cfi = server && !server.finished ? server.cfi : null;
+        if (kept && !kept.finished && (!server || kept.at > server.updatedAt)) cfi = kept.cfi;
         try {
           await view.init({ lastLocation: cfi, showTextStart: !cfi });
         } catch {
@@ -333,7 +469,68 @@ export function BookReader({ id, title, onClose, onSaved }: { id: string; title:
         /* rien à libérer */
       }
     };
-  }, [id, flush, showChrome]);
+  }, [id, flush, showChrome, offline, loadBookmarks]);
+
+  // ── La recherche dans le livre ─────────────────────────────────────────────────────────────
+  // foliate-js parcourt les chapitres un à un (un `await` entre deux : la page reste vive) ; chaque
+  // nouvelle frappe arrête la recherche en cours, et l'on s'arrête de soi-même passé quelques centaines
+  // de trouvailles. Les trouvailles sont soulignées sur la page (`Overlayer.outline` de foliate-js).
+  const stopSearch = useCallback(() => {
+    searchRun.current += 1;
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    void searchIter.current?.return(undefined).catch(() => {});
+    searchIter.current = null;
+    setSearchProgress(null);
+  }, []);
+  const runSearch = useCallback(
+    (query: string) => {
+      stopSearch();
+      setSearchGroups([]);
+      const view = viewRef.current;
+      if (!view) return;
+      if (query.trim().length < 2) {
+        view.clearSearch();
+        return;
+      }
+      const run = searchRun.current;
+      setSearchProgress(0);
+      const iter = view.search({ query: query.trim() });
+      searchIter.current = iter;
+      void (async () => {
+        let found = 0;
+        try {
+          for await (const result of iter) {
+            if (run !== searchRun.current) return;
+            if (result === "done") break;
+            if ("progress" in result) setSearchProgress(result.progress);
+            else {
+              const items = result.subitems.slice(0, SEARCH_MAX_RESULTS - found).map((x) => ({ cfi: x.cfi, ...x.excerpt }));
+              found += items.length;
+              setSearchGroups((g) => [...g, { label: result.label, items }]);
+              if (found >= SEARCH_MAX_RESULTS) break;
+            }
+          }
+        } catch {
+          /* un chapitre illisible arrête la recherche ; ce qui est trouvé reste */
+        } finally {
+          if (run === searchRun.current) {
+            setSearchProgress(null);
+            searchIter.current = null;
+          }
+        }
+      })();
+    },
+    [stopSearch]
+  );
+  const onSearchQuery = useCallback(
+    (query: string) => {
+      setSearchQuery(query);
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+      searchTimer.current = setTimeout(() => runSearch(query), SEARCH_DEBOUNCE_MS);
+    },
+    [runSearch]
+  );
+  useEffect(() => () => stopSearch(), [stopSearch]);
 
   // ── Le zoom : la taille du texte, au pincement ou au Ctrl/⌘ ────────────────────────────────
   // Pas un agrandissement de l'image : le même réglage que le curseur, borné comme lui et gardé de
@@ -569,9 +766,9 @@ export function BookReader({ id, title, onClose, onSaved }: { id: string; title:
     if (view && followLinkAt(view, e.clientX, e.clientY)) return;
     const width = e.currentTarget.clientWidth;
     const x = e.clientX - e.currentTarget.getBoundingClientRect().left;
-    if (x < width * 0.3) void turn("left");
-    else if (x > width * 0.7) void turn("right");
-    else if (chrome) hideChrome();
+    const action = tapAction(x, width, prefs.tapTurns, chrome);
+    if (action === "left" || action === "right") void turn(action);
+    else if (action === "hide") hideChrome();
     else showChrome(false);
   };
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -681,6 +878,26 @@ export function BookReader({ id, title, onClose, onSaved }: { id: string; title:
           </div>
           <button
             type="button"
+            onClick={toggleBookmark}
+            disabled={status !== "ready"}
+            aria-label={markedCfi ? t("books.reader.bookmarkRemove") : t("books.reader.bookmarkAdd")}
+            aria-pressed={markedCfi !== null}
+            data-reader-bookmark
+            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-black/10 disabled:opacity-40"
+          >
+            <Bookmark size={20} aria-hidden fill={markedCfi ? "currentColor" : "none"} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setPanel(panel === "search" ? null : "search")}
+            disabled={status !== "ready"}
+            aria-label={t("books.reader.search")}
+            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-black/10 disabled:opacity-40"
+          >
+            <Search size={20} aria-hidden />
+          </button>
+          <button
+            type="button"
             onClick={() => setPanel(panel === "toc" ? null : "toc")}
             disabled={status !== "ready"}
             aria-label={t("books.reader.contents")}
@@ -742,15 +959,37 @@ export function BookReader({ id, title, onClose, onSaved }: { id: string; title:
         </div>
       </div>
 
-      {panel === "toc" && (
+      {(panel === "toc" || panel === "bookmarks") && (
         <ReaderTocPanel
           toc={toc}
           currentHref={currentHref}
           colors={colors}
+          initialTab={panel === "bookmarks" ? "bookmarks" : "toc"}
+          bookmarks={bookmarks}
           onPick={(href) => {
             setPanel(null);
             void viewRef.current?.goTo(href).catch(() => {});
           }}
+          onPickBookmark={(cfi) => {
+            setPanel(null);
+            void viewRef.current?.goTo(cfi).catch(() => {});
+          }}
+          onRemoveBookmark={(cfi) => writeBookmark({ cfi, remove: true })}
+          onClose={() => setPanel(null)}
+        />
+      )}
+      {panel === "search" && (
+        <ReaderSearchPanel
+          colors={colors}
+          query={searchQuery}
+          onQuery={onSearchQuery}
+          groups={searchGroups}
+          progress={searchProgress}
+          onPick={(cfi) => {
+            setPanel(null);
+            void viewRef.current?.goTo(cfi).catch(() => {});
+          }}
+          onStop={stopSearch}
           onClose={() => setPanel(null)}
         />
       )}

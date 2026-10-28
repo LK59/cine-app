@@ -305,7 +305,10 @@ under a page-specific Content Security Policy — see DECISIONS.md §127 and `to
 Turned off, every books address answers 404 and nothing of it loads. Each account can also hide books
 for itself (Account → Interface, « Show books »), on all its devices. Books also appear in the app's
 search. Series, authors and covers missing from Jellyfin are read from the EPUB itself in the background;
-large libraries (thousands of files) are indexed on the server and sent to devices a page at a time.
+large libraries (thousands of files) are indexed once on the server for every account (each account
+only sees the Jellyfin libraries and tags it may see) and sent to devices a page at a time. The reader
+also has bookmarks (kept per account), search inside the book, and offline reading: « Download » keeps
+a book on the device, readable without a connection from the downloads page.
 
 ## Keyboard and remote
 

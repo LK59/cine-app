@@ -15,6 +15,32 @@ const CAST_KIT_SOURCES = [
   "https://www.gstatic.com/eureka/clank/",
 ].join(" ");
 
+// La politique de sécurité de la page des livres et de leur page hors ligne — voir la règle `/livres` plus bas.
+const BOOKS_HEADERS = [
+  {
+    key: "Content-Security-Policy",
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' blob:",
+      "font-src 'self' blob: data:",
+      "img-src 'self' blob: data:",
+      "media-src 'self' blob:",
+      "connect-src 'self'",
+      "frame-src blob:",
+      "child-src blob:",
+      "worker-src 'self'",
+      "object-src 'none'",
+      // `'self'` et non `'none'` : les chapitres `blob:` héritent aussi de cette directive, et
+      // WebKit l'applique à leur propre cadre — avec `'none'`, il refusait d'afficher le moindre
+      // chapitre (vérifié le 28/10/2026). La page reste inencadrable par tout autre site.
+      "frame-ancestors 'self'",
+      "base-uri 'self'",
+      "form-action 'none'",
+    ].join("; "),
+  },
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Pas de `x-powered-by: Next.js` : rien à gagner à annoncer la pile à qui sonde le site.
@@ -178,30 +204,13 @@ const nextConfig = {
         // On n'y arrive que par un vrai chargement de page (liens ordinaires de `BooksMode` et `BooksHome`) : une
         // navigation côté client garderait le document de l'accueil, et sa politique.
         source: "/livres",
-        headers: [
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline' blob:",
-              "font-src 'self' blob: data:",
-              "img-src 'self' blob: data:",
-              "media-src 'self' blob:",
-              "connect-src 'self'",
-              "frame-src blob:",
-              "child-src blob:",
-              "worker-src 'self'",
-              "object-src 'none'",
-              // `'self'` et non `'none'` : les chapitres `blob:` héritent aussi de cette directive, et
-              // WebKit l'applique à leur propre cadre — avec `'none'`, il refusait d'afficher le moindre
-              // chapitre (vérifié le 28/10/2026). La page reste inencadrable par tout autre site.
-              "frame-ancestors 'self'",
-              "base-uri 'self'",
-              "form-action 'none'",
-            ].join("; "),
-          },
-        ],
+        headers: BOOKS_HEADERS,
+      },
+      {
+        // La page des livres gardés sur l'appareil (`/livres/hors-ligne`) : elle ouvre le même lecteur,
+        // sous la même politique.
+        source: "/livres/hors-ligne",
+        headers: BOOKS_HEADERS,
       },
       {
         // Les captures jointes à un signalement, et surtout leurs originaux, envoyés par n'importe

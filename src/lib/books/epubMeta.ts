@@ -22,9 +22,9 @@ import { anyPlaybackBeat } from "@/lib/activity/presence";
  * (`book_meta`), avec l'empreinte du fichier chez Jellyfin (`Etag`) — un fichier remplacé est relu.
  *
  * La lecture ne doit jamais ralentir l'application : elle ne démarre qu'à la demande de la grille
- * (jamais au lancement), deux livres à la fois au plus, rend la main à la boucle entre deux livres, se
- * met en pause tant qu'un film joue (`anyPlaybackBeat`, comme l'indexation des répliques), et écrit en
- * base par lots, dans une transaction courte.
+ * (jamais au lancement), deux livres à la fois au plus, rend la main à la boucle entre deux livres,
+ * ralentit à un livre par seconde tant qu'un film joue (`anyPlaybackBeat`), et écrit en base par lots,
+ * dans une transaction courte.
  */
 
 export interface EpubMeta {
@@ -287,8 +287,12 @@ const RETRY_FAILED_MS = 24 * 3600_000;
 const CONCURRENCY = 2;
 const BATCH = 25;
 const BATCH_MS = 300;
-/** Pendant un film, la file attend : on revérifie toutes les trente secondes. */
-const PLAYBACK_PAUSE_MS = 30_000;
+/**
+ * Pendant un film, la file ralentit sans s'arrêter : un livre à la fois, au plus un par seconde. Elle
+ * s'arrêtait tout à fait — en production, seize livres sur 6 403 en une heure, trois films jouant
+ * presque sans cesse ; un livre lu coûte trois petites requêtes à Jellyfin, rien qu'un film ne remarque.
+ */
+export const PLAYING_GAP_MS = 1000;
 
 // Sur `globalThis` : les routes sont des points d'entrée distincts (CLAUDE.md, « server-cache ») — une
 // file par copie du module lirait deux fois le même livre.
@@ -298,7 +302,10 @@ interface Queue {
   running: number;
   done: Pending[];
   flushTimer: ReturnType<typeof setTimeout> | null;
-  pausedUntil: number;
+  /** Le départ de la dernière lecture : pendant un film, la suivante attend `PLAYING_GAP_MS`. */
+  lastStart: number;
+  /** Une relance déjà programmée (pendant un film). */
+  wake: ReturnType<typeof setTimeout> | null;
   /** Augmente à chaque lot écrit : l'index des livres sait ainsi qu'il a de quoi se refaire. */
   version: number;
   /** Pour les tests : lire autrement qu'à travers Jellyfin. */
@@ -308,7 +315,7 @@ interface Queue {
 }
 function queue(): Queue {
   const g = globalThis as unknown as Record<symbol, Queue | undefined>;
-  return (g[QUEUE_KEY] ??= { waiting: new Map(), running: 0, done: [], flushTimer: null, pausedUntil: 0, version: 0, reader: readEpubMeta, playing: () => anyPlaybackBeat() });
+  return (g[QUEUE_KEY] ??= { waiting: new Map(), running: 0, done: [], flushTimer: null, lastStart: 0, wake: null, version: 0, reader: readEpubMeta, playing: () => anyPlaybackBeat() });
 }
 
 /** Les livres dont l'OPF reste à lire (jamais lu, fichier changé, échec ancien). */
@@ -352,18 +359,23 @@ function flushSoon(force = false): void {
 function pump(): void {
   const q = queue();
   if (q.waiting.size === 0) return;
-  // Un film joue : la file attend, sans rien lire ni écrire.
-  if (q.playing()) {
-    if (Date.now() >= q.pausedUntil) {
-      q.pausedUntil = Date.now() + PLAYBACK_PAUSE_MS;
-      setTimeout(pump, PLAYBACK_PAUSE_MS);
+  const playing = q.playing();
+  const limit = playing ? 1 : CONCURRENCY;
+  while (q.running < limit && q.waiting.size > 0) {
+    if (playing) {
+      const wait = q.lastStart + PLAYING_GAP_MS - Date.now();
+      if (wait > 0) {
+        q.wake ??= setTimeout(() => {
+          q.wake = null;
+          pump();
+        }, wait);
+        return;
+      }
     }
-    return;
-  }
-  while (q.running < CONCURRENCY && q.waiting.size > 0) {
     const [id, etag] = q.waiting.entries().next().value as [string, string];
     q.waiting.delete(id);
     q.running += 1;
+    q.lastStart = Date.now();
     void q
       .reader(id)
       .then((meta) => {

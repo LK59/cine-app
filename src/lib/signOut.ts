@@ -70,6 +70,16 @@ export async function forgetAccountOnDevice(budgetMs: number): Promise<void> {
   // (audit du 08/10/2026).
   step(forgetHomeLayoutMirror);
   step(forgetGuidedScrollMirror);
+  // Les livres (§127) : la file des positions et signets en attente, les positions et signets gardés
+  // pour la lecture hors ligne (`books/bookSync.ts`) — tous rangés sous `laterna:books:`. Écrit ici sans
+  // importer le module des livres, que le cinéma ne charge pas. Les réglages du lecteur
+  // (`laterna:books:reader`) sont ceux de l'appareil, pas du compte : ils restent.
+  step(() => {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("laterna:books:") && key !== "laterna:books:reader") localStorage.removeItem(key);
+    }
+  });
   // Le catalogue gardé sur l'appareil part avec la session : un iPad partagé ne doit rien garder
   // de la bibliothèque ni de la reprise de qui que ce soit.
   // Les octets gardés pour la reprise instantanée aussi (`src/lib/resumeCache/`), dans le même délai.

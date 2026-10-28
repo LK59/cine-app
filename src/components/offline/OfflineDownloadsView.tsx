@@ -18,6 +18,7 @@ import { OfflineTitleSheet } from "./OfflineTitleSheet";
 import { useOfflineImage } from "./useOfflineImage";
 import { PassageDownloadsCard } from "@/components/passage/PassageDownloads";
 import { offlinePlayable, offlineProgress, offlineStatusLabel, touchDevice } from "./OfflineDownloadControl";
+import { BooksDownloadsEntry, useOfflineBooksPresent } from "@/components/books/BooksMode";
 
 /**
  * La page des téléchargements (bêta, DECISIONS.md §109) — le contenu seul, monté par deux cadres :
@@ -54,6 +55,9 @@ export function OfflineDownloadsView({ onOpenTitle }: { onOpenTitle?: (target: O
   const [shown, setShown] = useState<{ film: string } | { series: string } | null>(null);
   const [open, setOpen] = useState(false);
   const isMobile = useIsMobile();
+  // Les livres gardés sur l'appareil (option « Livres », §127) : leur section, sous les films et les
+  // séries ; rien des livres n'est chargé quand l'appareil n'en garde pas.
+  const booksPresent = useOfflineBooksPresent();
   const sheet = useExitDelay(open, isMobile ? SHEET_OUT_MS + SHEET_UNMOUNT_SLACK_MS : 200);
   const shownFilm = shown && "film" in shown ? films.find((d) => d.id === shown.film) : undefined;
   const shownSeries = shown && "series" in shown ? series.find((g) => g.key === shown.series) : undefined;
@@ -84,7 +88,7 @@ export function OfflineDownloadsView({ onOpenTitle }: { onOpenTitle?: (target: O
       <PassageDownloadsCard />
       <StorageSummary downloads={downloads} />
       {downloads.length === 0 ? (
-        <PlayerEmptyState icon={Download} message={t("player.downloads.empty")} />
+        !booksPresent && <PlayerEmptyState icon={Download} message={t("player.downloads.empty")} />
       ) : (
         <>
           {active.length > 0 && (
@@ -120,6 +124,7 @@ export function OfflineDownloadsView({ onOpenTitle }: { onOpenTitle?: (target: O
           )}
         </>
       )}
+      <BooksDownloadsEntry present={booksPresent} />
     </div>
   );
 }

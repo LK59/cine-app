@@ -51,6 +51,7 @@ import { GET as facetsGET } from "@/app/api/books/facets/route";
 import { GET as searchGET } from "@/app/api/books/search/route";
 import { GET as coverGET } from "@/app/api/books/[id]/cover/route";
 import { __testing as indexTesting } from "@/lib/books/bookIndex";
+import { __testing as rightsTesting } from "@/lib/books/rights";
 import { __testing as metaTesting } from "@/lib/books/epubMeta";
 import { getDb } from "@/lib/db";
 
@@ -78,16 +79,35 @@ const bookItem = (over: Record<string, unknown> = {}) => ({
 });
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
+/** Deux bibliothèques de livres : la permise et une autre (`library: LIB2` sur un élément). */
+const LIB1 = "1".repeat(8) + "-" + "1".repeat(4) + "-" + "1".repeat(4) + "-" + "1".repeat(4) + "-" + "1".repeat(12);
+const LIB2 = "2".repeat(32);
+const policy = vi.hoisted(() => ({ current: { EnableAllFolders: true, EnabledFolders: [] as string[] } as Record<string, unknown> }));
+
 /** Ce que Jellyfin répond, selon l'adresse demandée. */
 function jellyfinAnswers(items: Record<string, unknown>[], file = "PK\u0003\u0004epub") {
+  const libOf = (i: Record<string, unknown>) => (i.library as string | undefined) ?? LIB1;
+  // Ce que Jellyfin laisse voir à ce compte par sa propre adresse (`/Users/<id>/Items/<id>`) : les bibliothèques permises.
+  const userSees = (i: Record<string, unknown>) => {
+    const p = policy.current;
+    if (p.EnableAllFolders !== false) return true;
+    return ((p.EnabledFolders as string[]) ?? []).map((f) => f.replace(/-/g, "")).includes(libOf(i).replace(/-/g, ""));
+  };
   upstream.mockImplementation(async (url: string) => {
     if (url.endsWith("/Download")) return new Response(file, { status: 200, headers: { "Content-Type": "application/octet-stream", "Content-Length": String(file.length), "X-Emby-Authorization": "leak" } });
+    if (url.endsWith("/Library/VirtualFolders")) return json([{ ItemId: LIB1, CollectionType: "books" }, { ItemId: LIB2, CollectionType: "books" }, { ItemId: "9".repeat(32), CollectionType: "movies" }]);
+    if (url.endsWith(`/Users/${JF}`)) return json({ Policy: policy.current });
     const one = /\/Items\/([0-9a-f]{32})\?/.exec(url)?.[1];
     if (one) {
       const item = items.find((i) => i.Id === one);
+      if (url.includes("/Users/") && item && !userSees(item)) return json({}, 404);
       return item ? json(item) : json({}, 404);
     }
-    return json({ Items: items, TotalRecordCount: items.length });
+    const u = new URL(url);
+    if (u.searchParams.get("IsPlayed") === "true") return json({ Items: items.filter((i) => (i.UserData as { Played?: boolean } | undefined)?.Played && userSees(i)) });
+    const parent = u.searchParams.get("ParentId");
+    const list = parent ? items.filter((i) => libOf(i) === parent) : items;
+    return json({ Items: list, TotalRecordCount: list.length });
   });
 }
 
@@ -96,6 +116,8 @@ beforeEach(() => {
   cfg.on = true;
   blocked.tags = [];
   verify.mockResolvedValue({ u: "lecteur", role: "user", jfId: JF, jti: "j" });
+  policy.current = { EnableAllFolders: true, EnabledFolders: [] };
+  rightsTesting.reset();
   markPlayed.mockResolvedValue(undefined);
   getDb().prepare("DELETE FROM book_progress").run();
   getDb().prepare("DELETE FROM book_meta").run();
@@ -146,15 +168,64 @@ describe("qui y a droit", () => {
 });
 
 describe("GET /api/books", () => {
-  it("demande à Jellyfin sous l'identité du compte, signé par l'en-tête MediaBrowser seulement", async () => {
+  it("lit la bibliothèque une fois, bibliothèque par bibliothèque, signé par l'en-tête MediaBrowser seulement", async () => {
     await listGET(req());
-    const [url, init] = upstream.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain(`http://jf/Users/${JF}/Items?`);
-    expect(url).toContain("IncludeItemTypes=Book");
-    expect(url).toContain("Recursive=true");
-    const headers = new Headers(init.headers);
-    expect(headers.get("authorization")).toContain(`MediaBrowser Token="${KEY}"`);
-    expect(headers.get("x-emby-token")).toBeNull();
+    const lists = upstream.mock.calls.filter(([u]) => String(u).includes("IncludeItemTypes=Book") && String(u).includes("ParentId="));
+    // Les deux bibliothèques de livres, jamais celle des films.
+    expect(lists.map(([u]) => new URL(String(u)).searchParams.get("ParentId")).sort()).toEqual([LIB1, LIB2].sort());
+    for (const [url, init] of lists as [string, RequestInit][]) {
+      expect(url).toContain("http://jf/Items?");
+      expect(url).toContain("Recursive=true");
+      const headers = new Headers(init.headers);
+      expect(headers.get("authorization")).toContain(`MediaBrowser Token="${KEY}"`);
+      expect(headers.get("x-emby-token")).toBeNull();
+    }
+    // Un second compte aux mêmes droits : rien de plus n'est demandé à Jellyfin pour la liste.
+    verify.mockResolvedValue({ u: "autre", role: "user", jfId: JF, jti: "k" });
+    const before = upstream.mock.calls.filter(([u]) => String(u).includes("ParentId=")).length;
+    await listGET(req());
+    expect(upstream.mock.calls.filter(([u]) => String(u).includes("ParentId=")).length).toBe(before);
+  });
+
+  it("un livre d'une bibliothèque interdite au compte, ou portant un de ses tags bloqués, n'existe nulle part pour lui", async () => {
+    const OK = "1".repeat(32);
+    const TAGGED = "3".repeat(32);
+    const ELSEWHERE = "4".repeat(32);
+    jellyfinAnswers([
+      bookItem({ Id: OK, Name: "Permis commun", Etag: "e1" }),
+      bookItem({ Id: TAGGED, Name: "Caché commun", Tags: ["Prive"], Etag: "e2" }),
+      bookItem({ Id: ELSEWHERE, Name: "Ailleurs commun", library: LIB2, Etag: "e3" }),
+    ]);
+    blocked.tags = ["prive"];
+    policy.current = { EnableAllFolders: false, EnabledFolders: [LIB1] };
+    const names = (books: { name: string }[]) => books.map((b) => b.name);
+    expect(names((await (await listGET(req())).json()).books)).toEqual(["Permis commun"]);
+    const home = await (await homeGET(req())).json();
+    expect(JSON.stringify(home)).not.toMatch(/Caché|Ailleurs/);
+    expect(names((await (await searchGET(req(undefined, "http://l/api/books/search?q=commun"))).json()).books)).toEqual(["Permis commun"]);
+    expect(JSON.stringify(await (await facetsGET(req())).json())).not.toMatch(/Caché|Ailleurs/);
+    for (const id of [TAGGED, ELSEWHERE]) {
+      expect((await coverGET(req(), params(id))).status, `couverture ${id}`).toBe(404);
+      expect((await fileGET(req(), params(id))).status, `fichier ${id}`).toBe(404);
+      expect((await detailGET(req(), params(id))).status, `fiche ${id}`).toBe(404);
+      expect((await progressPOST(req(JSON.stringify({ cfi: "epubcfi(/6/4!/4/2)", fraction: 0.5 })), params(id))).status, `position ${id}`).toBe(404);
+    }
+    // Aucun téléchargement du livre lui-même (la lecture de l'OPF en arrière-plan, par plages, n'en est pas un).
+    const whole = upstream.mock.calls.filter(([u, init]) => String(u).endsWith("/Download") && !new Headers((init as RequestInit)?.headers).has("range"));
+    expect(whole).toHaveLength(0);
+    // Un compte qui a toutes les bibliothèques et aucun tag bloqué voit les trois — l'index est le même.
+    policy.current = { EnableAllFolders: true };
+    blocked.tags = [];
+    rightsTesting.reset();
+    verify.mockResolvedValue({ u: "admin2", role: "user", jfId: JF, jti: "k" });
+    expect(names((await (await listGET(req())).json()).books).sort()).toEqual(["Ailleurs commun", "Caché commun", "Permis commun"]);
+  });
+
+  it("droits illisibles (Jellyfin ne répond pas sur le compte) : rien n'est montré", async () => {
+    jellyfinAnswers([bookItem()]);
+    const base = upstream.getMockImplementation()!;
+    upstream.mockImplementation(async (url: string, init: RequestInit) => (String(url).endsWith(`/Users/${JF}`) ? json({}, 500) : base(url, init)));
+    expect((await listGET(req())).status).toBe(502);
   });
 
   it("retire ce qui n'est pas un livre et ce qui porte un tag bloqué du compte ; trie par série, tome, nom", async () => {

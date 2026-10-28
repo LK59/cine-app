@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { bookIdOf, booksCaller } from "@/lib/books/guard";
-import { bookFor } from "@/lib/books/library";
+import { bookFor, forgetPlayed } from "@/lib/books/library";
 import { readProgress, saveProgress, validProgressInput } from "@/lib/books/progress";
 import { logError } from "@/lib/logger";
 
@@ -45,9 +45,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   } catch {
     return new NextResponse(null, { status: 502 });
   }
+  // Une position lue hors ligne et renvoyée plus tard n'efface pas celle, plus récente, qu'un autre
+  // appareil a écrite entre-temps.
+  if (input.at !== null) {
+    const held = readProgress(caller.u, id);
+    if (held && held.updatedAt > input.at) return NextResponse.json({ ok: true, kept: true });
+  }
   const { firstFinish } = saveProgress(caller.u, id, input.cfi, input.fraction, input.finished);
   if (firstFinish && caller.jfId) {
     await jellyfin.markPlayed(caller.jfId, id).catch((err: unknown) => logError("books/progress", err, { itemId: id }));
+    // Le badge « Lu » de la grille vient de Jellyfin, gardé deux minutes : on le redemande.
+    forgetPlayed(caller.jfId);
   }
   return NextResponse.json({ ok: true });
 }

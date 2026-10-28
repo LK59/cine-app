@@ -32,6 +32,11 @@ export interface ReaderPrefs {
   brightness: number;
   /** De 0 (neutre) à 1 (chaud) : un voile ambré pour lire le soir. */
   warmth: number;
+  /**
+   * « Tourner les pages en touchant les bords » : coupé, un toucher ne tourne jamais la page (glisser, le
+   * clavier et la molette, si) et montre ou cache les barres, où qu'il tombe.
+   */
+  tapTurns: boolean;
 }
 
 export const READER_PREFS_KEY = "laterna:books:reader";
@@ -60,7 +65,21 @@ export function defaultReaderPrefs(reducedMotion = false): ReaderPrefs {
     layout: "auto",
     brightness: 1,
     warmth: 0,
+    tapTurns: true,
   };
+}
+
+/** Les zones d'un toucher sur la page : 30 % à gauche, 40 % au centre, 30 % à droite. */
+export const TAP_EDGE = 0.3;
+
+/**
+ * Ce que fait un toucher sur la page (hors lien) : tourner vers la gauche ou la droite sur un bord, sinon
+ * montrer ou cacher les barres. Réglage coupé, toujours les barres.
+ */
+export function tapAction(x: number, width: number, tapTurns: boolean, chromeShown: boolean): "left" | "right" | "hide" | "show" {
+  if (tapTurns && x < width * TAP_EDGE) return "left";
+  if (tapTurns && x > width * (1 - TAP_EDGE)) return "right";
+  return chromeShown ? "hide" : "show";
 }
 
 /** Les couleurs de chaque thème — le fond autour du livre et les barres du lecteur prennent les mêmes. */
@@ -133,6 +152,7 @@ export function normalizeReaderPrefs(raw: unknown, reducedMotion = false): Reade
     layout: oneOf(LAYOUTS, o.layout, o.spread === false ? "single" : d.layout),
     brightness: clamp(o.brightness, 0.4, 1, 0.05, d.brightness),
     warmth: clamp(o.warmth, 0, 1, 0.05, d.warmth),
+    tapTurns: typeof o.tapTurns === "boolean" ? o.tapTurns : d.tapTurns,
   };
 }
 

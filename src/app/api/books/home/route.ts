@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { booksCaller } from "@/lib/books/guard";
 import { bookIndex, resumeFrom, withProgress } from "@/lib/books/bookIndex";
 import { progressByBook } from "@/lib/books/progress";
+import { playedBooksOf } from "@/lib/books/library";
 
 /**
  * L'accueil de la catégorie Livres (option, DECISIONS.md §127), déjà calculé par le serveur
@@ -13,14 +14,14 @@ export async function GET(req: NextRequest) {
   const caller = await booksCaller(req);
   if (caller instanceof NextResponse) return caller;
   try {
-    const index = await bookIndex(caller);
+    const [index, played] = await Promise.all([bookIndex(caller), playedBooksOf(caller)]);
     const progress = progressByBook(caller.u);
     return NextResponse.json(
       {
         total: index.books.length,
         resume: resumeFrom(index, progress),
-        recent: withProgress(index.home.recent, progress),
-        rows: index.home.rows.map((row) => ({ ...row, books: withProgress(row.books, progress) })),
+        recent: withProgress(index.home.recent, progress, played),
+        rows: index.home.rows.map((row) => ({ ...row, books: withProgress(row.books, progress, played) })),
         hidden: index.home.hidden,
       },
       { headers: { "Cache-Control": "private, no-store" } }

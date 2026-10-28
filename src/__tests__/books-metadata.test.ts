@@ -19,7 +19,7 @@ const upstream = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/jellyfinBreaker", () => ({ passJellyfinFetch: (...a: unknown[]) => upstream(...a), jellyfinFetch: (...a: unknown[]) => upstream(...a) }));
 
 import { bookAuthors, bookGenres, decideSeries, nameKey } from "@/lib/books/metadata";
-import { knownMeta, parseOpf, readEpubMeta, scheduleMetaReads, staleMeta, __testing } from "@/lib/books/epubMeta";
+import { PLAYING_GAP_MS, knownMeta, parseOpf, readEpubMeta, scheduleMetaReads, staleMeta, __testing } from "@/lib/books/epubMeta";
 import { epubCover } from "@/lib/books/covers";
 import { authorIndex, filterBooks, homeRows, sortBooks } from "@/lib/books/grouping";
 import type { BookSummary } from "@/lib/books/types";
@@ -165,14 +165,16 @@ describe("la lecture de l'OPF par plages", () => {
     expect(staleMeta([{ id, etag: "e1" }], known)).toEqual([]);
     expect(staleMeta([{ id, etag: "e2" }], known)).toEqual([{ id, etag: "e2" }]);
   });
-  it("la file attend pendant qu'un film joue, deux lectures à la fois au plus, écrites par lots", async () => {
+  it("pendant un film, un livre à la fois et un par seconde ; sinon deux à la fois ; écrites par lots", async () => {
     const q = __testing.queue();
     const realReader = q.reader;
     const realPlaying = q.playing;
     let playing = true;
     let inFlight = 0;
     let maxInFlight = 0;
+    const starts: number[] = [];
     const read = vi.fn(async () => {
+      starts.push(Date.now());
       inFlight += 1;
       maxInFlight = Math.max(maxInFlight, inFlight);
       await new Promise((r) => setTimeout(r, 1));
@@ -181,21 +183,21 @@ describe("la lecture de l'OPF par plages", () => {
     });
     q.reader = read;
     q.playing = () => playing;
-    q.pausedUntil = 0;
+    q.lastStart = 0;
     try {
       const items = Array.from({ length: 60 }, (_, i) => ({ id: (i + 1).toString(16).padStart(32, "f"), etag: "e" }));
       const version = q.version;
       scheduleMetaReads(items);
-      await new Promise((r) => setTimeout(r, 20));
-      expect(read).not.toHaveBeenCalled();
+      // Un film joue : la file avance quand même, mais doucement.
+      await vi.waitFor(() => expect(read.mock.calls.length).toBeGreaterThanOrEqual(3), { timeout: 5000 });
+      expect(maxInFlight).toBe(1);
+      for (let i = 1; i < 3; i++) expect(starts[i] - starts[i - 1]).toBeGreaterThanOrEqual(PLAYING_GAP_MS - 20);
       playing = false;
-      q.pausedUntil = 0;
-      __testing.pump();
-      await vi.waitFor(() => expect(knownMeta().get(items[59].id)).toBeDefined(), { timeout: 5000 });
+      await vi.waitFor(() => expect(knownMeta().get(items[59].id)).toBeDefined(), { timeout: 8000 });
       expect(read).toHaveBeenCalledTimes(60);
       expect(maxInFlight).toBeLessThanOrEqual(2);
       // Soixante lectures, quelques transactions seulement.
-      expect(q.version - version).toBeLessThanOrEqual(4);
+      expect(q.version - version).toBeLessThanOrEqual(8);
     } finally {
       q.reader = realReader;
       q.playing = realPlaying;
@@ -289,7 +291,8 @@ describe("une bibliothèque à deux racines, dont un lot de milliers d'EPUB", ()
   it("le dossier du lot n'est jamais une série ; l'auteur vient des métadonnées, pas du dossier", async () => {
     const { bookIndex } = await import("@/lib/books/bookIndex");
     upstream.mockImplementation(async (url: string) => {
-      if (!url.includes("IncludeItemTypes")) return new Response("[]", { status: 200 });
+      if (url.endsWith("/Library/VirtualFolders")) return new Response(JSON.stringify([{ ItemId: "l".repeat(32), CollectionType: "books" }]), { status: 200 });
+      if (!url.includes("IncludeItemTypes")) return new Response("{}", { status: 200 });
       const items = [
         { Id: "1".repeat(32), Name: "Central Park", Type: "Book", SeriesName: "6000 Romans Ebook en Epub Pack", People: [{ Name: "Guillaume Musso", Type: "Author" }] },
         { Id: "2".repeat(32), Name: "L'appel de l'ange", Type: "Book", SeriesName: "Guillaume Musso", IndexNumber: 3, People: [{ Name: "Guillaume Musso", Type: "Author" }] },

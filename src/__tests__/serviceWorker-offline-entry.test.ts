@@ -234,3 +234,48 @@ describe("les navigations", () => {
     expect(await res.json()).toEqual({ state: "none" });
   });
 });
+
+describe("la page hors ligne des livres (option « Livres », DECISIONS.md §127)", () => {
+  const POLICY = "default-src 'self'; frame-src blob:";
+  const books = () =>
+    server({
+      "/livres/hors-ligne": () =>
+        new Response('<html><script src="/_next/static/chunks/main.js"></script></html>', {
+          headers: { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": POLICY },
+        }),
+    });
+  async function warmBooks() {
+    let done: Promise<unknown> = Promise.resolve();
+    listeners.message({ data: { type: "cine:warm-offline-books" }, waitUntil: (p: Promise<unknown>) => (done = p) });
+    await done;
+  }
+
+  it("gardée avec sa politique de sécurité, servie sans réseau, à côté de l'entrée des films", async () => {
+    books();
+    worker();
+    await install();
+    await warmBooks();
+    await warm();
+    server({ "/livres/hors-ligne": () => Promise.reject(new TypeError("offline")), "/hors-ligne": () => Promise.reject(new TypeError("offline")) });
+    const res = await dispatch(navigation("/livres/hors-ligne"));
+    expect(res.headers.get("Content-Security-Policy")).toBe(POLICY);
+    expect(await res.text()).toContain("/_next/static/chunks/main.js");
+    // L'entrée des films reste ce qu'elle était : sans politique ajoutée.
+    const films = await dispatch(navigation("/hors-ligne"));
+    expect(films.headers.get("Content-Security-Policy")).toBeNull();
+  });
+
+  it("une page servie sans sa politique n'est pas gardée", async () => {
+    server({ "/livres/hors-ligne": () => new Response("<html></html>", { headers: { "Content-Type": "text/html" } }) });
+    worker();
+    await warmBooks();
+    expect(await caches.get("cine-static-b1")?.match("/livres/hors-ligne")).toBeUndefined();
+  });
+
+  it("l'entrée des films n'est pas touchée par la demande des livres", async () => {
+    books();
+    worker();
+    await warmBooks();
+    expect(await caches.get("cine-static-b1")!.match("/hors-ligne")).toBeUndefined();
+  });
+});

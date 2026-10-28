@@ -119,6 +119,26 @@ describe("la page /livres", () => {
     vi.doUnmock("next/headers");
     vi.doUnmock("@/components/books/BooksScreenLazy");
   });
+  it("la page hors ligne des livres : publique (le service worker la demande sans cookie), absente option coupée", async () => {
+    const { isPublicPath } = await import("@/lib/publicPaths");
+    expect(isPublicPath("/livres/hors-ligne")).toBe(true);
+    // La page des livres elle-même reste derrière la session.
+    expect(isPublicPath("/livres")).toBe(false);
+    vi.resetModules();
+    delete process.env.BOOKS_ENABLED;
+    vi.doMock("next/navigation", () => ({
+      notFound: () => {
+        throw new Error("NEXT_NOT_FOUND");
+      },
+    }));
+    vi.doMock("@/components/books/OfflineBooksScreenLazy", () => ({ OfflineBooksScreenLazy: () => null }));
+    const { default: OfflinePage } = await import("@/app/livres/hors-ligne/page");
+    expect(() => OfflinePage()).toThrow("NEXT_NOT_FOUND");
+    process.env.BOOKS_ENABLED = "true";
+    expect(OfflinePage()).toBeTruthy();
+    vi.doUnmock("next/navigation");
+    vi.doUnmock("@/components/books/OfflineBooksScreenLazy");
+  });
 });
 
 describe("la configuration publique", () => {
@@ -158,6 +178,7 @@ describe("une session de partage", () => {
       ["GET", "/api/books/requests"],
       ["POST", "/api/books/requests"],
       ["PATCH", "/api/books/requests/1"],
+      ["POST", `/api/books/${BOOK}/bookmarks`],
     ]) {
       expect(shareRuleFor(method, p), `${method} ${p}`).toBeNull();
     }
@@ -180,10 +201,12 @@ describe("une session de partage", () => {
     const page = await proxy(req("GET", "/livres"));
     expect(page.headers.get("location")).toContain("/partage/abcdefghjk");
   });
-  it("un compte du foyer peut écrire sa position, et rien d'autre sous /api/books", async () => {
+  it("un compte du foyer peut écrire sa position et ses signets, et rien d'autre sous /api/books", async () => {
     mockVerify.mockResolvedValue({ u: "lecteur", role: "user", jfId: "x", jti: "j", exp: EXPIRES });
     const { proxy } = await import("@/proxy");
     expect((await proxy(req("POST", `/api/books/${BOOK}/progress`))).status).toBe(200);
+    expect((await proxy(req("POST", `/api/books/${BOOK}/bookmarks`))).status).toBe(200);
+    expect((await proxy(req("DELETE", `/api/books/${BOOK}/bookmarks`))).status).toBe(403);
     expect((await proxy(req("POST", `/api/books/${BOOK}/file`))).status).toBe(403);
     expect((await proxy(req("DELETE", `/api/books/${BOOK}/progress`))).status).toBe(403);
     // Demander un livre : la demande, oui ; y répondre, non.
@@ -196,7 +219,7 @@ describe("l'accueil ne charge rien des livres", () => {
   const BOOK_IMPORT = /from\s+["']@\/(components|lib)\/books\/([^"']+)["']|import\(\s*["']([^"']*books[^"']*)["']\s*\)/g;
 
   it("les deux écrans du cinéma et la recherche n'importent des livres que `BooksMode`", () => {
-    for (const file of ["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx", "src/components/player/PlayerSearchPanel.tsx"]) {
+    for (const file of ["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx", "src/components/player/PlayerSearchPanel.tsx", "src/components/offline/OfflineDownloadsView.tsx"]) {
       const found = [...read(file).matchAll(BOOK_IMPORT)].map((m) => m[0]);
       expect(found, file).toEqual([`from "@/components/books/BooksMode"`]);
     }
@@ -207,6 +230,7 @@ describe("l'accueil ne charge rien des livres", () => {
     expect(staticImports.sort()).toEqual(["@/components/TranslationProvider", "@/lib/cinemaRoute", "@/lib/swr", "lucide-react", "next/dynamic", "react", "swr"]);
     expect(mode).toMatch(/dynamic\(\(\) => import\("\.\/BooksHome"\)/);
     expect(mode).toMatch(/dynamic\(\(\) => import\("\.\/BooksSearch"\)/);
+    expect(mode).toMatch(/dynamic\(\(\) => import\("\.\/BooksDownloads"\)/);
     // Rendu seulement quand la catégorie est affichée, donc l'option allumée.
     for (const file of ["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx"]) {
       expect(read(file), file).toMatch(/\{books\.active && <BooksHomeLazy variant="(desktop|mobile)" \/>\}/);
@@ -265,5 +289,8 @@ describe("la politique de sécurité", () => {
     expect(books).toMatch(/object-src 'none'/);
     // La règle des livres vient après la générale : la dernière qui pose l'en-tête l'emporte.
     expect(rules.findIndex((r) => r.source === "/livres")).toBeGreaterThan(rules.findIndex((r) => r.source === "/(.*)"));
+    // La page hors ligne des livres ouvre le même lecteur : la même politique.
+    expect(csp("/livres/hors-ligne")).toBe(books);
+    expect(rules.findIndex((r) => r.source === "/livres/hors-ligne")).toBeGreaterThan(rules.findIndex((r) => r.source === "/(.*)"));
   });
 });

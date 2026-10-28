@@ -23,7 +23,7 @@ const upstream = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/jellyfinBreaker", () => ({ jellyfinFetch: (...a: unknown[]) => upstream(...a), passJellyfinFetch: (...a: unknown[]) => upstream(...a) }));
 vi.mock("@/lib/blockedTags", () => ({ blockedTagsOf: async () => [], carriesBlockedTag: () => false }));
 
-import { LIST_PAGE, fetchBookItems, type JellyfinBookItem } from "@/lib/books/library";
+import { LIST_PAGE, fetchLibrary, type LibraryItem } from "@/lib/books/library";
 import { buildIndex, pageOf, searchIndex } from "@/lib/books/bookIndex";
 import { __testing as metaTesting } from "@/lib/books/epubMeta";
 import { NO_SERIES, filterBooks, homeRows } from "@/lib/books/grouping";
@@ -61,7 +61,7 @@ function library(): BookSummary[] {
 }
 
 /** 6 400 éléments comme Jellyfin les rend pour un gros lot d'EPUB : un auteur sur quatre absent, des genres bruts. */
-function jellyfinItems(n = 6400): JellyfinBookItem[] {
+function jellyfinItems(n = 6400): LibraryItem[] {
   return Array.from({ length: n }, (_, i) => ({
     Id: hex(i + 1),
     Name: `Livre ${i}`,
@@ -72,24 +72,29 @@ function jellyfinItems(n = 6400): JellyfinBookItem[] {
     People: i % 4 ? [{ Name: `Auteur ${i % 1464}`, Type: "Author" }] : [],
     DateCreated: new Date(1_700_000_000_000 + i * 60_000).toISOString(),
     Etag: `e${i}`,
+    library: "l",
   }));
 }
 
 describe("la liste demandée à Jellyfin", () => {
-  it("par pages, sans résumé, jusqu'au total annoncé", async () => {
+  it("une fois pour tous, par bibliothèque, par pages sans résumé, jusqu'au total annoncé", async () => {
     const total = 2500;
     upstream.mockImplementation(async (url: string) => {
+      if (url.endsWith("/Library/VirtualFolders")) return new Response(JSON.stringify([{ ItemId: "L", CollectionType: "books" }, { ItemId: "F", CollectionType: "movies" }]), { status: 200 });
       const params = new URL(url).searchParams;
       const start = Number(params.get("StartIndex"));
       const limit = Number(params.get("Limit"));
       const items = Array.from({ length: Math.max(0, Math.min(limit, total - start)) }, (_, k) => ({ Id: hex(start + k + 1), Name: `Livre ${start + k}`, Type: "Book", SeriesName: null }));
       return new Response(JSON.stringify({ Items: items, TotalRecordCount: total }), { status: 200 });
     });
-    const items = await fetchBookItems({ role: "user", jfId: "a".repeat(32) });
+    const items = await fetchLibrary();
     expect(items).toHaveLength(total);
+    expect(items.every((i) => i.library === "l")).toBe(true);
     const urls = upstream.mock.calls.map(([u]) => new URL(u as string)).filter((u) => u.searchParams.has("StartIndex"));
     expect(urls).toHaveLength(Math.ceil(total / LIST_PAGE));
-    expect(urls.map((u) => u.searchParams.get("StartIndex"))).toEqual(["0", "1000", "2000"]);
+    expect(urls.map((u) => u.searchParams.get("StartIndex")).sort()).toEqual(["0", "1000", "2000"]);
+    // Avec la clé du serveur, sans identité de compte : la liste est commune.
+    for (const u of urls) expect(u.pathname).toBe("/Items");
     for (const u of urls) {
       expect(u.searchParams.get("Fields")).not.toMatch(/Overview/);
       expect(u.searchParams.get("Limit")).toBe(String(LIST_PAGE));
@@ -137,7 +142,7 @@ describe("l'index d'un compte", () => {
     const realReader = q.reader;
     q.waiting.clear();
     q.playing = () => false;
-    q.pausedUntil = 0;
+    q.lastStart = 0;
     // Une lecture factice qui rend la main comme un vrai aller-retour réseau.
     q.reader = async () => {
       await new Promise((r) => setImmediate(r));

@@ -1,24 +1,34 @@
-import type { BookCaller, JellyfinBookItem } from "@/lib/books/library";
-import { compareBooks, fetchBookItems, summaryOf } from "@/lib/books/library";
+import fs from "node:fs";
+import path from "node:path";
+import { DATA_DIR } from "@/lib/dataDir";
+import type { BookCaller, LibraryItem } from "@/lib/books/library";
+import { compareBooks, fetchLibrary, summaryOf } from "@/lib/books/library";
 import { knownMeta, metaVersion, scheduleMetaReads, staleMeta } from "@/lib/books/epubMeta";
-import { authorIndex, filterBooks, foldText, genreIndex, groupBooks, homeRows, sortBooks, type BookSort, type HomeRows } from "@/lib/books/grouping";
+import { allows, rightsKey, rightsOf, type BookRights } from "@/lib/books/rights";
+import { authorIndex, dedupeBooks, filterBooks, foldText, genreIndex, groupBooks, homeRows, sortBooks, type BookSort, type HomeRows } from "@/lib/books/grouping";
 import type { BookProgress, BookSummary } from "@/lib/books/types";
 
 /**
- * L'index des livres, par compte, en mémoire (DECISIONS.md §127).
+ * L'index des livres, **un seul pour tous les comptes**, en mémoire (DECISIONS.md §127).
  *
  * Une bibliothèque de plusieurs milliers d'EPUB ne voyage jamais entière jusqu'au téléphone : le serveur
- * la garde ici, triée, avec le texte de recherche de chaque livre déjà replié, l'accueil (`homeRows`)
- * déjà calculé et les choix des filtres de la grille. Les routes n'en envoient que des morceaux —
- * l'accueil (quelques rangées), une page de la grille, douze résultats de recherche.
+ * la garde ici, triée, avec le texte de recherche de chaque livre déjà replié. Les routes n'en envoient
+ * que des morceaux — l'accueil (quelques rangées), une page de la grille, douze résultats de recherche.
  *
- * Rien n'est lu au lancement : l'index d'un compte naît à sa première ouverture de la catégorie Livres.
- * Frais cinq minutes ; au-delà, la réponse part de l'index gardé pendant qu'un autre se prépare derrière
- * (une seule préparation à la fois par compte). Les métadonnées des EPUB arrivent en arrière-plan
- * (`epubMeta.ts`) : quand un lot est écrit, l'index se refait depuis les éléments déjà reçus, sans
- * redemander Jellyfin, au plus toutes les vingt secondes. La construction rend la main à la boucle tous
- * les quelques centaines de livres. Les positions de lecture n'y sont pas : elles sont par compte, en
- * base, et posées sur les livres envoyés au moment de répondre (`withProgress`).
+ * La bibliothèque est lue une fois, avec la clé du serveur (`fetchLibrary`) : en production, sept pages de
+ * mille livres coûtaient ~5 s **à chaque compte** après chaque redémarrage. Chaque compte n'en voit que ce
+ * que ses droits permettent (`rights.ts` : ses bibliothèques Jellyfin, ses tags bloqués, la classification) ;
+ * la vue d'un ensemble de droits (livres, accueil, choix des menus) est calculée une fois et partagée par
+ * les comptes qui ont les mêmes droits (au plus vingt-quatre vues gardées).
+ *
+ * Rien n'est lu au lancement : l'index naît à la première ouverture de la catégorie Livres. Une copie des
+ * éléments reçus est gardée sur le disque (`DATA_DIR/book-index.json`, un jour au plus) : après un
+ * redémarrage, la première ouverture part d'elle pendant que Jellyfin est relu derrière. Frais cinq
+ * minutes ; au-delà, la réponse part de l'index gardé pendant qu'un autre se prépare (une préparation à
+ * la fois). Quand des métadonnées d'EPUB arrivent (`epubMeta.ts`), l'index se refait depuis les éléments
+ * déjà reçus, au plus toutes les vingt secondes. La construction rend la main à la boucle tous les
+ * quelques centaines de livres. Ce qui est propre à un compte — position, « lu » chez Jellyfin — est posé
+ * sur les livres envoyés au moment de répondre (`withProgress`).
  *
  * Sur `globalThis`, comme le cache serveur : les routes sont des points d'entrée distincts.
  */
@@ -33,121 +43,203 @@ export interface BookIndex {
   facets: { series: string[]; authors: string[]; genres: string[] };
 }
 
+/** Un livre de l'index commun, avec ce que les droits lisent. */
 interface Entry {
-  items: JellyfinBookItem[] | null;
+  book: BookSummary;
+  hay: string;
+  library: string;
+  tags: string[];
+  rated: boolean;
+}
+
+interface Base {
+  builtAt: number;
+  entries: Entry[];
+}
+
+interface Shared {
+  items: LibraryItem[] | null;
   fetchedAt: number;
   metaVersion: number;
-  index: BookIndex | null;
-  pending: Promise<BookIndex> | null;
-  usedAt: number;
+  base: Base | null;
+  pending: Promise<Base> | null;
+  diskTried: boolean;
+  views: Map<string, { baseAt: number; view: BookIndex; usedAt: number }>;
+  viewPending: Map<string, Promise<BookIndex>>;
 }
 
 const FRESH_MS = 5 * 60_000;
 const META_REBUILD_MS = 20_000;
-const MAX_ACCOUNTS = 24;
+const MAX_VIEWS = 24;
 const YIELD_EVERY = 400;
+const DISK_MAX_AGE_MS = 24 * 3600_000;
+const diskFile = () => path.join(DATA_DIR, "book-index.json");
 
-const KEY = Symbol.for("laterna.books.index");
-function entries(): Map<string, Entry> {
-  const g = globalThis as unknown as Record<symbol, Map<string, Entry> | undefined>;
-  return (g[KEY] ??= new Map());
+const KEY = Symbol.for("laterna.books.sharedIndex");
+function shared(): Shared {
+  const g = globalThis as unknown as Record<symbol, Shared | undefined>;
+  return (g[KEY] ??= { items: null, fetchedAt: 0, metaVersion: -1, base: null, pending: null, diskTried: false, views: new Map(), viewPending: new Map() });
 }
 
 const yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 
-/** L'index fait d'une liste d'éléments de Jellyfin — par tranches, la boucle reprend la main entre deux. */
-export async function buildIndex(items: readonly JellyfinBookItem[]): Promise<BookIndex> {
+/** L'index commun fait d'une liste d'éléments — par tranches, la boucle reprend la main entre deux. */
+async function buildBase(items: readonly LibraryItem[]): Promise<Base> {
   const known = knownMeta();
-  const books: BookSummary[] = [];
+  const entries: Entry[] = [];
   for (let i = 0; i < items.length; i++) {
-    books.push(summaryOf(items[i], known.get(items[i].Id.toLowerCase())?.meta ?? null));
+    const item = items[i];
+    const book = summaryOf(item, known.get(item.Id.toLowerCase())?.meta ?? null);
+    entries.push({
+      book,
+      hay: foldText(`${book.name} ${book.seriesName ?? ""} ${book.authors.join(" ")}`),
+      library: item.library,
+      tags: item.Tags ?? [],
+      rated: !!item.OfficialRating,
+    });
     if (i % YIELD_EVERY === YIELD_EVERY - 1) await yieldToLoop();
   }
-  books.sort(compareBooks);
+  entries.sort((a, b) => compareBooks(a.book, b.book));
   await yieldToLoop();
+  // Les OPF pas encore lus partent en arrière-plan ; cet index-ci fait sans.
+  scheduleMetaReads(staleMeta(entries.map((e) => ({ id: e.book.id, etag: e.book.fileTag })), known));
+  return { builtAt: Date.now(), entries };
+}
+
+/** La vue d'un ensemble de droits : les livres permis, l'accueil, les choix des menus. */
+async function buildView(base: Base, rights: BookRights): Promise<BookIndex> {
+  const books: BookSummary[] = [];
   const hay: string[] = [];
-  for (let i = 0; i < books.length; i++) {
-    const b = books[i];
-    hay.push(foldText(`${b.name} ${b.seriesName ?? ""} ${b.authors.join(" ")}`));
+  for (let i = 0; i < base.entries.length; i++) {
+    const e = base.entries[i];
+    if (allows(rights, e)) {
+      books.push(e.book);
+      hay.push(e.hay);
+    }
     if (i % (YIELD_EVERY * 4) === YIELD_EVERY * 4 - 1) await yieldToLoop();
   }
   await yieldToLoop();
-  const computed = homeRows(books);
+  // Le dédoublonnage d'abord, la boucle reprenant la main avant les rangées : à 6 400 livres, les deux d'un bloc
+  // tenaient la boucle ~30 ms (le double sous charge).
+  const deduped = dedupeBooks(books);
+  await yieldToLoop();
+  const computed = homeRows(deduped, { deduped: true });
   const home = { recent: computed.recent, rows: computed.rows, hidden: computed.hidden };
   await yieldToLoop();
   const sorted = (xs: Iterable<string>) => [...new Set(xs)].sort(collator.compare);
-  const genres = [...genreIndex(books).values()].filter((g) => g.books.length >= 2).map((g) => g.label);
-  const facets = {
-    series: sorted(groupBooks(books).flatMap((g) => (g.series ? [g.series] : []))),
-    authors: sorted([...authorIndex(books).values()].map((a) => a.label)),
-    genres: sorted(genres),
-  };
-  // Les OPF pas encore lus partent en arrière-plan ; cet index-ci fait sans.
-  scheduleMetaReads(staleMeta(books.map((b) => ({ id: b.id, etag: b.fileTag })), known));
+  // Les trois listes l'une après l'autre, la boucle reprenant la main entre deux.
+  const genres = sorted([...genreIndex(books).values()].filter((g) => g.books.length >= 2).map((g) => g.label));
+  await yieldToLoop();
+  const series = sorted(groupBooks(books).flatMap((g) => (g.series ? [g.series] : [])));
+  await yieldToLoop();
+  const authors = sorted([...authorIndex(books).values()].map((a) => a.label));
+  const facets = { series, authors, genres };
   return { builtAt: Date.now(), books, byId: new Map(books.map((b) => [b.id, b])), hay, home, facets };
 }
 
-function accountKey(caller: BookCaller): string {
-  return caller.jfId ? caller.jfId.toLowerCase() : "*local";
+/** Pour les tests et les mesures : l'index d'une liste, vu avec tous les droits. */
+export async function buildIndex(items: readonly LibraryItem[], rights: BookRights = { folders: null, tags: [], blockUnrated: false, blockRated: false }): Promise<BookIndex> {
+  return buildView(await buildBase(items), rights);
 }
 
-function evict(map: Map<string, Entry>): void {
-  if (map.size <= MAX_ACCOUNTS) return;
-  const oldest = [...map.entries()].filter(([, e]) => !e.pending).sort((a, b) => a[1].usedAt - b[1].usedAt);
-  for (const [key] of oldest.slice(0, map.size - MAX_ACCOUNTS)) map.delete(key);
+async function readDisk(): Promise<{ savedAt: number; items: LibraryItem[] } | null> {
+  try {
+    const raw = JSON.parse(await fs.promises.readFile(diskFile(), "utf8")) as { savedAt?: number; items?: LibraryItem[] };
+    if (typeof raw.savedAt !== "number" || !Array.isArray(raw.items) || Date.now() - raw.savedAt > DISK_MAX_AGE_MS) return null;
+    return { savedAt: raw.savedAt, items: raw.items };
+  } catch {
+    return null;
+  }
 }
 
-function refresh(caller: BookCaller, entry: Entry): Promise<BookIndex> {
-  entry.pending ??= (async () => {
+function writeDisk(items: LibraryItem[]): void {
+  const tmp = `${diskFile()}.${process.pid}.tmp`;
+  void fs.promises
+    .writeFile(tmp, JSON.stringify({ savedAt: Date.now(), items }))
+    .then(() => fs.promises.rename(tmp, diskFile()))
+    .catch(() => fs.promises.rm(tmp, { force: true }).catch(() => {}));
+}
+
+function refresh(s: Shared, refetch: boolean): Promise<Base> {
+  s.pending ??= (async () => {
     try {
-      const now = Date.now();
-      if (!entry.items || now - entry.fetchedAt >= FRESH_MS) {
-        entry.items = await fetchBookItems(caller);
-        entry.fetchedAt = Date.now();
+      if (!s.items || refetch) {
+        s.items = await fetchLibrary();
+        s.fetchedAt = Date.now();
+        writeDisk(s.items);
       }
-      entry.metaVersion = metaVersion();
-      entry.index = await buildIndex(entry.items);
-      return entry.index;
+      s.metaVersion = metaVersion();
+      s.base = await buildBase(s.items);
+      return s.base;
     } finally {
-      entry.pending = null;
+      s.pending = null;
     }
   })();
-  return entry.pending;
+  return s.pending;
 }
 
-/**
- * L'index de ce compte. Attendu seulement la première fois ; ensuite, toujours celui qu'on a, et un
- * neuf qui se prépare derrière quand il a vieilli ou que des métadonnées sont arrivées.
- */
-export async function bookIndex(caller: BookCaller, now = Date.now()): Promise<BookIndex> {
-  const map = entries();
-  const key = accountKey(caller);
-  let entry = map.get(key);
-  if (!entry) {
-    entry = { items: null, fetchedAt: 0, metaVersion: -1, index: null, pending: null, usedAt: now };
-    map.set(key, entry);
-    evict(map);
+/** L'index commun : attendu la première fois seulement ; ensuite servi tel quel, refait derrière s'il a vieilli. */
+async function sharedBase(now = Date.now()): Promise<Base> {
+  const s = shared();
+  if (!s.base && !s.diskTried) {
+    s.diskTried = true;
+    const disk = await readDisk();
+    if (disk && !s.base) {
+      s.items = disk.items;
+      s.fetchedAt = disk.savedAt;
+      s.metaVersion = metaVersion();
+      s.base = await buildBase(disk.items);
+    }
   }
-  entry.usedAt = now;
-  if (!entry.index) return refresh(caller, entry);
-  const stale = now - entry.fetchedAt >= FRESH_MS;
-  const metaMoved = entry.metaVersion !== metaVersion() && now - entry.index.builtAt >= META_REBUILD_MS;
-  if ((stale || metaMoved) && !entry.pending) {
-    refresh(caller, entry).catch(() => {
+  if (!s.base) return refresh(s, true);
+  const stale = now - s.fetchedAt >= FRESH_MS;
+  const metaMoved = s.metaVersion !== metaVersion() && now - s.base.builtAt >= META_REBUILD_MS;
+  if ((stale || metaMoved) && !s.pending) {
+    refresh(s, stale).catch(() => {
       // L'index gardé reste servi ; la prochaine demande retentera.
     });
   }
-  return entry.index;
+  return s.base;
 }
 
-/** Les positions de lecture de ce compte, posées sur des livres de l'index (copies : l'index est partagé). */
-export function withProgress(books: readonly BookSummary[], progress: Map<string, BookProgress>): BookSummary[] {
+/** Ce que ce compte voit de l'index commun. Lève si ses droits ne peuvent pas être lus (la route dit 502). */
+export async function bookIndex(caller: BookCaller, now = Date.now()): Promise<BookIndex> {
+  const [base, rights] = await Promise.all([sharedBase(now), rightsOf(caller, now)]);
+  const s = shared();
+  const key = rightsKey(rights);
+  const held = s.views.get(key);
+  if (held && held.baseAt === base.builtAt) {
+    held.usedAt = now;
+    return held.view;
+  }
+  const pendingKey = `${key}@${base.builtAt}`;
+  let job = s.viewPending.get(pendingKey);
+  if (!job) {
+    job = buildView(base, rights).finally(() => s.viewPending.delete(pendingKey));
+    s.viewPending.set(pendingKey, job);
+  }
+  const view = await job;
+  s.views.set(key, { baseAt: base.builtAt, view, usedAt: now });
+  if (s.views.size > MAX_VIEWS) {
+    const oldest = [...s.views.entries()].sort((a, b) => a[1].usedAt - b[1].usedAt)[0];
+    s.views.delete(oldest[0]);
+  }
+  return view;
+}
+
+/**
+ * Ce qui est propre à ce compte, posé sur des livres de l'index (copies : l'index est partagé) — sa
+ * position de lecture, et « lu » selon Jellyfin.
+ */
+export function withProgress(books: readonly BookSummary[], progress: Map<string, BookProgress>, played: ReadonlySet<string> = EMPTY_SET): BookSummary[] {
   return books.map((b) => {
     const p = progress.get(b.id);
-    return p ? { ...b, progress: p } : b;
+    const isPlayed = played.has(b.id);
+    return p || isPlayed ? { ...b, progress: p ?? b.progress, played: isPlayed || b.played } : b;
   });
 }
+const EMPTY_SET: ReadonlySet<string> = new Set();
 
 /** « Continuer la lecture » : d'après les positions de ce compte, les livres que l'index connaît encore. */
 export function resumeFrom(index: BookIndex, progress: Map<string, BookProgress>, limit = 12): BookSummary[] {
@@ -213,4 +305,13 @@ export function searchIndex(index: BookIndex, query: string, limit = 12): BookSu
     .map((s) => s.book);
 }
 
-export const __testing = { reset: () => entries().clear(), entries };
+export const __testing = {
+  reset: () => {
+    const s = shared();
+    Object.assign(s, { items: null, fetchedAt: 0, metaVersion: -1, base: null, pending: null, diskTried: true });
+    s.views.clear();
+    s.viewPending.clear();
+  },
+  shared,
+  diskFile,
+};

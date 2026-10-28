@@ -33,6 +33,9 @@ export const PUBLIC_PATHS = [
   // lancement, les écritures d'une autre page) comme `/status`. Elle ne sert rien d'un compte :
   // ce qu'elle montre est lu sur l'appareil.
   "/hors-ligne",
+  // Les livres gardés sur l'appareil (option « Livres », DECISIONS.md §127) : la même raison que
+  // `/hors-ligne`, et rien d'un compte non plus. Option coupée, la page répond 404.
+  "/livres/hors-ligne",
   // Un lien de partage (DECISIONS.md §112) : sa page demande le mot de passe à qui n'a pas encore de
   // session, et l'entrée l'échange contre une session `share`. La page elle-même ne montre rien du
   // titre avant le mot de passe ; ce qui suit passe par la porte des liens (`share/gate.ts`).

@@ -336,6 +336,11 @@ self.addEventListener("fetch", (event) => {
 // lancement normal. Un appareil sans téléchargement n'attend jamais autrement qu'avant.
 
 const OFFLINE_ENTRY = "/hors-ligne";
+// Les livres gardés sur l'appareil (option « Livres », DECISIONS.md §127) : une seconde entrée, gardée et
+// servie de la même façon, à la demande de la page des livres (`cine:warm-offline-books`) et seulement
+// sur un appareil qui garde des livres. Sa politique de sécurité — celle des livres, qui permet les cadres
+// du lecteur — est gardée avec elle : servie sans, le lecteur n'aurait plus ses trois barrières.
+const OFFLINE_BOOKS = "/livres/hors-ligne";
 const WAIT_PATH = "/__sw/attente";
 const SLOW_NAVIGATION_MS = 6000;
 const OFFLINE_ENTRY_FAST_MS = 2500;
@@ -353,17 +358,17 @@ const SCOPE_BASE = (() => {
     return "https://localhost/";
   }
 })();
-const offlineEntryKey = () => new Request(new URL(OFFLINE_ENTRY, SCOPE_BASE).href);
+const offlineEntryKey = (path = OFFLINE_ENTRY) => new Request(new URL(path, SCOPE_BASE).href);
 
 /** L'entrée gardée, de ce build ou du précédent — chacune avec le code de sa génération. */
-function cachedOfflineEntry() {
+function cachedOfflineEntry(path = OFFLINE_ENTRY) {
   return caches
     .open(STATIC_CACHE)
-    .then((c) => c.match(offlineEntryKey()))
+    .then((c) => c.match(offlineEntryKey(path)))
     .then(
       (hit) =>
         hit ||
-        previousStaticCache().then((previous) => (previous ? caches.open(previous).then((c) => c.match(offlineEntryKey())) : undefined))
+        previousStaticCache().then((previous) => (previous ? caches.open(previous).then((c) => c.match(offlineEntryKey(path))) : undefined))
     )
     .catch(() => undefined);
 }
@@ -390,7 +395,9 @@ const navigationKey = (href) => String(href).split("#")[0];
 function navigate(event) {
   const request = event.request;
   const key = navigationKey(request.url);
-  if (new URL(request.url).pathname === OFFLINE_ENTRY) return navigateOfflineEntry(event);
+  const pathname = new URL(request.url).pathname;
+  if (pathname === OFFLINE_ENTRY) return navigateOfflineEntry(event);
+  if (pathname === OFFLINE_BOOKS) return navigateOfflineEntry(event, OFFLINE_BOOKS);
   // La page d'attente se recharge : la réponse qu'elle guettait est là, on la lui rend.
   const held = heldNavigations.get(key);
   if (held) {
@@ -437,10 +444,10 @@ function navigate(event) {
  * `/hors-ligne` : le réseau s'il répond vite et bien (la page rendue avec la session), sinon la copie
  * gardée. Une page qu'on ouvre faute de réseau ne doit pas attendre le réseau.
  */
-function navigateOfflineEntry(event) {
+function navigateOfflineEntry(event, path = OFFLINE_ENTRY) {
   const network = fetch(event.request);
   network.catch(() => {});
-  return cachedOfflineEntry().then((entry) => {
+  return cachedOfflineEntry(path).then((entry) => {
     if (!entry) return network.catch(() => offlinePage());
     return new Promise((resolve) => {
       let settled = false;
@@ -503,17 +510,20 @@ function assetsIn(text, base, isCss) {
   return found;
 }
 
-let warming = null;
+const warming = new Map();
 
-/** Garde `/hors-ligne` et tout le code qu'elle atteint dans le cache de ce build — voir plus haut. */
-function warmOfflineEntry() {
-  if (warming) return warming;
-  warming = caches
+/**
+ * Garde `/hors-ligne` (ou la page hors ligne des livres) et tout le code qu'elle atteint dans le cache
+ * de ce build — voir plus haut. `keepPolicy` : la politique de sécurité de la page est gardée avec elle.
+ */
+function warmOfflineEntry(path = OFFLINE_ENTRY, keepPolicy = false) {
+  if (warming.has(path)) return warming.get(path);
+  const work = caches
     .open(STATIC_CACHE)
     .then((cache) =>
-      cache.match(offlineEntryKey()).then(async (already) => {
+      cache.match(offlineEntryKey(path)).then(async (already) => {
         if (already) return;
-        const page = await fetch(new URL(OFFLINE_ENTRY, SCOPE_BASE).href, { credentials: "omit", cache: "no-store", redirect: "manual" });
+        const page = await fetch(new URL(path, SCOPE_BASE).href, { credentials: "omit", cache: "no-store", redirect: "manual" });
         if (!page.ok || !/text\/html/.test(page.headers.get("Content-Type") || "")) return;
         const html = await page.text();
         const queue = assetsIn(html, SCOPE_BASE, false);
@@ -529,19 +539,29 @@ function warmOfflineEntry() {
           if (!response.ok) continue;
           if (/\.(?:m?js|css)$/.test(path)) queue.push(...assetsIn(await response.text(), href, path.endsWith(".css")));
         }
-        await cache.put(offlineEntryKey(), new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }));
+        const headers = { "Content-Type": "text/html; charset=utf-8" };
+        const policy = keepPolicy ? page.headers.get("Content-Security-Policy") : null;
+        // Sans sa politique, la page des livres ne serait pas gardée : servie sans, elle perdrait une barrière.
+        if (keepPolicy && !policy) return;
+        if (policy) headers["Content-Security-Policy"] = policy;
+        await cache.put(offlineEntryKey(path), new Response(html, { headers }));
       })
     )
     .catch(() => {})
     .then(() => {
-      warming = null;
+      warming.delete(path);
     });
-  return warming;
+  warming.set(path, work);
+  return work;
 }
 
 self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "cine:warm-offline-entry") {
     const work = warmOfflineEntry();
+    if (event.waitUntil) event.waitUntil(work);
+  }
+  if (event.data && event.data.type === "cine:warm-offline-books") {
+    const work = warmOfflineEntry(OFFLINE_BOOKS, true);
     if (event.waitUntil) event.waitUntil(work);
   }
 });

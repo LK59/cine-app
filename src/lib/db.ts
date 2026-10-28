@@ -745,6 +745,19 @@ function migrate(db: Database.Database): void {
       checked_at   INTEGER NOT NULL
     );
   `);
+  // Les signets d'un compte dans un livre (§127) : une page par ligne, bornés par livre (`bookmarks.ts`).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS book_bookmarks (
+      account    TEXT    NOT NULL,
+      item_id    TEXT    NOT NULL,
+      cfi        TEXT    NOT NULL,
+      fraction   REAL    NOT NULL,
+      chapter    TEXT    NOT NULL DEFAULT '',
+      excerpt    TEXT    NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (account, item_id, cfi)
+    );
+  `);
   // Les auteurs et la couverture de l'OPF sont venus après la série : une base d'essai antérieure les gagne ici.
   try { db.exec("ALTER TABLE book_meta ADD COLUMN creators TEXT NOT NULL DEFAULT '[]'"); } catch { /* already exists */ }
   try { db.exec("ALTER TABLE book_meta ADD COLUMN cover_path TEXT"); } catch { /* already exists */ }

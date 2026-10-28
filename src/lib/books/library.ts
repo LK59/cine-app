@@ -7,6 +7,7 @@ import type { SessionPayload } from "@/lib/auth";
 import type { BookDetail, BookSummary } from "@/lib/books/types";
 import { knownMeta, type EpubMeta } from "@/lib/books/epubMeta";
 import { bookAuthors, bookGenres, decideSeries } from "@/lib/books/metadata";
+import { normId } from "@/lib/books/rights";
 
 /**
  * Les livres de Jellyfin, vus par un compte (DECISIONS.md §127).
@@ -27,7 +28,7 @@ const FIELDS = "Tags,Genres,People,Overview,SeriesName,ProductionYear,ImageTags,
  * (`bookFor`). Une bibliothèque de plusieurs milliers d'EPUB ne voyage ainsi qu'en titres, séries,
  * auteurs, genres et empreintes (couverture, fichier).
  */
-const LIST_FIELDS = "Tags,Genres,People,ProductionYear,ImageTags,DateCreated,Etag";
+const LIST_FIELDS = "Tags,Genres,People,ProductionYear,ImageTags,DateCreated,Etag,OfficialRating";
 /** Les livres sont demandés par pages : une réponse par millier, jamais toute la bibliothèque d'un bloc. */
 export const LIST_PAGE = 1000;
 /** Une borne de sécurité : au-delà, la grille s'arrête plutôt que de demander sans fin. */
@@ -49,6 +50,13 @@ export interface JellyfinBookItem {
   DateCreated?: string | null;
   Etag?: string | null;
   UserData?: { Played?: boolean } | null;
+  OfficialRating?: string | null;
+}
+
+/** Un livre de la bibliothèque commune, avec ce qu'il faut pour décider qui le voit (`rights.ts`). */
+export interface LibraryItem extends JellyfinBookItem {
+  /** La bibliothèque Jellyfin (dossier virtuel) qui le contient, identifiant normalisé. */
+  library: string;
 }
 
 export type BookCaller = Pick<SessionPayload, "role" | "jfId">;
@@ -139,32 +147,86 @@ export function compareBooks(a: BookSummary, b: BookSummary): number {
   return collator.compare(a.name, b.name);
 }
 
+/** Trois pages à la fois au plus : Jellyfin met près d'une seconde à rendre mille livres. */
+const PAGE_CONCURRENCY = 3;
+
 /**
- * Les livres que ce compte voit, tels que Jellyfin les décrit — par pages de mille, sans résumés, moins
- * ceux qui portent un de ses tags bloqués. L'index (`bookIndex.ts`) en fait la grille.
+ * Toute la bibliothèque de livres, lue **une fois pour tous les comptes**, avec la clé du serveur
+ * (DECISIONS.md §127) : bibliothèque par bibliothèque (`/Library/VirtualFolders`, puis `ParentId`), pour
+ * savoir de laquelle vient chaque livre — c'est ce que les droits d'un compte nomment. Par pages de mille,
+ * sans résumés, trois pages en parallèle. Ce que chaque compte en voit, c'est `rights.ts` qui le décide.
  */
-export async function fetchBookItems(caller: BookCaller): Promise<JellyfinBookItem[]> {
-  const items: JellyfinBookItem[] = [];
-  for (let start = 0; start < LIST_MAX; start += LIST_PAGE) {
-    const params = new URLSearchParams({
-      IncludeItemTypes: "Book",
-      Recursive: "true",
-      Fields: LIST_FIELDS,
-      EnableUserData: "true",
-      EnableImageTypes: "Primary",
-      SortBy: "SortName",
-      StartIndex: String(start),
-      Limit: String(LIST_PAGE),
-    });
-    const { status, body } = await getJson<{ Items?: JellyfinBookItem[]; TotalRecordCount?: number }>(`${itemsBase(caller)}?${params}`);
-    if (!body) throw new Error(`Jellyfin a répondu ${status}`);
-    const page = body.Items ?? [];
-    for (const item of page) items.push(item);
-    const total = typeof body.TotalRecordCount === "number" ? body.TotalRecordCount : 0;
-    if (page.length < LIST_PAGE || items.length >= total) break;
+export async function fetchLibrary(): Promise<LibraryItem[]> {
+  const folders = await getJson<{ ItemId?: string; CollectionType?: string | null }[]>(`${config.jellyfin.url}/Library/VirtualFolders`);
+  if (!folders.body) throw new Error(`Jellyfin a répondu ${folders.status}`);
+  // Les bibliothèques qui ne peuvent pas contenir de livres ne sont pas parcourues.
+  const libraries = folders.body.filter((f) => typeof f.ItemId === "string" && !["movies", "tvshows", "music", "musicvideos", "homevideos", "boxsets", "playlists", "livetv"].includes(f.CollectionType ?? ""));
+  const out: LibraryItem[] = [];
+  for (const lib of libraries) {
+    const library = normId(lib.ItemId as string);
+    const page = async (start: number) => {
+      const params = new URLSearchParams({
+        ParentId: lib.ItemId as string,
+        IncludeItemTypes: "Book",
+        Recursive: "true",
+        Fields: LIST_FIELDS,
+        EnableUserData: "false",
+        EnableImageTypes: "Primary",
+        SortBy: "SortName",
+        StartIndex: String(start),
+        Limit: String(LIST_PAGE),
+      });
+      const { status, body } = await getJson<{ Items?: JellyfinBookItem[]; TotalRecordCount?: number }>(`${config.jellyfin.url}/Items?${params}`);
+      if (!body) throw new Error(`Jellyfin a répondu ${status}`);
+      return body;
+    };
+    const first = await page(0);
+    const total = Math.min(LIST_MAX, typeof first.TotalRecordCount === "number" ? first.TotalRecordCount : 0);
+    const pages = [first.Items ?? []];
+    const starts: number[] = [];
+    for (let start = LIST_PAGE; start < total; start += LIST_PAGE) starts.push(start);
+    for (let i = 0; i < starts.length; i += PAGE_CONCURRENCY) {
+      const batch = await Promise.all(starts.slice(i, i + PAGE_CONCURRENCY).map((start) => page(start)));
+      for (const b of batch) pages.push(b.Items ?? []);
+    }
+    for (const items of pages) {
+      for (const item of items) if (item.Type === "Book" && typeof item.Id === "string") out.push({ ...item, library });
+    }
   }
-  const blocked = caller.jfId ? await blockedTagsOf(caller.jfId) : [];
-  return items.filter((item) => item.Type === "Book" && typeof item.Id === "string" && !carriesBlockedTag(item.Tags, blocked));
+  return out;
+}
+
+const PLAYED_TTL_MS = 2 * 60_000;
+const PLAYED_KEY = Symbol.for("laterna.books.played");
+type PlayedCache = Map<string, { ids: Set<string>; at: number }>;
+function playedCache(): PlayedCache {
+  const g = globalThis as unknown as Record<symbol, PlayedCache | undefined>;
+  return (g[PLAYED_KEY] ??= new Map());
+}
+
+/**
+ * Les livres que Jellyfin dit lus par ce compte — l'index commun n'a pas d'état par compte. Une requête
+ * qui ne rend que les livres lus, sans champs, gardée deux minutes ; en panne, rien (pas de badge « Lu »).
+ */
+export async function playedBooksOf(caller: BookCaller, now = Date.now()): Promise<Set<string>> {
+  if (!caller.jfId) return new Set();
+  const known = playedCache().get(caller.jfId);
+  if (known && now - known.at < PLAYED_TTL_MS) return known.ids;
+  const params = new URLSearchParams({ IncludeItemTypes: "Book", Recursive: "true", IsPlayed: "true", EnableImages: "false", Fields: "", Limit: "20000" });
+  try {
+    const { body } = await getJson<{ Items?: { Id?: string }[] }>(`${itemsBase(caller)}?${params}`);
+    const ids = new Set((body?.Items ?? []).flatMap((i) => (typeof i.Id === "string" ? [i.Id.toLowerCase()] : [])));
+    playedCache().set(caller.jfId, { ids, at: now });
+    if (playedCache().size > 200) playedCache().delete(playedCache().keys().next().value as string);
+    return ids;
+  } catch {
+    return known?.ids ?? new Set();
+  }
+}
+
+/** Après « lu » chez Jellyfin : la prochaine lecture redemande. */
+export function forgetPlayed(jfId: string | undefined): void {
+  if (jfId) playedCache().delete(jfId);
 }
 
 /**

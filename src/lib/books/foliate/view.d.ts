@@ -43,7 +43,15 @@ export interface FoliateRelocateDetail {
   section?: { current: number; total: number };
   /** Minutes restantes estimées (foliate-js compte 1 600 caractères de source par minute). */
   time?: { section: number; total: number };
+  /** Le texte de la page montrée, dans le document du chapitre. */
+  range?: Range | null;
 }
+
+/** Un résultat de `search` : l'avancement, ou les trouvailles d'un chapitre avec leur contexte. */
+export type FoliateSearchResult =
+  | "done"
+  | { progress: number }
+  | { label: string; subitems: { cfi: string; excerpt: { pre: string; match: string; post: string } }[] };
 
 export interface FoliateRenderer extends HTMLElement {
   setStyles?: (styles: string | [string, string]) => void;
@@ -71,6 +79,9 @@ export interface FoliateView extends HTMLElement {
   goRight: () => Promise<void>;
   next: (distance?: number) => Promise<void>;
   prev: (distance?: number) => Promise<void>;
+  /** Cherche dans tout le texte du livre, chapitre par chapitre ; chaque trouvaille est soulignée sur la page. */
+  search: (options: { query: string; index?: number }) => AsyncGenerator<FoliateSearchResult, void, undefined>;
+  clearSearch: () => void;
 }
 
 export function makeBook(file: File | Blob | string): Promise<FoliateBook>;

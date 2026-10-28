@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
 import { LayoutGrid } from "lucide-react";
@@ -53,6 +53,53 @@ export function BooksSearchEntry({ query }: { query: string }) {
   const { data } = useSWR<{ booksEnabled?: boolean }>("/api/config/public", fetcher, playerBootstrapOptions);
   if (data?.booksEnabled !== true) return null;
   return <BooksSearchLazy query={query} />;
+}
+
+const BooksDownloadsLazy = dynamic(() => import("./BooksDownloads").then((m) => m.BooksDownloads), { ssr: false });
+
+// Ce que la page des téléchargements sait des livres sans rien charger d'eux : combien l'appareil en
+// garde (`offlineBooks.ts` l'écrit), et si les livres étaient affichés pour ce compte au dernier passage
+// en ligne — sans réseau, la configuration ne répond pas.
+const COUNT_KEY = "laterna:books:offline-count";
+const SHOWN_KEY = "laterna:books:shown";
+const readKey = (key: string) => () => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+const subscribeStorage = (listener: () => void) => {
+  window.addEventListener("storage", listener);
+  return () => window.removeEventListener("storage", listener);
+};
+
+/** L'appareil garde-t-il des livres que ce compte peut voir ? Faux tant que rien ne le dit. */
+export function useOfflineBooksPresent(): boolean {
+  const { data, error } = useSWR<{ booksEnabled?: boolean }>("/api/config/public", fetcher, playerBootstrapOptions);
+  const count = Number(useSyncExternalStore(subscribeStorage, readKey(COUNT_KEY), () => null) ?? 0);
+  const shownBefore = useSyncExternalStore(subscribeStorage, readKey(SHOWN_KEY), () => null);
+  const known = typeof data?.booksEnabled === "boolean";
+  useEffect(() => {
+    if (!known) return;
+    try {
+      localStorage.setItem(SHOWN_KEY, data?.booksEnabled ? "1" : "0");
+    } catch {
+      /* sans mémoire : hors ligne, la section suivra le dernier état connu */
+    }
+  }, [known, data?.booksEnabled]);
+  if (count <= 0) return false;
+  if (known) return data?.booksEnabled === true;
+  // Hors ligne (ou la configuration en panne) : le dernier état connu.
+  return (error !== undefined || data === undefined) && shownBefore === "1";
+}
+
+/**
+ * La section « Livres » de la page des téléchargements : rien, et aucun code des livres chargé, tant
+ * que l'appareil n'en garde pas ou que les livres ne sont pas affichés pour ce compte.
+ */
+export function BooksDownloadsEntry({ present }: { present: boolean }) {
+  return present ? <BooksDownloadsLazy /> : null;
 }
 
 /** L'accueil des livres, chargé seulement dans la catégorie Livres. */

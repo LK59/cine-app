@@ -59,10 +59,11 @@ export function saveProgress(account: string, itemId: string, cfi: string, fract
 }
 
 /** Une position plausible : une CFI EPUB bornée, une fraction entre 0 et 1. */
-export function validProgressInput(body: unknown): { cfi: string; fraction: number; finished: boolean } | null {
+export function validProgressInput(body: unknown): { cfi: string; fraction: number; finished: boolean; at: number | null } | null {
   if (!body || typeof body !== "object") return null;
-  const { cfi, fraction, finished } = body as Record<string, unknown>;
+  const { cfi, fraction, finished, at } = body as Record<string, unknown>;
   if (typeof cfi !== "string" || cfi.length > 4000 || !/^epubcfi\(.+\)$/.test(cfi)) return null;
   if (typeof fraction !== "number" || !Number.isFinite(fraction) || fraction < 0 || fraction > 1) return null;
-  return { cfi, fraction, finished: finished === true };
+  // `at` : l'heure de lecture, quand la position a attendu hors ligne avant d'être envoyée.
+  return { cfi, fraction, finished: finished === true, at: typeof at === "number" && Number.isFinite(at) ? at : null };
 }
