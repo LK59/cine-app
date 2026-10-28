@@ -30,7 +30,9 @@ function PanelFrame({ colors, title, onClose, children, side }: { colors: Colors
     <div
       className={`absolute inset-x-0 bottom-0 z-20 flex max-h-[62%] flex-col rounded-t-2xl border shadow-2xl shadow-black/40 backdrop-blur-2xl animate-fade-in-up sm:inset-y-3 sm:bottom-3 sm:max-h-none sm:w-[23rem] sm:rounded-2xl sm:animate-fade-in-side ${side === "left" ? "sm:left-3 sm:right-auto" : "sm:left-auto sm:right-3"}`}
       style={{
-        background: colors.dark ? "rgb(24 24 27 / 0.9)" : "rgb(255 255 255 / 0.9)",
+        // Presque opaque : le texte du livre ne doit pas se lire à travers les réglages ; la page reste
+        // visible au-dessus, où l'on voit chaque changement.
+        background: colors.dark ? "rgb(24 24 27 / 0.97)" : "rgb(252 251 249 / 0.97)",
         color: colors.fg,
         borderColor: colors.dark ? "rgb(255 255 255 / 0.08)" : "rgb(0 0 0 / 0.08)",
         paddingBottom: "env(safe-area-inset-bottom)",

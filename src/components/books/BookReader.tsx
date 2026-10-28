@@ -403,16 +403,17 @@ export function BookReader({ id, title, onClose, onSaved }: { id: string; title:
     const view = viewRef.current;
     if (!view || status !== "ready") return;
     const handle = setTimeout(() => {
-      applyLayout(view, prefs);
-      view.renderer.setStyles?.(readerCss(prefs, systemDark, location.origin));
-      // L'aperçu d'un zoom (une simple mise à l'échelle) laisse la place au texte repaginé.
+      // L'aperçu d'un zoom (une simple mise à l'échelle) laisse la place au texte repaginé — retiré
+      // **avant** la nouvelle mise en page, dans la même tâche (rien n'est peint entre les deux) :
+      // foliate-js mesure ses colonnes à l'écran, et sous une mise à l'échelle il se plaçait de travers
+      // (une page blanche après un pincement, vu le 28/10/2026).
       if (zoomPreview.current) {
         zoomPreview.current = false;
-        requestAnimationFrame(() => {
-          view.style.transform = "";
-          view.style.transformOrigin = "";
-        });
+        view.style.transform = "";
+        view.style.transformOrigin = "";
       }
+      applyLayout(view, prefs);
+      view.renderer.setStyles?.(readerCss(prefs, systemDark, location.origin));
     }, 40);
     return () => clearTimeout(handle);
   }, [prefs, systemDark, status]);
