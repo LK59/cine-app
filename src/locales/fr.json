@@ -3787,6 +3787,7 @@
       "drmError": "Ce livre est protégé (DRM) : il ne peut pas être lu ici.",
       "notEpubError": "Ce fichier n'est pas un EPUB lisible.",
       "openError": "Ce livre n'a pas pu être ouvert.",
+      "frame": "Lecture",
       "contents": "Table des matières",
       "settings": "Réglages de lecture",
       "position": "Position dans le livre",

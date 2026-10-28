@@ -2048,6 +2048,7 @@ de fond de la bannière du bureau — déjà éteinte, mais dont le code restait
 `CinemaTrailerBackdrop`, `loadYoutubeIframeApi` (l'API iframe `YT.Player`). La CSP ne garde que
 `frame-src https://www.youtube-nocookie.com` : `www.youtube.com` sort de `script-src`, `connect-src`
 et `frame-src`, `img.youtube.com` d'`img-src` et `connect-src`. Le type du catalogue ne change pas.
+(`frame-src` a gagné `'self'` le 28/10/2026, pour le lecteur de livres — §128 ; YouTube y reste seul hôte.)
 
 **Tests.** `titleExtras.test.ts`, `sheetFacts.test.ts`, `useQueuedPlay.test.tsx`,
 `youtube-fenetre-seule.test.ts`.
@@ -7482,9 +7483,10 @@ vie des fiches (CLAUDE.md) : `useSheetTransition` (la couverture touchée devien
 à l'iPad, continuité au bureau), `useSheetExit`, `useSwipeToDismiss`, `useExitDelay`, `arrivedByBack`
 lu au montage, une `key` par livre, la barre du bas effacée dessous (`setOfflineSheetOpen`). « Lire » fait
 grandir la couverture en première page (`readerOpening.ts`, rien si le système demande moins de
-mouvement). Depuis l'accueil, le lecteur s'ouvre sur `/livres?retour=1#livre=…&lire=1` et le refermer y
-ramène, fiche ouverte : ce passage est un vrai chargement de page, le lecteur ne vivant que sous la
-politique de sécurité de `/livres` (plus bas). Tests : `books-sheet.test.tsx`. Les livres ne s'appuient sur aucun champ propre à un greffon de Jellyfin : titre,
+mouvement). Depuis l'accueil, le lecteur s'ouvre dans un cadre posé sur le cinéma — la page
+`/livres?cadre=1#livre=…&lire=1`, sous sa propre politique de sécurité (plus bas) —, et le refermer retire
+le cadre : la fiche est là, dessous, sans que rien n'ait été rechargé (§128). Tests : `books-sheet.test.tsx`,
+`books-reader-frame.test.tsx`. Les livres ne s'appuient sur aucun champ propre à un greffon de Jellyfin : titre,
 auteur (`People` de type `Author`), série et tome (`SeriesName`, `IndexNumber`), année, résumé et
 couverture sont ce que Jellyfin lit lui-même dans l'EPUB ; un tome, un auteur ou une couverture
 absents sont prévus.
@@ -7627,22 +7629,26 @@ Jellyfin pour ce compte (`markPlayed`) ; un échec de cet appel ne perd pas la p
 - *« Tous les livres » s'ouvre par-dessus l'accueil* (`#tous=…`, `booksAll` dans l'adresse du cinéma),
   sans changer de page : la grille n'a pas besoin de la politique de sécurité du lecteur. Elle chargeait
   le document `/livres` (~0,55 s), et son retour rechargeait tout le cinéma (~0,65 s) ; le retour est
-  maintenant de 70 ms. Seule la lecture passe encore par la page `/livres`.
+  maintenant de 70 ms. Le lecteur, lui, reste la page `/livres` — dans un cadre posé sur le cinéma depuis
+  le même jour (§128).
 - *Aucun morceau des livres ne passe par Suspense* (`lazyNow`) : React retient l'apparition de ce qui
   était suspendu 300 ms au moins. La catégorie Livres, « Tous les livres » et le lecteur l'attendaient,
   alors que leur code et leurs données arrivaient en 10 à 40 ms.
-- *« Lire » → première page* : ~1,4 s → ~0,42 s (iPhone), ~1,1 s → ~0,25 s (ordinateur). La page des livres
-  est demandée pendant que la couverture grandit (`openReaderPage`), le fichier du livre dès qu'on reste
-  0,6 s sur sa fiche (`readerPreload.ts`, gardé aussi une heure par le navigateur ; rien en économie de
-  données), et la page des livres ouverte pour lire ne demande que le lecteur : son code, foliate-js et le
-  fichier partent au premier rendu, en même temps ; la grille n'est pas chargée derrière.
+- *« Lire » → première page* : ~1,4 s → ~0,42 s (iPhone), ~1,1 s → ~0,25 s (ordinateur). Le fichier du livre
+  est demandé dès qu'on reste 0,6 s sur sa fiche (`readerPreload.ts`, gardé aussi une heure par le
+  navigateur ; rien en économie de données), et la page des livres ouverte pour lire ne demande que le
+  lecteur : son code, foliate-js et le fichier partent au premier rendu, en même temps ; la grille n'est pas
+  chargée derrière. Depuis le cadre (§128), cette page se prépare elle-même au même moment, invisible, le
+  livre fermé jusqu'à « Lire ».
 - *La catégorie Livres se prépare à l'intention* (survol, doigt posé, focus du bouton) ; la fiche paraît
   sans attendre sa propre réponse quand la carte suffit.
-- *Ce qui reste* : refermer le lecteur recharge le cinéma (~0,5 s). Le cache d'aller-retour des navigateurs
-  ne le garde pas : son document est servi `Cache-Control: no-store` (Chromium le dit :
-  `response-cache-control-no-store`), ce qui empêche aussi de revenir, après une déconnexion, sur la page
-  d'un autre compte. L'enlever — ou mettre le lecteur dans le document du cinéma, ce qui demanderait
-  d'ouvrir sa politique de sécurité aux cadres `blob:` — est un choix à faire, pas un correctif.
+- *Refermer le lecteur rechargeait le cinéma* (~0,5 s à l'ordinateur, ~0,75 s sur iPhone, l'accueil
+  reconstruit sous les yeux). Le cache d'aller-retour des navigateurs ne le gardait pas : son document est
+  servi `Cache-Control: no-store` (Chromium le dit : `response-cache-control-no-store`), ce qui empêche
+  aussi de revenir, après une déconnexion, sur la page d'un autre compte — gardé. Ni ce `no-store` retiré,
+  ni la politique du cinéma ouverte aux cadres `blob:` : le lecteur est posé sur le cinéma dans un cadre de
+  la même origine, la page `/livres` telle quelle (§128). Refermer : ~50 ms sur iPhone, ~20 ms à
+  l'ordinateur, sans rechargement.
 
 **Google Books, en option (`googleBooks.ts`).** `BOOKS_GOOGLE_ENRICH` (coupée par défaut) et
 `GOOGLE_BOOKS_API_KEY` (un secret, comme la clé TMDB : jamais renvoyé au navigateur), dans la même carte
@@ -7747,11 +7753,13 @@ d'ailleurs.
    livre : c'est la page qui lit le cadre, jamais l'inverse, puisque rien ne s'exécute dedans. Un lien
    externe ne s'ouvre jamais.
 3. *La politique de la page* : `/livres` a sa propre règle dans `next.config.js`, qui remplace la
-   générale pour cette adresse seulement (la générale garde `frame-src` YouTube seul) : `frame-src
+   générale pour cette adresse seulement (la générale garde `frame-src` YouTube et, depuis §128, notre
+   propre origine) : `frame-src
    blob:`, et images, polices, feuilles de style et connexions limitées à l'application et à `blob:`.
    Un document `blob:` hérite de la politique de la page qui l'a créé : c'est aussi celle des
-   chapitres. On n'arrive sur `/livres` que par un vrai chargement (lien ordinaire, pas de navigation
-   de Next) : sinon le document — et la politique — de l'accueil resteraient en place.
+   chapitres. On n'arrive sur `/livres` que par un vrai chargement (lien ordinaire, ou le cadre que le
+   cinéma pose pour lire, §128 — pas de navigation de Next) : sinon le document — et la politique — de
+   l'accueil resteraient en place.
 
 **Tests.** `books-routes.test.ts` (option coupée, droits, tags bloqués, relais, position, « lu »),
 `books-isolation.test.ts` (défaut coupé, page absente, configuration publique, liens de partage,
@@ -7765,12 +7773,94 @@ la fiche), `books-scale.test.tsx` (index, pages, file des OPF, mesures de la bou
 téléchargements), `serviceWorker-offline-entry.test.ts` (page hors ligne des livres et sa politique),
 et dans `books-routes.test.ts` un livre d'une bibliothèque interdite ou porteur d'un tag bloqué, absent
 de toutes les routes pour ce compte. En vrais navigateurs : `tools/livres-securite/` (Chromium, Firefox, WebKit ; un EPUB
-piégé et un espion qui compte ce qui l'atteint).
+piégé et un espion qui compte ce qui l'atteint ; sur la page seule et dans le cadre posé sur le cinéma).
 
 **Voulu.** Ni page Nouveautés, ni entrée au registre des corrections : une option qu'une
 installation allume elle-même. Pas de sélection de texte ni de surlignage (la couche de gestes les
 empêche ; une version future pourrait les faire depuis la page). Les livres à mise en page fixe
 passent par le même lecteur sans réglages de texte utiles. Seul l'EPUB : les autres formats de
 foliate-js ne sont pas copiés.
+
+**Décidé le 28/10/2026.**
+
+## 128. Le lecteur de livres dans un cadre posé sur le cinéma, et `frame-src 'self'`
+
+**Règle.** Depuis le cinéma, « Lire » ouvre la page `/livres?cadre=1#livre=<id>&lire=1` dans un `<iframe>`
+de la même origine posé sur tout l'écran (`ReaderFrame.tsx`), au lieu d'y mener toute la fenêtre. C'est
+toujours le document `/livres`, avec sa propre politique de sécurité et ses trois barrières (§127) ; le
+refermer retire le cadre, et le cinéma dessous n'a pas bougé. La politique générale ne gagne qu'une
+source : `frame-src 'self' https://www.youtube-nocookie.com` — ni `blob:`, ni `data:`, ni autre hôte.
+`'self'` ne vaut que pour les cadres que le cinéma crée : ce qu'ils chargent eux-mêmes relève de leur
+propre politique (les cadres `blob:` des chapitres, permis par celle de `/livres` seule). La page des
+livres garde `frame-ancestors 'self'` (seule notre origine peut la poser) et le `X-Frame-Options: DENY`
+de la règle générale, que Chromium, Firefox et WebKit ignorent quand `frame-ancestors` est là (vérifié
+le 28/10/2026 dans les trois) ; le cinéma reste `frame-ancestors 'none'`.
+
+**Le contrat entre les deux documents** (`src/lib/books/readerFrame.ts`, une fonction par sens) :
+- *l'adresse* : le cinéma pousse **une** entrée (`#livre=…&lire=1`, `cinemaNavigate`) après l'animation
+  de la couverture ; le cadre ne touche jamais à l'historique de la fenêtre — une entrée poussée dans un
+  cadre s'empile dans l'historique commun, et Retour reculerait dans le cadre. Le cadre naît avec son
+  adresse (la première navigation d'un cadre neuf remplace son `about:blank`).
+- *refermer* : la croix et Échap du lecteur demandent `close` ; Retour (navigateur, bouton d'Android)
+  ramène l'entrée d'en dessous ; Échap resté au cinéma (avant la première page) fait de même. Tout passe
+  par `cinemaClose({ reading: false })` — un seul retour en vol — et le cadre est retiré quand l'adresse ne
+  nomme plus le lecteur. Le focus revient à « Lire » de la fiche (`data-book-read`).
+- *les messages* : des objets aux clés exactes (`app`, `v`, `kind`, et le livre ou les marges), acceptés
+  seulement de notre origine **et** de la fenêtre attendue — le cadre pour le cinéma (`acceptFromFrame`),
+  le cinéma pour le cadre (`acceptFromParent`) ; envoyés à notre seule origine. Du cadre : `hello` (il
+  écoute), `ready` (première page ou erreur affichée — le calque de l'ouverture part), `saved` (une
+  position est enregistrée — la fiche, l'accueil des livres et la grille ouverte par-dessus relisent la
+  leur), `close`. Du cinéma : les marges de l'écran (`insets`) et `open`.
+- *les marges* : un cadre ne reçoit pas celles de l'encoche ni de la barre d'accueil (`env()` y vaut 0) ;
+  le cinéma les mesure et les envoie, et le lecteur lit `var(--reader-inset-*, env(safe-area-inset-*))`
+  (`insetVar`), la plus grande des deux.
+- *la position relue* : la dernière part du cadre en `keepalive` au moment où il est retiré ; le cinéma
+  relit la fiche et l'accueil tout de suite, puis 1,5 s plus tard.
+
+**Préparé depuis la fiche.** Les deux documents partagent le même fil : chargé à « Lire », le code de la
+page des livres tombait pendant que la couverture grandit (mesuré : ~0,75–0,95 s jusqu'à la première page
+sur iPhone émulé, contre ~0,5 s avant le cadre). Restée 0,6 s sur la fiche (la même intention que le
+fichier demandé d'avance, rien en économie de données), la page prépare son cadre (`standbyReaderFrame`,
+`onReadIntent` de `BookSheetHost`) : `/livres?cadre=1#livre=<id>`, invisible et inerte, qui charge son
+code, foliate-js et le fichier **sans ouvrir le livre** — ouvrir, c'est aussi enregistrer une position, et
+un livre seulement regardé entrerait dans « Continuer la lecture ». Il l'ouvre à `open`. La fiche refermée
+sans lire, le cadre est retiré ; une fiche refermée pendant que la couverture grandit l'emporte (rien n'est
+poussé).
+
+**Mesuré (28/10/2026, 6 400 livres, cache chaud, médiane de six ouvertures du même livre, Playwright).**
+
+| | iPhone émulé (WebKit) avant → après | Ordinateur (Chromium) avant → après |
+|---|---|---|
+| « Lire » → première page | 482 → 503 ms | 354 → 432 ms |
+| Lecteur refermé → fiche | 736 → 48 ms | 428 → 21 ms |
+| … animations terminées | 1 021 → 314 ms | 994 → 23 ms |
+| Document du cinéma rechargé | oui → non | oui → non |
+
+« Avant » s'arrêtait à la première peinture de la page des livres, l'animation de la couverture coupée par
+le changement de document ; « après », elle va à son terme (380 ms) et la page paraît quand le calque
+commence à s'effacer — d'où les ~80 ms de plus à l'ordinateur.
+
+**Fonctions.** `readerFrame.ts` (adresse, messages, vérifications, `isFramedReader`, `insetVar`),
+`ReaderFrame.tsx` (`standbyReaderFrame`, `openReaderFrame`, `ReaderFrame`), `BooksScreen` (la page en
+cadre : `tellCinema`, marges, `open`), `BookReader` (`onReady`). Appelants : `BooksHome` (sa fiche et la
+grille ouverte par-dessus). La page `/livres` ouverte seule — lien direct, rechargement, `?retour=1`
+d'une adresse gardée, `/livres/hors-ligne` — se comporte comme avant : le paramètre ne suffit pas, il faut
+aussi un parent de notre origine.
+
+**Tests.** `books-reader-frame.test.tsx` (messages refusés d'une autre origine, d'une autre fenêtre, mal
+formés ; une entrée d'historique ; `close` par l'adresse, un seul retour en vol ; cadre préparé, `open`
+après `hello` ; marges ; position relue), `books-isolation.test.ts` et `youtube-fenetre-seule.test.ts` (la
+politique générale : exactement `frame-src 'self' https://www.youtube-nocookie.com`, sans `blob:`). En vrais
+navigateurs, `tools/livres-securite/` ouvre l'EPUB piégé aussi dans le cadre posé sur le cinéma : aucun
+script, aucune requête hors de l'application, rien d'écrit dans la fenêtre du cinéma ni de changé à son
+adresse — et, sans le correctif de foliate-js (`allow-scripts`), le script d'un chapitre atteindrait bien la
+fenêtre du cinéma, ce qui dit pourquoi les cadres des chapitres ne l'ont jamais.
+
+**Voulu.** Le cadre est retiré, pas gardé caché : un lecteur vivant sous le cinéma tiendrait de la mémoire
+et des écouteurs pour un livre qu'on ne lit plus. Pas d'animation de sortie : refermer découvre la fiche,
+qui est déjà là. La page des livres seule n'a pas changé de comportement.
+
+**Pas sûr, à regarder sur un vrai iPhone en application installée** : le défilement continu, le pincement
+et les marges dans un cadre (Playwright n'émule ni l'encoche ni le zoom de la page).
 
 **Décidé le 28/10/2026.**

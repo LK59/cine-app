@@ -40,8 +40,22 @@ const EXIT_DESKTOP_MS = 200;
 /** Combien de temps sur une fiche avant de préparer la lecture. */
 const READ_INTENT_MS = 600;
 
-/** La fiche d'après l'adresse : montée tant qu'elle est nommée, gardée le temps de sa sortie. */
-export function BookSheetHost({ books, onRead }: { books: readonly BookSummary[]; onRead: (book: BookSummary | null, id: string, cover: HTMLElement | null) => void }) {
+/** « Lire » est probable : ce que l'hôte prépare pour la lecture, et la fonction qui le défait. */
+export type ReadIntent = (id: string) => () => void;
+
+/**
+ * La fiche d'après l'adresse : montée tant qu'elle est nommée, gardée le temps de sa sortie.
+ * `onReadIntent` : dans le cinéma, le lecteur posé dans un cadre se prépare (`standbyReaderFrame`, §128).
+ */
+export function BookSheetHost({
+  books,
+  onRead,
+  onReadIntent,
+}: {
+  books: readonly BookSummary[];
+  onRead: (book: BookSummary | null, id: string, cover: HTMLElement | null) => void;
+  onReadIntent?: ReadIntent;
+}) {
   const route = useCinemaRoute();
   const isMobile = useIsMobile();
   const open = !!route.book && !route.reading;
@@ -51,7 +65,7 @@ export function BookSheetHost({ books, onRead }: { books: readonly BookSummary[]
   if (route.book && route.book !== shown) setShown(route.book);
   if (!exit.render || !shown) return null;
   const summary = books.find((b) => b.id === shown) ?? null;
-  return <BookSheet key={shown} id={shown} summary={summary} leaving={exit.leaving} hidden={!!route.reading} onRead={(cover) => onRead(summary, shown, cover)} />;
+  return <BookSheet key={shown} id={shown} summary={summary} leaving={exit.leaving} hidden={!!route.reading} onRead={(cover) => onRead(summary, shown, cover)} onReadIntent={onReadIntent} />;
 }
 
 function BookSheet({
@@ -60,12 +74,14 @@ function BookSheet({
   leaving,
   hidden,
   onRead,
+  onReadIntent,
 }: {
   id: string;
   summary: BookSummary | null;
   leaving: boolean;
   hidden: boolean;
   onRead: (cover: HTMLElement | null) => void;
+  onReadIntent?: ReadIntent;
 }) {
   const t = useT();
   const isMobile = useIsMobile();
@@ -99,10 +115,23 @@ function BookSheet({
   // Seulement le fichier, du réseau : pas le code du lecteur, que la page des livres demande elle-même
   // dès son premier rendu — l'analyser ici prenait le fil principal pendant que la fiche s'animait
   // (mesuré le 28/10/2026). Pas sur une connexion qui demande l'économie de données.
+  // Dans le cinéma, le lecteur se prépare aussi dans son cadre (`onReadIntent`), après l'animation de la
+  // fiche : c'est un autre document, mais il partage le fil de celui-ci (§128).
+  const intentRef = useRef(onReadIntent);
+  useEffect(() => {
+    intentRef.current = onReadIntent;
+  });
   useEffect(() => {
     if (leaving || hidden || saveData()) return;
-    const timer = window.setTimeout(() => void preloadBookFile(id), READ_INTENT_MS);
-    return () => window.clearTimeout(timer);
+    let undo: (() => void) | null = null;
+    const timer = window.setTimeout(() => {
+      void preloadBookFile(id);
+      undo = intentRef.current?.(id) ?? null;
+    }, READ_INTENT_MS);
+    return () => {
+      window.clearTimeout(timer);
+      undo?.();
+    };
   }, [id, leaving, hidden]);
 
   // La barre du bas du téléphone s'efface sous une fiche ; elle ne lit que les fiches de films dans
@@ -137,6 +166,8 @@ function BookSheet({
         <button
           type="button"
           {...NOT_THE_HANDLE}
+          // Le lecteur refermé rend le focus ici (`ReaderFrame`).
+          data-book-read=""
           onClick={() => onRead(coverRef.current)}
           disabled={!book}
           className="flex items-center gap-2 rounded-full bg-white px-6 py-2.5 font-semibold text-ink transition-transform active:scale-95 disabled:opacity-50"
