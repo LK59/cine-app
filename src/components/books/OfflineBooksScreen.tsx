@@ -17,6 +17,7 @@ import {
   type OfflineBook,
 } from "@/lib/books/offlineBooks";
 import { DrawnCover } from "./BookCover";
+import { useBookRemoval } from "./BookDownload";
 import { flushOutbox, listenForReconnect } from "@/lib/books/bookSync";
 
 const BookReader = dynamic(() => import("./BookReader").then((m) => m.BookReader), { ssr: false });
@@ -108,6 +109,7 @@ export function OfflineBooksScreen() {
 export function OfflineBookCard({ book, onOpen }: { book: OfflineBook; onOpen: () => void }) {
   const t = useT();
   const [cover, setCover] = useState<string | null>(null);
+  const removal = useBookRemoval(book.id, book.title, cover);
   useEffect(() => {
     let url: string | null = null;
     let cancelled = false;
@@ -146,13 +148,14 @@ export function OfflineBookCard({ book, onOpen }: { book: OfflineBook; onOpen: (
       </button>
       <button
         type="button"
-        onClick={() => void removeOfflineBook(book.id)}
+        onClick={removal.ask}
         aria-label={t("books.removeDownload")}
         title={t("books.removeDownload")}
         className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white opacity-80 transition-opacity hover:opacity-100"
       >
         <Trash2 size={13} aria-hidden />
       </button>
+      {removal.sheet}
     </div>
   );
 }
