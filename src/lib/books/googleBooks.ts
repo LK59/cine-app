@@ -452,9 +452,8 @@ async function refusalOf(res: Response): Promise<{ reason: string | null; messag
 /**
  * Une recherche, en texte libre : `q` est encodé une seule fois, par `URLSearchParams` ; la clé va dans
  * l'en-tête. Un 503 ou une coupure est retenté jusqu'à trois fois, à 1,5–3 s d'écart, puis la file s'arrête une
- * minute. Seule une réponse de Google compte dans le quota du jour : un 503 ni une coupure ne le comptent pas
- * (29/10/2026 — la console de Google comptait 907 requêtes quand nous en comptions ~950, l'écart étant ses refus ;
- * les compter nous arrêtait une soixantaine de livres trop tôt chaque jour).
+ * minute. Chaque tentative compte dans le quota du jour, refus compris : la console de Google les compte aussi
+ * (vérifié le 29/10/2026 — 899 de l'application + 50 d'essai = 949 chez Google, une fois la console à jour).
  */
 async function search(q: string, lang: string | null): Promise<GoogleVolume[]> {
   const params = new URLSearchParams({ q, maxResults: "20", printType: "books", fields: FIELDS });
@@ -462,6 +461,7 @@ async function search(q: string, lang: string | null): Promise<GoogleVolume[]> {
   let last = "";
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     if (attempt > 0) await pause(1500 + Math.round(Math.random() * 1500));
+    countRequest();
     let res: Response;
     const started = Date.now();
     try {
@@ -480,7 +480,6 @@ async function search(q: string, lang: string | null): Promise<GoogleVolume[]> {
       logRefusal({ attempt: attempt + 1, ms: Date.now() - started, status: res.status, ...why, q, lang });
       throw new QuotaError(`Google Books a répondu ${res.status}`);
     }
-    if (res.status < 500) countRequest();
     if (res.status >= 500) {
       const why = await refusalOf(res);
       logRefusal({ attempt: attempt + 1, ms: Date.now() - started, status: res.status, ...why, q, lang });

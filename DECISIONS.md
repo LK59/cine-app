@@ -8150,6 +8150,7 @@ chapitre, ce qui dépasse s'accumule et au-delà de `FLOW_EDGE_PX` (70 px, 220 p
 voisin s'ouvre — le suivant en haut, le précédent en bas. Un doigt posé arrête l'élan. Revers assumé : on ne
 sélectionne plus de texte au doigt dans ce mode, comme dans les autres.
 
-**Google Books.** Un 503 ou une coupure ne compte plus dans les 900 requêtes du jour : la console de Google en
-comptait 907 quand nous en comptions ~950, l'écart étant ses refus (environ un sur sept, au hasard, mesuré sur
-50 requêtes le 29/10). La pause après trois refus d'affilée passe de cinq minutes à une.
+**Google Books.** La pause après trois refus d'affilée passe de cinq minutes à une : les 503 de Google sont un
+hasard (environ un sur sept, indépendants, mesuré sur 50 requêtes le 29/10). Ils restent comptés dans les 900
+du jour : la console de Google les compte aussi — elle a d'abord affiché 907 (son retard d'affichage), puis 949,
+soit exactement les 899 de l'application et les 50 de l'essai.
