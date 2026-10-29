@@ -172,7 +172,10 @@ function hold(id: string, reading: boolean): Held {
     if (msg.kind === "hello") {
       h.listening = true;
       sendInsets();
-      if (h.openPending) {
+      // Un livre déjà ouvert le reste : un cadre rechargé (erreur de morceau, nouvelle version) revient
+      // sur l'adresse de sa préparation, sans `lire=1`, et ne montrait plus rien — ni page ni croix, et
+      // dans l'app installée sur iPhone, rien pour en sortir (29/10/2026).
+      if (h.openPending || h.opened) {
         h.openPending = false;
         post(h, openMessage());
       }
@@ -223,6 +226,10 @@ export function standbyReaderFrame(id: string): () => void {
  * l'animation (Échap, Retour) l'emporte : le cadre est retiré, rien n'est poussé.
  */
 export async function openReaderFrame(id: string, cover: HTMLElement | null): Promise<void> {
+  // Un second « Lire » pendant l'ouverture (double-clic, deux touchers) : il posait un second calque et
+  // écrasait le premier, que plus rien ne retirait — un aplat opaque au-dessus du lecteur, puis du
+  // cinéma, jusqu'au rechargement (29/10/2026).
+  if (held?.id === id && held.claimed) return;
   const opening = readerOpening(cover);
   const h = hold(id, true);
   h.claimed = true;

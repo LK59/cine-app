@@ -397,8 +397,10 @@ describe("la position de lecture", () => {
     await post({ cfi: "epubcfi(/6/2)", fraction: 0.1 });
     expect(markPlayed).toHaveBeenCalledTimes(1);
     expect(markPlayed).toHaveBeenCalledWith(JF, BOOK);
+    // Revenu au début (une relecture) : « terminé » suit la position depuis le 29/10/2026 — le livre
+    // reprendra là ; « lu » chez Jellyfin reste.
     const { progress } = await (await progressGET(req(), params(BOOK))).json();
-    expect(progress.finished).toBe(true);
+    expect(progress.finished).toBe(false);
   });
 
   it("un échec de Jellyfin au « lu » ne perd pas la position", async () => {

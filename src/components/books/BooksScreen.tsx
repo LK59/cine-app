@@ -246,7 +246,11 @@ export function BooksScreen({ embedded }: { embedded?: { filter: string; onRead:
   useEffect(() => {
     if (!embedded) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !route.book && !e.defaultPrevented) cinemaClose({ booksAll: null });
+      // Ni quand une fenêtre est ouverte par-dessus (« Demander un livre ») : Échap la refermait avec la
+      // grille, saisie perdue (29/10/2026). La règle de `PlayerPanelFrame`.
+      if (e.key !== "Escape" || route.book || e.defaultPrevented) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+      cinemaClose({ booksAll: null });
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

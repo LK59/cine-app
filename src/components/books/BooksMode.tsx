@@ -78,7 +78,17 @@ export function useBooksMode(inAddress: boolean | undefined): BooksMode {
     } catch {
       /* sans mémoire : hors ligne, la section suivra le dernier état connu */
     }
-    if (enabled && keptBooksCount() > 0) warmBooksOfflineEntries();
+    if (!enabled) return;
+    if (keptBooksCount() > 0) warmBooksOfflineEntries();
+    // Le compteur à zéro n'est pas une preuve (une déconnexion l'efface, les fichiers restent) : relu
+    // sur l'appareil, au repos — le module ne charge que là où l'option est allumée.
+    else
+      void import("@/lib/books/offlineBooks")
+        .then((m) => m.recountOfflineBooks())
+        .then((n) => {
+          if (n > 0) warmBooksOfflineEntries();
+        })
+        .catch(() => {});
   }, [known, enabled]);
   const active = enabled && inAddress === true;
   // Retenu par un état, posé pendant le rendu (la forme dérivée que React permet) : une fois ouverte, la

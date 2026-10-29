@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { Check, Loader2, X } from "lucide-react";
@@ -58,6 +58,16 @@ export function BookRequestsPanel({ initialTitle = "", onClose }: { initialTitle
   const [title, setTitle] = useState(initialTitle);
   const [author, setAuthor] = useState("");
   const [note, setNote] = useState("");
+  // Échap referme la fenêtre, et elle seule : l'écran dessous se tait devant `aria-modal`.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      e.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error" | "limit">("idle");
   const admin = data?.all !== undefined;
   const pendingAll = data?.all?.filter((r) => r.status === "pending").length ?? 0;

@@ -192,7 +192,7 @@ async function buildView(base: Base, rights: BookRights): Promise<BookIndex> {
 }
 
 /** Pour les tests et les mesures : l'index d'une liste, vu avec tous les droits. */
-export async function buildIndex(items: readonly LibraryItem[], rights: BookRights = { folders: null, tags: [], blockUnrated: false, blockRated: false }): Promise<BookIndex> {
+export async function buildIndex(items: readonly LibraryItem[], rights: BookRights = { folders: null, tags: [], allowed: [], blockUnrated: false, blockRated: false }): Promise<BookIndex> {
   return buildView(await buildBase(items), rights);
 }
 

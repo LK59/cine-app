@@ -96,6 +96,8 @@ function bookmarkOn(page: Page | null, list: readonly StoredBookmark[], cfi: Cfi
 }
 
 const SAVE_DELAY_MS = 1500;
+/** Un livre gardé sur l'appareil n'attend pas sa position du serveur plus longtemps. */
+const PROGRESS_WAIT_MS = 4000;
 const CHROME_AUTOHIDE_MS = 3200;
 
 function subscribeDark(listener: () => void): () => void {
@@ -369,6 +371,13 @@ export function BookReader({
           }
           setMarkedCfi(bookmarkOn(pageRef.current, bookmarksRef.current, tools));
         }
+        // La page où le livre s'ouvre n'est pas une lecture : comptée comme déjà envoyée, seule une page
+        // tournée part. Le début du texte d'un livre à longue préface passe 1 % (29/10/2026), et l'ouvrir
+        // puis le refermer le faisait entrer dans « Continuer la lecture ».
+        if (!sent.current) {
+          sent.current = `${d.cfi}|${finished}`;
+          return;
+        }
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => flush(false), finished ? 0 : SAVE_DELAY_MS);
       }
@@ -400,12 +409,18 @@ export function BookReader({
         const file: Promise<Blob | null> = local ? Promise.resolve(local) : offline ? Promise.resolve(null) : preloadBookFile(id);
         // Ce qui attendait d'un livre lu hors ligne part avant de lire la position du serveur, qui en
         // tient compte — seulement s'il y a quelque chose, et jamais attendu sur la page hors ligne.
-        if (offline) void flushOutbox().catch(() => {});
+        // Un livre gardé sur l'appareil n'attend jamais le réseau (29/10/2026) : sur un réseau qui ne
+        // répond pas (portail captif, signal à bout), la file puis la position, attendues sans délai,
+        // laissaient tourner la roue alors que le fichier était là.
+        if (offline || local) void flushOutbox().catch(() => {});
         else if (outbox().length > 0) await flushOutbox().catch(() => {});
+        const noProgress: { progress: BookProgress | null; now?: number } = { progress: null };
         const [progressRes, blob, foliate, cfiTools] = await Promise.all([
           offline
-            ? { progress: null }
-            : fetch(`/api/books/${id}/progress`).then((r) => (r.ok ? (r.json() as Promise<{ progress: BookProgress | null }>) : { progress: null })).catch(() => ({ progress: null })),
+            ? noProgress
+            : fetch(`/api/books/${id}/progress`, local ? { signal: AbortSignal.timeout(PROGRESS_WAIT_MS) } : undefined)
+                .then((r) => (r.ok ? (r.json() as Promise<{ progress: BookProgress | null; now?: number }>) : noProgress))
+                .catch(() => noProgress),
           file,
           import("@/lib/books/foliate/view.js"),
           import("@/lib/books/foliate/epubcfi.js"),
@@ -455,7 +470,10 @@ export function BookReader({
         const server = progressRes.progress;
         const kept = rememberedPosition(id);
         let cfi = server && !server.finished ? server.cfi : null;
-        if (kept && !kept.finished && (!server || kept.at > server.updatedAt)) cfi = kept.cfi;
+        // La copie de l'appareil est datée par son horloge, celle du serveur par la sienne : l'heure du
+        // serveur lue avec la réponse ramène la sienne dans celle de l'appareil.
+        const skew = typeof progressRes.now === "number" ? Date.now() - progressRes.now : 0;
+        if (kept && !kept.finished && (!server || kept.at > server.updatedAt + skew)) cfi = kept.cfi;
         try {
           await view.init({ lastLocation: cfi, showTextStart: !cfi });
         } catch {

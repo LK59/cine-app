@@ -80,7 +80,11 @@ const EMPTY_ROWS: HomeRow[] = [];
  */
 export function BooksHome({ variant, hidden: paneHidden = false }: { variant: "desktop" | "mobile"; hidden?: boolean }) {
   const t = useT();
-  const { data, error, isLoading, mutate } = useSWR<BooksHomePayload>(BOOKS_HOME_KEY, fetcher, { revalidateOnFocus: true });
+  const { data, error, isLoading, mutate } = useSWR<BooksHomePayload>(BOOKS_HOME_KEY, fetcher, {
+    // Caché (la catégorie quittée pour les films), il ne se relit plus à chaque retour au premier plan :
+    // il le faisait pour un compte qui n'y revenait jamais (29/10/2026). Il se relit en redevenant visible.
+    revalidateOnFocus: !paneHidden,
+  });
   const resume = data?.resume ?? EMPTY;
   const recent = data?.recent ?? EMPTY;
   const rows = data?.rows ?? EMPTY_ROWS;

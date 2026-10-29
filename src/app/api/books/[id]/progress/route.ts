@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { bookIdOf, booksCaller } from "@/lib/books/guard";
 import { bookFor, forgetPlayed } from "@/lib/books/library";
-import { dismissedAt, dismissProgress, forgetUnstarted, readProgress, saveProgress, validProgressInput, MIN_STARTED_FRACTION } from "@/lib/books/progress";
+import { dismissedAt, dismissProgress, forgetUnstarted, readAt, readProgress, saveProgress, validProgressInput, MIN_STARTED_FRACTION } from "@/lib/books/progress";
 import { logError } from "@/lib/logger";
 
 /**
@@ -20,7 +20,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (caller instanceof NextResponse) return caller;
   const id = bookIdOf((await params).id);
   if (!id) return new NextResponse(null, { status: 400 });
-  return NextResponse.json({ progress: readProgress(caller.u, id) }, { headers: { "Cache-Control": "private, no-store" } });
+  // `now` : l'heure du serveur, pour que l'appareil compare sa copie à `updatedAt` sans mêler deux horloges.
+  return NextResponse.json({ progress: readProgress(caller.u, id), now: Date.now() }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -47,12 +48,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   // Une position lue hors ligne et renvoyée plus tard n'efface pas celle, plus récente, qu'un autre
   // appareil a écrite entre-temps.
-  if (input.at !== null) {
+  const at = readAt(input);
+  if (at !== null) {
     const held = readProgress(caller.u, id);
-    if (held && held.updatedAt > input.at) return NextResponse.json({ ok: true, kept: true });
+    if (held && held.updatedAt > at) return NextResponse.json({ ok: true, kept: true });
     // Ni un retrait de « Continuer la lecture » fait depuis : une page lue avant ne l'y remet pas.
     const dismissed = dismissedAt(caller.u, id);
-    if (dismissed !== null && dismissed > input.at) return NextResponse.json({ ok: true, kept: true });
+    if (dismissed !== null && dismissed > at) return NextResponse.json({ ok: true, kept: true });
   }
   // Encore sur sa première page (`MIN_STARTED_FRACTION`) : pas commencé (28/10/2026). Rien n'est écrit pour
   // un livre qu'on vient d'ouvrir ; un livre revenu à son début redevient « pas commencé » (`forgetUnstarted`
@@ -62,7 +64,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     forgetUnstarted(caller.u, id);
     return NextResponse.json({ ok: true, notStarted: true });
   }
-  const { firstFinish } = saveProgress(caller.u, id, input.cfi, input.fraction, input.finished);
+  // Datée de sa lecture, pas de sa réception : une page tournée juste après un envoi n'est plus « plus
+  // vieille » que lui, et une position partie de la file garde son heure. Jamais dans le futur.
+  const { firstFinish } = saveProgress(caller.u, id, input.cfi, input.fraction, input.finished, Math.min(Date.now(), at ?? Date.now()));
   if (firstFinish && caller.jfId) {
     await jellyfin.markPlayed(caller.jfId, id).catch((err: unknown) => logError("books/progress", err, { itemId: id }));
     // Le badge « Lu » de la grille vient de Jellyfin, gardé deux minutes : on le redemande.

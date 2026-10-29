@@ -114,7 +114,36 @@ describe("une position lue hors ligne, renvoyée plus tard", () => {
   });
 });
 
+describe("l'heure d'une position, dans l'horloge du serveur (29/10/2026)", () => {
+  it("un appareil qui retarde d'une minute n'a plus ses positions jetées", async () => {
+    getDb().prepare("INSERT OR REPLACE INTO book_progress (account, item_id, cfi, fraction, updated_at, finished_at) VALUES (?, ?, ?, ?, ?, ?)").run("lecteur", BOOK, "epubcfi(/6/20)", 0.3, Date.now() - 2000, null);
+    const res = await progressPOST(req({ cfi: "epubcfi(/6/22)", fraction: 0.31, at: Date.now() - 60_000, ageMs: 0 }), params(BOOK));
+    expect((await res.json()).kept).toBeUndefined();
+    expect((await (await progressGET(req(), params(BOOK))).json()).progress.cfi).toBe("epubcfi(/6/22)");
+  });
+  it("un appareil qui avance ne remet pas dans la rangée un livre retiré après sa lecture", async () => {
+    getDb().prepare("INSERT OR REPLACE INTO book_progress (account, item_id, cfi, fraction, updated_at, finished_at, dismissed_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run("lecteur", BOOK, "epubcfi(/6/20)", 0.3, Date.now() - 60_000, null, Date.now() - 1000);
+    const res = await progressPOST(req({ cfi: "epubcfi(/6/24)", fraction: 0.32, at: Date.now() + 120_000, ageMs: 30_000 }), params(BOOK));
+    expect((await res.json()).kept).toBe(true);
+  });
+  it("le serveur dit son heure avec la position", async () => {
+    const body = await (await progressGET(req(), params(BOOK))).json();
+    expect(Math.abs(body.now - Date.now())).toBeLessThan(5000);
+  });
+});
+
 describe("la file de l'appareil", () => {
+  it("une session expirée (401) garde l'écriture pour après la reconnexion, et l'âge part avec la position", async () => {
+    const fetchSpy = vi.fn(async (_u: string, _i?: RequestInit) => new Response("", { status: 401 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    await sendBookOp({ kind: "progress", id: BOOK, body: { cfi: "epubcfi(/6/10)", fraction: 0.4, finished: false, at: Date.now() - 5000 } });
+    expect(outbox()).toHaveLength(1);
+    const sent = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(sent.ageMs).toBeGreaterThanOrEqual(5000);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    await flushOutbox();
+    expect(outbox()).toEqual([]);
+  });
   it("sans réseau : position et signets attendent ; une seule position par livre ; repartent au retour", async () => {
     vi.stubGlobal("navigator", { ...navigator, onLine: false, sendBeacon: vi.fn() });
     const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));

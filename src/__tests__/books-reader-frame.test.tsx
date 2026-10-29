@@ -164,6 +164,30 @@ describe("le cadre posé sur le cinéma", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it("un second « Lire » pendant l'ouverture ne fait rien : un seul calque, une seule entrée (29/10/2026)", async () => {
+    act(() => cinemaNavigate({ book: ID, reading: false }));
+    const before = window.history.length;
+    const first = openReaderFrame(ID, null);
+    const second = openReaderFrame(ID, null);
+    await act(() => Promise.all([first, second]));
+    expect(window.history.length).toBe(before + 1);
+    expect(document.querySelectorAll("[data-reader-frame]")).toHaveLength(1);
+  });
+
+  it("un cadre rechargé après « Lire » (nouvelle version) reçoit `open` de nouveau à son `hello` (29/10/2026)", async () => {
+    act(() => cinemaNavigate({ book: ID, reading: false }));
+    standbyReaderFrame(ID);
+    const frame = frameNow();
+    const post = vi.spyOn(frame.contentWindow as Window, "postMessage").mockImplementation(() => {});
+    send(frameMessage("hello", ID));
+    await act(() => openReaderFrame(ID, null));
+    expect(post).toHaveBeenCalledWith(openMessage(), window.location.origin);
+    post.mockClear();
+    // Le cadre revient sur l'adresse de sa préparation, sans `lire=1`, et redit `hello`.
+    send(frameMessage("hello", ID));
+    expect(post).toHaveBeenCalledWith(openMessage(), window.location.origin);
+  });
+
   it("une fiche refermée pendant que la couverture grandit : rien n'est poussé, le cadre est retiré", async () => {
     act(() => cinemaNavigate({ book: ID, reading: false }));
     const opening = openReaderFrame(ID, null);
@@ -208,8 +232,10 @@ describe("le cadre posé sur le cinéma", () => {
     expect(post).toHaveBeenCalledWith(expect.objectContaining({ app: "laterna-livres", kind: "insets" }), window.location.origin);
     expect(parseParentMessage(post.mock.calls[0][0])).not.toBeNull();
     // D'ailleurs : ignoré.
+    // Les marges, puis `open` (un livre ouvert le reste, même pour un cadre rechargé) ; d'ailleurs : ignoré.
+    expect(post).toHaveBeenCalledTimes(2);
     send(frameMessage("hello", ID), { source: window });
-    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledTimes(2);
 
     send(frameMessage("saved", ID));
     expect(mutate).toHaveBeenCalledWith("/api/books/home");

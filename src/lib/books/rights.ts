@@ -23,19 +23,26 @@ export interface BookRights {
   /** `null` : toutes les bibliothèques. */
   folders: Set<string> | null;
   tags: readonly string[];
+  /**
+   * Les tags autorisés de Jellyfin (`AllowedTags`) : vide, aucune restriction ; sinon un livre doit en
+   * porter un. Absents jusqu'au 29/10/2026 : un tel compte voyait dans les listes des livres dont la
+   * fiche et le fichier lui répondaient 404 (`bookFor` passe par Jellyfin, qui les applique).
+   */
+  allowed: readonly string[];
   blockUnrated: boolean;
   blockRated: boolean;
 }
 
-export const ALL_RIGHTS: BookRights = { folders: null, tags: [], blockUnrated: false, blockRated: false };
+export const ALL_RIGHTS: BookRights = { folders: null, tags: [], allowed: [], blockUnrated: false, blockRated: false };
 /** Aucune bibliothèque : ce que voit une session qui n'est ni administrateur ni un compte Jellyfin. */
-const NO_RIGHTS: BookRights = { folders: new Set(), tags: [], blockUnrated: false, blockRated: false };
+const NO_RIGHTS: BookRights = { folders: new Set(), tags: [], allowed: [], blockUnrated: false, blockRated: false };
 
 interface Policy {
   EnableAllFolders?: boolean;
   EnabledFolders?: string[] | null;
   BlockUnratedItems?: string[] | null;
   MaxParentalRating?: number | null;
+  AllowedTags?: string[] | null;
 }
 
 const TTL_MS = 2 * 60_000;
@@ -84,6 +91,7 @@ export async function rightsOf(caller: BookCaller, now = Date.now()): Promise<Bo
   return {
     folders: all ? null : new Set((policy.EnabledFolders ?? []).filter((f) => typeof f === "string").map(normId)),
     tags,
+    allowed: (policy.AllowedTags ?? []).filter((t): t is string => typeof t === "string" && t.trim() !== "").map((t) => t.toLowerCase()),
     blockUnrated: (policy.BlockUnratedItems ?? []).some((t) => typeof t === "string" && t.toLowerCase() === "book"),
     blockRated: typeof policy.MaxParentalRating === "number",
   };
@@ -92,13 +100,15 @@ export async function rightsOf(caller: BookCaller, now = Date.now()): Promise<Bo
 /** La clé d'un ensemble de droits : deux comptes aux mêmes droits partagent la même vue. */
 export function rightsKey(r: BookRights): string {
   const folders = r.folders ? [...r.folders].sort().join(",") : "*";
-  return `${folders}|${[...r.tags].sort().join(",")}|${r.blockUnrated ? 1 : 0}${r.blockRated ? 1 : 0}`;
+  return `${folders}|${[...r.tags].sort().join(",")}|${[...r.allowed].sort().join(",")}|${r.blockUnrated ? 1 : 0}${r.blockRated ? 1 : 0}`;
 }
 
 /** Ce livre est-il visible avec ces droits ? */
 export function allows(r: BookRights, item: { library: string; tags: readonly string[]; rated: boolean }): boolean {
   if (r.folders && !r.folders.has(item.library)) return false;
   if (carriesBlockedTag(item.tags, r.tags)) return false;
+  // La même comparaison de tags que les tags bloqués : « en porte-t-il un de la liste ? ».
+  if (r.allowed.length > 0 && !carriesBlockedTag(item.tags, r.allowed)) return false;
   if (r.blockUnrated && !item.rated) return false;
   if (r.blockRated && item.rated) return false;
   return true;

@@ -62,3 +62,16 @@ describe("moins d'un pour cent : pas commencé", () => {
     expect(readProgress("lou", "f".repeat(32))?.finished).toBe(true);
   });
 });
+
+describe("« terminé » suit la position (29/10/2026)", () => {
+  it("revenir avant la fin après un coup d'œil à la dernière page : le livre reprend, et rentre dans la rangée", async () => {
+    const id = "9".repeat(32);
+    saveProgress("lou", id, CFI, 0.4, false, 1000);
+    expect(saveProgress("lou", id, CFI, 1, true, 2000).firstFinish).toBe(true);
+    expect(readProgress("lou", id)?.finished).toBe(true);
+    saveProgress("lou", id, CFI, 0.4, false, 3000);
+    expect(readProgress("lou", id)?.finished).toBe(false);
+    const index = await buildIndex([{ Id: id, Name: "Black Friday", Type: "Book", People: [], library: "l" } as LibraryItem]);
+    expect(resumeFrom(index, progressByBook("lou")).map((b) => b.id)).toEqual([id]);
+  });
+});

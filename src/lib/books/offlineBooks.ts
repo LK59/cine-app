@@ -123,6 +123,9 @@ export async function loadOfflineBooks(account: string | null): Promise<OfflineB
     const root = await dir([ROOT, safe(account)], true);
     for await (const [name, handle] of (root as unknown as { entries(): AsyncIterable<[string, FileSystemHandle]> }).entries()) {
       if (handle.kind !== "directory") continue;
+      // Un livre qui arrive en ce moment n'a pas encore sa description : il n'est pas interrompu. Pris
+      // pour tel (29/10/2026), ouvrir la page des téléchargements pendant qu'un livre arrivait l'effaçait.
+      if (progress.has(name)) continue;
       try {
         const meta = await (await (handle as FileSystemDirectoryHandle).getFileHandle("meta.json")).getFile();
         const parsed = JSON.parse(await meta.text()) as OfflineBook;
@@ -148,6 +151,23 @@ export async function ensureOfflineBooks(): Promise<void> {
   if (account && loadedFor !== account) await loadOfflineBooks(account);
 }
 
+/**
+ * Au lancement en ligne, quand l'appareil ne se croit sans livre : relit ce qu'il garde vraiment. La
+ * déconnexion efface le compte et le compteur (`signOut.ts`) mais laisse les fichiers — après une
+ * reconnexion, les livres gardés manquaient aux téléchargements et au lancement sans réseau jusqu'à
+ * la fiche d'un livre rouverte (29/10/2026). Rien du tout sans dossier des livres sur l'appareil.
+ */
+export async function recountOfflineBooks(): Promise<number> {
+  if (!offlineBooksSupported()) return 0;
+  try {
+    await (await navigator.storage.getDirectory()).getDirectoryHandle(ROOT);
+  } catch {
+    return 0;
+  }
+  await ensureOfflineBooks();
+  return books.length;
+}
+
 export function offlineBook(id: string): OfflineBook | null {
   return books.find((b) => b.id === id) ?? null;
 }
@@ -166,6 +186,12 @@ export async function saveOfflineBook(book: BookSummary, title: string, coverUrl
   if (!account || !offlineBooksSupported()) throw new Error("indisponible");
   progress.set(book.id, 0);
   emit();
+  // Un livre déjà gardé (sa fiche ouverte avant que la liste ne soit relue) : un nouvel essai qui échoue
+  // ne doit pas emporter la bonne copie (29/10/2026). `createWritable` n'écrit qu'à la fermeture.
+  const keptBefore = await dir([ROOT, safe(account), book.id], false)
+    .then((d) => d.getFileHandle("meta.json"))
+    .then(() => true)
+    .catch(() => false);
   try {
     const res = await fetch(`/api/books/${book.id}/file`);
     if (!res.ok || !res.body) throw new Error(`fichier ${res.status}`);
@@ -246,7 +272,7 @@ export async function saveOfflineBook(book: BookSummary, title: string, coverUrl
       /* rien */
     }
   } catch (error) {
-    await removeFolder(account, book.id);
+    if (!keptBefore) await removeFolder(account, book.id);
     throw error;
   } finally {
     progress.delete(book.id);

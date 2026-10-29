@@ -53,15 +53,19 @@ export function forgetUnstarted(account: string, itemId: string): boolean {
 }
 
 /**
- * Écrit la position. `finished` : le lecteur a montré la dernière page — la date est gardée la
- * première fois seulement. Rend `true` quand c'est cette écriture-ci qui termine le livre (la route
- * le note alors chez Jellyfin, une fois).
+ * Écrit la position. `finished` : le lecteur montre la dernière page — la date est gardée tant qu'il y
+ * reste. « Terminé » dit où en est la lecture, pas ce qui est arrivé un jour : il tombe dès qu'une page
+ * d'avant est enregistrée. Il ne tombait jamais (29/10/2026) — glisser la barre jusqu'au bout pour voir ce
+ * qui restait sortait le livre de « Continuer la lecture » et le faisait rouvrir au début pour toujours,
+ * et une relecture ne reprenait jamais sa page. « Lu » chez Jellyfin, lui, reste. Rend `true` quand c'est
+ * cette écriture-ci qui termine le livre (la route le note alors chez Jellyfin).
+ * `now` : l'heure de lecture, dans l'horloge du serveur (`readAt` de la route).
  */
 export function saveProgress(account: string, itemId: string, cfi: string, fraction: number, finished: boolean, now = Date.now()): { firstFinish: boolean } {
   const db = getDb();
   return db.transaction(() => {
     const before = db.prepare("SELECT finished_at FROM book_progress WHERE account = ? AND item_id = ?").get(account, itemId) as { finished_at: number | null } | undefined;
-    const finishedAt = before?.finished_at ?? (finished ? now : null);
+    const finishedAt = finished ? (before?.finished_at ?? now) : null;
     db.prepare(
       `INSERT INTO book_progress (account, item_id, cfi, fraction, updated_at, finished_at)
        VALUES (?, ?, ?, ?, ?, ?)
@@ -89,11 +93,32 @@ export function dismissedAt(account: string, itemId: string): number | null {
 }
 
 /** Une position plausible : une CFI EPUB bornée, une fraction entre 0 et 1. */
-export function validProgressInput(body: unknown): { cfi: string; fraction: number; finished: boolean; at: number | null } | null {
+export function validProgressInput(body: unknown): { cfi: string; fraction: number; finished: boolean; at: number | null; ageMs: number | null } | null {
   if (!body || typeof body !== "object") return null;
-  const { cfi, fraction, finished, at } = body as Record<string, unknown>;
+  const { cfi, fraction, finished, at, ageMs } = body as Record<string, unknown>;
   if (typeof cfi !== "string" || cfi.length > 4000 || !/^epubcfi\(.+\)$/.test(cfi)) return null;
   if (typeof fraction !== "number" || !Number.isFinite(fraction) || fraction < 0 || fraction > 1) return null;
-  // `at` : l'heure de lecture, quand la position a attendu hors ligne avant d'être envoyée.
-  return { cfi, fraction, finished: finished === true, at: typeof at === "number" && Number.isFinite(at) ? at : null };
+  // `at` : l'heure de lecture dans l'horloge de l'appareil ; `ageMs` : depuis combien de temps, mesuré par
+  // l'appareil au moment d'envoyer — la seule des deux que le serveur peut placer dans sa propre horloge.
+  return {
+    cfi,
+    fraction,
+    finished: finished === true,
+    at: typeof at === "number" && Number.isFinite(at) ? at : null,
+    ageMs: typeof ageMs === "number" && Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= MAX_AGE_MS ? ageMs : null,
+  };
+}
+
+/** Une position lue hors ligne il y a plus d'un an n'est plus datée : elle compte comme lue maintenant. */
+const MAX_AGE_MS = 365 * 24 * 3_600_000;
+
+/**
+ * L'heure de lecture d'une position, dans l'horloge du serveur — celle de `updated_at` et `dismissed_at`.
+ * L'heure de l'appareil comparée à celle du serveur (29/10/2026) : un appareil qui retardait voyait ses
+ * positions jetées en silence, un appareil qui avançait remettait dans « Continuer la lecture » un livre
+ * qu'on venait d'en retirer. Un ancien client n'envoie que `at` : elle sert, faute de mieux.
+ */
+export function readAt(input: { at: number | null; ageMs: number | null }, now = Date.now()): number | null {
+  if (input.ageMs !== null) return now - input.ageMs;
+  return input.at;
 }

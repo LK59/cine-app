@@ -71,11 +71,19 @@ function enqueue(op: BookOp): void {
 
 const url = (op: BookOp) => `/api/books/${op.id}/${op.kind === "progress" ? "progress" : "bookmarks"}`;
 
-/** `true` : le serveur a répondu (accepté ou refusé pour de bon) ; `false` : à retenter. */
+/** Le corps envoyé : une position dit aussi son âge, mesuré maintenant (`readAt` côté serveur). */
+const wire = (op: BookOp) => JSON.stringify(op.kind === "progress" ? { ...op.body, ageMs: Math.max(0, Date.now() - op.body.at) } : op.body);
+
+/**
+ * `true` : le serveur a répondu (accepté ou refusé pour de bon) ; `false` : à retenter. Une session
+ * expirée (401) ou une limite (429) n'est pas un refus de l'écriture : elle attend la reconnexion. Tenue
+ * pour « faite » (29/10/2026), une lecture hors ligne de plusieurs jours rendue après l'expiration de la
+ * session perdait toutes ses positions et tous ses signets.
+ */
 async function deliver(op: BookOp): Promise<{ done: boolean; response: Response | null }> {
   try {
-    const res = await fetch(url(op), { method: "POST", body: JSON.stringify(op.body), headers: { "Content-Type": "application/json" }, keepalive: true });
-    if (res.status >= 500) return { done: false, response: res };
+    const res = await fetch(url(op), { method: "POST", body: wire(op), headers: { "Content-Type": "application/json" }, keepalive: true });
+    if (res.status >= 500 || res.status === 401 || res.status === 429) return { done: false, response: res };
     return { done: true, response: res };
   } catch {
     return { done: false, response: null };
@@ -104,7 +112,7 @@ export function beaconProgress(id: string, body: ProgressBody): void {
     enqueue(op);
     return;
   }
-  if (!navigator.sendBeacon(url(op), new Blob([JSON.stringify(body)], { type: "application/json" }))) enqueue(op);
+  if (!navigator.sendBeacon(url(op), new Blob([wire(op)], { type: "application/json" }))) enqueue(op);
 }
 
 let flushing: Promise<void> | null = null;

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 /**
@@ -123,6 +123,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const shareMode = session?.role === "share";
   const lang: Locale = LOCALES.includes(rawLang as Locale) ? rawLang as Locale : "fr";
   const dict = await loadLocaleDict(lang);
+  // Le lecteur de livres posé sur le cinéma est ce même document dans un cadre (DECISIONS.md §128) : le
+  // cinéma porte déjà la présence, la maintenance, le contrôle de version et l'invitation à installer.
+  // Montés aussi dans le cadre (29/10/2026), ils comptaient l'appareil deux fois, l'envoyaient « en
+  // arrière-plan » à chaque cadre retiré, et `BuildRefresh` rechargeait le cadre seul après un
+  // déploiement. Un navigateur trop ancien pour `Sec-Fetch-Dest` les garde, comme avant.
+  const inFrame = (await headers()).get("sec-fetch-dest") === "iframe";
   return (
     <html lang={lang} className="dark">
       <head>
@@ -200,9 +206,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   {/* Sous `SWRProvider` — d'où il lit l'état — et sous `PlaybackProvider`, d'où
                       il apprend qu'un film joue. Les deux lui sont nécessaires, et c'est le seul
                       point de l'arbre qui les a tous les deux. */}
-                  <ErrorBoundary name="notices-maintenance">
-                    <MaintenanceNotices />
-                  </ErrorBoundary>
+                  {!inFrame && (
+                    <ErrorBoundary name="notices-maintenance">
+                      <MaintenanceNotices />
+                    </ErrorBoundary>
+                  )}
                   {/* Le banc d'essai du lecteur : rien tant qu'un administrateur ne l'a pas lancé
                       depuis son panneau Compte. Il ouvre et ferme les films par `PlaybackProvider`. */}
                   <ErrorBoundary name="banc-essai">
@@ -210,19 +218,23 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   </ErrorBoundary>
                   {/* « Je suis là », une fois par minute, pour la vue en direct de l'administrateur.
                       Sous `PlaybackProvider`, d'où il apprend ce qui joue. */}
-                  <ErrorBoundary name="presence">
-                    <PresencePinger />
-                  </ErrorBoundary>
+                  {!inFrame && (
+                    <ErrorBoundary name="presence">
+                      <PresencePinger />
+                    </ErrorBoundary>
+                  )}
                   {/* Un onglet plus vieux que le serveur se recharge seul, quand aucun film n'est
                       ouvert — d'où sa place sous `PlaybackProvider`. Voir `staleBuild.ts`. */}
-                  <ErrorBoundary name="build">
-                    <BuildRefresh />
-                  </ErrorBoundary>
+                  {!inFrame && (
+                    <ErrorBoundary name="build">
+                      <BuildRefresh />
+                    </ErrorBoundary>
+                  )}
                 </PlaybackProvider>
               </ToastProvider>
             </SWRProvider>
           </ShareModeProvider>
-          <InstallPrompt />
+          {!inFrame && <InstallPrompt />}
         </TranslationProvider>
         <ServiceWorkerRegistration />
         <ClientErrorListener />
