@@ -166,7 +166,11 @@ function BookSheet({
   if (typeof document === "undefined") return null;
 
   const info = (
-    <div className={detailColumnMotion({ leaving, revealed: revealed || morph.handlesEntry })} data-sheet-content="">
+    // `data-sheet-content` sur le téléphone seulement (la trajectoire y fait arriver le texte après la carte). Sur
+    // ordinateur, la fiche est une fenêtre et non une page : elle arrive et repart d'un seul fondu, carte comprise
+    // (`data-sheet-veil` sur la carte) — le texte qui partait en 100 ms laissait la carte noire seule jusqu'à
+    // 250 ms, un rectangle vide avant la grille (29/10/2026).
+    <div className={detailColumnMotion({ leaving, revealed: revealed || morph.handlesEntry })} data-sheet-content={isMobile ? "" : undefined}>
       {book?.seriesName && (
         <p className="text-sm font-medium uppercase tracking-wide text-subtle">
           {book.index !== null ? t("books.seriesTome", { series: book.seriesName, n: book.index }) : book.seriesName}
@@ -352,7 +356,7 @@ function BookSheet({
           posé sur lui, le flou venait aussitôt et l'assombrissement à la fin, en deux temps (29/10/2026). Ici il
           arrive en un seul fondu avec le reste du fond de la fiche, et repart de même. */}
       <div aria-hidden data-sheet-veil="" className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => exit.requestClose()} />
-      <div className="relative flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-ink shadow-2xl shadow-black/60">
+      <div data-sheet-veil="" className="relative flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-ink shadow-2xl shadow-black/60">
         {backdrop}
         {closeButton}
         <div className="relative overflow-y-auto overscroll-contain px-8 pb-8 pt-8">
