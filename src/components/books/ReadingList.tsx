@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
-import { BookMarked, BookmarkMinus, BookmarkPlus } from "lucide-react";
+import { BookMarked, Bookmark, BookmarkCheck } from "lucide-react";
+import { ToggleGlyph } from "@/components/ToggleGlyph";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
 import { cinemaNavigate } from "@/lib/cinemaRoute";
@@ -60,17 +61,21 @@ export function ReadingListButton({ book, finished }: { book: BookSummary; finis
   const listed = books?.some((b) => b.id === book.id) ?? false;
   // Un livre terminé sort de la liste de lui-même : on ne propose pas de l'y mettre, seulement de l'en retirer.
   if (books === undefined || (finished && !listed)) return null;
-  const Icon = listed ? BookmarkMinus : BookmarkPlus;
+  const label = listed ? t("books.list.remove") : t("books.list.add");
+  // Le bouton « Ma liste » des fiches de films (`WatchlistButton`) : même forme, même marque dorée une fois
+  // dans la liste, mêmes icônes — c'était un lien gris, seul de son espèce (29/10/2026).
   return (
     <button
       type="button"
       {...NOT_THE_HANDLE}
       aria-pressed={listed}
+      title={label}
       onClick={() => void setListed(book, !listed).catch(() => {})}
-      className="flex items-center gap-1.5 text-sm text-subtle transition-colors hover:text-white"
+      className={`btn btn-ghost ${listed ? "btn-mine" : ""}`}
       data-reading-list-toggle=""
     >
-      <Icon size={15} aria-hidden /> {listed ? t("books.list.remove") : t("books.list.add")}
+      <ToggleGlyph on={listed} onIcon={<BookmarkCheck size={16} />} offIcon={<Bookmark size={16} />} />
+      <span>{listed ? t("books.list.removeShort") : t("books.list.addShort")}</span>
     </button>
   );
 }

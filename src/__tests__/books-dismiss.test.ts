@@ -44,13 +44,11 @@ describe("retirer un livre de « Continuer la lecture »", () => {
   });
 });
 
-describe("moins d'un pour cent : pas commencé", () => {
-  it("une position d'avant la règle, sous 1 %, n'est pas dans « Continuer la lecture »", async () => {
+describe("commencé dès la deuxième page", () => {
+  it("une position gardée, même sous 1 %, est dans « Continuer la lecture » (29/10/2026)", async () => {
     const id = "d".repeat(32);
-    saveProgress("lou", id, CFI, 0.006, false, 1000);
+    saveProgress("lou", id, CFI, 0.003, false, 1000);
     const index = await buildIndex([{ Id: id, Name: "Le Bal", Type: "Book", People: [], library: "l" } as LibraryItem]);
-    expect(resumeFrom(index, progressByBook("lou"))).toEqual([]);
-    saveProgress("lou", id, CFI, 0.012, false, 2000);
     expect(resumeFrom(index, progressByBook("lou")).map((b) => b.id)).toEqual([id]);
   });
   it("revenu au début : la position s'efface, sauf pour un livre terminé", () => {

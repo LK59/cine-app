@@ -3948,7 +3948,9 @@
       "remove": "Quitar de mi lista de lectura",
       "row": "Mi lista de lectura",
       "empty": "Nada que leer por ahora. Añade un libro desde su ficha.",
-      "browse": "Explorar libros"
+      "browse": "Explorar libros",
+      "addShort": "Añadir a mi lista",
+      "removeShort": "Quitar de mi lista"
     }
   }
 }

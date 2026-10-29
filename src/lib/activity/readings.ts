@@ -1,5 +1,4 @@
 import { allProgress } from "@/lib/books/progress";
-import { MIN_STARTED_FRACTION } from "@/lib/books/types";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
 import { readRecords, type LogRecord } from "@/lib/activity/logReader";
@@ -93,7 +92,7 @@ export function readingsOverview(books: ReadonlyMap<string, Pick<BookSummary, "n
     const book: ReadingBook = { id: p.itemId, ...named(p.itemId), fraction: p.fraction, at: p.finishedAt ?? p.updatedAt, device: p.lastDevice };
     if (p.finishedAt !== null) {
       if (a.finished.length < MAX_PER_ACCOUNT) a.finished.push(book);
-    } else if (p.fraction >= MIN_STARTED_FRACTION && a.inProgress.length < MAX_PER_ACCOUNT) a.inProgress.push(book);
+    } else if (a.inProgress.length < MAX_PER_ACCOUNT) a.inProgress.push(book);
     a.lastReadAt = Math.max(a.lastReadAt ?? 0, p.updatedAt);
   }
 

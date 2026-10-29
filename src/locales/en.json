@@ -3948,7 +3948,9 @@
       "remove": "Remove from my reading list",
       "row": "My reading list",
       "empty": "Nothing to read yet. Add a book from its page.",
-      "browse": "Browse books"
+      "browse": "Browse books",
+      "addShort": "Add to my list",
+      "removeShort": "Remove from my list"
     }
   }
 }

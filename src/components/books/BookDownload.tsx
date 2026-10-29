@@ -92,7 +92,8 @@ export function BookDownloadButton({ book, className = "" }: { book: BookSummary
         <button
           type="button"
           onClick={() => void start()}
-          className="flex items-center gap-2 rounded-full bg-white/10 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/15 active:scale-95"
+          // Le même bouton que « Ma liste » et que les fiches de films (29/10/2026).
+          className="btn btn-ghost"
         >
           <Download size={16} aria-hidden />
           {t("books.download")}

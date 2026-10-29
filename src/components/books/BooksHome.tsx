@@ -6,7 +6,7 @@ import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
 import type { HomeRow } from "@/lib/books/grouping";
 import { displayTitle } from "@/lib/books/displayTitle";
-import type { BookSummary } from "@/lib/books/types";
+import { readPercent, type BookSummary } from "@/lib/books/types";
 import { BookCover } from "./BookCover";
 import { BookRequestButton } from "./BookRequests";
 import { BookSheetHost } from "./BookSheet";
@@ -109,7 +109,9 @@ export function BooksHome({ variant, hidden: paneHidden = false }: { variant: "d
       className={desktop ? "absolute inset-y-0 right-0 z-[9] overflow-y-auto bg-ink pb-16" : "flex-1 overflow-y-auto overscroll-contain"}
       style={
         desktop
-          ? { left: "var(--player-rail, 0px)", paddingTop: "calc(max(1rem, env(safe-area-inset-top)) + 4.5rem)" }
+          ? // Depuis le bord de l'écran, sous le rail, le contenu décalé de sa largeur : posée à droite du rail,
+            // la catégorie laissait voir dans la bande du rail la bannière du film d'en dessous (29/10/2026).
+            { left: 0, paddingLeft: "var(--player-rail, 0px)", paddingTop: "calc(max(1rem, env(safe-area-inset-top)) + 4.5rem)" }
           : { paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6rem)" }
       }
       data-books-home={paneHidden ? undefined : ""}
@@ -140,7 +142,7 @@ export function BooksHome({ variant, hidden: paneHidden = false }: { variant: "d
           <h2 className={`${pad} mb-3 font-display text-lg font-semibold`}>{t("books.continue")}</h2>
           <div className={`${pad} ${snapPad} scrollbar-none flex snap-x gap-4 overflow-x-auto pb-2`}>
             {resume.map((book) => {
-              const pct = Math.round((book.progress?.fraction ?? 0) * 100);
+              const pct = readPercent(book.progress?.fraction ?? 0);
               return (
                 <button
                   key={book.id}
@@ -259,7 +261,7 @@ const Row = memo(function Row({
       </div>
       <div className={`${pad} ${snapPad} scrollbar-none flex snap-x overflow-x-auto pb-2 ${desktop ? "gap-4" : "gap-3"}`}>
         {books.map((book, i) => {
-          const pct = book.progress && !book.progress.finished ? Math.round(book.progress.fraction * 100) : 0;
+          const pct = book.progress && !book.progress.finished ? readPercent(book.progress.fraction) : 0;
           return (
             <button
               key={book.id}

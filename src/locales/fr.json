@@ -3948,7 +3948,9 @@
       "remove": "Retirer de ma liste de lecture",
       "row": "Ma liste de lecture",
       "empty": "Rien à lire pour l'instant. Ajoutez un livre depuis sa fiche.",
-      "browse": "Parcourir les livres"
+      "browse": "Parcourir les livres",
+      "addShort": "Ajouter à ma liste",
+      "removeShort": "Retirer de ma liste"
     }
   }
 }

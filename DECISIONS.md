@@ -8091,3 +8091,13 @@ réponse qui l'emporte et part une seconde après, hors ligne puis envoi à l'ou
 « Lectures » à l'administrateur seul).
 
 **Décidé le 29/10/2026.**
+
+### Commencé dès la deuxième page (29/10/2026, 10.11.1)
+
+Le seuil de 1 % (`MIN_STARTED_FRACTION`, 28/10/2026) demandait quatre pages d'un roman de 400 avant
+« Continuer la lecture ». La règle devient : la page où un livre jamais commencé s'ouvre n'est pas envoyée
+(`BookReader`, déjà le cas), toute page tournée ensuite le commence ; revenu à cette page d'ouverture (ou au
+tout début du fichier), le lecteur envoie `atStart: true` et la route l'efface (`forgetUnstarted`). Une position
+gardée est donc un livre commencé : les filtres de `resumeFrom`, `grouping.ts` et de la vue « Lectures »
+n'appliquent plus de seuil, et le pourcentage montré n'est jamais « 0 % » (`readPercent`). Un client d'avant,
+qui n'envoie pas `atStart`, garde le seuil de 1 % côté route.

@@ -11,6 +11,14 @@
  */
 export const MIN_STARTED_FRACTION = 0.01;
 
+/**
+ * Le pourcentage montré d'un livre commencé : jamais « 0 % » — commencé dès la deuxième page (29/10/2026),
+ * un long roman y est à 0,3 %, et « Reprendre 0 % » ou une barre vide disaient le contraire.
+ */
+export function readPercent(fraction: number): number {
+  return Math.min(100, Math.max(1, Math.round(fraction * 100)));
+}
+
 /** Où en est ce compte dans un livre — gardé par l'application, pas par Jellyfin. */
 export interface BookProgress {
   /** La position exacte (EPUB CFI), celle que le lecteur rouvre. */

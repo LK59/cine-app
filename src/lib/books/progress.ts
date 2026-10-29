@@ -104,9 +104,9 @@ export function dismissedAt(account: string, itemId: string): number | null {
 }
 
 /** Une position plausible : une CFI EPUB bornée, une fraction entre 0 et 1. */
-export function validProgressInput(body: unknown): { cfi: string; fraction: number; finished: boolean; at: number | null; ageMs: number | null } | null {
+export function validProgressInput(body: unknown): { cfi: string; fraction: number; finished: boolean; at: number | null; ageMs: number | null; atStart: boolean | null } | null {
   if (!body || typeof body !== "object") return null;
-  const { cfi, fraction, finished, at, ageMs } = body as Record<string, unknown>;
+  const { cfi, fraction, finished, at, ageMs, atStart } = body as Record<string, unknown>;
   if (typeof cfi !== "string" || cfi.length > 4000 || !/^epubcfi\(.+\)$/.test(cfi)) return null;
   if (typeof fraction !== "number" || !Number.isFinite(fraction) || fraction < 0 || fraction > 1) return null;
   // `at` : l'heure de lecture dans l'horloge de l'appareil ; `ageMs` : depuis combien de temps, mesuré par
@@ -117,6 +117,8 @@ export function validProgressInput(body: unknown): { cfi: string; fraction: numb
     finished: finished === true,
     at: typeof at === "number" && Number.isFinite(at) ? at : null,
     ageMs: typeof ageMs === "number" && Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= MAX_AGE_MS ? ageMs : null,
+    // `null` : un client d'avant le 29/10/2026, qui ne le dit pas — la route garde pour lui le seuil de 1 %.
+    atStart: typeof atStart === "boolean" ? atStart : null,
   };
 }
 

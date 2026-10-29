@@ -409,10 +409,17 @@ describe("la position de lecture", () => {
     expect((await (await progressGET(req(), params(BOOK))).json()).progress.fraction).toBe(1);
   });
 
-  it("première page : rien n'est écrit — un livre ouvert puis refermé n'est pas commencé", async () => {
+  it("un client d'avant `atStart` : sous 1 %, rien n'est écrit — un livre ouvert puis refermé n'est pas commencé", async () => {
     expect(await (await post({ cfi: "epubcfi(/6/2!/4/2)", fraction: 0 })).json()).toMatchObject({ ok: true, notStarted: true });
     expect((await post({ cfi: "epubcfi(/6/2!/4/8)", fraction: 0.004 })).status).toBe(200);
     expect(getDb().prepare("SELECT COUNT(*) AS n FROM book_progress").get()).toEqual({ n: 0 });
+  });
+
+  it("dès la deuxième page, le livre est commencé — même à 0,3 % d'un long roman ; revenu à la page d'ouverture, il ne l'est plus (29/10/2026)", async () => {
+    expect((await (await post({ cfi: "epubcfi(/6/4!/4/2)", fraction: 0.003, atStart: false })).json()).notStarted).toBeUndefined();
+    expect((await (await progressGET(req(), params(BOOK))).json()).progress.fraction).toBe(0.003);
+    expect(await (await post({ cfi: "epubcfi(/6/4!/4/1)", fraction: 0.002, atStart: true })).json()).toMatchObject({ notStarted: true });
+    expect((await (await progressGET(req(), params(BOOK))).json()).progress).toBeNull();
   });
 
   it("revenu à la première page puis refermé : redevient « pas commencé », les signets restent", async () => {

@@ -231,6 +231,10 @@ export function BookReader({
   const sectionRef = useRef(-1);
   const lastFraction = useRef(0);
   const pending = useRef<ProgressBody | null>(null);
+  // Un livre jamais commencé s'ouvre au début de son texte : cette page-là, et elle seule, est « pas commencé ».
+  // `null` pour un livre repris (revenir avant sa page ne le « décommence » pas).
+  const openedUnstarted = useRef(false);
+  const startFraction = useRef<number | null>(null);
   const pageRef = useRef<Page | null>(null);
   const bookmarksRef = useRef<StoredBookmark[]>([]);
   const cfiRef = useRef<CfiTools | null>(null);
@@ -363,7 +367,12 @@ export function BookReader({
       lastFraction.current = fraction;
       if (d.cfi) {
         const finished = fraction >= 0.995 || view?.renderer.atEnd === true;
-        pending.current = { cfi: d.cfi, fraction, finished, at: Date.now() };
+        if (!sent.current && openedUnstarted.current) startFraction.current = fraction;
+        // Revenu à la page d'ouverture d'un livre pas commencé, ou au tout début du fichier : le serveur
+        // l'efface de « Continuer la lecture » (`atStart`). Toute autre page le commence (29/10/2026 : le
+        // seuil de 1 % demandait quatre pages d'un roman de 400 avant de le compter).
+        const atStart = view?.renderer.atStart === true || (startFraction.current !== null && fraction <= startFraction.current + 1e-6);
+        pending.current = { cfi: d.cfi, fraction, finished, at: Date.now(), atStart };
         // La page montrée, pour son signet : son début, sa fin, quelques mots de son texte.
         const tools = cfiRef.current;
         if (tools) {
@@ -483,6 +492,7 @@ export function BookReader({
         // serveur lue avec la réponse ramène la sienne dans celle de l'appareil.
         const skew = typeof progressRes.now === "number" ? Date.now() - progressRes.now : 0;
         if (kept && !kept.finished && (!server || kept.at > server.updatedAt + skew)) cfi = kept.cfi;
+        openedUnstarted.current = !cfi;
         try {
           await view.init({ lastLocation: cfi, showTextStart: !cfi });
         } catch {

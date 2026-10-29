@@ -63,11 +63,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const dismissed = dismissedAt(caller.u, id);
     if (dismissed !== null && dismissed > at) return NextResponse.json({ ok: true, kept: true });
   }
-  // Encore sur sa première page (`MIN_STARTED_FRACTION`) : pas commencé (28/10/2026). Rien n'est écrit pour
-  // un livre qu'on vient d'ouvrir ; un livre revenu à son début redevient « pas commencé » (`forgetUnstarted`
-  // — les signets restent). Un livre ouvert puis refermé sur sa couverture n'entre plus dans « Continuer la
-  // lecture ».
-  if (!input.finished && input.fraction < MIN_STARTED_FRACTION) {
+  // Pas commencé : revenu à la page où il s'était ouvert (`atStart`, dit par le lecteur) — il redevient « pas
+  // commencé » (`forgetUnstarted`, les signets restent). Toute autre page le commence, la deuxième comprise :
+  // un seuil de 1 % (28/10/2026) demandait quatre pages d'un roman de 400 avant « Continuer la lecture »
+  // (29/10/2026). La page d'ouverture elle-même n'est jamais envoyée (`BookReader`). Un client d'avant ne dit
+  // pas `atStart` : il garde le seuil (`MIN_STARTED_FRACTION`).
+  if (!input.finished && (input.atStart === true || (input.atStart === null && input.fraction < MIN_STARTED_FRACTION))) {
     forgetUnstarted(caller.u, id);
     return NextResponse.json({ ok: true, notStarted: true });
   }

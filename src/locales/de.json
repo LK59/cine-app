@@ -3948,7 +3948,9 @@
       "remove": "Aus meiner Leseliste entfernen",
       "row": "Meine Leseliste",
       "empty": "Noch nichts zu lesen. Fügen Sie ein Buch über seine Seite hinzu.",
-      "browse": "Bücher durchsuchen"
+      "browse": "Bücher durchsuchen",
+      "addShort": "Zu meiner Liste",
+      "removeShort": "Aus meiner Liste entfernen"
     }
   }
 }

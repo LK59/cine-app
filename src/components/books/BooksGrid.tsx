@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useT } from "@/components/TranslationProvider";
 import { groupBooks } from "@/lib/books/grouping";
 import { displayTitle } from "@/lib/books/displayTitle";
-import { MIN_STARTED_FRACTION, type BookSummary } from "@/lib/books/types";
+import { readPercent, type BookSummary } from "@/lib/books/types";
 import { BookCover } from "./BookCover";
 
 /** Les livres demandés au serveur à chaque fois que le bas de la grille approche. */
@@ -79,7 +79,7 @@ export function BooksGrid({
 
 export function BookCard({ book, onOpen }: { book: BookSummary; onOpen: (book: BookSummary) => void }) {
   const t = useT();
-  const pct = book.progress && !book.progress.finished && book.progress.fraction >= MIN_STARTED_FRACTION ? Math.round(book.progress.fraction * 100) : null;
+  const pct = book.progress && !book.progress.finished ? readPercent(book.progress.fraction) : null;
   return (
     <button
       type="button"

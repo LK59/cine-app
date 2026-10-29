@@ -15,7 +15,7 @@ import { SHEET_OUT_MS, SHEET_UNMOUNT_SLACK_MS, detailColumnMotion, phoneSheetCor
 import { useIsMobile } from "@/lib/useIsMobile";
 import { setOfflineSheetOpen } from "@/lib/offline/offlineSheetOpen";
 import { displayTitle } from "@/lib/books/displayTitle";
-import type { BookDetail, BookSummary } from "@/lib/books/types";
+import { readPercent, type BookDetail, type BookSummary } from "@/lib/books/types";
 import { BookCover, coverUrl } from "./BookCover";
 import { BookDownloadButton } from "./BookDownload";
 import { ReadingListButton } from "./ReadingList";
@@ -151,7 +151,7 @@ function BookSheet({
   }, [leaving]);
 
   const progress = book?.progress ?? null;
-  const pct = progress ? Math.round(progress.fraction * 100) : 0;
+  const pct = progress && !progress.finished ? readPercent(progress.fraction) : 0;
   const finished = progress?.finished === true || book?.played === true;
   const readLabel = progress && !progress.finished && pct > 0 ? t("books.resume", { pct }) : finished ? t("books.readAgain") : t("books.read");
   const overview = detail?.overview ?? "";
@@ -215,15 +215,20 @@ function BookSheet({
             <X size={15} aria-hidden /> {t("books.removeFromContinue")}
           </button>
         )}
-        {/* « Ma liste de lecture » (§129) : ajouté ou retiré aussitôt, rattrapé si le serveur refuse. */}
-        {book && <ReadingListButton book={book} finished={finished} />}
         {finished && (
           <p className="flex items-center gap-1.5 text-sm text-subtle">
             <Check size={15} aria-hidden /> {t("books.finished")}
           </p>
         )}
-        {/* Le livre gardé sur l'appareil, pour le lire sans réseau. */}
-        {book && <BookDownloadButton book={book} />}
+        {/* « Ma liste de lecture » (§129) et le livre gardé sur l'appareil, côte à côte et avec les boutons des
+            fiches de films (`btn btn-ghost`, `btn-mine` dans la liste) : le premier était un lien gris, le second
+            une pilule à part (29/10/2026, « un peu d'uniformité »). */}
+        {book && (
+          <div className={`flex flex-wrap items-start gap-2 ${isMobile ? "justify-center" : ""}`}>
+            <ReadingListButton book={book} finished={finished} />
+            <BookDownloadButton book={book} />
+          </div>
+        )}
         {/* Le fichier d'origine, pour une liseuse (câble, Calibre…) : dans un navigateur seulement — l'app
             installée, sur iPhone surtout, n'a pas de gestionnaire de téléchargements où le retrouver. */}
         {book && !installed && (

@@ -883,6 +883,26 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.11.1",
+    page: "10.7",
+    onlyOnPage: true,
+    group: { fr: "Livres", en: "Books", es: "Libros", de: "Bücher" },
+    items: [
+      {
+        fr: "Un livre entre dans « Continuer la lecture » dès la deuxième page, et non plus après quelques pour cent.",
+        en: "A book now appears in “Continue reading” from the second page, rather than after a few percent.",
+        es: "Un libro entra en «Seguir leyendo» desde la segunda página, y no tras unos pocos por ciento.",
+        de: "Ein Buch erscheint ab der zweiten Seite unter „Weiterlesen“, nicht erst nach einigen Prozent.",
+      },
+      {
+        fr: "Sur la fiche d'un livre, « Ajouter à ma liste » et « Télécharger » ont la même forme que les boutons des films, et l'accueil des livres recouvre tout l'écran.",
+        en: "On a book's page, “Add to my list” and “Download” now look like the film buttons, and the Books home covers the whole screen.",
+        es: "En la ficha de un libro, «Añadir a mi lista» y «Descargar» tienen la misma forma que los botones de las películas, y el inicio de Libros cubre toda la pantalla.",
+        de: "Auf der Seite eines Buchs sehen „Zu meiner Liste“ und „Herunterladen“ jetzt wie die Schaltflächen der Filme aus, und die Bücher-Startseite füllt den ganzen Bildschirm.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

@@ -21,6 +21,8 @@ export interface ProgressBody {
   finished: boolean;
   /** L'heure de lecture (ms) — le serveur ne remplace pas une position plus récente. */
   at: number;
+  /** Revenu à la page d'ouverture d'un livre pas commencé : il redevient « pas commencé ». */
+  atStart?: boolean;
 }
 
 export interface BookmarkBody {

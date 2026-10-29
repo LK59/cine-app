@@ -10,7 +10,6 @@ import { allows, rightsKey, rightsOf, type BookRights } from "@/lib/books/rights
 import { authorIndex, filterBooks, foldText, genreIndex, groupBooks, homeRows, preferredCopy, sortBooks, type BookSort, type HomeRows } from "@/lib/books/grouping";
 import { duplicateKey, nameKey, titleKey } from "@/lib/books/metadata";
 import type { BookProgress, BookSummary } from "@/lib/books/types";
-import { MIN_STARTED_FRACTION } from "@/lib/books/types";
 
 /** Les métadonnées qui refont l'index : celles de l'EPUB, et celles de Google Books (option). */
 const metaVersion = () => epubMetaVersion() * 1_000_000 + enrichVersion();
@@ -376,8 +375,9 @@ const EMPTY_COPIES: ReadonlyMap<string, BookSummary> = new Map();
 /** « Continuer la lecture » : d'après les positions de ce compte, les livres que l'index connaît encore. */
 export function resumeFrom(index: BookIndex, progress: Map<string, BookProgress>, limit = 12): BookSummary[] {
   return [...progress.entries()]
-    // Moins d'un pour cent : pas commencé (`MIN_STARTED_FRACTION`), même pour une position d'avant cette règle.
-    .filter(([, p]) => !p.finished && !p.dismissed && p.fraction >= MIN_STARTED_FRACTION)
+    // Une position gardée est un livre commencé (29/10/2026 : dès la deuxième page) ; la page d'ouverture n'en
+    // laisse aucune (`forgetUnstarted`).
+    .filter(([, p]) => !p.finished && !p.dismissed)
     .sort((a, b) => b[1].updatedAt - a[1].updatedAt)
     .flatMap(([id, p]) => {
       // Une copie cachée commencée reste ici : c'est elle qu'on lisait.
