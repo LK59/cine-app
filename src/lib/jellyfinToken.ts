@@ -32,7 +32,12 @@ const CHECK_EVERY_MS = 60 * 60 * 1000;
 const RETRY_UNKNOWN_MS = 5 * 60 * 1000;
 
 type Verdict = { at: number; alive: boolean; certain: boolean };
-const verdicts = new Map<string, Verdict>();
+// Sur `globalThis` (29/10/2026) : le proxy et les routes sont compilés à part, chacun avec son
+// exemplaire de ce module (vu dans le build : `middleware.js` embarque le sien). Un rapport de
+// lecture refusé (`markJellyfinTokenDead`, côté route) n'était donc jamais vu du proxy, qui
+// n'apprenait le jeton mort qu'à sa propre question, une heure plus tard au pire.
+const VERDICTS_KEY = Symbol.for("cine-app.jellyfinTokenVerdicts");
+const verdicts: Map<string, Verdict> = ((globalThis as { [VERDICTS_KEY]?: Map<string, Verdict> })[VERDICTS_KEY] ??= new Map<string, Verdict>());
 
 function forget(now: number): void {
   // Borné par le nombre de sessions, mais un redémarrage n'arrive pas toujours avant qu'elles

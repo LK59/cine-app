@@ -31,6 +31,9 @@ describe("proxy — what a plain user may write", () => {
     const { proxy } = await import("@/proxy");
     for (const [method, path] of [
       ["POST", "/api/player/requests"],
+      // L'écran de fin de lecture : un GET jusqu'au 29/10/2026, passé en POST pour que le refus des
+      // écritures d'un autre site le couvre.
+      ["POST", "/api/player/watched/finished?itemId=" + "a".repeat(32)],
       ["POST", "/api/jellyfin/favorite"],
       ["POST", "/api/player/account/preferences"],
       ["POST", "/api/player/account/password"],

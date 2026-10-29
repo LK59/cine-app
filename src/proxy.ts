@@ -50,6 +50,9 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // Le « vu » d'un compte (DECISIONS.md §51) : la route n'écrit que pour l'appelant — sa copie
   // locale, et chez Jellyfin sous son propre identifiant.
   "POST /api/player/watched",
+  // « Vous avez terminé ce film » à la fin d'une lecture : n'écrit « vu » que pour l'appelant (un GET
+  // jusqu'au 29/10/2026, passé en POST pour que `crossSiteWrite` le couvre).
+  "POST /api/player/watched/finished",
   // Retirer un titre de sa propre rangée « Reprendre » : la route n'oublie que la position, et que
   // celle du compte de la session (23/09/2026).
   "DELETE /api/jellyfin/resume",

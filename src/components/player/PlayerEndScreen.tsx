@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 import { Play, RotateCcw, X } from "lucide-react";
-import { cacheOnlyOptions, fetcher, MOVIES_CATALOGUE_KEY, playerBootstrapOptions } from "@/lib/swr";
+import { cacheOnlyOptions, MOVIES_CATALOGUE_KEY, playerBootstrapOptions } from "@/lib/swr";
 import { noteWatchlistChange } from "@/lib/watchlistCache";
 import { apiAction } from "@/lib/apiAction";
 import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
@@ -177,6 +177,7 @@ function SuiteAsk({ movie, ...props }: SuiteProps & { movie: CinemaMovie }) {
 }
 
 type FinishedAnswer = { finished: boolean; type?: "movie" | "series"; tmdbId?: number; title?: string; inToWatch?: boolean };
+const postFinished = (url: string) => apiAction(url, { method: "POST" }) as Promise<FinishedAnswer>;
 
 /**
  * « Vous avez terminé ce film » (DECISIONS.md §51, demandé le 06/10/2026).
@@ -190,7 +191,8 @@ type FinishedAnswer = { finished: boolean; type?: "movie" | "series"; tmdbId?: n
  */
 function FinishedAsk({ itemId }: { itemId: string }) {
   const t = useT();
-  const { data } = useSWR<FinishedAnswer>(`/api/player/watched/finished?itemId=${encodeURIComponent(itemId)}`, fetcher, {
+  // Un POST (la question écrit dans « Vus ») : `crossSiteWrite` refuse ainsi qu'une autre page la pose.
+  const { data } = useSWR<FinishedAnswer>(`/api/player/watched/finished?itemId=${encodeURIComponent(itemId)}`, postFinished, {
     ...playerBootstrapOptions,
     revalidateOnFocus: false,
     revalidateIfStale: false,

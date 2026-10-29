@@ -8154,3 +8154,26 @@ sélectionne plus de texte au doigt dans ce mode, comme dans les autres.
 hasard (environ un sur sept, indépendants, mesuré sur 50 requêtes le 29/10). Ils restent comptés dans les 900
 du jour : la console de Google les compte aussi — elle a d'abord affiché 907 (son retard d'affichage), puis 949,
 soit exactement les 899 de l'application et les 50 de l'essai.
+
+## 130. Revue de sécurité ciblée de `src/proxy.ts` (29/10/2026)
+
+Trois relectures isolées (formes d'adresses, sessions et partage, accès sans session et en-têtes), chaque
+trouvaille contre-vérifiée par une relecture neuve ou un essai. Rien de grave. Les contournements par une
+adresse encodée (`/_next%2F..%2Fapi%2Fsettings` et voisines) ont été essayés contre le conteneur : Next
+répond 404, ou ramène le chemin à la route réelle qui répond 401.
+
+**Une écriture en GET échappait à `crossSiteWrite`.** `/api/player/watched/finished` (« Vous avez terminé
+ce film », écran de fin du lecteur) écrivait « vu » sur un GET ; le refus des écritures d'un autre site ne
+regarde que les méthodes qui écrivent, et le cookie `SameSite=Lax` suit une navigation. C'est un POST,
+inscrit dans la liste des écritures permises à un compte ordinaire ; l'appelant (`FinishedAsk`) le pose
+par `apiAction`. Une route qui écrit n'est jamais un GET.
+
+**Les verdicts sur les jetons Jellyfin existaient en deux exemplaires.** `middleware.js` embarque sa propre
+copie de `jellyfinToken.ts` (vu dans le build) : un rapport de lecture refusé, noté côté route, n'était connu
+du proxy qu'à sa propre question, une heure plus tard au pire. La table vit sur `globalThis`
+(`cine-app.jellyfinTokenVerdicts`) ; `jellyfin-token.test.ts` l'éprouve entre deux imports du module.
+
+**Laissé tel quel, par choix.** Un compte ordinaire dont le jeton Jellyfin est mort garde sa session sur
+les appels d'API jusqu'à l'expiration du cookie (sept jours au plus) : seul un chargement de page la ferme,
+pour ne jamais couper un film en cours. « Déconnecter mes autres appareils » la ferme.
+

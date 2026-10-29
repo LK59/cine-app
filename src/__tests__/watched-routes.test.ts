@@ -23,7 +23,7 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/lib/server-cache", () => ({ getProviderIdCI: (ids: Record<string, string> | undefined) => ids?.Tmdb }));
 
 import { POST } from "@/app/api/player/watched/route";
-import { GET as FINISHED } from "@/app/api/player/watched/finished/route";
+import { POST as FINISHED } from "@/app/api/player/watched/finished/route";
 
 const post = (body: unknown) => ({ cookies: { get: () => ({ value: "t" }) }, json: async () => body }) as never;
 const get = (itemId: string) => ({ cookies: { get: () => ({ value: "t" }) }, nextUrl: new URL(`http://x/api/player/watched/finished?itemId=${itemId}`) }) as never;
@@ -57,7 +57,7 @@ describe("POST /api/player/watched", () => {
   });
 });
 
-describe("GET /api/player/watched/finished", () => {
+describe("POST /api/player/watched/finished", () => {
   it("un film fini : il entre dans « Vu », et la réponse dit qu'il est encore dans « À voir »", async () => {
     s.item = { Id: JF(1), Type: "Movie", Name: "Dune", ProviderIds: { Tmdb: "438631" } };
     const body = await (await FINISHED(get(JF(1)))).json();

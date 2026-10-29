@@ -374,7 +374,8 @@ checks every file the manifest, `layout.tsx`, `sw.js` and the push code name exi
   bundled as separate entry points and the module existed in several copies — 8.65.4 kept warm a copy
   the movie catalogue route never read (940 ms measured in production). A module-level singleton
   written from `instrumentation.ts` and read by a route must do the same (`statusCron.ts`,
-  `jellyfinBreaker.ts`). `withPersistentCache` values are not copied into
+  `jellyfinBreaker.ts`) — and so must one written by a route and read by `src/proxy.ts`, which the build
+  compiles with its own copy of every module it imports (`jellyfinToken.ts`, 29/10/2026). `withPersistentCache` values are not copied into
   the stale store; the disk is their fallback. Cache *projections* of TMDB answers (versioned keys:
   `search:person-credits:v2:`, `credits:v2:`), never whole responses — 75 MB of `kv_cache` was
   filmographies and credits nobody read past five fields. Consultation caches are pruned after 14

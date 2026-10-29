@@ -35,6 +35,13 @@ describe("crossSiteWrite", () => {
     expect(crossSiteWrite(req("POST", "/api/watchlist"))).toBe(false);
   });
 
+  // 29/10/2026 (revue de sécurité) : « Vous avez terminé ce film » écrivait dans « Vus » en GET, hors
+  // de portée de ce refus — un lien sur une autre page suffisait. C'est un POST désormais.
+  it("refuse « titre fini » venu d'un autre site", async () => {
+    const res = await proxy(req("POST", "/api/player/watched/finished?itemId=" + "a".repeat(32), { "sec-fetch-site": "cross-site" }));
+    expect(res.status).toBe(403);
+  });
+
   it("le proxy répond 403 avant toute autre chose, connexion comprise", async () => {
     const res = await proxy(req("POST", "/api/auth/jellyfin", { "sec-fetch-site": "same-site" }));
     expect(res.status).toBe(403);

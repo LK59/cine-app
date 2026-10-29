@@ -15,8 +15,12 @@ export const dynamic = "force-dynamic";
  * dans « Vus » (Jellyfin le marque de son côté au rapport d'arrêt, la synchronisation le recopiera
  * de toute façon), et la réponse dit s'il est encore dans « À voir » — l'écran propose alors de
  * l'en retirer, sans le faire d'office.
+ *
+ * Un POST, pas un GET (29/10/2026, revue de sécurité) : la question écrit dans « Vus », et le refus
+ * des écritures venues d'un autre site (`crossSiteWrite`) ne regarde que les méthodes qui écrivent.
+ * En GET, un simple lien sur une autre page marquait un titre « vu » sur le compte connecté.
  */
-export async function GET(req: NextRequest) {
+export async function POST(req: NextRequest) {
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session?.jfId) return NextResponse.json({ finished: false });
   const itemId = req.nextUrl.searchParams.get("itemId");

@@ -153,3 +153,16 @@ describe("reportPlayback — un rapport refusé garde la position autrement", ()
     expect(mockLog).not.toHaveBeenCalled();
   });
 });
+
+// 29/10/2026 (revue de sécurité) : le proxy et les routes ont chacun leur exemplaire de ce module dans
+// le build. Un jeton déclaré mort par une route (rapport de lecture refusé) doit se voir du proxy.
+describe("verdicts partagés entre exemplaires du module", () => {
+  it("un jeton marqué mort dans un exemplaire est connu mort dans un autre", async () => {
+    const a = await import("@/lib/jellyfinToken");
+    a.markJellyfinTokenDead(SESSION, "rapport de lecture (test)");
+    vi.resetModules();
+    const b = await import("@/lib/jellyfinToken");
+    expect(b).not.toBe(a);
+    expect(b.jellyfinTokenKnownDead(SESSION.jti)).toBe(true);
+  });
+});

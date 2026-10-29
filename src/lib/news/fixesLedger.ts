@@ -1000,6 +1000,25 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.12.9",
+    page: "10.5",
+    group: { fr: "Compte", en: "Account", es: "Cuenta", de: "Konto" },
+    items: [
+      {
+        fr: "Un lien sur une autre page ne peut plus marquer un titre comme vu sur le compte connecté.",
+        en: "A link on another page can no longer mark a title as watched on the signed-in account.",
+        es: "Un enlace en otra página ya no puede marcar un título como visto en la cuenta conectada.",
+        de: "Ein Link auf einer anderen Seite kann einen Titel nicht mehr im angemeldeten Konto als gesehen markieren.",
+      },
+      {
+        fr: "Après un changement de mot de passe, une session encore ouverte sur un autre appareil est fermée plus vite.",
+        en: "After a password change, a session still open on another device is closed sooner.",
+        es: "Tras un cambio de contraseña, una sesión aún abierta en otro dispositivo se cierra antes.",
+        de: "Nach einer Passwortänderung wird eine noch offene Sitzung auf einem anderen Gerät schneller geschlossen.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
