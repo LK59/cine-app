@@ -869,6 +869,20 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.10.7",
+    page: "10.7",
+    onlyOnPage: true,
+    group: { fr: "Livres", en: "Books", es: "Libros", de: "Bücher" },
+    items: [
+      {
+        fr: "En mode défilement, la molette fait défiler le texte même quand les réglages de lecture sont ouverts.",
+        en: "In scrolling mode, the mouse wheel scrolls the text even while the reading settings are open.",
+        es: "En el modo de desplazamiento, la rueda del ratón desplaza el texto aunque los ajustes de lectura estén abiertos.",
+        de: "Im Bildlaufmodus scrollt das Mausrad den Text auch dann, wenn die Leseeinstellungen geöffnet sind.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

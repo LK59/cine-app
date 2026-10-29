@@ -833,6 +833,16 @@ export function BookReader({
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     // Avec Ctrl/⌘ c'est un zoom, traité plus haut.
     if (e.ctrlKey || e.metaKey) return;
+    // Au défilement continu, la couche n'est là que pendant un panneau ouvert (un toucher le referme) : la
+    // molette y fait défiler le texte, comme quand elle l'atteint directement. Elle tournait des pages
+    // entières tant que les réglages restaient ouverts — juste quand on essaie le défilement (29/10/2026).
+    if (prefsRef.current.turn === "scroll") {
+      const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+      const px = e.deltaMode === 1 ? delta * 16 : e.deltaMode === 2 ? delta * (e.currentTarget.clientHeight || 600) : delta;
+      if (px > 0) void viewRef.current?.next(px);
+      else if (px < 0) void viewRef.current?.prev(-px);
+      return;
+    }
     const now = performance.now();
     if (now - wheel.current.at > 300) wheel.current.acc = 0;
     wheel.current.at = now;
