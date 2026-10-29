@@ -395,14 +395,14 @@ describe("la position de lecture", () => {
     expect(markPlayed).not.toHaveBeenCalled();
   });
 
-  it("« Marquer comme lu » puis « non lu » (29/10/2026) : terminé ici et chez Jellyfin, sorti de la liste ; puis effacé, signets gardés", async () => {
+  it("« Marquer comme lu » puis « non lu » (29/10/2026) : terminé ici et chez Jellyfin, gardé dans la liste ; puis effacé, signets gardés", async () => {
     await post({ cfi: "epubcfi(/6/8!/4/2)", fraction: 0.3, atStart: false });
     addBookmark("lecteur", BOOK, { cfi: "epubcfi(/6/8!/4/2)", fraction: 0.3, chapter: "II", excerpt: "…" });
     getDb().prepare("INSERT INTO book_list (account, item_id, added_at) VALUES ('lecteur', ?, 1)").run(BOOK);
     expect((await readPOST(req(), params(BOOK))).status).toBe(200);
     expect(markPlayed).toHaveBeenCalledWith(JF, BOOK);
     expect((await (await progressGET(req(), params(BOOK))).json()).progress).toMatchObject({ finished: true });
-    expect(getDb().prepare("SELECT COUNT(*) AS n FROM book_list").get()).toEqual({ n: 0 });
+    expect(getDb().prepare("SELECT COUNT(*) AS n FROM book_list").get()).toEqual({ n: 1 });
     expect((await readDELETE(req(), params(BOOK))).status).toBe(200);
     expect(markUnplayed).toHaveBeenCalledWith(JF, BOOK);
     expect((await (await progressGET(req(), params(BOOK))).json()).progress).toBeNull();

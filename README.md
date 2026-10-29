@@ -329,7 +329,7 @@ downloaded book, even with no film, offers its downloads when it starts without 
 
 Each account has a reading list, separate from its films and series: « Add to my reading list » on a
 book's sheet, a « My reading list » row on the books home, and a « To read » tab in My list (only where
-books are shown for that account); a finished book leaves it on its own. Reading sessions (time with
+books are shown for that account); like a watched film in « To watch », a finished book stays in it until removed. Reading sessions (time with
 the page visible, progress, pages turned, device, read offline or not) are written one per line to
 `data/logs/lectures.log`, with a line when a book is first finished or removed from « Continue
 reading »; the administrator reads them under Activity → Reading — per account, books in progress and

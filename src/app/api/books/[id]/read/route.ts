@@ -3,7 +3,6 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { bookIdOf, booksCaller } from "@/lib/books/guard";
 import { bookFor, forgetPlayed } from "@/lib/books/library";
 import { markRead, markUnread } from "@/lib/books/progress";
-import { removeFromReadingList } from "@/lib/books/readingList";
 import { bookFields } from "@/lib/books/readingLog";
 import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { logReadingEvent } from "@/lib/eventLogs";
@@ -14,7 +13,8 @@ import { logError } from "@/lib/logger";
  * (29/10/2026) — pour le compte de la session et lui seul, sur un livre qu'il voit (`bookFor`).
  *
  * Comme les films, « lu » vit chez Jellyfin (ses autres applications le savent) et chez nous (la position,
- * « Continuer la lecture ») : les deux bougent ensemble. Lu, le livre quitte aussi « Ma liste de lecture ».
+ * « Continuer la lecture ») : les deux bougent ensemble. Il reste dans « Ma liste de lecture », comme un film vu
+ * reste dans « À voir » (29/10/2026).
  * Un Jellyfin qui refuse n'empêche pas l'état local, et le dit dans `server.log`.
  */
 async function resolve(req: NextRequest, params: Promise<{ id: string }>) {
@@ -36,7 +36,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (r instanceof NextResponse) return r;
   const { caller, id, book } = r;
   markRead(caller.u, id);
-  removeFromReadingList(caller.u, id);
   if (caller.jfId) {
     await jellyfin.markPlayed(caller.jfId, id).catch((err: unknown) => logError("books/read", err, { itemId: id, played: true }));
     // Le badge « Lu » vient de Jellyfin, gardé deux minutes : on le redemande.

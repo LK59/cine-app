@@ -59,8 +59,8 @@ export function ReadingListButton({ book, finished }: { book: BookSummary; finis
   const t = useT();
   const { books } = useReadingList();
   const listed = books?.some((b) => b.id === book.id) ?? false;
-  // Un livre terminé sort de la liste de lui-même : on ne propose pas de l'y mettre, seulement de l'en retirer.
-  if (books === undefined || (finished && !listed)) return null;
+  // Proposé aussi pour un livre lu, comme « Ma liste » d'un film vu (29/10/2026).
+  if (books === undefined) return null;
   const label = listed ? t("books.list.remove") : t("books.list.add");
   // Le bouton « Ma liste » des fiches de films (`WatchlistButton`) : même forme, même marque dorée une fois
   // dans la liste, mêmes icônes — c'était un lien gris, seul de son espèce (29/10/2026).

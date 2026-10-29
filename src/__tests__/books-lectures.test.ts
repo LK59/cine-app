@@ -11,7 +11,7 @@ import type { NextRequest } from "next/server";
  *   « terminé » / « retiré » ; l'appareil de la dernière page dans `book_progress` ; la vue de l'activité
  *   réservée à l'administrateur et absente l'option coupée ;
  * - « Ma liste de lecture » — un livre que le compte ne voit pas ne s'y ajoute pas, et un livre terminé
- *   en sort de lui-même.
+ *   y reste, comme un film vu dans « À voir ».
  */
 await vi.hoisted(async () => {
   const f = await import("node:fs");
@@ -288,12 +288,12 @@ describe("« Ma liste de lecture »", () => {
     expect(await list()).toEqual([]);
   });
 
-  it("un livre terminé quitte la liste ; l'accueil des livres montre la liste juste après « Continuer la lecture »", async () => {
+  it("un livre terminé reste dans la liste ; l'accueil des livres la montre juste après « Continuer la lecture »", async () => {
     await add(BOOK);
     const home = (await (await homeGET(req())).json()) as { list: { id: string }[] };
     expect(home.list.map((b) => b.id)).toEqual([BOOK]);
     await progressPOST(req(JSON.stringify({ cfi: "epubcfi(/6/4!/4/2)", fraction: 1, finished: true })), params(BOOK));
-    expect(await list()).toEqual([]);
+    expect(await list()).toEqual([BOOK]);
   });
 
   it("option coupée : 404", async () => {

@@ -931,6 +931,20 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.12.3",
+    page: "10.7",
+    onlyOnPage: true,
+    group: { fr: "Livres", en: "Books", es: "Libros", de: "Bücher" },
+    items: [
+      {
+        fr: "Un livre terminé ou marqué lu reste dans votre liste « À lire », comme un film vu reste dans « À voir ».",
+        en: "A finished book, or one marked as read, now stays in your “To read” list, just as a watched film stays in “To watch”.",
+        es: "Un libro terminado o marcado como leído se queda en su lista «Por leer», como una película vista se queda en «Por ver».",
+        de: "Ein beendetes oder als gelesen markiertes Buch bleibt in Ihrer Liste „Zu lesen“, so wie ein gesehener Film in „Zu sehen“ bleibt.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

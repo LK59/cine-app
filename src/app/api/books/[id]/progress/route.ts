@@ -8,7 +8,6 @@ import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { logReadingEvent } from "@/lib/eventLogs";
 import { bookIndex } from "@/lib/books/bookIndex";
 import { bookFields } from "@/lib/books/readingLog";
-import { removeFromReadingList } from "@/lib/books/readingList";
 
 /**
  * La position de lecture d'un livre (option, DECISIONS.md §127), pour le compte de la session et lui
@@ -77,8 +76,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const device = requestDeviceLabel(req);
   const { firstFinish } = saveProgress(caller.u, id, input.cfi, input.fraction, input.finished, Math.min(Date.now(), at ?? Date.now()), device);
   if (firstFinish) {
-    // Terminé : il quitte « Ma liste de lecture » (§129) — elle dit ce qui reste à lire —, et l'activité le sait.
-    removeFromReadingList(caller.u, id);
+    // Terminé : l'activité le sait. Il reste dans « Ma liste de lecture », comme un film vu reste dans « À voir »
+    // (29/10/2026) : la liste ne se vide que par le geste de son compte.
     logReadingEvent("terminé", { user: caller.jfUser ?? caller.u, account: caller.u, book: id, ...bookFields(book), device });
   }
   if (firstFinish && caller.jfId) {

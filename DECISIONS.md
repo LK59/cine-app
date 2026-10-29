@@ -8059,12 +8059,12 @@ est aussi une source des Journaux de l'activité (`readings`, proposée seulemen
 (`watchlist`, qui ne connaît qu'eux). `GET /api/books/list` (la liste vue à travers la vue du compte :
 un livre retiré ou caché depuis par un tag bloqué n'y paraît pas, sa ligne reste), `POST { id }` (ajouter :
 seulement un livre que `bookFor` rend pour ce compte, sinon 404 ; deux mille au plus), `DELETE ?id=`
-(retirer). Un livre terminé en sort de lui-même, côté serveur, à la première fin (`removeFromReadingList`
-dans la route de la position) : la liste dit ce qui reste à lire.
+(retirer). Seul son compte la vide : un livre terminé ou marqué lu y reste, comme un film vu reste dans
+« À voir » (29/10/2026 — avant, il en sortait de lui-même à la première fin).
 
 **Où elle se voit.** Sur la fiche d'un livre, « Ajouter à ma liste de lecture » / « Retirer de ma liste
 de lecture », du style des autres gestes secondaires, appliqué avant la réponse et rattrapé si le serveur
-refuse (`setListed`, `ReadingList.tsx`) — pas proposé pour un livre terminé qui n'y est pas. Sur l'accueil
+refuse (`setListed`, `ReadingList.tsx`) — proposé aussi pour un livre lu. Sur l'accueil
 des livres, une rangée « Ma liste de lecture » juste après « Continuer la lecture », quand elle a des
 livres (`list` de `/api/books/home`, vingt au plus, sans « Tout voir »). Dans Ma liste, un onglet « À
 lire » juste après « À voir », seulement quand les livres sont affichés pour ce compte
@@ -8107,6 +8107,6 @@ qui n'envoie pas `atStart`, garde le seuil de 1 % côté route.
 Sur la fiche d'un livre (`MarkReadButton`, `ReadingList.tsx`), la forme de « Ma liste » et la coche dorée de
 « Marquer vu » des films ; il remplace la ligne « Terminé ». Route `POST|DELETE /api/books/<id>/read` (le compte
 de la session, un livre qu'il voit — `bookFor`). Lu : `markRead` (terminé comme au bout du lecteur, la position
-gardée ou une ligne vide), « lu » chez Jellyfin, retiré de « Ma liste de lecture ». Non lu : `markUnread` (la
+gardée ou une ligne vide), « lu » chez Jellyfin ; il reste dans « Ma liste de lecture », comme un film vu. Non lu : `markUnread` (la
 position effacée, les signets restent), « non lu » chez Jellyfin. Les deux vont au journal des lectures
 (`marqué lu`, `marqué non lu`). Un refus de Jellyfin ne bloque pas l'état local et va dans `server.log`.

@@ -7,8 +7,8 @@ import type { BookSummary } from "@/lib/books/types";
  * de lire, rangés sous le compte de l'application (`session.u`) comme sa position. À part de la liste des
  * films et séries (`watchlist`), qui ne connaît que ceux-là et vit de leurs identifiants TMDB.
  *
- * Un livre terminé en sort de lui-même (`removeFromReadingList`, appelé par la route de la position à la
- * première fin) : la liste dit ce qui reste à lire. Bornée : au-delà, c'est un script, pas une liste.
+ * Seul son compte la vide : un livre terminé ou marqué lu y reste, comme un film vu reste dans « À voir »
+ * (29/10/2026 — il en sortait de lui-même à la première fin). Bornée : au-delà, c'est un script, pas une liste.
  */
 export const MAX_LISTED = 2000;
 

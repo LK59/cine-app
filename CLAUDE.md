@@ -453,7 +453,7 @@ widening `"movies" | "series"` would ripple through twenty places. Turned off, e
   `offline`/`lateByMs`) plus `terminé` / `retiré`; Activity → « Lectures » reads it with `book_progress`.
 - **Per account** (§129): reader settings per account × device type (`book_reader_prefs`,
   `readerPrefsStore.ts` — a type with none takes the account's latest; the device keeps a local copy);
-  the reading list `book_list` (`readingList.ts`, « À lire » in Ma liste through `BooksMode`, left on finish).
+  the reading list `book_list` (`readingList.ts`, « À lire » in Ma liste through `BooksMode`, kept on finish like a watched film).
 
 **The player** has its own reference: read `DOC-TECH.md` before touching `src/lib/webcodecs/`,
 and `docs/cycle-de-vie-lecteur.md` before touching `ExperimentalPlayerHost`, `PlayerHost` or the
