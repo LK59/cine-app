@@ -12,6 +12,7 @@ import { ActivitySeance } from "@/components/activity/views/ActivitySeance";
 import { ActivityNews } from "@/components/activity/views/ActivityNews";
 import { ActivityDownloads } from "@/components/activity/views/ActivityDownloads";
 import { ActivityShares } from "@/components/activity/views/ActivityShares";
+import { ActivityReadings } from "@/components/activity/views/ActivityReadings";
 
 // Chargé à l'ouverture seulement : ses gestes, ses matières et sa feuille de style ne concernent
 // que l'administrateur qui l'ouvre.
@@ -36,6 +37,7 @@ export function PlayerActivityPanel({ raw, leaving }: { raw: string; leaving?: b
     : view.kind === "news" ? t("news.title")
     : view.kind === "downloads" ? t("activity.downloads.title")
     : view.kind === "shares" ? t("activity.shares.title")
+    : view.kind === "readings" ? t("activity.readings.title")
     : t("activity.title");
   return (
     <PlayerPanelFrame contentWidth="80rem" title={title} back leaving={leaving} scrollKey={`activite:${raw}`}>
@@ -49,6 +51,7 @@ export function PlayerActivityPanel({ raw, leaving }: { raw: string; leaving?: b
         {view.kind === "news" && <ActivityNews />}
         {view.kind === "downloads" && <ActivityDownloads />}
         {view.kind === "shares" && <ActivityShares />}
+        {view.kind === "readings" && <ActivityReadings />}
       </div>
     </PlayerPanelFrame>
   );

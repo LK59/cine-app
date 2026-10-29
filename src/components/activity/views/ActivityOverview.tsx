@@ -6,6 +6,7 @@ import {
   Activity,
   AlertTriangle,
   Bell,
+  BookOpen,
   CalendarClock,
   Clapperboard,
   Clock,
@@ -48,6 +49,8 @@ import type { DownloadsOverview } from "@/lib/activity/offlineDownloads";
 import { SharesTiles, type SharesOverview } from "@/components/activity/views/ActivityShares";
 import { SHARE_ADMIN_KEY } from "@/components/share/shareClient";
 import { AddressChangePanel } from "@/components/activity/AddressChange";
+import { READINGS_ADMIN_KEY, ReadingsTiles, useBooksAvailable } from "@/components/activity/views/ActivityReadings";
+import type { ReadingsOverview } from "@/lib/activity/readings";
 
 interface Overview {
   now: number;
@@ -373,6 +376,32 @@ function SharesPanel() {
   );
 }
 
+/**
+ * Les lectures de livres en quatre chiffres (DECISIONS.md §129) ; chaque compte, ses livres et le fil dans
+ * leur vue. Rien — ni requête — les livres éteints sur l'installation, ni tant que personne n'a rien lu.
+ */
+function ReadingsPanel() {
+  const t = useT();
+  const available = useBooksAvailable();
+  const { data } = useSWR<ReadingsOverview>(available ? READINGS_ADMIN_KEY : null, fetcher, { refreshInterval: 60_000 });
+  if (!data?.accounts?.length) return null;
+  return (
+    <Panel
+      title={t("activity.readings.title")}
+      icon={BookOpen}
+      action={
+        <ActivityLink to={{ kind: "readings" }} className="text-xs text-accent-400 hover:underline">
+          {t("activity.readings.open")}
+        </ActivityLink>
+      }
+    >
+      <div className="p-3">
+        <ReadingsTiles data={data} />
+      </div>
+    </Panel>
+  );
+}
+
 const PERIODS = [7, 30, "all"] as const;
 type Period = (typeof PERIODS)[number];
 
@@ -604,6 +633,9 @@ export function ActivityOverview() {
 
       {/* Les liens de partage : ceux qui vivent, et ce qui joue en ce moment (§112). */}
       <SharesPanel />
+
+      {/* Les lectures de livres : qui lit quoi, et combien de temps (§129) — l'option allumée seulement. */}
+      <ReadingsPanel />
 
       {/* Le changement d'adresse : qui est passé à la nouvelle, qui ouvre encore l'ancienne (§119). */}
       <AddressChangePanel />

@@ -572,7 +572,8 @@
         "auth": "Connexions",
         "notifications": "Notifications",
         "subtitleGen": "Sous-titres générés",
-        "startup": "Ouvertures"
+        "startup": "Ouvertures",
+        "readings": "Lectures"
       },
       "user": "Compte",
       "allUsers": "Tous les comptes",
@@ -915,6 +916,28 @@
       "delete": "Supprimer",
       "deleteConfirm": "Supprimer définitivement",
       "deleted": "Lien supprimé"
+    },
+    "readings": {
+      "title": "Lectures",
+      "open": "Ouvrir",
+      "intro": "Ce que chaque compte lit : les livres en cours et terminés, le temps de lecture page visible et les séances, sur sept et trente jours.",
+      "readers": "Lecteurs (7 j)",
+      "time7": "Temps de lecture (7 j)",
+      "sessions7": "Séances (7 j)",
+      "inProgress": "En cours",
+      "finished": "Terminés",
+      "week": "7 j : {time}, {n} séances",
+      "month": "30 j : {time}, {n} séances",
+      "lastRead": "lu {when}",
+      "unknownBook": "Livre inconnu",
+      "accounts": "Comptes ({n})",
+      "none": "Personne n'a encore rien lu.",
+      "recent": "Dernières lectures",
+      "noRecent": "Aucune lecture ces trente derniers jours.",
+      "eventSession": "{title} — {time} de lecture",
+      "eventFinished": "{title} — terminé",
+      "eventRemoved": "{title} — retiré de « Continuer la lecture »",
+      "offline": "hors ligne"
     }
   },
   "radarr": {
@@ -2102,7 +2125,8 @@
       "addNothing": "Rien trouvé.",
       "addToWatch": "Ajouter à « À voir »",
       "alreadyInList": "Déjà dans la liste",
-      "failed": "Impossible de charger votre liste pour le moment."
+      "failed": "Impossible de charger votre liste pour le moment.",
+      "toRead": "À lire"
     },
     "requests": {
       "state": {
@@ -3918,6 +3942,13 @@
     "offlineUnavailable": "Cet appareil ne peut pas garder de livres.",
     "offlineBack": "Téléchargements",
     "filterAuthor": "Auteur",
-    "filterGenre": "Genre"
+    "filterGenre": "Genre",
+    "list": {
+      "add": "Ajouter à ma liste de lecture",
+      "remove": "Retirer de ma liste de lecture",
+      "row": "Ma liste de lecture",
+      "empty": "Rien à lire pour l'instant. Ajoutez un livre depuis sa fiche.",
+      "browse": "Parcourir les livres"
+    }
   }
 }

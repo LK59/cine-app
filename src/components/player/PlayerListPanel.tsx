@@ -19,8 +19,10 @@ import { useFlipGrid } from "@/lib/useFlipGrid";
 import type { PlayerListsPayload, PlayerListItem } from "@/app/api/player/lists/route";
 import { AnimatedNumber } from "@/lib/useTweenedNumber";
 import { escapeClears } from "@/lib/escapeClears";
+import { ReadingListEntry, useReadingListEntry } from "@/components/books/BooksMode";
 
-type Segment = "toWatch" | "requests" | "watched";
+type Segment = "toWatch" | "requests" | "watched" | "toRead";
+type FilmSegment = Exclude<Segment, "toRead">;
 
 /**
  * Trois onglets, et c'est un choix de fond.
@@ -29,10 +31,18 @@ type Segment = "toWatch" | "requests" | "watched";
  * voir » avec un autre mot. Ce qui reste répond aux trois seules questions qu'on se pose ici :
  * qu'est-ce que je veux voir, qu'est-ce que j'ai vu, où en sont mes demandes.
  */
-const SEGMENTS: Segment[] = ["toWatch", "requests", "watched"];
+const SEGMENTS: FilmSegment[] = ["toWatch", "requests", "watched"];
+
+/**
+ * « À lire » (DECISIONS.md §129) : les livres de la liste de lecture, juste après « À voir », seulement
+ * quand les livres sont affichés pour ce compte (`useReadingListEntry`). Il n'est jamais l'onglet choisi
+ * d'office : son compte arrive après celui des films, et l'écran sauterait d'un onglet à l'autre sous
+ * les yeux — Ma liste s'ouvre comme avant les livres.
+ */
+const WITH_BOOKS: Segment[] = ["toWatch", "toRead", "requests", "watched"];
 
 /** Une image par vide : un écran qui ne porte qu'une phrase grise ressemble à un chargement raté. */
-const EMPTY_ICON: Record<Segment, React.ElementType> = {
+const EMPTY_ICON: Record<FilmSegment, React.ElementType> = {
   toWatch: Bookmark,
   requests: Inbox,
   watched: Eye,
@@ -109,7 +119,10 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
     }),
     [data, query]
   );
-  const counts = { requests: filtered.requests.length, toWatch: filtered.toWatch.length, watched: filtered.watched.length };
+  const books = useReadingListEntry();
+  const toRead = useMemo(() => filterByTitle((books.titles ?? []).map((title) => ({ title })), query).length, [books.titles, query]);
+  const counts = { requests: filtered.requests.length, toWatch: filtered.toWatch.length, watched: filtered.watched.length, toRead };
+  const segments = books.shown ? WITH_BOOKS : SEGMENTS;
 
   // Ce qui vient d'arriver, et rien d'autre.
   //
@@ -122,7 +135,8 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
   // provoquer de rendu en cascade, et un choix explicite l'emporte pour toujours.
   // Le repli est le premier onglet et non un nom écrit en dur : tout vide, on ouvre sur « À
   // voir », qui est aussi celui qu'on trouve en premier quand il y a quelque chose.
-  const segment: Segment = chosen ?? SEGMENTS.find((key) => counts[key] > 0) ?? SEGMENTS[0];
+  // « À lire » choisi puis les livres masqués (Compte → Interface) : retour à la règle d'avant.
+  const segment: Segment = (chosen !== "toRead" || books.shown ? chosen : null) ?? SEGMENTS.find((key) => counts[key] > 0) ?? SEGMENTS[0];
 
   // Une fiche s'ouvre *par-dessus* Ma liste, sans la refermer : le retour du navigateur ramène
   // alors sur la liste, à son onglet, au lieu de sauter à l'accueil.
@@ -140,7 +154,7 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
   }
 
   const items: PlayerListItem[] = useMemo(() => {
-    return segment === "requests" ? [] : sortList(filtered[segment], sort);
+    return segment === "requests" || segment === "toRead" ? [] : sortList(filtered[segment], sort);
   }, [filtered, segment, sort]);
 
   /**
@@ -251,7 +265,7 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
             d'affichage et non comme une invitation à faire glisser. */}
         <div className="relative -mx-1">
           <div className="scrollbar-none flex gap-2 overflow-x-auto px-1 pb-1">
-            {SEGMENTS.map((key) => (
+            {segments.map((key) => (
               <button
                 key={key}
                 type="button"
@@ -291,13 +305,13 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
           <p className="mt-5 text-sm text-muted">{t("player.lists.watchedHint")}</p>
         )}
 
-        {nothingToShowYet(isLoading, data) && (
+        {segment !== "toRead" && nothingToShowYet(isLoading, data) && (
           <div className="mt-12 flex justify-center">
             <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-white" />
           </div>
         )}
 
-        {unreadable && !nothingToShowYet(isLoading, data) && (
+        {segment !== "toRead" && unreadable && !nothingToShowYet(isLoading, data) && (
           <PlayerEmptyState
             icon={CloudOff}
             message={t("player.lists.failed")}
@@ -305,7 +319,7 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
           />
         )}
 
-        {!nothingToShowYet(isLoading, data) && !unreadable && counts[segment] === 0 && (
+        {segment !== "toRead" && !nothingToShowYet(isLoading, data) && !unreadable && counts[segment] === 0 && (
           <PlayerEmptyState
             icon={EMPTY_ICON[segment]}
             message={t(`player.lists.empty.${segment}`)}
@@ -356,6 +370,9 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
             ))}
           </div>
         )}
+
+        {/* « À lire » : son chargement, son vide et ses cartes sont les siens (`ReadingListSegment`). */}
+        {segment === "toRead" && <ReadingListEntry query={query} sort={sort} />}
           </>
         )}
       </div>

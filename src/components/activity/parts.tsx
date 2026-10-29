@@ -763,6 +763,16 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
         numOf(line.shownMs) != null && t("activity.line.newsShown", { s: secs(numOf(line.shownMs)) }),
         strOf(line.closedBy) && t("activity.line.newsClosed", { by: strOf(line.closedBy) ?? "" })
       );
+    // Les lectures de livres (§129, `lectures.log`) : la même phrase que la vue « Lectures ».
+    case "séance":
+      return join(
+        t("activity.readings.eventSession", { title: strOf(line.title) ?? t("activity.readings.unknownBook"), time: hours((numOf(line.durationMs) ?? 0) / 1000) }),
+        line.offline === true && t("activity.readings.offline")
+      );
+    case "terminé":
+      return t("activity.readings.eventFinished", { title: strOf(line.title) ?? t("activity.readings.unknownBook") });
+    case "retiré":
+      return t("activity.readings.eventRemoved", { title: strOf(line.title) ?? t("activity.readings.unknownBook") });
     default:
       return strOf(line.message) ?? strOf(line.reason) ?? "";
   }

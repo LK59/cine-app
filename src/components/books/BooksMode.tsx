@@ -158,6 +158,26 @@ export function BooksDownloadsEntry({ present }: { present: boolean }) {
   return present ? <BooksDownloadsLazy /> : null;
 }
 
+const ReadingListSegmentLazy = lazyNow(() => import("./ReadingList").then((m) => m.ReadingListSegment));
+
+/**
+ * « À lire » dans Ma liste (DECISIONS.md §129) : seulement quand les livres sont affichés pour ce compte
+ * (`booksEnabled` de la configuration publique, qui suit l'option et « Afficher les livres »). Sinon ni
+ * segment, ni requête, ni code des livres. Les titres de la liste, sans rien d'autre, pour le compteur du
+ * segment — la même réponse que le segment lui-même lira (`/api/books/list`).
+ */
+export function useReadingListEntry(): { shown: boolean; titles: string[] | undefined } {
+  const { data: pub } = useSWR<{ booksEnabled?: boolean }>("/api/config/public", fetcher, playerBootstrapOptions);
+  const shown = pub?.booksEnabled === true;
+  const { data } = useSWR<{ books: { name: string }[] }>(shown ? "/api/books/list" : null, fetcher, { revalidateOnFocus: false });
+  return { shown, titles: data?.books?.map((b) => b.name) };
+}
+
+/** Le segment « À lire », chargé à son ouverture seulement. `sort` : celui de Ma liste (`ListSort`). */
+export function ReadingListEntry({ query, sort }: { query: string; sort: "added" | "title" | "year" }) {
+  return <ReadingListSegmentLazy query={query} sort={sort} />;
+}
+
 /** L'accueil des livres, chargé seulement dans la catégorie Livres (ou à l'intention de l'ouvrir). */
 export const BooksHomeLazy = lazyNow(() => import("./BooksHome").then((m) => m.BooksHome));
 

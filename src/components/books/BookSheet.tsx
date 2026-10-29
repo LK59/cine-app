@@ -18,6 +18,7 @@ import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookDetail, BookSummary } from "@/lib/books/types";
 import { BookCover, coverUrl } from "./BookCover";
 import { BookDownloadButton } from "./BookDownload";
+import { ReadingListButton } from "./ReadingList";
 import { isInstalledApp } from "@/lib/iosInstall";
 import { useCoverWash } from "./coverWash";
 import { preloadBookFile, saveData } from "@/lib/books/readerPreload";
@@ -214,6 +215,8 @@ function BookSheet({
             <X size={15} aria-hidden /> {t("books.removeFromContinue")}
           </button>
         )}
+        {/* « Ma liste de lecture » (§129) : ajouté ou retiré aussitôt, rattrapé si le serveur refuse. */}
+        {book && <ReadingListButton book={book} finished={finished} />}
         {finished && (
           <p className="flex items-center gap-1.5 text-sm text-subtle">
             <Check size={15} aria-hidden /> {t("books.finished")}

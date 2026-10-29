@@ -58,6 +58,8 @@ export const BOOKS_HOME_KEY = "/api/books/home";
 export interface BooksHomePayload {
   total: number;
   resume: BookSummary[];
+  /** « Ma liste de lecture » (§129) ; absente d'une réponse d'avant. */
+  list?: BookSummary[];
   recent: BookSummary[];
   rows: HomeRow[];
   hidden: number;
@@ -86,11 +88,12 @@ export function BooksHome({ variant, hidden: paneHidden = false }: { variant: "d
     revalidateOnFocus: !paneHidden,
   });
   const resume = data?.resume ?? EMPTY;
+  const listed = data?.list ?? EMPTY;
   const recent = data?.recent ?? EMPTY;
   const rows = data?.rows ?? EMPTY_ROWS;
   const hidden = data?.hidden ?? 0;
   // Ce que la fiche peut montrer d'emblée, avant sa propre réponse : les livres déjà à l'écran.
-  const shown = useMemo(() => [...resume, ...recent, ...rows.flatMap((r) => r.books)], [resume, recent, rows]);
+  const shown = useMemo(() => [...resume, ...listed, ...recent, ...rows.flatMap((r) => r.books)], [resume, listed, recent, rows]);
   const desktop = variant === "desktop";
   const pad = desktop ? "px-8 lg:px-12" : "px-4";
   // L'accroche des rangées tient compte de la marge : sans elle, la première carte se collait au bord.
@@ -168,6 +171,10 @@ export function BooksHome({ variant, hidden: paneHidden = false }: { variant: "d
         </section>
       )}
 
+      {/* « Ma liste de lecture » (§129), juste après « Continuer la lecture », seulement quand elle a des livres.
+          Sans « Tout voir » : la liste entière est le segment « À lire » de Ma liste. */}
+      {listed.length > 0 && <Row title={t("books.list.row")} filter="" books={listed} pad={pad} snapPad={snapPad} card={card} desktop={desktop} />}
+
       {recent.length > 0 && <Row title={t("books.recent")} filter="tri=recent" books={recent} pad={pad} snapPad={snapPad} card={card} desktop={desktop} />}
 
       {rows.map((group) => (
@@ -234,7 +241,7 @@ const Row = memo(function Row({
   desktop: boolean;
 }) {
   // La rangée, pour la navigation au clavier (`useTvGridNav`) : son « Tout voir » la nomme d'une façon unique.
-  const rowKey = filter;
+  const rowKey = filter || "liste";
   const t = useT();
   return (
     // Mise en page sautée loin de l'écran (`content-visibility`, la règle des rangées de films) : à l'entrée
@@ -244,9 +251,11 @@ const Row = memo(function Row({
       <div className={`${pad} mb-3 flex items-baseline gap-3`}>
         <h2 className="truncate font-display text-lg font-semibold">{title}</h2>
         {count && <span className="shrink-0 text-sm text-subtle">{count}</span>}
-        <button type="button" onClick={() => openBooksBrowse(filter)} className="ml-auto shrink-0 text-sm text-subtle transition-colors hover:text-white">
-          {t("books.seeAll")}
-        </button>
+        {filter && (
+          <button type="button" onClick={() => openBooksBrowse(filter)} className="ml-auto shrink-0 text-sm text-subtle transition-colors hover:text-white">
+            {t("books.seeAll")}
+          </button>
+        )}
       </div>
       <div className={`${pad} ${snapPad} scrollbar-none flex snap-x overflow-x-auto pb-2 ${desktop ? "gap-4" : "gap-3"}`}>
         {books.map((book, i) => {

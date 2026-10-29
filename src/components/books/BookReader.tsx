@@ -43,6 +43,8 @@ import { reportClientError } from "@/lib/reportClientError";
 import { EpubProblemError, epubProblem, type EpubProblem } from "@/lib/books/epubCheck";
 import { insetVar } from "@/lib/books/readerFrame";
 import type { BookProgress } from "@/lib/books/types";
+import { useReaderPrefsSync } from "@/lib/books/readerPrefsSync";
+import { useReadingSession } from "@/lib/books/readingSessions";
 import { ReaderSearchPanel, ReaderSettingsPanel, ReaderTocPanel, type SearchGroup } from "./ReaderPanels";
 
 /**
@@ -193,7 +195,13 @@ export function BookReader({
   const t = useT();
   const systemDark = useSyncExternalStore(subscribeDark, darkSnapshot, () => true);
   const [prefs, setPrefs] = useState<ReaderPrefs>(() => loadReaderPrefs(prefersReducedMotion()));
+  // Ceux du compte pour ce type d'appareil (§129) : pris s'ils diffèrent et qu'on n'a rien touché depuis
+  // l'ouverture ; chaque changement leur est renvoyé. La copie de l'appareil ouvre le livre sans attendre.
+  useReaderPrefsSync(prefs, setPrefs, offline);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  // La séance de lecture (§129) : le temps page visible, l'avancement et les pages tournées, pour le
+  // journal des lectures — envoyée à la fermeture et au passage en arrière-plan.
+  const notePage = useReadingSession(id, status === "ready", offline);
   // Pourquoi il ne s'ouvre pas, quand on le sait : un livre protégé, un fichier qui n'est pas un EPUB.
   const [problem, setProblem] = useState<EpubProblem | null>(null);
   const [chrome, setChrome] = useState(true);
@@ -339,6 +347,7 @@ export function BookReader({
       const fraction = typeof d.fraction === "number" ? Math.min(1, Math.max(0, d.fraction)) : 0;
       const section = d.section?.current ?? -1;
       sectionRef.current = section;
+      notePage(fraction);
       setPlace({
         fraction,
         chapter: d.tocItem?.label?.trim() ?? "",
@@ -527,7 +536,7 @@ export function BookReader({
         /* rien à libérer */
       }
     };
-  }, [id, flush, showChrome, offline, loadBookmarks]);
+  }, [id, flush, showChrome, offline, loadBookmarks, notePage]);
 
   // ── La recherche dans le livre ─────────────────────────────────────────────────────────────
   // foliate-js parcourt les chapitres un à un (un `await` entre deux : la page reste vive) ; chaque

@@ -572,7 +572,8 @@
         "auth": "Sign-ins",
         "notifications": "Notifications",
         "subtitleGen": "Generated subtitles",
-        "startup": "Launches"
+        "startup": "Launches",
+        "readings": "Reading"
       },
       "user": "Account",
       "allUsers": "All accounts",
@@ -915,6 +916,28 @@
       "delete": "Delete",
       "deleteConfirm": "Delete permanently",
       "deleted": "Link deleted"
+    },
+    "readings": {
+      "title": "Reading",
+      "open": "Open",
+      "intro": "What each account reads: books in progress and finished, reading time with the page visible, and sessions over seven and thirty days.",
+      "readers": "Readers (7 d)",
+      "time7": "Reading time (7 d)",
+      "sessions7": "Sessions (7 d)",
+      "inProgress": "In progress",
+      "finished": "Finished",
+      "week": "7 d: {time}, {n} sessions",
+      "month": "30 d: {time}, {n} sessions",
+      "lastRead": "read {when}",
+      "unknownBook": "Unknown book",
+      "accounts": "Accounts ({n})",
+      "none": "Nobody has read anything yet.",
+      "recent": "Latest reading",
+      "noRecent": "No reading in the last thirty days.",
+      "eventSession": "{title} — {time} of reading",
+      "eventFinished": "{title} — finished",
+      "eventRemoved": "{title} — removed from “Continue reading”",
+      "offline": "offline"
     }
   },
   "radarr": {
@@ -2102,7 +2125,8 @@
       "addNothing": "Nothing found.",
       "addToWatch": "Add to “To watch”",
       "alreadyInList": "Already in the list",
-      "failed": "Your list can’t be loaded right now."
+      "failed": "Your list can’t be loaded right now.",
+      "toRead": "To read"
     },
     "requests": {
       "state": {
@@ -3918,6 +3942,13 @@
     "offlineUnavailable": "This device cannot keep books.",
     "offlineBack": "Downloads",
     "filterAuthor": "Author",
-    "filterGenre": "Genre"
+    "filterGenre": "Genre",
+    "list": {
+      "add": "Add to my reading list",
+      "remove": "Remove from my reading list",
+      "row": "My reading list",
+      "empty": "Nothing to read yet. Add a book from its page.",
+      "browse": "Browse books"
+    }
   }
 }

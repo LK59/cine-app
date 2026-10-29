@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
 import { ChevronDown, ChevronRight, Clapperboard, RefreshCw, Search } from "lucide-react";
-import { fetcher } from "@/lib/swr";
+import { fetcher, playerBootstrapOptions } from "@/lib/swr";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
 import { JsonBlock, Steps, TimelineTable, describeLine, fullDate, kindTone } from "@/components/activity/parts";
@@ -23,7 +23,7 @@ interface LogPage {
   facets?: { users: string[]; types: { name: string; count: number }[]; recentLines: number; partial?: boolean };
 }
 
-const SOURCES = ["player", "server", "auth", "notifications", "startup", "bench", "benchPlayer", "subtitleGen"] as const;
+const SOURCES = ["player", "server", "auth", "notifications", "startup", "bench", "benchPlayer", "subtitleGen", "readings"] as const;
 const PERIODS = [1, 7, 30, 0] as const;
 /** Le rafraîchissement automatique : assez vif pour suivre une séance en cours, sans tenir le serveur. */
 const LIVE_REFRESH_MS = 20_000;
@@ -175,6 +175,10 @@ function LogLine({ item, source }: { item: LogItem; source: string }) {
  */
 export function ActivityLogs({ preset }: { preset: LogsPreset }) {
   const t = useT();
+  // Les lectures de livres (§129) ne sont proposées que les livres allumés sur l'installation : la même
+  // clé que le réglage « Afficher les livres » du Compte, sans rien charger des livres.
+  const { data: pub } = useSWR<{ booksAvailable?: boolean }>("/api/config/public", fetcher, playerBootstrapOptions);
+  const sources = SOURCES.filter((key) => key !== "readings" || pub?.booksAvailable === true);
   const [source, setSource] = useState((SOURCES as readonly string[]).includes(preset.source ?? "") ? preset.source! : "player");
   const [user, setUser] = useState(preset.user ?? "");
   const [type, setType] = useState(preset.type ?? "");
@@ -224,7 +228,7 @@ export function ActivityLogs({ preset }: { preset: LogsPreset }) {
 
       <div className="card space-y-3 p-3">
         <div className="flex flex-wrap gap-1">
-          {SOURCES.map((key) => (
+          {sources.map((key) => (
             <button
               key={key}
               type="button"

@@ -572,7 +572,8 @@
         "auth": "Anmeldungen",
         "notifications": "Benachrichtigungen",
         "subtitleGen": "Generierte Untertitel",
-        "startup": "Starts"
+        "startup": "Starts",
+        "readings": "Lesen"
       },
       "user": "Konto",
       "allUsers": "Alle Konten",
@@ -915,6 +916,28 @@
       "delete": "Löschen",
       "deleteConfirm": "Endgültig löschen",
       "deleted": "Link gelöscht"
+    },
+    "readings": {
+      "title": "Lesen",
+      "open": "Öffnen",
+      "intro": "Was jedes Konto liest: laufende und beendete Bücher, Lesezeit bei sichtbarer Seite und Sitzungen über sieben und dreißig Tage.",
+      "readers": "Lesende (7 T.)",
+      "time7": "Lesezeit (7 T.)",
+      "sessions7": "Sitzungen (7 T.)",
+      "inProgress": "Begonnen",
+      "finished": "Beendet",
+      "week": "7 T.: {time}, {n} Sitzungen",
+      "month": "30 T.: {time}, {n} Sitzungen",
+      "lastRead": "gelesen {when}",
+      "unknownBook": "Unbekanntes Buch",
+      "accounts": "Konten ({n})",
+      "none": "Bisher hat niemand etwas gelesen.",
+      "recent": "Zuletzt gelesen",
+      "noRecent": "Keine Lektüre in den letzten dreißig Tagen.",
+      "eventSession": "{title} — {time} gelesen",
+      "eventFinished": "{title} — beendet",
+      "eventRemoved": "{title} — aus „Weiterlesen“ entfernt",
+      "offline": "offline"
     }
   },
   "radarr": {
@@ -2102,7 +2125,8 @@
       "addNothing": "Nichts gefunden.",
       "addToWatch": "Zu „Anzusehen“ hinzufügen",
       "alreadyInList": "Schon in der Liste",
-      "failed": "Ihre Liste kann gerade nicht geladen werden."
+      "failed": "Ihre Liste kann gerade nicht geladen werden.",
+      "toRead": "Zu lesen"
     },
     "requests": {
       "state": {
@@ -3918,6 +3942,13 @@
     "offlineUnavailable": "Dieses Gerät kann keine Bücher speichern.",
     "offlineBack": "Downloads",
     "filterAuthor": "Autor",
-    "filterGenre": "Genre"
+    "filterGenre": "Genre",
+    "list": {
+      "add": "Zu meiner Leseliste hinzufügen",
+      "remove": "Aus meiner Leseliste entfernen",
+      "row": "Meine Leseliste",
+      "empty": "Noch nichts zu lesen. Fügen Sie ein Buch über seine Seite hinzu.",
+      "browse": "Bücher durchsuchen"
+    }
   }
 }
