@@ -448,7 +448,12 @@ widening `"movies" | "series"` would ripple through twenty places. Turned off, e
   language. Rules carry a version (`RULES_VERSION`): bumping it re-evaluates what an older rule filled.
 - **Logs**: `docker logs` carries `[livres]` lines (index prepared, Google Books passes); `server.log`
   carries `books/meta` (unreadable EPUBs), `books/file` (Jellyfin refusing a download) and
-  `component:BookReader` (why a book did not open).
+  `component:BookReader` (why a book did not open). `data/logs/lectures.log` (`eventLogs.ts`, since
+  29/10/2026, §129) has one `séance` line per reading session (visible time, progress, pages, device,
+  `offline`/`lateByMs`) plus `terminé` / `retiré`; Activity → « Lectures » reads it with `book_progress`.
+- **Per account** (§129): reader settings per account × device type (`book_reader_prefs`,
+  `readerPrefsStore.ts` — a type with none takes the account's latest; the device keeps a local copy);
+  the reading list `book_list` (`readingList.ts`, « À lire » in Ma liste through `BooksMode`, left on finish).
 
 **The player** has its own reference: read `DOC-TECH.md` before touching `src/lib/webcodecs/`,
 and `docs/cycle-de-vie-lecteur.md` before touching `ExperimentalPlayerHost`, `PlayerHost` or the

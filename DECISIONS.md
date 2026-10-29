@@ -7779,7 +7779,8 @@ EPUB lisible ».
 `UPSTREAM`) : pas de paquet npm, et seuls les fichiers de l'EPUB. Pages en colonnes (deux côte à côte
 sur un écran large et couché, si l'on veut) ou défilement continu ; toucher à gauche ou à droite,
 glisser, molette, flèches ; Échap ou Retour referment (`&lire=1` dans l'adresse du cinéma). Réglages
-gardés par appareil (`localStorage`, chaque accès gardé) : changement de page (glisser, fondu, page
+gardés par appareil (`localStorage`, chaque accès gardé ; par compte et par type d'appareil depuis le
+29/10/2026, la copie de l'appareil restant, §129) : changement de page (glisser, fondu, page
 3D, aucun, défilement — fondu par défaut si le système demande moins de mouvement), taille, police
 (celle du livre, Literata, Georgia, Outfit, système ; Literata et Outfit servies depuis
 `public/books/fonts`), interligne, marges, justification, thème (auto, clair, sépia, sombre, noir),
@@ -7974,3 +7975,113 @@ Laissé en l'état, exprès : au défilement continu sur WebKit, un toucher ne r
 un vrai iPhone ; Retour pendant les 200–600 ms d'ouverture du lecteur referme aussi la fiche ; l'option
 coupée n'est vue par un cinéma déjà ouvert qu'au rechargement ; la liste des demandes de l'administrateur
 cherche chaque demande (limite de 120 recherches par minute).
+
+## 129. Les livres par compte : réglages par type d'appareil, journal des lectures, liste de lecture
+
+Trois ajouts à l'option des livres (§127), voulus ensemble le 29/10/2026. Coupée, rien de tout cela
+n'existe : les routes répondent 404 (`booksCaller`, et la route de l'activité vérifie l'option elle-même),
+Ma liste n'a pas d'onglet de plus, l'activité ni carte ni vue, et aucun code des livres n'est chargé
+(`books-isolation.test.ts`).
+
+### Les réglages du lecteur, par compte et par type d'appareil
+
+**Règle.** Les réglages du lecteur (page qui tourne, police, taille, interligne, marges, justification,
+thème, lumière, chaleur, disposition, bords) sont gardés **par compte et par type d'appareil** — `telephone`,
+`tablette`, `ordinateur` — dans `book_reader_prefs` (une ligne par compte et par type, l'objet entier en
+JSON). Un type qui n'a encore rien prend **les derniers réglages écrits par le compte, quel que soit leur
+type** : la première fois qu'on règle le lecteur, le réglage vaut partout. Dès qu'on en change un sur un
+autre type d'appareil, ce type a les siens et les garde. Deux appareils du même type partagent la même
+ligne. Ils étaient gardés par appareil seulement (`localStorage`, §127) : un nouveau téléphone, une
+navigation privée, un navigateur effacé repartaient des réglages par défaut.
+
+**Le type d'un appareil** (`deviceType.ts`, `deviceTypeOf` / `currentReaderDeviceType`) : tactile
+(`hover: none` et `pointer: coarse`) et petit côté de **l'écran** sous 600 points → téléphone, au-dessus →
+tablette ; tout le reste, une Fire TV comprise, → ordinateur. L'écran et non la fenêtre, exprès : `useIsMobile`
+et `useIsTablet` suivent la fenêtre, pour la mise en page — une fenêtre d'ordinateur réduite y devient un
+téléphone, un téléphone couché change de côté. Un profil qui sauterait quand on tourne l'écran
+repaginerait le livre sous les yeux.
+
+**Fonctions.** `readerPrefsFor` / `saveReaderPrefs` (`readerPrefsStore.ts`, la règle du repli, et un
+changement renvoyé tard qui n'écrase pas un plus récent du même type), `strictReaderPrefs`
+(`readerPrefs.ts` : tous les champs, aucun autre, chaque choix dans sa liste, chaque nombre dans ses
+bornes — plus strict que `normalizeReaderPrefs`, qui rattrape un ancien stockage de l'appareil),
+`GET/PUT /api/books/reader-prefs` (corps de 2 000 octets au plus ; `PUT` dans la liste blanche du proxy).
+Côté lecteur, `useReaderPrefsSync` (`readerPrefsSync.ts`) : le livre s'ouvre **aussitôt** sur la copie de
+l'appareil (`laterna:books:reader`, gardée à la déconnexion comme avant) ; la réponse du serveur n'est prise
+que si elle diffère et qu'aucun réglage n'a été touché depuis l'ouverture ; un changement part une seconde
+après le dernier (un curseur en produit des dizaines), tout de suite si le lecteur se referme. Un envoi
+qui échoue (hors ligne, panne, session expirée) laisse une marque (`laterna:books:reader-pending`, avec
+l'heure) : à la prochaine ouverture en ligne, la copie de l'appareil part d'abord au lieu d'être remplacée.
+Même chemin dans le cadre posé sur le cinéma, sur `/livres` seule et sur `/livres/hors-ligne` (l'appareil
+seul, la marque pour plus tard).
+
+**Voulu.** Pas de reprise des réglages d'avant le 29/10/2026 : un appareil qui avait les siens les garde
+tant que le compte n'a rien écrit ; dès qu'un appareil en écrit, ceux des types sans réglages suivent. Pas
+de profil par appareil nommé : trois types, rien à gérer.
+
+### Le journal des lectures, et « Lectures » dans l'activité
+
+**Règle.** `data/logs/lectures.log` (`READINGS_LOG`, `logReadingEvent`, `eventLogs.ts` : une ligne JSON,
+cinq mégaoctets, vingt archives, `logGenerations`), trois sortes de lignes :
+- `séance` — une par séance de lecture, envoyée par le lecteur (`useReadingSession`, `readingSessions.ts`)
+  à sa fermeture et au passage de la page en arrière-plan, par `sendBeacon` : temps **page visible**
+  (`durationMs` ; le temps caché n'y est jamais, et un retour au premier plan ouvre une nouvelle séance),
+  avancement au début et à la fin, pages tournées (une repagination ne compte pas), type d'appareil,
+  `offline`, `build`/`version`. Sans réseau, la séance attend dans `laterna:books:sessions` (cinquante au
+  plus) et repart à l'ouverture suivante ou au retour du réseau, avec son âge : le serveur la place à
+  l'heure où elle a eu lieu (`startedAt`/`endedAt` dans son horloge, `resent` et `lateByMs` au-delà d'une
+  minute). Le compte vient de la session ; le titre et le premier auteur, de l'index du serveur (`bookFields`)
+  — rien du corps ne nomme le livre, et un livre hors de la vue du compte est refusé (404). Sous dix
+  secondes sans page tournée, rien n'est écrit ; soixante séances par heure et par compte au plus
+  (`readingSession`, `writeLimits.ts`) ; une séance renvoyée deux fois (même `id`) n'est écrite qu'une fois.
+- `terminé` — le livre fini la première fois (`firstFinish` de la route de la position) ;
+- `retiré` — « Retirer de Continuer la lecture ».
+`book_progress.last_device` garde l'appareil (`requestDeviceLabel`) de la dernière page enregistrée.
+
+**L'activité.** « Lectures » (`#activite=lectures`, `ActivityReadings`, carte dans la vue d'ensemble
+seulement les livres allumés et quand quelqu'un a lu) : par compte, les livres en cours (titre, auteur,
+pourcentage, date, appareil), les terminés et leur date, le temps de lecture et les séances sur sept et
+trente jours, puis le fil des dernières lectures. `readingsOverview` (`src/lib/activity/readings.ts`) réunit
+`book_progress` (`allProgress`) et le journal (`readRecords("readings")`) ; les titres viennent de l'index
+commun vu avec tous les droits, sinon de la dernière ligne du journal qui nomme le livre. Route
+`/api/admin/activity/books` : `adminOnly`, au proxy dans `ADMIN_ONLY_READS`, 404 l'option coupée. Le journal
+est aussi une source des Journaux de l'activité (`readings`, proposée seulement les livres allumés).
+
+### « Ma liste de lecture »
+
+**Règle.** Table `book_list` (compte, livre, date d'ajout), à part de la liste des films et séries
+(`watchlist`, qui ne connaît qu'eux). `GET /api/books/list` (la liste vue à travers la vue du compte :
+un livre retiré ou caché depuis par un tag bloqué n'y paraît pas, sa ligne reste), `POST { id }` (ajouter :
+seulement un livre que `bookFor` rend pour ce compte, sinon 404 ; deux mille au plus), `DELETE ?id=`
+(retirer). Un livre terminé en sort de lui-même, côté serveur, à la première fin (`removeFromReadingList`
+dans la route de la position) : la liste dit ce qui reste à lire.
+
+**Où elle se voit.** Sur la fiche d'un livre, « Ajouter à ma liste de lecture » / « Retirer de ma liste
+de lecture », du style des autres gestes secondaires, appliqué avant la réponse et rattrapé si le serveur
+refuse (`setListed`, `ReadingList.tsx`) — pas proposé pour un livre terminé qui n'y est pas. Sur l'accueil
+des livres, une rangée « Ma liste de lecture » juste après « Continuer la lecture », quand elle a des
+livres (`list` de `/api/books/home`, vingt au plus, sans « Tout voir »). Dans Ma liste, un onglet « À
+lire » juste après « À voir », seulement quand les livres sont affichés pour ce compte
+(`useReadingListEntry` de `BooksMode`, la clé `booksEnabled` de la configuration publique) : sa recherche et
+son tri sont ceux de Ma liste, un livre touché ouvre sa fiche dans la catégorie Livres par-dessus Ma liste
+(`{ books: true, book }`, comme depuis la recherche). Le segment est chargé à part (`ReadingListEntry`,
+`lazyNow`) : `PlayerListPanel` n'importe des livres que `BooksMode`.
+
+**Voulu, différent exprès.** « À lire » n'est jamais l'onglet choisi d'office à l'ouverture de Ma liste : son
+compte arrive après celui des films, et l'écran sauterait d'un onglet à l'autre ; Ma liste s'ouvre comme
+avant les livres. Le compteur et le filtre de l'onglet lisent le nom entier du livre (pas le titre
+raccourci de `displayTitle`) : les deux disent le même nombre.
+
+**Tests.** `books-lectures.test.ts` (type d'appareil ; réglages refusés champ par champ, repli sur les
+derniers du compte puis les siens, ordre des écritures tardives, isolement entre comptes, option coupée et
+lien de partage ; séance validée et bornée, compte et titre du serveur, appareil, séance courte ignorée,
+renvoi tardif et doublon, livre hors des droits ; lignes `terminé`/`retiré` et `last_device` ; « Lectures »
+à l'administrateur seul, absente option coupée, chiffres par compte ; liste : ajout, retrait, isolement,
+droits, tag bloqué après coup, sortie à la fin, rangée de l'accueil, option coupée),
+`books-lectures-ui.test.tsx` (onglet « À lire » absent sans les livres, jamais choisi d'office, ouverture de
+la fiche ; vue « Lectures » ; réglages : copie de l'appareil puis ceux du compte sans renvoi, geste avant la
+réponse qui l'emporte et part une seconde après, hors ligne puis envoi à l'ouverture suivante),
+`books-isolation.test.ts` (proxy : écritures permises à un compte et refusées à un lien de partage,
+« Lectures » à l'administrateur seul).
+
+**Décidé le 29/10/2026.**

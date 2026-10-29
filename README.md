@@ -297,8 +297,10 @@ Off by default. With `BOOKS_ENABLED` turned on (Configuration → Playback, or `
 screen's Movies / Series switch gains a third category, « Books »: the EPUB files of Jellyfin's book
 libraries, grouped by series in volume order, with a « Continue reading » row, a full grid
 (`/livres`), a sheet per book and an in-app reader — pages or continuous scroll, a choice of page-turn animation, text size, font,
-line spacing, margins, justification, light / sepia / dark / black themes and dimming, all kept per
-device. Each account sees the books its Jellyfin account may see, minus its blocked tags; reading
+line spacing, margins, justification, light / sepia / dark / black themes and dimming, kept per
+account and per kind of device (phone, tablet, computer): the first settings an account chooses apply
+everywhere, and a kind of device keeps its own once they are changed on it; the device keeps a copy to
+open at once and offline. Each account sees the books its Jellyfin account may see, minus its blocked tags; reading
 positions are kept by Laterna, and a finished book is marked played in Jellyfin. Share links never
 reach books. Book content is untrusted: it is sanitized, shown in frames that cannot run scripts, and
 under a page-specific Content Security Policy — see DECISIONS.md §127 and `tools/livres-securite/`.
@@ -324,6 +326,14 @@ or below 1 %, stays unread and out of « Continue reading », which a book's she
 Layout: « One page » always shows one; « Auto » shows two once two comfortable columns fit side by side;
 « Two pages » shows two on any landscape screen; portrait always shows one. A device that keeps a
 downloaded book, even with no film, offers its downloads when it starts without a connection.
+
+Each account has a reading list, separate from its films and series: « Add to my reading list » on a
+book's sheet, a « My reading list » row on the books home, and a « To read » tab in My list (only where
+books are shown for that account); a finished book leaves it on its own. Reading sessions (time with
+the page visible, progress, pages turned, device, read offline or not) are written one per line to
+`data/logs/lectures.log`, with a line when a book is first finished or removed from « Continue
+reading »; the administrator reads them under Activity → Reading — per account, books in progress and
+finished, reading time and sessions over seven and thirty days (DECISIONS.md §129).
 
 ## Keyboard and remote
 
