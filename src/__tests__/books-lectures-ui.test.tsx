@@ -57,6 +57,8 @@ describe("les réglages du lecteur entre l'appareil et le serveur", () => {
   beforeEach(() => {
     calls = [];
     localStorage.clear();
+    // Un appareil qui a déjà parlé au serveur : la règle ordinaire (l'amorçage a son propre test).
+    localStorage.setItem("laterna:books:reader-synced", "1");
     answer = async () => new Response(JSON.stringify({ prefs: { ...defaultReaderPrefs(), theme: "sepia" }, own: false }), { status: 200, headers: { "content-type": "application/json" } });
     vi.stubGlobal(
       "fetch",
@@ -74,6 +76,27 @@ describe("les réglages du lecteur entre l'appareil et le serveur", () => {
     await waitFor(() => expect(screen.getByRole("button").textContent).toBe("sepia/100"));
     expect(calls.map((c) => c.method)).toEqual(["GET"]);
     expect(calls[0].url).toBe("/api/books/reader-prefs?device=ordinateur");
+  });
+
+  it("au premier échange, des réglages faits sur l'appareil avant (pas ceux d'origine) partent comme les siens au lieu d'être remplacés", async () => {
+    localStorage.removeItem("laterna:books:reader-synced");
+    render(<PrefsProbe />);
+    await waitFor(() => expect(calls.map((c) => c.method)).toEqual(["GET", "PUT"]));
+    expect(screen.getByRole("button").textContent).toBe("light/100");
+    expect(JSON.parse(calls[1].body)).toMatchObject({ device: "ordinateur", prefs: { theme: "light" } });
+    expect(localStorage.getItem("laterna:books:reader-synced")).toBe("1");
+  });
+
+  it("au premier échange, un appareil aux réglages d'origine prend ceux du compte", async () => {
+    localStorage.removeItem("laterna:books:reader-synced");
+    function Plain() {
+      const [prefs, setPrefs] = useState<ReaderPrefs>(() => defaultReaderPrefs());
+      useReaderPrefsSync(prefs, setPrefs, false);
+      return <span>{prefs.theme}</span>;
+    }
+    render(<Plain />);
+    await waitFor(() => expect(screen.getByText("sepia")).toBeTruthy());
+    expect(calls.map((c) => c.method)).toEqual(["GET"]);
   });
 
   it("un geste fait avant la réponse l'emporte, et part une seconde après", async () => {

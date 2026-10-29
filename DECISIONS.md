@@ -8015,9 +8015,15 @@ l'heure) : à la prochaine ouverture en ligne, la copie de l'appareil part d'abo
 Même chemin dans le cadre posé sur le cinéma, sur `/livres` seule et sur `/livres/hors-ligne` (l'appareil
 seul, la marque pour plus tard).
 
-**Voulu.** Pas de reprise des réglages d'avant le 29/10/2026 : un appareil qui avait les siens les garde
-tant que le compte n'a rien écrit ; dès qu'un appareil en écrit, ceux des types sans réglages suivent. Pas
-de profil par appareil nommé : trois types, rien à gérer.
+**Les réglages d'avant le 29/10/2026 sont repris** (`SYNCED_KEY`, `laterna:books:reader-synced`) : au
+premier échange réussi d'un appareil avec le serveur, si ses réglages ne sont pas ceux d'origine et que le
+serveur n'a rien de propre à son type, ils partent comme ceux de ce type au lieu d'être remplacés. Sans
+cette règle (la première version), le premier appareil à envoyer les siens les imposait à tous les autres,
+qui perdaient ce qu'on y avait réglé quand ils n'étaient gardés que sur l'appareil. Un appareil aux
+réglages d'origine prend ceux du compte. La marque est sous `laterna:books:` : après une déconnexion, le
+premier échange se refait pour le compte suivant.
+
+**Voulu.** Pas de profil nommé à choisir : trois types d'appareil, rien à gérer.
 
 ### Le journal des lectures, et « Lectures » dans l'activité
 

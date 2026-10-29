@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { normalizeReaderPrefs, type ReaderPrefs } from "@/lib/books/readerPrefs";
+import { defaultReaderPrefs, normalizeReaderPrefs, type ReaderPrefs } from "@/lib/books/readerPrefs";
 import { currentReaderDeviceType, isReaderDeviceType, type ReaderDeviceType } from "@/lib/books/deviceType";
 
 /**
@@ -24,6 +24,33 @@ import { currentReaderDeviceType, isReaderDeviceType, type ReaderDeviceType } fr
 
 const PREFS_URL = "/api/books/reader-prefs";
 const PENDING_KEY = "laterna:books:reader-pending";
+/**
+ * Posée au premier échange réussi avec le serveur. Avant elle, l'appareil a peut-être des réglages faits
+ * quand ils n'étaient gardés que sur lui (jusqu'au 29/10/2026) : s'ils ne sont pas ceux d'origine et que le
+ * serveur n'a rien de propre à ce type d'appareil, ils partent comme les siens au lieu d'être remplacés —
+ * sans quoi le premier appareil à envoyer les siens imposait ses réglages à tous les autres.
+ */
+const SYNCED_KEY = "laterna:books:reader-synced";
+
+function synced(): boolean {
+  try {
+    return localStorage.getItem(SYNCED_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+function markSynced(): void {
+  try {
+    localStorage.setItem(SYNCED_KEY, "1");
+  } catch {
+    /* sans mémoire : la règle ordinaire */
+  }
+}
+/** Réglés à la main : ni ceux d'origine, ni ceux d'origine avec « réduire les animations ». */
+function customised(prefs: ReaderPrefs): boolean {
+  const s = JSON.stringify(prefs);
+  return s !== JSON.stringify(defaultReaderPrefs(false)) && s !== JSON.stringify(defaultReaderPrefs(true));
+}
 export const PREFS_PUSH_DELAY_MS = 1000;
 
 interface Pending {
@@ -90,9 +117,17 @@ export function useReaderPrefsSync(prefs: ReaderPrefs, adopt: (prefs: ReaderPref
     }
     let alive = true;
     void fetch(`${PREFS_URL}?device=${device}`)
-      .then((r) => (r.ok ? (r.json() as Promise<{ prefs: unknown }>) : null))
+      .then((r) => (r.ok ? (r.json() as Promise<{ prefs: unknown; own?: boolean }>) : null))
       .then((data) => {
-        if (!alive || touched.current || !data?.prefs) return;
+        if (!alive || touched.current || !data) return;
+        // Le premier échange de cet appareil : ses réglages d'avant ne sont pas perdus (`SYNCED_KEY`).
+        const first = !synced();
+        markSynced();
+        if (first && data.own !== true && customised(latest.current)) {
+          void push(device, latest.current, Date.now());
+          return;
+        }
+        if (!data.prefs) return;
         const next = normalizeReaderPrefs(data.prefs);
         const signature = JSON.stringify(next);
         if (signature === JSON.stringify(latest.current)) return;
