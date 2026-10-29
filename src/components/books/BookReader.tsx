@@ -98,6 +98,9 @@ function bookmarkOn(page: Page | null, list: readonly StoredBookmark[], cfi: Cfi
 }
 
 const SAVE_DELAY_MS = 1500;
+/** Au bord d'un chapitre, ce qu'un glissement doit dépasser pour ouvrir le voisin ; et la molette, plus fine. */
+const FLOW_EDGE_PX = 70;
+const FLOW_EDGE_WHEEL_PX = 220;
 /** Un livre gardé sur l'appareil n'attend pas sa position du serveur plus longtemps. */
 const PROGRESS_WAIT_MS = 4000;
 const CHROME_AUTOHIDE_MS = 3200;
@@ -767,8 +770,41 @@ export function BookReader({
   // ── Les gestes, sur la couche posée sur le livre ───────────────────────────────────────────
   // La prise du pointeur passe par le crochet commun, qui la rend au démontage (règle 3 des fiches).
   const capture = usePointerCapture();
-  const gesture = useRef<{ x: number; y: number; t: number; id: number; dragging: boolean } | null>(null);
+  const gesture = useRef<{ x: number; y: number; t: number; id: number; dragging: boolean; lastY: number; lastT: number; v: number } | null>(null);
   const wheel = useRef({ acc: 0, at: 0 });
+
+  // ── Le défilement continu, mené par nos gestes (29/10/2026) ────────────────────────────────────
+  // La couche des gestes reste posée sur le livre dans ce mode aussi : sur WebKit, un chapitre (cadre sans
+  // scripts) ne transmet aucun toucher à la page — un toucher ne ramenait pas les barres —, et foliate-js ne
+  // passait jamais au chapitre suivant au doigt : une couverture qui tient dans l'écran ne se quittait pas.
+  // Un toucher montre ou cache les barres ; un glissement fait défiler, avec de l'élan ; arrivé au bord du
+  // chapitre, ce qui dépasse s'accumule, et au-delà de `FLOW_EDGE_PX` le chapitre voisin s'ouvre.
+  const flowEdge = useRef(0);
+  const inertia = useRef<number | null>(null);
+  const stopInertia = useCallback(() => {
+    if (inertia.current !== null) cancelAnimationFrame(inertia.current);
+    inertia.current = null;
+  }, []);
+  /** Fait défiler de `px` ; au bord du chapitre, l'excédent s'accumule. Rend `false` quand rien n'a bougé. */
+  const flowBy = useCallback((px: number): boolean => {
+    const moved = viewRef.current?.renderer.scrollFlow?.(px) ?? 0;
+    if (Math.abs(px - moved) < 0.5) {
+      flowEdge.current = 0;
+      return true;
+    }
+    flowEdge.current += px - moved;
+    return Math.abs(moved) >= 0.5;
+  }, []);
+  /** L'excédent suffit : le chapitre voisin (le suivant s'ouvre en haut, le précédent en bas). */
+  const crossFlowEdge = useCallback((threshold: number): boolean => {
+    const over = flowEdge.current;
+    if (Math.abs(over) < threshold) return false;
+    flowEdge.current = 0;
+    stopInertia();
+    void (over > 0 ? viewRef.current?.next() : viewRef.current?.prev());
+    return true;
+  }, [stopInertia]);
+  useEffect(() => stopInertia, [stopInertia]);
   // Les doigts posés, pour le pincement : deux doigts, c'est un zoom — jamais une page tournée ni un
   // toucher au milieu, même quand le premier se lève avant l'autre.
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -791,7 +827,11 @@ export function BookReader({
       return;
     }
     if (pinch.current || pointers.current.size > 2) return;
-    gesture.current = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId, dragging: false };
+    // Un doigt posé arrête l'élan, comme partout ailleurs.
+    stopInertia();
+    flowEdge.current = 0;
+    const now = performance.now();
+    gesture.current = { x: e.clientX, y: e.clientY, t: now, id: e.pointerId, dragging: false, lastY: e.clientY, lastT: now, v: 0 };
   };
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -806,6 +846,23 @@ export function BookReader({
     const g = gesture.current;
     if (!g || g.id !== e.pointerId) return;
     const dx = e.clientX - g.x;
+    if (prefsRef.current.turn === "scroll") {
+      const dy = e.clientY - g.y;
+      if (!g.dragging && Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) {
+        g.dragging = true;
+        capture.take(e);
+      }
+      if (!g.dragging) return;
+      const now = performance.now();
+      const step = g.lastY - e.clientY;
+      flowBy(step);
+      // La vitesse des derniers instants, lissée : c'est elle qui donne l'élan au lâcher.
+      const dt = Math.max(1, now - g.lastT);
+      g.v = g.v * 0.4 + (step / dt) * 0.6;
+      g.lastY = e.clientY;
+      g.lastT = now;
+      return;
+    }
     if (!g.dragging && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(e.clientY - g.y)) {
       g.dragging = true;
       capture.take(e);
@@ -833,6 +890,28 @@ export function BookReader({
     }
     const dx = e.clientX - g.x;
     const dt = Math.max(1, performance.now() - g.t);
+    if (prefsRef.current.turn === "scroll" && g.dragging) {
+      // Tiré au-delà du bord du chapitre : le voisin. Sinon l'élan, qui ralentit et peut à son tour y mener.
+      if (crossFlowEdge(FLOW_EDGE_PX)) return;
+      // Un doigt resté immobile avant de se lever ne lance rien.
+      let v = performance.now() - g.lastT > 80 ? 0 : g.v;
+      let last = performance.now();
+      const glide = (now: number) => {
+        const elapsed = Math.min(48, now - last);
+        last = now;
+        if (!flowBy(v * elapsed) && crossFlowEdge(FLOW_EDGE_PX)) return;
+        v *= Math.pow(0.95, elapsed / 16);
+        if (Math.abs(v) < 0.02) {
+          inertia.current = null;
+          flowEdge.current = 0;
+          return;
+        }
+        inertia.current = requestAnimationFrame(glide);
+      };
+      if (Math.abs(v) >= 0.05) inertia.current = requestAnimationFrame(glide);
+      else flowEdge.current = 0;
+      return;
+    }
     if (g.dragging) {
       if (Math.abs(dx) > 48 || Math.abs(dx) / dt > 0.35) void turn(dx < 0 ? "right" : "left");
       return;
@@ -842,6 +921,12 @@ export function BookReader({
       return;
     }
     if (view && followLinkAt(view, e.clientX, e.clientY)) return;
+    // Au défilement continu, un toucher n'importe où montre ou cache les barres : les bords ne tournent rien.
+    if (prefsRef.current.turn === "scroll") {
+      if (chrome) hideChrome();
+      else showChrome(false);
+      return;
+    }
     const width = e.currentTarget.clientWidth;
     const x = e.clientX - e.currentTarget.getBoundingClientRect().left;
     const action = tapAction(x, width, prefs.tapTurns, chrome);
@@ -852,14 +937,16 @@ export function BookReader({
   const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     // Avec Ctrl/⌘ c'est un zoom, traité plus haut.
     if (e.ctrlKey || e.metaKey) return;
-    // Au défilement continu, la couche n'est là que pendant un panneau ouvert (un toucher le referme) : la
-    // molette y fait défiler le texte, comme quand elle l'atteint directement. Elle tournait des pages
-    // entières tant que les réglages restaient ouverts — juste quand on essaie le défilement (29/10/2026).
+    // Au défilement continu, la molette fait défiler le texte, réglages ouverts ou non (elle tournait des pages
+    // entières tant qu'ils l'étaient, 29/10/2026) ; insistée au bord d'un chapitre, elle ouvre le voisin.
     if (prefsRef.current.turn === "scroll") {
+      stopInertia();
       const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
       const px = e.deltaMode === 1 ? delta * 16 : e.deltaMode === 2 ? delta * (e.currentTarget.clientHeight || 600) : delta;
-      if (px > 0) void viewRef.current?.next(px);
-      else if (px < 0) void viewRef.current?.prev(-px);
+      const now = performance.now();
+      if (now - wheel.current.at > 400) flowEdge.current = 0;
+      wheel.current.at = now;
+      if (!flowBy(px)) crossFlowEdge(FLOW_EDGE_WHEEL_PX);
       return;
     }
     const now = performance.now();
@@ -878,7 +965,6 @@ export function BookReader({
   const pct = Math.round(shownFraction * 100);
   const minutes = place.minutesLeft;
   const timeLabel = minutes === null ? "" : minutes < 1 ? t("books.reader.lessThanMinute") : Math.ceil(minutes) === 1 ? t("books.reader.minuteLeft") : t("books.reader.minutesLeft", { n: Math.ceil(minutes) });
-  const scrolled = prefs.turn === "scroll";
   const barStyle = useMemo(
     () => ({
       background: colors.dark ? "rgb(20 20 22 / 0.78)" : "rgb(255 255 255 / 0.8)",
@@ -910,11 +996,11 @@ export function BookReader({
         <div ref={shadeRef} className="pointer-events-none absolute inset-0 bg-black opacity-0" aria-hidden />
       </div>
 
-      {/* La couche des gestes. Au défilement continu, elle laisse passer le doigt jusqu'au texte. */}
+      {/* La couche des gestes, dans tous les modes : au défilement continu, c'est elle qui fait défiler. */}
       {status === "ready" && (
         <div
           className="absolute inset-0 touch-none select-none"
-          style={{ pointerEvents: scrolled && !panel ? "none" : "auto", cursor: "default" }}
+          style={{ cursor: "default" }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

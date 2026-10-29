@@ -30,7 +30,9 @@ import { plainOverview } from "@/lib/books/library";
 const API = "https://www.googleapis.com/books/v1/volumes";
 const DAILY_CAP = 900;
 const GAP_MS = 2_000;
-const BACKOFF_MS = 5 * 60_000;
+// Une minute, pas cinq (29/10/2026) : trois 503 d'affilée sont un hasard de Google (environ un refus sur sept,
+// indépendants les uns des autres, mesuré sur 50 requêtes), pas une panne qui demanderait d'attendre.
+const BACKOFF_MS = 60_000;
 const TIMEOUT_MS = 15_000;
 const FIELDS =
   "items(id,volumeInfo(title,subtitle,authors,publisher,publishedDate,description,categories,language,imageLinks,industryIdentifiers))";
@@ -449,8 +451,10 @@ async function refusalOf(res: Response): Promise<{ reason: string | null; messag
 
 /**
  * Une recherche, en texte libre : `q` est encodé une seule fois, par `URLSearchParams` ; la clé va dans
- * l'en-tête. Un 503 ou une coupure est retenté jusqu'à trois fois, à 1,5–3 s d'écart (chaque tentative
- * compte dans le quota du jour), puis la file s'arrête quelques minutes.
+ * l'en-tête. Un 503 ou une coupure est retenté jusqu'à trois fois, à 1,5–3 s d'écart, puis la file s'arrête une
+ * minute. Seule une réponse de Google compte dans le quota du jour : un 503 ni une coupure ne le comptent pas
+ * (29/10/2026 — la console de Google comptait 907 requêtes quand nous en comptions ~950, l'écart étant ses refus ;
+ * les compter nous arrêtait une soixantaine de livres trop tôt chaque jour).
  */
 async function search(q: string, lang: string | null): Promise<GoogleVolume[]> {
   const params = new URLSearchParams({ q, maxResults: "20", printType: "books", fields: FIELDS });
@@ -458,7 +462,6 @@ async function search(q: string, lang: string | null): Promise<GoogleVolume[]> {
   let last = "";
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     if (attempt > 0) await pause(1500 + Math.round(Math.random() * 1500));
-    countRequest();
     let res: Response;
     const started = Date.now();
     try {
@@ -477,6 +480,7 @@ async function search(q: string, lang: string | null): Promise<GoogleVolume[]> {
       logRefusal({ attempt: attempt + 1, ms: Date.now() - started, status: res.status, ...why, q, lang });
       throw new QuotaError(`Google Books a répondu ${res.status}`);
     }
+    if (res.status < 500) countRequest();
     if (res.status >= 500) {
       const why = await refusalOf(res);
       logRefusal({ attempt: attempt + 1, ms: Date.now() - started, status: res.status, ...why, q, lang });

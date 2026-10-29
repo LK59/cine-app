@@ -8137,3 +8137,19 @@ La lecture des attributs de l'OPF (`attr`, `epubMeta.ts`) prend la valeur entre 
 `["']([^"']*)` s'arrêtait à la première apostrophe (« Ailes d » pour « Les ailes d'Alexanne », 141 séries).
 Toute ligne de `book_meta` qui porte une série est relue une fois (empreinte vidée, marqueur
 `book-meta-apostrophe`) ; l'index garde l'ancienne valeur jusqu'à la relecture.
+
+### Le défilement continu mené par nos gestes, et Google Books plus économe (29/10/2026, 10.12.7)
+
+**Défilement continu.** La couche des gestes du lecteur reste posée sur le livre dans ce mode aussi (elle
+s'effaçait pour laisser le doigt au texte). Sur WebKit, un chapitre — cadre sans scripts — ne transmet aucun
+toucher à la page : un toucher ne ramenait pas les barres ; et foliate-js ne passait jamais au chapitre suivant
+au doigt — une couverture qui tient dans l'écran ne se quittait pas. Désormais : un toucher montre ou cache les
+barres (les bords ne tournent rien dans ce mode) ; un glissement vertical fait défiler par `scrollFlow` (patch
+Laterna de `paginator.js`, qui rend la distance réellement parcourue), avec un élan qui ralentit ; au bord d'un
+chapitre, ce qui dépasse s'accumule et au-delà de `FLOW_EDGE_PX` (70 px, 220 px à la molette) le chapitre
+voisin s'ouvre — le suivant en haut, le précédent en bas. Un doigt posé arrête l'élan. Revers assumé : on ne
+sélectionne plus de texte au doigt dans ce mode, comme dans les autres.
+
+**Google Books.** Un 503 ou une coupure ne compte plus dans les 900 requêtes du jour : la console de Google en
+comptait 907 quand nous en comptions ~950, l'écart étant ses refus (environ un sur sept, au hasard, mesuré sur
+50 requêtes le 29/10). La pause après trois refus d'affilée passe de cinq minutes à une.

@@ -60,6 +60,8 @@ export interface FoliateRenderer extends HTMLElement {
   atEnd?: boolean;
   next: () => Promise<void>;
   prev: () => Promise<void>;
+  /** Défilement continu (patch Laterna) : fait défiler le chapitre, rend la distance réellement parcourue. */
+  scrollFlow?: (delta: number) => number;
   destroy?: () => void;
 }
 

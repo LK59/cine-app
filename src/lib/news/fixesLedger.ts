@@ -986,6 +986,20 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.12.7",
+    page: "10.7",
+    onlyOnPage: true,
+    group: { fr: "Livres", en: "Books", es: "Libros", de: "Bücher" },
+    items: [
+      {
+        fr: "En mode défilement, un toucher fait apparaître ou disparaître les barres, un glissement fait défiler avec de l'élan, et le chapitre suivant s'ouvre en continuant au bout — même depuis la couverture.",
+        en: "In scrolling mode, a tap shows or hides the bars, a swipe scrolls with momentum, and the next chapter opens as you keep going at the end — even from the cover.",
+        es: "En el modo de desplazamiento, un toque muestra u oculta las barras, un deslizamiento desplaza con inercia y el capítulo siguiente se abre al seguir al final, incluso desde la portada.",
+        de: "Im Bildlaufmodus blendet ein Tippen die Leisten ein oder aus, ein Wischen scrollt mit Schwung, und am Ende öffnet sich beim Weiterwischen das nächste Kapitel — auch vom Umschlag aus.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

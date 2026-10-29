@@ -819,6 +819,20 @@ export class Paginator extends HTMLElement {
         element[scrollProp] = Math.max(min, Math.min(max,
             element[scrollProp] + delta))
     }
+    // Laterna: the continuous-scroll mode is driven by the host's own gestures — a layer over the book takes
+    // every touch, since WebKit never hands a chapter frame's events to the page, and nothing here ever moved
+    // to the next chapter on touch (a cover that fits the screen could not be left). Moves the chapter by
+    // `delta` px along the reading direction, within the chapter, and returns how far it really moved: what is
+    // left over tells the host it reached the chapter's edge (29/10/2026).
+    scrollFlow(delta) {
+        if (!this.scrolled || !this.#view) return 0
+        const element = this.#container
+        const { scrollProp } = this
+        const sign = this.#vertical ? -1 : 1
+        const before = element[scrollProp]
+        element[scrollProp] = before + delta * sign
+        return (element[scrollProp] - before) * sign
+    }
     snap(vx, vy) {
         const velocity = this.#vertical ? vy : vx
         const [offset, a, b] = this.#scrollBounds

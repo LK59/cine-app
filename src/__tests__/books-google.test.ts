@@ -157,7 +157,8 @@ describe("la file", () => {
     expect(enrichOf("a".repeat(32))).toBeNull();
     // Trois tentatives de la même requête, puis la file s'arrête (reprise plus tard).
     expect(calls).toHaveLength(3);
-    expect(__testing.quota().requests).toBe(3);
+    // Google ne compte pas ses refus (29/10/2026) : nos 900 du jour non plus.
+    expect(__testing.quota().requests).toBe(0);
     calls = [];
     google(() => new Response("", { status: 429 }));
     await __testing.run("essai");
