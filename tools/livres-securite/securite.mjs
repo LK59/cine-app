@@ -59,7 +59,16 @@ async function run(name, engine, mode) {
   const requests = [];
   const popups = [];
   const consoleLines = [];
-  page.on("request", (r) => requests.push(r.url()));
+  // En mode cadre, le cinéma est vraiment dessous, avec ses affiches : sur une vraie installation, la page du
+  // dessus demande ses images à TMDB et TheTVDB (les hôtes que la politique générale lui permet). Ce sont les
+  // siennes, pas celles du livre — comptées, elles faisaient échouer le banc lancé contre une instance avec
+  // catalogue (29/10/2026). Seulement celles du document du dessus vers ces deux hôtes ; un livre qui
+  // atteindrait ce document se verrait de toute façon (`top`, l'espion).
+  const cinemaImage = (r) =>
+    mode === "cadre" && r.frame() === page.mainFrame() && /^https:\/\/(image\.tmdb\.org|artworks\.thetvdb\.com)\//.test(r.url());
+  page.on("request", (r) => {
+    if (!cinemaImage(r)) requests.push(r.url());
+  });
   // Chromium annonce aussi les requêtes que la politique de la page arrête (`net::ERR_BLOCKED_BY_CSP`) :
   // elles sont comptées à part, l'espion dit si l'une d'elles est vraiment partie.
   const failed = new Map();
