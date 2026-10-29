@@ -748,6 +748,9 @@ function migrate(db: Database.Database): void {
       checked_at   INTEGER NOT NULL
     );
   `);
+  // Les tables des bandes-annonces téléchargées en local (essai du 02/09/2026, annulé le jour même : 725 échecs
+  // sur 786) : plus aucun code ne les lit depuis — la seule bande-annonce passe par la fenêtre « Bande-annonce ».
+  db.exec("DROP TABLE IF EXISTS trailer_jobs; DROP TABLE IF EXISTS trailer_settings;");
   // Les séries lues avant le 29/10/2026 étaient coupées à la première apostrophe (« Ailes d » pour « Les ailes
   // d'Alexanne », 141 séries) : toute ligne qui porte une série est relue une fois, en arrière-plan. L'empreinte
   // vidée suffit (`staleMeta`) ; l'index garde l'ancienne valeur jusque-là, rien ne disparaît.
