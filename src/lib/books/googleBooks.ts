@@ -1,6 +1,7 @@
 import { config } from "@/lib/config";
 import { getDb } from "@/lib/db";
-import { logError } from "@/lib/logger";
+import { logError, SERVER_LOG_FILE, SERVER_LOG_KEEP } from "@/lib/logger";
+import { appendJsonLine } from "@/lib/logFile";
 import { taskLog } from "@/lib/taskLog";
 import { bookGenres, fold, nameKey, primaryLanguage, titleKey } from "@/lib/books/metadata";
 import { plainOverview } from "@/lib/books/library";
@@ -409,6 +410,44 @@ class RetryLaterError extends Error {}
 const ATTEMPTS = 3;
 
 /**
+ * Ce que Google a répondu quand il refuse — au journal du serveur, qui survit aux redémarrages (29/10/2026).
+ * Les passes ne disaient que « erreurs=1 » dans `docker logs`, effacé à chaque déploiement : impossible de
+ * savoir si c'était un 503 de Google, un délai dépassé ou le réseau, ni à quelles heures. Le motif vient du
+ * corps d'erreur de Google (`error.errors[0].reason`, « backendError »…), le message est coupé ; jamais la clé.
+ */
+function logRefusal({ message, q, ...fields }: { attempt: number; ms: number; status: number | null; reason?: string | null; message?: string | null; q: string; lang: string | null }): void {
+  try {
+    appendJsonLine(
+      SERVER_LOG_FILE,
+      {
+        timestamp: new Date().toISOString(),
+        level: "warn",
+        scope: "books/google",
+        message: fields.status === null ? "Google Books injoignable" : `Google Books a répondu ${fields.status}`,
+        ...fields,
+        q: q.slice(0, 80),
+        // Le message de Google peut répéter la clé : toujours par `redact`, jamais tel quel.
+        detail: message ? redact(message).slice(0, 200) : undefined,
+      },
+      { keep: SERVER_LOG_KEEP }
+    );
+  } catch {
+    /* une note qui ne s'écrit pas n'arrête pas la file */
+  }
+}
+
+/** Le motif et le message d'un corps d'erreur de Google, s'il en a un. */
+async function refusalOf(res: Response): Promise<{ reason: string | null; message: string | null }> {
+  try {
+    const body = JSON.parse((await res.text()).slice(0, 4000)) as { error?: { message?: unknown; status?: unknown; errors?: { reason?: unknown }[] } };
+    const reason = body.error?.errors?.[0]?.reason ?? body.error?.status;
+    return { reason: typeof reason === "string" ? reason : null, message: typeof body.error?.message === "string" ? body.error.message : null };
+  } catch {
+    return { reason: null, message: null };
+  }
+}
+
+/**
  * Une recherche, en texte libre : `q` est encodé une seule fois, par `URLSearchParams` ; la clé va dans
  * l'en-tête. Un 503 ou une coupure est retenté jusqu'à trois fois, à 1,5–3 s d'écart (chaque tentative
  * compte dans le quota du jour), puis la file s'arrête quelques minutes.
@@ -421,6 +460,7 @@ async function search(q: string, lang: string | null): Promise<GoogleVolume[]> {
     if (attempt > 0) await pause(1500 + Math.round(Math.random() * 1500));
     countRequest();
     let res: Response;
+    const started = Date.now();
     try {
       res = await state().fetcher(`${API}?${params}`, {
         headers: { "X-Goog-Api-Key": config.books.googleKey, Accept: "application/json" },
@@ -429,14 +469,17 @@ async function search(q: string, lang: string | null): Promise<GoogleVolume[]> {
       });
     } catch (error) {
       last = redact(error instanceof Error ? error.message : String(error));
+      logRefusal({ attempt: attempt + 1, ms: Date.now() - started, status: null, reason: error instanceof Error ? error.name : null, message: last, q, lang });
       continue;
     }
     if (res.status === 429 || res.status === 403) {
-      await res.body?.cancel().catch(() => {});
+      const why = await refusalOf(res);
+      logRefusal({ attempt: attempt + 1, ms: Date.now() - started, status: res.status, ...why, q, lang });
       throw new QuotaError(`Google Books a répondu ${res.status}`);
     }
     if (res.status >= 500) {
-      await res.body?.cancel().catch(() => {});
+      const why = await refusalOf(res);
+      logRefusal({ attempt: attempt + 1, ms: Date.now() - started, status: res.status, ...why, q, lang });
       last = `Google Books a répondu ${res.status}`;
       continue;
     }

@@ -35,7 +35,15 @@ vi.mock("@/lib/config", () => ({
   },
 }));
 const logged = vi.hoisted(() => [] as string[]);
-vi.mock("@/lib/logger", () => ({ logError: (_s: string, e: unknown) => logged.push(String((e as Error)?.message ?? e)) }));
+vi.mock("@/lib/logger", async () => {
+  const path = await import("node:path");
+  return {
+    logError: (_s: string, e: unknown) => logged.push(String((e as Error)?.message ?? e)),
+    // Le vrai fichier, dans le `DATA_DIR` jetable de ce test : les refus de Google y sont écrits (`logRefusal`).
+    SERVER_LOG_FILE: path.join(process.env.DATA_DIR as string, "logs", "server.log"),
+    SERVER_LOG_KEEP: 3,
+  };
+});
 vi.mock("@/lib/taskLog", () => ({ taskLog: (...a: unknown[]) => logged.push(JSON.stringify(a)) }));
 
 import { __testing, acceptable, bestCandidate, enrichOf, googleGenres, recordOf, redact, signature, startGoogleEnrich, titleVariants, titlesMatch, type EnrichTarget, type GoogleVolume } from "@/lib/books/googleBooks";
@@ -301,6 +309,24 @@ describe("règles v3 : les réponses réelles de Google en texte libre", () => {
     expect(calls).toHaveLength(2);
     expect(new URL(calls[0].url).search).toBe(new URL(calls[1].url).search);
     expect(enrichOf("a".repeat(32))?.status).toBe("filled");
+  });
+
+  it("un refus de Google laisse au journal du serveur son code, son motif et sa durée — jamais la clé (29/10/2026)", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const { SERVER_LOG_FILE } = await import("@/lib/logger");
+    const before = fs.existsSync(SERVER_LOG_FILE) ? fs.readFileSync(SERVER_LOG_FILE, "utf8").length : 0;
+    let n = 0;
+    const body = JSON.stringify({ error: { code: 503, message: `Backend Error for key=${KEY}`, errors: [{ reason: "backendError" }] } });
+    google(() => (++n === 1 ? new Response(body, { status: 503 }) : new Response(JSON.stringify({ items: [vol("Dans les bois", ["Harlan Coben"])] }))));
+    __testing.state().targets = async () => [target()];
+    await __testing.run("essai");
+    const added = fs.readFileSync(SERVER_LOG_FILE, "utf8").slice(before);
+    const line = added.split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((l) => l.scope === "books/google");
+    expect(line).toMatchObject({ level: "warn", status: 503, reason: "backendError", attempt: 1 });
+    expect(typeof line.ms).toBe("number");
+    expect(added).not.toContain(KEY);
+    expect(path.basename(SERVER_LOG_FILE)).toBe("server.log");
   });
 });
 
