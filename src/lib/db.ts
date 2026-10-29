@@ -748,6 +748,15 @@ function migrate(db: Database.Database): void {
       checked_at   INTEGER NOT NULL
     );
   `);
+  // Les séries lues avant le 29/10/2026 étaient coupées à la première apostrophe (« Ailes d » pour « Les ailes
+  // d'Alexanne », 141 séries) : toute ligne qui porte une série est relue une fois, en arrière-plan. L'empreinte
+  // vidée suffit (`staleMeta`) ; l'index garde l'ancienne valeur jusque-là, rien ne disparaît.
+  if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'book-meta-apostrophe'").get()) {
+    db.transaction(() => {
+      db.prepare("UPDATE book_meta SET etag = '' WHERE series IS NOT NULL").run();
+      db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES ('book-meta-apostrophe', ?)").run(Date.now());
+    })();
+  }
   // Ce que Google Books a donné d'un livre (§127, `googleBooks.ts`) : une ligne par livre essayé, « sans
   // correspondance » compris ; `sig` : les métadonnées au moment de l'essai — elles changent, on réessaie.
   db.exec(`

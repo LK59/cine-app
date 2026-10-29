@@ -68,6 +68,12 @@ describe("l'OPF", () => {
       <meta refines="#c01" property="collection-type">series</meta><meta refines="#c01" property="group-position">7</meta></metadata></package>`;
     expect(parseOpf(opf)).toEqual({ series: "Les Rougon-Macquart", seriesIndex: 7, subjects: [], creators: [], coverPath: null });
   });
+  it("une apostrophe dans une valeur entre guillemets doubles n'y met pas fin (29/10/2026 : « Ailes d »)", () => {
+    const opf = `<package><metadata><meta name="calibre:series" content="Les ailes d'Alexanne"/><meta name="calibre:series_index" content="2"/></metadata></package>`;
+    expect(parseOpf(opf)).toMatchObject({ series: "Les ailes d'Alexanne", seriesIndex: 2 });
+    expect(parseOpf(`<package><metadata><meta name='calibre:series' content='Le "Cycle"'/></metadata></package>`).series).toBe('Le "Cycle"');
+  });
+
   it("sans série : rien, pas même un rang", () => {
     expect(parseOpf(`<package><metadata><meta name="calibre:series_index" content="8.5"/></metadata></package>`)).toEqual({ series: null, seriesIndex: null, subjects: [], creators: [], coverPath: null });
   });

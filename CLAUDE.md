@@ -758,6 +758,12 @@ dictionaries' values.
   Chromium: 150 MiB / 12 MiB per track on desktop, four tiers on Android read from
   `navigator.deviceMemory` (`demuxer_memory_limit_*.cc`). Gecko: 150 MiB / 20 MiB everywhere
   (100 MiB of video before Firefox 130). An unknown engine keeps the old 30 s.
+- **An expected absence is never a 404 on a route the interface calls per item** (29/10/2026). An
+  intrusion-prevention layer in front of the reverse proxy (CrowdSec's `http-probing`: more than ten
+  *distinct* paths answering 404/403/400 from one address within seconds) bans the address for hours — a
+  grid of books without covers did it to a viewer, cutting them off the whole app. A missing image answers
+  `204` (`/api/books/<id>/cover`, `/api/jellyfin/image`), and code that keeps an image with `fetch` accepts
+  only a non-empty `200`. Before adding a per-item route, decide what its "nothing here" answers.
 - **A pathological file is the normal case here.** The library holds six-audio-track files mixing
   FLAC / AC-3 / DTS / TrueHD at 1, 6 and 8 channels, 24-bit FLAC, mono defaults, Dolby Vision 4K.
   Test player changes against `The Exorcist (1973)` before believing them.

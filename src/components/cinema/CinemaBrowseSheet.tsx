@@ -146,8 +146,10 @@ const BrowseGrid = memo(function BrowseGrid<T extends BrowsableTitle>({
 // Les styles de `input` / `select` (globals.css) recopiés sans `backdrop-blur-xs` plutôt que
 // surchargés : l'ordre de deux utilitaires qui touchent la même propriété n'est pas garanti.
 const FILTER_BASE =
-  "h-9 shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500";
-const FILTER_FIELD = `${FILTER_BASE} placeholder:text-subtle`;
+  "h-9 shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-white focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500";
+const FILTER_FIELD = `${FILTER_BASE} py-2 placeholder:text-subtle`;
+// Sans marge verticale : dans 36 px, 8 px en haut et en bas laissaient 18 px à un texte de 20 — Safari sur iPhone
+// le coupait en haut et en bas (29/10/2026), Chrome agrandissait le menu. Le système centre lui-même le texte.
 const FILTER_SELECT = FILTER_BASE;
 
 function BrowseSheet<T extends BrowsableTitle>({

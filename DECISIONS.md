@@ -8121,3 +8121,19 @@ heure ; `BookCover` retient pour la page les couvertures absentes et ne les rede
 hors ligne n'enregistre qu'une réponse `200` non vide. Un livre hors des droits du compte répond toujours 404.
 Laissé exprès : le relais `/api/jellyfin/image` garde son 404 (des `fetch` des téléchargements de films le
 lisent comme un échec ; ses 404 sont rares et espacés).
+
+### Le relais d'images et les menus de « Voir tout » (29/10/2026, 10.12.5)
+
+Le relais `/api/jellyfin/image` suit la règle des couvertures : une image absente chez Jellyfin répond `204`
+(gardé une heure), tout autre refus `502` — jamais 404 (27 en quatre jours, des images de fond absentes : une
+rangée de titres sans fond suffisait à faire bannir une adresse). Les `fetch` qui gardent une image hors ligne
+(`artwork.ts`, l'affiche dans `downloads.ts`) n'acceptent qu'un `200` non vide. Ce qui reste en 404 dans
+l'usage, rare et isolé : `trickplay/info` (un titre sans aperçus, une fois par lecture), un titre masqué.
+
+Les menus des grilles « Voir tout » (films, séries, livres) n'ont plus de marge verticale (`FILTER_SELECT`,
+`BooksScreen` `Picker`) : 8 px en haut et en bas dans 36 px coupaient leur texte sur iPhone.
+
+La lecture des attributs de l'OPF (`attr`, `epubMeta.ts`) prend la valeur entre ses propres guillemets :
+`["']([^"']*)` s'arrêtait à la première apostrophe (« Ailes d » pour « Les ailes d'Alexanne », 141 séries).
+Toute ligne de `book_meta` qui porte une série est relue une fois (empreinte vidée, marqueur
+`book-meta-apostrophe`) ; l'index garde l'ancienne valeur jusqu'à la relecture.

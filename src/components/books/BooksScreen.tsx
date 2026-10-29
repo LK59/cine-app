@@ -424,9 +424,11 @@ function GridSkeleton() {
 
 // Les champs de « Voir tout » des films (`CinemaBrowseSheet`, `FILTER_BASE`), recopiés : sans le flou
 // d'arrière-plan des `input` / `select` globaux, qui accrochait le défilement sur iPhone.
+// La marge verticale sur le champ seulement : un menu de 36 px qui en avait 8 en haut et en bas coupait son texte
+// sur iPhone (« Par série », 29/10/2026).
 const FILTER_BASE =
-  "h-9 shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500";
-const FILTER_FIELD = `${FILTER_BASE} placeholder:text-subtle`;
+  "h-9 shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-white focus:border-accent-500 focus:outline-hidden focus:ring-1 focus:ring-accent-500";
+const FILTER_FIELD = `${FILTER_BASE} py-2 placeholder:text-subtle`;
 
 /**
  * Un choix de la grille, en liste native : des milliers d'auteurs s'y parcourent au clavier comme au doigt.

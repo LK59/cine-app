@@ -64,7 +64,13 @@ export async function GET(req: NextRequest) {
     });
     if (!res.ok) {
       await res.body?.cancel().catch(() => {});
-      return new NextResponse(null, { status: 404 });
+      // Jamais de 404 ici (29/10/2026) : CrowdSec, devant le proxy, bannit quatre heures une adresse qui reçoit
+      // plus de dix 404/403/400 sur des adresses différentes en quelques secondes (`http-probing`) — une rangée
+      // de titres sans image de fond suffisait. Image absente chez Jellyfin : 204, gardé une heure ; Jellyfin en
+      // panne : 502. Une balise image échoue de même sur les deux ; les `fetch` qui gardent une image hors ligne
+      // ne prennent qu'un 200 (`artwork.ts`, `downloads.ts`).
+      if (res.status === 404) return new NextResponse(null, { status: 204, headers: { "Cache-Control": "private, max-age=3600" } });
+      return new NextResponse(null, { status: 502 });
     }
 
     const blob = await res.blob();

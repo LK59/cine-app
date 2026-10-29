@@ -27,8 +27,11 @@ export const SERIES_POSTER_FILE = "series-poster";
 async function keepImage(account: string, id: string, itemId: string | null, kind: "logo" | "backdrop" | "poster", name: string): Promise<boolean> {
   if (!itemId) return false;
   const res = await fetch(`/api/jellyfin/image?itemId=${encodeURIComponent(itemId)}&kind=${kind}`);
-  if (!res.ok) return false;
-  await deviceStore.writeFile(account, id, name, new Uint8Array(await res.arrayBuffer()));
+  // 200 seulement : une image absente répond 204, `ok` aussi — une image vide serait gardée.
+  if (res.status !== 200) return false;
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (bytes.byteLength === 0) return false;
+  await deviceStore.writeFile(account, id, name, bytes);
   return true;
 }
 

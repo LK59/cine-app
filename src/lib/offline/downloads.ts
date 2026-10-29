@@ -362,9 +362,10 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
   // `fetch` ne peut rien lire sans CORS (relevé au premier essai réel, 19/10/2026 — aucune affiche gardée).
   {
     void fetch(`/api/jellyfin/image?itemId=${encodeURIComponent(request.itemId)}&kind=poster`)
-      .then((r) => (r.ok ? r.arrayBuffer() : null))
+      // 200 seulement : une affiche absente répond 204 (`ok` aussi).
+      .then((r) => (r.status === 200 ? r.arrayBuffer() : null))
       .then(async (buffer) => {
-        if (!buffer || !account || !offlineDownloadById(job.id)) return;
+        if (!buffer || buffer.byteLength === 0 || !account || !offlineDownloadById(job.id)) return;
         await deviceStore.writePoster(owner, job.id, new Uint8Array(buffer));
         if (!(await stillThere(owner, job.id))) return;
         const updated = patch(job.id, { hasPoster: true });

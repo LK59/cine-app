@@ -135,7 +135,12 @@ const decodeXml = (s: string) =>
     .replace(/&amp;/g, "&")
     .trim();
 
-const attr = (tag: string, name: string) => new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`, "i").exec(tag)?.[1];
+// La valeur entre ses propres guillemets : une apostrophe dans une valeur entre guillemets doubles n'y met pas fin.
+// `["']([^"']*)` coupait « Les ailes d'Alexanne » en « Ailes d » — 141 séries de la bibliothèque (29/10/2026).
+const attr = (tag: string, name: string) => {
+  const m = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "i").exec(tag);
+  return m ? (m[1] ?? m[2]) : undefined;
+};
 
 /** Un chemin du zip, relatif au dossier de l'OPF, ramené à sa forme absolue (`OEBPS/images/cover.jpg`). */
 function resolvePath(base: string, href: string): string {
@@ -207,7 +212,8 @@ export function parseOpf(opf: string, opfPath = ""): EpubMeta {
 export async function readEpubMeta(id: string): Promise<EpubMeta> {
   const entries = await entriesOf(id);
   const container = entries.find((e) => e.name === "META-INF/container.xml");
-  const opfPath = container ? /full-path\s*=\s*["']([^"']+)["']/i.exec((await readEntry(id, container)).toString("utf8"))?.[1] : undefined;
+  const fullPath = container ? /full-path\s*=\s*(?:"([^"]+)"|'([^']+)')/i.exec((await readEntry(id, container)).toString("utf8")) : null;
+  const opfPath = fullPath ? (fullPath[1] ?? fullPath[2]) : undefined;
   const opf = entries.find((e) => e.name === opfPath) ?? entries.find((e) => e.name.toLowerCase().endsWith(".opf"));
   if (!opf) throw new Error("pas d'OPF");
   return parseOpf((await readEntry(id, opf)).toString("utf8"), opf.name);

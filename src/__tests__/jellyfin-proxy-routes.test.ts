@@ -39,11 +39,15 @@ describe("GET /api/jellyfin/image", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 404 when Jellyfin has no image for this item", async () => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: false });
+  // Jamais 404 (29/10/2026) : une rafale de 404 sur des adresses différentes fait bannir l'adresse par CrowdSec
+  // (`http-probing`). Image absente : 204 ; Jellyfin qui répond autre chose : 502.
+  it("answers 204 when Jellyfin has no image for this item, 502 on any other refusal", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 });
     const { GET } = await import("@/app/api/jellyfin/image/route");
     const res = await GET(fakeReq({ search: `itemId=${validId}` }));
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(204);
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+    expect((await GET(fakeReq({ search: `itemId=${validId}` }))).status).toBe(502);
   });
 
   it("returns 502 when the fetch itself throws (network error)", async () => {

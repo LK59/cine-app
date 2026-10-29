@@ -959,6 +959,33 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.12.5",
+    page: "10.7",
+    onlyOnPage: true,
+    group: { fr: "Livres", en: "Books", es: "Libros", de: "Bücher" },
+    items: [
+      {
+        fr: "Les séries dont le nom contient une apostrophe s'affichent en entier (« Les ailes d'Alexanne » au lieu de « Ailes d »).",
+        en: "Series whose name contains an apostrophe now show in full (“Les ailes d'Alexanne” instead of “Ailes d”).",
+        es: "Las series cuyo nombre lleva un apóstrofo se muestran completas («Les ailes d'Alexanne» en lugar de «Ailes d»).",
+        de: "Reihen mit einem Apostroph im Namen werden vollständig angezeigt („Les ailes d'Alexanne“ statt „Ailes d“).",
+      },
+    ],
+  },
+  {
+    version: "10.12.5",
+    page: "10.5",
+    group: { fr: "Interface", en: "Interface", es: "Interfaz", de: "Oberfläche" },
+    items: [
+      {
+        fr: "Sur iPhone, le texte des menus de « Voir tout » n'est plus coupé en haut et en bas.",
+        en: "On iPhone, the text of the “See all” menus is no longer cut off at the top and bottom.",
+        es: "En iPhone, el texto de los menús de «Ver todo» ya no aparece cortado por arriba y por abajo.",
+        de: "Auf dem iPhone wird der Text der Menüs unter „Alle anzeigen“ oben und unten nicht mehr abgeschnitten.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
