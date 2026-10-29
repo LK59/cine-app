@@ -311,8 +311,8 @@ also has bookmarks (kept per account), search inside the book, and offline readi
 a book on the device, readable without a connection from the downloads page. In a browser (not the installed app, which has no downloads manager to find it in), a book's sheet also offers the original file, named « Title - Author.epub », for an e-reader. Optionally (off by default,
 `BOOKS_GOOGLE_ENRICH` with a `GOOGLE_BOOKS_API_KEY`, set in `.env` or in Configuration), Google Books
 fills in what Jellyfin and the EPUB lack — summary, cover, genres, year — never overwriting existing
-data, within a daily request budget (900 requests, one every two seconds, stopped for the day on a
-quota error). A match must agree on title and author and is never a study guide, an omnibus or
+data, within a daily request budget (900 requests, one every two seconds, counted on Google's day,
+which starts at midnight Pacific time; stopped until then on a quota error). A match must agree on title and author and is never a study guide, an omnibus or
 another volume; a summary is only taken in the book's own language (the EPUB's, else the library's
 metadata language, else the instance's), so the rule works for any language. The key is sent in a
 header, never in an address or a log.

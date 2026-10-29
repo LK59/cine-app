@@ -371,3 +371,15 @@ describe("la langue du livre, et rien de supposé français", () => {
     expect(enrichOf("a".repeat(32))?.overview).toMatch(/^Eine Beschreibung/);
   });
 });
+
+describe("le jour du quota, celui de Google", () => {
+  it("change à minuit heure du Pacifique, pas à minuit chez nous", async () => {
+    const { quotaDay, msUntilTomorrow } = await import("@/lib/books/googleBooks");
+    // 29/10/2026 01:07 à Paris = 28/10 17:07 en Californie : même journée Google que la veille au soir.
+    expect(quotaDay(new Date("2026-10-29T00:07:00Z"))).toBe("2026-10-28");
+    expect(quotaDay(new Date("2026-10-29T06:59:00Z"))).toBe("2026-10-28");
+    expect(quotaDay(new Date("2026-10-29T07:00:00Z"))).toBe("2026-10-29");
+    // 23:38 en Californie : réveil 27 min plus tard, à 00:05.
+    expect(msUntilTomorrow(new Date("2026-10-29T06:38:00Z"))).toBe(27 * 60_000);
+  });
+});

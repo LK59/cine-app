@@ -7711,8 +7711,12 @@ un titre, un auteur ni une couverture existante (les corrections faites à la ma
   ligne porte la version des règles (`rules`) : celles d'une version plus ancienne sont réévaluées, les
   remplies d'abord, dans le même quota — un mauvais résumé est remplacé ou effacé.
 - *Le quota* : un livre à la fois, 2 s au moins entre deux requêtes, 900 requêtes par jour au plus
-  (compteur en base, `book_enrich_quota`, remis à zéro à **minuit heure du serveur**, pas à minuit heure du
-  Pacifique comme le compte Google — d'où la marge sous les 1 000). Chaque livre n'est essayé qu'une fois,
+  (compteur en base, `book_enrich_quota`, remis à zéro à **minuit heure du Pacifique**, comme le compte Google
+  — `quotaDay`). Il l'était à minuit heure du serveur jusqu'au 29/10/2026 : la marge sous les 1 000 ne suffisait
+  pas, une journée Google à cheval sur deux des nôtres a reçu ~1 000 requêtes (463 + 510, refus à 1 h du
+  matin), et le refus bloquait la file jusqu'à notre minuit, quinze heures après que Google avait rendu son
+  quota. Le réveil du lendemain vise 00:05 heure du Pacifique ; un changement d'heure qui le fait sonner
+  trop tôt trouve le jour encore bloqué et se rendort jusqu'au vrai minuit. Chaque livre n'est essayé qu'une fois,
   « sans correspondance » compris (`book_enrich`), sauf si son titre, son auteur ou son ISBN changent.
   429 ou 403 : arrêt jusqu'au lendemain ; 503 ou réseau : reprise cinq minutes plus tard, le livre non
   compté comme essayé. L'ordre : les livres sans résumé chez Jellyfin d'abord, puis sans couverture, puis

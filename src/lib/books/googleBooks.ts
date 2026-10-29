@@ -374,9 +374,16 @@ function save(id: string, sig: string, rec: EnrichRecord, googleId: string | nul
     .run(id, sig, RULES_VERSION, rec.status, rec.overview, JSON.stringify(rec.genres), rec.year, rec.coverUrl, googleId, Date.now());
 }
 
-/** Le jour du compteur : minuit heure du serveur (le fuseau du foyer). */
+/**
+ * Le jour du compteur, celui de Google : son quota quotidien repart à minuit heure du Pacifique. Compté
+ * à minuit chez nous (29/10/2026), le plafond de 900 laissait passer ~1 000 requêtes dans une même
+ * journée Google, réparties sur deux des nôtres (463 + 510) — refus à 1 h du matin — et un refus
+ * bloquait la file jusqu'à notre minuit, quinze heures après que Google avait rendu son quota.
+ */
+const QUOTA_ZONE = "America/Los_Angeles";
+const quotaDayFormat = new Intl.DateTimeFormat("en-CA", { timeZone: QUOTA_ZONE, year: "numeric", month: "2-digit", day: "2-digit" });
 export function quotaDay(now = new Date()): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return quotaDayFormat.format(now);
 }
 function quota(now = new Date()): { requests: number; blocked: boolean } {
   const row = getDb().prepare("SELECT requests, blocked FROM book_enrich_quota WHERE day = ?").get(quotaDay(now)) as { requests: number; blocked: number } | undefined;
@@ -580,10 +587,15 @@ async function run(why: string): Promise<void> {
   if (stop && stop !== "option coupée" && !state().wake) scheduleRetry(msUntilTomorrow());
 }
 
-function msUntilTomorrow(now = new Date()): number {
-  const next = new Date(now);
-  next.setHours(24, 5, 0, 0);
-  return next.getTime() - now.getTime();
+/**
+ * Jusqu'au jour Google suivant, plus cinq minutes. Un changement d'heure peut décaler le réveil d'une
+ * heure : réveillée trop tôt, la file trouve le jour encore bloqué et se rendort jusqu'au vrai minuit.
+ */
+export function msUntilTomorrow(now = new Date()): number {
+  const clock = new Intl.DateTimeFormat("en-GB", { timeZone: QUOTA_ZONE, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(now);
+  const part = (t: string) => Number(clock.find((p) => p.type === t)?.value ?? 0);
+  const elapsed = ((part("hour") * 60 + part("minute")) * 60 + part("second")) * 1000 + now.getMilliseconds();
+  return 24 * 3_600_000 - elapsed + 5 * 60_000;
 }
 
 function scheduleRetry(ms: number): void {

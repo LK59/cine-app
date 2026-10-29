@@ -441,7 +441,7 @@ widening `"movies" | "series"` would ripple through twenty places. Turned off, e
   (`ReaderFrame.tsx`, messages checked in `readerFrame.ts`), so closing a book reloads nothing; the global
   CSP gained only `frame-src 'self'` for it. `tools/livres-securite/` opens a trapped EPUB in Chromium,
   Firefox and WebKit, standalone and framed — run it after touching the reader, its CSP or the sanitizer.
-- **Google Books** (`googleBooks.ts`) only fills what is missing, one request every two seconds, 900 a day,
+- **Google Books** (`googleBooks.ts`) only fills what is missing, one request every two seconds, 900 a day counted on Google's own day (midnight Pacific time),
   key in the `X-Goog-Api-Key` header. Measured on 28/10/2026: its field operators (`intitle:`, `inauthor:`,
   `isbn:`) return nothing with a key, so queries are free text and the right edition is picked among
   twenty candidates by title, author, tome and language; a summary is only taken in the book's own
