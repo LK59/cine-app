@@ -222,8 +222,13 @@ describe("le lecteur serveur, session Jellyfin expirée (BUREAU-22)", () => {
     reauth();
     const { getByText } = render(<PlayerHost />);
     await waitFor(() => expect(getByText("player.reconnect")).toBeTruthy());
-    fireEvent.keyDown(window, { key: "Escape" });
-    expect(lines("stop").map((l) => l.why)).toEqual(["close"]);
+    // L'écran écoute Échap dans un effet, posé après son premier rendu : sur une machine lente (la CI du
+    // 29/10/2026), la touche partait avant l'écoute et rien ne se fermait. La touche est redonnée jusqu'à ce
+    // qu'elle soit entendue — une seule fermeture, toujours.
+    await waitFor(() => {
+      if (lines("stop").length === 0) fireEvent.keyDown(window, { key: "Escape" });
+      expect(lines("stop").map((l) => l.why)).toEqual(["close"]);
+    });
   });
 
   it("laisse Échap à l'écran parcouru dans le mini-lecteur", async () => {

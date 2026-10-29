@@ -341,12 +341,17 @@ function BookSheet({
       aria-modal="true"
       aria-label={book ? displayTitle(book) : ""}
       aria-hidden={hidden}
-      className={`fixed inset-0 flex items-center justify-center bg-black/70 p-8 backdrop-blur-sm ${revealed || morph.handlesEntry ? "" : "animate-fade-in"}`}
+      className={`fixed inset-0 flex items-center justify-center p-8 ${revealed || morph.handlesEntry ? "" : "animate-fade-in"}`}
       style={{ zIndex: 48, visibility: hidden ? "hidden" : undefined, ...exit.style }}
       onClick={(e) => {
         if (e.target === e.currentTarget) exit.requestClose();
       }}
     >
+      {/* Le voile, flou et sombre ensemble, dans sa propre couche (`data-sheet-veil`) : la trajectoire de la fiche
+          (`useDesktopContinuity`) tient le fond de la fenêtre transparent pendant l'arrivée puis le rend d'un coup —
+          posé sur lui, le flou venait aussitôt et l'assombrissement à la fin, en deux temps (29/10/2026). Ici il
+          arrive en un seul fondu avec le reste du fond de la fiche, et repart de même. */}
+      <div aria-hidden data-sheet-veil="" className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => exit.requestClose()} />
       <div className="relative flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-ink shadow-2xl shadow-black/60">
         {backdrop}
         {closeButton}

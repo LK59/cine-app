@@ -917,6 +917,20 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.12.1",
+    page: "10.7",
+    onlyOnPage: true,
+    group: { fr: "Livres", en: "Books", es: "Libros", de: "Bücher" },
+    items: [
+      {
+        fr: "Sur ordinateur, la fiche d'un livre floute et assombrit l'arrière-plan d'un seul geste, et non plus en deux temps.",
+        en: "On computers, a book's page now blurs and dims the background in one smooth step instead of two.",
+        es: "En el ordenador, la ficha de un libro difumina y oscurece el fondo de una sola vez, y no en dos tiempos.",
+        de: "Am Computer macht die Seite eines Buchs den Hintergrund jetzt in einem Zug unscharf und dunkler, nicht mehr in zwei Schritten.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
