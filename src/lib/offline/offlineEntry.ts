@@ -84,6 +84,22 @@ export const OFFLINE_BOOKS_SHOWN_KEY = "laterna:books:shown";
 /** Le message qui demande au service worker de garder la page hors ligne des livres (`/livres/hors-ligne`). */
 export const WARM_OFFLINE_BOOKS_ENTRY = "cine:warm-offline-books";
 
+/** La place que prennent les livres gardés (octets) : la page des téléchargements l'ajoute à celle des films. */
+export const OFFLINE_BOOKS_BYTES_KEY = "laterna:books:offline-bytes";
+
+/**
+ * Lue sans rien charger des livres. La page des téléchargements disait « 0 Mo » sur un appareil qui ne
+ * gardait que des livres (29/10/2026).
+ */
+export function keptBooksBytes(): number {
+  try {
+    const n = Number(localStorage.getItem(OFFLINE_BOOKS_BYTES_KEY) ?? 0);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function keptBooksCount(): number {
   try {
     const n = Number(localStorage.getItem(OFFLINE_BOOKS_COUNT_KEY) ?? 0);

@@ -861,6 +861,12 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
         es: "Abrir un libro y cerrarlo sin pasar página ya no lo añade a «Seguir leyendo», y pulsar dos veces «Leer» ya no bloquea la pantalla.",
         de: "Ein Buch zu öffnen und ohne Umblättern zu schließen, fügt es nicht mehr zu „Weiterlesen“ hinzu, und zweimal auf „Lesen“ zu tippen blockiert den Bildschirm nicht mehr.",
       },
+      {
+        fr: "La table des matières mène au bon chapitre dans tous les livres, et la fiche d'un livre retrouve son fond aux couleurs de la couverture.",
+        en: "The table of contents now takes you to the right chapter in every book, and a book's page has its cover-coloured background again.",
+        es: "El índice lleva al capítulo correcto en todos los libros, y la ficha de un libro recupera su fondo con los colores de la portada.",
+        de: "Das Inhaltsverzeichnis führt in jedem Buch zum richtigen Kapitel, und die Seite eines Buchs hat wieder ihren Hintergrund in den Farben des Umschlags.",
+      },
     ],
   },
 ];

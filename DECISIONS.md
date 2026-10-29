@@ -7940,3 +7940,37 @@ largeur de la page moins les marges, et une ligne porte plus de cinq mots ; les 
 couché et debout.
 
 **Décidé le 28/10/2026.**
+
+### Chasse aux bugs du 29/10/2026 (10.10.6)
+
+Une relecture du code et une passe en vrai navigateur (Chromium, Firefox, iPhone et iPad émulés) ; ce
+qu'elles ont fixé comme règles :
+
+- **« Terminé » suit la position** (`saveProgress`) : il tombe dès qu'une page d'avant est enregistrée. Il
+  ne tombait jamais — un coup d'œil à la dernière page sortait le livre de « Continuer la lecture » pour
+  toujours. « Lu » chez Jellyfin reste ; il est redit à la fin suivante (sans effet de plus).
+- **Une heure de lecture est dans l'horloge du serveur** (`readAt`) : le client envoie l'âge de la mesure
+  (`ageMs`), le serveur en déduit l'heure, s'en sert pour `updated_at` et pour comparer au retrait. `GET`
+  rend `now`, que le lecteur utilise pour comparer sa copie de l'appareil. Un ancien client (seulement
+  `at`) reste accepté.
+- **La file de l'appareil garde une écriture refusée par 401 ou 429** (`bookSync.ts`) : une session
+  expirée pendant une lecture hors ligne n'est pas un refus.
+- **La page où le livre s'ouvre n'est pas enregistrée** : seule une page tournée part.
+- **Un livre gardé n'attend pas le réseau** : 4 s au plus pour la position, la file envoyée sans attendre.
+- **Le compteur des livres gardés est relu au lancement** s'il vaut zéro (`recountOfflineBooks`), et la
+  place qu'ils prennent compte dans celle des téléchargements (`keptBooksBytes`).
+- **Le cadre du lecteur** : un second « Lire » pendant l'ouverture est ignoré ; un cadre rechargé reçoit
+  `open` à son `hello` ; la présence, la maintenance, `BuildRefresh` et l'invitation à installer ne sont pas
+  montées dans un document servi à un cadre (`Sec-Fetch-Dest: iframe`, `layout.tsx`).
+- **Les tags autorisés de Jellyfin** (`AllowedTags`) filtrent l'index comme les tags bloqués.
+- **foliate-js** : un seul décodage des adresses (`decodeHref`, `epub.js`) — `decodeURI` laissait `%2C`,
+  et une table des matières qui échappe « , » ne menait nulle part ; un chapitre sans `body` n'est plus
+  mis en page (`setStylesImportant`). Vérifié avant : aucun des 6 505 EPUB de la bibliothèque n'a de `%`
+  dans un nom d'entrée, donc rien qui se trouvait ne se perd.
+- **Le lavis de la fiche est un `blob:`**, pas un `data:` : la politique d'images du cinéma refuse `data:`.
+
+Laissé en l'état, exprès : au défilement continu sur WebKit, un toucher ne ramène pas les barres (les
+écouteurs posés dans un chapitre sans scripts ne s'y déclenchent pas ; remonter les ramène) — à juger sur
+un vrai iPhone ; Retour pendant les 200–600 ms d'ouverture du lecteur referme aussi la fiche ; l'option
+coupée n'est vue par un cinéma déjà ouvert qu'au rechargement ; la liste des demandes de l'administrateur
+cherche chaque demande (limite de 120 recherches par minute).

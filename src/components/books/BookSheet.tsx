@@ -172,7 +172,9 @@ function BookSheet({
       )}
       <h2 className="mt-1 text-balance font-display text-2xl font-semibold leading-tight sm:text-3xl">{book ? displayTitle(book) : ""}</h2>
       <p className="mt-2 text-muted">{[book?.authors.length ? book.authors.join(", ") : null, book?.year ?? null].filter(Boolean).join(" · ")}</p>
-      <div className="mt-5 flex flex-col items-center gap-3 sm:items-start">
+      {/* Centrés dans la feuille du téléphone et de l'iPad, comme le titre ; calés à gauche sur ordinateur. Selon
+          la largeur (`sm:`), l'iPad mêlait couverture et boutons à gauche, titre et auteur au centre (29/10/2026). */}
+      <div className={`mt-5 flex flex-col gap-3 ${isMobile ? "items-center" : "items-start"}`}>
         <button
           type="button"
           {...NOT_THE_HANDLE}
@@ -264,7 +266,7 @@ function BookSheet({
   // La couverture : c'est elle qui vole depuis la carte touchée (`data-sheet-photo`), et elle encore
   // qui grandit en première page à l'ouverture du lecteur (`readerOpening`).
   const cover = (
-    <div ref={coverRef} data-book-sheet-cover className="relative mx-auto w-40 shrink-0 overflow-hidden rounded-lg shadow-2xl shadow-black/60 sm:mx-0 sm:w-56" style={{ aspectRatio: "2 / 3" }}>
+    <div ref={coverRef} data-book-sheet-cover className={`relative ${isMobile ? "mx-auto" : ""} w-40 shrink-0 overflow-hidden rounded-lg shadow-2xl shadow-black/60 sm:w-56`} style={{ aspectRatio: "2 / 3" }}>
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element -- relais d'images déjà dimensionné par Jellyfin.
         <img src={url} alt="" data-sheet-photo="" draggable={false} className="absolute inset-0 h-full w-full object-cover" />
@@ -280,7 +282,7 @@ function BookSheet({
   // (`useCoverWash`) plutôt qu'un flou CSS repeint à chaque ouverture et fermeture.
   const backdrop = washed ? (
     <div className="pointer-events-none absolute inset-x-0 top-0 h-80 overflow-hidden opacity-50" aria-hidden data-sheet-veil="">
-      {/* eslint-disable-next-line @next/next/no-img-element -- une image `data:` de 16 × 24 points, étirée. */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- une image de 16 × 24 points (`blob:`), étirée. */}
       <img src={washed} alt="" className="absolute inset-0 h-full w-full scale-125 object-cover" />
       <div className="absolute inset-0 bg-linear-to-b from-transparent via-ink/60 to-ink" />
     </div>

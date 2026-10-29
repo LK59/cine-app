@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { AlertTriangle, Download, Film, HardDrive, Pause, Play, RotateCcw, Trash2, Tv, X } from "lucide-react";
 import { ActionSheet } from "@/components/ActionSheet";
 import { useLocale, useT } from "@/components/TranslationProvider";
@@ -19,6 +19,7 @@ import { useOfflineImage } from "./useOfflineImage";
 import { PassageDownloadsCard } from "@/components/passage/PassageDownloads";
 import { offlinePlayable, offlineProgress, offlineStatusLabel, touchDevice } from "./OfflineDownloadControl";
 import { BooksDownloadsEntry, useOfflineBooksPresent } from "@/components/books/BooksMode";
+import { keptBooksBytes } from "@/lib/offline/offlineEntry";
 
 /**
  * La page des téléchargements (bêta, DECISIONS.md §109) — le contenu seul, monté par deux cadres :
@@ -181,11 +182,14 @@ function Grid({ children }: { children: React.ReactNode }) {
  * chaque ouverture. La page s'ouvre avec la valeur d'avant, que la nouvelle remplace.
  */
 let lastFree: number | null = null;
+const noopSubscribe = () => () => {};
 
 function StorageSummary({ downloads }: { downloads: OfflineDownload[] }) {
   const t = useT();
   const { locale } = useLocale();
-  const used = downloads.reduce((sum, d) => sum + d.bytes, 0);
+  // Les livres gardés aussi (`keptBooksBytes`, lu sans rien charger d'eux) : seuls, ils affichaient « 0 Mo ».
+  const booksBytes = useSyncExternalStore(noopSubscribe, keptBooksBytes, () => 0);
+  const used = downloads.reduce((sum, d) => sum + d.bytes, 0) + booksBytes;
   const [free, setFree] = useState<number | null>(lastFree);
   // Relue quand la place prise change de plus de quelques Mo : un téléchargement en cours la fait
   // bouger toutes les deux secondes, l'estimation n'a pas à suivre chaque morceau.

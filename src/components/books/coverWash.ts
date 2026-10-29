@@ -11,9 +11,11 @@ import { useEffect, useState } from "react";
  * la trajectoire de la fiche (`useSheetMorph`) en recopie le voile, donc le flou, dans son calque.
  *
  * Ici : l'image réduite à 16 × 24 points dans un canevas (avec un léger flou là où le canevas le sait),
- * rendue en `data:` — étirée par le navigateur, elle donne le même lavis de couleur pour un coût nul, et une
+ * rendue en `blob:` — étirée par le navigateur, elle donne le même lavis de couleur pour un coût nul, et une
  * copie du nœud (le calque du trajet) la garde, ce qu'un canevas recopié ne ferait pas (il serait vide).
- * Gardée par adresse : rouvrir la fiche ne refait rien.
+ * Gardée par adresse : rouvrir la fiche ne refait rien. `blob:` et non `data:` (29/10/2026) : la politique
+ * d'images du cinéma refuse `data:` exprès, et le lavis n'apparaissait nulle part, une violation en console
+ * à chaque fiche ouverte.
  */
 const W = 16;
 const H = 24;
@@ -39,7 +41,7 @@ function wash(url: string): Promise<string | null> {
         const sw = Math.min(img.naturalWidth, img.naturalHeight * ratio);
         const sh = sw / ratio;
         ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, 0, 0, W, H);
-        resolve(canvas.toDataURL("image/png"));
+        canvas.toBlob((blob) => resolve(blob ? URL.createObjectURL(blob) : null), "image/png");
       } catch {
         resolve(null);
       }
@@ -57,7 +59,11 @@ export function useCoverWash(url: string | null): string | null {
     let live = true;
     void wash(url).then((w) => {
       if (w) {
-        if (made.size >= MAX_KEPT) made.delete(made.keys().next().value as string);
+        if (made.size >= MAX_KEPT) {
+          const oldest = made.keys().next().value as string;
+          URL.revokeObjectURL(made.get(oldest) as string);
+          made.delete(oldest);
+        }
         made.set(url, w);
       }
       if (live) setState({ url, wash: w });

@@ -216,6 +216,9 @@ const layoutRect = el => {
 }
 
 const setStylesImportant = (el, styles) => {
+    // Laterna: a chapter document torn down mid-layout (the reader closed while it loads, a reload) has
+    // no body any more; laying it out threw « Cannot destructure property 'style' » (29/10/2026).
+    if (!el) return
     const { style } = el
     for (const [k, v] of Object.entries(styles)) style.setProperty(k, v, 'important')
 }

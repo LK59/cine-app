@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { BookSummary } from "@/lib/books/types";
-import { OFFLINE_BOOKS_COUNT_KEY, OFFLINE_BOOKS_SHOWN_KEY, WARM_OFFLINE_BOOKS_ENTRY, warmBooksOfflineEntries } from "@/lib/offline/offlineEntry";
+import { OFFLINE_BOOKS_BYTES_KEY, OFFLINE_BOOKS_COUNT_KEY, OFFLINE_BOOKS_SHOWN_KEY, WARM_OFFLINE_BOOKS_ENTRY, warmBooksOfflineEntries } from "@/lib/offline/offlineEntry";
 
 /**
  * Les livres gardés sur l'appareil pour les lire sans réseau (DECISIONS.md §127).
@@ -110,6 +110,7 @@ export function useOfflineBooks(): { books: OfflineBook[]; progress: Map<string,
 function noteCount(): void {
   try {
     localStorage.setItem(OFFLINE_COUNT_KEY, String(books.length));
+    localStorage.setItem(OFFLINE_BOOKS_BYTES_KEY, String(books.reduce((sum, b) => sum + (b.bytes || 0), 0)));
   } catch {
     /* rien */
   }

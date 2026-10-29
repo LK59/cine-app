@@ -92,6 +92,21 @@ const childGetter = (doc, ns) => {
     }
 }
 
+// Laterna: one decoding for every href, the manifest's and the table of contents'. `decodeURI` leaves
+// `%2C`, `%5B`… encoded: an NCX that escapes « , » and « [ » where the OPF writes them as-is pointed at
+// no section, and its entries did nothing (29/10/2026).
+const decodeHref = href => {
+    try {
+        return decodeURIComponent(href)
+    } catch {
+        try {
+            return decodeURI(href)
+        } catch {
+            return href
+        }
+    }
+}
+
 const resolveURL = (url, relativeTo) => {
     try {
         if (relativeTo.includes(':')) return new URL(url, relativeTo)
@@ -99,7 +114,7 @@ const resolveURL = (url, relativeTo) => {
         const root = 'https://invalid.invalid/'
         const obj = new URL(url, root + relativeTo)
         obj.search = ''
-        return decodeURI(obj.href.replace(root, ''))
+        return decodeHref(obj.href.replace(root, ''))
     } catch(e) {
         console.warn(e)
         return url
@@ -314,7 +329,7 @@ const getMetadata = opf => {
 
 const parseNav = (doc, resolve = f => f) => {
     const { $, $$, $$$ } = childGetter(doc, NS.XHTML)
-    const resolveHref = href => href ? decodeURI(resolve(href)) : null
+    const resolveHref = href => href ? decodeHref(resolve(href)) : null
     const parseLI = getType => $li => {
         const $a = $($li, 'a') ?? $($li, 'span')
         const $ol = $($li, 'ol')
@@ -345,7 +360,7 @@ const parseNav = (doc, resolve = f => f) => {
 
 const parseNCX = (doc, resolve = f => f) => {
     const { $, $$ } = childGetter(doc, NS.NCX)
-    const resolveHref = href => href ? decodeURI(resolve(href)) : null
+    const resolveHref = href => href ? decodeHref(resolve(href)) : null
     const parseItem = el => {
         const $label = $(el, 'navLabel')
         const $content = $(el, 'content')
@@ -1047,7 +1062,7 @@ ${doc.querySelector('parsererror').innerText}`)
     }
     resolveHref(href) {
         const [path, hash] = href.split('#')
-        const item = this.resources.getItemByHref(decodeURI(path))
+        const item = this.resources.getItemByHref(decodeHref(path))
         if (!item) return null
         const index = this.resources.spine.findIndex(({ idref }) => idref === item.id)
         const anchor = hash ? doc => getHTMLFragment(doc, hash) : () => 0
