@@ -164,3 +164,31 @@ export function allProgress(limit = 5000): AccountBookProgress[] {
     lastDevice: r.last_device,
   }));
 }
+
+/**
+ * « Marquer comme lu » (fiche du livre, 29/10/2026) : un livre lu ailleurs — papier, liseuse — ou fini sans
+ * passer par la dernière page. Il devient terminé comme au bout du lecteur : hors de « Continuer la
+ * lecture », et une prochaine ouverture repart du début (une relecture, qui le « détermine » à sa première
+ * page enregistrée, `saveProgress`). La position gardée reste ; sans position, une ligne vide la porte.
+ * Rend `true` si le livre ne l'était pas encore.
+ */
+export function markRead(account: string, itemId: string, now = Date.now()): boolean {
+  const db = getDb();
+  return db.transaction(() => {
+    const before = db.prepare("SELECT finished_at FROM book_progress WHERE account = ? AND item_id = ?").get(account, itemId) as { finished_at: number | null } | undefined;
+    if (before) {
+      db.prepare("UPDATE book_progress SET fraction = 1, finished_at = COALESCE(finished_at, ?), updated_at = ?, dismissed_at = NULL WHERE account = ? AND item_id = ?").run(now, now, account, itemId);
+    } else {
+      db.prepare("INSERT INTO book_progress (account, item_id, cfi, fraction, updated_at, finished_at) VALUES (?, ?, '', 1, ?, ?)").run(account, itemId, now, now);
+    }
+    return (before?.finished_at ?? null) === null;
+  })();
+}
+
+/**
+ * « Marquer comme non lu » : le livre repart de zéro — ni terminé, ni commencé, sa position effacée. Les
+ * signets, dans leur propre table, restent. Rend `true` s'il y avait quelque chose à effacer.
+ */
+export function markUnread(account: string, itemId: string): boolean {
+  return getDb().prepare("DELETE FROM book_progress WHERE account = ? AND item_id = ?").run(account, itemId).changes > 0;
+}

@@ -168,6 +168,9 @@ const GUEST_ALLOWED_PATTERNS: RegExp[] = [
   // Une séance de lecture finie (§129) : une ligne au journal des lectures, sous le compte de la session —
   // le titre et l'auteur relus par le serveur, jamais pris du corps.
   /^POST \/api\/books\/[0-9a-f]{32}\/session$/,
+  // « Marquer comme lu / non lu » depuis la fiche (29/10/2026) : la position et le « lu » Jellyfin du compte
+  // de la session seulement, sur un livre qu'il voit (`bookFor`, dans la route).
+  /^(POST|DELETE) \/api\/books\/[0-9a-f]{32}\/read$/,
 ];
 
 function isAllowedForEveryone(method: string, pathname: string): boolean {

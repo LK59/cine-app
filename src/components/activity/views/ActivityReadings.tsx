@@ -143,7 +143,11 @@ export function ActivityReadings() {
                     ? t("activity.readings.eventFinished", { title: e.title ?? t("activity.readings.unknownBook") })
                     : e.kind === "retiré"
                       ? t("activity.readings.eventRemoved", { title: e.title ?? t("activity.readings.unknownBook") })
-                      : t("activity.readings.eventSession", { title: e.title ?? t("activity.readings.unknownBook"), time: hours((e.durationMs ?? 0) / 1000) })}
+                      : e.kind === "marqué lu"
+                        ? t("activity.readings.eventMarkedRead", { title: e.title ?? t("activity.readings.unknownBook") })
+                        : e.kind === "marqué non lu"
+                          ? t("activity.readings.eventMarkedUnread", { title: e.title ?? t("activity.readings.unknownBook") })
+                          : t("activity.readings.eventSession", { title: e.title ?? t("activity.readings.unknownBook"), time: hours((e.durationMs ?? 0) / 1000) })}
                   {(e.device || e.offline) && (
                     <span className="text-subtle">
                       {" "}

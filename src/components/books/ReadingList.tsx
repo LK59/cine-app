@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import useSWR, { mutate as globalMutate } from "swr";
-import { BookMarked, Bookmark, BookmarkCheck } from "lucide-react";
+import { BookMarked, Bookmark, BookmarkCheck, Check, CircleCheck } from "lucide-react";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
@@ -76,6 +76,49 @@ export function ReadingListButton({ book, finished }: { book: BookSummary; finis
     >
       <ToggleGlyph on={listed} onIcon={<BookmarkCheck size={16} />} offIcon={<Bookmark size={16} />} />
       <span>{listed ? t("books.list.removeShort") : t("books.list.addShort")}</span>
+    </button>
+  );
+}
+
+/**
+ * « Marquer comme lu » / « Marquer comme non lu » (29/10/2026) : la forme de « Ma liste » à côté, la coche et la
+ * marque dorée de « Marquer vu » des films. Lu : le livre est terminé ici et chez Jellyfin, il quitte « Continuer
+ * la lecture » et « À lire » ; non lu : il repart de zéro (les signets restent). Basculé aussitôt, rattrapé si le
+ * serveur refuse.
+ */
+export function MarkReadButton({ book, read, onChanged }: { book: BookSummary; read: boolean; onChanged: () => void }) {
+  const t = useT();
+  const [shown, setShown] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const on = shown ?? read;
+  const label = on ? t("books.markUnread") : t("books.markRead");
+  const toggle = () => {
+    if (busy) return;
+    const next = !on;
+    setShown(next);
+    setBusy(true);
+    void fetch(`/api/books/${book.id}/read`, { method: next ? "POST" : "DELETE" })
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        onChanged();
+        void globalMutate(READING_LIST_KEY);
+      })
+      .catch(() => setShown(null))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <button
+      type="button"
+      {...NOT_THE_HANDLE}
+      aria-pressed={on}
+      title={label}
+      disabled={busy}
+      onClick={toggle}
+      className={`btn btn-ghost ${on ? "btn-mine" : ""}`}
+      data-book-read-toggle=""
+    >
+      <ToggleGlyph on={on} onIcon={<CircleCheck size={16} />} offIcon={<Check size={16} />} />
+      <span>{on ? t("books.readState") : t("books.markRead")}</span>
     </button>
   );
 }

@@ -937,7 +937,9 @@
       "eventSession": "{title} — {time} de lectura",
       "eventFinished": "{title} — terminado",
       "eventRemoved": "{title} — quitado de «Seguir leyendo»",
-      "offline": "sin conexión"
+      "offline": "sin conexión",
+      "eventMarkedRead": "{title} — marcado como leído",
+      "eventMarkedUnread": "{title} — marcado como no leído"
     }
   },
   "radarr": {
@@ -3951,6 +3953,9 @@
       "browse": "Explorar libros",
       "addShort": "Añadir a mi lista",
       "removeShort": "Quitar de mi lista"
-    }
+    },
+    "markRead": "Marcar como leído",
+    "markUnread": "Marcar como no leído",
+    "readState": "Leído"
   }
 }

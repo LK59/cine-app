@@ -903,6 +903,20 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.12.0",
+    page: "10.7",
+    onlyOnPage: true,
+    group: { fr: "Livres", en: "Books", es: "Libros", de: "Bücher" },
+    items: [
+      {
+        fr: "Sur la fiche d'un livre, « Marquer comme lu » et « Marquer comme non lu », comme pour les films : un livre lu ailleurs, ou à relire depuis le début.",
+        en: "On a book's page, “Mark as read” and “Mark as unread”, as for films: for a book read elsewhere, or to start again from the beginning.",
+        es: "En la ficha de un libro, «Marcar como leído» y «Marcar como no leído», como en las películas: para un libro leído en otra parte, o para releerlo desde el principio.",
+        de: "Auf der Seite eines Buchs „Als gelesen markieren“ und „Als ungelesen markieren“, wie bei Filmen: für ein anderswo gelesenes Buch oder um von vorn zu beginnen.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

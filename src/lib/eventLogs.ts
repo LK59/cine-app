@@ -168,7 +168,10 @@ export type ReadingEvent =
   /** Le livre terminé la première fois (noté « lu » chez Jellyfin au même moment). */
   | "terminé"
   /** « Retirer de Continuer la lecture », depuis la fiche. */
-  | "retiré";
+  | "retiré"
+  /** « Marquer comme lu » / « Marquer comme non lu », depuis la fiche (29/10/2026). */
+  | "marqué lu"
+  | "marqué non lu";
 
 /** Ne lève jamais : une lecture se poursuit, journal ou pas. */
 export function logReadingEvent(kind: ReadingEvent, fields: { user: string; account: string; book: string } & Record<string, unknown>): void {

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import useSWR, { useSWRConfig } from "swr";
-import { BookOpen, Check, FileDown, X } from "lucide-react";
+import { BookOpen, FileDown, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { fetcher } from "@/lib/swr";
 import { arrivedByBack, cinemaClose, useCinemaRoute } from "@/lib/cinemaRoute";
@@ -18,10 +18,11 @@ import { displayTitle } from "@/lib/books/displayTitle";
 import { readPercent, type BookDetail, type BookSummary } from "@/lib/books/types";
 import { BookCover, coverUrl } from "./BookCover";
 import { BookDownloadButton } from "./BookDownload";
-import { ReadingListButton } from "./ReadingList";
+import { MarkReadButton, ReadingListButton } from "./ReadingList";
 import { isInstalledApp } from "@/lib/iosInstall";
 import { useCoverWash } from "./coverWash";
 import { preloadBookFile, saveData } from "@/lib/books/readerPreload";
+import { BOOKS_PROGRESS_EVENT } from "@/lib/books/readerFrame";
 
 const noopSubscribe = () => () => {};
 
@@ -215,16 +216,21 @@ function BookSheet({
             <X size={15} aria-hidden /> {t("books.removeFromContinue")}
           </button>
         )}
-        {finished && (
-          <p className="flex items-center gap-1.5 text-sm text-subtle">
-            <Check size={15} aria-hidden /> {t("books.finished")}
-          </p>
-        )}
         {/* « Ma liste de lecture » (§129) et le livre gardé sur l'appareil, côte à côte et avec les boutons des
             fiches de films (`btn btn-ghost`, `btn-mine` dans la liste) : le premier était un lien gris, le second
             une pilule à part (29/10/2026, « un peu d'uniformité »). */}
         {book && (
           <div className={`flex flex-wrap items-start gap-2 ${isMobile ? "justify-center" : ""}`}>
+            {/* « Lu » dit aussi ce que disait la ligne « Terminé » d'avant : un seul endroit. */}
+            <MarkReadButton
+              book={book}
+              read={finished}
+              onChanged={() => {
+                void mutate();
+                void mutateKey("/api/books/home");
+                window.dispatchEvent(new Event(BOOKS_PROGRESS_EVENT));
+              }}
+            />
             <ReadingListButton book={book} finished={finished} />
             <BookDownloadButton book={book} />
           </div>

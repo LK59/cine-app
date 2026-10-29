@@ -40,12 +40,14 @@ vi.mock("@/lib/blockedTags", async (importOriginal) => {
   return { ...actual, blockedTagsOf: async () => blocked.tags };
 });
 const markPlayed = vi.fn();
-vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: { markPlayed: (...a: unknown[]) => markPlayed(...a) } }));
+const markUnplayed = vi.fn();
+vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: { markPlayed: (...a: unknown[]) => markPlayed(...a), markUnplayed: (...a: unknown[]) => markUnplayed(...a) } }));
 
 import { GET as listGET } from "@/app/api/books/route";
 import { GET as detailGET } from "@/app/api/books/[id]/route";
 import { GET as fileGET } from "@/app/api/books/[id]/file/route";
 import { GET as progressGET, POST as progressPOST } from "@/app/api/books/[id]/progress/route";
+import { POST as readPOST, DELETE as readDELETE } from "@/app/api/books/[id]/read/route";
 import { addBookmark, listBookmarks } from "@/lib/books/bookmarks";
 import { GET as homeGET } from "@/app/api/books/home/route";
 import { GET as facetsGET } from "@/app/api/books/facets/route";
@@ -120,6 +122,7 @@ beforeEach(() => {
   policy.current = { EnableAllFolders: true, EnabledFolders: [] };
   rightsTesting.reset();
   markPlayed.mockResolvedValue(undefined);
+  markUnplayed.mockResolvedValue(undefined);
   getDb().prepare("DELETE FROM book_progress").run();
   getDb().prepare("DELETE FROM book_meta").run();
   // L'index est gardé par compte, en mémoire : chaque essai repart d'une bibliothèque neuve.
@@ -210,6 +213,7 @@ describe("GET /api/books", () => {
       expect((await fileGET(req(), params(id))).status, `fichier ${id}`).toBe(404);
       expect((await detailGET(req(), params(id))).status, `fiche ${id}`).toBe(404);
       expect((await progressPOST(req(JSON.stringify({ cfi: "epubcfi(/6/4!/4/2)", fraction: 0.5 })), params(id))).status, `position ${id}`).toBe(404);
+      expect((await readPOST(req(), params(id))).status, `marqué lu ${id}`).toBe(404);
     }
     // Aucun téléchargement du livre lui-même (la lecture de l'OPF en arrière-plan, par plages, n'en est pas un).
     const whole = upstream.mock.calls.filter(([u, init]) => String(u).endsWith("/Download") && !new Headers((init as RequestInit)?.headers).has("range"));
@@ -389,6 +393,25 @@ describe("la position de lecture", () => {
     expect(progress).toMatchObject({ cfi: "epubcfi(/6/4!/4/2)", fraction: 0.25, finished: false });
     expect(getDb().prepare("SELECT account FROM book_progress").all()).toEqual([{ account: "lecteur" }]);
     expect(markPlayed).not.toHaveBeenCalled();
+  });
+
+  it("« Marquer comme lu » puis « non lu » (29/10/2026) : terminé ici et chez Jellyfin, sorti de la liste ; puis effacé, signets gardés", async () => {
+    await post({ cfi: "epubcfi(/6/8!/4/2)", fraction: 0.3, atStart: false });
+    addBookmark("lecteur", BOOK, { cfi: "epubcfi(/6/8!/4/2)", fraction: 0.3, chapter: "II", excerpt: "…" });
+    getDb().prepare("INSERT INTO book_list (account, item_id, added_at) VALUES ('lecteur', ?, 1)").run(BOOK);
+    expect((await readPOST(req(), params(BOOK))).status).toBe(200);
+    expect(markPlayed).toHaveBeenCalledWith(JF, BOOK);
+    expect((await (await progressGET(req(), params(BOOK))).json()).progress).toMatchObject({ finished: true });
+    expect(getDb().prepare("SELECT COUNT(*) AS n FROM book_list").get()).toEqual({ n: 0 });
+    expect((await readDELETE(req(), params(BOOK))).status).toBe(200);
+    expect(markUnplayed).toHaveBeenCalledWith(JF, BOOK);
+    expect((await (await progressGET(req(), params(BOOK))).json()).progress).toBeNull();
+    expect(listBookmarks("lecteur", BOOK)).toHaveLength(1);
+  });
+
+  it("« Marquer comme lu » un livre jamais ouvert : terminé sans position", async () => {
+    expect((await readPOST(req(), params(BOOK))).status).toBe(200);
+    expect((await (await progressGET(req(), params(BOOK))).json()).progress).toMatchObject({ finished: true, fraction: 1 });
   });
 
   it("au bout du livre, « lu » chez Jellyfin pour ce compte — une seule fois", async () => {

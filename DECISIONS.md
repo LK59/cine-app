@@ -8101,3 +8101,12 @@ tout début du fichier), le lecteur envoie `atStart: true` et la route l'efface 
 gardée est donc un livre commencé : les filtres de `resumeFrom`, `grouping.ts` et de la vue « Lectures »
 n'appliquent plus de seuil, et le pourcentage montré n'est jamais « 0 % » (`readPercent`). Un client d'avant,
 qui n'envoie pas `atStart`, garde le seuil de 1 % côté route.
+
+### « Marquer comme lu / non lu » (29/10/2026, 10.12.0)
+
+Sur la fiche d'un livre (`MarkReadButton`, `ReadingList.tsx`), la forme de « Ma liste » et la coche dorée de
+« Marquer vu » des films ; il remplace la ligne « Terminé ». Route `POST|DELETE /api/books/<id>/read` (le compte
+de la session, un livre qu'il voit — `bookFor`). Lu : `markRead` (terminé comme au bout du lecteur, la position
+gardée ou une ligne vide), « lu » chez Jellyfin, retiré de « Ma liste de lecture ». Non lu : `markUnread` (la
+position effacée, les signets restent), « non lu » chez Jellyfin. Les deux vont au journal des lectures
+(`marqué lu`, `marqué non lu`). Un refus de Jellyfin ne bloque pas l'état local et va dans `server.log`.
