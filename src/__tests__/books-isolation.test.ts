@@ -213,6 +213,30 @@ describe("une session de partage", () => {
     // Demander un livre : la demande, oui ; y répondre, non.
     expect((await proxy(req("POST", "/api/books/requests"))).status).toBe(200);
     expect((await proxy(req("PATCH", "/api/books/requests/1"))).status).toBe(403);
+    // §129 : ses réglages du lecteur, sa liste de lecture, ses séances de lecture — rien d'autre.
+    expect((await proxy(req("PUT", "/api/books/reader-prefs"))).status).toBe(200);
+    expect((await proxy(req("POST", "/api/books/list"))).status).toBe(200);
+    expect((await proxy(req("DELETE", "/api/books/list"))).status).toBe(200);
+    expect((await proxy(req("POST", `/api/books/${BOOK}/session`))).status).toBe(200);
+    expect((await proxy(req("DELETE", `/api/books/${BOOK}/session`))).status).toBe(403);
+    expect((await proxy(req("PUT", "/api/books/list"))).status).toBe(403);
+    // Les lectures de chaque compte : à l'administrateur seul, dès le proxy.
+    expect((await proxy(req("GET", "/api/admin/activity/books"))).status).toBe(403);
+  });
+  it("une session de partage n'atteint aucune des routes du §129", async () => {
+    process.env.BOOKS_ENABLED = "true";
+    mockVerify.mockResolvedValue({ u: "partage-01234567", role: "share", sh: SHARE.id, jti: "j", exp: EXPIRES });
+    const { proxy } = await import("@/proxy");
+    for (const [method, p] of [
+      ["GET", "/api/books/reader-prefs"],
+      ["PUT", "/api/books/reader-prefs"],
+      ["GET", "/api/books/list"],
+      ["POST", "/api/books/list"],
+      ["POST", `/api/books/${BOOK}/session`],
+      ["GET", "/api/admin/activity/books"],
+    ]) {
+      expect((await proxy(req(method, p))).status, `${method} ${p}`).toBe(403);
+    }
   });
 });
 
