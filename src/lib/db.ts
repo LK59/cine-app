@@ -839,6 +839,9 @@ function migrate(db: Database.Database): void {
     seedNewsPage(db, books.seed, books.version, books.content, Date.now(), "draft");
     // Signets, recherche dans le livre et lecture hors ligne ajoutés le soir même, avant publication.
     refreshNewsDraft(db, books.refresh, books.version, books.content);
+    // Publiée le 29/10, puis complétée des réglages par compte et de la liste de lecture (§129) : mise à
+    // jour, pas republiée (Louis) — personne ne revoit la fenêtre.
+    amendNewsPage(db, books.amend, books.version, books.content);
   }
   // Les versions 10.1 à 10.5 (27/10/2026) : publiée partout, consultable dans Compte → Nouveautés, sans
   // ouvrir la fenêtre (Louis : mettre à jour, ne pas republier). Avant le registre, qui la complète.
@@ -997,6 +1000,21 @@ export function republishNewsPage(
         page.id
       );
     }
+    db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES (?, ?)").run(marker, now);
+  })();
+}
+
+/**
+ * Une page publiée, complétée dans le code après sa publication (Louis : mettre à jour, ne pas
+ * republier) : son contenu est remplacé, son rang, sa date et ce que chaque compte a vu ne bougent pas —
+ * la fenêtre ne se rouvre pour personne. Le contenu du code doit reprendre ce que le registre des
+ * corrections y a déjà versé (la page 10.7 le relit, `ledgerFixes`), et le registre repasse ensuite sans
+ * rien doubler. Une page encore en brouillon, ou effacée, n'est pas touchée. Une fois, par son marqueur.
+ */
+export function amendNewsPage(db: Database.Database, marker: string, version: string, content: NewsContentByLang, now = Date.now()): void {
+  if (db.prepare("SELECT 1 FROM migrations_done WHERE name = ?").get(marker)) return;
+  db.transaction(() => {
+    db.prepare("UPDATE news_pages SET content = ?, updated_at = ? WHERE version = ? AND status = 'published'").run(JSON.stringify(content), now, version);
     db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES (?, ?)").run(marker, now);
   })();
 }

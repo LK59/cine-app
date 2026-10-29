@@ -21,6 +21,8 @@ export const NEWS_107_VERSION = "10.7";
 export const NEWS_107_SEED = "news-seed-10.7-livres";
 /** Le brouillon complété le soir même (signets, recherche, hors ligne), avant publication : `refreshNewsDraft`. */
 export const NEWS_107_REFRESH = "news-refresh-10.7-livres-signets";
+/** La page déjà publiée, complétée une fois des réglages par compte et de la liste de lecture (§129) : `amendNewsPage`. */
+export const NEWS_107_AMEND = "news-amend-10.7-livres-par-compte";
 /** Les corrections reprises du registre : à partir de cette version (ce que la page 10.5 n'annonçait pas). */
 const FIXES_FROM = "10.5.6";
 
@@ -67,6 +69,18 @@ export const NEWS_107_CONTENT: NewsContentByLang = {
             icon: "phone",
             title: "Signets, recherche et hors ligne",
             text: "Marquez une page d'un signet, cherchez un mot dans tout le livre, et téléchargez-le pour le lire sans réseau.",
+            badge: "",
+          },
+          {
+            icon: "palette",
+            title: "Vos réglages vous suivent",
+            text: "La taille du texte, le thème et la page qui tourne sont gardés sur votre compte : un réglage pour le téléphone, un pour la tablette, un pour l'ordinateur.",
+            badge: "",
+          },
+          {
+            icon: "heart",
+            title: "Ma liste de lecture",
+            text: "Ajoutez un livre depuis sa fiche : il vous attend dans Ma liste, onglet « À lire », et en haut des livres.",
             badge: "",
           },
           {
@@ -146,6 +160,18 @@ export const NEWS_107_CONTENT: NewsContentByLang = {
             badge: "",
           },
           {
+            icon: "palette",
+            title: "Your settings follow you",
+            text: "Text size, theme and page turn are kept on your account: one setting for your phone, one for your tablet, one for your computer.",
+            badge: "",
+          },
+          {
+            icon: "heart",
+            title: "My reading list",
+            text: "Add a book from its page: it waits for you in My list, under “To read”, and at the top of Books.",
+            badge: "",
+          },
+          {
             icon: "search",
             title: "Everything is easy to find",
             text: "Search finds books too, below films and series. “See all” sorts and filters by genre, author or series.",
@@ -219,6 +245,18 @@ export const NEWS_107_CONTENT: NewsContentByLang = {
             icon: "phone",
             title: "Marcadores, búsqueda y sin conexión",
             text: "Marque una página, busque una palabra en todo el libro y descárguelo para leerlo sin conexión.",
+            badge: "",
+          },
+          {
+            icon: "palette",
+            title: "Sus ajustes le siguen",
+            text: "El tamaño del texto, el tema y el paso de página se guardan en su cuenta: un ajuste para el teléfono, otro para la tableta y otro para el ordenador.",
+            badge: "",
+          },
+          {
+            icon: "heart",
+            title: "Mi lista de lectura",
+            text: "Añada un libro desde su ficha: le espera en Mi lista, pestaña «Por leer», y arriba de Libros.",
             badge: "",
           },
           {
@@ -298,6 +336,18 @@ export const NEWS_107_CONTENT: NewsContentByLang = {
             badge: "",
           },
           {
+            icon: "palette",
+            title: "Ihre Einstellungen gehen mit",
+            text: "Textgröße, Design und Umblättern werden in Ihrem Konto gespeichert: eine Einstellung für das Telefon, eine für das Tablet, eine für den Computer.",
+            badge: "",
+          },
+          {
+            icon: "heart",
+            title: "Meine Leseliste",
+            text: "Fügen Sie ein Buch über seine Seite hinzu: Es wartet in Meine Liste unter „Zu lesen“ und oben bei den Büchern.",
+            badge: "",
+          },
+          {
             icon: "search",
             title: "Alles ist schnell gefunden",
             text: "Die Suche findet auch Bücher, unter Filmen und Serien. „Alle anzeigen“ sortiert und filtert nach Genre, Autor oder Reihe.",
@@ -347,6 +397,6 @@ export const NEWS_107_CONTENT: NewsContentByLang = {
 };
 
 /** La page, sur la seule installation qui annonce sa nouvelle adresse ; `null` partout ailleurs. */
-export function booksNewsPage(rawAddress: string | null | undefined): { seed: string; refresh: string; version: string; content: NewsContentByLang } | null {
-  return laternaAddress(rawAddress) ? { seed: NEWS_107_SEED, refresh: NEWS_107_REFRESH, version: NEWS_107_VERSION, content: NEWS_107_CONTENT } : null;
+export function booksNewsPage(rawAddress: string | null | undefined): { seed: string; refresh: string; amend: string; version: string; content: NewsContentByLang } | null {
+  return laternaAddress(rawAddress) ? { seed: NEWS_107_SEED, refresh: NEWS_107_REFRESH, amend: NEWS_107_AMEND, version: NEWS_107_VERSION, content: NEWS_107_CONTENT } : null;
 }

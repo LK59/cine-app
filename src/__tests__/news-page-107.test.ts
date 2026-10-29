@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import Database from "better-sqlite3";
 import { NEWS_LANGS, sanitizeContent } from "@/lib/news/content";
-import { booksNewsPage, NEWS_107_CONTENT, NEWS_107_REFRESH, NEWS_107_SEED, NEWS_107_VERSION } from "@/lib/news/page107";
-import { refreshNewsDraft, seedNewsPage } from "@/lib/db";
+import { booksNewsPage, NEWS_107_AMEND, NEWS_107_CONTENT, NEWS_107_REFRESH, NEWS_107_SEED, NEWS_107_VERSION } from "@/lib/news/page107";
+import { amendNewsPage, refreshNewsDraft, seedNewsPage } from "@/lib/db";
 
 /**
  * La page « 10.7 » (les livres, §127, et la 10.6) : seulement sur l'installation qui annonce sa
@@ -34,7 +34,7 @@ describe("la page Nouveautés 10.7", () => {
 
   it("n'existe que sur l'installation qui annonce sa nouvelle adresse", () => {
     for (const none of [undefined, null, "", "cine-app"]) expect(booksNewsPage(none), String(none)).toBeNull();
-    expect(booksNewsPage("app.example.org")).toEqual({ seed: NEWS_107_SEED, refresh: NEWS_107_REFRESH, version: NEWS_107_VERSION, content: NEWS_107_CONTENT });
+    expect(booksNewsPage("app.example.org")).toEqual({ seed: NEWS_107_SEED, refresh: NEWS_107_REFRESH, amend: NEWS_107_AMEND, version: NEWS_107_VERSION, content: NEWS_107_CONTENT });
   });
 
   it("est semée en brouillon, une seule fois", () => {
@@ -65,5 +65,22 @@ describe("la page Nouveautés 10.7", () => {
     const rows = db.prepare("SELECT status, content FROM news_pages ORDER BY id").all() as { status: string; content: string }[];
     expect(JSON.parse(rows[0].content)).toEqual(NEWS_107_CONTENT);
     expect(rows[1].content).toBe('{"kept":1}');
+  });
+
+  it("publiée puis complétée (§129) : le contenu change une fois, ni le rang ni la date ne bougent", () => {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE migrations_done (name TEXT PRIMARY KEY, done_at INTEGER NOT NULL);
+      CREATE TABLE news_pages (id INTEGER PRIMARY KEY AUTOINCREMENT, version TEXT NOT NULL, content TEXT NOT NULL,
+        status TEXT NOT NULL, seq INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, published_at INTEGER);
+    `);
+    db.prepare("INSERT INTO news_pages (version, content, status, seq, created_at, updated_at, published_at) VALUES ('10.7', '{\"old\":1}', 'published', 11, 1, 1, 5)").run();
+    amendNewsPage(db, "a", "10.7", NEWS_107_CONTENT, 7);
+    amendNewsPage(db, "a", "10.7", { fr: { sections: [], fixesSummary: "", fixes: [] } }, 8);
+    const row = db.prepare("SELECT seq, published_at, content FROM news_pages").get() as { seq: number; published_at: number; content: string };
+    expect(row.seq).toBe(11);
+    expect(row.published_at).toBe(5);
+    expect(JSON.parse(row.content)).toEqual(NEWS_107_CONTENT);
+    expect(JSON.stringify(NEWS_107_CONTENT.fr)).toContain("Ma liste de lecture");
   });
 });
