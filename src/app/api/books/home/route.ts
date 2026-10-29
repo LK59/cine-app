@@ -4,6 +4,7 @@ import { accountCopies, bookIndex, resumeFrom, withProgress } from "@/lib/books/
 import { progressByBook } from "@/lib/books/progress";
 import { playedBooksOf } from "@/lib/books/library";
 import { bookmarkedBooks } from "@/lib/books/bookmarks";
+import { listedBooks, readingListFrom } from "@/lib/books/readingList";
 
 /**
  * L'accueil de la catégorie Livres (option, DECISIONS.md §127), déjà calculé par le serveur
@@ -23,6 +24,8 @@ export async function GET(req: NextRequest) {
       {
         total: index.books.length,
         resume: resumeFrom(index, progress),
+        // « Ma liste de lecture » (§129), juste après « Continuer la lecture » ; vide, l'accueil n'en montre rien.
+        list: withProgress(readingListFrom(index, listedBooks(caller.u)).slice(0, 20), progress, played),
         recent: withProgress(index.home.recent, progress, played, copies),
         rows: index.home.rows.map((row) => ({ ...row, books: withProgress(row.books, progress, played, copies) })),
         hidden: index.home.hidden,

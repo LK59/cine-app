@@ -125,6 +125,12 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // L'ancienne adresse a libéré sa place (§119) : une ligne au journal, pour les seuls titres attestés
   // à la session de l'appelant.
   "POST /api/passage/fetched",
+  // Les livres (option, DECISIONS.md §129) — chaque route n'écrit que sous le compte de la session et
+  // répond 404 option coupée : les réglages du lecteur pour un type d'appareil, et sa liste de lecture
+  // (ajouter, retirer ; un livre que le compte ne voit pas est refusé par la route).
+  "PUT /api/books/reader-prefs",
+  "POST /api/books/list",
+  "DELETE /api/books/list",
 ]);
 
 /**
@@ -159,6 +165,9 @@ const GUEST_ALLOWED_PATTERNS: RegExp[] = [
   // Demander un livre (§127) : un ticket rangé sous le compte de la session. Répondre à une demande
   // (`PATCH /api/books/requests/<id>`) reste à l'administrateur.
   /^POST \/api\/books\/requests$/,
+  // Une séance de lecture finie (§129) : une ligne au journal des lectures, sous le compte de la session —
+  // le titre et l'auteur relus par le serveur, jamais pris du corps.
+  /^POST \/api\/books\/[0-9a-f]{32}\/session$/,
 ];
 
 function isAllowedForEveryone(method: string, pathname: string): boolean {
@@ -245,6 +254,9 @@ const ADMIN_ONLY_READS: RegExp[] = [
   /^\/api\/admin\/offline(\/|$)/,
   // Les liens de partage : qui les a reçus, ce qu'ils ont regardé (DECISIONS.md §112).
   /^\/api\/admin\/shares(\/|$)/,
+  // Les lectures de chaque compte — quels livres, combien de temps, sur quel appareil (§129). La route le
+  // vérifie aussi (`adminOnly`), et répond 404 l'option des livres coupée.
+  /^\/api\/admin\/activity\/books(\/|$)/,
   // La recherche de Radarr et de Sonarr (fiches complètes, chemins sur le disque) et la bibliothèque
   // de Jellyfin (sa version exacte, ses compteurs) : la gestion seule les lit (revue du 20/10/2026).
   /^\/api\/(radarr\/movies|sonarr\/series)\/lookup\/?$/,

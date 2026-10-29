@@ -42,6 +42,12 @@ export const WRITE_LIMITS = {
   newsSeen: { max: 10, windowMs: 60_000 },
   /** Un commentaire se tape à la main : vingt en une minute n'en est plus un. */
   reportMessages: { max: 20, windowMs: 60_000 },
+  /**
+   * Les séances de lecture de livres (DECISIONS.md §129) : une par fermeture du lecteur ou passage en
+   * arrière-plan, plus celles lues hors ligne et renvoyées d'un coup au retour du réseau. Soixante par
+   * heure couvre une journée de train ; au-delà, une boucle.
+   */
+  readingSession: { max: 60, windowMs: 3_600_000 },
 } as const;
 
 const limiter = (name: keyof typeof WRITE_LIMITS) => createRateLimiter(WRITE_LIMITS[name].max, WRITE_LIMITS[name].windowMs);
@@ -54,3 +60,4 @@ export const reportMessageAllowed = limiter("reportMessages");
 export const remoteDiagAllowed = limiter("remoteDiag");
 export const newsEventAllowed = limiter("newsEvent");
 export const newsSeenAllowed = limiter("newsSeen");
+export const readingSessionAllowed = limiter("readingSession");

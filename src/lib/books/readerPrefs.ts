@@ -1,9 +1,10 @@
 /**
  * Les réglages du lecteur de livres (DECISIONS.md §127) : la page qui tourne, la police, sa taille,
- * l'interligne, les marges, la justification, le thème, la lumière. Gardés **par appareil**
- * (`localStorage`) et non par compte : on ne lit pas de la même façon sur un téléphone le soir et sur
- * un grand écran. Chaque accès est gardé — une navigation privée ou un stockage bloqué rendent
- * simplement les valeurs par défaut.
+ * l'interligne, les marges, la justification, le thème, la lumière. Gardés **par compte et par type
+ * d'appareil** depuis le 29/10/2026 (§129, `readerPrefsStore.ts`, `readerPrefsSync.ts`) : on ne lit pas de
+ * la même façon sur un téléphone le soir et sur un grand écran, mais un nouveau téléphone retrouve ses
+ * réglages. L'appareil en garde une copie (`localStorage`) pour ouvrir aussitôt et sans réseau ; chaque
+ * accès est gardé — une navigation privée ou un stockage bloqué rendent simplement les valeurs par défaut.
  */
 
 export type ReaderTheme = "auto" | "light" | "sepia" | "dark" | "black";
@@ -176,6 +177,44 @@ export function normalizeReaderPrefs(raw: unknown, reducedMotion = false): Reade
     warmth: clamp(o.warmth, 0, 1, 0.05, d.warmth),
     tapTurns: typeof o.tapTurns === "boolean" ? o.tapTurns : d.tapTurns,
   };
+}
+
+const PREF_KEYS = Object.keys(defaultReaderPrefs()) as (keyof ReaderPrefs)[];
+
+/** Les bornes de chaque réglage numérique — celles de `normalizeReaderPrefs`, dites une fois pour le serveur. */
+const NUMBER_BOUNDS: Partial<Record<keyof ReaderPrefs, { min: number; max: number }>> = {
+  fontSize: FONT_SIZE_RANGE,
+  lineHeight: LINE_HEIGHT_RANGE,
+  brightness: { min: 0.4, max: 1 },
+  warmth: { min: 0, max: 1 },
+};
+
+/**
+ * Des réglages reçus par le serveur (DECISIONS.md §129) : **tous** les champs, et rien d'autre — une clé
+ * inconnue, un choix hors liste, un nombre hors bornes ou du mauvais type, et c'est `null`. Plus strict
+ * que `normalizeReaderPrefs`, qui rattrape ce qu'un ancien stockage de l'appareil a pu garder : ce que le
+ * serveur garde est relu par tous les appareils du compte, il n'accepte que ce que le lecteur écrit. Les
+ * nombres sont ramenés au pas du curseur (un pincement donne un nombre quelconque entre les bornes).
+ */
+export function strictReaderPrefs(raw: unknown): ReaderPrefs | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const keys = Object.keys(o);
+  if (keys.length !== PREF_KEYS.length || keys.some((k) => !(PREF_KEYS as string[]).includes(k))) return null;
+  for (const [key, bounds] of Object.entries(NUMBER_BOUNDS)) {
+    const v = o[key];
+    if (typeof v !== "number" || !Number.isFinite(v) || v < bounds.min || v > bounds.max) return null;
+  }
+  if (typeof o.justify !== "boolean" || typeof o.tapTurns !== "boolean") return null;
+  const lists: [keyof ReaderPrefs, readonly string[]][] = [
+    ["turn", TURNS],
+    ["font", FONTS],
+    ["margin", MARGINS],
+    ["theme", THEMES],
+    ["layout", LAYOUTS],
+  ];
+  if (lists.some(([key, values]) => typeof o[key] !== "string" || !values.includes(o[key] as string))) return null;
+  return normalizeReaderPrefs(o);
 }
 
 export function loadReaderPrefs(reducedMotion = false): ReaderPrefs {

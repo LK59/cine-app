@@ -61,17 +61,28 @@ export function forgetUnstarted(account: string, itemId: string): boolean {
  * cette écriture-ci qui termine le livre (la route le note alors chez Jellyfin).
  * `now` : l'heure de lecture, dans l'horloge du serveur (`readAt` de la route).
  */
-export function saveProgress(account: string, itemId: string, cfi: string, fraction: number, finished: boolean, now = Date.now()): { firstFinish: boolean } {
+export function saveProgress(
+  account: string,
+  itemId: string,
+  cfi: string,
+  fraction: number,
+  finished: boolean,
+  now = Date.now(),
+  device: string | null = null
+): { firstFinish: boolean } {
   const db = getDb();
   return db.transaction(() => {
     const before = db.prepare("SELECT finished_at FROM book_progress WHERE account = ? AND item_id = ?").get(account, itemId) as { finished_at: number | null } | undefined;
     const finishedAt = finished ? (before?.finished_at ?? now) : null;
+    // `device` : l'appareil de cette page (§129, l'activité dit « lu en dernier sur… ») ; inconnu, celui
+    // d'avant reste.
     db.prepare(
-      `INSERT INTO book_progress (account, item_id, cfi, fraction, updated_at, finished_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO book_progress (account, item_id, cfi, fraction, updated_at, finished_at, last_device)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(account, item_id) DO UPDATE SET cfi = excluded.cfi, fraction = excluded.fraction,
-         updated_at = excluded.updated_at, finished_at = excluded.finished_at, dismissed_at = NULL`
-    ).run(account, itemId, cfi, fraction, now, finishedAt);
+         updated_at = excluded.updated_at, finished_at = excluded.finished_at, dismissed_at = NULL,
+         last_device = COALESCE(excluded.last_device, book_progress.last_device)`
+    ).run(account, itemId, cfi, fraction, now, finishedAt, device);
     return { firstFinish: finished && (before?.finished_at ?? null) === null };
   })();
 }
@@ -121,4 +132,33 @@ const MAX_AGE_MS = 365 * 24 * 3_600_000;
 export function readAt(input: { at: number | null; ageMs: number | null }, now = Date.now()): number | null {
   if (input.ageMs !== null) return now - input.ageMs;
   return input.at;
+}
+
+export interface AccountBookProgress {
+  account: string;
+  itemId: string;
+  fraction: number;
+  updatedAt: number;
+  finishedAt: number | null;
+  dismissed: boolean;
+  lastDevice: string | null;
+}
+
+/**
+ * Toutes les positions de tous les comptes, pour l'activité de l'administrateur (§129) — les plus récentes
+ * d'abord, bornées : une ligne par compte et par livre, jamais le texte (la CFI n'en sort pas).
+ */
+export function allProgress(limit = 5000): AccountBookProgress[] {
+  const rows = getDb()
+    .prepare("SELECT account, item_id, fraction, updated_at, finished_at, dismissed_at, last_device FROM book_progress ORDER BY updated_at DESC LIMIT ?")
+    .all(limit) as { account: string; item_id: string; fraction: number; updated_at: number; finished_at: number | null; dismissed_at: number | null; last_device: string | null }[];
+  return rows.map((r) => ({
+    account: r.account,
+    itemId: r.item_id,
+    fraction: r.fraction,
+    updatedAt: r.updated_at,
+    finishedAt: r.finished_at,
+    dismissed: r.dismissed_at !== null,
+    lastDevice: r.last_device,
+  }));
 }

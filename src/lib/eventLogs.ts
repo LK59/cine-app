@@ -153,6 +153,33 @@ export function logAuthEvent(kind: AuthEvent, fields: { user: string; device?: s
   }
 }
 
+/**
+ * Les lectures de livres (option, DECISIONS.md §129) : une ligne par séance de lecture — le lecteur
+ * l'envoie en se refermant ou quand la page passe en arrière-plan — et une ligne quand un livre est
+ * terminé pour la première fois ou retiré de « Continuer la lecture ». Rien ne disait qui lisait quoi,
+ * combien de temps ni sur quel appareil : la position seule (`book_progress`) ne garde que la dernière
+ * page. Même forme que les autres journaux, vingt archives ; lu par l'activité (« Lectures »).
+ */
+export const READINGS_LOG = () => path.join(LOG_DIR, "lectures.log");
+
+export type ReadingEvent =
+  /** Une séance de lecture, page visible : durée, avancement, pages tournées. */
+  | "séance"
+  /** Le livre terminé la première fois (noté « lu » chez Jellyfin au même moment). */
+  | "terminé"
+  /** « Retirer de Continuer la lecture », depuis la fiche. */
+  | "retiré";
+
+/** Ne lève jamais : une lecture se poursuit, journal ou pas. */
+export function logReadingEvent(kind: ReadingEvent, fields: { user: string; account: string; book: string } & Record<string, unknown>): void {
+  try {
+    // `kind` posé en dernier aussi, comme `logAuthEvent` : aucun champ ne le remplace.
+    appendJsonLine(READINGS_LOG(), Object.assign({ timestamp: new Date().toISOString(), kind }, fields, { kind }), { keep: EVENT_LOG_KEEP });
+  } catch {
+    /* un disque qui refuse une note n'interrompt pas une lecture */
+  }
+}
+
 /** Une notification envoyée : à qui, et ce qu'il en est advenu, appareil par appareil. */
 export function logNotificationSent(fields: {
   category: string | null;

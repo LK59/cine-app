@@ -788,6 +788,29 @@ function migrate(db: Database.Database): void {
   try { db.exec("ALTER TABLE book_meta ADD COLUMN cover_path TEXT"); } catch { /* already exists */ }
   // La langue de l'EPUB (`dc:language`) : Google Books ne donne un résumé que dans la langue du livre.
   try { db.exec("ALTER TABLE book_meta ADD COLUMN language TEXT"); } catch { /* already exists */ }
+  // Les réglages du lecteur de livres, par compte et par type d'appareil (§129, `readerPrefsStore.ts`) :
+  // un objet JSON validé par ligne. Un type sans ligne prend la dernière écrite du compte.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS book_reader_prefs (
+      account     TEXT    NOT NULL,
+      device_type TEXT    NOT NULL CHECK (device_type IN ('telephone', 'tablette', 'ordinateur')),
+      prefs       TEXT    NOT NULL,
+      updated_at  INTEGER NOT NULL,
+      PRIMARY KEY (account, device_type)
+    );
+  `);
+  // « Ma liste de lecture » (§129, `readingList.ts`) : les livres qu'un compte se promet de lire, à part
+  // de la liste des films et séries (`watchlist`, qui n'accepte que ceux-là).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS book_list (
+      account  TEXT    NOT NULL,
+      item_id  TEXT    NOT NULL,
+      added_at INTEGER NOT NULL,
+      PRIMARY KEY (account, item_id)
+    );
+  `);
+  // L'appareil de la dernière page lue (§129) : l'activité dit « lu en dernier sur iPhone ».
+  try { db.exec("ALTER TABLE book_progress ADD COLUMN last_device TEXT"); } catch { /* already exists */ }
   seedInitialNews(db);
   // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
   seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");

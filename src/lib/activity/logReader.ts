@@ -16,16 +16,17 @@ import { logGenerations } from "@/lib/logFile";
 import { playerLogFile, benchPlayerLogFile, PLAYER_LOG_KEEP, BENCH_PLAYER_LOG_KEEP } from "@/lib/playerLog";
 import { SERVER_LOG_FILE, SERVER_LOG_KEEP } from "@/lib/logger";
 import { BENCH_LOG, BENCH_LOG_KEEP } from "@/lib/playerBench/benchLog";
-import { AUTH_LOG, NOTIFICATIONS_LOG, STARTUP_LOG, EVENT_LOG_KEEP } from "@/lib/eventLogs";
+import { AUTH_LOG, NOTIFICATIONS_LOG, READINGS_LOG, STARTUP_LOG, EVENT_LOG_KEEP } from "@/lib/eventLogs";
 import { SUBTITLE_GEN_LOG, SUBTITLE_GEN_LOG_KEEP } from "@/lib/subtitleGen/log";
 
-export type LogSource = "player" | "server" | "auth" | "notifications" | "startup" | "bench" | "benchPlayer" | "subtitleGen";
+export type LogSource = "player" | "server" | "auth" | "notifications" | "startup" | "bench" | "benchPlayer" | "subtitleGen" | "readings";
 /**
  * `startup` (les ouvertures du cinéma, la télécommande d'un Fire TV, les Nouveautés) depuis le
  * 14/10/2026 : le journal était écrit depuis le 25/09 et ne se lisait qu'au terminal, avec `jq` —
- * c'est pourtant lui qui a montré les 1,7 à 4,8 s de « Reprendre » vide (§86).
+ * c'est pourtant lui qui a montré les 1,7 à 4,8 s de « Reprendre » vide (§86). `readings` (les lectures
+ * de livres, §129) depuis le 29/10/2026 — l'écran ne la propose que les livres allumés.
  */
-export const LOG_SOURCES: LogSource[] = ["player", "server", "auth", "notifications", "startup", "bench", "benchPlayer", "subtitleGen"];
+export const LOG_SOURCES: LogSource[] = ["player", "server", "auth", "notifications", "startup", "bench", "benchPlayer", "subtitleGen", "readings"];
 
 function generationsOf(source: LogSource): string[] {
   switch (source) {
@@ -45,6 +46,8 @@ function generationsOf(source: LogSource): string[] {
       return logGenerations(benchPlayerLogFile(), BENCH_PLAYER_LOG_KEEP);
     case "subtitleGen":
       return logGenerations(SUBTITLE_GEN_LOG(), SUBTITLE_GEN_LOG_KEEP);
+    case "readings":
+      return logGenerations(READINGS_LOG(), EVENT_LOG_KEEP);
   }
 }
 

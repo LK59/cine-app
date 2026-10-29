@@ -4,6 +4,11 @@ import { bookIdOf, booksCaller } from "@/lib/books/guard";
 import { bookFor, forgetPlayed } from "@/lib/books/library";
 import { dismissedAt, dismissProgress, forgetUnstarted, readAt, readProgress, saveProgress, validProgressInput, MIN_STARTED_FRACTION } from "@/lib/books/progress";
 import { logError } from "@/lib/logger";
+import { requestDeviceLabel } from "@/lib/deviceLabel";
+import { logReadingEvent } from "@/lib/eventLogs";
+import { bookIndex } from "@/lib/books/bookIndex";
+import { bookFields } from "@/lib/books/readingLog";
+import { removeFromReadingList } from "@/lib/books/readingList";
 
 /**
  * La position de lecture d'un livre (option, DECISIONS.md §127), pour le compte de la session et lui
@@ -41,8 +46,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const input = validProgressInput(parsed);
   if (!input) return NextResponse.json({ error: "Position invalide" }, { status: 400 });
 
+  let book;
   try {
-    if (!(await bookFor(caller, id))) return new NextResponse(null, { status: 404 });
+    book = await bookFor(caller, id);
+    if (!book) return new NextResponse(null, { status: 404 });
   } catch {
     return new NextResponse(null, { status: 502 });
   }
@@ -66,7 +73,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   // Datée de sa lecture, pas de sa réception : une page tournée juste après un envoi n'est plus « plus
   // vieille » que lui, et une position partie de la file garde son heure. Jamais dans le futur.
-  const { firstFinish } = saveProgress(caller.u, id, input.cfi, input.fraction, input.finished, Math.min(Date.now(), at ?? Date.now()));
+  const device = requestDeviceLabel(req);
+  const { firstFinish } = saveProgress(caller.u, id, input.cfi, input.fraction, input.finished, Math.min(Date.now(), at ?? Date.now()), device);
+  if (firstFinish) {
+    // Terminé : il quitte « Ma liste de lecture » (§129) — elle dit ce qui reste à lire —, et l'activité le sait.
+    removeFromReadingList(caller.u, id);
+    logReadingEvent("terminé", { user: caller.jfUser ?? caller.u, account: caller.u, book: id, ...bookFields(book), device });
+  }
   if (firstFinish && caller.jfId) {
     await jellyfin.markPlayed(caller.jfId, id).catch((err: unknown) => logError("books/progress", err, { itemId: id }));
     // Le badge « Lu » de la grille vient de Jellyfin, gardé deux minutes : on le redemande.
@@ -84,6 +97,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (caller instanceof NextResponse) return caller;
   const id = bookIdOf((await params).id);
   if (!id) return new NextResponse(null, { status: 400 });
-  dismissProgress(caller.u, id);
+  if (dismissProgress(caller.u, id) !== null) {
+    // Pour l'activité (§129) : le titre lu dans l'index, sans demander Jellyfin — un retrait n'attend personne.
+    const book = await bookIndex(caller)
+      .then((index) => index.all.get(id) ?? null)
+      .catch(() => null);
+    logReadingEvent("retiré", { user: caller.jfUser ?? caller.u, account: caller.u, book: id, ...bookFields(book), device: requestDeviceLabel(req) });
+  }
   return NextResponse.json({ ok: true });
 }
