@@ -321,6 +321,9 @@ The reader opens in a same-origin frame laid over the home screen, so closing a 
 where you were, without reloading anything; the global policy only gained `frame-src 'self'` for that
 (DECISIONS.md §128). A book is « started » once past its first page: one opened and closed on page one,
 or below 1 %, stays unread and out of « Continue reading », which a book's sheet can also remove it from.
+Layout: « One page » always shows one; « Auto » shows two once two comfortable columns fit side by side;
+« Two pages » shows two on any landscape screen; portrait always shows one. A device that keeps a
+downloaded book, even with no film, offers its downloads when it starts without a connection.
 
 ## Keyboard and remote
 
