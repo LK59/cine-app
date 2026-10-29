@@ -31,7 +31,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const found = enrichOf(id);
     if (found?.status === "filled" && found.coverUrl) image = await googleCover(id, found.coverUrl);
   }
-  if (!image) return new NextResponse(null, { status: 404, headers: { "Cache-Control": "private, max-age=3600" } });
+  // Pas de couverture n'est pas une erreur : 204, pas 404 (29/10/2026). Une grille de livres sans image en
+  // demandait une rafale, et CrowdSec, devant le proxy, y a lu un robot qui fouille le site (« http-probing » :
+  // douze 404 en onze secondes) — un compte a été coupé de l'application quatre heures. La couverture dessinée
+  // prend la place, comme avant ; la réponse se garde une heure.
+  if (!image) return new NextResponse(null, { status: 204, headers: { "Cache-Control": "private, max-age=3600" } });
   const pinned = req.nextUrl.searchParams.get("v") === fileTag;
   return new NextResponse(new Uint8Array(image), {
     headers: {

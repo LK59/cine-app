@@ -945,6 +945,20 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.12.4",
+    page: "10.7",
+    onlyOnPage: true,
+    group: { fr: "Livres", en: "Books", es: "Libros", de: "Bücher" },
+    items: [
+      {
+        fr: "Parcourir beaucoup de livres sans couverture ne peut plus couper l'accès à l'application pendant quelques heures.",
+        en: "Browsing many books without a cover can no longer cut off access to the app for a few hours.",
+        es: "Recorrer muchos libros sin portada ya no puede cortar el acceso a la aplicación durante unas horas.",
+        de: "Das Durchsehen vieler Bücher ohne Umschlag kann den Zugang zur App nicht mehr für einige Stunden sperren.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

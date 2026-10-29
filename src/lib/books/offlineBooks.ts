@@ -233,9 +233,11 @@ export async function saveOfflineBook(book: BookSummary, title: string, coverUrl
     if (coverUrl) {
       try {
         const cover = await fetch(coverUrl);
-        if (cover.ok) {
+        // 200 seulement : « pas de couverture » répond 204 (29/10/2026), `ok` aussi — une image vide gardée.
+        const image = cover.status === 200 ? await cover.blob() : null;
+        if (image && image.size > 0) {
           const w = await (await folder.getFileHandle("cover", { create: true })).createWritable();
-          await w.write(await cover.blob());
+          await w.write(image);
           await w.close();
           hasCover = true;
         }

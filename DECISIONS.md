@@ -8110,3 +8110,14 @@ de la session, un livre qu'il voit — `bookFor`). Lu : `markRead` (terminé com
 gardée ou une ligne vide), « lu » chez Jellyfin ; il reste dans « Ma liste de lecture », comme un film vu. Non lu : `markUnread` (la
 position effacée, les signets restent), « non lu » chez Jellyfin. Les deux vont au journal des lectures
 (`marqué lu`, `marqué non lu`). Un refus de Jellyfin ne bloque pas l'état local et va dans `server.log`.
+
+### Pas de 404 pour une couverture absente (29/10/2026, 10.12.4)
+
+Un livre sans couverture (ni Jellyfin, ni l'EPUB, ni Google Books) faisait répondre `404` à
+`/api/books/<id>/cover`. Une grille de livres en demandait une rafale, et CrowdSec, devant le proxy, l'a lue
+comme un robot qui fouille le site (`crowdsecurity/http-probing`, douze 404 en onze secondes) : un compte a
+été coupé de toute l'application pendant quatre heures. « Pas de couverture » répond désormais `204`, gardé une
+heure ; `BookCover` retient pour la page les couvertures absentes et ne les redemande plus ; le téléchargement
+hors ligne n'enregistre qu'une réponse `200` non vide. Un livre hors des droits du compte répond toujours 404.
+Laissé exprès : le relais `/api/jellyfin/image` garde son 404 (des `fetch` des téléchargements de films le
+lisent comme un échec ; ses 404 sont rares et espacés).

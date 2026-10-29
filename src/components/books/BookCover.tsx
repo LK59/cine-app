@@ -46,8 +46,16 @@ export function DrawnCover({ book }: { book: Pick<BookSummary, "name" | "seriesN
   );
 }
 
+/**
+ * Les couvertures que le serveur n'a pas (204) ou n'a pas pu donner, pour la page : une grille remontée ou
+ * revue ne les redemande pas. Des réponses en échec en rafale ont déjà fait bannir un compte par le pare-feu
+ * devant le proxy (29/10/2026) — moins on en envoie, mieux c'est.
+ */
+const missingCovers = new Set<string>();
+
 export function BookCover({ book, className = "", eager = false }: { book: BookSummary; className?: string; eager?: boolean }) {
-  const url = coverUrl(book);
+  const proposed = coverUrl(book);
+  const url = proposed && !missingCovers.has(proposed) ? proposed : null;
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   return (
@@ -63,7 +71,10 @@ export function BookCover({ book, className = "", eager = false }: { book: BookS
           decoding="async"
           draggable={false}
           onLoad={() => setLoaded(true)}
-          onError={() => setFailed(true)}
+          onError={() => {
+            missingCovers.add(url);
+            setFailed(true);
+          }}
           className="absolute inset-0 h-full w-full object-cover"
         />
       )}

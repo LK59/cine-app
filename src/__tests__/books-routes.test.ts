@@ -310,9 +310,10 @@ describe("l'index du compte : l'accueil, les pages, la recherche", () => {
   it("une couverture n'est servie que pour un livre de l'index du compte", async () => {
     jellyfinAnswers([bookItem({ Etag: null })]);
     expect((await coverGET(req(), params("9".repeat(32)))).status).toBe(404);
-    // Ce livre-ci, sans empreinte de fichier : rien à faire, et rien demandé à Jellyfin pour lui.
+    // Ce livre-ci, sans empreinte de fichier : rien à faire, et rien demandé à Jellyfin pour lui. Pas de
+    // couverture n'est pas une erreur : 204 — des 404 en rafale ont fait bannir un compte par le pare-feu.
     const before = upstream.mock.calls.length;
-    expect((await coverGET(req(), params(BOOK))).status).toBe(404);
+    expect((await coverGET(req(), params(BOOK))).status).toBe(204);
     expect(upstream.mock.calls.slice(before).some(([u]) => String(u).includes("/Download"))).toBe(false);
   });
 });
