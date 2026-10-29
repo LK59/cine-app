@@ -22,6 +22,12 @@ import { NEWS_LANGS } from "@/lib/news/content";
 export interface FixLedgerEntry {
   /** La page de Nouveautés qui la porte (« 9.1 »). Absente ou introuvable : celle que la version désigne. */
   page?: string;
+  /**
+   * Seulement sur la page nommée, jamais sur une autre : une correction d'une option propre à une
+   * installation (les livres, page 10.7) n'a rien à faire dans la page 10.5 des autres. Absente, l'entrée
+   * attend.
+   */
+  onlyOnPage?: boolean;
   /** La version qui a livré la correction. */
   version: string;
   /** Le groupe (« Lecture »), titré dans chaque langue — le même que celui de la page s'il existe. */
@@ -825,6 +831,38 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.10.6",
+    page: "10.7",
+    onlyOnPage: true,
+    group: { fr: "Livres", en: "Books", es: "Libros", de: "Bücher" },
+    items: [
+      {
+        fr: "Un coup d'œil à la dernière page ne marque plus le livre comme terminé : il reprend à votre page et reste dans « Continuer la lecture ».",
+        en: "A glance at the last page no longer marks the book as finished: it resumes where you are and stays in “Continue reading”.",
+        es: "Echar un vistazo a la última página ya no marca el libro como terminado: se reanuda donde va y sigue en «Seguir leyendo».",
+        de: "Ein Blick auf die letzte Seite markiert das Buch nicht mehr als beendet: Es geht dort weiter, wo Sie sind, und bleibt unter „Weiterlesen“.",
+      },
+      {
+        fr: "La page lue est gardée même quand l'horloge de l'appareil n'est pas à l'heure, et ce qui a été lu hors ligne n'est plus perdu si la connexion a expiré entre-temps.",
+        en: "Your page is kept even when the device's clock is off, and what you read offline is no longer lost if you were signed out in the meantime.",
+        es: "La página leída se guarda aunque el reloj del dispositivo no esté en hora, y lo leído sin conexión ya no se pierde si la sesión caducó entretanto.",
+        de: "Die gelesene Seite bleibt erhalten, auch wenn die Uhr des Geräts falsch geht, und offline Gelesenes geht nicht mehr verloren, wenn die Anmeldung inzwischen abgelaufen ist.",
+      },
+      {
+        fr: "Les livres téléchargés restent accessibles après une déconnexion puis une reconnexion, et s'ouvrent sans attendre le réseau.",
+        en: "Downloaded books stay available after signing out and back in, and open without waiting for the network.",
+        es: "Los libros descargados siguen disponibles tras cerrar y volver a abrir sesión, y se abren sin esperar a la red.",
+        de: "Heruntergeladene Bücher bleiben nach Ab- und erneuter Anmeldung verfügbar und öffnen sich, ohne auf das Netz zu warten.",
+      },
+      {
+        fr: "Ouvrir un livre puis le refermer sans tourner de page ne le met plus dans « Continuer la lecture », et un double appui sur « Lire » ne bloque plus l'écran.",
+        en: "Opening a book and closing it without turning a page no longer adds it to “Continue reading”, and tapping “Read” twice no longer freezes the screen.",
+        es: "Abrir un libro y cerrarlo sin pasar página ya no lo añade a «Seguir leyendo», y pulsar dos veces «Leer» ya no bloquea la pantalla.",
+        de: "Ein Buch zu öffnen und ohne Umblättern zu schließen, fügt es nicht mehr zu „Weiterlesen“ hinzu, und zweimal auf „Lesen“ zu tippen blockiert den Bildschirm nicht mehr.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
@@ -846,6 +884,7 @@ export function ledgerTarget<P extends { version: string; seq: number }>(entry: 
   if (pages.length === 0) return null;
   const named = entry.page ? pages.find((p) => p.version === entry.page) : undefined;
   if (named) return named;
+  if (entry.onlyOnPage) return null;
   const covering = pages.filter((p) => compareVersions(entry.version, p.version) <= 0).sort((a, b) => compareVersions(a.version, b.version))[0];
   return covering ?? [...pages].sort((a, b) => b.seq - a.seq)[0];
 }

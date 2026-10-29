@@ -65,12 +65,19 @@ describe("verser le registre", () => {
     expect(ledgerTarget(entry({ page: undefined, version: "9.3.2" }), pages)?.version).toBe("9.1");
     expect(compareVersions("8.64.1", "8.64")).toBeGreaterThan(0);
   });
+
+  it("propre à une page (une option d'une seule installation) : jamais ailleurs, elle attend sa page", () => {
+    const pages = [{ version: "10.0", seq: 9 }, { version: "10.5", seq: 10 }];
+    expect(ledgerTarget(entry({ page: "10.7", version: "10.10.6", onlyOnPage: true }), pages)).toBeNull();
+    expect(ledgerTarget(entry({ page: "10.7", version: "10.10.6", onlyOnPage: true }), [...pages, { version: "10.7", seq: 11 }])?.version).toBe("10.7");
+  });
 });
 
 describe("le registre lui-même", () => {
   // « 10.0 » : la page de Laterna, semée seulement sur l'installation qui annonce sa nouvelle adresse ;
-  // ailleurs `ledgerTarget` retombe sur la dernière page publiée.
-  const pages = ["8.44", "8.48", "8.61", "8.64", "8.68", "9.0", "9.1", "10.0", "10.5"];
+  // ailleurs `ledgerTarget` retombe sur la dernière page publiée. « 10.7 » : les livres, sur la même seule
+  // installation — ses entrées portent `onlyOnPage` et attendent leur page au lieu de retomber ailleurs.
+  const pages = ["8.44", "8.48", "8.61", "8.64", "8.68", "9.0", "9.1", "10.0", "10.5", "10.7"];
 
   it("chaque entrée vise une page qui existe, dans les quatre langues, aux bornes d'une page", () => {
     for (const e of FIXES_LEDGER) {
