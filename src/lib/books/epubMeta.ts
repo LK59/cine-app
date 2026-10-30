@@ -48,6 +48,18 @@ interface ZipEntry {
   localOffset: number;
 }
 
+/**
+ * Un fichier qui n'est pas un EPUB lisible — zip tronqué, en-tête faux, pas d'OPF —, par opposition à
+ * un échec passager (Jellyfin injoignable, délai dépassé). Le livre est alors masqué de l'index tant que
+ * le fichier ne change pas (`bookIndex.ts`) : il reste sur le disque, un lot partagé le redemanderait.
+ */
+export class EpubDefectError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EpubDefectError";
+  }
+}
+
 const TAIL = 64 * 1024;
 const MAX_ENTRY = 2 * 1024 * 1024;
 const MAX_COVER = 8 * 1024 * 1024;
@@ -80,7 +92,7 @@ export function centralDirectory(tail: Buffer, tailOffset: number): { entries: Z
       break;
     }
   }
-  if (eocd < 0) throw new Error("zip sans fin de répertoire");
+  if (eocd < 0) throw new EpubDefectError("zip sans fin de répertoire");
   const cdSize = tail.readUInt32LE(eocd + 12);
   const cdOffset = tail.readUInt32LE(eocd + 16);
   if (cdOffset < tailOffset) return { cdOffset, cdSize };
@@ -117,7 +129,7 @@ async function readEntry(id: string, entry: ZipEntry, max = MAX_ENTRY): Promise<
   // L'en-tête local a sa propre longueur de nom et d'extra : on prend large, puis on se recale.
   const head = await range(id, entry.localOffset, entry.localOffset + 30 + 1024 + entry.compressedSize);
   const local = head.bytes.subarray(entry.localOffset - head.offset);
-  if (local.readUInt32LE(0) !== 0x04034b50) throw new Error("en-tête local illisible");
+  if (local.readUInt32LE(0) !== 0x04034b50) throw new EpubDefectError("en-tête local illisible");
   const start = 30 + local.readUInt16LE(26) + local.readUInt16LE(28);
   const data = local.subarray(start, start + entry.compressedSize);
   const raw = entry.method === 0 ? data : entry.method === 8 ? inflateRawSync(data, { maxOutputLength: max * 4 }) : null;
@@ -215,7 +227,7 @@ export async function readEpubMeta(id: string): Promise<EpubMeta> {
   const fullPath = container ? /full-path\s*=\s*(?:"([^"]+)"|'([^']+)')/i.exec((await readEntry(id, container)).toString("utf8")) : null;
   const opfPath = fullPath ? (fullPath[1] ?? fullPath[2]) : undefined;
   const opf = entries.find((e) => e.name === opfPath) ?? entries.find((e) => e.name.toLowerCase().endsWith(".opf"));
-  if (!opf) throw new Error("pas d'OPF");
+  if (!opf) throw new EpubDefectError("pas d'OPF");
   return parseOpf((await readEntry(id, opf)).toString("utf8"), opf.name);
 }
 
@@ -241,7 +253,11 @@ interface Row {
   checked_at: number;
 }
 
-export type KnownMeta = Map<string, { etag: string; meta: EpubMeta | null; failed: boolean; checkedAt: number }>;
+/**
+ * `failed` en base : 0 lu, 1 échec passager (relu au bout d'un jour), 2 fichier illisible
+ * (`EpubDefectError` : masqué, relu au bout d'une semaine ou dès que le fichier change).
+ */
+export type KnownMeta = Map<string, { etag: string; meta: EpubMeta | null; failed: boolean; defect: boolean; checkedAt: number }>;
 
 /** Ce qui est connu, par livre (identifiant en minuscules) — une seule requête pour toute la bibliothèque. */
 export function knownMeta(): KnownMeta {
@@ -251,19 +267,20 @@ export function knownMeta(): KnownMeta {
       r.item_id,
       {
         etag: r.etag,
-        failed: r.failed === 1,
+        failed: r.failed !== 0,
+        defect: r.failed === 2,
         checkedAt: r.checked_at,
-        meta: r.failed === 1 ? null : metaOfRow(r),
+        meta: r.failed !== 0 ? null : metaOfRow(r),
       },
     ])
   );
 }
 
 /** Ce qui est connu d'un seul livre — la route de couverture. */
-export function metaOf(id: string): { etag: string; meta: EpubMeta | null } | null {
+export function metaOf(id: string): { etag: string; meta: EpubMeta | null; defect: boolean } | null {
   const r = getDb().prepare("SELECT item_id, etag, series, series_index, subjects, creators, cover_path, language, failed, checked_at FROM book_meta WHERE item_id = ?").get(id) as Row | undefined;
   if (!r) return null;
-  return { etag: r.etag, meta: r.failed === 1 ? null : metaOfRow(r) };
+  return { etag: r.etag, meta: r.failed !== 0 ? null : metaOfRow(r), defect: r.failed === 2 };
 }
 
 function metaOfRow(r: Row): EpubMeta {
@@ -286,7 +303,7 @@ function safeList(json: string): string[] {
   }
 }
 
-type Pending = { id: string; etag: string; meta: EpubMeta | null; at: number };
+type Pending = { id: string; etag: string; meta: EpubMeta | null; defect?: boolean; at: number };
 
 /** Les écritures en attente, écrites par lots : une transaction courte toutes les 25 lectures ou 300 ms. */
 function flush(rows: Pending[]): void {
@@ -300,13 +317,15 @@ function flush(rows: Pending[]): void {
   );
   db.transaction(() => {
     for (const r of rows) {
-      stmt.run(r.id, r.etag, r.meta?.series ?? null, r.meta?.seriesIndex ?? null, JSON.stringify(r.meta?.subjects ?? []), JSON.stringify(r.meta?.creators ?? []), r.meta?.coverPath ?? null, r.meta?.language ?? null, r.meta ? 0 : 1, r.at);
+      stmt.run(r.id, r.etag, r.meta?.series ?? null, r.meta?.seriesIndex ?? null, JSON.stringify(r.meta?.subjects ?? []), JSON.stringify(r.meta?.creators ?? []), r.meta?.coverPath ?? null, r.meta?.language ?? null, r.meta ? 0 : r.defect ? 2 : 1, r.at);
     }
   })();
 }
 
 /** Un échec (fichier illisible, Jellyfin absent) est retenté au bout d'un jour, pas à chaque grille. */
 const RETRY_FAILED_MS = 24 * 3600_000;
+/** Un fichier illisible n'est relu que s'il change (son empreinte) — ou au bout d'une semaine, au cas où. */
+const RETRY_DEFECT_MS = 7 * 24 * 3600_000;
 const CONCURRENCY = 2;
 const BATCH = 25;
 const BATCH_MS = 300;
@@ -348,7 +367,7 @@ export function staleMeta(items: readonly { id: string; etag: string | null }[],
     .filter((i) => {
       const k = known.get(i.id);
       if (!k || k.etag !== i.etag) return true;
-      return k.failed && now - k.checkedAt > RETRY_FAILED_MS;
+      return k.failed && now - k.checkedAt > (k.defect ? RETRY_DEFECT_MS : RETRY_FAILED_MS);
     }) as { id: string; etag: string }[];
 }
 
@@ -405,7 +424,7 @@ function pump(): void {
         q.done.push({ id, etag, meta, at: Date.now() });
       })
       .catch((error: unknown) => {
-        q.done.push({ id, etag, meta: null, at: Date.now() });
+        q.done.push({ id, etag, meta: null, defect: error instanceof EpubDefectError, at: Date.now() });
         logError("books/meta", error, { itemId: id });
       })
       .finally(() => {
@@ -421,10 +440,10 @@ function pump(): void {
  * L'OPF d'un livre lu hors de la file (la couverture d'une carte demandée avant son tour) : il quitte la
  * file et rejoint le prochain lot écrit.
  */
-export function recordMeta(id: string, etag: string, meta: EpubMeta | null): void {
+export function recordMeta(id: string, etag: string, meta: EpubMeta | null, defect = false): void {
   const q = queue();
   q.waiting.delete(id);
-  q.done.push({ id, etag, meta, at: Date.now() });
+  q.done.push({ id, etag, meta, defect, at: Date.now() });
   flushSoon();
 }
 

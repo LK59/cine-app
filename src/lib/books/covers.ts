@@ -3,7 +3,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { DATA_DIR } from "@/lib/dataDir";
 import { logError } from "@/lib/logger";
-import { metaOf, readEpubCover, readEpubMeta, recordMeta } from "@/lib/books/epubMeta";
+import { EpubDefectError, metaOf, readEpubCover, readEpubMeta, recordMeta } from "@/lib/books/epubMeta";
 
 /**
  * La couverture tirée de l'EPUB, pour les livres dont Jellyfin n'a pas d'image (DECISIONS.md §127).
@@ -82,6 +82,8 @@ async function make(id: string, fileTag: string, name: string): Promise<Buffer |
   let coverPath: string | null;
   try {
     const known = metaOf(id);
+    // Un fichier déjà reconnu illisible : rien à relire, la grille l'a d'ailleurs masqué.
+    if (known && known.etag === fileTag && known.defect) return null;
     if (known && known.etag === fileTag && known.meta) coverPath = known.meta.coverPath;
     else {
       const meta = await readEpubMeta(id);
@@ -90,6 +92,7 @@ async function make(id: string, fileTag: string, name: string): Promise<Buffer |
     }
   } catch (error) {
     s.failedAt.set(name, Date.now());
+    if (error instanceof EpubDefectError) recordMeta(id, fileTag, null, true);
     logError("books/cover", error, { itemId: id, where: "lecture de l'OPF" });
     return null;
   }

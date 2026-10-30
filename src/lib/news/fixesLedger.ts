@@ -1019,6 +1019,20 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.12.10",
+    page: "10.7",
+    onlyOnPage: true,
+    group: { fr: "Livres", en: "Books", es: "Libros", de: "Bücher" },
+    items: [
+      {
+        fr: "Un livre dont le fichier est abîmé n'apparaît plus dans les rangées ni dans la recherche, au lieu de s'ouvrir sur une erreur ; il revient de lui-même si le fichier est remplacé.",
+        en: "A book whose file is damaged no longer appears in rows or search, instead of opening on an error; it comes back by itself if the file is replaced.",
+        es: "Un libro cuyo archivo está dañado ya no aparece en las filas ni en la búsqueda, en lugar de abrirse con un error; vuelve por sí solo si se sustituye el archivo.",
+        de: "Ein Buch mit beschädigter Datei erscheint nicht mehr in den Reihen und in der Suche, statt mit einem Fehler zu öffnen; wird die Datei ersetzt, kehrt es von selbst zurück.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

@@ -435,7 +435,9 @@ widening `"movies" | "series"` would ripple through twenty places. Turned off, e
   folder became a « series ». Series and authors come from the EPUB's OPF (`epubMeta.ts`, read in the
   background, slowed — not stopped — while a film plays), never from folders. Duplicates of one book
   (same folded title and first author) are hidden in the index, not deleted: a seeding pack would
-  re-download a deleted file.
+  re-download a deleted file. An EPUB that cannot be read (truncated zip, no OPF — `EpubDefectError`, `failed = 2` in `book_meta`)
+  is hidden the same way while that file stays (same `Etag`), re-read after a week or as soon as it changes; a
+  transient failure (Jellyfin unreachable) is not a defect and hides nothing.
 - **The reader** is foliate-js, vendored in `src/lib/books/foliate/` (outside the lint). EPUB content is
   untrusted: sanitized, chapter frames without `allow-scripts`, and the `/livres` page's own CSP
   (`frame-src blob:`, nothing external). That page opens in a same-origin frame laid over the cinema

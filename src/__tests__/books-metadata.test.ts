@@ -19,7 +19,7 @@ const upstream = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/jellyfinBreaker", () => ({ passJellyfinFetch: (...a: unknown[]) => upstream(...a), jellyfinFetch: (...a: unknown[]) => upstream(...a) }));
 
 import { bookAuthors, bookGenres, decideSeries, nameKey } from "@/lib/books/metadata";
-import { PLAYING_GAP_MS, knownMeta, parseOpf, readEpubMeta, scheduleMetaReads, staleMeta, __testing } from "@/lib/books/epubMeta";
+import { EpubDefectError, PLAYING_GAP_MS, knownMeta, parseOpf, readEpubMeta, scheduleMetaReads, staleMeta, __testing } from "@/lib/books/epubMeta";
 import { epubCover } from "@/lib/books/covers";
 import { authorIndex, filterBooks, homeRows, sortBooks } from "@/lib/books/grouping";
 import type { BookSummary } from "@/lib/books/types";
@@ -344,6 +344,54 @@ describe("la langue d'un livre, pour Google Books", () => {
     });
     const targets = await enrichTargets();
     expect(Object.fromEntries(targets.map((t) => [t.name, t.language]))).toEqual({ "Der Vorleser": "de", "Lunatic Cafe": "en" });
+    indexTesting.reset();
+  });
+});
+
+describe("un EPUB illisible est masqué, pas supprimé", () => {
+  beforeEach(() => vi.clearAllMocks());
+  it("un zip tronqué est un défaut du fichier ; une panne de Jellyfin n'en est pas un", async () => {
+    // Un lot en cours de partage contenait des EPUB tronqués : « zip sans fin de répertoire ».
+    serve(EPUB.subarray(0, EPUB.length - 200));
+    await expect(readEpubMeta("c".repeat(32))).rejects.toBeInstanceOf(EpubDefectError);
+    const broken = "d".repeat(32);
+    scheduleMetaReads([{ id: broken, etag: "e1" }]);
+    await vi.waitFor(() => expect(knownMeta().get(broken)?.defect).toBe(true));
+    upstream.mockImplementation(async () => new Response("", { status: 503 }));
+    const down = "e".repeat(32);
+    scheduleMetaReads([{ id: down, etag: "e1" }]);
+    await vi.waitFor(() => expect(knownMeta().get(down)?.failed).toBe(true));
+    expect(knownMeta().get(down)?.defect).toBe(false);
+    // Le défaut n'est relu qu'au bout d'une semaine, ou dès que le fichier change ; la panne, le lendemain.
+    const known = knownMeta();
+    const day = 24 * 3600_000;
+    expect(staleMeta([{ id: broken, etag: "e1" }], known, Date.now() + 2 * day)).toEqual([]);
+    expect(staleMeta([{ id: broken, etag: "e1" }], known, Date.now() + 8 * day)).toHaveLength(1);
+    expect(staleMeta([{ id: broken, etag: "e2" }], known)).toHaveLength(1);
+    expect(staleMeta([{ id: down, etag: "e1" }], known, Date.now() + 2 * day)).toHaveLength(1);
+  });
+  it("l'index ne montre pas un fichier illisible — remplacé, il revient ; un échec passager reste montré", async () => {
+    const { enrichTargets, __testing: indexTesting } = await import("@/lib/books/bookIndex");
+    indexTesting.reset();
+    const db = (await import("@/lib/db")).getDb();
+    db.prepare("DELETE FROM book_meta").run();
+    const row = db.prepare("INSERT INTO book_meta (item_id, etag, series, series_index, subjects, creators, cover_path, language, failed, checked_at) VALUES (?, ?, NULL, NULL, '[]', '[]', NULL, NULL, ?, ?)");
+    const now = Date.now();
+    row.run("7".repeat(32), "abime", 2, now);
+    row.run("8".repeat(32), "ancien", 2, now);
+    row.run("9".repeat(32), "e", 1, now);
+    upstream.mockImplementation(async (url: string) => {
+      if (url.endsWith("/Library/VirtualFolders")) return new Response(JSON.stringify([{ ItemId: "l".repeat(32), CollectionType: "books" }]), { status: 200 });
+      if (!url.includes("ParentId")) return new Response(JSON.stringify({ Items: [], TotalRecordCount: 0 }), { status: 200 });
+      const items = [
+        { Id: "7".repeat(32), Etag: "abime", Name: "Dôme 2", Type: "Book" },
+        { Id: "8".repeat(32), Etag: "remplace", Name: "Neuromancien", Type: "Book" },
+        { Id: "9".repeat(32), Etag: "e", Name: "Le Singe", Type: "Book" },
+      ];
+      return new Response(JSON.stringify({ Items: items, TotalRecordCount: 3 }), { status: 200 });
+    });
+    const names = (await enrichTargets()).map((t) => t.name).sort();
+    expect(names).toEqual(["Le Singe", "Neuromancien"]);
     indexTesting.reset();
   });
 });

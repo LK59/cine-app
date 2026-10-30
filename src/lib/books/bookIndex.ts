@@ -109,11 +109,19 @@ async function buildBase(items: readonly LibraryItem[]): Promise<Base> {
   const known = knownMeta();
   const enriched = knownEnrich();
   const entries: Entry[] = [];
+  const unreadable: { id: string; etag: string | null }[] = [];
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const id = item.Id.toLowerCase();
     const k = known.get(id);
     const book = summaryOf(item, k?.meta ?? null, enriched.get(id) ?? null);
+    // Un EPUB illisible (zip tronqué, pas d'OPF) n'est montré nulle part tant que ce fichier-là reste :
+    // il restait dans les grilles, s'ouvrait sur une erreur, et sa couverture était redemandée à chaque
+    // affichage. Le fichier n'est pas touché (un lot partagé le redemanderait) ; remplacé, il revient.
+    if (k?.defect && k.etag === book.fileTag) {
+      unreadable.push({ id: book.id, etag: book.fileTag });
+      continue;
+    }
     const providers = item.ProviderIds ?? {};
     const isbn = Object.entries(providers).find(([key]) => /^isbn/i.test(key))?.[1] ?? null;
     entries.push({
@@ -131,7 +139,7 @@ async function buildBase(items: readonly LibraryItem[]): Promise<Base> {
   entries.sort((a, b) => compareBooks(a.book, b.book));
   await yieldToLoop();
   // Les OPF pas encore lus partent en arrière-plan ; cet index-ci fait sans.
-  scheduleMetaReads(staleMeta(entries.map((e) => ({ id: e.book.id, etag: e.book.fileTag })), known));
+  scheduleMetaReads(staleMeta([...entries.map((e) => ({ id: e.book.id, etag: e.book.fileTag })), ...unreadable], known));
   return { builtAt: Date.now(), entries };
 }
 
