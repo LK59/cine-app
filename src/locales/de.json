@@ -2178,11 +2178,15 @@
       "subtitleLanguage": "Untertitelsprache",
       "subtitleMode": "Untertitel anzeigen",
       "subtitleModes": {
-        "Default": "Wie in der Datei",
+        "Default": "Automatisch",
         "Smart": "Wenn der Ton nicht in meiner Sprache ist",
         "Always": "Immer",
-        "OnlyForced": "Nur übersetzte Passagen",
+        "OnlyForced": "Nur fremdsprachige Dialoge",
         "None": "Nie"
+      },
+      "subtitleModeHints": {
+        "Default": "Vollständige Untertitel, wenn der Ton nicht in Ihrer Sprache ist, sonst nur fremdsprachige Dialoge.",
+        "OnlyForced": "Zum Beispiel ein Satz auf Russisch oder ein Schild in einem deutschen Film."
       },
       "playbackHint": "Diese Einstellungen gehören zum Konto und gelten auch in den Jellyfin-Apps.",
       "langAny": "Egal",

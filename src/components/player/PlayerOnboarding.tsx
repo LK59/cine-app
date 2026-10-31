@@ -197,9 +197,10 @@ export function PlayerOnboarding({
   });
   /**
    * Le préremplissage : ce qui existe chez Jellyfin, et le français seulement là où il n'y a rien.
-   * « Quand l'audio n'est pas dans ma langue » seulement pour un compte qui n'avait rien réglé du
-   * tout — « Selon le fichier » est aussi la valeur par défaut, on ne peut pas savoir s'il l'a
-   * choisi, donc on ne la change que chez ceux qui n'ont visiblement rien touché.
+   * Un compte qui n'avait rien réglé reçoit « Automatique » (Default, 31/10/2026) : sous-titres
+   * complets quand l'audio n'est pas dans sa langue, sinon les seuls forcés — les passages étrangers
+   * d'une VF. Il recevait « Quand l'audio n'est pas dans ma langue » (Smart), identique ici une fois
+   * la langue réglée, mais que les applications Jellyfin des télévisions lisent autrement.
    */
   const initial = useMemo(() => {
     if (!prefs) return null;
@@ -207,7 +208,7 @@ export function PlayerOnboarding({
     return {
       audioLanguage: toJellyfinLanguage(prefs.audioLanguage) ?? "fra",
       subtitleLanguage: toJellyfinLanguage(prefs.subtitleLanguage) ?? "fra",
-      subtitleMode: untouched ? "Smart" : prefs.subtitleMode ?? "Default",
+      subtitleMode: untouched ? "Default" : prefs.subtitleMode ?? "Default",
     };
   }, [prefs]);
   const [edits, setEdits] = useState<Partial<PlayerPreferences>>({});

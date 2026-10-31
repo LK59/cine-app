@@ -1033,6 +1033,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.12.11",
+    page: "10.5",
+    group: { fr: "Compte", en: "Account", es: "Cuenta", de: "Konto" },
+    items: [
+      {
+        fr: "Les réglages des sous-titres sont plus clairs : « Automatique » remplace « Selon le fichier », et « Seulement les dialogues en langue étrangère » remplace « Seulement les passages traduits ».",
+        en: "Subtitle settings are clearer: « Automatic » replaces « As the file says », and « Only foreign-language lines » replaces « Only translated passages ».",
+        es: "Los ajustes de subtítulos son más claros: « Automático » sustituye a « Según el archivo » y « Solo los diálogos en otro idioma » a « Solo los pasajes traducidos ».",
+        de: "Die Untertitel-Einstellungen sind klarer: « Automatisch » ersetzt « Wie in der Datei », « Nur fremdsprachige Dialoge » ersetzt « Nur übersetzte Passagen ».",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

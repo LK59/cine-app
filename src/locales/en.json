@@ -2178,11 +2178,15 @@
       "subtitleLanguage": "Subtitle language",
       "subtitleMode": "Subtitle display",
       "subtitleModes": {
-        "Default": "As the file says",
+        "Default": "Automatic",
         "Smart": "When the audio isn't in my language",
         "Always": "Always",
-        "OnlyForced": "Only translated passages",
+        "OnlyForced": "Only foreign-language lines",
         "None": "Never"
+      },
+      "subtitleModeHints": {
+        "Default": "Full subtitles when the audio isn’t in your language, otherwise only foreign-language lines.",
+        "OnlyForced": "For example a line in Russian or a sign in an English film."
       },
       "playbackHint": "These follow your account: they apply in the Jellyfin apps too.",
       "langAny": "Any",

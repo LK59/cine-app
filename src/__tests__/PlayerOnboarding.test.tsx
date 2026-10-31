@@ -118,14 +118,14 @@ describe("l'écran d'accueil", () => {
       return found;
     });
     expect(selects[1].value).toBe("fra");
-    // Rien réglé du tout : « quand l'audio n'est pas dans ma langue ».
-    expect(selects[2].value).toBe("Smart");
+    // Rien réglé du tout : « Automatique ».
+    expect(selects[2].value).toBe("Default");
     next();
     await screen.findByText("player.onboarding.notifTitle");
     expect(JSON.parse(posted("/api/player/account/preferences")[0][1]!.body as string)).toEqual({
       audioLanguage: "fra",
       subtitleLanguage: "fra",
-      subtitleMode: "Smart",
+      subtitleMode: "Default",
     });
   });
 

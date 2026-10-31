@@ -105,6 +105,11 @@ export function SubtitleModeSelect({
           </option>
         ))}
       </select>
+      {/* Les deux modes dont le libellé seul ne suffit pas : « Automatique » dépend de la langue
+          entendue, et « passages traduits » (les sous-titres forcés) ne se comprenait pas. */}
+      {(value ?? "Default") === "Default" || value === "OnlyForced" ? (
+        <span className="text-xs text-subtle">{t(`player.account.subtitleModeHints.${value ?? "Default"}`)}</span>
+      ) : null}
     </label>
   );
 }
