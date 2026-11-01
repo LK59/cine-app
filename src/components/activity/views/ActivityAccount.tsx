@@ -239,8 +239,8 @@ export function ActivityAccount({ id }: { id: string }) {
         )}
       </div>
 
-      {playing && (
-        <div className="card flex items-center gap-4 border border-success/20 p-4">
+      {playing && [playing, ...(d.alsoPlaying ?? [])].map((playing, i) => (
+        <div key={i} className="card flex items-center gap-4 border border-success/20 p-4">
           <Poster itemId={playing.itemId} className="h-16 w-11" />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium uppercase tracking-wide text-success">{t("activity.live.nowWatching")}</p>
@@ -257,7 +257,7 @@ export function ActivityAccount({ id }: { id: string }) {
             </p>
           </div>
         </div>
-      )}
+      ))}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Tile icon={Clapperboard} label={t("activity.account.seances")} value={d.stats.seances} hint={t("activity.account.historyHint", { n: d.historyDays })} />

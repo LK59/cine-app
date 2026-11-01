@@ -233,18 +233,21 @@ function LiveCard({ a, now }: { a: AccountSummary; now: number }) {
           <PresenceBadge presence={a.presence} nowPlaying={playing} now={now} seenAt={latest(a.app.lastSeen, a.jellyfin.lastActivity)} />
         </span>
         {playing ? (
-          <>
-            <span className="mt-1 block truncate text-sm text-white">{playing.title}</span>
-            <Progress position={playing.positionSeconds} runtime={playing.runtimeSeconds} />
-            <span className="mt-1 flex flex-wrap gap-x-2 text-xs text-subtle">
-              <span>
-                {clock(playing.positionSeconds)} / {clock(playing.runtimeSeconds)}
+          // Chaque lecture du compte, une par appareil : la première seule cachait les autres.
+          [playing, ...(a.alsoPlaying ?? [])].map((p, i) => (
+            <span key={i} className={`block ${i > 0 ? "mt-2 border-t border-white/5 pt-2" : ""}`}>
+              <span className="mt-1 block truncate text-sm text-white">{p.title}</span>
+              <Progress position={p.positionSeconds} runtime={p.runtimeSeconds} />
+              <span className="mt-1 flex flex-wrap gap-x-2 text-xs text-subtle">
+                <span>
+                  {clock(p.positionSeconds)} / {clock(p.runtimeSeconds)}
+                </span>
+                {p.paused && <span className="text-warning">{t("activity.live.paused")}</span>}
+                {p.device && <span>{p.device}</span>}
+                {p.method && <span>{p.method}</span>}
               </span>
-              {playing.paused && <span className="text-warning">{t("activity.live.paused")}</span>}
-              {playing.device && <span>{playing.device}</span>}
-              {playing.method && <span>{playing.method}</span>}
             </span>
-          </>
+          ))
         ) : pingTitle ? (
           <span className="mt-1 block truncate text-sm text-white">{pingTitle}</span>
         ) : (

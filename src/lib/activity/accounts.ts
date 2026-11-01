@@ -79,6 +79,8 @@ export interface AccountSummary {
   disabled: boolean;
   presence: Presence;
   nowPlaying: NowPlaying | null;
+  /** Ses autres lectures en même temps, sur d'autres appareils — voir `playsOf`. */
+  alsoPlaying: NowPlaying[];
   app: { sessions: number; lastSeen: number | null };
   jellyfin: { lastActivity: number | null; lastLogin: number | null };
   /** Ce qui mérite un regard : un jeton refusé, ou un compte que Jellyfin ne voit plus. */
@@ -108,6 +110,19 @@ function nowPlayingFrom(session: JellyfinSession | undefined): NowPlaying | null
     client: session.Client ?? null,
     method: session.PlayState?.PlayMethod ?? null,
   };
+}
+
+/**
+ * Toutes les lectures en cours d'un compte, celle qui avance d'abord. On ne gardait que la première
+ * session trouvée : un compte qui regardait sur deux appareils en montrait une, et l'Activité comptait
+ * quatre lectures quand le Stream Deck, qui lit les mêmes sessions, en comptait six (01/11/2026).
+ */
+function playsOf(sessions: readonly JellyfinSession[], userId: string): NowPlaying[] {
+  return sessions
+    .filter((s) => s.UserId === userId && s.NowPlayingItem)
+    .map((s) => nowPlayingFrom(s))
+    .filter((p): p is NowPlaying => p !== null)
+    .sort((a, b) => Number(a.paused) - Number(b.paused));
 }
 
 /** Les incidents d'une séance, comptés ensemble. */
@@ -179,14 +194,15 @@ export async function listAccounts(now = Date.now(), clearedAt = alertsClearedAt
         alerts.push({ kind: "tokenStale", at: lastActivity });
       }
       if (clientErrors.length) alerts.push({ kind: "clientErrors", at: clientErrors[clientErrors.length - 1]._t, count: clientErrors.length });
-      const playing = sessions.find((s) => s.UserId === user.Id && s.NowPlayingItem);
+      const plays = playsOf(sessions, user.Id);
       return {
         id: user.Id,
         name,
         admin: user.Policy?.IsAdministrator === true,
         disabled: user.Policy?.IsDisabled === true,
         presence: presenceOf(name, now),
-        nowPlaying: nowPlayingFrom(playing),
+        nowPlaying: plays[0] ?? null,
+        alsoPlaying: plays.slice(1),
         app: { sessions: app?.count ?? 0, lastSeen: app?.lastSeenAt ?? null },
         jellyfin: { lastActivity, lastLogin: time(user.LastLoginDate) },
         alerts,
@@ -541,7 +557,8 @@ export async function accountDetail(id: string, now = Date.now(), clearedAt = al
       followedRequests: pendingRequestDb.getAll().filter((r) => r.userId === name).length,
     },
     presence: presenceOf(name, now),
-    nowPlaying: sessions.ok ? nowPlayingFrom(sessions.value.find((s) => s.UserId === id && s.NowPlayingItem)) : null,
+    nowPlaying: sessions.ok ? (playsOf(sessions.value, id)[0] ?? null) : null,
+    alsoPlaying: sessions.ok ? playsOf(sessions.value, id).slice(1) : [],
     appSessions: appSessionsOf(id),
     devices: devices.ok
       ? devices.value

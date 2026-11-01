@@ -10,7 +10,8 @@ import type { ReportSummary } from "@/lib/reports";
  */
 export function liveAccounts(accounts: readonly AccountSummary[]): { live: AccountSummary[]; playing: number } {
   const live = accounts.filter((a) => a.nowPlaying || a.presence.state !== "away");
-  const playing = live.filter((a) => a.nowPlaying || a.presence.state === "playing").length;
+  // Des lectures, pas des comptes : un compte sur deux appareils en compte deux, comme le Stream Deck.
+  const playing = live.reduce((n, a) => n + (a.nowPlaying ? 1 + (a.alsoPlaying?.length ?? 0) : a.presence.state === "playing" ? 1 : 0), 0);
   return { live, playing };
 }
 

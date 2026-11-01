@@ -21,6 +21,11 @@ describe("le résumé de l'Activité", () => {
     expect(playing).toBe(2);
   });
 
+  it("compte des lectures, pas des comptes : deux appareils sur un compte en font deux, comme le Stream Deck", () => {
+    const twice = { ...account("m", "playing", true), alsoPlaying: [{ title: "y" }] } as unknown as AccountSummary;
+    expect(liveAccounts([twice, account("o", "away", true)]).playing).toBe(3);
+  });
+
   it("n'attend que les signalements ouverts ou en cours", () => {
     const reports = ["open", "in_progress", "resolved", "closed"].map((status, id) => ({ id, status }) as unknown as ReportSummary);
     expect(pendingReports(reports).map((r) => r.id)).toEqual([0, 1]);
