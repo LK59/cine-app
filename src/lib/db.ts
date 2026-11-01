@@ -68,6 +68,20 @@ function migrate(db: Database.Database): void {
       seen_at  INTEGER NOT NULL
     );
 
+    -- Le masquage des demandes pour un compte (requestHide/, 01/11/2026) : la décision par titre
+    -- (« movie:<tmdb> », « series:<tmdb> »), source de vérité que la tâche recopie dans Jellyfin en tag.
+    CREATE TABLE IF NOT EXISTS request_hide (
+      key        TEXT    PRIMARY KEY,
+      state      TEXT    NOT NULL,
+      source     TEXT    NOT NULL,
+      title      TEXT,
+      decided_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS request_hide_meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     -- Les titres vus d'un compte (DECISIONS.md §51, 06/10/2026). Une copie tenue à jour de ce que
     -- Jellyfin sait pour les titres qu'il possède, et la seule trace pour ceux qu'il n'a pas (vus
     -- ailleurs, ou partis de la bibliothèque) : le « vu » d'un compte ne se perd plus. Ce n'est pas
@@ -1506,6 +1520,48 @@ export const knownAccountsDb = {
     getDb().transaction(() => {
       for (const id of ids) insert.run(id, now);
     })();
+  },
+};
+
+export type RequestHideState = "hidden" | "shown";
+export type RequestHideSource = "auto" | "manual";
+export interface RequestHideRow {
+  key: string;
+  state: RequestHideState;
+  source: RequestHideSource;
+  title: string | null;
+  decidedAt: number;
+}
+
+/** Les décisions du masquage des demandes (`requestHide/`) et ses deux réglages (automatique, depuis quand). */
+export const requestHideDb = {
+  all(): RequestHideRow[] {
+    return getDb()
+      .prepare("SELECT key, state, source, title, decided_at AS decidedAt FROM request_hide")
+      .all() as RequestHideRow[];
+  },
+  set(rows: readonly Omit<RequestHideRow, "decidedAt">[], now = Date.now()): void {
+    const upsert = getDb().prepare(
+      "INSERT INTO request_hide (key, state, source, title, decided_at) VALUES (?, ?, ?, ?, ?) " +
+        "ON CONFLICT(key) DO UPDATE SET state = excluded.state, source = excluded.source, title = COALESCE(excluded.title, title), decided_at = excluded.decided_at",
+    );
+    getDb().transaction(() => {
+      for (const r of rows) upsert.run(r.key, r.state, r.source, r.title, now);
+    })();
+  },
+  remove(keys: readonly string[]): void {
+    const del = getDb().prepare("DELETE FROM request_hide WHERE key = ?");
+    getDb().transaction(() => {
+      for (const k of keys) del.run(k);
+    })();
+  },
+  meta(key: string): string | null {
+    const row = getDb().prepare("SELECT value FROM request_hide_meta WHERE key = ?").get(key) as { value: string } | undefined;
+    return row?.value ?? null;
+  },
+  setMeta(key: string, value: string | null): void {
+    if (value === null) getDb().prepare("DELETE FROM request_hide_meta WHERE key = ?").run(key);
+    else getDb().prepare("INSERT INTO request_hide_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
   },
 };
 

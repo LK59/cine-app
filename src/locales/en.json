@@ -3961,5 +3961,44 @@
     "markRead": "Mark as read",
     "markUnread": "Mark as unread",
     "readState": "Read"
+  },
+  "requestHide": {
+    "link": "Hiding for “{account}”",
+    "title": "Hiding for “{account}”",
+    "subtitle": "Titles requested by accounts other than: {keep}. This account no longer sees them, in any app.",
+    "auto": "Hide new requests automatically",
+    "autoSince": "On since {date}: anything requested since is hidden from “{account}”.",
+    "autoOff": "Off: new requests stay visible to “{account}” and wait in “To sort”.",
+    "syncing": "Applying ({n} left)",
+    "synced": "Jellyfin is up to date",
+    "syncError": "Last pass failed: {error}",
+    "search": "Search a title",
+    "requester": "Requested by",
+    "everyone": "All requesters",
+    "selectAll": "Select all ({n})",
+    "hide": "Hide ({n})",
+    "show": "Make visible ({n})",
+    "hideOne": "Hide",
+    "showOne": "Unhide",
+    "empty": "No titles here.",
+    "more": "Show more ({n})",
+    "requestedBy": "Requested by {who}",
+    "notRequested": "Not requested",
+    "auto_short": "auto",
+    "doneHidden": "Hidden from “{account}”: {n}",
+    "doneShown": "Visible to “{account}”: {n}",
+    "filters": {
+      "candidate": "To sort",
+      "hidden": "Hidden",
+      "shown": "Made visible",
+      "all": "All"
+    },
+    "status": {
+      "candidate": "To sort",
+      "hidden": "Hidden",
+      "shown": "Visible",
+      "kept": "Kept",
+      "free": "Free"
+    }
   }
 }

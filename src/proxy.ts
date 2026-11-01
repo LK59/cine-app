@@ -260,6 +260,10 @@ const ADMIN_ONLY_READS: RegExp[] = [
   /^\/api\/admin\/offline(\/|$)/,
   // Les liens de partage : qui les a reçus, ce qu'ils ont regardé (DECISIONS.md §112).
   /^\/api\/admin\/shares(\/|$)/,
+  // Le masquage des demandes pour un compte : qui a demandé quel titre (`requestHide/`). La route le
+  // vérifie aussi (`adminOnly`), et répond 404 la fonction coupée. Son écriture n'est pas dans la liste
+  // blanche des écritures : refusée à un compte ordinaire d'office.
+  /^\/api\/admin\/request-hide(\/|$)/,
   // Les lectures de chaque compte — quels livres, combien de temps, sur quel appareil (§129). La route le
   // vérifie aussi (`adminOnly`), et répond 404 l'option des livres coupée.
   /^\/api\/admin\/activity\/books(\/|$)/,

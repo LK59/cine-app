@@ -3961,5 +3961,44 @@
     "markRead": "Marcar como leído",
     "markUnread": "Marcar como no leído",
     "readState": "Leído"
+  },
+  "requestHide": {
+    "link": "Ocultación para «{account}»",
+    "title": "Ocultación para «{account}»",
+    "subtitle": "Títulos pedidos por cuentas distintas de: {keep}. Esta cuenta ya no los ve, en ninguna aplicación.",
+    "auto": "Ocultar automáticamente las nuevas solicitudes",
+    "autoSince": "Activado el {date}: lo pedido desde entonces se oculta a «{account}».",
+    "autoOff": "Desactivado: las nuevas solicitudes siguen visibles para «{account}» y esperan en «Por ordenar».",
+    "syncing": "Aplicando ({n} restantes)",
+    "synced": "Jellyfin está al día",
+    "syncError": "Última pasada fallida: {error}",
+    "search": "Buscar un título",
+    "requester": "Pedido por",
+    "everyone": "Todos los solicitantes",
+    "selectAll": "Seleccionar todo ({n})",
+    "hide": "Ocultar ({n})",
+    "show": "Hacer visible ({n})",
+    "hideOne": "Ocultar",
+    "showOne": "Mostrar",
+    "empty": "Ningún título aquí.",
+    "more": "Mostrar más ({n})",
+    "requestedBy": "Pedido por {who}",
+    "notRequested": "No pedido",
+    "auto_short": "auto",
+    "doneHidden": "Ocultos para «{account}»: {n}",
+    "doneShown": "Visibles para «{account}»: {n}",
+    "filters": {
+      "candidate": "Por ordenar",
+      "hidden": "Ocultos",
+      "shown": "Hechos visibles",
+      "all": "Todo"
+    },
+    "status": {
+      "candidate": "Por ordenar",
+      "hidden": "Oculto",
+      "shown": "Visible",
+      "kept": "Conservado",
+      "free": "Libre"
+    }
   }
 }

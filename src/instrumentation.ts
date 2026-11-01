@@ -66,6 +66,11 @@ export async function register() {
     const { startNewAccountTagsCron } = await import("./lib/newAccountTags");
     startNewAccountTagsCron();
 
+    // Le masquage des demandes pour un compte (option d'une installation) : la liste recopiée dans
+    // Jellyfin toutes les cinq minutes — voir `requestHide/run.ts`. Sans compte nommé, rien ne part.
+    const { startRequestHideCron } = await import("./lib/requestHide/run");
+    startRequestHideCron();
+
     // Les liens de partage finis : leur compte Jellyfin désactivé, puis effacé un mois plus tard —
     // voir `share/service.ts` (DECISIONS.md §112).
     const { startShareSweep } = await import("./lib/share/service");

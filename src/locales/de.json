@@ -3961,5 +3961,44 @@
     "markRead": "Als gelesen markieren",
     "markUnread": "Als ungelesen markieren",
     "readState": "Gelesen"
+  },
+  "requestHide": {
+    "link": "Ausblenden für „{account}“",
+    "title": "Ausblenden für „{account}“",
+    "subtitle": "Titel, die andere Konten als diese angefragt haben: {keep}. Dieses Konto sieht sie in keiner App mehr.",
+    "auto": "Neue Anfragen automatisch ausblenden",
+    "autoSince": "Aktiv seit {date}: Was seitdem angefragt wird, ist für „{account}“ ausgeblendet.",
+    "autoOff": "Aus: Neue Anfragen bleiben für „{account}“ sichtbar und warten unter „Zu sortieren“.",
+    "syncing": "Wird angewendet ({n} übrig)",
+    "synced": "Jellyfin ist aktuell",
+    "syncError": "Letzter Durchlauf fehlgeschlagen: {error}",
+    "search": "Titel suchen",
+    "requester": "Angefragt von",
+    "everyone": "Alle Anfragenden",
+    "selectAll": "Alle auswählen ({n})",
+    "hide": "Ausblenden ({n})",
+    "show": "Sichtbar machen ({n})",
+    "hideOne": "Ausblenden",
+    "showOne": "Einblenden",
+    "empty": "Hier gibt es keine Titel.",
+    "more": "Mehr anzeigen ({n})",
+    "requestedBy": "Angefragt von {who}",
+    "notRequested": "Nicht angefragt",
+    "auto_short": "auto",
+    "doneHidden": "{n} Titel für „{account}“ ausgeblendet",
+    "doneShown": "{n} Titel für „{account}“ sichtbar",
+    "filters": {
+      "candidate": "Zu sortieren",
+      "hidden": "Ausgeblendet",
+      "shown": "Sichtbar gemacht",
+      "all": "Alle"
+    },
+    "status": {
+      "candidate": "Zu sortieren",
+      "hidden": "Ausgeblendet",
+      "shown": "Sichtbar",
+      "kept": "Behalten",
+      "free": "Frei"
+    }
   }
 }

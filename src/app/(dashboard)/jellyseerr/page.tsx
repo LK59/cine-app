@@ -19,6 +19,7 @@ import { useToast } from "@/components/Toast";
 import { TMDB_IMAGE_BASE } from "@/lib/tmdbImageBase";
 import { relDate } from "@/lib/format";
 import { useT } from "@/components/TranslationProvider";
+import { RequestHideLink } from "@/components/gestion/RequestHideLink";
 
 function RequestRow({ r, showActions, onApprove, onDecline }: {
   r: EnrichedRequest;
@@ -140,7 +141,7 @@ export default function JellyseerrPage() {
 
   return (
     <div>
-      <PageHeader title={t('jellyseerr.pageTitle')} />
+      <PageHeader title={t('jellyseerr.pageTitle')} action={<RequestHideLink />} />
 
       {/* Tabs */}
       <div className="mb-6 flex gap-2 border-b border-white/10 pb-0">

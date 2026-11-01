@@ -3961,5 +3961,44 @@
     "markRead": "Marquer comme lu",
     "markUnread": "Marquer comme non lu",
     "readState": "Lu"
+  },
+  "requestHide": {
+    "link": "Masquage pour « {account} »",
+    "title": "Masquage pour « {account} »",
+    "subtitle": "Les titres demandés par d'autres comptes que : {keep}. Ce compte ne les voit plus, dans toutes les applications.",
+    "auto": "Masquer automatiquement les nouvelles demandes",
+    "autoSince": "Activé le {date} : ce qui est demandé depuis est caché à « {account} ».",
+    "autoOff": "Désactivé : les nouvelles demandes restent visibles pour « {account} » et attendent dans « À trier ».",
+    "syncing": "Application en cours ({n} restants)",
+    "synced": "Jellyfin est à jour",
+    "syncError": "Dernier passage manqué : {error}",
+    "search": "Rechercher un titre",
+    "requester": "Demandé par",
+    "everyone": "Tous les demandeurs",
+    "selectAll": "Tout sélectionner ({n})",
+    "hide": "Masquer ({n})",
+    "show": "Rendre visible ({n})",
+    "hideOne": "Masquer",
+    "showOne": "Démasquer",
+    "empty": "Aucun titre ici.",
+    "more": "Afficher plus ({n})",
+    "requestedBy": "Demandé par {who}",
+    "notRequested": "Pas demandé",
+    "auto_short": "auto",
+    "doneHidden": "Masqués pour « {account} » : {n}",
+    "doneShown": "Visibles pour « {account} » : {n}",
+    "filters": {
+      "candidate": "À trier",
+      "hidden": "Masqués",
+      "shown": "Rendus visibles",
+      "all": "Tout"
+    },
+    "status": {
+      "candidate": "À trier",
+      "hidden": "Masqué",
+      "shown": "Visible",
+      "kept": "Gardé",
+      "free": "Libre"
+    }
   }
 }

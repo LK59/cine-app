@@ -283,6 +283,26 @@ export const config = {
       return optional("VAPID_SUBJECT", "mailto:admin@example.com");
     },
   },
+  // Le masquage des demandes pour un compte (01/11/2026) : propre à une installation — déploiement
+  // seulement (`envOnly`), hors du schéma des réglages et de `.env.example`. Sans compte nommé, rien ne
+  // tourne et l'écran n'existe pas.
+  requestHide: {
+    /** Le compte Jellyfin à qui l'on cache les titres — vide : fonction coupée. */
+    get account() {
+      return envOnly("REQUEST_HIDE_ACCOUNT", "").trim();
+    },
+    get enabled() {
+      return envOnly("REQUEST_HIDE_ACCOUNT", "").trim() !== "";
+    },
+    /** Les comptes dont les demandes restent visibles, séparés par des virgules. */
+    get keep() {
+      return envOnly("REQUEST_HIDE_KEEP", "");
+    },
+    /** Le tag posé dans Jellyfin et bloqué sur ce compte seul. */
+    get tag() {
+      return envOnly("REQUEST_HIDE_TAG", "masque-demandes").trim() || "masque-demandes";
+    },
+  },
   news: {
     // La nouvelle adresse publique annoncée par la page Nouveautés du renommage (`news/pageLaterna.ts`,
     // DECISIONS.md §118). Déploiement seulement, hors du schéma des réglages et de `.env.example` : elle
