@@ -25,8 +25,10 @@ import type { ViewItem, ViewStatus } from "@/lib/requestHide/rules";
 export const REQUEST_HIDE_KEY = "/api/admin/request-hide";
 const PAGE = 120;
 
-type Filter = "candidate" | "hidden" | "shown" | "all";
-const FILTERS: Filter[] = ["candidate", "hidden", "shown", "all"];
+// « Gardés » a son onglet pour que les quatre premiers fassent « Tout » : sans lui, l'écart (les titres
+// demandés par un compte gardé) ne se lisait nulle part.
+type Filter = "candidate" | "hidden" | "shown" | "kept" | "all";
+const FILTERS: Filter[] = ["candidate", "hidden", "shown", "kept", "all"];
 
 const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
@@ -56,9 +58,9 @@ export function RequestHidePanel() {
 
   const items = useMemo(() => data?.items ?? [], [data]);
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { candidate: 0, hidden: 0, shown: 0, all: 0 };
+    const c: Record<Filter, number> = { candidate: 0, hidden: 0, shown: 0, kept: 0, all: 0 };
     for (const i of items) {
-      if (i.status === "candidate" || i.status === "hidden" || i.status === "shown") c[i.status]++;
+      if (i.status !== "free") c[i.status]++;
       if (i.requesters.length > 0 || i.status === "hidden") c.all++;
     }
     return c;
