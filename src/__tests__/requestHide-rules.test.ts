@@ -49,6 +49,12 @@ describe("masquage des demandes — règles", () => {
     expect([...hiddenKeys(rows)]).toEqual(["movie:1"]);
   });
 
+  it("un titre jamais demandé est « libre » et dit s'il est déjà caché au compte par un autre tag", () => {
+    const [winx] = buildView([{ ...title("series:1848"), kind: "series", otherBlock: "lucas" }], summarize([]), []);
+    expect(winx).toMatchObject({ status: "free", otherBlock: "lucas", applied: true });
+    expect(buildView([{ ...title("series:1848"), kind: "series", otherBlock: "lucas" }], summarize([]), [row("series:1848", "hidden", "manual")])[0].status).toBe("hidden");
+  });
+
   it("pose et retire le tag sans toucher aux autres, casse ignorée", () => {
     expect(retag(["magic", "lucas"], "masque-demandes", true)).toEqual(["magic", "lucas", "masque-demandes"]);
     expect(retag(["magic", "Masque-Demandes"], "masque-demandes", true)).toBeNull();

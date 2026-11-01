@@ -25,10 +25,11 @@ import type { ViewItem, ViewStatus } from "@/lib/requestHide/rules";
 export const REQUEST_HIDE_KEY = "/api/admin/request-hide";
 const PAGE = 120;
 
-// « Gardés » a son onglet pour que les quatre premiers fassent « Tout » : sans lui, l'écart (les titres
-// demandés par un compte gardé) ne se lisait nulle part.
-type Filter = "candidate" | "hidden" | "shown" | "kept" | "all";
-const FILTERS: Filter[] = ["candidate", "hidden", "shown", "kept", "all"];
+// Chaque titre de la bibliothèque est dans un onglet, et « Tout » est leur somme : « Gardés » (demandés
+// par un compte gardé) et « Non demandés » (ajoutés directement) en ont un pour que l'écart se lise, et
+// qu'un titre jamais demandé se trouve et se masque comme les autres.
+type Filter = "candidate" | "hidden" | "shown" | "kept" | "free" | "all";
+const FILTERS: Filter[] = ["candidate", "hidden", "shown", "kept", "free", "all"];
 
 const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
@@ -58,10 +59,10 @@ export function RequestHidePanel() {
 
   const items = useMemo(() => data?.items ?? [], [data]);
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { candidate: 0, hidden: 0, shown: 0, kept: 0, all: 0 };
+    const c: Record<Filter, number> = { candidate: 0, hidden: 0, shown: 0, kept: 0, free: 0, all: 0 };
     for (const i of items) {
-      if (i.status !== "free") c[i.status]++;
-      if (i.requesters.length > 0 || i.status === "hidden") c.all++;
+      c[i.status]++;
+      c.all++;
     }
     return c;
   }, [items]);
@@ -71,7 +72,7 @@ export function RequestHidePanel() {
   const visible = useMemo(() => {
     const q = fold(query.trim());
     return items
-      .filter((i) => (filter === "all" ? i.requesters.length > 0 || i.status !== "free" : i.status === filter))
+      .filter((i) => filter === "all" || i.status === filter)
       .filter((i) => !q || fold(i.name).includes(q))
       .filter((i) => !who || i.requesters.includes(who))
       .sort((a, b) => (b.requestedAt ?? 0) - (a.requestedAt ?? 0) || a.name.localeCompare(b.name));
@@ -247,6 +248,9 @@ function Row({ item, checked, onCheck, onAct, busy }: { item: ViewItem; checked:
         {item.source === "auto" ? ` · ${t("requestHide.auto_short")}` : ""}
         {!item.applied ? " …" : ""}
       </span>
+      {item.otherBlock && item.status !== "hidden" ? (
+        <span className="hidden shrink-0 rounded-full bg-white/5 px-2 py-0.5 text-xs text-subtle sm:inline">{t("requestHide.otherBlock", { tag: item.otherBlock })}</span>
+      ) : null}
       <button type="button" className="btn btn-ghost btn-sm shrink-0" disabled={busy} onClick={() => onAct(hidden ? "shown" : "hidden")} aria-label={t(hidden ? "requestHide.showOne" : "requestHide.hideOne")}>
         {hidden ? <Eye size={14} /> : <EyeOff size={14} />}
         <span className="hidden sm:inline">{t(hidden ? "requestHide.showOne" : "requestHide.hideOne")}</span>

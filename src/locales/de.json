@@ -3992,6 +3992,7 @@
       "hidden": "Ausgeblendet",
       "shown": "Sichtbar gemacht",
       "kept": "Behalten",
+      "free": "Nicht angefragt",
       "all": "Alle"
     },
     "status": {
@@ -4000,6 +4001,7 @@
       "shown": "Sichtbar",
       "kept": "Behalten",
       "free": "Frei"
-    }
+    },
+    "otherBlock": "Bereits ausgeblendet ({tag})"
   }
 }

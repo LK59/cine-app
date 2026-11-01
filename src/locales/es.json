@@ -3992,6 +3992,7 @@
       "hidden": "Ocultos",
       "shown": "Hechos visibles",
       "kept": "Conservados",
+      "free": "No pedidos",
       "all": "Todo"
     },
     "status": {
@@ -4000,6 +4001,7 @@
       "shown": "Visible",
       "kept": "Conservado",
       "free": "Libre"
-    }
+    },
+    "otherBlock": "Ya oculto ({tag})"
   }
 }

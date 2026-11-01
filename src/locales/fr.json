@@ -3992,6 +3992,7 @@
       "hidden": "Masqués",
       "shown": "Rendus visibles",
       "kept": "Gardés",
+      "free": "Non demandés",
       "all": "Tout"
     },
     "status": {
@@ -4000,6 +4001,7 @@
       "shown": "Visible",
       "kept": "Gardé",
       "free": "Libre"
-    }
+    },
+    "otherBlock": "Déjà caché ({tag})"
   }
 }

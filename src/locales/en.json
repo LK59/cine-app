@@ -3992,6 +3992,7 @@
       "hidden": "Hidden",
       "shown": "Made visible",
       "kept": "Kept",
+      "free": "Not requested",
       "all": "All"
     },
     "status": {
@@ -4000,6 +4001,7 @@
       "shown": "Visible",
       "kept": "Kept",
       "free": "Free"
-    }
+    },
+    "otherBlock": "Already hidden ({tag})"
   }
 }

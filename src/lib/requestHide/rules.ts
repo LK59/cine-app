@@ -38,6 +38,8 @@ export interface LibraryTitle {
   imageTag: string | null;
   /** Le titre porte déjà le tag dans Jellyfin. */
   tagged: boolean;
+  /** Un autre tag que le compte bloque déjà (« lucas »…) : le titre lui est caché sans nous. */
+  otherBlock?: string | null;
 }
 
 export interface RequestSummary {
@@ -126,6 +128,7 @@ export interface ViewItem {
   /** Jellyfin dit déjà ce que la décision veut (tag posé si masqué, absent sinon). */
   applied: boolean;
   requestedAt: number | null;
+  otherBlock: string | null;
 }
 
 /**
@@ -155,6 +158,7 @@ export function buildView(
       source: row?.source ?? null,
       applied: t.tagged === (status === "hidden"),
       requestedAt: s?.lastAt ?? null,
+      otherBlock: t.otherBlock ?? null,
     };
   });
 }

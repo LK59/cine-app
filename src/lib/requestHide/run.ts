@@ -121,6 +121,8 @@ async function readSources(): Promise<Sources> {
   const keepIds = new Set(users.filter((u) => u.Id && u.Name && keep.has(u.Name.toLowerCase())).map((u) => idOf(u.Id as string)));
   const target = users.find((u) => (u.Name ?? "").toLowerCase() === config.requestHide.account.toLowerCase()) ?? null;
   const adminId = users.find((u) => u.Policy?.IsAdministrator && !u.Policy?.IsDisabled)?.Id ?? null;
+  // Les autres tags que le compte bloque déjà : un titre qui en porte un lui est caché sans nous, l'écran le dit.
+  const otherBlocked = (target?.Policy?.BlockedTags ?? []).filter((t): t is string => typeof t === "string" && t.toLowerCase() !== tag.toLowerCase());
 
   const tvdbToKey = new Map<string, string>();
   const requests: HideRequest[] = [];
@@ -152,6 +154,7 @@ async function readSources(): Promise<Sources> {
       year: item.ProductionYear ?? null,
       imageTag: item.ImageTags?.Primary ?? null,
       tagged: (item.Tags ?? []).some((t) => t.toLowerCase() === tag.toLowerCase()),
+      otherBlock: otherBlocked.find((b) => (item.Tags ?? []).some((t) => t.toLowerCase() === b.toLowerCase())) ?? null,
     });
   };
   for (const m of movies) add(m, "movie");
