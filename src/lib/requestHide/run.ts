@@ -184,10 +184,14 @@ async function writeTag(adminId: string, jfId: string, want: boolean): Promise<b
   const item = (await res.json()) as { Tags?: string[] } & Record<string, unknown>;
   const tags = retag(item.Tags, config.requestHide.tag, want);
   if (!tags) return false;
+  // Ce que la mise à jour ne lit pas, et que Jellyfin ne sait pas relire : renvoyé tel quel, le champ
+  // des aperçus (`Trickplay`) d'un film fait échouer la requête (HTTP 500, vu le 01/11/2026). Sans ces
+  // quatre champs, l'aller-retour ne change toujours que l'`Etag`.
+  const { Trickplay: _t, MediaSources: _m, MediaStreams: _s, Chapters: _c, ...rest } = item;
   const post = await jellyfinFetch(base, {
     method: "POST",
     headers: jfHeaders(),
-    body: JSON.stringify({ ...item, Tags: tags }),
+    body: JSON.stringify({ ...rest, Tags: tags }),
     signal: upstreamSignal(UPSTREAM_TIMEOUT_MS),
   });
   if (!post.ok) throw new Error(`POST /Items/… : HTTP ${post.status}`);
