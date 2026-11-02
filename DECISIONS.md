@@ -6403,7 +6403,8 @@ module) ; et, inchangés, `native-close-once.test.tsx`, `ChromecastPlayer.test.t
   l'épisode déjà à l'écran pour le menu « Épisodes » ; Chromecast teste sa garde avant de poser la
   position de fin.
 - La ligne `stop` : celle de l'hôte (`reportStop`, ou `stopFields` pour Chromecast, `ended` compris) ;
-  aucune pour le hors ligne, qui n'écrit pas au journal du lecteur.
+  pour le hors ligne, celle de `useOfflineSessionLog`, au démontage (depuis le 02/11/2026 ; il
+  n'écrivait rien au journal du lecteur avant).
 - Le téléviseur (`release`) : l'élément HLS relâché en AirPlay (serveur, §94), la séance Chromecast
   terminée.
 - Pas de fondu ni de sortie du plein écran pour Chromecast : la page n'y est qu'une télécommande.

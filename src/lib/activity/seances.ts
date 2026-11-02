@@ -24,8 +24,16 @@ export interface Seance {
   device: string | null;
   /** Le temps d'ouverture de la première ouverture (hors reconstructions), en ms. */
   openedMs: number | null;
-  /** « natif » (remultiplexage — ou canevas, dans les séances d'avant le 24/09/2026) ou « serveur ». */
-  player: "natif" | "serveur";
+  /**
+   * « natif » (remultiplexage — ou canevas, dans les séances d'avant le 24/09/2026), « serveur », ou
+   * « hors-ligne » : un téléchargement lu sur l'appareil (journalisé depuis le 02/11/2026).
+   */
+  player: "natif" | "serveur" | "hors-ligne";
+  /**
+   * Reconstituée après coup (`retro` sur ses lignes) : une séance hors ligne d'avant le 02/11/2026,
+   * retrouvée dans l'activité de Jellyfin. Son temps regardé est l'écart entre l'annonce et l'arrêt.
+   */
+  retro?: boolean;
   path: string | null;
   video: string | null;
   range: string | null;
@@ -144,6 +152,10 @@ function isCast(r: LogRecord, reason: string): boolean {
   );
 }
 
+function playerOf(r: LogRecord): Seance["player"] {
+  return r.player === "serveur" ? "serveur" : r.player === "hors-ligne" ? "hors-ligne" : "natif";
+}
+
 function blank(id: string, legacy: boolean, r: LogRecord): Seance {
   return {
     id,
@@ -155,7 +167,7 @@ function blank(id: string, legacy: boolean, r: LogRecord): Seance {
     end: lineTime(r),
     device: deviceLabel(str(r.agent), { touch: r.touch === true }),
     openedMs: null,
-    player: r.player === "serveur" ? "serveur" : "natif",
+    player: playerOf(r),
     path: str(r.path),
     video: str(r.video),
     range: str(r.range),
@@ -215,6 +227,7 @@ function absorb(s: Seance, r: LogRecord): void {
   s.start = Math.min(s.start, t);
   s.device ??= deviceLabel(str(r.agent), { touch: r.touch === true });
   if (r.player === "serveur") s.player = "serveur";
+  if (r.retro === true) s.retro = true;
   // Le nom complet d'un épisode, quand il arrive après coup : le lecteur serveur écrit sa première
   // ligne sous le nom que lui a passé l'appelant (« Je ris, je ris, je ris »), et le reste sous
   // celui de Jellyfin (« LOL : Qui rit, sort ! — S04E01 · Je ris, je ris, je ris »). Le même

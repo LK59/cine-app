@@ -95,7 +95,9 @@ function verdictOf(viewers: Viewer[], proven = false): Verdict {
 export function diagnoseTitles(all: Seance[], limit = 12): TitleDiagnosis[] {
   // Un témoin sans appareil connu — le lecteur serveur avant le 24/09/2026 ne disait pas lequel —
   // ne prouve rien : il passait pour « quelqu'un chez qui ça marche » et innocentait le titre.
-  const seances = all.filter((s) => s.device !== null);
+  // Ni un téléchargement lu sur l'appareil (02/11/2026) : c'est une copie préparée par le serveur, pas
+  // le fichier de la bibliothèque — sa séance sans accroc n'innocente pas l'original.
+  const seances = all.filter((s) => s.device !== null && s.player !== "hors-ligne");
   // Ce que chaque spectateur a vécu sur l'ensemble de la période, titre par titre.
   const perViewer = new Map<string, Map<string, { seances: number; failed: number }>>();
   const byTitle = new Map<string, Seance[]>();

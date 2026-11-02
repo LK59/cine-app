@@ -33,6 +33,7 @@ import { refreshResumeThresholds } from "@/lib/offline/resumeRules";
 import { autoNextDue, downloadNextEpisode, offlineNextTarget, useOnline, watchedThrough } from "@/lib/offline/episodeDownloads";
 import { offlinePlayable, useTrackLabeller } from "@/components/offline/OfflineDownloadControl";
 import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
+import { useOfflineSessionLog } from "./useOfflineSessionLog";
 
 /**
  * Le lecteur des téléchargements hors ligne (bêta, 19/10/2026) — un hôte à part, voulu par Louis :
@@ -42,7 +43,8 @@ import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
  *
  * Une seule piste son est dans le fichier ; le menu montre toutes celles du film. En choisir une
  * autre propose la lecture en ligne à la même position — ou dit qu'on est hors ligne. La position
- * est gardée avec le téléchargement (`saveOfflinePosition`), pas encore renvoyée à Jellyfin.
+ * est gardée avec le téléchargement (`saveOfflinePosition`) et rapportée à Jellyfin ; la séance va au
+ * journal du lecteur (`useOfflineSessionLog`, 02/11/2026).
  */
 /**
  * Le fichier tel que le lecteur le lit : ce qui est sur l'appareil d'abord, et pendant le
@@ -283,6 +285,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     [ready, itemId, id]
   );
   const { stop: stopReporting } = usePlaybackSession(getPosition, reporting, getPaused);
+  const sessionLog = useOfflineSessionLog(videoRef, ready, opened, countsRef);
   useEffect(() => {
     void refreshResumeThresholds();
     const video = videoRef.current;
@@ -294,8 +297,8 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
     return () => video.removeEventListener("timeupdate", onTime);
   }, []);
 
-  // La suite commune aux quatre hôtes (`closePlayerSession`, DECISIONS.md §114) — sans ligne `stop` :
-  // le lecteur hors ligne n'écrit pas au journal du lecteur. La fiche et « Reprendre » se relisent une
+  // La suite commune aux quatre hôtes (`closePlayerSession`, DECISIONS.md §114) — la ligne `stop` part
+  // au démontage (`useOfflineSessionLog`). La fiche et « Reprendre » se relisent une
   // fois l'arrêt pris par Jellyfin, comme après le lecteur en ligne.
   //
   // La garde est une référence (`claimOnce`), comme au serveur : elle lisait l'état `closing`, et deux
@@ -370,6 +373,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
   const getNextOnline = useNextEpisodeFromCache(seriesItemId ? `/api/cinema/series/${seriesItemId}/episodes` : "");
   const advance = () => {
     if (!nextTarget) return;
+    sessionLog.endAs("next");
     if (nextTarget.offlineId) {
       // Depuis le début, comme `advance` en ligne : c'est la suite qu'on enchaîne.
       playback.play({ itemId: nextTarget.itemId, title: nextTarget.title, resumeAt: 0, offline: { id: nextTarget.offlineId } });

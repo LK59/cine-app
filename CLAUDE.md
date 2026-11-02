@@ -184,6 +184,10 @@ goes quiet, the **server** keeps the resume point from the segments the televisi
 activity page attaches it to the account's latest session of that title. Only a request without a
 session cookie is a television: the in-page server player loads the same signed address, and until
 8.36.3 every server session (paused for a minute) went through that relay.
+The offline player (downloads read from the device) writes one `start` and one `stop` with
+`player: "hors-ligne"` since 2026-11-02 (`useOfflineSessionLog`) — before, only Jellyfin saw those
+sessions; lines sent without network wait in the device's queue. Sessions from before were rebuilt
+from Jellyfin's activity log and carry `retro: true` (watched = announce to stop, approximate).
 `data/logs/server.log` is its counterpart for the server's own errors, with the stack the console
 line omits: `docker logs` dies with the container, which is recreated on every deploy — several a
 day — so an error a viewer hit in the evening was gone before anyone went looking. Since

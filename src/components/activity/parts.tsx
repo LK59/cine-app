@@ -248,6 +248,8 @@ export function SeanceFlags({ s }: { s: Seance }) {
   if (s.stop?.identicalRetries) flags.push({ label: t("activity.flags.identicalRetry", { n: s.stop.identicalRetries }), tone: "bg-warning/15 text-warning" });
   if (s.stop?.why === "lost") flags.push({ label: t("activity.flags.lost"), tone: "bg-white/5 text-muted" });
   if (s.player === "serveur") flags.push({ label: t("activity.flags.server"), tone: "bg-violet-500/15 text-violet-300" });
+  if (s.player === "hors-ligne") flags.push({ label: t("activity.flags.offline"), tone: "bg-sky-500/15 text-sky-300" });
+  if (s.retro) flags.push({ label: t("activity.flags.retro"), tone: "bg-white/5 text-muted" });
   if (s.onTv) flags.push({ label: t("activity.flags.tv"), tone: "bg-violet-500/15 text-violet-300" });
   // Le téléviseur nommé quand ce n'est pas AirPlay (DECISIONS.md §64) — absent des séances d'avant.
   if (s.onTv && s.castTarget === "chromecast") flags.push({ label: t("activity.flags.chromecast"), tone: "bg-violet-500/15 text-violet-300" });

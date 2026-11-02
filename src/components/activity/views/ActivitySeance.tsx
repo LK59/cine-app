@@ -142,7 +142,13 @@ export function ActivitySeance({ id }: { id: string }) {
             <span className="text-accent-400">{s.user}</span>
             <span>{fullDate(s.start)}</span>
             {s.device && <span>{s.device}</span>}
-            <span>{s.player === "serveur" ? t("activity.seance.serverPlayer") : t("activity.seance.nativePlayer", { path: s.path ?? "?" })}</span>
+            <span>
+              {s.player === "serveur"
+                ? t("activity.seance.serverPlayer")
+                : s.player === "hors-ligne"
+                  ? t("activity.seance.offlinePlayer")
+                  : t("activity.seance.nativePlayer", { path: s.path ?? "?" })}
+            </span>
           </p>
           <p className="mt-1 flex flex-wrap gap-x-3 text-xs text-subtle">
             {s.container && <span>{s.container}</span>}
