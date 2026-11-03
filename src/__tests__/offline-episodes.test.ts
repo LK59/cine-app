@@ -133,6 +133,7 @@ describe("« Télécharger la saison »", () => {
     );
     expect(failed).toEqual([]);
     expect(count).toBe(3);
+    expect(started.every((r) => r.origin === "season")).toBe(true);
     expect(started.map((r) => [r.itemId, r.audioIndex])).toEqual([
       ["s1e1", 2],
       ["s1e2", 1],
@@ -194,7 +195,7 @@ describe("le téléchargement automatique de l'épisode suivant", () => {
     held = [current];
     expect(await downloadNextEpisode(current, labeller, () => true)).toBe("started");
     expect(started).toHaveLength(1);
-    expect(started[0]).toMatchObject({ itemId: "s1e2", audioIndex: 2, quality: "high", codec: "hevc", episode: { autoNext: true, audioLanguage: "fr" } });
+    expect(started[0]).toMatchObject({ itemId: "s1e2", audioIndex: 2, quality: "high", codec: "hevc", origin: "auto", episode: { autoNext: true, audioLanguage: "fr" } });
     vi.unstubAllGlobals();
   });
 

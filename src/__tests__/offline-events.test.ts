@@ -66,11 +66,12 @@ describe("le journal du téléchargement hors ligne", () => {
     process.env.OFFLINE_DOWNLOADS = "false";
     upstream.mockImplementation(async () => json({ Items: [episode] }));
     await requestOfflineJob({ account: "louis", itemId: ITEM, audioIndex: 1, quality: "high", codec: "hevc" });
-    await requestOfflineJob({ account: "mathis", itemId: ITEM, audioIndex: 1, quality: "high", codec: "hevc" });
+    await requestOfflineJob({ account: "mathis", itemId: ITEM, audioIndex: 1, quality: "high", codec: "hevc", origin: "auto" });
     await vi.waitFor(() => expect(lines()).toHaveLength(2));
     const [first, second] = lines();
-    expect(first).toMatchObject({ level: "info", event: "requested", user: "louis", title: "Ted Lasso — S01E02", quality: "high", codec: "hevc", audioIndex: 1, audio: "Français - AAC - Stéréo", copy: "new" });
-    expect(second).toMatchObject({ user: "mathis", copy: "preparing" });
+    expect(first).toMatchObject({ level: "info", event: "requested", user: "louis", title: "Ted Lasso — S01E02", quality: "high", codec: "hevc", audioIndex: 1, audio: "Français - AAC - Stéréo", copy: "new", origin: "manual" });
+    // L'épisode suivant demandé de lui-même le dit : il se déduisait des heures (03/11/2026).
+    expect(second).toMatchObject({ user: "mathis", copy: "preparing", origin: "auto" });
   });
 
   it("préparation : commencée puis prête, avec durée, taille, vitesse et les comptes ; récupérée une seule fois", async () => {

@@ -12,7 +12,7 @@ import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
 import { logError } from "@/lib/logger";
 import { parseInit, scanFragments } from "./fmp4";
 import { logOfflineEvent, noteOfflineTitle, type JellyfinNaming } from "./events";
-import { expectedBytes, OFFLINE_AUDIO_BPS, OFFLINE_QUALITIES, type OfflineCodec, type OfflineQuality } from "./quality";
+import { expectedBytes, OFFLINE_AUDIO_BPS, OFFLINE_QUALITIES, type OfflineCodec, type OfflineOrigin, type OfflineQuality } from "./quality";
 
 /**
  * Les préparations du téléchargement hors ligne (bêta, 19/10/2026 — docs/telechargement-hors-ligne.md).
@@ -249,6 +249,7 @@ export async function requestOfflineJob(input: {
   audioIndex: number;
   quality: OfflineQuality;
   codec: OfflineCodec;
+  origin?: OfflineOrigin;
   now?: number;
 }): Promise<OfflineJob> {
   const now = input.now ?? Date.now();
@@ -312,7 +313,7 @@ export async function requestOfflineJob(input: {
     "INSERT INTO offline_requests (account, job_id, created_at) VALUES (?, ?, ?) ON CONFLICT(account, job_id) DO UPDATE SET fetched_at = NULL"
   ).run(input.account, id, now);
   const asked = offlineJobFor(input.account, id)!;
-  void logOfflineEvent("requested", asked, { user: input.account, copy, expectedBytes: asked.expectedBytes });
+  void logOfflineEvent("requested", asked, { user: input.account, copy, origin: input.origin ?? "manual", expectedBytes: asked.expectedBytes });
   pump();
   return offlineJobFor(input.account, id)!;
 }

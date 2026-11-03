@@ -5,6 +5,7 @@ import { config } from "@/lib/config";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { assertVisible } from "@/lib/itemVisibility";
 import { OfflineRefusal, requestOfflineJob, type OfflineCodec, type OfflineQuality } from "@/lib/offline/jobs";
+import { OFFLINE_ORIGINS, type OfflineOrigin } from "@/lib/offline/quality";
 
 /**
  * Demander un téléchargement hors ligne (bêta) : Jellyfin prépare la version, l'appareil la suit par
@@ -24,11 +25,13 @@ export async function POST(req: NextRequest) {
   if (!config.player.offlineDownloadsForEveryone && session.role !== "admin") {
     return NextResponse.json({ error: "Téléchargement hors ligne réservé aux administrateurs" }, { status: 403 });
   }
-  const body = (await req.json().catch(() => null)) as { itemId?: unknown; audioIndex?: unknown; quality?: unknown; codec?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { itemId?: unknown; audioIndex?: unknown; quality?: unknown; codec?: unknown; origin?: unknown } | null;
   const itemId = body?.itemId;
   const audioIndex = body?.audioIndex;
   const quality = body?.quality;
   const codec = body?.codec ?? "hevc";
+  // Pour le journal seulement : une valeur inconnue (un appareil d'avant ce champ) se lit « à la main ».
+  const origin = OFFLINE_ORIGINS.find((o) => o === body?.origin) as OfflineOrigin | undefined;
   if (!isJellyfinId(itemId) || typeof audioIndex !== "number" || !Number.isInteger(audioIndex) || audioIndex < 0) {
     return NextResponse.json({ error: "Demande invalide" }, { status: 400 });
   }
@@ -37,7 +40,7 @@ export async function POST(req: NextRequest) {
   const refused = await assertVisible(session, itemId);
   if (refused) return refused;
   try {
-    const job = await requestOfflineJob({ account: session.u, itemId, audioIndex, quality: quality as OfflineQuality, codec: codec as OfflineCodec });
+    const job = await requestOfflineJob({ account: session.u, itemId, audioIndex, quality: quality as OfflineQuality, codec: codec as OfflineCodec, origin });
     return NextResponse.json({ job }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     if (error instanceof OfflineRefusal) {

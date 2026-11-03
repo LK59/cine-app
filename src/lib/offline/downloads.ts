@@ -10,7 +10,7 @@ import { storeOfflineSubtitles, type OfflineSubtitle } from "./subtitles";
 import { storeOfflineTrickplay, type OfflineTrickplay } from "./trickplay";
 import { BACKDROP_FILE, LOGO_FILE, forgetOfflineImages, offlineImage, storeOfflineArtwork, type OfflineArtwork } from "./artwork";
 import type { OfflineJob } from "./jobs";
-import type { OfflineCodec, OfflineQuality } from "./quality";
+import type { OfflineCodec, OfflineOrigin, OfflineQuality } from "./quality";
 
 /**
  * Les téléchargements hors ligne de l'appareil (bêta, 19/10/2026) — l'état que l'interface lit, et la
@@ -289,6 +289,8 @@ export interface OfflineRequest {
   audioTracks: { index: number; label: string }[];
   quality: OfflineQuality;
   codec: OfflineCodec;
+  /** D'où vient la demande, pour le journal du serveur (`OFFLINE_ORIGINS`) ; absent : à la main. */
+  origin?: OfflineOrigin;
 }
 
 /** Demande la préparation, crée le téléchargement sur l'appareil, et le lance. */
@@ -300,7 +302,7 @@ export async function startOfflineDownload(request: OfflineRequest): Promise<voi
   const res = await fetch("/api/offline/jobs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ itemId: request.itemId, audioIndex: request.audioIndex, quality: request.quality, codec: request.codec }),
+    body: JSON.stringify({ itemId: request.itemId, audioIndex: request.audioIndex, quality: request.quality, codec: request.codec, origin: request.origin }),
   });
   const body = (await res.json().catch(() => null)) as { job?: OfflineJob; error?: string; code?: string } | null;
   // Le code voyage avec l'erreur (`offline-limit`) : la fenêtre le traduit
@@ -493,6 +495,7 @@ export async function retryOfflineDownload(id: string): Promise<void> {
     audioTracks: d.audioTracks,
     quality: d.quality,
     codec: d.codec,
+    origin: "retry",
   });
 }
 

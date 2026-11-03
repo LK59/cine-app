@@ -7,6 +7,16 @@
 export type OfflineQuality = "standard" | "high";
 export type OfflineCodec = "hevc" | "h264";
 
+/**
+ * D'où vient une demande, écrit sur sa ligne `requested` du journal du serveur (03/11/2026) : un appui
+ * sur « Télécharger » (`manual`, la valeur quand l'appareil ne dit rien), « Télécharger la saison »,
+ * l'épisode suivant demandé de lui-même à mi-épisode (`auto`), « Réessayer », ou la reprise des
+ * téléchargements après un changement d'adresse (`passage`). Sans elle, savoir si une première
+ * utilisatrice se servait de l'automatique se déduisait des heures.
+ */
+export const OFFLINE_ORIGINS = ["manual", "season", "auto", "retry", "passage"] as const;
+export type OfflineOrigin = (typeof OFFLINE_ORIGINS)[number];
+
 export const OFFLINE_QUALITIES: Record<OfflineQuality, { videoBps: number }> = {
   standard: { videoBps: 2_000_000 },
   high: { videoBps: 4_000_000 },

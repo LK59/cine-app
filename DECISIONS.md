@@ -6209,7 +6209,7 @@ et la navigation repart de zéro.
   défaut ; administrateurs seulement pendant les premiers essais), refermable aux administrateurs d'un
   geste comme le Chromecast. Le label « Bêta » reste. Page Nouveautés « 9.0 » publiée pour toutes les
   installations (`publishNewsDraft`).
-- *Activité* : chaque étape au journal (`scope: "offline"`), les copies du serveur dans le panneau.
+- *Activité* : chaque étape au journal (`scope: "offline"`), les copies du serveur dans le panneau. Depuis le 03/11/2026, la ligne `requested` dit d'où vient la demande (`origin` : `manual`, `season`, `auto` — l'épisode suivant à mi-épisode —, `retry`, `passage` ; `OFFLINE_ORIGINS`, `quality.ts`) : savoir si la première vraie utilisatrice se servait de l'automatique se déduisait des heures. Un appareil d'avant ce champ se lit `manual`.
 
 Tests : `offline-fmp4`, `offline-trickplay`, `offline-engine`, `offline-jobs`, `offline-routes`, `lab-offline-samples-routes`,
 `offline-downloads-page`, `offline-entry`, `serviceWorker-offline-entry`, `offline-page`,

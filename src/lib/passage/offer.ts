@@ -180,6 +180,7 @@ export async function relaunchPassageDownloads(
         audioTracks: item.audioTracks,
         quality: item.quality,
         codec: item.codec,
+        origin: "passage",
       });
       started += 1;
     } catch {

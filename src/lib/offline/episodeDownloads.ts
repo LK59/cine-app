@@ -9,7 +9,7 @@ import { nextEpisodeIn } from "@/lib/nextEpisode";
 import { labelAudioTracks } from "@/lib/trackLabel";
 import { trackLanguage } from "@/lib/trackPreferences";
 import { offlineDownloadById, offlineEpisodesOf, startOfflineDownload, type OfflineDownload } from "./downloads";
-import { expectedBytes, type OfflineCodec, type OfflineQuality } from "./quality";
+import { expectedBytes, type OfflineCodec, type OfflineOrigin, type OfflineQuality } from "./quality";
 import { applyResumeRules } from "./resumeRules";
 
 /**
@@ -106,6 +106,8 @@ export interface EpisodeChoice {
   quality: OfflineQuality;
   codec: OfflineCodec;
   autoNext: boolean;
+  /** D'où vient la demande, pour le journal du serveur ; absent : à la main. */
+  origin?: OfflineOrigin;
 }
 
 /** Demande un épisode : ses pistes lues, la bonne gardée, le téléchargement lancé. */
@@ -144,6 +146,7 @@ export async function requestEpisodeDownload(
     audioTracks: tracks.map(({ index, label }) => ({ index, label })),
     quality: choice.quality,
     codec: choice.codec,
+    origin: choice.origin,
   });
 }
 
@@ -168,7 +171,7 @@ export async function requestSeasonDownloads(
     // Relu à chaque tour : un épisode demandé entre-temps (sa ligne, l'automatique) n'est pas redemandé.
     if (held(episode.jellyfinItemId, downloads())) continue;
     try {
-      await requestEpisodeDownload(series, episode, seasons, choice, labeller);
+      await requestEpisodeDownload(series, episode, seasons, { ...choice, origin: "season" }, labeller);
       started += 1;
     } catch (error) {
       failed.push({ episode, error: error instanceof Error ? error.message : String(error), cause: error });
@@ -224,7 +227,7 @@ export async function downloadNextEpisode(
     { seriesItemId: facts.seriesItemId, sonarrId: facts.sonarrId, seriesTitle: facts.seriesTitle },
     episode,
     seasons,
-    { language: facts.audioLanguage ?? null, quality: d.quality, codec: d.codec, autoNext: true },
+    { language: facts.audioLanguage ?? null, quality: d.quality, codec: d.codec, autoNext: true, origin: "auto" },
     labeller
   );
   return "started";
