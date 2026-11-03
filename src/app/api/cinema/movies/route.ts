@@ -170,7 +170,7 @@ async function getMovies(req: Request) {
 
     const locale = localeOf(req);
     const cinemaMovies = await Promise.all([
-      ...matched.map(({ m, jfItem }) => toCinemaMovie(m, jfItem.Id, locale)),
+      ...matched.map(({ m, jfItem }) => toCinemaMovie(m, jfItem, locale)),
       ...onlyInJellyfin.map((t) => jellyfinOnlyCinemaMovie(t, locale)),
     ]);
 
@@ -186,7 +186,8 @@ async function getMovies(req: Request) {
       }
     }
 
-    // La date de la carte : l'ajout dans Radarr, ou l'entrée dans Jellyfin d'un film qu'il a seul.
+    // La date de la carte : la plus tardive de l'ajout dans Radarr et de l'entrée dans Jellyfin
+    // (`movieAddedAt`), ou cette entrée seule pour un film que Jellyfin a seul.
     const spotlight = cinemaMovies
       .filter((m) => m.addedAt && m.addedAt !== "0001-01-01T00:00:00Z")
       .sort((a, b) => new Date(b.addedAt!).getTime() - new Date(a.addedAt!).getTime())

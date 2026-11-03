@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isRecentlyAdded, recentlyAddedRail, top10Rail, uniqueById } from "@/lib/cinemaRails";
+import { isRecentlyAdded, movieAddedAt, recentlyAddedRail, top10Rail, uniqueById } from "@/lib/cinemaRails";
 import { similarInLibrary } from "@/lib/cinemaSimilar";
 
 const NOW = Date.parse("2026-09-02T12:00:00Z");
@@ -87,5 +87,20 @@ describe("similarInLibrary", () => {
 
   it("respects the limit", () => {
     expect(similarInLibrary(subject, library, () => false, 1)).toHaveLength(1);
+  });
+});
+
+// Un film demandé puis arrivé des semaines plus tard (Primetime, 03/11/2026) : sa date est son arrivée.
+describe("movieAddedAt", () => {
+  it("prend l'entrée dans Jellyfin quand elle suit l'ajout dans Radarr", () => {
+    expect(movieAddedAt("2026-09-25T11:21:16Z", "2026-11-03T06:05:00.175626Z")).toBe("2026-11-03T06:05:00.175626Z");
+  });
+  it("ne recule pas sur une date de fichier plus ancienne que l'ajout", () => {
+    expect(movieAddedAt("2026-01-10T07:12:10Z", "2015-02-14T08:09:37.0000000Z")).toBe("2026-01-10T07:12:10Z");
+  });
+  it("garde l'ajout de Radarr sans date Jellyfin, et ignore le « jamais » de Radarr", () => {
+    expect(movieAddedAt("2026-09-25T11:21:16Z", undefined)).toBe("2026-09-25T11:21:16Z");
+    expect(movieAddedAt("0001-01-01T00:00:00Z", "2026-11-03T06:05:00Z")).toBe("2026-11-03T06:05:00Z");
+    expect(movieAddedAt(null, null)).toBeNull();
   });
 });

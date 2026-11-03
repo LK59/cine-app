@@ -44,7 +44,7 @@ const built = vi.hoisted(() => ({ calls: [] as unknown[][] }));
 vi.mock("@/lib/cinemaEntries", () => ({
   toCinemaMovie: async (...args: unknown[]) => {
     built.calls.push(["movie", ...args]);
-    return { radarrId: (args[0] as { id: number }).id, jellyfinItemId: args[1] };
+    return { radarrId: (args[0] as { id: number }).id, jellyfinItemId: (args[1] as { Id: string }).Id };
   },
   toCinemaSeries: async (...args: unknown[]) => {
     built.calls.push(["series", ...args]);
@@ -91,7 +91,7 @@ describe("shareTitleEntry", () => {
   it("un film : la carte du catalogue pour lui, et aucune autre construite", async () => {
     const card = await shareTitleEntry({ kind: "movie", itemId: MOVIE }, "fr");
     expect(card).toEqual({ radarrId: 2, jellyfinItemId: MOVIE });
-    expect(built.calls).toEqual([["movie", { id: 2, jf: MOVIE }, MOVIE, "fr"]]);
+    expect(built.calls).toEqual([["movie", { id: 2, jf: MOVIE }, expect.objectContaining({ Id: MOVIE }), "fr"]]);
   });
 
   it("l'identifiant du lien se compare sans tenir compte de la casse", async () => {

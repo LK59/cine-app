@@ -39,7 +39,7 @@ export async function shareTitleEntry(share: Pick<Share, "kind" | "itemId">, loc
     const [movies, jellyfinMovies] = await Promise.all([cachedMovies(), cachedJellyfinMoviesAdmin()]);
     const matched = matchMovies(movies, jellyfinMovies);
     const hit = matched.find((x) => isWanted(x.jfItem.Id));
-    if (hit) return toCinemaMovie(hit.m, hit.jfItem.Id, locale);
+    if (hit) return toCinemaMovie(hit.m, hit.jfItem, locale);
     // Les identifiants réservés dépendent de toute la liste (`withReservedIds`) : calculée en entier,
     // comme le catalogue, pour que la carte porte le même `radarrId` que chez le foyer.
     const only = jellyfinOnlyMovies(jellyfinMovies, matched).find((t) => isWanted(t.item.Id));

@@ -3744,6 +3744,17 @@ de séries, Jellyfin muet).
 
 **Sur les rangées de nouveautés (12/10/2026).** « Récemment ajoutés » et « À la une » coupaient la pastille (`showNewBadge={false}` : écrire « Nouveau » sur chaque carte d'une rangée de nouveautés ne dit rien) — or c'est là que remonte une série pour un épisode. Elles passent en mode `"reason"` (`NewBadgeMode`) : une série remontée y dit « Nouvel épisode » ou « Nouvelle saison », un film ou une série elle-même nouvelle reste sans pastille. Bureau et téléphone par le même `CinemaNewBadge`.
 
+**Les films aussi, depuis le 03/11/2026.** Un film datait de son ajout dans Radarr seul : *Primetime* et
+*Resident Evil*, demandés fin septembre et sortis le 03/11, entraient dans la bibliothèque avec plus d'un
+mois d'âge — ni « Récemment ajoutés », ni bannière, ni pastille. Sa date est désormais la plus tardive de
+l'ajout dans Radarr et de l'entrée de l'élément dans Jellyfin (`movieAddedAt`, `cinemaRails.ts`, appelé
+par `toCinemaMovie`) — la « date propre » des séries ci-dessus. Pas `movieFile.dateAdded` de Radarr :
+il bouge à chaque remplacement de fichier (meilleure version, réencodage) et aurait ramené en tête des
+films là depuis des mois ; `DateCreated` de Jellyfin garde la première arrivée (mesuré : 8 films sur 899
+changent de date, tous des demandes arrivées tard). Une `DateCreated` plus ancienne que l'ajout (la date
+du fichier d'un dossier existant) ne recule rien. Pas de « vu par compte » ici : un film arrive une fois.
+Le palmarès du jour départage donc ses films sur cette date, la même pour tous. Tests : `cinema-rails.test.ts`.
+
 ## 76. Les listes de lecture HLS partent compressées, et rien d'autre ne change
 
 Relevé le 12/10/2026 dans le journal du relais inverse : une spectatrice sur Edge, connexion à ~40 Ko/s,

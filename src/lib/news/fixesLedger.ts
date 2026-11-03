@@ -1046,6 +1046,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.13.6",
+    page: "10.5",
+    group: { fr: "Accueil", en: "Home", es: "Inicio", de: "Startseite" },
+    items: [
+      {
+        fr: "Un film demandé qui devient disponible des semaines plus tard remonte désormais dans « Récemment ajoutés » et marqué « Nouveau », comme un épisode qui arrive.",
+        en: "A requested film that becomes available weeks later now shows up in « Recently added » and is marked « New », like an arriving episode.",
+        es: "Una película pedida que pasa a estar disponible semanas después aparece ahora en « Añadidos recientemente » y marcada « Nuevo », como un episodio que llega.",
+        de: "Ein angefragter Film, der Wochen später verfügbar wird, erscheint jetzt unter « Kürzlich hinzugefügt » und ist als « Neu » markiert, wie eine neue Folge.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

@@ -5,6 +5,7 @@ import { getTitleArt, logoForScreen } from "@/lib/title-art";
 import { catalogueExtras, getTitleExtras, type TitleExtras, getTitleNames, getTitleOverviews, localizedOverview, localizedTitle } from "@/lib/titleNames";
 import { getImdbRating } from "@/lib/imdb-rating";
 import { tvEpisodeRuntime } from "@/lib/tvRuntime";
+import { movieAddedAt } from "@/lib/cinemaRails";
 import { toDynamicRange, type VideoQuality } from "@/lib/videoQuality";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
@@ -25,7 +26,12 @@ import type { CinemaSeries } from "@/app/api/cinema/series/route";
 // /api/radarr/movies/[id]/info route already populates), so only the very first request after a
 // cold cache pays the full TMDB round-trip for the whole library at once — every request after
 // that, including this one, is cache reads only.
-export async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string, locale: Locale): Promise<CinemaMovie> {
+export async function toCinemaMovie(
+  m: RadarrMovie,
+  jellyfinItem: { Id: string; DateCreated?: string },
+  locale: Locale
+): Promise<CinemaMovie> {
+  const jellyfinItemId = jellyfinItem.Id;
   // Le logo et l'affiche sans texte viennent de la même réponse TMDB et de la même entrée de
   // cache : la seconde ne coûte donc pas un appel de plus.
   const art = await getTitleArt(m.tmdbId, "movie");
@@ -56,7 +62,8 @@ export async function toCinemaMovie(m: RadarrMovie, jellyfinItemId: string, loca
     quality: videoQualityOf(m),
     // Sous leur nom commun : « Horreur » et « Horror » ne font qu'un genre — voir `genres.ts`.
     genres: canonicalGenres(m.genres),
-    addedAt: m.added ?? null,
+    // Un film demandé puis arrivé date de son arrivée, pas de sa demande — voir `movieAddedAt`.
+    addedAt: movieAddedAt(m.added, jellyfinItem.DateCreated),
   };
 }
 

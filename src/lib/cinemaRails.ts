@@ -33,6 +33,26 @@ function addedTime(addedAt: string | null): number | null {
   return Number.isFinite(t) ? t : null;
 }
 
+/**
+ * La date d'un film : la plus tardive de son ajout dans Radarr et de son entrée dans Jellyfin — la
+ * même règle que les séries (`seriesFreshness`, §75), réduite à un fichier.
+ *
+ * Jusqu'au 03/11/2026, un film datait de son ajout dans Radarr seul : *Primetime*, demandé le 25/09
+ * et sorti le 03/11, entrait dans la bibliothèque avec cinq semaines d'âge, loin derrière les films
+ * importés la veille, sans pastille ni place dans les nouveautés. L'entrée dans Jellyfin
+ * (`DateCreated`) plutôt que le fichier de Radarr (`movieFile.dateAdded`) : celui-ci change à chaque
+ * remplacement de fichier (une meilleure version, un réencodage) et ramènerait en tête un film déjà
+ * là depuis des mois ; l'élément Jellyfin, lui, garde sa date. Une `DateCreated` plus ancienne que
+ * l'ajout (la date du fichier sur le disque, pour un film importé d'un dossier existant) ne recule
+ * rien : c'est un maximum.
+ */
+export function movieAddedAt(radarrAdded: string | null | undefined, jellyfinCreated: string | null | undefined): string | null {
+  const a = addedTime(radarrAdded ?? null);
+  const j = addedTime(jellyfinCreated ?? null);
+  if (j !== null && (a === null || j > a)) return jellyfinCreated!;
+  return radarrAdded ?? null;
+}
+
 export function isRecentlyAdded(addedAt: string | null, now: number = Date.now()): boolean {
   const t = addedTime(addedAt);
   return t !== null && now - t <= NEW_BADGE_DAYS * DAY_MS;
