@@ -34,7 +34,7 @@ import { MaintenanceNotices } from "@/components/MaintenanceNotices";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ClientErrorListener } from "@/components/ClientErrorListener";
 import { RemoteControlSupport } from "@/components/RemoteControlSupport";
-import { ViewportHeal } from "@/components/ViewportHeal";
+import { ViewportWatch } from "@/components/ViewportWatch";
 import { PresencePinger } from "@/components/PresencePinger";
 import { ShareModeProvider } from "@/components/ShareMode";
 import { APP_NAME } from "@/lib/appBuild";
@@ -240,7 +240,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <ServiceWorkerRegistration />
         <ClientErrorListener />
         <RemoteControlSupport />
-        <ViewportHeal />
+        <ViewportWatch />
       </body>
     </html>
   );

@@ -33,7 +33,7 @@ export const WRITE_LIMITS = {
   startupTiming: { max: 10, windowMs: 60_000 },
   /** Le relevé de télécommande d'une Fire TV (`installRemoteDiag`) : trois par onglet au plus. */
   remoteDiag: { max: 3, windowMs: 60_000 },
-  /** Le relevé de hauteur de l'app installée sur iOS (`viewportHeal.ts`) : huit par onglet au plus. */
+  /** Le relevé de hauteur de l'app installée sur iOS (`viewportWatch.ts`) : huit par onglet au plus. */
   viewportDiag: { max: 8, windowMs: 60_000 },
   /**
    * Les Nouveautés (DECISIONS.md §73) : une fenêtre, un « Voir plus », une visite de la page — trois

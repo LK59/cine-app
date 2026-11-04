@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { getDb, applyFixesLedger } from "@/lib/db";
+import { getDb, applyFixesLedger, retireLedgerItems } from "@/lib/db";
 import { FIXES_LEDGER, compareVersions, ledgerTarget, type FixLedgerEntry } from "@/lib/news/fixesLedger";
 import { NEWS_LANGS, NEWS_LIMITS, type NewsContentByLang } from "@/lib/news/content";
 
@@ -28,7 +28,26 @@ const entry = (over: Partial<FixLedgerEntry> = {}): FixLedgerEntry => ({
 
 beforeEach(() => {
   getDb().prepare("DELETE FROM news_pages").run();
-  getDb().prepare("DELETE FROM migrations_done WHERE name LIKE 'news-fix:%'").run();
+  getDb().prepare("DELETE FROM migrations_done WHERE name LIKE 'news-fix%'").run();
+});
+
+// Une correction annoncée qui ne corrigeait rien (10.13.10, la hauteur iOS) : sa ligne s'ôte des pages.
+describe("retirer une ligne versée", () => {
+  it("ôte la ligne dans chaque langue, une fois, et le groupe s'il reste vide", () => {
+    page("10.5", 9, {
+      fr: fr([{ title: "Interface", items: ["Un défaut corrigé."] }, { title: "Compte", items: ["Garde."] }]),
+      en: fr([{ title: "Interface", items: ["A fixed bug."] }]),
+    });
+    const retired = [{ marker: "news-fix-retired:test", items: entry().items }];
+    retireLedgerItems(getDb(), retired);
+    const c = contentOf("10.5");
+    expect(c.fr.fixes).toEqual([{ title: "Compte", items: ["Garde."] }]);
+    expect(c.en?.fixes).toEqual([]);
+    // Une seconde fois : le marqueur est posé, une ligne revenue à la main reste.
+    getDb().prepare("UPDATE news_pages SET content = ? WHERE version = '10.5'").run(JSON.stringify({ fr: fr([{ title: "Interface", items: ["Un défaut corrigé."] }]) }));
+    retireLedgerItems(getDb(), retired);
+    expect(contentOf("10.5").fr.fixes[0].items).toEqual(["Un défaut corrigé."]);
+  });
 });
 
 describe("verser le registre", () => {

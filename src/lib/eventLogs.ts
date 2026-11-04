@@ -91,7 +91,7 @@ export function logRemoteDiag(fields: { user: string; device: string | null } & 
   }
 }
 
-/** Le relevé de hauteur de l'application installée sur iOS (`viewportHeal.ts`), dans le journal des ouvertures. */
+/** Le relevé de hauteur de l'application installée sur iOS (`viewportWatch.ts`), dans le journal des ouvertures. */
 export function logViewportDiag(fields: { user: string; device: string | null } & Record<string, unknown>): void {
   try {
     appendJsonLine(STARTUP_LOG(), { timestamp: new Date().toISOString(), kind: "hauteur", ...fields }, { keep: EVENT_LOG_KEEP });

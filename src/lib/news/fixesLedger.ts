@@ -1083,18 +1083,6 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
         de: "Ein beendeter Freigabelink, dessen Konto von Hand gelöscht wurde, schreibt nicht mehr jede Minute einen Fehler ins Protokoll: Er wird einfach als gelöscht vermerkt.",
       },
     ],
-  },  {
-    version: "10.13.10",
-    page: "10.5",
-    group: { fr: "Interface", en: "Interface", es: "Interfaz", de: "Oberfläche" },
-    items: [
-      {
-        fr: "Sur iPhone et iPad, l'app de l'écran d'accueil ne reste plus coupée aux deux tiers quand on y revient depuis une app où le clavier était ouvert.",
-        en: "On iPhone and iPad, the Home Screen app no longer stays cut off two thirds of the way down when you come back to it from an app where the keyboard was open.",
-        es: "En iPhone y iPad, la app de la pantalla de inicio ya no se queda cortada a dos tercios al volver a ella desde una app con el teclado abierto.",
-        de: "Auf iPhone und iPad bleibt die App vom Home-Bildschirm nicht mehr bei zwei Dritteln abgeschnitten, wenn Sie aus einer App mit geöffneter Tastatur zurückkehren.",
-      },
-    ],
   },
 ];
 
@@ -1141,6 +1129,41 @@ export function withLedgerEntry(content: NewsContentByLang, entry: FixLedgerEntr
     if (lang === "fr") continue;
     const own = content[lang];
     if (own) next[lang] = mergeInto(own, entry.group[lang], entry.items.map((i) => i[lang]));
+  }
+  return next;
+}
+
+/**
+ * Les lignes versées puis retirées : une correction annoncée qui ne corrigeait rien. Le registre
+ * n'ajoute qu'une fois et ne réécrit jamais ; ces lignes-là sont ôtées une fois des pages publiées
+ * (`retireLedgerItems`, db.ts), dans chaque langue, et leur groupe avec elles s'il reste vide.
+ *
+ * 10.13.10 : « l'app de l'écran d'accueil ne reste plus coupée aux deux tiers » — trois réparations
+ * mesurées sans effet sur le défaut d'iOS 26, retirées en 10.13.14 (`viewportWatch.ts`).
+ */
+export const RETIRED_LEDGER_ITEMS: { marker: string; items: Record<NewsLang, string>[] }[] = [
+  {
+    marker: "news-fix-retired:10.13.10:ios-keyboard-height",
+    items: [
+      {
+        fr: "Sur iPhone et iPad, l'app de l'écran d'accueil ne reste plus coupée aux deux tiers quand on y revient depuis une app où le clavier était ouvert.",
+        en: "On iPhone and iPad, the Home Screen app no longer stays cut off two thirds of the way down when you come back to it from an app where the keyboard was open.",
+        es: "En iPhone y iPad, la app de la pantalla de inicio ya no se queda cortada a dos tercios al volver a ella desde una app con el teclado abierto.",
+        de: "Auf iPhone und iPad bleibt die App vom Home-Bildschirm nicht mehr bei zwei Dritteln abgeschnitten, wenn Sie aus einer App mit geöffneter Tastatur zurückkehren.",
+      },
+    ],
+  },
+];
+
+/** Le contenu d'une page sans ces lignes, dans chaque langue ; un groupe vidé disparaît. */
+export function withoutLedgerItems(content: NewsContentByLang, items: readonly Record<NewsLang, string>[]): NewsContentByLang {
+  const next: NewsContentByLang = { ...content };
+  for (const lang of NEWS_LANGS) {
+    const own = content[lang];
+    if (!own) continue;
+    const gone = new Set(items.map((i) => i[lang]));
+    const fixes = own.fixes.map((g) => ({ title: g.title, items: g.items.filter((t) => !gone.has(t)) })).filter((g) => g.items.length > 0);
+    next[lang] = { ...own, fixes };
   }
   return next;
 }

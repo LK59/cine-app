@@ -15,7 +15,7 @@ import { laternaNewsPage } from "@/lib/news/pageLaterna";
 import { booksNewsPage } from "@/lib/news/page107";
 import { NEWS_105_CONTENT, NEWS_105_SEED, NEWS_105_VERSION } from "@/lib/news/page105";
 import { config } from "@/lib/config";
-import { FIXES_LEDGER, ledgerMarker, ledgerTarget, withLedgerEntry, type FixLedgerEntry } from "@/lib/news/fixesLedger";
+import { FIXES_LEDGER, RETIRED_LEDGER_ITEMS, ledgerMarker, ledgerTarget, withLedgerEntry, withoutLedgerItems, type FixLedgerEntry } from "@/lib/news/fixesLedger";
 import { NEWS_8672_CONTENT, NEWS_8672_FIRST_VERSION, NEWS_8672_REPUBLISH, NEWS_8672_SEED, NEWS_8672_VERSION } from "@/lib/news/page8672";
 
 // Réexporté, et défini ailleurs : le journal des erreurs a besoin du chemin et ne doit rien
@@ -874,6 +874,7 @@ function migrate(db: Database.Database): void {
   seedQuietNewsPage(db, NEWS_105_SEED, NEWS_105_VERSION, NEWS_105_CONTENT);
   // Les corrections livrées, ajoutées à l'historique des pages publiées (`fixesLedger.ts`).
   applyFixesLedger(db);
+  retireLedgerItems(db);
   if (!db.prepare("SELECT 1 FROM migrations_done WHERE name = 'onboarding-seed-louis'").get()) {
     const now = Date.now();
     db.prepare("INSERT OR IGNORE INTO onboarding (user_name, pending, updated_at) VALUES ('louis', 1, ?)").run(now);
@@ -937,6 +938,32 @@ export function applyFixesLedger(db: Database.Database, ledger: readonly FixLedg
     const update = db.prepare("UPDATE news_pages SET content = ? WHERE id = ?");
     for (const [id, content] of contents) update.run(JSON.stringify(content), id);
   })();
+}
+
+/**
+ * Les lignes du registre retirées (`RETIRED_LEDGER_ITEMS`) : ôtées une fois de toutes les pages
+ * publiées, par leur marqueur. Le contenu seul change, comme au versement.
+ */
+export function retireLedgerItems(db: Database.Database, retired = RETIRED_LEDGER_ITEMS, now = Date.now()): void {
+  for (const { marker, items } of retired) {
+    if (db.prepare("SELECT 1 FROM migrations_done WHERE name = ?").get(marker)) continue;
+    db.transaction(() => {
+      const pages = db.prepare("SELECT id, content FROM news_pages WHERE status = 'published'").all() as { id: number; content: string }[];
+      const update = db.prepare("UPDATE news_pages SET content = ? WHERE id = ?");
+      for (const page of pages) {
+        let content: NewsContentByLang;
+        try {
+          content = JSON.parse(page.content) as NewsContentByLang;
+        } catch {
+          continue;
+        }
+        if (!content?.fr) continue;
+        const next = JSON.stringify(withoutLedgerItems(content, items));
+        if (next !== page.content) update.run(next, page.id);
+      }
+      db.prepare("INSERT OR IGNORE INTO migrations_done (name, done_at) VALUES (?, ?)").run(marker, now);
+    })();
+  }
 }
 
 /**

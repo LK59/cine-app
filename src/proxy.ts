@@ -70,7 +70,7 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // Le relevé de télécommande d'une Fire TV (fireTv.ts) : la route n'écrit que sur l'appelant,
   // dans le journal des ouvertures, et ne renvoie rien.
   "POST /api/remote-diag",
-  // Le relevé de hauteur de l'app installée sur iOS (viewportHeal.ts) : même règle.
+  // Le relevé de hauteur de l'app installée sur iOS (viewportWatch.ts) : même règle.
   "POST /api/viewport-diag",
   // « Signaler un problème » : créer le sien. Les routes vérifient que c'est bien le sien pour tout
   // le reste (modifier un brouillon, commenter, fermer, retirer une image).

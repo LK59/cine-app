@@ -276,9 +276,10 @@ resume cache holds for the account — measured before keeping more on the devic
 log also receives one `kind: "télécommande"` line per tab (`installRemoteDiag`, `src/lib/fireTv.ts`, since
 2026-10-10): the first 30 keydowns as they arrived (key, code, keyCode, target, handled) and cursor/wheel counts —
 Silk navigates by an on-screen cursor by default and then sends the page no arrow keys, which is why it exists.
-In the installed app on iPhone and iPad, it also receives `kind: "hauteur"` lines (`viewportHeal.ts`, since
-2026-11-05): the window, visual viewport, root and shell heights before and after each attempt (at the first touch, an invisible field opens a real keyboard and closes it the next frame), when one of
-them falls short of the expected height after a keyboard — iOS 26 can leave the page at its keyboard height.
+In the installed app on iPhone and iPad, it also receives `kind: "hauteur"` lines (`viewportWatch.ts`, since
+2026-11-05): the window, visual viewport, root and shell heights when the window comes back shorter than the
+screen — iOS 26 can leave it at its keyboard height after a keyboard in another app. Three repairs were
+measured useless and removed; the lines say when an iOS release fixes it.
 Its format is versioned
 (`PERSISTED_CACHE_SCHEMA`), and `persistentCache-schema.test.ts` fails when the kept responses'
 types change without the version moving.

@@ -6,14 +6,14 @@ import { logViewportDiag } from "@/lib/eventLogs";
 import { viewportDiagAllowed } from "@/lib/writeLimits";
 
 /**
- * Le relevé de hauteur de l'application installée sur iPhone et iPad — voir `viewportHeal.ts`.
+ * Le relevé de hauteur de l'application installée sur iPhone et iPad — voir `viewportWatch.ts`.
  *
  * Le compte vient de la session, jamais du corps. Seuls les champs connus, bornés ; le reste tombe.
  * Rien n'est renvoyé.
  */
 const SNAPSHOT_FIELDS = ["inner", "outer", "width", "vv", "vvTop", "client", "shell", "shellTop", "scrollY"] as const;
-const DECISIONS = new Set(["rien", "attend un toucher", "clavier au toucher", "champ", "film"]);
-const TRIGGERS = new Set(["retour", "pageshow", "redimensionné", "clavier fermé", "toucher"]);
+const DECISIONS = new Set(["rien", "coincée", "champ", "film"]);
+const TRIGGERS = new Set(["retour", "pageshow", "redimensionné", "clavier fermé"]);
 
 const px = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) && Math.abs(value) < 100_000 ? Math.round(value) : null;
@@ -42,7 +42,6 @@ export async function POST(req: NextRequest) {
     decision: typeof body.decision === "string" && DECISIONS.has(body.decision) ? body.decision : null,
     best: px(body.best),
     before: snapshotOf(body.before),
-    after: snapshotOf(body.after),
     screen: str(body.screen, 20),
     build: str(body.build, 40),
     version: str(body.version, 20),

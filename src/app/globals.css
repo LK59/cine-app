@@ -690,7 +690,7 @@
      for the whole session and never wobbles, so it is both correct and stable.
 
      Except that iOS 26 can leave it at the height *with* the keyboard — a keyboard closed here, or
-     open in another app on the way back. `viewportHeal.ts` re-measures it (04/11/2026). */
+     open in another app on the way back. Nothing we tried brings it back (`viewportWatch.ts`, 05/11/2026). */
   .app-viewport {
     height: 100dvh;
   }
