@@ -4,50 +4,49 @@ import { isAppleTouchDevice } from "@/lib/iosInstall";
 /**
  * L'écran rétréci de l'application installée sur iPhone et iPad (04/11/2026).
  *
- * Revenu dans Laterna après un moment, le propriétaire trouvait la page coupée aux deux tiers : la
- * barre flottante posée au milieu de l'écran, du noir dessous, comme si le clavier était encore
- * là. Un passage par l'accueil, ou parfois un glissé, la remettait d'aplomb. C'est un défaut de
- * WebKit en mode installé (`display-mode: standalone`), signalé sur iOS 26 (WebKit 301857) : une fois
- * le clavier fermé, la hauteur de la fenêtre reste celle *avec* le clavier, et tout ce qui se mesure
- * en `vh` (`app-viewport`) garde cette hauteur-là. Rien en CSS ne la remesure ; ce qui marche,
- * relevé par d'autres, est de retirer un instant du rendu un élément de toute la hauteur, avec une
- * mise en page synchrone entre les deux — WebKit relit alors la vraie hauteur.
+ * Le clavier ouvert dans une autre app, puis retour dans Laterna par un glissé de la barre d'accueil :
+ * la page restait coupée aux deux tiers, la barre flottante au milieu de l'écran, du noir dessous —
+ * à coup sûr. Elle ne se remettait qu'en ouvrant puis fermant le clavier chez nous (la recherche).
+ * Défaut de WebKit en mode installé, signalé sur iOS 26 (WebKit 301857).
  *
- * Le cas confirmé par le propriétaire le même jour : le clavier ouvert dans une autre app, puis retour
- * dans Laterna — qui se dessine à la hauteur avec clavier, et peut même *démarrer* ainsi, sans
- * avoir jamais vu sa vraie hauteur. Sur iPhone, la référence est donc aussi l'écran lui-même : en
- * application installée, `black-translucent` et `viewport-fit=cover`, la page en occupe toute la
- * hauteur. Pas sur iPad, où une fenêtre partagée (Split View, Stage Manager) est légitimement plus
- * basse que l'écran.
+ * **Mesuré le 05/11/2026** (`kind: "hauteur"` dans `startup.log`, iPhone 430 × 932) : au retour,
+ * `innerHeight`, la vue visuelle, la racine et la coquille valent toutes 585 — la *fenêtre* elle-même
+ * a la hauteur avec clavier ; `outerHeight` dit 932. Ce n'est donc pas notre mise en page : la
+ * première réparation (10.13.10), retirer un instant la coquille du rendu, ne changeait rien — après
+ * elle, toujours 585. Seule une vraie fermeture de clavier remet 932 (relevé du même soir).
  *
- * Seulement quand la page est vraiment plus basse que la plus haute vue dans cette orientation, et
- * qu'aucun champ n'a le focus (le clavier peut être là pour de bon). Jamais pendant un film : retirer
- * du rendu une vidéo qui joue n'est pas un geste anodin. Les positions de défilement sont remises
- * telles quelles.
+ * D'où le geste du propriétaire, reproduit : un champ invisible reçoit le focus puis le perd, avec
+ * `inputmode="none"` pour qu'aucun clavier ne s'affiche. D'abord tout de suite au retour ; s'il ne
+ * suffit pas (WebKit peut ignorer un focus sans geste), au premier toucher suivant, dans le geste.
+ * Chaque tentative est relevée avec ce qu'elle a changé.
+ *
+ * Jamais quand un champ de la page a le focus (le clavier est là pour de bon), ni pendant un film.
+ * Sur iPhone, la référence est aussi l'écran : en application installée, `black-translucent` et
+ * `viewport-fit=cover`, la page en occupe toute la hauteur — elle peut *démarrer* coincée. Pas sur
+ * iPad, où une fenêtre partagée (Split View, Stage Manager) est légitimement plus basse.
  */
 
 const SETTLE_AFTER_BLUR_MS = 140;
 const SETTLE_AFTER_SHOW_MS = 300;
+/** Le temps laissé à iOS pour rendre la hauteur après un focus rendu. */
+const MEASURE_AFTER_NUDGE_MS = 400;
 /** Le jeu toléré entre deux mesures de la même orientation. */
 const SLACK_PX = 4;
+const NUDGE_ATTR = "data-viewport-nudge";
 
 export type ViewportHealDeps = {
   win: Window;
-  /** L'élément de toute la hauteur qu'on retire un instant du rendu. */
+  /** L'élément de toute la hauteur de l'app, mesuré pour le relevé. */
   shell: () => HTMLElement | null;
   /** Un film à l'écran : on ne touche à rien. */
   playing: () => boolean;
   /** La hauteur que la page doit avoir, quand l'appareil la donne (iPhone) ; `null` sinon. */
   fullHeight?: () => number | null;
-  /** Le relevé d'un retour où une hauteur s'écarte de la référence — voir `viewportSnapshot`. */
+  /** Le relevé d'un retour, et de chaque tentative — voir `viewportSnapshot`. */
   report?: (snapshot: Record<string, unknown>) => void;
 };
 
-/**
- * Ce que la page sait de sa hauteur à un instant (05/11/2026). Le premier correctif ne suffisait pas
- * — la page restait coupée — et rien ne disait laquelle des hauteurs iOS laissait coincée : la
- * fenêtre, la vue visuelle, la racine, ou seulement la coquille.
- */
+/** Ce que la page sait de sa hauteur à un instant : la fenêtre, la vue visuelle, la racine, la coquille. */
 function viewportSnapshot(win: Window, shell: HTMLElement | null): Record<string, number | null> {
   const vv = win.visualViewport;
   const box = shell?.getBoundingClientRect();
@@ -66,7 +65,7 @@ function viewportSnapshot(win: Window, shell: HTMLElement | null): Record<string
 
 function editableFocused(doc: Document): boolean {
   const el = doc.activeElement as HTMLElement | null;
-  if (!el || el === doc.body) return false;
+  if (!el || el === doc.body || el.hasAttribute(NUDGE_ATTR)) return false;
   if (el.isContentEditable) return true;
   const tag = el.tagName;
   if (tag === "TEXTAREA" || tag === "SELECT") return true;
@@ -75,32 +74,32 @@ function editableFocused(doc: Document): boolean {
   return !["button", "checkbox", "radio", "range", "submit", "reset", "file", "color"].includes(type);
 }
 
-/** La hauteur que la page croit avoir : la fenêtre, et la coquille si elle est plus basse. */
-function measuredHeight(win: Window, shell: HTMLElement | null): number {
-  const inner = win.innerHeight;
-  const box = shell ? shell.getBoundingClientRect().height : inner;
-  return Math.min(inner, box);
-}
-
-/** Retire la coquille du rendu le temps d'une mise en page, et remet chaque défilement où il était. */
-export function reflowShell(shell: HTMLElement): void {
-  const scrolled: [Element, number, number][] = [];
-  for (const el of shell.querySelectorAll("*")) {
-    if (el.scrollTop !== 0 || el.scrollLeft !== 0) scrolled.push([el, el.scrollTop, el.scrollLeft]);
-  }
-  const previous = shell.style.display;
-  shell.style.display = "none";
-  void shell.offsetHeight;
-  shell.style.display = previous;
-  for (const [el, top, left] of scrolled) {
-    el.scrollTop = top;
-    el.scrollLeft = left;
-  }
+/**
+ * Le geste « ouvrir puis fermer un champ », sans clavier : un champ invisible prend le focus et le
+ * rend aussitôt, puis le focus d'avant revient où il était.
+ */
+export function nudgeKeyboard(win: Window): void {
+  const doc = win.document;
+  const previous = doc.activeElement as HTMLElement | null;
+  const input = doc.createElement("input");
+  input.setAttribute(NUDGE_ATTR, "");
+  input.setAttribute("inputmode", "none");
+  input.setAttribute("aria-hidden", "true");
+  input.tabIndex = -1;
+  // 16 px : en dessous, iOS agrandit la page sur le champ qui prend le focus.
+  Object.assign(input.style, { position: "fixed", top: "0", left: "0", width: "1px", height: "1px", opacity: "0", fontSize: "16px", pointerEvents: "none" });
+  doc.body.appendChild(input);
+  input.focus({ preventScroll: true });
+  win.setTimeout(() => {
+    input.blur();
+    input.remove();
+    if (previous && previous !== doc.body && previous.isConnected) previous.focus({ preventScroll: true });
+  }, 60);
 }
 
 /**
- * Écoute la fenêtre et répare la hauteur quand elle est restée coincée. Renvoie de quoi se
- * désabonner. Les dépendances sont injectées pour les tests ; `installViewportHeal` pose les vraies.
+ * Écoute la fenêtre et rend sa hauteur à la page quand elle est restée celle du clavier. Renvoie de
+ * quoi se désabonner. Les dépendances sont injectées pour les tests ; `installViewportHeal` pose les vraies.
  */
 export function watchViewportHeal({ win, shell, playing, fullHeight = () => null, report }: ViewportHealDeps): () => void {
   const doc = win.document;
@@ -111,33 +110,56 @@ export function watchViewportHeal({ win, shell, playing, fullHeight = () => null
     tallest.set(width, Math.max(tallest.get(width) ?? 0, win.innerHeight));
   };
   note();
+  const expected = () => Math.max(tallest.get(win.innerWidth) ?? 0, fullHeight() ?? 0);
+  const stuck = () => expected() - win.innerHeight > SLACK_PX;
+
+  // Un épisode : de la hauteur coincée à la hauteur rendue. Une tentative de chaque sorte par épisode.
+  let triedNow = false;
+  let armed = false;
+
+  const relate = (trigger: string, decision: string, before: Record<string, unknown>, later = 0) => {
+    if (!report) return;
+    win.setTimeout(() => report({ trigger, best: expected(), decision, before, after: viewportSnapshot(win, shell()) }), later);
+  };
+
+  const onTouch = () => {
+    armed = false;
+    if (!stuck() || editableFocused(doc) || playing()) return;
+    const before = viewportSnapshot(win, shell());
+    nudgeKeyboard(win);
+    relate("toucher", "focus au toucher", before, MEASURE_AFTER_NUDGE_MS);
+  };
+  const arm = () => {
+    if (armed) return;
+    armed = true;
+    doc.addEventListener("touchend", onTouch, { capture: true, once: true });
+  };
 
   let timer: number | undefined;
   let trigger = "";
   const heal = () => {
     timer = undefined;
     if (doc.visibilityState === "hidden") return;
-    const el = shell();
-    if (!el) return;
-    const best = Math.max(tallest.get(win.innerWidth) ?? 0, fullHeight() ?? 0);
-    const before = viewportSnapshot(win, el);
-    // Une hauteur (fenêtre, vue visuelle, racine ou coquille) plus basse que la référence.
-    const off = [before.inner, before.vv, before.client, before.shell].some((h) => h !== null && best - h > SLACK_PX);
-    const short = best - measuredHeight(win, el) > SLACK_PX;
-    const skip = editableFocused(doc) ? "champ" : playing() ? "film" : null;
-    if (short && !skip) {
-      reflowShell(el);
-      note();
+    const before = viewportSnapshot(win, shell());
+    if (!stuck()) {
+      triedNow = false;
+      // Un retour sans écart est relevé aussi (deux par onglet, `sendViewportDiag`).
+      if (trigger === "retour") relate(trigger, "rien", before);
+      return;
     }
-    // Un retour sans écart est relevé aussi (deux par onglet, `sendViewportDiag`) : si le défaut se
-    // voit sans qu'aucune hauteur ne s'écarte, c'est cela qu'il faut savoir.
-    if (!report || (!off && trigger !== "retour")) return;
-    const decision = !off ? "rien" : (skip ?? (short ? "réparé" : "coquille juste"));
-    // Ce que la réparation a changé, mesuré deux images plus tard : iOS ne relit pas forcément tout
-    // dans la mise en page synchrone.
-    win.requestAnimationFrame(() =>
-      win.requestAnimationFrame(() => report({ trigger, best, decision, before, after: viewportSnapshot(win, shell()) }))
-    );
+    const skip = editableFocused(doc) ? "champ" : playing() ? "film" : null;
+    if (skip) return relate(trigger, skip, before);
+    if (!triedNow) {
+      triedNow = true;
+      nudgeKeyboard(win);
+      relate(trigger, "focus", before, MEASURE_AFTER_NUDGE_MS);
+      // Si le focus sans geste n'a pas suffi, le premier toucher le refera.
+      win.setTimeout(() => {
+        if (stuck()) arm();
+      }, MEASURE_AFTER_NUDGE_MS);
+      return;
+    }
+    arm();
   };
   const later = (why: string, ms: number) => {
     if (timer !== undefined) win.clearTimeout(timer);
@@ -145,13 +167,17 @@ export function watchViewportHeal({ win, shell, playing, fullHeight = () => null
     timer = win.setTimeout(heal, ms);
   };
 
-  const onFocusOut = () => later("clavier fermé", SETTLE_AFTER_BLUR_MS);
+  const onFocusOut = (event: FocusEvent) => {
+    // Le champ du geste lui-même : ce n'est pas un clavier qui se ferme.
+    if ((event.target as Element | null)?.hasAttribute?.(NUDGE_ATTR)) return;
+    later("clavier fermé", SETTLE_AFTER_BLUR_MS);
+  };
   const onVisible = () => {
     if (doc.visibilityState === "visible") later("retour", SETTLE_AFTER_SHOW_MS);
   };
   const onPageShow = () => later("pageshow", SETTLE_AFTER_SHOW_MS);
-  // Un rétrécissement sans champ actif chez nous : le clavier d'une autre app, appliqué au retour
-  // par un glissé de la barre d'accueil — parfois après l'évènement de visibilité.
+  // Un rétrécissement sans champ actif chez nous : le clavier d'une autre app, appliqué au retour —
+  // parfois après l'évènement de visibilité.
   const onResize = () => {
     note();
     later("redimensionné", SETTLE_AFTER_SHOW_MS);
@@ -166,6 +192,7 @@ export function watchViewportHeal({ win, shell, playing, fullHeight = () => null
     doc.removeEventListener("focusout", onFocusOut);
     doc.removeEventListener("visibilitychange", onVisible);
     win.removeEventListener("pageshow", onPageShow);
+    doc.removeEventListener("touchend", onTouch, { capture: true });
   };
 }
 

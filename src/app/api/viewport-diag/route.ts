@@ -12,8 +12,8 @@ import { viewportDiagAllowed } from "@/lib/writeLimits";
  * Rien n'est renvoyé.
  */
 const SNAPSHOT_FIELDS = ["inner", "outer", "width", "vv", "vvTop", "client", "shell", "shellTop", "scrollY"] as const;
-const DECISIONS = new Set(["rien", "réparé", "coquille juste", "champ", "film"]);
-const TRIGGERS = new Set(["retour", "pageshow", "redimensionné", "clavier fermé"]);
+const DECISIONS = new Set(["rien", "focus", "focus au toucher", "champ", "film"]);
+const TRIGGERS = new Set(["retour", "pageshow", "redimensionné", "clavier fermé", "toucher"]);
 
 const px = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) && Math.abs(value) < 100_000 ? Math.round(value) : null;
