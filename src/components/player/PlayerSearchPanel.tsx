@@ -26,7 +26,7 @@ import { dialogueSearchUrl, useDialogueSearch, wantsDialogueSearch, type Dialogu
 import { DialogueResults } from "./DialogueResults";
 import { BooksSearchEntry } from "@/components/books/BooksMode";
 
-type Filter = "all" | "movie" | "series" | "person" | "dialogue";
+type Filter = "all" | "movie" | "series" | "person" | "dialogue" | "book";
 
 /**
  * Un résultat, d'où qu'il vienne.
@@ -295,6 +295,9 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
   const moviesByItem = useMemo(() => new Map(allMovies.map((m) => [m.jellyfinItemId, m])), [allMovies]);
   const dialogueFilms = ((dialogue.data ?? dialogue.stale)?.films ?? []).filter((f) => moviesByItem.has(f.itemId)).length;
 
+  // Les livres trouvés (option, §127), comptés par leur propre section : rien ne s'en charge ici.
+  const [bookCount, setBookCount] = useState(0);
+
   const counts = useMemo(
     () => ({
       all: titles.length + persons.length,
@@ -302,8 +305,9 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
       series: titles.filter((r) => r.kind === "series").length,
       person: persons.length,
       dialogue: dialogueFilms,
+      book: bookCount,
     }),
-    [titles, persons, dialogueFilms]
+    [titles, persons, dialogueFilms, bookCount]
   );
 
   // Un filtre qui ne correspond plus à rien laisserait une grille vide sans que rien ne
@@ -317,7 +321,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
   // la clé change — ce qui est ce qu'on veut en tapant, et pas du tout ce qu'on veut quand on
   // efface : le champ redevenait vide, l'invitation réapparaissait, et la grille précédente
   // restait affichée dessous.
-  const shownTitles = !searching || filter === "person" || filter === "dialogue" ? [] : titles.filter((r) => filter === "all" || r.kind === filter);
+  const shownTitles = !searching || filter === "person" || filter === "dialogue" || filter === "book" ? [] : titles.filter((r) => filter === "all" || r.kind === filter);
   const shownPersons = searching && (filter === "all" || filter === "person") ? persons : [];
   const showDialogue = dialogueWanted && (filter === "all" || filter === "dialogue");
   /**
@@ -328,7 +332,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
    * parlent des titres et des personnes — et le compte des répliques peut être celui d'une frappe
    * précédente (`stale`) quand elles ne sont plus cherchées.
    */
-  const allChipCount = counts.all + (dialogueWanted ? counts.dialogue : 0);
+  const allChipCount = counts.all + counts.book + (dialogueWanted ? counts.dialogue : 0);
   /**
    * « Rien trouvé » ne se dit qu'une fois la réponse connue.
    *
@@ -341,7 +345,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
    * la grille — la moitié qui manque doit se voir.
    */
   const empty =
-    searching && filter !== "dialogue" && debounced === typed && !isLoading && !failed && counts.all === 0 && !(showDialogue && (dialogue.loading || counts.dialogue > 0));
+    searching && filter !== "dialogue" && debounced === typed && !isLoading && !failed && counts.all === 0 && counts.book === 0 && !(showDialogue && (dialogue.loading || counts.dialogue > 0));
   const unreachable = searching && debounced === typed && failed;
 
   // La fiche s'ouvre par-dessus la recherche, qui reste montée dessous : le retour du navigateur
@@ -368,6 +372,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
     { key: "movie", label: t("player.kind.moviePlural") },
     { key: "series", label: t("player.kind.seriesPlural") },
     { key: "person", label: t("player.kind.personPlural") },
+    { key: "book", label: t("books.nav") },
     { key: "dialogue", label: t("player.search.dialogue.chip") },
   ];
 
@@ -430,7 +435,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
           )}
         </div>
 
-        {searching && (counts.all > 0 || dialogueAvailable) && (
+        {searching && (counts.all > 0 || counts.book > 0 || dialogueAvailable) && (
           <div className="mt-5 flex flex-wrap gap-2">
             {FILTERS.map(({ key, label }) => {
               // La puce « Répliques » est là dès que la recherche existe : on la choisit pour chercher.
@@ -503,10 +508,11 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
         )}
 
         {/* Les livres (option, DECISIONS.md §127) : une section sous les films et les séries, rien
-            tant qu'elle est coupée. */}
-        {searching && (filter === "all" || filter === "movie" || filter === "series") && <BooksSearchEntry query={localQuery} />}
+            tant qu'elle est coupée — et seule sous sa puce. Toujours montée pendant une recherche :
+            c'est elle qui compte les livres de la puce, même quand une autre puce la cache. */}
+        {searching && <BooksSearchEntry query={localQuery} shown={filter === "all" || filter === "book"} onCount={setBookCount} />}
 
-        {isLoading && searching && filter !== "dialogue" && (
+        {isLoading && searching && filter !== "dialogue" && filter !== "book" && (
           <div className="mt-10 flex justify-center">
             <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-white" />
           </div>

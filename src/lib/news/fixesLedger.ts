@@ -1058,6 +1058,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
         de: "Ein angefragter Film, der Wochen später verfügbar wird, erscheint jetzt unter « Kürzlich hinzugefügt » und ist als « Neu » markiert, wie eine neue Folge.",
       },
     ],
+  },  {
+    version: "10.13.8",
+    page: "10.7",
+    onlyOnPage: true,
+    group: { fr: "Livres", en: "Books", es: "Libros", de: "Bücher" },
+    items: [
+      {
+        fr: "La recherche a une puce « Livres » quand elle trouve des livres : un toucher les montre seuls, sans faire défiler tous les films.",
+        en: "Search has a « Books » chip when it finds books: one tap shows them alone, without scrolling past every film.",
+        es: "La búsqueda tiene una etiqueta « Libros » cuando encuentra libros: un toque los muestra solos, sin desplazarse por todas las películas.",
+        de: "Die Suche hat einen Filter « Bücher », wenn sie Bücher findet: Ein Tippen zeigt nur sie, ohne an allen Filmen vorbeizuscrollen.",
+      },
+    ],
   },
 ];
 

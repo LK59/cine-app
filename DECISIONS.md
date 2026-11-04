@@ -7619,7 +7619,12 @@ de l'EPUB), jamais les noms de fichiers. Tests : `books-metadata.test.ts`.
 films et les séries, quand les livres sont affichés pour ce compte (`BooksSearchEntry`, rien sinon — ni
 rendu, ni code, ni requête). Sa propre requête, partie 300 ms après la dernière frappe
 (`/api/books/search`, l'index en mémoire, même limite par compte que la recherche des films) : les films
-et séries ne l'attendent jamais. Un livre touché y ouvre sa fiche dans la catégorie Livres.
+et séries ne l'attendent jamais. Un livre touché y ouvre sa fiche dans la catégorie Livres. Depuis le
+04/11/2026, une puce « Livres » à côté de Films / Séries / Personnes, avec leur nombre (remonté par
+`onCount`), les montre seuls, et « Tout » les compte : sans elle, il fallait descendre sous trente films
+pour les voir. La section reste montée pendant toute la recherche (`shown` la cache sous une autre puce),
+pour que la puce reste juste ; sous Films ou Séries, elle ne s'affiche plus. Test :
+`player-search-panel.test.tsx`.
 
 **Demander un livre.** Une seconde option, `BOOKS_REQUESTS_ENABLED` (même carte, coupée par défaut,
 sans effet tant que les livres sont coupés — `config.books.requests`). Un ticket, traité à la main :

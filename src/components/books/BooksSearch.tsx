@@ -20,8 +20,9 @@ export const BOOKS_SEARCH_DEBOUNCE_MS = 300;
  * films et séries ne l'attendent jamais, et rien n'est dessiné tant qu'elle n'a pas répondu. Les cartes
  * de résultat de la recherche elle-même (`PlayerResultCard`). Un livre touché ouvre sa fiche dans la
  * catégorie Livres de l'accueil, par une entrée d'historique : Retour revient à la recherche.
+ * Combien elle en a trouvé remonte par `onCount` : la recherche en fait sa puce « Livres ».
  */
-export function BooksSearch({ query }: { query: string }) {
+export function BooksSearch({ query, shown = true, onCount }: { query: string; shown?: boolean; onCount?: (count: number) => void }) {
   const t = useT();
   const [settled, setSettled] = useState("");
   useEffect(() => {
@@ -32,7 +33,15 @@ export function BooksSearch({ query }: { query: string }) {
   // Pas de `keepPreviousData` : une recherche qui change ne montre pas les livres de la précédente.
   const { data } = useSWR<{ books: BookSummary[] }>(key, fetcher, { keepPreviousData: false, revalidateOnFocus: false });
   const results = key && data ? data.books : [];
-  if (results.length === 0) return null;
+  // Le nombre trouvé remonte à la recherche, pour sa puce « Livres » (04/11/2026) : sans elle, les
+  // livres n'étaient qu'une section sous trente films, qu'il fallait aller chercher tout en bas. La
+  // requête tourne aussi quand une autre puce cache la section (`shown`), pour que la puce reste juste.
+  const count = results.length;
+  useEffect(() => {
+    onCount?.(count);
+  }, [count, onCount]);
+  useEffect(() => () => onCount?.(0), [onCount]);
+  if (count === 0 || !shown) return null;
   return (
     <section className="mt-8" data-books-search>
       <h2 className="mb-3 text-sm font-semibold text-white">{t("books.nav")}</h2>

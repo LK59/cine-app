@@ -63,6 +63,21 @@ vi.mock("@/components/player/PlayerPanelFrame", () => ({
   PlayerPanelFrame: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
+/**
+ * La section des livres, réduite à ce que la recherche en voit : combien elle en a trouvé
+ * (`onCount`) et si elle se montre (`shown`). Zéro livre par défaut, comme une installation sans.
+ */
+const books = vi.hoisted(() => ({ count: 0 }));
+vi.mock("@/components/books/BooksMode", async () => {
+  const { useEffect } = await import("react");
+  return {
+    BooksSearchEntry: ({ shown, onCount }: { shown?: boolean; onCount?: (n: number) => void }) => {
+      useEffect(() => onCount?.(books.count), [onCount]);
+      return shown && books.count > 0 ? <div data-testid="books-section" /> : null;
+    },
+  };
+});
+
 import { PlayerSearchPanel, forgetSearchQuery } from "@/components/player/PlayerSearchPanel";
 
 const OWNED = {
@@ -92,6 +107,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   forgetSearchQuery();
   failing = false;
+  books.count = 0;
   render(
     <SWRConfig value={{ provider: homeCache, dedupingInterval: 0 }}>
       <PlayerSearchPanel />
@@ -364,5 +380,32 @@ describe("PlayerSearchPanel — une recherche qui échoue", () => {
     await type("dune");
     expect(await screen.findByText("player.search.failed")).toBeTruthy();
     expect(screen.queryByText("player.search.noResults")).toBeNull();
+  });
+
+  // Les livres avaient leur section tout en bas, sous trente films, et pas de puce (04/11/2026).
+  it("une puce « Livres » compte les livres, les montre seuls, et « Tout » les compte aussi", async () => {
+    books.count = 2;
+    payload = { library: [OWNED], tmdb: [MISSING], persons: [] };
+    await type("matrix");
+    await screen.findByText("Dune");
+    const chip = await screen.findByRole("button", { name: /books\.nav/ });
+    expect(chip.textContent).toContain("2");
+    expect(screen.getByRole("button", { name: /player\.search\.filterAll/ }).textContent).toContain("4");
+    expect(screen.getByTestId("books-section")).toBeTruthy();
+
+    fireEvent.click(chip);
+    expect(screen.queryByText("Matrix")).toBeNull();
+    expect(screen.getByTestId("books-section")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /player\.kind\.moviePlural/ }));
+    expect(await screen.findByText("Matrix")).toBeTruthy();
+    expect(screen.queryByTestId("books-section")).toBeNull();
+  });
+
+  it("sans livre trouvé, pas de puce « Livres »", async () => {
+    payload = { library: [OWNED], tmdb: [], persons: [] };
+    await type("matrix");
+    await screen.findByText("Matrix");
+    expect(screen.queryByRole("button", { name: /books\.nav/ })).toBeNull();
   });
 });

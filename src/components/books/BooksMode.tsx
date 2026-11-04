@@ -105,10 +105,10 @@ const BooksSearchLazy = lazyNow(() => import("./BooksSearch").then((m) => m.Book
  * La section « Livres » de la recherche de l'application : rien, et aucun code des livres chargé, tant
  * que l'option est coupée — la recherche reste alors exactement ce qu'elle était.
  */
-export function BooksSearchEntry({ query }: { query: string }) {
+export function BooksSearchEntry({ query, shown, onCount }: { query: string; shown?: boolean; onCount?: (count: number) => void }) {
   const { data } = useSWR<{ booksEnabled?: boolean }>("/api/config/public", fetcher, playerBootstrapOptions);
   if (data?.booksEnabled !== true) return null;
-  return <BooksSearchLazy query={query} />;
+  return <BooksSearchLazy query={query} shown={shown} onCount={onCount} />;
 }
 
 const BooksDownloadsLazy = lazyNow(() => import("./BooksDownloads").then((m) => m.BooksDownloads));
