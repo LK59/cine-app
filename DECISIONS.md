@@ -6330,8 +6330,9 @@ que les secrets du cookie) pour ouvrir une session Jellyfin par appareil ; celui
 haché (scrypt). Ces comptes ne sont pas des personnes du foyer : `jellyfin.getUsers` les écarte (une
 fois, pour l'Activité, les nouveautés, l'accueil et les notifications), le blocage des tags des nouveaux
 comptes ne les touche pas, Jellyseerr ne les importe jamais. Fin du lien : compte désactivé et sessions
-fermées au passage suivant (`sweepShares`, dix minutes) ; effacé un mois après — d'ici là, le lien se
-prolonge, reprise comprise.
+fermées au passage suivant (`sweepShares`, chaque minute depuis le 20/10/2026) ; effacé un mois après —
+d'ici là, le lien se prolonge, reprise comprise. Un compte déjà absent de Jellyfin (effacé à la main) est
+noté effacé (`ShareAccountGone`, 04/11/2026) : sinon son 404 s'écrivait au journal chaque minute.
 
 **Trois lectures.** Comptées à l'ouverture (`direct` pour le lecteur natif, `playback/start` pour le
 lecteur serveur) : les autres sessions du lien dont le battement de lecture a moins de deux minutes et

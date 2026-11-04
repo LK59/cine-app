@@ -170,11 +170,20 @@ export async function signInShareAccount(
 }
 
 /**
+ * Le compte du lien n'existe plus chez Jellyfin : effacé à la main par un administrateur. Le passage
+ * régulier (`sweepShares`) le note comme effacé au lieu de réessayer — sans quoi un 404 s'écrivait au
+ * journal chaque minute, pour toujours (04/11/2026, vu sur une autre installation).
+ */
+export class ShareAccountGone extends Error {}
+
+/**
  * Désactivé, Jellyfin refuse le compte partout et ferme ses jetons au prochain contrôle
  * (`jellyfinToken.ts`) ; réactivé quand un lien est prolongé.
  */
 export async function setShareAccountDisabled(jfId: string, disabled: boolean): Promise<void> {
-  const res = await call(`/Users/${jellyfinIdSegment(jfId)}`, { headers: adminHeaders() });
+  const res = await jellyfinFetch(`${base()}/Users/${jellyfinIdSegment(jfId)}`, { headers: adminHeaders(), signal: upstreamSignal(UPSTREAM_TIMEOUT_MS) });
+  if (res.status === 404) throw new ShareAccountGone("GET /Users/{id} : HTTP 404");
+  if (!res.ok) throw new Error(`GET /Users/{id} : HTTP ${res.status}`);
   const policy = ((await res.json()) as { Policy?: Policy }).Policy ?? {};
   await call(`/Users/${jellyfinIdSegment(jfId)}/Policy`, { method: "POST", headers: adminHeaders(true), body: JSON.stringify({ ...policy, IsDisabled: disabled }) });
 }

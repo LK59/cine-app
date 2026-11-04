@@ -1071,6 +1071,18 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
         de: "Die Suche hat einen Filter « Bücher », wenn sie Bücher findet: Ein Tippen zeigt nur sie, ohne an allen Filmen vorbeizuscrollen.",
       },
     ],
+  },  {
+    version: "10.13.9",
+    page: "10.5",
+    group: { fr: "Liens de partage", en: "Share links", es: "Enlaces compartidos", de: "Freigabelinks" },
+    items: [
+      {
+        fr: "Un lien de partage fini dont le compte a été supprimé à la main n'ajoute plus une erreur au journal chaque minute : il est simplement noté comme effacé.",
+        en: "An ended share link whose account was deleted by hand no longer adds an error to the log every minute: it is simply marked as deleted.",
+        es: "Un enlace compartido terminado cuya cuenta se borró a mano ya no añade un error al registro cada minuto: simplemente se marca como borrado.",
+        de: "Ein beendeter Freigabelink, dessen Konto von Hand gelöscht wurde, schreibt nicht mehr jede Minute einen Fehler ins Protokoll: Er wird einfach als gelöscht vermerkt.",
+      },
+    ],
   },
 ];
 

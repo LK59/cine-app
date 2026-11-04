@@ -12,6 +12,7 @@ const account = vi.hoisted(() => ({
   deleted: [] as string[],
   signIns: 0,
   failCreate: false,
+  gone: false,
 }));
 vi.mock("@/lib/share/jellyfinAccount", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/share/jellyfinAccount")>();
@@ -29,6 +30,7 @@ vi.mock("@/lib/share/jellyfinAccount", async (importOriginal) => {
       return { userId: account.created.at(-1) ?? "f".repeat(32), token: "jeton-jellyfin", deviceId: `cine-app-${account.signIns}` };
     },
     setShareAccountDisabled: async (id: string, disabled: boolean) => {
+      if (account.gone) throw new real.ShareAccountGone("GET /Users/{id} : HTTP 404");
       account.disabled.push([id, disabled]);
     },
     deleteShareAccount: async (id: string) => {
@@ -48,6 +50,7 @@ beforeEach(async () => {
   account.deleted = [];
   account.signIns = 0;
   account.failCreate = false;
+  account.gone = false;
   const { getDb } = await import("@/lib/db");
   getDb().prepare("DELETE FROM shares").run();
   getDb().prepare("DELETE FROM sessions").run();
@@ -182,6 +185,19 @@ describe("la vie d'un lien", () => {
     await sweepShares(share.expiresAt + 31 * DAY);
     expect(account.deleted).toEqual([share.jfUserId]);
     expect(sharesDb.get(share.id)?.jfDeletedAt).not.toBeNull();
+  });
+
+  // Un compte effacé à la main chez Jellyfin : un 404 au journal chaque minute, pour toujours (04/11/2026).
+  it("le passage régulier : un compte déjà absent de Jellyfin est noté effacé, une fois, sans erreur", async () => {
+    const { share } = await create(1);
+    const { sweepShares } = await import("@/lib/share/service");
+    const { sharesDb } = await import("@/lib/share/store");
+    account.gone = true;
+    await sweepShares(share.expiresAt + 1);
+    expect(sharesDb.get(share.id)?.jfDeletedAt).not.toBeNull();
+    await sweepShares(share.expiresAt + 60_000);
+    expect(account.disabled).toEqual([]);
+    expect(account.deleted).toEqual([]);
   });
 
   it("supprimer efface le compte et la ligne", async () => {

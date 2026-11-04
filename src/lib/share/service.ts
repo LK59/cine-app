@@ -12,6 +12,7 @@ import {
   describeItem,
   setShareAccountDisabled,
   signInShareAccount,
+  ShareAccountGone,
 } from "@/lib/share/jellyfinAccount";
 import {
   SHARE_LABEL_MAX,
@@ -222,6 +223,12 @@ export async function sweepShares(now = Date.now()): Promise<void> {
         taskLog("partages", "compte d'un lien fini effacé", { lien: share.label });
       }
     } catch (err) {
+      if (err instanceof ShareAccountGone) {
+        closeSessions(share);
+        sharesDb.setDeleted(share.id, now);
+        taskLog("partages", "compte d'un lien fini déjà absent de Jellyfin", { lien: share.label });
+        continue;
+      }
       logError("share.sweep", err, { share: share.id });
     }
   }
