@@ -15,9 +15,11 @@ import { isAppleTouchDevice } from "@/lib/iosInstall";
  * première réparation (10.13.10), retirer un instant la coquille du rendu, ne changeait rien — après
  * elle, toujours 585. Seule une vraie fermeture de clavier remet 932 (relevé du même soir).
  *
- * D'où le geste du propriétaire, reproduit : un champ invisible reçoit le focus puis le perd, avec
- * `inputmode="none"` pour qu'aucun clavier ne s'affiche. D'abord tout de suite au retour ; s'il ne
- * suffit pas (WebKit peut ignorer un focus sans geste), au premier toucher suivant, dans le geste.
+ * Un focus donné à un champ sans clavier (`inputmode="none"`, 10.13.12) ne changeait rien non plus,
+ * même dans un toucher : 585 avant, 585 après. Pour iOS, sans clavier montré, il ne s'est rien passé.
+ * D'où un vrai clavier, une fraction de seconde : au premier toucher après le retour (iOS n'ouvre
+ * un clavier que dans un geste), un champ invisible prend le focus et le rend à l'image suivante.
+ * Le clavier peut amorcer sa montée ; c'est le prix, accepté par le propriétaire le 05/11/2026.
  * Chaque tentative est relevée avec ce qu'elle a changé.
  *
  * Jamais quand un champ de la page a le focus (le clavier est là pour de bon), ni pendant un film.
@@ -28,8 +30,8 @@ import { isAppleTouchDevice } from "@/lib/iosInstall";
 
 const SETTLE_AFTER_BLUR_MS = 140;
 const SETTLE_AFTER_SHOW_MS = 300;
-/** Le temps laissé à iOS pour rendre la hauteur après un focus rendu. */
-const MEASURE_AFTER_NUDGE_MS = 400;
+/** Le temps laissé à iOS pour rendre la hauteur après le clavier refermé. */
+const MEASURE_AFTER_NUDGE_MS = 700;
 /** Le jeu toléré entre deux mesures de la même orientation. */
 const SLACK_PX = 4;
 const NUDGE_ATTR = "data-viewport-nudge";
@@ -75,26 +77,30 @@ function editableFocused(doc: Document): boolean {
 }
 
 /**
- * Le geste « ouvrir puis fermer un champ », sans clavier : un champ invisible prend le focus et le
- * rend aussitôt, puis le focus d'avant revient où il était.
+ * Le geste « ouvrir puis fermer un champ » : un champ invisible prend le focus — un vrai clavier,
+ * appelé dans le toucher en cours — et le rend à l'image suivante ; le focus d'avant revient.
  */
-export function nudgeKeyboard(win: Window): void {
+export function flashKeyboard(win: Window): void {
   const doc = win.document;
   const previous = doc.activeElement as HTMLElement | null;
   const input = doc.createElement("input");
+  input.type = "text";
   input.setAttribute(NUDGE_ATTR, "");
-  input.setAttribute("inputmode", "none");
   input.setAttribute("aria-hidden", "true");
+  input.setAttribute("autocomplete", "off");
+  input.setAttribute("autocorrect", "off");
+  input.setAttribute("autocapitalize", "off");
+  input.setAttribute("spellcheck", "false");
   input.tabIndex = -1;
   // 16 px : en dessous, iOS agrandit la page sur le champ qui prend le focus.
   Object.assign(input.style, { position: "fixed", top: "0", left: "0", width: "1px", height: "1px", opacity: "0", fontSize: "16px", pointerEvents: "none" });
   doc.body.appendChild(input);
   input.focus({ preventScroll: true });
-  win.setTimeout(() => {
+  win.requestAnimationFrame(() => {
     input.blur();
     input.remove();
     if (previous && previous !== doc.body && previous.isConnected) previous.focus({ preventScroll: true });
-  }, 60);
+  });
 }
 
 /**
@@ -113,8 +119,7 @@ export function watchViewportHeal({ win, shell, playing, fullHeight = () => null
   const expected = () => Math.max(tallest.get(win.innerWidth) ?? 0, fullHeight() ?? 0);
   const stuck = () => expected() - win.innerHeight > SLACK_PX;
 
-  // Un épisode : de la hauteur coincée à la hauteur rendue. Une tentative de chaque sorte par épisode.
-  let triedNow = false;
+  // Une hauteur coincée attend le premier toucher ; une tentative par toucher, tant qu'elle l'est.
   let armed = false;
 
   const relate = (trigger: string, decision: string, before: Record<string, unknown>, later = 0) => {
@@ -126,8 +131,8 @@ export function watchViewportHeal({ win, shell, playing, fullHeight = () => null
     armed = false;
     if (!stuck() || editableFocused(doc) || playing()) return;
     const before = viewportSnapshot(win, shell());
-    nudgeKeyboard(win);
-    relate("toucher", "focus au toucher", before, MEASURE_AFTER_NUDGE_MS);
+    flashKeyboard(win);
+    relate("toucher", "clavier au toucher", before, MEASURE_AFTER_NUDGE_MS);
   };
   const arm = () => {
     if (armed) return;
@@ -142,24 +147,14 @@ export function watchViewportHeal({ win, shell, playing, fullHeight = () => null
     if (doc.visibilityState === "hidden") return;
     const before = viewportSnapshot(win, shell());
     if (!stuck()) {
-      triedNow = false;
       // Un retour sans écart est relevé aussi (deux par onglet, `sendViewportDiag`).
       if (trigger === "retour") relate(trigger, "rien", before);
       return;
     }
     const skip = editableFocused(doc) ? "champ" : playing() ? "film" : null;
     if (skip) return relate(trigger, skip, before);
-    if (!triedNow) {
-      triedNow = true;
-      nudgeKeyboard(win);
-      relate(trigger, "focus", before, MEASURE_AFTER_NUDGE_MS);
-      // Si le focus sans geste n'a pas suffi, le premier toucher le refera.
-      win.setTimeout(() => {
-        if (stuck()) arm();
-      }, MEASURE_AFTER_NUDGE_MS);
-      return;
-    }
     arm();
+    relate(trigger, "attend un toucher", before);
   };
   const later = (why: string, ms: number) => {
     if (timer !== undefined) win.clearTimeout(timer);

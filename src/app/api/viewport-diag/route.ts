@@ -12,7 +12,7 @@ import { viewportDiagAllowed } from "@/lib/writeLimits";
  * Rien n'est renvoyé.
  */
 const SNAPSHOT_FIELDS = ["inner", "outer", "width", "vv", "vvTop", "client", "shell", "shellTop", "scrollY"] as const;
-const DECISIONS = new Set(["rien", "focus", "focus au toucher", "champ", "film"]);
+const DECISIONS = new Set(["rien", "attend un toucher", "clavier au toucher", "champ", "film"]);
 const TRIGGERS = new Set(["retour", "pageshow", "redimensionné", "clavier fermé", "toucher"]);
 
 const px = (value: unknown): number | null =>

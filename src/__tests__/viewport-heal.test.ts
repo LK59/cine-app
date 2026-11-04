@@ -5,8 +5,8 @@ import { watchViewportHeal } from "@/lib/viewportHeal";
 /**
  * L'écran rétréci de l'application installée sur iOS (04–05/11/2026) : au retour d'une app où le
  * clavier était ouvert, la *fenêtre* garde la hauteur avec clavier (relevé : 585 sur 932). Seule une
- * fermeture de clavier la rend : `watchViewportHeal` donne le focus à un champ invisible sans clavier
- * puis le reprend — au retour, et sinon au premier toucher.
+ * fermeture de clavier la rend : au premier toucher, `watchViewportHeal` donne le focus à un champ
+ * invisible — un vrai clavier — et le reprend à l'image suivante.
  */
 
 let height = 800;
@@ -54,45 +54,63 @@ const comeBack = () => {
   vi.advanceTimersByTime(1000);
 };
 
+const touch = () => {
+  document.dispatchEvent(new Event("touchend"));
+  vi.advanceTimersByTime(1000);
+};
+
 describe("watchViewportHeal", () => {
-  it("une fenêtre restée à la hauteur du clavier : un champ sans clavier prend le focus et le rend", () => {
+  it("coincée au retour : rien sans geste, puis un vrai clavier au premier toucher, rendu à l'image suivante", () => {
     const { stop } = setup();
     height = 500;
     comeBack();
+    expect(nudges).toBe(0);
+    expect(reports.at(-1)).toMatchObject({ trigger: "retour", decision: "attend un toucher", best: 800 });
+    touch();
     expect(nudges).toBe(1);
     expect(document.querySelector("[data-viewport-nudge]")).toBeNull();
-    expect(reports.at(-1)).toMatchObject({ trigger: "retour", decision: "focus", best: 800 });
+    expect(reports.at(-1)).toMatchObject({ trigger: "toucher", decision: "clavier au toucher" });
     stop();
   });
 
-  it("le focus sans geste n'a pas suffi : le premier toucher le refait, une fois", () => {
+  it("le champ appelle un vrai clavier : ni `inputmode=none`, ni lecture seule", () => {
     const { stop } = setup();
     height = 500;
     comeBack();
-    document.dispatchEvent(new Event("touchend"));
-    vi.advanceTimersByTime(1000);
-    expect(nudges).toBe(2);
-    expect(reports.at(-1)).toMatchObject({ trigger: "toucher", decision: "focus au toucher" });
-    document.dispatchEvent(new Event("touchend"));
-    expect(nudges).toBe(2);
+    let seen: HTMLInputElement | null = null;
+    const spy = HTMLElement.prototype.focus;
+    HTMLElement.prototype.focus = function (this: HTMLElement, opts?: FocusOptions) {
+      if (this.hasAttribute("data-viewport-nudge")) seen = this as HTMLInputElement;
+      return spy.call(this, opts);
+    };
+    touch();
+    expect(seen).not.toBeNull();
+    expect(seen!.getAttribute("inputmode")).toBeNull();
+    expect(seen!.readOnly).toBe(false);
     stop();
   });
 
-  it("rendue au premier focus : le toucher suivant ne fait rien", () => {
+  it("une tentative par toucher, tant qu'elle reste coincée ; plus rien une fois rendue", () => {
     const { stop } = setup();
     height = 500;
-    document.dispatchEvent(new Event("visibilitychange"));
-    vi.advanceTimersByTime(300);
-    height = 800;
-    vi.advanceTimersByTime(1000);
-    document.dispatchEvent(new Event("touchend"));
+    comeBack();
+    touch();
+    touch();
     expect(nudges).toBe(1);
+    comeBack();
+    touch();
+    expect(nudges).toBe(2);
+    height = 800;
+    comeBack();
+    touch();
+    expect(nudges).toBe(2);
     stop();
   });
 
   it("une page à sa vraie hauteur n'est pas touchée", () => {
     const { stop } = setup();
     comeBack();
+    touch();
     expect(nudges).toBe(0);
     expect(reports.at(-1)).toMatchObject({ decision: "rien" });
     stop();
@@ -105,30 +123,33 @@ describe("watchViewportHeal", () => {
     shell.appendChild(input);
     input.focus();
     comeBack();
+    touch();
     expect(nudges).toBe(0);
     input.remove();
     playing = true;
     comeBack();
+    touch();
     expect(nudges).toBe(0);
     stop();
   });
 
-  // Le clavier ouvert dans une autre app, puis retour dans Laterna : la page a pu démarrer coincée,
-  // sans jamais avoir vu sa vraie hauteur — l'écran de l'iPhone la donne.
+  // La page a pu démarrer coincée, sans jamais avoir vu sa vraie hauteur — l'écran de l'iPhone la donne.
   it("une page partie coincée se répare d'après la hauteur de l'écran", () => {
     height = 500;
     full = 800;
     const { stop } = setup();
     comeBack();
+    touch();
     expect(nudges).toBe(1);
     stop();
   });
 
-  it("un rétrécissement arrivé après le retour est réparé aussi", () => {
+  it("un rétrécissement arrivé après le retour est pris aussi", () => {
     const { stop } = setup();
     height = 500;
     window.dispatchEvent(new Event("resize"));
     vi.advanceTimersByTime(1000);
+    touch();
     expect(nudges).toBe(1);
     stop();
   });

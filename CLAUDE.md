@@ -277,7 +277,7 @@ log also receives one `kind: "télécommande"` line per tab (`installRemoteDiag`
 2026-10-10): the first 30 keydowns as they arrived (key, code, keyCode, target, handled) and cursor/wheel counts —
 Silk navigates by an on-screen cursor by default and then sends the page no arrow keys, which is why it exists.
 In the installed app on iPhone and iPad, it also receives `kind: "hauteur"` lines (`viewportHeal.ts`, since
-2026-11-05): the window, visual viewport, root and shell heights before and after each attempt (a focus given to and taken from an invisible keyboard-less field), when one of
+2026-11-05): the window, visual viewport, root and shell heights before and after each attempt (at the first touch, an invisible field opens a real keyboard and closes it the next frame), when one of
 them falls short of the expected height after a keyboard — iOS 26 can leave the page at its keyboard height.
 Its format is versioned
 (`PERSISTED_CACHE_SCHEMA`), and `persistentCache-schema.test.ts` fails when the kept responses'

@@ -35,7 +35,7 @@ describe("POST /api/viewport-diag", () => {
     const res = await post({
       user: "quelqu'un d'autre",
       trigger: "retour",
-      decision: "focus",
+      decision: "clavier au toucher",
       best: 844,
       before: { inner: 508, vv: 508, client: 508, shell: 508, evil: "x" },
       after: { inner: 844, shell: 844 },
@@ -45,7 +45,7 @@ describe("POST /api/viewport-diag", () => {
     });
     expect(res.status).toBe(204);
     const line = mockLog.mock.calls[0][0];
-    expect(line).toMatchObject({ user: "louis", trigger: "retour", decision: "focus", best: 844, screen: "390x844" });
+    expect(line).toMatchObject({ user: "louis", trigger: "retour", decision: "clavier au toucher", best: 844, screen: "390x844" });
     expect(line.before).toEqual({ inner: 508, vv: 508, client: 508, shell: 508 });
     expect(line).not.toHaveProperty("extra");
   });
