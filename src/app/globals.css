@@ -687,7 +687,10 @@
      the app out at the smaller "toolbar visible" height first, only settling to the real one
      after the first gesture — which is exactly the band of dead space under the bottom bar that
      goes away as soon as you drag. With no browser chrome in standalone, vh is the same number
-     for the whole session and never wobbles, so it is both correct and stable. */
+     for the whole session and never wobbles, so it is both correct and stable.
+
+     Except that iOS 26 can leave it at the height *with* the keyboard — a keyboard closed here, or
+     open in another app on the way back. `viewportHeal.ts` re-measures it (04/11/2026). */
   .app-viewport {
     height: 100dvh;
   }

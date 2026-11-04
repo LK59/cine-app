@@ -26,6 +26,14 @@ describe("le résumé de l'Activité", () => {
     expect(liveAccounts([twice, account("o", "away", true)]).playing).toBe(3);
   });
 
+  // « 6 en lecture · -1 dans l'application » (04/11/2026) : les comptes ouverts sans lecture se
+  // comptent eux-mêmes, jamais par soustraction de lectures.
+  it("dans l'application : les comptes ouverts sans lecture, jamais négatif", () => {
+    const twice = { ...account("m", "playing", true), alsoPlaying: [{ title: "y" }] } as unknown as AccountSummary;
+    expect(liveAccounts([twice, account("o", "app"), account("p", "away")]).browsing).toBe(1);
+    expect(liveAccounts([twice]).browsing).toBe(0);
+  });
+
   it("n'attend que les signalements ouverts ou en cours", () => {
     const reports = ["open", "in_progress", "resolved", "closed"].map((status, id) => ({ id, status }) as unknown as ReportSummary);
     expect(pendingReports(reports).map((r) => r.id)).toEqual([0, 1]);

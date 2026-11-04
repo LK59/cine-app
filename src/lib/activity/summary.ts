@@ -8,11 +8,15 @@ import type { ReportSummary } from "@/lib/reports";
  *
  * Sans import de valeur : ce module part dans le navigateur, `accounts.ts` lit des fichiers.
  */
-export function liveAccounts(accounts: readonly AccountSummary[]): { live: AccountSummary[]; playing: number } {
+export function liveAccounts(accounts: readonly AccountSummary[]): { live: AccountSummary[]; playing: number; browsing: number } {
   const live = accounts.filter((a) => a.nowPlaying || a.presence.state !== "away");
   // Des lectures, pas des comptes : un compte sur deux appareils en compte deux, comme le Stream Deck.
   const playing = live.reduce((n, a) => n + (a.nowPlaying ? 1 + (a.alsoPlaying?.length ?? 0) : a.presence.state === "playing" ? 1 : 0), 0);
-  return { live, playing };
+  // Les comptes ouverts sans rien lire. Pas `live.length - playing` : un compte qui lit sur deux
+  // appareils compte deux lectures pour un compte, et l'en-tête affichait « -1 dans l'application »
+  // (04/11/2026).
+  const browsing = live.filter((a) => !a.nowPlaying && a.presence.state !== "playing").length;
+  return { live, playing, browsing };
 }
 
 /** Un signalement attend une réponse tant qu'il est ouvert ou en cours — comme dans le panneau. */

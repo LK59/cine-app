@@ -1083,6 +1083,18 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
         de: "Ein beendeter Freigabelink, dessen Konto von Hand gelöscht wurde, schreibt nicht mehr jede Minute einen Fehler ins Protokoll: Er wird einfach als gelöscht vermerkt.",
       },
     ],
+  },  {
+    version: "10.13.10",
+    page: "10.5",
+    group: { fr: "Interface", en: "Interface", es: "Interfaz", de: "Oberfläche" },
+    items: [
+      {
+        fr: "Sur iPhone et iPad, l'app de l'écran d'accueil ne reste plus coupée aux deux tiers quand on y revient depuis une app où le clavier était ouvert.",
+        en: "On iPhone and iPad, the Home Screen app no longer stays cut off two thirds of the way down when you come back to it from an app where the keyboard was open.",
+        es: "En iPhone y iPad, la app de la pantalla de inicio ya no se queda cortada a dos tercios al volver a ella desde una app con el teclado abierto.",
+        de: "Auf iPhone und iPad bleibt die App vom Home-Bildschirm nicht mehr bei zwei Dritteln abgeschnitten, wenn Sie aus einer App mit geöffneter Tastatur zurückkehren.",
+      },
+    ],
   },
 ];
 

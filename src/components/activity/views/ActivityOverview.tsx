@@ -551,14 +551,14 @@ export function ActivityOverview() {
 
   const { now, accounts, signals: s, recent } = data;
   // La règle est partagée avec l'accueil de la gestion (`liveAccounts`, DECISIONS.md §81).
-  const { live, playing: playingCount } = liveAccounts(accounts);
+  const { live, playing: playingCount, browsing } = liveAccounts(accounts);
   const alerts = accounts.filter((a) => a.alerts.length);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">
-          {t("activity.subtitle", { playing: playingCount, app: live.length - playingCount, total: accounts.length })}
+          {t("activity.subtitle", { playing: playingCount, app: browsing, total: accounts.length })}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <AlertsClearControl clearedAt={data.alertsClearedAt ?? 0} now={now} />
