@@ -424,8 +424,14 @@ function pump(): void {
         q.done.push({ id, etag, meta, at: Date.now() });
       })
       .catch((error: unknown) => {
-        q.done.push({ id, etag, meta: null, defect: error instanceof EpubDefectError, at: Date.now() });
-        logError("books/meta", error, { itemId: id });
+        const defect = error instanceof EpubDefectError;
+        // Un livre déjà connu illisible ne se note plus (05/11/2026) : Jellyfin repasse ces fichiers
+        // abîmés à chaque analyse, leur empreinte change, ils sont relus — et les six mêmes livres
+        // écrivaient la même erreur deux fois par jour, 107 lignes en une semaine. La première fois
+        // reste au journal ; un échec passager (Jellyfin absent) s'écrit toujours.
+        const knownDefect = defect && metaOf(id)?.defect === true;
+        q.done.push({ id, etag, meta: null, defect, at: Date.now() });
+        if (!knownDefect) logError("books/meta", error, { itemId: id });
       })
       .finally(() => {
         q.running -= 1;

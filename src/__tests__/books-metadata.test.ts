@@ -17,6 +17,11 @@ await vi.hoisted(async () => {
 vi.mock("@/lib/config", () => ({ config: { jellyfin: { url: "http://jf", apiKey: "k" } } }));
 const upstream = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/jellyfinBreaker", () => ({ passJellyfinFetch: (...a: unknown[]) => upstream(...a), jellyfinFetch: (...a: unknown[]) => upstream(...a) }));
+const logged = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/logger", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/logger")>()),
+  logError: (...a: unknown[]) => logged(...a),
+}));
 
 import { bookAuthors, bookGenres, decideSeries, nameKey } from "@/lib/books/metadata";
 import { EpubDefectError, PLAYING_GAP_MS, knownMeta, parseOpf, readEpubMeta, scheduleMetaReads, staleMeta, __testing } from "@/lib/books/epubMeta";
@@ -369,6 +374,21 @@ describe("un EPUB illisible est masqué, pas supprimé", () => {
     expect(staleMeta([{ id: broken, etag: "e1" }], known, Date.now() + 8 * day)).toHaveLength(1);
     expect(staleMeta([{ id: broken, etag: "e2" }], known)).toHaveLength(1);
     expect(staleMeta([{ id: down, etag: "e1" }], known, Date.now() + 2 * day)).toHaveLength(1);
+  });
+
+  // Jellyfin repasse un fichier abîmé à chaque analyse : son empreinte change, il est relu — sans
+  // réécrire la même erreur deux fois par jour (05/11/2026).
+  it("un livre déjà connu illisible, relu après un changement d'empreinte, ne se note plus", async () => {
+    serve(EPUB.subarray(0, EPUB.length - 200));
+    const broken = "f".repeat(32);
+    scheduleMetaReads([{ id: broken, etag: "e1" }]);
+    await vi.waitFor(() => expect(knownMeta().get(broken)?.defect).toBe(true));
+    const first = logged.mock.calls.filter((c) => c[0] === "books/meta" && (c[2] as { itemId?: string })?.itemId === broken).length;
+    expect(first).toBe(1);
+    scheduleMetaReads([{ id: broken, etag: "e2" }]);
+    await vi.waitFor(() => expect(knownMeta().get(broken)?.etag).toBe("e2"));
+    const after = logged.mock.calls.filter((c) => c[0] === "books/meta" && (c[2] as { itemId?: string })?.itemId === broken).length;
+    expect(after).toBe(1);
   });
   it("l'index ne montre pas un fichier illisible — remplacé, il revient ; un échec passager reste montré", async () => {
     const { enrichTargets, __testing: indexTesting } = await import("@/lib/books/bookIndex");
