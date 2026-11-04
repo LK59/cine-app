@@ -1437,6 +1437,7 @@ function ActivePlayer({
         needBps,
         nativeHls,
         directPlay: !!data.isDirectPlay,
+        video,
         startup,
         cap,
         slowLogRef,

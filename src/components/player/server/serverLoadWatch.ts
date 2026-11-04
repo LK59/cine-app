@@ -23,6 +23,29 @@ export const NO_LINK_SIGNAL: LinkSignal = { hint: false, recvBps: null, needBps:
 
 type Translate = ReturnType<typeof useT>;
 
+/**
+ * Où l'élément en était au renoncement (05/11/2026) : sa position, ce qu'il dit pouvoir atteindre, son
+ * état. Sur Safari, les segments que lit le HLS natif ne paraissent pas dans les entrées de ressources
+ * de la page — la reprise de *Terrifier* du 02/11 (iPad, rechargement direct, préchauffage emporté) a
+ * demandé le segment 822, à 2 466 s, pour une reprise à 281,6 s, et seul le journal du proxy l'a dit ;
+ * rien ne disait si l'élément lui-même se croyait là-bas. Jellyfin donne la même liste avec ou sans
+ * position de départ (1 624 segments de 3 s depuis 0, vérifié le 05/11) : c'est Safari qui choisit.
+ */
+export function elementFacts(video: HTMLVideoElement | null): Record<string, number | string> {
+  if (!video) return {};
+  try {
+    const ranges = (r: TimeRanges) => Array.from({ length: Math.min(r.length, 3) }, (_, i) => `${r.start(i).toFixed(1)}–${r.end(i).toFixed(1)}`).join(" ") || "vide";
+    return {
+      elementAt: Math.round(video.currentTime * 10) / 10,
+      elementSeekable: ranges(video.seekable),
+      elementBuffered: ranges(video.buffered),
+      elementReadyState: video.readyState,
+    };
+  } catch {
+    return {};
+  }
+}
+
 /** Le renoncement des 20 s sans image — la fonction que `startPlayback` arme et que le retour au premier plan réarme. */
 export function makeFireWatchdog({
   linkWatch,
@@ -32,6 +55,7 @@ export function makeFireWatchdog({
   needBps,
   nativeHls,
   directPlay,
+  video,
   startup,
   cap,
   slowLogRef,
@@ -54,6 +78,8 @@ export function makeFireWatchdog({
   needBps: number | null;
   nativeHls: boolean;
   directPlay: boolean;
+  /** L'élément du lecteur, lu seulement pour la ligne d'échec (`elementFacts`). */
+  video?: HTMLVideoElement | null;
   startup: ServerStartup;
   cap: { maxBitrate: number; step: LighterStep | null };
   slowLogRef: RefObject<SlowLog>;
@@ -84,7 +110,7 @@ export function makeFireWatchdog({
     }
     // Où en était le démarrage — la liste, un segment, son décodage, l'image (§77).
     if (nativeHls || directPlay) startup.fromResources(resourceEntries(), STREAM_PREFIX);
-    const stages = startup.fields(true);
+    const stages = { ...startup.fields(true), ...(nativeHls ? elementFacts(video ?? null) : {}) };
     if (cap.step) slowLogRef.current.note(`échec (allégée palier ${cap.step.tier}) : pas d'image en 20 s`);
     // La décision au délai du renoncement (§78) : lenteur prouvée et un palier encore possible en
     // « Automatique » → la bascule au palier suivant, au lieu de l'écran.
