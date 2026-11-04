@@ -1,3 +1,4 @@
+import { APP_BUILD, APP_VERSION } from "@/lib/appBuild";
 import { isAppleTouchDevice } from "@/lib/iosInstall";
 
 /**
@@ -38,7 +39,30 @@ export type ViewportHealDeps = {
   playing: () => boolean;
   /** La hauteur que la page doit avoir, quand l'appareil la donne (iPhone) ; `null` sinon. */
   fullHeight?: () => number | null;
+  /** Le relevé d'un retour où une hauteur s'écarte de la référence — voir `viewportSnapshot`. */
+  report?: (snapshot: Record<string, unknown>) => void;
 };
+
+/**
+ * Ce que la page sait de sa hauteur à un instant (05/11/2026). Le premier correctif ne suffisait pas
+ * — la page restait coupée — et rien ne disait laquelle des hauteurs iOS laissait coincée : la
+ * fenêtre, la vue visuelle, la racine, ou seulement la coquille.
+ */
+function viewportSnapshot(win: Window, shell: HTMLElement | null): Record<string, number | null> {
+  const vv = win.visualViewport;
+  const box = shell?.getBoundingClientRect();
+  return {
+    inner: win.innerHeight,
+    outer: win.outerHeight,
+    width: win.innerWidth,
+    vv: vv ? Math.round(vv.height) : null,
+    vvTop: vv ? Math.round(vv.offsetTop) : null,
+    client: win.document.documentElement.clientHeight,
+    shell: box ? Math.round(box.height) : null,
+    shellTop: box ? Math.round(box.top) : null,
+    scrollY: Math.round(win.scrollY),
+  };
+}
 
 function editableFocused(doc: Document): boolean {
   const el = doc.activeElement as HTMLElement | null;
@@ -78,7 +102,7 @@ export function reflowShell(shell: HTMLElement): void {
  * Écoute la fenêtre et répare la hauteur quand elle est restée coincée. Renvoie de quoi se
  * désabonner. Les dépendances sont injectées pour les tests ; `installViewportHeal` pose les vraies.
  */
-export function watchViewportHeal({ win, shell, playing, fullHeight = () => null }: ViewportHealDeps): () => void {
+export function watchViewportHeal({ win, shell, playing, fullHeight = () => null, report }: ViewportHealDeps): () => void {
   const doc = win.document;
   // La plus grande hauteur vue, par largeur : tourner l'appareil change légitimement la hauteur.
   const tallest = new Map<number, number>();
@@ -89,31 +113,48 @@ export function watchViewportHeal({ win, shell, playing, fullHeight = () => null
   note();
 
   let timer: number | undefined;
+  let trigger = "";
   const heal = () => {
     timer = undefined;
-    if (doc.visibilityState === "hidden" || editableFocused(doc) || playing()) return;
+    if (doc.visibilityState === "hidden") return;
     const el = shell();
     if (!el) return;
     const best = Math.max(tallest.get(win.innerWidth) ?? 0, fullHeight() ?? 0);
-    if (best - measuredHeight(win, el) <= SLACK_PX) return;
-    reflowShell(el);
-    note();
+    const before = viewportSnapshot(win, el);
+    // Une hauteur (fenêtre, vue visuelle, racine ou coquille) plus basse que la référence.
+    const off = [before.inner, before.vv, before.client, before.shell].some((h) => h !== null && best - h > SLACK_PX);
+    const short = best - measuredHeight(win, el) > SLACK_PX;
+    const skip = editableFocused(doc) ? "champ" : playing() ? "film" : null;
+    if (short && !skip) {
+      reflowShell(el);
+      note();
+    }
+    // Un retour sans écart est relevé aussi (deux par onglet, `sendViewportDiag`) : si le défaut se
+    // voit sans qu'aucune hauteur ne s'écarte, c'est cela qu'il faut savoir.
+    if (!report || (!off && trigger !== "retour")) return;
+    const decision = !off ? "rien" : (skip ?? (short ? "réparé" : "coquille juste"));
+    // Ce que la réparation a changé, mesuré deux images plus tard : iOS ne relit pas forcément tout
+    // dans la mise en page synchrone.
+    win.requestAnimationFrame(() =>
+      win.requestAnimationFrame(() => report({ trigger, best, decision, before, after: viewportSnapshot(win, shell()) }))
+    );
   };
-  const later = (ms: number) => {
+  const later = (why: string, ms: number) => {
     if (timer !== undefined) win.clearTimeout(timer);
+    trigger = why;
     timer = win.setTimeout(heal, ms);
   };
 
-  const onFocusOut = () => later(SETTLE_AFTER_BLUR_MS);
+  const onFocusOut = () => later("clavier fermé", SETTLE_AFTER_BLUR_MS);
   const onVisible = () => {
-    if (doc.visibilityState === "visible") later(SETTLE_AFTER_SHOW_MS);
+    if (doc.visibilityState === "visible") later("retour", SETTLE_AFTER_SHOW_MS);
   };
-  const onPageShow = () => later(SETTLE_AFTER_SHOW_MS);
+  const onPageShow = () => later("pageshow", SETTLE_AFTER_SHOW_MS);
   // Un rétrécissement sans champ actif chez nous : le clavier d'une autre app, appliqué au retour
   // par un glissé de la barre d'accueil — parfois après l'évènement de visibilité.
   const onResize = () => {
     note();
-    later(SETTLE_AFTER_SHOW_MS);
+    later("redimensionné", SETTLE_AFTER_SHOW_MS);
   };
   win.addEventListener("resize", onResize);
   doc.addEventListener("focusout", onFocusOut);
@@ -146,5 +187,33 @@ export function installViewportHeal(): () => void {
     },
     shell: () => document.querySelector<HTMLElement>(".app-viewport"),
     playing: () => Array.from(document.querySelectorAll("video")).some((v) => !v.paused && !v.ended),
+    report: sendViewportDiag,
   });
+}
+
+/** Six relevés d'écart par onglet au plus : de quoi voir le défaut, pas un journal de chaque retour. */
+const DIAG_MAX = 6;
+/** Et deux retours sans écart, comptés à part pour ne pas manger la place des autres. */
+const DIAG_PLAIN_MAX = 2;
+
+function sendViewportDiag(snapshot: Record<string, unknown>): void {
+  const plain = snapshot.decision === "rien";
+  const key = plain ? "cine:viewport-diag-plain" : "cine:viewport-diag";
+  try {
+    const sent = Number(window.sessionStorage.getItem(key) ?? 0);
+    if (sent >= (plain ? DIAG_PLAIN_MAX : DIAG_MAX)) return;
+    window.sessionStorage.setItem(key, String(sent + 1));
+  } catch {
+    /* sans stockage : la limite de la route tient */
+  }
+  try {
+    void fetch("/api/viewport-diag", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...snapshot, screen: `${window.screen.width}x${window.screen.height}`, build: APP_BUILD, version: APP_VERSION }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    /* un relevé perdu ne coûte rien */
+  }
 }

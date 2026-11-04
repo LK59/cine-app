@@ -91,6 +91,15 @@ export function logRemoteDiag(fields: { user: string; device: string | null } & 
   }
 }
 
+/** Le relevé de hauteur de l'application installée sur iOS (`viewportHeal.ts`), dans le journal des ouvertures. */
+export function logViewportDiag(fields: { user: string; device: string | null } & Record<string, unknown>): void {
+  try {
+    appendJsonLine(STARTUP_LOG(), { timestamp: new Date().toISOString(), kind: "hauteur", ...fields }, { keep: EVENT_LOG_KEEP });
+  } catch {
+    /* rien */
+  }
+}
+
 /**
  * Les Nouveautés (DECISIONS.md §73) : la fenêtre (combien de temps elle est restée à l'écran, page
  * visible seulement, et comment elle s'est fermée), « Voir plus », et la page Compte → Nouveautés.
