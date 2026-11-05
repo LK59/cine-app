@@ -18,7 +18,7 @@
     "@mediabunny/dts": "1.62.1",
     "@wasm-audio-decoders/flac": "0.2.11",
     "better-sqlite3": "13.0.3",
-    "hls.js": "1.7.3",
+    "hls.js": "1.7.4",
     "lucide-react": "1.69.0",
     "mediabunny": "1.62.1",
     "next": "16.4.5",

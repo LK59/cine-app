@@ -4,13 +4,14 @@ import Hls from "hls.js";
 import * as hlsModule from "hls.js";
 import { HLS_RESET_MEDIA_SOURCE_FLAG, hlsRecoveryPosition, hlsResetItself } from "@/lib/hlsRecovery";
 
-// Le contrat que `PlayerHost` suppose d'hls.js — lu dans les sources de 1.7.3, vérifié ici sur la vraie
+// Le contrat que `PlayerHost` suppose d'hls.js — lu dans les sources de 1.7.3, relu dans le diff 1.7.3 → 1.7.4
+// (06/11/2026 : `ErrorController`, `recoverMediaError` et `onMediaAttached` inchangés), vérifié ici sur la vraie
 // bibliothèque plutôt que sur une imitation (`PlayerHost-hls-recovery.test.tsx` simule hls.js et ne
 // peut rien dire d'une montée de version). DECISIONS §67, `hlsRecovery.ts`.
 
 describe("hls.js — le contrat de récupération (vraie bibliothèque)", () => {
   it("la version épinglée est celle que ce contrat décrit", () => {
-    expect(Hls.version).toBe("1.7.3");
+    expect(Hls.version).toBe("1.7.4");
   });
 
   it("le drapeau ResetMediaSource recopié vaut celui de la bibliothèque", () => {
