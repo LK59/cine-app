@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
 import { brotliDecompressSync, gunzipSync } from "node:zlib";
+import { ENCODING_MARKER, LENGTH_MARKER } from "../../server-boot/responseFraming.mjs";
+
+// Depuis Next 16.4.5, le codage et la longueur passent par un marqueur que le serveur de démarrage
+// traduit (`responseFraming.ts`) ; ici, on se place sous ce serveur.
+beforeEach(() => {
+  vi.stubEnv("CINE_FRAMING_HEADERS", "1");
+});
 
 // DECISIONS.md §76 — les listes `.m3u8` compressées par la route quand le client l'accepte, sans
 // changer un octet de leur contenu ni rien d'autre du relais (adresses, laissez-passer, CORS,
@@ -68,7 +75,7 @@ async function get(url: string, path: string[], opts: { cookie: string | null; a
 }
 
 function decode(res: Response, bytes: Buffer): string {
-  const encoding = res.headers.get("Content-Encoding");
+  const encoding = res.headers.get(ENCODING_MARKER);
   if (encoding === "gzip") return gunzipSync(bytes).toString("utf-8");
   if (encoding === "br") return brotliDecompressSync(bytes).toString("utf-8");
   return bytes.toString("utf-8");
@@ -112,9 +119,9 @@ describe("route de flux — compression des listes .m3u8", () => {
   it("sans Accept-Encoding : en clair, comme avant", async () => {
     mockFetch.mockResolvedValue(upstream(playlist));
     const { res, bytes } = await get(url, ["main.m3u8"], { cookie: "t" });
-    expect(res.headers.get("Content-Encoding")).toBeNull();
+    expect(res.headers.get(ENCODING_MARKER)).toBeNull();
     expect(bytes.toString("utf-8")).toBe(playlist);
-    expect(res.headers.get("Content-Length")).toBe(String(bytes.length));
+    expect(res.headers.get(LENGTH_MARKER)).toBe(String(bytes.length));
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect(res.headers.get("Content-Type")).toBe("application/vnd.apple.mpegurl");
   });
@@ -128,9 +135,9 @@ describe("route de flux — compression des listes .m3u8", () => {
       const plain = await get(url, ["main.m3u8"], { cookie: "t" });
       mockFetch.mockResolvedValue(upstream(playlist));
       const { res, bytes } = await get(url, ["main.m3u8"], { cookie: "t", acceptEncoding });
-      expect(res.headers.get("Content-Encoding")).toBe(expected);
+      expect(res.headers.get(ENCODING_MARKER)).toBe(expected);
       expect(res.headers.get("Vary")).toBe("Accept-Encoding");
-      expect(res.headers.get("Content-Length")).toBe(String(bytes.length));
+      expect(res.headers.get(LENGTH_MARKER)).toBe(String(bytes.length));
       expect(res.headers.get("Cache-Control")).toBe("no-store");
       expect(decode(res, bytes)).toBe(plain.bytes.toString("utf-8"));
       // L'ordre de grandeur mesuré sur la vraie liste : ~700 Ko en clair, moins de 15 Ko compressés.
@@ -167,7 +174,7 @@ describe("route de flux — compression des listes .m3u8", () => {
       cookie: "t",
       acceptEncoding: "gzip, br",
     });
-    expect(res.headers.get("Content-Encoding")).toBeNull();
+    expect(res.headers.get(ENCODING_MARKER)).toBeNull();
     expect(bytes.toString("utf-8")).toBe(master);
   });
 
@@ -177,7 +184,7 @@ describe("route de flux — compression des listes .m3u8", () => {
       cookie: "t",
       acceptEncoding: "gzip, br",
     });
-    expect(res.headers.get("Content-Encoding")).toBeNull();
+    expect(res.headers.get(ENCODING_MARKER)).toBeNull();
     expect(res.headers.get("Vary")).toBeNull();
   });
 });

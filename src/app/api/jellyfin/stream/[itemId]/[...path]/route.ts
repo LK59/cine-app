@@ -19,6 +19,7 @@ import { admitTranscode, shouldLogRefusal } from "@/lib/transcodeBudget";
 import { shareStreamRefusal } from "@/lib/share/guard";
 import { logError } from "@/lib/logger";
 import { errorBody } from "@/lib/apiErrorCodes";
+import { lengthHeader, upstreamLengthHeader } from "@/lib/responseFraming";
 
 // Root cause found live via temporary request logging: right after a fresh remux job starts
 // (e.g. on an audio-track switch, which always requests a brand new PlaySessionId/ffmpeg job),
@@ -233,7 +234,7 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
      */
     if (!isManifest && !lowerPath.endsWith(".vtt") && isTextual(contentType)) {
       const buf = Buffer.from(withoutAdminKey(stripAccessToken(await res.text())), "utf-8");
-      return new NextResponse(buf, { headers: { "Content-Type": contentType, "Cache-Control": "no-store", "Content-Length": String(buf.length) } });
+      return new NextResponse(buf, { headers: { "Content-Type": contentType, "Cache-Control": "no-store", ...lengthHeader(buf.length) } });
     }
 
     if (isManifest) {
@@ -295,7 +296,7 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
     if (lowerPath.endsWith(".vtt")) {
       const buf = Buffer.from(withoutAdminKey(fixVttTimestampMap(await res.text())), "utf-8");
       return new NextResponse(buf, {
-        headers: { "Content-Type": contentType, "Cache-Control": "private, max-age=21600", "Content-Length": String(buf.length) },
+        headers: { "Content-Type": contentType, "Cache-Control": "private, max-age=21600", ...lengthHeader(buf.length) },
       });
     }
 
@@ -314,10 +315,14 @@ async function serveStream(req: NextRequest, { params }: StreamParams, pass: Cas
       // d'avance du disque le même jour.
       const passthroughHeaders: Record<string, string> = { "Content-Type": contentType, "Cache-Control": "private, no-store" };
       const contentRange = res.headers.get("Content-Range");
-      const contentLength = res.headers.get("Content-Length");
       const acceptRanges = res.headers.get("Accept-Ranges");
       if (contentRange) passthroughHeaders["Content-Range"] = contentRange;
-      if (contentLength) passthroughHeaders["Content-Length"] = contentLength;
+      // La longueur de Jellyfin, par le marqueur depuis Next 16.4.5 (06/11/2026) : retirée, une plage
+      // partait en morceaux sans taille, le HEAD de `HttpByteSource.open` ne lisait plus la taille du
+      // fichier (un aller-retour de plus), et le `<video>` du lecteur serveur en lecture directe — Safari,
+      // un téléviseur AirPlay — recevait des 206 sans longueur. Seulement pour un corps que `fetch` n'a
+      // pas décodé : voir `upstreamLengthHeader`.
+      Object.assign(passthroughHeaders, upstreamLengthHeader(res));
       if (acceptRanges) passthroughHeaders["Accept-Ranges"] = acceptRanges;
       // La date du fichier chez Jellyfin (25/09/2026) : les octets gardés sur l'appareil pour une
       // reprise instantanée ne valent que pour ce fichier-là, et un fichier remplacé (réencodé par

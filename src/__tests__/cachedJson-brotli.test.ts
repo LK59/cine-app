@@ -1,6 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { brotliDecompressSync, gunzipSync } from "node:zlib";
 import { preparedJson, respondPrepared } from "@/lib/cachedJson";
+import { ENCODING_MARKER, LENGTH_MARKER } from "../../server-boot/responseFraming.mjs";
+
+// Depuis Next 16.4.5, le codage et la longueur passent par un marqueur que le serveur de démarrage
+// traduit (`responseFraming.ts`) ; ici, on se place sous ce serveur.
+beforeEach(() => {
+  vi.stubEnv("CINE_FRAMING_HEADERS", "1");
+});
 
 const req = (acceptEncoding: string | null, etag?: string) =>
   new Request("http://x/api/cinema/movies", {
@@ -24,13 +31,13 @@ describe("respondPrepared — brotli", () => {
   it("part en gzip tant que brotli n'est pas prêt, puis en brotli, le même JSON", async () => {
     const p = preparedJson("t:brotli:1", catalogue("a"));
     const res1 = respondPrepared(req("gzip, deflate, br"), p);
-    expect(res1.headers.get("content-encoding")).toBe("gzip");
+    expect(res1.headers.get(ENCODING_MARKER)).toBe("gzip");
     expect(gunzipSync(Buffer.from(await res1.arrayBuffer())).toString()).toBe(p.json);
     await brotliReady(p);
     const res2 = respondPrepared(req("gzip, deflate, br"), p);
-    expect(res2.headers.get("content-encoding")).toBe("br");
+    expect(res2.headers.get(ENCODING_MARKER)).toBe("br");
     const body = Buffer.from(await res2.arrayBuffer());
-    expect(Number(res2.headers.get("content-length"))).toBe(body.byteLength);
+    expect(Number(res2.headers.get(LENGTH_MARKER))).toBe(body.byteLength);
     expect(body.byteLength).toBeLessThan(p.gzip.byteLength);
     expect(brotliDecompressSync(body).toString()).toBe(p.json);
     expect(res2.headers.get("etag")).toBe(p.etag);
@@ -39,9 +46,9 @@ describe("respondPrepared — brotli", () => {
 
   it("ne sert brotli qu'à qui l'accepte, et ne le calcule pas pour les autres", async () => {
     const p = preparedJson("t:brotli:2", catalogue("b"));
-    expect(respondPrepared(req("gzip"), p).headers.get("content-encoding")).toBe("gzip");
-    expect(respondPrepared(req("gzip, br;q=0"), p).headers.get("content-encoding")).toBe("gzip");
-    expect(respondPrepared(req(null), p).headers.get("content-encoding")).toBeNull();
+    expect(respondPrepared(req("gzip"), p).headers.get(ENCODING_MARKER)).toBe("gzip");
+    expect(respondPrepared(req("gzip, br;q=0"), p).headers.get(ENCODING_MARKER)).toBe("gzip");
+    expect(respondPrepared(req(null), p).headers.get(ENCODING_MARKER)).toBeNull();
     expect(p.brStarted).toBeFalsy();
   });
 
@@ -59,7 +66,7 @@ describe("respondPrepared — brotli", () => {
     const fresh = preparedJson("t:brotli:4", catalogue("e"));
     expect(fresh).not.toBe(old);
     const res = respondPrepared(req("br, gzip"), fresh);
-    expect(res.headers.get("content-encoding")).toBe("gzip");
+    expect(res.headers.get(ENCODING_MARKER)).toBe("gzip");
     expect(gunzipSync(Buffer.from(await res.arrayBuffer())).toString()).toBe(fresh.json);
   });
 

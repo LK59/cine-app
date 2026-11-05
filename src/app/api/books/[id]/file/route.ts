@@ -6,6 +6,7 @@ import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
 import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { bookIdOf, booksCaller } from "@/lib/books/guard";
 import { bookFor } from "@/lib/books/library";
+import { upstreamLengthHeader } from "@/lib/responseFraming";
 
 /**
  * Le fichier EPUB d'un livre (option, DECISIONS.md §127), relayé depuis `/Items/{id}/Download`.
@@ -62,9 +63,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     "Content-Disposition": req.nextUrl.searchParams.get("telecharger") === "1" ? attachment(visible) : "inline",
     "X-Content-Type-Options": "nosniff",
   };
-  const length = upstream.headers.get("content-length");
-  if (length && /^\d+$/.test(length)) headers["Content-Length"] = length;
-  return new NextResponse(upstream.body, { status: 200, headers });
+  // La taille, que la page lit pour savoir si le livre tient sur l'appareil (`offlineBooks.ts`) — par
+  // le marqueur depuis Next 16.4.5, et seulement si `fetch` n'a pas décodé le corps (`responseFraming.ts`).
+  return new NextResponse(upstream.body, { status: 200, headers: { ...headers, ...upstreamLengthHeader(upstream) } });
 }
 
 /**

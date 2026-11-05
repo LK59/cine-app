@@ -9,6 +9,7 @@ import { carryOverStatic } from "./staticCarryover.mjs";
 import { dataDirProblem, startupRefusal } from "./startupChecks.mjs";
 import { applyFirstRunSecrets } from "./firstRunSecrets.mjs";
 import { linkImageCache } from "./imageCache.mjs";
+import { FRAMING_ENV, installResponseFraming } from "./responseFraming.mjs";
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dataDir = process.env.DATA_DIR || path.join(appDir, "data");
@@ -80,15 +81,24 @@ try {
  * Les gestionnaires de route de Next n'y ont pas accès ; sans elle, `X-Forwarded-For` — que n'importe
  * quel voisin du réseau Docker peut écrire — était la seule adresse connue. `x-cine-peer` est écrasé à
  * chaque requête : un client ne peut pas le fournir. Voir `src/lib/trustedProxy.ts`.
+ *
+ * Le même crochet pose le cadrage de chaque réponse (06/11/2026) : Next 16.4.5 retire
+ * `Content-Encoding` et `Content-Length` des réponses de route, et c'est ici qu'ils sont remis, à partir
+ * des marqueurs que les routes posent — voir `responseFraming.mjs`.
  */
 const createServer = http.createServer;
 http.createServer = function (...args) {
   const server = createServer.apply(this, args);
-  server.prependListener("request", (req) => {
+  server.prependListener("request", (req, res) => {
     req.headers["x-cine-peer"] = req.socket?.remoteAddress ?? "";
+    // Avant Next, donc sous le module `compression` qu'il branche ensuite : voir responseFraming.mjs.
+    installResponseFraming(req, res);
   });
   return server;
 };
 process.env.CINE_PEER_HEADER = "1";
+// Les routes ne précompressent (et ne déclarent de longueur) que si ce serveur traduit leurs marqueurs :
+// sous `next dev`, sans ce fichier, elles répondent en clair (`src/lib/responseFraming.ts`).
+process.env[FRAMING_ENV] = "1";
 
 await import(pathToFileURL(path.join(appDir, "server.js")).href);

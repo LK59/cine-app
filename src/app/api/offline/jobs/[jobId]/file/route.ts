@@ -6,6 +6,7 @@ import { verifySessionFull } from "@/lib/session";
 import { markOfflineFetched, offlineFile, offlineJobFor, touchOfflineJob } from "@/lib/offline/jobs";
 import { noteOfflineServed } from "@/lib/offline/events";
 import { notePassageFetched } from "@/lib/passage/service";
+import { lengthHeader } from "@/lib/responseFraming";
 
 const JOB_ID = /^[0-9a-f]{32}$/;
 
@@ -38,7 +39,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ jobI
   const askedEnd = range && range[2] !== "" ? Number(range[2]) : Infinity;
   const end = Math.min(askedEnd, written - 1);
   if (start >= written || end < start) return new NextResponse(null, { status: 416, headers });
-  headers["Content-Length"] = String(end - start + 1);
+  // Par le marqueur depuis Next 16.4.5 : `createReadStream({ start, end })` ne rend jamais plus que la
+  // plage, et un fichier plus court qu'annoncé coupe la connexion (`responseFraming.ts`).
+  Object.assign(headers, lengthHeader(end - start + 1));
   headers["Content-Range"] = `bytes ${start}-${end}/${done ? written : "*"}`;
   // La dernière plage d'une version finie : l'appareil l'a désormais entière — une ligne au journal
   // la première fois pour ce compte, jamais une par plage (`noteOfflineServed`).

@@ -15,6 +15,13 @@ vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => verify
 import { DATA_DIR } from "@/lib/dataDir";
 import { GET as listGET } from "@/app/api/lab/offline-samples/route";
 import { GET as fileGET } from "@/app/api/lab/offline-samples/[file]/route";
+import { ENCODING_MARKER, LENGTH_MARKER } from "../../server-boot/responseFraming.mjs";
+
+// Depuis Next 16.4.5, le codage et la longueur passent par un marqueur que le serveur de démarrage
+// traduit (`responseFraming.ts`) ; ici, on se place sous ce serveur.
+beforeEach(() => {
+  vi.stubEnv("CINE_FRAMING_HEADERS", "1");
+});
 
 const req = (headers: Record<string, string> = {}) =>
   ({ cookies: { get: () => ({ value: "t" }) }, headers: new Headers(headers) }) as unknown as NextRequest;
@@ -58,7 +65,7 @@ describe("/api/lab/offline-samples", () => {
   it("sans plage : le fichier entier ; hors liste ou absent : 404", async () => {
     const res = await fileGET(req(), params("a-1080-2.mp4"));
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-length")).toBe(String(BYTES.length));
+    expect(res.headers.get(LENGTH_MARKER)).toBe(String(BYTES.length));
     expect((await fileGET(req(), params("secret.mp4"))).status).toBe(404);
     expect((await fileGET(req(), params("../../app.db"))).status).toBe(404);
     expect((await fileGET(req(), params("b-1080-3.mp4"))).status).toBe(404);

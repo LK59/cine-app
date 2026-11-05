@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { brotliCompress, constants, gzipSync } from "node:zlib";
 import { playlistEncodingFor } from "@/lib/playlistEncoding";
+import { encodedBodyHeaders, framingAvailable, lengthHeader } from "@/lib/responseFraming";
 
 /**
  * Répondre en JSON sans renvoyer ce que le navigateur a déjà.
@@ -122,20 +123,23 @@ export function respondPrepared(req: Request, p: Prepared): Response {
     return new Response(null, { status: 304, headers });
   }
 
+  /**
+   * Sans le serveur de démarrage pour traduire le marqueur (`next dev`), le JSON part en clair : Next
+   * 16.4.5 retire le `Content-Encoding` d'une route, et un corps compressé sans lui est la panne du
+   * 05/11/2026 — voir `responseFraming.ts`. La compression de Next prend alors le relais (gzip).
+   */
+  if (!framingAvailable()) return new Response(json, { headers });
+
   const acceptEncoding = req.headers.get("accept-encoding");
   if (playlistEncodingFor(acceptEncoding) === "br") {
     if (p.br) {
-      return new Response(new Uint8Array(p.br), {
-        headers: { ...headers, "Content-Encoding": "br", "Content-Length": String(p.br.byteLength) },
-      });
+      return new Response(new Uint8Array(p.br), { headers: { ...headers, ...encodedBodyHeaders("br", p.br.byteLength) } });
     }
     startBrotli(p);
   }
 
   if ((acceptEncoding ?? "").includes("gzip")) {
-    return new Response(new Uint8Array(gzip), {
-      headers: { ...headers, "Content-Encoding": "gzip", "Content-Length": String(gzip.byteLength) },
-    });
+    return new Response(new Uint8Array(gzip), { headers: { ...headers, ...encodedBodyHeaders("gzip", gzip.byteLength) } });
   }
-  return new Response(json, { headers });
+  return new Response(json, { headers: { ...headers, ...lengthHeader(Buffer.byteLength(json)) } });
 }

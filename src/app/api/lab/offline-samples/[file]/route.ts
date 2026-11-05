@@ -6,6 +6,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
 import { DATA_DIR } from "@/lib/dataDir";
 import { labSampleByFile } from "@/lib/labSamples";
+import { lengthHeader } from "@/lib/responseFraming";
 
 /**
  * Un extrait du test de qualité hors ligne, servi par plages comme le flux d'un film : le lecteur le
@@ -31,8 +32,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ file
   };
   const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get("range") ?? "");
   if (!range || (range[1] === "" && range[2] === "")) {
-    headers["Content-Length"] = String(size);
-    return new NextResponse(Readable.toWeb(fs.createReadStream(file)) as ReadableStream, { status: 200, headers });
+    // Lu jusqu'à la taille relevée, pas au-delà : la longueur déclarée doit rester vraie même si le
+    // fichier grandit entre-temps (`responseFraming.ts`).
+    Object.assign(headers, lengthHeader(size));
+    if (size === 0) return new NextResponse(new Uint8Array(0), { status: 200, headers });
+    return new NextResponse(Readable.toWeb(fs.createReadStream(file, { start: 0, end: size - 1 })) as ReadableStream, { status: 200, headers });
   }
   // `bytes=-N` : les N derniers octets.
   const start = range[1] === "" ? Math.max(0, size - Number(range[2])) : Number(range[1]);
@@ -40,7 +44,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ file
   if (start >= size || end < start) {
     return new NextResponse(null, { status: 416, headers: { "Content-Range": `bytes */${size}` } });
   }
-  headers["Content-Length"] = String(end - start + 1);
+  Object.assign(headers, lengthHeader(end - start + 1));
   headers["Content-Range"] = `bytes ${start}-${end}/${size}`;
   return new NextResponse(Readable.toWeb(fs.createReadStream(file, { start, end })) as ReadableStream, { status: 206, headers });
 }

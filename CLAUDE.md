@@ -342,6 +342,29 @@ Docker network); a direct client's own address is used otherwise (20/10/2026).
 `x-cine-peer` is ignored and the old rule applies. `/_next/image` needs a session since 2026-10-08
 (anyone could fill `data/image-cache`); only the loopback (`posterPrewarm`) passes without one.
 
+**A route never writes `Content-Encoding` or `Content-Length` itself** (DECISIONS §131, 06/11/2026).
+Next 16.4.5 (GHSA-pc58-hwjq-p385) strips both, and `Transfer-Encoding`, from every route response
+(`send-response.js`, `FORBIDDEN_HEADERS`): on 05/11/2026 the brotli catalogue reached browsers
+unlabelled and was read as JSON (« The string did not match the expected pattern »), and the gate
+was green because no test went through Next's real response path. Routes set internal markers
+instead — `x-cine-encoding: br|gzip`, `x-cine-length: <n>` — through `src/lib/responseFraming.ts`
+(`encodedBodyHeaders`, `lengthHeader`, `upstreamLengthHeader`), and the same `boot.mjs` wrapper turns
+them into the real headers the moment Next sets them (`server-boot/responseFraming.mjs`): at
+`setHeader` time, so Next's `compression` already sees `Content-Encoding` and never gzips a
+precompressed body; a marker never leaves the server; and the bytes actually sent are counted
+against a declared length — a longer or shorter body cuts the connection rather than desync it.
+Only a length the route *holds* is declared: a body in memory, a file range read with
+`createReadStream({ start, end })`, or an upstream (Jellyfin) length when `fetch` did not decode the
+body (no `Content-Encoding` upstream). `boot.mjs` sets `CINE_FRAMING_HEADERS=1`; without it (`next
+dev`, tests) `framingAvailable()` is false and routes answer **uncompressed, without a length** —
+never a compressed body without its label. Next's own `compression` compresses pages and static
+files only: a route response reaches it with array-valued headers, which its `compressible` filter
+rejects, so a plain JSON route goes out uncompressed (16.4.3 and 16.4.5 alike).
+`response-framing.test.ts` drives Next's real `sendResponse` and `compression`;
+`tools/compression-reelle/run.sh` builds the app, starts `boot.mjs` on the standalone output with a
+throwaway `DATA_DIR`, a fake Jellyfin and an app-made session, and reads the catalogue-shaped route,
+an HLS list, a relayed 206 and a HEAD byte for byte — run it before any Next upgrade.
+
 **`/api/reports*` is outside the proxy's matcher** (`HORS_PROXY`) and carries its checks itself, in
 `reportCaller` (`src/lib/reportRequest.ts`), before any body is read: `crossSiteWrite` (the same
 function, `src/lib/crossSite.ts`), the session with `x-session-expired`, and a declared-size cap
@@ -705,7 +728,8 @@ dictionaries' values.
   "1.4 MB" and that raw figure made the payload look like a bottleneck it is not. It is half the
   JavaScript bundle. Remeasured on 2026-10-15 over 812 films, with taglines, trailers and cast added (§55):
   1 MB raw, 381 KB gzip, **297 KB brotli** — `respondPrepared` serves brotli (quality 11,
-  computed once per version off the main thread, gzip until it is ready). The opening's wait on an
+  computed once per version off the main thread, gzip until it is ready), labelled through the
+  `x-cine-encoding` marker since Next 16.4.5 (see "A route never writes `Content-Encoding`"). The opening's wait on an
   iPhone was not the size, though: the catalogue request left ~1 s after the code started (the
   `<link rel="preload">` was off on WebKit, which downloaded it twice) and then took ~0.3 s
   (`routes` in startup.log). **Since 8.65.3 the catalogue, « Reprendre » and « À suivre » leave with

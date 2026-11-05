@@ -8195,3 +8195,49 @@ du proxy qu'à sa propre question, une heure plus tard au pire. La table vit sur
 les appels d'API jusqu'à l'expiration du cookie (sept jours au plus) : seul un chargement de page la ferme,
 pour ne jamais couper un film en cours. « Déconnecter mes autres appareils » la ferme.
 
+
+## 131. Le cadrage des réponses posé par le serveur de démarrage, pas par la route (06/11/2026)
+
+**La panne.** Next 16.4.5 (correctif GHSA-pc58-hwjq-p385) retire `content-length`, `content-encoding` et
+`transfer-encoding` de toute réponse de route (`next/dist/server/send-response.js`, `FORBIDDEN_HEADERS`) : un
+corps relu par `fetch` a pu être décompressé en gardant ses en-têtes, et sa longueur d'origine décrivait alors
+autre chose que ce qui partait. Le 05/11/2026, le catalogue, les Nouveautés et les listes HLS — précompressés
+par leurs routes — sont arrivés sans leur étiquette ; le navigateur a lu du brotli comme du JSON. Retour en
+16.4.3 le jour même. Le gate était vert : aucun test ne passait par le code de Next qui envoie la réponse.
+
+**La règle.** Une route n'écrit jamais `Content-Encoding` ni `Content-Length`. Elle pose un marqueur
+(`x-cine-encoding: br|gzip`, `x-cine-length: <n>`) par `src/lib/responseFraming.ts` — `encodedBodyHeaders`
+(corps précompressé en mémoire), `lengthHeader` (corps en mémoire, plage de fichier bornée),
+`upstreamLengthHeader` (longueur de Jellyfin, seulement si l'amont n'a pas codé son corps : `fetch` ne l'a donc
+pas décodé). `server-boot/responseFraming.mjs`, branché par `boot.mjs` sur chaque réponse avant Next, en fait le
+vrai en-tête **au moment où Next le pose** (`setHeader` / `appendHeader`) — avant le `writeHead` où le module
+`compression` de Next décide : il y voit `Content-Encoding` et ne recompresse pas. Un marqueur ne sort jamais ;
+une valeur illisible est jetée. Les octets envoyés sont comptés contre la longueur traduite : trop ou trop peu,
+la connexion est coupée plutôt que de laisser une réponse mal cadrée (le fond de la faille). HEAD, 204, 304 ne
+sont pas comptés ; quand `compression` compresse lui-même (il retire la longueur), le compte s'efface.
+
+**Sans le serveur de démarrage** (`next dev`, les tests, un autre point d'entrée), `boot.mjs` n'a pas posé
+`CINE_FRAMING_HEADERS=1` : `framingAvailable()` est faux et les routes répondent en clair, sans longueur. Jamais
+un corps compressé sans son étiquette.
+
+**Appelants.** `respondPrepared` / `cachedJson` (catalogues, Nouveautés, copie de secours §92), `encodePlaylist`
+(listes HLS), le relais du flux (`/api/jellyfin/stream` : fichier en lecture directe 206/HEAD, textes nettoyés,
+sous-titres), `/api/player/download` (sans longueur, le téléchargement du navigateur n'a ni taille ni barre),
+`/api/books/[id]/file` (la place libre est vérifiée sur cette longueur), `/api/books/[id]/cover`,
+`/api/offline/jobs/[jobId]/file`, `/api/lab/offline-samples/[file]`. Sans la longueur relayée, le HEAD de
+`HttpByteSource.open` ne lisait plus la taille (un aller-retour de plus), et le `<video>` du lecteur serveur en
+lecture directe — Safari, un téléviseur AirPlay — recevait des 206 en morceaux.
+
+**Relevé en chemin.** La compression de Next ne touche aucune réponse de route, en 16.4.3 comme en 16.4.5 :
+`sendResponse` pose les en-têtes en tableaux et le filtre `compressible` n'accepte qu'une chaîne. Les pages et
+les fichiers statiques restent compressés. Une route JSON qui ne passe pas par `cachedJson` part donc en clair,
+avant comme après — non changé ici.
+
+**Tests.** `response-framing.test.ts` : les règles du marqueur ; le vrai `sendResponse` et le vrai
+`compression` de Next, branchés dans l'ordre de `router-server.js` (la panne reproduite sans le cadrage, brotli,
+gzip, HEAD, 304, 206 relayé, corps trop long/trop court) ; les routes en clair sans `boot.mjs` ; aucune écriture
+de `Content-Encoding`/`Content-Length` dans `src/app` et `src/lib`. `compression-reelle.spec.ts`, sauté sans
+build, par `tools/compression-reelle/run.sh` : `next build`, `boot.mjs` sur la sortie standalone, DATA_DIR
+jetable, faux Jellyfin, session créée par le code de l'application ; il échoue sur l'arbre du 05/11 construit
+avec 16.4.5 (JSON illisible, liste HLS sans codage, 206 sans longueur) et passe avec ce changement. À lancer
+avant toute montée de Next.

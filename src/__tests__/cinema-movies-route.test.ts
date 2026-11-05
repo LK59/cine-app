@@ -4,6 +4,13 @@ function fakeReq(headers: Record<string, string> = {}): Request {
 }
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ENCODING_MARKER, LENGTH_MARKER } from "../../server-boot/responseFraming.mjs";
+
+// Depuis Next 16.4.5, le codage et la longueur passent par un marqueur que le serveur de démarrage
+// traduit (`responseFraming.ts`) ; ici, on se place sous ce serveur.
+beforeEach(() => {
+  vi.stubEnv("CINE_FRAMING_HEADERS", "1");
+});
 
 const mockCachedMovies = vi.fn();
 const mockCachedJellyfinMoviesAdmin = vi.fn();
@@ -171,9 +178,9 @@ describe("GET /api/cinema/movies — ce qui repart sur le réseau", () => {
     const { GET } = await import("@/app/api/cinema/movies/route");
     const plain = await GET(fakeReq());
     const gzipped = await GET(fakeReq({ "accept-encoding": "gzip, deflate, br" }));
-    expect(plain.headers.get("content-encoding")).toBeNull();
-    expect(gzipped.headers.get("content-encoding")).toBe("gzip");
-    const compressed = Number(gzipped.headers.get("content-length"));
+    expect(plain.headers.get(ENCODING_MARKER)).toBeNull();
+    expect(gzipped.headers.get(ENCODING_MARKER)).toBe("gzip");
+    const compressed = Number(gzipped.headers.get(LENGTH_MARKER));
     expect(compressed).toBeGreaterThan(0);
     expect(compressed).toBeLessThan((await plain.text()).length);
   });

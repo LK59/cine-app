@@ -1,5 +1,6 @@
 import { promisify } from "node:util";
 import { brotliCompress, constants, gzip } from "node:zlib";
+import { encodedBodyHeaders, framingAvailable, lengthHeader } from "@/lib/responseFraming";
 
 /**
  * Compresser une liste de lecture HLS (`.m3u8`) pour le client qui l'accepte.
@@ -18,6 +19,8 @@ import { brotliCompress, constants, gzip } from "node:zlib";
  * `application/vnd.apple.mpegurl` n'y est pas marqué. Le relais inverse est partagé avec d'autres
  * sites : on ne le touche pas. C'est donc la route qui compresse, comme `cachedJson` pour le
  * catalogue — et `compression` laisse passer une réponse qui porte déjà son `Content-Encoding`.
+ * Depuis Next 16.4.5, cet en-tête passe par un marqueur que le serveur de démarrage traduit
+ * (`responseFraming.ts`) ; sans lui (`next dev`), la liste part en clair.
  *
  * Le contenu n'est jamais changé : une fois décompressé, c'est la liste d'avant, octet pour octet.
  * Les segments, eux, ne passent pas par ici (de la vidéo déjà compressée, et un flux continu).
@@ -62,15 +65,15 @@ export function playlistEncodingFor(acceptEncoding: string | null | undefined): 
 }
 
 /**
- * Le corps à envoyer et les en-têtes qui vont avec : `Content-Encoding` et `Content-Length` du corps
- * compressé, et toujours `Vary: Accept-Encoding` — la réponse dépend de l'en-tête, même quand elle
+ * Le corps à envoyer et les en-têtes qui vont avec : le codage et la longueur du corps compressé
+ * (en marqueurs, voir `responseFraming.ts`), et toujours `Vary: Accept-Encoding` — la réponse dépend de l'en-tête, même quand elle
  * part en clair, et aucun cache ne doit servir l'une à qui a demandé l'autre.
  */
 export async function encodePlaylist(
   body: Buffer,
   acceptEncoding: string | null | undefined
 ): Promise<{ body: Buffer; headers: Record<string, string> }> {
-  const encoding = body.length >= MIN_BYTES ? playlistEncodingFor(acceptEncoding) : null;
+  const encoding = body.length >= MIN_BYTES && framingAvailable() ? playlistEncodingFor(acceptEncoding) : null;
   if (encoding) {
     try {
       const compressed =
@@ -81,11 +84,11 @@ export async function encodePlaylist(
           : await gzipAsync(body);
       return {
         body: compressed,
-        headers: { "Content-Encoding": encoding, "Content-Length": String(compressed.length), Vary: "Accept-Encoding" },
+        headers: { ...encodedBodyHeaders(encoding, compressed.length), Vary: "Accept-Encoding" },
       };
     } catch {
       // Une compression qui échoue ne doit pas devenir l'erreur : la liste part en clair, comme avant.
     }
   }
-  return { body, headers: { "Content-Length": String(body.length), Vary: "Accept-Encoding" } };
+  return { body, headers: { ...lengthHeader(body.length), Vary: "Accept-Encoding" } };
 }

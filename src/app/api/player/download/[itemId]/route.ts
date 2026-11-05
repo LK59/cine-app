@@ -11,6 +11,7 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { displayTitle } from "@/lib/displayTitle";
 import { logDownload } from "@/lib/logger";
 import { noteMediaRead } from "@/lib/repliques/playbackActivity";
+import { upstreamLengthHeader } from "@/lib/responseFraming";
 
 export const dynamic = "force-dynamic";
 
@@ -84,9 +85,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     // Le nom du fichier vient de Jellyfin ; sans lui, le navigateur l'appellerait « itemId ».
     "Content-Disposition": res.headers.get("Content-Disposition") ?? "attachment",
   };
-  for (const name of ["Content-Length", "Content-Range", "Accept-Ranges", "Last-Modified", "ETag"]) {
+  for (const name of ["Content-Range", "Accept-Ranges", "Last-Modified", "ETag"]) {
     const value = res.headers.get(name);
     if (value) headers[name] = value;
   }
+  // La longueur, sans laquelle le navigateur télécharge sans taille ni barre de progression : retirée
+  // par Next 16.4.5 si elle est écrite telle quelle, elle passe par le marqueur — et seulement pour un
+  // corps que `fetch` n'a pas décodé (`responseFraming.ts`).
+  Object.assign(headers, upstreamLengthHeader(res));
   return new NextResponse(res.body, { status: res.status, headers });
 }

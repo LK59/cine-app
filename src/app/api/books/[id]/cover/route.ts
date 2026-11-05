@@ -4,6 +4,7 @@ import { bookIndex } from "@/lib/books/bookIndex";
 import { epubCover, googleCover } from "@/lib/books/covers";
 import { enrichOf } from "@/lib/books/googleBooks";
 import { config } from "@/lib/config";
+import { lengthHeader } from "@/lib/responseFraming";
 
 /**
  * La couverture d'un livre tirée de son EPUB (option, DECISIONS.md §127), quand Jellyfin n'en a pas —
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   return new NextResponse(new Uint8Array(image), {
     headers: {
       "Content-Type": "image/webp",
-      "Content-Length": String(image.byteLength),
+      ...lengthHeader(image.byteLength),
       "Cache-Control": pinned ? "private, max-age=31536000, immutable" : "private, max-age=3600",
       "X-Content-Type-Options": "nosniff",
     },
