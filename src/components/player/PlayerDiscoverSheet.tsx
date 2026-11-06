@@ -37,6 +37,13 @@ import { DesktopSheetBackdrop, SheetBackButton } from "@/components/cinema/Deskt
 import { TitleToggleRow, TitleToggleWide, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
 import { useWatchlistToggle } from "@/lib/useWatchlistToggle";
 
+/**
+ * Le fondu de la réponse au téléphone : celui de l'image de relais (300 ms, `STAND_IN_FADE_MS`), et non
+ * les 150 ms des lignes tardives d'une fiche déjà remplie — ici c'est toute la colonne qui arrive avec
+ * le visuel, et à 150 ms elle se lisait « d'un coup » (septième film).
+ */
+const ANSWER_FADE = "animate-fade-in [animation-duration:300ms]";
+
 const STATE_ICON: Record<PlayerRequestState, React.ElementType> = {
   unreleased: CalendarClock,
   processing: Clock,
@@ -261,7 +268,10 @@ export function PlayerDiscoverSheet({
         {data?.backdrop ? (
           <FadeInImg src={data.backdrop} alt="" data-sheet-photo="" className="absolute inset-0 h-full w-full object-cover" />
         ) : (
-          <div className="absolute inset-0 bg-surface" />
+          // Le fond uni qui tient la place du visuel : caché pendant le trajet (`data-sheet-settle`),
+          // sans quoi une bande sombre pleine largeur paraissait en haut de l'écran pendant que
+          // l'affiche volait encore au milieu (septième film) ; sous l'image de relais ensuite.
+          <div data-sheet-settle="" className="absolute inset-0 bg-surface" />
         )}
         <div data-sheet-veil="" className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
         <button
@@ -308,7 +318,7 @@ export function PlayerDiscoverSheet({
               )}
             </>
           ) : (
-          <div className={late.fade}>
+          <div className={late.fade ? ANSWER_FADE : ""}>
           <PhoneSheetTitle title={data.title} logoUrl={data.logo} />
 
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">

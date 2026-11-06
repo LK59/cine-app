@@ -43,6 +43,9 @@ describe("fiche découverte, téléphone — l'attente de la réponse", () => {
         <PlayerDiscoverSheet tmdbId={1263337} mediaType="movie" />
       </SWRConfig>
     );
+    // Le fond uni qui tient la place du visuel ne paraît qu'une fois la fiche posée : pendant le
+    // trajet, c'était une bande sombre pleine largeur en haut de l'écran (septième film).
+    expect(document.body.querySelector(".bg-surface")?.hasAttribute("data-sheet-settle")).toBe(true);
     const content = document.body.querySelector<HTMLElement>("[data-sheet-content]");
     // Le bloc que le trajet fait paraître existe dès le montage, avec ce que la carte savait.
     expect(content).not.toBeNull();

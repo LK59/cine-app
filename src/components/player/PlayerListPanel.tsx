@@ -1,5 +1,6 @@
 "use client";
 
+import { noteDiscoverPreview } from "@/lib/discoverPreview";
 import { useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { fetcher, nothingToShowYet } from "@/lib/swr";
@@ -144,13 +145,17 @@ export function PlayerListPanel({ leaving, replaced, fromTab }: { leaving?: bool
   // Et `openLibraryTitle` emporte l'onglet films/séries avec l'identifiant — c'est ce qui manquait :
   // une série ouverte depuis une liste consultée côté films ne se résolvait pas, donc rien ne
   // s'ouvrait et on retombait sur l'accueil.
-  function open(item: { type: "movie" | "series"; libraryId: number | null; tmdbId: number | null }) {
+  function open(item: { type: "movie" | "series"; libraryId: number | null; tmdbId: number | null; title?: string; year?: number | null }) {
     if (item.libraryId !== null) {
       openLibraryTitle(item.type, item.libraryId);
       return;
     }
     // Absent de la bibliothèque : sa fiche TMDB, où « Lire » est devenu « Demander ».
-    if (item.tmdbId) cinemaNavigate({ discover: item.tmdbId, discoverType: item.type });
+    if (item.tmdbId) {
+      // Ce que la carte sait déjà, pour l'attente de la fiche — voir `discoverPreview`.
+      if (item.title) noteDiscoverPreview(item.type, item.tmdbId, { title: item.title, year: item.year ?? null });
+      cinemaNavigate({ discover: item.tmdbId, discoverType: item.type });
+    }
   }
 
   const items: PlayerListItem[] = useMemo(() => {

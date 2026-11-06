@@ -1,5 +1,6 @@
 "use client";
 
+import { noteDiscoverPreview } from "@/lib/discoverPreview";
 import { useEffect, useState } from "react";
 import { Plus, Check, X, Loader2 } from "lucide-react";
 import { useSearchResults } from "@/lib/useSearchResults";
@@ -135,7 +136,12 @@ function AddRow({ result, already }: { result: UnifiedSearchResult; already: boo
   function open() {
     const libraryId = libraryTargetOf(result);
     if (libraryId !== null) openLibraryTitle(result.type === "series" ? "series" : "movie", libraryId);
-    else cinemaNavigate({ discover: result.tmdbId, discoverType: result.type === "series" ? "series" : "movie" });
+    else {
+      const type = result.type === "series" ? "series" : "movie";
+      // Ce que la carte sait déjà, pour l'attente de la fiche — voir `discoverPreview`.
+      noteDiscoverPreview(type, result.tmdbId, { title: result.title, year: result.year });
+      cinemaNavigate({ discover: result.tmdbId, discoverType: type });
+    }
   }
 
   return (

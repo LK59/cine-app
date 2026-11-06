@@ -1,5 +1,6 @@
 "use client";
 
+import { noteDiscoverPreview } from "@/lib/discoverPreview";
 import { memo, useMemo } from "react";
 import useSWR from "swr";
 import { cacheOnlyOptions, fetcher, MOVIES_CATALOGUE_KEY, playerBootstrapOptions } from "@/lib/swr";
@@ -182,6 +183,8 @@ export const CinemaCollectionRow = memo(function CinemaCollectionRow({
       else openLibraryTitle("movie", part.movie.radarrId);
       return;
     }
+    // Ce que la carte sait déjà, pour l'attente de la fiche — voir `discoverPreview`.
+    noteDiscoverPreview("movie", part.tmdbId, { title: part.title, year: null });
     cinemaNavigate({ discover: part.tmdbId, discoverType: "movie" });
   }
 

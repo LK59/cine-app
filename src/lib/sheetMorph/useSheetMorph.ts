@@ -516,27 +516,48 @@ function standInUntilLoaded(container: HTMLElement, standIn: string): void {
     backgroundSize: "cover",
     backgroundPosition: "center",
   } satisfies Partial<CSSStyleDeclaration>);
-  // Au-dessus du visuel, sous les voiles (ses frères suivants) ; sans visuel, en tête de la bannière —
-  // un visuel monté plus tard par React prend la place du fond uni, sous elle.
+  // Au-dessus du visuel, sous les voiles (ses frères suivants). Sans visuel, juste sous les voiles —
+  // au-dessus du fond uni qui tient la place du visuel absent : posée en tête de la bannière, sous
+  // lui, l'affiche disparaissait à l'arrivée, et la fiche découverte restait noire tout le temps de
+  // sa réponse (06/11/2026, septième film). Un visuel monté plus tard par React s'insère alors
+  // au-dessus d'elle : c'est lui qui paraît en fondu (`finish`).
   if (first) first.insertAdjacentElement("afterend", over);
-  else container.prepend(over);
+  else {
+    const veil = Array.from(container.children).find((el) => el.hasAttribute("data-sheet-veil")) ?? null;
+    container.insertBefore(over, veil);
+  }
+  /** Le visuel est-il au-dessus de l'image de relais (monté après elle) ? */
+  const isAbove = (img: HTMLElement) => !!(over.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING);
 
   let watched: HTMLImageElement | null = null;
   let done = false;
   const ready = (img: HTMLImageElement) => img.complete && img.naturalWidth > 0;
+  /**
+   * Le relais, une seule fois et une seule transition : le visuel **décodé** d'abord (chargé ne veut
+   * pas dire peint d'un coup), puis un fondu — celui de l'image de relais qui s'efface s'il est dessous,
+   * le sien qui paraît s'il est au-dessus. Le visuel monté au-dessus était rendu opaque d'un coup :
+   * l'affiche d'abord découverte une image, puis le vrai visuel, sans fondu (septième film).
+   */
   const finish = (img: HTMLImageElement) => {
     if (done) return;
     done = true;
     observer?.disconnect();
     watched?.removeEventListener("load", onLoad);
-    img.style.transition = "none";
-    img.style.opacity = "1";
-    if (!over.isConnected || typeof over.animate !== "function") {
-      over.remove();
-      return;
-    }
-    const anim = over.animate([{ opacity: 1 }, { opacity: 0 }], { duration: STAND_IN_FADE_MS, easing: "cubic-bezier(0.22, 1, 0.36, 1)", fill: "forwards" });
-    anim.onfinish = () => over.remove();
+    const above = isAbove(img);
+    const reveal = () => {
+      img.style.transition = "none";
+      img.style.opacity = "1";
+      img.style.visibility = "";
+      if (!over.isConnected || typeof over.animate !== "function") {
+        over.remove();
+        return;
+      }
+      const ease = { duration: STAND_IN_FADE_MS, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
+      const anim = above ? img.animate([{ opacity: 0 }, { opacity: 1 }], { ...ease, fill: "backwards" }) : over.animate([{ opacity: 1 }, { opacity: 0 }], { ...ease, fill: "forwards" });
+      anim.onfinish = () => over.remove();
+    };
+    if (typeof img.decode !== "function") return reveal();
+    void img.decode().then(reveal, reveal);
   };
   const onLoad = () => {
     if (watched && ready(watched)) finish(watched);
@@ -552,6 +573,9 @@ function standInUntilLoaded(container: HTMLElement, standIn: string): void {
       watched?.removeEventListener("load", onLoad);
       watched = img;
       watched?.addEventListener("load", onLoad);
+      // Monté au-dessus de l'image de relais : tenu caché jusqu'à son fondu, décodé — sans quoi son
+      // propre fondu de chargement (`FadeInImg`) le montrait par-dessus, à moitié peint.
+      if (img && isAbove(img)) img.style.visibility = "hidden";
     }
     if (img && ready(img)) finish(img);
   };

@@ -41,6 +41,7 @@ function Sheet({
   instantExit = false,
   swipe: withSwipe = false,
   onSwipeDismiss,
+  photo = true,
 }: {
   layout?: SheetLayout;
   leaving?: boolean;
@@ -51,6 +52,8 @@ function Sheet({
   swipe?: boolean;
   /** Ce que fait la fiche quand le geste la ferme (la vraie demande sa sortie). */
   onSwipeDismiss?: () => void;
+  /** Faux : pas encore de visuel (la fiche découverte avant sa réponse) — le fond uni tient sa place. */
+  photo?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
@@ -59,8 +62,12 @@ function Sheet({
   return createPortal(
     <div ref={rootRef} data-box="sheet" data-handles={String(morph.handlesEntry)} data-settled={String(morph.settled)} className="phone-sheet-frame" style={{ zIndex: 48, backgroundColor: "rgb(10, 10, 15)" }}>
       <div ref={bannerRef} data-box="banner" {...(withSwipe ? swipe.handlers : {})}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- la fiche de test n'a qu'une <img> nue, comme FadeInImg */}
-        <img data-sheet-photo="" src="https://img.test/backdrop.jpg" alt="" />
+        {photo ? (
+          // eslint-disable-next-line @next/next/no-img-element -- la fiche de test n'a qu'une <img> nue, comme FadeInImg
+          <img data-sheet-photo="" src="https://img.test/backdrop.jpg" alt="" />
+        ) : (
+          <div data-sheet-settle="" data-placeholder="" />
+        )}
         <div data-sheet-veil="" />
         <button type="button" data-sheet-glass="" aria-label="fermer">
           x
@@ -416,6 +423,57 @@ describe("le visuel de la fiche", () => {
     markLoaded(fresh);
     expect(fresh.style.opacity).toBe("1");
     expect((live(standIn)[0] as FakeAnimation).frames.map((f) => f.opacity)).toEqual([1, 0]);
+  });
+});
+
+/**
+ * La fiche découverte sans visuel avant sa réponse (06/11/2026, septième film) : une bande sombre en
+ * haut de l'écran pendant le trajet, puis l'affiche effacée à l'arrivée — un écran noir tout le temps
+ * de la réponse —, puis le visuel d'un coup, en deux images.
+ */
+describe("sans visuel au montage", () => {
+  it("le fond uni ne paraît pas pendant le trajet ; l'affiche reste sur la bannière jusqu'au visuel, qui paraît en un seul fondu", async () => {
+    press(addPoster().querySelector("img")!);
+    const { rerender } = render(<Sheet photo={false} />);
+    const placeholder = root()!.querySelector<HTMLElement>("[data-placeholder]")!;
+    // Pendant le trajet : le fond uni est caché (rien ne paraît en haut avant la fenêtre).
+    expect(placeholder.style.visibility).toBe("hidden");
+    await runOpen();
+    // Posée : l'affiche tient la bannière, au-dessus du fond uni et sous les voiles.
+    const banner = placeholder.parentElement!;
+    const standIn = banner.querySelector<HTMLElement>("[data-sheet-standin]")!;
+    expect(standIn).not.toBeNull();
+    expect(standIn.style.backgroundImage).toContain("poster.jpg");
+    const order = Array.from(banner.children);
+    expect(order.indexOf(standIn)).toBeGreaterThan(order.indexOf(placeholder));
+    expect(order.indexOf(standIn)).toBeLessThan(order.indexOf(banner.querySelector("[data-sheet-veil]")!));
+    // Toujours là bien plus tard : rien ne l'efface sans visuel.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(standIn.isConnected).toBe(true);
+    // La réponse : le visuel monte au-dessus de l'affiche, tenu caché tant qu'il n'est pas chargé.
+    rerender(<Sheet photo />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const photo = root()!.querySelector<HTMLImageElement>("[data-sheet-photo]")!;
+    expect(photo.style.visibility).toBe("hidden");
+    expect(standIn.isConnected).toBe(true);
+    const before = fake.created.length;
+    markLoaded(photo);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // Un seul fondu : le visuel paraît sur l'affiche, qui reste dessous jusqu'à la fin.
+    const fades = fake.created.slice(before);
+    expect(fades).toHaveLength(1);
+    expect(fades[0].target).toBe(photo);
+    expect(fades[0].frames.map((f) => f.opacity)).toEqual([0, 1]);
+    expect(photo.style.visibility).toBe("");
+    expect(standIn.isConnected).toBe(true);
+    act(() => fades[0].finish());
+    expect(standIn.isConnected).toBe(false);
   });
 });
 

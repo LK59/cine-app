@@ -1,5 +1,6 @@
 "use client";
 
+import { noteDiscoverPreview } from "@/lib/discoverPreview";
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import { catalogueTitles } from "@/lib/cinemaPayload";
@@ -364,7 +365,11 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
     // titre complet (voir `rememberSearch`).
     rememberOpened(entry.title);
     if (entry.libraryId !== null) openLibraryTitle(entry.kind, entry.libraryId);
-    else if (entry.tmdbId !== null) cinemaNavigate({ discover: entry.tmdbId, discoverType: entry.kind });
+    else if (entry.tmdbId !== null) {
+      // Ce que la carte sait déjà, pour l'attente de la fiche — voir `discoverPreview`.
+      noteDiscoverPreview(entry.kind, entry.tmdbId, { title: entry.title, year: entry.year });
+      cinemaNavigate({ discover: entry.tmdbId, discoverType: entry.kind });
+    }
   }
 
   const FILTERS: { key: Filter; label: string }[] = [

@@ -449,7 +449,8 @@ export function CinemaMobileDetail({
             className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
-          <div className="absolute inset-0 bg-surface" />
+          // Caché pendant le trajet, sous l'image de relais ensuite — voir la fiche découverte (`data-sheet-settle`).
+          <div data-sheet-settle="" className="absolute inset-0 bg-surface" />
         )}
         <div data-sheet-veil="" className="absolute inset-0 bg-linear-to-t from-ink via-ink/20 to-transparent" />
         <button

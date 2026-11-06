@@ -2546,6 +2546,27 @@ L'accueil du bureau porte `data-sheet-home`.
   bibliothèque, logo) ; Jellyseerr attend seulement les tags bloqués, la progression du
   téléchargement la bibliothèque — §54 inchangé, un titre caché n'est ni demandé, ni possédé, ni en
   téléchargement. La fiche personne entre en montant, sa roue dans la carte : pas le même cas.
+  **Septième film (06/11/2026)**, « bien mais pas parfait » :
+  - *une bande sombre en haut de l'écran pendant le trajet* : le fond uni qui tient la place d'un
+    visuel absent (`bg-surface`) n'était ni visuel ni voile, donc peint à sa place dès le montage. Il
+    porte `data-sheet-settle` (caché pendant le trajet) — fiche découverte, fiche de bibliothèque et
+    fiche hors ligne du téléphone ;
+  - *l'affiche effacée à l'arrivée, un écran noir pendant toute l'attente* : sans visuel, l'image de
+    relais était posée en tête de la bannière, **sous** ce fond uni. Elle se pose désormais juste sous
+    les voiles (`standInUntilLoaded`), au-dessus de lui ;
+  - *le visuel d'un coup, en deux images* : monté par React au-dessus de l'image de relais, il était
+    rendu opaque d'un coup. Un visuel monté au-dessus est tenu caché jusqu'à son relais, et le relais
+    décode d'abord (`img.decode()`) puis fait **un** fondu — celui de l'image de relais s'il est dessous,
+    le sien s'il est au-dessus ; la colonne de la réponse se dépose en 300 ms, le même temps ;
+  - *~1,5 s d'attente à la première ouverture* : le logo. Un titre jamais vu se le voit choisir en
+    téléchargeant et en mesurant chaque logo candidat, langue après langue (`pickLogosByLang`,
+    `logoLook`) — TMDB répond en ~270 ms, Jellyseerr en ~100 ms. La route ne l'attend plus que
+    `TITLE_ART_WAIT_MS` (150 ms) : lu sur disque il est là, calculé il continue en arrière-plan pour la
+    prochaine ouverture, et la fiche écrit le titre en attendant.
+  Toutes les ouvertures d'une fiche découverte notent ce que la carte savait (`noteDiscoverPreview`) :
+  rangées de découverte, recherche, filmographie, saga, Ma liste, ajout à une liste.
+  Tests : `sheetMorph-hook.test.tsx` (« sans visuel au montage »), `discover-sheet-phone-wait.test.tsx`,
+  `player-routes.test.ts` (« un logo qui se calcule ne retient pas la réponse »).
 - **La fiche personne** garde sa montée simple : il n'y a pas d'affiche à faire devenir une bannière.
 - **Le banc** garde sa scène simulée, l'ancien moteur (`clip`) et les durées fixes pour comparer,
   mais joue les mêmes fonctions (`src/lib/sheetMorph/motion.ts`, `dom.ts`).

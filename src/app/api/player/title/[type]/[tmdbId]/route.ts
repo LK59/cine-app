@@ -125,7 +125,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
     const downloadingP = Promise.all([hiddenP, libraryIdP]).then(([hidden, libraryId]) =>
       libraryId === null && !hidden ? titleDownloadProgress(type, tmdbId) : null
     );
-    const artP = titleArt(type, tmdbId);
+    // Le logo est un ornement : il n'attend pas plus que `TITLE_ART_WAIT_MS` — voir `titleArtWithin`.
+    const artP = titleArtWithin(type, tmdbId, TITLE_ART_WAIT_MS);
 
     if (type === "movie") {
       const [detail, media, libraryId, downloading, art] = await Promise.all([
@@ -188,6 +189,26 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
       logo: pickLogo(art, "series", tmdbId, req, { shown: detail.name, original: detail.original_name, originalLanguage: detail.original_language }),
     });
   }, "player-title");
+}
+
+/**
+ * Ce qu'un logo peut faire attendre la réponse.
+ *
+ * Mesuré le 06/11/2026 (septième film) : la fiche découverte d'un titre jamais vu attendait ~1,5 s,
+ * quand TMDB répond en ~270 ms et Jellyseerr en ~100 ms. Le reste était le logo : un titre que le cache
+ * ne connaît pas encore se voit choisir le sien en téléchargeant et en mesurant chaque logo candidat,
+ * langue après langue (`pickLogosByLang`, `logoLook`). Lu sur disque, il est là en quelques
+ * millisecondes ; calculé, il continue en arrière-plan et sera là à la prochaine ouverture — la fiche
+ * écrit le titre en attendant (`PhoneSheetTitle`, `CinemaDetailTitle`).
+ */
+const TITLE_ART_WAIT_MS = 150;
+
+function titleArtWithin(type: "movie" | "series", tmdbId: number, ms: number): Promise<TitleArt | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((ok) => {
+    timer = setTimeout(() => ok(null), ms);
+  });
+  return Promise.race([titleArt(type, tmdbId), late]).finally(() => clearTimeout(timer));
 }
 
 /**

@@ -77,9 +77,13 @@ vi.mock("@/lib/db", () => ({ watchlistDb, pendingRequestDb: { add: vi.fn() } }))
 const mockHidden = vi.fn(async (_jfId?: string | null) => new Set<string>());
 vi.mock("@/lib/blockedTags", () => ({ hiddenTmdbKeysFor: (jfId?: string | null) => mockHidden(jfId) }));
 // Le logo de la fiche découverte (14/10/2026) : la même entrée de cache que le catalogue.
+const artState = vi.hoisted(() => ({ delayMs: 0 }));
 vi.mock("@/lib/title-art", async (importOriginal) => ({
   namesWithDetail: (await importOriginal<typeof import("@/lib/title-art")>()).namesWithDetail,
-  getTitleArt: async () => ({ logoUrl: "https://image.tmdb.org/t/p/w500/logo.png", posterTextlessUrl: null, posterByLang: {} }),
+  getTitleArt: async () => {
+    if (artState.delayMs) await new Promise((ok) => setTimeout(ok, artState.delayMs));
+    return { logoUrl: "https://image.tmdb.org/t/p/w500/logo.png", posterTextlessUrl: null, posterByLang: {} };
+  },
   logoForLocale: (art: { logoUrl: string | null }) => art.logoUrl,
   logoForScreen: (art: { logoUrl: string | null }) => art.logoUrl,
 }));
@@ -264,6 +268,39 @@ describe("GET /api/player/title — les appels indépendants partent ensemble", 
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // 06/11/2026, septième film : ~1,5 s pour un titre jamais vu — le logo, choisi en téléchargeant et
+  // mesurant chaque candidat. Un ornement n'attend pas : la réponse part sans lui, il sera là ensuite.
+  it("un logo qui se calcule ne retient pas la réponse", async () => {
+    vi.useFakeTimers();
+    artState.delayMs = 1000;
+    try {
+      tmdbClient.getMovie.mockResolvedValueOnce({ title: "Vice-versa 2", release_date: "2024-06-14", overview: "", genres: [], runtime: 96, credits: { cast: [] } });
+      jellyseerr.getMovieMedia.mockResolvedValueOnce({});
+      const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
+      let done = false;
+      const pending = GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "1022789" }) }).then((r) => {
+        done = true;
+        return r;
+      });
+      await vi.advanceTimersByTimeAsync(200);
+      expect(done).toBe(true);
+      const body = await (await pending).json();
+      expect(body.title).toBe("Vice-versa 2");
+      expect(body.logo).toBeNull();
+    } finally {
+      artState.delayMs = 0;
+      vi.useRealTimers();
+    }
+  });
+
+  it("un logo déjà là arrive avec la réponse", async () => {
+    tmdbClient.getMovie.mockResolvedValueOnce({ title: "Matrix", release_date: "1999-03-31", overview: "", genres: [], runtime: 136, credits: { cast: [] } });
+    jellyseerr.getMovieMedia.mockResolvedValueOnce({});
+    const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
+    const body = await (await GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "603" }) })).json();
+    expect(body.logo).toBe("https://image.tmdb.org/t/p/w500/logo.png");
   });
 
   it("un titre caché reste inconnu, même interrogé en parallèle (§54)", async () => {

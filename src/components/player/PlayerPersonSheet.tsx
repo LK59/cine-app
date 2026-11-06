@@ -1,5 +1,6 @@
 "use client";
 
+import { noteDiscoverPreview } from "@/lib/discoverPreview";
 import { departmentLabel } from "@/lib/personDepartment";
 import { liquidButtonRef } from "@/lib/liquidGlass/liquid";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -219,7 +220,11 @@ function openCredit(c: PersonCredit) {
      referme ce qui la couvre ; la fiche découverte ne passe pas par elle, d'où `person: null`.
      L'onglet suit le type, sans quoi une série ouverte depuis un acteur ne se résout pas. */
   if (c.libraryId !== null) openLibraryTitle(type, c.libraryId);
-  else cinemaNavigate({ discover: c.tmdbId, discoverType: type, person: null });
+  else {
+    // Ce que la carte sait déjà, pour l'attente de la fiche — voir `discoverPreview`.
+    noteDiscoverPreview(type, c.tmdbId, { title: c.title, year: c.year });
+    cinemaNavigate({ discover: c.tmdbId, discoverType: type, person: null });
+  }
 }
 
 function creditCard(c: PersonCredit) {
