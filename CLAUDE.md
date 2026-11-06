@@ -561,7 +561,7 @@ so nobody has to take the file on trust. A version change ships only with `ffmpe
 run before and after on every TrueHD and PCE track: every fingerprint that moves is explained against
 `ffmpeg astats`, or the new files stay out. It runs in a Web Worker since 2026-11-06 (`truehdWorker.mjs`,
 plain JavaScript run as-is: the build copies it byte for byte into `static/media` and the page starts it
-from a one-line `blob:` module that imports the copy — DECISIONS §131), on the main thread only when no
+from a one-line `blob:` module that imports the copy — DECISIONS §132), on the main thread only when no
 worker can be created (a quarter-second batch at a time with a real yield between batches; the `start`
 line says which, `truehdThread`), and in Node, where `truehd-bench.spec.ts` compares it with ffmpeg
 channel by channel and `ffmpeg-wasm-regress-bench.spec.ts` with `FFW_WORKER=1` proves the worker

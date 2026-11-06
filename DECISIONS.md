@@ -8256,3 +8256,51 @@ build, par `tools/compression-reelle/run.sh` : `next build`, `boot.mjs` sur la s
 jetable, faux Jellyfin, session créée par le code de l'application ; il échoue sur l'arbre du 05/11 construit
 avec 16.4.5 (JSON illisible, liste HLS sans codage, 206 sans longueur) et passe avec ce changement. À lancer
 avant toute montée de Next.
+
+## 132. Le TrueHD décodé dans un worker, par le même code que le fil principal (06/11/2026)
+
+**Règle.** Le décodage d'un lot de TrueHD n'existe qu'une fois : `decodeBlocks` (et `closeDecoder`),
+dans `src/lib/webcodecs/truehd/truehdWorker.mjs`. Le worker exécute ce fichier tel quel ; le fil
+principal l'importe. Un worker par page, partagé par les décodeurs ouverts, terminé 10 s après la
+fermeture du dernier ; s'il ne peut pas naître, le décodeur s'ouvre sur le fil principal comme avant, et
+la page s'en souvient.
+
+**Porteur.** `truehdWorker.mjs` (`decodeBlocks`, `closeDecoder`, `serveTrueHd`) ;
+`truehdDecoder.ts` (`openTrueHdDecoder` : le worker, ses transferts, son repli ; `absoluteHref`).
+
+**Appelants.** `TrueHdCore` (fil principal, Node) et `serveTrueHd` (worker) pour le décodage ;
+`truehdAudio.ts` pour `openTrueHdDecoder` ; `softwareAudio.ts` → `takeTrueHdThread` →
+`trueHdThreadFacts` (`nativeHostHelpers.ts`) pour la ligne `start` (`truehdThread`, `truehdWorkerError`).
+
+**Tests.** `webcodecs-truehd-worker.test.ts` (au bit près contre le fil principal, saut et blocs refusés
+compris ; ordre des réponses en vol ; blocs du cache jamais détachés ; un seul worker, terminé ; replis :
+constructeur refusé, worker qui ne démarre pas, muet 20 s, perdu en cours de film ; adresses complètes ;
+forme du lancement). Bancs : `ffmpeg-wasm-regress-bench.spec.ts` et `truehd-bench.spec.ts` avec
+`FFW_WORKER=1` / `THD_WORKER=1` (`src/__tests__/helpers/nodeWebWorker.ts` exécute le fichier du navigateur
+dans un fil `worker_threads`, le module en ligne `blob:` compris).
+
+**Ce qui diffère exprès.** Sur le fil principal, chaque lot est suivi d'un retour au navigateur
+(`yieldToBrowser`) ; dans le worker, la réponse est elle-même une tâche, rien à céder. Les lots gardent
+leur quart de seconde des deux côtés : les morceaux livrés (`contiguousAudio`) restent les mêmes.
+
+**Pourquoi un module en ligne et pas `new Worker(new URL(...))`.** Turbopack (Next 16.4.3) reconnaît
+cette forme, même au travers d'une variable, et en fait un worker à lui : le fichier recompilé dans ses
+morceaux, `importScripts` dans un worker classique (`type: "module"` retiré), modules évalués après une
+attente. Lu dans `.next/static` le 06/11/2026. Le module en ligne importe la copie conforme que le build
+pose dans `static/media` (SHA-256 identique à la source, vérifié). Et `new URL(..., import.meta.url)`
+devient chez Turbopack un objet au `href` relatif : sans `absoluteHref`, un module `blob:` ne trouve
+rien — premier essai Firefox sur l'instance du banc : repli sur le fil principal, noté
+`truehdWorkerError: "le worker n'a pas démarré"`, ce qui a aussi prouvé le repli.
+
+**Mesuré.** Identité : ffmpeg-wasm-regress-bench sur les 59 fichiers TrueHD de la bibliothèque (68 pistes, 272 fenêtres), chaque
+fenêtre de 60 s (0 s, 40 %, 75 %, décodeur neuf à 40 %) au même SHA-256 sur les deux chemins ;
+truehd-bench contre `ffmpeg astats` (FFmpeg de Jellyfin) identique à 0,01 dB, worker ou non (Top Gun
+Maverick 7.1, Braveheart 7.1, Gattaca 5.1, à 600 s) ; dans Chromium 153, Firefox 155 et WebKit 26.6,
+sous la CSP de production, le worker tel que la page le lance rend sur la fixture stéréo l'empreinte de
+Node. Coût retiré du fil principal : le décodage seul prend dans Node 1,07–1,10 s par minute de 7.1
+Atmos (4,5 ms par lot, 9 au pire) et 0,67 s par minute de 5.1, sur le serveur — plusieurs fois plus
+sur un téléphone. Dans Chromium (The Duchess, TrueHD 5.1 → Opus, 3 × 60 s par build) : `TaskDuration`
+du fil principal 3,92 s → 3,37 s par minute (−14 %), sonde de retard 58,7 → 49,2 ms/s. Dans Firefox
+headless (Braveheart 4K, The Duchess), aucune différence lisible : ~180–200 ms/s et ~50–60 tâches de
+plus de 50 ms par minute des deux côtés, le fil principal de Firefox sans GPU étant occupé par autre
+chose. Sur iPhone, non mesuré ici.

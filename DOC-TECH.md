@@ -1397,11 +1397,11 @@ fallback, and Node for the tests and benches), and the worker runs that very fil
   film without TrueHD.
 - **Proof.** `ffmpeg-wasm-regress-bench.spec.ts` with `FFW_WORKER=1` runs the browser's worker file in
   a `worker_threads` thread (`src/__tests__/helpers/nodeWebWorker.ts`, which also runs the page's
-  `blob:` bootstrap): on 59 TrueHD files, every window (from 0 s, two seeks, a fresh decoder at 40 %)
+  `blob:` bootstrap): on the 59 TrueHD files of the library (68 tracks, 272 windows of 60 s: from 0 s, two seeks, a fresh decoder at 40 %), every window
   has the same SHA-256 as the main thread. In Chromium 153, Firefox 155 and WebKit 26.6, under the
   production CSP, the worker as the page starts it decodes the repository's stereo fixture to the same
   SHA-256 as Node. `truehd-bench.spec.ts` takes `THD_WORKER=1` too. Main-thread cost: see
-  DECISIONS §131.
+  DECISIONS §132.
 
 **Pinned FFmpeg: 7.1.5 since 2026-10-14** (7.1.2 before), for both modules — the TrueHD one
 (`truehd-wasm.mjs`, 465 KB / 193 KB gzipped, SHA-256
