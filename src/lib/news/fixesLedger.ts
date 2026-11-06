@@ -1083,6 +1083,18 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
         de: "Ein beendeter Freigabelink, dessen Konto von Hand gelöscht wurde, schreibt nicht mehr jede Minute einen Fehler ins Protokoll: Er wird einfach als gelöscht vermerkt.",
       },
     ],
+  },  {
+    version: "10.13.21",
+    page: "10.5",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Les films au son Dolby TrueHD sont décodés en arrière-plan : les commandes et l'image restent plus fluides, surtout sur iPhone.",
+        en: "Films with Dolby TrueHD sound are decoded in the background: the controls and the picture stay smoother, especially on iPhone.",
+        es: "Las películas con sonido Dolby TrueHD se decodifican en segundo plano: los controles y la imagen van más fluidos, sobre todo en iPhone.",
+        de: "Filme mit Dolby-TrueHD-Ton werden im Hintergrund dekodiert: Bedienelemente und Bild bleiben flüssiger, besonders auf dem iPhone.",
+      },
+    ],
   },
 ];
 
