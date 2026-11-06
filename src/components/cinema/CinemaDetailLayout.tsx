@@ -1,7 +1,7 @@
 "use client";
 
 import { useDelayedClose } from "@/lib/useDelayedClose";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
@@ -363,8 +363,12 @@ const GRIP_RETURN_MS = 280;
  * **Seulement au doigt.** À la souris, tirer une fiche vers le bas ne veut rien dire, et la bande
  * mangerait des clics au profit d'un geste que personne ne ferait.
  */
-export function useSheetGrip(onDismiss: () => void, enabled: boolean) {
-  const swipe = useSwipeToDismiss(onDismiss, { addressed: true });
+export function useSheetGrip(onDismiss: () => void, enabled: boolean, card?: RefObject<HTMLElement | null>) {
+  // La fiche suit le doigt sans rendu React par mouvement (`card`, 06/11/2026) : c'est toute la fiche
+  // du bureau qui se redessinait à chaque `pointermove`. Les écouteurs de toucher de la bande sont
+  // posés dès son montage (`handle`).
+  const gripRef = useRef<HTMLDivElement>(null);
+  const swipe = useSwipeToDismiss(onDismiss, { addressed: true, card, handle: enabled ? gripRef : undefined });
   /**
    * Le temps du retour, le style reste posé.
    *
@@ -400,6 +404,7 @@ export function useSheetGrip(onDismiss: () => void, enabled: boolean) {
       : undefined,
     grip: enabled ? (
       <div
+        ref={gripRef}
         {...swipe.handlers}
         aria-hidden
         className="absolute inset-x-0 top-0 z-10 flex h-16 items-center justify-center"

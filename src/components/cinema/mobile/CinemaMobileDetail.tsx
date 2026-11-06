@@ -16,7 +16,7 @@ import { arrivedByBack, markSheetLeaving, useSheetBehind, useRouteBehind } from 
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
 import { useWatchlistToggle } from "@/lib/useWatchlistToggle";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
-import { sheetMotionClass, phoneSheetCorner, phoneSheetShadow } from "@/lib/sheetMotion";
+import { sheetMotionClass, phoneSheetCorner, phoneSheetFollow, phoneSheetShadow } from "@/lib/sheetMotion";
 import { useSheetMorph } from "@/lib/sheetMorph/useSheetMorph";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabledState } from "@/lib/usePlayerEnabled";
@@ -141,9 +141,8 @@ export function CinemaMobileDetail({
     if (closing) markSheetLeaving();
   }, [closing]);
   const similar = useCinemaSimilar(item, mediaType);
-  // Grab the banner and pull the sheet away — see the hook. Only the artwork above the title is
-  // a handle; everything from the Lire button down scrolls as usual.
-  const swipe = useSwipeToDismiss(requestClose, { addressed: true });
+  // Only the artwork above the title is a handle for the swipe (declared below, with the refs it
+  // drives); everything from the Lire button down scrolls as usual.
   /**
    * Le geste liquide des boutons de la fiche (DECISIONS.md §45, 04/10/2026), par délégation.
    *
@@ -164,6 +163,9 @@ export function CinemaMobileDetail({
    * (DECISIONS.md §61) — la même décision que les fiches du bureau et la fiche TMDB.
    */
   const bannerRef = useRef<HTMLDivElement>(null);
+  // Grab the banner and pull the sheet away — see the hook. The card follows the finger without a
+  // render per move (`card`), and the banner's touch listeners are there from mount (`handle`).
+  const swipe = useSwipeToDismiss(requestClose, { addressed: true, card: sheetRef, handle: inert ? undefined : bannerRef, follow: phoneSheetFollow });
   const morph = useSheetMorph({
     layout: "phone",
     rootRef: sheetRef,

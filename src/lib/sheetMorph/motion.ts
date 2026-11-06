@@ -110,9 +110,26 @@ export const CONTENT_OUT_MS = 100;
  * filmé à 60 i/s montrait le texte de la fiche resté pleine taille au-dessus des rangées pendant que
  * la carte rétrécissait déjà, puis la croix seule, à côté de l'affiche posée (Mr. Robot, 06/11/2026).
  * Indexé sur `q`, l'effacement suit la carte quelle que soit son allure, et finit avant elle.
+ *
+ * **Puis le contenu part avec la carte** (second film, 06/11/2026, choix de Louis). Immobile et
+ * effacé en « ease-in », il restait opaque pendant que la fenêtre le quittait : deux à quatre images
+ * du grand logo de « her » et de sa ligne d'infos pleine taille au-dessus des rangées, la carte déjà
+ * dans l'affiche. Il est maintenant emporté avec le coin haut gauche de la fenêtre, à l'échelle de sa
+ * largeur (`rideTrack`, useSheetMorph.ts), et effacé en tête du trajet (`fadeOutEarly`) : 0,25
+ * d'opacité au quart du chemin, rien à mi-chemin (`CONTENT_OUT_Q`). La croix et le partage gardent
+ * leur effacement à 90 % : ils sont petits et posés dans le coin, ils peuvent accompagner la carte.
  */
-export const CONTENT_OUT_Q = 0.7;
+export const CONTENT_OUT_Q = 0.5;
 export const GLASS_OUT_Q = 0.9;
+/**
+ * L'effacement en tête du trajet, depuis `from` : `(1 − q / until)²`, nul dès que `q` atteint `until`.
+ * Le contenu de la copie, emporté avec la carte (06/11/2026, second film) : déjà au quart à 25 % du
+ * chemin, parti à mi-chemin.
+ */
+export function fadeOutEarly(from: number, q: number, until: number): number {
+  const t = 1 - clamp(q / until, 0, 1);
+  return from * t * t;
+}
 /** L'opacité d'un effacement indexé sur le trajet, depuis `from` : nulle dès que `q` atteint `until`. */
 export function fadeOutAt(from: number, q: number, until: number): number {
   const t = clamp(q / until, 0, 1);

@@ -339,3 +339,79 @@ describe("useSwipeToDismiss — l'adresse l'emporte", () => {
     }
   });
 });
+
+/**
+ * La carte menée sans React (option `card`, 06/11/2026) : filmée à 60 i/s, elle ne suivait le doigt
+ * qu'une image sur deux — chaque mouvement redessinait toute la fiche.
+ */
+describe("la carte suit le doigt sans rendu par mouvement", () => {
+  function setup(follow = vi.fn()) {
+    const scroller = document.createElement("div");
+    scroller.style.overflowY = "auto";
+    scroller.style.overscrollBehaviorY = "contain";
+    const card = document.createElement("div");
+    const handle = document.createElement("div");
+    const cross = document.createElement("button");
+    handle.appendChild(cross);
+    card.appendChild(handle);
+    scroller.appendChild(card);
+    document.body.appendChild(scroller);
+    let renders = 0;
+    const cardRef = { current: card };
+    const handleRef = { current: handle };
+    const hook = renderHook(() => {
+      renders++;
+      return useSwipeToDismiss(vi.fn(), { card: cardRef, handle: handleRef, follow });
+    });
+    const at = (clientY: number) => ({ ...pointer(clientY), currentTarget: handle }) as unknown as React.PointerEvent;
+    return { scroller, card, handle, cross, hook, at, renders: () => renders, follow };
+  }
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("déplace la carte elle-même, sans un seul rendu entre l'appui et le relâché", () => {
+    const { card, hook, at, renders, follow } = setup();
+    act(() => hook.result.current.handlers.onPointerDown(at(100)));
+    const afterPress = renders();
+    act(() => hook.result.current.handlers.onPointerMove(at(100)));
+    for (let y = 110; y <= 190; y += 10) act(() => hook.result.current.handlers.onPointerMove(at(y)));
+    expect(card.style.transform).toBe("translateY(90px)");
+    expect(follow).toHaveBeenLastCalledWith(90, card);
+    expect(renders()).toBe(afterPress);
+    expect(hook.result.current.offset).toBe(0);
+  });
+
+  it("revient en place en écrivant le zéro lui-même — un `offset` resté à 0 ne se réécrirait pas", () => {
+    const { card, hook, at, follow } = setup();
+    act(() => hook.result.current.handlers.onPointerDown(at(100)));
+    act(() => hook.result.current.handlers.onPointerMove(at(100)));
+    act(() => hook.result.current.handlers.onPointerMove(at(140)));
+    expect(card.style.transform).toBe("translateY(40px)");
+    vi.spyOn(performance, "now").mockReturnValue(performance.now() + 5000);
+    act(() => hook.result.current.handlers.onPointerUp(at(140)));
+    expect(hook.result.current.dragging).toBe(false);
+    expect(card.style.transform).toBe("translateY(0px)");
+    expect(follow).toHaveBeenLastCalledWith(0, card);
+  });
+
+  it("refuse le défilement natif dès le `touchstart`, avec des écouteurs posés au montage", () => {
+    const { scroller, handle, cross, hook } = setup();
+    expect(hook.result.current.dragging).toBe(false);
+    // Aucun appui encore : le doigt se pose sur la poignée.
+    handle.dispatchEvent(new TouchEvent("touchstart", { bubbles: true }));
+    expect(scroller.style.overscrollBehaviorY).toBe("none");
+    const move = new TouchEvent("touchmove", { cancelable: true, bubbles: true });
+    handle.dispatchEvent(move);
+    expect(move.defaultPrevented).toBe(true);
+    handle.dispatchEvent(new TouchEvent("touchend", { bubbles: true }));
+    expect(scroller.style.overscrollBehaviorY).toBe("contain");
+    // La croix, dans la poignée, n'est pas un geste.
+    cross.dispatchEvent(new TouchEvent("touchstart", { bubbles: true }));
+    const onCross = new TouchEvent("touchmove", { cancelable: true, bubbles: true });
+    cross.dispatchEvent(onCross);
+    expect(onCross.defaultPrevented).toBe(false);
+    expect(scroller.style.overscrollBehaviorY).toBe("contain");
+  });
+});

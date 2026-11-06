@@ -119,7 +119,9 @@ describe("la sortie des fiches TMDB n'a qu'un seul maître", () => {
     // Le geste aboutit à la fermeture du parent — directement, ou décalée de deux images pour
     // que le glissement démarre avant que l'accueil se redessine (fiche personne, 23/09/2026).
     // Décalée, jamais retenue : aucune minuterie, rien qui garde la fiche montée plus longtemps.
-    expect(src).toMatch(/useSwipeToDismiss\((requestClose|closeAfterSlideStarts), \{ addressed: true \}\)/);
+    // (Les options qui suivent `addressed` — la carte et la poignée menées sans React, 06/11/2026 — ne
+    // changent rien à ce maître-là.)
+    expect(src).toMatch(/useSwipeToDismiss\((requestClose|closeAfterSlideStarts), \{ addressed: true[,}]/);
     if (src.includes("useSwipeToDismiss(closeAfterSlideStarts)")) {
       expect(src).toMatch(
         /const closeAfterSlideStarts = useCallback\(\(\) => \{\s*requestAnimationFrame\(\(\) => requestAnimationFrame\(\(\) => requestClose\(\)\)\);\s*\}, \[requestClose\]\);/

@@ -31,6 +31,7 @@ import {
   collapseCardBody,
   coverTf,
   fadeOutAt,
+  fadeOutEarly,
   lerp,
   lerpBox,
   lerpCorners,
@@ -433,15 +434,36 @@ function glassRide(
     }
     wrapper.appendChild(el);
   });
-  const track = progressTrack(samples, duration, GLASS_OUT_Q, (q) => {
+  const track = rideTrack(poseAt, samples, duration, "right", GLASS_OUT_Q, (q) => fadeOutAt(1, q, GLASS_OUT_Q));
+  return Array.from(wrappers.values(), (wrapper) => ({ wrapper, frames: track.frames, duration: track.duration }));
+}
+
+/**
+ * Une piste qui emporte un élément de la copie avec la fenêtre : translaté avec un coin du haut de la
+ * fenêtre (`anchor`), mis à l'échelle de sa largeur autour de ce coin, et effacé selon `opacityAt` —
+ * sur les poses et les instants de la fenêtre, coupée quand le trajet atteint `until`. L'élément
+ * animé prend pour `transform-origin` le coin de départ, exprimé dans sa propre boîte (`originIn`).
+ */
+function rideTrack(
+  poseAt: (q: number) => Pose,
+  samples: Sample[],
+  duration: number,
+  anchor: "left" | "right",
+  until: number,
+  opacityAt: (q: number) => number
+): { frames: Keyframe[]; duration: number; originIn: (box: Box) => string } {
+  const c0 = poseAt(0).box;
+  const cornerX = (b: Box) => (anchor === "right" ? b.x + b.w : b.x);
+  const x0 = cornerX(c0);
+  const track = progressTrack(samples, duration, until, (q) => {
     const b = poseAt(q).box;
     const s = b.w / Math.max(1, c0.w);
     return {
-      transform: `translate(${(b.x + b.w - corner0.x).toFixed(2)}px, ${(b.y - corner0.y).toFixed(2)}px) scale(${s.toFixed(5)})`,
-      opacity: fadeOutAt(1, q, GLASS_OUT_Q),
+      transform: `translate(${(cornerX(b) - x0).toFixed(2)}px, ${(b.y - c0.y).toFixed(2)}px) scale(${s.toFixed(5)})`,
+      opacity: opacityAt(q),
     };
   });
-  return Array.from(wrappers.values(), (wrapper) => ({ wrapper, frames: track.frames, duration: track.duration }));
+  return { ...track, originIn: (box) => `${(x0 - box.x).toFixed(2)}px ${(c0.y - box.y).toFixed(2)}px` };
 }
 
 /** Le fondu du relais d'affiche vers le vrai visuel : assez long pour se voir comme un fondu, pas comme une attente. */
@@ -1007,7 +1029,10 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     const cardFrom = translateYOf(getComputedStyle(root).transform);
     const rootOpacity = opacityNow(root);
     const contentSel = "[data-sheet-content]";
-    const contentNow = Array.from(root.querySelectorAll<HTMLElement>(contentSel)).map((el) => opacityNow(el));
+    const contentEls = Array.from(root.querySelectorAll<HTMLElement>(contentSel));
+    const contentNow = contentEls.map((el) => opacityNow(el));
+    // Leurs boîtes, lues avant toute écriture : la copie les emporte avec la fenêtre (`rideTrack`).
+    const contentBox = phone ? contentEls.map((el) => boxOf(el)) : [];
     // La croix (et le partage) du téléphone : son opacité, et la boîte de son parent — c'est lui que
     // la copie emporte avec le coin de la carte (`glassRide`).
     const glassEls = phone ? Array.from(root.querySelectorAll<HTMLElement>("[data-sheet-glass]")) : [];
@@ -1182,18 +1207,22 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     const ghost = trackAnims(w, poseAt, motion, base, stage, samples);
     const riders: HTMLElement[] = [];
     if (phone) {
-      // Le contenu s'efface sur le trajet (`CONTENT_OUT_Q`), depuis où il en est, aux instants mêmes
-      // de la fenêtre : jamais après elle. Il ne bouge pas — la carte qui rétrécit est dans la
-      // fenêtre, dessous. Sur un plancher de 100 ms, une fermeture d'un jet le laissait pleine
-      // taille au-dessus des rangées pendant que la carte rétrécissait déjà (06/11/2026).
+      // Le contenu part avec la carte (choix de Louis, 06/11/2026, second film) : emporté avec le coin
+      // haut gauche de la fenêtre et rétréci à sa largeur, il s'efface en tête du trajet
+      // (`fadeOutEarly`, parti à mi-chemin), aux instants mêmes de la fenêtre — jamais après elle.
+      // Immobile et effacé en « ease-in » sur 70 % du chemin (10.13.23), il restait encore deux à
+      // quatre images pleine taille au-dessus des rangées, la carte déjà dans l'affiche (« her » à
+      // 8,7 s, Mr. Robot à 10,3 s). Une animation par bloc de contenu — un seul dans chaque fiche.
       copyContent.forEach((el, i) => {
         const from = contentNow[i] ?? 1;
-        if (!(from > 0)) {
+        const box = contentBox[i];
+        if (!(from > 0) || !box) {
           others.push(paused(el.animate([{ opacity: 0 }, { opacity: 0 }], { duration: 1, fill: "both" })));
           return;
         }
-        const track = progressTrack(samples, d, CONTENT_OUT_Q, (q) => ({ opacity: fadeOutAt(from, q, CONTENT_OUT_Q) }));
-        others.push(paused(el.animate(track.frames, LINEAR(track.duration))));
+        const ride = rideTrack(poseAt, samples, d, "left", CONTENT_OUT_Q, (q) => fadeOutEarly(from, q, CONTENT_OUT_Q));
+        el.style.transformOrigin = ride.originIn(box);
+        others.push(paused(el.animate(ride.frames, LINEAR(ride.duration))));
       });
       // La croix et le partage voyagent avec le coin haut droit de la carte, rétrécis comme elle, et
       // s'effacent en route (`GLASS_OUT_Q`) : restés à leur place, ils demeuraient seuls à côté de
@@ -1209,8 +1238,16 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
       // sur le trajet comme au téléphone (`CONTENT_OUT_Q`), et non plus sur 100 ms d'horloge : un
       // retour lancé au doigt sur l'iPad (`flickResponse`) laissait sinon la colonne et ses boutons
       // en place, encore visibles, quand l'image avait déjà presque rejoint l'affiche.
-      const track = progressTrack(samples, d, CONTENT_OUT_Q, (q) => ({ opacity: fadeOutAt(rootOpacity, q, CONTENT_OUT_Q) }));
-      others.push(paused(copy.animate(track.frames, LINEAR(track.duration))));
+      // Et, comme au téléphone, elle part avec l'image : emportée avec le coin haut gauche du visuel,
+      // rétrécie à sa largeur, effacée en tête du trajet.
+      // La copie tirée par la poignée garde son décalage (`translateY`) devant le trajet : l'animation
+      // remplace sa transformation posée.
+      const ride = rideTrack(poseAt, samples, d, "left", CONTENT_OUT_Q, (q) => fadeOutEarly(rootOpacity, q, CONTENT_OUT_Q));
+      const copyBox: Box = { x: rootRectNow.left, y: rootRectNow.top, w: rootRectNow.width, h: rootRectNow.height };
+      copy.style.transformOrigin = ride.originIn(copyBox);
+      const lead = cardFrom ? `translateY(${cardFrom.toFixed(2)}px) ` : "";
+      others.push(paused(copy.animate(lead ? ride.frames.map((f) => ({ ...f, transform: lead + String(f.transform) })) : ride.frames, LINEAR(ride.duration))));
+      riders.push(copy);
     }
     if (dim) others.push(paused(dim.animate(samples.map(({ offset, q }) => ({ offset, opacity: dimNow * (1 - clamp(q, 0, 1)) })), LINEAR(d))));
     if (h && homeNow !== null && homeNow !== 1)

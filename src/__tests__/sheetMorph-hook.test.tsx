@@ -685,14 +685,36 @@ describe("la fermeture finit avec son trajet", () => {
     }
   });
 
-  it("le contenu s'efface sur le trajet, comme les 100 ms d'avant à la croix", async () => {
-    const { copy, track, flight } = await close("croix");
-    const content = live(copy.querySelector("[data-sheet-content]"))[0] as FakeAnimation;
-    expect(content.frames.at(-1)!.opacity).toBe(0);
-    expect(content.frames.length).toBeLessThanOrEqual(track.frames.length);
-    // À la croix (~350 ms), effacé vers 100 ms comme avant — à 70 % du chemin.
-    expect(endOf(content)).toBeGreaterThan(70);
-    expect(endOf(content)).toBeLessThan(flight * 0.4);
+  it("le contenu part avec la carte : accroché au coin haut gauche de la fenêtre, effacé avant mi-chemin", async () => {
+    for (const how of ["croix", "jet"] as const) {
+      fresh();
+      const { copy, track, flight } = await close(how);
+      const el = copy.querySelector<HTMLElement>("[data-sheet-content]")!;
+      const anims = live(el);
+      // Un seul élément animé pour tout le bloc.
+      expect(anims).toHaveLength(1);
+      const content = anims[0] as FakeAnimation;
+      expect(content.frames.length).toBeLessThanOrEqual(track.frames.length);
+      expect(content.frames[0].opacity).toBe(1);
+      expect(content.frames.at(-1)!.opacity).toBe(0);
+      // Parti avant que la carte ait fait la moitié du chemin — et déjà bien entamé au quart.
+      expect(progressAt(track, endOf(content) / flight)).toBeLessThanOrEqual(0.55);
+      const quarter = content.frames.find((f) => progressAt(track, (Number(f.offset) * endOf(content)) / flight) >= 0.25)!;
+      expect(Number(quarter.opacity)).toBeLessThanOrEqual(0.6);
+      // L'origine : le coin haut gauche de la fenêtre au départ (la carte), dans la boîte du bloc.
+      const { sheet } = BOXES;
+      expect(numbers(el.style.transformOrigin)).toEqual([sheet.x, sheet.y]);
+      // À chaque image clé, le bloc est translaté avec le coin haut gauche de la fenêtre au même
+      // instant, et mis à l'échelle de sa largeur : il ne peut pas rester derrière elle.
+      for (const f of content.frames) {
+        const t = (Number(f.offset) * endOf(content)) / flight;
+        const [tx, ty, sx] = sampleAt(track.frames, t, "transform");
+        const [dx, dy, s] = numbers(f.transform);
+        expect(Math.abs(tx - dx)).toBeLessThan(1.5);
+        expect(Math.abs(ty - dy)).toBeLessThan(1.5);
+        expect(Math.abs(sx - s)).toBeLessThan(0.01);
+      }
+    }
   });
 
   it("la croix et le partage voyagent d'un bloc avec le coin haut droit de la carte, et s'effacent avant l'arrivée", async () => {

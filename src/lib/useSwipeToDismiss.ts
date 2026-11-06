@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { usePointerCapture } from "@/lib/usePointerCapture";
 
 // Drag-down-to-close for a full-screen sheet, driven from one grab handle (here: the banner
@@ -54,22 +54,40 @@ export const FIRST_MOVE_SLOP_MAX_PX = 48;
  * La poignée a `touch-action: none`, mais WebKit sur iOS laissait quand même la fiche défilante qui
  * la contient rebondir en haut : filmé le 06/11/2026, pendant ~100 ms le contenu descendait seul (une
  * bande noire s'ouvrait entre l'image et le titre), puis le geste prenait la main et la carte sautait
- * de ~140 px en une image. Dès l'appui sur la poignée, c'est un geste de fermeture : ses `touchmove`
- * sont refusés au défilement (un écouteur non passif — ceux de React le sont), et le défileur le plus
- * proche perd son rebond (`overscroll-behavior: none`) jusqu'au relâché. Défiler depuis le contenu
- * ne change pas : rien de cela n'existe hors d'un geste parti de la poignée.
+ * de ~140 px en une image. Dès que le doigt se pose sur la poignée, c'est un geste de fermeture : ses
+ * `touchmove` sont refusés au défilement (un écouteur non passif — ceux de React le sont), et chaque
+ * défileur au-dessus d'elle perd son rebond (`overscroll-behavior: none`) jusqu'au relâché. Défiler
+ * depuis le contenu ne change pas : rien de cela n'existe hors d'un geste parti de la poignée.
+ *
+ * **Les écouteurs sont posés au montage** (option `handle`), pas à l'appui (10.13.23) : WebKit décide
+ * au `touchstart` si la suite du geste peut se défiler sans attendre la page (ses régions d'écoute sont
+ * envoyées au processus de l'interface avec le rendu), et un écouteur ajouté à l'appui arrivait trop
+ * tard pour ce geste-là — or chaque fiche ouverte est une poignée neuve, dont le premier geste est le
+ * seul : le rebond revenait sur un geste sur deux (filmé le 06/11/2026, 19 h). Une poignée passée sans
+ * l'option reçoit encore ses écouteurs au premier appui, comme avant.
  */
-const touchGuarded = new WeakSet<EventTarget>();
-let guardActive = false;
-function refuseNativePan(e: TouchEvent) {
-  if (guardActive && e.cancelable) e.preventDefault();
-}
-function scrollerOf(el: Element | null): HTMLElement | null {
+function scrollersOf(el: Element | null): HTMLElement[] {
+  const out: HTMLElement[] = [];
   for (let p = el?.parentElement ?? null; p; p = p.parentElement) {
     const oy = getComputedStyle(p).overflowY;
-    if (oy === "auto" || oy === "scroll") return p;
+    if (oy === "auto" || oy === "scroll") out.push(p);
   }
-  return null;
+  return out;
+}
+/** Ce qui, dans la poignée, n'en fait pas partie (la croix, le partage) : un appui là n'est pas un geste. */
+const NOT_A_GESTURE = "button, a, [role='button']";
+
+/**
+ * Ce qui suit la carte sous le doigt sans passer par React (option `follow`) : l'ombre d'une fiche
+ * soulevée, le voile de la fiche personne. Appelé à chaque mouvement avec le décalage montré, et une
+ * fois au retour en place (0).
+ */
+export type SwipeFollow = (offset: number, card: HTMLElement) => void;
+
+/** La carte posée à `y` sous le doigt — hors du composant : ses écritures ne sont pas un rendu. */
+function placeCard(el: HTMLElement, y: number, follow: SwipeFollow | undefined): void {
+  el.style.transform = `translateY(${y}px)`;
+  follow?.(y, el);
 }
 
 export interface SwipeToDismiss {
@@ -139,7 +157,29 @@ export function useSwipeToDismiss(
      * après le geste, la fiche n'a pas été fermée, et elle revient.
      */
     addressed = false,
-  }: { addressed?: boolean } = {}
+    /**
+     * La carte qui suit le doigt. Donnée, le doigt la déplace **directement** (`style.transform`), sans
+     * rendu React par mouvement : `offset` ne change qu'à l'appui et au relâché.
+     *
+     * Filmé à 60 i/s le 06/11/2026 : sous le doigt, la carte ne bougeait qu'une image sur deux —
+     * chaque `pointermove` posait l'état, et toute la fiche (`CinemaMobileDetail` et ses rangées) se
+     * redessinait à chaque mouvement. La fiche rend toujours `translateY(offset)` : pendant le geste
+     * cette valeur ne change pas, donc React ne touche pas au style écrit ici ; au retour en place,
+     * le crochet écrit lui-même le zéro, une fois la transition rendue par React (un `offset` resté à 0
+     * ne se réécrirait pas). Sans carte (le banc d'animations, les tests du crochet), l'état suit le
+     * doigt comme avant.
+     */
+    card,
+    /** La poignée, pour ses écouteurs de toucher posés dès le montage — voir `scrollersOf`. */
+    handle,
+    /** Ce qui suit la carte sans React — voir `SwipeFollow`. */
+    follow,
+  }: {
+    addressed?: boolean;
+    card?: RefObject<HTMLElement | null>;
+    handle?: RefObject<HTMLElement | null>;
+    follow?: SwipeFollow;
+  } = {}
 ): SwipeToDismiss {
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -162,23 +202,103 @@ export function useSwipeToDismiss(
   const latest = useRef(0);
   /** La tolérance retranchée au premier mouvement (`FIRST_MOVE_SLOP_MAX_PX`) ; `null` avant lui. */
   const slop = useRef<number | null>(null);
-  /** Le rebond du défileur, rendu au relâché. */
+  /** Le geste refuse le défilement natif (`touchmove`) — voir `scrollersOf`. */
+  const guard = useRef(false);
+  /** Le rebond des défileurs, rendu au relâché. */
   const restoreBounce = useRef<(() => void) | null>(null);
+  /** La poignée qui porte nos écouteurs de toucher, et de quoi les retirer. */
+  const listening = useRef<{ el: Element; off: () => void; byOption: boolean } | null>(null);
+  /** Le retour en place à écrire sur la carte une fois la transition rendue (mode direct). */
+  const restPending = useRef(false);
+  // Les options lues par les gestionnaires, tenues à jour sans les recréer.
+  const followRef = useRef(follow);
+  const cardRef = useRef(card);
+  const handleRef = useRef(handle);
+  useLayoutEffect(() => {
+    followRef.current = follow;
+    cardRef.current = card;
+    handleRef.current = handle;
+  });
   // Prise et rendue par la primitive partagée : trois gestes de cette application capturent le
   // pointeur, et le protocole autour — rendre à la fin, rendre au démontage, ne pas lever sur un
   // pointeur déjà parti — est le seul morceau qu'ils ont en commun. Voir `usePointerCapture`.
   const capture = usePointerCapture();
-  // Démontée doigt posé (règle 3 des fiches : un geste ne survit pas à son élément) : le défileur
-  // retrouve son rebond, et plus aucun `touchmove` n'est refusé.
+
+  const endGuard = useCallback(() => {
+    guard.current = false;
+    restoreBounce.current?.();
+    restoreBounce.current = null;
+  }, []);
+  const beginGuard = useCallback((el: Element) => {
+    guard.current = true;
+    if (restoreBounce.current) return;
+    const scrollers = scrollersOf(el);
+    const before = scrollers.map((sc) => sc.style.overscrollBehaviorY);
+    for (const sc of scrollers) sc.style.overscrollBehaviorY = "none";
+    restoreBounce.current = () => scrollers.forEach((sc, i) => (sc.style.overscrollBehaviorY = before[i]));
+  }, []);
+  const listen = useCallback(
+    (el: Element, byOption: boolean) => {
+      if (listening.current?.el === el) return;
+      listening.current?.off();
+      const onStart = (e: Event) => {
+        const hit = e.target instanceof Element ? e.target.closest(NOT_A_GESTURE) : null;
+        if (hit && hit !== el && el.contains(hit)) return;
+        beginGuard(el);
+      };
+      const onMove = (e: Event) => {
+        if (guard.current && e.cancelable) e.preventDefault();
+      };
+      const onEnd = () => {
+        if (!active.current) endGuard();
+      };
+      el.addEventListener("touchstart", onStart, { passive: true });
+      el.addEventListener("touchmove", onMove, { passive: false });
+      el.addEventListener("touchend", onEnd, { passive: true });
+      el.addEventListener("touchcancel", onEnd, { passive: true });
+      listening.current = {
+        el,
+        byOption,
+        off: () => {
+          el.removeEventListener("touchstart", onStart);
+          el.removeEventListener("touchmove", onMove);
+          el.removeEventListener("touchend", onEnd);
+          el.removeEventListener("touchcancel", onEnd);
+        },
+      };
+    },
+    [beginGuard, endGuard]
+  );
+  // La poignée, dès qu'elle est dans la page — et la suivante si elle change (une fiche dont l'en-tête
+  // se monte plus tard). Une option retirée (la fiche passée dessous, la mise en page du bureau) retire
+  // ses écouteurs : hors d'un geste possible, la poignée ne refuse rien. Sans dépendances : une
+  // comparaison par rendu.
+  useEffect(() => {
+    const el = handle?.current;
+    if (el) listen(el, true);
+    else if (listening.current?.byOption && !active.current) {
+      listening.current.off();
+      listening.current = null;
+    }
+  });
+  // Démontée doigt posé (règle 3 des fiches : un geste ne survit pas à son élément) : les défileurs
+  // retrouvent leur rebond, et les écouteurs partent avec la poignée.
   useEffect(
     () => () => {
-      if (!active.current) return;
-      guardActive = false;
-      restoreBounce.current?.();
-      restoreBounce.current = null;
+      endGuard();
+      listening.current?.off();
+      listening.current = null;
     },
-    []
+    [endGuard]
   );
+  // Le retour en place en mode direct : écrit après le rendu qui a rétabli la transition de la carte,
+  // pour qu'elle revienne en glissant d'où le doigt l'a laissée.
+  useLayoutEffect(() => {
+    if (dragging || !restPending.current) return;
+    restPending.current = false;
+    const el = cardRef.current?.current;
+    if (el) placeCard(el, 0, followRef.current);
+  }, [dragging]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -187,24 +307,13 @@ export function useSwipeToDismiss(
     startedAt.current = performance.now();
     latest.current = 0;
     slop.current = null;
-    // Le rebond natif coupé dès l'appui — voir `refuseNativePan`. Posé sur la poignée une fois pour
-    // toutes (il ne fait rien hors d'un geste) ; le défileur retrouve son rebond au relâché.
-    const handle = e.currentTarget as unknown as Element | null;
-    if (handle && typeof (handle as Partial<Element>).addEventListener === "function") {
-      if (!touchGuarded.has(handle)) {
-        touchGuarded.add(handle);
-        handle.addEventListener("touchmove", refuseNativePan as EventListener, { passive: false });
-      }
-      guardActive = true;
-      restoreBounce.current?.();
-      const scroller = handle instanceof Element ? scrollerOf(handle) : null;
-      if (scroller) {
-        const before = scroller.style.overscrollBehaviorY;
-        scroller.style.overscrollBehaviorY = "none";
-        restoreBounce.current = () => {
-          scroller.style.overscrollBehaviorY = before;
-        };
-      }
+    restPending.current = false;
+    // Le rebond natif coupé dès l'appui, si le `touchstart` ne l'a pas déjà fait — et les écouteurs
+    // posés ici pour une poignée que l'option `handle` ne désigne pas.
+    const el = e.currentTarget as unknown as Element | null;
+    if (el && typeof (el as Partial<Element>).addEventListener === "function" && el instanceof Element) {
+      if (!handleRef.current) listen(el, false);
+      beginGuard(el);
     }
     setDragging(true);
     setTouched(true);
@@ -215,7 +324,7 @@ export function useSwipeToDismiss(
     // l'événement arrive, ce qui se produit sous les doigts pressés. Non rattrapée, l'exception
     // part d'un gestionnaire React et emporte l'arbre, pour un geste qui n'aurait rien fait.
     capture.take(e);
-  }, [capture]);
+  }, [capture, listen, beginGuard]);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!active.current) return;
@@ -226,16 +335,21 @@ export function useSwipeToDismiss(
     // Le premier mouvement : sa tolérance est retranchée, la carte part de là (`FIRST_MOVE_SLOP_MAX_PX`).
     if (slop.current === null) slop.current = Math.min(travel, FIRST_MOVE_SLOP_MAX_PX);
     latest.current = travel;
-    setOffset(Math.max(0, travel - slop.current));
+    const shown = Math.max(0, travel - slop.current);
+    const el = cardRef.current?.current;
+    if (el) {
+      // Le mode direct : aucun rendu React par mouvement — voir l'option `card`.
+      placeCard(el, shown, followRef.current);
+    } else {
+      setOffset(shown);
+    }
   }, []);
 
   const finish = useCallback(() => {
     // Rendue avant toute autre chose, et même si le geste n'était pas actif : c'est la seule
     // ligne qui doit s'exécuter quoi qu'il arrive ensuite.
     capture.release();
-    guardActive = false;
-    restoreBounce.current?.();
-    restoreBounce.current = null;
+    endGuard();
     if (!active.current) return;
     active.current = false;
     setDragging(false);
@@ -253,8 +367,9 @@ export function useSwipeToDismiss(
       onDismiss();
     } else {
       setOffset(0);
+      if (cardRef.current?.current) restPending.current = true;
     }
-  }, [onDismiss, capture]);
+  }, [onDismiss, capture, endGuard]);
 
   return {
     offset,

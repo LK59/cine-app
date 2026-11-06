@@ -15,7 +15,7 @@ import { useRequestConfirmation } from "./RequestConfirm";
 import { useTitleWatched } from "@/lib/useTitleWatched";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
-import { SHEET_OUT_MS, sheetMotionClass, detailColumnMotion, phoneSheetCorner, phoneSheetShadow } from "@/lib/sheetMotion";
+import { SHEET_OUT_MS, sheetMotionClass, detailColumnMotion, phoneSheetCorner, phoneSheetFollow, phoneSheetShadow } from "@/lib/sheetMotion";
 import { useSheetExit } from "@/lib/useSheetExit";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
 import {
@@ -129,7 +129,8 @@ export function PlayerDiscoverSheet({
   const requestClose = exit.requestClose;
   // Le même geste que sur les fiches de la bibliothèque, qui l'avaient et pas celle-ci : on tire
   // la bannière vers le bas pour refermer.
-  const swipe = useSwipeToDismiss(requestClose, { addressed: true });
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const swipe = useSwipeToDismiss(requestClose, { addressed: true, card: containerRef, handle: bannerRef, follow: phoneSheetFollow });
   // Montée parce qu'on revient dessus plutôt qu'on l'ouvre : pas d'animation d'entrée — voir
   // `arrivedByBack`. Lu une seule fois, au montage.
   const [revealed] = useState(() => arrivedByBack());
@@ -140,7 +141,6 @@ export function PlayerDiscoverSheet({
    * avant, et seule la fermeture revole vers l'affiche. La sortie se fait d'un coup quand ce qu'elle
    * recouvre n'est pas dessiné — la même règle que `sheetExitMs` dans PlayerShell.
    */
-  const bannerRef = useRef<HTMLDivElement>(null);
   const behind = useRouteBehind();
   const swapsInPlace = useSheetBehind() && !(behind !== null && (behind.film !== null || behind.serie !== null));
   const morph = useSheetTransition({

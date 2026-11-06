@@ -385,7 +385,18 @@ export function PlayerPersonSheet({
   const closeAfterSlideStarts = useCallback(() => {
     requestAnimationFrame(() => requestAnimationFrame(() => requestClose()));
   }, [requestClose]);
-  const swipe = useSwipeToDismiss(closeAfterSlideStarts, { addressed: true });
+  /**
+   * La carte et le voile suivent le doigt sans rendu React par mouvement (`card`, `follow`) : la fiche
+   * et sa filmographie se redessinaient à chaque `pointermove`, et la carte ne bougeait qu'une image
+   * sur deux (06/11/2026). Le voile s'éclaircit avec le chemin, comme avant.
+   */
+  const scrimRef = useRef<HTMLDivElement>(null);
+  const handleRef = useRef<HTMLDivElement>(null);
+  const followScrim = useCallback((offset: number) => {
+    const scrim = scrimRef.current;
+    if (scrim) scrim.style.opacity = offset > 0 ? String(Math.max(0.2, 1 - offset / 400)) : "";
+  }, []);
+  const swipe = useSwipeToDismiss(closeAfterSlideStarts, { addressed: true, card: dialogRef, handle: isMobile && !underneath ? handleRef : undefined, follow: followScrim });
   // Montée parce qu'on revient dessus plutôt qu'on l'ouvre : pas d'animation d'entrée — voir
   // `arrivedByBack`. Lu une seule fois, au montage.
   const [revealed] = useState(() => arrivedByBack());
@@ -493,6 +504,7 @@ export function PlayerPersonSheet({
     >
       {/* Le voile : il laisse voir le film qu'on regardait, et le toucher referme la carte. */}
       <div
+        ref={scrimRef}
         aria-hidden
         data-person-scrim
         onClick={underneath ? undefined : requestClose}
@@ -574,6 +586,7 @@ export function PlayerPersonSheet({
             navigateur ne réclame pas ce mouvement pour son propre défilement — sinon il vole le
             flux de pointeurs au milieu du glissement. Le reste de la carte défile normalement. */}
         <div
+          ref={handleRef}
           {...(isMobile && !underneath ? swipe.handlers : {})}
           style={isMobile ? { touchAction: "none" } : undefined}
           className="px-5 pt-3 sm:px-8 sm:pt-8"

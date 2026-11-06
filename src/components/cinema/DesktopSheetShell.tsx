@@ -99,7 +99,7 @@ export function useDesktopSheetShell({
    * Inerte à la souris, et inerte aussi sous une fiche posée par-dessus — un écran qui s'en va
    * n'a pas d'avis, et celui du dessous non plus.
    */
-  const { style: gripStyle, grip } = useSheetGrip(requestClose, useIsTouch() && !underneath);
+  const { style: gripStyle, grip } = useSheetGrip(requestClose, useIsTouch() && !underneath, containerRef);
 
   // Un titre similaire rouvre la même fiche sur un autre titre : c'est une arrivée, et le drapeau
   // doit repartir de zéro. Sans cela, un spectateur venu d'un titre similaire — donc ayant forcément

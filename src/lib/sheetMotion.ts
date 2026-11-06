@@ -92,3 +92,15 @@ export function phoneSheetCorner(offset: number): number {
 export function phoneSheetShadow(offset: number): string | undefined {
   return offset > 0 ? "0 -18px 50px rgba(0,0,0,0.55), var(--sheet-scrim, 0 0 #0000)" : undefined;
 }
+
+/**
+ * Ce qui suit une fiche du téléphone sous le doigt sans passer par React (`follow` de
+ * `useSwipeToDismiss`) : son ombre, posée une fois soulevée, retirée au retour en place. Le rayon,
+ * lui, ne grandit plus pendant le geste (06/11/2026) : changé à chaque mouvement, il repeignait toute
+ * la carte à chaque image — il garde ses 16 px sous le doigt, et la fiche écrit le reste au relâché.
+ * Une seule écriture pour les quatre fiches qui se tirent par leur bannière.
+ */
+export function phoneSheetFollow(offset: number, card: HTMLElement): void {
+  const shadow = phoneSheetShadow(offset) ?? "";
+  if (card.style.boxShadow !== shadow) card.style.boxShadow = shadow;
+}

@@ -20,7 +20,7 @@ import { useIsMobile, useIsShortViewport } from "@/lib/useIsMobile";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
 import { useSheetExit } from "@/lib/useSheetExit";
 import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
-import { detailColumnMotion, phoneSheetCorner, phoneSheetShadow, sheetMotionClass } from "@/lib/sheetMotion";
+import { detailColumnMotion, phoneSheetCorner, phoneSheetFollow, phoneSheetShadow, sheetMotionClass } from "@/lib/sheetMotion";
 import { pauseOfflineDownload, removeOfflineDownload, resumeOfflineDownload, retryOfflineDownload, type OfflineDownload } from "@/lib/offline/downloads";
 import { offlineRemainingSeconds, offlineSeriesNext, type OfflineSeriesGroup } from "@/lib/offline/downloadGroups";
 import { BACKDROP_FILE, LOGO_FILE, POSTER_FILE } from "@/lib/offline/artwork";
@@ -101,7 +101,7 @@ export function OfflineTitleSheet({
   const exit = useSheetExit(onClose, { leaving, listening: !overviewOpen && !confirming });
   // Retour (Android, navigateur) ferme la fiche, pas la page qui la porte.
   useOfflineSheetBack(onClose, leaving);
-  const swipe = useSwipeToDismiss(exit.requestClose);
+  const swipe = useSwipeToDismiss(exit.requestClose, { card: rootRef, handle: bannerRef, follow: phoneSheetFollow });
   useLiquidDelegation(rootRef);
   const morph = useSheetTransition({
     layout: isMobile ? "phone" : "desktop",

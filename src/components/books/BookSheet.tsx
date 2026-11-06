@@ -11,7 +11,7 @@ import { useSheetTransition } from "@/lib/sheetMorph/desktopContinuity";
 import { useSwipeToDismiss, NOT_THE_HANDLE } from "@/lib/useSwipeToDismiss";
 import { useSheetExit } from "@/lib/useSheetExit";
 import { useExitDelay } from "@/lib/useExitDelay";
-import { SHEET_OUT_MS, SHEET_UNMOUNT_SLACK_MS, detailColumnMotion, phoneSheetCorner, phoneSheetShadow, sheetMotionClass } from "@/lib/sheetMotion";
+import { SHEET_OUT_MS, SHEET_UNMOUNT_SLACK_MS, detailColumnMotion, phoneSheetCorner, phoneSheetFollow, phoneSheetShadow, sheetMotionClass } from "@/lib/sheetMotion";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { setOfflineSheetOpen } from "@/lib/offline/offlineSheetOpen";
 import { displayTitle } from "@/lib/books/displayTitle";
@@ -103,7 +103,8 @@ function BookSheet({
 
   const close = () => cinemaClose({ book: null, reading: false });
   const exit = useSheetExit(close, { leaving, listening: !hidden });
-  const swipe = useSwipeToDismiss(exit.requestClose, { addressed: true });
+  const handleRef = useRef<HTMLDivElement>(null);
+  const swipe = useSwipeToDismiss(exit.requestClose, { addressed: true, card: containerRef, handle: handleRef, follow: phoneSheetFollow });
   // Revenue sur elle par un retour (le lecteur refermé) : elle se découvre, rien ne vole.
   const [revealed] = useState(() => arrivedByBack());
   const morph = useSheetTransition({
@@ -327,7 +328,7 @@ function BookSheet({
         }}
       >
         {/* La poignée du geste : tout l'en-tête, la couverture comprise. */}
-        <div className="relative px-5 pb-2 pt-8" {...swipe.handlers} style={{ touchAction: "none" }}>
+        <div ref={handleRef} className="relative px-5 pb-2 pt-8" {...swipe.handlers} style={{ touchAction: "none" }}>
           {backdrop}
           <div className="relative">{cover}</div>
         </div>
