@@ -55,7 +55,7 @@ import {
   type Stage,
 } from "./motion";
 import { afterTwoFrames, clearSheetTimeout, sheetFrame, sheetTimeout, boxOf, clockNow, detectProfile, opacityNow, place, prefersReducedMotion, promote, scaleOf, startTogether, swallowStrayClick, translateYOf } from "./dom";
-import { SHEET_GRAB_EVENT } from "@/lib/useSwipeToDismiss";
+import { SHEET_DRAG_EVENT, SHEET_DRAG_FOLLOW_ATTR, SHEET_GRAB_EVENT, type SheetDragDetail } from "@/lib/useSwipeToDismiss";
 import { hideSource, installPressTracker, peekPress, showSource, takePress, visibleSource, type SheetSource } from "./source";
 
 /**
@@ -213,7 +213,9 @@ function createLayer(root: HTMLElement, ink: string): { layer: HTMLElement; dim:
   layer.setAttribute("aria-hidden", "true");
   Object.assign(layer.style, { position: "fixed", inset: "0", pointerEvents: "none", zIndex: getComputedStyle(root).zIndex || "47" });
   const dim = document.createElement("div");
-  Object.assign(dim.style, { position: "absolute", inset: "0", background: ink, opacity: "0" });
+  // Un écran de plus au-dessus : une ouverture saisie tôt translate tout le calque avec le doigt
+  // (`followGrab`), et l'assombrissement ne doit jamais laisser une bande claire en haut.
+  Object.assign(dim.style, { position: "absolute", left: "0", right: "0", top: "-100%", bottom: "0", background: ink, opacity: "0" });
   layer.appendChild(dim);
   root.parentNode?.insertBefore(layer, root);
   return { layer, dim };
@@ -467,6 +469,12 @@ function rideTrack(
   return { ...track, originIn: (box) => `${(x0 - box.x).toFixed(2)}px ${(c0.y - box.y).toFixed(2)}px` };
 }
 
+/**
+ * Saisie pendant l'ouverture : au plus ce trajet restant (en pixels), l'ouverture finit d'un coup — le
+ * saut ne se voit pas ; au-delà, la fenêtre suit le doigt et l'ouverture continue (`openMorph`, 9).
+ */
+const GRAB_SETTLE_PX = 4;
+
 /** Le fondu du relais d'affiche vers le vrai visuel : assez long pour se voir comme un fondu, pas comme une attente. */
 export const STAND_IN_FADE_MS = 300;
 
@@ -598,6 +606,12 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     cancelCalm: (() => void) | null;
     /** L'ouverture en cours, menée à son terme d'un coup — la fiche saisie au doigt (`SHEET_GRAB_EVENT`). */
     settleNow: (() => void) | null;
+    /** L'appui sur la poignée pendant l'ouverture : finir d'un coup, ou suivre le doigt (`openMorph`, 8). */
+    grab: (() => void) | null;
+    /** Le décalage du doigt, porté par le calque du trajet pendant une ouverture saisie tôt. */
+    drag: ((offset: number, released: boolean) => void) | null;
+    /** Rend au calque sa place, quand la fenêtre part (l'arrivée, une fermeture, un démontage). */
+    unfollow: (() => void) | null;
     closing: boolean;
     closeAt: number;
     mountedAt: number;
@@ -620,6 +634,9 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     bdShown: false,
     cancelCalm: null,
     settleNow: null,
+    grab: null,
+    drag: null,
+    unfollow: null,
     closing: false,
     closeAt: 0,
     mountedAt: 0,
@@ -656,14 +673,20 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     root.addEventListener("pointerup", onUp);
     root.addEventListener("click", onClick);
     // La fiche saisie au doigt pendant son ouverture — voir `settleNow` dans `openMorph`.
-    const onGrab = () => s.settleNow?.();
+    const onGrab = () => s.grab?.();
+    const onDrag = (e: Event) => {
+      const d = (e as CustomEvent<SheetDragDetail>).detail;
+      if (d) s.drag?.(d.offset, d.released);
+    };
     root.addEventListener(SHEET_GRAB_EVENT, onGrab);
+    root.addEventListener(SHEET_DRAG_EVENT, onDrag);
     return () => {
       root.removeEventListener("pointerdown", onDown);
       root.removeEventListener("pointermove", onMove);
       root.removeEventListener("pointerup", onUp);
       root.removeEventListener("click", onClick);
       root.removeEventListener(SHEET_GRAB_EVENT, onGrab);
+      root.removeEventListener(SHEET_DRAG_EVENT, onDrag);
     };
   }, [opts.rootRef]);
 
@@ -741,6 +764,8 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
   function stopOpen() {
     const s = st.current;
     s.settleNow = null;
+    s.grab = null;
+    s.unfollow?.();
     s.cancelStart?.();
     s.cancelStart = null;
     for (const a of s.openAnims.splice(0)) a.cancel();
@@ -984,6 +1009,51 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
       }
       settleOpen(photo, s.bdShown ? backdropSrc : source.image);
     };
+
+    // 9. Saisie *tôt* : la fenêtre suit le doigt, l'ouverture continue (06/11/2026, cinquième film).
+    //
+    // Sauter à la fin est invisible quand il ne reste que quelques pixels de trajet ; saisie dans les
+    // premiers instants (5,52 s et ~8,1 s du cinquième film), la carte, encore loin de sa place,
+    // grandissait d'un coup jusqu'à sa taille entière (différence d'image de 62) avant de suivre le doigt.
+    // Au-delà de `GRAB_SETTLE_PX` de trajet restant, rien ne saute : l'ouverture continue sur son propre
+    // ressort, et le calque du trajet (fenêtre, visuel, encre de la carte) reçoit le même `translateY`
+    // que la carte, écrit directement à chaque mouvement (`SHEET_DRAG_EVENT`) — contenu et verre sont
+    // dans la carte, ils suivent avec elle. Arrivée pendant le geste, le relais ordinaire (`settleOpen`)
+    // échange l'image pixel pour pixel : le calque et la carte sont au même décalage, et le calque
+    // reprend sa place à cet instant, la fenêtre partie. Relâchée avant l'arrivée : « reste », le calque
+    // revient en place avec la transition même de la carte ; « ferme », la fermeture part de la pose de
+    // l'aller plus le doigt (chemin déjà prévu pour une fiche tirée pendant l'aller), et le calque est
+    // remis à sa place avant qu'elle ne construise sa fenêtre. Choisi plutôt que raccourcir le reste
+    // du trajet : rien n'est recréé, le ressort de l'ouverture reste celui qu'on voit partout, et une
+    // seule écriture de plus par mouvement (le calque), sans rendu ni lecture de mise en page.
+    s.grab = () => {
+      if (s.win !== w || s.closing) return;
+      const ct = run.clock?.currentTime;
+      const t = run.startedAt == null ? 0 : typeof ct === "number" ? ct : clockNow() - run.startedAt;
+      const q = run.startedAt == null ? 0 : run.motion.q(t);
+      if (Math.abs(1 - q) * run.span <= GRAB_SETTLE_PX) {
+        s.settleNow?.();
+        return;
+      }
+      // Ressaisie avant l'arrivée : le calque suit déjà, il reprend le doigt sans transition, comme la carte.
+      if (s.unfollow) {
+        layer.style.transition = "none";
+        return;
+      }
+      root.setAttribute(SHEET_DRAG_FOLLOW_ATTR, "");
+      Object.assign(layer.style, { willChange: "transform", transition: "none" });
+      s.drag = (offset, released) => {
+        // Relâchée : la transition que React vient de rendre à la carte, pour revenir ou partir avec elle.
+        if (released) layer.style.transition = root.style.transition;
+        layer.style.transform = `translateY(${offset}px)`;
+      };
+      s.unfollow = () => {
+        s.unfollow = null;
+        s.drag = null;
+        root.removeAttribute(SHEET_DRAG_FOLLOW_ATTR);
+        Object.assign(layer.style, { willChange: "", transition: "", transform: "" });
+      };
+    };
   }
 
   /**
@@ -995,6 +1065,8 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     const s = st.current;
     if (s.closing) return;
     s.settleNow = null;
+    s.grab = null;
+    s.unfollow?.();
     const loaded = !!photo && photo.complete && photo.naturalWidth > 0;
     if (loaded) {
       photo.style.transition = "none";

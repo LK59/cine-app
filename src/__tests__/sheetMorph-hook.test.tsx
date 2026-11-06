@@ -789,43 +789,132 @@ describe("la fermeture finit avec son trajet", () => {
  * fenêtre du trajet, qui ne suit pas la carte.
  */
 describe("la fiche saisie pendant son ouverture", () => {
-  for (const when of [{ label: "en plein trajet", ms: 260 }, { label: "avant même le départ", ms: 0 }]) {
-    it(`${when.label} : l'ouverture finit d'un coup, et visuel et carte bougent ensemble dès le premier mouvement`, async () => {
-      const poster = addPoster();
-      press(poster.querySelector("img")!);
-      render(<Sheet swipe />);
-      markLoaded(root()!.querySelector<HTMLImageElement>("[data-sheet-photo]")!);
-      if (when.ms) {
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(when.ms);
-        });
-      }
-      // Le trajet n'est pas fini : le visuel est encore dans la fenêtre, la fiche transparente.
-      expect(windowOf()).toBeTruthy();
-      expect(root()!.style.backgroundColor).toBe("transparent");
-      const banner = root()!.querySelector<HTMLElement>("[data-box='banner']")!;
-      fireEvent.pointerDown(banner, { pointerId: 3, clientY: 100, pointerType: "touch", button: 0 });
-      // Dès l'appui, avant tout mouvement : plus de fenêtre, la fiche rendue à elle-même, le visuel
-      // dans la bannière — et seul l'assombrissement reste dans le calque, à sa valeur posée.
-      expect(Array.from(layer()!.children)).toHaveLength(1);
-      expect(root()!.style.backgroundColor).not.toBe("transparent");
-      expect(root()!.hasAttribute("data-sheet-flying")).toBe(false);
-      expect(root()!.querySelector<HTMLElement>("[data-sheet-photo]")!.style.visibility).toBe("");
-      expect(root()!.querySelector<HTMLElement>("[data-sheet-photo]")!.style.opacity).toBe("1");
-      // Le premier mouvement déplace la carte entière, visuel compris (il est dedans).
-      fireEvent.pointerMove(banner, { pointerId: 3, clientY: 100, pointerType: "touch" });
-      fireEvent.pointerMove(banner, { pointerId: 3, clientY: 160, pointerType: "touch" });
-      expect(root()!.style.transform).toBe("translateY(60px)");
-      expect(root()!.contains(root()!.querySelector("[data-sheet-photo]"))).toBe(true);
-      // Le relais prévu pour l'arrivée ne retombe pas plus tard sur la fiche saisie.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(1000);
-      });
-      expect(windowOf()).toBeUndefined();
-      expect(root()!.style.transform).toBe("translateY(60px)");
-      fireEvent.pointerUp(banner, { pointerId: 3, clientY: 160, pointerType: "touch" });
+  /** Ouvre la fiche du téléphone avec son geste, et rend la piste de la fenêtre (son horloge). */
+  function open() {
+    const poster = addPoster();
+    press(poster.querySelector("img")!);
+    const view = render(<Sheet swipe />);
+    markLoaded(root()!.querySelector<HTMLImageElement>("[data-sheet-photo]")!);
+    return { view, track: live(windowOf())[0] as FakeAnimation };
+  }
+  /** Où en est l'ouverture à `at` (0–1) : la largeur de la fenêtre va linéairement de l'affiche à la carte. */
+  const openProgress = (track: FakeAnimation, at: number) =>
+    (sampleAt(track.frames, at, "transform")[2] * BOXES.sheet.w - BOXES.poster.w) / (BOXES.sheet.w - BOXES.poster.w);
+  /** Avance jusqu'à ce que l'ouverture ait fait `q` de son chemin. */
+  async function advanceTo(track: FakeAnimation, q: number) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    const D = Number(track.options.duration);
+    const at = track.frames.find((f) => openProgress(track, Number(f.offset)) >= q)!;
+    const target = track.startTime! + Number(at.offset) * D;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(Math.max(0, target - performance.now()));
     });
   }
+  const banner = () => root()!.querySelector<HTMLElement>("[data-box='banner']")!;
+  const down = (y: number) => fireEvent.pointerDown(banner(), { pointerId: 3, clientY: y, pointerType: "touch", button: 0 });
+  const move = (y: number) => fireEvent.pointerMove(banner(), { pointerId: 3, clientY: y, pointerType: "touch" });
+  const up = (y: number) => fireEvent.pointerUp(banner(), { pointerId: 3, clientY: y, pointerType: "touch" });
+
+  it("presque arrivée (≤ 4 px de trajet restant) : l'ouverture finit d'un coup, visuel et carte bougent ensemble", async () => {
+    const { track } = open();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(track.startTime! + Number(track.options.duration) - 3 - performance.now());
+    });
+    expect(windowOf()).toBeTruthy();
+    down(100);
+    // Dès l'appui : plus de fenêtre, la fiche rendue à elle-même, le visuel dans la bannière.
+    expect(Array.from(layer()!.children)).toHaveLength(1);
+    expect(root()!.style.backgroundColor).not.toBe("transparent");
+    expect(root()!.querySelector<HTMLElement>("[data-sheet-photo]")!.style.opacity).toBe("1");
+    move(100);
+    move(160);
+    expect(root()!.style.transform).toBe("translateY(60px)");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(windowOf()).toBeUndefined();
+    up(160);
+  });
+
+  for (const when of [
+    { label: "avant même le départ", q: null },
+    { label: "tôt dans le trajet (q ≈ 0,1)", q: 0.1 },
+  ] as const) {
+    it(`${when.label} : rien ne saute — l'ouverture continue, et la fenêtre suit le doigt avec la carte`, async () => {
+      const { track } = open();
+      if (when.q !== null) await advanceTo(track, when.q);
+      const before = fake.created.length;
+      const startedAt = track.startTime;
+      down(100);
+      // Rien n'a sauté : la fenêtre et sa piste sont les mêmes, rien n'a été fini, annulé ni recréé.
+      expect(windowOf()).toBeTruthy();
+      expect(live(windowOf())[0]).toBe(track);
+      expect(track.cancelled).toBe(false);
+      expect(track.startTime).toBe(startedAt);
+      expect(fake.created.length).toBe(before);
+      expect(root()!.style.backgroundColor).toBe("transparent");
+      // Le doigt emporte la carte et le calque du trajet d'un même décalage, à chaque mouvement.
+      for (const y of [100, 120, 160]) {
+        move(y);
+        expect(layer()!.style.transform).toBe(root()!.style.transform);
+      }
+      expect(root()!.style.transform).toBe("translateY(60px)");
+      up(160);
+    });
+  }
+
+  it("saisie tôt puis relâchée : elle revient en place avec la carte, et l'arrivée ne laisse rien derrière", async () => {
+    const { track } = open();
+    await advanceTo(track, 0.1);
+    down(100);
+    move(100);
+    move(160);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(150);
+    });
+    up(160);
+    // Le retour en place : le calque repart avec la transition même de la carte, vers zéro.
+    expect(root()!.style.transform).toBe("translateY(0px)");
+    expect(layer()!.style.transform).toBe("translateY(0px)");
+    expect(layer()!.style.transition).toBe(root()!.style.transition);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    // L'arrivée : la fenêtre partie, le calque rendu à sa place, seul l'assombrissement y reste.
+    expect(windowOf()).toBeUndefined();
+    expect(Array.from(layer()!.children)).toHaveLength(1);
+    expect(layer()!.style.transform).toBe("");
+    expect(root()!.hasAttribute("data-sheet-drag-follow")).toBe(false);
+    expect(root()!.querySelector<HTMLElement>("[data-sheet-photo]")!.style.visibility).toBe("");
+  });
+
+  it("saisie tôt puis jetée : la fermeture part de la pose de l'aller plus le doigt, et ne laisse rien derrière", async () => {
+    const { view, track } = open();
+    await advanceTo(track, 0.1);
+    down(100);
+    move(100);
+    move(400);
+    up(400);
+    // Fermée : le calque part avec la carte, du même décalage.
+    expect(layer()!.style.transform).toBe(`translateY(${window.innerHeight}px)`);
+    root()!.style.transform = "translateY(300px)";
+    view.rerender(<Sheet swipe leaving />);
+    // La fermeture remet le calque à sa place avant de bâtir sa fenêtre, qui part de la carte tirée.
+    expect(layer()!.style.transform).toBe("");
+    const winBack = live(layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!.previousElementSibling)[0] as FakeAnimation;
+    expect(numbers(winBack.frames[0].transform)[1]).toBeGreaterThan(300 - 1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    act(() => fake.created.filter((a) => a.frames.length === 2 && a.frames[1].opacity === 0 && a.onfinish).forEach((a) => a.finish()));
+    expect(layer()).toBeNull();
+    expect(sheetMorphForTests.flights()).toBe(0);
+  });
 
   it("après l'arrivée, saisir la fiche ne touche plus à rien", async () => {
     press(addPoster().querySelector("img")!);

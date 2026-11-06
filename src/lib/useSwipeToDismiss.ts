@@ -63,6 +63,21 @@ export type SwipeFollow = (offset: number, card: HTMLElement) => void;
  */
 export const SHEET_GRAB_EVENT = "cine:sheet-grab";
 
+/**
+ * Le décalage du doigt, annoncé sur la carte à chaque mouvement — seulement quand la carte le demande
+ * (`SHEET_DRAG_FOLLOW_ATTR`, posé par `useSheetMorph` sur une fiche saisie tôt dans son ouverture, dont
+ * la fenêtre du trajet doit suivre le doigt avec elle) ; et une fois au relâché (`released`), avec le
+ * décalage final, une fois la transition de la carte rendue par React. Hors de ce cas, rien n'est émis.
+ */
+export const SHEET_DRAG_EVENT = "cine:sheet-drag";
+export const SHEET_DRAG_FOLLOW_ATTR = "data-sheet-drag-follow";
+export type SheetDragDetail = { offset: number; released: boolean };
+
+function announceDrag(el: HTMLElement, offset: number, released: boolean): void {
+  if (!el.hasAttribute(SHEET_DRAG_FOLLOW_ATTR)) return;
+  el.dispatchEvent(new CustomEvent<SheetDragDetail>(SHEET_DRAG_EVENT, { detail: { offset, released } }));
+}
+
 /** La carte posée à `y` sous le doigt — hors du composant : ses écritures ne sont pas un rendu. */
 function placeCard(el: HTMLElement, y: number, follow: SwipeFollow | undefined): void {
   el.style.transform = `translateY(${y}px)`;
@@ -179,7 +194,7 @@ export function useSwipeToDismiss(
   /** La tolérance retranchée au premier mouvement (`FIRST_MOVE_SLOP_MAX_PX`) ; `null` avant lui. */
   const slop = useRef<number | null>(null);
   /** Le retour en place à écrire sur la carte une fois la transition rendue (mode direct). */
-  const restPending = useRef(false);
+  const restPending = useRef<number | null>(null);
   // Les options lues par les gestionnaires, tenues à jour sans les recréer.
   const followRef = useRef(follow);
   const cardRef = useRef(card);
@@ -195,10 +210,14 @@ export function useSwipeToDismiss(
   // Le retour en place en mode direct : écrit après le rendu qui a rétabli la transition de la carte,
   // pour qu'elle revienne en glissant d'où le doigt l'a laissée.
   useLayoutEffect(() => {
-    if (dragging || !restPending.current) return;
-    restPending.current = false;
+    if (dragging || restPending.current === null) return;
+    const final = restPending.current;
+    restPending.current = null;
     const el = cardRef.current?.current;
-    if (el) placeCard(el, 0, followRef.current);
+    if (!el) return;
+    // Fermée : React a écrit le décalage final (il change) ; seul le retour en place s'écrit ici.
+    if (final === 0) placeCard(el, 0, followRef.current);
+    announceDrag(el, final, true);
   }, [dragging]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
@@ -208,7 +227,7 @@ export function useSwipeToDismiss(
     startedAt.current = performance.now();
     latest.current = 0;
     slop.current = null;
-    restPending.current = false;
+    restPending.current = null;
     // La fiche saisie pendant son ouverture finit celle-ci avant de bouger — voir `SHEET_GRAB_EVENT`.
     cardRef.current?.current?.dispatchEvent(new Event(SHEET_GRAB_EVENT));
     setDragging(true);
@@ -236,6 +255,7 @@ export function useSwipeToDismiss(
     if (el) {
       // Le mode direct : aucun rendu React par mouvement — voir l'option `card`.
       placeCard(el, shown, followRef.current);
+      announceDrag(el, shown, false);
     } else {
       setOffset(shown);
     }
@@ -257,12 +277,13 @@ export function useSwipeToDismiss(
       // Carries on off the bottom instead of snapping back first — the close animation is the
       // continuation of the gesture, not a separate thing that happens after it.
       setOffset(window.innerHeight);
+      if (cardRef.current?.current) restPending.current = window.innerHeight;
       dismissedAt.current = window.location.hash;
       setDismissed(true);
       onDismiss();
     } else {
       setOffset(0);
-      if (cardRef.current?.current) restPending.current = true;
+      if (cardRef.current?.current) restPending.current = 0;
     }
   }, [onDismiss, capture]);
 
