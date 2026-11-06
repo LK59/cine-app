@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { createPortal } from "react-dom";
 import { useSheetMorph, sheetMorphForTests, type SheetLayout } from "@/lib/sheetMorph/useSheetMorph";
 import { forgetPress } from "@/lib/sheetMorph/source";
+import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { clearMorphLayers, installFakeAnimations, type FakeAnimation } from "./helpers/fakeAnimations";
 
 /**
@@ -38,19 +39,23 @@ function Sheet({
   revealed = false,
   active = true,
   instantExit = false,
+  swipe: withSwipe = false,
 }: {
   layout?: SheetLayout;
   leaving?: boolean;
   revealed?: boolean;
   active?: boolean;
   instantExit?: boolean;
+  /** Le geste de la vraie fiche du téléphone sur la bannière (`useSwipeToDismiss`, carte menée sans React). */
+  swipe?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
   const morph = useSheetMorph({ layout, rootRef, imageRef: layout === "phone" ? bannerRef : rootRef, active, leaving, revealed, instantExit });
+  const swipe = useSwipeToDismiss(() => {}, { card: rootRef, handle: bannerRef });
   return createPortal(
     <div ref={rootRef} data-box="sheet" data-handles={String(morph.handlesEntry)} data-settled={String(morph.settled)} className="phone-sheet-frame" style={{ zIndex: 48, backgroundColor: "rgb(10, 10, 15)" }}>
-      <div ref={bannerRef} data-box="banner">
+      <div ref={bannerRef} data-box="banner" {...(withSwipe ? swipe.handlers : {})}>
         {/* eslint-disable-next-line @next/next/no-img-element -- la fiche de test n'a qu'une <img> nue, comme FadeInImg */}
         <img data-sheet-photo="" src="https://img.test/backdrop.jpg" alt="" />
         <div data-sheet-veil="" />
@@ -775,6 +780,62 @@ describe("la fermeture finit avec son trajet", () => {
       }
       expect(checked).toBeGreaterThan(5);
     }
+  });
+});
+
+/**
+ * Saisie au doigt avant l'arrivée (06/11/2026, troisième film) : la bannière restait clouée en haut de
+ * l'écran pendant que le reste de la carte descendait sous le doigt — le visuel était encore dans la
+ * fenêtre du trajet, qui ne suit pas la carte.
+ */
+describe("la fiche saisie pendant son ouverture", () => {
+  for (const when of [{ label: "en plein trajet", ms: 260 }, { label: "avant même le départ", ms: 0 }]) {
+    it(`${when.label} : l'ouverture finit d'un coup, et visuel et carte bougent ensemble dès le premier mouvement`, async () => {
+      const poster = addPoster();
+      press(poster.querySelector("img")!);
+      render(<Sheet swipe />);
+      markLoaded(root()!.querySelector<HTMLImageElement>("[data-sheet-photo]")!);
+      if (when.ms) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(when.ms);
+        });
+      }
+      // Le trajet n'est pas fini : le visuel est encore dans la fenêtre, la fiche transparente.
+      expect(windowOf()).toBeTruthy();
+      expect(root()!.style.backgroundColor).toBe("transparent");
+      const banner = root()!.querySelector<HTMLElement>("[data-box='banner']")!;
+      fireEvent.pointerDown(banner, { pointerId: 3, clientY: 100, pointerType: "touch", button: 0 });
+      // Dès l'appui, avant tout mouvement : plus de fenêtre, la fiche rendue à elle-même, le visuel
+      // dans la bannière — et seul l'assombrissement reste dans le calque, à sa valeur posée.
+      expect(Array.from(layer()!.children)).toHaveLength(1);
+      expect(root()!.style.backgroundColor).not.toBe("transparent");
+      expect(root()!.hasAttribute("data-sheet-flying")).toBe(false);
+      expect(root()!.querySelector<HTMLElement>("[data-sheet-photo]")!.style.visibility).toBe("");
+      expect(root()!.querySelector<HTMLElement>("[data-sheet-photo]")!.style.opacity).toBe("1");
+      // Le premier mouvement déplace la carte entière, visuel compris (il est dedans).
+      fireEvent.pointerMove(banner, { pointerId: 3, clientY: 100, pointerType: "touch" });
+      fireEvent.pointerMove(banner, { pointerId: 3, clientY: 160, pointerType: "touch" });
+      expect(root()!.style.transform).toBe("translateY(60px)");
+      expect(root()!.contains(root()!.querySelector("[data-sheet-photo]"))).toBe(true);
+      // Le relais prévu pour l'arrivée ne retombe pas plus tard sur la fiche saisie.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(windowOf()).toBeUndefined();
+      expect(root()!.style.transform).toBe("translateY(60px)");
+      fireEvent.pointerUp(banner, { pointerId: 3, clientY: 160, pointerType: "touch" });
+    });
+  }
+
+  it("après l'arrivée, saisir la fiche ne touche plus à rien", async () => {
+    press(addPoster().querySelector("img")!);
+    render(<Sheet swipe />);
+    await runOpen();
+    const before = fake.created.length;
+    const banner = root()!.querySelector<HTMLElement>("[data-box='banner']")!;
+    fireEvent.pointerDown(banner, { pointerId: 3, clientY: 100, pointerType: "touch", button: 0 });
+    expect(fake.created.length).toBe(before);
+    fireEvent.pointerUp(banner, { pointerId: 3, clientY: 100, pointerType: "touch" });
   });
 });
 

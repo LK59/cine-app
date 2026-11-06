@@ -55,6 +55,7 @@ import {
   type Stage,
 } from "./motion";
 import { afterTwoFrames, clearSheetTimeout, sheetFrame, sheetTimeout, boxOf, clockNow, detectProfile, opacityNow, place, prefersReducedMotion, promote, scaleOf, startTogether, swallowStrayClick, translateYOf } from "./dom";
+import { SHEET_GRAB_EVENT } from "@/lib/useSwipeToDismiss";
 import { hideSource, installPressTracker, peekPress, showSource, takePress, visibleSource, type SheetSource } from "./source";
 
 /**
@@ -595,6 +596,8 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     /** Le visuel a pris la place de l'affiche pendant le trajet (arrivé en plein vol). */
     bdShown: boolean;
     cancelCalm: (() => void) | null;
+    /** L'ouverture en cours, menée à son terme d'un coup — la fiche saisie au doigt (`SHEET_GRAB_EVENT`). */
+    settleNow: (() => void) | null;
     closing: boolean;
     closeAt: number;
     mountedAt: number;
@@ -616,6 +619,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     unpromote: null,
     bdShown: false,
     cancelCalm: null,
+    settleNow: null,
     closing: false,
     closeAt: 0,
     mountedAt: 0,
@@ -651,11 +655,15 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     root.addEventListener("pointermove", onMove, { passive: true });
     root.addEventListener("pointerup", onUp);
     root.addEventListener("click", onClick);
+    // La fiche saisie au doigt pendant son ouverture — voir `settleNow` dans `openMorph`.
+    const onGrab = () => s.settleNow?.();
+    root.addEventListener(SHEET_GRAB_EVENT, onGrab);
     return () => {
       root.removeEventListener("pointerdown", onDown);
       root.removeEventListener("pointermove", onMove);
       root.removeEventListener("pointerup", onUp);
       root.removeEventListener("click", onClick);
+      root.removeEventListener(SHEET_GRAB_EVENT, onGrab);
     };
   }, [opts.rootRef]);
 
@@ -732,6 +740,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
   /** L'ouverture s'arrête net : plus rien d'elle ne peut révéler une ligne ou basculer un calque. */
   function stopOpen() {
     const s = st.current;
+    s.settleNow = null;
     s.cancelStart?.();
     s.cancelStart = null;
     for (const a of s.openAnims.splice(0)) a.cancel();
@@ -942,6 +951,39 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
         s.timers.push(sheetTimeout(() => settleOpen(photo, s.bdShown ? backdropSrc : source.image), d));
       });
     });
+
+    // 8. Saisie au doigt avant l'arrivée : l'ouverture finit d'un coup, et le visuel rentre dans la carte.
+    //
+    // Filmé sur l'iPhone (06/11/2026, troisième film — « her » saisie 0,2 s après l'ouverture, « Drive »
+    // 0,4 s) : pendant 80 à 100 ms, la bannière restait clouée en haut de l'écran pendant que le reste de
+    // la carte (croix, logo, boutons, texte) descendait sous le doigt, une bande noire entre les deux et
+    // pas d'accueil derrière ; puis tout se recollait d'un coup. Le visuel était encore dans la fenêtre
+    // du trajet (le calque à part, qui ne suit pas la carte), la fiche encore transparente et la fenêtre
+    // portait l'encre de la carte à sa place de repos. Le geste (`useSwipeToDismiss`) annonce donc la
+    // saisie à la carte, avant tout mouvement : toutes les animations de l'ouverture sautent à leur fin,
+    // puis le relais ordinaire de l'arrivée (`settleOpen`) — visuel ou image de relais dans la bannière,
+    // fiche rendue opaque, fenêtre retirée, assombrissement laissé à sa valeur posée. La carte bouge
+    // alors d'une pièce dès le premier pixel, l'accueil assombri paraît au-dessus d'elle comme dans tout
+    // glissement. Pourquoi sauter à la fin plutôt que faire suivre le doigt à la fenêtre : 0,2 s après
+    // l'appui, le ressort a déjà fait ~90 % du chemin (le saut est de quelques pixels), et une fenêtre
+    // qui suivrait le doigt devrait être déplacée par une écriture de plus à chaque mouvement, puis
+    // relayée en plein geste — deux pièces à garder alignées au lieu d'une.
+    s.settleNow = () => {
+      if (s.win !== w || s.closing) return;
+      s.settleNow = null;
+      cancelled = true;
+      s.cancelStart?.();
+      s.cancelStart = null;
+      for (const id of s.timers.splice(0)) clearSheetTimeout(id);
+      for (const a of anims) {
+        try {
+          a.finish();
+        } catch {
+          // Une animation que le moteur refuse de finir (sans fin connue) : le relais la retire.
+        }
+      }
+      settleOpen(photo, s.bdShown ? backdropSrc : source.image);
+    };
   }
 
   /**
@@ -952,6 +994,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
   function settleOpen(photo: HTMLImageElement | null, standIn: string) {
     const s = st.current;
     if (s.closing) return;
+    s.settleNow = null;
     const loaded = !!photo && photo.complete && photo.naturalWidth > 0;
     if (loaded) {
       photo.style.transition = "none";

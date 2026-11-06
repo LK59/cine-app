@@ -2642,6 +2642,25 @@ aussi sa transformation ; au bureau, la copie est maintenant promue le temps du 
 Tests : `sheetMorph-hook.test.tsx` (« le contenu part avec la carte » : à chaque image clé, la
 translation et l'échelle du bloc sont celles de la fenêtre au même instant).
 
+**Saisie au doigt pendant l'ouverture, l'ouverture finit d'un coup (06/11/2026, troisième film).** Une
+fiche du téléphone saisie dans la demi-seconde qui suit son ouverture (« her » à 0,2 s, « Drive » à
+0,4 s) : pendant 80 à 100 ms la bannière restait clouée en haut de l'écran pendant que le reste de la
+carte descendait sous le doigt, une bande noire entre les deux, pas d'accueil derrière — puis tout se
+recollait. Le visuel était encore dans la fenêtre du trajet (le calque à part, que la transformation de
+la carte n'emporte pas), la fiche encore transparente, l'encre de la carte dans la fenêtre à sa place
+de repos. Ce qu'on avait pris pour le rebond d'iOS au départ du geste (§7.2) était ceci. Désormais
+`useSwipeToDismiss` annonce la saisie à la carte (`SHEET_GRAB_EVENT`, à l'appui, avant tout mouvement)
+et `useSheetMorph` mène l'ouverture à son terme d'un coup (`settleNow`) : toutes ses animations à leur
+fin, puis le relais ordinaire de l'arrivée (`settleOpen` — visuel, ou image de relais dans la bannière ;
+fiche rendue opaque ; fenêtre retirée ; assombrissement laissé à sa valeur posée). La carte bouge d'une
+pièce dès le premier pixel. Saisie en plein vol, la fenêtre saute à la fin plutôt que de suivre le
+doigt : 0,2 s après l'appui le ressort a fait ~90 % du chemin, et une fenêtre qui suivrait le doigt
+serait une seconde pièce à déplacer à chaque mouvement puis à relayer en plein geste. Toutes les
+fiches qui volent et se tirent : bibliothèque (film, série), découverte, hors ligne, livres au
+téléphone ; et la poignée de l'iPad (`useSheetGrip`, même carte, même annonce). Tests :
+`sheetMorph-hook.test.tsx` (« la fiche saisie pendant son ouverture » : en plein trajet et avant le
+départ ; après l'arrivée, rien).
+
 **La fermeture au doigt part de la carte où le doigt l'a mise, à sa vitesse** — une seule pièce
 depuis l'audit du 10/10/2026 ; l'élan porté à part (`fingerCarry`) qui le précédait est retiré.
 Tests : `sheetMorph-motion.test.ts`, `uiQuiet.test.ts`, `resumeCache-uiQuiet.test.ts`,

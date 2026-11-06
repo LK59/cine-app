@@ -84,6 +84,14 @@ const NOT_A_GESTURE = "button, a, [role='button']";
  */
 export type SwipeFollow = (offset: number, card: HTMLElement) => void;
 
+/**
+ * Annoncé sur la carte (option `card`) à l'appui sur la poignée, avant tout mouvement : une fiche qui
+ * finit encore son ouverture (`useSheetMorph`) la mène à son terme d'un coup, pour que le doigt
+ * déplace une seule pièce dès le premier pixel (06/11/2026). Un événement plutôt qu'une option : le
+ * geste et l'ouverture sont deux crochets de la même fiche, déclarés dans l'ordre qui lui convient.
+ */
+export const SHEET_GRAB_EVENT = "cine:sheet-grab";
+
 /** La carte posée à `y` sous le doigt — hors du composant : ses écritures ne sont pas un rendu. */
 function placeCard(el: HTMLElement, y: number, follow: SwipeFollow | undefined): void {
   el.style.transform = `translateY(${y}px)`;
@@ -315,6 +323,8 @@ export function useSwipeToDismiss(
       if (!handleRef.current) listen(el, false);
       beginGuard(el);
     }
+    // La fiche saisie pendant son ouverture finit celle-ci avant de bouger — voir `SHEET_GRAB_EVENT`.
+    cardRef.current?.current?.dispatchEvent(new Event(SHEET_GRAB_EVENT));
     setDragging(true);
     setTouched(true);
     // Capture: the finger drags the sheet down out from under itself, so it leaves the handle
