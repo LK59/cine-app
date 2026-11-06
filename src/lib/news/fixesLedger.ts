@@ -1096,6 +1096,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.13.22",
+    page: "10.5",
+    group: { fr: "Interface", en: "Interface", es: "Interfaz", de: "Oberfläche" },
+    items: [
+      {
+        fr: "Au lancement, l'accueil apparaît d'emblée dans sa forme, avec la bonne barre de navigation, puis se remplit — au lieu d'un écran d'attente suivi de plusieurs à-coups.",
+        en: "At launch, the home screen appears in its final shape right away, with the right navigation bar, then fills in — instead of a loading screen followed by several jolts.",
+        es: "Al abrir la app, la pantalla de inicio aparece de entrada con su forma y la barra de navegación correcta, y luego se completa, en lugar de una pantalla de espera seguida de varios saltos.",
+        de: "Beim Start erscheint die Startseite sofort in ihrer Form, mit der richtigen Navigationsleiste, und füllt sich dann – statt eines Ladebildschirms mit mehreren Rucklern.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
