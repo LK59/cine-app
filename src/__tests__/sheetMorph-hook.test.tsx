@@ -477,6 +477,68 @@ describe("sans visuel au montage", () => {
   });
 });
 
+/**
+ * Refermée vite après une première ouverture (06/11/2026, huitième film, « Les Légendes de l'Ouest ») :
+ * l'image de relais, reproduite par la copie à la place de la bannière, restait immobile au-dessus de
+ * l'accueil tout le temps du retour, puis disparaissait d'un coup.
+ */
+describe("une fermeture rapide ne laisse rien derrière elle", () => {
+  const openProgress = (track: FakeAnimation, at: number) =>
+    (sampleAt(track.frames, at, "transform")[2] * BOXES.sheet.w - BOXES.poster.w) / (BOXES.sheet.w - BOXES.poster.w);
+  const cases = [
+    { label: "en plein trajet (q ≈ 0,3)", q: 0.3 },
+    { label: "presque arrivée (q ≈ 0,9)", q: 0.9 },
+    { label: "arrivée, le visuel de la réponse pas encore décodé", q: null },
+  ] as const;
+  for (const c of cases) {
+    it(c.label, async () => {
+      press(addPoster().querySelector("img")!);
+      const { rerender } = render(<Sheet photo={false} />);
+      const track = live(windowOf())[0] as FakeAnimation;
+      let photo = false;
+      if (c.q !== null) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(100);
+        });
+        const D = Number(track.options.duration);
+        const at = track.frames.find((f) => openProgress(track, Number(f.offset)) >= c.q)!;
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(Math.max(0, track.startTime! + Number(at.offset) * D - performance.now()));
+        });
+        expect(windowOf()).toBeTruthy();
+      } else {
+        await runOpen();
+        // La réponse : son visuel monte, pas encore chargé — l'image de relais tient la bannière.
+        rerender(<Sheet photo />);
+        photo = true;
+        await act(async () => {
+          await Promise.resolve();
+        });
+        expect(root()!.querySelector("[data-sheet-standin]")).not.toBeNull();
+      }
+      rerender(<Sheet photo={photo} leaving />);
+      const copy = layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!;
+      // Ni la fiche ni sa copie ne gardent d'image de relais : la fenêtre l'emporte.
+      expect(root()!.querySelector("[data-sheet-standin]")).toBeNull();
+      expect(copy.querySelector("[data-sheet-standin]")).toBeNull();
+      if (c.q === null) {
+        const win = copy.previousElementSibling as HTMLElement;
+        expect(Array.from(win.querySelectorAll("img")).map((i) => i.getAttribute("src"))).toContain("https://img.test/poster.jpg");
+        expect(Array.from(win.querySelectorAll("img")).map((i) => i.getAttribute("src"))).not.toContain("https://img.test/backdrop.jpg");
+      }
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      act(() => fake.created.filter((a) => a.frames.length === 2 && a.frames[1].opacity === 0 && a.onfinish).forEach((a) => a.finish()));
+      // Rien au-dessus de l'accueil : ni calque, ni image de relais, ni trajet en vol, ni minuterie.
+      expect(layer()).toBeNull();
+      expect(document.body.querySelectorAll("[data-sheet-standin]")).toHaveLength(0);
+      expect(sheetMorphForTests.flights()).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+  }
+});
+
 describe("la fermeture", () => {
   it("la carte entière rétrécit dans l'affiche ; la copie s'efface en place ; tout part une image plus tard", async () => {
     const poster = addPoster();
@@ -557,6 +619,8 @@ describe("la fermeture", () => {
   it("tirée au doigt, la carte repart d'où le doigt l'a mise — d'un bloc, visuel compris", async () => {
     press(addPoster().querySelector("img")!);
     const { rerender } = render(<Sheet />);
+    // Le visuel chargé : c'est lui que la fenêtre emporte (sans lui, ce serait l'image de relais).
+    markLoaded(root()!.querySelector<HTMLImageElement>("[data-sheet-photo]")!);
     await runOpen();
     root()!.style.transform = "translateY(60px)";
     rerender(<Sheet leaving />);

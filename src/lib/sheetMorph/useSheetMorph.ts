@@ -498,7 +498,7 @@ const MIDFLIGHT_FADE_MS = 140;
  * (`MutationObserver`), pas celle du départ, et ne la rend opaque qu'une fois chargée. Un visuel qui
  * échoue, ou qui n'existe pas, laisse l'image en place : une affiche vaut mieux qu'une bannière vide.
  */
-function standInUntilLoaded(container: HTMLElement, standIn: string): void {
+function standInUntilLoaded(container: HTMLElement, standIn: string): () => void {
   const photoNow = () => container.querySelector<HTMLImageElement>("[data-sheet-photo]");
   const first = photoNow();
   const over = document.createElement("div");
@@ -582,6 +582,16 @@ function standInUntilLoaded(container: HTMLElement, standIn: string): void {
   const observer = typeof MutationObserver === "function" ? new MutationObserver(check) : null;
   observer?.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
   check();
+  // Retirée d'un coup par une fermeture (`beginClose`) ou un démontage : plus rien n'attend un visuel,
+  // et le visuel tenu caché pour son fondu redevient un visuel ordinaire.
+  return () => {
+    if (done) return;
+    done = true;
+    observer?.disconnect();
+    watched?.removeEventListener("load", onLoad);
+    if (watched) watched.style.visibility = "";
+    over.remove();
+  };
 }
 
 export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
@@ -628,6 +638,8 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     /** Le visuel a pris la place de l'affiche pendant le trajet (arrivé en plein vol). */
     bdShown: boolean;
     cancelCalm: (() => void) | null;
+    /** L'image de relais posée à l'arrivée, à retirer d'un coup — voir `standInUntilLoaded`. */
+    cancelStandIn: (() => void) | null;
     /** L'ouverture en cours, menée à son terme d'un coup — la fiche saisie au doigt (`SHEET_GRAB_EVENT`). */
     settleNow: (() => void) | null;
     /** L'appui sur la poignée pendant l'ouverture : finir d'un coup, ou suivre le doigt (`openMorph`, 8). */
@@ -657,6 +669,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     unpromote: null,
     bdShown: false,
     cancelCalm: null,
+    cancelStandIn: null,
     settleNow: null,
     grab: null,
     drag: null,
@@ -739,6 +752,8 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     return () => {
       s.cancelCalm?.();
       s.cancelCalm = null;
+      s.cancelStandIn?.();
+      s.cancelStandIn = null;
       if (s.closing) return;
       // Démontée par un retour (le bouton du navigateur, `history.back()` d'ailleurs) : la même
       // fermeture que la croix — la racine est encore dans la page quand ce nettoyage s'exécute.
@@ -1102,7 +1117,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
       // Sans visuel du tout, seulement au téléphone : la bannière y est un cadre à part ; au bureau, ce
       // serait la fiche entière.
       const container = photo?.parentElement ?? (optsRef.current.layout === "phone" ? optsRef.current.imageRef.current : null);
-      if (container) standInUntilLoaded(container, standIn);
+      if (container) s.cancelStandIn = standInUntilLoaded(container, standIn);
     }
     for (const undo of s.restore.splice(0)) undo();
     s.win?.win.remove();
@@ -1217,6 +1232,17 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     const reduced = prefersReducedMotion();
     const canFly = !!source && !!imageNow && !reduced && imageNow.w > 0;
     const photo = root.querySelector<HTMLImageElement>("[data-sheet-photo]");
+    /**
+     * L'image de relais encore posée sur la bannière (le visuel pas encore là, ou pas encore décodé) :
+     * c'est elle que la fenêtre emporte, et elle quitte la fiche tout de suite. La copie la reproduisait
+     * telle quelle, posée à la place de la bannière : refermée vite après une première ouverture, la fiche
+     * laissait cette image immobile au-dessus de l'accueil tout le temps du retour (~250 ms), puis elle
+     * disparaissait d'un coup avec la copie (06/11/2026, huitième film, « Les Légendes de l'Ouest »).
+     */
+    const standInEl = root.querySelector<HTMLElement>("[data-sheet-standin]");
+    const standInUrl = standInEl ? /url\(["']?([^"')]+)["']?\)/.exec(standInEl.style.backgroundImage)?.[1] ?? null : null;
+    s.cancelStandIn?.();
+    s.cancelStandIn = null;
 
     // 3. La copie prend la place de la fiche, qui se cache et rend l'adresse. Au téléphone, seulement
     //    ce qui est à l'écran (`cloneVisible`) : la copie entière coûtait une longue image au départ.
@@ -1341,12 +1367,12 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     // il débordait, sombre, sous la vignette déjà posée.
     const poseAt = phone ? collapseCardBody(closePoses(cur, toPose), banner) : closePoses(cur, toPose);
     const veils = Array.from(root.querySelectorAll<HTMLElement>("[data-sheet-veil]"));
-    const w = buildWindow(layer, copy, stage, base, banner, srcBox, source.image, photo?.currentSrc || photo?.src || source.image, veils, radius, phone ? { box: base, ink } : null);
+    const w = buildWindow(layer, copy, stage, base, banner, srcBox, source.image, standInUrl ?? (photo?.currentSrc || photo?.src || source.image), veils, radius, phone ? { box: base, ink } : null);
     hideSource(source);
     // La copie, sans son visuel ni ses voiles, qui sont dans la fenêtre ; transparente — l'encre de la
     // carte est dans la fenêtre au téléphone, le visuel plein écran au bureau.
     Object.assign(copy.style, holdTransparent(layout));
-    for (const sel of ["[data-sheet-photo]", "[data-sheet-veil]", "[data-sheet-settle]"])
+    for (const sel of ["[data-sheet-photo]", "[data-sheet-veil]", "[data-sheet-settle]", "[data-sheet-standin]"])
       for (const el of Array.from(copy.querySelectorAll<HTMLElement>(sel))) el.style.visibility = "hidden";
 
     const ghost = trackAnims(w, poseAt, motion, base, stage, samples);

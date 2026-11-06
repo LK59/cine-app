@@ -62,6 +62,11 @@ export interface PlayerTitlePayload {
    * d'un film de la bibliothèque, logo en tête de colonne, et n'avait que le titre écrit.
    */
   logo: string | null;
+  /**
+   * Le logo se choisit encore (un titre jamais vu, `TITLE_ART_WAIT_MS` dépassé) : la fiche redemande
+   * la réponse un peu plus tard pour le recevoir, sans l'avoir attendu (06/11/2026, huitième film).
+   */
+  logoPending: boolean;
 }
 
 /**
@@ -129,7 +134,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
     const artP = titleArtWithin(type, tmdbId, TITLE_ART_WAIT_MS);
 
     if (type === "movie") {
-      const [detail, media, libraryId, downloading, art] = await Promise.all([
+      const [detail, media, libraryId, downloading, artWait] = await Promise.all([
         // Un titre que TMDB ne connaît plus (lien ancien) : « Titre introuvable », pas le corps de
         // TMDB — voir `renameNotFound` (ROBUSTESSE-7).
         renameNotFound(tmdb.getMovie(tmdbId), "Titre introuvable", "title_not_found"),
@@ -155,12 +160,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
         mediaStatus: media?.mediaInfo?.status ?? null,
         watchlistStatus: userId ? watchlistDb.get(userId, "movie", tmdbId)?.status ?? null : null,
         downloading,
+        logoPending: artWait.pending,
         watched: userId ? isWatchedLocally(userId, "movie", tmdbId) : false,
-        logo: pickLogo(art, "movie", tmdbId, req, { shown: detail.title, original: detail.original_title, originalLanguage: detail.original_language }),
+        logo: pickLogo(artWait.art, "movie", tmdbId, req, { shown: detail.title, original: detail.original_title, originalLanguage: detail.original_language }),
       });
     }
 
-    const [detail, media, libraryId, downloading, art] = await Promise.all([
+    const [detail, media, libraryId, downloading, artWait] = await Promise.all([
       renameNotFound(tmdb.getTv(tmdbId), "Titre introuvable", "title_not_found"),
       mediaP,
       libraryIdP,
@@ -185,8 +191,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
       mediaStatus: media?.mediaInfo?.status ?? null,
       watchlistStatus: userId ? watchlistDb.get(userId, "series", tmdbId)?.status ?? null : null,
       downloading,
+      logoPending: artWait.pending,
       watched: userId ? isWatchedLocally(userId, "series", tmdbId) : false,
-      logo: pickLogo(art, "series", tmdbId, req, { shown: detail.name, original: detail.original_name, originalLanguage: detail.original_language }),
+      logo: pickLogo(artWait.art, "series", tmdbId, req, { shown: detail.name, original: detail.original_name, originalLanguage: detail.original_language }),
     });
   }, "player-title");
 }
@@ -203,12 +210,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
  */
 const TITLE_ART_WAIT_MS = 150;
 
-function titleArtWithin(type: "movie" | "series", tmdbId: number, ms: number): Promise<TitleArt | null> {
+function titleArtWithin(type: "movie" | "series", tmdbId: number, ms: number): Promise<{ art: TitleArt | null; pending: boolean }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<null>((ok) => {
-    timer = setTimeout(() => ok(null), ms);
+  const late = new Promise<{ art: null; pending: true }>((ok) => {
+    timer = setTimeout(() => ok({ art: null, pending: true }), ms);
   });
-  return Promise.race([titleArt(type, tmdbId), late]).finally(() => clearTimeout(timer));
+  const ready = titleArt(type, tmdbId).then((art) => ({ art, pending: false }));
+  return Promise.race([ready, late]).finally(() => clearTimeout(timer));
 }
 
 /**
@@ -268,6 +276,7 @@ function build(input: {
   downloading: number | null;
   watched: boolean;
   logo: string | null;
+  logoPending: boolean;
 }): PlayerTitlePayload {
   return {
     tmdbId: input.tmdbId,
@@ -300,5 +309,6 @@ function build(input: {
     watched: input.watched,
     posterPath: input.posterPath,
     logo: input.logo,
+    logoPending: input.logoPending,
   };
 }

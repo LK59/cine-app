@@ -44,6 +44,38 @@ import { useWatchlistToggle } from "@/lib/useWatchlistToggle";
  */
 const ANSWER_FADE = "animate-fade-in [animation-duration:300ms]";
 
+/**
+ * Un logo qui se choisit encore côté serveur (`logoPending`) : la fiche redemande sa réponse à ce rythme.
+ * Huitième film (06/11/2026) : la réponse partie sans lui, la fiche gardait le titre écrit pour de bon —
+ * et SWR resservait cette même réponse aux réouvertures des dix secondes suivantes.
+ */
+const LOGO_RETRY_MS = 1200;
+/**
+ * Et pas au-delà : un logo dont le calcul n'aboutit jamais (TMDB lent, images refusées) laissait la
+ * fiche redemander sa réponse toutes les 1,2 s tant qu'elle restait ouverte. Passé ce délai, le titre
+ * écrit reste ; le calcul, lui, continue côté serveur et sert la prochaine ouverture.
+ */
+const LOGO_RETRY_FOR_MS = 15_000;
+
+/**
+ * Le logo arrivé après la fiche : il se pose dans une place tenue à sa hauteur dès l'attente (pas de
+ * saut de la colonne), en fondu à la place du titre écrit. `late` : le logo s'est fait attendre
+ * dans cette fiche — sinon rien ne bouge.
+ */
+function LateLogoTitle({ title, logo, pending, late, desktop = false }: { title: string; logo: string | null; pending: boolean; late: boolean; desktop?: boolean }) {
+  const inner = desktop ? <CinemaDetailTitle title={title} logoUrl={logo} /> : <PhoneSheetTitle title={title} logoUrl={logo} />;
+  if (!late) return inner;
+  // La hauteur d'un logo du téléphone (`SURFACES.phone` de CinemaLogo : 52 px, 76 dès 760 px de haut).
+  const reserve = desktop ? "" : "min-h-13 [@media(min-height:760px)]:min-h-19";
+  return (
+    <div className={reserve}>
+      <div key={logo ?? (pending ? "attente" : "écrit")} className={logo ? ANSWER_FADE : ""}>
+        {inner}
+      </div>
+    </div>
+  );
+}
+
 const STATE_ICON: Record<PlayerRequestState, React.ElementType> = {
   unreleased: CalendarClock,
   processing: Clock,
@@ -80,16 +112,28 @@ export function PlayerDiscoverSheet({
   const containerRef = useRef<HTMLDivElement>(null);
   const [showSynopsis, setShowSynopsis] = useState(false);
 
+  const [openedAt] = useState(() => Date.now());
   const { data, isLoading, error } = useSWR<PlayerTitlePayload>(
     `/api/player/title/${mediaType}/${tmdbId}`,
     fetcher,
     // Relue toute seule tant que le titre arrive, pour que le pourcentage avance sous les yeux ;
     // jamais sinon.
-    { revalidateOnFocus: false, refreshInterval: (latest) => (latest?.downloading != null ? DOWNLOAD_REFRESH_MS : 0) }
+    // Et tant que son logo se choisit encore (`logoPending`) : la réponse est partie sans lui, il arrive
+    // dans la même fiche — et, gardé par SWR, il est là d'emblée à la réouverture.
+    {
+      revalidateOnFocus: false,
+      refreshInterval: (latest) => (latest?.downloading != null ? DOWNLOAD_REFRESH_MS : latest?.logoPending && Date.now() - openedAt < LOGO_RETRY_FOR_MS ? LOGO_RETRY_MS : 0),
+      // Sous l'intervalle de relecture : les dix secondes de `SWRProvider` avalaient la relecture du
+      // logo (une relecture périodique est dédoublonnée comme une autre).
+      dedupingInterval: LOGO_RETRY_MS - 200,
+    }
   );
   // Ce que la carte savait, pour l'attente — voir `discoverPreview` ; et le fondu de ce qui arrive après.
   const [preview] = useState(() => discoverPreview(mediaType, tmdbId));
   const late = useLateArrival(data !== undefined || error !== undefined);
+  // Le logo s'est fait attendre dans cette fiche (une réponse `logoPending`) : il paraîtra en fondu.
+  const [logoLate, setLogoLate] = useState(false);
+  if (data?.logoPending && !logoLate) setLogoLate(true);
   const runtimeLabel = useRuntimeLabel();
   const releaseLabel = useReleaseLabel();
 
@@ -319,7 +363,7 @@ export function PlayerDiscoverSheet({
             </>
           ) : (
           <div className={late.fade ? ANSWER_FADE : ""}>
-          <PhoneSheetTitle title={data.title} logoUrl={data.logo} />
+          <LateLogoTitle title={data.title} logo={data.logo} pending={data.logoPending} late={logoLate} />
 
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
             {releaseLabel(data.releaseDate, data.year) && <span>{releaseLabel(data.releaseDate, data.year)}</span>}
@@ -432,7 +476,7 @@ export function PlayerDiscoverSheet({
         <CinemaDetailPages
           first={
             <div data-sheet-content="" style={COLUMN_STYLE} className={`flex flex-col ${COLUMN_GAP} px-8 sm:px-16 ${detailColumnMotion({ leaving: false, revealed: revealed || morph.handlesEntry })}`}>
-              <CinemaDetailTitle title={data.title} logoUrl={data.logo} />
+              <LateLogoTitle title={data.title} logo={data.logo} pending={data.logoPending} late={logoLate} desktop />
 
               <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
                 {releaseLabel(data.releaseDate, data.year) && <span>{releaseLabel(data.releaseDate, data.year)}</span>}

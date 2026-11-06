@@ -289,6 +289,8 @@ describe("GET /api/player/title — les appels indépendants partent ensemble", 
       const body = await (await pending).json();
       expect(body.title).toBe("Vice-versa 2");
       expect(body.logo).toBeNull();
+      // Et la fiche le sait : elle redemandera la réponse pour le recevoir.
+      expect(body.logoPending).toBe(true);
     } finally {
       artState.delayMs = 0;
       vi.useRealTimers();
@@ -301,6 +303,7 @@ describe("GET /api/player/title — les appels indépendants partent ensemble", 
     const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
     const body = await (await GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "603" }) })).json();
     expect(body.logo).toBe("https://image.tmdb.org/t/p/w500/logo.png");
+    expect(body.logoPending).toBe(false);
   });
 
   it("un titre caché reste inconnu, même interrogé en parallèle (§54)", async () => {

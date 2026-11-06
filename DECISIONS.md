@@ -2567,6 +2567,24 @@ L'accueil du bureau porte `data-sheet-home`.
   rangées de découverte, recherche, filmographie, saga, Ma liste, ajout à une liste.
   Tests : `sheetMorph-hook.test.tsx` (« sans visuel au montage »), `discover-sheet-phone-wait.test.tsx`,
   `player-routes.test.ts` (« un logo qui se calcule ne retient pas la réponse »).
+  **Huitième film (06/11/2026)** :
+  - *les logos perdus* : une réponse partie sans son logo (encore en calcul) le gardait pour de bon —
+    `SWRProvider` dédoublonne dix secondes et ne relit pas au retour au premier plan, si bien que les
+    réouvertures suivantes resservaient la même réponse, titre écrit (Star Trek, cinq fois). Un logo
+    déjà calculé, lu sur disque sans attente d'entrée-sortie, ne perd jamais la course des 150 ms. La
+    réponse dit désormais `logoPending` ; la fiche la relit toutes les 1,2 s tant qu'il l'est (son
+    dédoublonnage descendu sous cet intervalle), et le logo paraît dans la même fiche, en fondu, dans une
+    place tenue à sa hauteur dès l'attente (`LateLogoTitle`) ; gardée par SWR, la réponse avec logo sert
+    d'emblée la réouverture ;
+  - *l'image restée sur l'accueil après une fermeture rapide* : l'image de relais, posée sur la bannière
+    à l'arrivée en attendant le visuel, était reproduite par la copie de la fermeture à la place de la
+    bannière — immobile au-dessus de l'accueil tout le temps du retour, puis partie d'un coup avec la copie.
+    La fermeture la retire de la fiche (`standInUntilLoaded` rend de quoi l'annuler : observateur coupé,
+    visuel tenu caché rendu), la copie n'en garde rien, et c'est elle que la fenêtre emporte. Un démontage
+    l'annule aussi.
+  Tests : `sheetMorph-hook.test.tsx` (« une fermeture rapide ne laisse rien derrière elle » : à q ≈ 0,3,
+  à q ≈ 0,9, arrivée sans visuel décodé — ni calque, ni image de relais, ni minuterie),
+  `discover-sheet-phone-wait.test.tsx` (« le logo arrivé après la réponse »), `player-routes.test.ts`.
 - **La fiche personne** garde sa montée simple : il n'y a pas d'affiche à faire devenir une bannière.
 - **Le banc** garde sa scène simulée, l'ancien moteur (`clip`) et les durées fixes pour comparer,
   mais joue les mêmes fonctions (`src/lib/sheetMorph/motion.ts`, `dom.ts`).
