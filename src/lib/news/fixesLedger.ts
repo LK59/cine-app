@@ -1154,6 +1154,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.13.28",
+    page: "10.5",
+    group: { fr: "Interface", en: "Interface", es: "Interfaz", de: "Oberfläche" },
+    items: [
+      {
+        fr: "Au retour dans l'app après une mise à jour, la nouvelle version se charge directement, sans que les rangées bougent d'abord sur l'ancienne.",
+        en: "When you return to the app after an update, the new version now loads straight away, without the rows first shifting on the old one.",
+        es: "Al volver a la app tras una actualización, la nueva versión se carga directamente, sin que las filas se muevan antes en la anterior.",
+        de: "Bei der Rückkehr in die App nach einem Update lädt die neue Version jetzt direkt, ohne dass sich die Reihen vorher in der alten verschieben.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
