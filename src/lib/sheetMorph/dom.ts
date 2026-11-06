@@ -113,9 +113,13 @@ export function promote(els: (HTMLElement | null | undefined)[]): () => void {
   };
 }
 
-/** Démarre ensemble des animations créées en pause : un même `startTime`, une même première image. */
-export function startTogether(anims: Animation[]): number {
-  const t0 = clockNow();
+/**
+ * Démarre ensemble des animations créées en pause : un même `startTime`, une même première image.
+ * `from` (une heure de l'horloge déjà passée) les fait partir de ce moment-là plutôt que de l'image
+ * présente — une fermeture qui prolonge un geste, dont le mouvement n'a pas à attendre (useSheetMorph).
+ */
+export function startTogether(anims: Animation[], from?: number): number {
+  const t0 = from ?? clockNow();
   for (const a of anims) {
     if ("startTime" in a) a.startTime = t0;
     else (a as Partial<Animation>).play?.();

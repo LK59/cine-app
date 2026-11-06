@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { flushSync } from "react-dom";
+import { afterTwoFrames, swallowStrayClick } from "@/lib/sheetMorph/dom";
+import { releaseVelocity } from "@/lib/sheetMorph/motion";
 import { usePointerCapture } from "@/lib/usePointerCapture";
 
 // Drag-down-to-close for a full-screen sheet, driven from one grab handle (here: the banner
@@ -77,6 +80,14 @@ function announceDrag(el: HTMLElement, offset: number, released: boolean): void 
   if (!el.hasAttribute(SHEET_DRAG_FOLLOW_ATTR)) return;
   el.dispatchEvent(new CustomEvent<SheetDragDetail>(SHEET_DRAG_EVENT, { detail: { offset, released } }));
 }
+
+/**
+ * Le pont du relâché : la durée au-delà de laquelle la carte lancée s'arrêterait si la fermeture
+ * tardait encore (elle prend la main deux images plus tard, ~33 ms) — voir `finish`.
+ */
+const BRIDGE_MS = 400;
+/** Au-delà, la vitesse du doigt n'est plus un geste mais un sursaut de mesure (px/s). */
+const BRIDGE_MAX_SPEED = 6000;
 
 /** La carte posée à `y` sous le doigt — hors du composant : ses écritures ne sont pas un rendu. */
 function placeCard(el: HTMLElement, y: number, follow: SwipeFollow | undefined): void {
@@ -195,6 +206,11 @@ export function useSwipeToDismiss(
   const slop = useRef<number | null>(null);
   /** Le retour en place à écrire sur la carte une fois la transition rendue (mode direct). */
   const restPending = useRef<number | null>(null);
+  /** Le dernier décalage montré, et les derniers mouvements du doigt (sa vitesse au relâché). */
+  const shownRef = useRef(0);
+  const moves = useRef<{ t: number; y: number }[]>([]);
+  /** La fermeture différée du relâché et le pont qui l'attend — voir `finish`. */
+  const bridging = useRef<{ cancel: () => void; anim: Animation } | null>(null);
   // Les options lues par les gestionnaires, tenues à jour sans les recréer.
   const followRef = useRef(follow);
   const cardRef = useRef(card);
@@ -206,6 +222,15 @@ export function useSwipeToDismiss(
   // pointeur, et le protocole autour — rendre à la fin, rendre au démontage, ne pas lever sur un
   // pointeur déjà parti — est le seul morceau qu'ils ont en commun. Voir `usePointerCapture`.
   const capture = usePointerCapture();
+  // Démontée pendant le pont : rien ne reste en attente, rien ne tient la carte.
+  useEffect(
+    () => () => {
+      bridging.current?.cancel();
+      bridging.current?.anim.cancel();
+      bridging.current = null;
+    },
+    []
+  );
 
   // Le retour en place en mode direct : écrit après le rendu qui a rétabli la transition de la carte,
   // pour qu'elle revienne en glissant d'où le doigt l'a laissée.
@@ -222,12 +247,16 @@ export function useSwipeToDismiss(
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    // La carte est déjà lancée vers sa fermeture (le pont du relâché) : elle ne se ressaisit plus.
+    if (bridging.current) return;
     active.current = true;
     startY.current = e.clientY;
     startedAt.current = performance.now();
     latest.current = 0;
     slop.current = null;
     restPending.current = null;
+    shownRef.current = 0;
+    moves.current = [{ t: e.timeStamp, y: e.clientY }];
     // La fiche saisie pendant son ouverture finit celle-ci avant de bouger — voir `SHEET_GRAB_EVENT`.
     cardRef.current?.current?.dispatchEvent(new Event(SHEET_GRAB_EVENT));
     setDragging(true);
@@ -251,6 +280,9 @@ export function useSwipeToDismiss(
     if (slop.current === null) slop.current = Math.min(travel, FIRST_MOVE_SLOP_MAX_PX);
     latest.current = travel;
     const shown = Math.max(0, travel - slop.current);
+    shownRef.current = shown;
+    moves.current.push({ t: e.timeStamp, y: e.clientY });
+    if (moves.current.length > 12) moves.current.shift();
     const el = cardRef.current?.current;
     if (el) {
       // Le mode direct : aucun rendu React par mouvement — voir l'option `card`.
@@ -267,7 +299,6 @@ export function useSwipeToDismiss(
     capture.release();
     if (!active.current) return;
     active.current = false;
-    setDragging(false);
 
     const distance = latest.current;
     const elapsed = Math.max(performance.now() - startedAt.current, 1);
@@ -276,12 +307,60 @@ export function useSwipeToDismiss(
     if (distance > threshold || (distance >= MIN_FLICK_PX && distance / elapsed > VELOCITY_THRESHOLD)) {
       // Carries on off the bottom instead of snapping back first — the close animation is the
       // continuation of the gesture, not a separate thing that happens after it.
-      setOffset(window.innerHeight);
-      if (cardRef.current?.current) restPending.current = window.innerHeight;
-      dismissedAt.current = window.location.hash;
-      setDismissed(true);
-      onDismiss();
+      const dismiss = () => {
+        setDragging(false);
+        setOffset(window.innerHeight);
+        if (cardRef.current?.current) restPending.current = window.innerHeight;
+        dismissedAt.current = window.location.hash;
+        setDismissed(true);
+        onDismiss();
+      };
+      const el = cardRef.current?.current;
+      /**
+       * Le pont du relâché (06/11/2026, sixième film) : 13 fermetures au doigt sur 13, la carte restait
+       * figée où le doigt l'avait laissée pendant deux à trois images (35 à 50 ms), puis le retour
+       * partait. Tout se faisait dans la tâche même du relâché : le rendu de la fiche (geste fini,
+       * sortie), la copie de la fiche et sa mise en page (`useSheetMorph`), puis le retour créé en pause
+       * et lancé une image plus tard, à son point de départ — l'écran gardait la dernière image tant que
+       * cette tâche durait, et la première image du retour était encore la pose de départ.
+       *
+       * Désormais la carte est lancée sur le compositeur dès le relâché, à la vitesse du doigt
+       * (`BRIDGE_MS`, linéaire), avant tout rendu ; la fermeture n'est demandée que deux images plus tard,
+       * quand ce pont est déjà parti — il continue de bouger pendant que la tâche lourde s'exécute. La
+       * fermeture repart alors de la place que le pont a atteinte, et son horloge part de cet instant
+       * (`useSheetMorph`, `continueFrom`) : le compositeur passe d'un mouvement à l'autre sans arrêt.
+       * Une fiche saisie tôt, dont le calque du trajet suit le doigt (`SHEET_DRAG_FOLLOW_ATTR`), ferme
+       * comme avant : le calque n'a pas de pont.
+       */
+      if (el && typeof el.animate === "function" && !el.hasAttribute(SHEET_DRAG_FOLLOW_ATTR)) {
+        const y0 = shownRef.current;
+        const v = Math.min(BRIDGE_MAX_SPEED, Math.max(0, releaseVelocity(moves.current)));
+        const anim = el.animate([{ transform: `translateY(${y0}px)` }, { transform: `translateY(${y0 + (v * BRIDGE_MS) / 1000}px)` }], {
+          duration: BRIDGE_MS,
+          easing: "linear",
+          fill: "forwards",
+        });
+        // Le `click` qui suit le relâché tombait sur ce qu'il y a dessous ; la fermeture l'avalait dans la
+        // même tâche, elle arrive maintenant deux images plus tard.
+        swallowStrayClick();
+        const cancel = afterTwoFrames(() => {
+          bridging.current = null;
+          // La carte posée où le pont l'a menée, sans transition, puis le pont retiré : la sortie de la
+          // fiche (sa transition, la copie de `useSheetMorph`) part de là. La lecture du style fixe ce
+          // point de départ pour la transition que le rendu va poser.
+          const t = typeof anim.currentTime === "number" ? Math.min(BRIDGE_MS, Math.max(0, anim.currentTime)) : 0;
+          el.style.transition = "none";
+          placeCard(el, y0 + (v * t) / 1000, followRef.current);
+          anim.cancel();
+          void getComputedStyle(el).transform;
+          flushSync(dismiss);
+        });
+        bridging.current = { cancel, anim };
+        return;
+      }
+      dismiss();
     } else {
+      setDragging(false);
       setOffset(0);
       if (cardRef.current?.current) restPending.current = 0;
     }

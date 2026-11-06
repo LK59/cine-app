@@ -2533,8 +2533,19 @@ L'accueil du bureau porte `data-sheet-home`.
 - **Téléphone / iPad** : la carte entière qui grandit d'un côté, le visuel plein écran et l'accueil
   qui recule de l'autre ; la fermeture au doigt moins vive qu'au bureau (`closeResponse` : 0,85 fois
   l'ouverture, au moins 0,26 s, jamais plus lente que l'ouverture) et posée à un pixel près.
-- **La fiche TMDB** n'a son visuel qu'avec la réponse du serveur. Sans elle au montage, elle entre
-  comme avant, et seule sa fermeture revole vers l'affiche.
+- **La fiche TMDB** n'a son visuel qu'avec la réponse du serveur. **Au téléphone**, elle n'attend plus
+  cette réponse pour voler (06/11/2026, sixième film : ~1,3 s d'écran noir, une croix et une roue, puis
+  la fiche d'un coup) : l'affiche touchée se pose sur la bannière et y reste comme image de relais
+  (`standInUntilLoaded`) jusqu'au visuel de la réponse ; le bloc de contenu est là dès le montage,
+  avec ce que la carte savait (titre, année — `discoverPreview.ts`, noté par `openDiscoveryItem`) et
+  une roue à la place des actions, et le reste s'y dépose en fondu (`useLateArrival`). Une ouverture
+  qui n'a rien noté (filmographie, recherche, saga) vole pareil, sans titre en attendant. **Au bureau
+  et à l'iPad**, rien ne change : la fenêtre y est la fiche entière, et sans visuel elle n'aurait rien
+  sur quoi se poser — elle entre comme avant, et seule sa fermeture revole vers l'affiche. La route
+  (`/api/player/title`) lance ensemble tout ce qui ne dépend de rien (tags bloqués, TMDB,
+  bibliothèque, logo) ; Jellyseerr attend seulement les tags bloqués, la progression du
+  téléchargement la bibliothèque — §54 inchangé, un titre caché n'est ni demandé, ni possédé, ni en
+  téléchargement. La fiche personne entre en montant, sa roue dans la carte : pas le même cas.
 - **La fiche personne** garde sa montée simple : il n'y a pas d'affiche à faire devenir une bannière.
 - **Le banc** garde sa scène simulée, l'ancien moteur (`clip`) et les durées fixes pour comparer,
   mais joue les mêmes fonctions (`src/lib/sheetMorph/motion.ts`, `dom.ts`).
@@ -2660,6 +2671,22 @@ au téléphone ; et la poignée de l'iPad (`useSheetGrip`, même carte, mêmes a
 `sheetMorph-hook.test.tsx` (« la fiche saisie pendant son ouverture » : presque arrivée, avant le
 départ, tôt — rien ne saute, la fenêtre suit le doigt — puis relâchée en place ou jetée, sans rien
 laisser derrière ; après l'arrivée, rien).
+
+**Le relâché ne fige plus la carte (06/11/2026, sixième film).** 13 fermetures au doigt sur 13 : la
+carte restait immobile deux à trois images (35 à 50 ms) là où le doigt l'avait laissée, puis le retour
+partait. Tout se faisait dans la tâche même du relâché — rendu de la fiche, copie et mise en page —,
+l'écran gardait la dernière image tant qu'elle durait, et le retour, lancé une image plus tard depuis
+sa pose de départ, en redonnait une immobile. Désormais `useSwipeToDismiss` lance la carte sur le
+compositeur dès le relâché, à la vitesse du doigt (`BRIDGE_MS`, linéaire), avant tout rendu, et ne
+demande la fermeture que deux images plus tard (`flushSync`), quand ce pont roule déjà : il continue
+pendant la tâche lourde. La carte est alors posée où le pont l'a menée, et le retour en part ; son
+horloge part de cet instant (`continueFrom`, `startTogether(…, from)`), pas de l'image où il démarre.
+À la croix, à Échap, au retour, rien ne change (la carte est au repos). Le retour en place d'un geste
+trop court non plus. Une fiche saisie tôt, dont le calque du trajet suit le doigt, ferme sans pont.
+Le `click` qui suit le relâché est avalé dès le relâché (`swallowStrayClick`). Toutes les fiches à
+carte menée par le doigt : bibliothèque, découverte, hors ligne, livres au téléphone, fiche personne
+(sa sortie glisse depuis la place du pont), poignée de l'iPad. Tests : `sheetMorph-hook.test.tsx`
+(« le relâché d'une fermeture au doigt »).
 
 **La fermeture au doigt part de la carte où le doigt l'a mise, à sa vitesse** — une seule pièce
 depuis l'audit du 10/10/2026 ; l'élan porté à part (`fingerCarry`) qui le précédait est retiré.

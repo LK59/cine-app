@@ -102,25 +102,41 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
      * Un titre que les tags bloqués du compte lui cachent n'existe pas pour lui (DECISIONS.md §54) :
      * ni « dans la bibliothèque », ni en cours de téléchargement, ni « disponible » chez Jellyseerr.
      * La fiche TMDB l'annonçait possédé — le seul écran qui le disait encore (08/10/2026).
+     *
+     * Tout ce qui ne dépend de rien part ensemble (06/11/2026, sixième film) : la fiche découverte
+     * attendait ~1,3 s sur un écran noir — les tags bloqués, puis Jellyseerr, puis TMDB, la
+     * bibliothèque et le logo, puis la progression du téléchargement, l'un après l'autre. Seuls
+     * Jellyseerr et la progression attendent ce dont ils dépendent (le titre caché, la bibliothèque),
+     * et rien d'autre : la règle des tags bloqués reste entière — un titre caché n'est ni demandé à
+     * Jellyseerr, ni « dans la bibliothèque », ni en téléchargement.
      */
-    const hidden = (await hiddenTmdbKeysFor(session.jfId).catch(() => new Set<string>())).has(`${type}:${tmdbId}`);
-    const media =
+    const key = `${type}:${tmdbId}`;
+    const hiddenP = hiddenTmdbKeysFor(session.jfId)
+      .catch(() => new Set<string>())
+      .then((keys) => keys.has(key));
+    const mediaP = hiddenP.then((hidden) =>
       config.jellyseerr.apiKey && !hidden
-        ? await (type === "movie" ? jellyseerr.getMovieMedia(tmdbId) : jellyseerr.getTvMedia(tmdbId)).catch(() => null)
-        : null;
+        ? (type === "movie" ? jellyseerr.getMovieMedia(tmdbId) : jellyseerr.getTvMedia(tmdbId)).catch(() => null)
+        : null
+    );
+    // Ouvrable, pas seulement connu de Radarr : un film surveillé sans fichier n'a pas de fiche
+    // à ouvrir, et lui donner un identifiant menait à un clic qui ne faisait rien.
+    const libraryIdP = Promise.all([hiddenP, playableLibrary()]).then(([hidden, lib]) => (hidden ? null : playableId(lib, type, tmdbId)));
+    const downloadingP = Promise.all([hiddenP, libraryIdP]).then(([hidden, libraryId]) =>
+      libraryId === null && !hidden ? titleDownloadProgress(type, tmdbId) : null
+    );
+    const artP = titleArt(type, tmdbId);
 
     if (type === "movie") {
-      const [detail, lib, art] = await Promise.all([
+      const [detail, media, libraryId, downloading, art] = await Promise.all([
         // Un titre que TMDB ne connaît plus (lien ancien) : « Titre introuvable », pas le corps de
         // TMDB — voir `renameNotFound` (ROBUSTESSE-7).
         renameNotFound(tmdb.getMovie(tmdbId), "Titre introuvable", "title_not_found"),
-        playableLibrary(),
-        titleArt("movie", tmdbId),
+        mediaP,
+        libraryIdP,
+        downloadingP,
+        artP,
       ]);
-      // Ouvrable, pas seulement connu de Radarr : un film surveillé sans fichier n'a pas de fiche
-      // à ouvrir, et lui donner un identifiant menait à un clic qui ne faisait rien.
-      const libraryId = hidden ? null : playableId(lib, "movie", tmdbId);
-      const downloading = libraryId === null && !hidden ? await titleDownloadProgress("movie", tmdbId) : null;
       return build({
         tmdbId,
         type,
@@ -143,13 +159,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ type: str
       });
     }
 
-    const [detail, lib, art] = await Promise.all([
+    const [detail, media, libraryId, downloading, art] = await Promise.all([
       renameNotFound(tmdb.getTv(tmdbId), "Titre introuvable", "title_not_found"),
-      playableLibrary(),
-      titleArt("series", tmdbId),
+      mediaP,
+      libraryIdP,
+      downloadingP,
+      artP,
     ]);
-    const libraryId = hidden ? null : playableId(lib, "series", tmdbId);
-    const downloading = libraryId === null && !hidden ? await titleDownloadProgress("series", tmdbId) : null;
     return build({
       tmdbId,
       type,

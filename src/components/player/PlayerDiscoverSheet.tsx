@@ -30,7 +30,8 @@ import type { PlayerRequestState } from "@/lib/playerRequestState";
 import { CinemaCastRow, castFromTitle } from "@/components/cinema/CinemaCastRow";
 import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine, PhoneSheetTitle } from "@/components/cinema/CinemaDetailPages";
 import { similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
-import { CinemaTagline, CinemaDownloading, useRuntimeLabel, useReleaseLabel, DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
+import { CinemaTagline, CinemaDownloading, useLateArrival, useRuntimeLabel, useReleaseLabel, DOWNLOAD_REFRESH_MS } from "@/components/cinema/CinemaDetailExtras";
+import { discoverPreview } from "@/lib/discoverPreview";
 import { FadeInImg } from "@/components/FadeInImg";
 import { DesktopSheetBackdrop, SheetBackButton } from "@/components/cinema/DesktopSheetShell";
 import { TitleToggleRow, TitleToggleWide, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
@@ -79,6 +80,9 @@ export function PlayerDiscoverSheet({
     // jamais sinon.
     { revalidateOnFocus: false, refreshInterval: (latest) => (latest?.downloading != null ? DOWNLOAD_REFRESH_MS : 0) }
   );
+  // Ce que la carte savait, pour l'attente — voir `discoverPreview` ; et le fondu de ce qui arrive après.
+  const [preview] = useState(() => discoverPreview(mediaType, tmdbId));
+  const late = useLateArrival(data !== undefined || error !== undefined);
   const runtimeLabel = useRuntimeLabel();
   const releaseLabel = useReleaseLabel();
 
@@ -150,7 +154,11 @@ export function PlayerDiscoverSheet({
     active: true,
     leaving,
     revealed,
-    ready: !!data?.backdrop,
+    // Au téléphone, le trajet part de l'affiche touchée sans attendre la réponse (06/11/2026, sixième
+    // film : ~1,3 s d'écran noir, puis la fiche d'un coup) : l'affiche se pose sur la bannière et y
+    // reste (`standInUntilLoaded`) jusqu'à ce que le visuel de la réponse soit monté et chargé. Au
+    // bureau, la fenêtre est la fiche entière : sans visuel, elle n'aurait rien sur quoi se poser.
+    ready: isMobile || !!data?.backdrop,
     instantExit: swapsInPlace,
   });
 
@@ -272,12 +280,6 @@ export function PlayerDiscoverSheet({
         </button>
       </div>
 
-      {isLoading && (
-        <div className="flex justify-center py-12">
-          <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-        </div>
-      )}
-
       {error && !data && (
         <p className="px-4 py-10 text-center text-sm text-danger">
           {errorText(error, t("errors.loadFailed"))}
@@ -290,8 +292,23 @@ export function PlayerDiscoverSheet({
           restait qu'un liseré de six pixels. Positionner ce bloc à son tour le remet au-dessus,
           à sa place — le chevauchement lui-même est voulu, c'est ce qui pose le titre dans le
           fondu de l'image. */}
-      {data && (
+      {!(error && !data) && (
+        // Un seul bloc de contenu, du montage à la réponse : c'est lui que le trajet fait paraître à
+        // 90 %. Avant la réponse, ce que la carte savait (titre, année) et une roue discrète à la place
+        // des actions ; à la réponse, le reste s'y dépose en fondu (`useLateArrival`).
         <div data-sheet-content="" className="relative -mt-6 px-4 pb-16">
+          {!data ? (
+            <>
+              {preview && <PhoneSheetTitle title={preview.title} logoUrl={null} />}
+              {preview?.year && <div className="mb-4 text-sm text-muted">{preview.year}</div>}
+              {isLoading && (
+                <div className="flex justify-center py-8">
+                  <div className="h-7 w-7 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+                </div>
+              )}
+            </>
+          ) : (
+          <div className={late.fade}>
           <PhoneSheetTitle title={data.title} logoUrl={data.logo} />
 
           <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
@@ -345,6 +362,8 @@ export function PlayerDiscoverSheet({
           {data.overview && <p className="mb-4 text-sm leading-6 text-white">{data.overview}</p>}
 
           <CinemaCastRow cast={cast} />
+          </div>
+          )}
         </div>
       )}
     </div>

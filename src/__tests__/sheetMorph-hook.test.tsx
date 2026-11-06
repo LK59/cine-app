@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSheetMorph, sheetMorphForTests, type SheetLayout } from "@/lib/sheetMorph/useSheetMorph";
 import { forgetPress } from "@/lib/sheetMorph/source";
@@ -40,6 +40,7 @@ function Sheet({
   active = true,
   instantExit = false,
   swipe: withSwipe = false,
+  onSwipeDismiss,
 }: {
   layout?: SheetLayout;
   leaving?: boolean;
@@ -48,11 +49,13 @@ function Sheet({
   instantExit?: boolean;
   /** Le geste de la vraie fiche du téléphone sur la bannière (`useSwipeToDismiss`, carte menée sans React). */
   swipe?: boolean;
+  /** Ce que fait la fiche quand le geste la ferme (la vraie demande sa sortie). */
+  onSwipeDismiss?: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
   const morph = useSheetMorph({ layout, rootRef, imageRef: layout === "phone" ? bannerRef : rootRef, active, leaving, revealed, instantExit });
-  const swipe = useSwipeToDismiss(() => {}, { card: rootRef });
+  const swipe = useSwipeToDismiss(onSwipeDismiss ?? (() => {}), { card: rootRef });
   return createPortal(
     <div ref={rootRef} data-box="sheet" data-handles={String(morph.handlesEntry)} data-settled={String(morph.settled)} className="phone-sheet-frame" style={{ zIndex: 48, backgroundColor: "rgb(10, 10, 15)" }}>
       <div ref={bannerRef} data-box="banner" {...(withSwipe ? swipe.handlers : {})}>
@@ -925,6 +928,84 @@ describe("la fiche saisie pendant son ouverture", () => {
     fireEvent.pointerDown(banner, { pointerId: 3, clientY: 100, pointerType: "touch", button: 0 });
     expect(fake.created.length).toBe(before);
     fireEvent.pointerUp(banner, { pointerId: 3, clientY: 100, pointerType: "touch" });
+  });
+});
+
+/**
+ * Le relâché d'une fermeture au doigt (06/11/2026, sixième film : 13 fermetures sur 13) : la carte
+ * restait figée deux à trois images où le doigt l'avait laissée — la copie, sa mise en page et le
+ * rendu de la sortie se faisaient dans la tâche du relâché, et le retour partait une image plus tard
+ * de sa pose de départ.
+ */
+describe("le relâché d'une fermeture au doigt", () => {
+  /** La fiche du téléphone avec son geste, qui demande sa sortie quand le geste la ferme. */
+  function Closable() {
+    const [leaving, setLeaving] = useState(false);
+    return <Sheet swipe leaving={leaving} onSwipeDismiss={() => setLeaving(true)} />;
+  }
+  const banner = () => root()!.querySelector<HTMLElement>("[data-box='banner']")!;
+
+  it("la carte part sur le compositeur dans la tâche même du relâché, et le retour prolonge ce mouvement", async () => {
+    press(addPoster().querySelector("img")!);
+    render(<Closable />);
+    await runOpen();
+    fireEvent.pointerDown(banner(), { pointerId: 4, clientY: 100, pointerType: "touch", button: 0 });
+    fireEvent.pointerMove(banner(), { pointerId: 4, clientY: 100, pointerType: "touch" });
+    for (let y = 140; y <= 300; y += 40) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(16);
+      });
+      fireEvent.pointerMove(banner(), { pointerId: 4, clientY: y, pointerType: "touch" });
+    }
+    const released = root()!.style.transform;
+    expect(released).toBe("translateY(200px)");
+    fireEvent.pointerUp(banner(), { pointerId: 4, clientY: 300, pointerType: "touch" });
+    // Dans la tâche du relâché : le pont, lancé (pas en pause), qui descend depuis la place du doigt
+    // à la vitesse du doigt — et rien de lourd encore : ni copie, ni sortie.
+    const bridge = live(root()).at(-1)!;
+    expect(bridge.paused).toBe(false);
+    const [from, to] = bridge.frames.map((f) => numbers(f.transform)[0]);
+    expect(from).toBe(200);
+    expect(to).toBeGreaterThan(from + 100);
+    expect(layer()!.querySelector(".sheet-morph-clone")).toBeNull();
+    // Deux images plus tard : la sortie, sa copie, et un retour dont l'horloge part de cet instant-là.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(40);
+    });
+    expect(bridge.cancelled).toBe(true);
+    const copy = layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!;
+    expect(copy).not.toBeNull();
+    const builtAt = performance.now();
+    const track = live(copy.previousElementSibling)[0] as FakeAnimation;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20);
+    });
+    // Lancé à l'image suivante, mais daté de la construction : sa première image est déjà en route,
+    // jamais la pose de départ une seconde fois.
+    expect(track.startTime).not.toBeNull();
+    expect(track.startTime!).toBeLessThanOrEqual(builtAt);
+    expect(performance.now() - track.startTime!).toBeGreaterThan(10);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    act(() => fake.created.filter((a) => a.frames.length === 2 && a.frames[1].opacity === 0 && a.onfinish).forEach((a) => a.finish()));
+    expect(layer()).toBeNull();
+    expect(sheetMorphForTests.flights()).toBe(0);
+  });
+
+  it("à la croix, rien ne change : pas de pont, et le retour part de l'image où il démarre", async () => {
+    press(addPoster().querySelector("img")!);
+    const { rerender } = render(<Sheet swipe />);
+    await runOpen();
+    const before = fake.created.length;
+    rerender(<Sheet swipe leaving />);
+    expect(fake.created.slice(before).some((a) => a.target === root())).toBe(false);
+    const track = live(layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!.previousElementSibling)[0] as FakeAnimation;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20);
+    });
+    const startedAt = track.startTime!;
+    expect(startedAt).toBeGreaterThan(performance.now() - 20);
   });
 });
 

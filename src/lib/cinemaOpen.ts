@@ -1,5 +1,6 @@
 "use client";
 
+import { noteDiscoverPreview } from "@/lib/discoverPreview";
 import { cinemaNavigate, openLibraryTitle } from "@/lib/cinemaRoute";
 import type { DiscoveryItem } from "@/app/api/player/discover/route";
 
@@ -57,6 +58,8 @@ export function openDiscoveryItem(item: DiscoveryItem): void {
     openLibraryTitle(item.type, item.libraryId);
     return;
   }
+  // Ce que la carte sait déjà : la fiche s'ouvre sur ces lignes en attendant la sienne (`discoverPreview`).
+  noteDiscoverPreview(item.type, item.tmdbId, { title: item.title, year: item.year });
   cinemaNavigate({ discover: item.tmdbId, discoverType: item.type });
 }
 

@@ -235,6 +235,50 @@ describe("GET /api/player/title", () => {
   });
 });
 
+// 06/11/2026, sixième film : ~1,3 s d'écran noir sur une fiche découverte — les appels de la route
+// partaient l'un après l'autre (tags bloqués, Jellyseerr, puis TMDB). Ce qui ne dépend de rien part
+// ensemble : la réponse attend le plus long chemin, plus la somme.
+describe("GET /api/player/title — les appels indépendants partent ensemble", () => {
+  it("TMDB n'attend ni les tags bloqués ni Jellyseerr", async () => {
+    vi.useFakeTimers();
+    try {
+      const later = <T,>(ms: number, value: T) => new Promise<T>((ok) => setTimeout(() => ok(value), ms));
+      mockHidden.mockImplementationOnce(() => later(100, new Set<string>()));
+      jellyseerr.getMovieMedia.mockImplementationOnce(() => later(100, { mediaInfo: { status: 3 } }));
+      tmdbClient.getMovie.mockImplementationOnce(() =>
+        later(150, { title: "Loin", release_date: "2026-01-01", overview: "", genres: [], runtime: 100, credits: { cast: [] } })
+      );
+      const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
+      let done = false;
+      const pending = GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "1263337" }) }).then((r) => {
+        done = true;
+        return r;
+      });
+      // TMDB (150 ms) court pendant la chaîne tags bloqués → Jellyseerr (200 ms) : la réponse à 200 ms,
+      // et non à 350 ms comme quand ils s'enchaînaient.
+      await vi.advanceTimersByTimeAsync(210);
+      expect(done).toBe(true);
+      const body = await (await pending).json();
+      expect(body.title).toBe("Loin");
+      expect(body.requestState).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("un titre caché reste inconnu, même interrogé en parallèle (§54)", async () => {
+    mockHidden.mockResolvedValueOnce(new Set(["movie:603"]));
+    tmdbClient.getMovie.mockResolvedValue({ title: "Privé", release_date: "2012-10-24", overview: "", genres: [], runtime: 90, credits: { cast: [] } });
+    jellyseerr.getMovieMedia.mockResolvedValue({ mediaInfo: { status: 5 } });
+    const { GET } = await import("@/app/api/player/title/[type]/[tmdbId]/route");
+    const body = await (await GET(req(), { params: Promise.resolve({ type: "movie", tmdbId: "603" }) })).json();
+    expect(body.libraryId).toBeNull();
+    expect(body.downloading).toBeNull();
+    expect(body.requestState).toBeNull();
+    expect(jellyseerr.getMovieMedia).not.toHaveBeenCalled();
+  });
+});
+
 describe("POST /api/player/requests", () => {
   it("rejects a body without a usable type or id", async () => {
     const { POST } = await import("@/app/api/player/requests/route");

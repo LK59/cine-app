@@ -1120,6 +1120,12 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     const byRelease = now - s.upAt < 150 && s.clickAt < s.upAt;
     const fingerVy = byRelease ? releaseVelocity(s.moves) : 0;
     if (byRelease) swallowStrayClick();
+    // Fermée au doigt, le retour prolonge un geste en mouvement — le pont du relâché
+    // (`useSwipeToDismiss`) roule encore sur le compositeur pendant cette tâche. Son horloge part donc
+    // d'ici, et non de l'image où il démarre : partie de là, sa première image redonnait la pose de
+    // départ, une image immobile de plus après celles de la tâche (06/11/2026, sixième film). À la croix,
+    // à Échap, au retour, la carte est au repos : le retour part de l'image présente, comme avant.
+    const continueFrom = byRelease ? clockNow() : null;
 
     if (o.instantExit || !canAnimate()) {
       stopOpen();
@@ -1239,12 +1245,12 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
       const plainSource = s.source;
       let timer = 0;
       const cancelGo = sheetFrame(() => {
-        startTogether(others);
+        const t0 = startTogether(others, continueFrom ?? undefined);
         timer = sheetTimeout(() => {
           flights.delete(plain);
           removeLayer();
           if (plainSource) showSource(plainSource);
-        }, ms);
+        }, Math.max(0, ms - (clockNow() - t0)));
       });
       // Une ouverture pendant cette sortie la coupe net : sa copie et son assombrissement partent, la
       // nouvelle fiche reprend l'assombrissement où il en était. Elle ne se retourne pas (`handover`).
@@ -1423,7 +1429,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     // peinte est le point de départ. Lancé dans la tâche même de la fermeture (le rendu React, la
     // copie), le retour perdait ses premières images et se lisait comme un saut (audit du 10/10/2026).
     const cancelGo = sheetFrame(() => {
-      startedAt = startTogether([...ghost, ...others]);
+      startedAt = startTogether([...ghost, ...others], continueFrom ?? undefined);
       // Le relais : la vraie carte reparaît dessous, et la fenêtre, superposée à elle, s'efface par-dessus.
       timers.push(
         sheetTimeout(() => {
@@ -1436,7 +1442,7 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
             flights.delete(flight);
             removeLayer();
           };
-        }, d),
+        }, Math.max(0, d - (clockNow() - (startedAt ?? clockNow())))),
       );
     });
   }
