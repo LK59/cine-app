@@ -164,8 +164,8 @@ export function CinemaMobileDetail({
    */
   const bannerRef = useRef<HTMLDivElement>(null);
   // Grab the banner and pull the sheet away — see the hook. The card follows the finger without a
-  // render per move (`card`), and the banner's touch listeners are there from mount (`handle`).
-  const swipe = useSwipeToDismiss(requestClose, { addressed: true, card: sheetRef, handle: inert ? undefined : bannerRef, follow: phoneSheetFollow });
+  // render per move (`card`).
+  const swipe = useSwipeToDismiss(requestClose, { addressed: true, card: sheetRef, follow: phoneSheetFollow });
   const morph = useSheetMorph({
     layout: "phone",
     rootRef: sheetRef,

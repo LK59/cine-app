@@ -130,7 +130,7 @@ export function PlayerDiscoverSheet({
   // Le même geste que sur les fiches de la bibliothèque, qui l'avaient et pas celle-ci : on tire
   // la bannière vers le bas pour refermer.
   const bannerRef = useRef<HTMLDivElement>(null);
-  const swipe = useSwipeToDismiss(requestClose, { addressed: true, card: containerRef, handle: bannerRef, follow: phoneSheetFollow });
+  const swipe = useSwipeToDismiss(requestClose, { addressed: true, card: containerRef, follow: phoneSheetFollow });
   // Montée parce qu'on revient dessus plutôt qu'on l'ouvre : pas d'animation d'entrée — voir
   // `arrivedByBack`. Lu une seule fois, au montage.
   const [revealed] = useState(() => arrivedByBack());

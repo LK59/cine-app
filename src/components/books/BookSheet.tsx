@@ -103,8 +103,7 @@ function BookSheet({
 
   const close = () => cinemaClose({ book: null, reading: false });
   const exit = useSheetExit(close, { leaving, listening: !hidden });
-  const handleRef = useRef<HTMLDivElement>(null);
-  const swipe = useSwipeToDismiss(exit.requestClose, { addressed: true, card: containerRef, handle: handleRef, follow: phoneSheetFollow });
+  const swipe = useSwipeToDismiss(exit.requestClose, { addressed: true, card: containerRef, follow: phoneSheetFollow });
   // Revenue sur elle par un retour (le lecteur refermé) : elle se découvre, rien ne vole.
   const [revealed] = useState(() => arrivedByBack());
   const morph = useSheetTransition({
@@ -328,7 +327,7 @@ function BookSheet({
         }}
       >
         {/* La poignée du geste : tout l'en-tête, la couverture comprise. */}
-        <div ref={handleRef} className="relative px-5 pb-2 pt-8" {...swipe.handlers} style={{ touchAction: "none" }}>
+        <div className="relative px-5 pb-2 pt-8" {...swipe.handlers} style={{ touchAction: "none" }}>
           {backdrop}
           <div className="relative">{cover}</div>
         </div>

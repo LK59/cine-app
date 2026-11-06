@@ -52,7 +52,7 @@ function Sheet({
   const rootRef = useRef<HTMLDivElement>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
   const morph = useSheetMorph({ layout, rootRef, imageRef: layout === "phone" ? bannerRef : rootRef, active, leaving, revealed, instantExit });
-  const swipe = useSwipeToDismiss(() => {}, { card: rootRef, handle: bannerRef });
+  const swipe = useSwipeToDismiss(() => {}, { card: rootRef });
   return createPortal(
     <div ref={rootRef} data-box="sheet" data-handles={String(morph.handlesEntry)} data-settled={String(morph.settled)} className="phone-sheet-frame" style={{ zIndex: 48, backgroundColor: "rgb(10, 10, 15)" }}>
       <div ref={bannerRef} data-box="banner" {...(withSwipe ? swipe.handlers : {})}>

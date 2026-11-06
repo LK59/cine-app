@@ -365,10 +365,8 @@ const GRIP_RETURN_MS = 280;
  */
 export function useSheetGrip(onDismiss: () => void, enabled: boolean, card?: RefObject<HTMLElement | null>) {
   // La fiche suit le doigt sans rendu React par mouvement (`card`, 06/11/2026) : c'est toute la fiche
-  // du bureau qui se redessinait à chaque `pointermove`. Les écouteurs de toucher de la bande sont
-  // posés dès son montage (`handle`).
-  const gripRef = useRef<HTMLDivElement>(null);
-  const swipe = useSwipeToDismiss(onDismiss, { addressed: true, card, handle: enabled ? gripRef : undefined });
+  // du bureau qui se redessinait à chaque `pointermove`.
+  const swipe = useSwipeToDismiss(onDismiss, { addressed: true, card });
   /**
    * Le temps du retour, le style reste posé.
    *
@@ -404,7 +402,6 @@ export function useSheetGrip(onDismiss: () => void, enabled: boolean, card?: Ref
       : undefined,
     grip: enabled ? (
       <div
-        ref={gripRef}
         {...swipe.handlers}
         aria-hidden
         className="absolute inset-x-0 top-0 z-10 flex h-16 items-center justify-center"

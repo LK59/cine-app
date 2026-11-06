@@ -83,32 +83,6 @@ describe("useSwipeToDismiss", () => {
     expect(late.current.offset).toBe(140 - FIRST_MOVE_SLOP_MAX_PX);
   });
 
-  it("coupe le rebond natif sous la poignée le temps du geste, et le rend au relâché", () => {
-    const scroller = document.createElement("div");
-    scroller.style.overflowY = "auto";
-    scroller.style.overscrollBehaviorY = "contain";
-    const handle = document.createElement("div");
-    scroller.appendChild(handle);
-    document.body.appendChild(scroller);
-    try {
-      const { result } = renderHook(() => useSwipeToDismiss(vi.fn()));
-      const at = (clientY: number) => ({ ...pointer(clientY), currentTarget: handle }) as unknown as React.PointerEvent;
-      act(() => result.current.handlers.onPointerDown(at(100)));
-      expect(scroller.style.overscrollBehaviorY).toBe("none");
-      const during = new TouchEvent("touchmove", { cancelable: true, bubbles: true });
-      handle.dispatchEvent(during);
-      expect(during.defaultPrevented).toBe(true);
-      act(() => result.current.handlers.onPointerUp(at(110)));
-      expect(scroller.style.overscrollBehaviorY).toBe("contain");
-      // Hors d'un geste, la poignée ne refuse rien.
-      const after = new TouchEvent("touchmove", { cancelable: true, bubbles: true });
-      handle.dispatchEvent(after);
-      expect(after.defaultPrevented).toBe(false);
-    } finally {
-      scroller.remove();
-    }
-  });
-
   it("never goes above its starting position", () => {
     const { result } = renderHook(() => useSwipeToDismiss(vi.fn()));
     act(() => result.current.handlers.onPointerDown(pointer(200)));
@@ -346,25 +320,18 @@ describe("useSwipeToDismiss — l'adresse l'emporte", () => {
  */
 describe("la carte suit le doigt sans rendu par mouvement", () => {
   function setup(follow = vi.fn()) {
-    const scroller = document.createElement("div");
-    scroller.style.overflowY = "auto";
-    scroller.style.overscrollBehaviorY = "contain";
     const card = document.createElement("div");
     const handle = document.createElement("div");
-    const cross = document.createElement("button");
-    handle.appendChild(cross);
     card.appendChild(handle);
-    scroller.appendChild(card);
-    document.body.appendChild(scroller);
+    document.body.appendChild(card);
     let renders = 0;
     const cardRef = { current: card };
-    const handleRef = { current: handle };
     const hook = renderHook(() => {
       renders++;
-      return useSwipeToDismiss(vi.fn(), { card: cardRef, handle: handleRef, follow });
+      return useSwipeToDismiss(vi.fn(), { card: cardRef, follow });
     });
     const at = (clientY: number) => ({ ...pointer(clientY), currentTarget: handle }) as unknown as React.PointerEvent;
-    return { scroller, card, handle, cross, hook, at, renders: () => renders, follow };
+    return { card, hook, at, renders: () => renders, follow };
   }
 
   afterEach(() => {
@@ -394,24 +361,5 @@ describe("la carte suit le doigt sans rendu par mouvement", () => {
     expect(hook.result.current.dragging).toBe(false);
     expect(card.style.transform).toBe("translateY(0px)");
     expect(follow).toHaveBeenLastCalledWith(0, card);
-  });
-
-  it("refuse le défilement natif dès le `touchstart`, avec des écouteurs posés au montage", () => {
-    const { scroller, handle, cross, hook } = setup();
-    expect(hook.result.current.dragging).toBe(false);
-    // Aucun appui encore : le doigt se pose sur la poignée.
-    handle.dispatchEvent(new TouchEvent("touchstart", { bubbles: true }));
-    expect(scroller.style.overscrollBehaviorY).toBe("none");
-    const move = new TouchEvent("touchmove", { cancelable: true, bubbles: true });
-    handle.dispatchEvent(move);
-    expect(move.defaultPrevented).toBe(true);
-    handle.dispatchEvent(new TouchEvent("touchend", { bubbles: true }));
-    expect(scroller.style.overscrollBehaviorY).toBe("contain");
-    // La croix, dans la poignée, n'est pas un geste.
-    cross.dispatchEvent(new TouchEvent("touchstart", { bubbles: true }));
-    const onCross = new TouchEvent("touchmove", { cancelable: true, bubbles: true });
-    cross.dispatchEvent(onCross);
-    expect(onCross.defaultPrevented).toBe(false);
-    expect(scroller.style.overscrollBehaviorY).toBe("contain");
   });
 });

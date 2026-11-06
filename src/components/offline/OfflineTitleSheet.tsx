@@ -101,7 +101,7 @@ export function OfflineTitleSheet({
   const exit = useSheetExit(onClose, { leaving, listening: !overviewOpen && !confirming });
   // Retour (Android, navigateur) ferme la fiche, pas la page qui la porte.
   useOfflineSheetBack(onClose, leaving);
-  const swipe = useSwipeToDismiss(exit.requestClose, { card: rootRef, handle: bannerRef, follow: phoneSheetFollow });
+  const swipe = useSwipeToDismiss(exit.requestClose, { card: rootRef, follow: phoneSheetFollow });
   useLiquidDelegation(rootRef);
   const morph = useSheetTransition({
     layout: isMobile ? "phone" : "desktop",

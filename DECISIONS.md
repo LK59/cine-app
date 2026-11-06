@@ -273,37 +273,24 @@ la capture, ce qui sur Chrome pour Android renvoie le clic ailleurs que sur la c
 grand écran (`md:animate-fade-*`), la fiche de bibliothèque sort sans animation quand rien n'est
 dessiné derrière elle (`swapsInPlace`).
 
-**Le départ du geste (06/11/2026).** Filmé sur l'iPhone : une fiche tirée depuis sa bannière, le
-contenu en haut, laissait pendant ~100 ms le rebond natif d'iOS tirer le contenu (une bande noire
-entre l'image et le titre) malgré `touch-action: none`, puis la carte sautait de ~140 px en une image ;
-un autre départ restait immobile quatre images puis sautait de ~45 px (la tolérance de WebKit avant le
-premier `pointermove`, livrée d'un coup). Deux règles, dans `useSwipeToDismiss`, donc pour toutes les
-fiches qui se tirent (bibliothèque, découverte, personne, hors ligne, livre, poignée du bureau) :
-- un appui sur la poignée est une fermeture dès le premier pixel : ses `touchmove` sont refusés au
-  défilement par un écouteur non passif posé sur la poignée (React n'en pose que de passifs), et le
-  défileur le plus proche perd son rebond (`overscroll-behavior: none`) jusqu'au relâché ou au
-  démontage. Défiler depuis le contenu ne change pas ;
-- le premier mouvement est retranché, jusqu'à `FIRST_MOVE_SLOP_MAX_PX` (48 px) : la carte part du point
-  où le geste est reconnu et suit le doigt pixel pour pixel — comme une vue défilante d'iOS. La
-  décision au relâché compte le chemin entier du doigt, seuils inchangés.
-
-**Second film (06/11/2026, 19 h).** Le rebond revenait sur un geste sur deux, et sous le doigt la carte
-ne bougeait qu'une image sur deux. Deux causes, deux règles de plus :
-- **les écouteurs de toucher sont posés au montage** (option `handle`), et non à l'appui : WebKit
-  décide au `touchstart`, d'après les régions d'écoute qu'il a déjà reçues, si le geste peut défiler
-  sans attendre la page — un écouteur ajouté à l'appui arrivait trop tard, et chaque fiche ouverte est
-  une poignée neuve dont le premier geste est souvent le seul. Le `touchstart` (passif) arme la garde
-  et coupe le rebond de **tous** les défileurs au-dessus de la poignée ; le `touchmove` (non passif) la
-  refuse au défilement ; un appui sur un bouton de la poignée (la croix, le partage) n'arme rien. Une
-  poignée inactive (fiche du dessous, mise en page du bureau de la fiche personne) ne reçoit pas
-  d'écouteurs ;
+**Le départ du geste (06/11/2026).** Le « rebond d'iOS » des films du 06/11 était le relais de
+l'ouverture (§61, « Saisie au doigt pendant l'ouverture ») : aucune garde de toucher n'est nécessaire, la
+poignée a `touch-action: none` (celle posée en 10.13.23–10.13.25 a été retirée). Deux règles restent,
+dans `useSwipeToDismiss`, donc pour toutes les fiches qui se tirent (bibliothèque, découverte, personne,
+hors ligne, livre, poignée du bureau) :
+- **le premier mouvement est retranché**, jusqu'à `FIRST_MOVE_SLOP_MAX_PX` (48 px) : WebKit n'envoie le
+  premier `pointermove` qu'une fois sa tolérance passée (filmé : quatre images immobiles puis ~45 px
+  d'un coup) ; la carte part du point où le geste est reconnu et suit le doigt pixel pour pixel —
+  comme une vue défilante d'iOS. La décision au relâché compte le chemin entier du doigt, seuils
+  inchangés ;
 - **la carte suit le doigt sans React** (option `card`) : chaque `pointermove` posait l'état et toute
-  la fiche se redessinait. Le crochet écrit `transform` sur la carte ; `offset` ne change qu'à l'appui
-  et au relâché ; au retour en place, le crochet écrit lui-même le zéro après le rendu qui a rétabli
-  la transition (un `offset` resté à 0 ne se réécrirait pas). Ce qui suit la carte passe par `follow`
-  : l'ombre des fiches du téléphone (`phoneSheetFollow`, sheetMotion.ts), le voile de la fiche
-  personne. Le rayon ne grandit plus sous le doigt (il repeignait la carte à chaque image) : 16 px
-  pendant le geste, celui du décalage final au relâché. Appelants : `CinemaMobileDetail`,
+  la fiche se redessinait — la carte ne bougeait qu'une image sur deux. Le crochet écrit `transform` sur
+  la carte ; `offset` ne change qu'à l'appui et au relâché ; au retour en place, le crochet écrit
+  lui-même le zéro après le rendu qui a rétabli la transition (un `offset` resté à 0 ne se réécrirait
+  pas). Ce qui suit la carte passe par `follow` : l'ombre des fiches du téléphone (`phoneSheetFollow`,
+  sheetMotion.ts), le voile de la fiche personne. Le rayon ne grandit plus sous le doigt (il repeignait
+  la carte à chaque image) : 16 px pendant le geste, celui du décalage final au relâché. À l'appui, le
+  crochet annonce la saisie à la carte (`SHEET_GRAB_EVENT`, §61). Appelants : `CinemaMobileDetail`,
   `PlayerDiscoverSheet`, `OfflineTitleSheet`, `BookSheet`, `PlayerPersonSheet`, `useSheetGrip`
   (`DesktopSheetShell`) ; le banc d'animations garde l'ancien chemin (sans `card`).
 
@@ -2648,7 +2635,8 @@ fiche du téléphone saisie dans la demi-seconde qui suit son ouverture (« her 
 carte descendait sous le doigt, une bande noire entre les deux, pas d'accueil derrière — puis tout se
 recollait. Le visuel était encore dans la fenêtre du trajet (le calque à part, que la transformation de
 la carte n'emporte pas), la fiche encore transparente, l'encre de la carte dans la fenêtre à sa place
-de repos. Ce qu'on avait pris pour le rebond d'iOS au départ du geste (§7.2) était ceci. Désormais
+de repos. Ce qu'on avait pris pour le rebond d'iOS au départ du geste (§7.2) était ceci — la garde de
+toucher posée pour lui a été retirée. Désormais
 `useSwipeToDismiss` annonce la saisie à la carte (`SHEET_GRAB_EVENT`, à l'appui, avant tout mouvement)
 et `useSheetMorph` mène l'ouverture à son terme d'un coup (`settleNow`) : toutes ses animations à leur
 fin, puis le relais ordinaire de l'arrivée (`settleOpen` — visuel, ou image de relais dans la bannière ;
