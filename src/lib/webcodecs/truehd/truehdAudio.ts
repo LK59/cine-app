@@ -19,7 +19,9 @@ export const TRUEHD_CODECS = new Set(["A_TRUEHD", "A_MLP"]);
 
 /**
  * Combien de son par lot. Un bloc TrueHD dure 1/1200 s ; par quart de seconde, un lot se décode
- * en quelques millisecondes et le navigateur reprend la main entre deux — voir truehdDecoder.ts.
+ * en quelques millisecondes — dans le worker, ou sur le fil principal avec un retour au navigateur
+ * entre deux lots quand il n'y a pas de worker (truehdDecoder.ts). Gardé tel quel avec le worker :
+ * les lots, leurs frontières et donc les morceaux livrés ne changent pas d'un chemin à l'autre.
  */
 const BATCH_US = 250_000;
 
@@ -98,6 +100,9 @@ export interface TrueHdTrack {
   format: { sampleRate: number; numberOfChannels: number };
   samples(fromSeconds: number): AsyncGenerator<DecodedAudio>;
   close(): void;
+  /** Où le décodeur tourne, et pourquoi pas dans un worker — pour la ligne `start` (truehdDecoder.ts). */
+  thread: "worker" | "principal";
+  workerRefusal?: string;
 }
 
 export async function openTrueHdTrack(source: ByteSource, trackNumber: number, parsed?: MatroskaFile): Promise<TrueHdTrack> {
@@ -121,7 +126,9 @@ export async function openTrueHdTrack(source: ByteSource, trackNumber: number, p
   /**
    * Un seul flux vivant à la fois. Le transcodeur abandonne un flux pour en ouvrir un autre à
    * chaque saut ; l'ancien, suspendu sur un décodage en cours, ne doit plus rien envoyer au
-   * décodeur partagé — ses blocs seraient décodés au milieu de ceux du nouvel endroit.
+   * décodeur partagé — ses blocs seraient décodés au milieu de ceux du nouvel endroit. Avec le
+   * worker, le lot déjà parti revient quand même : il est décodé avant le `reset` (le worker suit
+   * l'ordre des messages), et jeté ici, son flux n'étant plus le bon.
    */
   async function* samples(fromSeconds: number): AsyncGenerator<DecodedAudio> {
     const mine = ++generation;
@@ -175,5 +182,7 @@ export async function openTrueHdTrack(source: ByteSource, trackNumber: number, p
       closed = true;
       decoder.close();
     },
+    thread: decoder.thread,
+    ...(decoder.workerRefusal !== undefined ? { workerRefusal: decoder.workerRefusal } : {}),
   };
 }

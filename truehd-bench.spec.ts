@@ -18,6 +18,12 @@ import { openSync, readSync, statSync, closeSync } from "node:fs";
 import { parseMatroska } from "@/lib/webcodecs/matroska";
 import { SoftwareAudioTrack } from "@/lib/webcodecs/softwareAudio";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
+import { NodeWebWorker } from "@/__tests__/helpers/nodeWebWorker";
+
+// THD_WORKER=1 : le TrueHD passe par le worker du navigateur (truehdWorker.mjs exécuté tel quel dans un fil
+// worker_threads), et non par le fil principal — le chemin des navigateurs depuis le 06/11/2026.
+// Les deux sorties, avec et sans, doivent être identiques ligne à ligne.
+if (process.env.THD_WORKER === "1") (globalThis as { Worker?: unknown }).Worker = NodeWebWorker;
 
 function fileSource(path: string): ByteSource {
   const fd = openSync(path, "r");

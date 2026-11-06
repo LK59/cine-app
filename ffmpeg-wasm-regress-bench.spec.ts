@@ -26,8 +26,14 @@ import { it } from "vitest";
 import { appendFileSync, closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { parseMatroska } from "@/lib/webcodecs/matroska";
-import { SoftwareAudioTrack } from "@/lib/webcodecs/softwareAudio";
+import { SoftwareAudioTrack, takeTrueHdThread } from "@/lib/webcodecs/softwareAudio";
 import type { ByteSource } from "@/lib/webcodecs/byteSource";
+import { NodeWebWorker } from "@/__tests__/helpers/nodeWebWorker";
+
+// FFW_WORKER=1 : le TrueHD passe par le worker du navigateur (truehdWorker.mjs exécuté tel quel dans un fil
+// worker_threads), et non par le fil principal — le chemin des navigateurs depuis le 06/11/2026.
+// Les deux sorties, avec et sans, doivent être identiques ligne à ligne.
+if (process.env.FFW_WORKER === "1") (globalThis as { Worker?: unknown }).Worker = NodeWebWorker;
 
 function fileSource(path: string): ByteSource {
   const fd = openSync(path, "r");
@@ -116,13 +122,19 @@ it.skipIf(!process.env.FFW_LIST)("empreintes du son des modules FFmpeg en WebAss
           canauxEnTete: track.audio?.channels ?? null,
         };
         const write = (row: object) => appendFileSync(process.env.FFW_OUT!, JSON.stringify({ ...base, ...row }) + "\n");
-        const open = () => SoftwareAudioTrack.open(source, track.number, track.codecId, file, { measuredAacDecoder: true });
+        // `fil` : où le TrueHD a été décodé (worker ou fil principal) — de quoi vérifier que FFW_WORKER a pris.
+        let fil: string | undefined;
+        const open = async () => {
+          const opened = await SoftwareAudioTrack.open(source, track.number, track.codecId, file, { measuredAacDecoder: true });
+          fil = takeTrueHdThread()?.thread;
+          return opened;
+        };
         let audio: SoftwareAudioTrack | null = null;
         try {
           audio = await open();
           for (const [position, from] of [["0", 0], ["a", a], ["b", b]] as const) {
             try {
-              write({ position, debut: from, format: audio.format, ...(await window(audio, from, span)) });
+              write({ position, debut: from, fil, format: audio.format, ...(await window(audio, from, span)) });
             } catch (e) {
               write({ position, debut: from, erreur: String(e instanceof Error ? e.message : e).slice(0, 200) });
             }
@@ -136,7 +148,7 @@ it.skipIf(!process.env.FFW_LIST)("empreintes du son des modules FFmpeg en WebAss
         let fresh: SoftwareAudioTrack | null = null;
         try {
           fresh = await open();
-          write({ position: "a-neuf", debut: a, format: fresh.format, ...(await window(fresh, a, span)) });
+          write({ position: "a-neuf", debut: a, fil, format: fresh.format, ...(await window(fresh, a, span)) });
         } catch (e) {
           write({ position: "a-neuf", debut: a, erreur: String(e instanceof Error ? e.message : e).slice(0, 200) });
         } finally {

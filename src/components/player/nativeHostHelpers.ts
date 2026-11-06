@@ -3,7 +3,7 @@
 // cachaient. Aucune n'a changé — ni ses champs, ni leur ordre.
 import { warmNextEpisode } from "@/lib/nextEpisodeWarmup";
 import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
-import { takeAacDecodeRoute } from "@/lib/webcodecs/softwareAudio";
+import { takeAacDecodeRoute, takeTrueHdThread } from "@/lib/webcodecs/softwareAudio";
 import type { SeekTiming } from "@/lib/hostSeek";
 import { seekElapsed } from "@/components/player/session/seekElapsed";
 import { traceRecent } from "@/lib/webcodecs/trace";
@@ -42,6 +42,17 @@ export function warmNextNear(nextId: string | null, position: number, duration: 
 export function aacRouteFacts(): Record<string, unknown> {
   const route = takeAacDecodeRoute();
   return route ? { aacRoute: route } : {};
+}
+
+/**
+ * Où le TrueHD de ce pipeline a été décodé : `truehdThread` « worker », ou « principal » avec
+ * `truehdWorkerError`, la raison pour laquelle le worker n'a pas pu naître (06/11/2026). Rien quand
+ * le pipeline n'a pas ouvert de TrueHD — la ligne de tout autre film ne change pas.
+ */
+export function trueHdThreadFacts(): Record<string, unknown> {
+  const thread = takeTrueHdThread();
+  if (!thread) return {};
+  return { truehdThread: thread.thread, ...(thread.workerRefusal !== undefined ? { truehdWorkerError: thread.workerRefusal } : {}) };
 }
 
 /**

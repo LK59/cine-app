@@ -69,6 +69,19 @@ export function takeAacDecodeRoute(): "wasm-decode" | "browser-decode" | null {
   return route;
 }
 
+/**
+ * Où le dernier décodeur TrueHD s'est ouvert — le worker, ou le fil principal et pourquoi — pour la
+ * ligne `start` (truehd/truehdDecoder.ts). Rien quand le pipeline n'a pas ouvert de TrueHD.
+ */
+let lastTrueHdThread: { thread: "worker" | "principal"; workerRefusal?: string } | null = null;
+
+/** Lu (et oublié) par qui écrit la ligne `start`. */
+export function takeTrueHdThread(): { thread: "worker" | "principal"; workerRefusal?: string } | null {
+  const thread = lastTrueHdThread;
+  lastTrueHdThread = null;
+  return thread;
+}
+
 export class SoftwareAudioTrack {
   private constructor(
     /** Le décodé à partir d'un instant — par mediabunny, ou par notre décodeur TrueHD. */
@@ -108,6 +121,7 @@ export class SoftwareAudioTrack {
       } catch (error) {
         throw new Error(`décodeur TrueHD non chargé (${error instanceof Error ? error.message : "import échoué"})`);
       }
+      lastTrueHdThread = { thread: track.thread, ...(track.workerRefusal !== undefined ? { workerRefusal: track.workerRefusal } : {}) };
       return new SoftwareAudioTrack(track.samples, track.format, () => track.close());
     }
     // Un AAC à PCE hors Chromium : le décodeur AAC de FFmpeg en WebAssembly, jamais celui du

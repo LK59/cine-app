@@ -138,6 +138,7 @@ import {
 } from "@/components/playerNative/NativeOverlays";
 import {
   aacRouteFacts,
+  trueHdThreadFacts,
   castSubtitleOf,
   generationMenu,
   jellyfinAudioIndex,
@@ -1868,6 +1869,8 @@ export function ExperimentalPlayerHost({
         ...pceDecisionFacts(),
         // Et, décodé, par quel décodeur : FFmpeg en WebAssembly hors Chromium, le navigateur sinon.
         ...aacRouteFacts(),
+        // Et un TrueHD : décodé dans un worker, ou sur le fil principal faute de worker (et pourquoi).
+        ...trueHdThreadFacts(),
         // Écrit seulement quand il est actif : la ligne de tout autre compte ne change pas.
         ...(openedDialogue !== "off" ? { dialogue: openedDialogue } : {}),
         // Ce que la réserve d'avance s'autorise sur cet appareil — c'était la ligne `reserve/départ`,
