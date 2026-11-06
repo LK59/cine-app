@@ -14,7 +14,7 @@ import { NEWS_91_CONTENT, NEWS_91_SEED, NEWS_91_VERSION } from "@/lib/news/page9
 import { laternaNewsPage } from "@/lib/news/pageLaterna";
 import { booksNewsPage } from "@/lib/news/page107";
 import { NEWS_105_CONTENT, NEWS_105_SEED, NEWS_105_VERSION } from "@/lib/news/page105";
-import { NEWS_1013_CONTENT, NEWS_1013_SEED, NEWS_1013_VERSION } from "@/lib/news/page1013";
+import { NEWS_1013_CONTENT, NEWS_1013_REFRESH, NEWS_1013_SEED, NEWS_1013_VERSION } from "@/lib/news/page1013";
 import { config } from "@/lib/config";
 import { FIXES_LEDGER, RETIRED_LEDGER_ITEMS, ledgerMarker, ledgerTarget, withLedgerEntry, withoutLedgerItems, type FixLedgerEntry } from "@/lib/news/fixesLedger";
 import { NEWS_8672_CONTENT, NEWS_8672_FIRST_VERSION, NEWS_8672_REPUBLISH, NEWS_8672_SEED, NEWS_8672_VERSION } from "@/lib/news/page8672";
@@ -876,6 +876,8 @@ function migrate(db: Database.Database): void {
   // Les animations reprises image par image (06/11/2026) : en brouillon — Louis la relit et la publie
   // depuis Activité → Nouveautés.
   seedNewsPage(db, NEWS_1013_SEED, NEWS_1013_VERSION, NEWS_1013_CONTENT, Date.now(), "draft");
+  // Complétée des fiches de titres absents de la bibliothèque avant publication (Louis, 06/11/2026).
+  refreshNewsDraft(db, NEWS_1013_REFRESH, NEWS_1013_VERSION, NEWS_1013_CONTENT);
   // Les corrections livrées, ajoutées à l'historique des pages publiées (`fixesLedger.ts`).
   applyFixesLedger(db);
   retireLedgerItems(db);

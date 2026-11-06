@@ -15,6 +15,8 @@ import type { NewsContentByLang } from "./content";
 export const NEWS_1013_VERSION = "10.13";
 /** Le marqueur dans `migrations_done` : posé une fois, le brouillon n'est plus jamais réécrit. */
 export const NEWS_1013_SEED = "news-seed-10.13-draft";
+/** Le détail complété des fiches de titres absents de la bibliothèque (10.13.29–10.13.31), avant publication. */
+export const NEWS_1013_REFRESH = "news-refresh-10.13-discover";
 
 export const NEWS_1013_CONTENT: NewsContentByLang = {
   fr: {
@@ -45,6 +47,8 @@ export const NEWS_1013_CONTENT: NewsContentByLang = {
           "Améliore la fluidité des fiches lorsqu'on les tire vers le bas.",
           "Corrige un problème où le texte et les boutons d'une fiche restaient affichés un instant après sa fermeture.",
           "Corrige un problème où l'image d'une fiche restait en haut de l'écran lorsqu'on l'attrapait pendant son ouverture.",
+          "Améliore l'ouverture des titres absents de la bibliothèque, désormais animée depuis leur affiche.",
+          "Corrige un problème où l'image d'une fiche restait affichée un instant après une fermeture rapide.",
           "Corrige un problème où une fiche marquait un bref arrêt lorsqu'on la lâchait vers le bas.",
         ],
       },
@@ -87,6 +91,8 @@ export const NEWS_1013_CONTENT: NewsContentByLang = {
           "Improves the smoothness of sheets when you pull them down.",
           "Fixes an issue where a sheet's text and buttons stayed on screen for a moment after it closed.",
           "Fixes an issue where a sheet's picture stayed at the top of the screen when grabbed while opening.",
+          "Improves opening titles that are not in the library, now animated from their poster.",
+          "Fixes an issue where a sheet's picture stayed on screen for a moment after a quick close.",
           "Fixes an issue where a sheet paused briefly when released downward.",
         ],
       },
@@ -129,6 +135,8 @@ export const NEWS_1013_CONTENT: NewsContentByLang = {
           "Mejora la fluidez de las fichas al deslizarlas hacia abajo.",
           "Corrige un problema por el que el texto y los botones de una ficha seguían visibles un instante tras cerrarla.",
           "Corrige un problema por el que la imagen de una ficha se quedaba arriba al agarrarla mientras se abría.",
+          "Mejora la apertura de los títulos que no están en la biblioteca, ahora animada desde su póster.",
+          "Corrige un problema por el que la imagen de una ficha seguía visible un instante tras un cierre rápido.",
           "Corrige un problema por el que una ficha se detenía brevemente al soltarla hacia abajo.",
         ],
       },
@@ -171,6 +179,8 @@ export const NEWS_1013_CONTENT: NewsContentByLang = {
           "Verbessert die Flüssigkeit der Karten beim Herunterziehen.",
           "Behebt ein Problem, bei dem Text und Schaltflächen einer Karte nach dem Schließen kurz sichtbar blieben.",
           "Behebt ein Problem, bei dem das Bild einer Karte oben am Bildschirm hängen blieb, wenn sie beim Öffnen gegriffen wurde.",
+          "Verbessert das Öffnen von Titeln, die nicht in der Bibliothek sind – jetzt animiert aus ihrem Poster.",
+          "Behebt ein Problem, bei dem das Bild einer Karte nach schnellem Schließen kurz sichtbar blieb.",
           "Behebt ein Problem, bei dem eine Karte beim Loslassen nach unten kurz anhielt.",
         ],
       },
