@@ -1167,6 +1167,25 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.13.29",
+    page: "10.5",
+    group: { fr: "Interface", en: "Interface", es: "Interfaz", de: "Oberfläche" },
+    items: [
+      {
+        fr: "Une fiche lâchée vers le bas part aussitôt, sans marquer d'arrêt sous le doigt.",
+        en: "A sheet released downward now leaves at once, without pausing under your finger.",
+        es: "Una ficha soltada hacia abajo se va al instante, sin detenerse bajo el dedo.",
+        de: "Eine nach unten losgelassene Karte gleitet jetzt sofort weg, ohne unter dem Finger anzuhalten.",
+      },
+      {
+        fr: "Un titre qui n'est pas dans la bibliothèque s'ouvre aussitôt depuis son affiche, au lieu d'un écran noir d'attente.",
+        en: "A title that is not in the library now opens straight from its poster, instead of a black waiting screen.",
+        es: "Un título que no está en la biblioteca se abre al instante desde su póster, en lugar de una pantalla negra de espera.",
+        de: "Ein Titel, der nicht in der Bibliothek ist, öffnet sich jetzt sofort aus seinem Poster statt über einen schwarzen Wartebildschirm.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
