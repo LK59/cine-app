@@ -57,6 +57,9 @@ function Sheet({
         <button type="button" data-sheet-glass="" aria-label="fermer">
           x
         </button>
+        <button type="button" data-sheet-glass="" aria-label="partager">
+          p
+        </button>
       </div>
       <div data-sheet-content="">contenu</div>
     </div>,
@@ -602,6 +605,154 @@ describe("la fermeture", () => {
     unmount();
     expect(layer()).toBeNull();
     expect(poster.style.opacity).toBe("");
+  });
+});
+
+/**
+ * Tout ce que la fermeture anime finit avec son trajet (06/11/2026). Filmée à 60 i/s sur l'iPhone,
+ * une fermeture d'un jet (Mr. Robot vers sa vignette de « Reprendre ») posait la carte en ~100 ms
+ * pendant que le contenu s'effaçait sur un plancher de 100 ms et la croix sur 200 : texte fantôme
+ * au-dessus des rangées, puis la croix seule à côté de la vignette posée ; et le corps sombre de la
+ * carte débordait sous elle.
+ */
+describe("la fermeture finit avec son trajet", () => {
+  /** Ferme la fiche ouverte — à la croix, ou d'un jet du doigt sur la bannière (≈ 3 000 px/s). */
+  async function close(how: "croix" | "jet") {
+    press(addPoster().querySelector("img")!);
+    const { rerender } = render(<Sheet />);
+    await runOpen();
+    if (how === "jet") {
+      const banner = root()!.querySelector("[data-box='banner']")!;
+      fireEvent.pointerDown(banner, { pointerId: 2, clientY: 100 });
+      for (let i = 1; i <= 5; i++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(16);
+        });
+        fireEvent.pointerMove(banner, { pointerId: 2, clientY: 100 + i * 48, buttons: 1 });
+      }
+      fireEvent.pointerUp(banner, { pointerId: 2, clientY: 100 + 5 * 48 });
+    } else {
+      fireEvent.click(root()!.querySelector("[data-sheet-glass]")!);
+    }
+    const before = fake.created.length;
+    rerender(<Sheet leaving />);
+    const created = fake.created.slice(before).filter((a) => !a.cancelled);
+    const copy = layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!;
+    const win = copy.previousElementSibling as HTMLElement;
+    const track = live(win)[0] as FakeAnimation;
+    return { created, copy, win, track, flight: Number(track.options.duration) };
+  }
+
+  const endOf = (a: FakeAnimation) => Number(a.options.delay ?? 0) + Number(a.options.duration ?? 0);
+  const fresh = () => {
+    cleanup();
+    clearMorphLayers();
+    document.body.innerHTML = "";
+  };
+  /** Où en est le trajet à `at` (0–1) : la largeur de la fenêtre va linéairement de la carte à l'affiche. */
+  const progressAt = (track: FakeAnimation, at: number) => {
+    const sx = sampleAt(track.frames, at, "transform")[2];
+    return (BOXES.sheet.w - sx * BOXES.sheet.w) / (BOXES.sheet.w - BOXES.poster.w);
+  };
+
+  it("un jet du doigt raccourcit le trajet — et rien ne lui survit, ni ne traîne derrière la carte", async () => {
+    const croix = await close("croix");
+    fresh();
+    const jet = await close("jet");
+    // Le geste a bien réglé l'allure : le cas filmé, pas celui de la croix.
+    expect(jet.flight).toBeLessThan(croix.flight * 0.75);
+    // Une affiche toute proche de la carte (celle de la bannière d'accueil) : un trajet court.
+    fresh();
+    BOXES.poster = { x: 20, y: 60, w: 160, h: 240 };
+    let court: Awaited<ReturnType<typeof close>>;
+    try {
+      court = await close("jet");
+    } finally {
+      BOXES.poster = { x: 20, y: 500, w: 110, h: 165 };
+    }
+    for (const { created, flight } of [croix, jet, court]) {
+      // Le trajet, l'assombrissement, le contenu, le verre, le corps de la carte : tout.
+      expect(created.length).toBeGreaterThanOrEqual(6);
+      for (const a of created) expect(endOf(a)).toBeLessThanOrEqual(flight + 0.01);
+    }
+    // Et en distance : le contenu est parti aux trois quarts du chemin, le verre avant la fin.
+    for (const { copy, track, flight } of [croix, jet]) {
+      const content = live(copy.querySelector("[data-sheet-content]"))[0] as FakeAnimation;
+      expect(progressAt(track, endOf(content) / flight)).toBeLessThanOrEqual(0.75);
+      const glass = fake.created.filter((a) => !a.cancelled && a.target.closest?.(".sheet-morph-clone") === copy && a.target !== copy && a.target !== content.target);
+      expect(glass.length).toBeGreaterThan(0);
+      for (const g of glass) expect(progressAt(track, endOf(g) / flight)).toBeLessThanOrEqual(0.95);
+    }
+  });
+
+  it("le contenu s'efface sur le trajet, comme les 100 ms d'avant à la croix", async () => {
+    const { copy, track, flight } = await close("croix");
+    const content = live(copy.querySelector("[data-sheet-content]"))[0] as FakeAnimation;
+    expect(content.frames.at(-1)!.opacity).toBe(0);
+    expect(content.frames.length).toBeLessThanOrEqual(track.frames.length);
+    // À la croix (~350 ms), effacé vers 100 ms comme avant — à 70 % du chemin.
+    expect(endOf(content)).toBeGreaterThan(70);
+    expect(endOf(content)).toBeLessThan(flight * 0.4);
+  });
+
+  it("la croix et le partage voyagent d'un bloc avec le coin haut droit de la carte, et s'effacent avant l'arrivée", async () => {
+    for (const how of ["croix", "jet"] as const) {
+      fresh();
+      const { copy, track, flight } = await close(how);
+      const rides = copy.querySelectorAll("[data-sheet-glass-ride]");
+      expect(rides.length).toBe(1);
+      const ride = rides[0] as HTMLElement;
+      // Les deux boutons dans l'enveloppe, et elle seule animée.
+      expect(ride.querySelectorAll("[data-sheet-glass]").length).toBe(2);
+      for (const b of Array.from(ride.querySelectorAll("[data-sheet-glass]"))) expect(live(b)).toHaveLength(0);
+      const anim = live(ride)[0] as FakeAnimation;
+      expect(anim.frames[0].opacity).toBe(1);
+      expect(anim.frames.at(-1)!.opacity).toBe(0);
+      expect(endOf(anim)).toBeLessThan(flight);
+      // À chaque image clé, le coin de l'enveloppe est celui de la fenêtre au même instant.
+      const { sheet } = BOXES;
+      for (const f of anim.frames) {
+        const t = (Number(f.offset) * endOf(anim)) / flight;
+        const [tx, ty, sx] = sampleAt(track.frames, t, "transform");
+        const [dx, dy] = numbers(f.transform);
+        expect(Math.abs(sheet.x + tx + sx * sheet.w - (sheet.x + sheet.w + dx))).toBeLessThan(1.5);
+        expect(Math.abs(sheet.y + ty - (sheet.y + dy))).toBeLessThan(1.5);
+      }
+    }
+  });
+
+  it("au bureau et à l'iPad, la copie entière s'efface sur le trajet, et finit avant lui", async () => {
+    press(addPoster().querySelector("img")!);
+    const { rerender } = render(<Sheet layout="desktop" />);
+    await runOpen();
+    const before = fake.created.length;
+    rerender(<Sheet layout="desktop" leaving />);
+    const created = fake.created.slice(before).filter((a) => !a.cancelled);
+    const copy = layer()!.querySelector<HTMLElement>(".sheet-morph-clone")!;
+    const flight = Number((live(copy.previousElementSibling)[0] as FakeAnimation).options.duration);
+    for (const a of created) expect(endOf(a)).toBeLessThanOrEqual(flight + 0.01);
+    const out = live(copy)[0] as FakeAnimation;
+    // Indexée sur le trajet : les instants mêmes de la fenêtre, plus deux images clés d'horloge.
+    expect(out.frames.length).toBeGreaterThan(2);
+    expect(out.frames.at(-1)!.opacity).toBe(0);
+  });
+
+  it("le corps de la carte ne déborde jamais sous l'affiche une fois presque posée", async () => {
+    for (const how of ["croix", "jet"] as const) {
+      fresh();
+      const { track } = await close(how);
+      const { sheet, poster } = BOXES;
+      let checked = 0;
+      for (const f of track.frames) {
+        const [, ty, sx, sy] = numbers(f.transform);
+        // La largeur va linéairement de la carte à l'affiche : elle dit où en est le trajet.
+        const q = (sheet.w - sx * sheet.w) / (sheet.w - poster.w);
+        if (q < 0.85) continue;
+        checked++;
+        expect(sheet.y + ty + sy * sheet.h).toBeLessThanOrEqual(poster.y + poster.h + 0.5);
+      }
+      expect(checked).toBeGreaterThan(5);
+    }
   });
 });
 

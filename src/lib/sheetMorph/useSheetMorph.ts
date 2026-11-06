@@ -5,12 +5,13 @@ import { phoneSheetCorner } from "@/lib/sheetMotion";
 import { arrivedByBack } from "@/lib/cinemaRoute";
 import { useSwallowEntryRepeatClicks } from "./entryClicks";
 import {
-  CONTENT_OUT_MS,
+  CONTENT_OUT_Q,
   DIM,
   FADE_IN_MS,
   FADE_OUT_MS,
   GHOST_FADE_MS,
   GHOST_SNAP_AT,
+  GLASS_OUT_Q,
   HANDOVER_MS,
   HOME_SCALE,
   IDENTITY,
@@ -27,13 +28,16 @@ import {
   clamp,
   closePoses,
   closeStartVelocity,
+  collapseCardBody,
   coverTf,
+  fadeOutAt,
   lerp,
   lerpBox,
   lerpCorners,
   lerpTf,
   morphTracks,
   openPoses,
+  progressTrack,
   releaseVelocity,
   sampleMotion,
   shiftPose,
@@ -379,6 +383,65 @@ function cloneVisible(root: HTMLElement, layer: HTMLElement, H: number): HTMLEle
     }
   }
   return copy;
+}
+
+/**
+ * La croix et le partage de la copie, emportés avec le coin haut droit de la carte à la fermeture du
+ * téléphone (06/11/2026, choix de Louis) : immobiles à leur place pendant que la carte rétrécissait,
+ * ils restaient seuls à l'écran à côté de la vignette posée — deux « boutons fantômes ».
+ *
+ * Dans la copie, les boutons d'un même parent passent dans une enveloppe qui le couvre exactement
+ * (leurs places ne changent pas) ; c'est elle seule qui s'anime — une translation qui suit le coin
+ * haut droit de la fenêtre, une échelle qui suit sa largeur, autour de ce coin, et une opacité
+ * indexée sur le trajet (`GLASS_OUT_Q`), sur les mêmes poses et les mêmes instants que la fenêtre :
+ * rien ne peut s'en décoller, ni finir après elle. L'opacité propre de chaque bouton (une croix
+ * encore en train de paraître) reste posée dessous, multipliée.
+ *
+ * `originals` sont les boutons de la vraie fiche, dans l'ordre de `copyGlass` ; `parentBox`, la boîte
+ * de leurs parents lue avant toute écriture.
+ */
+function glassRide(
+  copyGlass: HTMLElement[],
+  originals: HTMLElement[],
+  opacities: number[],
+  parentBox: Map<HTMLElement, Box>,
+  poseAt: (q: number) => Pose,
+  samples: Sample[],
+  duration: number
+): { wrapper: HTMLElement; frames: Keyframe[]; duration: number }[] {
+  if (!opacities.some((o) => o > 0)) return [];
+  const c0 = poseAt(0).box;
+  const corner0 = { x: c0.x + c0.w, y: c0.y };
+  const wrappers = new Map<HTMLElement, HTMLElement>();
+  copyGlass.forEach((el, i) => {
+    const parent = el.parentElement;
+    const originalParent = originals[i]?.parentElement;
+    const box = originalParent ? parentBox.get(originalParent) : undefined;
+    if (!parent || !box) return;
+    let wrapper = wrappers.get(parent);
+    if (!wrapper) {
+      wrapper = document.createElement("div");
+      wrapper.setAttribute("data-sheet-glass-ride", "");
+      Object.assign(wrapper.style, {
+        position: "absolute",
+        inset: "0",
+        pointerEvents: "none",
+        transformOrigin: `${(corner0.x - box.x).toFixed(2)}px ${(corner0.y - box.y).toFixed(2)}px`,
+      });
+      parent.appendChild(wrapper);
+      wrappers.set(parent, wrapper);
+    }
+    wrapper.appendChild(el);
+  });
+  const track = progressTrack(samples, duration, GLASS_OUT_Q, (q) => {
+    const b = poseAt(q).box;
+    const s = b.w / Math.max(1, c0.w);
+    return {
+      transform: `translate(${(b.x + b.w - corner0.x).toFixed(2)}px, ${(b.y - corner0.y).toFixed(2)}px) scale(${s.toFixed(5)})`,
+      opacity: fadeOutAt(1, q, GLASS_OUT_Q),
+    };
+  });
+  return Array.from(wrappers.values(), (wrapper) => ({ wrapper, frames: track.frames, duration: track.duration }));
 }
 
 /** Le fondu du relais d'affiche vers le vrai visuel : assez long pour se voir comme un fondu, pas comme une attente. */
@@ -945,8 +1008,12 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     const rootOpacity = opacityNow(root);
     const contentSel = "[data-sheet-content]";
     const contentNow = Array.from(root.querySelectorAll<HTMLElement>(contentSel)).map((el) => opacityNow(el));
-    // La croix du téléphone s'efface deux fois moins vite que le contenu, comme dans la maquette.
-    const glassNow = phone ? Array.from(root.querySelectorAll<HTMLElement>("[data-sheet-glass]")).map((el) => opacityNow(el)) : [];
+    // La croix (et le partage) du téléphone : son opacité, et la boîte de son parent — c'est lui que
+    // la copie emporte avec le coin de la carte (`glassRide`).
+    const glassEls = phone ? Array.from(root.querySelectorAll<HTMLElement>("[data-sheet-glass]")) : [];
+    const glassNow = glassEls.map((el) => opacityNow(el));
+    const glassParentBox = new Map<HTMLElement, Box>();
+    for (const el of glassEls) if (el.parentElement && !glassParentBox.has(el.parentElement)) glassParentBox.set(el.parentElement, boxOf(el.parentElement));
     const dimNow = s.dim ? opacityNow(s.dim) : 0;
     const bdFadeNow = s.win ? opacityNow(s.win.bdFade) : 1;
     const posterFadeNow = s.win ? opacityNow(s.win.posterFade) : 1;
@@ -1100,7 +1167,9 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
     const motion = appleCloseMotion(cur.box, toPose.box, stage, detectProfile(), v0, run && midOpen ? 0 : fingerVy);
     const d = motion.duration;
     const samples = sampleMotion(motion);
-    const poseAt = closePoses(cur, toPose);
+    // Au téléphone, le corps de la carte rentre dans l'image avant qu'elle se pose (`collapseCardBody`) :
+    // il débordait, sombre, sous la vignette déjà posée.
+    const poseAt = phone ? collapseCardBody(closePoses(cur, toPose), banner) : closePoses(cur, toPose);
     const veils = Array.from(root.querySelectorAll<HTMLElement>("[data-sheet-veil]"));
     const w = buildWindow(layer, copy, stage, base, banner, srcBox, source.image, photo?.currentSrc || photo?.src || source.image, veils, radius, phone ? { box: base, ink } : null);
     hideSource(source);
@@ -1111,27 +1180,42 @@ export function useSheetMorph(opts: SheetMorphOptions): SheetMorph {
       for (const el of Array.from(copy.querySelectorAll<HTMLElement>(sel))) el.style.visibility = "hidden";
 
     const ghost = trackAnims(w, poseAt, motion, base, stage, samples);
+    const riders: HTMLElement[] = [];
     if (phone) {
-      // Le contenu s'efface sur le premier quart du trajet, depuis où il en est ; la croix deux fois
-      // moins vite. La copie ne bouge pas : la carte qui rétrécit est dans la fenêtre, dessous.
-      const outMs = Math.max(CONTENT_OUT_MS, timeAt(samples, d, 0.25));
+      // Le contenu s'efface sur le trajet (`CONTENT_OUT_Q`), depuis où il en est, aux instants mêmes
+      // de la fenêtre : jamais après elle. Il ne bouge pas — la carte qui rétrécit est dans la
+      // fenêtre, dessous. Sur un plancher de 100 ms, une fermeture d'un jet le laissait pleine
+      // taille au-dessus des rangées pendant que la carte rétrécissait déjà (06/11/2026).
       copyContent.forEach((el, i) => {
         const from = contentNow[i] ?? 1;
-        others.push(paused(el.animate([{ opacity: from }, { opacity: 0 }], { duration: from > 0 ? outMs : 1, easing: "ease-in", fill: "both" })));
+        if (!(from > 0)) {
+          others.push(paused(el.animate([{ opacity: 0 }, { opacity: 0 }], { duration: 1, fill: "both" })));
+          return;
+        }
+        const track = progressTrack(samples, d, CONTENT_OUT_Q, (q) => ({ opacity: fadeOutAt(from, q, CONTENT_OUT_Q) }));
+        others.push(paused(el.animate(track.frames, LINEAR(track.duration))));
       });
-      copyGlass.forEach((el, i) => {
-        const from = glassNow[i] ?? 1;
-        others.push(paused(el.animate([{ opacity: from }, { opacity: 0 }], { duration: from > 0 ? outMs * 2 : 1, easing: "ease-in", fill: "both" })));
-      });
+      // La croix et le partage voyagent avec le coin haut droit de la carte, rétrécis comme elle, et
+      // s'effacent en route (`GLASS_OUT_Q`) : restés à leur place, ils demeuraient seuls à côté de
+      // l'affiche posée (06/11/2026, choix de Louis). Un seul élément animé par parent — l'enveloppe
+      // qui les reçoit dans la copie —, sur les poses mêmes de la fenêtre.
+      for (const ride of glassRide(copyGlass, glassEls, glassNow, glassParentBox, poseAt, samples, d)) {
+        others.push(paused(ride.wrapper.animate(ride.frames, LINEAR(ride.duration))));
+        riders.push(ride.wrapper);
+      }
     } else {
-      // Au bureau, la copie ne porte plus que la colonne, le bouton Retour et la poignée : elle
-      // s'efface d'un bloc pendant que l'image revole.
-      others.push(paused(copy.animate([{ opacity: rootOpacity }, { opacity: 0 }], { duration: CONTENT_OUT_MS, easing: "ease-in", fill: "both" })));
+      // Au bureau (l'iPad, la fiche découverte large), la copie ne porte plus que la colonne, le
+      // bouton Retour, le partage et la poignée : elle s'efface d'un bloc pendant que l'image revole —
+      // sur le trajet comme au téléphone (`CONTENT_OUT_Q`), et non plus sur 100 ms d'horloge : un
+      // retour lancé au doigt sur l'iPad (`flickResponse`) laissait sinon la colonne et ses boutons
+      // en place, encore visibles, quand l'image avait déjà presque rejoint l'affiche.
+      const track = progressTrack(samples, d, CONTENT_OUT_Q, (q) => ({ opacity: fadeOutAt(rootOpacity, q, CONTENT_OUT_Q) }));
+      others.push(paused(copy.animate(track.frames, LINEAR(track.duration))));
     }
     if (dim) others.push(paused(dim.animate(samples.map(({ offset, q }) => ({ offset, opacity: dimNow * (1 - clamp(q, 0, 1)) })), LINEAR(d))));
     if (h && homeNow !== null && homeNow !== 1)
       others.push(paused(h.animate(samples.map(({ offset, q }) => ({ offset, transform: `scale(${lerp(homeNow, 1, clamp(q, 0, 1)).toFixed(5)})` })), LINEAR(d, "none"))));
-    const unpromote = promote([w.win, w.inner, w.bd, w.poster, dim, h, ...copyContent]);
+    const unpromote = promote([w.win, w.inner, w.bd, w.poster, dim, h, ...copyContent, ...riders]);
 
     let startedAt: number | null = null;
     const timers: number[] = [];

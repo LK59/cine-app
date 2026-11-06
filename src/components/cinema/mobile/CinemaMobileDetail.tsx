@@ -470,6 +470,7 @@ export function CinemaMobileDetail({
             variant="icon"
             {...NOT_THE_HANDLE}
             iconClassName="nav-glass absolute right-14 top-3 flex h-9 w-9 items-center justify-center rounded-full text-white"
+            sheetGlass
             kind={isSeries ? "series" : "movie"}
             itemId={item.jellyfinItemId}
             radarrId={!isSeries && "radarrId" in item ? (item.radarrId ?? null) : null}

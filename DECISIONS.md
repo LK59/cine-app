@@ -273,6 +273,20 @@ la capture, ce qui sur Chrome pour Android renvoie le clic ailleurs que sur la c
 grand écran (`md:animate-fade-*`), la fiche de bibliothèque sort sans animation quand rien n'est
 dessiné derrière elle (`swapsInPlace`).
 
+**Le départ du geste (06/11/2026).** Filmé sur l'iPhone : une fiche tirée depuis sa bannière, le
+contenu en haut, laissait pendant ~100 ms le rebond natif d'iOS tirer le contenu (une bande noire
+entre l'image et le titre) malgré `touch-action: none`, puis la carte sautait de ~140 px en une image ;
+un autre départ restait immobile quatre images puis sautait de ~45 px (la tolérance de WebKit avant le
+premier `pointermove`, livrée d'un coup). Deux règles, dans `useSwipeToDismiss`, donc pour toutes les
+fiches qui se tirent (bibliothèque, découverte, personne, hors ligne, livre, poignée du bureau) :
+- un appui sur la poignée est une fermeture dès le premier pixel : ses `touchmove` sont refusés au
+  défilement par un écouteur non passif posé sur la poignée (React n'en pose que de passifs), et le
+  défileur le plus proche perd son rebond (`overscroll-behavior: none`) jusqu'au relâché ou au
+  démontage. Défiler depuis le contenu ne change pas ;
+- le premier mouvement est retranché, jusqu'à `FIRST_MOVE_SLOP_MAX_PX` (48 px) : la carte part du point
+  où le geste est reconnu et suit le doigt pixel pour pixel — comme une vue défilante d'iOS. La
+  décision au relâché compte le chemin entier du doigt, seuils inchangés.
+
 **Tests.** `useSwipeToDismiss.test.tsx`, `sheet-exit.test.tsx`, `cinema-mobile-detail-keys.test.tsx`,
 `decisions-partagees.test.ts`.
 
@@ -2375,7 +2389,8 @@ vite que le doigt — et laissait l'image au-dessus d'elle (le « décrochement 
 rapide). Désormais une seule pièce : la fenêtre a la boîte de la carte (du haut de la fiche au bas
 de l'écran), porte l'encre de la carte, et le visuel posé sur la bannière ; elle grandit depuis
 l'affiche et y rétrécit. Rien ne peut se décoller. Le contenu arrive d'un bloc à 90 % ; à la
-fermeture, la copie (le contenu, la croix) ne bouge pas et s'efface sur le premier quart du trajet.
+fermeture, le contenu de la copie ne bouge pas et s'efface sur le trajet, la croix et le partage
+voyagent avec le coin de la carte (voir « Les effacements de la fermeture suivent le trajet » plus bas).
 Lâchée au doigt, la carte repart de là où le doigt l'a mise, lancée à la vitesse du doigt projetée sur
 son chemin. Une fiche dont l'image vole porte `data-sheet-flying` : tout visuel ou voile monté pendant
 le trajet reste caché (globals.css). Tests : `sheetMorph-hook.test.tsx` (« ne plonge jamais », « d'un
@@ -2502,7 +2517,8 @@ La carte entière qui grandit est une seule pièce : il n'y a plus rien à colle
   l'accueil hors de la fenêtre ;
 - `data-sheet-content` : la colonne ;
 - `data-sheet-settle` : le flou localisé du bureau, posé une fois arrivé ;
-- `data-sheet-glass` : le verre de la croix, coupé pendant le mouvement.
+- `data-sheet-glass` : le verre de la croix (et du partage au téléphone), coupé pendant le mouvement,
+  emporté avec le coin de la carte à la fermeture.
 
 L'accueil du bureau porte `data-sheet-home`.
 
@@ -2550,6 +2566,47 @@ trois règles :
   l'enregistrement des ouvertures sur l'appareil (`recordTitle`, `useResumeCache`), qui lit l'en-tête
   et l'index Matroska d'un tenant, et le réchauffage du catalogue des séries. La plus longue tâche
   pendant l'ouverture d'une fiche du Top 10 était cette lecture, pas la fiche.
+
+**Les effacements de la fermeture suivent le trajet, jamais une horloge ; le verre voyage avec le
+coin de la carte (06/11/2026).** Filmé à 60 i/s sur l'iPhone : Mr. Robot fermé d'un jet vers sa vignette
+de « Reprendre » — `flickResponse` raccourcit le ressort, la carte est posée à l'œil en ~100 ms. Le
+contenu de la copie s'effaçait sur `max(100 ms, quart du trajet)` et la croix sur le double : à +17 ms,
+le texte de la fiche pleine taille au-dessus des rangées, la carte déjà rétrécie ; à +100–120 ms, la
+croix et le partage seuls à côté de la vignette posée. Et entre les deux, un rectangle sombre de la
+largeur de la fenêtre qui débordait sous la vignette sur la rangée suivante : la fenêtre allait en ligne
+droite de la carte (jusqu'au bas de l'écran) à l'affiche, l'image de la bannière à l'affiche, si bien
+que l'encre de la carte restait sous l'image sur (1 − q) × (bas de l'écran − bas de la bannière) —
+encore 27 à 50 px à 90 % du trajet, où un ressort amorti critique passe plus de la moitié de sa durée.
+Trois règles, au téléphone :
+- **le contenu** s'efface en `1 − (q / 0,7)²`, sur les instants mêmes de la fenêtre et coupé là
+  (`CONTENT_OUT_Q`, `fadeOutAt`, `progressTrack`, motion.ts) : à la croix (~350 ms), c'est à quelques
+  centièmes près la courbe des 100 ms d'avant ; d'un jet, il suit la carte au lieu de l'horloge ;
+- **la croix et le partage** (`data-sheet-glass` — le partage porte la marque depuis ce jour,
+  `sheetGlass` de `ShareButton` : il paraît donc aussi avec la croix à l'ouverture, son flou coupé
+  pendant le trajet) passent dans la copie sous une enveloppe unique (`glassRide`, useSheetMorph.ts)
+  qui suit le coin haut droit de la fenêtre et sa largeur, sur les mêmes poses, et s'efface à 90 %
+  (`GLASS_OUT_Q`) — choix de Louis entre « effacés plus tôt » et « emportés par la carte » ;
+- **le corps de la carte** rejoint le bas de l'image entre 45 et 85 % du trajet (`collapseCardBody`,
+  `CARD_BODY_OUT`) plutôt que de s'effacer : seules les images clés de la fenêtre changent, aucun
+  élément animé de plus, la carte reste une seule pièce, et rien n'a à disparaître à l'arrivée.
+Aucune animation créée par la fermeture ne finit après le trajet (le relais `HANDOVER_MS`, qui
+commence à l'arrivée, à part). Coût : sept éléments animés comme avant (fenêtre, contenu intérieur,
+visuel, affiche, assombrissement, contenu, verre) — le verre est une enveloppe au lieu de la croix
+seule, et le partage, qui ne bougeait pas, y est compris ; contenu et verre passent de 2 images clés à
+celles du trajet jusqu'à leur fin (≤ celles de la fenêtre) ; une couche promue de plus (l'enveloppe),
+rendue au relais. Tests : `sheetMorph-hook.test.tsx` (« la fermeture finit avec son trajet » : à la
+croix, d'un jet, sur un trajet court, et au bureau).
+Toutes les fiches qui volent en profitent, la règle étant dans `useSheetMorph` : la fiche de
+bibliothèque du téléphone (film et série, `CinemaMobileDetail`), la fiche découverte, la fiche hors
+ligne et celle d'un livre au téléphone. **Au bureau et à l'iPad** (`layout: "desktop"` : fiches film et
+série de `DesktopSheetShell`, fiche découverte large), la copie entière s'effaçait sur 100 ms
+d'horloge pendant que le visuel plein écran revolait vers l'affiche — même plancher, même risque d'un
+retour lancé au doigt sur l'iPad : elle s'efface désormais sur le trajet, avec la même courbe
+(`CONTENT_OUT_Q`). **La continuité du fond de l'ordinateur** (`desktopContinuity.ts`) garde ses 100 ms :
+rien n'y rétrécit, aucun doigt n'y règle l'allure, et son trajet dure au moins 250 ms
+(`BACKDROP_FADE_MS`) — rien ne peut y survivre. **La fiche personne** ne vole pas : elle sort d'une
+pièce, sa croix dedans (`sheet-out`, ou le prolongement du doigt), et n'a donc ni contenu ni verre
+qui puisse rester derrière.
 
 **La fermeture au doigt part de la carte où le doigt l'a mise, à sa vitesse** — une seule pièce
 depuis l'audit du 10/10/2026 ; l'élan porté à part (`fingerCarry`) qui le précédait est retiré.

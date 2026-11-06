@@ -91,8 +91,33 @@ export const REVEAL_AT = 0.9;
  */
 export const REVEAL_MS = 160;
 export const REVEAL_RISE_PX = 8;
-/** L'effacement du contenu à la fermeture, depuis l'opacité où il en est. */
+/**
+ * L'effacement du contenu à la fermeture, depuis l'opacité où il en est — dans la continuité du fond
+ * de l'ordinateur (`desktopContinuity.ts`, où rien ne rétrécit et dont le trajet dure au moins 250 ms)
+ * et dans le banc. Les fermetures qui volent vers l'affiche, voir `CONTENT_OUT_Q`.
+ */
 export const CONTENT_OUT_MS = 100;
+/**
+ * Une fermeture qui vole vers l'affiche efface sa copie *sur le trajet*, jamais sur une horloge
+ * (06/11/2026) — au téléphone, et la copie entière au bureau et à l'iPad.
+ *
+ * Le contenu (logo, infos, Lire, synopsis) est effacé quand la carte a fait 70 % de son chemin, en
+ * `1 − (q / 0,7)²` ; la croix et le partage, qui voyagent avec le coin de la carte, à 90 %. C'est,
+ * à quelques centièmes près, ce que donnaient pour une fermeture à la croix (~350 ms) les 100 ms
+ * « ease-in » d'avant (q = 0,70 à 100 ms ; 0,69 / 0,38 d'opacité à q = 0,34 / 0,54, contre
+ * 0,76 / 0,40 ici) et les 200 ms de la croix (q ≈ 0,93). Mais ces durées étaient des planchers :
+ * une fermeture d'un jet de doigt (`flickResponse`) pose la carte en ~100 ms à l'œil, et l'iPhone
+ * filmé à 60 i/s montrait le texte de la fiche resté pleine taille au-dessus des rangées pendant que
+ * la carte rétrécissait déjà, puis la croix seule, à côté de l'affiche posée (Mr. Robot, 06/11/2026).
+ * Indexé sur `q`, l'effacement suit la carte quelle que soit son allure, et finit avant elle.
+ */
+export const CONTENT_OUT_Q = 0.7;
+export const GLASS_OUT_Q = 0.9;
+/** L'opacité d'un effacement indexé sur le trajet, depuis `from` : nulle dès que `q` atteint `until`. */
+export function fadeOutAt(from: number, q: number, until: number): number {
+  const t = clamp(q / until, 0, 1);
+  return from * (1 - t * t);
+}
 /** L'assombrissement de ce qui est derrière la fiche, et le recul de l'accueil du bureau. */
 export const DIM = 0.6;
 export const HOME_SCALE = 0.98;
@@ -331,6 +356,51 @@ export function shiftPose(p: Pose, dy: number): Pose {
 export function timeAt(samples: Sample[], duration: number, q: number): number {
   const hit = samples.find((x) => x.q >= q);
   return (hit?.offset ?? 1) * duration;
+}
+
+/**
+ * Une piste indexée sur le trajet et arrêtée quand il atteint `until` : les mêmes instants que la
+ * fenêtre (`samples`), ceux d'après coupés — rien de ce qu'elle anime ne peut finir après le
+ * trajet, ni s'en désynchroniser. `frameAt(q)` donne l'image clé à ce point du trajet.
+ */
+export function progressTrack(samples: Sample[], duration: number, until: number, frameAt: (q: number) => Keyframe): { frames: Keyframe[]; duration: number } {
+  let k = samples.findIndex((x) => x.q >= until);
+  if (k < 0) k = samples.length - 1;
+  k = Math.max(1, k);
+  const end = samples[k].offset;
+  if (!(end > 0)) return { frames: [frameAt(samples[0].q), frameAt(1)], duration: 1 };
+  return {
+    frames: samples.slice(0, k + 1).map(({ offset, q }) => ({ ...frameAt(q), offset: offset / end })),
+    duration: Math.max(1, end * duration),
+  };
+}
+
+/**
+ * Au téléphone, à la fermeture, le corps de la carte (l'encre sous la bannière) rentre dans l'image
+ * avant qu'elle se pose (06/11/2026).
+ *
+ * La fenêtre allait en ligne droite de la carte (du haut de la fiche au bas de l'écran) à l'affiche,
+ * l'image (la bannière) de la bannière à l'affiche : le bas de la fenêtre restait en dessous de
+ * l'image de (1 − q) × (bas de l'écran − bas de la bannière), soit encore 27 à 50 px à 90 % du trajet
+ * — et un ressort amorti critique passe plus de la moitié de sa durée au-delà de 90 %. Filmé sur
+ * l'iPhone (Mr. Robot, fermé d'un jet vers sa vignette de « Reprendre ») : un rectangle sombre de la
+ * largeur de la fenêtre qui débordait sur la rangée suivante, sous la vignette déjà posée. Ici, le
+ * bas de la fenêtre rejoint celui de l'image entre 45 et 85 % du trajet, en douceur ; avant, la carte
+ * rétrécit comme avant. Rien de plus n'est animé : seules les images clés de la fenêtre changent.
+ * `banner` est la boîte où le visuel est posé dans la fenêtre (`bd`).
+ */
+export const CARD_BODY_OUT = { from: 0.45, to: 0.85 } as const;
+
+export function collapseCardBody(poseAt: (r: number) => Pose, banner: Box): (r: number) => Pose {
+  const imageBottom = (p: Pose) => banner.y + p.bd.ty + p.bd.s * banner.h;
+  const p0 = poseAt(0);
+  const body = p0.box.y + p0.box.h - imageBottom(p0);
+  if (!(body > 0)) return poseAt;
+  return (r) => {
+    const p = poseAt(r);
+    const cut = body * (1 - r) * smooth(CARD_BODY_OUT.from, CARD_BODY_OUT.to, r);
+    return cut > 0 ? { ...p, box: { ...p.box, h: Math.max(1, p.box.h - cut) } } : p;
+  };
 }
 
 /**

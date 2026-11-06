@@ -55,6 +55,13 @@ interface Props extends ShareTitle {
   iconStyle?: React.CSSProperties;
   /** Pour `icon` : la pastille posée sur l'image du téléphone ne doit pas saisir la fiche au doigt. */
   onPointerDown?: (e: React.PointerEvent) => void;
+  /**
+   * Pour `icon` : la pastille est du verre de la fiche (`data-sheet-glass`, DECISIONS.md §61) — elle
+   * paraît avec la croix à l'ouverture, son flou coupé pendant le trajet, et voyage avec la croix
+   * dans le coin de la carte à la fermeture. Sans la marque, elle restait seule à l'écran à côté de
+   * l'affiche posée (06/11/2026).
+   */
+  sheetGlass?: boolean;
   rowClassName?: string;
   badgeClassName?: string;
   /** L'espacement du bouton pleine largeur dans sa colonne. */
@@ -79,7 +86,7 @@ export function ShareButton(props: Props) {
   return isReadOnly === false ? <ShareButtonOn {...props} /> : null;
 }
 
-function ShareButtonOn({ variant, rowClassName = "", badgeClassName = "", wideSpacing = "mb-2", iconClassName = "", iconStyle, onPointerDown, ...title }: Props) {
+function ShareButtonOn({ variant, rowClassName = "", badgeClassName = "", wideSpacing = "mb-2", iconClassName = "", iconStyle, onPointerDown, sheetGlass = false, ...title }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
   // Une ouverture, une fenêtre neuve : le mot de passe d'un lien déjà créé ne doit pas reparaître à
@@ -97,6 +104,7 @@ function ShareButtonOn({ variant, rowClassName = "", badgeClassName = "", wideSp
           type="button"
           onClick={openSheet}
           onPointerDown={onPointerDown}
+          data-sheet-glass={sheetGlass ? "" : undefined}
           aria-label={label}
           title={label}
           className={iconClassName}

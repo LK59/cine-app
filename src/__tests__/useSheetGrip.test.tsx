@@ -32,6 +32,8 @@ describe("useSheetGrip", () => {
     const sheet = getByTestId("sheet");
     const grip = sheet.firstElementChild!;
     pointer(grip, "pointerdown", 100);
+    // Le premier mouvement porte la tolérance du navigateur, retranchée (`FIRST_MOVE_SLOP_MAX_PX`) : sur place ici.
+    pointer(grip, "pointermove", 100);
     pointer(grip, "pointermove", 140);
     expect(sheet.style.transform).toBe("translateY(40px)");
     act(() => void vi.advanceTimersByTime(500));

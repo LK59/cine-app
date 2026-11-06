@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
-import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
+import { FIRST_MOVE_SLOP_MAX_PX, useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { sheetMotionClass } from "@/lib/sheetMotion";
 
 describe("sheetMotionClass", () => {
@@ -57,11 +57,56 @@ describe("useSwipeToDismiss", () => {
     act(() => result.current.handlers.onPointerDown(pointer(100)));
     expect(result.current.dragging).toBe(true);
 
-    act(() => result.current.handlers.onPointerMove(pointer(180)));
+    // Le premier mouvement porte la tolérance du navigateur : la carte part de là.
+    act(() => result.current.handlers.onPointerMove(pointer(110)));
+    expect(result.current.offset).toBe(0);
+
+    act(() => result.current.handlers.onPointerMove(pointer(190)));
     expect(result.current.offset).toBe(80);
 
-    act(() => result.current.handlers.onPointerMove(pointer(130)));
+    act(() => result.current.handlers.onPointerMove(pointer(140)));
     expect(result.current.offset).toBe(30);
+  });
+
+  it("ne saute pas au premier mouvement : la tolérance est retranchée, jusqu'à un plafond (06/11/2026)", () => {
+    const { result } = renderHook(() => useSwipeToDismiss(vi.fn()));
+    act(() => result.current.handlers.onPointerDown(pointer(100)));
+    // Quatre images sans rien, puis 45 px d'un coup : la carte ne saute pas.
+    act(() => result.current.handlers.onPointerMove(pointer(145)));
+    expect(result.current.offset).toBe(0);
+    act(() => result.current.handlers.onPointerMove(pointer(155)));
+    expect(result.current.offset).toBe(10);
+    // Des mouvements perdus bien au-delà d'une tolérance : la carte rattrape le doigt au-delà du plafond.
+    const { result: late } = renderHook(() => useSwipeToDismiss(vi.fn()));
+    act(() => late.current.handlers.onPointerDown(pointer(100)));
+    act(() => late.current.handlers.onPointerMove(pointer(240)));
+    expect(late.current.offset).toBe(140 - FIRST_MOVE_SLOP_MAX_PX);
+  });
+
+  it("coupe le rebond natif sous la poignée le temps du geste, et le rend au relâché", () => {
+    const scroller = document.createElement("div");
+    scroller.style.overflowY = "auto";
+    scroller.style.overscrollBehaviorY = "contain";
+    const handle = document.createElement("div");
+    scroller.appendChild(handle);
+    document.body.appendChild(scroller);
+    try {
+      const { result } = renderHook(() => useSwipeToDismiss(vi.fn()));
+      const at = (clientY: number) => ({ ...pointer(clientY), currentTarget: handle }) as unknown as React.PointerEvent;
+      act(() => result.current.handlers.onPointerDown(at(100)));
+      expect(scroller.style.overscrollBehaviorY).toBe("none");
+      const during = new TouchEvent("touchmove", { cancelable: true, bubbles: true });
+      handle.dispatchEvent(during);
+      expect(during.defaultPrevented).toBe(true);
+      act(() => result.current.handlers.onPointerUp(at(110)));
+      expect(scroller.style.overscrollBehaviorY).toBe("contain");
+      // Hors d'un geste, la poignée ne refuse rien.
+      const after = new TouchEvent("touchmove", { cancelable: true, bubbles: true });
+      handle.dispatchEvent(after);
+      expect(after.defaultPrevented).toBe(false);
+    } finally {
+      scroller.remove();
+    }
   });
 
   it("never goes above its starting position", () => {
@@ -227,6 +272,7 @@ describe("useSwipeToDismiss", () => {
 
       expect(() => act(() => result.current.handlers.onPointerDown(event as unknown as React.PointerEvent))).not.toThrow();
       // Le geste reste utilisable : il suivra tant que le doigt ne quitte pas l'élément.
+      act(() => result.current.handlers.onPointerMove({ clientY: 100, pointerId: 7 } as unknown as React.PointerEvent));
       act(() => result.current.handlers.onPointerMove({ clientY: 180, pointerId: 7 } as unknown as React.PointerEvent));
       expect(result.current.offset).toBe(80);
       // Et rien à rendre, puisque rien n'a été pris.

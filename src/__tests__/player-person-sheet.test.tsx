@@ -271,6 +271,8 @@ describe("PlayerPersonSheet — la fiche de la gestion, transposée", () => {
     const pointer = (type: string, clientY: number) =>
       act(() => void handle.dispatchEvent(new MouseEvent(type, { bubbles: true, clientY })));
     pointer("pointerdown", 100);
+    // Le premier mouvement porte la tolérance du navigateur, retranchée (`FIRST_MOVE_SLOP_MAX_PX`) : sur place ici.
+    pointer("pointermove", 100);
     const before = cardRenders.count;
     expect(before).toBeGreaterThan(0);
     for (let y = 110; y <= 200; y += 10) pointer("pointermove", y);

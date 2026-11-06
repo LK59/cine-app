@@ -78,6 +78,8 @@ describe.each([
     const back = Array.from(root().querySelectorAll("button")).find((b) => b.textContent?.includes("cinema.back"))!;
     expect(g!.compareDocumentPosition(back) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     pointer(g!, "pointerdown", 100);
+    // Le premier mouvement porte la tolérance du navigateur, retranchée (`FIRST_MOVE_SLOP_MAX_PX`) : sur place ici.
+    pointer(g!, "pointermove", 100);
     pointer(g!, "pointermove", 140);
     expect(root().style.transform).toBe("translateY(40px)");
   });

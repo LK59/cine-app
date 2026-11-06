@@ -35,6 +35,42 @@ const VELOCITY_THRESHOLD = 0.5;
  * raccourci de la vitesse de s'appliquer à quelque chose qui n'a pas bougé.
  */
 export const MIN_FLICK_PX = 24;
+/**
+ * Ce que le premier mouvement peut apporter d'un coup sans que la carte saute : il est retranché du
+ * geste, comme le fait une vue défilante d'iOS de sa propre tolérance.
+ *
+ * Filmé sur l'iPhone (06/11/2026) : le doigt descend, rien ne bouge pendant quatre images, puis la
+ * carte saute de ~45 px — WebKit n'envoie le premier `pointermove` qu'une fois sa tolérance passée,
+ * et tout ce chemin arrivait en une image. La carte part maintenant du point où le geste est reconnu
+ * et suit le doigt pixel pour pixel ensuite. Au-delà de ce plafond, ce n'est plus une tolérance mais
+ * des mouvements perdus : la carte rattrape le doigt plutôt que de traîner loin derrière lui. La
+ * décision au relâché (distance, vitesse) compte toujours le chemin entier du doigt.
+ */
+export const FIRST_MOVE_SLOP_MAX_PX = 48;
+
+/**
+ * Le rebond natif d'iOS sous la poignée, coupé le temps du geste.
+ *
+ * La poignée a `touch-action: none`, mais WebKit sur iOS laissait quand même la fiche défilante qui
+ * la contient rebondir en haut : filmé le 06/11/2026, pendant ~100 ms le contenu descendait seul (une
+ * bande noire s'ouvrait entre l'image et le titre), puis le geste prenait la main et la carte sautait
+ * de ~140 px en une image. Dès l'appui sur la poignée, c'est un geste de fermeture : ses `touchmove`
+ * sont refusés au défilement (un écouteur non passif — ceux de React le sont), et le défileur le plus
+ * proche perd son rebond (`overscroll-behavior: none`) jusqu'au relâché. Défiler depuis le contenu
+ * ne change pas : rien de cela n'existe hors d'un geste parti de la poignée.
+ */
+const touchGuarded = new WeakSet<EventTarget>();
+let guardActive = false;
+function refuseNativePan(e: TouchEvent) {
+  if (guardActive && e.cancelable) e.preventDefault();
+}
+function scrollerOf(el: Element | null): HTMLElement | null {
+  for (let p = el?.parentElement ?? null; p; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if (oy === "auto" || oy === "scroll") return p;
+  }
+  return null;
+}
 
 export interface SwipeToDismiss {
   /** Current downward offset in px. 0 when idle. */
@@ -124,10 +160,25 @@ export function useSwipeToDismiss(
   const startY = useRef(0);
   const startedAt = useRef(0);
   const latest = useRef(0);
+  /** La tolérance retranchée au premier mouvement (`FIRST_MOVE_SLOP_MAX_PX`) ; `null` avant lui. */
+  const slop = useRef<number | null>(null);
+  /** Le rebond du défileur, rendu au relâché. */
+  const restoreBounce = useRef<(() => void) | null>(null);
   // Prise et rendue par la primitive partagée : trois gestes de cette application capturent le
   // pointeur, et le protocole autour — rendre à la fin, rendre au démontage, ne pas lever sur un
   // pointeur déjà parti — est le seul morceau qu'ils ont en commun. Voir `usePointerCapture`.
   const capture = usePointerCapture();
+  // Démontée doigt posé (règle 3 des fiches : un geste ne survit pas à son élément) : le défileur
+  // retrouve son rebond, et plus aucun `touchmove` n'est refusé.
+  useEffect(
+    () => () => {
+      if (!active.current) return;
+      guardActive = false;
+      restoreBounce.current?.();
+      restoreBounce.current = null;
+    },
+    []
+  );
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -135,6 +186,26 @@ export function useSwipeToDismiss(
     startY.current = e.clientY;
     startedAt.current = performance.now();
     latest.current = 0;
+    slop.current = null;
+    // Le rebond natif coupé dès l'appui — voir `refuseNativePan`. Posé sur la poignée une fois pour
+    // toutes (il ne fait rien hors d'un geste) ; le défileur retrouve son rebond au relâché.
+    const handle = e.currentTarget as unknown as Element | null;
+    if (handle && typeof (handle as Partial<Element>).addEventListener === "function") {
+      if (!touchGuarded.has(handle)) {
+        touchGuarded.add(handle);
+        handle.addEventListener("touchmove", refuseNativePan as EventListener, { passive: false });
+      }
+      guardActive = true;
+      restoreBounce.current?.();
+      const scroller = handle instanceof Element ? scrollerOf(handle) : null;
+      if (scroller) {
+        const before = scroller.style.overscrollBehaviorY;
+        scroller.style.overscrollBehaviorY = "none";
+        restoreBounce.current = () => {
+          scroller.style.overscrollBehaviorY = before;
+        };
+      }
+    }
     setDragging(true);
     setTouched(true);
     // Capture: the finger drags the sheet down out from under itself, so it leaves the handle
@@ -151,15 +222,20 @@ export function useSwipeToDismiss(
     // Clamped at 0 rather than allowed to go negative: dragging back up returns the sheet
     // exactly to where it started and stops there, which is what "you can change your mind"
     // should feel like. Pulling it up beyond its own top edge would just tear it off the screen.
-    const next = Math.max(0, e.clientY - startY.current);
-    latest.current = next;
-    setOffset(next);
+    const travel = Math.max(0, e.clientY - startY.current);
+    // Le premier mouvement : sa tolérance est retranchée, la carte part de là (`FIRST_MOVE_SLOP_MAX_PX`).
+    if (slop.current === null) slop.current = Math.min(travel, FIRST_MOVE_SLOP_MAX_PX);
+    latest.current = travel;
+    setOffset(Math.max(0, travel - slop.current));
   }, []);
 
   const finish = useCallback(() => {
     // Rendue avant toute autre chose, et même si le geste n'était pas actif : c'est la seule
     // ligne qui doit s'exécuter quoi qu'il arrive ensuite.
     capture.release();
+    guardActive = false;
+    restoreBounce.current?.();
+    restoreBounce.current = null;
     if (!active.current) return;
     active.current = false;
     setDragging(false);

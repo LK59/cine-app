@@ -195,6 +195,8 @@ describe("la page Tests animations", () => {
     expect(handle!.querySelector('[aria-label="Fermer la fiche"]')).toBeTruthy();
     const sheet = handle!.parentElement!;
     fireEvent.pointerDown(handle!, { clientY: 100, pointerId: 1, button: 0, pointerType: "touch" });
+    // Le premier mouvement porte la tolérance du navigateur, retranchée (`FIRST_MOVE_SLOP_MAX_PX`) : sur place ici.
+    fireEvent.pointerMove(handle!, { clientY: 100, pointerId: 1, pointerType: "touch" });
     fireEvent.pointerMove(handle!, { clientY: 120, pointerId: 1, pointerType: "touch" });
     expect(sheet.style.transform).toBe("translateY(20px)");
     // Relâchée en deçà du seuil (et trop courte pour un lancer), elle revient en place.
@@ -202,6 +204,7 @@ describe("la page Tests animations", () => {
     expect(sheet.style.transform).toBe("");
     // Au-delà : elle se ferme depuis là où le doigt l'a laissée, sans filer d'abord au bas de l'écran.
     fireEvent.pointerDown(handle!, { clientY: 100, pointerId: 1, button: 0, pointerType: "touch" });
+    fireEvent.pointerMove(handle!, { clientY: 100, pointerId: 1, pointerType: "touch" });
     fireEvent.pointerMove(handle!, { clientY: 400, pointerId: 1, pointerType: "touch" });
     fireEvent.pointerUp(handle!, { clientY: 400, pointerId: 1, pointerType: "touch" });
     expect(sheet.style.transform).toBe("translateY(300px)");
@@ -371,6 +374,8 @@ describe("la page Tests animations", () => {
       const grip = sheet.querySelector<HTMLElement>('[style*="touch-action: none"]');
       expect(grip).toBeTruthy();
       fireEvent.pointerDown(grip!, { clientY: 100, pointerId: 1, button: 0, pointerType: "touch" });
+      // Le premier mouvement porte la tolérance du navigateur, retranchée (`FIRST_MOVE_SLOP_MAX_PX`) : sur place ici.
+      fireEvent.pointerMove(grip!, { clientY: 100, pointerId: 1, pointerType: "touch" });
       fireEvent.pointerMove(grip!, { clientY: 140, pointerId: 1, pointerType: "touch" });
       expect(sheet.style.transform).toBe("translateY(40px)");
       cleanup();
