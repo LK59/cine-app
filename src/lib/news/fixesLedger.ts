@@ -1141,6 +1141,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.13.25",
+    page: "10.5",
+    group: { fr: "Interface", en: "Interface", es: "Interfaz", de: "Oberfläche" },
+    items: [
+      {
+        fr: "Une fiche attrapée juste après son ouverture descend d'un seul bloc : son image ne reste plus figée en haut de l'écran.",
+        en: "A sheet grabbed right after it opens now moves down in one piece: its picture no longer stays stuck at the top of the screen.",
+        es: "Una ficha agarrada justo después de abrirse baja de una pieza: su imagen ya no se queda fija en la parte superior de la pantalla.",
+        de: "Eine direkt nach dem Öffnen gegriffene Karte bewegt sich jetzt in einem Stück: Ihr Bild bleibt nicht mehr oben am Bildschirm hängen.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
