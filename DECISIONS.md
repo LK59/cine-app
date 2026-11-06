@@ -3038,6 +3038,21 @@ sources et vérifié sur la vraie bibliothèque (`hls-contrat.test.ts`) :
   identique ; sur Chrome l'erreur de décodage lève aussi l'`error` de l'élément, dont l'échelle du son
   renégocie à la position (~5 s, déjà le cas en 1.5.17). Non vérifiables ici : Fire TV, Android, une
   variante HDR servie telle quelle (la seule où la double récupération se produisait en vrai).
+- **1.7.4 (06/11/2026)**, épinglée exacte. Diff relu : `ErrorController`, `recoverMediaError()` et
+  `onMediaAttached` inchangés, le contrat ci-dessus tient. Ce qui peut nous toucher, sur un flux VOD
+  à niveau unique et sans piste son séparée : un `stopLoad()` qui interrompt un fragment laisse
+  désormais hls.js arrêté (notre borne de coupure appelle `stopLoad()` puis `detachMedia()`) ; une
+  requête du premier fragment interrompue avant toute image le redemande à la position de départ ;
+  les fragments marqués « trou » survivent à un `recoverMediaError()` ; une MediaSource fermée parce
+  que l'élément a pris une autre source n'est plus recréée par-dessus (nos `releaseHlsElement` vident
+  `src` : rien de changé). Le reste (LL-HLS, EME, interstitiels, IMSC1, pistes son séparées, démuxeur
+  TS et chargement progressif — Jellyfin nous sert du fMP4, `deviceProfile.ts`) est sans objet ici.
+  Banc navigateur (moyen + toutes les séances hls.js du complet, 19) : une seule différence due à la
+  montée, reproduite 3 fois sur 3 contre 0 sur 3 en 1.7.3 — l'épisode en MP2 dans WebKit pour Linux
+  (profil iPhone émulé), qui ne montre jamais d'image dans les deux versions : 1.7.4 y lève une erreur
+  média (« hls.js : média », 20 fois), l'échelle du lecteur serveur monte ses quatre marches, et
+  l'écran « Le chargement prend trop de temps » vient ~17 s plus tard. Même issue ; Safari réel prend
+  le HLS natif, et la même séance dans Chromium est identique.
 
 Tests : `hls-contrat.test.ts` (vraie bibliothèque : ordre des écouteurs, drapeau, fatale), et dans
 `PlayerHost-hls-recovery.test.tsx` « hls.js 1.7 » — chacun échoue sans le correctif.
