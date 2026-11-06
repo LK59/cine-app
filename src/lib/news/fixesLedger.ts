@@ -1109,6 +1109,25 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.13.23",
+    page: "10.5",
+    group: { fr: "Interface", en: "Interface", es: "Interfaz", de: "Oberfläche" },
+    items: [
+      {
+        fr: "Une fiche refermée d'un geste vif rentre d'un seul tenant dans son affiche : plus de texte ni de boutons qui traînent un instant après elle.",
+        en: "A sheet closed with a quick swipe now returns to its poster in one piece: no more text or buttons lingering for a moment behind it.",
+        es: "Una ficha cerrada con un gesto rápido vuelve de una pieza a su póster: ya no quedan textos ni botones rezagados un instante.",
+        de: "Eine mit schneller Geste geschlossene Karte kehrt in einem Stück zu ihrem Poster zurück: Keine Texte oder Schaltflächen bleiben mehr kurz zurück.",
+      },
+      {
+        fr: "Tirer une fiche vers le bas par son image la fait suivre le doigt dès le premier mouvement, sans à-coup ni bande noire.",
+        en: "Pulling a sheet down by its picture now makes it follow your finger from the very first movement, without a jolt or a black band.",
+        es: "Al deslizar una ficha hacia abajo desde su imagen, ahora sigue el dedo desde el primer movimiento, sin saltos ni franja negra.",
+        de: "Wird eine Karte an ihrem Bild nach unten gezogen, folgt sie dem Finger jetzt ab der ersten Bewegung – ohne Ruck und ohne schwarzen Streifen.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
