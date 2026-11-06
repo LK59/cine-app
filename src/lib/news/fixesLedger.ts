@@ -1128,6 +1128,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.13.24",
+    page: "10.5",
+    group: { fr: "Interface", en: "Interface", es: "Interfaz", de: "Oberfläche" },
+    items: [
+      {
+        fr: "Une fiche tirée vers le bas suit le doigt de façon plus fluide, et en se refermant son texte rentre dans l'affiche avec elle.",
+        en: "A sheet pulled down now follows your finger more smoothly, and as it closes its text goes back into the poster with it.",
+        es: "Una ficha arrastrada hacia abajo sigue el dedo con más fluidez y, al cerrarse, su texto vuelve al póster con ella.",
+        de: "Eine nach unten gezogene Karte folgt dem Finger jetzt flüssiger, und beim Schließen kehrt ihr Text mit ihr ins Poster zurück.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
