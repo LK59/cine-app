@@ -8304,3 +8304,39 @@ du fil principal 3,92 s → 3,37 s par minute (−14 %), sonde de retard 58,7 �
 headless (Braveheart 4K, The Duchess), aucune différence lisible : ~180–200 ms/s et ~50–60 tâches de
 plus de 50 ms par minute des deux côtés, le fil principal de Firefox sans GPU étant occupé par autre
 chose. Sur iPhone, non mesuré ici.
+
+## 133. L'interface décidée avant le premier dessin, et l'écran de lancement en forme d'accueil (06/11/2026)
+
+**Règle.** Tactile ou ordinateur se décide par une seule règle, `decideInterface`, sur les faits que lit
+`readInterfaceFacts` (`src/lib/interfaceDecision.ts`) — un écran étroit, le choix Compte → Interface là
+où il est proposé, l'appareil touché, la Fire TV, le simulateur d'iPad. Le crochet `useIsMobile` les
+appelle ; le layout du cinéma les envoie dans le HTML, sérialisées par `toString()`, dans un script qui
+pose `<html data-ui="touch|desktop">` avant le premier dessin. Ce que le serveur rend pour les deux
+interfaces porte `data-ui-only`, et `globals.css` (« La marque de l'interface ») cache l'autre et pose
+`--player-rail` / `--player-bar-space` jusqu'à ce que `PlayerShell` le fasse. Les deux fonctions ne
+lisent rien hors de leurs paramètres : sérialisées, elles n'emportent pas leur module.
+
+**Porteur.** `interfaceDecision.ts` (`readInterfaceFacts`, `decideInterface`, `interfaceMarkScript`) ;
+`useHydrated.ts` ; `HomeSkeleton.tsx` (`DesktopHomeSkeleton`, `MobileHomeSkeleton`,
+`MobileHomeSkeletonBody`, `HomeSkeletons`, et les mesures partagées avec les accueils : part de la
+bannière, largeurs des cartes, fondu des bords).
+
+**Appelants.** `useIsMobile` / `canChooseInterface` ; `(player)/layout.tsx` (le script, après celui du
+simulateur) ; `PlayerShell` (les deux navigations pendant l'hydratation, puis la seule utile dans la
+même enveloppe ; la marque tenue à jour) ; `(player)/page.tsx` (`LoadingScreen`) ; `CinemaClient` et
+`CinemaMobileClient` (leur propre attente de catalogue, et les mesures).
+
+**Tests.** `interface-mark.test.tsx` (le script exécuté seul contre le crochet : téléphone, iPad
+automatique / Tactile / Ordinateur, ordinateur, PC tactile, Fire TV, simulateur ; HTML serveur sous la
+marque : ni rail ni squelette du bureau sur un téléphone, réserves justes ; hydratation sans désaccord ;
+valeurs du CSS égales à `RAIL_WIDTH` / `BAR_SPACE`) ; `interface-choice.test.tsx` ;
+`decisions-partagees.test.ts` (une seule part de bannière).
+
+**Ce qui diffère exprès.** Sous le simulateur d'iPad, l'écran n'est jamais « étroit » : la méta
+`viewport` vient d'être réécrite à 1 180 px et `matchMedia` peut ne pas l'avoir vue au moment du script
+— le crochet, plus tard, y trouve la même réponse. Sans marque (script en échec, ou une navigation
+client depuis la gestion, où un script inséré ne s'exécute pas), le CSS montre l'interface ordinateur
+comme avant, et `PlayerShell` pose la marque dans son effet de mise en page, avant la peinture. Les
+accueils n'ont plus de fondu d'entrée sur leur cadre : le squelette de lancement est déjà là, et un
+fondu depuis le noir l'effaçait d'abord ; la bannière et les rangées gardent le leur. L'écran de
+lancement passe au rang de l'accueil (45, sous la navigation), et non plus au-dessus de tout (200).

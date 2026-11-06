@@ -1,8 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { isFireTv } from "@/lib/fireTv";
-import { ipadSimulatorOn } from "@/lib/ipadSimulator";
+import { INTERFACE_PROBES, decideInterface, readInterfaceFacts, type InterfaceFacts } from "@/lib/interfaceDecision";
 
 // Tailwind's own md breakpoint — the same line the rest of the app's responsive classes switch
 // on, so "mobile" here means exactly what it means everywhere else in the UI.
@@ -11,7 +10,9 @@ import { ipadSimulatorOn } from "@/lib/ipadSimulator";
 // wide and would fall through to the desktop layout, which assumes a tall window (a hero pane
 // stacked over the rows). Short AND coarse-pointer keeps that to touch devices — a 13" laptop is
 // ~800px tall with a mouse, so it stays on the desktop UI exactly as before.
-const MOBILE_QUERY = "(max-width: 767px), (max-height: 500px) and (pointer: coarse)";
+// La requête elle-même vit dans `interfaceDecision.ts` : le script d'avant le premier dessin la lit
+// aussi, et deux copies divergeraient.
+const MOBILE_QUERY = INTERFACE_PROBES.narrow;
 
 // A viewport with almost no vertical room — a phone in landscape, essentially. Layouts that lead
 // with a tall piece of key art use it to lay that art out sideways instead.
@@ -67,7 +68,7 @@ function useMediaQuery(query: string): boolean {
  * basculer l'écran sous les doigts ; changer le choix recharge la page.
  */
 export type InterfaceChoice = "auto" | "touch" | "desktop";
-const INTERFACE_KEY = "cine:interface";
+const INTERFACE_KEY = INTERFACE_PROBES.choiceKey;
 
 export function interfaceChoice(): InterfaceChoice {
   try {
@@ -90,9 +91,15 @@ export function setInterfaceChoice(choice: InterfaceChoice): void {
 }
 
 let touchAtLoad: boolean | null = null;
-function touchDevice(): boolean {
-  touchAtLoad ??= window.matchMedia(TOUCH_QUERY).matches && !isFireTv();
-  return touchAtLoad;
+
+/**
+ * Ce que l'appareil dit de lui, avec le pointeur lu une fois au chargement (voir plus haut). La
+ * règle elle-même est `decideInterface` — la même que le script d'avant le premier dessin.
+ */
+function facts(): InterfaceFacts {
+  const read = readInterfaceFacts(window, INTERFACE_PROBES);
+  touchAtLoad ??= read.touch;
+  return { ...read, touch: touchAtLoad };
 }
 
 /**
@@ -102,17 +109,7 @@ function touchDevice(): boolean {
  * ses gestes), ni une télévision. Le simulateur d'iPad, sur un iPhone, le propose aussi.
  */
 export function canChooseInterface(): boolean {
-  if (typeof window.matchMedia !== "function" || isFireTv()) return false;
-  if (ipadSimulatorOn()) return true;
-  const touchable = window.matchMedia("(any-pointer: coarse)").matches;
-  return touchable && Math.min(window.screen.width, window.screen.height) >= 600;
-}
-
-function touchInterface(narrow: boolean): boolean {
-  if (narrow) return true;
-  const choice = canChooseInterface() ? interfaceChoice() : "auto";
-  if (choice !== "auto") return choice === "touch";
-  return touchDevice();
+  return decideInterface(facts()).canChoose;
 }
 
 /** Pour les tests : oublier le pointeur lu au chargement. */
@@ -123,7 +120,7 @@ export function resetInterfaceForTests(): void {
 export function useIsMobile(): boolean {
   return useSyncExternalStore(
     subscriberFor(MOBILE_QUERY),
-    () => touchInterface(window.matchMedia(MOBILE_QUERY).matches),
+    () => decideInterface(facts()).touch,
     () => false
   );
 }
@@ -164,7 +161,7 @@ export function useIsShortViewport(): boolean {
  * `hover: none` plutôt que `pointer: coarse` seul : un écran tactile de portable a les deux, et
  * c'est bien l'absence de survol qui décide ici, pas la grosseur du pointeur.
  */
-const TOUCH_QUERY = "(hover: none) and (pointer: coarse)";
+const TOUCH_QUERY = INTERFACE_PROBES.touch;
 
 export function useIsTouch(): boolean {
   return useMediaQuery(TOUCH_QUERY);

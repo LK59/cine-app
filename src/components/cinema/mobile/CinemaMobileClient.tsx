@@ -71,6 +71,7 @@ import { CinemaNewBadge } from "@/components/cinema/CinemaNewBadge";
 import { CinemaTop10Card } from "@/components/cinema/CinemaTop10Card";
 import { useCinemaMyList, useCinemaMyListPending } from "@/lib/useCinemaMyList";
 import { CinemaSkeletonCards } from "@/components/cinema/CinemaRowSkeleton";
+import { MOBILE_CONTINUE_WIDTH, MOBILE_POSTER_WIDTH, MobileHomeSkeletonBody } from "@/components/cinema/HomeSkeleton";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { CinemaMobileDetail } from "@/components/cinema/mobile/CinemaMobileDetail";
 import { CinemaMobileHero } from "@/components/cinema/mobile/CinemaMobileHero";
@@ -84,11 +85,10 @@ import { APP_NAME } from "@/lib/appBuild";
 import { episodeStartFrom, movieStartFrom, useContinueRow, type CinemaResumeItem, type ShownContinueEntry } from "@/lib/useContinueRow";
 import { useArrivalFade } from "@/lib/useArrivalFade";
 
-// Roughly a third of a phone's width, so a row always shows "two and a bit" posters — the visual
-// cue that it scrolls, without a card so small the artwork stops being readable.
-// `tablet:` — l'iPad, en grand (16/10/2026) : cinq affiches et demie debout, sept ou huit couché.
-const POSTER_WIDTH = "w-28 sm:w-32 tablet:w-36";
-const CONTINUE_WIDTH = "w-44 sm:w-48 tablet:w-60";
+// Les largeurs des cartes vivent avec le squelette de l'écran de lancement, qui doit les reprendre
+// au pixel près — voir `HomeSkeleton.tsx`.
+const POSTER_WIDTH = MOBILE_POSTER_WIDTH;
+const CONTINUE_WIDTH = MOBILE_CONTINUE_WIDTH;
 // A phone row is flicked through, not traversed — past a couple of dozen cards nobody is
 // scrolling horizontally any further, and every extra card is DOM and decoded artwork the
 // browser carries for the whole session.
@@ -621,7 +621,10 @@ export function CinemaMobileClient() {
     // `safe-x` : couché, l'encoche et la Dynamic Island mordent sur le bord gauche de l'écran
     // (`viewport-fit=cover` laisse le contenu passer dessous). Le menu et la première affiche de
     // chaque rangée s'y cachaient.
-    <div className="app-viewport safe-x fixed inset-x-0 top-0 flex animate-fade-in flex-col overflow-hidden bg-ink" style={{ zIndex: 45 }}>
+    // Sans fondu d'entrée (06/11/2026) : le squelette de l'écran de lancement est déjà là, dans la
+    // même forme, et un fondu depuis le noir l'effaçait d'abord — un éclair noir au lieu d'un écran
+    // qui se remplit. La bannière et les rangées ont leur propre arrivée (`useArrivalFade`).
+    <div className="app-viewport safe-x fixed inset-x-0 top-0 flex flex-col overflow-hidden bg-ink" style={{ zIndex: 45 }}>
       {/* Sticky chrome: le menu à gauche, les deux onglets de bibliothèque en pastilles. */}
       {/* The safe-area inset alone puts this flush against the status bar, which iOS then dims
           and blurs over in a standalone PWA — the pills came out half-hidden. An explicit gap on
@@ -696,32 +699,16 @@ export function CinemaMobileClient() {
         className={`flex-1 overflow-y-auto overscroll-contain ${books.active ? "hidden" : ""}`}
         style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${short ? "4.5rem" : "6rem"})` }}
       >
+        {/* La forme de l'accueil qui va se remplir — la même que l'écran de lancement, qui la
+            montrait déjà : rien ne bouge quand l'un remplace l'autre (`HomeSkeleton.tsx`). Couché,
+            la bannière est une ligne compacte et non une affiche pleine largeur : le squelette
+            vertical faisait sauter toute la page au moment où le contenu arrivait (23/09/2026). */}
         {loading && (
-          <div className="px-4 pt-2">
-            {/* La forme de la bannière qui va le remplacer : en paysage c'est une ligne compacte,
-                pas une affiche pleine largeur, et le squelette vertical faisait sauter toute la
-                page au moment où le contenu arrivait (relevé le 23/09/2026). */}
-            {short ? (
-              <div className="flex gap-4 rounded-2xl bg-surface/70 p-3">
-                <div className="skeleton aspect-2/3 w-24 shrink-0 rounded-lg" />
-                <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
-                  <div className="skeleton h-6 w-40 rounded" />
-                  <div className="skeleton h-3 w-32 rounded" />
-                  <div className="skeleton mt-1 h-9 w-44 rounded-full" />
-                </div>
-              </div>
-            ) : (
-              <div className="skeleton aspect-2/3 w-full rounded-2xl" />
-            )}
-            <div className="skeleton mt-6 h-4 w-32 rounded" />
-            <div className="mt-3 flex gap-3">
-              {Array.from({ length: 3 }, (_, i) => (
-                <div key={i} className={`skeleton ${POSTER_WIDTH} aspect-2/3 shrink-0 rounded-lg`} />
-              ))}
-            </div>
+          <>
+            <MobileHomeSkeletonBody />
             {/* Cinq secondes sans catalogue : les téléchargements de l'appareil, s'il y en a (§109). */}
             <SlowLaunchDownloads />
-          </div>
+          </>
         )}
 
         {/* Une ligne, avec ou sans catalogue : le téléphone n'a pas d'écran plein d'erreur. Celle de

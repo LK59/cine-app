@@ -734,10 +734,17 @@ describe("une seule animation de colonne pour les fiches du bureau", () => {
 describe("une seule hauteur de bannière pour l'écran du bureau et son squelette", () => {
   // Le squelette était resté à 50 % quand l'écran est passé à 44 : les rangées remontaient d'un
   // coup à chaque chargement à froid (23/09/2026). Voir `HERO_BASIS`.
+  // Depuis le 06/11/2026 le squelette vit dans `HomeSkeleton.tsx` (l'écran de lancement le montre
+  // aussi), avec la valeur : l'écran l'en importe.
   it("aucune hauteur de bannière écrite en dur", () => {
     const src = lire("src/components/cinema/CinemaClient.tsx");
+    const skeleton = lire("src/components/cinema/HomeSkeleton.tsx");
     expect(src).not.toMatch(/flexBasis: "\d+%"/);
-    expect(src.match(/flexBasis: HERO_BASIS/g)?.length).toBe(2);
+    expect(skeleton).not.toMatch(/flexBasis: "\d+%"/);
+    expect(src).toContain("const HERO_BASIS = DESKTOP_HERO_BASIS;");
+    expect(src.match(/flexBasis: HERO_BASIS/g)?.length).toBe(1);
+    expect(skeleton.match(/flexBasis: DESKTOP_HERO_BASIS/g)?.length).toBe(1);
+    expect(src).toContain("<DesktopHomeSkeleton>");
   });
 });
 

@@ -12,13 +12,20 @@
  * 0 — et le dit par l'indice `touch` (voir `TOUCH_HINT_HEADER`). Sans cet indice, un iPad reste un
  * Mac, comme avant.
  */
+/**
+ * La marque d'une Fire TV dans sa signature : « AFT » suivi du modèle. Exportée pour le script
+ * d'avant le premier dessin (`interfaceDecision.ts`), qui ne peut pas importer ce module et doit
+ * pourtant reconnaître une Fire TV exactement comme `isFireTv`.
+ */
+export const FIRE_TV_MODEL = /\bAFT([A-Z0-9]+)\b/;
+
 export function deviceLabel(userAgent: string | null | undefined, hints: { touch?: boolean } = {}): string | null {
   if (!userAgent) return null;
   const ua = userAgent;
   // Une Fire TV se déclare « Linux; Android 11; AFTT » : avant la règle Android, qui la nommait
   // téléphone (« Android · Chrome » dans l'activité pour la clé de Timothé, 10/10/2026). Le
   // modèle n'est nommé que là où il est sûr — AFTT, la Fire TV Stick —, sinon « Fire TV ».
-  const fireTv = /\bAFT([A-Z0-9]+)\b/.exec(ua);
+  const fireTv = FIRE_TV_MODEL.exec(ua);
   const named = fireTv
     ? fireTv[1] === "T"
       ? "Fire TV Stick"

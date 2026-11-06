@@ -3,6 +3,8 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useIsMobile } from "@/lib/useIsMobile";
+import { useHydrated } from "@/lib/useHydrated";
+import { INTERFACE_MARK } from "@/lib/interfaceDecision";
 import { useRole } from "@/lib/useRole";
 import {
   cinemaClose,
@@ -91,10 +93,10 @@ const DecoderWarmup = dynamic(() => import("./DecoderWarmup").then((m) => m.Deco
  *
  * La même valeur que `.player-rail` dans globals.css : si l'une change, l'autre aussi.
  */
-const RAIL_WIDTH = "3.75rem";
+export const RAIL_WIDTH = "3.75rem";
 
 /** La hauteur que la barre du téléphone occupe, réservée par le bas des panneaux. */
-const BAR_SPACE = "5.5rem";
+export const BAR_SPACE = "5.5rem";
 
 /** La durée des animations de sortie — celle de `--animate-fade-out`, à la milliseconde près. */
 const EXIT_MS = 200;
@@ -131,6 +133,14 @@ const DECODER_WARMUP_MS = 8000;
 
 export function PlayerShell() {
   const isMobile = useIsMobile();
+  /**
+   * Avant l'hydratation, l'interface n'est pas connue de React — le serveur répond « ordinateur »
+   * à `useIsMobile` —, mais elle l'est du document : le script du layout l'a notée sur `<html>`
+   * avant le premier dessin (`interfaceDecision.ts`). Les deux navigations sont alors rendues, et
+   * le CSS de cette marque cache celle qui ne sert pas : le HTML d'un iPhone montrait le rail du
+   * bureau jusqu'au démarrage du code, puis la barre du bas le remplaçait (06/11/2026).
+   */
+  const hydrated = useHydrated();
   const route = useCinemaRoute();
   const { role } = useRole();
   // L'activité ouverte par l'adresse chez un compte qui n'est pas administrateur : refermée dès que
@@ -145,18 +155,29 @@ export function PlayerShell() {
   //
   // Avant la peinture, et non après : posée dans un effet ordinaire, la grille s'affichait une
   // image entière collée au bord gauche avant de sauter de soixante-douze pixels.
+  //
+  // Pas pendant l'hydratation : `useIsMobile` y vaut encore « ordinateur » partout, et poser sa
+  // réserve aurait décalé l'écran d'un téléphone le temps d'un rendu. Jusque-là, ce sont les
+  // valeurs de la marque d'interface qui tiennent (`globals.css`, mêmes valeurs qu'ici).
+  //
+  // La marque elle-même suit ensuite la décision de React : le CSS qui cache la navigation
+  // inutile la lit encore (l'écran de lancement, `(player)/page.tsx`), et une fenêtre qu'on
+  // rétrécit change d'interface sans recharger.
   useIsomorphicLayoutEffect(() => {
+    if (!hydrated) return;
     const root = document.documentElement;
+    root.setAttribute(INTERFACE_MARK, isMobile ? "touch" : "desktop");
     root.style.setProperty("--player-rail", isMobile ? "0px" : RAIL_WIDTH);
     // Et symétriquement en bas : la barre du téléphone flotte au-dessus du contenu, donc les
     // panneaux doivent lui réserver la place. Nulle sur grand écran, où c'est le rail qui navigue
     // et où rien ne flotte en bas.
     root.style.setProperty("--player-bar-space", isMobile ? BAR_SPACE : "0px");
     return () => {
+      root.removeAttribute(INTERFACE_MARK);
       root.style.removeProperty("--player-rail");
       root.style.removeProperty("--player-bar-space");
     };
-  }, [isMobile]);
+  }, [hydrated, isMobile]);
 
   const search = useExitDelay(route.search, EXIT_MS);
   const list = useExitDelay(route.list, EXIT_MS);
@@ -300,7 +321,20 @@ export function PlayerShell() {
           la grammaire de chaque appareil. Le tiroir et son hamburger ont disparu — deux coins du
           haut hors de portée du pouce, et un écran entier recouvert pour poser une deuxième
           question. */}
-      {isMobile ? <PlayerBottomBar /> : <PlayerRail />}
+      {/* Avant l'hydratation les deux, chacune dans l'enveloppe que la marque d'interface cache ou
+          montre (`data-ui-only`, `globals.css`) ; ensuite la seule qui sert, dans la même enveloppe
+          — à la même place de l'arbre, donc sans être remontée. `contents` : l'enveloppe ne
+          dessine rien, la navigation garde sa position `fixed`. */}
+      {(!hydrated || isMobile) && (
+        <div className="contents" data-ui-only="touch">
+          <PlayerBottomBar />
+        </div>
+      )}
+      {(!hydrated || !isMobile) && (
+        <div className="contents" data-ui-only="desktop">
+          <PlayerRail />
+        </div>
+      )}
       <PlayerOnboardingGate />
       <PushResumePrompt />
       <PassageBanner />

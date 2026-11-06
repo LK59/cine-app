@@ -5,6 +5,7 @@ import { verifySessionFull } from "@/lib/session";
 import { PlayerShell } from "@/components/player/PlayerShell";
 import { earlyFetchScript } from "@/lib/earlyFetch";
 import { ipadSimulatorScript } from "@/lib/ipadSimulator";
+import { interfaceMarkScript } from "@/lib/interfaceDecision";
 import { IpadSimulatorBadge } from "@/components/player/IpadSimulatorBadge";
 
 /**
@@ -64,6 +65,11 @@ export default async function PlayerLayout({ children }: { children: React.React
       <script dangerouslySetInnerHTML={{ __html: earlyFetchScript() }} />
       {/* Le simulateur d'iPad de l'administrateur, avant le premier dessin (`ipadSimulator.ts`). */}
       <script dangerouslySetInnerHTML={{ __html: ipadSimulatorScript() }} />
+      {/* L'interface — tactile ou ordinateur — décidée avant le premier dessin, par la règle de
+          `useIsMobile`, et notée sur `<html>` : le HTML ne montre que la bonne navigation et le bon
+          squelette, et réserve les bonnes bandes (`interfaceDecision.ts`). Après celui du
+          simulateur, qui peut changer la largeur. */}
+      <script dangerouslySetInnerHTML={{ __html: interfaceMarkScript() }} />
       {children}
       <PlayerShell />
       <IpadSimulatorBadge />

@@ -5,6 +5,7 @@ import { useIsMobile } from "@/lib/useIsMobile";
 import { catalogueCacheReady } from "@/lib/persistentCache";
 import { useResumeCache } from "@/lib/resumeCache/useResumeCache";
 import { SlowLaunchDownloads } from "@/components/offline/SlowLaunchDownloads";
+import { HomeSkeletons } from "@/components/cinema/HomeSkeleton";
 
 // L'écran d'attente est un simple bloc `fixed`, et non plus un portage dans `document.body`.
 //
@@ -13,13 +14,21 @@ import { SlowLaunchDownloads } from "@/components/offline/SlowLaunchDownloads";
 // descendant `fixed`. Le lecteur n'a plus cette coquille — et surtout, ce composant de repli est
 // rendu côté serveur (c'est ce que `ssr: false` fait du `loading`), où `document` n'existe pas :
 // la page répondait 500 avant d'avoir affiché quoi que ce soit.
+//
+// La forme de l'accueil, et non plus un rond qui tourne (06/11/2026) : l'accueil se monte dedans et
+// le remplit, rien ne bouge (`HomeSkeleton.tsx`). Rendu au serveur, il ne sait pas quel accueil
+// viendra : les deux squelettes sont dans le HTML, et la marque d'interface posée avant le premier
+// dessin ne laisse voir que le bon (`interfaceDecision.ts`, `data-ui-only`). Au rang de l'accueil
+// (45), sous la navigation (50) : elle était cachée sous l'ancien écran (200), et apparaissait d'un
+// coup avec l'accueil.
 function LoadingScreen() {
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-ink" style={{ zIndex: 200 }}>
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-      {/* Cinq secondes sans écran : les téléchargements de l'appareil, s'il y en a (§109). */}
+    <>
+      <HomeSkeletons />
+      {/* Cinq secondes sans écran : les téléchargements de l'appareil, s'il y en a (§109). Il se
+          pose lui-même au-dessus de tout (`zIndex` 210). */}
       <SlowLaunchDownloads />
-    </div>
+    </>
   );
 }
 

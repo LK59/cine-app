@@ -1333,6 +1333,32 @@
   --player-rail: 0px;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   La marque de l'interface (06/11/2026).
+
+   Le serveur ne sait pas quel appareil l'appelle, et le HTML d'un iPhone dessinait le rail du
+   bureau jusqu'au démarrage du code. Un script du layout du cinéma décide avant le premier dessin
+   — par la même règle que `useIsMobile`, `interfaceDecision.ts` — et pose `data-ui` sur `<html>` ;
+   `PlayerShell` la tient à jour ensuite. Ce que le serveur rend pour les deux interfaces (les deux
+   navigations pendant l'hydratation, les deux squelettes de l'écran de lancement) porte
+   `data-ui-only`, et seul ce qui correspond se voit. Sans marque (script en échec), l'interface
+   ordinateur, comme avant.
+
+   Les réserves aussi : `PlayerShell` les pose en style après l'hydratation, et jusque-là ce sont
+   celles-ci qui tiennent — mêmes valeurs que `RAIL_WIDTH` et `BAR_SPACE` (un test les compare). */
+html:not([data-ui="touch"]) [data-ui-only="touch"],
+html[data-ui="touch"] [data-ui-only="desktop"] {
+  display: none;
+}
+html[data-ui="desktop"] {
+  --player-rail: 3.75rem;
+  --player-bar-space: 0px;
+}
+html[data-ui="touch"] {
+  --player-rail: 0px;
+  --player-bar-space: 5.5rem;
+}
+
 /* La pilule posée à 0,75 rem du bord (plus la zone sûre d'un iPad en paysage) : c'est l'ancre,
    pleine hauteur et transparente aux clics, qui porte la position. */
 .player-rail-anchor {

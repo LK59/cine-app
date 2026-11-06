@@ -69,17 +69,11 @@ import { useCentredCard } from "@/lib/useCentredCard";
 
 /** La durée de l'animation de sortie de la grille — celle de `--animate-fade-out`. */
 /**
- * La part de l'écran que prend la bannière — pour le vrai écran *et* pour son squelette.
- *
- * 44 % et non 50 % : la première page doit montrer la bannière, la rangée « À la une » *entière*,
- * puis le titre de « Reprendre » et le haut de ses affiches — c'est ce qui dit qu'on peut
- * descendre. Six points de hauteur suffisent à l'obtenir.
- *
- * Une seule valeur pour les deux : le squelette était resté à 50 % quand l'écran est passé à 44,
- * si bien qu'à chaque chargement à froid toutes les rangées remontaient d'un coup au moment où le
- * contenu remplaçait le squelette (relevé le 23/09/2026).
+ * La part de l'écran que prend la bannière — pour le vrai écran *et* pour son squelette, rangée
+ * avec lui (`HomeSkeleton.tsx`) : le squelette était resté à 50 % quand l'écran était passé à 44,
+ * et toutes les rangées remontaient d'un coup au chargement à froid (23/09/2026).
  */
-const HERO_BASIS = "44%";
+const HERO_BASIS = DESKTOP_HERO_BASIS;
 
 const BROWSE_EXIT_MS = 200;
 import { CinemaCard } from "@/components/cinema/CinemaCard";
@@ -94,6 +88,7 @@ import { CinemaTop10Row } from "@/components/cinema/CinemaTop10Row";
 import { CinemaDiscoveryRow } from "@/components/cinema/CinemaDiscoveryRow";
 import { useCinemaMyList, useCinemaMyListPending } from "@/lib/useCinemaMyList";
 import { CinemaSkeletonCards } from "@/components/cinema/CinemaRowSkeleton";
+import { DESKTOP_CARD_WIDTH, DESKTOP_EDGE_FADE, DESKTOP_HERO_BASIS, DesktopHomeSkeleton } from "@/components/cinema/HomeSkeleton";
 import { heroOffscreen, heroSignature, resolveHeroCarousel, upcomingImages, useDecodeAhead, useHeroOrder } from "@/lib/heroCarousel";
 import { CinemaShortcutsGuide } from "@/components/cinema/CinemaShortcutsGuide";
 import { requestSearchFocusOnOpen } from "@/lib/searchFocus";
@@ -113,11 +108,9 @@ import { guidedScrollClass, useGuidedScroll } from "@/lib/guidedScroll";
 const TV_NAV_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink";
 
-// w-24→xl:w-36 (96px→144px), down from the original w-40/sm:w-48 (160/192px) fixed pair — that
-// fixed size overflowed the row on anything shorter than a large desktop window, pushing the row
-// label itself off (above) the visible area. Shared between ContinueCard and CinemaCard so both
-// grids stay visually aligned.
-const CARD_WIDTH = "w-24 sm:w-28 md:w-32 lg:w-36";
+// Shared between ContinueCard and CinemaCard so both grids stay visually aligned — and with the
+// launch screen's skeleton, which lives beside it (`HomeSkeleton.tsx`).
+const CARD_WIDTH = DESKTOP_CARD_WIDTH;
 
 // Same edge-fade mask as CinemaRow/CinemaSeriesRow (see their own doc comment) — the Continue
 // Watching row is hand-rolled here rather than going through either of those (it renders
@@ -127,10 +120,7 @@ const CARD_WIDTH = "w-24 sm:w-28 md:w-32 lg:w-36";
 // exact count per tab would buy nothing visible.
 const RAIL_COUNT = 5;
 
-const EDGE_FADE = {
-  maskImage: "linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)",
-  WebkitMaskImage: "linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)",
-};
+const EDGE_FADE = DESKTOP_EDGE_FADE;
 
 // Continue-watching cards are noticeably wider than genre-row posters (landscape source image,
 // and there's a label chip to fit beneath) — a distinct width from CARD_WIDTH, not a smaller
@@ -1126,30 +1116,12 @@ export function CinemaClient() {
   if (nothingToShowYet(moviesLoading, movies)) {
     // A skeleton in the shape of the real screen, not a centred spinner: the layout it resolves
     // into is already on screen, so the load reads as content filling in rather than a blank
-    // screen swapping for a full one.
+    // screen swapping for a full one. The same one the launch screen showed (`HomeSkeleton.tsx`).
     return createPortal(
-      <div className="fixed inset-0 flex animate-fade-in flex-col overflow-hidden bg-ink" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
-        <div className="relative min-h-0 shrink grow-0" style={{ flexBasis: HERO_BASIS }}>
-          <div className="flex h-full max-w-2xl flex-col justify-end gap-4 px-8 pb-10 sm:px-12">
-            <div className="skeleton h-12 w-72 rounded-lg sm:h-16" />
-            <div className="skeleton h-4 w-48 rounded" />
-            <div className="skeleton h-4 w-full max-w-xl rounded" />
-            <div className="skeleton h-4 w-2/3 max-w-md rounded" />
-          </div>
-        </div>
-        <div className="min-h-80 flex-1 pt-6">
-          <div className="mb-2 px-8 sm:px-12">
-            <div className="skeleton h-4 w-28 rounded" />
-          </div>
-          <div className="flex gap-3 px-8 pb-4 pt-3 sm:px-12" style={EDGE_FADE}>
-            {Array.from({ length: 10 }, (_, i) => (
-              <div key={i} className={`skeleton ${CARD_WIDTH} aspect-2/3 shrink-0 rounded-lg`} />
-            ))}
-          </div>
-        </div>
+      <DesktopHomeSkeleton>
         {/* Cinq secondes sans catalogue : les téléchargements de l'appareil, s'il y en a (§109). */}
         <SlowLaunchDownloads />
-      </div>,
+      </DesktopHomeSkeleton>,
       document.body
     );
   }
@@ -1241,7 +1213,10 @@ export function CinemaClient() {
     // `--player-rail` est posée par PlayerShell : la bande repliée du rail est réservée ici,
     // parce qu'un écran porté dans document.body n'hérite d'aucun padding de la coquille.
     // `data-sheet-home` : l'accueil que la première fiche fait reculer d'un rien (DECISIONS.md §61).
-    <div data-sheet-home="" className="fixed inset-0 animate-fade-in overflow-hidden bg-ink" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
+    // Sans fondu d'entrée (06/11/2026) : le squelette de l'écran de lancement est déjà là, dans la
+    // même forme, et un fondu depuis le noir l'effaçait d'abord — un éclair noir au lieu d'un écran
+    // qui se remplit. La bannière a sa propre arrivée.
+    <div data-sheet-home="" className="fixed inset-0 overflow-hidden bg-ink" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
       {/* La sortie et la loupe ont quitté les coins de l'écran : elles sont dans le rail, à
           gauche, avec le reste de la navigation. Deux boutons flottants de moins par-dessus les
           affiches, et un seul endroit où l'on va chercher où aller. */}
