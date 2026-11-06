@@ -7,6 +7,7 @@ import { catalogueRefreshDue, refreshCatalogues, REFRESHED_CATALOGUE_KEYS } from
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
 import { renewPersisted } from "@/lib/persistentCache";
 import { whenUiQuiet } from "@/lib/uiQuiet";
+import { afterForegroundCheck } from "@/lib/foregroundGate";
 
 /**
  * Les deux catalogues relus au retour au premier plan, passé un quart d'heure — pour les deux
@@ -58,14 +59,17 @@ export function useCatalogueRefresh(blocked: boolean): void {
   }, [blocked, run]);
 
   useEffect(() => {
+    // Après la question de version (DECISIONS.md §134) : une page qui va se recharger ne télécharge pas
+    // le catalogue que la page neuve redemandera — c'était le double téléchargement du 06/11/2026.
     const onVisible = () => {
-      if (document.visibilityState === "visible") run();
+      if (document.visibilityState === "visible") afterForegroundCheck(run);
     };
+    const onFocus = () => afterForegroundCheck(run);
     document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", run);
+    window.addEventListener("focus", onFocus);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", run);
+      window.removeEventListener("focus", onFocus);
     };
   }, [run]);
 }

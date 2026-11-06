@@ -10,6 +10,7 @@ import { initOfflineDownloads, offlineAccount } from "@/lib/offline/downloads";
 import { keptBooksCount, rememberedOfflineAccount } from "@/lib/offline/offlineEntry";
 import { BetaBadge } from "./OfflineDownloadControl";
 import { OfflineDownloadsView } from "./OfflineDownloadsView";
+import { afterForegroundCheck } from "@/lib/foregroundGate";
 
 /**
  * `/hors-ligne` — les téléchargements de l'appareil sans le cinéma (bêta, DECISIONS.md §109).
@@ -51,7 +52,8 @@ export function OfflineEntryScreen() {
     })();
     // Au retour au premier plan, comme le rond du cinéma : la boucle a pu être suspendue.
     const onVisible = () => {
-      if (document.visibilityState === "visible") void initOfflineDownloads().catch(() => {});
+      // Après la question de version (DECISIONS.md §134).
+      if (document.visibilityState === "visible") afterForegroundCheck(() => void initOfflineDownloads().catch(() => {}));
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {

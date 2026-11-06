@@ -7,6 +7,7 @@ import { isPublicPath } from "@/lib/publicPaths";
 import { PRESENCE_EVERY_MS } from "@/lib/activity/presence";
 import { TOUCH_HINT_HEADER, touchHintHeaders } from "@/lib/deviceLabel";
 import { progressBeatFresh } from "@/lib/progressBeat";
+import { afterForegroundCheck } from "@/lib/foregroundGate";
 
 /**
  * Dit au serveur, une fois par minute, que l'application est ouverte — et ce qui y joue.
@@ -65,7 +66,12 @@ export function PresencePinger() {
       if (playing.current && progressBeatFresh()) return;
       if (document.visibilityState === "visible" || playing.current) send();
     }, PRESENCE_EVERY_MS);
-    const onVisibility = () => send(document.visibilityState === "visible");
+    // Le départ, tout de suite ; le retour, après la question de version (DECISIONS.md §134) — une
+    // page qui se recharge n'annonce rien, la neuve le fait à son montage.
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") afterForegroundCheck(() => send(true));
+      else send(false);
+    };
     const onHide = () => send(false);
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", onHide);

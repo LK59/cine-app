@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
+import { afterForegroundCheck } from "@/lib/foregroundGate";
 
 interface PendingTitle {
   title: string;
@@ -72,7 +73,8 @@ export function SSENotifier() {
       if (document.visibilityState !== "hidden") void loadTitles();
     }, 60_000);
     const onVisible = () => {
-      if (document.visibilityState === "visible") void loadTitles();
+      // Après la question de version (DECISIONS.md §134).
+      if (document.visibilityState === "visible") afterForegroundCheck(() => void loadTitles());
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {

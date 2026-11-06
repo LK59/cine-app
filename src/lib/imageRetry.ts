@@ -25,6 +25,7 @@
  */
 
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
+import { afterForegroundCheck } from "@/lib/foregroundGate";
 
 /** Les délais des nouveaux essais, après le premier échec puis après chacun. */
 export const RETRY_DELAYS_MS = [2000, 6000, 15000] as const;
@@ -84,7 +85,8 @@ function install(): void {
   installed = true;
   window.addEventListener("online", retryAllNow);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") retryAllNow();
+    // Après la question de version (DECISIONS.md §134) : une page qui se recharge ne réessaie rien.
+    if (document.visibilityState === "visible") afterForegroundCheck(retryAllNow);
   });
 }
 

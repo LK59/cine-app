@@ -9,6 +9,7 @@ import { deviceStoreSupported } from "@/lib/offline/deviceStore";
 import { initOfflineDownloads, offlineAccount, useOfflineDownloads } from "@/lib/offline/downloads";
 import { keptBooksCount, rememberOfflineAccount, warmOfflineEntry } from "@/lib/offline/offlineEntry";
 import { ProgressRing, offlineProgress } from "./OfflineDownloadControl";
+import { afterForegroundCheck } from "@/lib/foregroundGate";
 
 /**
  * Le rond des téléchargements hors ligne (bêta, 19/10/2026), à côté de « Tous les films / Toutes les
@@ -29,7 +30,8 @@ export function OfflineDownloadsButton() {
     void initOfflineDownloads();
     // Au retour au premier plan : la boucle a pu être suspendue (iPhone en arrière-plan).
     const onVisible = () => {
-      if (document.visibilityState === "visible") void initOfflineDownloads();
+      // Après la question de version (DECISIONS.md §134).
+      if (document.visibilityState === "visible") afterForegroundCheck(() => void initOfflineDownloads());
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);

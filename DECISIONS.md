@@ -8450,3 +8450,45 @@ comme avant, et `PlayerShell` pose la marque dans son effet de mise en page, ava
 accueils n'ont plus de fondu d'entrée sur leur cadre : le squelette de lancement est déjà là, et un
 fondu depuis le noir l'effaçait d'abord ; la bannière et les rangées gardent le leur. L'écran de
 lancement passe au rang de l'accueil (45, sous la navigation), et non plus au-dessus de tout (200).
+
+## 134. Au retour au premier plan, la version d'abord (06/11/2026)
+
+**Règle.** Au passage d'une page à « visible », la question de version (`BuildRefresh`, `/api/version`)
+part seule ; ce que le retour déclenche sur le réseau attend sa réponse. Même build, réponse en échec
+ou absente au bout de 1,5 s : tout part, comme avant. Nouveau build et `reloadIfSafe` recharge : rien ne
+part (sauf si la page est encore là 15 s plus tard — rechargement raté). Nouveau build sans rechargement
+permis : tout part. La porte n'est armée que si un rechargement était possible au retour (`mayReloadNow`
+au moment de l'armer) : un film ouvert, même réduit, un banc, un texte en cours — rien n'attend, et le
+lecteur n'attend jamais. Relevé du 06/11/2026 à 07:20 : un iPhone revenu après un déploiement relisait
+les deux catalogues, « Reprendre », « À suivre », Ma liste… sur l'ancienne page, puis se rechargeait et
+redemandait tout — 141 requêtes en 8 s, le catalogue téléchargé deux fois.
+
+**Ordre.** La porte s'arme dans un écouteur `visibilitychange` en capture sur `window` : l'événement
+vise le `document`, la phase de capture passe par `window` avant lui, donc avant tout écouteur du
+`document` (SWR, les crochets, `BuildRefresh`), quel que soit leur ordre d'inscription.
+
+**Porteur.** `src/lib/foregroundGate.ts` (`enableForegroundGate`, `foregroundHeld`,
+`currentForegroundReturn` / `settleForegroundReturn`, `afterForegroundCheck`, `onForegroundRelease`).
+
+**Appelants.** `BuildRefresh` (branche la porte, la règle par sa réponse — `reloadIfSafe` dit s'il
+recharge) ; `SWRProvider` — SWR n'a pas de crochet pour différer sa relecture au focus (`initFocus`
+n'est lu que pour un `provider` neuf, qui serait un second cache) : son `isVisible` répond faux tant
+que la porte est fermée, ce qui saute la relecture au focus, la reconnexion et les tours de sondage
+(dont `useMaintenance`), et `ForegroundReplay` rejoue la relecture au focus de chaque clé montée (et la
+reconnexion si `online` est arrivé entre-temps) à l'ouverture ; par `afterForegroundCheck` :
+`useCatalogueRefresh` (retour et focus), `useFreshPersonalLists`, `PresencePinger` (le retour ; le
+départ reste immédiat), `SSENotifier` (titres des demandes), `useResumeCache`, `imageRetry`,
+`OfflineDownloadsButton`, `OfflineEntryScreen`.
+
+**Tests.** `foregroundGate.test.ts` (armée avant un écouteur inscrit plus tôt ; même build ; recharge ;
+délai ; rechargement impossible ; sans porte ; retour à l'arrière-plan et réponse périmée) ;
+`foreground-version-first.test.tsx` (vrais `SWRProvider`, `BuildRefresh` et `useCatalogueRefresh` :
+témoin sans porte, même build → « Reprendre » et catalogue après la réponse, nouveau build → rien avant
+le rechargement).
+
+**Ce qui diffère exprès.** Hors de la porte : le lecteur et tout ce qui vit pendant un film (battement,
+journaux, réserve, réveil), `clearDeliveredNotifications` (pas de réseau), la mesure de hauteur
+(`viewportWatch`), les séances de lecture des livres (le cadre ne monte pas `BuildRefresh`, la porte n'y
+est jamais armée). Le focus seul, sans changement de visibilité (un ordinateur qui revient d'une autre
+application), n'arme rien : `BuildRefresh` ne pose la question qu'au retour de visibilité. `pageshow`
+non plus : `BuildRefresh` ne l'écoute pas. Un tour de sondage sauté pendant la porte n'est pas rejoué.

@@ -4,6 +4,7 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { benchStore } from "@/lib/playerBench/store";
 import { APP_BUILD } from "@/lib/appBuild";
+import { currentForegroundReturn, enableForegroundGate, settleForegroundReturn, type ForegroundOutcome } from "@/lib/foregroundGate";
 import { alreadyReloadedFor, holdsUnsavedText, isStaleBuild, markReloadedFor, mayReloadNow } from "@/lib/staleBuild";
 
 /** Combien de temps un onglet resté au premier plan attend avant de reposer la question. */
@@ -29,13 +30,17 @@ function unsaved(): boolean {
   return false;
 }
 
-/** Recharge si le serveur sert un autre build et que le moment ne coûte rien. */
-function reloadIfSafe(served: string | null, moment: { filmOpen: boolean; benchRunning: boolean }): void {
-  if (!served) return;
-  if (!mayReloadNow({ ...moment, typing: typing(), unsaved: unsaved() })) return;
-  if (alreadyReloadedFor(served)) return;
+/**
+ * Recharge si le serveur sert un autre build et que le moment ne coûte rien. Dit s'il recharge : au
+ * retour au premier plan, c'est ce qui garde fermée la porte des relectures (`foregroundGate.ts`).
+ */
+function reloadIfSafe(served: string | null, moment: { filmOpen: boolean; benchRunning: boolean }): boolean {
+  if (!served) return false;
+  if (!mayReloadNow({ ...moment, typing: typing(), unsaved: unsaved() })) return false;
+  if (alreadyReloadedFor(served)) return false;
   markReloadedFor(served);
   refreshPage(window.location);
+  return true;
 }
 
 /**
@@ -77,25 +82,35 @@ export function BuildRefresh() {
 
   useEffect(() => {
     let cancelled = false;
-    const check = async (thenReload: boolean) => {
+    const check = async (thenReload: boolean): Promise<ForegroundOutcome> => {
       try {
         const res = await fetch("/api/version", { cache: "no-store" });
-        if (!res.ok) return;
+        if (!res.ok) return "go";
         const body = (await res.json()) as { build?: unknown };
-        if (cancelled || !isStaleBuild(APP_BUILD, body.build)) return;
+        if (cancelled || !isStaleBuild(APP_BUILD, body.build)) return "go";
         served.current = body.build as string;
-        if (thenReload) reloadIfSafe(served.current, moment.current);
+        if (thenReload && reloadIfSafe(served.current, moment.current)) return "reloading";
       } catch {
         // Hors ligne, ou le serveur redémarre : la question sera reposée.
       }
+      return "go";
     };
     const onInput = (event: Event) => {
       if (event.target instanceof Element) touched.add(event.target);
     };
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") reloadIfSafe(served.current, moment.current);
-      else void check(true);
+      if (document.visibilityState === "hidden") {
+        reloadIfSafe(served.current, moment.current);
+        return;
+      }
+      // La porte vient d'être armée, avant cet écouteur (`foregroundGate.ts`) : la réponse l'ouvre, ou
+      // la laisse fermée si la page s'en va.
+      const pendingReturn = currentForegroundReturn();
+      void check(true).then((outcome) => settleForegroundReturn(pendingReturn, outcome));
     };
+    // Au retour, les relectures attendent cette réponse — mais seulement si un rechargement était
+    // possible : un film ouvert, un banc, un texte en cours, et rien n'attend (DECISIONS.md §134).
+    const disableGate = enableForegroundGate(() => mayReloadNow({ ...moment.current, typing: typing(), unsaved: unsaved() }));
     document.addEventListener("visibilitychange", onVisibility);
     // En capture : un champ qui arrête la propagation de ses événements compte quand même.
     document.addEventListener("input", onInput, true);
@@ -105,6 +120,7 @@ export function BuildRefresh() {
     }, CHECK_INTERVAL_MS);
     return () => {
       cancelled = true;
+      disableGate();
       document.removeEventListener("visibilitychange", onVisibility);
       document.removeEventListener("input", onInput, true);
       clearInterval(interval);

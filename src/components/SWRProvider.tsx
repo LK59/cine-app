@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import { SWRConfig, useSWRConfig } from "swr";
+import { SWRGlobalState, revalidateEvents, type Cache, type RevalidateEvent } from "swr/_internal";
+import { foregroundHeld, onForegroundRelease } from "@/lib/foregroundGate";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
 import { hydrateFromDisk, persistMiddleware, startPersistence, swrEntryHolds } from "@/lib/persistentCache";
 
@@ -28,6 +30,53 @@ function PersistentCacheHydrator({ account }: { account: string | null }) {
   return null;
 }
 
+/**
+ * Visible pour SWR : la page l'est, et aucun retour au premier plan n'attend sa réponse de version
+ * (`foregroundGate.ts`, DECISIONS.md §134).
+ *
+ * SWR n'offre pas de crochet pour retarder sa relecture au focus : `initFocus` n'est lu que pour un
+ * `provider` neuf, et un `provider` neuf serait un second cache, que le `mutate` global de `swr.ts` ne
+ * verrait plus. Il demande en revanche `isVisible()` avant chaque relecture au focus, à la reconnexion
+ * et à chaque tour de sondage : retenu, il saute ces relectures — puis `ForegroundReplay` les rejoue à
+ * l'ouverture de la porte. Un tour de sondage sauté n'est pas rejoué : le suivant partira à son heure.
+ */
+function visibleAndReleased(): boolean {
+  const visible = typeof document === "undefined" || document.visibilityState !== "hidden";
+  return visible && !foregroundHeld();
+}
+
+/**
+ * Rejoue, à l'ouverture de la porte, ce que SWR a sauté pendant qu'elle était fermée : la relecture au
+ * focus de chaque clé montée (la même boucle que SWR, `revalidators[0]` de chaque clé), et la
+ * reconnexion si le réseau est revenu entre-temps. Une page qui se recharge n'arrive jamais ici.
+ */
+function ForegroundReplay() {
+  const { cache } = useSWRConfig();
+  useEffect(() => {
+    let reconnected = false;
+    const onOnline = () => {
+      if (foregroundHeld()) reconnected = true;
+    };
+    const replay = (type: RevalidateEvent) => {
+      const state = SWRGlobalState.get(cache as Cache);
+      if (!state) return;
+      const revalidators = state[0];
+      for (const key in revalidators) revalidators[key][0]?.(type);
+    };
+    const stop = onForegroundRelease(() => {
+      replay(revalidateEvents.FOCUS_EVENT);
+      if (reconnected) replay(revalidateEvents.RECONNECT_EVENT);
+      reconnected = false;
+    });
+    window.addEventListener("online", onOnline);
+    return () => {
+      stop();
+      window.removeEventListener("online", onOnline);
+    };
+  }, [cache]);
+  return null;
+}
+
 export function SWRProvider({ children, account = null }: { children: React.ReactNode; account?: string | null }) {
   return (
     <SWRConfig
@@ -42,11 +91,13 @@ export function SWRProvider({ children, account = null }: { children: React.Reac
         revalidateIfStale: true,
         dedupingInterval: 10000,
         keepPreviousData: true,
+        isVisible: visibleAndReleased,
         // Toute réponse d'un flux de l'écran d'accueil est gardée pour la prochaine ouverture.
         use: [persistMiddleware],
       }}
     >
       <PersistentCacheHydrator account={account} />
+      <ForegroundReplay />
       {children}
     </SWRConfig>
   );

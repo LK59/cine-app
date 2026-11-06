@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useSWRConfig } from "swr";
 import { isWatchingFullScreen } from "@/lib/playbackBusy";
+import { afterForegroundCheck } from "@/lib/foregroundGate";
 import { NEXT_UP_KEY, RESUME_KEY, TO_WATCH_KEY } from "@/lib/swr";
 
 /**
@@ -41,7 +42,8 @@ export function useFreshPersonalLists(tab: string): void {
       for (const key of PERSONAL_LIST_KEYS) void mutate(key);
     };
     const onVisible = () => {
-      if (document.visibilityState === "visible") refresh();
+      // Après la question de version (DECISIONS.md §134) : rien pour une page qui se recharge.
+      if (document.visibilityState === "visible") afterForegroundCheck(refresh);
     };
     // Un changement d'onglet — pas l'arrivée sur l'écran, où tout vient d'être demandé.
     if (firstTab.current) firstTab.current = false;

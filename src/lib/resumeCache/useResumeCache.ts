@@ -13,6 +13,7 @@ import { planResumeCache, remainingChunks, resumeTargets, type ResumeTarget } fr
 import { mustStop, recordTitle } from "./recordTitle";
 import { currentResumeNetworkMode, waitBeforeTitle } from "./network";
 import { readResumeIndex, removeResumeEntry, sweepResumeStore } from "./store";
+import { afterForegroundCheck } from "@/lib/foregroundGate";
 
 export { recordTitle } from "./recordTitle";
 
@@ -198,7 +199,11 @@ export function useResumeCache(): void {
     const cancel = whenIdle(() => void runResumeCache(latest.current, control.signal));
     // Relancé au retour au premier plan : un passage interrompu par l'arrière-plan reprend.
     const onVisible = () => {
-      if (document.visibilityState === "visible" && !control.signal.aborted) void runResumeCache(latest.current, control.signal);
+      // Après la question de version (DECISIONS.md §134) : pas d'octets gardés pour une page qui s'en va.
+      if (document.visibilityState !== "visible") return;
+      afterForegroundCheck(() => {
+        if (!control.signal.aborted) void runResumeCache(latest.current, control.signal);
+      });
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
