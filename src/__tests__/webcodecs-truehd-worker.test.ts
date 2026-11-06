@@ -267,6 +267,20 @@ describe("ce que le build en fait", () => {
       .join("\n");
     const created = code.match(/new Worker\(([^,)]+)/g) ?? [];
     expect(created).toEqual(["new Worker(bootstrap"]);
-    expect(code).toMatch(/const bootstrap = URL\.createObjectURL\(new Blob\(\[`import \$\{JSON\.stringify\(workerUrl\.href\)\};/);
+    expect(code).toMatch(/const bootstrap = URL\.createObjectURL\(new Blob\(\[`import \$\{JSON\.stringify\(absoluteHref\(workerUrl\)\)\};/);
+    expect(code).toMatch(/wasm: absoluteHref\(wasmUrl\)/);
+  });
+
+  it("donne au worker des adresses complètes, même quand le build les rend relatives", async () => {
+    // L'objet que Turbopack met à la place de `new URL(…, import.meta.url)` a un `href` relatif ; un
+    // module `blob:` ne résout rien de relatif (premier essai Firefox du 06/11/2026 : repli).
+    const { absoluteHref } = await import("@/lib/webcodecs/truehd/truehdDecoder");
+    vi.stubGlobal("location", { href: "https://cine.example/#film=12" });
+    try {
+      expect(absoluteHref({ href: "/_next/static/media/truehdWorker.abc.mjs" })).toBe("https://cine.example/_next/static/media/truehdWorker.abc.mjs");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(absoluteHref({ href: "file:///app/src/x.mjs" })).toBe("file:///app/src/x.mjs");
   });
 });

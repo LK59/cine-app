@@ -559,16 +559,23 @@ reproducibly — pinned FFmpeg (**7.1.5** since 2026-10-14, the 7.1 branch on pu
 delivery" says what it changed and how it was proved), checked SHA-256, pinned emscripten — and exists
 so nobody has to take the file on trust. A version change ships only with `ffmpeg-wasm-regress-bench`
 run before and after on every TrueHD and PCE track: every fingerprint that moves is explained against
-`ffmpeg astats`, or the new files stay out. It runs on the main thread, a quarter-second batch at a time with a real yield
-to the browser between batches — and in Node, where `truehd-bench.spec.ts` compares it with ffmpeg
-channel by channel. Four things it cost to learn: FFmpeg's `mlp_parser` loses sync when started
+`ffmpeg astats`, or the new files stay out. It runs in a Web Worker since 2026-11-06 (`truehdWorker.mjs`,
+plain JavaScript run as-is: the build copies it byte for byte into `static/media` and the page starts it
+from a one-line `blob:` module that imports the copy — DECISIONS §131), on the main thread only when no
+worker can be created (a quarter-second batch at a time with a real yield between batches; the `start`
+line says which, `truehdThread`), and in Node, where `truehd-bench.spec.ts` compares it with ffmpeg
+channel by channel and `ffmpeg-wasm-regress-bench.spec.ts` with `FFW_WORKER=1` proves the worker
+delivers the main thread's floats bit for bit. Four things it cost to learn: FFmpeg's `mlp_parser` loses sync when started
 mid-stream — no sound after every seek — so each Matroska block goes to the decoder whole;
 FFmpeg's TrueHD *encoder* (6.1 to 8.1) writes multichannel streams its own decoder rejects, so the
 proof is the bench (only mono and stereo have synthetic fixtures, `fixtures/truehd/generate.sh`); emscripten's Node variant imports `module`, which
 breaks Next's browser build, so the module is built for web and worker only (Node runs it anyway);
-and **Turbopack does not compile `new Worker(new URL("./x.worker.ts", import.meta.url))`** — it
+and **Turbopack did not compile `new Worker(new URL("./x.worker.ts", import.meta.url))`** — it
 copied the TypeScript source into `static/media` as-is, a worker that would never have started.
-The gate and the build both pass on that; only reading what the build emitted shows it. Once TrueHD
+Since Next 16.4.3 it *does* recognise that form (even through a variable) and builds a worker of its
+own, recompiled into its chunks and loaded by `importScripts` with `type: "module"` dropped — read in
+the build output on 2026-11-06. Either way, the gate and the build pass whatever it does; only reading
+what the build emitted shows it. Once TrueHD
 became playable, per-file audio unification made the Dolby track of 19 mixed films re-encoded too —
 which is what per-track delivery (below) undoes.
 Its twin, **FFmpeg's native AAC decoder** (`src/lib/webcodecs/aac/aac-wasm.mjs`, 913 KB,

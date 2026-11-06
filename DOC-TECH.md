@@ -1361,6 +1361,48 @@ AudioDecoder: Safari's (CoreAudio) fails on Ruby's PCE. Chromium keeps its own A
 falls back to the WebAssembly one only if it refuses the track. `aac-wasm-bench.spec.ts` compares
 the module's output with `ffmpeg -af astats` channel by channel (Ruby: ≤ 0.03 dB on six channels).
 
+**The TrueHD decoder runs in a worker (since 2026-11-06).** Until then it ran on the main thread, a
+quarter-second batch at a time with a yield between batches: a refill of ten seconds of 7.1 Atmos was
+forty short tasks, during the whole film. The batch decode itself (`decodeBlocks`) lives in
+`truehd/truehdWorker.mjs` — plain JavaScript, shared by both paths: the main thread imports it (the
+fallback, and Node for the tests and benches), and the worker runs that very file.
+
+- **How it is loaded.** The build copies `truehdWorker.mjs` and `truehd-wasm.mjs` byte for byte into
+  `static/media` (`new URL("./…", import.meta.url)`), and the page starts the worker from a one-line
+  inline module (`blob:`, already allowed by `worker-src 'self' blob:`) that imports the copy; the
+  WebAssembly module's address is sent in the first message. Not `new Worker(new URL(...))`: Next
+  16.4.3's Turbopack now recognises that form, even through a variable, and turns it into a worker of
+  its own — the file recompiled into its chunks, loaded by `importScripts` in a classic worker whose
+  `type: "module"` it removes, its modules evaluated after an `await` (read in the build output). It
+  might work; it would not be the file Node proved. A test fails if the form comes back. The worker
+  says `listening` before the page talks to it, so no message can precede its `onmessage`. The CSP
+  is unchanged: a `blob:` worker inherits the page's (`script-src 'self' 'wasm-unsafe-eval'`).
+- **One worker per page**, shared by the open decoders (one per TrueHD track of a pipeline, one at a
+  time in practice), terminated 10 s after the last one closes with nothing pending: a track change
+  or a rebuild closes then reopens and finds it, closing the player returns its memory, and it never
+  accumulates. Messages are handled strictly in order, so a `reset` after a seek lands after the
+  batch already in flight and before the new position's; that stale batch comes back and is dropped
+  by `truehdAudio.ts`'s `generation`, as before.
+- **Transfers.** The blocks are views on `HttpByteSource`'s chunks: they are copied end to end into a
+  fresh buffer that is transferred (transferring theirs would detach the player's cache); the
+  answer's `pcm` and `frames` come back by transfer. The batches, their boundaries and the pieces
+  `contiguousAudio` cuts are the same on both paths.
+- **Errors.** A decoder error comes back with its main-thread text (`mémoire épuisée…`, `décodeur TrueHD
+  fermé`). A worker that dies rejects everything pending as `worker TrueHD perdu (…)` — the pipeline
+  sees an audio error and the rebuild opens a new one.
+- **Fallback.** If the worker cannot be created or does not answer `ready` within 20 s (CSP, no module
+  workers, module not found), the decoder opens on the main thread exactly as before, and the page
+  remembers it (no 20 s retry at each rebuild). The `start` line says where the TrueHD was decoded:
+  `truehdThread` (`worker` / `principal`) and, on the main thread, `truehdWorkerError`. Absent for a
+  film without TrueHD.
+- **Proof.** `ffmpeg-wasm-regress-bench.spec.ts` with `FFW_WORKER=1` runs the browser's worker file in
+  a `worker_threads` thread (`src/__tests__/helpers/nodeWebWorker.ts`, which also runs the page's
+  `blob:` bootstrap): on 59 TrueHD files, every window (from 0 s, two seeks, a fresh decoder at 40 %)
+  has the same SHA-256 as the main thread. In Chromium 153, Firefox 155 and WebKit 26.6, under the
+  production CSP, the worker as the page starts it decodes the repository's stereo fixture to the same
+  SHA-256 as Node. `truehd-bench.spec.ts` takes `THD_WORKER=1` too. Main-thread cost: see
+  DECISIONS §131.
+
 **Pinned FFmpeg: 7.1.5 since 2026-10-14** (7.1.2 before), for both modules — the TrueHD one
 (`truehd-wasm.mjs`, 465 KB / 193 KB gzipped, SHA-256
 `b8d19dcd1aa7f221bf05fc7d29eb94b9c62e794d394e78d84aadd6271753fb71`) and the AAC one. Archive checked
@@ -2217,7 +2259,7 @@ or computer to be tested, and it plays real films through the real player while 
 | Limitation | Detail |
 |---|---|
 | **No adaptive bitrate on the native path** | The file is read as it is. A link too slow for it is handed to the server player's lighter version (a Jellyfin transcode, see [User-facing messages](#user-facing-messages)), never switched back to the original during that film; Safari's native HLS on the server player measures nothing |
-| **TrueHD is decoded here** | Since 2026-09-21: FFmpeg's decoder compiled to WebAssembly (`tools/truehd-wasm`; FFmpeg 7.1.5 since 2026-10-14, see "Audio delivery"), run on the main thread in quarter-second batches with a yield between them (Turbopack does not compile a TypeScript worker), fed one Matroska block per call (FFmpeg's parser loses sync mid-stream), re-encoded like DTS. 52 tracks in the library then — 50 TrueHD Atmos 7.1, 2 TrueHD 5.1 (65 on 2026-10-14: 62 and 3) — 35 films whose VO or VF exists only in TrueHD. Validated against `ffmpeg astats` to 0.01 dB on every channel (`truehd-bench.spec.ts`); at most 88 ms of silence after a seek. Atmos objects are not rendered: the 7.1 presentation is, as on the server player |
+| **TrueHD is decoded here** | Since 2026-09-21: FFmpeg's decoder compiled to WebAssembly (`tools/truehd-wasm`; FFmpeg 7.1.5 since 2026-10-14, see "Audio delivery"), run in a worker since 2026-11-06 (`truehdWorker.mjs`, started from an inline module; on the main thread in quarter-second batches with a yield between them when no worker can be created — see "Audio delivery"), fed one Matroska block per call (FFmpeg's parser loses sync mid-stream), re-encoded like DTS. 52 tracks in the library then — 50 TrueHD Atmos 7.1, 2 TrueHD 5.1 (65 on 2026-10-14: 62 and 3) — 35 films whose VO or VF exists only in TrueHD. Validated against `ffmpeg astats` to 0.01 dB on every channel (`truehd-bench.spec.ts`); at most 88 ms of silence after a seek. Atmos objects are not rendered: the 7.1 presentation is, as on the server player |
 | **False keyframes cost one seek in eighty** | On the affected file only; a few seconds of frames nobody sees are re-read |
 | **ASS/SSA without styling** | Dialogue only — see [Subtitles](#subtitles) |
 | **Fragmented MP4 refused** | `moof`/`mvex` files carry no sample tables; the header read refuses them by name and the server player takes over (offline downloads are fragmented MP4 and have their own reader, `src/lib/offline/fmp4.ts`). Only the first media edit of an edit list is followed |
@@ -2269,6 +2311,7 @@ Everything is in `src/lib/webcodecs/` unless stated otherwise.
 | File | Role |
 |---|---|
 | `audioTranscode.ts`, `softwareAudio.ts` | Audio decoding and re-encoding |
+| `truehd/truehdDecoder.ts`, `truehd/truehdWorker.mjs`, `truehd/truehdCore.ts` | TrueHD: the worker and its fallback, the batch decode both share, the main-thread decoder |
 | `externalSubtitles.ts` | The `.srt` files alongside: fetching, lookup by time |
 | `subtitleMarkup.ts` | Markup stripping, for internal tracks **and** files; text of a subtitle block (`subtitleText`) |
 | `playerTrack.ts` | A track as the interface sees it (`PlayerTrack`), read from the container |

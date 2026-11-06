@@ -132,12 +132,24 @@ function releaseIfIdle(h: Host): void {
  * Et le worker dit quand il écoute (`listening`) avant qu'on lui parle : aucun message ne peut
  * arriver avant son `onmessage`, quelle que soit la façon dont il a été chargé.
  */
+/**
+ * Une adresse complète. Turbopack remplace `new URL("./x", import.meta.url)` par un objet à lui dont
+ * `href` est relatif (« /_next/static/media/… », sans origine — lu dans son code d'exécution). Le
+ * module en ligne a une adresse `blob:`, contre laquelle rien de relatif ne se résout : le premier
+ * essai dans Firefox, sur l'instance du banc, a échoué ainsi (« le worker n'a pas démarré ») et s'est
+ * replié sur le fil principal (06/11/2026). Dans Node, l'adresse est déjà complète (`file:`).
+ */
+export function absoluteHref(url: { href: string }): string {
+  const base = (globalThis as { location?: { href: string } }).location?.href;
+  return base ? new URL(url.href, base).href : new URL(url.href).href;
+}
+
 function createHost(): Host {
   // Les deux fichiers sont copiés tels quels par le build ; le module WebAssembly est donné au worker
   // par son adresse, qu'un import relatif ne retrouverait pas sous le nom haché de la copie.
   const workerUrl = new URL("./truehdWorker.mjs", import.meta.url);
   const wasmUrl = new URL("./truehd-wasm.mjs", import.meta.url);
-  const bootstrap = URL.createObjectURL(new Blob([`import ${JSON.stringify(workerUrl.href)};\n`], { type: "text/javascript" }));
+  const bootstrap = URL.createObjectURL(new Blob([`import ${JSON.stringify(absoluteHref(workerUrl))};\n`], { type: "text/javascript" }));
   let worker: Worker;
   try {
     worker = new Worker(bootstrap, { type: "module", name: "truehd" });
@@ -168,7 +180,7 @@ function createHost(): Host {
   worker.onmessage = (event: MessageEvent) => {
     const data = event.data as { listening?: boolean; ready?: boolean; error?: string; req?: number; ok?: unknown };
     if (data.listening) {
-      worker.postMessage({ op: "init", wasm: wasmUrl.href });
+      worker.postMessage({ op: "init", wasm: absoluteHref(wasmUrl) });
       return;
     }
     if (data.ready !== undefined) {
