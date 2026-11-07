@@ -302,16 +302,42 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
   // Les livres trouvés (option, §127), comptés par leur propre section : rien ne s'en charge ici.
   const [bookCount, setBookCount] = useState(0);
 
+  /**
+   * La recherche par description (07/11/2026, `describeSearch.ts`) : « le film où un type revit la
+   * même journée ». Seulement si l'installation l'a allumée (`available`), sous « Tout », « Films »
+   * ou « Séries », et pour une frappe qui décrit (`looksLikeDescription`) — un titre tapé en entier
+   * n'appelle pas le modèle. Ses titres comptent dans les puces — « Tout 0 » au-dessus d'Interstellar
+   * trouvé (07/11/2026). Sa rangée passe au-dessus de la grille (`DescribedResults`), sans ce que
+   * la grille montre déjà en tête : un titre que la recherche ordinaire a trouvé n'est pas répété.
+   */
+  const { data: describeState } = useSWR<DescribeResponse>("/api/search/describe", fetcher, { revalidateOnFocus: false });
+  const describeWanted =
+    describeState?.available === true && searching && (requested === "all" || requested === "movie" || requested === "series") && looksLikeDescription(typed);
+  const described = useDescribeSearch(describeWanted ? describeSearchUrl(typed) : null);
+  const describedEntries: Entry[] = useMemo(() => {
+    const leading = new Set(titles.slice(0, 6).map((e) => `${e.kind}:${e.tmdbId}`));
+    return (described.results ?? [])
+      .filter((r) => !leading.has(`${r.type}:${r.tmdbId}`))
+      .map((r) => ({
+        key: `described-${r.type}-${r.tmdbId}`,
+        kind: r.type,
+        title: r.title,
+        year: r.year,
+        poster: r.posterPath,
+        libraryId: libraryTargetOf(r),
+        tmdbId: r.tmdbId,
+      }));
+  }, [described.results, titles]);
   const counts = useMemo(
     () => ({
-      all: titles.length + persons.length,
-      movie: titles.filter((r) => r.kind === "movie").length,
-      series: titles.filter((r) => r.kind === "series").length,
+      all: titles.length + persons.length + describedEntries.length,
+      movie: [...titles, ...describedEntries].filter((r) => r.kind === "movie").length,
+      series: [...titles, ...describedEntries].filter((r) => r.kind === "series").length,
       person: persons.length,
       dialogue: dialogueFilms,
       book: bookCount,
     }),
-    [titles, persons, dialogueFilms, bookCount]
+    [titles, persons, describedEntries, dialogueFilms, bookCount]
   );
 
   // Un filtre qui ne correspond plus à rien laisserait une grille vide sans que rien ne
@@ -348,32 +374,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
    * dit qu'il en est un (`failed`), même quand la bibliothèque, elle, a trouvé de quoi remplir
    * la grille — la moitié qui manque doit se voir.
    */
-  /**
-   * La recherche par description (07/11/2026, `describeSearch.ts`) : « le film où un type revit la
-   * même journée ». Seulement si l'installation l'a allumée (`available`), sous « Tout », « Films »
-   * ou « Séries », et pour une frappe qui décrit (`looksLikeDescription`) — un titre tapé en entier
-   * n'appelle pas le modèle. Sa rangée passe au-dessus de la grille (`DescribedResults`), sans ce que
-   * la grille montre déjà en tête : un titre que la recherche ordinaire a trouvé n'est pas répété.
-   */
-  const { data: describeState } = useSWR<DescribeResponse>("/api/search/describe", fetcher, { revalidateOnFocus: false });
-  const describeWanted =
-    describeState?.available === true && searching && (filter === "all" || filter === "movie" || filter === "series") && looksLikeDescription(typed);
-  const described = useDescribeSearch(describeWanted ? describeSearchUrl(typed) : null);
-  const describedEntries: Entry[] = useMemo(() => {
-    const leading = new Set(titles.slice(0, 6).map((e) => `${e.kind}:${e.tmdbId}`));
-    return (described.results ?? [])
-      .filter((r) => !leading.has(`${r.type}:${r.tmdbId}`))
-      .map((r) => ({
-        key: `described-${r.type}-${r.tmdbId}`,
-        kind: r.type,
-        title: r.title,
-        year: r.year,
-        poster: r.posterPath,
-        libraryId: libraryTargetOf(r),
-        tmdbId: r.tmdbId,
-      }));
-  }, [described.results, titles]);
-  const shownDescribed = describeWanted ? describedEntries.filter((e) => filter === "all" || e.kind === filter) : [];
+  const shownDescribed = describeWanted && (filter === "all" || filter === "movie" || filter === "series") ? describedEntries.filter((e) => filter === "all" || e.kind === filter) : [];
   const describing = describeWanted && described.loading;
 
   const empty =

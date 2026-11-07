@@ -98,6 +98,8 @@ describe("la rangée « D'après votre description »", () => {
     expect(row.textContent).toContain("player.notInLibrary");
     // Matrix est déjà en tête de la grille : une seule carte, pas deux.
     expect(screen.getAllByRole("button", { name: /Matrix/ })).toHaveLength(1);
+    // La puce « Tout » les compte (« Tout 0 » au-dessus d'Interstellar, 07/11/2026).
+    expect(screen.getByRole("button", { name: /player.search.filterAll/ }).textContent).toBe("player.search.filterAll2");
   });
 
   it("un titre tapé n'appelle pas le modèle", async () => {
