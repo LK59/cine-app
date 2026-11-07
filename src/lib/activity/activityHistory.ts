@@ -146,8 +146,11 @@ function withoutIncidents(t: SignalTally): SignalTally {
   };
 }
 
-/** Le bilan depuis la première ligne des journaux. */
-export function allTimeSignals(now = Date.now(), clearedAt = 0): WeekSignals {
+/**
+ * Le compte de chaque jour depuis la première séance, du plus ancien au plus récent : les jours clos
+ * gardés en base, les derniers relus dans les journaux. Sans les incidents d'avant l'effacement.
+ */
+function allDays(now: number, clearedAt: number): [string, SignalTally][] {
   const today = new Date(now);
   const frozenEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() - LIVE_DAYS).getTime();
   freezeClosedDays(frozenEnd, now);
@@ -163,9 +166,33 @@ export function allTimeSignals(now = Date.now(), clearedAt = 0): WeekSignals {
   // Les jours vides d'avant la première séance ne font pas commencer l'historique plus tôt.
   const all: [string, SignalTally][] = [...stored.map(([d, t]) => [d, t] as [string, SignalTally]), ...live];
   const firstUsed = all.findIndex(([, t]) => t.seances > 0);
-  const days = firstUsed < 0 ? all.slice(-1) : all.slice(firstUsed);
+  return firstUsed < 0 ? all.slice(-1) : all.slice(firstUsed);
+}
+
+/** Le bilan depuis la première ligne des journaux. */
+export function allTimeSignals(now = Date.now(), clearedAt = 0): WeekSignals {
+  const days = allDays(now, clearedAt);
   const total = days.reduce((acc, [, t]) => addTally(acc, t), emptyTally());
   const since = days.length ? dayStart(days[0][0]) : startOfLocalDay(now);
   const { perDay, bucket } = historyBars(days);
   return signalsOf(total, since, perDay, bucket);
+}
+
+/**
+ * Trente jours de la courbe des heures regardées, finissant le jour `end` (« 2026-10-07 ») — pour
+ * remonter tout l'historique depuis le tableau de bord (07/11/2026). `first` : le premier jour qui a
+ * une séance, où les flèches s'arrêtent.
+ */
+export function historySeries(end: string, now = Date.now(), clearedAt = 0, span = 30): { first: string | null; series: { day: string; seances: number; watchedSeconds: number; real: number }[] } {
+  const days = allDays(now, clearedAt);
+  const byDay = new Map(days);
+  const endStart = dayStart(end);
+  const series: { day: string; seances: number; watchedSeconds: number; real: number }[] = [];
+  for (let i = span - 1; i >= 0; i--) {
+    const d = new Date(endStart);
+    const day = localDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() - i));
+    const t = byDay.get(day);
+    series.push({ day, seances: t?.seances ?? 0, watchedSeconds: t?.watchedSeconds ?? 0, real: t?.problems ?? 0 });
+  }
+  return { first: days.find(([, t]) => t.seances > 0)?.[0] ?? null, series };
 }

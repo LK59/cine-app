@@ -27,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { fetcher } from "@/lib/swr";
+import { KpiRow, Segmented } from "@/components/activity/DashboardParts";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { LoadingState, ErrorState } from "@/components/StateViews";
@@ -179,6 +180,8 @@ export function ActivityAccount({ id }: { id: string }) {
   const t = useT();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("seances");
+  // Les chiffres du compte sur 24 h, 7 jours, 30 jours ou tout, comme la vue d'ensemble (07/11/2026).
+  const [period, setPeriod] = useState<"day" | "week" | "month" | "all">("week");
   const { data, isLoading, mutate } = useSWR<Detail>(`/api/admin/activity/accounts/${id}`, fetcher, { refreshInterval: 30_000 });
 
   if (isLoading && !data) return <LoadingState />;
@@ -259,14 +262,38 @@ export function ActivityAccount({ id }: { id: string }) {
         </div>
       ))}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Tile icon={Clapperboard} label={t("activity.account.seances")} value={d.stats.seances} hint={d.historyDays ? t("activity.account.historyHint", { n: d.historyDays }) : t("activity.account.historyAll")} />
-        <Tile icon={Clock} label={t("activity.account.watched")} value={hours(d.stats.watchedSeconds)} hint={d.historyDays ? t("activity.account.historyHint", { n: d.historyDays }) : t("activity.account.historyAll")} />
-        <Tile icon={CalendarClock} label={t("activity.account.thisWeek")} value={d.stats.weekSeances} hint={hours(d.stats.weekWatchedSeconds)} />
-        <Tile icon={Wrench} label={t("activity.account.problems")} value={d.stats.problems} tone={d.stats.problems ? "warn" : "good"} />
-        <Tile icon={Eye} label={t("activity.account.played")} value={d.library.playedMovies ?? "—"} hint={t("activity.account.playedEpisodes", { n: d.library.playedEpisodes ?? "—" })} />
-        <Tile icon={UserRound} label={t("activity.account.firstSeen")} value={d.stats.firstSeen ? ago(d.stats.firstSeen, now, t) : "—"} hint={d.stats.devices.join(" · ")} />
-      </div>
+      {d.periods ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xs font-medium uppercase tracking-wide text-subtle">{t(`activity.dash.periodTitle.${period}`)}</h2>
+            <Segmented
+              label={t("activity.period.label")}
+              value={period}
+              onChange={setPeriod}
+              options={[
+                { value: "day", label: t("activity.dash.period.day") },
+                { value: "week", label: t("activity.dash.period.week") },
+                { value: "month", label: t("activity.dash.period.month") },
+                { value: "all", label: t("activity.dash.period.all") },
+              ]}
+            />
+          </div>
+          <KpiRow stats={d.periods[period]} prev={period === "all" ? null : d.periods.previous[period]} all={null} />
+          <div className="grid grid-cols-2 gap-3">
+            <Tile icon={Eye} label={t("activity.account.played")} value={d.library.playedMovies ?? "—"} hint={t("activity.account.playedEpisodes", { n: d.library.playedEpisodes ?? "—" })} />
+            <Tile icon={UserRound} label={t("activity.account.firstSeen")} value={d.stats.firstSeen ? ago(d.stats.firstSeen, now, t) : "—"} hint={d.stats.devices.join(" · ")} />
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <Tile icon={Clapperboard} label={t("activity.account.seances")} value={d.stats.seances} hint={t("activity.account.historyAll")} />
+          <Tile icon={Clock} label={t("activity.account.watched")} value={hours(d.stats.watchedSeconds)} hint={t("activity.account.historyAll")} />
+          <Tile icon={CalendarClock} label={t("activity.account.thisWeek")} value={d.stats.weekSeances} hint={hours(d.stats.weekWatchedSeconds)} />
+          <Tile icon={Wrench} label={t("activity.account.problems")} value={d.stats.problems} tone={d.stats.problems ? "warn" : "good"} />
+          <Tile icon={Eye} label={t("activity.account.played")} value={d.library.playedMovies ?? "—"} hint={t("activity.account.playedEpisodes", { n: d.library.playedEpisodes ?? "—" })} />
+          <Tile icon={UserRound} label={t("activity.account.firstSeen")} value={d.stats.firstSeen ? ago(d.stats.firstSeen, now, t) : "—"} hint={d.stats.devices.join(" · ")} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         {/* Ce qu'il a fait. */}

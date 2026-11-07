@@ -1035,7 +1035,12 @@
       "clearFilter": "Filter entfernen",
       "openAccount": "Konto öffnen",
       "showQuiet": "{n} Konto ohne Aktivität diese Woche|{n} Konten ohne Aktivität diese Woche",
-      "hideQuiet": "Konten ohne Aktivität ausblenden"
+      "hideQuiet": "Konten ohne Aktivität ausblenden",
+      "olderDays": "Dreißig Tage früher",
+      "newerDays": "Dreißig Tage später",
+      "watchedTotal": "{d} angesehen",
+      "backToToday": "Zurück zu heute",
+      "showSeances": "Anzeigen"
     }
   },
   "radarr": {

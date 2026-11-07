@@ -271,7 +271,7 @@ const ADMIN_ONLY_READS: RegExp[] = [
   /^\/api\/admin\/activity\/books(\/|$)/,
   // Le fil filtré du tableau de bord de l'Activité : les séances de tous les comptes (§136). La route le
   // vérifie aussi (`adminOnly`).
-  /^\/api\/admin\/activity\/feed(\/|$)/,
+  /^\/api\/admin\/activity\/(feed|series)(\/|$)/,
   // La recherche de Radarr et de Sonarr (fiches complètes, chemins sur le disque) et la bibliothèque
   // de Jellyfin (sa version exacte, ses compteurs) : la gestion seule les lit (revue du 20/10/2026).
   /^\/api\/(radarr\/movies|sonarr\/series)\/lookup\/?$/,

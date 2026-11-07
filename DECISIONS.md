@@ -8655,3 +8655,10 @@ barre, une heure, un appareil, un titre, un chemin ou un compte filtre le fil de
 (`/api/admin/activity/feed`, `feedOf`). « En direct » dit le client — Laterna et son chemin
 (`pathOfPlay`), ou l'autre client que Jellyfin voit — au lieu du « DirectPlay » de Jellyfin. Les comptes
 sans activité de la semaine sont repliés.
+
+**Ajouts du 07/11/2026 (10.18.0).** La courbe des heures remonte tout l'historique, trente jours par
+trente jours (`historySeries`, `/api/admin/activity/series`, jours gardés en base). Toucher une barre ou
+une ligne la choisit sans faire bouger la page : une barre de filtre flottante (`FilterBar`) dit le choix
+et le nombre de séances, et y mène ; elle se cache quand le fil est à l'écran. La fiche d'un compte a le
+même sélecteur 24 h / 7 jours / 30 jours / Tout et les mêmes chiffres (`accountPeriods`, `KpiRow`
+partagé). En direct, Laterna n'ajoute son chemin que s'il n'est pas le lecteur de l'application.

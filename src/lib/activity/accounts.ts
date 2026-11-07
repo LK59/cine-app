@@ -24,6 +24,7 @@ import { isChunkLoadError } from "@/lib/chunkError";
 import { clearedDiagnosis, withoutCleared } from "@/lib/activity/diagnosisCleared";
 import { acknowledgeSeances, afterClear, alertsClearedAt } from "@/lib/activity/alertsCleared";
 import { cachedJellyfinDevices } from "@/lib/server-cache";
+import { periodStats } from "@/lib/activity/dashboard";
 
 /**
  * Une « erreur » de navigateur qui n'en est pas une : la page était ouverte pendant un
@@ -670,6 +671,9 @@ export async function accountDetail(id: string, now = Date.now(), clearedAt = al
     watchlist: watchlistDb.getAll(id),
     requests: requests.ok ? requests.value : null,
     seances: seances.slice(0, 300),
+    // Les chiffres de la fiche sur 24 h, 7 jours, 30 jours ou tout, comme la vue d'ensemble
+    // (07/11/2026), avec la période d'avant pour les écarts.
+    periods: accountPeriods(seances, now),
     historyDays: ACCOUNT_HISTORY_DAYS,
     stats: {
       seances: seances.length,
@@ -695,6 +699,21 @@ export async function accountDetail(id: string, now = Date.now(), clearedAt = al
 }
 
 export type AccountDetail = NonNullable<Awaited<ReturnType<typeof accountDetail>>>;
+
+function accountPeriods(seances: readonly Seance[], now: number) {
+  const within = (from: number, to = 0) => seances.filter((s) => s.start >= now - from && s.start < now - to);
+  return {
+    day: periodStats(within(DAY)),
+    week: periodStats(within(7 * DAY)),
+    month: periodStats(within(30 * DAY)),
+    all: periodStats(seances),
+    previous: {
+      day: periodStats(within(2 * DAY, DAY)),
+      week: periodStats(within(14 * DAY, 7 * DAY)),
+      month: periodStats(within(60 * DAY, 30 * DAY)),
+    },
+  };
+}
 
 /** Les demandes de ce compte, par son compte lié côté Seerr. */
 async function requestsOf(jellyfinId: string) {

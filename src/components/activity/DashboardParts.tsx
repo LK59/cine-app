@@ -9,9 +9,11 @@
 // et son chiffre : jamais la couleur seule. Les courbes à une série restent dans l'encre du panneau.
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clapperboard, Clock, Gauge, Hourglass, ShieldCheck } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
-import { Poster, hours, uiLocale } from "@/components/activity/parts";
+import { Poster, hours, secs, uiLocale } from "@/components/activity/parts";
+import type { PeriodStats, PeriodTotals } from "@/lib/activity/dashboard";
+import type { WeekSignals } from "@/lib/activity/accounts";
 
 export const PATH_COLORS = { natif: "#3987e5", serveur: "#d95926", tv: "#199e70", horsLigne: "#c98500" } as const;
 
@@ -317,4 +319,89 @@ export function Fold({ id, title, icon: Icon, summary, children }: { id: string;
 /** « 12 nov. » dans la langue de l'écran. */
 export function shortDay(day: string): string {
   return new Date(day + "T12:00:00").toLocaleDateString(uiLocale(), { day: "numeric", month: "short" });
+}
+
+export function handledSum(h: PeriodStats["handled"]): number {
+  return h.recovered + h.network + h.slowLinks + h.planned + h.background;
+}
+
+export function pct(part: number, total: number): string {
+  return total ? `${Math.round((part / total) * 100)} %` : "—";
+}
+
+/**
+ * L'écart avec la période d'avant, dit court : « +12 », « +4 pts », « −0,3 s ». `better` : quand la
+ * hausse est bonne (`true`), mauvaise (`false`), ou ni l'un ni l'autre (`null`, le volume).
+ */
+function deltaOf(now: number | null, before: number | null, kind: "count" | "points" | "ms" | "hours", better: boolean | null): { text: string; good: boolean | null } | null {
+  if (now === null || before === null) return null;
+  const diff = now - before;
+  const sign = diff > 0 ? "+" : diff < 0 ? "−" : "±";
+  const abs = Math.abs(diff);
+  let text: string;
+  if (kind === "points") {
+    if (Math.round(abs) === 0) return null;
+    text = `${sign}${Math.round(abs)} pts`;
+  } else if (kind === "ms") {
+    if (abs < 50) return null;
+    text = `${sign}${secs(abs)}`;
+  } else if (kind === "hours") {
+    if (abs < 60) return null;
+    text = `${sign}${hours(abs)}`;
+  } else {
+    if (abs === 0) return null;
+    text = `${sign}${abs}`;
+  }
+  return { text, good: better === null ? null : diff > 0 === better };
+}
+
+/** Les chiffres clés de la période, et leur écart avec la période d'avant. « Tout » vient de l'historique gardé. */
+export function KpiRow({ stats, prev, all }: { stats: PeriodStats | null; prev: PeriodTotals | null; all: WeekSignals | null }) {
+  const t = useT();
+  if (!stats) {
+    if (!all) return <div className="h-28 animate-pulse rounded-2xl bg-white/[0.03]" />;
+    const real = all.perDay.reduce((n, d) => n + d.problems, 0);
+    return (
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Kpi icon={Clapperboard} label={t("activity.dash.kpi.seances")} value={all.seances} hint={t("activity.week.viewers", { n: all.viewers })} />
+        <Kpi icon={Clock} label={t("activity.dash.kpi.watched")} value={hours(all.watchedSeconds)} />
+        <Kpi icon={Hourglass} label={t("activity.dash.kpi.waits")} value={all.waits} hint={t("activity.week.waitsHint", { d: secs(all.waitedMs) })} />
+        <Kpi icon={AlertTriangle} label={t("activity.dash.kpi.real")} value={real} tone={real ? "warn" : "good"} />
+      </div>
+    );
+  }
+  const cleanShare = stats.seances ? stats.clean / stats.seances : 1;
+  const prevShare = prev && prev.seances ? prev.clean / prev.seances : null;
+  const handled = handledSum(stats.handled);
+  const openSplit =
+    stats.openDeviceMs !== null && stats.openNetworkMs !== null
+      ? t("activity.dash.kpi.openSplit", { device: secs(stats.openDeviceMs), network: secs(stats.openNetworkMs) })
+      : stats.openP90Ms !== null
+        ? t("activity.dash.kpi.openHint", { d: secs(stats.openP90Ms) })
+        : undefined;
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <Kpi icon={Clapperboard} label={t("activity.dash.kpi.seances")} value={stats.seances} hint={t("activity.week.viewers", { n: stats.viewers })} delta={deltaOf(stats.seances, prev?.seances ?? null, "count", null)} />
+      <Kpi icon={Clock} label={t("activity.dash.kpi.watched")} value={hours(stats.watchedSeconds)} delta={deltaOf(stats.watchedSeconds, prev?.watchedSeconds ?? null, "hours", null)} />
+      <Kpi
+        icon={CheckCircle2}
+        label={t("activity.dash.kpi.clean")}
+        value={pct(stats.clean, stats.seances)}
+        hint={t("activity.dash.kpi.cleanHint", { n: stats.clean, total: stats.seances })}
+        delta={stats.seances ? deltaOf(cleanShare * 100, prevShare === null ? null : prevShare * 100, "points", true) : null}
+        // Vert dès 90 %, neutre au-dessus de 75 %, ambre en dessous — jamais rouge : une séance gênée
+        // n'est pas une panne de l'application (le détail est dans « À gérer »).
+        tone={!stats.seances ? "default" : cleanShare >= 0.9 ? "good" : cleanShare >= 0.75 ? "default" : "warn"}
+      />
+      <Kpi
+        icon={Gauge}
+        label={t("activity.dash.kpi.open")}
+        value={stats.openMedianMs !== null ? secs(stats.openMedianMs) : "—"}
+        hint={openSplit}
+        delta={deltaOf(stats.openMedianMs, prev?.openMedianMs ?? null, "ms", false)}
+      />
+      <Kpi icon={Hourglass} label={t("activity.dash.kpi.waits")} value={stats.waits} hint={t("activity.week.waitsHint", { d: secs(stats.waitedMs) })} delta={deltaOf(stats.waits, prev?.waits ?? null, "count", false)} />
+      <Kpi icon={ShieldCheck} label={t("activity.dash.kpi.handled")} value={handled} hint={t("activity.dash.kpi.handledHint", { n: stats.real })} />
+    </div>
+  );
 }

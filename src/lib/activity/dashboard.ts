@@ -272,8 +272,10 @@ export function pathOf(s: Seance): NonNullable<FeedFilter["path"]> {
  */
 export function feedOf(f: FeedFilter, now = Date.now(), clearedAt = 0): Seance[] {
   const span = f.period === "day" ? DAY : f.period === "week" ? 7 * DAY : 30 * DAY;
-  // Un jour ou une heure se lisent sur les trente jours de la courbe, quelle que soit la période.
-  const since = f.day !== undefined || f.hour !== undefined ? now - 30 * DAY : now - span;
+  // Un jour se lit où qu'il soit dans l'historique (la courbe remonte au-delà de trente jours) ; une
+  // heure, sur les trente jours de sa courbe.
+  const dayStart = f.day !== undefined ? new Date(`${f.day}T00:00:00`).getTime() : NaN;
+  const since = Number.isFinite(dayStart) ? Math.min(now - span, dayStart - DAY) : f.hour !== undefined ? now - 30 * DAY : now - span;
   return acknowledgeSeances(seancesSince(since, now), clearedAt)
     .filter((s) => f.day === undefined || localDay(new Date(s.start)) === f.day)
     .filter((s) => f.hour === undefined || new Date(s.start).getHours() === f.hour)

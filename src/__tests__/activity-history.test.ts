@@ -129,3 +129,18 @@ describe("depuis le début, alertes effacées", () => {
     expect(cleared.perDay.reduce((n, b) => n + b.problems, 0)).toBe(0);
   });
 });
+
+describe("la courbe qui remonte l'historique (07/11/2026)", () => {
+  it("rend trente jours finissant le jour demandé, jours gardés en base compris, et le premier jour", async () => {
+    await writeLogs([...seance("old", "anna", at(40), 3600), ...seance("new", "anna", at(0), 600)]);
+    const { historySeries } = await import("@/lib/activity/activityHistory");
+    const { localDay } = await import("@/lib/activity/accounts");
+    const end = localDay(new Date(at(30)));
+    const { first, series } = historySeries(end, NOW);
+    expect(series).toHaveLength(30);
+    expect(series.at(-1)?.day).toBe(end);
+    expect(series.reduce((n, d) => n + d.seances, 0)).toBe(1);
+    expect(series.reduce((n, d) => n + d.watchedSeconds, 0)).toBe(3600);
+    expect(first).toBe(localDay(new Date(at(40))));
+  });
+});
