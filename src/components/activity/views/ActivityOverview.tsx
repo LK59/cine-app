@@ -702,7 +702,8 @@ function Charts({ dash, filter, onFilter }: { dash: Dashboard; filter: Filter | 
       detail: `${shortDay(d.day)} · ${hours(d.watchedSeconds)} · ${t("activity.dash.seancesN", { n: d.seances })}${d.real ? ` · ${t("activity.dash.realN", { n: d.real })}` : ""}${versions ? ` · ${t("activity.dash.release", { v: versions.join(", ") })}` : ""}`,
       value: d.watchedSeconds,
       flagged: d.real > 0,
-      mark: versions?.join(", "),
+      // Pas de trait : une version nouvelle arrive presque chaque jour, il y en avait derrière presque
+      // chaque barre (revue du 08/11/2026). La version se lit dans le détail de la barre touchée.
     };
   });
   const byHour = dash.hours.map((sec, h) => ({
@@ -746,12 +747,7 @@ function Charts({ dash, filter, onFilter }: { dash: Dashboard; filter: Filter | 
             selected={filter?.kind === "day" ? filter.value : null}
             onSelect={(day) => onFilter(day ? { kind: "day", value: day } : null)}
           />
-          {!end && (dash.releases?.length ?? 0) > 0 && (
-            <p className="mt-3 flex items-center gap-1.5 text-[11px] text-subtle">
-              <span className="inline-block h-3 w-px bg-white/30" aria-hidden />
-              {t("activity.dash.releaseLegend")}
-            </p>
-          )}
+
         </div>
       </Panel>
       <Panel title={t("activity.dash.byHour")} icon={CalendarClock} className="lg:col-span-2">

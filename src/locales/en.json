@@ -1048,7 +1048,6 @@
       "linkMbps": "{n} Mb/s",
       "linkWeak": "weak link",
       "release": "version {v}",
-      "releaseLegend": "A line: a new version that day",
       "clearFilter": "Remove the filter",
       "openAccount": "Open the account",
       "showQuiet": "{n} account with no activity this week|{n} accounts with no activity this week",

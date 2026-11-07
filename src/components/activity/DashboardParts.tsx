@@ -37,18 +37,16 @@ export function Kpi({
   const toneClass = { default: "text-white", good: "text-success", warn: "text-warning", bad: "text-danger" }[tone];
   return (
     <div className="card flex min-w-0 flex-col gap-1 p-4">
-      {/* L'écart sur la ligne du nom, à droite : à côté du chiffre il le faisait passer sur deux lignes
-          dans les tuiles étroites d'un téléphone (« 141 h / 58 », revue du 08/11/2026). */}
-      <span className="flex items-center justify-between gap-2 text-xs">
-        <span className="flex min-w-0 items-center gap-1.5 truncate text-muted">
-          {Icon && <Icon size={13} className="shrink-0" />}
-          {label}
-        </span>
-        {delta && (
-          <span className={`shrink-0 font-medium tabular-nums ${delta.good === null ? "text-subtle" : delta.good ? "text-success" : "text-warning"}`}>{delta.text}</span>
-        )}
+      <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-muted">
+        {Icon && <Icon size={13} className="shrink-0" />}
+        {label}
       </span>
       <span className={`whitespace-nowrap text-3xl font-semibold tracking-tight tabular-nums ${toneClass}`}>{value}</span>
+      {/* L'écart sur sa ligne, sous le chiffre : à côté, il le coupait sur deux lignes, et sur la ligne
+          du nom il le rognait, dans les tuiles étroites d'un téléphone (revue du 08/11/2026). */}
+      {delta && (
+        <span className={`text-xs font-medium tabular-nums ${delta.good === null ? "text-subtle" : delta.good ? "text-success" : "text-warning"}`}>{delta.text}</span>
+      )}
       {hint && <span className="line-clamp-2 text-xs text-subtle">{hint}</span>}
     </div>
   );
