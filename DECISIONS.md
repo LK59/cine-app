@@ -8678,3 +8678,13 @@ séances, puis les répartitions, les comptes et le détail replié. « Menées 
 seuls » parmi les six chiffres ; « Sans accroc » dit le taux depuis la plus récente version qui a dix
 séances (`sinceVersionOf`, `version` de la séance). La fiche d'un compte a ses habitudes, ses demandes
 (`requestsOfUser`, sur le bilan des demandes gardé cinq minutes) et ses deux courbes (`accountCharts`).
+
+**Revue du 08/11/2026 (10.21.0).** Parcourue dans un vrai navigateur (téléphone et ordinateur) sur une
+instance jetable, chiffres recomptés à part dans les journaux (338 séances, 12 spectateurs, 260 bilans :
+justes). Corrigé : « lu d'avance » au lieu de « hors du réseau » (la réserve vient aussi du réseau,
+d'avance) ; les demandes suivent la période, liste dépliable ; « menées au bout » compte aussi un arrêt
+après 90 % de la durée (`isFinished`, durées lues chez Jellyfin, `ensureRuntimes`) ; les attentes ne
+sont plus effacées avec les alertes (une mesure, pas une erreur) ; `books/meta` hors des alertes par sa
+portée (le lecteur des journaux retire `stack`) ; plus de traits de version sur la courbe (une version
+presque chaque jour) ; l'écart sous le chiffre ; « 0 min » au lieu de « 0 » ; une seule étiquette pour
+le lecteur serveur prévu ; légendes et pluriels.
