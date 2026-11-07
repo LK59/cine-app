@@ -152,3 +152,15 @@ describe("fullDate", () => {
     expect(fullDate(lastYear.getTime())).toContain(String(lastYear.getFullYear()));
   });
 });
+
+describe("describeLine — les lignes qui restaient vides (07/11/2026)", () => {
+  it("liens de partage, hauteur, retour, banc, livres marqués, recherche par description", () => {
+    expect(describeLine({ kind: "share-created", label: "Papa", title: "Dune", days: 7 }, tFr)).toBe("Lien de partage créé : Papa · Dune · 7 j");
+    expect(describeLine({ kind: "share-revoked", label: "Papa" }, tFr)).toBe("Lien de partage révoqué : Papa");
+    expect(describeLine({ kind: "hauteur", best: 585, screen: "390x844", trigger: "retour", decision: "rien" }, tFr)).toBe("Fenêtre à 585 px pour un écran de 390x844 · retour · rien");
+    expect(describeLine({ kind: "retour", hiddenS: 600, maxGapMs: 120, longJanks: 0, events: ["version:même@12"] }, tFr)).toBe("Retour après 10 min cachée · plus long gel 120 ms · version:même@12");
+    expect(describeLine({ kind: "marqué lu", title: "Dune" }, tFr)).toBe("Dune — marqué lu");
+    expect(describeLine({ kind: "run", items: [1, 2], elapsedMs: 600 }, tFr)).toBe("Banc : 2 titres en 600 ms");
+    expect(describeLine({ kind: "description", words: 8, ms: 900, source: "cache", results: 3, inLibrary: 1, status: "ok" }, tFr)).toBe("8 mots · 900 ms · depuis le cache · 3 résultats dont 1 en bibliothèque");
+  });
+});

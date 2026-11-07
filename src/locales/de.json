@@ -560,7 +560,23 @@
         "present": "Status",
         "kept": "Behalten",
         "done": "Fertig"
-      }
+      },
+      "share": {
+        "created": "Freigabelink erstellt: {label}",
+        "redeemed": "Freigabelink geöffnet: {label}",
+        "revoked": "Freigabelink widerrufen: {label}",
+        "deleted": "Freigabelink gelöscht: {label}"
+      },
+      "height": "Fenster mit {best} px bei einem {screen}-Bildschirm",
+      "return": "Zurück nach {hidden} im Hintergrund · längstes Stocken {gap}",
+      "returnJanks": "{n} Stocken über 200 ms|{n} Stocken über 200 ms",
+      "benchOpen": "Start {d}",
+      "benchRun": "Prüfstand: {n} Titel in {d}|Prüfstand: {n} Titel in {d}",
+      "benchCancelled": "abgebrochen",
+      "describe": "{n} Wort · {d}|{n} Wörter · {d}",
+      "describeModel": "Modell in {d}",
+      "describeCache": "aus dem Cache",
+      "describeResults": "{n} Ergebnis, {lib} in der Bibliothek|{n} Ergebnisse, {lib} in der Bibliothek"
     },
     "logs": {
       "title": "Protokolle",
@@ -576,7 +592,7 @@
         "notifications": "Benachrichtigungen",
         "subtitleGen": "Generierte Untertitel",
         "startup": "Starts",
-        "readings": "Lesen",
+        "readings": "Bücher gelesen",
         "search": "Suche per Beschreibung",
         "devPlayer": "Player (Entwicklung)"
       },
@@ -924,7 +940,7 @@
       "deleted": "Link gelöscht"
     },
     "readings": {
-      "title": "Lesen",
+      "title": "Bücher gelesen",
       "open": "Öffnen",
       "intro": "Was jedes Konto liest: laufende und beendete Bücher, Lesezeit bei sichtbarer Seite und Sitzungen über sieben und dreißig Tage.",
       "readers": "Lesende (7 T.)",

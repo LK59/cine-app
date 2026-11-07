@@ -791,6 +791,50 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
       return t("activity.readings.eventFinished", { title: strOf(line.title) ?? t("activity.readings.unknownBook") });
     case "retiré":
       return t("activity.readings.eventRemoved", { title: strOf(line.title) ?? t("activity.readings.unknownBook") });
+    case "marqué lu":
+      return t("activity.readings.eventMarkedRead", { title: strOf(line.title) ?? t("activity.readings.unknownBook") });
+    case "marqué non lu":
+      return t("activity.readings.eventMarkedUnread", { title: strOf(line.title) ?? t("activity.readings.unknownBook") });
+    // Les liens de partage (§112, `auth.log`) — vides au journal jusqu'au 07/11/2026.
+    case "share-created":
+      return join(t("activity.line.share.created", { label: strOf(line.label) ?? "?" }), strOf(line.title), numOf(line.days) !== null && t("activity.line.days", { n: numOf(line.days) ?? 0 }));
+    case "share-redeemed":
+      return join(t("activity.line.share.redeemed", { label: strOf(line.label) ?? "?" }), strOf(line.device), strOf(line.ip));
+    case "share-revoked":
+      return t("activity.line.share.revoked", { label: strOf(line.label) ?? "?" });
+    case "share-deleted":
+      return t("activity.line.share.deleted", { label: strOf(line.label) ?? "?" });
+    // La hauteur de l'application installée sur iOS (`viewportWatch.ts`).
+    case "hauteur":
+      return join(
+        t("activity.line.height", { best: numOf(line.best) ?? "?", screen: strOf(line.screen) ?? "?" }),
+        strOf(line.trigger),
+        strOf(line.decision)
+      );
+    // Un retour au premier plan sur iPhone et iPad (`returnDiag.ts`).
+    case "retour":
+      return join(
+        t("activity.line.return", { hidden: hours(numOf(line.hiddenS) ?? 0), gap: secs(numOf(line.maxGapMs)) }),
+        numOf(line.longJanks) ? t("activity.line.returnJanks", { n: numOf(line.longJanks) ?? 0 }) : null,
+        Array.isArray(line.events) && line.events.length ? (line.events as unknown[]).map(String).join(", ") : null,
+        strOf(line.cut)
+      );
+    // Le banc d'essai des appareils (`bench.log`).
+    case "item":
+      return join(strOf(line.title), strOf(line.verdict), numOf(line.openMs) !== null && t("activity.line.benchOpen", { d: secs(numOf(line.openMs)) }), strOf(line.path));
+    case "run":
+      return join(
+        t("activity.line.benchRun", { n: Array.isArray(line.items) ? line.items.length : (numOf(line.items) ?? 0), d: secs(numOf(line.elapsedMs)) }),
+        line.cancelled === true && t("activity.line.benchCancelled")
+      );
+    // La recherche par description (`recherche.log`) — des chiffres, jamais la phrase.
+    case "description":
+      return join(
+        t("activity.line.describe", { n: numOf(line.words) ?? 0, d: secs(numOf(line.ms)) }),
+        line.source === "modèle" ? t("activity.line.describeModel", { d: secs(numOf(line.modelMs)) }) : t("activity.line.describeCache"),
+        numOf(line.results) !== null && t("activity.line.describeResults", { n: numOf(line.results) ?? 0, lib: numOf(line.inLibrary) ?? 0 }),
+        line.status !== "ok" && strOf(line.status)
+      );
     default:
       return strOf(line.message) ?? strOf(line.reason) ?? "";
   }

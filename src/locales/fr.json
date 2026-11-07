@@ -560,7 +560,23 @@
         "present": "État",
         "kept": "Gardée",
         "done": "Terminé"
-      }
+      },
+      "share": {
+        "created": "Lien de partage créé : {label}",
+        "redeemed": "Lien de partage ouvert : {label}",
+        "revoked": "Lien de partage révoqué : {label}",
+        "deleted": "Lien de partage supprimé : {label}"
+      },
+      "height": "Fenêtre à {best} px pour un écran de {screen}",
+      "return": "Retour après {hidden} cachée · plus long gel {gap}",
+      "returnJanks": "{n} gel de plus de 200 ms|{n} gels de plus de 200 ms",
+      "benchOpen": "ouverture {d}",
+      "benchRun": "Banc : {n} titre en {d}|Banc : {n} titres en {d}",
+      "benchCancelled": "interrompu",
+      "describe": "{n} mot · {d}|{n} mots · {d}",
+      "describeModel": "modèle en {d}",
+      "describeCache": "depuis le cache",
+      "describeResults": "{n} résultat dont {lib} en bibliothèque|{n} résultats dont {lib} en bibliothèque"
     },
     "logs": {
       "title": "Journaux",
@@ -576,7 +592,7 @@
         "notifications": "Notifications",
         "subtitleGen": "Sous-titres générés",
         "startup": "Ouvertures",
-        "readings": "Lectures",
+        "readings": "Lectures de livres",
         "search": "Recherches par description",
         "devPlayer": "Lecteur (développement)"
       },
@@ -924,7 +940,7 @@
       "deleted": "Lien supprimé"
     },
     "readings": {
-      "title": "Lectures",
+      "title": "Lectures de livres",
       "open": "Ouvrir",
       "intro": "Ce que chaque compte lit : les livres en cours et terminés, le temps de lecture page visible et les séances, sur sept et trente jours.",
       "readers": "Lecteurs (7 j)",

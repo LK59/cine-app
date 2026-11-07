@@ -560,7 +560,23 @@
         "present": "State",
         "kept": "Kept",
         "done": "Done"
-      }
+      },
+      "share": {
+        "created": "Share link created: {label}",
+        "redeemed": "Share link opened: {label}",
+        "revoked": "Share link revoked: {label}",
+        "deleted": "Share link deleted: {label}"
+      },
+      "height": "Window at {best} px for a {screen} screen",
+      "return": "Back after {hidden} hidden · longest freeze {gap}",
+      "returnJanks": "{n} freeze over 200 ms|{n} freezes over 200 ms",
+      "benchOpen": "start-up {d}",
+      "benchRun": "Bench: {n} title in {d}|Bench: {n} titles in {d}",
+      "benchCancelled": "interrupted",
+      "describe": "{n} word · {d}|{n} words · {d}",
+      "describeModel": "model in {d}",
+      "describeCache": "from the cache",
+      "describeResults": "{n} result, {lib} in the library|{n} results, {lib} in the library"
     },
     "logs": {
       "title": "Logs",
@@ -576,7 +592,7 @@
         "notifications": "Notifications",
         "subtitleGen": "Generated subtitles",
         "startup": "Launches",
-        "readings": "Reading",
+        "readings": "Book reading",
         "search": "Description searches",
         "devPlayer": "Player (development)"
       },
@@ -924,7 +940,7 @@
       "deleted": "Link deleted"
     },
     "readings": {
-      "title": "Reading",
+      "title": "Book reading",
       "open": "Open",
       "intro": "What each account reads: books in progress and finished, reading time with the page visible, and sessions over seven and thirty days.",
       "readers": "Readers (7 d)",

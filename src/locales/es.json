@@ -560,7 +560,23 @@
         "present": "Estado",
         "kept": "Conservada",
         "done": "Terminado"
-      }
+      },
+      "share": {
+        "created": "Enlace compartido creado: {label}",
+        "redeemed": "Enlace compartido abierto: {label}",
+        "revoked": "Enlace compartido revocado: {label}",
+        "deleted": "Enlace compartido eliminado: {label}"
+      },
+      "height": "Ventana a {best} px para una pantalla de {screen}",
+      "return": "Vuelta tras {hidden} oculta · congelación más larga {gap}",
+      "returnJanks": "{n} congelación de más de 200 ms|{n} congelaciones de más de 200 ms",
+      "benchOpen": "apertura {d}",
+      "benchRun": "Banco: {n} título en {d}|Banco: {n} títulos en {d}",
+      "benchCancelled": "interrumpido",
+      "describe": "{n} palabra · {d}|{n} palabras · {d}",
+      "describeModel": "modelo en {d}",
+      "describeCache": "desde la caché",
+      "describeResults": "{n} resultado, {lib} en la biblioteca|{n} resultados, {lib} en la biblioteca"
     },
     "logs": {
       "title": "Registros",
@@ -576,7 +592,7 @@
         "notifications": "Notificaciones",
         "subtitleGen": "Subtítulos generados",
         "startup": "Aperturas",
-        "readings": "Lecturas",
+        "readings": "Lecturas de libros",
         "search": "Búsquedas por descripción",
         "devPlayer": "Reproductor (desarrollo)"
       },
@@ -924,7 +940,7 @@
       "deleted": "Enlace eliminado"
     },
     "readings": {
-      "title": "Lecturas",
+      "title": "Lecturas de libros",
       "open": "Abrir",
       "intro": "Lo que lee cada cuenta: libros en curso y terminados, tiempo de lectura con la página visible y sesiones, en siete y treinta días.",
       "readers": "Lectores (7 d)",
