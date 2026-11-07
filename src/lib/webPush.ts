@@ -1,4 +1,6 @@
-import webpush from "web-push";
+// web-push 4 n'est plus qu'ESM, sans export par défaut (07/11/2026) : l'ancien `import webpush from`
+// n'y trouverait rien. L'espace de noms marche sur les deux, et les types (@types/web-push) le décrivent.
+import * as webpush from "web-push";
 import { config } from "@/lib/config";
 
 type PushSubscriptionInput = {
