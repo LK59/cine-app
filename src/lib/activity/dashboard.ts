@@ -38,12 +38,21 @@ export interface PeriodStats {
   paths: { natif: number; serveur: number; tv: number; horsLigne: number };
   devices: { label: string; seances: number; watchedSeconds: number; real: number }[];
   titles: { title: string; itemId: string | null; episode: boolean; seances: number; watchedSeconds: number }[];
+  /**
+   * Menées au bout : une fin atteinte (`ended`) ou l'épisode suivant enchaîné (`why: next`), sur les
+   * séances qui ont un bilan. `abandoned` : les titres le plus souvent quittés avant dix minutes.
+   */
+  completion: { finished: number; closed: number; abandoned: { title: string; itemId: string | null; count: number }[] };
+  /** Les séries en cours, par spectateur : le dernier épisode vu et combien d'épisodes sur la période. */
+  series: { user: string; series: string; itemId: string | null; last: string; lastAt: number; episodes: number }[];
+  /** D'où le lecteur a lu ses octets, en Mo : la réserve en mémoire, l'appareil (reprise), le réseau. */
+  reads: { reserveMB: number; deviceMB: number; networkMB: number; withReserve: number };
   /** `linkMbps` / `needMbps` : médianes du débit mesuré et de celui qu'exigeaient ses fichiers. */
   people: { user: string; seances: number; watchedSeconds: number; linkMbps: number | null; needMbps: number | null }[];
 }
 
 /** Les chiffres d'une période sans ses répartitions : la période d'avant, pour les écarts. */
-export type PeriodTotals = Omit<PeriodStats, "devices" | "titles" | "people">;
+export type PeriodTotals = Omit<PeriodStats, "devices" | "titles" | "people" | "series" | "completion" | "reads">;
 
 /** Une ligne du fil filtré (`feedOf`). */
 export interface FeedFilter {
@@ -112,12 +121,17 @@ export function periodStats(seances: readonly Seance[]): PeriodStats {
   const people = new Map<string, PeriodStats["people"][number]>();
   const links = new Map<string, { link: number[]; need: number[] }>();
   const fromDevice: number[] = [];
+  const abandoned = new Map<string, { title: string; itemId: string | null; count: number }>();
+  const series = new Map<string, PeriodStats["series"][number]>();
   const fromNetwork: number[] = [];
   const out: PeriodStats = {
     seances: 0, viewers: 0, watchedSeconds: 0, clean: 0, real: 0,
     handled: { recovered: 0, planned: 0, slowLinks: 0, network: 0, background: 0 },
     openMedianMs: null, openP90Ms: null, openDeviceMs: null, openNetworkMs: null, waits: 0, waitedMs: 0, seeks: 0, slowSeeks: 0,
     paths: { natif: 0, serveur: 0, tv: 0, horsLigne: 0 },
+    completion: { finished: 0, closed: 0, abandoned: [] },
+    series: [],
+    reads: { reserveMB: 0, deviceMB: 0, networkMB: 0, withReserve: 0 },
     devices: [], titles: [], people: [],
   };
   for (const s of seances) {
@@ -162,6 +176,30 @@ export function periodStats(seances: readonly Seance[]): PeriodStats {
     d.real += real;
     devices.set(label, d);
     const work = workOf(s.title);
+    if (s.stop && s.stop.why !== "lost") {
+      out.completion.closed += 1;
+      const finished = s.stop.ended || s.stop.why === "next";
+      if (finished) out.completion.finished += 1;
+      else if (watched < 600) {
+        const a = abandoned.get(work.title.toLowerCase()) ?? { title: work.title, itemId: s.itemId, count: 0 };
+        a.count += 1;
+        abandoned.set(work.title.toLowerCase(), a);
+      }
+    }
+    if (work.episode) {
+      const key = `${user.toLowerCase()}|${work.title.toLowerCase()}`;
+      const ep = /— (S\d+E\d+)/.exec(s.title)?.[1] ?? "";
+      // Les séances arrivent les plus récentes d'abord : la première vue est le dernier épisode.
+      const e = series.get(key) ?? { user, series: work.title, itemId: s.itemId, last: ep, lastAt: s.start, episodes: 0 };
+      e.episodes += 1;
+      series.set(key, e);
+    }
+    if (s.readMB) {
+      out.reads.reserveMB += s.readMB.reserve;
+      out.reads.deviceMB += s.readMB.device;
+      out.reads.networkMB += s.readMB.network;
+      if (s.readMB.reserve > 0) out.reads.withReserve += 1;
+    }
     const tKey = work.title.toLowerCase();
     // L'affiche : celle de la séance la plus récente (les séances arrivent les plus récentes d'abord) ;
     // pour une série, un épisode — l'affiche d'épisode est celle que Jellyfin a pour cet identifiant.
@@ -180,6 +218,8 @@ export function periodStats(seances: readonly Seance[]): PeriodStats {
     p.linkMbps = l ? quantile(l.link, 0.5) : null;
     p.needMbps = l ? quantile(l.need, 0.5) : null;
   }
+  out.completion.abandoned = [...abandoned.values()].filter((a) => a.count > 1).sort((a, b) => b.count - a.count).slice(0, 5);
+  out.series = [...series.values()].sort((a, b) => b.lastAt - a.lastAt).slice(0, 10);
   out.devices = top(devices, 8);
   out.titles = top(titles, 8);
   out.people = top(people, 12);
@@ -235,10 +275,8 @@ export function alarmsOf(now: number, clearedAt: number): Alarms {
 }
 
 function totalsOf(stats: PeriodStats): PeriodTotals {
-  const { devices: _d, titles: _t, people: _p, ...rest } = stats;
-  void _d;
-  void _t;
-  void _p;
+  const { devices: _d, titles: _t, people: _p, series: _s, completion: _c, reads: _r, ...rest } = stats;
+  void [_d, _t, _p, _s, _c, _r];
   return rest;
 }
 
@@ -336,4 +374,91 @@ function safe<T>(fn: () => T, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+export interface RequestStats {
+  /** Demandes des trente derniers jours. */
+  requested: number;
+  available: number;
+  /** Regardées par la personne qui les a faites, après la demande. */
+  watched: number;
+  /** Médiane du délai entre la demande et le premier visionnage par son auteur. */
+  medianDelayMs: number | null;
+  recent: { title: string; requester: string; createdAt: number; available: boolean; watchedAt: number | null }[];
+}
+
+/**
+ * Les demandes (Jellyseerr) et ce qu'il en advient : arrivées, regardées par qui les a faites, et en
+ * combien de temps (07/11/2026). Une demande et une séance se rejoignent par TMDB — le film de la
+ * séance par la fiche Jellyfin, l'épisode par sa série — jamais par le titre, que Radarr et Jellyfin
+ * n'écrivent pas pareil. Une demande compte pour son auteur sous son nom Jellyfin, Seerr ou affiché.
+ */
+export async function requestStats(now = Date.now()): Promise<RequestStats> {
+  const [{ jellyseerr }, { cachedJellyfinMoviesAdmin, cachedJellyfinSeriesAdmin }, { enrichRequests }] = await Promise.all([
+    import("@/lib/clients/jellyseerr"),
+    import("@/lib/server-cache"),
+    import("@/lib/jellyseerr-enrich"),
+  ]);
+  const [{ results }, movies, shows] = await Promise.all([
+    jellyseerr.getRecentRequests(100),
+    cachedJellyfinMoviesAdmin().catch(() => []),
+    cachedJellyfinSeriesAdmin().catch(() => []),
+  ]);
+  const tmdbOf = (ids: Record<string, string> | undefined) => {
+    for (const [k, v] of Object.entries(ids ?? {})) if (k.toLowerCase() === "tmdb" && v) return v;
+    return null;
+  };
+  const movieKey = new Map<string, string>();
+  for (const m of movies as { Id: string; ProviderIds?: Record<string, string> }[]) {
+    const id = tmdbOf(m.ProviderIds);
+    if (id) movieKey.set(m.Id, `movie:${id}`);
+  }
+  const seriesKey = new Map<string, string>();
+  for (const sh of shows as { Name?: string; ProviderIds?: Record<string, string> }[]) {
+    const id = tmdbOf(sh.ProviderIds);
+    if (id && sh.Name) seriesKey.set(sh.Name.toLowerCase(), `tv:${id}`);
+  }
+  const keyOfSeance = (x: Seance): string | null => {
+    const work = workOf(x.title);
+    if (work.episode) return seriesKey.get(work.title.toLowerCase()) ?? null;
+    return x.itemId ? (movieKey.get(x.itemId) ?? null) : null;
+  };
+  const seances = seancesSince(now - 60 * DAY, now);
+  const firstWatch = new Map<string, number>();
+  for (const x of seances) {
+    const key = keyOfSeance(x);
+    if (!key) continue;
+    const k = `${key}|${x.user.toLowerCase()}`;
+    if (!firstWatch.has(k) || x.start < (firstWatch.get(k) as number)) firstWatch.set(k, x.start);
+  }
+  const since = now - 30 * DAY;
+  const recentReqs = results.filter((r) => Date.parse(r.createdAt) >= since);
+  const enriched = await enrichRequests(recentReqs).catch(() => recentReqs);
+  const delays: number[] = [];
+  const rows = enriched.map((r) => {
+    const createdAt = Date.parse(r.createdAt);
+    const key = r.media.tmdbId ? `${r.media.mediaType === "tv" ? "tv" : "movie"}:${r.media.tmdbId}` : null;
+    const who = r.requestedBy as { displayName?: string; username?: string; jellyfinUsername?: string };
+    const names = [who.jellyfinUsername, who.username, who.displayName].filter((n): n is string => !!n).map((n) => n.toLowerCase());
+    let watchedAt: number | null = null;
+    for (const n of names) {
+      const t = key ? firstWatch.get(`${key}|${n}`) : undefined;
+      if (t !== undefined && t >= createdAt && (watchedAt === null || t < watchedAt)) watchedAt = t;
+    }
+    if (watchedAt !== null) delays.push(watchedAt - createdAt);
+    return {
+      title: r.media.title ?? "?",
+      requester: who.displayName ?? who.username ?? "?",
+      createdAt,
+      available: (r.media.status ?? 0) >= 4,
+      watchedAt,
+    };
+  });
+  return {
+    requested: rows.length,
+    available: rows.filter((r) => r.available).length,
+    watched: rows.filter((r) => r.watchedAt !== null).length,
+    medianDelayMs: quantile(delays, 0.5),
+    recent: rows.sort((a, b) => b.createdAt - a.createdAt).slice(0, 8),
+  };
 }

@@ -106,6 +106,12 @@ export const jellyseerr = {
       `${cfg.url}/api/v1/request?filter=${filter}&take=25&sort=added`,
       { headers: authHeaders(cookie) }
     ),
+  /** Les dernières demandes, tous comptes et tous états — le bilan de l'Activité (07/11/2026). */
+  getRecentRequests: (take = 100) =>
+    fetchJson<{ results: JellyseerrRequest[]; pageInfo: { results: number } }>(
+      `${cfg.url}/api/v1/request?filter=all&take=${Math.min(200, Math.max(1, Math.floor(take)))}&sort=added`,
+      { headers }
+    ),
   getRequestsByUser: (userId: number, cookie?: string) =>
     fetchJson<{ results: JellyseerrRequest[]; pageInfo: { results: number } }>(
       `${cfg.url}/api/v1/request?filter=all&requestedBy=${userId}&take=50&sort=added`,

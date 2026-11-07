@@ -1040,7 +1040,36 @@
       "newerDays": "Trente jours plus tard",
       "watchedTotal": "{d} regardées",
       "backToToday": "Revenir à aujourd'hui",
-      "showSeances": "Voir"
+      "showSeances": "Voir",
+      "habits": {
+        "title": "Habitudes",
+        "end": "menées au bout",
+        "series": "séries en cours",
+        "reads": "lu hors du réseau",
+        "requests": "demandes regardées",
+        "endHint": "{n} séances sur {total} menées jusqu'à la fin ou enchaînées sur l'épisode suivant.",
+        "abandoned": "Souvent quittés avant dix minutes",
+        "noAbandon": "Aucun titre quitté tôt plusieurs fois.",
+        "timesN": "{n} fois|{n} fois",
+        "episodesN": "{n} épisode|{n} épisodes",
+        "perWeek": "{n} par semaine",
+        "fromReserve": "Réserve en mémoire",
+        "fromDevice": "Appareil",
+        "fromNetwork": "Réseau",
+        "readsHint": "{n} séance a lu dans la réserve en mémoire.|{n} séances ont lu dans la réserve en mémoire.",
+        "requested": "Demandes",
+        "last30": "trente jours",
+        "arrived": "Arrivées",
+        "watchedByRequester": "Regardées",
+        "delay": "Délai médian",
+        "watchedAfter": "regardé {d} après",
+        "availableBadge": "disponible",
+        "pendingBadge": "en attente",
+        "noRequests": "Les demandes ne sont pas lisibles pour l'instant.",
+        "days": "{n} j|{n} j",
+        "hoursN": "{n} h|{n} h",
+        "minutes": "{n} min|{n} min"
+      }
     }
   },
   "radarr": {

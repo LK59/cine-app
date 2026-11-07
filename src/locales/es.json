@@ -1040,7 +1040,36 @@
       "newerDays": "Treinta días después",
       "watchedTotal": "{d} vistas",
       "backToToday": "Volver a hoy",
-      "showSeances": "Ver"
+      "showSeances": "Ver",
+      "habits": {
+        "title": "Hábitos",
+        "end": "vistas hasta el final",
+        "series": "series en curso",
+        "reads": "leído fuera de la red",
+        "requests": "peticiones vistas",
+        "endHint": "{n} sesiones de {total} vistas hasta el final o encadenadas con el episodio siguiente.",
+        "abandoned": "Abandonados a menudo antes de diez minutos",
+        "noAbandon": "Ningún título abandonado pronto más de una vez.",
+        "timesN": "{n} vez|{n} veces",
+        "episodesN": "{n} episodio|{n} episodios",
+        "perWeek": "{n} por semana",
+        "fromReserve": "Reserva en memoria",
+        "fromDevice": "Dispositivo",
+        "fromNetwork": "Red",
+        "readsHint": "{n} sesión leyó de la reserva en memoria.|{n} sesiones leyeron de la reserva en memoria.",
+        "requested": "Peticiones",
+        "last30": "treinta días",
+        "arrived": "Llegadas",
+        "watchedByRequester": "Vistas",
+        "delay": "Plazo mediano",
+        "watchedAfter": "visto {d} después",
+        "availableBadge": "disponible",
+        "pendingBadge": "pendiente",
+        "noRequests": "Las peticiones no se pueden leer ahora.",
+        "days": "{n} d|{n} d",
+        "hoursN": "{n} h|{n} h",
+        "minutes": "{n} min|{n} min"
+      }
     }
   },
   "radarr": {

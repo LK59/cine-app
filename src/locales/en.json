@@ -1040,7 +1040,36 @@
       "newerDays": "Thirty days later",
       "watchedTotal": "{d} watched",
       "backToToday": "Back to today",
-      "showSeances": "Show"
+      "showSeances": "Show",
+      "habits": {
+        "title": "Habits",
+        "end": "watched to the end",
+        "series": "series in progress",
+        "reads": "read off the network",
+        "requests": "requests watched",
+        "endHint": "{n} sessions out of {total} watched to the end or continued to the next episode.",
+        "abandoned": "Often left within ten minutes",
+        "noAbandon": "No title left early more than once.",
+        "timesN": "{n} time|{n} times",
+        "episodesN": "{n} episode|{n} episodes",
+        "perWeek": "{n} per week",
+        "fromReserve": "Memory reserve",
+        "fromDevice": "Device",
+        "fromNetwork": "Network",
+        "readsHint": "{n} session read from the memory reserve.|{n} sessions read from the memory reserve.",
+        "requested": "Requests",
+        "last30": "thirty days",
+        "arrived": "Arrived",
+        "watchedByRequester": "Watched",
+        "delay": "Median delay",
+        "watchedAfter": "watched {d} later",
+        "availableBadge": "available",
+        "pendingBadge": "pending",
+        "noRequests": "Requests cannot be read right now.",
+        "days": "{n} d|{n} d",
+        "hoursN": "{n} h|{n} h",
+        "minutes": "{n} min|{n} min"
+      }
     }
   },
   "radarr": {

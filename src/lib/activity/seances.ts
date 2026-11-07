@@ -32,6 +32,8 @@ export interface Seance {
   /** Le débit mesuré du lien et celui qu'exige le fichier, en Mb/s, d'après le bilan (`diag.*`). */
   linkMbps?: number | null;
   needMbps?: number | null;
+  /** D'où le lecteur a lu ses octets, en Mo (bilan, `diag.read*MB`) : la réserve en mémoire, l'appareil, le réseau. */
+  readMB?: { reserve: number; device: number; network: number } | null;
   /**
    * « natif » (remultiplexage — ou canevas, dans les séances d'avant le 24/09/2026), « serveur », ou
    * « hors-ligne » : un téléchargement lu sur l'appareil (journalisé depuis le 02/11/2026).
@@ -383,6 +385,9 @@ function absorb(s: Seance, r: LogRecord): void {
       // (depuis le 10/10/2026). Gardé à part — le dernier bilan l'emporte, comme `watched` — et
       // ajouté à la fin à ce que le lecteur natif a écrit avant de passer la main.
       if (r.player === "serveur") serverCounts.set(s, { seeks: num(r.seeks) ?? 0, audioSwitches: num(r.audioSwitches) ?? 0 });
+      if (num(r["diag.readNetworkMB"]) !== null || num(r["diag.readReserveMB"]) !== null) {
+        s.readMB = { reserve: num(r["diag.readReserveMB"]) ?? 0, device: num(r["diag.readDeviceMB"]) ?? 0, network: num(r["diag.readNetworkMB"]) ?? 0 };
+      }
       s.linkMbps = num(r["diag.linkMbps"]) ?? s.linkMbps ?? null;
       s.needMbps = num(r["diag.needMbps"]) ?? s.needMbps ?? null;
       break;

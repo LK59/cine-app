@@ -121,3 +121,23 @@ describe("ce que le tableau de bord ajoute (07/11/2026)", () => {
     expect(pathOfPlay([s], { ...play, itemId: "autre" })).toBeNull();
   });
 });
+
+describe("les habitudes (07/11/2026)", () => {
+  it("compte ce qui est mené au bout, les séries en cours, et d'où viennent les octets", () => {
+    const seances = buildSeances([
+      rec("e1", 1000, { kind: "start", title: "Lost — S01E01 · Pilote" }),
+      rec("e1", 2000, { kind: "stop", why: "next", watched: 2400, title: "Lost — S01E01 · Pilote", "diag.readReserveMB": 300, "diag.readDeviceMB": 10, "diag.readNetworkMB": 100 }),
+      rec("e2", 3000, { kind: "start", title: "Lost — S01E02 · Pilote (2)" }),
+      rec("e2", 4000, { kind: "stop", why: "close", ended: true, watched: 2400, title: "Lost — S01E02 · Pilote (2)" }),
+      rec("q1", 5000, { kind: "start", title: "Navet" }),
+      rec("q1", 6000, { kind: "stop", why: "close", watched: 120, title: "Navet" }),
+      rec("q2", 7000, { kind: "start", title: "Navet" }),
+      rec("q2", 8000, { kind: "stop", why: "close", watched: 60, title: "Navet" }),
+    ]);
+    const s = periodStats(seances);
+    expect(s.completion).toMatchObject({ finished: 2, closed: 4 });
+    expect(s.completion.abandoned).toEqual([expect.objectContaining({ title: "Navet", count: 2 })]);
+    expect(s.series).toEqual([expect.objectContaining({ user: "lucas", series: "Lost", last: "S01E02", episodes: 2 })]);
+    expect(s.reads).toEqual({ reserveMB: 300, deviceMB: 10, networkMB: 100, withReserve: 1 });
+  });
+});

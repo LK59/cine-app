@@ -44,7 +44,7 @@ import { useT } from "@/components/TranslationProvider";
 import { AlertChip, Avatar, ConfirmButton, Panel, Poster, PresenceBadge, Progress, SeanceRow, Tile, ago, clock, hours, latest, reasonLabel, secs, uiLocale, type T } from "@/components/activity/parts";
 import { Bars, Fold, KpiRow, PATH_COLORS, RankList, Segmented, StackBar, TitleRank, handledSum, pct, shortDay } from "@/components/activity/DashboardParts";
 import type { AccountSummary, WeekSignals, household } from "@/lib/activity/accounts";
-import type { Dashboard, FeedFilter, PeriodStats, PeriodTotals } from "@/lib/activity/dashboard";
+import type { Dashboard, FeedFilter, PeriodStats, RequestStats } from "@/lib/activity/dashboard";
 import { isOwnAppName, isPlaybackClient } from "@/lib/playbackClients";
 import { APP_NAME } from "@/lib/appBuild";
 import { scrollBehavior } from "@/lib/reducedMotion";
@@ -80,6 +80,8 @@ interface Overview {
   household: ReturnType<typeof household>;
   /** Absent d'une réponse d'avant le 07/11/2026 (onglet ouvert pendant le déploiement). */
   dashboard?: Dashboard;
+  /** Les demandes et ce qu'il en advient — `null` quand Seerr ne répond pas. */
+  requests?: RequestStats | null;
   /** La date d'effacement des alertes, 0 si rien n'est effacé — voir `alertsCleared.ts`. */
   alertsClearedAt: number;
   /** Depuis quand Jellyfin ne répond plus aux relevés de santé — `null` s'il répond (§92). */
@@ -470,6 +472,159 @@ function PeriodBreakdowns({
 
 function mbps(n: number): string {
   return n.toLocaleString(uiLocale(), { maximumFractionDigits: n < 10 ? 1 : 0 });
+}
+
+/** Les heures et minutes d'un délai : « 2 j 4 h », « 5 h », « 40 min ». */
+function delayLabel(ms: number, t: T): string {
+  const h = Math.round(ms / 3600_000);
+  if (h >= 48) return t("activity.dash.habits.days", { n: Math.round(h / 24) });
+  if (h >= 1) return t("activity.dash.habits.hoursN", { n: h });
+  return t("activity.dash.habits.minutes", { n: Math.max(1, Math.round(ms / 60_000)) });
+}
+
+type HabitTab = "end" | "series" | "reads" | "requests";
+
+/**
+ * Les habitudes (07/11/2026) : ce qu'on mène au bout, les séries en cours et leur rythme, d'où viennent
+ * les octets, et ce que deviennent les demandes. Quatre onglets dans un seul encadré, chacun avec son
+ * chiffre sur l'onglet — rien de plus à ouvrir pour voir l'essentiel.
+ */
+function Habits({
+  stats,
+  requests,
+  periodDays,
+  now,
+  onFilter,
+}: {
+  stats: PeriodStats;
+  requests: RequestStats | null;
+  periodDays: number;
+  now: number;
+  onFilter: (f: Filter | null) => void;
+}) {
+  const t = useT();
+  const [tab, setTab] = useState<HabitTab>("end");
+  const finishedShare = stats.completion.closed ? stats.completion.finished / stats.completion.closed : null;
+  const readTotal = stats.reads.reserveMB + stats.reads.deviceMB + stats.reads.networkMB;
+  const savedShare = readTotal ? (stats.reads.reserveMB + stats.reads.deviceMB) / readTotal : null;
+  const tabs: { key: HabitTab; label: string; value: string }[] = [
+    { key: "end", label: t("activity.dash.habits.end"), value: finishedShare === null ? "—" : `${Math.round(finishedShare * 100)} %` },
+    { key: "series", label: t("activity.dash.habits.series"), value: String(stats.series.length) },
+    { key: "reads", label: t("activity.dash.habits.reads"), value: savedShare === null ? "—" : `${Math.round(savedShare * 100)} %` },
+    { key: "requests", label: t("activity.dash.habits.requests"), value: requests ? `${requests.watched}/${requests.requested}` : "—" },
+  ];
+  const weeks = Math.max(1, periodDays / 7);
+  return (
+    <Panel title={t("activity.dash.habits.title")} icon={Sparkles}>
+      <div className="grid grid-cols-2 gap-px bg-white/5 sm:grid-cols-4" role="tablist" aria-label={t("activity.dash.habits.title")}>
+        {tabs.map((x) => (
+          <button
+            key={x.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === x.key}
+            onClick={() => setTab(x.key)}
+            className={`flex flex-col items-start gap-0.5 px-4 py-3 text-left transition-colors ${tab === x.key ? "bg-white/[0.07]" : "bg-surface hover:bg-white/[0.03]"}`}
+          >
+            <span className="text-xl font-semibold tabular-nums text-white">{x.value}</span>
+            <span className={`text-xs ${tab === x.key ? "text-white" : "text-muted"}`}>{x.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {tab === "end" && (
+        <div>
+          <p className="px-4 pt-3 text-xs text-subtle">
+            {t("activity.dash.habits.endHint", { n: stats.completion.finished, total: stats.completion.closed })}
+          </p>
+          <p className="px-4 pb-1 pt-3 text-xs font-medium text-muted">{t("activity.dash.habits.abandoned")}</p>
+          <RankList
+            empty={t("activity.dash.habits.noAbandon")}
+            rows={stats.completion.abandoned.map((a) => ({
+              key: a.title,
+              label: a.title,
+              value: a.count,
+              valueLabel: t("activity.dash.habits.timesN", { n: a.count }),
+              leading: <Poster itemId={a.itemId} kind="movie" className="h-10 w-7" />,
+              onOpen: () => onFilter({ kind: "title", value: a.title }),
+            }))}
+          />
+        </div>
+      )}
+
+      {tab === "series" && (
+        <RankList
+          empty={t("activity.dash.empty")}
+          rows={stats.series.map((x) => ({
+            key: `${x.user}|${x.series}`,
+            label: (
+              <>
+                <span className="text-accent-400">{x.user}</span> · {x.series}
+              </>
+            ),
+            value: x.episodes,
+            valueLabel: x.last,
+            note: `${t("activity.dash.habits.episodesN", { n: x.episodes })} · ${t("activity.dash.habits.perWeek", { n: (x.episodes / weeks).toLocaleString(uiLocale(), { maximumFractionDigits: 1 }) })} · ${ago(x.lastAt, now, t)}`,
+            leading: <Poster itemId={x.itemId} kind="episode" className="h-10 w-7" />,
+            onOpen: () => onFilter({ kind: "title", value: x.series }),
+          }))}
+        />
+      )}
+
+      {tab === "reads" && (
+        <div className="space-y-3 p-4">
+          <StackBar
+            empty={t("activity.dash.empty")}
+            parts={[
+              { key: "reserve", label: t("activity.dash.habits.fromReserve"), value: Math.round(stats.reads.reserveMB), color: PATH_COLORS.natif },
+              { key: "device", label: t("activity.dash.habits.fromDevice"), value: Math.round(stats.reads.deviceMB), color: PATH_COLORS.tv },
+              { key: "network", label: t("activity.dash.habits.fromNetwork"), value: Math.round(stats.reads.networkMB), color: PATH_COLORS.serveur },
+            ]}
+          />
+          <p className="text-xs text-subtle">{t("activity.dash.habits.readsHint", { n: stats.reads.withReserve })}</p>
+        </div>
+      )}
+
+      {tab === "requests" &&
+        (requests ? (
+          <div>
+            <div className="grid grid-cols-2 gap-3 p-3 md:grid-cols-4">
+              <Tile icon={Download} label={t("activity.dash.habits.requested")} value={requests.requested} hint={t("activity.dash.habits.last30")} />
+              <Tile icon={CheckCircle2} label={t("activity.dash.habits.arrived")} value={requests.available} />
+              <Tile icon={Clapperboard} label={t("activity.dash.habits.watchedByRequester")} value={requests.watched} />
+              <Tile icon={Clock} label={t("activity.dash.habits.delay")} value={requests.medianDelayMs !== null ? delayLabel(requests.medianDelayMs, t) : "—"} />
+            </div>
+            {requests.recent.length > 0 && (
+              <ul className="divide-y divide-white/5 border-t border-white/5">
+                {requests.recent.map((r, i) => (
+                  <li key={`${r.title}|${r.createdAt}|${i}`} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-white">{r.title}</span>
+                      <span className="block truncate text-xs text-subtle">
+                        {r.requester} · {ago(r.createdAt, now, t)}
+                      </span>
+                    </span>
+                    <span
+                      className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                        r.watchedAt ? "bg-success/15 text-success" : r.available ? "bg-white/10 text-white" : "bg-white/5 text-muted"
+                      }`}
+                    >
+                      {r.watchedAt
+                        ? t("activity.dash.habits.watchedAfter", { d: delayLabel(r.watchedAt - r.createdAt, t) })
+                        : r.available
+                          ? t("activity.dash.habits.availableBadge")
+                          : t("activity.dash.habits.pendingBadge")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <p className="px-4 py-6 text-sm text-subtle">{t("activity.dash.habits.noRequests")}</p>
+        ))}
+    </Panel>
+  );
 }
 
 /** Le jour `day` décalé de `n` jours, en jour local. */
@@ -1038,6 +1193,9 @@ export function ActivityOverview({ active = true }: { active?: boolean }) {
       {/* 4. Les courbes, puis les répartitions de la période. */}
       {dash && <Charts dash={dash} filter={filter} onFilter={setFilter} />}
       {breakdown && <PeriodBreakdowns stats={breakdown} filter={filter} onFilter={setFilter} />}
+      {breakdown && breakdown.completion && (
+        <Habits stats={breakdown} requests={data.requests ?? null} periodDays={period === "day" ? 1 : period === "week" ? 7 : 30} now={now} onFilter={setFilter} />
+      )}
 
       {/* 5. Le fil des séances, filtré par ce qu'on a touché plus haut. */}
       {filter && (

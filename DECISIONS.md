@@ -8662,3 +8662,12 @@ une ligne la choisit sans faire bouger la page : une barre de filtre flottante (
 et le nombre de séances, et y mène ; elle se cache quand le fil est à l'écran. La fiche d'un compte a le
 même sélecteur 24 h / 7 jours / 30 jours / Tout et les mêmes chiffres (`accountPeriods`, `KpiRow`
 partagé). En direct, Laterna n'ajoute son chemin que s'il n'est pas le lecteur de l'application.
+
+**Habitudes (07/11/2026, 10.19.0).** Un encadré à quatre onglets suit la période choisie : menées au
+bout (`completion` — `ended` ou `why: next`, titres quittés avant dix minutes plus d'une fois), séries
+en cours par spectateur (dernier épisode, épisodes et rythme), d'où viennent les octets (`reads`,
+`diag.read*MB` du bilan : réserve en mémoire, appareil, réseau) et les demandes (`requestStats` :
+Jellyseerr, trente jours, gardé cinq minutes) — arrivées, regardées par leur auteur et le délai médian,
+une demande et une séance se rejoignant par TMDB (fiche Jellyfin du film, série de l'épisode), jamais
+par le titre. Les pistes audio et sous-titres ne sont pas comptées : le journal ne note que le rang de
+la piste, pas sa langue.

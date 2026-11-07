@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dashboard } from "@/lib/activity/dashboard";
+import { dashboard, requestStats } from "@/lib/activity/dashboard";
+import { withCache } from "@/lib/server-cache";
 import { preparedUnkept, respondPrepared } from "@/lib/cachedJson";
 import { adminOnly } from "@/lib/activity/adminOnly";
 import { household, listAccounts, recentSeances, weekSignals } from "@/lib/activity/accounts";
@@ -16,7 +17,13 @@ export async function GET(req: NextRequest) {
   const now = Date.now();
   // Lue une fois et passée à chaque calcul : les quatre parties voient la même date d'effacement.
   const clearedAt = alertsClearedAt();
-  const [accounts, signals] = await Promise.all([listAccounts(now, clearedAt), Promise.resolve(weekSignals(now, clearedAt))]);
+  // Les demandes : gardées cinq minutes — Seerr n'a pas à répondre à chaque relecture de dix secondes,
+  // et une panne de Seerr ne coûte que ce bloc.
+  const [accounts, signals, requests] = await Promise.all([
+    listAccounts(now, clearedAt),
+    Promise.resolve(weekSignals(now, clearedAt)),
+    withCache("activity:requests", 5 * 60_000, () => requestStats(now)).catch(() => null),
+  ]);
   // Compressée, avec son étiquette : relue toutes les dix secondes page ouverte, elle partait en clair
   // (35 Ko) et sans 304 possible (07/11/2026).
   return respondPrepared(
@@ -28,6 +35,7 @@ export async function GET(req: NextRequest) {
       recent: recentSeances(20, now, clearedAt),
       household: household(now, clearedAt),
       dashboard: dashboard(now, clearedAt),
+      requests,
       alertsClearedAt: clearedAt,
       jellyfinDownSince: jellyfinDownSince(),
     })
