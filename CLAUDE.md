@@ -280,6 +280,12 @@ In the installed app on iPhone and iPad, it also receives `kind: "hauteur"` line
 2026-11-05): the window, visual viewport, root and shell heights when the window comes back shorter than the
 screen — iOS 26 can leave it at its keyboard height after a keyboard in another app. Three repairs were
 measured useless and removed; the lines say when an iOS release fixes it.
+On iPhone and iPad it also receives `kind: "retour"` lines (`returnDiag.ts`, since 2026-11-07): after a
+return to the foreground from at least 2 s hidden, three seconds of frames (`firstFrameMs`, `maxGapMs` and
+when it ended, `janks` over 50 ms, `longJanks` over 200 ms) and what the return triggered, with its time
+(`events`: `version:même|nouvelle|rechargement`, `catalogue:films-inchangé|…-changé`, `listes:N`); `cut` when
+the page reloads or hides again first. Eight per tab. Measured only — it exists to find what freezes the
+interface for a moment after a return.
 Its format is versioned
 (`PERSISTED_CACHE_SCHEMA`), and `persistentCache-schema.test.ts` fails when the kept responses'
 types change without the version moving.

@@ -1,5 +1,6 @@
 "use client";
 
+import { noteReturn } from "@/lib/returnDiag";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { benchStore } from "@/lib/playerBench/store";
@@ -106,7 +107,11 @@ export function BuildRefresh() {
       // La porte vient d'être armée, avant cet écouteur (`foregroundGate.ts`) : la réponse l'ouvre, ou
       // la laisse fermée si la page s'en va.
       const pendingReturn = currentForegroundReturn();
-      void check(true).then((outcome) => settleForegroundReturn(pendingReturn, outcome));
+      void check(true).then((outcome) => {
+        // Pour la mesure du retour (`returnDiag.ts`) : même version, nouvelle sans rechargement permis, ou rechargement.
+        noteReturn("version", outcome === "reloading" ? "rechargement" : served.current ? "nouvelle" : "même");
+        settleForegroundReturn(pendingReturn, outcome);
+      });
     };
     // Au retour, les relectures attendent cette réponse — mais seulement si un rechargement était
     // possible : un film ouvert, un banc, un texte en cours, et rien n'attend (DECISIONS.md §134).

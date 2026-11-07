@@ -54,4 +54,27 @@ describe("POST /api/viewport-diag", () => {
     expect((await post({})).status).toBe(401);
     expect(mockLog).not.toHaveBeenCalled();
   });
+
+  it("la mesure d'un retour (07/11/2026) : ses champs, bornés, en « retour », et le temps caché en secondes", async () => {
+    const res = await post({
+      kind: "retour",
+      hiddenMs: 3 * 3600_000,
+      firstFrameMs: 40,
+      frames: 150,
+      maxGapMs: 380,
+      maxGapAtMs: 520,
+      janks: 4,
+      longJanks: 1,
+      events: ["version:même@180", "listes:9@185", 42, "x".repeat(200)],
+      film: false,
+      standalone: true,
+      cut: "n'importe quoi",
+      user: "quelqu'un d'autre",
+    });
+    expect(res.status).toBe(204);
+    const [line, kind] = mockLog.mock.calls[0];
+    expect(kind).toBe("retour");
+    expect(line).toMatchObject({ user: "louis", hiddenS: 10_800, firstFrameMs: 40, frames: 150, maxGapMs: 380, maxGapAtMs: 520, janks: 4, longJanks: 1, film: false, standalone: true, cut: null });
+    expect(line.events).toEqual(["version:même@180", "listes:9@185", "x".repeat(60)]);
+  });
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import { noteReturn } from "@/lib/returnDiag";
 import { useCallback, useEffect, useRef } from "react";
 import { useSWRConfig } from "swr";
 import { readCatalogueBody } from "@/lib/cinemaPayload";
@@ -44,10 +45,17 @@ export function useCatalogueRefresh(blocked: boolean): void {
     void refreshCatalogues({
       keys,
       heldNow: (key) => (cache.get(key) as { data?: unknown } | undefined)?.data,
-      apply: (key, data) => void mutate(key, data, { revalidate: false }),
+      apply: (key, data) => {
+        // Pour la mesure du retour (`returnDiag.ts`) : le catalogue a changé, la grille se redessine.
+        noteReturn("catalogue", key.includes("series") ? "séries-changé" : "films-changé");
+        void mutate(key, data, { revalidate: false });
+      },
       canApply,
       whenQuiet: () => whenUiQuiet(),
-      unchanged: (key, data) => renewPersisted(key, data),
+      unchanged: (key, data) => {
+        noteReturn("catalogue", key.includes("series") ? "séries-inchangé" : "films-inchangé");
+        renewPersisted(key, data);
+      },
       read: (key, res) => readCatalogueBody(key, res),
     });
   }, [cache, mutate, canApply]);

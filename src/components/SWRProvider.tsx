@@ -1,5 +1,6 @@
 "use client";
 
+import { noteReturn } from "@/lib/returnDiag";
 import { useEffect } from "react";
 import { SWRConfig, useSWRConfig } from "swr";
 import { SWRGlobalState, revalidateEvents, type Cache, type RevalidateEvent } from "swr/_internal";
@@ -61,7 +62,13 @@ function ForegroundReplay() {
       const state = SWRGlobalState.get(cache as Cache);
       if (!state) return;
       const revalidators = state[0];
-      for (const key in revalidators) revalidators[key][0]?.(type);
+      let count = 0;
+      for (const key in revalidators) {
+        if (revalidators[key][0]) count += 1;
+        revalidators[key][0]?.(type);
+      }
+      // Pour la mesure du retour (`returnDiag.ts`) : combien de listes revérifiées d'un coup.
+      if (type === revalidateEvents.FOCUS_EVENT) noteReturn("listes", count);
     };
     const stop = onForegroundRelease(() => {
       replay(revalidateEvents.FOCUS_EVENT);

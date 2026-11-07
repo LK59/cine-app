@@ -92,9 +92,9 @@ export function logRemoteDiag(fields: { user: string; device: string | null } & 
 }
 
 /** Le relevé de hauteur de l'application installée sur iOS (`viewportWatch.ts`), dans le journal des ouvertures. */
-export function logViewportDiag(fields: { user: string; device: string | null } & Record<string, unknown>): void {
+export function logViewportDiag(fields: { user: string; device: string | null } & Record<string, unknown>, kind: "hauteur" | "retour" = "hauteur"): void {
   try {
-    appendJsonLine(STARTUP_LOG(), { timestamp: new Date().toISOString(), kind: "hauteur", ...fields }, { keep: EVENT_LOG_KEEP });
+    appendJsonLine(STARTUP_LOG(), { timestamp: new Date().toISOString(), kind, ...fields }, { keep: EVENT_LOG_KEEP });
   } catch {
     /* rien */
   }
