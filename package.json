@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.134.0",
+    "@anthropic-ai/sdk": "1.6.0",
     "@mediabunny/ac3": "1.62.1",
     "@mediabunny/dts": "1.62.1",
     "@wasm-audio-decoders/flac": "0.2.11",
