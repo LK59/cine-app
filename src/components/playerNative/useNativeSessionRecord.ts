@@ -12,6 +12,7 @@ import {
   diagRecentMbps,
   diagReserveAheadMB,
   diagSessionFacts,
+  diagWaitEnded,
   diagWaiting,
 } from "@/lib/webcodecs/playbackDiagnosis";
 import { TIMELINE_EVERY_MS, bufferedAhead, elementState } from "@/lib/playbackTimeline";
@@ -245,6 +246,8 @@ export function useNativeSessionRecord({
       const element = videoElRef.current;
       if (document.visibilityState === "hidden") {
         tally.hidden(Date.now());
+        // Une attente en cours n'en est plus une, pour le diagnostic non plus (`SessionTally.waitStarted`).
+        diagWaitEnded(false);
         // L'état au départ, la retenue d'un retour précédent effacée, la pause d'iOS reconnue —
         // voir `BackgroundWatch.hide`.
         background.hide(Date.now(), element);

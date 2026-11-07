@@ -199,6 +199,57 @@ describe("watchElementWaits", () => {
   });
 });
 
+// 07/11/2026 : un épisode laissé en arrière-plan toute la nuit sur un iPhone — `watched: 44201`, 65
+// attentes et 318 s attendues pour une position passée de 0 à 43 s. iOS gèle la page sans pause.
+describe("Page cachée — rien de ce que personne n'a vu", () => {
+  it("le temps regardé page cachée ne dépasse pas ce que la position a avancé", () => {
+    let at = 30;
+    const clock = new WatchedClock();
+    clock.run(0);
+    clock.away(10_000, () => at); // 10 s regardées à l'écran
+    at = 43; // la nuit entière : 13 s jouées avant le gel
+    expect(clock.seconds(12 * 3_600_000)).toBe(23);
+    clock.back(12 * 3_600_000);
+    expect(clock.seconds(12 * 3_600_000 + 5_000)).toBe(28); // et ça repart à l'écran
+  });
+
+  it("le son qui joue page cachée compte, sans dépasser le temps écoulé", () => {
+    let at = 0;
+    const clock = new WatchedClock();
+    clock.run(0);
+    clock.away(0, () => at);
+    at = 600;
+    clock.back(600_000);
+    expect(clock.seconds(600_000)).toBe(600);
+    at = 2_000; // un saut au retour ne compte pas
+    clock.away(600_000, () => at);
+    at = 2_100;
+    clock.back(610_000);
+    expect(clock.seconds(610_000)).toBe(610);
+  });
+
+  it("une ligne lue page cachée repart de la position où elle a été lue", () => {
+    let at = 0;
+    const clock = new WatchedClock();
+    clock.run(0);
+    clock.away(0, () => at);
+    at = 20;
+    expect(clock.take(60_000)).toBe(20);
+    expect(clock.seconds(3_600_000)).toBe(0);
+  });
+
+  it("aucune attente comptée page cachée", () => {
+    const t = new SessionTally();
+    t.hidden(0);
+    expect(t.waitStarted(1_000)).toBe(false);
+    t.waitEnded(60_000);
+    t.shown(70_000);
+    expect(t.waitStarted(71_000)).toBe(true);
+    t.waitEnded(72_000);
+    expect(t.summary(80_000)).toMatchObject({ waits: 1, waitedMs: 1_000 });
+  });
+});
+
 describe("SessionTally — reprises après une pause", () => {
   it("compte chaque reprise, son total et la plus longue, sans redoubler un second signal", () => {
     const t = new SessionTally();

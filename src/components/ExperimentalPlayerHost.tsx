@@ -2099,8 +2099,8 @@ export function ExperimentalPlayerHost({
         // (10/10/2026) — voir la ligne `opening`.
         trace(`élément : en attente à ${element.currentTime.toFixed(2)} s${element.seeking ? " (saut)" : ""}, readyState ${element.readyState}`);
         if (playedOnce && !element.seeking && !seeks.pending()) {
-          tally.waitStarted(Date.now());
-          diagWaitStarted(leadAt(element));
+          // Page cachée, ni le bilan ni le diagnostic ne la comptent (`SessionTally.waitStarted`).
+          if (tally.waitStarted(Date.now())) diagWaitStarted(leadAt(element));
           if (stallAtRef.current === null) {
             stallAtRef.current = Date.now();
             setStallAt(stallAtRef.current);

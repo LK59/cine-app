@@ -5807,6 +5807,12 @@ instance de test : image figée 100 à 196 s, ni roue, ni mot, ni ligne `stall` 
   lecteur natif et le lecteur serveur. L'attente est indépendante de « en lecture » : elle peut arriver
   avant que l'hôte ne l'ait dit, et l'image après une pause ne relance rien. La diffusion Chromecast
   l'excluait déjà (`remote.waiting`).
+- *Page cachée* (07/11/2026) — le temps couru page cachée ne compte qu'à hauteur de ce que la position
+  de l'élément a avancé (`WatchedClock.away` / `back`, branchés par `watchElementWaits` : natif, serveur,
+  hors ligne ; pas Chromecast, où la télé joue page cachée). Et aucune attente n'est comptée page cachée,
+  ni au bilan (`SessionTally.waitStarted` rend faux) ni au diagnostic. Un épisode laissé en arrière-plan
+  une nuit sur un iPhone — iOS gèle la page sans pause — disait `watched: 44201`, 65 attentes et 318 s
+  pour une position passée de 0 à 43 s. Le son qui joue page cachée fait avancer la position : il compte.
 - *Le mot* — « Connexion perdue ou instable… » (§78) se dit aussi sous la roue d'une attente en pleine
   lecture (ni ouverture, ni saut, ni reprise après une pause), au même délai que les autres mots
   (`WORD_AFTER_MS`, 3 s) et à la même condition (`networkTrouble` : une plage qui réessaie, ou le

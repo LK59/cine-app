@@ -87,9 +87,18 @@ export class SessionTally {
     this.longestResumeMs = Math.max(this.longestResumeMs, ms);
   }
 
-  /** Le film s'arrête de lui-même. Un second signal pendant la même attente ne la redouble pas. */
-  waitStarted(now: number): void {
+  /**
+   * Le film s'arrête de lui-même. Un second signal pendant la même attente ne la redouble pas.
+   *
+   * Page cachée, rien n'est compté : personne ne la voit. 07/11/2026 : un épisode lancé puis laissé
+   * en arrière-plan sur un iPhone attendait toutes les minutes (WebKit ne décode plus l'image), et son
+   * bilan disait 65 attentes et 318 s pour 43 s de film — une soirée de lecture « pénible » qui n'a
+   * jamais eu lieu. Rend vrai si l'attente est comptée, pour que le diagnostic suive la même règle.
+   */
+  waitStarted(now: number): boolean {
+    if (this.hiddenSince !== null) return false;
     if (this.waitingSince === null) this.waitingSince = now;
+    return true;
   }
 
   /** Il repart — ou le spectateur a mis en pause, ou sauté ailleurs : l'attente s'arrête là. */
@@ -223,6 +232,16 @@ export function newPlayerSessionId(): string {
 export class WatchedClock {
   private total = 0;
   private since: number | null = null;
+  /**
+   * Page cachée : le temps couru alors (`awayRun`) ne compte qu'à hauteur de ce que la position a
+   * avancé depuis le départ (`awayFrom`). 07/11/2026 : un épisode laissé en arrière-plan toute la nuit
+   * sur un iPhone disait `watched: 44201` pour une position passée de 0 à 43 s — iOS gèle la page sans
+   * que l'élément passe en pause, et l'horloge suivait « en lecture ». Le son qui continue page cachée
+   * (un onglet derrière un autre, un écran verrouillé qui joue) fait avancer la position : il compte.
+   */
+  private awayPosition: (() => number) | null = null;
+  private awayFrom = 0;
+  private awayRun = 0;
   /** L'hôte dit le film en lecture (`run`) — ce qu'il voulait avant cette attente-ci. */
   private wanted = false;
   /** L'élément attend son média (`waiting`) : rien ne passe à l'écran, rien n'est compté. */
@@ -257,15 +276,50 @@ export class WatchedClock {
     if (this.wanted && this.since === null) this.since = now;
   }
 
+  /** La page passe en arrière-plan ; `position` lit la position de l'élément (secondes). */
+  away(now: number, position: () => number): void {
+    if (this.awayPosition !== null) return;
+    this.settle(now);
+    this.awayPosition = position;
+    this.awayFrom = readPosition(position);
+    this.awayRun = 0;
+  }
+
+  /** Elle revient (ou l'élément qu'on suivait s'en va) : l'absence est comptée pour ce qu'elle a joué. */
+  back(now: number): void {
+    if (this.awayPosition === null) return;
+    this.settle(now);
+    this.total += this.awayCredit(this.awayRun);
+    this.awayPosition = null;
+    this.awayRun = 0;
+  }
+
+  /** Le morceau en cours rangé là où il compte, l'horloge toujours en marche si elle l'était. */
+  private settle(now: number): void {
+    if (this.since === null) return;
+    this.stop(now);
+    this.since = now;
+  }
+
+  private awayCredit(runMs: number): number {
+    if (this.awayPosition === null) return runMs;
+    const advanced = Math.max(0, readPosition(this.awayPosition) - this.awayFrom) * 1000;
+    return Math.min(runMs, advanced);
+  }
+
   private stop(now: number): void {
     if (this.since === null) return;
-    this.total += Math.max(0, now - this.since);
+    const ms = Math.max(0, now - this.since);
+    if (this.awayPosition !== null) this.awayRun += ms;
+    else this.total += ms;
     this.since = null;
   }
 
   /** En secondes, arrondi — l'unité de la ligne `stop`. */
   seconds(now: number): number {
-    return Math.round((this.total + (this.since !== null ? Math.max(0, now - this.since) : 0)) / 1000);
+    const running = this.since !== null ? Math.max(0, now - this.since) : 0;
+    const ms = this.awayPosition !== null ? this.total + this.awayCredit(this.awayRun + running) : this.total + running;
+    return Math.round(ms / 1000);
   }
 
   /**
@@ -277,7 +331,20 @@ export class WatchedClock {
     const seconds = this.seconds(now);
     this.total = 0;
     if (this.since !== null) this.since = now;
+    if (this.awayPosition !== null) {
+      this.awayRun = 0;
+      this.awayFrom = readPosition(this.awayPosition);
+    }
     return seconds;
+  }
+}
+
+function readPosition(position: () => number): number {
+  try {
+    const at = position();
+    return Number.isFinite(at) ? at : 0;
+  } catch {
+    return 0;
   }
 }
 
@@ -293,13 +360,28 @@ export function watchElementWaits(element: HTMLMediaElement, clock: WatchedClock
   const onTime = () => {
     if (!element.paused && element.readyState >= HAVE_FUTURE_DATA) clock.resume(now());
   };
+  // Page cachée, le temps ne compte que ce que la position a avancé (`WatchedClock.away`).
+  const position = () => element.currentTime;
+  const onVisibility = () => {
+    if (document.visibilityState === "hidden") clock.away(now(), position);
+    else clock.back(now());
+  };
+  const hasDocument = typeof document !== "undefined";
   element.addEventListener("waiting", onWaiting);
   element.addEventListener("playing", onPlaying);
   element.addEventListener("timeupdate", onTime);
+  if (hasDocument) {
+    document.addEventListener("visibilitychange", onVisibility);
+    // Un pipeline reconstruit page cachée suit son propre élément dès le départ.
+    if (document.visibilityState === "hidden") clock.away(now(), position);
+  }
   return () => {
     element.removeEventListener("waiting", onWaiting);
     element.removeEventListener("playing", onPlaying);
     element.removeEventListener("timeupdate", onTime);
+    if (hasDocument) document.removeEventListener("visibilitychange", onVisibility);
+    // L'élément s'en va : son absence est comptée tant que sa position se lit encore.
+    clock.back(now());
   };
 }
 
