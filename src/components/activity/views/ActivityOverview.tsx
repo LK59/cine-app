@@ -1170,7 +1170,9 @@ export function ActivityOverview({ active = true }: { active?: boolean }) {
 
       {/* 2. La période. */}
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* Toujours sur deux lignes : sur une seule quand le titre était court (« Depuis le début »), les
+            boutons sautaient d'une ligne à l'autre en changeant de période (07/11/2026). */}
+        <div className="flex flex-col items-start gap-2">
           <h2 className="text-xs font-medium uppercase tracking-wide text-subtle">{t(`activity.dash.periodTitle.${period}`)}</h2>
           <Segmented
             label={t("activity.period.label")}
