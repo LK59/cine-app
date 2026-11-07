@@ -58,7 +58,8 @@ function writeWeek() {
   const seance = (id: string, t: number) => [
     { timestamp: iso(t), kind: "start", session: id, user: "lucas", itemId: "a", title: "Ted Lasso", agent: "Mozilla/5.0 (iPhone)" },
     { timestamp: iso(t + 60_000), kind: "stall", session: id, user: "lucas" },
-    { timestamp: iso(t + 120_000), kind: "rebuild", session: id, user: "lucas", reason: "décodeur" },
+    // Trois reconstructions : au-delà de deux, elles ne sont plus « rattrapées » (`RECOVERED_MAX`).
+    ...[0, 1, 2].map((k) => ({ timestamp: iso(t + 120_000 + k * 1000), kind: "rebuild", session: id, user: "lucas", reason: "décodeur" })),
     { timestamp: iso(t + 180_000), kind: "stop", session: id, user: "lucas", why: "close", watched: 100, waits: 4, waitedMs: 2000 },
   ];
   writeLog("player.log", [...seance("avant", NOW - 5 * H), ...seance("apres", NOW - 1 * H)]);
@@ -99,13 +100,13 @@ describe("la semaine en chiffres", () => {
     writeWeek();
     const { weekSignals } = await import("@/lib/activity/accounts");
     const before = weekSignals(NOW, 0);
-    expect(before).toMatchObject({ seances: 2, stalls: 2, rebuilds: 2, waits: 8, tokenRefusals: 1, clientErrors: 1 });
+    expect(before).toMatchObject({ seances: 2, stalls: 2, rebuilds: 6, waits: 8, tokenRefusals: 1, clientErrors: 1 });
     expect(before.serverErrors).toEqual([{ scope: "catalogue", count: 1 }]);
 
     const after = weekSignals(NOW, NOW - 3 * H);
-    expect(after).toMatchObject({ seances: 2, stalls: 1, rebuilds: 1, waits: 4, tokenRefusals: 0, clientErrors: 0 });
+    expect(after).toMatchObject({ seances: 2, stalls: 1, rebuilds: 3, waits: 4, tokenRefusals: 0, clientErrors: 0 });
     expect(after.serverErrors).toEqual([]);
-    expect(after.perDay.reduce((n, d) => n + d.problems, 0)).toBe(2);
+    expect(after.perDay.reduce((n, d) => n + d.problems, 0)).toBe(4);
   });
 });
 
@@ -118,7 +119,7 @@ describe("les alertes des comptes", () => {
     const [cleared] = await listAccounts(NOW, NOW - 3 * H);
     expect(cleared.alerts).toEqual([]);
     // La séance d'après l'effacement compte toujours ses incidents ; celle d'avant, non.
-    expect(cleared.week).toMatchObject({ seances: 2, problems: 2 });
+    expect(cleared.week).toMatchObject({ seances: 2, problems: 4 });
 
     // Un nouveau refus, après l'effacement : l'alerte revient.
     const server = fs.readFileSync(path.join(DIR, "logs", "server.log"), "utf8");
@@ -159,7 +160,7 @@ describe("le foyer", () => {
     expect(h.logins.failed).toBe(0);
     expect(h.logins.recentFailures).toEqual([]);
     // La qualité par appareil ne garde que les incidents d'après.
-    expect(h.devices[0]).toMatchObject({ seances: 2, stalls: 1, rebuilds: 1 });
+    expect(h.devices[0]).toMatchObject({ seances: 2, stalls: 1, rebuilds: 3 });
   });
 });
 

@@ -373,11 +373,10 @@ export function PlayerShell() {
           fromTab={search.leaving || list.leaving || activity.leaving || report.leaving || news.leaving}
         />
       )}
-      {/* L'activité : une clé par vue — une autre vue est un autre écran (voir la règle des fiches
-          dans CLAUDE.md), avec son entrée, son défilement et son focus à elle. */}
-      {activity.render && lastActivity !== null && (
-        <PlayerActivityPanel key={lastActivity} raw={lastActivity} leaving={activity.leaving} />
-      )}
+      {/* L'activité : un seul panneau pour toutes ses vues depuis le 07/11/2026 — il garde la vue
+          d'ensemble montée sous les autres, et chaque autre vue y porte sa propre clé (voir
+          `PlayerActivityPanel`). Une clé par vue ici reconstruisait le tableau de bord à chaque retour. */}
+      {activity.render && lastActivity !== null && <PlayerActivityPanel raw={lastActivity} leaving={activity.leaving} />}
       {report.render && lastReport !== null && <PlayerReportPanel key={lastReport} raw={lastReport} leaving={report.leaving} />}
       {news.render && lastNews !== null && <PlayerNewsPanel key={lastNews} raw={lastNews} leaving={news.leaving} />}
       {downloads.render && <PlayerDownloadsPanel leaving={downloads.leaving} />}

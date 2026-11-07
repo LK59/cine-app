@@ -394,7 +394,9 @@
       "tv": "on a TV",
       "chromecast": "Chromecast",
       "serverRelay": "resume kept by the server",
-      "identicalRetry": "{n} identical retry|{n} identical retries"
+      "identicalRetry": "{n} identical retry|{n} identical retries",
+      "recovered": "{n} recovered rebuild|{n} recovered rebuilds",
+      "planned": "server player (expected)"
     },
     "seance": {
       "ring": {
@@ -945,6 +947,79 @@
       "offline": "offline",
       "eventMarkedRead": "{title} — marked as read",
       "eventMarkedUnread": "{title} — marked as unread"
+    },
+    "dash": {
+      "period": {
+        "day": "24 h",
+        "week": "7 days",
+        "month": "30 days",
+        "all": "All"
+      },
+      "periodTitle": {
+        "day": "The last 24 hours",
+        "week": "The last seven days",
+        "month": "The last thirty days",
+        "all": "Since the beginning"
+      },
+      "kpi": {
+        "seances": "Sessions",
+        "watched": "Time watched",
+        "clean": "Trouble-free",
+        "cleanHint": "{n} sessions out of {total}",
+        "open": "Start-up",
+        "openHint": "9 in 10 under {d}",
+        "waits": "Waits",
+        "handled": "Handled automatically",
+        "handledHint": "{n} real incident|{n} real incidents",
+        "real": "Real incidents"
+      },
+      "toHandle": "Needs attention",
+      "nothingToHandle": "Nothing needs attention.",
+      "handledLine": "This week, the player handled {n} case on its own:|This week, the player handled {n} cases on its own:",
+      "handled": {
+        "recovered": "{n} recovered rebuild|{n} recovered rebuilds",
+        "slowLinks": "{n} switch to the lighter version|{n} switches to the lighter version",
+        "planned": "{n} expected server playback|{n} expected server playbacks",
+        "background": "{n} return from the background|{n} returns from the background"
+      },
+      "issue": {
+        "reports": "{n} report awaits a reply|{n} reports await a reply",
+        "failures": "{n} failure|{n} failures",
+        "logins": "{n} refused sign-in|{n} refused sign-ins",
+        "notifs": "{n} undelivered notification|{n} undelivered notifications",
+        "server": "{n} server error|{n} server errors"
+      },
+      "watchedPerDay": "Hours watched, thirty days",
+      "byHour": "Time of day, thirty days",
+      "people": "Who watches",
+      "titles": "Most watched",
+      "paths": "Playback paths",
+      "devices": "Devices",
+      "path": {
+        "natif": "App player",
+        "serveur": "Server player",
+        "tv": "Television",
+        "horsLigne": "Offline"
+      },
+      "seancesN": "{n} session|{n} sessions",
+      "realN": "{n} real incident|{n} real incidents",
+      "empty": "Nothing in this period.",
+      "details": "Details",
+      "diagnosisSummary": "{n} title followed|{n} titles followed",
+      "devicesSummary": "{n} device|{n} devices",
+      "causes": "Causes and errors",
+      "causesSummary": "{r} rebuild causes · {e} kinds of server errors",
+      "describe": {
+        "title": "Search by description",
+        "summary": "{n} search over seven days|{n} searches over seven days",
+        "searches": "Searches",
+        "accounts": "{n} account|{n} accounts",
+        "model": "Model calls",
+        "median": "Median delay",
+        "errors": "Failures"
+      },
+      "addressShow": "Address change",
+      "addressHide": "Hide the address change"
     }
   },
   "radarr": {

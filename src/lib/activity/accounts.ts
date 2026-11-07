@@ -17,7 +17,7 @@ import { jellyseerr } from "@/lib/clients/jellyseerr";
 import { enrichRequests } from "@/lib/jellyseerr-enrich";
 import { sessionDb, watchlistDb, pushDb, notificationPrefsDb, userPrefsDb, onboardingDb, pendingRequestDb, reportsDb } from "@/lib/db";
 import { presenceOf, type Presence } from "@/lib/activity/presence";
-import { diagnoseTitles } from "@/lib/activity/diagnosis";
+import { diagnoseTitles, failuresOf } from "@/lib/activity/diagnosis";
 import { readRecords, type LogRecord } from "@/lib/activity/logReader";
 import { buildSeances, type Seance } from "@/lib/activity/seances";
 import { isChunkLoadError } from "@/lib/chunkError";
@@ -125,10 +125,61 @@ function playsOf(sessions: readonly JellyfinSession[], userId: string): NowPlayi
     .sort((a, b) => Number(a.paused) - Number(b.paused));
 }
 
-/** Les incidents d'une séance, comptés ensemble. */
+/**
+ * Les vrais incidents d'une séance — ce qui a gêné et que rien n'avait prévu : la même règle que le
+ * diagnostic (`failuresOf`). Depuis le 07/11/2026, ni une connexion trop lente (la bascule sur la
+ * version allégée est faite pour ça, §78), ni un saut lent (le réseau, compté à part), ni une
+ * reconstruction rattrapée, ni un passage prévu au lecteur serveur n'en sont : l'Activité les mettait
+ * en avant comme des pannes.
+ */
 export function problemsOf(s: Seance): number {
-  // Une connexion trop lente (§77) est un problème vécu par le spectateur — son lien, pas le fichier.
-  return s.stalls + s.rebuilds + s.fallbacks + s.errors + s.slowSeeks + (s.slowLinks ?? 0);
+  return failuresOf(s);
+}
+
+/** Ce que le lecteur a traité tout seul, comme prévu — compté, jamais mis en avant. */
+export function handledOf(s: Seance): number {
+  return (s.recovered ?? 0) + (s.planned ?? 0) + (s.slowLinks ?? 0) + s.backgroundRebuilds;
+}
+
+/**
+ * Les séances des trente et un derniers jours, construites une fois tant que le journal du lecteur
+ * n'a pas bougé (07/11/2026). La vue d'ensemble les reconstruisait quatre fois à chaque relecture
+ * — comptes, semaine, fil, foyer —, les quatre cinquièmes de son temps. Une fenêtre plus courte
+ * filtre celle-ci ; une plus longue (la fiche d'un compte, 90 jours) se construit à part.
+ *
+ * La clé est le journal lui-même : nombre de lignes, somme des instants, première et dernière
+ * (fichier et rang) — une ligne ajoutée ou une rotation la changent. Jamais modifiées ensuite : `acknowledgeSeances` copie.
+ */
+const WINDOW_DAYS = 31;
+type WindowMemo = { key: string; since: number; seances: Seance[] };
+// Sur `globalThis`, comme le cache des journaux : préparée au démarrage, lue par la route.
+const memoHolder = ((globalThis as Record<symbol, unknown>)[Symbol.for("cine-app.activitySeances")] ??= { memo: null }) as { memo: WindowMemo | null };
+
+/**
+ * Lue au démarrage, vingt secondes après (`instrumentation.ts`) : le journal du lecteur (16 Mo,
+ * ~260 ms d'analyse) et ses séances. La première vue d'ensemble après un déploiement les payait.
+ */
+export function warmActivityLogs(now = Date.now()): void {
+  seancesSince(now - 30 * DAY, now);
+}
+
+export function seancesSince(since: number, now = Date.now()): Seance[] {
+  const windowStart = now - WINDOW_DAYS * DAY;
+  if (since < windowStart) return buildSeances(readRecords("player", since)).filter((s) => s.start >= since);
+  const records = readRecords("player", windowStart);
+  const first = records[0];
+  const last = records[records.length - 1];
+  // La somme des instants départage deux journaux de même longueur (les tests en écrivent beaucoup).
+  let stamp = 0;
+  for (const r of records) stamp += r._t;
+  const key = `${records.length}|${stamp}|${first?._file}:${first?._line}|${last?._file}:${last?._line}`;
+  // Reconstruite aussi quand la fenêtre a glissé de plus d'une heure, pour ne pas garder des jours
+  // sortis de la période.
+  const memo = memoHolder.memo;
+  if (!memo || memo.key !== key || windowStart - memo.since > 60 * 60_000) {
+    memoHolder.memo = { key, since: windowStart, seances: buildSeances(records) };
+  }
+  return (memoHolder.memo as WindowMemo).seances.filter((s) => s.start >= since);
 }
 
 function serverRecordsSince(since: number): LogRecord[] {
@@ -169,7 +220,7 @@ export async function listAccounts(now = Date.now(), clearedAt = alertsClearedAt
   const weekStart = now - 7 * DAY;
   // Les alertes effacées ne se recomptent pas : incidents des séances finies avant, lignes du
   // journal d'avant — voir `alertsCleared.ts`.
-  const seances = acknowledgeSeances(buildSeances(readRecords("player", weekStart)).filter((s) => s.start >= weekStart), clearedAt);
+  const seances = acknowledgeSeances(seancesSince(weekStart, now), clearedAt);
   const server = serverRecordsSince(weekStart).filter(afterClear(clearedAt));
 
   return users
@@ -421,7 +472,7 @@ function signalsForDays(days: number, now: number, clearedAt: number): WeekSigna
   const since = now - days * DAY;
   // Les séances et le temps regardé restent ceux de la période ; seuls les incidents et les erreurs
   // effacés ne se comptent plus (`alertsCleared.ts`).
-  const seances = acknowledgeSeances(buildSeances(readRecords("player", since)).filter((s) => s.start >= since), clearedAt);
+  const seances = acknowledgeSeances(seancesSince(since, now), clearedAt);
   const perDay = lastLocalDays(now, days).map(({ day, start, end }) => {
     const of = seances.filter((s) => s.start >= start && s.start < end);
     return { day, seances: of.length, problems: of.reduce((n, s) => n + problemsOf(s), 0) };
@@ -623,7 +674,7 @@ async function requestsOf(jellyfinId: string) {
 
 /** Les dernières séances, tous comptes confondus — le fil de ce qui s'est regardé. */
 export function recentSeances(limit = 20, now = Date.now(), clearedAt = alertsClearedAt()): Seance[] {
-  return acknowledgeSeances(buildSeances(readRecords("player", now - 30 * DAY)).slice(0, limit), clearedAt);
+  return acknowledgeSeances(seancesSince(now - 30 * DAY, now).slice(0, limit), clearedAt);
 }
 
 
@@ -745,15 +796,14 @@ function authEventsFor(userName: string, since: number) {
  * liste au lieu de faire monter les suivants (relu le 06/10/2026 : deux titres remontaient).
  */
 export function failingTitleKeys(now = Date.now()): string[] {
-  const since = now - 30 * DAY;
-  const seances = buildSeances(readRecords("player", since)).filter((s) => s.start >= since);
+  const seances = seancesSince(now - 30 * DAY, now);
   return diagnoseTitles(seances, Number.POSITIVE_INFINITY).map((d) => d.key);
 }
 
 /** Le foyer sur trente jours : appareils, habitudes, connexions et notifications. */
 export function household(now = Date.now(), clearedAt = alertsClearedAt()) {
   const since = now - 30 * DAY;
-  const seances = buildSeances(readRecords("player", since)).filter((s) => s.start >= since);
+  const seances = seancesSince(since, now);
   const fresh = afterClear(clearedAt);
   const auth = readRecords("auth", since).filter((r) => r._t >= since);
   const notifications = readRecords("notifications", since).filter((r) => r._t >= since);

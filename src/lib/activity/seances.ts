@@ -102,6 +102,21 @@ export interface Seance {
    */
   casts: number;
   /**
+   * Les passages au lecteur serveur pour une raison prévue (07/11/2026) : le chemin natif a refusé le
+   * fichier d'emblée et l'a dit (`Aucun chemin de lecture disponible…` — une vidéo AV1 qu'un appareil
+   * ne décode pas, un DTS ou un TrueHD que le navigateur refuse et ne sait remplacer). C'est le
+   * chemin conçu pour ces fichiers, pas une panne : compté à part, jamais dans « À gérer » ni dans le
+   * diagnostic. Une zone illisible n'en est pas un (`fileDefects`). Absent d'une séance gardée avant.
+   */
+  planned?: number;
+  /**
+   * Les reconstructions rattrapées (07/11/2026) : au plus `RECOVERED_MAX` dans une séance qui n'a ni
+   * repli ni erreur — le lecteur a rouvert sa source et la lecture a continué. Retirées de
+   * `rebuilds` à la fin de la séance (`finish`) : l'administrateur ne doit voir en alerte que ce qui
+   * a vraiment gêné. Absent d'une séance gardée avant ce champ.
+   */
+  recovered?: number;
+  /**
    * Un téléviseur a réellement pris la lecture (ligne `cast`, « diffusion établie ») — et non
    * seulement demandée. Une séance rouverte sur le téléphone puis envoyée à la télé par les
    * commandes de la vidéo n'a pas de repli « diffusion demandée » : sans ceci, elle se lisait
@@ -131,6 +146,18 @@ export interface Seance {
    */
   restarts: { why: string; label: string; t: number; failure: boolean }[];
 }
+
+/**
+ * Un refus d'emblée du chemin natif, annoncé comme tel (`choosePlaybackPath`, CLAUDE.md « A refusal is a
+ * named error ») : le lecteur serveur est alors le chemin prévu. Une zone illisible commence de la même
+ * façon mais accuse le fichier — elle reste un défaut.
+ */
+export function isPlannedHandoff(reason: string): boolean {
+  return reason.startsWith("Aucun chemin de lecture disponible") && !isUnreadableZoneReason(reason);
+}
+
+/** Jusqu'à combien de reconstructions une séance sans repli ni erreur est dite « rattrapée ». */
+export const RECOVERED_MAX = 2;
 
 /** Un saut qui prend plus que ça se remarque : c'est le seuil du banc d'essai. */
 export const SLOW_SEEK_MS = 3000;
@@ -287,6 +314,11 @@ function absorb(s: Seance, r: LogRecord): void {
         noteSlowLink(s, r);
         break;
       }
+      if (isPlannedHandoff(reason)) {
+        s.planned = (s.planned ?? 0) + 1;
+        s.incidents.push({ kind: "planned", t: r._t, reason });
+        break;
+      }
       if (isUnreadableZoneReason(reason)) s.fileDefects = (s.fileDefects ?? 0) + 1;
       s.fallbacks += 1;
       s.incidents.push({ kind: "fallback", t: r._t, reason });
@@ -351,6 +383,12 @@ function finish(s: Seance): Seance {
   if (server) {
     s.seeks += server.seeks;
     s.audioSwitches += server.audioSwitches;
+  }
+  // Une ou deux reconstructions et rien d'autre : rattrapées, voir `Seance.recovered`.
+  if (s.rebuilds > 0 && s.rebuilds <= RECOVERED_MAX && s.errors === 0 && s.fallbacks === 0) {
+    s.recovered = s.rebuilds;
+    s.rebuilds = 0;
+    for (const i of s.incidents) if (i.kind === "rebuild") i.kind = "recovered";
   }
   return s;
 }

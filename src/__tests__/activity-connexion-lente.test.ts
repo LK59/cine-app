@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildSeances } from "@/lib/activity/seances";
 import { diagnoseTitles, failuresOf } from "@/lib/activity/diagnosis";
 import { friseModel } from "@/lib/activity/frise";
-import { problemsOf } from "@/lib/activity/accounts";
+import { handledOf, problemsOf } from "@/lib/activity/accounts";
 import type { LogRecord } from "@/lib/activity/logReader";
 
 // « Connexion trop lente » (DECISIONS.md §77) au panneau Activité : une séance arrêtée par le lien
@@ -30,8 +30,10 @@ describe("une connexion trop lente, au panneau Activité", () => {
     expect(s.errors).toBe(0);
     expect(s.fallbacks).toBe(0);
     expect(failuresOf(s)).toBe(0);
-    // Un problème vécu par le spectateur, tout de même.
-    expect(problemsOf(s)).toBe(1);
+    // Géré par le lecteur — la bascule sur la version allégée est faite pour ça (§78) : ni problème ni
+    // alerte depuis le 07/11/2026, compté parmi ce qui a été géré.
+    expect(problemsOf(s)).toBe(0);
+    expect(handledOf(s)).toBe(1);
     expect(s.incidents).toEqual([expect.objectContaining({ kind: "slowLink", reason: "connexion trop lente" })]);
     const [r] = buildSeances(lines("augustine", EDGE, [slowFallback]));
     expect(r.slowLinks).toBe(1);

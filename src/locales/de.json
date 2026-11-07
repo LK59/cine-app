@@ -394,7 +394,9 @@
       "tv": "auf einem Fernseher",
       "chromecast": "Chromecast",
       "serverRelay": "Fortsetzung vom Server gesichert",
-      "identicalRetry": "{n} identischer Wiederholungsversuch|{n} identische Wiederholungsversuche"
+      "identicalRetry": "{n} identischer Wiederholungsversuch|{n} identische Wiederholungsversuche",
+      "recovered": "{n} aufgefangener Neuaufbau|{n} aufgefangene Neuaufbauten",
+      "planned": "Server-Player (vorgesehen)"
     },
     "seance": {
       "ring": {
@@ -945,6 +947,79 @@
       "offline": "offline",
       "eventMarkedRead": "{title} — als gelesen markiert",
       "eventMarkedUnread": "{title} — als ungelesen markiert"
+    },
+    "dash": {
+      "period": {
+        "day": "24 Std.",
+        "week": "7 Tage",
+        "month": "30 Tage",
+        "all": "Alles"
+      },
+      "periodTitle": {
+        "day": "Die letzten 24 Stunden",
+        "week": "Die letzten sieben Tage",
+        "month": "Die letzten dreißig Tage",
+        "all": "Seit Beginn"
+      },
+      "kpi": {
+        "seances": "Sitzungen",
+        "watched": "Angesehene Zeit",
+        "clean": "Störungsfrei",
+        "cleanHint": "{n} von {total} Sitzungen",
+        "open": "Start",
+        "openHint": "9 von 10 unter {d}",
+        "waits": "Wartezeiten",
+        "handled": "Selbst gelöst",
+        "handledHint": "{n} echter Vorfall|{n} echte Vorfälle",
+        "real": "Echte Vorfälle"
+      },
+      "toHandle": "Zu erledigen",
+      "nothingToHandle": "Nichts zu erledigen.",
+      "handledLine": "Diese Woche hat der Player {n} Fall selbst gelöst:|Diese Woche hat der Player {n} Fälle selbst gelöst:",
+      "handled": {
+        "recovered": "{n} aufgefangener Neuaufbau|{n} aufgefangene Neuaufbauten",
+        "slowLinks": "{n} Wechsel zur leichteren Version|{n} Wechsel zur leichteren Version",
+        "planned": "{n} vorgesehene Server-Wiedergabe|{n} vorgesehene Server-Wiedergaben",
+        "background": "{n} Rückkehr aus dem Hintergrund|{n} Rückkehren aus dem Hintergrund"
+      },
+      "issue": {
+        "reports": "{n} Meldung wartet auf Antwort|{n} Meldungen warten auf Antwort",
+        "failures": "{n} Fehlschlag|{n} Fehlschläge",
+        "logins": "{n} abgelehnte Anmeldung|{n} abgelehnte Anmeldungen",
+        "notifs": "{n} nicht zugestellte Benachrichtigung|{n} nicht zugestellte Benachrichtigungen",
+        "server": "{n} Serverfehler|{n} Serverfehler"
+      },
+      "watchedPerDay": "Angesehene Stunden, dreißig Tage",
+      "byHour": "Tageszeit, dreißig Tage",
+      "people": "Wer schaut",
+      "titles": "Am meisten gesehen",
+      "paths": "Wiedergabewege",
+      "devices": "Geräte",
+      "path": {
+        "natif": "App-Player",
+        "serveur": "Server-Player",
+        "tv": "Fernseher",
+        "horsLigne": "Offline"
+      },
+      "seancesN": "{n} Sitzung|{n} Sitzungen",
+      "realN": "{n} echter Vorfall|{n} echte Vorfälle",
+      "empty": "Nichts in diesem Zeitraum.",
+      "details": "Details",
+      "diagnosisSummary": "{n} beobachteter Titel|{n} beobachtete Titel",
+      "devicesSummary": "{n} Gerät|{n} Geräte",
+      "causes": "Ursachen und Fehler",
+      "causesSummary": "{r} Ursachen für Neuaufbau · {e} Arten von Serverfehlern",
+      "describe": {
+        "title": "Suche per Beschreibung",
+        "summary": "{n} Suche in sieben Tagen|{n} Suchen in sieben Tagen",
+        "searches": "Suchen",
+        "accounts": "{n} Konto|{n} Konten",
+        "model": "Modellaufrufe",
+        "median": "Mittlere Dauer",
+        "errors": "Fehlschläge"
+      },
+      "addressShow": "Adresswechsel",
+      "addressHide": "Adresswechsel ausblenden"
     }
   },
   "radarr": {

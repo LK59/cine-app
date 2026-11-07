@@ -144,6 +144,12 @@ export async function register() {
         "listes de la bibliothèque relues avant d'expirer · hors ligne, sous-titres générés, répliques et intégrité selon leur file"
     );
 
+    // Les journaux de l'Activité et leurs séances, prêts avant qu'un administrateur l'ouvre : la
+    // première vue d'ensemble après un déploiement attendait ~260 ms d'analyse (07/11/2026).
+    setTimeout(() => {
+      import("./lib/activity/accounts").then(({ warmActivityLogs }) => warmActivityLogs()).catch(() => {});
+    }, 20_000);
+
     // Non-blocking cache warmup — fire and forget, never delays startup
     setTimeout(() => {
       import("./lib/server-cache").then(async ({ cachedMovies, cachedSeries }) => {

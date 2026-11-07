@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { dashboard } from "@/lib/activity/dashboard";
+import { preparedUnkept, respondPrepared } from "@/lib/cachedJson";
 import { adminOnly } from "@/lib/activity/adminOnly";
 import { household, listAccounts, recentSeances, weekSignals } from "@/lib/activity/accounts";
 import { alertsClearedAt } from "@/lib/activity/alertsCleared";
@@ -15,15 +17,21 @@ export async function GET(req: NextRequest) {
   // Lue une fois et passée à chaque calcul : les quatre parties voient la même date d'effacement.
   const clearedAt = alertsClearedAt();
   const [accounts, signals] = await Promise.all([listAccounts(now, clearedAt), Promise.resolve(weekSignals(now, clearedAt))]);
-  return NextResponse.json({
-    now,
-    accounts,
-    signals,
-    recent: recentSeances(20, now, clearedAt),
-    household: household(now, clearedAt),
-    alertsClearedAt: clearedAt,
-    jellyfinDownSince: jellyfinDownSince(),
-  });
+  // Compressée, avec son étiquette : relue toutes les dix secondes page ouverte, elle partait en clair
+  // (35 Ko) et sans 304 possible (07/11/2026).
+  return respondPrepared(
+    req,
+    preparedUnkept({
+      now,
+      accounts,
+      signals,
+      recent: recentSeances(20, now, clearedAt),
+      household: household(now, clearedAt),
+      dashboard: dashboard(now),
+      alertsClearedAt: clearedAt,
+      jellyfinDownSince: jellyfinDownSince(),
+    })
+  );
 }
 
 /**

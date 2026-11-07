@@ -8,6 +8,23 @@
 // au panneau Compte d'où l'on est parti — comme partout ailleurs dans le cinéma.
 
 import { cinemaNavigate } from "@/lib/cinemaRoute";
+import { preloadQuietly } from "@/lib/prefetch";
+
+/**
+ * La donnée d'une vue, demandée dès que le doigt ou la souris s'en approche (07/11/2026) : la fiche
+ * d'un compte pèse ~200 Ko et 30 ms de serveur, elle est là quand le clic arrive. Les vues sans
+ * donnée propre ne demandent rien.
+ */
+export function viewDataKey(view: ActivityView): string | null {
+  if (view.kind === "account") return `/api/admin/activity/accounts/${view.id}`;
+  if (view.kind === "seance") return `/api/admin/activity/seances/${encodeURIComponent(view.id)}`;
+  return null;
+}
+
+function prefetchView(view: ActivityView): void {
+  const key = viewDataKey(view);
+  if (key) void preloadQuietly(key);
+}
 
 export type LogsPreset = { source?: string; type?: string; user?: string; session?: string; days?: number };
 
@@ -113,6 +130,9 @@ export function ActivityLink({
       href={`/#${new URLSearchParams({ activite: encoded })}`}
       title={title}
       className={className}
+      onPointerEnter={() => prefetchView(to)}
+      onPointerDown={() => prefetchView(to)}
+      onFocus={() => prefetchView(to)}
       onClick={(e) => {
         if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         e.preventDefault();

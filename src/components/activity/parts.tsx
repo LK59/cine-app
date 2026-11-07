@@ -236,7 +236,10 @@ export function SeanceFlags({ s }: { s: Seance }) {
   if (s.rebuilds) flags.push({ label: t("activity.flags.rebuild", { n: s.rebuilds }), tone: "bg-warning/15 text-warning" });
   if (s.stalls) flags.push({ label: t("activity.flags.stall", { n: s.stalls }), tone: "bg-warning/15 text-warning" });
   if (s.slowSeeks) flags.push({ label: t("activity.flags.slowSeek", { n: s.slowSeeks }), tone: "bg-warning/15 text-warning" });
-  if (s.slowLinks) flags.push({ label: t("activity.flags.slowLink", { n: s.slowLinks }), tone: "bg-warning/15 text-warning" });
+  // Ce que le lecteur a géré comme prévu (07/11/2026) : en gris, jamais en couleur d'alerte.
+  if (s.slowLinks) flags.push({ label: t("activity.flags.slowLink", { n: s.slowLinks }), tone: "bg-white/5 text-muted" });
+  if (s.recovered) flags.push({ label: t("activity.flags.recovered", { n: s.recovered }), tone: "bg-white/5 text-muted" });
+  if (s.planned) flags.push({ label: t("activity.flags.planned", { n: s.planned }), tone: "bg-white/5 text-muted" });
   // Les relances du lecteur serveur : celles qui suivent une panne (échelle de repli) en ambre, les
   // gestes du spectateur (piste, « Réessayer ») en gris — l'une n'est pas l'autre (10/10/2026).
   const restarts = s.restarts ?? [];

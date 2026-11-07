@@ -143,14 +143,19 @@ interface Cached {
   lines: number;
   records: LogRecord[];
 }
-const cache = new Map<string, Cached>();
+// Sur `globalThis` (07/11/2026) : `instrumentation.ts` et les routes sont des points d'entrée
+// distincts, chacun avec sa copie du module (CLAUDE.md, server-cache) — la lecture faite au démarrage
+// (`warmActivityLogs`) n'aurait servi à aucune route.
+const cache: Map<string, Cached> = ((globalThis as Record<symbol, unknown>)[Symbol.for("cine-app.activityLogCache")] ??= new Map<string, Cached>()) as Map<string, Cached>;
 
 /**
  * Combien de générations restent en mémoire. Les journaux peuvent garder des centaines d'archives
  * (≈ 1 Go au total) ; en tenir le quart en objets dépasserait la mémoire du conteneur. Les plus
  * anciennement lues s'en vont — relire une archive coûte une lecture de 5 Mo, rien de plus.
  */
-const MAX_CACHED_GENERATIONS = 12;
+// 20 depuis le 07/11/2026 : à 12, ouvrir les journaux du banc (dix archives) chassait celles du
+// lecteur, et la vue d'ensemble suivante relisait 16 Mo — 260 ms d'attente, boucle tenue.
+const MAX_CACHED_GENERATIONS = 20;
 
 function remember(file: string, entry: Cached): void {
   // Réinsérée en fin : l'ordre d'insertion d'une Map sert d'ordre d'usage.

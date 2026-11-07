@@ -8604,3 +8604,32 @@ vide retirée, option coupée).
 
 **Ce qui diffère exprès.** Seule la recherche du cinéma l'a ; celle de la gestion non. Pas sous les puces
 Personnes, Livres, Répliques.
+
+## 136. L'Activité en tableau de bord : n'alerter que sur ce qui a vraiment gêné (07/11/2026)
+
+**La règle.** Un incident que le lecteur a traité comme prévu n'est pas un problème : il est compté
+(« gérés seuls »), jamais mis dans « À gérer », ni dans le diagnostic « fichier ou appareil », ni dans les
+problèmes d'un compte ou d'un jour. Sont gérés : une ou deux reconstructions dans une séance sans repli ni
+erreur (`recovered`, `RECOVERED_MAX`), un passage au lecteur serveur annoncé par le refus d'emblée du chemin
+natif (`planned`, `isPlannedHandoff` — « Aucun chemin de lecture disponible… », hors zone illisible), une
+bascule sur la version allégée (`slowLinks`, §77–§78) et un retour d'arrière-plan (`backgroundRebuilds`).
+Restent des problèmes : erreurs, replis non prévus, blocages, trois reconstructions ou plus, relances
+d'échelle du lecteur serveur, défauts du fichier.
+
+**Porteurs.** `buildSeances` / `finish` (`seances.ts`) classent ; `failuresOf` (`diagnosis.ts`) est la seule
+définition d'un vrai incident, `problemsOf` la reprend, `handledOf` compte le reste (`accounts.ts`).
+`dashboard.ts` (`periodStats`, `dashboard`, `describeStats`) donne les chiffres de 24 h, 7 et 30 jours, la
+courbe des heures regardées, l'heure de la journée et la recherche par description. Les séances des 31
+derniers jours ne se construisent qu'une fois tant que le journal du lecteur ne bouge pas
+(`seancesSince`, sur `globalThis` avec le cache des journaux, préparées 20 s après le démarrage).
+
+**L'écran.** `ActivityOverview` reste monté sous les autres vues (`PlayerActivityPanel`) : revenir d'une
+fiche ne reconstruit rien, la hauteur de chaque vue est gardée. `ActivityLink` précharge la fiche d'un
+compte ou d'une séance au survol et à l'appui. Les sections secondaires sont repliées (`Fold`), le
+changement d'adresse (§119) est derrière un bouton en bas de page.
+
+**Tests.** `activity-dashboard.test.ts` ; `activity-core`, `activity-alerts-cleared`,
+`activity-connexion-lente` suivent la règle.
+
+**Ce qui diffère exprès.** « Depuis le début » lit l'historique gardé par jour (`activityHistory.ts`,
+`TALLY_VERSION` inchangée) : les jours figés avant le 07/11/2026 gardent l'ancien compte des problèmes.

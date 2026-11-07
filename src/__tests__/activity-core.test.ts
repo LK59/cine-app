@@ -61,7 +61,9 @@ describe("séances", () => {
     // Le saut de 286 s a traversé un passage en arrière-plan : ce n'est pas une attente.
     expect(s.seeks).toBe(2);
     expect(s.slowSeeks).toBe(1);
-    expect(s.rebuilds).toBe(1);
+    // Une seule reconstruction, sans repli ni erreur : rattrapée (07/11/2026).
+    expect(s.rebuilds).toBe(0);
+    expect(s.recovered).toBe(1);
     expect(s.stop?.why).toBe("lost");
     expect(s.stop?.watched).toBe(120);
   });

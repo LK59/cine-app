@@ -15,11 +15,14 @@ vi.mock("@/lib/activity/accounts", () => ({
   weekSignals: () => ({}),
   recentSeances: () => [],
   household: () => ({}),
+  seancesSince: () => [],
+  lastLocalDays: () => [],
+  problemsOf: () => 0,
   accountDetail: vi.fn(async () => null),
 }));
 
 const req = (url = "https://cine.example/api/admin/activity") =>
-  ({ cookies: { get: () => ({ value: "t" }) }, nextUrl: new URL(url), json: async () => ({ action: "closeSessions" }) }) as unknown as NextRequest;
+  ({ cookies: { get: () => ({ value: "t" }) }, headers: new Headers(), nextUrl: new URL(url), json: async () => ({ action: "closeSessions" }) }) as unknown as NextRequest;
 const params = { params: Promise.resolve({ id: "abc" }) };
 
 beforeEach(() => vi.clearAllMocks());

@@ -394,7 +394,9 @@
       "tv": "sur un téléviseur",
       "chromecast": "Chromecast",
       "serverRelay": "reprise gardée par le serveur",
-      "identicalRetry": "{n} reprise identique|{n} reprises identiques"
+      "identicalRetry": "{n} reprise identique|{n} reprises identiques",
+      "recovered": "{n} reconstruction rattrapée|{n} reconstructions rattrapées",
+      "planned": "lecteur serveur prévu"
     },
     "seance": {
       "ring": {
@@ -945,6 +947,79 @@
       "offline": "hors ligne",
       "eventMarkedRead": "{title} — marqué lu",
       "eventMarkedUnread": "{title} — marqué non lu"
+    },
+    "dash": {
+      "period": {
+        "day": "24 h",
+        "week": "7 jours",
+        "month": "30 jours",
+        "all": "Tout"
+      },
+      "periodTitle": {
+        "day": "Les dernières 24 heures",
+        "week": "Les sept derniers jours",
+        "month": "Les trente derniers jours",
+        "all": "Depuis le début"
+      },
+      "kpi": {
+        "seances": "Séances",
+        "watched": "Temps regardé",
+        "clean": "Sans accroc",
+        "cleanHint": "{n} séances sur {total}",
+        "open": "Ouverture",
+        "openHint": "9 sur 10 sous {d}",
+        "waits": "Attentes",
+        "handled": "Gérés seuls",
+        "handledHint": "{n} vrai incident|{n} vrais incidents",
+        "real": "Vrais incidents"
+      },
+      "toHandle": "À gérer",
+      "nothingToHandle": "Rien à gérer.",
+      "handledLine": "Cette semaine, le lecteur a géré seul {n} cas :|Cette semaine, le lecteur a géré seul {n} cas :",
+      "handled": {
+        "recovered": "{n} reconstruction rattrapée|{n} reconstructions rattrapées",
+        "slowLinks": "{n} bascule sur la version allégée|{n} bascules sur la version allégée",
+        "planned": "{n} lecture serveur prévue|{n} lectures serveur prévues",
+        "background": "{n} retour d'arrière-plan|{n} retours d'arrière-plan"
+      },
+      "issue": {
+        "reports": "{n} signalement attend une réponse|{n} signalements attendent une réponse",
+        "failures": "{n} échec|{n} échecs",
+        "logins": "{n} connexion refusée|{n} connexions refusées",
+        "notifs": "{n} notification non remise|{n} notifications non remises",
+        "server": "{n} erreur serveur|{n} erreurs serveur"
+      },
+      "watchedPerDay": "Heures regardées, trente jours",
+      "byHour": "Heure de la journée, trente jours",
+      "people": "Qui regarde",
+      "titles": "Les plus regardés",
+      "paths": "Chemins de lecture",
+      "devices": "Appareils",
+      "path": {
+        "natif": "Lecteur de l'application",
+        "serveur": "Lecteur serveur",
+        "tv": "Télévision",
+        "horsLigne": "Hors ligne"
+      },
+      "seancesN": "{n} séance|{n} séances",
+      "realN": "{n} vrai incident|{n} vrais incidents",
+      "empty": "Rien sur cette période.",
+      "details": "Détails",
+      "diagnosisSummary": "{n} titre suivi|{n} titres suivis",
+      "devicesSummary": "{n} appareil|{n} appareils",
+      "causes": "Causes et erreurs",
+      "causesSummary": "{r} causes de reconstruction · {e} sortes d'erreurs serveur",
+      "describe": {
+        "title": "Recherche par description",
+        "summary": "{n} recherche sur sept jours|{n} recherches sur sept jours",
+        "searches": "Recherches",
+        "accounts": "{n} compte|{n} comptes",
+        "model": "Appels au modèle",
+        "median": "Délai médian",
+        "errors": "Échecs"
+      },
+      "addressShow": "Changement d'adresse",
+      "addressHide": "Masquer le changement d'adresse"
     }
   },
   "radarr": {

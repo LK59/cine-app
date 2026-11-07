@@ -394,7 +394,9 @@
       "tv": "en un televisor",
       "chromecast": "Chromecast",
       "serverRelay": "reanudación guardada por el servidor",
-      "identicalRetry": "{n} reintento idéntico|{n} reintentos idénticos"
+      "identicalRetry": "{n} reintento idéntico|{n} reintentos idénticos",
+      "recovered": "{n} reconstrucción recuperada|{n} reconstrucciones recuperadas",
+      "planned": "reproductor del servidor (previsto)"
     },
     "seance": {
       "ring": {
@@ -945,6 +947,79 @@
       "offline": "sin conexión",
       "eventMarkedRead": "{title} — marcado como leído",
       "eventMarkedUnread": "{title} — marcado como no leído"
+    },
+    "dash": {
+      "period": {
+        "day": "24 h",
+        "week": "7 días",
+        "month": "30 días",
+        "all": "Todo"
+      },
+      "periodTitle": {
+        "day": "Las últimas 24 horas",
+        "week": "Los últimos siete días",
+        "month": "Los últimos treinta días",
+        "all": "Desde el principio"
+      },
+      "kpi": {
+        "seances": "Sesiones",
+        "watched": "Tiempo visto",
+        "clean": "Sin incidencias",
+        "cleanHint": "{n} sesiones de {total}",
+        "open": "Apertura",
+        "openHint": "9 de cada 10 en menos de {d}",
+        "waits": "Esperas",
+        "handled": "Resueltos solos",
+        "handledHint": "{n} incidente real|{n} incidentes reales",
+        "real": "Incidentes reales"
+      },
+      "toHandle": "Pendiente",
+      "nothingToHandle": "Nada pendiente.",
+      "handledLine": "Esta semana, el reproductor resolvió solo {n} caso:|Esta semana, el reproductor resolvió solo {n} casos:",
+      "handled": {
+        "recovered": "{n} reconstrucción recuperada|{n} reconstrucciones recuperadas",
+        "slowLinks": "{n} cambio a la versión ligera|{n} cambios a la versión ligera",
+        "planned": "{n} reproducción prevista en el servidor|{n} reproducciones previstas en el servidor",
+        "background": "{n} vuelta del segundo plano|{n} vueltas del segundo plano"
+      },
+      "issue": {
+        "reports": "{n} informe espera respuesta|{n} informes esperan respuesta",
+        "failures": "{n} fallo|{n} fallos",
+        "logins": "{n} inicio de sesión rechazado|{n} inicios de sesión rechazados",
+        "notifs": "{n} notificación no entregada|{n} notificaciones no entregadas",
+        "server": "{n} error del servidor|{n} errores del servidor"
+      },
+      "watchedPerDay": "Horas vistas, treinta días",
+      "byHour": "Hora del día, treinta días",
+      "people": "Quién ve",
+      "titles": "Lo más visto",
+      "paths": "Vías de reproducción",
+      "devices": "Dispositivos",
+      "path": {
+        "natif": "Reproductor de la aplicación",
+        "serveur": "Reproductor del servidor",
+        "tv": "Televisión",
+        "horsLigne": "Sin conexión"
+      },
+      "seancesN": "{n} sesión|{n} sesiones",
+      "realN": "{n} incidente real|{n} incidentes reales",
+      "empty": "Nada en este periodo.",
+      "details": "Detalles",
+      "diagnosisSummary": "{n} título seguido|{n} títulos seguidos",
+      "devicesSummary": "{n} dispositivo|{n} dispositivos",
+      "causes": "Causas y errores",
+      "causesSummary": "{r} causas de reconstrucción · {e} tipos de errores del servidor",
+      "describe": {
+        "title": "Búsqueda por descripción",
+        "summary": "{n} búsqueda en siete días|{n} búsquedas en siete días",
+        "searches": "Búsquedas",
+        "accounts": "{n} cuenta|{n} cuentas",
+        "model": "Llamadas al modelo",
+        "median": "Tiempo mediano",
+        "errors": "Fallos"
+      },
+      "addressShow": "Cambio de dirección",
+      "addressHide": "Ocultar el cambio de dirección"
     }
   },
   "radarr": {
