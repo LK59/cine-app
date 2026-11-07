@@ -307,7 +307,7 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
    * même journée ». Seulement si l'installation l'a allumée (`available`), sous « Tout », « Films »
    * ou « Séries », et pour une frappe qui décrit (`looksLikeDescription`) — un titre tapé en entier
    * n'appelle pas le modèle. Ses titres comptent dans les puces — « Tout 0 » au-dessus d'Interstellar
-   * trouvé (07/11/2026). Sa rangée passe au-dessus de la grille (`DescribedResults`), sans ce que
+   * trouvé (07/11/2026). Sa section passe au-dessus de la grille, dans la même grille (`DescribedResults`), sans ce que
    * la grille montre déjà en tête : un titre que la recherche ordinaire a trouvé n'est pas répété.
    */
   const { data: describeState } = useSWR<DescribeResponse>("/api/search/describe", fetcher, { revalidateOnFocus: false });

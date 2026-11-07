@@ -15,14 +15,13 @@ export interface DescribedEntry {
 }
 
 /**
- * Les titres trouvés d'après une description (`describeSearch.ts`), en une rangée au-dessus de la
- * grille de recherche.
+ * Les titres trouvés d'après une description (`describeSearch.ts`), au-dessus de la grille de
+ * recherche, dans **la même grille** qu'elle — mêmes colonnes, même carte.
  *
- * Une rangée à part, et sur **une seule ligne** qui défile de côté : elle arrive une seconde après
- * la grille, et une grille où des cartes s'insèrent en tête ferait sauter ce qu'on s'apprêtait à
- * toucher. La rangée prend sa place dès que la frappe est une description — squelettes de la taille
- * des cartes, colonnes de la grille —, si bien que ses résultats remplacent les squelettes sans
- * rien pousser. Elle ne disparaît que si la description n'a rien donné de neuf.
+ * Une rangée qui défilait de côté a été essayée le 07/11/2026 et retirée le jour même : sur iPhone,
+ * des affiches de tailles différentes, et sept séries trouvées dont trois seulement à l'écran sous
+ * une puce « Tout 7 ». Tout ce qui est compté se voit. Pendant l'attente, une ligne de squelettes de
+ * la taille des cartes tient la place.
  *
  * Rien d'autre que des cartes : ni phrase du modèle, ni explication. Après trois secondes, une
  * ligne dit qu'il faut encore un instant (`SlowHint`).
@@ -41,17 +40,16 @@ export function DescribedResults({
 }) {
   const t = useT();
   if (!loading && entries.length === 0) return null;
-  const width = "w-[calc((100%-1.5rem)/3)] shrink-0 sm:w-[calc((100%-2.25rem)/4)] md:w-[calc((100%-3rem)/5)] lg:w-[calc((100%-3.75rem)/6)]";
   return (
     <section className="mt-6" aria-busy={loading}>
       <div className="mb-3 flex items-baseline gap-3">
         <h2 className="text-sm font-semibold text-white">{t("player.search.describe.title")}</h2>
         {loading && <SlowHint key={waitKey} />}
       </div>
-      <div className="scrollbar-none -mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+      <div className="player-grid grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 player-grid-fluid">
         {loading
           ? [0, 1, 2].map((i) => (
-              <div key={i} aria-hidden className={width}>
+              <div key={i} aria-hidden>
                 <div className="skeleton aspect-[2/3] rounded-lg" />
                 <div className="mt-2 min-h-[2.75em] text-[13px] leading-snug">
                   <div className="skeleton h-3 w-4/5 rounded" />
@@ -60,7 +58,7 @@ export function DescribedResults({
               </div>
             ))
           : entries.map((entry) => (
-              <div key={entry.key} className={`${width} animate-fade-in`}>
+              <div key={entry.key} className="animate-fade-in">
                 <PlayerResultCard
                   kind={entry.kind}
                   title={entry.title}

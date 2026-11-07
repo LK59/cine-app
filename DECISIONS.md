@@ -8581,11 +8581,13 @@ souvenirs flous, détails faux, fautes, demandes larges), trois prompts. Tous tr
 nettes ; celui retenu ne rend que le bon titre quand la description en désigne un. 46/48 sur les cas
 durs, ~0,9 s médian, ~1,3 s au 90e centile, moins d'un dixième de centime par phrase.
 
-**Écran.** Une rangée à part au-dessus de la grille, sur une ligne qui défile de côté
-(`DescribedResults`) : squelettes aux colonnes de la grille pendant l'attente, « Encore un instant… »
-passé 3 s, puis les cartes à leur place — rien ne pousse la grille. Ce que la grille montre déjà dans
-ses six premières cartes n'y est pas répété ; vide, la rangée s'en va. Un échec ne se dit pas : la
-recherche ordinaire est là. Pas de « Rien trouvé » tant que la description est en route.
+**Écran.** Une section à part au-dessus de la grille, dans la même grille qu'elle (`DescribedResults`) :
+une ligne de squelettes à la taille des cartes pendant l'attente, « Encore un instant… » passé 3 s, puis
+les cartes. Une rangée qui défilait de côté a été retirée le jour même : affiches de tailles inégales sur
+iPhone, et « Tout 7 » au-dessus de trois cartes visibles. Ce que la grille montre déjà dans ses six
+premières cartes n'y est pas répété ; vide, la section s'en va. Les titres trouvés comptent dans les
+puces. Un échec ne se dit pas : la recherche ordinaire est là. Pas de « Rien trouvé » tant que la
+description est en route.
 
 **Porteurs.** `src/lib/describeSearch.ts` (appel, lecture défiante `parseDescribed`, `pickTmdbMatch`,
 `findOnTmdb`, cache disque une semaine par phrase normalisée, TMDB un jour par langue) ;
