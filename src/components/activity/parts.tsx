@@ -44,7 +44,10 @@ export function hours(seconds: number | null | undefined): string {
 /** 1 293 ms → « 1,3 s ». */
 export function secs(ms: number | null | undefined): string {
   if (ms == null) return "—";
-  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
+  // Dans la langue de l'écran : « 2,7 s » en français, « 2.7 s » en anglais (07/11/2026).
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  const digits = ms < 10_000 ? 1 : 0;
+  return `${(ms / 1000).toLocaleString(uiLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits })} s`;
 }
 
 /** 3 723 s → « 1:02:03 ». */

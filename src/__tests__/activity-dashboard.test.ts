@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { buildSeances, isPlannedHandoff } from "@/lib/activity/seances";
 import { failuresOf } from "@/lib/activity/diagnosis";
-import { isAlarmingServerLine, periodStats } from "@/lib/activity/dashboard";
+import { isAlarmingServerLine, pathOf, periodStats } from "@/lib/activity/dashboard";
+import { pathOfPlay } from "@/lib/activity/accounts";
 import type { LogRecord } from "@/lib/activity/logReader";
 
 // Le tableau de bord de l'Activité (07/11/2026) : n'est mis en avant que ce qui a vraiment gêné. Une
@@ -92,5 +93,31 @@ describe("les chiffres d'une période", () => {
     expect(s.watchedSeconds).toBe(3600);
     expect(s.openMedianMs).toBe(2000);
     expect(s.titles[0]).toMatchObject({ title: "Ted Lasso", episode: true, seances: 3 });
+  });
+});
+
+describe("ce que le tableau de bord ajoute (07/11/2026)", () => {
+  it("sépare les ouvertures depuis l'appareil de celles du réseau, et garde le débit de chacun", () => {
+    const seances = buildSeances([
+      rec("a1", 1000, { kind: "start", openedInMs: 200, openedFrom: "appareil" }),
+      rec("a1", 1500, { kind: "stop", why: "close", watched: 60, "diag.linkMbps": 4, "diag.needMbps": 8 }),
+      rec("a2", 2000, { kind: "start", openedInMs: 1200, openedFrom: "réseau" }),
+      rec("a2", 2500, { kind: "stop", why: "close", watched: 60, "diag.linkMbps": 6, "diag.needMbps": 8 }),
+    ]);
+    const s = periodStats(seances);
+    expect(s.openDeviceMs).toBe(200);
+    expect(s.openNetworkMs).toBe(1200);
+    expect(s.people[0]).toMatchObject({ user: "lucas", linkMbps: 6, needMbps: 8 });
+  });
+
+  it("retrouve le chemin d'une lecture en cours dans sa séance", () => {
+    const [s] = buildSeances([
+      rec("t", 1000, { kind: "fallback", reason: "diffusion demandée", cast: true }),
+      rec("t", 2000, { kind: "cast", player: "serveur" }),
+    ]);
+    expect(pathOf(s)).toBe("tv");
+    const play = { itemId: "a", title: "x", positionSeconds: 1, runtimeSeconds: 2, paused: false, device: null, client: "Laterna", method: null };
+    expect(pathOfPlay([s], play)).toBe("tv");
+    expect(pathOfPlay([s], { ...play, itemId: "autre" })).toBeNull();
   });
 });

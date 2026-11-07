@@ -8645,3 +8645,13 @@ touchés. « Réafficher » est retiré. Chaque ligne de « À gérer » s'effac
 **L'historique.** « Tout » garde le temps par compte jour par jour (`byUser`, `TALLY_VERSION` 2) ; la
 fiche d'un compte lit tous les journaux (`ACCOUNT_HISTORY_DAYS = null`, c'était 90 jours). Le journal
 du lecteur garde 120 archives de 5 Mo (deux mois en remplissaient quatre à l'automne 2026).
+
+**Ajouts du 07/11/2026 (10.17.0).** Chaque chiffre clé dit son écart avec la période d'avant
+(`previous`, fenêtre de séances portée à 61 jours) ; la courbe des heures porte un trait par version
+apparue (`releasesSince`, d'après le `version` des lignes du lecteur). L'ouverture se lit par origine
+(`openDeviceMs` / `openNetworkMs`, d'après `openedFrom`), et « Qui regarde » donne le débit habituel de
+chacun (`linkMbps` / `needMbps` du bilan), en ambre seulement sous celui de ses fichiers. Toucher une
+barre, une heure, un appareil, un titre, un chemin ou un compte filtre le fil des séances
+(`/api/admin/activity/feed`, `feedOf`). « En direct » dit le client — Laterna et son chemin
+(`pathOfPlay`), ou l'autre client que Jellyfin voit — au lieu du « DirectPlay » de Jellyfin. Les comptes
+sans activité de la semaine sont repliés.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import {
   Activity,
@@ -39,10 +39,13 @@ import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
-import { AlertChip, Avatar, ConfirmButton, Panel, Poster, PresenceBadge, Progress, SeanceRow, Tile, ago, clock, hours, latest, reasonLabel, secs, type T } from "@/components/activity/parts";
+import { AlertChip, Avatar, ConfirmButton, Panel, Poster, PresenceBadge, Progress, SeanceRow, Tile, ago, clock, hours, latest, reasonLabel, secs, uiLocale, type T } from "@/components/activity/parts";
 import { Bars, Fold, Kpi, PATH_COLORS, RankList, Segmented, StackBar, TitleRank, shortDay } from "@/components/activity/DashboardParts";
 import type { AccountSummary, WeekSignals, household } from "@/lib/activity/accounts";
-import type { Dashboard, PeriodStats } from "@/lib/activity/dashboard";
+import type { Dashboard, FeedFilter, PeriodStats, PeriodTotals } from "@/lib/activity/dashboard";
+import { isOwnAppName, isPlaybackClient } from "@/lib/playbackClients";
+import { APP_NAME } from "@/lib/appBuild";
+import { scrollBehavior } from "@/lib/reducedMotion";
 import type { ReportSummary } from "@/lib/reports";
 import { NOTIFICATION_CATEGORIES } from "@/lib/notifications";
 import { ReportRowView } from "@/components/reports/ReportParts";
@@ -156,7 +159,17 @@ function alertLabel(a: AccountSummary["alerts"][number], t: T, now: number): str
   return t("activity.alerts.clientErrors", { n: a.count ?? 0 });
 }
 
-/** Ceux qui regardent en ce moment : l'affiche, où ils en sont, sur quoi, par quel chemin. */
+/** Le nom du client d'une lecture : Laterna, sous tous ses noms (`playbackClients.ts`), ou celui de l'autre client. */
+function clientLabel(client: string | null): { laterna: boolean; label: string | null } {
+  if (isPlaybackClient(client) || isOwnAppName(client)) return { laterna: true, label: APP_NAME };
+  return { laterna: false, label: client };
+}
+
+/**
+ * Ceux qui regardent en ce moment : l'affiche, où ils en sont, sur quoi, **par quoi** — Laterna et son
+ * chemin (application, serveur, télévision, hors ligne), ou l'autre client que Jellyfin voit (Jellyfin
+ * Web, Infuse…). Le « DirectPlay » que Jellyfin donne pour Laterna ne disait rien : il le voit toujours.
+ */
 function LiveCard({ a, now }: { a: AccountSummary; now: number }) {
   const t = useT();
   const playing = a.nowPlaying;
@@ -174,20 +187,29 @@ function LiveCard({ a, now }: { a: AccountSummary; now: number }) {
         </span>
         {playing ? (
           // Chaque lecture du compte, une par appareil : la première seule cachait les autres.
-          [playing, ...(a.alsoPlaying ?? [])].map((p, i) => (
-            <span key={i} className={`block ${i > 0 ? "mt-2 border-t border-white/5 pt-2" : ""}`}>
-              <span className="mt-1 block truncate text-sm text-white">{p.title}</span>
-              <Progress position={p.positionSeconds} runtime={p.runtimeSeconds} />
-              <span className="mt-1 flex flex-wrap gap-x-2 text-xs text-subtle">
-                <span className="tabular-nums">
-                  {clock(p.positionSeconds)} / {clock(p.runtimeSeconds)}
+          [playing, ...(a.alsoPlaying ?? [])].map((p, i) => {
+            const c = clientLabel(p.client);
+            return (
+              <span key={i} className={`block ${i > 0 ? "mt-2 border-t border-white/5 pt-2" : ""}`}>
+                <span className="mt-1 block truncate text-sm text-white">{p.title}</span>
+                <Progress position={p.positionSeconds} runtime={p.runtimeSeconds} />
+                <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-subtle">
+                  <span className="tabular-nums">
+                    {clock(p.positionSeconds)} / {clock(p.runtimeSeconds)}
+                  </span>
+                  {p.paused && <span className="text-warning">{t("activity.live.paused")}</span>}
+                  {c.label && (
+                    <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${c.laterna ? "bg-white/10 text-white" : "bg-sky-500/15 text-sky-300"}`}>
+                      {c.label}
+                      {c.laterna && p.path ? ` · ${t(`activity.dash.path.${p.path}`)}` : ""}
+                    </span>
+                  )}
+                  {p.device && <span>{p.device}</span>}
+                  {!c.laterna && p.method && <span>{p.method}</span>}
                 </span>
-                {p.paused && <span className="text-warning">{t("activity.live.paused")}</span>}
-                {p.device && <span>{p.device}</span>}
-                {p.method && <span>{p.method}</span>}
               </span>
-            </span>
-          ))
+            );
+          })
         ) : pingTitle ? (
           <span className="mt-1 block truncate text-sm text-white">{pingTitle}</span>
         ) : (
@@ -365,8 +387,34 @@ function pct(part: number, total: number): string {
   return total ? `${Math.round((part / total) * 100)} %` : "—";
 }
 
-/** Les chiffres clés de la période. « Tout » vient de l'historique gardé (`/api/admin/activity/period`). */
-function KpiRow({ stats, all }: { stats: PeriodStats | null; all: WeekSignals | null }) {
+/**
+ * L'écart avec la période d'avant, dit court : « +12 », « +4 pts », « −0,3 s ». `better` : quand la
+ * hausse est bonne (`true`), mauvaise (`false`), ou ni l'un ni l'autre (`null`, le volume).
+ */
+function deltaOf(now: number | null, before: number | null, kind: "count" | "points" | "ms" | "hours", better: boolean | null): { text: string; good: boolean | null } | null {
+  if (now === null || before === null) return null;
+  const diff = now - before;
+  const sign = diff > 0 ? "+" : diff < 0 ? "−" : "±";
+  const abs = Math.abs(diff);
+  let text: string;
+  if (kind === "points") {
+    if (Math.round(abs) === 0) return null;
+    text = `${sign}${Math.round(abs)} pts`;
+  } else if (kind === "ms") {
+    if (abs < 50) return null;
+    text = `${sign}${secs(abs)}`;
+  } else if (kind === "hours") {
+    if (abs < 60) return null;
+    text = `${sign}${hours(abs)}`;
+  } else {
+    if (abs === 0) return null;
+    text = `${sign}${abs}`;
+  }
+  return { text, good: better === null ? null : diff > 0 === better };
+}
+
+/** Les chiffres clés de la période, et leur écart avec la période d'avant. « Tout » vient de l'historique gardé. */
+function KpiRow({ stats, prev, all }: { stats: PeriodStats | null; prev: PeriodTotals | null; all: WeekSignals | null }) {
   const t = useT();
   if (!stats) {
     if (!all) return <div className="h-28 animate-pulse rounded-2xl bg-white/[0.03]" />;
@@ -381,30 +429,60 @@ function KpiRow({ stats, all }: { stats: PeriodStats | null; all: WeekSignals | 
     );
   }
   const cleanShare = stats.seances ? stats.clean / stats.seances : 1;
+  const prevShare = prev && prev.seances ? prev.clean / prev.seances : null;
   const handled = handledSum(stats.handled);
+  const openSplit =
+    stats.openDeviceMs !== null && stats.openNetworkMs !== null
+      ? t("activity.dash.kpi.openSplit", { device: secs(stats.openDeviceMs), network: secs(stats.openNetworkMs) })
+      : stats.openP90Ms !== null
+        ? t("activity.dash.kpi.openHint", { d: secs(stats.openP90Ms) })
+        : undefined;
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-      <Kpi icon={Clapperboard} label={t("activity.dash.kpi.seances")} value={stats.seances} hint={t("activity.week.viewers", { n: stats.viewers })} />
-      <Kpi icon={Clock} label={t("activity.dash.kpi.watched")} value={hours(stats.watchedSeconds)} />
+      <Kpi icon={Clapperboard} label={t("activity.dash.kpi.seances")} value={stats.seances} hint={t("activity.week.viewers", { n: stats.viewers })} delta={deltaOf(stats.seances, prev?.seances ?? null, "count", null)} />
+      <Kpi icon={Clock} label={t("activity.dash.kpi.watched")} value={hours(stats.watchedSeconds)} delta={deltaOf(stats.watchedSeconds, prev?.watchedSeconds ?? null, "hours", null)} />
       <Kpi
         icon={CheckCircle2}
         label={t("activity.dash.kpi.clean")}
         value={pct(stats.clean, stats.seances)}
         hint={t("activity.dash.kpi.cleanHint", { n: stats.clean, total: stats.seances })}
+        delta={stats.seances ? deltaOf(cleanShare * 100, prevShare === null ? null : prevShare * 100, "points", true) : null}
         // Vert dès 90 %, neutre au-dessus de 75 %, ambre en dessous — jamais rouge : une séance gênée
         // n'est pas une panne de l'application (le détail est dans « À gérer »).
         tone={!stats.seances ? "default" : cleanShare >= 0.9 ? "good" : cleanShare >= 0.75 ? "default" : "warn"}
       />
-      <Kpi icon={Gauge} label={t("activity.dash.kpi.open")} value={stats.openMedianMs !== null ? secs(stats.openMedianMs) : "—"} hint={stats.openP90Ms !== null ? t("activity.dash.kpi.openHint", { d: secs(stats.openP90Ms) }) : undefined} />
-      <Kpi icon={Hourglass} label={t("activity.dash.kpi.waits")} value={stats.waits} hint={t("activity.week.waitsHint", { d: secs(stats.waitedMs) })} />
+      <Kpi
+        icon={Gauge}
+        label={t("activity.dash.kpi.open")}
+        value={stats.openMedianMs !== null ? secs(stats.openMedianMs) : "—"}
+        hint={openSplit}
+        delta={deltaOf(stats.openMedianMs, prev?.openMedianMs ?? null, "ms", false)}
+      />
+      <Kpi icon={Hourglass} label={t("activity.dash.kpi.waits")} value={stats.waits} hint={t("activity.week.waitsHint", { d: secs(stats.waitedMs) })} delta={deltaOf(stats.waits, prev?.waits ?? null, "count", false)} />
       <Kpi icon={ShieldCheck} label={t("activity.dash.kpi.handled")} value={handled} hint={t("activity.dash.kpi.handledHint", { n: stats.real })} />
     </div>
   );
 }
 
-function PeriodBreakdowns({ stats, accounts }: { stats: PeriodStats; accounts: AccountSummary[] }) {
+/** Ce qu'on a touché sur le tableau de bord, et qui filtre le fil des séances. */
+type Filter =
+  | { kind: "day"; value: string }
+  | { kind: "hour"; value: number }
+  | { kind: "device"; value: string }
+  | { kind: "title"; value: string }
+  | { kind: "path"; value: NonNullable<FeedFilter["path"]> }
+  | { kind: "user"; value: string };
+
+function PeriodBreakdowns({
+  stats,
+  filter,
+  onFilter,
+}: {
+  stats: PeriodStats;
+  filter: Filter | null;
+  onFilter: (f: Filter | null) => void;
+}) {
   const t = useT();
-  const idOf = new Map(accounts.map((a) => [a.name.toLowerCase(), a.id]));
   const paths = [
     { key: "natif", label: t("activity.dash.path.natif"), value: stats.paths.natif, color: PATH_COLORS.natif },
     { key: "serveur", label: t("activity.dash.path.serveur"), value: stats.paths.serveur, color: PATH_COLORS.serveur },
@@ -412,31 +490,46 @@ function PeriodBreakdowns({ stats, accounts }: { stats: PeriodStats; accounts: A
     { key: "horsLigne", label: t("activity.dash.path.horsLigne"), value: stats.paths.horsLigne, color: PATH_COLORS.horsLigne },
   ];
   const empty = t("activity.dash.empty");
+  const is = (kind: Filter["kind"], value: string) => filter?.kind === kind && filter.value === value;
+  const toggle = (f: Filter) => onFilter(filter?.kind === f.kind && filter.value === f.value ? null : f);
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <Panel title={t("activity.dash.people")} icon={Users}>
         <RankList
           empty={empty}
           rows={stats.people.map((p) => {
-            const id = idOf.get(p.user.toLowerCase());
+            // Le débit habituel de quelqu'un : en ambre seulement quand il n'atteint pas celui de ses fichiers.
+            const weak = p.linkMbps !== null && p.needMbps !== null && p.linkMbps < p.needMbps;
+            const link = p.linkMbps !== null ? t("activity.dash.linkMbps", { n: mbps(p.linkMbps) }) : null;
             return {
               key: p.user,
               label: p.user,
               value: p.watchedSeconds || p.seances,
               valueLabel: hours(p.watchedSeconds),
-              note: t("activity.dash.seancesN", { n: p.seances }),
+              note: (
+                <>
+                  {t("activity.dash.seancesN", { n: p.seances })}
+                  {link && <span className={weak ? "text-warning" : ""}> · {link}{weak ? ` · ${t("activity.dash.linkWeak")}` : ""}</span>}
+                </>
+              ),
               leading: <Avatar name={p.user} size={28} />,
-              onOpen: id ? () => goTo({ kind: "account", id }) : undefined,
+              selected: is("user", p.user),
+              onOpen: () => toggle({ kind: "user", value: p.user }),
             };
           })}
         />
       </Panel>
       <Panel title={t("activity.dash.titles")} icon={Clapperboard}>
-        <TitleRank titles={stats.titles} empty={empty} />
+        <TitleRank titles={stats.titles} empty={empty} selected={filter?.kind === "title" ? filter.value : null} onSelect={(title) => onFilter(title ? { kind: "title", value: title } : null)} />
       </Panel>
       <Panel title={t("activity.dash.paths")} icon={Route}>
         <div className="p-4">
-          <StackBar parts={paths} empty={empty} />
+          <StackBar
+            parts={paths}
+            empty={empty}
+            selected={filter?.kind === "path" ? filter.value : null}
+            onSelect={(key) => onFilter(key ? { kind: "path", value: key as NonNullable<FeedFilter["path"]> } : null)}
+          />
         </div>
       </Panel>
       <Panel title={t("activity.dash.devices")} icon={MonitorSmartphone}>
@@ -448,6 +541,8 @@ function PeriodBreakdowns({ stats, accounts }: { stats: PeriodStats; accounts: A
             value: d.seances,
             valueLabel: t("activity.dash.seancesN", { n: d.seances }),
             note: d.real ? <span className="text-warning">{t("activity.dash.realN", { n: d.real })}</span> : hours(d.watchedSeconds),
+            selected: is("device", d.label),
+            onOpen: () => toggle({ kind: "device", value: d.label }),
           }))}
         />
       </Panel>
@@ -455,35 +550,164 @@ function PeriodBreakdowns({ stats, accounts }: { stats: PeriodStats; accounts: A
   );
 }
 
-function Charts({ dash }: { dash: Dashboard }) {
+function mbps(n: number): string {
+  return n.toLocaleString(uiLocale(), { maximumFractionDigits: n < 10 ? 1 : 0 });
+}
+
+function Charts({ dash, filter, onFilter }: { dash: Dashboard; filter: Filter | null; onFilter: (f: Filter | null) => void }) {
   const t = useT();
-  const perDay = dash.series.map((d, i) => ({
-    key: d.day,
-    // Une étiquette sur cinq, la plus récente comprise : trente dates se chevauchaient.
-    label: (dash.series.length - 1 - i) % 5 === 0 ? String(new Date(d.day + "T12:00:00").getDate()) : "",
-    detail: `${shortDay(d.day)} · ${hours(d.watchedSeconds)} · ${t("activity.dash.seancesN", { n: d.seances })}${d.real ? ` · ${t("activity.dash.realN", { n: d.real })}` : ""}`,
-    value: d.watchedSeconds,
-    flagged: d.real > 0,
-  }));
-  const byHour = dash.hours.map((s, h) => ({
+  // Les versions du jour, réunies : deux déploiements le même jour font un seul trait.
+  const releases = new Map<string, string[]>();
+  for (const r of dash.releases ?? []) releases.set(r.day, [...(releases.get(r.day) ?? []), r.version]);
+  const perDay = dash.series.map((d, i) => {
+    const versions = releases.get(d.day);
+    return {
+      key: d.day,
+      // Une étiquette sur cinq, la plus récente comprise : trente dates se chevauchaient.
+      label: (dash.series.length - 1 - i) % 5 === 0 ? String(new Date(d.day + "T12:00:00").getDate()) : "",
+      detail: `${shortDay(d.day)} · ${hours(d.watchedSeconds)} · ${t("activity.dash.seancesN", { n: d.seances })}${d.real ? ` · ${t("activity.dash.realN", { n: d.real })}` : ""}${versions ? ` · ${t("activity.dash.release", { v: versions.join(", ") })}` : ""}`,
+      value: d.watchedSeconds,
+      flagged: d.real > 0,
+      mark: versions?.join(", "),
+    };
+  });
+  const byHour = dash.hours.map((sec, h) => ({
     key: String(h),
     label: h % 3 === 0 ? String(h) : "",
-    detail: `${h} h – ${h + 1} h · ${hours(s)}`,
-    value: s,
+    detail: `${h} h – ${h + 1} h · ${hours(sec)}`,
+    value: sec,
   }));
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
       <Panel title={t("activity.dash.watchedPerDay")} icon={Activity} className="lg:col-span-3">
         <div className="p-4">
-          <Bars points={perDay} empty={t("activity.dash.empty")} />
+          <Bars
+            points={perDay}
+            empty={t("activity.dash.empty")}
+            selected={filter?.kind === "day" ? filter.value : null}
+            onSelect={(day) => onFilter(day ? { kind: "day", value: day } : null)}
+          />
+          {(dash.releases?.length ?? 0) > 0 && (
+            <p className="mt-3 flex items-center gap-1.5 text-[11px] text-subtle">
+              <span className="inline-block h-3 w-px bg-white/30" aria-hidden />
+              {t("activity.dash.releaseLegend")}
+            </p>
+          )}
         </div>
       </Panel>
       <Panel title={t("activity.dash.byHour")} icon={CalendarClock} className="lg:col-span-2">
         <div className="p-4">
-          <Bars points={byHour} empty={t("activity.dash.empty")} />
+          <Bars
+            points={byHour}
+            empty={t("activity.dash.empty")}
+            selected={filter?.kind === "hour" ? String(filter.value) : null}
+            onSelect={(h) => onFilter(h === null ? null : { kind: "hour", value: Number(h) })}
+          />
         </div>
       </Panel>
     </div>
+  );
+}
+
+/** Le filtre en mots, pour l'étiquette au-dessus du fil. */
+function filterLabel(f: Filter, t: T): string {
+  switch (f.kind) {
+    case "day":
+      return shortDay(f.value);
+    case "hour":
+      return `${f.value} h – ${f.value + 1} h`;
+    case "path":
+      return t(`activity.dash.path.${f.value}`);
+    default:
+      return f.value;
+  }
+}
+
+/**
+ * Le fil des séances : les dernières, ou celles de ce qu'on a touché sur le tableau de bord. Le filtre
+ * se lit dans une pastille qu'on ferme ; un compte filtré mène aussi à sa fiche.
+ */
+function Feed({
+  recent,
+  now,
+  filter,
+  period,
+  accounts,
+  onFilter,
+  anchor,
+}: {
+  recent: Seance[];
+  now: number;
+  filter: Filter | null;
+  period: "day" | "week" | "month";
+  accounts: AccountSummary[];
+  onFilter: (f: Filter | null) => void;
+  anchor: React.RefObject<HTMLDivElement | null>;
+}) {
+  const t = useT();
+  const params = new URLSearchParams({ period });
+  if (filter) params.set(filter.kind, String(filter.value));
+  const { data, isLoading } = useSWR<{ seances: Seance[] }>(filter ? `/api/admin/activity/feed?${params}` : null, fetcher, { keepPreviousData: true });
+  const list = filter ? (data?.seances ?? []) : recent;
+  const userId = filter?.kind === "user" ? accounts.find((a) => a.name.toLowerCase() === filter.value.toLowerCase())?.id : undefined;
+  return (
+    <div ref={anchor} className="scroll-mt-4">
+      <Panel
+        title={t("activity.recent.title")}
+        icon={Clapperboard}
+        action={
+          <ActivityLink to={{ kind: "logs", preset: {} }} className="text-xs text-accent-400 hover:underline">
+            {t("activity.logs.open")}
+          </ActivityLink>
+        }
+      >
+        {filter && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-white/5 px-4 py-2.5">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 py-1 pl-3 pr-1 text-xs text-white">
+              {filterLabel(filter, t)}
+              <button type="button" onClick={() => onFilter(null)} aria-label={t("activity.dash.clearFilter")} className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-white/15">
+                <X size={12} />
+              </button>
+            </span>
+            <span className="text-xs text-subtle">{isLoading && !data ? "…" : t("activity.dash.seancesN", { n: list.length })}</span>
+            {userId && (
+              <ActivityLink to={{ kind: "account", id: userId }} className="ml-auto text-xs text-accent-400 hover:underline">
+                {t("activity.dash.openAccount")}
+              </ActivityLink>
+            )}
+          </div>
+        )}
+        <div className={`divide-y divide-white/5 transition-opacity ${filter && isLoading ? "opacity-60" : ""}`}>
+          {list.map((seance) => (
+            <SeanceRow key={seance.id} s={seance} now={now} showUser />
+          ))}
+          {filter && !isLoading && list.length === 0 && <p className="px-4 py-6 text-sm text-subtle">{t("activity.dash.empty")}</p>}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+/** Les comptes : ceux qui ont regardé cette semaine, ou sont là ; les autres repliés en une ligne. */
+function Accounts({ accounts, now }: { accounts: AccountSummary[]; now: number }) {
+  const t = useT();
+  const [showAll, setShowAll] = useState(false);
+  const active = accounts.filter((a) => a.week.seances > 0 || a.nowPlaying || a.presence.state !== "away" || a.alerts.length > 0);
+  const quiet = accounts.length - active.length;
+  const shown = showAll ? accounts : active;
+  return (
+    <Panel title={t("activity.accounts.title", { n: accounts.length })} icon={Users}>
+      <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
+        {shown.map((a) => (
+          <AccountCard key={a.id} a={a} now={now} />
+        ))}
+      </div>
+      {quiet > 0 && (
+        <button type="button" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll} className="w-full border-t border-white/5 px-4 py-2.5 text-left text-xs text-accent-400 hover:underline">
+          {showAll ? t("activity.dash.hideQuiet") : t("activity.dash.showQuiet", { n: quiet })}
+        </button>
+      )}
+    </Panel>
   );
 }
 
@@ -713,6 +937,13 @@ export function ActivityOverview({ active = true }: { active?: boolean }) {
   const t = useT();
   const { data, isLoading, mutate } = useSWR<Overview>("/api/admin/activity", fetcher, { refreshInterval: active ? LIVE_REFRESH_MS : 0 });
   const [period, setPeriod] = useState<PeriodKey>("week");
+  const [filter, setFilterState] = useState<Filter | null>(null);
+  const feedAnchor = useRef<HTMLDivElement>(null);
+  // Choisir un filtre amène le fil sous les yeux ; le relâcher ne fait pas bouger la page.
+  const setFilter = (f: Filter | null) => {
+    setFilterState(f);
+    if (f) requestAnimationFrame(() => feedAnchor.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" }));
+  };
   const { data: all } = useSWR<WeekSignals>(period === "all" ? "/api/admin/activity/period?period=all" : null, fetcher, { refreshInterval: active ? 60_000 : 0 });
 
   if (isLoading && !data) return <Skeleton />;
@@ -729,9 +960,11 @@ export function ActivityOverview({ active = true }: { active?: boolean }) {
   // chemins, appareils) n'y sont pas gardées et suivent les trente derniers jours.
   const breakdown = dash
     ? period === "all"
-      ? { ...dash.periods.month, people: all?.people ?? dash.periods.month.people }
+      ? { ...dash.periods.month, people: (all?.people ?? []).map((p) => ({ ...p, linkMbps: null, needMbps: null })) }
       : dash.periods[period]
     : null;
+  const prev = dash?.previous && period !== "all" ? dash.previous[period] : null;
+  const feedPeriod = period === "all" ? "month" : period;
 
   return (
     <div className="space-y-6">
@@ -791,41 +1024,21 @@ export function ActivityOverview({ active = true }: { active?: boolean }) {
             ]}
           />
         </div>
-        <KpiRow stats={stats} all={period === "all" ? (all ?? null) : null} />
+        <KpiRow stats={stats} prev={prev} all={period === "all" ? (all ?? null) : null} />
       </div>
 
       {/* 3. Ce qui demande vraiment une main. */}
       <ToHandle data={data} week={dash?.periods.week ?? null} now={now} />
 
       {/* 4. Les courbes, puis les répartitions de la période. */}
-      {dash && <Charts dash={dash} />}
-      {breakdown && <PeriodBreakdowns stats={breakdown} accounts={accounts} />}
+      {dash && <Charts dash={dash} filter={filter} onFilter={setFilter} />}
+      {breakdown && <PeriodBreakdowns stats={breakdown} filter={filter} onFilter={setFilter} />}
 
-      {/* 5. Les comptes. */}
-      <Panel title={t("activity.accounts.title", { n: accounts.length })} icon={Users}>
-        <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
-          {accounts.map((a) => (
-            <AccountCard key={a.id} a={a} now={now} />
-          ))}
-        </div>
-      </Panel>
+      {/* 5. Le fil des séances, filtré par ce qu'on a touché plus haut. */}
+      <Feed recent={recent} now={now} filter={filter} period={feedPeriod} accounts={accounts} onFilter={setFilter} anchor={feedAnchor} />
 
-      {/* 6. Le fil des séances. */}
-      <Panel
-        title={t("activity.recent.title")}
-        icon={Clapperboard}
-        action={
-          <ActivityLink to={{ kind: "logs", preset: {} }} className="text-xs text-accent-400 hover:underline">
-            {t("activity.logs.open")}
-          </ActivityLink>
-        }
-      >
-        <div className="divide-y divide-white/5">
-          {recent.map((seance) => (
-            <SeanceRow key={seance.id} s={seance} now={now} showUser />
-          ))}
-        </div>
-      </Panel>
+      {/* 6. Les comptes. */}
+      <Accounts accounts={accounts} now={now} />
 
       {/* 7. Le détail, replié. */}
       <Details data={data} dash={dash} />

@@ -25,6 +25,14 @@ export interface Seance {
   /** Le temps d'ouverture de la première ouverture (hors reconstructions), en ms. */
   openedMs: number | null;
   /**
+   * D'où sont venus les premiers octets de cette ouverture (`openedFrom` sur `start`, depuis le
+   * 25/09/2026) : `appareil`, `mémoire`, `réseau` ou `mixte`. Absent d'une séance qui ne le dit pas.
+   */
+  openedFrom?: string | null;
+  /** Le débit mesuré du lien et celui qu'exige le fichier, en Mb/s, d'après le bilan (`diag.*`). */
+  linkMbps?: number | null;
+  needMbps?: number | null;
+  /**
    * « natif » (remultiplexage — ou canevas, dans les séances d'avant le 24/09/2026), « serveur », ou
    * « hors-ligne » : un téléchargement lu sur l'appareil (journalisé depuis le 02/11/2026).
    */
@@ -272,7 +280,10 @@ function absorb(s: Seance, r: LogRecord): void {
   const reason = str(r.reason) ?? str(r.message) ?? str(r.why) ?? "";
   switch (r.kind) {
     case "start":
-      if (s.openedMs === null && !(num(r.rebuild) ?? 0)) s.openedMs = num(r.openedInMs);
+      if (s.openedMs === null && !(num(r.rebuild) ?? 0)) {
+        s.openedMs = num(r.openedInMs);
+        s.openedFrom = str(r.openedFrom);
+      }
       s.path = str(r.path) ?? s.path;
       s.video ??= str(r.video);
       s.range ??= str(r.range);
@@ -372,6 +383,8 @@ function absorb(s: Seance, r: LogRecord): void {
       // (depuis le 10/10/2026). Gardé à part — le dernier bilan l'emporte, comme `watched` — et
       // ajouté à la fin à ce que le lecteur natif a écrit avant de passer la main.
       if (r.player === "serveur") serverCounts.set(s, { seeks: num(r.seeks) ?? 0, audioSwitches: num(r.audioSwitches) ?? 0 });
+      s.linkMbps = num(r["diag.linkMbps"]) ?? s.linkMbps ?? null;
+      s.needMbps = num(r["diag.needMbps"]) ?? s.needMbps ?? null;
       break;
   }
 }

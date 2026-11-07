@@ -970,7 +970,8 @@
         "waits": "Wartezeiten",
         "handled": "Selbst gelöst",
         "handledHint": "{n} echter Vorfall|{n} echte Vorfälle",
-        "real": "Echte Vorfälle"
+        "real": "Echte Vorfälle",
+        "openSplit": "Gerät {device} · Netz {network}"
       },
       "toHandle": "Zu erledigen",
       "nothingToHandle": "Nichts zu erledigen.",
@@ -1026,7 +1027,15 @@
         "fallback": "Wechsel des Players",
         "error": "Fehler"
       },
-      "dismiss": "Diese Zeile löschen"
+      "dismiss": "Diese Zeile löschen",
+      "linkMbps": "{n} Mb/s",
+      "linkWeak": "schwache Verbindung",
+      "release": "Version {v}",
+      "releaseLegend": "Ein Strich: eine neue Version an diesem Tag",
+      "clearFilter": "Filter entfernen",
+      "openAccount": "Konto öffnen",
+      "showQuiet": "{n} Konto ohne Aktivität diese Woche|{n} Konten ohne Aktivität diese Woche",
+      "hideQuiet": "Konten ohne Aktivität ausblenden"
     }
   },
   "radarr": {

@@ -20,12 +20,15 @@ export function Kpi({
   label,
   value,
   hint,
+  delta,
   tone = "default",
   icon: Icon,
 }: {
   label: string;
   value: React.ReactNode;
   hint?: React.ReactNode;
+  /** L'écart avec la période d'avant : son texte, et s'il va dans le bon sens (`null` : neutre). */
+  delta?: { text: string; good: boolean | null } | null;
   tone?: "default" | "good" | "warn" | "bad";
   icon?: React.ElementType;
 }) {
@@ -36,7 +39,12 @@ export function Kpi({
         {Icon && <Icon size={13} className="shrink-0" />}
         {label}
       </span>
-      <span className={`text-3xl font-semibold tracking-tight tabular-nums ${toneClass}`}>{value}</span>
+      <span className="flex items-baseline gap-2">
+        <span className={`text-3xl font-semibold tracking-tight tabular-nums ${toneClass}`}>{value}</span>
+        {delta && (
+          <span className={`text-xs font-medium tabular-nums ${delta.good === null ? "text-subtle" : delta.good ? "text-success" : "text-warning"}`}>{delta.text}</span>
+        )}
+      </span>
       {hint && <span className="truncate text-xs text-subtle">{hint}</span>}
     </div>
   );
@@ -70,17 +78,33 @@ export interface SeriesPoint {
   value: number;
   /** Une marque d'alerte sur la barre — de vrais incidents ce jour-là. */
   flagged?: boolean;
+  /** Un trait vertical derrière la barre, avec son nom — une version arrivée ce jour-là. */
+  mark?: string;
 }
 
 /**
  * Des barres verticales, une série : la valeur survolée (ou touchée) s'écrit au-dessus, une ligne
  * qui ne cache rien. Chaque barre est un bouton — clavier et lecteur d'écran lisent la même ligne.
  */
-export function Bars({ points, height = 120, empty }: { points: SeriesPoint[]; height?: number; empty: string }) {
+export function Bars({
+  points,
+  height = 120,
+  empty,
+  selected,
+  onSelect,
+}: {
+  points: SeriesPoint[];
+  height?: number;
+  empty: string;
+  /** La barre choisie (filtre du fil), mise en avant. */
+  selected?: string | null;
+  /** Toucher une barre la choisit ; la toucher de nouveau la relâche. */
+  onSelect?: (key: string | null) => void;
+}) {
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(0, ...points.map((p) => p.value));
   if (max === 0) return <p className="py-8 text-center text-sm text-subtle">{empty}</p>;
-  const shown = hover === null ? null : points[hover];
+  const shown = hover === null ? (points.find((p) => p.key === selected) ?? null) : points[hover];
   return (
     <div>
       <p className="mb-2 h-4 truncate text-xs text-muted" aria-live="polite">
@@ -95,11 +119,18 @@ export function Bars({ points, height = 120, empty }: { points: SeriesPoint[]; h
             onPointerEnter={() => setHover(i)}
             onFocus={() => setHover(i)}
             onBlur={() => setHover(null)}
-            onClick={() => setHover(i)}
+            onClick={() => {
+              setHover(i);
+              onSelect?.(selected === p.key ? null : p.key);
+            }}
+            aria-pressed={onSelect ? selected === p.key : undefined}
             className="group relative flex h-full min-w-0 flex-1 items-end justify-center outline-none"
           >
+            {p.mark && <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-white/15" title={p.mark} aria-hidden />}
             <span
-              className={`block w-full max-w-[22px] rounded-t-[4px] transition-colors ${hover === i ? "bg-white" : "bg-white/45 group-focus-visible:bg-white"}`}
+              className={`relative block w-full max-w-[22px] rounded-t-[4px] transition-colors ${
+                selected === p.key || hover === i ? "bg-white" : selected ? "bg-white/20 group-focus-visible:bg-white" : "bg-white/45 group-focus-visible:bg-white"
+              }`}
               style={{ height: `${p.value > 0 ? Math.max(3, (p.value / max) * 100) : 0}%` }}
             />
             {p.flagged && <span className="absolute -bottom-2.5 h-1.5 w-1.5 rounded-full bg-danger" aria-hidden />}
@@ -120,7 +151,17 @@ export function Bars({ points, height = 120, empty }: { points: SeriesPoint[]; h
 }
 
 /** Une barre découpée en parts, chacune avec son nom, son chiffre et sa part dans la légende. */
-export function StackBar({ parts, empty }: { parts: { key: string; label: string; value: number; color: string }[]; empty: string }) {
+export function StackBar({
+  parts,
+  empty,
+  selected,
+  onSelect,
+}: {
+  parts: { key: string; label: string; value: number; color: string }[];
+  empty: string;
+  selected?: string | null;
+  onSelect?: (key: string | null) => void;
+}) {
   const total = parts.reduce((n, p) => n + p.value, 0);
   if (!total) return <p className="py-6 text-center text-sm text-subtle">{empty}</p>;
   const visible = parts.filter((p) => p.value > 0);
@@ -133,11 +174,19 @@ export function StackBar({ parts, empty }: { parts: { key: string; label: string
       </div>
       <ul className="grid grid-cols-2 gap-x-4 gap-y-2">
         {parts.map((p) => (
-          <li key={p.key} className="flex items-center gap-2 text-sm">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: p.color }} aria-hidden />
-            <span className="min-w-0 flex-1 truncate text-muted">{p.label}</span>
-            <span className="tabular-nums text-white">{p.value}</span>
-            <span className="w-10 text-right text-xs tabular-nums text-subtle">{Math.round((p.value / total) * 100)} %</span>
+          <li key={p.key}>
+            <button
+              type="button"
+              disabled={!onSelect || !p.value}
+              aria-pressed={selected === p.key}
+              onClick={() => onSelect?.(selected === p.key ? null : p.key)}
+              className={`flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-sm transition-colors enabled:hover:bg-white/[0.04] ${selected === p.key ? "bg-white/[0.07]" : ""}`}
+            >
+              <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: p.color }} aria-hidden />
+              <span className="min-w-0 flex-1 truncate text-muted">{p.label}</span>
+              <span className="tabular-nums text-white">{p.value}</span>
+              <span className="w-10 text-right text-xs tabular-nums text-subtle">{Math.round((p.value / total) * 100)} %</span>
+            </button>
           </li>
         ))}
       </ul>
@@ -153,7 +202,7 @@ export function RankList({
   rows,
   empty,
 }: {
-  rows: { key: string; label: React.ReactNode; value: number; valueLabel: string; note?: React.ReactNode; onOpen?: () => void; leading?: React.ReactNode }[];
+  rows: { key: string; label: React.ReactNode; value: number; valueLabel: string; note?: React.ReactNode; onOpen?: () => void; leading?: React.ReactNode; selected?: boolean }[];
   empty: string;
 }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
@@ -180,7 +229,12 @@ export function RankList({
         return (
           <li key={r.key}>
             {r.onOpen ? (
-              <button type="button" onClick={r.onOpen} className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-white/[0.03]">
+              <button
+                type="button"
+                onClick={r.onOpen}
+                aria-pressed={r.selected}
+                className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-white/[0.03] ${r.selected ? "bg-white/[0.06]" : ""}`}
+              >
                 {body}
               </button>
             ) : (
@@ -194,7 +248,17 @@ export function RankList({
 }
 
 /** Les titres les plus regardés, avec leur affiche. */
-export function TitleRank({ titles, empty }: { titles: { title: string; itemId: string | null; episode: boolean; seances: number; watchedSeconds: number }[]; empty: string }) {
+export function TitleRank({
+  titles,
+  empty,
+  selected,
+  onSelect,
+}: {
+  titles: { title: string; itemId: string | null; episode: boolean; seances: number; watchedSeconds: number }[];
+  empty: string;
+  selected?: string | null;
+  onSelect?: (title: string | null) => void;
+}) {
   const t = useT();
   return (
     <RankList
@@ -206,6 +270,8 @@ export function TitleRank({ titles, empty }: { titles: { title: string; itemId: 
         valueLabel: hours(x.watchedSeconds),
         note: t("activity.dash.seancesN", { n: x.seances }),
         leading: <Poster itemId={x.itemId} kind={x.episode ? "episode" : "movie"} className="h-12 w-8" />,
+        selected: selected === x.title,
+        onOpen: onSelect ? () => onSelect(selected === x.title ? null : x.title) : undefined,
       }))}
     />
   );

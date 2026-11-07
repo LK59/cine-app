@@ -970,7 +970,8 @@
         "waits": "Esperas",
         "handled": "Resueltos solos",
         "handledHint": "{n} incidente real|{n} incidentes reales",
-        "real": "Incidentes reales"
+        "real": "Incidentes reales",
+        "openSplit": "dispositivo {device} · red {network}"
       },
       "toHandle": "Pendiente",
       "nothingToHandle": "Nada pendiente.",
@@ -1026,7 +1027,15 @@
         "fallback": "cambio de reproductor",
         "error": "error"
       },
-      "dismiss": "Borrar esta línea"
+      "dismiss": "Borrar esta línea",
+      "linkMbps": "{n} Mb/s",
+      "linkWeak": "conexión débil",
+      "release": "versión {v}",
+      "releaseLegend": "Una línea: una versión nueva ese día",
+      "clearFilter": "Quitar el filtro",
+      "openAccount": "Abrir la ficha",
+      "showQuiet": "{n} cuenta sin actividad esta semana|{n} cuentas sin actividad esta semana",
+      "hideQuiet": "Ocultar las cuentas sin actividad"
     }
   },
   "radarr": {

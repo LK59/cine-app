@@ -970,7 +970,8 @@
         "waits": "Waits",
         "handled": "Handled automatically",
         "handledHint": "{n} real incident|{n} real incidents",
-        "real": "Real incidents"
+        "real": "Real incidents",
+        "openSplit": "device {device} · network {network}"
       },
       "toHandle": "Needs attention",
       "nothingToHandle": "Nothing needs attention.",
@@ -1026,7 +1027,15 @@
         "fallback": "fallback",
         "error": "error"
       },
-      "dismiss": "Clear this line"
+      "dismiss": "Clear this line",
+      "linkMbps": "{n} Mb/s",
+      "linkWeak": "weak link",
+      "release": "version {v}",
+      "releaseLegend": "A line: a new version that day",
+      "clearFilter": "Remove the filter",
+      "openAccount": "Open the account",
+      "showQuiet": "{n} account with no activity this week|{n} accounts with no activity this week",
+      "hideQuiet": "Hide accounts with no activity"
     }
   },
   "radarr": {

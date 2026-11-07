@@ -269,6 +269,9 @@ const ADMIN_ONLY_READS: RegExp[] = [
   // Les lectures de chaque compte — quels livres, combien de temps, sur quel appareil (§129). La route le
   // vérifie aussi (`adminOnly`), et répond 404 l'option des livres coupée.
   /^\/api\/admin\/activity\/books(\/|$)/,
+  // Le fil filtré du tableau de bord de l'Activité : les séances de tous les comptes (§136). La route le
+  // vérifie aussi (`adminOnly`).
+  /^\/api\/admin\/activity\/feed(\/|$)/,
   // La recherche de Radarr et de Sonarr (fiches complètes, chemins sur le disque) et la bibliothèque
   // de Jellyfin (sa version exacte, ses compteurs) : la gestion seule les lit (revue du 20/10/2026).
   /^\/api\/(radarr\/movies|sonarr\/series)\/lookup\/?$/,

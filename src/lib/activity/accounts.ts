@@ -71,6 +71,12 @@ export interface NowPlaying {
   device: string | null;
   client: string | null;
   method: string | null;
+  /**
+   * Le chemin que prend la lecture, quand c'est Laterna : retrouvé dans la séance du journal du lecteur
+   * (même compte, même titre). `null` pour un autre client (Jellyfin Web, Infuse…) ou une séance pas
+   * encore écrite.
+   */
+  path?: "natif" | "serveur" | "tv" | "horsLigne" | null;
 }
 
 export interface AccountSummary {
@@ -143,7 +149,7 @@ export function handledOf(s: Seance): number {
 }
 
 /**
- * Les séances des trente et un derniers jours, construites une fois tant que le journal du lecteur
+ * Les séances des soixante et un derniers jours, construites une fois tant que le journal du lecteur
  * n'a pas bougé (07/11/2026). La vue d'ensemble les reconstruisait quatre fois à chaque relecture
  * — comptes, semaine, fil, foyer —, les quatre cinquièmes de son temps. Une fenêtre plus courte
  * filtre celle-ci ; une plus longue (la fiche d'un compte, 90 jours) se construit à part.
@@ -151,7 +157,8 @@ export function handledOf(s: Seance): number {
  * La clé est le journal lui-même : nombre de lignes, somme des instants, première et dernière
  * (fichier et rang) — une ligne ajoutée ou une rotation la changent. Jamais modifiées ensuite : `acknowledgeSeances` copie.
  */
-const WINDOW_DAYS = 31;
+// 61 depuis le 07/11/2026 : les chiffres de trente jours se comparent aux trente d'avant.
+const WINDOW_DAYS = 61;
 type WindowMemo = { key: string; since: number; seances: Seance[] };
 // Sur `globalThis`, comme le cache des journaux : préparée au démarrage, lue par la route.
 const memoHolder = ((globalThis as Record<symbol, unknown>)[Symbol.for("cine-app.activitySeances")] ??= { memo: null }) as { memo: WindowMemo | null };
@@ -246,7 +253,7 @@ export async function listAccounts(now = Date.now(), clearedAt = alertsClearedAt
         alerts.push({ kind: "tokenStale", at: lastActivity });
       }
       if (clientErrors.length) alerts.push({ kind: "clientErrors", at: clientErrors[clientErrors.length - 1]._t, count: clientErrors.length });
-      const plays = playsOf(sessions, user.Id);
+      const plays = playsOf(sessions, user.Id).map((p) => ({ ...p, path: pathOfPlay(mine, p) }));
       return {
         id: user.Id,
         name,
@@ -266,6 +273,14 @@ export async function listAccounts(now = Date.now(), clearedAt = alertsClearedAt
       };
     })
     .sort((a, b) => rank(b) - rank(a) || (b.app.lastSeen ?? 0) - (a.app.lastSeen ?? 0));
+}
+
+/** Le chemin d'une lecture en cours, d'après la dernière séance du même titre (07/11/2026). */
+export function pathOfPlay(seances: readonly Seance[], play: NowPlaying): NowPlaying["path"] {
+  if (!play.itemId) return null;
+  const s = seances.find((x) => x.itemId === play.itemId);
+  if (!s) return null;
+  return s.onTv ? "tv" : s.player === "serveur" ? "serveur" : s.player === "hors-ligne" ? "horsLigne" : "natif";
 }
 
 /** Les présents d'abord — en lecture, puis dans l'application —, puis les plus récemment vus. */
