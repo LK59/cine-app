@@ -27,7 +27,8 @@ import {
   X,
 } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { KpiRow, Segmented } from "@/components/activity/DashboardParts";
+import { Bars, KpiRow, Segmented, shortDay } from "@/components/activity/DashboardParts";
+import { Habits } from "@/components/activity/views/ActivityOverview";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { LoadingState, ErrorState } from "@/components/StateViews";
@@ -176,6 +177,35 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 /** Tout ce que l'application et le serveur média savent d'un compte, et les actions sur lui. */
+/** Ses heures jour par jour et heure par heure, trente jours — les courbes de la vue d'ensemble, pour lui. */
+function AccountCharts({ charts }: { charts: NonNullable<Detail["charts"]> }) {
+  const t = useT();
+  const perDay = charts.series.map((d, i) => ({
+    key: d.day,
+    label: (charts.series.length - 1 - i) % 5 === 0 ? String(new Date(d.day + "T12:00:00").getDate()) : "",
+    detail: `${shortDay(d.day)} · ${hours(d.watchedSeconds)} · ${t("activity.dash.seancesN", { n: d.seances })}${d.real ? ` · ${t("activity.dash.realN", { n: d.real })}` : ""}`,
+    value: d.watchedSeconds,
+    flagged: d.real > 0,
+  }));
+  const byHour = charts.hours.map((sec, h) => ({ key: String(h), label: h % 3 === 0 ? String(h) : "", detail: `${h} h – ${h + 1} h · ${hours(sec)}`, value: sec }));
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+      <section className="card overflow-hidden lg:col-span-3">
+        <h2 className="border-b border-white/5 px-4 py-3 text-sm font-semibold text-white">{t("activity.dash.watchedPerDay")}</h2>
+        <div className="p-4">
+          <Bars points={perDay} empty={t("activity.dash.empty")} />
+        </div>
+      </section>
+      <section className="card overflow-hidden lg:col-span-2">
+        <h2 className="border-b border-white/5 px-4 py-3 text-sm font-semibold text-white">{t("activity.dash.byHour")}</h2>
+        <div className="p-4">
+          <Bars points={byHour} empty={t("activity.dash.empty")} />
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function ActivityAccount({ id }: { id: string }) {
   const t = useT();
   const toast = useToast();
@@ -285,6 +315,8 @@ export function ActivityAccount({ id }: { id: string }) {
             <Tile icon={Eye} label={t("activity.account.played")} value={d.library.playedMovies ?? "—"} hint={t("activity.account.playedEpisodes", { n: d.library.playedEpisodes ?? "—" })} />
             <Tile icon={UserRound} label={t("activity.account.firstSeen")} value={d.stats.firstSeen ? ago(d.stats.firstSeen, now, t) : "—"} hint={d.stats.devices.join(" · ")} />
           </div>
+          <Habits stats={d.periods[period]} requests={d.requestStats ?? null} periodDays={period === "day" ? 1 : period === "week" ? 7 : period === "month" ? 30 : Math.max(1, (now - (d.stats.firstSeen ?? now)) / 86_400_000)} now={now} />
+          {d.charts && <AccountCharts charts={d.charts} />}
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">

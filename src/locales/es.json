@@ -971,7 +971,9 @@
         "handled": "Resueltos solos",
         "handledHint": "{n} incidente real|{n} incidentes reales",
         "real": "Incidentes reales",
-        "openSplit": "dispositivo {device} · red {network}"
+        "openSplit": "dispositivo {device} · red {network}",
+        "finished": "Vistas hasta el final",
+        "sinceVersion": "desde la {v}: {p}"
       },
       "toHandle": "Pendiente",
       "nothingToHandle": "Nada pendiente.",

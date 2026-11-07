@@ -32,6 +32,8 @@ export interface Seance {
   /** Le débit mesuré du lien et celui qu'exige le fichier, en Mb/s, d'après le bilan (`diag.*`). */
   linkMbps?: number | null;
   needMbps?: number | null;
+  /** La version de l'application qui a ouvert la séance (`version` de sa première ligne). */
+  version?: string | null;
   /** D'où le lecteur a lu ses octets, en Mo (bilan, `diag.read*MB`) : la réserve en mémoire, l'appareil, le réseau. */
   readMB?: { reserve: number; device: number; network: number } | null;
   /**
@@ -211,6 +213,7 @@ function blank(id: string, legacy: boolean, r: LogRecord): Seance {
     start: lineTime(r),
     end: lineTime(r),
     device: deviceLabel(str(r.agent), { touch: r.touch === true }),
+    version: str(r.version),
     openedMs: null,
     player: playerOf(r),
     path: str(r.path),

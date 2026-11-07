@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dashboard, requestStats } from "@/lib/activity/dashboard";
-import { withCache } from "@/lib/server-cache";
+import { cachedRequestStats, dashboard } from "@/lib/activity/dashboard";
 import { preparedUnkept, respondPrepared } from "@/lib/cachedJson";
 import { adminOnly } from "@/lib/activity/adminOnly";
 import { household, listAccounts, recentSeances, weekSignals } from "@/lib/activity/accounts";
@@ -22,7 +21,7 @@ export async function GET(req: NextRequest) {
   const [accounts, signals, requests] = await Promise.all([
     listAccounts(now, clearedAt),
     Promise.resolve(weekSignals(now, clearedAt)),
-    withCache("activity:requests", 5 * 60_000, () => requestStats(now)).catch(() => null),
+    cachedRequestStats(now),
   ]);
   // Compressée, avec son étiquette : relue toutes les dix secondes page ouverte, elle partait en clair
   // (35 Ko) et sans 304 possible (07/11/2026).

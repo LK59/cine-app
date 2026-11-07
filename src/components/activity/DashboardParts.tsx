@@ -9,7 +9,7 @@
 // et son chiffre : jamais la couleur seule. Les courbes à une série restent dans l'encre du panneau.
 
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clapperboard, Clock, Gauge, Hourglass, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clapperboard, Clock, Flag, Gauge, Hourglass } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { Poster, hours, secs, uiLocale } from "@/components/activity/parts";
 import type { PeriodStats, PeriodTotals } from "@/lib/activity/dashboard";
@@ -356,7 +356,18 @@ function deltaOf(now: number | null, before: number | null, kind: "count" | "poi
 }
 
 /** Les chiffres clés de la période, et leur écart avec la période d'avant. « Tout » vient de l'historique gardé. */
-export function KpiRow({ stats, prev, all }: { stats: PeriodStats | null; prev: PeriodTotals | null; all: WeekSignals | null }) {
+export function KpiRow({
+  stats,
+  prev,
+  all,
+  sinceVersion,
+}: {
+  stats: PeriodStats | null;
+  prev: PeriodTotals | null;
+  all: WeekSignals | null;
+  /** Le taux sans accroc depuis une version — sous le chiffre, à la place du simple compte. */
+  sinceVersion?: { version: string; seances: number; clean: number } | null;
+}) {
   const t = useT();
   if (!stats) {
     if (!all) return <div className="h-28 animate-pulse rounded-2xl bg-white/[0.03]" />;
@@ -372,7 +383,6 @@ export function KpiRow({ stats, prev, all }: { stats: PeriodStats | null; prev: 
   }
   const cleanShare = stats.seances ? stats.clean / stats.seances : 1;
   const prevShare = prev && prev.seances ? prev.clean / prev.seances : null;
-  const handled = handledSum(stats.handled);
   const openSplit =
     stats.openDeviceMs !== null && stats.openNetworkMs !== null
       ? t("activity.dash.kpi.openSplit", { device: secs(stats.openDeviceMs), network: secs(stats.openNetworkMs) })
@@ -387,7 +397,11 @@ export function KpiRow({ stats, prev, all }: { stats: PeriodStats | null; prev: 
         icon={CheckCircle2}
         label={t("activity.dash.kpi.clean")}
         value={pct(stats.clean, stats.seances)}
-        hint={t("activity.dash.kpi.cleanHint", { n: stats.clean, total: stats.seances })}
+        hint={
+          sinceVersion
+            ? t("activity.dash.kpi.sinceVersion", { v: sinceVersion.version, p: pct(sinceVersion.clean, sinceVersion.seances) })
+            : t("activity.dash.kpi.cleanHint", { n: stats.clean, total: stats.seances })
+        }
         delta={stats.seances ? deltaOf(cleanShare * 100, prevShare === null ? null : prevShare * 100, "points", true) : null}
         // Vert dès 90 %, neutre au-dessus de 75 %, ambre en dessous — jamais rouge : une séance gênée
         // n'est pas une panne de l'application (le détail est dans « À gérer »).
@@ -401,7 +415,18 @@ export function KpiRow({ stats, prev, all }: { stats: PeriodStats | null; prev: 
         delta={deltaOf(stats.openMedianMs, prev?.openMedianMs ?? null, "ms", false)}
       />
       <Kpi icon={Hourglass} label={t("activity.dash.kpi.waits")} value={stats.waits} hint={t("activity.week.waitsHint", { d: secs(stats.waitedMs) })} delta={deltaOf(stats.waits, prev?.waits ?? null, "count", false)} />
-      <Kpi icon={ShieldCheck} label={t("activity.dash.kpi.handled")} value={handled} hint={t("activity.dash.kpi.handledHint", { n: stats.real })} />
+      {/* « Menées au bout » plutôt que « gérés seuls » (07/11/2026) : ce qui a été géré se lit sous « À gérer ». */}
+      <Kpi
+        icon={Flag}
+        label={t("activity.dash.kpi.finished")}
+        value={pct(stats.completion.finished, stats.completion.closed)}
+        hint={t("activity.dash.kpi.cleanHint", { n: stats.completion.finished, total: stats.completion.closed })}
+        delta={
+          stats.completion.closed && prev?.completion?.closed
+            ? deltaOf((stats.completion.finished / stats.completion.closed) * 100, (prev.completion.finished / prev.completion.closed) * 100, "points", true)
+            : null
+        }
+      />
     </div>
   );
 }

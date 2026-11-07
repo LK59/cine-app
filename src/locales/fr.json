@@ -971,7 +971,9 @@
         "handled": "Gérés seuls",
         "handledHint": "{n} vrai incident|{n} vrais incidents",
         "real": "Vrais incidents",
-        "openSplit": "appareil {device} · réseau {network}"
+        "openSplit": "appareil {device} · réseau {network}",
+        "finished": "Menées au bout",
+        "sinceVersion": "depuis la {v} : {p}"
       },
       "toHandle": "À gérer",
       "nothingToHandle": "Rien à gérer.",

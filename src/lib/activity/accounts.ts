@@ -24,7 +24,7 @@ import { isChunkLoadError } from "@/lib/chunkError";
 import { clearedDiagnosis, withoutCleared } from "@/lib/activity/diagnosisCleared";
 import { acknowledgeSeances, afterClear, alertsClearedAt } from "@/lib/activity/alertsCleared";
 import { cachedJellyfinDevices } from "@/lib/server-cache";
-import { periodStats } from "@/lib/activity/dashboard";
+import { cachedRequestStats, periodStats, requestsOfUser } from "@/lib/activity/dashboard";
 
 /**
  * Une « erreur » de navigateur qui n'en est pas une : la page était ouverte pendant un
@@ -674,6 +674,9 @@ export async function accountDetail(id: string, now = Date.now(), clearedAt = al
     // Les chiffres de la fiche sur 24 h, 7 jours, 30 jours ou tout, comme la vue d'ensemble
     // (07/11/2026), avec la période d'avant pour les écarts.
     periods: accountPeriods(seances, now),
+    // Ses courbes et ses demandes, comme la vue d'ensemble (07/11/2026).
+    charts: accountCharts(seances, now),
+    requestStats: requestsOfUser(await cachedRequestStats(now), name),
     historyDays: ACCOUNT_HISTORY_DAYS,
     stats: {
       seances: seances.length,
@@ -699,6 +702,16 @@ export async function accountDetail(id: string, now = Date.now(), clearedAt = al
 }
 
 export type AccountDetail = NonNullable<Awaited<ReturnType<typeof accountDetail>>>;
+
+function accountCharts(seances: readonly Seance[], now: number) {
+  const series = lastLocalDays(now, 30).map(({ day, start, end }) => {
+    const of = seances.filter((s) => s.start >= start && s.start < end);
+    return { day, seances: of.length, watchedSeconds: of.reduce((n, s) => n + (s.watched ?? 0), 0), real: of.reduce((n, s) => n + problemsOf(s), 0) };
+  });
+  const hours = Array.from({ length: 24 }, () => 0);
+  for (const s of seances) if (s.start >= now - 30 * DAY) hours[new Date(s.start).getHours()] += s.watched ?? 0;
+  return { series, hours };
+}
 
 function accountPeriods(seances: readonly Seance[], now: number) {
   const within = (from: number, to = 0) => seances.filter((s) => s.start >= now - from && s.start < now - to);

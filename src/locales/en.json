@@ -971,7 +971,9 @@
         "handled": "Handled automatically",
         "handledHint": "{n} real incident|{n} real incidents",
         "real": "Real incidents",
-        "openSplit": "device {device} · network {network}"
+        "openSplit": "device {device} · network {network}",
+        "finished": "Watched to the end",
+        "sinceVersion": "since {v}: {p}"
       },
       "toHandle": "Needs attention",
       "nothingToHandle": "Nothing needs attention.",

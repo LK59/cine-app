@@ -52,7 +52,7 @@ export interface PeriodStats {
 }
 
 /** Les chiffres d'une période sans ses répartitions : la période d'avant, pour les écarts. */
-export type PeriodTotals = Omit<PeriodStats, "devices" | "titles" | "people" | "series" | "completion" | "reads">;
+export type PeriodTotals = Omit<PeriodStats, "devices" | "titles" | "people" | "series" | "reads">;
 
 /** Une ligne du fil filtré (`feedOf`). */
 export interface FeedFilter {
@@ -86,6 +86,11 @@ export interface Dashboard {
   previous: { day: PeriodTotals; week: PeriodTotals; month: PeriodTotals };
   /** Les versions apparues dans le journal du lecteur ces trente jours, au jour de leur première ligne. */
   releases: { day: string; version: string }[];
+  /**
+   * Le taux sans accroc depuis la plus récente version qui a déjà dix séances — « depuis la 10.16 :
+   * 96 % » sous le chiffre (07/11/2026). `null` sans version assez vue.
+   */
+  sinceVersion: { version: string; seances: number; clean: number } | null;
   /** Trente jours, du plus ancien au plus récent. */
   series: { day: string; seances: number; watchedSeconds: number; real: number }[];
   /** Le temps regardé sur trente jours, par heure de la journée (heure du foyer). */
@@ -275,9 +280,9 @@ export function alarmsOf(now: number, clearedAt: number): Alarms {
 }
 
 function totalsOf(stats: PeriodStats): PeriodTotals {
-  const { devices: _d, titles: _t, people: _p, series: _s, completion: _c, reads: _r, ...rest } = stats;
-  void [_d, _t, _p, _s, _c, _r];
-  return rest;
+  const { devices: _d, titles: _t, people: _p, series: _s, reads: _r, ...rest } = stats;
+  void [_d, _t, _p, _s, _r];
+  return { ...rest, completion: { ...rest.completion, abandoned: [] } };
 }
 
 /**
@@ -324,12 +329,26 @@ export function feedOf(f: FeedFilter, now = Date.now(), clearedAt = 0): Seance[]
     .slice(0, 60);
 }
 
+/**
+ * Les séances ouvertes par une version arrivée ces trente jours ou une suivante, depuis la plus
+ * récente qui en compte au moins dix : assez pour qu'un taux veuille dire quelque chose.
+ */
+export function sinceVersionOf(seances: readonly Seance[], releases: readonly { version: string }[]): Dashboard["sinceVersion"] {
+  for (let i = releases.length - 1; i >= 0; i--) {
+    const versions = new Set(releases.slice(i).map((r) => r.version));
+    const of = seances.filter((s) => s.version && versions.has(s.version));
+    if (of.length >= 10) return { version: releases[i].version, seances: of.length, clean: of.filter((s) => problemsOf(s) === 0).length };
+  }
+  return null;
+}
+
 export function dashboard(now = Date.now(), clearedAt = 0): Dashboard {
   // Les incidents d'avant « Effacer les alertes » ne comptent sur aucune période (07/11/2026) ; les
   // séances et le temps regardé restent.
   const sixty = acknowledgeSeances(seancesSince(now - 60 * DAY, now), clearedAt);
   const month = sixty.filter((s) => s.start >= now - 30 * DAY);
   const between = (from: number, to: number) => sixty.filter((s) => s.start >= now - from && s.start < now - to);
+  const releases = safe(() => releasesSince(now - 30 * DAY), []);
   const days = lastLocalDays(now, 30);
   const series = days.map(({ day, start, end }) => {
     const of = month.filter((s) => s.start >= start && s.start < end);
@@ -359,7 +378,8 @@ export function dashboard(now = Date.now(), clearedAt = 0): Dashboard {
       week: totalsOf(periodStats(between(14 * DAY, 7 * DAY))),
       month: totalsOf(periodStats(between(60 * DAY, 30 * DAY))),
     },
-    releases: safe(() => releasesSince(now - 30 * DAY), []),
+    releases,
+    sinceVersion: sinceVersionOf(month, releases),
     series,
     hours,
     describe,
@@ -384,7 +404,32 @@ export interface RequestStats {
   watched: number;
   /** Médiane du délai entre la demande et le premier visionnage par son auteur. */
   medianDelayMs: number | null;
-  recent: { title: string; requester: string; createdAt: number; available: boolean; watchedAt: number | null }[];
+  recent: RequestRow[];
+  /** Toutes les demandes des trente jours — pour en tirer celles d'un compte. */
+  all: RequestRow[];
+}
+
+export interface RequestRow {
+  title: string;
+  requester: string;
+  /** Les noms sous lesquels on reconnaît l'auteur (Jellyfin, Seerr, affiché), en minuscules. */
+  names: string[];
+  createdAt: number;
+  available: boolean;
+  watchedAt: number | null;
+}
+
+/** Le bilan d'un ensemble de demandes — toutes, ou celles d'un compte. */
+export function summarizeRequests(rows: readonly RequestRow[]): RequestStats {
+  const delays = rows.filter((r) => r.watchedAt !== null).map((r) => (r.watchedAt as number) - r.createdAt);
+  return {
+    requested: rows.length,
+    available: rows.filter((r) => r.available).length,
+    watched: delays.length,
+    medianDelayMs: quantile(delays, 0.5),
+    recent: [...rows].sort((a, b) => b.createdAt - a.createdAt).slice(0, 8),
+    all: [...rows],
+  };
 }
 
 /**
@@ -434,8 +479,7 @@ export async function requestStats(now = Date.now()): Promise<RequestStats> {
   const since = now - 30 * DAY;
   const recentReqs = results.filter((r) => Date.parse(r.createdAt) >= since);
   const enriched = await enrichRequests(recentReqs).catch(() => recentReqs);
-  const delays: number[] = [];
-  const rows = enriched.map((r) => {
+  const rows: RequestRow[] = enriched.map((r) => {
     const createdAt = Date.parse(r.createdAt);
     const key = r.media.tmdbId ? `${r.media.mediaType === "tv" ? "tv" : "movie"}:${r.media.tmdbId}` : null;
     const who = r.requestedBy as { displayName?: string; username?: string; jellyfinUsername?: string };
@@ -445,20 +489,27 @@ export async function requestStats(now = Date.now()): Promise<RequestStats> {
       const t = key ? firstWatch.get(`${key}|${n}`) : undefined;
       if (t !== undefined && t >= createdAt && (watchedAt === null || t < watchedAt)) watchedAt = t;
     }
-    if (watchedAt !== null) delays.push(watchedAt - createdAt);
     return {
       title: r.media.title ?? "?",
       requester: who.displayName ?? who.username ?? "?",
+      names,
       createdAt,
       available: (r.media.status ?? 0) >= 4,
       watchedAt,
     };
   });
-  return {
-    requested: rows.length,
-    available: rows.filter((r) => r.available).length,
-    watched: rows.filter((r) => r.watchedAt !== null).length,
-    medianDelayMs: quantile(delays, 0.5),
-    recent: rows.sort((a, b) => b.createdAt - a.createdAt).slice(0, 8),
-  };
+  return summarizeRequests(rows);
+}
+
+/** Les demandes, gardées cinq minutes : Seerr n'a pas à répondre à chaque relecture. */
+export async function cachedRequestStats(now = Date.now()): Promise<RequestStats | null> {
+  const { withCache } = await import("@/lib/server-cache");
+  return withCache("activity:requests", 5 * 60_000, () => requestStats(now)).catch(() => null);
+}
+
+/** Les demandes d'un compte, d'après son nom Jellyfin. */
+export function requestsOfUser(stats: RequestStats | null, name: string): RequestStats | null {
+  if (!stats) return null;
+  const lower = name.toLowerCase();
+  return summarizeRequests(stats.all.filter((r) => r.names.includes(lower)));
 }

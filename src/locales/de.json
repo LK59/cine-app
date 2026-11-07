@@ -971,7 +971,9 @@
         "handled": "Selbst gelöst",
         "handledHint": "{n} echter Vorfall|{n} echte Vorfälle",
         "real": "Echte Vorfälle",
-        "openSplit": "Gerät {device} · Netz {network}"
+        "openSplit": "Gerät {device} · Netz {network}",
+        "finished": "Bis zum Ende",
+        "sinceVersion": "seit {v}: {p}"
       },
       "toHandle": "Zu erledigen",
       "nothingToHandle": "Nichts zu erledigen.",

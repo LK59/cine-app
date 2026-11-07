@@ -115,7 +115,7 @@ function AlertsClearControl({ clearedAt, now }: { clearedAt: number; now: number
   };
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {clearedAt > 0 && <span className="text-xs text-subtle">{t("activity.alerts.clearedOn", { when: ago(clearedAt, now, t) })}</span>}
+      {clearedAt > 0 && <span className="hidden text-xs text-subtle sm:inline">{t("activity.alerts.clearedOn", { when: ago(clearedAt, now, t) })}</span>}
       <ConfirmButton label={t("activity.alerts.clear")} confirm={t("activity.alerts.clearConfirm")} onConfirm={clear} />
     </div>
   );
@@ -321,6 +321,7 @@ function handledDetail(h: PeriodStats["handled"], t: T): string {
 }
 
 function ToHandle({ data, week, now }: { data: Overview; week: PeriodStats | null; now: number }) {
+  const clearedAt = data.alertsClearedAt ?? 0;
   const t = useT();
   const toast = useToast();
   const { mutate } = useSWRConfig();
@@ -345,7 +346,7 @@ function ToHandle({ data, week, now }: { data: Overview; week: PeriodStats | nul
     }
   };
   return (
-    <Panel title={t("activity.dash.toHandle")} icon={issues.length ? ShieldAlert : ShieldCheck}>
+    <Panel title={t("activity.dash.toHandle")} icon={issues.length ? ShieldAlert : ShieldCheck} action={<AlertsClearControl clearedAt={clearedAt} now={now} />}>
       {issues.length ? (
         <ul className="divide-y divide-white/5">
           {issues.map((i) => (
@@ -489,7 +490,7 @@ type HabitTab = "end" | "series" | "reads" | "requests";
  * les octets, et ce que deviennent les demandes. Quatre onglets dans un seul encadré, chacun avec son
  * chiffre sur l'onglet — rien de plus à ouvrir pour voir l'essentiel.
  */
-function Habits({
+export function Habits({
   stats,
   requests,
   periodDays,
@@ -500,7 +501,8 @@ function Habits({
   requests: RequestStats | null;
   periodDays: number;
   now: number;
-  onFilter: (f: Filter | null) => void;
+  /** Absent (la fiche d'un compte) : les lignes ne filtrent rien. */
+  onFilter?: (f: Filter | null) => void;
 }) {
   const t = useT();
   const [tab, setTab] = useState<HabitTab>("end");
@@ -546,7 +548,7 @@ function Habits({
               value: a.count,
               valueLabel: t("activity.dash.habits.timesN", { n: a.count }),
               leading: <Poster itemId={a.itemId} kind="movie" className="h-10 w-7" />,
-              onOpen: () => onFilter({ kind: "title", value: a.title }),
+              onOpen: onFilter ? () => onFilter({ kind: "title", value: a.title }) : undefined,
             }))}
           />
         </div>
@@ -566,7 +568,7 @@ function Habits({
             valueLabel: x.last,
             note: `${t("activity.dash.habits.episodesN", { n: x.episodes })} · ${t("activity.dash.habits.perWeek", { n: (x.episodes / weeks).toLocaleString(uiLocale(), { maximumFractionDigits: 1 }) })} · ${ago(x.lastAt, now, t)}`,
             leading: <Poster itemId={x.itemId} kind="episode" className="h-10 w-7" />,
-            onOpen: () => onFilter({ kind: "title", value: x.series }),
+            onOpen: onFilter ? () => onFilter({ kind: "title", value: x.series }) : undefined,
           }))}
         />
       )}
@@ -1131,7 +1133,6 @@ export function ActivityOverview({ active = true }: { active?: boolean }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">{t("activity.subtitle", { playing: playingCount, app: browsing, total: accounts.length })}</p>
         <div className="flex flex-wrap items-center gap-2">
-          <AlertsClearControl clearedAt={data.alertsClearedAt ?? 0} now={now} />
           <button type="button" onClick={() => mutate()} className="btn-ghost px-3 py-1.5 text-xs">
             <RefreshCw size={14} />
             <span className="hidden sm:inline">{t("activity.refresh")}</span>
@@ -1168,7 +1169,11 @@ export function ActivityOverview({ active = true }: { active?: boolean }) {
         )}
       </Panel>
 
-      {/* 2. La période. */}
+      {/* 2. Ce qui demande vraiment une main — la seule partie qui appelle un geste, juste sous le
+          direct ; « Effacer les alertes » dans son en-tête, à côté de ce qu'il efface (07/11/2026). */}
+      <ToHandle data={data} week={dash?.periods.week ?? null} now={now} />
+
+      {/* 3. La période : ses chiffres, puis ses habitudes. */}
       <div className="space-y-3">
         {/* Toujours sur deux lignes : sur une seule quand le titre était court (« Depuis le début »), les
             boutons sautaient d'une ligne à l'autre en changeant de période (07/11/2026). */}
@@ -1186,20 +1191,17 @@ export function ActivityOverview({ active = true }: { active?: boolean }) {
             ]}
           />
         </div>
-        <KpiRow stats={stats} prev={prev} all={period === "all" ? (all ?? null) : null} />
+        <KpiRow stats={stats} prev={prev} all={period === "all" ? (all ?? null) : null} sinceVersion={dash?.sinceVersion ?? null} />
       </div>
-
-      {/* 3. Ce qui demande vraiment une main. */}
-      <ToHandle data={data} week={dash?.periods.week ?? null} now={now} />
-
-      {/* 4. Les courbes, puis les répartitions de la période. */}
-      {dash && <Charts dash={dash} filter={filter} onFilter={setFilter} />}
-      {breakdown && <PeriodBreakdowns stats={breakdown} filter={filter} onFilter={setFilter} />}
       {breakdown && breakdown.completion && (
         <Habits stats={breakdown} requests={data.requests ?? null} periodDays={period === "day" ? 1 : period === "week" ? 7 : 30} now={now} onFilter={setFilter} />
       )}
 
-      {/* 5. Le fil des séances, filtré par ce qu'on a touché plus haut. */}
+      {/* 4. Les courbes. */}
+      {dash && <Charts dash={dash} filter={filter} onFilter={setFilter} />}
+
+      {/* 5. Le fil des séances, avant les répartitions : moins à faire défiler sur téléphone. Filtré
+          par ce qu'on touche au-dessus comme en dessous. */}
       {filter && (
         <FilterBar
           label={filterLabel(filter, t)}
@@ -1211,10 +1213,13 @@ export function ActivityOverview({ active = true }: { active?: boolean }) {
       )}
       <Feed recent={recent} now={now} filter={filter} feed={{ data: feed.data, isLoading: feed.isLoading }} accounts={accounts} onFilter={setFilter} anchor={feedAnchor} />
 
-      {/* 6. Les comptes. */}
+      {/* 6. Les répartitions de la période. */}
+      {breakdown && <PeriodBreakdowns stats={breakdown} filter={filter} onFilter={setFilter} />}
+
+      {/* 7. Les comptes. */}
       <Accounts accounts={accounts} now={now} />
 
-      {/* 7. Le détail, replié. */}
+      {/* 8. Le détail, replié. */}
       <Details data={data} dash={dash} />
 
       <AddressFooter />

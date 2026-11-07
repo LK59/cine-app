@@ -141,3 +141,21 @@ describe("les habitudes (07/11/2026)", () => {
     expect(s.reads).toEqual({ reserveMB: 300, deviceMB: 10, networkMB: 100, withReserve: 1 });
   });
 });
+
+describe("le taux depuis une version (07/11/2026)", () => {
+  it("prend la plus récente version qui a au moins dix séances", async () => {
+    const { sinceVersionOf } = await import("@/lib/activity/dashboard");
+    const make = (n: number, version: string, bad = 0) =>
+      buildSeances(
+        Array.from({ length: n }, (_, i) => [
+          rec(`${version}-${i}`, 1000 + i, { kind: "start", version }),
+          ...(i < bad ? [rec(`${version}-${i}`, 2000 + i, { kind: "error", reason: "x", version })] : []),
+        ]).flat()
+      );
+    const seances = [...make(12, "10.16.0", 1), ...make(4, "10.17.0")];
+    const releases = [{ version: "10.16.0" }, { version: "10.17.0" }];
+    // 10.17 seule n'a que 4 séances : on remonte à 10.16, qui compte avec ses suivantes.
+    expect(sinceVersionOf(seances, releases)).toEqual({ version: "10.16.0", seances: 16, clean: 15 });
+    expect(sinceVersionOf(make(3, "10.18.0"), [{ version: "10.18.0" }])).toBeNull();
+  });
+});

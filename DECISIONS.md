@@ -8671,3 +8671,10 @@ Jellyseerr, trente jours, gardé cinq minutes) — arrivées, regardées par leu
 une demande et une séance se rejoignant par TMDB (fiche Jellyfin du film, série de l'épisode), jamais
 par le titre. Les pistes audio et sous-titres ne sont pas comptées : le journal ne note que le rang de
 la piste, pas sa langue.
+
+**Ordre et compléments (07/11/2026, 10.20.0).** De haut en bas : en direct, « À gérer » (avec
+« Effacer les alertes » dans son en-tête), la période et ses habitudes, les courbes, le fil des
+séances, puis les répartitions, les comptes et le détail replié. « Menées au bout » remplace « gérés
+seuls » parmi les six chiffres ; « Sans accroc » dit le taux depuis la plus récente version qui a dix
+séances (`sinceVersionOf`, `version` de la séance). La fiche d'un compte a ses habitudes, ses demandes
+(`requestsOfUser`, sur le bilan des demandes gardé cinq minutes) et ses deux courbes (`accountCharts`).
