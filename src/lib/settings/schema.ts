@@ -79,6 +79,9 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "SUBTITLE_GEN_BUDGET_USD", group: "subtitles", kind: "number", need: "optional", fallback: "5", inApp: true, placeholder: "5" },
   { key: "SUBTITLE_GEN_PRICE_INPUT", group: "subtitles", kind: "number", need: "optional", fallback: "", inApp: true },
   { key: "SUBTITLE_GEN_PRICE_OUTPUT", group: "subtitles", kind: "number", need: "optional", fallback: "", inApp: true },
+  // La recherche par description (07/11/2026) : se sert du fournisseur et de la clé ci-dessus, et
+  // n'existe qu'avec Anthropic. Coupée par défaut — chaque recherche décrite est un appel payant.
+  { key: "DESCRIBE_SEARCH_ENABLED", group: "subtitles", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   // ── La recherche de répliques (DECISIONS.md §88) ──
   // Coupée par défaut : elle lit les films sur le disque, ce qu'une installation doit avoir monté et
   // décidé. La page refuse de l'allumer tant que le dossier des films n'est pas lisible (`checkMoviesMount`).

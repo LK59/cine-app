@@ -2087,6 +2087,10 @@
       "recent": "Ihre letzten Suchen",
       "forget": "Löschen",
       "failed": "Die Suche ist fehlgeschlagen. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
+      "describe": {
+        "title": "Nach Ihrer Beschreibung",
+        "slow": "Einen Moment noch…"
+      },
       "dialogue": {
         "title": "Dialoge",
         "chip": "Dialoge",
@@ -3248,6 +3252,7 @@
       "RADARR_QUALITY_PROFILE": "Qualitätsprofil für Hinzufügungen",
       "SONARR_QUALITY_PROFILE": "Qualitätsprofil für Hinzufügungen",
       "SUBTITLE_GEN_ENABLED": "Untertitel-Erstellung anbieten",
+      "DESCRIBE_SEARCH_ENABLED": "Suche nach Beschreibung: einen Film oder eine Serie finden, die in einem Satz beschrieben ist (Anthropic, mit dem Schlüssel oben)",
       "SUBTITLE_GEN_PROVIDER": "Anbieter",
       "SUBTITLE_GEN_API_KEY": "Schlüssel des Anbieters",
       "SUBTITLE_GEN_MODEL": "Modell",

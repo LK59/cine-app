@@ -8564,3 +8564,39 @@ journaux, réserve, réveil), `clearDeliveredNotifications` (pas de réseau), la
 est jamais armée). Le focus seul, sans changement de visibilité (un ordinateur qui revient d'une autre
 application), n'arme rien : `BuildRefresh` ne pose la question qu'au retour de visibilité. `pageshow`
 non plus : `BuildRefresh` ne l'écoute pas. Un tour de sondage sauté pendant la porte n'est pas rejoué.
+
+## 135. La recherche par description : le modèle reconnaît, TMDB décide (07/11/2026)
+
+**Règle.** Une frappe qui décrit un titre (`looksLikeDescription` : quatre mots dont un mot repère des
+quatre langues, ou sept mots) part, après 600 ms d'arrêt, à `/api/search/describe`. Claude Haiku y rend
+des titres (anglais, original, année, film ou série) dans un schéma JSON imposé ; chacun n'est gardé que
+si TMDB a ce titre à un an près (`pickTmdbMatch` — sinon le premier résultat s'il est exactement de
+l'année), et devient une carte de recherche ordinaire (`makeEntry`, même règle bibliothèque / à demander
+que `/api/search`). Rien de ce que le modèle écrit n'est montré. Les tags bloqués du compte sont retirés
+après le cache (§54). Option coupée par défaut (`DESCRIBE_SEARCH_ENABLED`), Anthropic seulement, avec la
+clé des sous-titres générés (§69) ; Haiku toujours, quel que soit le modèle réglé pour les sous-titres.
+
+**Pourquoi ce prompt.** Banc du 07/11/2026 : 48 descriptions en quatre langues (intrigue, acteur,
+souvenirs flous, détails faux, fautes, demandes larges), trois prompts. Tous trouvent les descriptions
+nettes ; celui retenu ne rend que le bon titre quand la description en désigne un. 46/48 sur les cas
+durs, ~0,9 s médian, ~1,3 s au 90e centile, moins d'un dixième de centime par phrase.
+
+**Écran.** Une rangée à part au-dessus de la grille, sur une ligne qui défile de côté
+(`DescribedResults`) : squelettes aux colonnes de la grille pendant l'attente, « Encore un instant… »
+passé 3 s, puis les cartes à leur place — rien ne pousse la grille. Ce que la grille montre déjà dans
+ses six premières cartes n'y est pas répété ; vide, la rangée s'en va. Un échec ne se dit pas : la
+recherche ordinaire est là. Pas de « Rien trouvé » tant que la description est en route.
+
+**Porteurs.** `src/lib/describeSearch.ts` (appel, lecture défiante `parseDescribed`, `pickTmdbMatch`,
+`findOnTmdb`, cache disque une semaine par phrase normalisée, TMDB un jour par langue) ;
+`src/lib/describeQuery.ts` (`looksLikeDescription`, `describeKey` — partagés par l'écran et la route) ;
+`src/lib/useDescribeSearch.ts` ; `src/lib/searchLibraryIndex.ts` (déplacé de `/api/search` pour n'avoir
+qu'une règle). Borne : 30 phrases par minute et par compte.
+
+**Tests.** `describe-search.test.ts` (déclenchement, lecture du modèle, correspondance TMDB, route :
+coupée, titre tapé, bibliothèque / à demander, titre inventé écarté, tag bloqué, échec) ;
+`player-search-describe.test.tsx` (squelettes puis cartes, pas de doublon, abandon à la frappe, rangée
+vide retirée, option coupée).
+
+**Ce qui diffère exprès.** Seule la recherche du cinéma l'a ; celle de la gestion non. Pas sous les puces
+Personnes, Livres, Répliques.

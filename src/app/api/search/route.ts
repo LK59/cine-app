@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hiddenTmdbKeysFor } from "@/lib/blockedTags";
 import { catalogueMembers } from "@/lib/catalogueMembers";
+import { makeEntry, searchLibraryIndex } from "@/lib/searchLibraryIndex";
 import { createTmdbClient, tmdb, TMDB_IMAGE_BASE, type TmdbMovie, type TmdbTv, type TmdbMultiResult } from "@/lib/clients/tmdb";
 import { cachedMovies, cachedSeries, withCache, withPersistentCache, TTL } from "@/lib/server-cache";
 import { SESSION_COOKIE } from "@/lib/auth"
@@ -109,37 +110,6 @@ function resolveGenreIds(name: string | null, movieGenres: { id: number; name: s
       return normalizedAliases.some((a) => normalized.includes(a) || a.includes(normalized));
     })?.id ?? null;
   return { movie: findId(movieGenres), tv: findId(tvGenres) };
-}
-
-function makeEntry(
-  item: { id: number; title?: string; name?: string; poster_path?: string | null; release_date?: string; first_air_date?: string; vote_average?: number; overview?: string },
-  mediaType: "movie" | "series",
-  radarrByTmdb: Map<number, number>,
-  sonarrByTmdb: Map<number, number>,
-  source: "tmdb" | "radarr" | "sonarr" = "tmdb",
-  playable?: Set<string>,
-): UnifiedSearchResult {
-  const title = item.title ?? item.name ?? "";
-  const dateStr = item.release_date ?? item.first_air_date ?? "";
-  const radarrId = mediaType === "movie" ? radarrByTmdb.get(item.id) ?? null : null;
-  const sonarrId = mediaType === "series" ? sonarrByTmdb.get(item.id) ?? null : null;
-  const inLibrary = radarrId !== null || sonarrId !== null;
-  return {
-    tmdbId: item.id,
-    title,
-    year: dateStr ? Number(dateStr.split("-")[0]) : null,
-    posterPath: item.poster_path ? `${TMDB_IMAGE_BASE}/w342${item.poster_path}` : null,
-    type: mediaType,
-    overview: item.overview ?? "",
-    rating: item.vote_average ?? 0,
-    radarrId,
-    sonarrId,
-    inLibrary,
-    available:
-      (radarrId !== null && (playable?.has(`movie:${radarrId}`) ?? false)) ||
-      (sonarrId !== null && (playable?.has(`series:${sonarrId}`) ?? false)),
-    sources: inLibrary ? [source === "tmdb" ? (mediaType === "movie" ? "radarr" : "sonarr") : source] : ["tmdb"],
-  };
 }
 
 function makePersonCreditEntry(
@@ -294,30 +264,7 @@ export async function GET(req: NextRequest) {
       tmdbPrimary.searchPerson(personQuery).catch(() => ({ results: [] })),
     ]);
 
-    // Build lookup maps
-    const radarrByTmdb = new Map(movies.map((m) => [m.tmdbId, m.id]));
-    const sonarrByTmdb = new Map(series.filter((s) => s.tmdbId).map((s) => [s.tmdbId!, s.id]));
-    // Ouvrable = dans le catalogue du cinéma, la même règle que ses routes (`catalogueMembers`) :
-    // un titre que Jellyfin ne rapproche pas s'ouvre sur sa fiche TMDB au lieu de ne rien faire.
-    const playable = new Set<string>([
-      ...members.movies.map((m) => `movie:${m.id}`),
-      ...members.series.map((s) => `series:${s.id}`),
-    ]);
-    // Ce que Jellyfin a seul (DECISIONS.md §89), par le TMDB qu'il lui donne : « dans la
-    // bibliothèque », ouvert sur sa fiche — jamais « Demander ». Un titre de Radarr/Sonarr *ouvrable*
-    // au même TMDB passe devant ; un titre qu'ils suivent sans l'avoir s'efface devant celui qu'on a.
-    for (const [titles, byTmdb, kind] of [
-      [members.jellyfinOnly?.movies ?? [], radarrByTmdb, "movie"],
-      [members.jellyfinOnly?.series ?? [], sonarrByTmdb, "series"],
-    ] as const) {
-      for (const t of titles) {
-        if (t.tmdbId === null) continue;
-        const known = byTmdb.get(t.tmdbId);
-        if (known !== undefined && playable.has(`${kind}:${known}`)) continue;
-        byTmdb.set(t.tmdbId, t.id);
-        playable.add(`${kind}:${t.id}`);
-      }
-    }
+    const { radarrByTmdb, sonarrByTmdb, playable } = searchLibraryIndex(movies, series, members);
 
     const library: UnifiedSearchResult[] = [];
     const tmdbNotInLib: UnifiedSearchResult[] = [];

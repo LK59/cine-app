@@ -239,6 +239,13 @@ export const config = {
       return optional("SUBTITLE_GEN_PRICE_OUTPUT");
     },
   },
+  // La recherche par description (07/11/2026) : une phrase qui décrit un film ou une série, reconnue
+  // par le modèle des sous-titres générés (même fournisseur Anthropic, même clé). Coupée par défaut.
+  describeSearch: {
+    get enabled() {
+      return optional("DESCRIBE_SEARCH_ENABLED", "false") === "true";
+    },
+  },
   // La recherche de répliques (DECISIONS.md §88) : relue à chaque accès, comme le reste — couper
   // l'option arrête l'indexation à sa prochaine lecture de fichier, sans redémarrage.
   repliques: {

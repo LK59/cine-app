@@ -25,6 +25,9 @@ import { escapeClears } from "@/lib/escapeClears";
 import { fetcher } from "@/lib/swr";
 import { dialogueSearchUrl, useDialogueSearch, wantsDialogueSearch, type DialogueResponse } from "@/lib/dialogueSearch";
 import { DialogueResults } from "./DialogueResults";
+import { DescribedResults } from "./DescribedResults";
+import { describeSearchUrl, looksLikeDescription } from "@/lib/describeQuery";
+import { useDescribeSearch, type DescribeResponse } from "@/lib/useDescribeSearch";
 import { BooksSearchEntry } from "@/components/books/BooksMode";
 
 type Filter = "all" | "movie" | "series" | "person" | "dialogue" | "book";
@@ -345,8 +348,36 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
    * dit qu'il en est un (`failed`), même quand la bibliothèque, elle, a trouvé de quoi remplir
    * la grille — la moitié qui manque doit se voir.
    */
+  /**
+   * La recherche par description (07/11/2026, `describeSearch.ts`) : « le film où un type revit la
+   * même journée ». Seulement si l'installation l'a allumée (`available`), sous « Tout », « Films »
+   * ou « Séries », et pour une frappe qui décrit (`looksLikeDescription`) — un titre tapé en entier
+   * n'appelle pas le modèle. Sa rangée passe au-dessus de la grille (`DescribedResults`), sans ce que
+   * la grille montre déjà en tête : un titre que la recherche ordinaire a trouvé n'est pas répété.
+   */
+  const { data: describeState } = useSWR<DescribeResponse>("/api/search/describe", fetcher, { revalidateOnFocus: false });
+  const describeWanted =
+    describeState?.available === true && searching && (filter === "all" || filter === "movie" || filter === "series") && looksLikeDescription(typed);
+  const described = useDescribeSearch(describeWanted ? describeSearchUrl(typed) : null);
+  const describedEntries: Entry[] = useMemo(() => {
+    const leading = new Set(titles.slice(0, 6).map((e) => `${e.kind}:${e.tmdbId}`));
+    return (described.results ?? [])
+      .filter((r) => !leading.has(`${r.type}:${r.tmdbId}`))
+      .map((r) => ({
+        key: `described-${r.type}-${r.tmdbId}`,
+        kind: r.type,
+        title: r.title,
+        year: r.year,
+        poster: r.posterPath,
+        libraryId: libraryTargetOf(r),
+        tmdbId: r.tmdbId,
+      }));
+  }, [described.results, titles]);
+  const shownDescribed = describeWanted ? describedEntries.filter((e) => filter === "all" || e.kind === filter) : [];
+  const describing = describeWanted && described.loading;
+
   const empty =
-    searching && filter !== "dialogue" && debounced === typed && !isLoading && !failed && counts.all === 0 && counts.book === 0 && !(showDialogue && (dialogue.loading || counts.dialogue > 0));
+    searching && filter !== "dialogue" && debounced === typed && !isLoading && !failed && counts.all === 0 && counts.book === 0 && !(showDialogue && (dialogue.loading || counts.dialogue > 0)) && !describing && shownDescribed.length === 0;
   const unreachable = searching && debounced === typed && failed;
 
   // La fiche s'ouvre par-dessus la recherche, qui reste montée dessous : le retour du navigateur
@@ -475,6 +506,10 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
 
         {unreachable && (
           <p role="alert" className="mt-6 text-sm text-warning/90">{t("player.search.failed")}</p>
+        )}
+
+        {(describing || shownDescribed.length > 0) && (
+          <DescribedResults entries={shownDescribed} loading={describing} waitKey={typed} onOpen={openTitle} />
         )}
 
         {(shownTitles.length > 0 || shownPersons.length > 0) && (

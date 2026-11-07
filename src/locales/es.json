@@ -2087,6 +2087,10 @@
       "recent": "Tus últimas búsquedas",
       "forget": "Borrar",
       "failed": "La búsqueda no se ha completado. Comprueba la conexión e inténtalo de nuevo.",
+      "describe": {
+        "title": "Según su descripción",
+        "slow": "Un momento…"
+      },
       "dialogue": {
         "title": "Diálogos",
         "chip": "Diálogos",
@@ -3248,6 +3252,7 @@
       "RADARR_QUALITY_PROFILE": "Perfil de calidad de las altas",
       "SONARR_QUALITY_PROFILE": "Perfil de calidad de las altas",
       "SUBTITLE_GEN_ENABLED": "Ofrecer la generación de subtítulos",
+      "DESCRIBE_SEARCH_ENABLED": "Búsqueda por descripción: encontrar una película o serie descrita en una frase (Anthropic, con la clave de arriba)",
       "SUBTITLE_GEN_PROVIDER": "Proveedor",
       "SUBTITLE_GEN_API_KEY": "Clave del proveedor",
       "SUBTITLE_GEN_MODEL": "Modelo",

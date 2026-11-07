@@ -113,6 +113,7 @@ spending and the jobs.
 | `SUBTITLE_GEN_PRICE_INPUT` | the app's price table | Price per million input tokens, in US dollars. Required for a model the table does not know. |
 | `SUBTITLE_GEN_PRICE_OUTPUT` | the app's price table | Price per million output tokens. |
 | `SUBTITLE_GEN_ENABLED` | `true` | `false` turns the feature off while keeping the key. |
+| `DESCRIBE_SEARCH_ENABLED` | `false` | Search by description: a sentence describing a film or series (« the film where a man relives the same day ») finds it, in the library or not. Uses the key above, Anthropic only (Claude Haiku). Each new sentence is one request, well under a tenth of a cent; not counted in the subtitle budget. |
 
 ## Dialogue search
 

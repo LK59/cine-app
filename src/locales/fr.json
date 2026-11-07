@@ -2087,6 +2087,10 @@
       "recent": "Vos dernières recherches",
       "forget": "Effacer",
       "failed": "La recherche n’a pas abouti. Vérifiez la connexion et réessayez.",
+      "describe": {
+        "title": "D'après votre description",
+        "slow": "Encore un instant…"
+      },
       "dialogue": {
         "title": "Répliques",
         "chip": "Répliques",
@@ -3248,6 +3252,7 @@
       "RADARR_QUALITY_PROFILE": "Profil de qualité des ajouts",
       "SONARR_QUALITY_PROFILE": "Profil de qualité des ajouts",
       "SUBTITLE_GEN_ENABLED": "Proposer la génération de sous-titres",
+      "DESCRIBE_SEARCH_ENABLED": "Recherche par description : retrouver un film ou une série décrit en une phrase (Anthropic, avec la clé ci-dessus)",
       "SUBTITLE_GEN_PROVIDER": "Fournisseur",
       "SUBTITLE_GEN_API_KEY": "Clé du fournisseur",
       "SUBTITLE_GEN_MODEL": "Modèle",
