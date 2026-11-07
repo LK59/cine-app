@@ -13,20 +13,22 @@
 import fs from "node:fs";
 import path from "node:path";
 import { logGenerations } from "@/lib/logFile";
-import { playerLogFile, benchPlayerLogFile, PLAYER_LOG_KEEP, BENCH_PLAYER_LOG_KEEP } from "@/lib/playerLog";
+import { playerLogFile, benchPlayerLogFile, devPlayerLogFile, PLAYER_LOG_KEEP, BENCH_PLAYER_LOG_KEEP, DEV_PLAYER_LOG_KEEP } from "@/lib/playerLog";
 import { SERVER_LOG_FILE, SERVER_LOG_KEEP } from "@/lib/logger";
 import { BENCH_LOG, BENCH_LOG_KEEP } from "@/lib/playerBench/benchLog";
-import { AUTH_LOG, NOTIFICATIONS_LOG, READINGS_LOG, STARTUP_LOG, EVENT_LOG_KEEP } from "@/lib/eventLogs";
+import { AUTH_LOG, NOTIFICATIONS_LOG, READINGS_LOG, SEARCH_LOG, STARTUP_LOG, EVENT_LOG_KEEP } from "@/lib/eventLogs";
 import { SUBTITLE_GEN_LOG, SUBTITLE_GEN_LOG_KEEP } from "@/lib/subtitleGen/log";
 
-export type LogSource = "player" | "server" | "auth" | "notifications" | "startup" | "bench" | "benchPlayer" | "subtitleGen" | "readings";
+export type LogSource = "player" | "server" | "auth" | "notifications" | "startup" | "bench" | "benchPlayer" | "subtitleGen" | "readings" | "search" | "devPlayer";
 /**
  * `startup` (les ouvertures du cinéma, la télécommande d'un Fire TV, les Nouveautés) depuis le
  * 14/10/2026 : le journal était écrit depuis le 25/09 et ne se lisait qu'au terminal, avec `jq` —
  * c'est pourtant lui qui a montré les 1,7 à 4,8 s de « Reprendre » vide (§86). `readings` (les lectures
- * de livres, §129) depuis le 29/10/2026 — l'écran ne la propose que les livres allumés.
+ * de livres, §129) depuis le 29/10/2026 — l'écran ne la propose que les livres allumés. `search` (la
+ * recherche par description, §135, une ligne par phrase sans la phrase) et `devPlayer` (les lignes du
+ * lecteur sous `next dev`) depuis le 07/11/2026 : tout fichier de `data/logs` se lit d'ici.
  */
-export const LOG_SOURCES: LogSource[] = ["player", "server", "auth", "notifications", "startup", "bench", "benchPlayer", "subtitleGen", "readings"];
+export const LOG_SOURCES: LogSource[] = ["player", "server", "auth", "notifications", "startup", "bench", "benchPlayer", "subtitleGen", "readings", "search", "devPlayer"];
 
 function generationsOf(source: LogSource): string[] {
   switch (source) {
@@ -48,6 +50,10 @@ function generationsOf(source: LogSource): string[] {
       return logGenerations(SUBTITLE_GEN_LOG(), SUBTITLE_GEN_LOG_KEEP);
     case "readings":
       return logGenerations(READINGS_LOG(), EVENT_LOG_KEEP);
+    case "search":
+      return logGenerations(SEARCH_LOG(), EVENT_LOG_KEEP);
+    case "devPlayer":
+      return logGenerations(devPlayerLogFile(), DEV_PLAYER_LOG_KEEP);
   }
 }
 

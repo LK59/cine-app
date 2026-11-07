@@ -576,7 +576,9 @@
         "notifications": "Notifications",
         "subtitleGen": "Generated subtitles",
         "startup": "Launches",
-        "readings": "Reading"
+        "readings": "Reading",
+        "search": "Description searches",
+        "devPlayer": "Player (development)"
       },
       "user": "Account",
       "allUsers": "All accounts",

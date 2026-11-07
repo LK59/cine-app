@@ -576,7 +576,9 @@
         "notifications": "Notifications",
         "subtitleGen": "Sous-titres générés",
         "startup": "Ouvertures",
-        "readings": "Lectures"
+        "readings": "Lectures",
+        "search": "Recherches par description",
+        "devPlayer": "Lecteur (développement)"
       },
       "user": "Compte",
       "allUsers": "Tous les comptes",

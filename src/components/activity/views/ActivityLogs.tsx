@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
 import { ChevronDown, ChevronRight, Clapperboard, RefreshCw, Search } from "lucide-react";
-import { fetcher, playerBootstrapOptions } from "@/lib/swr";
+import { fetcher } from "@/lib/swr";
 import { LoadingState, ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
 import { JsonBlock, Steps, TimelineTable, describeLine, fullDate, kindTone } from "@/components/activity/parts";
@@ -23,7 +23,7 @@ interface LogPage {
   facets?: { users: string[]; types: { name: string; count: number }[]; recentLines: number; partial?: boolean };
 }
 
-const SOURCES = ["player", "server", "auth", "notifications", "startup", "bench", "benchPlayer", "subtitleGen", "readings"] as const;
+const SOURCES = ["player", "server", "auth", "notifications", "startup", "bench", "benchPlayer", "subtitleGen", "readings", "search", "devPlayer"] as const;
 const PERIODS = [1, 7, 30, 0] as const;
 /** Le rafraîchissement automatique : assez vif pour suivre une séance en cours, sans tenir le serveur. */
 const LIVE_REFRESH_MS = 20_000;
@@ -175,10 +175,9 @@ function LogLine({ item, source }: { item: LogItem; source: string }) {
  */
 export function ActivityLogs({ preset }: { preset: LogsPreset }) {
   const t = useT();
-  // Les lectures de livres (§129) ne sont proposées que les livres allumés sur l'installation : la même
-  // clé que le réglage « Afficher les livres » du Compte, sans rien charger des livres.
-  const { data: pub } = useSWR<{ booksAvailable?: boolean }>("/api/config/public", fetcher, playerBootstrapOptions);
-  const sources = SOURCES.filter((key) => key !== "readings" || pub?.booksAvailable === true);
+  // Tous les journaux, toujours (07/11/2026) : les lectures de livres n'étaient proposées que les livres
+  // allumés, et leurs lignes déjà écrites devenaient illisibles une fois l'option coupée.
+  const sources = SOURCES;
   const [source, setSource] = useState((SOURCES as readonly string[]).includes(preset.source ?? "") ? preset.source! : "player");
   const [user, setUser] = useState(preset.user ?? "");
   const [type, setType] = useState(preset.type ?? "");
