@@ -58,8 +58,11 @@ export function DescribedResults({
               </div>
             ))
           : entries.map((entry) => (
-              <div key={entry.key} className="animate-fade-in">
-                <PlayerResultCard
+              // La carte est la case de la grille, comme dans la grille ordinaire : un `<button>`
+              // enveloppé dans une case prend la largeur de son contenu, pas celle de la colonne —
+              // chaque affiche avait sa propre taille sur iPhone (07/11/2026).
+              <PlayerResultCard
+                  key={entry.key}
                   kind={entry.kind}
                   title={entry.title}
                   subtitle={entry.year ? String(entry.year) : null}
@@ -68,7 +71,6 @@ export function DescribedResults({
                   uniform
                   onOpen={() => onOpen(entry)}
                 />
-              </div>
             ))}
       </div>
     </section>
