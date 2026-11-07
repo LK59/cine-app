@@ -24,7 +24,7 @@ import { isChunkLoadError } from "@/lib/chunkError";
 import { clearedDiagnosis, withoutCleared } from "@/lib/activity/diagnosisCleared";
 import { acknowledgeSeances, afterClear, alertsClearedAt } from "@/lib/activity/alertsCleared";
 import { cachedJellyfinDevices } from "@/lib/server-cache";
-import { cachedRequestStats, periodStats, requestsOfUser } from "@/lib/activity/dashboard";
+import { cachedRequestStats, ensureRuntimes, periodStats, requestsOfUser } from "@/lib/activity/dashboard";
 
 /**
  * Une « erreur » de navigateur qui n'en est pas une : la page était ouverte pendant un
@@ -673,7 +673,7 @@ export async function accountDetail(id: string, now = Date.now(), clearedAt = al
     seances: seances.slice(0, 300),
     // Les chiffres de la fiche sur 24 h, 7 jours, 30 jours ou tout, comme la vue d'ensemble
     // (07/11/2026), avec la période d'avant pour les écarts.
-    periods: accountPeriods(seances, now),
+    periods: await ensureRuntimes(seances.map((s) => s.itemId)).then(() => accountPeriods(seances, now)),
     // Ses courbes et ses demandes, comme la vue d'ensemble (07/11/2026).
     charts: accountCharts(seances, now),
     requestStats: requestsOfUser(await cachedRequestStats(now), name),

@@ -315,7 +315,7 @@ export function ActivityAccount({ id }: { id: string }) {
             <Tile icon={Eye} label={t("activity.account.played")} value={d.library.playedMovies ?? "—"} hint={t("activity.account.playedEpisodes", { n: d.library.playedEpisodes ?? "—" })} />
             <Tile icon={UserRound} label={t("activity.account.firstSeen")} value={d.stats.firstSeen ? ago(d.stats.firstSeen, now, t) : "—"} hint={d.stats.devices.join(" · ")} />
           </div>
-          <Habits stats={d.periods[period]} requests={d.requestStats ?? null} periodDays={period === "day" ? 1 : period === "week" ? 7 : period === "month" ? 30 : Math.max(1, (now - (d.stats.firstSeen ?? now)) / 86_400_000)} now={now} />
+          <Habits stats={d.periods[period]} requests={d.requestStats ?? null} periodDays={period === "day" ? 1 : period === "week" ? 7 : period === "month" ? 30 : Math.max(1, (now - (d.stats.firstSeen ?? now)) / 86_400_000)} periodStart={period === "all" ? null : now - (period === "day" ? 1 : period === "week" ? 7 : 30) * 86_400_000} now={now} />
           {d.charts && <AccountCharts charts={d.charts} />}
         </div>
       ) : (

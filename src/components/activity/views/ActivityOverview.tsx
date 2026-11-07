@@ -475,6 +475,24 @@ function mbps(n: number): string {
   return n.toLocaleString(uiLocale(), { maximumFractionDigits: n < 10 ? 1 : 0 });
 }
 
+/** Le bilan d'un ensemble de demandes, côté écran — le même calcul que `summarizeRequests`. */
+function summarizeRows(rows: RequestStats["all"]): RequestStats {
+  const delays = rows.filter((r) => r.watchedAt !== null).map((r) => (r.watchedAt as number) - r.createdAt).sort((a, b) => a - b);
+  return {
+    requested: rows.length,
+    available: rows.filter((r) => r.available).length,
+    watched: delays.length,
+    medianDelayMs: delays.length ? delays[Math.floor(delays.length / 2)] : null,
+    recent: [...rows].sort((a, b) => b.createdAt - a.createdAt),
+    all: [...rows],
+  };
+}
+
+/** Des mégaoctets lisibles : « 840 Mo », « 27,7 Go ». */
+function megabytes(mb: number): string {
+  return mb >= 1000 ? `${(mb / 1000).toLocaleString(uiLocale(), { maximumFractionDigits: 1 })} Go` : `${Math.round(mb)} Mo`;
+}
+
 /** Les heures et minutes d'un délai : « 2 j 4 h », « 5 h », « 40 min ». */
 function delayLabel(ms: number, t: T): string {
   const h = Math.round(ms / 3600_000);
@@ -492,22 +510,31 @@ type HabitTab = "end" | "series" | "reads" | "requests";
  */
 export function Habits({
   stats,
-  requests,
+  requests: allRequests,
   periodDays,
+  periodStart,
   now,
   onFilter,
 }: {
   stats: PeriodStats;
   requests: RequestStats | null;
   periodDays: number;
+  /** Le début de la période pour les demandes ; `null` : tout ce qui a été lu. */
+  periodStart: number | null;
   now: number;
   /** Absent (la fiche d'un compte) : les lignes ne filtrent rien. */
   onFilter?: (f: Filter | null) => void;
 }) {
   const t = useT();
   const [tab, setTab] = useState<HabitTab>("end");
+  const [allShown, setAllShown] = useState(false);
+  // Les demandes suivent la période choisie, comme le reste (07/11/2026 : elles restaient à trente jours).
+  const requests = allRequests ? summarizeRows(allRequests.all.filter((r) => periodStart === null || r.createdAt >= periodStart)) : null;
   const finishedShare = stats.completion.closed ? stats.completion.finished / stats.completion.closed : null;
   const readTotal = stats.reads.reserveMB + stats.reads.deviceMB + stats.reads.networkMB;
+  // « Lu d'avance » : ce qui était déjà là quand le lecteur en a eu besoin — téléchargé d'avance dans la
+  // réserve en mémoire, ou gardé sur l'appareil. La réserve vient aussi du réseau, mais avant d'en avoir
+  // besoin : « hors du réseau » le disait mal (07/11/2026).
   const savedShare = readTotal ? (stats.reads.reserveMB + stats.reads.deviceMB) / readTotal : null;
   const tabs: { key: HabitTab; label: string; value: string }[] = [
     { key: "end", label: t("activity.dash.habits.end"), value: finishedShare === null ? "—" : `${Math.round(finishedShare * 100)} %` },
@@ -577,6 +604,8 @@ export function Habits({
         <div className="space-y-3 p-4">
           <StackBar
             empty={t("activity.dash.empty")}
+            columns={1}
+            format={(mb) => megabytes(mb)}
             parts={[
               { key: "reserve", label: t("activity.dash.habits.fromReserve"), value: Math.round(stats.reads.reserveMB), color: PATH_COLORS.natif },
               { key: "device", label: t("activity.dash.habits.fromDevice"), value: Math.round(stats.reads.deviceMB), color: PATH_COLORS.tv },
@@ -591,14 +620,14 @@ export function Habits({
         (requests ? (
           <div>
             <div className="grid grid-cols-2 gap-3 p-3 md:grid-cols-4">
-              <Tile icon={Download} label={t("activity.dash.habits.requested")} value={requests.requested} hint={t("activity.dash.habits.last30")} />
+              <Tile icon={Download} label={t("activity.dash.habits.requested")} value={requests.requested} />
               <Tile icon={CheckCircle2} label={t("activity.dash.habits.arrived")} value={requests.available} />
               <Tile icon={Clapperboard} label={t("activity.dash.habits.watchedByRequester")} value={requests.watched} />
               <Tile icon={Clock} label={t("activity.dash.habits.delay")} value={requests.medianDelayMs !== null ? delayLabel(requests.medianDelayMs, t) : "—"} />
             </div>
             {requests.recent.length > 0 && (
               <ul className="divide-y divide-white/5 border-t border-white/5">
-                {requests.recent.map((r, i) => (
+                {(allShown ? requests.recent : requests.recent.slice(0, 8)).map((r, i) => (
                   <li key={`${r.title}|${r.createdAt}|${i}`} className="flex items-center gap-3 px-4 py-2.5 text-sm">
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-white">{r.title}</span>
@@ -620,6 +649,11 @@ export function Habits({
                   </li>
                 ))}
               </ul>
+            )}
+            {requests.recent.length > 8 && (
+              <button type="button" onClick={() => setAllShown((v) => !v)} aria-expanded={allShown} className="w-full border-t border-white/5 px-4 py-2.5 text-left text-xs text-accent-400 hover:underline">
+                {allShown ? t("activity.dash.habits.fewerRequests") : t("activity.dash.habits.moreRequests", { n: requests.recent.length - 8 })}
+              </button>
             )}
           </div>
         ) : (
@@ -1194,7 +1228,14 @@ export function ActivityOverview({ active = true }: { active?: boolean }) {
         <KpiRow stats={stats} prev={prev} all={period === "all" ? (all ?? null) : null} sinceVersion={dash?.sinceVersion ?? null} />
       </div>
       {breakdown && breakdown.completion && (
-        <Habits stats={breakdown} requests={data.requests ?? null} periodDays={period === "day" ? 1 : period === "week" ? 7 : 30} now={now} onFilter={setFilter} />
+        <Habits
+          stats={breakdown}
+          requests={data.requests ?? null}
+          periodDays={period === "day" ? 1 : period === "week" ? 7 : 30}
+          periodStart={period === "all" ? null : now - (period === "day" ? 1 : period === "week" ? 7 : 30) * DAY}
+          now={now}
+          onFilter={setFilter}
+        />
       )}
 
       {/* 4. Les courbes. */}

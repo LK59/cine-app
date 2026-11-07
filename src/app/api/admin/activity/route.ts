@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cachedRequestStats, dashboard } from "@/lib/activity/dashboard";
+import { cachedRequestStats, dashboard, ensureRuntimes } from "@/lib/activity/dashboard";
+import { seancesSince } from "@/lib/activity/accounts";
 import { preparedUnkept, respondPrepared } from "@/lib/cachedJson";
 import { adminOnly } from "@/lib/activity/adminOnly";
 import { household, listAccounts, recentSeances, weekSignals } from "@/lib/activity/accounts";
@@ -18,6 +19,10 @@ export async function GET(req: NextRequest) {
   const clearedAt = alertsClearedAt();
   // Les demandes : gardées cinq minutes — Seerr n'a pas à répondre à chaque relecture de dix secondes,
   // et une panne de Seerr ne coûte que ce bloc.
+  // Les durées des titres (« menées au bout ») : demandées une fois, sans jamais retenir la vue
+  // d'ensemble plus d'une seconde et demie.
+  const runtimesReady = ensureRuntimes(seancesSince(now - 60 * 24 * 3600_000, now).map((s) => s.itemId));
+  await Promise.race([runtimesReady, new Promise((r) => setTimeout(r, 1500))]);
   const [accounts, signals, requests] = await Promise.all([
     listAccounts(now, clearedAt),
     Promise.resolve(weekSignals(now, clearedAt)),

@@ -410,6 +410,13 @@ export const jellyfin = {
       (r) => r.Items?.[0]?.RunTimeTicks ?? null
     ),
 
+  /** Les durées de plusieurs éléments d'un coup, par la clé du serveur — « menées au bout » (07/11/2026). */
+  getItemsRunTimeTicks: (itemIds: readonly string[]) =>
+    fetchJson<{ Items?: { Id: string; RunTimeTicks?: number }[] }>(
+      `${cfg.url}/Items?ids=${itemIds.map((id) => encodeURIComponent(id)).join(",")}&fields=RunTimeTicks`,
+      { headers }
+    ).then((r) => new Map((r.Items ?? []).map((i) => [i.Id, i.RunTimeTicks ?? null] as const))),
+
   getRunTimeTicks: async (userId: string, itemId: string) =>
     fetchJson<{ RunTimeTicks?: number }>(`${cfg.url}/Users/${idSegment(userId)}/Items/${idSegment(itemId)}`, { headers }).then(
       (item) => item.RunTimeTicks ?? null

@@ -118,6 +118,44 @@ function top<T extends { watchedSeconds: number; seances: number }>(map: Map<str
   return [...map.values()].sort((a, b) => b.watchedSeconds - a.watchedSeconds || b.seances - a.seances).slice(0, n);
 }
 
+/**
+ * La durée de chaque titre, en secondes, gardée tant que le serveur vit (sur `globalThis`, comme les
+ * séances) : le lecteur de l'application n'écrit pas la durée dans son bilan, seulement la position
+ * d'arrêt. `null` : Jellyfin ne la connaît pas.
+ */
+const runtimes = ((globalThis as Record<symbol, unknown>)[Symbol.for("cine-app.activityRuntimes")] ??= new Map<string, number | null>()) as Map<string, number | null>;
+
+/** Demande à Jellyfin les durées qui manquent, par lots ; ne lève jamais. */
+export async function ensureRuntimes(itemIds: Iterable<string | null>): Promise<void> {
+  const missing = [...new Set([...itemIds].filter((id): id is string => !!id && !runtimes.has(id)))];
+  if (!missing.length) return;
+  const { jellyfin } = await import("@/lib/clients/jellyfin");
+  for (let i = 0; i < missing.length; i += 80) {
+    const batch = missing.slice(i, i + 80);
+    try {
+      const got = await jellyfin.getItemsRunTimeTicks(batch);
+      for (const id of batch) {
+        const ticks = got.get(id);
+        runtimes.set(id, ticks ? ticks / 1e7 : null);
+      }
+    } catch {
+      return;
+    }
+  }
+}
+
+/**
+ * Menée au bout : la fin atteinte, l'épisode suivant enchaîné, ou arrêtée après 90 % de la durée — le
+ * générique d'un film en prend souvent dix minutes, et qui le ferme a bien vu le film (07/11/2026 : 41 %
+ * « menées au bout » avec la seule fin atteinte).
+ */
+export function isFinished(s: Seance): boolean {
+  if (!s.stop) return false;
+  if (s.stop.ended || s.stop.why === "next") return true;
+  const runtime = s.itemId ? runtimes.get(s.itemId) : null;
+  return !!runtime && s.stop.at !== null && s.stop.at >= runtime * 0.9;
+}
+
 export function periodStats(seances: readonly Seance[]): PeriodStats {
   const viewers = new Set<string>();
   const opens: number[] = [];
@@ -183,7 +221,7 @@ export function periodStats(seances: readonly Seance[]): PeriodStats {
     const work = workOf(s.title);
     if (s.stop && s.stop.why !== "lost") {
       out.completion.closed += 1;
-      const finished = s.stop.ended || s.stop.why === "next";
+      const finished = isFinished(s);
       if (finished) out.completion.finished += 1;
       else if (watched < 600) {
         const a = abandoned.get(work.title.toLowerCase()) ?? { title: work.title, itemId: s.itemId, count: 0 };
@@ -397,7 +435,7 @@ function safe<T>(fn: () => T, fallback: T): T {
 }
 
 export interface RequestStats {
-  /** Demandes des trente derniers jours. */
+  /** Demandes de l'ensemble résumé. */
   requested: number;
   available: number;
   /** Regardées par la personne qui les a faites, après la demande. */
@@ -405,7 +443,7 @@ export interface RequestStats {
   /** Médiane du délai entre la demande et le premier visionnage par son auteur. */
   medianDelayMs: number | null;
   recent: RequestRow[];
-  /** Toutes les demandes des trente jours — pour en tirer celles d'un compte. */
+  /** Toutes les demandes lues — pour en tirer celles d'un compte ou d'une période. */
   all: RequestRow[];
 }
 
@@ -419,7 +457,7 @@ export interface RequestRow {
   watchedAt: number | null;
 }
 
-/** Le bilan d'un ensemble de demandes — toutes, ou celles d'un compte. */
+/** Le bilan d'un ensemble de demandes — toutes, celles d'un compte, ou celles d'une période. */
 export function summarizeRequests(rows: readonly RequestRow[]): RequestStats {
   const delays = rows.filter((r) => r.watchedAt !== null).map((r) => (r.watchedAt as number) - r.createdAt);
   return {
@@ -427,7 +465,7 @@ export function summarizeRequests(rows: readonly RequestRow[]): RequestStats {
     available: rows.filter((r) => r.available).length,
     watched: delays.length,
     medianDelayMs: quantile(delays, 0.5),
-    recent: [...rows].sort((a, b) => b.createdAt - a.createdAt).slice(0, 8),
+    recent: [...rows].sort((a, b) => b.createdAt - a.createdAt),
     all: [...rows],
   };
 }
@@ -445,7 +483,7 @@ export async function requestStats(now = Date.now()): Promise<RequestStats> {
     import("@/lib/jellyseerr-enrich"),
   ]);
   const [{ results }, movies, shows] = await Promise.all([
-    jellyseerr.getRecentRequests(100),
+    jellyseerr.getRecentRequests(200),
     cachedJellyfinMoviesAdmin().catch(() => []),
     cachedJellyfinSeriesAdmin().catch(() => []),
   ]);
@@ -468,7 +506,8 @@ export async function requestStats(now = Date.now()): Promise<RequestStats> {
     if (work.episode) return seriesKey.get(work.title.toLowerCase()) ?? null;
     return x.itemId ? (movieKey.get(x.itemId) ?? null) : null;
   };
-  const seances = seancesSince(now - 60 * DAY, now);
+  const oldest = results.reduce((m, r) => Math.min(m, Date.parse(r.createdAt) || now), now);
+  const seances = seancesSince(Math.min(now - 60 * DAY, oldest), now);
   const firstWatch = new Map<string, number>();
   for (const x of seances) {
     const key = keyOfSeance(x);
@@ -476,9 +515,8 @@ export async function requestStats(now = Date.now()): Promise<RequestStats> {
     const k = `${key}|${x.user.toLowerCase()}`;
     if (!firstWatch.has(k) || x.start < (firstWatch.get(k) as number)) firstWatch.set(k, x.start);
   }
-  const since = now - 30 * DAY;
-  const recentReqs = results.filter((r) => Date.parse(r.createdAt) >= since);
-  const enriched = await enrichRequests(recentReqs).catch(() => recentReqs);
+  // Toutes les demandes lues (les deux cents dernières) : l'écran les découpe selon la période choisie.
+  const enriched = await enrichRequests(results).catch(() => results);
   const rows: RequestRow[] = enriched.map((r) => {
     const createdAt = Date.parse(r.createdAt);
     const key = r.media.tmdbId ? `${r.media.mediaType === "tv" ? "tv" : "movie"}:${r.media.tmdbId}` : null;

@@ -158,11 +158,17 @@ export function StackBar({
   empty,
   selected,
   onSelect,
+  format = String,
+  columns = 2,
 }: {
   parts: { key: string; label: string; value: number; color: string }[];
   empty: string;
   selected?: string | null;
   onSelect?: (key: string | null) => void;
+  /** Comment écrire une valeur dans la légende (une unité, par exemple). */
+  format?: (value: number) => string;
+  /** Une colonne quand les noms sont longs : sur téléphone, deux colonnes les coupaient. */
+  columns?: 1 | 2;
 }) {
   const total = parts.reduce((n, p) => n + p.value, 0);
   if (!total) return <p className="py-6 text-center text-sm text-subtle">{empty}</p>;
@@ -174,7 +180,7 @@ export function StackBar({
           <span key={p.key} title={`${p.label} · ${p.value}`} style={{ flexGrow: p.value, background: p.color }} className="h-full min-w-[3px]" />
         ))}
       </div>
-      <ul className="grid grid-cols-2 gap-x-4 gap-y-2">
+      <ul className={`grid gap-x-4 gap-y-2 ${columns === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
         {parts.map((p) => (
           <li key={p.key}>
             <button
@@ -186,7 +192,7 @@ export function StackBar({
             >
               <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: p.color }} aria-hidden />
               <span className="min-w-0 flex-1 truncate text-muted">{p.label}</span>
-              <span className="tabular-nums text-white">{p.value}</span>
+              <span className="tabular-nums text-white">{format(p.value)}</span>
               <span className="w-10 text-right text-xs tabular-nums text-subtle">{Math.round((p.value / total) * 100)} %</span>
             </button>
           </li>
