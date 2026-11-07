@@ -87,7 +87,8 @@ describe("une séance acquittée", () => {
     expect(s.stalls).toBe(1);
     const acked = acknowledgeSeance(s, 5000);
     expect(acked).toMatchObject({ stalls: 0, rebuilds: 0, fallbacks: 0, errors: 0, slowSeeks: 0, incidents: [] });
-    expect(acked.stop?.waits).toBe(0);
+    // Les attentes restent : une mesure du confort, pas une erreur (08/11/2026).
+    expect(acked.stop?.waits).toBe(3);
     // Le reste ne bouge pas : elle est toujours là, avec son temps regardé.
     expect(acked.id).toBe(s.id);
     expect(acknowledgeSeance(s, 2500)).toBe(s);
@@ -104,7 +105,7 @@ describe("la semaine en chiffres", () => {
     expect(before.serverErrors).toEqual([{ scope: "catalogue", count: 1 }]);
 
     const after = weekSignals(NOW, NOW - 3 * H);
-    expect(after).toMatchObject({ seances: 2, stalls: 1, rebuilds: 3, waits: 4, tokenRefusals: 0, clientErrors: 0 });
+    expect(after).toMatchObject({ seances: 2, stalls: 1, rebuilds: 3, waits: 8, tokenRefusals: 0, clientErrors: 0 });
     expect(after.serverErrors).toEqual([]);
     expect(after.perDay.reduce((n, d) => n + d.problems, 0)).toBe(4);
   });

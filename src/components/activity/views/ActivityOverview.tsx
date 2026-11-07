@@ -620,7 +620,7 @@ export function Habits({
         (requests ? (
           <div>
             <div className="grid grid-cols-2 gap-3 p-3 md:grid-cols-4">
-              <Tile icon={Download} label={t("activity.dash.habits.requested")} value={requests.requested} />
+              <Tile icon={Download} label={t("activity.dash.habits.requested")} value={requests.requested} hint={periodStart === null ? t("activity.dash.habits.latestN", { n: allRequests?.all.length ?? 0 }) : undefined} />
               <Tile icon={CheckCircle2} label={t("activity.dash.habits.arrived")} value={requests.available} />
               <Tile icon={Clapperboard} label={t("activity.dash.habits.watchedByRequester")} value={requests.watched} />
               <Tile icon={Clock} label={t("activity.dash.habits.delay")} value={requests.medianDelayMs !== null ? delayLabel(requests.medianDelayMs, t) : "—"} />
@@ -1007,7 +1007,7 @@ function Details({ data, dash }: { data: Overview; dash: Dashboard | undefined }
           <Heatmap heatmap={h.habits.heatmap} />
         </div>
       </Fold>
-      <Fold id="causes" title={t("activity.dash.causes")} icon={Wrench} summary={t("activity.dash.causesSummary", { r: s.rebuildReasons.length, e: s.serverErrors.length })}>
+      <Fold id="causes" title={t("activity.dash.causes")} icon={Wrench} summary={`${t("activity.dash.causesRebuild", { n: s.rebuildReasons.length })} · ${t("activity.dash.causesServer", { n: s.serverErrors.length })}`}>
         <div className="grid grid-cols-1 divide-y divide-white/5 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
           <div>
             <p className="px-4 pt-3 text-xs font-medium text-muted">{t("activity.week.rebuildReasons")}</p>

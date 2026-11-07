@@ -34,7 +34,8 @@ export function ago(ts: number | null | undefined, now: number, t: T): string {
 
 /** 7 530 s → « 2 h 05 » ; 300 s → « 5 min ». */
 export function hours(seconds: number | null | undefined): string {
-  if (!seconds || seconds < 60) return seconds ? "< 1 min" : "0";
+  // « 0 min » et non « 0 » : un « 0 regardé » ou « 1 séance · 0 » ne se lisait pas (revue du 08/11/2026).
+  if (!seconds || seconds < 60) return seconds ? "< 1 min" : "0 min";
   const total = Math.round(seconds / 60);
   const h = Math.floor(total / 60);
   const m = total % 60;
@@ -263,7 +264,8 @@ export function SeanceFlags({ s }: { s: Seance }) {
   // registre la compte sans l'empêcher — c'est ce chiffre qui dira s'il faut l'activer.
   if (s.stop?.identicalRetries) flags.push({ label: t("activity.flags.identicalRetry", { n: s.stop.identicalRetries }), tone: "bg-warning/15 text-warning" });
   if (s.stop?.why === "lost") flags.push({ label: t("activity.flags.lost"), tone: "bg-white/5 text-muted" });
-  if (s.player === "serveur") flags.push({ label: t("activity.flags.server"), tone: "bg-violet-500/15 text-violet-300" });
+  // « Lecteur serveur prévu » le dit déjà : pas deux étiquettes pour un même fait.
+  if (s.player === "serveur" && !s.planned) flags.push({ label: t("activity.flags.server"), tone: "bg-violet-500/15 text-violet-300" });
   if (s.player === "hors-ligne") flags.push({ label: t("activity.flags.offline"), tone: "bg-sky-500/15 text-sky-300" });
   if (s.retro) flags.push({ label: t("activity.flags.retro"), tone: "bg-white/5 text-muted" });
   if (s.onTv) flags.push({ label: t("activity.flags.tv"), tone: "bg-violet-500/15 text-violet-300" });
@@ -485,7 +487,7 @@ function age(ms: number | null, t: T): string | null {
 /** 114.7 → « 115 Mo » ; sous 10, une décimale. */
 function mb(v: number | null, t: T): string | null {
   if (v == null) return null;
-  return t("activity.line.mb", { n: v < 10 ? v.toFixed(1) : String(Math.round(v)) });
+  return t("activity.line.mb", { n: v < 10 ? v.toLocaleString(uiLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : String(Math.round(v)) });
 }
 
 /** Une valeur de journal écrite en français, dite dans la langue de l'écran quand on la connaît. */

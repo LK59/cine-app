@@ -291,6 +291,10 @@ export function describeStats(now = Date.now()): DescribeStats {
  */
 export function isAlarmingServerLine(r: LogRecord): boolean {
   if (r.level !== "error" || r.scope === "admin" || r.scope === "client" || r.scope === "jellyfin-token") return false;
+  // `books/meta` ne journalise que des EPUB illisibles, cachés du catalogue comme prévu. Par la portée et
+  // non par la pile : le lecteur des journaux retire `stack` des lignes (`HEAVY_FIELDS`), et le filtre
+  // sur la pile laissait passer chacune (revue du 08/11/2026).
+  if (r.scope === "books/meta") return false;
   return !String(r.stack ?? "").startsWith("EpubDefectError");
 }
 
@@ -328,18 +332,29 @@ function totalsOf(stats: PeriodStats): PeriodTotals {
  * de la courbe. Une version déjà là au début de la fenêtre n'en a pas : elle n'est pas « arrivée » ici.
  */
 export function releasesSince(since: number): { day: string; version: string }[] {
-  const first = new Map<string, number>();
+  // Seulement les versions qui changent le deuxième chiffre (10.14 → 10.15) : avec une version par
+  // correctif, il y avait un trait derrière presque chaque barre (revue du 08/11/2026). Et une version
+  // plus ancienne que la plus récente déjà vue n'est pas une arrivée : c'est un onglet resté ouvert.
+  const parse = (v: string) => v.split(".").map((n) => Number(n) || 0);
+  const newer = (a: number[], b: number[]) => a[0] > b[0] || (a[0] === b[0] && a[1] > b[1]);
+  const out: { day: string; version: string }[] = [];
+  let best: number[] | null = null;
   let earliest = Number.POSITIVE_INFINITY;
-  for (const r of readRecords("player", since)) {
-    if (r._t < since || r.bench) continue;
-    if (r._t < earliest) earliest = r._t;
-    const v = typeof r.version === "string" ? r.version : null;
-    if (v && !first.has(v)) first.set(v, r._t);
+  const lines = readRecords("player", since).filter((r) => r._t >= since && !r.bench && typeof r.version === "string");
+  for (const r of lines) if (r._t < earliest) earliest = r._t;
+  for (const r of [...lines].sort((a, b) => a._t - b._t)) {
+    const v = parse(r.version as string);
+    if (!best) {
+      best = v;
+      continue;
+    }
+    if (newer(v, best)) {
+      best = v;
+      // Une version déjà là au début de la fenêtre n'est pas « arrivée » ici.
+      if (r._t > earliest + 6 * 3600_000) out.push({ day: localDay(new Date(r._t)), version: `${v[0]}.${v[1]}` });
+    }
   }
-  return [...first]
-    .filter(([, t]) => t > earliest + 6 * 3600_000)
-    .sort((a, b) => a[1] - b[1])
-    .map(([version, t]) => ({ day: localDay(new Date(t)), version }));
+  return out;
 }
 
 /** Le chemin d'une séance, dans les mots du tableau de bord. */

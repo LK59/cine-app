@@ -37,17 +37,19 @@ export function Kpi({
   const toneClass = { default: "text-white", good: "text-success", warn: "text-warning", bad: "text-danger" }[tone];
   return (
     <div className="card flex min-w-0 flex-col gap-1 p-4">
-      <span className="flex items-center gap-1.5 truncate text-xs text-muted">
-        {Icon && <Icon size={13} className="shrink-0" />}
-        {label}
-      </span>
-      <span className="flex items-baseline gap-2">
-        <span className={`text-3xl font-semibold tracking-tight tabular-nums ${toneClass}`}>{value}</span>
+      {/* L'écart sur la ligne du nom, à droite : à côté du chiffre il le faisait passer sur deux lignes
+          dans les tuiles étroites d'un téléphone (« 141 h / 58 », revue du 08/11/2026). */}
+      <span className="flex items-center justify-between gap-2 text-xs">
+        <span className="flex min-w-0 items-center gap-1.5 truncate text-muted">
+          {Icon && <Icon size={13} className="shrink-0" />}
+          {label}
+        </span>
         {delta && (
-          <span className={`text-xs font-medium tabular-nums ${delta.good === null ? "text-subtle" : delta.good ? "text-success" : "text-warning"}`}>{delta.text}</span>
+          <span className={`shrink-0 font-medium tabular-nums ${delta.good === null ? "text-subtle" : delta.good ? "text-success" : "text-warning"}`}>{delta.text}</span>
         )}
       </span>
-      {hint && <span className="truncate text-xs text-subtle">{hint}</span>}
+      <span className={`whitespace-nowrap text-3xl font-semibold tracking-tight tabular-nums ${toneClass}`}>{value}</span>
+      {hint && <span className="line-clamp-2 text-xs text-subtle">{hint}</span>}
     </div>
   );
 }
@@ -180,7 +182,7 @@ export function StackBar({
           <span key={p.key} title={`${p.label} · ${p.value}`} style={{ flexGrow: p.value, background: p.color }} className="h-full min-w-[3px]" />
         ))}
       </div>
-      <ul className={`grid gap-x-4 gap-y-2 ${columns === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+      <ul className={`grid gap-x-4 gap-y-2 ${columns === 1 ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}>
         {parts.map((p) => (
           <li key={p.key}>
             <button
@@ -367,12 +369,15 @@ export function KpiRow({
   prev,
   all,
   sinceVersion,
+  single = false,
 }: {
   stats: PeriodStats | null;
   prev: PeriodTotals | null;
   all: WeekSignals | null;
   /** Le taux sans accroc depuis une version — sous le chiffre, à la place du simple compte. */
   sinceVersion?: { version: string; seances: number; clean: number } | null;
+  /** La fiche d'un compte : « 1 spectateur » n'y dit rien. */
+  single?: boolean;
 }) {
   const t = useT();
   if (!stats) {
@@ -397,7 +402,7 @@ export function KpiRow({
         : undefined;
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-      <Kpi icon={Clapperboard} label={t("activity.dash.kpi.seances")} value={stats.seances} hint={t("activity.week.viewers", { n: stats.viewers })} delta={deltaOf(stats.seances, prev?.seances ?? null, "count", null)} />
+      <Kpi icon={Clapperboard} label={t("activity.dash.kpi.seances")} value={stats.seances} hint={single ? undefined : t("activity.week.viewers", { n: stats.viewers })} delta={deltaOf(stats.seances, prev?.seances ?? null, "count", null)} />
       <Kpi icon={Clock} label={t("activity.dash.kpi.watched")} value={hours(stats.watchedSeconds)} delta={deltaOf(stats.watchedSeconds, prev?.watchedSeconds ?? null, "hours", null)} />
       <Kpi
         icon={CheckCircle2}

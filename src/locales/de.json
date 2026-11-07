@@ -1027,7 +1027,6 @@
       "diagnosisSummary": "{n} beobachteter Titel|{n} beobachtete Titel",
       "devicesSummary": "{n} Gerät|{n} Geräte",
       "causes": "Ursachen und Fehler",
-      "causesSummary": "{r} Ursachen für Neuaufbau · {e} Arten von Serverfehlern",
       "describe": {
         "title": "Suche per Beschreibung",
         "summary": "{n} Suche in sieben Tagen|{n} Suchen in sieben Tagen",
@@ -1087,8 +1086,11 @@
         "hoursN": "{n} Std.|{n} Std.",
         "minutes": "{n} Min.|{n} Min.",
         "moreRequests": "Die andere Anfrage anzeigen|Die anderen {n} Anfragen anzeigen",
-        "fewerRequests": "Weniger anzeigen"
-      }
+        "fewerRequests": "Weniger anzeigen",
+        "latestN": "die letzten {n}"
+      },
+      "causesRebuild": "{n} Ursache für Neuaufbau|{n} Ursachen für Neuaufbau",
+      "causesServer": "{n} Art von Serverfehler|{n} Arten von Serverfehlern"
     }
   },
   "radarr": {

@@ -310,7 +310,7 @@ export function ActivityAccount({ id }: { id: string }) {
               ]}
             />
           </div>
-          <KpiRow stats={d.periods[period]} prev={period === "all" ? null : d.periods.previous[period]} all={null} />
+          <KpiRow stats={d.periods[period]} prev={period === "all" ? null : d.periods.previous[period]} all={null} single />
           <div className="grid grid-cols-2 gap-3">
             <Tile icon={Eye} label={t("activity.account.played")} value={d.library.playedMovies ?? "—"} hint={t("activity.account.playedEpisodes", { n: d.library.playedEpisodes ?? "—" })} />
             <Tile icon={UserRound} label={t("activity.account.firstSeen")} value={d.stats.firstSeen ? ago(d.stats.firstSeen, now, t) : "—"} hint={d.stats.devices.join(" · ")} />

@@ -68,6 +68,8 @@ describe("les blocages et le serveur", () => {
     const line = (f: Record<string, unknown>) => ({ _file: "server.log", _line: 0, _t: 1, ...f }) as LogRecord;
     expect(isAlarmingServerLine(line({ level: "warn", scope: "books/google" }))).toBe(false);
     expect(isAlarmingServerLine(line({ level: "error", scope: "books/meta", stack: "EpubDefectError: zip sans fin" }))).toBe(false);
+    // Telle que le lecteur des journaux la rend : sans sa pile (08/11/2026).
+    expect(isAlarmingServerLine(line({ level: "error", scope: "books/meta", message: "pas d'OPF" }))).toBe(false);
     expect(isAlarmingServerLine(line({ level: "info", scope: "admin" }))).toBe(false);
     expect(isAlarmingServerLine(line({ level: "error", scope: "cinema-movies", stack: "Error: boom" }))).toBe(true);
   });

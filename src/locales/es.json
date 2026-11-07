@@ -1027,7 +1027,6 @@
       "diagnosisSummary": "{n} título seguido|{n} títulos seguidos",
       "devicesSummary": "{n} dispositivo|{n} dispositivos",
       "causes": "Causas y errores",
-      "causesSummary": "{r} causas de reconstrucción · {e} tipos de errores del servidor",
       "describe": {
         "title": "Búsqueda por descripción",
         "summary": "{n} búsqueda en siete días|{n} búsquedas en siete días",
@@ -1087,8 +1086,11 @@
         "hoursN": "{n} h|{n} h",
         "minutes": "{n} min|{n} min",
         "moreRequests": "Ver la otra petición|Ver las otras {n} peticiones",
-        "fewerRequests": "Mostrar menos"
-      }
+        "fewerRequests": "Mostrar menos",
+        "latestN": "las {n} últimas"
+      },
+      "causesRebuild": "{n} causa de reconstrucción|{n} causas de reconstrucción",
+      "causesServer": "{n} tipo de error del servidor|{n} tipos de errores del servidor"
     }
   },
   "radarr": {

@@ -1027,7 +1027,6 @@
       "diagnosisSummary": "{n} titre suivi|{n} titres suivis",
       "devicesSummary": "{n} appareil|{n} appareils",
       "causes": "Causes et erreurs",
-      "causesSummary": "{r} causes de reconstruction · {e} sortes d'erreurs serveur",
       "describe": {
         "title": "Recherche par description",
         "summary": "{n} recherche sur sept jours|{n} recherches sur sept jours",
@@ -1087,8 +1086,11 @@
         "hoursN": "{n} h|{n} h",
         "minutes": "{n} min|{n} min",
         "moreRequests": "Voir les {n} autres demandes|Voir les {n} autres demandes",
-        "fewerRequests": "Afficher moins"
-      }
+        "fewerRequests": "Afficher moins",
+        "latestN": "les {n} dernières"
+      },
+      "causesRebuild": "{n} cause de reconstruction|{n} causes de reconstruction",
+      "causesServer": "{n} sorte d'erreur serveur|{n} sortes d'erreurs serveur"
     }
   },
   "radarr": {

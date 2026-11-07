@@ -1027,7 +1027,6 @@
       "diagnosisSummary": "{n} title followed|{n} titles followed",
       "devicesSummary": "{n} device|{n} devices",
       "causes": "Causes and errors",
-      "causesSummary": "{r} rebuild causes · {e} kinds of server errors",
       "describe": {
         "title": "Search by description",
         "summary": "{n} search over seven days|{n} searches over seven days",
@@ -1087,8 +1086,11 @@
         "hoursN": "{n} h|{n} h",
         "minutes": "{n} min|{n} min",
         "moreRequests": "Show the other {n} request|Show the other {n} requests",
-        "fewerRequests": "Show less"
-      }
+        "fewerRequests": "Show less",
+        "latestN": "the latest {n}"
+      },
+      "causesRebuild": "{n} rebuild cause|{n} rebuild causes",
+      "causesServer": "{n} kind of server error|{n} kinds of server errors"
     }
   },
   "radarr": {

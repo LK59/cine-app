@@ -52,7 +52,8 @@ export function acknowledgeSeance(s: Seance, clearedAt: number): Seance {
     // elles aussi, sans disparaître de la séance (07/11/2026).
     restarts: (s.restarts ?? []).map((r) => (r.failure ? { ...r, failure: false } : r)),
     incidents: [],
-    stop: s.stop ? { ...s.stop, waits: 0, waitedMs: 0, longestWaitMs: 0 } : null,
+    // Les attentes restent (revue du 08/11/2026) : c'est une mesure du confort de lecture, pas une
+    // erreur — effacées, la tuile « Attentes » tombait à zéro sur toutes les périodes.
   };
 }
 
