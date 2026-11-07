@@ -8,6 +8,8 @@ import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { createRateLimiter } from "@/lib/rateLimiter";
 import { LOCALE_COOKIE, getTmdbLocale, type Locale } from "@/lib/i18n";
 import { logError } from "@/lib/logger";
+import { logDescribeSearch } from "@/lib/eventLogs";
+import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { makeEntry, searchLibraryIndex } from "@/lib/searchLibraryIndex";
 import { describedTitles, describeSearchAvailable, findOnTmdb } from "@/lib/describeSearch";
 import { looksLikeDescription } from "@/lib/describeQuery";
@@ -26,6 +28,9 @@ export const dynamic = "force-dynamic";
  *
  * Une borne par compte : chaque phrase nouvelle est un appel payant. Trente par minute laisse taper
  * en paix et arrête une boucle.
+ *
+ * Chaque phrase laisse une ligne dans `recherche.log` (`logDescribeSearch`) : compte, mots, délai,
+ * cache ou modèle, résultats — jamais la phrase.
  */
 const describeAllowed = createRateLimiter(30, 60_000);
 const SEARCH_JELLYFIN_WAIT_MS = 1500;
@@ -39,8 +44,11 @@ export async function GET(req: NextRequest) {
   // La même règle que l'écran : une frappe qui n'est pas une description ne coûte rien.
   if (!looksLikeDescription(q)) return NextResponse.json({ available, results: [] });
 
+  const started = Date.now();
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
+  const who = { user: session?.jfUser ?? session?.u ?? "anonyme", device: requestDeviceLabel(req), words: q.split(/\s+/).length };
   if (!describeAllowed(session?.jfId ?? session?.u ?? "anonyme")) {
+    logDescribeSearch({ ...who, status: "limite", ms: Date.now() - started });
     return NextResponse.json({ available, results: [] }, { status: 429 });
   }
 
@@ -51,10 +59,14 @@ export async function GET(req: NextRequest) {
   if (!client.isEnabled()) return NextResponse.json({ available, results: [] });
 
   let titles;
+  let modelMs: number | undefined;
   try {
-    titles = await describedTitles(q);
+    titles = await describedTitles(q, (ms) => {
+      modelMs = ms;
+    });
   } catch (error) {
     logError("describe-search", error);
+    logDescribeSearch({ ...who, status: "erreur", ms: Date.now() - started });
     return NextResponse.json({ available, results: [] }, { status: 502 });
   }
 
@@ -76,6 +88,15 @@ export async function GET(req: NextRequest) {
     if (seen.has(key) || hidden.has(key)) return;
     seen.add(key);
     results.push(makeEntry(hit, type, index.radarrByTmdb, index.sonarrByTmdb, "tmdb", index.playable));
+  });
+  logDescribeSearch({
+    ...who,
+    status: "ok",
+    ms: Date.now() - started,
+    ...(modelMs === undefined ? {} : { modelMs }),
+    titles: titles.length,
+    results: results.length,
+    inLibrary: results.filter((r) => r.inLibrary).length,
   });
   return NextResponse.json({ available, results });
 }

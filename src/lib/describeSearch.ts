@@ -136,8 +136,14 @@ export function setDescribeModelForTests(fn: ((query: string) => Promise<Describ
  * Les titres qu'une phrase désigne. Gardés une semaine sur disque par phrase normalisée — la langue
  * de l'interface n'y entre pas, le modèle rend les mêmes titres. Une erreur n'est pas gardée.
  */
-export function describedTitles(query: string): Promise<DescribedTitle[]> {
-  return withPersistentCache(`describe:v1:${describeKey(query)}`, 7 * 24 * 3600_000, () => identify(query));
+export function describedTitles(query: string, onModel?: (ms: number) => void): Promise<DescribedTitle[]> {
+  return withPersistentCache(`describe:v1:${describeKey(query)}`, 7 * 24 * 3600_000, async () => {
+    // Appelé seulement quand le cache n'a rien : le journal compte ainsi les appels payants.
+    const started = Date.now();
+    const titles = await identify(query);
+    onModel?.(Date.now() - started);
+    return titles;
+  });
 }
 
 /** Un titre pour comparer : minuscules, sans accents ni ponctuation. */

@@ -286,6 +286,10 @@ when it ended, `janks` over 50 ms, `longJanks` over 200 ms) and what the return 
 (`events`: `version:même|nouvelle|rechargement`, `catalogue:films-inchangé|…-changé`, `listes:N`); `cut` when
 the page reloads or hides again first. Eight per tab. Measured only — it exists to find what freezes the
 interface for a moment after a return.
+`data/logs/recherche.log` (since 2026-11-07, `logDescribeSearch`) has one line per description search
+(DECISIONS §135): account, device, word count, `ms`, `source` (`cache` or `modèle` — only the second is a
+paid call, with `modelMs`), titles recognised, results kept and how many are in the library, `status`
+(`ok` / `erreur` / `limite`). Never the sentence typed.
 Its format is versioned
 (`PERSISTED_CACHE_SCHEMA`), and `persistentCache-schema.test.ts` fails when the kept responses'
 types change without the version moving.

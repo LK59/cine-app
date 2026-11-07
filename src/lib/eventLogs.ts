@@ -101,6 +101,32 @@ export function logViewportDiag(fields: { user: string; device: string | null } 
 }
 
 /**
+ * La recherche par description (DECISIONS.md §135, 07/11/2026) : une ligne par phrase envoyée — compte,
+ * appareil, nombre de mots, délai, cache ou appel au modèle (le seul qui coûte), titres reconnus et
+ * gardés. **Jamais la phrase elle-même** : ce que chacun cherche ne regarde que lui.
+ */
+export const SEARCH_LOG = () => path.join(LOG_DIR, "recherche.log");
+
+export function logDescribeSearch(fields: {
+  user: string;
+  device: string | null;
+  words: number;
+  status: "ok" | "erreur" | "limite";
+  ms: number;
+  /** Absent : la réponse venait du cache. */
+  modelMs?: number;
+  titles?: number;
+  results?: number;
+  inLibrary?: number;
+}): void {
+  try {
+    appendJsonLine(SEARCH_LOG(), { timestamp: new Date().toISOString(), kind: "description", source: fields.modelMs === undefined ? "cache" : "modèle", ...fields }, { keep: EVENT_LOG_KEEP });
+  } catch {
+    /* rien */
+  }
+}
+
+/**
  * Les Nouveautés (DECISIONS.md §73) : la fenêtre (combien de temps elle est restée à l'écran, page
  * visible seulement, et comment elle s'est fermée), « Voir plus », et la page Compte → Nouveautés.
  * Dans le journal des ouvertures, parce que c'en est un moment : la fenêtre ne s'ouvre qu'au lancement.

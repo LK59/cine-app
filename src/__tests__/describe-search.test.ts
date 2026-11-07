@@ -29,6 +29,8 @@ vi.mock("@/lib/blockedTags", () => ({
 }));
 const logError = vi.fn();
 vi.mock("@/lib/logger", () => ({ logError: (...args: unknown[]) => logError(...args) }));
+const searchLog = vi.fn();
+vi.mock("@/lib/eventLogs", () => ({ logDescribeSearch: (...args: unknown[]) => searchLog(...args) }));
 
 const tmdbMock = {
   isEnabled: () => true,
@@ -58,6 +60,7 @@ function req(q: string | null, account = "libre"): NextRequest {
   const cookies: Record<string, string> = { cine_session: account };
   return {
     nextUrl: { searchParams: new URLSearchParams(q === null ? {} : { q }) },
+    headers: new Headers({ "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)" }),
     cookies: { get: (name: string) => (cookies[name] ? { value: cookies[name] } : undefined) },
   } as unknown as NextRequest;
 }
@@ -76,6 +79,7 @@ beforeEach(() => {
   settings.apiKey = "sk-test";
   model.mockReset();
   logError.mockReset();
+  searchLog.mockReset();
   setDescribeModelForTests(model);
   tmdbMock.searchMovies.mockReset();
   tmdbMock.searchTv.mockReset();
@@ -182,6 +186,13 @@ describe("/api/search/describe", () => {
       [587792, false, false, null],
     ]);
     expect(body.results[0].title).toBe("Un jour sans fin");
+    // Le journal : des chiffres, jamais la phrase.
+    expect(searchLog).toHaveBeenCalledTimes(1);
+    const line = searchLog.mock.calls[0][0];
+    expect(line).toMatchObject({ status: "ok", words: 9, titles: 3, results: 2, inLibrary: 1 });
+    expect(typeof line.ms).toBe("number");
+    expect(typeof line.modelMs).toBe("number");
+    expect(JSON.stringify(line)).not.toMatch(/journée|revit/);
   });
 
   it("un titre caché au compte ne sort pas (§54)", async () => {
@@ -197,5 +208,6 @@ describe("/api/search/describe", () => {
     expect(status).toBe(502);
     expect(body.results).toEqual([]);
     expect(logError).toHaveBeenCalledWith("describe-search", expect.any(Error));
+    expect(searchLog).toHaveBeenCalledWith(expect.objectContaining({ status: "erreur", words: 9 }));
   });
 });

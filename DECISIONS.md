@@ -8594,6 +8594,8 @@ description est en route.
 `src/lib/describeQuery.ts` (`looksLikeDescription`, `describeKey` — partagés par l'écran et la route) ;
 `src/lib/useDescribeSearch.ts` ; `src/lib/searchLibraryIndex.ts` (déplacé de `/api/search` pour n'avoir
 qu'une règle). Borne : 30 phrases par minute et par compte.
+Journal : une ligne par phrase dans `recherche.log` (`logDescribeSearch`, `eventLogs.ts`) — compte,
+appareil, nombre de mots, délai, cache ou modèle, résultats ; jamais la phrase elle-même.
 
 **Tests.** `describe-search.test.ts` (déclenchement, lecture du modèle, correspondance TMDB, route :
 coupée, titre tapé, bibliothèque / à demander, titre inventé écarté, tag bloqué, échec) ;
