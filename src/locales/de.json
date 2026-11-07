@@ -316,9 +316,7 @@
       "clear": "Warnungen löschen",
       "clearConfirm": "Alle löschen",
       "cleared": "Warnungen gelöscht",
-      "restored": "Warnungen wieder sichtbar",
       "clearedOn": "Warnungen gelöscht {when}",
-      "restore": "Wieder anzeigen",
       "title": "Genauer ansehen",
       "tokenRefused": "Token abgelehnt",
       "tokenStale": "Für den Medienserver unsichtbar",
@@ -672,7 +670,8 @@
       "twinOf": "Zwilling von „{device}“ (Adresswechsel) – sie werden gemeinsam beendet",
       "devices": "Geräte des Medienservers ({n})",
       "closeHint": "Eine Sitzung zu schließen meldet dieses Gerät von der App ab und widerruft das Token dieser Anmeldung; die anderen Apps der Person bleiben unberührt.",
-      "historyHint": "über {n} Tage"
+      "historyHint": "über {n} Tage",
+      "historyAll": "seit Beginn"
     },
     "actions": {
       "close": "Schließen",
@@ -980,7 +979,8 @@
         "recovered": "{n} aufgefangener Neuaufbau|{n} aufgefangene Neuaufbauten",
         "slowLinks": "{n} Wechsel zur leichteren Version|{n} Wechsel zur leichteren Version",
         "planned": "{n} vorgesehene Server-Wiedergabe|{n} vorgesehene Server-Wiedergaben",
-        "background": "{n} Rückkehr aus dem Hintergrund|{n} Rückkehren aus dem Hintergrund"
+        "background": "{n} Rückkehr aus dem Hintergrund|{n} Rückkehren aus dem Hintergrund",
+        "network": "{n} Hänger durch das Netz des Zuschauers|{n} Hänger durch das Netz des Zuschauers"
       },
       "issue": {
         "reports": "{n} Meldung wartet auf Antwort|{n} Meldungen warten auf Antwort",
@@ -996,8 +996,8 @@
       "paths": "Wiedergabewege",
       "devices": "Geräte",
       "path": {
-        "natif": "App-Player",
-        "serveur": "Server-Player",
+        "natif": "App",
+        "serveur": "Server",
         "tv": "Fernseher",
         "horsLigne": "Offline"
       },
@@ -1019,7 +1019,14 @@
         "errors": "Fehlschläge"
       },
       "addressShow": "Adresswechsel",
-      "addressHide": "Adresswechsel ausblenden"
+      "addressHide": "Adresswechsel ausblenden",
+      "reason": {
+        "stall": "Hänger",
+        "rebuild": "Neuaufbau",
+        "fallback": "Wechsel des Players",
+        "error": "Fehler"
+      },
+      "dismiss": "Diese Zeile löschen"
     }
   },
   "radarr": {

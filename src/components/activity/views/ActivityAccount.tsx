@@ -260,8 +260,8 @@ export function ActivityAccount({ id }: { id: string }) {
       ))}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Tile icon={Clapperboard} label={t("activity.account.seances")} value={d.stats.seances} hint={t("activity.account.historyHint", { n: d.historyDays })} />
-        <Tile icon={Clock} label={t("activity.account.watched")} value={hours(d.stats.watchedSeconds)} hint={t("activity.account.historyHint", { n: d.historyDays })} />
+        <Tile icon={Clapperboard} label={t("activity.account.seances")} value={d.stats.seances} hint={d.historyDays ? t("activity.account.historyHint", { n: d.historyDays }) : t("activity.account.historyAll")} />
+        <Tile icon={Clock} label={t("activity.account.watched")} value={hours(d.stats.watchedSeconds)} hint={d.historyDays ? t("activity.account.historyHint", { n: d.historyDays }) : t("activity.account.historyAll")} />
         <Tile icon={CalendarClock} label={t("activity.account.thisWeek")} value={d.stats.weekSeances} hint={hours(d.stats.weekWatchedSeconds)} />
         <Tile icon={Wrench} label={t("activity.account.problems")} value={d.stats.problems} tone={d.stats.problems ? "warn" : "good"} />
         <Tile icon={Eye} label={t("activity.account.played")} value={d.library.playedMovies ?? "—"} hint={t("activity.account.playedEpisodes", { n: d.library.playedEpisodes ?? "—" })} />

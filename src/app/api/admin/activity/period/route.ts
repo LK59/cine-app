@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminOnly } from "@/lib/activity/adminOnly";
 import { monthSignals } from "@/lib/activity/accounts";
 import { allTimeSignals } from "@/lib/activity/activityHistory";
+import { alertsClearedAt } from "@/lib/activity/alertsCleared";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,6 @@ export async function GET(req: NextRequest) {
   if (session instanceof NextResponse) return session;
   const period = req.nextUrl.searchParams.get("period");
   if (period === "30") return NextResponse.json(monthSignals());
-  if (period === "all") return NextResponse.json(allTimeSignals());
+  if (period === "all") return NextResponse.json(allTimeSignals(Date.now(), alertsClearedAt()));
   return NextResponse.json({ error: "Période inconnue" }, { status: 400 });
 }

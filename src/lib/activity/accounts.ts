@@ -53,11 +53,12 @@ function isError(r: LogRecord): boolean {
   return r.level !== "info" && r.scope !== "admin";
 }
 /**
- * Jusqu'où remonte la fiche d'un compte. Les journaux gardent des années depuis le 24/09/2026 ;
- * tout relire à chaque ouverture tiendrait le serveur plusieurs secondes. Les journaux eux-mêmes
- * remontent aussi loin qu'on le demande (page Journaux, « Plus ancien »).
+ * Jusqu'où remonte la fiche d'un compte : tout ce que gardent les journaux, depuis le 07/11/2026
+ * (c'était 90 jours). Le journal du lecteur garde 120 archives de 5 Mo — au rythme de l'automne 2026,
+ * plusieurs années — et les quatre premières, deux mois, se lisent en ~260 ms une fois puis restent en
+ * mémoire (`logReader.ts`). Si les archives se multiplient au point de peser, c'est ici qu'on bornera.
  */
-export const ACCOUNT_HISTORY_DAYS = 90;
+export const ACCOUNT_HISTORY_DAYS: number | null = null;
 /** Un compte actif dans l'application dont Jellyfin ne voit rien depuis plus d'un jour : son jeton. */
 const TOKEN_GAP_MS = DAY;
 
@@ -138,7 +139,7 @@ export function problemsOf(s: Seance): number {
 
 /** Ce que le lecteur a traité tout seul, comme prévu — compté, jamais mis en avant. */
 export function handledOf(s: Seance): number {
-  return (s.recovered ?? 0) + (s.planned ?? 0) + (s.slowLinks ?? 0) + s.backgroundRebuilds;
+  return (s.recovered ?? 0) + (s.planned ?? 0) + (s.slowLinks ?? 0) + (s.netStalls ?? 0) + s.backgroundRebuilds;
 }
 
 /**
@@ -299,6 +300,8 @@ export interface WeekSignals {
   perDay: { day: string; seances: number; problems: number }[];
   /** Ce que couvre une barre de `perDay` ; absent : un jour. */
   bucket?: "day" | "week" | "month";
+  /** Qui regarde, les plus regardeurs d'abord — sur toute la période. */
+  people?: { user: string; seances: number; watchedSeconds: number }[];
 }
 
 /**
@@ -327,13 +330,18 @@ export interface SignalTally {
   tokenRefusals: number;
   serverErrors: Record<string, number>;
   rebuildReasons: Record<string, number>;
+  /**
+   * Par compte (nom en minuscules) : séances et temps regardé — de quoi dire « qui regarde » sur tout
+   * l'historique, jour après jour (07/11/2026, `TALLY_VERSION` 2). Absent d'un compte plus ancien.
+   */
+  byUser?: Record<string, { user: string; seances: number; watchedSeconds: number }>;
 }
 
 export function emptyTally(): SignalTally {
   return {
     seances: 0, viewers: [], watchedSeconds: 0, waits: 0, waitedMs: 0, slowSeeks: 0, seeks: 0, stalls: 0, rebuilds: 0,
     fallbacks: 0, errors: 0, lost: 0, audioSwitches: 0, problems: 0, clientErrors: 0, staleReloads: 0, tokenRefusals: 0,
-    serverErrors: {}, rebuildReasons: {},
+    serverErrors: {}, rebuildReasons: {}, byUser: {},
   };
 }
 
@@ -345,9 +353,13 @@ export function emptyTally(): SignalTally {
 export function tallySignals(seances: readonly Seance[], allServer: readonly LogRecord[], clearedAt = 0): SignalTally {
   const t = emptyTally();
   const viewers = new Set<string>();
+  const byUser: NonNullable<SignalTally["byUser"]> = {};
   for (const s of seances) {
     t.seances += 1;
     viewers.add(s.user.toLowerCase());
+    const u = (byUser[s.user.toLowerCase()] ??= { user: s.user, seances: 0, watchedSeconds: 0 });
+    u.seances += 1;
+    u.watchedSeconds += s.watched ?? 0;
     t.watchedSeconds += s.watched ?? 0;
     t.waits += s.stop?.waits ?? 0;
     t.waitedMs += s.stop?.waitedMs ?? 0;
@@ -369,6 +381,7 @@ export function tallySignals(seances: readonly Seance[], allServer: readonly Log
     }
   }
   t.viewers = [...viewers].sort();
+  t.byUser = byUser;
   const fresh = afterClear(clearedAt);
   for (const r of allServer) {
     if (isStaleClientChunk(r)) {
@@ -416,7 +429,19 @@ export function addTally(into: SignalTally, add: SignalTally): SignalTally {
     tokenRefusals: into.tokenRefusals + add.tokenRefusals,
     serverErrors: sumMaps(into.serverErrors, add.serverErrors),
     rebuildReasons: sumMaps(into.rebuildReasons, add.rebuildReasons),
+    byUser: sumUsers(into.byUser ?? {}, add.byUser ?? {}),
   };
+}
+
+function sumUsers(a: NonNullable<SignalTally["byUser"]>, b: NonNullable<SignalTally["byUser"]>): NonNullable<SignalTally["byUser"]> {
+  const out: NonNullable<SignalTally["byUser"]> = {};
+  for (const [k, v] of Object.entries(a)) out[k] = { ...v };
+  for (const [k, v] of Object.entries(b)) {
+    const o = (out[k] ??= { user: v.user, seances: 0, watchedSeconds: 0 });
+    o.seances += v.seances;
+    o.watchedSeconds += v.watchedSeconds;
+  }
+  return out;
 }
 
 /** Le bilan affiché, à partir d'un compte et de ses barres. */
@@ -444,6 +469,7 @@ export function signalsOf(t: SignalTally, since: number, perDay: WeekSignals["pe
     rebuildReasons: top(t.rebuildReasons, 6).map(([reason, count]) => ({ reason, count })),
     perDay,
     ...(bucket ? { bucket } : {}),
+    people: Object.values(t.byUser ?? {}).sort((a, b) => b.watchedSeconds - a.watchedSeconds || b.seances - a.seances).slice(0, 12),
   };
 }
 
@@ -465,8 +491,7 @@ export function lastLocalDays(now: number, n: number): { day: string; start: num
 
 /**
  * Le bilan des `days` derniers jours : ce que le journal du lecteur et celui du serveur en disent.
- * La semaine (7) suit « Effacer les alertes » ; les trente jours passent `clearedAt = 0` — c'est de
- * l'historique, pas une alerte.
+ * Toutes les périodes suivent « Effacer les alertes » depuis le 07/11/2026.
  */
 function signalsForDays(days: number, now: number, clearedAt: number): WeekSignals {
   const since = now - days * DAY;
@@ -485,9 +510,12 @@ export function weekSignals(now = Date.now(), clearedAt = alertsClearedAt()): We
   return signalsForDays(7, now, clearedAt);
 }
 
-/** Les trente derniers jours, alertes effacées comprises. */
-export function monthSignals(now = Date.now()): WeekSignals {
-  return signalsForDays(30, now, 0);
+/**
+ * Les trente derniers jours. Depuis le 07/11/2026 ils suivent « Effacer les alertes » comme la semaine :
+ * Louis voulait que les erreurs d'anciennes versions, réglées depuis, ne pèsent plus sur aucune période.
+ */
+export function monthSignals(now = Date.now(), clearedAt = alertsClearedAt()): WeekSignals {
+  return signalsForDays(30, now, clearedAt);
 }
 
 // ─── Un compte ──────────────────────────────────────────────────────────────────────────────
@@ -574,7 +602,7 @@ export async function accountDetail(id: string, now = Date.now(), clearedAt = al
     part(jellyfin.getNextUpGlobal(id, 12).then((items) => (items as unknown as JellyfinItemLike[]).map(mediaEntry))),
   ]);
 
-  const historyStart = now - ACCOUNT_HISTORY_DAYS * DAY;
+  const historyStart = ACCOUNT_HISTORY_DAYS === null ? 0 : now - ACCOUNT_HISTORY_DAYS * DAY;
   // Ses séances restent toutes listées ; celles d'avant l'effacement ne colorent plus rien.
   const seances = acknowledgeSeances(
     buildSeances(readRecords("player", historyStart)).filter((s) => s.user.toLowerCase() === lower && s.start >= historyStart),

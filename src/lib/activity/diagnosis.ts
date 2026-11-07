@@ -60,6 +60,8 @@ export interface TitleDiagnosis {
   verdict: Verdict;
 }
 
+const REAL_KINDS = new Set(["stall", "rebuild", "fallback", "error"]);
+
 /** Une part d'échec au-delà de laquelle un appareil « peine partout » plutôt que sur ce titre. */
 const EVERYWHERE_SHARE = 0.3;
 
@@ -140,6 +142,9 @@ export function diagnoseTitles(all: Seance[], limit = 12): TitleDiagnosis[] {
     const reasons = new Map<string, number>();
     for (const s of failedList) {
       for (const i of s.incidents) {
+        // Seuls les vrais incidents nomment le souci : une reconstruction rattrapée ou un passage prévu
+        // au lecteur serveur dans la même séance n'en sont pas (07/11/2026, §136).
+        if (!REAL_KINDS.has(i.kind)) continue;
         // Le début du motif : assez pour regrouper, sans les nombres qui changent d'une fois à l'autre.
         // Un blocage n'a pour motif que la position où il a eu lieu : une fois les nombres retirés,
         // il ne restait que « stall: # s » (relu le 06/10/2026). Il se regroupe sous son seul nom.

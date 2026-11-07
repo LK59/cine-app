@@ -117,6 +117,14 @@ export interface Seance {
    */
   recovered?: number;
   /**
+   * Les blocages que le diagnostic du lecteur impute au réseau du spectateur (07/11/2026) : verdict
+   * `réseau` ou lien `trop lente` (`diag.*`, `playbackDiagnosis.ts`), ou l'appareil hors ligne. Ni le
+   * fichier ni l'application : sur la semaine du 31/10, plus de la moitié des blocages, presque tous
+   * chez un même spectateur en itinérance. Comptés à part de `stalls`, gérés, jamais « à gérer ». Un
+   * blocage sans diagnostic (lignes d'avant le 28/09/2026) reste un blocage.
+   */
+  netStalls?: number;
+  /**
    * Un téléviseur a réellement pris la lecture (ligne `cast`, « diffusion établie ») — et non
    * seulement demandée. Une séance rouverte sur le téléphone puis envoyée à la télé par les
    * commandes de la vidéo n'a pas de repli « diffusion demandée » : sans ceci, elle se lisait
@@ -300,6 +308,11 @@ function absorb(s: Seance, r: LogRecord): void {
       s.incidents.push({ kind: "rebuild", t: r._t, reason });
       break;
     case "stall":
+      if (r["diag.verdict"] === "réseau" || r["diag.linkVerdict"] === "trop lente" || r.onLine === false || r.netTrouble === true) {
+        s.netStalls = (s.netStalls ?? 0) + 1;
+        s.incidents.push({ kind: "netStall", t: r._t, reason: `${num(r.position)?.toFixed(0) ?? "?"} s` });
+        break;
+      }
       s.stalls += 1;
       s.incidents.push({ kind: "stall", t: r._t, reason: `${num(r.position)?.toFixed(0) ?? "?"} s` });
       break;

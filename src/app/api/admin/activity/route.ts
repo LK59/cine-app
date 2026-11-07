@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       signals,
       recent: recentSeances(20, now, clearedAt),
       household: household(now, clearedAt),
-      dashboard: dashboard(now),
+      dashboard: dashboard(now, clearedAt),
       alertsClearedAt: clearedAt,
       jellyfinDownSince: jellyfinDownSince(),
     })

@@ -7,7 +7,8 @@
 // version allégée, lecteur serveur pour un fichier qu'un appareil ne lit pas), et ne disait ni le
 // taux de séances sans accroc, ni les chemins pris, ni les heures regardées jour par jour.
 
-import { readRecords } from "@/lib/activity/logReader";
+import { readRecords, type LogRecord } from "@/lib/activity/logReader";
+import { acknowledgeSeances, dismissedIssues } from "@/lib/activity/alertsCleared";
 import { lastLocalDays, problemsOf, seancesSince } from "@/lib/activity/accounts";
 import type { Seance } from "@/lib/activity/seances";
 
@@ -22,7 +23,7 @@ export interface PeriodStats {
   /** Vrais incidents, toutes séances. */
   real: number;
   /** Ce que le lecteur a géré seul, par sorte. */
-  handled: { recovered: number; planned: number; slowLinks: number; background: number };
+  handled: { recovered: number; planned: number; slowLinks: number; network: number; background: number };
   /** Temps d'ouverture : médiane et 90e centile, en ms — `null` sans mesure. */
   openMedianMs: number | null;
   openP90Ms: number | null;
@@ -45,6 +46,13 @@ export interface DescribeStats {
   errors: number;
 }
 
+export interface Alarms {
+  /** Les vraies erreurs du serveur, par portée, avec la dernière. */
+  server: { scope: string; count: number; lastAt: number }[];
+  logins: { count: number; lastAt: number } | null;
+  notifications: { count: number; lastAt: number } | null;
+}
+
 export interface Dashboard {
   periods: { day: PeriodStats; week: PeriodStats; month: PeriodStats };
   /** Trente jours, du plus ancien au plus récent. */
@@ -52,6 +60,10 @@ export interface Dashboard {
   /** Le temps regardé sur trente jours, par heure de la journée (heure du foyer). */
   hours: number[];
   describe: DescribeStats;
+  /** Les lignes de « À gérer » qui viennent des journaux du serveur, d'après l'effacement. */
+  alarms: Alarms;
+  /** Les lignes effacées une à une — `alertsCleared.ts`. */
+  dismissed: Record<string, number>;
 }
 
 function quantile(values: number[], q: number): number | null {
@@ -78,7 +90,7 @@ export function periodStats(seances: readonly Seance[]): PeriodStats {
   const people = new Map<string, PeriodStats["people"][number]>();
   const out: PeriodStats = {
     seances: 0, viewers: 0, watchedSeconds: 0, clean: 0, real: 0,
-    handled: { recovered: 0, planned: 0, slowLinks: 0, background: 0 },
+    handled: { recovered: 0, planned: 0, slowLinks: 0, network: 0, background: 0 },
     openMedianMs: null, openP90Ms: null, waits: 0, waitedMs: 0, seeks: 0, slowSeeks: 0,
     paths: { natif: 0, serveur: 0, tv: 0, horsLigne: 0 },
     devices: [], titles: [], people: [],
@@ -93,6 +105,7 @@ export function periodStats(seances: readonly Seance[]): PeriodStats {
     out.handled.recovered += s.recovered ?? 0;
     out.handled.planned += s.planned ?? 0;
     out.handled.slowLinks += s.slowLinks ?? 0;
+    out.handled.network += s.netStalls ?? 0;
     out.handled.background += s.backgroundRebuilds;
     out.waits += s.stop?.waits ?? 0;
     out.waitedMs += s.stop?.waitedMs ?? 0;
@@ -147,8 +160,44 @@ export function describeStats(now = Date.now()): DescribeStats {
   };
 }
 
-export function dashboard(now = Date.now()): Dashboard {
-  const month = seancesSince(now - 30 * DAY, now);
+/**
+ * Une erreur du serveur qui demande une main. Pas un avertissement (`warn` : une relance réussie, un
+ * service tiers qui a répondu 503 une fois — 1 800 lignes de Google Books en une semaine, le 07/11/2026),
+ * pas un EPUB illisible (`EpubDefectError` : caché du catalogue comme prévu, §127), pas une page ouverte
+ * pendant un déploiement, ni un geste de l'administrateur.
+ */
+export function isAlarmingServerLine(r: LogRecord): boolean {
+  if (r.level !== "error" || r.scope === "admin" || r.scope === "client" || r.scope === "jellyfin-token") return false;
+  return !String(r.stack ?? "").startsWith("EpubDefectError");
+}
+
+export function alarmsOf(now: number, clearedAt: number): Alarms {
+  const since = Math.max(now - 7 * DAY, clearedAt);
+  const server = new Map<string, { scope: string; count: number; lastAt: number }>();
+  for (const r of readRecords("server", since)) {
+    if (r._t <= since || !isAlarmingServerLine(r)) continue;
+    const scope = String(r.scope ?? "?");
+    const e = server.get(scope) ?? { scope, count: 0, lastAt: 0 };
+    e.count += 1;
+    e.lastAt = Math.max(e.lastAt, r._t);
+    server.set(scope, e);
+  }
+  const failedLogins = readRecords("auth", since).filter((r) => r._t > since && r.kind === "login-failed");
+  const failedNotifs = readRecords("notifications", since).filter(
+    (r) => r._t > since && (Array.isArray(r.recipients) ? (r.recipients as Record<string, unknown>[]) : []).some((x) => Number(x.failed) > 0 || Number(x.removed) > 0)
+  );
+  const summary = (list: LogRecord[]) => (list.length ? { count: list.length, lastAt: Math.max(...list.map((r) => r._t)) } : null);
+  return {
+    server: [...server.values()].sort((a, b) => b.count - a.count),
+    logins: summary(failedLogins),
+    notifications: summary(failedNotifs),
+  };
+}
+
+export function dashboard(now = Date.now(), clearedAt = 0): Dashboard {
+  // Les incidents d'avant « Effacer les alertes » ne comptent sur aucune période (07/11/2026) ; les
+  // séances et le temps regardé restent.
+  const month = acknowledgeSeances(seancesSince(now - 30 * DAY, now), clearedAt);
   const days = lastLocalDays(now, 30);
   const series = days.map(({ day, start, end }) => {
     const of = month.filter((s) => s.start >= start && s.start < end);
@@ -176,5 +225,15 @@ export function dashboard(now = Date.now()): Dashboard {
     series,
     hours,
     describe,
+    alarms: safe(() => alarmsOf(now, clearedAt), { server: [], logins: null, notifications: null }),
+    dismissed: safe(() => dismissedIssues(), {}),
   };
+}
+
+function safe<T>(fn: () => T, fallback: T): T {
+  try {
+    return fn();
+  } catch {
+    return fallback;
+  }
 }

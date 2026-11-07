@@ -167,13 +167,14 @@ describe("le foyer", () => {
 describe("POST /api/admin/activity/alerts", () => {
   const req = (body: unknown) => ({ json: async () => body }) as never;
 
-  it("efface (une date), réaffiche (zéro), refuse le reste", async () => {
+  it("efface (une date, définitive), refuse le reste", async () => {
     const { POST } = await import("@/app/api/admin/activity/alerts/route");
     const res = await POST(req({ action: "clear" }));
     expect(res.status).toBe(200);
     expect(alertsClearedAt()).toBeGreaterThan(0);
-    expect((await POST(req({ action: "restore" }))).status).toBe(200);
-    expect(alertsClearedAt()).toBe(0);
+    // Définitif depuis le 07/11/2026 : plus de « Réafficher ».
+    expect((await POST(req({ action: "restore" }))).status).toBe(400);
+    expect(alertsClearedAt()).toBeGreaterThan(0);
     expect((await POST(req({ action: "rien" }))).status).toBe(400);
   });
 

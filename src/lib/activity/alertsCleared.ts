@@ -47,6 +47,10 @@ export function acknowledgeSeance(s: Seance, clearedAt: number): Seance {
     slowLinks: 0,
     errors: 0,
     slowSeeks: 0,
+    fileDefects: 0,
+    // Les relances d'échelle du lecteur serveur comptent comme incidents (`failuresOf`) : effacées
+    // elles aussi, sans disparaître de la séance (07/11/2026).
+    restarts: (s.restarts ?? []).map((r) => (r.failure ? { ...r, failure: false } : r)),
     incidents: [],
     stop: s.stop ? { ...s.stop, waits: 0, waitedMs: 0, longestWaitMs: 0 } : null,
   };
@@ -59,4 +63,29 @@ export function acknowledgeSeances(list: Seance[], clearedAt: number): Seance[] 
 /** Une ligne de journal postérieure à l'effacement — les seules qui comptent pour une alerte. */
 export function afterClear(clearedAt: number) {
   return (r: { _t: number }) => r._t > clearedAt;
+}
+
+/**
+ * Les lignes de « À gérer » effacées une à une (07/11/2026, §136) : une date par ligne, sous une clé
+ * stable (`compte:<id>:<sorte>`, `titre:<clé>`, `serveur:<portée>`, `connexions`, `notifications`).
+ * Une ligne revient si son dernier événement est postérieur à sa date — la panne réglée qui revient
+ * doit se voir. Comme le diagnostic (`diagnosisCleared.ts`), rien des journaux n'est touché.
+ */
+const DISMISSED_KEY = "__ACTIVITY_ISSUES_DISMISSED";
+const DISMISSED_KEEP_MS = 31 * 24 * 3600_000;
+
+export function dismissedIssues(): Record<string, number> {
+  try {
+    const parsed = JSON.parse(readOverride(DISMISSED_KEY) ?? "{}") as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function dismissIssue(key: string, now = Date.now()): void {
+  const all = dismissedIssues();
+  all[key.slice(0, 200)] = now;
+  for (const [k, at] of Object.entries(all)) if (typeof at !== "number" || now - at > DISMISSED_KEEP_MS) delete all[k];
+  writeOverride(DISMISSED_KEY, JSON.stringify(all));
 }

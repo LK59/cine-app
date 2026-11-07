@@ -216,6 +216,16 @@ export function Poster({ itemId, tag, kind, className = "h-14 w-10" }: { itemId:
   return <img src={`/api/jellyfin/image?itemId=${itemId}${tag ? `&tag=${tag}` : ""}`} alt="" loading="lazy" className={`shrink-0 rounded bg-white/5 object-cover ${className}`} />;
 }
 
+/**
+ * Le motif d'un titre en échec (`diagnoseTitles`), lisible : « stall » → « blocage »,
+ * « fallback: … » → « repli : … ». Le reste du motif est celui du journal, tel quel.
+ */
+export function reasonLabel(reason: string, t: T): string {
+  if (reason === "stall") return t("activity.dash.reason.stall");
+  const m = /^(rebuild|fallback|error): (.*)$/.exec(reason);
+  return m ? `${t(`activity.dash.reason.${m[1]}`)} : ${m[2]}` : reason;
+}
+
 /** Une barre de progression fine : où en est quelqu'un d'un titre. */
 export function Progress({ position, runtime }: { position: number | null; runtime: number | null }) {
   if (!position || !runtime) return null;

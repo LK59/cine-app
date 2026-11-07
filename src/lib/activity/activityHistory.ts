@@ -2,6 +2,7 @@ import { getDb } from "@/lib/db";
 import { readRecords } from "@/lib/activity/logReader";
 import { buildSeances, type Seance } from "@/lib/activity/seances";
 import type { LogRecord } from "@/lib/activity/logReader";
+import { acknowledgeSeances } from "@/lib/activity/alertsCleared";
 import { addTally, emptyTally, localDay, signalsOf, tallySignals, type SignalTally, type WeekSignals } from "@/lib/activity/accounts";
 
 /**
@@ -19,7 +20,9 @@ import { addTally, emptyTally, localDay, signalsOf, tallySignals, type SignalTal
  * cette ligne-là. Ce qui arrive plus tard encore n'est pas recompté — c'est rare, et le dire vaut
  * mieux que relire des mois de journaux à chaque appel.
  *
- * Comme les trente jours, ce bilan ignore « Effacer les alertes » : c'est de l'historique.
+ * Depuis le 07/11/2026, il suit « Effacer les alertes » comme les autres périodes : un jour clos avant
+ * l'effacement garde ses séances et son temps regardé, sans ses incidents (`withoutIncidents`) — les
+ * erreurs des anciennes versions ne pèsent plus sur l'historique. Les comptes gardés ne changent pas.
  */
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -29,7 +32,9 @@ export const LIVE_DAYS = 3;
  * La forme du compte gardé. Un changement de ce que compte `tallySignals` la fait monter : les jours
  * gardés sous l'ancienne sont oubliés et recomptés depuis ce que les journaux ont encore.
  */
-export const TALLY_VERSION = 1;
+// 2 (07/11/2026) : le temps par compte (`byUser`). Les journaux remontaient alors jusqu'au premier jour
+// gardé (04/09/2026) : le recompte n'a rien perdu.
+export const TALLY_VERSION = 2;
 /** Au-delà de six mois, une barre par mois plutôt que par semaine. */
 const MAX_WEEK_BARS = 26;
 
@@ -65,7 +70,7 @@ function parseTally(raw: string): SignalTally | null {
 }
 
 /** Les comptes de chaque jour entre `from` (inclus) et `to` (exclu), jours vides compris. */
-function tallyDays(seances: readonly Seance[], server: readonly LogRecord[], from: number, to: number): Map<string, SignalTally> {
+function tallyDays(seances: readonly Seance[], server: readonly LogRecord[], from: number, to: number, clearedAt = 0): Map<string, SignalTally> {
   const byDay = new Map<string, { seances: Seance[]; server: LogRecord[] }>();
   for (let d = from; d < to; d = nextDay(d)) byDay.set(localDay(new Date(d)), { seances: [], server: [] });
   for (const s of seances) {
@@ -74,7 +79,7 @@ function tallyDays(seances: readonly Seance[], server: readonly LogRecord[], fro
   for (const r of server) {
     if (r._t >= from && r._t < to) byDay.get(localDay(new Date(r._t)))?.server.push(r);
   }
-  return new Map([...byDay].map(([day, v]) => [day, tallySignals(v.seances, v.server, 0)]));
+  return new Map([...byDay].map(([day, v]) => [day, tallySignals(acknowledgeSeances(v.seances, clearedAt), v.server, clearedAt)]));
 }
 
 /**
@@ -126,18 +131,34 @@ function historyBars(days: [string, SignalTally][]): { perDay: WeekSignals["perD
   return { perDay: group((day) => `${day.slice(0, 7)}-01`), bucket: "month" };
 }
 
+/** Le compte d'un jour sans ses incidents : ce qui reste quand les alertes d'avant ont été effacées. */
+function withoutIncidents(t: SignalTally): SignalTally {
+  return {
+    ...emptyTally(),
+    seances: t.seances,
+    viewers: t.viewers,
+    watchedSeconds: t.watchedSeconds,
+    seeks: t.seeks,
+    audioSwitches: t.audioSwitches,
+    lost: t.lost,
+    staleReloads: t.staleReloads,
+    byUser: t.byUser,
+  };
+}
+
 /** Le bilan depuis la première ligne des journaux. */
-export function allTimeSignals(now = Date.now()): WeekSignals {
+export function allTimeSignals(now = Date.now(), clearedAt = 0): WeekSignals {
   const today = new Date(now);
   const frozenEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() - LIVE_DAYS).getTime();
   freezeClosedDays(frozenEnd, now);
 
   const stored = (getDb().prepare("SELECT day, tally FROM activity_day_tallies ORDER BY day").all() as Row[])
     .map((r) => [r.day, parseTally(r.tally)] as const)
-    .filter((e): e is readonly [string, SignalTally] => e[1] !== null);
+    .filter((e): e is readonly [string, SignalTally] => e[1] !== null)
+    .map(([day, t]) => [day, clearedAt && nextDay(dayStart(day)) <= clearedAt ? withoutIncidents(t) : t] as const);
   const seances = buildSeances(readRecords("player", frozenEnd - DAY)).filter((s) => s.start >= frozenEnd);
   const server = readRecords("server", frozenEnd).filter((r) => r._t >= frozenEnd);
-  const live = tallyDays(seances, server, frozenEnd, nextDay(startOfLocalDay(now)));
+  const live = tallyDays(seances, server, frozenEnd, nextDay(startOfLocalDay(now)), clearedAt);
 
   // Les jours vides d'avant la première séance ne font pas commencer l'historique plus tôt.
   const all: [string, SignalTally][] = [...stored.map(([d, t]) => [d, t] as [string, SignalTally]), ...live];

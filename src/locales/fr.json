@@ -316,9 +316,7 @@
       "clear": "Effacer les alertes",
       "clearConfirm": "Tout effacer",
       "cleared": "Alertes effacées",
-      "restored": "Alertes réaffichées",
       "clearedOn": "Alertes effacées {when}",
-      "restore": "Réafficher",
       "title": "À regarder",
       "tokenRefused": "Jeton refusé",
       "tokenStale": "Invisible pour le serveur média",
@@ -672,7 +670,8 @@
       "twinOf": "Jumelle de « {device} » (changement d'adresse) — elles se ferment ensemble",
       "devices": "Appareils du serveur média ({n})",
       "closeHint": "Fermer une session déconnecte cet appareil de l'application et révoque le jeton que cette connexion avait obtenu ; les autres applications de la personne ne sont pas touchées.",
-      "historyHint": "sur {n} jours"
+      "historyHint": "sur {n} jours",
+      "historyAll": "depuis le début"
     },
     "actions": {
       "close": "Fermer",
@@ -980,7 +979,8 @@
         "recovered": "{n} reconstruction rattrapée|{n} reconstructions rattrapées",
         "slowLinks": "{n} bascule sur la version allégée|{n} bascules sur la version allégée",
         "planned": "{n} lecture serveur prévue|{n} lectures serveur prévues",
-        "background": "{n} retour d'arrière-plan|{n} retours d'arrière-plan"
+        "background": "{n} retour d'arrière-plan|{n} retours d'arrière-plan",
+        "network": "{n} blocage dû au réseau du spectateur|{n} blocages dus au réseau du spectateur"
       },
       "issue": {
         "reports": "{n} signalement attend une réponse|{n} signalements attendent une réponse",
@@ -996,8 +996,8 @@
       "paths": "Chemins de lecture",
       "devices": "Appareils",
       "path": {
-        "natif": "Lecteur de l'application",
-        "serveur": "Lecteur serveur",
+        "natif": "Application",
+        "serveur": "Serveur",
         "tv": "Télévision",
         "horsLigne": "Hors ligne"
       },
@@ -1019,7 +1019,14 @@
         "errors": "Échecs"
       },
       "addressShow": "Changement d'adresse",
-      "addressHide": "Masquer le changement d'adresse"
+      "addressHide": "Masquer le changement d'adresse",
+      "reason": {
+        "stall": "blocage",
+        "rebuild": "reconstruction",
+        "fallback": "repli",
+        "error": "erreur"
+      },
+      "dismiss": "Effacer cette ligne"
     }
   },
   "radarr": {

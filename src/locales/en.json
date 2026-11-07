@@ -316,9 +316,7 @@
       "clear": "Clear alerts",
       "clearConfirm": "Clear all",
       "cleared": "Alerts cleared",
-      "restored": "Alerts shown again",
       "clearedOn": "Alerts cleared {when}",
-      "restore": "Show again",
       "title": "Needs a look",
       "tokenRefused": "Token refused",
       "tokenStale": "Invisible to the media server",
@@ -672,7 +670,8 @@
       "twinOf": "Twin of “{device}” (address change) — they close together",
       "devices": "Media server devices ({n})",
       "closeHint": "Closing a session signs that device out of the app and revokes the token that sign-in obtained; the person's other apps are untouched.",
-      "historyHint": "over {n} days"
+      "historyHint": "over {n} days",
+      "historyAll": "since the beginning"
     },
     "actions": {
       "close": "Close",
@@ -980,7 +979,8 @@
         "recovered": "{n} recovered rebuild|{n} recovered rebuilds",
         "slowLinks": "{n} switch to the lighter version|{n} switches to the lighter version",
         "planned": "{n} expected server playback|{n} expected server playbacks",
-        "background": "{n} return from the background|{n} returns from the background"
+        "background": "{n} return from the background|{n} returns from the background",
+        "network": "{n} stall caused by the viewer's network|{n} stalls caused by the viewer's network"
       },
       "issue": {
         "reports": "{n} report awaits a reply|{n} reports await a reply",
@@ -996,8 +996,8 @@
       "paths": "Playback paths",
       "devices": "Devices",
       "path": {
-        "natif": "App player",
-        "serveur": "Server player",
+        "natif": "App",
+        "serveur": "Server",
         "tv": "Television",
         "horsLigne": "Offline"
       },
@@ -1019,7 +1019,14 @@
         "errors": "Failures"
       },
       "addressShow": "Address change",
-      "addressHide": "Hide the address change"
+      "addressHide": "Hide the address change",
+      "reason": {
+        "stall": "stall",
+        "rebuild": "rebuild",
+        "fallback": "fallback",
+        "error": "error"
+      },
+      "dismiss": "Clear this line"
     }
   },
   "radarr": {

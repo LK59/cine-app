@@ -6,7 +6,7 @@ import { mutate } from "swr";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { useT } from "@/components/TranslationProvider";
-import { Panel, Poster, ago, type T } from "@/components/activity/parts";
+import { Panel, Poster, ago, type T, reasonLabel } from "@/components/activity/parts";
 import { ActivityLink } from "@/components/activity/nav";
 import type { TitleDiagnosis, Verdict } from "@/lib/activity/diagnosis";
 
@@ -132,7 +132,7 @@ export function DiagnosisPanel({ items, now, days }: { items: TitleDiagnosis[]; 
                     {d.reasons.map((r) => (
                       <span key={r.reason} className="max-w-full truncate rounded bg-black/30 px-1.5 py-0.5 font-mono text-[11px] text-muted">
                         {r.count > 1 ? `${r.count}× ` : ""}
-                        {r.reason}
+                        {reasonLabel(r.reason, t)}
                       </span>
                     ))}
                   </div>

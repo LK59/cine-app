@@ -28,6 +28,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  X,
   Stethoscope,
   Users,
   Wrench,
@@ -38,7 +39,7 @@ import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
 import { ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
-import { AlertChip, Avatar, ConfirmButton, Panel, Poster, PresenceBadge, Progress, SeanceRow, Tile, ago, clock, hours, latest, secs, type T } from "@/components/activity/parts";
+import { AlertChip, Avatar, ConfirmButton, Panel, Poster, PresenceBadge, Progress, SeanceRow, Tile, ago, clock, hours, latest, reasonLabel, secs, type T } from "@/components/activity/parts";
 import { Bars, Fold, Kpi, PATH_COLORS, RankList, Segmented, StackBar, TitleRank, shortDay } from "@/components/activity/DashboardParts";
 import type { AccountSummary, WeekSignals, household } from "@/lib/activity/accounts";
 import type { Dashboard, PeriodStats } from "@/lib/activity/dashboard";
@@ -87,36 +88,28 @@ const DAY = 24 * 60 * 60 * 1000;
 type PeriodKey = "day" | "week" | "month" | "all";
 
 /**
- * « Effacer les alertes » : tout ce qui est rouge, orange ou jaune dans le panneau ne se compte
- * plus qu'à partir de maintenant (09/10/2026, DECISIONS.md §59). Les journaux restent intacts, et
- * « Réafficher » remet tout comme avant. Confirmé d'un second appui, comme les gestes du compte.
+ * « Effacer les alertes » : tout incident d'avant maintenant sort de toutes les statistiques, sur
+ * toutes les périodes (09/10/2026, DECISIONS.md §59 ; définitif et pour toutes les périodes depuis le
+ * 07/11/2026, §136). Les journaux restent intacts. Confirmé d'un second appui, comme les gestes du compte.
  */
 function AlertsClearControl({ clearedAt, now }: { clearedAt: number; now: number }) {
   const t = useT();
   const toast = useToast();
   const { mutate } = useSWRConfig();
-  const send = async (action: "clear" | "restore") => {
+  const clear = async () => {
     try {
-      await apiAction("/api/admin/activity/alerts", { method: "POST", body: JSON.stringify({ action }) });
-      // Toutes les vues du panneau en dépendent : la vue d'ensemble, et chaque fiche de compte.
+      await apiAction("/api/admin/activity/alerts", { method: "POST", body: JSON.stringify({ action: "clear" }) });
+      // Toutes les vues du panneau en dépendent : la vue d'ensemble, les périodes, chaque fiche de compte.
       await mutate((key) => typeof key === "string" && key.startsWith("/api/admin/activity"));
-      toast.success(action === "clear" ? t("activity.alerts.cleared") : t("activity.alerts.restored"));
+      toast.success(t("activity.alerts.cleared"));
     } catch (error) {
       toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
     }
   };
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {clearedAt > 0 && (
-        <span className="text-xs text-subtle">
-          {t("activity.alerts.clearedOn", { when: ago(clearedAt, now, t) })}
-          {" · "}
-          <button type="button" onClick={() => void send("restore")} className="text-accent-400 hover:underline">
-            {t("activity.alerts.restore")}
-          </button>
-        </span>
-      )}
-      <ConfirmButton label={t("activity.alerts.clear")} confirm={t("activity.alerts.clearConfirm")} onConfirm={() => send("clear")} />
+      {clearedAt > 0 && <span className="text-xs text-subtle">{t("activity.alerts.clearedOn", { when: ago(clearedAt, now, t) })}</span>}
+      <ConfirmButton label={t("activity.alerts.clear")} confirm={t("activity.alerts.clearConfirm")} onConfirm={clear} />
     </div>
   );
 }
@@ -235,7 +228,10 @@ function AccountCard({ a, now }: { a: AccountSummary; now: number }) {
 }
 
 interface Issue {
+  /** La clé sous laquelle la ligne s'efface (`dismissIssue`). */
   key: string;
+  /** Son dernier événement : une ligne effacée revient s'il est postérieur à l'effacement. */
+  at: number;
   icon: React.ElementType;
   tone: "bad" | "warn";
   text: string;
@@ -244,70 +240,109 @@ interface Issue {
 }
 
 /**
- * Ce qui demande vraiment une main (07/11/2026). Pas une reconstruction rattrapée, pas une bascule sur
- * la version allégée, pas un lecteur serveur pris pour un fichier qu'un appareil ne lit pas, pas un
- * retour d'arrière-plan : le lecteur les a gérés comme prévu (`problemsOf`, `handledOf`). Restent les
- * comptes que Jellyfin refuse ou ne voit plus, les erreurs du navigateur, les titres qui ont vraiment
- * échoué cette semaine, les signalements sans réponse, les connexions refusées, les notifications non
- * remises et les erreurs du serveur.
+ * Ce qui demande vraiment une main (07/11/2026, §136). Pas une reconstruction rattrapée, pas une bascule
+ * sur la version allégée, pas un blocage dû au réseau du spectateur, pas un lecteur serveur pris pour un
+ * fichier qu'un appareil ne lit pas, pas un retour d'arrière-plan, pas un avertissement du serveur : le
+ * lecteur et le serveur les ont gérés comme prévu. Restent les comptes que Jellyfin refuse ou ne voit
+ * plus, les erreurs du navigateur, les titres qui ont vraiment échoué cette semaine, les signalements
+ * sans réponse, les connexions refusées, les notifications non remises et les vraies erreurs du serveur.
+ * Chaque ligne s'efface à part ; elle revient avec un nouvel événement.
  */
 function issuesOf(data: Overview, pending: ReportSummary[], t: T, now: number): Issue[] {
   const out: Issue[] = [];
   for (const a of data.accounts) {
     for (const al of a.alerts) {
-      out.push({ key: `${a.id}:${al.kind}`, icon: al.kind === "clientErrors" ? AlertTriangle : KeyRound, tone: al.kind === "tokenRefused" ? "bad" : "warn", text: a.name, detail: alertLabel(al, t, now), to: { kind: "account", id: a.id } });
+      out.push({ key: `compte:${a.id}:${al.kind}`, at: al.at ?? 0, icon: al.kind === "clientErrors" ? AlertTriangle : KeyRound, tone: al.kind === "tokenRefused" ? "bad" : "warn", text: a.name, detail: alertLabel(al, t, now), to: { kind: "account", id: a.id } });
     }
   }
-  if (pending.length > 0) out.push({ key: "reports", icon: MessageSquareWarning, tone: "warn", text: t("activity.dash.issue.reports", { n: pending.length }), to: { kind: "report", id: pending[0].id } });
+  if (pending.length > 0) {
+    out.push({ key: "signalements", at: Math.max(...pending.map((r) => r.sentAt ?? 0)), icon: MessageSquareWarning, tone: "warn", text: t("activity.dash.issue.reports", { n: pending.length }), to: { kind: "report", id: pending[0].id } });
+  }
   for (const d of data.household.diagnosis) {
     if (d.lastFailure < now - 7 * DAY) continue;
     const seance = d.viewers.flatMap((v) => v.failedSeances)[0];
     out.push({
-      key: `title:${d.key}`,
+      key: `titre:${d.key}`,
+      at: d.lastFailure,
       icon: Clapperboard,
       tone: "bad",
       text: d.title,
-      detail: `${t("activity.dash.issue.failures", { n: d.failures })}${d.reasons[0] ? ` · ${d.reasons[0].reason.slice(0, 90)}` : ""} · ${ago(d.lastFailure, now, t)}`,
+      detail: `${t("activity.dash.issue.failures", { n: d.failures })}${d.reasons[0] ? ` · ${reasonLabel(d.reasons[0].reason, t).slice(0, 90)}` : ""} · ${ago(d.lastFailure, now, t)}`,
       to: seance ? { kind: "seance", id: seance } : { kind: "logs", preset: { source: "player" } },
     });
   }
-  if (data.household.logins.failed > 0) out.push({ key: "logins", icon: ShieldAlert, tone: "warn", text: t("activity.dash.issue.logins", { n: data.household.logins.failed }), to: { kind: "logs", preset: { source: "auth", type: "login-failed" } } });
-  if (data.household.notifications.failed > 0) out.push({ key: "notifs", icon: Bell, tone: "warn", text: t("activity.dash.issue.notifs", { n: data.household.notifications.failed }), to: { kind: "logs", preset: { source: "notifications" } } });
-  for (const e of data.signals.serverErrors) {
-    out.push({ key: `server:${e.scope}`, icon: ServerCrash, tone: "warn", text: t("activity.dash.issue.server", { n: e.count }), detail: e.scope, to: { kind: "logs", preset: { source: "server", type: e.scope } } });
+  const alarms = data.dashboard?.alarms;
+  if (alarms) {
+    if (alarms.logins) out.push({ key: "connexions", at: alarms.logins.lastAt, icon: ShieldAlert, tone: "warn", text: t("activity.dash.issue.logins", { n: alarms.logins.count }), detail: ago(alarms.logins.lastAt, now, t), to: { kind: "logs", preset: { source: "auth", type: "login-failed" } } });
+    if (alarms.notifications) out.push({ key: "notifications", at: alarms.notifications.lastAt, icon: Bell, tone: "warn", text: t("activity.dash.issue.notifs", { n: alarms.notifications.count }), detail: ago(alarms.notifications.lastAt, now, t), to: { kind: "logs", preset: { source: "notifications" } } });
+    for (const e of alarms.server) {
+      out.push({ key: `serveur:${e.scope}`, at: e.lastAt, icon: ServerCrash, tone: "warn", text: t("activity.dash.issue.server", { n: e.count }), detail: `${e.scope} · ${ago(e.lastAt, now, t)}`, to: { kind: "logs", preset: { source: "server", type: e.scope } } });
+    }
   }
-  return out;
+  const dismissed = data.dashboard?.dismissed ?? {};
+  return out.filter((i) => !(dismissed[i.key] && i.at <= dismissed[i.key]));
 }
 
 function handledDetail(h: PeriodStats["handled"], t: T): string {
   const parts: string[] = [];
   if (h.recovered) parts.push(t("activity.dash.handled.recovered", { n: h.recovered }));
+  if (h.network) parts.push(t("activity.dash.handled.network", { n: h.network }));
   if (h.slowLinks) parts.push(t("activity.dash.handled.slowLinks", { n: h.slowLinks }));
   if (h.planned) parts.push(t("activity.dash.handled.planned", { n: h.planned }));
   if (h.background) parts.push(t("activity.dash.handled.background", { n: h.background }));
   return parts.join(" · ");
 }
 
+function handledSum(h: PeriodStats["handled"]): number {
+  return h.recovered + h.network + h.slowLinks + h.planned + h.background;
+}
+
 function ToHandle({ data, week, now }: { data: Overview; week: PeriodStats | null; now: number }) {
   const t = useT();
+  const toast = useToast();
+  const { mutate } = useSWRConfig();
   const { data: reports } = useSWR<{ reports: ReportSummary[]; unread: number }>(ADMIN_REPORTS_KEY, fetcher, { refreshInterval: 30_000 });
+  // Effacée à l'appui, sans attendre le serveur : la ligne part tout de suite, la relecture confirme.
+  const [gone, setGone] = useState<Set<string>>(() => new Set());
   const pending = reports ? pendingReports(reports.reports) : [];
-  const issues = issuesOf(data, pending, t, now);
-  const handledTotal = week ? week.handled.recovered + week.handled.slowLinks + week.handled.planned + week.handled.background : 0;
+  const issues = issuesOf(data, pending, t, now).filter((i) => !gone.has(i.key));
+  const handledTotal = week ? handledSum(week.handled) : 0;
+  const dismiss = async (key: string) => {
+    setGone((prev) => new Set(prev).add(key));
+    try {
+      await apiAction("/api/admin/activity/alerts", { method: "POST", body: JSON.stringify({ action: "dismiss", key }) });
+      await mutate("/api/admin/activity");
+    } catch (error) {
+      setGone((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+      toast.error(error instanceof Error && error.message ? error.message : t("common.error"));
+    }
+  };
   return (
     <Panel title={t("activity.dash.toHandle")} icon={issues.length ? ShieldAlert : ShieldCheck}>
       {issues.length ? (
         <ul className="divide-y divide-white/5">
           {issues.map((i) => (
-            <li key={i.key}>
-              <ActivityLink to={i.to} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-white/[0.03]">
+            <li key={i.key} className="flex items-center">
+              <ActivityLink to={i.to} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-4 pr-2 transition-colors hover:bg-white/[0.03]">
                 <i.icon size={15} className={`shrink-0 ${i.tone === "bad" ? "text-danger" : "text-warning"}`} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm text-white">{i.text}</span>
                   {i.detail && <span className="block truncate text-xs text-subtle">{i.detail}</span>}
                 </span>
-                <span className="shrink-0 text-subtle">›</span>
               </ActivityLink>
+              <button
+                type="button"
+                onClick={() => void dismiss(i.key)}
+                aria-label={t("activity.dash.dismiss")}
+                title={t("activity.dash.dismiss")}
+                className="mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-subtle transition-colors hover:bg-white/5 hover:text-white"
+              >
+                <X size={15} />
+              </button>
             </li>
           ))}
         </ul>
@@ -346,7 +381,7 @@ function KpiRow({ stats, all }: { stats: PeriodStats | null; all: WeekSignals | 
     );
   }
   const cleanShare = stats.seances ? stats.clean / stats.seances : 1;
-  const handled = stats.handled.recovered + stats.handled.slowLinks + stats.handled.planned + stats.handled.background;
+  const handled = handledSum(stats.handled);
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
       <Kpi icon={Clapperboard} label={t("activity.dash.kpi.seances")} value={stats.seances} hint={t("activity.week.viewers", { n: stats.viewers })} />
@@ -356,11 +391,13 @@ function KpiRow({ stats, all }: { stats: PeriodStats | null; all: WeekSignals | 
         label={t("activity.dash.kpi.clean")}
         value={pct(stats.clean, stats.seances)}
         hint={t("activity.dash.kpi.cleanHint", { n: stats.clean, total: stats.seances })}
-        tone={!stats.seances ? "default" : cleanShare >= 0.95 ? "good" : cleanShare >= 0.85 ? "warn" : "bad"}
+        // Vert dès 90 %, neutre au-dessus de 75 %, ambre en dessous — jamais rouge : une séance gênée
+        // n'est pas une panne de l'application (le détail est dans « À gérer »).
+        tone={!stats.seances ? "default" : cleanShare >= 0.9 ? "good" : cleanShare >= 0.75 ? "default" : "warn"}
       />
       <Kpi icon={Gauge} label={t("activity.dash.kpi.open")} value={stats.openMedianMs !== null ? secs(stats.openMedianMs) : "—"} hint={stats.openP90Ms !== null ? t("activity.dash.kpi.openHint", { d: secs(stats.openP90Ms) }) : undefined} />
       <Kpi icon={Hourglass} label={t("activity.dash.kpi.waits")} value={stats.waits} hint={t("activity.week.waitsHint", { d: secs(stats.waitedMs) })} />
-      <Kpi icon={Wrench} label={t("activity.dash.kpi.handled")} value={handled} hint={t("activity.dash.kpi.handledHint", { n: stats.real })} tone={stats.real ? "warn" : "default"} />
+      <Kpi icon={ShieldCheck} label={t("activity.dash.kpi.handled")} value={handled} hint={t("activity.dash.kpi.handledHint", { n: stats.real })} />
     </div>
   );
 }
@@ -423,14 +460,14 @@ function Charts({ dash }: { dash: Dashboard }) {
   const perDay = dash.series.map((d, i) => ({
     key: d.day,
     // Une étiquette sur cinq, la plus récente comprise : trente dates se chevauchaient.
-    label: (dash.series.length - 1 - i) % 5 === 0 ? shortDay(d.day) : "",
+    label: (dash.series.length - 1 - i) % 5 === 0 ? String(new Date(d.day + "T12:00:00").getDate()) : "",
     detail: `${shortDay(d.day)} · ${hours(d.watchedSeconds)} · ${t("activity.dash.seancesN", { n: d.seances })}${d.real ? ` · ${t("activity.dash.realN", { n: d.real })}` : ""}`,
     value: d.watchedSeconds,
     flagged: d.real > 0,
   }));
   const byHour = dash.hours.map((s, h) => ({
     key: String(h),
-    label: h % 3 === 0 ? `${h} h` : "",
+    label: h % 3 === 0 ? String(h) : "",
     detail: `${h} h – ${h + 1} h · ${hours(s)}`,
     value: s,
   }));
@@ -688,8 +725,13 @@ export function ActivityOverview({ active = true }: { active?: boolean }) {
   // La règle est partagée avec l'accueil de la gestion (`liveAccounts`, DECISIONS.md §81).
   const { live, playing: playingCount, browsing } = liveAccounts(accounts);
   const stats = dash && period !== "all" ? dash.periods[period] : null;
-  // « Tout » n'a pas de répartitions gardées : elles suivent alors les trente derniers jours.
-  const breakdown = dash ? (period === "all" ? dash.periods.month : dash.periods[period]) : null;
+  // « Tout » : qui regarde vient de l'historique gardé jour par jour ; les autres répartitions (titres,
+  // chemins, appareils) n'y sont pas gardées et suivent les trente derniers jours.
+  const breakdown = dash
+    ? period === "all"
+      ? { ...dash.periods.month, people: all?.people ?? dash.periods.month.people }
+      : dash.periods[period]
+    : null;
 
   return (
     <div className="space-y-6">

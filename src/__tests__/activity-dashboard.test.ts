@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildSeances, isPlannedHandoff } from "@/lib/activity/seances";
 import { failuresOf } from "@/lib/activity/diagnosis";
-import { periodStats } from "@/lib/activity/dashboard";
+import { isAlarmingServerLine, periodStats } from "@/lib/activity/dashboard";
 import type { LogRecord } from "@/lib/activity/logReader";
 
 // Le tableau de bord de l'Activité (07/11/2026) : n'est mis en avant que ce qui a vraiment gêné. Une
@@ -49,6 +49,26 @@ describe("ce qui est géré, ce qui ne l'est pas", () => {
     ]);
     expect(s).toMatchObject({ fallbacks: 0, planned: 1, player: "serveur" });
     expect(failuresOf(s)).toBe(0);
+  });
+});
+
+describe("les blocages et le serveur", () => {
+  it("un blocage que le diagnostic impute au réseau du spectateur est géré ; un blocage du décodeur, non", () => {
+    const [s] = buildSeances([
+      rec("n", 1000, { kind: "stall", position: 10, "diag.verdict": "réseau", "diag.linkVerdict": "suffisante" }),
+      rec("n", 2000, { kind: "stall", position: 20, "diag.verdict": "autre", "diag.linkVerdict": "trop lente" }),
+      rec("n", 3000, { kind: "stall", position: 30, "diag.verdict": "décodeur", "diag.linkVerdict": "suffisante" }),
+    ]);
+    expect(s).toMatchObject({ stalls: 1, netStalls: 2 });
+    expect(failuresOf(s)).toBe(1);
+  });
+
+  it("n'alerte ni sur un avertissement, ni sur un EPUB illisible, ni sur un geste d'administrateur", () => {
+    const line = (f: Record<string, unknown>) => ({ _file: "server.log", _line: 0, _t: 1, ...f }) as LogRecord;
+    expect(isAlarmingServerLine(line({ level: "warn", scope: "books/google" }))).toBe(false);
+    expect(isAlarmingServerLine(line({ level: "error", scope: "books/meta", stack: "EpubDefectError: zip sans fin" }))).toBe(false);
+    expect(isAlarmingServerLine(line({ level: "info", scope: "admin" }))).toBe(false);
+    expect(isAlarmingServerLine(line({ level: "error", scope: "cinema-movies", stack: "Error: boom" }))).toBe(true);
   });
 });
 

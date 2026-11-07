@@ -106,10 +106,12 @@ export function Bars({ points, height = 120, empty }: { points: SeriesPoint[]; h
           </button>
         ))}
       </div>
-      <div className="mt-3 flex gap-[2px]">
+      {/* Chaque étiquette centrée sous sa barre et libre de déborder : une colonne fait dix pixels
+          sur un téléphone, « 12 » y était coupé en « 1. ». */}
+      <div className="mt-3 flex h-4 gap-[2px]">
         {points.map((p) => (
-          <span key={p.key} className="min-w-0 flex-1 truncate text-center text-[11px] tabular-nums text-subtle">
-            {p.label}
+          <span key={p.key} className="relative min-w-0 flex-1">
+            {p.label && <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[11px] tabular-nums text-subtle">{p.label}</span>}
           </span>
         ))}
       </div>

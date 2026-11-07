@@ -103,13 +103,29 @@ describe("depuis le début", () => {
 });
 
 describe("trente jours", () => {
-  it("trente barres de jours, et les incidents effacés s'y comptent encore", async () => {
+  it("trente barres de jours ; comme la semaine, ils suivent « Effacer les alertes » (07/11/2026)", async () => {
     await writeLogs([...seance("a", "anna", at(20), 100, true), ...seance("b", "anna", at(2), 100, true)]);
     const { monthSignals, weekSignals } = await import("@/lib/activity/accounts");
-    const month = monthSignals(NOW);
+    const month = monthSignals(NOW, 0);
     expect(month.perDay).toHaveLength(30);
     expect(month).toMatchObject({ seances: 2, stalls: 2 });
-    // La semaine, elle, suit « Effacer les alertes ».
+    // Effacé : les séances restent, leurs incidents non.
+    expect(monthSignals(NOW, NOW - 1000)).toMatchObject({ seances: 2, stalls: 0 });
     expect(weekSignals(NOW, NOW - 1000)).toMatchObject({ seances: 1, stalls: 0 });
+  });
+});
+
+describe("depuis le début, alertes effacées", () => {
+  it("les jours d'avant l'effacement gardent leurs séances, pas leurs incidents", async () => {
+    await writeLogs(
+      [...seance("old", "anna", at(40), 3600, true), ...seance("new", "anna", at(0), 600, true)],
+      [{ timestamp: new Date(at(10)).toISOString(), level: "error", scope: "api", message: "x" }],
+    );
+    const { allTimeSignals } = await import("@/lib/activity/activityHistory");
+    expect(allTimeSignals(NOW)).toMatchObject({ seances: 2, stalls: 2 });
+    const cleared = allTimeSignals(NOW, NOW + 1000);
+    expect(cleared).toMatchObject({ seances: 2, watchedSeconds: 4200, stalls: 0 });
+    expect(cleared.serverErrors).toEqual([]);
+    expect(cleared.perDay.reduce((n, b) => n + b.problems, 0)).toBe(0);
   });
 });

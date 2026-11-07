@@ -316,9 +316,7 @@
       "clear": "Borrar las alertas",
       "clearConfirm": "Borrar todo",
       "cleared": "Alertas borradas",
-      "restored": "Alertas visibles de nuevo",
       "clearedOn": "Alertas borradas {when}",
-      "restore": "Volver a mostrar",
       "title": "Para revisar",
       "tokenRefused": "Token rechazado",
       "tokenStale": "Invisible para el servidor multimedia",
@@ -672,7 +670,8 @@
       "twinOf": "Gemela de «{device}» (cambio de dirección): se cierran juntas",
       "devices": "Dispositivos del servidor multimedia ({n})",
       "closeHint": "Cerrar una sesión desconecta ese dispositivo de la aplicación y revoca el token que obtuvo ese inicio de sesión; las demás aplicaciones de la persona no se ven afectadas.",
-      "historyHint": "en {n} días"
+      "historyHint": "en {n} días",
+      "historyAll": "desde el principio"
     },
     "actions": {
       "close": "Cerrar",
@@ -980,7 +979,8 @@
         "recovered": "{n} reconstrucción recuperada|{n} reconstrucciones recuperadas",
         "slowLinks": "{n} cambio a la versión ligera|{n} cambios a la versión ligera",
         "planned": "{n} reproducción prevista en el servidor|{n} reproducciones previstas en el servidor",
-        "background": "{n} vuelta del segundo plano|{n} vueltas del segundo plano"
+        "background": "{n} vuelta del segundo plano|{n} vueltas del segundo plano",
+        "network": "{n} bloqueo por la red del espectador|{n} bloqueos por la red del espectador"
       },
       "issue": {
         "reports": "{n} informe espera respuesta|{n} informes esperan respuesta",
@@ -996,8 +996,8 @@
       "paths": "Vías de reproducción",
       "devices": "Dispositivos",
       "path": {
-        "natif": "Reproductor de la aplicación",
-        "serveur": "Reproductor del servidor",
+        "natif": "Aplicación",
+        "serveur": "Servidor",
         "tv": "Televisión",
         "horsLigne": "Sin conexión"
       },
@@ -1019,7 +1019,14 @@
         "errors": "Fallos"
       },
       "addressShow": "Cambio de dirección",
-      "addressHide": "Ocultar el cambio de dirección"
+      "addressHide": "Ocultar el cambio de dirección",
+      "reason": {
+        "stall": "bloqueo",
+        "rebuild": "reconstrucción",
+        "fallback": "cambio de reproductor",
+        "error": "error"
+      },
+      "dismiss": "Borrar esta línea"
     }
   },
   "radarr": {

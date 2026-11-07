@@ -8631,5 +8631,17 @@ changement d'adresse (§119) est derrière un bouton en bas de page.
 **Tests.** `activity-dashboard.test.ts` ; `activity-core`, `activity-alerts-cleared`,
 `activity-connexion-lente` suivent la règle.
 
-**Ce qui diffère exprès.** « Depuis le début » lit l'historique gardé par jour (`activityHistory.ts`,
-`TALLY_VERSION` inchangée) : les jours figés avant le 07/11/2026 gardent l'ancien compte des problèmes.
+Un blocage que le diagnostic du lecteur impute au réseau du spectateur (`netStalls` : verdict
+`réseau`, lien `trop lente`, hors ligne) est géré lui aussi. Côté serveur, seules les lignes `error`
+alertent (`isAlarmingServerLine`) : ni un avertissement (une relance, un 503 de Google Books), ni un EPUB
+illisible (`EpubDefectError`).
+
+**Effacer.** « Effacer les alertes » est définitif et vaut pour toutes les périodes — 24 h, 7 et 30
+jours, « Tout » (`allTimeSignals(now, clearedAt)`, `withoutIncidents`) : les incidents d'avant sortent
+des tableaux et des chiffres, les séances et le temps regardé restent, les journaux ne sont jamais
+touchés. « Réafficher » est retiré. Chaque ligne de « À gérer » s'efface aussi à part
+(`dismissIssue`, une date par clé) et revient avec un nouvel événement.
+
+**L'historique.** « Tout » garde le temps par compte jour par jour (`byUser`, `TALLY_VERSION` 2) ; la
+fiche d'un compte lit tous les journaux (`ACCOUNT_HISTORY_DAYS = null`, c'était 90 jours). Le journal
+du lecteur garde 120 archives de 5 Mo (deux mois en remplissaient quatre à l'automne 2026).
