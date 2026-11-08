@@ -114,6 +114,7 @@ spending and the jobs.
 | `SUBTITLE_GEN_PRICE_OUTPUT` | the app's price table | Price per million output tokens. |
 | `SUBTITLE_GEN_ENABLED` | `true` | `false` turns the feature off while keeping the key. |
 | `DESCRIBE_SEARCH_ENABLED` | `false` | Search by description: a sentence describing a film or series (« the film where a man relives the same day ») finds it, in the library or not. Uses the key above, Anthropic only (Claude Haiku). Each new sentence is one request, well under a tenth of a cent; not counted in the subtitle budget. |
+| `RECAP_ENABLED` | `false` | « Previously »: on the page of a series in progress (more than two episodes finished, nothing watched for three hours), two or three sentences recalling the latest events, from the official episode summaries and the subtitles of the last ten minutes watched — never beyond. Prepared in the background, one request per series and position, a few hundredths of a cent each. Uses the key above, Anthropic only (Claude Haiku); not counted in the subtitle budget. |
 
 ## Dialogue search
 

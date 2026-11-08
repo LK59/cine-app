@@ -82,6 +82,8 @@ export const SETTINGS: readonly SettingDef[] = [
   // La recherche par description (07/11/2026) : se sert du fournisseur et de la clé ci-dessus, et
   // n'existe qu'avec Anthropic. Coupée par défaut — chaque recherche décrite est un appel payant.
   { key: "DESCRIBE_SEARCH_ENABLED", group: "subtitles", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  // « Précédemment » (08/11/2026, §137) : même fournisseur et même clé. Coupé par défaut, payant aussi.
+  { key: "RECAP_ENABLED", group: "subtitles", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   // ── La recherche de répliques (DECISIONS.md §88) ──
   // Coupée par défaut : elle lit les films sur le disque, ce qu'une installation doit avoir monté et
   // décidé. La page refuse de l'allumer tant que le dossier des films n'est pas lisible (`checkMoviesMount`).

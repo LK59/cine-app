@@ -87,6 +87,11 @@ export async function register() {
     const { startCatalogueWarm } = await import("./lib/catalogueWarm");
     startCatalogueWarm();
 
+    // « Précédemment » (option, DECISIONS.md §137) : préparé en fond pour les séries laissées depuis
+    // trois heures — la fiche n'attend jamais le modèle ni la lecture des sous-titres.
+    const { startRecapCron } = await import("./lib/recap/service");
+    startRecapCron();
+
     // L'index des livres (option, DECISIONS.md §127), préparé après les préchauffages du catalogue pour
     // qu'aucun lecteur n'attende sa première construction. Option coupée : rien n'est importé ni lancé
     // (l'allumer depuis la Configuration le prépare aussitôt, `/api/settings`).

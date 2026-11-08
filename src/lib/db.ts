@@ -620,6 +620,26 @@ function migrate(db: Database.Database): void {
       PRIMARY KEY (account, series_id)
     );
   `);
+  // « Précédemment » (DECISIONS.md §137, 08/11/2026). `series_recaps` : un texte par épisode, minute
+  // d'arrêt et langue (`recapKey`), partagé par les comptes — un rejet ou une réponse vide est gardé
+  // aussi, pour ne pas redemander la même chose à chaque passage. `recap_accounts` : les comptes qui
+  // ont ouvert l'application depuis que l'option existe, et dans quelle langue — la tâche de fond n'a
+  // pas de requête pour la lui dire, et ne prépare rien pour qui ne vient plus.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS series_recaps (
+      key        TEXT    PRIMARY KEY,
+      series_id  TEXT    NOT NULL,
+      status     TEXT    NOT NULL,
+      text       TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS recap_accounts (
+      jf_id      TEXT    PRIMARY KEY,
+      user       TEXT    NOT NULL,
+      locale     TEXT    NOT NULL,
+      seen_at    INTEGER NOT NULL
+    );
+  `);
   // Les liens de partage (DECISIONS.md §112) : un film ou une série, un mot de passe (haché), une
   // fin, et le compte Jellyfin technique qui garde la reprise du lien. La ligne reste après
   // l'expiration — ce que le lien a consommé se lit encore dans l'Activité.
@@ -2418,5 +2438,41 @@ export const dailyTop10Db = {
       recall: (day) => dailyTop10Db.recall(kind, day),
       remember: (day, theme) => dailyTop10Db.remember(kind, day, theme),
     };
+  },
+};
+
+/** « Précédemment » (DECISIONS.md §137) — voir les tables dans `migrate()`. */
+export type RecapStatus = "ok" | "rejeté" | "vide";
+export const recapDb = {
+  get(key: string): { status: RecapStatus; text: string | null } | null {
+    return (getDb().prepare("SELECT status, text FROM series_recaps WHERE key = ?").get(key) as { status: RecapStatus; text: string | null } | undefined) ?? null;
+  },
+  /** Les textes prêts parmi ces clés — une lecture pour toute la liste d'un compte. */
+  readyAmong(keys: readonly string[]): Map<string, string> {
+    if (!keys.length) return new Map();
+    const rows = getDb()
+      .prepare(`SELECT key, text FROM series_recaps WHERE status = 'ok' AND key IN (${keys.map(() => "?").join(",")})`)
+      .all(...keys) as { key: string; text: string }[];
+    return new Map(rows.map((r) => [r.key, r.text]));
+  },
+  put(key: string, seriesId: string, status: RecapStatus, text: string | null, now = Date.now()): void {
+    getDb()
+      .prepare("INSERT INTO series_recaps (key, series_id, status, text, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET status = excluded.status, text = excluded.text, created_at = excluded.created_at")
+      .run(key, seriesId, status, text, now);
+  },
+  /** Une position quittée depuis un mois ne reviendra pas : la clé n'est plus demandée par personne. */
+  prune(olderThanMs: number, now = Date.now()): number {
+    return getDb().prepare("DELETE FROM series_recaps WHERE created_at < ?").run(now - olderThanMs).changes;
+  },
+  /** Le compte vient d'ouvrir l'application — écrit au plus une fois l'heure, ou si la langue change. */
+  noteAccount(jfId: string, user: string, locale: string, now = Date.now()): void {
+    getDb()
+      .prepare(
+        "INSERT INTO recap_accounts (jf_id, user, locale, seen_at) VALUES (?, ?, ?, ?) ON CONFLICT(jf_id) DO UPDATE SET user = excluded.user, locale = excluded.locale, seen_at = excluded.seen_at WHERE recap_accounts.locale != excluded.locale OR recap_accounts.seen_at < ?"
+      )
+      .run(jfId, user, locale, now, now - 60 * 60 * 1000);
+  },
+  accountsSince(since: number): { jfId: string; user: string; locale: string }[] {
+    return getDb().prepare("SELECT jf_id AS jfId, user, locale FROM recap_accounts WHERE seen_at >= ? ORDER BY seen_at DESC").all(since) as { jfId: string; user: string; locale: string }[];
   },
 };

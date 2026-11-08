@@ -2766,6 +2766,8 @@
     "inMyList": "Dans ma liste",
     "watchedState": "Vu",
     "readMore": "Voir plus",
+    "recapTitle": "Précédemment :",
+    "recapNote": "Généré par IA à partir de ce que vous avez déjà vu",
     "spotlight": "À la une",
     "discovery": {
       "trendingMovies": "Tendances — films",
@@ -3400,6 +3402,7 @@
       "SONARR_QUALITY_PROFILE": "Profil de qualité des ajouts",
       "SUBTITLE_GEN_ENABLED": "Proposer la génération de sous-titres",
       "DESCRIBE_SEARCH_ENABLED": "Recherche par description : retrouver un film ou une série décrit en une phrase (Anthropic, avec la clé ci-dessus)",
+      "RECAP_ENABLED": "« Précédemment » : sur la fiche d'une série en cours, rappeler les derniers faits vus (Anthropic, avec la clé ci-dessus)",
       "SUBTITLE_GEN_PROVIDER": "Fournisseur",
       "SUBTITLE_GEN_API_KEY": "Clé du fournisseur",
       "SUBTITLE_GEN_MODEL": "Modèle",

@@ -289,7 +289,11 @@ interface for a moment after a return.
 `data/logs/recherche.log` (since 2026-11-07, `logDescribeSearch`) has one line per description search
 (DECISIONS §135): account, device, word count, `ms`, `source` (`cache` or `modèle` — only the second is a
 paid call, with `modelMs`), titles recognised, results kept and how many are in the library, `status`
-(`ok` / `erreur` / `limite`). Never the sentence typed.
+(`ok` / `erreur` / `limite`). Never the sentence typed. Since 2026-11-08 it also has one `kind:
+"précédemment"` line per « Précédemment » prepared in the background (DECISIONS §137, `logRecap`):
+account, series, episode and minute, `source` (`dialogues` or `résumés`), `status` (`ok` / `rejeté` —
+with the `names` the sources did not contain — / `vide` / `erreur` / `limite`), tokens. Never the text,
+which is in `series_recaps`.
 Its format is versioned
 (`PERSISTED_CACHE_SCHEMA`), and `persistentCache-schema.test.ts` fails when the kept responses'
 types change without the version moving.

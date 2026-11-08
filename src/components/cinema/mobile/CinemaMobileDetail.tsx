@@ -32,6 +32,8 @@ import { CinemaSimilarRow, useCinemaSimilar } from "@/components/cinema/CinemaSi
 import { CinemaMovieCollectionRow } from "@/components/cinema/CinemaCollectionRow";
 import { CinemaCastRow, type CinemaCastMember } from "@/components/cinema/CinemaCastRow";
 import { useT } from "@/components/TranslationProvider";
+import SeriesRecap from "@/components/cinema/SeriesRecap";
+import { useSeriesRecap } from "@/lib/useSeriesRecap";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
@@ -195,6 +197,8 @@ export function CinemaMobileDetail({
 
 
   const isSeries = mediaType === "series";
+  // Un film n'en a pas : sans identifiant, le crochet ne demande rien.
+  const recap = useSeriesRecap(isSeries ? item.jellyfinItemId : null);
   const infoUrl = isSeries
     ? `/api/sonarr/series/${(item as CinemaSeries).sonarrId}/info`
     : `/api/radarr/movies/${(item as CinemaMovie).radarrId}/info`;
@@ -594,7 +598,8 @@ export function CinemaMobileDetail({
           <CinemaTagline text={lead.tagline} className={`mb-1.5 ${lead.taglineLate ? late.fade : ""}`} />
         )}
         {/* Le synopsis du catalogue ne change pas de texte à l'arrivée de TMDB — voir `sheetOverview`. */}
-        <p className="mb-3 text-sm leading-6 text-white">{sheetOverview(item.overview, info?.tmdb?.overview)}</p>
+        {/* Une série en cours a son « Précédemment » à la place du résumé (DECISIONS.md §137). */}
+        {recap ? <SeriesRecap recap={recap} className="mb-3" /> : <p className="mb-3 text-sm leading-6 text-white">{sheetOverview(item.overview, info?.tmdb?.overview)}</p>}
 
 
         {/* Netflix's icon-over-label action row — big touch targets, no text buttons competing

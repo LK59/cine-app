@@ -127,6 +127,32 @@ export function logDescribeSearch(fields: {
 }
 
 /**
+ * Un « Précédemment » préparé (DECISIONS.md §137) — dans le même journal que la recherche par
+ * description : ce sont les deux appels payants au modèle. Le compte pour qui il a été préparé, la
+ * série et l'endroit, ce que le modèle a lu (`dialogues` ou les seuls résumés), et le verdict ;
+ * jamais le texte lui-même, qui est en base.
+ */
+export function logRecap(fields: {
+  user: string;
+  series: string;
+  episode: string;
+  minute: number;
+  status: "ok" | "rejeté" | "vide" | "erreur" | "limite";
+  source?: "dialogues" | "résumés";
+  ms: number;
+  inTokens?: number;
+  outTokens?: number;
+  /** Les noms que les sources ne contiennent pas — la raison d'un rejet. */
+  names?: string[];
+}): void {
+  try {
+    appendJsonLine(SEARCH_LOG(), { timestamp: new Date().toISOString(), kind: "précédemment", ...fields }, { keep: EVENT_LOG_KEEP });
+  } catch {
+    /* rien */
+  }
+}
+
+/**
  * Les Nouveautés (DECISIONS.md §73) : la fenêtre (combien de temps elle est restée à l'écran, page
  * visible seulement, et comment elle s'est fermée), « Voir plus », et la page Compte → Nouveautés.
  * Dans le journal des ouvertures, parce que c'en est un moment : la fenêtre ne s'ouvre qu'au lancement.

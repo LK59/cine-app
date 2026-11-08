@@ -19,6 +19,8 @@ import { useWatchlistToggle } from "@/lib/useWatchlistToggle";
 import { useSheetKeys } from "@/lib/useSheetKeys";
 import { useJellyfinItemState } from "@/lib/useJellyfinItemState";
 import { useT } from "@/components/TranslationProvider";
+import SeriesRecap from "@/components/cinema/SeriesRecap";
+import { useSeriesRecap } from "@/lib/useSeriesRecap";
 import { genreLabel } from "@/lib/top10Label";
 import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
@@ -84,6 +86,7 @@ export function CinemaSeriesDetail({
   underneath?: boolean;
 }) {
   const t = useT();
+  const recap = useSeriesRecap(item.jellyfinItemId);
   const [showTrailer, setShowTrailer] = useState(false);
   const [showSynopsis, setShowSynopsis] = useState(false);
   // In the URL like every other Cinema layer, so Back closes the season browser and returns to
@@ -267,14 +270,19 @@ export function CinemaSeriesDetail({
 
           {!lead.taglineKnown ? <ReservedLine className="h-[1.1rem]" /> : <CinemaTagline text={lead.tagline} className={lead.taglineLate ? late.fade : ""} />}
 
-          <CinemaOverview
-            text={sheetOverview(item.overview, info?.tmdb?.overview)}
-            readMore={t("cinema.readMore")}
-            // Jusqu'à cinq lignes quand la page a de la place au-dessus du logo — voir CinemaOverview.
-            maxLines={5}
-            alwaysOpenable={!!info?.imdbId}
-            onOpen={() => setShowSynopsis(true)}
-          />
+          {/* Une série en cours a son « Précédemment » à la place du résumé (DECISIONS.md §137). */}
+          {recap ? (
+            <SeriesRecap recap={recap} />
+          ) : (
+            <CinemaOverview
+              text={sheetOverview(item.overview, info?.tmdb?.overview)}
+              readMore={t("cinema.readMore")}
+              // Jusqu'à cinq lignes quand la page a de la place au-dessus du logo — voir CinemaOverview.
+              maxLines={5}
+              alwaysOpenable={!!info?.imdbId}
+              onOpen={() => setShowSynopsis(true)}
+            />
+          )}
 
           {late.pending && <ReservedLine className="h-4" />}
           {/* Les noms mènent chacun à leur fiche ; voir `CinemaDetailCastLine`. */}

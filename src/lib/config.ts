@@ -246,6 +246,13 @@ export const config = {
       return optional("DESCRIBE_SEARCH_ENABLED", "false") === "true";
     },
   },
+  // « Précédemment » (DECISIONS.md §137) : même fournisseur et même clé que la recherche par
+  // description, Anthropic seulement. Coupé par défaut — chaque texte préparé est un appel payant.
+  recap: {
+    get enabled() {
+      return optional("RECAP_ENABLED", "false") === "true";
+    },
+  },
   // La recherche de répliques (DECISIONS.md §88) : relue à chaque accès, comme le reste — couper
   // l'option arrête l'indexation à sa prochaine lecture de fichier, sans redémarrage.
   repliques: {
