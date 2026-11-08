@@ -518,6 +518,33 @@ describe("pendant le chargement : indice, préchauffage, bascule (§78)", () => 
     expect(errors()[0].fields.reason).toBe("pas de première image en 20 s");
     expect(document.body.textContent).toContain("player.loadingTooLong");
   });
+
+  // 08/11/2026 : un iPhone passé en arrière-plan juste après « Lire » retrouvait l'écran d'échec à son
+  // retour — le délai s'était écoulé page cachée, sans réseau — alors que l'image arrivait juste après.
+  it.each([
+    ["Safari (HLS natif)", true],
+    ["hls.js", false],
+  ])("%s : le temps passé page cachée ne compte pas, le retour réarme 20 s pleines", async (_label, native) => {
+    nativeHls = native;
+    let visibility: DocumentVisibilityState = "visible";
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
+    const setVisibility = (v: DocumentVisibilityState) => {
+      visibility = v;
+      document.dispatchEvent(new Event("visibilitychange"));
+    };
+    render(<PlayerHost />);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(2_000)));
+    await act(async () => setVisibility("hidden"));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(45_000)));
+    expect(errors()).toHaveLength(0);
+    await act(async () => setVisibility("visible"));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(19_000)));
+    expect(errors()).toHaveLength(0);
+    expect(document.body.textContent).not.toContain("player.loadingTooLong");
+    await act(async () => void (await vi.advanceTimersByTimeAsync(2_000)));
+    expect(errors()).toHaveLength(1);
+    expect(document.body.textContent).toContain("player.loadingTooLong");
+  });
 });
 
 /** Les libellés des boutons de la page. */

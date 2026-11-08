@@ -1198,6 +1198,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.23.4",
+    page: "10.13",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Corrige un problème où « Le chargement prend trop de temps » pouvait s'afficher au retour dans l'app, quand on l'avait quittée pendant le lancement d'une vidéo.",
+        en: "Fixes an issue where “This is taking too long” could appear when coming back to the app after leaving it while a video was starting.",
+        es: "Corrige un problema por el que « Esto está tardando demasiado » podía aparecer al volver a la app tras salir de ella mientras se iniciaba un vídeo.",
+        de: "Behebt ein Problem, bei dem „Das dauert zu lange“ erscheinen konnte, wenn Sie zur App zurückkehrten, nachdem Sie sie während des Starts eines Videos verlassen hatten.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

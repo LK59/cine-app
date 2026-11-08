@@ -1453,8 +1453,18 @@ function ActivePlayer({
         setReconnecting,
         setLoading,
       });
-      watchdogFireRef.current = fireWatchdog;
-      loadWatchdog.current = setTimeout(fireWatchdog, 20_000);
+      // Les 20 s ne comptent que le temps où la page est visible (08/11/2026). Sur iPhone, une page
+      // passée en arrière-plan juste après « Lire » n'a plus de réseau et ses minuteries sont bridées :
+      // le chien de garde partait quand même — 31 s après l'ouverture, page cachée — et la personne
+      // retrouvait « Le chargement prend trop de temps » alors que l'image arrivait 17 s après son
+      // retour (MacGyver en AV1, transcodé en moins de 2 s chez Jellyfin). Page cachée : rien ; le
+      // retour au premier plan réarme 20 s pleines (voir l'effet `visibilitychange` plus bas).
+      const fireWhenShown = () => {
+        if (document.visibilityState === "hidden") return;
+        fireWatchdog();
+      };
+      watchdogFireRef.current = fireWhenShown;
+      loadWatchdog.current = setTimeout(fireWhenShown, 20_000);
       // Chaque seconde du chargement, le lien mesuré (§78 — hls.js seulement : Safari lit son HLS
       // lui-même et la lecture directe n'est pas comptée ; rien n'y change). L'indice ; en
       // « Automatique », le préchauffage du palier suivant dès 8 s et la bascule à 10 s (très lente) ou
@@ -2250,8 +2260,11 @@ function ActivePlayer({
     const onVisibility = () => {
       // Revenu pendant le chargement (§78) : ce qui a été mesuré en arrière-plan ne vaut rien
       // (minuteurs bridés, réseau en veille). La mesure repart de zéro, et le chien de garde avec elle :
-      // aucun verdict sur une mesure d'arrière-plan.
-      if (document.visibilityState !== "hidden" && linkWatch.current && loadWatchdog.current && watchdogFireRef.current) {
+      // aucun verdict sur une mesure d'arrière-plan. Le chien de garde est réarmé pour tous les
+      // chemins — HLS natif (Safari) et lecture directe compris, qui n'ont pas de mesure du lien :
+      // jusqu'au 08/11/2026 il ne l'était que pour hls.js, et un iPhone revenu du fond tombait sur
+      // l'écran d'échec d'un délai écoulé pendant qu'il était caché.
+      if (document.visibilityState !== "hidden" && loadWatchdog.current && watchdogFireRef.current) {
         linkMeterRef.current = new LinkMeter();
         measureStartRef.current = Date.now();
         clearTimeout(loadWatchdog.current);
