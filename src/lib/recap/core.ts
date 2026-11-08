@@ -164,9 +164,9 @@ export function recapSystem(locale: Locale): string {
 
 But : rappeler les DERNIERS faits, là où en est l'intrigue quand le spectateur s'est arrêté. Pas un résumé de la saison.
 
-Structure imposée :
-1. Une phrase sur le dernier épisode terminé, tirée de son résumé officiel.
-2. S'il y a des dialogues de l'épisode en cours : une ou deux phrases sur ce qui s'y passe juste avant l'arrêt. Sinon, une phrase de plus sur l'avant-dernier épisode terminé.
+Structure imposée, dans l'ordre de l'histoire :
+- S'il y a des dialogues de l'épisode en cours : une phrase sur le dernier épisode terminé, tirée de son résumé officiel, puis une ou deux phrases sur ce qui se passe juste avant l'arrêt.
+- Sinon : une phrase sur l'avant-dernier épisode terminé, puis une sur le dernier.
 Au total 3 phrases au plus et 55 mots au plus, au présent, écrites en ${LANGUAGE_NAME[locale]}.
 
 Sources et confiance :

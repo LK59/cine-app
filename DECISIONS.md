@@ -8722,7 +8722,9 @@ phrases et 80 mots (`judgeRecap`), qui retire aussi « Dans S02E04, … ». **R�
 moyen** : second banc le même jour (11 séries en cours × sans réflexion / effort bas / moyen / haut × 2) —
 sans réflexion, des actes prêtés au mauvais personnage dans 4 séries sur 11 et la fausse publicité de
 *The Boys* recopiée ; en effort moyen, une erreur de lieu sur 22 textes et *The Boys* laissé vide ;
-l'effort haut ne fait pas mieux. ~8 s et ~0,001 $ le texte, préparé en fond.
+l'effort haut ne fait pas mieux. ~8 s et ~0,001 $ le texte, préparé en fond. La structure du prompt suit l'ordre de
+l'histoire : la première version disait « le dernier épisode, puis l'avant-dernier », et au début d'un
+épisode les deux faits sortaient à l'envers (*Chicago Fire*, *The Handmaid's Tale*, 08/11/2026).
 
 **Quand.** Jamais à l'ouverture d'une fiche : Jellyfin met 12 à 45 s à lire des sous-titres rangés dans
 le fichier. Une tâche de fond (`startRecapCron`, toutes les 5 min, une minute après le démarrage) prend les
