@@ -18,7 +18,8 @@ import type { CinemaRecap } from "@/app/api/cinema/recaps/route";
 export default function SeriesRecap({ recap, synopsis, className = "" }: { recap: CinemaRecap; synopsis: ReactNode; className?: string }) {
   const t = useT();
   const [showSynopsis, setShowSynopsis] = useState(false);
-  const link = "mt-1 text-xs text-muted underline-offset-2 hover:underline focus-visible:underline";
+  // En gras : en texte discret de la même couleur que la mention, rien ne disait qu'on pouvait cliquer (Louis, 08/11/2026).
+  const link = "mt-1 text-xs font-semibold text-white underline-offset-2 hover:underline focus-visible:underline";
   if (showSynopsis) {
     return (
       <div className={className}>
@@ -37,7 +38,7 @@ export default function SeriesRecap({ recap, synopsis, className = "" }: { recap
       <p className="mt-1 text-xs text-muted">
         {recap.source === "officiel" && recap.about ? t("cinema.recapOfficial", { code: recap.about }) : t("cinema.recapNote")}
         {" · "}
-        <button type="button" className="underline-offset-2 hover:underline focus-visible:underline" onClick={() => setShowSynopsis(true)}>
+        <button type="button" className="font-semibold text-white underline-offset-2 hover:underline focus-visible:underline" onClick={() => setShowSynopsis(true)}>
           {t("cinema.recapShowSynopsis")}
         </button>
       </p>
