@@ -475,6 +475,9 @@ export class AudioTranscoder {
   private lastDecodedSeconds = 0;
   private exhausted = false;
   private failure: string | null = null;
+  /** Le vidage de fin de piste est en cours, ou déjà fait (une fois par flux) — voir `flushTail`. */
+  private flushingTail = false;
+  private tailFlushed = false;
 
   private constructor(
     private readonly decoder: SoftwareAudioTrack,
@@ -772,6 +775,7 @@ export class AudioTranscoder {
     this.pending = [];
     this.lastDecodedSeconds = seconds;
     this.exhausted = false;
+    this.tailFlushed = false;
   }
 
   /**
@@ -803,7 +807,7 @@ export class AudioTranscoder {
     }
 
     // At the end of the file there is nothing left to feed, so the remainder has to be asked for.
-    if (this.exhausted) await this.encoder.flush();
+    if (this.exhausted) await this.flushTail();
     else await this.drain();
     if (this.failure) throw new Error(this.failure);
 
@@ -811,6 +815,33 @@ export class AudioTranscoder {
     const ready = this.pending.filter((frame) => frame.timestampUs < cut);
     this.pending = this.pending.filter((frame) => frame.timestampUs >= cut);
     return ready;
+  }
+
+  /**
+   * Le dernier vidage, une fois la piste entièrement donnée à l'encodeur — et un échec n'y est pas une panne.
+   *
+   * Il ne rend que le reste d'une image : moins de 1024 échantillons, ~20 ms de son au tout dernier
+   * instant du film. Le 08/11/2026, l'encodeur AAC de Chrome Android a refusé ce vidage
+   * (« Flushing error ») à 29 s de la fin d'*Anacondas*, après 1 h 36 sans accroc : le lecteur l'a
+   * pris pour une panne et a passé la main au serveur pour la fin du générique. Ce qui est déjà
+   * encodé est gardé, le reste est perdu, et c'est tracé. Une seule fois par flux : rien n'est plus
+   * donné à l'encodeur après la fin, et un encodeur qui a échoué est fermé.
+   */
+  private async flushTail(): Promise<void> {
+    if (this.tailFlushed) return;
+    this.flushingTail = true;
+    try {
+      await this.encoder.flush();
+    } catch (error) {
+      this.tailLost(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.flushingTail = false;
+      this.tailFlushed = true;
+    }
+  }
+
+  private tailLost(message: string): void {
+    trace(`transcodage audio : vidage de fin de piste refusé (${message}) — le dernier reste d'image est perdu, la lecture continue`);
   }
 
   /** Waits for what has been handed to the encoder to come back out, without forcing a frame. */
@@ -857,6 +888,8 @@ export class AudioTranscoder {
   private closed = false;
 
   private fail(message: string): void {
+    // Signalé par l'encodeur pendant le vidage de fin : sa promesse le dit aussi, `flushTail` s'en charge.
+    if (this.flushingTail) return;
     this.failure = `Encodage audio interrompu : ${message}`;
     // Un échec en cours de route au débit demandé : le suivant partira d'un barreau plus bas.
     // Sans débit imposé, il n'y a rien sous lequel descendre.

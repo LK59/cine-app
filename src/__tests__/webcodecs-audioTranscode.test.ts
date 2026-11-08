@@ -47,7 +47,7 @@ class FakeAudioData {
 }
 
 /** Emits fixed 1024-frame chunks and buffers the remainder, as a real AAC encoder does. */
-function fakeEncoderClass(options: { describeAfter?: number; failWith?: string; refuseAbove?: number } = {}) {
+function fakeEncoderClass(options: { describeAfter?: number; failWith?: string; refuseAbove?: number; failFlushWith?: string } = {}) {
   return class {
     static supportedCalls: unknown[] = [];
     /** Every configuration handed to configure(), across every instance. */
@@ -96,6 +96,11 @@ function fakeEncoderClass(options: { describeAfter?: number; failWith?: string; 
       );
     }
     async flush() {
+      // Chrome Android, 08/11/2026 : l'erreur arrive par le rappel et par la promesse.
+      if (options.failFlushWith) {
+        this.init.error({ message: options.failFlushWith } as never);
+        throw new Error(options.failFlushWith);
+      }
       // Padding out what did not fill a frame — the very thing this is no longer asked to do
       // between segments.
       if (this.held > 0) {
@@ -452,6 +457,20 @@ describe("AudioTranscoder", () => {
     expect(transcoder.drained).toBe(false);
     expect((await transcoder.framesUpTo(Infinity)).length).toBeGreaterThan(0);
     expect(transcoder.drained).toBe(true);
+  });
+
+  it("un vidage de fin refusé n'est pas une panne : ce qui est encodé est rendu, la piste se dit vidée", async () => {
+    // Anacondas, Chrome Android, 08/11/2026 : « Flushing error » à 29 s de la fin.
+    const Encoder = fakeEncoderClass({ failFlushWith: "Flushing error." });
+    vi.stubGlobal("AudioEncoder", Encoder);
+    samples.mockImplementation(() => decoded(41));
+    const { AudioTranscoder } = await load();
+    const transcoder = await AudioTranscoder.open(source as never, track as never);
+    const frames = await transcoder.framesUpTo(Infinity);
+    expect(frames.length).toBeGreaterThan(0);
+    expect(transcoder.drained).toBe(true);
+    // Redemandé (le remultiplexeur repasse) : pas de second vidage, pas d'erreur.
+    await expect(transcoder.framesUpTo(Infinity)).resolves.toEqual([]);
   });
 
   it("restarts decoding where a seek asks, not where it had got to", async () => {

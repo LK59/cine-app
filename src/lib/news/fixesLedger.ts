@@ -1185,6 +1185,18 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
         de: "Ein Titel, der nicht in der Bibliothek ist, öffnet sich jetzt sofort aus seinem Poster statt über einen schwarzen Wartebildschirm.",
       },
     ],
+  },  {
+    version: "10.21.1",
+    page: "10.13",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Corrige un problème où, sur Android, la lecture pouvait basculer sur une version transcodée dans les toutes dernières secondes d'un film.",
+        en: "Fixes an issue where, on Android, playback could switch to a transcoded version in the very last seconds of a film.",
+        es: "Corrige un problema por el que, en Android, la reproducción podía pasar a una versión transcodificada en los últimos segundos de una película.",
+        de: "Behebt ein Problem, bei dem die Wiedergabe auf Android in den letzten Sekunden eines Films auf eine transkodierte Version wechseln konnte.",
+      },
+    ],
   },
 ];
 
