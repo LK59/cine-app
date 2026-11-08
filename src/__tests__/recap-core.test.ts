@@ -46,8 +46,10 @@ describe("ce qui part au modèle", () => {
 });
 
 describe("la clé", () => {
-  it("la minute d'arrêt, et rien avant deux minutes : l'épisode n'est pas commencé", () => {
-    expect(recapKey("ep", 1530, "fr")).toBe("ep:25:fr");
+  it("une tranche par dix minutes, et rien avant deux minutes : l'épisode n'est pas commencé", () => {
+    expect(recapKey("ep", 1530, "fr")).toBe("ep:3:fr");
+    expect(recapKey("ep", 1250, "fr")).toBe(recapKey("ep", 1790, "fr"));
+    expect(recapKey("ep", 1790, "fr")).not.toBe(recapKey("ep", 1810, "fr"));
     expect(recapKey("ep", 0, "fr")).toBe(recapKey("ep", 90, "fr"));
     expect(recapKey("ep", 1530, "en")).not.toBe(recapKey("ep", 1530, "fr"));
   });
@@ -86,6 +88,17 @@ describe("le jugement de la réponse", () => {
   it("garde une réponse dont chaque nom est dans les sources, sans « Dans S06E04 » ni code en fin", () => {
     const v = judgeRecap({ phrases: [{ texte: "Dans S06E04, lord Petyr convainc Jon Snow.", episodes: ["S06E04"] }, { texte: "Yara Greyjoy revendique le trône [S06E05]", episodes: [] }] }, sources);
     expect(v).toEqual({ status: "ok", text: "Lord Petyr convainc Jon Snow. Yara Greyjoy revendique le trône" });
+  });
+
+  it("« inchangé » rend le texte précédent tel quel ; sans texte précédent, c'est une réponse vide", () => {
+    expect(judgeRecap({ inchange: true, noms: [], phrases: [] }, sources, "Jon Snow marche.")).toEqual({ status: "ok", text: "Jon Snow marche.", kept: true });
+    expect(judgeRecap({ inchange: true, noms: [], phrases: [] }, sources, null)).toEqual({ status: "vide" });
+  });
+
+  it("le texte précédent est donné au modèle et compte parmi les sources", () => {
+    const { message, sources: src } = recapSources({ series: "S", current: { code: "S01E02", title: "x" }, positionS: 60, done: [{ code: "S01E01", title: "y", overview: "Un début." }], cues: [], previous: "Arya part pour Braavos." });
+    expect(message).toContain("Arya part pour Braavos.");
+    expect(unknownNames("Elle rejoint Arya à Braavos.", src)).toEqual([]);
   });
 
   it("coupe à trois phrases et à la longueur, et une réponse vide n'affiche rien", () => {

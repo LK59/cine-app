@@ -137,7 +137,8 @@ export function logRecap(fields: {
   series: string;
   episode: string;
   minute: number;
-  status: "ok" | "rejeté" | "vide" | "erreur" | "limite";
+  /** `gardé` : le modèle a jugé que rien d'important n'était arrivé depuis le texte précédent. */
+  status: "ok" | "gardé" | "rejeté" | "vide" | "erreur" | "limite";
   source?: "dialogues" | "résumés";
   ms: number;
   inTokens?: number;

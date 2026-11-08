@@ -639,6 +639,17 @@ function migrate(db: Database.Database): void {
       locale     TEXT    NOT NULL,
       seen_at    INTEGER NOT NULL
     );
+    /* Le dernier texte de chaque compte par série, et où il en était (saison × 1000 + épisode, tranche) :
+       le texte suivant le reçoit pour le garder si rien d'important n'est arrivé — jamais celui d'un
+       autre compte, qui peut être plus loin dans l'histoire. */
+    CREATE TABLE IF NOT EXISTS recap_progress (
+      jf_id      TEXT    NOT NULL,
+      series_id  TEXT    NOT NULL,
+      key        TEXT    NOT NULL,
+      ep_order   INTEGER NOT NULL,
+      step       INTEGER NOT NULL,
+      PRIMARY KEY (jf_id, series_id)
+    );
   `);
   // Les liens de partage (DECISIONS.md §112) : un film ou une série, un mot de passe (haché), une
   // fin, et le compte Jellyfin technique qui garde la reprise du lien. La ligne reste après
@@ -2471,6 +2482,14 @@ export const recapDb = {
         "INSERT INTO recap_accounts (jf_id, user, locale, seen_at) VALUES (?, ?, ?, ?) ON CONFLICT(jf_id) DO UPDATE SET user = excluded.user, locale = excluded.locale, seen_at = excluded.seen_at WHERE recap_accounts.locale != excluded.locale OR recap_accounts.seen_at < ?"
       )
       .run(jfId, user, locale, now, now - 60 * 60 * 1000);
+  },
+  lastOf(jfId: string, seriesId: string): { key: string; epOrder: number; step: number } | null {
+    return (getDb().prepare("SELECT key, ep_order AS epOrder, step FROM recap_progress WHERE jf_id = ? AND series_id = ?").get(jfId, seriesId) as { key: string; epOrder: number; step: number } | undefined) ?? null;
+  },
+  setLast(jfId: string, seriesId: string, key: string, epOrder: number, step: number): void {
+    getDb()
+      .prepare("INSERT INTO recap_progress (jf_id, series_id, key, ep_order, step) VALUES (?, ?, ?, ?, ?) ON CONFLICT(jf_id, series_id) DO UPDATE SET key = excluded.key, ep_order = excluded.ep_order, step = excluded.step")
+      .run(jfId, seriesId, key, epOrder, step);
   },
   accountsSince(since: number): { jfId: string; user: string; locale: string }[] {
     return getDb().prepare("SELECT jf_id AS jfId, user, locale FROM recap_accounts WHERE seen_at >= ? ORDER BY seen_at DESC").all(since) as { jfId: string; user: string; locale: string }[];

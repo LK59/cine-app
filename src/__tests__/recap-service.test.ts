@@ -3,6 +3,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // « Précédemment » (DECISIONS.md §137) : quand la tâche de fond prépare, ce qu'elle garde, et ce que
 // la fiche lit. Jellyfin et le modèle sont des doubles — aucun appel réseau ne part.
 
+// Sa propre base : la suite partage un DATA_DIR, et elle écrit dans trois tables (CLAUDE.md).
+await vi.hoisted(async () => {
+  const fsp = await import("node:fs");
+  const os = await import("node:os");
+  const p = await import("node:path");
+  process.env.DATA_DIR = fsp.mkdtempSync(p.join(os.tmpdir(), "laterna-recap-"));
+});
+
 const { fetchMock, nextUpMock } = vi.hoisted(() => ({ fetchMock: vi.fn(), nextUpMock: vi.fn() }));
 vi.mock("@/lib/jellyfinBreaker", () => ({ jellyfinFetch: fetchMock }));
 vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: { getNextUpGlobal: nextUpMock } }));
@@ -52,10 +60,10 @@ beforeEach(() => {
 });
 
 describe("la préparation", () => {
-  it("rien tant que la série a été regardée il y a moins de trois heures, ni sous trois épisodes finis", async () => {
+  it("rien tant que la série a été regardée il y a moins de dix minutes, ni sous trois épisodes finis", async () => {
     const model = vi.fn();
     setRecapModelForTests(model);
-    const recent = episodes(2 * HOUR);
+    const recent = episodes(5 * 60 * 1000);
     serve(recent.items);
     expect(await prepareRecap(account, stateOf(recent, 1300), NOW)).toBe("pas encore");
     const few = episodes(5 * HOUR, 2);
@@ -89,7 +97,23 @@ describe("la préparation", () => {
     expect(await prepareRecap(account, stateOf(s, 1300), NOW)).toBe("rejeté");
     nextUpMock.mockResolvedValue([{ ...stateOf(s, 1300).episode, SeriesId: s.id }]);
     expect(await readyRecapsFor(LUCAS, "fr")).toEqual({});
-    expect(recapDb.get(`${s.items[4].Id}:21:fr`)?.status).toBe("rejeté");
+    expect(recapDb.get(`${s.items[4].Id}:3:fr`)?.status).toBe("rejeté");
+  });
+
+  it("dix minutes plus loin, le modèle reçoit le texte d'avant et peut le garder ; jamais celui d'un autre compte", async () => {
+    const s = episodes(HOUR);
+    serve(s.items);
+    setRecapModelForTests(async () => ({ raw: { inchange: false, noms: ["Ted Lasso"], phrases: [{ texte: "Ted Lasso arrive à Richmond.", episodes: [] }] }, inTokens: 1, outTokens: 1 }));
+    expect(await prepareRecap(account, stateOf(s, 700), NOW)).toBe("préparé");
+    const model = vi.fn(async (_system: string, _message: string) => ({ raw: { inchange: true, noms: [], phrases: [] }, inTokens: 1, outTokens: 1 }));
+    setRecapModelForTests(model);
+    expect(await prepareRecap(account, stateOf(s, 1300), NOW)).toBe("gardé");
+    expect(model.mock.calls[0][1]).toContain("Ted Lasso arrive à Richmond.");
+    expect(recapDb.get(`${s.items[4].Id}:3:fr`)).toEqual({ status: "ok", text: "Ted Lasso arrive à Richmond." });
+    // Un autre compte, plus loin dans l'histoire : lucas ne reçoit pas son texte.
+    recapDb.setLast(LUCAS, s.id, "x", 9999, 9);
+    expect(await prepareRecap(account, stateOf(s, 1900), NOW)).toBe("vide");
+    expect(model.mock.calls[1][1]).not.toContain("« Précédemment » actuel");
   });
 
   it("un refus de débit arrête le passage et ne garde rien", async () => {
@@ -99,6 +123,6 @@ describe("la préparation", () => {
     const s = episodes(5 * HOUR);
     serve(s.items);
     await expect(prepareRecap(account, stateOf(s, 1300), NOW)).rejects.toThrow();
-    expect(recapDb.get(`${s.items[4].Id}:21:fr`)).toBeNull();
+    expect(recapDb.get(`${s.items[4].Id}:3:fr`)).toBeNull();
   });
 });

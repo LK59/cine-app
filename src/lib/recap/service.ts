@@ -14,7 +14,6 @@ import { jellyfinFetch } from "@/lib/jellyfinBreaker";
 import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { upstreamSignal } from "@/lib/http";
 import { DEFAULT_MODELS } from "@/lib/subtitleGen/pricing";
-import { anyPlaybackBeat } from "@/lib/activity/presence";
 import { logRecap } from "@/lib/eventLogs";
 import { logError } from "@/lib/logger";
 import { taskLog } from "@/lib/taskLog";
@@ -25,6 +24,7 @@ import {
   pickSubtitleStream,
   recapKey,
   recapSources,
+  recapStep,
   recapSystem,
   RECAP_IDLE_MS,
   RECAP_MIN_PLAYED,
@@ -42,8 +42,9 @@ const PER_PASS = 12;
 /** Un compte qui n'a pas ouvert l'application depuis ce temps n'a plus rien de préparé. */
 const ACCOUNT_IDLE_MS = 30 * 24 * 60 * 60 * 1000;
 const PRUNE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
-const STARTUP_DELAY_MS = 3 * 60 * 1000;
-const INTERVAL_MS = 20 * 60 * 1000;
+const STARTUP_DELAY_MS = 60 * 1000;
+/** Réactif (Louis, 08/11/2026) : dix minutes après l'arrêt, le texte est prêt dans les cinq qui suivent. */
+const INTERVAL_MS = 5 * 60 * 1000;
 const MODEL_TIMEOUT_MS = 30_000;
 const SUBTITLE_TIMEOUT_MS = 90_000;
 
@@ -138,11 +139,13 @@ export function setRecapModelForTests(fn: RecapModel | null): void {
 /** Une limite de débit : le passage s'arrête au premier refus (règle des bancs, 08/11/2026). */
 class RecapRateLimited extends Error {}
 
-type Outcome = "préparé" | "rejeté" | "vide" | "déjà" | "pas encore" | "trop peu";
+type Outcome = "préparé" | "gardé" | "rejeté" | "vide" | "déjà" | "pas encore" | "trop peu";
 
 /**
  * Préparer le « Précédemment » d'une série pour un compte, s'il y a lieu : plus de deux épisodes
- * finis, et rien regardé de la série depuis trois heures. Le résultat — même un rejet — est gardé.
+ * finis, et rien regardé de la série depuis dix minutes. Le résultat — même un rejet — est gardé.
+ * Le texte que ce compte avait plus tôt dans l'histoire est donné au modèle, qui le garde si les dix
+ * minutes de plus n'ont rien apporté d'important.
  */
 export async function prepareRecap(
   account: { jfId: string; user: string; locale: Locale },
@@ -150,7 +153,12 @@ export async function prepareRecap(
   now = Date.now()
 ): Promise<Outcome> {
   const key = recapKey(state.episode.Id, state.positionS, account.locale);
-  if (recapDb.get(key)) return "déjà";
+  const order = (state.episode.ParentIndexNumber ?? 0) * 1000 + (state.episode.IndexNumber ?? 0);
+  const step = recapStep(state.positionS);
+  if (recapDb.get(key)) {
+    recapDb.setLast(account.jfId, state.seriesId, key, order, step);
+    return "déjà";
+  }
   const episodes = await episodesOf(account.jfId, state.seriesId);
   const played = episodes.filter((e) => e.UserData?.Played);
   if (played.length < RECAP_MIN_PLAYED) return "trop peu";
@@ -165,7 +173,12 @@ export async function prepareRecap(
     .map((e) => ({ code: code(e), title: e.Name, overview: e.Overview ?? "" }));
   if (!done.some((e) => e.overview.trim())) return "trop peu";
   const cues = state.positionS >= RECAP_STARTED_S ? await cuesOf(current, account.locale) : [];
-  const input = recapSources({ series: state.series, current: { code: code(current), title: current.Name }, positionS: state.positionS, done, cues });
+  // Seulement un texte d'avant dans l'histoire : revenu en arrière, le compte n'a plus le droit à
+  // celui qu'il avait plus loin.
+  const last = recapDb.lastOf(account.jfId, state.seriesId);
+  const before = last && (last.epOrder < order || (last.epOrder === order && last.step < step));
+  const previous = before ? (recapDb.get(last.key)?.text ?? null) : null;
+  const input = recapSources({ series: state.series, current: { code: code(current), title: current.Name }, positionS: state.positionS, done, cues, previous });
   const started = Date.now();
   const base = { user: account.user, series: state.series, episode: code(current), minute: Math.floor(state.positionS / 60), source: input.usedDialogue ? ("dialogues" as const) : ("résumés" as const) };
   let answer: Awaited<ReturnType<RecapModel>>;
@@ -177,10 +190,12 @@ export async function prepareRecap(
     if (status === 429) throw new RecapRateLimited();
     throw err;
   }
-  const verdict = judgeRecap(answer.raw, input.sources);
+  const verdict = judgeRecap(answer.raw, input.sources, previous);
   recapDb.put(key, state.seriesId, verdict.status, verdict.status === "ok" ? verdict.text : null, now);
-  logRecap({ ...base, status: verdict.status, ms: Date.now() - started, inTokens: answer.inTokens, outTokens: answer.outTokens, ...(verdict.status === "rejeté" ? { names: verdict.names } : {}) });
-  return verdict.status === "ok" ? "préparé" : verdict.status;
+  if (verdict.status === "ok") recapDb.setLast(account.jfId, state.seriesId, key, order, step);
+  const kept = verdict.status === "ok" && verdict.kept;
+  logRecap({ ...base, status: kept ? "gardé" : verdict.status, ms: Date.now() - started, inTokens: answer.inTokens, outTokens: answer.outTokens, ...(verdict.status === "rejeté" ? { names: verdict.names } : {}) });
+  return kept ? "gardé" : verdict.status === "ok" ? "préparé" : verdict.status;
 }
 
 const PASS_KEY = Symbol.for("cine-app.recapPass");
@@ -189,8 +204,9 @@ const pass = (shared[PASS_KEY] ??= { running: false, started: false });
 
 /**
  * Un passage : les comptes venus depuis un mois, leurs séries en cours, une préparation à la fois.
- * Jamais pendant un film — Jellyfin lit alors les sous-titres dans le fichier qu'on regarde peut-être
- * (même règle que l'indexation des répliques). Arrêté au premier refus de débit ou à la première panne.
+ * Arrêté au premier refus de débit ou à la première panne. Il tourne même quand quelqu'un regarde un
+ * film : la première version attendait que plus rien ne joue nulle part, et avec un foyer entier, elle
+ * n'a jamais tourné (08/11/2026). Lire les sous-titres d'un épisode est une lecture comme une autre.
  */
 export async function runRecapPass(now = Date.now()): Promise<{ prepared: number; rejected: number }> {
   const result = { prepared: 0, rejected: 0 };
@@ -202,11 +218,11 @@ export async function runRecapPass(now = Date.now()): Promise<{ prepared: number
     for (const account of recapDb.accountsSince(now - ACCOUNT_IDLE_MS)) {
       const locale = recapLocale(account.locale);
       for (const state of await positionsOf(account.jfId)) {
-        if (made >= PER_PASS || anyPlaybackBeat()) return result;
-        if (recapDb.get(recapKey(state.episode.Id, state.positionS, locale))) continue;
+        if (made >= PER_PASS) return result;
+        // Même déjà prêt (par un autre compte au même endroit), le passage note où en est ce compte.
         const outcome = await prepareRecap({ jfId: account.jfId, user: account.user, locale }, state, now);
-        if (outcome === "préparé" || outcome === "rejeté" || outcome === "vide") made++;
-        if (outcome === "préparé") result.prepared++;
+        if (outcome === "préparé" || outcome === "gardé" || outcome === "rejeté" || outcome === "vide") made++;
+        if (outcome === "préparé" || outcome === "gardé") result.prepared++;
         if (outcome === "rejeté" || outcome === "vide") result.rejected++;
       }
     }

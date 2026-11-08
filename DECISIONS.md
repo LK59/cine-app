@@ -8694,9 +8694,13 @@ le lecteur serveur prévu ; légendes et pluriels.
 **Règle.** Sur la fiche d'une série en cours, un texte de deux ou trois phrases (« Précédemment : … »)
 remplace le résumé, avec en dessous « Généré par IA à partir de ce que vous avez déjà vu ». Il existe
 quand le compte a fini plus de deux épisodes de la série (`RECAP_MIN_PLAYED`) et n'en a rien regardé
-depuis trois heures (`RECAP_IDLE_MS`, d'après `LastPlayedDate` de Jellyfin : vaut aussi pour ce qui a été
-vu sur la télé, survit aux redémarrages). Il parle de l'endroit exact où l'on s'est arrêté : l'épisode que
-Jellyfin propose ensuite (`/Shows/NextUp`) et la minute dedans. Option coupée par défaut
+depuis dix minutes (`RECAP_IDLE_MS`, d'après `LastPlayedDate` de Jellyfin : vaut aussi pour ce qui a été
+vu sur la télé, survit aux redémarrages). Il parle de l'endroit où l'on s'est arrêté : l'épisode que
+Jellyfin propose ensuite (`/Shows/NextUp`) et la tranche de dix minutes dedans (`recapStep`). Avancer
+d'une tranche demande un nouveau texte ; le modèle reçoit alors celui que **ce compte** avait plus tôt
+dans l'histoire (`recap_progress`) et le garde tel quel (`inchange`) si rien d'important n'est arrivé
+(Louis, le jour même : réactif plutôt que trois heures d'absence). Jamais le texte d'un autre compte,
+qui peut être plus loin ; jamais celui d'avant un retour en arrière. Option coupée par défaut
 (`RECAP_ENABLED`), Anthropic seulement, clé des sous-titres générés (§69), Haiku toujours.
 
 **Ce que lit le modèle — et rien d'autre.** Au milieu d'un épisode : le résumé officiel (Jellyfin) du
@@ -8717,11 +8721,12 @@ rejet n'affiche rien, la fiche garde son résumé. La longueur demandée n'est p
 phrases et 80 mots (`judgeRecap`), qui retire aussi « Dans S02E04, … ». ~1,3 s et ~0,0004 $ le texte.
 
 **Quand.** Jamais à l'ouverture d'une fiche : Jellyfin met 12 à 45 s à lire des sous-titres rangés dans
-le fichier. Une tâche de fond (`startRecapCron`, toutes les 20 min, 3 min après le démarrage) prend les
+le fichier. Une tâche de fond (`startRecapCron`, toutes les 5 min, une minute après le démarrage) prend les
 comptes venus depuis un mois (`recap_accounts`, noté par la route avec la langue du cookie — la tâche
 n'a pas de requête pour la connaître), leurs huit séries « À suivre » les plus récentes, et prépare une à
-une ce qui manque : douze au plus par passage, jamais pendant un film (`anyPlaybackBeat`), arrêt au
-premier refus de débit ou à la première panne. Un texte par épisode, minute d'arrêt et langue
+une ce qui manque : douze au plus par passage, arrêt au premier refus de débit ou à la première panne.
+Elle tourne pendant les films des autres : la première version attendait que plus rien ne joue nulle
+part, et le jour du déploiement elle n'a jamais tourné. Un texte par épisode, tranche d'arrêt et langue
 (`recapKey`, table `series_recaps`), partagé par les comptes ; rejets et réponses vides gardés aussi,
 pour ne pas redemander ; effacés après trente jours.
 

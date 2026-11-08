@@ -24,21 +24,32 @@ import type { Locale } from "@/lib/i18n";
 export const RECAP_WINDOW_S = 600;
 /** Arrêté avant ça, l'épisode n'est pas commencé : seuls les résumés des épisodes finis comptent. */
 export const RECAP_STARTED_S = 120;
-/** Préparé une fois la série laissée de côté depuis ce temps (choix de Louis, 08/11/2026). */
-export const RECAP_IDLE_MS = 3 * 60 * 60 * 1000;
+/**
+ * Préparé une fois la série laissée de côté depuis ce temps. Trois heures au départ (08/11/2026) ;
+ * le jour même, Louis l'a voulu réactif : dix minutes après qu'on a cessé de regarder.
+ */
+export const RECAP_IDLE_MS = 10 * 60 * 1000;
+/** Un nouveau texte à chaque tranche de dix minutes avancée (Louis, 08/11/2026). */
+export const RECAP_STEP_S = 600;
 /** « Plus de deux épisodes finis » (Louis, 08/11/2026) : en dessous, il n'y a rien à rappeler. */
 export const RECAP_MIN_PLAYED = 3;
 export const RECAP_MAX_PHRASES = 3;
 export const RECAP_MAX_WORDS = 80;
 
 /**
- * La clé d'un « Précédemment » : l'épisode, la minute où l'on s'est arrêté, la langue. Partagée par
- * tous les comptes — deux personnes arrêtées au même endroit lisent le même texte, demandé une fois.
- * Avant `RECAP_STARTED_S`, la position ne compte plus : l'épisode n'est pas commencé.
+ * La tranche de l'arrêt dans l'épisode : 0 avant `RECAP_STARTED_S` (pas commencé), puis une par dix
+ * minutes. Avancer d'une tranche demande un nouveau texte ; bouger dedans, non.
+ */
+export function recapStep(positionS: number): number {
+  return positionS < RECAP_STARTED_S ? 0 : Math.floor(positionS / RECAP_STEP_S) + 1;
+}
+
+/**
+ * La clé d'un « Précédemment » : l'épisode, la tranche d'arrêt, la langue. Partagée par tous les
+ * comptes — deux personnes arrêtées au même endroit lisent le même texte, demandé une fois.
  */
 export function recapKey(episodeId: string, positionS: number, locale: Locale): string {
-  const minute = positionS < RECAP_STARTED_S ? 0 : Math.floor(positionS / 60);
-  return `${episodeId}:${minute}:${locale}`;
+  return `${episodeId}:${recapStep(positionS)}:${locale}`;
 }
 
 export interface Cue {
@@ -120,6 +131,8 @@ export interface RecapInput {
   done: readonly DoneEpisode[];
   /** Les répliques de l'épisode en cours, toutes : la fenêtre est choisie ici. */
   cues: readonly Cue[];
+  /** Le texte que ce compte avait, plus tôt dans l'histoire — le modèle peut le garder. */
+  previous?: string | null;
 }
 
 /** Ce qui part au modèle, et le texte des sources contre lequel sa réponse est vérifiée. */
@@ -137,7 +150,10 @@ export function recapSources(input: RecapInput): { message: string; sources: str
   }
   const sources = parts.join("\n\n");
   const where = started ? `à ${minutes} min` : "depuis le début";
-  return { message: `Série : ${input.series}\nReprise de ${input.current.code} ${where}.\n\n${sources}`, sources: `${input.series}\n${sources}`, usedDialogue: lines.length > 0 };
+  const previous = input.previous?.trim() ? `\n\n### « Précédemment » actuel, écrit un peu plus tôt dans l'histoire\n${input.previous.trim()}` : "";
+  // Le texte précédent compte parmi les sources : il a été vérifié contre les siennes, et le garder
+  // ou en reprendre un nom ne doit pas faire rejeter la réponse.
+  return { message: `Série : ${input.series}\nReprise de ${input.current.code} ${where}.\n\n${sources}${previous}`, sources: `${input.series}\n${sources}${previous}`, usedDialogue: lines.length > 0 };
 }
 
 const LANGUAGE_NAME: Record<Locale, string> = { fr: "français", en: "anglais", es: "espagnol", de: "allemand" };
@@ -161,6 +177,8 @@ Sources et confiance :
 - N'utilise QUE ces sources : tu ne connais pas cette série. Aucun nom ni événement absent des sources, même si tu crois le connaître.
 - Rien après l'arrêt.
 
+Si un « Précédemment » actuel est fourni : réponds « inchange » à vrai (et aucune phrase) quand les nouvelles sources n'apportent rien d'important à ce qu'il dit déjà ; sinon « inchange » à faux et un nouveau texte complet.
+
 Style : phrases simples, noms exactement comme dans les sources, ni « spectateur », ni « vous », ni code d'épisode, ni « dans cet épisode », ni jugement, ni teaser, pas de vulgarité reprise des dialogues. Pour chaque phrase, les codes d'épisodes (ex. S02E03) d'où elle vient. Dans « noms », chaque nom propre (personne, lieu, groupe) que tes phrases emploient, écrit comme dans tes phrases.`;
 }
 
@@ -168,8 +186,9 @@ Style : phrases simples, noms exactement comme dans les sources, ni « spectateu
 export const RECAP_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["phrases", "noms"],
+  required: ["inchange", "phrases", "noms"],
   properties: {
+    inchange: { type: "boolean" },
     noms: { type: "array", items: { type: "string" } },
     phrases: {
       type: "array",
@@ -197,10 +216,14 @@ export function unknownNames(text: string, sources: string, declared: readonly s
   return [...new Set([...inner, ...named].filter((w) => !low.includes(w.toLowerCase().replace(/['’]s$/, ""))))];
 }
 
-export type RecapVerdict = { status: "ok"; text: string } | { status: "rejeté"; names: string[] } | { status: "vide" };
+export type RecapVerdict = { status: "ok"; text: string; kept?: true } | { status: "rejeté"; names: string[] } | { status: "vide" };
 
-/** Le jugement d'une réponse : nettoyée, coupée, et rejetée au moindre nom inconnu. */
-export function judgeRecap(raw: unknown, sources: string): RecapVerdict {
+/**
+ * Le jugement d'une réponse : nettoyée, coupée, et rejetée au moindre nom inconnu. « Inchangé » rend
+ * le texte précédent tel quel — le modèle juge que les dix minutes de plus n'ont rien changé.
+ */
+export function judgeRecap(raw: unknown, sources: string, previous?: string | null): RecapVerdict {
+  if ((raw as { inchange?: unknown } | null)?.inchange === true && previous?.trim()) return { status: "ok", text: previous.trim(), kept: true };
   const list = (raw as { phrases?: unknown } | null)?.phrases;
   const phrases = (Array.isArray(list) ? list : [])
     .map((p) => (typeof (p as { texte?: unknown })?.texte === "string" ? (p as { texte: string }).texte : ""))
