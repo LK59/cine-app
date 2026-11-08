@@ -17,7 +17,9 @@ export async function GET(req: NextRequest) {
   const homeDefaults = { continueHero: config.home.continueHero };
   // « Afficher les livres » (DECISIONS.md §127), suivi d'un appareil à l'autre comme le reste.
   const showBooks = userPrefsDb.getShowBooks(userId);
-  return NextResponse.json({ lang, guidedScroll, showBooks, homeOwn: own, homeDefaults });
+  // « Précédemment » (DECISIONS.md §137) : coupé, rien n'est ni affiché ni préparé pour ce compte.
+  const showRecap = userPrefsDb.getShowRecap(userId);
+  return NextResponse.json({ lang, guidedScroll, showBooks, showRecap, homeOwn: own, homeDefaults });
 }
 
 export async function PUT(req: NextRequest) {
@@ -41,6 +43,12 @@ export async function PUT(req: NextRequest) {
   if (typeof body?.showBooks === "boolean") {
     userPrefsDb.setShowBooks(userId, body.showBooks);
     return NextResponse.json({ ok: true, showBooks: body.showBooks });
+  }
+
+  // « Précédemment » (DECISIONS.md §137) : une mise à jour à elle seule.
+  if (typeof body?.showRecap === "boolean") {
+    userPrefsDb.setShowRecap(userId, body.showRecap);
+    return NextResponse.json({ ok: true, showRecap: body.showRecap });
   }
 
   // La disposition de l'accueil : un booléen choisit, `null` rend la main au serveur.

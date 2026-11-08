@@ -302,6 +302,8 @@ function migrate(db: Database.Database): void {
   try { db.exec("ALTER TABLE user_preferences ADD COLUMN home_continue_hero INTEGER"); } catch { /* already exists */ }
   // « Afficher les livres » (DECISIONS.md §127) : NULL = oui, 0 = ce compte n'en veut pas.
   try { db.exec("ALTER TABLE user_preferences ADD COLUMN show_books INTEGER"); } catch { /* already exists */ }
+  // « Précédemment » (DECISIONS.md §137) : NULL = oui, 0 = ce compte n'en veut pas — ni affiché, ni préparé.
+  try { db.exec("ALTER TABLE user_preferences ADD COLUMN show_recap INTEGER"); } catch { /* already exists */ }
   // La colonne a existé le temps d'une version qui révoquait le jeton Jellyfin en même temps que
   // la session. Ce n'est plus le cas — se déconnecter de Cine App ne doit pas toucher à Jellyfin —
   // et un secret qu'on ne lit plus n'a rien à faire au repos : elle est vidée à chaque démarrage.
@@ -620,11 +622,12 @@ function migrate(db: Database.Database): void {
       PRIMARY KEY (account, series_id)
     );
   `);
-  // « Précédemment » (DECISIONS.md §137, 08/11/2026). `series_recaps` : un texte par épisode, minute
-  // d'arrêt et langue (`recapKey`), partagé par les comptes — un rejet ou une réponse vide est gardé
-  // aussi, pour ne pas redemander la même chose à chaque passage. `recap_accounts` : les comptes qui
-  // ont ouvert l'application depuis que l'option existe, et dans quelle langue — la tâche de fond n'a
-  // pas de requête pour la lui dire, et ne prépare rien pour qui ne vient plus.
+  // « Précédemment » (DECISIONS.md §137, 08/11/2026). `series_recaps` : un texte par épisode, tranche
+  // d'arrêt et langue (`recapKey`), partagé par les comptes — un rejet, une réponse vide ou « rien à
+  // dire » est gardé aussi, pour ne pas redemander la même chose à chaque passage. `about` : l'épisode
+  // dont le résumé officiel est affiché tel quel (`officiel`). `recap_accounts` a existé quelques
+  // heures (la langue des comptes, apprise à l'ouverture de l'application) : la langue est dans
+  // `user_preferences`, la préparation ne dépend plus d'aucune ouverture.
   db.exec(`
     CREATE TABLE IF NOT EXISTS series_recaps (
       key        TEXT    PRIMARY KEY,
@@ -633,12 +636,7 @@ function migrate(db: Database.Database): void {
       text       TEXT,
       created_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS recap_accounts (
-      jf_id      TEXT    PRIMARY KEY,
-      user       TEXT    NOT NULL,
-      locale     TEXT    NOT NULL,
-      seen_at    INTEGER NOT NULL
-    );
+    DROP TABLE IF EXISTS recap_accounts;
     /* Le dernier texte de chaque compte par série, et où il en était (saison × 1000 + épisode, tranche) :
        le texte suivant le reçoit pour le garder si rien d'important n'est arrivé — jamais celui d'un
        autre compte, qui peut être plus loin dans l'histoire. */
@@ -651,6 +649,7 @@ function migrate(db: Database.Database): void {
       PRIMARY KEY (jf_id, series_id)
     );
   `);
+  try { db.exec("ALTER TABLE series_recaps ADD COLUMN about TEXT"); } catch { /* already exists */ }
   // Les liens de partage (DECISIONS.md §112) : un film ou une série, un mot de passe (haché), une
   // fin, et le compte Jellyfin technique qui garde la reprise du lien. La ligne reste après
   // l'expiration — ce que le lien a consommé se lit encore dans l'Activité.
@@ -1214,6 +1213,24 @@ export const userPrefsDb = {
       VALUES (?, NULL, ?, ?)
       ON CONFLICT (user_id) DO UPDATE SET
         show_books = excluded.show_books,
+        updated_at = excluded.updated_at
+    `).run(userId, on ? 1 : 0, Date.now());
+  },
+
+  /** « Précédemment » (DECISIONS.md §137) : oui tant que le compte ne l'a pas coupé. */
+  getShowRecap(userId: string): boolean {
+    const row = getDb()
+      .prepare("SELECT show_recap FROM user_preferences WHERE user_id = ?")
+      .get(userId) as { show_recap: number | null } | undefined;
+    return row?.show_recap !== 0;
+  },
+
+  setShowRecap(userId: string, on: boolean): void {
+    getDb().prepare(`
+      INSERT INTO user_preferences (user_id, lang, show_recap, updated_at)
+      VALUES (?, NULL, ?, ?)
+      ON CONFLICT (user_id) DO UPDATE SET
+        show_recap = excluded.show_recap,
         updated_at = excluded.updated_at
     `).run(userId, on ? 1 : 0, Date.now());
   },
@@ -2453,35 +2470,33 @@ export const dailyTop10Db = {
 };
 
 /** « Précédemment » (DECISIONS.md §137) — voir les tables dans `migrate()`. */
-export type RecapStatus = "ok" | "rejeté" | "vide";
+/** `officiel` : le résumé Jellyfin d'un épisode, affiché tel quel ; `aucun` : rien à dire à cet endroit. */
+export type RecapStatus = "ok" | "officiel" | "rejeté" | "vide" | "aucun";
+export interface ReadyRecap {
+  text: string;
+  status: "ok" | "officiel";
+  about: string | null;
+}
 export const recapDb = {
   get(key: string): { status: RecapStatus; text: string | null } | null {
     return (getDb().prepare("SELECT status, text FROM series_recaps WHERE key = ?").get(key) as { status: RecapStatus; text: string | null } | undefined) ?? null;
   },
-  /** Les textes prêts parmi ces clés — une lecture pour toute la liste d'un compte. */
-  readyAmong(keys: readonly string[]): Map<string, string> {
+  /** Les textes à afficher parmi ces clés — une lecture pour toute la liste d'un compte. */
+  readyAmong(keys: readonly string[]): Map<string, ReadyRecap> {
     if (!keys.length) return new Map();
     const rows = getDb()
-      .prepare(`SELECT key, text FROM series_recaps WHERE status = 'ok' AND key IN (${keys.map(() => "?").join(",")})`)
-      .all(...keys) as { key: string; text: string }[];
-    return new Map(rows.map((r) => [r.key, r.text]));
+      .prepare(`SELECT key, text, status, about FROM series_recaps WHERE status IN ('ok', 'officiel') AND text IS NOT NULL AND key IN (${keys.map(() => "?").join(",")})`)
+      .all(...keys) as ({ key: string } & ReadyRecap)[];
+    return new Map(rows.map((r) => [r.key, { text: r.text, status: r.status, about: r.about }]));
   },
-  put(key: string, seriesId: string, status: RecapStatus, text: string | null, now = Date.now()): void {
+  put(key: string, seriesId: string, status: RecapStatus, text: string | null, now = Date.now(), about: string | null = null): void {
     getDb()
-      .prepare("INSERT INTO series_recaps (key, series_id, status, text, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET status = excluded.status, text = excluded.text, created_at = excluded.created_at")
-      .run(key, seriesId, status, text, now);
+      .prepare("INSERT INTO series_recaps (key, series_id, status, text, created_at, about) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET status = excluded.status, text = excluded.text, created_at = excluded.created_at, about = excluded.about")
+      .run(key, seriesId, status, text, now, about);
   },
   /** Une position quittée depuis un mois ne reviendra pas : la clé n'est plus demandée par personne. */
   prune(olderThanMs: number, now = Date.now()): number {
     return getDb().prepare("DELETE FROM series_recaps WHERE created_at < ?").run(now - olderThanMs).changes;
-  },
-  /** Le compte vient d'ouvrir l'application — écrit au plus une fois l'heure, ou si la langue change. */
-  noteAccount(jfId: string, user: string, locale: string, now = Date.now()): void {
-    getDb()
-      .prepare(
-        "INSERT INTO recap_accounts (jf_id, user, locale, seen_at) VALUES (?, ?, ?, ?) ON CONFLICT(jf_id) DO UPDATE SET user = excluded.user, locale = excluded.locale, seen_at = excluded.seen_at WHERE recap_accounts.locale != excluded.locale OR recap_accounts.seen_at < ?"
-      )
-      .run(jfId, user, locale, now, now - 60 * 60 * 1000);
   },
   lastOf(jfId: string, seriesId: string): { key: string; epOrder: number; step: number } | null {
     return (getDb().prepare("SELECT key, ep_order AS epOrder, step FROM recap_progress WHERE jf_id = ? AND series_id = ?").get(jfId, seriesId) as { key: string; epOrder: number; step: number } | undefined) ?? null;
@@ -2490,8 +2505,5 @@ export const recapDb = {
     getDb()
       .prepare("INSERT INTO recap_progress (jf_id, series_id, key, ep_order, step) VALUES (?, ?, ?, ?, ?) ON CONFLICT(jf_id, series_id) DO UPDATE SET key = excluded.key, ep_order = excluded.ep_order, step = excluded.step")
       .run(jfId, seriesId, key, epOrder, step);
-  },
-  accountsSince(since: number): { jfId: string; user: string; locale: string }[] {
-    return getDb().prepare("SELECT jf_id AS jfId, user, locale FROM recap_accounts WHERE seen_at >= ? ORDER BY seen_at DESC").all(since) as { jfId: string; user: string; locale: string }[];
   },
 };

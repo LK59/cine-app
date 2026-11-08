@@ -599,7 +599,11 @@ export function CinemaMobileDetail({
         )}
         {/* Le synopsis du catalogue ne change pas de texte à l'arrivée de TMDB — voir `sheetOverview`. */}
         {/* Une série en cours a son « Précédemment » à la place du résumé (DECISIONS.md §137). */}
-        {recap ? <SeriesRecap recap={recap} className="mb-3" /> : <p className="mb-3 text-sm leading-6 text-white">{sheetOverview(item.overview, info?.tmdb?.overview)}</p>}
+        {recap ? (
+          <SeriesRecap recap={recap} className="mb-3" synopsis={<p className="text-sm leading-6 text-white">{sheetOverview(item.overview, info?.tmdb?.overview)}</p>} />
+        ) : (
+          <p className="mb-3 text-sm leading-6 text-white">{sheetOverview(item.overview, info?.tmdb?.overview)}</p>
+        )}
 
 
         {/* Netflix's icon-over-label action row — big touch targets, no text buttons competing

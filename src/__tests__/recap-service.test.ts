@@ -13,10 +13,12 @@ await vi.hoisted(async () => {
 
 const { fetchMock, nextUpMock } = vi.hoisted(() => ({ fetchMock: vi.fn(), nextUpMock: vi.fn() }));
 vi.mock("@/lib/jellyfinBreaker", () => ({ jellyfinFetch: fetchMock }));
-vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: { getNextUpGlobal: nextUpMock } }));
+vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: {} }));
+// « À suivre » passe par `fetchJson` (avec `NextUpDateCutoff`) : le double rend la liste du test.
+vi.mock("@/lib/http", async (orig) => ({ ...(await orig<typeof import("@/lib/http")>()), fetchJson: async () => ({ Items: await nextUpMock() }) }));
 
 import { prepareRecap, readyRecapsFor, setRecapModelForTests } from "@/lib/recap/service";
-import { recapDb } from "@/lib/db";
+import { recapDb, userPrefsDb } from "@/lib/db";
 import type { JellyfinItem } from "@/lib/clients/jellyfin";
 
 const HOUR = 60 * 60 * 1000;
@@ -57,19 +59,33 @@ const stateOf = (series: { id: string; items: { Id: string }[] }, positionS: num
 beforeEach(() => {
   fetchMock.mockReset();
   nextUpMock.mockReset();
+  // La langue du compte est celle de ses préférences ; l'installation des tests est en anglais.
+  userPrefsDb.setLang(LUCAS, "fr");
 });
 
 describe("la préparation", () => {
-  it("rien tant que la série a été regardée il y a moins de dix minutes, ni sous trois épisodes finis", async () => {
+  it("rien tant que la série a été regardée il y a moins de dix minutes, ni sans épisode fini", async () => {
     const model = vi.fn();
     setRecapModelForTests(model);
     const recent = episodes(5 * 60 * 1000);
     serve(recent.items);
     expect(await prepareRecap(account, stateOf(recent, 1300), NOW)).toBe("pas encore");
-    const few = episodes(5 * HOUR, 2);
-    serve(few.items);
-    expect(await prepareRecap(account, stateOf(few, 1300), NOW)).toBe("trop peu");
+    const none = episodes(5 * HOUR, 0);
+    serve(none.items);
+    expect(await prepareRecap(account, stateOf(none, 1300), NOW)).toBe("aucun");
     expect(model).not.toHaveBeenCalled();
+  });
+
+  it("un seul épisode fini et le suivant pas commencé : son résumé tel quel, sans modèle, avec l'épisode d'où il vient", async () => {
+    const model = vi.fn();
+    setRecapModelForTests(model);
+    const one = episodes(HOUR, 1);
+    serve(one.items);
+    const state = { ...stateOf(one, 30), episode: { ...one.items[1], UserData: { Played: false, PlayCount: 0, PlaybackPositionTicks: 30 * 10_000_000 } } as JellyfinItem };
+    expect(await prepareRecap(account, state, NOW)).toBe("officiel");
+    expect(model).not.toHaveBeenCalled();
+    nextUpMock.mockResolvedValue([{ ...state.episode, SeriesId: one.id }]);
+    expect(await readyRecapsFor(LUCAS)).toEqual({ [one.id]: { text: "Ted Lasso arrive à Richmond, épisode 1.", episode: "S01E02", source: "officiel", about: "S01E01" } });
   });
 
   it("prépare une fois, garde le texte sous la clé, et la fiche le lit pour cette série", async () => {
@@ -85,9 +101,15 @@ describe("la préparation", () => {
     expect(model).toHaveBeenCalledTimes(1);
 
     nextUpMock.mockResolvedValue([{ ...stateOf(s, 1300).episode, SeriesId: s.id, SeriesName: "Ted Lasso" }]);
-    expect(await readyRecapsFor(LUCAS, "fr")).toEqual({ [s.id]: { text: "Ted Lasso arrive à Richmond. Rebecca vend le club.", episode: "S01E05" } });
-    // Une autre langue, une autre clé : rien de prêt.
-    expect(await readyRecapsFor(LUCAS, "en")).toEqual({});
+    expect(await readyRecapsFor(LUCAS)).toEqual({ [s.id]: { text: "Ted Lasso arrive à Richmond. Rebecca vend le club.", episode: "S01E05", source: "ia", about: null } });
+    // Un compte dans une autre langue a une autre clé : rien de prêt pour lui.
+    userPrefsDb.setLang(LUCAS, "en");
+    expect(await readyRecapsFor(LUCAS)).toEqual({});
+    userPrefsDb.setLang(LUCAS, "fr");
+    // Coupé dans Compte → Interface : plus rien d'affiché.
+    userPrefsDb.setShowRecap(LUCAS, false);
+    expect(await readyRecapsFor(LUCAS)).toEqual({});
+    userPrefsDb.setShowRecap(LUCAS, true);
   });
 
   it("un nom inventé est rejeté, gardé comme tel, et n'apparaît pas sur la fiche", async () => {
@@ -96,7 +118,7 @@ describe("la préparation", () => {
     serve(s.items);
     expect(await prepareRecap(account, stateOf(s, 1300), NOW)).toBe("rejeté");
     nextUpMock.mockResolvedValue([{ ...stateOf(s, 1300).episode, SeriesId: s.id }]);
-    expect(await readyRecapsFor(LUCAS, "fr")).toEqual({});
+    expect(await readyRecapsFor(LUCAS)).toEqual({});
     expect(recapDb.get(`${s.items[4].Id}:3:fr`)?.status).toBe("rejeté");
   });
 

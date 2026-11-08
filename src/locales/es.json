@@ -2459,6 +2459,8 @@
       "guidedScrollHint": "En el ordenador, el inicio se ajusta a una fila entera y las fichas a una página entera. Desactivado, la página se desplaza libremente.",
       "showBooks": "Mostrar los libros",
       "showBooksHint": "Una tercera categoría junto a las películas y las series, y los libros en la búsqueda. En todos sus dispositivos.",
+      "showRecap": "Anteriormente",
+      "showRecapHint": "En la ficha de una serie en curso, recordar los últimos hechos vistos. Generado por IA.",
       "home": {
         "continueHero": "Mostrar lo que estoy viendo en el banner del inicio",
         "continueHeroHint": "Lo que estás viendo encabeza el inicio; si hay poco, los títulos destacados completan."
@@ -2768,6 +2770,9 @@
     "readMore": "Ver más",
     "recapTitle": "Anteriormente:",
     "recapNote": "Generado por IA a partir de lo que ya ha visto",
+    "recapShowSynopsis": "Ver la sinopsis de la serie",
+    "recapShowRecap": "Ver el resumen de los episodios anteriores",
+    "recapOfficial": "Resumen del episodio {code}",
     "spotlight": "Destacados",
     "discovery": {
       "trendingMovies": "Tendencias — películas",

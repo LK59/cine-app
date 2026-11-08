@@ -2459,6 +2459,8 @@
       "guidedScrollHint": "Sur ordinateur, l'accueil se cale sur une rangée entière et les fiches sur une page entière. Coupé, la page défile librement.",
       "showBooks": "Afficher les livres",
       "showBooksHint": "Une troisième catégorie à côté des films et des séries, et les livres dans la recherche. Sur tous vos appareils.",
+      "showRecap": "Précédemment",
+      "showRecapHint": "Sur la fiche d'une série en cours, rappeler les derniers faits vus. Généré par IA.",
       "home": {
         "continueHero": "Afficher mes reprises dans la bannière d'accueil",
         "continueHeroHint": "Ce que vous regardez passe en tête de l'accueil ; s'il y en a peu, les titres « À la une » complètent."
@@ -2768,6 +2770,9 @@
     "readMore": "Voir plus",
     "recapTitle": "Précédemment :",
     "recapNote": "Généré par IA à partir de ce que vous avez déjà vu",
+    "recapShowSynopsis": "Voir le synopsis de la série",
+    "recapShowRecap": "Voir le résumé des épisodes précédents",
+    "recapOfficial": "Résumé de l'épisode {code}",
     "spotlight": "À la une",
     "discovery": {
       "trendingMovies": "Tendances — films",

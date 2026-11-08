@@ -2,12 +2,13 @@
 //
 // Rien n'est préparé à l'ouverture d'une fiche : lire les sous-titres d'un épisode prend 12 à 45 s à
 // Jellyfin quand ils sont dans le fichier (mesuré le 08/11/2026). La tâche de fond prépare donc, pour
-// chaque compte qui ouvre l'application, ses séries en cours laissées depuis trois heures ; la fiche
-// lit ce qui est prêt, en une requête pour toutes (`readyRecapsFor`), ou garde son résumé habituel.
+// chaque compte du foyer — qu'il ouvre l'application ou non —, ses séries en cours laissées depuis dix
+// minutes ; la fiche lit ce qui est prêt, en une requête pour toutes (`readyRecapsFor`), ou garde son
+// synopsis.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "@/lib/config";
-import { recapDb } from "@/lib/db";
+import { recapDb, userPrefsDb, type ReadyRecap } from "@/lib/db";
 import { jellyfin, type JellyfinItem } from "@/lib/clients/jellyfin";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { jellyfinFetch } from "@/lib/jellyfinBreaker";
@@ -16,6 +17,7 @@ import { upstreamSignal } from "@/lib/http";
 import { DEFAULT_MODELS } from "@/lib/subtitleGen/pricing";
 import { logRecap } from "@/lib/eventLogs";
 import { logError } from "@/lib/logger";
+import { fetchJson } from "@/lib/http";
 import { taskLog } from "@/lib/taskLog";
 import { LOCALES, type Locale } from "@/lib/i18n";
 import {
@@ -27,7 +29,6 @@ import {
   recapStep,
   recapSystem,
   RECAP_IDLE_MS,
-  RECAP_MIN_PLAYED,
   RECAP_SCHEMA,
   RECAP_STARTED_S,
   type Cue,
@@ -36,11 +37,11 @@ import {
 
 export const RECAP_MODEL = DEFAULT_MODELS.anthropic;
 /** Les séries « À suivre » regardées par compte : les plus récentes d'abord, comme Jellyfin les rend. */
-const SERIES_PER_ACCOUNT = 8;
+const SERIES_PER_ACCOUNT = 12;
+/** Une série laissée depuis plus longtemps n'est plus « en cours » (`NextUpDateCutoff`). */
+const SERIES_RECENT_MS = 30 * 24 * 60 * 60 * 1000;
 /** Au plus par passage : un compte qui revient après un mois ne fait pas trente appels d'un coup. */
 const PER_PASS = 12;
-/** Un compte qui n'a pas ouvert l'application depuis ce temps n'a plus rien de préparé. */
-const ACCOUNT_IDLE_MS = 30 * 24 * 60 * 60 * 1000;
 const PRUNE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 const STARTUP_DELAY_MS = 60 * 1000;
 /** Réactif (Louis, 08/11/2026) : dix minutes après l'arrêt, le texte est prêt dans les cinq qui suivent. */
@@ -49,11 +50,18 @@ const MODEL_TIMEOUT_MS = 90_000;
 const SUBTITLE_TIMEOUT_MS = 90_000;
 
 export function recapAvailable(): boolean {
-  return config.recap.enabled && config.subtitleGen.provider === "anthropic" && config.subtitleGen.apiKey.trim() !== "";
+  // Lu par la configuration publique à chaque ouverture : une configuration partielle (les doubles des
+  // tests, une installation qui n'a jamais vu la clé) vaut « coupé », jamais une erreur.
+  return config.recap?.enabled === true && config.subtitleGen?.provider === "anthropic" && (config.subtitleGen?.apiKey ?? "").trim() !== "";
 }
 
 export function recapLocale(value: string | null | undefined): Locale {
   return (LOCALES as readonly string[]).includes(value ?? "") ? (value as Locale) : "fr";
+}
+
+/** La langue du compte, gardée côté serveur (`user_preferences.lang`) — la même pour la route et la tâche. */
+export function accountLocale(jfId: string): Locale {
+  return recapLocale(userPrefsDb.getLang(jfId, config.app.language));
 }
 
 const code = (item: Pick<JellyfinItem, "ParentIndexNumber" | "IndexNumber">) =>
@@ -65,20 +73,35 @@ const positionOf = (item: JellyfinItem) => Math.floor((item.UserData?.PlaybackPo
  * sinon le suivant du dernier vu) et la position dedans. Lu avec l'identifiant du compte : ses tags
  * bloqués s'appliquent, une série qui lui est cachée n'y est pas.
  */
-async function positionsOf(jfId: string): Promise<{ seriesId: string; series: string; episode: JellyfinItem; positionS: number }[]> {
-  const items = await jellyfin.getNextUpGlobal(jfId, SERIES_PER_ACCOUNT);
+async function positionsOf(jfId: string, now = Date.now()): Promise<{ seriesId: string; series: string; episode: JellyfinItem; positionS: number }[]> {
+  const cutoff = new Date(now - SERIES_RECENT_MS).toISOString();
+  const { Items: items } = await fetchJson<{ Items: JellyfinItem[] }>(
+    `${config.jellyfin.url}/Shows/NextUp?UserId=${jellyfinIdSegment(jfId)}&Limit=${SERIES_PER_ACCOUNT}&NextUpDateCutoff=${encodeURIComponent(cutoff)}&Fields=UserData,SeriesName,SeriesId,IndexNumber,ParentIndexNumber`,
+    { headers: jellyfinAuthHeaders(config.jellyfin.apiKey) }
+  );
   return items.filter((e) => e.SeriesId).map((e) => ({ seriesId: e.SeriesId!, series: e.SeriesName ?? "", episode: e, positionS: positionOf(e) }));
 }
 
-/** Les « Précédemment » prêts pour ce compte, par série — ce que la fiche lit. */
-export async function readyRecapsFor(jfId: string, locale: Locale): Promise<Record<string, { text: string; episode: string }>> {
+export interface RecapForSheet {
+  text: string;
+  /** L'épisode où le compte en est (« S02E05 ») — le texte vaut pour cet endroit-là. */
+  episode: string;
+  /** `ia` : écrit par le modèle ; `officiel` : le résumé Jellyfin de l'épisode `about`, tel quel. */
+  source: "ia" | "officiel";
+  about: string | null;
+}
+
+/** Les « Précédemment » prêts pour ce compte, par série — ce que la fiche lit. Rien s'il l'a coupé. */
+export async function readyRecapsFor(jfId: string): Promise<Record<string, RecapForSheet>> {
+  if (!userPrefsDb.getShowRecap(jfId)) return {};
+  const locale = accountLocale(jfId);
   const states = await positionsOf(jfId);
   const keys = states.map((s) => recapKey(s.episode.Id, s.positionS, locale));
   const ready = recapDb.readyAmong(keys);
-  const out: Record<string, { text: string; episode: string }> = {};
+  const out: Record<string, RecapForSheet> = {};
   states.forEach((s, i) => {
-    const text = ready.get(keys[i]);
-    if (text) out[s.seriesId] = { text, episode: code(s.episode) };
+    const r: ReadyRecap | undefined = ready.get(keys[i]);
+    if (r) out[s.seriesId] = { text: r.text, episode: code(s.episode), source: r.status === "officiel" ? "officiel" : "ia", about: r.about };
   });
   return out;
 }
@@ -144,13 +167,18 @@ export function setRecapModelForTests(fn: RecapModel | null): void {
 /** Une limite de débit : le passage s'arrête au premier refus (règle des bancs, 08/11/2026). */
 class RecapRateLimited extends Error {}
 
-type Outcome = "préparé" | "gardé" | "rejeté" | "vide" | "déjà" | "pas encore" | "trop peu";
+type Outcome = "préparé" | "gardé" | "officiel" | "rejeté" | "vide" | "déjà" | "pas encore" | "aucun";
 
 /**
- * Préparer le « Précédemment » d'une série pour un compte, s'il y a lieu : plus de deux épisodes
- * finis, et rien regardé de la série depuis dix minutes. Le résultat — même un rejet — est gardé.
- * Le texte que ce compte avait plus tôt dans l'histoire est donné au modèle, qui le garde si les dix
- * minutes de plus n'ont rien apporté d'important.
+ * Préparer le « Précédemment » d'une série pour un compte, s'il y a lieu (règles de Louis, 08/11/2026) :
+ * - rien regardé de la série depuis dix minutes (et, vérifié par le passage, aucune lecture en cours) ;
+ * - aucun épisode fini : rien (`aucun`) — sans résumé officiel où s'appuyer, des dialogues seuls sont
+ *   trop risqués, la fiche garde le synopsis ;
+ * - un seul résumé et pas de dialogues (épisode suivant pas commencé, ou sans sous-titres) : ce résumé
+ *   tel quel (`officiel`), sans modèle — rien à condenser ;
+ * - sinon le modèle, qui reçoit le texte que ce compte avait plus tôt dans l'histoire et le garde si
+ *   les dix minutes de plus n'ont rien apporté d'important.
+ * Le résultat — même un rejet — est gardé.
  */
 export async function prepareRecap(
   account: { jfId: string; user: string; locale: Locale },
@@ -165,19 +193,25 @@ export async function prepareRecap(
     return "déjà";
   }
   const episodes = await episodesOf(account.jfId, state.seriesId);
-  const played = episodes.filter((e) => e.UserData?.Played);
-  if (played.length < RECAP_MIN_PLAYED) return "trop peu";
   const lastPlayed = Math.max(0, ...episodes.map((e) => Date.parse(e.UserData?.LastPlayedDate ?? "") || 0));
   if (now - lastPlayed < RECAP_IDLE_MS) return "pas encore";
   const at = episodes.findIndex((e) => e.Id === state.episode.Id);
-  if (at < 0) return "trop peu";
   const current = episodes[at];
-  const done = episodes
-    .slice(0, at)
-    .filter((e) => e.UserData?.Played)
-    .map((e) => ({ code: code(e), title: e.Name, overview: e.Overview ?? "" }));
-  if (!done.some((e) => e.overview.trim())) return "trop peu";
+  const done = (at < 0 ? [] : episodes.slice(0, at))
+    .filter((e) => e.UserData?.Played && (e.Overview ?? "").trim())
+    .map((e) => ({ code: code(e), title: e.Name, overview: (e.Overview ?? "").trim() }));
+  if (!current || !done.length) {
+    recapDb.put(key, state.seriesId, "aucun", null, now);
+    return "aucun";
+  }
   const cues = state.positionS >= RECAP_STARTED_S ? await cuesOf(current, account.locale) : [];
+  const hasDialogue = cues.some((c) => c.startS <= state.positionS);
+  if (!hasDialogue && done.length === 1) {
+    recapDb.put(key, state.seriesId, "officiel", done[0].overview, now, done[0].code);
+    recapDb.setLast(account.jfId, state.seriesId, key, order, step);
+    logRecap({ user: account.user, series: state.series, episode: code(current), minute: Math.floor(state.positionS / 60), status: "officiel", source: "résumés", ms: 0 });
+    return "officiel";
+  }
   // Seulement un texte d'avant dans l'histoire : revenu en arrière, le compte n'a plus le droit à
   // celui qu'il avait plus loin.
   const last = recapDb.lastOf(account.jfId, state.seriesId);
@@ -203,12 +237,24 @@ export async function prepareRecap(
   return kept ? "gardé" : verdict.status === "ok" ? "préparé" : verdict.status;
 }
 
+/** `compte:série` de tout ce qui joue en ce moment, pause comprise — la télé aussi. */
+async function seriesBeingWatched(): Promise<Set<string>> {
+  const sessions = await fetchJson<{ UserId?: string; NowPlayingItem?: { SeriesId?: string } }[]>(
+    `${config.jellyfin.url}/Sessions?ActiveWithinSeconds=900`,
+    { headers: jellyfinAuthHeaders(config.jellyfin.apiKey) }
+  );
+  return new Set(sessions.filter((x) => x.UserId && x.NowPlayingItem?.SeriesId).map((x) => `${x.UserId}:${x.NowPlayingItem!.SeriesId}`));
+}
+
 const PASS_KEY = Symbol.for("cine-app.recapPass");
 const shared = globalThis as typeof globalThis & { [PASS_KEY]?: { running: boolean; started: boolean } };
 const pass = (shared[PASS_KEY] ??= { running: false, started: false });
 
 /**
- * Un passage : les comptes venus depuis un mois, leurs séries en cours, une préparation à la fois.
+ * Un passage : tous les comptes du foyer (sans les liens de partage, sans ceux qui ont coupé l'option),
+ * leurs séries en cours, une préparation à la fois. Une série qu'un compte est en train de regarder
+ * (même en pause, sur n'importe quel appareil, d'après `/Sessions`) est laissée : sa position avance
+ * en continu, et Jellyfin ne date parfois une lecture qu'à son début.
  * Arrêté au premier refus de débit ou à la première panne. Il tourne même quand quelqu'un regarde un
  * film : la première version attendait que plus rien ne joue nulle part, et avec un foyer entier, elle
  * n'a jamais tourné (08/11/2026). Lire les sous-titres d'un épisode est une lecture comme une autre.
@@ -220,14 +266,17 @@ export async function runRecapPass(now = Date.now()): Promise<{ prepared: number
   try {
     recapDb.prune(PRUNE_AFTER_MS, now);
     let made = 0;
-    for (const account of recapDb.accountsSince(now - ACCOUNT_IDLE_MS)) {
-      const locale = recapLocale(account.locale);
-      for (const state of await positionsOf(account.jfId)) {
+    const watching = await seriesBeingWatched();
+    for (const user of await jellyfin.getUsers()) {
+      if (!userPrefsDb.getShowRecap(user.Id)) continue;
+      const locale = accountLocale(user.Id);
+      for (const state of await positionsOf(user.Id, now)) {
         if (made >= PER_PASS) return result;
+        if (watching.has(`${user.Id}:${state.seriesId}`)) continue;
         // Même déjà prêt (par un autre compte au même endroit), le passage note où en est ce compte.
-        const outcome = await prepareRecap({ jfId: account.jfId, user: account.user, locale }, state, now);
+        const outcome = await prepareRecap({ jfId: user.Id, user: user.Name, locale }, state, now);
         if (outcome === "préparé" || outcome === "gardé" || outcome === "rejeté" || outcome === "vide") made++;
-        if (outcome === "préparé" || outcome === "gardé") result.prepared++;
+        if (outcome === "préparé" || outcome === "gardé" || outcome === "officiel") result.prepared++;
         if (outcome === "rejeté" || outcome === "vide") result.rejected++;
       }
     }

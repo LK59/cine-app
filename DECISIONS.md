@@ -8689,74 +8689,84 @@ portée (le lecteur des journaux retire `stack`) ; plus de traits de version sur
 presque chaque jour) ; l'écart sous le chiffre ; « 0 min » au lieu de « 0 » ; une seule étiquette pour
 le lecteur serveur prévu ; légendes et pluriels.
 
-## 137. « Précédemment » : les derniers faits vus, préparés pendant l'absence (08/11/2026)
+## 137. « Précédemment » : les derniers faits vus, préparés en fond (08/11/2026)
 
-**Règle.** Sur la fiche d'une série en cours, un texte de deux ou trois phrases (« Précédemment : … »)
-remplace le résumé, avec en dessous « Généré par IA à partir de ce que vous avez déjà vu ». Il existe
-quand le compte a fini plus de deux épisodes de la série (`RECAP_MIN_PLAYED`) et n'en a rien regardé
-depuis dix minutes (`RECAP_IDLE_MS`, d'après `LastPlayedDate` de Jellyfin : vaut aussi pour ce qui a été
-vu sur la télé, survit aux redémarrages). Il parle de l'endroit où l'on s'est arrêté : l'épisode que
-Jellyfin propose ensuite (`/Shows/NextUp`) et la tranche de dix minutes dedans (`recapStep`). Avancer
-d'une tranche demande un nouveau texte ; le modèle reçoit alors celui que **ce compte** avait plus tôt
-dans l'histoire (`recap_progress`) et le garde tel quel (`inchange`) si rien d'important n'est arrivé
-(Louis, le jour même : réactif plutôt que trois heures d'absence). Jamais le texte d'un autre compte,
-qui peut être plus loin ; jamais celui d'avant un retour en arrière. Option coupée par défaut
-(`RECAP_ENABLED`), Anthropic seulement, clé des sous-titres générés (§69), Haiku toujours.
+**Règle** (Louis, 08/11/2026, après trois versions le même jour). Sur la fiche d'une série en cours,
+« Précédemment : … » remplace le synopsis, avec un lien discret « Voir le synopsis de la série » (et, de
+là, « Voir le résumé des épisodes précédents ») ; chaque ouverture de la fiche repart sur « Précédemment ».
+Option de l'installation coupée par défaut (`RECAP_ENABLED`), Anthropic seulement, clé des sous-titres
+générés (§69), Haiku toujours ; chaque compte peut la couper dans Compte → Interface
+(`user_preferences.show_recap`) — coupée, rien n'est ni affiché ni préparé pour lui.
 
-**Ce que lit le modèle — et rien d'autre.** Au milieu d'un épisode : le résumé officiel (Jellyfin) du
-dernier épisode fini, et les dialogues des dix minutes avant l'arrêt (piste texte non forcée de la langue
-du compte, sinon pour malentendants, sinon l'anglais — `pickSubtitleStream`). Avant deux minutes, ou sans
-piste : les résumés des deux derniers épisodes finis. **Jamais le résumé de l'épisode en cours** : il
-raconte la suite.
+**Quel endroit.** Les douze séries les plus récentes de « À suivre » du compte (`/Shows/NextUp`, avec
+`NextUpDateCutoff` à trente jours) : l'épisode que Jellyfin propose ensuite, et la tranche de dix minutes
+où le compte s'est arrêté (`recapStep` ; avant deux minutes, l'épisode n'est pas commencé).
 
-**Pourquoi ces règles.** Banc du 08/11/2026 (Haiku, une requête à la fois) sur quatre séries à une
-position fixée puis dix séries réellement en cours sur les comptes. Les dialogues ne disent pas qui
-parle : avec tout le début de l'épisode, le modèle prêtait des répliques au mauvais personnage ; avec dix
-minutes et la consigne « faits nets seulement », plus. Avec deux résumés en plus des dialogues, il
-remontait un épisode trop loin. Les pistes pour malentendants n'ont pas fait mieux en moyenne (trois sur
-six n'en avaient que l'étiquette). Le modèle sort des noms de sa mémoire (« Baelish », « Torfes ») : tout
-nom absent des sources rejette la réponse (`unknownNames` — mots à majuscule hors début de phrase, plus
-les noms que le modèle déclare dans `noms`, faute de quoi « Sansa » en tête de phrase échappait) ; un
-rejet n'affiche rien, la fiche garde son résumé. La longueur demandée n'est pas tenue : coupée à trois
-phrases et 80 mots (`judgeRecap`), qui retire aussi « Dans S02E04, … ». **Réflexion adaptative, effort
-moyen** : second banc le même jour (11 séries en cours × sans réflexion / effort bas / moyen / haut × 2) —
-sans réflexion, des actes prêtés au mauvais personnage dans 4 séries sur 11 et la fausse publicité de
-*The Boys* recopiée ; en effort moyen, une erreur de lieu sur 22 textes et *The Boys* laissé vide ;
-l'effort haut ne fait pas mieux. ~8 s et ~0,001 $ le texte, préparé en fond. La structure du prompt suit l'ordre de
-l'histoire : la première version disait « le dernier épisode, puis l'avant-dernier », et au début d'un
-épisode les deux faits sortaient à l'envers (*Chicago Fire*, *The Handmaid's Tale*, 08/11/2026).
+**Ce qui s'affiche, selon l'endroit.**
+- Aucun épisode fini : rien, le synopsis (`aucun`) — sans résumé officiel où s'appuyer, des dialogues
+  seuls sont trop risqués.
+- Un épisode fini, et pas de dialogues (le suivant pas commencé, ou sans sous-titres texte) : son résumé
+  Jellyfin tel quel, sans modèle (`officiel`), avec « Résumé de l'épisode S01E01 » au lieu de la mention IA.
+- Sinon, un texte du modèle, avec « Généré par IA à partir de ce que vous avez déjà vu » : au milieu d'un
+  épisode, le résumé officiel du dernier épisode fini et les dialogues des dix minutes avant l'arrêt
+  (piste texte non forcée de la langue du compte, sinon pour malentendants, sinon l'anglais —
+  `pickSubtitleStream`) ; au début d'un épisode, les résumés des deux derniers épisodes finis, dans
+  l'ordre de l'histoire. **Jamais le résumé de l'épisode en cours** : il raconte la suite.
 
-**Quand.** Jamais à l'ouverture d'une fiche : Jellyfin met 12 à 45 s à lire des sous-titres rangés dans
-le fichier. Une tâche de fond (`startRecapCron`, toutes les 5 min, une minute après le démarrage) prend les
-comptes venus depuis un mois (`recap_accounts`, noté par la route avec la langue du cookie — la tâche
-n'a pas de requête pour la connaître), leurs huit séries « À suivre » les plus récentes, et prépare une à
-une ce qui manque : douze au plus par passage, arrêt au premier refus de débit ou à la première panne.
-Elle tourne pendant les films des autres : la première version attendait que plus rien ne joue nulle
-part, et le jour du déploiement elle n'a jamais tourné. Un texte par épisode, tranche d'arrêt et langue
-(`recapKey`, table `series_recaps`), partagé par les comptes ; rejets et réponses vides gardés aussi,
-pour ne pas redemander ; effacés après trente jours.
+**Quand.** Une tâche de fond (`startRecapCron`, toutes les 5 min, une minute après le démarrage) prend
+tous les comptes du foyer (`jellyfin.getUsers`, sans les liens de partage), dans la langue de chacun
+(`user_preferences.lang`, sinon celle de l'installation) — sans attendre qu'ils ouvrent l'application :
+la première version l'attendait, pour apprendre la langue, et n'a rien préparé pour qui ne l'ouvrait pas.
+Une série n'est préparée que dix minutes après son dernier visionnage (`RECAP_IDLE_MS`, `LastPlayedDate`)
+**et** si personne ne la regarde sur ce compte (`/Sessions`, pause comprise, télé comprise) : sa position
+avance en continu, et Jellyfin ne date parfois une lecture qu'à son début. La tâche tourne pendant les
+films des autres (la première version attendait que plus rien ne joue nulle part, et n'a jamais tourné).
+Douze textes au plus par passage, un à la fois ; arrêt au premier refus de débit ou à la première panne.
+
+**Réactif.** Avancer d'une tranche de dix minutes, ou d'un épisode, demande un nouveau texte ; le modèle
+reçoit celui que **ce compte** avait plus tôt dans l'histoire (`recap_progress`) et le garde tel quel
+(`inchange`) si rien d'important n'est arrivé. Jamais le texte d'un autre compte, qui peut être plus loin ;
+jamais celui d'avant un retour en arrière. Un texte par épisode, tranche et langue (`recapKey`, table
+`series_recaps`), partagé par les comptes arrêtés au même endroit ; rejets, réponses vides et « rien à
+dire » gardés aussi, pour ne pas redemander ; effacés après trente jours.
+
+**Pourquoi ces garde-fous.** Bancs du 08/11/2026 (Haiku, une requête à la fois) : quatre séries à une
+position fixée, dix puis onze séries réellement en cours. Les dialogues ne disent pas qui parle : avec tout
+le début de l'épisode, le modèle prêtait des répliques au mauvais personnage ; avec dix minutes et « faits
+nets seulement », beaucoup moins. **Réflexion adaptative, effort moyen** : sans réflexion, des actes prêtés
+au mauvais personnage dans 4 séries sur 11 (« Nate a passé la nuit avec Canaille ») et la fausse publicité
+de *The Boys* saison 5 recopiée ; en effort moyen, une erreur de lieu sur 22 textes et *The Boys* laissé
+vide ; l'effort haut ne fait pas mieux (~8 s et ~0,001 $ le texte, en fond). Le modèle sort des noms de sa
+mémoire (« Baelish », « Torfes ») : tout nom absent des sources rejette la réponse (`unknownNames` — mots
+à majuscule hors début de phrase, plus les noms qu'il déclare dans `noms`, faute de quoi « Sansa » en tête
+de phrase échappait) ; un rejet laisse le synopsis. La longueur demandée n'est pas tenue : coupée à trois
+phrases et 80 mots (`judgeRecap`), qui retire aussi « Dans S02E04, … ». La structure du prompt suit
+l'ordre de l'histoire : la première disait « le dernier épisode, puis l'avant-dernier », et au début d'un
+épisode les deux faits sortaient à l'envers. Les pistes pour malentendants n'ont pas fait mieux en moyenne.
 
 **Écran.** `useSeriesRecap` lit `/api/cinema/recaps` (tous les textes prêts du compte, une requête,
-relue au plus toutes les dix minutes, à l'ouverture d'une fiche ou au retour au premier plan) ;
-`SeriesRecap` l'affiche. Les deux fiches de série — `CinemaSeriesDetail` et la fiche du téléphone
-`CinemaMobileDetail` — passent par ces deux-là et nulle part ailleurs. Sur l'ordinateur, la fenêtre du
-synopsis reste celle du résumé.
+relue au plus toutes les dix minutes, à l'ouverture d'une fiche ou au retour au premier plan, et tout de
+suite quand le réglage change) ; `SeriesRecap` l'affiche avec le synopsis de la fiche en enfant. Les deux
+fiches de série — `CinemaSeriesDetail` et `CinemaMobileDetail` — passent par ces deux-là et nulle part
+ailleurs. Le réglage du compte : `useShowRecap.ts`, montré seulement si `recapAvailable` (configuration
+publique).
 
-**Porteurs.** `src/lib/recap/core.ts` (clé, SRT, piste, sources, prompt, schéma, jugement) ;
+**Porteurs.** `src/lib/recap/core.ts` (tranche, clé, SRT, piste, sources, prompt, schéma, jugement) ;
 `src/lib/recap/service.ts` (Jellyfin, modèle, `prepareRecap`, `runRecapPass`, `readyRecapsFor`) ;
-`recapDb` (`db.ts`) ; `src/app/api/cinema/recaps/route.ts` (hors de la liste fermée des liens de
-partage, §112). Journal : une ligne par texte préparé dans `recherche.log` (`logRecap`, `kind:
-"précédemment"` — compte, série, épisode, minute, `dialogues` ou `résumés`, verdict, jetons, noms
-rejetés ; jamais le texte), une ligne `[tâche] précédemment` par passage qui a fait quelque chose.
+`recapDb`, `userPrefsDb.getShowRecap` (`db.ts`) ; `src/app/api/cinema/recaps/route.ts` (hors de la liste
+fermée des liens de partage, §112). Journal : une ligne par texte dans `recherche.log` (`logRecap`,
+`kind: "précédemment"` — compte, série, épisode, minute, `dialogues` ou `résumés`, verdict `ok` / `gardé`
+/ `officiel` / `rejeté` / `vide` / `erreur` / `limite`, jetons, noms rejetés ; jamais le texte), une ligne
+`[tâche] précédemment` par passage qui a fait quelque chose.
 
-**Tests.** `recap-core.test.ts` (fenêtre de dialogues, rien après l'arrêt, résumés au début, clé, SRT,
-choix de piste, noms inconnus en tête et en milieu de phrase, coupe, réponse vide) ;
-`recap-service.test.ts` (trois heures, trois épisodes, préparé une fois, jamais le résumé de l'épisode en
-cours, lu par la fiche, autre langue, rejet gardé, refus de débit).
+**Tests.** `recap-core.test.ts` (tranches, fenêtre de dialogues, rien après l'arrêt, résumés au début,
+SRT, choix de piste, noms inconnus en tête et en milieu de phrase, « inchangé », texte précédent parmi les
+sources, coupe, réponse vide) ; `recap-service.test.ts` (dix minutes, aucun épisode fini, résumé officiel
+tel quel, préparé une fois, jamais le résumé de l'épisode en cours, langue du compte, réglage coupé, rejet
+gardé, texte précédent gardé et jamais celui d'un autre compte, refus de débit).
 
-**Limites connues.** Un résumé officiel qui n'en est pas un (les fausses publicités de *The Boys*
-saison 5) passe parfois malgré la consigne. Une erreur d'attribution reste possible quand les dialogues
-sont confus (*Dark*). Un compte dans une autre langue que celle des résumés de Jellyfin voit plus de
-rejets : un nom traduit par le modèle n'est pas dans les sources. La diarisation des voix a été écartée
-pour l'instant (voix anonymes, son de série difficile) — à essayer seulement si les erreurs d'attribution
-reviennent en usage réel.
+**Limites connues.** Le fait retenu n'est pas toujours le plus marquant de la scène. Un compte dans une
+autre langue que celle des résumés de Jellyfin voit plus de rejets : un nom traduit n'est pas dans les
+sources. La diarisation des voix et des sources plus riches (Wikipédia, Fandom) ont été écartées pour
+l'instant : la première donne des voix anonymes sur un son difficile, les secondes ne servent qu'aux
+épisodes finis, en anglais surtout.

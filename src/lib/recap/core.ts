@@ -31,8 +31,6 @@ export const RECAP_STARTED_S = 120;
 export const RECAP_IDLE_MS = 10 * 60 * 1000;
 /** Un nouveau texte à chaque tranche de dix minutes avancée (Louis, 08/11/2026). */
 export const RECAP_STEP_S = 600;
-/** « Plus de deux épisodes finis » (Louis, 08/11/2026) : en dessous, il n'y a rien à rappeler. */
-export const RECAP_MIN_PLAYED = 3;
 export const RECAP_MAX_PHRASES = 3;
 export const RECAP_MAX_WORDS = 80;
 

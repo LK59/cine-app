@@ -18,6 +18,8 @@ const mockUserPrefsDb = {
   setHomeLayout: vi.fn(),
   getShowBooks: vi.fn(() => true),
   setShowBooks: vi.fn(),
+  getShowRecap: vi.fn(() => true),
+  setShowRecap: vi.fn(),
 };
 const mockSessionDb = { countOthers: vi.fn(), deleteOthers: vi.fn(), listOthers: vi.fn(() => []), find: vi.fn((): unknown => null) };
 vi.mock("@/lib/db", () => ({
@@ -193,6 +195,18 @@ describe("/api/user/preferences", () => {
     expect(res.status).toBe(200);
     expect(mockUserPrefsDb.setShowBooks).toHaveBeenCalledWith("jf-3", false);
     expect(mockUserPrefsDb.setGuidedScroll).not.toHaveBeenCalled();
+    expect(mockUserPrefsDb.setLang).not.toHaveBeenCalled();
+  });
+
+  // « Précédemment » (DECISIONS.md §137) : une préférence du compte, oui par défaut, comme les livres.
+  it("GET dit « Précédemment » du compte, et PUT le coupe seul", async () => {
+    mockVerifySessionFull.mockResolvedValue({ u: "emma", jfId: "jf-3", role: "user" });
+    const { GET, PUT } = await import("@/app/api/user/preferences/route");
+    expect((await (await GET(fakeReq())).json()).showRecap).toBe(true);
+    const res = await PUT(fakeReq({ body: { showRecap: false } }));
+    expect(res.status).toBe(200);
+    expect(mockUserPrefsDb.setShowRecap).toHaveBeenCalledWith("jf-3", false);
+    expect(mockUserPrefsDb.setShowBooks).not.toHaveBeenCalled();
     expect(mockUserPrefsDb.setLang).not.toHaveBeenCalled();
   });
 

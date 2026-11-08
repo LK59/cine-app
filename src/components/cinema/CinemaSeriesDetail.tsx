@@ -210,6 +210,17 @@ export function CinemaSeriesDetail({
 
   const playTargetId = facts.targetId;
 
+  const overview = (
+    <CinemaOverview
+      text={sheetOverview(item.overview, info?.tmdb?.overview)}
+      readMore={t("cinema.readMore")}
+      // Jusqu'à cinq lignes quand la page a de la place au-dessus du logo — voir CinemaOverview.
+      maxLines={5}
+      alwaysOpenable={!!info?.imdbId}
+      onOpen={() => setShowSynopsis(true)}
+    />
+  );
+
   return createPortal(
     // La couche plein écran, son fond, la poignée et le bouton Retour : `DesktopSheetFrame`.
     <DesktopSheetFrame
@@ -271,18 +282,7 @@ export function CinemaSeriesDetail({
           {!lead.taglineKnown ? <ReservedLine className="h-[1.1rem]" /> : <CinemaTagline text={lead.tagline} className={lead.taglineLate ? late.fade : ""} />}
 
           {/* Une série en cours a son « Précédemment » à la place du résumé (DECISIONS.md §137). */}
-          {recap ? (
-            <SeriesRecap recap={recap} />
-          ) : (
-            <CinemaOverview
-              text={sheetOverview(item.overview, info?.tmdb?.overview)}
-              readMore={t("cinema.readMore")}
-              // Jusqu'à cinq lignes quand la page a de la place au-dessus du logo — voir CinemaOverview.
-              maxLines={5}
-              alwaysOpenable={!!info?.imdbId}
-              onOpen={() => setShowSynopsis(true)}
-            />
-          )}
+          {recap ? <SeriesRecap recap={recap} synopsis={overview} /> : overview}
 
           {late.pending && <ReservedLine className="h-4" />}
           {/* Les noms mènent chacun à leur fiche ; voir `CinemaDetailCastLine`. */}

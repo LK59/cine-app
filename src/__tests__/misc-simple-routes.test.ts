@@ -58,6 +58,7 @@ describe("GET /api/config/public", () => {
       // L'option « Livres » (§127) : absente de cette configuration, donc coupée.
       booksEnabled: false,
       booksAvailable: false,
+      recapAvailable: false,
       bookRequests: false,
       // Pas de nouvelle adresse dans cette configuration : rien à proposer à la connexion (§119).
       passageHost: null,

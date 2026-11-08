@@ -4,7 +4,7 @@ import { useSignOut } from "@/components/offline/useSignOut";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet, TabletSmartphone, BookOpen } from "lucide-react";
+import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet, TabletSmartphone, BookOpen, History } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { LOCALES, LOCALE_LABELS, getDateLocale, type Locale } from "@/lib/i18n";
@@ -27,6 +27,7 @@ import { setGuidedScroll, useGuidedScroll } from "@/lib/guidedScroll";
 import { interfaceChoice, setInterfaceChoice, useInterfaceChoosable, type InterfaceChoice } from "@/lib/useIsMobile";
 import { setHomeLayoutChoice, useHomeLayoutChoice } from "@/lib/useHomeLayout";
 import { setShowBooks, useShowBooksSetting } from "@/lib/books/showBooks";
+import { setShowRecap, useShowRecapSetting } from "@/lib/useShowRecap";
 import type { PlayerPreferences } from "@/app/api/player/account/preferences/route";
 import type { OtherSession } from "@/app/api/auth/sessions/route";
 import { MAINTENANCE_KEY, type MaintenanceState } from "@/lib/useMaintenance";
@@ -354,6 +355,8 @@ function DisplayRows() {
   const choosable = useInterfaceChoosable();
   // « Afficher les livres » (DECISIONS.md §127) : seulement quand l'installation propose les livres.
   const books = useShowBooksSetting();
+  // « Précédemment » (DECISIONS.md §137) : seulement quand l'installation le propose.
+  const recap = useShowRecapSetting();
   return (
     <>
       {choosable && <InterfaceRow />}
@@ -372,6 +375,11 @@ function DisplayRows() {
       {books.available && (
         <Row icon={BookOpen} title={t("player.account.showBooks")} hint={t("player.account.showBooksHint")}>
           <Toggle checked={books.on} ariaLabel={t("player.account.showBooks")} onChange={(next) => void setShowBooks(next).catch(fail)} />
+        </Row>
+      )}
+      {recap.available && (
+        <Row icon={History} title={t("player.account.showRecap")} hint={t("player.account.showRecapHint")}>
+          <Toggle checked={recap.on} ariaLabel={t("player.account.showRecap")} onChange={(next) => void setShowRecap(next).catch(fail)} />
         </Row>
       )}
     </>
