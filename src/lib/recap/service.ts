@@ -45,7 +45,7 @@ const PRUNE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 const STARTUP_DELAY_MS = 60 * 1000;
 /** Réactif (Louis, 08/11/2026) : dix minutes après l'arrêt, le texte est prêt dans les cinq qui suivent. */
 const INTERVAL_MS = 5 * 60 * 1000;
-const MODEL_TIMEOUT_MS = 30_000;
+const MODEL_TIMEOUT_MS = 90_000;
 const SUBTITLE_TIMEOUT_MS = 90_000;
 
 export function recapAvailable(): boolean {
@@ -112,12 +112,17 @@ const askModel: RecapModel = async (system, message) => {
   const client = new Anthropic({ apiKey: config.subtitleGen.apiKey.trim(), maxRetries: 0, timeout: MODEL_TIMEOUT_MS });
   const res = await client.messages.create({
     model: RECAP_MODEL,
-    max_tokens: 600,
+    // La réflexion compte dans `max_tokens` : ~1 800 à 2 600 jetons au banc, la marge est large.
+    max_tokens: 8000,
     system,
     messages: [{ role: "user", content: message }],
-    // Comme la recherche par description : sans réflexion, effort bas — choisi au banc du 08/11/2026.
-    thinking: { type: "disabled" },
-    output_config: { effort: "low", format: { type: "json_schema", schema: RECAP_SCHEMA } },
+    // Réflexion adaptative, effort moyen — banc du 08/11/2026, 11 séries en cours × 4 réglages × 2 :
+    // sans réflexion, Haiku prêtait des actes au mauvais personnage dans 4 séries sur 11 (« Nate a
+    // passé la nuit avec Canaille ») et recopiait une fausse publicité de *The Boys* ; en effort moyen,
+    // une erreur de lieu sur 22 textes, et *The Boys* laissé vide. L'effort haut ne fait pas mieux.
+    // ~8 s et ~0,001 $ le texte : sans importance, tout est préparé en fond.
+    thinking: { type: "adaptive" },
+    output_config: { effort: "medium", format: { type: "json_schema", schema: RECAP_SCHEMA } },
   });
   let raw: unknown = null;
   // Un refus ou une réponse coupée ne suivent pas le schéma : vide plutôt qu'une moitié de JSON.

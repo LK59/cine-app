@@ -8718,7 +8718,11 @@ six n'en avaient que l'étiquette). Le modèle sort des noms de sa mémoire (« 
 nom absent des sources rejette la réponse (`unknownNames` — mots à majuscule hors début de phrase, plus
 les noms que le modèle déclare dans `noms`, faute de quoi « Sansa » en tête de phrase échappait) ; un
 rejet n'affiche rien, la fiche garde son résumé. La longueur demandée n'est pas tenue : coupée à trois
-phrases et 80 mots (`judgeRecap`), qui retire aussi « Dans S02E04, … ». ~1,3 s et ~0,0004 $ le texte.
+phrases et 80 mots (`judgeRecap`), qui retire aussi « Dans S02E04, … ». **Réflexion adaptative, effort
+moyen** : second banc le même jour (11 séries en cours × sans réflexion / effort bas / moyen / haut × 2) —
+sans réflexion, des actes prêtés au mauvais personnage dans 4 séries sur 11 et la fausse publicité de
+*The Boys* recopiée ; en effort moyen, une erreur de lieu sur 22 textes et *The Boys* laissé vide ;
+l'effort haut ne fait pas mieux. ~8 s et ~0,001 $ le texte, préparé en fond.
 
 **Quand.** Jamais à l'ouverture d'une fiche : Jellyfin met 12 à 45 s à lire des sous-titres rangés dans
 le fichier. Une tâche de fond (`startRecapCron`, toutes les 5 min, une minute après le démarrage) prend les
