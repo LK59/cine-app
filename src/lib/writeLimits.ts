@@ -41,6 +41,8 @@ export const WRITE_LIMITS = {
    * par fenêtre.
    */
   newsEvent: { max: 20, windowMs: 60_000 },
+  /** « Précédemment » affiché ou quitté pour le synopsis (§137) : une ligne par ouverture de fiche. */
+  recapEvent: { max: 30, windowMs: 60_000 },
   newsSeen: { max: 10, windowMs: 60_000 },
   /** Un commentaire se tape à la main : vingt en une minute n'en est plus un. */
   reportMessages: { max: 20, windowMs: 60_000 },
@@ -62,5 +64,6 @@ export const reportMessageAllowed = limiter("reportMessages");
 export const remoteDiagAllowed = limiter("remoteDiag");
 export const viewportDiagAllowed = limiter("viewportDiag");
 export const newsEventAllowed = limiter("newsEvent");
+export const recapEventAllowed = limiter("recapEvent");
 export const newsSeenAllowed = limiter("newsSeen");
 export const readingSessionAllowed = limiter("readingSession");

@@ -25,10 +25,12 @@ export const RECAP_WINDOW_S = 600;
 /** Arrêté avant ça, l'épisode n'est pas commencé : seuls les résumés des épisodes finis comptent. */
 export const RECAP_STARTED_S = 120;
 /**
- * Préparé une fois la série laissée de côté depuis ce temps. Trois heures au départ (08/11/2026) ;
- * le jour même, Louis l'a voulu réactif : dix minutes après qu'on a cessé de regarder.
+ * Préparé — et affiché — une fois la série laissée de côté depuis ce temps. Trois heures au départ,
+ * dix minutes quelques heures plus tard, puis de nouveau trois heures le soir même (Louis, 08/11/2026) :
+ * le texte sert après une vraie pause, pas entre deux épisodes enchaînés ; avant, la fiche garde son
+ * synopsis, et rien n'est payé pour un texte que personne ne lirait.
  */
-export const RECAP_IDLE_MS = 10 * 60 * 1000;
+export const RECAP_IDLE_MS = 3 * 60 * 60 * 1000;
 /** Un nouveau texte à chaque tranche de dix minutes avancée (Louis, 08/11/2026). */
 export const RECAP_STEP_S = 600;
 export const RECAP_MAX_PHRASES = 3;

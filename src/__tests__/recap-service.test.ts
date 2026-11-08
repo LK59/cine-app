@@ -11,11 +11,15 @@ await vi.hoisted(async () => {
   process.env.DATA_DIR = fsp.mkdtempSync(p.join(os.tmpdir(), "laterna-recap-"));
 });
 
-const { fetchMock, nextUpMock } = vi.hoisted(() => ({ fetchMock: vi.fn(), nextUpMock: vi.fn() }));
+const { fetchMock, nextUpMock, playedMock } = vi.hoisted(() => ({ fetchMock: vi.fn(), nextUpMock: vi.fn(), playedMock: vi.fn(() => [] as unknown[]) }));
 vi.mock("@/lib/jellyfinBreaker", () => ({ jellyfinFetch: fetchMock }));
 vi.mock("@/lib/clients/jellyfin", () => ({ jellyfin: {} }));
 // « À suivre » passe par `fetchJson` (avec `NextUpDateCutoff`) : le double rend la liste du test.
-vi.mock("@/lib/http", async (orig) => ({ ...(await orig<typeof import("@/lib/http")>()), fetchJson: async () => ({ Items: await nextUpMock() }) }));
+// Les épisodes récemment lus (`/Users/…/Items`) répondent par `playedMock`.
+vi.mock("@/lib/http", async (orig) => ({
+  ...(await orig<typeof import("@/lib/http")>()),
+  fetchJson: async (url: string) => ({ Items: url.includes("/Items?") ? playedMock() : await nextUpMock() }),
+}));
 
 import { prepareRecap, readyRecapsFor, setRecapModelForTests } from "@/lib/recap/service";
 import { recapDb, userPrefsDb } from "@/lib/db";
@@ -59,15 +63,17 @@ const stateOf = (series: { id: string; items: { Id: string }[] }, positionS: num
 beforeEach(() => {
   fetchMock.mockReset();
   nextUpMock.mockReset();
+  playedMock.mockReset();
+  playedMock.mockReturnValue([]);
   // La langue du compte est celle de ses préférences ; l'installation des tests est en anglais.
   userPrefsDb.setLang(LUCAS, "fr");
 });
 
 describe("la préparation", () => {
-  it("rien tant que la série a été regardée il y a moins de dix minutes, ni sans épisode fini", async () => {
+  it("rien tant que la série a été regardée il y a moins de trois heures, ni sans épisode fini", async () => {
     const model = vi.fn();
     setRecapModelForTests(model);
-    const recent = episodes(5 * 60 * 1000);
+    const recent = episodes(2 * HOUR);
     serve(recent.items);
     expect(await prepareRecap(account, stateOf(recent, 1300), NOW)).toBe("pas encore");
     const none = episodes(5 * HOUR, 0);
@@ -79,13 +85,13 @@ describe("la préparation", () => {
   it("un seul épisode fini et le suivant pas commencé : son résumé tel quel, sans modèle, avec l'épisode d'où il vient", async () => {
     const model = vi.fn();
     setRecapModelForTests(model);
-    const one = episodes(HOUR, 1);
+    const one = episodes(5 * HOUR, 1);
     serve(one.items);
     const state = { ...stateOf(one, 30), episode: { ...one.items[1], UserData: { Played: false, PlayCount: 0, PlaybackPositionTicks: 30 * 10_000_000 } } as JellyfinItem };
     expect(await prepareRecap(account, state, NOW)).toBe("officiel");
     expect(model).not.toHaveBeenCalled();
     nextUpMock.mockResolvedValue([{ ...state.episode, SeriesId: one.id }]);
-    expect(await readyRecapsFor(LUCAS)).toEqual({ [one.id]: { text: "Ted Lasso arrive à Richmond, épisode 1.", episode: "S01E02", source: "officiel", about: "S01E01" } });
+    expect(await readyRecapsFor(LUCAS)).toEqual({ [one.id]: { text: "Ted Lasso arrive à Richmond, épisode 1.", episode: "S01E02", source: "officiel", about: "S01E01", idleMin: null } });
   });
 
   it("prépare une fois, garde le texte sous la clé, et la fiche le lit pour cette série", async () => {
@@ -101,7 +107,7 @@ describe("la préparation", () => {
     expect(model).toHaveBeenCalledTimes(1);
 
     nextUpMock.mockResolvedValue([{ ...stateOf(s, 1300).episode, SeriesId: s.id, SeriesName: "Ted Lasso" }]);
-    expect(await readyRecapsFor(LUCAS)).toEqual({ [s.id]: { text: "Ted Lasso arrive à Richmond. Rebecca vend le club.", episode: "S01E05", source: "ia", about: null } });
+    expect(await readyRecapsFor(LUCAS)).toEqual({ [s.id]: { text: "Ted Lasso arrive à Richmond. Rebecca vend le club.", episode: "S01E05", source: "ia", about: null, idleMin: null } });
     // Un compte dans une autre langue a une autre clé : rien de prêt pour lui.
     userPrefsDb.setLang(LUCAS, "en");
     expect(await readyRecapsFor(LUCAS)).toEqual({});
@@ -110,6 +116,11 @@ describe("la préparation", () => {
     userPrefsDb.setShowRecap(LUCAS, false);
     expect(await readyRecapsFor(LUCAS)).toEqual({});
     userPrefsDb.setShowRecap(LUCAS, true);
+    // Regardée il y a une heure (une reprise de cinq minutes) : le synopsis, même avec un texte prêt.
+    playedMock.mockReturnValue([{ SeriesId: s.id, UserData: { LastPlayedDate: ago(HOUR) } }]);
+    expect(await readyRecapsFor(LUCAS, NOW)).toEqual({});
+    playedMock.mockReturnValue([{ SeriesId: s.id, UserData: { LastPlayedDate: ago(4 * HOUR) } }]);
+    expect((await readyRecapsFor(LUCAS, NOW))[s.id]?.idleMin).toBe(240);
   });
 
   it("un nom inventé est rejeté, gardé comme tel, et n'apparaît pas sur la fiche", async () => {
@@ -123,7 +134,7 @@ describe("la préparation", () => {
   });
 
   it("dix minutes plus loin, le modèle reçoit le texte d'avant et peut le garder ; jamais celui d'un autre compte", async () => {
-    const s = episodes(HOUR);
+    const s = episodes(5 * HOUR);
     serve(s.items);
     setRecapModelForTests(async () => ({ raw: { inchange: false, noms: ["Ted Lasso"], phrases: [{ texte: "Ted Lasso arrive à Richmond.", episodes: [] }] }, inTokens: 1, outTokens: 1 }));
     expect(await prepareRecap(account, stateOf(s, 700), NOW)).toBe("préparé");

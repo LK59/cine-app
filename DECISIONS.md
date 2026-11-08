@@ -8719,8 +8719,9 @@ session vivante — `sessionDb.activeUsers`, vue depuis moins de sept jours : le
 passe que par d'autres applications, recevait des textes que personne ne lirait), dans la langue de chacun
 (`user_preferences.lang`, sinon celle de l'installation) — sans attendre qu'ils ouvrent l'application : la
 première version l'attendait, pour apprendre la langue, et ne préparait rien avant leur retour.
-Une série n'est préparée que dix minutes après son dernier visionnage (`RECAP_IDLE_MS`, `LastPlayedDate`)
-**et** si personne ne la regarde sur ce compte (`/Sessions`, pause comprise, télé comprise) : sa position
+Une série n'est préparée que trois heures après son dernier visionnage (`RECAP_IDLE_MS`, `LastPlayedDate`
+— dix minutes pendant quelques heures le 08/11/2026, revenu à trois heures le soir même : le texte sert
+après une vraie pause, pas entre deux épisodes enchaînés) **et** si personne ne la regarde sur ce compte (`/Sessions`, pause comprise, télé comprise) : sa position
 avance en continu, et Jellyfin ne date parfois une lecture qu'à son début. La tâche tourne pendant les
 films des autres (la première version attendait que plus rien ne joue nulle part, et n'a jamais tourné).
 Douze textes au plus par passage, un à la fois ; arrêt au premier refus de débit ou à la première panne.
@@ -8745,6 +8746,15 @@ de phrase échappait) ; un rejet laisse le synopsis. La longueur demandée n'est
 phrases et 80 mots (`judgeRecap`), qui retire aussi « Dans S02E04, … ». La structure du prompt suit
 l'ordre de l'histoire : la première disait « le dernier épisode, puis l'avant-dernier », et au début d'un
 épisode les deux faits sortaient à l'envers. Les pistes pour malentendants n'ont pas fait mieux en moyenne.
+
+**Affiché après la même pause.** `readyRecapsFor` ne rend pas le texte d'une série regardée il y a moins
+de trois heures (`lastPlayedBySeries`, une requête pour toutes) : la fiche montre son synopsis — sans
+quoi un texte prêt restait affiché après une reprise de cinq minutes, tant que la tranche ne changeait pas.
+
+**Usage mesuré.** Au journal des ouvertures (`startup.log`, `kind: "précédemment"`, `logRecapView`) :
+`affiché` à chaque ouverture d'une fiche qui le montre (série, épisode, `ia` ou `officiel`, `idleMin` —
+depuis quand la série n'a pas été regardée), `synopsis` quand on lui préfère le synopsis. Route
+`/api/cinema/recaps/event`, 30 lignes par minute et par compte ; jamais le texte.
 
 **Écran.** `useSeriesRecap` lit `/api/cinema/recaps` (tous les textes prêts du compte, une requête,
 relue au plus toutes les dix minutes, à l'ouverture d'une fiche ou au retour au premier plan, et tout de

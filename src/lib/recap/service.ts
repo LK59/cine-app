@@ -84,6 +84,8 @@ async function positionsOf(jfId: string, now = Date.now()): Promise<{ seriesId: 
 
 export interface RecapForSheet {
   text: string;
+  /** Depuis combien de minutes la série n'a pas été regardée — pour le journal d'usage. */
+  idleMin: number | null;
   /** L'épisode où le compte en est (« S02E05 ») — le texte vaut pour cet endroit-là. */
   episode: string;
   /** `ia` : écrit par le modèle ; `officiel` : le résumé Jellyfin de l'épisode `about`, tel quel. */
@@ -91,17 +93,40 @@ export interface RecapForSheet {
   about: string | null;
 }
 
-/** Les « Précédemment » prêts pour ce compte, par série — ce que la fiche lit. Rien s'il l'a coupé. */
-export async function readyRecapsFor(jfId: string): Promise<Record<string, RecapForSheet>> {
+/**
+ * Quand le compte a regardé chaque série pour la dernière fois — une requête pour toutes : ses
+ * épisodes les plus récemment lus, commencés ou finis.
+ */
+async function lastPlayedBySeries(jfId: string): Promise<Map<string, number>> {
+  const { Items: items } = await fetchJson<{ Items: JellyfinItem[] }>(
+    `${config.jellyfin.url}/Users/${jellyfinIdSegment(jfId)}/Items?IncludeItemTypes=Episode&Recursive=true&SortBy=DatePlayed&SortOrder=Descending&Limit=200&Fields=UserData,SeriesId`,
+    { headers: jellyfinAuthHeaders(config.jellyfin.apiKey) }
+  );
+  const out = new Map<string, number>();
+  for (const e of items) {
+    const at = Date.parse(e.UserData?.LastPlayedDate ?? "");
+    if (e.SeriesId && at && at > (out.get(e.SeriesId) ?? 0)) out.set(e.SeriesId, at);
+  }
+  return out;
+}
+
+/**
+ * Les « Précédemment » prêts pour ce compte, par série — ce que la fiche lit. Rien s'il l'a coupé, et
+ * rien pour une série regardée il y a moins de trois heures : un texte déjà prêt resterait sinon
+ * affiché après une reprise de cinq minutes, tant que la tranche ne change pas.
+ */
+export async function readyRecapsFor(jfId: string, now = Date.now()): Promise<Record<string, RecapForSheet>> {
   if (!userPrefsDb.getShowRecap(jfId)) return {};
   const locale = accountLocale(jfId);
-  const states = await positionsOf(jfId);
+  const [states, lastPlayed] = await Promise.all([positionsOf(jfId, now), lastPlayedBySeries(jfId)]);
   const keys = states.map((s) => recapKey(s.episode.Id, s.positionS, locale));
   const ready = recapDb.readyAmong(keys);
   const out: Record<string, RecapForSheet> = {};
   states.forEach((s, i) => {
     const r: ReadyRecap | undefined = ready.get(keys[i]);
-    if (r) out[s.seriesId] = { text: r.text, episode: code(s.episode), source: r.status === "officiel" ? "officiel" : "ia", about: r.about };
+    const at = lastPlayed.get(s.seriesId);
+    if (!r || (at && now - at < RECAP_IDLE_MS)) return;
+    out[s.seriesId] = { text: r.text, episode: code(s.episode), source: r.status === "officiel" ? "officiel" : "ia", about: r.about, idleMin: at ? Math.round((now - at) / 60_000) : null };
   });
   return out;
 }

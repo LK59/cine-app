@@ -123,6 +123,9 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // routes n'écrivent que pour l'appelant (son compte vient de la session) et ne renvoient rien.
   "POST /api/release-notes/seen",
   "POST /api/release-notes/event",
+  // « Précédemment » affiché ou quitté pour le synopsis (DECISIONS.md §137) : une ligne au journal
+  // des ouvertures, sous le nom de l'appelant, rien d'autre.
+  "POST /api/cinema/recaps/event",
   // Le passage vers la nouvelle adresse (DECISIONS.md §119) : la demande ne fabrique une session que
   // pour l'appelant lui-même, et « réglages posés » n'efface que ceux de sa session.
   "POST /api/passage",

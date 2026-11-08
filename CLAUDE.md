@@ -293,7 +293,9 @@ paid call, with `modelMs`), titles recognised, results kept and how many are in 
 "précédemment"` line per « Précédemment » prepared in the background (DECISIONS §137, `logRecap`):
 account, series, episode and minute, `source` (`dialogues` or `résumés`), `status` (`ok` / `gardé` — the
 previous text kept — / `officiel` — one episode's summary shown as is — / `rejeté` — with the `names` the
-sources did not contain — / `vide` / `erreur` / `limite`), tokens. Never the text, which is in `series_recaps`.
+sources did not contain — / `vide` / `erreur` / `limite`), tokens. Never the text, which is in `series_recaps`. Its use is measured in `startup.log` (`kind: "précédemment"`, `logRecapView`):
+`affiché` each time a sheet shows one (series, episode, `ia` or `officiel`, `idleMin`), `synopsis` when
+the viewer switches to the synopsis.
 Its format is versioned
 (`PERSISTED_CACHE_SCHEMA`), and `persistentCache-schema.test.ts` fails when the kept responses'
 types change without the version moving.

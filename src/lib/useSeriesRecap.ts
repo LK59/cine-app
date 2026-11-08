@@ -24,3 +24,20 @@ export function useSeriesRecap(seriesJellyfinId: string | null | undefined): Cin
   });
   return (seriesJellyfinId && data?.recaps?.[seriesJellyfinId]) || null;
 }
+
+/**
+ * Une mesure d'usage (`affiché`, `synopsis`) au journal des ouvertures. Jamais attendue, jamais
+ * fatale : une mesure perdue ne doit pas casser la fiche qui l'envoie.
+ */
+export function sendRecapEvent(event: "affiché" | "synopsis", recap: CinemaRecap, series: string): void {
+  try {
+    void fetch(`${RECAPS_KEY}/event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event, series, episode: recap.episode, source: recap.source, idleMin: recap.idleMin }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    /* rien */
+  }
+}

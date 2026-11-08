@@ -154,6 +154,19 @@ export function logRecap(fields: {
 }
 
 /**
+ * L'usage de « Précédemment » (DECISIONS.md §137), au journal des ouvertures : `affiché` à chaque
+ * ouverture d'une fiche qui le montre — avec depuis quand la série n'a pas été regardée —, `synopsis`
+ * quand on lui préfère le synopsis. De quoi dire, après quelques semaines, s'il sert ; jamais le texte.
+ */
+export function logRecapView(event: "affiché" | "synopsis", fields: { user: string; device: string | null } & Record<string, unknown>): void {
+  try {
+    appendJsonLine(STARTUP_LOG(), { timestamp: new Date().toISOString(), kind: "précédemment", event, ...fields }, { keep: EVENT_LOG_KEEP });
+  } catch {
+    /* une mesure perdue ne coûte rien à personne */
+  }
+}
+
+/**
  * Les Nouveautés (DECISIONS.md §73) : la fenêtre (combien de temps elle est restée à l'écran, page
  * visible seulement, et comment elle s'est fermée), « Voir plus », et la page Compte → Nouveautés.
  * Dans le journal des ouvertures, parce que c'en est un moment : la fenêtre ne s'ouvre qu'au lancement.

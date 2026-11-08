@@ -6,6 +6,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
  * limite de trois lectures. La porte du proxy est dans `share-gate.test.ts`.
  */
 
+// Sa propre base : il vide `shares` et `sessions` à chaque test, et dans la base partagée de la suite
+// il prenait « database is locked » sous charge — trois portails rouges le 08/11/2026 (CLAUDE.md).
+await vi.hoisted(async () => {
+  const fsp = await import("node:fs");
+  const os = await import("node:os");
+  const p = await import("node:path");
+  process.env.DATA_DIR = fsp.mkdtempSync(p.join(os.tmpdir(), "laterna-share-core-"));
+});
+
 const account = vi.hoisted(() => ({
   created: [] as string[],
   disabled: [] as [string, boolean][],

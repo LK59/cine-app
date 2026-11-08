@@ -114,7 +114,7 @@ spending and the jobs.
 | `SUBTITLE_GEN_PRICE_OUTPUT` | the app's price table | Price per million output tokens. |
 | `SUBTITLE_GEN_ENABLED` | `true` | `false` turns the feature off while keeping the key. |
 | `DESCRIBE_SEARCH_ENABLED` | `false` | Search by description: a sentence describing a film or series (« the film where a man relives the same day ») finds it, in the library or not. Uses the key above, Anthropic only (Claude Haiku). Each new sentence is one request, well under a tenth of a cent; not counted in the subtitle budget. |
-| `RECAP_ENABLED` | `false` | « Previously »: on the page of a series in progress, a short recap of the latest events the account watched — from the official episode summaries and the subtitles of the last ten minutes watched, never beyond — prepared in the background for every account, ten minutes after it stops watching. A single finished episode shows its official summary as is. Each account can turn it off (Account → Interface). Uses the key above, Anthropic only (Claude Haiku), about a tenth of a cent per text; not counted in the subtitle budget. |
+| `RECAP_ENABLED` | `false` | « Previously »: on the page of a series in progress, a short recap of the latest events the account watched — from the official episode summaries and the subtitles of the last ten minutes watched, never beyond — prepared in the background for every account that uses the app, three hours after it stops watching the series (before that, the page keeps the synopsis). A single finished episode shows its official summary as is. Each account can turn it off (Account → Interface). Uses the key above, Anthropic only (Claude Haiku), about a tenth of a cent per text; not counted in the subtitle budget. |
 
 ## Dialogue search
 

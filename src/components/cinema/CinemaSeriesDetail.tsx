@@ -282,7 +282,7 @@ export function CinemaSeriesDetail({
           {!lead.taglineKnown ? <ReservedLine className="h-[1.1rem]" /> : <CinemaTagline text={lead.tagline} className={lead.taglineLate ? late.fade : ""} />}
 
           {/* Une série en cours a son « Précédemment » à la place du résumé (DECISIONS.md §137). */}
-          {recap ? <SeriesRecap recap={recap} synopsis={overview} /> : overview}
+          {recap ? <SeriesRecap recap={recap} series={item.title} synopsis={overview} /> : overview}
 
           {late.pending && <ReservedLine className="h-4" />}
           {/* Les noms mènent chacun à leur fiche ; voir `CinemaDetailCastLine`. */}
