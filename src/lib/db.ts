@@ -1906,6 +1906,16 @@ export const sessionDb = {
       .run(now, jti, now - 60 * 60 * 1000);
   },
 
+  /**
+   * Les comptes qui ont une session vivante — qui se sont servis de l'application depuis moins de
+   * `SESSION_MAX_AGE_MS`. Lu par « Précédemment » (§137) : un compte qui ne passe que par d'autres
+   * applications (la télé) n'a rien à préparer.
+   */
+  activeUsers(): Set<string> {
+    const rows = getDb().prepare("SELECT DISTINCT user_id FROM sessions").all() as { user_id: string }[];
+    return new Set(rows.map((r) => r.user_id));
+  },
+
   /** Les autres sessions de cette personne, la plus récente d'abord. */
   listOthers(userId: string, currentJti: string): StoredSession[] {
     const rows = getDb()

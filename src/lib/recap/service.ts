@@ -8,7 +8,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "@/lib/config";
-import { recapDb, userPrefsDb, type ReadyRecap } from "@/lib/db";
+import { recapDb, sessionDb, userPrefsDb, type ReadyRecap } from "@/lib/db";
 import { jellyfin, type JellyfinItem } from "@/lib/clients/jellyfin";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { jellyfinFetch } from "@/lib/jellyfinBreaker";
@@ -251,7 +251,8 @@ const shared = globalThis as typeof globalThis & { [PASS_KEY]?: { running: boole
 const pass = (shared[PASS_KEY] ??= { running: false, started: false });
 
 /**
- * Un passage : tous les comptes du foyer (sans les liens de partage, sans ceux qui ont coupé l'option),
+ * Un passage : les comptes du foyer qui se servent de Laterna (sans les liens de partage, sans ceux
+ * qui ont coupé l'option),
  * leurs séries en cours, une préparation à la fois. Une série qu'un compte est en train de regarder
  * (même en pause, sur n'importe quel appareil, d'après `/Sessions`) est laissée : sa position avance
  * en continu, et Jellyfin ne date parfois une lecture qu'à son début.
@@ -267,8 +268,12 @@ export async function runRecapPass(now = Date.now()): Promise<{ prepared: number
     recapDb.prune(PRUNE_AFTER_MS, now);
     let made = 0;
     const watching = await seriesBeingWatched();
+    // Seulement les comptes qui se servent de Laterna (une session vivante, vue depuis moins de sept
+    // jours) : le compte de la télé ne passe que par d'autres applications, et recevait des textes
+    // que personne ne lirait (08/11/2026). Un compte qui revient est repris dès sa connexion.
+    const active = sessionDb.activeUsers();
     for (const user of await jellyfin.getUsers()) {
-      if (!userPrefsDb.getShowRecap(user.Id)) continue;
+      if (!active.has(user.Id) || !userPrefsDb.getShowRecap(user.Id)) continue;
       const locale = accountLocale(user.Id);
       for (const state of await positionsOf(user.Id, now)) {
         if (made >= PER_PASS) return result;

@@ -8714,9 +8714,11 @@ où le compte s'est arrêté (`recapStep` ; avant deux minutes, l'épisode n'est
   l'ordre de l'histoire. **Jamais le résumé de l'épisode en cours** : il raconte la suite.
 
 **Quand.** Une tâche de fond (`startRecapCron`, toutes les 5 min, une minute après le démarrage) prend
-tous les comptes du foyer (`jellyfin.getUsers`, sans les liens de partage), dans la langue de chacun
-(`user_preferences.lang`, sinon celle de l'installation) — sans attendre qu'ils ouvrent l'application :
-la première version l'attendait, pour apprendre la langue, et n'a rien préparé pour qui ne l'ouvrait pas.
+les comptes du foyer qui se servent de Laterna (`jellyfin.getUsers`, sans les liens de partage, avec une
+session vivante — `sessionDb.activeUsers`, vue depuis moins de sept jours : le compte de la télé, qui ne
+passe que par d'autres applications, recevait des textes que personne ne lirait), dans la langue de chacun
+(`user_preferences.lang`, sinon celle de l'installation) — sans attendre qu'ils ouvrent l'application : la
+première version l'attendait, pour apprendre la langue, et ne préparait rien avant leur retour.
 Une série n'est préparée que dix minutes après son dernier visionnage (`RECAP_IDLE_MS`, `LastPlayedDate`)
 **et** si personne ne la regarde sur ce compte (`/Sessions`, pause comprise, télé comprise) : sa position
 avance en continu, et Jellyfin ne date parfois une lecture qu'à son début. La tâche tourne pendant les
