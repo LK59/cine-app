@@ -75,6 +75,8 @@ export const SHARE_RULES: readonly Rule[] = [
   { methods: ["GET"], path: /^\/api\/jellyfin\/chapters$/, scope: QUERY },
   { methods: ["GET"], path: new RegExp(`^/api/player/item/${ID}$`), scope: PATH },
   { methods: ["GET"], path: new RegExp(`^/api/player/frame/${ID}$`), scope: PATH },
+  // Les acteurs à l'écran (option, DECISIONS.md §138) : ceux du titre du lien seulement.
+  { methods: ["GET"], path: new RegExp(`^/api/player/xray/${ID}$`), scope: PATH },
   { methods: ["POST"], path: /^\/api\/jellyfin\/playback\/(?:start|playing|progress|stop)$/, scope: BODY },
   { methods: ["POST"], path: /^\/api\/player\/series-language$/, scope: BODY },
   { methods: ["POST"], path: /^\/api\/player\/log$/, scope: BODY },

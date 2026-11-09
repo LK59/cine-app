@@ -86,3 +86,10 @@ services:
       timeout: 5s
       retries: 3
       start_period: 60s
+
+  # Optional: actors on screen (ENV.md, "Actors on screen"). A separate service that recognises the
+  # actors in each scene, reading the media folder read-only at the same path Jellyfin uses. Its
+  # compose service, image and options are described in xray/README.md; once it runs on this
+  # network, turn it on in Management → Configuration → Connections (XRAY_ENABLED, XRAY_API_KEY).
+  # laterna-xray:
+  #   see xray/README.md

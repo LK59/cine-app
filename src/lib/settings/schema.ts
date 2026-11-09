@@ -19,7 +19,7 @@
 
 export type SettingKind = "url" | "secret" | "text" | "boolean" | "select" | "profile" | "number";
 export type SettingNeed = "required" | "optional";
-export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "playback" | "subtitles" | "dialogue" | "app" | "defaults" | "deployment";
+export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "xray" | "playback" | "subtitles" | "dialogue" | "app" | "defaults" | "deployment";
 
 export interface SettingDef {
   key: string;
@@ -67,6 +67,12 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "JACKETT_API_KEY", group: "jackett", kind: "secret", need: "optional", fallback: "", inApp: true },
   { key: "OMDB_API_KEY", group: "ratings", kind: "secret", need: "optional", fallback: "", inApp: true },
   { key: "MDBLIST_API_KEY", group: "ratings", kind: "secret", need: "optional", fallback: "", inApp: true },
+  // ── Les acteurs à l'écran (DECISIONS.md §138) ──
+  // Un service à part (`laterna-xray`, `xray/README.md`) qui reconnaît les visages des acteurs dans
+  // chaque scène. Coupé par défaut : allumé sans adresse joignable ni clé, rien ne part.
+  { key: "XRAY_ENABLED", group: "xray", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  { key: "XRAY_URL", group: "xray", kind: "url", need: "optional", fallback: "http://laterna-xray:8000", inApp: true, placeholder: "http://laterna-xray:8000" },
+  { key: "XRAY_API_KEY", group: "xray", kind: "secret", need: "optional", fallback: "", inApp: true },
   // ── Les sous-titres générés (DECISIONS.md §69) ──
   // Traduits par une IA en ligne à partir d'un sous-titre complet du titre. Sans clé, la fonction
   // n'existe pas : aucune route ne l'annonce. La clé ne quitte jamais le serveur (`secret`).
@@ -152,7 +158,7 @@ export const SETTINGS: readonly SettingDef[] = [
 export const SETTINGS_BY_KEY: ReadonlyMap<string, SettingDef> = new Map(SETTINGS.map((s) => [s.key, s]));
 
 /** Les groupes réglables, dans l'ordre de l'assistant et de la page. */
-export const SETTING_GROUPS: readonly SettingGroup[] = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "ratings", "playback", "subtitles", "dialogue", "app", "defaults", "deployment"];
+export const SETTING_GROUPS: readonly SettingGroup[] = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "ratings", "xray", "playback", "subtitles", "dialogue", "app", "defaults", "deployment"];
 
 /**
  * Le guide de déploiement : ce qui ne se règle pas dans l'application — un dossier à monter, le
@@ -193,7 +199,7 @@ export const DEPLOYMENT_GUIDE: readonly DeploymentGuideEntry[] = [
 export const GENERATED_SECRETS = ["SESSION_SECRET", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"] as const;
 
 /** Les services qu'on peut tester, et les réglages que le test lit. */
-export const TESTABLE_GROUPS = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett"] as const;
+export const TESTABLE_GROUPS = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "xray"] as const;
 export type TestableGroup = (typeof TESTABLE_GROUPS)[number];
 
 /** D'où vient une valeur. */

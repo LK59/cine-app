@@ -19,6 +19,8 @@ const CARDS: readonly ConfigCard[] = [
   { group: "bazarr" },
   { group: "jackett" },
   { group: "ratings" },
+  // Les acteurs à l'écran (§138) : un service à part, coupé par défaut.
+  { group: "xray" },
   { group: "app", keys: ["POSTER_PREWARM", "VAPID_SUBJECT"] },
 ];
 

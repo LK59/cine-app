@@ -279,6 +279,9 @@ const ADMIN_ONLY_READS: RegExp[] = [
   // de Jellyfin (sa version exacte, ses compteurs) : la gestion seule les lit (revue du 20/10/2026).
   /^\/api\/(radarr\/movies|sonarr\/series)\/lookup\/?$/,
   /^\/api\/jellyfin\/library\/?$/,
+  // Les acteurs à l'écran vus du banc : l'état du service et de n'importe quel élément (§138). La route
+  // le vérifie aussi (`adminOnly`) ; sa commande (POST) n'est pas dans la liste blanche des écritures.
+  /^\/api\/admin\/xray(\/|$)/,
 ];
 
 function isAdminOnlyRead(pathname: string): boolean {

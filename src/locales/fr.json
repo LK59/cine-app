@@ -3257,6 +3257,14 @@
       "timeout": "Pas de réponse en 6 secondes.",
       "other": "Échec ({detail})."
     },
+    "xray": {
+      "model": "Modèle {name}",
+      "ready": "prêt",
+      "preparing": "en préparation (téléchargement du modèle)",
+      "vaapiOn": "décodage matériel disponible",
+      "vaapiOff": "sans décodage matériel",
+      "pending": "{count} en attente"
+    },
     "save": "Enregistrer",
     "saving": "Enregistrement…",
     "saved": "Réglages enregistrés.",
@@ -3332,6 +3340,11 @@
         "why": "Notes IMDb, Rotten Tomatoes et Metacritic sur les fiches.",
         "help": "Clés gratuites : omdbapi.com et mdblist.com."
       },
+      "xray": {
+        "title": "Acteurs à l'écran",
+        "why": "Facultatif, coupé par défaut. Un service installé à côté de l'application reconnaît, scène par scène, les acteurs présents à l'image, pour pouvoir dire qui est à l'écran pendant un film ou un épisode. Allumé, chaque lecture demande l'analyse du titre regardé, puis celle de l'épisode suivant.",
+        "help": "L'adresse et la clé du service (sa variable XRAY_API_KEY). Son installation est décrite dans xray/README.md."
+      },
       "app": {
         "title": "Application",
         "why": "La préparation des affiches et l'adresse de contact des notifications."
@@ -3379,6 +3392,9 @@
       "JACKETT_API_KEY": "Clé API Jackett",
       "OMDB_API_KEY": "Clé OMDb",
       "MDBLIST_API_KEY": "Clé MDBList",
+      "XRAY_ENABLED": "Analyser les acteurs à l'écran",
+      "XRAY_URL": "Adresse du service d'analyse",
+      "XRAY_API_KEY": "Clé du service d'analyse",
       "APP_LANGUAGE": "Langue par défaut",
       "COOKIE_SECURE": "Servie en HTTPS (cookies sécurisés)",
       "PLAYER_ENABLED": "Lecteur intégré",

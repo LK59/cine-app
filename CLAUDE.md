@@ -505,6 +505,15 @@ widening `"movies" | "series"` would ripple through twenty places. Turned off, e
   `readerPrefsStore.ts` — a type with none takes the account's latest; the device keeps a local copy);
   the reading list `book_list` (`readingList.ts`, « À lire » in Ma liste through `BooksMode`, kept on finish like a watched film).
 
+**Actors on screen are a sidecar service, off by default** (DECISIONS §138, since 09/11/2026):
+`laterna-xray` (its code under `xray/`, its own image, outside the gate) recognises actors scene by
+scene; Laterna only commands and reads it (`src/lib/clients/xray.ts`, `src/lib/xray/`), behind
+`XRAY_ENABLED` + `XRAY_URL` + `XRAY_API_KEY` (Configuration → Connections). The trigger is the player
+log's `start` line — the only one all three players send, with the item and the position: the item
+goes out `high` from there, the next episode `normal`, fire-and-forget, one order per item. The player's
+read, `GET /api/player/xray/[itemId]`, answers 200 with `scenes: []` and a `status` for every absence —
+a title hidden from the account reads exactly like one never analysed. No viewer screen reads it yet.
+
 **The player** has its own reference: read `DOC-TECH.md` before touching `src/lib/webcodecs/`,
 and `docs/cycle-de-vie-lecteur.md` before touching `ExperimentalPlayerHost`, `PlayerHost` or the
 session layer — its states, transitions, races and known fragile paths, none of which the code

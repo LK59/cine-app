@@ -41,6 +41,15 @@ export interface TmdbCastMember {
   profile_path: string | null;
 }
 
+/** Une personne créditée sur un film ou un épisode, avec sa place au générique. */
+export interface TmdbCreditedPerson {
+  id: number;
+  name: string;
+  character?: string | null;
+  order?: number | null;
+  profile_path: string | null;
+}
+
 export interface TmdbCrewMember {
   id: number;
   name: string;
@@ -357,6 +366,18 @@ function createTmdbClient(lang = "fr-FR") {
       fetchJson<{ profiles: { file_path: string; vote_average: number; width: number; height: number }[] }>(
         `${BASE}/person/${personId}/images?api_key=${cfg.apiKey}`
       ),
+    /**
+     * La distribution d'**un** épisode : les rôles de la série crédités sur lui (`cast`) et les invités
+     * (`guest_stars`) — ce que l'analyse des acteurs à l'écran cherche dans l'image (§138). Sans
+     * langue : les noms de personnages ne sont pas traduits, et une seule réponse sert à tous.
+     */
+    getEpisodeCredits: (tmdbTvId: number, seasonNumber: number, episodeNumber: number) =>
+      fetchJson<{ cast?: TmdbCreditedPerson[]; guest_stars?: TmdbCreditedPerson[] }>(
+        `${BASE}/tv/${tmdbTvId}/season/${seasonNumber}/episode/${episodeNumber}/credits?api_key=${cfg.apiKey}`
+      ),
+    /** La distribution d'un film, dans l'ordre du générique (§138). */
+    getMovieCredits: (tmdbId: number) =>
+      fetchJson<{ cast?: TmdbCreditedPerson[] }>(`${BASE}/movie/${tmdbId}/credits?api_key=${cfg.apiKey}`),
     getPersonExternalIds: (personId: number) =>
       fetchJson<{ imdb_id: string | null; instagram_id: string | null; twitter_id: string | null; wikidata_id: string | null }>(
         `${BASE}/person/${personId}/external_ids?api_key=${cfg.apiKey}`

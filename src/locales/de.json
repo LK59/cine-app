@@ -3257,6 +3257,14 @@
       "timeout": "Keine Antwort innerhalb von 6 Sekunden.",
       "other": "Fehlgeschlagen ({detail})."
     },
+    "xray": {
+      "model": "Modell {name}",
+      "ready": "bereit",
+      "preparing": "in Vorbereitung (Modell wird geladen)",
+      "vaapiOn": "Hardware-Dekodierung verfügbar",
+      "vaapiOff": "ohne Hardware-Dekodierung",
+      "pending": "{count} in der Warteschlange"
+    },
     "save": "Speichern",
     "saving": "Wird gespeichert…",
     "saved": "Einstellungen gespeichert.",
@@ -3332,6 +3340,11 @@
         "why": "Bewertungen von IMDb, Rotten Tomatoes und Metacritic auf den Titelseiten.",
         "help": "Kostenlose Schlüssel: omdbapi.com und mdblist.com."
       },
+      "xray": {
+        "title": "Darsteller im Bild",
+        "why": "Optional, standardmäßig aus. Ein neben der App installierter Dienst erkennt Szene für Szene die Darsteller im Bild, damit sich während eines Films oder einer Folge sagen lässt, wer zu sehen ist. Eingeschaltet fordert jede Wiedergabe die Analyse des gesehenen Titels an, danach die der nächsten Folge.",
+        "help": "Adresse und Schlüssel des Dienstes (seine Variable XRAY_API_KEY). Die Installation beschreibt xray/README.md."
+      },
       "app": {
         "title": "Anwendung",
         "why": "Die Vorbereitung der Poster und die Kontaktadresse für Benachrichtigungen."
@@ -3379,6 +3392,9 @@
       "JACKETT_API_KEY": "Jackett-API-Schlüssel",
       "OMDB_API_KEY": "OMDb-Schlüssel",
       "MDBLIST_API_KEY": "MDBList-Schlüssel",
+      "XRAY_ENABLED": "Darsteller im Bild analysieren",
+      "XRAY_URL": "Adresse des Analysedienstes",
+      "XRAY_API_KEY": "Schlüssel des Analysedienstes",
       "APP_LANGUAGE": "Standardsprache",
       "COOKIE_SECURE": "Über HTTPS ausgeliefert (sichere Cookies)",
       "PLAYER_ENABLED": "Integrierter Player",

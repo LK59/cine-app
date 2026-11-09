@@ -189,15 +189,15 @@ function ProfileSelect({ id, service, value, onChange }: { id: string; service: 
  * connexion » et le « Suivant » de l'assistant le partagent. `values` : ce qui est en cours de
  * saisie ; vide, les réglages enregistrés.
  */
-export async function runServiceTest(group: TestableGroup, values: Draft): Promise<{ ok: boolean; detail: string }> {
+export async function runServiceTest(group: TestableGroup, values: Draft): Promise<{ ok: boolean; detail: string; xray?: XrayTestFacts }> {
   try {
     const res = await fetch("/api/settings/test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ group, values }),
     });
-    const body = (await res.json().catch(() => null)) as { ok?: boolean; detail?: string } | null;
-    return { ok: !!body?.ok, detail: body?.detail ?? `http-${res.status}` };
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; detail?: string; xray?: XrayTestFacts } | null;
+    return { ok: !!body?.ok, detail: body?.detail ?? `http-${res.status}`, ...(body?.xray ? { xray: body.xray } : {}) };
   } catch {
     return { ok: false, detail: "unreachable" };
   }
@@ -215,10 +215,29 @@ export function testFailureText(t: (key: string, vars?: Record<string, string>) 
   return detail === "unauthorized" || detail === "unreachable" || detail === "timeout" ? t(`setup.testFail.${detail}`) : t("setup.testFail.other", { detail });
 }
 
+/** Ce que le test des acteurs à l'écran rapporte du service (§138, `testService.ts`). */
+type XrayTestFacts = { model: string; ready: boolean; license: string; error: string | null; vaapi: boolean; pending: number };
+
+/**
+ * Le modèle, s'il est prêt (il se télécharge au premier lancement du service), et si le décodage
+ * matériel est disponible : les trois choses qu'on vérifie en installant le service.
+ */
+function XrayFacts({ facts }: { facts: XrayTestFacts }) {
+  const t = useT();
+  return (
+    <p className="w-full text-xs text-subtle" data-testid="xray-facts">
+      {t("setup.xray.model", { name: facts.model })} · {t(facts.ready ? "setup.xray.ready" : "setup.xray.preparing")} ·{" "}
+      {t(facts.vaapi ? "setup.xray.vaapiOn" : "setup.xray.vaapiOff")}
+      {facts.pending > 0 ? ` · ${t("setup.xray.pending", { count: String(facts.pending) })}` : ""}
+      {facts.error ? ` · ${facts.error}` : ""}
+    </p>
+  );
+}
+
 /** « Tester la connexion » avec les valeurs en cours de saisie — un secret vide reprend celui enregistré. */
 function ConnectionTest({ group, draft }: { group: TestableGroup; draft: Draft }) {
   const t = useT();
-  const [state, setState] = useState<"idle" | "running" | { ok: boolean; detail: string }>("idle");
+  const [state, setState] = useState<"idle" | "running" | { ok: boolean; detail: string; xray?: XrayTestFacts }>("idle");
   async function run() {
     setState("running");
     setState(await runServiceTest(group, draft));
@@ -240,6 +259,7 @@ function ConnectionTest({ group, draft }: { group: TestableGroup; draft: Draft }
             <CircleAlert size={15} /> {failure(state.detail)}
           </span>
         ))}
+      {typeof state === "object" && state.ok && state.xray && <XrayFacts facts={state.xray} />}
     </div>
   );
 }

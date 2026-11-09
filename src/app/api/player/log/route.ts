@@ -7,6 +7,8 @@ import { logPlaybackEvent, isPlayerEventKind } from "@/lib/playerLog";
 import { recoverLostPosition } from "@/lib/lostStopPosition";
 import { playerLogAllowed } from "@/lib/writeLimits";
 import { alreadyWritten, isLineId } from "@/lib/playerLogIds";
+import { noteSessionStart } from "@/lib/xray/orders";
+import { xrayConfigured } from "@/lib/clients/xray";
 
 /**
  * The player telling the server what happened to it.
@@ -52,5 +54,13 @@ export async function POST(req: NextRequest) {
     );
   }
   logPlaybackEvent(session.u, body.kind, cleaned);
+  // Les acteurs à l'écran (option, DECISIONS.md §138) : une séance qui commence commande l'analyse de
+  // ce qu'elle regarde, et de l'épisode suivant. La ligne `start` est le seul signal que les trois
+  // lecteurs (natif, serveur, Chromecast) envoient tous, avec l'élément et la position. Ni un banc, ni
+  // le lecteur hors ligne (le fichier est déjà sur l'appareil), ni un autre titre que celui d'un lien de
+  // partage. Sans attente : la réponse part tout de suite, et rien d'ici ne peut la faire échouer.
+  if (body.kind === "start" && xrayConfigured() && !cleaned.bench && cleaned.player !== "hors-ligne" && !(await shareRefusal(session, cleaned.itemId))) {
+    noteSessionStart(cleaned.itemId, cleaned.at, session.u);
+  }
   return NextResponse.json({ ok: true });
 }

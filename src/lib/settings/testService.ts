@@ -1,5 +1,6 @@
 import { extractSessionCookie } from "@/lib/clients/qbittorrent";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
+import { xrayAuthHeaders, type XrayHealth } from "@/lib/clients/xray";
 import { SETTINGS_BY_KEY, urlProblem, type TestableGroup } from "./schema";
 
 /**
@@ -12,6 +13,11 @@ export interface TestResult {
   ok: boolean;
   /** Ce qui a répondu (« Jellyfin 12.0.1 »), ou pourquoi ça n'a pas marché. */
   detail: string;
+  /**
+   * Les acteurs à l'écran (§138) : ce que `/health` dit du service — le modèle et s'il est prêt (il
+   * se télécharge au premier lancement), le décodage matériel. L'écran le traduit (`XrayFacts`).
+   */
+  xray?: { model: string; ready: boolean; license: string; error: string | null; vaapi: boolean; pending: number };
 }
 
 const TIMEOUT_MS = 6000;
@@ -74,6 +80,24 @@ export async function testService(group: TestableGroup, valueOf: (key: string) =
           `${trimSlash(valueOf("JACKETT_URL"))}/api/v2.0/indexers/all/results/torznab/api?apikey=${encodeURIComponent(valueOf("JACKETT_API_KEY"))}&t=caps`
         );
         return status(res) ?? { ok: true, detail: "Jackett" };
+      }
+      case "xray": {
+        const res = await get(`${trimSlash(valueOf("XRAY_URL"))}/health`, xrayAuthHeaders(valueOf("XRAY_API_KEY")));
+        const bad = status(res);
+        if (bad) return bad;
+        const health = (await res.json()) as Partial<XrayHealth>;
+        return {
+          ok: true,
+          detail: `laterna-xray ${health.version ?? ""}`.trim(),
+          xray: {
+            model: String(health.model?.name ?? "?"),
+            ready: health.model?.ready === true,
+            license: String(health.model?.license ?? ""),
+            error: typeof health.model?.error === "string" ? health.model.error.slice(0, 200) : null,
+            vaapi: health.decode?.vaapi === true,
+            pending: typeof health.queue?.pending === "number" ? health.queue.pending : 0,
+          },
+        };
       }
       case "qbittorrent": {
         const base = trimSlash(valueOf("QBITTORRENT_URL"));

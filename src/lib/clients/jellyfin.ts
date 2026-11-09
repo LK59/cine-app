@@ -489,6 +489,28 @@ export const jellyfin = {
       { headers }
     ).then((page) => page.Items?.[0] ?? null),
 
+  /**
+   * Ce qu'il faut pour commander l'analyse des acteurs à l'écran (§138) : le type, le chemin du fichier
+   * tel que Jellyfin le voit, l'`ETag` de sa source (la version du fichier), la série et les numéros
+   * d'un épisode, les identifiants externes. Avec la clé du serveur, sans compte : c'est le serveur qui
+   * commande, pour tous ; ce que chacun peut lire ensuite est vérifié à part (`assertVisible`).
+   */
+  getItemForAnalysis: async (itemId: string) =>
+    fetchJson<{
+      Items?: {
+        Id: string;
+        Type?: string;
+        Path?: string | null;
+        SeriesId?: string | null;
+        ParentIndexNumber?: number | null;
+        IndexNumber?: number | null;
+        ProviderIds?: JellyfinItem["ProviderIds"];
+        MediaSources?: { Path?: string | null; ETag?: string | null; Size?: number | null }[] | null;
+      }[];
+    }>(`${cfg.url}/Items?ids=${idSegment(itemId)}&Fields=Path,MediaSources,ProviderIds,SeriesId,ParentIndexNumber,IndexNumber&EnableImages=false&EnableUserData=false`, {
+      headers,
+    }).then((page) => page.Items?.[0] ?? null),
+
   getSystemInfo: () =>
     fetchJson<{ ServerName: string; Version: string }>(`${cfg.url}/System/Info`, { headers }),
   getSessions: () => fetchJson<JellyfinSession[]>(`${cfg.url}/Sessions`, { headers }),

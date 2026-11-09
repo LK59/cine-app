@@ -292,6 +292,21 @@ export const config = {
       return optional("GOOGLE_BOOKS_API_KEY", "");
     },
   },
+  // L'analyse des acteurs à l'écran (DECISIONS.md §138) : un service à part, `laterna-xray`, qui
+  // reconnaît les visages scène par scène. Coupée par défaut ; relue à chaque appel comme le reste —
+  // la couper arrête les commandes à la séance suivante, sans redémarrage. Ni l'adresse ni la clé ne
+  // sont recopiées ailleurs (`clients/xray.ts` les relit à chaque requête).
+  xray: {
+    get enabled() {
+      return optional("XRAY_ENABLED", "false") === "true";
+    },
+    get url() {
+      return optional("XRAY_URL", "http://laterna-xray:8000");
+    },
+    get apiKey() {
+      return optional("XRAY_API_KEY");
+    },
+  },
   push: {
     get subject() {
       return optional("VAPID_SUBJECT", "mailto:admin@example.com");

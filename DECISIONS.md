@@ -8782,3 +8782,76 @@ autre langue que celle des résumés de Jellyfin voit plus de rejets : un nom tr
 sources. La diarisation des voix et des sources plus riches (Wikipédia, Fandom) ont été écartées pour
 l'instant : la première donne des voix anonymes sur un son difficile, les secondes ne servent qu'aux
 épisodes finis, en anglais surtout.
+
+## 138. Les acteurs à l'écran : un service à part, commandé par la séance qui commence (09/11/2026)
+
+**Règle.** L'analyse des acteurs présents à l'image, scène par scène, est faite par un service à part,
+`laterna-xray` (son code et son installation : `xray/README.md`), que Laterna commande et lit par un
+contrat fixé des deux côtés (v1 : `GET /health`, `POST /jobs`, `GET /items/{id}`, `GET /items/{id}/scenes`,
+`DELETE /items/{id}`, une clé en `Authorization: Bearer`). Une option de l'installation, **coupée par
+défaut** (`XRAY_ENABLED`), avec son adresse (`XRAY_URL`, `http://laterna-xray:8000`) et sa clé
+(`XRAY_API_KEY`) : Configuration → Connexions, carte « Acteurs à l'écran », comme les autres services
+(réglage → `.env` → défaut, relus à chaque appel, §48). « Tester la connexion » lit `/health` et dit le
+modèle, s'il est prêt (il se télécharge au premier lancement du service) et si le décodage matériel est
+disponible (`testService`, `XrayFacts`). Sans les trois — allumée, une adresse, une clé —
+(`xrayConfigured`), rien ne part vers le service et rien n'est lu. Aucun écran du cinéma ne montre encore
+ces données : la forme de la lecture est fixée maintenant, l'interface viendra après un banc.
+
+**Le déclencheur : la ligne `start` du journal du lecteur.** `/api/player/log` reçoit un `start` des trois
+lecteurs — le natif, celui du serveur (AirPlay compris) et le Chromecast —, avec l'élément (`itemId`) et la
+position (`at`, la reprise pour le lecteur du serveur). Le rapport de lecture à Jellyfin
+(`/api/jellyfin/playback/playing`) n'est envoyé que par le lecteur natif (le lecteur du serveur s'annonce
+par sa négociation) : il aurait laissé de côté chaque séance confiée au serveur. Exclus : une ligne de banc
+(`bench`, gardé pour l'administrateur seul), le lecteur hors ligne (le fichier est sur l'appareil), et pour
+un lien de partage tout autre titre que le sien (`shareRefusal`). L'élément regardé part en priorité `high`
+à partir de la position (`startAt`), puis l'épisode suivant de la série en `normal` (`nextEpisodeAfter` :
+la règle de `nextEpisodeIn`, saison suivante, spéciaux entre eux, sur la liste du serveur). **Sans
+attente** : la réponse du journal part avant, et rien ne remonte — `noteSessionStart` n'attend rien, un
+échec va dans `server.log` (`logError`, `xray/order`, `xray/next`) et la configuration illisible vaut
+« coupée ».
+
+**Une commande par élément.** Un film reconstruit réécrit son `start`, chaque relance du lecteur du
+serveur aussi : `orderAnalysis` garde chaque commande six heures (en mémoire, sur `globalThis` — la route
+du journal et celle du banc ont chacune leur copie du module) et ne repasse que pour une priorité plus
+haute ; un échec est retenté au bout de dix minutes, pas à la ligne suivante. Trente commandes neuves par
+compte et par heure au plus (un client qui boucle ne fait pas tout analyser). Une ligne `[tâche]` par
+vraie commande (`taskLog("acteurs", …)`) — pas pour « déjà fait au même fichier », ni pour un tour sans
+rien.
+
+**La commande.** `analysisTarget` (Jellyfin, clé du serveur, `getItemForAnalysis`, dix minutes en
+mémoire) : le chemin du fichier tel que Jellyfin le voit (le service monte la médiathèque au même chemin,
+en lecture seule), l'`ETag` de la source (sinon `size:<octets>`), la série, et le titre chez TMDB (le film,
+ou la série — par TVDB si Jellyfin n'a que lui — avec saison et épisode). `castOf` : la distribution de
+**cet** épisode (`/tv/{id}/season/{s}/episode/{e}/credits` : rôles crédités puis invités) ou du film
+(`/movie/{id}/credits`), dans l'ordre du générique, une personne une fois (deux rôles joints), quarante au
+plus. `castWithPhotos` : la photo principale puis les mieux notées de `/person/{id}/images`, huit au plus,
+en adresses `https://image.tmdb.org/t/p/w185…` — les seules que le service accepte ; un album qui ne répond
+pas laisse la photo principale. Projections seulement, sous des clés de consultation (`credits:xray:v1:…`,
+`person:xray-photos:v1:…`, une semaine) que le ménage efface après quatorze jours et que la sauvegarde
+laisse de côté. Sans distribution, rien n'est commandé.
+
+**La lecture du lecteur : `GET /api/player/xray/[itemId]`** (`scenesForPlayer`). Les scènes du service,
+chaque personne jointe à la distribution (nom, personnage, photo TMDB `w185` — l'adresse que le cinéma
+affiche déjà pour la distribution) ; un visage nommé ailleurs dans la série et absent de la distribution de
+cet épisode garde `name: null`. **Une absence attendue répond 200**, `scenes: []` et un `status` : `off`
+(option coupée), `none` (rien), `queued` / `running` / `failed`, `stale` (le résultat d'un autre `ETag` :
+le fichier a changé), `unavailable` (service injoignable, au journal). Jamais 404 : la route est appelée
+par élément (CLAUDE.md, « An expected absence is never a 404 »). Le droit de voir l'élément est demandé à
+Jellyfin sous l'identité du compte (`assertVisible` — tags bloqués §54, bibliothèques, contrôle parental) ;
+caché, la route répond **exactement** `none`, comme un élément jamais analysé. Un lien de partage n'y lit
+que son titre (`SHARE_RULES`, portée `path`, §112). Réponse `private, no-store`.
+
+**Le banc : `/api/admin/xray`** — `GET` (l'état du service, et d'un élément avec `?itemId=`), `POST`
+(`{ itemId, priority?, startAt? }`, commande en passant outre la mémoire). Administrateur seul : `adminOnly`
+dans la route, `ADMIN_ONLY_READS` dans le proxy, et l'écriture hors de la liste blanche des comptes.
+
+**Porteurs.** `src/lib/clients/xray.ts` (contrat, `xrayConfigured`, `xrayAuthHeaders`) ;
+`src/lib/xray/cast.ts` (`analysisTarget`, `castOf`, `castWithPhotos`, `nextEpisodeAfter`) ;
+`src/lib/xray/orders.ts` (`orderAnalysis`, `noteSessionStart`) ; `src/lib/xray/scenes.ts`
+(`scenesForPlayer`) ; `tmdb.getEpisodeCredits` / `getMovieCredits`, `jellyfin.getItemForAnalysis`.
+**Appelants.** `/api/player/log` (déclencheur), `/api/player/xray/[itemId]`, `/api/admin/xray`,
+`testService` (Tester). **Tests.** `xray-client.test.ts` (contrat, Bearer, adresse relue, 404 = rien,
+Tester, réglages), `xray-orders.test.ts` (commande, distribution invités compris, photos, mémoire, borne
+par compte, panne, épisode suivant), `xray-player-route.test.ts` (200 partout, caché = `none`, `stale`,
+jointure), `xray-proxy-admin.test.ts` (portes), `xray-trigger.test.ts` (la ligne `start`) ;
+`share-gate.test.ts` parcourt la nouvelle route avec les autres.

@@ -81,6 +81,22 @@ features that depend on them (downloads, requests, missing episodes) are simply 
 | `OMDB_API_KEY` | — | IMDb ratings on cards. Free key at omdbapi.com (1,000 requests a day). |
 | `MDBLIST_API_KEY` | — | IMDb, Rotten Tomatoes, Metacritic, Letterboxd and Trakt ratings on title pages. Free key at mdblist.com. |
 
+## Actors on screen
+
+An optional companion service, `laterna-xray`, recognises the actors in the picture scene by scene
+(its installation: `xray/README.md`). **Off by default.** When on, each playback asks it to analyse
+the title being watched, from the current position, then the next episode of a series; the cast of
+that episode or film and several photos per person come from TMDB. Nothing is shown to viewers yet.
+
+Set in the app: **Management → Configuration → Connections**, *Actors on screen* card, whose
+*Test the connection* button shows the service's model, whether it is ready, and hardware decoding.
+
+| Variable | Default | Role |
+|---|---|---|
+| `XRAY_ENABLED` | `false` | Turns the analysis on. Without an address and a key, nothing is sent. |
+| `XRAY_URL` | `http://laterna-xray:8000` | The service's address, from inside the container (same Docker network). |
+| `XRAY_API_KEY` | — | The key the service was started with (its own `XRAY_API_KEY`), sent as `Authorization: Bearer`. |
+
 ## Playback
 
 Set in the app: **Management → Configuration → Playback**. Applied without a restart.
