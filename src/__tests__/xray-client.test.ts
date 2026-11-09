@@ -114,7 +114,7 @@ describe("le test de connexion de la Configuration", () => {
 describe("le réglage", () => {
   it("coupé par défaut, l'adresse du conteneur par défaut, la clé secrète, et un service qu'on peut tester", async () => {
     const { SETTINGS_BY_KEY, TESTABLE_GROUPS } = await import("@/lib/settings/schema");
-    expect(SETTINGS_BY_KEY.get("XRAY_ENABLED")).toMatchObject({ group: "xray", kind: "boolean", fallback: "false", inApp: true });
+    expect(SETTINGS_BY_KEY.get("XRAY_ENABLED")).toMatchObject({ group: "xray", kind: "audience", fallback: "off", inApp: true });
     expect(SETTINGS_BY_KEY.get("XRAY_URL")).toMatchObject({ group: "xray", kind: "url", fallback: "http://laterna-xray:8000", inApp: true });
     expect(SETTINGS_BY_KEY.get("XRAY_API_KEY")).toMatchObject({ group: "xray", kind: "secret", inApp: true });
     expect(TESTABLE_GROUPS).toContain("xray");

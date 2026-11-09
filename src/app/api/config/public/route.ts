@@ -6,6 +6,7 @@ import { configuredServices } from "@/lib/services";
 import { passageTarget } from "@/lib/passage/target";
 import { userPrefsDb } from "@/lib/db";
 import { recapAvailable } from "@/lib/recap/service";
+import { askAvailableFor } from "@/lib/ask/service";
 
 /**
  * Ce que l'interface a besoin de savoir avant d'afficher quoi que ce soit.
@@ -42,6 +43,10 @@ export async function GET(req: NextRequest) {
     booksAvailable,
     // Le réglage « Précédemment » du Compte (DECISIONS.md §137) n'a de sens que l'option allumée.
     recapAvailable: recapAvailable() && !!session && session.role !== "share",
+    // « Poser une question » (DECISIONS.md §139) : l'option et son public (`off` / `admins` / `tous`) — un
+    // lien de partage aussi, réglée sur `tous`, sur son seul titre (liste fermée, portée `path`). Ce n'est
+    // que pour cacher la pilule : la route refuse d'elle-même.
+    askAvailable: askAvailableFor(session),
     // « Demander un livre » : seulement avec les livres eux-mêmes.
     bookRequests: config.books?.requests === true && booksShown,
     // La disposition de l'accueil, réglée par l'exploitant (DECISIONS.md §52).

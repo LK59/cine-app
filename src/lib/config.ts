@@ -1,4 +1,5 @@
 import { readOverride } from "@/lib/settings/store";
+import { parseAudience } from "@/lib/featureAudience";
 import { receiverAppIdOf } from "@/lib/chromecast/receiverAppId";
 
 function required(name: string): string {
@@ -253,6 +254,17 @@ export const config = {
       return optional("RECAP_ENABLED", "false") === "true";
     },
   },
+  // « Poser une question » (DECISIONS.md §139) : même fournisseur et même clé, Anthropic seulement.
+  // Coupé par défaut — chaque question est un appel payant.
+  ask: {
+    /** À qui (`featureAudience.ts`) : `off` (défaut), `admins`, `tous`. */
+    get audience() {
+      return parseAudience(optional("ASK_ENABLED", "off"));
+    },
+    get enabled() {
+      return this.audience !== "off";
+    },
+  },
   // La recherche de répliques (DECISIONS.md §88) : relue à chaque accès, comme le reste — couper
   // l'option arrête l'indexation à sa prochaine lecture de fichier, sans redémarrage.
   repliques: {
@@ -297,8 +309,13 @@ export const config = {
   // la couper arrête les commandes à la séance suivante, sans redémarrage. Ni l'adresse ni la clé ne
   // sont recopiées ailleurs (`clients/xray.ts` les relit à chaque requête).
   xray: {
+    /** À qui (`featureAudience.ts`) : `off` (défaut), `admins`, `tous` ; `true`/`false` d'avant valent `tous`/`off`. */
+    get audience() {
+      return parseAudience(optional("XRAY_ENABLED", "off"));
+    },
+    /** Le service est-il branché pour quelqu'un — les commandes et la lecture regardent ensuite à qui. */
     get enabled() {
-      return optional("XRAY_ENABLED", "false") === "true";
+      return this.audience !== "off";
     },
     get url() {
       return optional("XRAY_URL", "http://laterna-xray:8000");

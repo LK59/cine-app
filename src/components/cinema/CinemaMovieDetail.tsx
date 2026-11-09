@@ -1,5 +1,6 @@
 "use client";
 
+import { AskTitleControl } from "@/components/ask/AskTitleControl";
 import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -317,6 +318,9 @@ export function CinemaMovieDetail({
 
             {/* Sa place est tenue, invisible et hors du clavier, tant que la description n'est pas là. */}
             <DetailTrailerRow lead={lead} late={late} onOpen={() => setShowTrailer(true)} />
+
+            {/* « Poser une question » (§139) : la même pièce sur toutes les fiches, qui décide seule d'exister. */}
+            <AskTitleControl itemId={item.jellyfinItemId} variant="row" />
 
             {/* Le téléchargement hors ligne (bêta, 19/10/2026) : Lire, Bande-annonce, puis Télécharger (Louis). */}
             {!fileMissing && (

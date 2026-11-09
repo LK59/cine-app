@@ -3424,6 +3424,7 @@
       "SUBTITLE_GEN_ENABLED": "Offer subtitle generation",
       "DESCRIBE_SEARCH_ENABLED": "Search by description: find a film or series described in a sentence (Anthropic, with the key above)",
       "RECAP_ENABLED": "“Previously”: on the page of a series in progress, recall the latest events seen (Anthropic, with the key above)",
+      "ASK_ENABLED": "“Ask a question”: on a title page or with the film paused, answer a question from what the account has already watched (Anthropic, with the key above)",
       "SUBTITLE_GEN_PROVIDER": "Provider",
       "SUBTITLE_GEN_API_KEY": "Provider key",
       "SUBTITLE_GEN_MODEL": "Model",
@@ -3506,6 +3507,11 @@
         "on": "Subtitle search (Bazarr)",
         "off": "Without Bazarr: no subtitle search"
       }
+    },
+    "audience": {
+      "off": "Off",
+      "admins": "Administrators only",
+      "tous": "All accounts"
     }
   },
   "subtitleGen": {
@@ -4182,5 +4188,25 @@
       "free": "Free"
     },
     "otherBlock": "Already hidden ({tag})"
+  },
+  "ask": {
+    "title": "Ask a question",
+    "pill": "A question?",
+    "placeholder": "Your question about this title…",
+    "send": "Send",
+    "hint": "Answers rely only on what you have already watched.",
+    "thinking": "One moment…",
+    "unknown": "I can't tell from what has been watched so far.",
+    "limit": "Too many questions for now. Please try again a little later.",
+    "unavailable": "Questions are not available for this title right now.",
+    "error": "The answer could not arrive. Please try again in a moment.",
+    "off": "Questions are not offered at the moment.",
+    "maxReached": "Five questions per opening: close and reopen to ask more.",
+    "chipPlayer0": "What just happened?",
+    "chipPlayer1": "Who are the main characters?",
+    "chipPlayer2": "Where does the story stand?",
+    "chipSheet0": "Where does the story stand?",
+    "chipSheet1": "Who are the main characters?",
+    "chipSheet2": "What is this title about?"
   }
 }

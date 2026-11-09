@@ -3,7 +3,7 @@
 import type { TrickplayInfo } from "@/lib/trickplayTile";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Maximize, Minimize, Captions, AudioLines, Loader2, RotateCcw, RotateCw, EllipsisVertical, SkipForward, Layers, ChevronRight } from "lucide-react";
+import { Play, Pause, Maximize, Minimize, Captions, AudioLines, Loader2, RotateCcw, RotateCw, EllipsisVertical, SkipForward, Layers, ChevronRight, MessageCircleQuestion } from "lucide-react";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import type { HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
@@ -24,6 +24,8 @@ import { useVolumeControl } from "@/components/playerControls/useVolumeControl";
 import { useLatest } from "@/components/playerControls/useLatest";
 import { useAutoHide } from "@/components/playerControls/useAutoHide";
 import { PlayerSeekBar } from "@/components/playerControls/PlayerSeekBar";
+import { AskPanel } from "@/components/ask/AskPanel";
+import { useAskAvailable } from "@/lib/ask/client";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
 import {
   subtitleStyleStore,
@@ -248,6 +250,12 @@ interface PlayerControlsProps {
    * navigateur et n'en ont pas l'usage.
    */
   onChromeEdges?: (edges: ChromeEdges | null) => void;
+  /**
+   * « Poser une question » (DECISIONS.md §139), film en pause : faux pour le lecteur hors ligne — le
+   * fichier est sur l'appareil, le réseau souvent absent. Partout ailleurs l'option décide seule
+   * (`useAskAvailable`).
+   */
+  askable?: boolean;
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -330,6 +338,7 @@ export function PlayerControls({
   dialogue,
   subtitleGeneration,
   onChromeEdges,
+  askable = true,
 }: PlayerControlsProps) {
   const t = useT();
   // La série d'un épisode et le droit de télécharger (19/10/2026) — voir `usePlayerItem`.
@@ -660,11 +669,25 @@ export function PlayerControls({
     return () => video.removeEventListener("enterpictureinpicture", onEnterPip);
   }, [videoRef]);
 
+  /**
+   * « Poser une question » (§139) : le panneau ouvert, les commandes ne se cachent plus (`held`) et
+   * n'écoutent plus le clavier (`suspended`) — espace, flèches, F ou M écrivent dans le champ ou ne font
+   * rien, jamais lecture ni saut. Refermé quand l'élément change ou que les commandes se cachent pour
+   * un écran d'erreur. Une ouverture = une conversation : ses échanges vivent dans le panneau.
+   */
+  const askOffered = useAskAvailable() && askable && !lab;
+  const [askOpen, setAskOpen] = useState(false);
+  const [askFor, setAskFor] = useState({ itemId, hidden });
+  if (askFor.itemId !== itemId || askFor.hidden !== hidden) {
+    setAskFor({ itemId, hidden });
+    if (askOpen) setAskOpen(false);
+  }
   const { suspendedRef, showControls, holdControls, toggleControls, windowExitHides } = useAutoHide({
     visible,
     setVisible,
     playing,
-    suspended,
+    suspended: suspended || askOpen,
+    held: askOpen,
     hidden,
     resuming,
     menu,
@@ -1157,6 +1180,28 @@ export function PlayerControls({
           </div>
         )}
 
+        {/* « Une question ? » (§139) : film en pause seulement, avec les commandes, au-dessus du titre —
+            à gauche, loin de « Passer l'intro » et de l'épisode suivant, posés à droite. */}
+        {askOffered && !askOpen && !playing && !resuming && !loading && !openingQuiet && !castActive && (
+          <div className="player-chrome-x pointer-events-none absolute inset-x-0 flex" style={{ bottom: PROMPT_BOTTOM }}>
+            <button
+              type="button"
+              data-player-nav="ask"
+              data-player-surface-ignore
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenu(null);
+                setAskOpen(true);
+              }}
+              data-liquid
+              className={`player-fade player-pill ${visible ? "pointer-events-auto" : "pointer-events-none"} flex items-center gap-2 py-2.5 pl-3.5 pr-4 text-sm font-medium text-white`}
+            >
+              <MessageCircleQuestion size={18} aria-hidden />
+              {t("ask.pill")}
+            </button>
+          </div>
+        )}
+
         {/* En bas : le titre et la pilule des réglages sur une rangée, la barre et ses deux temps
             dessous. */}
         <div
@@ -1280,6 +1325,18 @@ export function PlayerControls({
           />
         </div>
       </div>
+      {askOpen && (
+        <AskPanel
+          itemId={itemId}
+          where="lecteur"
+          placement="player"
+          position={() => (positionNow ? positionNow() : (videoRef.current?.currentTime ?? null))}
+          onClose={() => {
+            setAskOpen(false);
+            showControls();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1893,3 +1893,22 @@ describe("proposer les notifications : une règle (§17, `canOfferPush`)", () =>
     expect(copies).toEqual([]);
   });
 });
+
+describe("« Poser une question » : une pièce pour toutes les fiches, un panneau pour tout (§139)", () => {
+  const FICHES = ["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx", "src/components/cinema/mobile/CinemaMobileDetail.tsx"];
+  it("les trois fiches passent par `AskTitleControl`, et aucune n'ouvre le panneau elle-même", () => {
+    for (const f of FICHES) {
+      const src = sansCommentaires(lire(f));
+      expect(src, f).toMatch(/<AskTitleControl\b/);
+      expect(src, f).not.toMatch(/<AskPanel\b/);
+    }
+  });
+  it("le panneau n'est posé que par `AskTitleControl` (fiches) et `PlayerControls` (les deux lecteurs)", () => {
+    const posers = SOURCES().filter((f) => /<AskPanel\b/.test(sansCommentaires(lire(f))));
+    expect(posers.sort()).toEqual(["src/components/PlayerControls.tsx", "src/components/ask/AskTitleControl.tsx"]);
+  });
+  it("la route n'est appelée que par `useAskTitle`", () => {
+    const callers = SOURCES().filter((f) => /fetch\(\s*`\/api\/cinema\/ask\//.test(sansCommentaires(lire(f))));
+    expect(callers).toEqual(["src/lib/ask/client.ts"]);
+  });
+});

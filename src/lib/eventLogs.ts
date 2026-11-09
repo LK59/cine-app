@@ -154,6 +154,39 @@ export function logRecap(fields: {
 }
 
 /**
+ * « Poser une question » (DECISIONS.md §139) : une ligne par question, dans le journal des appels payants
+ * au modèle — compte, appareil, élément, d'où (fiche ou lecteur), la tranche de dix minutes de la position,
+ * le délai et les jetons, le verdict. **Jamais la question ni la réponse** : ce que chacun demande ne
+ * regarde que lui.
+ */
+export function logAskQuestion(fields: {
+  user: string;
+  device: string | null;
+  itemId: string;
+  where: "fiche" | "lecteur";
+  /** La tranche de dix minutes (0, 10, 20…), `null` sans position. */
+  bucket: number | null;
+  status: "ok" | "rejeté" | "limite" | "erreur" | "indisponible";
+  ms: number;
+  /** Jusqu'au premier morceau de réponse rendu à l'écran. */
+  firstMs?: number;
+  inTokens?: number;
+  outTokens?: number;
+  /** Des dialogues sont partis ; `attente` : ils n'étaient pas prêts à temps. */
+  dialogue?: boolean | "attente";
+  /** Combien de résumés d'épisodes vus sont partis. */
+  episodes?: number;
+  /** Le rang de la question dans l'ouverture du panneau (1 à 5). */
+  turn?: number;
+}): void {
+  try {
+    appendJsonLine(SEARCH_LOG(), { timestamp: new Date().toISOString(), kind: "question", ...fields }, { keep: EVENT_LOG_KEEP });
+  } catch {
+    /* rien */
+  }
+}
+
+/**
  * L'usage de « Précédemment » (DECISIONS.md §137), au journal des ouvertures : `affiché` à chaque
  * ouverture d'une fiche qui le montre — avec depuis quand la série n'a pas été regardée —, `synopsis`
  * quand on lui préfère le synopsis. De quoi dire, après quelques semaines, s'il sert ; jamais le texte.

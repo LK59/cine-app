@@ -17,7 +17,7 @@
  *   (Il existait un troisième niveau, « au moins Radarr ou Sonarr », qui bloquait l'assistant.)
  */
 
-export type SettingKind = "url" | "secret" | "text" | "boolean" | "select" | "profile" | "number";
+export type SettingKind = "url" | "secret" | "text" | "boolean" | "select" | "profile" | "number" | "audience";
 export type SettingNeed = "required" | "optional";
 export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "xray" | "playback" | "subtitles" | "dialogue" | "app" | "defaults" | "deployment";
 
@@ -70,7 +70,8 @@ export const SETTINGS: readonly SettingDef[] = [
   // ── Les acteurs à l'écran (DECISIONS.md §138) ──
   // Un service à part (`laterna-xray`, `xray/README.md`) qui reconnaît les visages des acteurs dans
   // chaque scène. Coupé par défaut : allumé sans adresse joignable ni clé, rien ne part.
-  { key: "XRAY_ENABLED", group: "xray", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  // À qui (`featureAudience.ts`, 09/11/2026) : `off`, `admins`, `tous` — `true`/`false` d'avant valent `tous`/`off`.
+  { key: "XRAY_ENABLED", group: "xray", kind: "audience", need: "optional", fallback: "off", inApp: true },
   { key: "XRAY_URL", group: "xray", kind: "url", need: "optional", fallback: "http://laterna-xray:8000", inApp: true, placeholder: "http://laterna-xray:8000" },
   { key: "XRAY_API_KEY", group: "xray", kind: "secret", need: "optional", fallback: "", inApp: true },
   // ── Les sous-titres générés (DECISIONS.md §69) ──
@@ -90,6 +91,8 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "DESCRIBE_SEARCH_ENABLED", group: "subtitles", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   // « Précédemment » (08/11/2026, §137) : même fournisseur et même clé. Coupé par défaut, payant aussi.
   { key: "RECAP_ENABLED", group: "subtitles", kind: "boolean", need: "optional", fallback: "false", inApp: true },
+  // « Poser une question » (09/11/2026, §139) : même fournisseur et même clé. Coupé par défaut, payant aussi.
+  { key: "ASK_ENABLED", group: "subtitles", kind: "audience", need: "optional", fallback: "off", inApp: true },
   // ── La recherche de répliques (DECISIONS.md §88) ──
   // Coupée par défaut : elle lit les films sur le disque, ce qu'une installation doit avoir monté et
   // décidé. La page refuse de l'allumer tant que le dossier des films n'est pas lisible (`checkMoviesMount`).

@@ -3424,6 +3424,7 @@
       "SUBTITLE_GEN_ENABLED": "Ofrecer la generación de subtítulos",
       "DESCRIBE_SEARCH_ENABLED": "Búsqueda por descripción: encontrar una película o serie descrita en una frase (Anthropic, con la clave de arriba)",
       "RECAP_ENABLED": "«Anteriormente»: en la ficha de una serie en curso, recordar los últimos hechos vistos (Anthropic, con la clave de arriba)",
+      "ASK_ENABLED": "«Hacer una pregunta»: en una ficha o con la película en pausa, responder a una pregunta a partir de lo que la cuenta ya ha visto (Anthropic, con la clave de arriba)",
       "SUBTITLE_GEN_PROVIDER": "Proveedor",
       "SUBTITLE_GEN_API_KEY": "Clave del proveedor",
       "SUBTITLE_GEN_MODEL": "Modelo",
@@ -3506,6 +3507,11 @@
         "on": "Búsqueda de subtítulos (Bazarr)",
         "off": "Sin Bazarr: sin búsqueda de subtítulos"
       }
+    },
+    "audience": {
+      "off": "Desactivado",
+      "admins": "Solo administradores",
+      "tous": "Todas las cuentas"
     }
   },
   "subtitleGen": {
@@ -4182,5 +4188,25 @@
       "free": "Libre"
     },
     "otherBlock": "Ya oculto ({tag})"
+  },
+  "ask": {
+    "title": "Hacer una pregunta",
+    "pill": "¿Una pregunta?",
+    "placeholder": "Su pregunta sobre este título…",
+    "send": "Enviar",
+    "hint": "Las respuestas solo se basan en lo que ya ha visto.",
+    "thinking": "Un momento…",
+    "unknown": "No lo sé a partir de lo que se ha visto.",
+    "limit": "Demasiadas preguntas por ahora. Vuelva a intentarlo un poco más tarde.",
+    "unavailable": "Este título no admite preguntas por ahora.",
+    "error": "La respuesta no ha podido llegar. Vuelva a intentarlo en un momento.",
+    "off": "Las preguntas no están disponibles en este momento.",
+    "maxReached": "Cinco preguntas por apertura: cierre y vuelva a abrir para hacer más.",
+    "chipPlayer0": "¿Qué acaba de pasar?",
+    "chipPlayer1": "¿Quiénes son los personajes principales?",
+    "chipPlayer2": "¿En qué punto está la historia?",
+    "chipSheet0": "¿En qué punto está la historia?",
+    "chipSheet1": "¿Quiénes son los personajes principales?",
+    "chipSheet2": "¿De qué trata este título?"
   }
 }

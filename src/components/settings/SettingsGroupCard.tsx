@@ -3,6 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { CircleCheck, CircleAlert, Loader2, RotateCcw } from "lucide-react";
+import { AUDIENCES, parseAudience } from "@/lib/featureAudience";
 import { useT } from "@/components/TranslationProvider";
 import { DEPLOYMENT_GUIDE, SETTINGS, TESTABLE_GROUPS, type SettingGroup, type SettingView, type TestableGroup } from "@/lib/settings/schema";
 
@@ -89,6 +90,15 @@ export function SettingsGroupCard({
                 <BooleanChoice id={`setting-${def.key}`} value={value} onChange={(v) => onDraft(def.key, v)} />
               ) : def.kind === "profile" ? (
                 <ProfileSelect id={`setting-${def.key}`} service={group === "sonarr" ? "sonarr" : "radarr"} value={value} onChange={(v) => onDraft(def.key, v)} />
+              ) : def.kind === "audience" ? (
+                // À qui la fonction est ouverte (`featureAudience.ts`) ; un `true`/`false` d'avant se lit `tous`/`off`.
+                <select id={`setting-${def.key}`} className="select w-full" value={parseAudience(value)} onChange={(e) => onDraft(def.key, e.target.value)}>
+                  {AUDIENCES.map((a) => (
+                    <option key={a} value={a}>
+                      {t(`setup.audience.${a}`)}
+                    </option>
+                  ))}
+                </select>
               ) : def.kind === "select" ? (
                 <select id={`setting-${def.key}`} className="select w-full" value={value} onChange={(e) => onDraft(def.key, e.target.value)}>
                   {def.options?.map((o) => (

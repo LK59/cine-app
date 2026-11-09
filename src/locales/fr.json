@@ -3424,6 +3424,7 @@
       "SUBTITLE_GEN_ENABLED": "Proposer la génération de sous-titres",
       "DESCRIBE_SEARCH_ENABLED": "Recherche par description : retrouver un film ou une série décrit en une phrase (Anthropic, avec la clé ci-dessus)",
       "RECAP_ENABLED": "« Précédemment » : sur la fiche d'une série en cours, rappeler les derniers faits vus (Anthropic, avec la clé ci-dessus)",
+      "ASK_ENABLED": "« Poser une question » : sur une fiche ou le film en pause, répondre à une question d'après ce que le compte a déjà vu (Anthropic, avec la clé ci-dessus)",
       "SUBTITLE_GEN_PROVIDER": "Fournisseur",
       "SUBTITLE_GEN_API_KEY": "Clé du fournisseur",
       "SUBTITLE_GEN_MODEL": "Modèle",
@@ -3506,6 +3507,11 @@
         "on": "La recherche de sous-titres (Bazarr)",
         "off": "Sans Bazarr : pas de recherche de sous-titres"
       }
+    },
+    "audience": {
+      "off": "Coupé",
+      "admins": "Administrateurs seulement",
+      "tous": "Tous les comptes"
     }
   },
   "subtitleGen": {
@@ -4182,5 +4188,25 @@
       "free": "Libre"
     },
     "otherBlock": "Déjà caché ({tag})"
+  },
+  "ask": {
+    "title": "Poser une question",
+    "pill": "Une question ?",
+    "placeholder": "Votre question sur ce titre…",
+    "send": "Envoyer",
+    "hint": "Les réponses ne s'appuient que sur ce que vous avez déjà vu.",
+    "thinking": "Un instant…",
+    "unknown": "Je ne sais pas d'après ce qui a été vu.",
+    "limit": "Trop de questions pour l'instant. Réessayez un peu plus tard.",
+    "unavailable": "Ce titre ne peut pas recevoir de question pour l'instant.",
+    "error": "La réponse n'a pas pu arriver. Réessayez dans un instant.",
+    "off": "Les questions ne sont pas proposées pour le moment.",
+    "maxReached": "Cinq questions par ouverture : refermez puis rouvrez pour en poser d'autres.",
+    "chipPlayer0": "Que vient-il de se passer ?",
+    "chipPlayer1": "Qui sont les personnages principaux ?",
+    "chipPlayer2": "Où en est l'histoire ?",
+    "chipSheet0": "Où en est l'histoire ?",
+    "chipSheet1": "Qui sont les personnages principaux ?",
+    "chipSheet2": "De quoi parle ce titre ?"
   }
 }

@@ -19,12 +19,15 @@ vi.mock("@/lib/itemVisibility", () => ({ assertVisible: (...a: unknown[]) => moc
 
 const svc = vi.hoisted(() => ({
   configured: true,
+  /** À qui l'option est ouverte (`featureAudience.ts`) — la vraie règle, sur ce réglage. */
+  audience: "tous" as "off" | "admins" | "tous",
   scenes: null as unknown,
   status: null as unknown,
   scenesError: null as Error | null,
 }));
 vi.mock("@/lib/clients/xray", () => ({
   xrayConfigured: () => svc.configured,
+  xrayOpenTo: (s: { role?: string } | null) => (svc.audience === "tous" ? !!s : svc.audience === "admins" ? s?.role === "admin" : false),
   xray: {
     scenes: async () => {
       if (svc.scenesError) throw svc.scenesError;
@@ -53,13 +56,23 @@ async function get(itemId = ITEM) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  Object.assign(svc, { configured: true, scenes: null, status: null, scenesError: null });
+  Object.assign(svc, { configured: true, audience: "tous", scenes: null, status: null, scenesError: null });
   target.etag = "v1";
   mockVerify.mockResolvedValue({ u: "louis", jfId: "f".repeat(32), jti: "j", role: "user" });
   mockVisible.mockResolvedValue(null);
 });
 
 describe("GET /api/player/xray/[itemId]", () => {
+  it("réglée sur `admins` : `off` pour un compte ordinaire, sans rien lire ; les scènes pour un administrateur", async () => {
+    svc.audience = "admins";
+    svc.scenes = { itemId: ITEM, etag: "v1", model: "m", version: 1, complete: true, analyzedUntil: 10, scenes: [] };
+    const user = await get();
+    expect(user.body).toMatchObject({ status: "off", scenes: [] });
+    expect(mockVisible).not.toHaveBeenCalled();
+    mockVerify.mockResolvedValue({ u: "louis", jfId: "f".repeat(32), jti: "j", role: "admin" });
+    expect((await get()).body.status).not.toBe("off");
+  });
+
   it("joint les scènes à la distribution, en réponse privée", async () => {
     svc.scenes = {
       itemId: ITEM,

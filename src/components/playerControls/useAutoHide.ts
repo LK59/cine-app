@@ -23,6 +23,7 @@ export function useAutoHide({
   setMenu,
   seekingRef,
   liquidRootRef,
+  held = false,
 }: {
   visible: boolean;
   setVisible: (visible: boolean) => void;
@@ -34,6 +35,8 @@ export function useAutoHide({
   setMenu: (view: MenuView | null) => void;
   seekingRef: RefObject<boolean>;
   liquidRootRef: RefObject<HTMLDivElement | null>;
+  /** Un panneau posé sur le film (« Poser une question », §139) : comme un menu ouvert, rien ne se cache. */
+  held?: boolean;
 }) {
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Shows the controls and (re)starts the auto-hide — called directly from
@@ -98,13 +101,13 @@ export function useAutoHide({
   // Voir `menuOpenRef` : ouvert, le minuteur est suspendu ; refermé, le décompte normal reprend.
   useEffect(() => {
     const wasOpen = menuOpenRef.current;
-    menuOpenRef.current = menu !== null;
-    if (menu !== null) {
+    menuOpenRef.current = menu !== null || held;
+    if (menuOpenRef.current) {
       if (hideTimer.current) clearTimeout(hideTimer.current);
     } else if (wasOpen) {
       showControls();
     }
-  }, [menu, showControls]);
+  }, [menu, held, showControls]);
 
   function hideControls() {
     setVisible(false);

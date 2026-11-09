@@ -59,6 +59,7 @@ describe("GET /api/config/public", () => {
       booksEnabled: false,
       booksAvailable: false,
       recapAvailable: false,
+      askAvailable: false,
       bookRequests: false,
       // Pas de nouvelle adresse dans cette configuration : rien à proposer à la connexion (§119).
       passageHost: null,

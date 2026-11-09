@@ -131,9 +131,10 @@ export async function readyRecapsFor(jfId: string, now = Date.now()): Promise<Re
   return out;
 }
 
-type EpisodeWithStreams = JellyfinItem & { MediaStreams?: SubtitleStream[]; MediaSources?: { Id: string }[] };
+export type EpisodeWithStreams = JellyfinItem & { MediaStreams?: SubtitleStream[]; MediaSources?: { Id: string }[] };
 
-async function episodesOf(jfId: string, seriesId: string): Promise<EpisodeWithStreams[]> {
+/** Les épisodes d'une série vus par ce compte, dans l'ordre — lus aussi par « Poser une question » (§139). */
+export async function episodesOf(jfId: string, seriesId: string): Promise<EpisodeWithStreams[]> {
   const url = `${config.jellyfin.url}/Shows/${jellyfinIdSegment(seriesId)}/Episodes?userId=${jellyfinIdSegment(jfId)}&Fields=Overview,UserData,MediaStreams,MediaSources`;
   const res = await jellyfinFetch(url, { headers: jellyfinAuthHeaders(config.jellyfin.apiKey), signal: upstreamSignal(15_000) });
   if (!res.ok) throw new Error(`Jellyfin ${res.status} sur les épisodes`);
@@ -142,7 +143,8 @@ async function episodesOf(jfId: string, seriesId: string): Promise<EpisodeWithSt
   return (body.Items ?? []).filter((e) => (e.ParentIndexNumber ?? 0) > 0);
 }
 
-async function cuesOf(episode: EpisodeWithStreams, locale: Locale): Promise<Cue[]> {
+/** Les répliques d'un élément (épisode ou film) — la source des dialogues de §137, reprise par §139. */
+export async function cuesOf(episode: EpisodeWithStreams, locale: Locale): Promise<Cue[]> {
   const stream = pickSubtitleStream(episode.MediaStreams ?? [], locale);
   const source = episode.MediaSources?.[0]?.Id;
   if (!stream || !source) return [];
