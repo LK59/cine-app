@@ -127,7 +127,13 @@ async function post(account: string, body: Record<string, unknown>) {
   const { POST } = await import("@/app/api/cinema/ask/[itemId]/route");
   const res = await POST(req(account, body), { params: Promise.resolve({ itemId: MOVIE }) });
   const events = (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l) as { t: string; v?: string; code?: string });
-  return { events, text: events.filter((e) => e.t === "text").map((e) => e.v).join(" ") };
+  // Le texte tel que l'écran le montre : les mots ajoutés, un `reset` remet tout (10.28.0).
+  let text = "";
+  for (const e of events) {
+    if (e.t === "reset") text = e.v ?? "";
+    else if (e.t === "text") text = text ? `${text} ${e.v}` : (e.v ?? "");
+  }
+  return { events, text };
 }
 const question = (account: string, extra: Record<string, unknown> = {}) => post(account, { question: "Que vient-il de se passer ?", where: "lecteur", positionS: 600, ...extra });
 const sofar = (account: string) => post(account, { mode: "jusquici", personId: 2, positionS: 12 * 60 });

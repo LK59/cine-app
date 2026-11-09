@@ -4234,6 +4234,13 @@
     "photo": "Foto von {name}",
     "sofar": "Bisher",
     "sofarLittle": "Bisher zu wenig gesehen, um mehr zu sagen.",
+    "sofarWait": {
+      "scenes": "Die Szene mit {name} wird durchgesehen…|Die {n} Szenen mit {name} werden durchgesehen…",
+      "reading": "Was Sie gesehen haben, wird durchgesehen…",
+      "episodes": "Folgen {from} bis {to}…",
+      "episode": "Folge {code}…",
+      "writing": "Wird geschrieben…"
+    },
     "library": "In Ihrer Mediathek",
     "diedAt": "† mit {n} Jahren",
     "qLink": "In welcher Beziehung steht {name} zu {other}?",

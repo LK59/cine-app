@@ -92,7 +92,13 @@ async function ask(body: Record<string, unknown> = {}) {
     params: Promise.resolve({ itemId: MOVIE }),
   });
   const events = (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l) as { t: string; v?: string });
-  return { events, text: events.filter((e) => e.t === "text").map((e) => e.v).join(" ") };
+  // Le texte tel que l'écran le montre : les mots ajoutés, un `reset` remet tout (10.28.0).
+  let text = "";
+  for (const e of events) {
+    if (e.t === "reset") text = e.v ?? "";
+    else if (e.t === "text") text = text ? `${text} ${e.v}` : (e.v ?? "");
+  }
+  return { events, text };
 }
 let serial = 0;
 
@@ -148,13 +154,13 @@ describe("AnswerGate avec le filet des mots de coulisse", () => {
   it("sans second passage : la phrase remplacée par la limite dite naturellement, une seule fois", () => {
     const gate = new AnswerGate(sources, undefined, { locale: "fr", sources, retry: false, onMeta: "replace" });
     const out = gate.push("NOMS: —\n\nLes sources ne donnent pas son âge. Le contexte non plus. ");
-    expect(out.release).toEqual([METALESS_LIMIT.fr]);
+    expect(out.release.join(" ")).toBe(METALESS_LIMIT.fr);
     expect(gate.rewritten).toBe(true);
   });
   it("après une phrase rendue : reformulée plutôt que redemandée", () => {
     const gate = new AnswerGate(sources, undefined, { locale: "fr", sources, retry: true, onMeta: "replace" });
     const out = gate.push("NOMS: Ariadne\n\nAriadne construit le labyrinthe. D'après les sources, Ariadne dessine. ");
-    expect(out.release).toEqual(["Ariadne construit le labyrinthe.", "D'après ce que vous avez vu, Ariadne dessine."]);
+    expect(out.release.join(" ")).toBe("Ariadne construit le labyrinthe. D'après ce que vous avez vu, Ariadne dessine.");
   });
 });
 

@@ -53,7 +53,14 @@ export function recapKey(episodeId: string, positionS: number, locale: Locale): 
 }
 
 export interface Cue {
+  /** La seconde entière du début (la coupe des questions et de « Précédemment » la compare). */
   startS: number;
+  /**
+   * Le début exact, millisecondes comprises (10.28.0) : « Jusqu'ici » coupe strictement avant le début d'une
+   * scène et range chaque réplique dans sa scène — à la seconde entière, la première réplique de la scène
+   * coupée passait (`startS ≤ coupe`). Absent (un double de test) : `startS`.
+   */
+  atS?: number;
   text: string;
 }
 
@@ -75,7 +82,10 @@ export function parseSrt(srt: string): Cue[] {
       .map((l) => l.replace(/<[^>]+>/g, "").replace(/\{[^}]*\}/g, "").trim())
       .filter(Boolean)
       .join(" ");
-    if (text) out.push({ startS: Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]), text });
+    if (text) {
+      const startS = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+      out.push({ startS, atS: startS + Number(m[4]) / 1000, text });
+    }
   }
   return out;
 }

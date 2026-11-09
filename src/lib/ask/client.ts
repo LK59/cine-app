@@ -49,7 +49,18 @@ export interface AskExchange {
   error?: AskErrorCode;
 }
 
-type StreamEvent = { t: "text"; v: string } | { t: "done" } | { t: "rejected" } | { t: "error"; code: AskErrorCode };
+/**
+ * Les lignes d'une réponse. `text` : des mots à ajouter, séparés d'une espace (mot par mot depuis 10.28.0) ;
+ * `reset` : le texte montré entier à remettre (une phrase commencée puis retirée par le filet des mots de
+ * coulisse) ; `plan` (« Jusqu'ici ») : une génération commence — la fenêtre des résumés qui partent.
+ */
+type StreamEvent =
+  | { t: "text"; v: string }
+  | { t: "reset"; v: string }
+  | { t: "plan"; from?: string; to?: string }
+  | { t: "done" }
+  | { t: "rejected" }
+  | { t: "error"; code: AskErrorCode };
 
 /**
  * Les lignes JSON d'une réponse, lues au fil de l'eau. Une ligne illisible est sautée ; une réponse
@@ -166,6 +177,7 @@ export function useAskTitle({
         if (!res.ok) throw new Error(String(res.status));
         await readAskStream(res, (ev) => {
           if (ev.t === "text") update((e) => ({ ...e, state: "streaming", answer: e.answer ? `${e.answer} ${ev.v}` : ev.v }));
+          else if (ev.t === "reset") update((e) => ({ ...e, answer: ev.v }));
           else if (ev.t === "done") {
             ended = true;
             update((e) => ({ ...e, state: "done" }));
@@ -264,8 +276,14 @@ export type SofarView = {
    */
   state: "waiting" | "streaming" | "done" | "little" | "none";
   text: string;
-  /** La ligne d'attente : seulement passé `SOFAR_LOADING_DELAY_MS` sans texte (un texte gardé n'en montre pas). */
+  /**
+   * L'attente animée (10.28.0) : dès que le serveur dit qu'une génération commence (`plan`), ou passé
+   * `SOFAR_LOADING_DELAY_MS` sans rien — jamais pour un texte gardé (sur l'appareil : aucune requête ; au
+   * serveur : il arrive avant). Le premier mot la remplace aussitôt.
+   */
   loading: boolean;
+  /** Ce que le serveur a dit de la génération : la fenêtre des résumés envoyés (`null` : rien dit encore). */
+  plan: { from?: string; to?: string } | null;
 };
 
 /** Au-delà, la ligne discrète remplace l'attente (10.27.1 : « Un instant… » restait affiché pour toujours). */
@@ -290,7 +308,7 @@ export function resetSofarClientForTests(): void {
   pendingSofar.clear();
 }
 
-const NONE: SofarView = { state: "none", text: "", loading: false };
+const NONE: SofarView = { state: "none", text: "", loading: false, plan: null };
 
 /**
  * La demande de « Jusqu'ici » partie **au toucher lui-même** (10.27.2), avant l'animation du panneau et toute
@@ -362,6 +380,7 @@ export function useSofar(itemId: string, personId: number, positionS: number | n
   const key = `${readKey}:${pos ?? "?"}`;
   const [view, setView] = useState<{ key: string; view: SofarView } | null>(null);
   const [slow, setSlow] = useState<string | null>(null);
+  const [plan, setPlan] = useState<{ key: string; plan: NonNullable<SofarView["plan"]> } | null>(null);
   const already = enabled ? sofarRead.get(readKey) : undefined;
   useEffect(() => {
     if (!enabled || already !== undefined) return;
@@ -370,8 +389,8 @@ export function useSofar(itemId: string, personId: number, positionS: number | n
     const ctrl = pending?.ctrl ?? new AbortController();
     let text = "";
     let ended = false;
-    const set = (v: Omit<SofarView, "loading">) => setView({ key, view: { ...v, loading: false } });
-    const finish = (v: Omit<SofarView, "loading">) => {
+    const set = (v: Omit<SofarView, "loading" | "plan">) => setView({ key, view: { ...v, loading: false, plan: null } });
+    const finish = (v: Omit<SofarView, "loading" | "plan">) => {
       if (ended) return;
       ended = true;
       window.clearTimeout(timeout);
@@ -391,9 +410,14 @@ export function useSofar(itemId: string, personId: number, positionS: number | n
         if (!res.ok) throw new Error(String(res.status));
         await readAskStream(res, (ev) => {
           if (ended) return;
-          if (ev.t === "text") {
-            text = text ? `${text} ${ev.v}` : ev.v;
+          if (ev.t === "plan") {
+            // Une génération commence : l'attente paraît tout de suite, avec ce qui part au modèle.
             window.clearTimeout(loadingTimer);
+            setPlan({ key, plan: { ...(ev.from ? { from: ev.from } : {}), ...(ev.to ? { to: ev.to } : {}) } });
+          } else if (ev.t === "text" || ev.t === "reset") {
+            text = ev.t === "reset" ? ev.v : text ? `${text} ${ev.v}` : ev.v;
+            window.clearTimeout(loadingTimer);
+            // Le premier mot remplace l'attente à l'instant (consigne du propriétaire : elle ne retarde jamais rien).
             set({ state: "streaming", text });
           } else if (ev.t === "done") {
             if (text) {
@@ -418,7 +442,8 @@ export function useSofar(itemId: string, personId: number, positionS: number | n
     };
   }, [key, readKey, itemId, personId, pos, enabled, already]);
   if (!enabled) return NONE;
-  if (already !== undefined) return { state: "done", text: already, loading: false };
+  if (already !== undefined) return { state: "done", text: already, loading: false, plan: null };
   if (view?.key === key) return view.view;
-  return { state: "waiting", text: "", loading: slow === key };
+  const known = plan?.key === key ? plan.plan : null;
+  return { state: "waiting", text: "", loading: slow === key || known !== null, plan: known };
 }

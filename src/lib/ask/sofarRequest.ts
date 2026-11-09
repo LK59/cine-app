@@ -22,7 +22,7 @@ import { aiBudgetReached } from "@/lib/aiFeatures";
 import { castPerson } from "@/lib/xray/person";
 import { scenesForPlayer } from "@/lib/xray/scenes";
 import { sofarCut, sofarMark } from "@/lib/ask/sofarCut";
-import { sofarInput, sofarKey, sofarLookup, sofarParts, sofarSources, sofarStart, sofarSubscribe, sofarSystem, type SofarEntry } from "@/lib/ask/sofar";
+import { sofarInput, sofarKey, sofarLookup, sofarParts, sofarScenes, sofarSources, sofarStart, sofarSubscribe, sofarSystem, type SofarEntry } from "@/lib/ask/sofar";
 
 /**
  * La borne par compte (consigne du propriétaire, 09/11/2026 : ~100 €/mois de crédit, ne pas brider — seulement
@@ -42,7 +42,7 @@ const STREAM_HEADERS = {
   "X-Accel-Buffering": "no",
 };
 
-type Out = { t: "text"; v: string } | { t: "done" } | { t: "rejected" } | { t: "queued" } | { t: "error"; code: "off" | "limite" | "indisponible" | "erreur" | "budget" };
+type Out = { t: "text"; v: string } | { t: "reset"; v: string } | { t: "plan"; from?: string; to?: string } | { t: "done" } | { t: "rejected" } | { t: "queued" } | { t: "error"; code: "off" | "limite" | "indisponible" | "erreur" | "budget" };
 
 function oneShot(event: Out): NextResponse {
   return new NextResponse(`${JSON.stringify(event)}\n`, { status: 200, headers: STREAM_HEADERS });
@@ -102,8 +102,9 @@ export async function answerSofar(
   }
 
   const person = { name: found.person.name, character: found.person.character };
-  const sources = sofarSources(context.input, person);
-  const system = sofarSystem(who.locale);
+  // Les répliques groupées par scène (10.28.0, S7c) : les mêmes scènes que la coupe.
+  const sources = sofarSources(context.input, person, sofarScenes(scenes, body.personId));
+  const system = sofarSystem(who.locale, !!sources.grouped, context.input.kind);
   const { message, prefixEnd } = sofarParts(sources, askWhereLine(sofarInput(context.input)), person);
   // Le modèle qui écrit (§140) : un texte d'un fournisseur n'est jamais servi pour un autre.
   const key = sofarKey(askModelName(), system, message);
@@ -137,7 +138,8 @@ export async function answerSofar(
         ...timing,
         totalMs: Date.now() - started,
         ...(fin.ttftMs === undefined ? {} : { ttftMs: fin.ttftMs }),
-        ...(fin.firstMs === undefined ? {} : { firstMs: fin.firstMs, firstSentenceMs: fin.firstMs }),
+        ...(fin.firstMs === undefined ? {} : { firstMs: fin.firstMs, firstWordMs: fin.firstMs }),
+        ...(fin.firstSentenceMs === undefined ? {} : { firstSentenceMs: fin.firstSentenceMs }),
         ...(fin.inTokens === undefined ? {} : { inTokens: fin.inTokens, outTokens: fin.outTokens }),
         ...(fin.cacheWrite === undefined ? {} : { cacheWrite: fin.cacheWrite }),
         ...(fin.cacheRead === undefined ? {} : { cacheRead: fin.cacheRead }),
@@ -173,8 +175,14 @@ export async function answerSofar(
           /* déjà fermé */
         }
       };
+      // Une génération en cours, rien encore d'écrit (10.28.0) : ce qui part au modèle, dit à l'écran d'attente —
+      // la fenêtre des résumés. Jamais pour un texte déjà gardé : il se montre sans attente.
+      if (held.state === "running" && !held.shown) {
+        const codes = sources.episodeCodes ?? [];
+        send(codes.length ? { t: "plan", from: codes[0], to: codes[codes.length - 1] } : { t: "plan" });
+      }
       stop = sofarSubscribe(held, (e) => {
-        if (e.t === "text") return send(e);
+        if (e.t === "text" || e.t === "reset") return send(e);
         if (e.state === "ok") send({ t: "done" });
         else if (e.state === "erreur") send({ t: "error", code: "erreur" });
         else send({ t: "rejected" });

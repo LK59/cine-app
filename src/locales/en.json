@@ -4234,6 +4234,13 @@
     "photo": "Photo of {name}",
     "sofar": "So far",
     "sofarLittle": "Too little seen so far to say more.",
+    "sofarWait": {
+      "scenes": "Going over {name}'s scene…|Going over {name}'s {n} scenes…",
+      "reading": "Going over what you've seen…",
+      "episodes": "Episodes {from} to {to}…",
+      "episode": "Episode {code}…",
+      "writing": "Writing…"
+    },
     "library": "In your library",
     "diedAt": "† aged {n}",
     "qLink": "How is {name} connected to {other}?",

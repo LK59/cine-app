@@ -4234,6 +4234,13 @@
     "photo": "Foto de {name}",
     "sofar": "Hasta ahora",
     "sofarLittle": "Todavía se ha visto demasiado poco para decir más.",
+    "sofarWait": {
+      "scenes": "Repasando la escena de {name}…|Repasando las {n} escenas de {name}…",
+      "reading": "Repasando lo que ha visto…",
+      "episodes": "Episodios {from} a {to}…",
+      "episode": "Episodio {code}…",
+      "writing": "Redactando…"
+    },
     "library": "En su biblioteca",
     "diedAt": "† a los {n} años",
     "qLink": "¿Qué relación tiene {name} con {other}?",

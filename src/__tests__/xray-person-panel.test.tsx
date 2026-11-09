@@ -16,6 +16,7 @@ vi.mock("@/components/TranslationProvider", () => ({
 }));
 
 import { AskPanel, ASK_EXIT_MS } from "@/components/ask/AskPanel";
+import { SOFAR_WAIT_STEP_MS } from "@/components/ask/AskPersonHeader";
 import { resetSofarClientForTests, SOFAR_CLIENT_TIMEOUT_MS, SOFAR_LOADING_DELAY_MS } from "@/lib/ask/client";
 import { compactPlace, personFactsLine, personQuestions } from "@/lib/xray/client";
 import type { XrayPlayerPerson } from "@/lib/xray/scenes";
@@ -245,7 +246,8 @@ describe("avec l'option : « Jusqu'ici »", () => {
     await screen.findByText("Ariadne construit le labyrinthe. Elle a rejoint l'équipe de Cobb.");
     expect(document.querySelector("[data-ask-sofar]")?.getAttribute("data-ask-sofar")).toBe("done");
     expect(document.querySelector("[data-ask-sofar-loading]")).toBeNull();
-    expect(document.querySelector("[data-ask-sofar-text]")?.className).toContain("ask-sofar-in");
+    // 10.28.0 : plus de fondu sur le texte — le premier mot est là à pleine lumière, rien ne le retarde.
+    expect(document.querySelector("[data-ask-sofar-text]")?.className).not.toContain("ask-sofar-in");
   });
 
   it("une génération : la ligne d'attente passé le délai, puis les phrases à mesure — les faits n'attendent jamais", async () => {
@@ -278,6 +280,111 @@ describe("avec l'option : « Jusqu'ici »", () => {
       end();
     });
     await waitFor(() => expect(document.querySelector("[data-ask-sofar]")?.getAttribute("data-ask-sofar")).toBe("done"));
+  });
+
+  /** Une réponse « Jusqu'ici » tenue ouverte : chaque ligne envoyée quand le test le dit. */
+  function streamedSofar() {
+    const ctl: { push: (line: unknown) => void; end: () => void } = { push: () => {}, end: () => {} };
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST" && JSON.parse(String(init.body)).mode === "jusquici") {
+        const enc = new TextEncoder();
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(c) {
+              ctl.push = (l) => c.enqueue(enc.encode(JSON.stringify(l) + "\n"));
+              ctl.end = () => c.close();
+            },
+          })
+        );
+      }
+      return base(url, init);
+    });
+    return ctl;
+  }
+  const waitLines = () => [...document.querySelectorAll("[data-ask-sofar-wait-line]")].map((n) => n.textContent);
+  // Position 754 : la coupe tombe sur la scène de 600 s. Ariadne est reconnue dans deux scènes avant elle ;
+  // celle qui commence à la coupe ne compte pas.
+  const SCENES = {
+    complete: true,
+    analyzedUntil: 3000,
+    scenes: [
+      { start: 0, end: 300, people: [ARIADNE] },
+      { start: 300, end: 450, people: [COBB] },
+      { start: 450, end: 600, people: [ARIADNE, COBB] },
+      { start: 600, end: 900, people: [ARIADNE] },
+    ],
+  };
+
+  it("10.28.0 — une génération qui commence (`plan`) : l'attente tout de suite, des lignes vraies l'une après l'autre", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const ctl = streamedSofar();
+    open({ scenes: SCENES });
+    await waitFor(() => expect(sofarPosts()).toHaveLength(1));
+    act(() => ctl.push({ t: "plan", from: "S01E05", to: "S01E07" }));
+    // Sans attendre le délai de la ligne d'attente : le serveur a dit qu'il écrit.
+    await waitFor(() => expect(document.querySelector("[data-ask-sofar-loading]")).toBeTruthy(), { timeout: SOFAR_LOADING_DELAY_MS - 100 });
+    expect(waitLines()).toEqual(['xray.sofarWait.scenes:{"n":2,"name":"Ariadne"}']);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(SOFAR_WAIT_STEP_MS)));
+    expect(waitLines()).toEqual(['xray.sofarWait.scenes:{"n":2,"name":"Ariadne"}', 'xray.sofarWait.episodes:{"from":"S01E05","to":"S01E07"}']);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(SOFAR_WAIT_STEP_MS)));
+    expect(waitLines()).toHaveLength(3);
+    expect(waitLines()[2]).toBe("xray.sofarWait.writing");
+    // Seule la dernière ligne porte le reflet.
+    expect(document.querySelectorAll(".ask-wait-shimmer")).toHaveLength(1);
+    ctl.end();
+  });
+
+  it("10.28.0 — le premier mot remplace l'attente à l'instant, même au milieu de ses lignes ; les mots s'ajoutent un à un", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const ctl = streamedSofar();
+    open({ scenes: SCENES });
+    await waitFor(() => expect(sofarPosts()).toHaveLength(1));
+    act(() => ctl.push({ t: "plan", from: "S01E05", to: "S01E05" }));
+    await waitFor(() => expect(waitLines()).toHaveLength(1));
+    // Le premier mot arrive avant la deuxième ligne : l'attente part, aucune ligne de plus n'attend son tour.
+    act(() => ctl.push({ t: "text", v: "Ariadne" }));
+    await waitFor(() => expect(document.querySelector("[data-ask-sofar-text]")?.textContent).toBe("Ariadne"));
+    expect(document.querySelector("[data-ask-sofar-loading]")).toBeNull();
+    act(() => ctl.push({ t: "text", v: "construit" }));
+    await waitFor(() => expect(document.querySelector("[data-ask-sofar-text]")?.textContent).toBe("Ariadne construit"));
+    // Un `reset` (une phrase retirée par le filet) remet le texte montré.
+    act(() => ctl.push({ t: "reset", v: "" }));
+    act(() => ctl.push({ t: "text", v: "Ariadne dessine." }));
+    await waitFor(() => expect(document.querySelector("[data-ask-sofar-text]")?.textContent).toBe("Ariadne dessine."));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(SOFAR_WAIT_STEP_MS * 3)));
+    expect(document.querySelector("[data-ask-sofar-loading]")).toBeNull();
+    act(() => {
+      ctl.push({ t: "done" });
+      ctl.end();
+    });
+    await waitFor(() => expect(document.querySelector("[data-ask-sofar]")?.getAttribute("data-ask-sofar")).toBe("done"));
+  });
+
+  it("10.28.0 — un texte gardé : jamais d'attente, à aucun moment (serveur ou appareil)", async () => {
+    const seen: boolean[] = [];
+    const observer = new MutationObserver(() => seen.push(!!document.querySelector("[data-ask-sofar-loading]")));
+    observer.observe(document.body, { childList: true, subtree: true });
+    open({ scenes: SCENES });
+    await screen.findByText("Ariadne construit le labyrinthe.");
+    cleanup();
+    // Rouvert : le texte gardé sur l'appareil, sans requête.
+    open({ scenes: SCENES });
+    expect(screen.getByText("Ariadne construit le labyrinthe.")).toBeTruthy();
+    await act(async () => void (await new Promise((r) => setTimeout(r, SOFAR_LOADING_DELAY_MS + 50))));
+    observer.disconnect();
+    expect(seen.some(Boolean)).toBe(false);
+    expect(document.querySelector("[data-ask-sofar-loading]")).toBeNull();
+  });
+
+  it("10.28.0 — mouvement réduit : les lignes connues toutes ensemble, sans les faire attendre", async () => {
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("prefers-reduced-motion"), media: q, addEventListener() {}, removeEventListener() {} }));
+    const ctl = streamedSofar();
+    open({ scenes: SCENES });
+    await waitFor(() => expect(sofarPosts()).toHaveLength(1));
+    act(() => ctl.push({ t: "plan", from: "S01E05", to: "S01E07" }));
+    await waitFor(() => expect(waitLines()).toHaveLength(3));
+    ctl.end();
   });
 
   it("rouvert sur la même personne dans la même tranche : le texte à l'instant, sans nouvelle demande", async () => {

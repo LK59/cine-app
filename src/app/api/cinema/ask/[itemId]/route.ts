@@ -25,6 +25,7 @@ import {
   metaReminder,
   positionBucket,
   type AskActorFacts,
+  type GateResult,
   type AskWhere,
   type PreviousExchange,
 } from "@/lib/ask/core";
@@ -86,7 +87,7 @@ const STREAM_HEADERS = {
   "X-Accel-Buffering": "no",
 };
 
-type Event = { t: "text"; v: string } | { t: "done" } | { t: "rejected" } | { t: "error"; code: "off" | "limite" | "indisponible" | "erreur" | "budget" };
+type Event = { t: "text"; v: string } | { t: "reset"; v: string } | { t: "done" } | { t: "rejected" } | { t: "error"; code: "off" | "limite" | "indisponible" | "erreur" | "budget" };
 
 function oneShot(event: Event): NextResponse {
   return new NextResponse(`${JSON.stringify(event)}\n`, { status: 200, headers: STREAM_HEADERS });
@@ -219,18 +220,25 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
       let modelAt: number | undefined;
       let ttftMs: number | undefined;
       let firstSentenceMs: number | undefined;
-      const release = (sentences: string[]) => {
-        for (const s of sentences) {
+      let firstWordMs: number | undefined;
+      // Mot par mot (10.28.0) : chaque mot sûr part aussitôt ; `reset` remet le texte montré (une phrase
+      // commencée puis retirée par le filet des mots de coulisse, ou effacée avant le second passage).
+      const release = (out: GateResult, gate: AnswerGate) => {
+        if (out.reset !== undefined) send({ t: "reset", v: out.reset });
+        for (const w of out.release) {
           firstMs ??= Date.now() - started;
-          if (modelAt !== undefined) firstSentenceMs ??= Date.now() - modelAt;
-          send({ t: "text", v: s });
+          if (modelAt !== undefined) firstWordMs ??= Date.now() - modelAt;
+          send({ t: "text", v: w });
         }
+        if (modelAt !== undefined && firstSentenceMs === undefined && gate.sentences.length > 0) firstSentenceMs = Date.now() - modelAt;
       };
       try {
         // Deux passages au plus : le second seulement si le premier parlait de « sources » avant d'avoir
         // rendu quoi que ce soit (`retry` du filet) — avec le rappel, et sans droit à un troisième.
         let fin: { inTokens: number; outTokens: number; stop: string | null; cacheWrite?: number; cacheRead?: number } | null = null;
         let rejected = false;
+        // Le texte qui reste à l'écran à la fin d'un passage : vide, c'est « je ne sais pas ».
+        let shownText = "";
         for (let attempt = 0; ; attempt++) {
           const gate = new AnswerGate(check, undefined, { locale, sources: sources.text, retry: attempt === 0, onMeta: "replace" });
           const pass = new AbortController();
@@ -244,7 +252,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
           for await (const delta of run.deltas) {
             ttftMs ??= Date.now() - (modelAt ?? started);
             const out = gate.push(delta);
-            release(out.release);
+            release(out, gate);
             if (out.rejected) {
               rejected = true;
               pass.abort();
@@ -258,12 +266,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
           }
           if (!rejected && !retry) {
             const out = gate.end();
-            release(out.release);
+            release(out, gate);
             rejected = !!out.rejected;
             retry = !!out.retry;
           }
           abort.signal.removeEventListener("abort", stopPass);
           if (gate.rewritten) meta.rewritten = true;
+          shownText = gate.text;
           if (retry) {
             meta.regenerated = true;
             continue;
@@ -286,7 +295,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
         // Le plafond atteint (10.27.2) : une réponse coupée n'est pas une réponse — une panne, « Réessayer ».
         if (fin?.stop === "max_tokens") throw new Error(`réponse coupée au plafond (stop_reason: max_tokens, ${ASK_MAX_OUTPUT_TOKENS} jetons)`);
         // Rien de rendu (réponse vide, coupée dans la ligne des noms) : « je ne sais pas ».
-        if (rejected || firstMs === undefined) {
+        if (rejected || !shownText) {
           status = "rejeté";
           send({ t: "rejected" });
         } else send({ t: "done" });
@@ -311,6 +320,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
           ctx: context.ctx,
           ...(ttftMs === undefined ? {} : { ttftMs }),
           ...(firstSentenceMs === undefined ? {} : { firstSentenceMs }),
+          ...(firstWordMs === undefined ? {} : { firstWordMs }),
           totalMs: Date.now() - started,
           ...(metaField ? { meta: metaField } : {}),
         });

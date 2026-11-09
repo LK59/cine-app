@@ -131,7 +131,13 @@ async function ask(account: string, itemId: string, body: Record<string, unknown
   const { POST } = await import("@/app/api/cinema/ask/[itemId]/route");
   const res = await POST(req(account, { question: "Que vient-il de se passer ?", ...body }), { params: Promise.resolve({ itemId }) });
   const events = (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l) as { t: string; v?: string; code?: string });
-  return { status: res.status, events, text: events.filter((e) => e.t === "text").map((e) => e.v).join(" ") };
+  // Le texte tel que l'écran le montre : les mots ajoutés, un `reset` remet tout (10.28.0).
+  let text = "";
+  for (const e of events) {
+    if (e.t === "reset") text = e.v ?? "";
+    else if (e.t === "text") text = text ? `${text} ${e.v}` : (e.v ?? "");
+  }
+  return { status: res.status, events, text };
 }
 
 let serial = 0;
@@ -188,7 +194,8 @@ describe("les sources — seulement ce qui a été vu", () => {
   });
 });
 
-describe("AnswerGate — la réponse vérifiée phrase par phrase", () => {
+describe("AnswerGate — la réponse vérifiée mot par mot (10.28.0 ; phrase par phrase avant)", () => {
+  const said = (out: { release: string[] }) => out.release.join(" ");
   const sources = "Inception\nLeonardo DiCaprio — Cobb\nElliot Page — Ariadne\nAriadne construit le labyrinthe.";
 
   it("un nom déclaré absent des sources : rejeté avant la première phrase", () => {
@@ -199,28 +206,31 @@ describe("AnswerGate — la réponse vérifiée phrase par phrase", () => {
     expect(gate.push("Encore une phrase. ").release).toEqual([]);
   });
 
-  it("des noms connus : chaque phrase rendue quand elle est complète, la ligne des noms jamais", () => {
+  it("des noms connus : chaque mot rendu quand il est complet, la ligne des noms jamais", () => {
     const gate = new AnswerGate(sources);
-    expect(gate.push("NOMS: Cobb, Ariadne\n\nCobb recrute Ariadne. Elle constr").release).toEqual(["Cobb recrute Ariadne."]);
-    expect(gate.end().release).toEqual(["Elle constr"]);
+    expect(gate.push("NOMS: Cobb, Ariadne\n\nCobb recrute Ariadne. Elle constr").release).toEqual(["Cobb", "recrute", "Ariadne.", "Elle"]);
+    expect(gate.end().release).toEqual(["constr"]);
+    expect(gate.text).toBe("Cobb recrute Ariadne. Elle constr");
   });
 
   it("un nom inconnu au milieu de la deuxième phrase : la première est partie, la suite est arrêtée", () => {
     const gate = new AnswerGate(sources);
     const out = gate.push("NOMS: —\n\nLe rêve s'effondre. Puis il rejoint Mombasa avec Eames. ");
-    expect(out.release).toEqual(["Le rêve s'effondre."]);
-    expect(out.rejected).toEqual(expect.arrayContaining(["Mombasa", "Eames"]));
+    // Le rejet retire tout (l'écran efface la réponse) ; le nom inconnu n'est jamais rendu.
+    expect(out.release).toEqual([]);
+    expect(out.rejected).toEqual(["Mombasa"]);
   });
 
   it("sans ligne des noms : la règle des majuscules reste", () => {
     const gate = new AnswerGate(sources);
-    expect(gate.push("Le film parle de rêves. ").release).toEqual(["Le film parle de rêves."]);
+    expect(said(gate.push("Le film parle de rêves. "))).toBe("Le film parle de rêves.");
   });
 
   it("la longueur demandée n'est pas tenue : coupée à cinq phrases", () => {
     const gate = new AnswerGate(sources);
     const out = gate.push("NOMS: —\n\n" + "Une phrase. ".repeat(8));
-    expect(out.release).toHaveLength(5);
+    expect(gate.sentences).toHaveLength(5);
+    expect(said(out)).toBe("Une phrase. ".repeat(5).trim());
   });
 });
 

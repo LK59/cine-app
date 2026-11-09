@@ -118,7 +118,14 @@ async function post(account: string, body: Record<string, unknown>) {
   const { POST } = await import("@/app/api/cinema/ask/[itemId]/route");
   const res = await POST(req(account, body), { params: Promise.resolve({ itemId: MOVIE }) });
   const events = (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l) as { t: string; v?: string; code?: string });
-  return { status: res.status, events, text: events.filter((e) => e.t === "text").map((e) => e.v).join(" ") };
+  // Le texte tel que l'écran le montre : les mots ajoutés, un `reset` remet tout (10.28.0).
+  let text = "";
+  for (const e of events) {
+    if (e.t === "reset") text = e.v ?? "";
+    else if (e.t === "text") text = text ? `${text} ${e.v}` : (e.v ?? "");
+  }
+  // `plan` (l'attente de l'écran, une génération qui commence) est lu à part : `plans`.
+  return { status: res.status, events: events.filter((e) => e.t !== "plan"), plans: events.filter((e) => e.t === "plan"), text };
 }
 const sofar = (account: string, extra: Record<string, unknown> = {}) => post(account, { mode: "jusquici", personId: 2, positionS: 12 * 60, ...extra });
 const question = (account: string) => post(account, { question: "Que vient-il de se passer ?", where: "lecteur", positionS: 600 });
@@ -336,20 +343,19 @@ describe("les pannes du modèle : dites proprement, jamais gardées", () => {
 });
 
 describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans la clé", () => {
-  it("la consigne : un second rôle nommé ou dans la scène reçoit au moins une phrase ; RIEN seulement s'il n'apparaît nulle part", () => {
+  it("la consigne (S7c depuis 10.28.0) : un personnage nommé nulle part reçoit son nom et qu'il est là ; RIEN seulement hors de la distribution", () => {
     const sys = sofarSystem("fr");
-    expect(sys).toContain("Un second rôle compte autant qu'un premier");
-    expect(sys).toContain(`La réponse est le seul mot ${SOFAR_NOTHING} seulement si ce personnage n'est ni dans les sources ni dans la distribution`);
-    expect(sys).toContain("Même s'il n'est nommé nulle part ailleurs, écris une phrase");
+    expect(sys).toContain("S'il n'est nommé nulle part, écris son nom, son rôle si la distribution le donne, et qu'il est là.");
+    expect(sys).toContain(`${SOFAR_NOTHING} seulement s'il n'est même pas dans la distribution.`);
     // L'ancienne règle (« au-delà de son nom ») est partie : elle faisait taire cinq personnes sur huit.
     expect(sys).not.toContain("au-delà de son nom");
-    // Le plus récent d'abord, jamais les débuts.
-    expect(sys).toContain("Centre-toi sur le plus récent");
+    // Le plus récent d'abord : le dernier moment de l'épisode en cours.
+    expect(sys).toContain("au dernier moment de l'épisode en cours où il est là");
   });
 
-  it("la version de la consigne est dans la clé : 2, et une même entrée sous la version 1 donne une autre clé", () => {
-    expect(SOFAR_VERSION).toBe(2);
-    expect(sofarKey(ASK_MODEL, "s", "m", 1)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
+  it("la version de la consigne est dans la clé : 3 (S7c), et une même entrée sous la version 2 donne une autre clé", () => {
+    expect(SOFAR_VERSION).toBe(3);
+    expect(sofarKey(ASK_MODEL, "s", "m", 2)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
   });
 
   it("un « vide » gardé avant le changement de consigne n'est jamais relu : le modèle est redemandé et le texte montré", async () => {
@@ -360,7 +366,7 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     // Ce qui est parti au modèle, gardé sous l'ancienne version comme « rien à dire » : ce que 10.27.1 laissait.
     getDb().prepare("DELETE FROM sofar_texts").run();
     resetSofarForTests();
-    sofarDb.put(sofarKey(ASK_MODEL, reqs[0].system, reqs[0].message, 1), "vide", null, "ancien");
+    sofarDb.put(sofarKey(ASK_MODEL, reqs[0].system, reqs[0].message, 2), "vide", null, "ancien");
     const model = vi.fn(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe."));
     setAskModelForTests(model);
     const r = await sofar(account());
@@ -384,7 +390,7 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
   });
 });
 
-describe("10.27.2 — centré sur le récent : cinq résumés au plus, ceux d'avant l'épisode en cours", () => {
+describe("10.27.2 — centré sur le récent : trois résumés au plus depuis 10.28.0 (cinq avant), ceux d'avant l'épisode en cours", () => {
   const long: AskContextInput = {
     kind: "series",
     title: "Ted Lasso",
@@ -401,12 +407,12 @@ describe("10.27.2 — centré sur le récent : cinq résumés au plus, ceux d'av
     positionS: 600,
     cues: [],
   };
-  it("une longue série : les cinq derniers vus, la fin de la saison d'avant comprise, jamais les débuts", () => {
+  it("une longue série : les trois derniers vus, la fin de la saison d'avant comprise, jamais les débuts", () => {
     const sources = sofarSources(long, { name: "Jason Sudeikis", character: "Ted Lasso" });
-    expect(SOFAR_MAX_EPISODES).toBe(5);
-    expect(sources.episodes).toBe(5);
-    for (const code of ["S02E07", "S02E08", "S02E09", "S02E10", "S03E01"]) expect(sources.text).toContain(`RESUME-${code}`);
-    expect(sources.text).not.toContain("RESUME-S02E06");
+    expect(SOFAR_MAX_EPISODES).toBe(3);
+    expect(sources.episodes).toBe(3);
+    for (const code of ["S02E09", "S02E10", "S03E01"]) expect(sources.text).toContain(`RESUME-${code}`);
+    expect(sources.text).not.toContain("RESUME-S02E08");
     expect(sources.text).not.toContain("RESUME-S01E01");
     expect(sources.text).not.toContain("RESUME-S03E02");
   });

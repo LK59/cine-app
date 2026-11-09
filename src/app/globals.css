@@ -2225,6 +2225,16 @@ body:has(.gestion-liquid) .glass-window {
 }
 @keyframes ask-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .ask-sofar-in { animation: ask-sofar-in 260ms ease-out; }
+/* L'attente de « Jusqu'ici » (10.28.0) : des lignes gris clair, la dernière parcourue d'un reflet dans le texte
+   même (le fond qui glisse derrière les lettres). */
+.ask-wait-shimmer {
+  background: linear-gradient(90deg, rgb(255 255 255 / 0.4) 0%, rgb(255 255 255 / 0.85) 50%, rgb(255 255 255 / 0.4) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: ask-shimmer 1.6s linear infinite;
+}
 @keyframes ask-sofar-in { from { opacity: 0; } }
 /* Peu de hauteur (téléphone couché) : les propositions sur une seule ligne qui défile de côté, pour laisser
    la place à la réponse. */
@@ -2236,7 +2246,7 @@ body:has(.gestion-liquid) .glass-window {
 /* « Dans votre bibliothèque » : des affiches qui ne réagissent à rien — pas même au long appui d'iOS. */
 .ask-library-poster { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 @media (prefers-reduced-motion: reduce) {
-  .ask-shimmer, .ask-sofar-in { animation: none; }
+  .ask-shimmer, .ask-sofar-in, .ask-wait-shimmer { animation: none; }
   .ask-panel { transition: none; }
   .ask-panel-out-side { animation: none; }
 }

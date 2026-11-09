@@ -9412,6 +9412,59 @@ coupe ; jamais page cachée ; le clic qui suit ouvre) ; `ai-cost.test.ts` ; `ask
 étapes au journal ; `ctx: "prêt"` après la préparation) ; `xray-row-1027.test.tsx` (« Jusqu'ici » part au
 toucher, panneau pas encore monté, une seule demande ; le contexte préparé une fois à l'ouverture).
 
+**10.28.0 (09/11/2026) — consigne S7c, répliques par scène, mot par mot, attente vraie.**
+
+- **La consigne S7c** (`sofarSystem`), retenue par le propriétaire après des appels réels sur six cas (*Ted Lasso*,
+  *MacGyver*) : le nom du personnage, une incise, puis **ce qui se passe au dernier moment de l'épisode en cours où il
+  est là** — ce qu'il y fait ou ce à quoi il assiste ; les épisodes précédents en appoint. Ses règles visent ce que les
+  bancs ont montré : un acte prêté au mauvais personnage (un mot d'adresse dit à qui l'on parle), les termes d'un
+  échange (« qui propose quoi ») où les attributions se trompent, une cause ou un lien inventé, la liste « à l'écran »
+  ou un horaire recopiés. Seule la langue de la réponse suit le compte ; sans scènes (titre non analysé), la précision
+  « groupées par moment avec qui est à l'écran » est retirée. **Un film** (`kind: "movie"`, non couvert par le banc) :
+  trois phrases changent et rien d'autre — « synopsis, distribution, et répliques du film », « au dernier moment du
+  film », « si le synopsis le dit » ; un test vérifie que les règles sont celles du banc.
+- **Le message** (`askSources` avec `strictCut` et `scenes`) : les **trois** derniers résumés avant l'épisode en cours
+  (`SOFAR_MAX_EPISODES`, cinq avant) ; les répliques **groupées par scène d'« À l'écran »**, sans horaire — un titre
+  « ### Épisode en cours, SxxEyy « titre », jusqu'à N min… » (« ### Film en cours, … » pour un film), puis par scène
+  « — à l'écran : » et les personnages reconnus (« personne de reconnu » sinon) ; une réplique au temps t est dans la
+  scène où `début − 0,5 ≤ t < fin − 0,5`, celles d'avant la première scène vont avec elle, une scène sans réplique
+  n'est pas écrite (`groupCuesByScene`). **Coupe stricte** : seulement `t < coupe`, millisecondes comprises
+  (`Cue.atS`, lu par `parseSrt`) — à la seconde entière, la première réplique de la scène coupée passait. La personne
+  reste en dernier, après le préfixe partagé (cache de prompts). Les noms de personnages viennent de TMDB, en anglais
+  (« Flo 'Sassy' Collins ») : gardés tels quels, le filet des noms les connaît par le texte même des sources.
+  **Preuve** : le message du banc (`build.py`, variante S7c) reproduit octet pour octet — les six cas réels vérifiés
+  hors du dépôt le 09/11/2026, un cas inventé produit par le banc lui-même figé dans `ask-sofar-s7c.test.ts`.
+  `SOFAR_VERSION` 3 : aucun texte d'avant n'est relu.
+- **Un film long** : au-delà du plafond des répliques (`ASK_MAX_CUES`), la moitié va aux scènes où la personne
+  touchée est reconnue (les plus récentes d'abord) — sa présentation ne doit pas tomber —, le reste aux dernières
+  scènes ; « […] » marque ce qui est omis. Sous le plafond, rien ne change (la forme du banc).
+- **Mot par mot** (`AnswerGate`, questions et « Jusqu'ici ») : chaque mot part dès qu'il est complet (suivi d'un blanc,
+  ou la fin du flux) — un nom en cours d'écriture attend d'être entier. Le contrôle des noms est **le même** :
+  `unknownNames` sur la phrase en cours à chaque mot (ses correspondances ne dépendent que du mot et de sa place) ; un
+  nom inconnu n'est jamais montré et retire toute la réponse. Le filet des mots de coulisse regarde chaque mot : au
+  premier, la phrase commencée quitte l'écran (`reset` — un nouvel événement du flux, le texte montré entier), est
+  gardée jusqu'à sa fin et reçoit la règle d'avant (reformulée, redemandée une fois, retirée, remplacée) ; une phrase
+  qui commence comme « D'après les… » est retenue six mots, le temps de savoir si sa tête se reformule ; « RIEN » seul
+  n'est jamais montré. Le texte final est le même quel que soit le découpage (`ask-stream-1028.test.ts`). Le
+  protocole garde `{"t":"text"}` (un mot, joint d'une espace comme l'étaient les phrases) : un onglet resté sur
+  l'ancien code lit le même texte. Journal : `firstWordMs` (premier mot), `firstSentenceMs` reste la première phrase.
+- **L'attente vraie** (`SofarWaiting`, `AskPersonHeader.tsx`) : des lignes gris clair, l'une après l'autre (900 ms),
+  la dernière parcourue d'un reflet dans le texte — « Relecture des N scènes de {personnage}… » (scènes de la personne
+  avant la coupe, lues des scènes du lecteur), « Épisodes {a} à {b}… » (la fenêtre des résumés, dite par le serveur
+  dans un premier événement `{"t":"plan"}` quand une génération commence), « Rédaction… ». Aucun appel au modèle pour
+  elles. **Règle du propriétaire : elle ne retarde jamais rien** — pas de durée minimale, le premier mot la remplace à
+  l'instant, même au milieu de ses lignes ; un texte gardé (sur l'appareil, ou au serveur : pas de `plan`) n'en
+  montre aucune. Sans `plan`, elle paraît passé `SOFAR_LOADING_DELAY_MS` (le contexte se prépare). Mouvement réduit :
+  les lignes connues ensemble, immobiles. Le texte n'a plus de fondu : le premier mot est là à pleine lumière.
+- **Appels réels du 09/11/2026** (compte de test, base copiée, Haiku, 4 appels) : *Ted Lasso* S01E08 à 15 min, Rebecca
+  — « Rebecca Welton, qu'on appelle « patronne », est avec Ted : elle lui demande de l'accompagner à un rendez-vous
+  avec deux actionnaires minoritaires, les sœurs Lait, et il accepte. » ; *Bullet Train* à 1 h 47 (coupe 1 h 45),
+  Ladybug, répliques prêtes — « Coccinelle, assassin malchanceux qui veut descendre du train, assiste au récit de la
+  Mort Blanche sur la mort de sa femme, pendant qu'il est question de Carver. » (fidèle au dernier moment, rien
+  au-delà) ; la même demande à froid, répliques pas prêtes dans les 25 s (`SOFAR_DIALOGUE_WAIT_MS`), n'avait que le
+  synopsis : un texte générique — le premier « Jusqu'ici » d'un film jamais ouvert peut l'être. Prince, même
+  position : juste mais recopie les présents (« entourée de Ladybug, Lemon, White Death… ») malgré la règle.
+
 **Nouveautés.** La page « 10.25 » (`src/lib/news/page1025.ts`), semée **en brouillon**
 (`news-seed-10.25-draft`) : rien ne s'affiche avant qu'elle soit publiée depuis Activité → Nouveautés.
 
@@ -9517,3 +9570,14 @@ l'inverse, ligne `budget`), `describe-search.test.ts`.
 plafond n'éteint pas l'affichage de ce qui est déjà payé (textes « Précédemment » et « Jusqu'ici » gardés).
 Aucune vraie requête n'a été faite chez OpenAI ou Google (pas de clé) : leurs chemins sont prouvés contre un
 double et contre leur documentation, pas contre leur API.
+
+**10.28.0 — le coût dans Activité lu de la source du plafond.** Les tuiles de coût de 10.27.2 recalculaient la
+dépense d'après les jetons de `recherche.log` au prix de Haiku : une seconde comptabilité, sans les sous-titres ni
+les autres fournisseurs, qui pouvait dire autre chose que le plafond. `spendDb.add` écrit maintenant, dans une même
+transaction, la ligne du mois (`subtitle_gen_spend`, que le plafond lit) et celle du jour UTC et de la fonction
+(`ai_spend_days` : `subtitles`, `describe`, `recap`, `askTitle`, `askPerson`, `sofar`, `news`) ; `aiCostOf`
+(`activity/dashboard.ts`) les lit, et le mois affiché **est** `aiBudget().spent`. La référence est le plafond réglé, en
+dollars (« x $ sur y $ de plafond mensuel ») ; les euros, au taux fixe écrit dans le titre (≈ 0,92), sont dits
+approximatifs. Les journées d'avant 10.28.0 n'existent pas (le mois en cours est entier). `anthropicUsage` compte
+écriture et relecture du cache, chacune à son prix ; OpenAI et Gemini reçoivent le préfixe partagé en `stable` (leur
+cache implicite). Tests : `ai-cost.test.ts`.

@@ -186,6 +186,8 @@ export function logAskQuestion(fields: {
   contextMs?: number;
   ttftMs?: number;
   firstSentenceMs?: number;
+  /** Mot par mot (10.28.0) : du départ vers le modèle au premier mot montré. */
+  firstWordMs?: number;
   totalMs?: number;
   ctx?: "prêt" | "construit";
   /** Le cache de prompts d'Anthropic (10.27.2) : jetons du préfixe écrits, et relus. */
@@ -239,6 +241,8 @@ export function logJusquici(fields: {
   contextMs?: number;
   ttftMs?: number;
   firstSentenceMs?: number;
+  /** Mot par mot (10.28.0) : du départ vers le modèle au premier mot montré. */
+  firstWordMs?: number;
   totalMs?: number;
   ctx?: "prêt" | "construit";
   /** Le cache de prompts d'Anthropic (10.27.2) : jetons du préfixe écrits, et relus. */

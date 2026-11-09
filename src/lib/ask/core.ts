@@ -82,6 +82,10 @@ export interface AskSources {
   dialogue: boolean;
   /** Le nombre de résumés d'épisodes envoyés — pour le journal et les tests. */
   episodes: number;
+  /** Les répliques sont parties groupées par scène (« Jusqu'ici », 10.28.0) — la consigne le dit alors. */
+  grouped?: boolean;
+  /** Les épisodes dont le résumé est parti, dans l'ordre (« S01E05 ») — l'attente de « Jusqu'ici » les dit. */
+  episodeCodes?: string[];
 }
 
 const clock = (s: number) => {
@@ -116,6 +120,95 @@ export function seenEpisodes(episodes: readonly AskEpisode[], watchedAll: boolea
 export interface AskSourcesOptions {
   maxEpisodes?: number;
   beforeCurrent?: boolean;
+  /**
+   * « Jusqu'ici » (10.28.0) : la coupe est stricte — seulement les répliques qui commencent **avant** la
+   * position (`atS < positionS`, millisecondes comprises), jamais la première de la scène où tombe la coupe.
+   */
+  strictCut?: boolean;
+  /**
+   * « Jusqu'ici » (10.28.0, consigne S7c validée par le propriétaire) : les scènes d'« À l'écran », chacune avec
+   * les personnages reconnus. Données, les répliques partent groupées par scène, sans horaire ; vides ou
+   * absentes (titre non analysé), en un seul bloc.
+   */
+  scenes?: readonly SourceScene[] | null;
+}
+
+/** Une scène d'« À l'écran » telle que les sources la lisent : ses bornes, et qui y est reconnu (noms affichés). */
+export interface SourceScene {
+  start: number;
+  end: number;
+  people: readonly string[];
+  /** La personne touchée est reconnue dans cette scène : gardée en priorité sous le plafond des répliques. */
+  withPerson?: boolean;
+}
+
+/** Les répliques de « Jusqu'ici » : strictement avant la coupe. */
+function cuesBefore(cues: readonly Cue[], positionS: number | null): Cue[] {
+  if (positionS == null || positionS <= 0) return [];
+  return cues.filter((c) => (c.atS ?? c.startS) < positionS);
+}
+
+/**
+ * Les répliques rangées par scène (10.28.0) — la forme exacte du banc qui a validé la consigne S7c :
+ * seulement les scènes qui commencent avant la coupe (à la seconde près : la coupe est un début de scène
+ * arrondi à l'entier) ; une réplique au temps t est dans la scène où `début − 0,5 ≤ t < fin − 0,5` (le demi-
+ * seconde absorbe le décalage des sous-titres sur les plans) ; celles d'avant la première scène vont avec elle ;
+ * une scène sans réplique n'est pas écrite ; une réplique entre deux scènes (un trou de l'analyse) non plus.
+ * Chaque scène : « — à l'écran : » et ses personnages reconnus, ou « personne de reconnu ». Rendu vide si
+ * aucune réplique ne tombe dans une scène.
+ */
+export function groupCuesByScene(lines: readonly Cue[], scenes: readonly SourceScene[], cutS: number, maxLines = ASK_MAX_CUES): string {
+  const kept = scenes.filter((s) => s.start < cutS + 1);
+  const groups: { scene: SourceScene; lines: Cue[] }[] = [];
+  kept.forEach((s, i) => {
+    const mine = lines.filter((c) => {
+      const t = c.atS ?? c.startS;
+      return (s.start - 0.5 <= t && t < s.end - 0.5) || (i === 0 && t < s.start);
+    });
+    if (mine.length) groups.push({ scene: s, lines: mine });
+  });
+  const chosen = chooseScenes(groups, maxLines);
+  const body: string[] = [];
+  let skipped = false;
+  groups.forEach((g, i) => {
+    if (!chosen.has(i)) {
+      skipped = true;
+      return;
+    }
+    // Des scènes laissées de côté par le plafond : dit, pour que deux moments éloignés ne se lisent pas d'un trait.
+    if (skipped && body.length) body.push("[…]");
+    skipped = false;
+    const who = g.scene.people.length ? g.scene.people.join(", ") : "personne de reconnu";
+    body.push(`— à l'écran : ${who}\n${g.lines.map((c) => c.text).join("\n")}`);
+  });
+  return body.join("\n\n");
+}
+
+/**
+ * Sous le plafond des répliques (`ASK_MAX_CUES`, 10.28.0 — un film long vu presque en entier le dépasse) : la
+ * moitié pour les scènes où la personne touchée est reconnue, les plus récentes d'abord — sa première
+ * apparition, qui dit qui elle est, ne doit pas tomber —, le reste pour les dernières scènes. Sous le plafond,
+ * tout est gardé (la forme du banc S7c, octet pour octet).
+ */
+function chooseScenes(groups: readonly { scene: SourceScene; lines: readonly Cue[] }[], maxLines: number): Set<number> {
+  const total = groups.reduce((n, g) => n + g.lines.length, 0);
+  const chosen = new Set<number>();
+  if (total <= maxLines) {
+    groups.forEach((_, i) => chosen.add(i));
+    return chosen;
+  }
+  let used = 0;
+  const take = (i: number, budget: number): boolean => {
+    if (chosen.has(i)) return true;
+    if (used + groups[i].lines.length > budget) return false;
+    chosen.add(i);
+    used += groups[i].lines.length;
+    return true;
+  };
+  const half = Math.floor(maxLines / 2);
+  for (let i = groups.length - 1; i >= 0; i--) if (groups[i].scene.withPerson) take(i, half);
+  for (let i = groups.length - 1; i >= 0; i--) if (!take(i, maxLines)) break;
+  return chosen;
 }
 
 /** Ce qui part au modèle — seulement ce que ce compte a vu. */
@@ -137,14 +230,30 @@ export function askSources(input: AskContextInput, opts: AskSourcesOptions = {})
   const seen = input.kind === "series" ? seenEpisodes(all, input.watchedAll) : [];
   const episodes = opts.maxEpisodes !== undefined ? seen.slice(-opts.maxEpisodes) : seen;
   for (const e of episodes) parts.push(`### ${e.code} « ${e.title} » — résumé officiel (épisode vu)\n${e.overview.trim()}`);
-  const lines = seenCues(input.cues, input.positionS, input.watchedAll);
+  const lines = opts.strictCut && !input.watchedAll ? cuesBefore(input.cues, input.positionS) : seenCues(input.cues, input.positionS, input.watchedAll);
+  let grouped = false;
   if (lines.length) {
-    const what = input.kind === "series" && input.current ? `de ${input.current.code} « ${input.current.title} »` : "du film";
     const upTo = input.watchedAll ? "en entier (déjà vu)" : `jusqu'à ${clock(input.positionS ?? 0)}, là où en est le spectateur`;
-    parts.push(`### Dialogues ${what}, ${upTo} — sans le nom de qui parle\n${lines.map((c) => c.text).join("\n")}`);
+    const byScene = opts.scenes?.length && !input.watchedAll ? groupCuesByScene(lines, opts.scenes, input.positionS ?? 0) : "";
+    if (!byScene && lines.length > ASK_MAX_CUES) lines.splice(0, lines.length - ASK_MAX_CUES);
+    if (byScene) {
+      grouped = true;
+      const what = input.kind === "series" && input.current ? `Épisode en cours, ${input.current.code} « ${input.current.title} »` : "Film en cours";
+      parts.push(`### ${what}, ${upTo} — répliques sans le nom de qui parle, par moment, avec qui est reconnu à l'écran\n${byScene}`);
+    } else {
+      const what = input.kind === "series" && input.current ? `de ${input.current.code} « ${input.current.title} »` : "du film";
+      parts.push(`### Dialogues ${what}, ${upTo} — sans le nom de qui parle\n${lines.map((c) => c.text).join("\n")}`);
+    }
   }
   const text = parts.join("\n\n");
-  return { text, check: `${input.title}\n${text}`, dialogue: lines.length > 0, episodes: episodes.length };
+  return {
+    text,
+    check: `${input.title}\n${text}`,
+    dialogue: lines.length > 0,
+    episodes: episodes.length,
+    episodeCodes: episodes.map((e) => e.code),
+    ...(grouped ? { grouped } : {}),
+  };
 }
 
 /** `AAAA-MM-JJ` d'une date ISO, ou `null`. */
@@ -333,40 +442,94 @@ export function positionBucket(positionS: number | null | undefined): number | n
   return Math.floor(positionS / 600) * 10;
 }
 
-export type GateResult = ({ release: string[]; rejected?: never } | { release: string[]; rejected: string[] }) & {
-  /** Une phrase de coulisse avant toute phrase rendue : l'appelant redemande une fois (`MetaOptions.retry`). */
+/**
+ * Ce que le filet rend à chaque morceau (10.28.0 : **mot par mot**). `release` : les mots désormais sûrs, à
+ * ajouter au texte montré, séparés d'une espace. `reset` : le texte montré entier à remettre **avant** ces mots
+ * — une phrase commencée puis retirée (un mot de coulisse au milieu) ne reste jamais à moitié à l'écran.
+ */
+export type GateResult = {
+  release: string[];
+  reset?: string;
+  /** Un nom inconnu : tout est retiré, rien de ce qui suit n'est plus rendu. */
+  rejected?: string[];
+  /** Une phrase de coulisse avant toute phrase finie : l'appelant redemande une fois (`MetaOptions.retry`). */
   retry?: true;
 };
 
+/** La fin d'une phrase, au bout d'un mot : . ! ? ou … (puis guillemet ou parenthèse fermants). */
+const SENTENCE_END = /[.!?…]+["»”’)]*$/u;
 /**
- * Le tri de la réponse au fil de l'eau : la ligne des noms d'abord (jamais montrée, vérifiée en entier
- * avant la première phrase), puis chaque phrase complète, vérifiée avant d'être rendue. Le premier
- * nom inconnu arrête tout (`rejected`) ; rien de ce qui suit n'est plus rendu.
+ * Les premiers mots d'une phrase qui peut commencer par « D'après les sources, … » (`META_PREFIX`) : la phrase
+ * est retenue jusqu'à `LEAD_HOLD_WORDS` mots, le temps de savoir si sa tête se reformule — une tête déjà
+ * montrée ne se reformule plus. Toute autre phrase coule mot par mot.
+ */
+const META_LEAD = /^(?:d['’]après|selon|according|based|from|según|de|laut|nach|gemäß)$/iu;
+const LEAD_HOLD_WORDS = 6;
+
+/**
+ * Le tri de la réponse au fil de l'eau : la ligne des noms d'abord (jamais montrée, vérifiée en entier avant
+ * le premier mot), puis **chaque mot dès qu'il est complet** (10.28.0, consigne du propriétaire : la réponse
+ * s'écrit sous les yeux, plus phrase par phrase).
+ *
+ * Ce qui ne change pas : le contrôle des noms est **le même** — `unknownNames` sur la phrase en cours, à
+ * chaque mot (ses correspondances ne dépendent que du mot et de sa place : un mot en majuscule hors du début
+ * de phrase, absent des sources, est vu dès qu'il est complet, avant d'être montré). Le premier nom inconnu
+ * arrête tout (`rejected`) et l'écran retire ce qu'il montrait. Un mot n'est jamais montré à moitié : seuls
+ * les mots suivis d'un blanc (ou la fin du flux) sortent — un nom en cours d'écriture attend d'être entier.
+ *
+ * Le filet des mots de coulisse (`metaTalk`) regarde chaque mot : au premier, la phrase en cours est retirée
+ * de l'écran (`reset`), gardée jusqu'à sa fin, puis la règle d'avant s'applique à la phrase entière
+ * (reformulée, redemandée une fois, retirée ou remplacée par la limite). Une phrase qui commence comme
+ * « D'après les… » est retenue quelques mots (`META_LEAD`). « Jusqu'ici » : un premier mot « RIEN » est retenu
+ * jusqu'à la fin de sa phrase (`nothing`) — « rien à dire » n'est jamais montré.
+ *
+ * Le texte final (`text`, les phrases jointes d'une espace) est le même quel que soit le découpage du flux.
  */
 export class AnswerGate {
   private buffer = "";
   private phase: "names" | "answer" | "closed" = "names";
-  private sentences = 0;
+  /** Les phrases finies, telles qu'elles restent (reformulées ou remplacées le cas échéant). */
+  private kept: string[] = [];
   private words = 0;
   private limitSaid = false;
+  /** La phrase en cours : ses mots complets, combien sont montrés, et ce qui la retient. */
+  private sentence: string[] = [];
+  private shown = 0;
+  /** Les mots de la phrase en cours déjà montrés **avant** l'appel en cours (les autres sont encore dans `release`). */
+  private shownBeforeCall = 0;
+  private hold: "none" | "lead" | "meta" | "nothing" = "none";
 
   /** Ce que le filet des mots de coulisse a fait (`metaTalk`) — pour le journal. */
   rewritten = false;
+  /** « Jusqu'ici » : la réponse était « rien à dire » (`nothing`). */
+  nothing = false;
   private readonly material: string;
 
   /**
    * `limits` : la coupe de la réponse — cinq phrases et 120 mots d'office, deux phrases pour « Jusqu'ici ».
    * `meta` : le filet des mots de coulisse (10.27.2) ; sans lui, aucune phrase n'est regardée pour cela.
+   * `nothing` : le mot qui, seul en première phrase, veut dire « rien à dire » (« Jusqu'ici », `SOFAR_NOTHING`).
    */
   constructor(
     private readonly sources: string,
     private readonly limits: { sentences: number; words: number } = { sentences: ASK_MAX_SENTENCES, words: ASK_MAX_WORDS },
-    private readonly meta?: MetaOptions
+    private readonly meta?: MetaOptions,
+    private readonly nothingWord?: string
   ) {
     this.material = meta ? metaMaterial(meta.sources) : "";
   }
 
-  /** Un morceau de texte du modèle : les phrases désormais sûres, ou le rejet. */
+  /** Les phrases finies, jointes : le texte qui reste quand tout est dit. */
+  get text(): string {
+    return this.kept.join(" ");
+  }
+
+  /** Les phrases finies jusqu'ici (le journal dit quand la première l'a été). */
+  get sentences(): readonly string[] {
+    return this.kept;
+  }
+
+  /** Un morceau de texte du modèle : les mots désormais sûrs, ou le rejet. */
   push(delta: string): GateResult {
     if (this.phase === "closed") return { release: [] };
     this.buffer += delta;
@@ -393,7 +556,7 @@ export class AnswerGate {
     return this.drain(false);
   }
 
-  /** La fin du flux : la dernière phrase, même sans point final. */
+  /** La fin du flux : le dernier mot et la dernière phrase, même sans point final. */
   end(): GateResult {
     if (this.phase === "closed") return { release: [] };
     // Un flux qui s'arrête dans la ligne des noms n'a rien dit : rien à rendre.
@@ -402,6 +565,7 @@ export class AnswerGate {
       return { release: [] };
     }
     const out = this.drain(true);
+    if (!this.isClosed() && this.sentence.length) this.finishSentence(out);
     this.phase = "closed";
     return out;
   }
@@ -412,51 +576,120 @@ export class AnswerGate {
     return { release: [], rejected: names };
   }
 
+  private close(): void {
+    this.phase = "closed";
+    this.buffer = "";
+  }
+
+  /** Lu par une méthode : un mot traité peut fermer le filet, ce que l'analyse de flux de TypeScript ignore. */
+  private isClosed(): boolean {
+    return this.phase === "closed";
+  }
+
+  /** Les mots complets du tampon (suivis d'un blanc ; tous à la fin du flux), un par un. */
   private drain(final: boolean): GateResult {
-    const release: string[] = [];
+    const out: GateResult = { release: [] };
+    this.shownBeforeCall = this.shown;
     for (;;) {
-      if (this.sentences >= this.limits.sentences || this.words >= this.limits.words) {
-        this.phase = "closed";
-        this.buffer = "";
-        break;
-      }
-      // Une phrase finit sur . ! ? ou … suivis d'un blanc ; une abréviation coupe trop tôt, sans dommage.
-      const m = /[.!?…]+["»”’)]*\s/u.exec(this.buffer);
-      let sentence: string;
-      if (m) {
-        sentence = this.buffer.slice(0, m.index + m[0].length).trim();
-        this.buffer = this.buffer.slice(m.index + m[0].length);
-      } else if (final && this.buffer.trim()) {
-        sentence = this.buffer.trim();
-        this.buffer = "";
-      } else break;
-      if (!sentence) continue;
-      const unknown = unknownNames(sentence, this.sources);
-      if (unknown.length) {
-        this.phase = "closed";
-        this.buffer = "";
-        return { release, rejected: unknown };
-      }
-      if (this.meta && metaTalk(sentence, this.material).length) {
-        const rewritten = rewriteMetaPrefix(sentence, this.meta.locale);
-        if (rewritten && !metaTalk(rewritten, this.material).length) sentence = rewritten;
-        else if (this.meta.retry && this.sentences === 0 && release.length === 0) {
-          this.phase = "closed";
-          this.buffer = "";
-          return { release, retry: true };
-        } else if (this.meta.onMeta === "drop" || this.limitSaid) {
-          this.rewritten = true;
-          continue;
-        } else {
-          sentence = METALESS_LIMIT[this.meta.locale];
-          this.limitSaid = true;
-        }
-        this.rewritten = true;
-      }
-      this.sentences++;
-      this.words += sentence.split(/\s+/).length;
-      release.push(sentence);
+      if (this.isClosed() || out.rejected || out.retry) break;
+      const m = /^\s*(\S+)(\s|$)/u.exec(this.buffer);
+      if (!m || (!m[2] && !final)) break;
+      this.buffer = this.buffer.slice(m[0].length);
+      this.word(m[1], out);
     }
-    return { release };
+    return out;
+  }
+
+  /** Un mot complet : contrôlé, puis montré, retenu ou retiré ; la phrase finie s'il la finit. */
+  private word(w: string, out: GateResult): void {
+    if (this.sentence.length === 0 && (this.kept.length >= this.limits.sentences || this.words >= this.limits.words)) {
+      this.close();
+      return;
+    }
+    this.sentence.push(w);
+    const unknown = unknownNames(this.sentence.join(" "), this.sources);
+    if (unknown.length) {
+      this.close();
+      out.release = [];
+      delete out.reset;
+      out.rejected = unknown;
+      return;
+    }
+    const first = this.sentence.length === 1;
+    if (this.hold !== "meta" && this.meta && metaTalk(w, this.material).length) {
+      // La phrase commencée quitte l'écran tout de suite ; la règle se décide à sa fin.
+      this.retract(out);
+      this.hold = "meta";
+    } else if (first && this.nothingWord && this.kept.length === 0 && new RegExp(`^${this.nothingWord}\\W*$`, "iu").test(w)) this.hold = "nothing";
+    else if (first && this.meta && META_LEAD.test(w)) this.hold = "lead";
+    else if (this.hold === "nothing") this.hold = "none";
+    if (this.hold === "lead" && this.sentence.length >= LEAD_HOLD_WORDS) this.hold = "none";
+    if (SENTENCE_END.test(w)) {
+      this.finishSentence(out);
+      return;
+    }
+    if (this.hold === "none") this.show(out);
+  }
+
+  /** Les mots de la phrase en cours pas encore montrés. */
+  private show(out: GateResult): void {
+    while (this.shown < this.sentence.length) out.release.push(this.sentence[this.shown++]);
+  }
+
+  /**
+   * Retirer de l'écran les mots montrés de la phrase en cours. Montrés pendant cet appel seulement : ils
+   * sont les derniers de `release`, et en sortent ; montrés avant : `reset` aux phrases finies.
+   */
+  private retract(out: GateResult): void {
+    if (this.shown === 0) return;
+    if (this.shownBeforeCall === 0) out.release.splice(out.release.length - this.shown, this.shown);
+    else {
+      out.release = [];
+      out.reset = this.kept.join(" ");
+    }
+    this.shown = 0;
+    this.shownBeforeCall = 0;
+  }
+
+  /** La phrase finie : la règle des mots de coulisse sur la phrase entière, puis gardée et montrée. */
+  private finishSentence(out: GateResult): void {
+    let sentence = this.sentence.join(" ");
+    const hold = this.hold;
+    this.hold = "none";
+    if (hold === "nothing" && this.kept.length === 0) {
+      // « RIEN » seul : rien à dire — rien n'est montré, rien de ce qui suit non plus.
+      this.nothing = true;
+      this.sentence = [];
+      this.shown = 0;
+      this.close();
+      return;
+    }
+    if (this.meta && metaTalk(sentence, this.material).length) {
+      // Déjà retirée de l'écran au premier mot de coulisse, d'ordinaire ; sinon, maintenant.
+      this.retract(out);
+      const rewritten = rewriteMetaPrefix(sentence, this.meta.locale);
+      if (rewritten && !metaTalk(rewritten, this.material).length) sentence = rewritten;
+      else if (this.meta.retry && this.kept.length === 0) {
+        this.sentence = [];
+        out.retry = true;
+        this.close();
+        return;
+      } else if (this.meta.onMeta === "drop" || this.limitSaid) {
+        this.rewritten = true;
+        this.sentence = [];
+        return;
+      } else {
+        sentence = METALESS_LIMIT[this.meta.locale];
+        this.limitSaid = true;
+      }
+      this.rewritten = true;
+      this.sentence = sentence.split(/\s+/).filter(Boolean);
+    }
+    this.show(out);
+    this.kept.push(this.sentence.join(" "));
+    this.words += this.sentence.length;
+    this.sentence = [];
+    this.shown = 0;
+    this.shownBeforeCall = 0;
   }
 }

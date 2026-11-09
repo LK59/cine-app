@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { initialsOf, personFactsLine, usePersonFacts } from "@/lib/xray/client";
-import { useSofar } from "@/lib/ask/client";
-import type { SofarScenes } from "@/lib/ask/sofarCut";
+import { useSofar, type SofarView } from "@/lib/ask/client";
+import { sofarCut, type SofarScenes } from "@/lib/ask/sofarCut";
+import { usePrefersReducedMotion } from "@/lib/reducedMotion";
 import type { XrayPlayerPerson } from "@/lib/xray/scenes";
 
 /**
@@ -37,14 +38,84 @@ export function PersonAvatar({ person, className }: { person: Pick<XrayPlayerPer
   );
 }
 
+/** L'écart entre deux lignes de l'attente : le temps de lire la précédente, jamais une attente imposée. */
+export const SOFAR_WAIT_STEP_MS = 900;
+
+/**
+ * Les scènes où la personne est reconnue avant la coupe — ce que « Jusqu'ici » relit d'elle. Lu des scènes
+ * que le lecteur a déjà (aucune requête) ; `null` sans scènes nommées.
+ */
+export function sofarSceneCount(scenes: SofarScenes | null | undefined, personId: number, position: number | null): number | null {
+  if (!scenes?.scenes.length) return null;
+  const cut = sofarCut(position, scenes);
+  let n = 0;
+  for (const s of scenes.scenes as readonly { start: number; people?: readonly { personId?: number }[] }[]) {
+    if (s.start < cut && s.people?.some((p) => p.personId === personId)) n++;
+  }
+  return n;
+}
+
+/**
+ * Les lignes de l'attente (10.28.0, consigne du propriétaire) : **rien d'inventé**, seulement ce qui part
+ * vraiment au modèle — les scènes de la personne avant la coupe (lues localement), la fenêtre des résumés
+ * (dite par le serveur dans `plan`), puis l'écriture, une fois la génération lancée. Aucun appel au modèle.
+ */
+export function sofarWaitLines(t: (key: string, vars?: Record<string, string | number>) => string, name: string, sceneCount: number | null, plan: SofarView["plan"]): string[] {
+  const lines = [sceneCount && sceneCount > 0 ? t("xray.sofarWait.scenes", { n: sceneCount, name }) : t("xray.sofarWait.reading")];
+  if (plan?.from) lines.push(plan.to && plan.to !== plan.from ? t("xray.sofarWait.episodes", { from: plan.from, to: plan.to }) : t("xray.sofarWait.episode", { code: plan.from }));
+  if (plan) lines.push(t("xray.sofarWait.writing"));
+  return lines;
+}
+
+/**
+ * L'attente de « Jusqu'ici » (10.28.0) : des lignes gris clair qui paraissent l'une après l'autre, la dernière
+ * parcourue d'un reflet discret. Elle ne retarde jamais rien : aucune durée minimale — le premier mot la
+ * remplace à l'instant, au milieu d'une ligne s'il le faut (le parent cesse de la monter). Mouvement réduit :
+ * les lignes connues toutes ensemble, immobiles.
+ */
+function SofarWaiting({ lines }: { lines: string[] }) {
+  const t = useT();
+  const reduced = usePrefersReducedMotion();
+  const [count, setCount] = useState(1);
+  useEffect(() => {
+    if (reduced || count >= lines.length) return;
+    const id = window.setTimeout(() => setCount((c) => c + 1), SOFAR_WAIT_STEP_MS);
+    return () => window.clearTimeout(id);
+  }, [count, lines.length, reduced]);
+  const visible = reduced ? lines : lines.slice(0, count);
+  return (
+    <div data-ask-sofar-loading="" role="status" aria-label={t("ask.thinking")} className="flex flex-col gap-0.5 py-0.5">
+      {visible.map((line, i) => (
+        <p key={i} data-ask-sofar-wait-line="" className={`ask-sofar-in text-[12px] leading-5 text-white/45 ${i === visible.length - 1 ? "ask-wait-shimmer" : ""}`}>
+          {line}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 /**
  * « Jusqu'ici » (DECISIONS.md §139, 10.27.1) : un composant à lui, qui ne retient rien du reste du panneau.
- * Avec l'option pour cette séance, la section est toujours là en haut dès l'ouverture : son titre, une ligne
- * d'attente discrète (un reflet qui passe, pas de texte — passé un court délai, `loading`), puis le texte en
- * fondu. Rien à dire, une panne ou le délai : une ligne discrète, « Encore trop peu vu pour en dire plus. »
- * (`little`, 10.27.2) — jamais une section qui disparaît (`useSofar`).
+ * Avec l'option pour cette séance, la section est toujours là en haut dès l'ouverture : son titre, l'attente
+ * (`SofarWaiting`, 10.28.0 — des lignes vraies sur ce qui part au modèle ; un texte gardé n'en montre pas),
+ * puis le texte, **mot par mot** à mesure qu'il est vérifié. Rien à dire, une panne ou le délai : une ligne
+ * discrète, « Encore trop peu vu pour en dire plus. » (`little`, 10.27.2) — jamais une section qui disparaît
+ * (`useSofar`).
  */
-export function AskPersonSofar({ itemId, personId, position, scenes }: { itemId: string; personId: number; position: number | null; scenes?: SofarScenes | null }) {
+export function AskPersonSofar({
+  itemId,
+  personId,
+  position,
+  scenes,
+  name = "",
+}: {
+  itemId: string;
+  personId: number;
+  position: number | null;
+  scenes?: SofarScenes | null;
+  /** Le personnage (sinon l'acteur), tel que l'attente le nomme. */
+  name?: string;
+}) {
   const t = useT();
   const view = useSofar(itemId, personId, position, true, scenes);
   if (view.state === "none") return null;
@@ -57,14 +128,11 @@ export function AskPersonSofar({ itemId, personId, position, scenes }: { itemId:
           {t("xray.sofarLittle")}
         </p>
       ) : ready ? (
-        <p data-ask-sofar-text="" className="ask-sofar-in text-sm leading-5 text-white">
+        <p data-ask-sofar-text="" className="text-sm leading-5 text-white">
           {view.text}
         </p>
       ) : view.loading ? (
-        <div data-ask-sofar-loading="" role="status" aria-label={t("ask.thinking")} className="flex flex-col gap-1.5 py-1">
-          <span aria-hidden className="ask-shimmer block h-2.5 w-11/12 rounded-full" />
-          <span aria-hidden className="ask-shimmer block h-2.5 w-2/3 rounded-full" />
-        </div>
+        <SofarWaiting lines={sofarWaitLines(t, name, sofarSceneCount(scenes, personId, position), view.plan)} />
       ) : null}
     </div>
   );
@@ -112,7 +180,16 @@ export function AskPersonBlock({
           {person.character && <span className="truncate text-[13px] leading-tight text-white/60">{person.character}</span>}
         </div>
       </div>
-      {sofar && <AskPersonSofar key={`${itemId}:${person.personId}`} itemId={itemId} personId={person.personId} position={position} scenes={scenes} />}
+      {sofar && (
+        <AskPersonSofar
+          key={`${itemId}:${person.personId}`}
+          itemId={itemId}
+          personId={person.personId}
+          position={position}
+          scenes={scenes}
+          name={person.character || person.name || ""}
+        />
+      )}
       {(line || ok?.bio) && (
         <div data-ask-person-facts="" className="flex flex-col gap-1">
           {line && <p className="text-[13px] leading-5 text-white/70">{line}</p>}
