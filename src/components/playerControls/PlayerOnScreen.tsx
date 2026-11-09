@@ -16,7 +16,7 @@ function finePointer(): boolean {
   }
 }
 import type { XrayPlayerPerson } from "@/lib/xray/scenes";
-import { boxOf, lookOf, type XrayUiDiagFn } from "@/lib/xrayUiDiag";
+import { boxOf, effectiveLookOf, hitAt, lookOf, type XrayUiDiagFn } from "@/lib/xrayUiDiag";
 
 /**
  * « À l'écran » (DECISIONS.md §138) : au-dessus du bloc du titre, à gauche — une petite étiquette, puis une
@@ -230,18 +230,30 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth, on
       const first = row?.querySelector("[data-onscreen-person]") ?? null;
       const rowLook = lookOf(row);
       const firstLook = lookOf(first);
+      // 10.29.2 : ce que l'écran montre vraiment — l'opacité cumulée jusqu'à la racine, ce qui cache plus haut, et
+      // ce qui est dessus au centre de la rangée et de la première pilule (`elle` : c'est bien elle qu'un doigt toucherait).
+      const rowEff = effectiveLookOf(row);
+      const firstEff = effectiveLookOf(first);
+      const rowBox = boxOf(row);
+      const firstBox = boxOf(first);
       send("row", {
         trigger: mountedOnce.current ? "scène" : "montée",
         sceneStart: diagRef.current.sceneStart ?? null,
         pills: shown.list.length,
         overflow: row ? row.scrollLeft + row.clientWidth < row.scrollWidth - 2 : null,
         scrollLeft: row ? Math.round(row.scrollLeft) : null,
-        row: boxOf(row),
+        row: rowBox,
         rowOpacity: rowLook.opacity,
         rowVisibility: rowLook.visibility,
-        first: boxOf(first),
+        rowEffOpacity: rowEff.effOpacity,
+        rowHiddenBy: rowEff.hiddenBy ?? undefined,
+        rowTop: hitAt(document, rowBox, row, null, "elle"),
+        first: firstBox,
         firstOpacity: firstLook.opacity,
         firstVisibility: firstLook.visibility,
+        firstEffOpacity: firstEff.effOpacity,
+        firstHiddenBy: firstEff.hiddenBy ?? undefined,
+        firstTop: hitAt(document, firstBox, first, null, "elle"),
       });
       mountedOnce.current = true;
     });

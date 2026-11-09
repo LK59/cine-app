@@ -231,7 +231,13 @@ export function logJusquici(fields: {
    * `tôt` (10.28.2) : un film avant dix minutes, `attente` : les répliques d'une piste texte pas encore lues — ni
    * l'un ni l'autre n'appelle le modèle ni ne garde rien (§139).
    */
-  status: "ok" | "vide" | "rejeté" | "limite" | "erreur" | "indisponible" | "tôt" | "attente";
+  status: "ok" | "vide" | "rejeté" | "limite" | "erreur" | "indisponible" | "tôt" | "attente" | "attente-erreur";
+  /**
+   * `attente-erreur` (10.29.2) : une panne passagère récente — pour cette entrée (`clé`) ou ce compte (`compte`) —, le
+   * modèle n'est pas appelé ; `waitLeftS` : ce qui reste de l'attente.
+   */
+  waitBy?: "clé" | "compte";
+  waitLeftS?: number;
   ms: number;
   firstMs?: number;
   inTokens?: number;

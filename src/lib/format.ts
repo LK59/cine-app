@@ -126,6 +126,22 @@ function isFrench(text: string): boolean {
 }
 
 /**
+ * Le Markdown simple que TMDB laisse dans ses biographies (10.29.2) : « *Atlanta* », « **Widows** », « _Lost_ »,
+ * « [Lost](https://…) » s'affichaient tels quels, étoiles comprises, dans les fiches d'acteur comme dans le panneau
+ * d'une personne du lecteur. Le texte seul reste : l'emphase perd ses marques, un lien garde son texte. Une étoile
+ * ou un trait bas isolés (« 5 * 3 », « snake_case ») ne sont pas touchés : une marque s'ouvre devant un mot, se
+ * ferme après un mot, sans lettre collée au-dehors.
+ */
+export function stripSimpleMarkdown(text: string): string {
+  return text
+    .replace(/\[([^\]\n]+)\]\((?:[^()\s]|\([^()\s]*\))+\)/g, "$1")
+    .replace(/(^|[^\w*])\*\*(?=\S)([^*\n]*?\S)\*\*(?![\w*])/g, "$1$2")
+    .replace(/(^|[^\w_])__(?=\S)([^_\n]*?\S)__(?![\w_])/g, "$1$2")
+    .replace(/(^|[^\w*])\*(?=\S)([^*\n]*?\S)\*(?![\w*])/g, "$1$2")
+    .replace(/(^|[^\w_])_(?=\S)([^_\n]*?\S)_(?![\w_])/g, "$1$2");
+}
+
+/**
  * Pick the best biography between a TMDb bio and a Wikipedia bio.
  * Rules (in order):
  *   1. French > non-French, regardless of length
@@ -135,7 +151,8 @@ export function selectBio(
   tmdbBio: string | null | undefined,
   wikiBio: string | null | undefined
 ): { text: string; source: "tmdb" | "wikipedia" } | null {
-  const t = tmdbBio?.trim() || null;
+  // TMDB écrit parfois en Markdown (10.29.2) : nettoyé ici, où les deux fiches et le panneau du lecteur le lisent.
+  const t = (tmdbBio ? stripSimpleMarkdown(tmdbBio) : "").trim() || null;
   const w = wikiBio?.trim() || null;
   if (!t && !w) return null;
   if (!t) return { text: w!, source: "wikipedia" };

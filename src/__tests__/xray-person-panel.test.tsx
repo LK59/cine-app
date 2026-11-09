@@ -111,15 +111,21 @@ describe("les faits, sans le modèle", () => {
     expect(personFactsLine({ birthday: "1933-03-14", deathday: "2007-01-01" }, "fr", t, now)).toBe("xray.diedAt:73");
     expect(personFactsLine({}, "fr", t, now)).toBeNull();
   });
-  it("les questions proposées : son lien avec l'autre personne de la scène, ce qui lui est arrivé, ce qu'elle cherche", () => {
+  it("les questions proposées (10.29.2) : seulement son lien avec les autres personnages de la scène — le plus présent d'abord, deux au plus", () => {
     const t = (k: string, v?: Record<string, unknown>) => `${k}:${JSON.stringify(v)}`;
-    expect(personQuestions(ARIADNE, [ARIADNE, COBB], t)).toEqual([
-      'xray.qLink:{"name":"Ariadne","other":"Dom"}',
-      'xray.qRecent:{"name":"Ariadne"}',
-      'xray.qWants:{"name":"Ariadne"}',
-    ]);
-    expect(personQuestions(ARIADNE, [ARIADNE], t)).toHaveLength(2);
+    expect(personQuestions(ARIADNE, [ARIADNE, COBB], t)).toEqual(['xray.qLink:{"name":"Ariadne","other":"Dom"}']);
+    // Seule dans la scène : aucune proposition.
+    expect(personQuestions(ARIADNE, [ARIADNE], t)).toEqual([]);
     expect(personQuestions({ personId: 9, character: null }, [], t)).toBeUndefined();
+    // Par temps à l'écran, pas par ordre de la scène ; un troisième ne passe pas ; un même prénom une fois.
+    const scene = [
+      { personId: 2, character: "Ariadne", screenTime: 50 },
+      { personId: 10, character: "Saito", screenTime: 5 },
+      { personId: 11, character: "Arthur", screenTime: 40 },
+      { personId: 12, character: "Eames", screenTime: 20 },
+      { personId: 13, character: "Arthur (jeune)", screenTime: 30 },
+    ];
+    expect(personQuestions(ARIADNE, scene, t)).toEqual(['xray.qLink:{"name":"Ariadne","other":"Arthur"}', 'xray.qLink:{"name":"Ariadne","other":"Eames"}']);
   });
 });
 
@@ -140,12 +146,13 @@ describe("sans l'option des questions", () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith("/api/cinema/ask/"))).toBe(false);
   });
 
-  it("les questions sur une personne ouvertes, « Jusqu'ici » coupé (§139, 09/11/2026) : le champ, pas la section", async () => {
+  it("les questions sur une personne ouvertes, « Jusqu'ici » coupé (§139, 09/11/2026) : la proposition, pas la section — et jamais de champ (10.29.2)", async () => {
     open({ ask: true, sofar: false });
     await screen.findByText("Elliot Page est un acteur canadien.");
     expect(document.querySelector("[data-ask-sofar]")).toBeNull();
+    expect(document.querySelector("[data-ask-input]")).toBeNull();
     expect(sofarPosts()).toHaveLength(0);
-    fireEvent.click(screen.getByText('xray.qRecent:{"name":"Ariadne"}'));
+    fireEvent.click(screen.getByText('xray.qLink:{"name":"Ariadne","other":"Dom"}'));
     await screen.findByText("Elle construit les rêves.");
     // Posée depuis le panneau d'une personne : la porte de ces questions-là côté serveur.
     expect(JSON.parse(String((questionPosts()[0][1] as RequestInit).body)).about).toBe("person");
@@ -162,7 +169,7 @@ describe("sans l'option des questions", () => {
   it("le plafond mensuel atteint : une ligne dite à la place de la réponse (§140)", async () => {
     questionReplies = [[{ t: "error", code: "budget" }]];
     open({ ask: true, sofar: false });
-    fireEvent.click(screen.getByText('xray.qRecent:{"name":"Ariadne"}'));
+    fireEvent.click(screen.getByText('xray.qLink:{"name":"Ariadne","other":"Dom"}'));
     await screen.findByText("ask.budget");
   });
 
@@ -439,15 +446,17 @@ describe("avec l'option : « Jusqu'ici »", () => {
     expect(document.querySelector("[data-ask-person='2']")).toBeTruthy();
   });
 
-  it("l'ordre : en-tête, « Jusqu'ici », faits, bibliothèque, propositions, champ", async () => {
+  it("l'ordre : en-tête, « Jusqu'ici », faits, bibliothèque, propositions — sans champ (10.29.2)", async () => {
     open();
     await screen.findByText("Ariadne construit le labyrinthe.");
     await waitFor(() => expect(document.querySelector("[data-ask-person-library]")).toBeTruthy());
-    const order = ["[data-ask-person='2'] span", "[data-ask-sofar]", "[data-ask-person-facts]", "[data-ask-person-library]", "[data-ask-chips]", "[data-ask-input]"].map(
+    const order = ["[data-ask-person='2'] span", "[data-ask-sofar]", "[data-ask-person-facts]", "[data-ask-person-library]", "[data-ask-chips]"].map(
       (sel) => document.querySelector(sel)!
     );
     for (let i = 1; i < order.length; i++) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText('xray.qLink:{"name":"Ariadne","other":"Dom"}')).toBeTruthy();
+    expect(document.querySelector("[data-ask-input]")).toBeNull();
+    expect(screen.queryByText("ask.chipPlayer0")).toBeNull();
   });
 });
 
@@ -530,19 +539,17 @@ describe("une question en panne", () => {
   it("dite proprement, avec « Réessayer » qui repose la même question à sa place", async () => {
     questionReplies = [[{ t: "error", code: "erreur" }], [{ t: "text", v: "Elle construit les rêves." }, { t: "done" }]];
     open();
-    fireEvent.click(screen.getByText('xray.qRecent:{"name":"Ariadne"}'));
+    fireEvent.click(screen.getByText('xray.qLink:{"name":"Ariadne","other":"Dom"}'));
     const retry = await waitFor(() => {
       const el = document.querySelector<HTMLElement>("[data-ask-retry]");
       expect(el).toBeTruthy();
       return el!;
     });
     expect(screen.getByText("ask.error")).toBeTruthy();
-    // Le panneau reste utilisable : le champ est là.
-    expect(document.querySelector<HTMLInputElement>("[data-ask-input]")!.disabled).toBe(false);
     fireEvent.click(retry);
     await screen.findByText("Elle construit les rêves.");
     expect(questionPosts()).toHaveLength(2);
-    expect(JSON.parse(String((questionPosts()[1][1] as RequestInit).body)).question).toBe('xray.qRecent:{"name":"Ariadne"}');
+    expect(JSON.parse(String((questionPosts()[1][1] as RequestInit).body)).question).toBe('xray.qLink:{"name":"Ariadne","other":"Dom"}');
     expect(document.querySelectorAll("[data-ask-exchange]")).toHaveLength(1);
     expect(document.querySelector("[data-ask-retry]")).toBeNull();
   });
@@ -550,7 +557,7 @@ describe("une question en panne", () => {
   it("un flux coupé sans sa fin : la même ligne, jamais un écran cassé", async () => {
     questionReplies = [[{ t: "text", v: "Elle" }]];
     open();
-    fireEvent.click(screen.getByText('xray.qWants:{"name":"Ariadne"}'));
+    fireEvent.click(screen.getByText('xray.qLink:{"name":"Ariadne","other":"Dom"}'));
     await waitFor(() => expect(document.querySelector("[data-ask-retry]")).toBeTruthy());
   });
 });
@@ -665,6 +672,21 @@ describe("10.29.1 — le relevé `xray-ui` du panneau : ce qu'il montre 300 ms a
     expect(lines.map((l) => l.event)).toEqual(["open", "close"]);
     expect(lines[0]).toMatchObject({ early: true });
     expect(lines[1]).toMatchObject({ reason: "démonté" });
+  });
+
+  it("10.29.2 — l'opacité **effective** : le cadre à demi transparent au-dessus du panneau se lit dans `panelEffOpacity`", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { lines, diag } = diagSpy();
+    // Un ancêtre (ici le corps de la page) à 0 : le panneau, lui, à 1 — c'est ce que disaient les lignes du banc.
+    document.body.style.opacity = "0";
+    try {
+      const { unmount } = render(<AskPanel itemId={ITEM} where="lecteur" placement="player" position={() => 754} onClose={() => {}} person={ARIADNE} ask={false} diag={diag} />);
+      await act(async () => void (await vi.advanceTimersByTimeAsync(310)));
+      expect(lines[0]).toMatchObject({ event: "open", panelOpacity: 1, panelEffOpacity: 0 });
+      unmount();
+    } finally {
+      document.body.style.opacity = "";
+    }
   });
 
   it("sans relevé (une fiche) : rien", async () => {

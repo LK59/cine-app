@@ -122,16 +122,49 @@ export function lookOf(el: Element | null | undefined): { opacity: number | null
 }
 
 /**
+ * Ce que l'écran montre **vraiment** d'un élément (10.29.2) : `lookOf` ne lit que l'élément lui-même — pendant un
+ * passage du banc de bout en bout, les lignes `row` disaient `rowOpacity: 1` alors que tout le cadre du lecteur était
+ * à l'opacité 0 (l'accueil était à l'écran). Ici : le produit des opacités de l'élément et de tous ses ancêtres
+ * jusqu'à la racine (`effOpacity`), et ce qui le cache plus haut (`hiddenBy`) — un `display: none` (`display`) ou un
+ * `visibility: hidden`/`collapse` (`visibility`) sur lui ou un ancêtre, que l'élément le surcharge ou non (un
+ * `visible` sous un ancêtre caché se dessine, mais le dire ne coûte rien). Lu au relevé seulement, jamais au rendu.
+ */
+export function effectiveLookOf(el: Element | null | undefined): { effOpacity: number | null; hiddenBy: "display" | "visibility" | null } {
+  if (!el || typeof getComputedStyle !== "function") return { effOpacity: null, hiddenBy: null };
+  try {
+    let opacity = 1;
+    let hiddenBy: "display" | "visibility" | null = null;
+    for (let node: Element | null = el; node; node = node.parentElement) {
+      const s = getComputedStyle(node);
+      const o = Number.parseFloat(s.opacity);
+      if (Number.isFinite(o)) opacity *= o;
+      if (s.display === "none") hiddenBy = "display";
+      else if (!hiddenBy && (s.visibility === "hidden" || s.visibility === "collapse")) hiddenBy = "visibility";
+    }
+    return { effOpacity: Math.round(opacity * 100) / 100, hiddenBy };
+  } catch {
+    return { effOpacity: null, hiddenBy: null };
+  }
+}
+
+/**
  * Ce qui est vraiment dessus au centre d'un panneau : `panneau` (lui ou un de ses enfants), `fond` (son fond qui
  * referme au toucher — le panneau est alors sous autre chose, ou ailleurs), `rien`, ou l'élément trouvé (balise et
  * premier attribut `data-`).
  */
-export function hitAt(doc: Document, box: { x: number; y: number; w: number; h: number } | null, panel: Element | null, backdrop: Element | null): string | null {
+export function hitAt(
+  doc: Document,
+  box: { x: number; y: number; w: number; h: number } | null,
+  panel: Element | null,
+  backdrop: Element | null,
+  /** Le mot dit quand c'est bien lui (ou un de ses enfants) qui est dessus : `panneau`, ou `elle` pour la rangée et une pilule (10.29.2). */
+  self = "panneau"
+): string | null {
   if (!box || typeof doc.elementFromPoint !== "function") return null;
   try {
     const hit = doc.elementFromPoint(box.x + box.w / 2, box.y + box.h / 2);
     if (!hit) return "rien";
-    if (panel && panel.contains(hit)) return "panneau";
+    if (panel && panel.contains(hit)) return self;
     if (backdrop && hit === backdrop) return "fond";
     const data = Array.from(hit.attributes).find((a) => a.name.startsWith("data-"))?.name;
     return `${hit.tagName.toLowerCase()}${data ? `[${data}]` : ""}`.slice(0, 60);

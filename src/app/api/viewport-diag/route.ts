@@ -24,7 +24,9 @@ const TRIGGERS = new Set(["retour", "pageshow", "redimensionné", "clavier ferm�
 const XRAY_UI_EVENTS = new Set(["row", "tap", "open", "close"]);
 const XRAY_UI_REASONS = new Set(["fond", "croix", "glissé", "échap", "démonté"]);
 const XRAY_UI_NUMBERS = ["seq", "sceneStart", "pills", "scrollLeft", "personId", "openMs"] as const;
-const XRAY_UI_OPACITIES = ["rowOpacity", "firstOpacity", "panelOpacity", "layerOpacity"] as const;
+const XRAY_UI_OPACITIES = ["rowOpacity", "firstOpacity", "panelOpacity", "layerOpacity", "rowEffOpacity", "firstEffOpacity", "panelEffOpacity"] as const;
+/** Ce qui cache un élément plus haut que lui (10.29.2, `effectiveLookOf`). */
+const XRAY_UI_HIDDEN = ["rowHiddenBy", "firstHiddenBy", "panelHiddenBy"] as const;
 const XRAY_UI_BOOLEANS = ["overflow", "early"] as const;
 const XRAY_UI_BOXES = ["row", "first", "pill", "panel"] as const;
 
@@ -124,6 +126,9 @@ export async function POST(req: NextRequest) {
         firstVisibility: visibility(body.firstVisibility) ?? undefined,
         panelVisibility: visibility(body.panelVisibility) ?? undefined,
         top: str(body.top, 60) ?? undefined,
+        rowTop: str(body.rowTop, 60) ?? undefined,
+        firstTop: str(body.firstTop, 60) ?? undefined,
+        ...Object.fromEntries(XRAY_UI_HIDDEN.flatMap((key) => (body[key] === "display" || body[key] === "visibility" ? [[key, body[key]]] : []))),
         ...fields,
         build: str(body.build, 40),
         version: str(body.version, 20),

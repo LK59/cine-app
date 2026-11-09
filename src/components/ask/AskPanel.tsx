@@ -24,7 +24,7 @@ import { ASK_MAX_QUESTION, type AskWhere } from "@/lib/ask/core";
 import type { SofarScenes } from "@/lib/ask/sofarCut";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { APP_BUILD, APP_VERSION } from "@/lib/appBuild";
-import { boxOf, hitAt, lookOf, XRAY_UI_PANEL_CHECK_MS, type XrayUiDiagFn } from "@/lib/xrayUiDiag";
+import { boxOf, effectiveLookOf, hitAt, lookOf, XRAY_UI_PANEL_CHECK_MS, type XrayUiDiagFn } from "@/lib/xrayUiDiag";
 
 /**
  * Le panneau « Poser une question » (DECISIONS.md §139) — un seul, pour le lecteur (film en pause) et
@@ -127,12 +127,15 @@ export function askFailureKey(exchange: Pick<AskExchange, "state" | "error">): s
 function useKeyboardDiag(
   refs: { layer: React.RefObject<HTMLDivElement | null>; panel: React.RefObject<HTMLElement | null>; input: React.RefObject<HTMLInputElement | null> },
   state: { layout: AskPanelLayout; facts: ViewportFacts; where: string; placement: string },
+  /** Un champ à écouter (10.29.2 : pas dans le panneau d'une personne). */
+  enabled = true,
 ) {
   const latest = useRef(state);
   useEffect(() => {
     latest.current = state;
   });
   useEffect(() => {
+    if (!enabled) return;
     const win = window;
     let coarse = false;
     try {
@@ -196,7 +199,7 @@ function useKeyboardDiag(
       vv?.removeEventListener("scroll", onVvScroll);
       win.removeEventListener("resize", onWinResize);
     };
-  }, [refs.input, refs.layer, refs.panel]);
+  }, [refs.input, refs.layer, refs.panel, enabled]);
 }
 
 /**
@@ -233,6 +236,8 @@ function useXrayPanelDiag(
       checked = true;
       const box = boxOf(panel);
       const look = lookOf(panel);
+      // 10.29.2 : l'opacité cumulée jusqu'à la racine — le cadre du lecteur à 0 cache un panneau à 1.
+      const eff = effectiveLookOf(panel);
       latest.current.diag?.("open", {
         personId: latest.current.personId,
         mode: panel?.getAttribute("data-mode") ?? null,
@@ -242,6 +247,8 @@ function useXrayPanelDiag(
         panelOpacity: look.opacity,
         panelVisibility: look.visibility,
         layerOpacity: lookOf(layer).opacity,
+        panelEffOpacity: eff.effOpacity,
+        panelHiddenBy: eff.hiddenBy ?? undefined,
         top: hitAt(document, box, panel, backdrop),
       });
     };
@@ -274,8 +281,11 @@ export function AskPanel({ itemId, where, position, sofarPosition, onClose, pers
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
+  // Le champ libre (10.29.2, décision du propriétaire) : le panneau d'un titre seulement — celui d'une personne du
+  // lecteur ne propose que ses liens avec les autres personnages de la scène. Sans champ, ni clavier ni son relevé.
+  const freeInput = askEnabled && !person;
   const { layout, facts } = useAskPanelLayout(focused, layerRef, placement);
-  useKeyboardDiag({ layer: layerRef, panel: panelRef, input: inputRef }, { layout, facts, where, placement });
+  useKeyboardDiag({ layer: layerRef, panel: panelRef, input: inputRef }, { layout, facts, where, placement }, freeInput);
   const { closing, requestClose } = useDelayedClose(onClose, ASK_EXIT_MS);
   // La première raison de fermer gagne (une croix pendant le glissé de sortie ne la réécrit pas).
   const closeReason = useRef<CloseReason | null>(null);
@@ -390,8 +400,9 @@ export function AskPanel({ itemId, where, position, sofarPosition, onClose, pers
   const line = layout.mode === "line";
   const sheet = layout.mode === "full" && layout.sheet;
   const asked = new Set(exchanges.map((e) => e.question));
-  const offered = suggestions?.length ? suggestions : person ? personQuestions(person, scene ?? [], t) : undefined;
-  const chips = askEnabled ? (offered?.length ? offered : SUGGESTIONS[where].map((k) => t(k))).filter((q) => !asked.has(q)) : [];
+  // Une personne : ses liens avec les autres personnages de la scène, ou rien — jamais les propositions d'office (10.29.2).
+  const offered = suggestions?.length ? suggestions : person ? (personQuestions(person, scene ?? [], t) ?? []) : undefined;
+  const chips = askEnabled ? (offered ?? SUGGESTIONS[where].map((k) => t(k))).filter((q) => !asked.has(q)) : [];
   // La ligne posée sans mesure du clavier (`inconnu`) se met sous la zone sûre du haut ; en attente de la
   // mesure, invisible — elle ne saute pas du haut vers le bas sous les yeux.
   // La feuille est haute de son contenu (10.27 : un grand vide sous deux lignes) : posée par son bas — le
@@ -548,7 +559,7 @@ export function AskPanel({ itemId, where, position, sofarPosition, onClose, pers
         )}
         {/* Le champ reste le même nœud dans les deux formes : en changer ferait perdre le focus, et le
             clavier se refermerait aussitôt ouvert. */}
-        {askEnabled && (
+        {freeInput && (
         <form
           className={`flex shrink-0 items-center gap-2 ${line ? "h-full px-2" : "px-4 pb-4"}`}
           onSubmit={(e) => {

@@ -4316,9 +4316,7 @@
     },
     "library": "In your library",
     "diedAt": "† aged {n}",
-    "qLink": "How is {name} connected to {other}?",
-    "qRecent": "What has happened to {name} lately?",
-    "qWants": "What is {name} after?"
+    "qLink": "How is {name} connected to {other}?"
   },
   "aiFeatures": {
     "title": "What each feature does with each provider",

@@ -4316,9 +4316,7 @@
     },
     "library": "Dans votre bibliothèque",
     "diedAt": "† à {n} ans",
-    "qLink": "Quel est le lien entre {name} et {other} ?",
-    "qRecent": "Qu'est-il arrivé à {name} récemment ?",
-    "qWants": "Que cherche {name} ?"
+    "qLink": "Quel est le lien entre {name} et {other} ?"
   },
   "aiFeatures": {
     "title": "Ce que chaque fonction fait selon le fournisseur",

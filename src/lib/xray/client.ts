@@ -179,20 +179,35 @@ export function onScreenRowBottom(chrome: Box, titleRow: Box): number {
 
 // ── Le panneau d'une personne (10.27) ───────────────────────────────────────────────────────────
 
+/** Deux propositions au plus dans le panneau d'une personne (10.29.2). */
+export const PERSON_QUESTIONS_MAX = 2;
+
 /**
- * Les questions proposées pour une personne touchée : son lien avec la personne la plus présente de la
- * même scène, ce qui lui est arrivé récemment, ce qu'elle cherche — par le prénom du personnage. Sans
- * personnage, `undefined` (les propositions d'office).
+ * Les questions proposées pour une personne touchée (décision du propriétaire, 10.29.2) : **seulement son lien**
+ * avec un autre personnage vraiment présent dans la même scène d'« À l'écran » — le plus présent d'abord (temps à
+ * l'écran), puis un second s'il en existe un autre, deux au plus. « Qu'est-il arrivé à X récemment ? » et « Que
+ * cherche X ? » sont retirées (« Jusqu'ici » dit déjà le récent), comme le champ libre du panneau d'une personne.
+ * Par le prénom du personnage ; deux personnages au même prénom ne font qu'une proposition. Personne d'autre dans
+ * la scène : `[]` (aucune proposition). Sans personnage : `undefined`.
  */
 export function personQuestions(
   person: Pick<XrayPlayerPerson, "personId" | "character">,
-  scene: readonly Pick<XrayPlayerPerson, "personId" | "character">[],
+  scene: readonly (Pick<XrayPlayerPerson, "personId" | "character"> & { screenTime?: number | null })[],
   t: (key: string, vars?: Record<string, string | number>) => string
 ): string[] | undefined {
   const name = characterFirstName(person.character);
   if (!name) return undefined;
-  const other = scene.map((p) => (p.personId === person.personId ? null : characterFirstName(p.character))).find((n) => n && n !== name);
-  return [...(other ? [t("xray.qLink", { name, other })] : []), t("xray.qRecent", { name }), t("xray.qWants", { name })];
+  const others: string[] = [];
+  // Tri stable : à temps égal, l'ordre de la scène.
+  const byTime = [...scene].sort((a, b) => (b.screenTime ?? 0) - (a.screenTime ?? 0));
+  for (const p of byTime) {
+    if (p.personId === person.personId) continue;
+    const other = characterFirstName(p.character);
+    if (!other || other === name || others.includes(other)) continue;
+    others.push(other);
+    if (others.length >= PERSON_QUESTIONS_MAX) break;
+  }
+  return others.map((other) => t("xray.qLink", { name, other }));
 }
 
 let regionCodes: Map<string, string> | null = null;

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRevealAfterFrame } from "@/lib/useRevealAfterFrame";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
@@ -512,11 +513,8 @@ export function ExperimentalPlayerHost({
    * Posé à la frame suivante et non au montage : appliquer l'état d'arrivée et l'état d'entrée
    * dans le même rendu ne laisse rien à animer au navigateur.
    */
-  const [revealed, setRevealed] = useState(false);
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setRevealed(true));
-    return () => cancelAnimationFrame(frame);
-  }, []);
+  // Avec un filet (10.29.2, `useRevealAfterFrame`) : sans image sous 400 ms, il se montre quand même.
+  const revealed = useRevealAfterFrame();
   const [playing, setPlaying] = useState(false);
   // Tant que ça joue, l'écran reste allumé — voir useWakeLock pour ce que chaque chemin
   // obtient déjà tout seul et ce qu'il n'obtient pas.

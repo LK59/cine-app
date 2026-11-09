@@ -238,10 +238,11 @@ describe("la rangée « À l'écran » du lecteur", () => {
     const header = dialog.querySelector('[data-ask-person="2"]')!;
     expect(header.textContent).toContain("Elliot Page");
     expect(header.textContent).toContain("Ariadne");
-    // 10.27 : son lien avec l'autre personne de la scène, ce qui lui est arrivé, ce qu'elle cherche.
+    // 10.29.2 : seulement son lien avec l'autre personne de la scène — ni « récemment », ni « que cherche », ni champ.
     expect(screen.getByText('xray.qLink:{"name":"Ariadne","other":"Dom"}')).toBeTruthy();
-    expect(screen.getByText('xray.qRecent:{"name":"Ariadne"}')).toBeTruthy();
-    expect(screen.getByText('xray.qWants:{"name":"Ariadne"}')).toBeTruthy();
+    expect(screen.queryByText('xray.qRecent:{"name":"Ariadne"}')).toBeNull();
+    expect(screen.queryByText('xray.qWants:{"name":"Ariadne"}')).toBeNull();
+    expect(dialog.querySelector("[data-ask-input]")).toBeNull();
     expect(screen.queryByText("ask.chipPlayer0")).toBeNull();
   });
 

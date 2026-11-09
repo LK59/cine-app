@@ -1,5 +1,6 @@
 "use client";
 
+import { useRevealAfterFrame } from "@/lib/useRevealAfterFrame";
 import { PLAYER_FRAME_TRANSITION } from "@/lib/playerFrame";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { SubtitleLayer } from "@/components/player/SubtitleLayer";
@@ -142,11 +143,8 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
   const isMini = mode === "mini";
   // Posé à l'image suivante, comme le lecteur en ligne : l'état d'arrivée et l'état d'entrée dans le
   // même rendu ne laissent rien à animer.
-  const [revealed, setRevealed] = useState(false);
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setRevealed(true));
-    return () => cancelAnimationFrame(frame);
-  }, []);
+  // Avec un filet (10.29.2, `useRevealAfterFrame`) : sans image sous 400 ms, il se montre quand même.
+  const revealed = useRevealAfterFrame();
 
   // Le moteur, ouvert une fois pour cette séance.
   useEffect(() => {

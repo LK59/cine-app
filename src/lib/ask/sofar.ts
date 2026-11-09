@@ -264,6 +264,74 @@ export interface SofarEntry {
   }>;
 }
 
+// ── Les pannes passagères : une attente courte par clé et par compte (10.29.2) ────────────────────
+
+/**
+ * Pendant un passage du banc de bout en bout (09/11/2026), après un 429 du fournisseur, chaque toucher d'une
+ * pilule relançait le modèle : 43 refus en quelques minutes — rien n'était gardé d'une panne, exprès (la demande
+ * suivante réessaie). Désormais une panne **passagère** (débit, surcharge, 5xx, délai, réseau : `sofarTransient`)
+ * ouvre une attente : deux minutes, puis dix si la même clé (ou le même compte) retombe en panne dans la demi-heure
+ * qui suit la fin de la précédente — jamais plus. Pendant ce temps, un toucher montre la ligne discrète sans appeler
+ * le modèle (`sofarWaiting`, `status: "attente-erreur"` à `recherche.log`). En mémoire seulement : un redémarrage
+ * l'oublie, et c'est voulu. Un texte, « rien à dire » ou un rejet du filet effacent l'attente de la clé et du compte.
+ * Un refus du modèle ou une réponse coupée au plafond ne sont pas passagers : ils restent des pannes ordinaires.
+ */
+export const SOFAR_FAIL_WAIT_MS = 2 * 60_000;
+export const SOFAR_FAIL_WAIT_MAX_MS = 10 * 60_000;
+/** Une panne qui suit la fin de l'attente précédente de moins que ceci compte comme une récidive (dix minutes). */
+const SOFAR_FAIL_MEMORY_MS = 30 * 60_000;
+/** Une borne contre une fuite : les plus anciennes attentes partent d'abord. */
+const SOFAR_FAIL_MAX = 2000;
+
+type FailWait = { until: number; count: number };
+const FAIL_KEY = Symbol.for("cine-app.askSofarFailures");
+const sharedFail = globalThis as typeof globalThis & { [FAIL_KEY]?: { byKey: Map<string, FailWait>; byAccount: Map<string, FailWait> } };
+const failures = (sharedFail[FAIL_KEY] ??= { byKey: new Map(), byAccount: new Map() });
+
+/** Une panne passagère du fournisseur : 408, 429, 5xx (529 compris), délai du chien de garde, réseau coupé. */
+export function sofarTransient(error: unknown): boolean {
+  const e = error as { status?: unknown; name?: unknown; kind?: unknown; message?: unknown; code?: unknown } | null;
+  if (!e || typeof e !== "object") return false;
+  if (typeof e.status === "number") return e.status === 408 || e.status === 429 || e.status >= 500;
+  if (e.kind === "rate" || e.kind === "server" || e.kind === "network") return true;
+  if (e.name === "AskModelTimeout" || e.name === "TimeoutError" || e.name === "APIConnectionError" || e.name === "APIConnectionTimeoutError") return true;
+  // `fetch failed` (undici), une connexion coupée : un `TypeError` sans statut, ou un code de socket.
+  if (e.name === "TypeError" && typeof e.message === "string" && /fetch|network|socket/i.test(e.message)) return true;
+  return typeof e.code === "string" && /^(ECONN|ETIMEDOUT|EAI_AGAIN|UND_ERR)/.test(e.code);
+}
+
+function noteFailure(map: Map<string, FailWait>, id: string, now: number): void {
+  const prev = map.get(id);
+  const count = prev && now - prev.until < SOFAR_FAIL_MEMORY_MS ? prev.count + 1 : 1;
+  map.delete(id);
+  map.set(id, { until: now + (count >= 2 ? SOFAR_FAIL_WAIT_MAX_MS : SOFAR_FAIL_WAIT_MS), count });
+  while (map.size > SOFAR_FAIL_MAX) map.delete(map.keys().next().value as string);
+}
+
+/** Une panne passagère pour cette clé, demandée par ce compte : l'attente s'ouvre (ou s'allonge) pour les deux. */
+export function sofarNoteFailure(key: string, account: string, now = Date.now()): void {
+  noteFailure(failures.byKey, key, now);
+  noteFailure(failures.byAccount, account, now);
+}
+
+/** Le modèle a répondu (texte, « rien à dire », rejet) : plus d'attente pour cette clé ni ce compte. */
+function sofarClearFailure(key: string, account: string): void {
+  failures.byKey.delete(key);
+  failures.byAccount.delete(account);
+}
+
+/**
+ * En attente après une panne : `key` (cette entrée), `compte` (ce compte, une autre entrée), ou `null`. Le
+ * reste en millisecondes, pour le journal.
+ */
+export function sofarWaiting(key: string, account: string, now = Date.now()): { by: "clé" | "compte"; leftMs: number } | null {
+  const k = failures.byKey.get(key);
+  if (k && k.until > now) return { by: "clé", leftMs: k.until - now };
+  const a = failures.byAccount.get(account);
+  if (a && a.until > now) return { by: "compte", leftMs: a.until - now };
+  return null;
+}
+
 const STORE_KEY = Symbol.for("cine-app.askSofar");
 const shared = globalThis as typeof globalThis & { [STORE_KEY]?: Map<string, SofarEntry> };
 const store = (shared[STORE_KEY] ??= new Map());
@@ -326,6 +394,8 @@ export function sofarStart(
     // Gardé en base : un texte, « rien à dire », ou un rejet du filet des noms (une heure, `sofarLookup`).
     // Jamais une panne, ni un texte vidé deux fois par le filet des mots de coulisse (`unkept`, 10.29.2) : ce
     // n'est pas « rien à dire », la demande suivante réessaie.
+    // Le modèle a répondu : une attente ouverte par une panne passée se referme (10.29.2).
+    if (state !== "erreur") sofarClearFailure(key, by);
     if (!unkept && (state === "ok" || state === "vide" || state === "rejeté")) {
       try {
         sofarDb.put(key, state, state === "ok" ? JSON.stringify(entry.sentences) : null, by, entry.at);
@@ -440,6 +510,8 @@ export function sofarStart(
     } catch (error) {
       entry.sentences = [];
       entry.shown = "";
+      // Une panne passagère ouvre l'attente (10.29.2) — avant `finish`, qui libère les lecteurs.
+      if (sofarTransient(error)) sofarNoteFailure(key, by);
       finish("erreur");
       return { state: "erreur" as const, ms: Date.now() - started, error };
     }
@@ -470,4 +542,6 @@ export function sofarSubscribe(entry: SofarEntry, on: (e: SofarEvent) => void): 
 
 export function resetSofarForTests(): void {
   store.clear();
+  failures.byKey.clear();
+  failures.byAccount.clear();
 }

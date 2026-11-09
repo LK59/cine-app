@@ -4316,9 +4316,7 @@
     },
     "library": "In Ihrer Mediathek",
     "diedAt": "† mit {n} Jahren",
-    "qLink": "In welcher Beziehung steht {name} zu {other}?",
-    "qRecent": "Was ist {name} zuletzt passiert?",
-    "qWants": "Was will {name}?"
+    "qLink": "In welcher Beziehung steht {name} zu {other}?"
   },
   "aiFeatures": {
     "title": "Was jede Funktion je nach Anbieter leistet",

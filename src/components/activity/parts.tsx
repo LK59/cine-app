@@ -839,6 +839,10 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
             numOf(line.sceneStart) !== null && `scène ${numOf(line.sceneStart)} s`,
             box(line.row),
             numOf(line.firstOpacity) !== null && `opacité ${numOf(line.rowOpacity) ?? "?"}/${numOf(line.firstOpacity)}`,
+            // 10.29.2 : ce que l'écran montre vraiment — dit seulement quand ce n'est pas « tout visible, elle dessus ».
+            numOf(line.rowEffOpacity) !== null && numOf(line.rowEffOpacity) !== 1 && `effective ${numOf(line.rowEffOpacity)}`,
+            strOf(line.rowHiddenBy) && `cachée (${strOf(line.rowHiddenBy)})`,
+            strOf(line.firstTop) && strOf(line.firstTop) !== "elle" && `dessus : ${strOf(line.firstTop)}`,
             strOf(line.firstVisibility) && strOf(line.firstVisibility) !== "visible" && strOf(line.firstVisibility)
           );
         case "tap":
@@ -850,6 +854,8 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
             line.early === true && "refermé avant la mesure",
             strOf(line.top) && `dessus : ${strOf(line.top)}`,
             numOf(line.panelOpacity) !== null && `opacité ${numOf(line.panelOpacity)}`,
+            numOf(line.panelEffOpacity) !== null && numOf(line.panelEffOpacity) !== 1 && `effective ${numOf(line.panelEffOpacity)}`,
+            strOf(line.panelHiddenBy) && `caché (${strOf(line.panelHiddenBy)})`,
             strOf(line.panelVisibility) && strOf(line.panelVisibility) !== "visible" && strOf(line.panelVisibility),
             box(line.panel)
           );

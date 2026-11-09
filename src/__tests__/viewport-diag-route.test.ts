@@ -148,4 +148,24 @@ describe("POST /api/viewport-diag", () => {
     expect((await post({ kind: "xray-ui", event: "boom" })).status).toBe(400);
     expect(mockLog).toHaveBeenCalledTimes(1);
   });
+
+  it("10.29.2 — l'opacité effective, ce qui cache plus haut, ce qui est dessus au centre de la rangée et de la pilule", async () => {
+    const res = await post({
+      kind: "xray-ui",
+      event: "row",
+      rowOpacity: 1,
+      rowEffOpacity: 0,
+      firstEffOpacity: 0.004,
+      panelEffOpacity: 3,
+      rowHiddenBy: "display",
+      firstHiddenBy: "<script>",
+      rowTop: "elle",
+      firstTop: "main[data-home]" + "x".repeat(100),
+    });
+    expect(res.status).toBe(204);
+    const [line] = mockLog.mock.calls[0];
+    expect(line).toMatchObject({ event: "row", rowOpacity: 1, rowEffOpacity: 0, firstEffOpacity: 0, panelEffOpacity: 1, rowHiddenBy: "display", rowTop: "elle" });
+    expect(line).not.toHaveProperty("firstHiddenBy");
+    expect(String(line.firstTop)).toHaveLength(60);
+  });
 });

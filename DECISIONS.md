@@ -8974,10 +8974,10 @@ faits. Sans l'option des questions, toucher une personne ne fait rien (la rangé
   appels, mêmes clés de cache, `selectBio`) — rien n'est recopié. Même porte que les scènes (`xrayOpenTo`,
   `assertVisible`, lien de partage par la règle de la route), 200 et `status: "none"` quand il n'y a rien.
   Avec l'option : le même panneau, plus « Jusqu'ici » et les questions (§139). Ordre : en-tête →
-  « Jusqu'ici » → faits et biographie → bibliothèque → questions proposées → champ.
-- Les questions proposées pour une personne (`personQuestions`) : « Quel est le lien entre <prénom> et
-  <prénom de la personne la plus présente de la même scène> ? », « Qu'est-il arrivé à <prénom> récemment ? »,
-  « Que cherche <prénom> ? » — « Qui est … ? » est retiré.
+  « Jusqu'ici » → faits et biographie → bibliothèque → questions proposées (plus de champ depuis 10.29.2, §139).
+- Les questions proposées pour une personne (`personQuestions`) : depuis 10.29.2 (§139), seulement « Quel est le lien
+  entre <prénom> et <prénom> ? » avec les autres personnages de la même scène, par temps à l'écran, deux au plus ;
+  « Qu'est-il arrivé à … récemment ? », « Que cherche … ? » et « Qui est … ? » sont retirées.
 Porteurs ajoutés : `useOnScreenPlacement`, `onScreenRowWidth`/`onScreenRowBottom`, `personQuestions`,
 `compactPlace`/`personFactsLine`, `usePersonFacts` (`src/lib/xray/client.ts`), `AskPersonBlock`
 (`AskPersonHeader.tsx`), `src/lib/xray/person.ts`, `src/lib/tmdbPerson.ts`. Tests : `xray-row-1027.test.tsx`,
@@ -9859,6 +9859,52 @@ encore vidé : la ligne discrète, rien de gardé, pas de troisième appel ; une
   seulement, `leadVerdict`, une phrase sans nom retirée et la suivante gardée, « RIEN » intact) ; `ask-sofar.test.ts`
   (une réponse sans le nom en tête : un second passage ; version 8) ; `ask-sofar-s7c.test.ts` (la consigne octet pour
   octet).
+
+**10.29.2 — le banc de bout en bout : cinq retouches au panneau d'une personne et autour.**
+
+- **Le panneau d'une personne du lecteur n'a plus de champ libre** (décision du propriétaire). Ni le champ ni son
+  clavier (`freeInput` = questions ouvertes **et** pas de personne ; `useKeyboardDiag` reçoit `enabled`) ; « Qu'est-il
+  arrivé à X récemment ? » et « Que cherche X ? » sont retirées (« Jusqu'ici » dit déjà le récent), avec leurs clés
+  (`xray.qRecent`, `xray.qWants`, quatre langues). Restent les liens (`personQuestions`, `xray/client.ts`) : « Quel est
+  le lien entre <prénom> et <prénom> ? » avec les **autres personnages de la même scène d'« À l'écran »**, par temps à
+  l'écran décroissant, deux au plus, un même prénom une fois. Personne d'autre dans la scène : aucune proposition (ni
+  les trois d'office) — « Jusqu'ici » et les faits seulement. Une proposition touchée part comme avant (`about:
+  "person"`, la même porte côté serveur), la réponse dans le panneau. Le champ libre reste au panneau d'un titre (fiches,
+  bouton rond du lecteur). Ceci remplace la liste « Les questions proposées pour une personne » de §138.
+- **« Jusqu'ici » attend après une panne passagère** (`sofarTransient`, `sofarNoteFailure`, `sofarWaiting`,
+  `sofar.ts`). Le banc avait vu 43 appels refusés en quelques minutes après un 429 : rien n'était gardé d'une panne, et
+  chaque toucher relançait le modèle. Une panne passagère (408, 429, 5xx dont 529, délai du chien de garde, réseau)
+  ouvre une attente pour la clé **et** pour le compte : 2 min (`SOFAR_FAIL_WAIT_MS`), 10 min (`SOFAR_FAIL_WAIT_MAX_MS`)
+  si elle revient dans la demi-heure qui suit, jamais plus ; en mémoire, bornée à 2 000 entrées. Pendant l'attente,
+  `answerSofar` répond `{"t":"error","code":"erreur"}` (la ligne discrète) sans appeler le modèle, préparations comprises,
+  et écrit `status: "attente-erreur"` avec `waitBy` (`clé` / `compte`) et `waitLeftS` à `recherche.log`. Une réponse
+  (texte, « rien à dire », rejet) referme l'attente de la clé et du compte. Un refus du modèle ou une réponse coupée
+  au plafond ne sont pas passagers : pannes ordinaires, redemandées. Le texte, « vide » et le rejet gardé une heure
+  sont inchangés.
+- **Les biographies de TMDB sans Markdown** (`stripSimpleMarkdown`, `format.ts`) : « *Atlanta* », « **Widows** »,
+  « _x_ », « [titre](url) » s'affichaient tels quels. Nettoyé dans `selectBio`, que lisent les fiches d'acteur, la page
+  de personne et le panneau du lecteur (`personFactsForPlayer`). Une étoile ou un trait bas qui ne marquent rien
+  (« 5 * 3 », « mon_fichier ») restent.
+- **Le relevé `xray-ui` dit ce que l'écran montre vraiment** (`effectiveLookOf`, `xrayUiDiag.ts`). Les lignes `row` du
+  banc disaient `rowOpacity: 1` alors que tout le cadre du lecteur était à 0 (l'accueil à l'écran). `row` porte en plus
+  `rowEffOpacity` / `firstEffOpacity` (produit des opacités jusqu'à la racine), `rowHiddenBy` / `firstHiddenBy`
+  (`display` / `visibility` d'un ancêtre) et `rowTop` / `firstTop` (`elementFromPoint` au centre : `elle`, ou
+  l'élément trouvé) ; `open` porte `panelEffOpacity` / `panelHiddenBy`. La route les borne ; l'activité ne les dit que
+  quand ils s'écartent de « visible, elle dessus ».
+- **Le lecteur se montre même sans image** (`useRevealAfterFrame`, `REVEAL_FALLBACK_MS` = 400 ms ; lecteur en ligne et
+  hors ligne). `revealed` était posé par un seul `requestAnimationFrame` : sous charge, WebKit a laissé le cadre à
+  l'opacité 0 de 2,6 à 9,3 s, le film derrière l'accueil. Le minuteur ne force que ce même état ; il est annulé quand
+  l'image vient d'abord (le cas ordinaire : même ordre, empreintes inchangées) et au démontage. `revealed` ne règle que
+  l'opacité et l'échelle du cadre (`nativeFrameStyle`, fondu de 220 ms) — pas l'ouverture de §60 (visuel, logo, ligne),
+  montée et cadencée par l'hôte indépendamment, ni le départ du chargement ni les commandes ; `closing` l'emporte
+  toujours (un lecteur qui se referme reste à 0).
+Tests : `xray-person-panel.test.tsx`, `xray-onscreen.test.tsx` (liens seulement, par temps à l'écran, deux au plus,
+aucun champ ; `panelEffOpacity` sous un ancêtre à 0) ; `ask-sofar.test.ts` (ce qui est passager ; après un 429, ni la
+même clé, ni un autre compte, ni une autre clé du compte n'appellent le modèle ; 2 puis 10 min, borné ; une réponse
+referme ; un refus n'attend pas) ; `format.test.ts` (Markdown retiré, étoiles isolées gardées) ;
+`viewport-diag-route.test.ts` (les champs bornés) ; `xray-ui-reveal-10292.test.tsx` (`effectiveLookOf`, la ligne `row`
+sous un cadre invisible, le filet de 400 ms, l'image d'abord sans minuteur restant, le démontage qui annule tout,
+`closing` plus fort que `revealed`).
 
 ## 140. Les fonctions d'IA chez les trois fournisseurs, un seul plafond mensuel, et des réglages qui disent ce qu'ils demandent (09/11/2026)
 

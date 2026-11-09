@@ -236,3 +236,20 @@ describe("selectBio", () => {
     expect(result?.source).toBe("tmdb");
   });
 });
+
+// 10.29.2 : TMDB laisse du Markdown dans ses biographies (« *Atlanta* », « *Widows* ») — affiché tel quel dans les
+// fiches d'acteur et le panneau d'une personne du lecteur, qui passent tous par `selectBio`.
+describe("selectBio — le Markdown simple de TMDB retiré", () => {
+  it("emphase, gras, trait bas et liens : le texte seul", () => {
+    const bio =
+      "Brian Tyree Henry est un acteur américain. Il est connu pour *Atlanta* et **Widows**, et pour _If Beale Street Could Talk_ ; " +
+      "voir [Eternals](https://www.themoviedb.org/movie/524434) et __Bullet Train__.";
+    expect(selectBio(bio, null)?.text).toBe(
+      "Brian Tyree Henry est un acteur américain. Il est connu pour Atlanta et Widows, et pour If Beale Street Could Talk ; voir Eternals et Bullet Train."
+    );
+  });
+  it("une étoile ou un trait bas qui ne marquent rien restent (« 5 * 3 », « snake_case », « L'*Atlanta* » nettoyé)", () => {
+    expect(selectBio("Il note 5 * 3 = 15 dans un fichier mon_fichier_test pour son rôle.", null)?.text).toBe("Il note 5 * 3 = 15 dans un fichier mon_fichier_test pour son rôle.");
+    expect(selectBio("Révélé dans l'*Atlanta* de Glover.", null)?.text).toBe("Révélé dans l'Atlanta de Glover.");
+  });
+});

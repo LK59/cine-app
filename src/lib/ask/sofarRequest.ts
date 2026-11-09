@@ -22,7 +22,7 @@ import { aiBudgetReached } from "@/lib/aiFeatures";
 import { castPerson } from "@/lib/xray/person";
 import { scenesForPlayer } from "@/lib/xray/scenes";
 import { sofarCut, sofarMark } from "@/lib/ask/sofarCut";
-import { SOFAR_MOVIE_MIN_S, sofarInput, sofarKey, sofarLookup, sofarParts, sofarScenes, sofarSources, sofarStart, sofarSubscribe, sofarSystem, type SofarEntry } from "@/lib/ask/sofar";
+import { SOFAR_MOVIE_MIN_S, sofarInput, sofarKey, sofarLookup, sofarParts, sofarScenes, sofarSources, sofarStart, sofarSubscribe, sofarSystem, sofarWaiting, type SofarEntry } from "@/lib/ask/sofar";
 
 /**
  * La borne par compte (consigne du propriétaire, 09/11/2026 : ~100 €/mois de crédit, ne pas brider — seulement
@@ -134,6 +134,13 @@ export async function answerSofar(
   let entry: SofarEntry | null = sofarLookup(key);
   const cache = entry ? (entry.by === who.account ? "compte" : "partagé") : "nouveau";
   if (!entry) {
+    // Une panne passagère toute récente, pour cette entrée ou ce compte (10.29.2, `sofarWaiting`) : la ligne
+    // discrète, sans appeler le modèle — après un 429, chaque toucher le relançait.
+    const waiting = sofarWaiting(key, who.account);
+    if (waiting) {
+      logJusquici({ ...base, cache, status: "attente-erreur", waitBy: waiting.by, waitLeftS: Math.ceil(waiting.leftMs / 1000), ms: Date.now() - started });
+      return oneShot({ t: "error", code: "erreur" });
+    }
     // Le plafond mensuel commun atteint (§140) : rien de nouveau n'est écrit — l'écran se tait.
     if (aiBudgetReached()) {
       logJusquici({ ...base, cache, status: "limite", ms: Date.now() - started });

@@ -4316,9 +4316,7 @@
     },
     "library": "En su biblioteca",
     "diedAt": "† a los {n} años",
-    "qLink": "¿Qué relación tiene {name} con {other}?",
-    "qRecent": "¿Qué le ha pasado a {name} últimamente?",
-    "qWants": "¿Qué busca {name}?"
+    "qLink": "¿Qué relación tiene {name} con {other}?"
   },
   "aiFeatures": {
     "title": "Lo que hace cada función según el proveedor",

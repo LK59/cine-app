@@ -50,7 +50,7 @@ vi.mock("@/lib/xray/person", () => ({
 }));
 
 import { setAskModelForTests, resetAskCachesForTests, AskModelTimeout, type AskModel } from "@/lib/ask/service";
-import { resetSofarForTests, sofarCutoff, sofarKey, sofarSources, sofarSystem, SOFAR_KEEP_MS, SOFAR_REJECT_KEEP_MS, SOFAR_MAX_EPISODES, SOFAR_MOVIE_MIN_S, SOFAR_NOTHING, SOFAR_VERSION } from "@/lib/ask/sofar";
+import { resetSofarForTests, SOFAR_FAIL_WAIT_MS, SOFAR_FAIL_WAIT_MAX_MS, sofarTransient, sofarCutoff, sofarKey, sofarSources, sofarSystem, SOFAR_KEEP_MS, SOFAR_REJECT_KEEP_MS, SOFAR_MAX_EPISODES, SOFAR_MOVIE_MIN_S, SOFAR_NOTHING, SOFAR_VERSION } from "@/lib/ask/sofar";
 import { askContent, ASK_MODEL, SOFAR_MAX_OUTPUT_TOKENS } from "@/lib/ask/service";
 import { metaReminder, type AskContextInput } from "@/lib/ask/core";
 import { SOFAR_DIALOGUE_WAIT_MS, SOFAR_PER_HOUR } from "@/lib/ask/sofarRequest";
@@ -346,6 +346,102 @@ describe("les pannes du modèle : dites proprement, jamais gardées", () => {
     });
     const r = await question(account());
     expect(r.events.at(-1)).toEqual({ t: "error", code: "erreur" });
+  });
+});
+
+describe("10.29.2 — une panne passagère : une attente courte avant de rappeler le modèle", () => {
+  // Le banc de bout en bout du 09/11/2026 : après un 429, chaque toucher relançait le modèle — 43 refus en quelques minutes.
+  function counting(err: unknown) {
+    const calls = { n: 0 };
+    const fail = failing(err);
+    return { calls, model: ((req) => (calls.n++, fail(req))) as AskModel };
+  }
+  const rate = () => Object.assign(new Error("rate"), { status: 429 });
+
+  it("ce qui est passager : 429, 529, 5xx, 408, délai, réseau — pas un refus ni une réponse coupée", () => {
+    for (const status of [408, 429, 500, 503, 529]) expect(sofarTransient(Object.assign(new Error("x"), { status }))).toBe(true);
+    expect(sofarTransient(new AskModelTimeout())).toBe(true);
+    expect(sofarTransient(new TypeError("fetch failed"))).toBe(true);
+    expect(sofarTransient(Object.assign(new Error("x"), { status: 400 }))).toBe(false);
+    expect(sofarTransient(new Error("refus du modèle (stop_reason: refusal)"))).toBe(false);
+    expect(sofarTransient(new Error("réponse coupée au plafond (stop_reason: max_tokens)"))).toBe(false);
+  });
+
+  it("après un 429 : le toucher suivant montre la ligne discrète sans appeler le modèle — même clé, autre compte, ou autre clé du même compte", async () => {
+    const { calls, model } = counting(rate());
+    setAskModelForTests(model);
+    const a = account();
+    expect((await sofar(a)).events).toEqual([{ t: "error", code: "erreur" }]);
+    await settle();
+    expect(calls.n).toBe(1);
+    // Le même compte, la même entrée : rien ne part.
+    expect((await sofar(a)).events).toEqual([{ t: "error", code: "erreur" }]);
+    expect(sofarLog).toHaveBeenLastCalledWith(expect.objectContaining({ status: "attente-erreur", waitBy: "clé" }));
+    // Un autre compte au même endroit : la même entrée, la même attente.
+    expect((await sofar(account())).events).toEqual([{ t: "error", code: "erreur" }]);
+    // Le même compte, une autre tranche (une autre clé) : l'attente du compte.
+    expect((await sofar(a, { positionS: 25 * 60 })).events).toEqual([{ t: "error", code: "erreur" }]);
+    expect(sofarLog).toHaveBeenLastCalledWith(expect.objectContaining({ status: "attente-erreur", waitBy: "compte" }));
+    expect(calls.n).toBe(1);
+    // Préparée en fond : pas d'appel non plus.
+    await sofar(a, { prewarm: true });
+    expect(calls.n).toBe(1);
+  });
+
+  it(`l'attente : ${SOFAR_FAIL_WAIT_MS / 60_000} min, puis ${SOFAR_FAIL_WAIT_MAX_MS / 60_000} si la panne revient — jamais plus ; une réponse la referme`, async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const t0 = Date.parse("2026-11-09T20:00:00Z");
+      vi.setSystemTime(t0);
+      const { calls, model } = counting(Object.assign(new Error("overloaded"), { status: 529 }));
+      setAskModelForTests(model);
+      const a = account();
+      await sofar(a);
+      await settle();
+      vi.setSystemTime(t0 + SOFAR_FAIL_WAIT_MS - 1000);
+      await sofar(a);
+      expect(calls.n).toBe(1);
+      // Passé deux minutes : le modèle est rappelé — et retombe en panne : dix minutes cette fois.
+      vi.setSystemTime(t0 + SOFAR_FAIL_WAIT_MS + 1000);
+      await sofar(a);
+      await settle();
+      expect(calls.n).toBe(2);
+      const t1 = t0 + SOFAR_FAIL_WAIT_MS + 1000;
+      vi.setSystemTime(t1 + SOFAR_FAIL_WAIT_MS + 1000);
+      await sofar(a);
+      expect(calls.n).toBe(2);
+      // Une troisième panne garde dix minutes (borné).
+      vi.setSystemTime(t1 + SOFAR_FAIL_WAIT_MAX_MS + 1000);
+      await sofar(a);
+      await settle();
+      expect(calls.n).toBe(3);
+      const t2 = t1 + SOFAR_FAIL_WAIT_MAX_MS + 1000;
+      vi.setSystemTime(t2 + SOFAR_FAIL_WAIT_MAX_MS - 1000);
+      await sofar(a);
+      expect(calls.n).toBe(3);
+      // Le modèle répond enfin : le texte, gardé ; l'attente du compte est refermée pour une autre entrée.
+      vi.setSystemTime(t2 + SOFAR_FAIL_WAIT_MAX_MS + 1000);
+      setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe."));
+      expect((await sofar(a)).text).toBe("Ariadne construit le labyrinthe.");
+      await settle();
+      setAskModelForTests(model);
+      await sofar(a, { positionS: 25 * 60 });
+      await settle();
+      expect(calls.n).toBe(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("un refus du modèle n'ouvre pas d'attente : le toucher suivant le redemande (une panne ordinaire)", async () => {
+    let n = 0;
+    setAskModelForTests((req) => (n++, scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe.", [], "refusal")(req)));
+    const a = account();
+    await sofar(a);
+    await settle();
+    await sofar(a);
+    await settle();
+    expect(n).toBe(2);
   });
 });
 
