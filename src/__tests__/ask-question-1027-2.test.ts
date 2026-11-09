@@ -38,7 +38,7 @@ vi.mock("@/lib/logger", () => ({ logError: (...args: unknown[]) => logError(...a
 vi.mock("@/lib/eventLogs", () => ({ logAskQuestion: (...args: unknown[]) => askLog(...args), logJusquici: vi.fn(), logRecap: vi.fn() }));
 vi.mock("@/lib/xray/person", () => ({ actorFactsForAsk: (...args: unknown[]) => actorFacts(...args), castPerson: vi.fn(async () => null) }));
 
-import { actorFactsText, AnswerGate, askParts, askSources, METALESS_LIMIT, metaTalk, rewriteMetaPrefix, type AskContextInput } from "@/lib/ask/core";
+import { actorFactsText, AnswerGate, askParts, askSources, leadForms, leadVerdict, METALESS_LIMIT, metaTalk, rewriteMetaPrefix, type AskContextInput } from "@/lib/ask/core";
 import { ASK_MAX_OUTPUT_TOKENS, setAskModelForTests, resetAskCachesForTests, type AskModel } from "@/lib/ask/service";
 
 const MOVIE = "a".repeat(32);
@@ -169,6 +169,48 @@ describe("les mots de coulisse (`metaTalk`)", () => {
     const out = gate.push("NOMS: Sam Obisanya\n\nSam Obisanya n'a pas encore eu de moment à lui. Il est là jusqu'à 9 minutes. ");
     const end = gate.end();
     expect([...out.release, ...end.release].join(" ")).toBe("Sam Obisanya n'a pas encore eu de moment à lui.");
+  });
+  // 10.29.2, « Jusqu'ici » seulement : « Dans S01E07, elle décide… », « est dans l'épisode en cours », « sans que le film
+  // ait encore révélé… », « Au moment où le spectateur la retrouve », « dans « Deux as » » — la parole du lecteur.
+  it("« Jusqu'ici » : codes et titres d'épisodes, « l'épisode en cours », « le film », « le spectateur » sont pris — une question non", () => {
+    const narrator = { titles: ["deux as", "une virée mouvementée"] };
+    expect(metaTalk("Dans S01E07, elle décide de partir.", "", narrator)).toEqual(["s01e07"]);
+    expect(metaTalk("Elle est dans l'épisode en cours avec Mac.", "", narrator)).toEqual(["l'épisode en cours"]);
+    expect(metaTalk("Sans que le film ait encore révélé son sort.", "", narrator)).toEqual(["le film"]);
+    expect(metaTalk("Au moment où le spectateur la retrouve.", "", narrator)).toEqual(["le spectateur"]);
+    expect(metaTalk("Ted fait appel à Dani Rojas dans « Deux as ».", "", narrator)).toEqual(["deux as"]);
+    // Une question peut parler du film ou d'un épisode.
+    expect(metaTalk("Dans le film, Ariadne dessine ; dans S01E07 aussi.", "")).toEqual([]);
+    // Un film sur un tournage : « le film » dit par l'histoire reste permis.
+    expect(metaTalk("Il finance le film.", "on doit finir le film avant lundi.", narrator)).toEqual([]);
+  });
+  it("le nom en tête (`leadVerdict`) : un mot du nom, après un article au besoin, ou un nom que les répliques emploient", () => {
+    const forms = leadForms("Angus 'Mac' MacGyver");
+    expect([...forms]).toEqual(["angus", "mac", "macgyver"]);
+    expect(leadVerdict(["Mac,"], forms, "")).toBe("ok");
+    expect(leadVerdict(["MacGyver", "démonte"], forms, "")).toBe("ok");
+    expect(leadVerdict(["Dans", "S01E07,"], leadForms("Rebecca Welton"), "Bonjour, mon cher.")).toBe("miss");
+    expect(leadVerdict(["Elle", "décide"], leadForms("Rebecca Welton"), "")).toBe("miss");
+    expect(leadVerdict(["Le"], leadForms("The Prime Minister"), "")).toBe("wait");
+    // Le nom des répliques : en majuscule au milieu d'une phrase, ou interpellé en tête de réplique.
+    expect(leadVerdict(["Le", "Premier"], leadForms("The Prime Minister"), "Voici le Premier ministre.")).toBe("ok");
+    expect(leadVerdict(["Coccinelle,"], leadForms("Ladybug"), "Coccinelle, attends !")).toBe("ok");
+    expect(leadVerdict(["Coccinelle,"], leadForms("Ladybug"), "Rien ici.")).toBe("miss");
+  });
+  it("à travers `AnswerGate` (« Jusqu'ici ») : une phrase qui ne commence pas par le nom est retirée, la suivante gardée", () => {
+    const src = "Titre : Inception\n### Film en cours, jusqu'à 12 min\nAriadne construit le labyrinthe.";
+    const opts = { locale: "fr" as const, sources: src, retry: false, onMeta: "drop" as const, lead: "Ariadne" };
+    const gate = new AnswerGate(`Inception\n${src}\nAriadne — joué par Elliot Page`, { sentences: 2, words: 60 }, opts, "RIEN");
+    const out = [gate.push("NOMS: Ariadne\n\nElle dessine. Ariadne construit le labyrinthe. "), gate.end()];
+    expect(gate.text).toBe("Ariadne construit le labyrinthe.");
+    expect(gate.rewritten).toBe(true);
+    // Rien de la première phrase n'a été montré : elle attendait son premier mot.
+    expect(out.flatMap((o) => o.release)).not.toContain("Elle");
+    // « RIEN » reste « rien à dire », pas une phrase sans nom.
+    const nothing = new AnswerGate(`Inception\n${src}`, { sentences: 2, words: 60 }, opts, "RIEN");
+    nothing.push("NOMS: —\n\nRIEN");
+    nothing.end();
+    expect(nothing.nothing).toBe(true);
   });
   it("« D'après les sources, … » se reformule ; le reste non", () => {
     expect(rewriteMetaPrefix("D'après les sources, Ariadne dessine.", "fr")).toBe("D'après ce que vous avez vu, Ariadne dessine.");

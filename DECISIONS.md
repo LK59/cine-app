@@ -9835,6 +9835,31 @@ retirée et la phrase simple montrée) ; `ask-sofar-s7c.test.ts` (consigne octet
 retiré au premier passage : un second avec le rappel, deux appels, jetons additionnés, `regénéré`, le texte gardé ;
 encore vidé : la ligne discrète, rien de gardé, pas de troisième appel ; une phrase restée : un seul appel).
 
+- **Le nom en tête, et la parole du lecteur au filet** (même version de l'app, `SOFAR_VERSION` 8). La consigne finit
+  par « …puis la réponse, qui commence par le nom du personnage. », et le filet l'exige (`leadVerdict`, `core.ts`,
+  option `lead` de `MetaOptions`, posée par `sofarRequest`) : la première phrase gardée commence par un mot du nom
+  du personnage (après un article au besoin), ou par un nom que les répliques emploient comme tel — en majuscule au
+  milieu d'une phrase, ou interpellé (« Coccinelle, attends ! ») ; les répliques seules, ni la distribution ni les
+  résumés, où tous les noms sont écrits. Elle attend son premier nom avant de se montrer ; sans lui, elle est retirée
+  comme une phrase de coulisse, et si rien ne reste, le second passage part. Pour « Jusqu'ici » seulement (une
+  question peut parler du film ou d'un épisode), le filet prend aussi un code d'épisode (« Dans S01E07, elle… »), les
+  titres d'épisodes des intitulés des sources (« dans « Deux as » »), « l'épisode en cours », « le film » / « du
+  film » / « ce film » (« sans que le film ait encore révélé… »), « le spectateur », et leurs équivalents — excusés
+  quand l'histoire les dit (un film sur un tournage). Limite connue : un nom des répliques n'est pas forcément celui
+  du personnage présenté ; « Ted lui rend visite… » passe si « Ted » est interpellé dans les répliques.
+- **Banc v8** (le code de `main`, le filet réel, 9 appels dont un second passage) : Sam « n'a pas encore eu de moment
+  à lui. » ; Rebecca à 4 min deux fois Liverpool — la seconde après un premier passage vidé (« …dans la scène de la
+  chambre. Dans l'épisode précédent, elle… » : « scène », puis pas de nom) et redemandé ; Claude juste deux fois ;
+  Prince une fois juste et récent (« face à lui dans le train quand il est question de son pistolet saboté, destiné à
+  exploser sur la Mort Blanche »), deux fois faux : « lui a ordonné à l'hôpital de tuer son fils Wataru », « Prince, à
+  l'hôpital, présente Kimura comme l'homme qui doit la tuer ». C'est la scène d'X-Ray « Prince, Kimura, Hospital Thug »
+  — l'appel du train et la chambre d'hôpital montés en alternance, fondus en une scène — : le modèle place Prince à
+  l'hôpital et prête à Kimura l'ordre donné à l'homme de main. Le correctif est dans le découpage des scènes
+  (service X-Ray), pas dans la consigne. Tests : `ask-question-1027-2.test.ts` (la parole du lecteur pour « Jusqu'ici »
+  seulement, `leadVerdict`, une phrase sans nom retirée et la suivante gardée, « RIEN » intact) ; `ask-sofar.test.ts`
+  (une réponse sans le nom en tête : un second passage ; version 8) ; `ask-sofar-s7c.test.ts` (la consigne octet pour
+  octet).
+
 ## 140. Les fonctions d'IA chez les trois fournisseurs, un seul plafond mensuel, et des réglages qui disent ce qu'ils demandent (09/11/2026)
 
 **Règle.** Le fournisseur, la clé et le budget des sous-titres générés (§69) servent à **toutes** les

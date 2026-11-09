@@ -370,8 +370,9 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     expect(sys).not.toContain("ou à quoi il assiste");
   });
 
-  it("la version de la consigne est dans la clé : 7 (10.29.2), et une même entrée sous les versions d'avant donne une autre clé", () => {
-    expect(SOFAR_VERSION).toBe(7);
+  it("la version de la consigne est dans la clé : 8 (10.29.2), et une même entrée sous les versions d'avant donne une autre clé", () => {
+    expect(SOFAR_VERSION).toBe(8);
+    expect(sofarKey(ASK_MODEL, "s", "m", 7)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 6)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 5)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 4)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
@@ -444,6 +445,14 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     setAskModelForTests(model);
     expect((await sofar(account())).text).toBe("Ariadne construit le labyrinthe.");
     expect(model).not.toHaveBeenCalled();
+  });
+
+  it("une réponse qui ne commence pas par le nom du personnage (« Dans S01E07, elle… ») : retirée, un second passage", async () => {
+    const reqs: { message: string }[] = [];
+    setAskModelForTests(sequence(["NOMS: —\n\nElle construit le labyrinthe.", "NOMS: Ariadne\n\nAriadne construit le labyrinthe."], reqs));
+    const r = await sofar(account());
+    expect(reqs).toHaveLength(2);
+    expect(r.text).toBe("Ariadne construit le labyrinthe.");
   });
 
   it("le second passage encore vidé : la ligne discrète, rien de gardé, jamais un troisième appel", async () => {

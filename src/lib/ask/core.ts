@@ -394,6 +394,27 @@ const META_WORDS =
  */
 const TIME_REF = /(?<![\p{L}\d])\d+\s*(?:minutes?|mins?|minutos?|minuten?)(?![\p{L}])/giu;
 
+/**
+ * La parole du lecteur, pour « Jusqu'ici » seulement (10.29.2) : un code d'épisode (« Dans S01E07, elle… »), « l'épisode
+ * en cours », « le film » (« sans que le film ait encore révélé… »), « le spectateur ». Une question peut, elle,
+ * parler du film ou d'un épisode : ce n'est pas cherché pour elle. Comme les autres mots, excusé quand l'histoire
+ * le dit elle-même (un film sur un tournage).
+ */
+const NARRATOR_TALK =
+  /(?<![\p{L}\d])(s\d{1,2}\s?e\d{1,3}|l['’]épisode en cours|(?:le|du|ce) film|le spectateur|la spectatrice|the current episode|the (?:film|movie)|the viewer|el episodio actual|(?:la|esta) película|el espectador|die aktuelle folge|(?:der|den|im|dem) film|der zuschauer)(?![\p{L}\d])/giu;
+
+/** Les titres des épisodes que les sources nomment dans leurs intitulés (« ### S01E07 « Une virée mouvementée » … »). */
+function episodeTitles(sources: string): string[] {
+  const titles = new Set<string>();
+  for (const line of sources.split("\n")) {
+    const m = /^###.*?\bS\d+E\d+\s+«\s*(.+?)\s*»/u.exec(line);
+    if (m && m[1].length >= 4) titles.add(m[1].toLowerCase());
+  }
+  return [...titles];
+}
+
+const escapeRe = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /** Le texte des sources sans leurs intitulés : ce que l'histoire dit elle-même. */
 function metaMaterial(text: string): string {
   return text
@@ -404,11 +425,66 @@ function metaMaterial(text: string): string {
 }
 
 /** Les mots de coulisse d'une phrase, absents de l'histoire elle-même. */
-export function metaTalk(sentence: string, material: string): string[] {
+export function metaTalk(sentence: string, material: string, narrator?: { titles: readonly string[] }): string[] {
   const found = [...(sentence.match(META_WORDS) ?? []), ...(sentence.match(TIME_REF) ?? []).map((t) => t.replace(/\s+/gu, " "))];
+  if (narrator) {
+    found.push(...(sentence.match(NARRATOR_TALK) ?? []).map((t) => t.replace(/\s+/gu, " ")));
+    const said = sentence.toLowerCase();
+    for (const title of narrator.titles) if (new RegExp(`(?<![\\p{L}\\d])${escapeRe(title)}(?![\\p{L}\\d])`, "u").test(said)) found.push(title);
+  }
   const low = material.toLowerCase().replace(/\s+/gu, " ");
-  const esc = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return [...new Set(found.map((w) => w.toLowerCase()))].filter((w) => !new RegExp(`(?<![\\p{L}\\d-])${esc(w)}(?![\\p{L}-])`, "u").test(low));
+  return [...new Set(found.map((w) => w.toLowerCase()))].filter((w) => !new RegExp(`(?<![\\p{L}\\d-])${escapeRe(w)}(?![\\p{L}-])`, "u").test(low));
+}
+
+/**
+ * Le nom en tête (« Jusqu'ici », 10.29.2) : la première phrase gardée commence par le personnage présenté — un mot de
+ * son nom (« Rebecca », « MacGyver », « Prince »), après un article au besoin (« le Premier ministre »), ou un nom que
+ * les répliques emploient comme tel (« Coccinelle » : en majuscule au milieu d'une phrase, ou interpellé). Ce qui ne
+ * commence pas ainsi (« Dans S01E07, elle… », « Au moment où… ») est traité comme un mot de coulisse. Les répliques
+ * seules, ni la distribution ni les résumés : un nom pris là vaudrait pour n'importe qui.
+ */
+const LEAD_ARTICLE = /^(?:le|la|les|the|el|los|las|der|die|das|den)$/iu;
+export function leadVerdict(words: readonly string[], forms: ReadonlySet<string>, dialogue: string): "ok" | "miss" | "wait" {
+  let w = words[0] ?? "";
+  if (LEAD_ARTICLE.test(w)) {
+    if (words.length < 2) return "wait";
+    w = words[1];
+  }
+  const clean = w
+    .replace(/^[«"“(]+/u, "")
+    .replace(/^[ld]['’]/iu, "")
+    .replace(/[^\p{L}\p{N}'’-]+$/u, "")
+    .replace(/['’]s$/u, "");
+  if (!clean) return "miss";
+  if (forms.has(clean.toLowerCase())) return "ok";
+  if (!/^\p{Lu}/u.test(clean)) return "miss";
+  const e = escapeRe(clean);
+  const named = new RegExp(`[\\p{Ll}\\p{N},;:]\\s+${e}(?![\\p{L}])|(?:^|\\n)[-–—\\s]*${e}\\s*[,!?]`, "u");
+  return named.test(dialogue) ? "ok" : "miss";
+}
+
+/** Les mots du nom du personnage, pour `leadVerdict` (« Angus 'Mac' MacGyver » : angus, mac, macgyver). */
+export function leadForms(name: string): Set<string> {
+  return new Set(
+    name
+      .split(/[\s'’"«»()-]+/u)
+      .map((t) => t.toLowerCase())
+      .filter((t) => t.length >= 2 && !LEAD_ARTICLE.test(t))
+  );
+}
+
+/** Les seules répliques des sources (bloc « Épisode en cours » / « Film en cours » / « Dialogues »), sans « à l'écran ». */
+function dialogueMaterial(sources: string): string {
+  const out: string[] = [];
+  let inside = false;
+  for (const line of sources.split("\n")) {
+    if (line.startsWith("###")) {
+      inside = /^### (?:Épisode en cours|Film en cours|Dialogues)/u.test(line);
+      continue;
+    }
+    if (inside && !/^— à l'écran/u.test(line) && line !== "[…]") out.push(line);
+  }
+  return out.join("\n");
 }
 
 const META_PREFIX: Record<Locale, [RegExp, string]> = {
@@ -441,6 +517,11 @@ export interface MetaOptions {
   retry: boolean;
   /** `replace` : la limite dite naturellement (une question) ; `drop` : la phrase retirée (« Jusqu'ici »). */
   onMeta: "replace" | "drop";
+  /**
+   * « Jusqu'ici » (10.29.2) : le personnage présenté. Le texte commence par son nom (`leadVerdict`), et le filet prend
+   * aussi la parole du lecteur (`NARRATOR_TALK`) et les titres d'épisodes des intitulés.
+   */
+  lead?: string;
 }
 
 /** La tranche de dix minutes de la position, pour le journal — jamais la seconde exacte. */
@@ -504,13 +585,18 @@ export class AnswerGate {
   private shown = 0;
   /** Les mots de la phrase en cours déjà montrés **avant** l'appel en cours (les autres sont encore dans `release`). */
   private shownBeforeCall = 0;
-  private hold: "none" | "lead" | "meta" | "nothing" = "none";
+  private hold: "none" | "lead" | "meta" | "nothing" | "name" = "none";
 
   /** Ce que le filet des mots de coulisse a fait (`metaTalk`) — pour le journal. */
   rewritten = false;
   /** « Jusqu'ici » : la réponse était « rien à dire » (`nothing`). */
   nothing = false;
   private readonly material: string;
+  /** « Jusqu'ici » (10.29.2) : les titres d'épisodes à ne pas citer, et le nom attendu en tête. */
+  private readonly narrator?: { titles: string[] };
+  private readonly lead?: { forms: Set<string>; dialogue: string };
+  /** La phrase en cours ne commence pas par le nom attendu : retirée à sa fin comme une phrase de coulisse. */
+  private nameMiss = false;
 
   /**
    * `limits` : la coupe de la réponse — cinq phrases et 120 mots d'office, deux phrases pour « Jusqu'ici ».
@@ -524,6 +610,10 @@ export class AnswerGate {
     private readonly nothingWord?: string
   ) {
     this.material = meta ? metaMaterial(meta.sources) : "";
+    if (meta?.lead) {
+      this.narrator = { titles: episodeTitles(meta.sources) };
+      this.lead = { forms: leadForms(meta.lead), dialogue: dialogueMaterial(meta.sources) };
+    }
   }
 
   /** Les phrases finies, jointes : le texte qui reste quand tout est dit. */
@@ -623,7 +713,7 @@ export class AnswerGate {
       return;
     }
     const first = this.sentence.length === 1;
-    if (this.hold !== "meta" && this.meta && metaTalk(w, this.material).length) {
+    if (this.hold !== "meta" && this.meta && metaTalk(w, this.material, this.narrator).length) {
       // La phrase commencée quitte l'écran tout de suite ; la règle se décide à sa fin.
       this.retract(out);
       this.hold = "meta";
@@ -631,6 +721,17 @@ export class AnswerGate {
     else if (first && this.meta && META_LEAD.test(w)) this.hold = "lead";
     else if (this.hold === "nothing") this.hold = "none";
     if (this.hold === "lead" && this.sentence.length >= LEAD_HOLD_WORDS) this.hold = "none";
+    // Le nom en tête (« Jusqu'ici », 10.29.2) : la première phrase gardée attend d'avoir son premier nom avant de
+    // se montrer ; sans lui, elle est retirée comme une phrase de coulisse (et l'appelant redemande si rien ne reste).
+    if (this.lead && this.kept.length === 0 && this.sentence.length <= 2 && (this.hold === "none" || this.hold === "lead" || this.hold === "name")) {
+      const verdict = leadVerdict(this.sentence, this.lead.forms, this.lead.dialogue);
+      if (verdict === "wait") this.hold = "name";
+      else if (verdict === "miss") {
+        this.retract(out);
+        this.hold = "meta";
+        this.nameMiss = true;
+      } else if (this.hold === "name") this.hold = "none";
+    }
     if (SENTENCE_END.test(w)) {
       this.finishSentence(out);
       return;
@@ -671,10 +772,12 @@ export class AnswerGate {
       this.close();
       return;
     }
-    if (this.meta && metaTalk(sentence, this.material).length) {
+    const nameMiss = this.nameMiss;
+    this.nameMiss = false;
+    if (this.meta && (nameMiss || metaTalk(sentence, this.material, this.narrator).length)) {
       // Déjà retirée de l'écran au premier mot de coulisse, d'ordinaire ; sinon, maintenant.
       this.retract(out);
-      const rewritten = rewriteMetaPrefix(sentence, this.meta.locale);
+      const rewritten = nameMiss ? null : rewriteMetaPrefix(sentence, this.meta.locale);
       if (rewritten && !metaTalk(rewritten, this.material).length) sentence = rewritten;
       else if (this.meta.retry && this.kept.length === 0) {
         this.sentence = [];

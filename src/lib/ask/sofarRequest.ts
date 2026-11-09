@@ -151,7 +151,8 @@ export async function answerSofar(
       who.account,
       (signal, attempt) => model({ system, message: attempt ? message + metaReminder(who.locale) : message, prefixEnd, maxTokens: SOFAR_MAX_OUTPUT_TOKENS, signal, feature: "sofar" }),
       sources.check,
-      { locale: who.locale, sources: sources.text }
+      // Le nom en tête et la parole du lecteur (10.29.2) : la personne présentée, telle que l'écran la nomme.
+      { locale: who.locale, sources: sources.text, lead: person.character || person.name }
     );
     // Le journal de la génération, à sa fin, au nom de qui l'a lancée — une seule ligne `nouveau`.
     void entry.done.then((fin) => {
