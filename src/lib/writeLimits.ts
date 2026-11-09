@@ -33,8 +33,13 @@ export const WRITE_LIMITS = {
   startupTiming: { max: 10, windowMs: 60_000 },
   /** Le relevé de télécommande d'une Fire TV (`installRemoteDiag`) : trois par onglet au plus. */
   remoteDiag: { max: 3, windowMs: 60_000 },
-  /** Le relevé de hauteur de l'app installée sur iOS (`viewportWatch.ts`) : huit par onglet au plus. */
-  viewportDiag: { max: 8, windowMs: 60_000 },
+  /**
+   * Les relevés de `/api/viewport-diag` : la hauteur de l'app installée sur iOS (`viewportWatch.ts`, huit par
+   * onglet au plus), le clavier du panneau des questions (six par ouverture), et depuis 10.29.1 « À l'écran »
+   * (`xray-ui`, douze par séance du lecteur — une rangée, un toucher, le panneau et sa fermeture tiennent en
+   * quelques secondes). Huit en une minute aurait perdu la fin d'une rafale ; vingt, c'est encore une boucle.
+   */
+  viewportDiag: { max: 20, windowMs: 60_000 },
   /**
    * Les Nouveautés (DECISIONS.md §73) : une fenêtre, un « Voir plus », une visite de la page — trois
    * lignes par lancement au plus. Vingt en une minute, c'est une boucle. « Vu » à part : une fois

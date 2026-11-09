@@ -38,8 +38,13 @@ export function PersonAvatar({ person, className }: { person: Pick<XrayPlayerPer
   );
 }
 
-/** L'écart entre deux lignes de l'attente : le temps de lire la précédente, jamais une attente imposée. */
-export const SOFAR_WAIT_STEP_MS = 900;
+/**
+ * Le temps de chaque ligne de l'attente (10.29.1) : de quoi la lire, jamais une attente imposée — le premier mot
+ * la remplace à l'instant.
+ */
+export const SOFAR_WAIT_STEP_MS = 1200;
+/** Le fondu croisé entre deux lignes (`ask-wait-in` / `ask-wait-out`, globals.css). */
+export const SOFAR_WAIT_FADE_MS = 350;
 
 /**
  * Les scènes où la personne est reconnue avant la coupe — ce que « Jusqu'ici » relit d'elle. Lu des scènes
@@ -68,28 +73,46 @@ export function sofarWaitLines(t: (key: string, vars?: Record<string, string | n
 }
 
 /**
- * L'attente de « Jusqu'ici » (10.28.0) : des lignes gris clair qui paraissent l'une après l'autre, la dernière
- * parcourue d'un reflet discret. Elle ne retarde jamais rien : aucune durée minimale — le premier mot la
- * remplace à l'instant, au milieu d'une ligne s'il le faut (le parent cesse de la monter). Mouvement réduit :
- * les lignes connues toutes ensemble, immobiles.
+ * L'attente de « Jusqu'ici » (10.29.1, dessin du propriétaire) : **une ligne à la fois**, à la même place. Chaque
+ * nouvelle ligne entre en fondu (et monte de 4 px) pendant que la précédente sort de même — un fondu croisé de
+ * 350 ms, rien ne s'accumule ; une ligne toutes les 1,2 s ; la dernière reste et respire doucement (opacité seule).
+ * `opacity` et `transform` seulement — plus de reflet dans le texte (`background-clip: text`, 10.28.0), écarté de
+ * ce panneau flouté (globals.css, `.ask-wait-line`). Elle ne retarde jamais rien : le premier mot la remplace à
+ * l'instant, au milieu d'une ligne s'il le faut (le parent cesse de la monter). Mouvement réduit : une seule ligne,
+ * immobile — la plus avancée de ce qu'on sait.
  */
 function SofarWaiting({ lines }: { lines: string[] }) {
   const t = useT();
   const reduced = usePrefersReducedMotion();
-  const [count, setCount] = useState(1);
+  // `leaving` : le rang de la ligne qui sort, gardée le temps de son fondu (le texte d'un rang ne change pas).
+  const [step, setStep] = useState<{ index: number; leaving: number | null }>({ index: 0, leaving: null });
+  const last = lines.length - 1;
+  const index = Math.min(step.index, last);
   useEffect(() => {
-    if (reduced || count >= lines.length) return;
-    const id = window.setTimeout(() => setCount((c) => c + 1), SOFAR_WAIT_STEP_MS);
+    if (reduced || index >= last) return;
+    const id = window.setTimeout(() => setStep((s) => ({ index: s.index + 1, leaving: s.index })), SOFAR_WAIT_STEP_MS);
     return () => window.clearTimeout(id);
-  }, [count, lines.length, reduced]);
-  const visible = reduced ? lines : lines.slice(0, count);
+  }, [index, last, reduced]);
+  useEffect(() => {
+    if (step.leaving === null) return;
+    const id = window.setTimeout(() => setStep((s) => (s.leaving === null ? s : { ...s, leaving: null })), SOFAR_WAIT_FADE_MS);
+    return () => window.clearTimeout(id);
+  }, [step.leaving]);
+  const current = reduced ? lines[last] : lines[index];
   return (
-    <div data-ask-sofar-loading="" role="status" aria-label={t("ask.thinking")} className="flex flex-col gap-0.5 py-0.5">
-      {visible.map((line, i) => (
-        <p key={i} data-ask-sofar-wait-line="" className={`ask-sofar-in text-[12px] leading-5 text-white/45 ${i === visible.length - 1 ? "ask-wait-shimmer" : ""}`}>
-          {line}
+    <div data-ask-sofar-loading="" role="status" aria-label={t("ask.thinking")} className="ask-wait-stack py-0.5">
+      {!reduced && step.leaving !== null && step.leaving !== index && lines[step.leaving] !== undefined && (
+        <p key={`out:${step.leaving}`} aria-hidden data-ask-sofar-wait-leaving="" className="ask-wait-leaving text-[12px] leading-5 text-white/65">
+          {lines[step.leaving]}
         </p>
-      ))}
+      )}
+      <p
+        key={reduced ? "static" : `in:${index}`}
+        data-ask-sofar-wait-line=""
+        className={`text-[12px] leading-5 text-white/65 ${reduced ? "" : `ask-wait-line ${index === last ? "ask-wait-last" : ""}`}`}
+      >
+        {current}
+      </p>
     </div>
   );
 }

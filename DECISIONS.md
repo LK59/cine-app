@@ -8920,7 +8920,7 @@ du titre, à gauche (la place de la pilule « Une question ? », `PROMPT_BOTTOM`
 défile de côté — photo ronde TMDB (36 px, 32 sur un téléphone), nom de l'acteur (14/12 px, demi-gras),
 personnage (12/11 px, blanc 60 %). **Toutes** les personnes nommées de la scène, par temps à l'écran
 décroissant ; un visage sans nom (`name: null`) n'est pas montré. Aimantée sur chaque pilule, un fondu au
-bord droit quand d'autres attendent (un masque, posé seulement alors : il isole le flou des pilules) ; au
+bord droit quand d'autres attendent (un masque, posé seulement alors — un voile à part depuis 10.29.1, plus bas) ; au
 doigt on glisse, à la souris la molette verticale fait défiler de côté et deux petites flèches paraissent
 (pointeur fin seulement). « Une question ? » reste au bout, hors de ce qui défile. Le fondu des commandes
 (`player-fade`) est porté par chaque pilule, jamais par la rangée. Elle paraît et part avec les commandes,
@@ -9183,6 +9183,44 @@ et commande d'une séance), `xray-scan-route.test.ts` (portes, liste de priorit�
   partagée — c'est l'administrateur qui les fait. La recherche de répliques (§88) n'a pas cette garde.
 Tests : `xray-scheduler.test.ts` (« La revue du 09/11/2026 » : chaque point ci-dessus, chacun en échec sur le
 code d'avant), `xray-scan-card.test.tsx` (pause de tout, barre avec échecs).
+
+**10.29.1 — la rangée sans masque, le geste des pilules, et un relevé pour voir ce que l'écran montre.**
+
+- **Le symptôme** (prod 10.29.0, 09/11/2026, iPhone du propriétaire, application installée, iOS 26) : *Ted Lasso*
+  S01E08, la scène de 599 s — cinq personnes, la rangée déborde. Des touchers sur les acteurs ont fait disparaître la
+  rangée quelques secondes, puis elle est revenue **vide** ; le panneau de Roy n'a pas paru — le serveur l'a vu monté
+  puis refermé 2,4 s plus tard, sans doute un panneau **invisible** refermé par un toucher sur son fond invisible.
+  Cassé jusqu'à la réouverture du lecteur. Rejoué sous jsdom avec les vraies données, l'état est juste à chaque pas.
+- **L'hypothèse retenue : un défaut de rendu de WebKit**, pas de logique. Deux combinaisons connues pour mal finir
+  avec `backdrop-filter` (WebKit 284227, 279115, 298709) étaient réunies : le fondu du bord droit de la rangée était un
+  `mask-image` posé sur l'élément qui défile, **parent de pilules floutées** — et seulement quand elle déborde, ce qui
+  était le cas ; et l'attente de « Jusqu'ici » animait sans fin un `background-clip: text` dans l'espace qui défile
+  (`contain: paint`) d'un panneau flouté (§139). Rien ne le prouve encore : d'où le relevé ci-dessous.
+- **Le fondu du bord est un voile, plus un masque** (`PlayerOnScreen`, `.player-onscreen-fade`) : un élément à lui,
+  `pointer-events: none`, posé au-dessus des pilules et sous les flèches, monté seulement quand la rangée déborde, qui
+  va vers le sombre du voile bas du lecteur ; il part avec les commandes (`player-fade`). **Aucun masque sur un élément
+  qui porte des enfants à `backdrop-filter`.** Le voile assombrit un peu l'image au bord au lieu de la laisser voir :
+  c'est le prix, accepté, d'une rangée qui se dessine.
+- **Les pilules et le bouton rond répondent au doigt comme les autres pilules du lecteur** (§45) : les pilules portent
+  `data-liquid-pan="press"`, que la délégation de `PlayerControls` branche sur le réglage du même nom de
+  `useLiquidDelegation` (force 0,4, `yieldAfter` 8 px) — elles gonflent à l'appui, rebondissent au relâchement sur le
+  ressort commun, et rendent la main dès que le doigt part de côté. Leur `touch-action` est `pan-x` dans la rangée
+  (`pan-y`, celui des boutons d'une page qui défile, aurait interdit de la faire glisser en partant d'une pilule). Un
+  appui pendant l'élan d'iOS (`data-onscreen-scrolling`, posé sur le nœud 120 ms après chaque `scroll`, sans rendu)
+  ne fait qu'arrêter la rangée : rien ne gonfle. Le bouton rond de la question devient une cible du geste comme le
+  rond seul des commandes (`.player-ask-btn` dans `targets`) : même marge, et il s'allume (`data-lit`).
+- **Le relevé `kind: "xray-ui"`** (`src/lib/xrayUiDiag.ts`, dans `startup.log` par `/api/viewport-diag`, comme
+  `hauteur`, `retour` et `clavier`) : sur un écran tactile seulement, douze lignes au plus par séance du lecteur (un
+  élément), dont cinq pour la rangée ; un `session` court relie les lignes. `row` (montée ou scène, commandes
+  affichées, une image plus tard) : début de la scène, pilules, débordement, `scrollLeft`, la boîte et l'opacité /
+  visibilité **calculées** de la rangée et de sa première pilule ; `tap` : la personne, la boîte de la pilule ; `open`
+  300 ms après le montage du panneau (ou tout de suite s'il se referme avant, `early`) : sa boîte, son opacité et sa
+  visibilité calculées, celle de la couche, et **ce qui est dessus en son centre** (`elementFromPoint` : `panneau`,
+  `fond`, ou l'élément trouvé) ; `close` : `fond`, `croix`, `glissé`, `échap` ou `démonté` (par le lecteur), et la
+  durée. Activité les montre avec les autres lignes de `startup.log`. La limite de `/api/viewport-diag` passe de 8 à
+  20 par minute. Tests : `xray-ui-10291.test.tsx` (voile, plus de masque ni de texte détouré dans la feuille de style,
+  geste, élan, relevé borné, `hitAt`, parcours complet dans le lecteur, rien à la souris), `xray-person-panel.test.tsx`
+  (`open` et `close` du panneau), `viewport-diag-route.test.ts` (champs bornés).
 
 ## 139. « Poser une question » : la réponse ne sait que ce que le compte a vu (09/11/2026)
 
@@ -9729,6 +9767,20 @@ même règle, et à la coupe zéro le texte s'écrit sur les résumés).
   1 100 jetons, environ 6,2 s, comme la consigne d'avant sur les mêmes cas.
 Tests : `ask-sofar-s7c.test.ts` (la consigne série octet pour octet, la phrase film, version 5) ; `ask-sofar.test.ts`
 (la phrase, plus de « à quoi il assiste », version 5 et une clé de la v4 jamais relue).
+
+**10.29.1 — l'attente de « Jusqu'ici » : une ligne à la fois, sans texte détouré** (dessin du propriétaire). Les lignes
+restent celles de 10.28.0 (`sofarWaitLines` : « Relecture des N scènes de X… », « Épisodes a à b… », « Rédaction… »),
+mais **une seule à la fois, à la même place** (`SofarWaiting`) : la nouvelle entre en fondu en montant de 4 px pendant
+que la précédente sort de même (350 ms, `ask-wait-in` / `ask-wait-out`), une ligne toutes les 1,2 s
+(`SOFAR_WAIT_STEP_MS`), rien ne s'accumule ; la dernière reste et respire doucement (`ask-wait-pulse`, opacité de 1 à
+0,55). Les deux lignes partagent une case de grille — aucune position absolue. **`opacity` et `transform` seulement** :
+le reflet dans le texte de 10.28.0 (`.ask-wait-shimmer`, `background-clip: text` animé sans fin) est retiré — il tournait
+dans l'espace qui défile (`contain: paint`) d'un panneau flouté, l'une des deux combinaisons soupçonnées du panneau
+invisible de l'iPhone (§138, 10.29.1). Inchangé : le premier mot la remplace à l'instant ; un texte gardé s'affiche
+sans attente ; mouvement réduit : une seule ligne immobile, la plus avancée de ce qu'on sait (10.28.0 les montrait
+toutes). Fermeture du panneau : une raison par geste (`fond`, `croix`, `glissé`, `échap`), pour le relevé `xray-ui`.
+Tests : `xray-person-panel.test.tsx` (une ligne à la fois, la sortante en fondu puis retirée, la dernière qui respire,
+plus de reflet ; mouvement réduit).
 
 ## 140. Les fonctions d'IA chez les trois fournisseurs, un seul plafond mensuel, et des réglages qui disent ce qu'ils demandent (09/11/2026)
 

@@ -822,6 +822,43 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
         strOf(line.orientation),
         line.standalone === true && "standalone"
       );
+    // « À l'écran » et le panneau d'une personne (`xrayUiDiag.ts`, 10.29.1) : mesures brutes, pour l'administrateur.
+    // Ce qui compte d'un coup d'œil : la rangée et son opacité, la personne touchée, ce qui couvrait le panneau.
+    case "xray-ui": {
+      const box = (v: unknown) => {
+        const b = v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+        return b && numOf(b.w) !== null ? `${numOf(b.w)}×${numOf(b.h) ?? "?"}@${numOf(b.x) ?? "?"},${numOf(b.y) ?? "?"}` : null;
+      };
+      const ms = (v: unknown) => (numOf(v) !== null ? `${numOf(v)} ms` : null);
+      switch (line.event) {
+        case "row":
+          return join(
+            `rangée ${strOf(line.trigger) ?? ""}`.trim(),
+            numOf(line.pills) !== null && `${numOf(line.pills)} pilules`,
+            line.overflow === true && "déborde",
+            numOf(line.sceneStart) !== null && `scène ${numOf(line.sceneStart)} s`,
+            box(line.row),
+            numOf(line.firstOpacity) !== null && `opacité ${numOf(line.rowOpacity) ?? "?"}/${numOf(line.firstOpacity)}`,
+            strOf(line.firstVisibility) && strOf(line.firstVisibility) !== "visible" && strOf(line.firstVisibility)
+          );
+        case "tap":
+          return join(`toucher ${numOf(line.personId) ?? "?"}`, numOf(line.pills) !== null && `${numOf(line.pills)} pilules`, line.overflow === true && "déborde", box(line.pill));
+        case "open":
+          return join(
+            `panneau ${numOf(line.personId) ?? "question"}`,
+            strOf(line.mode),
+            line.early === true && "refermé avant la mesure",
+            strOf(line.top) && `dessus : ${strOf(line.top)}`,
+            numOf(line.panelOpacity) !== null && `opacité ${numOf(line.panelOpacity)}`,
+            strOf(line.panelVisibility) && strOf(line.panelVisibility) !== "visible" && strOf(line.panelVisibility),
+            box(line.panel)
+          );
+        case "close":
+          return join(`fermé ${numOf(line.personId) ?? "question"}`, strOf(line.reason), ms(line.openMs));
+        default:
+          return strOf(line.event) ?? "";
+      }
+    }
     // Un retour au premier plan sur iPhone et iPad (`returnDiag.ts`).
     case "retour":
       return join(

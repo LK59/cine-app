@@ -2137,10 +2137,22 @@ body:has(.gestion-liquid) .glass-window {
   padding-block: 2px;
 }
 .player-onscreen-row::-webkit-scrollbar { display: none; }
-.player-onscreen-more {
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent 100%);
-  mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent 100%);
+/* Le fondu du bord droit (10.29.1) : un voile posé au-dessus des pilules (`data-onscreen-fade`), sans pointeur,
+   monté seulement quand la rangée déborde — plus un `mask-image` sur la rangée. Un masque sur un parent dont les
+   enfants portent `backdrop-filter` et défilent est la combinaison de plusieurs défauts de rendu connus de WebKit
+   (284227, 279115, 298709) ; sur l'iPhone du propriétaire, une rangée qui débordait a disparu puis est revenue vide
+   sous les touchers. Le voile va vers le sombre du voile bas du lecteur : la même lecture « il y en a d'autres ». */
+.player-onscreen-fade {
+  width: 3rem;
+  border-radius: 0 999px 999px 0;
+  background: linear-gradient(to right, rgb(0 0 0 / 0), rgb(0 0 0 / 0.55));
 }
+/* Les pilules gardent le défilement de côté sous le doigt : `data-liquid-pan` pose `pan-y` (une page qui défile en
+   hauteur), qui interdirait ici de faire glisser la rangée en partant d'une pilule. */
+.player-onscreen-row [data-liquid-pan] { touch-action: pan-x; }
+/* Le geste liquide allume la pilule appuyée (`data-lit`), comme le rond seul des commandes. */
+.player-liquid .player-onscreen-pill[data-lit],
+.player-liquid .player-ask-btn[data-lit] { box-shadow: var(--glass-edge), var(--glass-lit), 0 8px 24px rgb(0 0 0 / 0.28); }
 .player-onscreen-photo { width: 32px; height: 32px; }
 .player-onscreen-name { font-size: 13px; }
 .player-onscreen-character { font-size: 11px; }
@@ -2215,9 +2227,8 @@ body:has(.gestion-liquid) .glass-window {
 .ask-scroll {
   contain: paint;
 }
-/* « Jusqu'ici » : une ligne d'attente discrète — un reflet qui passe sur deux traits, sans texte (le fond qui
-   glisse, jamais une opacité animée qui ferait un calque composé dans l'espace qui défile) — puis le texte
-   en fondu. */
+/* Une ligne d'attente discrète — un reflet qui passe sur deux traits, sans texte (le fond qui glisse) — puis le
+   texte en fondu. */
 .ask-shimmer {
   background: linear-gradient(90deg, rgb(255 255 255 / 0.08) 0%, rgb(255 255 255 / 0.2) 50%, rgb(255 255 255 / 0.08) 100%);
   background-size: 200% 100%;
@@ -2225,16 +2236,20 @@ body:has(.gestion-liquid) .glass-window {
 }
 @keyframes ask-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .ask-sofar-in { animation: ask-sofar-in 260ms ease-out; }
-/* L'attente de « Jusqu'ici » (10.28.0) : des lignes gris clair, la dernière parcourue d'un reflet dans le texte
-   même (le fond qui glisse derrière les lettres). */
-.ask-wait-shimmer {
-  background: linear-gradient(90deg, rgb(255 255 255 / 0.4) 0%, rgb(255 255 255 / 0.85) 50%, rgb(255 255 255 / 0.4) 100%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: ask-shimmer 1.6s linear infinite;
-}
+/* L'attente de « Jusqu'ici » (10.29.1, dessin du propriétaire) : **une ligne à la fois**, à la même place — la
+   nouvelle entre (fondu et 4 px de montée) pendant que la précédente sort de même, 350 ms ; la dernière reste et
+   respire doucement (opacité seule). `opacity` et `transform` seulement : plus de `background-clip: text` animé
+   (10.28.0, `ask-wait-shimmer`) dans l'espace qui défile (`contain: paint`) d'un panneau flouté — une des pistes
+   du panneau invisible sur l'iPhone (WebKit 284227, 279115, 298709). Les deux lignes partagent une seule case de
+   grille : aucune position absolue, la hauteur est celle de la plus haute. */
+.ask-wait-stack { display: grid; }
+.ask-wait-stack > * { grid-area: 1 / 1; }
+.ask-wait-line { animation: ask-wait-in 350ms ease-out both; }
+.ask-wait-line.ask-wait-last { animation: ask-wait-in 350ms ease-out both, ask-wait-pulse 1.8s ease-in-out 350ms infinite alternate; }
+.ask-wait-leaving { animation: ask-wait-out 350ms ease-in both; }
+@keyframes ask-wait-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes ask-wait-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-4px); } }
+@keyframes ask-wait-pulse { from { opacity: 1; } to { opacity: 0.55; } }
 @keyframes ask-sofar-in { from { opacity: 0; } }
 /* Peu de hauteur (téléphone couché) : les propositions sur une seule ligne qui défile de côté, pour laisser
    la place à la réponse. */
@@ -2246,7 +2261,7 @@ body:has(.gestion-liquid) .glass-window {
 /* « Dans votre bibliothèque » : des affiches qui ne réagissent à rien — pas même au long appui d'iOS. */
 .ask-library-poster { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 @media (prefers-reduced-motion: reduce) {
-  .ask-shimmer, .ask-sofar-in, .ask-wait-shimmer { animation: none; }
+  .ask-shimmer, .ask-sofar-in, .ask-wait-line, .ask-wait-line.ask-wait-last, .ask-wait-leaving { animation: none; }
   .ask-panel { transition: none; }
   .ask-panel-out-side { animation: none; }
 }

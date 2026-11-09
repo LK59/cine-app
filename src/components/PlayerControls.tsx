@@ -27,6 +27,7 @@ import { PlayerSeekBar } from "@/components/playerControls/PlayerSeekBar";
 import { AskPanel } from "@/components/ask/AskPanel";
 import { prewarmSofar, sofarPosition, startSofar, useAskAvailable, useAskPersonAvailable, useAskPrepare, useSofarAvailable } from "@/lib/ask/client";
 import { PlayerOnScreen } from "@/components/playerControls/PlayerOnScreen";
+import { useXrayUiDiag } from "@/lib/xrayUiDiag";
 import { useOnScreenPlacement } from "@/components/playerControls/useOnScreenPlacement";
 import { onScreenPeople, sceneAt, useXrayAvailable, useXrayScenes } from "@/lib/xray/client";
 import type { XrayPlayerPerson } from "@/lib/xray/scenes";
@@ -442,7 +443,15 @@ export function PlayerControls({
   useEffect(() => {
     const root = liquidRootRef.current;
     if (!root) return;
-    const press = createLiquidPress({ targets: ".player-pill-btn, .player-center-btn, .player-capsule" });
+    // Le bouton rond de la question (§139) est une cible comme le rond seul des commandes (10.29.1) : la même
+    // marge de toucher, et il s'allume sous le doigt.
+    const press = createLiquidPress({ targets: ".player-pill-btn, .player-center-btn, .player-capsule, .player-ask-btn" });
+    // Les pilules d'« À l'écran » (§138, 10.29.1) : le geste des boutons posés dans ce qu'on fait glisser
+    // (`data-liquid-pan="press"`, le même que `useLiquidDelegation`) — elles gonflent à l'appui et rebondissent au
+    // relâchement, et rendent la main dès que le doigt part de côté (la rangée défile, et le clic natif n'a pas
+    // lieu). Un appui sur une rangée qui défile encore (l'élan d'iOS, `data-onscreen-scrolling`) ne fait que
+    // l'arrêter : rien ne gonfle.
+    const inRow = createLiquidPress({ targets: "[data-liquid-pan]", strength: 0.4, yieldAfter: 8 });
     // Les menus (`data-liquid-soft`) bougent au doigt comme le reste — gonflement, étirement,
     // rebond —, mais ne touchent à aucun clic : leurs lignes gardent le leur, et la liste défile.
     // Un menu ne gonfle pas : c'est une surface qu'on lit, et tout gonflement y paraissait étrange
@@ -459,6 +468,11 @@ export function PlayerControls({
       const target = e.target as Element | null;
       const menu = target?.closest?.<HTMLElement>("[data-liquid-soft]");
       if (menu && root.contains(menu)) return soft.down(e, menu);
+      const pill = target?.closest?.<HTMLElement>('[data-liquid-pan="press"]');
+      if (pill && root.contains(pill)) {
+        if (!pill.closest("[data-onscreen-scrolling]")) inRow.down(e, pill);
+        return;
+      }
       const surface = target?.closest?.<HTMLElement>("[data-liquid]");
       if (surface && root.contains(surface)) press.down(e, surface);
     };
@@ -467,6 +481,7 @@ export function PlayerControls({
       root.removeEventListener("pointerdown", onDown);
       press.dispose();
       soft.dispose();
+      inRow.dispose();
     };
     // Rebranché quand les commandes réapparaissent : cachées (`hidden`), leur racine n'existe pas.
   }, [hidden]);
@@ -711,7 +726,10 @@ export function PlayerControls({
    * l'instant se cherche en mémoire à chaque rendu — aucune requête.
    */
   const rowAllowed = !askOpen && !resuming && !loading && !openingQuiet && !castActive;
-  const scenePeople = xrayOffered && rowAllowed ? onScreenPeople(sceneAt(xrayPayload, currentTime)) : [];
+  const sceneNow = xrayOffered && rowAllowed ? sceneAt(xrayPayload, currentTime) : null;
+  const scenePeople = onScreenPeople(sceneNow);
+  // Le relevé `xray-ui` de cette séance (10.29.1, `xrayUiDiag.ts`) : la rangée, les touchers, le panneau.
+  const xrayDiag = useXrayUiDiag(itemId);
   const rowShown = rowAllowed && (askOffered || scenePeople.length > 0);
   const onScreenWrapRef = useRef<HTMLDivElement>(null);
   const centerGroupRef = useRef<HTMLDivElement>(null);
@@ -1287,6 +1305,8 @@ export function PlayerControls({
                     onIntent={onPersonIntent}
                     onRelease={() => showControls(10000)}
                     onPick={pickPerson}
+                    diag={xrayDiag}
+                    sceneStart={sceneNow?.start ?? null}
                   />
                 ) : (
                   askButton
@@ -1428,6 +1448,7 @@ export function PlayerControls({
           person={askPerson?.person}
           scene={askPerson?.scene}
           scenes={xrayPayload}
+          diag={xrayDiag}
           ask={askPerson ? askPersonOffered : askOffered}
           sofar={sofarOffered}
           onClose={() => {

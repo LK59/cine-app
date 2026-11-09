@@ -16,7 +16,7 @@ vi.mock("@/components/TranslationProvider", () => ({
 }));
 
 import { AskPanel, ASK_EXIT_MS } from "@/components/ask/AskPanel";
-import { SOFAR_WAIT_STEP_MS } from "@/components/ask/AskPersonHeader";
+import { SOFAR_WAIT_FADE_MS, SOFAR_WAIT_STEP_MS } from "@/components/ask/AskPersonHeader";
 import { resetSofarClientForTests, SOFAR_CLIENT_TIMEOUT_MS, SOFAR_LOADING_DELAY_MS } from "@/lib/ask/client";
 import { compactPlace, personFactsLine, personQuestions } from "@/lib/xray/client";
 import type { XrayPlayerPerson } from "@/lib/xray/scenes";
@@ -303,6 +303,7 @@ describe("avec l'option : « Jusqu'ici »", () => {
     return ctl;
   }
   const waitLines = () => [...document.querySelectorAll("[data-ask-sofar-wait-line]")].map((n) => n.textContent);
+  const leavingLines = () => [...document.querySelectorAll("[data-ask-sofar-wait-leaving]")].map((n) => n.textContent);
   // Position 754 : la coupe tombe sur la scène de 600 s. Ariadne est reconnue dans deux scènes avant elle ;
   // celle qui commence à la coupe ne compte pas.
   const SCENES = {
@@ -316,7 +317,7 @@ describe("avec l'option : « Jusqu'ici »", () => {
     ],
   };
 
-  it("10.28.0 — une génération qui commence (`plan`) : l'attente tout de suite, des lignes vraies l'une après l'autre", async () => {
+  it("10.29.1 — une génération qui commence (`plan`) : l'attente tout de suite, une ligne vraie à la fois, en fondu croisé", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const ctl = streamedSofar();
     open({ scenes: SCENES });
@@ -325,13 +326,22 @@ describe("avec l'option : « Jusqu'ici »", () => {
     // Sans attendre le délai de la ligne d'attente : le serveur a dit qu'il écrit.
     await waitFor(() => expect(document.querySelector("[data-ask-sofar-loading]")).toBeTruthy(), { timeout: SOFAR_LOADING_DELAY_MS - 100 });
     expect(waitLines()).toEqual(['xray.sofarWait.scenes:{"n":2,"name":"Ariadne"}']);
+    expect(leavingLines()).toEqual([]);
     await act(async () => void (await vi.advanceTimersByTimeAsync(SOFAR_WAIT_STEP_MS)));
-    expect(waitLines()).toEqual(['xray.sofarWait.scenes:{"n":2,"name":"Ariadne"}', 'xray.sofarWait.episodes:{"from":"S01E05","to":"S01E07"}']);
+    // La nouvelle ligne entre à la place de l'ancienne, qui sort en même temps — rien ne s'accumule.
+    expect(waitLines()).toEqual(['xray.sofarWait.episodes:{"from":"S01E05","to":"S01E07"}']);
+    expect(leavingLines()).toEqual(['xray.sofarWait.scenes:{"n":2,"name":"Ariadne"}']);
+    expect(document.querySelector("[data-ask-sofar-wait-leaving]")!.className).toContain("ask-wait-leaving");
+    expect(document.querySelector("[data-ask-sofar-wait-line]")!.className).toContain("ask-wait-line");
+    await act(async () => void (await vi.advanceTimersByTimeAsync(SOFAR_WAIT_FADE_MS + 10)));
+    expect(leavingLines()).toEqual([]);
     await act(async () => void (await vi.advanceTimersByTimeAsync(SOFAR_WAIT_STEP_MS)));
-    expect(waitLines()).toHaveLength(3);
-    expect(waitLines()[2]).toBe("xray.sofarWait.writing");
-    // Seule la dernière ligne porte le reflet.
-    expect(document.querySelectorAll(".ask-wait-shimmer")).toHaveLength(1);
+    expect(waitLines()).toEqual(["xray.sofarWait.writing"]);
+    // La dernière reste, et respire (opacité seule) ; plus de reflet dans le texte.
+    expect(document.querySelector("[data-ask-sofar-wait-line]")!.className).toContain("ask-wait-last");
+    await act(async () => void (await vi.advanceTimersByTimeAsync(SOFAR_WAIT_STEP_MS * 3)));
+    expect(waitLines()).toEqual(["xray.sofarWait.writing"]);
+    expect(document.querySelectorAll(".ask-wait-shimmer")).toHaveLength(0);
     ctl.end();
   });
 
@@ -377,13 +387,16 @@ describe("avec l'option : « Jusqu'ici »", () => {
     expect(document.querySelector("[data-ask-sofar-loading]")).toBeNull();
   });
 
-  it("10.28.0 — mouvement réduit : les lignes connues toutes ensemble, sans les faire attendre", async () => {
+  it("10.29.1 — mouvement réduit : une seule ligne, immobile — la plus avancée de ce qu'on sait", async () => {
     vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("prefers-reduced-motion"), media: q, addEventListener() {}, removeEventListener() {} }));
     const ctl = streamedSofar();
     open({ scenes: SCENES });
     await waitFor(() => expect(sofarPosts()).toHaveLength(1));
     act(() => ctl.push({ t: "plan", from: "S01E05", to: "S01E07" }));
-    await waitFor(() => expect(waitLines()).toHaveLength(3));
+    await waitFor(() => expect(waitLines()).toEqual(["xray.sofarWait.writing"]));
+    const line = document.querySelector("[data-ask-sofar-wait-line]")!;
+    expect(line.className).not.toContain("ask-wait-line");
+    expect(leavingLines()).toEqual([]);
     ctl.end();
   });
 
@@ -594,5 +607,70 @@ describe("la feuille du téléphone debout", () => {
     open();
     expect(document.querySelector("[data-ask-panel]")!.getAttribute("data-mode")).toBe("side");
     expect(document.querySelector("[data-ask-handle]")).toBeNull();
+  });
+});
+
+describe("10.29.1 — le relevé `xray-ui` du panneau : ce qu'il montre 300 ms après, et par quoi il se referme", () => {
+  type Line = { event: string } & Record<string, unknown>;
+  function diagSpy() {
+    const lines: Line[] = [];
+    return { lines, diag: (event: string, fields: Record<string, unknown>) => void lines.push({ event, ...fields }) };
+  }
+
+  it("300 ms après l'ouverture : la boîte, l'opacité calculée, et ce qui est dessus au centre", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { lines, diag } = diagSpy();
+    // jsdom ne fait pas de mise en page : le centre du panneau est posé à la main, et ce qui y est trouvé aussi.
+    const rect = { left: 500, top: 20, width: 330, height: 350, right: 830, bottom: 370, x: 500, y: 20, toJSON() {} } as DOMRect;
+    const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
+    let hit: Element | null = null;
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => hit });
+    open({ diag, ask: false });
+    hit = document.querySelector("[data-ask-backdrop]");
+    expect(lines).toEqual([]);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(310)));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ event: "open", personId: 2, panel: { x: 500, y: 20, w: 330, h: 350 }, panelOpacity: 1, panelVisibility: "visible", top: "fond" });
+    spy.mockRestore();
+  });
+
+  it("un toucher sur le fond : `close` avec la raison `fond` et la durée ; la croix : `croix` ; Échap : `échap`", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    for (const [how, reason] of [
+      [() => fireEvent.click(document.querySelector("[data-ask-backdrop]")!), "fond"],
+      [() => fireEvent.click(document.querySelector("[data-ask-close]")!), "croix"],
+      [() => fireEvent.keyDown(window, { key: "Escape" }), "échap"],
+    ] as const) {
+      const { lines, diag } = diagSpy();
+      const onClose = vi.fn();
+      const { unmount } = render(<AskPanel itemId={ITEM} where="lecteur" placement="player" position={() => 754} onClose={onClose} person={ARIADNE} ask={false} diag={diag} />);
+      await act(async () => void (await vi.advanceTimersByTimeAsync(400)));
+      act(() => how());
+      await act(async () => void (await vi.advanceTimersByTimeAsync(ASK_EXIT_MS + 10)));
+      expect(onClose).toHaveBeenCalledTimes(1);
+      // Le parent démonte le panneau à `onClose`.
+      unmount();
+      const close = lines.find((l) => l.event === "close")!;
+      expect(close).toMatchObject({ personId: 2, reason });
+      expect(close.openMs).toBeGreaterThanOrEqual(400);
+      expect(lines.filter((l) => l.event === "open")).toHaveLength(1);
+      cleanup();
+    }
+  });
+
+  it("démonté par le lecteur avant 300 ms (commandes cachées) : la mesure tout de suite, marquée `early`, puis `démonté`", () => {
+    const { lines, diag } = diagSpy();
+    const { unmount } = render(<AskPanel itemId={ITEM} where="lecteur" placement="player" position={() => 754} onClose={() => {}} person={ARIADNE} ask={false} diag={diag} />);
+    unmount();
+    expect(lines.map((l) => l.event)).toEqual(["open", "close"]);
+    expect(lines[0]).toMatchObject({ early: true });
+    expect(lines[1]).toMatchObject({ reason: "démonté" });
+  });
+
+  it("sans relevé (une fiche) : rien", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    open({ ask: false });
+    await act(async () => void (await vi.advanceTimersByTimeAsync(400)));
+    expect(fetchMock.mock.calls.some(([url]) => String(url) === "/api/viewport-diag")).toBe(false);
   });
 });

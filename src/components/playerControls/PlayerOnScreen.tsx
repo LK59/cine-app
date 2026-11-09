@@ -16,6 +16,7 @@ function finePointer(): boolean {
   }
 }
 import type { XrayPlayerPerson } from "@/lib/xray/scenes";
+import { boxOf, lookOf, type XrayUiDiagFn } from "@/lib/xrayUiDiag";
 
 /**
  * « À l'écran » (DECISIONS.md §138) : au-dessus du bloc du titre, à gauche — une petite étiquette, puis une
@@ -24,6 +25,19 @@ import type { XrayPlayerPerson } from "@/lib/xray/scenes";
  * à la souris, la molette ou le pavé, et deux petites flèches (pointeur fin seulement). Un fondu au bord
  * droit dit qu'il y en a d'autres. `trailing` (le bouton rond de la question) reste au bout, hors de ce
  * qui défile.
+ *
+ * **Le fondu du bord est un voile posé dessus, pas un masque** (10.29.1) : un élément à lui
+ * (`data-onscreen-fade`, `.player-onscreen-fade`), sans pointeur, au-dessus des pilules et sous les flèches,
+ * monté seulement quand la rangée déborde. Jusqu'en 10.29.0 c'était un `mask-image` sur la rangée qui défile —
+ * un parent masqué d'enfants à `backdrop-filter` qui défilent, la combinaison de plusieurs défauts de rendu
+ * connus de WebKit (284227, 279115, 298709). Sur l'iPhone du propriétaire, dans une scène qui débordait, des
+ * touchers ont fait disparaître la rangée puis l'ont rendue vide, et le panneau d'une personne n'a pas paru ;
+ * l'état, rejoué, était juste. Aucun masque sur ce qui porte du verre.
+ *
+ * **Les pilules répondent au doigt comme les autres pilules du lecteur** (10.29.1) : le geste liquide
+ * (`data-liquid-pan="press"`, branché par la délégation de `PlayerControls`) — elles gonflent à l'appui et
+ * rebondissent au relâchement ; le doigt qui part de côté rend la main au défilement (`yieldAfter`), et un
+ * appui pendant que la rangée défile encore (`data-onscreen-scrolling`, l'élan d'iOS) ne gonfle rien.
  *
  * **Avec les commandes, en lecture comme en pause** (10.27) : la rangée suit les changements de scène —
  * les nouveaux visages arrivent en fondu, ceux qui partent s'effacent (`player-onscreen-in` / `-out`) —, mais
@@ -65,16 +79,22 @@ export interface PlayerOnScreenProps {
    * passage, jamais un doigt. Le lecteur y prépare « Jusqu'ici » de cette seule personne (`prewarmSofar`).
    */
   onIntent?: (person: XrayPlayerPerson) => void;
+  /** Le relevé `xray-ui` de la séance (10.29.1, `xrayUiDiag.ts`) : la rangée montrée, un toucher. */
+  diag?: XrayUiDiagFn;
+  /** Le début de la scène montrée, pour ce relevé. */
+  sceneStart?: number | null;
 }
 
 /** Après le dernier contact ou le dernier défilement, le temps avant que la rangée suive de nouveau la scène. */
 export const ONSCREEN_SETTLE_MS = 600;
 /** La durée du fondu d'un changement de scène (`player-onscreen-in` / `-out`, globals.css). */
 export const ONSCREEN_FADE_MS = 280;
+/** Après le dernier `scroll`, la rangée est encore « en train de défiler » ce temps-là : un appui n'y gonfle rien. */
+export const ONSCREEN_SCROLLING_MS = 120;
 
 const signature = (people: readonly XrayPlayerPerson[]) => people.map((p) => p.personId).join(",");
 
-export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth, onHold, onRelease, onIntent }: PlayerOnScreenProps) {
+export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth, onHold, onRelease, onIntent, diag, sceneStart }: PlayerOnScreenProps) {
   const t = useT();
   const rowRef = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ before: false, after: false });
@@ -189,6 +209,59 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth, on
     };
   }, [measure, toStart, shown.sig, maxWidth]);
 
+  /**
+   * Le relevé de la rangée (10.29.1) : une ligne par scène montrée, commandes affichées — à l'ouverture et à
+   * chaque changement —, une image plus tard (posée et peinte). Ce que l'écran calcule, pas ce que React a écrit :
+   * la boîte et l'opacité de la rangée et de sa première pilule. C'est elle qui dira une rangée « revenue vide ».
+   */
+  const diagRef = useRef({ diag, sceneStart });
+  useEffect(() => {
+    diagRef.current = { diag, sceneStart };
+  });
+  const loggedSig = useRef<string | null>(null);
+  const mountedOnce = useRef(false);
+  useEffect(() => {
+    if (!visible || loggedSig.current === shown.sig || !diagRef.current.diag) return;
+    const frame = window.requestAnimationFrame(() => {
+      const row = rowRef.current;
+      const send = diagRef.current.diag;
+      if (!send || loggedSig.current === shown.sig) return;
+      loggedSig.current = shown.sig;
+      const first = row?.querySelector("[data-onscreen-person]") ?? null;
+      const rowLook = lookOf(row);
+      const firstLook = lookOf(first);
+      send("row", {
+        trigger: mountedOnce.current ? "scène" : "montée",
+        sceneStart: diagRef.current.sceneStart ?? null,
+        pills: shown.list.length,
+        overflow: row ? row.scrollLeft + row.clientWidth < row.scrollWidth - 2 : null,
+        scrollLeft: row ? Math.round(row.scrollLeft) : null,
+        row: boxOf(row),
+        rowOpacity: rowLook.opacity,
+        rowVisibility: rowLook.visibility,
+        first: boxOf(first),
+        firstOpacity: firstLook.opacity,
+        firstVisibility: firstLook.visibility,
+      });
+      mountedOnce.current = true;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [shown.sig, shown.list.length, visible]);
+
+  /**
+   * La rangée défile encore (le doigt, ou l'élan d'iOS après lui) : marqué sur le nœud, sans rendu — le geste
+   * liquide de `PlayerControls` le lit à l'appui et ne gonfle pas une pilule qu'on ne fait qu'arrêter.
+   */
+  const scrollingTimer = useRef<number | undefined>(undefined);
+  const markScrolling = () => {
+    const row = rowRef.current;
+    if (!row) return;
+    row.setAttribute("data-onscreen-scrolling", "");
+    window.clearTimeout(scrollingTimer.current);
+    scrollingTimer.current = window.setTimeout(() => rowRef.current?.removeAttribute("data-onscreen-scrolling"), ONSCREEN_SCROLLING_MS);
+  };
+  useEffect(() => () => window.clearTimeout(scrollingTimer.current), []);
+
   // La molette verticale d'une souris fait défiler la rangée de côté (un pavé tactile le fait déjà).
   useEffect(() => {
     const row = rowRef.current;
@@ -246,9 +319,20 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth, on
       data-player-surface-ignore
       tabIndex={leaving ? -1 : undefined}
       aria-hidden={leaving || undefined}
+      // Le geste liquide des pilules du lecteur, en version « posée dans ce qu'on fait glisser » (10.29.1).
+      data-liquid-pan={leaving ? undefined : "press"}
       onClick={(e) => {
         e.stopPropagation();
-        if (!leaving) onPick(person);
+        if (leaving) return;
+        const row = rowRef.current;
+        diag?.("tap", {
+          personId: person.personId,
+          pills: shown.list.length,
+          overflow: edges.after,
+          scrollLeft: row ? Math.round(row.scrollLeft) : null,
+          pill: boxOf(e.currentTarget),
+        });
+        onPick(person);
       }}
       onPointerEnter={leaving ? undefined : (e) => hoverStart(person, e)}
       onPointerLeave={hoverEnd}
@@ -281,6 +365,7 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth, on
               data-onscreen-row=""
               data-onscreen-touching={touching ? "" : undefined}
               onScroll={() => {
+                markScrolling();
                 measure();
                 if (touching) touchSettle();
               }}
@@ -304,11 +389,14 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth, on
                 pointerDown.current = false;
                 touchSettle();
               }}
-              className={`player-onscreen-row ${edges.after ? "player-onscreen-more" : ""} ${live} flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain`}
+              className={`player-onscreen-row ${live} flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain`}
             >
               {list.map((person) => pill(person, false))}
               {shown.leaving.map((person) => pill(person, true))}
             </div>
+            {/* Le fondu du bord droit : un voile au-dessus des pilules, sous les flèches, jamais un masque sur la
+                rangée (10.29.1, voir plus haut). Porté par lui-même (`player-fade`) : il part avec les commandes. */}
+            {edges.after && <div aria-hidden data-onscreen-fade="" className="player-fade player-onscreen-fade pointer-events-none absolute inset-y-0 right-0" />}
             {edges.before && (
               <button
                 type="button"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUp, RotateCw, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
@@ -24,6 +24,7 @@ import { ASK_MAX_QUESTION, type AskWhere } from "@/lib/ask/core";
 import type { SofarScenes } from "@/lib/ask/sofarCut";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { APP_BUILD, APP_VERSION } from "@/lib/appBuild";
+import { boxOf, hitAt, lookOf, XRAY_UI_PANEL_CHECK_MS, type XrayUiDiagFn } from "@/lib/xrayUiDiag";
 
 /**
  * Le panneau « Poser une question » (DECISIONS.md §139) — un seul, pour le lecteur (film en pause) et
@@ -89,7 +90,15 @@ export interface AskPanelProps {
   suggestions?: string[];
   /** Les scènes d'« À l'écran » du lecteur : la coupe de « Jusqu'ici » tombe sur un début de scène (10.27.2). */
   scenes?: SofarScenes | null;
+  /**
+   * Le relevé `xray-ui` du lecteur (10.29.1, `xrayUiDiag.ts`) : le panneau 300 ms après son ouverture — sa boîte,
+   * son opacité calculée, ce qui est dessus en son centre — et sa fermeture (par quoi, au bout de combien).
+   */
+  diag?: XrayUiDiagFn;
 }
+
+/** Par quoi le panneau s'est refermé, pour le relevé `xray-ui` ; `démonté` : par son parent (commandes cachées, autre élément). */
+type CloseReason = "fond" | "croix" | "glissé" | "échap" | "démonté";
 
 /** La sortie du panneau : la durée de `fade-out-down` et de `ask-panel-out-side` (globals.css). */
 export const ASK_EXIT_MS = 200;
@@ -190,7 +199,62 @@ function useKeyboardDiag(
   }, [refs.input, refs.layer, refs.panel]);
 }
 
-export function AskPanel({ itemId, where, position, sofarPosition, onClose, person, scene, ask: askEnabled = true, sofar: sofarEnabled = askEnabled, placement, suggestions, scenes }: AskPanelProps) {
+/**
+ * Le relevé `xray-ui` du panneau (10.29.1) : une ligne `open` 300 ms après le montage — la boîte du panneau, son
+ * opacité et sa visibilité **calculées**, celles de la couche, et ce que `elementFromPoint` trouve en son centre
+ * (`panneau` : il est bien dessus ; `fond` : son propre fond est au-dessus de lui ; autre chose : un élément du
+ * lecteur) — puis une ligne `close` au démontage : par quoi, au bout de combien. Sur l'iPhone du propriétaire, le
+ * panneau de Roy a été monté puis refermé 2,4 s plus tard sans avoir paru : sans doute invisible, et refermé par
+ * un toucher sur son fond. Lu une fois, dans un minuteur et au démontage : rien pendant le rendu.
+ */
+function useXrayPanelDiag(
+  diag: XrayUiDiagFn | undefined,
+  personId: number | null,
+  refs: { panel: React.RefObject<HTMLElement | null>; backdrop: React.RefObject<HTMLElement | null>; layer: React.RefObject<HTMLElement | null> },
+  /** Lue au démontage : la raison posée par le dernier geste, pas celle du montage. */
+  closeReasonNow: () => CloseReason | null
+) {
+  const latest = useRef({ diag, personId });
+  useEffect(() => {
+    latest.current = { diag, personId };
+  });
+  // Une mise en page, pas un effet : au démontage, son nettoyage passe avant que le panneau quitte le document —
+  // un panneau refermé avant les 300 ms est encore mesurable.
+  const { panel: panelRef, backdrop: backdropRef, layer: layerRef } = refs;
+  useLayoutEffect(() => {
+    if (!latest.current.diag) return;
+    const panel = panelRef.current;
+    const backdrop = backdropRef.current;
+    const layer = layerRef.current;
+    const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+    const openedAt = now();
+    let checked = false;
+    const check = (early: boolean) => {
+      checked = true;
+      const box = boxOf(panel);
+      const look = lookOf(panel);
+      latest.current.diag?.("open", {
+        personId: latest.current.personId,
+        mode: panel?.getAttribute("data-mode") ?? null,
+        early: early || undefined,
+        openMs: Math.round(now() - openedAt),
+        panel: box,
+        panelOpacity: look.opacity,
+        panelVisibility: look.visibility,
+        layerOpacity: lookOf(layer).opacity,
+        top: hitAt(document, box, panel, backdrop),
+      });
+    };
+    const timer = window.setTimeout(() => check(false), XRAY_UI_PANEL_CHECK_MS);
+    return () => {
+      window.clearTimeout(timer);
+      if (!checked) check(true);
+      latest.current.diag?.("close", { personId: latest.current.personId, reason: closeReasonNow() ?? "démonté", openMs: Math.round(now() - openedAt) });
+    };
+  }, [panelRef, backdropRef, layerRef, closeReasonNow]);
+}
+
+export function AskPanel({ itemId, where, position, sofarPosition, onClose, person, scene, ask: askEnabled = true, sofar: sofarEnabled = askEnabled, placement, suggestions, scenes, diag }: AskPanelProps) {
   const t = useT();
   const { exchanges, ask, retry, busy, full } = useAskTitle({
     itemId,
@@ -209,10 +273,23 @@ export function AskPanel({ itemId, where, position, sofarPosition, onClose, pers
   const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const { layout, facts } = useAskPanelLayout(focused, layerRef, placement);
   useKeyboardDiag({ layer: layerRef, panel: panelRef, input: inputRef }, { layout, facts, where, placement });
   const { closing, requestClose } = useDelayedClose(onClose, ASK_EXIT_MS);
-  const swipe = useSwipeToDismiss(requestClose, { card: panelRef, follow: phoneSheetFollow });
+  // La première raison de fermer gagne (une croix pendant le glissé de sortie ne la réécrit pas).
+  const closeReason = useRef<CloseReason | null>(null);
+  const closeBy = useCallback(
+    (reason: CloseReason) => {
+      if (!closeReason.current) closeReason.current = reason;
+      requestClose();
+    },
+    [requestClose]
+  );
+  const closeBySwipe = useCallback(() => closeBy("glissé"), [closeBy]);
+  const swipe = useSwipeToDismiss(closeBySwipe, { card: panelRef, follow: phoneSheetFollow });
+  const closeReasonNow = useCallback(() => closeReason.current, []);
+  useXrayPanelDiag(diag, person?.personId ?? null, { panel: panelRef, backdrop: backdropRef, layer: layerRef }, closeReasonNow);
 
   // Une rotation pendant la frappe : le clavier se referme (le texte reste), le panneau se replace.
   useEffect(() => {
@@ -227,10 +304,10 @@ export function AskPanel({ itemId, where, position, sofarPosition, onClose, pers
       window.removeEventListener("orientationchange", blurIfTyping);
     };
   }, []);
-  const onCloseRef = useRef(requestClose);
+  const onCloseRef = useRef(() => closeBy("échap"));
   useEffect(() => {
-    onCloseRef.current = requestClose;
-  }, [requestClose]);
+    onCloseRef.current = () => closeBy("échap");
+  }, [closeBy]);
 
   // Où était la page à l'ouverture : remise après chaque clavier refermé, et au départ du panneau.
   const pageAt = useRef<{ x: number; y: number } | null>(null);
@@ -363,12 +440,13 @@ export function AskPanel({ itemId, where, position, sofarPosition, onClose, pers
     >
       {/* Le film (ou la fiche) visible autour : le toucher referme — ou, pendant la frappe, referme le clavier. */}
       <div
+        ref={backdropRef}
         aria-hidden
         data-ask-backdrop=""
         className="absolute inset-0"
         onClick={() => {
           if (focused) inputRef.current?.blur();
-          else requestClose();
+          else closeBy("fond");
         }}
       />
       <section
@@ -398,7 +476,7 @@ export function AskPanel({ itemId, where, position, sofarPosition, onClose, pers
             type="button"
             data-ask-close=""
             {...NOT_THE_HANDLE}
-            onClick={requestClose}
+            onClick={() => closeBy("croix")}
             aria-label={t("common.close")}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/12 text-white transition-colors hover:bg-white/20"
           >

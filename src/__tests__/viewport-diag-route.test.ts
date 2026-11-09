@@ -115,4 +115,37 @@ describe("POST /api/viewport-diag", () => {
     await post({ kind: "clavier", branch: "<script>" });
     expect(mockLog.mock.calls[1][0].branch).toBeNull();
   });
+
+  it("« À l'écran » (10.29.1, `xray-ui`) : ses champs bornés, en « xray-ui », l'inconnu tombe ; un évènement inconnu : 400", async () => {
+    const res = await post({
+      kind: "xray-ui",
+      event: "open",
+      itemId: "item-1",
+      session: "abc123",
+      seq: 3,
+      personId: 1234,
+      mode: "side",
+      openMs: 301.6,
+      panel: { x: 500, y: 20.4, w: 330, h: 350, evil: "x" },
+      panelOpacity: 0.004,
+      panelVisibility: "visible",
+      layerOpacity: 7,
+      top: "fond",
+      early: true,
+      reason: "<script>",
+      user: "quelqu'un d'autre",
+      extra: "rien",
+      build: "abc",
+      version: "10.29.1",
+    });
+    expect(res.status).toBe(204);
+    const [line, kind] = mockLog.mock.calls[0];
+    expect(kind).toBe("xray-ui");
+    expect(line).toMatchObject({ user: "louis", event: "open", itemId: "item-1", session: "abc123", seq: 3, personId: 1234, mode: "side", openMs: 302, top: "fond", early: true, panelOpacity: 0, layerOpacity: 1, panelVisibility: "visible", version: "10.29.1" });
+    expect(line.panel).toEqual({ x: 500, y: 20, w: 330, h: 350 });
+    expect(line.reason).toBeUndefined();
+    expect(line).not.toHaveProperty("extra");
+    expect((await post({ kind: "xray-ui", event: "boom" })).status).toBe(400);
+    expect(mockLog).toHaveBeenCalledTimes(1);
+  });
 });
