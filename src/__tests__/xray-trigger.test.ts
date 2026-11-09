@@ -16,8 +16,11 @@ vi.mock("@/lib/playerLog", () => ({
   isPlayerEventKind: (v: unknown) => ["start", "stop", "stall"].includes(v as string),
 }));
 vi.mock("@/lib/config", () => ({ config: { player: { enabled: true } } }));
-const xr = vi.hoisted(() => ({ configured: true }));
-vi.mock("@/lib/clients/xray", () => ({ xrayConfigured: () => xr.configured }));
+const xr = vi.hoisted(() => ({ configured: true, audience: "tous" as "off" | "admins" | "tous" }));
+vi.mock("@/lib/clients/xray", async () => {
+  const { audienceAllows } = await import("@/lib/featureAudience");
+  return { xrayConfigured: () => xr.configured, xrayOpenTo: (session: { role?: string }) => audienceAllows(xr.audience, session) };
+});
 const mockNote = vi.fn();
 vi.mock("@/lib/xray/orders", () => ({ noteSessionStart: (...a: unknown[]) => mockNote(...a) }));
 vi.mock("@/lib/share/guard", () => ({
@@ -34,6 +37,7 @@ async function post(kind: string, fields: Record<string, unknown>) {
 beforeEach(() => {
   vi.clearAllMocks();
   xr.configured = true;
+  xr.audience = "tous";
   mockVerify.mockResolvedValue({ u: "louis", jfId: "f".repeat(32), role: "user" });
 });
 
@@ -59,6 +63,15 @@ describe("POST /api/player/log → acteurs à l'écran", () => {
     await post("start", { itemId: ITEM, at: 10 });
     expect(mockNote).not.toHaveBeenCalled();
     expect(mockLog).toHaveBeenCalledTimes(4);
+  });
+
+  it("réglée sur `admins` : seules les séances d'un administrateur commandent une analyse", async () => {
+    xr.audience = "admins";
+    await post("start", { itemId: ITEM, at: 5 });
+    expect(mockNote).not.toHaveBeenCalled();
+    mockVerify.mockResolvedValue({ u: "admin", jfId: "f".repeat(32), role: "admin" });
+    await post("start", { itemId: ITEM, at: 5 });
+    expect(mockNote).toHaveBeenCalledWith(ITEM, 5, "admin");
   });
 
   it("un lien de partage : seulement son titre", async () => {

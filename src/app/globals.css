@@ -2121,3 +2121,42 @@ body:has(.gestion-liquid) .glass-window {
   .player-squeezable { transition: none; }
   .player-next-up-panel { animation: none; }
 }
+
+/* ─── « Poser une question » (DECISIONS.md §139) ─────────────────────────────
+   Un panneau de verre à droite du film ou de la fiche — 380 px au bureau, 330 sur un téléphone
+   couché —, une feuille en bas sur un téléphone debout, et une seule ligne au-dessus du clavier
+   pendant la frappe. Sa hauteur et son haut viennent de la vue visuelle (`useAskPanelLayout`),
+   jamais de `100vh`. Un seul flou, sur une surface qui ne bouge pas pendant la lecture (le film est
+   en pause, ou c'est une fiche). */
+.ask-panel {
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.02)), rgb(24 24 28 / 0.78);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 18px 48px rgb(0 0 0 / 0.45);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border-radius: 24px;
+  transition: top 160ms ease-out, height 160ms ease-out;
+}
+.ask-panel-side {
+  right: max(0.75rem, env(safe-area-inset-right, 0px));
+  width: min(380px, calc(100% - 1.5rem));
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  .ask-panel-side { width: min(330px, calc(100% - 1.5rem)); border-radius: 22px; }
+}
+.ask-panel-sheet {
+  left: 0.5rem;
+  right: 0.5rem;
+  border-radius: 26px 26px 0 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.ask-panel-line {
+  left: max(0.5rem, env(safe-area-inset-left, 0px));
+  right: max(0.5rem, env(safe-area-inset-right, 0px));
+  max-width: 640px;
+  margin-inline: auto;
+  border-radius: 999px;
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ask-panel { transition: none; }
+}

@@ -505,6 +505,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
         !error && (
           <div className="absolute inset-0 z-10">
             <PlayerControls
+              askable={false}
               downloadedFraction={download ? (download.state === "done" ? 1 : download.bytes / Math.max(1, download.expectedBytes)) : undefined}
               offlineTrickplay={trickplay}
               logoUrl={introArt?.logoUrl ?? null}

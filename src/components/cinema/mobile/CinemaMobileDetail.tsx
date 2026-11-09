@@ -1,5 +1,6 @@
 "use client";
 
+import { AskTitleControl } from "@/components/ask/AskTitleControl";
 import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
 import { OfflineDownloadControl, OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
 import { OfflineEpisodeButton, OfflineSeasonDownload } from "@/components/offline/OfflineEpisodeDownload";
@@ -616,6 +617,8 @@ export function CinemaMobileDetail({
           {/* Estompé tant qu'on ignore l'état : proposer « marquer comme vu » sans l'avoir lu,
               c'est proposer d'écrire une valeur qu'on a devinée. */}
           <TitleToggleIcon face={WATCHED_FACE} on={watched} onClick={toggleWatched} disabled={watchedBusy} unknown={!watchedKnown} />
+          {/* « Poser une question » (§139) : la même pièce que les fiches du bureau, film ou série. */}
+          <AskTitleControl itemId={item.jellyfinItemId} variant="icon" />
         </div>
 
         {/* Des visages plutôt qu'une ligne de noms : chacun ouvre la fiche de la personne, posée

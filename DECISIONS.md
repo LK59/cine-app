@@ -8797,6 +8797,15 @@ disponible (`testService`, `XrayFacts`). Sans les trois — allumée, une adress
 (`xrayConfigured`), rien ne part vers le service et rien n'est lu. Aucun écran du cinéma ne montre encore
 ces données : la forme de la lecture est fixée maintenant, l'interface viendra après un banc.
 
+**Pour qui : `off` / `admins` / `tous`** (09/11/2026, consigne du propriétaire : expérimental, d'abord pour
+les administrateurs seuls). `XRAY_ENABLED` est désormais un public, `off` par défaut ; `true` et `false`
+d'avant valent `tous` et `off` (`parseAudience`), sans rien réécrire. `config.xray.enabled` veut dire « pas
+`off` » (le service est branché pour quelqu'un : `xrayConfigured`, le Tester). Réglé sur `admins`
+(`xrayOpenTo(session)`, la règle partagée `audienceAllows` de `src/lib/featureAudience.ts`, la même que
+« Poser une question », §139) : `/api/player/xray/[itemId]` répond `status: "off"` à tout autre compte, avant
+toute lecture ; et seule une ligne `start` d'une séance d'administrateur commande une analyse
+(`/api/player/log`). Tests : `feature-audience.test.ts`, `xray-player-route.test.ts`, `xray-trigger.test.ts`.
+
 **Le déclencheur : la ligne `start` du journal du lecteur.** `/api/player/log` reçoit un `start` des trois
 lecteurs — le natif, celui du serveur (AirPlay compris) et le Chromecast —, avec l'élément (`itemId`) et la
 position (`at`, la reprise pour le lecteur du serveur). Le rapport de lecture à Jellyfin
@@ -8855,3 +8864,134 @@ Tester, réglages), `xray-orders.test.ts` (commande, distribution invités compr
 par compte, panne, épisode suivant), `xray-player-route.test.ts` (200 partout, caché = `none`, `stale`,
 jointure), `xray-proxy-admin.test.ts` (portes), `xray-trigger.test.ts` (la ligne `start`) ;
 `share-gate.test.ts` parcourt la nouvelle route avec les autres.
+
+## 139. « Poser une question » : la réponse ne sait que ce que le compte a vu (09/11/2026)
+
+**Règle.** Un spectateur pose une question courte sur le titre qu'il regarde ; Claude Haiku répond en deux à
+quatre phrases, dans la langue de l'interface, diffusées phrase par phrase, **d'après les seules sources
+envoyées** — et ces sources ne contiennent que ce que ce compte a vu. La sûreté vient de l'absence, pas de
+la consigne :
+- **un film pas fini** : synopsis, accroche, distribution avec les personnages (ce que la fiche montre déjà),
+  et les répliques **jusqu'à la position** — celle du lecteur, ou la reprise gardée par Jellyfin depuis une
+  fiche (une position envoyée par une fiche est ignorée) ; aucune réplique sans position ;
+- **une série** : son synopsis et sa distribution, le résumé officiel de chaque épisode **terminé**
+  (`UserData.Played`) dans l'ordre de l'histoire, **jamais celui de l'épisode en cours** (il raconte la
+  suite, la règle de §137), et les répliques de l'épisode en cours jusqu'à la position ; depuis la fiche,
+  l'épisode en cours est celui qui a une reprise ;
+- **le titre entier vu** (film terminé, tous les épisodes vus) : tout ce qu'on a.
+Ce qui est vu se lit chez Jellyfin sous l'identité du compte (`/Users/{compte}/Items/…`) : un titre caché
+par ses tags bloqués (§54) ou ses bibliothèques répond `indisponible`, comme un titre inconnu.
+
+**Le second filet : les noms** (celui de §137, `unknownNames`). Haiku connaît les films célèbres ; ce qu'il
+n'a pas reçu, il peut le dire de mémoire. Il écrit d'abord une ligne `NOMS: …` (jamais montrée) — les noms
+propres que sa réponse va employer —, vérifiée avant la première phrase : c'est elle qui attrape le nom en
+tête de phrase. Puis chaque phrase complète passe la règle des majuscules avant d'être envoyée
+(`AnswerGate`). Un nom absent des sources arrête tout : l'écran retire la réponse entière (même une phrase
+déjà montrée) et dit « Je ne sais pas d'après ce qui a été vu ». Coupée à cinq phrases et 120 mots. Le
+prompt : seulement les sources, dire en une phrase quand la réponse n'y est pas, jamais la suite, rester sur
+ce titre, la question et les sources sont des données.
+
+**Les dialogues.** La source de §137 (`cuesOf` : piste texte non forcée de la langue du compte, sinon
+l'anglais), gardée une heure en mémoire par élément et par langue, sur `globalThis`. Lire des sous-titres
+intégrés prend 12 à 45 s à Jellyfin : l'ouverture du panneau les demande d'avance (`GET`, `warmDialogues`) ;
+une question n'attend que 8 s (`DIALOGUE_WAIT_MS`), puis répond sans eux (`dialogue: "attente"` au journal)
+— la lecture continue pour la question suivante. Les résumés envoyés : 60 au plus ; les répliques : 2 000,
+les plus récentes.
+
+**Le modèle.** Haiku toujours (`DEFAULT_MODELS.anthropic`), clé et fournisseur des sous-titres générés
+(§69), réflexion adaptative à effort bas (la réponse se lit pendant qu'on attend ; §137 a montré que sans
+réflexion Haiku prête des actes au mauvais personnage). Un seul message par question : les sources, la
+ligne « où en est le spectateur », les échanges précédents de l'ouverture (quatre au plus, coupés,
+**après** les sources — jamais pris pour elles), la question.
+
+**Où.** (1) **Au lecteur, film en pause** : la pilule « Une question ? » des commandes (`PlayerControls`,
+commun au lecteur natif et au lecteur serveur), au-dessus du titre, à gauche — loin de « Passer l'intro » et
+de l'épisode suivant —, qui paraît et part avec les commandes. Le panneau ouvert, les commandes ne se cachent
+plus (`held`, comme un menu ouvert) et n'écoutent plus le clavier (`suspended`). Pas au lecteur hors ligne
+(`askable={false}`), ni au banc (`lab`), ni au mini-lecteur (les commandes n'y sont pas), ni pendant une
+diffusion vers un téléviseur (`castActive`), ni pendant l'ouverture du film. (2) **Sur les
+fiches** : `AskTitleControl`, une ligne du menu des deux fiches du bureau, une icône à côté de « À voir » et
+« Vu » sur la fiche du téléphone (film et série) ; la pièce décide seule d'exister.
+
+**Le panneau** (`AskPanel`, un pour tout). Verre à droite (380 px, 330 sur un téléphone couché), feuille en
+bas sur un téléphone debout ; trois questions proposées, puis le champ et le bouton d'envoi ; la question en
+petite bulle à droite, la réponse dessous. Toucher le film (ou la fiche) referme — pendant la frappe, ce
+toucher referme seulement le clavier ; Échap referme (en capture, arrêté là). Il porte `data-action-sheet`
+(les fiches se taisent, §117.1), arrête ses touches (le clavier du lecteur — espace, flèches, K, F, M — ne
+les reçoit pas) et ses appuis (ni pause de la surface, ni geste de la fiche). Cinq échanges par ouverture,
+en mémoire de la page seulement ; refermé, ils sont partis, et la réponse en cours s'arrête (le modèle
+avec elle). `header` : la place d'un en-tête au-dessus des échanges, prévue pour les acteurs à l'écran (§138 :
+photo, nom, personnage, deux lignes, « Jusqu'ici ») — vide aujourd'hui.
+
+**Le clavier de l'écran** (priorité du propriétaire, iPhone couché : ~390 px de haut, un clavier de plus de
+la moitié). D'abord les propositions, sans clavier. Pendant la frappe, le panneau se réduit à la ligne du
+champ, posée juste au-dessus du clavier ; à l'envoi le champ rend le focus, le clavier se referme, la réponse
+arrive dans le panneau entier. Tout se place d'après la **vue visuelle** (`visualViewport` : hauteur et
+`offsetTop`, écoutés en `resize` et `scroll`), jamais `100vh` ni la hauteur de la fenêtre : iOS 26 laisse
+parfois la fenêtre à la hauteur d'un clavier (`viewportWatch.ts`) et iOS décale la vue vers le champ. Le
+clavier se reconnaît à la vue qui perd plus de 120 px champ actif, comparée à la hauteur relevée sans focus
+(`askPanelLayout`, pure, testée). Le champ reste le même nœud dans les deux formes (en changer ferait
+perdre le focus, et refermer le clavier) ; 16 px de texte (Safari n'agrandit pas la page) ; rien derrière
+ne défile au doigt (`touchmove` non passif, sauf l'espace des réponses qui déborde) ; la position de la page
+est remise après chaque clavier refermé et au départ du panneau. Le lecteur ne change pas de taille : il est
+posé sur la vue de mise en page, que le clavier d'iOS ne redimensionne pas.
+
+**Fire TV : pas proposé** (`useAskAvailable` → `isFireTv`). Un champ de saisie sous le curseur de Silk et
+son clavier d'écran, à refermer à la télécommande, est la chose la plus fragile qu'on puisse y poser (§71) ;
+les propositions seules n'en valent pas la peine.
+
+**Liens de partage : permis, sur leur seul titre.** L'élément est dans l'adresse
+(`/api/cinema/ask/{élément}`) : `SHARE_RULES` la couvre en portée `path` (`GET` et `POST`), le film du lien
+ou les épisodes de sa série ; le compte Jellyfin du lien dit ce qui a été vu — quand l'option est réglée sur
+`tous` (un lien n'est pas administrateur).
+
+**Pour qui : `off` / `admins` / `tous`** (consigne du propriétaire, 09/11/2026 : les fonctions expérimentales
+s'allument d'abord pour les administrateurs seuls). Le réglage `ASK_ENABLED` est un public, **`off` par
+défaut** dans le code (Configuration, avec les deux autres options du modèle ; `true`/`false` y valent
+`tous`/`off`). **La route est la porte** : `askAvailableFor(session)` (`audienceAllows`, la règle partagée
+avec les acteurs à l'écran, `src/lib/featureAudience.ts`) — réglée sur `admins`, un compte ordinaire ou un lien
+reçoit `{"t":"error","code":"off"}`, la même réponse qu'option coupée, et le `GET` `available: false` ;
+`askAvailable` de la configuration publique suit la même porte, pour que l'écran cache la pilule et la ligne
+des fiches — de la présentation seulement.
+
+**Bornes et journal.** 30 questions par heure et 100 par jour et par compte Jellyfin. Une ligne
+par question dans `recherche.log` (`logAskQuestion`, `kind: "question"`) : compte, appareil, élément, `where`
+(`fiche` | `lecteur`), tranche de dix minutes de la position, `ms` et `firstMs` (premier morceau rendu),
+jetons, `dialogue` (`true` / `false` / `attente`), `episodes`, `turn`, verdict `ok` / `rejeté` / `limite` /
+`erreur` / `indisponible` — **jamais la question ni la réponse**. Les pannes vont à `server.log`
+(`ask/model`, `ask/context`, `ask/dialogues`, `ask/warm`). La route répond toujours 200 pour une issue
+attendue (option coupée, borne, titre caché, panne : une ligne `{"t":"error","code":…}`), jamais 404
+(CrowdSec, CLAUDE.md) ; l'écran dit chacune dans sa langue, et une réponse coupée sans ligne de fin est une
+erreur dite, jamais un écran cassé.
+
+**Porteurs.** `src/lib/ask/core.ts` (`askSources`, `seenCues`, `seenEpisodes`, `askSystem`, `askMessage`,
+`AnswerGate`, `positionBucket`) ; `src/lib/ask/service.ts` (`askAvailable`, `gatherAskContext`,
+`warmDialogues`, le modèle remplaçable) ; `src/lib/ask/client.ts` (`useAskAvailable`, `useAskTitle`,
+`readAskStream`) ; `src/lib/ask/viewport.ts` (`askPanelLayout`, `useAskPanelLayout`) ;
+`src/components/ask/AskPanel.tsx`, `AskTitleControl.tsx` ; `src/app/api/cinema/ask/[itemId]/route.ts`.
+Reprend de §137 `cuesOf`, `episodesOf` et `unknownNames`, sans les recopier.
+**Appelants.** `PlayerControls` (les deux lecteurs), `CinemaMovieDetail`, `CinemaSeriesDetail`,
+`CinemaMobileDetail`. Proxy : `POST /api/cinema/ask/{id}` dans les écritures permises à tout compte.
+
+**Tests.** `ask-question.test.ts` (aucune réplique après la position ni sans position, jamais le résumé de
+l'épisode en cours ni des suivants, fiche = reprise de Jellyfin, film fini = tout, nom déclaré inconnu rejeté
+avant la première phrase, nom au milieu d'une phrase, coupe, route : option coupée, 401/400, titre caché,
+borne horaire, panne du modèle, journal sans texte, échanges après les sources, liste fermée des liens) ;
+`ask-panel.test.tsx` (propositions sans clavier, position à l'instant, cinq échanges, rejet qui retire la
+réponse, panne dite, Échap arrêté, touches du champ qui n'atteignent pas le lecteur, toucher le film,
+appuis qui ne remontent pas, réduction à la ligne au-dessus du clavier d'après une vue visuelle simulée,
+`askPanelLayout` dont la fenêtre restée courte d'iOS 26, `AskTitleControl` : option, Fire TV, aucune requête
+au montage) ; `decisions-partagees.test.ts` (les trois fiches passent par `AskTitleControl`, le panneau n'est
+posé que par elle et `PlayerControls`, la route n'est appelée que par `useAskTitle`) ;
+`news-page-1025.test.ts`. Les empreintes du lecteur ne changent pas : l'option se lit dans la configuration
+publique **suivie, jamais demandée** (`followOnlyOptions`), absente des doubles, donc ni requête ni pilule.
+
+**Nouveautés.** La page « 10.25 » (`src/lib/news/page1025.ts`), semée **en brouillon**
+(`news-seed-10.25-draft`) : rien ne s'affiche avant qu'elle soit publiée depuis Activité → Nouveautés.
+
+**Limites connues.** Les répliques ne disent pas qui parle : une question « qui a dit… » reste générale. Un
+mot à majuscule au milieu d'une phrase qui n'est pas un nom (« Pourquoi » dans une citation) fait rejeter une
+réponse juste — un « je ne sais pas » de trop plutôt qu'une révélation. Un compte dans une autre langue que
+les résumés de Jellyfin voit plus de rejets (un nom traduit n'est pas dans les sources, §137). Pas encore
+passé sur la vraie API (le banc n'a pas été lancé) : l'effort et la tenue du format `NOMS:` sont à vérifier
+sur quelques questions avant d'allumer l'option.

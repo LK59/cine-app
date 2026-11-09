@@ -1,5 +1,6 @@
 "use client";
 
+import { AskTitleControl } from "@/components/ask/AskTitleControl";
 import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -372,6 +373,9 @@ export function CinemaSeriesDetail({
                 <span className="text-sm font-medium">{t("cinema.moreEpisodes")}</span>
               </button>
             )}
+
+            {/* « Poser une question » (§139) : la même pièce sur toutes les fiches, qui décide seule d'exister. */}
+            <AskTitleControl itemId={item.jellyfinItemId} variant="row" />
 
             {/* « Vu » puis « À voir » : la forme de toutes les fiches (`TitleToggles`, §117.4). Estompé
                 tant que Jellyfin n'a pas répondu : ce bouton écrit, et proposer d'écrire une valeur

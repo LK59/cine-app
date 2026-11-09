@@ -1,5 +1,6 @@
 import { config } from "@/lib/config";
 import { HttpError, upstreamSignal } from "@/lib/http";
+import { audienceAllows, type Audience } from "@/lib/featureAudience";
 
 /**
  * Le client de `laterna-xray` (DECISIONS.md §138) — le service à part qui reconnaît les acteurs à
@@ -96,6 +97,20 @@ export function xrayConfigured(): boolean {
   // « coupée », jamais une erreur de la route qui demandait.
   try {
     return config.xray.enabled && config.xray.url.trim() !== "" && config.xray.apiKey.trim() !== "";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * L'option est-elle ouverte à **cette** session (`off` / `admins` / `tous`, `featureAudience.ts`, 09/11/2026) :
+ * réglée sur `admins`, un compte ordinaire lit `off` et ses séances ne commandent rien. Une configuration
+ * sans `audience` (un double de test, une lecture qui échoue) se lit par `enabled` : `true` vaut `tous`.
+ */
+export function xrayOpenTo(session: { role?: string | null } | null | undefined): boolean {
+  try {
+    const x = config.xray as { audience?: Audience; enabled?: boolean };
+    return audienceAllows(x.audience ?? (x.enabled ? "tous" : "off"), session);
   } catch {
     return false;
   }

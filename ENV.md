@@ -93,7 +93,7 @@ Set in the app: **Management → Configuration → Connections**, *Actors on scr
 
 | Variable | Default | Role |
 |---|---|---|
-| `XRAY_ENABLED` | `false` | Turns the analysis on. Without an address and a key, nothing is sent. |
+| `XRAY_ENABLED` | `off` | Who the analysis is on for: `off`, `admins` (analyses ordered only from administrators' playback, the player reads `off` for everyone else) or `tous` (everyone). `true` and `false` from before still read as `tous` and `off`. Without an address and a key, nothing is sent. |
 | `XRAY_URL` | `http://laterna-xray:8000` | The service's address, from inside the container (same Docker network). |
 | `XRAY_API_KEY` | — | The key the service was started with (its own `XRAY_API_KEY`), sent as `Authorization: Bearer`. |
 
@@ -131,6 +131,7 @@ spending and the jobs.
 | `SUBTITLE_GEN_ENABLED` | `true` | `false` turns the feature off while keeping the key. |
 | `DESCRIBE_SEARCH_ENABLED` | `false` | Search by description: a sentence describing a film or series (« the film where a man relives the same day ») finds it, in the library or not. Uses the key above, Anthropic only (Claude Haiku). Each new sentence is one request, well under a tenth of a cent; not counted in the subtitle budget. |
 | `RECAP_ENABLED` | `false` | « Previously »: on the page of a series in progress, a short recap of the latest events the account watched — from the official episode summaries and the subtitles of the last ten minutes watched, never beyond — prepared in the background for every account that uses the app, three hours after it stops watching the series (before that, the page keeps the synopsis). A single finished episode shows its official summary as is. Each account can turn it off (Account → Interface). Uses the key above, Anthropic only (Claude Haiku), about a tenth of a cent per text; not counted in the subtitle budget. |
+| `ASK_ENABLED` | `off` | Who « Ask a question » is on for: `off`, `admins` (administrators only — the route answers « off » to everyone else) or `tous` (everyone, share links included on their own title). The feature: with a film paused, or from a film or series page, a short streamed answer to a question about the title — built only from what the account has already watched (the synopsis and cast, the summaries of finished episodes, the subtitles up to the current position), never beyond. An answer naming anything the sources do not contain is withheld. 30 questions an hour and 100 a day per account; one line per question in `recherche.log`, never its text. Not offered on Fire TV. Uses the key above, Anthropic only (Claude Haiku); not counted in the subtitle budget. |
 
 ## Dialogue search
 

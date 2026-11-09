@@ -4,6 +4,7 @@ import { verifySessionFull } from "@/lib/session";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { assertVisible } from "@/lib/itemVisibility";
 import { emptyXray, scenesForPlayer, type XrayPlayerPayload } from "@/lib/xray/scenes";
+import { xrayOpenTo } from "@/lib/clients/xray";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   if (!isJellyfinId(itemId)) return NextResponse.json({ error: "itemId invalide" }, { status: 400 });
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  // Réglée sur `admins` (`featureAudience.ts`), l'option est coupée pour tout autre compte : `off`.
+  if (!xrayOpenTo(session)) return NextResponse.json(emptyXray("off") satisfies XrayPlayerPayload, { headers: PRIVATE });
 
   const refused = await assertVisible(session, itemId);
   if (refused) {
