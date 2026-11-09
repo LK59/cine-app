@@ -457,3 +457,49 @@ def test_images_detectees_par_lots_de_plans():
     sf.flush()
     assert eng.detector.calls == [pipeline.DETECT_BATCH, pipeline.DETECT_BATCH, 5]
     assert eng.clock.counts["images"] == 21
+
+
+# --- 7. fichier remplacé de même durée ---------------------------------------------------------------
+
+
+def _done(client, duration=2551.36):
+    client.post("/jobs", json=job(), headers=AUTH)
+    client.db.run("UPDATE items SET status='done', duration=? WHERE item_id=?", (duration, ITEM))
+    client.db.run("INSERT INTO results (item_id, etag, model, scenes_json, analyzed_until, progress, complete, updated, version)"
+                  " VALUES (?, 'etag-1', 'buffalo_l', '[]', ?, 1, 1, 0, 3)", (ITEM, duration))
+
+
+def test_reprise_d_un_fichier_remplace_de_meme_duree(client):
+    _done(client)
+    r = client.post("/jobs", json=job(etag="etag-2", rebindIfSameDuration=True, durationS=2551.9), headers=AUTH)
+    assert r.status_code == 200 and r.json()["status"] == "done"
+    it = client.get(f"/items/{ITEM}", headers=AUTH).json()
+    assert it["etag"] == "etag-2" and it["status"] == "done" and it["durationS"] == 2551.36
+    assert client.get(f"/items/{ITEM}/scenes", headers=AUTH).json()["etag"] == "etag-2"
+
+
+def test_pas_de_reprise_hors_tolerance_ou_sans_demande(client):
+    _done(client)
+    r = client.post("/jobs", json=job(etag="etag-2", rebindIfSameDuration=True, durationS=2553.0), headers=AUTH)
+    assert r.status_code == 202 and r.json()["status"] == "queued"
+    assert client.get(f"/items/{ITEM}/scenes", headers=AUTH).status_code == 404  # oublié, comme avant
+
+
+def test_pas_de_reprise_sans_demande(client):
+    _done(client)
+    r = client.post("/jobs", json=job(etag="etag-2", durationS=2551.36), headers=AUTH)
+    assert r.status_code == 202
+
+
+def test_reprise_sur_la_fin_analysee_si_duree_absente(client):
+    _done(client)
+    client.db.run("UPDATE items SET duration=NULL WHERE item_id=?", (ITEM,))
+    r = client.post("/jobs", json=job(etag="etag-2", rebindIfSameDuration=True, durationS=2551.0), headers=AUTH)
+    assert r.status_code == 200
+
+
+def test_reprise_validee():
+    for bad in ({"rebindIfSameDuration": True}, {"rebindIfSameDuration": True, "durationS": -3},
+                {"rebindIfSameDuration": "oui", "durationS": 10}):
+        with pytest.raises(InvalidJob):
+            validate_job(job(**bad), MEDIA)

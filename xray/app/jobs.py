@@ -28,6 +28,7 @@ VIDEO_EXT = {
 MAX_CAST = 300
 MAX_PHOTOS = 12
 MAX_SKIP = 32
+REBIND_TOLERANCE = 1.0  # secondes
 
 
 class InvalidJob(ValueError):
@@ -58,6 +59,9 @@ class JobSpec:
     cast: list[CastMember] = field(default_factory=list)
     # Plages à ne pas analyser ; None = non précisé (le service demande alors à Jellyfin).
     skip: list[tuple[float, float]] | None = None
+    # Fichier remplacé (autre etag) de même durée : reprendre le résultat complet au lieu de tout
+    # refaire (`rebindIfSameDuration` + `durationS`).
+    rebind_duration: float | None = None
 
 
 def check_photo_url(url: object) -> str:
@@ -149,6 +153,15 @@ def validate_job(body: object, media_root: Path) -> JobSpec:
         seen.add(pid)
         cast.append(CastMember(pid, name, character, order, list(dict.fromkeys(photos))))
     skip = check_skip(body.get("skip"))
+    rebind = body.get("rebindIfSameDuration", False)
+    if not isinstance(rebind, bool):
+        raise InvalidJob("rebindIfSameDuration : booléen attendu")
+    rebind_duration = None
+    if rebind:
+        d = body.get("durationS")
+        if isinstance(d, bool) or not isinstance(d, (int, float)) or not math.isfinite(d) or d <= 0:
+            raise InvalidJob("durationS : nombre positif attendu avec rebindIfSameDuration")
+        rebind_duration = float(d)
     path = check_media_path(body.get("path"), media_root)
     return JobSpec(
         item_id=item_id.lower(),
@@ -159,6 +172,7 @@ def validate_job(body: object, media_root: Path) -> JobSpec:
         series_id=series_id.lower() if series_id else None,
         cast=cast,
         skip=skip,
+        rebind_duration=rebind_duration,
     )
 
 
@@ -201,6 +215,8 @@ class JobStore:
         now = time.time()
         with self.db.tx() as c:
             row = c.execute("SELECT * FROM items WHERE item_id=?", (spec.item_id,)).fetchone()
+            if row is not None and row["etag"] != spec.etag and self._rebind(c, row, spec):
+                return 200, {"itemId": spec.item_id, "status": "done", "position": 0}
             if row is not None and row["etag"] == spec.etag and row["status"] == "done":
                 return 200, {"itemId": spec.item_id, "status": "done", "position": 0}
             if row is not None and row["etag"] == spec.etag and row["status"] in ("queued", "running"):
@@ -237,6 +253,25 @@ class JobStore:
                 status = "queued"
         self._wake.set()
         return 202, {"itemId": spec.item_id, "status": status, "position": self.position(spec.item_id)}
+
+    def _rebind(self, c, row, spec: JobSpec) -> bool:
+        """Même élément, fichier remplacé (réencodage, autre conteneur) mais de même durée, à une
+        seconde près : le résultat complet reste valable, il passe au nouvel etag sans rien
+        analyser. La durée comparée est celle que ffprobe a lue sur l'ancien fichier (`items.duration`) ;
+        à défaut, la fin de la plage analysée d'un résultat complet, qui vaut cette même durée.
+        Sans l'une ni l'autre, pas de reprise : l'ancien fichier n'est plus là pour être mesuré."""
+        if spec.rebind_duration is None or row["status"] != "done":
+            return False
+        res = c.execute("SELECT complete, analyzed_until FROM results WHERE item_id=?", (spec.item_id,)).fetchone()
+        if res is None or not res["complete"]:
+            return False
+        known = row["duration"] if row["duration"] else (res["analyzed_until"] or None)
+        if not known or abs(float(known) - spec.rebind_duration) > REBIND_TOLERANCE:
+            return False
+        now = time.time()
+        c.execute("UPDATE items SET etag=?, path=?, updated=? WHERE item_id=?", (spec.etag, spec.path, now, spec.item_id))
+        c.execute("UPDATE results SET etag=?, updated=? WHERE item_id=?", (spec.etag, now, spec.item_id))
+        return True
 
     def _forget(self, c, item_id: str) -> None:
         for table in ("chunks", "shots", "tracks", "results"):

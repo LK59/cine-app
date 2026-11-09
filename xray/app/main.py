@@ -104,6 +104,8 @@ def create_app(start_background: bool = True, db: Database | None = None, models
             "progress": 1.0 if status == "done" else (float(res["progress"]) if res else 0.0),
             "analyzedUntil": float(res["analyzed_until"]) if res else 0.0,
             "error": row["error"],
+            # Durée du fichier lue par ffprobe (ajout compatible) ; null tant que l'analyse n'a pas commencé.
+            "durationS": round(float(row["duration"]), 3) if row["duration"] else None,
             # Ajout compatible (11/2026) : où le temps est passé, tronçons faits jusqu'ici.
             "stats": stats if stats["seconds"] else None,
         }

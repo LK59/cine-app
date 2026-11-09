@@ -528,6 +528,7 @@ prêts (réseau, empreinte qui ne correspond pas). `running` est l'`itemId` en c
 | `startAt` | facultatif : position à analyser en premier |
 | `seriesId` | facultatif : pour réutiliser les visages nommés dans la série |
 | `cast` | la distribution de l'épisode ; 12 photos au plus par personne, **adresses `https://image.tmdb.org/` uniquement** |
+| `rebindIfSameDuration`, `durationS` | facultatifs (ajout compatible, 11/2026) : fichier remplacé (réencodage) de même durée. Avec `true` et la durée du nouveau fichier en secondes, un résultat **complet** sous un autre `etag` dont le fichier durait à ±1 s pareil passe au nouvel `etag` sans analyse (`200 done`). La durée comparée est celle que ffprobe a lue sur l'ancien fichier, à défaut la fin du résultat complet ; sinon, comportement habituel |
 | `skip` | facultatif (ajout compatible, 11/2026) : `[{"start": 208.3, "end": 224.8}, …]`, 32 plages au plus, en secondes — génériques, rappel, bande-annonce. Aucun visage n'y est cherché ; les scènes ne les couvrent pas. Absent : le service demande ses segments à Jellyfin (Intro, Outro, Recap, Preview) s'il y a accès ; `[]` : rien n'est sauté et Jellyfin n'est pas consulté |
 
 Réponses :
@@ -538,7 +539,8 @@ Réponses :
 - `200 {"itemId", "status": "done", "position": 0}` — déjà fait pour ce même `etag` : rien n'est
   relancé ;
 - un ordre en double (même `etag`, en attente ou en cours) ne fait que remonter la priorité ;
-- un autre `etag` oublie l'ancien résultat et repart de zéro ; un ordre en échec est relancé ;
+- un autre `etag` oublie l'ancien résultat et repart de zéro — sauf reprise d'un fichier
+  remplacé de même durée (`rebindIfSameDuration`) ; un ordre en échec est relancé ;
 - `400` — champ invalide, chemin hors de la médiathèque, photo hors de `image.tmdb.org`.
 
 Entre deux tronçons, un ordre cède la place à un ordre plus prioritaire, et reprend ensuite là
@@ -548,6 +550,7 @@ où il en était.
 
 ```json
 { "itemId": "…", "etag": "…", "status": "running", "progress": 0.094, "analyzedUntil": 840.0, "error": null,
+  "durationS": 2551.36,
   "stats": { "seconds": 61.2, "realtime": 13.7, "skippedSeconds": 0,
              "stages": { "decode_wait": 1.1, "shots": 2.0, "convert": 0.3, "detect": 30.5, "grade": 1.2,
                          "embed": 18.4, "track": 0.4, "write": 0.1, "build": 1.0, "photos": 5.9, "other": 0.3 },
@@ -556,7 +559,8 @@ où il en était.
 
 `status` : `queued`, `running`, `done` ou `failed`. `progress` : part du fichier analysée.
 `analyzedUntil` : fin de la plage analysée d'un seul tenant à partir du tronçon de `startAt`
-(0 tant que ce tronçon n'est pas fait ; la durée du fichier une fois terminé). `stats` (ajout
+(0 tant que ce tronçon n'est pas fait ; la durée du fichier une fois terminé). `durationS` : durée du
+fichier lue par ffprobe (`null` avant le début de l'analyse). `stats` (ajout
 compatible, 11/2026 ; `null` tant que rien n'est fait) : le temps de calcul des tronçons faits,
 étape par étape, et ce qu'ils ont compté — informatif, pour savoir où le temps passe. Les étapes :
 `decode_wait` (l'analyse attend ffmpeg, qui décode en parallèle), `shots` (coupes), `convert`,
