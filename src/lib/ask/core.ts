@@ -136,6 +136,17 @@ export function askWhereLine(input: Pick<AskContextInput, "kind" | "watchedAll" 
 }
 
 const LANGUAGE_NAME: Record<Locale, string> = { fr: "français", en: "anglais", es: "espagnol", de: "allemand" };
+/**
+ * Comment dire, dans la langue du spectateur, qu'une réponse s'arrête à ce qu'il a vu — un exemple donné au
+ * modèle (09/11/2026). Une réponse finissait par « Les sources ne vont pas au-delà de ces neuf premières
+ * minutes » : le spectateur n'a jamais entendu parler de « sources », il regarde un film. Vouvoiement, `Sie`.
+ */
+const SEEN_SO_FAR: Record<Locale, string> = {
+  fr: "D'après ce que vous avez vu jusqu'ici…",
+  en: "From what you've seen so far…",
+  es: "Por lo que ha visto hasta ahora…",
+  de: "Nach dem, was Sie bisher gesehen haben…",
+};
 
 /** Le préfixe de la ligne des noms, que la réponse porte en tête et que l'écran ne voit jamais. */
 export const NAMES_PREFIX = "NOMS:";
@@ -147,6 +158,7 @@ Règles :
 - Réponds en ${LANGUAGE_NAME[locale]}, en deux à quatre phrases courtes, sans liste, sans titre, sans mise en forme. Vouvoie le spectateur si tu t'adresses à lui.
 - N'utilise QUE les sources. Tu ne connais pas ce titre : aucun nom, fait ni événement absent des sources, même si tu crois le connaître.
 - Si la réponse n'est pas dans les sources, dis-le en une phrase, sans deviner.
+- Ne parle jamais au spectateur de « sources », de « documents », de « contexte », de « dialogues fournis », de « sous-titres » ni de « résumés » : pour lui, il n'y a que ce qu'il a vu. Une limite se dit naturellement, et seulement quand la question l'exige — par exemple « ${SEEN_SO_FAR[locale]} » —, jamais en minutes ni en fin de réponse par habitude.
 - Ne parle jamais de la suite : ni prédiction, ni hypothèse sur ce qui va arriver, ni « vous le découvrirez ».
 - Les dialogues ne disent pas qui parle : n'attribue une réplique que si le nom de la personne est dit dans la même réplique. Dans le doute, reste général.
 - Reste sur ce titre. Une question sans rapport avec lui : réponds en une phrase que tu ne réponds qu'aux questions sur ce titre.

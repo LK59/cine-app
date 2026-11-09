@@ -8921,7 +8921,14 @@ toucher referme seulement le clavier ; Échap referme (en capture, arrêté là)
 les reçoit pas) et ses appuis (ni pause de la surface, ni geste de la fiche). Cinq échanges par ouverture,
 en mémoire de la page seulement ; refermé, ils sont partis, et la réponse en cours s'arrête (le modèle
 avec elle). `header` : la place d'un en-tête au-dessus des échanges, prévue pour les acteurs à l'écran (§138 :
-photo, nom, personnage, deux lignes, « Jusqu'ici ») — vide aujourd'hui.
+photo, nom, personnage, deux lignes, « Jusqu'ici ») ; `suggestions` remplace alors les trois propositions
+d'office.
+
+**Il arrive et repart** (10.26 — la fiche n'avait aucun mouvement) : la colonne glisse de la droite
+(`animate-fade-in-side`), la feuille du téléphone monte (`animate-slide-up`) ; la sortie, en 0,2 s
+(`ASK_EXIT_MS`, `ask-panel-out-side` / `animate-fade-out-down`), passe par `useDelayedClose` — Échap, la croix,
+toucher le film ou la fiche. `transform` et `opacity` seulement, rien sous `prefers-reduced-motion`. Le
+même mouvement au lecteur et sur les fiches (un seul panneau).
 
 **Le clavier de l'écran** (priorité du propriétaire, iPhone couché : ~390 px de haut, un clavier de plus de
 la moitié). D'abord les propositions, sans clavier. Pendant la frappe, le panneau se réduit à la ligne du
@@ -8935,6 +8942,48 @@ perdre le focus, et refermer le clavier) ; 16 px de texte (Safari n'agrandit pas
 ne défile au doigt (`touchmove` non passif, sauf l'espace des réponses qui déborde) ; la position de la page
 est remise après chaque clavier refermé et au départ du panneau. Le lecteur ne change pas de taille : il est
 posé sur la vue de mise en page, que le clavier d'iOS ne redimensionne pas.
+
+**L'iPhone du propriétaire en application installée** (10.26, 09/11/2026). Couché, le clavier couvrait le
+champ ; debout, au lecteur, le panneau ne s'était **pas réduit du tout** — le champ entier sous le clavier.
+Donc la vue visuelle n'avait rien dit (ni `resize`, ni hauteur plus courte), ou trop tard. Ce qui est en
+place, sans supposer laquelle des deux (`askPanelLayout`, `keyboardCover`) :
+- le clavier se reconnaît de deux façons : la vue visuelle plus courte que la **référence** relevée sans
+  focus (branche `vue`), ou plus courte que la **fenêtre** restée entière, `innerHeight − hauteur − offsetTop`
+  (branche `fenetre` : la référence relevée trop tard, ou iOS qui fait glisser la vue au lieu de la réduire) ;
+  un pincement (`scale` > 1,05) n'en est pas un ;
+- la ligne se pose le bas contre le bas de la vue visuelle (`offsetTop + hauteur`), en coordonnées de la vue
+  de mise en page, moins le haut du calque du panneau (`layerTop`, 0 d'ordinaire) ;
+- la vue est relue à chaque image pendant la première seconde du focus, puis une fois à 700 ms : un `resize`
+  en retard, ou absent, ne laisse plus le panneau entier ;
+- **un téléphone** (pointeur grossier, petit côté de l'écran < 600 px) dont le clavier ne se laisse pas
+  mesurer passe quand même à la ligne : invisible les 700 premières ms (branche `attente`, elle ne saute pas
+  du haut vers le bas sous les yeux), puis **en haut** de ce qu'on voit, sous la zone sûre (`inconnu`) — le
+  seul endroit qu'aucun clavier ne couvre. Un iPad garde son panneau entier (un clavier matériel n'ouvre rien).
+
+**Le relevé `kind: "clavier"`** (`startup.log`, même route et même chemin que `kind: "hauteur"`,
+`/api/viewport-diag`) : sur un écran tactile, une ligne au focus (écouté sur le document, `focusin` — pas
+l'état de React, que la ligne dit à part : `focusedState`, `active`), une 600 ms plus tard, une par rafale de
+`resize` de la vue champ actif ; six par ouverture du panneau au plus. Elle porte `innerHeight` /
+`outerHeight`, `clientHeight`, la vue visuelle (`vv`, `vvTop`, `vvPageTop`, `vvScale`), la référence,
+`scrollY`, l'écran et l'orientation, `standalone`, `touchPhone`, les bords du calque, du panneau et du champ,
+la branche et la forme décidées, et les événements comptés depuis le focus (`vvResize`, `vvScroll`,
+`winResize`) — ce qui dira, au prochain essai, si iOS prévient, quand, et de quoi.
+
+**« OK »** à côté de l'envoi, seulement champ actif : referme le clavier sans envoyer (iOS n'a pas de touche
+pour cela ici), le texte reste, le panneau entier revient. Appuyé, il ne prend pas le focus.
+
+**Rien ne se dessine sur la réponse.** Couché, la fin d'une réponse passait sous la proposition restante :
+l'espace des réponses rogne ce qu'il porte (`clip-path: inset(0)`, qui rogne aussi un calque composé de
+WebKit), descend jusqu'à sa dernière ligne une image plus tard et quand il change de taille
+(`ResizeObserver`) ; propositions et champ sont dessous, dans le flux. Peu de hauteur (couché), les
+propositions tiennent sur une ligne qui défile de côté.
+
+**Pas de « sources » dites au spectateur.** Une réponse finissait par « Les sources ne vont pas au-delà de
+ces neuf premières minutes. » La consigne interdit désormais de parler de sources, documents, contexte,
+dialogues fournis, sous-titres ou résumés, et donne une façon naturelle de dire la limite, dans la langue de
+l'interface et seulement quand la question l'exige (`SEEN_SO_FAR` : « D'après ce que vous avez vu
+jusqu'ici… », « From what you've seen so far… », « Por lo que ha visto hasta ahora… », « Nach dem, was Sie
+bisher gesehen haben… »). Le filet des noms et la règle de la suite ne changent pas.
 
 **Fire TV : pas proposé** (`useAskAvailable` → `isFireTv`). Un champ de saisie sous le curseur de Silk et
 son clavier d'écran, à refermer à la télécommande, est la chose la plus fragile qu'on puisse y poser (§71) ;
@@ -8980,8 +9029,12 @@ borne horaire, panne du modèle, journal sans texte, échanges après les source
 `ask-panel.test.tsx` (propositions sans clavier, position à l'instant, cinq échanges, rejet qui retire la
 réponse, panne dite, Échap arrêté, touches du champ qui n'atteignent pas le lecteur, toucher le film,
 appuis qui ne remontent pas, réduction à la ligne au-dessus du clavier d'après une vue visuelle simulée,
-`askPanelLayout` dont la fenêtre restée courte d'iOS 26, `AskTitleControl` : option, Fire TV, aucune requête
-au montage) ; `decisions-partagees.test.ts` (les trois fiches passent par `AskTitleControl`, le panneau n'est
+`askPanelLayout` dont la fenêtre restée courte d'iOS 26, la vue qui rétrécit avec la fenêtre, la fenêtre
+entière et la vue glissée, un calque décalé, le téléphone sans mesure (attente puis en haut), le pincement,
+~150 px visibles ; `resize` en retard, aucun `resize`, les lignes `clavier` et leur borne, « OK », propositions
+sous l'espace des réponses, l'entrée et la sortie animées, l'en-tête d'une personne, `AskTitleControl` :
+option, Fire TV, aucune requête au montage) ; `viewport-diag-route.test.ts` (la ligne `clavier`, bornée) ;
+`ask-question.test.ts` (la consigne sans « sources », dans les quatre langues) ; `decisions-partagees.test.ts` (les trois fiches passent par `AskTitleControl`, le panneau n'est
 posé que par elle et `PlayerControls`, la route n'est appelée que par `useAskTitle`) ;
 `news-page-1025.test.ts`. Les empreintes du lecteur ne changent pas : l'option se lit dans la configuration
 publique **suivie, jamais demandée** (`followOnlyOptions`), absente des doubles, donc ni requête ni pilule.

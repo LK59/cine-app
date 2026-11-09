@@ -2157,6 +2157,28 @@ body:has(.gestion-liquid) .glass-window {
   border-radius: 999px;
   transition: none;
 }
+/* La sortie de la colonne (et de la ligne) : vers la droite, d'où elle est venue (`fade-in-side`), en
+   0,2 s comme les autres sorties — `ASK_EXIT_MS` la lit. La feuille du téléphone sort par `fade-out-down`. */
+.ask-panel-out-side {
+  animation: ask-panel-out-side 0.2s ease-in both;
+}
+@keyframes ask-panel-out-side {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(28px); }
+}
+/* L'espace des réponses rogne ce qu'il porte : sur l'iPhone couché, la fin d'une réponse passait sous la
+   proposition restante (09/11/2026). Un `clip-path` rogne aussi un calque composé de WebKit. */
+.ask-scroll {
+  clip-path: inset(0);
+}
+/* Peu de hauteur (téléphone couché) : les propositions sur une seule ligne qui défile de côté, pour laisser
+   la place à la réponse. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .ask-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .ask-chips::-webkit-scrollbar { display: none; }
+  .ask-chips > button { flex-shrink: 0; white-space: nowrap; }
+}
 @media (prefers-reduced-motion: reduce) {
   .ask-panel { transition: none; }
+  .ask-panel-out-side { animation: none; }
 }

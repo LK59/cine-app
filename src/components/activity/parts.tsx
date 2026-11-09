@@ -813,6 +813,15 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
         strOf(line.trigger),
         strOf(line.decision)
       );
+    // Le clavier du panneau « Poser une question » (`ask/viewport.ts`) : mesures brutes, pour l'administrateur.
+    case "clavier":
+      return join(
+        strOf(line.trigger),
+        strOf(line.branch),
+        numOf(line.vv) !== null && `vv ${numOf(line.vv)}+${numOf(line.vvTop) ?? 0} / ${numOf(line.inner) ?? "?"}`,
+        strOf(line.orientation),
+        line.standalone === true && "standalone"
+      );
     // Un retour au premier plan sur iPhone et iPad (`returnDiag.ts`).
     case "retour":
       return join(

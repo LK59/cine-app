@@ -5,8 +5,19 @@ import { createPortal } from "react-dom";
 import { ArrowUp, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { useAskTitle, type AskExchange } from "@/lib/ask/client";
-import { restorePageScroll, useAskPanelLayout, LINE_HEIGHT_PX } from "@/lib/ask/viewport";
+import {
+  restorePageScroll,
+  useAskPanelLayout,
+  keyboardSnapshot,
+  sendKeyboardDiag,
+  KEYBOARD_DIAG_MAX,
+  LINE_HEIGHT_PX,
+  type AskPanelLayout,
+  type ViewportFacts,
+} from "@/lib/ask/viewport";
 import { ASK_MAX_QUESTION, type AskWhere } from "@/lib/ask/core";
+import { useDelayedClose } from "@/lib/useDelayedClose";
+import { APP_BUILD, APP_VERSION } from "@/lib/appBuild";
 
 /**
  * Le panneau « Poser une question » (DECISIONS.md §139) — un seul, pour le lecteur (film en pause) et
@@ -23,8 +34,14 @@ import { ASK_MAX_QUESTION, type AskWhere } from "@/lib/ask/core";
  * écoute le clavier du lecteur (espace, flèches…) ; ses appuis ne remontent pas jusqu'à la surface du
  * lecteur (qui mettrait en pause) ni au geste de la fiche (qui la tirerait vers le bas).
  *
- * `header` : la place d'un en-tête au-dessus des échanges — prévue pour les acteurs à l'écran (§138 :
- * photo, nom, personnage, deux lignes, « Jusqu'ici »). Vide aujourd'hui.
+ * `header` : la place d'un en-tête au-dessus des échanges — rempli par les acteurs à l'écran (§138 :
+ * photo, nom, personnage ; la biographie et « Jusqu'ici » viendront dessous). `suggestions` remplace les
+ * questions proposées (« Qui est … ? » pour une personne touchée).
+ *
+ * Il arrive et repart en glissant (09/11/2026 — la fiche n'avait aucun mouvement) : de la droite pour la
+ * colonne, du bas pour la feuille du téléphone, par les durées communes (`--animate-fade-in-side`,
+ * `--animate-slide-up`, sorties en 0,2 s lues par `ASK_EXIT_MS`) ; toute fermeture passe par
+ * `useDelayedClose`. `transform` et `opacity` seulement ; rien sous `prefers-reduced-motion`.
  */
 export interface AskPanelProps {
   itemId: string;
@@ -38,7 +55,12 @@ export interface AskPanelProps {
    * fixe posé sur la fiche.
    */
   placement: "player" | "sheet";
+  /** Les questions proposées à la place des trois d'office (une personne touchée : « Qui est … ? »). */
+  suggestions?: string[];
 }
+
+/** La sortie du panneau : la durée de `fade-out-down` et de `ask-panel-out-side` (globals.css). */
+export const ASK_EXIT_MS = 200;
 
 const SUGGESTIONS = {
   lecteur: ["ask.chipPlayer0", "ask.chipPlayer1", "ask.chipPlayer2"],
@@ -55,19 +77,102 @@ export function askFailureKey(exchange: Pick<AskExchange, "state" | "error">): s
   return "ask.error";
 }
 
-export function AskPanel({ itemId, where, position, onClose, header, placement }: AskPanelProps) {
+/**
+ * Le relevé `kind: "clavier"` (voir `keyboardSnapshot`) : écouté au niveau du document (`focusin`), pas par
+ * l'état de React — c'est justement ce qu'on veut vérifier —, sur un écran tactile seulement, six lignes par
+ * ouverture au plus. Une rafale de `resize` (le clavier qui monte) ne fait qu'une ligne.
+ */
+function useKeyboardDiag(
+  refs: { layer: React.RefObject<HTMLDivElement | null>; panel: React.RefObject<HTMLElement | null>; input: React.RefObject<HTMLInputElement | null> },
+  state: { layout: AskPanelLayout; facts: ViewportFacts; where: string; placement: string },
+) {
+  const latest = useRef(state);
+  useEffect(() => {
+    latest.current = state;
+  });
+  useEffect(() => {
+    const win = window;
+    let coarse = false;
+    try {
+      coarse = typeof win.matchMedia === "function" && win.matchMedia("(pointer: coarse)").matches;
+    } catch {
+      coarse = false;
+    }
+    if (!coarse) return;
+    let sent = 0;
+    const events = { vvResize: 0, vvScroll: 0, winResize: 0 };
+    const timers = new Set<number>();
+    let burst: number | undefined;
+    const send = (trigger: string) => {
+      if (sent >= KEYBOARD_DIAG_MAX) return;
+      sent += 1;
+      try {
+        sendKeyboardDiag(
+          keyboardSnapshot(win, { panel: refs.panel.current, input: refs.input.current, layer: refs.layer.current }, { trigger, ...latest.current, events: { ...events } }),
+          { build: APP_BUILD, version: APP_VERSION },
+        );
+      } catch {
+        /* un relevé ne casse jamais le panneau */
+      }
+    };
+    const later = (fn: () => void, ms: number) => {
+      const id = win.setTimeout(() => {
+        timers.delete(id);
+        fn();
+      }, ms);
+      timers.add(id);
+      return id;
+    };
+    const onFocusIn = (e: FocusEvent) => {
+      if (e.target !== refs.input.current) return;
+      events.vvResize = events.vvScroll = events.winResize = 0;
+      later(() => send("focus"), 50);
+      later(() => send("600ms"), 600);
+    };
+    const focusedNow = () => win.document.activeElement === refs.input.current;
+    const onVvResize = () => {
+      events.vvResize += 1;
+      if (!focusedNow()) return;
+      if (burst !== undefined) win.clearTimeout(burst);
+      burst = later(() => send("resize"), 150);
+    };
+    const onVvScroll = () => {
+      events.vvScroll += 1;
+    };
+    const onWinResize = () => {
+      events.winResize += 1;
+    };
+    const vv = win.visualViewport;
+    win.document.addEventListener("focusin", onFocusIn);
+    vv?.addEventListener("resize", onVvResize);
+    vv?.addEventListener("scroll", onVvScroll);
+    win.addEventListener("resize", onWinResize);
+    return () => {
+      for (const id of timers) win.clearTimeout(id);
+      win.document.removeEventListener("focusin", onFocusIn);
+      vv?.removeEventListener("resize", onVvResize);
+      vv?.removeEventListener("scroll", onVvScroll);
+      win.removeEventListener("resize", onWinResize);
+    };
+  }, [refs.input, refs.layer, refs.panel]);
+}
+
+export function AskPanel({ itemId, where, position, onClose, header, placement, suggestions }: AskPanelProps) {
   const t = useT();
   const { exchanges, ask, busy, full } = useAskTitle({ itemId, where, position });
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
-  const layout = useAskPanelLayout(focused);
   const layerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
+  const { layout, facts } = useAskPanelLayout(focused, layerRef);
+  useKeyboardDiag({ layer: layerRef, panel: panelRef, input: inputRef }, { layout, facts, where, placement });
+  const { closing, requestClose } = useDelayedClose(onClose, ASK_EXIT_MS);
+  const onCloseRef = useRef(requestClose);
   useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
+    onCloseRef.current = requestClose;
+  }, [requestClose]);
 
   // Où était la page à l'ouverture : remise après chaque clavier refermé, et au départ du panneau.
   const pageAt = useRef<{ x: number; y: number } | null>(null);
@@ -105,12 +210,27 @@ export function AskPanel({ itemId, where, position, onClose, header, placement }
     return () => layer.removeEventListener("touchmove", onTouchMove);
   }, []);
 
-  // Une réponse qui arrive se lit sans chercher : l'espace des réponses descend avec elle.
+  // Une réponse qui arrive se lit sans chercher : l'espace des réponses descend avec elle — jusqu'à sa
+  // dernière ligne, relu une image plus tard (la hauteur du texte n'est connue qu'une fois posé), et quand
+  // l'espace change de taille (le clavier refermé, les propositions qui s'en vont).
   const last = exchanges[exchanges.length - 1];
   useEffect(() => {
     const scroller = scrollRef.current;
-    if (scroller && typeof scroller.scrollTo === "function") scroller.scrollTo({ top: scroller.scrollHeight });
+    if (!scroller || typeof scroller.scrollTo !== "function") return;
+    const down = () => scroller.scrollTo({ top: scroller.scrollHeight });
+    down();
+    const frame = window.requestAnimationFrame(down);
+    return () => window.cancelAnimationFrame(frame);
   }, [exchanges.length, last?.answer, last?.state]);
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || typeof ResizeObserver === "undefined" || typeof scroller.scrollTo !== "function") return;
+    const observer = new ResizeObserver(() => {
+      if (exchanges.length) scroller.scrollTo({ top: scroller.scrollHeight });
+    });
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [exchanges.length]);
 
   function submit(question: string) {
     if (!question.trim() || busy || full) return;
@@ -130,10 +250,23 @@ export function AskPanel({ itemId, where, position, onClose, header, placement }
 
   const line = layout.mode === "line";
   const asked = new Set(exchanges.map((e) => e.question));
-  const chips = SUGGESTIONS[where].map((k) => t(k)).filter((q) => !asked.has(q));
+  const chips = (suggestions && suggestions.length ? suggestions : SUGGESTIONS[where].map((k) => t(k))).filter((q) => !asked.has(q));
+  // La ligne posée sans mesure du clavier (`inconnu`) se met sous la zone sûre du haut ; en attente de la
+  // mesure, invisible — elle ne saute pas du haut vers le bas sous les yeux.
   const style: React.CSSProperties = line
-    ? { top: layout.top, height: LINE_HEIGHT_PX }
+    ? {
+        top: layout.fromTop ? `calc(${layout.top}px + env(safe-area-inset-top, 0px))` : layout.top,
+        height: LINE_HEIGHT_PX,
+        opacity: layout.pending ? 0 : undefined,
+      }
     : { top: layout.top, height: layout.height };
+  const motion = closing
+    ? layout.mode === "full" && layout.sheet
+      ? "animate-fade-out-down"
+      : "ask-panel-out-side"
+    : layout.mode === "full" && layout.sheet
+      ? "animate-slide-up"
+      : "animate-fade-in-side";
 
   const layer = (
     <div
@@ -164,15 +297,18 @@ export function AskPanel({ itemId, where, position, onClose, header, placement }
         className="absolute inset-0"
         onClick={() => {
           if (focused) inputRef.current?.blur();
-          else onClose();
+          else requestClose();
         }}
       />
       <section
+        ref={panelRef}
         role="dialog"
         aria-label={t("ask.title")}
         data-ask-panel=""
         data-mode={line ? "line" : layout.sheet ? "sheet" : "side"}
-        className={`ask-panel absolute flex flex-col overflow-hidden text-white ${
+        data-branch={layout.branch}
+        data-closing={closing ? "" : undefined}
+        className={`ask-panel absolute flex flex-col overflow-hidden text-white motion-reduce:animate-none ${motion} ${
           line ? "ask-panel-line" : layout.sheet ? "ask-panel-sheet" : "ask-panel-side"
         }`}
         style={style}
@@ -183,7 +319,7 @@ export function AskPanel({ itemId, where, position, onClose, header, placement }
           <button
             type="button"
             data-ask-close=""
-            onClick={onClose}
+            onClick={requestClose}
             aria-label={t("common.close")}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/12 text-white transition-colors hover:bg-white/20"
           >
@@ -195,7 +331,10 @@ export function AskPanel({ itemId, where, position, onClose, header, placement }
             {header}
           </div>
         )}
-        <div ref={scrollRef} data-ask-scroll="" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-3" hidden={line}>
+        {/* `ask-scroll` rogne ce qu'il porte (`clip-path`) : sur l'iPhone couché, la fin d'une réponse
+            passait sous la proposition restante, dessinée par-dessus (09/11/2026). Propositions et champ
+            sont dessous, dans le flux, jamais posés sur le texte. */}
+        <div ref={scrollRef} data-ask-scroll="" className="ask-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-3" hidden={line}>
           {exchanges.length === 0 ? (
             <p className="pt-1 text-sm leading-6 text-white/70">{t("ask.hint")}</p>
           ) : (
@@ -220,7 +359,7 @@ export function AskPanel({ itemId, where, position, onClose, header, placement }
           {full && !busy && <p className="pt-4 text-xs leading-5 text-white/55">{t("ask.maxReached")}</p>}
         </div>
         {!full && chips.length > 0 && (
-          <div data-ask-chips="" className="flex shrink-0 flex-wrap gap-2 px-5 pb-3" hidden={line}>
+          <div data-ask-chips="" className="ask-chips flex shrink-0 flex-wrap gap-2 px-5 pb-3" hidden={line}>
             {chips.map((q) => (
               <button
                 key={q}
@@ -261,6 +400,19 @@ export function AskPanel({ itemId, where, position, onClose, header, placement }
             // 16 px au moins : en dessous, Safari agrandit la page au focus — et rien ne la remet.
             className="h-11 min-w-0 flex-1 rounded-full bg-white/12 px-4 text-base text-white placeholder:text-white/50 focus:bg-white/16 focus:outline-none disabled:opacity-50"
           />
+          {/* « OK » : refermer le clavier sans envoyer — iOS n'a pas de touche pour cela ici. Le texte reste ;
+              le panneau entier revient. Appuyé, il ne prend pas le focus (le champ le perdrait avant le clic). */}
+          {focused && (
+            <button
+              type="button"
+              data-ask-done=""
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => inputRef.current?.blur()}
+              className="flex h-11 shrink-0 items-center justify-center rounded-full bg-white/12 px-3.5 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+            >
+              {t("ask.done")}
+            </button>
+          )}
           <button
             type="submit"
             data-ask-send=""

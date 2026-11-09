@@ -7,12 +7,15 @@ import { viewportDiagAllowed } from "@/lib/writeLimits";
 
 /**
  * Le relevé de hauteur de l'application installée sur iPhone et iPad — voir `viewportWatch.ts` —, et
- * depuis le 07/11/2026 la mesure d'un retour au premier plan (`kind: "retour"`, `returnDiag.ts`).
+ * depuis le 07/11/2026 la mesure d'un retour au premier plan (`kind: "retour"`, `returnDiag.ts`), et depuis
+ * le 09/11/2026 le clavier du panneau « Poser une question » (`kind: "clavier"`, `ask/viewport.ts`).
  *
  * Le compte vient de la session, jamais du corps. Seuls les champs connus, bornés ; le reste tombe.
  * Rien n'est renvoyé.
  */
 const SNAPSHOT_FIELDS = ["inner", "outer", "width", "vv", "vvTop", "client", "shell", "shellTop", "scrollY"] as const;
+/** Les mesures en pixels d'une ligne `clavier`. */
+const KEYBOARD_NUMBERS = ["inner", "outer", "innerW", "client", "vv", "vvTop", "vvPageTop", "baseline", "scrollY", "screenW", "screenH", "layerTop", "panelTop", "panelBottom", "inputTop", "inputBottom"] as const;
 const DECISIONS = new Set(["rien", "coincée", "champ", "film"]);
 const TRIGGERS = new Set(["retour", "pageshow", "redimensionné", "clavier fermé"]);
 
@@ -36,6 +39,37 @@ export async function POST(req: NextRequest) {
   if (!viewportDiagAllowed(session.u)) return new NextResponse(null, { status: 429 });
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body || typeof body !== "object") return NextResponse.json({ error: "Corps invalide" }, { status: 400 });
+  // Le clavier du panneau « Poser une question » (09/11/2026, `keyboardSnapshot` dans `ask/viewport.ts`) :
+  // ce que disent la fenêtre, la vue visuelle et l'écran champ actif, et quelle branche a placé le panneau.
+  if (body.kind === "clavier") {
+    const pick = (value: unknown, allowed: readonly string[]) => (typeof value === "string" && allowed.includes(value) ? value : null);
+    const fields: Record<string, unknown> = {};
+    for (const key of KEYBOARD_NUMBERS) fields[key] = px(body[key]);
+    const events = (body.events && typeof body.events === "object" ? body.events : {}) as Record<string, unknown>;
+    logViewportDiag(
+      {
+        user: session.jfUser ?? session.u,
+        device: requestDeviceLabel(req),
+        trigger: pick(body.trigger, ["focus", "600ms", "resize"]),
+        branch: pick(body.branch, ["vue", "fenetre", "attente", "inconnu", "feuille", "colonne"]),
+        mode: pick(body.mode, ["line", "full"]),
+        where: pick(body.where, ["lecteur", "fiche"]),
+        placement: pick(body.placement, ["player", "sheet"]),
+        orientation: str(body.orientation, 30),
+        focusedState: body.focusedState === true,
+        active: body.active === true,
+        standalone: body.standalone === true,
+        touchPhone: body.touchPhone === true,
+        vvScale: typeof body.vvScale === "number" && Number.isFinite(body.vvScale) ? Math.round(body.vvScale * 100) / 100 : null,
+        ...fields,
+        events: { vvResize: px(events.vvResize), vvScroll: px(events.vvScroll), winResize: px(events.winResize) },
+        build: str(body.build, 40),
+        version: str(body.version, 20),
+      },
+      "clavier",
+    );
+    return new NextResponse(null, { status: 204 });
+  }
   if (body.kind === "retour") {
     const events = Array.isArray(body.events) ? body.events.filter((e): e is string => typeof e === "string").slice(0, 12).map((e) => e.slice(0, 60)) : [];
     logViewportDiag(

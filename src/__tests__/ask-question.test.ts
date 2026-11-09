@@ -34,7 +34,7 @@ vi.mock("@/lib/jellyfinBreaker", () => ({ jellyfinFetch: fetchMock }));
 vi.mock("@/lib/logger", () => ({ logError: (...args: unknown[]) => logError(...args) }));
 vi.mock("@/lib/eventLogs", () => ({ logAskQuestion: (...args: unknown[]) => askLog(...args), logRecap: vi.fn() }));
 
-import { AnswerGate, askSources, seenCues, seenEpisodes, positionBucket, type AskContextInput } from "@/lib/ask/core";
+import { AnswerGate, askSystem, askSources, seenCues, seenEpisodes, positionBucket, type AskContextInput } from "@/lib/ask/core";
 import { setAskModelForTests, resetAskCachesForTests, type AskModel } from "@/lib/ask/service";
 import { shareRuleFor } from "@/lib/share/gate";
 
@@ -372,5 +372,20 @@ describe("liens de partage", () => {
   it("la route est dans la liste fermée, portée par l'élément de l'adresse", () => {
     expect(shareRuleFor("POST", `/api/cinema/ask/${MOVIE}`)?.rule.scope).toEqual({ kind: "path" });
     expect(shareRuleFor("GET", `/api/cinema/ask/${MOVIE}`)?.rule.scope).toEqual({ kind: "path" });
+  });
+});
+
+describe("la consigne : jamais de « sources » dites au spectateur (09/11/2026)", () => {
+  // Une réponse finissait par « Les sources ne vont pas au-delà de ces neuf premières minutes. »
+  it("interdit le mot et donne, dans chaque langue, une façon naturelle de dire la limite", () => {
+    const phrases = { fr: "D'après ce que vous avez vu jusqu'ici", en: "From what you've seen so far", es: "Por lo que ha visto hasta ahora", de: "Nach dem, was Sie bisher gesehen haben" } as const;
+    for (const [locale, phrase] of Object.entries(phrases)) {
+      const system = askSystem(locale as keyof typeof phrases);
+      expect(system).toContain("Ne parle jamais au spectateur de « sources »");
+      expect(system).toContain(phrase);
+      // Les autres règles ne bougent pas.
+      expect(system).toContain("Ne parle jamais de la suite");
+      expect(system).toContain("N'utilise QUE les sources");
+    }
   });
 });
