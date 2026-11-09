@@ -111,7 +111,13 @@ const COLUMNS = `item_id AS itemId, tier, kind, title, series_id AS seriesId, du
 
 /**
  * Une tranche du plan : chaque élément est inséré ou mis à jour (palier, rang, durée, date), son état
- * gardé — sauf si sa date d'import a changé (un fichier nouveau au même élément) : il repasse à vérifier.
+ * gardé — sauf si sa date d'import a changé (un fichier nouveau au même élément) : un échec ou un écarté
+ * repasse à vérifier. Un élément **fait** ne repasse à vérifier sur une date changée que si sa durée a
+ * changé aussi (plus d'une seconde) : la date de Jellyfin (`DateCreated`, quand Radarr/Sonarr n'en
+ * donnent pas) bouge à chaque réanalyse de la bibliothèque, et chaque relecture du plan renvoyait des
+ * éléments finis à la vérification pour rien (revue du 09/11/2026). Un fichier remplacé à durée égale,
+ * c'est la relecture lente de l'`ETag` qui le voit (`staleDone`). Une date inconnue (`0` — une ligne
+ * ajoutée par la liste de priorité avant que le plan l'ait lue) n'est pas une date changée.
  * Un élément écarté pour l'animation le reste tant que son genre ne change pas ; le genre retiré, il
  * repasse à vérifier. Un élément de la liste de priorité (palier 0) y reste. `generation` marque les lignes vues par cette relecture (`dropUnseen`).
  */
@@ -129,7 +135,9 @@ export function upsertPlanSlice(items: readonly PlannedItem[], generation: numbe
          WHEN excluded.status = 'excluded' AND xray_scan_items.status IN ('pending', 'failed') THEN 'excluded'
          WHEN excluded.status = 'excluded' THEN xray_scan_items.status
          WHEN xray_scan_items.status = 'excluded' AND xray_scan_items.reason = 'animation' THEN 'pending'
-         WHEN xray_scan_items.imported_at <> excluded.imported_at AND xray_scan_items.status IN ('done', 'failed', 'excluded') THEN 'pending'
+         WHEN xray_scan_items.imported_at <> 0 AND xray_scan_items.imported_at <> excluded.imported_at AND xray_scan_items.status IN ('failed', 'excluded') THEN 'pending'
+         WHEN xray_scan_items.imported_at <> 0 AND xray_scan_items.imported_at <> excluded.imported_at AND xray_scan_items.status = 'done'
+           AND xray_scan_items.duration_s > 0 AND excluded.duration_s > 0 AND ABS(xray_scan_items.duration_s - excluded.duration_s) > 1 THEN 'pending'
          ELSE xray_scan_items.status END,
        reason = CASE
          WHEN excluded.status = 'excluded' AND xray_scan_items.status IN ('pending', 'failed') THEN excluded.reason
@@ -197,8 +205,38 @@ export function nextPending(tiers: readonly ScanTier[], limit: number): ScanRow[
 /** Les éléments finis dont l'`ETag` n'a pas été relu depuis `before` — la relecture lente. */
 export function staleDone(before: number, limit: number): ScanRow[] {
   return db()
-    .prepare(`SELECT ${COLUMNS} FROM xray_scan_items WHERE status IN ('done', 'failed') AND COALESCE(checked_at, 0) < ? ORDER BY COALESCE(checked_at, 0) LIMIT ?`)
+    .prepare(`SELECT ${COLUMNS} FROM xray_scan_items WHERE status = 'done' AND COALESCE(checked_at, 0) < ? ORDER BY COALESCE(checked_at, 0) LIMIT ?`)
     .all(before, limit) as ScanRow[];
+}
+
+/**
+ * Les échecs et les écartés **qui peuvent changer** (sans fichier, sans distribution, hors des dossiers
+ * permis) vus pour la dernière fois avant `before` repassent à vérifier — `limit` au plus. Une écriture en
+ * base, aucune lecture : la vérification se fait au tour, à leur place dans leur palier. Jusqu'au
+ * 09/11/2026 un écarté l'était pour toujours (une fiche TMDB complétée, un fichier arrivé ensuite, rien
+ * n'y revenait), et un échec n'était retenté qu'une fois toute la bibliothèque finie. L'animation, elle,
+ * suit le genre que relit le plan (`upsertPlanSlice`).
+ */
+export function reopenStale(before: number, limit: number): number {
+  return db()
+    .prepare(
+      `UPDATE xray_scan_items SET status = 'pending', reason = NULL WHERE item_id IN (
+         SELECT item_id FROM xray_scan_items
+         WHERE (status = 'failed' OR (status = 'excluded' AND COALESCE(reason, '') <> 'animation')) AND COALESCE(checked_at, 0) < ?
+         ORDER BY COALESCE(checked_at, 0) LIMIT ?)`,
+    )
+    .run(before, limit).changes;
+}
+
+/** Les écartés « hors des dossiers permis » repassent tous à vérifier : la liste des dossiers a changé. */
+export function reopenOutsideLibrary(): number {
+  return db().prepare("UPDATE xray_scan_items SET status = 'pending', reason = NULL WHERE status = 'excluded' AND reason = 'outside-library'").run().changes;
+}
+
+/** Le palier 1 tel que retenu (élément → rang) : le plan relu sans la liste des comptes le garde. */
+export function storedWatching(): Map<string, number> {
+  const rows = db().prepare("SELECT item_id AS itemId, rank FROM xray_scan_items WHERE tier = 1").all() as { itemId: string; rank: number }[];
+  return new Map(rows.map((r) => [r.itemId, r.rank]));
 }
 
 export function getRow(itemId: string): ScanRow | null {

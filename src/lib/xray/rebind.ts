@@ -69,13 +69,18 @@ export type RebindOutcome = "rebound" | "refused" | "queued";
 
 /**
  * Demande au service de rattacher son analyse au nouvel `ETag` : la commande ordinaire, avec
- * `rebindIfSameDuration: true` et la durée. Un 200 `done` : rattachée. Un 400 (un service qui ne
- * connaît pas ce champ, ou qui trouve la durée différente) : rien n'est commandé, l'ancien résultat
- * reste — le lecteur le sert quand même (`scenes.ts`). Un 202 : le service a mis l'élément en file
- * (une version qui ignore le champ) — on le dit tel quel.
+ * `rebindIfSameDuration: true` et la durée, **à la priorité de la commande** (`priority`, par défaut
+ * celle du `job`). Un 200 `done` : rattachée. Un 202 : le service n'a pas rattaché (durée qu'il trouve
+ * différente, résultat incomplet, ou version qui ignore le champ) — selon le contrat (xray/README.md,
+ * `POST /jobs`), un autre `etag` lui fait alors **oublier l'ancien résultat et réanalyser** : l'élément
+ * est en file, à cette priorité. Jusqu'au 09/11/2026 la priorité était forcée à `low` ici : une série
+ * de la liste de priorité (palier 0, `normal`) ou la commande d'un spectateur (`high`) qui ne se
+ * rattachait pas retombait derrière tout le fond. Un 400 (champ invalide, chemin hors de la
+ * médiathèque) : rien n'est commandé, l'ancien résultat reste — le lecteur le sert quand même
+ * (`scenes.ts`).
  */
-export async function rebindAnalysis(job: XrayJob, durationS: number): Promise<RebindOutcome> {
-  const body: RebindableJob = { ...job, priority: "low", rebindIfSameDuration: true, durationS };
+export async function rebindAnalysis(job: XrayJob, durationS: number, priority: XrayPriority = job.priority): Promise<RebindOutcome> {
+  const body: RebindableJob = { ...job, priority, rebindIfSameDuration: true, durationS };
   try {
     const answer = await xray.enqueue(body);
     if (answer.status === "done") {

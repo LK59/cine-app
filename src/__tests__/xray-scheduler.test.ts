@@ -29,6 +29,11 @@ const svc = vi.hoisted(() => ({
   enqueueStatus: "queued" as string,
   rebindError: null as Error | null,
   healthError: null as Error | null,
+  /** Ce que le service répond à un rattachement : `done` (rattaché) ou `queued` (il réanalyse, 202). */
+  rebindAnswer: "done" as string,
+  enqueueError: null as Error | null,
+  /** Appelé à chaque lecture d'état — un geste de l'administrateur pendant le tour. */
+  onItemStatus: null as ((itemId: string) => void) | null,
 }));
 vi.mock("@/lib/clients/xray", () => ({
   xrayConfigured: () => svc.configured,
@@ -37,11 +42,15 @@ vi.mock("@/lib/clients/xray", () => ({
       if (svc.healthError) throw svc.healthError;
       return { ok: true, queue: { pending: svc.pending, running: null } };
     },
-    itemStatus: async (itemId: string) => svc.statuses.get(itemId) ?? null,
+    itemStatus: async (itemId: string) => {
+      svc.onItemStatus?.(itemId);
+      return svc.statuses.get(itemId) ?? null;
+    },
     enqueue: async (job: Record<string, unknown>) => {
       if (job.rebindIfSameDuration && svc.rebindError) throw svc.rebindError;
+      if (svc.enqueueError) throw svc.enqueueError;
       svc.enqueued.push(job);
-      if (job.rebindIfSameDuration) return { itemId: job.itemId, status: "done", position: 0 };
+      if (job.rebindIfSameDuration && svc.rebindAnswer === "done") return { itemId: job.itemId, status: "done", position: 0 };
       // Le service range l'ordre : `/items/{id}` le dit en file jusqu'à ce que le test le finisse.
       svc.statuses.set(job.itemId as string, { itemId: job.itemId as string, etag: job.etag as string, status: svc.enqueueStatus, progress: 0, analyzedUntil: 0, error: null });
       return { itemId: job.itemId, status: svc.enqueueStatus, position: svc.enqueued.length };
@@ -58,17 +67,34 @@ const lib = vi.hoisted(() => ({
   durations: new Map<string, number>(),
   paths: new Map<string, string>(),
   titles: new Map<string, unknown>(),
+  targetErrors: new Map<string, Error>(),
+  castErrors: new Map<string, Error>(),
+  libraryError: null as Error | null,
+  watchingError: null as Error | null,
+  libraryReads: 0,
+  watchingReads: 0,
 }));
 vi.mock("@/lib/xray/scanSources", () => ({
-  readLibrary: async () => lib.library,
-  readWatching: async () => lib.watching,
+  readLibrary: async () => {
+    lib.libraryReads++;
+    if (lib.libraryError) throw lib.libraryError;
+    return lib.library;
+  },
+  readWatching: async () => {
+    lib.watchingReads++;
+    if (lib.watchingError) throw lib.watchingError;
+    return lib.watching;
+  },
   readPriorityTitle: async (itemId: string) => lib.titles.get(itemId) ?? null,
 }));
 vi.mock("@/lib/xray/cast", () => ({
-  analysisTarget: async (itemId: string) =>
-    lib.noFile.has(itemId)
+  analysisTarget: async (itemId: string) => {
+    const failure = lib.targetErrors.get(itemId);
+    if (failure) throw failure;
+    return lib.noFile.has(itemId)
       ? null
-      : { itemId, type: "Movie", path: lib.paths.get(itemId) ?? `/media/movies/${itemId}.mkv`, etag: lib.etags.get(itemId) ?? "v1", seriesId: null, tmdb: { kind: "movie", id: 1 }, durationS: lib.durations.get(itemId) ?? 3600 },
+      : { itemId, type: "Movie", path: lib.paths.get(itemId) ?? `/media/movies/${itemId}.mkv`, etag: lib.etags.get(itemId) ?? "v1", seriesId: null, tmdb: { kind: "movie", id: 1 }, durationS: lib.durations.get(itemId) ?? 3600 };
+  },
   castOf: async () => [{ personId: 1, name: "A", character: "B", order: 0, profilePath: null }],
   castWithPhotos: async () => [{ personId: 1, name: "A", character: "B", order: 0, photos: [] }],
 }));
@@ -76,8 +102,11 @@ vi.mock("@/lib/xray/rebind", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/xray/rebind")>();
   return {
     ...real,
-    jobFor: async (target: { itemId: string; etag: string; path: string }, priority: string) =>
-      lib.noCast.has(target.itemId) ? null : { job: { itemId: target.itemId, path: target.path, etag: target.etag, priority, seriesId: null, cast: [{}] }, cast: 1 },
+    jobFor: async (target: { itemId: string; etag: string; path: string }, priority: string) => {
+      const failure = lib.castErrors.get(target.itemId);
+      if (failure) throw failure;
+      return lib.noCast.has(target.itemId) ? null : { job: { itemId: target.itemId, path: target.path, etag: target.etag, priority, seriesId: null, cast: [{}] }, cast: 1 };
+    },
   };
 });
 const play = vi.hoisted(() => ({ wait: false }));
@@ -90,8 +119,8 @@ const mockLogError = vi.fn();
 vi.mock("@/lib/logger", () => ({ logError: (...a: unknown[]) => mockLogError(...a) }));
 
 import { HttpError } from "@/lib/http";
-import { MAX_PENDING, prioritizeTitle, readPriority, scanAction, scanTick, unprioritizeTitle, xrayScanStatus, __testing } from "@/lib/xray/scheduler";
-import { getRow, recordFileVersion, wipeScanStore } from "@/lib/xray/scanStore";
+import { MAX_PENDING, prioritizeTitle, readControls, readPriority, scanAction, scanTick, startXrayScheduler, unprioritizeTitle, xrayScanStatus, __testing } from "@/lib/xray/scheduler";
+import { getRow, markRow, recordFileVersion, setPriorityRows, upsertPlanSlice, wipeScanStore, writeMeta } from "@/lib/xray/scanStore";
 
 function movie(c: string, daysAgo: number, over: Record<string, unknown> = {}) {
   return { itemId: id(c), kind: "Movie", title: `Film ${c}`, seriesId: null, durationS: 3600, importedAt: NOW - daysAgo * DAY, createdAt: null, animation: false, ...over };
@@ -103,7 +132,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   __testing.reset();
   wipeScanStore();
-  Object.assign(svc, { configured: true, pending: 0, statuses: new Map(), enqueued: [], enqueueStatus: "queued", rebindError: null, healthError: null });
+  Object.assign(svc, { configured: true, pending: 0, statuses: new Map(), enqueued: [], enqueueStatus: "queued", rebindError: null, healthError: null, rebindAnswer: "done", enqueueError: null, onItemStatus: null });
   // Palier 1 : « 1 » ; palier 2 : « 2 » (arrivé hier) ; palier 3 : « 3 », « 4 », « 5 » du plus récent au plus ancien.
   lib.library = [movie("1", 300), movie("2", 1), movie("3", 30), movie("4", 60), movie("5", 90), movie("6", 2, { animation: true })];
   lib.watching = new Map([[id("1"), 1]]);
@@ -113,7 +142,14 @@ beforeEach(() => {
   lib.durations = new Map();
   lib.paths = new Map();
   lib.titles = new Map();
+  lib.targetErrors = new Map();
+  lib.castErrors = new Map();
+  lib.libraryError = null;
+  lib.watchingError = null;
+  lib.libraryReads = 0;
+  lib.watchingReads = 0;
   delete process.env.XRAY_LIBRARY_ROOTS;
+  vi.unstubAllEnvs();
   play.wait = false;
 });
 
@@ -343,5 +379,236 @@ describe("la liste de priorité de l'administrateur", () => {
     expect(unprioritizeTitle(id("4"), NOW + 7 * 3600_000)).toBe(true);
     expect(getRow(id("4"))?.tier).toBe(3);
     expect(xrayScanStatus().priority.items).toEqual([]);
+  });
+});
+
+// ─── La revue du 09/11/2026 ──────────────────────────────────────────────────
+
+const finish = (c: string, status = "done", error: string | null = null) =>
+  svc.statuses.set(id(c), { itemId: id(c), etag: "v1", status, progress: 1, analyzedUntil: 3600, error, stats: { seconds: 360, realtime: 10 } });
+const HOUR = 3600_000;
+
+describe("un élément en erreur ne bloque pas la file", () => {
+  it("une erreur de Jellyfin ou de TMDB propre à un élément : échec, et les suivants partent", async () => {
+    lib.targetErrors.set(id("1"), new HttpError("Jellyfin : 500", 500));
+    lib.castErrors.set(id("2"), new HttpError("TMDB : 404", 404));
+    await scanTick(NOW);
+    expect(enqueuedIds()).toEqual([id("3"), id("4")]);
+    expect(getRow(id("1"))).toMatchObject({ status: "failed", error: "Jellyfin : 500" });
+    expect(getRow(id("2"))).toMatchObject({ status: "failed", error: "TMDB : 404" });
+    expect(xrayScanStatus().phase).toBe("running");
+    // Pas rejoué chaque minute : un échec attend une semaine.
+    finish("3");
+    await scanTick(NOW + 60_000);
+    expect(enqueuedIds()).toEqual([id("3"), id("4"), id("5")]);
+    expect(mockLogError.mock.calls.filter((c) => c[0] === "xray/scan-item")).toHaveLength(2);
+  });
+
+  it("une erreur de réseau : l'élément est retenté dans l'heure, et le tour s'arrête là", async () => {
+    lib.targetErrors.set(id("1"), new TypeError("fetch failed"));
+    await scanTick(NOW);
+    expect(enqueuedIds()).toEqual([]);
+    expect(getRow(id("1"))?.status).toBe("failed");
+    // La minute suivante, la file continue derrière lui.
+    await scanTick(NOW + 60_000);
+    expect(enqueuedIds()).toEqual([id("2"), id("3")]);
+    lib.targetErrors.clear();
+    finish("2");
+    finish("3");
+    await scanTick(NOW + HOUR + 2 * 60_000);
+    expect(enqueuedIds()).toContain(id("1"));
+  });
+
+  it("le service lui-même en panne arrête le tour, sans rien marquer", async () => {
+    svc.enqueueError = new HttpError("laterna-xray jobs : 503", 503);
+    await scanTick(NOW);
+    expect(getRow(id("1"))?.status).toBe("pending");
+    expect(xrayScanStatus()).toMatchObject({ phase: "unavailable", lastError: "laterna-xray jobs : 503" });
+  });
+});
+
+describe("les écartés et les échecs revus", () => {
+  it("sans distribution, sans fichier : revus après une semaine ; l'animation reste écartée", async () => {
+    lib.noCast.add(id("1"));
+    lib.noFile.add(id("2"));
+    await scanTick(NOW);
+    expect(getRow(id("1"))).toMatchObject({ status: "excluded", reason: "no-cast" });
+    lib.noCast.clear();
+    lib.noFile.clear();
+    finish("3");
+    finish("4");
+    await scanTick(NOW + 60_000);
+    expect(getRow(id("1"))?.status).toBe("excluded");
+    finish("5");
+    await scanTick(NOW + 8 * 24 * HOUR);
+    expect(enqueuedIds()).toEqual(expect.arrayContaining([id("1"), id("2")]));
+    expect(getRow(id("6"))).toMatchObject({ status: "excluded", reason: "animation" });
+  });
+
+  it("les dossiers permis changés : ce qui était hors des dossiers est revu aussitôt", async () => {
+    lib.paths.set(id("1"), "/media/films/Film.mkv");
+    await scanTick(NOW);
+    expect(getRow(id("1"))).toMatchObject({ status: "excluded", reason: "outside-library" });
+    process.env.XRAY_LIBRARY_ROOTS = "/media/films,/media/movies";
+    finish("2");
+    finish("3");
+    await scanTick(NOW + 60_000);
+    expect(enqueuedIds()).toContain(id("1"));
+  });
+
+  it("un échec du service est relancé la semaine suivante, même avec du travail devant", async () => {
+    await scanTick(NOW);
+    finish("1", "failed", "décodage impossible");
+    await scanTick(NOW + 60_000);
+    expect(getRow(id("1"))?.status).toBe("failed");
+    finish("2");
+    finish("3");
+    await scanTick(NOW + 8 * 24 * HOUR);
+    expect(enqueuedIds().filter((x) => x === id("1"))).toHaveLength(2);
+  });
+});
+
+describe("la relecture du plan", () => {
+  it("en échec, elle attend 15 min, puis 1 h, au lieu de relire la bibliothèque chaque minute", async () => {
+    lib.libraryError = new HttpError("Jellyfin : 502", 502);
+    await scanTick(NOW);
+    expect(lib.libraryReads).toBe(1);
+    await scanTick(NOW + 60_000);
+    await scanTick(NOW + 2 * 60_000);
+    expect(lib.libraryReads).toBe(1);
+    expect(xrayScanStatus().lastError).toBe("Jellyfin : 502");
+    await scanTick(NOW + 16 * 60_000);
+    expect(lib.libraryReads).toBe(2);
+    await scanTick(NOW + 30 * 60_000);
+    expect(lib.libraryReads).toBe(2);
+    await scanTick(NOW + 16 * 60_000 + HOUR + 60_000);
+    expect(lib.libraryReads).toBe(3);
+    lib.libraryError = null;
+    await scanTick(NOW + 16 * 60_000 + 7 * HOUR + 2 * 60_000);
+    expect(lib.libraryReads).toBe(4);
+    expect(xrayScanStatus().lastError).toBeNull();
+  });
+
+  it("la liste des comptes lue est appliquée même quand la bibliothèque échoue, et l'inverse", async () => {
+    await scanTick(NOW);
+    lib.libraryError = new HttpError("Jellyfin : 502", 502);
+    lib.watching = new Map([[id("4"), 1]]);
+    await scanTick(NOW + 7 * HOUR);
+    expect(getRow(id("4"))?.tier).toBe(1);
+    // La bibliothèque revenue, les comptes illisibles : le palier 1 retenu est gardé.
+    lib.libraryError = null;
+    lib.watchingError = new Error("comptes illisibles");
+    await scanTick(NOW + 21 * HOUR);
+    expect(getRow(id("4"))?.tier).toBe(1);
+  });
+});
+
+describe("aucune lecture inutile", () => {
+  it("tout en pause : ni la bibliothèque, ni les comptes, ni le service ne sont lus", async () => {
+    writeMeta("controls", { paused: [0, 1, 2, 3], forced: [] });
+    await scanTick(NOW);
+    expect(lib.libraryReads + lib.watchingReads).toBe(0);
+    expect(xrayScanStatus().phase).toBe("paused");
+  });
+
+  it("pendant une lecture sans palier forcé : les comptes ne sont pas relus", async () => {
+    await scanTick(NOW);
+    const reads = lib.watchingReads;
+    play.wait = true;
+    await scanTick(NOW + 11 * 60_000);
+    await scanTick(NOW + 7 * HOUR);
+    expect(lib.watchingReads).toBe(reads);
+    expect(lib.libraryReads).toBe(1);
+  });
+});
+
+describe("le palier 0", () => {
+  const SERIES = id("s");
+  const series = {
+    kind: "Series",
+    title: "Série",
+    animation: false,
+    rows: [{ itemId: id("a"), kind: "Episode", title: "Série S1E1", seriesId: SERIES, durationS: 2400 }, { itemId: id("b"), kind: "Episode", title: "Série S1E2", seriesId: SERIES, durationS: 2400 }],
+  };
+
+  it("un fichier remplacé que le service réanalyse reste en normal", async () => {
+    lib.titles.set(SERIES, series);
+    lib.etags.set(id("a"), "v2");
+    lib.durations.set(id("a"), 2400);
+    svc.statuses.set(id("a"), { itemId: id("a"), etag: "v1", status: "done", progress: 1, analyzedUntil: 2400, error: null, durationS: 2400 });
+    svc.rebindAnswer = "queued";
+    await prioritizeTitle(SERIES, NOW);
+    const rebind = svc.enqueued.find((j) => j.rebindIfSameDuration);
+    expect(rebind).toMatchObject({ itemId: id("a"), priority: "normal" });
+  });
+
+  it("ne passe jamais devant une commande de spectateur en attente au service", async () => {
+    lib.titles.set(SERIES, series);
+    svc.pending = 1; // l'épisode suivant d'un spectateur, en `normal`
+    await prioritizeTitle(SERIES, NOW);
+    await scanTick(NOW + 60_000);
+    expect(svc.enqueued).toEqual([]);
+    svc.pending = 0;
+    await scanTick(NOW + 2 * 60_000);
+    expect(enqueuedIds()).toEqual([id("a"), id("b")]);
+    expect(svc.enqueued.every((j) => j.priority === "normal")).toBe(true);
+  });
+});
+
+describe("les gestes et l'état", () => {
+  it("un geste de l'administrateur pendant le tour n'est pas écrasé à la fin", async () => {
+    await scanTick(NOW);
+    finish("1");
+    finish("2");
+    writeMeta("controls", { paused: [], forced: [2] });
+    // Pendant le tour — l'élément 3 en cours de vérification —, l'administrateur met le palier 3 en pause.
+    svc.onItemStatus = (itemId) => {
+      if (itemId !== id("3")) return;
+      svc.onItemStatus = null;
+      writeMeta("controls", { paused: [3], forced: [2] });
+    };
+    await scanTick(NOW + 60_000);
+    // Le palier 2 forcé s'est vidé : son forçage tombe, la pause reste.
+    expect(readControls()).toEqual({ paused: [3], forced: [] });
+  });
+
+  it("« À jour » seulement si aucun palier en pause n'a encore de travail", async () => {
+    writeMeta("controls", { paused: [3], forced: [] });
+    await scanTick(NOW);
+    finish("1");
+    finish("2");
+    await scanTick(NOW + 60_000);
+    expect(xrayScanStatus().phase).toBe("paused");
+  });
+});
+
+describe("un élément fait reste fait à la relecture du plan", () => {
+  const item = (importedAt: number, durationS = 3600) => ({ itemId: id("9"), tier: 3 as const, kind: "Movie" as const, title: "Film 9", seriesId: null, durationS, importedAt, rank: 1, excluded: null });
+
+  it("sa date bouge (DateCreated de Jellyfin) : rien ne change ; sa durée aussi : à revérifier", () => {
+    upsertPlanSlice([item(NOW - DAY)], 1);
+    markRow(id("9"), { status: "done" });
+    upsertPlanSlice([item(NOW - 2 * DAY)], 2);
+    expect(getRow(id("9"))?.status).toBe("done");
+    upsertPlanSlice([item(NOW - 3 * DAY, 2400)], 3);
+    expect(getRow(id("9"))?.status).toBe("pending");
+  });
+
+  it("un élément de la liste de priorité (date inconnue) fini avant que le plan le lise", () => {
+    setPriorityRows(id("s"), [{ itemId: id("9"), kind: "Movie", title: "Film 9", seriesId: null, durationS: 3600 }], 100_000);
+    markRow(id("9"), { status: "done" });
+    upsertPlanSlice([item(NOW - DAY)], 1);
+    expect(getRow(id("9"))).toMatchObject({ status: "done", tier: 0 });
+  });
+});
+
+describe("sous next dev", () => {
+  it("rien ne tourne : la pile de développement partage cine.db", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    await scanTick(NOW);
+    startXrayScheduler();
+    expect(svc.enqueued).toEqual([]);
+    expect(lib.libraryReads).toBe(0);
+    expect(__testing.live.timers).toHaveLength(0);
   });
 });

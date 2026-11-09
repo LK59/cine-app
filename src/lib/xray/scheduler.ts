@@ -5,7 +5,7 @@ import { taskLog } from "@/lib/taskLog";
 import { mustWaitForPlayback } from "@/lib/repliques/playbackActivity";
 import { analysisTarget } from "./cast";
 import { jobFor, keepsAnalysis, rebindAnalysis } from "./rebind";
-import { analysisSpeed, buildPlan, etaSeconds, isLibraryPath, NEW_WINDOW_MS, SCAN_TIERS, type ScanTier } from "./scanPlan";
+import { analysisSpeed, buildPlan, etaSeconds, isLibraryPath, libraryRoots, NEW_WINDOW_MS, SCAN_TIERS, type ScanTier } from "./scanPlan";
 import { readLibrary, readPriorityTitle, readWatching } from "./scanSources";
 import {
   clearPriorityRows,
@@ -18,11 +18,14 @@ import {
   priorityCounts,
   readMeta,
   recordFileVersion,
+  reopenOutsideLibrary,
+  reopenStale,
   rowsWithStatus,
   setPriorityRows,
   setWatching,
   speedSamples,
   staleDone,
+  storedWatching,
   tierCounts,
   upsertPlanSlice,
   writeMeta,
@@ -58,6 +61,22 @@ import {
  * par tour sans autre travail, chacun au plus une fois par `RECHECK_AFTER_MS`) : un fichier remplacé
  * change d'`ETag` et repasse à vérifier.
  *
+ * **Un élément ne bloque jamais la file** (revue du 09/11/2026). Une erreur de TMDB ou de Jellyfin propre
+ * à un élément (`HttpError`) le met en échec, retenté une semaine plus tard (`reopenStale`) ; une erreur
+ * de réseau aussi, mais retentée dans l'heure, et le tour s'arrête là (une panne ne doit pas mettre vingt
+ * éléments en échec par minute). Seul le service lui-même (`/health`, `/jobs` autre que 400, `/items`)
+ * arrête le tour. Avant, la première erreur levée par `prepare` interrompait le tour, l'élément restait
+ * en tête des `pending`, et chaque minute rejouait la même erreur : la file entière était arrêtée.
+ *
+ * **Aucune lecture inutile.** Tous les paliers en pause : rien n'est lu. Pendant une lecture sans palier
+ * forcé ni liste de priorité à servir : ni le palier 1 ni le plan ne sont relus. Une relecture du plan
+ * qui échoue n'est retentée qu'après 15 min, 1 h, puis 6 h (`PLAN_TRIED_KEY`) — elle était retentée à
+ * chaque tour, soit la bibliothèque entière relue chaque minute ; et ce qui a réussi (la liste des
+ * comptes) est gardé même quand l'autre moitié (la bibliothèque) échoue.
+ *
+ * **`next dev` ne planifie rien** : la pile de développement partage `data/cine.db` avec la production,
+ * et deux planificateurs commanderaient en double sur le même plan (`devServer`).
+ *
  * Le journal du conteneur : une ligne `[xray]` par lot vraiment commandé (avec le palier), par relecture
  * complète du plan et par palier terminé — jamais par tour. Les erreurs vont dans `server.log`.
  */
@@ -77,11 +96,22 @@ const CHECKS_PER_TICK = 20;
 /** La relecture lente des éléments finis. */
 const RECHECK_AFTER_MS = 7 * 24 * 3600_000;
 const RECHECKS_PER_TICK = 10;
+/** Un échec, ou un écarté qui peut changer (sans fichier, sans distribution, hors des dossiers), revu après une semaine. */
+const REOPEN_AFTER_MS = 7 * 24 * 3600_000;
+const REOPENS_PER_TICK = 50;
+/** Une erreur de réseau sur un élément (Jellyfin, TMDB injoignables) : l'élément est retenté dans l'heure. */
+const TRANSIENT_RETRY_MS = 3600_000;
+/** Une relecture du plan qui échoue : retentée après 15 min, 1 h, puis toutes les 6 h. */
+const PLAN_BACKOFF_MS = [15 * 60_000, 3600_000, PLAN_EVERY_MS] as const;
 
 const CONTROLS_KEY = "controls";
 const PLANNED_KEY = "plannedAt";
 const WATCHING_KEY = "watchingAt";
 const PRIORITY_KEY = "priority";
+/** La dernière relecture du plan tentée : `{ at, failures, error }` — `failures` remis à 0 au succès. */
+const PLAN_TRIED_KEY = "planTried";
+/** Les dossiers permis vus au dernier tour : changés, les « hors des dossiers » sont revus. */
+const ROOTS_KEY = "libraryRoots";
 /** L'écart de rang entre deux titres de la liste de priorité : une série tient dans 100 000 épisodes. */
 const PRIORITY_RANK_STEP = 100_000;
 
@@ -120,6 +150,28 @@ const live: Live = (shared[LIVE_KEY] ??= {
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 300);
 
+/** `next dev` : la pile de développement partage `data/cine.db` — lu à l'appel (un test bascule `NODE_ENV`). */
+const devServer = () => process.env.NODE_ENV === "development";
+
+/**
+ * Une erreur du service d'analyse lui-même : elle arrête le tour (le service est en panne pour tous les
+ * éléments), à la différence d'une erreur de TMDB ou de Jellyfin propre à un élément.
+ */
+class XrayServiceError extends Error {
+  constructor(cause: unknown) {
+    super(errorText(cause), { cause });
+    this.name = "XrayServiceError";
+  }
+}
+
+async function service<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    throw new XrayServiceError(error);
+  }
+}
+
 export function readControls(): ScanControls {
   const c = readMeta<Partial<ScanControls>>(CONTROLS_KEY);
   const tiers = (v: unknown): ScanTier[] => (Array.isArray(v) ? SCAN_TIERS.filter((t) => v.includes(t)) : []);
@@ -132,10 +184,20 @@ function writeControls(c: ScanControls): void {
 
 // ─── Le plan ─────────────────────────────────────────────────────────────────
 
+/**
+ * La relecture complète. La liste des comptes (palier 1) et la bibliothèque sont lues ensemble mais
+ * indépendamment (`allSettled`) : la première est appliquée dès qu'elle est lue, même si la seconde
+ * échoue ; sans elle, le plan garde le palier 1 retenu (`storedWatching`). Une bibliothèque illisible
+ * lève : le plan en place reste, et la relecture attend son tour (`PLAN_BACKOFF_MS`).
+ */
 async function refreshPlan(now: number): Promise<void> {
   live.phase = "planning";
-  const [library, watching] = await Promise.all([readLibrary(), readWatching()]);
-  const plan = buildPlan(library, watching, now);
+  const [libraryRead, watchingRead] = await Promise.allSettled([readLibrary(), readWatching()]);
+  if (watchingRead.status === "fulfilled") setWatching(watchingRead.value, now - NEW_WINDOW_MS);
+  else logError("xray/scan-watching", watchingRead.reason);
+  writeMeta(WATCHING_KEY, now);
+  if (libraryRead.status === "rejected") throw libraryRead.reason;
+  const plan = buildPlan(libraryRead.value, watchingRead.status === "fulfilled" ? watchingRead.value : storedWatching(), now);
   const generation = now;
   for (let i = 0; i < plan.length; i += 500) {
     upsertPlanSlice(plan.slice(i, i + 500), generation);
@@ -144,7 +206,6 @@ async function refreshPlan(now: number): Promise<void> {
   // Une bibliothèque lue vide (Jellyfin qui répond une liste vide) n'efface pas tout le suivi.
   const removed = plan.length > 0 ? dropUnseen(generation) : 0;
   writeMeta(PLANNED_KEY, now);
-  writeMeta(WATCHING_KEY, now);
   // La liste de priorité réappliquée : les épisodes arrivés depuis dans une série choisie y entrent.
   await applyPriority().catch((error: unknown) => logError("xray/scan-priority", error));
   const counts = tierCounts();
@@ -160,9 +221,53 @@ async function refreshPlan(now: number): Promise<void> {
   });
 }
 
+interface PlanTried {
+  at: number;
+  failures: number;
+  error: string | null;
+}
+
+export const planBackoffMs = (failures: number): number => PLAN_BACKOFF_MS[Math.min(Math.max(failures, 1), PLAN_BACKOFF_MS.length) - 1];
+
+/**
+ * Le plan relu s'il est dû (vide, ou six heures passées) et que le dernier échec a assez attendu ;
+ * sinon le palier 1 s'il a dix minutes. Rend l'incident à afficher (relecture en échec), ou `null`.
+ */
+async function refreshIfDue(now: number): Promise<string | null> {
+  const plannedAt = readMeta<number>(PLANNED_KEY) ?? 0;
+  if (planSize() === 0 || now - plannedAt >= PLAN_EVERY_MS) {
+    const tried = readMeta<PlanTried>(PLAN_TRIED_KEY);
+    const failures = tried && typeof tried.failures === "number" ? tried.failures : 0;
+    if (failures > 0 && tried && now - tried.at < planBackoffMs(failures)) return tried.error;
+    try {
+      await refreshPlan(now);
+      writeMeta(PLAN_TRIED_KEY, { at: now, failures: 0, error: null } satisfies PlanTried);
+      return null;
+    } catch (error) {
+      const text = errorText(error);
+      writeMeta(PLAN_TRIED_KEY, { at: now, failures: failures + 1, error: text } satisfies PlanTried);
+      logError("xray/scan-plan", error, { failures: failures + 1 });
+      return text;
+    }
+  }
+  if (now - (readMeta<number>(WATCHING_KEY) ?? 0) >= WATCH_EVERY_MS) await refreshWatching(now).catch((error: unknown) => logError("xray/scan-watching", error));
+  return null;
+}
+
 async function refreshWatching(now: number): Promise<void> {
-  setWatching(await readWatching(), now - NEW_WINDOW_MS);
+  // La date d'abord : une liste des comptes illisible est retentée dans dix minutes, pas à chaque tour.
   writeMeta(WATCHING_KEY, now);
+  setWatching(await readWatching(), now - NEW_WINDOW_MS);
+}
+
+/** Les dossiers permis ont changé (`XRAY_LIBRARY_ROOTS`) : ce qui était « hors des dossiers » est revu. */
+function followLibraryRoots(): void {
+  const roots = libraryRoots().join(",");
+  const seen = readMeta<string>(ROOTS_KEY);
+  if (seen === roots) return;
+  const reopened = seen === null ? 0 : reopenOutsideLibrary();
+  writeMeta(ROOTS_KEY, roots);
+  if (reopened > 0) taskLog("xray", "dossiers permis changés", { revus: reopened });
 }
 
 // ─── Ce qui est en file ──────────────────────────────────────────────────────
@@ -174,9 +279,15 @@ const computeOf = (state: ItemStats): number | null => {
   return typeof s === "number" && s > 0 ? s : null;
 };
 
-/** Nos éléments en file : finis, en échec, oubliés par le service, ou celui qui tourne. */
-async function followInflight(now: number): Promise<number> {
+/**
+ * Nos éléments en file : finis, en échec, oubliés par le service, ou celui qui tourne. `waiting` : ceux
+ * que le service dit encore en attente (pas celui qui tourne) — le reste de sa file `pending` est à
+ * d'autres, les commandes des spectateurs. Un état illisible ne compte pas comme le nôtre : mieux vaut
+ * croire à une commande de spectateur de trop que passer devant l'une d'elles.
+ */
+async function followInflight(now: number): Promise<{ inflight: number; waiting: number }> {
   let inflight = 0;
+  let waiting = 0;
   live.current = null;
   for (const row of rowsWithStatus("queued")) {
     let state: ItemStats | null;
@@ -195,10 +306,11 @@ async function followInflight(now: number): Promise<number> {
       markRow(row.itemId, { status: "failed", finishedAt: now, checkedAt: now, error: (state.error ?? "échec").slice(0, 300) });
     } else {
       inflight++;
+      if (state.status === "queued") waiting++;
       if (state.status === "running") live.current = { itemId: row.itemId, title: row.title, progress: typeof state.progress === "number" ? state.progress : 0 };
     }
   }
-  return inflight;
+  return { inflight, waiting };
 }
 
 type Prepared = "queued" | "done" | "excluded" | "failed";
@@ -224,8 +336,12 @@ async function prepare(row: ScanRow, now: number): Promise<Prepared> {
     markRow(row.itemId, { status: "excluded", reason: "no-cast", checkedAt: now });
     return "excluded";
   }
-  const state = (await xray.itemStatus(target.itemId)) as ItemStats | null;
-  if (state && state.etag === target.etag) {
+  const state = (await service(() => xray.itemStatus(target.itemId))) as ItemStats | null;
+  // Un échec du service au même fichier : retenu tel quel à la découverte ; relancé quand l'élément
+  // revient d'un échec déjà retenu (`reopenStale` garde son `error`) — « un ordre en échec est
+  // relancé » (contrat). Avant, la relance hebdomadaire relisait l'échec et ne commandait rien.
+  const relaunch = state?.status === "failed" && !!row.error;
+  if (state && state.etag === target.etag && !relaunch) {
     if (state.status === "done") {
       markRow(row.itemId, { status: "done", etag: target.etag, checkedAt: now, finishedAt: now, computeS: computeOf(state), error: null });
       return "done";
@@ -239,7 +355,7 @@ async function prepare(row: ScanRow, now: number): Promise<Prepared> {
     // priorité (contrat) — d'où la nouvelle commande pour la liste de priorité.
     if (row.tier === 0) {
       const raised = await jobFor(target, priority);
-      if (raised) await xray.enqueue(raised.job);
+      if (raised) await service(() => xray.enqueue(raised.job));
     }
     markRow(row.itemId, { status: "queued", etag: target.etag, orderedAt: now, checkedAt: now });
     return "queued";
@@ -250,8 +366,10 @@ async function prepare(row: ScanRow, now: number): Promise<Prepared> {
     return "excluded";
   }
   // Fini pour un autre fichier de même durée : rattaché, pas réanalysé (consigne du 09/11/2026).
-  if (state && state.status === "done" && target.durationS && keepsAnalysis(target.itemId, state, target.durationS)) {
-    const outcome = await rebindAnalysis(built.job, target.durationS);
+  const durationS = target.durationS;
+  if (state && state.status === "done" && durationS && keepsAnalysis(target.itemId, state, durationS)) {
+    // À la priorité du palier : la liste de priorité ne retombe pas en `low` quand le service réanalyse.
+    const outcome = await service(() => rebindAnalysis(built.job, durationS, priority));
     if (outcome !== "queued") {
       markRow(row.itemId, { status: "done", reason: outcome === "rebound" ? "rebound" : "same-duration", etag: target.etag, checkedAt: now, finishedAt: now, error: null });
       return "done";
@@ -275,7 +393,7 @@ async function prepare(row: ScanRow, now: number): Promise<Prepared> {
       markRow(row.itemId, { status: "failed", etag: target.etag, checkedAt: now, finishedAt: now, error: errorText(error) });
       return "failed";
     }
-    throw error;
+    throw new XrayServiceError(error);
   }
 }
 
@@ -285,11 +403,9 @@ async function recheckDone(now: number): Promise<number> {
   for (const row of staleDone(now - RECHECK_AFTER_MS, RECHECKS_PER_TICK)) {
     const target = await analysisTarget(row.itemId).catch(() => undefined);
     if (target === undefined) break; // Jellyfin injoignable : au tour suivant.
+    // Les échecs ne passent plus par ici : `reopenStale` les rouvre chaque semaine, sans attendre que
+    // toute la bibliothèque soit finie.
     if (target && row.etag && target.etag !== row.etag) {
-      markRow(row.itemId, { status: "pending", checkedAt: now });
-      reopened++;
-    } else if (row.status === "failed") {
-      // Un échec est retenté une fois par semaine : le service a pu être corrigé.
       markRow(row.itemId, { status: "pending", checkedAt: now });
       reopened++;
     } else {
@@ -301,24 +417,26 @@ async function recheckDone(now: number): Promise<number> {
 
 // ─── Le tour ─────────────────────────────────────────────────────────────────
 
-async function runTick(now: number): Promise<void> {
+/** Rend l'incident à afficher sans que le tour ait échoué (une relecture du plan en échec), ou `null`. */
+async function runTick(now: number): Promise<string | null> {
   live.lastTickAt = now;
   if (!xrayConfigured()) {
     live.phase = "off";
-    return;
+    return null;
   }
-  const plannedAt = readMeta<number>(PLANNED_KEY) ?? 0;
-  if (planSize() === 0 || now - plannedAt >= PLAN_EVERY_MS) await refreshPlan(now);
-  else if (now - (readMeta<number>(WATCHING_KEY) ?? 0) >= WATCH_EVERY_MS) await refreshWatching(now).catch((error: unknown) => logError("xray/scan-watching", error));
+  // Rien que la base : les écartés et les échecs à revoir, les dossiers permis qui ont changé.
+  followLibraryRoots();
+  reopenStale(now - REOPEN_AFTER_MS, REOPENS_PER_TICK);
 
-  const inflight = await followInflight(now);
   const controls = readControls();
   const active = SCAN_TIERS.filter((t) => !controls.paused.includes(t));
   if (active.length === 0) {
+    // Tout en pause : aucune lecture, ni de la bibliothèque, ni des comptes, ni du service.
     live.phase = "paused";
     live.playbackBy = null;
-    return;
+    return null;
   }
+  const { inflight, waiting } = await followInflight(now);
   let allowed = active;
   const { wait, signal } = await mustWaitForPlayback(now);
   if (wait) {
@@ -328,28 +446,60 @@ async function runTick(now: number): Promise<void> {
     const priorityWork = !!before && before.total - before.done - before.failed > 0;
     allowed = active.filter((t) => (t === 0 && priorityWork) || controls.forced.includes(t));
     if (allowed.length === 0) {
+      // Pendant une lecture sans rien de forcé, la bibliothèque et les comptes ne sont pas relus non plus.
       live.phase = "waiting-playback";
       live.playbackBy = signal.by;
-      return;
+      return null;
     }
+  }
+  const planIssue = await refreshIfDue(now);
+  if (planSize() === 0) {
+    live.phase = "unavailable";
+    return planIssue;
   }
   live.playbackBy = null;
   live.phase = "running";
 
   let slots = MAX_PENDING - inflight;
+  let feed: readonly ScanTier[] = allowed;
   if (slots > 0) {
     const health = await xray.health();
-    slots = Math.min(slots, MAX_SERVICE_PENDING - (health.queue?.pending ?? 0));
+    const pending = health.queue?.pending ?? 0;
+    slots = Math.min(slots, MAX_SERVICE_PENDING - pending);
     if (!live.current && health.queue?.running) {
       const row = getRow(health.queue.running);
       live.current = { itemId: health.queue.running, title: row?.title ?? null, progress: 0 };
     }
+    // La liste de priorité part en `normal`, comme l'épisode suivant d'un spectateur (`orders.ts`) : à
+    // priorité égale le service sert dans l'ordre d'arrivée, et une commande à nous passée avant serait
+    // servie avant la sienne. Elle n'est donc nourrie que lorsque la file du service ne contient rien
+    // d'autre que nos propres commandes ; sinon rien ne part du tout ce tour-ci — pas même le fond en
+    // `low`, qui prendrait les places que la liste de priorité attend (revue du 09/11/2026).
+    if (slots > 0 && allowed.includes(0) && pending - waiting > 0 && nextPending([0], 1).length > 0) {
+      feed = [];
+      slots = 0;
+    }
   }
   const ordered: ScanRow[] = [];
   if (slots > 0) {
-    for (const row of nextPending(allowed, CHECKS_PER_TICK)) {
+    for (const row of nextPending(feed, CHECKS_PER_TICK)) {
       if (slots <= 0) break;
-      if ((await prepare(row, now)) === "queued") {
+      let outcome: Prepared;
+      try {
+        outcome = await prepare(row, now);
+      } catch (error) {
+        // Le service en panne : le tour s'arrête, tous les éléments en pâtiraient.
+        if (error instanceof XrayServiceError) throw error.cause ?? error;
+        // Propre à cet élément : un échec, et la file continue. Une réponse d'erreur (TMDB, Jellyfin) est
+        // retentée dans une semaine ; une erreur de réseau dans l'heure, et le tour s'arrête là — une
+        // panne de Jellyfin ne met pas vingt éléments en échec par minute.
+        const answered = error instanceof HttpError;
+        markRow(row.itemId, { status: "failed", error: errorText(error), finishedAt: now, checkedAt: answered ? now : now - REOPEN_AFTER_MS + TRANSIENT_RETRY_MS });
+        logError("xray/scan-item", error, { itemId: row.itemId });
+        if (!answered) break;
+        continue;
+      }
+      if (outcome === "queued") {
         ordered.push(row);
         slots--;
       }
@@ -373,9 +523,13 @@ async function runTick(now: number): Promise<void> {
     const c = counts.find((x) => x.tier === t);
     return c ? c.total - c.done - c.failed : 0;
   };
-  const emptied = controls.forced.filter((t) => left(t) === 0);
+  // Relus juste avant d'écrire : un geste de l'administrateur pendant le tour (pause, forçage) n'est pas
+  // écrasé par l'état lu au début ; seuls les paliers forcés au début, encore forcés et vidés, perdent
+  // leur forçage.
+  const fresh = readControls();
+  const emptied = controls.forced.filter((t) => fresh.forced.includes(t) && left(t) === 0);
   if (emptied.length > 0) {
-    writeControls({ ...controls, forced: controls.forced.filter((t) => !emptied.includes(t)) });
+    writeControls({ paused: fresh.paused, forced: fresh.forced.filter((t) => !emptied.includes(t)) });
     taskLog("xray", "palier forcé terminé", { paliers: emptied.map(String) });
   }
   const remaining = counts.filter((c) => allowed.includes(c.tier)).reduce((s, c) => s + (c.total - c.done - c.failed), 0);
@@ -383,19 +537,24 @@ async function runTick(now: number): Promise<void> {
   // Jamais pendant une lecture : la relecture est du travail de fond comme un autre.
   if (remaining === 0 && inflight === 0 && !wait) {
     const reopened = await recheckDone(now);
-    live.phase = reopened > 0 ? "running" : "done";
+    // « À jour » seulement si aucun palier en pause n'a encore du travail : sinon, c'est la pause qui
+    // retient la suite, et l'état le dit.
+    const pausedWork = fresh.paused.some((t) => left(t) > 0);
+    live.phase = reopened > 0 ? "running" : pausedWork ? "paused" : "done";
   } else if (remaining === 0 && inflight === 0) {
     live.phase = "waiting-playback";
     live.playbackBy = signal.by;
   }
+  return planIssue;
 }
 
 /** Un tour — jamais deux à la fois : un tour en cours est rendu à qui en demande un autre. */
 export function scanTick(now = Date.now()): Promise<void> {
+  if (devServer()) return Promise.resolve();
   if (live.ticking) return live.ticking;
   live.ticking = runTick(now)
-    .then(() => {
-      live.lastError = null;
+    .then((issue) => {
+      live.lastError = issue;
     })
     .catch((error: unknown) => {
       live.lastError = errorText(error);
@@ -410,7 +569,7 @@ export function scanTick(now = Date.now()): Promise<void> {
 
 /** Démarrage du serveur : premier tour après le démarrage, puis chaque minute. */
 export function startXrayScheduler(): void {
-  if (live.started) return;
+  if (live.started || devServer()) return;
   live.started = true;
   const first = setTimeout(() => void scanTick(), START_DELAY_MS);
   first.unref?.();

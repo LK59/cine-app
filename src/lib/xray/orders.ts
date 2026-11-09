@@ -137,8 +137,8 @@ export async function orderAnalysis(itemId: string, options: OrderOptions, now =
       .catch(() => null);
     if (prior && prior.etag && prior.etag !== target.etag && prior.status === "done" && target.durationS && keepsAnalysis(id, prior, target.durationS)) {
       const rebound = await rebindAnalysis(job, target.durationS);
-      // « queued » : une version du service qui ignore le champ l'a mis en file — la commande ci-dessous
-      // n'en remonte que la priorité.
+      // « queued » : pas rattaché, le service réanalyse (contrat) — mis en file à la priorité de cette
+      // commande (`rebindAnalysis` la garde, 09/11/2026) ; la commande ci-dessous est un doublon sans effet.
       if (rebound !== "queued") return { status: "ordered", answer: { itemId: id, status: "done", position: 0 }, cast: cast.length };
     }
     const answer = await xray.enqueue(job);

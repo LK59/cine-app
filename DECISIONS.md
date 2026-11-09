@@ -9129,6 +9129,61 @@ bornée, file du service pleine, déjà fait, écartés, hors des dossiers permi
 progression et estimation, rattachement et repli sur 400, journal), `xray-same-duration.test.ts` (lecteur
 et commande d'une séance), `xray-scan-route.test.ts` (portes, liste de priorité, refus de l'animation), `xray-priority-control.test.tsx` (le bouton de la fiche : administrateur seul, confirmation, refus de l'animation) ; la liste de priorité dans `xray-scheduler.test.ts` (avant le palier 1, en `normal`, saison par saison, pendant une lecture, redémarrage et relecture du plan, retrait).
 
+**Revue du planificateur** (09/11/2026, relecture indépendante des deux commits du jour). Ce qui a changé :
+- **Un élément en erreur ne bloque plus la file.** Toute erreur levée par `prepare` (TMDB dans `jobFor` /
+  `castOf`, Jellyfin dans `analysisTarget`) arrêtait le tour : l'élément restait en tête des `pending`, l'état
+  affichait « injoignable » et `server.log` recevait la même ligne chaque minute — la file entière était
+  arrêtée par un seul titre. Désormais l'erreur est attrapée par élément dans `runTick` : une réponse d'erreur
+  (`HttpError`) le met en échec (`xray/scan-item`), revu une semaine plus tard ; une erreur de réseau aussi,
+  mais revue dans l'heure (`TRANSIENT_RETRY_MS`), et le tour s'arrête là pour qu'une panne de Jellyfin ne
+  mette pas vingt éléments en échec par minute. Seul le service d'analyse lui-même (`/health`, `/items`,
+  `/jobs` autre que 400 — `XrayServiceError`, `service()`) arrête le tour.
+- **Les échecs et les écartés qui peuvent changer sont revus** (`reopenStale`, `REOPEN_AFTER_MS` = 7 jours,
+  50 par tour, une écriture en base) : sans fichier, sans distribution, hors des dossiers permis — jusque-là
+  écartés pour toujours — et les échecs, qui n'étaient retentés qu'une fois toute la bibliothèque finie (la
+  relecture lente ne tournait qu'à file vide). Un échec revu est **relancé** même si le service le dit encore
+  en échec au même `ETag` (« un ordre en échec est relancé », contrat) : avant, la relance relisait l'échec et
+  ne commandait rien. L'animation suit le genre que relit le plan. `XRAY_LIBRARY_ROOTS` changé : les « hors
+  des dossiers » sont revus au tour suivant (`followLibraryRoots`, `reopenOutsideLibrary`).
+- **Une relecture du plan qui échoue attend** (`PLAN_TRIED_KEY`, `planBackoffMs` : 15 min, 1 h, puis 6 h) :
+  `plannedAt` n'étant écrit qu'au succès, elle était retentée chaque minute — une vingtaine de pages de
+  Jellyfin, deux appels par compte, deux par série chez Sonarr, à chaque tour. La liste des comptes et la
+  bibliothèque sont lues en `allSettled` : la première est appliquée même si la seconde échoue, et sans
+  elle le plan garde le palier 1 retenu (`storedWatching`). Le plan en place continue de servir ; l'incident
+  reste affiché jusqu'au succès. La relecture du palier 1 (dix minutes) date sa tentative, plus son succès.
+- **Aucune lecture inutile** : la relecture du plan et du palier 1 se fait après la pause et après
+  `mustWaitForPlayback`. Tous les paliers en pause : rien n'est lu (ni Jellyfin, ni les comptes, ni le service).
+  Pendant une lecture : rien, sauf palier forcé ou liste de priorité avec du travail.
+- **Le palier 0 ne passe jamais devant un spectateur.** Il part en `normal`, comme l'épisode suivant qu'une
+  séance commande (`orders.ts`), et le service sert à priorité égale dans l'ordre d'arrivée
+  (`ORDER BY priority, seq`) : une commande à nous arrivée avant aurait été servie avant la sienne. Il n'est
+  donc nourri que si la file `pending` du service (`/health`) ne contient que nos propres commandes en attente
+  (`followInflight` les compte, `waiting`) ; sinon rien ne part ce tour-ci — pas même le fond en `low`, qui
+  prendrait les deux places que le palier 0 attend. Un état illisible ne compte pas comme le nôtre. `/health`
+  ne donne pas les priorités : une commande d'autrui est supposée d'un spectateur (le fond est seul à
+  commander en `low`). Ce qui est déjà en file avant l'arrivée d'une commande de spectateur y reste (deux au
+  plus) ; le `high` passe devant de toute façon, le service cédant entre deux tronçons.
+- **`rebindAnalysis` garde la priorité de la commande** (paramètre, par défaut celle du `job`) : il forçait
+  `low`, et un élément du palier 0 — ou la commande `high` d'une séance (`orders.ts`) — que le service ne
+  rattachait pas (202 : il oublie l'ancien résultat et réanalyse, contrat) retombait derrière tout le fond.
+  Le commentaire qui donnait un 400 pour ce cas est corrigé : 400 = commande refusée, rien ne change.
+- **Les gestes de l'administrateur ne sont plus écrasés** : les réglages sont relus juste avant d'écrire la
+  fin d'un forçage, et seuls les paliers forcés au début, encore forcés et vidés, le perdent (une pause
+  posée pendant le tour était effacée).
+- **Un élément fait reste fait à la relecture du plan** quand seule sa date bouge (`DateCreated` de
+  Jellyfin, réécrit par une réanalyse de la bibliothèque) ; il ne repasse à vérifier que si sa durée change
+  aussi (plus d'une seconde) — un remplacement à durée égale, c'est la relecture de l'`ETag` qui le voit.
+  Une date inconnue (`0`, élément ajouté par la liste de priorité avant le plan) n'est pas une date changée.
+- **L'affichage** : « Tout mettre en pause / Tout reprendre » compte le palier 0 (`everyTierPaused`) ; l'état
+  dit « En pause » et non « À jour » tant qu'un palier en pause a du travail ; la barre d'un palier ou d'un
+  titre compte les échecs comme traités, dans leur propre segment (`scanBar`) — elle restait sous 100 %.
+- **`next dev` ne planifie rien** (`devServer`, `NODE_ENV === "development"`, lu à l'appel — même règle que
+  `dev-player.log`) : la pile de développement partage `data/cine.db`, et deux planificateurs commanderaient
+  en double sur le même plan. Les gestes de la page de développement s'écrivent quand même dans la base
+  partagée — c'est l'administrateur qui les fait. La recherche de répliques (§88) n'a pas cette garde.
+Tests : `xray-scheduler.test.ts` (« La revue du 09/11/2026 » : chaque point ci-dessus, chacun en échec sur le
+code d'avant), `xray-scan-card.test.tsx` (pause de tout, barre avec échecs).
+
 ## 139. « Poser une question » : la réponse ne sait que ce que le compte a vu (09/11/2026)
 
 *Amendé le 09/11/2026 (§140) : trois réglages au lieu d'un — `ASK_ENABLED` (questions sur un titre),

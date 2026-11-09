@@ -481,7 +481,10 @@ state lives in `cine.db` (`scanStore.ts`). A file replaced at the same duration 
 (`rebindIfSameDuration`), never re-analysed, and the player serves its old scenes. Progress and controls:
 Configuration → Acteurs à l'écran (`/api/admin/xray/scan`, admin only). Above tier 1, a tier 0 the admin
 fills by hand (a film, or a whole series season by season — from that page or « Analyser en priorité » on
-the title sheet): ordered `normal`, fed even during playback, animation still refused.
+the title sheet): ordered `normal`, fed even during playback, animation still refused — but only while the
+service's queue holds nothing but our own orders, so it never overtakes a viewer's. One item's TMDB or
+Jellyfin error fails that item, never the queue; a failed library read backs off (15 min, 1 h, 6 h); with
+every tier paused, or during playback with nothing forced, nothing is read; it never runs under `next dev`.
 
 **Books are an option, off by default, kept apart from the cinema** (DECISIONS §127–§128, since
 28/10/2026): `BOOKS_ENABLED`, `BOOKS_REQUESTS_ENABLED`, `BOOKS_GOOGLE_ENRICH` + `GOOGLE_BOOKS_API_KEY`.

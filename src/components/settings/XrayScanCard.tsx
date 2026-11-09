@@ -37,6 +37,34 @@ export function fmtScanDuration(seconds: number | null, t: T): string {
   return t("xrayScan.duration.minutes", { m: Math.max(m, s > 0 ? 1 : 0) });
 }
 
+/**
+ * La barre d'un palier ou d'un titre : les éléments **traités** — analysés ou en échec — sur le total.
+ * Un échec ne sera pas retenté avant une semaine ; compté comme reste à faire, il laissait la barre d'un
+ * palier fini à 97 % pour toujours (revue du 09/11/2026). Les échecs ont leur part de la barre, à part.
+ */
+export function scanBar(done: number, failed: number, total: number): { done: number; failed: number } {
+  if (total <= 0) return { done: 0, failed: 0 };
+  const d = Math.min(100, (done / total) * 100);
+  const f = Math.min(100 - d, (failed / total) * 100);
+  return { done: Math.round(d * 10) / 10, failed: Math.round(f * 10) / 10 };
+}
+
+/** Tout est-il en pause — les trois paliers **et** la liste de priorité (palier 0) ? */
+export const everyTierPaused = (data: Pick<XrayScanStatus, "tiers" | "priority">): boolean => data.tiers.every((tier) => tier.paused) && data.priority.paused;
+
+function ScanBar({ done, failed, total, thin }: { done: number; failed: number; total: number; thin?: boolean }) {
+  const bar = scanBar(done, failed, total);
+  // Un palier vide est fini ; un titre de la liste sans élément connu n'a pas commencé.
+  const shown = total > 0 ? bar : thin ? { done: 0, failed: 0 } : { done: 100, failed: 0 };
+  const now = Math.round(shown.done + shown.failed);
+  return (
+    <div className={`flex ${thin ? "h-1.5" : "h-2"} overflow-hidden rounded-full bg-white/10`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={now}>
+      <div className="h-full bg-white transition-[width] duration-500" style={{ width: `${shown.done}%` }} />
+      {shown.failed > 0 && <div className="h-full bg-warning transition-[width] duration-500" data-testid="xray-scan-bar-failed" style={{ width: `${shown.failed}%` }} />}
+    </div>
+  );
+}
+
 const fmtHours = (h: number) => (h >= 100 ? Math.round(h).toLocaleString() : (Math.round(h * 10) / 10).toLocaleString());
 
 export function XrayScanCard() {
@@ -80,7 +108,7 @@ export function XrayScanCard() {
     return false;
   }
 
-  const allPaused = data.tiers.every((tier) => tier.paused);
+  const allPaused = everyTierPaused(data);
   const current = data.current;
 
   return (
@@ -141,7 +169,6 @@ export function XrayScanCard() {
 }
 
 function TierCard({ tier, busy, onAct, t }: { tier: ScanTierStatus; busy: string | null; onAct: (action: ScanAction) => void; t: T }) {
-  const percent = tier.total > 0 ? Math.min(100, Math.round((tier.done / tier.total) * 100)) : 100;
   const mine = (action: ScanAction) => busy === `${action}:${tier.tier}`;
   return (
     <section className="settings-card rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-testid={`xray-scan-tier-${tier.tier}`}>
@@ -177,9 +204,7 @@ function TierCard({ tier, busy, onAct, t }: { tier: ScanTierStatus; busy: string
       </div>
       {(tier.forced || tier.paused) && <p className={`mt-2 text-xs ${tier.forced ? "text-warning" : "text-subtle"}`}>{t(tier.forced ? "xrayScan.forced" : "xrayScan.paused")}</p>}
       <div className="mt-4 space-y-2">
-        <div className="h-2 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
-          <div className="h-full rounded-full bg-white transition-[width] duration-500" style={{ width: `${percent}%` }} />
-        </div>
+        <ScanBar done={tier.done} failed={tier.failed} total={tier.total} />
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
           <Fact label={t("xrayScan.done")} value={`${tier.done.toLocaleString()} / ${tier.total.toLocaleString()}`} />
           <Fact label={t("xrayScan.hours")} value={t("xrayScan.hoursValue", { done: fmtHours(tier.hoursDone), total: fmtHours(tier.hoursTotal) })} />
@@ -304,7 +329,6 @@ function PriorityCard({
       ) : (
         <ul className="mt-3 space-y-3">
           {data.priority.items.map((item) => {
-            const percent = item.total > 0 ? Math.min(100, Math.round((item.done / item.total) * 100)) : 0;
             return (
               <li key={item.id} data-testid="xray-priority-item">
                 <div className="flex items-center justify-between gap-3">
@@ -328,8 +352,8 @@ function PriorityCard({
                     {busy === `unprioritize:${item.id}` ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
                   </button>
                 </div>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
-                  <div className="h-full rounded-full bg-white transition-[width] duration-500" style={{ width: `${percent}%` }} />
+                <div className="mt-1.5">
+                  <ScanBar done={item.done} failed={item.failed} total={item.total} thin />
                 </div>
               </li>
             );
