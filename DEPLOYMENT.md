@@ -348,10 +348,11 @@ at once, without a restart, unless the field says otherwise.
 
 | Page | What it holds |
 |---|---|
-| **Connections** | Address, key and *Test connection* for each service: Jellyfin, TMDB, Radarr and Sonarr (with the quality profile given to titles added from the app), Jellyseerr, qBittorrent, Bazarr, Jackett, ratings. The *Application* card: poster preparation (applies at the next start) and the notification contact. |
+| **Connections** | Address, key and *Test connection* for each service: Jellyfin, TMDB, Radarr and Sonarr (with the quality profile given to titles added from the app), Jellyseerr, qBittorrent, Bazarr, Jackett, ratings, and *Actors on screen* (the optional `laterna-xray` service, with who it is on for). The *Application* card: poster preparation (applies at the next start) and the notification contact. |
 | **Playback** | The built-in player, handing unplayable files to Jellyfin, black-bar framing, who sees the Chromecast button, the Chromecast receiver, and offline downloads (on or off, who may use them, the server quota). |
-| **Generated subtitles** | Provider, key, model and monthly budget for AI-translated subtitles, with the month's spending and the jobs. |
+| **Generated subtitles** | Provider (Anthropic, OpenAI or Google), key, model and the monthly ceiling shared by **every** paid AI feature — generated subtitles, search by description, « Previously », questions, « So far » —, with the month's spending, who each feature is on for, what blocks it, and the subtitle jobs. |
 | **Dialogue search** | Off by default. Indexes the films' subtitles so the cinema search finds a film by a line: the initial indexing (start, pause, resume, progress), the nightly update and its window, the languages, the index size and *Rebuild the index*. Greyed out until the films folder is mounted. |
+| **On-screen cast** | Once the *Actors on screen* service is connected (Connections): the background analysis of the library: progress per tier, speed, time left, pause and resume, a priority list (a film or a whole series), the quality of the names per series and resetting a series' memory. See [xray/README.md](xray/README.md). |
 | **New accounts** | What an account gets until it chooses otherwise: language, home banner, Jellyfin tags blocked automatically on new accounts. And the welcome screen, offered again to everyone or removed. |
 | **Administrator** | The local administrator's password, a search diagnostic, and the installed version. |
 | **Deployment** | What only the compose file can set — time zone, media folders, reverse proxy, HTTPS, an administrator fixed by `.env` — with the line to copy. Recreate the container after adding one. It also says whether `TRUSTED_PROXIES` (with its value) and `COOKIE_SECURE` are set in the running container. |
@@ -514,7 +515,8 @@ docker exec cine-app tail -n 50 /app/data/logs/player.log   # what each viewer's
 ```
 
 The others: `auth.log` (sign-ins), `startup.log` (each opening of the cinema), `notifications.log`,
-`subtitle-gen.log`, `bench.log` and `bench-player.log` (the test bench).
+`subtitle-gen.log`, `recherche.log` (one line per description search, « Previously », question and « So far »,
+never their text), `bench.log` and `bench-player.log` (the test bench).
 
 | Symptom | Where to look |
 |---|---|

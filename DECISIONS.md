@@ -8736,7 +8736,7 @@ le lecteur serveur prévu ; légendes et pluriels.
 *Amendé le 09/11/2026 (§140) : aussi chez OpenAI et Google (réflexion « moyenne » transposée), compté dans le
 plafond mensuel commun ; atteint, rien de nouveau n'est préparé, les textes prêts restent lus.*
 
-**Règle** (Louis, 08/11/2026, après trois versions le même jour). Sur la fiche d'une série en cours,
+**Règle** (le propriétaire, 08/11/2026, après trois versions le même jour). Sur la fiche d'une série en cours,
 « Précédemment : … » remplace le synopsis, avec un lien discret « Voir le synopsis de la série » (et, de
 là, « Voir le résumé des épisodes précédents ») ; chaque ouverture de la fiche repart sur « Précédemment ».
 Option de l'installation coupée par défaut (`RECAP_ENABLED`), Anthropic seulement, clé des sous-titres
@@ -8834,6 +8834,30 @@ l'instant : la première donne des voix anonymes sur un son difficile, les secon
 (`SOFAR_ENABLED`) ont chacune leur réglage et demandent les acteurs à l'écran ; sans elles, le panneau d'une
 personne ne montre que ses faits TMDB. La carte des réglages renvoie au guide de déploiement du service.*
 
+**État en 10.30.1** (résumé ; la règle, puis l'historique version par version, suivent — un paragraphe daté
+peut décrire une forme remplacée depuis, il le dit).
+- **Le service** `laterna-xray` dit qui est à l'image **et, depuis 10.30, qui parle**, scène par scène
+  (contrat v1 et ses ajouts compatibles : `xray/README.md`). Gratuit, local, coupé par défaut ; public
+  `off` / `admins` / `tous` (`XRAY_ENABLED`).
+- **Commandé** par la ligne `start` du journal du lecteur (l'élément en `high`, l'épisode suivant en
+  `normal`) **et** par le planificateur de la bibliothèque : palier 0 (liste de priorité de
+  l'administrateur), 1 (ce qui se regarde), 2 (arrivées des quatorze derniers jours), 3 (le reste) ; rien
+  de neuf pendant une lecture sauf palier forcé ou palier 0 ; dossiers permis seulement
+  (`XRAY_LIBRARY_ROOTS`) ; animation écartée ; un fichier remplacé à durée égale rattaché sans
+  réanalyse ; les épisodes dans l'ordre de la série, et une série finie renommée une fois.
+- **La rangée « À l'écran »** du lecteur : **avec les commandes, en lecture comme en pause** (10.27),
+  au-dessus du titre, aussi loin que possible à droite (10.27.1), pilules compactes, au début à chaque scène,
+  jamais déplacée sous un doigt, commandes tenues pendant le geste (10.27.2) ; un voile au bord droit, plus
+  de masque (10.29.1, WebKit) ; les pilules gonflent à l'appui comme les autres pilules du lecteur ; le bouton
+  rond « Poser une question » au bout, seul quand personne n'est reconnu. Ni sur Fire TV, ni au lecteur hors
+  ligne, ni pendant une diffusion, ni au mini-lecteur.
+- **Le panneau d'une personne** : photo, acteur, personnage, faits TMDB (âge, lieu), courte biographie (sans
+  Markdown, 10.29.2), « Dans votre bibliothèque » (affiches inertes ; jamais pour un lien de partage) ; avec
+  leurs réglages, « Jusqu'ici » et au plus deux liens entre personnages de la scène — **aucun champ libre**
+  (10.29.2, §139).
+- **La qualité des noms** (Configuration → Acteurs à l'écran) et « Réinitialiser la mémoire » d'une série
+  (10.30) ; le relevé `kind: "xray-ui"` dans `startup.log` (10.29.1).
+
 **Règle.** L'analyse des acteurs présents à l'image, scène par scène, est faite par un service à part,
 `laterna-xray` (son code et son installation : `xray/README.md`), que Laterna commande et lit par un
 contrat fixé des deux côtés (v1 : `GET /health`, `POST /jobs`, `GET /items/{id}`, `GET /items/{id}/scenes`,
@@ -8914,7 +8938,9 @@ par compte, panne, épisode suivant), `xray-player-route.test.ts` (200 partout, 
 jointure), `xray-proxy-admin.test.ts` (portes), `xray-trigger.test.ts` (la ligne `start`) ;
 `share-gate.test.ts` parcourt la nouvelle route avec les autres.
 
-**La rangée « À l'écran »** (10.26, 09/11/2026, maquette validée par le propriétaire). Film en pause, au-dessus
+**La rangée « À l'écran »** (10.26, 09/11/2026, maquette validée par le propriétaire ; **forme d'origine** — depuis
+10.27 avec les commandes en lecture comme en pause, la question en bouton rond, pilules plus compactes, voile au
+lieu du masque en 10.29.1 : plus bas). Film en pause, au-dessus
 du titre, à gauche (la place de la pilule « Une question ? », `PROMPT_BOTTOM`) : une étiquette « À l'écran »
 (11 px, capitales, espacement .16em, blanc 60 %) puis une rangée de pilules de verre (`player-pill`) qui
 défile de côté — photo ronde TMDB (36 px, 32 sur un téléphone), nom de l'acteur (14/12 px, demi-gras),
@@ -9284,6 +9310,41 @@ Porteurs : `xray/app/audio.py`, `voice.py`, `voices.py`, `voicejob.py`, `relabel
 OpenAI et Google répondent aussi (d'un bloc, par le même `AnswerGate`) ; le plafond mensuel atteint donne
 une ligne `budget` à une question et tait « Jusqu'ici ».*
 
+**État en 10.30.1** (résumé ; la règle et l'historique version par version suivent — plusieurs formes
+décrites plus bas ont été remplacées le jour même, chacune le dit).
+- **Trois fonctions, trois publics** `off` / `admins` / `tous` (§140) : les questions sur un titre
+  (`ASK_ENABLED`), les questions sur une personne (`ASK_PERSON_ENABLED`) et « Jusqu'ici »
+  (`SOFAR_ENABLED`) ; les deux dernières demandent aussi les acteurs à l'écran (§138). La route est la
+  porte. **Un lien de partage n'a aucune fonction d'IA** (10.28.1). Pas sur Fire TV. Anthropic, OpenAI ou
+  Google, un seul plafond mensuel (§140).
+- **Où.** Au lecteur : un bouton rond, icône seule, au bout de la rangée « À l'écran », avec les commandes,
+  en lecture comme en pause (10.27 — la pilule « Une question ? » en pause seulement est l'ancienne forme).
+  Sur les fiches : `AskTitleControl` (un bouton rond de la rangée du bureau, §117.4 ; une icône au
+  téléphone). Le panneau d'un titre : trois propositions et le champ libre. **Le panneau d'une personne n'a
+  pas de champ** (10.29.2) : « Jusqu'ici », les faits, puis au plus deux « Quel est le lien entre X et Y ? »
+  avec les autres personnages de la scène.
+- **Les filets** : seulement ce que le compte a vu ; noms absents des sources (réponse retirée) ; mots de
+  coulisse, horaires du lecteur, « attribué », parole du lecteur (`metaTalk`) ; Markdown retiré mot à mot
+  (10.30.1). Réponses diffusées **mot par mot** (10.28.0). Bornes : 60 questions par heure et 300 par jour,
+  200 générations de « Jusqu'ici » par heure, par compte.
+- **« Jusqu'ici »** : une ou deux phrases sur le personnage, **qui commencent par son nom** (consigne de la
+  famille S7c, `SOFAR_VERSION` 10) ; générées **à la demande** — la demande part au toucher de la pilule —,
+  préparées seulement sur une **intention au bureau** (pointeur fin posé 300 ms) ; **coupe** au début de la
+  scène d'« À l'écran » en cours, plus les pas de deux minutes déjà passés dans une longue scène (`sofarCut`,
+  le même calcul au client et au serveur ; sans scènes, la marque des cinq minutes) ; trois résumés au plus
+  avant l'épisode en cours, répliques groupées par scène ; un second passage quand le filet a tout retiré ;
+  **gardées trente jours sous l'empreinte de ce qui part au modèle** (partagées entre comptes au même
+  endroit), un rejet une heure, une panne jamais, et une panne passagère ouvre une attente de 2 puis 10 min ;
+  rien sur le seul synopsis quand les répliques d'un élément sous-titré ne sont pas prêtes, rien avant dix
+  minutes de film. Pendant l'attente, une ligne à la fois (« Relecture des N scènes de X… », « Épisodes a à
+  b… », « Rédaction… »), remplacée par le premier mot ; faute de texte, « Encore trop peu vu pour en dire
+  plus. ».
+- **Qui parle** (10.30) : une réplique porte le nom de qui la dit seulement quand l'analyse des voix est
+  **complète** et la voix sûre (60 % de la réplique, confiance 0,6, pas de désaccord, pas une réplique courte
+  avalée par la voix voisine — 10.30.1).
+- **Journal** : `recherche.log`, `kind: "question"` et `kind: "jusquici"` (étapes, cache, `cutS`, verdict),
+  jamais le texte ; `startup.log`, `kind: "clavier"` et `kind: "xray-ui"`.
+
 **Règle.** Un spectateur pose une question courte sur le titre qu'il regarde ; Claude Haiku répond en deux à
 quatre phrases, dans la langue de l'interface, diffusées phrase par phrase, **d'après les seules sources
 envoyées** — et ces sources ne contiennent que ce que ce compte a vu. La sûreté vient de l'absence, pas de
@@ -9321,7 +9382,8 @@ réflexion Haiku prête des actes au mauvais personnage). Un seul message par qu
 ligne « où en est le spectateur », les échanges précédents de l'ouverture (quatre au plus, coupés,
 **après** les sources — jamais pris pour elles), la question.
 
-**Où.** (1) **Au lecteur, film en pause** : la pilule « Une question ? » des commandes (`PlayerControls`,
+**Où.** (forme de 10.25 ; au lecteur, un bouton rond au bout de la rangée « À l'écran », avec les commandes en
+lecture comme en pause, depuis 10.27 — §138.) (1) **Au lecteur, film en pause** : la pilule « Une question ? » des commandes (`PlayerControls`,
 commun au lecteur natif et au lecteur serveur), au-dessus du titre, à gauche — loin de « Passer l'intro » et
 de l'épisode suivant —, qui paraît et part avec les commandes. Le panneau ouvert, les commandes ne se cachent
 plus (`held`, comme un menu ouvert) et n'écoutent plus le clavier (`suspended`). Pas au lecteur hors ligne
@@ -9339,7 +9401,8 @@ les reçoit pas) et ses appuis (ni pause de la surface, ni geste de la fiche). C
 en mémoire de la page seulement ; refermé, ils sont partis, et la réponse en cours s'arrête (le modèle
 avec elle). `header` : la place d'un en-tête au-dessus des échanges, remplie depuis 10.26 par une personne
 d'« À l'écran » (§138 : photo, nom, personnage ; la biographie et « Jusqu'ici » viendront dessous), avec
-`suggestions` (« Qui est … ? ») à la place des trois propositions d'office.
+`suggestions` (« Qui est … ? ») à la place des trois propositions d'office. *Depuis 10.29.2 : les seuls liens
+entre personnages de la scène, et pas de champ (plus bas).*
 
 **Il arrive et repart** (10.26 — la fiche n'avait aucun mouvement) : la colonne glisse de la droite
 (`animate-fade-in-side`), la feuille du téléphone monte (`animate-slide-up`) ; la sortie, en 0,2 s
@@ -9470,7 +9533,8 @@ une ou deux phrases sur **le personnage** d'après ce que ce compte a vu, sous l
 questions — les sources de `askSources` (`sofarSources` y ajoute la personne, prise dans la distribution de
 l'élément, jamais dans la requête) et le même filet des noms (`AnswerGate`, coupée à deux phrases et 60
 mots ; « RIEN » quand il n'y a rien à dire, jamais montré). **La coupe est le début de la tranche de cinq
-minutes** de la position (`sofarCutoff`, `SOFAR_BUCKET_S` — dix en 10.27.0 : pendant les dix premières minutes
+minutes** (forme de 10.27.1 ; posée sur un début de scène en 10.27.2, puis sur la scène en cours et ses pas de
+deux minutes en 10.30.1 — plus bas) de la position (`sofarCutoff`, `SOFAR_BUCKET_S` — dix en 10.27.0 : pendant les dix premières minutes
 d'un épisode, aucune réplique de cet épisode ne partait, `dialogue: false` au journal ; cinq depuis 10.27.1,
 consigne du propriétaire, le budget est large ; la tranche du client, `SOFAR_BUCKET_S` de `ask/client.ts`, est
 la même — un test les compare) : rien de ce qui suit ce début n'entre, un retour en arrière dans
@@ -9490,7 +9554,9 @@ la tranche ne montre rien de plus, et deux comptes au même endroit envoient les
 - **Préparé en fond** (10.27 à 10.27.1 — retiré en 10.27.2, voir plus bas) : la rangée affichée, pour les
   **trois premières personnes** de la scène. Le panneau s'ouvre tout de suite avec ce qui ne dépend pas du modèle ;
   « Jusqu'ici » montre une ligne d'attente, puis le texte (`useSofar`).
-- **L'affichage, règle du propriétaire (10.27.1).** Le panneau s'ouvre tout de suite avec ce qui ne dépend
+- **L'affichage, règle du propriétaire (10.27.1 ; depuis 10.27.2 la section ne disparaît plus, une ligne
+  discrète la remplace ; depuis 10.28.0 le reflet est remplacé par des lignes d'attente, une à la fois en
+  10.29.1).** Le panneau s'ouvre tout de suite avec ce qui ne dépend
   pas du modèle (faits, biographie, affiches — `usePersonFacts`, jamais en attente de « Jusqu'ici ») ; avec
   l'option pour cette séance, la section « Jusqu'ici » est **toujours** là, en haut, dès l'ouverture
   (`AskPersonSofar`, un composant à lui) : une ligne d'attente discrète — deux traits sur lesquels passe un
@@ -9730,7 +9796,9 @@ toucher, panneau pas encore monté, une seule demande ; le contexte préparé un
 **Nouveautés.** La page « 10.25 » (`src/lib/news/page1025.ts`), semée **en brouillon**
 (`news-seed-10.25-draft`) : rien ne s'affiche avant qu'elle soit publiée depuis Activité → Nouveautés.
 
-**Limites connues.** Les répliques ne disent pas qui parle : une question « qui a dit… » reste générale. Un
+**Limites connues** (écrites en 10.25 ; depuis 10.30 les répliques portent le nom de qui parle quand la voix est
+sûre, et les bancs sur la vraie API ont eu lieu à partir de 10.27.2 — plus bas). Les répliques ne disent pas qui
+parle : une question « qui a dit… » reste générale. Un
 mot à majuscule au milieu d'une phrase qui n'est pas un nom (« Pourquoi » dans une citation) fait rejeter une
 réponse juste — un « je ne sais pas » de trop plutôt qu'une révélation. Un compte dans une autre langue que
 les résumés de Jellyfin voit plus de rejets (un nom traduit n'est pas dans les sources, §137). Pas encore
@@ -10116,14 +10184,15 @@ retiré, en aperçu, réservé ou « deprecated » n'est pas repris ; rien n'est
 demande les deux prix saisis.
 
 **Les questions détachées (§139) et les prérequis dits.** `ASK_ENABLED` ne règle plus que les questions sur
-un titre. Deux réglages de public (`off` / `admins` / `tous`) le rejoignent : `ASK_PERSON_ENABLED` (le champ et
-les questions proposées du panneau d'une personne d'« À l'écran ») et `SOFAR_ENABLED` (« Jusqu'ici » et sa
-préparation de fond). **Vides, ils suivent `ASK_ENABLED`** (`inherits` dans le schéma, `config.ask.personAudience`
+un titre. Deux réglages de public (`off` / `admins` / `tous`) le rejoignent : `ASK_PERSON_ENABLED` (les questions
+proposées du panneau d'une personne d'« À l'écran » — le champ y était encore, retiré en 10.29.2) et
+`SOFAR_ENABLED` (« Jusqu'ici » et sa préparation — de fond à l'écriture de ceci, sur intention au bureau
+depuis 10.27.2). **Vides, ils suivent `ASK_ENABLED`** (`inherits` dans le schéma, `config.ask.personAudience`
 / `sofarAudience`) : une installation réglée avant garde exactement ce qu'elle avait, sans migration de base.
 Les deux demandent en plus les acteurs à l'écran branchés et ouverts à la session (§138) et un fournisseur
 prêt (clé, prix connu). Chaque porte est au serveur : la route des questions lit `about: "person"` et répond
 `off` selon le réglage de la question posée ; la configuration publique porte `askPersonAvailable` et
-`sofarAvailable`, que le lecteur lit pour le champ du panneau et la préparation de fond. Sans eux, le panneau
+`sofarAvailable`, que le lecteur lit pour les propositions du panneau et la préparation sur intention. Sans eux, le panneau
 d'une personne ne montre que ses faits TMDB (qui font partie des acteurs à l'écran, sans réglage à part). La
 carte « Acteurs à l'écran » (Connexions) renvoie au guide de déploiement du service (`xray/README.md` sur le
 dépôt) ; elle dit que l'analyse est gratuite et locale.

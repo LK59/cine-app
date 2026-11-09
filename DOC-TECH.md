@@ -92,7 +92,8 @@ flowchart LR
         BZ["Bazarr<br/>subtitles"]
         JK["Jackett<br/>indexers"]
         META["TMDB · OMDb · MDBList<br/>metadata, images, ratings"]
-        AI["AI provider<br/>OpenAI-compatible · Anthropic · Google<br/>generated subtitles"]
+        AI["AI provider<br/>Anthropic · OpenAI · Google<br/>generated subtitles · description search<br/>Précédemment · questions · Jusqu'ici"]
+        XR["laterna-xray — optional sidecar<br/>who is on screen, who speaks<br/>local, reads the media read-only"]
         WP["Web Push services<br/>VAPID"]
     end
 
@@ -121,6 +122,7 @@ flowchart LR
     LIB --> JK
     LIB --> META
     LIB --> AI
+    LIB -->|"orders, scenes, voices — Bearer key"| XR
     LIB -->|"web-push"| WP
     WP -.->|"push event"| SW
     CCP -.->|"Cast load request"| TV
@@ -146,6 +148,19 @@ otherwise the whole file streamed — and writes them to `data/repliques.db`, a 
 with an FTS5 index on the folded text. Every file read passes a gate that stops for a pause and
 waits while anyone is watching (Jellyfin sessions, the stream relay, the playback beat). The
 cinema search queries it through `/api/repliques`, after and apart from the title search.
+
+**Actors on screen** ([DECISIONS §138](DECISIONS.md), `src/lib/xray/`, off by default) are computed by a
+separate service, `laterna-xray`, with its own image and its own SQLite: it decodes each file with
+ffmpeg, recognises faces against TMDB photos and names voices from those faces. Laterna orders an
+analysis when a playback starts and from a background scheduler (only while nothing plays), and the
+player reads the scenes once per item (`/api/player/xray/[itemId]`, 200 for every absence). The
+service, its API contract and its measurements: [xray/README.md](xray/README.md).
+
+**AI features** ([DECISIONS §135, §137, §139, §140](DECISIONS.md)) — description search,
+« Précédemment », questions about a title or a person, « Jusqu'ici » — share the generated subtitles'
+provider, key and monthly ceiling. Their sources are built on the server from what the account has
+watched only (`src/lib/ask/`, `src/lib/recap/`), and every answer passes the same name check before it
+is shown.
 
 **Offline downloads** ([DECISIONS §109](DECISIONS.md), `src/lib/offline/`, beta) do not read media
 files: Jellyfin transcodes a lighter version through its API (`/Videos/{id}/stream.mp4`, fragmented

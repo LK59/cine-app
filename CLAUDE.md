@@ -294,11 +294,22 @@ paid call, with `modelMs`), titles recognised, results kept and how many are in 
 account, series, episode and minute, `source` (`dialogues` or `résumés`), `status` (`ok` / `gardé` — the
 previous text kept — / `officiel` — one episode's summary shown as is — / `rejeté` — with the `names` the
 sources did not contain — / `vide` / `erreur` / `limite`), tokens. Never the text, which is in `series_recaps`.
-Since 2026-11-09 it also has one `kind: "question"` line per « Poser une question » (DECISIONS §139, `logAskQuestion`):
-account, device, item, `where` (`fiche` / `lecteur`), the ten-minute bucket of the position, `ms`/`firstMs`, tokens,
-`dialogue`, `status` (`ok` / `rejeté` / `limite` / `erreur` / `indisponible`). Never the question nor the answer. Its use is measured in `startup.log` (`kind: "précédemment"`, `logRecapView`):
+Its use is measured in `startup.log` (`kind: "précédemment"`, `logRecapView`):
 `affiché` each time a sheet shows one (series, episode, `ia` or `officiel`, `idleMin`), `synopsis` when
 the viewer switches to the synopsis.
+Since 2026-11-09 `recherche.log` also has one `kind: "question"` line per « Poser une question » (DECISIONS §139,
+`logAskQuestion`): account, device, item, `where` (`fiche` / `lecteur`), the ten-minute bucket of the position,
+`ms`/`firstMs`/`firstWordMs`, `contextMs`/`ttftMs`, `ctx` (`prêt` / `construit`), tokens with cache writes/reads,
+`dialogue`, `meta`, `status` (`ok` / `rejeté` / `limite` / `erreur` / `indisponible` / `abandon`) — and
+one `kind: "jusquici"` line per « Jusqu'ici » (`logJusquici`): person, `bucket` (five-minute mark) and `cutS` (the
+cut actually used, the start of the current scene), `cache` (`partagé` / `compte` / `nouveau`), the same timings,
+`status` (adding `vide`, `attente` — subtitles not ready —, `tôt` — a film before 10 min —, `attente-erreur` —
+back-off after a transient failure, with `waitBy`/`waitLeftS`). Never the question, the answer nor the text.
+`startup.log` also receives, on touch screens, `kind: "clavier"` lines (the ask panel's on-screen keyboard: what
+iOS reported and where the input was placed) and `kind: "xray-ui"` lines (the « À l'écran » row and the person
+panel: computed and *effective* opacity, what `elementFromPoint` finds on top, how the panel closed) — both
+through `/api/viewport-diag`, bounded per session; they exist because a WebKit painting fault left the panel
+invisible and nothing else could see it.
 Its format is versioned
 (`PERSISTED_CACHE_SCHEMA`), and `persistentCache-schema.test.ts` fails when the kept responses'
 types change without the version moving.
@@ -485,6 +496,9 @@ the title sheet): ordered `normal`, fed even during playback, animation still re
 service's queue holds nothing but our own orders, so it never overtakes a viewer's. One item's TMDB or
 Jellyfin error fails that item, never the queue; a failed library read backs off (15 min, 1 h, 6 h); with
 every tier paused, or during playback with nothing forced, nothing is read; it never runs under `next dev`.
+Within a tier a series goes in episode order, and a series whose plan is all done is relabelled once by the
+service (its first episodes gain the whole series' memory). The allowed folders are `XRAY_LIBRARY_ROOTS`
+(`.env` only). The same page shows the quality of the names per series and resets a series' memory.
 
 **Books are an option, off by default, kept apart from the cinema** (DECISIONS §127–§128, since
 28/10/2026): `BOOKS_ENABLED`, `BOOKS_REQUESTS_ENABLED`, `BOOKS_GOOGLE_ENRICH` + `GOOGLE_BOOKS_API_KEY`.
@@ -532,7 +546,30 @@ scene; Laterna only commands and reads it (`src/lib/clients/xray.ts`, `src/lib/x
 log's `start` line — the only one all three players send, with the item and the position: the item
 goes out `high` from there, the next episode `normal`, fire-and-forget, one order per item. The player's
 read, `GET /api/player/xray/[itemId]`, answers 200 with `scenes: []` and a `status` for every absence —
-a title hidden from the account reads exactly like one never analysed. No viewer screen reads it yet.
+a title hidden from the account reads exactly like one never analysed. `XRAY_ENABLED` is an audience
+(`off` / `admins` / `tous`, `featureAudience.ts`). The viewer screens: the « À l'écran » row of
+`PlayerControls` (`PlayerOnScreen`, with the controls in play and pause; scenes read once per item, the
+current one found in memory) and the person panel (`AskPanel` + `AskPersonHeader`: TMDB facts through
+`src/lib/tmdbPerson.ts`, the cinema's own person path). **No mask or `background-clip: text` on anything that
+carries `backdrop-filter` children** — on iOS it left the row and panel unpainted (DECISIONS §138, 10.29.1).
+`xrayAvailable` / `askAvailable` / `askPersonAvailable` / `sofarAvailable` are read from the public config
+with `followOnlyOptions` and absent from the player fingerprints' doubles: the fingerprints must not change
+when touching these features.
+
+**AI features share one provider, one key and one monthly ceiling** (DECISIONS §135, §137, §139, §140):
+generated subtitles, description search, « Précédemment », questions about a title or a person, « Jusqu'ici »
+— Anthropic, OpenAI or Google (`subtitleGen/providers/`), every call written to `ai_spend_days` /
+`subtitle_gen_spend` at the model's price (`recordAiSpend`, interrupted calls included), and
+`aiBudgetReached` stops each one cleanly. Only Claude Haiku has been measured on a bench. The rules live
+server-side (`src/lib/ask/`): the sources contain only what the account has watched, and `AnswerGate`
+withholds, word by word, any name the sources do not contain, backstage words and player times, and
+strips Markdown.
+« Jusqu'ici » texts are keyed by a SHA-256 of exactly what is sent (model, `SOFAR_VERSION`, prompt, message):
+the key follows the prompt and the message by itself, so **bump `SOFAR_VERSION` when anything else that shaped
+a kept text changes** (the filters, a rule of the cut), or texts written under the old rules are served; its cut
+(`sofarCut.ts`) is shared by client and server and must stay identical on both. `ASK_ENABLED`,
+`ASK_PERSON_ENABLED`, `SOFAR_ENABLED` are audiences (the last two follow the first when empty); share links
+get no AI feature whatever they say (`aiAudienceAllows`).
 
 **The player** has its own reference: read `DOC-TECH.md` before touching `src/lib/webcodecs/`,
 and `docs/cycle-de-vie-lecteur.md` before touching `ExperimentalPlayerHost`, `PlayerHost` or the

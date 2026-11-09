@@ -83,10 +83,19 @@ features that depend on them (downloads, requests, missing episodes) are simply 
 
 ## Actors on screen
 
-An optional companion service, `laterna-xray`, recognises the actors in the picture scene by scene
-(its installation: `xray/README.md`). **Off by default.** When on, each playback asks it to analyse
-the title being watched, from the current position, then the next episode of a series; the cast of
-that episode or film and several photos per person come from TMDB. Nothing is shown to viewers yet.
+An optional companion service, `laterna-xray`, recognises the actors in the picture scene by scene,
+and who is speaking (its installation, contract and measurements: `xray/README.md`). **Off by
+default.** When on, each playback asks it to analyse the title being watched, from the current
+position, then the next episode of a series; a background scheduler works through the rest of the
+library while nothing is playing (Management → Configuration → *On-screen cast*: progress, pause,
+a priority list, the quality of the names per series). The cast of that episode or film and several
+photos per person come from TMDB.
+
+Viewers see an *On screen* row with the player's controls (in play and in pause): the people
+recognised in the current scene, each opening a panel with the actor's TMDB facts, a short
+biography and their other titles in the library. The AI features built on it (« So far », the
+questions about a person) have their own settings, under *AI features* below. Share links see the
+row and the panel without the library titles, and never any AI feature.
 
 Set in the app: **Management → Configuration → Connections**, *Actors on screen* card, whose
 *Test the connection* button shows the service's model, whether it is ready, and hardware decoding.
@@ -96,6 +105,7 @@ Set in the app: **Management → Configuration → Connections**, *Actors on scr
 | `XRAY_ENABLED` | `off` | Who the analysis is on for: `off`, `admins` (analyses ordered only from administrators' playback, the player reads `off` for everyone else) or `tous` (everyone). `true` and `false` from before still read as `tous` and `off`. Without an address and a key, nothing is sent. Free: it runs on your own server, no AI provider is called. The person panel's TMDB facts (biography, the person's titles in the library) are part of it. Its questions and « So far » are separate settings (`ASK_PERSON_ENABLED`, `SOFAR_ENABLED`, below). Deployment guide: `xray/README.md`. |
 | `XRAY_URL` | `http://laterna-xray:8000` | The service's address, from inside the container (same Docker network). |
 | `XRAY_API_KEY` | — | The key the service was started with (its own `XRAY_API_KEY`), sent as `Authorization: Bearer`. |
+| `XRAY_LIBRARY_ROOTS` | `/media/movies,/media/tv` | `.env` only. The folders, as Jellyfin sees them, whose files may be analysed — comma-separated. Anything else (downloads, seeds, books, a neighbour such as `/media/movies-seeds`) is never ordered, even if Jellyfin lists it. Changing it re-checks the items skipped as outside. |
 
 ## Playback
 
@@ -132,9 +142,9 @@ blocks it, and the subtitle jobs.
 | `SUBTITLE_GEN_ENABLED` | `true` | `false` turns the feature off while keeping the key. |
 | `DESCRIBE_SEARCH_ENABLED` | `false` | Search by description: a sentence describing a film or series (« the film where a man relives the same day ») finds it, in the library or not. Uses the provider and key above. Each new sentence is one request, well under a tenth of a cent with Claude Haiku; counted in the monthly ceiling. |
 | `RECAP_ENABLED` | `false` | « Previously »: on the page of a series in progress, a short recap of the latest events the account watched — from the official episode summaries and the subtitles of the last ten minutes watched, never beyond — prepared in the background for every account that uses the app, three hours after it stops watching the series (before that, the page keeps the synopsis). A single finished episode shows its official summary as is. Each account can turn it off (Account → Interface). Uses the provider and key above, about a tenth of a cent per text with Claude Haiku; counted in the monthly ceiling. |
-| `ASK_ENABLED` | `off` | Who « Ask a question » is on for: `off`, `admins` (administrators only — the route answers « off » to everyone else) or `tous` (everyone, share links included on their own title). The feature: with a film paused, or from a film or series page, a short streamed answer to a question about the title — built only from what the account has already watched (the synopsis and cast, the summaries of finished episodes, the subtitles up to the current position), never beyond. An answer naming anything the sources do not contain is withheld. 30 questions an hour and 100 a day per account; one line per question in `recherche.log`, never its text. Not offered on Fire TV. Uses the provider and key above (streamed sentence by sentence with Anthropic, shown all at once with OpenAI and Google); counted in the monthly ceiling. Since 09/11/2026 it covers questions about a **title** only. |
-| `ASK_PERSON_ENABLED` | *(empty: same as `ASK_ENABLED`)* | Who the questions asked from the panel of an « On screen » actor are on for (the input and the suggested questions): `off`, `admins`, `tous`. Also needs `XRAY_ENABLED`. Left empty, it follows `ASK_ENABLED`, which used to cover them — an installation set before keeps exactly what it had. |
-| `SOFAR_ENABLED` | *(empty: same as `ASK_ENABLED`)* | Who « So far » is on for — two sentences in an actor's panel on what their character has done up to the current position, prepared in the background for the first three people of the scene: `off`, `admins`, `tous`. Also needs `XRAY_ENABLED`. Off: no « So far » section and no background preparation. Left empty, it follows `ASK_ENABLED`. |
+| `ASK_ENABLED` | `off` | Who « Ask a question » about a **title** is on for: `off`, `admins` (administrators only — the route answers « off » to everyone else) or `tous` (every household account; share links never get any AI feature). The feature: a round button at the end of the player's *On screen* row (with the controls, in play or in pause), or on a film or series page; a short answer, streamed word by word, to a question about the title — built only from what the account has already watched (the synopsis and cast, the summaries of finished episodes, the subtitles up to the current position, named by speaker once the voice analysis of that file is complete), never beyond. An answer naming anything the sources do not contain is withheld. 60 questions an hour and 300 a day per account; one line per question in `recherche.log`, never its text. Not offered on Fire TV. Uses the provider and key above (streamed with Anthropic, shown all at once with OpenAI and Google); counted in the monthly ceiling. |
+| `ASK_PERSON_ENABLED` | *(empty: same as `ASK_ENABLED`)* | Who the suggested questions in the panel of an « On screen » actor are on for: `off`, `admins`, `tous`. The panel has no free input: it offers at most two « How is X connected to Y? » with the other characters of the scene. Also needs `XRAY_ENABLED`. Left empty, it follows `ASK_ENABLED`, which used to cover them — an installation set before keeps exactly what it had. |
+| `SOFAR_ENABLED` | *(empty: same as `ASK_ENABLED`)* | Who « So far » is on for — one or two sentences at the top of an actor's panel, starting with the character's name, on the latest thing that concerns them in what the account has watched: `off`, `admins`, `tous`. Written on demand when the panel opens (on a computer, also when the pointer rests 300 ms on the person), cut at the start of the current scene, then kept 30 days under a fingerprint of exactly what was sent — so two accounts at the same place read the same text, and a text already written costs nothing. 200 texts an hour per account. Also needs `XRAY_ENABLED`. Left empty, it follows `ASK_ENABLED`. |
 
 ## Dialogue search
 
