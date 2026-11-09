@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse, Response
 
 from . import decode
 from .config import VERSION, settings
+from .asd import AsdModels
 from .voice import VoiceModels
 from . import memory, relabel
 from .db import Database
@@ -39,8 +40,10 @@ def quality(db) -> dict:
     """La qualité des noms, par série et pour toute la bibliothèque (les films ensemble) : part du temps de
     parole nommée, voix indécises et en désaccord, part du temps de visage nommée. Les séries les moins
     bien nommées d'abord. Seulement les éléments finis."""
-    rows = db.q("""SELECT i.item_id, i.series_id, r.stats_json AS fstats, v.stats_json AS vstats, v.complete AS vdone
+    rows = db.q("""SELECT i.item_id, i.series_id, r.stats_json AS fstats, v.stats_json AS vstats, v.complete AS vdone,
+                          a.stats_json AS astats
                    FROM items i LEFT JOIN results r ON r.item_id = i.item_id LEFT JOIN voice_results v ON v.item_id = i.item_id
+                   LEFT JOIN asd_runs a ON a.item_id = i.item_id AND a.status = 'done'
                    WHERE i.status='done'""")
     groups: dict = {}
     for r in rows:
@@ -48,7 +51,8 @@ def quality(db) -> dict:
         v = json.loads(r["vstats"]) if r["vstats"] else {}
         g = groups.setdefault(r["series_id"], {"items": 0, "withVoices": 0, "speech": [], "faceT": 0.0, "faceN": 0.0,
                                                 "voicesNamed": 0, "voicesUndecided": 0, "voicesConflict": 0,
-                                                "itemsWithConflict": 0})
+                                                "itemsWithConflict": 0, "voicesAsd": 0, "asdItems": 0, "asdTried": 0,
+                                                "asdResolved": 0, "asdCpu": 0.0})
         g["items"] += 1
         if r["vdone"] and v:
             g["withVoices"] += 1
@@ -57,6 +61,13 @@ def quality(db) -> dict:
             for k in ("voicesNamed", "voicesUndecided", "voicesConflict"):
                 g[k] += int(v.get(k) or 0)
             g["itemsWithConflict"] += 1 if v.get("voicesConflict") else 0
+            g["voicesAsd"] += int(v.get("voicesAsd") or 0)
+        a = json.loads(r["astats"]) if r["astats"] else None
+        if a:
+            g["asdItems"] += 1
+            g["asdTried"] += int(a.get("voicesTried") or 0)
+            g["asdResolved"] += int(a.get("voicesResolved") or 0)
+            g["asdCpu"] += float(a.get("cpuSeconds") or 0.0)
         if f.get("facesNamed") is not None:
             g["faceT"] += float(f.get("faceSeconds") or 0.0)
             g["faceN"] += float(f["facesNamed"]) * float(f.get("faceSeconds") or 0.0)
@@ -66,10 +77,16 @@ def quality(db) -> dict:
                 "speechNamed": round(sum(g["speech"]) / len(g["speech"]), 4) if g["speech"] else None,
                 "facesNamed": round(g["faceN"] / g["faceT"], 4) if g["faceT"] > 0 else None,
                 "voicesNamed": g["voicesNamed"], "voicesUndecided": g["voicesUndecided"],
-                "voicesConflict": g["voicesConflict"], "itemsWithConflict": g["itemsWithConflict"]}
+                "voicesConflict": g["voicesConflict"], "itemsWithConflict": g["itemsWithConflict"],
+                # Lecture des lèvres (11/2026) : voix nommées par elle, éléments lus, voix tentées et résolues,
+                # calcul dépensé.
+                "voicesAsd": g["voicesAsd"],
+                "asd": {"items": g["asdItems"], "tried": g["asdTried"], "resolved": g["asdResolved"],
+                        "cpuSeconds": round(g["asdCpu"], 1)}}
 
     allg = {"items": 0, "withVoices": 0, "speech": [], "faceT": 0.0, "faceN": 0.0, "voicesNamed": 0,
-            "voicesUndecided": 0, "voicesConflict": 0, "itemsWithConflict": 0}
+            "voicesUndecided": 0, "voicesConflict": 0, "itemsWithConflict": 0, "voicesAsd": 0, "asdItems": 0,
+            "asdTried": 0, "asdResolved": 0, "asdCpu": 0.0}
     for g in groups.values():
         for k in allg:
             allg[k] = allg[k] + g[k]
@@ -90,7 +107,11 @@ def _voice_state(db, item_id: str) -> dict | None:
     if row is None:
         return None
     st = json.loads(row["stats_json"]) if row["stats_json"] else {}
-    return {"complete": bool(row["complete"]), **{k: st[k] for k in ("voicesNamed", "voicesUndecided", "voicesConflict", "voicesSmall", "speechNamed") if k in st}}
+    out = {"complete": bool(row["complete"]), **{k: st[k] for k in ("voicesNamed", "voicesUndecided", "voicesConflict", "voicesSmall", "speechNamed", "voicesAsd") if k in st}}
+    a = db.one("SELECT status, stats_json FROM asd_runs WHERE item_id=?", (item_id,))
+    if a is not None:
+        out["asd"] = dict(json.loads(a["stats_json"]) if a["stats_json"] else {}, status=a["status"])
+    return out
 
 
 def create_app(start_background: bool = True, db: Database | None = None, models: ModelManager | None = None,
@@ -104,7 +125,8 @@ def create_app(start_background: bool = True, db: Database | None = None, models
         mm = models or ModelManager(settings.model, settings.models_dir)
         guard = GpuGuard()
         vm = voice_models or VoiceModels(settings.voice_model, settings.models_dir, settings.voice_enabled)
-        state.update(db=database, store=store, models=mm, guard=guard, voice=vm)
+        am = AsdModels(settings.models_dir, settings.asd_enabled and settings.voice_enabled)
+        state.update(db=database, store=store, models=mm, guard=guard, voice=vm, asd=am)
         if not settings.api_key:
             log.error("XRAY_API_KEY vide : toutes les requêtes seront refusées")
         if start_background:
@@ -112,8 +134,9 @@ def create_app(start_background: bool = True, db: Database | None = None, models
 
             mm.start()
             vm.start()
+            am.start()
             guard.start()
-            Worker(database, store, mm, guard, vm).start()
+            Worker(database, store, mm, guard, vm, am).start()
             # Premier essai du périphérique tout de suite : /health le dit dès le démarrage.
             decode.vaapi_available(force=True)
         yield
@@ -144,7 +167,7 @@ def create_app(start_background: bool = True, db: Database | None = None, models
             # Ajout compatible (11/2026) : où et en quelle précision tourne l'inférence.
             "inference": _inference(mm),
             # Ajout compatible (11/2026) : « qui parle » — modèle d'empreinte de voix, détection de parole.
-            "voice": state["voice"].status(),
+            "voice": dict(state["voice"].status(), asd=state["asd"].status()),
             "queue": {"pending": store.pending_count(), "running": store.running_id},
         }
 

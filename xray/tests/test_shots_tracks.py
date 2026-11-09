@@ -237,3 +237,31 @@ def test_scene_courte_toujours_fondue_et_scene_normale_intacte():
     # Une scène de 150 s n'est pas touchée ; la règle des 10 s tient toujours.
     shots = _decor_uniforme(30, 5.0)
     assert [(s[0].start, s[-1].end) for s in group_scenes(shots)] == [(0.0, 150.0)]
+
+
+def _rafale(people_burst, people_after):
+    """Un vestiaire de 60 s (A, B : deux personnes), puis une conférence de presse montée en plans de 2 s
+    aux couleurs changeantes (chacun une scène courte), puis 30 s dans un troisième décor."""
+    A, B = h(1), (h(1) * 3 + h(2)) / 4
+    shots = [ShotInfo(i * 6.0, (i + 1) * 6.0, A if i % 2 == 0 else B, {1} if i % 2 == 0 else {2}) for i in range(10)]
+    t = 60.0
+    for k in range(12):
+        shots.append(ShotInfo(t, t + 2.0, h(40 + k), people_burst(k)))
+        t += 2.0
+    shots += [ShotInfo(t, t + 15.0, h(9), people_after), ShotInfo(t + 15.0, t + 30.0, h(9), people_after)]
+    return shots
+
+
+def test_rafale_d_un_autre_lieu_gardee():
+    # Ted Lasso S01E09 : la conférence de presse (d'autres personnes, plans courts sans lien de couleur)
+    # n'est plus fondue morceau par morceau dans le vestiaire.
+    spans = [(s[0].start, s[-1].end) for s in group_scenes(_rafale(lambda k: {10 + k % 3}, {20}))]
+    assert spans == [(0.0, 60.0), (60.0, 84.0), (84.0, 114.0)]
+
+
+def test_rafale_des_memes_personnes_fondue():
+    # Les mêmes personnes que le vestiaire (un champ-contrechamp aux couleurs qui sautent) : comme avant,
+    # fondue dans ses voisines. Sans visage non plus : rien ne dit que le lieu a changé.
+    for people in (lambda k: {1 + k % 2}, lambda k: set()):
+        spans = [(s[0].start, s[-1].end) for s in group_scenes(_rafale(people, {20}))]
+        assert (60.0, 84.0) not in spans and spans[0][0] == 0.0 and spans[-1][1] == 114.0

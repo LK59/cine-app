@@ -36,7 +36,7 @@ from .results import Assembler, ShotRow, TrackRow, build
 from .pipeline import ShotFaces
 from .shots import ShotSplitter, frames_to_sample, pick_indices
 from .timing import StageClock, job_stats, line
-from . import relabel, voicejob
+from . import asdjob, relabel, voicejob
 
 log = logging.getLogger("xray.worker")
 
@@ -94,7 +94,7 @@ def _prefetch(gen, depth: int = 48, clock: StageClock | None = None):
 
 
 class Worker:
-    def __init__(self, db: Database, store: JobStore, models: ModelManager, guard, voice_models=None):
+    def __init__(self, db: Database, store: JobStore, models: ModelManager, guard, voice_models=None, asd_models=None):
         self.db = db
         self.store = store
         self.models = models
@@ -105,6 +105,9 @@ class Worker:
         self.voice_models = voice_models
         self.voice_engine = None
         self.voice_stage: voicejob.VoiceStage | None = None
+        # Lecture des lèvres (11/2026, `asdjob.py`) : le réseau, chargé à la première voix indécise.
+        self.asd_models = asd_models
+        self.asd_net = None
 
     def _voice(self) -> "voicejob.VoiceStage | None":
         vm = self.voice_models
@@ -146,7 +149,7 @@ class Worker:
             row = self.store.next_job()
             # Les voix d'un ordre fini avant l'étape des voix : le son seul, avant tout ordre `low` (bien
             # moins cher que l'image), jamais devant un ordre `normal` ou `high`.
-            if (row is None or row["priority"] >= 2) and (self._relabel() or self._voice_only()):
+            if (row is None or row["priority"] >= 2) and (self._relabel() or self._voice_only() or self._asd()):
                 continue
             if row is None:
                 self.store.wait_for_work(10.0)
@@ -179,6 +182,39 @@ class Worker:
                 self.db, row, self.voice_engine, model, self._presence_from_db, self._skips,
                 lambda: self.store.cancel.is_set() or self.db.one(
                     "SELECT 1 FROM items WHERE status='queued' AND priority < 2 LIMIT 1") is not None)
+        finally:
+            self.store.running_id = None
+            self.store.cancel.clear()
+        return True
+
+    def _asd(self) -> bool:
+        """La lecture des lèvres d'un élément aux voix complètes (voir `asdjob.py`) : après le son seul et
+        les renommages, jamais devant un ordre `normal` ou `high` (rend la main entre deux fenêtres)."""
+        am, vm = self.asd_models, self.voice_models
+        if am is None or not am.enabled or not am.ready or vm is None or not vm.enabled or self.engine is None:
+            return False
+        row = asdjob.next_item(self.db, vm.name)
+        if row is None:
+            return False
+        if self.asd_net is None:
+            try:
+                self.asd_net = am.load(settings.asd_threads)
+            except Exception as e:
+                am.error = f"chargement de Light-ASD impossible : {e}"
+                am.ready = False
+                log.exception("chargement de Light-ASD")
+                return False
+        self.store.running_id = row["item_id"]
+        try:
+            built = relabel.rebuild_faces(self.db, row, row["model"] or self.models.name)
+            asdjob.run_item(self.db, row, self.engine, self.asd_net, vm.name, built,
+                            lambda: self.store.cancel.is_set() or self.db.one(
+                                "SELECT 1 FROM items WHERE status='queued' AND priority < 2 LIMIT 1") is not None,
+                            guard=self.guard, cancel=self.store.cancel)
+        except Exception as e:
+            # Une panne ne se répète pas en boucle : le passage est noté fait, avec l'erreur.
+            log.exception("[xray] %s : lecture des lèvres en échec", row["item_id"])
+            asdjob._save_run(self.db, row, vm.name, "done", {}, {"error": f"{type(e).__name__}: {e}"[:300]})
         finally:
             self.store.running_id = None
             self.store.cancel.clear()
@@ -218,7 +254,8 @@ class Worker:
             # mêler, dans un même résultat, des tronçons des deux versions.
             log.info("[xray] %s : tronçons de la version %d oubliés, reprise à zéro", item_id, row["version"])
             with self.db.tx() as c:
-                for table in ("chunks", "shots", "tracks", "results", "voice_regions", "voice_windows", "voice_results"):
+                for table in ("chunks", "shots", "tracks", "results", "voice_regions", "voice_windows", "voice_results",
+                              "asd_votes", "asd_runs"):
                     c.execute(f"DELETE FROM {table} WHERE item_id=?", (item_id,))
                 c.execute("UPDATE items SET stats_json=NULL WHERE item_id=?", (item_id,))
         self.store.set_status(item_id, "running", attempts=row["attempts"] + 1, model=model, version=RESULT_VERSION)

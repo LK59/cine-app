@@ -188,7 +188,11 @@ nettement. Les chiffres qui fixent ces bandes sont dans [Calibrage](#calibrage).
 Un plan rejoint la scène en cours s'il ressemble par ses couleurs à l'un de ses quatre derniers
 plans — un dialogue filmé en champ-contrechamp alterne A, B, A, B — ou s'il montre quelqu'un
 qu'on vient d'y voir dans un décor encore voisin. Une scène de moins de dix secondes est fondue
-dans sa voisine la plus proche. Une scène de plus de trois minutes est recoupée à sa frontière de
+dans sa voisine la plus proche — sauf une **rafale** : plusieurs scènes courtes qui se suivent, dix
+secondes ensemble au moins, dont les personnes sont pour 60 % au moins absentes de la minute voisine
+de chaque côté, restent une scène (un autre lieu, monté en plans brefs que les couleurs ne relient pas).
+*Ted Lasso* S01E09 : la conférence de presse (320–349 s) était fondue morceau par morceau dans le
+vestiaire (238–320 s), les deux décors, sombres, se ressemblant à 0,9 par les couleurs. Une scène de plus de trois minutes est recoupée à sa frontière de
 plans la plus faible (couleurs les moins semblables, de préférence là où les personnes changent du
 tout au tout), sans laisser de morceau de moins de 30 s : un décor uniforme — des urgences toutes
 en bleu-vert — enchaînait sinon des scènes de douze minutes. Pour chaque scène, les personnes
@@ -371,6 +375,63 @@ les **photos** avec une marge de 0,10 et 5 s de présence, une voix nommée par 
 `GET /series/{id}/memory` liste les contributions ; `POST /series/{id}/memory/reset` les efface puis
 renomme la série. L'ancienne `series_faces` est reprise une fois comme une contribution `legacy`.
 
+### Lecture des lèvres
+
+Le contraste avec les visages ne départage pas deux personnes toujours filmées ensemble : leur
+présence est la même pendant les deux voix. Après les voix, à basse priorité, le service regarde **qui
+bouge les lèvres** — seulement là où cela peut servir, car c'est cher ([`app/asdjob.py`](app/asdjob.py)) :
+
+1. **Quelles voix** : les voix indécises (au seuil du milieu) d'au moins 4 morceaux, ni nommées ni en
+   désaccord. Leurs **candidats** : les deux ou trois personnes les plus présentes pendant elles (15 %
+   au moins). Une voix sans candidat à l'image (téléphone, narration) n'est pas lue, ni un morceau où
+   plus de quatre personnes sont à l'image (une foule), ni une voix déjà nommée.
+2. **Quels instants** : dix de ses morceaux au plus où un candidat est bien visible (la moitié du
+   morceau), à 3 s au moins l'un de l'autre, élargis de 0,4 s, voisins joints (12 s au plus).
+3. **Chaque fenêtre** est décodée à 25 images par seconde **avec son son**, dans le même ffmpeg, sans
+   sauter d'image (sur l'iGPU quand il s'y prête et que Jellyfin ne s'en sert pas). Visages détectés
+   une image sur cinq par le détecteur de l'analyse (32 px au moins), suivis par recouvrement, boîtes
+   interpolées ; chaque piste prend le nom du groupe de visages nommé le plus proche (0,30).
+   **Light-ASD** note chaque image de chaque piste (MFCC du son, visage en niveaux de gris 112×112).
+4. **Un vote par morceau** : la piste la plus « parlante » (note moyenne), gardé en base par instants
+   (`asd_votes`).
+5. **Les voix sont refaites** : une voix encore sans nom prend celui que ses votes désignent — 3 votes
+   au moins, 70 % des votes exprimés, un vote comptant si la note du gagnant est positive. **Jamais
+   contre la mémoire de la série** : si elle préfère nettement quelqu'un d'autre (0,1 de cosinus), la
+   voix reste sans nom (`conflict`). Les segments ainsi nommés portent `via: "asd"`. Une voix nommée
+   par la lecture des lèvres ne nourrit pas la mémoire (seules les voix nommées par les visages le font).
+
+Les votes sont gardés à travers les renommages (`relabel`) : ils sont rattachés aux morceaux du moment
+par leurs instants. **Plafond** : `XRAY_ASD_BUDGET_S` secondes de processeur par élément (ffmpeg
+compris, 600 par défaut) ; au-delà, ce qui est lu compte, le reste reste indécis. Entre deux fenêtres,
+l'ouvrier cède la place à un ordre `normal` ou `high` et reprend plus tard où il en était. Le bilan est
+dans `/items/{id}` (`voices.asd` : voix tentées, nommées, indécises avant et après, votes, calcul) et
+dans `/quality` (`voicesAsd`, `asd`).
+
+**Petites voix** (même date) : une voix de moins de 6 morceaux ne garde un nom qu'avec une confiance
+de 0,75 au moins — tous les avis d'accord, et une voix qui ressemble à celle de la personne. Une voix
+de 3 morceaux mêlant deux personnes (*Ted Lasso* S01E09, 840 s et 1675 s) était nommée à 0,667.
+
+**Mesures** (10/11/2026, copie de la base de production, mêmes vérités de terrain et même règle
+d'alignement que plus haut ; mémoire de la série telle qu'en production pour *Ted Lasso*) :
+
+| | *Ted Lasso* E08 | *MacGyver* E06 | *Bullet Train* | Ensemble | Hors champ nommés |
+|---|---|---|---|---|---|
+| avant (voix v1) | 88,5 % / 94,8 % | 65,3 % / 97,5 % | 67,9 % / 100 % | 75,7 % / 96,4 % | 1 / 14 |
+| petites voix | 88,0 % / 95,1 % | 64,8 % / 97,5 % | 67,9 % / 100 % | 75,3 % / 96,5 % | 1 / 14 |
+| + lecture des lèvres | 88,0 % / 95,1 % | 64,8 % / 97,5 % | **75,5 % / 100 %** | **76,2 % / 96,5 %** | 1 / 14 |
+
+Les 10 répliques nommées par la lecture des lèvres sont toutes justes ; une note de vote abaissée à
+−0,5 nommait 9 voix de téléphone de plus — le seuil reste à 0. Sur *Ted Lasso* et *MacGyver*, les voix
+qui restent indécises sont pour l'essentiel **des mélanges** (une voix de 27 morceaux dont les votes se
+partagent entre deux personnes) : les votes refusent, à raison, de les nommer. Lire plus de voix (seuil
+de 3 morceaux, 15 morceaux par voix) ne nomme rien de plus. *Ted Lasso* S01E09 : 14 voix indécises
+avant, 20 avec la règle des petites voix (six petites voix perdent un nom peu sûr), 19 après la lecture.
+
+**Coût** (i7-8700, 4 fils pour les visages, 2 pour Light-ASD, décodage sur l'iGPU) : *Ted Lasso* E08
+35 s de calcul (3 voix, 24 s de vidéo lue), *MacGyver* 28 s, *Bullet Train* 162 s (11 voix, 133 s de
+vidéo), *Ted Lasso* E09 13 s — 1,2 à 1,4 s de calcul par seconde de vidéo lue, loin du plafond. Light-ASD
+seul : 2,5 ms par image et par visage.
+
 ### Limites
 
 - Une voix nommée suppose que la personne soit **à l'image** quand elle parle, plus que les autres :
@@ -378,7 +439,9 @@ renomme la série. L'ancienne `series_faces` est reprise une fois comme une cont
   partenaire, reste souvent sans nom — c'est voulu.
 - Un échange rapide sans silence peut tomber dans un même morceau ; la coupe aux changements de voix en
   rattrape la plupart, pas toutes. Les répliques à deux voix ne sont jamais nommées par Laterna.
-- Les voix trop courtes (moins de 3 morceaux) ne sont jamais nommées.
+- Les voix trop courtes (moins de 3 morceaux) ne sont jamais nommées ; de 3 à 5, seulement avec une
+  confiance de 0,75.
+- La lecture des lèvres ne nomme qu'une voix entière : une voix qui mêle deux personnes reste indécise.
 - La version originale, prise de son de tournage, se regroupe moins bien qu'un doublage de studio.
 
 ---
@@ -449,12 +512,21 @@ dans le volume (`models/buffalo_l/int8/`). Cela prend quelques minutes, une fois
 | Détection de parole | `silero_vad.onnx` (v6.2) | [snakers4/silero-vad](https://github.com/snakers4/silero-vad) | MIT |
 | Empreinte de voix, `XRAY_VOICE_MODEL=wespeaker_r34` *(défaut)* | `voxceleb_resnet34_LM.onnx` | [Wespeaker/wespeaker-voxceleb-resnet34-LM](https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM) | **CC BY 4.0** |
 | Empreinte de voix, `XRAY_VOICE_MODEL=campplus_en` | `3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx` | [3D-Speaker CAM++](https://github.com/modelscope/3D-Speaker), export ONNX de [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models) | Apache-2.0 |
+| Lecture des lèvres (`models/asd/`) (`XRAY_ASD=1`) | `pretrain_AVA_CVPR.model` (Light-ASD, AVA ActiveSpeaker) | [Junhua-Liao/Light-ASD](https://github.com/Junhua-Liao/Light-ASD), commit `ed38c232` | MIT |
+
+Light-ASD (Junhua Liao et al., *A Light Weight Model for Active Speaker Detection*, CVPR 2023) : ~1 M de paramètres, 94,1 % de mAP sur AVA. Le
+fichier est un `state_dict` de PyTorch, lu **sans PyTorch** par un *unpickler* restreint qui n'accepte que
+ce qu'un tel fichier contient (un dictionnaire, des tenseurs, leurs stockages) ; le réseau est reconstruit en OpenVINO
+([`app/asd.py`](app/asd.py)), identique au code d'origine à 2,4·10⁻⁶ près sur la note (vérifié contre
+PyTorch sur les vrais poids, et à chaque construction contre une référence numpy). LR-ASD (IJCV 2025,
+même auteur, MIT) annonce 94,45 % : écart dans le bruit pour un vote, et non mesuré ici.
 
 *Attribution (CC BY 4.0)* : « WeSpeaker ResNet34-LM, VoxCeleb » — Hongji Wang, Chengdong Liang, Shuai
 Wang, Zhengyang Chen, Binbin Zhang, Xu Xiang, Yanlei Deng, Yanmin Qian, *WeSpeaker: A Research and
 Production oriented Speaker Embedding Learning Toolkit*, ICASSP 2023 ; poids publiés par le projet
 WeSpeaker sous licence CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), utilisés sans
-modification. `XRAY_VOICE=0` coupe l'étape des voix (rien n'est téléchargé).
+modification. `XRAY_VOICE=0` coupe l'étape des voix (rien n'est téléchargé), lecture des lèvres
+comprise ; `XRAY_ASD=0` coupe la seule lecture des lèvres.
 
 `XRAY_DETECTOR_INT8=0` garde le détecteur d'origine. `auraface` n'a pas de détecteur INT8 (YuNet
 passe par OpenCV).
@@ -644,6 +716,9 @@ Variables d'environnement (toutes facultatives sauf la clé) :
 | `XRAY_VOICE_MODEL` | `wespeaker_r34` | Empreinte de voix : `wespeaker_r34` (CC BY 4.0) ou `campplus_en` (Apache-2.0). Changer de modèle refait les voix par le son seul. |
 | `XRAY_VOICE_THREADS` | `2` | Fils des réseaux de la voix, à côté de ceux de l'image. |
 | `XRAY_VOICE_TRACK` | `original` | `original` : la version originale quand elle existe ; `default` : la piste par défaut du fichier. |
+| `XRAY_ASD` | `1` | `0` : pas de lecture des lèvres (ni téléchargement de Light-ASD). |
+| `XRAY_ASD_BUDGET_S` | `600` | Plafond de calcul de la lecture des lèvres, par élément (secondes de processeur, ffmpeg compris). |
+| `XRAY_ASD_THREADS` | `2` | Fils de Light-ASD. |
 | `XRAY_CLUSTER_THRESHOLD` | selon le modèle | Similarité pour regrouper deux pistes (0,42 / 0,40). |
 | `XRAY_LABEL_THRESHOLD` | selon le modèle | Seuil de rejet d'un nom (0,30 / 0,28). |
 
@@ -874,6 +949,12 @@ Laterna. `404` tant qu'il n'y a rien. `version` : 1.
   `items`, `withVoices`, `speechNamed` (part du temps de parole nommée), `facesNamed` (part du temps de
   visage nommée), `voicesNamed`, `voicesUndecided`, `voicesConflict`, `itemsWithConflict`.
 
+Lecture des lèvres (10/11/2026) : les segments de `/voices` peuvent porter `via: "asd"` ; `/voices`
+passe en `version: 2` ; `/items/{id}` → `voices.voicesAsd` et `voices.asd` (`voicesTried`,
+`voicesResolved`, `voicesUndecided`, `undecidedBefore`, `votes`, `cpuSeconds`, `capped`, `status`) ;
+`/quality` → `voicesAsd` et `asd` (`items`, `tried`, `resolved`, `cpuSeconds`) par groupe ; `/health` →
+`voice.asd` (`enabled`, `ready`, `license`, `error`).
+
 `GET /items/{itemId}` gagne `voices` (`complete`, comptes de voix, `speechNamed`) et `faces`
 (`facesNamed`, `faceSeconds`) ; `/health` gagne `voice` (modèle, licence, prêt, erreur, détection de
 parole). `POST /jobs` accepte `originalLanguage` (code ISO 639, facultatif).
@@ -911,6 +992,8 @@ xray/
 │   ├── voice.py       Silero VAD, empreintes de voix, poids de la voix
 │   ├── voices.py      morceaux, voix, noms, consensus, mémoire (assemblage pur)
 │   ├── voicejob.py    le son d'un ordre à côté de l'image, son seul des ordres finis
+│   ├── asd.py         Light-ASD : poids sans PyTorch, réseau OpenVINO, MFCC, recadrage
+│   ├── asdjob.py      lecture des lèvres ciblée : voix, instants, pistes, votes, plafond
 │   ├── relabel.py     renommer sans relire (file, lots bornés)
 │   ├── memory.py      mémoire des séries par contribution d'épisode
 │   └── db.py          SQLite
@@ -920,7 +1003,9 @@ xray/
                        décodage arrêté par nous, assemblage incrémental identique au complet,
                        paliers et bascule de l'iGPU, quantification INT8 (vraie, sur un petit réseau),
                        voix (champ-contrechamp, téléphone, désaccord, consensus), piste son,
-                       son du même ffmpeg, renommage identique à l'analyse, mémoire bornée, qualité
+                       son du même ffmpeg, renommage identique à l'analyse, mémoire bornée, qualité,
+                       lecture des lèvres (poids piégés refusés, réseau contre une référence numpy,
+                       votes, mémoire contredite, renommage), rafales de plans courts
 ```
 
 Les tests n'ont besoin ni des modèles ni du réseau. Ils tournent pendant la construction de

@@ -25,10 +25,15 @@ reste se refait ici à chaque point d'étape, comme les scènes (`results.py`) :
    précédents ; elle nomme une voix que les visages laissent sans nom, et retire le nom d'une voix
    qu'elle attribue nettement à quelqu'un d'autre.
 
-Les sorties sont des segments `{start, end, voiceId, personId|null, confidence, conflict?}` : des morceaux
+5. **Lecture des lèvres** (`asdjob.py`, 11/2026) : une voix que visages et mémoire laissent sans nom prend
+   celui que désignent nettement ses votes Light-ASD (gardés en base par instants, relus à chaque
+   assemblage) — jamais contre la mémoire de la série. **Petites voix** : moins de 6 morceaux, un nom
+   seulement à 0,75 de confiance (une voix de 3 morceaux mêlant deux personnes avait été nommée à 0,667).
+
+Les sorties sont des segments `{start, end, voiceId, personId|null, confidence, conflict?, via?}` : des morceaux
 voisins de la même voix sont joints. `confidence` (0..1) est la part des avis qui donnent ce nom,
 réduite quand le morceau ressemble peu à la voix de la personne. Laterna ne préfixe une réplique
-que d'un nom donné avec assez de confiance.
+que d'un nom donné avec assez de confiance. `via: "asd"` : nommé par la lecture des lèvres.
 """
 
 from __future__ import annotations
@@ -76,6 +81,20 @@ class VoiceParams:
     memory_min_lines: int = 8
     # Deux personnes dont les voix se ressemblent plus que ceci (cosinus) : aucune n'est retenue.
     memory_distinct_cos: float = 0.6
+    # Petites voix (E2E du 10/11/2026 : une voix de 3 morceaux mêlant deux personnes nommée à 0,667) : une
+    # voix de moins de `small_voice` morceaux (au seuil du milieu) ne garde un nom qu'avec une confiance
+    # d'au moins `small_conf` — tous les avis d'accord et une voix qui ressemble à celle de la personne.
+    small_voice: int = 6
+    small_conf: float = 0.75
+    # Lecture des lèvres (`asdjob.py`) : une voix que visages et mémoire laissent sans nom prend celui que
+    # les votes désignent — au moins `asd_votes` votes, et `asd_share` des votes exprimés ; un vote compte si
+    # la note de Light-ASD du visage gagnant dépasse `asd_score` et celle du suivant de `asd_margin`. La
+    # mémoire de la série qui préfère nettement une autre personne (`asd_memory_margin`) l'emporte : pas de nom.
+    asd_votes: int = 3
+    asd_share: float = 0.7
+    asd_score: float = 0.0
+    asd_margin: float = 0.0
+    asd_memory_margin: float = 0.1
 
 
 DEFAULT_PARAMS = VoiceParams()
@@ -90,6 +109,12 @@ class VoiceResult:
     stats: dict = field(default_factory=dict)
     # Par morceau (pour les bancs) : bornes, voix, personne, confiance.
     pieces: list[tuple[float, float, int, int | None, float]] = field(default_factory=list)
+    # Par morceau : désaccord visages / mémoire (ou lecture des lèvres / mémoire) ; nommé par la lecture des
+    # lèvres ; et, par morceau, la part de chaque personne à l'image (pour choisir où lire les lèvres).
+    piece_conflict: list[bool] = field(default_factory=list)
+    piece_asd: list[bool] = field(default_factory=list)
+    presence: np.ndarray | None = None
+    presence_ids: list[int] = field(default_factory=list)
 
 
 def normalize_rows(x: np.ndarray) -> np.ndarray:
@@ -240,18 +265,21 @@ def _unit(v: np.ndarray) -> np.ndarray:
 
 
 def name_once(E: np.ndarray, ok: np.ndarray, pres: np.ndarray, scene_of: np.ndarray, pids: list[int],
-              thr: float, p: VoiceParams, memory: dict[int, np.ndarray] | None = None):
+              thr: float, p: VoiceParams, memory: dict[int, np.ndarray] | None = None,
+              asd: dict[int, list[int | None]] | None = None):
     """Un avis : regroupement à `thr`, noms par contraste, seconde chance, une personne une voix,
-    mémoire de la série, seconde passe. Rend (voix par morceau, personne par morceau ou None,
-    personnes nommées par les visages seuls → leurs morceaux)."""
+    mémoire de la série, lecture des lèvres, seconde passe. Rend (voix par morceau, personne par morceau
+    ou None, personnes nommées par les visages seuls → leurs morceaux, morceaux en désaccord, morceaux
+    nommés par la lecture des lèvres)."""
     labels = cluster_pieces(E, ok, thr)
     voices = sorted(int(v) for v in set(labels.tolist()) if v > 0)
     n = len(E)
     pred: list[int | None] = [None] * n
     face_named: dict[int, list[int]] = {}
     conflict: set[int] = set()
+    by_asd: set[int] = set()
     if not voices:
-        return labels, pred, face_named, conflict
+        return labels, pred, face_named, conflict, by_asd
     members = {v: np.where(labels == v)[0] for v in voices}
     cent = {v: _unit(E[members[v]].mean(0)) for v in voices}
     M: dict[int, dict] = {}
@@ -330,6 +358,37 @@ def name_once(E: np.ndarray, ok: np.ndarray, pres: np.ndarray, scene_of: np.ndar
                 elif v not in named:
                     named[v] = mem_pid
 
+    # Lecture des lèvres : une voix encore sans nom (ni visages ni mémoire), assez fournie, prend le nom
+    # que les votes désignent nettement — sauf si la mémoire de la série préfère nettement quelqu'un d'autre.
+    if asd:
+        mem_ids = list(memory) if memory else []
+        Pm = np.stack([memory[pid] for pid in mem_ids]) if mem_ids else None
+        for v in voices:
+            if v in named or M[v]["n"] < p.min_lines:
+                continue
+            mine = members[v]
+            if any(int(i) in conflict for i in mine):
+                continue
+            c = collections.Counter(who for i in mine for who in asd.get(int(i), ()))
+            total = sum(c.values())
+            if not total:
+                continue
+            who, k = c.most_common(1)[0]
+            if who is None or k < p.asd_votes or k / total < p.asd_share:
+                continue
+            if Pm is not None and who in mem_ids:
+                s = Pm @ cent[v]
+                if float(s.max()) - float(s[mem_ids.index(who)]) >= p.asd_memory_margin:
+                    conflict.update(int(i) for i in mine)
+                    continue
+            elif Pm is not None:
+                s = Pm @ cent[v]
+                if float(s.max()) >= p.memory_tau and float(s.max()) - (np.sort(s)[-2] if len(s) > 1 else -1.0) >= p.memory_margin:
+                    conflict.update(int(i) for i in mine)
+                    continue
+            named[v] = who
+            by_asd.update(int(i) for i in mine)
+
     for v, pid in named.items():
         for i in members[v]:
             pred[i] = pid
@@ -349,12 +408,40 @@ def name_once(E: np.ndarray, ok: np.ndarray, pres: np.ndarray, scene_of: np.ndar
                 if b >= p.tau and b - s2 >= p.tau_margin:
                     if i not in conflict:
                         pred[i] = prof_ids[int(o[0])]
-    return labels, pred, face_named, conflict
+    return labels, pred, face_named, conflict, by_asd
+
+
+def asd_by_piece(pieces: list[tuple[float, float]], votes, p: VoiceParams) -> dict[int, list[int | None]]:
+    """Les votes de la lecture des lèvres (début, fin, personne ou None, note, note du suivant), rattachés
+    au morceau qu'ils recouvrent le plus (la moitié du vote au moins) ; un vote trop faible ne compte pas.
+    Les votes sont gardés par instants, pas par voix : un renommage (autres seuils, autre mémoire) les
+    rattache aux morceaux du moment."""
+    out: dict[int, list[int | None]] = {}
+    if not votes or not pieces:
+        return out
+    starts = np.array([a for a, _ in pieces])
+    for vs, ve, who, score, second in votes:
+        if score is None or score < p.asd_score or score - (second if second is not None else -1e9) < p.asd_margin:
+            continue
+        lo = max(0, int(np.searchsorted(starts, vs - 4.0)))
+        best, bo = -1, 0.0
+        for k in range(lo, len(pieces)):
+            a, b = pieces[k]
+            if a > ve:
+                break
+            ov = min(b, ve) - max(a, vs)
+            if ov > bo:
+                best, bo = k, ov
+        if best >= 0 and bo >= 0.5 * max(ve - vs, 1e-3):
+            out.setdefault(best, []).append(None if who is None else int(who))
+    return out
 
 
 def build(regions: list[tuple[float, float]], wins: np.ndarray, embs: np.ndarray,
           presence: list[tuple[float, float, int, float]], scenes: list[dict],
-          memory: dict[int, np.ndarray] | None = None, params: VoiceParams = DEFAULT_PARAMS) -> VoiceResult:
+          memory: dict[int, np.ndarray] | None = None, params: VoiceParams = DEFAULT_PARAMS,
+          asd: list | None = None) -> VoiceResult:
+    """`asd` : les votes de la lecture des lèvres gardés en base (`asdjob.py`), ou rien."""
     p = params
     wins = np.asarray(wins, dtype=np.float64).reshape(-1, 2)
     embs = np.asarray(embs, dtype=np.float32)
@@ -367,6 +454,8 @@ def build(regions: list[tuple[float, float]], wins: np.ndarray, embs: np.ndarray
     pres, pids = presence_matrix(pieces, presence)
     scene_of = scene_index(pieces, scenes)
     mem = {pid: v for pid, v in (memory or {}).items() if pid in set(pids)} if memory else None
+    asd_votes = asd_by_piece(pieces, asd, p)
+    asd_runs = np.zeros(len(pieces), dtype=np.int64)
 
     votes: list[collections.Counter] = [collections.Counter() for _ in pieces]
     conflicts = np.zeros(len(pieces), dtype=np.int64)
@@ -374,9 +463,12 @@ def build(regions: list[tuple[float, float]], wins: np.ndarray, embs: np.ndarray
     face_named_all: dict[int, list[int]] = {}
     mid = len(p.thresholds) // 2
     for k, thr in enumerate(p.thresholds):
-        labels, pred, face_named, conflict = name_once(E, ok, pres, scene_of, pids, thr, p, mem)
+        labels, pred, face_named, conflict, by_asd = name_once(E, ok, pres, scene_of, pids, thr, p, mem, asd_votes)
         for i, who in enumerate(pred):
             votes[i][who] += 1
+        for i in by_asd:
+            if pred[i] is not None:
+                asd_runs[i] += 1
         for i in conflict:
             conflicts[i] += 1
         if k == mid:
@@ -416,6 +508,15 @@ def build(regions: list[tuple[float, float]], wins: np.ndarray, embs: np.ndarray
             shrink = 1.0 if sim >= 0.6 else max(0.5, 0.5 + (sim - 0.2) * 1.25)
             conf[i] = round(float(agree[i] * shrink), 3)
 
+    # Petites voix : un nom seulement avec une confiance haute (voir `small_conf`).
+    ref_size = collections.Counter(int(x) for x in ref_labels if x > 0)
+    for i, who in enumerate(final):
+        if who is not None and 0 < ref_labels[i] and ref_size[int(ref_labels[i])] < p.small_voice and conf[i] < p.small_conf:
+            final[i] = None
+            conf[i] = 0.0
+    # Nommé par la lecture des lèvres : la plupart des avis qui donnent ce nom le tiennent d'elle.
+    via_asd = [final[i] is not None and asd_runs[i] * 2 >= votes[i][final[i]] for i in range(len(pieces))]
+
     # Profils pour la mémoire : seulement des voix nommées par les visages, fournies et nettes, dont le
     # nom final est le même (le consensus ne l'a pas retiré).
     profiles: dict[int, tuple[np.ndarray, int]] = {}
@@ -440,17 +541,21 @@ def build(regions: list[tuple[float, float]], wins: np.ndarray, embs: np.ndarray
         who = final[i]
         c = float(conf[i]) if who is not None else 0.0
         cf = bool(in_conflict[i])
+        va = bool(via_asd[i])
         piece_rows.append((s, e, v, who, c))
         if v <= 0:
             continue  # pas d'empreinte (morceau trop court) : rien à dire
         last = segs[-1] if segs else None
         if (last is not None and last["voiceId"] == v and last["personId"] == who and s - last["end"] < 0.3
-                and abs(last["confidence"] - c) < 1e-6 and last.get("conflict", False) == cf):
+                and abs(last["confidence"] - c) < 1e-6 and last.get("conflict", False) == cf
+                and (last.get("via") == "asd") == va):
             last["end"] = round(e, 3)
             continue
         seg = {"start": round(s, 3), "end": round(e, 3), "voiceId": v, "personId": who, "confidence": round(c, 3)}
         if cf:
             seg["conflict"] = True
+        if va:
+            seg["via"] = "asd"
         segs.append(seg)
     # Par voix (au seuil du milieu) : nommée (la plupart de ses morceaux ont un nom), en désaccord
     # (visages et mémoire), indécise, ou trop petite (moins de `min_lines` morceaux) — de quoi juger plus tard où une lecture des lèvres servirait.
@@ -463,6 +568,8 @@ def build(regions: list[tuple[float, float]], wins: np.ndarray, embs: np.ndarray
             vstat["conflict"] += 1
         elif sum(1 for i in idx if final[i] is not None) >= 0.5 * len(idx):
             vstat["named"] += 1
+            if sum(1 for i in idx if via_asd[i]) >= 0.5 * len(idx):
+                vstat["asd"] += 1
         else:
             vstat["undecided"] += 1
     stats = {
@@ -474,11 +581,14 @@ def build(regions: list[tuple[float, float]], wins: np.ndarray, embs: np.ndarray
         # Part du temps de parole (morceaux avec empreinte) qui porte un nom.
         "speechNamed": round(sum(e - s for (s, e), w, k in zip(pieces, final, ok) if w is not None and k)
                              / max(sum(e - s for (s, e), k in zip(pieces, ok) if k), 1e-9), 4) if ok.any() else None,
-        "people": len(named_ids),
+        "people": len({w for w in final if w is not None}),
         "memory": len(mem or {}),
         "voicesNamed": int(vstat["named"]),
         "voicesUndecided": int(vstat["undecided"]),
         "voicesConflict": int(vstat["conflict"]),
         "voicesSmall": int(vstat["small"]),
+        # Parmi les voix nommées, celles que la lecture des lèvres a nommées.
+        "voicesAsd": int(vstat["asd"]),
+        "asdVotes": int(sum(len(x) for x in asd_votes.values())),
     }
-    return VoiceResult(segs, profiles, stats, piece_rows)
+    return VoiceResult(segs, profiles, stats, piece_rows, [bool(x) for x in in_conflict], via_asd, pres, list(pids))

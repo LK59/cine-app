@@ -130,6 +130,29 @@ CREATE TABLE IF NOT EXISTS relabel_queue (
     seq       INTEGER NOT NULL,
     requested REAL NOT NULL
 );
+-- Lecture des lèvres (asdjob.py) : un vote par morceau lu — qui, parmi les visages à l'image, parlait
+-- (personId, NULL pour un visage sans nom), sa note Light-ASD et celle du suivant ; et le passage par
+-- élément (fenêtres faites, pour reprendre ; bilan). Gardés à travers les renommages.
+CREATE TABLE IF NOT EXISTS asd_votes (
+    item_id   TEXT NOT NULL,
+    start     REAL NOT NULL,
+    end       REAL NOT NULL,
+    person_id INTEGER,
+    score     REAL,
+    second    REAL,
+    faces     INTEGER NOT NULL,
+    PRIMARY KEY (item_id, start)
+);
+CREATE TABLE IF NOT EXISTS asd_runs (
+    item_id    TEXT PRIMARY KEY,
+    etag       TEXT NOT NULL,
+    voice_model TEXT,
+    version    INTEGER NOT NULL,
+    status     TEXT NOT NULL,          -- partial | done
+    state_json TEXT,
+    stats_json TEXT,
+    updated    REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS series_faces (
     series_id TEXT NOT NULL,
     model     TEXT NOT NULL,

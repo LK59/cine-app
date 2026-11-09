@@ -57,7 +57,9 @@ def reset_if_other_model(db: Database, item_id: str, model: str) -> None:
     if row is None or row["voice_model"] == model:
         return
     with db.tx() as c:
-        for table in ("voice_regions", "voice_windows", "voice_results"):
+        # Les votes de la lecture des lèvres sont gardés (des instants et des visages, pas des voix) ; le
+        # passage, lui, est à refaire : les voix indécises ne sont plus les mêmes.
+        for table in ("voice_regions", "voice_windows", "voice_results", "asd_runs"):
             c.execute(f"DELETE FROM {table} WHERE item_id=?", (item_id,))
         c.execute("UPDATE chunks SET voice=0 WHERE item_id=?", (item_id,))
         c.execute("UPDATE items SET voice_model=? WHERE item_id=?", (model, item_id))
@@ -88,6 +90,12 @@ def load_voice(db: Database, item_id: str) -> tuple[list[tuple[float, float]], n
     return regions, wins, embs
 
 
+def load_asd(db: Database, item_id: str) -> list[tuple[float, float, int | None, float, float | None]]:
+    """Les votes de la lecture des lèvres d'un élément (`asdjob.py`) : (début, fin, personne, note, note du suivant)."""
+    return [(r["start"], r["end"], r["person_id"], r["score"], r["second"])
+            for r in db.q("SELECT start, end, person_id, score, second FROM asd_votes WHERE item_id=? ORDER BY start", (item_id,))]
+
+
 def series_memory(db: Database, series_id: str | None, model: str) -> dict[int, np.ndarray]:
     return memory.recall(db, series_id, "voice", model)
 
@@ -109,7 +117,7 @@ def assemble(db: Database, item_id: str, etag: str, model: str, series_id: str |
     t0 = time.process_time()
     regions, wins, embs = load_voice(db, item_id)
     memory = series_memory(db, series_id, model)
-    result = build(regions, wins, embs, presence, scenes, memory)
+    result = build(regions, wins, embs, presence, scenes, memory, asd=load_asd(db, item_id))
     done = [(r["start"], r["end"]) for r in chunks if r["voice"]]
     complete = final and len(done) == len(chunks)
     until = max((e for _, e in done), default=0.0)

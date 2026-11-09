@@ -284,10 +284,12 @@ class JobStore:
         c.execute("UPDATE results SET etag=?, updated=? WHERE item_id=?", (spec.etag, now, spec.item_id))
         # Les voix suivent : mêmes temps, même durée.
         c.execute("UPDATE voice_results SET etag=?, updated=? WHERE item_id=?", (spec.etag, now, spec.item_id))
+        c.execute("UPDATE asd_runs SET etag=?, updated=? WHERE item_id=?", (spec.etag, now, spec.item_id))
         return True
 
     def _forget(self, c, item_id: str) -> None:
-        for table in ("chunks", "shots", "tracks", "results", "voice_regions", "voice_windows", "voice_results"):
+        for table in ("chunks", "shots", "tracks", "results", "voice_regions", "voice_windows", "voice_results",
+                      "asd_votes", "asd_runs"):
             c.execute(f"DELETE FROM {table} WHERE item_id=?", (item_id,))
         c.execute("UPDATE items SET stats_json=NULL, voice_track_json=NULL, voice_model=NULL, voice_error=NULL, "
                   "voice_tried=NULL WHERE item_id=?", (item_id,))

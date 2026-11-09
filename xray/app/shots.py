@@ -17,6 +17,11 @@ par seconde), sans modèle :
   quelqu'un qu'on vient d'y voir dans un décor encore voisin (le héros est de presque toutes
   les scènes : seul, son visage enchaînerait l'épisode entier en une scène). Une scène de moins de 10 s est fondue dans sa voisine la plus
   proche : un plan de coupe isolé n'est pas une scène.
+- une **rafale** de scènes courtes qui se suivent (une conférence de presse montée en plans de deux
+  secondes, que les couleurs ne relient pas entre eux) n'est pas fondue morceau par morceau dans la
+  scène d'avant quand, ensemble, elle dure 10 s au moins et montre d'autres personnes que ses deux
+  voisines : c'est un autre lieu. *Ted Lasso* S01E09 : le vestiaire (238–320 s) avalait le début de
+  la conférence de presse (320–349 s), les couleurs des deux décors, sombres, se ressemblant à 0,9.
 - longueur bornée : une scène de plus de 3 minutes est recoupée à sa frontière de plans la plus
   faible — couleurs les moins semblables, de préférence là où les personnes changent du tout au
   tout. Un décor uniforme (les urgences de *The Pitt*, toutes en bleu-vert) enchaînait sinon des
@@ -51,6 +56,10 @@ MIN_SPLIT_PART = 30.0
 # frontière où elles changent du tout au tout (en points de similarité de couleurs).
 SPLIT_PEOPLE_WINDOW = 60.0
 SPLIT_PEOPLE_BONUS = 0.20
+# Rafale de plans courts (voir `_keep_bursts`) : gardée en scène à elle si ses personnes (deux groupes
+# de visages au moins) sont pour `BURST_NEW_PEOPLE` au moins absentes de la minute voisine, de chaque côté.
+BURST_NEW_PEOPLE = 0.6
+BURST_PEOPLE_WINDOW = 60.0
 MAX_SHOT_FRAMES = 120
 # Plan fixe : aucune image du plan ne s'écarte de la première de plus que ceci (vignette 32×18,
 # brute et à contraste égal ; histogramme). Deux images y suffisent — rien n'entre ni ne bouge
@@ -280,7 +289,7 @@ def group_scenes(shots: list[ShotInfo], gap: float = 1.0, sim: Similarity | None
         else:
             scenes.append([s])
     out: list[list[ShotInfo]] = []
-    for sc in _merge_short(scenes, gap, m):
+    for sc in _merge_short(_keep_bursts(scenes, gap), gap, m):
         out.extend(_split_long(sc, m))
     return out
 
@@ -322,6 +331,50 @@ def _split_long(scene: list[ShotInfo], m: Similarity = _PLAIN) -> list[list[Shot
 def _scene_hist(scene: list[ShotInfo]) -> np.ndarray:
     w = np.array([max(s.end - s.start, 1e-3) for s in scene])
     return (np.stack([s.hist for s in scene]) * w[:, None]).sum(0) / w.sum()
+
+
+def _people_near(scene: list[ShotInfo], t: float, before: bool) -> set[int]:
+    """Les groupes de visages de `scene` dans la minute qui précède `t` (ou qui le suit)."""
+    out: set[int] = set()
+    for r in scene:
+        if (r.end > t - BURST_PEOPLE_WINDOW) if before else (r.start < t + BURST_PEOPLE_WINDOW):
+            out |= r.clusters
+    return out
+
+
+def _keep_bursts(scenes: list[list[ShotInfo]], gap: float) -> list[list[ShotInfo]]:
+    """Une suite d'au moins deux scènes courtes (moins de `MIN_SCENE`), contiguës, qui dure ensemble
+    `MIN_SCENE` au moins et dont les personnes sont pour l'essentiel nouvelles des deux côtés devient
+    une scène : `_merge_short` l'aurait fondue morceau par morceau dans ses voisines. Une rafale sans
+    visages, ou qui partage ses personnes avec une voisine (un champ-contrechamp aux couleurs
+    changeantes), reste à `_merge_short`, comme avant."""
+    out: list[list[ShotInfo]] = []
+    i = 0
+    while i < len(scenes):
+        sc = scenes[i]
+        if sc[-1].end - sc[0].start >= MIN_SCENE:
+            out.append(sc)
+            i += 1
+            continue
+        j = i
+        run = list(sc)
+        while (j + 1 < len(scenes) and scenes[j + 1][-1].end - scenes[j + 1][0].start < MIN_SCENE
+               and scenes[j + 1][0].start - scenes[j][-1].end <= gap):
+            j += 1
+            run += scenes[j]
+        mine = set().union(*(r.clusters for r in run))
+        if j > i and run[-1].end - run[0].start >= MIN_SCENE and len(mine) >= 2:
+            prev = out[-1] if out and run[0].start - out[-1][-1].end <= gap else None
+            nxt = scenes[j + 1] if j + 1 < len(scenes) and scenes[j + 1][0].start - run[-1].end <= gap else None
+            new = [len(mine - _people_near(x, run[0].start if x is prev else run[-1].end, x is prev)) / len(mine)
+                   for x in (prev, nxt) if x is not None]
+            if new and min(new) >= BURST_NEW_PEOPLE:
+                out.append(run)
+                i = j + 1
+                continue
+        out.extend(scenes[i:j + 1])
+        i = j + 1
+    return out
 
 
 def _merge_short(scenes: list[list[ShotInfo]], gap: float, m: Similarity = _PLAIN) -> list[list[ShotInfo]]:

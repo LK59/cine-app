@@ -160,14 +160,18 @@ def tonemap_available() -> bool:
 
 
 def build_command(path: str, start: float, length: float, info: MediaInfo, vaapi: bool,
-                  fps: float, width: int, threads: int, extra_output: list[str] | None = None) -> list[str]:
+                  fps: float, width: int, threads: int, extra_output: list[str] | None = None,
+                  noref: bool = True) -> list[str]:
+    """`noref=False` : toutes les images décodées — la lecture des lèvres (`asdjob.py`) lit 25 images
+    par seconde, et une image voisine répétée à la place d'une image sautée y serait un mouvement de
+    lèvres perdu."""
     w, h = info.out_size(width)
     # `-filter_threads` borne aussi les filtres (réduction, adaptation HDR) à `XRAY_THREADS`.
     cmd = [settings.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-filter_threads", str(threads)]
     tonemap = info.hdr and tonemap_available()
     if vaapi:
         cmd += ["-hwaccel", "vaapi", "-hwaccel_device", settings.vaapi_device, "-hwaccel_output_format", "vaapi"]
-        if settings.vaapi_noref:
+        if settings.vaapi_noref and noref:
             cmd += ["-skip_frame", "noref"]
         if tonemap:
             # La carte réduit en 10 bits, le processeur adapte la petite image.
@@ -177,7 +181,7 @@ def build_command(path: str, start: float, length: float, info: MediaInfo, vaapi
     else:
         # Sur le processeur, sauter les images non référencées divise le décodage sans rien
         # coûter ici : on n'en garde de toute façon que quatre par seconde.
-        cmd += ["-threads", str(threads), "-skip_frame", "noref"]
+        cmd += ["-threads", str(threads)] + (["-skip_frame", "noref"] if noref else [])
         if tonemap:
             vf = f"fps={fps},scale={w}:{h}:flags=fast_bilinear,format=yuv420p10le,{TONEMAP},format=nv12"
         else:
@@ -212,7 +216,7 @@ class DecodeStats:
 def read_frames(path: str, start: float, length: float, info: MediaInfo, vaapi: bool,
                 stats: DecodeStats, cancel: threading.Event | None = None,
                 fps: float | None = None, width: int | None = None,
-                audio=None, audio_out: list | None = None) -> Iterator[tuple[float, np.ndarray]]:
+                audio=None, audio_out: list | None = None, noref: bool = True) -> Iterator[tuple[float, np.ndarray]]:
     """Rend (instant absolu, image NV12 (h·3/2 × l)) pour chaque image échantillonnée.
     Les instants sont reconstruits à partir du rang : le filtre `fps` cadence la sortie.
 
@@ -230,7 +234,7 @@ def read_frames(path: str, start: float, length: float, info: MediaInfo, vaapi: 
 
         rfd, wfd = audiomod.open_pipe()
         extra = audiomod.audio_output_args(audio, f"pipe:{wfd}")
-    cmd = build_command(path, start, length, info, vaapi, fps, width, settings.threads, extra)
+    cmd = build_command(path, start, length, info, vaapi, fps, width, settings.threads, extra, noref=noref)
     t0 = time.monotonic()
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=frame_bytes * 4,

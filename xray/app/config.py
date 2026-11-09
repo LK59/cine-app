@@ -26,10 +26,18 @@ VERSION = "1.0.0"
 #   5 — (11/2026) l'étape « qui parle » (voix, `/voices`) dans le même passage ; règles des visages et
 #       des scènes inchangées. Un ordre v4 fini garde ses scènes, et ses voix sont complétées par une
 #       lecture du son seul (`voicejob.py`), sans refaire l'image.
+#   (10/11/2026, sans changer de version) une rafale de plans courts d'un autre lieu reste une scène
+#       (`shots._keep_bursts`). Les scènes sont regroupées à neuf à chaque assemblage depuis les plans
+#       gardés en base : rien ne se mêle, et monter la version referait de zéro les ordres en cours.
 RESULT_VERSION = 5
 # Version de l'assemblage des voix (`version` de /voices) — 1 : morceaux de 2 s coupés aux changements
 # de voix, consensus de trois seuils, contraste local avec les visages, mémoire de la série.
-VOICE_VERSION = 1
+# 2 (10/11/2026) — petites voix (moins de 6 morceaux) nommées seulement à 0,75 de confiance ; lecture des
+# lèvres (`asdjob.py`, segments `via: "asd"`). Un résultat 1 reste servi ; un renommage le refait en 2.
+VOICE_VERSION = 2
+# Version de la lecture des lèvres (`asdjob.py`) : un élément passé sous une version antérieure est repris
+# (ses votes gardés). 1 — Light-ASD, votes par morceau, voix indécises seulement (11/2026).
+ASD_VERSION = 1
 
 
 def _int(name: str, default: int) -> int:
@@ -105,6 +113,11 @@ class Settings:
     voice_model: str = field(default_factory=lambda: os.environ.get("XRAY_VOICE_MODEL", "wespeaker_r34").strip().lower())
     voice_threads: int = field(default_factory=lambda: max(1, _int("XRAY_VOICE_THREADS", 2)))
     voice_track: str = field(default_factory=lambda: os.environ.get("XRAY_VOICE_TRACK", "original").strip().lower())
+    # Lecture des lèvres (11/2026, `asdjob.py`) : après les voix, pour les seules voix indécises, à basse
+    # priorité ; plafond de calcul par élément (secondes de processeur, ffmpeg compris) ; fils du réseau.
+    asd_enabled: bool = field(default_factory=lambda: _flag("XRAY_ASD", True))
+    asd_budget_s: float = field(default_factory=lambda: max(0.0, _float("XRAY_ASD_BUDGET_S", 600.0)))
+    asd_threads: int = field(default_factory=lambda: max(1, _int("XRAY_ASD_THREADS", 2)))
 
     @property
     def db_path(self) -> Path:
