@@ -59,8 +59,9 @@ describe("les sous-titres", () => {
   it("lit un SRT, balises ôtées, lignes d'une réplique jointes", () => {
     const cues = parseSrt("1\r\n00:01:02,500 --> 00:01:04,000\r\n<i>- Bonjour.</i>\r\n- {\\an8}Salut.\r\n\r\n2\r\n01:00:00,000 --> 01:00:01,000\r\nFin.\r\n");
     expect(cues).toEqual([
-      { startS: 62, atS: 62.5, text: "- Bonjour. - Salut." },
-      { startS: 3600, atS: 3600, text: "Fin." },
+      // La fin (10.30) et deux voix dans la même réplique (un tiret en tête d'une ligne après la première).
+      { startS: 62, atS: 62.5, endS: 64, twoSpeakers: true, text: "- Bonjour. - Salut." },
+      { startS: 3600, atS: 3600, endS: 3601, text: "Fin." },
     ]);
   });
 

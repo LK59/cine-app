@@ -1,6 +1,6 @@
 import { HttpError } from "@/lib/http";
 import { xray, type XrayItemState, type XrayJob, type XrayPriority } from "@/lib/clients/xray";
-import { castOf, castWithPhotos, type AnalysisTarget } from "./cast";
+import { castOf, castWithPhotos, type AnalysisTarget, originalLanguageOf } from "./cast";
 import { sameDuration } from "./scanPlan";
 import { recordedDuration, recordFileVersion } from "./scanStore";
 
@@ -60,6 +60,7 @@ export async function jobFor(target: AnalysisTarget, priority: XrayPriority, sta
       ...(startAt && startAt > 0 ? { startAt: Math.round(startAt * 1000) / 1000 } : {}),
       seriesId: target.seriesId,
       cast: await castWithPhotos(cast),
+      originalLanguage: originalLanguageOf(target.tmdb),
     },
     cast: cast.length,
   };

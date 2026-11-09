@@ -12,6 +12,9 @@ import { ASK_MAX_OUTPUT_TOKENS, askAvailableFor, currentAskModel, gatherAskConte
 import { aiBudgetReached, askPersonAvailableFor, sofarAvailableFor } from "@/lib/aiFeatures";
 import { answerSofar, readSofarBody } from "@/lib/ask/sofarRequest";
 import { actorFactsForAsk } from "@/lib/xray/person";
+import { speakerSegments } from "@/lib/xray/voices";
+import { xrayOpenTo } from "@/lib/clients/xray";
+import { withSpeakers } from "@/lib/ask/voices";
 import {
   AnswerGate,
   ASK_MAX_EXCHANGES,
@@ -195,7 +198,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
     return oneShot({ t: "error", code: "indisponible" });
   }
 
-  const sources = askSources(context.input);
+  // « Qui parle » (10.30) : le nom de qui dit chaque réplique, seulement d'une analyse complète et pour un compte à qui
+  // « À l'écran » est ouvert ; sinon, les répliques sans nom, comme avant. Une panne ne retient rien.
+  const speakers = context.input.cues.length && context.cuesItemId && xrayOpenTo(session) ? await speakerSegments(context.cuesItemId).catch(() => null) : null;
+  const sources = askSources(speakers ? { ...context.input, cues: withSpeakers(context.input.cues, speakers) } : context.input);
   const { message, prefixEnd } = askParts(sources, askWhereLine(context.input), body.previous, body.question, actor);
   // Les noms des faits réels (le lieu de naissance) passent le filet.
   const check = actor ? `${sources.check}\n${actorFactsText(actor)}` : sources.check;
@@ -247,7 +253,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
           const stopPass = () => pass.abort();
           abort.signal.addEventListener("abort", stopPass, { once: true });
           modelAt ??= Date.now();
-          const run = currentAskModel()({ system: askSystem(locale), message: attempt ? message + metaReminder(locale) : message, prefixEnd, maxTokens: ASK_MAX_OUTPUT_TOKENS, signal: pass.signal, feature: body.about === "person" ? "askPerson" : "askTitle" });
+          const run = currentAskModel()({ system: askSystem(locale, !!sources.voiced), message: attempt ? message + metaReminder(locale) : message, prefixEnd, maxTokens: ASK_MAX_OUTPUT_TOKENS, signal: pass.signal, feature: body.about === "person" ? "askPerson" : "askTitle" });
           // Attachée tout de suite : une panne du flux rejette aussi `done`, qui ne doit pas rester sans lecteur.
           const done = run.done.catch((failure: unknown) => ({ failure }));
           let retry = false;

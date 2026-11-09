@@ -9222,6 +9222,61 @@ code d'avant), `xray-scan-card.test.tsx` (pause de tout, barre avec échecs).
   geste, élan, relevé borné, `hitAt`, parcours complet dans le lecteur, rien à la souris), `xray-person-panel.test.tsx`
   (`open` et `close` du panneau), `viewport-diag-route.test.ts` (champs bornés).
 
+**10.30 — « Qui parle » : les voix, nommées par les visages ; renommer sans relire ; la mémoire des séries gardée**
+(10/11/2026, consigne du propriétaire après la R&D du 09/11, branche `voice-exp`, `tools/voice-exp/`).
+
+- **Le service écoute** (résultats v5 ; tout le détail, les modèles, les licences et les mesures : `xray/README.md`,
+  « Qui parle »). Le son sort du **même ffmpeg** que l'image (une seconde sortie dans un second tuyau, le canal central
+  quand la piste en a un, 16 kHz mono), part dans un fil à lui (Silero VAD, une empreinte de voix par fenêtre de 1,5 s,
+  `XRAY_VOICE_THREADS`) et s'écrit en base tronçon par tronçon. Les voix sont regroupées et nommées à chaque point
+  d'étape comme les scènes : morceaux de 2 s coupés aux changements de voix, **consensus de trois seuils** (un nom
+  seulement si deux sur trois le donnent, aucun autre), **contraste local avec les visages** d'« À l'écran », seconde
+  chance, **une personne, une voix** (une seconde grosse voix nettement différente reste sans nom : le téléphone),
+  **mémoire de la série** (voix nommées par les visages des épisodes précédents) — et **un désaccord entre la mémoire
+  et les visages de l'épisode laisse la voix sans nom**, marquée `conflict` et comptée au journal. Modèle d'empreinte
+  au choix : **WeSpeaker ResNet34-LM** (CC BY 4.0, défaut) ou CAM++ (Apache-2.0) ; poids téléchargés au démarrage,
+  SHA-256 figés, comme ceux des visages. La piste : la **version originale** (Laterna envoie `originalLanguage`
+  — `originalLanguageOf`, la langue que le catalogue tient de TMDB), sinon une piste dite VO, sinon celle par défaut ;
+  jamais un commentaire ni une audiodescription.
+- **Mesuré** sur les trois vérités de terrain de la R&D (*Ted Lasso* S01E08, *MacGyver* S01E06, *Bullet Train*), par le
+  service lui-même, avec la règle de Laterna (ci-dessous) : **66,6 % des répliques nommées, 97,5 % justes** (WeSpeaker,
+  VO), 77,6 % sur *Ted Lasso* avec la mémoire de l'épisode précédent ; une voix au téléphone sur quatorze nommée. CAM++ :
+  66,4 % / 95,4 %. La stabilité, le risque de la R&D : seuil déplacé de ± 0,05, le seuil unique allait de 52 à 66 % à
+  94 % de précision (dix voix au téléphone nommées), le consensus reste entre 63 et 67 % à 97,3–97,5 % (une ou deux).
+  Le doublage se nomme mieux que la VO sur *Ted Lasso* (88,5 %), moins bien sur *Bullet Train* (50 %) :
+  `XRAY_VOICE_TRACK=default` existe, la VO reste le défaut. Coût : ~0,065 s de calcul par seconde d'épisode.
+- **Un ordre fini avant 10.30 n'est pas réanalysé** : quand rien de plus pressé qu'un ordre `low` n'attend, le service lit
+  le son seul de ses tronçons et prend les visages en base (`voicejob.run_voice_only`).
+- **Contrat, ajouts compatibles** : `GET /items/{id}/voices` (`{ itemId, etag, model, version, complete, analyzedUntil,
+  track, stats, segments: [{start, end, voiceId, personId|null, confidence, conflict?}] }`), `voices` et `faces` dans
+  `/items/{id}`, `voice` dans `/health`, `originalLanguage` dans `POST /jobs`, et les gestes ci-dessous.
+- **Renommer sans relire** (`relabel.py`) : plans, empreintes de visages, zones de parole et empreintes de voix sont
+  gardés ; `POST /items/{id}/relabel`, `/series/{id}/relabel` (dans l'ordre des épisodes) et `/relabel` (toute la
+  bibliothèque) refont seulement regroupement et noms, visages puis voix, avec les seuils et la mémoire du moment, par
+  lots de 20 s entre deux tronçons, jamais devant un ordre `normal` ou `high`. Résultat identique à une analyse neuve
+  sur les mêmes données (`test_relabel.py`).
+- **La mémoire des séries, gardée** (`memory.py`, visages et voix) : une **contribution par épisode et par personne**,
+  avec sa provenance (épisode, date, poids, note), remplacée — jamais ajoutée — quand l'épisode est refait ; un épisode
+  pèse au plus 300 s de visage et 60 morceaux de voix par personne, 15 personnes ; seulement un visage nommé par les
+  **photos** avec une marge de 0,10 (0,08 avant) et 5 s de présence, une voix nommée par les **visages**. Auditable
+  (`GET /series/{id}/memory`), réinitialisable (`POST /series/{id}/memory/reset`, puis la série est renommée).
+- **Le planificateur** (`scanPlan.ts`, `inEpisodeOrder`) : dans un palier, les épisodes d'une série passent **dans
+  l'ordre de la série** (saison, épisode), aux places que la série tenait — `nextPending` ordonne désormais tous les
+  paliers par rang (les paliers 2 et 3 l'étaient par date, que le rang portait déjà). Une série dont tout le plan est
+  traité est **renommée une fois** (`relabelFinishedSeries`, trois par tour, refait si de nouveaux épisodes sont finis ;
+  `[tâche] série renommée`) : ses premiers épisodes profitent de la mémoire de toute la série.
+- **La qualité des noms** (Configuration → Acteurs à l'écran, `XrayQualityCard`, `GET /api/admin/xray/quality`) : pour
+  toute la bibliothèque, les films, puis chaque série (les moins bien nommées d'abord) — parole nommée, visages nommés,
+  voix indécises, désaccords ; et « Réinitialiser la mémoire » par série (confirmé d'abord ; `POST { action: "reset",
+  seriesId }`, administrateur seul, dans `ADMIN_ONLY_READS` par `/api/admin/xray`).
+Porteurs : `xray/app/audio.py`, `voice.py`, `voices.py`, `voicejob.py`, `relabel.py`, `memory.py` ; côté Laterna
+`src/lib/clients/xray.ts` (`voices`, `relabelSeries`, `resetSeriesMemory`, `quality`), `src/lib/xray/voices.ts`
+(`speakerSegments`), `cast.ts` (`originalLanguageOf`), `scanStore.ts` (`finishedSeries`, `seriesRows`), `scheduler.ts`,
+`src/app/api/admin/xray/quality/route.ts`, `XrayQualityCard.tsx`. Tests : `xray/tests/test_voices.py`,
+`test_relabel.py` ; `ask-voices-1030.test.ts`, `xray-quality-1030.test.tsx`, `xray-scheduler.test.ts` (ordre des
+épisodes, série renommée une fois), `xray-same-duration.test.ts` (langue d'origine dans la commande).
+
+
 ## 139. « Poser une question » : la réponse ne sait que ce que le compte a vu (09/11/2026)
 
 *Amendé le 09/11/2026 (§140) : trois réglages au lieu d'un — `ASK_ENABLED` (questions sur un titre),
@@ -9905,6 +9960,35 @@ referme ; un refus n'attend pas) ; `format.test.ts` (Markdown retiré, étoiles 
 `viewport-diag-route.test.ts` (les champs bornés) ; `xray-ui-reveal-10292.test.tsx` (`effectiveLookOf`, la ligne `row`
 sous un cadre invisible, le filet de 400 ms, l'image d'abord sans minuteur restant, le démontage qui annule tout,
 `closing` plus fort que `revealed`).
+
+**10.30 — « Qui parle » dans « Jusqu'ici » et les questions** (10/11/2026, consigne du propriétaire). Les répliques de
+l'épisode en cours ou du film portent le nom de qui les dit quand la voix est sûre (`src/lib/ask/voices.ts`) :
+- **Seulement une analyse complète** (`speakerSegments` rend `null` tant que `/voices` dit `complete: false`, et pour un
+  autre fichier, une option coupée, un service d'avant 10.30) : pendant l'analyse, rien ne change, jamais un nom
+  provisoire. Aux questions, aussi seulement pour un compte à qui « À l'écran » est ouvert (`xrayOpenTo`). Un lien de
+  partage n'a aucune fonction d'IA.
+- **« Nom : » seulement si tout tient** (`speakerOf`) : une même voix nommée couvre au moins **60 %** de la réplique
+  (élargie de 0,15 s de chaque côté) et c'est la voix qui en couvre le plus ; sa confiance est d'au moins 0,6 ; pas de
+  désaccord (`conflict`) ; jamais une réplique à deux voix (un tiret en tête d'une ligne après la première —
+  `parseSrt` le note, `twoSpeakers`, avec la fin, `endS`). Le nom est celui qu'« À l'écran » écrit (le personnage,
+  sinon l'acteur) ; la consigne fait le reste (le nom des répliques quand il est clair).
+- **La consigne change d'une règle, et seulement avec des noms** (`sources.voiced`) : « Une réplique précédée d'un nom
+  (« Nom : … ») est dite par lui ; d'une réplique sans nom, ne déduis rien sur qui la dit, même juste après une des
+  siennes. » remplace « Les répliques ne disent pas qui parle… » (« Jusqu'ici ») et « Les dialogues ne disent pas qui
+  parle… » (questions) ; le titre du bloc dit « certaines précédées du nom de qui parle ». Sans voix, consignes et
+  messages identiques à l'octet à ceux de 10.29.2 (vérifié au banc). `SOFAR_VERSION` 9. « … même juste après une des
+  siennes » vient du banc : sans elle, Patricia (*MacGyver*, 34 min) recevait deux fois de suite la réplique sans nom
+  qui suivait les siennes (« il pourrait être n'importe qui », de Mac).
+- **Banc** (Haiku, 19 appels, un à la fois, aucun refus ; les huit cas difficiles des bancs précédents, avant / après) :
+  après, Ted (4 min) « avoue au coach Beard avoir passé la nuit avec l'amie de Rebecca » (avant : « il est question de
+  café ») ; Sam (10 min) « n'a pas encore eu de moment à lui » sans justification (avant : « sans qu'on lui attribue une
+  réplique », retiré par le filet) ; Rupert (24 min) « fiancé à Bex… affronte Ted aux fléchettes » ; Jack (20 min)
+  « lui demande s'il est sûr de vouloir voir seul une vidéo » (avant : « fait partie de ceux à qui l'on demande de
+  quitter la pièce ») ; Prince (59 min) « reconnaît avoir fait venir Kimura pour qu'il échoue » ; Rebecca (4 et 12 min)
+  inchangées et justes. Le seul écart d'attribution (Patricia) a conduit à la précision de la règle ci-dessus.
+Tests : `ask-voices-1030.test.ts` (couverture, deux voix d'une même personne, tirets, confiance, désaccord, réplique sans
+fin, analyse pas finie = rien, autre fichier = rien, « Nom : » dans les deux formes du bloc, consignes inchangées sans
+voix) ; `recap-core.test.ts` (`endS`, `twoSpeakers`) ; `ask-sofar*.test.ts` (version 9).
 
 ## 140. Les fonctions d'IA chez les trois fournisseurs, un seul plafond mensuel, et des réglages qui disent ce qu'ils demandent (09/11/2026)
 

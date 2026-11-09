@@ -4380,5 +4380,20 @@
     "pricesVerified": "Tarifs relevés le {date} sur la page officielle du fournisseur",
     "spendAll": "Toutes les fonctions payantes comptent dans ce plafond, au jeton près.",
     "budgetReached": "Plafond mensuel atteint : les fonctions payantes sont en pause jusqu'au premier du mois prochain. Relevez le plafond pour les rallumer."
+  },
+  "xrayQuality": {
+    "title": "Qualité des noms",
+    "hint": "Part de la parole et des visages qui portent un nom, voix indécises et désaccords entre la mémoire d'une série et ses épisodes. Les séries les moins bien nommées d'abord.",
+    "overall": "Toute la bibliothèque · {n} éléments, {v} avec les voix",
+    "movies": "Films · {n}",
+    "episodes": "{n} épisodes",
+    "speech": "Parole nommée",
+    "faces": "Visages nommés",
+    "undecided": "Voix indécises",
+    "conflicts": "Désaccords",
+    "reset": "Réinitialiser la mémoire",
+    "resetConfirm": "Oublier et renommer",
+    "resetDone": "Mémoire effacée : la série va être renommée.",
+    "unavailable": "Le service ne donne pas encore ces chiffres."
   }
 }

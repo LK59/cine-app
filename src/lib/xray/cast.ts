@@ -3,6 +3,7 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { getProviderIdCI, withCache, withPersistentCache } from "@/lib/server-cache";
 import { mapInBatches } from "@/lib/inBatches";
 import { isJellyfinId } from "@/lib/jellyfinPath";
+import { getTitleNames } from "@/lib/titleNames";
 
 /**
  * Ce que l'analyse des acteurs à l'écran sait d'un élément (DECISIONS.md §138) : où est son fichier,
@@ -49,6 +50,21 @@ export interface XrayPerson {
   order: number;
   /** Le chemin TMDB de la photo principale (`/abc.jpg`), ou `null`. */
   profilePath: string | null;
+}
+
+/**
+ * La langue d'origine du titre (« en »), pour que le service écoute la version originale (« qui parle »,
+ * 10.30) : celle que le catalogue tient déjà de TMDB (`getTitleNames`, gardée, sans appel de plus quand le
+ * titre est connu). Inconnue ou illisible : `null`, le service prend la piste par défaut.
+ */
+export function originalLanguageOf(tmdb: TmdbRef | null): string | null {
+  if (!tmdb) return null;
+  try {
+    const names = getTitleNames(tmdb.kind === "movie" ? tmdb.id : tmdb.tvId, tmdb.kind === "movie" ? "movie" : "series");
+    return typeof names.originalLanguage === "string" && /^[a-z]{2,3}$/i.test(names.originalLanguage) ? names.originalLanguage.toLowerCase() : null;
+  } catch {
+    return null;
+  }
 }
 
 export function tmdbPhotoUrl(filePath: string): string {

@@ -31,6 +31,7 @@ import {
   writeMeta,
   type ScanRow,
   type TierCounts,
+  finishedSeries,
 } from "./scanStore";
 
 /**
@@ -516,6 +517,10 @@ async function runTick(now: number): Promise<string | null> {
     live.lastBatchTier = tier;
   }
 
+  // Une série dont tout le plan est traité est renommée une fois (10.30) : ses premiers épisodes profitent de la
+  // mémoire construite par les suivants. Une panne n'arrête pas le tour.
+  await relabelFinishedSeries().catch((error) => logError("xray/relabel", error));
+
   const counts = tierCounts();
   // Un palier forcé et vidé perd son forçage : une file continue (le palier 2) forcée pour toujours
   // passerait outre chaque lecture à venir.
@@ -546,6 +551,32 @@ async function runTick(now: number): Promise<string | null> {
     live.playbackBy = signal.by;
   }
   return planIssue;
+}
+
+/** Les séries renommées : `seriesId → nombre d'épisodes finis` au moment du renommage. */
+const RELABELED_KEY = "relabeled-series";
+/** Au plus tant de séries renommées par tour : le service les sert entre deux tronçons, par lots bornés. */
+export const RELABELS_PER_TICK = 3;
+
+/**
+ * Renommer une série dont tout le plan est traité (consigne du propriétaire, 10/11/2026) : une fois, par
+ * `POST /series/{id}/relabel` dans l'ordre des épisodes — le service refait regroupement et noms sans relire
+ * les fichiers, avec la mémoire de toute la série. Refait si de nouveaux épisodes ont été finis depuis.
+ */
+async function relabelFinishedSeries(): Promise<number> {
+  const done = readMeta<Record<string, number>>(RELABELED_KEY) ?? {};
+  let n = 0;
+  for (const s of finishedSeries()) {
+    if (n >= RELABELS_PER_TICK) break;
+    if (done[s.seriesId] === s.done) continue;
+    // Retenu avant l'appel : un service qui refuse (version d'avant 10.30) n'est pas redemandé à chaque tour.
+    done[s.seriesId] = s.done;
+    writeMeta(RELABELED_KEY, done);
+    n++;
+    await service(() => xray.relabelSeries(s.seriesId, s.itemIds));
+    taskLog("xray", "série renommée", { série: s.name, épisodes: s.done });
+  }
+  return n;
 }
 
 /** Un tour — jamais deux à la fois : un tour en cours est rendu à qui en demande un autre. */

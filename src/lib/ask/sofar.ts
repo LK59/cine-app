@@ -52,9 +52,11 @@ import { logError } from "@/lib/logger";
  * épisodes vus ne disent rien de lui — formulée « rien ne le concerne encore », elle faisait redécrire sa présence à
  * Rebecca à 4 min au lieu de Liverpool (résumé de S01E07), et le texte, vidé par le filet, restait blanc. 8 (même
  * version) : « la réponse, qui commence par le nom du personnage » — le filet l'exige aussi (`leadVerdict`) ; la même
- * Rebecca recevait « Dans S01E07, elle décide… » une fois sa première phrase retirée.
+ * Rebecca recevait « Dans S01E07, elle décide… » une fois sa première phrase retirée. 9 (10.30) : « qui parle » —
+ * les répliques d'une analyse complète portent le nom de qui les dit quand la voix est sûre, et la règle
+ * d'attribution change avec elles (`SOFAR_ATTRIBUTION_VOICED`).
  */
-export const SOFAR_VERSION = 8;
+export const SOFAR_VERSION = 9;
 export { SOFAR_BUCKET_S } from "@/lib/ask/sofarCut";
 export const SOFAR_MAX_SENTENCES = 2;
 export const SOFAR_MAX_WORDS = 60;
@@ -112,8 +114,19 @@ const LANGUAGE_NAME: Record<Locale, string> = { fr: "français", en: "anglais", 
  * `grouped` : les répliques partent groupées par scène avec qui est à l'écran (titre analysé) ; sinon la
  * précision « groupées par moment avec qui est à l'écran » est retirée — elle décrirait un bloc absent.
  */
-export function sofarSystem(locale: Locale, grouped = true, kind: "series" | "movie" = "series"): string {
-  const text = sofarSeriesSystem(locale, grouped);
+/**
+ * La règle d'attribution (S7c), et sa forme quand des répliques portent le nom de qui les dit (10.30, consigne du
+ * propriétaire : « une parole précédée d'un nom est de lui ; une parole sans nom, n'en déduis rien »). Même longueur,
+ * même place ; le reste de la consigne ne change pas.
+ */
+const SOFAR_ATTRIBUTION =
+  "- Les répliques ne disent pas qui parle. Ne lui prête une parole, un acte ou une histoire (une nuit, un pari, une décision) que si les répliques le rattachent à lui par son nom ou si un résumé le dit ; un mot d'adresse (un prénom, « patronne », « coach ») dit à qui l'on parle. Quand plusieurs personnages sont là, dis seulement à quoi il assiste ou participe.";
+const SOFAR_ATTRIBUTION_VOICED =
+  "- Une réplique précédée d'un nom (« Nom : … ») est dite par lui ; d'une réplique sans nom, ne déduis rien sur qui la dit, même juste après une des siennes. Ne lui prête un acte ou une histoire (une nuit, un pari, une décision) que si ses répliques, celles qui le nomment ou un résumé le disent ; un mot d'adresse (« patronne », « coach ») dit à qui l'on parle. Quand plusieurs personnages sont là, dis seulement à quoi il assiste ou participe.";
+
+export function sofarSystem(locale: Locale, grouped = true, kind: "series" | "movie" = "series", voiced = false): string {
+  const base = sofarSeriesSystem(locale, grouped);
+  const text = voiced ? base.replace(SOFAR_ATTRIBUTION, SOFAR_ATTRIBUTION_VOICED).replace("sans le nom de qui parle", "certaines précédées du nom de qui parle") : base;
   if (kind === "series") return text;
   // Un film (10.28.0) : ni résumés d'épisodes ni « épisode en cours » — le synopsis, la distribution et les
   // répliques du film. Le texte des séries, validé au banc, n'en est pas touché : seules ces phrases changent.

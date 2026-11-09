@@ -17,6 +17,7 @@
 
 import type { Locale } from "@/lib/i18n";
 import { unknownNames, type Cue } from "@/lib/recap/core";
+import { cueLine } from "@/lib/ask/voices";
 
 /** Une question, pas un texte : la borne de la recherche (`/api/search`). */
 export const ASK_MAX_QUESTION = 200;
@@ -86,6 +87,11 @@ export interface AskSources {
   grouped?: boolean;
   /** Les épisodes dont le résumé est parti, dans l'ordre (« S01E05 ») — l'attente de « Jusqu'ici » les dit. */
   episodeCodes?: string[];
+  /**
+   * Des répliques sont parties précédées du nom de qui parle (« qui parle », 10.30) : la consigne dit alors
+   * qu'une parole nommée est de lui, et d'une parole sans nom de ne rien déduire.
+   */
+  voiced?: boolean;
 }
 
 const clock = (s: number) => {
@@ -179,7 +185,7 @@ export function groupCuesByScene(lines: readonly Cue[], scenes: readonly SourceS
     if (skipped && body.length) body.push("[…]");
     skipped = false;
     const who = g.scene.people.length ? g.scene.people.join(", ") : "personne de reconnu";
-    body.push(`— à l'écran : ${who}\n${g.lines.map((c) => c.text).join("\n")}`);
+    body.push(`— à l'écran : ${who}\n${g.lines.map(cueLine).join("\n")}`);
   });
   return body.join("\n\n");
 }
@@ -232,6 +238,9 @@ export function askSources(input: AskContextInput, opts: AskSourcesOptions = {})
   for (const e of episodes) parts.push(`### ${e.code} « ${e.title} » — résumé officiel (épisode vu)\n${e.overview.trim()}`);
   const lines = opts.strictCut && !input.watchedAll ? cuesBefore(input.cues, input.positionS) : seenCues(input.cues, input.positionS, input.watchedAll);
   let grouped = false;
+  const voiced = lines.some((c) => !!c.speaker);
+  // « Qui parle » (10.30) : le titre du bloc dit ce qui est vrai — certaines répliques portent un nom, ou aucune.
+  const who = voiced ? "certaines précédées du nom de qui parle" : "sans le nom de qui parle";
   if (lines.length) {
     const upTo = input.watchedAll ? "en entier (déjà vu)" : `jusqu'à ${clock(input.positionS ?? 0)}, là où en est le spectateur`;
     const byScene = opts.scenes?.length && !input.watchedAll ? groupCuesByScene(lines, opts.scenes, input.positionS ?? 0) : "";
@@ -239,10 +248,10 @@ export function askSources(input: AskContextInput, opts: AskSourcesOptions = {})
     if (byScene) {
       grouped = true;
       const what = input.kind === "series" && input.current ? `Épisode en cours, ${input.current.code} « ${input.current.title} »` : "Film en cours";
-      parts.push(`### ${what}, ${upTo} — répliques sans le nom de qui parle, par moment, avec qui est reconnu à l'écran\n${byScene}`);
+      parts.push(`### ${what}, ${upTo} — répliques ${who}, par moment, avec qui est reconnu à l'écran\n${byScene}`);
     } else {
       const what = input.kind === "series" && input.current ? `de ${input.current.code} « ${input.current.title} »` : "du film";
-      parts.push(`### Dialogues ${what}, ${upTo} — sans le nom de qui parle\n${lines.map((c) => c.text).join("\n")}`);
+      parts.push(`### Dialogues ${what}, ${upTo} — ${who}\n${lines.map(cueLine).join("\n")}`);
     }
   }
   const text = parts.join("\n\n");
@@ -253,6 +262,7 @@ export function askSources(input: AskContextInput, opts: AskSourcesOptions = {})
     episodes: episodes.length,
     episodeCodes: episodes.map((e) => e.code),
     ...(grouped ? { grouped } : {}),
+    ...(voiced ? { voiced } : {}),
   };
 }
 
@@ -321,7 +331,19 @@ const SEEN_SO_FAR: Record<Locale, string> = {
 /** Le préfixe de la ligne des noms, que la réponse porte en tête et que l'écran ne voit jamais. */
 export const NAMES_PREFIX = "NOMS:";
 
-export function askSystem(locale: Locale): string {
+/**
+ * La règle d'attribution des questions. Sans « qui parle » : celle d'avant, inchangée. Avec (10.30, consigne du
+ * propriétaire) : une parole précédée d'un nom est de lui ; d'une parole sans nom, rien ne se déduit.
+ */
+const ASK_ATTRIBUTION = "- Les dialogues ne disent pas qui parle : n'attribue une réplique que si le nom de la personne est dit dans la même réplique. Dans le doute, reste général.";
+const ASK_ATTRIBUTION_VOICED = "- Une réplique précédée d'un nom (« Nom : … ») est dite par lui ; d'une réplique sans nom, ne déduis rien sur qui la dit, même juste après une des siennes. Dans le doute, reste général.";
+
+export function askSystem(locale: Locale, voiced = false): string {
+  const text = askSystemText(locale);
+  return voiced ? text.replace(ASK_ATTRIBUTION, ASK_ATTRIBUTION_VOICED) : text;
+}
+
+function askSystemText(locale: Locale): string {
   return `Tu réponds à la question d'un spectateur sur le film ou la série qu'il regarde, uniquement d'après les sources fournies : ce qu'il a déjà vu (synopsis, distribution, résumés des épisodes vus, dialogues jusqu'à l'endroit où il en est).
 
 Règles :

@@ -34,6 +34,7 @@ const svc = vi.hoisted(() => ({
   enqueueError: null as Error | null,
   /** Appelé à chaque lecture d'état — un geste de l'administrateur pendant le tour. */
   onItemStatus: null as ((itemId: string) => void) | null,
+  relabeled: [] as { seriesId: string; itemIds: readonly string[] }[],
 }));
 vi.mock("@/lib/clients/xray", () => ({
   xrayConfigured: () => svc.configured,
@@ -45,6 +46,10 @@ vi.mock("@/lib/clients/xray", () => ({
     itemStatus: async (itemId: string) => {
       svc.onItemStatus?.(itemId);
       return svc.statuses.get(itemId) ?? null;
+    },
+    relabelSeries: async (seriesId: string, itemIds: readonly string[]) => {
+      svc.relabeled.push({ seriesId, itemIds });
+      return { queued: itemIds.length };
     },
     enqueue: async (job: Record<string, unknown>) => {
       if (job.rebindIfSameDuration && svc.rebindError) throw svc.rebindError;
@@ -88,6 +93,7 @@ vi.mock("@/lib/xray/scanSources", () => ({
   readPriorityTitle: async (itemId: string) => lib.titles.get(itemId) ?? null,
 }));
 vi.mock("@/lib/xray/cast", () => ({
+  originalLanguageOf: () => "en",
   analysisTarget: async (itemId: string) => {
     const failure = lib.targetErrors.get(itemId);
     if (failure) throw failure;
@@ -132,7 +138,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   __testing.reset();
   wipeScanStore();
-  Object.assign(svc, { configured: true, pending: 0, statuses: new Map(), enqueued: [], enqueueStatus: "queued", rebindError: null, healthError: null, rebindAnswer: "done", enqueueError: null, onItemStatus: null });
+  Object.assign(svc, { configured: true, pending: 0, statuses: new Map(), enqueued: [], enqueueStatus: "queued", rebindError: null, healthError: null, rebindAnswer: "done", enqueueError: null, onItemStatus: null, relabeled: [] });
   // Palier 1 : « 1 » ; palier 2 : « 2 » (arrivé hier) ; palier 3 : « 3 », « 4 », « 5 » du plus récent au plus ancien.
   lib.library = [movie("1", 300), movie("2", 1), movie("3", 30), movie("4", 60), movie("5", 90), movie("6", 2, { animation: true })];
   lib.watching = new Map([[id("1"), 1]]);
@@ -610,5 +616,48 @@ describe("sous next dev", () => {
     expect(svc.enqueued).toEqual([]);
     expect(lib.libraryReads).toBe(0);
     expect(__testing.live.timers).toHaveLength(0);
+  });
+});
+
+describe("une série dans l'ordre de ses épisodes, puis renommée une fois (10.30)", () => {
+  const ep = (c: string, n: number, daysAgo: number) => ({
+    itemId: id(c),
+    kind: "Episode",
+    title: `Show S01E${String(n).padStart(2, "0")}`,
+    seriesId: id("s"),
+    durationS: 1800,
+    importedAt: NOW - daysAgo * DAY,
+    createdAt: null,
+    animation: false,
+    season: 1,
+    episode: n,
+  });
+  const done = (c: string) => svc.statuses.set(id(c), { itemId: id(c), etag: "v1", status: "done", progress: 1, analyzedUntil: 1800, error: null });
+
+  it("les épisodes partent dans l'ordre de la série, à la place que la série tenait dans son palier", async () => {
+    // Importés à l'envers : l'épisode 3 est le plus récent.
+    lib.library = [ep("a", 3, 30), ep("b", 1, 40), ep("c", 2, 50), movie("5", 35)];
+    lib.watching = new Map();
+    await scanTick(NOW);
+    expect(enqueuedIds()).toEqual([id("b"), id("5")]);
+    done("b");
+    done("5");
+    await scanTick(NOW + 60_000);
+    expect(enqueuedIds()).toEqual([id("b"), id("5"), id("c"), id("a")]);
+  });
+
+  it("tous ses épisodes du plan finis : la série est renommée une fois, dans l'ordre de ses épisodes", async () => {
+    lib.library = [ep("a", 3, 30), ep("b", 1, 40), ep("c", 2, 50)];
+    lib.watching = new Map();
+    await scanTick(NOW);
+    done("b");
+    done("c");
+    await scanTick(NOW + 60_000);
+    expect(svc.relabeled).toEqual([]); // l'épisode 3 n'est pas fini
+    done("a");
+    await scanTick(NOW + 120_000);
+    await scanTick(NOW + 180_000);
+    expect(svc.relabeled).toEqual([{ seriesId: id("s"), itemIds: [id("b"), id("c"), id("a")] }]);
+    expect(mockTaskLog).toHaveBeenCalledWith("xray", "série renommée", { série: "Show", épisodes: 3 });
   });
 });

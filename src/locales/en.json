@@ -4380,5 +4380,20 @@
     "pricesVerified": "Prices checked on {date} on the provider's official page",
     "spendAll": "Every paid feature counts towards this limit, to the token.",
     "budgetReached": "Monthly limit reached: paid features are paused until the first of next month. Raise the limit to turn them back on."
+  },
+  "xrayQuality": {
+    "title": "Naming quality",
+    "hint": "Share of speech and faces that carry a name, undecided voices, and disagreements between a series' memory and its episodes. Worst-named series first.",
+    "overall": "Whole library · {n} items, {v} with voices",
+    "movies": "Movies · {n}",
+    "episodes": "{n} episodes",
+    "speech": "Speech named",
+    "faces": "Faces named",
+    "undecided": "Undecided voices",
+    "conflicts": "Disagreements",
+    "reset": "Reset memory",
+    "resetConfirm": "Forget and rename",
+    "resetDone": "Memory cleared: the series will be renamed.",
+    "unavailable": "The service does not report these figures yet."
   }
 }

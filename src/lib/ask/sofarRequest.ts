@@ -21,6 +21,8 @@ import { SOFAR_MAX_OUTPUT_TOKENS, askModelName, currentAskModel, gatherAskContex
 import { aiBudgetReached } from "@/lib/aiFeatures";
 import { castPerson } from "@/lib/xray/person";
 import { scenesForPlayer } from "@/lib/xray/scenes";
+import { speakerSegments } from "@/lib/xray/voices";
+import { withSpeakers } from "@/lib/ask/voices";
 import { sofarCut, sofarMark } from "@/lib/ask/sofarCut";
 import { SOFAR_MOVIE_MIN_S, sofarInput, sofarKey, sofarLookup, sofarParts, sofarScenes, sofarSources, sofarStart, sofarSubscribe, sofarSystem, sofarWaiting, type SofarEntry } from "@/lib/ask/sofar";
 
@@ -121,10 +123,14 @@ export async function answerSofar(
   }
 
   const person = { name: found.person.name, character: found.person.character };
+  // « Qui parle » (10.30) : le nom de qui dit chaque réplique — seulement d'une analyse complète (`speakerSegments`
+  // rend `null` sinon, et les répliques partent sans nom, comme avant). La porte de l'option est celle de la route.
+  const speakers = context.input.cues.length && context.cuesItemId ? await speakerSegments(context.cuesItemId).catch(() => null) : null;
+  const input = speakers ? { ...context.input, cues: withSpeakers(context.input.cues, speakers) } : context.input;
   // Les répliques groupées par scène (10.28.0, S7c) : les mêmes scènes que la coupe.
-  const sources = sofarSources(context.input, person, sofarScenes(scenes, body.personId));
-  const system = sofarSystem(who.locale, !!sources.grouped, context.input.kind);
-  const { message, prefixEnd } = sofarParts(sources, askWhereLine(sofarInput(context.input)), person);
+  const sources = sofarSources(input, person, sofarScenes(scenes, body.personId));
+  const system = sofarSystem(who.locale, !!sources.grouped, context.input.kind, !!sources.voiced);
+  const { message, prefixEnd } = sofarParts(sources, askWhereLine(sofarInput(input)), person);
   // Le modèle qui écrit (§140) : un texte d'un fournisseur n'est jamais servi pour un autre.
   const key = sofarKey(askModelName(), system, message);
   const dialogue: boolean | "attente" = context.dialogueLate ? "attente" : sources.dialogue;

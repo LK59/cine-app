@@ -61,6 +61,15 @@ export interface Cue {
    * coupée passait (`startS ≤ coupe`). Absent (un double de test) : `startS`.
    */
   atS?: number;
+  /** La fin exacte (10.30, « qui parle » : la voix doit couvrir la réplique). Absente : inconnue. */
+  endS?: number;
+  /**
+   * Deux personnes dans la même réplique (10.30) : une ligne après la première commence par un tiret
+   * (« - Tu viens ? / - Non. »). Jamais attribuée à une seule voix.
+   */
+  twoSpeakers?: boolean;
+  /** Qui la dit, quand l'analyse des voix le sait avec assurance (`withSpeakers`, src/lib/ask/voices.ts). */
+  speaker?: string;
   text: string;
 }
 
@@ -77,14 +86,18 @@ export function parseSrt(srt: string): Cue[] {
     if (at < 0) continue;
     const m = lines[at].match(/(\d+):(\d+):(\d+)[,.](\d+)/);
     if (!m) continue;
-    const text = lines
+    const end = lines[at].match(/-->\s*(\d+):(\d+):(\d+)[,.](\d+)/);
+    const body = lines
       .slice(at + 1)
       .map((l) => l.replace(/<[^>]+>/g, "").replace(/\{[^}]*\}/g, "").trim())
-      .filter(Boolean)
-      .join(" ");
+      .filter(Boolean);
+    const text = body.join(" ");
     if (text) {
       const startS = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
-      out.push({ startS, atS: startS + Number(m[4]) / 1000, text });
+      const cue: Cue = { startS, atS: startS + Number(m[4]) / 1000, text };
+      if (end) cue.endS = Number(end[1]) * 3600 + Number(end[2]) * 60 + Number(end[3]) + Number(end[4]) / 1000;
+      if (body.slice(1).some((l) => /^[-–—]/.test(l))) cue.twoSpeakers = true;
+      out.push(cue);
     }
   }
   return out;

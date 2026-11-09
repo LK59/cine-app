@@ -4380,5 +4380,20 @@
     "pricesVerified": "Precios comprobados el {date} en la página oficial del proveedor",
     "spendAll": "Todas las funciones de pago cuentan en este límite, token a token.",
     "budgetReached": "Límite mensual alcanzado: las funciones de pago están en pausa hasta el primer día del mes que viene. Suba el límite para reactivarlas."
+  },
+  "xrayQuality": {
+    "title": "Calidad de los nombres",
+    "hint": "Proporción del habla y de las caras que llevan un nombre, voces indecisas y desacuerdos entre la memoria de una serie y sus episodios. Primero las series peor nombradas.",
+    "overall": "Toda la biblioteca · {n} elementos, {v} con voces",
+    "movies": "Películas · {n}",
+    "episodes": "{n} episodios",
+    "speech": "Habla nombrada",
+    "faces": "Caras nombradas",
+    "undecided": "Voces indecisas",
+    "conflicts": "Desacuerdos",
+    "reset": "Restablecer la memoria",
+    "resetConfirm": "Olvidar y renombrar",
+    "resetDone": "Memoria borrada: la serie se va a renombrar.",
+    "unavailable": "El servicio aún no da estas cifras."
   }
 }

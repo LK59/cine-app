@@ -42,6 +42,11 @@ export interface XrayJob {
   startAt?: number;
   seriesId: string | null;
   cast: XrayCastMember[];
+  /**
+   * La langue d'origine du titre (ISO 639-1 de TMDB, « en ») — ajout compatible (10.30, « qui parle ») : le
+   * service écoute la version originale quand le fichier l'a. Absente : la piste par défaut.
+   */
+  originalLanguage?: string | null;
 }
 
 export type XrayJobStatus = "queued" | "running" | "done";
@@ -82,6 +87,53 @@ export interface XrayScenes {
   complete: boolean;
   analyzedUntil: number;
   scenes: XrayScene[];
+}
+
+/**
+ * « Qui parle » (10.30, DECISIONS.md §138) : les segments de parole du service, chacun avec sa voix et,
+ * nommée, la personne (`personId` de la distribution) et une confiance. `conflict` : la mémoire des voix de
+ * la série et les visages de l'épisode se contredisent — la voix reste sans nom.
+ */
+export interface XrayVoiceSegment {
+  start: number;
+  end: number;
+  voiceId: number;
+  personId: number | null;
+  confidence: number;
+  conflict?: boolean;
+}
+
+export interface XrayVoices {
+  itemId: string;
+  etag: string;
+  model: string;
+  version: number;
+  complete: boolean;
+  analyzedUntil: number;
+  track: { index: number; language: string | null; title: string | null; channels: number; reason: string | null } | null;
+  stats?: Record<string, number | null> | null;
+  segments: XrayVoiceSegment[];
+}
+
+/** La qualité des noms par série (`GET /quality`) — Configuration → Acteurs à l'écran. */
+export interface XrayQualityGroup {
+  seriesId: string | null;
+  items: number;
+  withVoices: number;
+  /** Part du temps de parole qui porte un nom (moyenne des éléments) ; `null` sans voix. */
+  speechNamed: number | null;
+  /** Part du temps de visage à l'écran qui porte un nom. */
+  facesNamed: number | null;
+  voicesNamed: number;
+  voicesUndecided: number;
+  voicesConflict: number;
+  itemsWithConflict: number;
+}
+
+export interface XrayQuality {
+  overall: XrayQualityGroup;
+  movies: XrayQualityGroup | null;
+  series: XrayQualityGroup[];
 }
 
 /** Une lecture : le service est local, il répond en bien moins. */
@@ -174,6 +226,37 @@ export const xray = {
     }
     if (!res.ok) return refused(res, "scenes");
     return (await res.json()) as XrayScenes;
+  },
+
+  /** « Qui parle » : les segments de parole, ou `null` s'il n'y a rien (pas encore analysé, ou service d'avant 10.30). */
+  voices: async (itemId: string): Promise<XrayVoices | null> => {
+    const res = await call(`${item(itemId)}/voices`);
+    if (res.status === 404) {
+      await res.arrayBuffer().catch(() => undefined);
+      return null;
+    }
+    if (!res.ok) return refused(res, "voices");
+    return (await res.json()) as XrayVoices;
+  },
+
+  /** Refait regroupement et noms d'une série sans relire ses fichiers, dans l'ordre donné des épisodes. */
+  relabelSeries: async (seriesId: string, itemIds: readonly string[] = []): Promise<{ queued: number }> => {
+    const res = await call(`/series/${encodeURIComponent(seriesId)}/relabel`, { method: "POST", body: JSON.stringify({ itemIds }), timeoutMs: ORDER_TIMEOUT_MS });
+    if (!res.ok) return refused(res, "relabel");
+    return (await res.json()) as { queued: number };
+  },
+
+  /** Efface la mémoire des visages et des voix d'une série, puis la renomme dans l'ordre donné. */
+  resetSeriesMemory: async (seriesId: string, itemIds: readonly string[] = []): Promise<{ removed: number; queued: number }> => {
+    const res = await call(`/series/${encodeURIComponent(seriesId)}/memory/reset`, { method: "POST", body: JSON.stringify({ itemIds }), timeoutMs: ORDER_TIMEOUT_MS });
+    if (!res.ok) return refused(res, "memory/reset");
+    return (await res.json()) as { removed: number; queued: number };
+  },
+
+  quality: async (): Promise<XrayQuality> => {
+    const res = await call("/quality");
+    if (!res.ok) return refused(res, "quality");
+    return (await res.json()) as XrayQuality;
   },
 
   /** Oublie le résultat d'un élément (fichier remplacé). Inconnu : rien à oublier, pas une erreur. */

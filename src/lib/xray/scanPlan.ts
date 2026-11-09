@@ -83,6 +83,9 @@ export interface LibraryEntry {
   /** `DateCreated` de Jellyfin (ms) — le repli. */
   createdAt: number | null;
   animation: boolean;
+  /** Saison et numéro d'un épisode (Jellyfin) : l'ordre des épisodes d'une série dans un palier (10.30). */
+  season?: number | null;
+  episode?: number | null;
 }
 
 /** Une liste « Reprendre » ou « À suivre » d'un compte, dans son ordre. */
@@ -201,7 +204,36 @@ export function buildPlan(library: readonly LibraryEntry[], watching: Map<string
       excluded: e.animation ? "animation" : null,
     });
   }
-  return out;
+  return inEpisodeOrder(out, library);
+}
+
+/**
+ * Dans un palier, les épisodes d'une même série passent **dans l'ordre de la série** (saison, épisode ;
+ * consigne du propriétaire, 10/11/2026) : la mémoire des visages et des voix d'une série se construit
+ * d'épisode en épisode, et le premier épisode analysé est le premier vu. Les places du palier ne changent
+ * pas — la série garde les rangs qu'elle avait (les plus récents d'abord), seulement redistribués à ses
+ * épisodes dans leur ordre. Le palier 1 garde son ordre à lui (la distance à l'épisode en cours, déjà dans
+ * l'ordre de la série).
+ */
+export function inEpisodeOrder(plan: PlannedItem[], library: readonly LibraryEntry[]): PlannedItem[] {
+  const numbers = new Map(library.map((e) => [e.itemId, e]));
+  const groups = new Map<string, PlannedItem[]>();
+  for (const p of plan) {
+    if (p.tier === 1 || p.kind !== "Episode" || !p.seriesId) continue;
+    const key = `${p.tier}:${p.seriesId}`;
+    const g = groups.get(key);
+    if (g) g.push(p);
+    else groups.set(key, [p]);
+  }
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    const ranks = g.map((p) => p.rank).sort((a, b) => a - b);
+    const ordered = seriesOrder(g.map((p) => ({ Id: p.itemId, ParentIndexNumber: numbers.get(p.itemId)?.season ?? null, IndexNumber: numbers.get(p.itemId)?.episode ?? null, p })));
+    ordered.forEach((o, i) => {
+      o.p.rank = ranks[i];
+    });
+  }
+  return plan;
 }
 
 /** Deux durées « égales » : à une seconde près (consigne du propriétaire, 09/11/2026). */

@@ -101,6 +101,8 @@ export async function readLibrary(): Promise<LibraryEntry[]> {
       importedAt: imported,
       createdAt: dateMs(ep.DateCreated),
       animation: info?.animation ?? false,
+      season: season ?? null,
+      episode: number ?? null,
     });
   }
   return out;

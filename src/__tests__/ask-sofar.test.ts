@@ -466,8 +466,9 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     expect(sys).not.toContain("ou à quoi il assiste");
   });
 
-  it("la version de la consigne est dans la clé : 8 (10.29.2), et une même entrée sous les versions d'avant donne une autre clé", () => {
-    expect(SOFAR_VERSION).toBe(8);
+  it("la version de la consigne est dans la clé : 9 (10.30, « qui parle »), et une même entrée sous les versions d'avant donne une autre clé", () => {
+    expect(SOFAR_VERSION).toBe(9);
+    expect(sofarKey(ASK_MODEL, "s", "m", 8)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 7)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 6)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 5)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));

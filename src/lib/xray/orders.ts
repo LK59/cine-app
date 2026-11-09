@@ -3,7 +3,7 @@ import { xray, xrayConfigured, type XrayJob, type XrayJobAnswer, type XrayPriori
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { logError } from "@/lib/logger";
 import { taskLog } from "@/lib/taskLog";
-import { analysisTarget, castOf, castWithPhotos, nextEpisodeAfter } from "./cast";
+import { analysisTarget, castOf, castWithPhotos, nextEpisodeAfter, originalLanguageOf } from "./cast";
 import { keepsAnalysis, rebindAnalysis } from "./rebind";
 import { recordFileVersion } from "./scanStore";
 
@@ -128,6 +128,7 @@ export async function orderAnalysis(itemId: string, options: OrderOptions, now =
       ...(options.startAt && options.startAt > 0 ? { startAt: Math.round(options.startAt * 1000) / 1000 } : {}),
       seriesId: target.seriesId,
       cast: await castWithPhotos(cast),
+      originalLanguage: originalLanguageOf(target.tmdb),
     };
     // Un fichier remplacé à durée égale (± 1 s) garde son analyse : rattachée au nouvel `ETag`, rien
     // n'est réanalysé (§138, 09/11/2026). Le lecteur sert l'ancienne de toute façon (`scenes.ts`).

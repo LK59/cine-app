@@ -194,11 +194,15 @@ export function rowsWithStatus(status: ScanStatus, limit = 50): ScanRow[] {
 }
 
 /** Les prochains à vérifier, palier par palier — le 0 et le 1 par rang, les autres du plus récent au plus ancien. */
+/**
+ * Dans l'ordre du palier, puis du rang. Depuis 10.30 le rang sert aussi aux paliers 2 et 3 (il y était déjà l'ordre des
+ * dates, du plus récent au plus ancien) : il y porte en plus l'ordre des épisodes d'une série (`inEpisodeOrder`).
+ */
 export function nextPending(tiers: readonly ScanTier[], limit: number): ScanRow[] {
   if (tiers.length === 0) return [];
   const marks = tiers.map(() => "?").join(",");
   return db()
-    .prepare(`SELECT ${COLUMNS} FROM xray_scan_items WHERE status = 'pending' AND tier IN (${marks}) ORDER BY tier, CASE WHEN tier <= 1 THEN rank ELSE -imported_at END, item_id LIMIT ?`)
+    .prepare(`SELECT ${COLUMNS} FROM xray_scan_items WHERE status = 'pending' AND tier IN (${marks}) ORDER BY tier, rank, item_id LIMIT ?`)
     .all(...tiers, limit) as ScanRow[];
 }
 
@@ -413,6 +417,45 @@ export function readMeta<T>(key: string): T | null {
 
 export function writeMeta(key: string, value: unknown): void {
   db().prepare("INSERT INTO xray_scan_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, JSON.stringify(value));
+}
+
+/**
+ * Les séries dont tout le plan est traité (10.30) : aucun épisode en attente ni en file, au moins un fini. Avec
+ * leurs épisodes finis dans l'ordre de la série (le titre porte « SxxEyy », zéros compris). Les écartés ne
+ * comptent pas ; un échec compte comme traité (il serait sinon attendu pour toujours).
+ */
+export function finishedSeries(): { seriesId: string; name: string; done: number; itemIds: string[] }[] {
+  const rows = db()
+    .prepare("SELECT series_id AS seriesId, item_id AS itemId, title, status FROM xray_scan_items WHERE series_id IS NOT NULL AND status != 'excluded'")
+    .all() as { seriesId: string; itemId: string; title: string; status: ScanStatus }[];
+  const by = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const g = by.get(r.seriesId);
+    if (g) g.push(r);
+    else by.set(r.seriesId, [r]);
+  }
+  const out: { seriesId: string; name: string; done: number; itemIds: string[] }[] = [];
+  for (const [seriesId, g] of by) {
+    if (g.some((r) => r.status === "pending" || r.status === "queued")) continue;
+    const done = g.filter((r) => r.status === "done").sort((a, b) => a.title.localeCompare(b.title, "en", { numeric: true }));
+    if (done.length === 0) continue;
+    out.push({ seriesId, name: seriesNameOf(done[0].title), done: done.length, itemIds: done.map((r) => r.itemId) });
+  }
+  return out;
+}
+
+/** Le nom d'une série d'après le titre d'un de ses épisodes dans le plan (« Ted Lasso S01E08 »). */
+export function seriesNameOf(title: string): string {
+  return title.replace(/\s+S\d+E\d+\s*$/i, "").trim() || title;
+}
+
+/** Les épisodes d'une série dans le plan, dans l'ordre de la série, et son nom (la qualité, la réinitialisation). */
+export function seriesRows(seriesId: string): { name: string | null; itemIds: string[] } {
+  const rows = db()
+    .prepare("SELECT item_id AS itemId, title FROM xray_scan_items WHERE series_id = ?")
+    .all(seriesId.toLowerCase()) as { itemId: string; title: string }[];
+  rows.sort((a, b) => a.title.localeCompare(b.title, "en", { numeric: true }));
+  return { name: rows.length ? seriesNameOf(rows[0].title) : null, itemIds: rows.map((r) => r.itemId) };
 }
 
 /** Pour les tests : tout oublier. */

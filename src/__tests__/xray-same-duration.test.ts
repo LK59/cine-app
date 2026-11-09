@@ -26,6 +26,7 @@ vi.mock("@/lib/clients/xray", () => ({
 }));
 const target = vi.hoisted(() => ({ etag: "v2", durationS: 2551.4 as number | null }));
 vi.mock("@/lib/xray/cast", () => ({
+  originalLanguageOf: () => "en",
   analysisTarget: async (itemId: string) => ({ itemId, type: "Episode", path: "/media/m.mkv", etag: target.etag, seriesId: null, tmdb: { kind: "episode", tvId: 1, season: 1, episode: 1 }, durationS: target.durationS }),
   castOf: async () => [{ personId: 7, name: "Lucas Till", character: "Angus MacGyver", order: 0, profilePath: "/lt.jpg" }],
   castWithPhotos: async () => [{ personId: 7, name: "Lucas Till", character: "Angus MacGyver", order: 0, photos: [] }],
@@ -95,6 +96,8 @@ describe("la commande d'une séance", () => {
     await orderAnalysis(other, { priority: "high" });
     expect(svc.enqueued).toHaveLength(1);
     expect(svc.enqueued[0].rebindIfSameDuration).toBeUndefined();
+    // La langue d'origine du titre part avec la commande (10.30, « qui parle » : la version originale).
+    expect(svc.enqueued[0].originalLanguage).toBe("en");
     expect(recordedDuration(other, "v2")).toBe(2700);
   });
 });

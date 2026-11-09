@@ -197,6 +197,8 @@ export type AskContext =
       early: boolean;
       /** `prêt` : l'élément et ses épisodes venaient de la préparation (10.27.2) ; `construit` : lus pour cette demande. */
       ctx: "prêt" | "construit";
+      /** L'élément dont les répliques sont parties (le film, l'épisode en cours) — « qui parle » (10.30) s'y lit. */
+      cuesItemId?: string | null;
     }
   | { status: "indisponible" };
 
@@ -239,6 +241,7 @@ export async function gatherAskContext(
       dialogueMissing: wantsCues && !cues?.length && hasTextSubtitles(item, locale),
       early,
       ctx,
+      cuesItemId: item.Id,
       input: {
         kind: "movie",
         title: item.Name,
@@ -283,6 +286,7 @@ export async function gatherAskContext(
     dialogueMissing,
     early: false,
     ctx,
+    cuesItemId: current?.Id ?? null,
     input: {
       kind: "series",
       title: series.Name,

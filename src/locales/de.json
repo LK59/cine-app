@@ -4380,5 +4380,20 @@
     "pricesVerified": "Preise am {date} auf der offiziellen Seite des Anbieters geprüft",
     "spendAll": "Alle kostenpflichtigen Funktionen zählen zu diesem Limit, auf den Token genau.",
     "budgetReached": "Monatslimit erreicht: Kostenpflichtige Funktionen sind bis zum Ersten des nächsten Monats pausiert. Erhöhen Sie das Limit, um sie wieder einzuschalten."
+  },
+  "xrayQuality": {
+    "title": "Qualität der Namen",
+    "hint": "Anteil der Sprache und der Gesichter mit Namen, unentschiedene Stimmen und Widersprüche zwischen dem Gedächtnis einer Serie und ihren Folgen. Die am schlechtesten benannten Serien zuerst.",
+    "overall": "Gesamte Bibliothek · {n} Titel, {v} mit Stimmen",
+    "movies": "Filme · {n}",
+    "episodes": "{n} Folgen",
+    "speech": "Sprache benannt",
+    "faces": "Gesichter benannt",
+    "undecided": "Unentschiedene Stimmen",
+    "conflicts": "Widersprüche",
+    "reset": "Gedächtnis zurücksetzen",
+    "resetConfirm": "Vergessen und neu benennen",
+    "resetDone": "Gedächtnis gelöscht: die Serie wird neu benannt.",
+    "unavailable": "Der Dienst liefert diese Zahlen noch nicht."
   }
 }
