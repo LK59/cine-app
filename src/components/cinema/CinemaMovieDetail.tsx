@@ -1,6 +1,5 @@
 "use client";
 
-import { AskTitleControl } from "@/components/ask/AskTitleControl";
 import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -24,12 +23,12 @@ import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import { OfflineDownloadControl, OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
-import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
+import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, SHORT_HIDE, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
 import { useDesktopSheetShell, DesktopSheetFrame, DetailTrailerRow } from "@/components/cinema/DesktopSheetShell";
 import { useSheetPlay } from "@/lib/useSheetPlay";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, sheetRuntimeMinutes, sheetLeadFacts } from "@/lib/sheetFacts";
-import { TitleToggleRow, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
+import { DetailIconActions } from "@/components/cinema/DetailIconActions";
 import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
@@ -249,7 +248,7 @@ export function CinemaMovieDetail({
           {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
           </div>
 
-          {!lead.taglineKnown ? <ReservedLine className="h-[1.1rem]" /> : <CinemaTagline text={lead.tagline} className={lead.taglineLate ? late.fade : ""} />}
+          {!lead.taglineKnown ? <ReservedLine className={`h-[1.1rem] ${SHORT_HIDE}`} /> : <CinemaTagline text={lead.tagline} className={`${SHORT_HIDE} ${lead.taglineLate ? late.fade : ""}`} />}
 
           <CinemaOverview
             text={sheetOverview(item.overview, info?.tmdb?.overview)}
@@ -319,9 +318,6 @@ export function CinemaMovieDetail({
             {/* Sa place est tenue, invisible et hors du clavier, tant que la description n'est pas là. */}
             <DetailTrailerRow lead={lead} late={late} onOpen={() => setShowTrailer(true)} />
 
-            {/* « Poser une question » (§139) : la même pièce sur toutes les fiches, qui décide seule d'exister. */}
-            <AskTitleControl itemId={item.jellyfinItemId} variant="row" />
-
             {/* Le téléchargement hors ligne (bêta, 19/10/2026) : Lire, Bande-annonce, puis Télécharger (Louis). */}
             {!fileMissing && (
               <OfflineDownloadControl
@@ -339,16 +335,15 @@ export function CinemaMovieDetail({
               />
             )}
 
-            {/* « Vu » puis « À voir » : la forme de toutes les fiches (`TitleToggles`, §117.4). Estompé
-                tant que Jellyfin n'a pas répondu : ce bouton écrit, et proposer d'écrire une valeur
-                qu'on n'a pas lue est la façon la plus sûre de la changer par erreur. */}
-            <TitleToggleRow face={WATCHED_FACE} on={watched} onClick={toggleWatched} disabled={flagsBusy} unknown={!flagsKnown} />
-
-            {/* L'état tient dans la pastille, et non dans la ligne entière.
-                Une ligne pleine d'accent criait plus fort que le repère de sélection lui-même :
-                sur un menu parcouru à la télécommande, la ligne « déjà dans ma liste » avait donc
-                l'air d'être celle qu'on venait de désigner. */}
-            {listable && <TitleToggleRow face={WATCHLIST_FACE} on={inList} onClick={toggleAddToList} />}
+            {/* « Vu », « À voir » et « Poser une question » : trois boutons ronds sous les actions (10.27,
+                `DetailIconActions`, la même rangée sur la fiche série) — la fiche tient en une page. « Vu »
+                est estompé tant que Jellyfin n'a pas répondu : ce bouton écrit, et proposer d'écrire une
+                valeur qu'on n'a pas lue est la façon la plus sûre de la changer par erreur. */}
+            <DetailIconActions
+              watched={{ on: watched, onClick: toggleWatched, disabled: flagsBusy, unknown: !flagsKnown }}
+              list={listable ? { on: inList, onClick: toggleAddToList } : null}
+              askItemId={item.jellyfinItemId}
+            />
           </div>
 
         </div>

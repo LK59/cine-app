@@ -100,9 +100,10 @@ const withSwr = (node: React.ReactNode) => <SWRConfig value={{ provider: () => n
 /** Les boutons « À voir » et « Vu » d'une fiche, dans l'ordre : libellé, icône, état annoncé. */
 function toggles() {
   return Array.from(document.body.querySelectorAll<HTMLButtonElement>("button[aria-pressed]"))
-    .filter((b) => /À voir|Dans ma liste|Vu|Marquer comme vu|Ajouter à ma liste/.test(b.textContent ?? ""))
+    // Le libellé écrit, ou celui d'un bouton rond (10.27 : les fiches du bureau, `TitleToggleRound`).
+    .filter((b) => /À voir|Dans ma liste|Vu|Marquer comme vu|Ajouter à ma liste/.test((b.textContent || b.getAttribute("aria-label")) ?? ""))
     .map((b) => ({
-      label: (b.textContent ?? "").trim(),
+      label: ((b.textContent ?? "").trim() || b.getAttribute("aria-label")) ?? "",
       icon: b.querySelector("[data-toggle-glyph] svg")?.getAttribute("class")?.match(/lucide-([a-z-]+)/g)?.find((c) => c !== "lucide-icon") ?? null,
       pressed: b.getAttribute("aria-pressed"),
     }));

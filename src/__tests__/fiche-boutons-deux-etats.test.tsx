@@ -89,7 +89,8 @@ const withSwr = (node: React.ReactNode) => <SWRConfig value={{ provider: () => n
 /** Les libellés, toutes fiches confondues, des deux boutons à deux états. */
 const LIST = /^(watchlist\.statuses\.toWatch|cinema\.inMyList|player\.discover\.addToList|player\.discover\.inList)$/;
 const SEEN = /^(cinema\.markWatched|cinema\.watchedState|player\.discover\.markWatched|player\.discover\.watched)$/;
-const buttons = (re: RegExp) => Array.from(document.body.querySelectorAll("button")).filter((b) => re.test((b.textContent ?? "").trim()));
+// Le libellé écrit, ou celui d'un bouton rond (10.27 : les fiches du bureau, `TitleToggleRound`).
+const buttons = (re: RegExp) => Array.from(document.body.querySelectorAll("button")).filter((b) => re.test(((b.textContent ?? "").trim() || b.getAttribute("aria-label")) ?? ""));
 
 beforeEach(() => {
   mobile = false;

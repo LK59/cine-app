@@ -6,14 +6,16 @@ import { useT } from "@/components/TranslationProvider";
 import { AskPanel } from "@/components/ask/AskPanel";
 import { useAskAvailable } from "@/lib/ask/client";
 import { MENU_BADGE, MENU_ROW, MENU_ROW_INACTIVE } from "@/components/cinema/detailMenu";
+import { ROUND_ACTION } from "@/components/cinema/roundAction";
 
 /**
  * « Poser une question » sur une fiche de titre (DECISIONS.md §139) — la seule pièce que les fiches
  * appellent : la fiche film et la fiche série du bureau (`row`, une ligne de leur menu), la fiche du
- * téléphone, film et série (`icon`, à côté de « À voir » et « Vu »). Elle décide seule si elle existe
+ * téléphone, film et série (`icon`, à côté de « À voir » et « Vu ») ; depuis 10.27, un bouton rond de la
+ * rangée des fiches du bureau (`round`, `DetailIconActions`). Elle décide seule si elle existe
  * (l'option, Fire TV — `useAskAvailable`), ouvre le même panneau que le lecteur, et ne recopie rien.
  */
-export function AskTitleControl({ itemId, variant }: { itemId: string | null | undefined; variant: "row" | "icon" }) {
+export function AskTitleControl({ itemId, variant }: { itemId: string | null | undefined; variant: "row" | "icon" | "round" }) {
   const t = useT();
   const available = useAskAvailable();
   const [open, setOpen] = useState(false);
@@ -21,7 +23,11 @@ export function AskTitleControl({ itemId, variant }: { itemId: string | null | u
   const label = t("ask.title");
   return (
     <>
-      {variant === "row" ? (
+      {variant === "round" ? (
+        <button type="button" data-detail-menu data-ask-open="" data-round-action="ask" aria-label={label} title={label} onClick={() => setOpen(true)} className={ROUND_ACTION}>
+          <MessageCircleQuestion size={19} />
+        </button>
+      ) : variant === "row" ? (
         <button type="button" data-detail-menu data-ask-open="" onClick={() => setOpen(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}>
           <span className={MENU_BADGE}>
             <MessageCircleQuestion size={14} />

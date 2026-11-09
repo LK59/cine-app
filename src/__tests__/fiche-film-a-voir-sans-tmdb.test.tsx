@@ -70,7 +70,7 @@ const draw = (item: CinemaMovie) =>
   );
 
 const listRow = () =>
-  Array.from(document.body.querySelectorAll("[data-detail-menu]")).find((b) => /watchlist\.statuses\.toWatch|cinema\.inMyList/.test(b.textContent ?? ""));
+  Array.from(document.body.querySelectorAll("[data-detail-menu]")).find((b) => /watchlist\.statuses\.toWatch|cinema\.inMyList/.test((b.textContent || b.getAttribute("aria-label")) ?? ""));
 
 afterEach(() => {
   cleanup();

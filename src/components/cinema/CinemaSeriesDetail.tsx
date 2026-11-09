@@ -1,6 +1,5 @@
 "use client";
 
-import { AskTitleControl } from "@/components/ask/AskTitleControl";
 import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -27,14 +26,14 @@ import { CinemaEpisodeBrowser } from "@/components/cinema/CinemaEpisodeBrowser";
 import type { CinemaSeries } from "@/app/api/cinema/series/route";
 import type { CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuArrowNav } from "@/components/cinema/detailMenu";
-import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
+import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, SHORT_HIDE, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
 import { useDesktopSheetShell, DesktopSheetFrame, DetailTrailerRow } from "@/components/cinema/DesktopSheetShell";
 import { playEpisodeFrom } from "@/lib/episodeRow";
 import { useSheetPlay } from "@/lib/useSheetPlay";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
 import { OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
-import { TitleToggleRow, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
+import { DetailIconActions } from "@/components/cinema/DetailIconActions";
 import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
@@ -280,7 +279,7 @@ export function CinemaSeriesDetail({
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
           </div>
 
-          {!lead.taglineKnown ? <ReservedLine className="h-[1.1rem]" /> : <CinemaTagline text={lead.tagline} className={lead.taglineLate ? late.fade : ""} />}
+          {!lead.taglineKnown ? <ReservedLine className={`h-[1.1rem] ${SHORT_HIDE}`} /> : <CinemaTagline text={lead.tagline} className={`${SHORT_HIDE} ${lead.taglineLate ? late.fade : ""}`} />}
 
           {/* Une série en cours a son « Précédemment » à la place du résumé (DECISIONS.md §137). */}
           {recap ? <SeriesRecap recap={recap} series={item.title} synopsis={overview} /> : overview}
@@ -374,16 +373,13 @@ export function CinemaSeriesDetail({
               </button>
             )}
 
-            {/* « Poser une question » (§139) : la même pièce sur toutes les fiches, qui décide seule d'exister. */}
-            <AskTitleControl itemId={item.jellyfinItemId} variant="row" />
-
-            {/* « Vu » puis « À voir » : la forme de toutes les fiches (`TitleToggles`, §117.4). Estompé
-                tant que Jellyfin n'a pas répondu : ce bouton écrit, et proposer d'écrire une valeur
-                qu'on n'a pas lue est la façon la plus sûre de la changer par erreur. */}
-            <TitleToggleRow face={WATCHED_FACE} on={watched} onClick={toggleWatched} disabled={flagsBusy} unknown={!flagsKnown} />
-
-            {/* L'état tient dans la pastille, et non dans la ligne entière — voir la fiche film. */}
-            {listable && <TitleToggleRow face={WATCHLIST_FACE} on={inList} onClick={toggleAddToList} />}
+            {/* « Vu », « À voir » et « Poser une question » : la rangée ronde de la fiche film
+                (`DetailIconActions`, 10.27). */}
+            <DetailIconActions
+              watched={{ on: watched, onClick: toggleWatched, disabled: flagsBusy, unknown: !flagsKnown }}
+              list={listable ? { on: inList, onClick: toggleAddToList } : null}
+              askItemId={item.jellyfinItemId}
+            />
           </div>
 
         </div>

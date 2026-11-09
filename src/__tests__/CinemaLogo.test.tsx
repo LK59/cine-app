@@ -31,12 +31,15 @@ describe("le logo d'un titre", () => {
   it("donne moins de hauteur à un logo long qu'à un logo empilé", () => {
     render(<CinemaLogo src="/long.png" alt="Long" surface="sheet" />);
     arrives(logo("Long"), 900, 150); // ratio 6 — une ligne très longue
-    const long = parseInt(logo("Long").style.maxHeight, 10);
+    // La fiche borne aussi par la hauteur de la fenêtre (10.27) : `min(<px>, 14vh)` — le plafond en px d'abord.
+    const px = (v: string) => parseFloat(v.replace(/^min\(/, ""));
+    expect(logo("Long").style.maxHeight).toMatch(/^min\([\d.]+px, 14vh\)$/);
+    const long = px(logo("Long").style.maxHeight);
 
     cleanup();
     render(<CinemaLogo src="/carre.png" alt="Carré" surface="sheet" />);
     arrives(logo("Carré"), 374, 248); // ratio 1,5 — empilé
-    const stacked = parseInt(logo("Carré").style.maxHeight, 10);
+    const stacked = px(logo("Carré").style.maxHeight);
 
     expect(stacked).toBeGreaterThan(long);
   });

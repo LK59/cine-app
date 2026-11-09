@@ -1715,16 +1715,25 @@ describe("« À voir » et « Vu » : une forme, un crochet d'écriture (§117.4
   // Audit du 23/10/2026 : la fiche TMDB et les fiches de bibliothèque disaient le même geste avec
   // d'autres mots, d'autres icônes, dans un autre ordre, et l'écrivaient par deux crochets.
   const FICHES = [
-    "src/components/cinema/CinemaMovieDetail.tsx",
-    "src/components/cinema/CinemaSeriesDetail.tsx",
+    // Les deux fiches de bibliothèque du bureau passent par la rangée ronde (10.27), vérifiée juste dessous.
+    "src/components/cinema/DetailIconActions.tsx",
     "src/components/cinema/mobile/CinemaMobileDetail.tsx",
     "src/components/player/PlayerDiscoverSheet.tsx",
   ];
   it.each(FICHES)("%s dessine ses deux boutons par `TitleToggles`, sans écrire leurs mots", (f) => {
     const code = sansCommentaires(lire(f));
-    expect([f, /<TitleToggle(Row|Icon|Wide) face=\{WATCHED_FACE\}/.test(code), /<TitleToggle(Row|Icon|Wide) face=\{WATCHLIST_FACE\}/.test(code)]).toEqual([f, true, true]);
+    expect([f, /<TitleToggle(Row|Icon|Wide|Round) face=\{WATCHED_FACE\}/.test(code), /<TitleToggle(Row|Icon|Wide|Round) face=\{WATCHLIST_FACE\}/.test(code)]).toEqual([f, true, true]);
     expect([f, /cinema\.markWatched|cinema\.watchedState|cinema\.inMyList|watchlist\.statuses\.toWatch|player\.discover\.(addToList|inList|watched|markWatched)/.test(code)]).toEqual([f, false]);
   });
+
+  it.each(["src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"])(
+    "%s pose « Vu », « À voir » et la question par la rangée ronde commune, sans écrire leurs mots (10.27)",
+    (f) => {
+      const code = sansCommentaires(lire(f));
+      expect(code).toMatch(/<DetailIconActions\b/);
+      expect(code).not.toMatch(/<TitleToggle|<AskTitleControl|cinema\.markWatched|cinema\.inMyList/);
+    }
+  );
 
   it("le glyphe qui confirme le geste est posé par `TitleToggles`", () => {
     expect(sansCommentaires(lire("src/components/cinema/TitleToggles.tsx"))).toContain("<ToggleGlyph on={");
@@ -1899,7 +1908,8 @@ describe("« Poser une question » : une pièce pour toutes les fiches, un panne
   it("les trois fiches passent par `AskTitleControl`, et aucune n'ouvre le panneau elle-même", () => {
     for (const f of FICHES) {
       const src = sansCommentaires(lire(f));
-      expect(src, f).toMatch(/<AskTitleControl\b/);
+      // Les fiches du bureau, par la rangée ronde commune (10.27), qui la pose.
+      expect(src, f).toMatch(/<AskTitleControl\b|<DetailIconActions\b/);
       expect(src, f).not.toMatch(/<AskPanel\b/);
     }
   });
@@ -1910,5 +1920,8 @@ describe("« Poser une question » : une pièce pour toutes les fiches, un panne
   it("la route n'est appelée que par `useAskTitle`", () => {
     const callers = SOURCES().filter((f) => /fetch\(\s*`\/api\/cinema\/ask\//.test(sansCommentaires(lire(f))));
     expect(callers).toEqual(["src/lib/ask/client.ts"]);
+  });
+  it("la rangée ronde des fiches du bureau pose `AskTitleControl`", () => {
+    expect(sansCommentaires(lire("src/components/cinema/DetailIconActions.tsx"))).toMatch(/<AskTitleControl itemId=\{askItemId\} variant="round"/);
   });
 });

@@ -5,6 +5,7 @@ import { BookmarkCheck, Check, CircleCheck, Plus } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
+import { ROUND_ACTION } from "@/components/cinema/roundAction";
 
 /**
  * « À voir » et « Vu » : une forme, pour toutes les fiches de titre (DECISIONS.md §117.4).
@@ -20,8 +21,9 @@ import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/co
  * « Dans ma liste » le fait), et le geste pour « Vu » éteint (« Marquer comme vu ») — deux mots
  * différents pour deux états. L'icône change de forme et de couleur.
  *
- * Trois dessins, un par mise en page — la ligne du menu du bureau, l'icône sous libellé du téléphone,
- * le bouton pleine largeur de la fiche TMDB au téléphone — et un seul jeu de mots et d'icônes.
+ * Quatre dessins, un par mise en page — la ligne du menu (fiche découverte du bureau), le bouton rond des
+ * fiches de bibliothèque du bureau (10.27, `DetailIconActions`), l'icône sous libellé du téléphone, le
+ * bouton pleine largeur de la fiche TMDB au téléphone — et un seul jeu de mots et d'icônes.
  */
 export interface ToggleFace {
   offLabel: string;
@@ -62,6 +64,35 @@ export function TitleToggleRow({ face, on, onClick, disabled, unknown }: ToggleP
         <ToggleGlyph on={on} onIcon={<OnIcon size={16} />} offIcon={<OffIcon size={14} />} />
       </span>
       <span className="text-sm font-medium">{on ? t(face.onLabel) : t(face.offLabel)}</span>
+    </button>
+  );
+}
+
+/** Allumé (déjà vu, dans ma liste) : l'or de la marque, le liseré qui le détache du sélecteur blanc (§83, option B). */
+const ROUND_ON = "bg-ink text-brand ring-1 ring-brand/60 hover:bg-ink";
+
+/**
+ * Le bouton rond des fiches de bibliothèque du bureau (10.27, `DetailIconActions`) : l'icône seule, le
+ * libellé pour les lecteurs d'écran (`aria-label`) et en bulle au survol (`title`). Porte
+ * `data-detail-menu` : les flèches y descendent comme dans le menu.
+ */
+export function TitleToggleRound({ face, on, onClick, disabled, unknown }: ToggleProps) {
+  const t = useT();
+  const { OnIcon, OffIcon } = face;
+  const label = on ? t(face.onLabel) : t(face.offLabel);
+  return (
+    <button
+      type="button"
+      data-detail-menu
+      data-round-action={face === WATCHED_FACE ? "watched" : "list"}
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={on}
+      aria-label={label}
+      title={label}
+      className={`${ROUND_ACTION} ${on ? ROUND_ON : ""} ${unknown ? "opacity-50" : ""}`}
+    >
+      <ToggleGlyph on={on} onIcon={<OnIcon size={19} />} offIcon={<OffIcon size={18} />} />
     </button>
   );
 }

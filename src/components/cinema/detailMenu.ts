@@ -19,8 +19,8 @@
  * glissent que les couleurs, le fond, l'anneau d'une pastille et l'enfoncement d'une ligne.
  */
 export const MENU_ROW =
-  "group relative flex w-full items-center gap-3 rounded-lg px-4 py-2 text-left transition-[color,background-color,transform] duration-200 " +
-  "focus-visible:outline-none [@media(min-height:820px)]:py-2.5";
+  "group relative flex w-full items-center gap-3 rounded-lg px-4 py-1.5 text-left transition-[color,background-color,transform] duration-200 " +
+  "focus-visible:outline-none [@media(min-height:720px)]:py-2 [@media(min-height:820px)]:py-2.5";
 
 /**
  * Le sélecteur.

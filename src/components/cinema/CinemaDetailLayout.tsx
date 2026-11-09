@@ -62,8 +62,21 @@ export const MENU_STYLE = { width: "min(26rem, 100%)" } as const;
  * de compter sur une largeur qui ne dit rien de la place verticale disponible.
  */
 export const SECTION_CLASS =
-  "relative flex h-full snap-start flex-col justify-end overflow-hidden pb-14 pt-10 " +
-  "[@media(min-height:820px)]:pb-24 [@media(min-height:820px)]:pt-12";
+  "relative flex h-full snap-start flex-col justify-end overflow-hidden pb-8 pt-[calc(4.5rem+env(safe-area-inset-top))] " +
+  "[@media(min-height:720px)]:pb-14 [@media(min-height:820px)]:pb-24";
+
+/**
+ * La première page ne défile jamais, et ne commence jamais sous le bouton Retour (10.27, consigne du
+ * propriétaire : une seule page par titre, comme une télévision). Le haut de la page est réservé à la
+ * barre du Retour — `4.5rem` : son bord du haut (1 rem), sa hauteur (~2,5 rem) et une marge — ; ce qui
+ * doit tenir dessous tient par la taille, pas par le défilement :
+ * - le logo borné par la hauteur de la fenêtre (`CinemaLogo`, surface `sheet` : 14vh au plus) ;
+ * - « Vu », « À voir » et « Poser une question » en une rangée de boutons ronds (`DetailIconActions`) ;
+ * - sous 720 px de haut, l'accroche se tait (`SHORT_HIDE`), les écarts et les lignes du menu se resserrent,
+ *   et le synopsis garde ce que `CinemaOverview` mesure (deux lignes au moins).
+ * Mesuré sur le papier à 1280×800, 1366×768 et 1440×900 (DECISIONS §117.4, 10.27).
+ */
+export const SHORT_HIDE = "[@media(max-height:719px)]:hidden";
 
 
 
@@ -92,7 +105,7 @@ export const CAST_CLASS = "truncate text-xs text-muted";
 export const CAST_SHOWN = 3;
 
 /** L'espacement de la colonne, resserré sur un écran court. */
-export const COLUMN_GAP = "gap-3 [@media(min-height:820px)]:gap-4";
+export const COLUMN_GAP = "gap-2 [@media(min-height:720px)]:gap-3 [@media(min-height:820px)]:gap-4";
 
 /**
  * Le synopsis, en deux lignes, avec de quoi lire la suite.

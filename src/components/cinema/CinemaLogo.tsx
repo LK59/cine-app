@@ -44,8 +44,12 @@ const SURFACES = {
    * (`fit`, voir `SurfaceFit`).
    */
   hero: { compact: 76, roomy: 132, maxWidth: "min(100%, 42rem)", fit: { reserve: "18.5rem", floor: 48 } },
-  /** La fiche plein écran. */
-  sheet: { compact: 68, roomy: 120, maxWidth: "min(100%, 32rem)" },
+  /**
+   * La fiche plein écran — bornée aussi par la hauteur de la fenêtre (10.27, `vh`) : à 800 px de haut, un
+   * logo empilé prenait 168 px et poussait le haut de la colonne sous le bouton Retour d'une fiche qui ne
+   * défile pas. 14 % de la hauteur au plus : 112 px à 800, 107 à 768, 126 à 900.
+   */
+  sheet: { compact: 68, roomy: 120, maxWidth: "min(100%, 32rem)", vh: 14 },
   /** Le téléphone, où la place est comptée dans les deux sens. */
   phone: { compact: 52, roomy: 76, maxWidth: "min(100%, 21rem)" },
   /**
@@ -146,7 +150,8 @@ export function CinemaLogo({
   // ajoute qu'en limite absolue, sans facteur de forme — un logo empilé (×1,4) n'a pas plus de
   // place qu'un autre dans le même volet.
   const fit: SurfaceFit | undefined = "fit" in spec ? spec.fit : undefined;
-  const maxHeight = fit ? `min(${capped}px, max(${fit.floor}px, calc(100cqh - ${fit.reserve})))` : capped;
+  const vh: number | undefined = "vh" in spec ? spec.vh : undefined;
+  const maxHeight = fit ? `min(${capped}px, max(${fit.floor}px, calc(100cqh - ${fit.reserve})))` : vh ? `min(${capped}px, ${vh}vh)` : capped;
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
