@@ -10,6 +10,7 @@
 import { readRecords, type LogRecord } from "@/lib/activity/logReader";
 import { acknowledgeSeances, dismissedIssues } from "@/lib/activity/alertsCleared";
 import { lastLocalDays, localDay, problemsOf, seancesSince } from "@/lib/activity/accounts";
+import { aiCostStats, type AiCostStats } from "@/lib/activity/aiCost";
 import type { Seance } from "@/lib/activity/seances";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -96,6 +97,8 @@ export interface Dashboard {
   /** Le temps regardé sur trente jours, par heure de la journée (heure du foyer). */
   hours: number[];
   describe: DescribeStats;
+  /** Ce que coûtent les appels au modèle (questions, « Jusqu'ici », « Précédemment »…), en euros (10.27.2, `aiCost.ts`). */
+  aiCost: AiCostStats;
   /** Les lignes de « À gérer » qui viennent des journaux du serveur, d'après l'effacement. */
   alarms: Alarms;
   /** Les lignes effacées une à une — `alertsCleared.ts`. */
@@ -283,6 +286,15 @@ export function describeStats(now = Date.now()): DescribeStats {
   };
 }
 
+/** Le coût des appels au modèle : `recherche.log` sur trente jours, et depuis le 1er du mois s'il est plus loin. */
+export function aiCostOf(now = Date.now()): AiCostStats {
+  const monthStart = new Date(now);
+  monthStart.setHours(0, 0, 0, 0);
+  monthStart.setDate(1);
+  const since = Math.min(now - 30 * DAY, monthStart.getTime());
+  return aiCostStats(readRecords("search", since).filter((r) => r._t >= since), now);
+}
+
 /**
  * Une erreur du serveur qui demande une main. Pas un avertissement (`warn` : une relance réussie, un
  * service tiers qui a répondu 503 une fois — 1 800 lignes de Google Books en une semaine, le 07/11/2026),
@@ -420,6 +432,7 @@ export function dashboard(now = Date.now(), clearedAt = 0): Dashboard {
   } catch {
     describe = { searches: 0, modelCalls: 0, medianMs: null, accounts: 0, errors: 0 };
   }
+  const aiCost = safe(() => aiCostOf(now), aiCostStats([], now));
   return {
     periods: {
       day: periodStats(month.filter((s) => s.start >= now - DAY)),
@@ -436,6 +449,7 @@ export function dashboard(now = Date.now(), clearedAt = 0): Dashboard {
     series,
     hours,
     describe,
+    aiCost,
     alarms: safe(() => alarmsOf(now, clearedAt), { server: [], logins: null, notifications: null }),
     dismissed: safe(() => dismissedIssues(), {}),
   };

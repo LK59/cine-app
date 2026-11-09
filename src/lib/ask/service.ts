@@ -5,7 +5,7 @@
 // s'il n'existait pas. Les dialogues viennent de la même source que « Précédemment » (`cuesOf`, §137) —
 // la piste texte de la langue du compte, sinon l'anglais —, gardés une heure en mémoire par élément et par
 // langue : lire les sous-titres intégrés prend 12 à 45 s à Jellyfin (mesuré le 08/11/2026). L'ouverture du
-// panneau les demande d'avance (`warmDialogues`) ; une question qui arrive avant n'attend que
+// panneau les demande d'avance (`prepareAskContext`) ; une question qui arrive avant n'attend que
 // `DIALOGUE_WAIT_MS`, puis répond sans eux — la lecture continue et sert à la question suivante.
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -55,6 +55,8 @@ export function askAvailableFor(session: { role?: string | null } | null | undef
 
 type FullItem = EpisodeWithStreams & {
   Taglines?: string[];
+  /** La date de sortie (film) ou de première diffusion (épisode) — tirée de TMDB par Jellyfin (10.27.2). */
+  PremiereDate?: string;
   People?: { Name?: string; Role?: string; Type?: string }[];
 };
 
@@ -65,6 +67,63 @@ async function itemFor(jfId: string, itemId: string): Promise<FullItem | null> {
   if (res.status === 404 || res.status === 400) return null;
   if (!res.ok) throw new Error(`Jellyfin ${res.status} sur l'élément`);
   return (await res.json()) as FullItem;
+}
+
+// ── Le contexte préparé à l'ouverture du lecteur (10.27.2) ───────────────────────────────────────
+// Quand un film ou un épisode s'ouvre au lecteur (option ouverte à la séance), la page demande
+// `GET /api/cinema/ask/{id}` : l'élément, la série et la liste de ses épisodes (résumés, vus ou non) sont lus
+// sous l'identité du compte et gardés ici, et les répliques demandées d'avance (`cuesKept`). Une question ou
+// « Jusqu'ici » ensuite ne fait plus que couper à sa position (`ctx: "prêt"` au journal). Borné (quelques
+// éléments, les plus récents), quinze minutes : ce qui a été vu change lentement pendant un film, et une
+// préparation plus vieille est relue (`ctx: "construit"`). Sur `globalThis`, comme les répliques.
+const PREPARED_KEY = Symbol.for("cine-app.askPrepared");
+type Prepared = { at: number; item: FullItem; series: FullItem | null; episodes: EpisodeWithStreams[] | null };
+const preparedShared = globalThis as typeof globalThis & { [PREPARED_KEY]?: Map<string, Prepared> };
+const prepared = (preparedShared[PREPARED_KEY] ??= new Map());
+export const PREPARED_TTL_MS = 15 * 60_000;
+export const PREPARED_KEEP = 8;
+
+function keepPrepared(key: string, value: Prepared): void {
+  prepared.delete(key);
+  prepared.set(key, value);
+  while (prepared.size > PREPARED_KEEP) prepared.delete(prepared.keys().next().value as string);
+}
+
+/** L'élément, sa série et ses épisodes pour ce compte : gardés s'ils ont moins de quinze minutes, sinon relus. */
+async function contextParts(jfId: string, itemId: string, now = Date.now()): Promise<{ parts: Prepared | null; ready: boolean }> {
+  const key = `${jfId}:${itemId}`;
+  const kept = prepared.get(key);
+  if (kept && now - kept.at < PREPARED_TTL_MS) return { parts: kept, ready: true };
+  const item = await itemFor(jfId, itemId);
+  if (!item) return { parts: null, ready: false };
+  let series: FullItem | null = null;
+  let episodes: EpisodeWithStreams[] | null = null;
+  const seriesId = item.Type === "Series" ? item.Id : item.Type === "Episode" ? item.SeriesId : null;
+  if (seriesId) {
+    [series, episodes] = await Promise.all([item.Type === "Series" ? Promise.resolve(item) : itemFor(jfId, seriesId), episodesOf(jfId, seriesId)]);
+  }
+  const parts = { at: now, item, series, episodes };
+  keepPrepared(key, parts);
+  return { parts, ready: false };
+}
+
+/**
+ * Préparer ce que le compte regarde (10.27.2) : appelé à l'ouverture du lecteur et du panneau, sans rien
+ * attendre. Une erreur ici ne regarde personne : la demande suivante construira son contexte elle-même.
+ */
+export async function prepareAskContext(jfId: string, itemId: string, locale: Locale): Promise<void> {
+  try {
+    const { parts } = await contextParts(jfId, itemId);
+    if (!parts) return;
+    const { item, episodes } = parts;
+    if (item.Type === "Movie" || item.Type === "Episode") void cuesKept(item, locale);
+    else if (item.Type === "Series") {
+      const current = (episodes ?? []).find((e) => !e.UserData?.Played && positionOf(e) > 0);
+      if (current) void cuesKept(current, locale);
+    }
+  } catch (err) {
+    logError("ask/warm", err);
+  }
 }
 
 // ── Les dialogues, gardés en mémoire ─────────────────────────────────────────────────────────────
@@ -110,7 +169,13 @@ const castOf = (item: FullItem) =>
   (item.People ?? []).filter((p) => p.Type === "Actor" && p.Name).map((p) => ({ name: p.Name!, role: p.Role ?? null }));
 
 export type AskContext =
-  | { status: "ok"; input: AskContextInput; dialogueLate: boolean }
+  | {
+      status: "ok";
+      input: AskContextInput;
+      dialogueLate: boolean;
+      /** `prêt` : l'élément et ses épisodes venaient de la préparation (10.27.2) ; `construit` : lus pour cette demande. */
+      ctx: "prêt" | "construit";
+    }
   | { status: "indisponible" };
 
 /**
@@ -129,8 +194,10 @@ export async function gatherAskContext(
   locale: Locale,
   waitMs = DIALOGUE_WAIT_MS
 ): Promise<AskContext> {
-  const item = await itemFor(jfId, itemId);
-  if (!item) return { status: "indisponible" };
+  const { parts, ready } = await contextParts(jfId, itemId);
+  if (!parts) return { status: "indisponible" };
+  const item = parts.item;
+  const ctx = ready ? ("prêt" as const) : ("construit" as const);
 
   if (item.Type === "Movie") {
     const watchedAll = item.UserData?.Played === true;
@@ -140,6 +207,7 @@ export async function gatherAskContext(
     return {
       status: "ok",
       dialogueLate: cues === null,
+      ctx,
       input: {
         kind: "movie",
         title: item.Name,
@@ -150,13 +218,15 @@ export async function gatherAskContext(
         watchedAll,
         positionS,
         cues: cues ?? [],
+        airDate: item.PremiereDate ?? null,
       },
     };
   }
 
   const seriesId = item.Type === "Series" ? item.Id : item.Type === "Episode" ? item.SeriesId : null;
   if (!seriesId) return { status: "indisponible" };
-  const [series, episodes] = await Promise.all([item.Type === "Series" ? Promise.resolve(item) : itemFor(jfId, seriesId), episodesOf(jfId, seriesId)]);
+  const series = parts.series;
+  const episodes = parts.episodes ?? [];
   if (!series) return { status: "indisponible" };
   const watchedAll = series.UserData?.Played === true && episodes.length > 0 && episodes.every((e) => e.UserData?.Played);
 
@@ -178,6 +248,7 @@ export async function gatherAskContext(
   return {
     status: "ok",
     dialogueLate: cues === null,
+    ctx,
     input: {
       kind: "series",
       title: series.Name,
@@ -190,26 +261,10 @@ export async function gatherAskContext(
       current: current ? { code: code(current), title: current.Name } : null,
       positionS,
       cues: cues ?? [],
+      // L'épisode joué est l'élément entier (sa date y est toujours) ; depuis la fiche, celui de la liste.
+      airDate: (item.Type === "Episode" ? item.PremiereDate : (current as FullItem | null)?.PremiereDate) ?? null,
     },
   };
-}
-
-/**
- * Demander d'avance les dialogues de ce que le compte regarde — à l'ouverture du panneau, sans rien
- * attendre. Une erreur ici ne regarde personne : la question suivante répondra sans dialogues.
- */
-export async function warmDialogues(jfId: string, itemId: string, locale: Locale): Promise<void> {
-  try {
-    const item = await itemFor(jfId, itemId);
-    if (!item) return;
-    if (item.Type === "Movie" || item.Type === "Episode") void cuesKept(item, locale);
-    else if (item.Type === "Series") {
-      const current = (await episodesOf(jfId, item.Id)).find((e) => !e.UserData?.Played && positionOf(e) > 0);
-      if (current) void cuesKept(current, locale);
-    }
-  } catch (err) {
-    logError("ask/warm", err);
-  }
 }
 
 // ── Le modèle ─────────────────────────────────────────────────────────────────────────────────────
@@ -217,12 +272,43 @@ export async function warmDialogues(jfId: string, itemId: string, locale: Locale
 export interface AskModelRun {
   /** Le texte, morceau par morceau. */
   deltas: AsyncIterable<string>;
-  /** La fin : jetons, et pourquoi le modèle s'est arrêté. */
-  done: Promise<{ inTokens: number; outTokens: number; stop: string | null }>;
+  /**
+   * La fin : jetons, et pourquoi le modèle s'est arrêté. `cacheWrite` / `cacheRead` (10.27.2) : les jetons
+   * du préfixe écrits dans le cache de prompts d'Anthropic, ou relus de lui.
+   */
+  done: Promise<{ inTokens: number; outTokens: number; stop: string | null; cacheWrite?: number; cacheRead?: number }>;
 }
 
-/** Le modèle, remplaçable dans les tests — aucun appel réseau réel n'y part. */
-export type AskModel = (req: { system: string; message: string; signal?: AbortSignal }) => AskModelRun;
+/**
+ * Le modèle, remplaçable dans les tests — aucun appel réseau réel n'y part.
+ *
+ * `prefixEnd` (10.27.2) : `message.slice(0, prefixEnd)` est la partie partagée — les sources (résumés,
+ * répliques jusqu'à la coupe) et où en est le spectateur —, envoyée comme un premier bloc marqué
+ * `cache_control: { type: "ephemeral" }` ; le reste (la personne, la question) vient après, dans un second
+ * bloc. Avec la consigne (`system`, fixe par langue) devant, c'est le préfixe que le cache de prompts
+ * d'Anthropic garde cinq minutes : la deuxième personne d'une même scène, ou la question suivante, relit
+ * ces milliers de jetons au dixième du prix et plus vite. Le message entier reste `message` — c'est lui que
+ * l'empreinte de « Jusqu'ici » (`sofarKey`) prend, jamais le découpage.
+ */
+export type AskModel = (req: { system: string; message: string; prefixEnd?: number; maxTokens?: number; signal?: AbortSignal }) => AskModelRun;
+
+/**
+ * Les plafonds de sortie (10.27.2), réflexion comprise — mesurés dans `recherche.log` le 09/11/2026 :
+ * « Jusqu'ici » jusqu'à 1 730 jetons, une question jusqu'à 1 151. Assez haut pour ne jamais couper une
+ * réponse ordinaire ; une réponse qui l'atteint (`stop_reason: "max_tokens"`) est une panne dite proprement
+ * — la ligne discrète de « Jusqu'ici », « Réessayer » pour une question —, jamais une phrase coupée.
+ */
+export const ASK_MAX_OUTPUT_TOKENS = 2000;
+export const SOFAR_MAX_OUTPUT_TOKENS = 2500;
+
+/** Le contenu du message : en deux blocs, le premier marqué pour le cache, quand un préfixe est donné. */
+export function askContent(message: string, prefixEnd?: number): string | Anthropic.TextBlockParam[] {
+  if (!prefixEnd || prefixEnd <= 0 || prefixEnd >= message.length) return message;
+  return [
+    { type: "text", text: message.slice(0, prefixEnd), cache_control: { type: "ephemeral" } },
+    { type: "text", text: message.slice(prefixEnd) },
+  ];
+}
 
 /** Une panne du modèle qui n'est pas une réponse HTTP : le délai dépassé, un flux coupé. */
 export class AskModelTimeout extends Error {
@@ -232,15 +318,15 @@ export class AskModelTimeout extends Error {
   }
 }
 
-const askModel: AskModel = ({ system, message, signal }) => {
+const askModel: AskModel = ({ system, message, prefixEnd, maxTokens, signal }) => {
   const client = new Anthropic({ apiKey: config.subtitleGen.apiKey.trim(), maxRetries: 0, timeout: MODEL_IDLE_MS });
   const stream = client.messages.stream(
     {
       model: ASK_MODEL,
-      // La réflexion compte dans `max_tokens` ; la réponse, elle, fait quatre phrases.
-      max_tokens: 4000,
+      // La réflexion compte dans `max_tokens` ; la réponse, elle, fait quatre phrases (plafonds mesurés plus haut).
+      max_tokens: maxTokens ?? ASK_MAX_OUTPUT_TOKENS,
       system,
-      messages: [{ role: "user", content: message }],
+      messages: [{ role: "user", content: askContent(message, prefixEnd) }],
       // Réflexion adaptative, effort bas : la réponse se lit pendant qu'on attend, film en pause. Le banc
       // de §137 a montré que sans réflexion Haiku prête des actes au mauvais personnage ; l'effort bas en
       // garde une part sans faire attendre (mesures au §139).
@@ -277,7 +363,13 @@ const askModel: AskModel = ({ system, message, signal }) => {
   return {
     deltas: deltas(),
     done: stream.finalMessage().then(
-      (m) => ({ inTokens: m.usage.input_tokens, outTokens: m.usage.output_tokens, stop: m.stop_reason ?? null }),
+      (m) => ({
+        inTokens: m.usage.input_tokens,
+        outTokens: m.usage.output_tokens,
+        stop: m.stop_reason ?? null,
+        cacheWrite: m.usage.cache_creation_input_tokens ?? 0,
+        cacheRead: m.usage.cache_read_input_tokens ?? 0,
+      }),
       (err: unknown) => {
         throw fail(err);
       }
@@ -294,4 +386,5 @@ export function setAskModelForTests(fn: AskModel | null): void {
 }
 export function resetAskCachesForTests(): void {
   cueCache.clear();
+  prepared.clear();
 }

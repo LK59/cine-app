@@ -1036,6 +1036,15 @@
         "median": "Délai médian",
         "errors": "Échecs"
       },
+      "aiCost": {
+        "title": "Coût des réponses du modèle (approximatif, questions, « Jusqu'ici », « Précédemment »)",
+        "today": "Aujourd'hui",
+        "week": "7 jours",
+        "days30": "30 jours",
+        "month": "Ce mois-ci",
+        "calls": "{n} appel sur 30 jours|{n} appels sur 30 jours",
+        "ofReference": "{pct} % de {ref}"
+      },
       "addressShow": "Changement d'adresse",
       "addressHide": "Masquer le changement d'adresse",
       "reason": {
@@ -4216,6 +4225,7 @@
     "next": "Personnes suivantes",
     "photo": "Photo de {name}",
     "sofar": "Jusqu'ici",
+    "sofarLittle": "Encore trop peu vu pour en dire plus.",
     "library": "Dans votre bibliothèque",
     "diedAt": "† à {n} ans",
     "qLink": "Quel est le lien entre {name} et {other} ?",

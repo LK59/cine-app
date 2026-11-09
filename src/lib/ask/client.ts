@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { fetcher, followOnlyOptions } from "@/lib/swr";
 import { isFireTv } from "@/lib/fireTv";
 import { ASK_MAX_EXCHANGES, ASK_MAX_QUESTION, type AskWhere } from "@/lib/ask/core";
+import { sofarCut, type SofarScenes } from "@/lib/ask/sofarCut";
 
 /**
  * « Poser une question » côté écran (DECISIONS.md §139) : l'option, les échanges d'une ouverture du
@@ -75,7 +76,20 @@ function parseLine(line: string, onEvent: (e: StreamEvent) => void) {
  * serveur ni sur l'appareil : le panneau refermé, ils sont partis. Cinq au plus. La position est lue au
  * moment de la question (`position`), jamais retenue à l'ouverture : le film peut avoir bougé.
  */
-export function useAskTitle({ itemId, where, position, enabled = true }: { itemId: string; where: AskWhere; position?: () => number | null; enabled?: boolean }) {
+export function useAskTitle({
+  itemId,
+  where,
+  position,
+  enabled = true,
+  personId,
+}: {
+  itemId: string;
+  where: AskWhere;
+  position?: () => number | null;
+  enabled?: boolean;
+  /** Le panneau d'une personne (10.27.2) : ses faits réels partent avec la question, côté serveur. */
+  personId?: number;
+}) {
   const [exchanges, setExchanges] = useState<AskExchange[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const nextId = useRef(1);
@@ -121,7 +135,7 @@ export function useAskTitle({ itemId, where, position, enabled = true }: { itemI
         const res = await fetch(`/api/cinema/ask/${encodeURIComponent(itemId)}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question, where, positionS: positionRef.current?.() ?? null, previous }),
+          body: JSON.stringify({ question, where, positionS: positionRef.current?.() ?? null, previous, ...(personId ? { personId } : {}) }),
           signal: ctrl.signal,
         });
         if (!res.ok) throw new Error(String(res.status));
@@ -145,7 +159,7 @@ export function useAskTitle({ itemId, where, position, enabled = true }: { itemI
         update((e) => ({ ...e, state: "error", error: "erreur" }));
       }
     },
-    [exchanges, itemId, where]
+    [exchanges, itemId, where, personId]
   );
   const retry = useCallback(
     (id: number) => {
@@ -161,38 +175,55 @@ export function useAskTitle({ itemId, where, position, enabled = true }: { itemI
 // ── « Jusqu'ici » (DECISIONS.md §139, 10.27) ─────────────────────────────────────────────────────
 
 /**
- * La tranche de cinq minutes d'une position (10.27.1, `SOFAR_BUCKET_S` côté serveur) — ce qui distingue deux
- * préparations d'une même personne, et deux textes gardés sur l'appareil.
+ * La coupe de « Jusqu'ici » (10.27.2) : la même fonction que le serveur (`sofarCut`), sur les scènes que le
+ * lecteur a reçues — ce qui distingue deux préparations d'une même personne, et deux textes gardés sur
+ * l'appareil. Le rythme reste de cinq minutes (`SOFAR_BUCKET_S`).
  */
-export const SOFAR_BUCKET_S = 300;
-const sofarBucket = (positionS: number | null) => (positionS === null ? 0 : Math.floor(Math.max(0, positionS) / SOFAR_BUCKET_S));
+export { SOFAR_BUCKET_S } from "@/lib/ask/sofarCut";
 const prewarmed = new Set<string>();
-/** Les trois premières personnes de la scène seulement. */
-export const SOFAR_PREWARM_PEOPLE = 3;
+/** Le temps qu'un pointeur doit rester sur une pilule pour que ce soit une intention, pas un passage. */
+export const SOFAR_HOVER_INTENT_MS = 300;
 
 /**
- * Préparer « Jusqu'ici » en fond pour les premières personnes de la scène, quand la rangée paraît : une
- * fois par personne et par tranche de cinq minutes pour cette page, jamais page cachée. Personne n'attend
- * la réponse (`{"t":"queued"}`) ; une panne ne dit rien.
+ * Préparer « Jusqu'ici » pour **une** personne, sur une intention (10.27.2, règle du propriétaire) : au
+ * bureau, le pointeur posé sur sa pilule d'« À l'écran » (`SOFAR_HOVER_INTENT_MS`, pointeur fin seulement —
+ * jamais au doigt). Une fois par personne et par coupe pour la page, jamais page cachée ; personne n'attend
+ * la réponse (`{"t":"queued"}`), une panne ne dit rien. Le clic qui suit d'ordinaire lit la même génération
+ * (le serveur la garde par sa clé) ; rien n'est annulé si le pointeur s'en va.
+ *
+ * Jusqu'en 10.27.1, les trois premières personnes de chaque scène étaient préparées dès que la rangée
+ * paraissait : ~6 textes par heure de film pour zéro ou une lecture — retiré.
  */
-export function prewarmSofar(itemId: string, personIds: readonly number[], positionS: number): void {
+export function prewarmSofar(itemId: string, personId: number, positionS: number, scenes?: SofarScenes | null): void {
   if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
   if (!Number.isFinite(positionS)) return;
-  for (const personId of personIds.slice(0, SOFAR_PREWARM_PEOPLE)) {
-    const key = `${itemId}:${personId}:${sofarBucket(positionS)}`;
-    if (prewarmed.has(key)) continue;
-    prewarmed.add(key);
-    if (prewarmed.size > 2000) prewarmed.delete(prewarmed.values().next().value as string);
-    try {
-      void fetch(`/api/cinema/ask/${encodeURIComponent(itemId)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "jusquici", personId, positionS: Math.floor(positionS), prewarm: true }),
-      }).catch(() => {});
-    } catch {
-      /* une préparation perdue ne coûte rien */
-    }
+  const key = `${itemId}:${personId}:${sofarCut(positionS, scenes)}`;
+  if (prewarmed.has(key)) return;
+  prewarmed.add(key);
+  if (prewarmed.size > 2000) prewarmed.delete(prewarmed.values().next().value as string);
+  try {
+    void fetch(`/api/cinema/ask/${encodeURIComponent(itemId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "jusquici", personId, positionS: Math.floor(positionS), prewarm: true }),
+    }).catch(() => {});
+  } catch {
+    /* une préparation perdue ne coûte rien */
   }
+}
+
+/**
+ * Le lecteur ouvre un film ou un épisode, l'option ouverte à la séance (10.27.2) : le serveur prépare le
+ * contexte des questions et de « Jusqu'ici » (`prepareAskContext` — l'élément, ses épisodes, les répliques),
+ * une fois par élément. Rien n'est attendu ; une panne ne dit rien.
+ */
+export function useAskPrepare(itemId: string, enabled: boolean): void {
+  useEffect(() => {
+    if (!enabled) return;
+    const ctrl = new AbortController();
+    fetch(`/api/cinema/ask/${encodeURIComponent(itemId)}`, { signal: ctrl.signal }).catch(() => {});
+    return () => ctrl.abort();
+  }, [itemId, enabled]);
 }
 
 export function resetPrewarmForTests(): void {
@@ -201,16 +232,18 @@ export function resetPrewarmForTests(): void {
 
 export type SofarView = {
   /**
-   * `waiting` : la section est là, le texte pas encore ; `streaming` / `done` : le texte ; `none` : pas de
-   * section (option coupée pour cette séance, rien à dire, panne, délai).
+   * `waiting` : la section est là, le texte pas encore ; `streaming` / `done` : le texte ; `little` : la
+   * section reste avec une ligne discrète (« Encore trop peu vu pour en dire plus. ») — rien à dire, un nom
+   * refusé, une panne, le délai (10.27.2 : la section qui disparaissait se lisait comme une panne) ; `none` :
+   * pas de section (option coupée pour cette séance).
    */
-  state: "waiting" | "streaming" | "done" | "none";
+  state: "waiting" | "streaming" | "done" | "little" | "none";
   text: string;
   /** La ligne d'attente : seulement passé `SOFAR_LOADING_DELAY_MS` sans texte (un texte gardé n'en montre pas). */
   loading: boolean;
 };
 
-/** Au-delà, la section se retire sans un mot (10.27.1 : « Un instant… » restait affiché pour toujours). */
+/** Au-delà, la ligne discrète remplace l'attente (10.27.1 : « Un instant… » restait affiché pour toujours). */
 export const SOFAR_CLIENT_TIMEOUT_MS = 25_000;
 /**
  * La ligne d'attente ne paraît qu'après ce délai : un texte gardé par le serveur arrive en ~230 ms et se
@@ -228,34 +261,88 @@ const SOFAR_READ_MAX = 200;
 
 export function resetSofarClientForTests(): void {
   sofarRead.clear();
+  for (const p of pendingSofar.values()) clearTimeout(p.timer);
+  pendingSofar.clear();
 }
 
 const NONE: SofarView = { state: "none", text: "", loading: false };
+
+/**
+ * La demande de « Jusqu'ici » partie **au toucher lui-même** (10.27.2), avant l'animation du panneau et toute
+ * autre requête : `startSofar` la lance depuis le gestionnaire du clic, et `useSofar`, monté une image plus
+ * tard, la reprend au lieu d'en lancer une seconde. Une demande que personne ne reprend (panneau jamais
+ * monté) est oubliée au bout de dix secondes — la génération, détachée côté serveur, va au bout et se garde.
+ */
+type Pending = { res: Promise<Response>; ctrl: AbortController; timer: ReturnType<typeof setTimeout> };
+const pendingSofar = new Map<string, Pending>();
+const PENDING_FORGET_MS = 10_000;
+
+const sofarPos = (positionS: number | null) => (positionS !== null && Number.isFinite(positionS) ? Math.floor(positionS) : null);
+const sofarReadKey = (itemId: string, personId: number, pos: number | null, scenes?: SofarScenes | null) => `${itemId}:${personId}:${sofarCut(pos, scenes)}`;
+
+function sofarFetch(itemId: string, personId: number, pos: number | null, signal: AbortSignal): Promise<Response> {
+  return fetch(`/api/cinema/ask/${encodeURIComponent(itemId)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode: "jusquici", personId, positionS: pos }),
+    signal,
+  });
+}
+
+/** `position` : la position, ou de quoi la lire au moment du toucher (celle que le panneau lira). */
+export function startSofar(itemId: string, personId: number, position: number | null | (() => number | null), scenes?: SofarScenes | null): void {
+  const pos = sofarPos(typeof position === "function" ? position() : position);
+  const key = sofarReadKey(itemId, personId, pos, scenes);
+  if (sofarRead.has(key) || pendingSofar.has(key)) return;
+  const ctrl = new AbortController();
+  let res: Promise<Response>;
+  try {
+    res = sofarFetch(itemId, personId, pos, ctrl.signal);
+  } catch (err) {
+    res = Promise.reject(err);
+  }
+  res.catch(() => {});
+  const timer = setTimeout(() => pendingSofar.delete(key), PENDING_FORGET_MS);
+  pendingSofar.set(key, { res, ctrl, timer });
+}
+
+function takePendingSofar(key: string): Pending | null {
+  const pending = pendingSofar.get(key) ?? null;
+  if (pending) {
+    clearTimeout(pending.timer);
+    pendingSofar.delete(key);
+  }
+  return pending;
+}
 
 /**
  * « Jusqu'ici » dans le panneau d'une personne (DECISIONS.md §139, 10.27.1) — indépendant de tout le reste
  * du panneau (faits, biographie, affiches : `usePersonFacts`, jamais en attente de celui-ci).
  *
  * Avec l'option pour cette séance, la section est **toujours** là, en haut, dès l'ouverture : la ligne
- * d'attente (passé un court délai), puis le texte. Elle ne disparaît que sur « rien à dire » (`rejected`),
- * une panne (réseau, 5xx, `error`, flux fini sans sa fin) ou **vingt-cinq secondes** sans fin
- * (`SOFAR_CLIENT_TIMEOUT_MS`) — sans un mot ; la cause d'une panne est dans `server.log` (`ask/jusquici`).
+ * d'attente (passé un court délai), puis le texte. Sur « rien à dire » ou un nom refusé (`rejected`), une
+ * panne (réseau, 5xx, `error`, flux fini sans sa fin) ou **vingt-cinq secondes** sans fin
+ * (`SOFAR_CLIENT_TIMEOUT_MS`), elle reste avec une ligne discrète (`little`, 10.27.2 — en 10.27.1 elle se
+ * retirait sans un mot, et le propriétaire le lisait comme une panne) ; la cause d'une panne est dans
+ * `server.log` (`ask/jusquici`). Seule l'option refusée à ce compte (`off`) retire la section.
  * Position inconnue : demandée quand même (`null` — le serveur coupe au début), jamais une section muette.
  *
  * 10.27.0 rendait `none` — pas de section du tout — quand la position manquait, n'avait aucun délai côté
  * client (une réponse qui ne finissait pas laissait « Un instant… » pour toujours), et ne gardait rien :
  * chaque ouverture repassait par la ligne d'attente.
  */
-export function useSofar(itemId: string, personId: number, positionS: number | null, enabled: boolean): SofarView {
-  const pos = positionS !== null && Number.isFinite(positionS) ? Math.floor(positionS) : null;
-  const readKey = `${itemId}:${personId}:${sofarBucket(pos)}`;
+export function useSofar(itemId: string, personId: number, positionS: number | null, enabled: boolean, scenes?: SofarScenes | null): SofarView {
+  const pos = sofarPos(positionS);
+  const readKey = sofarReadKey(itemId, personId, pos, scenes);
   const key = `${readKey}:${pos ?? "?"}`;
   const [view, setView] = useState<{ key: string; view: SofarView } | null>(null);
   const [slow, setSlow] = useState<string | null>(null);
   const already = enabled ? sofarRead.get(readKey) : undefined;
   useEffect(() => {
     if (!enabled || already !== undefined) return;
-    const ctrl = new AbortController();
+    // La demande partie au toucher (`startSofar`), sinon une nouvelle.
+    const pending = takePendingSofar(readKey);
+    const ctrl = pending?.ctrl ?? new AbortController();
     let text = "";
     let ended = false;
     const set = (v: Omit<SofarView, "loading">) => setView({ key, view: { ...v, loading: false } });
@@ -270,17 +357,12 @@ export function useSofar(itemId: string, personId: number, positionS: number | n
     // Le délai du client : une réponse qui ne finit pas ne laisse jamais la ligne d'attente pour toujours —
     // la section se retire, comme pour une panne (une phrase sans sa fin n'est pas une réponse vérifiée).
     const timeout = window.setTimeout(() => {
-      finish({ state: "none", text: "" });
+      finish({ state: "little", text: "" });
       ctrl.abort();
     }, SOFAR_CLIENT_TIMEOUT_MS);
     void (async () => {
       try {
-        const res = await fetch(`/api/cinema/ask/${encodeURIComponent(itemId)}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "jusquici", personId, positionS: pos }),
-          signal: ctrl.signal,
-        });
+        const res = await (pending ? pending.res : sofarFetch(itemId, personId, pos, ctrl.signal));
         if (!res.ok) throw new Error(String(res.status));
         await readAskStream(res, (ev) => {
           if (ended) return;
@@ -293,13 +375,14 @@ export function useSofar(itemId: string, personId: number, positionS: number | n
               sofarRead.set(readKey, text);
               if (sofarRead.size > SOFAR_READ_MAX) sofarRead.delete(sofarRead.keys().next().value as string);
             }
-            finish(text ? { state: "done", text } : { state: "none", text: "" });
-          } else finish({ state: "none", text: "" });
+            finish(text ? { state: "done", text } : { state: "little", text: "" });
+          } else if (ev.t === "error" && ev.code === "off") finish({ state: "none", text: "" });
+          else finish({ state: "little", text: "" });
         });
         // Fini sans sa ligne de fin (connexion coupée) : une panne.
-        finish({ state: "none", text: "" });
+        finish({ state: "little", text: "" });
       } catch {
-        if (!ctrl.signal.aborted) finish({ state: "none", text: "" });
+        if (!ctrl.signal.aborted) finish({ state: "little", text: "" });
       }
     })();
     return () => {

@@ -4,6 +4,7 @@ import { selectBio } from "@/lib/format";
 import { logError } from "@/lib/logger";
 import { enrichedPerson, personCreditsCached, personDetailsCached, personFilmography, personWithBiography } from "@/lib/tmdbPerson";
 import { analysisTarget, castOf, type XrayPerson } from "./cast";
+import type { AskActorFacts } from "@/lib/ask/core";
 
 /**
  * Le panneau d'une personne d'« À l'écran » (DECISIONS.md §138, 10.27) — ce qui ne dépend pas du modèle :
@@ -75,5 +76,34 @@ export async function personFactsForPlayer(itemId: string, personId: number, lan
   } catch (error) {
     logError("xray/person", error, { itemId, personId });
     return { status: "none" };
+  }
+}
+
+/**
+ * Les faits réels d'une personne pour une question posée depuis son panneau (10.27.2, DECISIONS.md §139) :
+ * ce que le panneau montre déjà — nom, personnage, naissance, décès, lieu, biographie choisie —, par les
+ * mêmes appels et les mêmes caches (le panneau vient de les lire). Cherchée dans la distribution de cet
+ * élément, comme le panneau ; `null` sinon, ou sur une panne — la question part alors sans eux.
+ */
+export async function actorFactsForAsk(itemId: string, personId: number, lang: Locale): Promise<AskActorFacts | null> {
+  try {
+    const found = await castPerson(itemId, personId);
+    if (!found) return null;
+    const locale = getTmdbLocale(lang);
+    const tmdb = createTmdbClient(locale);
+    if (!tmdb.isEnabled()) return { name: found.person.name, character: found.person.character };
+    const [localized, enriched] = await Promise.all([personDetailsCached(tmdb, locale, personId), enrichedPerson(tmdb, lang, personId)]);
+    const details = await personWithBiography(localized, locale, personId);
+    return {
+      name: found.person.name,
+      character: found.person.character,
+      birthday: details?.birthday ?? null,
+      deathday: details?.deathday ?? null,
+      placeOfBirth: details?.place_of_birth ?? null,
+      bio: selectBio(details?.biography, enriched.wikiBio)?.text ?? null,
+    };
+  } catch (error) {
+    logError("ask/acteur", error, { itemId, personId });
+    return null;
   }
 }

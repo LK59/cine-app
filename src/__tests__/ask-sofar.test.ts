@@ -38,6 +38,9 @@ vi.mock("@/lib/eventLogs", () => ({
   logJusquici: (...args: unknown[]) => sofarLog(...args),
   logRecap: vi.fn(),
 }));
+// Les scènes d'« À l'écran » (10.27.2) : aucune par défaut — la coupe est alors la marque des cinq minutes.
+const xrayScenes = vi.hoisted(() => ({ payload: null as null | { status: string; complete: boolean; analyzedUntil: number; scenes: { start: number; end: number; people: never[] }[] } }));
+vi.mock("@/lib/xray/scenes", () => ({ scenesForPlayer: async () => xrayScenes.payload ?? { status: "none", complete: false, analyzedUntil: 0, scenes: [] } }));
 // La personne est cherchée dans la distribution de l'élément : Ariadne, jouée par Elliot Page.
 vi.mock("@/lib/xray/person", () => ({
   castPerson: async (_itemId: string, personId: number) =>
@@ -45,8 +48,10 @@ vi.mock("@/lib/xray/person", () => ({
 }));
 
 import { setAskModelForTests, resetAskCachesForTests, AskModelTimeout, type AskModel } from "@/lib/ask/service";
-import { resetSofarForTests, sofarCutoff, SOFAR_KEEP_MS } from "@/lib/ask/sofar";
-import { SOFAR_PREWARM_PER_HOUR } from "@/lib/ask/sofarRequest";
+import { resetSofarForTests, sofarCutoff, sofarKey, sofarSources, sofarSystem, SOFAR_KEEP_MS, SOFAR_MAX_EPISODES, SOFAR_NOTHING, SOFAR_VERSION } from "@/lib/ask/sofar";
+import { askContent, ASK_MODEL, SOFAR_MAX_OUTPUT_TOKENS } from "@/lib/ask/service";
+import type { AskContextInput } from "@/lib/ask/core";
+import { SOFAR_PER_HOUR } from "@/lib/ask/sofarRequest";
 import { getDb, sofarDb } from "@/lib/db";
 
 const MOVIE = "a".repeat(32);
@@ -76,9 +81,10 @@ function json(body: unknown) {
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 }
 
-function scripted(text: string, seen: string[] = [], stop = "end_turn"): AskModel {
-  return ({ message }) => {
+function scripted(text: string, seen: string[] = [], stop = "end_turn", reqs: { system: string; message: string; prefixEnd?: number }[] = []): AskModel {
+  return ({ system, message, prefixEnd }) => {
     seen.push(message);
+    reqs.push({ system, message, prefixEnd });
     async function* deltas() {
       for (let i = 0; i < text.length; i += 7) yield text.slice(i, i + 7);
     }
@@ -125,6 +131,7 @@ function account(extra: Partial<{ jfId: string; role: string }> = {}) {
 }
 
 beforeEach(() => {
+  xrayScenes.payload = null;
   fetchMock.mockReset();
   askLog.mockReset();
   sofarLog.mockReset();
@@ -256,12 +263,12 @@ describe("préparé en fond", () => {
     expect(JSON.stringify(sofarLog.mock.calls)).not.toContain("labyrinthe");
   });
 
-  it(`${SOFAR_PREWARM_PER_HOUR} préparations par heure et par compte, puis « limite » — un texte gardé ne compte pas`, async () => {
+  it(`${SOFAR_PER_HOUR} générations par heure et par compte (préparations comprises), puis « limite » — un texte gardé ne compte pas`, async () => {
     let n = 0;
     setAskModelForTests((req) => scripted(`NOMS: Ariadne\n\nAriadne construit le labyrinthe numéro ${++n}.`)(req));
     const a = account();
-    for (let i = 0; i < SOFAR_PREWARM_PER_HOUR; i++) await sofar(a, { prewarm: true, positionS: (i + 1) * 600 + 1 });
-    const over = await sofar(a, { prewarm: true, positionS: (SOFAR_PREWARM_PER_HOUR + 5) * 600 });
+    for (let i = 0; i < SOFAR_PER_HOUR; i++) await sofar(a, { prewarm: true, positionS: (i + 1) * 600 + 1 });
+    const over = await sofar(a, { prewarm: true, positionS: (SOFAR_PER_HOUR + 5) * 600 });
     expect(over.events).toEqual([{ t: "error", code: "limite" }]);
     // Déjà gardé : servi sans compter.
     await settle();
@@ -323,5 +330,218 @@ describe("les pannes du modèle : dites proprement, jamais gardées", () => {
     });
     const r = await question(account());
     expect(r.events.at(-1)).toEqual({ t: "error", code: "erreur" });
+  });
+});
+
+describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans la clé", () => {
+  it("la consigne : un second rôle nommé ou dans la scène reçoit au moins une phrase ; RIEN seulement s'il n'apparaît nulle part", () => {
+    const sys = sofarSystem("fr");
+    expect(sys).toContain("Un second rôle compte autant qu'un premier");
+    expect(sys).toContain(`La réponse est le seul mot ${SOFAR_NOTHING} seulement si ce personnage n'est ni dans les sources ni dans la distribution`);
+    expect(sys).toContain("Même s'il n'est nommé nulle part ailleurs, écris une phrase");
+    // L'ancienne règle (« au-delà de son nom ») est partie : elle faisait taire cinq personnes sur huit.
+    expect(sys).not.toContain("au-delà de son nom");
+    // Le plus récent d'abord, jamais les débuts.
+    expect(sys).toContain("Centre-toi sur le plus récent");
+  });
+
+  it("la version de la consigne est dans la clé : 2, et une même entrée sous la version 1 donne une autre clé", () => {
+    expect(SOFAR_VERSION).toBe(2);
+    expect(sofarKey(ASK_MODEL, "s", "m", 1)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
+  });
+
+  it("un « vide » gardé avant le changement de consigne n'est jamais relu : le modèle est redemandé et le texte montré", async () => {
+    const reqs: { system: string; message: string; prefixEnd?: number }[] = [];
+    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe.", [], "end_turn", reqs));
+    await sofar(account());
+    await settle();
+    // Ce qui est parti au modèle, gardé sous l'ancienne version comme « rien à dire » : ce que 10.27.1 laissait.
+    getDb().prepare("DELETE FROM sofar_texts").run();
+    resetSofarForTests();
+    sofarDb.put(sofarKey(ASK_MODEL, reqs[0].system, reqs[0].message, 1), "vide", null, "ancien");
+    const model = vi.fn(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe."));
+    setAskModelForTests(model);
+    const r = await sofar(account());
+    expect(model).toHaveBeenCalledTimes(1);
+    expect(r.text).toBe("Ariadne construit le labyrinthe.");
+  });
+
+  it("le message dit que la personne est dans la scène que le spectateur regarde", async () => {
+    const seen: string[] = [];
+    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe.", seen));
+    await sofar(account());
+    expect(seen[0]).toContain("ce personnage est dans la scène qu'il regarde");
+  });
+
+  it("une phrase qui parle de « sources » est retirée, jamais montrée (« Jusqu'ici » n'a pas de second passage)", async () => {
+    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe. Les sources ne disent rien de plus."));
+    const r = await sofar(account());
+    expect(r.text).toBe("Ariadne construit le labyrinthe.");
+    await settle();
+    expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cache: "nouveau", meta: "réécrit" }));
+  });
+});
+
+describe("10.27.2 — centré sur le récent : cinq résumés au plus, ceux d'avant l'épisode en cours", () => {
+  const long: AskContextInput = {
+    kind: "series",
+    title: "Ted Lasso",
+    cast: [{ name: "Jason Sudeikis", role: "Ted Lasso" }],
+    watchedAll: false,
+    // Trois saisons de dix épisodes ; le spectateur en est au deuxième de la saison 3.
+    episodes: Array.from({ length: 30 }, (_, i) => {
+      const season = Math.floor(i / 10) + 1;
+      const n = (i % 10) + 1;
+      const code = `S0${season}E${String(n).padStart(2, "0")}`;
+      return { code, title: `Épisode ${code}`, overview: `RESUME-${code}`, played: i < 21 };
+    }),
+    current: { code: "S03E02", title: "Épisode S03E02" },
+    positionS: 600,
+    cues: [],
+  };
+  it("une longue série : les cinq derniers vus, la fin de la saison d'avant comprise, jamais les débuts", () => {
+    const sources = sofarSources(long, { name: "Jason Sudeikis", character: "Ted Lasso" });
+    expect(SOFAR_MAX_EPISODES).toBe(5);
+    expect(sources.episodes).toBe(5);
+    for (const code of ["S02E07", "S02E08", "S02E09", "S02E10", "S03E01"]) expect(sources.text).toContain(`RESUME-${code}`);
+    expect(sources.text).not.toContain("RESUME-S02E06");
+    expect(sources.text).not.toContain("RESUME-S01E01");
+    expect(sources.text).not.toContain("RESUME-S03E02");
+  });
+  it("une série revue en entier : rien après l'épisode en cours, ni ses répliques au-delà de la coupe", () => {
+    const all: AskContextInput = {
+      ...long,
+      watchedAll: true,
+      episodes: long.episodes!.map((e) => ({ ...e, played: true })),
+      cues: [
+        { startS: 100, text: "AVANT" },
+        { startS: 900, text: "APRES" },
+      ],
+    };
+    const sources = sofarSources(all, { name: "Jason Sudeikis", character: "Ted Lasso" });
+    expect(sources.text).not.toContain("RESUME-S03E03");
+    expect(sources.text).toContain("RESUME-S03E01");
+    expect(sources.text).toContain("AVANT");
+    expect(sources.text).not.toContain("APRES");
+  });
+});
+
+describe("10.27.2 — le cache de prompts : le préfixe partagé d'abord, la personne en dernier", () => {
+  it("deux personnes de la même scène : le même préfixe (sources, où en est le spectateur), la personne après lui", async () => {
+    const reqs: { system: string; message: string; prefixEnd?: number }[] = [];
+    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe.", [], "end_turn", reqs));
+    await sofar(account());
+    const [r] = reqs;
+    expect(r.prefixEnd).toBeGreaterThan(0);
+    const prefix = r.message.slice(0, r.prefixEnd);
+    const rest = r.message.slice(r.prefixEnd);
+    expect(prefix).toContain("<sources>");
+    expect(prefix).toContain("AVANT-CINQ");
+    expect(prefix).not.toContain("Elliot Page)");
+    expect(rest).toContain("Ariadne (joué par Elliot Page)");
+    // La requête : deux blocs, le premier seul marqué pour le cache.
+    const content = askContent(r.message, r.prefixEnd);
+    expect(Array.isArray(content)).toBe(true);
+    const blocks = content as { text: string; cache_control?: { type: string } }[];
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(blocks[1].cache_control).toBeUndefined();
+    expect(blocks[0].text + blocks[1].text).toBe(r.message);
+    // Sans préfixe, le message tel quel.
+    expect(askContent("bonjour")).toBe("bonjour");
+  });
+
+  it("les jetons du cache vont au journal (`cacheWrite`, `cacheRead`)", async () => {
+    setAskModelForTests(() => {
+      async function* deltas() {
+        yield "NOMS: Ariadne\n\nAriadne construit le labyrinthe.";
+      }
+      return { deltas: deltas(), done: Promise.resolve({ inTokens: 40, outTokens: 30, stop: "end_turn", cacheWrite: 0, cacheRead: 3200 }) };
+    });
+    await sofar(account());
+    await settle();
+    expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cache: "nouveau", cacheWrite: 0, cacheRead: 3200 }));
+  });
+
+});
+
+describe("10.27.2 — le plafond de sortie de « Jusqu'ici »", () => {
+  it("parti avec son plafond ; atteint, une panne jamais gardée (la ligne discrète à l'écran)", async () => {
+    const seen: (number | undefined)[] = [];
+    setAskModelForTests(({ maxTokens }) => {
+      seen.push(maxTokens);
+      async function* deltas() {
+        yield "NOMS: Ariadne\n\nAriadne construit le labyrinthe. Elle";
+      }
+      return { deltas: deltas(), done: Promise.resolve({ inTokens: 10, outTokens: SOFAR_MAX_OUTPUT_TOKENS, stop: "max_tokens" }) };
+    });
+    const r = await sofar(account());
+    expect(seen).toEqual([SOFAR_MAX_OUTPUT_TOKENS]);
+    expect(r.events.at(-1)).toEqual({ t: "error", code: "erreur" });
+    await settle();
+    expect(getDb().prepare("SELECT COUNT(*) AS n FROM sofar_texts").get()).toEqual({ n: 0 });
+  });
+});
+
+describe("10.27.2 — la coupe tombe sur un début de scène", () => {
+  const scenes = (starts: number[], complete = true, analyzedUntil = 3000) => ({
+    status: "done",
+    complete,
+    analyzedUntil,
+    scenes: starts.map((start, i) => ({ start, end: starts[i + 1] ?? start + 60, people: [] as never[] })),
+  });
+
+  it("à 12 min : le début de la dernière scène avant 10 min (4 min 50), jamais au milieu d'une scène", async () => {
+    xrayScenes.payload = scenes([0, 230, 290, 700]);
+    const seen: string[] = [];
+    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne dessine un plan.", seen));
+    await sofar(account(), { positionS: 12 * 60 });
+    // La réplique de 4 min part, celle de 5 min (dans la scène commencée à 4 min 50) non.
+    expect(seen[0]).toContain("AVANT-CINQ");
+    expect(seen[0]).not.toContain("Ariadne construit le labyrinthe.");
+    expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cutS: 290, bucket: 10 }));
+    const { sofarCut } = await import("@/lib/ask/sofarCut");
+    expect(sofarCut(12 * 60, xrayScenes.payload)).toBe(290);
+  });
+
+  it("sans scènes : la marque des cinq minutes, comme avant", async () => {
+    const seen: string[] = [];
+    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe.", seen));
+    await sofar(account(), { positionS: 12 * 60 });
+    expect(seen[0]).toContain("Ariadne construit le labyrinthe.");
+    expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cutS: 600 }));
+  });
+
+  it("deux positions de la même tranche, une même scène : la même clé, un seul appel", async () => {
+    xrayScenes.payload = scenes([0, 230, 290, 700]);
+    const model = vi.fn(scripted("NOMS: Ariadne\n\nAriadne dessine un plan."));
+    setAskModelForTests(model);
+    const a = account();
+    await sofar(a, { positionS: 10 * 60 + 5 });
+    await settle();
+    await sofar(a, { positionS: 14 * 60 + 50 });
+    expect(model).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("10.27.2 — les étapes au journal, le contexte préparé", () => {
+  it("une génération : `contextMs`, `ttftMs`, `firstSentenceMs`, `totalMs`, `ctx`", async () => {
+    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe."));
+    await sofar(account());
+    await settle();
+    const line = sofarLog.mock.calls.map(([f]) => f as Record<string, unknown>).find((f) => f.cache === "nouveau")!;
+    for (const k of ["contextMs", "ttftMs", "firstSentenceMs", "totalMs"]) expect(typeof line[k]).toBe("number");
+    expect(line.ctx).toBe("construit");
+  });
+
+  it("préparé à l'ouverture du lecteur (GET) : la demande suivante lit le contexte prêt", async () => {
+    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe."));
+    const a = account();
+    const { GET } = await import("@/app/api/cinema/ask/[itemId]/route");
+    await GET(req(a, null), { params: Promise.resolve({ itemId: MOVIE }) });
+    await settle();
+    const r = await question(a);
+    expect(r.events.at(-1)).toEqual({ t: "done" });
+    expect(askLog).toHaveBeenLastCalledWith(expect.objectContaining({ ctx: "prêt", contextMs: expect.any(Number), ttftMs: expect.any(Number), firstSentenceMs: expect.any(Number), totalMs: expect.any(Number) }));
   });
 });

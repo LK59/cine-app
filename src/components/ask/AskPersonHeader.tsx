@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { initialsOf, personFactsLine, usePersonFacts } from "@/lib/xray/client";
 import { useSofar } from "@/lib/ask/client";
+import type { SofarScenes } from "@/lib/ask/sofarCut";
 import type { XrayPlayerPerson } from "@/lib/xray/scenes";
 
 /**
@@ -40,17 +41,22 @@ export function PersonAvatar({ person, className }: { person: Pick<XrayPlayerPer
  * « Jusqu'ici » (DECISIONS.md §139, 10.27.1) : un composant à lui, qui ne retient rien du reste du panneau.
  * Avec l'option pour cette séance, la section est toujours là en haut dès l'ouverture : son titre, une ligne
  * d'attente discrète (un reflet qui passe, pas de texte — passé un court délai, `loading`), puis le texte en
- * fondu. Elle ne disparaît que sur « rien à dire » ou une panne, sans un mot (`useSofar`).
+ * fondu. Rien à dire, une panne ou le délai : une ligne discrète, « Encore trop peu vu pour en dire plus. »
+ * (`little`, 10.27.2) — jamais une section qui disparaît (`useSofar`).
  */
-export function AskPersonSofar({ itemId, personId, position }: { itemId: string; personId: number; position: number | null }) {
+export function AskPersonSofar({ itemId, personId, position, scenes }: { itemId: string; personId: number; position: number | null; scenes?: SofarScenes | null }) {
   const t = useT();
-  const view = useSofar(itemId, personId, position, true);
+  const view = useSofar(itemId, personId, position, true, scenes);
   if (view.state === "none") return null;
   const ready = view.state !== "waiting";
   return (
     <div data-ask-sofar={view.state} className="flex flex-col gap-1">
       <span className="text-[11px] font-semibold uppercase tracking-[.14em] text-white/55">{t("xray.sofar")}</span>
-      {ready ? (
+      {view.state === "little" ? (
+        <p data-ask-sofar-little="" className="ask-sofar-in text-[13px] leading-5 text-white/55">
+          {t("xray.sofarLittle")}
+        </p>
+      ) : ready ? (
         <p data-ask-sofar-text="" className="ask-sofar-in text-sm leading-5 text-white">
           {view.text}
         </p>
@@ -75,7 +81,20 @@ export function AskPersonSofar({ itemId, personId, position }: { itemId: string;
  * Le panneau s'ouvre tout de suite avec l'en-tête ; les faits et « Jusqu'ici » arrivent chacun de leur côté,
  * jamais l'un en attente de l'autre (10.27.1).
  */
-export function AskPersonBlock({ itemId, person, sofar, position }: { itemId: string; person: XrayPlayerPerson; sofar: boolean; position: number | null }) {
+export function AskPersonBlock({
+  itemId,
+  person,
+  sofar,
+  position,
+  scenes,
+}: {
+  itemId: string;
+  person: XrayPlayerPerson;
+  sofar: boolean;
+  position: number | null;
+  /** Les scènes du lecteur : la coupe de « Jusqu'ici » tombe sur un début de scène (`sofarCut`, 10.27.2). */
+  scenes?: SofarScenes | null;
+}) {
   const t = useT();
   const { locale } = useLocale();
   const facts = usePersonFacts(itemId, person.personId);
@@ -93,7 +112,7 @@ export function AskPersonBlock({ itemId, person, sofar, position }: { itemId: st
           {person.character && <span className="truncate text-[13px] leading-tight text-white/60">{person.character}</span>}
         </div>
       </div>
-      {sofar && <AskPersonSofar key={`${itemId}:${person.personId}`} itemId={itemId} personId={person.personId} position={position} />}
+      {sofar && <AskPersonSofar key={`${itemId}:${person.personId}`} itemId={itemId} personId={person.personId} position={position} scenes={scenes} />}
       {(line || ok?.bio) && (
         <div data-ask-person-facts="" className="flex flex-col gap-1">
           {line && <p className="text-[13px] leading-5 text-white/70">{line}</p>}

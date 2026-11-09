@@ -177,13 +177,15 @@ describe("avec l'option : « Jusqu'ici »", () => {
     expect(document.querySelector("[data-ask-sofar]")?.getAttribute("data-ask-sofar")).toBe("done");
   });
 
-  it("une panne, un refus ou rien à dire : pas de bloc « Jusqu'ici », pas de bruit — le reste du panneau est là", async () => {
+  it("une panne, un refus ou rien à dire : la section reste, une ligne discrète (10.27.2 — elle se retirait et se lisait comme une panne)", async () => {
     for (const reply of ["error", "rejected"] as const) {
       sofarReply = reply;
       open();
       await waitFor(() => expect(sofarPosts().length).toBeGreaterThan(0));
       await screen.findByText("Elliot Page est un acteur canadien.");
-      await waitFor(() => expect(document.querySelector("[data-ask-sofar]")).toBeNull());
+      await waitFor(() => expect(document.querySelector("[data-ask-sofar]")?.getAttribute("data-ask-sofar")).toBe("little"));
+      expect(document.querySelector("[data-ask-sofar-little]")?.textContent).toBe("xray.sofarLittle");
+      expect(document.querySelector("[data-ask-sofar-text]")).toBeNull();
       expect(screen.queryByText("ask.error")).toBeNull();
       cleanup();
       fetchMock.mockClear();
@@ -191,6 +193,16 @@ describe("avec l'option : « Jusqu'ici »", () => {
     // Une coupure réseau : pareil.
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (init?.method === "POST") throw new TypeError("Failed to fetch");
+      return new Response(JSON.stringify(String(url).includes("?person=") ? FACTS : { available: true }));
+    });
+    open();
+    await screen.findByText("Elliot Page est un acteur canadien.");
+    await waitFor(() => expect(document.querySelector("[data-ask-sofar]")?.getAttribute("data-ask-sofar")).toBe("little"));
+  });
+
+  it("l'option refusée à ce compte (`off`) : la section se retire, elle seule", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") return ndjson([{ t: "error", code: "off" }]);
       return new Response(JSON.stringify(String(url).includes("?person=") ? FACTS : { available: true }));
     });
     open();
@@ -259,22 +271,24 @@ describe("avec l'option : « Jusqu'ici »", () => {
     expect(JSON.parse(String((sofarPosts()[0][1] as RequestInit).body))).toMatchObject({ mode: "jusquici", personId: 2, positionS: null });
   });
 
-  it("rien à dire : la section se retire, le reste reste", async () => {
+  it("rien à dire : la section reste avec la ligne discrète, le reste reste", async () => {
     sofarReply = "rejected";
     open();
     expect(document.querySelector("[data-ask-sofar]")).toBeTruthy();
     await screen.findByText("Elliot Page est un acteur canadien.");
-    await waitFor(() => expect(document.querySelector("[data-ask-sofar]")).toBeNull());
+    await waitFor(() => expect(document.querySelector("[data-ask-sofar-little]")).toBeTruthy());
+    expect(document.querySelector("[data-ask-sofar-text]")).toBeNull();
   });
 
-  it(`aucune fin en ${SOFAR_CLIENT_TIMEOUT_MS / 1000} s : la section se retire sans un mot (10.27.0 : « Un instant… » pour toujours)`, async () => {
+  it(`aucune fin en ${SOFAR_CLIENT_TIMEOUT_MS / 1000} s : la ligne discrète remplace l'attente (10.27.0 : « Un instant… » pour toujours)`, async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     sofarReply = "hang";
     open();
     await act(async () => void (await vi.advanceTimersByTimeAsync(SOFAR_LOADING_DELAY_MS + 50)));
     expect(document.querySelector("[data-ask-sofar-loading]")).toBeTruthy();
     await act(async () => void (await vi.advanceTimersByTimeAsync(SOFAR_CLIENT_TIMEOUT_MS)));
-    expect(document.querySelector("[data-ask-sofar]")).toBeNull();
+    expect(document.querySelector("[data-ask-sofar]")?.getAttribute("data-ask-sofar")).toBe("little");
+    expect(document.querySelector("[data-ask-sofar-loading]")).toBeNull();
     expect(screen.queryByText("ask.error")).toBeNull();
     expect(document.querySelector("[data-ask-person='2']")).toBeTruthy();
   });
@@ -288,6 +302,71 @@ describe("avec l'option : « Jusqu'ici »", () => {
     );
     for (let i = 1; i < order.length; i++) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText('xray.qLink:{"name":"Ariadne","other":"Dom"}')).toBeTruthy();
+  });
+});
+
+describe("le panneau s'ouvre en haut (10.27.2)", () => {
+  // jsdom ne fait pas de mise en page : l'espace qui défile reçoit une hauteur de contenu plus grande que
+  // la sienne, et `scrollTo` est espionné — c'est lui qui descendait le panneau à l'ouverture en 10.27.1.
+  function tallScroller() {
+    const calls: number[] = [];
+    // jsdom n'a pas `Element.scrollTo` : posé pour le test, retiré après.
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      writable: true,
+      value: function (this: HTMLElement, o: ScrollToOptions) {
+        if (this.hasAttribute("data-ask-scroll")) calls.push(o.top ?? 0);
+      },
+    });
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute("data-ask-scroll") ? 900 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute("data-ask-scroll") ? 300 : 0;
+    });
+    return {
+      calls,
+      restore: () => {
+        vi.restoreAllMocks();
+        delete (HTMLElement.prototype as Partial<HTMLElement>).scrollTo;
+      },
+    };
+  }
+
+  it("faits, biographie, bibliothèque et « Jusqu'ici » qui arrivent après l'ouverture : rien ne descend", async () => {
+    const scroller = tallScroller();
+    try {
+      open();
+      await screen.findByText("Elliot Page est un acteur canadien.");
+      await screen.findByText("Ariadne construit le labyrinthe.");
+      await waitFor(() => expect(document.querySelector("[data-ask-person-library]")).toBeTruthy());
+      await act(async () => void (await new Promise((r) => requestAnimationFrame(() => r(null)))));
+      expect(scroller.calls).toEqual([]);
+    } finally {
+      scroller.restore();
+    }
+  });
+
+  it("une question posée : l'espace descend jusqu'à la réponse", async () => {
+    const scroller = tallScroller();
+    try {
+      open();
+      await screen.findByText("Elliot Page est un acteur canadien.");
+      fireEvent.click(screen.getByText('xray.qLink:{"name":"Ariadne","other":"Dom"}'));
+      await screen.findByText("Elle construit les rêves.");
+      await waitFor(() => expect(scroller.calls.length).toBeGreaterThan(0));
+      expect(scroller.calls.every((top) => top === 900)).toBe(true);
+    } finally {
+      scroller.restore();
+    }
+  });
+
+  it("une question posée depuis le panneau d'une personne emporte son `personId` (ses faits réels, côté serveur)", async () => {
+    open();
+    await screen.findByText("Elliot Page est un acteur canadien.");
+    fireEvent.click(screen.getByText('xray.qLink:{"name":"Ariadne","other":"Dom"}'));
+    await screen.findByText("Elle construit les rêves.");
+    expect(JSON.parse(String((questionPosts()[0][1] as RequestInit).body))).toMatchObject({ personId: 2, positionS: 754 });
   });
 });
 

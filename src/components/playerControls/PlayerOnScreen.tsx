@@ -1,10 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { PersonAvatar } from "@/components/ask/AskPersonHeader";
 import { scrollBehavior } from "@/lib/reducedMotion";
+import { SOFAR_HOVER_INTENT_MS } from "@/lib/ask/client";
+
+/** Un pointeur fin qui survole (souris, pavé) — jamais un écran tactile, où un survol n'est pas une intention. */
+function finePointer(): boolean {
+  try {
+    return typeof window.matchMedia === "function" && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  } catch {
+    return false;
+  }
+}
 import type { XrayPlayerPerson } from "@/lib/xray/scenes";
 
 /**
@@ -25,6 +35,13 @@ import type { XrayPlayerPerson } from "@/lib/xray/scenes";
  * pilule n'a pas de largeur à elle (10.27.1 : « Hannah Waddingh… » coupé avec la moitié de l'écran libre) :
  * un nom n'est coupé que si la rangée entière manque de place (`max-w-full`).
  *
+ * **Elle commence au début** (10.27.2) : à l'ouverture et à chaque changement de scène, la rangée revient à
+ * sa première pilule — la personne la plus longtemps à l'écran —, sauf sous un doigt. 10.27.1 s'ouvrait
+ * souvent au bout sur l'iPhone : l'aimantation (`snap-mandatory`) garde, après un changement de mise en
+ * page, la pilule sur laquelle elle était posée — une pilule déplacée vers la fin d'une nouvelle scène
+ * emmenait la rangée avec elle. `toStart` la remet au début après chaque mise en page qui n'est pas le fait
+ * de qui regarde (`userMoved` : un doigt, la molette, une flèche).
+ *
  * Une photo absente ou qui ne charge pas montre les initiales — jamais une image cassée. Le fondu des
  * commandes (`player-fade`) est porté par chaque pilule, jamais par la rangée (globals.css : un parent à
  * opacité < 1 isole le flou).
@@ -36,6 +53,18 @@ export interface PlayerOnScreenProps {
   onPick: (person: XrayPlayerPerson) => void;
   trailing?: ReactNode;
   maxWidth?: number | null;
+  /**
+   * Un doigt, la molette ou une flèche sur la rangée (10.27.2) : les commandes ne doivent pas partir
+   * pendant le geste (`holdControls`) ; la fin du geste — `ONSCREEN_SETTLE_MS` après le dernier signe —
+   * relance leur décompte (`onRelease`).
+   */
+  onHold?: () => void;
+  onRelease?: () => void;
+  /**
+   * Une intention sur une pilule (10.27.2) : un pointeur fin qui s'y pose `SOFAR_HOVER_INTENT_MS` — pas un
+   * passage, jamais un doigt. Le lecteur y prépare « Jusqu'ici » de cette seule personne (`prewarmSofar`).
+   */
+  onIntent?: (person: XrayPlayerPerson) => void;
 }
 
 /** Après le dernier contact ou le dernier défilement, le temps avant que la rangée suive de nouveau la scène. */
@@ -45,7 +74,7 @@ export const ONSCREEN_FADE_MS = 280;
 
 const signature = (people: readonly XrayPlayerPerson[]) => people.map((p) => p.personId).join(",");
 
-export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth }: PlayerOnScreenProps) {
+export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth, onHold, onRelease, onIntent }: PlayerOnScreenProps) {
   const t = useT();
   const rowRef = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ before: false, after: false });
@@ -85,22 +114,56 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth }: 
   // Le contact : posé au premier appui, au défilement, à la molette ; levé 600 ms après le dernier signe.
   const settleTimer = useRef<number | undefined>(undefined);
   const pointerDown = useRef(false);
+  /** Qui regarde l'a fait défiler depuis le dernier changement de scène : on ne la remet plus au début. */
+  const userMoved = useRef(false);
+  const touchingNow = useRef(false);
+  const hold = useRef(onHold);
+  const release = useRef(onRelease);
+  useEffect(() => {
+    hold.current = onHold;
+    release.current = onRelease;
+  });
   const touchStart = useCallback(() => {
     if (settleTimer.current !== undefined) window.clearTimeout(settleTimer.current);
     settleTimer.current = undefined;
+    userMoved.current = true;
+    touchingNow.current = true;
     setTouching(true);
+    hold.current?.();
   }, []);
   const touchSettle = useCallback(() => {
     if (pointerDown.current) return;
     if (settleTimer.current !== undefined) window.clearTimeout(settleTimer.current);
     settleTimer.current = window.setTimeout(() => {
       settleTimer.current = undefined;
+      touchingNow.current = false;
       setTouching(false);
+      release.current?.();
     }, ONSCREEN_SETTLE_MS);
   }, []);
   useEffect(() => () => {
     if (settleTimer.current !== undefined) window.clearTimeout(settleTimer.current);
   }, []);
+
+  /** Au début — jamais sous un doigt, ni après qu'on l'a fait défiler dans cette scène. */
+  const toStart = useCallback(() => {
+    const row = rowRef.current;
+    if (!row || userMoved.current || touchingNow.current) return;
+    if (row.scrollLeft !== 0) row.scrollLeft = 0;
+  }, []);
+  // À l'ouverture et à chaque scène : avant que l'image se dessine, puis une image plus tard (l'aimantation
+  // de WebKit se rejoue après la mise en page). Une largeur permise qui change fait de même.
+  useLayoutEffect(() => {
+    userMoved.current = false;
+    toStart();
+    const frame = window.requestAnimationFrame(toStart);
+    return () => window.cancelAnimationFrame(frame);
+  }, [shown.sig, toStart]);
+  useLayoutEffect(() => {
+    toStart();
+    const frame = window.requestAnimationFrame(toStart);
+    return () => window.cancelAnimationFrame(frame);
+  }, [maxWidth, shown.leaving.length, toStart]);
 
   const measure = useCallback(() => {
     const row = rowRef.current;
@@ -115,13 +178,16 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth }: 
     if (!row) return;
     const frame = window.requestAnimationFrame(measure);
     if (typeof ResizeObserver === "undefined") return () => window.cancelAnimationFrame(frame);
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(() => {
+      toStart();
+      measure();
+    });
     observer.observe(row);
     return () => {
       window.cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [measure, shown.sig, maxWidth]);
+  }, [measure, toStart, shown.sig, maxWidth]);
 
   // La molette verticale d'une souris fait défiler la rangée de côté (un pavé tactile le fait déjà).
   useEffect(() => {
@@ -145,10 +211,26 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth }: 
   const page = (direction: 1 | -1) => {
     const row = rowRef.current;
     if (!row) return;
+    touchStart();
+    touchSettle();
     const by = Math.max(120, row.clientWidth * 0.8) * direction;
     if (typeof row.scrollBy === "function") row.scrollBy({ left: by, behavior: scrollBehavior() });
     else row.scrollLeft += by;
   };
+
+  // L'intention sur une pilule : le pointeur fin posé là, sans bouger d'elle, `SOFAR_HOVER_INTENT_MS`.
+  const intentTimer = useRef<number | undefined>(undefined);
+  const intent = useRef(onIntent);
+  useEffect(() => {
+    intent.current = onIntent;
+  });
+  useEffect(() => () => window.clearTimeout(intentTimer.current), []);
+  const hoverStart = (person: XrayPlayerPerson, e: React.PointerEvent) => {
+    window.clearTimeout(intentTimer.current);
+    if (e.pointerType !== "mouse" || !intent.current || !finePointer()) return;
+    intentTimer.current = window.setTimeout(() => intent.current?.(person), SOFAR_HOVER_INTENT_MS);
+  };
+  const hoverEnd = () => window.clearTimeout(intentTimer.current);
 
   const list = shown.list;
   if (list.length === 0 && shown.leaving.length === 0 && !trailing) return null;
@@ -168,6 +250,8 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth }: 
         e.stopPropagation();
         if (!leaving) onPick(person);
       }}
+      onPointerEnter={leaving ? undefined : (e) => hoverStart(person, e)}
+      onPointerLeave={hoverEnd}
       className={`player-fade player-pill player-onscreen-pill flex min-w-0 max-w-full shrink-0 snap-start items-center gap-2 py-1 pl-1 pr-3.5 text-left text-white ${
         leaving ? "player-onscreen-out pointer-events-none" : entering(person.personId) ? "player-onscreen-in" : ""
       }`}

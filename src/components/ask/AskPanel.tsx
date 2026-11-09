@@ -21,6 +21,7 @@ import {
   type ViewportFacts,
 } from "@/lib/ask/viewport";
 import { ASK_MAX_QUESTION, type AskWhere } from "@/lib/ask/core";
+import type { SofarScenes } from "@/lib/ask/sofarCut";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { APP_BUILD, APP_VERSION } from "@/lib/appBuild";
 
@@ -76,6 +77,8 @@ export interface AskPanelProps {
   placement: "player" | "sheet";
   /** Les questions proposées à la place des trois d'office. */
   suggestions?: string[];
+  /** Les scènes d'« À l'écran » du lecteur : la coupe de « Jusqu'ici » tombe sur un début de scène (10.27.2). */
+  scenes?: SofarScenes | null;
 }
 
 /** La sortie du panneau : la durée de `fade-out-down` et de `ask-panel-out-side` (globals.css). */
@@ -176,9 +179,9 @@ function useKeyboardDiag(
   }, [refs.input, refs.layer, refs.panel]);
 }
 
-export function AskPanel({ itemId, where, position, onClose, person, scene, ask: askEnabled = true, placement, suggestions }: AskPanelProps) {
+export function AskPanel({ itemId, where, position, onClose, person, scene, ask: askEnabled = true, placement, suggestions, scenes }: AskPanelProps) {
   const t = useT();
-  const { exchanges, ask, retry, busy, full } = useAskTitle({ itemId, where, position, enabled: askEnabled });
+  const { exchanges, ask, retry, busy, full } = useAskTitle({ itemId, where, position, enabled: askEnabled, personId: person?.personId });
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
   // La position à l'ouverture, pour « Jusqu'ici » (une question relit la sienne au moment de partir).
@@ -249,10 +252,14 @@ export function AskPanel({ itemId, where, position, onClose, person, scene, ask:
   // Une réponse qui arrive se lit sans chercher : l'espace des réponses descend avec elle — jusqu'à sa
   // dernière ligne, relu une image plus tard (la hauteur du texte n'est connue qu'une fois posé), et quand
   // l'espace change de taille (le clavier refermé, les propositions qui s'en vont).
+  // **Seulement quand une question a été posée** (10.27.2) : sans échange, rien ne descend. 10.27.1 descendait
+  // aussi à l'ouverture — le panneau d'une personne aux faits déjà gardés s'ouvrait en bas, les premières
+  // lignes de la biographie coupées en haut (iPhone couché du propriétaire). Le panneau s'ouvre en haut, et
+  // ce qui arrive ensuite (faits, biographie, « Jusqu'ici ») ne le fait pas bouger.
   const last = exchanges[exchanges.length - 1];
   useEffect(() => {
     const scroller = scrollRef.current;
-    if (!scroller || typeof scroller.scrollTo !== "function") return;
+    if (!scroller || typeof scroller.scrollTo !== "function" || exchanges.length === 0) return;
     const down = () => scroller.scrollTo({ top: scroller.scrollHeight });
     down();
     const frame = window.requestAnimationFrame(down);
@@ -386,7 +393,7 @@ export function AskPanel({ itemId, where, position, onClose, person, scene, ask:
         <div ref={scrollRef} data-ask-scroll="" className="ask-scroll min-h-0 flex-auto overflow-y-auto overscroll-contain px-5 pb-3" hidden={line}>
           {person && (
             <div data-ask-header="">
-              <AskPersonBlock itemId={itemId} person={person} sofar={askEnabled} position={openedAt} />
+              <AskPersonBlock itemId={itemId} person={person} sofar={askEnabled} position={openedAt} scenes={scenes} />
             </div>
           )}
           {!askEnabled ? null : exchanges.length === 0 ? (

@@ -1036,6 +1036,15 @@
         "median": "Tiempo mediano",
         "errors": "Fallos"
       },
+      "aiCost": {
+        "title": "Coste de las respuestas del modelo (aproximado: preguntas, «Hasta ahora», «Anteriormente»)",
+        "today": "Hoy",
+        "week": "7 días",
+        "days30": "30 días",
+        "month": "Este mes",
+        "calls": "{n} llamada en 30 días|{n} llamadas en 30 días",
+        "ofReference": "{pct} % de {ref}"
+      },
       "addressShow": "Cambio de dirección",
       "addressHide": "Ocultar el cambio de dirección",
       "reason": {
@@ -4216,6 +4225,7 @@
     "next": "Más personas",
     "photo": "Foto de {name}",
     "sofar": "Hasta ahora",
+    "sofarLittle": "Todavía se ha visto demasiado poco para decir más.",
     "library": "En su biblioteca",
     "diedAt": "† a los {n} años",
     "qLink": "¿Qué relación tiene {name} con {other}?",

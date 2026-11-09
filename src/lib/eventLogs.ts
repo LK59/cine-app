@@ -178,6 +178,27 @@ export function logAskQuestion(fields: {
   episodes?: number;
   /** Le rang de la question dans l'ouverture du panneau (1 à 5). */
   turn?: number;
+  /**
+   * Les étapes (10.27.2) : `contextMs` l'assemblage du contexte, `ttftMs` du départ vers le modèle au premier
+   * morceau, `firstSentenceMs` à la première phrase rendue (après le filet des noms), `totalMs` en tout ;
+   * `ctx` : le contexte venait de la préparation du lecteur (`prêt`) ou a été lu pour la demande (`construit`).
+   */
+  contextMs?: number;
+  ttftMs?: number;
+  firstSentenceMs?: number;
+  totalMs?: number;
+  ctx?: "prêt" | "construit";
+  /** Le cache de prompts d'Anthropic (10.27.2) : jetons du préfixe écrits, et relus. */
+  cacheWrite?: number;
+  cacheRead?: number;
+  /** Posée depuis le panneau d'une personne (10.27.2) : ses faits réels (TMDB) sont partis avec. */
+  personId?: number;
+  /**
+   * Le filet des mots de coulisse (10.27.2, `metaTalk`) : `regénéré` — la première réponse parlait de
+   * « sources » avant toute phrase rendue, redemandée une fois ; `réécrit` — une phrase reformulée ou
+   * remplacée à l'écran.
+   */
+  meta?: "regénéré" | "réécrit" | "regénéré+réécrit";
 }): void {
   try {
     appendJsonLine(SEARCH_LOG(), { timestamp: new Date().toISOString(), kind: "question", ...fields }, { keep: EVENT_LOG_KEEP });
@@ -199,6 +220,8 @@ export function logJusquici(fields: {
   itemId: string;
   personId: number;
   bucket: number;
+  /** La coupe, en secondes (10.27.2) : le début de la dernière scène avant la marque des cinq minutes. */
+  cutS?: number;
   prewarm: boolean;
   cache: "partagé" | "compte" | "nouveau";
   status: "ok" | "vide" | "rejeté" | "limite" | "erreur" | "indisponible";
@@ -208,6 +231,21 @@ export function logJusquici(fields: {
   outTokens?: number;
   dialogue?: boolean | "attente";
   episodes?: number;
+  /**
+   * Les étapes (10.27.2) : `contextMs` l'assemblage du contexte, `ttftMs` du départ vers le modèle au premier
+   * morceau, `firstSentenceMs` à la première phrase rendue (après le filet des noms), `totalMs` en tout ;
+   * `ctx` : le contexte venait de la préparation du lecteur (`prêt`) ou a été lu pour la demande (`construit`).
+   */
+  contextMs?: number;
+  ttftMs?: number;
+  firstSentenceMs?: number;
+  totalMs?: number;
+  ctx?: "prêt" | "construit";
+  /** Le cache de prompts d'Anthropic (10.27.2) : jetons du préfixe écrits, et relus. */
+  cacheWrite?: number;
+  cacheRead?: number;
+  /** Une phrase qui parlait de « sources » retirée (10.27.2, `metaTalk`). */
+  meta?: "réécrit";
 }): void {
   try {
     appendJsonLine(SEARCH_LOG(), { timestamp: new Date().toISOString(), kind: "jusquici", ...fields }, { keep: EVENT_LOG_KEEP });

@@ -1036,6 +1036,15 @@
         "median": "Mittlere Dauer",
         "errors": "Fehlschläge"
       },
+      "aiCost": {
+        "title": "Kosten der Antworten des Modells (ungefähr: Fragen und „Bisher“-Texte)",
+        "today": "Heute",
+        "week": "7 Tage",
+        "days30": "30 Tage",
+        "month": "Dieser Monat",
+        "calls": "{n} Aufruf in 30 Tagen|{n} Aufrufe in 30 Tagen",
+        "ofReference": "{pct} % von {ref}"
+      },
       "addressShow": "Adresswechsel",
       "addressHide": "Adresswechsel ausblenden",
       "reason": {
@@ -4216,6 +4225,7 @@
     "next": "Weitere Personen",
     "photo": "Foto von {name}",
     "sofar": "Bisher",
+    "sofarLittle": "Bisher zu wenig gesehen, um mehr zu sagen.",
     "library": "In Ihrer Mediathek",
     "diedAt": "† mit {n} Jahren",
     "qLink": "In welcher Beziehung steht {name} zu {other}?",

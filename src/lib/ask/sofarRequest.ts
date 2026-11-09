@@ -1,8 +1,9 @@
 // « Jusqu'ici » côté route (`POST /api/cinema/ask/[itemId]` avec `mode: "jusquici"`) — DECISIONS.md §139.
 //
 // Deux usages, une seule clé (`sofarKey`) :
-// - **préparé en fond** (`prewarm: true`) : la rangée « À l'écran » vient de paraître ; la route lance la
-//   génération si personne ne l'a déjà fait et répond aussitôt `{"t":"queued"}` — personne n'attend ;
+// - **préparé sur une intention** (`prewarm: true`, 10.27.2) : au bureau, le pointeur posé sur une pilule
+//   d'« À l'écran » ; la route lance la génération si personne ne l'a déjà fait et répond aussitôt
+//   `{"t":"queued"}` — le clic qui suit lit la même génération ;
 // - **le panneau ouvert** : les phrases, diffusées comme celles d'une question — celles déjà là d'un coup,
 //   les suivantes à mesure —, puis `{"t":"done"}`, `{"t":"rejected"}` (rien à montrer : nom inconnu, ou
 //   rien à dire) ou `{"t":"error","code":…}`. L'écran ne montre rien dans les trois derniers cas.
@@ -16,20 +17,20 @@ import { logError } from "@/lib/logger";
 import { logJusquici } from "@/lib/eventLogs";
 import { createRateLimiter } from "@/lib/rateLimiter";
 import { askWhereLine } from "@/lib/ask/core";
-import { ASK_MODEL, currentAskModel, gatherAskContext } from "@/lib/ask/service";
+import { ASK_MODEL, SOFAR_MAX_OUTPUT_TOKENS, currentAskModel, gatherAskContext } from "@/lib/ask/service";
 import { castPerson } from "@/lib/xray/person";
-import { sofarCutoff, sofarKey, sofarLookup, sofarMessage, sofarSources, sofarStart, sofarSubscribe, sofarSystem, type SofarEntry } from "@/lib/ask/sofar";
+import { scenesForPlayer } from "@/lib/xray/scenes";
+import { sofarCut, sofarMark } from "@/lib/ask/sofarCut";
+import { sofarInput, sofarKey, sofarLookup, sofarParts, sofarSources, sofarStart, sofarSubscribe, sofarSystem, type SofarEntry } from "@/lib/ask/sofar";
 
 /**
- * Bornes par compte (consigne du propriétaire, 09/11/2026 : ~100 €/mois de crédit, ne pas brider —
- * seulement se garder d'un client qui boucle). Comptées seulement quand le modèle est vraiment appelé :
- * un texte déjà gardé ne coûte rien. Préparé en fond : 200 par heure ; panneau ouvert : 200 par heure
- * aussi, à part (une génération à la demande n'est jamais refusée parce que la préparation a tout pris).
+ * La borne par compte (consigne du propriétaire, 09/11/2026 : ~100 €/mois de crédit, ne pas brider — seulement
+ * se garder d'un client qui boucle) : 200 générations par heure, préparations sur intention comprises (10.27.2 :
+ * la préparation à l'apparition de la rangée, et sa borne à part, sont retirées). Comptée seulement quand le
+ * modèle est vraiment appelé : un texte déjà gardé ne coûte rien.
  */
-export const SOFAR_PREWARM_PER_HOUR = 200;
-export const SOFAR_OPEN_PER_HOUR = 200;
-const prewarmPerHour = createRateLimiter(SOFAR_PREWARM_PER_HOUR, 60 * 60 * 1000);
-const openPerHour = createRateLimiter(SOFAR_OPEN_PER_HOUR, 60 * 60 * 1000);
+export const SOFAR_PER_HOUR = 200;
+const perHour = createRateLimiter(SOFAR_PER_HOUR, 60 * 60 * 1000);
 
 /** Les répliques peuvent être attendues plus longtemps qu'à une question : le texte est gardé pour la tranche. */
 export const SOFAR_DIALOGUE_WAIT_MS = 25_000;
@@ -67,8 +68,19 @@ export async function answerSofar(
   body: SofarBody
 ): Promise<NextResponse> {
   const started = Date.now();
-  const cutoff = sofarCutoff(body.positionS);
-  const base = { user: who.user, device: who.device, itemId, personId: body.personId, bucket: Math.round(cutoff / 60), prewarm: body.prewarm };
+  // La coupe tombe sur un début de scène (10.27.2, `sofarCut`) : les scènes d'« À l'écran », celles que le
+  // lecteur reçoit ; sans elles, la marque des cinq minutes. Une panne du service des scènes ne bloque rien.
+  const scenes = await scenesForPlayer(itemId).catch(() => null);
+  const cutoff = sofarCut(body.positionS, scenes);
+  const base = {
+    user: who.user,
+    device: who.device,
+    itemId,
+    personId: body.personId,
+    bucket: Math.round(sofarMark(body.positionS) / 60),
+    cutS: cutoff,
+    prewarm: body.prewarm,
+  };
 
   let context: Awaited<ReturnType<typeof gatherAskContext>>;
   let found: Awaited<ReturnType<typeof castPerson>>;
@@ -82,6 +94,7 @@ export async function answerSofar(
     logJusquici({ ...base, cache: "nouveau", status: "erreur", ms: Date.now() - started });
     return oneShot({ t: "error", code: "erreur" });
   }
+  const contextMs = Date.now() - started;
   if (!found || context.status !== "ok") {
     logJusquici({ ...base, cache: "nouveau", status: "indisponible", ms: Date.now() - started });
     return oneShot({ t: "error", code: "indisponible" });
@@ -90,20 +103,21 @@ export async function answerSofar(
   const person = { name: found.person.name, character: found.person.character };
   const sources = sofarSources(context.input, person);
   const system = sofarSystem(who.locale);
-  const message = sofarMessage(sources, askWhereLine(context.input), person);
+  const { message, prefixEnd } = sofarParts(sources, askWhereLine(sofarInput(context.input)), person);
   const key = sofarKey(ASK_MODEL, system, message);
   const dialogue: boolean | "attente" = context.dialogueLate ? "attente" : sources.dialogue;
+  // Les temps de chaque étape (10.27.2) : l'assemblage du contexte, et d'où il venait.
+  const timing = { contextMs, ctx: context.ctx };
 
   let entry: SofarEntry | null = sofarLookup(key);
   const cache = entry ? (entry.by === who.account ? "compte" : "partagé") : "nouveau";
   if (!entry) {
-    const allowed = body.prewarm ? prewarmPerHour(who.account) : openPerHour(who.account);
-    if (!allowed) {
+    if (!perHour(who.account)) {
       logJusquici({ ...base, cache, status: "limite", ms: Date.now() - started });
       return oneShot({ t: "error", code: "limite" });
     }
     const model = currentAskModel();
-    entry = sofarStart(key, who.account, (signal) => model({ system, message, signal }), sources.check);
+    entry = sofarStart(key, who.account, (signal) => model({ system, message, prefixEnd, maxTokens: SOFAR_MAX_OUTPUT_TOKENS, signal }), sources.check, { locale: who.locale, sources: sources.text });
     // Le journal de la génération, à sa fin, au nom de qui l'a lancée — une seule ligne `nouveau`.
     void entry.done.then((fin) => {
       if (fin.error) logError("ask/jusquici", fin.error, { itemId });
@@ -113,16 +127,22 @@ export async function answerSofar(
         cache: "nouveau",
         status,
         ms: Date.now() - started,
-        ...(fin.firstMs === undefined ? {} : { firstMs: fin.firstMs }),
+        ...timing,
+        totalMs: Date.now() - started,
+        ...(fin.ttftMs === undefined ? {} : { ttftMs: fin.ttftMs }),
+        ...(fin.firstMs === undefined ? {} : { firstMs: fin.firstMs, firstSentenceMs: fin.firstMs }),
         ...(fin.inTokens === undefined ? {} : { inTokens: fin.inTokens, outTokens: fin.outTokens }),
+        ...(fin.cacheWrite === undefined ? {} : { cacheWrite: fin.cacheWrite }),
+        ...(fin.cacheRead === undefined ? {} : { cacheRead: fin.cacheRead }),
         dialogue,
         episodes: sources.episodes,
+        ...(fin.meta ? { meta: "réécrit" as const } : {}),
       });
     });
   } else {
     // Un texte déjà gardé (ou en cours pour un autre) : servi sans appel au modèle.
     const status = entry.state === "running" || entry.state === "ok" ? "ok" : entry.state;
-    logJusquici({ ...base, cache, status, ms: Date.now() - started, dialogue, episodes: sources.episodes });
+    logJusquici({ ...base, cache, status, ms: Date.now() - started, ...timing, totalMs: Date.now() - started, dialogue, episodes: sources.episodes });
   }
 
   if (body.prewarm) return oneShot({ t: "queued" });

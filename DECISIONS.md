@@ -8984,6 +8984,22 @@ n'est coupé que si la rangée entière manque de place. Le bouton rond de la qu
 Tests : `xray-row-1027.test.tsx` (centre chevauchant, rangée sous le centre sans chevauchement, pilule des
 outils chevauchante, debout ; pilule sans largeur propre, bouton au bout).
 
+**10.27.2 (09/11/2026, iPhone couché du propriétaire, *Ted Lasso* S01E08).**
+- **La rangée commence au début.** Elle s'ouvrait souvent au bout quand la scène comptait plus de visages
+  qu'il n'en tient. Cause : l'aimantation (`snap-mandatory`) garde, après un changement de mise en page, la
+  pilule sur laquelle elle était posée (règle de « re-snap » des navigateurs) — une pilule passée à la fin
+  d'une nouvelle scène emmenait la rangée avec elle. `toStart` (`PlayerOnScreen`) la remet à `scrollLeft = 0`
+  à l'ouverture, à chaque scène, quand la largeur permise change et quand la rangée change de taille, avant
+  l'image puis une image plus tard — **jamais sous un doigt** ni après que le spectateur l'a fait défiler dans
+  cette scène (`userMoved` : doigt, molette, flèche). Aucun `scrollIntoView` n'était en cause.
+- **Les commandes ne partent plus sous le doigt.** Toucher ou faire défiler la rangée (doigt, molette, pavé,
+  flèches) appelle `holdControls` (`onHold`), comme la barre de progression ; la fin du geste
+  (`ONSCREEN_SETTLE_MS` après le dernier signe) relance le décompte ordinaire de dix secondes (`onRelease` →
+  `showControls(10000)`).
+Tests : `xray-row-1027.test.tsx` (au début à l'ouverture, à chaque scène, à une largeur nouvelle ; rien ne
+saute sous un doigt ni après un défilement ; `onHold`/`onRelease` ; au lecteur, rangée tenue cinq secondes en
+lecture : les commandes restent, relâchée : elles partent).
+
 **Fire TV : pas proposée** (`useXrayAvailable` → `isFireTv`, §71). Une rangée qui défile de côté, au
 curseur de Silk ou à la télécommande, demanderait un parcours au focus propre (y entrer, défiler, en
 sortir vers la barre) que rien ne porte ici, et la pilule qu'elle ouvre n'y existe pas non plus.
@@ -9193,9 +9209,8 @@ la tranche ne montre rien de plus, et deux comptes au même endroit envoient les
   ou une panne n'est jamais gardé ; « rien à dire » l'est. Une génération par clé : la première demande lance
   le modèle **détaché de la requête** (un panneau refermé ne la perd pas) ; les suivantes lisent les mêmes
   phrases à mesure (`sofarStart`, `sofarSubscribe`).
-- **Préparé en fond** : la rangée affichée (commandes visibles, page visible), pour les **trois premières
-  personnes** de la scène, une fois par personne et par tranche pour la page (`prewarmSofar`) — le serveur
-  répond aussitôt `{"t":"queued"}`. Le panneau s'ouvre tout de suite avec ce qui ne dépend pas du modèle ;
+- **Préparé en fond** (10.27 à 10.27.1 — retiré en 10.27.2, voir plus bas) : la rangée affichée, pour les
+  **trois premières personnes** de la scène. Le panneau s'ouvre tout de suite avec ce qui ne dépend pas du modèle ;
   « Jusqu'ici » montre une ligne d'attente, puis le texte (`useSofar`).
 - **L'affichage, règle du propriétaire (10.27.1).** Le panneau s'ouvre tout de suite avec ce qui ne dépend
   pas du modèle (faits, biographie, affiches — `usePersonFacts`, jamais en attente de « Jusqu'ici ») ; avec
@@ -9233,9 +9248,9 @@ la tranche ne montre rien de plus, et deux comptes au même endroit envoient les
 - **Haiku** `claude-haiku-5-5`, réflexion adaptative à effort bas, comme les questions.
 
 **Bornes (10.27, consigne du propriétaire : ~100 €/mois de crédit, ne pas brider).** Questions : 60 par heure
-et 300 par jour et par compte (`ASK_PER_HOUR`, `ASK_PER_DAY`). « Jusqu'ici » : 200 préparations en fond par
-heure et par compte (`SOFAR_PREWARM_PER_HOUR`) et 200 générations à l'ouverture (`SOFAR_OPEN_PER_HOUR`),
-comptées seulement quand le modèle est appelé.
+et 300 par jour et par compte (`ASK_PER_HOUR`, `ASK_PER_DAY`). « Jusqu'ici » : 200 générations par heure et
+par compte (`SOFAR_PER_HOUR` depuis 10.27.2, préparations sur intention comprises), comptées seulement quand
+le modèle est appelé.
 
 **Les pannes, dites proprement (10.27).** Réseau, 5xx, 429, refus (`stop_reason: "refusal"`), **vingt
 secondes sans rien du modèle** (`MODEL_IDLE_MS` : le délai du client et un chien de garde réarmé à chaque
@@ -9275,6 +9290,109 @@ passé le délai puis phrases à mesure, faits jamais en attente ; rouvert dans 
 position inconnue : section quand même ; rien à dire : retirée ; 25 s sans fin : retirée ; `.ask-scroll` sans
 `clip-path`) ; `ask-sofar.test.ts` (tranche de cinq minutes, répliques jusqu'à 5 min à 9 min, `bucket` en
 minutes, tranche du client = celle du serveur).
+
+**10.27.2 (09/11/2026, essai du propriétaire, iPhone couché, *Ted Lasso* S01E08).**
+- **« Jusqu'ici » ne se tait plus sur les seconds rôles.** `recherche.log` montrait `status: "vide"` pour cinq
+  personnes sur huit entre 13:03 et 13:10 UTC (Isaac, Keeley, Bex, Rupert, Mae) : la consigne autorisait
+  « RIEN » dès que les sources ne disaient rien « au-delà du nom », et ces « vide » étaient gardés trente
+  jours. Nouvelle consigne : un personnage nommé une seule fois reçoit au moins une phrase factuelle (qui il
+  est pour les principaux, ce qu'il a fait à l'écran) ; le personnage demandé est **dans la scène** (le message
+  le dit : il vient d'être touché dans « À l'écran ») — même nommé nulle part, une phrase : son nom et qu'il
+  apparaît dans cette scène, son rôle si la distribution le dit, rien d'inventé ; « RIEN » seulement s'il n'est
+  ni dans les sources ni dans la distribution. `SOFAR_VERSION` passe à 2 : la version est dans la clé
+  (`sofarKey(…, version)`), aucun « vide » d'avant n'est relu. Vérifié sur la vraie API (5 appels, un à la
+  fois) : Bex, « vide » sous la consigne d'avant, rend « Bex apparaît dans la scène que vous regardez. » ;
+  Rupert « Rupert Mannion apparaît dans cette scène, où il vient d'entrer à l'écran. ».
+- **Centré sur le récent** (consigne du propriétaire). Au plus une incise sur qui est le personnage, puis le
+  plus récent : l'épisode en cours jusqu'à la coupe, puis les derniers épisodes vus ; l'ancien seulement s'il
+  est indispensable. L'entrée est bornée : **les résumés des cinq derniers épisodes vus avant l'épisode en
+  cours** (`SOFAR_MAX_EPISODES`, ceux de la fin de la saison d'avant comptent au début d'une saison — option
+  `maxEpisodes` / `beforeCurrent` d'`askSources`), plus les répliques de l'épisode en cours jusqu'à la coupe,
+  rien de plus ancien. Une série revue en entier (`sofarInput`) est coupée de même — « Jusqu'ici » parle de là
+  où en est le spectateur. Les questions gardent leur fenêtre (soixante résumés).
+- **La coupe tombe sur un début de scène** (consigne du propriétaire). Le rythme reste de cinq minutes, mais
+  la coupe est le début de la **dernière scène d'« À l'écran » qui commence au plus tard à la marque** des cinq
+  minutes : un texte ne s'arrête jamais au milieu d'une conversation, les répliques partent jusqu'à ce début.
+  Une seule fonction, `sofarCut` (`src/lib/ask/sofarCut.ts`, sans dépendance), lue par le serveur (sur les
+  scènes de `scenesForPlayer`, celles que reçoit le lecteur) et par le client (préparation sur intention, textes
+  déjà lus, sur la charge `useXrayScenes` passée à `AskPanel` → `AskPersonBlock` → `useSofar`). Sans scènes,
+  ou quand l'analyse ne va pas encore jusqu'à la marque, la marque elle-même. La coupe entre dans le message,
+  donc dans la clé ; `cutS` au journal (à côté de `bucket`, la marque en minutes).
+- **Rien à dire, rejet, panne ou délai : une ligne discrète**, « Encore trop peu vu pour en dire plus. »
+  (`xray.sofarLittle`, quatre langues, `Sie`), état `little` de `useSofar` — la section ne disparaît plus
+  (elle se lisait comme une panne). Seule l'option refusée à ce compte (`off`) la retire.
+- **Le panneau s'ouvre en haut.** L'espace des réponses descendait à l'ouverture (`scrollTo` vers le bas dès
+  le montage, sans échange) : avec des faits déjà gardés, la biographie s'ouvrait coupée en haut. Il ne
+  descend plus que quand une question est posée ou que sa réponse arrive ; ce qui arrive ensuite (faits,
+  biographie, « Jusqu'ici ») ne le fait pas bouger.
+- **Une question posée depuis le panneau d'une personne** emporte `personId` : ses faits réels (TMDB — nom,
+  naissance, décès, lieu, biographie montrée, `actorFactsForAsk`, cherchée dans la distribution de l'élément)
+  partent dans un bloc `<acteur>` après les sources, et la date de diffusion de l'épisode (ou de sortie du
+  film, `PremiereDate` de Jellyfin, tirée de TMDB) est dans les sources. « Quel âge a cette actrice pendant
+  cet épisode ? » recevait « Les sources ne donnent pas l'âge… » sous la date de naissance affichée ; vérifié
+  sur la vraie API : « Juno Temple, née le 21 juillet 1989, avait 31 ans lors de la diffusion de cet épisode,
+  en septembre 2020. ». La consigne dit que ces faits ne disent rien de l'histoire ; leurs noms passent le
+  filet (ajoutés à `check`).
+- **Le filet des mots de coulisse** (`metaTalk`, `core.ts`) : chaque phrase, avant d'être rendue, est cherchée
+  pour « sources, documents, contexte, sous-titres, transcription » et leurs équivalents anglais, espagnols,
+  allemands — sauf un mot que l'histoire emploie elle-même (une réplique qui dit « documents »). Une question :
+  prise avant toute phrase rendue → **redemandée une fois** avec un rappel (`metaReminder`) ; sinon « D'après
+  les sources, … » reformulé (« D'après ce que vous avez vu, … », `rewriteMetaPrefix`) ; sinon la phrase
+  remplacée par une limite dite naturellement (`METALESS_LIMIT`, une fois). « Jusqu'ici » : la phrase est
+  retirée. `meta` au journal (`regénéré`, `réécrit`).
+- **Le cache de prompts d'Anthropic.** Le message part en deux blocs (`askContent`, `prefixEnd`) : la partie
+  partagée — sources (résumés, répliques jusqu'à la coupe) et où en est le spectateur — marquée
+  `cache_control: { type: "ephemeral" }` (cinq minutes), puis ce qui est propre à la demande (la personne, ses
+  faits, les échanges, la question). La consigne (fixe par langue) est devant. L'empreinte de `sofar_texts`
+  prend toujours le message entier, jamais le découpage. Mesuré sur la vraie API : la deuxième personne d'une
+  même scène relit 6 659 jetons du cache (`cacheRead`) pour 86 en entrée ; le minimum cachable de Haiku 5.5
+  est 512 jetons. `cacheWrite` / `cacheRead` au journal.
+- **Plus de préparation à l'apparition de la rangée** (décision du propriétaire). Jusqu'en 10.27.1, les trois
+  premières personnes de chaque scène étaient préparées dès que la rangée paraissait : ~6 textes par heure de
+  film pour zéro ou une lecture. Désormais « Jusqu'ici » est **généré à la demande**, à l'ouverture du panneau
+  d'une personne, diffusé (la première phrase dès qu'elle est prête), puis gardé comme avant (clé de ce qui
+  part au modèle, trente jours, partagé entre comptes) — un texte gardé se montre à l'instant ; la partie sans
+  le modèle reste immédiate. **Seule préparation : une intention au bureau** — un pointeur fin (`hover: hover`
+  et `pointer: fine`) posé `SOFAR_HOVER_INTENT_MS` (300 ms) sur une pilule (`onIntent` de `PlayerOnScreen` →
+  `prewarmSofar`, une personne, une fois par coupe pour la page, jamais page cachée) ; le clic qui suit lit
+  la même génération (le serveur la garde par sa clé), rien n'est annulé si le pointeur s'en va. Jamais au
+  doigt. La route répond `{"t":"queued"}` aussitôt ; une seule borne, 200 générations par heure et par compte
+  (`SOFAR_PER_HOUR`, préparations comprises — la borne à part des préparations est retirée). Le cache de
+  prompts reste utile : plusieurs personnes ouvertes dans la même scène, et les questions.
+- **L'attente, réduite sans toucher à la qualité** (la réflexion et l'effort ne changent pas : le
+  propriétaire veut d'abord un essai à part).
+  1. **La demande part au toucher** : `startSofar`, appelé par le clic sur la pilule (`PlayerControls`),
+     lance la requête avant l'animation du panneau et toute autre requête ; `useSofar`, monté ensuite, la
+     reprend (`takePendingSofar`) au lieu d'en lancer une seconde — une demande jamais reprise est oubliée
+     au bout de 10 s, la génération va au bout et se garde. Une question part déjà du clic (`ask`).
+  2. **Le contexte préparé à l'ouverture du lecteur** : avec l'option pour la séance, le lecteur appelle
+     `GET /api/cinema/ask/{id}` une fois par élément ; le serveur lit l'élément, sa série et ses épisodes sous
+     l'identité du compte et les garde en mémoire (`prepareAskContext`, huit éléments, quinze minutes, sur
+     `globalThis`), et demande les répliques d'avance (`cuesKept`, une heure) — une question ou « Jusqu'ici »
+     ne fait plus que couper à sa position.
+  3. **Les étapes au journal**, lignes `question` et `jusquici` : `contextMs` (assemblage du contexte),
+     `ttftMs` (départ vers le modèle → premier morceau), `firstSentenceMs` (→ première phrase rendue, après
+     le filet des noms), `totalMs`, et `ctx` (`prêt` : le contexte venait de la préparation ; `construit`).
+- **Plafonds de sortie** : `max_tokens` à 2 500 pour « Jusqu'ici » et 2 000 pour une question
+  (`SOFAR_MAX_OUTPUT_TOKENS`, `ASK_MAX_OUTPUT_TOKENS`, réflexion comprise ; le plus long relevé : 1 730 et
+  1 151). Atteint (`stop_reason: "max_tokens"`) : une panne — la ligne discrète, « Réessayer » —, jamais une
+  phrase coupée.
+- **Le coût, en euros, dans Activité** (sous « Recherche par description », administrateur seul) :
+  aujourd'hui, sept jours, trente jours, le mois en cours contre la référence de 100 € (`aiCost.ts`) — les
+  jetons de `recherche.log` (questions, « Jusqu'ici », « Précédemment » ; une recherche par description qui
+  en porterait aussi) au tarif de `officialPrice` (Haiku 5.5 : 0,10 $ / 0,50 $ par million, cache ×1,25 /
+  ×0,1), au taux fixe et approximatif `USD_TO_EUR` = 0,92 (« ≈ » à l'écran).
+Tests : `ask-sofar.test.ts` (consigne, version dans la clé, « vide » d'avant jamais relu, cinq résumés au plus
+avant l'épisode en cours, série revue, préfixe partagé et personne en dernier, `cache_control` sur le seul
+premier bloc, jetons du cache au journal, plafond atteint jamais gardé, une seule borne) ; `ask-question-1027-2.test.ts` (mots de coulisse dans les quatre langues, reformulation, second
+passage, limite naturelle, faits réels et date de sortie, `personId`, plafond) ; `xray-person-panel.test.tsx`
+(ligne discrète sur rejet, panne, coupure et délai ; `off` retire la section ; le panneau ne descend pas à
+l'arrivée des faits ; il descend à une réponse ; `personId` envoyé) ; `xray-row-1027.test.tsx` (la rangée qui
+paraît ne prépare rien ; intention de 300 ms au pointeur fin, pas un passage, jamais au doigt ; une fois par
+coupe ; jamais page cachée ; le clic qui suit ouvre) ; `ai-cost.test.ts` ; `ask-sofar-cut.test.ts` et `ask-sofar.test.ts`
+(coupe sur un début de scène, jamais au milieu, repli sans scènes, même clé dans la même scène, `cutS` ; les
+étapes au journal ; `ctx: "prêt"` après la préparation) ; `xray-row-1027.test.tsx` (« Jusqu'ici » part au
+toucher, panneau pas encore monté, une seule demande ; le contexte préparé une fois à l'ouverture).
 
 **Nouveautés.** La page « 10.25 » (`src/lib/news/page1025.ts`), semée **en brouillon**
 (`news-seed-10.25-draft`) : rien ne s'affiche avant qu'elle soit publiée depuis Activité → Nouveautés.

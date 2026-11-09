@@ -8,18 +8,22 @@ import { accountLocale } from "@/lib/recap/service";
 import { logError } from "@/lib/logger";
 import { logAskQuestion } from "@/lib/eventLogs";
 import { requestDeviceLabel } from "@/lib/deviceLabel";
-import { askAvailableFor, currentAskModel, gatherAskContext, warmDialogues } from "@/lib/ask/service";
+import { ASK_MAX_OUTPUT_TOKENS, askAvailableFor, currentAskModel, gatherAskContext, prepareAskContext } from "@/lib/ask/service";
 import { answerSofar, readSofarBody } from "@/lib/ask/sofarRequest";
+import { actorFactsForAsk } from "@/lib/xray/person";
 import {
   AnswerGate,
   ASK_MAX_EXCHANGES,
   ASK_MAX_PREVIOUS_ANSWER,
   ASK_MAX_QUESTION,
-  askMessage,
+  askParts,
   askSources,
   askSystem,
   askWhereLine,
+  actorFactsText,
+  metaReminder,
   positionBucket,
+  type AskActorFacts,
   type AskWhere,
   type PreviousExchange,
 } from "@/lib/ask/core";
@@ -30,9 +34,10 @@ export const dynamic = "force-dynamic";
  * « Poser une question » sur un titre (DECISIONS.md §139).
  *
  * `GET` : `{ available }`, et — option allumée — les dialogues de ce que le compte regarde demandés
- * d'avance (`warmDialogues`), sans rien attendre : le panneau l'appelle à son ouverture.
+ * d'avance, et l'élément, sa série et ses épisodes gardés en mémoire (`prepareAskContext`, 10.27.2), sans rien
+ * attendre : le lecteur l'appelle à l'ouverture d'un film ou d'un épisode, le panneau à la sienne.
  *
- * `POST { question, where, positionS?, previous? }` : la réponse, **diffusée** en lignes JSON
+ * `POST { question, where, positionS?, previous?, personId? }` : la réponse, **diffusée** en lignes JSON
  * (`application/x-ndjson`) — `{"t":"text","v":"…"}` pour chaque phrase vérifiée, puis une fin :
  * `{"t":"done"}`, `{"t":"rejected"}` (un nom absent des sources : l'écran dit « Je ne sais pas d'après
  * ce qui a été vu »), ou `{"t":"error","code":"off"|"limite"|"indisponible"|"erreur"}`. Toujours 200 :
@@ -47,6 +52,15 @@ export const dynamic = "force-dynamic";
  *
  * `POST { mode: "jusquici", personId, positionS, prewarm? }` : « Jusqu'ici », deux phrases sur un
  * personnage d'« À l'écran » (`answerSofar`, `src/lib/ask/sofarRequest.ts`) — même porte, mêmes réponses.
+ *
+ * `personId` (10.27.2) : la question est posée depuis le panneau d'une personne d'« À l'écran » — ses faits
+ * réels (TMDB : naissance, décès, lieu, biographie, `actorFactsForAsk`) partent avec, et la date de
+ * diffusion de l'épisode ou de sortie du film est dans les sources : « quel âge a cette actrice pendant cet
+ * épisode ? » se répond. La personne est cherchée dans la distribution de l'élément, jamais crue.
+ *
+ * Chaque phrase passe aussi le filet des mots de coulisse (`metaTalk`, 10.27.2) : une réponse qui parle de
+ * « sources » avant toute phrase rendue est redemandée **une fois** avec un rappel (`metaReminder`) ; sinon
+ * la phrase est reformulée ou remplacée par une limite dite naturellement. `meta` au journal.
  *
  * Une panne du modèle — réseau, 5xx, 429, refus (`stop_reason: "refusal"`), vingt secondes sans rien
  * (`MODEL_IDLE_MS`), flux coupé — finit par `{"t":"error","code":"erreur"|"limite"}`, sa cause dans
@@ -82,13 +96,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
   const available = askAvailableFor(session);
-  if (available && session.jfId) void warmDialogues(session.jfId, itemId, localeOf(req, session.jfId));
+  if (available && session.jfId) void prepareAskContext(session.jfId, itemId, localeOf(req, session.jfId));
   return NextResponse.json({ available }, { headers: PRIVATE });
 }
 
 /** Le corps, lu avec méfiance : tout ce qui n'a pas la forme attendue est écarté, pas deviné. */
-function readBody(body: unknown): { question: string; where: AskWhere; positionS: number | null; previous: PreviousExchange[] } | null {
-  const b = body as { question?: unknown; where?: unknown; positionS?: unknown; previous?: unknown } | null;
+function readBody(body: unknown): { question: string; where: AskWhere; positionS: number | null; previous: PreviousExchange[]; personId: number | null } | null {
+  const b = body as { question?: unknown; where?: unknown; positionS?: unknown; previous?: unknown; personId?: unknown } | null;
   if (!b || typeof b.question !== "string") return null;
   const question = b.question.trim().slice(0, ASK_MAX_QUESTION);
   if (!question) return null;
@@ -99,7 +113,8 @@ function readBody(body: unknown): { question: string; where: AskWhere; positionS
     .filter((p): p is { question: string; answer: string } => typeof p?.question === "string" && typeof p?.answer === "string")
     .slice(-(ASK_MAX_EXCHANGES - 1))
     .map((p) => ({ question: p.question.trim().slice(0, ASK_MAX_QUESTION), answer: p.answer.trim().slice(0, ASK_MAX_PREVIOUS_ANSWER) }));
-  return { question, where, positionS, previous };
+  const personId = typeof b.personId === "number" && Number.isInteger(b.personId) && b.personId > 0 ? b.personId : null;
+  return { question, where, positionS, previous, personId };
 }
 
 export async function POST(req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
@@ -128,6 +143,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
     where: body.where,
     bucket: positionBucket(body.where === "lecteur" ? body.positionS : null),
     turn: body.previous.length + 1,
+    ...(body.personId ? { personId: body.personId } : {}),
   };
   // Une session sans compte Jellyfin (l'administrateur du .env) n'a rien de « vu » à lire.
   if (!session.jfId) {
@@ -142,21 +158,28 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
 
   const locale = localeOf(req, account);
   let context: Awaited<ReturnType<typeof gatherAskContext>>;
+  let actor: AskActorFacts | null = null;
   try {
-    context = await gatherAskContext(account, itemId, body.where, body.positionS, locale);
+    // Les faits de la personne ne retardent rien : lus en même temps, et une panne les laisse de côté.
+    [context, actor] = await Promise.all([
+      gatherAskContext(account, itemId, body.where, body.positionS, locale),
+      body.personId ? actorFactsForAsk(itemId, body.personId, locale) : Promise.resolve(null),
+    ]);
   } catch (err) {
     logError("ask/context", err);
     logAskQuestion({ ...who, status: "erreur", ms: Date.now() - started });
     return oneShot({ t: "error", code: "erreur" });
   }
+  const contextMs = Date.now() - started;
   if (context.status !== "ok") {
-    logAskQuestion({ ...who, status: "indisponible", ms: Date.now() - started });
+    logAskQuestion({ ...who, status: "indisponible", ms: Date.now() - started, contextMs });
     return oneShot({ t: "error", code: "indisponible" });
   }
 
   const sources = askSources(context.input);
-  const message = askMessage(sources, askWhereLine(context.input), body.previous, body.question);
-  const gate = new AnswerGate(sources.check);
+  const { message, prefixEnd } = askParts(sources, askWhereLine(context.input), body.previous, body.question, actor);
+  // Les noms des faits réels passent le filet : la biographie montrée par le panneau en contient.
+  const check = actor ? `${sources.check}\n${actorFactsText(actor)}` : sources.check;
   const abort = new AbortController();
   // Le panneau refermé, la page quittée : le modèle s'arrête aussi.
   req.signal?.addEventListener?.("abort", () => abort.abort(), { once: true });
@@ -174,39 +197,78 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
       };
       let firstMs: number | undefined;
       let status: "ok" | "rejeté" | "limite" | "erreur" = "ok";
-      let tokens: { inTokens?: number; outTokens?: number } = {};
+      let tokens: { inTokens?: number; outTokens?: number; cacheWrite?: number; cacheRead?: number } = {};
+      const meta = { regenerated: false, rewritten: false };
+      // Les étapes (10.27.2) : du départ vers le modèle au premier morceau, puis à la première phrase rendue.
+      let modelAt: number | undefined;
+      let ttftMs: number | undefined;
+      let firstSentenceMs: number | undefined;
       const release = (sentences: string[]) => {
         for (const s of sentences) {
           firstMs ??= Date.now() - started;
+          if (modelAt !== undefined) firstSentenceMs ??= Date.now() - modelAt;
           send({ t: "text", v: s });
         }
       };
       try {
-        const run = currentAskModel()({ system: askSystem(locale), message, signal: abort.signal });
-        // Attachée tout de suite : une panne du flux rejette aussi `done`, qui ne doit pas rester sans lecteur.
-        const done = run.done.catch((failure: unknown) => ({ failure }));
+        // Deux passages au plus : le second seulement si le premier parlait de « sources » avant d'avoir
+        // rendu quoi que ce soit (`retry` du filet) — avec le rappel, et sans droit à un troisième.
+        let fin: { inTokens: number; outTokens: number; stop: string | null; cacheWrite?: number; cacheRead?: number } | null = null;
         let rejected = false;
-        for await (const delta of run.deltas) {
-          const out = gate.push(delta);
-          release(out.release);
-          if (out.rejected) {
-            rejected = true;
-            abort.abort();
-            break;
+        for (let attempt = 0; ; attempt++) {
+          const gate = new AnswerGate(check, undefined, { locale, sources: sources.text, retry: attempt === 0, onMeta: "replace" });
+          const pass = new AbortController();
+          const stopPass = () => pass.abort();
+          abort.signal.addEventListener("abort", stopPass, { once: true });
+          modelAt ??= Date.now();
+          const run = currentAskModel()({ system: askSystem(locale), message: attempt ? message + metaReminder(locale) : message, prefixEnd, maxTokens: ASK_MAX_OUTPUT_TOKENS, signal: pass.signal });
+          // Attachée tout de suite : une panne du flux rejette aussi `done`, qui ne doit pas rester sans lecteur.
+          const done = run.done.catch((failure: unknown) => ({ failure }));
+          let retry = false;
+          for await (const delta of run.deltas) {
+            ttftMs ??= Date.now() - (modelAt ?? started);
+            const out = gate.push(delta);
+            release(out.release);
+            if (out.rejected) {
+              rejected = true;
+              pass.abort();
+              break;
+            }
+            if (out.retry) {
+              retry = true;
+              pass.abort();
+              break;
+            }
           }
+          if (!rejected && !retry) {
+            const out = gate.end();
+            release(out.release);
+            rejected = !!out.rejected;
+            retry = !!out.retry;
+          }
+          abort.signal.removeEventListener("abort", stopPass);
+          if (gate.rewritten) meta.rewritten = true;
+          if (retry) {
+            meta.regenerated = true;
+            continue;
+          }
+          const ended = rejected ? null : await done;
+          // Le flux fini sans sa fin (coupé, illisible) : une panne, pas une réponse complète.
+          if (ended && "failure" in ended) throw ended.failure;
+          fin = ended;
+          break;
         }
-        if (!rejected) {
-          const out = gate.end();
-          release(out.release);
-          rejected = !!out.rejected;
-        }
-        const ended = rejected ? null : await done;
-        // Le flux fini sans sa fin (coupé, illisible) : une panne, pas une réponse complète.
-        if (ended && "failure" in ended) throw ended.failure;
-        const fin = ended;
-        if (fin) tokens = { inTokens: fin.inTokens, outTokens: fin.outTokens };
+        if (fin)
+          tokens = {
+            inTokens: fin.inTokens,
+            outTokens: fin.outTokens,
+            ...(fin.cacheWrite === undefined ? {} : { cacheWrite: fin.cacheWrite }),
+            ...(fin.cacheRead === undefined ? {} : { cacheRead: fin.cacheRead }),
+          };
         // Un refus du modèle est une panne, pas un « je ne sais pas » : l'écran propose de réessayer.
         if (fin?.stop === "refusal") throw new Error("refus du modèle (stop_reason: refusal)");
+        // Le plafond atteint (10.27.2) : une réponse coupée n'est pas une réponse — une panne, « Réessayer ».
+        if (fin?.stop === "max_tokens") throw new Error(`réponse coupée au plafond (stop_reason: max_tokens, ${ASK_MAX_OUTPUT_TOKENS} jetons)`);
         // Rien de rendu (réponse vide, coupée dans la ligne des noms) : « je ne sais pas ».
         if (rejected || firstMs === undefined) {
           status = "rejeté";
@@ -220,7 +282,22 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
           send({ t: "error", code: code === 429 ? "limite" : "erreur" });
         }
       } finally {
-        logAskQuestion({ ...who, status, ms: Date.now() - started, ...(firstMs === undefined ? {} : { firstMs }), ...tokens, dialogue, episodes: sources.episodes });
+        const metaField = meta.regenerated && meta.rewritten ? "regénéré+réécrit" : meta.regenerated ? "regénéré" : meta.rewritten ? "réécrit" : null;
+        logAskQuestion({
+          ...who,
+          status,
+          ms: Date.now() - started,
+          ...(firstMs === undefined ? {} : { firstMs }),
+          ...tokens,
+          dialogue,
+          episodes: sources.episodes,
+          contextMs,
+          ctx: context.ctx,
+          ...(ttftMs === undefined ? {} : { ttftMs }),
+          ...(firstSentenceMs === undefined ? {} : { firstSentenceMs }),
+          totalMs: Date.now() - started,
+          ...(metaField ? { meta: metaField } : {}),
+        });
         try {
           controller.close();
         } catch {

@@ -25,7 +25,7 @@ import { useLatest } from "@/components/playerControls/useLatest";
 import { useAutoHide } from "@/components/playerControls/useAutoHide";
 import { PlayerSeekBar } from "@/components/playerControls/PlayerSeekBar";
 import { AskPanel } from "@/components/ask/AskPanel";
-import { prewarmSofar, SOFAR_BUCKET_S, SOFAR_PREWARM_PEOPLE, useAskAvailable } from "@/lib/ask/client";
+import { prewarmSofar, startSofar, useAskAvailable, useAskPrepare } from "@/lib/ask/client";
 import { PlayerOnScreen } from "@/components/playerControls/PlayerOnScreen";
 import { useOnScreenPlacement } from "@/components/playerControls/useOnScreenPlacement";
 import { onScreenPeople, sceneAt, useXrayAvailable, useXrayScenes } from "@/lib/xray/client";
@@ -714,17 +714,17 @@ export function PlayerControls({
   const titleRowRef = useRef<HTMLDivElement>(null);
   const onScreenPlace = useOnScreenPlacement({ wrap: onScreenWrapRef, center: centerGroupRef, titleRow: titleRowRef, tools: settingsPillRef }, rowShown && scenePeople.length > 0);
   /**
-   * « Jusqu'ici » préparé en fond (§139, 10.27) : la rangée affichée, pour les trois premières personnes de
-   * la scène — une fois par personne et par tranche de cinq minutes (`prewarmSofar`), jamais page cachée.
+   * « Jusqu'ici » préparé sur une intention seulement (§139, 10.27.2) : le pointeur fin posé sur une pilule
+   * (`onIntent` de `PlayerOnScreen`) — une personne, à la position de l'instant, coupée comme le serveur
+   * (`sofarCut` sur ces scènes). Plus rien quand la rangée paraît.
    */
-  const prewarmIds = scenePeople.slice(0, SOFAR_PREWARM_PEOPLE).map((p) => p.personId).join(",");
-  const prewarmKey = askOffered && visible && !hidden && prewarmIds ? `${itemId}|${prewarmIds}|${Math.floor(currentTime / SOFAR_BUCKET_S)}` : null;
-  const prewarmAt = useLatest(currentTime);
-  useEffect(() => {
-    if (!prewarmKey) return;
-    const [item, ids] = prewarmKey.split("|");
-    prewarmSofar(item, ids.split(",").map(Number), prewarmAt.current);
-  }, [prewarmKey, prewarmAt]);
+  // Le film s'ouvre, l'option ouverte à la séance (10.27.2) : le serveur prépare le contexte des questions et
+  // de « Jusqu'ici » (l'élément, ses épisodes, les répliques) — `prepareAskContext`. Une fois par élément.
+  useAskPrepare(itemId, askOffered);
+  const intentAt = useLatest(currentTime);
+  const onPersonIntent = askOffered
+    ? (person: XrayPlayerPerson) => prewarmSofar(itemId, person.personId, intentAt.current, xrayPayload)
+    : undefined;
   const { suspendedRef, showControls, holdControls, toggleControls, windowExitHides } = useAutoHide({
     visible,
     setVisible,
@@ -1263,7 +1263,16 @@ export function PlayerControls({
                     visible={visible}
                     trailing={askButton}
                     maxWidth={onScreenPlace.maxWidth}
+                    // Toucher ou faire défiler la rangée tient les commandes affichées ; la fin du geste relance
+                    // leur décompte ordinaire (10.27.2 — elles partaient sous le doigt).
+                    onHold={holdControls}
+                    onIntent={onPersonIntent}
+                    onRelease={() => showControls(10000)}
                     onPick={(person) => {
+                      // « Jusqu'ici » part au toucher même (10.27.2), avant le panneau et ses requêtes ; le
+                      // panneau reprend cette demande (`useSofar`) : même coupe que la sienne (la position affichée,
+                      // à un quart de seconde de celle qu'il lira — la coupe tombe sur un début de scène).
+                      if (askOffered) startSofar(itemId, person.personId, currentTime, xrayPayload);
                       setMenu(null);
                       // Une personne ouvre son panneau — avec les questions et « Jusqu'ici » si l'option est
                       // ouverte à ce compte, sinon la personne seule (photo, faits, biographie, ses titres).
@@ -1409,6 +1418,7 @@ export function PlayerControls({
           position={() => (positionNow ? positionNow() : (videoRef.current?.currentTime ?? null))}
           person={askPerson?.person}
           scene={askPerson?.scene}
+          scenes={xrayPayload}
           ask={askOffered}
           onClose={() => {
             setAskOpen(false);

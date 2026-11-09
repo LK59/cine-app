@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, cleanup, act, fireEvent, waitFor, renderHook } from "@testing-library/react";
+import { render, cleanup, act, fireEvent, waitFor, renderHook, screen } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { useRef, type ReactNode, type RefObject } from "react";
 
@@ -21,7 +21,7 @@ import { PlayerControls } from "@/components/PlayerControls";
 import { PlayerOnScreen, ONSCREEN_FADE_MS, ONSCREEN_SETTLE_MS } from "@/components/playerControls/PlayerOnScreen";
 import { useOnScreenPlacement } from "@/components/playerControls/useOnScreenPlacement";
 import { onScreenRowBottom, onScreenRowWidth, ONSCREEN_CENTER_GAP_PX } from "@/lib/xray/client";
-import { resetPrewarmForTests } from "@/lib/ask/client";
+import { prewarmSofar, resetPrewarmForTests, resetSofarClientForTests, SOFAR_HOVER_INTENT_MS } from "@/lib/ask/client";
 import type { XrayPlayerPayload, XrayPlayerPerson } from "@/lib/xray/scenes";
 
 afterEach(() => {
@@ -29,7 +29,10 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
-beforeEach(() => resetPrewarmForTests());
+beforeEach(() => {
+  resetPrewarmForTests();
+  resetSofarClientForTests();
+});
 
 const person = (personId: number, name: string, character: string, screenTime: number): XrayPlayerPerson => ({
   personId,
@@ -166,6 +169,117 @@ describe("la rangée suit la scène — jamais sous un doigt", () => {
   });
 });
 
+describe("la rangée commence au début (10.27.2 : elle s'ouvrait au bout sur l'iPhone)", () => {
+  // jsdom ne fait ni mise en page ni aimantation : la position de la rangée est une valeur posée à la main,
+  // comme l'aimantation de WebKit la poserait après une mise en page (la pilule suivie jusqu'au bout).
+  function scrollable(row: Element, at: number) {
+    Object.defineProperty(row, "scrollLeft", { value: at, writable: true, configurable: true });
+  }
+  const frame = () => act(async () => void (await new Promise((r) => requestAnimationFrame(() => r(null)))));
+  const C = [person(7, "Juno Temple", "Keeley", 40), person(8, "Brett Goldstein", "Roy Kent", 35), ...A, ...B];
+
+  it("à l'ouverture : une rangée portée au bout par la première mise en page revient à la première pilule", async () => {
+    const { container } = render(<PlayerOnScreen people={C} visible onPick={() => {}} />);
+    const row = container.querySelector("[data-onscreen-row]")!;
+    scrollable(row, 420);
+    await frame();
+    expect(row.scrollLeft).toBe(0);
+  });
+
+  it("à chaque changement de scène : au début, même si la rangée était ailleurs", async () => {
+    const { container, rerender } = render(<PlayerOnScreen people={A} visible onPick={() => {}} />);
+    const row = container.querySelector("[data-onscreen-row]")!;
+    scrollable(row, 260);
+    rerender(<PlayerOnScreen people={C} visible onPick={() => {}} />);
+    expect(row.scrollLeft).toBe(0);
+    // Et si l'aimantation la repousse après la mise en page, l'image suivante la ramène.
+    scrollable(row, 300);
+    await frame();
+    expect(row.scrollLeft).toBe(0);
+  });
+
+  it("une largeur permise qui change (la place mesurée après l'ouverture) : au début aussi", async () => {
+    const { container, rerender } = render(<PlayerOnScreen people={C} visible onPick={() => {}} maxWidth={null} />);
+    const row = container.querySelector("[data-onscreen-row]")!;
+    await frame();
+    scrollable(row, 380);
+    rerender(<PlayerOnScreen people={C} visible onPick={() => {}} maxWidth={302} />);
+    expect(row.scrollLeft).toBe(0);
+  });
+
+  it("sous un doigt, ou après qu'on l'a fait défiler : rien ne saute", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { container, rerender } = render(<PlayerOnScreen people={C} visible onPick={() => {}} maxWidth={null} />);
+    const row = container.querySelector("[data-onscreen-row]")!;
+    fireEvent.pointerDown(row);
+    scrollable(row, 150);
+    fireEvent.scroll(row);
+    // La scène change sous le doigt : la rangée garde ce qu'elle montre, et où elle en est.
+    rerender(<PlayerOnScreen people={A} visible onPick={() => {}} maxWidth={null} />);
+    rerender(<PlayerOnScreen people={A} visible onPick={() => {}} maxWidth={302} />);
+    expect(row.scrollLeft).toBe(150);
+    fireEvent.pointerUp(row);
+    // Doigt levé, même scène qu'au départ (rien à rattraper) : la place choisie reste, même si la largeur change.
+    rerender(<PlayerOnScreen people={C} visible onPick={() => {}} maxWidth={280} />);
+    act(() => void vi.advanceTimersByTime(ONSCREEN_SETTLE_MS + 10));
+    rerender(<PlayerOnScreen people={C} visible onPick={() => {}} maxWidth={260} />);
+    expect(row.scrollLeft).toBe(150);
+  });
+});
+
+describe("« Jusqu'ici » préparé sur une intention seulement (10.27.2)", () => {
+  function fine(matches: boolean) {
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: matches && q.includes("pointer: fine"), media: q, addEventListener() {}, removeEventListener() {} }));
+  }
+  it("un pointeur fin posé 300 ms sur une pilule : une intention, pour cette personne seule", () => {
+    vi.useFakeTimers();
+    fine(true);
+    const onIntent = vi.fn();
+    const { container } = render(<PlayerOnScreen people={A} visible onPick={() => {}} onIntent={onIntent} />);
+    const pill = container.querySelector('[data-onscreen-person="2"]')!;
+    fireEvent.pointerOver(pill, { pointerType: "mouse" });
+    act(() => void vi.advanceTimersByTime(SOFAR_HOVER_INTENT_MS - 50));
+    expect(onIntent).not.toHaveBeenCalled();
+    act(() => void vi.advanceTimersByTime(100));
+    expect(onIntent).toHaveBeenCalledTimes(1);
+    expect(onIntent.mock.calls[0][0].personId).toBe(2);
+  });
+  it("un passage (parti avant 300 ms), un doigt, un écran sans pointeur fin : rien", () => {
+    vi.useFakeTimers();
+    fine(true);
+    const onIntent = vi.fn();
+    const { container } = render(<PlayerOnScreen people={A} visible onPick={() => {}} onIntent={onIntent} />);
+    const pill = container.querySelector('[data-onscreen-person="1"]')!;
+    fireEvent.pointerOver(pill, { pointerType: "mouse" });
+    act(() => void vi.advanceTimersByTime(150));
+    fireEvent.pointerOut(pill, { pointerType: "mouse", relatedTarget: document.body });
+    act(() => void vi.advanceTimersByTime(SOFAR_HOVER_INTENT_MS));
+    fireEvent.pointerOver(pill, { pointerType: "touch" });
+    act(() => void vi.advanceTimersByTime(SOFAR_HOVER_INTENT_MS * 2));
+    expect(onIntent).not.toHaveBeenCalled();
+    fireEvent.pointerOut(pill, { pointerType: "touch", relatedTarget: document.body });
+    fine(false);
+    fireEvent.pointerOver(pill, { pointerType: "mouse" });
+    act(() => void vi.advanceTimersByTime(SOFAR_HOVER_INTENT_MS * 2));
+    expect(onIntent).not.toHaveBeenCalled();
+  });
+  it("prewarmSofar : une personne, une fois par coupe, jamais page cachée", () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ t: "queued" }) + "\n"));
+    vi.stubGlobal("fetch", fetchMock);
+    prewarmSofar("item-9", 2, 700);
+    prewarmSofar("item-9", 2, 890);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body))).toMatchObject({ mode: "jusquici", personId: 2, prewarm: true });
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    try {
+      prewarmSofar("item-9", 3, 700);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    }
+  });
+});
+
 // ── Dans le lecteur ─────────────────────────────────────────────────────────────────────────────
 
 const PAYLOAD: XrayPlayerPayload = {
@@ -279,36 +393,108 @@ describe("dans le lecteur : avec les commandes, en lecture comme en pause", () =
     expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith("/api/cinema/ask/"))).toBe(false);
   });
 
-  it("« Jusqu'ici » préparé en fond : les trois premières personnes, une fois par tranche de dix minutes", async () => {
+  it("la rangée qui paraît, en lecture comme en pause, ne prépare rien (10.27.2 : ~6 textes par heure pour zéro ou une lecture)", async () => {
     const fetchMock = stubFetch();
     let video: HTMLVideoElement | null = null;
-    withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 10, true);
-    await waitFor(() => expect(prewarms(fetchMock)).toHaveLength(3));
-    expect(prewarms(fetchMock).map((b) => b.personId)).toEqual([1, 2, 3]);
-    expect(prewarms(fetchMock).every((b) => b.mode === "jusquici" && b.prewarm)).toBe(true);
-    // Même scène, même tranche : rien de plus.
-    await at(video!, 20, false);
-    await at(video!, 30, true);
-    expect(prewarms(fetchMock)).toHaveLength(3);
-    // Une autre tranche : de nouveau, pour les personnes de la scène.
-    await at(video!, 610, true);
-    await waitFor(() => expect(prewarms(fetchMock)).toHaveLength(5));
+    await waitFor(() => expect(container.querySelector("[data-onscreen-row]")).toBeTruthy());
+    await at(video!, 610, false);
+    await act(async () => void (await new Promise((r) => setTimeout(r, 300))));
+    expect(prewarms(fetchMock)).toHaveLength(0);
   });
 
-  it("page cachée : aucune préparation, même dans une nouvelle tranche", async () => {
+  it("au toucher d'une pilule, « Jusqu'ici » part avant que le panneau soit monté, et le panneau reprend cette demande", async () => {
+    const order: { url: string; method: string; panel: boolean; body: string }[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      order.push({ url: String(url), method: init?.method ?? "GET", panel: !!document.querySelector("[data-ask-panel]"), body: String(init?.body ?? "") });
+      if (String(url).startsWith("/api/player/xray/")) return new Response(JSON.stringify(PAYLOAD));
+      if (init?.method === "POST") return new Response(JSON.stringify({ t: "text", v: "Ariadne construit le labyrinthe." }) + "\n" + JSON.stringify({ t: "done" }) + "\n");
+      return new Response(JSON.stringify({ available: true }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    let video: HTMLVideoElement | null = null;
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    await at(video!, 10, false);
+    const pill = await waitFor(() => container.querySelector<HTMLElement>('[data-onscreen-person="2"]')!);
+    const before = order.length;
+    fireEvent.click(pill);
+    const after = order.slice(before);
+    // La première requête après le toucher : « Jusqu'ici », panneau pas encore là.
+    expect(after[0]).toMatchObject({ method: "POST", panel: false });
+    expect(after[0].body).toContain('"mode":"jusquici"');
+    await screen.findByText("Ariadne construit le labyrinthe.");
+    // Une seule demande : le panneau a repris celle du toucher.
+    expect(order.filter((o) => o.method === "POST" && o.body.includes('"jusquici"'))).toHaveLength(1);
+  });
+
+  it("le lecteur ouvert, option ouverte : le contexte est préparé une fois (GET de la route des questions)", async () => {
     const fetchMock = stubFetch();
     let video: HTMLVideoElement | null = null;
     withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    await at(video!, 10, false);
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.filter(([url, init]) => String(url) === "/api/cinema/ask/item-1" && !(init as RequestInit | undefined)?.method)).toHaveLength(1)
+    );
+  });
+
+  it("au bureau, le pointeur posé sur une pilule : cette personne seule est préparée ; le clic qui suit l'ouvre", async () => {
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("pointer: fine"), media: q, addEventListener() {}, removeEventListener() {} }));
+    const fetchMock = stubFetch();
+    let video: HTMLVideoElement | null = null;
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    await at(video!, 10, false);
+    const pill = await waitFor(() => container.querySelector<HTMLElement>('[data-onscreen-person="2"]')!);
+    fireEvent.pointerOver(pill, { pointerType: "mouse" });
+    await waitFor(() => expect(prewarms(fetchMock)).toHaveLength(1));
+    expect(prewarms(fetchMock)[0]).toMatchObject({ mode: "jusquici", personId: 2, prewarm: true, positionS: 10 });
+    fireEvent.click(pill);
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([url, init]) => String(url).startsWith("/api/cinema/ask/") && /"mode":"jusquici"/.test(String(init?.body)) && !/"prewarm":true/.test(String(init?.body)))
+      ).toBe(true)
+    );
+  });
+});
+
+describe("10.27.2 — la rangée tient les commandes pendant qu'on la touche", () => {
+  it("PlayerOnScreen : `onHold` au premier contact (doigt, molette, flèche), `onRelease` à la fin du geste", () => {
+    vi.useFakeTimers();
+    const onHold = vi.fn();
+    const onRelease = vi.fn();
+    const { container } = render(<PlayerOnScreen people={A} visible onPick={() => {}} onHold={onHold} onRelease={onRelease} />);
+    const row = container.querySelector("[data-onscreen-row]")!;
+    fireEvent.touchStart(row);
+    expect(onHold).toHaveBeenCalledTimes(1);
+    fireEvent.scroll(row);
+    act(() => void vi.advanceTimersByTime(ONSCREEN_SETTLE_MS * 3));
+    expect(onRelease).not.toHaveBeenCalled();
+    fireEvent.touchEnd(row);
+    act(() => void vi.advanceTimersByTime(ONSCREEN_SETTLE_MS + 10));
+    expect(onRelease).toHaveBeenCalledTimes(1);
+    // La molette : un geste à elle seule (sur une rangée qui déborde — jsdom ne mesure rien).
+    Object.defineProperty(row, "scrollWidth", { value: 900, configurable: true });
+    Object.defineProperty(row, "clientWidth", { value: 300, configurable: true });
+    fireEvent.wheel(row, { deltaY: 40 });
+    expect(onHold).toHaveBeenCalledTimes(2);
+    act(() => void vi.advanceTimersByTime(ONSCREEN_SETTLE_MS + 10));
+    expect(onRelease).toHaveBeenCalledTimes(2);
+  });
+
+  it("dans le lecteur, en lecture : la rangée touchée pendant cinq secondes, les commandes restent ; relâchée, elles repartent", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    stubFetch();
+    let video: HTMLVideoElement | null = null;
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 10, true);
-    await waitFor(() => expect(prewarms(fetchMock)).toHaveLength(3));
-    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
-    try {
-      await at(video!, 610, true);
-      await act(async () => {});
-      expect(prewarms(fetchMock)).toHaveLength(3);
-    } finally {
-      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
-    }
+    const row = await waitFor(() => container.querySelector<HTMLElement>("[data-onscreen-row]")!);
+    // L'événement que les commandes écoutent pour lancer leur décompte (voir PlayerControls-masquage-barre).
+    await act(async () => void video!.dispatchEvent(new Event("play")));
+    fireEvent.pointerDown(row);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(5000)));
+    expect(container.querySelector("[data-chrome]")!.getAttribute("data-chrome")).toBe("shown");
+    fireEvent.pointerUp(row);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(ONSCREEN_SETTLE_MS + 10_000 + 200)));
+    expect(container.querySelector("[data-chrome]")!.getAttribute("data-chrome")).toBe("hidden");
   });
 });
