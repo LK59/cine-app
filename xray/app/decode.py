@@ -1,0 +1,194 @@
+"""Décodage : un flux réduit (640 px, quelques images par seconde) lu depuis ffmpeg.
+
+Sur l'iGPU Intel (VA-API) quand le codec s'y prête, sur le processeur sinon. Le format de
+sortie est le même dans les deux cas — NV12 brut, 640 px de large — si bien que tout ce qui
+suit ignore d'où viennent les images.
+
+Le HDR 10 bits est ramené en NV12 8 bits sans adaptation de tons : l'image est terne, mais un
+visage reste un visage, et l'adaptation coûterait plus que tout le reste du décodage.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import subprocess
+import threading
+import time
+from collections import deque
+from dataclasses import dataclass, field
+from fractions import Fraction
+from typing import Iterator
+
+import numpy as np
+
+from .config import settings
+
+log = logging.getLogger("xray.decode")
+
+# Ce que décode le bloc vidéo d'un Coffee Lake (UHD 630). Pas d'AV1 (arrivé avec Tiger Lake),
+# pas de HEVC 4:2:2/4:4:4 (Ice Lake), pas de H.264 10 bits (jamais chez Intel).
+VAAPI_CODECS = {"h264", "hevc", "vp9", "vp8", "mpeg2video", "vc1", "mjpeg"}
+VAAPI_HEVC_PROFILES = {"Main", "Main 10", "Main Still Picture"}
+
+
+@dataclass
+class MediaInfo:
+    duration: float
+    codec: str
+    profile: str
+    width: int
+    height: int
+    pix_fmt: str
+    sar: float = 1.0
+
+    def out_size(self, width: int) -> tuple[int, int]:
+        """Largeur fixe, hauteur selon le rapport d'affichage (pixels non carrés compris), paire."""
+        disp_w = self.width * (self.sar or 1.0)
+        h = int(round(width * self.height / disp_w / 2.0)) * 2
+        return width, max(2, h)
+
+
+def probe(path: str) -> MediaInfo:
+    out = subprocess.run(
+        [settings.ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries",
+         "stream=codec_name,profile,width,height,pix_fmt,sample_aspect_ratio,duration:format=duration",
+         "-of", "json", path],
+        capture_output=True, text=True, timeout=60,
+    )
+    if out.returncode != 0:
+        raise RuntimeError(f"ffprobe : {out.stderr.strip()[-300:]}")
+    data = json.loads(out.stdout or "{}")
+    streams = data.get("streams") or []
+    if not streams:
+        raise RuntimeError("aucune piste vidéo")
+    s = streams[0]
+    dur = data.get("format", {}).get("duration") or s.get("duration")
+    if not dur:
+        raise RuntimeError("durée inconnue")
+    sar = 1.0
+    raw_sar = s.get("sample_aspect_ratio") or "1:1"
+    try:
+        num, den = raw_sar.split(":")
+        if int(num) > 0 and int(den) > 0:
+            sar = float(Fraction(int(num), int(den)))
+    except (ValueError, ZeroDivisionError):
+        pass
+    return MediaInfo(
+        duration=float(dur), codec=s.get("codec_name", ""), profile=s.get("profile", "") or "",
+        width=int(s["width"]), height=int(s["height"]), pix_fmt=s.get("pix_fmt", "") or "", sar=sar,
+    )
+
+
+def vaapi_suits(info: MediaInfo) -> bool:
+    if info.codec not in VAAPI_CODECS:
+        return False
+    if info.codec == "h264" and ("10" in info.pix_fmt or "422" in info.pix_fmt or "444" in info.pix_fmt):
+        return False
+    if info.codec == "hevc" and info.profile and info.profile not in VAAPI_HEVC_PROFILES:
+        return False
+    return True
+
+
+_vaapi_state: dict = {"ok": None, "checked": 0.0}
+
+
+def vaapi_available(force: bool = False) -> bool:
+    """Le périphérique s'ouvre-t-il, et le pilote fait-il un aller-retour d'image ? Mis en cache
+    dix minutes : /health le lit à chaque appel."""
+    if not settings.hwaccel:
+        return False
+    now = time.time()
+    if not force and _vaapi_state["ok"] is not None and now - _vaapi_state["checked"] < 600:
+        return bool(_vaapi_state["ok"])
+    dev = settings.vaapi_device
+    try:
+        r = subprocess.run(
+            [settings.ffmpeg, "-hide_banner", "-nostdin", "-v", "error",
+             "-init_hw_device", f"vaapi=va:{dev}", "-filter_hw_device", "va",
+             "-f", "lavfi", "-i", "color=black:s=256x144:d=0.2",
+             "-vf", "format=nv12,hwupload,scale_vaapi=w=128:h=72:format=nv12,hwdownload,format=nv12",
+             "-f", "null", "-"],
+            capture_output=True, text=True, timeout=30,
+        )
+        ok = r.returncode == 0
+        if not ok:
+            log.warning("VA-API indisponible : %s", r.stderr.strip()[-300:])
+    except Exception as e:  # ffmpeg absent, délai dépassé…
+        log.warning("VA-API indisponible : %s", e)
+        ok = False
+    _vaapi_state.update(ok=ok, checked=now)
+    return ok
+
+
+def build_command(path: str, start: float, length: float, info: MediaInfo, vaapi: bool,
+                  fps: float, width: int, threads: int) -> list[str]:
+    w, h = info.out_size(width)
+    cmd = [settings.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error"]
+    if vaapi:
+        cmd += ["-hwaccel", "vaapi", "-hwaccel_device", settings.vaapi_device, "-hwaccel_output_format", "vaapi"]
+        vf = f"fps={fps},scale_vaapi=w={w}:h={h}:format=nv12,hwdownload,format=nv12"
+    else:
+        # Sur le processeur, sauter les images non référencées divise le décodage sans rien
+        # coûter ici : on n'en garde de toute façon que quatre par seconde.
+        cmd += ["-threads", str(threads), "-skip_frame", "noref"]
+        vf = f"fps={fps},scale={w}:{h}:flags=fast_bilinear,format=nv12"
+    cmd += ["-ss", f"{start:.3f}", "-t", f"{length:.3f}", "-i", path,
+            "-map", "0:v:0", "-an", "-sn", "-dn", "-vf", vf, "-f", "rawvideo", "-pix_fmt", "nv12", "pipe:1"]
+    return cmd
+
+
+@dataclass
+class DecodeStats:
+    decoder: str
+    frames: int = 0
+    seconds: float = 0.0
+    returncode: int | None = None
+    stderr: str = ""
+    extra: dict = field(default_factory=dict)
+
+
+def read_frames(path: str, start: float, length: float, info: MediaInfo, vaapi: bool,
+                stats: DecodeStats, cancel: threading.Event | None = None,
+                fps: float | None = None, width: int | None = None) -> Iterator[tuple[float, np.ndarray]]:
+    """Rend (instant absolu, image NV12 (h·3/2 × l)) pour chaque image échantillonnée.
+    Les instants sont reconstruits à partir du rang : le filtre `fps` cadence la sortie."""
+    fps = fps or settings.sample_fps
+    width = width or settings.frame_width
+    w, h = info.out_size(width)
+    frame_bytes = w * h * 3 // 2
+    cmd = build_command(path, start, length, info, vaapi, fps, width, settings.threads)
+    t0 = time.monotonic()
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=frame_bytes * 4)
+    err_tail: deque[str] = deque(maxlen=20)
+
+    def drain() -> None:
+        assert proc.stderr is not None
+        for line in proc.stderr:
+            err_tail.append(line.decode("utf-8", "replace").rstrip())
+
+    t = threading.Thread(target=drain, daemon=True)
+    t.start()
+    i = 0
+    try:
+        assert proc.stdout is not None
+        while True:
+            if cancel is not None and cancel.is_set():
+                break
+            buf = proc.stdout.read(frame_bytes)
+            if not buf or len(buf) < frame_bytes:
+                break
+            ts = start + i / fps
+            i += 1
+            if ts >= start + length:
+                break
+            yield ts, np.frombuffer(buf, dtype=np.uint8).reshape(h * 3 // 2, w)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait()
+        t.join(timeout=2)
+        stats.frames = i
+        stats.seconds = time.monotonic() - t0
+        stats.returncode = proc.returncode
+        stats.stderr = "\n".join(err_tail)
