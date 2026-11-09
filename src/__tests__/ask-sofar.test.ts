@@ -350,9 +350,12 @@ describe("les pannes du modèle : dites proprement, jamais gardées", () => {
 });
 
 describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans la clé", () => {
-  it("la consigne (S7c depuis 10.28.0) : un personnage nommé nulle part reçoit son nom et qu'il est là ; RIEN seulement hors de la distribution", () => {
+  it("la consigne : un personnage dont rien ne parle encore reçoit son nom et une phrase simple ; RIEN seulement hors de la distribution", () => {
     const sys = sofarSystem("fr");
-    expect(sys).toContain("S'il n'est nommé nulle part, écris son nom, son rôle si la distribution le donne, et qu'il est là.");
+    // 10.29.2 : « n'a pas encore eu de moment à lui », sans l'expliquer — la justification parlait d'horaire et
+    // d'attribution (« jusqu'à 9 minutes, sans qu'aucune parole ou action ne lui soit attribuée »).
+    expect(sys).toContain("- Si rien de ce qu'il a vu ne le concerne encore, une seule phrase, sans l'expliquer : son nom, qui il est si on le sait, et « n'a pas encore eu de moment à lui ».");
+    expect(sofarSystem("fr", true, "movie")).toContain("« n'a pas encore eu de moment à lui »");
     expect(sys).toContain(`${SOFAR_NOTHING} seulement s'il n'est même pas dans la distribution.`);
     // L'ancienne règle (« au-delà de son nom ») est partie : elle faisait taire cinq personnes sur huit.
     expect(sys).not.toContain("au-delà de son nom");
@@ -363,8 +366,9 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     expect(sys).not.toContain("ou à quoi il assiste");
   });
 
-  it("la version de la consigne est dans la clé : 5 (10.29.1), et une même entrée sous la version 4 donne une autre clé", () => {
-    expect(SOFAR_VERSION).toBe(5);
+  it("la version de la consigne est dans la clé : 6 (10.29.2), et une même entrée sous la version 5 donne une autre clé", () => {
+    expect(SOFAR_VERSION).toBe(6);
+    expect(sofarKey(ASK_MODEL, "s", "m", 5)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 4)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 3)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 2)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));

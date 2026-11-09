@@ -9782,6 +9782,39 @@ toutes). Fermeture du panneau : une raison par geste (`fond`, `croix`, `glissé`
 Tests : `xray-person-panel.test.tsx` (une ligne à la fois, la sortante en fondu puis retirée, la dernière qui respire,
 plus de reflet ; mouvement réduit).
 
+**10.29.2 — rien ne le concerne encore : une phrase simple ; l'horaire et « attribué » au filet.**
+
+- **Le symptôme** (prod 10.29.1, 09/11/2026) : *Ted Lasso* S01E08, Sam Obisanya, coupe à 9 min 59 → « Sam Obisanya est
+  présent dans l'épisode en cours, « Solidarité masculine », jusqu'à 9 minutes, sans qu'aucune parole ou action ne lui
+  soit attribuée à ce stade. » Le propriétaire veut une phrase quand il n'y a rien à dire, mais celle-ci donne un
+  horaire et parle d'attribution.
+- **La consigne** (`sofarSystem`, séries et films — la règle est commune) : la ligne « S'il n'est nommé nulle part,
+  écris son nom, son rôle si la distribution le donne, et qu'il est là. » devient « Si rien de ce qu'il a vu ne le
+  concerne encore, une seule phrase, sans l'expliquer : son nom, qui il est si on le sait, et « n'a pas encore eu de
+  moment à lui ». » ; « RIEN » reste réservé à qui n'est pas dans la distribution. Même longueur. `SOFAR_VERSION` 6.
+- **Banc du 09/11/2026** (24 appels, une requête à la fois, consigne et messages construits par le code de `main`,
+  identiques octet pour octet à ce qui est livré) : cinq formulations sur Sam. Sans « une seule phrase, sans
+  l'expliquer », le modèle justifie toujours : « il est présent dans plusieurs scènes, mais les répliques ne lui sont
+  pas attribuées », « jusqu'à 9 minutes… qu'on lui attribue » (4 textes sur 6) ; avec, « Sam Obisanya n'a pas encore
+  eu de moment à lui. » 2 fois sur 2, en 3 s (réflexion ≈ 450 jetons). La même règle conditionnelle, formulée sans ce
+  bout (F2), sur les autres cas : Rebecca à 4 min et Ted inchangés (Liverpool ; le matin avec Sassy), Rupert, Jack,
+  Claude justes. Elle a aussi donné une fois un texte sans le nom en tête (Rebecca à 12 min), une fois Prince
+  « depuis l'hôpital » (faux, déjà vu en 10.29.1) et une fois « scène » (Patricia) : le hasard d'un seul passage, que
+  le banc n'a pas pu départager dans le budget. La formulation livrée elle-même n'a été rejouée que sur Sam.
+- **Le filet des mots de coulisse** (`META_WORDS`, `TIME_REF`, `metaTalk`, `core.ts`) prend désormais
+  « attribué(e)(s) », « attribue », « attribution » et leurs équivalents (« attributed », « atribuido », « zugeschrieben »),
+  et un horaire du lecteur : un nombre écrit en chiffres suivi de minutes (« jusqu'à 9 minutes », « à 12 min »,
+  « 9 minutos », « 9 Minuten »). « Une minute de silence », « cinq minutes de retard » passent (sans chiffre) ; un
+  horaire que l'histoire dit elle-même (« dans 7 minutes, je descends ») est excusé comme les autres mots ; les
+  intitulés des sources (« jusqu'à 9 min ») ne comptent pas comme histoire. La phrase prise est retirée
+  (« Jusqu'ici », `drop`) ou remplacée par la limite (questions). Rejoués dans le filet, les textes du banc qui
+  justifiaient sortent vides plutôt que faux. Le rappel de la seconde demande (`metaReminder`) nomme « attribué » et la
+  minute.
+Tests : `ask-question-1027-2.test.ts` (l'horaire et « attribué » dans les quatre langues ; une minute de silence, un
+horaire de l'histoire, un prix « attribué » par l'histoire passent ; à travers `AnswerGate`, la phrase à l'horaire
+retirée et la phrase simple montrée) ; `ask-sofar-s7c.test.ts` (consigne octet pour octet, version 6) ;
+`ask-sofar.test.ts` (la ligne dans les consignes série et film, version 6 et une clé de la v5 jamais relue).
+
 ## 140. Les fonctions d'IA chez les trois fournisseurs, un seul plafond mensuel, et des réglages qui disent ce qu'ils demandent (09/11/2026)
 
 **Règle.** Le fournisseur, la clé et le budget des sous-titres générés (§69) servent à **toutes** les

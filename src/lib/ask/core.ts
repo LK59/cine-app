@@ -372,7 +372,7 @@ export function askParts(
  * Le rappel ajouté à la seconde demande, quand la première parlait de coulisses (`metaTalk`, 10.27.2).
  */
 export function metaReminder(locale: Locale): string {
-  return `\n\nRappel impératif : le spectateur ne connaît ni « sources », ni « documents », ni « contexte », ni « sous-titres », ni « transcription », ni « scène », ni « réplique » — il n'y a que ce qu'il a vu. N'emploie aucun de ces mots, dans aucune langue. Une limite se dit ainsi : « ${SEEN_SO_FAR[locale]} ».`;
+  return `\n\nRappel impératif : le spectateur ne connaît ni « sources », ni « documents », ni « contexte », ni « sous-titres », ni « transcription », ni « scène », ni « réplique », ni « attribué », ni la minute où il en est — il n'y a que ce qu'il a vu. N'emploie aucun de ces mots, dans aucune langue. Une limite se dit ainsi : « ${SEEN_SO_FAR[locale]} ».`;
 }
 
 // ── Le filet des mots de coulisse (10.27.2) ──────────────────────────────────────────────────────
@@ -384,7 +384,15 @@ export function metaReminder(locale: Locale): string {
 // ce que vous avez vu, … »), sinon remplacée par une limite dite naturellement (`METALESS_LIMIT`).
 
 const META_WORDS =
-  /(?<![\p{L}-])(sources|documents?|contextes?|sous-titres?|transcriptions?|sc[èe]nes?|r[ée]pliques?|contexts?|subtitles?|transcripts?|scenes?|fuentes|documentos?|contextos?|subt[íi]tulos?|transcripci[óo]n(?:es)?|escenas?|quellen|dokumente?n?|kontexte?s?|untertiteln?|transkripte?n?|szenen?)(?![\p{L}-])/giu;
+  /(?<![\p{L}-])(sources|documents?|contextes?|sous-titres?|transcriptions?|sc[èe]nes?|r[ée]pliques?|attribu(?:é|ée|és|ées|e|ent|er|tions?)|contexts?|subtitles?|transcripts?|scenes?|attributed|attributions?|fuentes|documentos?|contextos?|subt[íi]tulos?|transcripci[óo]n(?:es)?|escenas?|atribuid[oa]s?|atribuci[óo]n(?:es)?|quellen|dokumente?n?|kontexte?s?|untertiteln?|transkripte?n?|szenen?|zugeschrieben)(?![\p{L}-])/giu;
+
+/**
+ * Un horaire du lecteur (10.29.2) : « jusqu'à 9 minutes », « à 12 min » — la position du spectateur, que les
+ * sources disent dans leurs intitulés, jamais l'histoire. Seulement un nombre écrit en chiffres suivi d'une unité
+ * de minutes : « une minute de silence », « cinq minutes de retard » restent à l'histoire, et un horaire que
+ * l'histoire dit elle-même (« dans 7 minutes, je descends ») est excusé comme les autres mots.
+ */
+const TIME_REF = /(?<![\p{L}\d])\d+\s*(?:minutes?|mins?|minutos?|minuten?)(?![\p{L}])/giu;
 
 /** Le texte des sources sans leurs intitulés : ce que l'histoire dit elle-même. */
 function metaMaterial(text: string): string {
@@ -397,9 +405,10 @@ function metaMaterial(text: string): string {
 
 /** Les mots de coulisse d'une phrase, absents de l'histoire elle-même. */
 export function metaTalk(sentence: string, material: string): string[] {
-  const found = sentence.match(META_WORDS) ?? [];
-  const low = material.toLowerCase();
-  return [...new Set(found.map((w) => w.toLowerCase()))].filter((w) => !new RegExp(`(?<![\\p{L}-])${w}(?![\\p{L}-])`, "u").test(low));
+  const found = [...(sentence.match(META_WORDS) ?? []), ...(sentence.match(TIME_REF) ?? []).map((t) => t.replace(/\s+/gu, " "))];
+  const low = material.toLowerCase().replace(/\s+/gu, " ");
+  const esc = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return [...new Set(found.map((w) => w.toLowerCase()))].filter((w) => !new RegExp(`(?<![\\p{L}\\d-])${esc(w)}(?![\\p{L}-])`, "u").test(low));
 }
 
 const META_PREFIX: Record<Locale, [RegExp, string]> = {

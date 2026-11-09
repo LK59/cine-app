@@ -141,6 +141,35 @@ describe("les mots de coulisse (`metaTalk`)", () => {
     expect(metaTalk("Ariadne vole les documents de Saito.", "ariadne : rends-moi ces documents !")).toEqual([]);
     expect(metaTalk("Il ne parle pas.", "")).toEqual([]);
   });
+  // 10.29.2 : « Sam Obisanya est présent dans l'épisode en cours, « Solidarité masculine », jusqu'à 9 minutes, sans
+  // qu'aucune parole ou action ne lui soit attribuée à ce stade. » (prod, 09/11/2026) — l'horaire du lecteur et le
+  // vocabulaire de l'attribution passaient le filet.
+  it("l'horaire du lecteur (un nombre suivi de minutes) et « attribué » sont pris, dans les quatre langues", () => {
+    expect(metaTalk("Il est là jusqu'à 9 minutes.", "")).toEqual(["9 minutes"]);
+    expect(metaTalk("À 12 min, il arrive.", "")).toEqual(["12 min"]);
+    expect(metaTalk("At 9 minutes he is there.", "")).toEqual(["9 minutes"]);
+    expect(metaTalk("A los 9 minutos llega.", "")).toEqual(["9 minutos"]);
+    expect(metaTalk("Nach 9 Minuten kommt er.", "")).toEqual(["9 minuten"]);
+    expect(metaTalk("Sans qu'aucune parole ne lui soit attribuée.", "")).toEqual(["attribuée"]);
+    expect(metaTalk("Rien de ce qu'on dit ne lui est attribué.", "")).toEqual(["attribué"]);
+    expect(metaTalk("No line is attributed to him.", "")).toEqual(["attributed"]);
+    expect(metaTalk("No se le ha atribuido nada.", "")).toEqual(["atribuido"]);
+    expect(metaTalk("Ihm wird nichts zugeschrieben.", "")).toEqual(["zugeschrieben"]);
+  });
+  it("une durée de l'histoire reste permise : sans chiffre, ou dite par l'histoire elle-même", () => {
+    expect(metaTalk("Ils observent une minute de silence.", "")).toEqual([]);
+    expect(metaTalk("Il a cinq minutes de retard.", "")).toEqual([]);
+    expect(metaTalk("Elle descend du train dans 7 minutes.", "dans 7 minutes, je descends de ce train.")).toEqual([]);
+    expect(metaTalk("Le prix lui est attribué.", "le prix est attribué à sam.")).toEqual([]);
+    // L'intitulé des sources (« jusqu'à 9 min ») n'est pas l'histoire : le filet le retire avant de chercher.
+  });
+  it("à travers `AnswerGate` (« Jusqu'ici », `drop`) : la phrase à l'horaire est retirée, la phrase simple passe", () => {
+    const src = "Titre : Ted Lasso\n### Épisode en cours, S01E08 « Solidarité masculine », jusqu'à 9 min\nBonjour, mon cher.";
+    const gate = new AnswerGate(`Ted Lasso\n${src}\nSam Obisanya — joué par Toheeb Jimoh`, undefined, { locale: "fr", sources: src, retry: false, onMeta: "drop" });
+    const out = gate.push("NOMS: Sam Obisanya\n\nSam Obisanya n'a pas encore eu de moment à lui. Il est là jusqu'à 9 minutes. ");
+    const end = gate.end();
+    expect([...out.release, ...end.release].join(" ")).toBe("Sam Obisanya n'a pas encore eu de moment à lui.");
+  });
   it("« D'après les sources, … » se reformule ; le reste non", () => {
     expect(rewriteMetaPrefix("D'après les sources, Ariadne dessine.", "fr")).toBe("D'après ce que vous avez vu, Ariadne dessine.");
     expect(rewriteMetaPrefix("According to the subtitles, Ariadne draws.", "en")).toBe("From what you've seen, Ariadne draws.");
