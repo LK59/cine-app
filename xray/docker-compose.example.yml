@@ -1,0 +1,44 @@
+# laterna-xray — exemple de déploiement à côté de Jellyfin et de Laterna.
+#
+# 1. Copier ce fichier en docker-compose.yml, et créer à côté un fichier .env :
+#      XRAY_API_KEY=<clé partagée avec Laterna : openssl rand -hex 32>
+#      JELLYFIN_URL=http://jellyfin:8096          # facultatif (voir « Accélération matérielle »)
+#      JELLYFIN_API_KEY=<clé d'API Jellyfin>       # facultatif
+# 2. Adapter le chemin de la médiathèque et le numéro du groupe « render » (getent group render).
+# 3. docker compose up -d — les poids du modèle se téléchargent au premier démarrage.
+
+services:
+  laterna-xray:
+    image: ghcr.io/lk59/laterna-xray:latest
+    container_name: laterna-xray
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # buffalo_l (défaut, poids non commerciaux) ou auraface (Apache-2.0). Voir le README.
+      XRAY_MODEL: buffalo_l
+      # Fils de calcul pour l'inférence et le décodage sur processeur.
+      XRAY_THREADS: "4"
+    # Aucun port publié : seul Laterna, sur le même réseau Docker, lui parle.
+    networks: [media_net]
+    volumes:
+      # La médiathèque, en lecture seule, au MÊME chemin que dans le conteneur Jellyfin
+      # (Laterna envoie les chemins tels que Jellyfin les voit).
+      - /chemin/vers/la/mediatheque:/media:ro
+      # Base, poids des modèles, photos de référence.
+      - xray_data:/data
+    # Décodage matériel (Intel VA-API). Sans iGPU, retirer ces deux blocs : tout passe sur le processeur.
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      # Numéro du groupe propriétaire de /dev/dri/renderD128 sur l'hôte (getent group render).
+      - "993"
+    # L'analyse est un travail de fond : bornée, et à priorité basse (nice/ionice dans l'image).
+    cpus: 4
+    mem_limit: 4g
+
+volumes:
+  xray_data:
+
+networks:
+  media_net:
+    external: true
