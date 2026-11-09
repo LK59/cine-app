@@ -26,3 +26,6 @@ data
 *.md
 !README.md
 gallery
+
+# Le service laterna-xray a son propre Dockerfile et sa propre image.
+xray

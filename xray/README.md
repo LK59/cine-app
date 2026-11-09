@@ -203,7 +203,7 @@ docker build -t laterna-xray:local xray/      # les tests tournent pendant la co
 
 ## Brancher Laterna
 
-Dans Laterna, page **Configuration**, réglages X-Ray :
+Dans Laterna, **Configuration → Connexions**, carte « Acteurs à l'écran » :
 
 1. activer l'option ;
 2. adresse du service : `http://laterna-xray:8000` ;
