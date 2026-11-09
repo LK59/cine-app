@@ -16,6 +16,7 @@ mesuré le 09/11/2026 il rend une image trois fois plus sombre que la source (lu
 from __future__ import annotations
 
 import json
+import os
 import logging
 import subprocess
 import threading
@@ -161,6 +162,10 @@ def build_command(path: str, start: float, length: float, info: MediaInfo, vaapi
     tonemap = info.hdr and tonemap_available()
     if vaapi:
         cmd += ["-hwaccel", "vaapi", "-hwaccel_device", settings.vaapi_device, "-hwaccel_output_format", "vaapi"]
+        if os.environ.get("XRAY_VAAPI_NOREF", "0") == "1":
+            # Essai 11/2026 : comme sur le processeur, les images non référencées ne sont pas
+            # décodées (4K HEVC : 9,4 → 3,9 s pour un tronçon de 120 s).
+            cmd += ["-skip_frame", "noref"]
         if tonemap:
             # La carte réduit en 10 bits, le processeur adapte la petite image.
             vf = f"fps={fps},scale_vaapi=w={w}:h={h}:format=p010,hwdownload,format=p010,{TONEMAP},format=nv12"
@@ -222,6 +227,9 @@ def read_frames(path: str, start: float, length: float, info: MediaInfo, vaapi: 
             ts = start + i / fps
             i += 1
             if ts >= start + length:
+                # Image au-delà de la plage (le filtre `fps` en rend parfois une de trop) : on
+                # arrête ffmpeg nous-mêmes — ce n'est pas un échec (code -9 sinon).
+                stats.extra["stopped"] = True
                 break
             yield ts, np.frombuffer(buf, dtype=np.uint8).reshape(h * 3 // 2, w)
     finally:
@@ -231,5 +239,5 @@ def read_frames(path: str, start: float, length: float, info: MediaInfo, vaapi: 
         t.join(timeout=2)
         stats.frames = i
         stats.seconds = time.monotonic() - t0
-        stats.returncode = proc.returncode
+        stats.returncode = 0 if stats.extra.get("stopped") and i > 1 else proc.returncode
         stats.stderr = "\n".join(err_tail)

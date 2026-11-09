@@ -69,48 +69,88 @@ class OvSession:
     # La taille du lot peut changer même quand le fichier la fixe à 1 (`Scrfd.detect_batch`).
     batchable = True
 
-    def __init__(self, path: Path, threads: int):
+    def __init__(self, path: Path, threads: int, device: str = "CPU"):
         import openvino as ov
 
         core = ov.Core()
-        # Une seule requête à la fois, sur `threads` fils : la latence d'abord (l'ouvrier attend
-        # chaque résultat), sans flux parallèles qui prendraient d'autres cœurs.
-        self._cfg = {"INFERENCE_NUM_THREADS": int(threads), "PERFORMANCE_HINT": "LATENCY", "NUM_STREAMS": 1,
-                     # Calcul en float32 : sur une machine qui sait le bfloat16 (pas l'i7-8700),
-                     # OpenVINO l'emploierait sinon de lui-même, et l'empreinte changerait.
-                     "INFERENCE_PRECISION_HINT": "f32",
-                     # Pas de fils épinglés à des cœurs : le service tourne en priorité basse sur
-                     # une machine partagée, et un fil épinglé attend que *son* cœur se libère.
-                     # Mesuré le 09/11/2026 sous charge : 209 ms par image au lieu de 244.
-                     "ENABLE_CPU_PINNING": False}
+        self.device = device
+        if device == "CPU":
+            # Une seule requête à la fois, sur `threads` fils : la latence d'abord (l'ouvrier attend
+            # chaque résultat), sans flux parallèles qui prendraient d'autres cœurs.
+            self._cfg = {"INFERENCE_NUM_THREADS": int(threads), "PERFORMANCE_HINT": "LATENCY", "NUM_STREAMS": 1,
+                         "INFERENCE_PRECISION_HINT": "f32",
+                         "ENABLE_CPU_PINNING": False}
+        else:
+            # Essai 11/2026 : iGPU (plugin GPU, OpenCL), demi-précision.
+            self._cfg = {"PERFORMANCE_HINT": "LATENCY", "INFERENCE_PRECISION_HINT": "f16",
+                         "CACHE_DIR": "/tmp/ov-cache"}
+        self._core = core
         model = core.read_model(str(path))
         inp = model.inputs[0]
         self.input_name = inp.get_any_name()
         ps = inp.get_partial_shape()
         self.input_shape = [d.get_length() if d.is_static else None for d in ps]
-        # Lot libre ; les autres dimensions restent ce que le fichier dit (libres ou fixes).
-        dyn = [-1] + [d if d is not None else -1 for d in self.input_shape[1:]]
-        model.reshape({self.input_name: dyn})
         self.output_names = [o.get_any_name() for o in model.outputs]
-        self._req = core.compile_model(model, "CPU", self._cfg).create_infer_request()
         self._lock = threading.Lock()
-        # Premier passage tout de suite : un modèle qu'OpenVINO ne sait pas exécuter échoue
-        # ici, au chargement, et non au milieu d'un tronçon.
+        self._model = model
+        self._static: dict = {}
+        if device == "CPU" or not getattr(OvSession, "gpu_static", True):
+            dyn = [-1] + [d if d is not None else -1 for d in self.input_shape[1:]]
+            model.reshape({self.input_name: dyn})
+            self._req = core.compile_model(model, device, self._cfg).create_infer_request()
+        else:
+            # GPU : une forme compilée par taille d'entrée rencontrée (formes dynamiques lentes ou
+            # refusées sur Gen9).
+            self._req = None
         probe = [1] + [d if d is not None else 64 for d in self.input_shape[1:]]
         self.run(self.output_names, {self.input_name: np.zeros(probe, dtype=np.float32)})
+
+    # GPU : formes compilées bornées. Chaque forme compilée garde sa copie des poids (en mémoire
+    # partagée avec le système sur un iGPU) : une forme par taille de lot a fait sortir le conteneur
+    # de ses 4 Go (09/11/2026). Le lot est complété jusqu'au palier suivant ; au-delà de GPU_MAX
+    # formes (photos de tailles diverses), la forme passe par une copie dynamique sur le processeur.
+    GPU_BUCKETS = (1, 8, 32)
+    GPU_MAX = 6
+
+    def _request(self, shape):
+        if self._req is not None:
+            return self._req, shape[0]
+        n = shape[0]
+        b = next((x for x in self.GPU_BUCKETS if x >= n), n)
+        key = (b,) + tuple(shape[1:])
+        r = self._static.get(key)
+        if r is None and len(self._static) < self.GPU_MAX:
+            m = self._model.clone()
+            m.reshape({self.input_name: list(key)})
+            r = self._core.compile_model(m, self.device, self._cfg).create_infer_request()
+            self._static[key] = r
+        if r is None:
+            if getattr(self, "_cpu", None) is None:
+                m = self._model.clone()
+                m.reshape({self.input_name: [-1] + [d if d is not None else -1 for d in self.input_shape[1:]]})
+                self._cpu = self._core.compile_model(m, "CPU", {"INFERENCE_NUM_THREADS": 2, "PERFORMANCE_HINT": "LATENCY",
+                                                               "INFERENCE_PRECISION_HINT": "f32"}).create_infer_request()
+            return self._cpu, n
+        return r, b
 
     def run(self, names, feed):
         x = np.ascontiguousarray(next(iter(feed.values())), dtype=np.float32)
         with self._lock:
-            res = self._req.infer({0: x})
-            return [np.array(res[name]) for name in names]
+            req, b = self._request(x.shape)
+            n = x.shape[0]
+            if b > n:
+                # Seul l'empreinteur (sortie (lot, 512)) arrive ici avec un lot incomplet :
+                # SCRFD sur GPU n'est appelé que par lots de 1 ou de 8 (`Scrfd.detect_batch`).
+                x = np.concatenate([x, np.zeros((b - n,) + x.shape[1:], np.float32)])
+            res = req.infer({0: x})
+            return [np.array(res[name])[:n] if b > n else np.array(res[name]) for name in names]
 
 
-def open_session(path: Path, threads: int, prefer: str = "auto"):
+def open_session(path: Path, threads: int, prefer: str = "auto", device: str = "CPU"):
     """La session d'un réseau : OpenVINO si demandé ou disponible, ONNX Runtime sinon."""
     if prefer in ("auto", "openvino"):
         try:
-            return OvSession(path, threads)
+            return OvSession(path, threads, device)
         except ImportError:
             if prefer == "openvino":
                 log.warning("OpenVINO absent : ONNX Runtime pour %s", Path(path).name)

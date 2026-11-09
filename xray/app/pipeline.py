@@ -26,6 +26,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from .faces import Face
+import os
+
+from .tracking import TRACK_QUALITY, propagate, roi_redetect
+
+TRACK_MODE = os.environ.get("XRAY_TRACK_MODE", "roi")
 from .tracks import Track, TrackSummary, accepted_faces, best_faces, link, needs_full, summarize
 
 # Sortie anticipée par la mémoire de la série : similarité au plus ressemblant, et avance sur le
@@ -68,27 +73,35 @@ class ShotFaces:
     """Reçoit les plans détectés, rend leurs pistes résumées — par lots d'empreintes."""
 
     def __init__(self, engine, clock, faces_per_track: int = 2, batch: int = 32,
-                 memory: np.ndarray | None = None):
+                 memory: np.ndarray | None = None, every: int = 1):
         self.engine = engine
+        # Essai 11/2026 : le détecteur sur une image analysée sur `every`, les autres portées
+        # par le flot optique (`tracking.propagate`).
+        self.every = max(1, every)
         self.clock = clock
         self.k = max(1, faces_per_track)
         self.batch = max(1, batch)
         self.memory = memory
         self.pending: list[PendingShot] = []
         self._waiting = 0  # visages de première passe en attente
-        self.to_detect: list[tuple[float, float, list[np.ndarray]]] = []
+        self.to_detect: list[tuple[float, float, list[np.ndarray], list, list[bool]]] = []
         self._images = 0
         self._found: list[list[Face]] = []  # détections des premières images en attente
 
-    def add_images(self, start: float, end: float, images: list[np.ndarray]) -> list[tuple[float, float, int, TrackSummary]]:
+    def add_images(self, start: float, end: float, images: list[np.ndarray], lumas: list | None = None) -> list[tuple[float, float, int, TrackSummary]]:
         """Un plan, par ses images choisies (BGR) : la détection part par lots pleins de
-        `DETECT_BATCH` images, à cheval sur plusieurs plans ; le reste attend le plan suivant."""
-        self.to_detect.append((start, end, images))
+        `DETECT_BATCH` images, à cheval sur plusieurs plans ; le reste attend le plan suivant.
+        `lumas[k]` : luminances des images décodées de l'image choisie k−1 à k (suivi)."""
+        if self.every > 1 and lumas is not None:
+            det = [k % self.every == 0 for k in range(len(images))]
+        else:
+            det = [True] * len(images)
+        self.to_detect.append((start, end, images, lumas, det))
         self._images += len(images)
         return self._detect(final=False)
 
     def _detect(self, final: bool = True) -> list[tuple[float, float, int, TrackSummary]]:
-        flat = [im for _, _, ims in self.to_detect for im in ims]
+        flat = [im for _, _, ims, _, det in self.to_detect for im, d in zip(ims, det) if d]
         done = len(self._found)
         todo = len(flat) - done
         n = todo if final else todo - todo % DETECT_BATCH
@@ -96,9 +109,31 @@ class ShotFaces:
             self._found += self.engine.detect_grade_batch(flat[i:min(i + DETECT_BATCH, done + n)])
         out = []
         # Les plans entièrement détectés passent aux pistes, dans l'ordre.
-        while self.to_detect and len(self._found) >= len(self.to_detect[0][2]):
-            start, end, ims = self.to_detect.pop(0)
-            frames, self._found = self._found[:len(ims)], self._found[len(ims):]
+        while self.to_detect and len(self._found) >= sum(self.to_detect[0][4]):
+            start, end, ims, lumas, det = self.to_detect.pop(0)
+            nd = sum(det)
+            found, self._found = self._found[:nd], self._found[nd:]
+            frames: list[list[Face]] = []
+            it = iter(found)
+            for k, d in enumerate(det):
+                if d:
+                    frames.append(next(it))
+                    continue
+                t0 = time.perf_counter()
+                if TRACK_MODE == "roi":
+                    carried = roi_redetect(frames[-1], ims[k], self.engine.detector)
+                else:
+                    carried = propagate(frames[-1], lumas[k])
+                self.clock.add("tracker", time.perf_counter() - t0)
+                self.clock.count("tracked_images")
+                self.clock.count("tracked_faces", len(carried))
+                t0 = time.perf_counter()
+                self.engine._grade(ims[k], carried)
+                if TRACK_MODE != "roi":
+                    for f in carried:
+                        f.quality *= TRACK_QUALITY
+                self.clock.add("grade", time.perf_counter() - t0)
+                frames.append(carried)
             self._images -= len(ims)
             out += self.add(start, end, frames)
         return out

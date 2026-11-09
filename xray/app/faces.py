@@ -40,6 +40,8 @@ ARCFACE_TEMPLATE = np.array(
 MODEL_DEFAULTS = {
     "buffalo_l": {"cluster": 0.42, "label": 0.30},
     "auraface": {"cluster": 0.40, "label": 0.28},
+    # Essai 11/2026 : seuils de buffalo_l en attendant un calibrage propre (XRAY_*_THRESHOLD).
+    "antelopev2": {"cluster": 0.42, "label": 0.30},
 }
 
 
@@ -60,11 +62,14 @@ class Face:
         return float(min(self.box[2] - self.box[0], self.box[3] - self.box[1]))
 
 
-def _session(path: Path, threads: int):
+def _session(path: Path, threads: int, role: str = "detector"):
     from .config import settings
     from .inference import open_session
 
-    return open_session(path, threads, settings.inference)
+    dev = settings.ov_device
+    if role == "embedder" and settings.ov_device_embed:
+        dev = settings.ov_device_embed
+    return open_session(path, threads, settings.inference, dev)
 
 
 def nms(boxes: np.ndarray, scores: np.ndarray, thresh: float) -> list[int]:
@@ -135,6 +140,9 @@ class Scrfd:
         if len(imgs) <= 1 or not getattr(self.session, "batchable", False) or self.anchors < 1:
             return [self.detect(im) for im in imgs]
         if len({im.shape for im in imgs}) != 1:
+            return [self.detect(im) for im in imgs]
+        if getattr(self.session, "device", "CPU") != "CPU" and len(imgs) != 8:
+            # GPU : formes compilées bornées (lots de 1 ou de 8, `inference.OvSession`).
             return [self.detect(im) for im in imgs]
         n = len(imgs)
         prepared = [self._canvas(im) for im in imgs]
@@ -283,7 +291,10 @@ class Embedder:
     normalisation (InsightFace ne retombe sur 0/1 que pour les vieux modèles MXNet convertis)."""
 
     def __init__(self, path: Path, threads: int, batch: int = 32):
-        self.session = _session(path, threads)
+        try:
+            self.session = _session(path, threads, "embedder")
+        except TypeError:  # doublure de test à deux arguments
+            self.session = _session(path, threads)
         self.input_name = self.session.input_name
         self.output_name = self.session.output_names[0]
         shape = self.session.input_shape

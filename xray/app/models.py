@@ -40,6 +40,11 @@ BUFFALO_ZIP = (
     "80ffe37d8a5940d59a7384c201a2a38d4741f2f3c51eef46ebb28218a7b0ca2f",
 )
 
+ANTELOPE_ZIP = (
+    "https://github.com/deepinsight/insightface/releases/download/v0.7/antelopev2.zip",
+    "8e182f14fc6e80b3bfa375b33eb6cff7ee05d8ef7633e738d1c89021dcf0c5c5",
+)
+
 MODELS: dict[str, dict] = {
     "buffalo_l": {
         "license": "non-commercial",
@@ -50,6 +55,19 @@ MODELS: dict[str, dict] = {
                       archive=(BUFFALO_ZIP[0], BUFFALO_ZIP[1], "det_10g.onnx")),
             ModelFile("w600k_r50.onnx", "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43",
                       archive=(BUFFALO_ZIP[0], BUFFALO_ZIP[1], "w600k_r50.onnx")),
+        ],
+    },
+    # Essai 11/2026 : même détecteur (scrfd_10g_bnkps.onnx = det_10g.onnx, octet pour octet),
+    # empreinte ArcFace R100 entraînée sur Glint360K.
+    "antelopev2": {
+        "license": "non-commercial",
+        "detector": "scrfd_10g_bnkps.onnx",
+        "embedder": "glintr100.onnx",
+        "files": [
+            ModelFile("scrfd_10g_bnkps.onnx", "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91",
+                      archive=(ANTELOPE_ZIP[0], ANTELOPE_ZIP[1], "antelopev2/scrfd_10g_bnkps.onnx")),
+            ModelFile("glintr100.onnx", "4ab1d6435d639628a6f3e5008dd4f929edf4c4124b1a7169e1048f9fef534cdf",
+                      archive=(ANTELOPE_ZIP[0], ANTELOPE_ZIP[1], "antelopev2/glintr100.onnx")),
         ],
     },
     "auraface": {
@@ -119,7 +137,10 @@ class ModelManager:
         return self.spec["license"]
 
     def path(self, role: str) -> Path:
-        return self.dir / self.spec[role]
+        from .config import settings
+
+        alt = settings.detector_file if role == "detector" else settings.embedder_file
+        return self.dir / (alt or self.spec[role])
 
     def start(self) -> threading.Thread:
         t = threading.Thread(target=self._loop, name="models", daemon=True)
@@ -213,7 +234,7 @@ class ModelManager:
     def load_engine(self, threads: int, min_face: int):
         from .faces import Embedder, FaceEngine, QualityRules, Scrfd, YuNet
 
-        if self.name == "buffalo_l":
+        if self.name in ("buffalo_l", "antelopev2"):
             det = Scrfd(self.path("detector"), threads)
         else:
             det = YuNet(self.path("detector"), threads)

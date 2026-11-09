@@ -51,6 +51,14 @@ class Settings:
     # Visages empreintés par lot (un appel du réseau), et au plus par piste (les meilleurs).
     embed_batch: int = field(default_factory=lambda: max(1, _int("XRAY_EMBED_BATCH", 32)))
     faces_per_track: int = field(default_factory=lambda: max(1, _int("XRAY_FACES_PER_TRACK", 2)))
+    # Essais 11/2026 : détection une image analysée sur N (suivi entre les deux), fichiers de
+    # modèle de remplacement (IR OpenVINO INT8…), périphérique d'inférence OpenVINO.
+    incremental: bool = field(default_factory=lambda: os.environ.get("XRAY_INCREMENTAL", "0") in ("1", "true", "yes"))
+    detect_every: int = field(default_factory=lambda: max(1, _int("XRAY_DETECT_EVERY", 1)))
+    detector_file: str = field(default_factory=lambda: os.environ.get("XRAY_DETECTOR_FILE", ""))
+    embedder_file: str = field(default_factory=lambda: os.environ.get("XRAY_EMBEDDER_FILE", ""))
+    ov_device: str = field(default_factory=lambda: os.environ.get("XRAY_OV_DEVICE", "CPU").strip().upper())
+    ov_device_embed: str = field(default_factory=lambda: os.environ.get("XRAY_OV_DEVICE_EMBED", "").strip().upper())
     vaapi_device: str = field(default_factory=lambda: os.environ.get("XRAY_VAAPI_DEVICE", "/dev/dri/renderD128"))
     # « 0 » coupe l'accélération matérielle (décodage toujours sur le processeur).
     hwaccel: bool = field(default_factory=lambda: os.environ.get("XRAY_HWACCEL", "1") not in ("0", "false", "no"))

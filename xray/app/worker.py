@@ -262,16 +262,49 @@ class Worker:
             c.execute("UPDATE items SET stats_json=? WHERE item_id=?", (json.dumps(acc.as_dict()), item_id))
 
     def checkpoint(self, item_id: str, etag: str, model: str, duration: float, anchor: float, refs):
-        chunks = self.db.q("SELECT start, end, done FROM chunks WHERE item_id=?", (item_id,))
+        chunks = self.db.q("SELECT idx, start, end, done FROM chunks WHERE item_id=?", (item_id,))
         done = [(r["start"], r["end"]) for r in chunks if r["done"]]
         if not done:
             return None
+        if settings.incremental:
+            built = self._incremental(item_id, model, duration, anchor, refs, chunks)
+        else:
+            built = self._full_build(item_id, model, duration, anchor, refs, chunks, done)
+        return self._store(item_id, etag, model, built)
+
+    def _incremental(self, item_id, model, duration, anchor, refs, chunks):
+        """Essai 11/2026 (`results_inc`) : l'assembleur garde d'un tronçon à l'autre ce qui ne
+        change pas ; il est reconstruit depuis la base au premier tronçon d'un ordre (reprise)."""
+        from .results_inc import IncrementalBuilder
+
+        inc = getattr(self, "_inc", None)
+        if inc is None or inc[0] != item_id:
+            cluster_t, label_t = thresholds(model)
+            inc = (item_id, IncrementalBuilder(duration, len(chunks), anchor, refs, label_t, cluster_t), set())
+            self._inc = inc
+        b, seen = inc[1], inc[2]
+        built = None
+        for r in chunks:
+            if not r["done"] or r["idx"] in seen:
+                continue
+            seen.add(r["idx"])
+            shots = [ShotRow(x["start"], x["end"], np.frombuffer(x["hist"], dtype=np.float32))
+                     for x in self.db.q("SELECT start, end, hist FROM shots WHERE item_id=? AND chunk_idx=?", (item_id, r["idx"]))]
+            tracks = [TrackRow(x["shot_start"], x["shot_end"], x["screen_time"], x["quality"], np.frombuffer(x["emb"], dtype=np.float32))
+                      for x in self.db.q("SELECT shot_start, shot_end, screen_time, quality, emb FROM tracks WHERE item_id=? AND chunk_idx=? ORDER BY id",
+                                         (item_id, r["idx"]))]
+            built = b.add_chunk((r["start"], r["end"]), shots, tracks)
+        return built if built is not None else b._build()
+
+    def _full_build(self, item_id, model, duration, anchor, refs, chunks, done):
         shots = [ShotRow(r["start"], r["end"], np.frombuffer(r["hist"], dtype=np.float32))
                  for r in self.db.q("SELECT start, end, hist FROM shots WHERE item_id=?", (item_id,))]
         tracks = [TrackRow(r["shot_start"], r["shot_end"], r["screen_time"], r["quality"], np.frombuffer(r["emb"], dtype=np.float32))
                   for r in self.db.q("SELECT shot_start, shot_end, screen_time, quality, emb FROM tracks WHERE item_id=?", (item_id,))]
         cluster_t, label_t = thresholds(model)
-        built = build(duration, done, len(chunks), anchor, shots, tracks, refs, label_t, cluster_t)
+        return build(duration, done, len(chunks), anchor, shots, tracks, refs, label_t, cluster_t)
+
+    def _store(self, item_id, etag, model, built):
         with self.db.tx() as c:
             cur = c.execute("SELECT etag FROM items WHERE item_id=?", (item_id,)).fetchone()
             if cur is None or cur["etag"] != etag:
@@ -316,7 +349,8 @@ class Worker:
         engine = self.engine
         clock = StageClock()
         engine.clock = clock
-        faces = ShotFaces(engine, clock, settings.faces_per_track, settings.embed_batch, getattr(self, "memory", None))
+        faces = ShotFaces(engine, clock, settings.faces_per_track, settings.embed_batch, getattr(self, "memory", None),
+                          every=settings.detect_every)
         shots_out: list[ShotRow] = []
         tracks_out: list[tuple[TrackRow, int]] = []
         t0 = time.monotonic()
@@ -337,7 +371,12 @@ class Worker:
             sel = pick_indices(len(shot.frames), want)
             with clock.stage("convert"):
                 images = [cv2.cvtColor(shot.frames[i][1], cv2.COLOR_YUV2BGR_NV12) for i in sel]
-            collect(faces.add_images(shot.start, shot.end, images))
+            lumas = None
+            if settings.detect_every > 1:
+                # Luminance (le plan Y du NV12) de chaque image décodée entre deux images choisies.
+                lumas = [None] + [[shot.frames[j][1][:h] for j in range(sel[k - 1], sel[k] + 1)]
+                                  for k in range(1, len(sel))]
+            collect(faces.add_images(shot.start, shot.end, images, lumas))
 
         decoders = []
         skipped = (end - start) - sum(b - a for a, b in parts)

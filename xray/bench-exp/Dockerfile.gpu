@@ -1,0 +1,5 @@
+FROM laterna-xray:exp2
+USER root
+COPY debs/*.deb /tmp/debs/
+RUN apt-get update && apt-get install -y --no-install-recommends ocl-icd-libopencl1 /tmp/debs/*.deb && rm -rf /var/lib/apt/lists/* /tmp/debs
+USER xray

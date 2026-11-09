@@ -105,7 +105,9 @@ def build(
     for idx, t in enumerate(tracks):
         by_shot.setdefault(round(t.shot_start, 3), []).append(idx)
     infos = sorted(
-        (ShotInfo(s.start, s.end, s.hist, {int(labels[i]) for i in by_shot.get(round(s.start, 3), [])}) for s in shots),
+        (ShotInfo(s.start, s.end, s.hist, {int(labels[i]) for i in by_shot.get(round(s.start, 3), [])},
+                  {assignments[int(labels[i])].person_id for i in by_shot.get(round(s.start, 3), [])
+                   if int(labels[i]) in assignments}) for s in shots),
         key=lambda s: s.start,
     )
     scenes_out: list[dict] = []

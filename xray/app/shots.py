@@ -208,10 +208,81 @@ class ShotInfo:
     end: float
     hist: np.ndarray
     clusters: set[int] = field(default_factory=set)
+    # Personnes *nommées* du plan (essai « fils », 11/2026).
+    people: set[int] = field(default_factory=set)
 
 
 def hist_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return 1.0 - hist_distance(a, b)
+
+
+# Essai 11/2026 — montage alterné (A1 B1 A2 B2) : deux fils d'une même action, filmés dans des
+# décors voisins (un même train), se fondaient en une scène. Un plan qui *rejoindrait* la scène par
+# ses couleurs la quitte s'il ouvre un autre fil : ses personnes nommées n'ont rien de commun avec
+# les dernières personnes vues dans la scène, et aucune de celles-ci ne revient dans les
+# THREAD_AHEAD secondes qui suivent (un champ-contrechamp, lui, y revient). La frontière est posée
+# au lien de couleurs le plus faible entre la dernière apparition de l'ancien fil et ce plan.
+import os as _os
+
+THREAD_SPLIT = _os.environ.get("XRAY_THREAD_SPLIT", "0") == "1"
+THREAD_BACK = 60.0      # « dernières personnes vues » : les 3 derniers plans à personnes, sur 60 s
+THREAD_BACK_SHOTS = 3
+THREAD_AHEAD = float(_os.environ.get("XRAY_THREAD_AHEAD", "15"))
+THREAD_MERGE_VETO = _os.environ.get("XRAY_THREAD_MERGE_VETO", "0") == "1"
+THREAD_MIN_RUN = float(_os.environ.get("XRAY_THREAD_MIN_RUN", "15"))  # durée minimale du fil quitté
+THREAD_MAX_SIM = float(_os.environ.get("XRAY_THREAD_MAX_SIM", "1.01"))  # garde visuelle (désactivée par défaut)
+
+
+def _recent_people(cur: list[ShotInfo], t: float) -> tuple[set[int], int]:
+    seen: set[int] = set()
+    n, last = 0, -1
+    for k in range(len(cur) - 1, -1, -1):
+        r = cur[k]
+        if r.end < t - THREAD_BACK:
+            break
+        if r.people:
+            if last < 0:
+                last = k
+            seen |= r.people
+            n += 1
+            if n >= THREAD_BACK_SHOTS:
+                break
+    return seen, last
+
+
+def _thread_switch(cur: list[ShotInfo], shots: list[ShotInfo], i: int) -> int | None:
+    """Rang (dans `cur`) où commence le nouveau fil, ou None."""
+    s = shots[i]
+    if not s.people:
+        return None
+    recent, last = _recent_people(cur, s.start)
+    if not recent or (s.people & recent):
+        return None
+    if THREAD_MIN_RUN > 0:
+        # Le fil quitté doit avoir duré : ses personnes présentes depuis au moins THREAD_MIN_RUN s,
+        # sans personne du nouveau fil entre-temps.
+        first = None
+        for k in range(len(cur) - 1, -1, -1):
+            if cur[k].people & s.people:
+                break
+            if cur[k].people & recent:
+                first = cur[k].start
+        if first is None or s.start - first < THREAD_MIN_RUN:
+            return None
+    for r in shots[i + 1:]:
+        if r.start >= s.start + THREAD_AHEAD:
+            break
+        if r.people & recent:
+            return None
+    if hist_similarity(s.hist, cur[-1].hist) >= THREAD_MAX_SIM:
+        return None
+    # Frontière : le lien le plus faible entre l'ancien fil et ce plan.
+    best, cut = hist_similarity(s.hist, cur[-1].hist), len(cur)
+    for k in range(last + 1, len(cur)):
+        v = hist_similarity(cur[k].hist, cur[k - 1].hist)
+        if v < best:
+            best, cut = v, k
+    return cut
 
 
 def group_scenes(shots: list[ShotInfo], gap: float = 1.0) -> list[list[ShotInfo]]:
@@ -219,7 +290,7 @@ def group_scenes(shots: list[ShotInfo], gap: float = 1.0) -> list[list[ShotInfo]
     if not shots:
         return []
     scenes: list[list[ShotInfo]] = [[shots[0]]]
-    for s in shots[1:]:
+    for i, s in enumerate(shots[1:], 1):
         cur = scenes[-1]
         if s.start - cur[-1].end > gap:
             scenes.append([s])
@@ -228,7 +299,13 @@ def group_scenes(shots: list[ShotInfo], gap: float = 1.0) -> list[list[ShotInfo]
         sim = max(hist_similarity(s.hist, r.hist) for r in recent)
         seen: set[int] = set().union(*(r.clusters for r in recent))
         if sim >= SCENE_SIMILARITY or (sim >= SCENE_SIMILARITY_WITH_FACE and s.clusters & seen):
-            cur.append(s)
+            cut = _thread_switch(cur, shots, i) if THREAD_SPLIT else None
+            if cut is None:
+                cur.append(s)
+            else:
+                tail = cur[cut:]
+                del cur[cut:]
+                scenes.append(tail + [s])
         else:
             scenes.append([s])
     out: list[list[ShotInfo]] = []
@@ -289,6 +366,11 @@ def _merge_short(scenes: list[list[ShotInfo]], gap: float) -> list[list[ShotInfo
                 cands.append((hist_similarity(_scene_hist(sc), _scene_hist(scenes[i - 1])), i - 1))
             if i + 1 < len(scenes) and scenes[i + 1][0].start - sc[-1].end <= gap:
                 cands.append((hist_similarity(_scene_hist(sc), _scene_hist(scenes[i + 1])), i + 1))
+            if THREAD_SPLIT and THREAD_MERGE_VETO:
+                # Une scène courte ne rejoint pas un autre fil : personnes nommées disjointes.
+                mine = set().union(*(x.people for x in sc))
+                cands = [(v, j) for v, j in cands
+                         if not (mine and (other := set().union(*(x.people for x in scenes[j]))) and not (mine & other))]
             if not cands:
                 continue
             _, j = max(cands)
