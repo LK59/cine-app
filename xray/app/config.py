@@ -20,7 +20,10 @@ VERSION = "1.0.0"
 #   2 — (09/11/2026) bande de noms « à confirmer » 0,345–0,40, scènes de 3 min au plus, HDR adapté ;
 #       déployée vingt minutes sans la coupe « à contraste égal », d'où :
 #   3 — (09/11/2026) la même, plus la coupe à contraste égal (décors sombres d'une seule teinte).
-RESULT_VERSION = 3
+#   4 — (09/11/2026) images non référencées sautées aussi sur l'iGPU (`XRAY_VAAPI_NOREF`) : les
+#       images échantillonnées changent un peu ; détecteur INT8 (`XRAY_DETECTOR_INT8`) : quelques
+#       visages à la limite (moins de 36 px) gagnés ou perdus. Règles de noms et de scènes inchangées.
+RESULT_VERSION = 4
 
 
 def _int(name: str, default: int) -> int:
@@ -28,6 +31,13 @@ def _int(name: str, default: int) -> int:
         return int(os.environ.get(name, default))
     except ValueError:
         return default
+
+
+def _flag(name: str, default: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw not in ("0", "false", "no", "off")
 
 
 def _float(name: str, default: float) -> float:
@@ -54,6 +64,18 @@ class Settings:
     vaapi_device: str = field(default_factory=lambda: os.environ.get("XRAY_VAAPI_DEVICE", "/dev/dri/renderD128"))
     # « 0 » coupe l'accélération matérielle (décodage toujours sur le processeur).
     hwaccel: bool = field(default_factory=lambda: os.environ.get("XRAY_HWACCEL", "1") not in ("0", "false", "no"))
+    # Images non référencées sautées sur l'iGPU aussi (déjà le cas sur le processeur) : 4K HEVC,
+    # 9,4 → 3,9 s de décodage par tronçon de 120 s (mesuré le 09/11/2026). Voir decode.py.
+    vaapi_noref: bool = field(default_factory=lambda: _flag("XRAY_VAAPI_NOREF", True))
+    # Assemblage incrémental du résultat (`results.Assembler`) : mêmes scènes que le recalcul
+    # complet, 3 à 6 fois moins de calcul. « 0 » : recalcul complet à chaque tronçon (`results.build`).
+    incremental: bool = field(default_factory=lambda: _flag("XRAY_INCREMENTAL", True))
+    # Détecteur SCRFD quantifié en INT8, produit sur place au premier démarrage (`quantize.py`) ;
+    # buffalo_l et OpenVINO seulement. L'empreinte reste en float32.
+    detector_int8: bool = field(default_factory=lambda: _flag("XRAY_DETECTOR_INT8", True))
+    # Périphérique d'inférence OpenVINO : CPU (défaut) ou GPU (iGPU Intel, en option ; rendu au
+    # processeur tant que Jellyfin transcode sur l'iGPU — voir inference.py).
+    ov_device: str = field(default_factory=lambda: (os.environ.get("XRAY_OV_DEVICE", "CPU").strip().upper() or "CPU"))
     ffmpeg: str = field(default_factory=lambda: os.environ.get("XRAY_FFMPEG", "ffmpeg"))
     ffprobe: str = field(default_factory=lambda: os.environ.get("XRAY_FFPROBE", "ffprobe"))
     jellyfin_url: str = field(default_factory=lambda: os.environ.get("JELLYFIN_URL", "").rstrip("/"))
@@ -81,6 +103,11 @@ class Settings:
     @property
     def photos_dir(self) -> Path:
         return self.data_dir / "photos"
+
+    @property
+    def ov_cache_dir(self) -> Path:
+        """Noyaux OpenCL compilés par OpenVINO pour l'iGPU (gardés d'un démarrage à l'autre)."""
+        return self.data_dir / "ov-cache"
 
 
 def _opt_float(name: str) -> float | None:

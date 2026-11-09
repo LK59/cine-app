@@ -4,6 +4,9 @@ Si une session Jellyfin transcode avec l'accélération matérielle, le tronçon
 sur le processeur : l'unité de décodage de l'iGPU est partagée, et un spectateur qui attend
 son image compte plus qu'une analyse qui peut prendre une minute de plus. Vérifié avant chaque
 ordre et toutes les 30 s ; sans `JELLYFIN_URL`, l'iGPU est toujours considéré libre.
+
+L'inférence sur l'iGPU (`XRAY_OV_DEVICE=GPU`) suit le même signal, appel par appel (`busy_now`,
+le dernier état connu, sans requête) : elle repasse sur le processeur tant que Jellyfin transcode.
 """
 
 from __future__ import annotations
@@ -73,6 +76,11 @@ class GpuGuard:
         if time.time() - self._checked > self.interval:
             return self.check()
         return self._busy
+
+    def busy_now(self) -> bool:
+        """Le dernier état connu, sans jamais interroger Jellyfin : lu à chaque appel du réseau
+        quand l'inférence est sur l'iGPU. Le fil du garde le rafraîchit toutes les 30 s."""
+        return self.enabled and self._busy
 
     def start(self) -> None:
         if not self.enabled:

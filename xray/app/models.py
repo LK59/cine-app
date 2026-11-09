@@ -8,6 +8,9 @@ SHA-256 fixée ici, calculée sur la publication officielle :
 - un fichier présent n'est jamais retéléchargé ; s'il ne correspond pas, le service refuse de
   s'en servir et le dit dans /health (supprimer le fichier pour qu'il soit repris) ;
 - un téléchargement s'écrit dans un `.part`, et ne prend son nom définitif qu'une fois vérifié.
+
+Pour `buffalo_l`, le détecteur est ensuite quantifié en INT8 sur place (`quantize.py`), une fois,
+avant que le service ne se dise prêt ; en cas d'échec, il reste en float32 (`int8` dans /health).
 """
 
 from __future__ import annotations
@@ -113,6 +116,10 @@ class ModelManager:
         self.error: str | None = None
         self.state = "attente"
         self._lock = threading.Lock()
+        # Détecteur INT8 : état (`off`, `building`, `ready`, `failed`), raison, chemin de l'IR.
+        self.int8: dict = {"state": "off", "error": None}
+        self.int8_path: Path | None = None
+        self.engine = None
 
     @property
     def license(self) -> str:
@@ -196,10 +203,47 @@ class ModelManager:
             # L'archive de buffalo_l (288 Mo, trois modèles inutiles ici) ne reste pas.
             for z in archives.values():
                 z.unlink(missing_ok=True)
+        self._prepare_int8()
         self.state = "prêt"
         self.error = None
         self.ready = True
         log.info("modèles : %s prêt (%s)", self.name, self.license)
+
+    def int8_wanted(self) -> str | None:
+        """None si le détecteur doit être quantifié, sinon pourquoi il ne l'est pas."""
+        from .config import settings
+
+        if not settings.detector_int8:
+            return "XRAY_DETECTOR_INT8=0"
+        if self.name != "buffalo_l":
+            return f"pas de détecteur INT8 pour {self.name}"
+        if settings.inference == "onnxruntime":
+            return "XRAY_INFERENCE=onnxruntime (l'IR INT8 est propre à OpenVINO)"
+        try:
+            import openvino  # noqa: F401
+        except ImportError:
+            return "OpenVINO absent"
+        return None
+
+    def _prepare_int8(self) -> None:
+        from . import quantize
+        from .config import settings
+
+        why = self.int8_wanted()
+        if why is not None:
+            self.int8 = {"state": "off", "error": why}
+            return
+        spec = next(f for f in self.spec["files"] if f.name == self.spec["detector"])
+        self.state = "quantification du détecteur (INT8)"
+        self.int8 = {"state": "building", "error": None}
+        path, err = quantize.ensure(self.dir / spec.name, spec.sha256, self.dir / "int8", settings.media_root,
+                                    settings.threads)
+        if path is None:
+            log.warning("détecteur INT8 indisponible, float32 à la place : %s", err)
+            self.int8 = {"state": "failed", "error": err}
+        else:
+            self.int8_path = path
+            self.int8 = {"state": "ready", "error": None}
 
     @staticmethod
     def _accept(tmp: Path, dest: Path, mf: ModelFile) -> None:
@@ -210,16 +254,59 @@ class ModelManager:
         os.chmod(tmp, 0o644)
         tmp.replace(dest)
 
-    def load_engine(self, threads: int, min_face: int):
+    def load_engine(self, threads: int, min_face: int, use_gpu=None):
+        """Détecteur et empreinte. Sur le processeur, le détecteur est l'IR INT8 s'il est prêt ;
+        avec `XRAY_OV_DEVICE=GPU`, les réseaux d'origine tournent sur l'iGPU tant que `use_gpu()`
+        le permet (`inference.RoutedSession`), et sur le processeur sinon."""
+        from .config import settings
         from .faces import Embedder, FaceEngine, QualityRules, Scrfd, YuNet
+        from .inference import make_session
 
+        gpu = settings.ov_device == "GPU"
+        common = {"cache_dir": settings.ov_cache_dir}
         if self.name == "buffalo_l":
-            det = Scrfd(self.path("detector"), threads)
+            dpath = self.path("detector")
+            dsess = make_session(dpath, threads, settings.inference, cpu_path=self.int8_path,
+                                 gpu=dict(common, buckets=(1, 8), pad=False) if gpu else None,
+                                 use_gpu=use_gpu, label="détecteur")
+            det = Scrfd(dpath, threads, session=dsess)
         else:
             det = YuNet(self.path("detector"), threads)
-        from .config import settings
+        epath = self.path("embedder")
+        esess = make_session(epath, threads, settings.inference,
+                             gpu=dict(common, buckets=(1, 8, 32), pad=True) if gpu else None,
+                             use_gpu=use_gpu, label="empreinte")
+        emb = Embedder(epath, threads, batch=settings.embed_batch, session=esess)
+        self.engine = FaceEngine(self.name, det, emb, QualityRules(min_face=min_face))
+        st = self.inference_status()
+        log.info("modèles : inférence %s, détecteur %s, iGPU %s, %d fils", st["engine"], st["detector"],
+                 "oui" if st["gpu"] else ("non (" + str(st["gpuError"]) + ")" if gpu else "non"), threads)
+        return self.engine
 
-        emb = Embedder(self.path("embedder"), threads, batch=settings.embed_batch)
-        log.info("modèles : inférence %s / %s, %d fils", getattr(det, "session", None) and det.session.backend or "opencv",
-                 emb.session.backend, threads)
-        return FaceEngine(self.name, det, emb, QualityRules(min_face=min_face))
+    def inference_status(self) -> dict:
+        """Pour /health : moteur, précision du détecteur, iGPU demandé, servi, et où l'on en est."""
+        from .config import settings
+        from .inference import RoutedSession
+
+        eng = self.engine
+        sessions = []
+        if eng is not None:
+            sessions = [getattr(eng.detector, "session", None), getattr(eng.embedder, "session", None)]
+        routed = [s for s in sessions if isinstance(s, RoutedSession)]
+        errors = [getattr(s, "gpu_error", None) for s in sessions if getattr(s, "gpu_error", None)]
+        det = sessions[0] if sessions else None
+        # Le détecteur du processeur : l'IR INT8 s'il s'est chargé (sur l'iGPU, c'est toujours le
+        # réseau d'origine, en demi-précision ; le processeur n'y sert que pendant une transcodification).
+        # Avant le chargement des réseaux (juste après `ready`), ce qui est prévu.
+        on_cpu_int8 = self.int8_path is not None and (
+            det is None or isinstance(det, RoutedSession) or getattr(det, "path", None) == self.int8_path)
+        return {
+            "engine": next((getattr(s, "backend", None) for s in sessions if s is not None), None),
+            "device": settings.ov_device,
+            "gpu": bool(routed),
+            "gpuActive": bool(routed) and all(s.on_gpu() for s in routed),
+            "gpuError": errors[0] if errors else None,
+            # Sur l'iGPU, le détecteur d'origine (demi-précision) ; l'INT8 sert sur le processeur.
+            "detector": "int8" if on_cpu_int8 else "fp32",
+            "int8": dict(self.int8),
+        }

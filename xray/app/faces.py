@@ -1,4 +1,4 @@
-"""Détection, alignement et empreinte des visages, sur le processeur (ONNX Runtime).
+"""Détection, alignement et empreinte des visages (OpenVINO ou ONNX Runtime, `inference.py`).
 
 Deux jeux de modèles, au choix de l'installateur (`XRAY_MODEL`) :
 
@@ -10,8 +10,8 @@ Le décodage des sorties de SCRFD est écrit ici plutôt que pris au paquet `ins
 il tient en quarante lignes, et le paquet tire une compilation Cython, `onnx`, `scikit-image`
 et `matplotlib` pour deux fonctions.
 
-L'iGPU n'est pas utilisé pour l'inférence : le pilote de calcul des Gen9 (Coffee Lake) n'est
-plus qu'en maintenance, et l'iGPU sert déjà au décodage — ici et chez Jellyfin.
+L'inférence se fait sur le processeur par défaut ; sur l'iGPU en option (`XRAY_OV_DEVICE=GPU`,
+voir `inference.py`). Le détecteur peut être un IR OpenVINO quantifié en INT8 (`quantize.py`).
 """
 
 from __future__ import annotations
@@ -90,8 +90,9 @@ class Scrfd:
     """SCRFD (InsightFace) : sorties par pas (8, 16, 32), deux ancres par point, distances aux
     bords de la boîte et aux cinq points relatives au centre de l'ancre."""
 
-    def __init__(self, path: Path, threads: int, score_thresh: float = 0.5, nms_thresh: float = 0.4):
-        self.session = _session(path, threads)
+    def __init__(self, path: Path, threads: int, score_thresh: float = 0.5, nms_thresh: float = 0.4,
+                 session=None):
+        self.session = session if session is not None else _session(path, threads)
         self.input_name = self.session.input_name
         shape = self.session.input_shape
         # det_10g accepte une taille quelconque (multiple de 32) : on évite de remplir un carré
@@ -135,6 +136,10 @@ class Scrfd:
         if len(imgs) <= 1 or not getattr(self.session, "batchable", False) or self.anchors < 1:
             return [self.detect(im) for im in imgs]
         if len({im.shape for im in imgs}) != 1:
+            return [self.detect(im) for im in imgs]
+        accepts = getattr(self.session, "accepts_batch", None)
+        if accepts is not None and not accepts(len(imgs)):
+            # iGPU : formes compilées bornées, lots de 1 ou de 8 seulement (`inference.OvGpuSession`).
             return [self.detect(im) for im in imgs]
         n = len(imgs)
         prepared = [self._canvas(im) for im in imgs]
@@ -282,8 +287,8 @@ class Embedder:
     w600k_r50 et glintr100 sont tous deux issus d'`arcface_torch` et attendent cette
     normalisation (InsightFace ne retombe sur 0/1 que pour les vieux modèles MXNet convertis)."""
 
-    def __init__(self, path: Path, threads: int, batch: int = 32):
-        self.session = _session(path, threads)
+    def __init__(self, path: Path, threads: int, batch: int = 32, session=None):
+        self.session = session if session is not None else _session(path, threads)
         self.input_name = self.session.input_name
         self.output_name = self.session.output_names[0]
         shape = self.session.input_shape
@@ -406,7 +411,14 @@ class FaceEngine:
         return faces
 
     def best_face_embedding(self, img: np.ndarray) -> np.ndarray | None:
-        """Pour une photo de référence : le plus grand visage net, s'il y en a un."""
+        """Pour une photo de référence : le plus grand visage net, s'il y en a un. Toujours sur le
+        processeur : chaque photo a sa taille, une forme compilée sur l'iGPU ne servirait qu'une fois."""
+        from .inference import cpu_only
+
+        with cpu_only():
+            return self._best_face_embedding(img)
+
+    def _best_face_embedding(self, img: np.ndarray) -> np.ndarray | None:
         h, w = img.shape[:2]
         # Les portraits TMDB font 185 à 300 px de large : on les agrandit un peu pour que
         # le détecteur, réglé pour des images de 640, les voie à leur échelle habituelle.

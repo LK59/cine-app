@@ -7,7 +7,8 @@ visages, les regroupe par personne et les nomme d'après la distribution — si 
 peut afficher, pendant la lecture, les acteurs présents dans la scène en cours, avec leur rôle.
 
 Il tourne à côté de Jellyfin, lit la médiathèque en lecture seule, décode sur l'iGPU Intel quand
-il y en a un, calcule sur le processeur, et ne parle qu'à Laterna, par un réseau Docker interne.
+il y en a un, calcule sur le processeur (ou sur l'iGPU, en option), et ne parle qu'à Laterna, par
+un réseau Docker interne.
 
 ---
 
@@ -93,8 +94,10 @@ acteur, et un générique défile souvent sur des visages qui n'ont rien à fair
 
 Le fichier est lu par tronçons de deux minutes. Chaque tronçon est décodé par ffmpeg (la
 version que livre Jellyfin, avec son pilote Intel), réduit à 640 px de large et échantillonné à
-quatre images par seconde. Sur l'iGPU, la réduction se fait sur la carte et seules les petites
-images reviennent en mémoire. Un fichier HDR (PQ ou HLG, Dolby Vision à couche HDR10 compris) est
+quatre images par seconde. Les images non référencées ne sont pas décodées (`-skip_frame noref`,
+sur l'iGPU comme sur le processeur) : sur quatre images par seconde, le filtre prend la plus
+proche, et un tronçon 4K HEVC se décode en 3,9 s au lieu de 9,4 sur l'iGPU. Sur l'iGPU, la
+réduction se fait sur la carte et seules les petites images reviennent en mémoire. Un fichier HDR (PQ ou HLG, Dolby Vision à couche HDR10 compris) est
 adapté en SDR *après* la réduction, sur le processeur (`tonemapx`, livré avec jellyfin-ffmpeg) :
 quatre petites images par seconde ne coûtent presque rien. Lu sans adaptation, le signal HDR
 donne une image délavée aux couleurs tassées, et des coupes passent inaperçues (voir
@@ -291,7 +294,36 @@ sont gardés (`det_10g.onnx`, `w600k_r50.onnx`) ; l'archive est effacée.
 puis `docker compose up -d`. Les résultats déjà calculés restent lisibles (ils indiquent le
 modèle qui les a produits) ; les photos de référence sont réanalysées avec le nouveau modèle.
 
-`/health` indique toujours le modèle utilisé, s'il est prêt, et sa licence.
+**Le détecteur INT8 est produit chez vous, jamais distribué.** Avec `buffalo_l`, le détecteur
+SCRFD est quantifié en INT8 (40 % de temps de détection en moins, voir
+[Performances](#performances)). Ce réseau quantifié dérive des poids non commerciaux : comme eux,
+il n'est ni dans le dépôt ni dans l'image. Au premier démarrage, une fois les poids vérifiés, le
+conteneur le fabrique lui-même ([`app/quantize.py`](app/quantize.py), NNCF d'OpenVINO), à partir
+de `det_10g.onnx` (vérifié par son SHA-256, relu avant la quantification) et de 224 images de *votre*
+médiathèque — 14 images de 16 titres tirés au sort, décodées comme en production — et le garde
+dans le volume (`models/buffalo_l/int8/`). Cela prend quelques minutes, une fois ; `/health` dit
+`ready: false` pendant ce temps.
+
+- L'IR n'est gardé qu'après une vérification : sur ces images, il doit retrouver au moins 95 %
+  des visages identifiables que trouve le réseau d'origine (au banc : 72/72, 136/137, 73/74 —
+  les deux manqués sous 36 px), sans en inventer plus de 5 %.
+- Un `manifest.json` l'accompagne : recette, SHA-256 du réseau d'origine, versions d'OpenVINO et de
+  NNCF, titres de calibrage, résultat de la vérification, SHA-256 des fichiers produits. À chaque
+  démarrage, tout est revérifié ; un fichier abîmé, un autre réseau d'origine ou une recette
+  nouvelle le font refaire.
+- En cas d'échec, le service reste en float32 et le dit dans `/health` (`inference.int8`). Un
+  échec de la quantification ou de la vérification est noté (`models/buffalo_l/int8.failed.json`)
+  et n'est pas retenté — supprimer ce fichier pour réessayer ; une médiathèque vide ou pas encore
+  montée n'est pas notée, l'essai est refait au démarrage suivant.
+- Seul le détecteur est quantifié : l'empreinte en INT8 a été mesurée inutilisable, elle reste en
+  float32.
+- NNCF est installé sans son paquet de télémétrie : rien ne sort de la machine.
+
+`XRAY_DETECTOR_INT8=0` garde le détecteur d'origine. `auraface` n'a pas de détecteur INT8 (YuNet
+passe par OpenCV).
+
+`/health` indique toujours le modèle utilisé, s'il est prêt, sa licence, et où et en quelle
+précision tourne l'inférence.
 
 ---
 
@@ -308,11 +340,38 @@ processeur). `/health` indique si VA-API fonctionne (`decode.vaapi`).
 les sessions de Jellyfin avant chaque ordre et toutes les 30 secondes : si l'une d'elles
 transcode avec l'accélération matérielle, le tronçon suivant est décodé sur le processeur.
 
-**L'inférence se fait sur le processeur**, par **OpenVINO** (le moteur d'Intel, livré dans
-l'image) quand il se charge, par ONNX Runtime sinon — les deux lisent les mêmes fichiers `.onnx`
-et rendent les mêmes empreintes (écart mesuré : cosinus ≥ 0,99999). OpenVINO est installé sans
-son paquet de télémétrie, qui ne sert qu'aux outils de conversion. Le pilote de calcul des iGPU
-Gen9 n'est plus qu'en maintenance, et l'iGPU a déjà fort à faire avec le décodage.
+**L'inférence se fait sur le processeur** par défaut, par **OpenVINO** (le moteur d'Intel, livré
+dans l'image) quand il se charge, par ONNX Runtime sinon — les deux lisent les mêmes fichiers
+`.onnx` et rendent les mêmes empreintes (écart mesuré : cosinus ≥ 0,99999). Avec OpenVINO, le
+détecteur est l'IR INT8 produit sur place (voir [Modèles et licences](#modèles-et-licences)).
+OpenVINO est installé sans son paquet de télémétrie, qui ne sert qu'aux outils de conversion.
+
+**Inférence sur l'iGPU, en option** (`XRAY_OV_DEVICE=GPU`). Le plugin GPU d'OpenVINO exécute les
+deux réseaux d'origine en demi-précision sur l'iGPU Intel ; le processeur est presque libéré
+(8 ms de processeur par image au lieu de 200), et le débit monte (sur l'UHD 630 : 8,7 images/s +
+34,8 visages/s, contre 4,7 + 19,0 sur le processeur ; détections et empreintes identiques à un
+cosinus ≥ 0,9994 près). L'image embarque pour cela le pilote de calcul d'Intel (OpenCL) : la
+branche « legacy1 » 24.35 du compute-runtime et son compilateur IGC 1.0.17537.24, la dernière qui
+prend en charge les iGPU Gen9 à Gen11 (Skylake à Ice Lake) — paquets pris aux publications GitHub
+d'Intel et vérifiés par leur SHA-256 (~350 Mo de l'image ; `docker build --build-arg
+GPU_RUNTIME=0` les laisse dehors). À savoir avant de l'activer :
+
+- **mémoire** : chaque forme de réseau compilée sur l'iGPU garde sa copie des poids, en mémoire
+  partagée avec le système. Les lots sont donc complétés jusqu'à des paliers fixes (1, 8 ou 32
+  visages ; le détecteur par 1 ou par 8 images), et seules les quatre dernières formes servies
+  restent compilées. Pic mesuré : ~3,3 Go — **passer `mem_limit` à `6g`** dans la composition ;
+- **Jellyfin garde l'iGPU** : tant qu'il transcode avec l'accélération matérielle (le même relevé
+  des sessions que pour le décodage, toutes les 30 s), l'inférence repasse sur le processeur, puis
+  revient sur l'iGPU. Mesuré le 09/11/2026 : une transcodification perdait 39 % de sa vitesse avec
+  l'inférence sur l'iGPU, 8 % avec l'inférence sur le processeur. Le journal note chaque bascule ;
+- les photos de la distribution (chacune de sa taille) passent toujours par le processeur ;
+- les noyaux compilés sont gardés dans le volume (`ov-cache/`) : la première compilation d'une
+  forme prend quelques secondes, les suivantes presque rien ;
+- si l'iGPU ne s'ouvre pas (pas de `/dev/dri`, autre iGPU), le service reste sur le processeur et
+  le dit dans `/health` (`inference.gpuError`).
+
+Le pilote de calcul des iGPU Gen9 n'est plus qu'en maintenance chez Intel : c'est une option, pas
+le défaut.
 
 **Le service se fait discret** : une analyse à la fois ; `nice 10` et `ionice` en classe basse
 pour lui et le ffmpeg qu'il lance ; `XRAY_THREADS` fils de calcul (4 par défaut : inférence,
@@ -378,8 +437,44 @@ Le décodage n'est plus négligeable pour un film 4K HDR (adaptation `tonemapx` 
 (celui de `startAt`) reste prêt en moins d'une minute.
 
 Un épisode occupe environ un mégaoctet en base (une empreinte par piste). Les poids de `buffalo_l` font
-180 Mo, ceux d'`auraface` 260 Mo. En mémoire, le service tient sous 1,5 Go (un réseau compilé par
-modèle, taille de lot libre).
+180 Mo, ceux d'`auraface` 260 Mo, l'IR INT8 du détecteur 5 Mo. En mémoire, le service tient sous 1,5 Go
+sur le processeur (un réseau compilé par modèle, taille de lot libre) ; ~3,3 Go avec l'inférence
+sur l'iGPU.
+
+### Optimisations du 09/11/2026 (soir)
+
+Mesurées une à une sur le même i7-8700 / UHD 630 (prototypes du banc), puis ensemble sur
+*MacGyver* S01E06 (tableau plus bas). Toutes actives par défaut, sauf l'iGPU.
+
+| Mesure | Avant | Après | Effet sur le résultat |
+|---|---|---|---|
+| Images non référencées sautées sur l'iGPU (`XRAY_VAAPI_NOREF`) | 9,4 s de décodage par tronçon 4K HEVC de 120 s | 3,9 s | images échantillonnées un peu différentes (une voisine) : résultats v4 |
+| Détecteur INT8 (`XRAY_DETECTOR_INT8`) | 39,5 / 43,6 / 27,6 ms par image (MacGyver, The Pitt, Bullet Train) | 22,4 / 26,2 / 16,6 ms | 72/72, 136/137, 73/74 visages retrouvés (les manqués sous 36 px) ; empreintes inchangées |
+| Assemblage incrémental (`XRAY_INCREMENTAL`) | ~25 s sur un film (Bullet Train, 64 tronçons, ~3 000 pistes) | 3 à 6 fois moins | identique à l'octet près |
+| Inférence sur l'iGPU (`XRAY_OV_DEVICE=GPU`, option) | 4,7 images/s + 19,0 visages/s, ~200 ms de processeur par image | 8,7 + 34,8, 8 ms de processeur | cosinus ≥ 0,9994 ; 3,3 Go de mémoire |
+| Arrêt de ffmpeg une fois la plage lue (correctif) | compté comme un échec (−9) : tronçon repris sur le processeur, voire ordre en échec | succès | — |
+
+Écartés après mesure : le suivi entre images (détection sur une image analysée sur N, les autres
+portées par flot optique ou redétection locale), `antelopev2` (empreinte R100 sur Glint360K) et
+l'empreinte en INT8.
+
+Ensemble, sur *MacGyver* S01E06 (HEVC 1080p, 42 min), conteneurs jetables côte à côte dans le
+temps, `XRAY_THREADS=10`, `cpus: 10`, base neuve, machine chargée (charge moyenne 9 à 30 pour 12
+fils, d'où des écarts d'un passage à l'autre) :
+
+| Version | Durée | Détection | Empreinte | Assemblage | Charge |
+|---|---|---|---|---|---|
+| v3 (avant) | 369 s, **6,9×** le temps réel | 246 s (102 ms/image) | 93 s (1 091 visages) | 2,3 s | 13 → 23 |
+| v4, processeur | 187 s, **13,7×** | 105 s (44 ms/image) | 62 s (1 085 visages) | 1,2 s | 9 → 15 |
+| v4, processeur, relancé plus chargé | 239 s, **10,7×** | 150 s (62 ms/image) | 68 s (850 visages*) | 1,7 s | 17 → 28 |
+| v4, iGPU (`XRAY_OV_DEVICE=GPU`) | 173 s, **14,7×** | 113 s (47 ms/image) | 32 s (859 visages*) | 2,3 s | 21 → 30 |
+
+\* la mémoire de série était remplie par le passage précédent : moins de visages à empreinter.
+Les mêmes 8 personnes nommées dans les quatre passages ; temps de présence à 9 s près au plus
+par personne (sur 100 à 650 s), 51 scènes au lieu de 52. Le détecteur INT8 a été produit en 150 s
+au premier démarrage (224 images de 16 titres, 181 visages identifiables sur 184 retrouvés, 69 →
+38 ms par image au moment de la vérification). Mémoire : 1,2 Go sur le processeur, 2,7 Go au plus
+relevé avec l'iGPU (le premier tronçon y compile ses formes : 33 s au lieu de 7).
 
 ---
 
@@ -395,6 +490,10 @@ Variables d'environnement (toutes facultatives sauf la clé) :
 | `XRAY_INFERENCE` | `auto` | `auto` (OpenVINO s'il se charge, ONNX Runtime sinon), `openvino`, `onnxruntime`. |
 | `XRAY_EMBED_BATCH` | `32` | Visages empreintés par appel du réseau. |
 | `XRAY_FACES_PER_TRACK` | `2` | Visages empreintés au plus par piste (les meilleurs). |
+| `XRAY_DETECTOR_INT8` | `1` | Détecteur INT8 produit sur place au premier démarrage (`buffalo_l`, OpenVINO) ; `0` : réseau d'origine. Voir [Modèles et licences](#modèles-et-licences). |
+| `XRAY_OV_DEVICE` | `CPU` | `GPU` : inférence sur l'iGPU Intel (repasse sur le processeur pendant les transcodifications de Jellyfin ; `mem_limit: 6g`). Voir [Accélération matérielle](#accélération-matérielle). |
+| `XRAY_VAAPI_NOREF` | `1` | `0` : sur l'iGPU, décoder aussi les images non référencées (comme avant la v4). |
+| `XRAY_INCREMENTAL` | `1` | `0` : assemblage refait en entier à chaque tronçon (même résultat, plus cher). |
 | `JELLYFIN_URL` | — | Adresse de Jellyfin, pour lui laisser l'iGPU et lire ses segments (génériques). |
 | `JELLYFIN_API_KEY` | — | Clé d'API Jellyfin (en-tête `Authorization: MediaBrowser Token="…"`). |
 | `XRAY_HWACCEL` | `1` | `0` : jamais de VA-API. |
@@ -495,12 +594,22 @@ partout ; temps en secondes (trois décimales). Une erreur répond `{"error": "�
   "version": "1.0.0",
   "model": { "name": "buffalo_l", "ready": true, "license": "non-commercial", "error": null },
   "decode": { "vaapi": true, "device": "/dev/dri/renderD128" },
+  "inference": { "engine": "openvino", "device": "CPU", "gpu": false, "gpuActive": false, "gpuError": null,
+                 "detector": "int8", "int8": { "state": "ready", "error": null } },
   "queue": { "pending": 0, "running": null }
 }
 ```
 
-`ready` vaut `false` tant que les poids se téléchargent ; `error` dit pourquoi ils ne sont pas
-prêts (réseau, empreinte qui ne correspond pas). `running` est l'`itemId` en cours d'analyse.
+`ready` vaut `false` tant que les poids se téléchargent (et, au premier démarrage, pendant la
+quantification du détecteur) ; `error` dit pourquoi ils ne sont pas prêts (réseau, empreinte qui
+ne correspond pas). `running` est l'`itemId` en cours d'analyse.
+
+`inference` (ajout compatible, 11/2026 ; informatif) : `engine` (`openvino`, `onnxruntime`, `null`
+avant le chargement), `device` (le réglage `XRAY_OV_DEVICE`), `gpu` (réseaux chargés sur l'iGPU),
+`gpuActive` (servis par l'iGPU en ce moment — `false` pendant une transcodification de Jellyfin),
+`gpuError` (pourquoi l'iGPU n'a pas pu servir), `detector` (`int8` ou `fp32`, sur le processeur ;
+sur l'iGPU, toujours le réseau d'origine), `int8.state` (`off`, `building`, `ready`, `failed`) et
+`int8.error` (la raison d'un `off` ou d'un `failed`).
 
 ### `POST /jobs`
 
@@ -582,8 +691,9 @@ noms, scènes), `photos` (distribution). `404` si inconnu.
 
 Les scènes couvrent toutes les plages déjà analysées (y compris, pendant l'analyse, des plages
 disjointes) ; `people` est trié par temps de présence et ne contient que des visages nommés.
-`version` est la version de l'algorithme qui a produit *ce* résultat (aujourd'hui 3 ; voir
-[Calibrage](#calibrage)). Un résultat d'une version antérieure reste servi tel quel — il reste
+`version` est la version de l'algorithme qui a produit *ce* résultat (aujourd'hui 4 : images
+non référencées sautées sur l'iGPU et détecteur INT8, règles de noms et de scènes inchangées ; voir
+[Calibrage](#calibrage) et [Performances](#performances)). Un résultat d'une version antérieure reste servi tel quel — il reste
 valable — et rien n'est réanalysé de soi-même : un nouvel ordre au même `etag` répond encore
 `done`. Pour le refaire avec les règles du jour : `DELETE`, puis un nouvel ordre. Un ordre commencé
 sous une version antérieure et pas fini repart de zéro, pour ne jamais mêler deux règles dans un
@@ -607,20 +717,23 @@ xray/
 │   ├── decode.py      ffmpeg, VA-API
 │   ├── shots.py       plans, choix des images, scènes
 │   ├── faces.py       détection, alignement, empreinte
-│   ├── inference.py   OpenVINO ou ONNX Runtime
+│   ├── inference.py   OpenVINO (processeur ou iGPU) ou ONNX Runtime
+│   ├── quantize.py    détecteur INT8 produit sur place (calibrage, NNCF, vérification)
 │   ├── pipeline.py    quels visages empreinter, par lots, mémoire de série
 │   ├── tracks.py      pistes dans un plan
 │   ├── segments.py    plages sautées (ordre, segments de Jellyfin)
 │   ├── timing.py      chronomètre par étape
 │   ├── cluster.py     regroupement, noms (algorithme hongrois)
-│   ├── results.py     assemblage des scènes
+│   ├── results.py     assemblage des scènes (complet ou incrémental)
 │   ├── cast.py        photos de référence, mémoire de la série
 │   ├── gpu_guard.py   sessions Jellyfin
 │   ├── models.py      téléchargement et vérification des poids
 │   └── db.py          SQLite
 └── tests/             contrat HTTP, clé, file, chemins, regroupement et noms sur des
                        empreintes synthétiques, plans et pistes synthétiques, économies de
-                       calcul (meilleurs visages, lots, mémoire, plans fixes, plages, fils)
+                       calcul (meilleurs visages, lots, mémoire, plans fixes, plages, fils),
+                       décodage arrêté par nous, assemblage incrémental identique au complet,
+                       paliers et bascule de l'iGPU, quantification INT8 (vraie, sur un petit réseau)
 ```
 
 Les tests n'ont besoin ni des modèles ni du réseau. Ils tournent pendant la construction de
@@ -631,3 +744,6 @@ docker build --target test xray/
 ```
 
 Les dépendances Python sont figées dans `requirements.txt`, résolu depuis `requirements.in`.
+OpenVINO, NNCF et les quelques paquets que sa quantification importe sont installés à part, sans
+leurs dépendances (ni télémétrie, ni scikit-learn), à des versions figées dans le `Dockerfile` ;
+le pilote de calcul Intel aussi, vérifié par SHA-256.

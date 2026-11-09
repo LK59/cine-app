@@ -21,6 +21,8 @@ services:
       XRAY_MODEL: buffalo_l
       # Fils de calcul pour l'inférence et le décodage sur processeur.
       XRAY_THREADS: "4"
+      # Inférence sur l'iGPU Intel, en option (voir le README, « Accélération matérielle ») :
+      # XRAY_OV_DEVICE: GPU      # et mem_limit: 6g plus bas
       # Dossier personnel inscriptible quel que soit l'utilisateur choisi.
       HOME: /data
     # Aucun port publié : seul Laterna, sur le même réseau Docker, lui parle.
@@ -39,7 +41,7 @@ services:
       - "993"
     # L'analyse est un travail de fond : bornée, et à priorité basse (nice/ionice dans l'image).
     cpus: 4
-    mem_limit: 4g
+    mem_limit: 4g   # 6g avec XRAY_OV_DEVICE=GPU
 
 volumes:
   xray_data:

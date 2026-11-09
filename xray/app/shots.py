@@ -214,10 +214,58 @@ def hist_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return 1.0 - hist_distance(a, b)
 
 
-def group_scenes(shots: list[ShotInfo], gap: float = 1.0) -> list[list[ShotInfo]]:
+class Similarity:
+    """Ressemblance de couleurs entre deux plans, et entre deux suites de plans (scènes)."""
+
+    def shots(self, a: ShotInfo, b: ShotInfo) -> float:
+        return hist_similarity(a.hist, b.hist)
+
+    def scenes(self, x: list[ShotInfo], y: list[ShotInfo]) -> float:
+        return hist_similarity(_scene_hist(x), _scene_hist(y))
+
+
+class CachedSimilarity(Similarity):
+    """La même, gardée d'un assemblage à l'autre (`results.Assembler`) : elle ne dépend que des
+    plans comparés, et l'assemblage refait les scènes de tout l'ordre à chaque tronçon. Un plan
+    est désigné par son début (unique dans un ordre, son histogramme ne change plus une fois
+    écrit) ; une suite de plans contigus par son premier, son dernier et leur nombre."""
+
+    def __init__(self) -> None:
+        self._shots: dict[tuple[float, float], float] = {}
+        self._scenes: dict[tuple, float] = {}
+        self._hists: dict[tuple[float, float, int], np.ndarray] = {}
+
+    def shots(self, a: ShotInfo, b: ShotInfo) -> float:
+        key = (a.start, b.start)
+        v = self._shots.get(key)
+        if v is None:
+            v = self._shots[key] = hist_similarity(a.hist, b.hist)
+        return v
+
+    def _hist(self, x: list[ShotInfo]) -> tuple[tuple[float, float, int], np.ndarray]:
+        key = (x[0].start, x[-1].start, len(x))
+        h = self._hists.get(key)
+        if h is None:
+            h = self._hists[key] = _scene_hist(x)
+        return key, h
+
+    def scenes(self, x: list[ShotInfo], y: list[ShotInfo]) -> float:
+        kx, hx = self._hist(x)
+        ky, hy = self._hist(y)
+        v = self._scenes.get((kx, ky))
+        if v is None:
+            v = self._scenes[(kx, ky)] = hist_similarity(hx, hy)
+        return v
+
+
+_PLAIN = Similarity()
+
+
+def group_scenes(shots: list[ShotInfo], gap: float = 1.0, sim: Similarity | None = None) -> list[list[ShotInfo]]:
     """Regroupe des plans *triés et contigus* en scènes (voir l'en-tête du module)."""
     if not shots:
         return []
+    m = sim or _PLAIN
     scenes: list[list[ShotInfo]] = [[shots[0]]]
     for s in shots[1:]:
         cur = scenes[-1]
@@ -225,24 +273,24 @@ def group_scenes(shots: list[ShotInfo], gap: float = 1.0) -> list[list[ShotInfo]
             scenes.append([s])
             continue
         recent = cur[-SCENE_LOOKBACK:]
-        sim = max(hist_similarity(s.hist, r.hist) for r in recent)
+        best = max(m.shots(s, r) for r in recent)
         seen: set[int] = set().union(*(r.clusters for r in recent))
-        if sim >= SCENE_SIMILARITY or (sim >= SCENE_SIMILARITY_WITH_FACE and s.clusters & seen):
+        if best >= SCENE_SIMILARITY or (best >= SCENE_SIMILARITY_WITH_FACE and s.clusters & seen):
             cur.append(s)
         else:
             scenes.append([s])
     out: list[list[ShotInfo]] = []
-    for sc in _merge_short(scenes, gap):
-        out.extend(_split_long(sc))
+    for sc in _merge_short(scenes, gap, m):
+        out.extend(_split_long(sc, m))
     return out
 
 
-def boundary_strength(scene: list[ShotInfo], k: int) -> float:
+def boundary_strength(scene: list[ShotInfo], k: int, m: Similarity = _PLAIN) -> float:
     """Force du lien entre le plan `k` et ce qui le précède (plus bas = meilleure frontière) :
     ressemblance de couleurs avec les quatre plans d'avant, moins une prime si les personnes
     identifiées dans la minute d'avant et dans la minute d'après n'ont rien en commun."""
     s = scene[k]
-    sim = max(hist_similarity(s.hist, r.hist) for r in scene[max(0, k - SCENE_LOOKBACK):k])
+    sim = max(m.shots(s, r) for r in scene[max(0, k - SCENE_LOOKBACK):k])
     t = s.start
     before: set[int] = set()
     after: set[int] = set()
@@ -256,7 +304,7 @@ def boundary_strength(scene: list[ShotInfo], k: int) -> float:
     return sim
 
 
-def _split_long(scene: list[ShotInfo]) -> list[list[ShotInfo]]:
+def _split_long(scene: list[ShotInfo], m: Similarity = _PLAIN) -> list[list[ShotInfo]]:
     """Recoupe une scène trop longue à sa frontière la plus faible, jusqu'à ce que chaque
     morceau tienne sous `MAX_SCENE` (ou ne puisse plus être coupé sans laisser de miette)."""
     if scene[-1].end - scene[0].start <= MAX_SCENE or len(scene) < 2:
@@ -267,8 +315,8 @@ def _split_long(scene: list[ShotInfo]) -> list[list[ShotInfo]]:
     if not cands:
         # Plans très longs : on coupe au plus près du milieu plutôt que pas du tout.
         cands = list(range(1, len(scene)))
-    k = min(cands, key=lambda k: (boundary_strength(scene, k), abs(scene[k].start - (start + end) / 2)))
-    return _split_long(scene[:k]) + _split_long(scene[k:])
+    k = min(cands, key=lambda k: (boundary_strength(scene, k, m), abs(scene[k].start - (start + end) / 2)))
+    return _split_long(scene[:k], m) + _split_long(scene[k:], m)
 
 
 def _scene_hist(scene: list[ShotInfo]) -> np.ndarray:
@@ -276,7 +324,7 @@ def _scene_hist(scene: list[ShotInfo]) -> np.ndarray:
     return (np.stack([s.hist for s in scene]) * w[:, None]).sum(0) / w.sum()
 
 
-def _merge_short(scenes: list[list[ShotInfo]], gap: float) -> list[list[ShotInfo]]:
+def _merge_short(scenes: list[list[ShotInfo]], gap: float, m: Similarity = _PLAIN) -> list[list[ShotInfo]]:
     changed = True
     while changed and len(scenes) > 1:
         changed = False
@@ -286,9 +334,9 @@ def _merge_short(scenes: list[list[ShotInfo]], gap: float) -> list[list[ShotInfo
                 continue
             cands = []
             if i > 0 and sc[0].start - scenes[i - 1][-1].end <= gap:
-                cands.append((hist_similarity(_scene_hist(sc), _scene_hist(scenes[i - 1])), i - 1))
+                cands.append((m.scenes(sc, scenes[i - 1]), i - 1))
             if i + 1 < len(scenes) and scenes[i + 1][0].start - sc[-1].end <= gap:
-                cands.append((hist_similarity(_scene_hist(sc), _scene_hist(scenes[i + 1])), i + 1))
+                cands.append((m.scenes(sc, scenes[i + 1]), i + 1))
             if not cands:
                 continue
             _, j = max(cands)

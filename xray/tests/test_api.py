@@ -31,6 +31,9 @@ def test_health(client):
     assert body["model"] == {"name": "buffalo_l", "ready": True, "license": "non-commercial", "error": None}
     assert body["decode"] == {"vaapi": False, "device": None}
     assert body["queue"] == {"pending": 0, "running": None}
+    inf = body["inference"]  # ajout compatible (11/2026)
+    assert inf["device"] == "CPU" and inf["gpu"] is False and inf["detector"] in ("int8", "fp32")
+    assert inf["int8"]["state"] in ("off", "building", "ready", "failed")
 
 
 def test_depot_puis_lecture(client):
@@ -127,7 +130,7 @@ def test_version_du_resultat_servie_telle_quelle(client):
     assert client.get(f"/items/{ITEM}/scenes", headers=AUTH).json()["version"] == 1
     assert client.post("/jobs", json=job(), headers=AUTH).status_code == 200
     _results(client.db, ITEM, complete=True, version=RESULT_VERSION)
-    assert client.get(f"/items/{ITEM}/scenes", headers=AUTH).json()["version"] == RESULT_VERSION == 3
+    assert client.get(f"/items/{ITEM}/scenes", headers=AUTH).json()["version"] == RESULT_VERSION == 4
 
 
 def test_ancienne_base_migree():

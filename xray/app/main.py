@@ -25,6 +25,14 @@ def _error(status: int, message: str) -> JSONResponse:
     return JSONResponse({"error": message}, status_code=status)
 
 
+def _inference(mm) -> dict:
+    status = getattr(mm, "inference_status", None)
+    if status is None:
+        return {"engine": None, "device": settings.ov_device, "gpu": False, "gpuActive": False, "gpuError": None,
+                "detector": "fp32", "int8": {"state": "off", "error": None}}
+    return status()
+
+
 def create_app(start_background: bool = True, db: Database | None = None, models: ModelManager | None = None) -> FastAPI:
     state: dict = {}
 
@@ -70,6 +78,8 @@ def create_app(start_background: bool = True, db: Database | None = None, models
             "version": VERSION,
             "model": {"name": mm.name, "ready": bool(mm.ready), "license": mm.license, "error": mm.error},
             "decode": {"vaapi": vaapi, "device": settings.vaapi_device if vaapi else None},
+            # Ajout compatible (11/2026) : où et en quelle précision tourne l'inférence.
+            "inference": _inference(mm),
             "queue": {"pending": store.pending_count(), "running": store.running_id},
         }
 

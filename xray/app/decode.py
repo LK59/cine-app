@@ -11,6 +11,11 @@ histogrammes tassés, et des coupes passaient inaperçues (Bullet Train, 4K HDR1
 sur 5 minutes, 36 une fois adapté — voir README, « Calibrage »). `tonemap_vaapi` existe sur l'UHD 630, mais
 mesuré le 09/11/2026 il rend une image trois fois plus sombre que la source (luminance moyenne
 14 contre 35 pour `tonemapx`) : la carte décode et réduit, le processeur adapte.
+
+Les images non référencées (`-skip_frame noref`) ne sont pas décodées, sur le processeur comme
+sur l'iGPU (`XRAY_VAAPI_NOREF`, depuis le 09/11/2026) : on n'en garde que quatre par seconde,
+et le filtre `fps` comble avec la plus proche. Sur l'iGPU, 4K HEVC : 9,4 → 3,9 s par tronçon
+de 120 s. Les images retenues changent un peu (une voisine au lieu d'une autre) : résultats v4.
 """
 
 from __future__ import annotations
@@ -161,6 +166,8 @@ def build_command(path: str, start: float, length: float, info: MediaInfo, vaapi
     tonemap = info.hdr and tonemap_available()
     if vaapi:
         cmd += ["-hwaccel", "vaapi", "-hwaccel_device", settings.vaapi_device, "-hwaccel_output_format", "vaapi"]
+        if settings.vaapi_noref:
+            cmd += ["-skip_frame", "noref"]
         if tonemap:
             # La carte réduit en 10 bits, le processeur adapte la petite image.
             vf = f"fps={fps},scale_vaapi=w={w}:h={h}:format=p010,hwdownload,format=p010,{TONEMAP},format=nv12"
@@ -187,6 +194,15 @@ class DecodeStats:
     returncode: int | None = None
     stderr: str = ""
     extra: dict = field(default_factory=dict)
+    # ffmpeg arrêté par nous (`read_frames`) une fois la plage lue : son code (−9) ne dit rien.
+    stopped: bool = False
+
+    @property
+    def failed(self) -> bool:
+        """Le décodage a-t-il échoué ? Aucune image, ou ffmpeg sorti en erreur de lui-même."""
+        if self.frames == 0:
+            return True
+        return self.returncode not in (0, None) and not self.stopped
 
 
 def read_frames(path: str, start: float, length: float, info: MediaInfo, vaapi: bool,
@@ -222,6 +238,11 @@ def read_frames(path: str, start: float, length: float, info: MediaInfo, vaapi: 
             ts = start + i / fps
             i += 1
             if ts >= start + length:
+                # Une image au-delà de la plage (le filtre `fps` en rend parfois une de trop, et
+                # `-skip_frame noref` le fait plus souvent) : la plage est lue, on arrête ffmpeg
+                # nous-mêmes. Son code de sortie (−9, tué) comptait comme un échec : le tronçon
+                # était repris sur le processeur, ou l'ordre entier échouait sur le processeur.
+                stats.stopped = True
                 break
             yield ts, np.frombuffer(buf, dtype=np.uint8).reshape(h * 3 // 2, w)
     finally:

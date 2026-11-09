@@ -62,15 +62,21 @@ def cluster_embeddings(embs: np.ndarray, threshold: float) -> np.ndarray:
         return np.zeros(0, dtype=np.int64)
     if n == 1:
         return np.zeros(1, dtype=np.int64)
-    from scipy.cluster.hierarchy import fcluster, linkage
     from scipy.spatial.distance import pdist
 
     d = np.clip(pdist(normalize(embs.astype(np.float64)), metric="cosine"), 0.0, 2.0)
+    return labels_from_linkage(d, threshold)
+
+
+def labels_from_linkage(d: np.ndarray, threshold: float) -> np.ndarray:
+    """Lien moyen sur des distances cosinus condensées (`pdist`), coupé à `1 − threshold` ;
+    groupes renumérotés par ordre de première apparition (stable)."""
+    from scipy.cluster.hierarchy import fcluster, linkage
+
     z = linkage(d, method="average")
     labels = fcluster(z, t=1.0 - threshold, criterion="distance")
-    # Renumérotation stable : par ordre de première apparition.
     order: dict[int, int] = {}
-    out = np.empty(n, dtype=np.int64)
+    out = np.empty(len(labels), dtype=np.int64)
     for i, l in enumerate(labels):
         out[i] = order.setdefault(int(l), len(order))
     return out
@@ -124,6 +130,39 @@ def _runner_up(row: np.ndarray, j: int) -> float:
     return float(rest.max())
 
 
+def score_matrix(centroids: np.ndarray, refs: list[PersonRefs]) -> tuple[np.ndarray, np.ndarray]:
+    """`person_score` de chaque couple groupe × acteur, par un produit matriciel par acteur
+    (une boucle Python par couple coûtait l'essentiel de l'assemblage d'un film : ~3 000 pistes,
+    40 acteurs, refait à chaque tronçon). Mêmes valeurs : les k meilleures similarités, triées
+    puis moyennées dans le même ordre. `centroids` normalisés."""
+    k, p = len(centroids), len(refs)
+    score = np.full((k, p), -1.0, dtype=np.float64)
+    photo = np.full((k, p), -1.0, dtype=np.float64)
+    for j, ref in enumerate(refs):
+        if len(ref.photos):
+            sims = np.sort(centroids @ ref.photos.T, axis=1)[:, ::-1]
+            photo[:, j] = sims[:, : min(TOP_K, sims.shape[1])].mean(axis=1)
+        series = (centroids @ ref.series).astype(np.float64) if ref.series is not None else np.full(k, -1.0)
+        score[:, j] = np.maximum(photo[:, j], series)
+    return score, photo
+
+
+def acceptable_matrix(score: np.ndarray, weights: np.ndarray, tracks: np.ndarray, threshold: float) -> np.ndarray:
+    """`acceptable` pour chaque case, la meilleure note d'un *autre* acteur prise sur la ligne."""
+    k, p = score.shape
+    if p >= 2:
+        order = np.argsort(-score, axis=1, kind="stable")
+        rows = np.arange(k)
+        top1, top2 = score[rows, order[:, 0]], score[rows, order[:, 1]]
+        # Hors de la colonne du maximum, le meilleur autre est le maximum ; dans celle-ci, le second.
+        runner = np.where(np.arange(p)[None, :] == order[:, :1], top2[:, None], top1[:, None])
+    else:
+        runner = np.zeros((k, p))
+    seen = (np.asarray(weights, dtype=np.float64)[:, None] >= DOUBT_MIN_TIME) | (np.asarray(tracks)[:, None] >= DOUBT_MIN_TRACKS)
+    doubt = (score >= threshold + DOUBT_MARGIN) & (score - np.maximum(runner, 0.0) >= DOUBT_GAP) & seen
+    return (score >= threshold + SURE_MARGIN) | doubt
+
+
 def label_clusters(
     centroids: np.ndarray,
     weights: np.ndarray,
@@ -144,15 +183,8 @@ def label_clusters(
     if tracks is None:
         tracks = np.zeros(k, dtype=np.int64)
     centroids = normalize(centroids.astype(np.float32))
-    score = np.full((k, p), -1.0, dtype=np.float64)
-    photo = np.full((k, p), -1.0, dtype=np.float64)
-    for j, ref in enumerate(refs):
-        for i in range(k):
-            score[i, j], photo[i, j] = person_score(centroids[i], ref)
-    ok = np.zeros((k, p), dtype=bool)
-    for i in range(k):
-        for j in range(p):
-            ok[i, j] = acceptable(score[i, j], _runner_up(score[i], j), float(weights[i]), int(tracks[i]), threshold)
+    score, photo = score_matrix(centroids, refs)
+    ok = acceptable_matrix(score, weights, tracks, threshold)
     # Légère préférence aux groupes les plus présents : à notes voisines, le personnage vu
     # trois minutes l'emporte sur un groupe de deux secondes.
     w = 1.0 + 0.05 * np.log1p(np.maximum(weights, 0.0))[:, None]

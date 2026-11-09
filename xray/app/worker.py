@@ -32,7 +32,7 @@ from .db import Database
 from .faces import MODEL_DEFAULTS
 from .jobs import CastMember, JobStore
 from .models import ModelManager
-from .results import ShotRow, TrackRow, build
+from .results import Assembler, ShotRow, TrackRow, build
 from .pipeline import ShotFaces
 from .shots import ShotSplitter, frames_to_sample, pick_indices
 from .timing import StageClock, job_stats, line
@@ -99,6 +99,7 @@ class Worker:
         self.models = models
         self.guard = guard
         self.engine = None
+        self._asm: dict | None = None
 
     def start(self) -> threading.Thread:
         t = threading.Thread(target=self._loop, name="worker", daemon=True)
@@ -113,7 +114,10 @@ class Worker:
                 continue
             if self.engine is None:
                 try:
-                    self.engine = self.models.load_engine(settings.threads, settings.min_face)
+                    # Avec l'inférence sur l'iGPU : rendue au processeur tant que Jellyfin y transcode
+                    # (dernier état connu du garde, rafraîchi toutes les 30 s ; jamais d'appel réseau ici).
+                    self.engine = self.models.load_engine(settings.threads, settings.min_face,
+                                                          use_gpu=lambda: not self.guard.busy_now())
                 except Exception as e:
                     self.models.error = f"chargement du modèle impossible : {e}"
                     self.models.ready = False
@@ -148,6 +152,7 @@ class Worker:
         model = self.models.name
         self.store.running_id = item_id
         self.store.cancel.clear()
+        self._asm = None  # assemblage incrémental : repart de la base à chaque passage
         if row["version"] < RESULT_VERSION:
             # Commencé sous d'anciennes règles et pas fini : on repart de zéro plutôt que de
             # mêler, dans un même résultat, des tronçons des deux versions.
@@ -262,16 +267,20 @@ class Worker:
             c.execute("UPDATE items SET stats_json=? WHERE item_id=?", (json.dumps(acc.as_dict()), item_id))
 
     def checkpoint(self, item_id: str, etag: str, model: str, duration: float, anchor: float, refs):
-        chunks = self.db.q("SELECT start, end, done FROM chunks WHERE item_id=?", (item_id,))
+        chunks = self.db.q("SELECT idx, start, end, done FROM chunks WHERE item_id=?", (item_id,))
         done = [(r["start"], r["end"]) for r in chunks if r["done"]]
         if not done:
             return None
-        shots = [ShotRow(r["start"], r["end"], np.frombuffer(r["hist"], dtype=np.float32))
-                 for r in self.db.q("SELECT start, end, hist FROM shots WHERE item_id=?", (item_id,))]
-        tracks = [TrackRow(r["shot_start"], r["shot_end"], r["screen_time"], r["quality"], np.frombuffer(r["emb"], dtype=np.float32))
-                  for r in self.db.q("SELECT shot_start, shot_end, screen_time, quality, emb FROM tracks WHERE item_id=?", (item_id,))]
         cluster_t, label_t = thresholds(model)
-        built = build(duration, done, len(chunks), anchor, shots, tracks, refs, label_t, cluster_t)
+        if settings.incremental:
+            built = self._incremental(item_id, duration, anchor, refs, chunks, done, label_t, cluster_t)
+        else:
+            shots = [ShotRow(r["start"], r["end"], np.frombuffer(r["hist"], dtype=np.float32))
+                     for r in self.db.q("SELECT start, end, hist FROM shots WHERE item_id=?", (item_id,))]
+            tracks = [TrackRow(r["shot_start"], r["shot_end"], r["screen_time"], r["quality"], np.frombuffer(r["emb"], dtype=np.float32))
+                      for r in self.db.q("SELECT shot_start, shot_end, screen_time, quality, emb FROM tracks WHERE item_id=? ORDER BY id",
+                                         (item_id,))]
+            built = build(duration, done, len(chunks), anchor, shots, tracks, refs, label_t, cluster_t)
         with self.db.tx() as c:
             cur = c.execute("SELECT etag FROM items WHERE item_id=?", (item_id,)).fetchone()
             if cur is None or cur["etag"] != etag:
@@ -284,6 +293,29 @@ class Worker:
                  built.progress, 1 if built.complete else 0, time.time(), RESULT_VERSION),
             )
         return built
+
+    def _incremental(self, item_id, duration, anchor, refs, chunks, done, label_t, cluster_t):
+        """`results.Assembler` : un par passage de `run` (refs du jour), nourri des seuls plans des
+        tronçons nouvellement faits et des pistes écrites depuis — dans l'ordre d'écriture, celui
+        que lirait `build`. Au premier tronçon d'un passage (reprise), tout ce qui est en base."""
+        st = self._asm
+        if st is None or st["item"] != item_id:
+            st = self._asm = {"item": item_id, "chunks": set(), "last_track": 0,
+                              "asm": Assembler(duration, len(chunks), anchor, refs, label_t, cluster_t)}
+        new_chunks = [r["idx"] for r in chunks if r["done"] and r["idx"] not in st["chunks"]]
+        shots: list[ShotRow] = []
+        for idx in new_chunks:
+            shots += [ShotRow(r["start"], r["end"], np.frombuffer(r["hist"], dtype=np.float32))
+                      for r in self.db.q("SELECT start, end, hist FROM shots WHERE item_id=? AND chunk_idx=?", (item_id, idx))]
+        rows = self.db.q("SELECT id, shot_start, shot_end, screen_time, quality, emb FROM tracks WHERE item_id=? AND id>? ORDER BY id",
+                         (item_id, st["last_track"]))
+        tracks = [TrackRow(r["shot_start"], r["shot_end"], r["screen_time"], r["quality"], np.frombuffer(r["emb"], dtype=np.float32))
+                  for r in rows]
+        if rows:
+            st["last_track"] = rows[-1]["id"]
+        st["chunks"].update(new_chunks)
+        st["asm"].add(done, shots, tracks)
+        return st["asm"].build()
 
     # --- un tronçon ------------------------------------------------------------------------
 
@@ -355,7 +387,7 @@ class Worker:
             last = splitter.flush(p1)
             if self.store.cancel.is_set():
                 raise Cancelled()
-            if stats.returncode not in (0, None) or stats.frames == 0:
+            if stats.failed:
                 raise DecodeFailed(f"ffmpeg ({stats.decoder}) code {stats.returncode} : {stats.stderr[-300:]}")
             if last is not None:
                 analyse(last)
