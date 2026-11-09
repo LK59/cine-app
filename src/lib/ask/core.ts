@@ -263,11 +263,15 @@ function isoDay(raw: string | null | undefined): string | null {
 }
 
 /**
- * Les faits réels sur la personne d'un panneau d'« À l'écran » (10.27.2) — ceux que le panneau montre déjà
- * (TMDB : naissance, décès, lieu, courte biographie). Une question posée de là (« quel âge a cette actrice
- * pendant cet épisode ? ») recevait « les sources ne donnent pas l'âge » sous la date de naissance affichée.
- * Des faits sur la personne qui joue, hors de l'histoire : ils n'élargissent rien de ce que le modèle peut
- * dire du personnage ni de l'intrigue (la consigne le dit), et leurs noms passent le filet.
+ * Les faits réels sur la personne d'un panneau d'« À l'écran » (10.27.2) — naissance, décès, lieu (TMDB). Une
+ * question posée de là (« quel âge a cette actrice pendant cet épisode ? ») recevait « les sources ne donnent
+ * pas l'âge » sous la date de naissance affichée ; avec la date de sortie ou de diffusion, déjà dans les
+ * sources, l'âge se répond. Des faits sur la personne qui joue, hors de l'histoire, et leurs noms passent le
+ * filet.
+ *
+ * **Jamais la biographie** (10.28.1) : celle de Wikipédia raconte souvent le parcours du personnage qui a fait
+ * connaître l'acteur — la suite de l'histoire, envoyée à côté de sources qui s'arrêtent à ce qui a été vu. Le
+ * panneau la montre toujours (ce n'est pas le modèle) ; elle ne part plus.
  */
 export interface AskActorFacts {
   name: string;
@@ -275,11 +279,7 @@ export interface AskActorFacts {
   birthday?: string | null;
   deathday?: string | null;
   placeOfBirth?: string | null;
-  bio?: string | null;
 }
-
-/** La biographie part comme l'écran la montre : courte (les trois lignes du panneau, un peu plus). */
-export const ASK_ACTOR_BIO_MAX = 700;
 
 /** Le bloc des faits réels, tel qu'il part au modèle — et s'ajoute à ce contre quoi les noms sont vérifiés. */
 export function actorFactsText(facts: AskActorFacts): string {
@@ -290,8 +290,6 @@ export function actorFactsText(facts: AskActorFacts): string {
   const died = isoDay(facts.deathday);
   if (died) lines.push(`Décès : ${died}`);
   if (facts.placeOfBirth?.trim()) lines.push(`Lieu de naissance : ${facts.placeOfBirth.trim()}`);
-  const bio = facts.bio?.trim();
-  if (bio) lines.push(`Biographie : ${bio.length > ASK_ACTOR_BIO_MAX ? `${bio.slice(0, ASK_ACTOR_BIO_MAX).replace(/\s+\S*$/, "")}…` : bio}`);
   return lines.join("\n");
 }
 

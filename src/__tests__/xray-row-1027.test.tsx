@@ -428,6 +428,44 @@ describe("dans le lecteur : avec les commandes, en lecture comme en pause", () =
     expect(order.filter((o) => o.method === "POST" && o.body.includes('"jusquici"'))).toHaveLength(1);
   });
 
+  it("à une limite de tranche : la position est lue une fois au toucher — une seule demande, la même coupe (10.28.1)", async () => {
+    // La personne est à l'écran de 250 à 400 s. L'heure affichée dit 299 s (coupe 0) ; la vidéo, lue un instant
+    // plus tard par le panneau, 300,4 s (coupe 250 — la scène qui commence avant la marque des 300 s). En 10.28.0,
+    // le toucher demandait à 299 et le panneau à 300 : deux clés, deux demandes, parfois deux générations payées.
+    const boundary: XrayPlayerPayload = { status: "done", complete: true, analyzedUntil: 2000, scenes: [{ start: 0, end: 50, people: [] }, { start: 250, end: 400, people: A }] };
+    const posts: { positionS: number }[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).startsWith("/api/player/xray/")) return new Response(JSON.stringify(String(url).includes("person=") ? { status: "none" } : boundary));
+      if (init?.method === "POST") {
+        posts.push(JSON.parse(String(init.body)) as { positionS: number });
+        return new Response(JSON.stringify({ t: "text", v: "Ariadne dessine." }) + "\n" + JSON.stringify({ t: "done" }) + "\n");
+      }
+      return new Response(JSON.stringify({ available: true }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    let video: HTMLVideoElement | null = null;
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    await at(video!, 299, false);
+    const pill = await waitFor(() => container.querySelector<HTMLElement>('[data-onscreen-person="2"]')!);
+    // La vidéo avance sans `timeupdate` encore : l'heure affichée (299) et celle de l'élément (300,4) diffèrent.
+    Object.defineProperty(video!, "currentTime", { value: 300.4, writable: true, configurable: true });
+    fireEvent.click(pill);
+    await screen.findByText("Ariadne dessine.");
+    expect(posts).toHaveLength(1);
+    expect(posts[0].positionS).toBe(300);
+  });
+
+  it("la sortie d'un compte oublie « Jusqu'ici » lu et préparé (10.28.1) : le suivant redemande", async () => {
+    const fetchMock = stubFetch();
+    prewarmSofar("item-9", 2, 610, null);
+    prewarmSofar("item-9", 2, 610, null);
+    expect(prewarms(fetchMock)).toHaveLength(1);
+    const { forgetAccountOnDevice } = await import("@/lib/signOut");
+    await forgetAccountOnDevice(50);
+    prewarmSofar("item-9", 2, 610, null);
+    expect(prewarms(fetchMock)).toHaveLength(2);
+  });
+
   it("le lecteur ouvert, option ouverte : le contexte est préparé une fois (GET de la route des questions)", async () => {
     const fetchMock = stubFetch();
     let video: HTMLVideoElement | null = null;

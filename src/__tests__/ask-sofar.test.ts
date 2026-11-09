@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 // « Jusqu'ici » (DECISIONS.md §139, 10.27) et les pannes du modèle : la coupe à la tranche de cinq minutes
 // (dix en 10.27.0),
 // le texte gardé par ce qui part au modèle (partagé entre comptes qui ont vu la même chose, jamais au-delà),
-// trente jours en base, jamais un rejet ; la préparation en fond bornée ; et chaque panne — 5xx, 429, refus,
+// trente jours en base, un rejet une heure (10.28.1) ; la préparation en fond bornée ; et chaque panne — 5xx, 429, refus,
 // délai, flux coupé — dite proprement, au journal du serveur et à `recherche.log`. Jellyfin, TMDB et le
 // modèle sont des doubles — aucun appel réseau ne part.
 
@@ -50,7 +50,7 @@ vi.mock("@/lib/xray/person", () => ({
 }));
 
 import { setAskModelForTests, resetAskCachesForTests, AskModelTimeout, type AskModel } from "@/lib/ask/service";
-import { resetSofarForTests, sofarCutoff, sofarKey, sofarSources, sofarSystem, SOFAR_KEEP_MS, SOFAR_MAX_EPISODES, SOFAR_NOTHING, SOFAR_VERSION } from "@/lib/ask/sofar";
+import { resetSofarForTests, sofarCutoff, sofarKey, sofarSources, sofarSystem, SOFAR_KEEP_MS, SOFAR_REJECT_KEEP_MS, SOFAR_MAX_EPISODES, SOFAR_NOTHING, SOFAR_VERSION } from "@/lib/ask/sofar";
 import { askContent, ASK_MODEL, SOFAR_MAX_OUTPUT_TOKENS } from "@/lib/ask/service";
 import type { AskContextInput } from "@/lib/ask/core";
 import { SOFAR_PER_HOUR } from "@/lib/ask/sofarRequest";
@@ -217,7 +217,7 @@ describe("gardé par ce qui part au modèle", () => {
     expect(model).toHaveBeenCalledTimes(2);
   });
 
-  it("gardé trente jours en base, puis effacé par le ménage ; un rejet n'est jamais gardé", async () => {
+  it("gardé trente jours en base, puis effacé par le ménage ; un rejet gardé une heure seulement (10.28.1)", async () => {
     setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe."));
     await sofar(account());
     await settle();
@@ -231,8 +231,15 @@ describe("gardé par ce qui part au modèle", () => {
     const r = await sofar(account());
     expect(r.events).toEqual([{ t: "rejected" }]);
     await settle();
-    expect(getDb().prepare("SELECT COUNT(*) AS n FROM sofar_texts").get()).toEqual({ n: 0 });
-    // Pas gardé : la demande suivante redemande.
+    // Gardé sous la même clé, sans texte : rouvrir le panneau ne repaie pas la même génération rejetée
+    // (10.28.0 regénérait — et payait — à chaque ouverture).
+    expect(getDb().prepare("SELECT state, text FROM sofar_texts").all()).toEqual([{ state: "rejeté", text: null }]);
+    const again = await sofar(account());
+    expect(again.events).toEqual([{ t: "rejected" }]);
+    expect(model).toHaveBeenCalledTimes(1);
+    expect(sofarLog).toHaveBeenLastCalledWith(expect.objectContaining({ cache: "partagé", status: "rejeté" }));
+    // Une heure après, le rejet ne vaut plus : la même entrée repart au modèle.
+    getDb().prepare("UPDATE sofar_texts SET created_at = ?").run(Date.now() - SOFAR_REJECT_KEEP_MS - 1000);
     await sofar(account());
     expect(model).toHaveBeenCalledTimes(2);
   });

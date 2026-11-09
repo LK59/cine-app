@@ -43,7 +43,18 @@ export async function castPerson(itemId: string, personId: number): Promise<{ pe
   return person ? { person, tmdb: target.tmdb } : null;
 }
 
-export async function personFactsForPlayer(itemId: string, personId: number, lang: Locale, jfId: string | null | undefined): Promise<XrayPersonFacts> {
+/**
+ * `library: false` (10.28.1) : un lien de partage — ni « Dans votre bibliothèque », ni la lecture de la
+ * filmographie qui la prépare. `hiddenTmdbKeysFor` ne cache rien à un compte de lien : ses titres auraient été
+ * ceux de toute la bibliothèque, à qui ne doit voir que le sien (§112).
+ */
+export async function personFactsForPlayer(
+  itemId: string,
+  personId: number,
+  lang: Locale,
+  jfId: string | null | undefined,
+  { library: withLibrary = true }: { library?: boolean } = {}
+): Promise<XrayPersonFacts> {
   try {
     const found = await castPerson(itemId, personId);
     if (!found) return { status: "none" };
@@ -53,10 +64,10 @@ export async function personFactsForPlayer(itemId: string, personId: number, lan
     const [localized, enriched, credits] = await Promise.all([
       personDetailsCached(tmdb, locale, personId),
       enrichedPerson(tmdb, lang, personId),
-      personCreditsCached(tmdb, locale, personId).catch(() => ({ cast: [] as never[] })),
+      withLibrary ? personCreditsCached(tmdb, locale, personId).catch(() => ({ cast: [] as never[] })) : Promise.resolve({ cast: [] as never[] }),
     ]);
     const details = await personWithBiography(localized, locale, personId);
-    const filmography = await personFilmography(credits.cast ?? [], jfId);
+    const filmography = withLibrary ? await personFilmography(credits.cast ?? [], jfId) : [];
     const current = found.tmdb;
     const isCurrent = (c: { mediaType: string; tmdbId: number }) =>
       current?.kind === "movie" ? c.mediaType === "movie" && c.tmdbId === current.id : current?.kind === "episode" && c.mediaType === "tv" && c.tmdbId === current.tvId;
@@ -71,7 +82,7 @@ export async function personFactsForPlayer(itemId: string, personId: number, lan
       deathday: details?.deathday ?? null,
       placeOfBirth: details?.place_of_birth ?? null,
       bio: selectBio(details?.biography, enriched.wikiBio)?.text ?? null,
-      library,
+      ...(withLibrary ? { library } : {}),
     };
   } catch (error) {
     logError("xray/person", error, { itemId, personId });
@@ -81,9 +92,9 @@ export async function personFactsForPlayer(itemId: string, personId: number, lan
 
 /**
  * Les faits réels d'une personne pour une question posée depuis son panneau (10.27.2, DECISIONS.md §139) :
- * ce que le panneau montre déjà — nom, personnage, naissance, décès, lieu, biographie choisie —, par les
- * mêmes appels et les mêmes caches (le panneau vient de les lire). Cherchée dans la distribution de cet
- * élément, comme le panneau ; `null` sinon, ou sur une panne — la question part alors sans eux.
+ * nom, personnage, naissance, décès, lieu — par le même appel et le même cache que le panneau. **Pas la
+ * biographie** (10.28.1, `AskActorFacts`) : elle peut raconter la suite du personnage. Cherchée dans la
+ * distribution de cet élément, comme le panneau ; `null` sinon, ou sur une panne — la question part alors sans eux.
  */
 export async function actorFactsForAsk(itemId: string, personId: number, lang: Locale): Promise<AskActorFacts | null> {
   try {
@@ -92,15 +103,13 @@ export async function actorFactsForAsk(itemId: string, personId: number, lang: L
     const locale = getTmdbLocale(lang);
     const tmdb = createTmdbClient(locale);
     if (!tmdb.isEnabled()) return { name: found.person.name, character: found.person.character };
-    const [localized, enriched] = await Promise.all([personDetailsCached(tmdb, locale, personId), enrichedPerson(tmdb, lang, personId)]);
-    const details = await personWithBiography(localized, locale, personId);
+    const details = await personDetailsCached(tmdb, locale, personId);
     return {
       name: found.person.name,
       character: found.person.character,
       birthday: details?.birthday ?? null,
       deathday: details?.deathday ?? null,
       placeOfBirth: details?.place_of_birth ?? null,
-      bio: selectBio(details?.biography, enriched.wikiBio)?.text ?? null,
     };
   } catch (error) {
     logError("ask/acteur", error, { itemId, personId });

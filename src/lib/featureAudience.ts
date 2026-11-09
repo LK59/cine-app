@@ -26,3 +26,13 @@ export function audienceAllows(audience: Audience, session: { role?: string | nu
   if (!session || audience === "off") return false;
   return audience === "tous" || session.role === "admin";
 }
+
+/**
+ * Une fonction d'IA (questions sur un titre ou une personne, « Jusqu'ici » — DECISIONS.md §139, §140) : jamais
+ * pour un lien de partage (§112, consigne du propriétaire, 10.28.1), **quel que soit le public réglé** — `tous`
+ * veut dire les comptes du foyer, pas l'invité d'un lien. Un lien garde les acteurs à l'écran ordinaires (la
+ * rangée, le panneau d'une personne : photo, personnage, âge, lieu, courte biographie), rien du modèle.
+ */
+export function aiAudienceAllows(audience: Audience, session: { role?: string | null } | null | undefined): boolean {
+  return !!session && session.role !== "share" && audienceAllows(audience, session);
+}

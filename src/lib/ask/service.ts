@@ -17,12 +17,12 @@ import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { upstreamSignal } from "@/lib/http";
 import { DEFAULT_MODELS } from "@/lib/subtitleGen/pricing";
 import { ProviderError } from "@/lib/subtitleGen/providers";
-import { anthropicUsage, featureComplete, featureProviderReady, featureSettings, recordAiSpend } from "@/lib/aiFeatures";
+import { anthropicUsage, featureComplete, featureProviderReady, featureSettings, partialAnthropicUsage, recordAiSpend } from "@/lib/aiFeatures";
 import { cuesOf, episodesOf, type EpisodeWithStreams } from "@/lib/recap/service";
 import type { Cue } from "@/lib/recap/core";
 import type { Locale } from "@/lib/i18n";
 import { logError } from "@/lib/logger";
-import { audienceAllows, type Audience } from "@/lib/featureAudience";
+import { aiAudienceAllows, type Audience } from "@/lib/featureAudience";
 import type { AskContextInput, AskEpisode, AskWhere } from "@/lib/ask/core";
 
 export const ASK_MODEL = DEFAULT_MODELS.anthropic;
@@ -63,7 +63,8 @@ function askAudience(): Audience {
  * porte, que chaque route appelle ; l'écran ne fait que cacher ce qu'elle refuse.
  */
 export function askAvailableFor(session: { role?: string | null } | null | undefined): boolean {
-  return askAvailable() && audienceAllows(askAudience(), session);
+  // Jamais un lien de partage (§112, 10.28.1), quel que soit le public réglé : `aiAudienceAllows`.
+  return askAvailable() && aiAudienceAllows(askAudience(), session);
 }
 
 type FullItem = EpisodeWithStreams & {
@@ -430,13 +431,21 @@ const askModel: AskModel = (req) => {
       if (timer) clearTimeout(timer);
     }
   }
+  // Compté dans le plafond mensuel commun (§140) **une fois**, fini ou interrompu (10.28.1) : un flux coupé — filet
+  // des noms, premier passage redemandé, panneau refermé, chien de garde — se paie aussi ; `finalMessage()`
+  // rejette alors, et l'instantané du SDK (`currentMessage`) dit ce qui était déjà facturé.
+  let counted = false;
+  const count = (usage: ReturnType<typeof anthropicUsage> | null) => {
+    if (counted) return;
+    counted = true;
+    recordAiSpend(usage, featureSettings().price, feature);
+  };
   return {
     deltas: deltas(),
     done: stream.finalMessage().then(
       (m) => {
-        // Compté dans le plafond mensuel commun (§140) — écriture et relecture du cache comprises, chacune à
-        // son prix (`anthropicUsage`).
-        recordAiSpend(anthropicUsage(m.usage), featureSettings().price, feature);
+        // Écriture et relecture du cache comprises, chacune à son prix (`anthropicUsage`).
+        count(anthropicUsage(m.usage));
         return {
           inTokens: m.usage.input_tokens,
           outTokens: m.usage.output_tokens,
@@ -446,6 +455,7 @@ const askModel: AskModel = (req) => {
         };
       },
       (err: unknown) => {
+        count(partialAnthropicUsage(stream.currentMessage));
         throw fail(err);
       }
     ),

@@ -20,8 +20,9 @@
 // de ce que chacun a vu. Le journal dit d'où vient le texte (`cache` : `partagé` / `compte` / `nouveau`).
 //
 // **Gardé trente jours en base** (`sofar_texts`, consigne du propriétaire) et jamais regénéré tant qu'il
-// vaut ; effacé ensuite par le ménage périodique (`sofarDb.prune`, par tranches). Un texte rejeté par le
-// filet des noms n'est jamais gardé ; « rien à dire » l'est.
+// vaut ; effacé ensuite par le ménage périodique (`sofarDb.prune`, par tranches). « Rien à dire » l'est ; un
+// texte rejeté par le filet des noms aussi, mais une heure seulement (`SOFAR_REJECT_KEEP_MS`, 10.28.1) — sans
+// texte : chaque réouverture du panneau le faisait regénérer, et payer, à l'identique.
 //
 // **Une génération par clé** : la première demande lance le modèle, détaché de la requête (un panneau
 // refermé ne la perd pas) ; les suivantes, pendant la génération, lisent les mêmes phrases à mesure.
@@ -49,6 +50,12 @@ export const SOFAR_MAX_WORDS = 60;
 export const SOFAR_NOTHING = "RIEN";
 /** Gardés en base trente jours, puis effacés par le ménage périodique. */
 export const SOFAR_KEEP_MS = 30 * 24 * 3600_000;
+/**
+ * Un rejet du filet des noms (10.28.1) : gardé une heure, sous la même clé — la même entrée ne repart pas au
+ * modèle à chaque réouverture du panneau (chaque fois payée, chaque fois rejetée). Court : un modèle qui a
+ * nommé de mémoire peut ne pas le refaire, et la tranche suivante change la clé de toute façon.
+ */
+export const SOFAR_REJECT_KEEP_MS = 3600_000;
 /** Les générations en cours, en mémoire : un garde-fou contre une fuite, jamais atteint d'ordinaire. */
 const SOFAR_RUNNING_MAX = 500;
 
@@ -240,7 +247,7 @@ export function sofarLookup(key: string, now = Date.now()): SofarEntry | null {
     logError("ask/jusquici-db", err);
     return null;
   }
-  if (!row || now - row.createdAt > SOFAR_KEEP_MS) return null;
+  if (!row || now - row.createdAt > (row.state === "rejeté" ? SOFAR_REJECT_KEEP_MS : SOFAR_KEEP_MS)) return null;
   let sentences: string[] = [];
   try {
     sentences = row.state === "ok" && row.text ? (JSON.parse(row.text) as string[]) : [];
@@ -254,7 +261,7 @@ export function sofarLookup(key: string, now = Date.now()): SofarEntry | null {
 /**
  * Lancer la génération d'une clé. Détachée : elle va au bout même si personne ne lit plus. Une panne
  * (réseau, 5xx, 429, refus, délai) n'est pas gardée — la demande suivante réessaiera ; un « rien à dire »
- * ou un nom inconnu le sont (on ne redemande pas la même chose dans la même tranche).
+ * l'est trente jours, un nom inconnu une heure (on ne repaie pas la même chose à chaque réouverture).
  */
 export function sofarStart(
   key: string,
@@ -280,8 +287,9 @@ export function sofarStart(
     entry.state = state;
     entry.at = Date.now();
     store.delete(key);
-    // Gardé en base : un texte, ou « rien à dire ». Jamais un rejet (filet des noms) ni une panne.
-    if (state === "ok" || state === "vide") {
+    // Gardé en base : un texte, « rien à dire », ou un rejet du filet des noms (une heure, `sofarLookup`).
+    // Jamais une panne : la demande suivante réessaie.
+    if (state === "ok" || state === "vide" || state === "rejeté") {
       try {
         sofarDb.put(key, state, state === "ok" ? JSON.stringify(entry.sentences) : null, by, entry.at);
       } catch (err) {

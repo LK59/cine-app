@@ -302,6 +302,21 @@ export const SOFAR_LOADING_DELAY_MS = 350;
 const sofarRead = new Map<string, string>();
 const SOFAR_READ_MAX = 200;
 
+/**
+ * Ce que la page garde de « Jusqu'ici » et de ses préparations, oublié à la sortie d'un compte (10.28.1,
+ * `forgetAccountOnDevice`) : les textes lus disent ce que **ce** compte a vu ; le compte suivant dans le même
+ * onglet les aurait lus sans requête.
+ */
+export function forgetAskClient(): void {
+  sofarRead.clear();
+  for (const p of pendingSofar.values()) {
+    clearTimeout(p.timer);
+    p.ctrl.abort();
+  }
+  pendingSofar.clear();
+  prewarmed.clear();
+}
+
 export function resetSofarClientForTests(): void {
   sofarRead.clear();
   for (const p of pendingSofar.values()) clearTimeout(p.timer);
@@ -320,7 +335,16 @@ type Pending = { res: Promise<Response>; ctrl: AbortController; timer: ReturnTyp
 const pendingSofar = new Map<string, Pending>();
 const PENDING_FORGET_MS = 10_000;
 
-const sofarPos = (positionS: number | null) => (positionS !== null && Number.isFinite(positionS) ? Math.floor(positionS) : null);
+/**
+ * La position de « Jusqu'ici », en secondes entières — lue **une fois, au toucher** (10.28.1). Le toucher
+ * (`startSofar`) lisait l'heure affichée, le panneau (`useSofar`) la sienne un quart de seconde plus tard : à
+ * une limite de tranche, deux coupes, deux clés, une seconde demande — et parfois une seconde génération payée.
+ * Le même nombre sert maintenant aux deux : `startSofar` le rend, le lecteur le passe au panneau.
+ */
+export function sofarPosition(positionS: number | null | undefined): number | null {
+  return positionS != null && Number.isFinite(positionS) ? Math.floor(positionS) : null;
+}
+const sofarPos = sofarPosition;
 const sofarReadKey = (itemId: string, personId: number, pos: number | null, scenes?: SofarScenes | null) => `${itemId}:${personId}:${sofarCut(pos, scenes)}`;
 
 function sofarFetch(itemId: string, personId: number, pos: number | null, signal: AbortSignal): Promise<Response> {
@@ -332,11 +356,14 @@ function sofarFetch(itemId: string, personId: number, pos: number | null, signal
   });
 }
 
-/** `position` : la position, ou de quoi la lire au moment du toucher (celle que le panneau lira). */
-export function startSofar(itemId: string, personId: number, position: number | null | (() => number | null), scenes?: SofarScenes | null): void {
+/**
+ * `position` : la position, ou de quoi la lire au moment du toucher. Rend la position retenue (`sofarPosition`) :
+ * le panneau doit lire **celle-ci** (`useSofar`), pas la relire — même coupe, même clé, une seule demande.
+ */
+export function startSofar(itemId: string, personId: number, position: number | null | (() => number | null), scenes?: SofarScenes | null): number | null {
   const pos = sofarPos(typeof position === "function" ? position() : position);
   const key = sofarReadKey(itemId, personId, pos, scenes);
-  if (sofarRead.has(key) || pendingSofar.has(key)) return;
+  if (sofarRead.has(key) || pendingSofar.has(key)) return pos;
   const ctrl = new AbortController();
   let res: Promise<Response>;
   try {
@@ -347,6 +374,7 @@ export function startSofar(itemId: string, personId: number, position: number | 
   res.catch(() => {});
   const timer = setTimeout(() => pendingSofar.delete(key), PENDING_FORGET_MS);
   pendingSofar.set(key, { res, ctrl, timer });
+  return pos;
 }
 
 function takePendingSofar(key: string): Pending | null {

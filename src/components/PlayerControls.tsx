@@ -25,7 +25,7 @@ import { useLatest } from "@/components/playerControls/useLatest";
 import { useAutoHide } from "@/components/playerControls/useAutoHide";
 import { PlayerSeekBar } from "@/components/playerControls/PlayerSeekBar";
 import { AskPanel } from "@/components/ask/AskPanel";
-import { prewarmSofar, startSofar, useAskAvailable, useAskPersonAvailable, useAskPrepare, useSofarAvailable } from "@/lib/ask/client";
+import { prewarmSofar, sofarPosition, startSofar, useAskAvailable, useAskPersonAvailable, useAskPrepare, useSofarAvailable } from "@/lib/ask/client";
 import { PlayerOnScreen } from "@/components/playerControls/PlayerOnScreen";
 import { useOnScreenPlacement } from "@/components/playerControls/useOnScreenPlacement";
 import { onScreenPeople, sceneAt, useXrayAvailable, useXrayScenes } from "@/lib/xray/client";
@@ -691,7 +691,8 @@ export function PlayerControls({
   const sofarOffered = useSofarAvailable() && askable && !lab;
   const [askOpen, setAskOpen] = useState(false);
   // La personne touchée dans « À l'écran » et sa scène : le panneau s'ouvre sur elle.
-  const [askPerson, setAskPerson] = useState<{ person: XrayPlayerPerson; scene: XrayPlayerPerson[] } | null>(null);
+  // `sofarAt` : la position lue au toucher (10.28.1) — la même pour la demande de « Jusqu'ici » et pour le panneau.
+  const [askPerson, setAskPerson] = useState<{ person: XrayPlayerPerson; scene: XrayPlayerPerson[]; sofarAt: number | null } | null>(null);
   const [askFor, setAskFor] = useState({ itemId, hidden });
   if (askFor.itemId !== itemId || askFor.hidden !== hidden) {
     setAskFor({ itemId, hidden });
@@ -716,16 +717,29 @@ export function PlayerControls({
   const centerGroupRef = useRef<HTMLDivElement>(null);
   const titleRowRef = useRef<HTMLDivElement>(null);
   const onScreenPlace = useOnScreenPlacement({ wrap: onScreenWrapRef, center: centerGroupRef, titleRow: titleRowRef, tools: settingsPillRef }, rowShown && scenePeople.length > 0);
-  /**
-   * « Jusqu'ici » préparé sur une intention seulement (§139, 10.27.2) : le pointeur fin posé sur une pilule
-   * (`onIntent` de `PlayerOnScreen`) — une personne, à la position de l'instant, coupée comme le serveur
-   * (`sofarCut` sur ces scènes). Plus rien quand la rangée paraît.
-   */
   // Le film s'ouvre, une des trois portes ouverte à la séance (10.27.2, §139) : le serveur prépare le contexte
   // des questions et de « Jusqu'ici » (l'élément, ses épisodes, les répliques) — `prepareAskContext`. Une fois
   // par élément.
   useAskPrepare(itemId, askOffered || askPersonOffered || sofarOffered);
+  /**
+   * « Jusqu'ici » préparé sur une intention seulement (§139, 10.27.2) : le pointeur fin posé sur une pilule
+   * (`onIntent` de `PlayerOnScreen`) — une personne, à la position de l'instant, coupée comme le serveur
+   * (`sofarCut` sur ces scènes). La rangée qui paraît ne prépare rien.
+   */
   const intentAt = useLatest(currentTime);
+  const pickPerson = (person: XrayPlayerPerson) => {
+    // « Jusqu'ici » part au toucher même (10.27.2), avant le panneau et ses requêtes ; le panneau reprend cette
+    // demande (`useSofar`). La position est lue **une fois**, ici (10.28.1) : la demande et le panneau prennent le
+    // même nombre, donc la même coupe — à une limite de tranche, l'heure affichée et celle que le panneau
+    // relisait donnaient deux clés.
+    const at = positionNow ? positionNow() : (videoRef.current?.currentTime ?? null);
+    const sofarAt = sofarOffered ? startSofar(itemId, person.personId, at, xrayPayload) : sofarPosition(at);
+    setMenu(null);
+    // Une personne ouvre son panneau — avec les questions et « Jusqu'ici » si l'option est ouverte à ce compte,
+    // sinon la personne seule (photo, faits, biographie, ses titres).
+    setAskPerson({ person, scene: scenePeople, sofarAt });
+    setAskOpen(true);
+  };
   const onPersonIntent = sofarOffered
     ? (person: XrayPlayerPerson) => prewarmSofar(itemId, person.personId, intentAt.current, xrayPayload)
     : undefined;
@@ -1272,17 +1286,7 @@ export function PlayerControls({
                     onHold={holdControls}
                     onIntent={onPersonIntent}
                     onRelease={() => showControls(10000)}
-                    onPick={(person) => {
-                      // « Jusqu'ici » part au toucher même (10.27.2), avant le panneau et ses requêtes ; le
-                      // panneau reprend cette demande (`useSofar`) : même coupe que la sienne (la position affichée,
-                      // à un quart de seconde de celle qu'il lira — la coupe tombe sur un début de scène).
-                      if (sofarOffered) startSofar(itemId, person.personId, currentTime, xrayPayload);
-                      setMenu(null);
-                      // Une personne ouvre son panneau — avec les questions et « Jusqu'ici » si l'option est
-                      // ouverte à ce compte, sinon la personne seule (photo, faits, biographie, ses titres).
-                      setAskPerson({ person, scene: scenePeople });
-                      setAskOpen(true);
-                    }}
+                    onPick={pickPerson}
                   />
                 ) : (
                   askButton
@@ -1420,6 +1424,7 @@ export function PlayerControls({
           where="lecteur"
           placement="player"
           position={() => (positionNow ? positionNow() : (videoRef.current?.currentTime ?? null))}
+          sofarPosition={askPerson?.sofarAt}
           person={askPerson?.person}
           scene={askPerson?.scene}
           scenes={xrayPayload}

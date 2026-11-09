@@ -42,6 +42,8 @@ vi.mock("@/lib/xray/cast", () => ({
   castOf: async () => [{ personId: 7, name: "Lucas Till", character: "Angus MacGyver", order: 0, profilePath: "/lt.jpg" }],
   tmdbPhotoUrl: (p: string) => `https://image.tmdb.org/t/p/w185${p}`,
 }));
+const mockFacts = vi.fn();
+vi.mock("@/lib/xray/person", () => ({ personFactsForPlayer: (...a: unknown[]) => mockFacts(...a) }));
 const mockLogError = vi.fn();
 vi.mock("@/lib/logger", () => ({ logError: (...a: unknown[]) => mockLogError(...a) }));
 
@@ -148,5 +150,30 @@ describe("GET /api/player/xray/[itemId]", () => {
     expect((await get("../x")).res.status).toBe(400);
     mockVerify.mockResolvedValue(null);
     expect((await get()).res.status).toBe(401);
+  });
+});
+
+describe("GET /api/player/xray/[itemId]?person= — un lien de partage (10.28.1)", () => {
+  const withPerson = (): NextRequest =>
+    ({ cookies: { get: () => ({ value: "t" }) }, nextUrl: new URL(`http://x/api/player/xray/${ITEM}?person=7`) }) as unknown as NextRequest;
+  const facts = { status: "ok", personId: 7, birthday: "1990-08-10", placeOfBirth: "Fort Hood", bio: "Acteur.", library: [{ tmdbId: 1, mediaType: "movie", title: "Bumblebee", year: 2018, poster: null }] };
+  async function person() {
+    const { GET } = await import("@/app/api/player/xray/[itemId]/route");
+    const res = await GET(withPerson(), { params: Promise.resolve({ itemId: ITEM }) });
+    return (await res.json()) as Record<string, unknown>;
+  }
+  it("le panneau d'une personne : faits et courte biographie, jamais « Dans votre bibliothèque »", async () => {
+    mockFacts.mockImplementation(async () => structuredClone(facts));
+    mockVerify.mockResolvedValue({ u: "partage-1", jfId: "e".repeat(32), jti: "j", role: "share", sh: "s1" });
+    const body = await person();
+    expect(body).toMatchObject({ status: "ok", birthday: "1990-08-10", bio: "Acteur." });
+    expect(body).not.toHaveProperty("library");
+    expect(mockFacts).toHaveBeenCalledWith(ITEM, 7, "fr", "e".repeat(32), { library: false });
+  });
+  it("un compte du foyer garde ses autres titres", async () => {
+    mockFacts.mockImplementation(async () => structuredClone(facts));
+    const body = await person();
+    expect((body.library as unknown[]).length).toBe(1);
+    expect(mockFacts).toHaveBeenCalledWith(ITEM, 7, "fr", "f".repeat(32), { library: true });
   });
 });

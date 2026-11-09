@@ -4,7 +4,7 @@ import { DEFAULT_MODELS } from "@/lib/subtitleGen/pricing";
 import { withCache, withPersistentCache } from "@/lib/server-cache";
 import type { TmdbTrendingMovie, TmdbTrendingTv } from "@/lib/clients/tmdb";
 import { describeKey } from "@/lib/describeQuery";
-import { aiBudgetReached, anthropicUsage, featureComplete, featureProviderReady, featureSettings, recordAiSpend } from "@/lib/aiFeatures";
+import { aiBudgetReached, anthropicTimed, anthropicUsage, featureComplete, featureProviderReady, featureSettings, recordAiSpend } from "@/lib/aiFeatures";
 import { ProviderError } from "@/lib/subtitleGen/providers";
 
 /**
@@ -141,7 +141,7 @@ async function askOtherProvider(query: string): Promise<DescribedTitle[]> {
 async function askModel(query: string): Promise<DescribedTitle[]> {
   if (featureSettings().provider !== "anthropic") return askOtherProvider(query);
   const client = new Anthropic({ apiKey: config.subtitleGen.apiKey.trim(), maxRetries: 0, timeout: DESCRIBE_TIMEOUT_MS });
-  const res = await client.messages.create({
+  const res = await anthropicTimed(client, DESCRIBE_SYSTEM, query, "describe", {
     model: DESCRIBE_MODEL,
     max_tokens: 800,
     system: DESCRIBE_SYSTEM,

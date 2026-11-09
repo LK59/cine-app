@@ -45,9 +45,9 @@ export async function GET(req: NextRequest) {
     booksAvailable,
     // Le réglage « Précédemment » du Compte (DECISIONS.md §137) n'a de sens que l'option allumée.
     recapAvailable: recapAvailable() && !!session && session.role !== "share",
-    // « Poser une question » (DECISIONS.md §139) : l'option et son public (`off` / `admins` / `tous`) — un
-    // lien de partage aussi, réglée sur `tous`, sur son seul titre (liste fermée, portée `path`). Ce n'est
-    // que pour cacher la pilule : la route refuse d'elle-même.
+    // « Poser une question » (DECISIONS.md §139) : l'option et son public (`off` / `admins` / `tous`) — jamais
+    // un lien de partage (10.28.1, `aiAudienceAllows` : aucune fonction d'IA pour l'invité, quel que soit le
+    // public). Ce n'est que pour cacher la pilule : la route refuse d'elle-même.
     askAvailable: askAvailableFor(session),
     // Les questions posées depuis le panneau d'une personne d'« À l'écran », et « Jusqu'ici » dans ce
     // panneau (§139, 09/11/2026) : chacune son réglage (vide, il suit `ASK_ENABLED`), et les acteurs à

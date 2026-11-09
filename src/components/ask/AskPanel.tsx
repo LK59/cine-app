@@ -63,6 +63,11 @@ export interface AskPanelProps {
   where: AskWhere;
   /** La position du film au moment de la question (lecteur seulement). */
   position?: () => number | null;
+  /**
+   * La position lue au toucher de la personne (10.28.1, `startSofar`) : « Jusqu'ici » la prend telle quelle — la
+   * même que la demande partie au toucher, donc la même coupe et la même clé. Absente : lue à l'ouverture.
+   */
+  sofarPosition?: number | null;
   onClose: () => void;
   /** Une personne d'« À l'écran » (§138) : le panneau s'ouvre sur elle. */
   person?: XrayPlayerPerson;
@@ -185,7 +190,7 @@ function useKeyboardDiag(
   }, [refs.input, refs.layer, refs.panel]);
 }
 
-export function AskPanel({ itemId, where, position, onClose, person, scene, ask: askEnabled = true, sofar: sofarEnabled = askEnabled, placement, suggestions, scenes }: AskPanelProps) {
+export function AskPanel({ itemId, where, position, sofarPosition, onClose, person, scene, ask: askEnabled = true, sofar: sofarEnabled = askEnabled, placement, suggestions, scenes }: AskPanelProps) {
   const t = useT();
   const { exchanges, ask, retry, busy, full } = useAskTitle({
     itemId,
@@ -197,8 +202,9 @@ export function AskPanel({ itemId, where, position, onClose, person, scene, ask:
   });
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
-  // La position à l'ouverture, pour « Jusqu'ici » (une question relit la sienne au moment de partir).
-  const [openedAt] = useState(() => (position ? position() : null));
+  // La position pour « Jusqu'ici » : celle du toucher si le lecteur la donne, sinon celle de l'ouverture (une
+  // question relit la sienne au moment de partir).
+  const [openedAt] = useState(() => (sofarPosition !== undefined ? sofarPosition : position ? position() : null));
   const layerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);

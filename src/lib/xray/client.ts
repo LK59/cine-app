@@ -278,6 +278,14 @@ export function personFactsLine(
 const factsAsked = new Map<string, Promise<XrayPersonFacts>>();
 
 /**
+ * Oublier les faits lus par cette page (10.28.1) — à la sortie d'un compte (`forgetAccountOnDevice`) : ils
+ * portent « Dans votre bibliothèque », rangé par compte (tags bloqués), et un compte de lien n'en a pas.
+ */
+export function forgetPersonFacts(): void {
+  factsAsked.clear();
+}
+
+/**
  * Ce que le panneau d'une personne montre sans le modèle (âge, lieu, courte biographie, ses titres dans la
  * bibliothèque) — une requête par personne et par élément, gardée pour la page. Un `fetch` direct : SWR est
  * en pause pendant un film (CLAUDE.md).

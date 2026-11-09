@@ -26,7 +26,8 @@ const PRIVATE = { "Cache-Control": "private, no-store" };
  *
  * `?person=<id TMDB>` (10.27) : le panneau d'une personne touchée — âge, lieu de naissance, courte
  * biographie, autres titres dans la bibliothèque (`personFactsForPlayer`, le chemin des fiches personne
- * du cinéma). Même porte, même réponse 200 : `{ status: "none" }` quand il n'y a rien à dire.
+ * du cinéma). Même porte, même réponse 200 : `{ status: "none" }` quand il n'y a rien à dire. Un lien de
+ * partage n'en reçoit jamais les autres titres (`library`, 10.28.1) : il ne voit que le sien.
  */
 export async function GET(req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
   const { itemId } = await props.params;
@@ -46,7 +47,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   if (Number.isInteger(person) && person > 0) {
     const raw = req.cookies.get(LOCALE_COOKIE)?.value ?? "";
     const lang: Locale = raw === "en" || raw === "es" || raw === "de" ? raw : "fr";
-    return NextResponse.json(await personFactsForPlayer(itemId, person, lang, session.jfId), { headers: PRIVATE });
+    // Un lien de partage (§112, 10.28.1) : les faits de la personne, jamais ses autres titres de la bibliothèque.
+    const share = session.role === "share";
+    const facts = await personFactsForPlayer(itemId, person, lang, session.jfId, { library: !share });
+    if (share) delete facts.library;
+    return NextResponse.json(facts, { headers: PRIVATE });
   }
   return NextResponse.json(await scenesForPlayer(itemId), { headers: PRIVATE });
 }

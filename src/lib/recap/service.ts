@@ -16,7 +16,7 @@ import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { upstreamSignal } from "@/lib/http";
 import { DEFAULT_MODELS } from "@/lib/subtitleGen/pricing";
 import { ProviderError } from "@/lib/subtitleGen/providers";
-import { aiBudgetReached, anthropicUsage, featureComplete, featureProviderReady, featureSettings, recordAiSpend } from "@/lib/aiFeatures";
+import { aiBudgetReached, anthropicTimed, anthropicUsage, featureComplete, featureProviderReady, featureSettings, recordAiSpend } from "@/lib/aiFeatures";
 import { logRecap } from "@/lib/eventLogs";
 import { logError } from "@/lib/logger";
 import { fetchJson } from "@/lib/http";
@@ -186,7 +186,7 @@ async function askOtherProvider(system: string, message: string): Promise<Awaite
 const askModel: RecapModel = async (system, message) => {
   if (featureSettings().provider !== "anthropic") return askOtherProvider(system, message);
   const client = new Anthropic({ apiKey: config.subtitleGen.apiKey.trim(), maxRetries: 0, timeout: MODEL_TIMEOUT_MS });
-  const res = await client.messages.create({
+  const res = await anthropicTimed(client, system, message, "recap", {
     model: RECAP_MODEL,
     // La réflexion compte dans `max_tokens` : ~1 800 à 2 600 jetons au banc, la marge est large.
     max_tokens: 8000,

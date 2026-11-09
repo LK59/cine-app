@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { ProviderError, replyOf, safeMessage, type TranslationCall, type TranslationProvider, type TranslationReply } from "./types";
+import { estimatedInputUsage, partialAnthropicUsage } from "@/lib/aiUsage";
+import { ProviderError, replyOf, safeMessage, type TranslationCall, type TranslationProvider, type TranslationReply, type Usage } from "./types";
 
 /**
  * Anthropic, par le SDK officiel (`@anthropic-ai/sdk`).
@@ -44,10 +45,14 @@ export function anthropicProvider(apiKey: string, model: string): TranslationPro
         output_config: { effort: "low", ...(call.schema ? { format: { type: "json_schema" as const, schema: call.schema } } : {}) },
       };
       let res: Anthropic.Message;
+      // Un lot en flux coupé en route (délai du SDK, `signal`) a déjà été facturé : ce que l'instantané du SDK
+      // en garde part avec la panne (`partialAnthropicUsage`, 10.28.1), et le moteur le compte comme les autres.
+      let streamed: ReturnType<typeof client.messages.stream> | null = null;
       try {
         if (call.onText) {
           const onText = call.onText;
           const stream = client.messages.stream(params, { signal: call.signal });
+          streamed = stream;
           stream.on("text", (delta) => {
             // Ce qu'en fait l'appelant ne doit pas rompre le flux : son erreur resterait sans nom ici.
             try {
@@ -61,7 +66,9 @@ export function anthropicProvider(apiKey: string, model: string): TranslationPro
           res = await client.messages.create(params, { signal: call.signal });
         }
       } catch (error) {
-        throw classify(error);
+        // Sans flux, un appel coupé par le délai ou par nous ne rend rien : son entrée, estimée.
+        const cut = error instanceof Anthropic.APIConnectionTimeoutError || error instanceof Anthropic.APIUserAbortError;
+        throw classify(error, streamed ? partialAnthropicUsage(streamed.currentMessage) : cut ? estimatedInputUsage(call.system, ...call.stable, call.user) : null);
       }
       // `input_tokens` n'inclut ni l'écriture ni la lecture du cache : trois prix, trois compteurs.
       const usage = {
@@ -79,8 +86,13 @@ export function anthropicProvider(apiKey: string, model: string): TranslationPro
   };
 }
 
-function classify(error: unknown): ProviderError {
+function classify(error: unknown, partial: Usage | null = null): ProviderError {
   if (error instanceof ProviderError) return error;
+  // Coupé après `message_start` : facturé, quelle que soit la cause — la panne garde la nature de l'erreur.
+  if (partial) {
+    const bare = classify(error);
+    return new ProviderError(bare.kind, bare.message, partial);
+  }
   // Du plus précis au plus général : chaque classe du SDK étend `APIError`.
   if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) return new ProviderError("auth", "clé refusée");
   if (error instanceof Anthropic.RateLimitError) return new ProviderError("rate", "limite de débit");

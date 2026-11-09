@@ -38,7 +38,7 @@ vi.mock("@/lib/logger", () => ({ logError: (...args: unknown[]) => logError(...a
 vi.mock("@/lib/eventLogs", () => ({ logAskQuestion: (...args: unknown[]) => askLog(...args), logJusquici: vi.fn(), logRecap: vi.fn() }));
 vi.mock("@/lib/xray/person", () => ({ actorFactsForAsk: (...args: unknown[]) => actorFacts(...args), castPerson: vi.fn(async () => null) }));
 
-import { AnswerGate, askParts, askSources, METALESS_LIMIT, metaTalk, rewriteMetaPrefix, type AskContextInput } from "@/lib/ask/core";
+import { actorFactsText, AnswerGate, askParts, askSources, METALESS_LIMIT, metaTalk, rewriteMetaPrefix, type AskContextInput } from "@/lib/ask/core";
 import { ASK_MAX_OUTPUT_TOKENS, setAskModelForTests, resetAskCachesForTests, type AskModel } from "@/lib/ask/service";
 
 const MOVIE = "a".repeat(32);
@@ -119,7 +119,6 @@ beforeEach(() => {
     birthday: "1987-02-21",
     deathday: null,
     placeOfBirth: "Halifax, Nova Scotia, Canada",
-    bio: "Elliot Page est un acteur canadien, révélé par Juno.",
   });
 });
 
@@ -183,6 +182,27 @@ describe("la route, depuis le panneau d'une personne", () => {
     // La consigne dit que ces faits ne disent rien de l'histoire.
     expect(reqs[0].system).toContain("Ils ne disent rien de l'histoire");
     expect(askLog).toHaveBeenLastCalledWith(expect.objectContaining({ status: "ok", personId: 2 }));
+  });
+
+  it("la biographie ne part jamais au modèle (10.28.1 : elle peut raconter la suite du personnage)", async () => {
+    const reqs: Req[] = [];
+    // Même si une source la fournissait : ni la ligne, ni son texte.
+    actorFacts.mockResolvedValueOnce({
+      name: "Elliot Page",
+      character: "Ariadne",
+      birthday: "1987-02-21",
+      deathday: null,
+      placeOfBirth: "Halifax, Nova Scotia, Canada",
+      bio: "Ariadne finit par trahir Cobb dans le dernier niveau du rêve.",
+    });
+    setAskModelForTests(scripted(["NOMS: Elliot Page\n\nElliot Page avait 23 ans à la sortie du film."], reqs));
+    await ask({ personId: 2 });
+    const { message } = reqs[0];
+    expect(message).toContain("Naissance : 1987-02-21");
+    expect(message).toContain("Sortie du film : 2010-07-16");
+    expect(message).not.toContain("Biographie");
+    expect(message).not.toContain("trahir Cobb");
+    expect(actorFactsText({ name: "X", bio: "Une longue histoire." } as Parameters<typeof actorFactsText>[0])).toBe("Nom : X");
   });
 
   it("sans `personId` : aucun fait demandé, aucun bloc `<acteur>` ; une panne des faits laisse partir la question", async () => {

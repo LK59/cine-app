@@ -59,6 +59,13 @@ describe("personFactsForPlayer", () => {
     expect(person.jfSeen).toEqual(["f".repeat(32)]);
   });
 
+  it("`library: false` (un lien de partage, 10.28.1) : les faits et la biographie, ni filmographie lue ni autres titres", async () => {
+    const facts = await personFactsForPlayer("a".repeat(32), 7, "fr", "f".repeat(32), { library: false });
+    expect(facts).toMatchObject({ status: "ok", birthday: "1990-08-10", placeOfBirth: "Fort Hood, Texas, USA", bio: "Lucas Till est un acteur américain." });
+    expect(facts).not.toHaveProperty("library");
+    expect(person.jfSeen).toEqual([]);
+  });
+
   it("une personne absente de la distribution de cet élément : `none`, rien d'autre de lu", async () => {
     expect(await personFactsForPlayer("a".repeat(32), 999, "fr", null)).toEqual({ status: "none" });
     expect(person.jfSeen).toEqual([]);

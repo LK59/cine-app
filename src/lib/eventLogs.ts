@@ -166,7 +166,8 @@ export function logAskQuestion(fields: {
   where: "fiche" | "lecteur";
   /** La tranche de dix minutes (0, 10, 20…), `null` sans position. */
   bucket: number | null;
-  status: "ok" | "rejeté" | "limite" | "erreur" | "indisponible";
+  /** `abandon` (10.28.1) : le panneau refermé ou la page quittée avant la fin — se lisait `ok`. */
+  status: "ok" | "rejeté" | "limite" | "erreur" | "indisponible" | "abandon";
   ms: number;
   /** Jusqu'au premier morceau de réponse rendu à l'écran. */
   firstMs?: number;

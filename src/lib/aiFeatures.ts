@@ -1,10 +1,15 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { config } from "@/lib/config";
-import { audienceAllows, type Audience } from "@/lib/featureAudience";
+import { aiAudienceAllows, audienceAllows, type Audience } from "@/lib/featureAudience";
 import { budgetOf, costOf, DEFAULT_MODELS, PROVIDERS, priceFor, type BilledUsage, type ProviderName } from "@/lib/subtitleGen/pricing";
 import { genSettings, providerFor, ProviderError, type GenSettings, type TranslationCall, type TranslationReply } from "@/lib/subtitleGen/providers";
 import { monthOf, spendDb } from "@/lib/subtitleGen/store";
 import { taskLog } from "@/lib/taskLog";
 import { AI_FEATURES, type AiFeatureId } from "@/lib/aiFeatureTable";
+import { estimatedInputUsage } from "@/lib/aiUsage";
+
+// Les relevés de jetons, purs, dans un module à part : la couche des fournisseurs les lit aussi, sans cycle.
+export { anthropicUsage, partialAnthropicUsage, estimatedInputUsage, CHARS_PER_TOKEN } from "@/lib/aiUsage";
 
 /**
  * Les fonctions payantes hors sous-titres — recherche décrite (§135), « Précédemment » (§137),
@@ -87,19 +92,33 @@ export function recordAiSpend(usage: BilledUsage | null | undefined, price = fea
   }
 }
 
-/** Les jetons d'une réponse Anthropic, chaque catégorie à part (`input_tokens` n'inclut pas le cache). */
-export function anthropicUsage(u: { input_tokens?: number | null; output_tokens?: number | null; cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null } | null | undefined): BilledUsage {
-  return {
-    inputTokens: u?.input_tokens ?? 0,
-    cacheWriteTokens: u?.cache_creation_input_tokens ?? 0,
-    cacheReadTokens: u?.cache_read_input_tokens ?? 0,
-    outputTokens: u?.output_tokens ?? 0,
-  };
+/**
+ * Un appel Anthropic sans flux (recherche décrite, « Précédemment ») : la réponse est comptée par l'appelant ; un
+ * appel coupé par le délai du SDK (`APIConnectionTimeoutError`) ou par nous (`APIUserAbortError`) ne rend aucun
+ * compteur mais a pu être facturé — son entrée estimée est comptée ici, une fois (10.28.1).
+ */
+export async function anthropicTimed(
+  client: Anthropic,
+  system: string,
+  message: string,
+  feature: AiFeatureId,
+  params: Anthropic.MessageCreateParamsNonStreaming
+): Promise<Anthropic.Message> {
+  try {
+    return await client.messages.create(params);
+  } catch (error) {
+    if (error instanceof Anthropic.APIConnectionTimeoutError || error instanceof Anthropic.APIUserAbortError) {
+      recordAiSpend(estimatedInputUsage(system, message), featureSettings().price, feature);
+    }
+    throw error;
+  }
 }
 
 /**
  * Un appel de texte par la couche commune (OpenAI, Gemini — et Anthropic pour qui l'appellerait),
- * compté dans le plafond, refus et réponses coupées compris (ils se paient aussi).
+ * compté dans le plafond **une fois**, refus, réponses coupées et appels interrompus compris (ils se paient
+ * aussi). Une panne sans jetons connus n'est comptée que si l'appel a été coupé de notre côté (`signal`) :
+ * une clé refusée ou un réseau absent n'ont rien coûté.
  */
 export async function featureComplete(call: TranslationCall, feature: AiFeatureId): Promise<TranslationReply> {
   const s = featureSettings();
@@ -108,7 +127,9 @@ export async function featureComplete(call: TranslationCall, feature: AiFeatureI
     recordAiSpend(reply.usage, s.price, feature);
     return reply;
   } catch (error) {
-    if (error instanceof ProviderError) recordAiSpend(error.usage, s.price, feature);
+    const usage = error instanceof ProviderError ? error.usage : null;
+    if (usage) recordAiSpend(usage, s.price, feature);
+    else if (call.signal?.aborted) recordAiSpend(estimatedInputUsage(call.system, ...call.stable, call.user), s.price, feature);
     throw error;
   }
 }
@@ -192,7 +213,7 @@ function xrayFor(session: Session): boolean {
 /** Les questions sur une personne : leur public, les acteurs à l'écran, un fournisseur prêt. */
 export function askPersonAvailableFor(session: Session): boolean {
   try {
-    return audienceAllows(askAudienceOf("person"), session) && xrayFor(session) && featureProviderReady();
+    return aiAudienceAllows(askAudienceOf("person"), session) && xrayFor(session) && featureProviderReady();
   } catch {
     return false;
   }
@@ -201,7 +222,7 @@ export function askPersonAvailableFor(session: Session): boolean {
 /** « Jusqu'ici » : son public, les acteurs à l'écran, un fournisseur prêt. */
 export function sofarAvailableFor(session: Session): boolean {
   try {
-    return audienceAllows(askAudienceOf("sofar"), session) && xrayFor(session) && featureProviderReady();
+    return aiAudienceAllows(askAudienceOf("sofar"), session) && xrayFor(session) && featureProviderReady();
   } catch {
     return false;
   }

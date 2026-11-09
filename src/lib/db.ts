@@ -664,8 +664,9 @@ function migrate(db: Database.Database): void {
   // « Jusqu'ici » (DECISIONS.md §139, 10.27) : deux phrases sur un personnage, gardées trente jours sous
   // l'empreinte de ce qui est parti au modèle (`sofarKey` — langue, élément, personne, tranche, résumés
   // envoyés, modèle, version de la consigne), partagées par les comptes qui ont vu la même chose. `by` :
-  // le compte qui l'a fait générer (le journal dit `compte` ou `partagé`). Un rejet du filet des noms
-  // n'est jamais gardé ; « rien à dire » (`vide`) l'est, pour ne pas redemander la même chose.
+  // le compte qui l'a fait générer (le journal dit `compte` ou `partagé`). « Rien à dire » (`vide`) est
+  // gardé, pour ne pas redemander la même chose ; un rejet du filet des noms (`rejeté`) aussi, mais lu une heure
+  // seulement (`SOFAR_REJECT_KEEP_MS`, 10.28.1), puis effacé avec le reste par le ménage.
   db.exec(`
     CREATE TABLE IF NOT EXISTS sofar_texts (
       key        TEXT    PRIMARY KEY,
@@ -2510,14 +2511,14 @@ export const dailyTop10Db = {
 
 /** « Jusqu'ici » (DECISIONS.md §139) — voir la table dans `migrate()`. */
 export const sofarDb = {
-  get(key: string): { state: "ok" | "vide"; text: string | null; by: string; createdAt: number } | null {
+  get(key: string): { state: "ok" | "vide" | "rejeté"; text: string | null; by: string; createdAt: number } | null {
     return (
       (getDb().prepare("SELECT state, text, by_account AS by, created_at AS createdAt FROM sofar_texts WHERE key = ?").get(key) as
-        | { state: "ok" | "vide"; text: string | null; by: string; createdAt: number }
+        | { state: "ok" | "vide" | "rejeté"; text: string | null; by: string; createdAt: number }
         | undefined) ?? null
     );
   },
-  put(key: string, state: "ok" | "vide", text: string | null, by: string, now = Date.now()): void {
+  put(key: string, state: "ok" | "vide" | "rejeté", text: string | null, by: string, now = Date.now()): void {
     getDb()
       .prepare("INSERT INTO sofar_texts (key, state, text, by_account, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET state = excluded.state, text = excluded.text, by_account = excluded.by_account, created_at = excluded.created_at")
       .run(key, state, text, by, now);

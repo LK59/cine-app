@@ -35,7 +35,7 @@ export const dynamic = "force-dynamic";
 /**
  * « Poser une question » sur un titre (DECISIONS.md §139).
  *
- * `GET` : `{ available }`, et — option allumée — les dialogues de ce que le compte regarde demandés
+ * `GET` : `{ available }` (une des trois portes ouverte), et — option allumée — les dialogues de ce que le compte regarde demandés
  * d'avance, et l'élément, sa série et ses épisodes gardés en mémoire (`prepareAskContext`, 10.27.2), sans rien
  * attendre : le lecteur l'appelle à l'ouverture d'un film ou d'un épisode, le panneau à la sienne.
  *
@@ -47,8 +47,8 @@ export const dynamic = "force-dynamic";
  *
  * Ce qui est vu est lu sous l'identité du compte (`gatherAskContext`) : un titre caché répond
  * `indisponible`, comme un titre inconnu. Réglée sur `admins`, l'option répond « off » à tout autre compte.
- * Un lien de partage n'y passe que pour son titre (`SHARE_RULES`,
- * portée `path`). Bornée par compte : 60 questions par heure, 300 par jour (10.27 : le propriétaire ne veut
+ * Un lien de partage reçoit toujours « off » (10.28.1, `aiAudienceAllows` : aucune fonction d'IA pour un
+ * lien) ; `SHARE_RULES` garde la route (portée `path`) pour que ce refus soit un 200, pas un 403. Bornée par compte : 60 questions par heure, 300 par jour (10.27 : le propriétaire ne veut
  * pas brider — les bornes ne gardent que d'un client qui boucle). Une ligne par question dans
  * `recherche.log` (`logAskQuestion`) — jamais la question ni la réponse.
  *
@@ -62,7 +62,7 @@ export const dynamic = "force-dynamic";
  * question (l'écran le dit), et pour « Jusqu'ici » (l'écran se tait).
  *
  * `personId` (10.27.2) : la question est posée depuis le panneau d'une personne d'« À l'écran » — ses faits
- * réels (TMDB : naissance, décès, lieu, biographie, `actorFactsForAsk`) partent avec, et la date de
+ * réels (TMDB : naissance, décès, lieu, `actorFactsForAsk` ; jamais la biographie depuis 10.28.1) partent avec, et la date de
  * diffusion de l'épisode ou de sortie du film est dans les sources : « quel âge a cette actrice pendant cet
  * épisode ? » se répond. La personne est cherchée dans la distribution de l'élément, jamais crue.
  *
@@ -103,7 +103,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   if (!isJellyfinId(itemId)) return NextResponse.json({ error: "itemId invalide" }, { status: 400 });
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
-  const available = askAvailableFor(session) || askPersonAvailableFor(session);
+  // Une des trois portes ouverte à la séance (10.28.1) : « Jusqu'ici » seul lit le même contexte — le lecteur
+  // le demande alors aussi (`useAskPrepare`), et la route ne préparait rien.
+  const available = askAvailableFor(session) || askPersonAvailableFor(session) || sofarAvailableFor(session);
   if (available && session.jfId) void prepareAskContext(session.jfId, itemId, localeOf(req, session.jfId));
   return NextResponse.json({ available }, { headers: PRIVATE });
 }
@@ -195,7 +197,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
 
   const sources = askSources(context.input);
   const { message, prefixEnd } = askParts(sources, askWhereLine(context.input), body.previous, body.question, actor);
-  // Les noms des faits réels passent le filet : la biographie montrée par le panneau en contient.
+  // Les noms des faits réels (le lieu de naissance) passent le filet.
   const check = actor ? `${sources.check}\n${actorFactsText(actor)}` : sources.check;
   const abort = new AbortController();
   // Le panneau refermé, la page quittée : le modèle s'arrête aussi.
@@ -213,7 +215,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
         }
       };
       let firstMs: number | undefined;
-      let status: "ok" | "rejeté" | "limite" | "erreur" = "ok";
+      let status: "ok" | "rejeté" | "limite" | "erreur" | "abandon" = "ok";
       let tokens: { inTokens?: number; outTokens?: number; cacheWrite?: number; cacheRead?: number } = {};
       const meta = { regenerated: false, rewritten: false };
       // Les étapes (10.27.2) : du départ vers le modèle au premier morceau, puis à la première phrase rendue.
@@ -305,6 +307,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
           status = code === 429 ? "limite" : "erreur";
           if (code !== 429) logError("ask/model", err);
           send({ t: "error", code: code === 429 ? "limite" : "erreur" });
+        } else {
+          // Le panneau refermé, la page quittée (10.28.1) : une question abandonnée, pas une réponse — elle se
+          // lisait `ok` au journal. Le modèle arrêté avec elle est compté quand même (`partialAnthropicUsage`).
+          status = "abandon";
         }
       } finally {
         const metaField = meta.regenerated && meta.rewritten ? "regénéré+réécrit" : meta.regenerated ? "regénéré" : meta.rewritten ? "réécrit" : null;

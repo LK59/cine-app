@@ -6501,7 +6501,8 @@ changement de version, trente jours), et ceux de la semaine (`activity-alerts-cl
 trois lectures en même temps. Qui a les deux voit la fiche de ce titre — une série entière,
 épisodes à venir compris — et le lit avec les mêmes lecteurs, les mêmes règles et la même reprise
 qu'un compte du foyer. Rien d'autre : ni catalogue, ni recherche, ni listes, ni demandes, ni
-personnes, ni téléchargement d'aucune sorte, ni génération de sous-titres, ni compte. Réservé à
+personnes, ni téléchargement d'aucune sorte, ni génération de sous-titres, ni aucune fonction d'IA (§139,
+10.28.1), ni compte. Réservé à
 l'administrateur à la création, révocable et prolongeable depuis l'Activité.
 
 **Un troisième rôle, fermé par défaut.** Une session de lien a le rôle `share` et porte son lien
@@ -9156,10 +9157,18 @@ bisher gesehen haben… »). Le filet des noms et la règle de la suite ne chang
 son clavier d'écran, à refermer à la télécommande, est la chose la plus fragile qu'on puisse y poser (§71) ;
 les propositions seules n'en valent pas la peine.
 
-**Liens de partage : permis, sur leur seul titre.** L'élément est dans l'adresse
-(`/api/cinema/ask/{élément}`) : `SHARE_RULES` la couvre en portée `path` (`GET` et `POST`), le film du lien
-ou les épisodes de sa série ; le compte Jellyfin du lien dit ce qui a été vu — quand l'option est réglée sur
-`tous` (un lien n'est pas administrateur).
+**Liens de partage : aucune fonction d'IA** (10.28.1, consigne du propriétaire — en 10.27 ils y avaient droit,
+sur leur seul titre, l'option réglée sur `tous`). Ni question sur le titre, ni question sur une personne, ni
+« Jusqu'ici », quels que soient les publics réglés : `tous` désigne les comptes du foyer. La porte est
+`aiAudienceAllows` (`featureAudience.ts`), par laquelle passent `askAvailableFor`, `askPersonAvailableFor` et
+`sofarAvailableFor` : la route répond `off` (POST) et `available: false` (GET), la configuration publique dit
+`false` aux trois drapeaux, l'écran cache donc pilule, champ et section. `SHARE_RULES` garde la route (portée
+`path`) : un refus de la porte serait un 403 par élément. Il garde les acteurs à l'écran ordinaires (la rangée,
+le panneau d'une personne : photo, acteur, personnage, âge, lieu, courte biographie) quand le titre est analysé,
+**jamais « Dans votre bibliothèque »** : `hiddenTmdbKeysFor` ne cache rien à un compte de lien, et ses « autres
+titres » étaient ceux de toute la bibliothèque — la route des faits passe `library: false` pour `share` et retire
+le champ (`personFactsForPlayer`). Tests : `ai-share-10281.test.ts`, `xray-player-route.test.ts`,
+`xray-person-facts.test.ts`.
 
 **Pour qui : `off` / `admins` / `tous`** (consigne du propriétaire, 09/11/2026 : les fonctions expérimentales
 s'allument d'abord pour les administrateurs seuls). Le réglage `ASK_ENABLED` est un public, **`off` par
@@ -9223,8 +9232,10 @@ la tranche ne montre rien de plus, et deux comptes au même endroit envoient les
   Deux comptes qui ont vu la même chose au même endroit lisent le même texte ; la moindre différence dans
   ce qui a été vu donne une autre clé — rien ne passe d'un compte à l'autre au-delà de ce que chacun a vu.
   **Trente jours en base** (`sofar_texts`, `sofarDb`), jamais regénéré tant qu'il vaut, effacé ensuite par le
-  ménage horaire (`cleanupDiskCache` → `sofarDb.prune`, par tranches sous budget). Un rejet du filet des noms
-  ou une panne n'est jamais gardé ; « rien à dire » l'est. Une génération par clé : la première demande lance
+  ménage horaire (`cleanupDiskCache` → `sofarDb.prune`, par tranches sous budget). Une panne n'est jamais
+  gardée ; « rien à dire » l'est ; un rejet du filet des noms l'est **une heure** (`rejeté`,
+  `SOFAR_REJECT_KEEP_MS`, 10.28.1 — jamais gardé avant : chaque réouverture du panneau regénérait et repayait
+  la même entrée, rejetée à l'identique). Une génération par clé : la première demande lance
   le modèle **détaché de la requête** (un panneau refermé ne la perd pas) ; les suivantes lisent les mêmes
   phrases à mesure (`sofarStart`, `sofarSubscribe`).
 - **Préparé en fond** (10.27 à 10.27.1 — retiré en 10.27.2, voir plus bas) : la rangée affichée, pour les
@@ -9344,7 +9355,9 @@ minutes, tranche du client = celle du serveur).
   descend plus que quand une question est posée ou que sa réponse arrive ; ce qui arrive ensuite (faits,
   biographie, « Jusqu'ici ») ne le fait pas bouger.
 - **Une question posée depuis le panneau d'une personne** emporte `personId` : ses faits réels (TMDB — nom,
-  naissance, décès, lieu, biographie montrée, `actorFactsForAsk`, cherchée dans la distribution de l'élément)
+  naissance, décès, lieu, `actorFactsForAsk`, cherchée dans la distribution de l'élément ; **jamais la
+  biographie** depuis 10.28.1 : celle de Wikipédia raconte souvent l'arc du personnage, la suite de ce qui a été
+  vu — le panneau la montre toujours, elle ne part plus au modèle)
   partent dans un bloc `<acteur>` après les sources, et la date de diffusion de l'épisode (ou de sortie du
   film, `PremiereDate` de Jellyfin, tirée de TMDB) est dans les sources. « Quel âge a cette actrice pendant
   cet épisode ? » recevait « Les sources ne donnent pas l'âge… » sous la date de naissance affichée ; vérifié
@@ -9475,6 +9488,18 @@ les résumés de Jellyfin voit plus de rejets (un nom traduit n'est pas dans les
 passé sur la vraie API (le banc n'a pas été lancé) : l'effort et la tenue du format `NOMS:` sont à vérifier
 sur quelques questions avant d'allumer l'option.
 
+**10.28.1 — une seule coupe par toucher, la sortie d'un compte, la préparation.** (1) Le toucher d'une
+personne (`startSofar`) coupait sur l'heure affichée, le panneau (`useSofar`) sur la position qu'il relisait un
+instant plus tard : à une limite de tranche, deux coupes, deux clés, une seconde demande et parfois une seconde
+génération payée. La position est lue **une fois** au toucher (`readPosition` de `PlayerControls`) ;
+`startSofar` la rend (`sofarPosition`), le lecteur la passe au panneau (`AskPanel` `sofarPosition`) — même
+nombre, même `sofarCut`, même clé. (2) `GET /api/cinema/ask/{élément}` préparait le contexte pour les questions
+seulement, alors que le lecteur l'appelle aussi quand « Jusqu'ici » est seul ouvert : les trois portes y entrent.
+(3) La sortie d'un compte (`forgetAccountOnDevice`) oublie les textes lus et préparés (`forgetAskClient`) et les
+faits des personnes (`forgetPersonFacts`). (4) Une question abandonnée (panneau refermé, page quittée) s'écrit
+`status: "abandon"` dans `recherche.log` — elle se lisait `ok`. Tests : `xray-row-1027.test.tsx` (limite de
+tranche, oubli), `ai-share-10281.test.ts` (préparation), `ai-spend-abort-10281.test.ts` (`abandon`).
+
 ## 140. Les fonctions d'IA chez les trois fournisseurs, un seul plafond mensuel, et des réglages qui disent ce qu'ils demandent (09/11/2026)
 
 **Règle.** Le fournisseur, la clé et le budget des sous-titres générés (§69) servent à **toutes** les
@@ -9581,3 +9606,18 @@ dollars (« x $ sur y $ de plafond mensuel ») ; les euros, au taux fixe écrit 
 approximatifs. Les journées d'avant 10.28.0 n'existent pas (le mois en cours est entier). `anthropicUsage` compte
 écriture et relecture du cache, chacune à son prix ; OpenAI et Gemini reçoivent le préfixe partagé en `stable` (leur
 cache implicite). Tests : `ai-cost.test.ts`.
+
+**10.28.1 — un appel interrompu se paie, et se compte.** La dépense d'Anthropic n'était écrite que dans
+`stream.finalMessage().then(...)` ; interrompu, `finalMessage()` rejette (`APIUserAbortError`) et rien n'était
+compté, alors qu'Anthropic facture l'entrée et ce qui a été produit. Interrompent un flux : le filet des noms
+(question et « Jusqu'ici »), le premier passage d'une question redemandée (`retry`), le panneau refermé, le
+chien de garde des 20 s. Chaque appel est maintenant compté **une fois**, fini ou non (`count` dans
+`ask/service.ts`) : sur un rejet, `partialAnthropicUsage(stream.currentMessage)` (`src/lib/aiUsage.ts`) —
+l'instantané que le SDK 1.6.0 garde après l'interruption : entrée et cache **exacts** (`message_start`), sortie
+au moins ce qui a été reçu (le compteur, ou texte et réflexion reçus à quatre caractères par jeton ; le total
+n'arrive qu'au `message_delta` de la fin). Le même relevé part avec la panne d'un lot de sous-titres en flux
+(`subtitleGen/providers/anthropic.ts`). Un appel sans flux coupé par le délai ou par nous (recherche décrite,
+« Précédemment » : `anthropicTimed` ; OpenAI et Gemini : `featureComplete` quand son `signal` est levé) ne rend
+aucun compteur : son entrée est estimée sur le texte envoyé, sans sortie. Coupé avant `message_start`, rien n'est
+compté (rien de connu). Tests : `ai-spend-abort-10281.test.ts` (le vrai `MessageStream` du SDK, le transport en
+double : flux interrompu, flux fini, question rejetée, panneau refermé, « Jusqu'ici » rejeté puis rouvert).

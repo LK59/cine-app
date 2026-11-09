@@ -11,6 +11,8 @@ import { forgetGuidedScrollMirror } from "@/lib/guidedScroll";
 import { dropPushOnSignOut } from "@/lib/pushOnSignOut";
 import { persistedCacheAccount } from "@/lib/persistentCache";
 import { forgetOfflineAccount } from "@/lib/offline/offlineEntry";
+import { forgetAskClient } from "@/lib/ask/client";
+import { forgetPersonFacts } from "@/lib/xray/client";
 
 /**
  * Se déconnecter : prévenir le serveur, puis aller à la page de connexion — **quoi qu'il arrive**.
@@ -70,6 +72,10 @@ export async function forgetAccountOnDevice(budgetMs: number): Promise<void> {
   // (audit du 08/10/2026).
   step(forgetHomeLayoutMirror);
   step(forgetGuidedScrollMirror);
+  // « Jusqu'ici » lu et préparé, les faits des personnes d'« À l'écran » (10.28.1) : ce que ce compte a vu, et
+  // ses titres dans la bibliothèque — le compte suivant dans le même onglet les lisait sans requête.
+  step(forgetAskClient);
+  step(forgetPersonFacts);
   // Les livres (§127) : la file des positions et signets en attente, les positions et signets gardés
   // pour la lecture hors ligne (`books/bookSync.ts`) — tous rangés sous `laterna:books:`. Écrit ici sans
   // importer le module des livres, que le cinéma ne charge pas. Les réglages du lecteur
