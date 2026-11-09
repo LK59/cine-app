@@ -44,7 +44,7 @@ def test_depot_puis_lecture(client):
     r = client.get(f"/items/{ITEM}", headers=AUTH)
     assert r.status_code == 200
     assert r.json() == {"itemId": ITEM, "etag": "etag-1", "status": "queued", "progress": 0.0,
-                        "analyzedUntil": 0.0, "error": None, "durationS": None, "stats": None}
+                        "analyzedUntil": 0.0, "error": None, "durationS": None, "stats": None, "voices": None, "faces": None}
     assert client.get("/health", headers=AUTH).json()["queue"]["pending"] == 1
 
 
@@ -130,7 +130,7 @@ def test_version_du_resultat_servie_telle_quelle(client):
     assert client.get(f"/items/{ITEM}/scenes", headers=AUTH).json()["version"] == 1
     assert client.post("/jobs", json=job(), headers=AUTH).status_code == 200
     _results(client.db, ITEM, complete=True, version=RESULT_VERSION)
-    assert client.get(f"/items/{ITEM}/scenes", headers=AUTH).json()["version"] == RESULT_VERSION == 4
+    assert client.get(f"/items/{ITEM}/scenes", headers=AUTH).json()["version"] == RESULT_VERSION == 5
 
 
 def test_ancienne_base_migree():

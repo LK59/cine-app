@@ -36,6 +36,7 @@ from .results import Assembler, ShotRow, TrackRow, build
 from .pipeline import ShotFaces
 from .shots import ShotSplitter, frames_to_sample, pick_indices
 from .timing import StageClock, job_stats, line
+from . import relabel, voicejob
 
 log = logging.getLogger("xray.worker")
 
@@ -93,13 +94,32 @@ def _prefetch(gen, depth: int = 48, clock: StageClock | None = None):
 
 
 class Worker:
-    def __init__(self, db: Database, store: JobStore, models: ModelManager, guard):
+    def __init__(self, db: Database, store: JobStore, models: ModelManager, guard, voice_models=None):
         self.db = db
         self.store = store
         self.models = models
         self.guard = guard
         self.engine = None
         self._asm: dict | None = None
+        # « Qui parle » (11/2026) : les réseaux de la voix et leur fil, chargés une fois prêts.
+        self.voice_models = voice_models
+        self.voice_engine = None
+        self.voice_stage: voicejob.VoiceStage | None = None
+
+    def _voice(self) -> "voicejob.VoiceStage | None":
+        vm = self.voice_models
+        if vm is None or not vm.enabled or not vm.ready:
+            return None
+        if self.voice_stage is None:
+            try:
+                self.voice_engine = vm.load_engine(settings.voice_threads)
+                self.voice_stage = voicejob.VoiceStage(self.db, self.voice_engine, vm.name)
+            except Exception as e:
+                vm.error = f"chargement des réseaux de la voix impossible : {e}"
+                vm.ready = False
+                log.exception("chargement des réseaux de la voix")
+                return None
+        return self.voice_stage
 
     def start(self) -> threading.Thread:
         t = threading.Thread(target=self._loop, name="worker", daemon=True)
@@ -124,6 +144,10 @@ class Worker:
                     log.exception("chargement du modèle")
                     continue
             row = self.store.next_job()
+            # Les voix d'un ordre fini avant l'étape des voix : le son seul, avant tout ordre `low` (bien
+            # moins cher que l'image), jamais devant un ordre `normal` ou `high`.
+            if (row is None or row["priority"] >= 2) and (self._relabel() or self._voice_only()):
+                continue
             if row is None:
                 self.store.wait_for_work(10.0)
                 continue
@@ -140,6 +164,42 @@ class Worker:
             finally:
                 self.store.running_id = None
                 self.store.cancel.clear()
+
+    def _voice_only(self) -> bool:
+        stage = self._voice()
+        if stage is None:
+            return False
+        model = self.voice_models.name
+        row = voicejob.next_voice_only(self.db, model)
+        if row is None:
+            return False
+        self.store.running_id = row["item_id"]
+        try:
+            voicejob.run_voice_only(
+                self.db, row, self.voice_engine, model, self._presence_from_db, self._skips,
+                lambda: self.store.cancel.is_set() or self.db.one(
+                    "SELECT 1 FROM items WHERE status='queued' AND priority < 2 LIMIT 1") is not None)
+        finally:
+            self.store.running_id = None
+            self.store.cancel.clear()
+        return True
+
+    def _presence_from_db(self, row):
+        """Les visages d'un ordre fini, refaits depuis la base (relabel.rebuild_faces) : qui est à l'image
+        plan par plan, et les scènes."""
+        built = relabel.rebuild_faces(self.db, row, row["model"] or self.models.name)
+        return built.presence, built.scenes
+
+    def _relabel(self) -> bool:
+        """La file des renommages (relabel.py), par lots bornés en temps ; jamais devant un ordre `normal`
+        ou `high`."""
+        if relabel.pending(self.db) == 0:
+            return False
+        vm = self.voice_models
+        relabel.run_some(self.db, vm.name if vm is not None and vm.enabled else None,
+                         should_stop=lambda: self.db.one(
+                             "SELECT 1 FROM items WHERE status='queued' AND priority < 2 LIMIT 1") is not None)
+        return True
 
     def _same(self, item_id: str, etag: str) -> bool:
         cur = self.store.get(item_id)
@@ -158,7 +218,7 @@ class Worker:
             # mêler, dans un même résultat, des tronçons des deux versions.
             log.info("[xray] %s : tronçons de la version %d oubliés, reprise à zéro", item_id, row["version"])
             with self.db.tx() as c:
-                for table in ("chunks", "shots", "tracks", "results"):
+                for table in ("chunks", "shots", "tracks", "results", "voice_regions", "voice_windows", "voice_results"):
                     c.execute(f"DELETE FROM {table} WHERE item_id=?", (item_id,))
                 c.execute("UPDATE items SET stats_json=NULL WHERE item_id=?", (item_id,))
         self.store.set_status(item_id, "running", attempts=row["attempts"] + 1, model=model, version=RESULT_VERSION)
@@ -195,6 +255,24 @@ class Worker:
                  "plages sautées : %s", item_id, len(cast), len(refs), len(mem), info.duration, info.codec,
                  info.profile, info.width, info.height,
                  ", ".join(f"{a:.0f}–{b:.0f} s" for a, b in self.skips) or "aucune")
+        # « Qui parle » : la piste son, lue dans le même ffmpeg que l'image. Sans réseaux prêts ou sans
+        # piste, l'image passe seule ; le son manquant sera lu seul plus tard (`voicejob`).
+        stage = self._voice()
+        self.voice_track = None
+        self.voice_tinfo = None
+        if stage is not None:
+            try:
+                voicejob.reset_if_other_model(self.db, item_id, self.voice_models.name)
+                self.db.run("UPDATE items SET voice_model=? WHERE item_id=?", (self.voice_models.name, item_id))
+                row = self.store.get(item_id) or row
+                self.voice_track, self.voice_tinfo = voicejob.track_for(self.db, row, path)
+                t = self.voice_track
+                log.info("[xray] %s : voix — piste %s (%s, %s, %d canaux, %s)", item_id,
+                         f"0:{t.index}" if t else "aucune", (self.voice_tinfo or {}).get("reason"),
+                         t.language if t else "-", t.channels if t else 0, t.title if t else "-")
+            except Exception:
+                log.exception("[xray] %s : piste son illisible, image seule", item_id)
+                self.voice_track = None
         chunks = [(r["idx"], r["start"], r["end"]) for r in
                   self.db.q("SELECT idx, start, end FROM chunks WHERE item_id=? AND done=0 ORDER BY idx", (item_id,))]
         all_chunks = [(r["idx"], r["start"], r["end"]) for r in
@@ -209,6 +287,7 @@ class Worker:
                 log.info("[xray] %s : cède la place à un ordre plus pressé", item_id)
                 self.store.set_status(item_id, "queued")
                 return
+            self.chunk_audio = [] if self.voice_track is not None else None
             shots, tracks, decoder, clock = self.process_chunk(item_id, path, info, idx, start, end)
             t_write = time.perf_counter()
             with self.db.tx() as c:
@@ -228,15 +307,28 @@ class Worker:
                 c.execute("UPDATE chunks SET done=1, decoder=?, stats=? WHERE item_id=? AND idx=?",
                           (decoder, json.dumps(clock.as_dict()), item_id, idx))
             with job_clock.stage("build"):
-                self.checkpoint(item_id, etag, model, info.duration, anchor, refs)
+                built = self.checkpoint(item_id, etag, model, info.duration, anchor, refs)
             self._save_job_clock(item_id, job_clock)
             job_clock = StageClock()
+            if stage is not None and self.chunk_audio is not None:
+                stage.note_faces(item_id, built)
+                stage.submit(item_id, etag, idx, self.chunk_audio, row["series_id"], self.voice_tinfo)
         with job_clock.stage("build"):
             built = self.checkpoint(item_id, etag, model, info.duration, anchor, refs)
         self._save_job_clock(item_id, job_clock)
+        if stage is not None and self.voice_track is not None and built is not None:
+            vres = stage.finish(item_id, etag, row["series_id"], self.voice_tinfo, built)
+            if vres is not None:
+                st = vres.stats
+                log.info("[xray] %s : voix — %d voix nommées, %d indécises, %d en désaccord (visages / mémoire), "
+                         "%d trop petites ; %d morceaux sur %d nommés", item_id, st.get("voicesNamed", 0),
+                         st.get("voicesUndecided", 0), st.get("voicesConflict", 0), st.get("voicesSmall", 0),
+                         st.get("named", 0), st.get("pieces", 0))
+        elif stage is not None and self.voice_track is None and built is not None and built.complete:
+            voicejob.no_audio(self.db, item_id, etag, self.voice_models.name, self.voice_tinfo)
         if built is not None and built.complete:
             _, label_t = thresholds(model)
-            castmod.update_series(self.db, row["series_id"], model, built, label_t)
+            castmod.update_series(self.db, row["series_id"], model, built, label_t, item_id)
             self.store.set_status(item_id, "done")
             st = job_stats(self.db, item_id, info.duration)
             log.info("[xray] %s : terminé en %.0f s (%.0f s de calcul, %s× le temps réel), %d scènes — %s",
@@ -285,13 +377,7 @@ class Worker:
             cur = c.execute("SELECT etag FROM items WHERE item_id=?", (item_id,)).fetchone()
             if cur is None or cur["etag"] != etag:
                 raise Cancelled()
-            c.execute(
-                """INSERT OR REPLACE INTO results (item_id, etag, model, scenes_json, analyzed_until, progress, complete,
-                                                  updated, version)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (item_id, etag, model, json.dumps(built.scenes, separators=(",", ":")), built.analyzed_until,
-                 built.progress, 1 if built.complete else 0, time.time(), RESULT_VERSION),
-            )
+            relabel.write_result(c, item_id, etag, model, built)
         return built
 
     def _incremental(self, item_id, duration, anchor, refs, chunks, done, label_t, cluster_t):
@@ -326,6 +412,8 @@ class Worker:
             clock = StageClock()
             clock.add("skipped", end - start)
             log.info("[xray] %s : tronçon %d (%.0f–%.0f s) sauté", item_id, idx, start, end)
+            if getattr(self, "chunk_audio", None) is not None:
+                self.chunk_audio = []  # rien à écouter : le tronçon est fait, sans parole
             return [], [], "skip", clock
         want_vaapi = (
             settings.hwaccel and decode.vaapi_suits(info) and decode.vaapi_available() and not self.guard.busy()
@@ -342,6 +430,8 @@ class Worker:
                 raise RuntimeError(str(e2)) from None
 
     def _process(self, item_id, path, info, idx, start, end, parts, vaapi: bool):
+        if getattr(self, "chunk_audio", None) is not None:
+            self.chunk_audio.clear()  # une reprise sur le processeur relit aussi le son
         w, h = info.out_size(settings.frame_width)
         step = 1.0 / settings.sample_fps
         splitter = ShotSplitter(w, h, step)
@@ -377,7 +467,10 @@ class Worker:
             clock.add("skipped", skipped)
         for p0, p1 in parts:
             stats = decode.DecodeStats("vaapi" if vaapi else "cpu")
-            gen = decode.read_frames(path, p0, p1 - p0, info, vaapi, stats, self.store.cancel)
+            audio_out = getattr(self, "chunk_audio", None)
+            track = getattr(self, "voice_track", None) if audio_out is not None else None
+            gen = decode.read_frames(path, p0, p1 - p0, info, vaapi, stats, self.store.cancel, audio=track,
+                                     audio_out=audio_out)
             for ts, frame in _prefetch(gen, clock=clock):
                 with clock.stage("shots"):
                     done = splitter.push(ts, frame)

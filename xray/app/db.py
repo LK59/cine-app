@@ -82,6 +82,54 @@ CREATE TABLE IF NOT EXISTS photo_emb (
     fetched REAL NOT NULL,
     PRIMARY KEY (model, url)
 );
+-- « Qui parle » (11/2026, voir voice.py / voices.py) : par tronçon, les zones de parole et une empreinte
+-- de voix par fenêtre (float16) ; le résultat assemblé ; la mémoire des voix d'une série.
+CREATE TABLE IF NOT EXISTS voice_regions (
+    item_id   TEXT NOT NULL,
+    chunk_idx INTEGER NOT NULL,
+    start     REAL NOT NULL,
+    end       REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS voice_regions_item ON voice_regions(item_id);
+CREATE TABLE IF NOT EXISTS voice_windows (
+    item_id   TEXT NOT NULL,
+    chunk_idx INTEGER NOT NULL,
+    start     REAL NOT NULL,
+    end       REAL NOT NULL,
+    emb       BLOB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS voice_windows_item ON voice_windows(item_id);
+CREATE TABLE IF NOT EXISTS voice_results (
+    item_id        TEXT PRIMARY KEY,
+    etag           TEXT NOT NULL,
+    model          TEXT NOT NULL,
+    track_json     TEXT,
+    segments_json  TEXT NOT NULL,
+    analyzed_until REAL NOT NULL,
+    complete       INTEGER NOT NULL,
+    version        INTEGER NOT NULL,
+    stats_json     TEXT,
+    updated        REAL NOT NULL
+);
+-- La mémoire d'une série, visages et voix, par contribution d'épisode (memory.py).
+CREATE TABLE IF NOT EXISTS series_memory (
+    series_id TEXT NOT NULL,
+    kind      TEXT NOT NULL,          -- face | voice
+    model     TEXT NOT NULL,
+    person_id INTEGER NOT NULL,
+    item_id   TEXT NOT NULL,          -- l'épisode qui a contribué ('legacy' : reprise de series_faces)
+    emb       BLOB NOT NULL,
+    weight    REAL NOT NULL,
+    score     REAL NOT NULL,
+    updated   REAL NOT NULL,
+    PRIMARY KEY (series_id, kind, model, person_id, item_id)
+);
+-- Renommer sans relire le fichier (relabel.py) : une file d'éléments, servie par l'ouvrier.
+CREATE TABLE IF NOT EXISTS relabel_queue (
+    item_id   TEXT PRIMARY KEY,
+    seq       INTEGER NOT NULL,
+    requested REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS series_faces (
     series_id TEXT NOT NULL,
     model     TEXT NOT NULL,
@@ -116,10 +164,19 @@ class Database:
                 self._conn.execute(f"ALTER TABLE {table} ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
         # Chronomètres (11/2026) : par tronçon, et ce qui revient à l'ordre entier.
         # Plages sautées (11/2026) : données par l'ordre, ou lues chez Jellyfin ; NULL = à demander.
-        for table, col in (("chunks", "stats"), ("items", "stats_json"), ("items", "skip_json")):
+        # « Qui parle » (11/2026) : le son de chaque tronçon fait ou non (`voice`), la langue d'origine
+        # donnée par l'ordre, la piste et le modèle de voix retenus, la dernière tentative en échec.
+        for table, col in (("chunks", "stats"), ("items", "stats_json"), ("items", "skip_json"),
+                           ("chunks", "voice"), ("items", "original_language"), ("items", "voice_track_json"),
+                           ("items", "voice_model"), ("items", "voice_error"), ("items", "voice_tried"),
+                           ("results", "stats_json"), ("items", "relabeled")):
             cols = {r[1] for r in self._conn.execute(f"PRAGMA table_info({table})")}
             if col not in cols:
-                self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT")
+                kind = "INTEGER NOT NULL DEFAULT 0" if col == "voice" else ("REAL" if col in ("voice_tried", "relabeled") else "TEXT")
+                self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {kind}")
+        from .memory import migrate_legacy
+
+        migrate_legacy(self._conn)
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:

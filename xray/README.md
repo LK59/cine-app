@@ -1,6 +1,6 @@
 # laterna-xray
 
-**Qui est à l'écran, scène par scène.**
+**Qui est à l'écran, scène par scène — et qui parle.**
 
 `laterna-xray` est un service d'appoint pour Laterna. Pour un film ou un épisode, il repère les
 visages, les regroupe par personne et les nomme d'après la distribution — si bien que Laterna
@@ -18,6 +18,7 @@ un réseau Docker interne.
 - [Comment ça marche](#comment-ça-marche)
 - [Installation](#installation)
 - [Brancher Laterna](#brancher-laterna)
+- [Qui parle](#qui-parle)
 - [Modèles et licences](#modèles-et-licences)
 - [Accélération matérielle](#accélération-matérielle)
 - [Performances](#performances)
@@ -261,6 +262,127 @@ position de lecture — et lit les scènes au fil de la lecture.
 
 ---
 
+## Qui parle
+
+Depuis la version 5 des résultats (11/2026), le service écoute aussi : pour chaque segment de parole,
+quelle voix, et — quand c'est sûr — à quelle personne de la distribution elle appartient
+(`GET /items/{id}/voices`). Laterna aligne ses répliques de sous-titres sur ces segments par les temps
+(n'importe quelle langue de sous-titres convient) et fait précéder d'un nom celles dont la voix est
+sûre ; « Jusqu'ici » et les questions savent alors qui dit quoi.
+
+### Comment
+
+1. **Le son, sans relire le fichier.** Dans le même ffmpeg que l'image, une seconde sortie : la piste
+   choisie, 16 kHz mono, **le canal central seul** quand elle en a un (`pan=mono|c0=FC` — c'est là que
+   sont les dialogues, sans la musique ni les effets), sinon un mélange mono. Elle part dans un second
+   tuyau (`pipe:<fd>`) ; le fichier n'est lu qu'une fois.
+2. **La piste** : la version originale — la langue d'origine du titre, que Laterna envoie
+   (`originalLanguage`, d'après TMDB) ; sinon une piste dite « VO » / « original » par son titre ou
+   marquée comme telle ; sinon la piste par défaut ; jamais un commentaire ni une audiodescription.
+   La piste retenue et la raison sont rendues par `/voices` (`track`). `XRAY_VOICE_TRACK=default` prend
+   la piste par défaut d'office (voir les mesures plus bas).
+3. **Silero VAD** (v6.2) trouve les zones de parole ; **une empreinte de voix par fenêtre de 1,5 s
+   tous les 0,5 s** dans ces zones (80 bandes de Mel à la Kaldi). Le tout dans un fil à part
+   (`XRAY_VOICE_THREADS`, 2 cœurs), pendant que l'image avance ; écrit en base tronçon par tronçon
+   (empreintes en demi-précision).
+4. **Morceaux** : chaque zone est coupée là où la voix change (deux fenêtres voisines sans recouvrement
+   à plus de 0,5 de distance cosinus), puis en morceaux de 2 s au plus — l'unité qui reçoit une voix.
+5. **Voix** : les morceaux sont regroupés (lien moyen, cosinus) **à trois seuils** — 0,65, 0,70, 0,75.
+6. **Noms, par contraste local avec les visages** (pour chaque seuil) : pour une voix et une personne,
+   sa présence à l'image pendant cette voix, moins sa présence pendant les autres voix des mêmes
+   scènes (au moins 3 morceaux, contraste ≥ 0,10, marge ≥ 0,06, présence ≥ 0,3) ; puis la seconde
+   chance (une personne prise par une autre voix nettement différente est écartée) ; **une personne,
+   une voix** (une seconde grosse voix — 20 morceaux et plus — nettement différente de la principale
+   reste sans nom : une voix au téléphone ne reçoit pas le nom du seul visage à l'écran) ; et une
+   seconde passe morceau par morceau contre le profil de chaque personne nommée.
+7. **Consensus** : un morceau ne garde un nom que si deux seuils sur trois au moins le donnent, et
+   aucun autre nom. `confidence` = part des avis, réduite quand le morceau ressemble peu à la voix de la
+   personne.
+8. **Mémoire de la série** (`series_memory`, genre `voice`) : la voix moyenne de chaque personne que les
+   **visages** ont nommée avec assurance dans les épisodes précédents (8 morceaux au moins, deux
+   personnes trop proches écartées). Elle nomme une voix que les visages laissent sans nom ; **si elle
+   contredit les visages de l'épisode, la voix reste sans nom** et le segment le dit (`conflict: true`).
+9. À chaque point d'étape, le résultat des voix est refait comme les scènes ; à la fin de l'ordre, une
+   dernière fois avec les visages complets. Le journal dit, par épisode, combien de voix sont nommées,
+   indécises, en désaccord (visages / mémoire) et trop petites — de quoi juger plus tard où une lecture
+   des lèvres servirait (`/items/{id}`, `voices`).
+
+Un ordre fini **avant** l'étape des voix (résultat v4) n'est pas réanalysé : quand rien de plus pressé
+qu'un ordre `low` n'attend, l'ouvrier lit **le son seul** des tronçons qui manquent (bien moins cher que
+l'image) et prend les visages en base. De même pour des tronçons dont les réseaux de la voix n'étaient
+pas encore prêts, et après un changement de `XRAY_VOICE_MODEL`.
+
+### Mesures (09–10/11/2026, trois vérités de terrain)
+
+Trois titres étiquetés à la main, réplique par réplique : *Ted Lasso* S01E08 (416 répliques),
+*MacGyver* S01E06 (426), *Bullet Train* (120, dont 14 voix hors champ au téléphone — la seule bonne
+réponse y est « sans nom »). « Nommé » : part des répliques étiquetées auxquelles Laterna donne un nom
+(sa règle : 60 % de la réplique couverts par une même voix nommée, réplique à deux voix exclue) ;
+« précision » : part de ces noms qui sont justes. Calculé par le service lui-même (son seul, sur une
+copie de la base), sur la version originale :
+
+| | *Ted Lasso* | *MacGyver* | *Bullet Train* | Ensemble | Voix au téléphone nommées |
+|---|---|---|---|---|---|
+| WeSpeaker ResNet34-LM | 69,5 % / 96,9 % | 63,4 % / 97,4 % | 67,9 % / 100 % | **66,6 % / 97,5 %** | 1 / 14 |
+| + mémoire de la série (E09 → E08) | **77,6 % / 96,3 %** | — | — | | |
+| CAM++ | 75,7 % / 95,6 % | 60,3 % / 94,2 % | 53,8 % / 100 % | 66,4 % / 95,4 % | 0 / 14 |
+| + mémoire de la série | 77,2 % / 95,6 % | — | — | | |
+
+**WeSpeaker est retenu** : même part nommée, mais la meilleure précision et le meilleur *Bullet Train*
+(film : pas de mémoire). CAM++ coûte 40 % de calcul en moins.
+
+**La stabilité** (le défaut du banc de R&D : un seuil qui scinde ou fusionne une voix change tout).
+Le réglage du banc (seuil unique, morceaux de 3 s, sans coupe aux changements de voix) contre celui
+retenu, en déplaçant les seuils de ± 0,05 :
+
+| | seuil 0,65 | seuil 0,70 | seuil 0,75 |
+|---|---|---|---|
+| avant : un seuil | 52,1 % / 93,9 %, 11 téléphones nommés | 66,4 % / 94,3 %, 10 | 66,4 % / 94,4 %, 10 |
+| après : consensus (centré sur) | 62,7 % / 97,3 %, 2 | 66,6 % / 97,5 %, 1 | 66,6 % / 97,3 %, 1 |
+
+**La piste.** Sur *Ted Lasso*, le doublage français (voix de studio, un comédien par rôle) se nomme
+mieux que la version originale (88,5 % contre 69,5 %, 77,6 % avec la mémoire) ; sur *Bullet Train*,
+c'est l'inverse (50,0 % contre 67,9 %). Le défaut reste la version originale ; `XRAY_VOICE_TRACK=default`
+pour une installation qui préfère la piste par défaut.
+
+**Le coût** (i7-8700, 2 fils) : 0,065 s de calcul par seconde d'épisode, 0,046 par seconde de film
+(dialogues plus rares) — un épisode de 30 min en ~2 min de calcul, ~65 s de mur ; *Bullet Train* en
+~6 min de calcul. Le son seul d'un ordre déjà fait : même coût plus le décodage du son. Place en base :
+~0,7 Mo par épisode (empreintes en demi-précision).
+
+### Renommer sans relire
+
+Tout ce qui coûte est gardé : plans, empreintes des pistes de visage, zones de parole et empreintes des
+fenêtres de voix. `POST /items/{id}/relabel`, `POST /series/{id}/relabel` (dans l'ordre des épisodes
+donné par `itemIds`, sinon par chemin) et `POST /relabel` (toute la bibliothèque) mettent des éléments
+en file ; l'ouvrier refait **seulement** regroupement et noms (visages puis voix), avec les seuils du code
+et la mémoire de la série du moment, par lots de 20 s au plus, jamais devant un ordre `normal` ou `high`.
+Le résultat est le même qu'une analyse neuve sur les mêmes données (`test_relabel.py`). Laterna renomme
+une série dont tous les épisodes du plan sont finis, une fois : ses premiers épisodes profitent alors
+de la mémoire de toute la série.
+
+### La mémoire des séries, gardée
+
+Visages et voix : chaque épisode **dépose une contribution** par personne (`series_memory` : épisode,
+date, poids, note) ; la mémoire est la moyenne pondérée des contributions. Refaire un épisode
+**remplace** sa contribution. Un épisode compte au plus 300 s de visage et 60 morceaux de voix par
+personne, et 15 personnes. Seulement ce qui est sûr et d'une source indépendante : un visage nommé par
+les **photos** avec une marge de 0,10 et 5 s de présence, une voix nommée par les **visages**.
+`GET /series/{id}/memory` liste les contributions ; `POST /series/{id}/memory/reset` les efface puis
+renomme la série. L'ancienne `series_faces` est reprise une fois comme une contribution `legacy`.
+
+### Limites
+
+- Une voix nommée suppose que la personne soit **à l'image** quand elle parle, plus que les autres :
+  un personnage toujours hors champ (narrateur, voix au téléphone), ou toujours filmé avec le même
+  partenaire, reste souvent sans nom — c'est voulu.
+- Un échange rapide sans silence peut tomber dans un même morceau ; la coupe aux changements de voix en
+  rattrape la plupart, pas toutes. Les répliques à deux voix ne sont jamais nommées par Laterna.
+- Les voix trop courtes (moins de 3 morceaux) ne sont jamais nommées.
+- La version originale, prise de son de tournage, se regroupe moins bien qu'un doublage de studio.
+
+---
+
 ## Modèles et licences
 
 Le code du service est sous la licence du dépôt. **Les poids des modèles ne sont ni dans le
@@ -318,6 +440,21 @@ dans le volume (`models/buffalo_l/int8/`). Cela prend quelques minutes, une fois
 - Seul le détecteur est quantifié : l'empreinte en INT8 a été mesurée inutilisable, elle reste en
   float32.
 - NNCF est installé sans son paquet de télémétrie : rien ne sort de la machine.
+
+**Les voix** (« qui parle ») : deux fichiers de plus, dans `models/voice/`, vérifiés de même
+([`app/voice.py`](app/voice.py)) :
+
+| Rôle | Fichier | Source | Licence |
+|---|---|---|---|
+| Détection de parole | `silero_vad.onnx` (v6.2) | [snakers4/silero-vad](https://github.com/snakers4/silero-vad) | MIT |
+| Empreinte de voix, `XRAY_VOICE_MODEL=wespeaker_r34` *(défaut)* | `voxceleb_resnet34_LM.onnx` | [Wespeaker/wespeaker-voxceleb-resnet34-LM](https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM) | **CC BY 4.0** |
+| Empreinte de voix, `XRAY_VOICE_MODEL=campplus_en` | `3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx` | [3D-Speaker CAM++](https://github.com/modelscope/3D-Speaker), export ONNX de [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models) | Apache-2.0 |
+
+*Attribution (CC BY 4.0)* : « WeSpeaker ResNet34-LM, VoxCeleb » — Hongji Wang, Chengdong Liang, Shuai
+Wang, Zhengyang Chen, Binbin Zhang, Xu Xiang, Yanlei Deng, Yanmin Qian, *WeSpeaker: A Research and
+Production oriented Speaker Embedding Learning Toolkit*, ICASSP 2023 ; poids publiés par le projet
+WeSpeaker sous licence CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), utilisés sans
+modification. `XRAY_VOICE=0` coupe l'étape des voix (rien n'est téléchargé).
 
 `XRAY_DETECTOR_INT8=0` garde le détecteur d'origine. `auraface` n'a pas de détecteur INT8 (YuNet
 passe par OpenCV).
@@ -503,6 +640,10 @@ Variables d'environnement (toutes facultatives sauf la clé) :
 | `XRAY_SAMPLE_FPS` | `4` | Images échantillonnées par seconde. |
 | `XRAY_CHUNK_SECONDS` | `120` | Longueur d'un tronçon. |
 | `XRAY_MIN_FACE` | `36` | Plus petit visage identifiable, en pixels (image de 640 px). |
+| `XRAY_VOICE` | `1` | `0` : pas d'étape « qui parle » (ni téléchargement, ni son lu). |
+| `XRAY_VOICE_MODEL` | `wespeaker_r34` | Empreinte de voix : `wespeaker_r34` (CC BY 4.0) ou `campplus_en` (Apache-2.0). Changer de modèle refait les voix par le son seul. |
+| `XRAY_VOICE_THREADS` | `2` | Fils des réseaux de la voix, à côté de ceux de l'image. |
+| `XRAY_VOICE_TRACK` | `original` | `original` : la version originale quand elle existe ; `default` : la piste par défaut du fichier. |
 | `XRAY_CLUSTER_THRESHOLD` | selon le modèle | Similarité pour regrouper deux pistes (0,42 / 0,40). |
 | `XRAY_LABEL_THRESHOLD` | selon le modèle | Seuil de rejet d'un nom (0,30 / 0,28). |
 
@@ -691,13 +832,51 @@ noms, scènes), `photos` (distribution). `404` si inconnu.
 
 Les scènes couvrent toutes les plages déjà analysées (y compris, pendant l'analyse, des plages
 disjointes) ; `people` est trié par temps de présence et ne contient que des visages nommés.
-`version` est la version de l'algorithme qui a produit *ce* résultat (aujourd'hui 4 : images
-non référencées sautées sur l'iGPU et détecteur INT8, règles de noms et de scènes inchangées ; voir
+`version` est la version de l'algorithme qui a produit *ce* résultat (aujourd'hui 5 : l'étape « qui parle » dans le même passage ;
+4 : images non référencées sautées sur l'iGPU et détecteur INT8, règles de noms et de scènes inchangées ; voir
 [Calibrage](#calibrage) et [Performances](#performances)). Un résultat d'une version antérieure reste servi tel quel — il reste
 valable — et rien n'est réanalysé de soi-même : un nouvel ordre au même `etag` répond encore
 `done`. Pour le refaire avec les règles du jour : `DELETE`, puis un nouvel ordre. Un ordre commencé
 sous une version antérieure et pas fini repart de zéro, pour ne jamais mêler deux règles dans un
 même résultat. `404` tant que rien n'est analysé.
+
+### `GET /items/{itemId}/voices`
+
+```json
+{
+  "itemId": "…", "etag": "…", "model": "wespeaker_r34", "version": 1,
+  "complete": true, "analyzedUntil": 1783.0,
+  "track": { "index": 3, "language": "eng", "title": "English", "channels": 6, "reason": "original" },
+  "stats": { "voicesNamed": 23, "voicesUndecided": 11, "voicesConflict": 1, "voicesSmall": 94, "speechNamed": 0.85, "…": "…" },
+  "segments": [
+    { "start": 12.32, "end": 14.1, "voiceId": 7, "personId": 12345, "confidence": 1.0 },
+    { "start": 15.0, "end": 16.2, "voiceId": 9, "personId": null, "confidence": 0.0, "conflict": true }
+  ]
+}
+```
+
+Les segments de parole, dans l'ordre : `voiceId` (une voix de cet élément), `personId` (la
+distribution de l'ordre) quand la voix est nommée, `confidence` (0..1), `conflict` quand la mémoire
+de la série et les visages de l'épisode se contredisent (la voix reste sans nom). `track.reason` :
+`original`, `vo`, `default` ou `first` ; `track: null` sans piste son utilisable. `complete: false`
+pendant l'analyse — Laterna ne se sert alors d'aucun nom. Les répliques à deux voix sont l'affaire de
+Laterna. `404` tant qu'il n'y a rien. `version` : 1.
+
+### Renommer, mémoire des séries, qualité
+
+- `POST /items/{itemId}/relabel` → `202 {queued, pending}` ; `404` inconnu, `409` pas fini.
+- `POST /series/{seriesId}/relabel`, corps facultatif `{"itemIds": [...]}` (l'ordre des épisodes) →
+  `202 {queued, items, pending}`.
+- `POST /relabel` → toute la bibliothèque en file ; `GET /relabel` → `{pending}`.
+- `GET /series/{seriesId}/memory` → `{seriesId, entries: [{kind, model, personId, itemId, weight, score, updated}]}`.
+- `POST /series/{seriesId}/memory/reset`, corps facultatif `{"itemIds": [...]}` → `{removed, queued}`.
+- `GET /quality` → `{overall, movies, series: [...]}` : par série (les moins bien nommées d'abord),
+  `items`, `withVoices`, `speechNamed` (part du temps de parole nommée), `facesNamed` (part du temps de
+  visage nommée), `voicesNamed`, `voicesUndecided`, `voicesConflict`, `itemsWithConflict`.
+
+`GET /items/{itemId}` gagne `voices` (`complete`, comptes de voix, `speechNamed`) et `faces`
+(`facesNamed`, `faceSeconds`) ; `/health` gagne `voice` (modèle, licence, prêt, erreur, détection de
+parole). `POST /jobs` accepte `originalLanguage` (code ISO 639, facultatif).
 
 ### `DELETE /items/{itemId}`
 
@@ -728,12 +907,20 @@ xray/
 │   ├── cast.py        photos de référence, mémoire de la série
 │   ├── gpu_guard.py   sessions Jellyfin
 │   ├── models.py      téléchargement et vérification des poids
+│   ├── audio.py       piste son (version originale), son dans le même ffmpeg
+│   ├── voice.py       Silero VAD, empreintes de voix, poids de la voix
+│   ├── voices.py      morceaux, voix, noms, consensus, mémoire (assemblage pur)
+│   ├── voicejob.py    le son d'un ordre à côté de l'image, son seul des ordres finis
+│   ├── relabel.py     renommer sans relire (file, lots bornés)
+│   ├── memory.py      mémoire des séries par contribution d'épisode
 │   └── db.py          SQLite
 └── tests/             contrat HTTP, clé, file, chemins, regroupement et noms sur des
                        empreintes synthétiques, plans et pistes synthétiques, économies de
                        calcul (meilleurs visages, lots, mémoire, plans fixes, plages, fils),
                        décodage arrêté par nous, assemblage incrémental identique au complet,
-                       paliers et bascule de l'iGPU, quantification INT8 (vraie, sur un petit réseau)
+                       paliers et bascule de l'iGPU, quantification INT8 (vraie, sur un petit réseau),
+                       voix (champ-contrechamp, téléphone, désaccord, consensus), piste son,
+                       son du même ffmpeg, renommage identique à l'analyse, mémoire bornée, qualité
 ```
 
 Les tests n'ont besoin ni des modèles ni du réseau. Ils tournent pendant la construction de

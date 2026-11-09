@@ -56,6 +56,9 @@ class Built:
     assignments: dict[int, Assignment] = field(default_factory=dict)
     centroids: np.ndarray | None = None
     cluster_time: np.ndarray | None = None
+    # « Qui parle » (11/2026) : qui est à l'image, plan par plan — (début, fin, personId, part du plan
+    # où on le voit), la plus grande de ses pistes du plan. Ce que `voices.py` compare aux voix.
+    presence: list = field(default_factory=list)
 
 
 def merge_intervals(chunks: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -166,7 +169,16 @@ def _assemble(
             plist.sort(key=lambda p: (-p["screenTime"], -p["confidence"], p["personId"]))
             scenes_out.append({"start": round(start, 3), "end": round(end, 3), "people": plist})
     scenes_out.sort(key=lambda s: s["start"])
-    return Built(scenes_out, until, round(progress, 4), complete, assignments, centroids, ctime)
+    shown: dict[tuple[float, float, int], float] = {}
+    for i, t in enumerate(tracks):
+        asg = assignments.get(int(labels[i]))
+        if asg is None:
+            continue
+        key = (t.shot_start, t.shot_end, asg.person_id)
+        frac = min(1.0, t.screen_time / max(t.shot_end - t.shot_start, 1e-3))
+        shown[key] = max(shown.get(key, 0.0), frac)
+    presence = sorted((a, b, pid, f) for (a, b, pid), f in shown.items())
+    return Built(scenes_out, until, round(progress, 4), complete, assignments, centroids, ctime, presence)
 
 
 class Assembler:

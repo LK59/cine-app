@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
 import threading
 import time
@@ -159,7 +160,7 @@ def tonemap_available() -> bool:
 
 
 def build_command(path: str, start: float, length: float, info: MediaInfo, vaapi: bool,
-                  fps: float, width: int, threads: int) -> list[str]:
+                  fps: float, width: int, threads: int, extra_output: list[str] | None = None) -> list[str]:
     w, h = info.out_size(width)
     # `-filter_threads` borne aussi les filtres (réduction, adaptation HDR) à `XRAY_THREADS`.
     cmd = [settings.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-filter_threads", str(threads)]
@@ -183,6 +184,9 @@ def build_command(path: str, start: float, length: float, info: MediaInfo, vaapi
             vf = f"fps={fps},scale={w}:{h}:flags=fast_bilinear,format=nv12"
     cmd += ["-ss", f"{start:.3f}", "-t", f"{length:.3f}", "-i", path,
             "-map", "0:v:0", "-an", "-sn", "-dn", "-vf", vf, "-f", "rawvideo", "-pix_fmt", "nv12", "pipe:1"]
+    # « Qui parle » (11/2026) : le son de la même lecture, en seconde sortie (`audio.py`).
+    if extra_output:
+        cmd += extra_output
     return cmd
 
 
@@ -207,16 +211,35 @@ class DecodeStats:
 
 def read_frames(path: str, start: float, length: float, info: MediaInfo, vaapi: bool,
                 stats: DecodeStats, cancel: threading.Event | None = None,
-                fps: float | None = None, width: int | None = None) -> Iterator[tuple[float, np.ndarray]]:
+                fps: float | None = None, width: int | None = None,
+                audio=None, audio_out: list | None = None) -> Iterator[tuple[float, np.ndarray]]:
     """Rend (instant absolu, image NV12 (h·3/2 × l)) pour chaque image échantillonnée.
-    Les instants sont reconstruits à partir du rang : le filtre `fps` cadence la sortie."""
+    Les instants sont reconstruits à partir du rang : le filtre `fps` cadence la sortie.
+
+    `audio` (une `audio.AudioTrack`) : le son de la plage sort du même ffmpeg dans un second tuyau, et
+    `audio_out` reçoit à la fin `(start, pcm int16 16 kHz)` — le fichier n'est lu qu'une fois."""
     fps = fps or settings.sample_fps
     width = width or settings.frame_width
     w, h = info.out_size(width)
     frame_bytes = w * h * 3 // 2
-    cmd = build_command(path, start, length, info, vaapi, fps, width, settings.threads)
+    sink = None
+    extra = None
+    wfd = None
+    if audio is not None:
+        from . import audio as audiomod
+
+        rfd, wfd = audiomod.open_pipe()
+        extra = audiomod.audio_output_args(audio, f"pipe:{wfd}")
+    cmd = build_command(path, start, length, info, vaapi, fps, width, settings.threads, extra)
     t0 = time.monotonic()
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=frame_bytes * 4)
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=frame_bytes * 4,
+                                pass_fds=(wfd,) if wfd is not None else ())
+    finally:
+        if wfd is not None:
+            os.close(wfd)  # seul ffmpeg écrit : la fin de sa sortie ferme le tuyau
+    if audio is not None:
+        sink = audiomod.PcmSink(os.fdopen(rfd, "rb"))
     err_tail: deque[str] = deque(maxlen=20)
 
     def drain() -> None:
@@ -250,6 +273,10 @@ def read_frames(path: str, start: float, length: float, info: MediaInfo, vaapi: 
             proc.kill()
         proc.wait()
         t.join(timeout=2)
+        if sink is not None:
+            sink.join()
+            if audio_out is not None:
+                audio_out.append((start, sink.pcm()))
         stats.frames = i
         stats.seconds = time.monotonic() - t0
         stats.returncode = proc.returncode

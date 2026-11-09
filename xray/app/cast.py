@@ -95,10 +95,10 @@ def cached_photo_embeddings(db: Database, model: str, cast: list[CastMember]) ->
 
 
 def series_embeddings(db: Database, series_id: str | None, model: str) -> dict[int, np.ndarray]:
-    if not series_id:
-        return {}
-    rows = db.q("SELECT person_id, emb FROM series_faces WHERE series_id=? AND model=?", (series_id, model))
-    return {int(r["person_id"]): np.frombuffer(r["emb"], dtype=np.float32) for r in rows}
+    """La mémoire des visages de la série : la moyenne pondérée des contributions de ses épisodes (memory.py)."""
+    from . import memory
+
+    return memory.recall(db, series_id, "face", model)
 
 
 def build_refs(cast: list[CastMember], photos: dict[int, np.ndarray], series: dict[int, np.ndarray]) -> list[PersonRefs]:
@@ -113,37 +113,27 @@ def build_refs(cast: list[CastMember], photos: dict[int, np.ndarray], series: di
 
 
 # Ce que la série retient d'un épisode : seulement des groupes que les *photos* nomment avec
-# assurance. Une mémoire nourrie de ses propres conclusions finirait par confirmer ses erreurs.
-SERIES_MIN_PHOTO_MARGIN = 0.08
-SERIES_MAX_WEIGHT = 1800.0
+# assurance — une mémoire nourrie de ses propres conclusions finirait par confirmer ses erreurs. Depuis le
+# 10/11/2026 (garde de la mémoire) : marge de 0,10 au-dessus du seuil de nom (0,08 avant), cinq secondes
+# de présence au moins, et une contribution par épisode, bornée (memory.py).
+SERIES_MIN_PHOTO_MARGIN = 0.10
+SERIES_MIN_TIME = 5.0
 
 
-def update_series(db: Database, series_id: str | None, model: str, built, label_threshold: float) -> None:
+def update_series(db: Database, series_id: str | None, model: str, built, label_threshold: float, item_id: str = "") -> int:
+    """Dépose la contribution de cet épisode à la mémoire des visages (remplace la précédente)."""
+    from . import memory
+
     if not series_id or built.centroids is None:
-        return
-    per_person: dict[int, tuple[np.ndarray, float]] = {}
+        return 0
+    per_person: dict[int, tuple[np.ndarray, float, float]] = {}
     for ci, asg in built.assignments.items():
         if asg.photo_score < label_threshold + SERIES_MIN_PHOTO_MARGIN:
             continue
         w = float(built.cluster_time[ci])
         if w <= 0:
             continue
-        acc, tw = per_person.get(asg.person_id, (np.zeros_like(built.centroids[ci]), 0.0))
-        per_person[asg.person_id] = (acc + built.centroids[ci] * w, tw + w)
-    now = time.time()
-    with db.tx() as c:
-        for pid, (acc, w) in per_person.items():
-            row = c.execute("SELECT emb, weight FROM series_faces WHERE series_id=? AND model=? AND person_id=?",
-                            (series_id, model, pid)).fetchone()
-            if row is not None:
-                old = np.frombuffer(row["emb"], dtype=np.float32)
-                ow = float(row["weight"])
-                new = normalize(old * ow + acc)
-                nw = min(ow + w, SERIES_MAX_WEIGHT)
-            else:
-                new = normalize(acc)
-                nw = min(w, SERIES_MAX_WEIGHT)
-            c.execute(
-                "INSERT OR REPLACE INTO series_faces (series_id, model, person_id, emb, weight, updated) VALUES (?, ?, ?, ?, ?, ?)",
-                (series_id, model, pid, new.astype(np.float32).tobytes(), nw, now),
-            )
+        acc, tw, best = per_person.get(asg.person_id, (np.zeros_like(built.centroids[ci]), 0.0, 0.0))
+        per_person[asg.person_id] = (acc + built.centroids[ci] * w, tw + w, max(best, float(asg.photo_score)))
+    entries = {pid: (normalize(acc), tw, sc) for pid, (acc, tw, sc) in per_person.items() if tw >= SERIES_MIN_TIME}
+    return memory.contribute(db, series_id, "face", model, item_id or "?", entries)

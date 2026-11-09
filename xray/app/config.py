@@ -23,7 +23,13 @@ VERSION = "1.0.0"
 #   4 — (09/11/2026) images non référencées sautées aussi sur l'iGPU (`XRAY_VAAPI_NOREF`) : les
 #       images échantillonnées changent un peu ; détecteur INT8 (`XRAY_DETECTOR_INT8`) : quelques
 #       visages à la limite (moins de 36 px) gagnés ou perdus. Règles de noms et de scènes inchangées.
-RESULT_VERSION = 4
+#   5 — (11/2026) l'étape « qui parle » (voix, `/voices`) dans le même passage ; règles des visages et
+#       des scènes inchangées. Un ordre v4 fini garde ses scènes, et ses voix sont complétées par une
+#       lecture du son seul (`voicejob.py`), sans refaire l'image.
+RESULT_VERSION = 5
+# Version de l'assemblage des voix (`version` de /voices) — 1 : morceaux de 2 s coupés aux changements
+# de voix, consensus de trois seuils, contraste local avec les visages, mémoire de la série.
+VOICE_VERSION = 1
 
 
 def _int(name: str, default: int) -> int:
@@ -91,6 +97,14 @@ class Settings:
     # Seuils de similarité cosinus. Laisser vides = valeur propre au modèle (voir faces.MODEL_DEFAULTS).
     cluster_threshold: float | None = field(default_factory=lambda: _opt_float("XRAY_CLUSTER_THRESHOLD"))
     label_threshold: float | None = field(default_factory=lambda: _opt_float("XRAY_LABEL_THRESHOLD"))
+
+    # « Qui parle » (11/2026) : coupé par XRAY_VOICE=0 ; modèle d'empreinte (wespeaker_r34 ou
+    # campplus_en) ; fils de ses réseaux, à côté de ceux de l'image ; piste retenue (`original` : la
+    # version originale quand elle existe, `default` : la piste par défaut du fichier).
+    voice_enabled: bool = field(default_factory=lambda: _flag("XRAY_VOICE", True))
+    voice_model: str = field(default_factory=lambda: os.environ.get("XRAY_VOICE_MODEL", "wespeaker_r34").strip().lower())
+    voice_threads: int = field(default_factory=lambda: max(1, _int("XRAY_VOICE_THREADS", 2)))
+    voice_track: str = field(default_factory=lambda: os.environ.get("XRAY_VOICE_TRACK", "original").strip().lower())
 
     @property
     def db_path(self) -> Path:

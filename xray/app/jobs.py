@@ -62,6 +62,8 @@ class JobSpec:
     # Fichier remplacé (autre etag) de même durée : reprendre le résultat complet au lieu de tout
     # refaire (`rebindIfSameDuration` + `durationS`).
     rebind_duration: float | None = None
+    # Langue d'origine du titre (ISO 639-1 de TMDB, « en ») : la piste son de « qui parle » (audio.py).
+    original_language: str | None = None
 
 
 def check_photo_url(url: object) -> str:
@@ -162,6 +164,9 @@ def validate_job(body: object, media_root: Path) -> JobSpec:
         if isinstance(d, bool) or not isinstance(d, (int, float)) or not math.isfinite(d) or d <= 0:
             raise InvalidJob("durationS : nombre positif attendu avec rebindIfSameDuration")
         rebind_duration = float(d)
+    lang = body.get("originalLanguage")
+    if lang is not None and (not isinstance(lang, str) or not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z]{2})?", lang.strip())):
+        raise InvalidJob("originalLanguage : code de langue (ISO 639) ou null")
     path = check_media_path(body.get("path"), media_root)
     return JobSpec(
         item_id=item_id.lower(),
@@ -173,6 +178,7 @@ def validate_job(body: object, media_root: Path) -> JobSpec:
         cast=cast,
         skip=skip,
         rebind_duration=rebind_duration,
+        original_language=lang.strip().lower() if isinstance(lang, str) else None,
     )
 
 
@@ -218,6 +224,10 @@ class JobStore:
             if row is not None and row["etag"] != spec.etag and self._rebind(c, row, spec):
                 return 200, {"itemId": spec.item_id, "status": "done", "position": 0}
             if row is not None and row["etag"] == spec.etag and row["status"] == "done":
+                # Fait au même fichier : rien n'est relancé. La langue d'origine, si elle arrive seulement
+                # maintenant (un ordre d'avant « qui parle »), est retenue pour la lecture du son seul.
+                if spec.original_language and not row["original_language"]:
+                    c.execute("UPDATE items SET original_language=? WHERE item_id=?", (spec.original_language, spec.item_id))
                 return 200, {"itemId": spec.item_id, "status": "done", "position": 0}
             if row is not None and row["etag"] == spec.etag and row["status"] in ("queued", "running"):
                 # Un ordre en double ne relance rien : il peut seulement remonter la priorité.
@@ -239,16 +249,17 @@ class JobStore:
                 skip_json = None if spec.skip is None else json.dumps([[a, b] for a, b in spec.skip])
                 c.execute(
                     """INSERT INTO items (item_id, etag, path, priority, start_at, series_id, cast_json, skip_json,
-                                          status, error, seq, version, created, updated)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', NULL, ?, ?, ?, ?)
+                                          original_language, status, error, seq, version, created, updated)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', NULL, ?, ?, ?, ?)
                        ON CONFLICT(item_id) DO UPDATE SET
                          etag=excluded.etag, path=excluded.path, priority=excluded.priority,
                          start_at=excluded.start_at, series_id=excluded.series_id,
-                         cast_json=excluded.cast_json, skip_json=excluded.skip_json, status='queued', error=NULL,
+                         cast_json=excluded.cast_json, skip_json=excluded.skip_json,
+                         original_language=excluded.original_language, status='queued', error=NULL,
                          seq=excluded.seq, version=excluded.version, updated=excluded.updated""",
                     (spec.item_id, spec.etag, spec.path, spec.priority, spec.start_at, spec.series_id,
-                     cast_json, skip_json, seq, RESULT_VERSION if row is None or row["etag"] != spec.etag else row["version"],
-                     now, now),
+                     cast_json, skip_json, spec.original_language, seq,
+                     RESULT_VERSION if row is None or row["etag"] != spec.etag else row["version"], now, now),
                 )
                 status = "queued"
         self._wake.set()
@@ -271,12 +282,15 @@ class JobStore:
         now = time.time()
         c.execute("UPDATE items SET etag=?, path=?, updated=? WHERE item_id=?", (spec.etag, spec.path, now, spec.item_id))
         c.execute("UPDATE results SET etag=?, updated=? WHERE item_id=?", (spec.etag, now, spec.item_id))
+        # Les voix suivent : mêmes temps, même durée.
+        c.execute("UPDATE voice_results SET etag=?, updated=? WHERE item_id=?", (spec.etag, now, spec.item_id))
         return True
 
     def _forget(self, c, item_id: str) -> None:
-        for table in ("chunks", "shots", "tracks", "results"):
+        for table in ("chunks", "shots", "tracks", "results", "voice_regions", "voice_windows", "voice_results"):
             c.execute(f"DELETE FROM {table} WHERE item_id=?", (item_id,))
-        c.execute("UPDATE items SET stats_json=NULL WHERE item_id=?", (item_id,))
+        c.execute("UPDATE items SET stats_json=NULL, voice_track_json=NULL, voice_model=NULL, voice_error=NULL, "
+                  "voice_tried=NULL WHERE item_id=?", (item_id,))
 
     def delete(self, item_id: str) -> None:
         item_id = item_id.lower()
