@@ -9,7 +9,6 @@ import pytest
 from app import segments
 from app.decode import MediaInfo, build_command
 from app.faces import Embedder, Face, FaceEngine
-from app.inference import BATCH_BUCKETS, bucket
 from app.jobs import InvalidJob, check_skip, validate_job
 from app.pipeline import EARLY_MARGIN, EARLY_SIM, ShotFaces, memory_match
 from app.shots import ShotSplitter, frames_to_sample, pick_indices
@@ -151,7 +150,7 @@ class _PerSample:
 def test_lots_egaux_au_un_par_un(monkeypatch):
     import app.faces as faces
 
-    monkeypatch.setattr(faces, "_session", lambda path, threads, pad_batch=False: _PerSample())
+    monkeypatch.setattr(faces, "_session", lambda path, threads: _PerSample())
     rng = np.random.default_rng(6)
     crops = [rng.integers(0, 255, (112, 112, 3), dtype=np.uint8) for _ in range(37)]
     one = Embedder("x.onnx", 2, batch=1)
@@ -161,14 +160,9 @@ def test_lots_egaux_au_un_par_un(monkeypatch):
     assert np.allclose(a, b, atol=1e-6)
 
 
-def test_tailles_de_lot_compilees():
-    assert [bucket(n) for n in (1, 2, 3, 5, 9, 17, 32, 40)] == [1, 2, 4, 8, 16, 32, 32, 32]
-    assert BATCH_BUCKETS[-1] == 32
-
-
 def _tiny_ir(tmp_path):
     """Petit réseau OpenVINO (convolution, ReLU, moyenne, produit) sauvé en IR : de quoi
-    vérifier, sans les vrais poids, que compléter un lot ne change rien à ses images."""
+    vérifier, sans les vrais poids, qu'un lot rend ce que rendent ses images une à une."""
     ov = pytest.importorskip("openvino")
     from openvino import opset13 as ops
 
@@ -185,17 +179,17 @@ def _tiny_ir(tmp_path):
     return path
 
 
-def test_openvino_lot_complete_egal_au_un_par_un(tmp_path):
+def test_openvino_lot_egal_au_un_par_un(tmp_path):
     from app.inference import OvSession
 
     path = _tiny_ir(tmp_path)
-    s = OvSession(path, 3, pad_batch=True)
+    s = OvSession(path, 3)
     assert s._cfg["INFERENCE_NUM_THREADS"] == 3 and s._cfg["INFERENCE_PRECISION_HINT"] == "f32"
     assert s._cfg["ENABLE_CPU_PINNING"] is False
     rng = np.random.default_rng(8)
     x = rng.standard_normal((5, 3, 112, 112)).astype(np.float32)
     batched = s.run(s.output_names, {s.input_name: x})[0]
-    assert batched.shape == (5, 512)  # lot de 5 complété à 8, coupé à 5
+    assert batched.shape == (5, 512)  # un seul réseau compilé, lot libre
     single = np.concatenate([s.run(s.output_names, {s.input_name: x[i:i + 1]})[0] for i in range(5)])
     assert np.allclose(batched, single, rtol=1e-5, atol=1e-5)
 

@@ -329,24 +329,57 @@ restant en priorité basse, il cède de toute façon le processeur à ce qui en 
 
 ## Performances
 
-Mesuré sur un Core i7 de 8ᵉ génération (6 cœurs, UHD 630), `XRAY_THREADS=4`, `buffalo_l`, un
-épisode HEVC 1080p — **pendant qu'un réencodage HEVC occupait déjà l'iGPU et une partie du
-processeur** :
+Mesuré le 09/11/2026 sur un Core i7-8700 (6 cœurs / 12 fils, UHD 630), `buffalo_l`, base neuve,
+**sur une machine très chargée** (charge moyenne 22 à 49 pour 12 fils : réencodage, tests d'un
+autre service) — les durées absolues sont donc pessimistes, les rapports entre versions parlent
+davantage. Avant : `XRAY_THREADS=4`, `cpus: 4`, ONNX Runtime ; après : `XRAY_THREADS=8`, `cpus: 8`.
+Chaque titre de série passe après l'épisode qui remplit la mémoire (S01E05, S01E01).
 
-| Étape | Mesure |
-|---|---|
-| Décodage réduit, VA-API | 640 images source/s, **27× le temps réel** |
-| Décodage réduit, processeur | 230 images source/s, **10× le temps réel** |
-| Détection (SCRFD-10G, 640×360) | ~100 à 125 ms par image analysée |
-| Empreinte (ArcFace R50) | ~115 à 170 ms par visage |
-| Un tronçon de 2 min | ~24 s (≈ 90 plans, 200 images analysées, 120 visages) |
-| Un épisode de 42 min | ≈ 9 min |
+| Titre | Avant | Après | Noms | Écart de temps de présence |
+|---|---|---|---|---|
+| *MacGyver* S01E06 (HEVC 1080p, 42 min) | 727 s, **3,5×** le temps réel | 397 s, **6,4×** | 8 → les mêmes 8 | ≤ 3,7 s par personne |
+| *The Pitt* S02E01 (HEVC 1080p, 53 min) | 831 s, **3,8×** | 476 s, **6,7×** | 35 → les mêmes 35 | ≤ 1,5 s |
+| *Bullet Train* (HEVC 4K HDR10, 2 h 07) | 1 708 s, **4,5×** | 1 306 s, **5,8×** | 28 → les mêmes 28 | ≤ 16 s (Joey King −16, Michael Shannon +16 sur 470 et 199 s) |
 
-Le premier tronçon (celui de `startAt`) est prêt une trentaine de secondes après l'ordre. Sur
-une machine au repos, les temps d'inférence sont nettement plus courts.
+Sur le temps processeur (mesuré par le cgroup, les deux versions tournant côte à côte), un
+épisode coûte **2 à 2,4 fois moins** : *MacGyver* S01E06 2 534 → 1 076 s, *The Pitt* S01E01
+2 953 → 1 493 s.
+
+Où passe le temps (*MacGyver* S01E06, secondes, `stats` de `GET /items/{id}`) :
+
+| Étape | Avant | Après |
+|---|---|---|
+| Détection | 396 (157 ms/image, 2 513 images) | 288 (120 ms/image, 2 405 images) |
+| Empreinte | 284 (232 ms/visage, 1 223 visages) | 79 (90 ms/visage, 876 visages) |
+| Attente du décodage | 25 | 11 |
+| Plans (coupes) | 15 | 13 |
+| Regroupement, noms, scènes | 2,3 | 1,9 |
+| Photos de la distribution | 1,9 | 2,5 |
+
+Ce que chaque mesure apporte :
+
+- **OpenVINO** au lieu d'ONNX Runtime : empreinte un par un 324 → 210 ms par visage ; détection
+  image par image sans gain net (180 contre 206 ms, sous charge) — le gain de la détection vient
+  du lot.
+- **Lots** : empreinte par 32, 140 à 170 ms au lieu de 210 à 320 par visage selon la charge ;
+  détection par 8 (OpenVINO seulement), 25 à 30 % de moins par image. Sorties identiques (boîtes
+  à 10⁻⁴ pixel, cosinus ≥ 0,9999998).
+- **Deux meilleurs visages par piste** : −8 % d'empreintes (beaucoup de pistes n'en ont qu'un ou
+  deux bons ; 12 à 25 % des plans suivent la règle complète).
+- **Mémoire de série** : 215 pistes sur *MacGyver* S01E06, 100 sur *The Pitt* S02E01 s'arrêtent à
+  un visage ; noms et temps de présence identiques à l'analyse sans sortie anticipée.
+- **Plans fixes** : 1 à 4 % des plans, autant d'images en moins.
+- **Génériques** : 66 à 101 s par épisode (rien sur *Bullet Train*, sans segments Jellyfin).
+- **Fils** : 8 au lieu de 4 ; sur une machine déjà pleine, le service n'en obtient qu'une partie
+  (2,7 cœurs en moyenne pendant le banc).
+
+Le décodage n'est plus négligeable pour un film 4K HDR (adaptation `tonemapx` sur le processeur :
+369 s d'attente sur *Bullet Train*), ni pour l'AV1, décodé sur le processeur. Le premier tronçon
+(celui de `startAt`) reste prêt en moins d'une minute.
 
 Un épisode occupe environ un mégaoctet en base (une empreinte par piste). Les poids de `buffalo_l` font
-180 Mo, ceux d'`auraface` 260 Mo.
+180 Mo, ceux d'`auraface` 260 Mo. En mémoire, le service tient sous 1,5 Go (un réseau compilé par
+modèle, taille de lot libre).
 
 ---
 

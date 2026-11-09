@@ -60,11 +60,11 @@ class Face:
         return float(min(self.box[2] - self.box[0], self.box[3] - self.box[1]))
 
 
-def _session(path: Path, threads: int, pad_batch: bool = False):
+def _session(path: Path, threads: int):
     from .config import settings
     from .inference import open_session
 
-    return open_session(path, threads, settings.inference, pad_batch=pad_batch)
+    return open_session(path, threads, settings.inference)
 
 
 def nms(boxes: np.ndarray, scores: np.ndarray, thresh: float) -> list[int]:
@@ -127,7 +127,7 @@ class Scrfd:
     def detect_batch(self, imgs: list[np.ndarray]) -> list[list[Face]]:
         """Plusieurs images de même taille en un appel du réseau, quand le moteur sait changer
         la taille du lot (OpenVINO ; le fichier `det_10g.onnx` fixe un lot de 1, qu'ONNX Runtime
-        respecte). Le lot est complété d'images noires jusqu'à une taille compilée.
+        respecte).
 
         Les sorties d'un lot de N ne sont pas N blocs à la suite : la tête de SCRFD range ses
         prédictions en (hauteur, largeur, lot, ancre) — mesuré le 09/11/2026, la seule
@@ -136,17 +136,13 @@ class Scrfd:
             return [self.detect(im) for im in imgs]
         if len({im.shape for im in imgs}) != 1:
             return [self.detect(im) for im in imgs]
-        from .inference import bucket
-
         n = len(imgs)
         prepared = [self._canvas(im) for im in imgs]
         _, scale, tw, th = prepared[0]
         canvases = [p[0] for p in prepared]
-        nb = bucket(n)
-        canvases += [np.zeros_like(canvases[0])] * (nb - n)
         blob = cv2.dnn.blobFromImages(canvases, 1.0 / 128.0, (tw, th), (127.5, 127.5, 127.5), swapRB=True)
         outs = self.session.run(self.output_names, {self.input_name: blob})
-        per = split_batched(outs, nb, self.strides, self.fmc, self.anchors, tw, th)
+        per = split_batched(outs, n, self.strides, self.fmc, self.anchors, tw, th)
         h, w = imgs[0].shape[:2]
         return [self._decode(per[k], scale, tw, th, w, h) for k in range(n)]
 
@@ -287,8 +283,7 @@ class Embedder:
     normalisation (InsightFace ne retombe sur 0/1 que pour les vieux modèles MXNet convertis)."""
 
     def __init__(self, path: Path, threads: int, batch: int = 32):
-        # Lots complétés d'images noires sous OpenVINO (formes compilées en nombre borné).
-        self.session = _session(path, threads, pad_batch=True)
+        self.session = _session(path, threads)
         self.input_name = self.session.input_name
         self.output_name = self.session.output_names[0]
         shape = self.session.input_shape
