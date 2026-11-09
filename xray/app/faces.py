@@ -23,6 +23,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from .timing import StageClock
+
 # Gabarit d'ArcFace : où tombent les yeux, le nez et les coins de la bouche dans l'image
 # 112×112 que le réseau d'empreinte attend. Tout visage y est ramené par une similitude.
 ARCFACE_TEMPLATE = np.array(
@@ -287,16 +289,19 @@ class FaceEngine:
         self.detector = detector
         self.embedder = embedder
         self.rules = rules or QualityRules()
-        # Compteurs de temps, lus et remis à zéro par l'ouvrier à chaque tronçon (journal).
-        self.timing = {"det_ms": 0.0, "det_n": 0, "emb_ms": 0.0, "emb_n": 0}
+        # Chronomètre du tronçon en cours (`timing.StageClock`), posé par l'ouvrier.
+        self.clock = StageClock()
 
     def analyse(self, img: np.ndarray) -> list[Face]:
         """Détecte tous les visages ; n'empreinte que ceux qui le méritent (taille, netteté,
         orientation). Les autres restent des présences, utiles pour suivre une piste."""
+        clock = self.clock
         t0 = time.perf_counter()
         faces = self.detector.detect(img)
-        self.timing["det_ms"] += (time.perf_counter() - t0) * 1000
-        self.timing["det_n"] += 1
+        t1 = time.perf_counter()
+        clock.add("detect", t1 - t0)
+        clock.count("images")
+        clock.count("faces", len(faces))
         crops, idx = [], []
         for i, f in enumerate(faces):
             if f.min_side < self.rules.min_face or f.score < self.rules.min_score:
@@ -319,11 +324,12 @@ class FaceEngine:
             f.accepted = True
             crops.append(crop)
             idx.append(i)
+        t2 = time.perf_counter()
+        clock.add("grade", t2 - t1)
         if crops:
-            t0 = time.perf_counter()
             embs = self.embedder.embed(crops)
-            self.timing["emb_ms"] += (time.perf_counter() - t0) * 1000
-            self.timing["emb_n"] += len(crops)
+            clock.add("embed", time.perf_counter() - t2)
+            clock.count("embedded", len(crops))
             for j, i in enumerate(idx):
                 faces[i].emb = embs[j]
         return faces

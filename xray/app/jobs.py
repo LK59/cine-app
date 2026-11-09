@@ -215,6 +215,7 @@ class JobStore:
     def _forget(self, c, item_id: str) -> None:
         for table in ("chunks", "shots", "tracks", "results"):
             c.execute(f"DELETE FROM {table} WHERE item_id=?", (item_id,))
+        c.execute("UPDATE items SET stats_json=NULL WHERE item_id=?", (item_id,))
 
     def delete(self, item_id: str) -> None:
         item_id = item_id.lower()

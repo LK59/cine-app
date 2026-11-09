@@ -33,6 +33,7 @@ from .jobs import CastMember, JobStore
 from .models import ModelManager
 from .results import ShotRow, TrackRow, build
 from .shots import ShotSplitter, frames_to_sample, pick_indices
+from .timing import StageClock, job_stats, line
 from .tracks import link, summarize
 
 log = logging.getLogger("xray.worker")
@@ -59,7 +60,7 @@ def chunk_order(chunks: list[tuple[int, float, float]], start_at: float) -> list
     return [c for c in chunks if c[0] >= first_idx] + [c for c in chunks if c[0] < first_idx]
 
 
-def _prefetch(gen, depth: int = 48):
+def _prefetch(gen, depth: int = 48, clock: StageClock | None = None):
     """Le décodage (ffmpeg) avance pendant que l'inférence travaille : sans cette file, le tuyau
     de ffmpeg se remplit et il attend que Python lise."""
     q: queue.Queue = queue.Queue(maxsize=depth)
@@ -78,7 +79,10 @@ def _prefetch(gen, depth: int = 48):
     t = threading.Thread(target=run, daemon=True)
     t.start()
     while True:
+        t0 = time.perf_counter()
         item = q.get()
+        if clock is not None:
+            clock.add("decode_wait", time.perf_counter() - t0)
         if item is END:
             break
         yield item
@@ -150,6 +154,7 @@ class Worker:
             with self.db.tx() as c:
                 for table in ("chunks", "shots", "tracks", "results"):
                     c.execute(f"DELETE FROM {table} WHERE item_id=?", (item_id,))
+                c.execute("UPDATE items SET stats_json=NULL WHERE item_id=?", (item_id,))
         self.store.set_status(item_id, "running", attempts=row["attempts"] + 1, model=model, version=RESULT_VERSION)
         t_job = time.monotonic()
         info = decode.probe(path)
@@ -166,7 +171,10 @@ class Worker:
         cast = [CastMember(c["personId"], c.get("name", ""), c.get("character", ""), c.get("order", 0), c.get("photos", []))
                 for c in json.loads(row["cast_json"])]
         self.guard.busy()  # rafraîchit l'état de l'iGPU avant de commencer
-        photos = castmod.photo_embeddings(self.db, self.engine, model, cast, settings.photos_dir)
+        job_clock = StageClock()
+        self.engine.clock = job_clock
+        with job_clock.stage("photos"):
+            photos = castmod.photo_embeddings(self.db, self.engine, model, cast, settings.photos_dir)
         refs = castmod.build_refs(cast, photos, castmod.series_embeddings(self.db, row["series_id"], model))
         log.info("[xray] %s : %d acteurs, %d avec référence, %.0f s de vidéo (%s %s %dx%d)",
                  item_id, len(cast), len(refs), info.duration, info.codec, info.profile, info.width, info.height)
@@ -184,7 +192,8 @@ class Worker:
                 log.info("[xray] %s : cède la place à un ordre plus pressé", item_id)
                 self.store.set_status(item_id, "queued")
                 return
-            shots, tracks, decoder = self.process_chunk(item_id, path, info, idx, start, end)
+            shots, tracks, decoder, clock = self.process_chunk(item_id, path, info, idx, start, end)
+            t_write = time.perf_counter()
             with self.db.tx() as c:
                 cur = c.execute("SELECT etag FROM items WHERE item_id=?", (item_id,)).fetchone()
                 if cur is None or cur["etag"] != etag:
@@ -198,14 +207,34 @@ class Worker:
                         (item_id, idx, t[0].shot_start, t[0].shot_end, t[0].screen_time, t[0].quality, t[1],
                          t[0].emb.astype(np.float32).tobytes()),
                     )
-                c.execute("UPDATE chunks SET done=1, decoder=? WHERE item_id=? AND idx=?", (decoder, item_id, idx))
-            self.checkpoint(item_id, etag, model, info.duration, anchor, refs)
-        built = self.checkpoint(item_id, etag, model, info.duration, anchor, refs)
+                clock.add("write", time.perf_counter() - t_write)
+                c.execute("UPDATE chunks SET done=1, decoder=?, stats=? WHERE item_id=? AND idx=?",
+                          (decoder, json.dumps(clock.as_dict()), item_id, idx))
+            with job_clock.stage("build"):
+                self.checkpoint(item_id, etag, model, info.duration, anchor, refs)
+            self._save_job_clock(item_id, job_clock)
+            job_clock = StageClock()
+        with job_clock.stage("build"):
+            built = self.checkpoint(item_id, etag, model, info.duration, anchor, refs)
+        self._save_job_clock(item_id, job_clock)
         if built is not None and built.complete:
             _, label_t = thresholds(model)
             castmod.update_series(self.db, row["series_id"], model, built, label_t)
             self.store.set_status(item_id, "done")
-            log.info("[xray] %s : terminé en %.0f s, %d scènes", item_id, time.monotonic() - t_job, len(built.scenes))
+            st = job_stats(self.db, item_id, info.duration)
+            log.info("[xray] %s : terminé en %.0f s (%.0f s de calcul, %s× le temps réel), %d scènes — %s",
+                     item_id, time.monotonic() - t_job, st["seconds"], st["realtime"], len(built.scenes), line(st))
+
+    def _save_job_clock(self, item_id: str, clock: StageClock) -> None:
+        """Ce qui ne dépend d'aucun tronçon (photos, assemblage) s'ajoute à l'ordre, reprises comprises."""
+        with self.db.tx() as c:
+            row = c.execute("SELECT stats_json FROM items WHERE item_id=?", (item_id,)).fetchone()
+            if row is None:
+                return
+            acc = StageClock()
+            acc.merge(json.loads(row["stats_json"]) if row["stats_json"] else None)
+            acc.merge(clock.as_dict())
+            c.execute("UPDATE items SET stats_json=? WHERE item_id=?", (json.dumps(acc.as_dict()), item_id))
 
     def checkpoint(self, item_id: str, etag: str, model: str, duration: float, anchor: float, refs):
         chunks = self.db.q("SELECT start, end, done FROM chunks WHERE item_id=?", (item_id,))
@@ -254,8 +283,8 @@ class Worker:
         splitter = ShotSplitter(w, h, step)
         stats = decode.DecodeStats("vaapi" if vaapi else "cpu")
         engine = self.engine
-        for k in engine.timing:
-            engine.timing[k] = 0 if k.endswith("_n") else 0.0
+        clock = StageClock()
+        engine.clock = clock
         shots_out: list[ShotRow] = []
         tracks_out: list[tuple[TrackRow, int]] = []
         t0 = time.monotonic()
@@ -268,17 +297,21 @@ class Worker:
             sel = pick_indices(len(shot.frames), frames_to_sample(dur))
             per_frame = []
             for i in sel:
-                bgr = cv2.cvtColor(shot.frames[i][1], cv2.COLOR_YUV2BGR_NV12)
+                with clock.stage("convert"):
+                    bgr = cv2.cvtColor(shot.frames[i][1], cv2.COLOR_YUV2BGR_NV12)
                 per_frame.append(engine.analyse(bgr))
+            t_track = time.perf_counter()
             for tr in link(per_frame):
                 summ = summarize(tr, len(sel))
                 if summ is None:
                     continue
                 tracks_out.append((TrackRow(shot.start, shot.end, round(dur * summ.presence, 3), summ.quality, summ.emb), summ.faces))
+            clock.add("track", time.perf_counter() - t_track)
 
         gen = decode.read_frames(path, start, end - start, info, vaapi, stats, self.store.cancel)
-        for ts, frame in _prefetch(gen):
-            done = splitter.push(ts, frame)
+        for ts, frame in _prefetch(gen, clock=clock):
+            with clock.stage("shots"):
+                done = splitter.push(ts, frame)
             if done is not None:
                 analyse(done)
         last = splitter.flush(end)
@@ -289,11 +322,18 @@ class Worker:
         if last is not None:
             analyse(last)
         wall = time.monotonic() - t0
-        tm = engine.timing
+        clock.add("wall", wall)
+        clock.add("decode", stats.seconds)
+        clock.count("decoded", stats.frames)
+        clock.count("shots", len(shots_out))
+        clock.count("tracks", len(tracks_out))
+        sec, n = clock.seconds, clock.counts
         log.info(
             "[xray] %s : tronçon %d (%.0f–%.0f s) %s · %d images en %.1f s · %d plans · %d pistes · "
-            "détection %.0f ms/image (%d) · empreinte %.1f ms/visage (%d)",
+            "détection %.0f ms/image (%d) · empreinte %.1f ms/visage (%d) · attente décodage %.1f s",
             item_id, idx, start, end, stats.decoder, stats.frames, wall, len(shots_out), len(tracks_out),
-            tm["det_ms"] / max(tm["det_n"], 1), tm["det_n"], tm["emb_ms"] / max(tm["emb_n"], 1), tm["emb_n"],
+            1000 * sec.get("detect", 0.0) / max(n.get("images", 0), 1), n.get("images", 0),
+            1000 * sec.get("embed", 0.0) / max(n.get("embedded", 0), 1), n.get("embedded", 0),
+            sec.get("decode_wait", 0.0),
         )
-        return shots_out, tracks_out, stats.decoder
+        return shots_out, tracks_out, stats.decoder, clock

@@ -16,6 +16,7 @@ from .db import Database
 from .gpu_guard import GpuGuard
 from .jobs import HEX32, InvalidJob, JobStore, validate_job
 from .models import ModelManager
+from .timing import job_stats
 
 log = logging.getLogger("xray")
 
@@ -95,6 +96,7 @@ def create_app(start_background: bool = True, db: Database | None = None, models
             return _error(404, "inconnu")
         res = state["db"].one("SELECT progress, analyzed_until FROM results WHERE item_id=?", (row["item_id"],))
         status = row["status"]
+        stats = job_stats(state["db"], row["item_id"], float(row["duration"] or 0.0))
         return {
             "itemId": row["item_id"],
             "etag": row["etag"],
@@ -102,6 +104,8 @@ def create_app(start_background: bool = True, db: Database | None = None, models
             "progress": 1.0 if status == "done" else (float(res["progress"]) if res else 0.0),
             "analyzedUntil": float(res["analyzed_until"]) if res else 0.0,
             "error": row["error"],
+            # Ajout compatible (11/2026) : où le temps est passé, tronçons faits jusqu'ici.
+            "stats": stats if stats["seconds"] else None,
         }
 
     @app.get("/items/{item_id}/scenes")

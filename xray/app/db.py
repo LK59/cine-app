@@ -114,6 +114,11 @@ class Database:
             cols = {r[1] for r in self._conn.execute(f"PRAGMA table_info({table})")}
             if "version" not in cols:
                 self._conn.execute(f"ALTER TABLE {table} ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+        # Chronomètres (11/2026) : par tronçon, et ce qui revient à l'ordre entier.
+        for table, col in (("chunks", "stats"), ("items", "stats_json")):
+            cols = {r[1] for r in self._conn.execute(f"PRAGMA table_info({table})")}
+            if col not in cols:
+                self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT")
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:

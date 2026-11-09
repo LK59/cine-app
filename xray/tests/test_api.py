@@ -41,7 +41,7 @@ def test_depot_puis_lecture(client):
     r = client.get(f"/items/{ITEM}", headers=AUTH)
     assert r.status_code == 200
     assert r.json() == {"itemId": ITEM, "etag": "etag-1", "status": "queued", "progress": 0.0,
-                        "analyzedUntil": 0.0, "error": None}
+                        "analyzedUntil": 0.0, "error": None, "stats": None}
     assert client.get("/health", headers=AUTH).json()["queue"]["pending"] == 1
 
 
