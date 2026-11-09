@@ -9,6 +9,7 @@ import { logError } from "@/lib/logger";
 import { logAskQuestion } from "@/lib/eventLogs";
 import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { askAvailableFor, currentAskModel, gatherAskContext, warmDialogues } from "@/lib/ask/service";
+import { answerSofar, readSofarBody } from "@/lib/ask/sofarRequest";
 import {
   AnswerGate,
   ASK_MAX_EXCHANGES,
@@ -40,11 +41,21 @@ export const dynamic = "force-dynamic";
  * Ce qui est vu est lu sous l'identité du compte (`gatherAskContext`) : un titre caché répond
  * `indisponible`, comme un titre inconnu. Réglée sur `admins`, l'option répond « off » à tout autre compte.
  * Un lien de partage n'y passe que pour son titre (`SHARE_RULES`,
- * portée `path`). Bornée par compte : 30 questions par heure, 100 par jour. Une ligne par question dans
+ * portée `path`). Bornée par compte : 60 questions par heure, 300 par jour (10.27 : le propriétaire ne veut
+ * pas brider — les bornes ne gardent que d'un client qui boucle). Une ligne par question dans
  * `recherche.log` (`logAskQuestion`) — jamais la question ni la réponse.
+ *
+ * `POST { mode: "jusquici", personId, positionS, prewarm? }` : « Jusqu'ici », deux phrases sur un
+ * personnage d'« À l'écran » (`answerSofar`, `src/lib/ask/sofarRequest.ts`) — même porte, mêmes réponses.
+ *
+ * Une panne du modèle — réseau, 5xx, 429, refus (`stop_reason: "refusal"`), vingt secondes sans rien
+ * (`MODEL_IDLE_MS`), flux coupé — finit par `{"t":"error","code":"erreur"|"limite"}`, sa cause dans
+ * `server.log` (`ask/model`), `erreur` au journal ; l'écran propose « Réessayer ».
  */
-const perHour = createRateLimiter(30, 60 * 60 * 1000);
-const perDay = createRateLimiter(100, 24 * 60 * 60 * 1000);
+export const ASK_PER_HOUR = 60;
+export const ASK_PER_DAY = 300;
+const perHour = createRateLimiter(ASK_PER_HOUR, 60 * 60 * 1000);
+const perDay = createRateLimiter(ASK_PER_DAY, 24 * 60 * 60 * 1000);
 
 const PRIVATE = { "Cache-Control": "private, no-store" };
 const STREAM_HEADERS = {
@@ -96,10 +107,18 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
   if (!isJellyfinId(itemId)) return NextResponse.json({ error: "itemId invalide" }, { status: 400 });
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
-  const body = readBody(await req.json().catch(() => null));
-  if (!body) return NextResponse.json({ error: "Question manquante" }, { status: 400 });
+  const raw = await req.json().catch(() => null);
+  const sofar = readSofarBody(raw);
+  const body = sofar ? null : readBody(raw);
+  if (!sofar && !body) return NextResponse.json({ error: "Question manquante" }, { status: 400 });
   // La porte : l'option et son public (`admins` : un compte ordinaire reçoit la même réponse qu'option coupée).
   if (!askAvailableFor(session)) return oneShot({ t: "error", code: "off" });
+  if (sofar) {
+    if (!session.jfId) return oneShot({ t: "error", code: "indisponible" });
+    const user = session.jfUser ?? session.u ?? "anonyme";
+    return answerSofar({ user, device: requestDeviceLabel(req), account: session.jfId, locale: localeOf(req, session.jfId), signal: req.signal }, itemId, sofar);
+  }
+  if (!body) return NextResponse.json({ error: "Question manquante" }, { status: 400 });
 
   const started = Date.now();
   const who = {
@@ -165,7 +184,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
       try {
         const run = currentAskModel()({ system: askSystem(locale), message, signal: abort.signal });
         // Attachée tout de suite : une panne du flux rejette aussi `done`, qui ne doit pas rester sans lecteur.
-        const done = run.done.catch(() => null);
+        const done = run.done.catch((failure: unknown) => ({ failure }));
         let rejected = false;
         for await (const delta of run.deltas) {
           const out = gate.push(delta);
@@ -181,9 +200,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
           release(out.release);
           rejected = !!out.rejected;
         }
-        const fin = rejected ? null : await done;
+        const ended = rejected ? null : await done;
+        // Le flux fini sans sa fin (coupé, illisible) : une panne, pas une réponse complète.
+        if (ended && "failure" in ended) throw ended.failure;
+        const fin = ended;
         if (fin) tokens = { inTokens: fin.inTokens, outTokens: fin.outTokens };
-        // Rien de rendu (refus du modèle, réponse vide, coupée dans la ligne des noms) : « je ne sais pas ».
+        // Un refus du modèle est une panne, pas un « je ne sais pas » : l'écran propose de réessayer.
+        if (fin?.stop === "refusal") throw new Error("refus du modèle (stop_reason: refusal)");
+        // Rien de rendu (réponse vide, coupée dans la ligne des noms) : « je ne sais pas ».
         if (rejected || firstMs === undefined) {
           status = "rejeté";
           send({ t: "rejected" });

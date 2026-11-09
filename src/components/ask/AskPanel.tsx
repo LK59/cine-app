@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUp, X } from "lucide-react";
+import { ArrowUp, RotateCw, X } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
+import { AskPersonBlock } from "@/components/ask/AskPersonHeader";
+import { personQuestions } from "@/lib/xray/client";
+import type { XrayPlayerPerson } from "@/lib/xray/scenes";
+import { NOT_THE_HANDLE, useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
+import { phoneSheetFollow, sheetMotionClass } from "@/lib/sheetMotion";
 import { useAskTitle, type AskExchange } from "@/lib/ask/client";
 import {
   restorePageScroll,
@@ -34,9 +39,18 @@ import { APP_BUILD, APP_VERSION } from "@/lib/appBuild";
  * écoute le clavier du lecteur (espace, flèches…) ; ses appuis ne remontent pas jusqu'à la surface du
  * lecteur (qui mettrait en pause) ni au geste de la fiche (qui la tirerait vers le bas).
  *
- * `header` : la place d'un en-tête au-dessus des échanges — rempli par les acteurs à l'écran (§138 :
- * photo, nom, personnage ; la biographie et « Jusqu'ici » viendront dessous). `suggestions` remplace les
- * questions proposées (« Qui est … ? » pour une personne touchée).
+ * `person` : une personne d'« À l'écran » touchée (§138, 10.27) — le panneau s'ouvre sur elle
+ * (`AskPersonBlock` : en-tête, « Jusqu'ici », faits et courte biographie, ses titres dans la bibliothèque),
+ * avec des questions faites pour elle (`personQuestions`). `ask={false}` : l'option des questions est
+ * coupée pour ce compte — le panneau ne montre que la personne, sans « Jusqu'ici », sans propositions ni
+ * champ, et ne demande rien au modèle.
+ *
+ * La feuille du téléphone debout (10.27) : haute de son contenu (plus d'espace vide), propositions côte à
+ * côte, et refermée en la tirant vers le bas par la poignée — le geste des fiches (`useSwipeToDismiss`, qui
+ * capture par `usePointerCapture`), la sortie jouée par le geste lui-même (`sheetMotionClass`).
+ *
+ * Une rotation pendant la frappe (10.27) : le champ rend le focus (le clavier se referme), le texte reste,
+ * le panneau se replace dans la nouvelle forme — iOS laissait sinon une ligne posée pour l'ancienne.
  *
  * Il arrive et repart en glissant (09/11/2026 — la fiche n'avait aucun mouvement) : de la droite pour la
  * colonne, du bas pour la feuille du téléphone, par les durées communes (`--animate-fade-in-side`,
@@ -49,13 +63,18 @@ export interface AskPanelProps {
   /** La position du film au moment de la question (lecteur seulement). */
   position?: () => number | null;
   onClose: () => void;
-  header?: ReactNode;
+  /** Une personne d'« À l'écran » (§138) : le panneau s'ouvre sur elle. */
+  person?: XrayPlayerPerson;
+  /** Les personnes de la même scène — pour proposer « son lien avec … ». */
+  scene?: readonly XrayPlayerPerson[];
+  /** L'option des questions (et de « Jusqu'ici ») pour cette session ; faux : la personne seule. */
+  ask?: boolean;
   /**
    * `player` : dans le conteneur du lecteur (plein écran compris), en absolu ; `sheet` : un portail
    * fixe posé sur la fiche.
    */
   placement: "player" | "sheet";
-  /** Les questions proposées à la place des trois d'office (une personne touchée : « Qui est … ? »). */
+  /** Les questions proposées à la place des trois d'office. */
   suggestions?: string[];
 }
 
@@ -157,18 +176,35 @@ function useKeyboardDiag(
   }, [refs.input, refs.layer, refs.panel]);
 }
 
-export function AskPanel({ itemId, where, position, onClose, header, placement, suggestions }: AskPanelProps) {
+export function AskPanel({ itemId, where, position, onClose, person, scene, ask: askEnabled = true, placement, suggestions }: AskPanelProps) {
   const t = useT();
-  const { exchanges, ask, busy, full } = useAskTitle({ itemId, where, position });
+  const { exchanges, ask, retry, busy, full } = useAskTitle({ itemId, where, position, enabled: askEnabled });
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
+  // La position à l'ouverture, pour « Jusqu'ici » (une question relit la sienne au moment de partir).
+  const [openedAt] = useState(() => (position ? position() : null));
   const layerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { layout, facts } = useAskPanelLayout(focused, layerRef);
+  const { layout, facts } = useAskPanelLayout(focused, layerRef, placement);
   useKeyboardDiag({ layer: layerRef, panel: panelRef, input: inputRef }, { layout, facts, where, placement });
   const { closing, requestClose } = useDelayedClose(onClose, ASK_EXIT_MS);
+  const swipe = useSwipeToDismiss(requestClose, { card: panelRef, follow: phoneSheetFollow });
+
+  // Une rotation pendant la frappe : le clavier se referme (le texte reste), le panneau se replace.
+  useEffect(() => {
+    const blurIfTyping = () => {
+      if (inputRef.current && document.activeElement === inputRef.current) inputRef.current.blur();
+    };
+    const orientation = typeof screen !== "undefined" ? screen.orientation : undefined;
+    orientation?.addEventListener?.("change", blurIfTyping);
+    window.addEventListener("orientationchange", blurIfTyping);
+    return () => {
+      orientation?.removeEventListener?.("change", blurIfTyping);
+      window.removeEventListener("orientationchange", blurIfTyping);
+    };
+  }, []);
   const onCloseRef = useRef(requestClose);
   useEffect(() => {
     onCloseRef.current = requestClose;
@@ -249,23 +285,32 @@ export function AskPanel({ itemId, where, position, onClose, header, placement, 
   }
 
   const line = layout.mode === "line";
+  const sheet = layout.mode === "full" && layout.sheet;
   const asked = new Set(exchanges.map((e) => e.question));
-  const chips = (suggestions && suggestions.length ? suggestions : SUGGESTIONS[where].map((k) => t(k))).filter((q) => !asked.has(q));
+  const offered = suggestions?.length ? suggestions : person ? personQuestions(person, scene ?? [], t) : undefined;
+  const chips = askEnabled ? (offered?.length ? offered : SUGGESTIONS[where].map((k) => t(k))).filter((q) => !asked.has(q)) : [];
   // La ligne posée sans mesure du clavier (`inconnu`) se met sous la zone sûre du haut ; en attente de la
   // mesure, invisible — elle ne saute pas du haut vers le bas sous les yeux.
+  // La feuille est haute de son contenu (10.27 : un grand vide sous deux lignes) : posée par son bas — le
+  // bas de la vue visuelle —, sa hauteur au plus celle que la mise en page lui permet.
   const style: React.CSSProperties = line
     ? {
         top: layout.fromTop ? `calc(${layout.top}px + env(safe-area-inset-top, 0px))` : layout.top,
         height: LINE_HEIGHT_PX,
         opacity: layout.pending ? 0 : undefined,
       }
-    : { top: layout.top, height: layout.height };
-  const motion = closing
-    ? layout.mode === "full" && layout.sheet
-      ? "animate-fade-out-down"
-      : "ask-panel-out-side"
-    : layout.mode === "full" && layout.sheet
-      ? "animate-slide-up"
+    : sheet
+      ? {
+          bottom: `calc(100% - ${layout.top + layout.height}px)`,
+          maxHeight: layout.height,
+          transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
+          transition: swipe.dragging ? "none" : swipe.touched ? "transform 280ms cubic-bezier(0.32, 0.72, 0, 1)" : undefined,
+        }
+      : { top: layout.top, height: layout.height };
+  const motion = sheet
+    ? sheetMotionClass({ swipe, leaving: closing, revealed: false, out: "animate-fade-out-down", into: "animate-slide-up" })
+    : closing
+      ? "ask-panel-out-side"
       : "animate-fade-in-side";
 
   const layer = (
@@ -305,20 +350,28 @@ export function AskPanel({ itemId, where, position, onClose, header, placement, 
         role="dialog"
         aria-label={t("ask.title")}
         data-ask-panel=""
-        data-mode={line ? "line" : layout.sheet ? "sheet" : "side"}
+        data-mode={line ? "line" : sheet ? "sheet" : "side"}
         data-branch={layout.branch}
         data-closing={closing ? "" : undefined}
         className={`ask-panel absolute flex flex-col overflow-hidden text-white motion-reduce:animate-none ${motion} ${
-          line ? "ask-panel-line" : layout.sheet ? "ask-panel-sheet" : "ask-panel-side"
+          line ? "ask-panel-line" : sheet ? "ask-panel-sheet" : "ask-panel-side"
         }`}
         style={style}
       >
-        {/* L'en-tête : le titre et la croix. Caché pendant la frappe (la ligne seule tient au-dessus du clavier). */}
-        <div className="flex shrink-0 items-center justify-between gap-3 px-5 pb-2 pt-4" hidden={line}>
-          <h2 className="text-[15px] font-semibold">{t("ask.title")}</h2>
+        {/* L'en-tête : le titre et la croix — et, sur la feuille du téléphone, la poignée qu'on tire vers le
+            bas pour la refermer. Caché pendant la frappe (la ligne seule tient au-dessus du clavier). */}
+        <div
+          data-ask-handle={sheet ? "" : undefined}
+          className={`relative flex shrink-0 items-center justify-between gap-3 px-5 pb-2 ${sheet ? "touch-none pt-5" : "pt-4"}`}
+          hidden={line}
+          {...(sheet ? swipe.handlers : {})}
+        >
+          {sheet && <span aria-hidden className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-white/30" />}
+          <h2 className="text-[15px] font-semibold">{person ? t("xray.onScreen") : t("ask.title")}</h2>
           <button
             type="button"
             data-ask-close=""
+            {...NOT_THE_HANDLE}
             onClick={requestClose}
             aria-label={t("common.close")}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/12 text-white transition-colors hover:bg-white/20"
@@ -326,17 +379,18 @@ export function AskPanel({ itemId, where, position, onClose, header, placement, 
             <X size={18} />
           </button>
         </div>
-        {header && (
-          <div data-ask-header="" className="shrink-0 px-5" hidden={line}>
-            {header}
-          </div>
-        )}
         {/* `ask-scroll` rogne ce qu'il porte (`clip-path`) : sur l'iPhone couché, la fin d'une réponse
             passait sous la proposition restante, dessinée par-dessus (09/11/2026). Propositions et champ
-            sont dessous, dans le flux, jamais posés sur le texte. */}
-        <div ref={scrollRef} data-ask-scroll="" className="ask-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-3" hidden={line}>
-          {exchanges.length === 0 ? (
-            <p className="pt-1 text-sm leading-6 text-white/70">{t("ask.hint")}</p>
+            sont dessous, dans le flux, jamais posés sur le texte. La personne défile avec les échanges : sur
+            un téléphone couché, elle ne prend pas la place de la réponse. */}
+        <div ref={scrollRef} data-ask-scroll="" className="ask-scroll min-h-0 flex-auto overflow-y-auto overscroll-contain px-5 pb-3" hidden={line}>
+          {person && (
+            <div data-ask-header="">
+              <AskPersonBlock itemId={itemId} person={person} sofar={askEnabled} position={openedAt} />
+            </div>
+          )}
+          {!askEnabled ? null : exchanges.length === 0 ? (
+            person ? null : <p className="pt-1 text-sm leading-6 text-white/70">{t("ask.hint")}</p>
           ) : (
             <ol className="flex flex-col gap-4 pt-1" aria-live="polite">
               {exchanges.map((ex) => {
@@ -344,7 +398,22 @@ export function AskPanel({ itemId, where, position, onClose, header, placement, 
                 return (
                   <li key={ex.id} data-ask-exchange={ex.state} className="flex flex-col gap-2">
                     <p className="ml-10 self-end rounded-2xl rounded-br-md bg-white/14 px-3 py-1.5 text-[13px] leading-5 text-white/90">{ex.question}</p>
-                    {failure ? (
+                    {failure === "ask.error" ? (
+                      // Une panne : dite proprement, avec de quoi réessayer la même question (10.27).
+                      <p data-ask-failed="" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm leading-6 text-white/70">
+                        <span>{t(failure)}</span>
+                        <button
+                          type="button"
+                          data-ask-retry=""
+                          disabled={busy}
+                          onClick={() => retry(ex.id)}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-white/12 px-3 py-1 text-[13px] font-medium text-white transition-colors hover:bg-white/20 disabled:opacity-50"
+                        >
+                          <RotateCw size={13} aria-hidden />
+                          {t("ask.retry")}
+                        </button>
+                      </p>
+                    ) : failure ? (
                       <p className="text-sm leading-6 text-white/70">{t(failure)}</p>
                     ) : ex.state === "waiting" ? (
                       <p className="animate-pulse text-sm leading-6 text-white/60">{t("ask.thinking")}</p>
@@ -356,7 +425,7 @@ export function AskPanel({ itemId, where, position, onClose, header, placement, 
               })}
             </ol>
           )}
-          {full && !busy && <p className="pt-4 text-xs leading-5 text-white/55">{t("ask.maxReached")}</p>}
+          {askEnabled && full && !busy && <p className="pt-4 text-xs leading-5 text-white/55">{t("ask.maxReached")}</p>}
         </div>
         {!full && chips.length > 0 && (
           <div data-ask-chips="" className="ask-chips flex shrink-0 flex-wrap gap-2 px-5 pb-3" hidden={line}>
@@ -366,7 +435,7 @@ export function AskPanel({ itemId, where, position, onClose, header, placement, 
                 type="button"
                 disabled={busy}
                 onClick={() => submit(q)}
-                className="rounded-full bg-white/12 px-3 py-1.5 text-left text-[13px] leading-5 text-white transition-colors hover:bg-white/20 disabled:opacity-50"
+                className="max-w-full rounded-full bg-white/12 px-3 py-1.5 text-left text-[13px] leading-5 text-white transition-colors hover:bg-white/20 disabled:opacity-50"
               >
                 {q}
               </button>
@@ -375,6 +444,7 @@ export function AskPanel({ itemId, where, position, onClose, header, placement, 
         )}
         {/* Le champ reste le même nœud dans les deux formes : en changer ferait perdre le focus, et le
             clavier se refermerait aussitôt ouvert. */}
+        {askEnabled && (
         <form
           className={`flex shrink-0 items-center gap-2 ${line ? "h-full px-2" : "px-4 pb-4"}`}
           onSubmit={(e) => {
@@ -425,6 +495,7 @@ export function AskPanel({ itemId, where, position, onClose, header, placement, 
             <ArrowUp size={20} strokeWidth={2.4} />
           </button>
         </form>
+        )}
       </section>
     </div>
   );

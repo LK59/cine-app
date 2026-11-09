@@ -25,10 +25,10 @@ import { useLatest } from "@/components/playerControls/useLatest";
 import { useAutoHide } from "@/components/playerControls/useAutoHide";
 import { PlayerSeekBar } from "@/components/playerControls/PlayerSeekBar";
 import { AskPanel } from "@/components/ask/AskPanel";
-import { useAskAvailable } from "@/lib/ask/client";
+import { prewarmSofar, SOFAR_PREWARM_PEOPLE, useAskAvailable } from "@/lib/ask/client";
 import { PlayerOnScreen } from "@/components/playerControls/PlayerOnScreen";
-import { AskPersonHeader } from "@/components/ask/AskPersonHeader";
-import { characterFirstName, onScreenPeople, sceneAt, useXrayAvailable, useXrayScenes } from "@/lib/xray/client";
+import { useOnScreenPlacement } from "@/components/playerControls/useOnScreenPlacement";
+import { onScreenPeople, sceneAt, useXrayAvailable, useXrayScenes } from "@/lib/xray/client";
 import type { XrayPlayerPerson } from "@/lib/xray/scenes";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
 import {
@@ -265,12 +265,6 @@ interface PlayerControlsProps {
    * Partout ailleurs l'option décide seule (`useXrayAvailable`).
    */
   xrayable?: boolean;
-}
-
-/** « Qui est <prénom du personnage> ? » — la question proposée pour une personne touchée dans « À l'écran ». */
-function personSuggestions(person: XrayPlayerPerson, t: (key: string, vars?: Record<string, string | number>) => string): string[] | undefined {
-  const first = characterFirstName(person.character);
-  return first ? [t("ask.whoIs", { name: first })] : undefined;
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -693,8 +687,8 @@ export function PlayerControls({
    */
   const askOffered = useAskAvailable() && askable && !lab;
   const [askOpen, setAskOpen] = useState(false);
-  // La personne touchée dans « À l'écran » : le panneau s'ouvre avec son en-tête.
-  const [askPerson, setAskPerson] = useState<XrayPlayerPerson | null>(null);
+  // La personne touchée dans « À l'écran » et sa scène : le panneau s'ouvre sur elle.
+  const [askPerson, setAskPerson] = useState<{ person: XrayPlayerPerson; scene: XrayPlayerPerson[] } | null>(null);
   const [askFor, setAskFor] = useState({ itemId, hidden });
   if (askFor.itemId !== itemId || askFor.hidden !== hidden) {
     setAskFor({ itemId, hidden });
@@ -707,6 +701,30 @@ export function PlayerControls({
    */
   const xrayOffered = useXrayAvailable() && xrayable && !lab;
   const xrayPayload = useXrayScenes(itemId, xrayOffered);
+  /**
+   * La rangée et le bouton de la question paraissent **avec les commandes, en lecture comme en pause**
+   * (10.27) ; jamais panneau ouvert, pendant une reprise, l'ouverture du film ou une diffusion. La scène de
+   * l'instant se cherche en mémoire à chaque rendu — aucune requête.
+   */
+  const rowAllowed = !askOpen && !resuming && !loading && !openingQuiet && !castActive;
+  const scenePeople = xrayOffered && rowAllowed ? onScreenPeople(sceneAt(xrayPayload, currentTime)) : [];
+  const rowShown = rowAllowed && (askOffered || scenePeople.length > 0);
+  const onScreenWrapRef = useRef<HTMLDivElement>(null);
+  const centerGroupRef = useRef<HTMLDivElement>(null);
+  const titleRowRef = useRef<HTMLDivElement>(null);
+  const onScreenPlace = useOnScreenPlacement({ wrap: onScreenWrapRef, center: centerGroupRef, titleRow: titleRowRef }, rowShown && scenePeople.length > 0);
+  /**
+   * « Jusqu'ici » préparé en fond (§139, 10.27) : la rangée affichée, pour les trois premières personnes de
+   * la scène — une fois par personne et par tranche de dix minutes (`prewarmSofar`), jamais page cachée.
+   */
+  const prewarmIds = scenePeople.slice(0, SOFAR_PREWARM_PEOPLE).map((p) => p.personId).join(",");
+  const prewarmKey = askOffered && visible && !hidden && prewarmIds ? `${itemId}|${prewarmIds}|${Math.floor(currentTime / 600)}` : null;
+  const prewarmAt = useLatest(currentTime);
+  useEffect(() => {
+    if (!prewarmKey) return;
+    const [item, ids] = prewarmKey.split("|");
+    prewarmSofar(item, ids.split(",").map(Number), prewarmAt.current);
+  }, [prewarmKey, prewarmAt]);
   const { suspendedRef, showControls, holdControls, toggleControls, windowExitHides } = useAutoHide({
     visible,
     setVisible,
@@ -1160,7 +1178,7 @@ export function PlayerControls({
             conflict with the tap-to-toggle-controls handler covering the same area). Hidden
             while a spinner is already showing. */}
         {(resuming || (!loading && !buffering)) && (
-          <div data-player-navgroup="center" className={`${visible ? "pointer-events-auto" : "pointer-events-none"} absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-9 sm:gap-12 max-[379px]:gap-6`}>
+          <div ref={centerGroupRef} data-player-navgroup="center" className={`${visible ? "pointer-events-auto" : "pointer-events-none"} absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-9 sm:gap-12 max-[379px]:gap-6`}>
             <button
               data-player-nav="skip-back"
               onClick={(e) => {
@@ -1205,54 +1223,59 @@ export function PlayerControls({
           </div>
         )}
 
-        {/* « À l'écran » (§138) puis « Une question ? » (§139) : film en pause seulement, avec les
-            commandes, au-dessus du titre — à gauche, loin de « Passer l'intro » et de l'épisode suivant,
-            posés à droite. La pilule de la question reste au bout de la rangée, hors de ce qui défile. */}
-        {(() => {
-          const paused = !askOpen && !playing && !resuming && !loading && !openingQuiet && !castActive;
-          if (!paused) return null;
-          const people = xrayOffered ? onScreenPeople(sceneAt(xrayPayload, currentTime)) : [];
-          if (!askOffered && people.length === 0) return null;
-          const askPill = askOffered ? (
-            <button
-              type="button"
-              data-player-nav="ask"
-              data-player-surface-ignore
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenu(null);
-                setAskPerson(null);
-                setAskOpen(true);
-              }}
-              data-liquid
-              className={`player-fade player-pill ${visible ? "pointer-events-auto" : "pointer-events-none"} flex shrink-0 items-center gap-2 py-2.5 pl-3.5 pr-4 text-sm font-medium text-white`}
-            >
-              <MessageCircleQuestion size={18} aria-hidden />
-              {t("ask.pill")}
-            </button>
-          ) : null;
-          return (
-            <div className="player-chrome-x pointer-events-none absolute inset-x-0 flex" style={{ bottom: PROMPT_BOTTOM }}>
-              {people.length > 0 ? (
-                <PlayerOnScreen
-                  people={people}
-                  visible={visible}
-                  trailing={askPill}
-                  onPick={(person) => {
-                    setMenu(null);
-                    // Une personne ouvre le panneau des questions avec son en-tête : sans l'option des
-                    // questions, il n'y a rien à ouvrir (la rangée reste une information).
-                    if (!askOffered) return;
-                    setAskPerson(person);
-                    setAskOpen(true);
-                  }}
-                />
-              ) : (
-                askPill
-              )}
-            </div>
-          );
-        })()}
+        {/* « À l'écran » (§138) et le bouton de la question (§139) : avec les commandes, en lecture comme en
+            pause, juste au-dessus du bloc du titre, à gauche — loin de « Passer l'intro » et de l'épisode
+            suivant, posés à droite ; couché, la rangée s'arrête avant les boutons du centre
+            (`useOnScreenPlacement`). Le bouton rond de la question reste au bout, hors de ce qui défile — seul
+            quand personne n'est reconnu. */}
+        {rowShown &&
+          (() => {
+            const askButton = askOffered ? (
+              <button
+                type="button"
+                data-player-nav="ask"
+                data-player-surface-ignore
+                aria-label={t("ask.title")}
+                title={t("ask.title")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenu(null);
+                  setAskPerson(null);
+                  setAskOpen(true);
+                }}
+                data-liquid
+                className={`player-fade player-pill player-ask-btn ${visible ? "pointer-events-auto" : "pointer-events-none"} flex shrink-0 items-center justify-center text-white`}
+              >
+                <MessageCircleQuestion size={20} aria-hidden />
+              </button>
+            ) : null;
+            return (
+              <div
+                ref={onScreenWrapRef}
+                data-onscreen-wrap=""
+                className="player-chrome-x pointer-events-none absolute inset-x-0 flex"
+                style={{ bottom: onScreenPlace.bottom ?? PROMPT_BOTTOM }}
+              >
+                {scenePeople.length > 0 ? (
+                  <PlayerOnScreen
+                    people={scenePeople}
+                    visible={visible}
+                    trailing={askButton}
+                    maxWidth={onScreenPlace.maxWidth}
+                    onPick={(person) => {
+                      setMenu(null);
+                      // Une personne ouvre son panneau — avec les questions et « Jusqu'ici » si l'option est
+                      // ouverte à ce compte, sinon la personne seule (photo, faits, biographie, ses titres).
+                      setAskPerson({ person, scene: scenePeople });
+                      setAskOpen(true);
+                    }}
+                  />
+                ) : (
+                  askButton
+                )}
+              </div>
+            );
+          })()}
 
         {/* En bas : le titre et la pilule des réglages sur une rangée, la barre et ses deux temps
             dessous. */}
@@ -1266,7 +1289,7 @@ export function PlayerControls({
           onClickCapture={() => showControls(10000)}
           style={{ paddingBottom: BOTTOM_EDGE }}
         >
-          <div className="flex items-end gap-3">
+          <div ref={titleRowRef} className="flex items-end gap-3">
             {/* La série en grand, l'épisode en petit dessous ; un film, son titre seul. Une ombre
                 douce sous le texte et le palier du voile du bas : lisible sur une image claire, sans
                 flou. "Série — S02E05 · Le pilote" arrive d'une seule pièce du serveur. */}
@@ -1383,8 +1406,9 @@ export function PlayerControls({
           where="lecteur"
           placement="player"
           position={() => (positionNow ? positionNow() : (videoRef.current?.currentTime ?? null))}
-          header={askPerson ? <AskPersonHeader person={askPerson} /> : undefined}
-          suggestions={askPerson ? personSuggestions(askPerson, t) : undefined}
+          person={askPerson?.person}
+          scene={askPerson?.scene}
+          ask={askOffered}
           onClose={() => {
             setAskOpen(false);
             setAskPerson(null);

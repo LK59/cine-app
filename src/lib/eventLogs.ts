@@ -187,6 +187,36 @@ export function logAskQuestion(fields: {
 }
 
 /**
+ * « Jusqu'ici » (DECISIONS.md §138–§139, 10.27) : une ligne par texte servi ou préparé, dans le même
+ * journal que les questions — compte, appareil, élément, personne (son identifiant TMDB), la tranche de
+ * dix minutes, `prewarm` (préparé en fond, panneau fermé), d'où vient le texte (`cache` : `partagé` — gardé
+ * pour un autre compte qui a vu la même chose —, `compte`, `nouveau` : le modèle appelé), le délai, les
+ * jetons, le verdict. **Jamais le texte.**
+ */
+export function logJusquici(fields: {
+  user: string;
+  device: string | null;
+  itemId: string;
+  personId: number;
+  bucket: number;
+  prewarm: boolean;
+  cache: "partagé" | "compte" | "nouveau";
+  status: "ok" | "vide" | "rejeté" | "limite" | "erreur" | "indisponible";
+  ms: number;
+  firstMs?: number;
+  inTokens?: number;
+  outTokens?: number;
+  dialogue?: boolean | "attente";
+  episodes?: number;
+}): void {
+  try {
+    appendJsonLine(SEARCH_LOG(), { timestamp: new Date().toISOString(), kind: "jusquici", ...fields }, { keep: EVENT_LOG_KEEP });
+  } catch {
+    /* rien */
+  }
+}
+
+/**
  * L'usage de « Précédemment » (DECISIONS.md §137), au journal des ouvertures : `affiché` à chaque
  * ouverture d'une fiche qui le montre — avec depuis quand la série n'a pas été regardée —, `synopsis`
  * quand on lui préfère le synopsis. De quoi dire, après quelques semaines, s'il sert ; jamais le texte.

@@ -326,10 +326,10 @@ describe("/api/cinema/ask/[itemId]", () => {
     expect(model).not.toHaveBeenCalled();
   });
 
-  it("trente questions par heure et par compte, puis « limite »", async () => {
+  it("soixante questions par heure et par compte (10.27), puis « limite »", async () => {
     setAskModelForTests(scripted("NOMS: —\n\nLe film parle de rêves."));
     const who = account();
-    for (let i = 0; i < 30; i++) await ask(who, MOVIE, { where: "fiche" });
+    for (let i = 0; i < 60; i++) await ask(who, MOVIE, { where: "fiche" });
     const r = await ask(who, MOVIE, { where: "fiche" });
     expect(r.events).toEqual([{ t: "error", code: "limite" }]);
     expect(askLog).toHaveBeenLastCalledWith(expect.objectContaining({ status: "limite" }));

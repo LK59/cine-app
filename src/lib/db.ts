@@ -651,6 +651,21 @@ function migrate(db: Database.Database): void {
     );
   `);
   try { db.exec("ALTER TABLE series_recaps ADD COLUMN about TEXT"); } catch { /* already exists */ }
+  // « Jusqu'ici » (DECISIONS.md §139, 10.27) : deux phrases sur un personnage, gardées trente jours sous
+  // l'empreinte de ce qui est parti au modèle (`sofarKey` — langue, élément, personne, tranche, résumés
+  // envoyés, modèle, version de la consigne), partagées par les comptes qui ont vu la même chose. `by` :
+  // le compte qui l'a fait générer (le journal dit `compte` ou `partagé`). Un rejet du filet des noms
+  // n'est jamais gardé ; « rien à dire » (`vide`) l'est, pour ne pas redemander la même chose.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sofar_texts (
+      key        TEXT    PRIMARY KEY,
+      state      TEXT    NOT NULL,
+      text       TEXT,
+      by_account TEXT    NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sofar_texts_created ON sofar_texts(created_at);
+  `);
   // Les liens de partage (DECISIONS.md §112) : un film ou une série, un mot de passe (haché), une
   // fin, et le compte Jellyfin technique qui garde la reprise du lien. La ligne reste après
   // l'expiration — ce que le lien a consommé se lit encore dans l'Activité.
@@ -2480,6 +2495,33 @@ export const dailyTop10Db = {
       recall: (day) => dailyTop10Db.recall(kind, day),
       remember: (day, theme) => dailyTop10Db.remember(kind, day, theme),
     };
+  },
+};
+
+/** « Jusqu'ici » (DECISIONS.md §139) — voir la table dans `migrate()`. */
+export const sofarDb = {
+  get(key: string): { state: "ok" | "vide"; text: string | null; by: string; createdAt: number } | null {
+    return (
+      (getDb().prepare("SELECT state, text, by_account AS by, created_at AS createdAt FROM sofar_texts WHERE key = ?").get(key) as
+        | { state: "ok" | "vide"; text: string | null; by: string; createdAt: number }
+        | undefined) ?? null
+    );
+  },
+  put(key: string, state: "ok" | "vide", text: string | null, by: string, now = Date.now()): void {
+    getDb()
+      .prepare("INSERT INTO sofar_texts (key, state, text, by_account, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET state = excluded.state, text = excluded.text, by_account = excluded.by_account, created_at = excluded.created_at")
+      .run(key, state, text, by, now);
+  },
+  /** Par tranches, sous un budget de temps (CLAUDE.md : chaque requête tient la boucle d'événements). */
+  prune(olderThanMs: number, now = Date.now()): number {
+    const stmt = getDb().prepare(`DELETE FROM sofar_texts WHERE rowid IN (SELECT rowid FROM sofar_texts WHERE created_at < ? LIMIT ${CLEANUP_BATCH})`);
+    const startedAt = Date.now();
+    let removed = 0;
+    for (;;) {
+      const { changes } = stmt.run(now - olderThanMs);
+      removed += changes;
+      if (changes < CLEANUP_BATCH || Date.now() - startedAt > CLEANUP_BUDGET_MS) return removed;
+    }
   },
 };
 

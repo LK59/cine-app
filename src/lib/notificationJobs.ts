@@ -1,4 +1,5 @@
-import { availabilityNotifDb, pendingRequestDb, kvCacheDb, getDb } from "@/lib/db";
+import { availabilityNotifDb, pendingRequestDb, kvCacheDb, getDb, sofarDb } from "@/lib/db";
+import { SOFAR_KEEP_MS } from "@/lib/ask/sofar";
 import { serviceConfigured } from "@/lib/serviceConfigured";
 import { cachedMovies, cachedSeries, cachedJellyfinSeriesAdmin, findJellyfinSeriesByTvdb } from "@/lib/server-cache";
 import { jellyfin } from "@/lib/clients/jellyfin";
@@ -340,6 +341,8 @@ function cleanupDiskCache(): void {
     for (const pattern of OBSOLETE_KEYS) kvCacheDb.cleanupGlob(pattern, 0);
     for (const pattern of SHORT_LIVED_KEYS) kvCacheDb.cleanupGlob(pattern, 14 * DAY_MS);
     kvCacheDb.cleanup(30 * DAY_MS);
+    // « Jusqu'ici » (§139) : trente jours, puis regénéré à la demande.
+    sofarDb.prune(SOFAR_KEEP_MS);
   } catch (err) {
     logError("notifications.kv-cache-cleanup", err);
   }

@@ -227,7 +227,7 @@ describe("la rangée « À l'écran » du lecteur", () => {
     expect(container.querySelector("[data-player-onscreen]")).toBeNull();
   });
 
-  it("une personne touchée ouvre le panneau des questions : sa photo, son nom, son personnage, « Qui est Ariadne ? »", async () => {
+  it("une personne touchée ouvre son panneau : sa photo, son nom, son personnage, des questions faites pour elle", async () => {
     stubFetch();
     let video: HTMLVideoElement | null = null;
     const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
@@ -238,8 +238,10 @@ describe("la rangée « À l'écran » du lecteur", () => {
     const header = dialog.querySelector('[data-ask-person="2"]')!;
     expect(header.textContent).toContain("Elliot Page");
     expect(header.textContent).toContain("Ariadne");
-    expect(dialog.querySelector("[data-ask-person-more]")).toBeTruthy();
-    expect(screen.getByText('ask.whoIs:{"name":"Ariadne"}')).toBeTruthy();
+    // 10.27 : son lien avec l'autre personne de la scène, ce qui lui est arrivé, ce qu'elle cherche.
+    expect(screen.getByText('xray.qLink:{"name":"Ariadne","other":"Dom"}')).toBeTruthy();
+    expect(screen.getByText('xray.qRecent:{"name":"Ariadne"}')).toBeTruthy();
+    expect(screen.getByText('xray.qWants:{"name":"Ariadne"}')).toBeTruthy();
     expect(screen.queryByText("ask.chipPlayer0")).toBeNull();
   });
 

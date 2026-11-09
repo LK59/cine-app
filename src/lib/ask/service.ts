@@ -28,7 +28,11 @@ export const ASK_MODEL = DEFAULT_MODELS.anthropic;
 export const DIALOGUE_WAIT_MS = 8000;
 const DIALOGUE_TTL_MS = 60 * 60 * 1000;
 const DIALOGUE_KEEP = 24;
-const MODEL_TIMEOUT_MS = 45_000;
+/**
+ * Le modèle a 20 s pour répondre, puis 20 s au plus entre deux événements du flux (10.27, consigne du
+ * propriétaire) : au-delà, la réponse est une panne dite proprement — jamais un panneau qui attend.
+ */
+export const MODEL_IDLE_MS = 20_000;
 
 export function askAvailable(): boolean {
   // Lu par la configuration publique à chaque ouverture : une configuration partielle vaut « coupé ».
@@ -220,8 +224,16 @@ export interface AskModelRun {
 /** Le modèle, remplaçable dans les tests — aucun appel réseau réel n'y part. */
 export type AskModel = (req: { system: string; message: string; signal?: AbortSignal }) => AskModelRun;
 
+/** Une panne du modèle qui n'est pas une réponse HTTP : le délai dépassé, un flux coupé. */
+export class AskModelTimeout extends Error {
+  constructor() {
+    super(`le modèle n'a rien envoyé pendant ${MODEL_IDLE_MS / 1000} s`);
+    this.name = "AskModelTimeout";
+  }
+}
+
 const askModel: AskModel = ({ system, message, signal }) => {
-  const client = new Anthropic({ apiKey: config.subtitleGen.apiKey.trim(), maxRetries: 0, timeout: MODEL_TIMEOUT_MS });
+  const client = new Anthropic({ apiKey: config.subtitleGen.apiKey.trim(), maxRetries: 0, timeout: MODEL_IDLE_MS });
   const stream = client.messages.stream(
     {
       model: ASK_MODEL,
@@ -237,14 +249,39 @@ const askModel: AskModel = ({ system, message, signal }) => {
     },
     { signal }
   );
+  // Le chien de garde : chaque événement du flux (réflexion comprise) le réarme ; vingt secondes de
+  // silence, et le flux est coupé — la panne remonte comme `AskModelTimeout`.
+  let timedOut = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timedOut = true;
+      stream.abort();
+    }, MODEL_IDLE_MS);
+  };
+  arm();
+  const fail = (err: unknown) => (timedOut ? new AskModelTimeout() : err);
   async function* deltas() {
-    for await (const event of stream) {
-      if (event.type === "content_block_delta" && event.delta.type === "text_delta") yield event.delta.text;
+    try {
+      for await (const event of stream) {
+        arm();
+        if (event.type === "content_block_delta" && event.delta.type === "text_delta") yield event.delta.text;
+      }
+    } catch (err) {
+      throw fail(err);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
   return {
     deltas: deltas(),
-    done: stream.finalMessage().then((m) => ({ inTokens: m.usage.input_tokens, outTokens: m.usage.output_tokens, stop: m.stop_reason ?? null })),
+    done: stream.finalMessage().then(
+      (m) => ({ inTokens: m.usage.input_tokens, outTokens: m.usage.output_tokens, stop: m.stop_reason ?? null }),
+      (err: unknown) => {
+        throw fail(err);
+      }
+    ),
   };
 };
 

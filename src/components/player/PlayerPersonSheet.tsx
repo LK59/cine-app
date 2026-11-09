@@ -9,7 +9,7 @@ import useSWR from "swr";
 import { Calendar, ChevronLeft, ChevronRight, Globe, MapPin, Star, User, X } from "lucide-react";
 import { InstagramIcon } from "@/components/BrandIcons";
 import type { EnrichedPersonData } from "@/app/api/tmdb/person/[id]/enriched/route";
-import { selectBio } from "@/lib/format";
+import { ageAt, selectBio } from "@/lib/format";
 import { getDateLocale } from "@/lib/i18n";
 import { fetcher } from "@/lib/swr";
 import { cinemaClose, cinemaNavigate, openLibraryTitle, arrivedByBack } from "@/lib/cinemaRoute";
@@ -53,14 +53,6 @@ const TMDB_PROFILE = "https://image.tmdb.org/t/p/w300";
 
 function formatDate(iso: string, dateLocale: string): string {
   return new Date(iso).toLocaleDateString(dateLocale, { day: "numeric", month: "long", year: "numeric" });
-}
-
-/** L'âge, ou l'âge au décès. Calculé sur la date de fin plutôt que sur « maintenant » quand il y en a une. */
-function ageAt(birthday: string, deathday: string | null, now: number): number | null {
-  const born = new Date(birthday).getTime();
-  const end = deathday ? new Date(deathday).getTime() : now;
-  if (!Number.isFinite(born) || !Number.isFinite(end)) return null;
-  return Math.floor((end - born) / (365.25 * 24 * 3600 * 1000));
 }
 
 /**

@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { fetcher, followOnlyOptions } from "@/lib/swr";
 import { isFireTv } from "@/lib/fireTv";
+import { ageAt } from "@/lib/format";
 import type { XrayPlayerPayload, XrayPlayerPerson, XrayPlayerScene, XrayPlayerStatus } from "@/lib/xray/scenes";
+import type { XrayPersonFacts } from "@/lib/xray/person";
 
 /**
  * Les acteurs à l'écran côté lecteur (DECISIONS.md §138) : la rangée « À l'écran », film en pause.
@@ -140,4 +142,163 @@ export function useXrayScenes(itemId: string | null | undefined, enabled: boolea
     };
   }, [itemId, enabled]);
   return held && held.itemId === itemId && enabled ? held.payload : null;
+}
+
+// ── La place de la rangée (10.27) ───────────────────────────────────────────────────────────────
+
+/** L'écart gardé entre la rangée et les boutons du centre (−10 / lecture / +10). */
+export const ONSCREEN_CENTER_GAP_PX = 16;
+/** L'écart entre le bas de la rangée et le haut du bloc du titre. */
+export const ONSCREEN_TITLE_GAP_PX = 10;
+
+type Box = { left: number; top: number; right: number; bottom: number };
+
+/**
+ * La largeur permise à la rangée (10.27, iPhone couché du propriétaire : elle passait sous −10 / lecture /
+ * +10). Seulement quand elle partage la hauteur des boutons du centre — debout, ils sont au milieu de
+ * l'écran, loin au-dessus, et la rangée garde toute la largeur (`null`). Sinon, elle s'arrête 16 px avant
+ * leur bord gauche.
+ */
+export function onScreenRowWidth(row: Box, center: Box | null): number | null {
+  if (!center) return null;
+  const sharesHeight = row.top < center.bottom + ONSCREEN_CENTER_GAP_PX && row.bottom > center.top - ONSCREEN_CENTER_GAP_PX;
+  if (!sharesHeight) return null;
+  return Math.max(0, Math.floor(center.left - ONSCREEN_CENTER_GAP_PX - row.left));
+}
+
+/** Le bas de la rangée, en px depuis le bas des commandes : juste au-dessus du bloc du titre. */
+export function onScreenRowBottom(chrome: Box, titleRow: Box): number {
+  return Math.max(0, Math.round(chrome.bottom - titleRow.top + ONSCREEN_TITLE_GAP_PX));
+}
+
+// ── Le panneau d'une personne (10.27) ───────────────────────────────────────────────────────────
+
+/**
+ * Les questions proposées pour une personne touchée : son lien avec la personne la plus présente de la
+ * même scène, ce qui lui est arrivé récemment, ce qu'elle cherche — par le prénom du personnage. Sans
+ * personnage, `undefined` (les propositions d'office).
+ */
+export function personQuestions(
+  person: Pick<XrayPlayerPerson, "personId" | "character">,
+  scene: readonly Pick<XrayPlayerPerson, "personId" | "character">[],
+  t: (key: string, vars?: Record<string, string | number>) => string
+): string[] | undefined {
+  const name = characterFirstName(person.character);
+  if (!name) return undefined;
+  const other = scene.map((p) => (p.personId === person.personId ? null : characterFirstName(p.character))).find((n) => n && n !== name);
+  return [...(other ? [t("xray.qLink", { name, other })] : []), t("xray.qRecent", { name }), t("xray.qWants", { name })];
+}
+
+let regionCodes: Map<string, string> | null = null;
+const REGION_ALIASES: Record<string, string> = {
+  usa: "US",
+  "u.s.a.": "US",
+  "u.s.": "US",
+  us: "US",
+  "united states of america": "US",
+  uk: "GB",
+  "u.k.": "GB",
+  england: "GB",
+  scotland: "GB",
+  wales: "GB",
+  "northern ireland": "GB",
+  "great britain": "GB",
+  "west germany": "DE",
+  "east germany": "DE",
+  "south korea": "KR",
+  "czech republic": "CZ",
+  russia: "RU",
+  "soviet union": "RU",
+  ussr: "RU",
+};
+
+/** Le code d'un pays écrit en anglais par TMDB (« UK », « France », « USA »), ou `null`. */
+function regionCodeOf(name: string): string | null {
+  const key = name.trim().toLowerCase().replace(/\s+/g, " ");
+  if (REGION_ALIASES[key]) return REGION_ALIASES[key];
+  if (!regionCodes) {
+    regionCodes = new Map();
+    try {
+      const names = new Intl.DisplayNames(["en"], { type: "region" });
+      for (let a = 65; a <= 90; a++) {
+        for (let b = 65; b <= 90; b++) {
+          const code = String.fromCharCode(a, b);
+          const label = names.of(code);
+          if (label && label !== code) regionCodes.set(label.toLowerCase(), code);
+        }
+      }
+    } catch {
+      /* sans Intl.DisplayNames, le lieu reste tel que TMDB l'écrit */
+    }
+  }
+  return regionCodes.get(key) ?? null;
+}
+
+/**
+ * Le lieu de naissance, court et dans la langue de qui lit : la ville (telle que TMDB l'écrit) et le pays
+ * traduit — « London, England, UK » → « London, Royaume-Uni ». Un pays inconnu reste tel quel.
+ */
+export function compactPlace(place: string | null | undefined, locale: string): string | null {
+  const parts = (place ?? "").split(",").map((p) => p.trim()).filter(Boolean);
+  if (!parts.length) return null;
+  const country = parts[parts.length - 1];
+  const code = regionCodeOf(country);
+  let localized = country;
+  if (code) {
+    try {
+      localized = new Intl.DisplayNames([locale], { type: "region" }).of(code) ?? country;
+    } catch {
+      localized = country;
+    }
+  }
+  return parts.length === 1 ? localized : `${parts[0]}, ${localized}`;
+}
+
+/** La ligne courte sous l'en-tête : « 50 ans · London, Royaume-Uni ». */
+export function personFactsLine(
+  facts: { birthday?: string | null; deathday?: string | null; placeOfBirth?: string | null },
+  locale: string,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  now: number
+): string | null {
+  const age = facts.birthday ? ageAt(facts.birthday, facts.deathday ?? null, now) : null;
+  const parts = [
+    age === null ? null : facts.deathday ? t("xray.diedAt", { n: age }) : t("modals.actor.age", { n: age }),
+    compactPlace(facts.placeOfBirth, locale),
+  ].filter((p): p is string => !!p);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+const factsAsked = new Map<string, Promise<XrayPersonFacts>>();
+
+/**
+ * Ce que le panneau d'une personne montre sans le modèle (âge, lieu, courte biographie, ses titres dans la
+ * bibliothèque) — une requête par personne et par élément, gardée pour la page. Un `fetch` direct : SWR est
+ * en pause pendant un film (CLAUDE.md).
+ */
+export function usePersonFacts(itemId: string, personId: number): XrayPersonFacts | null {
+  const key = `${itemId}:${personId}`;
+  const [held, setHeld] = useState<{ key: string; facts: XrayPersonFacts } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let asked = factsAsked.get(key);
+    if (!asked) {
+      asked = fetch(`/api/player/xray/${encodeURIComponent(itemId)}?person=${personId}`, { cache: "no-store" })
+        .then((res) => (res.ok ? (res.json() as Promise<XrayPersonFacts>) : { status: "none" as const }))
+        .catch(() => ({ status: "none" as const }));
+      // Un échec n'est pas gardé : la prochaine ouverture réessaiera.
+      void asked.then((f) => {
+        if (f.status !== "ok") factsAsked.delete(key);
+      });
+      factsAsked.set(key, asked);
+      if (factsAsked.size > 200) factsAsked.delete(factsAsked.keys().next().value as string);
+    }
+    void asked.then((facts) => {
+      if (alive) setHeld({ key, facts });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [key, itemId, personId]);
+  return held?.key === key ? held.facts : null;
 }

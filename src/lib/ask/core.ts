@@ -199,7 +199,11 @@ export class AnswerGate {
   private sentences = 0;
   private words = 0;
 
-  constructor(private readonly sources: string) {}
+  /** `limits` : la coupe de la réponse — cinq phrases et 120 mots d'office, deux phrases pour « Jusqu'ici ». */
+  constructor(
+    private readonly sources: string,
+    private readonly limits: { sentences: number; words: number } = { sentences: ASK_MAX_SENTENCES, words: ASK_MAX_WORDS }
+  ) {}
 
   /** Un morceau de texte du modèle : les phrases désormais sûres, ou le rejet. */
   push(delta: string): GateResult {
@@ -250,7 +254,7 @@ export class AnswerGate {
   private drain(final: boolean): GateResult {
     const release: string[] = [];
     for (;;) {
-      if (this.sentences >= ASK_MAX_SENTENCES || this.words >= ASK_MAX_WORDS) {
+      if (this.sentences >= this.limits.sentences || this.words >= this.limits.words) {
         this.phase = "closed";
         this.buffer = "";
         break;

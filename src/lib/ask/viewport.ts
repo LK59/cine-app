@@ -59,6 +59,11 @@ export interface ViewportFacts {
   settling?: boolean;
   /** Le haut du calque du panneau dans la vue de mise en page (0 d'ordinaire). */
   layerTop?: number;
+  /**
+   * Où vit le panneau (10.27) : au lecteur, la ligne de frappe va **toujours en haut** ; sur une fiche,
+   * au-dessus du clavier debout, en haut couché. Absent : la règle d'une fiche.
+   */
+  context?: "player" | "sheet";
 }
 
 /**
@@ -72,6 +77,14 @@ export type AskLayoutBranch = "vue" | "fenetre" | "attente" | "inconnu" | "feuil
 export type AskPanelLayout =
   | { mode: "full"; top: number; height: number; sheet: boolean; branch: AskLayoutBranch }
   | { mode: "line"; top: number; branch: AskLayoutBranch; pending?: boolean; fromTop?: boolean };
+
+/**
+ * Couché : plus large que haut, la hauteur prise sans clavier (`baseline`) — un clavier ouvert raccourcit la
+ * vue d'un téléphone debout sans le coucher.
+ */
+export function isLandscape(f: Pick<ViewportFacts, "width" | "height" | "baseline">): boolean {
+  return f.width > Math.max(f.height, f.baseline);
+}
 
 /** Un téléphone tenu debout : le panneau devient une feuille posée en bas, pas une colonne à droite. */
 export function isNarrowPortrait(width: number, height: number): boolean {
@@ -94,6 +107,14 @@ export function keyboardCover(f: ViewportFacts): { px: number; branch: "vue" | "
 export function askPanelLayout(f: ViewportFacts): AskPanelLayout {
   const shift = f.layerTop ?? 0;
   const keyboard = keyboardCover(f);
+  // La règle du propriétaire (10.27, iPhone en application installée) : pendant la frappe, au lecteur la
+  // ligne va toujours en haut — debout comme couché —, et sur une fiche couchée aussi. En haut, rien à
+  // attendre ni à mesurer : aucun clavier ne couvre le haut. `branch` dit encore ce que la mesure du
+  // clavier a vu, pour le relevé `clavier`.
+  if (f.focused && (keyboard.branch || f.touchPhone) && (f.context === "player" || isLandscape(f))) {
+    const branch: AskLayoutBranch = keyboard.branch ?? (f.settling ? "attente" : "inconnu");
+    return { mode: "line", top: f.offsetTop + MARGIN_PX - shift, branch, pending: false, fromTop: true };
+  }
   if (keyboard.branch) {
     // Le bas de la ligne contre le haut du clavier : le bas de la vue visuelle, en coordonnées de mise en page.
     return { mode: "line", top: Math.max(f.offsetTop, f.offsetTop + f.height - LINE_HEIGHT_PX - LINE_GAP_PX) - shift, branch: keyboard.branch };
@@ -155,7 +176,11 @@ const sameFacts = (a: Omit<ViewportFacts, "focused">, b: Omit<ViewportFacts, "fo
  * iOS envoie parfois son `resize` en retard, ou pas du tout. La référence suit la vue tant que le champ
  * n'a pas le focus.
  */
-export function useAskPanelLayout(focused: boolean, layerRef?: { current: HTMLElement | null }): { layout: AskPanelLayout; facts: ViewportFacts } {
+export function useAskPanelLayout(
+  focused: boolean,
+  layerRef?: { current: HTMLElement | null },
+  context?: "player" | "sheet"
+): { layout: AskPanelLayout; facts: ViewportFacts } {
   const [facts, setFacts] = useState<Omit<ViewportFacts, "focused">>(() => {
     if (typeof window === "undefined") return { height: 800, offsetTop: 0, width: 1200, baseline: 800 };
     const now = read(window, null);
@@ -200,7 +225,7 @@ export function useAskPanelLayout(focused: boolean, layerRef?: { current: HTMLEl
       win.removeEventListener("resize", update);
     };
   }, [focused, layerRef]);
-  const all = { ...facts, focused, settling: focused && !settle.over };
+  const all = { ...facts, focused, settling: focused && !settle.over, context };
   return { layout: askPanelLayout(all), facts: all };
 }
 
@@ -243,6 +268,8 @@ export function keyboardSnapshot(
     trigger: state.trigger,
     branch: state.layout.branch,
     mode: state.layout.mode,
+    // Où la ligne s'est posée : en haut (`haut`) ou contre le clavier (`clavier`).
+    place: state.layout.mode === "line" ? (state.layout.fromTop ? "haut" : "clavier") : null,
     where: state.where,
     placement: state.placement,
     focusedState: state.facts.focused,

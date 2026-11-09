@@ -7009,6 +7009,32 @@ dit désormais « Marquer comme vu » dans les quatre langues.
 **Tests.** `fiche-a-voir-vu-forme.test.tsx` (le vrai dictionnaire français), `fiche-boutons-deux-etats.test.tsx`,
 `decisions-partagees.test.ts`.
 
+**Les fiches de bibliothèque du bureau : une rangée de boutons ronds** (10.27, 09/11/2026, décision du
+propriétaire). Avec la ligne « Poser une question » (§139), la liste verticale des actions avait grandi, et
+sur un écran de 13 pouces le logo remontait sous le bouton Retour. **Règle : la première page d'une fiche
+ne défile jamais — une seule page par titre, comme une télévision — et ne commence jamais sous la barre du
+Retour.** Donc :
+- « Marquer comme vu », « Dans ma liste » et « Poser une question » quittent la liste et deviennent **une
+  rangée de trois boutons ronds** sous les actions principales (`DetailIconActions`, la même pièce pour le
+  film et la série) : le verre des autres boutons ronds de la fiche (`ROUND_ACTION`, `bg-black/55`,
+  `float-edge`), l'or quand c'est allumé (`TitleToggleRound`, quatrième dessin de `TitleToggles`, mêmes
+  mots et mêmes icônes, l'état dans `aria-pressed`), un `aria-label` et une bulle au survol (`title`) ;
+  chacun porte `data-detail-menu` (les flèches y descendent). « Poser une question » est
+  `AskTitleControl variant="round"`. La fiche du téléphone et la fiche découverte ne changent pas ;
+- le logo de la fiche est borné aussi par la hauteur de la fenêtre (`CinemaLogo`, surface `sheet` :
+  `min(<px>, 14vh)`) ;
+- le haut de la page est réservé à la barre du Retour (`SECTION_CLASS`, `pt-[calc(4.5rem+safe-area)]`) ;
+- sous 720 px de haut, en dernier recours : l'accroche se tait (`SHORT_HIDE`), les écarts de la colonne
+  (`COLUMN_GAP`) et les lignes du menu (`MENU_ROW`) se resserrent ; le synopsis garde ce que
+  `CinemaOverview` mesure (deux lignes au moins). **Jamais de défilement.**
+Compté sur le papier (colonne d'un film avec toutes ses lignes, synopsis à deux lignes) : 1280×800 → 586 px
+pour 672 disponibles ; 1366×768 → 586 pour 640 ; 1440×900 → 656 pour 732 ; une fenêtre de navigateur de
+~650 px de haut (13 pouces) → 461 pour 546. Une série avec « Plus d'épisodes » ajoute une ligne (40 à 48 px)
+et tient aussi. Tests : `decisions-partagees.test.ts` (les deux fiches posent `DetailIconActions`, qui pose
+`TitleToggleRound` et `AskTitleControl`), `fiche-a-voir-vu-forme.test.tsx` et
+`fiche-boutons-deux-etats.test.tsx` (lisent le libellé d'un bouton rond), `CinemaLogo.test.tsx` (le plafond
+en `vh`).
+
 **Voulu.** La source de « Vu » reste double (§51) : Jellyfin pour un titre de la bibliothèque
 (`useJellyfinItemState`, qui attend d'avoir lu — d'où l'estompé), la copie locale pour un titre TMDB
 (`useTitleWatched`). L'estompé d'un « Vu » non lu vaut 50 % au bureau, 40 % au téléphone. La fiche
@@ -8892,12 +8918,49 @@ comme `askAvailable`) — absente des doubles des empreintes du lecteur, donc au
 aucun scénario : les empreintes ne changent pas. Une requête `fetch` directe, pas SWR (en pause pendant un
 film, §SWR de CLAUDE.md).
 
-**Une personne touchée ouvre « Poser une question »** (§139) avec l'en-tête du panneau rempli
+**Une personne touchée ouvre « Poser une question »** (10.26 ; remplacé en 10.27, plus bas) avec l'en-tête du panneau rempli
 (`AskPersonHeader` : photo, nom, personnage) et une seule question proposée, « Qui est <prénom du
 personnage> ? » (`characterFirstName` : premier mot qui n'est pas un titre abrégé, sans ce qui suit une
 barre ou une parenthèse ; sans personnage, les propositions d'office). La place sous l'en-tête
 (`data-ask-person-more`) est gardée pour la biographie résumée de TMDB et « Jusqu'ici » — pas encore
 faits. Sans l'option des questions, toucher une personne ne fait rien (la rangée reste une information).
+
+**10.27 (09/11/2026, essai du propriétaire sur iPhone en application installée).**
+- **Placement.** Couché, la rangée passait sous −10 / lecture / +10. Elle **mesure** maintenant le groupe du
+  centre (`getBoundingClientRect`) et s'arrête 16 px avant son bord gauche quand elle partage sa hauteur
+  (`onScreenRowWidth`), et se pose juste au-dessus du bloc du titre (`onScreenRowBottom`), relue à chaque
+  changement de taille, de vue visuelle et de rotation (`useOnScreenPlacement`). Debout, toute la largeur.
+  Pilules plus compactes : photo 32 px, nom 13 px (12 au téléphone), personnage 11 px, deux lignes.
+- **Avec les commandes, en lecture comme en pause** — plus seulement en pause ; elle part avec elles. Elle
+  suit les changements de scène (les nouveaux visages en fondu, `player-onscreen-in`, ceux qui partent
+  s'effacent, `player-onscreen-out`) mais **jamais sous un doigt** : appuyée, défilée ou à la molette, elle
+  garde ce qu'elle montre, et rattrape la scène 600 ms après le dernier signe (`ONSCREEN_SETTLE_MS`).
+  Toujours aucune requête : la scène se cherche en mémoire.
+- **La question : un bouton rond, icône seule** (`aria-label` « Poser une question »), au bout de la rangée,
+  hors de ce qui défile ; seul quand personne n'est reconnu ; avec les commandes, en lecture et en pause,
+  seulement si l'option des questions est ouverte à ce compte.
+- **Le panneau d'une personne, indépendant du modèle.** Sans l'option des questions (ou sans clé), toucher
+  une personne ouvre quand même son panneau : photo, acteur, personnage, une ligne de faits (« 50 ans ·
+  London, Royaume-Uni » : `personFactsLine`, le pays traduit par `Intl.DisplayNames`, la ville telle que TMDB
+  l'écrit), une courte biographie coupée à trois lignes, et « Dans votre bibliothèque » : deux ou trois
+  affiches de ses autres titres **ouvrables** (pas celui qu'on regarde), tags bloqués appliqués, qui **ne
+  réagissent à rien** (ni bouton, ni lien, `pointer-events: none`, pas de menu au long appui). Lu par
+  `GET /api/player/xray/[itemId]?person=<id>` (`personFactsForPlayer`) : la personne est cherchée dans la
+  distribution de cet élément, la biographie et la filmographie passent par **le chemin des fiches personne
+  du cinéma**, sorti des routes `/api/tmdb/person/[id]` et `/enriched` dans `src/lib/tmdbPerson.ts` (mêmes
+  appels, mêmes clés de cache, `selectBio`) — rien n'est recopié. Même porte que les scènes (`xrayOpenTo`,
+  `assertVisible`, lien de partage par la règle de la route), 200 et `status: "none"` quand il n'y a rien.
+  Avec l'option : le même panneau, plus « Jusqu'ici » et les questions (§139). Ordre : en-tête →
+  « Jusqu'ici » → faits et biographie → bibliothèque → questions proposées → champ.
+- Les questions proposées pour une personne (`personQuestions`) : « Quel est le lien entre <prénom> et
+  <prénom de la personne la plus présente de la même scène> ? », « Qu'est-il arrivé à <prénom> récemment ? »,
+  « Que cherche <prénom> ? » — « Qui est … ? » est retiré.
+Porteurs ajoutés : `useOnScreenPlacement`, `onScreenRowWidth`/`onScreenRowBottom`, `personQuestions`,
+`compactPlace`/`personFactsLine`, `usePersonFacts` (`src/lib/xray/client.ts`), `AskPersonBlock`
+(`AskPersonHeader.tsx`), `src/lib/xray/person.ts`, `src/lib/tmdbPerson.ts`. Tests : `xray-row-1027.test.tsx`,
+`xray-person-panel.test.tsx`, `xray-person-facts.test.ts`, `xray-onscreen.test.tsx`. **Empreintes du
+lecteur inchangées** : `xrayAvailable`/`askAvailable` restent absents de leurs doubles — ni rangée, ni
+bouton, ni préparation, ni requête de plus.
 
 **Fire TV : pas proposée** (`useXrayAvailable` → `isFireTv`, §71). Une rangée qui défile de côté, au
 curseur de Silk ou à la télécommande, demanderait un parcours au focus propre (y entrer, défiler, en
@@ -9051,7 +9114,8 @@ reçoit `{"t":"error","code":"off"}`, la même réponse qu'option coupée, et le
 `askAvailable` de la configuration publique suit la même porte, pour que l'écran cache la pilule et la ligne
 des fiches — de la présentation seulement.
 
-**Bornes et journal.** 30 questions par heure et 100 par jour et par compte Jellyfin. Une ligne
+**Bornes et journal.** 30 questions par heure et 100 par jour et par compte Jellyfin (60 et 300 depuis
+10.27, plus bas). Une ligne
 par question dans `recherche.log` (`logAskQuestion`, `kind: "question"`) : compte, appareil, élément, `where`
 (`fiche` | `lecteur`), tranche de dix minutes de la position, `ms` et `firstMs` (premier morceau rendu),
 jetons, `dialogue` (`true` / `false` / `attente`), `episodes`, `turn`, verdict `ok` / `rejeté` / `limite` /
@@ -9086,6 +9150,73 @@ option, Fire TV, aucune requête au montage) ; `viewport-diag-route.test.ts` (la
 posé que par elle et `PlayerControls`, la route n'est appelée que par `useAskTitle`) ;
 `news-page-1025.test.ts`. Les empreintes du lecteur ne changent pas : l'option se lit dans la configuration
 publique **suivie, jamais demandée** (`followOnlyOptions`), absente des doubles, donc ni requête ni pilule.
+
+**« Jusqu'ici »** (10.27, 09/11/2026). Dans le panneau d'une personne d'« À l'écran » (§138), avec l'option :
+une ou deux phrases sur **le personnage** d'après ce que ce compte a vu, sous les mêmes règles que les
+questions — les sources de `askSources` (`sofarSources` y ajoute la personne, prise dans la distribution de
+l'élément, jamais dans la requête) et le même filet des noms (`AnswerGate`, coupée à deux phrases et 60
+mots ; « RIEN » quand il n'y a rien à dire, jamais montré). **La coupe est le début de la tranche de dix
+minutes** de la position (`sofarCutoff`) : rien de ce qui suit ce début n'entre, un retour en arrière dans
+la tranche ne montre rien de plus, et deux comptes au même endroit envoient les mêmes sources.
+- **Gardé par ce qui part au modèle, partagé entre comptes** (consigne du propriétaire) : la clé est le
+  SHA-256 du modèle, de la version de la consigne (`SOFAR_VERSION`), de la consigne (sa langue) et du
+  message entier (titre, élément, personne, résumés effectivement envoyés, répliques jusqu'à la coupe).
+  Deux comptes qui ont vu la même chose au même endroit lisent le même texte ; la moindre différence dans
+  ce qui a été vu donne une autre clé — rien ne passe d'un compte à l'autre au-delà de ce que chacun a vu.
+  **Trente jours en base** (`sofar_texts`, `sofarDb`), jamais regénéré tant qu'il vaut, effacé ensuite par le
+  ménage horaire (`cleanupDiskCache` → `sofarDb.prune`, par tranches sous budget). Un rejet du filet des noms
+  ou une panne n'est jamais gardé ; « rien à dire » l'est. Une génération par clé : la première demande lance
+  le modèle **détaché de la requête** (un panneau refermé ne la perd pas) ; les suivantes lisent les mêmes
+  phrases à mesure (`sofarStart`, `sofarSubscribe`).
+- **Préparé en fond** : la rangée affichée (commandes visibles, page visible), pour les **trois premières
+  personnes** de la scène, une fois par personne et par tranche pour la page (`prewarmSofar`) — le serveur
+  répond aussitôt `{"t":"queued"}`. Le panneau s'ouvre tout de suite avec ce qui ne dépend pas du modèle ;
+  « Jusqu'ici » montre une ligne d'attente, puis le texte (`useSofar`).
+- **Route** : `POST /api/cinema/ask/{id}` avec `{ mode: "jusquici", personId, positionS, prewarm? }`
+  (`answerSofar`, `src/lib/ask/sofarRequest.ts`) — même porte (`askAvailableFor`), mêmes réponses.
+- **Journal** : une ligne `kind: "jusquici"` dans `recherche.log` (`logJusquici`) — compte, appareil, élément,
+  personne, tranche, `prewarm`, `cache` (`partagé` / `compte` / `nouveau`), `ms`, jetons, verdict ; jamais le
+  texte. Une seule ligne `nouveau` par génération, à sa fin.
+- **Haiku** `claude-haiku-5-5`, réflexion adaptative à effort bas, comme les questions.
+
+**Bornes (10.27, consigne du propriétaire : ~100 €/mois de crédit, ne pas brider).** Questions : 60 par heure
+et 300 par jour et par compte (`ASK_PER_HOUR`, `ASK_PER_DAY`). « Jusqu'ici » : 200 préparations en fond par
+heure et par compte (`SOFAR_PREWARM_PER_HOUR`) et 200 générations à l'ouverture (`SOFAR_OPEN_PER_HOUR`),
+comptées seulement quand le modèle est appelé.
+
+**Les pannes, dites proprement (10.27).** Réseau, 5xx, 429, refus (`stop_reason: "refusal"`), **vingt
+secondes sans rien du modèle** (`MODEL_IDLE_MS` : le délai du client et un chien de garde réarmé à chaque
+événement du flux, `AskModelTimeout`), flux fini sans son message final : une question finit par
+`{"t":"error","code":"erreur"}` (`limite` pour un 429), la cause dans `server.log` (`ask/model`), `erreur`
+dans `recherche.log` ; l'écran dit « La réponse n'a pas pu être obtenue. » avec **« Réessayer »**, qui
+repose la même question à sa place (`retry`, sans compter pour un échange de plus) ; le panneau reste
+utilisable, rien ne remonte dans React. Pour « Jusqu'ici », la même panne ne montre **rien** : le bloc
+disparaît, le reste du panneau (faits, biographie) reste ; la cause va à `server.log` (`ask/jusquici`).
+
+**Le clavier, la règle du propriétaire (10.27, iPhone en application installée)** — ce qui avait été observé
+devient la règle (`askPanelLayout`, `context`) :
+- **au lecteur**, pendant la frappe, la ligne du champ va **toujours en haut** de ce qu'on voit, sous la zone
+  sûre — debout comme couché, sans attente invisible (aucun clavier ne couvre le haut) ;
+- **sur une fiche** : debout, posée juste au-dessus du clavier (inchangé) ; couchée, en haut ;
+- **une rotation pendant la frappe** : le champ rend le focus (le clavier se referme), le texte reste, le
+  panneau se replace dans la nouvelle forme (`orientationchange` et `screen.orientation`).
+« OK », l'envoi et le relevé `clavier` ne changent pas ; le relevé dit aussi où la ligne s'est posée
+(`place` : `haut` / `clavier`).
+
+**La feuille du téléphone debout (10.27).** Haute de son contenu (posée par son bas, `max-height` — plus de
+grand vide sous deux lignes), propositions côte à côte (`flex-wrap`), et refermée en la tirant vers le bas
+par sa poignée — le geste des fiches (`useSwipeToDismiss`, capture par `usePointerCapture`, la croix hors du
+geste par `NOT_THE_HANDLE`, la sortie jouée par le geste lui-même par `sheetMotionClass`), sous les règles
+de « The sheet lifecycle » : une seule voie de sortie (`useDelayedClose`).
+
+**Pas d'historique** (décidé) : rien n'est gardé au-delà de la vie du panneau — ni question, ni réponse.
+
+Tests ajoutés : `ask-sofar.test.ts` (coupe à la tranche, clé partagée et `partagé`/`compte`/`nouveau`, autre
+tranche = autre appel, trente jours puis ménage, rejet jamais gardé, « RIEN », personne hors distribution,
+préparation `queued` et sa borne, chaque panne pour la question et pour « Jusqu'ici », refus, flux coupé) ;
+`xray-person-panel.test.tsx` (faits sans le modèle, affiches inertes, attente puis texte, silence sur panne,
+ordre, « Réessayer », feuille haute de son contenu, glisser pour fermer, la croix hors du geste) ;
+`ask-panel.test.tsx` (le haut au lecteur, fiche debout/couchée, rotation pendant la frappe).
 
 **Nouveautés.** La page « 10.25 » (`src/lib/news/page1025.ts`), semée **en brouillon**
 (`news-seed-10.25-draft`) : rien ne s'affiche avant qu'elle soit publiée depuis Activité → Nouveautés.

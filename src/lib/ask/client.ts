@@ -75,7 +75,7 @@ function parseLine(line: string, onEvent: (e: StreamEvent) => void) {
  * serveur ni sur l'appareil : le panneau refermé, ils sont partis. Cinq au plus. La position est lue au
  * moment de la question (`position`), jamais retenue à l'ouverture : le film peut avoir bougé.
  */
-export function useAskTitle({ itemId, where, position }: { itemId: string; where: AskWhere; position?: () => number | null }) {
+export function useAskTitle({ itemId, where, position, enabled = true }: { itemId: string; where: AskWhere; position?: () => number | null; enabled?: boolean }) {
   const [exchanges, setExchanges] = useState<AskExchange[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const nextId = useRef(1);
@@ -85,11 +85,13 @@ export function useAskTitle({ itemId, where, position }: { itemId: string; where
   }, [position]);
 
   // À l'ouverture : les dialogues demandés d'avance (le serveur n'attend rien). Une panne ici ne dit rien.
+  // Sans l'option (le panneau d'une personne seul, §138), rien n'est demandé.
   useEffect(() => {
+    if (!enabled) return;
     const ctrl = new AbortController();
     fetch(`/api/cinema/ask/${encodeURIComponent(itemId)}`, { signal: ctrl.signal }).catch(() => {});
     return () => ctrl.abort();
-  }, [itemId]);
+  }, [itemId, enabled]);
 
   // Refermé : la réponse en cours s'arrête, et le modèle avec elle.
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -97,13 +99,20 @@ export function useAskTitle({ itemId, where, position }: { itemId: string; where
   const busy = exchanges.some((e) => e.state === "waiting" || e.state === "streaming");
   const full = exchanges.length >= ASK_MAX_EXCHANGES;
 
+  /**
+   * `replacing` : « Réessayer » sur un échange en panne — la même question repart à sa place, sans compter
+   * pour un échange de plus.
+   */
   const ask = useCallback(
-    async (raw: string) => {
+    async (raw: string, replacing?: number) => {
       const question = raw.trim().slice(0, ASK_MAX_QUESTION);
-      if (!question || busy || full) return;
+      const others = replacing === undefined ? exchanges : exchanges.filter((e) => e.id !== replacing);
+      const busyNow = others.some((e) => e.state === "waiting" || e.state === "streaming");
+      if (!question || busyNow || others.length >= ASK_MAX_EXCHANGES) return;
       const id = nextId.current++;
-      const previous = exchanges.filter((e) => e.state === "done").map((e) => ({ question: e.question, answer: e.answer }));
-      setExchanges((all) => [...all, { id, question, answer: "", state: "waiting" }]);
+      const previous = others.filter((e) => e.state === "done").map((e) => ({ question: e.question, answer: e.answer }));
+      const fresh: AskExchange = { id, question, answer: "", state: "waiting" };
+      setExchanges((all) => (replacing === undefined ? [...all, fresh] : all.map((e) => (e.id === replacing ? fresh : e))));
       const update = (fn: (e: AskExchange) => AskExchange) => setExchanges((all) => all.map((e) => (e.id === id ? fn(e) : e)));
       const ctrl = new AbortController();
       abortRef.current = ctrl;
@@ -136,8 +145,101 @@ export function useAskTitle({ itemId, where, position }: { itemId: string; where
         update((e) => ({ ...e, state: "error", error: "erreur" }));
       }
     },
-    [busy, full, exchanges, itemId, where]
+    [exchanges, itemId, where]
+  );
+  const retry = useCallback(
+    (id: number) => {
+      const failed = exchanges.find((e) => e.id === id);
+      if (failed) void ask(failed.question, id);
+    },
+    [exchanges, ask]
   );
 
-  return { exchanges, ask, busy, full };
+  return { exchanges, ask, retry, busy, full };
+}
+
+// ── « Jusqu'ici » (DECISIONS.md §139, 10.27) ─────────────────────────────────────────────────────
+
+/** La tranche de dix minutes d'une position — ce qui distingue deux préparations d'une même personne. */
+const sofarBucket = (positionS: number) => Math.floor(Math.max(0, positionS) / 600);
+const prewarmed = new Set<string>();
+/** Les trois premières personnes de la scène seulement. */
+export const SOFAR_PREWARM_PEOPLE = 3;
+
+/**
+ * Préparer « Jusqu'ici » en fond pour les premières personnes de la scène, quand la rangée paraît : une
+ * fois par personne et par tranche de dix minutes pour cette page, jamais page cachée. Personne n'attend
+ * la réponse (`{"t":"queued"}`) ; une panne ne dit rien.
+ */
+export function prewarmSofar(itemId: string, personIds: readonly number[], positionS: number): void {
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+  if (!Number.isFinite(positionS)) return;
+  for (const personId of personIds.slice(0, SOFAR_PREWARM_PEOPLE)) {
+    const key = `${itemId}:${personId}:${sofarBucket(positionS)}`;
+    if (prewarmed.has(key)) continue;
+    prewarmed.add(key);
+    if (prewarmed.size > 2000) prewarmed.delete(prewarmed.values().next().value as string);
+    try {
+      void fetch(`/api/cinema/ask/${encodeURIComponent(itemId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "jusquici", personId, positionS: Math.floor(positionS), prewarm: true }),
+      }).catch(() => {});
+    } catch {
+      /* une préparation perdue ne coûte rien */
+    }
+  }
+}
+
+export function resetPrewarmForTests(): void {
+  prewarmed.clear();
+}
+
+export type SofarView = { state: "waiting" | "streaming" | "done" | "none"; text: string };
+
+/**
+ * « Jusqu'ici » dans le panneau d'une personne : demandé à l'ouverture (déjà prêt d'ordinaire, préparé en
+ * fond), les phrases à mesure. Toute issue autre qu'un texte — panne, délai, refus, nom inconnu, rien à
+ * dire — rend `none` : le panneau n'en montre rien (consigne du propriétaire : pas de bruit d'erreur ici).
+ */
+export function useSofar(itemId: string, personId: number, positionS: number | null, enabled: boolean): SofarView {
+  const [view, setView] = useState<{ key: string; view: SofarView } | null>(null);
+  const key = `${itemId}:${personId}:${positionS ?? "?"}`;
+  useEffect(() => {
+    if (!enabled || positionS === null) return;
+    const ctrl = new AbortController();
+    let text = "";
+    let ended = false;
+    const set = (v: SofarView) => setView({ key, view: v });
+    void (async () => {
+      try {
+        const res = await fetch(`/api/cinema/ask/${encodeURIComponent(itemId)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "jusquici", personId, positionS: Math.floor(positionS) }),
+          signal: ctrl.signal,
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        await readAskStream(res, (ev) => {
+          if (ended) return;
+          if (ev.t === "text") {
+            text = text ? `${text} ${ev.v}` : ev.v;
+            set({ state: "streaming", text });
+          } else if (ev.t === "done") {
+            ended = true;
+            set({ state: "done", text });
+          } else {
+            ended = true;
+            set({ state: "none", text: "" });
+          }
+        });
+        if (!ended) set({ state: "none", text: "" });
+      } catch {
+        if (!ctrl.signal.aborted) set({ state: "none", text: "" });
+      }
+    })();
+    return () => ctrl.abort();
+  }, [key, itemId, personId, positionS, enabled]);
+  if (!enabled || positionS === null) return { state: "none", text: "" };
+  return view?.key === key ? view.view : { state: "waiting", text: "" };
 }

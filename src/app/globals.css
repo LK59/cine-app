@@ -2123,9 +2123,13 @@ body:has(.gestion-liquid) .glass-window {
 }
 
 /* ─── « À l'écran » (DECISIONS.md §138) ───────────────────────────────────────
-   La rangée des personnes de la scène, film en pause (`PlayerOnScreen`). Photo 36 px au bureau, 32 sur
-   un téléphone ; nom 14/12 px, personnage 12/11 px. Pas de barre de défilement ; un fondu au bord droit
-   quand d'autres pilules attendent ; les flèches au pointeur fin seulement (au doigt, on glisse). */
+   La rangée des personnes de la scène, avec les commandes (`PlayerOnScreen`). Compacte depuis 10.27 :
+   photo 32 px, nom 13 px, personnage 11 px, toujours sur deux lignes (12/11 sur un téléphone). Pas de barre
+   de défilement ; un fondu au bord droit quand d'autres pilules attendent ; les flèches au pointeur fin
+   seulement (au doigt, on glisse). Un changement de scène : les nouveaux visages arrivent en fondu, ceux qui
+   partent s'effacent — `opacity` seulement, sur la pilule elle-même (jamais sur la rangée : un parent à
+   opacité < 1 isole le flou). `from` / `to` seuls : la valeur d'arrivée reste celle du fondu des commandes,
+   une rangée cachée ne se rallume pas le temps de l'animation. */
 .player-onscreen-row {
   scrollbar-width: none;
   max-width: min(100%, 64rem);
@@ -2137,17 +2141,25 @@ body:has(.gestion-liquid) .glass-window {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent 100%);
   mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent 100%);
 }
-.player-onscreen-photo { width: 36px; height: 36px; }
-.player-onscreen-name { font-size: 14px; }
-.player-onscreen-character { font-size: 12px; }
+.player-onscreen-photo { width: 32px; height: 32px; }
+.player-onscreen-name { font-size: 13px; }
+.player-onscreen-character { font-size: 11px; }
 @media (max-width: 640px), (orientation: landscape) and (max-height: 500px) {
-  .player-onscreen-photo { width: 32px; height: 32px; }
   .player-onscreen-name { font-size: 12px; }
   .player-onscreen-character { font-size: 11px; }
 }
 .player-onscreen-arrow { display: none; }
 @media (hover: hover) and (pointer: fine) {
   .player-onscreen-arrow { display: flex; }
+}
+.player-onscreen-in { animation: player-onscreen-in 280ms ease-out; }
+.player-onscreen-out { animation: player-onscreen-out 280ms ease-in forwards; }
+@keyframes player-onscreen-in { from { opacity: 0; } }
+@keyframes player-onscreen-out { to { opacity: 0; } }
+/* Le bouton de la question : rond, icône seule, du verre des pilules. */
+.player-ask-btn { width: 40px; height: 40px; border-radius: 999px; padding: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .player-onscreen-in, .player-onscreen-out { animation: none; }
 }
 
 /* ─── « Poser une question » (DECISIONS.md §139) ─────────────────────────────
@@ -2206,6 +2218,8 @@ body:has(.gestion-liquid) .glass-window {
   .ask-chips::-webkit-scrollbar { display: none; }
   .ask-chips > button { flex-shrink: 0; white-space: nowrap; }
 }
+/* « Dans votre bibliothèque » : des affiches qui ne réagissent à rien — pas même au long appui d'iOS. */
+.ask-library-poster { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 @media (prefers-reduced-motion: reduce) {
   .ask-panel { transition: none; }
   .ask-panel-out-side { animation: none; }

@@ -1,22 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { errorBody, renameNotFound } from "@/lib/apiErrorCodes";
-import { hiddenTmdbKeysFor } from "@/lib/blockedTags";
 import { verifySessionFull } from "@/lib/session";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { createTmdbClient } from "@/lib/clients/tmdb";
 import { getTmdbLocale } from "@/lib/i18n";
-import { playableLibrary } from "@/lib/playerLibrary";
 import { withErrorHandling } from "@/lib/api-helpers";
-import { withPersistentCache } from "@/lib/server-cache";
-import { sortFilmography } from "@/lib/filmographyOrder";
-
-/**
- * Une semaine, sur disque (23/09/2026) : une fiche personne coûtait deux appels à TMDB à chaque
- * ouverture, et une filmographie ne change pas d'un jour à l'autre. Seules les réponses de TMDB
- * sont gardées — ce qui est dans la bibliothèque est recalculé à chaque fois, pour qu'un film
- * arrivé hier y apparaisse aujourd'hui. Un échec n'est pas gardé (voir `withPersistentCache`).
- */
-const WEEK_MS = 7 * 24 * 3600_000;
+import { personCreditsCached, personDetailsCached, personFilmography, personWithBiography } from "@/lib/tmdbPerson";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -26,74 +15,19 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   if (!personId) return NextResponse.json(errorBody("Invalid ID", "invalid_request"), { status: 400 });
   if (!tmdb.isEnabled()) return NextResponse.json({ credits: [] });
 
+  // Le chemin est partagé avec le panneau d'une personne d'« À l'écran » (`src/lib/tmdbPerson.ts`) :
+  // mêmes appels, mêmes clés de cache, même repli de la biographie, mêmes titres cachés.
   return withErrorHandling(async () => {
-    const [personFr, { cast }, lib] = await Promise.all([
-      withPersistentCache(`tmdb:person:details:${locale}:${personId}`, WEEK_MS, () => tmdb.getPersonDetails(personId)).catch(() => null),
+    const [personFr, { cast }] = await Promise.all([
+      personDetailsCached(tmdb, locale, personId),
       // Une personne inconnue de TMDB (lien ancien) : « Personne introuvable », pas le corps de TMDB
       // — voir `renameNotFound` (ROBUSTESSE-7).
-      renameNotFound(
-        withPersistentCache(`tmdb:person:credits:${locale}:${personId}`, WEEK_MS, () => tmdb.getPersonCredits(personId)),
-        "Personne introuvable",
-        "person_not_found"
-      ),
-      // Ouvrable, et pas seulement connu de Radarr/Sonarr : une filmographie est pleine de titres
-      // surveillés sans fichier, et les annoncer comme présents menait à un clic qui ne faisait
-      // rien. Voir playableLibrary.
-      playableLibrary(),
+      renameNotFound(personCreditsCached(tmdb, locale, personId), "Personne introuvable", "person_not_found"),
     ]);
-
-    // If TMDB has no French biography, fall back to English
-    // Sans biographie dans la langue de qui regarde, celle en anglais. Le repli redemandait la même
-    // langue au même client — donc la même réponse vide, et un appel de plus à chaque ouverture
-    // (relevé le 23/09/2026).
-    const person =
-      personFr?.biography || locale === "en-US"
-        ? personFr
-        : await withPersistentCache(`tmdb:person:details:en-US:${personId}`, WEEK_MS, () =>
-            createTmdbClient("en-US").getPersonDetails(personId)
-          ).catch(() => personFr);
-
-    const movieByTmdb = new Map([...lib.movies].map(([tmdbId, m]) => [tmdbId, m.id]));
-    const seriesByTmdb = new Map([...lib.series].map(([tmdbId, s]) => [tmdbId, s.id]));
-
-    // Deduplicate (same title can appear as multiple roles), keep highest popularity
-    const seen = new Map<string, (typeof cast)[0]>();
-    for (const c of cast) {
-      const key = `${c.media_type}:${c.id}`;
-      const existing = seen.get(key);
-      if (!existing || c.popularity > existing.popularity) seen.set(key, c);
-    }
-
-    // L'ordre : bibliothèque, vrais rôles, puis note pondérée par les votes (DECISIONS.md §98).
-    const credits = sortFilmography(
-      [...seen.values()].map((c) => {
-        const isMovie = c.media_type === "movie";
-        const libraryId = isMovie ? movieByTmdb.get(c.id) : seriesByTmdb.get(c.id);
-        return {
-          tmdbId: c.id,
-          title: (isMovie ? c.title : c.name) ?? "",
-          year: new Date((isMovie ? c.release_date : c.first_air_date) ?? "").getFullYear() || null,
-          posterPath: c.poster_path,
-          mediaType: c.media_type,
-          character: c.character,
-          voteAverage: c.vote_average,
-          inLibrary: Boolean(libraryId),
-          libraryHref: libraryId
-            ? isMovie ? `/radarr/${libraryId}` : `/sonarr/${libraryId}`
-            : null,
-          // Le même identifiant, nu : le lecteur ouvre une fiche par son id, pas par une adresse
-          // de la partie gestion — et il ne doit surtout pas avoir à découper une URL pour ça.
-          libraryId: libraryId ?? null,
-          voteCount: c.vote_count ?? null,
-          genreIds: c.genre_ids ?? null,
-        };
-      })
-    ).map(({ genreIds: _genreIds, ...c }) => c); // le genre ne sert qu'au tri
-
-    // Ce que les tags bloqués du compte lui cachent n'apparaît pas dans une filmographie (DECISIONS.md §54).
-    const hidden = await hiddenTmdbKeysFor((await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value))?.jfId);
+    const person = await personWithBiography(personFr, locale, personId);
+    const credits = await personFilmography(cast, (await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value))?.jfId);
     return {
-      credits: credits.filter((c) => !hidden.has(`${c.mediaType === "tv" ? "series" : "movie"}:${c.tmdbId}`)),
+      credits,
       name: personFr?.name ?? null,
       profilePath: personFr?.profile_path ?? null,
       biography: person?.biography ?? null,

@@ -108,6 +108,14 @@ export function relDate(iso: string | null | undefined, t: TFn): string {
   return relativeTime(iso, t);
 }
 
+/** L'âge, ou l'âge au décès. Calculé sur la date de fin plutôt que sur « maintenant » quand il y en a une. */
+export function ageAt(birthday: string, deathday: string | null, now: number): number | null {
+  const born = new Date(birthday).getTime();
+  const end = deathday ? new Date(deathday).getTime() : now;
+  if (!Number.isFinite(born) || !Number.isFinite(end)) return null;
+  return Math.floor((end - born) / (365.25 * 24 * 3600 * 1000));
+}
+
 // ─── Bio selection ────────────────────────────────────────────────────────────
 
 function isFrench(text: string): boolean {

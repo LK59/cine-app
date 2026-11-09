@@ -4191,7 +4191,6 @@
   },
   "ask": {
     "title": "Poser une question",
-    "pill": "Une question ?",
     "placeholder": "Votre question sur ce titre…",
     "send": "Envoyer",
     "hint": "Les réponses ne s'appuient que sur ce que vous avez déjà vu.",
@@ -4199,7 +4198,7 @@
     "unknown": "Je ne sais pas d'après ce qui a été vu.",
     "limit": "Trop de questions pour l'instant. Réessayez un peu plus tard.",
     "unavailable": "Ce titre ne peut pas recevoir de question pour l'instant.",
-    "error": "La réponse n'a pas pu arriver. Réessayez dans un instant.",
+    "error": "La réponse n'a pas pu être obtenue.",
     "off": "Les questions ne sont pas proposées pour le moment.",
     "maxReached": "Cinq questions par ouverture : refermez puis rouvrez pour en poser d'autres.",
     "chipPlayer0": "Que vient-il de se passer ?",
@@ -4209,12 +4208,18 @@
     "chipSheet1": "Qui sont les personnages principaux ?",
     "chipSheet2": "De quoi parle ce titre ?",
     "done": "OK",
-    "whoIs": "Qui est {name} ?"
+    "retry": "Réessayer"
   },
   "xray": {
     "onScreen": "À l'écran",
     "previous": "Personnes précédentes",
     "next": "Personnes suivantes",
-    "photo": "Photo de {name}"
+    "photo": "Photo de {name}",
+    "sofar": "Jusqu'ici",
+    "library": "Dans votre bibliothèque",
+    "diedAt": "† à {n} ans",
+    "qLink": "Quel est le lien entre {name} et {other} ?",
+    "qRecent": "Qu'est-il arrivé à {name} récemment ?",
+    "qWants": "Que cherche {name} ?"
   }
 }

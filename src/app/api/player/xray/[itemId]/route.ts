@@ -5,6 +5,8 @@ import { isJellyfinId } from "@/lib/jellyfinPath";
 import { assertVisible } from "@/lib/itemVisibility";
 import { emptyXray, scenesForPlayer, type XrayPlayerPayload } from "@/lib/xray/scenes";
 import { xrayOpenTo } from "@/lib/clients/xray";
+import { personFactsForPlayer } from "@/lib/xray/person";
+import { LOCALE_COOKIE, type Locale } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,10 @@ const PRIVATE = { "Cache-Control": "private, no-store" };
  * Un élément que ce compte ne voit pas (tags bloqués, bibliothèque non permise, autre titre qu'un lien
  * de partage) répond exactement comme un élément jamais analysé : `none`. La question est posée à
  * Jellyfin sous l'identité du compte (`assertVisible`), avant toute lecture du service.
+ *
+ * `?person=<id TMDB>` (10.27) : le panneau d'une personne touchée — âge, lieu de naissance, courte
+ * biographie, autres titres dans la bibliothèque (`personFactsForPlayer`, le chemin des fiches personne
+ * du cinéma). Même porte, même réponse 200 : `{ status: "none" }` quand il n'y a rien à dire.
  */
 export async function GET(req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
   const { itemId } = await props.params;
@@ -35,6 +41,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     // Caché à ce compte : comme s'il n'avait jamais été analysé, sans rien dire de plus.
     if (refused.status === 404) return NextResponse.json(emptyXray("none") satisfies XrayPlayerPayload, { headers: PRIVATE });
     return refused;
+  }
+  const person = Number(req.nextUrl?.searchParams.get("person") ?? "");
+  if (Number.isInteger(person) && person > 0) {
+    const raw = req.cookies.get(LOCALE_COOKIE)?.value ?? "";
+    const lang: Locale = raw === "en" || raw === "es" || raw === "de" ? raw : "fr";
+    return NextResponse.json(await personFactsForPlayer(itemId, person, lang, session.jfId), { headers: PRIVATE });
   }
   return NextResponse.json(await scenesForPlayer(itemId), { headers: PRIVATE });
 }

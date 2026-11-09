@@ -171,7 +171,7 @@ describe("le panneau", () => {
     expect(surface).not.toHaveBeenCalled();
   });
 
-  it("iPhone couché : le clavier ouvert, le panneau se réduit à la ligne du champ posée juste au-dessus", async () => {
+  it("au lecteur, iPhone couché : le clavier ouvert, le panneau se réduit à la ligne du champ, posée en haut (10.27)", async () => {
     panel();
     const section = () => document.querySelector<HTMLElement>("[data-ask-panel]")!;
     expect(section().dataset.mode).toBe("side");
@@ -180,7 +180,9 @@ describe("le panneau", () => {
     // iOS fait glisser la vue vers le champ, et le clavier prend plus de la moitié.
     act(() => vv.set({ height: 170, offsetTop: 40 }));
     await waitFor(() => expect(section().dataset.mode).toBe("line"));
-    expect(section().style.top).toBe(`${40 + 170 - LINE_HEIGHT_PX - 8}px`);
+    // En haut de ce qu'on voit, sous la zone sûre — au lecteur, toujours.
+    expect(section().style.top).toBe("calc(52px + env(safe-area-inset-top, 0px))");
+    expect(section().style.opacity).toBe("");
     // Le champ est toujours le même nœud : le focus — donc le clavier — n'est pas perdu au changement de forme.
     expect(document.querySelector("[data-ask-input]")).toBe(input);
     // Envoyé : le champ rend le focus, le panneau entier revient avec la réponse.
@@ -190,6 +192,24 @@ describe("le panneau", () => {
     act(() => vv.set({ height: 390, offsetTop: 0 }));
     await waitFor(() => expect(section().dataset.mode).toBe("side"));
     await screen.findByText("Ariadne construit le labyrinthe.");
+  });
+
+  it("une rotation pendant la frappe : le clavier se referme, le texte reste, le panneau se replace", async () => {
+    panel({ placement: "sheet", where: "fiche" });
+    const section = () => document.querySelector<HTMLElement>("[data-ask-panel]")!;
+    const input = document.querySelector<HTMLInputElement>("[data-ask-input]")!;
+    act(() => input.focus());
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Qui est Mal ?" } });
+    act(() => vv.set({ height: 170, offsetTop: 0 }));
+    await waitFor(() => expect(section().dataset.mode).toBe("line"));
+    act(() => void window.dispatchEvent(new Event("orientationchange")));
+    expect(document.activeElement).not.toBe(input);
+    fireEvent.blur(input);
+    act(() => vv.set({ height: 844, width: 390, offsetTop: 0 }));
+    await waitFor(() => expect(section().dataset.mode).toBe("sheet"));
+    expect(input.value).toBe("Qui est Mal ?");
+    expect(posts()).toHaveLength(0);
   });
 });
 
@@ -230,8 +250,25 @@ describe("askPanelLayout — la place d'après la vue visuelle, jamais d'après 
     expect(layout.top + LINE_HEIGHT_PX + 8).toBe(300 + 420);
   });
   it("un calque qui ne commence pas en haut de la fenêtre : la ligne reste contre le clavier", () => {
-    const f = { width: 844, height: 170, offsetTop: 40, baseline: 390, layoutHeight: 390, focused: true, layerTop: 20 };
-    expect(askPanelLayout(f)).toMatchObject({ mode: "line", top: 40 + 170 - LINE_HEIGHT_PX - 8 - 20 });
+    const f = { width: 390, height: 470, offsetTop: 40, baseline: 844, layoutHeight: 844, focused: true, layerTop: 20 };
+    expect(askPanelLayout(f)).toMatchObject({ mode: "line", top: 40 + 470 - LINE_HEIGHT_PX - 8 - 20 });
+  });
+
+  // La règle du propriétaire (10.27) : au lecteur, la ligne en haut, debout comme couché ; sur une fiche,
+  // au-dessus du clavier debout, en haut couché. En haut, rien n'attend la mesure du clavier.
+  it("au lecteur : la ligne en haut, debout comme couché — mesurée ou non", () => {
+    const portrait = { width: 390, height: 480, offsetTop: 0, baseline: 844, layoutHeight: 844, focused: true, touchPhone: true, context: "player" as const };
+    expect(askPanelLayout(portrait)).toEqual({ mode: "line", top: 12, branch: "vue", pending: false, fromTop: true });
+    const landscape = { width: 844, height: 150, offsetTop: 30, baseline: 390, layoutHeight: 390, focused: true, touchPhone: true, context: "player" as const };
+    expect(askPanelLayout(landscape)).toMatchObject({ mode: "line", top: 42, fromTop: true, pending: false });
+    // Un téléphone dont le clavier ne se laisse pas mesurer : en haut tout de suite, sans attente invisible.
+    expect(askPanelLayout({ ...portrait, height: 844, settling: true })).toMatchObject({ mode: "line", branch: "attente", pending: false, fromTop: true });
+  });
+  it("sur une fiche : debout, contre le clavier ; couché, en haut", () => {
+    const portrait = { width: 390, height: 480, offsetTop: 0, baseline: 844, layoutHeight: 844, focused: true, touchPhone: true, context: "sheet" as const };
+    expect(askPanelLayout(portrait)).toEqual({ mode: "line", top: 480 - LINE_HEIGHT_PX - 8, branch: "vue" });
+    const landscape = { width: 844, height: 150, offsetTop: 0, baseline: 390, layoutHeight: 390, focused: true, touchPhone: true, context: "sheet" as const };
+    expect(askPanelLayout(landscape)).toMatchObject({ mode: "line", top: 12, fromTop: true });
   });
   it("aucun signe du clavier sur un téléphone : invisible le temps de la mesure, puis la ligne en haut — jamais le panneau entier", () => {
     const f = { width: 390, height: 844, offsetTop: 0, baseline: 844, layoutHeight: 844, focused: true, touchPhone: true };
@@ -247,16 +284,19 @@ describe("askPanelLayout — la place d'après la vue visuelle, jamais d'après 
   it("iPhone couché, ~150 px visibles : la ligne tient dans ce qui reste", () => {
     const f = { width: 844, height: 150, offsetTop: 0, baseline: 390, layoutHeight: 390, focused: true, touchPhone: true };
     const layout = askPanelLayout(f);
-    expect(layout).toMatchObject({ mode: "line", branch: "vue" });
+    expect(layout).toMatchObject({ mode: "line", branch: "vue", fromTop: true });
     expect(layout.top).toBeGreaterThanOrEqual(0);
     expect(layout.top + LINE_HEIGHT_PX).toBeLessThanOrEqual(150);
   });
 });
 
 describe("le panneau et le clavier d'iOS — vue visuelle simulée", () => {
+  /** Un iPhone debout, panneau d'une fiche : la ligne se pose contre le clavier (la règle de 10.27). */
   function phone() {
-    Object.defineProperty(window, "innerHeight", { configurable: true, value: 390 });
-    Object.defineProperty(window, "innerWidth", { configurable: true, value: 844 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 844 });
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    vv.width = 390;
+    vv.height = 844;
     Object.defineProperty(window.screen, "width", { configurable: true, value: 390 });
     Object.defineProperty(window.screen, "height", { configurable: true, value: 844 });
     vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("coarse"), media: q, addEventListener() {}, removeEventListener() {} }));
@@ -270,7 +310,7 @@ describe("le panneau et le clavier d'iOS — vue visuelle simulée", () => {
 
   it("resize en retard : la ligne attend, invisible, puis se pose au-dessus du clavier", async () => {
     phone();
-    panel();
+    panel({ placement: "sheet", where: "fiche" });
     const input = document.querySelector<HTMLInputElement>("[data-ask-input]")!;
     act(() => input.focus());
     fireEvent.focus(input);
@@ -280,21 +320,21 @@ describe("le panneau et le clavier d'iOS — vue visuelle simulée", () => {
     // 400 ms plus tard, iOS se décide.
     await act(async () => {
       await new Promise((r) => setTimeout(r, 400));
-      vv.set({ height: 160, offsetTop: 0 });
+      vv.set({ height: 460, offsetTop: 0 });
     });
-    await waitFor(() => expect(section().style.top).toBe(`${160 - LINE_HEIGHT_PX - 8}px`));
+    await waitFor(() => expect(section().style.top).toBe(`${460 - LINE_HEIGHT_PX - 8}px`));
     expect(section().style.opacity).toBe("");
   });
 
   it("aucun resize du tout : relue à chaque image, la vue qui a rétréci est quand même vue", async () => {
     phone();
-    panel();
+    panel({ placement: "sheet", where: "fiche" });
     const input = document.querySelector<HTMLInputElement>("[data-ask-input]")!;
     act(() => input.focus());
     fireEvent.focus(input);
     // La vue change sans prévenir (aucun événement).
-    vv.height = 170;
-    await waitFor(() => expect(section().style.top).toBe(`${170 - LINE_HEIGHT_PX - 8}px`));
+    vv.height = 470;
+    await waitFor(() => expect(section().style.top).toBe(`${470 - LINE_HEIGHT_PX - 8}px`));
   });
 
   it("les lignes `clavier` : au focus et 600 ms plus tard, avec la branche et les mesures ; six au plus par ouverture", async () => {
@@ -304,7 +344,7 @@ describe("le panneau et le clavier d'iOS — vue visuelle simulée", () => {
     act(() => input.focus());
     await waitFor(() => expect(diagLines().map((l) => l.trigger)).toEqual(["focus", "600ms"]), { timeout: 2000 });
     const first = diagLines()[0];
-    expect(first).toMatchObject({ kind: "clavier", where: "lecteur", placement: "player", inner: 390, screenW: 390, screenH: 844, touchPhone: true });
+    expect(first).toMatchObject({ kind: "clavier", where: "lecteur", placement: "player", inner: 844, screenW: 390, screenH: 844, touchPhone: true, place: "haut" });
     expect(first).toHaveProperty("branch");
     expect(first).toHaveProperty("inputBottom");
     expect(first).toHaveProperty("vvTop");
@@ -360,9 +400,8 @@ describe("le panneau des fiches arrive et repart", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
-  it("une personne : son en-tête et « Qui est … ? » à la place des propositions d'office", () => {
-    render(<AskPanel itemId={ITEM} where="lecteur" placement="player" onClose={() => {}} header={<p>en-tête</p>} suggestions={["Qui est Cobb ?"]} />);
-    expect(screen.getByText("en-tête")).toBeTruthy();
+  it("des propositions données : à la place de celles d'office", () => {
+    render(<AskPanel itemId={ITEM} where="lecteur" placement="player" onClose={() => {}} suggestions={["Qui est Cobb ?"]} />);
     expect(screen.getByText("Qui est Cobb ?")).toBeTruthy();
     expect(screen.queryByText("ask.chipPlayer0")).toBeNull();
   });

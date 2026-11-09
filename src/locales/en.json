@@ -4191,7 +4191,6 @@
   },
   "ask": {
     "title": "Ask a question",
-    "pill": "A question?",
     "placeholder": "Your question about this title…",
     "send": "Send",
     "hint": "Answers rely only on what you have already watched.",
@@ -4199,7 +4198,7 @@
     "unknown": "I can't tell from what has been watched so far.",
     "limit": "Too many questions for now. Please try again a little later.",
     "unavailable": "Questions are not available for this title right now.",
-    "error": "The answer could not arrive. Please try again in a moment.",
+    "error": "The answer couldn't be retrieved.",
     "off": "Questions are not offered at the moment.",
     "maxReached": "Five questions per opening: close and reopen to ask more.",
     "chipPlayer0": "What just happened?",
@@ -4209,12 +4208,18 @@
     "chipSheet1": "Who are the main characters?",
     "chipSheet2": "What is this title about?",
     "done": "OK",
-    "whoIs": "Who is {name}?"
+    "retry": "Try again"
   },
   "xray": {
     "onScreen": "On screen",
     "previous": "Previous people",
     "next": "More people",
-    "photo": "Photo of {name}"
+    "photo": "Photo of {name}",
+    "sofar": "So far",
+    "library": "In your library",
+    "diedAt": "† aged {n}",
+    "qLink": "How is {name} connected to {other}?",
+    "qRecent": "What has happened to {name} lately?",
+    "qWants": "What is {name} after?"
   }
 }
