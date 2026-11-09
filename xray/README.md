@@ -21,6 +21,7 @@ il y en a un, calcule sur le processeur, et ne parle qu'à Laterna, par un rése
 - [Accélération matérielle](#accélération-matérielle)
 - [Performances](#performances)
 - [Réglages](#réglages)
+- [Calibrage](#calibrage)
 - [Limites connues](#limites-connues)
 - [Référence de l'API](#référence-de-lapi)
 - [Développement](#développement)
@@ -88,8 +89,11 @@ Trois principes :
 Le fichier est lu par tronçons de deux minutes. Chaque tronçon est décodé par ffmpeg (la
 version que livre Jellyfin, avec son pilote Intel), réduit à 640 px de large et échantillonné à
 quatre images par seconde. Sur l'iGPU, la réduction se fait sur la carte et seules les petites
-images reviennent en mémoire. Un fichier HDR 10 bits est ramené en 8 bits sans adaptation des
-tons : l'image est terne, mais un visage reste un visage.
+images reviennent en mémoire. Un fichier HDR (PQ ou HLG, Dolby Vision à couche HDR10 compris) est
+adapté en SDR *après* la réduction, sur le processeur (`tonemapx`, livré avec jellyfin-ffmpeg) :
+quatre petites images par seconde ne coûtent presque rien. Lu sans adaptation, le signal HDR
+donne une image délavée aux couleurs tassées, et des coupes passent inaperçues (voir
+[Calibrage](#calibrage)).
 
 Le tronçon est l'unité de travail : une fois analysé, il est écrit en base d'un seul bloc. Un
 redémarrage reprend au premier tronçon non fait.
@@ -98,7 +102,9 @@ redémarrage reprend au premier tronçon non fait.
 
 Entre deux images successives, on compare les histogrammes de couleurs (luminance et
 chrominance). Une coupe change d'un coup les couleurs de l'image ; un mouvement de caméra
-déplace l'image sans les changer. Quand l'écart est moyen, une vignette de 32×18 départage.
+déplace l'image sans les changer. Quand l'écart est moyen, une vignette de 32×18 départage —
+brute, et à contraste égal (centrée, réduite) : dans un décor sombre d'une seule teinte, un
+champ-contrechamp change peu les couleurs et la luminance, mais pas la forme de l'image.
 Couper trop souvent ne coûte presque rien (les morceaux se recollent plus loin) ; les seuils
 penchent donc vers la coupe.
 
@@ -137,22 +143,30 @@ Chaque groupe est comparé à chaque acteur de la distribution fournie :
   servent aussi de référence : ils ressemblent davantage à l'image de la série qu'un portrait
   posé. Seuls des groupes que les *photos* ont nommés y entrent : la mémoire ne se nourrit pas
   de ses propres conclusions ;
-- l'**algorithme hongrois** attribue au plus un groupe par acteur, en maximisant la somme des
-  notes ; sous le **seuil de rejet**, le groupe reste anonyme ;
+- trois **bandes de note**, relatives au seuil de rejet *T* (0,30 pour `buffalo_l`) : à partir de
+  *T* + 0,10, le nom est sûr ; de *T* + 0,045 à *T* + 0,10, il n'est donné que si le deuxième
+  acteur le plus ressemblant est à 0,15 au moins derrière *et* si le groupe a été vu 2 s ou sur
+  2 pistes ; en dessous, le groupe reste anonyme ;
+- l'**algorithme hongrois** attribue au plus un groupe par acteur parmi ces couples
+  acceptables, en maximisant la somme des notes ;
 - un acteur filmé sous deux jours très différents peut former deux groupes : le second rejoint
-  le premier s'il ressemble nettement à l'acteur *et* au groupe déjà nommé.
+  le premier s'il ressemble nettement à l'acteur *et* au groupe déjà nommé, ou s'il tombe dans
+  la bande « à confirmer » et en remplit les conditions ; jamais s'il a été vu moins d'une
+  seconde.
 
 La confiance renvoyée vaut 0,5 au seuil et approche 1 quand la ressemblance le dépasse
-nettement. Sur un épisode d'essai, les bons noms obtenaient 0,66 à 0,78 de similarité, et le
-meilleur des autres acteurs 0,17 au plus, pour un seuil à 0,30.
+nettement. Les chiffres qui fixent ces bandes sont dans [Calibrage](#calibrage).
 
 ### 6. Scènes
 
 Un plan rejoint la scène en cours s'il ressemble par ses couleurs à l'un de ses quatre derniers
 plans — un dialogue filmé en champ-contrechamp alterne A, B, A, B — ou s'il montre quelqu'un
 qu'on vient d'y voir dans un décor encore voisin. Une scène de moins de dix secondes est fondue
-dans sa voisine la plus proche. Pour chaque scène, les personnes nommées sont triées par temps
-de présence.
+dans sa voisine la plus proche. Une scène de plus de trois minutes est recoupée à sa frontière de
+plans la plus faible (couleurs les moins semblables, de préférence là où les personnes changent du
+tout au tout), sans laisser de morceau de moins de 30 s : un décor uniforme — des urgences toutes
+en bleu-vert — enchaînait sinon des scènes de douze minutes. Pour chaque scène, les personnes
+nommées sont triées par temps de présence.
 
 ---
 
@@ -326,6 +340,56 @@ Variables d'environnement (toutes facultatives sauf la clé) :
 
 ---
 
+## Calibrage
+
+Mesuré le 09/11/2026 sur trois titres, `buffalo_l` : *MacGyver* (2016) S01E06 (HEVC 1080p SDR),
+*The Pitt* S02E01 (HEVC 1080p SDR), *Bullet Train* (2022, HEVC 4K HDR10), puis *Ted Lasso*
+S01E10 (HEVC 4K Dolby Vision / HDR10). Les groupes douteux ont été jugés sur planches d'images.
+
+**Noms.** Version 1 : seuil 0,30 en première passe, 0,40 en seconde passe. Dans chaque cas
+jugeable entre 0,345 et 0,40, le groupe resté anonyme était bien l'acteur — couché (0,37), masqué
+(0,386), sous chapeau et lunettes (0,349), de dos à demi (0,386) — et le deuxième acteur le plus
+ressemblant n'y dépassait jamais 0,25 (écart de 0,17 à 0,30). Les noms donnés sous 0,345 ne
+tenaient pas : 0,31 pour une seconde d'image, 0,33 sur 12 s ; ni un quatrième groupe d'un même
+acteur vu une demi-seconde. Recalcul hors ligne des mêmes pistes (version 1 → 3) :
+
+| Titre | Groupes nommés | Personnes | Temps nommé | Changements |
+|---|---|---|---|---|
+| MacGyver S01E06 | 9 → 9 | 9 → 8 | 1 507 → 1 508 s | + un groupe d'un acteur couché ; − un invité à 0,31 (1 s) |
+| The Pitt S02E01 | 35 → 38 | 34 → 34 | 2 273 → 2 318 s | + deux actrices (masquée, de profil, 19 s et 22 s), + un second groupe |
+| Bullet Train | 33 → 40 | 25 → 24 | 3 754 → 3 803 s | + 8 groupes d'acteurs déjà nommés ; − un nom à 0,33, − une demi-seconde |
+
+**Scènes.** Version 1 sans durée maximale : *The Pitt* avait des scènes de 775 s et 703 s (trois
+au-delà de 300 s). Recalcul sur les mêmes plans :
+
+| Titre | Scènes | Médiane | 90ᵉ centile | Plus longue |
+|---|---|---|---|---|
+| MacGyver S01E06 | 46 → 47 | 36,8 → 37,2 s | 124 → 124 s | 200 → 160 s |
+| The Pitt S02E01 | 21 → 40 | 61 → 79 s | 394 → 136 s | 775 → 178 s |
+| Bullet Train | 104 → 122 | 42 → 44 s | 145 → 143 s | 515 → 170 s |
+
+**Coupes.** Comptées sur des extraits de cinq minutes, décodés comme en production (VA-API) :
+
+| Extrait (5 min) | v1, sans adaptation | adapté seulement | v3 (adapté + contraste égal) | Plan médian v1 → v3 | 90ᵉ centile v1 → v3 |
+|---|---|---|---|---|---|
+| Bullet Train, 20ᵉ min (HDR10) | 22 | 36 | 79 | 6,0 → 2,5 s | 31,3 → 8,3 s |
+| Ted Lasso S01E10, 2ᵉ min (Dolby Vision / HDR10) | 11 | 12 | 98 | 7,8 → 2,3 s | 67,1 → 5,6 s |
+| The Pitt S02E01, 15ᵉ min (SDR) | 56 | — | 85 | 2,8 → 2,3 s | 11,5 → 6,9 s |
+| MacGyver S01E06, 10ᵉ min (SDR) | 108 | — | 128 | 2,3 → 2,0 s | 5,8 → 4,8 s |
+
+L'adaptation seule ne suffit pas : dans le bureau sombre de *Ted Lasso*, un champ-contrechamp
+change les couleurs de 0,10 à 0,27 et la luminance brute de 0,05 à 0,12 — sous les seuils
+d'origine —, mais à contraste égal ces coupes s'écartent de 0,65 à 1,0, quand deux images d'un
+même plan ne dépassent pas 0,49 dans ce décor. Un épisode y était découpé en un plan par
+tronçon de deux minutes. Couper un peu plus souvent ailleurs (MacGyver, +18 %) ne coûte presque
+rien : les morceaux se recollent en scènes.
+
+`tonemap_vaapi` fonctionne sur l'UHD 630, mais rend une image trois fois plus sombre que la source
+(luminance moyenne 14 contre 35 pour `tonemapx` sur la même image) : la carte décode et réduit, le
+processeur adapte.
+
+---
+
 ## Limites connues
 
 - **Un visage doit être vu de face, net et assez grand.** Un personnage filmé de dos, de profil,
@@ -341,7 +405,8 @@ Variables d'environnement (toutes facultatives sauf la clé) :
 - **Les scènes sont approchées.** Le découpage repose sur les couleurs et les personnes, pas sur
   le récit : une scène tournée dans deux décors très différents peut être coupée en deux, et
   deux scènes du même décor qui se suivent peuvent n'en faire qu'une.
-- **Le HDR n'est pas adapté** avant analyse : sans conséquence mesurée sur les visages.
+- **Le HDR est adapté par `tonemapx`**, propre à jellyfin-ffmpeg. Avec un autre ffmpeg, il est
+  analysé sans adaptation (le journal le dit) : moins de coupes trouvées, des scènes plus longues.
 - **Le résultat dépend du fichier** : il est lié à son `etag`, et un fichier remplacé doit être
   réanalysé.
 
@@ -397,8 +462,9 @@ prêts (réseau, empreinte qui ne correspond pas). `running` est l'`itemId` en c
 
 Réponses :
 
-- `202 {"itemId", "status": "queued" | "running", "position"}` — `position` vaut 0 pour l'ordre
-  en cours, 1 pour le prochain, etc. ;
+- `202 {"itemId", "status": "queued" | "running", "position"}` — `position` est le rang dans la
+  file : 0 pour l'ordre en cours *ou qui commence tout de suite* (file vide, rien en cours), 1
+  pour le prochain, etc. ;
 - `200 {"itemId", "status": "done", "position": 0}` — déjà fait pour ce même `etag` : rien n'est
   relancé ;
 - un ordre en double (même `etag`, en attente ou en cours) ne fait que remonter la priorité ;
@@ -433,8 +499,12 @@ où il en était.
 
 Les scènes couvrent toutes les plages déjà analysées (y compris, pendant l'analyse, des plages
 disjointes) ; `people` est trié par temps de présence et ne contient que des visages nommés.
-`version` change si le format ou l'algorithme rend les anciens résultats incomparables. `404`
-tant que rien n'est analysé.
+`version` est la version de l'algorithme qui a produit *ce* résultat (aujourd'hui 3 ; voir
+[Calibrage](#calibrage)). Un résultat d'une version antérieure reste servi tel quel — il reste
+valable — et rien n'est réanalysé de soi-même : un nouvel ordre au même `etag` répond encore
+`done`. Pour le refaire avec les règles du jour : `DELETE`, puis un nouvel ordre. Un ordre commencé
+sous une version antérieure et pas fini repart de zéro, pour ne jamais mêler deux règles dans un
+même résultat. `404` tant que rien n'est analysé.
 
 ### `DELETE /items/{itemId}`
 

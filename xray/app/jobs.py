@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .config import RESULT_VERSION
 from .db import Database
 
 PRIORITIES = {"high": 0, "normal": 1, "low": 2}
@@ -196,15 +197,16 @@ class JobStore:
                 cast_json = json.dumps([m.as_dict() for m in spec.cast], ensure_ascii=False)
                 c.execute(
                     """INSERT INTO items (item_id, etag, path, priority, start_at, series_id, cast_json,
-                                          status, error, seq, created, updated)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', NULL, ?, ?, ?)
+                                          status, error, seq, version, created, updated)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', NULL, ?, ?, ?, ?)
                        ON CONFLICT(item_id) DO UPDATE SET
                          etag=excluded.etag, path=excluded.path, priority=excluded.priority,
                          start_at=excluded.start_at, series_id=excluded.series_id,
                          cast_json=excluded.cast_json, status='queued', error=NULL,
-                         seq=excluded.seq, updated=excluded.updated""",
+                         seq=excluded.seq, version=excluded.version, updated=excluded.updated""",
                     (spec.item_id, spec.etag, spec.path, spec.priority, spec.start_at, spec.series_id,
-                     cast_json, seq, now, now),
+                     cast_json, seq, RESULT_VERSION if row is None or row["etag"] != spec.etag else row["version"],
+                     now, now),
                 )
                 status = "queued"
         self._wake.set()
@@ -228,6 +230,9 @@ class JobStore:
         return self.db.one("SELECT * FROM items WHERE item_id=?", (item_id.lower(),))
 
     def position(self, item_id: str) -> int:
+        """Rang dans la file : 0 pour l'ordre en cours — ou qui commence tout de suite, la file
+        étant vide —, 1 pour le prochain, etc. Un premier ordre sur une file vide rendait 1 :
+        l'ouvrier ne l'avait simplement pas encore pris."""
         row = self.get(item_id)
         if row is None or row["status"] != "queued":
             return 0
@@ -235,7 +240,8 @@ class JobStore:
             "SELECT COUNT(*) FROM items WHERE status='queued' AND (priority < ? OR (priority = ? AND seq < ?))",
             (row["priority"], row["priority"], row["seq"]),
         )[0]
-        return int(ahead) + 1
+        busy = self.running_id is not None and self.running_id != row["item_id"]
+        return int(ahead) + (1 if busy else 0)
 
     def pending_count(self) -> int:
         return int(self.db.one("SELECT COUNT(*) FROM items WHERE status='queued'")[0])

@@ -92,7 +92,8 @@ def build(
             centroids[l] += t.emb * w
             ctime[l] += t.screen_time
         centroids = normalize(centroids)
-        assignments = label_clusters(centroids, ctime, refs, label_threshold, cluster_threshold)
+        assignments = label_clusters(centroids, ctime, refs, label_threshold, cluster_threshold,
+                                     np.bincount(labels, minlength=k))
     else:
         labels = np.zeros(0, dtype=np.int64)
         centroids = np.zeros((0, 512), dtype=np.float32)

@@ -13,7 +13,14 @@ from pathlib import Path
 VERSION = "1.0.0"
 # Version du format et de l'algorithme des résultats (`version` de /scenes). À monter quand
 # un changement rend les anciens résultats incomparables : Laterna peut alors les redemander.
-RESULT_VERSION = 1
+# Chaque résultat garde la version qui l'a produit : un résultat ancien reste servi tel quel (il
+# reste valable), et rien n'est réanalysé de soi-même ; un ordre commencé sous une version
+# antérieure et pas fini repart de zéro, pour ne jamais mêler deux règles dans un résultat.
+#   1 — première version.
+#   2 — (09/11/2026) bande de noms « à confirmer » 0,345–0,40, scènes de 3 min au plus, HDR adapté ;
+#       déployée vingt minutes sans la coupe « à contraste égal », d'où :
+#   3 — (09/11/2026) la même, plus la coupe à contraste égal (décors sombres d'une seule teinte).
+RESULT_VERSION = 3
 
 
 def _int(name: str, default: int) -> int:

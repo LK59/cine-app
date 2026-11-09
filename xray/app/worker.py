@@ -26,7 +26,7 @@ import numpy as np
 
 from . import cast as castmod
 from . import decode
-from .config import settings
+from .config import RESULT_VERSION, settings
 from .db import Database
 from .faces import MODEL_DEFAULTS
 from .jobs import CastMember, JobStore
@@ -143,7 +143,14 @@ class Worker:
         model = self.models.name
         self.store.running_id = item_id
         self.store.cancel.clear()
-        self.store.set_status(item_id, "running", attempts=row["attempts"] + 1, model=model)
+        if row["version"] < RESULT_VERSION:
+            # Commencé sous d'anciennes règles et pas fini : on repart de zéro plutôt que de
+            # mêler, dans un même résultat, des tronçons des deux versions.
+            log.info("[xray] %s : tronçons de la version %d oubliés, reprise à zéro", item_id, row["version"])
+            with self.db.tx() as c:
+                for table in ("chunks", "shots", "tracks", "results"):
+                    c.execute(f"DELETE FROM {table} WHERE item_id=?", (item_id,))
+        self.store.set_status(item_id, "running", attempts=row["attempts"] + 1, model=model, version=RESULT_VERSION)
         t_job = time.monotonic()
         info = decode.probe(path)
         if info.duration <= 0:
@@ -216,10 +223,11 @@ class Worker:
             if cur is None or cur["etag"] != etag:
                 raise Cancelled()
             c.execute(
-                """INSERT OR REPLACE INTO results (item_id, etag, model, scenes_json, analyzed_until, progress, complete, updated)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT OR REPLACE INTO results (item_id, etag, model, scenes_json, analyzed_until, progress, complete,
+                                                  updated, version)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (item_id, etag, model, json.dumps(built.scenes, separators=(",", ":")), built.analyzed_until,
-                 built.progress, 1 if built.complete else 0, time.time()),
+                 built.progress, 1 if built.complete else 0, time.time(), RESULT_VERSION),
             )
         return built
 

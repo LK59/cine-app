@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS items (
     model       TEXT,
     seq         INTEGER NOT NULL,      -- ordre d'arrivée, départage les priorités égales
     attempts    INTEGER NOT NULL DEFAULT 0,
+    version     INTEGER NOT NULL DEFAULT 1,  -- RESULT_VERSION sous laquelle les tronçons ont été faits
     created     REAL NOT NULL,
     updated     REAL NOT NULL
 );
@@ -71,7 +72,8 @@ CREATE TABLE IF NOT EXISTS results (
     analyzed_until REAL NOT NULL,
     progress       REAL NOT NULL,
     complete       INTEGER NOT NULL,
-    updated        REAL NOT NULL
+    updated        REAL NOT NULL,
+    version        INTEGER NOT NULL DEFAULT 1   -- RESULT_VERSION de l'algorithme qui l'a produit
 );
 CREATE TABLE IF NOT EXISTS photo_emb (
     model   TEXT NOT NULL,
@@ -103,6 +105,15 @@ class Database:
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.executescript(SCHEMA)
+            self._migrate()
+
+    def _migrate(self) -> None:
+        """Colonnes ajoutées après coup. Une base d'avant la version 2 des résultats n'a pas de
+        colonne `version` : ses lignes valent 1 — ce qui les a produites."""
+        for table in ("items", "results"):
+            cols = {r[1] for r in self._conn.execute(f"PRAGMA table_info({table})")}
+            if "version" not in cols:
+                self._conn.execute(f"ALTER TABLE {table} ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:

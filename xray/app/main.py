@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
 from . import decode
-from .config import RESULT_VERSION, VERSION, settings
+from .config import VERSION, settings
 from .db import Database
 from .gpu_guard import GpuGuard
 from .jobs import HEX32, InvalidJob, JobStore, validate_job
@@ -115,7 +115,9 @@ def create_app(start_background: bool = True, db: Database | None = None, models
             "itemId": res["item_id"],
             "etag": res["etag"],
             "model": res["model"],
-            "version": RESULT_VERSION,
+            # La version qui a produit *ce* résultat : un résultat ancien reste servi (il reste
+            # valable) ; Laterna peut le redemander (DELETE puis ordre) s'il veut les nouvelles règles.
+            "version": int(res["version"]),
             "complete": bool(res["complete"]),
             "analyzedUntil": float(res["analyzed_until"]),
             "scenes": json.loads(res["scenes_json"]),

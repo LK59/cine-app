@@ -4,8 +4,13 @@ Sur l'iGPU Intel (VA-API) quand le codec s'y prête, sur le processeur sinon. Le
 sortie est le même dans les deux cas — NV12 brut, 640 px de large — si bien que tout ce qui
 suit ignore d'où viennent les images.
 
-Le HDR 10 bits est ramené en NV12 8 bits sans adaptation de tons : l'image est terne, mais un
-visage reste un visage, et l'adaptation coûterait plus que tout le reste du décodage.
+Le HDR (PQ ou HLG) est adapté en SDR *après* la réduction à 640 px, sur le processeur
+(`tonemapx`, le filtre SIMD de jellyfin-ffmpeg) : 4 images par seconde de 640×360 ne coûtent
+presque rien. Sans adaptation, le signal PQ lu comme du SDR donnait une image délavée aux
+histogrammes tassés, et des coupes passaient inaperçues (Bullet Train, 4K HDR10 : 22 coupes
+sur 5 minutes, 36 une fois adapté — voir README, « Calibrage »). `tonemap_vaapi` existe sur l'UHD 630, mais
+mesuré le 09/11/2026 il rend une image trois fois plus sombre que la source (luminance moyenne
+14 contre 35 pour `tonemapx`) : la carte décode et réduit, le processeur adapte.
 """
 
 from __future__ import annotations
@@ -30,6 +35,9 @@ log = logging.getLogger("xray.decode")
 # pas de HEVC 4:2:2/4:4:4 (Ice Lake), pas de H.264 10 bits (jamais chez Intel).
 VAAPI_CODECS = {"h264", "hevc", "vp9", "vp8", "mpeg2video", "vc1", "mjpeg"}
 VAAPI_HEVC_PROFILES = {"Main", "Main 10", "Main Still Picture"}
+HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}
+# Adaptation HDR → SDR (BT.2390, comme Jellyfin), sortie 8 bits.
+TONEMAP = "tonemapx=tonemap=bt2390:desat=0:t=bt709:m=bt709:p=bt709:format=yuv420p"
 
 
 @dataclass
@@ -41,6 +49,12 @@ class MediaInfo:
     height: int
     pix_fmt: str
     sar: float = 1.0
+    transfer: str = ""
+
+    @property
+    def hdr(self) -> bool:
+        """PQ (HDR10, HDR10+, Dolby Vision à couche HDR10) ou HLG."""
+        return self.transfer in HDR_TRANSFERS
 
     def out_size(self, width: int) -> tuple[int, int]:
         """Largeur fixe, hauteur selon le rapport d'affichage (pixels non carrés compris), paire."""
@@ -52,7 +66,7 @@ class MediaInfo:
 def probe(path: str) -> MediaInfo:
     out = subprocess.run(
         [settings.ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries",
-         "stream=codec_name,profile,width,height,pix_fmt,sample_aspect_ratio,duration:format=duration",
+         "stream=codec_name,profile,width,height,pix_fmt,sample_aspect_ratio,color_transfer,duration:format=duration",
          "-of", "json", path],
         capture_output=True, text=True, timeout=60,
     )
@@ -77,6 +91,7 @@ def probe(path: str) -> MediaInfo:
     return MediaInfo(
         duration=float(dur), codec=s.get("codec_name", ""), profile=s.get("profile", "") or "",
         width=int(s["width"]), height=int(s["height"]), pix_fmt=s.get("pix_fmt", "") or "", sar=sar,
+        transfer=s.get("color_transfer", "") or "",
     )
 
 
@@ -121,18 +136,43 @@ def vaapi_available(force: bool = False) -> bool:
     return ok
 
 
+_tonemap_state: dict = {"ok": None}
+
+
+def tonemap_available() -> bool:
+    """`tonemapx` est propre à jellyfin-ffmpeg : avec un autre ffmpeg, pas d'adaptation (l'image
+    reste terne, comme avant) plutôt qu'un échec de tous les tronçons HDR."""
+    if _tonemap_state["ok"] is None:
+        try:
+            r = subprocess.run([settings.ffmpeg, "-hide_banner", "-filters"], capture_output=True, text=True, timeout=30)
+            _tonemap_state["ok"] = " tonemapx " in r.stdout
+        except Exception:
+            _tonemap_state["ok"] = False
+        if not _tonemap_state["ok"]:
+            log.warning("tonemapx absent de ffmpeg : le HDR sera analysé sans adaptation")
+    return bool(_tonemap_state["ok"])
+
+
 def build_command(path: str, start: float, length: float, info: MediaInfo, vaapi: bool,
                   fps: float, width: int, threads: int) -> list[str]:
     w, h = info.out_size(width)
     cmd = [settings.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error"]
+    tonemap = info.hdr and tonemap_available()
     if vaapi:
         cmd += ["-hwaccel", "vaapi", "-hwaccel_device", settings.vaapi_device, "-hwaccel_output_format", "vaapi"]
-        vf = f"fps={fps},scale_vaapi=w={w}:h={h}:format=nv12,hwdownload,format=nv12"
+        if tonemap:
+            # La carte réduit en 10 bits, le processeur adapte la petite image.
+            vf = f"fps={fps},scale_vaapi=w={w}:h={h}:format=p010,hwdownload,format=p010,{TONEMAP},format=nv12"
+        else:
+            vf = f"fps={fps},scale_vaapi=w={w}:h={h}:format=nv12,hwdownload,format=nv12"
     else:
         # Sur le processeur, sauter les images non référencées divise le décodage sans rien
         # coûter ici : on n'en garde de toute façon que quatre par seconde.
         cmd += ["-threads", str(threads), "-skip_frame", "noref"]
-        vf = f"fps={fps},scale={w}:{h}:flags=fast_bilinear,format=nv12"
+        if tonemap:
+            vf = f"fps={fps},scale={w}:{h}:flags=fast_bilinear,format=yuv420p10le,{TONEMAP},format=nv12"
+        else:
+            vf = f"fps={fps},scale={w}:{h}:flags=fast_bilinear,format=nv12"
     cmd += ["-ss", f"{start:.3f}", "-t", f"{length:.3f}", "-i", path,
             "-map", "0:v:0", "-an", "-sn", "-dn", "-vf", vf, "-f", "rawvideo", "-pix_fmt", "nv12", "pipe:1"]
     return cmd

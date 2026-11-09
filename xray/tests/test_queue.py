@@ -1,7 +1,7 @@
 """La file : ordre de passage, cession à un ordre plus pressé, reprise après redémarrage."""
 
 from app.jobs import JobStore, validate_job
-from app.config import settings
+from app.config import RESULT_VERSION, settings
 from app.worker import chunk_order
 from conftest import ITEM, ITEM2, job
 
@@ -18,7 +18,11 @@ def test_ordre_priorite_puis_arrivee(db):
     submit(s, ITEM2, "normal")
     submit(s, ITEM3, "normal")
     assert s.next_job()["item_id"] == ITEM2
+    # Rien en cours : le premier de la file commence tout de suite (0).
+    assert [s.position(i) for i in (ITEM2, ITEM3, ITEM)] == [0, 1, 2]
+    s.running_id = "e" * 32  # un autre ordre en cours : tout le monde recule d'un rang
     assert [s.position(i) for i in (ITEM2, ITEM3, ITEM)] == [1, 2, 3]
+    s.running_id = None
     submit(s, ITEM, "high")
     assert s.next_job()["item_id"] == ITEM
 
@@ -70,3 +74,16 @@ def test_ordre_des_troncons():
     assert [c[0] for c in chunk_order(chunks, 250)] == [2, 3, 4, 0, 1]
     assert [c[0] for c in chunk_order(chunks, 240)] == [2, 3, 4, 0, 1]
     assert [c[0] for c in chunk_order(chunks, 10_000)] == [0, 1, 2, 3, 4]
+
+
+def test_ordre_commence_sous_une_ancienne_version_repart_de_zero(db):
+    s = JobStore(db)
+    submit(s, ITEM, "normal")
+    assert s.get(ITEM)["version"] == RESULT_VERSION
+    # Un ordre déposé avant la mise à jour garde sa version : l'ouvrier le reprendra de zéro.
+    db.run("UPDATE items SET version=1 WHERE item_id=?", (ITEM,))
+    submit(s, ITEM, "high")  # doublon : ne change pas la version des tronçons déjà faits
+    assert s.get(ITEM)["version"] == 1
+    db.run("UPDATE items SET etag='autre' WHERE item_id=?", (ITEM,))
+    submit(s, ITEM, "normal")  # autre fichier : tout est oublié, nouvelle version
+    assert s.get(ITEM)["version"] == RESULT_VERSION

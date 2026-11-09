@@ -3,6 +3,7 @@
 import json
 import time
 
+from app.config import RESULT_VERSION
 from conftest import AUTH, EPISODE, ITEM, ITEM2, MEDIA, job
 
 
@@ -35,7 +36,8 @@ def test_health(client):
 def test_depot_puis_lecture(client):
     r = client.post("/jobs", json=job(), headers=AUTH)
     assert r.status_code == 202
-    assert r.json() == {"itemId": ITEM, "status": "queued", "position": 1}
+    # File vide, rien en cours : l'ordre commence tout de suite, position 0.
+    assert r.json() == {"itemId": ITEM, "status": "queued", "position": 0}
     r = client.get(f"/items/{ITEM}", headers=AUTH)
     assert r.status_code == 200
     assert r.json() == {"itemId": ITEM, "etag": "etag-1", "status": "queued", "progress": 0.0,
@@ -52,20 +54,23 @@ def test_identifiant_en_majuscules_normalise(client):
 def test_doublon_ne_fait_que_remonter_la_priorite(client):
     client.post("/jobs", json=job(item=ITEM, priority="low"), headers=AUTH)
     client.post("/jobs", json=job(item=ITEM2, priority="normal"), headers=AUTH)
-    assert client.post("/jobs", json=job(item=ITEM, priority="low"), headers=AUTH).json()["position"] == 2
+    assert client.post("/jobs", json=job(item=ITEM, priority="low"), headers=AUTH).json()["position"] == 1
     r = client.post("/jobs", json=job(item=ITEM, priority="high"), headers=AUTH)
     assert r.status_code == 202
-    assert r.json() == {"itemId": ITEM, "status": "queued", "position": 1}
+    assert r.json() == {"itemId": ITEM, "status": "queued", "position": 0}
     # Une priorité plus basse ne la fait pas redescendre.
     r = client.post("/jobs", json=job(item=ITEM, priority="low"), headers=AUTH)
-    assert r.json()["position"] == 1
+    assert r.json()["position"] == 0
     assert client.get("/health", headers=AUTH).json()["queue"]["pending"] == 2
 
 
-def _results(db, item, etag="etag-1", complete=True):
+def _results(db, item, etag="etag-1", complete=True, version=None):
     scenes = [{"start": 0.0, "end": 12.5, "people": [{"personId": 1, "screenTime": 8.25, "confidence": 0.9}]}]
-    db.run("INSERT OR REPLACE INTO results VALUES (?, ?, 'buffalo_l', ?, ?, ?, ?, ?)",
+    db.run("INSERT OR REPLACE INTO results (item_id, etag, model, scenes_json, analyzed_until, progress, complete, updated)"
+           " VALUES (?, ?, 'buffalo_l', ?, ?, ?, ?, ?)",
            (item, etag, json.dumps(scenes), 12.5, 1.0 if complete else 0.4, 1 if complete else 0, time.time()))
+    if version is not None:
+        db.run("UPDATE results SET version=? WHERE item_id=?", (version, item))
 
 
 def test_deja_fait_au_meme_etag(client):
@@ -111,6 +116,39 @@ def test_scenes(client):
         "analyzedUntil": 12.5,
         "scenes": [{"start": 0.0, "end": 12.5, "people": [{"personId": 1, "screenTime": 8.25, "confidence": 0.9}]}],
     }
+
+
+def test_version_du_resultat_servie_telle_quelle(client):
+    # Un résultat des anciennes règles reste servi, avec sa version : rien n'est réanalysé de
+    # soi-même, et un nouvel ordre au même etag ne relance rien.
+    client.post("/jobs", json=job(), headers=AUTH)
+    _results(client.db, ITEM, complete=True)
+    client.db.run("UPDATE items SET status='done', version=1 WHERE item_id=?", (ITEM,))
+    assert client.get(f"/items/{ITEM}/scenes", headers=AUTH).json()["version"] == 1
+    assert client.post("/jobs", json=job(), headers=AUTH).status_code == 200
+    _results(client.db, ITEM, complete=True, version=RESULT_VERSION)
+    assert client.get(f"/items/{ITEM}/scenes", headers=AUTH).json()["version"] == RESULT_VERSION == 3
+
+
+def test_ancienne_base_migree():
+    # Une base d'avant la colonne `version` : ses lignes valent 1.
+    import sqlite3
+    import tempfile
+    from pathlib import Path
+    from app.db import Database
+
+    path = Path(tempfile.mkdtemp()) / "old.db"
+    c = sqlite3.connect(path)
+    c.execute("CREATE TABLE results (item_id TEXT PRIMARY KEY, etag TEXT NOT NULL, model TEXT NOT NULL,"
+              " scenes_json TEXT NOT NULL, analyzed_until REAL NOT NULL, progress REAL NOT NULL,"
+              " complete INTEGER NOT NULL, updated REAL NOT NULL)")
+    c.execute("INSERT INTO results VALUES ('x', 'e', 'buffalo_l', '[]', 1, 1, 1, 0)")
+    c.commit()
+    c.close()
+    db = Database(path)
+    assert db.one("SELECT version FROM results WHERE item_id='x'")[0] == 1
+    assert "version" in {r[1] for r in db.q("PRAGMA table_info(items)")}
+    db.close()
 
 
 def test_suppression(client):

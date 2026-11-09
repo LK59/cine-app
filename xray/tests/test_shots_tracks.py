@@ -5,7 +5,7 @@ import numpy as np
 from app.decode import MediaInfo, build_command, vaapi_suits
 from app.faces import Face, align, similarity_transform, ARCFACE_TEMPLATE
 from app.gpu_guard import sessions_use_hw
-from app.shots import ShotInfo, ShotSplitter, frames_to_sample, group_scenes, pick_indices
+from app.shots import MAX_SCENE, ShotInfo, ShotSplitter, boundary_strength, frames_to_sample, group_scenes, pick_indices
 from app.tracks import link, summarize
 from conftest import noisy, unit
 
@@ -45,6 +45,26 @@ def test_pas_de_coupe_sur_un_mouvement():
         f = nv12(0, 120, 130)
         f[:H] = np.roll(base, i * 2, axis=1)  # panoramique : mêmes couleurs, image décalée
         assert sp.push(i * 0.25, f) is None
+
+
+def test_coupe_dans_un_decor_sombre_d_une_seule_teinte():
+    # Champ-contrechamp dans un bureau sombre : mêmes teintes, luminance voisine, mais l'image
+    # change de forme. L'ancienne règle n'y voyait rien.
+    rng = np.random.default_rng(2)
+    a = rng.integers(30, 60, (H, W)).astype(np.uint8)
+    b = np.flipud(np.fliplr(a)).copy()
+    b[: H // 2] = np.clip(b[: H // 2].astype(int) + 24, 0, 255)
+    fa, fb = nv12(0, 120, 128), nv12(0, 121, 129)
+    fa[:H], fb[:H] = a, b
+    from app.shots import is_cut, signature, hist_distance
+    sa, sb = signature(fa, W, H), signature(fb, W, H)
+    assert 0.10 <= hist_distance(sa.hist, sb.hist) < 0.30
+    assert float(np.abs(sa.thumb - sb.thumb).mean()) < 0.12
+    assert is_cut(sa, sb)
+    # La même image un peu bruitée (grain, petit mouvement) : pas de coupe.
+    fc = fa.copy()
+    fc[:H] = np.clip(a.astype(int) + rng.integers(-3, 4, (H, W)), 0, 255)
+    assert not is_cut(sa, signature(fc, W, H))
 
 
 def test_images_par_plan():
@@ -137,7 +157,25 @@ def test_decodage():
     assert "-hwaccel vaapi" in cmd and "-hwaccel_output_format vaapi" in cmd
     assert "scale_vaapi=w=640:h=360:format=nv12,hwdownload,format=nv12" in cmd
     cmd = " ".join(build_command("/media/x.mkv", 0, 120, info, False, 4, 640, 4))
-    assert "vaapi" not in cmd and "-threads 4" in cmd
+    assert "vaapi" not in cmd and "-threads 4" in cmd and "tonemapx" not in cmd
+
+
+def test_hdr_adapte(monkeypatch):
+    import app.decode as dec
+
+    monkeypatch.setitem(dec._tonemap_state, "ok", True)
+    pq = MediaInfo(7600.0, "hevc", "Main 10", 3840, 1608, "yuv420p10le", transfer="smpte2084")
+    assert pq.hdr and MediaInfo(1, "hevc", "Main 10", 1920, 1080, "yuv420p10le", transfer="arib-std-b67").hdr
+    assert not MediaInfo(1, "hevc", "Main 10", 1920, 1080, "yuv420p10le", transfer="bt709").hdr
+    # La carte réduit en 10 bits, puis le processeur adapte la petite image.
+    cmd = " ".join(build_command("/media/x.mkv", 0, 120, pq, True, 4, 640, 4))
+    assert "scale_vaapi=w=640:h=268:format=p010,hwdownload,format=p010,tonemapx=" in cmd
+    assert cmd.index("scale_vaapi") < cmd.index("tonemapx") and "format=nv12 -f rawvideo" in cmd
+    cmd = " ".join(build_command("/media/x.mkv", 0, 120, pq, False, 4, 640, 4))
+    assert "scale=640:268:flags=fast_bilinear,format=yuv420p10le,tonemapx=" in cmd
+    # Sans tonemapx (autre ffmpeg) : l'ancienne chaîne, plutôt qu'un échec.
+    monkeypatch.setitem(dec._tonemap_state, "ok", False)
+    assert "tonemapx" not in " ".join(build_command("/media/x.mkv", 0, 120, pq, True, 4, 640, 4))
 
 
 def test_jellyfin_garde_l_igpu():
@@ -148,3 +186,54 @@ def test_jellyfin_garde_l_igpu():
     assert sessions_use_hw([{}, {"TranscodingInfo": {"HardwareAccelerationType": "vaapi"}}])
     assert sessions_use_hw([{"TranscodingInfo": {"HardwareAccelerationType": "qsv"}}])
     assert not sessions_use_hw({"pas": "une liste"})
+
+
+def _decor_uniforme(n, seconds, people_at=None):
+    """Un décor qui ne change presque pas (les urgences de The Pitt) : chaque plan ressemble au
+    précédent, et une personne au moins revient sans cesse — rien ne coupe la scène."""
+    base = h(11)
+    rng = np.random.default_rng(3)
+    shots = []
+    for i in range(n):
+        hist = base + rng.uniform(0, 0.004, 64).astype(np.float32)
+        hist[:32] /= hist[:32].sum(); hist[32:48] /= hist[32:48].sum(); hist[48:] /= hist[48:].sum()
+        shots.append(ShotInfo(i * seconds, (i + 1) * seconds, hist, (people_at or (lambda i: {1}))(i)))
+    return shots
+
+
+def test_scene_trop_longue_recoupee():
+    shots = _decor_uniforme(160, 5.0)  # 800 s d'un seul tenant
+    scenes = group_scenes(shots)
+    durs = [s[-1].end - s[0].start for s in scenes]
+    assert max(durs) <= MAX_SCENE and min(durs) >= 30.0
+    assert sum(durs) == 800.0 and len(scenes) >= 5
+    # Toujours contiguës, aucun plan perdu ni dupliqué.
+    flat = [x for s in scenes for x in s]
+    assert flat == shots
+
+
+def test_recoupe_a_la_frontiere_la_plus_faible():
+    shots = _decor_uniforme(50, 5.0)  # 250 s
+    # Le plan 21 (105 s) change un peu de couleurs : c'est là qu'on coupe.
+    shots[21].hist = (shots[21].hist + h(12)) / 2
+    shots[22].hist = shots[21].hist.copy()
+    scenes = group_scenes(shots)
+    assert [(s[0].start, s[-1].end) for s in scenes] == [(0.0, 105.0), (105.0, 250.0)]
+
+
+def test_recoupe_quand_les_personnes_changent():
+    # Mêmes couleurs partout, mais les personnes de la première minute et demie ne sont plus là
+    # ensuite : la frontière se met à ce changement.
+    shots = _decor_uniforme(50, 5.0, lambda i: {1, 2} if i < 18 else {3})
+    for s in shots[17:19]:
+        s.clusters = s.clusters | {1}  # la scène se tient encore par une personne commune…
+    shots[18].clusters = {3}
+    assert boundary_strength(shots, 18) < boundary_strength(shots, 30)
+    scenes = group_scenes(shots)
+    assert [(s[0].start, s[-1].end) for s in scenes] == [(0.0, 90.0), (90.0, 250.0)]
+
+
+def test_scene_courte_toujours_fondue_et_scene_normale_intacte():
+    # Une scène de 150 s n'est pas touchée ; la règle des 10 s tient toujours.
+    shots = _decor_uniforme(30, 5.0)
+    assert [(s[0].start, s[-1].end) for s in group_scenes(shots)] == [(0.0, 150.0)]

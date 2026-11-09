@@ -6,12 +6,21 @@ par seconde), sans modèle :
 
 - coupe : l'histogramme des couleurs (Y, U, V) change d'un coup entre deux images, ou il change
   moins mais l'image elle-même aussi (vignette 32×18). Le mouvement de caméra déplace l'image
-  sans changer ses couleurs ; une coupe change les deux.
+  sans changer ses couleurs ; une coupe change les deux. La vignette est aussi comparée *à
+  contraste égal* (centrée, réduite) : dans un décor sombre et d'une seule teinte — le bureau de
+  *Ted Lasso*, luminance moyenne 45 —, un champ-contrechamp change peu les couleurs (0,10 à 0,27)
+  et peu la luminance brute (0,05 à 0,12), et l'ancienne règle ne voyait que 4 coupes sur 2 min
+  au lieu d'une quarantaine. Mesuré le 09/11/2026 : à contraste égal, ces coupes s'écartent de
+  0,65 à 1,0, quand deux images d'un même plan ne dépassent pas 0,49 dans ce décor.
 - scène : un plan rejoint la scène en cours s'il ressemble (couleurs) à l'un de ses quatre
   derniers plans — le champ-contrechamp d'un dialogue alterne A, B, A, B — ou s'il montre
   quelqu'un qu'on vient d'y voir dans un décor encore voisin (le héros est de presque toutes
   les scènes : seul, son visage enchaînerait l'épisode entier en une scène). Une scène de moins de 10 s est fondue dans sa voisine la plus
   proche : un plan de coupe isolé n'est pas une scène.
+- longueur bornée : une scène de plus de 3 minutes est recoupée à sa frontière de plans la plus
+  faible — couleurs les moins semblables, de préférence là où les personnes changent du tout au
+  tout. Un décor uniforme (les urgences de *The Pitt*, toutes en bleu-vert) enchaînait sinon des
+  « scènes » de 12 minutes où défilaient vingt personnes (775 s et 703 s mesurées le 09/11/2026).
 
 Couper trop souvent ne coûte presque rien (une piste coupée en deux se recolle au regroupement) ;
 ne pas couper mélangerait deux plans dans une piste. Les seuils penchent donc vers la coupe.
@@ -28,10 +37,20 @@ HIST_BINS = (32, 16, 16)
 CUT_HIST = 0.30
 CUT_HIST_WITH_PIXELS = 0.15
 CUT_PIXELS = 0.12
+CUT_HIST_WITH_SHAPE = 0.10
+CUT_SHAPE = 0.60
 SCENE_SIMILARITY = 0.72
 SCENE_SIMILARITY_WITH_FACE = 0.45
 SCENE_LOOKBACK = 4
 MIN_SCENE = 10.0
+MAX_SCENE = 180.0
+# Une recoupe ne laisse pas de morceau de moins de 30 s : mieux vaut une scène un peu longue
+# qu'un plan de coupe isolé.
+MIN_SPLIT_PART = 30.0
+# Fenêtre où l'on compare les personnes de part et d'autre d'une frontière, et prime donnée à une
+# frontière où elles changent du tout au tout (en points de similarité de couleurs).
+SPLIT_PEOPLE_WINDOW = 60.0
+SPLIT_PEOPLE_BONUS = 0.20
 MAX_SHOT_FRAMES = 120
 
 
@@ -39,6 +58,7 @@ MAX_SHOT_FRAMES = 120
 class Signature:
     hist: np.ndarray   # 64 valeurs, trois blocs normalisés chacun à 1
     thumb: np.ndarray  # luminance 32×18, 0..1
+    shape: np.ndarray | None = None  # la même, centrée et réduite (contraste égal)
 
 
 def signature(nv12: np.ndarray, width: int, height: int) -> Signature:
@@ -50,7 +70,9 @@ def signature(nv12: np.ndarray, width: int, height: int) -> Signature:
     hv = np.bincount((uv[::2, ::2, 1] >> 4).ravel(), minlength=16).astype(np.float32)
     hist = np.concatenate([hy / max(hy.sum(), 1), hu / max(hu.sum(), 1), hv / max(hv.sum(), 1)])
     thumb = cv2.resize(y, (32, 18), interpolation=cv2.INTER_AREA).astype(np.float32) / 255.0
-    return Signature(hist, thumb)
+    # +0,02 : une image presque unie (noir, fondu) ne devient pas du bruit amplifié.
+    shape = (thumb - thumb.mean()) / (thumb.std() + 0.02)
+    return Signature(hist, thumb, shape)
 
 
 def hist_distance(a: np.ndarray, b: np.ndarray) -> float:
@@ -62,8 +84,10 @@ def is_cut(prev: Signature, cur: Signature) -> bool:
     hd = hist_distance(prev.hist, cur.hist)
     if hd >= CUT_HIST:
         return True
-    if hd >= CUT_HIST_WITH_PIXELS:
-        return float(np.abs(prev.thumb - cur.thumb).mean()) >= CUT_PIXELS
+    if hd >= CUT_HIST_WITH_PIXELS and float(np.abs(prev.thumb - cur.thumb).mean()) >= CUT_PIXELS:
+        return True
+    if hd >= CUT_HIST_WITH_SHAPE and prev.shape is not None and cur.shape is not None:
+        return float(np.abs(prev.shape - cur.shape).mean()) >= CUT_SHAPE
     return False
 
 
@@ -182,7 +206,44 @@ def group_scenes(shots: list[ShotInfo], gap: float = 1.0) -> list[list[ShotInfo]
             cur.append(s)
         else:
             scenes.append([s])
-    return _merge_short(scenes, gap)
+    out: list[list[ShotInfo]] = []
+    for sc in _merge_short(scenes, gap):
+        out.extend(_split_long(sc))
+    return out
+
+
+def boundary_strength(scene: list[ShotInfo], k: int) -> float:
+    """Force du lien entre le plan `k` et ce qui le précède (plus bas = meilleure frontière) :
+    ressemblance de couleurs avec les quatre plans d'avant, moins une prime si les personnes
+    identifiées dans la minute d'avant et dans la minute d'après n'ont rien en commun."""
+    s = scene[k]
+    sim = max(hist_similarity(s.hist, r.hist) for r in scene[max(0, k - SCENE_LOOKBACK):k])
+    t = s.start
+    before: set[int] = set()
+    after: set[int] = set()
+    for r in scene:
+        if r.start < t and r.end > t - SPLIT_PEOPLE_WINDOW:
+            before |= r.clusters
+        elif r.start >= t and r.start < t + SPLIT_PEOPLE_WINDOW:
+            after |= r.clusters
+    if before and after and not (before & after):
+        sim -= SPLIT_PEOPLE_BONUS
+    return sim
+
+
+def _split_long(scene: list[ShotInfo]) -> list[list[ShotInfo]]:
+    """Recoupe une scène trop longue à sa frontière la plus faible, jusqu'à ce que chaque
+    morceau tienne sous `MAX_SCENE` (ou ne puisse plus être coupé sans laisser de miette)."""
+    if scene[-1].end - scene[0].start <= MAX_SCENE or len(scene) < 2:
+        return [scene]
+    start, end = scene[0].start, scene[-1].end
+    cands = [k for k in range(1, len(scene))
+             if scene[k].start - start >= MIN_SPLIT_PART and end - scene[k].start >= MIN_SPLIT_PART]
+    if not cands:
+        # Plans très longs : on coupe au plus près du milieu plutôt que pas du tout.
+        cands = list(range(1, len(scene)))
+    k = min(cands, key=lambda k: (boundary_strength(scene, k), abs(scene[k].start - (start + end) / 2)))
+    return _split_long(scene[:k]) + _split_long(scene[k:])
 
 
 def _scene_hist(scene: list[ShotInfo]) -> np.ndarray:
