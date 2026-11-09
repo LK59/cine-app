@@ -356,12 +356,16 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     expect(sys).toContain(`${SOFAR_NOTHING} seulement s'il n'est même pas dans la distribution.`);
     // L'ancienne règle (« au-delà de son nom ») est partie : elle faisait taire cinq personnes sur huit.
     expect(sys).not.toContain("au-delà de son nom");
-    // Le plus récent d'abord : le dernier moment de l'épisode en cours.
-    expect(sys).toContain("au dernier moment de l'épisode en cours où il est là");
+    // Le plus récent d'abord : le dernier fait qui le concerne, dans l'épisode en cours d'abord (10.29.1 — le dernier
+    // moment où il ne faisait qu'assister donnait un texte creux).
+    expect(sys).toContain("puis le fait le plus récent qui le concerne vraiment");
+    expect(sys).toContain("un moment où il ne fait qu'assister ne compte pas.");
+    expect(sys).not.toContain("ou à quoi il assiste");
   });
 
-  it("la version de la consigne est dans la clé : 4 (10.28.2), et une même entrée sous la version 3 donne une autre clé", () => {
-    expect(SOFAR_VERSION).toBe(4);
+  it("la version de la consigne est dans la clé : 5 (10.29.1), et une même entrée sous la version 4 donne une autre clé", () => {
+    expect(SOFAR_VERSION).toBe(5);
+    expect(sofarKey(ASK_MODEL, "s", "m", 4)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 3)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 2)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
   });

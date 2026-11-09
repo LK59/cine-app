@@ -42,9 +42,12 @@ import { logError } from "@/lib/logger";
  * et ces « vide » étaient gardés trente jours : la version dans la clé les écarte tous. 3 (10.28.0) : la
  * consigne S7c, les trois derniers résumés, les répliques groupées par scène et coupées strictement. 4 (10.28.2) :
  * deux règles de plus (les noms des répliques, jamais la liste des présents) — et plus aucun texte écrit sur le
- * seul synopsis quand les répliques d'une piste texte n'étaient pas encore lues (`dialogueMissing`).
+ * seul synopsis quand les répliques d'une piste texte n'étaient pas encore lues (`dialogueMissing`). 5 (10.29.1) :
+ * le dernier fait qui le concerne vraiment, pas le dernier moment où il est là — un personnage qui ne faisait
+ * qu'assister recevait un texte juste et creux (Rebecca, *Ted Lasso* S01E08 à 4 min : « est là pendant une dispute
+ * sur une chambre »).
  */
-export const SOFAR_VERSION = 4;
+export const SOFAR_VERSION = 5;
 export { SOFAR_BUCKET_S } from "@/lib/ask/sofarCut";
 export const SOFAR_MAX_SENTENCES = 2;
 export const SOFAR_MAX_WORDS = 60;
@@ -84,8 +87,9 @@ const LANGUAGE_NAME: Record<Locale, string> = { fr: "français", en: "anglais", 
 
 /**
  * La consigne S7c (10.28.0, validée par le propriétaire après des appels réels le 09/11/2026 — banc de six
- * cas, Ted Lasso et MacGyver) : le **dernier moment** de l'épisode en cours où le personnage est là, ce qu'il
- * y fait ou ce à quoi il assiste ; les épisodes précédents seulement en appoint. Ses règles visent les erreurs
+ * cas, Ted Lasso et MacGyver) : le **dernier fait qui le concerne vraiment** (10.29.1 ; c'était le dernier moment
+ * où il est là, même s'il n'y faisait qu'assister), dans l'épisode en cours d'abord, sinon les derniers épisodes
+ * vus. Ses règles visent les erreurs
  * que les bancs ont montrées : une réplique, un acte ou une histoire prêtés au mauvais personnage (les
  * répliques ne disent pas qui parle — un mot d'adresse dit à qui l'on parle), les termes d'un échange
  * (« qui propose quoi ») où les attributions se trompent, une cause ou un lien inventé, l'horaire ou la
@@ -106,14 +110,17 @@ export function sofarSystem(locale: Locale, grouped = true, kind: "series" | "mo
   if (kind === "series") return text;
   // Un film (10.28.0) : ni résumés d'épisodes ni « épisode en cours » — le synopsis, la distribution et les
   // répliques du film. Le texte des séries, validé au banc, n'en est pas touché : seules ces trois phrases changent.
+  // 10.29.1 (§139) : « le fait le plus récent qui le concerne vraiment » au lieu du « dernier moment où il est là »,
+  // dans les deux consignes — au banc, *Bullet Train* (Prince, 58 min) passait de « est là avec Coccinelle quand on
+  // évoque un pistolet » à ce qu'elle a fait (Kimura menacé par son fils, la Mort Blanche à tuer pour elle).
   return text
     .replace(
       "— distribution, résumés des derniers épisodes vus, et répliques de l'épisode en cours jusqu'au point où il en est",
       "— synopsis, distribution, et répliques du film jusqu'au point où il en est"
     )
     .replace(
-      "puis ce qui se passe au dernier moment de l'épisode en cours où il est là — ce qu'il y fait, ou à quoi il assiste. Un fait des épisodes précédents seulement s'il reste de la place, ou si l'épisode en cours ne dit encore rien de lui.",
-      "puis ce qui se passe au dernier moment du film où il est là — ce qu'il y fait, ou à quoi il assiste. Un fait plus ancien du film seulement s'il reste de la place, ou si son dernier moment ne dit rien de lui."
+      "puis le fait le plus récent qui le concerne vraiment — ce qu'il fait, ce qui lui arrive, ce qu'on dit de lui —, dans l'épisode en cours d'abord, sinon dans les derniers épisodes vus ; un moment où il ne fait qu'assister ne compte pas.",
+      "puis le fait le plus récent qui le concerne vraiment — ce qu'il fait, ce qui lui arrive, ce qu'on dit de lui —, le plus tard possible dans le film ; un moment où il ne fait qu'assister ne compte pas."
     )
     .replace("ou si un résumé le dit ;", "ou si le synopsis le dit ;");
 }
@@ -122,7 +129,7 @@ function sofarSeriesSystem(locale: Locale, grouped: boolean): string {
   const by = grouped ? ", groupées par moment avec qui est à l'écran" : "";
   return `Tu écris « Jusqu'ici » : ce qu'un spectateur a déjà vu d'un personnage, d'après les seuls éléments fournis — distribution, résumés des derniers épisodes vus, et répliques de l'épisode en cours jusqu'au point où il en est, sans le nom de qui parle${by}, du plus ancien au plus récent.
 
-Écris en ${LANGUAGE_NAME[locale]} une ou deux phrases, 40 mots au plus, sans mise en forme : le nom du personnage (jamais celui de l'acteur), une incise de quelques mots sur qui il est si on le sait, puis ce qui se passe au dernier moment de l'épisode en cours où il est là — ce qu'il y fait, ou à quoi il assiste. Un fait des épisodes précédents seulement s'il reste de la place, ou si l'épisode en cours ne dit encore rien de lui.
+Écris en ${LANGUAGE_NAME[locale]} une ou deux phrases, 40 mots au plus, sans mise en forme : le nom du personnage (jamais celui de l'acteur), une incise de quelques mots sur qui il est si on le sait, puis le fait le plus récent qui le concerne vraiment — ce qu'il fait, ce qui lui arrive, ce qu'on dit de lui —, dans l'épisode en cours d'abord, sinon dans les derniers épisodes vus ; un moment où il ne fait qu'assister ne compte pas.
 
 Règles :
 - Rien qui ne soit écrit dans les éléments fournis : ni nom, ni lieu, ni détail.

@@ -9699,6 +9699,37 @@ au-delà de `SOFAR_DIALOGUE_WAIT_MS` : `rejected`, `attente`, rien en base, puis
 répliques ; lecture en échec : `attente` ; film sans piste texte : texte sur le synopsis comme avant ; épisode : la
 même règle, et à la coupe zéro le texte s'écrit sur les résumés).
 
+**10.29.1 — le dernier fait qui le concerne, plus le dernier moment où il ne fait qu'assister.**
+
+- **Le symptôme** (prod 10.29.0, 09/11/2026) : *Ted Lasso* S01E08, Rebecca, coupe à 4 min 13 → « Rebecca Welton,
+  divorcée, est là pendant une dispute sur une chambre, où l'on revendique la pièce et où l'on réclame qu'on
+  sorte. » Juste, et inutile. La cause : la consigne demandait « ce qui se passe au dernier moment de l'épisode en
+  cours où il est là — ce qu'il y fait, ou à quoi il assiste », et les règles contre les attributions (« dis
+  seulement à quoi il assiste », « ni geste qui ne soit dit tel quel ») ne laissaient de ce moment qu'un échange
+  vague.
+- **La phrase, une seule, à la place de l'ancienne** (`sofarSystem`, séries et films ; aucune règle ajoutée — la
+  longueur de la consigne fait la durée de la réflexion) : « puis le fait le plus récent qui le concerne vraiment —
+  ce qu'il fait, ce qui lui arrive, ce qu'on dit de lui —, dans l'épisode en cours d'abord, sinon dans les derniers
+  épisodes vus ; un moment où il ne fait qu'assister ne compte pas. » Pour un film : « …, le plus tard possible dans
+  le film ; … ». Les règles restent celles de S7c et de 10.28.2. `SOFAR_VERSION` 5.
+- **Banc du 09/11/2026** (Haiku 5.5, réflexion adaptative, effort bas, une requête à la fois, 27 appels, consigne et
+  messages construits par le code de `main`) : huit cas — Rebecca à 4 min 13 (le creux), Ted à 4 min 13 (tôt),
+  Rebecca à 12 min 38 et Rupert à 24 min (doivent rester précis), Jack (*MacGyver* S01E06, 19 min 53) et Patricia
+  (34 min 46, le « leurre » d'avant), *Le Prénom* (Claude, 78 min 42) et *Bullet Train* (Prince, 58 min 50). Quatre
+  formulations : une phrase de repli après l'ancienne (« s'il ne fait qu'y assister… ») et une règle ajoutée
+  restaient creuses (« est à l'écran quand il est question d'une chambre ») ; une variante sans « vraiment » aussi,
+  avec le mot « scène ». La phrase retenue, seize textes : Rebecca à 4 min 2 fois sur 2 utile (« divorcée, décide
+  de partir en week-end avec l'équipe pour le match face à Liverpool », résumé de S01E07) ; Rebecca à 12 min,
+  Patricia, Claude, Prince justes et précis à chaque fois (Prince : « a menacé Kimura de faire tuer son fils Wataru,
+  puis lui demande de tuer la Mort Blanche pour elle » — la consigne d'avant écrivait « la jeune femme rencontrée à
+  l'hôpital par Kimura », faux) ; aucun spoiler, aucun mot de coulisse, aucun rejet du filet. Ce qu'elle coûte : Jack
+  est raconté une scène plus tôt (le camion qu'on lui dit d'arrêter, où il est nommé, plutôt que la salle qu'on
+  évacue), Ted une fois par un fait de S01E06 plutôt que son matin avec Sassy ; et un lieu inventé une fois sur trois
+  pour Rupert (« dans le bureau du club », c'est un pub) — la règle « ni lieu » ne l'a pas retenu. Réflexion ≈
+  1 100 jetons, environ 6,2 s, comme la consigne d'avant sur les mêmes cas.
+Tests : `ask-sofar-s7c.test.ts` (la consigne série octet pour octet, la phrase film, version 5) ; `ask-sofar.test.ts`
+(la phrase, plus de « à quoi il assiste », version 5 et une clé de la v4 jamais relue).
+
 ## 140. Les fonctions d'IA chez les trois fournisseurs, un seul plafond mensuel, et des réglages qui disent ce qu'ils demandent (09/11/2026)
 
 **Règle.** Le fournisseur, la clé et le budget des sous-titres générés (§69) servent à **toutes** les
