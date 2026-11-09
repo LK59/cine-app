@@ -2122,6 +2122,34 @@ body:has(.gestion-liquid) .glass-window {
   .player-next-up-panel { animation: none; }
 }
 
+/* ─── « À l'écran » (DECISIONS.md §138) ───────────────────────────────────────
+   La rangée des personnes de la scène, film en pause (`PlayerOnScreen`). Photo 36 px au bureau, 32 sur
+   un téléphone ; nom 14/12 px, personnage 12/11 px. Pas de barre de défilement ; un fondu au bord droit
+   quand d'autres pilules attendent ; les flèches au pointeur fin seulement (au doigt, on glisse). */
+.player-onscreen-row {
+  scrollbar-width: none;
+  max-width: min(100%, 64rem);
+  scroll-padding-inline: 0.25rem;
+  padding-block: 2px;
+}
+.player-onscreen-row::-webkit-scrollbar { display: none; }
+.player-onscreen-more {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 3rem), transparent 100%);
+}
+.player-onscreen-photo { width: 36px; height: 36px; }
+.player-onscreen-name { font-size: 14px; }
+.player-onscreen-character { font-size: 12px; }
+@media (max-width: 640px), (orientation: landscape) and (max-height: 500px) {
+  .player-onscreen-photo { width: 32px; height: 32px; }
+  .player-onscreen-name { font-size: 12px; }
+  .player-onscreen-character { font-size: 11px; }
+}
+.player-onscreen-arrow { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .player-onscreen-arrow { display: flex; }
+}
+
 /* ─── « Poser une question » (DECISIONS.md §139) ─────────────────────────────
    Un panneau de verre à droite du film ou de la fiche — 380 px au bureau, 330 sur un téléphone
    couché —, une feuille en bas sur un téléphone debout, et une seule ligne au-dessus du clavier

@@ -60,6 +60,8 @@ describe("GET /api/config/public", () => {
       booksAvailable: false,
       recapAvailable: false,
       askAvailable: false,
+      // Les acteurs à l'écran (§138) : absents de cette configuration, donc aucune requête au lecteur.
+      xrayAvailable: false,
       bookRequests: false,
       // Pas de nouvelle adresse dans cette configuration : rien à proposer à la connexion (§119).
       passageHost: null,

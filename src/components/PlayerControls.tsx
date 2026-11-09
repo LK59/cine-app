@@ -26,6 +26,10 @@ import { useAutoHide } from "@/components/playerControls/useAutoHide";
 import { PlayerSeekBar } from "@/components/playerControls/PlayerSeekBar";
 import { AskPanel } from "@/components/ask/AskPanel";
 import { useAskAvailable } from "@/lib/ask/client";
+import { PlayerOnScreen } from "@/components/playerControls/PlayerOnScreen";
+import { AskPersonHeader } from "@/components/ask/AskPersonHeader";
+import { characterFirstName, onScreenPeople, sceneAt, useXrayAvailable, useXrayScenes } from "@/lib/xray/client";
+import type { XrayPlayerPerson } from "@/lib/xray/scenes";
 import { noteAutoAdvance, noteViewerPresent, autoAdvanceStore, STILL_THERE_AFTER } from "@/lib/autoAdvance";
 import {
   subtitleStyleStore,
@@ -256,6 +260,17 @@ interface PlayerControlsProps {
    * (`useAskAvailable`).
    */
   askable?: boolean;
+  /**
+   * « À l'écran » (DECISIONS.md §138), film en pause : faux pour le lecteur hors ligne, comme `askable`.
+   * Partout ailleurs l'option décide seule (`useXrayAvailable`).
+   */
+  xrayable?: boolean;
+}
+
+/** « Qui est <prénom du personnage> ? » — la question proposée pour une personne touchée dans « À l'écran ». */
+function personSuggestions(person: XrayPlayerPerson, t: (key: string, vars?: Record<string, string | number>) => string): string[] | undefined {
+  const first = characterFirstName(person.character);
+  return first ? [t("ask.whoIs", { name: first })] : undefined;
 }
 
 const NEXT_UP_COUNTDOWN_S = 10;
@@ -339,6 +354,7 @@ export function PlayerControls({
   subtitleGeneration,
   onChromeEdges,
   askable = true,
+  xrayable = true,
 }: PlayerControlsProps) {
   const t = useT();
   // La série d'un épisode et le droit de télécharger (19/10/2026) — voir `usePlayerItem`.
@@ -677,11 +693,20 @@ export function PlayerControls({
    */
   const askOffered = useAskAvailable() && askable && !lab;
   const [askOpen, setAskOpen] = useState(false);
+  // La personne touchée dans « À l'écran » : le panneau s'ouvre avec son en-tête.
+  const [askPerson, setAskPerson] = useState<XrayPlayerPerson | null>(null);
   const [askFor, setAskFor] = useState({ itemId, hidden });
   if (askFor.itemId !== itemId || askFor.hidden !== hidden) {
     setAskFor({ itemId, hidden });
     if (askOpen) setAskOpen(false);
   }
+  /**
+   * « À l'écran » (§138) : les scènes lues une fois à l'ouverture de l'élément (relues pendant l'analyse),
+   * la scène de l'instant cherchée ici à chaque rendu en pause — aucune requête à la pause. Seulement
+   * l'option allumée pour ce compte, hors banc et hors lecteur hors ligne ; jamais pendant une diffusion.
+   */
+  const xrayOffered = useXrayAvailable() && xrayable && !lab;
+  const xrayPayload = useXrayScenes(itemId, xrayOffered);
   const { suspendedRef, showControls, holdControls, toggleControls, windowExitHides } = useAutoHide({
     visible,
     setVisible,
@@ -1180,10 +1205,15 @@ export function PlayerControls({
           </div>
         )}
 
-        {/* « Une question ? » (§139) : film en pause seulement, avec les commandes, au-dessus du titre —
-            à gauche, loin de « Passer l'intro » et de l'épisode suivant, posés à droite. */}
-        {askOffered && !askOpen && !playing && !resuming && !loading && !openingQuiet && !castActive && (
-          <div className="player-chrome-x pointer-events-none absolute inset-x-0 flex" style={{ bottom: PROMPT_BOTTOM }}>
+        {/* « À l'écran » (§138) puis « Une question ? » (§139) : film en pause seulement, avec les
+            commandes, au-dessus du titre — à gauche, loin de « Passer l'intro » et de l'épisode suivant,
+            posés à droite. La pilule de la question reste au bout de la rangée, hors de ce qui défile. */}
+        {(() => {
+          const paused = !askOpen && !playing && !resuming && !loading && !openingQuiet && !castActive;
+          if (!paused) return null;
+          const people = xrayOffered ? onScreenPeople(sceneAt(xrayPayload, currentTime)) : [];
+          if (!askOffered && people.length === 0) return null;
+          const askPill = askOffered ? (
             <button
               type="button"
               data-player-nav="ask"
@@ -1191,16 +1221,38 @@ export function PlayerControls({
               onClick={(e) => {
                 e.stopPropagation();
                 setMenu(null);
+                setAskPerson(null);
                 setAskOpen(true);
               }}
               data-liquid
-              className={`player-fade player-pill ${visible ? "pointer-events-auto" : "pointer-events-none"} flex items-center gap-2 py-2.5 pl-3.5 pr-4 text-sm font-medium text-white`}
+              className={`player-fade player-pill ${visible ? "pointer-events-auto" : "pointer-events-none"} flex shrink-0 items-center gap-2 py-2.5 pl-3.5 pr-4 text-sm font-medium text-white`}
             >
               <MessageCircleQuestion size={18} aria-hidden />
               {t("ask.pill")}
             </button>
-          </div>
-        )}
+          ) : null;
+          return (
+            <div className="player-chrome-x pointer-events-none absolute inset-x-0 flex" style={{ bottom: PROMPT_BOTTOM }}>
+              {people.length > 0 ? (
+                <PlayerOnScreen
+                  people={people}
+                  visible={visible}
+                  trailing={askPill}
+                  onPick={(person) => {
+                    setMenu(null);
+                    // Une personne ouvre le panneau des questions avec son en-tête : sans l'option des
+                    // questions, il n'y a rien à ouvrir (la rangée reste une information).
+                    if (!askOffered) return;
+                    setAskPerson(person);
+                    setAskOpen(true);
+                  }}
+                />
+              ) : (
+                askPill
+              )}
+            </div>
+          );
+        })()}
 
         {/* En bas : le titre et la pilule des réglages sur une rangée, la barre et ses deux temps
             dessous. */}
@@ -1331,8 +1383,11 @@ export function PlayerControls({
           where="lecteur"
           placement="player"
           position={() => (positionNow ? positionNow() : (videoRef.current?.currentTime ?? null))}
+          header={askPerson ? <AskPersonHeader person={askPerson} /> : undefined}
+          suggestions={askPerson ? personSuggestions(askPerson, t) : undefined}
           onClose={() => {
             setAskOpen(false);
+            setAskPerson(null);
             showControls();
           }}
         />

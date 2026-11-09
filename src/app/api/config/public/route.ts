@@ -7,6 +7,7 @@ import { passageTarget } from "@/lib/passage/target";
 import { userPrefsDb } from "@/lib/db";
 import { recapAvailable } from "@/lib/recap/service";
 import { askAvailableFor } from "@/lib/ask/service";
+import { xrayConfigured, xrayOpenTo } from "@/lib/clients/xray";
 
 /**
  * Ce que l'interface a besoin de savoir avant d'afficher quoi que ce soit.
@@ -47,6 +48,9 @@ export async function GET(req: NextRequest) {
     // lien de partage aussi, réglée sur `tous`, sur son seul titre (liste fermée, portée `path`). Ce n'est
     // que pour cacher la pilule : la route refuse d'elle-même.
     askAvailable: askAvailableFor(session),
+    // Les acteurs à l'écran (DECISIONS.md §138) : l'option branchée et ouverte à ce compte. Le lecteur ne
+    // demande ses scènes qu'avec elle — sans, aucune requête de plus à l'ouverture d'un film.
+    xrayAvailable: !!session && xrayOpenTo(session) && xrayConfigured(),
     // « Demander un livre » : seulement avec les livres eux-mêmes.
     bookRequests: config.books?.requests === true && booksShown,
     // La disposition de l'accueil, réglée par l'exploitant (DECISIONS.md §52).

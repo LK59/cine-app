@@ -4208,6 +4208,13 @@
     "chipSheet0": "Où en est l'histoire ?",
     "chipSheet1": "Qui sont les personnages principaux ?",
     "chipSheet2": "De quoi parle ce titre ?",
-    "done": "OK"
+    "done": "OK",
+    "whoIs": "Qui est {name} ?"
+  },
+  "xray": {
+    "onScreen": "À l'écran",
+    "previous": "Personnes précédentes",
+    "next": "Personnes suivantes",
+    "photo": "Photo de {name}"
   }
 }

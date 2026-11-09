@@ -8794,8 +8794,8 @@ défaut** (`XRAY_ENABLED`), avec son adresse (`XRAY_URL`, `http://laterna-xray:8
 (réglage → `.env` → défaut, relus à chaque appel, §48). « Tester la connexion » lit `/health` et dit le
 modèle, s'il est prêt (il se télécharge au premier lancement du service) et si le décodage matériel est
 disponible (`testService`, `XrayFacts`). Sans les trois — allumée, une adresse, une clé —
-(`xrayConfigured`), rien ne part vers le service et rien n'est lu. Aucun écran du cinéma ne montre encore
-ces données : la forme de la lecture est fixée maintenant, l'interface viendra après un banc.
+(`xrayConfigured`), rien ne part vers le service et rien n'est lu. L'écran qui les montre : la rangée
+« À l'écran » du lecteur (10.26, plus bas).
 
 **Pour qui : `off` / `admins` / `tous`** (09/11/2026, consigne du propriétaire : expérimental, d'abord pour
 les administrateurs seuls). `XRAY_ENABLED` est désormais un public, `off` par défaut ; `true` et `false`
@@ -8865,6 +8865,54 @@ par compte, panne, épisode suivant), `xray-player-route.test.ts` (200 partout, 
 jointure), `xray-proxy-admin.test.ts` (portes), `xray-trigger.test.ts` (la ligne `start`) ;
 `share-gate.test.ts` parcourt la nouvelle route avec les autres.
 
+**La rangée « À l'écran »** (10.26, 09/11/2026, maquette validée par le propriétaire). Film en pause, au-dessus
+du titre, à gauche (la place de la pilule « Une question ? », `PROMPT_BOTTOM`) : une étiquette « À l'écran »
+(11 px, capitales, espacement .16em, blanc 60 %) puis une rangée de pilules de verre (`player-pill`) qui
+défile de côté — photo ronde TMDB (36 px, 32 sur un téléphone), nom de l'acteur (14/12 px, demi-gras),
+personnage (12/11 px, blanc 60 %). **Toutes** les personnes nommées de la scène, par temps à l'écran
+décroissant ; un visage sans nom (`name: null`) n'est pas montré. Aimantée sur chaque pilule, un fondu au
+bord droit quand d'autres attendent (un masque, posé seulement alors : il isole le flou des pilules) ; au
+doigt on glisse, à la souris la molette verticale fait défiler de côté et deux petites flèches paraissent
+(pointeur fin seulement). « Une question ? » reste au bout, hors de ce qui défile. Le fondu des commandes
+(`player-fade`) est porté par chaque pilule, jamais par la rangée. Elle paraît et part avec les commandes,
+en pause seulement ; jamais pendant une diffusion (`castActive`), au lecteur hors ligne (`xrayable={false}`),
+au banc (`lab`), au mini-lecteur (les commandes n'y sont pas), ni pendant l'ouverture du film. Rien du
+tout quand la scène n'a personne de nommé ou que l'option est coupée pour ce compte. Une photo absente ou
+qui ne charge pas montre les initiales (`PersonAvatar`) ; l'adresse est celle que la route donne
+(`image.tmdb.org` w185, permise par la CSP) — aucune route par personne, donc aucun 404 à craindre.
+
+**Les données : une lecture par élément, rien à la pause.** `useXrayScenes` lit `/api/player/xray/{id}` à
+l'ouverture de l'élément (et de l'épisode suivant), relit toutes les minutes tant que `status` vaut `queued`,
+`running` ou `unavailable` — vingt minutes au plus depuis l'ouverture, jamais page cachée (la relecture
+attend `visibilitychange`) —, s'arrête sur `done`, `off`, `none`, `failed`, `stale` (`xrayNextPoll`). La
+scène de l'instant se cherche en mémoire (`sceneAt` : début compris, fin exclue) à chaque rendu en pause,
+un saut en pause compris. **Seulement l'option allumée pour ce compte** : `xrayAvailable` de la configuration
+publique (`xrayOpenTo(session) && xrayConfigured()`), **suivie, jamais demandée** (`followOnlyOptions`,
+comme `askAvailable`) — absente des doubles des empreintes du lecteur, donc aucune requête de plus dans
+aucun scénario : les empreintes ne changent pas. Une requête `fetch` directe, pas SWR (en pause pendant un
+film, §SWR de CLAUDE.md).
+
+**Une personne touchée ouvre « Poser une question »** (§139) avec l'en-tête du panneau rempli
+(`AskPersonHeader` : photo, nom, personnage) et une seule question proposée, « Qui est <prénom du
+personnage> ? » (`characterFirstName` : premier mot qui n'est pas un titre abrégé, sans ce qui suit une
+barre ou une parenthèse ; sans personnage, les propositions d'office). La place sous l'en-tête
+(`data-ask-person-more`) est gardée pour la biographie résumée de TMDB et « Jusqu'ici » — pas encore
+faits. Sans l'option des questions, toucher une personne ne fait rien (la rangée reste une information).
+
+**Fire TV : pas proposée** (`useXrayAvailable` → `isFireTv`, §71). Une rangée qui défile de côté, au
+curseur de Silk ou à la télécommande, demanderait un parcours au focus propre (y entrer, défiler, en
+sortir vers la barre) que rien ne porte ici, et la pilule qu'elle ouvre n'y existe pas non plus.
+
+**Porteurs.** `src/lib/xray/client.ts` (`useXrayAvailable`, `useXrayScenes`, `xrayNextPoll`, `sceneAt`,
+`onScreenPeople`, `characterFirstName`, `initialsOf`) ; `src/components/playerControls/PlayerOnScreen.tsx` ;
+`src/components/ask/AskPersonHeader.tsx` (`PersonAvatar`, `AskPersonHeader`) ; `PlayerControls` (commun aux
+deux lecteurs). **Tests.** `xray-onscreen.test.tsx` (scène par instant, ordre par temps à l'écran, visages
+sans nom écartés, prénom, relecture qui s'arrête et attend une page cachée, « off » = une seule lecture,
+option coupée = aucune, rangée absente sans personne / sans option / hors ligne, la pilule de la question
+hors de ce qui défile, saut en pause sans requête, personne touchée = panneau avec en-tête et « Qui est … ? »,
+→ du clavier du lecteur intact) ; `misc-simple-routes.test.ts` (`xrayAvailable` dans la configuration
+publique).
+
 ## 139. « Poser une question » : la réponse ne sait que ce que le compte a vu (09/11/2026)
 
 **Règle.** Un spectateur pose une question courte sur le titre qu'il regarde ; Claude Haiku répond en deux à
@@ -8920,9 +8968,9 @@ toucher referme seulement le clavier ; Échap referme (en capture, arrêté là)
 (les fiches se taisent, §117.1), arrête ses touches (le clavier du lecteur — espace, flèches, K, F, M — ne
 les reçoit pas) et ses appuis (ni pause de la surface, ni geste de la fiche). Cinq échanges par ouverture,
 en mémoire de la page seulement ; refermé, ils sont partis, et la réponse en cours s'arrête (le modèle
-avec elle). `header` : la place d'un en-tête au-dessus des échanges, prévue pour les acteurs à l'écran (§138 :
-photo, nom, personnage, deux lignes, « Jusqu'ici ») ; `suggestions` remplace alors les trois propositions
-d'office.
+avec elle). `header` : la place d'un en-tête au-dessus des échanges, remplie depuis 10.26 par une personne
+d'« À l'écran » (§138 : photo, nom, personnage ; la biographie et « Jusqu'ici » viendront dessous), avec
+`suggestions` (« Qui est … ? ») à la place des trois propositions d'office.
 
 **Il arrive et repart** (10.26 — la fiche n'avait aucun mouvement) : la colonne glisse de la droite
 (`animate-fade-in-side`), la feuille du téléphone monte (`animate-slide-up`) ; la sortie, en 0,2 s
