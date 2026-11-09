@@ -9990,6 +9990,67 @@ Tests : `ask-voices-1030.test.ts` (couverture, deux voix d'une même personne, t
 fin, analyse pas finie = rien, autre fichier = rien, « Nom : » dans les deux formes du bloc, consignes inchangées sans
 voix) ; `recap-core.test.ts` (`endS`, `twoSpeakers`) ; `ask-sofar*.test.ts` (version 9).
 
+**10.30.1 — le banc de bout en bout sur *Ted Lasso* S01E09 : répliques courtes, coupe à la scène en cours, Markdown.**
+
+- **Une réplique courte avalée par le segment de l'autre reste sans nom** (`speakerOf` / `withSpeakers`, `voices.ts`,
+  `SPEAKER_SHORT_S` = 1,1 s, `SPEAKER_NEIGHBOUR_COVER` = 0,5). Relu ligne à ligne, l'épisode avait 337 répliques
+  nommées sur 546, dont 5 fausses — toutes d'environ une seconde : « Zut. » (Ted, au milieu de Keeley), « Quand ? »
+  (Keeley, au milieu de Rebecca), « T'exagères. » (Ted, au milieu de Roy), « Quoi ? » et « Comment vous avez su ? »
+  (Higgins, nommés Dani). L'analyse des voix découpe la parole en tronçons de plus d'une seconde : une réponse brève
+  disparaît dans le segment de celui qui parle avant ou après. Désormais, une réplique de moins de 1,1 s (sans
+  l'élargissement de 0,15 s) n'est pas nommée quand un segment de la voix qui la gagne couvre aussi au moins la moitié
+  de la réplique d'avant ou d'après. Rejoué par le code livré : 321 nommées, aucune des cinq fausses, précision
+  100 % (98,5 % avant), couverture 61,7 → 58,8 % (11 justes perdues). Sur les trois vérités de terrain étiquetées à la
+  main, avec les voix v5 du service : *Ted Lasso* S01E08 342 justes / 18 fausses → 330 / 13, *MacGyver* S01E06 254 / 7
+  → 252 / 7, *Bullet Train* 67 / 0 inchangé ; ensemble, précision 96,4 → 97,0 %, couverture 72,6 → 70,6 %. Le seuil :
+  1,0 s laissait 3 des 5 erreurs de S01E09 ; 1,2 et 1,3 s retiraient plus de justes sans une erreur de moins ; une
+  voisine « effleurée » (plus de zéro au lieu de la moitié) retirait 7 justes de plus. **Le contrat avec le service** :
+  une petite voix (3 à 5 tronçons) n'est nommée qu'avec une confiance d'au moins 0,75 — appliqué côté `laterna-xray`,
+  Laterna garde son seuil de 0,6 sur ce qu'il reçoit.
+- **La coupe de « Jusqu'ici » tombe au début de la scène en cours** (`sofarCut`, `sofarCut.ts`, client et serveur ;
+  consigne du propriétaire). Le symptôme : Rebecca à 13 min 43, coupe à 7 min 31 (la dernière scène commencée avant la
+  marque de 10 min) — sa confession à Ted (10 min 57 à 13 min 10), juste vue, absente du texte. La règle livrée telle
+  que demandée (le seul début de la scène en cours) ne suffisait pas sur ce cas : la confession est *dans* la scène
+  11 min 02 – 13 min 55, qu'« À l'écran » ne coupe pas, et cette coupe à 11 min 02 la laissait encore dehors. D'où
+  **un pas de deux minutes dans une longue scène** (`SOFAR_SCENE_STEP_S` = 120) : la coupe est le début de la scène,
+  plus les pas déjà passés — Rebecca à 13 min 43 : 13 min 02. Ce qui reste : entre deux scènes (un trou de l'analyse),
+  la fin de la précédente ; sans scènes, analyse qui ne va pas jusqu'à la position, ou avant la première scène, la
+  marque des cinq minutes comme avant. **La position est prise en secondes entières dans `sofarCut`** : le serveur la
+  reçoit ainsi (`readSofarBody`), le client a la position exacte, et un début de scène à 662,25 s donnait deux coupes
+  et deux clés à 662,5 s. Les coupes restent rares (une par scène, une de plus par tranche de deux minutes) : un texte
+  gardé sert à tous ceux qui sont au même endroit. `cutS` au journal ; `bucket` reste la marque des cinq minutes.
+  `SOFAR_VERSION` 10 : aucun texte gardé sous l'ancienne coupe n'est relu.
+- **Les réponses sans Markdown** (`stripEmphasisWord`, `core.ts`, dans `AnswerGate` — « Jusqu'ici » et questions).
+  Le modèle écrit parfois « *Ted* » ou « **la confession** », et l'écran montrait les étoiles. Le filet reçoit la
+  réponse mot par mot et une emphase en couvre plusieurs : chaque mot passe par `stripSimpleMarkdown` (`format.ts`, la
+  règle des biographies), puis une ouverture seule en tête (« **la ») ou une fermeture seule en fin (« confession**. »)
+  est retirée — **avant** tout contrôle, si bien que le filet des noms et le nom en tête lisent le mot sans étoiles ;
+  la ligne « NOMS: » aussi. Une étoile isolée (« 5 * 3 »), un trait bas dans un mot restent ; « ** » seul ne laisse rien.
+- **« X n'a pas encore eu de moment à lui » et qui il est** : rien à ajouter. Vérifié chez TMDB (crédits de l'épisode,
+  de la saison, agrégés, en français et en anglais) : Nathan Shelley, Coach Beard, Sam Obisanya n'y ont que leur nom —
+  aucun rôle (« intendant », « adjoint ») n'existe dans ces données. Quand le nom de crédit porte une description (*Bullet
+  Train* : « Hospital Thug », « White Death's Wife »), elle est déjà dans la distribution envoyée. La consigne (« son nom,
+  qui il est si on le sait ») est inchangée : le texte de Rebecca à 13 min 43 dit bien « ex-femme de Rupert Mannion et
+  dirigeante du club » quand les éléments le disent.
+- **Banc** (Haiku, 5 appels, un à la fois, aucun refus ; le code de la branche, une copie de la base) : Rebecca à
+  13 min 43 (coupe 13 min 02) « Rebecca Welton, ex-femme de Rupert Mannion et dirigeante du club, avoue à Ted Lasso
+  qu'elle lui a menti : elle l'a embauché pour faire perdre l'équipe et a saboté son travail. Elle lui présente ses
+  excuses. » (avant : « …hésite à avouer à Ted une faute ancienne ») ; Nathan à 6 min 31 (coupe 6 min 03) « Nathan
+  Shelley s'excuse d'une remarque qu'il juge sexiste sur les chaussures des femmes, puis laisse Rebecca Welton et Keeley
+  Jones seules dans la pièce. » (avant : « n'a pas encore eu de moment à lui », coupe 3 min 57) ; Beard à 6 min 38
+  « Coach Beard n'a pas encore eu de moment à lui. » (rien avant 6 min 03 ne le concerne) ; Roy à 27 min 18 (coupe
+  26 min 36) « Roy Kent, capitaine de Richmond, s'excuse d'avoir traité Ted d'enfoiré. Ted lui conseille de dire qu'il
+  est blessé, ce que Roy juge utile pour sa cote s'il veut partir. » ; Sam (S01E08, 9 min 59, coupe 9 min 59 — sa
+  scène commence là) « Sam Obisanya n'a pas encore eu de moment à lui. » (inchangé). Tous justes, relus contre les
+  répliques.
+Tests : `ask-voices-1030.test.ts` (« Zut. » avec les segments réels sans nom, les répliques de Keeley gardent le leur ; seule
+dans son segment, nommée ; au-dessus du seuil, nommée ; voisine effleurée ; sans voisines, la règle de 10.30) ;
+`ask-sofar-cut.test.ts` (les scènes réelles de S01E09 : Rebecca à 823 s → 782 et la confession avant la coupe, Nathan et
+Beard → 363, le pas d'une longue scène, le trou entre deux scènes, client et serveur à la même coupe sur toute la durée,
+les replis) ; `ask-sofar.test.ts` (les répliques des scènes vues partent, celles de la scène en cours non ; deux positions
+dans les deux premières minutes d'une scène, un appel ; version 10) ; `ask-question-1027-2.test.ts` (`stripEmphasisWord`,
+une emphase sur plusieurs mots à travers `AnswerGate` avec le nom en tête, une question).
+
 ## 140. Les fonctions d'IA chez les trois fournisseurs, un seul plafond mensuel, et des réglages qui disent ce qu'ils demandent (09/11/2026)
 
 **Règle.** Le fournisseur, la clé et le budget des sous-titres générés (§69) servent à **toutes** les

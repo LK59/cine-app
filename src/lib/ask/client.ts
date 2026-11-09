@@ -214,7 +214,8 @@ export function useAskTitle({
 /**
  * La coupe de « Jusqu'ici » (10.27.2) : la même fonction que le serveur (`sofarCut`), sur les scènes que le
  * lecteur a reçues — ce qui distingue deux préparations d'une même personne, et deux textes gardés sur
- * l'appareil. Le rythme reste de cinq minutes (`SOFAR_BUCKET_S`).
+ * l'appareil. Depuis 10.30.1, le début de la scène en cours ; sans scènes, la tranche de cinq minutes
+ * (`SOFAR_BUCKET_S`).
  */
 export { SOFAR_BUCKET_S } from "@/lib/ask/sofarCut";
 const prewarmed = new Set<string>();

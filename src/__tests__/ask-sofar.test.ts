@@ -466,8 +466,9 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     expect(sys).not.toContain("ou à quoi il assiste");
   });
 
-  it("la version de la consigne est dans la clé : 9 (10.30, « qui parle »), et une même entrée sous les versions d'avant donne une autre clé", () => {
-    expect(SOFAR_VERSION).toBe(9);
+  it("la version de la consigne est dans la clé : 10 (10.30.1, la coupe à la scène en cours), et une même entrée sous les versions d'avant donne une autre clé", () => {
+    expect(SOFAR_VERSION).toBe(10);
+    expect(sofarKey(ASK_MODEL, "s", "m", 9)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 8)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 7)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 6)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
@@ -678,17 +679,29 @@ describe("10.27.2 — la coupe tombe sur un début de scène", () => {
     scenes: starts.map((start, i) => ({ start, end: starts[i + 1] ?? start + 60, people: [] as never[] })),
   });
 
-  it("à 12 min : le début de la dernière scène avant 10 min (4 min 50), jamais au milieu d'une scène", async () => {
+  it("10.30.1 — à 12 min : le début de la scène en cours (11 min 40), tout ce qui la précède part", async () => {
     xrayScenes.payload = scenes([0, 230, 290, 700]);
     const seen: string[] = [];
-    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne dessine un plan.", seen));
+    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe.", seen));
     await sofar(account(), { positionS: 12 * 60 });
-    // La réplique de 4 min part, celle de 5 min (dans la scène commencée à 4 min 50) non.
+    // Les répliques de 4 et 5 min (scènes déjà vues) partent ; la règle d'avant coupait à 4 min 50 (la dernière
+    // scène commencée avant la marque de 10 min) et laissait celle de 5 min dehors.
     expect(seen[0]).toContain("AVANT-CINQ");
-    expect(seen[0]).not.toContain("Ariadne construit le labyrinthe.");
-    expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cutS: 290, bucket: 10 }));
+    expect(seen[0]).toContain("Ariadne construit le labyrinthe.");
+    expect(seen[0]).not.toContain("APRES-LA-COUPE");
+    expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cutS: 700, bucket: 10 }));
     const { sofarCut } = await import("@/lib/ask/sofarCut");
-    expect(sofarCut(12 * 60, xrayScenes.payload)).toBe(290);
+    expect(sofarCut(12 * 60, xrayScenes.payload)).toBe(700);
+  });
+
+  it("10.30.1 — au début d'une scène, ses répliques ne partent pas : la coupe est à son début", async () => {
+    xrayScenes.payload = scenes([0, 230, 290, 830]);
+    const seen: string[] = [];
+    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe.", seen));
+    await sofar(account(), { positionS: 14 * 60 + 30 });
+    expect(seen[0]).toContain("Ariadne construit le labyrinthe.");
+    expect(seen[0]).not.toContain("APRES-LA-COUPE");
+    expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cutS: 830 }));
   });
 
   it("sans scènes : la marque des cinq minutes, comme avant", async () => {
@@ -699,14 +712,14 @@ describe("10.27.2 — la coupe tombe sur un début de scène", () => {
     expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cutS: 600 }));
   });
 
-  it("deux positions de la même tranche, une même scène : la même clé, un seul appel", async () => {
-    xrayScenes.payload = scenes([0, 230, 290, 700]);
+  it("deux positions dans les deux premières minutes d'une même scène : la même clé, un seul appel", async () => {
+    xrayScenes.payload = scenes([0, 230, 290, 700, 1000]);
     const model = vi.fn(scripted("NOMS: Ariadne\n\nAriadne dessine un plan."));
     setAskModelForTests(model);
     const a = account();
-    await sofar(a, { positionS: 10 * 60 + 5 });
+    await sofar(a, { positionS: 11 * 60 + 50 });
     await settle();
-    await sofar(a, { positionS: 14 * 60 + 50 });
+    await sofar(a, { positionS: 13 * 60 + 35 });
     expect(model).toHaveBeenCalledTimes(1);
   });
 });

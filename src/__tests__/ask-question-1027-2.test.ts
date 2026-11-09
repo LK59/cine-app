@@ -38,7 +38,7 @@ vi.mock("@/lib/logger", () => ({ logError: (...args: unknown[]) => logError(...a
 vi.mock("@/lib/eventLogs", () => ({ logAskQuestion: (...args: unknown[]) => askLog(...args), logJusquici: vi.fn(), logRecap: vi.fn() }));
 vi.mock("@/lib/xray/person", () => ({ actorFactsForAsk: (...args: unknown[]) => actorFacts(...args), castPerson: vi.fn(async () => null) }));
 
-import { actorFactsText, AnswerGate, askParts, askSources, leadForms, leadVerdict, METALESS_LIMIT, metaTalk, rewriteMetaPrefix, type AskContextInput } from "@/lib/ask/core";
+import { actorFactsText, AnswerGate, stripEmphasisWord, askParts, askSources, leadForms, leadVerdict, METALESS_LIMIT, metaTalk, rewriteMetaPrefix, type AskContextInput } from "@/lib/ask/core";
 import { ASK_MAX_OUTPUT_TOKENS, setAskModelForTests, resetAskCachesForTests, type AskModel } from "@/lib/ask/service";
 
 const MOVIE = "a".repeat(32);
@@ -359,5 +359,40 @@ describe("le plafond de sortie (10.27.2)", () => {
     expect(seen).toEqual([ASK_MAX_OUTPUT_TOKENS]);
     expect(r.events.at(-1)).toEqual({ t: "error", code: "erreur" });
     expect(logError).toHaveBeenCalledWith("ask/model", expect.objectContaining({ message: expect.stringContaining("max_tokens") }));
+  });
+});
+
+describe("10.30.1 — les réponses sans Markdown (`AnswerGate`, questions et « Jusqu'ici »)", () => {
+  it("un mot : l'emphase entière, une ouverture ou une fermeture seule, ponctuation gardée", () => {
+    expect(stripEmphasisWord("*Atlanta*")).toBe("Atlanta");
+    expect(stripEmphasisWord("**Richmond**,")).toBe("Richmond,");
+    expect(stripEmphasisWord("_Lost_.")).toBe("Lost.");
+    expect(stripEmphasisWord("**la")).toBe("la");
+    expect(stripEmphasisWord("confession**.")).toBe("confession.");
+    expect(stripEmphasisWord("Ted.**")).toBe("Ted.");
+    expect(stripEmphasisWord("«*Big")).toBe("«Big");
+    // Ce qui ne marque rien reste.
+    expect(stripEmphasisWord("*")).toBe("*");
+    expect(stripEmphasisWord("mon_fichier")).toBe("mon_fichier");
+    expect(stripEmphasisWord("**")).toBe("");
+  });
+
+  it("« Jusqu'ici » : une emphase sur plusieurs mots, le nom en tête lu sans étoiles, rien d'étoilé à l'écran", () => {
+    const src = "Titre : Ted Lasso\n### Épisode en cours, jusqu'à 13 min\nRebecca Welton : Ted, je vous ai menti.";
+    const opts = { locale: "fr" as const, sources: src, retry: false, onMeta: "drop" as const, lead: "Rebecca Welton" };
+    const gate = new AnswerGate(`Ted Lasso\n${src}\nRebecca Welton — joué par Hannah Waddingham`, { sentences: 2, words: 60 }, opts, "RIEN");
+    const out = [gate.push("NOMS: **Rebecca Welton**, Ted\n\n**Rebecca Welton** avoue à *Ted* qu'elle lui a **menti depuis le début**. "), gate.end()];
+    const shown = out.flatMap((o) => o.release).join(" ");
+    expect(shown).toBe("Rebecca Welton avoue à Ted qu'elle lui a menti depuis le début.");
+    expect(gate.text).toBe(shown);
+    expect(gate.rewritten).toBe(false);
+  });
+
+  it("une question : la même règle, sans le filet des mots de coulisse", () => {
+    const sources = "Titre : Inception\n### Dialogues\nAriadne construit le labyrinthe.";
+    const gate = new AnswerGate(sources);
+    gate.push("NOMS: Ariadne\n\n_Ariadne_ construit le **labyrinthe**. ");
+    gate.end();
+    expect(gate.text).toBe("Ariadne construit le labyrinthe.");
   });
 });

@@ -311,16 +311,16 @@ describe("avec l'option : « Jusqu'ici »", () => {
   }
   const waitLines = () => [...document.querySelectorAll("[data-ask-sofar-wait-line]")].map((n) => n.textContent);
   const leavingLines = () => [...document.querySelectorAll("[data-ask-sofar-wait-leaving]")].map((n) => n.textContent);
-  // Position 754 : la coupe tombe sur la scène de 600 s. Ariadne est reconnue dans deux scènes avant elle ;
-  // celle qui commence à la coupe ne compte pas.
+  // Position 754 : la coupe tombe au début de la scène en cours, 700 s (10.30.1). Ariadne est reconnue dans deux
+  // scènes avant elle ; celle qui commence à la coupe ne compte pas.
   const SCENES = {
     complete: true,
     analyzedUntil: 3000,
     scenes: [
       { start: 0, end: 300, people: [ARIADNE] },
       { start: 300, end: 450, people: [COBB] },
-      { start: 450, end: 600, people: [ARIADNE, COBB] },
-      { start: 600, end: 900, people: [ARIADNE] },
+      { start: 450, end: 700, people: [ARIADNE, COBB] },
+      { start: 700, end: 900, people: [ARIADNE] },
     ],
   };
 

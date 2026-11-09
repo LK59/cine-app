@@ -22,7 +22,7 @@ vi.mock("@/lib/xray/cast", () => ({
 vi.mock("@/lib/xray/rebind", () => ({ keepsAnalysis: () => false }));
 vi.mock("@/lib/logger", () => ({ logError: vi.fn() }));
 
-import { cueLine, speakerOf, withSpeakers, SPEAKER_COVER, SPEAKER_MIN_CONFIDENCE, type SpeakerSegment } from "@/lib/ask/voices";
+import { cueLine, speakerOf, withSpeakers, SPEAKER_COVER, SPEAKER_MIN_CONFIDENCE, SPEAKER_SHORT_S, type SpeakerSegment } from "@/lib/ask/voices";
 import { speakerSegments } from "@/lib/xray/voices";
 import { askSources, askSystem, type AskContextInput } from "@/lib/ask/core";
 import { sofarSystem } from "@/lib/ask/sofar";
@@ -179,5 +179,45 @@ describe("ce qui part au modèle", () => {
     }
     // Le film garde ses propres phrases (10.28.0).
     expect(sofarSystem("fr", true, "movie", true)).toContain("synopsis, distribution, et répliques du film");
+  });
+});
+
+describe("10.30.1 — une réplique courte avalée par le segment de l'autre reste sans nom", () => {
+  // *Ted Lasso* S01E09, 3 min 45 (données réelles du service) : Keeley annonce à Ted que la marque garde ses
+  // mannequins, Ted répond « Zut. » (1 s), Keeley reprend. Un seul segment de Keeley couvre la réponse de Ted
+  // et toute la réplique suivante : 10.30 écrivait « Keeley Jones : Zut. ».
+  const segs: SpeakerSegment[] = [
+    { start: 223.219, end: 225.299, voiceId: 60, name: "Keeley Jones", confidence: 1 },
+    { start: 225.683, end: 231.891, voiceId: 60, name: "Keeley Jones", confidence: 1 },
+  ];
+  const cues: Cue[] = [
+    cue(223.098, 225.1, "Ils préfèrent garder leurs mannequins."),
+    cue(225.475, 226.476, "Zut."),
+    cue(226.56, 230.689, "Oui, mais s'ils cherchent un type lambda ou s'ils font une campagne satyrique,"),
+  ];
+
+  it("« Zut. » : sans nom ; les deux répliques de Keeley gardent le sien", () => {
+    const out = withSpeakers(cues, segs);
+    expect(out.map((c) => c.speaker)).toEqual(["Keeley Jones", undefined, "Keeley Jones"]);
+  });
+
+  it("la même réplique, seule dans son segment : nommée", () => {
+    const own: SpeakerSegment[] = [segs[0], { start: 225.4, end: 226.5, voiceId: 7, name: "Ted Lasso", confidence: 1 }, { start: 226.55, end: 231.9, voiceId: 60, name: "Keeley Jones", confidence: 1 }];
+    expect(withSpeakers(cues, own).map((c) => c.speaker)).toEqual(["Keeley Jones", "Ted Lasso", "Keeley Jones"]);
+  });
+
+  it(`seulement sous ${SPEAKER_SHORT_S} s : une réplique plus longue dans le même segment reste nommée`, () => {
+    const long = [cues[0], cue(225.475, 225.475 + SPEAKER_SHORT_S + 0.05, "Zut, alors."), cue(226.7, 230.689, "Oui, mais…")];
+    expect(withSpeakers(long, segs)[1].speaker).toBe("Keeley Jones");
+  });
+
+  it("un segment qui ne fait qu'effleurer la voisine (moins de la moitié) ne retire rien", () => {
+    // Le segment de la courte déborde de 0,5 s sur une voisine de 4 s.
+    const brief: SpeakerSegment[] = [{ start: 225.4, end: 227.06, voiceId: 7, name: "Ted Lasso", confidence: 1 }];
+    expect(withSpeakers(cues, brief)[1].speaker).toBe("Ted Lasso");
+  });
+
+  it("sans voisines données, `speakerOf` garde la règle de 10.30", () => {
+    expect(speakerOf(cues[1], segs)).toBe("Keeley Jones");
   });
 });

@@ -54,9 +54,11 @@ import { logError } from "@/lib/logger";
  * version) : « la réponse, qui commence par le nom du personnage » — le filet l'exige aussi (`leadVerdict`) ; la même
  * Rebecca recevait « Dans S01E07, elle décide… » une fois sa première phrase retirée. 9 (10.30) : « qui parle » —
  * les répliques d'une analyse complète portent le nom de qui les dit quand la voix est sûre, et la règle
- * d'attribution change avec elles (`SOFAR_ATTRIBUTION_VOICED`).
+ * d'attribution change avec elles (`SOFAR_ATTRIBUTION_VOICED`). 10 (10.30.1) : la coupe au début de la scène en
+ * cours (`sofarCut`) — la v9 coupait à la dernière scène commencée avant la marque des cinq minutes, et un texte
+ * gardé sous une coupe d'avant ne doit plus servir — et les réponses sans Markdown (`stripEmphasisWord`).
  */
-export const SOFAR_VERSION = 9;
+export const SOFAR_VERSION = 10;
 export { SOFAR_BUCKET_S } from "@/lib/ask/sofarCut";
 export const SOFAR_MAX_SENTENCES = 2;
 export const SOFAR_MAX_WORDS = 60;
@@ -82,8 +84,9 @@ export const SOFAR_REJECT_KEEP_MS = 3600_000;
 const SOFAR_RUNNING_MAX = 500;
 
 /**
- * La marque des cinq minutes de la position (`sofarMark`). La coupe elle-même tombe, depuis 10.27.2, sur le
- * début de la dernière scène avant cette marque (`sofarCut`, `src/lib/ask/sofarCut.ts`, partagée avec le client).
+ * La marque des cinq minutes de la position (`sofarMark`). La coupe elle-même tombe, depuis 10.30.1, au début de la
+ * scène en cours (`sofarCut`, `src/lib/ask/sofarCut.ts`, partagée avec le client) ; la marque n'est que son repli
+ * sans scènes.
  */
 export const sofarCutoff = sofarMark;
 

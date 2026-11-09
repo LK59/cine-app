@@ -18,6 +18,7 @@
 import type { Locale } from "@/lib/i18n";
 import { unknownNames, type Cue } from "@/lib/recap/core";
 import { cueLine } from "@/lib/ask/voices";
+import { stripSimpleMarkdown } from "@/lib/format";
 
 /** Une question, pas un texte : la borne de la recherche (`/api/search`). */
 export const ASK_MAX_QUESTION = 200;
@@ -595,6 +596,22 @@ const LEAD_HOLD_WORDS = 6;
  *
  * Le texte final (`text`, les phrases jointes d'une espace) est le même quel que soit le découpage du flux.
  */
+/**
+ * Un mot de la réponse sans ses marques d'emphase Markdown (10.30.1) : le modèle écrit parfois « *Rebecca* »,
+ * « **la confession** » ou « _Richmond_ », et l'écran montrait les étoiles (banc de bout en bout, *Ted Lasso*
+ * S01E09). Le filet reçoit la réponse mot par mot, et une emphase en couvre souvent plusieurs : le mot entier
+ * passe par `stripSimpleMarkdown` (`format.ts`, la règle des biographies), puis une marque d'ouverture seule en
+ * tête (« **la ») ou de fermeture seule en fin (« confession**. ») est retirée. Une étoile ou un trait bas
+ * isolés (« 5 * 3 ») et un trait bas dans un mot (« mon_fichier ») restent ; une marque seule (« ** ») ne laisse
+ * rien.
+ */
+export function stripEmphasisWord(word: string): string {
+  if (/^[*_]+$/.test(word)) return word.length === 1 ? word : "";
+  return stripSimpleMarkdown(word)
+    .replace(/^([«“"'(\[]?)(?:\*\*|__|\*|_)(?=[\p{L}\p{N}«“"'(])/u, "$1")
+    .replace(/([\p{L}\p{N}»”"'.!?…,;:)\]])(?:\*\*|__|\*|_)([.,;:!?…»”"')\]]*)$/u, "$1$2");
+}
+
 export class AnswerGate {
   private buffer = "";
   private phase: "names" | "answer" | "closed" = "names";
@@ -664,7 +681,7 @@ export class AnswerGate {
         const names = head
           .slice(NAMES_PREFIX.length, nl)
           .split(/[,;]/)
-          .map((n) => n.trim())
+          .map((n) => n.trim().split(/\s+/).map(stripEmphasisWord).filter(Boolean).join(" "))
           .filter((n) => n && !/^[—–-]+$/.test(n));
         const unknown = unknownNames("", this.sources, names);
         if (unknown.length) return this.reject(unknown);
@@ -720,7 +737,10 @@ export class AnswerGate {
   }
 
   /** Un mot complet : contrôlé, puis montré, retenu ou retiré ; la phrase finie s'il la finit. */
-  private word(w: string, out: GateResult): void {
+  private word(raw: string, out: GateResult): void {
+    // Sans Markdown (10.30.1) : retiré avant tout contrôle — les noms et le nom en tête se lisent sans étoiles.
+    const w = stripEmphasisWord(raw);
+    if (!w) return;
     if (this.sentence.length === 0 && (this.kept.length >= this.limits.sentences || this.words >= this.limits.words)) {
       this.close();
       return;

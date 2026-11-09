@@ -139,7 +139,7 @@ describe("« Jusqu'ici » S7c (10.28.0)", () => {
     // 5 depuis 10.29.1 (le dernier fait qui le concerne vraiment, plus le dernier moment où il ne fait qu'assister) ;
     // 6, 7 puis 8 en 10.29.2 (une phrase simple quand ni l'épisode en cours ni les épisodes vus ne disent rien de lui ;
     // la réponse commence par le nom du personnage) ; 9 en 10.30 (« qui parle » : les noms devant les répliques).
-    expect(SOFAR_VERSION).toBe(9);
+    expect(SOFAR_VERSION).toBe(10);
     expect(sofarKey("m", "s", "x")).not.toBe(sofarKey("m", "s", "x", 2));
   });
 
