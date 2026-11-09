@@ -20,8 +20,10 @@ import type { XrayPlayerPerson } from "@/lib/xray/scenes";
  * **jamais sous un doigt** : tant qu'on la touche ou qu'elle défile (et 600 ms après), elle garde ce qu'elle
  * montre, puis rattrape la scène de l'instant.
  *
- * `maxWidth` (10.27) : la largeur permise — couché, elle s'arrête avant les boutons du centre
- * (`onScreenRowWidth`) et défile dans ce qui reste.
+ * `maxWidth` (10.27) : la largeur permise — elle ne s'arrête avant les boutons du centre ou la pilule des
+ * outils que s'ils partagent sa hauteur (`onScreenRowWidth`, 10.27.1), et défile dans ce qui reste. Une
+ * pilule n'a pas de largeur à elle (10.27.1 : « Hannah Waddingh… » coupé avec la moitié de l'écran libre) :
+ * un nom n'est coupé que si la rangée entière manque de place (`max-w-full`).
  *
  * Une photo absente ou qui ne charge pas montre les initiales — jamais une image cassée. Le fondu des
  * commandes (`player-fade`) est porté par chaque pilule, jamais par la rangée (globals.css : un parent à
@@ -166,14 +168,14 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth }: 
         e.stopPropagation();
         if (!leaving) onPick(person);
       }}
-      className={`player-fade player-pill player-onscreen-pill flex shrink-0 snap-start items-center gap-2 py-1 pl-1 pr-3.5 text-left text-white ${
+      className={`player-fade player-pill player-onscreen-pill flex min-w-0 max-w-full shrink-0 snap-start items-center gap-2 py-1 pl-1 pr-3.5 text-left text-white ${
         leaving ? "player-onscreen-out pointer-events-none" : entering(person.personId) ? "player-onscreen-in" : ""
       }`}
     >
       <PersonAvatar person={person} className="player-onscreen-photo" />
       <span className="flex min-w-0 flex-col">
-        <span className="player-onscreen-name max-w-[10rem] truncate font-semibold leading-tight">{person.name}</span>
-        {person.character && <span className="player-onscreen-character max-w-[10rem] truncate leading-tight text-white/60">{person.character}</span>}
+        <span className="player-onscreen-name truncate font-semibold leading-tight">{person.name}</span>
+        {person.character && <span className="player-onscreen-character truncate leading-tight text-white/60">{person.character}</span>}
       </span>
     </button>
   );
@@ -187,7 +189,7 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth }: 
       {list.length > 0 && (
         <p className="player-fade player-onscreen-label pl-1 text-[11px] font-semibold uppercase leading-none tracking-[.16em] text-white/60">{t("xray.onScreen")}</p>
       )}
-      <div className="flex w-full min-w-0 items-center gap-2">
+      <div data-onscreen-line="" className="flex w-full min-w-0 items-center gap-2">
         {(list.length > 0 || shown.leaving.length > 0) && (
           <div className="relative min-w-0 shrink">
             <div

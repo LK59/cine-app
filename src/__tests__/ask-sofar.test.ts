@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
 
-// « Jusqu'ici » (DECISIONS.md §139, 10.27) et les pannes du modèle : la coupe à la tranche de dix minutes,
+// « Jusqu'ici » (DECISIONS.md §139, 10.27) et les pannes du modèle : la coupe à la tranche de cinq minutes
+// (dix en 10.27.0),
 // le texte gardé par ce qui part au modèle (partagé entre comptes qui ont vu la même chose, jamais au-delà),
 // trente jours en base, jamais un rejet ; la préparation en fond bornée ; et chaque panne — 5xx, 429, refus,
 // délai, flux coupé — dite proprement, au journal du serveur et à `recherche.log`. Jellyfin, TMDB et le
@@ -51,6 +52,7 @@ import { getDb, sofarDb } from "@/lib/db";
 const MOVIE = "a".repeat(32);
 const ticks = (s: number) => s * 10_000_000;
 const SRT = [
+  "0\n00:04:00,000 --> 00:04:02,000\nAriadne dessine un plan. AVANT-CINQ",
   "1\n00:05:00,000 --> 00:05:02,000\nAriadne construit le labyrinthe.",
   "2\n00:14:00,000 --> 00:14:02,000\nAriadne entre dans le rêve. APRES-LA-COUPE",
   "3\n01:30:00,000 --> 01:30:02,000\nFischer accepte l'idée. FIN-DU-FILM",
@@ -137,12 +139,29 @@ beforeEach(() => {
   });
 });
 
-describe("la coupe : le début de la tranche de dix minutes", () => {
-  it("12 min → 10 min ; 9 min 59 → rien ; jamais de négatif", () => {
+describe("la coupe : le début de la tranche de cinq minutes (10.27.1)", () => {
+  it("12 min → 10 min ; 9 min 59 → 5 min ; 4 min 59 → rien ; jamais de négatif", () => {
     expect(sofarCutoff(12 * 60)).toBe(600);
-    expect(sofarCutoff(599)).toBe(0);
+    expect(sofarCutoff(599)).toBe(300);
+    expect(sofarCutoff(299)).toBe(0);
     expect(sofarCutoff(-5)).toBe(0);
     expect(sofarCutoff(null)).toBe(0);
+  });
+
+  it("à 9 min, les répliques de l'épisode jusqu'à 5 min partent (10.27.0 : aucune avant 10 min, `dialogue: false`)", async () => {
+    const seen: string[] = [];
+    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne dessine un plan.", seen));
+    await sofar(account(), { positionS: 9 * 60 });
+    expect(seen[0]).toContain("AVANT-CINQ");
+    expect(seen[0]).not.toContain("APRES-LA-COUPE");
+    const line = sofarLog.mock.calls.map(([f]) => f as { bucket: number; dialogue?: unknown }).find((f) => f.dialogue !== undefined);
+    expect(line).toMatchObject({ bucket: 5, dialogue: true });
+  });
+
+  it("la tranche du client est celle du serveur", async () => {
+    const client = await import("@/lib/ask/client");
+    const server = await import("@/lib/ask/sofar");
+    expect(client.SOFAR_BUCKET_S).toBe(server.SOFAR_BUCKET_S);
   });
 
   it("aucune réplique après le début de la tranche — même vue à 12 min, celle de 14 min ne part pas", async () => {
@@ -165,7 +184,7 @@ describe("gardé par ce qui part au modèle", () => {
     const b = account();
     await sofar(a);
     await settle();
-    const second = await sofar(b, { positionS: 19 * 60 });
+    const second = await sofar(b, { positionS: 14 * 60 });
     expect(second.text).toBe("Ariadne construit le labyrinthe.");
     await sofar(a, { positionS: 11 * 60 });
     expect(model).toHaveBeenCalledTimes(1);

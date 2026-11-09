@@ -5,7 +5,7 @@ import { BookmarkCheck, Check, CircleCheck, Plus } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { ToggleGlyph } from "@/components/ToggleGlyph";
 import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, MENU_BADGE_ACTIVE } from "@/components/cinema/detailMenu";
-import { ROUND_ACTION } from "@/components/cinema/roundAction";
+import { ROUND_ACTION_IDLE, ROUND_ACTION_ON, ROUND_ACTION_SHAPE } from "@/components/cinema/roundAction";
 
 /**
  * « À voir » et « Vu » : une forme, pour toutes les fiches de titre (DECISIONS.md §117.4).
@@ -68,9 +68,6 @@ export function TitleToggleRow({ face, on, onClick, disabled, unknown }: ToggleP
   );
 }
 
-/** Allumé (déjà vu, dans ma liste) : l'or de la marque, le liseré qui le détache du sélecteur blanc (§83, option B). */
-const ROUND_ON = "bg-ink text-brand ring-1 ring-brand/60 hover:bg-ink";
-
 /**
  * Le bouton rond des fiches de bibliothèque du bureau (10.27, `DetailIconActions`) : l'icône seule, le
  * libellé pour les lecteurs d'écran (`aria-label`) et en bulle au survol (`title`). Porte
@@ -90,7 +87,10 @@ export function TitleToggleRound({ face, on, onClick, disabled, unknown }: Toggl
       aria-pressed={on}
       aria-label={label}
       title={label}
-      className={`${ROUND_ACTION} ${on ? ROUND_ON : ""} ${unknown ? "opacity-50" : ""}`}
+      data-on={on ? "" : undefined}
+      // La forme, puis une seule teinte : allumé, l'or de la pastille du menu (`ROUND_ACTION_ON`) ; jamais les
+      // deux à la fois (10.27.0 : le blanc de l'éteint l'emportait, l'or avait disparu).
+      className={`${ROUND_ACTION_SHAPE} ${on ? ROUND_ACTION_ON : ROUND_ACTION_IDLE} ${unknown ? "opacity-50" : ""}`}
     >
       <ToggleGlyph on={on} onIcon={<OnIcon size={19} />} offIcon={<OffIcon size={18} />} />
     </button>

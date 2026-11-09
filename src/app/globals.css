@@ -2207,10 +2207,25 @@ body:has(.gestion-liquid) .glass-window {
   to { opacity: 0; transform: translateX(28px); }
 }
 /* L'espace des réponses rogne ce qu'il porte : sur l'iPhone couché, la fin d'une réponse passait sous la
-   proposition restante (09/11/2026). Un `clip-path` rogne aussi un calque composé de WebKit. */
+   proposition restante (09/11/2026). 10.27.0 le faisait par un `clip-path: inset(0)` posé sur l'élément qui
+   défile : sur l'iPhone, le panneau d'une personne est resté figé sur sa première image (« Jusqu'ici · Un
+   instant… », ni faits ni texte, alors que les deux réponses étaient arrivées). `contain: paint` rogne de même
+   ce que l'élément porte — calques composés compris — sans habiller l'élément qui défile d'un masque
+   (10.27.1). */
 .ask-scroll {
-  clip-path: inset(0);
+  contain: paint;
 }
+/* « Jusqu'ici » : une ligne d'attente discrète — un reflet qui passe sur deux traits, sans texte (le fond qui
+   glisse, jamais une opacité animée qui ferait un calque composé dans l'espace qui défile) — puis le texte
+   en fondu. */
+.ask-shimmer {
+  background: linear-gradient(90deg, rgb(255 255 255 / 0.08) 0%, rgb(255 255 255 / 0.2) 50%, rgb(255 255 255 / 0.08) 100%);
+  background-size: 200% 100%;
+  animation: ask-shimmer 1.4s linear infinite;
+}
+@keyframes ask-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.ask-sofar-in { animation: ask-sofar-in 260ms ease-out; }
+@keyframes ask-sofar-in { from { opacity: 0; } }
 /* Peu de hauteur (téléphone couché) : les propositions sur une seule ligne qui défile de côté, pour laisser
    la place à la réponse. */
 @media (orientation: landscape) and (max-height: 500px) {
@@ -2221,6 +2236,7 @@ body:has(.gestion-liquid) .glass-window {
 /* « Dans votre bibliothèque » : des affiches qui ne réagissent à rien — pas même au long appui d'iOS. */
 .ask-library-poster { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 @media (prefers-reduced-motion: reduce) {
+  .ask-shimmer, .ask-sofar-in { animation: none; }
   .ask-panel { transition: none; }
   .ask-panel-out-side { animation: none; }
 }

@@ -25,7 +25,7 @@ import { useLatest } from "@/components/playerControls/useLatest";
 import { useAutoHide } from "@/components/playerControls/useAutoHide";
 import { PlayerSeekBar } from "@/components/playerControls/PlayerSeekBar";
 import { AskPanel } from "@/components/ask/AskPanel";
-import { prewarmSofar, SOFAR_PREWARM_PEOPLE, useAskAvailable } from "@/lib/ask/client";
+import { prewarmSofar, SOFAR_BUCKET_S, SOFAR_PREWARM_PEOPLE, useAskAvailable } from "@/lib/ask/client";
 import { PlayerOnScreen } from "@/components/playerControls/PlayerOnScreen";
 import { useOnScreenPlacement } from "@/components/playerControls/useOnScreenPlacement";
 import { onScreenPeople, sceneAt, useXrayAvailable, useXrayScenes } from "@/lib/xray/client";
@@ -712,13 +712,13 @@ export function PlayerControls({
   const onScreenWrapRef = useRef<HTMLDivElement>(null);
   const centerGroupRef = useRef<HTMLDivElement>(null);
   const titleRowRef = useRef<HTMLDivElement>(null);
-  const onScreenPlace = useOnScreenPlacement({ wrap: onScreenWrapRef, center: centerGroupRef, titleRow: titleRowRef }, rowShown && scenePeople.length > 0);
+  const onScreenPlace = useOnScreenPlacement({ wrap: onScreenWrapRef, center: centerGroupRef, titleRow: titleRowRef, tools: settingsPillRef }, rowShown && scenePeople.length > 0);
   /**
    * « Jusqu'ici » préparé en fond (§139, 10.27) : la rangée affichée, pour les trois premières personnes de
-   * la scène — une fois par personne et par tranche de dix minutes (`prewarmSofar`), jamais page cachée.
+   * la scène — une fois par personne et par tranche de cinq minutes (`prewarmSofar`), jamais page cachée.
    */
   const prewarmIds = scenePeople.slice(0, SOFAR_PREWARM_PEOPLE).map((p) => p.personId).join(",");
-  const prewarmKey = askOffered && visible && !hidden && prewarmIds ? `${itemId}|${prewarmIds}|${Math.floor(currentTime / 600)}` : null;
+  const prewarmKey = askOffered && visible && !hidden && prewarmIds ? `${itemId}|${prewarmIds}|${Math.floor(currentTime / SOFAR_BUCKET_S)}` : null;
   const prewarmAt = useLatest(currentTime);
   useEffect(() => {
     if (!prewarmKey) return;
@@ -1225,8 +1225,9 @@ export function PlayerControls({
 
         {/* « À l'écran » (§138) et le bouton de la question (§139) : avec les commandes, en lecture comme en
             pause, juste au-dessus du bloc du titre, à gauche — loin de « Passer l'intro » et de l'épisode
-            suivant, posés à droite ; couché, la rangée s'arrête avant les boutons du centre
-            (`useOnScreenPlacement`). Le bouton rond de la question reste au bout, hors de ce qui défile — seul
+            suivant, posés à droite ; elle va aussi loin que possible à droite et ne s'arrête avant les
+            boutons du centre (ou la pilule des outils) que s'ils partagent sa hauteur
+            (`useOnScreenPlacement`, 10.27.1). Le bouton rond de la question reste au bout, hors de ce qui défile — seul
             quand personne n'est reconnu. */}
         {rowShown &&
           (() => {

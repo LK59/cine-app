@@ -146,24 +146,30 @@ export function useXrayScenes(itemId: string | null | undefined, enabled: boolea
 
 // ── La place de la rangée (10.27) ───────────────────────────────────────────────────────────────
 
-/** L'écart gardé entre la rangée et les boutons du centre (−10 / lecture / +10). */
+/** L'écart gardé entre la rangée et ce qui l'arrête à droite (les boutons du centre, la pilule des outils). */
 export const ONSCREEN_CENTER_GAP_PX = 16;
 /** L'écart entre le bas de la rangée et le haut du bloc du titre. */
 export const ONSCREEN_TITLE_GAP_PX = 10;
 
 type Box = { left: number; top: number; right: number; bottom: number };
 
+/** Deux boîtes partagent-elles une hauteur ? Strictement : se toucher par un bord n'est pas se chevaucher. */
+const overlapsVertically = (a: Box, b: Box) => a.top < b.bottom && a.bottom > b.top;
+
 /**
- * La largeur permise à la rangée (10.27, iPhone couché du propriétaire : elle passait sous −10 / lecture /
- * +10). Seulement quand elle partage la hauteur des boutons du centre — debout, ils sont au milieu de
- * l'écran, loin au-dessus, et la rangée garde toute la largeur (`null`). Sinon, elle s'arrête 16 px avant
- * leur bord gauche.
+ * La largeur permise à la rangée (10.27.1, règle du propriétaire). 10.27.0 s'arrêtait avant les boutons du
+ * centre dès qu'ils passaient à 16 px de sa hauteur — sur l'iPhone couché, ils étaient **au-dessus** d'elle,
+ * sans la toucher, et la rangée finissait au tiers de l'écran, un seul nom coupé (« Hannah Waddingh… »).
+ * Désormais, la rangée va **aussi loin que possible à droite** :
+ * - 16 px avant le groupe du centre (−10 / lecture / +10), **seulement s'il chevauche sa hauteur** ;
+ * - sinon, 16 px avant la pilule des outils (audio, sous-titres, épisodes…), si elle chevauche sa hauteur ;
+ * - sinon, jusqu'au bord sûr de droite (`null` : la largeur entière du conteneur, déjà rentré des zones sûres).
+ * `row` est la ligne des pilules (pas l'étiquette au-dessus, courte et collée à gauche).
  */
-export function onScreenRowWidth(row: Box, center: Box | null): number | null {
-  if (!center) return null;
-  const sharesHeight = row.top < center.bottom + ONSCREEN_CENTER_GAP_PX && row.bottom > center.top - ONSCREEN_CENTER_GAP_PX;
-  if (!sharesHeight) return null;
-  return Math.max(0, Math.floor(center.left - ONSCREEN_CENTER_GAP_PX - row.left));
+export function onScreenRowWidth(row: Box, obstacles: { center?: Box | null; tools?: Box | null }): number | null {
+  const stop = [obstacles.center, obstacles.tools].find((b): b is Box => !!b && b.right > b.left && overlapsVertically(row, b));
+  if (!stop) return null;
+  return Math.max(0, Math.floor(stop.left - ONSCREEN_CENTER_GAP_PX - row.left));
 }
 
 /** Le bas de la rangée, en px depuis le bas des commandes : juste au-dessus du bloc du titre. */

@@ -16,6 +16,7 @@ vi.mock("@/components/TranslationProvider", () => ({
 }));
 
 import { AskPanel, ASK_EXIT_MS } from "@/components/ask/AskPanel";
+import { resetSofarClientForTests, SOFAR_CLIENT_TIMEOUT_MS, SOFAR_LOADING_DELAY_MS } from "@/lib/ask/client";
 import { compactPlace, personFactsLine, personQuestions } from "@/lib/xray/client";
 import type { XrayPlayerPerson } from "@/lib/xray/scenes";
 
@@ -55,6 +56,7 @@ function ndjson(lines: unknown[]) {
 }
 
 beforeEach(() => {
+  resetSofarClientForTests();
   vv = new FakeViewport();
   Object.defineProperty(window, "visualViewport", { configurable: true, value: vv });
   sofarReply = ["Ariadne construit le labyrinthe."];
@@ -78,6 +80,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -195,6 +198,87 @@ describe("avec l'option : « Jusqu'ici »", () => {
     await waitFor(() => expect(document.querySelector("[data-ask-sofar]")).toBeNull());
   });
 
+  it("un texte déjà gardé par le serveur (réponse immédiate, tout d'un coup) : le texte à l'instant, sans ligne d'attente", async () => {
+    sofarReply = ["Ariadne construit le labyrinthe.", "Elle a rejoint l'équipe de Cobb."];
+    open();
+    // La section est là dès l'ouverture, sans ligne d'attente avant le délai.
+    expect(document.querySelector("[data-ask-sofar]")).toBeTruthy();
+    expect(document.querySelector("[data-ask-sofar-loading]")).toBeNull();
+    await screen.findByText("Ariadne construit le labyrinthe. Elle a rejoint l'équipe de Cobb.");
+    expect(document.querySelector("[data-ask-sofar]")?.getAttribute("data-ask-sofar")).toBe("done");
+    expect(document.querySelector("[data-ask-sofar-loading]")).toBeNull();
+    expect(document.querySelector("[data-ask-sofar-text]")?.className).toContain("ask-sofar-in");
+  });
+
+  it("une génération : la ligne d'attente passé le délai, puis les phrases à mesure — les faits n'attendent jamais", async () => {
+    let push: (line: unknown) => void = () => {};
+    let end: () => void = () => {};
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST" && JSON.parse(String(init.body)).mode === "jusquici") {
+        const enc = new TextEncoder();
+        const body = new ReadableStream<Uint8Array>({
+          start(c) {
+            push = (l) => c.enqueue(enc.encode(JSON.stringify(l) + "\n"));
+            end = () => c.close();
+          },
+        });
+        return new Response(body);
+      }
+      return base(url, init);
+    });
+    open();
+    // Les faits arrivent pendant que « Jusqu'ici » attend encore.
+    await screen.findByText("Elliot Page est un acteur canadien.");
+    await waitFor(() => expect(document.querySelector("[data-ask-sofar-loading]")).toBeTruthy(), { timeout: SOFAR_LOADING_DELAY_MS + 1000 });
+    expect(document.querySelector("[data-ask-sofar-loading]")?.getAttribute("aria-label")).toBe("ask.thinking");
+    act(() => push({ t: "text", v: "Ariadne construit le labyrinthe." }));
+    await screen.findByText("Ariadne construit le labyrinthe.");
+    expect(document.querySelector("[data-ask-sofar-loading]")).toBeNull();
+    act(() => {
+      push({ t: "done" });
+      end();
+    });
+    await waitFor(() => expect(document.querySelector("[data-ask-sofar]")?.getAttribute("data-ask-sofar")).toBe("done"));
+  });
+
+  it("rouvert sur la même personne dans la même tranche : le texte à l'instant, sans nouvelle demande", async () => {
+    open();
+    await screen.findByText("Ariadne construit le labyrinthe.");
+    cleanup();
+    const before = sofarPosts().length;
+    open({ position: () => 790 });
+    expect(screen.getByText("Ariadne construit le labyrinthe.")).toBeTruthy();
+    expect(sofarPosts().length).toBe(before);
+  });
+
+  it("position inconnue : la section est là quand même, demandée sans position (10.27.0 : ni section ni demande)", async () => {
+    open({ position: () => null });
+    expect(document.querySelector("[data-ask-sofar]")).toBeTruthy();
+    await screen.findByText("Ariadne construit le labyrinthe.");
+    expect(JSON.parse(String((sofarPosts()[0][1] as RequestInit).body))).toMatchObject({ mode: "jusquici", personId: 2, positionS: null });
+  });
+
+  it("rien à dire : la section se retire, le reste reste", async () => {
+    sofarReply = "rejected";
+    open();
+    expect(document.querySelector("[data-ask-sofar]")).toBeTruthy();
+    await screen.findByText("Elliot Page est un acteur canadien.");
+    await waitFor(() => expect(document.querySelector("[data-ask-sofar]")).toBeNull());
+  });
+
+  it(`aucune fin en ${SOFAR_CLIENT_TIMEOUT_MS / 1000} s : la section se retire sans un mot (10.27.0 : « Un instant… » pour toujours)`, async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    sofarReply = "hang";
+    open();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(SOFAR_LOADING_DELAY_MS + 50)));
+    expect(document.querySelector("[data-ask-sofar-loading]")).toBeTruthy();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(SOFAR_CLIENT_TIMEOUT_MS)));
+    expect(document.querySelector("[data-ask-sofar]")).toBeNull();
+    expect(screen.queryByText("ask.error")).toBeNull();
+    expect(document.querySelector("[data-ask-person='2']")).toBeTruthy();
+  });
+
   it("l'ordre : en-tête, « Jusqu'ici », faits, bibliothèque, propositions, champ", async () => {
     open();
     await screen.findByText("Ariadne construit le labyrinthe.");
@@ -204,6 +288,16 @@ describe("avec l'option : « Jusqu'ici »", () => {
     );
     for (let i = 1; i < order.length; i++) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByText('xray.qLink:{"name":"Ariadne","other":"Dom"}')).toBeTruthy();
+  });
+});
+
+describe("l'espace qui défile n'est pas masqué (10.27.1)", () => {
+  it("`.ask-scroll` rogne par `contain: paint`, jamais par un `clip-path` — le panneau restait figé sur l'iPhone", async () => {
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync(`${process.cwd()}/src/app/globals.css`, "utf8");
+    const rule = css.match(/\.ask-scroll\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(rule).toContain("contain: paint");
+    expect(rule).not.toContain("clip-path");
   });
 });
 

@@ -15,7 +15,7 @@ import type { Locale } from "@/lib/i18n";
 import { logError } from "@/lib/logger";
 import { logJusquici } from "@/lib/eventLogs";
 import { createRateLimiter } from "@/lib/rateLimiter";
-import { askWhereLine, positionBucket } from "@/lib/ask/core";
+import { askWhereLine } from "@/lib/ask/core";
 import { ASK_MODEL, currentAskModel, gatherAskContext } from "@/lib/ask/service";
 import { castPerson } from "@/lib/xray/person";
 import { sofarCutoff, sofarKey, sofarLookup, sofarMessage, sofarSources, sofarStart, sofarSubscribe, sofarSystem, type SofarEntry } from "@/lib/ask/sofar";
@@ -68,7 +68,7 @@ export async function answerSofar(
 ): Promise<NextResponse> {
   const started = Date.now();
   const cutoff = sofarCutoff(body.positionS);
-  const base = { user: who.user, device: who.device, itemId, personId: body.personId, bucket: positionBucket(cutoff) ?? 0, prewarm: body.prewarm };
+  const base = { user: who.user, device: who.device, itemId, personId: body.personId, bucket: Math.round(cutoff / 60), prewarm: body.prewarm };
 
   let context: Awaited<ReturnType<typeof gatherAskContext>>;
   let found: Awaited<ReturnType<typeof castPerson>>;

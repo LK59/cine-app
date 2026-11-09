@@ -160,15 +160,19 @@ export function useAskTitle({ itemId, where, position, enabled = true }: { itemI
 
 // ── « Jusqu'ici » (DECISIONS.md §139, 10.27) ─────────────────────────────────────────────────────
 
-/** La tranche de dix minutes d'une position — ce qui distingue deux préparations d'une même personne. */
-const sofarBucket = (positionS: number) => Math.floor(Math.max(0, positionS) / 600);
+/**
+ * La tranche de cinq minutes d'une position (10.27.1, `SOFAR_BUCKET_S` côté serveur) — ce qui distingue deux
+ * préparations d'une même personne, et deux textes gardés sur l'appareil.
+ */
+export const SOFAR_BUCKET_S = 300;
+const sofarBucket = (positionS: number | null) => (positionS === null ? 0 : Math.floor(Math.max(0, positionS) / SOFAR_BUCKET_S));
 const prewarmed = new Set<string>();
 /** Les trois premières personnes de la scène seulement. */
 export const SOFAR_PREWARM_PEOPLE = 3;
 
 /**
  * Préparer « Jusqu'ici » en fond pour les premières personnes de la scène, quand la rangée paraît : une
- * fois par personne et par tranche de dix minutes pour cette page, jamais page cachée. Personne n'attend
+ * fois par personne et par tranche de cinq minutes pour cette page, jamais page cachée. Personne n'attend
  * la réponse (`{"t":"queued"}`) ; une panne ne dit rien.
  */
 export function prewarmSofar(itemId: string, personIds: readonly number[], positionS: number): void {
@@ -195,28 +199,86 @@ export function resetPrewarmForTests(): void {
   prewarmed.clear();
 }
 
-export type SofarView = { state: "waiting" | "streaming" | "done" | "none"; text: string };
+export type SofarView = {
+  /**
+   * `waiting` : la section est là, le texte pas encore ; `streaming` / `done` : le texte ; `none` : pas de
+   * section (option coupée pour cette séance, rien à dire, panne, délai).
+   */
+  state: "waiting" | "streaming" | "done" | "none";
+  text: string;
+  /** La ligne d'attente : seulement passé `SOFAR_LOADING_DELAY_MS` sans texte (un texte gardé n'en montre pas). */
+  loading: boolean;
+};
+
+/** Au-delà, la section se retire sans un mot (10.27.1 : « Un instant… » restait affiché pour toujours). */
+export const SOFAR_CLIENT_TIMEOUT_MS = 25_000;
+/**
+ * La ligne d'attente ne paraît qu'après ce délai : un texte gardé par le serveur arrive en ~230 ms et se
+ * montre sans elle ; une génération (2 à 5 s) la montre.
+ */
+export const SOFAR_LOADING_DELAY_MS = 350;
 
 /**
- * « Jusqu'ici » dans le panneau d'une personne : demandé à l'ouverture (déjà prêt d'ordinaire, préparé en
- * fond), les phrases à mesure. Toute issue autre qu'un texte — panne, délai, refus, nom inconnu, rien à
- * dire — rend `none` : le panneau n'en montre rien (consigne du propriétaire : pas de bruit d'erreur ici).
+ * Les textes déjà lus par cette page, par élément, personne et tranche : rouvrir le panneau de la même
+ * personne dans la même tranche les montre à l'instant, sans requête ni ligne d'attente. En mémoire
+ * seulement (la page est à un compte ; le serveur garde les textes trente jours, partagés).
+ */
+const sofarRead = new Map<string, string>();
+const SOFAR_READ_MAX = 200;
+
+export function resetSofarClientForTests(): void {
+  sofarRead.clear();
+}
+
+const NONE: SofarView = { state: "none", text: "", loading: false };
+
+/**
+ * « Jusqu'ici » dans le panneau d'une personne (DECISIONS.md §139, 10.27.1) — indépendant de tout le reste
+ * du panneau (faits, biographie, affiches : `usePersonFacts`, jamais en attente de celui-ci).
+ *
+ * Avec l'option pour cette séance, la section est **toujours** là, en haut, dès l'ouverture : la ligne
+ * d'attente (passé un court délai), puis le texte. Elle ne disparaît que sur « rien à dire » (`rejected`),
+ * une panne (réseau, 5xx, `error`, flux fini sans sa fin) ou **vingt-cinq secondes** sans fin
+ * (`SOFAR_CLIENT_TIMEOUT_MS`) — sans un mot ; la cause d'une panne est dans `server.log` (`ask/jusquici`).
+ * Position inconnue : demandée quand même (`null` — le serveur coupe au début), jamais une section muette.
+ *
+ * 10.27.0 rendait `none` — pas de section du tout — quand la position manquait, n'avait aucun délai côté
+ * client (une réponse qui ne finissait pas laissait « Un instant… » pour toujours), et ne gardait rien :
+ * chaque ouverture repassait par la ligne d'attente.
  */
 export function useSofar(itemId: string, personId: number, positionS: number | null, enabled: boolean): SofarView {
+  const pos = positionS !== null && Number.isFinite(positionS) ? Math.floor(positionS) : null;
+  const readKey = `${itemId}:${personId}:${sofarBucket(pos)}`;
+  const key = `${readKey}:${pos ?? "?"}`;
   const [view, setView] = useState<{ key: string; view: SofarView } | null>(null);
-  const key = `${itemId}:${personId}:${positionS ?? "?"}`;
+  const [slow, setSlow] = useState<string | null>(null);
+  const already = enabled ? sofarRead.get(readKey) : undefined;
   useEffect(() => {
-    if (!enabled || positionS === null) return;
+    if (!enabled || already !== undefined) return;
     const ctrl = new AbortController();
     let text = "";
     let ended = false;
-    const set = (v: SofarView) => setView({ key, view: v });
+    const set = (v: Omit<SofarView, "loading">) => setView({ key, view: { ...v, loading: false } });
+    const finish = (v: Omit<SofarView, "loading">) => {
+      if (ended) return;
+      ended = true;
+      window.clearTimeout(timeout);
+      window.clearTimeout(loadingTimer);
+      set(v);
+    };
+    const loadingTimer = window.setTimeout(() => setSlow(key), SOFAR_LOADING_DELAY_MS);
+    // Le délai du client : une réponse qui ne finit pas ne laisse jamais la ligne d'attente pour toujours —
+    // la section se retire, comme pour une panne (une phrase sans sa fin n'est pas une réponse vérifiée).
+    const timeout = window.setTimeout(() => {
+      finish({ state: "none", text: "" });
+      ctrl.abort();
+    }, SOFAR_CLIENT_TIMEOUT_MS);
     void (async () => {
       try {
         const res = await fetch(`/api/cinema/ask/${encodeURIComponent(itemId)}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "jusquici", personId, positionS: Math.floor(positionS) }),
+          body: JSON.stringify({ mode: "jusquici", personId, positionS: pos }),
           signal: ctrl.signal,
         });
         if (!res.ok) throw new Error(String(res.status));
@@ -224,22 +286,31 @@ export function useSofar(itemId: string, personId: number, positionS: number | n
           if (ended) return;
           if (ev.t === "text") {
             text = text ? `${text} ${ev.v}` : ev.v;
+            window.clearTimeout(loadingTimer);
             set({ state: "streaming", text });
           } else if (ev.t === "done") {
-            ended = true;
-            set({ state: "done", text });
-          } else {
-            ended = true;
-            set({ state: "none", text: "" });
-          }
+            if (text) {
+              sofarRead.set(readKey, text);
+              if (sofarRead.size > SOFAR_READ_MAX) sofarRead.delete(sofarRead.keys().next().value as string);
+            }
+            finish(text ? { state: "done", text } : { state: "none", text: "" });
+          } else finish({ state: "none", text: "" });
         });
-        if (!ended) set({ state: "none", text: "" });
+        // Fini sans sa ligne de fin (connexion coupée) : une panne.
+        finish({ state: "none", text: "" });
       } catch {
-        if (!ctrl.signal.aborted) set({ state: "none", text: "" });
+        if (!ctrl.signal.aborted) finish({ state: "none", text: "" });
       }
     })();
-    return () => ctrl.abort();
-  }, [key, itemId, personId, positionS, enabled]);
-  if (!enabled || positionS === null) return { state: "none", text: "" };
-  return view?.key === key ? view.view : { state: "waiting", text: "" };
+    return () => {
+      ended = true;
+      window.clearTimeout(timeout);
+      window.clearTimeout(loadingTimer);
+      ctrl.abort();
+    };
+  }, [key, readKey, itemId, personId, pos, enabled, already]);
+  if (!enabled) return NONE;
+  if (already !== undefined) return { state: "done", text: already, loading: false };
+  if (view?.key === key) return view.view;
+  return { state: "waiting", text: "", loading: slow === key };
 }

@@ -1,12 +1,14 @@
 // « Jusqu'ici » (10.27, 09/11/2026, DECISIONS.md §138–§139) — deux phrases sur un personnage d'« À
-// l'écran », d'après ce que ce compte a vu jusqu'à la tranche de dix minutes où il en est.
+// l'écran », d'après ce que ce compte a vu jusqu'à la tranche de cinq minutes où il en est (dix en 10.27.0).
 //
 // **Mêmes règles que les questions** : les sources sont celles de `askSources` (seulement ce qui est vu :
 // résumés des épisodes terminés, jamais celui de l'épisode en cours, répliques jusqu'à la coupe), et la
 // réponse passe le même filet des noms (`AnswerGate`, la ligne `NOMS:` puis la règle des majuscules).
 //
-// **La coupe est la tranche, pas la seconde** : les répliques s'arrêtent au **début** de la tranche de dix
-// minutes de la position (`sofarCutoff`). Rien de ce qui suit ce début n'entre — donc un retour en arrière
+// **La coupe est la tranche, pas la seconde** : les répliques s'arrêtent au **début** de la tranche de cinq
+// minutes de la position (`sofarCutoff`). Cinq depuis 10.27.1 (consigne du propriétaire, le budget est large) :
+// à dix, les dix premières minutes d'un épisode n'envoyaient jamais une réplique de cet épisode
+// (`dialogue: false` au journal). Rien de ce qui suit ce début n'entre — donc un retour en arrière
 // dans la même tranche ne montre jamais rien de plus que ce qu'on avait vu en y entrant —, et deux comptes
 // arrivés au même endroit envoient exactement les mêmes sources.
 //
@@ -33,7 +35,7 @@ import { logError } from "@/lib/logger";
 
 /** Change quand la consigne change : les textes d'avant ne servent plus. */
 export const SOFAR_VERSION = 1;
-export const SOFAR_BUCKET_S = 600;
+export const SOFAR_BUCKET_S = 300;
 export const SOFAR_MAX_SENTENCES = 2;
 export const SOFAR_MAX_WORDS = 60;
 /** Ce que le modèle écrit quand les sources ne disent rien du personnage — jamais montré. */
@@ -43,7 +45,7 @@ export const SOFAR_KEEP_MS = 30 * 24 * 3600_000;
 /** Les générations en cours, en mémoire : un garde-fou contre une fuite, jamais atteint d'ordinaire. */
 const SOFAR_RUNNING_MAX = 500;
 
-/** Le début de la tranche de dix minutes de la position : les répliques s'arrêtent là. */
+/** Le début de la tranche de cinq minutes de la position : les répliques s'arrêtent là. */
 export function sofarCutoff(positionS: number | null | undefined): number {
   if (positionS == null || !Number.isFinite(positionS) || positionS <= 0) return 0;
   return Math.floor(positionS / SOFAR_BUCKET_S) * SOFAR_BUCKET_S;

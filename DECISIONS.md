@@ -7035,6 +7035,15 @@ et tient aussi. Tests : `decisions-partagees.test.ts` (les deux fiches posent `D
 `fiche-boutons-deux-etats.test.tsx` (lisent le libellé d'un bouton rond), `CinemaLogo.test.tsx` (le plafond
 en `vh`).
 
+**10.27.1 : l'or rendu aux deux boutons allumés.** En 10.27.0, « Vu » et « Dans ma liste » allumés
+s'affichaient comme éteints : la classe de l'allumé (`bg-ink text-brand ring-brand/60`) s'ajoutait à celle du
+verre (`bg-black/55 text-white`) sur le même bouton, et entre deux couleurs de texte d'une même classe c'est
+l'ordre de la feuille de Tailwind qui tranche — le blanc gagnait. `roundAction.ts` sépare la forme
+(`ROUND_ACTION_SHAPE`) des deux teintes (`ROUND_ACTION_IDLE`, `ROUND_ACTION_ON`) ; un bouton n'en porte qu'une.
+L'allumé est l'or de la pastille allumée du menu (`MENU_BADGE_ACTIVE`, §83 option B — le même jeton `brand`
+que l'icône or du téléphone), au clavier un anneau blanc qui n'éteint pas l'or ; `data-on` le dit. Test :
+`fiche-ronds-or.test.tsx` (chacun des deux, allumé : l'or et pas le blanc ; éteint : le verre et pas l'or).
+
 **Voulu.** La source de « Vu » reste double (§51) : Jellyfin pour un titre de la bibliothèque
 (`useJellyfinItemState`, qui attend d'avoir lu — d'où l'estompé), la copie locale pour un titre TMDB
 (`useTitleWatched`). L'estompé d'un « Vu » non lu vaut 50 % au bureau, 40 % au téléphone. La fiche
@@ -8962,6 +8971,19 @@ Porteurs ajoutés : `useOnScreenPlacement`, `onScreenRowWidth`/`onScreenRowBotto
 lecteur inchangées** : `xrayAvailable`/`askAvailable` restent absents de leurs doubles — ni rangée, ni
 bouton, ni préparation, ni requête de plus.
 
+**10.27.1 (09/11/2026, deuxième essai du propriétaire, iPhone couché, *Ted Lasso* S01E08).** La rangée
+s'arrêtait au tiers de l'écran, un seul nom coupé (« Hannah Waddingh… »), alors que −10 / lecture / +10
+étaient **au-dessus** d'elle : la règle de 10.27 comptait comme « même hauteur » tout ce qui passait à 16 px,
+et mesurait la rangée entière, étiquette comprise. Règle du propriétaire désormais (`onScreenRowWidth`) : la
+rangée va **aussi loin que possible à droite** — 16 px avant le groupe du centre **seulement s'il chevauche**
+la hauteur de la ligne des pilules (`data-onscreen-line`, pas l'étiquette, courte et collée à gauche) ; sinon
+16 px avant la pilule des outils (audio, sous-titres, épisodes… — `settingsPillRef`, mesurée et suivie par
+`useOnScreenPlacement`) si elle la chevauche ; sinon jusqu'au bord sûr de droite. Se toucher par un bord n'est
+pas se chevaucher. Les pilules n'ont plus de largeur à elles (`max-w-[10rem]` retiré) : `max-w-full`, un nom
+n'est coupé que si la rangée entière manque de place. Le bouton rond de la question reste au bout de la ligne.
+Tests : `xray-row-1027.test.tsx` (centre chevauchant, rangée sous le centre sans chevauchement, pilule des
+outils chevauchante, debout ; pilule sans largeur propre, bouton au bout).
+
 **Fire TV : pas proposée** (`useXrayAvailable` → `isFireTv`, §71). Une rangée qui défile de côté, au
 curseur de Silk ou à la télécommande, demanderait un parcours au focus propre (y entrer, défiler, en
 sortir vers la barre) que rien ne porte ici, et la pilule qu'elle ouvre n'y existe pas non plus.
@@ -9084,8 +9106,8 @@ la branche et la forme décidées, et les événements comptés depuis le focus 
 pour cela ici), le texte reste, le panneau entier revient. Appuyé, il ne prend pas le focus.
 
 **Rien ne se dessine sur la réponse.** Couché, la fin d'une réponse passait sous la proposition restante :
-l'espace des réponses rogne ce qu'il porte (`clip-path: inset(0)`, qui rogne aussi un calque composé de
-WebKit), descend jusqu'à sa dernière ligne une image plus tard et quand il change de taille
+l'espace des réponses rogne ce qu'il porte (`contain: paint` depuis 10.27.1, qui rogne aussi un calque
+composé de WebKit — le `clip-path: inset(0)` de 10.27.0 sur l'élément qui défile est retiré, voir « Jusqu'ici »), descend jusqu'à sa dernière ligne une image plus tard et quand il change de taille
 (`ResizeObserver`) ; propositions et champ sont dessous, dans le flux. Peu de hauteur (couché), les
 propositions tiennent sur une ligne qui défile de côté.
 
@@ -9155,8 +9177,11 @@ publique **suivie, jamais demandée** (`followOnlyOptions`), absente des doubles
 une ou deux phrases sur **le personnage** d'après ce que ce compte a vu, sous les mêmes règles que les
 questions — les sources de `askSources` (`sofarSources` y ajoute la personne, prise dans la distribution de
 l'élément, jamais dans la requête) et le même filet des noms (`AnswerGate`, coupée à deux phrases et 60
-mots ; « RIEN » quand il n'y a rien à dire, jamais montré). **La coupe est le début de la tranche de dix
-minutes** de la position (`sofarCutoff`) : rien de ce qui suit ce début n'entre, un retour en arrière dans
+mots ; « RIEN » quand il n'y a rien à dire, jamais montré). **La coupe est le début de la tranche de cinq
+minutes** de la position (`sofarCutoff`, `SOFAR_BUCKET_S` — dix en 10.27.0 : pendant les dix premières minutes
+d'un épisode, aucune réplique de cet épisode ne partait, `dialogue: false` au journal ; cinq depuis 10.27.1,
+consigne du propriétaire, le budget est large ; la tranche du client, `SOFAR_BUCKET_S` de `ask/client.ts`, est
+la même — un test les compare) : rien de ce qui suit ce début n'entre, un retour en arrière dans
 la tranche ne montre rien de plus, et deux comptes au même endroit envoient les mêmes sources.
 - **Gardé par ce qui part au modèle, partagé entre comptes** (consigne du propriétaire) : la clé est le
   SHA-256 du modèle, de la version de la consigne (`SOFAR_VERSION`), de la consigne (sa langue) et du
@@ -9172,10 +9197,38 @@ la tranche ne montre rien de plus, et deux comptes au même endroit envoient les
   personnes** de la scène, une fois par personne et par tranche pour la page (`prewarmSofar`) — le serveur
   répond aussitôt `{"t":"queued"}`. Le panneau s'ouvre tout de suite avec ce qui ne dépend pas du modèle ;
   « Jusqu'ici » montre une ligne d'attente, puis le texte (`useSofar`).
+- **L'affichage, règle du propriétaire (10.27.1).** Le panneau s'ouvre tout de suite avec ce qui ne dépend
+  pas du modèle (faits, biographie, affiches — `usePersonFacts`, jamais en attente de « Jusqu'ici ») ; avec
+  l'option pour cette séance, la section « Jusqu'ici » est **toujours** là, en haut, dès l'ouverture
+  (`AskPersonSofar`, un composant à lui) : une ligne d'attente discrète — deux traits sur lesquels passe un
+  reflet (`ask-shimmer`, un fond qui glisse, jamais une opacité animée), étiquetée « Un instant… » pour un
+  lecteur d'écran — qui ne paraît qu'après 350 ms sans texte (`SOFAR_LOADING_DELAY_MS`), puis le texte en
+  fondu (`ask-sofar-in`). Un texte gardé par le serveur (~230 ms) se montre donc sans ligne d'attente ; un
+  texte déjà lu par la page pour la même personne et la même tranche se montre à l'instant, sans requête
+  (`sofarRead`, en mémoire). La section ne disparaît que sur « rien à dire » (`rejected`), une panne
+  (réseau, 5xx, `error`, flux fini sans sa fin) ou **vingt-cinq secondes sans fin** côté client
+  (`SOFAR_CLIENT_TIMEOUT_MS`) — sans un mot, la cause dans `server.log` (`ask/jusquici`). Position inconnue :
+  demandée quand même (`positionS: null`, coupe au début), jamais une section muette.
+- **Ce que 10.27.0 a montré sur l'iPhone** (le propriétaire, 09/11 vers 13 h) : pour Hannah Waddingh, faits et affiches
+  mais aucune section ; pour Jason Sudeikis, « Jusqu'ici · Un instant… » figé, ni faits, ni biographie, ni
+  affiches. Le serveur avait tout donné : `recherche.log` `cache: "compte"`, `ok`, ~230 ms, et le relais a
+  envoyé des réponses complètes (326 et 369 octets — les deux phrases gardées et la fin), les faits aussi
+  (558 et 383 octets) — le client ne les a pas montrés. Trois défauts côté client, corrigés :
+  1. **le panneau figé** (cause la plus probable, à confirmer sur l'iPhone) : `.ask-scroll` portait depuis 10.27.0 un `clip-path: inset(0)` sur l'élément même
+     qui défile, avec dedans une ligne d'attente à opacité animée (`animate-pulse`, un calque composé) ; sur
+     l'iPhone le contenu n'a plus été redessiné après sa première image — les faits arrivés 3 s plus tard
+     n'apparaissent pas non plus, ce qu'aucun défaut de « Jusqu'ici » seul n'expliquerait. Non reproduit
+     dans le WebKit de Linux (Playwright), qui redessine : seul l'iPhone le confirmera. `contain: paint`
+     rogne de même, et la ligne d'attente n'anime plus d'opacité ;
+  2. **la section absente** : une ouverture du panneau d'Hannah (11:57:46 UTC) a demandé l'option et les
+     faits mais pas « Jusqu'ici » — le seul chemin du client qui fait cela est `useSofar` rendant `none`
+     sans demande quand la position n'est pas un nombre ; c'est corrigé (demandée avec `null`) ;
+  3. **aucun délai côté client** : une réponse qui ne finissait pas laissait « Un instant… » pour toujours.
 - **Route** : `POST /api/cinema/ask/{id}` avec `{ mode: "jusquici", personId, positionS, prewarm? }`
   (`answerSofar`, `src/lib/ask/sofarRequest.ts`) — même porte (`askAvailableFor`), mêmes réponses.
 - **Journal** : une ligne `kind: "jusquici"` dans `recherche.log` (`logJusquici`) — compte, appareil, élément,
-  personne, tranche, `prewarm`, `cache` (`partagé` / `compte` / `nouveau`), `ms`, jetons, verdict ; jamais le
+  personne, tranche (`bucket`, en minutes : 0, 5, 10… depuis 10.27.1), `prewarm`, `cache` (`partagé` / `compte` /
+  `nouveau`), `ms`, jetons, verdict ; jamais le
   texte. Une seule ligne `nouveau` par génération, à sa fin.
 - **Haiku** `claude-haiku-5-5`, réflexion adaptative à effort bas, comme les questions.
 
@@ -9216,7 +9269,12 @@ tranche = autre appel, trente jours puis ménage, rejet jamais gardé, « RIEN �
 préparation `queued` et sa borne, chaque panne pour la question et pour « Jusqu'ici », refus, flux coupé) ;
 `xray-person-panel.test.tsx` (faits sans le modèle, affiches inertes, attente puis texte, silence sur panne,
 ordre, « Réessayer », feuille haute de son contenu, glisser pour fermer, la croix hors du geste) ;
-`ask-panel.test.tsx` (le haut au lecteur, fiche debout/couchée, rotation pendant la frappe).
+`ask-panel.test.tsx` (le haut au lecteur, fiche debout/couchée, rotation pendant la frappe). 10.27.1 :
+`xray-person-panel.test.tsx` (texte gardé : à l'instant, sans ligne d'attente ; génération : ligne d'attente
+passé le délai puis phrases à mesure, faits jamais en attente ; rouvert dans la même tranche : sans requête ;
+position inconnue : section quand même ; rien à dire : retirée ; 25 s sans fin : retirée ; `.ask-scroll` sans
+`clip-path`) ; `ask-sofar.test.ts` (tranche de cinq minutes, répliques jusqu'à 5 min à 9 min, `bucket` en
+minutes, tranche du client = celle du serveur).
 
 **Nouveautés.** La page « 10.25 » (`src/lib/news/page1025.ts`), semée **en brouillon**
 (`news-seed-10.25-draft`) : rien ne s'affiche avant qu'elle soit publiée depuis Activité → Nouveautés.
