@@ -9788,10 +9788,21 @@ plus de reflet ; mouvement réduit).
   présent dans l'épisode en cours, « Solidarité masculine », jusqu'à 9 minutes, sans qu'aucune parole ou action ne lui
   soit attribuée à ce stade. » Le propriétaire veut une phrase quand il n'y a rien à dire, mais celle-ci donne un
   horaire et parle d'attribution.
-- **La consigne** (`sofarSystem`, séries et films — la règle est commune) : la ligne « S'il n'est nommé nulle part,
-  écris son nom, son rôle si la distribution le donne, et qu'il est là. » devient « Si rien de ce qu'il a vu ne le
-  concerne encore, une seule phrase, sans l'expliquer : son nom, qui il est si on le sait, et « n'a pas encore eu de
-  moment à lui ». » ; « RIEN » reste réservé à qui n'est pas dans la distribution. Même longueur. `SOFAR_VERSION` 6.
+- **La consigne** (`sofarSystem`) : la ligne « S'il n'est nommé nulle part, écris son nom, son rôle si la distribution
+  le donne, et qu'il est là. » devient « Si ni l'épisode en cours ni les épisodes vus ne disent rien de lui, une seule
+  phrase, sans l'expliquer : son nom, qui il est si on le sait, et « n'a pas encore eu de moment à lui ». » — pour un
+  film, « Si le film, jusqu'ici, ne dit rien de lui, … ». « RIEN » reste réservé à qui n'est pas dans la distribution.
+  Même longueur. `SOFAR_VERSION` 7. Une première forme, « Si rien de ce qu'il a vu ne le concerne encore » (version 6,
+  jamais déployée), ne disait pas que les épisodes vus comptent : rejouée sur la version livrée, Rebecca à 4 min y
+  redécrivait sa présence (« se trouve dans une scène où il est question d'une chambre ») au lieu de Liverpool.
+- **Un second passage quand le filet a tout retiré** (`sofarStart`, `sofarRequest`) : si le filet des mots de
+  coulisse a retiré toutes les phrases (rien de gardé, ni nom inconnu ni « RIEN »), le modèle est redemandé une fois,
+  le même message suivi du rappel (`metaReminder`) — le préfixe du cache de prompts est le même. Chaque passage est
+  compté dans le plafond par `askModel` (10.28.1) ; `recherche.log` additionne leurs jetons et dit `meta: "regénéré"`.
+  Le second encore vidé : « vide », la ligne discrète, **rien de gardé** (`finish(…, unkept)`) — ce n'est pas « rien à
+  dire », la demande suivante redemande. La cause : Ted à 4 min, « … échange avec Flo 'Sassy' Collins dans cette scène
+  du matin. », une seule phrase juste, retirée pour un mot — l'écran restait blanc. Une phrase qui reste suffit : pas
+  de second passage (une question, elle, redemande dès la première phrase prise, `retry`).
 - **Banc du 09/11/2026** (24 appels, une requête à la fois, consigne et messages construits par le code de `main`,
   identiques octet pour octet à ce qui est livré) : cinq formulations sur Sam. Sans « une seule phrase, sans
   l'expliquer », le modèle justifie toujours : « il est présent dans plusieurs scènes, mais les répliques ne lui sont
@@ -9800,7 +9811,14 @@ plus de reflet ; mouvement réduit).
   bout (F2), sur les autres cas : Rebecca à 4 min et Ted inchangés (Liverpool ; le matin avec Sassy), Rupert, Jack,
   Claude justes. Elle a aussi donné une fois un texte sans le nom en tête (Rebecca à 12 min), une fois Prince
   « depuis l'hôpital » (faux, déjà vu en 10.29.1) et une fois « scène » (Patricia) : le hasard d'un seul passage, que
-  le banc n'a pas pu départager dans le budget. La formulation livrée elle-même n'a été rejouée que sur Sam.
+  le banc n'a pas pu départager dans le budget. Rejouée sur la version 7 (le code de `main`, le filet réel, 9 appels) :
+  Sam 2 fois sur 2 « Sam Obisanya n'a pas encore eu de moment à lui. » ; Rebecca à 4 min, une fois Liverpool (résumé
+  de S01E07), une fois une première phrase retirée pour « attribuée » puis « Dans S01E07, elle décide de partir en
+  week-end avec l'équipe… » (juste, mais le code d'épisode et sans son nom en tête) ; Ted à 4 min, une fois le matin
+  avec Sassy, une fois un fait de S01E06 ; Rebecca à 12 min et Patricia justes ; Prince faux (« a demandé à Kimura de
+  tuer Wataru » — l'ordre est donné à l'homme de l'hôpital — et « sans que le film ait encore révélé… », mots du
+  lecteur) : ce cas de *Bullet Train* (une menace au téléphone, deux fils montés ensemble) reste le plus fragile.
+  Aucun texte vide ni spoiler.
 - **Le filet des mots de coulisse** (`META_WORDS`, `TIME_REF`, `metaTalk`, `core.ts`) prend désormais
   « attribué(e)(s) », « attribue », « attribution » et leurs équivalents (« attributed », « atribuido », « zugeschrieben »),
   et un horaire du lecteur : un nombre écrit en chiffres suivi de minutes (« jusqu'à 9 minutes », « à 12 min »,
@@ -9813,7 +9831,9 @@ plus de reflet ; mouvement réduit).
 Tests : `ask-question-1027-2.test.ts` (l'horaire et « attribué » dans les quatre langues ; une minute de silence, un
 horaire de l'histoire, un prix « attribué » par l'histoire passent ; à travers `AnswerGate`, la phrase à l'horaire
 retirée et la phrase simple montrée) ; `ask-sofar-s7c.test.ts` (consigne octet pour octet, version 6) ;
-`ask-sofar.test.ts` (la ligne dans les consignes série et film, version 6 et une clé de la v5 jamais relue).
+`ask-sofar.test.ts` (la ligne dans les consignes série et film, version 7 et une clé de la v6 jamais relue ; tout
+retiré au premier passage : un second avec le rappel, deux appels, jetons additionnés, `regénéré`, le texte gardé ;
+encore vidé : la ligne discrète, rien de gardé, pas de troisième appel ; une phrase restée : un seul appel).
 
 ## 140. Les fonctions d'IA chez les trois fournisseurs, un seul plafond mensuel, et des réglages qui disent ce qu'ils demandent (09/11/2026)
 

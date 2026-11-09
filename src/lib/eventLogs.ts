@@ -253,8 +253,8 @@ export function logJusquici(fields: {
   /** Le cache de prompts d'Anthropic (10.27.2) : jetons du préfixe écrits, et relus. */
   cacheWrite?: number;
   cacheRead?: number;
-  /** Une phrase qui parlait de « sources » retirée (10.27.2, `metaTalk`). */
-  meta?: "réécrit";
+  /** Une phrase qui parlait de « sources » retirée (10.27.2, `metaTalk`) ; `regénéré` (10.29.2) : tout était retiré, un second passage demandé. */
+  meta?: "réécrit" | "regénéré";
 }): void {
   try {
     appendJsonLine(SEARCH_LOG(), { timestamp: new Date().toISOString(), kind: "jusquici", ...fields }, { keep: EVENT_LOG_KEEP });

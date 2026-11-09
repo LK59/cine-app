@@ -16,7 +16,7 @@ import type { Locale } from "@/lib/i18n";
 import { logError } from "@/lib/logger";
 import { logJusquici } from "@/lib/eventLogs";
 import { createRateLimiter } from "@/lib/rateLimiter";
-import { askWhereLine } from "@/lib/ask/core";
+import { askWhereLine, metaReminder } from "@/lib/ask/core";
 import { SOFAR_MAX_OUTPUT_TOKENS, askModelName, currentAskModel, gatherAskContext } from "@/lib/ask/service";
 import { aiBudgetReached } from "@/lib/aiFeatures";
 import { castPerson } from "@/lib/xray/person";
@@ -144,7 +144,15 @@ export async function answerSofar(
       return oneShot({ t: "error", code: "limite" });
     }
     const model = currentAskModel();
-    entry = sofarStart(key, who.account, (signal) => model({ system, message, prefixEnd, maxTokens: SOFAR_MAX_OUTPUT_TOKENS, signal, feature: "sofar" }), sources.check, { locale: who.locale, sources: sources.text });
+    // Le second passage (10.29.2), seulement si le filet des mots de coulisse a tout retiré : le même message et le
+    // rappel à la fin — le préfixe partagé reste celui du cache de prompts.
+    entry = sofarStart(
+      key,
+      who.account,
+      (signal, attempt) => model({ system, message: attempt ? message + metaReminder(who.locale) : message, prefixEnd, maxTokens: SOFAR_MAX_OUTPUT_TOKENS, signal, feature: "sofar" }),
+      sources.check,
+      { locale: who.locale, sources: sources.text }
+    );
     // Le journal de la génération, à sa fin, au nom de qui l'a lancée — une seule ligne `nouveau`.
     void entry.done.then((fin) => {
       if (fin.error) logError("ask/jusquici", fin.error, { itemId });
@@ -164,7 +172,7 @@ export async function answerSofar(
         ...(fin.cacheRead === undefined ? {} : { cacheRead: fin.cacheRead }),
         dialogue,
         episodes: sources.episodes,
-        ...(fin.meta ? { meta: "réécrit" as const } : {}),
+        ...(fin.meta === "regénéré" ? { meta: "regénéré" as const } : fin.meta ? { meta: "réécrit" as const } : {}),
       });
     });
   } else {

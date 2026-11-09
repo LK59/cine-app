@@ -52,7 +52,7 @@ vi.mock("@/lib/xray/person", () => ({
 import { setAskModelForTests, resetAskCachesForTests, AskModelTimeout, type AskModel } from "@/lib/ask/service";
 import { resetSofarForTests, sofarCutoff, sofarKey, sofarSources, sofarSystem, SOFAR_KEEP_MS, SOFAR_REJECT_KEEP_MS, SOFAR_MAX_EPISODES, SOFAR_MOVIE_MIN_S, SOFAR_NOTHING, SOFAR_VERSION } from "@/lib/ask/sofar";
 import { askContent, ASK_MODEL, SOFAR_MAX_OUTPUT_TOKENS } from "@/lib/ask/service";
-import type { AskContextInput } from "@/lib/ask/core";
+import { metaReminder, type AskContextInput } from "@/lib/ask/core";
 import { SOFAR_DIALOGUE_WAIT_MS, SOFAR_PER_HOUR } from "@/lib/ask/sofarRequest";
 import { getDb, sofarDb } from "@/lib/db";
 
@@ -354,8 +354,12 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     const sys = sofarSystem("fr");
     // 10.29.2 : « n'a pas encore eu de moment à lui », sans l'expliquer — la justification parlait d'horaire et
     // d'attribution (« jusqu'à 9 minutes, sans qu'aucune parole ou action ne lui soit attribuée »).
-    expect(sys).toContain("- Si rien de ce qu'il a vu ne le concerne encore, une seule phrase, sans l'expliquer : son nom, qui il est si on le sait, et « n'a pas encore eu de moment à lui ».");
-    expect(sofarSystem("fr", true, "movie")).toContain("« n'a pas encore eu de moment à lui »");
+    // 10.29.2, SOFAR_VERSION 7 : seulement quand ni l'épisode en cours ni les épisodes vus ne disent rien de lui —
+    // « rien ne le concerne encore » faisait redécrire sa présence au lieu du résumé de l'épisode d'avant.
+    expect(sys).toContain("- Si ni l'épisode en cours ni les épisodes vus ne disent rien de lui, une seule phrase, sans l'expliquer : son nom, qui il est si on le sait, et « n'a pas encore eu de moment à lui ».");
+    const film = sofarSystem("fr", true, "movie");
+    expect(film).toContain("- Si le film, jusqu'ici, ne dit rien de lui, une seule phrase, sans l'expliquer : son nom, qui il est si on le sait, et « n'a pas encore eu de moment à lui ».");
+    expect(film).not.toMatch(/épisode/);
     expect(sys).toContain(`${SOFAR_NOTHING} seulement s'il n'est même pas dans la distribution.`);
     // L'ancienne règle (« au-delà de son nom ») est partie : elle faisait taire cinq personnes sur huit.
     expect(sys).not.toContain("au-delà de son nom");
@@ -366,8 +370,9 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     expect(sys).not.toContain("ou à quoi il assiste");
   });
 
-  it("la version de la consigne est dans la clé : 6 (10.29.2), et une même entrée sous la version 5 donne une autre clé", () => {
-    expect(SOFAR_VERSION).toBe(6);
+  it("la version de la consigne est dans la clé : 7 (10.29.2), et une même entrée sous les versions d'avant donne une autre clé", () => {
+    expect(SOFAR_VERSION).toBe(7);
+    expect(sofarKey(ASK_MODEL, "s", "m", 6)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 5)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 4)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 3)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
@@ -397,12 +402,64 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     expect(seen[0]).toContain("ce personnage est dans la scène qu'il regarde");
   });
 
-  it("une phrase qui parle de « sources » est retirée, jamais montrée (« Jusqu'ici » n'a pas de second passage)", async () => {
-    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe. Les sources ne disent rien de plus."));
+  it("une phrase qui parle de « sources » est retirée, jamais montrée (une phrase reste : pas de second passage)", async () => {
+    const model = vi.fn(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe. Les sources ne disent rien de plus."));
+    setAskModelForTests(model);
     const r = await sofar(account());
     expect(r.text).toBe("Ariadne construit le labyrinthe.");
     await settle();
+    expect(model).toHaveBeenCalledTimes(1);
     expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cache: "nouveau", meta: "réécrit" }));
+  });
+
+  // 10.29.2 : *Ted Lasso* S01E08, Ted à 4 min — « … échange avec Flo 'Sassy' Collins dans cette scène du matin. », une
+  // seule phrase, juste, retirée pour un mot : l'écran restait vide. Un second passage, avec le rappel, une fois.
+  function sequence(texts: string[], reqs: { message: string }[] = []): AskModel {
+    let n = 0;
+    return ({ message }) => {
+      reqs.push({ message });
+      const text = texts[Math.min(n++, texts.length - 1)];
+      async function* deltas() {
+        for (let i = 0; i < text.length; i += 7) yield text.slice(i, i + 7);
+      }
+      return { deltas: deltas(), done: Promise.resolve({ inTokens: 1000, outTokens: 50, stop: "end_turn" }) };
+    };
+  }
+
+  it("tout retiré par le filet des mots de coulisse : un second passage avec le rappel, ses jetons comptés, le texte gardé", async () => {
+    const reqs: { message: string }[] = [];
+    setAskModelForTests(sequence(["NOMS: Ariadne\n\nAriadne dessine dans cette scène.", "NOMS: Ariadne\n\nAriadne construit le labyrinthe."], reqs));
+    const who = account();
+    const r = await sofar(who);
+    expect(r.text).toBe("Ariadne construit le labyrinthe.");
+    expect(r.events.at(-1)).toEqual({ t: "done" });
+    expect(reqs).toHaveLength(2);
+    expect(reqs[1].message.startsWith(reqs[0].message)).toBe(true);
+    expect(reqs[1].message.slice(reqs[0].message.length)).toBe(metaReminder("fr"));
+    await settle();
+    // Les deux passages au journal : leurs jetons additionnés (chacun compté dans le plafond par `askModel`).
+    expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cache: "nouveau", status: "ok", meta: "regénéré", inTokens: 2000, outTokens: 100 }));
+    // Gardé : la demande suivante le relit sans appeler le modèle.
+    const model = vi.fn(scripted("NOMS: Ariadne\n\nAutre chose."));
+    setAskModelForTests(model);
+    expect((await sofar(account())).text).toBe("Ariadne construit le labyrinthe.");
+    expect(model).not.toHaveBeenCalled();
+  });
+
+  it("le second passage encore vidé : la ligne discrète, rien de gardé, jamais un troisième appel", async () => {
+    const reqs: { message: string }[] = [];
+    setAskModelForTests(sequence(["NOMS: Ariadne\n\nAriadne dessine dans cette scène.", "NOMS: Ariadne\n\nUne réplique le dit."], reqs));
+    const r = await sofar(account());
+    expect(reqs).toHaveLength(2);
+    expect(r.text).toBe("");
+    expect(r.events.at(-1)).toEqual({ t: "rejected" });
+    await settle();
+    expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ status: "vide", meta: "regénéré" }));
+    // Rien de gardé : ce n'est pas « rien à dire », la demande suivante redemande.
+    const model = vi.fn(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe."));
+    setAskModelForTests(model);
+    expect((await sofar(account())).text).toBe("Ariadne construit le labyrinthe.");
+    expect(model).toHaveBeenCalledTimes(1);
   });
 });
 
