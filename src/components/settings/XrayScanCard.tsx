@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import useSWR from "swr";
-import { Loader2, Pause, Play, Zap } from "lucide-react";
-import { fetcher } from "@/lib/swr";
-import { useT } from "@/components/TranslationProvider";
+import { Loader2, Pause, Play, Plus, Search, X, Zap } from "lucide-react";
+import { fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
+import { cinemaFetcher } from "@/lib/cinemaPayload";
+import { searchCinemaLibrary } from "@/lib/cinemaSearch";
+import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
+import type { CinemaSeriesPayload } from "@/app/api/cinema/series/route";
+import { useLocale, useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { ErrorState } from "@/components/StateViews";
 import type { ScanAction, ScanTierStatus, XrayScanStatus } from "@/lib/xray/scheduler";
@@ -55,13 +59,25 @@ export function XrayScanCard() {
     );
   }
 
-  async function act(action: ScanAction, tier: number | null) {
-    const key = `${action}:${tier ?? "all"}`;
+  async function post(key: string, payload: Record<string, unknown>): Promise<Response | null> {
     setBusy(key);
-    const res = await fetch("/api/admin/xray/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, tier }) }).catch(() => null);
+    const res = await fetch("/api/admin/xray/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).catch(() => null);
     setBusy(null);
-    if (!res?.ok) toast.error(t("xrayScan.actionFailed"));
     await mutate();
+    return res;
+  }
+
+  async function act(action: ScanAction, tier: number | null) {
+    const res = await post(`${action}:${tier ?? "all"}`, { action, tier });
+    if (!res?.ok) toast.error(t("xrayScan.actionFailed"));
+  }
+
+  async function prioritize(itemId: string, on: boolean): Promise<boolean> {
+    const res = await post(`${on ? "prioritize" : "unprioritize"}:${itemId}`, { action: on ? "prioritize" : "unprioritize", itemId });
+    if (res?.ok) return true;
+    const body = (await res?.json().catch(() => null)) as { error?: string } | null;
+    toast.error(t(body?.error === "animation" ? "xrayScan.animationRefused" : "xrayScan.actionFailed"));
+    return false;
   }
 
   const allPaused = data.tiers.every((tier) => tier.paused);
@@ -94,6 +110,8 @@ export function XrayScanCard() {
           {data.lastError && <p className="text-warning">{t("xrayScan.lastError", { error: data.lastError })}</p>}
         </div>
       </section>
+
+      <PriorityCard data={data} busy={busy} t={t} onPrioritize={prioritize} onTier={(action) => void act(action, 0)} />
 
       {data.tiers.map((tier) => (
         <TierCard key={tier.tier} tier={tier} busy={busy} onAct={(action) => void act(action, tier.tier)} t={t} />
@@ -181,5 +199,143 @@ function Fact({ label, value }: { label: string; value: string }) {
       <dt className="text-xs text-subtle">{label}</dt>
       <dd className="tabular-nums text-white">{value}</dd>
     </div>
+  );
+}
+
+/** Les deux catalogues du cinéma, lus d'un coup pour la recherche de la liste de priorité. */
+async function fetchCatalogues(): Promise<{ movies: CinemaMoviesPayload; series: CinemaSeriesPayload }> {
+  const [movies, series] = await Promise.all([cinemaFetcher<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY), cinemaFetcher<CinemaSeriesPayload>(SERIES_CATALOGUE_KEY)]);
+  return { movies, series };
+}
+
+/**
+ * La liste de priorité (palier 0) : un champ qui cherche dans le catalogue du cinéma (la même recherche,
+ * `searchCinemaLibrary`, sur les deux catalogues qu'il lit déjà), et chaque titre ajouté avec son
+ * avancement — éléments faits sur total, temps restant — et un bouton pour le retirer.
+ */
+function PriorityCard({
+  data,
+  busy,
+  t,
+  onPrioritize,
+  onTier,
+}: {
+  data: XrayScanStatus;
+  busy: string | null;
+  t: T;
+  onPrioritize: (itemId: string, on: boolean) => Promise<boolean>;
+  onTier: (action: ScanAction) => void;
+}) {
+  const { locale } = useLocale();
+  const [query, setQuery] = useState("");
+  // Les catalogues ne sont lus qu'une fois le champ utilisé : la page n'en a pas besoin pour s'afficher.
+  // Sous une clé à elle, pas celles du cinéma : la gestion n'a pas le catalogue en cache, et lire les
+  // clés du cinéma sans `cacheOnlyOptions` est réservé aux deux écrans qui le tiennent à jour
+  // (`catalogue-lu-dans-le-cache.test.tsx`) — avec, rien ne serait jamais demandé ici.
+  const searching = query.trim().length >= 2;
+  const { data: catalogues } = useSWR(searching ? "xray-priority-catalogues" : null, fetchCatalogues);
+  const movies = catalogues?.movies;
+  const series = catalogues?.series;
+  const listed = new Set(data.priority.items.map((i) => i.id));
+  const results = useMemo(
+    () => (searching ? searchCinemaLibrary(query, movies?.items ?? [], series?.items ?? [], locale).slice(0, 8) : []),
+    [searching, query, movies, series, locale],
+  );
+  const paused = data.priority.paused;
+
+  return (
+    <section className="settings-card rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-testid="xray-scan-priority">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-white">{t("xrayScan.tier.0")}</h3>
+          <p className="mt-1 text-sm text-muted">{t("xrayScan.tierWhy.0")}</p>
+        </div>
+        {data.priority.items.length > 0 && (
+          <button type="button" className="btn btn-sm rounded-full" disabled={busy !== null} onClick={() => onTier(paused ? "resume" : "pause")}>
+            {paused ? <Play size={14} /> : <Pause size={14} />}
+            {t(paused ? "xrayScan.resume" : "xrayScan.pause")}
+          </button>
+        )}
+      </div>
+      {paused && <p className="mt-2 text-xs text-subtle">{t("xrayScan.paused")}</p>}
+
+      <label className="mt-4 flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm">
+        <Search size={15} className="shrink-0 text-subtle" />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("xrayScan.searchPlaceholder")}
+          aria-label={t("xrayScan.searchPlaceholder")}
+          className="min-w-0 flex-1 bg-transparent text-white placeholder:text-subtle focus:outline-none"
+        />
+      </label>
+      {searching && (
+        <ul className="mt-2 divide-y divide-white/5" data-testid="xray-priority-results">
+          {results.length === 0 && <li className="py-2 text-xs text-subtle">{t("xrayScan.noResult")}</li>}
+          {results.map((r) => {
+            const id = r.item.jellyfinItemId?.toLowerCase();
+            if (!id) return null;
+            const added = listed.has(id);
+            return (
+              <li key={`${r.kind}:${id}`} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                <span className="min-w-0 truncate text-white">
+                  {r.item.title}
+                  {r.item.year ? <span className="text-subtle"> ({r.item.year})</span> : null}
+                  <span className="text-subtle"> · {t(r.kind === "movie" ? "xrayScan.kindMovie" : "xrayScan.kindSeries")}</span>
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm shrink-0 rounded-full"
+                  disabled={added || busy !== null}
+                  onClick={() => void onPrioritize(id, true).then((ok) => ok && setQuery(""))}
+                >
+                  {busy === `prioritize:${id}` ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                  {t(added ? "xrayScan.added" : "xrayScan.add")}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {data.priority.items.length === 0 ? (
+        <p className="mt-3 text-xs text-subtle">{t("xrayScan.priorityEmpty")}</p>
+      ) : (
+        <ul className="mt-3 space-y-3">
+          {data.priority.items.map((item) => {
+            const percent = item.total > 0 ? Math.min(100, Math.round((item.done / item.total) * 100)) : 0;
+            return (
+              <li key={item.id} data-testid="xray-priority-item">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-white">{item.title}</p>
+                    <p className="text-xs text-subtle">
+                      {t(item.kind === "Series" ? "xrayScan.priorityEpisodes" : "xrayScan.priorityMovie", { done: item.done, total: item.total })}
+                      {" · "}
+                      {t("xrayScan.eta")} {fmtScanDuration(item.etaS, t)}
+                      {item.failed > 0 ? ` · ${t("xrayScan.failed")} ${item.failed}` : ""}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={t("xrayScan.remove")}
+                    title={t("xrayScan.remove")}
+                    className="btn btn-sm shrink-0 rounded-full"
+                    disabled={busy !== null}
+                    onClick={() => void onPrioritize(item.id, false)}
+                  >
+                    {busy === `unprioritize:${item.id}` ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
+                  </button>
+                </div>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+                  <div className="h-full rounded-full bg-white transition-[width] duration-500" style={{ width: `${percent}%` }} />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }

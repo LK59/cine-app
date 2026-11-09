@@ -18,9 +18,13 @@ vi.mock("@/lib/db", () => ({ sessionDb: { touch: vi.fn() } }));
 const mockVerify = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => mockVerify(...a) }));
 const mockAction = vi.fn(async () => undefined);
+const mockPrioritize = vi.fn(async (_id: string): Promise<string | null> => null);
+const mockUnprioritize = vi.fn((_id: string) => true);
 vi.mock("@/lib/xray/scheduler", () => ({
-  xrayScanStatus: () => ({ configured: true, phase: "running", tiers: [] }),
+  xrayScanStatus: () => ({ configured: true, phase: "running", tiers: [], priority: { paused: false, items: [] } }),
   scanAction: (...a: unknown[]) => mockAction(...(a as [])),
+  prioritizeTitle: (id: string) => mockPrioritize(id),
+  unprioritizeTitle: (id: string) => mockUnprioritize(id),
 }));
 
 function proxyReq(method: string, pathname: string): NextRequest {
@@ -69,5 +73,33 @@ describe("la route", () => {
     expect(mockAction).toHaveBeenLastCalledWith("pause", null);
     expect((await POST(routeReq({ action: "effacer" }))).status).toBe(400);
     expect((await POST(routeReq({ action: "run", tier: 4 }))).status).toBe(400);
+  });
+});
+
+describe("la liste de priorité", () => {
+  const SERIES = "b".repeat(32);
+
+  it("à l'administrateur seul ; un identifiant invalide est refusé", async () => {
+    const { POST } = await import("@/app/api/admin/xray/scan/route");
+    mockVerify.mockResolvedValue({ u: "compte", role: "user" });
+    expect((await POST(routeReq({ action: "prioritize", itemId: SERIES }))).status).toBe(403);
+    expect(mockPrioritize).not.toHaveBeenCalled();
+    mockVerify.mockResolvedValue({ u: "admin", role: "admin" });
+    expect((await POST(routeReq({ action: "prioritize", itemId: "../x" }))).status).toBe(400);
+    expect((await POST(routeReq({ action: "prioritize", itemId: SERIES }))).status).toBe(200);
+    expect(mockPrioritize).toHaveBeenCalledWith(SERIES);
+    expect((await POST(routeReq({ action: "unprioritize", itemId: SERIES }))).status).toBe(200);
+    expect(mockUnprioritize).toHaveBeenCalledWith(SERIES);
+  });
+
+  it("l'animation : refusée avec sa raison, jamais un 404", async () => {
+    mockVerify.mockResolvedValue({ u: "admin", role: "admin" });
+    const { POST } = await import("@/app/api/admin/xray/scan/route");
+    mockPrioritize.mockResolvedValueOnce("animation");
+    const res = await POST(routeReq({ action: "prioritize", itemId: SERIES }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "animation" });
+    mockPrioritize.mockResolvedValueOnce("not-found");
+    expect((await POST(routeReq({ action: "prioritize", itemId: SERIES }))).status).toBe(409);
   });
 });

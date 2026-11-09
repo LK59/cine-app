@@ -2,6 +2,7 @@
 
 import { AskTitleControl } from "@/components/ask/AskTitleControl";
 import { TitleToggleRound, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
+import { XrayPriorityControl } from "@/components/cinema/XrayPriorityControl";
 
 /**
  * La rangée de boutons ronds des fiches du bureau, film et série (10.27, 09/11/2026 — DECISIONS.md §117.4
@@ -37,6 +38,8 @@ export function DetailIconActions({ watched, list, askItemId }: { watched: Toggl
       <TitleToggleRound face={WATCHED_FACE} {...watched} />
       {list && <TitleToggleRound face={WATCHLIST_FACE} {...list} />}
       <AskTitleControl itemId={askItemId} variant="round" />
+      {/* L'administrateur seul, l'option branchée : « Analyser en priorité » (§138, liste de priorité). */}
+      <XrayPriorityControl itemId={askItemId} variant="round" />
     </div>
   );
 }

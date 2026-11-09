@@ -51,7 +51,8 @@ function db(): Database.Database {
         ordered_at INTEGER,
         finished_at INTEGER,
         checked_at INTEGER,
-        plan_seen INTEGER NOT NULL DEFAULT 0
+        plan_seen INTEGER NOT NULL DEFAULT 0,
+        priority_of TEXT
       );
       CREATE INDEX IF NOT EXISTS xray_scan_items_next ON xray_scan_items (status, tier, rank);
       CREATE TABLE IF NOT EXISTS xray_scan_meta (
@@ -112,7 +113,7 @@ const COLUMNS = `item_id AS itemId, tier, kind, title, series_id AS seriesId, du
  * Une tranche du plan : chaque élément est inséré ou mis à jour (palier, rang, durée, date), son état
  * gardé — sauf si sa date d'import a changé (un fichier nouveau au même élément) : il repasse à vérifier.
  * Un élément écarté pour l'animation le reste tant que son genre ne change pas ; le genre retiré, il
- * repasse à vérifier. `generation` marque les lignes vues par cette relecture (`dropUnseen`).
+ * repasse à vérifier. Un élément de la liste de priorité (palier 0) y reste. `generation` marque les lignes vues par cette relecture (`dropUnseen`).
  */
 export function upsertPlanSlice(items: readonly PlannedItem[], generation: number): void {
   const d = db();
@@ -120,8 +121,10 @@ export function upsertPlanSlice(items: readonly PlannedItem[], generation: numbe
     `INSERT INTO xray_scan_items (item_id, tier, kind, title, series_id, duration_s, imported_at, rank, status, reason, plan_seen)
      VALUES (@itemId, @tier, @kind, @title, @seriesId, @durationS, @importedAt, @rank, @status, @reason, @generation)
      ON CONFLICT(item_id) DO UPDATE SET
-       tier = excluded.tier, kind = excluded.kind, title = excluded.title, series_id = excluded.series_id,
-       duration_s = excluded.duration_s, rank = excluded.rank, plan_seen = excluded.plan_seen,
+       tier = CASE WHEN xray_scan_items.tier = 0 THEN 0 ELSE excluded.tier END,
+       kind = excluded.kind, title = excluded.title, series_id = excluded.series_id, duration_s = excluded.duration_s,
+       rank = CASE WHEN xray_scan_items.tier = 0 THEN xray_scan_items.rank ELSE excluded.rank END,
+       plan_seen = excluded.plan_seen,
        status = CASE
          WHEN excluded.status = 'excluded' AND xray_scan_items.status IN ('pending', 'failed') THEN 'excluded'
          WHEN excluded.status = 'excluded' THEN xray_scan_items.status
@@ -167,7 +170,8 @@ export function setWatching(ranks: Map<string, number>, newSince: number): void 
   const d = db();
   d.transaction(() => {
     d.prepare("UPDATE xray_scan_items SET tier = CASE WHEN imported_at >= ? THEN 2 ELSE 3 END WHERE tier = 1").run(newSince);
-    const one = d.prepare("UPDATE xray_scan_items SET tier = 1, rank = ? WHERE item_id = ?");
+    // La liste de priorité (palier 0) passe avant : un élément qui y est n'en descend pas.
+    const one = d.prepare("UPDATE xray_scan_items SET tier = 1, rank = ? WHERE item_id = ? AND tier <> 0");
     for (const [id, rank] of ranks) one.run(rank, id.toLowerCase());
   })();
   // Les paliers 2 et 3 se lisent par date (`nextPending`) : le rang n'y sert pas.
@@ -181,12 +185,12 @@ export function rowsWithStatus(status: ScanStatus, limit = 50): ScanRow[] {
   return db().prepare(`SELECT ${COLUMNS} FROM xray_scan_items WHERE status = ? ORDER BY ordered_at LIMIT ?`).all(status, limit) as ScanRow[];
 }
 
-/** Les prochains à vérifier, palier par palier — le 1 par rang, les autres du plus récent au plus ancien. */
+/** Les prochains à vérifier, palier par palier — le 0 et le 1 par rang, les autres du plus récent au plus ancien. */
 export function nextPending(tiers: readonly ScanTier[], limit: number): ScanRow[] {
   if (tiers.length === 0) return [];
   const marks = tiers.map(() => "?").join(",");
   return db()
-    .prepare(`SELECT ${COLUMNS} FROM xray_scan_items WHERE status = 'pending' AND tier IN (${marks}) ORDER BY tier, CASE WHEN tier = 1 THEN rank ELSE -imported_at END, item_id LIMIT ?`)
+    .prepare(`SELECT ${COLUMNS} FROM xray_scan_items WHERE status = 'pending' AND tier IN (${marks}) ORDER BY tier, CASE WHEN tier <= 1 THEN rank ELSE -imported_at END, item_id LIMIT ?`)
     .all(...tiers, limit) as ScanRow[];
 }
 
@@ -241,7 +245,7 @@ export function tierCounts(): TierCounts[] {
   const rows = db()
     .prepare("SELECT tier, status, COUNT(*) AS n, COALESCE(SUM(duration_s), 0) AS s FROM xray_scan_items GROUP BY tier, status")
     .all() as { tier: ScanTier; status: ScanStatus; n: number; s: number }[];
-  return ([1, 2, 3] as const).map((tier) => {
+  return ([0, 1, 2, 3] as const).map((tier) => {
     const of = (status: ScanStatus) => rows.find((r) => r.tier === tier && r.status === status) ?? { n: 0, s: 0 };
     const done = of("done");
     const queued = of("queued");
@@ -273,6 +277,88 @@ export function lastErrors(limit = 10): { itemId: string; title: string; error: 
   return db()
     .prepare("SELECT item_id AS itemId, title, COALESCE(error, '') AS error, COALESCE(finished_at, checked_at, 0) AS at FROM xray_scan_items WHERE status = 'failed' ORDER BY at DESC LIMIT ?")
     .all(limit) as { itemId: string; title: string; error: string; at: number }[];
+}
+
+// ─── La liste de priorité ────────────────────────────────────────────────────
+
+export interface PriorityRow {
+  itemId: string;
+  kind: "Movie" | "Episode";
+  title: string;
+  seriesId: string | null;
+  durationS: number;
+}
+
+/**
+ * Les éléments d'un titre de la liste de priorité passent au palier 0, dans l'ordre donné, à partir de
+ * `baseRank` ; un élément que le plan n'a pas encore lu est ajouté (il attend d'être vérifié). Son état
+ * est gardé : un élément déjà fait le reste.
+ */
+export function setPriorityRows(entryId: string, rows: readonly PriorityRow[], baseRank: number): void {
+  const d = db();
+  const upsert = d.prepare(
+    `INSERT INTO xray_scan_items (item_id, tier, kind, title, series_id, duration_s, rank, status, priority_of)
+     VALUES (@itemId, 0, @kind, @title, @seriesId, @durationS, @rank, 'pending', @entryId)
+     ON CONFLICT(item_id) DO UPDATE SET tier = 0, rank = excluded.rank, priority_of = excluded.priority_of,
+       -- Une commande « low » du fond déjà en file est revue : la prochaine la remonte en « normal ».
+       status = CASE WHEN xray_scan_items.status = 'queued' AND xray_scan_items.tier <> 0 THEN 'pending' ELSE xray_scan_items.status END,
+       duration_s = CASE WHEN excluded.duration_s > 0 THEN excluded.duration_s ELSE xray_scan_items.duration_s END`,
+  );
+  d.transaction(() => {
+    rows.forEach((row, i) =>
+      upsert.run({
+        itemId: row.itemId.toLowerCase(),
+        kind: row.kind,
+        title: row.title.slice(0, 200),
+        seriesId: row.seriesId,
+        durationS: row.durationS,
+        rank: baseRank + i,
+        entryId: entryId.toLowerCase(),
+      }),
+    );
+  })();
+}
+
+/** Un titre retiré de la liste : ses éléments retrouvent le palier de leur date (le 1 à la relecture suivante). */
+export function clearPriorityRows(entryId: string, newSince: number): number {
+  return db()
+    .prepare("UPDATE xray_scan_items SET tier = CASE WHEN imported_at >= ? THEN 2 ELSE 3 END, priority_of = NULL WHERE priority_of = ?")
+    .run(newSince, entryId.toLowerCase()).changes;
+}
+
+export interface PriorityCounts {
+  entryId: string;
+  total: number;
+  done: number;
+  queued: number;
+  failed: number;
+  excluded: number;
+  remainingS: number;
+}
+
+/** L'avancement de chaque titre de la liste de priorité. `total` sans les écartés, comme les paliers. */
+export function priorityCounts(): Map<string, PriorityCounts> {
+  const rows = db()
+    .prepare("SELECT priority_of AS entryId, status, COUNT(*) AS n, COALESCE(SUM(duration_s), 0) AS s FROM xray_scan_items WHERE priority_of IS NOT NULL GROUP BY priority_of, status")
+    .all() as { entryId: string; status: ScanStatus; n: number; s: number }[];
+  const out = new Map<string, PriorityCounts>();
+  for (const r of rows) {
+    const c = out.get(r.entryId) ?? { entryId: r.entryId, total: 0, done: 0, queued: 0, failed: 0, excluded: 0, remainingS: 0 };
+    if (r.status === "excluded") c.excluded += r.n;
+    else c.total += r.n;
+    if (r.status === "done") c.done += r.n;
+    if (r.status === "queued") c.queued += r.n;
+    if (r.status === "failed") c.failed += r.n;
+    if (r.status === "queued" || r.status === "pending") c.remainingS += r.s;
+    out.set(r.entryId, c);
+  }
+  return out;
+}
+
+/** Un élément d'animation déjà connu du plan, parmi ceux-ci. */
+export function anyAnimation(itemIds: readonly string[]): boolean {
+  const one = db().prepare("SELECT 1 FROM xray_scan_items WHERE item_id = ? AND status = 'excluded' AND reason = 'animation'");
+  return itemIds.some((id) => one.get(id.toLowerCase()) !== undefined);
 }
 
 // ─── Les réglages du fond ───────────────────────────────────────────────────

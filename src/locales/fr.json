@@ -3621,11 +3621,13 @@
       "off": "Coupée"
     },
     "tier": {
+      "0": "Analyse prioritaire",
       "1": "Ce qui se regarde",
       "2": "Arrivées récentes",
       "3": "Le reste de la bibliothèque"
     },
     "tierWhy": {
+      "0": "Les films et séries choisis ici passent avant tout le reste, même pendant un film, mais jamais avant ce qu'un spectateur regarde. Une série est analysée en entier, saison par saison.",
       "1": "Pour chaque compte : les films en cours et les cinq prochains épisodes de chaque série en cours.",
       "2": "Ce qui est arrivé ces deux dernières semaines, du plus récent au plus ancien.",
       "3": "Films et épisodes, du plus récent au plus ancien."
@@ -3656,6 +3658,19 @@
     "excludedWhy": "Écartés : les films et séries d'animation, et ce qui n'a pas de distribution connue.",
     "etaNote": "Temps de calcul estimé à la vitesse mesurée, sans compter les attentes pendant les films.",
     "plannedAt": "Bibliothèque relue le {date}",
+    "prioritize": "Analyser en priorité",
+    "prioritized": "Ajouté à l'analyse prioritaire",
+    "animationRefused": "Les films et séries d'animation ne sont pas analysés : aucun visage réel à reconnaître.",
+    "searchPlaceholder": "Ajouter un film ou une série",
+    "noResult": "Aucun titre de la bibliothèque ne correspond.",
+    "kindMovie": "film",
+    "kindSeries": "série",
+    "add": "Ajouter",
+    "added": "Déjà ajouté",
+    "remove": "Retirer de l'analyse prioritaire",
+    "priorityEmpty": "Aucun titre pour l'instant. Vous pouvez aussi en ajouter depuis la fiche d'un film ou d'une série.",
+    "priorityEpisodes": "{done} / {total} épisodes analysés",
+    "priorityMovie": "{done} / {total} analysé",
     "actionFailed": "L'action n'a pas abouti.",
     "duration": {
       "days": "{d} j {h} h",

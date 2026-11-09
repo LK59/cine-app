@@ -3,7 +3,8 @@ import { sonarr } from "@/lib/clients/sonarr";
 import { cachedJellyfinMoviesAdmin, cachedJellyfinSeriesAdmin, cachedMovies, cachedSeries, getProviderIdCI } from "@/lib/server-cache";
 import { mapInBatches, yieldToLoop } from "@/lib/inBatches";
 import { isJellyfinId } from "@/lib/jellyfinPath";
-import { isAnimationGenre, watchingRanks, type EpisodeRef, type LibraryEntry, type WatchingEntry } from "./scanPlan";
+import { isAnimationGenre, seriesOrder, watchingRanks, type EpisodeRef, type LibraryEntry, type WatchingEntry } from "./scanPlan";
+import { anyAnimation, type PriorityRow } from "./scanStore";
 
 /**
  * Ce que le planificateur des acteurs à l'écran lit de la bibliothèque (DECISIONS.md §138,
@@ -134,4 +135,56 @@ export async function readWatching(): Promise<Map<string, number>> {
     );
   });
   return watchingRanks(lists, (sid) => chains.get(sid));
+}
+
+/** Un titre choisi pour la liste de priorité : film, ou série avec tous ses épisodes dans l'ordre. */
+export interface PriorityTitle {
+  kind: "Movie" | "Series";
+  title: string;
+  animation: boolean;
+  rows: PriorityRow[];
+}
+
+/**
+ * Le film ou la série `itemId` de la bibliothèque (listes de l'administrateur, tags bloqués non
+ * appliqués : l'analyse est côté serveur), son genre (Jellyfin, Radarr, Sonarr — et un élément que le
+ * plan a déjà écarté pour l'animation) et ses éléments : le film, ou les épisodes réels de la série
+ * saison par saison (`seriesOrder`). `null` : pas un film ni une série de la bibliothèque.
+ */
+export async function readPriorityTitle(itemId: string): Promise<PriorityTitle | null> {
+  if (!isJellyfinId(itemId)) return null;
+  const id = itemId.toLowerCase();
+  const [movies, series] = await Promise.all([cachedJellyfinMoviesAdmin(), cachedJellyfinSeriesAdmin()]);
+  const movie = movies.find((m) => m.Id.toLowerCase() === id);
+  if (movie) {
+    const tmdbId = Number(getProviderIdCI(movie.ProviderIds as Record<string, string> | undefined, "Tmdb"));
+    const radarr = tmdbId > 0 ? (await cachedMovies().catch(() => [])).find((m) => m.tmdbId === tmdbId) : undefined;
+    const title = movie.ProductionYear ? `${movie.Name} (${movie.ProductionYear})` : movie.Name;
+    return {
+      kind: "Movie",
+      title,
+      animation: isAnimationGenre(movie.Genres) || isAnimationGenre(radarr?.genres) || anyAnimation([id]),
+      rows: [{ itemId: id, kind: "Movie", title, seriesId: null, durationS: ticksToS(movie.RunTimeTicks) }],
+    };
+  }
+  const show = series.find((s) => s.Id.toLowerCase() === id);
+  if (!show) return null;
+  const ids = show.ProviderIds as Record<string, string> | undefined;
+  const tvdb = Number(getProviderIdCI(ids, "Tvdb"));
+  const tmdb = Number(getProviderIdCI(ids, "Tmdb"));
+  const sonarrList = await cachedSeries().catch(() => []);
+  const sonarrShow = sonarrList.find((s) => (tvdb > 0 && s.tvdbId === tvdb) || (tmdb > 0 && s.tmdbId === tmdb));
+  const episodes = seriesOrder(
+    (await jellyfin.getEpisodesAdmin(show.Id)).filter((e) => isJellyfinId(e.Id) && (e as { LocationType?: string }).LocationType !== "Virtual"),
+  );
+  const rows: PriorityRow[] = episodes.map((e) => {
+    const code = e.ParentIndexNumber != null && e.IndexNumber != null ? ` S${String(e.ParentIndexNumber).padStart(2, "0")}E${String(e.IndexNumber).padStart(2, "0")}` : "";
+    return { itemId: e.Id.toLowerCase(), kind: "Episode", title: `${show.Name}${code}`, seriesId: id, durationS: ticksToS(e.RunTimeTicks) };
+  });
+  return {
+    kind: "Series",
+    title: show.Name,
+    animation: isAnimationGenre(show.Genres) || isAnimationGenre(sonarrShow?.genres) || anyAnimation(rows.map((r) => r.itemId)),
+    rows,
+  };
 }

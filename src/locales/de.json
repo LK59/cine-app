@@ -3621,11 +3621,13 @@
       "off": "Aus"
     },
     "tier": {
+      "0": "Vorrangige Analyse",
       "1": "Was gerade gesehen wird",
       "2": "Neu hinzugekommen",
       "3": "Der Rest der Mediathek"
     },
     "tierWhy": {
+      "0": "Hier gewählte Filme und Serien kommen vor allem anderen, auch während eines Films, aber nie vor dem, was gerade jemand ansieht. Eine Serie wird vollständig analysiert, Staffel für Staffel.",
       "1": "Für jedes Konto: begonnene Filme und die nächsten fünf Folgen jeder begonnenen Serie.",
       "2": "Was in den letzten zwei Wochen hinzugekommen ist, das Neueste zuerst.",
       "3": "Filme und Folgen, das Neueste zuerst."
@@ -3656,6 +3658,19 @@
     "excludedWhy": "Ausgelassen: Animationsfilme und -serien sowie alles ohne bekannte Besetzung.",
     "etaNote": "Rechenzeit, geschätzt mit der gemessenen Geschwindigkeit, ohne die Wartezeiten während Filmen.",
     "plannedAt": "Mediathek gelesen am {date}",
+    "prioritize": "Vorrangig analysieren",
+    "prioritized": "Zur vorrangigen Analyse hinzugefügt",
+    "animationRefused": "Animationsfilme und -serien werden nicht analysiert: Es gibt keine echten Gesichter zu erkennen.",
+    "searchPlaceholder": "Film oder Serie hinzufügen",
+    "noResult": "Kein Titel der Mediathek passt.",
+    "kindMovie": "Film",
+    "kindSeries": "Serie",
+    "add": "Hinzufügen",
+    "added": "Bereits hinzugefügt",
+    "remove": "Aus der vorrangigen Analyse entfernen",
+    "priorityEmpty": "Noch keine Titel. Sie können auch auf der Seite eines Films oder einer Serie welche hinzufügen.",
+    "priorityEpisodes": "{done} / {total} Folgen analysiert",
+    "priorityMovie": "{done} / {total} analysiert",
     "actionFailed": "Die Aktion ist nicht durchgegangen.",
     "duration": {
       "days": "{d} T. {h} Std.",

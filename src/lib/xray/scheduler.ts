@@ -6,17 +6,20 @@ import { mustWaitForPlayback } from "@/lib/repliques/playbackActivity";
 import { analysisTarget } from "./cast";
 import { jobFor, keepsAnalysis, rebindAnalysis } from "./rebind";
 import { analysisSpeed, buildPlan, etaSeconds, isLibraryPath, NEW_WINDOW_MS, SCAN_TIERS, type ScanTier } from "./scanPlan";
-import { readLibrary, readWatching } from "./scanSources";
+import { readLibrary, readPriorityTitle, readWatching } from "./scanSources";
 import {
+  clearPriorityRows,
   dropUnseen,
   getRow,
   lastErrors,
   markRow,
   nextPending,
   planSize,
+  priorityCounts,
   readMeta,
   recordFileVersion,
   rowsWithStatus,
+  setPriorityRows,
   setWatching,
   speedSamples,
   staleDone,
@@ -78,6 +81,9 @@ const RECHECKS_PER_TICK = 10;
 const CONTROLS_KEY = "controls";
 const PLANNED_KEY = "plannedAt";
 const WATCHING_KEY = "watchingAt";
+const PRIORITY_KEY = "priority";
+/** L'écart de rang entre deux titres de la liste de priorité : une série tient dans 100 000 épisodes. */
+const PRIORITY_RANK_STEP = 100_000;
 
 export type ScanPhase = "off" | "starting" | "planning" | "running" | "waiting-playback" | "paused" | "unavailable" | "done";
 
@@ -139,11 +145,15 @@ async function refreshPlan(now: number): Promise<void> {
   const removed = plan.length > 0 ? dropUnseen(generation) : 0;
   writeMeta(PLANNED_KEY, now);
   writeMeta(WATCHING_KEY, now);
+  // La liste de priorité réappliquée : les épisodes arrivés depuis dans une série choisie y entrent.
+  await applyPriority().catch((error: unknown) => logError("xray/scan-priority", error));
   const counts = tierCounts();
+  const of = (t: ScanTier) => counts.find((c) => c.tier === t)?.total ?? 0;
   taskLog("xray", "plan relu", {
-    palier1: counts[0].total,
-    palier2: counts[1].total,
-    palier3: counts[2].total,
+    priorité: of(0),
+    palier1: of(1),
+    palier2: of(2),
+    palier3: of(3),
     faits: counts.reduce((s, c) => s + c.done, 0),
     écartés: counts.reduce((s, c) => s + c.excluded, 0),
     retirés: removed,
@@ -193,8 +203,12 @@ async function followInflight(now: number): Promise<number> {
 
 type Prepared = "queued" | "done" | "excluded" | "failed";
 
-/** Un élément : déjà fait, à rattacher, à écarter, ou à commander en `low`. */
+/**
+ * Un élément : déjà fait, à rattacher, à écarter, ou à commander — en `normal` pour la liste de priorité
+ * (elle passe devant les `low` du fond, jamais devant le `high` d'un spectateur), en `low` sinon.
+ */
 async function prepare(row: ScanRow, now: number): Promise<Prepared> {
+  const priority = row.tier === 0 ? "normal" : "low";
   const target = await analysisTarget(row.itemId);
   if (!target) {
     markRow(row.itemId, { status: "excluded", reason: "no-file", checkedAt: now });
@@ -220,11 +234,17 @@ async function prepare(row: ScanRow, now: number): Promise<Prepared> {
       markRow(row.itemId, { status: "failed", etag: target.etag, checkedAt: now, finishedAt: now, error: (state.error ?? "échec").slice(0, 300) });
       return "failed";
     }
-    // Déjà en file (la commande d'un spectateur) : compte dans notre avance.
+    // Déjà en file (la commande d'un spectateur, ou la nôtre en `low` avant que l'administrateur ne le
+    // mette en priorité) : compte dans notre avance. Une commande en double ne fait que remonter la
+    // priorité (contrat) — d'où la nouvelle commande pour la liste de priorité.
+    if (row.tier === 0) {
+      const raised = await jobFor(target, priority);
+      if (raised) await xray.enqueue(raised.job);
+    }
     markRow(row.itemId, { status: "queued", etag: target.etag, orderedAt: now, checkedAt: now });
     return "queued";
   }
-  const built = await jobFor(target, "low");
+  const built = await jobFor(target, priority);
   if (!built) {
     markRow(row.itemId, { status: "excluded", reason: "no-cast", checkedAt: now });
     return "excluded";
@@ -302,7 +322,11 @@ async function runTick(now: number): Promise<void> {
   let allowed = active;
   const { wait, signal } = await mustWaitForPlayback(now);
   if (wait) {
-    allowed = active.filter((t) => controls.forced.includes(t));
+    // La liste de priorité est une demande explicite de l'administrateur : elle compte comme forcée —
+    // tant qu'elle a du travail ; vide, l'état dit qu'on attend la fin de la lecture.
+    const before = tierCounts().find((c) => c.tier === 0);
+    const priorityWork = !!before && before.total - before.done - before.failed > 0;
+    allowed = active.filter((t) => (t === 0 && priorityWork) || controls.forced.includes(t));
     if (allowed.length === 0) {
       live.phase = "waiting-playback";
       live.playbackBy = signal.by;
@@ -345,16 +369,24 @@ async function runTick(now: number): Promise<void> {
   const counts = tierCounts();
   // Un palier forcé et vidé perd son forçage : une file continue (le palier 2) forcée pour toujours
   // passerait outre chaque lecture à venir.
-  const emptied = controls.forced.filter((t) => counts[t - 1].total - counts[t - 1].done - counts[t - 1].failed === 0);
+  const left = (t: ScanTier) => {
+    const c = counts.find((x) => x.tier === t);
+    return c ? c.total - c.done - c.failed : 0;
+  };
+  const emptied = controls.forced.filter((t) => left(t) === 0);
   if (emptied.length > 0) {
     writeControls({ ...controls, forced: controls.forced.filter((t) => !emptied.includes(t)) });
     taskLog("xray", "palier forcé terminé", { paliers: emptied.map(String) });
   }
   const remaining = counts.filter((c) => allowed.includes(c.tier)).reduce((s, c) => s + (c.total - c.done - c.failed), 0);
   // Plus rien à commander dans les paliers permis : le temps de la relecture lente des éléments finis.
-  if (remaining === 0 && inflight === 0) {
+  // Jamais pendant une lecture : la relecture est du travail de fond comme un autre.
+  if (remaining === 0 && inflight === 0 && !wait) {
     const reopened = await recheckDone(now);
     live.phase = reopened > 0 ? "running" : "done";
+  } else if (remaining === 0 && inflight === 0) {
+    live.phase = "waiting-playback";
+    live.playbackBy = signal.by;
   }
 }
 
@@ -397,7 +429,7 @@ export type ScanAction = "run" | "pause" | "resume" | "unforce";
  * « Reprendre » : la pause tombe, le palier attend de nouveau qu'on ne regarde rien. Sans palier : tous.
  */
 export async function scanAction(action: ScanAction, tier: ScanTier | null): Promise<void> {
-  const tiers = tier ? [tier] : [...SCAN_TIERS];
+  const tiers = tier !== null ? [tier] : [...SCAN_TIERS];
   const c = readControls();
   if (action === "run") writeControls({ paused: c.paused.filter((t) => !tiers.includes(t)), forced: [...c.forced, ...tiers] });
   else if (action === "pause") writeControls({ paused: [...c.paused, ...tiers], forced: c.forced.filter((t) => !tiers.includes(t)) });
@@ -412,6 +444,69 @@ export async function scanAction(action: ScanAction, tier: ScanTier | null): Pro
   } else if (action === "pause" && readControls().paused.length === SCAN_TIERS.length) {
     live.phase = "paused";
   }
+}
+
+// ─── La liste de priorité ────────────────────────────────────────────────────
+
+/** Un film, ou une série entière, que l'administrateur a fait passer devant tout le reste. */
+export interface PriorityEntry {
+  id: string;
+  kind: "Movie" | "Series";
+  title: string;
+  addedAt: number;
+}
+
+export function readPriority(): PriorityEntry[] {
+  const list = readMeta<PriorityEntry[]>(PRIORITY_KEY);
+  return Array.isArray(list) ? list.filter((e) => e && typeof e.id === "string" && (e.kind === "Movie" || e.kind === "Series")) : [];
+}
+
+/** Chaque titre de la liste relu (un épisode arrivé depuis y entre), à son rang. */
+async function applyPriority(): Promise<void> {
+  const list = readPriority();
+  for (let i = 0; i < list.length; i++) {
+    const found = await readPriorityTitle(list[i].id);
+    if (found && !found.animation) setPriorityRows(list[i].id, found.rows, (i + 1) * PRIORITY_RANK_STEP);
+  }
+}
+
+export type PrioritizeRefusal = "not-found" | "animation";
+
+/**
+ * « Analyser en priorité » : un film, ou tous les épisodes d'une série dans l'ordre (saison par saison,
+ * les spéciaux à la fin), au palier 0 — vérifiés comme les autres (déjà fait, durée égale, dossiers
+ * permis, distribution), commandés en `normal`, nourris même pendant une lecture, deux d'avance au plus.
+ * L'animation reste écartée : le titre est refusé (`animation`) et la page le dit. Retenu dans `cine.db`.
+ */
+export async function prioritizeTitle(itemId: string, now = Date.now()): Promise<PrioritizeRefusal | null> {
+  const id = itemId.toLowerCase();
+  const found = await readPriorityTitle(id);
+  if (!found) return "not-found";
+  if (found.animation) return "animation";
+  const list = readPriority();
+  const at = list.findIndex((e) => e.id === id);
+  const entry: PriorityEntry = { id, kind: found.kind, title: found.title, addedAt: at >= 0 ? list[at].addedAt : now };
+  if (at < 0) list.push(entry);
+  writeMeta(PRIORITY_KEY, list);
+  setPriorityRows(id, found.rows, (list.findIndex((e) => e.id === id) + 1) * PRIORITY_RANK_STEP);
+  taskLog("xray", "mis en priorité", { titre: found.title, éléments: found.rows.length });
+  // Le tour part tout de suite, sans être attendu au-delà de quelques secondes.
+  await Promise.race([scanTick(), new Promise<void>((resolve) => setTimeout(resolve, 5000).unref?.())]);
+  return null;
+}
+
+/** Retiré de la liste : ses éléments retrouvent le palier de leur date ; ce qui est fait reste fait. */
+export function unprioritizeTitle(itemId: string, now = Date.now()): boolean {
+  const id = itemId.toLowerCase();
+  const list = readPriority();
+  const next = list.filter((e) => e.id !== id);
+  if (next.length === list.length) return false;
+  writeMeta(PRIORITY_KEY, next);
+  clearPriorityRows(id, now - NEW_WINDOW_MS);
+  // Le palier 1 relu au tour suivant : un élément qu'un compte regarde y remonte.
+  writeMeta(WATCHING_KEY, 0);
+  taskLog("xray", "retiré de la priorité", { titre: list.find((e) => e.id === id)?.title });
+  return true;
 }
 
 // ─── L'état, pour la page ────────────────────────────────────────────────────
@@ -435,6 +530,11 @@ export interface XrayScanStatus {
   /** × temps réel, mesuré sur les derniers éléments finis. */
   speed: number | null;
   tiers: ScanTierStatus[];
+  /** La liste de priorité (palier 0) : sa pause, et chaque titre avec son avancement. */
+  priority: {
+    paused: boolean;
+    items: (PriorityEntry & { total: number; done: number; queued: number; failed: number; excluded: number; etaS: number | null })[];
+  };
   etaAllS: number | null;
   errors: { itemId: string; title: string; error: string; at: number }[];
 }
@@ -444,7 +544,7 @@ export function xrayScanStatus(): XrayScanStatus {
   const counts = tierCounts();
   const controls = readControls();
   const speed = analysisSpeed(speedSamples());
-  const tiers = counts.map(({ remainingS, ...c }) => ({
+  const tiers = counts.filter((c) => c.tier !== 0).map(({ remainingS, ...c }) => ({
     ...c,
     remainingHours: remainingS / 3600,
     etaS: etaSeconds(remainingS, speed),
@@ -452,6 +552,22 @@ export function xrayScanStatus(): XrayScanStatus {
     forced: controls.forced.includes(c.tier),
   }));
   const remaining = counts.reduce((s, c) => s + c.remainingS, 0);
+  const perTitle = priorityCounts();
+  const priority = {
+    paused: controls.paused.includes(0),
+    items: readPriority().map((entry) => {
+      const c = perTitle.get(entry.id);
+      return {
+        ...entry,
+        total: c?.total ?? 0,
+        done: c?.done ?? 0,
+        queued: c?.queued ?? 0,
+        failed: c?.failed ?? 0,
+        excluded: c?.excluded ?? 0,
+        etaS: etaSeconds(c?.remainingS ?? 0, speed),
+      };
+    }),
+  };
   return {
     configured,
     phase: configured ? (live.phase === "off" ? "starting" : live.phase) : "off",
@@ -462,6 +578,7 @@ export function xrayScanStatus(): XrayScanStatus {
     current: live.current,
     speed: speed === null ? null : Math.round(speed * 10) / 10,
     tiers,
+    priority,
     etaAllS: etaSeconds(remaining, speed),
     errors: lastErrors(10),
   };

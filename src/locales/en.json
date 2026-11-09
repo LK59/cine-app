@@ -3621,11 +3621,13 @@
       "off": "Off"
     },
     "tier": {
+      "0": "Priority analysis",
       "1": "What is being watched",
       "2": "Recent arrivals",
       "3": "The rest of the library"
     },
     "tierWhy": {
+      "0": "Films and series chosen here go before everything else, even during a film, but never before what a viewer is watching. A series is analysed in full, season by season.",
       "1": "For every account: the films in progress and the next five episodes of every series in progress.",
       "2": "What arrived in the last two weeks, newest first.",
       "3": "Films and episodes, newest first."
@@ -3656,6 +3658,19 @@
     "excludedWhy": "Left out: animated films and series, and anything without a known cast.",
     "etaNote": "Computing time estimated at the measured speed, not counting the waits during films.",
     "plannedAt": "Library read on {date}",
+    "prioritize": "Analyse first",
+    "prioritized": "Added to the priority analysis",
+    "animationRefused": "Animated films and series are not analysed: there are no real faces to recognise.",
+    "searchPlaceholder": "Add a film or a series",
+    "noResult": "No title in the library matches.",
+    "kindMovie": "film",
+    "kindSeries": "series",
+    "add": "Add",
+    "added": "Already added",
+    "remove": "Remove from the priority analysis",
+    "priorityEmpty": "No titles yet. You can also add one from a film or series page.",
+    "priorityEpisodes": "{done} / {total} episodes analysed",
+    "priorityMovie": "{done} / {total} analysed",
     "actionFailed": "The action did not go through.",
     "duration": {
       "days": "{d} d {h} h",

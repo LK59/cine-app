@@ -57,10 +57,12 @@ const lib = vi.hoisted(() => ({
   etags: new Map<string, string>(),
   durations: new Map<string, number>(),
   paths: new Map<string, string>(),
+  titles: new Map<string, unknown>(),
 }));
 vi.mock("@/lib/xray/scanSources", () => ({
   readLibrary: async () => lib.library,
   readWatching: async () => lib.watching,
+  readPriorityTitle: async (itemId: string) => lib.titles.get(itemId) ?? null,
 }));
 vi.mock("@/lib/xray/cast", () => ({
   analysisTarget: async (itemId: string) =>
@@ -88,7 +90,7 @@ const mockLogError = vi.fn();
 vi.mock("@/lib/logger", () => ({ logError: (...a: unknown[]) => mockLogError(...a) }));
 
 import { HttpError } from "@/lib/http";
-import { MAX_PENDING, scanAction, scanTick, xrayScanStatus, __testing } from "@/lib/xray/scheduler";
+import { MAX_PENDING, prioritizeTitle, readPriority, scanAction, scanTick, unprioritizeTitle, xrayScanStatus, __testing } from "@/lib/xray/scheduler";
 import { getRow, recordFileVersion, wipeScanStore } from "@/lib/xray/scanStore";
 
 function movie(c: string, daysAgo: number, over: Record<string, unknown> = {}) {
@@ -110,6 +112,7 @@ beforeEach(() => {
   lib.etags = new Map();
   lib.durations = new Map();
   lib.paths = new Map();
+  lib.titles = new Map();
   delete process.env.XRAY_LIBRARY_ROOTS;
   play.wait = false;
 });
@@ -289,5 +292,56 @@ describe("le journal du conteneur", () => {
     await scanTick(NOW);
     expect(svc.enqueued).toEqual([]);
     expect(xrayScanStatus().phase).toBe("off");
+  });
+});
+
+describe("la liste de priorité de l'administrateur", () => {
+  const SERIES = id("s");
+  const ep = (c: string, season: number, episode: number) => ({ itemId: id(c), kind: "Episode", title: `Série S${season}E${episode}`, seriesId: SERIES, durationS: 2400, season, episode });
+  // Les épisodes tels que `readPriorityTitle` les rend : déjà dans l'ordre de `seriesOrder`.
+  const series = { kind: "Series", title: "Série", animation: false, rows: [ep("a", 1, 1), ep("b", 1, 2), ep("c", 2, 1)] };
+
+  it("passe avant le palier 1, en normal, saison par saison", async () => {
+    lib.titles.set(SERIES, series);
+    await scanTick(NOW); // le plan est lu, rien de prioritaire encore
+    svc.enqueued = [];
+    svc.statuses = new Map();
+    await prioritizeTitle(SERIES, NOW);
+    // Les deux commandes « low » du fond sont revues ; les places vont à la série, dans l'ordre.
+    await scanTick(NOW + 60_000);
+    const normal = svc.enqueued.filter((j) => j.priority === "normal").map((j) => j.itemId);
+    expect(normal.slice(0, 2)).toEqual([id("a"), id("b")]);
+    expect(getRow(id("a"))).toMatchObject({ tier: 0 });
+    expect(xrayScanStatus().priority.items[0]).toMatchObject({ id: SERIES, kind: "Series", title: "Série", total: 3 });
+  });
+
+  it("tourne même pendant une lecture, et seulement elle ; deux d'avance au plus", async () => {
+    lib.titles.set(SERIES, series);
+    play.wait = true;
+    await prioritizeTitle(SERIES, NOW);
+    await scanTick(NOW + 60_000);
+    expect(enqueuedIds()).toEqual([id("a"), id("b")]);
+    expect(svc.enqueued.every((j) => j.priority === "normal")).toBe(true);
+  });
+
+  it("l'animation est refusée, avec sa raison", async () => {
+    lib.titles.set(SERIES, { ...series, animation: true });
+    expect(await prioritizeTitle(SERIES, NOW)).toBe("animation");
+    expect(readPriority()).toEqual([]);
+    expect(await prioritizeTitle(id("z"), NOW)).toBe("not-found");
+  });
+
+  it("survit à un redémarrage et à une relecture du plan ; retiré, l'élément retrouve son palier", async () => {
+    lib.titles.set(id("4"), { kind: "Movie", title: "Film 4", animation: false, rows: [{ itemId: id("4"), kind: "Movie", title: "Film 4", seriesId: null, durationS: 3600 }] });
+    await scanTick(NOW);
+    await prioritizeTitle(id("4"), NOW);
+    __testing.reset();
+    // Sept heures plus tard : le plan complet est relu — le palier 0 reste.
+    await scanTick(NOW + 7 * 3600_000);
+    expect(readPriority().map((e) => e.id)).toEqual([id("4")]);
+    expect(getRow(id("4"))?.tier).toBe(0);
+    expect(unprioritizeTitle(id("4"), NOW + 7 * 3600_000)).toBe(true);
+    expect(getRow(id("4"))?.tier).toBe(3);
+    expect(xrayScanStatus().priority.items).toEqual([]);
   });
 });

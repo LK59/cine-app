@@ -9085,6 +9085,27 @@ désormais analysée **en fond**, par paliers, et seulement quand personne ne re
 - **Mesuré le 09/11/2026** (lecture seule, 32 comptes) : palier 1, 402 éléments (351 h) ; palier 2, 586
   (479 h) ; palier 3, 8 020 (6 746 h) ; animation écartée, 1 310 (552 h). Dates d'import : 920 films par
   Radarr, 9 331 épisodes par Sonarr, 67 par Jellyfin.
+- **La liste de priorité de l'administrateur : le palier 0** (09/11/2026, demande du propriétaire). Un film,
+  ou une série entière, choisi à la main passe avant tout le reste : `prioritizeTitle` (`readPriorityTitle` :
+  le film, ou tous les épisodes réels de la série saison par saison, spéciaux à la fin — `seriesOrder`),
+  liste retenue dans `xray_scan_meta` (`priority`), éléments au palier 0 (`priority_of`, `setPriorityRows`)
+  — une relecture du plan ne les en fait pas descendre (`upsertPlanSlice`, `setWatching`) et y fait entrer
+  les épisodes arrivés depuis (`applyPriority`). Commandés en **`normal`** : devant les `low` du fond, jamais
+  devant le `high` d'un spectateur ; une commande `low` déjà en file est renvoyée en `normal` (le contrat
+  remonte la priorité d'un double). **Nourris même pendant une lecture** (une demande explicite vaut
+  forçage), tant qu'ils ont du travail ; les deux d'avance restent la borne. Déjà fait, durée égale,
+  dossiers permis, distribution : les mêmes vérifications. **L'animation reste écartée** : le titre est
+  refusé (`animation`, 409 — jamais 404) et la page comme la fiche le disent. Retiré (`unprioritizeTitle`),
+  un élément retrouve le palier de sa date, le palier 1 relu au tour suivant ; ce qui est fait reste fait.
+  Où : la carte « Analyse prioritaire » de Configuration → Acteurs à l'écran (un champ qui cherche dans les
+  deux catalogues du cinéma par `searchCinemaLibrary`, chaque titre avec ses éléments faits / total, son
+  temps restant, et un bouton pour le retirer ; pause et reprise du palier 0) ; et sur la fiche du cinéma,
+  pour l'administrateur seul et l'option branchée (`XrayPriorityControl` : présentation — la route est la
+  porte), « Analyser en priorité » : un **bouton rond de plus** dans la rangée du bureau (`DetailIconActions`,
+  la rangée ne gagne pas de hauteur : la fiche tient toujours en une page, §117.4), une icône sous libellé
+  au téléphone (la rangée passe à la ligne plutôt que de serrer les autres). Un message bref confirme. Le
+  rôle n'est demandé qu'une fois l'option connue ouverte : une fiche sans l'option ne fait aucune requête de
+  plus. Route : `POST /api/admin/xray/scan` `{ action: "prioritize" | "unprioritize", itemId }`.
 Porteurs : `src/lib/xray/scanPlan.ts`, `scanSources.ts`, `scanStore.ts`, `scheduler.ts` (`scanTick`,
 `scanAction`, `xrayScanStatus`, `startXrayScheduler`), `rebind.ts` (`keepsAnalysis`, `rebindAnalysis`,
 `jobFor`) ; `src/app/api/admin/xray/scan/route.ts` ; `src/components/settings/XrayScanCard.tsx`,
@@ -9092,7 +9113,7 @@ Porteurs : `src/lib/xray/scanPlan.ts`, `scanSources.ts`, `scanStore.ts`, `schedu
 animation, durée égale, vitesse, estimation), `xray-scheduler.test.ts` (sans lecture seulement, avance
 bornée, file du service pleine, déjà fait, écartés, hors des dossiers permis, forçage, pauses, un tour à la fois, redémarrage,
 progression et estimation, rattachement et repli sur 400, journal), `xray-same-duration.test.ts` (lecteur
-et commande d'une séance), `xray-scan-route.test.ts` (portes).
+et commande d'une séance), `xray-scan-route.test.ts` (portes, liste de priorité, refus de l'animation), `xray-priority-control.test.tsx` (le bouton de la fiche : administrateur seul, confirmation, refus de l'animation) ; la liste de priorité dans `xray-scheduler.test.ts` (avant le palier 1, en `normal`, saison par saison, pendant une lecture, redémarrage et relecture du plan, retrait).
 
 ## 139. « Poser une question » : la réponse ne sait que ce que le compte a vu (09/11/2026)
 

@@ -479,7 +479,9 @@ books). It feeds the service only when nothing plays
 (§88's `mustWaitForPlayback`), in `low`, two items ahead at most, one tick per minute on `globalThis`;
 state lives in `cine.db` (`scanStore.ts`). A file replaced at the same duration (± 1 s) is rebound
 (`rebindIfSameDuration`), never re-analysed, and the player serves its old scenes. Progress and controls:
-Configuration → Acteurs à l'écran (`/api/admin/xray/scan`, admin only).
+Configuration → Acteurs à l'écran (`/api/admin/xray/scan`, admin only). Above tier 1, a tier 0 the admin
+fills by hand (a film, or a whole series season by season — from that page or « Analyser en priorité » on
+the title sheet): ordered `normal`, fed even during playback, animation still refused.
 
 **Books are an option, off by default, kept apart from the cinema** (DECISIONS §127–§128, since
 28/10/2026): `BOOKS_ENABLED`, `BOOKS_REQUESTS_ENABLED`, `BOOKS_GOOGLE_ENRICH` + `GOOGLE_BOOKS_API_KEY`.

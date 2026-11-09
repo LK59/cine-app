@@ -24,8 +24,31 @@
  * moment de commander (`castOf`) : l'élément est alors écarté à ce moment-là.
  */
 
-export type ScanTier = 1 | 2 | 3;
-export const SCAN_TIERS: readonly ScanTier[] = [1, 2, 3];
+/**
+ * `0` : la liste de priorité de l'administrateur (un film, ou une série entière, choisis à la main —
+ * `scheduler.ts`, `prioritizeTitle`), au-dessus de tout, commandée en `normal` et nourrie même pendant
+ * une lecture. Jamais produit par `buildPlan` : une relecture du plan ne le retire pas.
+ */
+export type ScanTier = 0 | 1 | 2 | 3;
+export const SCAN_TIERS: readonly ScanTier[] = [0, 1, 2, 3];
+/** Les paliers que le plan calcule lui-même. */
+export const PLAN_TIERS: readonly ScanTier[] = [1, 2, 3];
+
+/**
+ * Les épisodes d'une série dans l'ordre de la liste de priorité : saison par saison, épisode par épisode,
+ * les spéciaux (saison 0) à la fin ; un épisode sans numéro après les autres, dans l'ordre reçu.
+ */
+export function seriesOrder<T extends EpisodeRef>(episodes: readonly T[]): T[] {
+  const key = (e: EpisodeRef) => {
+    const season = numbered(e.ParentIndexNumber) ? (e.ParentIndexNumber === 0 ? 100_000 : e.ParentIndexNumber) : 200_000;
+    const episode = numbered(e.IndexNumber) ? e.IndexNumber : 100_000;
+    return season * 1_000_000 + episode;
+  };
+  return episodes
+    .map((e, i) => ({ e, i, k: key(e) }))
+    .sort((a, b) => a.k - b.k || a.i - b.i)
+    .map((x) => x.e);
+}
 
 /** Ce qui compte comme « arrivé récemment » : deux semaines. */
 export const NEW_WINDOW_MS = 14 * 24 * 3600_000;
