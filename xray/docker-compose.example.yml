@@ -12,12 +12,17 @@ services:
     image: ghcr.io/lk59/laterna-xray:latest
     container_name: laterna-xray
     restart: unless-stopped
+    # Le propriétaire des fichiers de la médiathèque (comme Jellyfin/Sonarr) : sous un autre
+    # utilisateur, un dossier en 770 paraît vide. Voir le README, « Installation ».
+    user: "1000:1000"
     env_file: .env
     environment:
       # buffalo_l (défaut, poids non commerciaux) ou auraface (Apache-2.0). Voir le README.
       XRAY_MODEL: buffalo_l
       # Fils de calcul pour l'inférence et le décodage sur processeur.
       XRAY_THREADS: "4"
+      # Dossier personnel inscriptible quel que soit l'utilisateur choisi.
+      HOME: /data
     # Aucun port publié : seul Laterna, sur le même réseau Docker, lui parle.
     networks: [media_net]
     volumes:

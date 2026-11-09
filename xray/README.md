@@ -178,6 +178,10 @@ Il faut Docker, le réseau Docker où vit Laterna (ici `media_net`), et la médi
    - le **chemin de la médiathèque**, monté en lecture seule **au même chemin que dans le
      conteneur Jellyfin** (si Jellyfin voit `/media/tv/…`, le service doit voir `/media/tv/…`) :
      Laterna transmet les chemins tels que Jellyfin les connaît ;
+   - l'**utilisateur** (`user: "UID:GID"`) qui possède les fichiers de la médiathèque, le même
+     que celui de Jellyfin ou de Sonarr/Radarr (souvent `PUID`/`PGID`). Sous un autre utilisateur,
+     un dossier en `770` paraît vide au service, et l'analyse échoue sur « fichier introuvable » —
+     c'est courant avec une fusion de disques (mergerfs) dont certains disques sont plus fermés ;
    - le **numéro du groupe `render`** de l'hôte (`getent group render`), qui donne accès à
      `/dev/dri/renderD128`. Sans iGPU, retirer `devices` et `group_add`.
 
@@ -189,9 +193,11 @@ Il faut Docker, le réseau Docker où vit Laterna (ici `media_net`), et la médi
    ```
 
 Le service n'ouvre aucun port sur l'hôte : seul un conteneur du même réseau Docker l'atteint, à
-l'adresse `http://laterna-xray:8000`. Il tourne sous un utilisateur sans privilège (uid 10001) ;
-ses données (base, poids des modèles, photos de référence) vivent dans le volume `xray_data`.
-Pour un dossier de l'hôte à la place du volume, le rendre accessible en écriture à l'uid 10001.
+l'adresse `http://laterna-xray:8000`. Il tourne sous un utilisateur sans privilège : l'uid 10001 de l'image par défaut, ou celui
+choisi par `user:` ; ses données (base, poids des modèles, photos de référence) vivent dans le
+volume `xray_data`, qui doit appartenir à cet utilisateur (après un changement de `user:`, un
+`chown -R UID:GID` du volume, fait une fois depuis un conteneur lancé en root). Pour un dossier de
+l'hôte à la place du volume, le rendre accessible en écriture au même utilisateur.
 
 Pour construire l'image soi-même plutôt que de la tirer :
 
