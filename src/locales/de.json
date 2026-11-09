@@ -1037,13 +1037,13 @@
         "errors": "Fehlschläge"
       },
       "aiCost": {
-        "title": "Kosten der Antworten des Modells (ungefähr: Fragen und „Bisher“-Texte)",
+        "title": "Ausgaben der kostenpflichtigen KI-Funktionen (alle: Untertitel, Suche, „Bisher“ zu Serie und Figur, Fragen) — in ungefähren Euro, 1 $ ≈ {rate} €",
         "today": "Heute",
         "week": "7 Tage",
         "days30": "30 Tage",
         "month": "Dieser Monat",
         "calls": "{n} Aufruf in 30 Tagen|{n} Aufrufe in 30 Tagen",
-        "ofReference": "{pct} % von {ref}"
+        "ofBudget": "{spent} von {cap} Monatslimit ({pct} %)"
       },
       "addressShow": "Adresswechsel",
       "addressHide": "Adresswechsel ausblenden",
@@ -3352,7 +3352,8 @@
       "xray": {
         "title": "Darsteller im Bild",
         "why": "Optional, standardmäßig aus. Ein neben der App installierter Dienst erkennt Szene für Szene die Darsteller im Bild, damit sich während eines Films oder einer Folge sagen lässt, wer zu sehen ist. Eingeschaltet fordert jede Wiedergabe die Analyse des gesehenen Titels an, danach die der nächsten Folge.",
-        "help": "Adresse und Schlüssel des Dienstes (seine Variable XRAY_API_KEY). Die Installation beschreibt xray/README.md."
+        "help": "Adresse und Schlüssel des Dienstes (seine Variable XRAY_API_KEY). Die Installation beschreibt xray/README.md.",
+        "guide": "Den Analysedienst installieren (Bereitstellungsanleitung)"
       },
       "app": {
         "title": "Anwendung",
@@ -3372,8 +3373,8 @@
         "why": "Der integrierte Player spielt Filme im Browser ab. Wenn eine Datei nicht abspielbar ist (ein Ton oder Bild, das das Gerät nicht dekodieren kann), übergibt er sie an Jellyfin, das sie live umwandelt — standardmäßig aktiv, empfohlen. Ausgeschaltet zeigen diese Dateien einen Wiedergabefehler, und der Server wandelt nie etwas um."
       },
       "subtitles": {
-        "title": "Generierte Untertitel",
-        "why": "Übersetzt auf Wunsch, während des Films, einen vollständigen Untertitel des Titels mit einer Online-KI in die gewählte Sprache. Ohne Schlüssel erscheint die Funktion nirgends.",
+        "title": "KI-Funktionen",
+        "why": "Ein Online-KI-Anbieter (Claude, OpenAI oder Google), ein Schlüssel und ein Monatslimit dienen allen kostenpflichtigen Funktionen: generierte Untertitel, Suche per Beschreibung, „Bisher“ zu einer Serie, Fragen und „Bisher“ zu einer Figur. Ohne Schlüssel erscheint keine davon.",
         "help": "Der Schlüssel bleibt auf dem Server: Er wird nie an Geräte gesendet und nie in die Protokolle geschrieben."
       },
       "dialogue": {
@@ -3430,21 +3431,23 @@
       "POSTER_PREWARM_TUNING": "Größen und Sprachen der vorbereiteten Poster",
       "RADARR_QUALITY_PROFILE": "Qualitätsprofil für Hinzufügungen",
       "SONARR_QUALITY_PROFILE": "Qualitätsprofil für Hinzufügungen",
-      "SUBTITLE_GEN_ENABLED": "Untertitel-Erstellung anbieten",
-      "DESCRIBE_SEARCH_ENABLED": "Suche nach Beschreibung: einen Film oder eine Serie finden, die in einem Satz beschrieben ist (Anthropic, mit dem Schlüssel oben)",
-      "RECAP_ENABLED": "„Bisher“: auf der Seite einer laufenden Serie die zuletzt gesehenen Ereignisse in Erinnerung rufen (Anthropic, mit dem Schlüssel oben)",
-      "ASK_ENABLED": "„Eine Frage stellen“: auf einer Titelseite oder bei angehaltenem Film eine Frage anhand des bereits Gesehenen beantworten (Anthropic, mit dem Schlüssel oben)",
+      "SUBTITLE_GEN_ENABLED": "Generierte Untertitel: während des Films einen vollständigen Untertitel in die gewählte Sprache übersetzen",
+      "DESCRIBE_SEARCH_ENABLED": "Suche per Beschreibung: einen in einem Satz beschriebenen Film oder eine Serie finden",
+      "RECAP_ENABLED": "„Bisher“: auf der Seite einer laufenden Serie an die zuletzt gesehenen Ereignisse erinnern",
+      "ASK_ENABLED": "Fragen zu einem Titel: auf einer Titelseite oder bei angehaltenem Film anhand des bereits Gesehenen antworten",
       "SUBTITLE_GEN_PROVIDER": "Anbieter",
       "SUBTITLE_GEN_API_KEY": "Schlüssel des Anbieters",
       "SUBTITLE_GEN_MODEL": "Modell",
-      "SUBTITLE_GEN_BUDGET_USD": "Monatsbudget (Dollar)",
+      "SUBTITLE_GEN_BUDGET_USD": "Monatslimit für alle kostenpflichtigen Funktionen (Dollar)",
       "SUBTITLE_GEN_PRICE_INPUT": "Eingabepreis pro Million Tokens (leer: bekannter Tarif)",
       "SUBTITLE_GEN_PRICE_OUTPUT": "Ausgabepreis pro Million Tokens (leer: bekannter Tarif)",
       "REPLIQUES_ENABLED": "Dialogsuche",
       "REPLIQUES_NIGHTLY": "Nächtliche Aktualisierung",
       "REPLIQUES_NIGHT_START": "Beginn des Nachtfensters",
       "REPLIQUES_NIGHT_END": "Ende des Nachtfensters",
-      "REPLIQUES_LANGUAGES": "Sprachen der Dialoge"
+      "REPLIQUES_LANGUAGES": "Sprachen der Dialoge",
+      "ASK_PERSON_ENABLED": "Fragen zu einer Person: im Bereich eines Darstellers aus „Im Bild“ das Eingabefeld und die vorgeschlagenen Fragen",
+      "SOFAR_ENABLED": "„Bisher“ zu einer Figur: im Bereich eines Darstellers aus „Im Bild“ zwei Sätze dazu, was seine Figur bis jetzt getan hat"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml unter „environment“:",
@@ -3521,7 +3524,11 @@
       "off": "Aus",
       "admins": "Nur Administratoren",
       "tous": "Alle Konten"
-    }
+    },
+    "inherit": {
+      "ASK_ENABLED": "Wie Fragen zu einem Titel"
+    },
+    "otherValue": "Anderes Modell…"
   },
   "subtitleGen": {
     "admin": {
@@ -4217,7 +4224,8 @@
     "chipSheet1": "Wer sind die Hauptfiguren?",
     "chipSheet2": "Worum geht es in diesem Titel?",
     "done": "OK",
-    "retry": "Erneut versuchen"
+    "retry": "Erneut versuchen",
+    "budget": "Das Monatslimit für kostenpflichtige Funktionen ist erreicht: Fragen sind ab nächstem Monat wieder möglich."
   },
   "xray": {
     "onScreen": "Im Bild",
@@ -4231,5 +4239,68 @@
     "qLink": "In welcher Beziehung steht {name} zu {other}?",
     "qRecent": "Was ist {name} zuletzt passiert?",
     "qWants": "Was will {name}?"
+  },
+  "aiFeatures": {
+    "title": "Was jede Funktion je nach Anbieter leistet",
+    "intro": "Alle laufen über den Anbieter und den Schlüssel oben. Die Schutzmechanismen der Anwendung – nichts über das vom Konto Gesehene hinaus, Namensprüfung, Limits pro Konto, Monatslimit – sind bei allen drei gleich.",
+    "quality": "Nur Claude (Haiku 5.5) wurde für diese Funktionen auf einem Prüfstand gemessen. Mit OpenAI oder Google funktionieren sie auf demselben Weg, aber für die Qualität der Antworten ist die Administration verantwortlich.",
+    "feature": "Funktion",
+    "providers": {
+      "anthropic": "Claude (Anthropic)",
+      "openai": "OpenAI",
+      "google": "Google Gemini"
+    },
+    "names": {
+      "subtitles": "Generierte Untertitel",
+      "describe": "Suche per Beschreibung",
+      "recap": "„Bisher“ zu einer Serie",
+      "askTitle": "Fragen zu einem Titel",
+      "askPerson": "Fragen zu einer Person",
+      "sofar": "„Bisher“ zu einer Figur",
+      "xray": "Darsteller im Bild"
+    },
+    "what": {
+      "subtitles": "Übersetzt einen vollständigen Untertitel während des Films.",
+      "describe": "Findet einen in einem Satz beschriebenen Titel.",
+      "recap": "Erinnert an die letzten Ereignisse einer Serie, im Hintergrund vorbereitet.",
+      "askTitle": "Beantwortet eine Frage zu einem Film oder einer Serie.",
+      "askPerson": "Beantwortet eine Frage zu einem Darsteller im Bild.",
+      "sofar": "Fasst zusammen, was eine Figur bis jetzt getan hat.",
+      "xray": "Zeigt, wer im Bild ist; TMDB-Seite und Titel der Person in der Bibliothek."
+    },
+    "paid": "Kostenpflichtige Aufrufe beim Anbieter",
+    "free": "Kostenlos, auf Ihrem Server",
+    "needsLabel": "Benötigt: {needs}",
+    "needs": {
+      "provider": "einen Anbieterschlüssel",
+      "xray": "Darsteller im Bild",
+      "xrayService": "den Analysedienst (Verbindungen)"
+    },
+    "blocked": {
+      "provider": "kein Schlüssel: inaktiv",
+      "price": "Modellpreis unbekannt: inaktiv",
+      "xray": "Darsteller im Bild aus oder Dienst nicht eingerichtet: inaktiv",
+      "budget": "Monatslimit erreicht: pausiert"
+    },
+    "noProvider": "Kein KI-Anbieter",
+    "unsupported": "Nicht verfügbar",
+    "notes": {
+      "streamLines": "Zeilen erscheinen fortlaufend",
+      "linesAtEnd": "Zeilen am Ende jedes Stapels geschrieben",
+      "explicitCache": "ausdrücklich gesetzter Cache",
+      "implicitCache": "automatischer Cache gleicher Anfänge",
+      "benched": "auf dem Prüfstand gemessen",
+      "notBenched": "nicht gemessen",
+      "thinkingAdaptive": "adaptives Denken, Aufwand je Funktion eingestellt",
+      "reasoningMapped": "Denken des Modells auf der nächstliegenden Stufe",
+      "streamSentences": "Antwort Satz für Satz",
+      "wholeAnswer": "Antwort auf einmal angezeigt",
+      "structured": "Antwort in vorgegebenem Format"
+    },
+    "fastModel": "Außer für Untertitel verwenden die Funktionen das schnelle Modell des Anbieters: {model} ({input} $ Eingabe, {output} $ Ausgabe, pro Million Token).",
+    "fastModelNoPrice": "Außer für Untertitel verwenden die Funktionen {model}, dessen Preis unbekannt ist: Sie bleiben inaktiv.",
+    "pricesVerified": "Preise am {date} auf der offiziellen Seite des Anbieters geprüft",
+    "spendAll": "Alle kostenpflichtigen Funktionen zählen zu diesem Limit, auf den Token genau.",
+    "budgetReached": "Monatslimit erreicht: Kostenpflichtige Funktionen sind bis zum Ersten des nächsten Monats pausiert. Erhöhen Sie das Limit, um sie wieder einzuschalten."
   }
 }

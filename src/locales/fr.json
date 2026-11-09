@@ -1037,13 +1037,13 @@
         "errors": "Échecs"
       },
       "aiCost": {
-        "title": "Coût des réponses du modèle (approximatif, questions, « Jusqu'ici », « Précédemment »)",
+        "title": "Dépense des fonctions d'IA payantes (toutes : sous-titres, recherche, « Précédemment », questions, « Jusqu'ici ») — en euros approximatifs, 1 $ ≈ {rate} €",
         "today": "Aujourd'hui",
         "week": "7 jours",
         "days30": "30 jours",
         "month": "Ce mois-ci",
         "calls": "{n} appel sur 30 jours|{n} appels sur 30 jours",
-        "ofReference": "{pct} % de {ref}"
+        "ofBudget": "{spent} sur {cap} de plafond mensuel ({pct} %)"
       },
       "addressShow": "Changement d'adresse",
       "addressHide": "Masquer le changement d'adresse",
@@ -3352,7 +3352,8 @@
       "xray": {
         "title": "Acteurs à l'écran",
         "why": "Facultatif, coupé par défaut. Un service installé à côté de l'application reconnaît, scène par scène, les acteurs présents à l'image, pour pouvoir dire qui est à l'écran pendant un film ou un épisode. Allumé, chaque lecture demande l'analyse du titre regardé, puis celle de l'épisode suivant.",
-        "help": "L'adresse et la clé du service (sa variable XRAY_API_KEY). Son installation est décrite dans xray/README.md."
+        "help": "L'adresse et la clé du service (sa variable XRAY_API_KEY). Son installation est décrite dans xray/README.md.",
+        "guide": "Installer le service d'analyse (guide de déploiement)"
       },
       "app": {
         "title": "Application",
@@ -3372,8 +3373,8 @@
         "why": "Le lecteur intégré lit les films dans le navigateur. Quand un fichier ne passe pas (un son ou une image que l'appareil ne sait pas décoder), il le confie à Jellyfin, qui le convertit à la volée — activé par défaut, conseillé. Désactivé, ces fichiers affichent une erreur de lecture, et le serveur ne convertit jamais rien."
       },
       "subtitles": {
-        "title": "Sous-titres générés",
-        "why": "Traduit à la demande, pendant le film, un sous-titre complet du titre vers la langue choisie, par une IA en ligne. Sans clé, la fonction n'apparaît nulle part.",
+        "title": "Fonctions d'IA",
+        "why": "Un fournisseur d'IA en ligne (Claude, OpenAI ou Google), une clé et un plafond mensuel servent à toutes les fonctions payantes : sous-titres générés, recherche par description, « Précédemment », questions et « Jusqu'ici ». Sans clé, aucune n'apparaît.",
         "help": "La clé reste sur le serveur : elle n'est jamais envoyée aux appareils ni écrite dans les journaux."
       },
       "dialogue": {
@@ -3430,21 +3431,23 @@
       "POSTER_PREWARM_TUNING": "Tailles et langues des affiches préparées",
       "RADARR_QUALITY_PROFILE": "Profil de qualité des ajouts",
       "SONARR_QUALITY_PROFILE": "Profil de qualité des ajouts",
-      "SUBTITLE_GEN_ENABLED": "Proposer la génération de sous-titres",
-      "DESCRIBE_SEARCH_ENABLED": "Recherche par description : retrouver un film ou une série décrit en une phrase (Anthropic, avec la clé ci-dessus)",
-      "RECAP_ENABLED": "« Précédemment » : sur la fiche d'une série en cours, rappeler les derniers faits vus (Anthropic, avec la clé ci-dessus)",
-      "ASK_ENABLED": "« Poser une question » : sur une fiche ou le film en pause, répondre à une question d'après ce que le compte a déjà vu (Anthropic, avec la clé ci-dessus)",
+      "SUBTITLE_GEN_ENABLED": "Sous-titres générés : traduire pendant le film un sous-titre complet vers la langue choisie",
+      "DESCRIBE_SEARCH_ENABLED": "Recherche par description : retrouver un film ou une série décrit en une phrase",
+      "RECAP_ENABLED": "« Précédemment » : sur la fiche d'une série en cours, rappeler les derniers faits vus",
+      "ASK_ENABLED": "Questions sur un titre : sur une fiche ou le film en pause, répondre d'après ce que le compte a déjà vu",
       "SUBTITLE_GEN_PROVIDER": "Fournisseur",
       "SUBTITLE_GEN_API_KEY": "Clé du fournisseur",
       "SUBTITLE_GEN_MODEL": "Modèle",
-      "SUBTITLE_GEN_BUDGET_USD": "Budget mensuel (dollars)",
+      "SUBTITLE_GEN_BUDGET_USD": "Plafond mensuel de toutes les fonctions payantes (dollars)",
       "SUBTITLE_GEN_PRICE_INPUT": "Prix en entrée, par million de jetons (vide : tarif connu)",
       "SUBTITLE_GEN_PRICE_OUTPUT": "Prix en sortie, par million de jetons (vide : tarif connu)",
       "REPLIQUES_ENABLED": "Recherche de répliques",
       "REPLIQUES_NIGHTLY": "Mise à jour chaque nuit",
       "REPLIQUES_NIGHT_START": "Début de la plage de nuit",
       "REPLIQUES_NIGHT_END": "Fin de la plage de nuit",
-      "REPLIQUES_LANGUAGES": "Langues des répliques"
+      "REPLIQUES_LANGUAGES": "Langues des répliques",
+      "ASK_PERSON_ENABLED": "Questions sur une personne : dans le panneau d'un acteur d'« À l'écran », le champ et les questions proposées",
+      "SOFAR_ENABLED": "« Jusqu'ici » : dans le panneau d'un acteur d'« À l'écran », deux phrases sur ce que son personnage a fait jusqu'ici"
     },
     "deployHint": {
       "TZ": "Dans docker-compose.yml, sous « environment » :",
@@ -3521,7 +3524,11 @@
       "off": "Coupé",
       "admins": "Administrateurs seulement",
       "tous": "Tous les comptes"
-    }
+    },
+    "inherit": {
+      "ASK_ENABLED": "Comme les questions sur un titre"
+    },
+    "otherValue": "Autre modèle…"
   },
   "subtitleGen": {
     "admin": {
@@ -4217,7 +4224,8 @@
     "chipSheet1": "Qui sont les personnages principaux ?",
     "chipSheet2": "De quoi parle ce titre ?",
     "done": "OK",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "budget": "Le plafond mensuel des fonctions payantes est atteint : les questions reviendront le mois prochain."
   },
   "xray": {
     "onScreen": "À l'écran",
@@ -4231,5 +4239,68 @@
     "qLink": "Quel est le lien entre {name} et {other} ?",
     "qRecent": "Qu'est-il arrivé à {name} récemment ?",
     "qWants": "Que cherche {name} ?"
+  },
+  "aiFeatures": {
+    "title": "Ce que chaque fonction fait selon le fournisseur",
+    "intro": "Toutes passent par le fournisseur et la clé ci-dessus. Les garde-fous de l'application — rien au-delà de ce que le compte a vu, contrôle des noms, limites par compte, plafond mensuel — sont les mêmes chez les trois.",
+    "quality": "Seul Claude (Haiku 5.5) a été mesuré sur banc pour ces fonctions. Avec OpenAI ou Google, elles marchent par la même voie, mais la qualité des réponses est sous la responsabilité de l'administrateur.",
+    "feature": "Fonction",
+    "providers": {
+      "anthropic": "Claude (Anthropic)",
+      "openai": "OpenAI",
+      "google": "Google Gemini"
+    },
+    "names": {
+      "subtitles": "Sous-titres générés",
+      "describe": "Recherche par description",
+      "recap": "« Précédemment »",
+      "askTitle": "Questions sur un titre",
+      "askPerson": "Questions sur une personne",
+      "sofar": "« Jusqu'ici »",
+      "xray": "Acteurs à l'écran"
+    },
+    "what": {
+      "subtitles": "Traduit un sous-titre complet pendant le film.",
+      "describe": "Retrouve un titre décrit en une phrase.",
+      "recap": "Rappelle les derniers faits vus d'une série, préparé en fond.",
+      "askTitle": "Répond à une question sur un film ou une série.",
+      "askPerson": "Répond à une question sur un acteur à l'écran.",
+      "sofar": "Résume ce qu'un personnage a fait jusqu'ici.",
+      "xray": "Dit qui est à l'image ; fiche TMDB et titres de la personne dans la bibliothèque."
+    },
+    "paid": "Appels payants au fournisseur",
+    "free": "Gratuit, sur votre serveur",
+    "needsLabel": "Demande : {needs}",
+    "needs": {
+      "provider": "une clé de fournisseur",
+      "xray": "les acteurs à l'écran",
+      "xrayService": "le service d'analyse (Connexions)"
+    },
+    "blocked": {
+      "provider": "aucune clé : inactif",
+      "price": "prix du modèle inconnu : inactif",
+      "xray": "acteurs à l'écran coupés ou service non réglé : inactif",
+      "budget": "plafond mensuel atteint : en pause"
+    },
+    "noProvider": "Aucun fournisseur d'IA",
+    "unsupported": "Non disponible",
+    "notes": {
+      "streamLines": "lignes affichées au fil de l'eau",
+      "linesAtEnd": "lignes écrites à la fin de chaque lot",
+      "explicitCache": "cache posé explicitement",
+      "implicitCache": "cache automatique des débuts identiques",
+      "benched": "mesuré sur banc",
+      "notBenched": "non mesuré",
+      "thinkingAdaptive": "réflexion adaptative, effort réglé par fonction",
+      "reasoningMapped": "réflexion du modèle au niveau le plus proche",
+      "streamSentences": "réponse phrase par phrase",
+      "wholeAnswer": "réponse affichée d'un bloc",
+      "structured": "réponse au format imposé"
+    },
+    "fastModel": "Hors sous-titres, les fonctions emploient le modèle rapide du fournisseur : {model} ({input} $ en entrée, {output} $ en sortie, par million de jetons).",
+    "fastModelNoPrice": "Hors sous-titres, les fonctions emploient {model}, dont le prix n'est pas connu : elles restent inactives.",
+    "pricesVerified": "Tarifs relevés le {date} sur la page officielle du fournisseur",
+    "spendAll": "Toutes les fonctions payantes comptent dans ce plafond, au jeton près.",
+    "budgetReached": "Plafond mensuel atteint : les fonctions payantes sont en pause jusqu'au premier du mois prochain. Relevez le plafond pour les rallumer."
   }
 }

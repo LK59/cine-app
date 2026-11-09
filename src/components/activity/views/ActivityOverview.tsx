@@ -37,7 +37,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { fetcher } from "@/lib/swr";
-import { euros, type AiCostStats } from "@/lib/activity/aiCost";
+import { dollars, euros, type AiCostStats } from "@/lib/activity/aiCost";
 import { fmtTime } from "@/lib/format";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
@@ -1075,9 +1075,9 @@ function Details({ data, dash }: { data: Overview; dash: Dashboard | undefined }
           {t("activity.logs.open")}
         </ActivityLink>
       </Fold>
-      {dash && (dash.describe.searches > 0 || (dash.aiCost?.calls ?? 0) > 0) && (
+      {dash && (dash.describe.searches > 0 || aiCostShown(dash.aiCost)) && (
         <Fold id="describe" title={t("activity.dash.describe.title")} icon={Search} summary={t("activity.dash.describe.summary", { n: dash.describe.searches })}>
-          {dash.aiCost && dash.aiCost.calls > 0 && <AiCostTiles cost={dash.aiCost} />}
+          {aiCostShown(dash.aiCost) && <AiCostTiles cost={dash.aiCost} />}
           <div className="grid grid-cols-2 gap-3 p-3 md:grid-cols-4">
             <Tile icon={Search} label={t("activity.dash.describe.searches")} value={dash.describe.searches} hint={t("activity.dash.describe.accounts", { n: dash.describe.accounts })} />
             <Tile icon={Sparkles} label={t("activity.dash.describe.model")} value={dash.describe.modelCalls} hint={pct(dash.describe.modelCalls, dash.describe.searches)} />
@@ -1127,27 +1127,34 @@ function Skeleton() {
 }
 
 /** La vue d'ensemble : en direct, la période, à gérer, les courbes, les comptes, le fil, le détail. */
+/** Les tuiles de coût : dès qu'un appel a été payé ce mois-ci ou dans les trente jours. */
+function aiCostShown(cost: AiCostStats | undefined): cost is AiCostStats {
+  return !!cost && (cost.calls > 0 || cost.monthUsd > 0);
+}
+
 /**
- * Ce que coûtent les réponses du modèle (10.27.2, `aiCost.ts`) : aujourd'hui, sept jours, trente jours, et le
- * mois en cours contre la référence de 100 €. Approximatif (« ≈ ») : un taux de change fixe.
+ * Ce que coûtent les fonctions d'IA payantes (10.27.2 ; 10.28.0, §140 : lu de la source même du plafond,
+ * `ai_spend_days` et `subtitle_gen_spend`) : aujourd'hui, sept jours, trente jours (jours UTC), et le mois
+ * en cours contre le plafond réglé, en dollars. En euros au taux fixe écrit dans le titre — approximatif (« ≈ »).
  */
 function AiCostTiles({ cost }: { cost: AiCostStats }) {
   const t = useT();
   const locale = uiLocale();
-  const share = cost.reference > 0 ? Math.round((cost.month / cost.reference) * 100) : 0;
+  const eur = (usd: number) => `≈ ${euros(usd * cost.usdToEur, locale)}`;
+  const share = cost.capUsd > 0 ? Math.round((cost.monthUsd / cost.capUsd) * 100) : 0;
   return (
     <div data-ai-cost="" className="border-b border-white/5">
-      <p className="px-4 pt-3 text-xs text-subtle">{t("activity.dash.aiCost.title")}</p>
+      <p className="px-4 pt-3 text-xs text-subtle">{t("activity.dash.aiCost.title", { rate: new Intl.NumberFormat(locale).format(cost.usdToEur) })}</p>
       <div className="grid grid-cols-2 gap-3 p-3 md:grid-cols-4">
-        <Tile icon={Coins} label={t("activity.dash.aiCost.today")} value={`≈ ${euros(cost.today, locale)}`} />
-        <Tile icon={Coins} label={t("activity.dash.aiCost.week")} value={`≈ ${euros(cost.week, locale)}`} />
-        <Tile icon={Coins} label={t("activity.dash.aiCost.days30")} value={`≈ ${euros(cost.days30, locale)}`} hint={t("activity.dash.aiCost.calls", { n: cost.calls })} />
+        <Tile icon={Coins} label={t("activity.dash.aiCost.today")} value={eur(cost.todayUsd)} />
+        <Tile icon={Coins} label={t("activity.dash.aiCost.week")} value={eur(cost.weekUsd)} />
+        <Tile icon={Coins} label={t("activity.dash.aiCost.days30")} value={eur(cost.days30Usd)} hint={t("activity.dash.aiCost.calls", { n: cost.calls })} />
         <Tile
           icon={Coins}
           label={t("activity.dash.aiCost.month")}
-          value={`≈ ${euros(cost.month, locale)}`}
-          hint={t("activity.dash.aiCost.ofReference", { pct: share, ref: euros(cost.reference, locale) })}
-          tone={cost.month > cost.reference ? "warn" : "default"}
+          value={eur(cost.monthUsd)}
+          hint={t("activity.dash.aiCost.ofBudget", { pct: share, spent: dollars(cost.monthUsd, locale), cap: dollars(cost.capUsd, locale) })}
+          tone={cost.capUsd > 0 && cost.monthUsd >= cost.capUsd ? "warn" : "default"}
         />
       </div>
     </div>

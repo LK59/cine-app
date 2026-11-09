@@ -132,7 +132,8 @@ export function settingProblem(key: string, value: string): string | null {
   if (def.kind === "boolean" && value !== "true" && value !== "false") return "invalid";
   if (def.kind === "select" && !def.options?.includes(value)) return "invalid";
   // `true`/`false` restent permis : un réglage d'avant le 09/11/2026 relu puis réenregistré tel quel.
-  if (def.kind === "audience" && !["off", "admins", "tous", "true", "false"].includes(value)) return "invalid";
+  // Vide : seulement pour un réglage qui en suit un autre (`inherits`, §139) — il redevient « comme l'autre ».
+  if (def.kind === "audience" && !["off", "admins", "tous", "true", "false"].includes(value) && !(value === "" && def.inherits)) return "invalid";
   // Un montant (budget, prix au million de jetons) : vide, ou un nombre positif — « 5 », « 0,75 ».
   if (def.kind === "number" && value !== "" && !/^\d{1,6}([.,]\d{1,4})?$/.test(value)) return "invalid";
   if (def.kind === "profile" && value !== "" && !/^[1-9]\d{0,8}$/.test(value)) return "invalid";

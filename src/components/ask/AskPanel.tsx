@@ -68,8 +68,13 @@ export interface AskPanelProps {
   person?: XrayPlayerPerson;
   /** Les personnes de la même scène — pour proposer « son lien avec … ». */
   scene?: readonly XrayPlayerPerson[];
-  /** L'option des questions (et de « Jusqu'ici ») pour cette session ; faux : la personne seule. */
+  /**
+   * L'option des questions pour cette session — sur une personne, celle des questions sur une personne
+   * (`askPersonAvailable`, §139) ; faux : pas de propositions ni de champ.
+   */
   ask?: boolean;
+  /** « Jusqu'ici » pour cette session (`sofarAvailable`) ; absent, suit `ask` (l'ancien réglage unique). */
+  sofar?: boolean;
   /**
    * `player` : dans le conteneur du lecteur (plein écran compris), en absolu ; `sheet` : un portail
    * fixe posé sur la fiche.
@@ -96,6 +101,7 @@ export function askFailureKey(exchange: Pick<AskExchange, "state" | "error">): s
   if (exchange.error === "limite") return "ask.limit";
   if (exchange.error === "indisponible") return "ask.unavailable";
   if (exchange.error === "off") return "ask.off";
+  if (exchange.error === "budget") return "ask.budget";
   return "ask.error";
 }
 
@@ -179,9 +185,16 @@ function useKeyboardDiag(
   }, [refs.input, refs.layer, refs.panel]);
 }
 
-export function AskPanel({ itemId, where, position, onClose, person, scene, ask: askEnabled = true, placement, suggestions, scenes }: AskPanelProps) {
+export function AskPanel({ itemId, where, position, onClose, person, scene, ask: askEnabled = true, sofar: sofarEnabled = askEnabled, placement, suggestions, scenes }: AskPanelProps) {
   const t = useT();
-  const { exchanges, ask, retry, busy, full } = useAskTitle({ itemId, where, position, enabled: askEnabled, personId: person?.personId });
+  const { exchanges, ask, retry, busy, full } = useAskTitle({
+    itemId,
+    where,
+    position,
+    enabled: askEnabled,
+    personId: person?.personId,
+    about: person ? "person" : "title",
+  });
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
   // La position à l'ouverture, pour « Jusqu'ici » (une question relit la sienne au moment de partir).
@@ -393,7 +406,7 @@ export function AskPanel({ itemId, where, position, onClose, person, scene, ask:
         <div ref={scrollRef} data-ask-scroll="" className="ask-scroll min-h-0 flex-auto overflow-y-auto overscroll-contain px-5 pb-3" hidden={line}>
           {person && (
             <div data-ask-header="">
-              <AskPersonBlock itemId={itemId} person={person} sofar={askEnabled} position={openedAt} scenes={scenes} />
+              <AskPersonBlock itemId={itemId} person={person} sofar={sofarEnabled} position={openedAt} scenes={scenes} />
             </div>
           )}
           {!askEnabled ? null : exchanges.length === 0 ? (

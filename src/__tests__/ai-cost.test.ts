@@ -1,55 +1,69 @@
-import { describe, it, expect } from "vitest";
-import { aiCostStats, euros, lineCostEur, USD_TO_EUR, AI_MONTHLY_REFERENCE_EUR } from "@/lib/activity/aiCost";
+import { describe, it, expect, vi } from "vitest";
 
-// Le coût des appels au modèle (10.27.2, DECISIONS.md §139) : les jetons de `recherche.log` au prix de
-// Haiku 5.5 (0,10 $ / 0,50 $ par million, cache ×1,25 à l'écriture, ×0,1 à la lecture), en euros au taux
-// fixe et approximatif `USD_TO_EUR`.
+// Sa propre base : la suite vide et remplit les tables de dépense.
+await vi.hoisted(async () => {
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  process.env.DATA_DIR = mkdtempSync(join(tmpdir(), "ai-cost-"));
+});
 
-describe("lineCostEur", () => {
-  it("entrée, sortie, écriture et lecture du cache, chacune à son prix", () => {
-    const t = Date.UTC(2026, 10, 9);
-    // 1 M de chaque : 0,10 + 0,50 + 0,125 + 0,01 = 0,735 $.
-    expect(lineCostEur({ _t: t, kind: "question", inTokens: 1e6, outTokens: 1e6, cacheWrite: 1e6, cacheRead: 1e6 }, t)).toBeCloseTo(0.735 * USD_TO_EUR, 10);
-    // Une ligne réelle (banc du 09/11/2026) : 86 en entrée, 523 en sortie, 6 659 relus du cache.
-    expect(lineCostEur({ _t: t, kind: "jusquici", inTokens: 86, outTokens: 523, cacheWrite: 0, cacheRead: 6659 }, t)).toBeCloseTo(
-      ((86 * 0.1 + 523 * 0.5 + 6659 * 0.01) / 1e6) * USD_TO_EUR,
-      12
-    );
+import { aiCostStats, dollars, euros, USD_TO_EUR, utcDay } from "@/lib/activity/aiCost";
+import { aiCostOf } from "@/lib/activity/dashboard";
+import { aiBudget, recordAiSpend } from "@/lib/aiFeatures";
+import { spendDb } from "@/lib/subtitleGen/store";
+import { getDb } from "@/lib/db";
+
+// Le coût des fonctions d'IA dans Activité (10.27.2 ; 10.28.0, DECISIONS.md §140) : **la source même du
+// plafond** — `subtitle_gen_spend` pour le mois, `ai_spend_days` pour les jours et les fonctions, écrites
+// ensemble par `spendDb.add` —, plus de second calcul d'après les jetons de `recherche.log`.
+
+const usage = { inputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
+
+describe("aiCostStats", () => {
+  it("aujourd'hui, sept jours, trente jours (jours UTC), par fonction ; le mois et le plafond tels quels", () => {
+    const now = Date.UTC(2026, 10, 9, 15);
+    const days = [
+      { day: "2026-11-09", feature: "sofar", cost: 0.5, requests: 3 },
+      { day: "2026-11-09", feature: "subtitles", cost: 1, requests: 1 },
+      { day: "2026-11-03", feature: "askTitle", cost: 0.25, requests: 2 }, // sept jours (3 → 9)
+      { day: "2026-11-02", feature: "askTitle", cost: 2, requests: 1 }, // hors des sept jours
+      { day: "2026-10-11", feature: "recap", cost: 4, requests: 1 }, // trente jours (11/10 → 09/11)
+      { day: "2026-10-10", feature: "recap", cost: 100, requests: 1 }, // trop vieux
+    ];
+    const s = aiCostStats(days, { spent: 3.75, cap: 80 }, now);
+    expect(s.todayUsd).toBeCloseTo(1.5, 10);
+    expect(s.weekUsd).toBeCloseTo(1.75, 10);
+    expect(s.days30Usd).toBeCloseTo(7.75, 10);
+    expect(s.calls).toBe(8);
+    expect(s.byFeature).toEqual({ sofar: 0.5, subtitles: 1, askTitle: 2.25, recap: 4 });
+    expect(s.monthUsd).toBe(3.75);
+    expect(s.capUsd).toBe(80);
+    expect(s.usdToEur).toBe(USD_TO_EUR);
   });
-  it("sans jetons, ou une autre sorte de ligne : rien", () => {
-    expect(lineCostEur({ _t: 0, kind: "jusquici" })).toBe(0);
-    expect(lineCostEur({ _t: 0, kind: "description" })).toBe(0);
-    expect(lineCostEur({ _t: 0, kind: "autre", inTokens: 1e6 })).toBe(0);
-    // Des jetons sur une recherche par description seraient comptés.
-    expect(lineCostEur({ _t: 0, kind: "description", inTokens: 1e6 })).toBeGreaterThan(0);
+
+  it("les montants à l'écran : euros au millième sous un euro, dollars au centime", () => {
+    expect(euros(0.0123, "fr")).toMatch(/0,012\s?€/);
+    expect(euros(12.345, "fr")).toMatch(/12,35\s?€/);
+    expect(dollars(80, "en")).toBe("$80.00");
   });
 });
 
-describe("aiCostStats", () => {
-  it("aujourd'hui, sept jours, trente jours, le mois en cours, par sorte", () => {
-    // Le 9 novembre 2026, 15 h (heure du foyer, `TZ` de la suite).
-    const now = new Date(2026, 10, 9, 15).getTime();
-    const big = { inTokens: 1e6, outTokens: 0 };
-    const lines = [
-      { _t: new Date(2026, 10, 9, 10).getTime(), kind: "question", ...big }, // aujourd'hui
-      { _t: new Date(2026, 10, 8, 23).getTime(), kind: "jusquici", ...big }, // hier : sept jours, mois
-      { _t: new Date(2026, 9, 31, 12).getTime(), kind: "précédemment", ...big }, // octobre : trente jours, pas le mois
-      { _t: new Date(2026, 9, 1, 12).getTime(), kind: "question", ...big }, // trop vieux
-      { _t: new Date(2026, 10, 9, 11).getTime(), kind: "description", status: "ok" }, // sans jetons
-    ];
-    const unit = 0.1 * USD_TO_EUR;
-    const s = aiCostStats(lines, now);
-    expect(s.today).toBeCloseTo(unit, 10);
-    expect(s.week).toBeCloseTo(2 * unit, 10);
-    expect(s.days30).toBeCloseTo(3 * unit, 10);
-    expect(s.month).toBeCloseTo(2 * unit, 10);
-    expect(s.calls).toBe(3);
-    expect(s.byKind.précédemment).toBeCloseTo(unit, 10);
-    expect(s.reference).toBe(AI_MONTHLY_REFERENCE_EUR);
-  });
-
-  it("le montant à l'écran : au millième sous un euro, au centime au-delà", () => {
-    expect(euros(0.0123, "fr")).toMatch(/0,012\s?€/);
-    expect(euros(12.345, "fr")).toMatch(/12,35\s?€/);
+describe("une seule source : ce que le plafond compte, Activité le montre", () => {
+  it("chaque appel enregistré par `recordAiSpend` ou les sous-titres arrive dans le mois du plafond ET dans les jours d'Activité", () => {
+    getDb().exec("DELETE FROM subtitle_gen_spend; DELETE FROM ai_spend_days;");
+    const now = Date.now();
+    const price = { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.1 };
+    // 1 M en entrée + 100 k écrits + 1 M relus + 100 k en sortie : 1 + 0,125 + 0,1 + 0,5 = 1,725 $.
+    recordAiSpend({ inputTokens: 1e6, cacheWriteTokens: 1e5, cacheReadTokens: 1e6, outputTokens: 1e5 }, price, "sofar", now);
+    spendDb.add(2, usage, now, "subtitles");
+    const s = aiCostOf(now);
+    expect(s.monthUsd).toBeCloseTo(aiBudget(now).spent, 12);
+    expect(s.monthUsd).toBeCloseTo(3.725, 10);
+    expect(s.todayUsd).toBeCloseTo(3.725, 10);
+    expect(s.byFeature.sofar).toBeCloseTo(1.725, 10);
+    expect(s.byFeature.subtitles).toBeCloseTo(2, 10);
+    expect(s.calls).toBe(2);
+    expect(utcDay(now)).toBe(new Date(now).toISOString().slice(0, 10));
   });
 });

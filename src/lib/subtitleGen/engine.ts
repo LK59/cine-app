@@ -339,7 +339,7 @@ function bill(jobId: string, settings: GenSettings, usage: Usage | null): void {
   if (!usage || !settings.price) return;
   const cost = costOf(usage, settings.price);
   jobsDb.addUsage(jobId, usage, cost);
-  spendDb.add(cost, usage);
+  spendDb.add(cost, usage, Date.now(), "subtitles");
   const st = statsOf(jobId);
   st.inputTokens += usage.inputTokens;
   st.cacheWriteTokens += usage.cacheWriteTokens;

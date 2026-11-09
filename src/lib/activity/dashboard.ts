@@ -10,7 +10,9 @@
 import { readRecords, type LogRecord } from "@/lib/activity/logReader";
 import { acknowledgeSeances, dismissedIssues } from "@/lib/activity/alertsCleared";
 import { lastLocalDays, localDay, problemsOf, seancesSince } from "@/lib/activity/accounts";
-import { aiCostStats, type AiCostStats } from "@/lib/activity/aiCost";
+import { aiCostStats, utcDay, type AiCostStats } from "@/lib/activity/aiCost";
+import { aiBudget } from "@/lib/aiFeatures";
+import { spendDb } from "@/lib/subtitleGen/store";
 import type { Seance } from "@/lib/activity/seances";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -97,7 +99,7 @@ export interface Dashboard {
   /** Le temps regardé sur trente jours, par heure de la journée (heure du foyer). */
   hours: number[];
   describe: DescribeStats;
-  /** Ce que coûtent les appels au modèle (questions, « Jusqu'ici », « Précédemment »…), en euros (10.27.2, `aiCost.ts`). */
+  /** Ce que coûtent les fonctions d'IA payantes, lu de la source du plafond (10.28.0, `aiCost.ts`, §140). */
   aiCost: AiCostStats;
   /** Les lignes de « À gérer » qui viennent des journaux du serveur, d'après l'effacement. */
   alarms: Alarms;
@@ -286,13 +288,12 @@ export function describeStats(now = Date.now()): DescribeStats {
   };
 }
 
-/** Le coût des appels au modèle : `recherche.log` sur trente jours, et depuis le 1er du mois s'il est plus loin. */
+/**
+ * Le coût des fonctions d'IA (§140, 10.28.0) : la source même du plafond — le mois (`aiBudget`) et les journées
+ * par fonction (`ai_spend_days`) —, jamais un second calcul.
+ */
 export function aiCostOf(now = Date.now()): AiCostStats {
-  const monthStart = new Date(now);
-  monthStart.setHours(0, 0, 0, 0);
-  monthStart.setDate(1);
-  const since = Math.min(now - 30 * DAY, monthStart.getTime());
-  return aiCostStats(readRecords("search", since).filter((r) => r._t >= since), now);
+  return aiCostStats(spendDb.days(utcDay(now, 29)), aiBudget(now), now);
 }
 
 /**
@@ -432,7 +433,7 @@ export function dashboard(now = Date.now(), clearedAt = 0): Dashboard {
   } catch {
     describe = { searches: 0, modelCalls: 0, medianMs: null, accounts: 0, errors: 0 };
   }
-  const aiCost = safe(() => aiCostOf(now), aiCostStats([], now));
+  const aiCost = safe(() => aiCostOf(now), aiCostStats([], { spent: 0, cap: 0 }, now));
   return {
     periods: {
       day: periodStats(month.filter((s) => s.start >= now - DAY)),

@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import { jellyfin, type JellyfinMediaSource, type JellyfinMediaStream } from "@/lib/clients/jellyfin";
 import { config } from "@/lib/config";
-import { budgetOf } from "./pricing";
+import { budgetOf, PRICE_SOURCES, PRICES_VERIFIED_ON } from "./pricing";
+import { featureSettings, featureStatuses } from "@/lib/aiFeatures";
 import { genAvailable, genSettings } from "./providers";
 import { TARGET_LANGUAGES, isTargetLanguage, twoLetter } from "./languages";
 import { orderCandidates, presentLanguages, isTextSubtitle } from "./source";
@@ -236,6 +237,17 @@ export function adminSummary() {
     price: settings.price,
     budgetUsd: budgetOf(config.subtitleGen.budgetUsd),
     month: { cost: month.cost, inputTokens: month.inputTokens, outputTokens: month.outputTokens, requests: month.requests },
+    // Depuis le 09/11/2026 (§140) : la dépense du mois est celle de toutes les fonctions payantes, et le
+    // budget leur plafond commun. La carte dit ce que chaque fonction fait chez quel fournisseur, ce qui
+    // la bloque, et le modèle rapide qu'elles emploient (hors sous-titres).
+    budgetReached: month.cost >= budgetOf(config.subtitleGen.budgetUsd),
+    fast: (() => {
+      const f = featureSettings();
+      return { model: f.model, price: f.price };
+    })(),
+    features: featureStatuses(),
+    pricesVerifiedOn: PRICES_VERIFIED_ON,
+    priceSource: PRICE_SOURCES[settings.provider],
     jobs: jobsDb.recent(50).map((j) => ({
       ...summary(j),
       itemId: j.item_id,

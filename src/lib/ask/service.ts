@@ -16,6 +16,8 @@ import { jellyfinFetch } from "@/lib/jellyfinBreaker";
 import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { upstreamSignal } from "@/lib/http";
 import { DEFAULT_MODELS } from "@/lib/subtitleGen/pricing";
+import { ProviderError } from "@/lib/subtitleGen/providers";
+import { anthropicUsage, featureComplete, featureProviderReady, featureSettings, recordAiSpend } from "@/lib/aiFeatures";
 import { cuesOf, episodesOf, type EpisodeWithStreams } from "@/lib/recap/service";
 import type { Cue } from "@/lib/recap/core";
 import type { Locale } from "@/lib/i18n";
@@ -36,7 +38,18 @@ export const MODEL_IDLE_MS = 20_000;
 
 export function askAvailable(): boolean {
   // Lu par la configuration publique à chaque ouverture : une configuration partielle vaut « coupé ».
-  return askAudience() !== "off" && config.subtitleGen?.provider === "anthropic" && (config.subtitleGen?.apiKey ?? "").trim() !== "";
+  // Les trois fournisseurs depuis le 09/11/2026 (§140). Le plafond mensuel n'y entre pas : atteint, la
+  // question reçoit une ligne d'erreur dite (`budget`), le bouton ne disparaît pas sans explication.
+  return askAudience() !== "off" && featureProviderReady();
+}
+
+/** Le modèle qui répond aux questions et écrit « Jusqu'ici » — dans la clé de leurs textes gardés. */
+export function askModelName(): string {
+  try {
+    return featureSettings().model;
+  } catch {
+    return ASK_MODEL;
+  }
 }
 
 /** À qui l'option est ouverte ; une configuration sans `audience` (un double de test) se lit par `enabled`. */
@@ -290,7 +303,15 @@ export interface AskModelRun {
  * ces milliers de jetons au dixième du prix et plus vite. Le message entier reste `message` — c'est lui que
  * l'empreinte de « Jusqu'ici » (`sofarKey`) prend, jamais le découpage.
  */
-export type AskModel = (req: { system: string; message: string; prefixEnd?: number; maxTokens?: number; signal?: AbortSignal }) => AskModelRun;
+export type AskModel = (req: {
+  system: string;
+  message: string;
+  prefixEnd?: number;
+  maxTokens?: number;
+  signal?: AbortSignal;
+  /** La fonction qui paie (§140) : la ligne de dépense du jour la range sous elle (Activité). */
+  feature?: "askTitle" | "askPerson" | "sofar";
+}) => AskModelRun;
 
 /**
  * Les plafonds de sortie (10.27.2), réflexion comprise — mesurés dans `recherche.log` le 09/11/2026 :
@@ -318,7 +339,56 @@ export class AskModelTimeout extends Error {
   }
 }
 
-const askModel: AskModel = ({ system, message, prefixEnd, maxTokens, signal }) => {
+/**
+ * Sans flux, la réponse entière doit arriver dans ce délai — une seule attente, pas de chien de garde
+ * réarmé par les événements (OpenAI et Gemini, §140).
+ */
+export const MODEL_WHOLE_MS = 30_000;
+
+/**
+ * OpenAI ou Gemini (§140) : un seul appel, sans flux — la réponse arrive d'un bloc, puis passe par le
+ * même `AnswerGate` (noms, mots interdits) que chez Anthropic, phrase par phrase. Réflexion basse comme
+ * chez Anthropic. Un refus devient `stop: "refusal"` (la panne dite) ; une limite de débit garde son 429.
+ *
+ * Le préfixe partagé (`prefixEnd`, 10.27.2) va dans `stable`, la personne ou la question dans `user` :
+ * chez ces deux fournisseurs, le cache est implicite sur les préfixes identiques — le même découpage que
+ * le point de cache explicite d'Anthropic, relu au même prix réduit. Les mêmes plafonds de sortie.
+ */
+function askOtherProvider({ system, message, prefixEnd, maxTokens, signal, feature = "askTitle" }: Parameters<AskModel>[0]): AskModelRun {
+  const timeout = AbortSignal.timeout(MODEL_WHOLE_MS);
+  const split = !!prefixEnd && prefixEnd > 0 && prefixEnd < message.length;
+  const reply = featureComplete(
+    {
+      system,
+      stable: split ? [message.slice(0, prefixEnd)] : [],
+      cache: false,
+      user: split ? message.slice(prefixEnd) : message,
+      schemaName: "answer",
+      maxOutputTokens: maxTokens ?? ASK_MAX_OUTPUT_TOKENS,
+      effort: "low",
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    },
+    feature
+  ).then(
+    (r) => ({ text: r.text, inTokens: r.usage.inputTokens + r.usage.cacheReadTokens, outTokens: r.usage.outputTokens, stop: "end_turn" as string | null, cacheRead: r.usage.cacheReadTokens }),
+    (error: unknown) => {
+      if (error instanceof ProviderError && error.kind === "refusal") return { text: "", inTokens: error.usage?.inputTokens ?? 0, outTokens: error.usage?.outputTokens ?? 0, stop: "refusal" as string | null, cacheRead: 0 };
+      if (error instanceof ProviderError && error.kind === "truncated") return { text: "", inTokens: error.usage?.inputTokens ?? 0, outTokens: error.usage?.outputTokens ?? 0, stop: "max_tokens" as string | null, cacheRead: 0 };
+      if (timeout.aborted && !signal?.aborted) throw new AskModelTimeout();
+      if (error instanceof ProviderError && error.kind === "rate") throw Object.assign(new Error(error.message), { status: 429 });
+      throw error;
+    }
+  );
+  async function* deltas() {
+    const r = await reply;
+    if (r.text) yield r.text;
+  }
+  return { deltas: deltas(), done: reply.then(({ inTokens, outTokens, stop, cacheRead }) => ({ inTokens, outTokens, stop, cacheWrite: 0, cacheRead })) };
+}
+
+const askModel: AskModel = (req) => {
+  if (featureSettings().provider !== "anthropic") return askOtherProvider(req);
+  const { system, message, prefixEnd, maxTokens, signal, feature = "askTitle" } = req;
   const client = new Anthropic({ apiKey: config.subtitleGen.apiKey.trim(), maxRetries: 0, timeout: MODEL_IDLE_MS });
   const stream = client.messages.stream(
     {
@@ -363,13 +433,18 @@ const askModel: AskModel = ({ system, message, prefixEnd, maxTokens, signal }) =
   return {
     deltas: deltas(),
     done: stream.finalMessage().then(
-      (m) => ({
-        inTokens: m.usage.input_tokens,
-        outTokens: m.usage.output_tokens,
-        stop: m.stop_reason ?? null,
-        cacheWrite: m.usage.cache_creation_input_tokens ?? 0,
-        cacheRead: m.usage.cache_read_input_tokens ?? 0,
-      }),
+      (m) => {
+        // Compté dans le plafond mensuel commun (§140) — écriture et relecture du cache comprises, chacune à
+        // son prix (`anthropicUsage`).
+        recordAiSpend(anthropicUsage(m.usage), featureSettings().price, feature);
+        return {
+          inTokens: m.usage.input_tokens,
+          outTokens: m.usage.output_tokens,
+          stop: m.stop_reason ?? null,
+          cacheWrite: m.usage.cache_creation_input_tokens ?? 0,
+          cacheRead: m.usage.cache_read_input_tokens ?? 0,
+        };
+      },
       (err: unknown) => {
         throw fail(err);
       }

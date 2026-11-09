@@ -357,7 +357,7 @@ describe("dans le lecteur : avec les commandes, en lecture comme en pause", () =
   it("film en lecture, commandes affichées : la rangée et le bouton rond de la question", async () => {
     stubFetch();
     let video: HTMLVideoElement | null = null;
-    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 10, true);
     await waitFor(() => expect(container.querySelector("[data-player-onscreen]")).toBeTruthy());
     const ask = container.querySelector<HTMLElement>('[data-player-nav="ask"]')!;
@@ -371,7 +371,7 @@ describe("dans le lecteur : avec les commandes, en lecture comme en pause", () =
   it("personne de reconnu : le bouton rond seul, sans rangée", async () => {
     stubFetch();
     let video: HTMLVideoElement | null = null;
-    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 60, true);
     await waitFor(() => expect(container.querySelector('[data-player-nav="ask"]')).toBeTruthy());
     expect(container.querySelector("[data-player-onscreen]")).toBeNull();
@@ -396,7 +396,7 @@ describe("dans le lecteur : avec les commandes, en lecture comme en pause", () =
   it("la rangée qui paraît, en lecture comme en pause, ne prépare rien (10.27.2 : ~6 textes par heure pour zéro ou une lecture)", async () => {
     const fetchMock = stubFetch();
     let video: HTMLVideoElement | null = null;
-    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 10, true);
     await waitFor(() => expect(container.querySelector("[data-onscreen-row]")).toBeTruthy());
     await at(video!, 610, false);
@@ -414,7 +414,7 @@ describe("dans le lecteur : avec les commandes, en lecture comme en pause", () =
     });
     vi.stubGlobal("fetch", fetchMock);
     let video: HTMLVideoElement | null = null;
-    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 10, false);
     const pill = await waitFor(() => container.querySelector<HTMLElement>('[data-onscreen-person="2"]')!);
     const before = order.length;
@@ -431,7 +431,7 @@ describe("dans le lecteur : avec les commandes, en lecture comme en pause", () =
   it("le lecteur ouvert, option ouverte : le contexte est préparé une fois (GET de la route des questions)", async () => {
     const fetchMock = stubFetch();
     let video: HTMLVideoElement | null = null;
-    withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 10, false);
     await waitFor(() =>
       expect(fetchMock.mock.calls.filter(([url, init]) => String(url) === "/api/cinema/ask/item-1" && !(init as RequestInit | undefined)?.method)).toHaveLength(1)
@@ -442,7 +442,7 @@ describe("dans le lecteur : avec les commandes, en lecture comme en pause", () =
     vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("pointer: fine"), media: q, addEventListener() {}, removeEventListener() {} }));
     const fetchMock = stubFetch();
     let video: HTMLVideoElement | null = null;
-    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 10, false);
     const pill = await waitFor(() => container.querySelector<HTMLElement>('[data-onscreen-person="2"]')!);
     fireEvent.pointerOver(pill, { pointerType: "mouse" });
@@ -485,7 +485,7 @@ describe("10.27.2 — la rangée tient les commandes pendant qu'on la touche", (
     vi.useFakeTimers({ shouldAdvanceTime: true });
     stubFetch();
     let video: HTMLVideoElement | null = null;
-    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 10, true);
     const row = await waitFor(() => container.querySelector<HTMLElement>("[data-onscreen-row]")!);
     // L'événement que les commandes écoutent pour lancer leur décompte (voir PlayerControls-masquage-barre).

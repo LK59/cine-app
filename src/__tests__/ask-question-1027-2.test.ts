@@ -16,7 +16,10 @@ await vi.hoisted(async () => {
 
 vi.mock("@/lib/config", () => ({
   config: {
-    ask: { enabled: true, audience: "tous" },
+    ask: { enabled: true, audience: "tous", personAudience: "tous", sofarAudience: "tous" },
+    // Une question qui porte une personne passe la porte des questions sur une personne (§139) : les
+    // acteurs à l'écran branchés.
+    xray: { audience: "tous", enabled: true, url: "http://xray", apiKey: "k" },
     recap: { enabled: false },
     subtitleGen: { provider: "anthropic", apiKey: "sk-test" },
     jellyfin: { url: "http://jf", apiKey: "k" },

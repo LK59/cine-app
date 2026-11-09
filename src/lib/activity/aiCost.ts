@@ -1,92 +1,63 @@
-// Ce que coûtent les appels au modèle, d'après `recherche.log` (10.27.2, DECISIONS.md §139) — affiché à
-// l'administrateur dans Activité, sous la recherche par description.
+// Ce que coûtent les fonctions d'IA payantes, affiché à l'administrateur dans Activité (10.27.2, unifié en
+// 10.28.0 — DECISIONS.md §140).
 //
-// **Rien d'estimé au-delà du prix** : chaque ligne qui a vraiment appelé le modèle porte ses jetons
-// (`inTokens`, `outTokens`, et depuis 10.27.2 `cacheWrite` / `cacheRead`, le cache de prompts) ; le prix
-// vient de la table de `subtitleGen/pricing.ts` (`officialPrice`, Haiku 5.5 : 0,10 $ / 0,50 $ par million,
-// écriture du cache ×1,25 de l'entrée, lecture ×0,1). Une ligne sans jetons (un texte gardé, une
-// recherche par description servie du cache — ces lignes-là n'en portent pas aujourd'hui) ne coûte rien
-// ici. `input_tokens` d'Anthropic ne compte pas les jetons du cache : les trois s'additionnent sans
-// double compte.
+// **Une seule source : celle du plafond.** Chaque appel payant de chaque fonction (sous-titres générés,
+// recherche décrite, « Précédemment », questions, « Jusqu'ici », Nouveautés traduites) écrit son coût exact
+// — jetons par catégorie, cache compris, au prix du modèle réellement appelé chez le fournisseur réglé —
+// par `spendDb.add`, dans `subtitle_gen_spend` (le mois, que le plafond lit) et `ai_spend_days` (le jour et la
+// fonction), dans une même transaction. Les tuiles lisent ces deux tables, et le mois affiché est
+// **exactement** la dépense que le plafond compare (`aiBudget`). En 10.27.2, elles recalculaient le coût à
+// partir des jetons de `recherche.log` au prix de Haiku : une seconde comptabilité, sans les sous-titres ni
+// les autres fournisseurs, qui pouvait dire autre chose que le plafond.
 //
-// En euros, au taux fixe `USD_TO_EUR` — **approximatif**, écrit ici et dit à l'écran (« ≈ ») : le
-// compteur sert à voir un ordre de grandeur contre la référence du propriétaire (100 € par mois), pas à
-// rapprocher une facture.
+// Les jours sont des jours UTC, comme le mois du plafond (la facture des fournisseurs). Les journées
+// d'avant 10.28.0 n'existent pas : le mois en cours, lui, est entier (la ligne du mois existait déjà).
+//
+// En euros au taux fixe `USD_TO_EUR` — **approximatif**, et dit à l'écran (« ≈ », le taux écrit) : la
+// dépense et le plafond restent en dollars, la monnaie des fournisseurs.
 
-import { officialPrice, DEFAULT_MODELS } from "@/lib/subtitleGen/pricing";
+import type { SpendDay } from "@/lib/subtitleGen/store";
 
 /** Dollars → euros, approximatif (relevé autour de 0,92 à l'automne 2026) — jamais une facture. */
 export const USD_TO_EUR = 0.92;
-/** La référence mensuelle du propriétaire (09/11/2026) : le crédit qu'il consacre à ces appels. */
-export const AI_MONTHLY_REFERENCE_EUR = 100;
 
-/** Les sortes de lignes qui appellent le modèle, telles que `recherche.log` les nomme. */
-export type AiKind = "question" | "jusquici" | "précédemment" | "description";
-const KINDS: readonly AiKind[] = ["question", "jusquici", "précédemment", "description"];
+const DAY = 86_400_000;
 
-export interface AiCostLine {
-  _t: number;
-  kind?: unknown;
-  inTokens?: unknown;
-  outTokens?: unknown;
-  cacheWrite?: unknown;
-  cacheRead?: unknown;
-}
-
-const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0);
-
-/** Le coût d'une ligne, en euros ; 0 sans jetons ou pour une autre sorte de ligne. */
-export function lineCostEur(line: AiCostLine, now = Date.now()): number {
-  if (!KINDS.includes(line.kind as AiKind)) return 0;
-  const tokens = num(line.inTokens) + num(line.outTokens) + num(line.cacheWrite) + num(line.cacheRead);
-  if (!tokens) return 0;
-  const price = officialPrice(DEFAULT_MODELS.anthropic, now);
-  if (!price) return 0;
-  const usd =
-    (num(line.inTokens) * price.input + num(line.outTokens) * price.output + num(line.cacheWrite) * price.cacheWrite + num(line.cacheRead) * price.cacheRead) / 1e6;
-  return usd * USD_TO_EUR;
+/** Le jour UTC (AAAA-MM-JJ) de `now` moins `back` jours. */
+export function utcDay(now: number, back = 0): string {
+  return new Date(now - back * DAY).toISOString().slice(0, 10);
 }
 
 export interface AiCostStats {
-  /** Euros : depuis minuit (heure du foyer), sept jours, trente jours, depuis le 1er du mois. */
-  today: number;
-  week: number;
-  days30: number;
-  month: number;
-  reference: number;
-  /** Trente jours, par sorte — pour dire d'où vient la dépense. */
-  byKind: Record<AiKind, number>;
-  /** Les appels qui ont coûté quelque chose, sur trente jours. */
+  /** Dollars, comme le plafond : aujourd'hui (UTC), sept jours, trente jours (aujourd'hui compris). */
+  todayUsd: number;
+  weekUsd: number;
+  days30Usd: number;
+  /** La dépense du mois que le plafond compare (`aiBudget().spent`), en dollars. */
+  monthUsd: number;
+  /** Le plafond mensuel réglé (`SUBTITLE_GEN_BUDGET_USD`), en dollars. */
+  capUsd: number;
+  /** Trente jours, par fonction (`SpendFeature`) — d'où vient la dépense. */
+  byFeature: Record<string, number>;
+  /** Les appels payés sur trente jours. */
   calls: number;
+  /** Le taux utilisé pour l'affichage en euros. */
+  usdToEur: number;
 }
 
-/** Les comptes de `lines` (lignes de `recherche.log`, toutes sortes confondues) à l'instant `now`. */
-export function aiCostStats(lines: readonly AiCostLine[], now = Date.now()): AiCostStats {
-  const midnight = new Date(now);
-  midnight.setHours(0, 0, 0, 0);
-  const monthStart = new Date(midnight);
-  monthStart.setDate(1);
-  const out: AiCostStats = {
-    today: 0,
-    week: 0,
-    days30: 0,
-    month: 0,
-    reference: AI_MONTHLY_REFERENCE_EUR,
-    byKind: { question: 0, jusquici: 0, précédemment: 0, description: 0 },
-    calls: 0,
-  };
-  for (const line of lines) {
-    if (line._t > now) continue;
-    const eur = lineCostEur(line, line._t);
-    if (!eur) continue;
-    if (line._t >= midnight.getTime()) out.today += eur;
-    if (line._t >= now - 7 * 86_400_000) out.week += eur;
-    if (line._t >= now - 30 * 86_400_000) {
-      out.days30 += eur;
-      out.byKind[line.kind as AiKind] += eur;
-      out.calls += 1;
-    }
-    if (line._t >= monthStart.getTime()) out.month += eur;
+/** Les comptes, d'après les journées de `ai_spend_days` (trente au moins) et le mois du plafond. */
+export function aiCostStats(days: readonly SpendDay[], budget: { spent: number; cap: number }, now = Date.now()): AiCostStats {
+  const today = utcDay(now);
+  const week = utcDay(now, 6);
+  const days30 = utcDay(now, 29);
+  const out: AiCostStats = { todayUsd: 0, weekUsd: 0, days30Usd: 0, monthUsd: budget.spent, capUsd: budget.cap, byFeature: {}, calls: 0, usdToEur: USD_TO_EUR };
+  for (const d of days) {
+    if (d.day > today || d.day < days30) continue;
+    out.days30Usd += d.cost;
+    out.calls += d.requests;
+    out.byFeature[d.feature] = (out.byFeature[d.feature] ?? 0) + d.cost;
+    if (d.day >= week) out.weekUsd += d.cost;
+    if (d.day === today) out.todayUsd += d.cost;
   }
   return out;
 }
@@ -95,4 +66,9 @@ export function aiCostStats(lines: readonly AiCostLine[], now = Date.now()): AiC
 export function euros(value: number, locale?: string): string {
   const digits = value > 0 && value < 1 ? 3 : 2;
   return new Intl.NumberFormat(locale, { style: "currency", currency: "EUR", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
+}
+
+/** Un montant en dollars, au centime (le plafond est saisi en dollars). */
+export function dollars(value: number, locale?: string): string {
+  return new Intl.NumberFormat(locale, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }

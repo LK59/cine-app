@@ -239,16 +239,50 @@ export interface UsageCounts {
   outputTokens: number;
 }
 
+/**
+ * La fonction qui a payé un appel (10.28.0, §140) : celles de `AiFeatureId`, les Nouveautés traduites
+ * (`news`), ou `autre` pour un appelant qui ne le dit pas.
+ */
+export type SpendFeature = "subtitles" | "describe" | "recap" | "askTitle" | "askPerson" | "sofar" | "xray" | "news" | "autre";
+
+/** Une journée (UTC) d'une fonction, telle que `ai_spend_days` la garde. */
+export interface SpendDay {
+  day: string;
+  feature: string;
+  cost: number;
+  requests: number;
+}
+
 export const spendDb = {
-  add(cost: number, u: UsageCounts, now = Date.now()): void {
-    db()
-      .prepare(
+  /**
+   * Un appel payé : la ligne du mois (le plafond la lit) et celle du jour et de la fonction (Activité la lit),
+   * dans une seule transaction — les deux ne peuvent pas diverger.
+   */
+  add(cost: number, u: UsageCounts, now = Date.now(), feature: SpendFeature = "autre"): void {
+    const d = db();
+    d.transaction(() => {
+      d.prepare(
         `INSERT INTO subtitle_gen_spend (month, cost_usd, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, requests) VALUES (?, ?, ?, ?, ?, ?, 1)
          ON CONFLICT(month) DO UPDATE SET cost_usd = cost_usd + excluded.cost_usd, input_tokens = input_tokens + excluded.input_tokens,
            cache_write_tokens = cache_write_tokens + excluded.cache_write_tokens, cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens,
            output_tokens = output_tokens + excluded.output_tokens, requests = requests + 1`
-      )
-      .run(monthOf(now), cost, u.inputTokens, u.cacheWriteTokens, u.cacheReadTokens, u.outputTokens);
+      ).run(monthOf(now), cost, u.inputTokens, u.cacheWriteTokens, u.cacheReadTokens, u.outputTokens);
+      d.prepare(
+        `INSERT INTO ai_spend_days (day, feature, cost_usd, requests) VALUES (?, ?, ?, 1)
+         ON CONFLICT(day, feature) DO UPDATE SET cost_usd = cost_usd + excluded.cost_usd, requests = requests + 1`
+      ).run(dayOf(now), feature, cost);
+    })();
+  },
+  /** Les journées depuis `fromDay` (AAAA-MM-JJ, UTC) comprise. */
+  days(fromDay: string): SpendDay[] {
+    return (
+      db().prepare("SELECT day, feature, cost_usd, requests FROM ai_spend_days WHERE day >= ? ORDER BY day").all(fromDay) as {
+        day: string;
+        feature: string;
+        cost_usd: number;
+        requests: number;
+      }[]
+    ).map((r) => ({ day: r.day, feature: r.feature, cost: r.cost_usd, requests: r.requests }));
   },
   month(now = Date.now()): UsageCounts & { cost: number; requests: number } {
     const row = db()

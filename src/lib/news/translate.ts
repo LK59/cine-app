@@ -111,10 +111,10 @@ export async function translateNews(fr: NewsContent, signal?: AbortSignal): Prom
     });
   } catch (error) {
     // Une réponse refusée ou coupée se paie aussi : comptée avant de remonter.
-    if (error instanceof ProviderError && error.usage && settings.price) spendDb.add(costOf(error.usage, settings.price), error.usage);
+    if (error instanceof ProviderError && error.usage && settings.price) spendDb.add(costOf(error.usage, settings.price), error.usage, Date.now(), "news");
     throw new NewsTranslationError("provider", error instanceof ProviderError ? `${error.kind} : ${error.message}` : "appel impossible");
   }
-  if (settings.price) spendDb.add(costOf(reply.usage, settings.price), reply.usage);
+  if (settings.price) spendDb.add(costOf(reply.usage, settings.price), reply.usage, Date.now(), "news");
   const json = (reply.json ?? null) as Record<string, unknown> | null;
   const out = {} as Record<Target, NewsContent>;
   for (const lang of TRANSLATED_LANGS) {

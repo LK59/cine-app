@@ -3323,6 +3323,9 @@ les dialogues »). Mesure de l'ordre des canaux des navigateurs : `sh tools/chan
 
 ## 69. Générer des sous-titres : traduire en flux un sous-titre complet du titre, présenté ensuite à Jellyfin
 
+*Amendé le 09/11/2026 (§140) : le budget mensuel est le plafond commun de toutes les fonctions payantes, la
+table de prix a été relevée à nouveau (paliers longs, cache de Gemini à son prix).*
+
 **Règle.** Un sous-titre texte **complet** déjà présent dans le titre (piste du fichier ou fichier
 voisin) est traduit vers une langue choisie par une IA en ligne — Anthropic, OpenAI ou Google, au
 choix de l'administrateur —, pendant que le film joue, là où regarde le spectateur. Pas de
@@ -8602,6 +8605,9 @@ non plus : `BuildRefresh` ne l'écoute pas. Un tour de sondage sauté pendant la
 
 ## 135. La recherche par description : le modèle reconnaît, TMDB décide (07/11/2026)
 
+*Amendé le 09/11/2026 (§140) : aussi chez OpenAI et Google (même prompt, même schéma, leur modèle rapide),
+comptée dans le plafond mensuel commun ; atteint, elle n'est plus proposée.*
+
 **Règle.** Une frappe qui décrit un titre (`looksLikeDescription` : quatre mots dont un mot repère des
 quatre langues, ou sept mots) part, après 600 ms d'arrêt, à `/api/search/describe`. Claude Haiku y rend
 des titres (anglais, original, année, film ou série) dans un schéma JSON imposé ; chacun n'est gardé que
@@ -8726,6 +8732,9 @@ le lecteur serveur prévu ; légendes et pluriels.
 
 ## 137. « Précédemment » : les derniers faits vus, préparés en fond (08/11/2026)
 
+*Amendé le 09/11/2026 (§140) : aussi chez OpenAI et Google (réflexion « moyenne » transposée), compté dans le
+plafond mensuel commun ; atteint, rien de nouveau n'est préparé, les textes prêts restent lus.*
+
 **Règle** (Louis, 08/11/2026, après trois versions le même jour). Sur la fiche d'une série en cours,
 « Précédemment : … » remplace le synopsis, avec un lien discret « Voir le synopsis de la série » (et, de
 là, « Voir le résumé des épisodes précédents ») ; chaque ouverture de la fiche repart sur « Précédemment ».
@@ -8819,6 +8828,10 @@ l'instant : la première donne des voix anonymes sur un son difficile, les secon
 épisodes finis, en anglais surtout.
 
 ## 138. Les acteurs à l'écran : un service à part, commandé par la séance qui commence (09/11/2026)
+
+*Amendé le 09/11/2026 (§140) : les questions sur une personne (`ASK_PERSON_ENABLED`) et « Jusqu'ici »
+(`SOFAR_ENABLED`) ont chacune leur réglage et demandent les acteurs à l'écran ; sans elles, le panneau d'une
+personne ne montre que ses faits TMDB. La carte des réglages renvoie au guide de déploiement du service.*
 
 **Règle.** L'analyse des acteurs présents à l'image, scène par scène, est faite par un service à part,
 `laterna-xray` (son code et son installation : `xray/README.md`), que Laterna commande et lit par un
@@ -9015,6 +9028,11 @@ hors de ce qui défile, saut en pause sans requête, personne touchée = panneau
 publique).
 
 ## 139. « Poser une question » : la réponse ne sait que ce que le compte a vu (09/11/2026)
+
+*Amendé le 09/11/2026 (§140) : trois réglages au lieu d'un — `ASK_ENABLED` (questions sur un titre),
+`ASK_PERSON_ENABLED` et `SOFAR_ENABLED` (vides, ils suivent `ASK_ENABLED`) —, chacun vérifié par la route ;
+OpenAI et Google répondent aussi (d'un bloc, par le même `AnswerGate`) ; le plafond mensuel atteint donne
+une ligne `budget` à une question et tait « Jusqu'ici ».*
 
 **Règle.** Un spectateur pose une question courte sur le titre qu'il regarde ; Claude Haiku répond en deux à
 quatre phrases, dans la langue de l'interface, diffusées phrase par phrase, **d'après les seules sources
@@ -9403,3 +9421,99 @@ réponse juste — un « je ne sais pas » de trop plutôt qu'une révélation. 
 les résumés de Jellyfin voit plus de rejets (un nom traduit n'est pas dans les sources, §137). Pas encore
 passé sur la vraie API (le banc n'a pas été lancé) : l'effort et la tenue du format `NOMS:` sont à vérifier
 sur quelques questions avant d'allumer l'option.
+
+## 140. Les fonctions d'IA chez les trois fournisseurs, un seul plafond mensuel, et des réglages qui disent ce qu'ils demandent (09/11/2026)
+
+**Règle.** Le fournisseur, la clé et le budget des sous-titres générés (§69) servent à **toutes** les
+fonctions payantes, chez Anthropic, OpenAI et Google : sous-titres générés, recherche par description
+(§135), « Précédemment » (§137), questions sur un titre, questions sur une personne et « Jusqu'ici »
+(§139). Le budget (`SUBTITLE_GEN_BUDGET_USD`, nom et sens gardés : dollars par mois calendaire UTC, 5 $ par
+défaut) devient leur **plafond commun**. La page des réglages dit, pour chaque fonction, ce qu'elle fait,
+si elle coûte, ce qu'elle demande, à qui elle est ouverte, ce qui la bloque, et ce qui change d'un
+fournisseur à l'autre. Décidé par le propriétaire ; le défaut reste Anthropic, et rien ne change pour une
+installation qui l'emploie.
+
+**Une seule voie d'appel.** Les fonctions qui ne passaient que par le SDK d'Anthropic appellent, pour OpenAI
+et Gemini, la couche des sous-titres (`subtitleGen/providers/`, `TranslationProvider.complete`) : des
+consignes, un message, un schéma JSON éventuel, une borne de sortie, l'usage en jetons — rien de plus n'est
+demandé à un fournisseur. Le chemin Anthropic de chaque fonction reste tel quel (réflexion adaptative et
+effort choisis au banc, flux des questions) ; il gagne seulement le comptage. Ce qui s'adapte :
+- **la réflexion** : `effort` (`TranslationCall`) — `medium` pour « Précédemment » (ce qu'Anthropic a gagné
+  au banc de §137), bas ailleurs ; OpenAI le lit en `reasoning.effort`, Gemini en `thinkingLevel` ;
+- **le flux** : seules les questions d'Anthropic arrivent phrase par phrase ; chez OpenAI et Gemini la
+  réponse arrive d'un bloc (30 s au plus, `MODEL_WHOLE_MS`) puis passe par le même `AnswerGate` — un
+  refus devient `stop: "refusal"` (la panne dite), une réponse coupée `max_tokens`, une limite de débit
+  garde son 429 ;
+- **le cache** : Anthropic par points explicites (sous-titres), OpenAI et Gemini automatiquement sur les
+  préfixes identiques — d'où l'ordre déjà en place partout : consignes et contexte stable d'abord, le
+  variable (position, question) à la fin ;
+- **le modèle** : hors sous-titres, toujours le rapide du fournisseur (`DEFAULT_MODELS` : Haiku 5.5,
+  gpt-6-luna, gemini-3.8-flash, `featureSettings`) — ces réponses s'attendent devant l'écran. Les prix
+  saisis à la main ne valent que pour ce même modèle. « Jusqu'ici » met le modèle dans la clé de ses textes
+  gardés (`askModelName`) : un texte d'un fournisseur n'est jamais servi pour un autre ; chez Anthropic la
+  clé ne change pas, les textes gardés restent.
+
+Aucune fonction n'est restée « Claude seulement » : aucune ne demandait plus que cet appel générique. Les
+garde-fous ne dépendent pas du fournisseur et s'appliquent à l'identique : fenêtre de ce qui a été vu,
+contrôle des noms et des mots interdits (`AnswerGate`, `judgeRecap`), titres vérifiés dans TMDB, cache de
+30 jours de « Jusqu'ici », limites par compte. **Seul Claude Haiku 5.5 a été mesuré sur banc** : la page le
+dit, et dit que la qualité avec un autre fournisseur est l'affaire de l'administrateur.
+
+**Le plafond, avant et après.** Avant : `subtitle_gen_spend` (un rang par mois) ne recevait que les lots de
+sous-titres et la traduction des Nouveautés ; atteint, les tâches de sous-titres se mettaient en pause
+(`budget`) et la création répondait 402. La recherche décrite, « Précédemment » et les questions n'étaient
+comptées nulle part (seulement leurs jetons au journal). Après : chaque appel de chaque fonction y écrit son
+coût exact (`recordAiSpend` : entrée, écriture et lecture du cache, sortie, au prix du modèle — refus et
+réponses coupées compris, ils se paient), et le plafond atteint (`aiBudgetReached`) coupe chaque fonction
+proprement :
+- sous-titres : inchangé (pause `budget`, 402) ;
+- recherche décrite : `describeSearchAvailable` faux — l'écran n'essaie plus, la recherche ordinaire reste ;
+- « Précédemment » : le passage de fond ne prépare plus rien (vérifié aussi entre deux séries) ; les textes
+  déjà prêts restent lus, puis le synopsis ;
+- questions (titre et personne) : `{"t":"error","code":"budget"}`, dit à l'écran (`ask.budget`) ;
+- « Jusqu'ici » : un texte déjà gardé est encore servi ; un texte à écrire répond `budget`, que l'écran tait.
+Le premier franchissement du mois écrit une ligne `[tâche] ia · plafond mensuel atteint` dans `docker logs` ;
+la carte de la Configuration le dit en clair et marque chaque fonction payante « en pause ». Un plafond
+illisible en base ne coupe rien (le contrôle est sur le chemin de chaque fonction).
+
+**Les prix (`pricing.ts`), relevés le 09/11/2026 sur les pages officielles** — Anthropic
+(platform.claude.com/docs/en/about-claude/pricing), OpenAI (developers.openai.com/api/docs/pricing), Google
+(aistudio.google.com/docs/pricing) — avec la date et les adresses en tête du fichier. Nouveau : les paliers
+d'invite longue (`Price.long` : Haiku 5.5 au-delà de 100 000 jetons cache compris, OpenAI au-delà de
+272 000), la lecture du cache de Gemini à son prix (elle était comptée au prix plein faute de tarif publié),
+les changements de prix annoncés (gemini-3.8-flash au 01/01/2027, gemini-4-argon au 01/12/2026), et une liste
+de modèles par fournisseur (`modelChoices`) que le champ propose, « Autre modèle… » restant libre. Un modèle
+retiré, en aperçu, réservé ou « deprecated » n'est pas repris ; rien n'est deviné — un modèle hors table
+demande les deux prix saisis.
+
+**Les questions détachées (§139) et les prérequis dits.** `ASK_ENABLED` ne règle plus que les questions sur
+un titre. Deux réglages de public (`off` / `admins` / `tous`) le rejoignent : `ASK_PERSON_ENABLED` (le champ et
+les questions proposées du panneau d'une personne d'« À l'écran ») et `SOFAR_ENABLED` (« Jusqu'ici » et sa
+préparation de fond). **Vides, ils suivent `ASK_ENABLED`** (`inherits` dans le schéma, `config.ask.personAudience`
+/ `sofarAudience`) : une installation réglée avant garde exactement ce qu'elle avait, sans migration de base.
+Les deux demandent en plus les acteurs à l'écran branchés et ouverts à la session (§138) et un fournisseur
+prêt (clé, prix connu). Chaque porte est au serveur : la route des questions lit `about: "person"` et répond
+`off` selon le réglage de la question posée ; la configuration publique porte `askPersonAvailable` et
+`sofarAvailable`, que le lecteur lit pour le champ du panneau et la préparation de fond. Sans eux, le panneau
+d'une personne ne montre que ses faits TMDB (qui font partie des acteurs à l'écran, sans réglage à part). La
+carte « Acteurs à l'écran » (Connexions) renvoie au guide de déploiement du service (`xray/README.md` sur le
+dépôt) ; elle dit que l'analyse est gratuite et locale.
+
+**Porteurs.** `src/lib/aiFeatures.ts` (`featureSettings`, `featureComplete`, `recordAiSpend`,
+`aiBudgetReached`, `featureStatuses`, `askPersonAvailableFor`, `sofarAvailableFor`), `src/lib/aiFeatureTable.ts`
+(la liste des fonctions et de leurs différences, lue par la page et les tests), `subtitleGen/pricing.ts`,
+`subtitleGen/providers/{types,openai,google}.ts` (`effort`), `describeSearch.ts`, `recap/service.ts`,
+`ask/service.ts`, `ask/sofarRequest.ts`, la route `cinema/ask/[itemId]`, `config/public`,
+`components/settings/{AiFeaturesBlock,SubtitleGenCard,SettingsGroupCard}.tsx` (`choices`, `notes`, l'option
+« comme les questions sur un titre »), `PlayerControls.tsx` et `AskPanel.tsx` (prop `sofar`).
+
+**Tests.** `ai-providers-140.test.ts` (aiguillage par fournisseur doublé de chaque fonction, garde-fous
+inchangés chez OpenAI, plafond commun qui coupe chacune, état vu par l'administrateur, combinaisons des
+réglages détachés, textes de la page dans les quatre langues), `subtitleGen-pricing.test.ts` (cache par
+fournisseur, paliers longs, dates, listes), `xray-person-panel.test.tsx` (questions sans « Jusqu'ici » et
+l'inverse, ligne `budget`), `describe-search.test.ts`.
+
+**Ce qui diffère exprès.** Les sous-titres gardent le modèle réglé ; les autres fonctions, le rapide. Le
+plafond n'éteint pas l'affichage de ce qui est déjà payé (textes « Précédemment » et « Jusqu'ici » gardés).
+Aucune vraie requête n'a été faite chez OpenAI ou Google (pas de clé) : leurs chemins sont prouvés contre un
+double et contre leur documentation, pas contre leur API.

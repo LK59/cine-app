@@ -481,6 +481,16 @@ function migrate(db: Database.Database): void {
       output_tokens INTEGER NOT NULL DEFAULT 0,
       requests      INTEGER NOT NULL DEFAULT 0
     );
+    -- La même dépense, par jour (UTC) et par fonction (10.28.0, DECISIONS.md §140) : écrite dans la même
+    -- transaction que la ligne du mois (\`spendDb.add\`), lue par les tuiles de coût d'Activité — une seule
+    -- source pour le plafond et pour ce que l'administrateur voit.
+    CREATE TABLE IF NOT EXISTS ai_spend_days (
+      day       TEXT    NOT NULL,
+      feature   TEXT    NOT NULL,
+      cost_usd  REAL    NOT NULL DEFAULT 0,
+      requests  INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (day, feature)
+    );
     CREATE TABLE IF NOT EXISTS subtitle_gen_quota (
       user_name TEXT    NOT NULL,
       day       TEXT    NOT NULL,

@@ -20,6 +20,8 @@ vi.mock("@/lib/config", () => ({
     ask: { enabled: true, audience: "tous" },
     recap: { enabled: false },
     subtitleGen: { provider: "anthropic", apiKey: "sk-test" },
+    // « Jusqu'ici » demande les acteurs à l'écran (§139, 09/11/2026).
+    xray: { enabled: true, audience: "tous", url: "http://xray", apiKey: "x" },
     jellyfin: { url: "http://jf", apiKey: "k" },
     app: { language: "fr" },
   },

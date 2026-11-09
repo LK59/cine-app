@@ -24,7 +24,22 @@ export function useAskAvailable(): boolean {
   return data?.askAvailable === true && !isFireTv();
 }
 
-export type AskErrorCode = "off" | "limite" | "indisponible" | "erreur";
+/**
+ * Les questions posées depuis le panneau d'une personne, et « Jusqu'ici » (§139, 09/11/2026) : chacune son
+ * réglage, lu de la même configuration publique suivie. Pas sur Fire TV, comme les questions.
+ */
+export function useAskPersonAvailable(): boolean {
+  const { data } = useSWR<{ askPersonAvailable?: boolean }>("/api/config/public", fetcher, followOnlyOptions);
+  return data?.askPersonAvailable === true && !isFireTv();
+}
+
+export function useSofarAvailable(): boolean {
+  const { data } = useSWR<{ sofarAvailable?: boolean }>("/api/config/public", fetcher, followOnlyOptions);
+  return data?.sofarAvailable === true && !isFireTv();
+}
+
+/** `budget` : le plafond mensuel des fonctions payantes est atteint (§140). */
+export type AskErrorCode = "off" | "limite" | "indisponible" | "erreur" | "budget";
 
 export interface AskExchange {
   id: number;
@@ -82,6 +97,7 @@ export function useAskTitle({
   position,
   enabled = true,
   personId,
+  about = "title",
 }: {
   itemId: string;
   where: AskWhere;
@@ -89,6 +105,8 @@ export function useAskTitle({
   enabled?: boolean;
   /** Le panneau d'une personne (10.27.2) : ses faits réels partent avec la question, côté serveur. */
   personId?: number;
+  /** `person` : posées depuis le panneau d'une personne — une autre porte côté serveur (`ASK_PERSON_ENABLED`). */
+  about?: "title" | "person";
 }) {
   const [exchanges, setExchanges] = useState<AskExchange[]>([]);
   const abortRef = useRef<AbortController | null>(null);
@@ -135,7 +153,14 @@ export function useAskTitle({
         const res = await fetch(`/api/cinema/ask/${encodeURIComponent(itemId)}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question, where, positionS: positionRef.current?.() ?? null, previous, ...(personId ? { personId } : {}) }),
+          body: JSON.stringify({
+            question,
+            where,
+            positionS: positionRef.current?.() ?? null,
+            previous,
+            ...(personId ? { personId } : {}),
+            ...(about === "person" ? { about } : {}),
+          }),
           signal: ctrl.signal,
         });
         if (!res.ok) throw new Error(String(res.status));
@@ -159,7 +184,7 @@ export function useAskTitle({
         update((e) => ({ ...e, state: "error", error: "erreur" }));
       }
     },
-    [exchanges, itemId, where, personId]
+    [exchanges, itemId, where, personId, about]
   );
   const retry = useCallback(
     (id: number) => {

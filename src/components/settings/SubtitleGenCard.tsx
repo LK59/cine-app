@@ -7,7 +7,8 @@ import { fetcher } from "@/lib/swr";
 import { useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { SettingsGroupCard, type Draft } from "@/components/settings/SettingsGroupCard";
-import { DEFAULT_MODELS, PROVIDERS, type ProviderName } from "@/lib/subtitleGen/pricing";
+import { DEFAULT_MODELS, PROVIDERS, modelChoices, type ProviderName } from "@/lib/subtitleGen/pricing";
+import { AiFeaturesBlock, FEATURE_SETTING, featureNote, type FeatureStatusView } from "@/components/settings/AiFeaturesBlock";
 import type { SettingView } from "@/lib/settings/schema";
 
 /**
@@ -44,6 +45,12 @@ interface AdminPayload {
   price: { input: number; output: number } | null;
   budgetUsd: number;
   month: { cost: number; inputTokens: number; cacheWriteTokens: number; cacheReadTokens: number; outputTokens: number; requests: number };
+  /** Depuis §140 : le plafond commun, le modèle rapide des autres fonctions, l'état de chacune. */
+  budgetReached?: boolean;
+  fast?: { model: string; price: { input: number; output: number } | null };
+  features?: FeatureStatusView[];
+  pricesVerifiedOn?: string;
+  priceSource?: string;
   jobs: AdminJob[];
 }
 
@@ -98,10 +105,26 @@ export function SubtitleGenCard({
   }
 
   const readRate = data ? cacheReadRate(data.month) : null;
+  const knownProvider: ProviderName = (PROVIDERS as readonly string[]).includes(provider) ? provider : "anthropic";
+  // Sous chaque réglage de fonction : ce qu'elle coûte, ce qu'elle demande, ce qui l'empêche de marcher.
+  const statuses = data?.features ?? [];
+  const notes = Object.fromEntries(
+    Object.entries(FEATURE_SETTING).map(([key, id]) => [key, featureNote(t, statuses.find((s) => s.id === id), id)])
+  );
 
   return (
     <div className="space-y-3">
-      <SettingsGroupCard group="subtitles" views={shownViews} draft={draft} errors={errors} onDraft={draftWithProvider} onReset={onReset} footer={footer} />
+      <SettingsGroupCard
+        group="subtitles"
+        views={shownViews}
+        draft={draft}
+        errors={errors}
+        onDraft={draftWithProvider}
+        onReset={onReset}
+        footer={footer}
+        choices={{ SUBTITLE_GEN_MODEL: modelChoices(knownProvider) }}
+        notes={notes}
+      />
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
         {!data ? (
           <Loader2 className="animate-spin text-subtle" />
@@ -114,15 +137,36 @@ export function SubtitleGenCard({
             ) : (
               <p className="text-xs text-subtle">{t("subtitleGen.admin.price", { model: data.model, input: data.price.input, output: data.price.output })}</p>
             )}
+            {data.fast && (
+              <p className="text-xs text-subtle">
+                {data.fast.price
+                  ? t("aiFeatures.fastModel", { model: data.fast.model, input: data.fast.price.input, output: data.fast.price.output })
+                  : t("aiFeatures.fastModelNoPrice", { model: data.fast.model })}
+              </p>
+            )}
+            {data.pricesVerifiedOn && data.priceSource && (
+              <p className="text-xs text-subtle">
+                <a href={data.priceSource} target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">
+                  {t("aiFeatures.pricesVerified", { date: data.pricesVerifiedOn })}
+                </a>
+              </p>
+            )}
             <div>
               <h4 className="text-sm font-semibold text-white">{t("subtitleGen.admin.spendTitle")}</h4>
               <p className="mt-1 text-sm text-muted">{t("subtitleGen.admin.spend", { spent: usd(data.month.cost), budget: usd(data.budgetUsd) })}</p>
+              <p className="text-xs text-subtle">{t("aiFeatures.spendAll")}</p>
+              {data.budgetReached && (
+                <p data-ai-budget-reached="" className="mt-1 text-sm text-warning">
+                  {t("aiFeatures.budgetReached")}
+                </p>
+              )}
               <p className="text-xs text-subtle">
                 {readRate === null
                   ? t("subtitleGen.admin.usageRequests", { requests: data.month.requests || 0 })
                   : t("subtitleGen.admin.usage", { requests: data.month.requests, rate: readRate })}
               </p>
             </div>
+            {data.features && <AiFeaturesBlock provider={data.provider} statuses={data.features} />}
             <div>
               <h4 className="mb-2 text-sm font-semibold text-white">{t("subtitleGen.admin.jobsTitle")}</h4>
               {data.jobs.length === 0 ? (

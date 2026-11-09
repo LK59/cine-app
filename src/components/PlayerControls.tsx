@@ -25,7 +25,7 @@ import { useLatest } from "@/components/playerControls/useLatest";
 import { useAutoHide } from "@/components/playerControls/useAutoHide";
 import { PlayerSeekBar } from "@/components/playerControls/PlayerSeekBar";
 import { AskPanel } from "@/components/ask/AskPanel";
-import { prewarmSofar, startSofar, useAskAvailable, useAskPrepare } from "@/lib/ask/client";
+import { prewarmSofar, startSofar, useAskAvailable, useAskPersonAvailable, useAskPrepare, useSofarAvailable } from "@/lib/ask/client";
 import { PlayerOnScreen } from "@/components/playerControls/PlayerOnScreen";
 import { useOnScreenPlacement } from "@/components/playerControls/useOnScreenPlacement";
 import { onScreenPeople, sceneAt, useXrayAvailable, useXrayScenes } from "@/lib/xray/client";
@@ -686,6 +686,9 @@ export function PlayerControls({
    * un écran d'erreur. Une ouverture = une conversation : ses échanges vivent dans le panneau.
    */
   const askOffered = useAskAvailable() && askable && !lab;
+  // Le panneau d'une personne (§139, 09/11/2026) : ses questions et « Jusqu'ici » ont chacun leur réglage.
+  const askPersonOffered = useAskPersonAvailable() && askable && !lab;
+  const sofarOffered = useSofarAvailable() && askable && !lab;
   const [askOpen, setAskOpen] = useState(false);
   // La personne touchée dans « À l'écran » et sa scène : le panneau s'ouvre sur elle.
   const [askPerson, setAskPerson] = useState<{ person: XrayPlayerPerson; scene: XrayPlayerPerson[] } | null>(null);
@@ -718,11 +721,12 @@ export function PlayerControls({
    * (`onIntent` de `PlayerOnScreen`) — une personne, à la position de l'instant, coupée comme le serveur
    * (`sofarCut` sur ces scènes). Plus rien quand la rangée paraît.
    */
-  // Le film s'ouvre, l'option ouverte à la séance (10.27.2) : le serveur prépare le contexte des questions et
-  // de « Jusqu'ici » (l'élément, ses épisodes, les répliques) — `prepareAskContext`. Une fois par élément.
-  useAskPrepare(itemId, askOffered);
+  // Le film s'ouvre, une des trois portes ouverte à la séance (10.27.2, §139) : le serveur prépare le contexte
+  // des questions et de « Jusqu'ici » (l'élément, ses épisodes, les répliques) — `prepareAskContext`. Une fois
+  // par élément.
+  useAskPrepare(itemId, askOffered || askPersonOffered || sofarOffered);
   const intentAt = useLatest(currentTime);
-  const onPersonIntent = askOffered
+  const onPersonIntent = sofarOffered
     ? (person: XrayPlayerPerson) => prewarmSofar(itemId, person.personId, intentAt.current, xrayPayload)
     : undefined;
   const { suspendedRef, showControls, holdControls, toggleControls, windowExitHides } = useAutoHide({
@@ -1272,7 +1276,7 @@ export function PlayerControls({
                       // « Jusqu'ici » part au toucher même (10.27.2), avant le panneau et ses requêtes ; le
                       // panneau reprend cette demande (`useSofar`) : même coupe que la sienne (la position affichée,
                       // à un quart de seconde de celle qu'il lira — la coupe tombe sur un début de scène).
-                      if (askOffered) startSofar(itemId, person.personId, currentTime, xrayPayload);
+                      if (sofarOffered) startSofar(itemId, person.personId, currentTime, xrayPayload);
                       setMenu(null);
                       // Une personne ouvre son panneau — avec les questions et « Jusqu'ici » si l'option est
                       // ouverte à ce compte, sinon la personne seule (photo, faits, biographie, ses titres).
@@ -1419,7 +1423,8 @@ export function PlayerControls({
           person={askPerson?.person}
           scene={askPerson?.scene}
           scenes={xrayPayload}
-          ask={askOffered}
+          ask={askPerson ? askPersonOffered : askOffered}
+          sofar={sofarOffered}
           onClose={() => {
             setAskOpen(false);
             setAskPerson(null);
