@@ -22,7 +22,7 @@ import { aiBudgetReached } from "@/lib/aiFeatures";
 import { castPerson } from "@/lib/xray/person";
 import { scenesForPlayer } from "@/lib/xray/scenes";
 import { sofarCut, sofarMark } from "@/lib/ask/sofarCut";
-import { sofarInput, sofarKey, sofarLookup, sofarParts, sofarScenes, sofarSources, sofarStart, sofarSubscribe, sofarSystem, type SofarEntry } from "@/lib/ask/sofar";
+import { SOFAR_MOVIE_MIN_S, sofarInput, sofarKey, sofarLookup, sofarParts, sofarScenes, sofarSources, sofarStart, sofarSubscribe, sofarSystem, type SofarEntry } from "@/lib/ask/sofar";
 
 /**
  * La borne par compte (consigne du propriétaire, 09/11/2026 : ~100 €/mois de crédit, ne pas brider — seulement
@@ -33,7 +33,12 @@ import { sofarInput, sofarKey, sofarLookup, sofarParts, sofarScenes, sofarSource
 export const SOFAR_PER_HOUR = 200;
 const perHour = createRateLimiter(SOFAR_PER_HOUR, 60 * 60 * 1000);
 
-/** Les répliques peuvent être attendues plus longtemps qu'à une question : le texte est gardé pour la tranche. */
+/**
+ * Les répliques peuvent être attendues plus longtemps qu'à une question : le texte est gardé pour la tranche.
+ * Depuis 10.28.2, au-delà, rien n'est écrit si l'élément a une piste texte (`dialogueMissing`) — la lecture
+ * continue et sert à la demande suivante ; l'écran garde l'attente animée jusqu'à son propre délai
+ * (`SOFAR_CLIENT_TIMEOUT_MS`, le même), puis la ligne discrète.
+ */
 export const SOFAR_DIALOGUE_WAIT_MS = 25_000;
 
 const STREAM_HEADERS = {
@@ -88,7 +93,7 @@ export async function answerSofar(
   try {
     [found, context] = await Promise.all([
       castPerson(itemId, body.personId),
-      gatherAskContext(who.account, itemId, "lecteur", cutoff, who.locale, SOFAR_DIALOGUE_WAIT_MS),
+      gatherAskContext(who.account, itemId, "lecteur", cutoff, who.locale, SOFAR_DIALOGUE_WAIT_MS, { movieEarly: (body.positionS ?? 0) < SOFAR_MOVIE_MIN_S }),
     ]);
   } catch (err) {
     logError("ask/jusquici", err, { itemId });
@@ -99,6 +104,20 @@ export async function answerSofar(
   if (!found || context.status !== "ok") {
     logJusquici({ ...base, cache: "nouveau", status: "indisponible", ms: Date.now() - started });
     return oneShot({ t: "error", code: "indisponible" });
+  }
+
+  // Deux cas où rien n'est demandé au modèle ni gardé (10.28.2) — la ligne discrète, « Encore trop peu vu pour en dire
+  // plus. » (`rejected`, que l'écran lit `little`) :
+  // - un film avant dix minutes (`SOFAR_MOVIE_MIN_S`) : rien à dire que le synopsis ne dise déjà ;
+  // - des répliques attendues et absentes (`dialogueMissing`) : la piste texte existe, mais sa lecture n'a pas fini
+  //   dans `SOFAR_DIALOGUE_WAIT_MS` (12 à 45 s chez Jellyfin pour une piste intégrée) ou a échoué. Avant, le texte
+  //   partait sur le seul synopsis — générique, et gardé trente jours sous sa clé (banc du 09/11/2026, *Bullet
+  //   Train* à froid). Une coupe à zéro n'envoie aucune réplique : rien n'y manque. Un élément **sans** piste texte
+  //   garde la règle d'avant (synopsis, distribution, résumés).
+  const quiet = context.early ? ("tôt" as const) : context.dialogueMissing && cutoff > 0 ? ("attente" as const) : null;
+  if (quiet) {
+    logJusquici({ ...base, cache: "nouveau", status: quiet, ms: Date.now() - started, contextMs, ctx: context.ctx, ...(quiet === "attente" ? { dialogue: "attente" as const } : {}) });
+    return oneShot({ t: "rejected" });
   }
 
   const person = { name: found.person.name, character: found.person.character };

@@ -50,10 +50,10 @@ vi.mock("@/lib/xray/person", () => ({
 }));
 
 import { setAskModelForTests, resetAskCachesForTests, AskModelTimeout, type AskModel } from "@/lib/ask/service";
-import { resetSofarForTests, sofarCutoff, sofarKey, sofarSources, sofarSystem, SOFAR_KEEP_MS, SOFAR_REJECT_KEEP_MS, SOFAR_MAX_EPISODES, SOFAR_NOTHING, SOFAR_VERSION } from "@/lib/ask/sofar";
+import { resetSofarForTests, sofarCutoff, sofarKey, sofarSources, sofarSystem, SOFAR_KEEP_MS, SOFAR_REJECT_KEEP_MS, SOFAR_MAX_EPISODES, SOFAR_MOVIE_MIN_S, SOFAR_NOTHING, SOFAR_VERSION } from "@/lib/ask/sofar";
 import { askContent, ASK_MODEL, SOFAR_MAX_OUTPUT_TOKENS } from "@/lib/ask/service";
 import type { AskContextInput } from "@/lib/ask/core";
-import { SOFAR_PER_HOUR } from "@/lib/ask/sofarRequest";
+import { SOFAR_DIALOGUE_WAIT_MS, SOFAR_PER_HOUR } from "@/lib/ask/sofarRequest";
 import { getDb, sofarDb } from "@/lib/db";
 
 const MOVIE = "a".repeat(32);
@@ -164,14 +164,14 @@ describe("la coupe : le début de la tranche de cinq minutes (10.27.1)", () => {
     expect(sofarCutoff(null)).toBe(0);
   });
 
-  it("à 9 min, les répliques de l'épisode jusqu'à 5 min partent (10.27.0 : aucune avant 10 min, `dialogue: false`)", async () => {
+  it("à 10 min d'un film, les répliques jusqu'à 10 min partent (à 9 min, un film ne demande plus rien : 10.28.2)", async () => {
     const seen: string[] = [];
     setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne dessine un plan.", seen));
-    await sofar(account(), { positionS: 9 * 60 });
+    await sofar(account(), { positionS: 10 * 60 });
     expect(seen[0]).toContain("AVANT-CINQ");
     expect(seen[0]).not.toContain("APRES-LA-COUPE");
     const line = sofarLog.mock.calls.map(([f]) => f as { bucket: number; dialogue?: unknown }).find((f) => f.dialogue !== undefined);
-    expect(line).toMatchObject({ bucket: 5, dialogue: true });
+    expect(line).toMatchObject({ bucket: 10, dialogue: true });
   });
 
   it("la tranche du client est celle du serveur", async () => {
@@ -360,8 +360,9 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     expect(sys).toContain("au dernier moment de l'épisode en cours où il est là");
   });
 
-  it("la version de la consigne est dans la clé : 3 (S7c), et une même entrée sous la version 2 donne une autre clé", () => {
-    expect(SOFAR_VERSION).toBe(3);
+  it("la version de la consigne est dans la clé : 4 (10.28.2), et une même entrée sous la version 3 donne une autre clé", () => {
+    expect(SOFAR_VERSION).toBe(4);
+    expect(sofarKey(ASK_MODEL, "s", "m", 3)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 2)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
   });
 
@@ -558,5 +559,138 @@ describe("10.27.2 — les étapes au journal, le contexte préparé", () => {
     const r = await question(a);
     expect(r.events.at(-1)).toEqual({ t: "done" });
     expect(askLog).toHaveBeenLastCalledWith(expect.objectContaining({ ctx: "prêt", contextMs: expect.any(Number), ttftMs: expect.any(Number), firstSentenceMs: expect.any(Number), totalMs: expect.any(Number) }));
+  });
+});
+
+describe("10.28.2 — rien sur le seul synopsis d'un élément sous-titré, rien avant dix minutes d'un film", () => {
+  const subtitleCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).includes("/Subtitles/")).length;
+  const rows = () => getDb().prepare("SELECT COUNT(*) AS n FROM sofar_texts").get();
+
+  it(`un film avant ${SOFAR_MOVIE_MIN_S / 60} min : la ligne discrète tout de suite — ni modèle, ni répliques lues, rien de gardé`, async () => {
+    const model = vi.fn(scripted("NOMS: Ariadne\n\nAriadne dessine un plan."));
+    setAskModelForTests(model);
+    const r = await sofar(account(), { positionS: SOFAR_MOVIE_MIN_S - 1 });
+    expect(r.events).toEqual([{ t: "rejected" }]);
+    expect(r.plans).toEqual([]);
+    await settle();
+    expect(model).not.toHaveBeenCalled();
+    expect(subtitleCalls()).toBe(0);
+    expect(rows()).toEqual({ n: 0 });
+    expect(sofarLog).toHaveBeenLastCalledWith(expect.objectContaining({ status: "tôt", cache: "nouveau" }));
+    // Position inconnue : pareil (un film à « 0 »).
+    expect((await sofar(account(), { positionS: null })).events).toEqual([{ t: "rejected" }]);
+    // Préparée au pointeur : rien non plus.
+    expect((await sofar(account(), { positionS: 120, prewarm: true })).events).toEqual([{ t: "rejected" }]);
+    expect(model).not.toHaveBeenCalled();
+    // À dix minutes pile, le modèle est appelé.
+    await sofar(account(), { positionS: SOFAR_MOVIE_MIN_S });
+    expect(model).toHaveBeenCalledTimes(1);
+  });
+
+  it("les répliques pas encore lues dans le délai : l'attente, puis la ligne discrète — ni modèle ni texte gardé ; elles servent à la demande suivante", async () => {
+    let release: (r: Response) => void = () => {};
+    const late = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/Subtitles/")) return late;
+      if (url.endsWith(`/Items/${MOVIE}`)) return json(movie);
+      return new Response("", { status: 404 });
+    });
+    const seen: string[] = [];
+    const model = vi.fn(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe.", seen));
+    setAskModelForTests(model);
+    const a = account();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let r: Awaited<ReturnType<typeof sofar>>;
+    try {
+      const pending = sofar(a);
+      await vi.advanceTimersByTimeAsync(SOFAR_DIALOGUE_WAIT_MS + 50);
+      r = await pending;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(r.events).toEqual([{ t: "rejected" }]);
+    expect(model).not.toHaveBeenCalled();
+    await settle();
+    expect(rows()).toEqual({ n: 0 });
+    expect(sofarLog).toHaveBeenLastCalledWith(expect.objectContaining({ status: "attente", dialogue: "attente" }));
+    // La lecture a continué : la demande suivante a les répliques, et le texte part d'elles.
+    release(new Response(SRT));
+    const again = await sofar(a);
+    expect(again.text).toBe("Ariadne construit le labyrinthe.");
+    expect(model).toHaveBeenCalledTimes(1);
+    expect(seen[0]).toContain("AVANT-CINQ");
+  });
+
+  it("une lecture des répliques en échec (piste illisible) : la ligne discrète, pas un texte sur le synopsis", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/Subtitles/")) return new Response("", { status: 500 });
+      if (url.endsWith(`/Items/${MOVIE}`)) return json(movie);
+      return new Response("", { status: 404 });
+    });
+    const model = vi.fn(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe."));
+    setAskModelForTests(model);
+    const r = await sofar(account());
+    expect(r.events).toEqual([{ t: "rejected" }]);
+    expect(model).not.toHaveBeenCalled();
+    expect(sofarLog).toHaveBeenLastCalledWith(expect.objectContaining({ status: "attente" }));
+  });
+
+  it("un épisode : les mêmes règles pour ses répliques — absentes, la ligne discrète ; à la coupe zéro (avant 5 min), rien n'y manque et les résumés suffisent", async () => {
+    const SERIES = "b".repeat(32);
+    const EP = "c".repeat(32);
+    const PREV = "e".repeat(32);
+    const ep = (id: string, n: number, played: boolean) => ({
+      Id: id,
+      Type: "Episode",
+      Name: `Épisode ${n}`,
+      SeriesId: SERIES,
+      ParentIndexNumber: 1,
+      IndexNumber: n,
+      Overview: `RESUME-${n}`,
+      UserData: { Played: played, PlaybackPositionTicks: 0 },
+      MediaSources: [{ Id: "f".repeat(32) }],
+      MediaStreams: [{ Index: 3, Type: "Subtitle", Language: "fre", IsTextSubtitleStream: true }],
+    });
+    const series = { Id: SERIES, Type: "Series", Name: "Le Phare", ProductionYear: 2024, Overview: "Une île.", People: movie.People, UserData: { Played: false } };
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/Subtitles/")) return new Response("", { status: 500 });
+      if (url.includes("/Episodes")) return json({ Items: [ep(PREV, 1, true), ep(EP, 2, false)] });
+      if (url.endsWith(`/Items/${EP}`)) return json(ep(EP, 2, false));
+      if (url.endsWith(`/Items/${SERIES}`)) return json(series);
+      return new Response("", { status: 404 });
+    });
+    const seen: string[] = [];
+    const model = vi.fn(scripted("NOMS: Ariadne\n\nAriadne arrive au phare.", seen));
+    setAskModelForTests(model);
+    const { POST } = await import("@/app/api/cinema/ask/[itemId]/route");
+    const ask = async (positionS: number) => {
+      const res = await POST(req(account(), { mode: "jusquici", personId: 2, positionS }), { params: Promise.resolve({ itemId: EP }) });
+      return (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l) as { t: string });
+    };
+    expect(await ask(12 * 60)).toEqual([{ t: "rejected" }]);
+    expect(model).not.toHaveBeenCalled();
+    expect(sofarLog).toHaveBeenLastCalledWith(expect.objectContaining({ status: "attente" }));
+    // Avant cinq minutes d'un épisode (coupe zéro) : aucune réplique n'aurait part — le texte s'écrit, sur les résumés.
+    const early = await ask(2 * 60);
+    expect(early.at(-1)).toEqual({ t: "done" });
+    expect(model).toHaveBeenCalledTimes(1);
+    expect(seen[0]).toContain("RESUME-1");
+  });
+
+  it("un film sans aucune piste de sous-titres texte : comme avant — synopsis et distribution, le texte est écrit", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith(`/Items/${MOVIE}`)) return json({ ...movie, MediaStreams: [{ Index: 3, Type: "Subtitle", Language: "fre", IsTextSubtitleStream: false }] });
+      return new Response("", { status: 404 });
+    });
+    const seen: string[] = [];
+    setAskModelForTests(scripted("NOMS: Ariadne\n\nAriadne est l'architecte.", seen));
+    const r = await sofar(account());
+    expect(r.text).toBe("Ariadne est l'architecte.");
+    expect(seen[0]).toContain("Dom Cobb vole des secrets dans les rêves.");
+    expect(seen[0]).not.toContain("AVANT-CINQ");
+    await settle();
+    expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ status: "ok", dialogue: false }));
   });
 });

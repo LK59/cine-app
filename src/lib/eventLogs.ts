@@ -227,7 +227,11 @@ export function logJusquici(fields: {
   cutS?: number;
   prewarm: boolean;
   cache: "partagé" | "compte" | "nouveau";
-  status: "ok" | "vide" | "rejeté" | "limite" | "erreur" | "indisponible";
+  /**
+   * `tôt` (10.28.2) : un film avant dix minutes, `attente` : les répliques d'une piste texte pas encore lues — ni
+   * l'un ni l'autre n'appelle le modèle ni ne garde rien (§139).
+   */
+  status: "ok" | "vide" | "rejeté" | "limite" | "erreur" | "indisponible" | "tôt" | "attente";
   ms: number;
   firstMs?: number;
   inTokens?: number;

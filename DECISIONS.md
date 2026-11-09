@@ -9601,6 +9601,49 @@ faits des personnes (`forgetPersonFacts`). (4) Une question abandonnée (panneau
 `status: "abandon"` dans `recherche.log` — elle se lisait `ok`. Tests : `xray-row-1027.test.tsx` (limite de
 tranche, oubli), `ai-share-10281.test.ts` (préparation), `ai-spend-abort-10281.test.ts` (`abandon`).
 
+**10.28.2 — les films : les noms des répliques, jamais la liste des présents, rien sur le seul synopsis, rien
+avant dix minutes.**
+
+- **Deux règles de plus dans la consigne** (`sofarSystem`, séries et films — une seule consigne), retenues par le
+  propriétaire : « Appelle chaque personnage comme les répliques le nomment quand c'est clair (une traduction, un
+  surnom), sinon comme la distribution. » — la distribution de TMDB est en anglais (« Ladybug », « White Death »,
+  « The Prime Minister ») quand les sous-titres français disent « Coccinelle », « la Mort Blanche », « le Premier
+  ministre » ; le filet des noms accepte le nom des répliques, il est dans les sources. Et « Un autre personnage
+  seulement s'il prend part à ce que tu racontes, jamais une liste de qui est là. » — un second rôle était présenté
+  « entourée de Ladybug, Lemon, White Death, The Elder et Kimura ». `SOFAR_VERSION` 4.
+- **Banc du 09/11/2026** (Haiku 5.5, réflexion adaptative, effort bas, une requête à la fois, 29 appels, ~0,06 $) :
+  trois films analysés par X-Ray — *Bullet Train* (action, distribution anglaise), *Le Prénom* (huis clos, cinq
+  personnages, un secret révélé tard), *Love Actually* (film choral) —, un premier rôle et un second rôle chacun, à
+  trois moments ; la consigne d'avant (S7c) sur les mêmes entrées là où il fallait comparer. Avec les deux règles :
+  les noms des répliques partout (« Coccinelle », « l'Ancien », « la Mort Blanche », « le Premier ministre » ; S7c
+  écrivait encore une fois « The Prime Minister »), plus de liste de cinq présents (au plus deux noms, une fois),
+  aucune révélation au-delà de la coupe (le secret du *Prénom* n'est dit qu'une fois passé), aucun rejet du filet.
+  *Ted Lasso* S01E08 (Rebecca, 15 min) et *MacGyver* S01E06 (Jack, 20 min) : les mêmes faits que S7c. Ce que les
+  deux règles ne règlent pas, vu sur les deux consignes : une scène d'X-Ray qui mêle deux fils montés en alternance
+  (un coup de téléphone et un autre wagon) fait prêter à un personnage ce qui se passe dans l'autre fil ; un détail
+  du monde ajouté (« britannique ») ; une fois, un moment plus ancien raconté à la place du dernier ; une fois le mot
+  « scène », que le filet des mots de coulisse ne retient pas.
+- **Rien sur le seul synopsis d'un élément sous-titré** (`dialogueMissing`, `gatherAskContext`) : quand l'élément — le
+  film ou l'épisode en cours — a une piste de sous-titres texte que `cuesOf` sait lire (`hasTextSubtitles`,
+  `recap/service.ts`, la même condition) et qu'aucune réplique n'est là — lecture pas finie dans
+  `SOFAR_DIALOGUE_WAIT_MS` (25 s ; 12 à 45 s chez Jellyfin pour une piste intégrée) ou en échec —, « Jusqu'ici »
+  n'appelle pas le modèle et ne garde rien : la route répond `{"t":"rejected"}`, l'écran garde l'attente animée
+  pendant ce délai puis montre la ligne discrète ; `recherche.log` dit `status: "attente"`. La lecture continue et
+  sert à la demande suivante (`cuesKept`). En 10.28.0, *Bullet Train* ouvert à froid recevait un texte générique tiré
+  du synopsis, gardé trente jours sous sa clé. Une coupe à zéro (un épisode avant cinq minutes) n'envoie aucune
+  réplique : rien n'y manque, la règle d'avant vaut (résumés). **Un élément sans piste texte garde la règle
+  d'avant** : synopsis, distribution, résumés.
+- **Un film avant dix minutes** (`SOFAR_MOVIE_MIN_S` = 600, `sofar.ts`) : la ligne discrète tout de suite — ni modèle,
+  ni répliques attendues (`movieEarly`), rien de gardé, `status: "tôt"` ; une position inconnue aussi. Le générique et
+  la scène d'ouverture ne disent rien d'un personnage que le synopsis ne dise déjà (au banc, un second rôle à 18 min :
+  trois répliques, un texte creux). Une série n'est pas concernée — ses épisodes vus ont des résumés.
+Tests : `ask-sofar-s7c.test.ts` (les deux règles dans les consignes série et film, la consigne entière octet pour
+octet, un nom tiré des répliques accepté par le filet, version 4) ; `ask-sofar.test.ts` (film à 9 min 59 et position
+inconnue : `rejected`, ni modèle ni sous-titres lus, rien en base, `tôt` ; à 10 min, appelé ; répliques en retard
+au-delà de `SOFAR_DIALOGUE_WAIT_MS` : `rejected`, `attente`, rien en base, puis la demande suivante écrit sur les
+répliques ; lecture en échec : `attente` ; film sans piste texte : texte sur le synopsis comme avant ; épisode : la
+même règle, et à la coupe zéro le texte s'écrit sur les résumés).
+
 ## 140. Les fonctions d'IA chez les trois fournisseurs, un seul plafond mensuel, et des réglages qui disent ce qu'ils demandent (09/11/2026)
 
 **Règle.** Le fournisseur, la clé et le budget des sous-titres générés (§69) servent à **toutes** les

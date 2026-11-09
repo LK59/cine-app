@@ -147,11 +147,20 @@ export async function episodesOf(jfId: string, seriesId: string): Promise<Episod
   return (body.Items ?? []).filter((e) => (e.ParentIndexNumber ?? 0) > 0);
 }
 
+/**
+ * L'élément a-t-il une piste de sous-titres texte que `cuesOf` sait lire (10.28.2) — la même condition, en un seul
+ * endroit : « Jusqu'ici » n'écrit jamais sur le seul synopsis un élément dont les répliques existent mais ne sont pas
+ * encore lues (`dialogueMissing`, §139).
+ */
+export function hasTextSubtitles(item: EpisodeWithStreams, locale: Locale): boolean {
+  return !!pickSubtitleStream(item.MediaStreams ?? [], locale) && !!item.MediaSources?.[0]?.Id;
+}
+
 /** Les répliques d'un élément (épisode ou film) — la source des dialogues de §137, reprise par §139. */
 export async function cuesOf(episode: EpisodeWithStreams, locale: Locale): Promise<Cue[]> {
-  const stream = pickSubtitleStream(episode.MediaStreams ?? [], locale);
-  const source = episode.MediaSources?.[0]?.Id;
-  if (!stream || !source) return [];
+  if (!hasTextSubtitles(episode, locale)) return [];
+  const stream = pickSubtitleStream(episode.MediaStreams ?? [], locale)!;
+  const source = episode.MediaSources![0].Id;
   const url = `${config.jellyfin.url}/Videos/${jellyfinIdSegment(episode.Id)}/${jellyfinIdSegment(source)}/Subtitles/${stream.Index}/0/Stream.srt`;
   const res = await jellyfinFetch(url, { headers: jellyfinAuthHeaders(config.jellyfin.apiKey), signal: upstreamSignal(SUBTITLE_TIMEOUT_MS) });
   // Une piste illisible n'empêche rien : le « Précédemment » se fait alors sur les résumés.

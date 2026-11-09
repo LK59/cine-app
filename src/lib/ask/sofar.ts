@@ -40,14 +40,24 @@ import { logError } from "@/lib/logger";
  * réservé au personnage absent de tout ce qui a été vu — en 10.27.1, les seconds rôles d'un épisode
  * (Ted Lasso S01E08, cinq personnes sur huit) recevaient « RIEN » alors qu'ils étaient nommés ou à l'écran,
  * et ces « vide » étaient gardés trente jours : la version dans la clé les écarte tous. 3 (10.28.0) : la
- * consigne S7c, les trois derniers résumés, les répliques groupées par scène et coupées strictement.
+ * consigne S7c, les trois derniers résumés, les répliques groupées par scène et coupées strictement. 4 (10.28.2) :
+ * deux règles de plus (les noms des répliques, jamais la liste des présents) — et plus aucun texte écrit sur le
+ * seul synopsis quand les répliques d'une piste texte n'étaient pas encore lues (`dialogueMissing`).
  */
-export const SOFAR_VERSION = 3;
+export const SOFAR_VERSION = 4;
 export { SOFAR_BUCKET_S } from "@/lib/ask/sofarCut";
 export const SOFAR_MAX_SENTENCES = 2;
 export const SOFAR_MAX_WORDS = 60;
 /** Ce que le modèle écrit quand le personnage n'apparaît nulle part dans ce qui a été vu — jamais montré tel quel. */
 export const SOFAR_NOTHING = "RIEN";
+/**
+ * Un film (10.28.2) : avant dix minutes de position, rien n'est demandé au modèle — la ligne discrète
+ * (« Encore trop peu vu pour en dire plus. ») tout de suite, rien de gardé. Le générique, une scène
+ * d'ouverture : il n'y a encore rien à dire d'un personnage que le synopsis ne dise déjà, et le banc l'a montré
+ * (un second rôle à 18 min de *Bullet Train* : trois répliques, un texte creux). Une série garde la règle
+ * d'avant — ses épisodes précédents ont des résumés.
+ */
+export const SOFAR_MOVIE_MIN_S = 600;
 /** Gardés en base trente jours, puis effacés par le ménage périodique. */
 export const SOFAR_KEEP_MS = 30 * 24 * 3600_000;
 /**
@@ -81,6 +91,13 @@ const LANGUAGE_NAME: Record<Locale, string> = { fr: "français", en: "anglais", 
  * (« qui propose quoi ») où les attributions se trompent, une cause ou un lien inventé, l'horaire ou la
  * liste « à l'écran » recopiés. Toujours en français, sauf la langue de la réponse.
  *
+ * Deux règles de plus en 10.28.2 (banc des films du 09/11/2026, *Bullet Train*, *Le Prénom*, *Love Actually*) :
+ * **les noms des répliques** — la distribution de TMDB est en anglais (« Ladybug », « White Death ») quand les
+ * sous-titres français disent « Coccinelle », « la Mort Blanche » : le nom des répliques quand il est clair, sinon
+ * celui de la distribution (le filet des noms l'accepte, il est dans les sources) ; et **jamais la liste des
+ * présents** — un second rôle était présenté « entourée de Ladybug, Lemon, White Death, The Elder et Kimura » :
+ * un autre personnage seulement s'il prend part à ce qui est raconté.
+ *
  * `grouped` : les répliques partent groupées par scène avec qui est à l'écran (titre analysé) ; sinon la
  * précision « groupées par moment avec qui est à l'écran » est retirée — elle décrirait un bloc absent.
  */
@@ -110,6 +127,8 @@ function sofarSeriesSystem(locale: Locale, grouped: boolean): string {
 Règles :
 - Rien qui ne soit écrit dans les éléments fournis : ni nom, ni lieu, ni détail.
 - Les répliques ne disent pas qui parle. Ne lui prête une parole, un acte ou une histoire (une nuit, un pari, une décision) que si les répliques le rattachent à lui par son nom ou si un résumé le dit ; un mot d'adresse (un prénom, « patronne », « coach ») dit à qui l'on parle. Quand plusieurs personnages sont là, dis seulement à quoi il assiste ou participe.
+- Appelle chaque personnage comme les répliques le nomment quand c'est clair (une traduction, un surnom), sinon comme la distribution.
+- Un autre personnage seulement s'il prend part à ce que tu racontes, jamais une liste de qui est là.
 - « À l'écran » sert seulement à savoir qui est là : ne le recopie pas. Ne donne ni minute ni horaire, et n'écris jamais « réplique », « scène », « dialogue », « résumé » ni « sources ».
 - Dis l'événement (« il défie Ted aux fléchettes », « elle lui demande de l'accompagner »), pas ses termes : ni conditions, ni sommes, ni qui propose quoi dans un échange — c'est là que les attributions se trompent.
 - Ni cause, ni lien entre les personnages, ni geste qui ne soit dit tel quel.

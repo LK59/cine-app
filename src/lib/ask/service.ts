@@ -18,7 +18,7 @@ import { upstreamSignal } from "@/lib/http";
 import { DEFAULT_MODELS } from "@/lib/subtitleGen/pricing";
 import { ProviderError } from "@/lib/subtitleGen/providers";
 import { anthropicUsage, featureComplete, featureProviderReady, featureSettings, partialAnthropicUsage, recordAiSpend } from "@/lib/aiFeatures";
-import { cuesOf, episodesOf, type EpisodeWithStreams } from "@/lib/recap/service";
+import { cuesOf, episodesOf, hasTextSubtitles, type EpisodeWithStreams } from "@/lib/recap/service";
 import type { Cue } from "@/lib/recap/core";
 import type { Locale } from "@/lib/i18n";
 import { logError } from "@/lib/logger";
@@ -187,6 +187,14 @@ export type AskContext =
       status: "ok";
       input: AskContextInput;
       dialogueLate: boolean;
+      /**
+       * Les répliques étaient attendues — une position, une piste de sous-titres texte que `cuesOf` sait lire — et il
+       * n'y en a aucune : pas encore lues dans le délai, ou leur lecture a échoué (10.28.2). « Jusqu'ici » n'écrit
+       * alors rien (§139) : un texte sur le seul synopsis n'en dit rien de juste.
+       */
+      dialogueMissing: boolean;
+      /** Un film demandé avec `movieEarly` (10.28.2) : ses répliques n'ont pas été attendues. */
+      early: boolean;
       /** `prêt` : l'élément et ses épisodes venaient de la préparation (10.27.2) ; `construit` : lus pour cette demande. */
       ctx: "prêt" | "construit";
     }
@@ -206,7 +214,13 @@ export async function gatherAskContext(
   where: AskWhere,
   playerPositionS: number | null,
   locale: Locale,
-  waitMs = DIALOGUE_WAIT_MS
+  waitMs = DIALOGUE_WAIT_MS,
+  /**
+   * `movieEarly` (« Jusqu'ici », 10.28.2) : la position est trop tôt pour un film (`SOFAR_MOVIE_MIN_S`) — si l'élément
+   * en est un, ses répliques ne sont pas attendues et le contexte le dit (`early`) ; la demande n'appellera pas le
+   * modèle. Sans effet sur un épisode.
+   */
+  opts: { movieEarly?: boolean } = {}
 ): Promise<AskContext> {
   const { parts, ready } = await contextParts(jfId, itemId);
   if (!parts) return { status: "indisponible" };
@@ -216,11 +230,14 @@ export async function gatherAskContext(
   if (item.Type === "Movie") {
     const watchedAll = item.UserData?.Played === true;
     const positionS = where === "lecteur" ? playerPositionS : positionOf(item) || null;
-    const wantsCues = watchedAll || (positionS ?? 0) > 0;
+    const early = opts.movieEarly === true;
+    const wantsCues = !early && (watchedAll || (positionS ?? 0) > 0);
     const cues = wantsCues ? await cuesWithin(item, locale, waitMs) : [];
     return {
       status: "ok",
       dialogueLate: cues === null,
+      dialogueMissing: wantsCues && !cues?.length && hasTextSubtitles(item, locale),
+      early,
       ctx,
       input: {
         kind: "movie",
@@ -258,10 +275,13 @@ export async function gatherAskContext(
   // la série entière vue le fait (`seenCues`).
   const wantsCues = !!current && (watchedAll || (positionS ?? 0) > 0);
   const cues = wantsCues && current ? await cuesWithin(current, locale, waitMs) : [];
+  const dialogueMissing = wantsCues && !!current && !cues?.length && hasTextSubtitles(current, locale);
   const list: AskEpisode[] = episodes.map((e) => ({ code: code(e), title: e.Name, overview: e.Overview ?? "", played: e.UserData?.Played === true }));
   return {
     status: "ok",
     dialogueLate: cues === null,
+    dialogueMissing,
+    early: false,
     ctx,
     input: {
       kind: "series",
