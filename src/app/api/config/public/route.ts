@@ -7,6 +7,7 @@ import { passageTarget } from "@/lib/passage/target";
 import { userPrefsDb } from "@/lib/db";
 import { recapAvailable } from "@/lib/recap/service";
 import { askAvailableFor } from "@/lib/ask/service";
+import { askPersonAvailableFor, sofarAvailableFor } from "@/lib/aiFeatures";
 import { xrayConfigured, xrayOpenTo } from "@/lib/clients/xray";
 
 /**
@@ -48,6 +49,11 @@ export async function GET(req: NextRequest) {
     // lien de partage aussi, réglée sur `tous`, sur son seul titre (liste fermée, portée `path`). Ce n'est
     // que pour cacher la pilule : la route refuse d'elle-même.
     askAvailable: askAvailableFor(session),
+    // Les questions posées depuis le panneau d'une personne d'« À l'écran », et « Jusqu'ici » dans ce
+    // panneau (§139, 09/11/2026) : chacune son réglage (vide, il suit `ASK_ENABLED`), et les acteurs à
+    // l'écran. Sans elles, le panneau d'une personne ne montre que ses faits TMDB.
+    askPersonAvailable: askPersonAvailableFor(session),
+    sofarAvailable: sofarAvailableFor(session),
     // Les acteurs à l'écran (DECISIONS.md §138) : l'option branchée et ouverte à ce compte. Le lecteur ne
     // demande ses scènes qu'avec elle — sans, aucune requête de plus à l'ouverture d'un film.
     xrayAvailable: !!session && xrayOpenTo(session) && xrayConfigured(),

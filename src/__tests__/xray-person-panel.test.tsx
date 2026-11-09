@@ -139,6 +139,32 @@ describe("sans l'option des questions", () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith("/api/cinema/ask/"))).toBe(false);
   });
 
+  it("les questions sur une personne ouvertes, « Jusqu'ici » coupé (§139, 09/11/2026) : le champ, pas la section", async () => {
+    open({ ask: true, sofar: false });
+    await screen.findByText("Elliot Page est un acteur canadien.");
+    expect(document.querySelector("[data-ask-sofar]")).toBeNull();
+    expect(sofarPosts()).toHaveLength(0);
+    fireEvent.click(screen.getByText('xray.qRecent:{"name":"Ariadne"}'));
+    await screen.findByText("Elle construit les rêves.");
+    // Posée depuis le panneau d'une personne : la porte de ces questions-là côté serveur.
+    expect(JSON.parse(String((questionPosts()[0][1] as RequestInit).body)).about).toBe("person");
+  });
+
+  it("« Jusqu'ici » ouvert, les questions sur une personne coupées : la section, ni propositions ni champ", async () => {
+    open({ ask: false, sofar: true });
+    await screen.findByText("Ariadne construit le labyrinthe.");
+    expect(document.querySelector("[data-ask-input]")).toBeNull();
+    expect(document.querySelector("[data-ask-chips]")).toBeNull();
+    expect(questionPosts()).toHaveLength(0);
+  });
+
+  it("le plafond mensuel atteint : une ligne dite à la place de la réponse (§140)", async () => {
+    questionReplies = [[{ t: "error", code: "budget" }]];
+    open({ ask: true, sofar: false });
+    fireEvent.click(screen.getByText('xray.qRecent:{"name":"Ariadne"}'));
+    await screen.findByText("ask.budget");
+  });
+
   it("« Dans votre bibliothèque » : des affiches qui ne réagissent à rien", async () => {
     open({ ask: false });
     const library = await waitFor(() => {

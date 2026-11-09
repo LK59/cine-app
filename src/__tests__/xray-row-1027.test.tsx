@@ -243,7 +243,7 @@ describe("dans le lecteur : avec les commandes, en lecture comme en pause", () =
   it("film en lecture, commandes affichées : la rangée et le bouton rond de la question", async () => {
     stubFetch();
     let video: HTMLVideoElement | null = null;
-    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 10, true);
     await waitFor(() => expect(container.querySelector("[data-player-onscreen]")).toBeTruthy());
     const ask = container.querySelector<HTMLElement>('[data-player-nav="ask"]')!;
@@ -257,7 +257,7 @@ describe("dans le lecteur : avec les commandes, en lecture comme en pause", () =
   it("personne de reconnu : le bouton rond seul, sans rangée", async () => {
     stubFetch();
     let video: HTMLVideoElement | null = null;
-    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 60, true);
     await waitFor(() => expect(container.querySelector('[data-player-nav="ask"]')).toBeTruthy());
     expect(container.querySelector("[data-player-onscreen]")).toBeNull();
@@ -282,7 +282,7 @@ describe("dans le lecteur : avec les commandes, en lecture comme en pause", () =
   it("« Jusqu'ici » préparé en fond : les trois premières personnes, une fois par tranche de dix minutes", async () => {
     const fetchMock = stubFetch();
     let video: HTMLVideoElement | null = null;
-    withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 10, true);
     await waitFor(() => expect(prewarms(fetchMock)).toHaveLength(3));
     expect(prewarms(fetchMock).map((b) => b.personId)).toEqual([1, 2, 3]);
@@ -299,7 +299,7 @@ describe("dans le lecteur : avec les commandes, en lecture comme en pause", () =
   it("page cachée : aucune préparation, même dans une nouvelle tranche", async () => {
     const fetchMock = stubFetch();
     let video: HTMLVideoElement | null = null;
-    withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 10, true);
     await waitFor(() => expect(prewarms(fetchMock)).toHaveLength(3));
     Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });

@@ -152,13 +152,15 @@ describe("pickTmdbMatch — le bon titre, ou rien", () => {
 });
 
 describe("/api/search/describe", () => {
-  it("coupée ou sans clé Anthropic : n'existe pas, et rien ne part", async () => {
+  it("coupée ou sans clé : n'existe pas, et rien ne part — OpenAI et Gemini comptent depuis le 09/11/2026 (§140)", async () => {
     settings.enabled = false;
     expect((await call(null)).body).toEqual({ available: false, results: [] });
     expect((await call("le film où un type revit la même journée")).body.results).toEqual([]);
     settings.enabled = true;
     settings.provider = "openai";
-    expect((await call(null)).body.available).toBe(false);
+    expect((await call(null)).body.available).toBe(true);
+    settings.provider = "google";
+    expect((await call(null)).body.available).toBe(true);
     settings.provider = "anthropic";
     settings.apiKey = " ";
     expect((await call(null)).body.available).toBe(false);

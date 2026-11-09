@@ -3343,7 +3343,8 @@
       "xray": {
         "title": "Actors on screen",
         "why": "Optional, off by default. A service installed next to the app recognises, scene by scene, the actors in the picture, so it can tell who is on screen during a film or an episode. When on, each playback asks for the title being watched to be analysed, then the next episode.",
-        "help": "The service's address and key (its XRAY_API_KEY variable). Installing it is described in xray/README.md."
+        "help": "The service's address and key (its XRAY_API_KEY variable). Installing it is described in xray/README.md.",
+        "guide": "Install the analysis service (deployment guide)"
       },
       "app": {
         "title": "Application",
@@ -3363,8 +3364,8 @@
         "why": "The built-in player plays films in the browser. When a file won't play (a sound or picture the device can't decode), it hands it over to Jellyfin, which converts it on the fly — on by default, recommended. Turned off, those files show a playback error, and the server never converts anything."
       },
       "subtitles": {
-        "title": "Generated subtitles",
-        "why": "Translates a full subtitle of the title into the chosen language on demand, during playback, with an online AI. Without a key, the feature appears nowhere.",
+        "title": "AI features",
+        "why": "One online AI provider (Claude, OpenAI or Google), one key and one monthly limit serve every paid feature: generated subtitles, search by description, “Previously”, questions and “So far”. Without a key, none of them appears.",
         "help": "The key stays on the server: it is never sent to devices nor written to the logs."
       },
       "dialogue": {
@@ -3421,21 +3422,23 @@
       "POSTER_PREWARM_TUNING": "Sizes and languages of prepared posters",
       "RADARR_QUALITY_PROFILE": "Quality profile for additions",
       "SONARR_QUALITY_PROFILE": "Quality profile for additions",
-      "SUBTITLE_GEN_ENABLED": "Offer subtitle generation",
-      "DESCRIBE_SEARCH_ENABLED": "Search by description: find a film or series described in a sentence (Anthropic, with the key above)",
-      "RECAP_ENABLED": "“Previously”: on the page of a series in progress, recall the latest events seen (Anthropic, with the key above)",
-      "ASK_ENABLED": "“Ask a question”: on a title page or with the film paused, answer a question from what the account has already watched (Anthropic, with the key above)",
+      "SUBTITLE_GEN_ENABLED": "Generated subtitles: translate a full subtitle into the chosen language during playback",
+      "DESCRIBE_SEARCH_ENABLED": "Search by description: find a film or series described in one sentence",
+      "RECAP_ENABLED": "“Previously”: on the page of a series in progress, recall the latest events watched",
+      "ASK_ENABLED": "Questions about a title: on a title page or with the film paused, answer from what the account has already watched",
       "SUBTITLE_GEN_PROVIDER": "Provider",
       "SUBTITLE_GEN_API_KEY": "Provider key",
       "SUBTITLE_GEN_MODEL": "Model",
-      "SUBTITLE_GEN_BUDGET_USD": "Monthly budget (dollars)",
+      "SUBTITLE_GEN_BUDGET_USD": "Monthly limit for all paid features (dollars)",
       "SUBTITLE_GEN_PRICE_INPUT": "Input price per million tokens (empty: known rate)",
       "SUBTITLE_GEN_PRICE_OUTPUT": "Output price per million tokens (empty: known rate)",
       "REPLIQUES_ENABLED": "Dialogue search",
       "REPLIQUES_NIGHTLY": "Nightly update",
       "REPLIQUES_NIGHT_START": "Night window start",
       "REPLIQUES_NIGHT_END": "Night window end",
-      "REPLIQUES_LANGUAGES": "Dialogue languages"
+      "REPLIQUES_LANGUAGES": "Dialogue languages",
+      "ASK_PERSON_ENABLED": "Questions about a person: in the panel of an “On screen” actor, the input and suggested questions",
+      "SOFAR_ENABLED": "“So far”: in the panel of an “On screen” actor, two sentences on what their character has done so far"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml, under “environment”:",
@@ -3512,7 +3515,11 @@
       "off": "Off",
       "admins": "Administrators only",
       "tous": "All accounts"
-    }
+    },
+    "inherit": {
+      "ASK_ENABLED": "Same as questions about a title"
+    },
+    "otherValue": "Other model…"
   },
   "subtitleGen": {
     "admin": {
@@ -4208,7 +4215,8 @@
     "chipSheet1": "Who are the main characters?",
     "chipSheet2": "What is this title about?",
     "done": "OK",
-    "retry": "Try again"
+    "retry": "Try again",
+    "budget": "The monthly limit for paid features has been reached: questions will be back next month."
   },
   "xray": {
     "onScreen": "On screen",
@@ -4221,5 +4229,68 @@
     "qLink": "How is {name} connected to {other}?",
     "qRecent": "What has happened to {name} lately?",
     "qWants": "What is {name} after?"
+  },
+  "aiFeatures": {
+    "title": "What each feature does with each provider",
+    "intro": "All of them go through the provider and key above. The app's safeguards — nothing beyond what the account has watched, name checks, per-account limits, the monthly limit — are the same with all three.",
+    "quality": "Only Claude (Haiku 5.5) has been measured on a test bench for these features. With OpenAI or Google they work the same way, but the quality of the answers is the administrator's responsibility.",
+    "feature": "Feature",
+    "providers": {
+      "anthropic": "Claude (Anthropic)",
+      "openai": "OpenAI",
+      "google": "Google Gemini"
+    },
+    "names": {
+      "subtitles": "Generated subtitles",
+      "describe": "Search by description",
+      "recap": "“Previously”",
+      "askTitle": "Questions about a title",
+      "askPerson": "Questions about a person",
+      "sofar": "“So far”",
+      "xray": "On-screen actors"
+    },
+    "what": {
+      "subtitles": "Translates a full subtitle during playback.",
+      "describe": "Finds a title described in one sentence.",
+      "recap": "Recalls the latest events of a series, prepared in the background.",
+      "askTitle": "Answers a question about a film or series.",
+      "askPerson": "Answers a question about an actor on screen.",
+      "sofar": "Sums up what a character has done so far.",
+      "xray": "Tells who is on screen; TMDB page and the person's titles in the library."
+    },
+    "paid": "Paid calls to the provider",
+    "free": "Free, on your server",
+    "needsLabel": "Needs: {needs}",
+    "needs": {
+      "provider": "a provider key",
+      "xray": "on-screen actors",
+      "xrayService": "the analysis service (Connections)"
+    },
+    "blocked": {
+      "provider": "no key: inactive",
+      "price": "model price unknown: inactive",
+      "xray": "on-screen actors off or service not set up: inactive",
+      "budget": "monthly limit reached: paused"
+    },
+    "noProvider": "No AI provider",
+    "unsupported": "Not available",
+    "notes": {
+      "streamLines": "lines shown as they arrive",
+      "linesAtEnd": "lines written at the end of each batch",
+      "explicitCache": "explicit cache markers",
+      "implicitCache": "automatic caching of identical beginnings",
+      "benched": "measured on a test bench",
+      "notBenched": "not measured",
+      "thinkingAdaptive": "adaptive thinking, effort set per feature",
+      "reasoningMapped": "model reasoning at the closest level",
+      "streamSentences": "answer sentence by sentence",
+      "wholeAnswer": "answer shown all at once",
+      "structured": "answer in an enforced format"
+    },
+    "fastModel": "Apart from subtitles, the features use the provider's fast model: {model} (${input} input, ${output} output, per million tokens).",
+    "fastModelNoPrice": "Apart from subtitles, the features use {model}, whose price is unknown: they stay inactive.",
+    "pricesVerified": "Prices checked on {date} on the provider's official page",
+    "spendAll": "Every paid feature counts towards this limit, to the token.",
+    "budgetReached": "Monthly limit reached: paid features are paused until the first of next month. Raise the limit to turn them back on."
   }
 }

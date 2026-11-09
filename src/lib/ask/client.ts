@@ -23,7 +23,22 @@ export function useAskAvailable(): boolean {
   return data?.askAvailable === true && !isFireTv();
 }
 
-export type AskErrorCode = "off" | "limite" | "indisponible" | "erreur";
+/**
+ * Les questions posées depuis le panneau d'une personne, et « Jusqu'ici » (§139, 09/11/2026) : chacune son
+ * réglage, lu de la même configuration publique suivie. Pas sur Fire TV, comme les questions.
+ */
+export function useAskPersonAvailable(): boolean {
+  const { data } = useSWR<{ askPersonAvailable?: boolean }>("/api/config/public", fetcher, followOnlyOptions);
+  return data?.askPersonAvailable === true && !isFireTv();
+}
+
+export function useSofarAvailable(): boolean {
+  const { data } = useSWR<{ sofarAvailable?: boolean }>("/api/config/public", fetcher, followOnlyOptions);
+  return data?.sofarAvailable === true && !isFireTv();
+}
+
+/** `budget` : le plafond mensuel des fonctions payantes est atteint (§140). */
+export type AskErrorCode = "off" | "limite" | "indisponible" | "erreur" | "budget";
 
 export interface AskExchange {
   id: number;
@@ -75,7 +90,20 @@ function parseLine(line: string, onEvent: (e: StreamEvent) => void) {
  * serveur ni sur l'appareil : le panneau refermé, ils sont partis. Cinq au plus. La position est lue au
  * moment de la question (`position`), jamais retenue à l'ouverture : le film peut avoir bougé.
  */
-export function useAskTitle({ itemId, where, position, enabled = true }: { itemId: string; where: AskWhere; position?: () => number | null; enabled?: boolean }) {
+export function useAskTitle({
+  itemId,
+  where,
+  position,
+  enabled = true,
+  about = "title",
+}: {
+  itemId: string;
+  where: AskWhere;
+  position?: () => number | null;
+  enabled?: boolean;
+  /** `person` : posées depuis le panneau d'une personne — une autre porte côté serveur (`ASK_PERSON_ENABLED`). */
+  about?: "title" | "person";
+}) {
   const [exchanges, setExchanges] = useState<AskExchange[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const nextId = useRef(1);
@@ -121,7 +149,7 @@ export function useAskTitle({ itemId, where, position, enabled = true }: { itemI
         const res = await fetch(`/api/cinema/ask/${encodeURIComponent(itemId)}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question, where, positionS: positionRef.current?.() ?? null, previous }),
+          body: JSON.stringify({ question, where, positionS: positionRef.current?.() ?? null, previous, ...(about === "person" ? { about } : {}) }),
           signal: ctrl.signal,
         });
         if (!res.ok) throw new Error(String(res.status));
@@ -145,7 +173,7 @@ export function useAskTitle({ itemId, where, position, enabled = true }: { itemI
         update((e) => ({ ...e, state: "error", error: "erreur" }));
       }
     },
-    [exchanges, itemId, where]
+    [exchanges, itemId, where, about]
   );
   const retry = useCallback(
     (id: number) => {

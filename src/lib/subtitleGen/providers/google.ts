@@ -45,7 +45,7 @@ export function googleProvider(apiKey: string, model: string, fetchImpl: typeof 
               // Sans schéma (les lots), du texte libre en lignes `id|traduction`.
               ...(call.schema ? { responseMimeType: "application/json", responseJsonSchema: call.schema } : {}),
               maxOutputTokens: call.maxOutputTokens,
-              thinkingConfig: { thinkingLevel: "low" },
+              thinkingConfig: { thinkingLevel: call.effort ?? "low" },
             },
           }),
           signal: call.signal ? AbortSignal.any([call.signal, AbortSignal.timeout(90_000)]) : AbortSignal.timeout(90_000),

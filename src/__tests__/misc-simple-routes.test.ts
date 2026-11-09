@@ -60,6 +60,9 @@ describe("GET /api/config/public", () => {
       booksAvailable: false,
       recapAvailable: false,
       askAvailable: false,
+      // Les questions sur une personne et « Jusqu'ici » (§139, 09/11/2026) : chacun son réglage.
+      askPersonAvailable: false,
+      sofarAvailable: false,
       // Les acteurs à l'écran (§138) : absents de cette configuration, donc aucune requête au lecteur.
       xrayAvailable: false,
       bookRequests: false,

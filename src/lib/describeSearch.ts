@@ -4,6 +4,8 @@ import { DEFAULT_MODELS } from "@/lib/subtitleGen/pricing";
 import { withCache, withPersistentCache } from "@/lib/server-cache";
 import type { TmdbTrendingMovie, TmdbTrendingTv } from "@/lib/clients/tmdb";
 import { describeKey } from "@/lib/describeQuery";
+import { aiBudgetReached, anthropicUsage, featureComplete, featureProviderReady, featureSettings, recordAiSpend } from "@/lib/aiFeatures";
+import { ProviderError } from "@/lib/subtitleGen/providers";
 
 /**
  * La recherche par description (07/11/2026) : « le film où un type revit la même journée » →
@@ -24,9 +26,11 @@ import { describeKey } from "@/lib/describeQuery";
  * 46/48 sur les cas durs (la série belge *Into the Night* lui est inconnue), ~0,9 s médian, ~1,3 s
  * au 90e centile, ~650 jetons d'entrée et ~55 de sortie : moins d'un dixième de centime la recherche.
  *
- * Même fournisseur et même clé que les sous-titres générés (§69) ; Anthropic seulement, Haiku
- * toujours — la réponse doit arriver pendant qu'on regarde l'écran, le modèle réglé pour les
- * sous-titres peut être plus lent. Une même phrase n'est demandée qu'une fois par semaine
+ * Même fournisseur et même clé que les sous-titres générés (§69) ; Haiku toujours chez Anthropic —
+ * la réponse doit arriver pendant qu'on regarde l'écran, le modèle réglé pour les sous-titres peut
+ * être plus lent. Depuis le 09/11/2026 (§140), OpenAI et Gemini aussi, par la couche commune, avec
+ * leur modèle rapide (`featureSettings`) ; seul Haiku a passé le banc. Chaque appel compte dans le
+ * plafond mensuel commun. Une même phrase n'est demandée qu'une fois par semaine
  * (cache disque, `describeKey`) : l'historique de recherche relance souvent la même.
  */
 
@@ -45,12 +49,12 @@ export const DESCRIBE_TIMEOUT_MS = 12_000;
 /** Au plus, ce que le modèle peut rendre (le prompt en demande 8 pour une demande large). */
 export const DESCRIBE_MAX_TITLES = 8;
 
+/**
+ * L'option allumée, un fournisseur prêt (clé et prix connu, les trois depuis le 09/11/2026, §140) et le
+ * plafond mensuel pas atteint — sinon l'écran n'essaie pas, et la recherche ordinaire reste seule.
+ */
 export function describeSearchAvailable(): boolean {
-  return (
-    config.describeSearch.enabled &&
-    config.subtitleGen.provider === "anthropic" &&
-    config.subtitleGen.apiKey.trim() !== ""
-  );
+  return config.describeSearch.enabled && featureProviderReady() && !aiBudgetReached();
 }
 
 export const DESCRIBE_SYSTEM = `You are the search engine of a home streaming app. A viewer typed a description instead of a title. Work out which films or series they mean.
@@ -108,7 +112,34 @@ export function parseDescribed(text: string): DescribedTitle[] {
   return out;
 }
 
+/**
+ * OpenAI ou Gemini (§140) : le même prompt, le même schéma (sortie structurée chez les trois), la plus
+ * basse réflexion, la même borne de temps. Un refus ou une réponse coupée : rien, comme chez Anthropic.
+ */
+async function askOtherProvider(query: string): Promise<DescribedTitle[]> {
+  try {
+    const reply = await featureComplete(
+      {
+        system: DESCRIBE_SYSTEM,
+        stable: [],
+        cache: false,
+        user: query,
+        schema: SCHEMA as unknown as Record<string, unknown>,
+        schemaName: "described_titles",
+        maxOutputTokens: 800,
+        signal: AbortSignal.timeout(DESCRIBE_TIMEOUT_MS),
+      },
+      "describe"
+    );
+    return parseDescribed(reply.text);
+  } catch (error) {
+    if (error instanceof ProviderError && (error.kind === "refusal" || error.kind === "truncated" || error.kind === "invalid")) return [];
+    throw error;
+  }
+}
+
 async function askModel(query: string): Promise<DescribedTitle[]> {
+  if (featureSettings().provider !== "anthropic") return askOtherProvider(query);
   const client = new Anthropic({ apiKey: config.subtitleGen.apiKey.trim(), maxRetries: 0, timeout: DESCRIBE_TIMEOUT_MS });
   const res = await client.messages.create({
     model: DESCRIBE_MODEL,
@@ -120,6 +151,8 @@ async function askModel(query: string): Promise<DescribedTitle[]> {
     thinking: { type: "disabled" },
     output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
   });
+  // Compté dans le plafond mensuel commun (§140), réponse utilisable ou non : elle se paie.
+  recordAiSpend(anthropicUsage(res.usage), featureSettings().price, "describe");
   // Un refus ou une réponse coupée ne suivent pas le schéma : rien plutôt qu'une moitié de JSON.
   if (res.stop_reason !== "end_turn") return [];
   return parseDescribed(res.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join(""));

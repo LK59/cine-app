@@ -3343,7 +3343,8 @@
       "xray": {
         "title": "Actores en pantalla",
         "why": "Opcional, desactivado por defecto. Un servicio instalado junto a la aplicación reconoce, escena por escena, a los actores que aparecen en la imagen, para poder decir quién está en pantalla durante una película o un episodio. Activado, cada reproducción pide el análisis del título que se ve y luego el del episodio siguiente.",
-        "help": "La dirección y la clave del servicio (su variable XRAY_API_KEY). Su instalación se describe en xray/README.md."
+        "help": "La dirección y la clave del servicio (su variable XRAY_API_KEY). Su instalación se describe en xray/README.md.",
+        "guide": "Instalar el servicio de análisis (guía de despliegue)"
       },
       "app": {
         "title": "Aplicación",
@@ -3363,8 +3364,8 @@
         "why": "El reproductor integrado reproduce las películas en el navegador. Cuando un archivo no se reproduce (un sonido o una imagen que el dispositivo no sabe decodificar), lo pasa a Jellyfin, que lo convierte al vuelo — activado por defecto, recomendado. Desactivado, esos archivos muestran un error de reproducción y el servidor nunca convierte nada."
       },
       "subtitles": {
-        "title": "Subtítulos generados",
-        "why": "Traduce bajo demanda, durante la película, un subtítulo completo del título al idioma elegido, con una IA en línea. Sin clave, la función no aparece en ninguna parte.",
+        "title": "Funciones de IA",
+        "why": "Un proveedor de IA en línea (Claude, OpenAI o Google), una clave y un límite mensual sirven a todas las funciones de pago: subtítulos generados, búsqueda por descripción, «Anteriormente», preguntas y «Hasta ahora». Sin clave, ninguna aparece.",
         "help": "La clave se queda en el servidor: nunca se envía a los dispositivos ni se escribe en los registros."
       },
       "dialogue": {
@@ -3421,21 +3422,23 @@
       "POSTER_PREWARM_TUNING": "Tamaños e idiomas de los carteles preparados",
       "RADARR_QUALITY_PROFILE": "Perfil de calidad de las altas",
       "SONARR_QUALITY_PROFILE": "Perfil de calidad de las altas",
-      "SUBTITLE_GEN_ENABLED": "Ofrecer la generación de subtítulos",
-      "DESCRIBE_SEARCH_ENABLED": "Búsqueda por descripción: encontrar una película o serie descrita en una frase (Anthropic, con la clave de arriba)",
-      "RECAP_ENABLED": "«Anteriormente»: en la ficha de una serie en curso, recordar los últimos hechos vistos (Anthropic, con la clave de arriba)",
-      "ASK_ENABLED": "«Hacer una pregunta»: en una ficha o con la película en pausa, responder a una pregunta a partir de lo que la cuenta ya ha visto (Anthropic, con la clave de arriba)",
+      "SUBTITLE_GEN_ENABLED": "Subtítulos generados: traducir durante la película un subtítulo completo al idioma elegido",
+      "DESCRIBE_SEARCH_ENABLED": "Búsqueda por descripción: encontrar una película o serie descrita en una frase",
+      "RECAP_ENABLED": "«Anteriormente»: en la ficha de una serie en curso, recordar los últimos hechos vistos",
+      "ASK_ENABLED": "Preguntas sobre un título: en una ficha o con la película en pausa, responder a partir de lo que la cuenta ya ha visto",
       "SUBTITLE_GEN_PROVIDER": "Proveedor",
       "SUBTITLE_GEN_API_KEY": "Clave del proveedor",
       "SUBTITLE_GEN_MODEL": "Modelo",
-      "SUBTITLE_GEN_BUDGET_USD": "Presupuesto mensual (dólares)",
+      "SUBTITLE_GEN_BUDGET_USD": "Límite mensual de todas las funciones de pago (dólares)",
       "SUBTITLE_GEN_PRICE_INPUT": "Precio de entrada por millón de tokens (vacío: tarifa conocida)",
       "SUBTITLE_GEN_PRICE_OUTPUT": "Precio de salida por millón de tokens (vacío: tarifa conocida)",
       "REPLIQUES_ENABLED": "Búsqueda de diálogos",
       "REPLIQUES_NIGHTLY": "Actualización cada noche",
       "REPLIQUES_NIGHT_START": "Inicio de la franja nocturna",
       "REPLIQUES_NIGHT_END": "Fin de la franja nocturna",
-      "REPLIQUES_LANGUAGES": "Idiomas de los diálogos"
+      "REPLIQUES_LANGUAGES": "Idiomas de los diálogos",
+      "ASK_PERSON_ENABLED": "Preguntas sobre una persona: en el panel de un actor de «En pantalla», el campo y las preguntas propuestas",
+      "SOFAR_ENABLED": "«Hasta ahora»: en el panel de un actor de «En pantalla», dos frases sobre lo que su personaje ha hecho hasta ahora"
     },
     "deployHint": {
       "TZ": "En docker-compose.yml, bajo «environment»:",
@@ -3512,7 +3515,11 @@
       "off": "Desactivado",
       "admins": "Solo administradores",
       "tous": "Todas las cuentas"
-    }
+    },
+    "inherit": {
+      "ASK_ENABLED": "Igual que las preguntas sobre un título"
+    },
+    "otherValue": "Otro modelo…"
   },
   "subtitleGen": {
     "admin": {
@@ -4208,7 +4215,8 @@
     "chipSheet1": "¿Quiénes son los personajes principales?",
     "chipSheet2": "¿De qué trata este título?",
     "done": "OK",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "budget": "Se ha alcanzado el límite mensual de las funciones de pago: las preguntas volverán el mes que viene."
   },
   "xray": {
     "onScreen": "En pantalla",
@@ -4221,5 +4229,68 @@
     "qLink": "¿Qué relación tiene {name} con {other}?",
     "qRecent": "¿Qué le ha pasado a {name} últimamente?",
     "qWants": "¿Qué busca {name}?"
+  },
+  "aiFeatures": {
+    "title": "Lo que hace cada función según el proveedor",
+    "intro": "Todas pasan por el proveedor y la clave de arriba. Las protecciones de la aplicación —nada más allá de lo que la cuenta ha visto, control de nombres, límites por cuenta, límite mensual— son las mismas con los tres.",
+    "quality": "Solo Claude (Haiku 5.5) se ha medido en banco de pruebas para estas funciones. Con OpenAI o Google funcionan por la misma vía, pero la calidad de las respuestas es responsabilidad del administrador.",
+    "feature": "Función",
+    "providers": {
+      "anthropic": "Claude (Anthropic)",
+      "openai": "OpenAI",
+      "google": "Google Gemini"
+    },
+    "names": {
+      "subtitles": "Subtítulos generados",
+      "describe": "Búsqueda por descripción",
+      "recap": "«Anteriormente»",
+      "askTitle": "Preguntas sobre un título",
+      "askPerson": "Preguntas sobre una persona",
+      "sofar": "«Hasta ahora»",
+      "xray": "Actores en pantalla"
+    },
+    "what": {
+      "subtitles": "Traduce un subtítulo completo durante la película.",
+      "describe": "Encuentra un título descrito en una frase.",
+      "recap": "Recuerda los últimos hechos de una serie, preparado en segundo plano.",
+      "askTitle": "Responde a una pregunta sobre una película o una serie.",
+      "askPerson": "Responde a una pregunta sobre un actor en pantalla.",
+      "sofar": "Resume lo que un personaje ha hecho hasta ahora.",
+      "xray": "Dice quién está en pantalla; ficha de TMDB y títulos de la persona en la biblioteca."
+    },
+    "paid": "Llamadas de pago al proveedor",
+    "free": "Gratis, en su servidor",
+    "needsLabel": "Requiere: {needs}",
+    "needs": {
+      "provider": "una clave de proveedor",
+      "xray": "los actores en pantalla",
+      "xrayService": "el servicio de análisis (Conexiones)"
+    },
+    "blocked": {
+      "provider": "sin clave: inactiva",
+      "price": "precio del modelo desconocido: inactiva",
+      "xray": "actores en pantalla desactivados o servicio sin configurar: inactiva",
+      "budget": "límite mensual alcanzado: en pausa"
+    },
+    "noProvider": "Ningún proveedor de IA",
+    "unsupported": "No disponible",
+    "notes": {
+      "streamLines": "líneas mostradas a medida que llegan",
+      "linesAtEnd": "líneas escritas al final de cada lote",
+      "explicitCache": "caché marcada explícitamente",
+      "implicitCache": "caché automática de los comienzos idénticos",
+      "benched": "medido en banco de pruebas",
+      "notBenched": "sin medir",
+      "thinkingAdaptive": "razonamiento adaptativo, esfuerzo ajustado por función",
+      "reasoningMapped": "razonamiento del modelo al nivel más cercano",
+      "streamSentences": "respuesta frase a frase",
+      "wholeAnswer": "respuesta mostrada de una vez",
+      "structured": "respuesta en formato impuesto"
+    },
+    "fastModel": "Salvo los subtítulos, las funciones usan el modelo rápido del proveedor: {model} ({input} $ de entrada, {output} $ de salida, por millón de tokens).",
+    "fastModelNoPrice": "Salvo los subtítulos, las funciones usan {model}, cuyo precio no se conoce: siguen inactivas.",
+    "pricesVerified": "Precios comprobados el {date} en la página oficial del proveedor",
+    "spendAll": "Todas las funciones de pago cuentan en este límite, token a token.",
+    "budgetReached": "Límite mensual alcanzado: las funciones de pago están en pausa hasta el primer día del mes que viene. Suba el límite para reactivarlas."
   }
 }

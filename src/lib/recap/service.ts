@@ -15,6 +15,8 @@ import { jellyfinFetch } from "@/lib/jellyfinBreaker";
 import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { upstreamSignal } from "@/lib/http";
 import { DEFAULT_MODELS } from "@/lib/subtitleGen/pricing";
+import { ProviderError } from "@/lib/subtitleGen/providers";
+import { aiBudgetReached, anthropicUsage, featureComplete, featureProviderReady, featureSettings, recordAiSpend } from "@/lib/aiFeatures";
 import { logRecap } from "@/lib/eventLogs";
 import { logError } from "@/lib/logger";
 import { fetchJson } from "@/lib/http";
@@ -51,8 +53,10 @@ const SUBTITLE_TIMEOUT_MS = 90_000;
 
 export function recapAvailable(): boolean {
   // Lu par la configuration publique à chaque ouverture : une configuration partielle (les doubles des
-  // tests, une installation qui n'a jamais vu la clé) vaut « coupé », jamais une erreur.
-  return config.recap?.enabled === true && config.subtitleGen?.provider === "anthropic" && (config.subtitleGen?.apiKey ?? "").trim() !== "";
+  // tests, une installation qui n'a jamais vu la clé) vaut « coupé », jamais une erreur. Les trois
+  // fournisseurs depuis le 09/11/2026 (§140). Le plafond mensuel n'y entre pas : atteint, les textes
+  // déjà prêts restent lisibles, seule la préparation s'arrête (`runRecapPass`).
+  return config.recap?.enabled === true && featureProviderReady();
 }
 
 export function recapLocale(value: string | null | undefined): Locale {
@@ -158,7 +162,29 @@ export async function cuesOf(episode: EpisodeWithStreams, locale: Locale): Promi
 /** Le modèle, remplaçable dans les tests — aucun appel réseau réel n'y part. */
 export type RecapModel = (system: string, message: string) => Promise<{ raw: unknown; inTokens: number; outTokens: number }>;
 
+/**
+ * OpenAI ou Gemini (§140) : le même prompt et le même schéma, la réflexion « moyenne » qu'Anthropic a
+ * gagnée au banc (`reasoning.effort` / `thinkingLevel`). Un refus ou une réponse coupée rendent `null`,
+ * que `judgeRecap` lit « vide » — le même chemin qu'Anthropic ; une limite de débit garde son 429.
+ */
+async function askOtherProvider(system: string, message: string): Promise<Awaited<ReturnType<RecapModel>>> {
+  try {
+    const reply = await featureComplete(
+      { system, stable: [], cache: false, user: message, schema: RECAP_SCHEMA as unknown as Record<string, unknown>, schemaName: "recap", maxOutputTokens: 8000, effort: "medium", signal: AbortSignal.timeout(MODEL_TIMEOUT_MS) },
+      "recap"
+    );
+    return { raw: reply.json ?? null, inTokens: reply.usage.inputTokens + reply.usage.cacheReadTokens, outTokens: reply.usage.outputTokens };
+  } catch (error) {
+    if (error instanceof ProviderError && error.kind === "rate") throw Object.assign(new Error(error.message), { status: 429 });
+    if (error instanceof ProviderError && (error.kind === "refusal" || error.kind === "truncated" || error.kind === "invalid")) {
+      return { raw: null, inTokens: error.usage?.inputTokens ?? 0, outTokens: error.usage?.outputTokens ?? 0 };
+    }
+    throw error;
+  }
+}
+
 const askModel: RecapModel = async (system, message) => {
+  if (featureSettings().provider !== "anthropic") return askOtherProvider(system, message);
   const client = new Anthropic({ apiKey: config.subtitleGen.apiKey.trim(), maxRetries: 0, timeout: MODEL_TIMEOUT_MS });
   const res = await client.messages.create({
     model: RECAP_MODEL,
@@ -174,6 +200,8 @@ const askModel: RecapModel = async (system, message) => {
     thinking: { type: "adaptive" },
     output_config: { effort: "medium", format: { type: "json_schema", schema: RECAP_SCHEMA } },
   });
+  // Compté dans le plafond mensuel commun (§140).
+  recordAiSpend(anthropicUsage(res.usage), featureSettings().price, "recap");
   let raw: unknown = null;
   // Un refus ou une réponse coupée ne suivent pas le schéma : vide plutôt qu'une moitié de JSON.
   if (res.stop_reason === "end_turn") {
@@ -189,6 +217,10 @@ const askModel: RecapModel = async (system, message) => {
 let model: RecapModel = askModel;
 export function setRecapModelForTests(fn: RecapModel | null): void {
   model = fn ?? askModel;
+}
+/** Le modèle réel (celui des réglages) — pour vérifier l'aiguillage vers un fournisseur doublé (§140). */
+export function defaultRecapModelForTests(): RecapModel {
+  return askModel;
 }
 
 /** Une limite de débit : le passage s'arrête au premier refus (règle des bancs, 08/11/2026). */
@@ -289,7 +321,9 @@ const pass = (shared[PASS_KEY] ??= { running: false, started: false });
  */
 export async function runRecapPass(now = Date.now()): Promise<{ prepared: number; rejected: number }> {
   const result = { prepared: 0, rejected: 0 };
-  if (!recapAvailable() || pass.running) return result;
+  // Le plafond mensuel atteint (§140) : rien de nouveau n'est préparé, en silence — la fiche garde les
+  // textes déjà prêts, puis son synopsis. La ligne du journal est écrite une fois, quand il est franchi.
+  if (!recapAvailable() || pass.running || aiBudgetReached(now)) return result;
   pass.running = true;
   try {
     recapDb.prune(PRUNE_AFTER_MS, now);
@@ -303,7 +337,7 @@ export async function runRecapPass(now = Date.now()): Promise<{ prepared: number
       if (!active.has(user.Id) || !userPrefsDb.getShowRecap(user.Id)) continue;
       const locale = accountLocale(user.Id);
       for (const state of await positionsOf(user.Id, now)) {
-        if (made >= PER_PASS) return result;
+        if (made >= PER_PASS || aiBudgetReached()) return result;
         if (watching.has(`${user.Id}:${state.seriesId}`)) continue;
         // Même déjà prêt (par un autre compte au même endroit), le passage note où en est ce compte.
         const outcome = await prepareRecap({ jfId: user.Id, user: user.Name, locale }, state, now);

@@ -16,7 +16,8 @@ import { logError } from "@/lib/logger";
 import { logJusquici } from "@/lib/eventLogs";
 import { createRateLimiter } from "@/lib/rateLimiter";
 import { askWhereLine } from "@/lib/ask/core";
-import { ASK_MODEL, currentAskModel, gatherAskContext } from "@/lib/ask/service";
+import { askModelName, currentAskModel, gatherAskContext } from "@/lib/ask/service";
+import { aiBudgetReached } from "@/lib/aiFeatures";
 import { castPerson } from "@/lib/xray/person";
 import { sofarCutoff, sofarKey, sofarLookup, sofarMessage, sofarSources, sofarStart, sofarSubscribe, sofarSystem, type SofarEntry } from "@/lib/ask/sofar";
 
@@ -40,7 +41,7 @@ const STREAM_HEADERS = {
   "X-Accel-Buffering": "no",
 };
 
-type Out = { t: "text"; v: string } | { t: "done" } | { t: "rejected" } | { t: "queued" } | { t: "error"; code: "off" | "limite" | "indisponible" | "erreur" };
+type Out = { t: "text"; v: string } | { t: "done" } | { t: "rejected" } | { t: "queued" } | { t: "error"; code: "off" | "limite" | "indisponible" | "erreur" | "budget" };
 
 function oneShot(event: Out): NextResponse {
   return new NextResponse(`${JSON.stringify(event)}\n`, { status: 200, headers: STREAM_HEADERS });
@@ -91,12 +92,18 @@ export async function answerSofar(
   const sources = sofarSources(context.input, person);
   const system = sofarSystem(who.locale);
   const message = sofarMessage(sources, askWhereLine(context.input), person);
-  const key = sofarKey(ASK_MODEL, system, message);
+  // Le modèle qui écrit (§140) : un texte d'un fournisseur n'est jamais servi pour un autre.
+  const key = sofarKey(askModelName(), system, message);
   const dialogue: boolean | "attente" = context.dialogueLate ? "attente" : sources.dialogue;
 
   let entry: SofarEntry | null = sofarLookup(key);
   const cache = entry ? (entry.by === who.account ? "compte" : "partagé") : "nouveau";
   if (!entry) {
+    // Le plafond mensuel commun atteint (§140) : rien de nouveau n'est écrit — l'écran se tait.
+    if (aiBudgetReached()) {
+      logJusquici({ ...base, cache, status: "limite", ms: Date.now() - started });
+      return oneShot({ t: "error", code: "budget" });
+    }
     const allowed = body.prewarm ? prewarmPerHour(who.account) : openPerHour(who.account);
     if (!allowed) {
       logJusquici({ ...base, cache, status: "limite", ms: Date.now() - started });

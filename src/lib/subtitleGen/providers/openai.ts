@@ -43,7 +43,7 @@ export function openaiProvider(apiKey: string, model: string, fetchImpl: typeof 
             instructions: [call.system, ...call.stable].join("\n\n"),
             input: call.user,
             max_output_tokens: call.maxOutputTokens,
-            reasoning: { effort: /luna/.test(model) ? "none" : "low" },
+            reasoning: { effort: call.effort ?? (/luna/.test(model) ? "none" : "low") },
             // Sans schéma (les lots), du texte libre en lignes `id|traduction`.
             ...(call.schema ? { text: { format: { type: "json_schema", name: call.schemaName, schema: call.schema, strict: true } } } : {}),
             store: false,

@@ -9,6 +9,7 @@ import { logError } from "@/lib/logger";
 import { logAskQuestion } from "@/lib/eventLogs";
 import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { askAvailableFor, currentAskModel, gatherAskContext, warmDialogues } from "@/lib/ask/service";
+import { aiBudgetReached, askPersonAvailableFor, sofarAvailableFor } from "@/lib/aiFeatures";
 import { answerSofar, readSofarBody } from "@/lib/ask/sofarRequest";
 import {
   AnswerGate,
@@ -46,7 +47,13 @@ export const dynamic = "force-dynamic";
  * `recherche.log` (`logAskQuestion`) — jamais la question ni la réponse.
  *
  * `POST { mode: "jusquici", personId, positionS, prewarm? }` : « Jusqu'ici », deux phrases sur un
- * personnage d'« À l'écran » (`answerSofar`, `src/lib/ask/sofarRequest.ts`) — même porte, mêmes réponses.
+ * personnage d'« À l'écran » (`answerSofar`, `src/lib/ask/sofarRequest.ts`) — mêmes réponses.
+ *
+ * **Trois portes, une par réglage** (09/11/2026, §139) : une question sur le titre (`ASK_ENABLED`), une
+ * question posée depuis le panneau d'une personne (`about: "person"`, `ASK_PERSON_ENABLED` et les acteurs
+ * à l'écran), « Jusqu'ici » (`SOFAR_ENABLED` et les acteurs à l'écran). Chacune répond `off` quand elle
+ * est fermée à cette session. Le plafond mensuel atteint (§140) : `{"t":"error","code":"budget"}` pour une
+ * question (l'écran le dit), et pour « Jusqu'ici » (l'écran se tait).
  *
  * Une panne du modèle — réseau, 5xx, 429, refus (`stop_reason: "refusal"`), vingt secondes sans rien
  * (`MODEL_IDLE_MS`), flux coupé — finit par `{"t":"error","code":"erreur"|"limite"}`, sa cause dans
@@ -65,7 +72,7 @@ const STREAM_HEADERS = {
   "X-Accel-Buffering": "no",
 };
 
-type Event = { t: "text"; v: string } | { t: "done" } | { t: "rejected" } | { t: "error"; code: "off" | "limite" | "indisponible" | "erreur" };
+type Event = { t: "text"; v: string } | { t: "done" } | { t: "rejected" } | { t: "error"; code: "off" | "limite" | "indisponible" | "erreur" | "budget" };
 
 function oneShot(event: Event): NextResponse {
   return new NextResponse(`${JSON.stringify(event)}\n`, { status: 200, headers: STREAM_HEADERS });
@@ -81,14 +88,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
   if (!isJellyfinId(itemId)) return NextResponse.json({ error: "itemId invalide" }, { status: 400 });
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   if (!session) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
-  const available = askAvailableFor(session);
+  const available = askAvailableFor(session) || askPersonAvailableFor(session);
   if (available && session.jfId) void warmDialogues(session.jfId, itemId, localeOf(req, session.jfId));
   return NextResponse.json({ available }, { headers: PRIVATE });
 }
 
 /** Le corps, lu avec méfiance : tout ce qui n'a pas la forme attendue est écarté, pas deviné. */
-function readBody(body: unknown): { question: string; where: AskWhere; positionS: number | null; previous: PreviousExchange[] } | null {
-  const b = body as { question?: unknown; where?: unknown; positionS?: unknown; previous?: unknown } | null;
+function readBody(body: unknown): { question: string; where: AskWhere; positionS: number | null; previous: PreviousExchange[]; about: "title" | "person" } | null {
+  const b = body as { question?: unknown; where?: unknown; positionS?: unknown; previous?: unknown; about?: unknown } | null;
   if (!b || typeof b.question !== "string") return null;
   const question = b.question.trim().slice(0, ASK_MAX_QUESTION);
   if (!question) return null;
@@ -99,7 +106,7 @@ function readBody(body: unknown): { question: string; where: AskWhere; positionS
     .filter((p): p is { question: string; answer: string } => typeof p?.question === "string" && typeof p?.answer === "string")
     .slice(-(ASK_MAX_EXCHANGES - 1))
     .map((p) => ({ question: p.question.trim().slice(0, ASK_MAX_QUESTION), answer: p.answer.trim().slice(0, ASK_MAX_PREVIOUS_ANSWER) }));
-  return { question, where, positionS, previous };
+  return { question, where, positionS, previous, about: b.about === "person" ? "person" : "title" };
 }
 
 export async function POST(req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
@@ -111,8 +118,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
   const sofar = readSofarBody(raw);
   const body = sofar ? null : readBody(raw);
   if (!sofar && !body) return NextResponse.json({ error: "Question manquante" }, { status: 400 });
-  // La porte : l'option et son public (`admins` : un compte ordinaire reçoit la même réponse qu'option coupée).
-  if (!askAvailableFor(session)) return oneShot({ t: "error", code: "off" });
+  // La porte : l'option et son public (`admins` : un compte ordinaire reçoit la même réponse qu'option coupée)
+  // — une par réglage (§139) : titre, personne, « Jusqu'ici ».
+  const open = sofar ? sofarAvailableFor(session) : body?.about === "person" ? askPersonAvailableFor(session) : askAvailableFor(session);
+  if (!open) return oneShot({ t: "error", code: "off" });
+  // Le plafond mensuel commun atteint (§140) : rien ne part chez le fournisseur. « Jusqu'ici » sert encore
+  // ses textes gardés, et ne refuse que ce qu'il faudrait écrire (`answerSofar`).
+  if (!sofar && aiBudgetReached()) return oneShot({ t: "error", code: "budget" });
   if (sofar) {
     if (!session.jfId) return oneShot({ t: "error", code: "indisponible" });
     const user = session.jfUser ?? session.u ?? "anonyme";

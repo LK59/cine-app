@@ -179,7 +179,7 @@ describe("la rangée « À l'écran » du lecteur", () => {
   it("en pause : l'étiquette, les personnes de la scène par temps à l'écran, et « Une question ? » au bout", async () => {
     const fetchMock = stubFetch();
     let video: HTMLVideoElement | null = null;
-    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await atPosition(video!, 10);
     await waitFor(() => expect(container.querySelector("[data-player-onscreen]")).toBeTruthy());
     expect(screen.getByText("xray.onScreen")).toBeTruthy();
@@ -200,7 +200,7 @@ describe("la rangée « À l'écran » du lecteur", () => {
   it("une scène sans personne : pas de rangée, la pilule de la question seule", async () => {
     stubFetch();
     let video: HTMLVideoElement | null = null;
-    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await atPosition(video!, 60);
     await waitFor(() => expect(container.querySelector('[data-player-nav="ask"]')).toBeTruthy());
     expect(container.querySelector("[data-player-onscreen]")).toBeNull();
@@ -220,7 +220,7 @@ describe("la rangée « À l'écran » du lecteur", () => {
   it("hors ligne ou au banc : ni requête ni rangée", async () => {
     const fetchMock = stubFetch();
     let video: HTMLVideoElement | null = null;
-    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness xrayable={false} onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness xrayable={false} onVideoRef={(v) => (video = v)} />);
     await atPosition(video!, 10);
     await act(async () => {});
     expect(xrayCalls(fetchMock)).toHaveLength(0);
@@ -230,7 +230,7 @@ describe("la rangée « À l'écran » du lecteur", () => {
   it("une personne touchée ouvre son panneau : sa photo, son nom, son personnage, des questions faites pour elle", async () => {
     stubFetch();
     let video: HTMLVideoElement | null = null;
-    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await atPosition(video!, 10);
     const pill = await waitFor(() => container.querySelector<HTMLElement>('[data-onscreen-person="2"]')!);
     fireEvent.click(pill);
@@ -248,7 +248,7 @@ describe("la rangée « À l'écran » du lecteur", () => {
   it("le clavier du lecteur ne change pas : → avance de dix secondes, rangée affichée", async () => {
     stubFetch();
     let video: HTMLVideoElement | null = null;
-    const { container } = withConfig({ xrayAvailable: true, askAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
+    const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await atPosition(video!, 10);
     await waitFor(() => expect(container.querySelector("[data-player-onscreen]")).toBeTruthy());
     await act(async () => void fireEvent.keyDown(document.body, { key: "ArrowRight", code: "ArrowRight" }));

@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { CircleCheck, CircleAlert, Loader2, RotateCcw } from "lucide-react";
 import { AUDIENCES, parseAudience } from "@/lib/featureAudience";
 import { useT } from "@/components/TranslationProvider";
+import { XRAY_GUIDE_URL } from "@/lib/appBuild";
 import { DEPLOYMENT_GUIDE, SETTINGS, TESTABLE_GROUPS, type SettingGroup, type SettingView, type TestableGroup } from "@/lib/settings/schema";
 
 /**
@@ -34,8 +35,17 @@ export function SettingsGroupCard({
   footer,
   keys,
   whyKey,
+  choices,
+  notes,
 }: {
   group: SettingGroup;
+  /**
+   * Une liste proposée pour un champ texte (les modèles d'un fournisseur, §140) : un menu, plus « Autre… »
+   * qui rend le champ libre — une valeur hors liste s'y montre telle quelle.
+   */
+  choices?: Record<string, readonly string[]>;
+  /** Une phrase sous un champ — ce qu'il demande, ce qui l'empêche de marcher (§139, §140). */
+  notes?: Record<string, React.ReactNode>;
   /**
    * Le texte d'explication, quand la carte n'en montre qu'une partie : l'assistant ne montre des
    * réglages par défaut que la langue, et le texte du groupe renvoyait à Compte → Interface, où
@@ -71,6 +81,14 @@ export function SettingsGroupCard({
       </header>
       <p className={`${help ? "mb-1" : "mb-4"} text-sm text-muted`}>{t(whyKey ?? `setup.groups.${group}.why`)}</p>
       {help && <p className="mb-4 text-xs text-subtle">{help}</p>}
+      {group === "xray" && (
+        // Le service se déploie à part : son guide est sur le dépôt public (§138).
+        <p className="-mt-2 mb-4 text-xs">
+          <a href={XRAY_GUIDE_URL} target="_blank" rel="noopener noreferrer" className="font-medium text-accent-400 hover:underline">
+            {t("setup.groups.xray.guide")}
+          </a>
+        </p>
+      )}
 
       <div className="space-y-4">
         {defs.filter((d) => d.inApp).map((def) => {
@@ -92,7 +110,14 @@ export function SettingsGroupCard({
                 <ProfileSelect id={`setting-${def.key}`} service={group === "sonarr" ? "sonarr" : "radarr"} value={value} onChange={(v) => onDraft(def.key, v)} />
               ) : def.kind === "audience" ? (
                 // À qui la fonction est ouverte (`featureAudience.ts`) ; un `true`/`false` d'avant se lit `tous`/`off`.
-                <select id={`setting-${def.key}`} className="select w-full" value={parseAudience(value)} onChange={(e) => onDraft(def.key, e.target.value)}>
+                // Un réglage qui en suit un autre (§139) : vide, « comme l'autre » — le premier choix.
+                <select
+                  id={`setting-${def.key}`}
+                  className="select w-full"
+                  value={def.inherits && value.trim() === "" ? "" : parseAudience(value)}
+                  onChange={(e) => onDraft(def.key, e.target.value)}
+                >
+                  {def.inherits && <option value="">{t(`setup.inherit.${def.inherits}`)}</option>}
                   {AUDIENCES.map((a) => (
                     <option key={a} value={a}>
                       {t(`setup.audience.${a}`)}
@@ -107,6 +132,8 @@ export function SettingsGroupCard({
                     </option>
                   ))}
                 </select>
+              ) : choices?.[def.key] ? (
+                <ChoiceOrText id={`setting-${def.key}`} choices={choices[def.key]} value={value} onChange={(v) => onDraft(def.key, v)} />
               ) : (
                 <input
                   id={`setting-${def.key}`}
@@ -120,6 +147,7 @@ export function SettingsGroupCard({
                   onChange={(e) => onDraft(def.key, e.target.value)}
                 />
               )}
+              {notes?.[def.key] && <div className="mt-1 text-xs text-subtle">{notes[def.key]}</div>}
               {def.restart && <p className="mt-1 text-xs text-subtle">{t("setup.restartNote")}</p>}
               {def.kind === "secret" && view?.set && !draft[def.key] && (
                 <p className="mt-1 text-xs text-subtle">{view.hint ? t("setup.secretSet", { hint: view.hint }) : t("setup.secretSetNoHint")}</p>
@@ -142,6 +170,44 @@ export function SettingsGroupCard({
       {testable && <ConnectionTest group={group as TestableGroup} draft={draft} />}
       {footer}
     </section>
+  );
+}
+
+/** Un menu de valeurs connues, et « Autre… » pour en saisir une hors liste (le nom d'un modèle, §140). */
+function ChoiceOrText({ id, choices, value, onChange }: { id: string; choices: readonly string[]; value: string; onChange: (value: string) => void }) {
+  const t = useT();
+  const listed = choices.includes(value);
+  const [other, setOther] = useState(!listed && value !== "");
+  const free = other || (!listed && value !== "");
+  return (
+    <>
+      <select id={id} className="select w-full" value={free ? "__other" : value} onChange={(e) => {
+        if (e.target.value === "__other") {
+          setOther(true);
+          return;
+        }
+        setOther(false);
+        onChange(e.target.value);
+      }}>
+        {choices.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+        <option value="__other">{t("setup.otherValue")}</option>
+      </select>
+      {free && (
+        <input
+          aria-label={t("setup.otherValue")}
+          className="input mt-1.5"
+          type="text"
+          autoComplete="off"
+          spellCheck={false}
+          value={listed ? "" : value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+    </>
   );
 }
 

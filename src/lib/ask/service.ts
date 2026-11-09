@@ -16,6 +16,8 @@ import { jellyfinFetch } from "@/lib/jellyfinBreaker";
 import { jellyfinIdSegment } from "@/lib/jellyfinPath";
 import { upstreamSignal } from "@/lib/http";
 import { DEFAULT_MODELS } from "@/lib/subtitleGen/pricing";
+import { ProviderError } from "@/lib/subtitleGen/providers";
+import { anthropicUsage, featureComplete, featureProviderReady, featureSettings, recordAiSpend } from "@/lib/aiFeatures";
 import { cuesOf, episodesOf, type EpisodeWithStreams } from "@/lib/recap/service";
 import type { Cue } from "@/lib/recap/core";
 import type { Locale } from "@/lib/i18n";
@@ -36,7 +38,18 @@ export const MODEL_IDLE_MS = 20_000;
 
 export function askAvailable(): boolean {
   // Lu par la configuration publique à chaque ouverture : une configuration partielle vaut « coupé ».
-  return askAudience() !== "off" && config.subtitleGen?.provider === "anthropic" && (config.subtitleGen?.apiKey ?? "").trim() !== "";
+  // Les trois fournisseurs depuis le 09/11/2026 (§140). Le plafond mensuel n'y entre pas : atteint, la
+  // question reçoit une ligne d'erreur dite (`budget`), le bouton ne disparaît pas sans explication.
+  return askAudience() !== "off" && featureProviderReady();
+}
+
+/** Le modèle qui répond aux questions et écrit « Jusqu'ici » — dans la clé de leurs textes gardés. */
+export function askModelName(): string {
+  try {
+    return featureSettings().model;
+  } catch {
+    return ASK_MODEL;
+  }
 }
 
 /** À qui l'option est ouverte ; une configuration sans `audience` (un double de test) se lit par `enabled`. */
@@ -232,7 +245,42 @@ export class AskModelTimeout extends Error {
   }
 }
 
-const askModel: AskModel = ({ system, message, signal }) => {
+/**
+ * Sans flux, la réponse entière doit arriver dans ce délai — une seule attente, pas de chien de garde
+ * réarmé par les événements (OpenAI et Gemini, §140).
+ */
+export const MODEL_WHOLE_MS = 30_000;
+
+/**
+ * OpenAI ou Gemini (§140) : un seul appel, sans flux — la réponse arrive d'un bloc, puis passe par le
+ * même `AnswerGate` (noms, mots interdits) que chez Anthropic, phrase par phrase. Réflexion basse comme
+ * chez Anthropic. Un refus devient `stop: "refusal"` (la panne dite) ; une limite de débit garde son 429.
+ */
+function askOtherProvider({ system, message, signal }: { system: string; message: string; signal?: AbortSignal }): AskModelRun {
+  const timeout = AbortSignal.timeout(MODEL_WHOLE_MS);
+  const reply = featureComplete(
+    { system, stable: [], cache: false, user: message, schemaName: "answer", maxOutputTokens: 4000, effort: "low", signal: signal ? AbortSignal.any([signal, timeout]) : timeout },
+    "askTitle"
+  ).then(
+    (r) => ({ text: r.text, inTokens: r.usage.inputTokens + r.usage.cacheReadTokens, outTokens: r.usage.outputTokens, stop: "end_turn" as string | null }),
+    (error: unknown) => {
+      if (error instanceof ProviderError && error.kind === "refusal") return { text: "", inTokens: error.usage?.inputTokens ?? 0, outTokens: error.usage?.outputTokens ?? 0, stop: "refusal" as string | null };
+      if (error instanceof ProviderError && error.kind === "truncated") return { text: "", inTokens: error.usage?.inputTokens ?? 0, outTokens: error.usage?.outputTokens ?? 0, stop: "max_tokens" as string | null };
+      if (timeout.aborted && !signal?.aborted) throw new AskModelTimeout();
+      if (error instanceof ProviderError && error.kind === "rate") throw Object.assign(new Error(error.message), { status: 429 });
+      throw error;
+    }
+  );
+  async function* deltas() {
+    const r = await reply;
+    if (r.text) yield r.text;
+  }
+  return { deltas: deltas(), done: reply.then(({ inTokens, outTokens, stop }) => ({ inTokens, outTokens, stop })) };
+}
+
+const askModel: AskModel = (req) => {
+  if (featureSettings().provider !== "anthropic") return askOtherProvider(req);
+  const { system, message, signal } = req;
   const client = new Anthropic({ apiKey: config.subtitleGen.apiKey.trim(), maxRetries: 0, timeout: MODEL_IDLE_MS });
   const stream = client.messages.stream(
     {
@@ -277,7 +325,11 @@ const askModel: AskModel = ({ system, message, signal }) => {
   return {
     deltas: deltas(),
     done: stream.finalMessage().then(
-      (m) => ({ inTokens: m.usage.input_tokens, outTokens: m.usage.output_tokens, stop: m.stop_reason ?? null }),
+      (m) => {
+        // Compté dans le plafond mensuel commun (§140).
+        recordAiSpend(anthropicUsage(m.usage), featureSettings().price, "askTitle");
+        return { inTokens: m.usage.input_tokens, outTokens: m.usage.output_tokens, stop: m.stop_reason ?? null };
+      },
       (err: unknown) => {
         throw fail(err);
       }

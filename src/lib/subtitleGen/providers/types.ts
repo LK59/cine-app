@@ -30,6 +30,13 @@ export interface TranslationCall {
   schema?: Record<string, unknown>;
   schemaName: string;
   maxOutputTokens: number;
+  /**
+   * La réflexion demandée (§140) : `medium` pour « Précédemment », qui en a besoin (banc de §137) ;
+   * absent, la plus basse que le modèle accepte. OpenAI : `reasoning.effort` ; Gemini : `thinkingLevel`.
+   * Anthropic garde ses propres réglages par fonction (réflexion adaptative et effort) : seul ce
+   * fournisseur a été mesuré sur banc.
+   */
+  effort?: "low" | "medium";
   signal?: AbortSignal;
   /**
    * Le texte au fil de sa production, pour écrire chaque ligne dès qu'elle est complète. Anthropic

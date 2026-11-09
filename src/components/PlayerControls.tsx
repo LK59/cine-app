@@ -25,7 +25,7 @@ import { useLatest } from "@/components/playerControls/useLatest";
 import { useAutoHide } from "@/components/playerControls/useAutoHide";
 import { PlayerSeekBar } from "@/components/playerControls/PlayerSeekBar";
 import { AskPanel } from "@/components/ask/AskPanel";
-import { prewarmSofar, SOFAR_BUCKET_S, SOFAR_PREWARM_PEOPLE, useAskAvailable } from "@/lib/ask/client";
+import { prewarmSofar, SOFAR_BUCKET_S, SOFAR_PREWARM_PEOPLE, useAskAvailable, useAskPersonAvailable, useSofarAvailable } from "@/lib/ask/client";
 import { PlayerOnScreen } from "@/components/playerControls/PlayerOnScreen";
 import { useOnScreenPlacement } from "@/components/playerControls/useOnScreenPlacement";
 import { onScreenPeople, sceneAt, useXrayAvailable, useXrayScenes } from "@/lib/xray/client";
@@ -686,6 +686,9 @@ export function PlayerControls({
    * un écran d'erreur. Une ouverture = une conversation : ses échanges vivent dans le panneau.
    */
   const askOffered = useAskAvailable() && askable && !lab;
+  // Le panneau d'une personne (§139, 09/11/2026) : ses questions et « Jusqu'ici » ont chacun leur réglage.
+  const askPersonOffered = useAskPersonAvailable() && askable && !lab;
+  const sofarOffered = useSofarAvailable() && askable && !lab;
   const [askOpen, setAskOpen] = useState(false);
   // La personne touchée dans « À l'écran » et sa scène : le panneau s'ouvre sur elle.
   const [askPerson, setAskPerson] = useState<{ person: XrayPlayerPerson; scene: XrayPlayerPerson[] } | null>(null);
@@ -718,7 +721,7 @@ export function PlayerControls({
    * la scène — une fois par personne et par tranche de cinq minutes (`prewarmSofar`), jamais page cachée.
    */
   const prewarmIds = scenePeople.slice(0, SOFAR_PREWARM_PEOPLE).map((p) => p.personId).join(",");
-  const prewarmKey = askOffered && visible && !hidden && prewarmIds ? `${itemId}|${prewarmIds}|${Math.floor(currentTime / SOFAR_BUCKET_S)}` : null;
+  const prewarmKey = sofarOffered && visible && !hidden && prewarmIds ? `${itemId}|${prewarmIds}|${Math.floor(currentTime / SOFAR_BUCKET_S)}` : null;
   const prewarmAt = useLatest(currentTime);
   useEffect(() => {
     if (!prewarmKey) return;
@@ -1409,7 +1412,8 @@ export function PlayerControls({
           position={() => (positionNow ? positionNow() : (videoRef.current?.currentTime ?? null))}
           person={askPerson?.person}
           scene={askPerson?.scene}
-          ask={askOffered}
+          ask={askPerson ? askPersonOffered : askOffered}
+          sofar={sofarOffered}
           onClose={() => {
             setAskOpen(false);
             setAskPerson(null);

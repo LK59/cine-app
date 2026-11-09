@@ -38,6 +38,8 @@ export interface SettingDef {
    * est relu à chaque accès (`config.ts`) et s'applique sans redémarrer.
    */
   restart?: true;
+  /** Vide, la valeur de cet autre réglage s'applique (un réglage détaché d'un autre, §139) ; la carte le dit. */
+  inherits?: string;
 }
 
 /** Les heures d'une plage horaire, « 0 » à « 23 ». */
@@ -79,6 +81,8 @@ export const SETTINGS: readonly SettingDef[] = [
   // n'existe pas : aucune route ne l'annonce. La clé ne quitte jamais le serveur (`secret`).
   // Le modèle vide vaut celui du fournisseur (`DEFAULT_MODELS`, subtitleGen/pricing.ts) ; les prix
   // vides valent la table officielle — remplis, ils la remplacent (un modèle qu'elle ne connaît pas).
+  // Depuis le 09/11/2026 (§140), le fournisseur, la clé et le plafond servent à **toutes** les
+  // fonctions payantes ci-dessous, chez les trois fournisseurs ; le budget est un plafond mensuel commun.
   { key: "SUBTITLE_GEN_ENABLED", group: "subtitles", kind: "boolean", need: "optional", fallback: "true", inApp: true },
   { key: "SUBTITLE_GEN_PROVIDER", group: "subtitles", kind: "select", need: "optional", fallback: "anthropic", inApp: true, options: ["anthropic", "openai", "google"] },
   { key: "SUBTITLE_GEN_API_KEY", group: "subtitles", kind: "secret", need: "optional", fallback: "", inApp: true },
@@ -86,13 +90,17 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "SUBTITLE_GEN_BUDGET_USD", group: "subtitles", kind: "number", need: "optional", fallback: "5", inApp: true, placeholder: "5" },
   { key: "SUBTITLE_GEN_PRICE_INPUT", group: "subtitles", kind: "number", need: "optional", fallback: "", inApp: true },
   { key: "SUBTITLE_GEN_PRICE_OUTPUT", group: "subtitles", kind: "number", need: "optional", fallback: "", inApp: true },
-  // La recherche par description (07/11/2026) : se sert du fournisseur et de la clé ci-dessus, et
-  // n'existe qu'avec Anthropic. Coupée par défaut — chaque recherche décrite est un appel payant.
+  // La recherche par description (07/11/2026) : se sert du fournisseur et de la clé ci-dessus (les
+  // trois depuis le 09/11/2026). Coupée par défaut — chaque recherche décrite est un appel payant.
   { key: "DESCRIBE_SEARCH_ENABLED", group: "subtitles", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   // « Précédemment » (08/11/2026, §137) : même fournisseur et même clé. Coupé par défaut, payant aussi.
   { key: "RECAP_ENABLED", group: "subtitles", kind: "boolean", need: "optional", fallback: "false", inApp: true },
-  // « Poser une question » (09/11/2026, §139) : même fournisseur et même clé. Coupé par défaut, payant aussi.
+  // « Poser une question » sur un titre (09/11/2026, §139) : même fournisseur et même clé. Coupé par défaut, payant aussi.
   { key: "ASK_ENABLED", group: "subtitles", kind: "audience", need: "optional", fallback: "off", inApp: true },
+  // Les questions sur une personne d'« À l'écran » et « Jusqu'ici » (§139), détachées d'`ASK_ENABLED` le
+  // 09/11/2026 : vides, elles **suivent** `ASK_ENABLED` (`inherits`) ; elles demandent en plus `XRAY_ENABLED`.
+  { key: "ASK_PERSON_ENABLED", group: "subtitles", kind: "audience", need: "optional", fallback: "", inApp: true, inherits: "ASK_ENABLED" },
+  { key: "SOFAR_ENABLED", group: "subtitles", kind: "audience", need: "optional", fallback: "", inApp: true, inherits: "ASK_ENABLED" },
   // ── La recherche de répliques (DECISIONS.md §88) ──
   // Coupée par défaut : elle lit les films sur le disque, ce qu'une installation doit avoir monté et
   // décidé. La page refuse de l'allumer tant que le dossier des films n'est pas lisible (`checkMoviesMount`).

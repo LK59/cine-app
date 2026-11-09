@@ -230,6 +230,7 @@ export const config = {
     get model() {
       return optional("SUBTITLE_GEN_MODEL");
     },
+    /** Le plafond mensuel de **toutes** les fonctions payantes depuis le 09/11/2026 (§140), nom gardé. */
     get budgetUsd() {
       return optional("SUBTITLE_GEN_BUDGET_USD", "5");
     },
@@ -241,21 +242,22 @@ export const config = {
     },
   },
   // La recherche par description (07/11/2026) : une phrase qui décrit un film ou une série, reconnue
-  // par le modèle des sous-titres générés (même fournisseur Anthropic, même clé). Coupée par défaut.
+  // par le fournisseur des sous-titres générés (même clé ; les trois depuis le 09/11/2026). Coupée par défaut.
   describeSearch: {
     get enabled() {
       return optional("DESCRIBE_SEARCH_ENABLED", "false") === "true";
     },
   },
   // « Précédemment » (DECISIONS.md §137) : même fournisseur et même clé que la recherche par
-  // description, Anthropic seulement. Coupé par défaut — chaque texte préparé est un appel payant.
+  // description (les trois fournisseurs depuis le 09/11/2026, §140). Coupé par défaut — chaque texte
+  // préparé est un appel payant, compté dans le plafond mensuel commun.
   recap: {
     get enabled() {
       return optional("RECAP_ENABLED", "false") === "true";
     },
   },
-  // « Poser une question » (DECISIONS.md §139) : même fournisseur et même clé, Anthropic seulement.
-  // Coupé par défaut — chaque question est un appel payant.
+  // « Poser une question » (DECISIONS.md §139) : même fournisseur et même clé (les trois depuis le
+  // 09/11/2026, §140). Coupé par défaut — chaque question est un appel payant.
   ask: {
     /** À qui (`featureAudience.ts`) : `off` (défaut), `admins`, `tous`. */
     get audience() {
@@ -263,6 +265,20 @@ export const config = {
     },
     get enabled() {
       return this.audience !== "off";
+    },
+    /**
+     * Les questions sur une personne d'« À l'écran » (09/11/2026, §139) — à part des questions sur un
+     * titre. Vide : suit `ASK_ENABLED`, d'où elles ont été détachées — une installation réglée avant
+     * garde exactement ce qu'elle avait. Elles demandent en plus les acteurs à l'écran.
+     */
+    get personAudience() {
+      const raw = optional("ASK_PERSON_ENABLED", "").trim();
+      return raw ? parseAudience(raw) : this.audience;
+    },
+    /** « Jusqu'ici » (§139) : même règle — vide, suit `ASK_ENABLED` ; demande aussi les acteurs à l'écran. */
+    get sofarAudience() {
+      const raw = optional("SOFAR_ENABLED", "").trim();
+      return raw ? parseAudience(raw) : this.audience;
     },
   },
   // La recherche de répliques (DECISIONS.md §88) : relue à chaque accès, comme le reste — couper
