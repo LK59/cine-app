@@ -140,7 +140,11 @@ class VoiceModels:
         self.state = "prêt"
         self.error = None
         self.ready = True
-        log.info("voix : %s prêt (%s), Silero VAD (MIT)", self.name, self.license)
+        from .logs import event
+
+        event(log, "voix : %s prêt (%s), Silero VAD (MIT), poids vérifiés", self.name, self.license,
+              action="models_ready", kind="voice", model=self.name, license=self.license,
+              files={mf.name: mf.sha256 for mf in self.files()})
 
     def status(self) -> dict:
         return {"enabled": self.enabled, "name": self.name, "label": self.spec["label"], "ready": bool(self.ready),

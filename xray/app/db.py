@@ -153,6 +153,14 @@ CREATE TABLE IF NOT EXISTS asd_runs (
     stats_json TEXT,
     updated    REAL NOT NULL
 );
+-- Le rapport de décision d'un élément (report.py) : ce qui a été fait, avec quoi, et pourquoi chaque voix
+-- est nommée ou non. Refait à chaque fin d'analyse, de lecture des lèvres ou de renommage.
+CREATE TABLE IF NOT EXISTS reports (
+    item_id     TEXT PRIMARY KEY,
+    etag        TEXT NOT NULL,
+    report_json TEXT NOT NULL,
+    updated     REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS series_faces (
     series_id TEXT NOT NULL,
     model     TEXT NOT NULL,
@@ -192,7 +200,11 @@ class Database:
         for table, col in (("chunks", "stats"), ("items", "stats_json"), ("items", "skip_json"),
                            ("chunks", "voice"), ("items", "original_language"), ("items", "voice_track_json"),
                            ("items", "voice_model"), ("items", "voice_error"), ("items", "voice_tried"),
-                           ("results", "stats_json"), ("items", "relabeled")):
+                           ("results", "stats_json"), ("items", "relabeled"),
+                           # Rapport de décision (11/2026, report.py) : les faits de l'analyse (versions,
+                           # précision du détecteur, plages sautées et leur source), le détail des groupes
+                           # de visages et des voix.
+                           ("items", "run_json"), ("results", "diag_json"), ("voice_results", "diag_json")):
             cols = {r[1] for r in self._conn.execute(f"PRAGMA table_info({table})")}
             if col not in cols:
                 kind = "INTEGER NOT NULL DEFAULT 0" if col == "voice" else ("REAL" if col in ("voice_tried", "relabeled") else "TEXT")

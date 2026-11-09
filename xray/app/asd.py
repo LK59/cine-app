@@ -354,7 +354,10 @@ class AsdModels:
                 tmp.unlink(missing_ok=True)
         self.error = None
         self.ready = True
-        log.info("lecture des lèvres : Light-ASD prêt (MIT)")
+        from .logs import event
+
+        event(log, "lecture des lèvres : Light-ASD prêt (MIT), poids vérifiés", action="models_ready", kind="asd",
+              model="light_asd", license=LICENSE, files={ASD_FILE.name: ASD_FILE.sha256})
 
     def status(self) -> dict:
         return {"enabled": self.enabled, "name": "light_asd", "label": LABEL, "ready": bool(self.ready),

@@ -7,6 +7,7 @@ se lit d'une requête — priorité d'abord (quelqu'un regarde maintenant), arri
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import re
@@ -18,6 +19,9 @@ from urllib.parse import urlsplit
 
 from .config import RESULT_VERSION
 from .db import Database
+from .logs import event
+
+log = logging.getLogger("xray.jobs")
 
 PRIORITIES = {"high": 0, "normal": 1, "low": 2}
 HEX32 = re.compile(r"^[0-9a-fA-F]{32}$")
@@ -278,6 +282,9 @@ class JobStore:
             return False
         known = row["duration"] if row["duration"] else (res["analyzed_until"] or None)
         if not known or abs(float(known) - spec.rebind_duration) > REBIND_TOLERANCE:
+            event(log, "[xray] %s : fichier remplacé, durée différente (%.1f s au lieu de %.1f s) : analyse refaite",
+                  spec.item_id, float(known or 0.0), spec.rebind_duration, item=spec.item_id, action="rebind_refused",
+                  knownDuration=known, durationS=spec.rebind_duration, oldEtag=row["etag"], etag=spec.etag)
             return False
         now = time.time()
         c.execute("UPDATE items SET etag=?, path=?, updated=? WHERE item_id=?", (spec.etag, spec.path, now, spec.item_id))
@@ -285,14 +292,19 @@ class JobStore:
         # Les voix suivent : mêmes temps, même durée.
         c.execute("UPDATE voice_results SET etag=?, updated=? WHERE item_id=?", (spec.etag, now, spec.item_id))
         c.execute("UPDATE asd_runs SET etag=?, updated=? WHERE item_id=?", (spec.etag, now, spec.item_id))
+        # Le rapport est refait à la demande, sous le nouvel etag (rien de ce qu'il dit ne change).
+        c.execute("DELETE FROM reports WHERE item_id=?", (spec.item_id,))
+        event(log, "[xray] %s : fichier remplacé de même durée, résultat repris sans analyse", spec.item_id,
+              item=spec.item_id, action="rebind", oldEtag=row["etag"], etag=spec.etag, path=spec.path,
+              durationS=spec.rebind_duration, knownDuration=float(known))
         return True
 
     def _forget(self, c, item_id: str) -> None:
         for table in ("chunks", "shots", "tracks", "results", "voice_regions", "voice_windows", "voice_results",
-                      "asd_votes", "asd_runs"):
+                      "asd_votes", "asd_runs", "reports"):
             c.execute(f"DELETE FROM {table} WHERE item_id=?", (item_id,))
         c.execute("UPDATE items SET stats_json=NULL, voice_track_json=NULL, voice_model=NULL, voice_error=NULL, "
-                  "voice_tried=NULL WHERE item_id=?", (item_id,))
+                  "voice_tried=NULL, run_json=NULL WHERE item_id=?", (item_id,))
 
     def delete(self, item_id: str) -> None:
         item_id = item_id.lower()

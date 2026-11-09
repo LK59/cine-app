@@ -46,6 +46,8 @@ from . import decode, voicejob
 from .config import ASD_VERSION, settings
 from .db import Database
 from .faces import align
+from .inference import device_calls
+from .logs import event
 from .voices import VoiceResult, build
 
 log = logging.getLogger("xray.asdjob")
@@ -332,8 +334,15 @@ def run_item(db: Database, row, engine, net, voice_model: str, built, should_sto
     if not vplans:
         stats.update(voicesResolved=0, voicesUndecided=before.stats.get("voicesUndecided", 0), cpuSeconds=0.0)
         _save_run(db, row, voice_model, "done", {}, stats)
-        log.info("[xray] %s : lecture des lèvres — aucune voix à lire (%d indécises)", item_id, stats["voicesUndecided"])
+        event(log, "[xray] %s : lecture des lèvres — aucune voix à lire (%d indécises)", item_id,
+              stats["voicesUndecided"], item=item_id, action="asd_done", **stats)
+        _report(db, item_id)
         return "done"
+    event(log, "[xray] %s : lecture des lèvres — %d voix à lire, %d fenêtres (%.0f s de vidéo)%s", item_id, len(vplans),
+          len(wlist), stats["videoSeconds"], " (reprise)" if resume else "", item=item_id, action="asd_start",
+          resume=resume, budgetS=budget, spentS=round(spent0, 1),
+          voices=[{"voiceId": vp.voice, "pieces": vp.size, "candidates": vp.candidates, "lines": len(vp.pieces)}
+                  for vp in vplans], windows=len(wlist), videoSeconds=stats["videoSeconds"])
 
     info = decode.probe(path)
     track, _ = voicejob.track_for(db, row, path)
@@ -343,12 +352,15 @@ def run_item(db: Database, row, engine, net, voice_model: str, built, should_sto
     decoders = set()
     capped = False
     nvotes = 0
+    calls0 = device_calls(engine)
     for a, b, pcs in wlist:
         if (a, b) in done_w:
             continue
         if should_stop():
             state.update(windows=sorted(done_w), cpu=spent0 + cpu_now() - c0)
             _save_run(db, row, voice_model, "partial", state, stats)
+            event(log, "[xray] %s : lecture des lèvres — cède la place à un ordre plus pressé (%d/%d fenêtres)", item_id,
+                  len(done_w), len(wlist), item=item_id, action="asd_yield", windowsDone=len(done_w), windows=len(wlist))
             return "yield"
         if spent0 + cpu_now() - c0 >= budget:
             capped = True
@@ -388,13 +400,25 @@ def run_item(db: Database, row, engine, net, voice_model: str, built, should_sto
             idx = [i for i, r in enumerate(rows) if r[2] == vp.voice]
             if idx and sum(1 for i in idx if rows[i][3] is not None) >= 0.5 * len(idx):
                 resolved += 1
+    calls1 = device_calls(engine)
     stats.update(voicesResolved=resolved, voicesUndecided=(res.stats.get("voicesUndecided") if res else None),
                  undecidedBefore=state.get("undecidedBefore"), votes=nvotes, cpuSeconds=cpu, capped=capped,
                  wallSeconds=round(time.monotonic() - t0, 1), decoders=sorted(decoders),
-                 voicesAsd=(res.stats.get("voicesAsd") if res else None))
+                 voicesAsd=(res.stats.get("voicesAsd") if res else None),
+                 # Détecteur et empreinte de cette lecture : appels servis par l'iGPU et le processeur (ce
+                 # passage-ci ; Light-ASD lui-même tourne sur le processeur).
+                 inference=None if calls0 is None or calls1 is None else
+                 {k: calls1[k] - calls0[k] for k in calls1})
     _save_run(db, row, voice_model, "done", {"windows": sorted(done_w)}, stats)
-    log.info("[xray] %s : lecture des lèvres — %d voix lues, %d nommées, %d indécises restent (avant : %s) ; "
-             "%d fenêtres, %.0f s de vidéo, %d votes, %.0f s de calcul%s", item_id, len(vplans), resolved,
-             stats["voicesUndecided"] or 0, stats["undecidedBefore"], len(wlist), stats["videoSeconds"], nvotes, cpu,
-             " (plafond atteint)" if capped else "")
+    event(log, "[xray] %s : lecture des lèvres — %d voix lues, %d nommées, %d indécises restent (avant : %s) ; "
+          "%d fenêtres, %.0f s de vidéo, %d votes, %.0f s de calcul%s", item_id, len(vplans), resolved,
+          stats["voicesUndecided"] or 0, stats["undecidedBefore"], len(wlist), stats["videoSeconds"], nvotes, cpu,
+          " (plafond atteint)" if capped else "", item=item_id, action="asd_done", **stats)
+    _report(db, item_id)
     return "done"
+
+
+def _report(db: Database, item_id: str) -> None:
+    from . import report
+
+    report.save(db, item_id, "lèvres")

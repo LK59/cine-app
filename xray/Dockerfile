@@ -94,6 +94,11 @@ RUN python -m pytest -q -p no:cacheprovider && touch /tests-ok
 
 # --- image finale ------------------------------------------------------------------------------
 FROM runtime
+# Le commit de l'image, repris par le journal de démarrage et le rapport de décision de chaque élément
+# (`--build-arg XRAY_COMMIT=$(git rev-parse --short HEAD)`) ; vide, ils disent `null`. Posé ici, après
+# l'étage de test, pour qu'un autre commit ne refasse pas les tests.
+ARG XRAY_COMMIT=""
+ENV XRAY_COMMIT=${XRAY_COMMIT}
 # Rien n'est pris de l'étage de test sinon cette marque : elle force BuildKit à l'exécuter.
 COPY --from=test /tests-ok /srv/.tests-ok
 # Utilisateur sans privilège. L'accès à /dev/dri/renderD128 passe par le groupe « render » de

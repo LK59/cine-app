@@ -27,6 +27,7 @@ from . import memory
 from . import segments
 from .config import VOICE_VERSION, settings
 from .db import Database
+from .logs import event
 from .voices import VoiceResult, build
 
 log = logging.getLogger("xray.voicejob")
@@ -48,6 +49,9 @@ def track_for(db: Database, row, path: str) -> tuple[audiomod.AudioTrack | None,
     t, why = audiomod.choose_track(tracks, orig, settings.voice_track)
     d = {"track": t.as_dict() if t else None, "reason": why, "originalLanguage": orig}
     db.run("UPDATE items SET voice_track_json=? WHERE item_id=?", (json.dumps(d, ensure_ascii=False), row["item_id"]))
+    event(log, "[xray] %s : piste son choisie — %s (%s)", row["item_id"], f"0:{t.index}" if t else "aucune", why,
+          item=row["item_id"], action="audio_track", reason=why, originalLanguage=orig, mode=settings.voice_track,
+          tracks=len(tracks), track=audiomod.describe(t) if t else None)
     return t, d
 
 
@@ -56,6 +60,10 @@ def reset_if_other_model(db: Database, item_id: str, model: str) -> None:
     row = db.one("SELECT voice_model FROM items WHERE item_id=?", (item_id,))
     if row is None or row["voice_model"] == model:
         return
+    if row["voice_model"]:
+        event(log, "[xray] %s : empreintes de voix d'un autre modèle (%s) oubliées, à refaire sous %s", item_id,
+              row["voice_model"], model, item=item_id, action="voice_model_reset", previous=row["voice_model"],
+              model=model)
     with db.tx() as c:
         # Les votes de la lecture des lèvres sont gardés (des instants et des visages, pas des voix) ; le
         # passage, lui, est à refaire : les voix indécises ne sont plus les mêmes.
@@ -128,11 +136,14 @@ def assemble(db: Database, item_id: str, etag: str, model: str, series_id: str |
             return None
         c.execute(
             """INSERT OR REPLACE INTO voice_results (item_id, etag, model, track_json, segments_json, analyzed_until,
-                                                     complete, version, stats_json, updated)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                                     complete, version, stats_json, updated, diag_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (item_id, etag, model, json.dumps(track, ensure_ascii=False) if track else None,
              json.dumps(result.segments, separators=(",", ":")), round(until, 3), 1 if complete else 0, VOICE_VERSION,
-             json.dumps(stats), time.time()),
+             json.dumps(stats), time.time(),
+             # Le détail par voix (rapport de décision), seulement quand le résultat est final : refait à
+             # chaque tronçon, il ne servirait à rien.
+             json.dumps(result.voices, separators=(",", ":"), ensure_ascii=False) if final else None),
         )
     if complete:
         update_series(db, series_id, model, result, item_id)
@@ -229,14 +240,20 @@ def run_voice_only(db: Database, row, engine, model: str, presence_of, skips_of,
         track, tinfo = track_for(db, row, path)
         if track is None:
             no_audio(db, item_id, etag, model, tinfo)
-            log.info("[xray] %s : voix — aucune piste son utilisable", item_id)
+            event(log, "[xray] %s : voix — aucune piste son utilisable", item_id, item=item_id, action="voice_only",
+                  outcome="no_audio")
+            _report(db, item_id, "voix")
             return "done"
         skips = skips_of(item_id, row)
         todo = db.q("SELECT idx, start, end FROM chunks WHERE item_id=? AND voice=0 ORDER BY idx", (item_id,))
         t0 = time.monotonic()
+        event(log, "[xray] %s : voix par le son seul — %d tronçons à lire", item_id, len(todo), item=item_id,
+              action="voice_only_start", chunks=len(todo), model=model)
         speech = 0.0
         for r in todo:
             if should_stop():
+                event(log, "[xray] %s : voix par le son seul — cède la place à un ordre plus pressé", item_id,
+                      item=item_id, action="voice_only_yield")
                 return "yield"
             regions: list = []
             wins_l, embs_l = [], []
@@ -255,10 +272,19 @@ def run_voice_only(db: Database, row, engine, model: str, presence_of, skips_of,
                 return "yield"
         presence, scenes = presence_of(row)
         res = assemble(db, item_id, etag, model, row["series_id"], tinfo, presence, scenes, final=True)
-        log.info("[xray] %s : voix complétées par le son seul — %d tronçons en %.0f s, %.0f s de parole, %s",
-                 item_id, len(todo), time.monotonic() - t0, speech, res.stats if res else "?")
+        event(log, "[xray] %s : voix complétées par le son seul — %d tronçons en %.0f s, %.0f s de parole", item_id,
+              len(todo), time.monotonic() - t0, speech, item=item_id, action="voice_only_done", chunks=len(todo),
+              seconds=round(time.monotonic() - t0, 1), speechSeconds=round(speech, 1),
+              stats=res.stats if res else None)
+        _report(db, item_id, "voix")
         return "done"
     except Exception as e:
         db.run("UPDATE items SET voice_error=?, voice_tried=? WHERE item_id=?", (f"{type(e).__name__}: {e}"[:500], time.time(), item_id))
         log.exception("[xray] %s : voix par le son seul en échec", item_id)
         return "failed"
+
+
+def _report(db: Database, item_id: str, trigger: str) -> None:
+    from . import report
+
+    report.save(db, item_id, trigger)

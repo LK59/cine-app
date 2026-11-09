@@ -24,19 +24,22 @@ import time
 import cv2
 import numpy as np
 
+from . import audio as audiomod
 from . import cast as castmod
 from . import decode
 from . import segments
 from .config import RESULT_VERSION, settings
 from .db import Database
 from .faces import MODEL_DEFAULTS
+from .inference import device_calls, device_label
 from .jobs import CastMember, JobStore
+from .logs import event
 from .models import ModelManager
 from .results import Assembler, ShotRow, TrackRow, build
 from .pipeline import ShotFaces
 from .shots import ShotSplitter, frames_to_sample, pick_indices
 from .timing import StageClock, job_stats, line
-from . import asdjob, relabel, voicejob
+from . import asdjob, relabel, report, voicejob
 
 log = logging.getLogger("xray.worker")
 
@@ -155,13 +158,18 @@ class Worker:
                 self.store.wait_for_work(10.0)
                 continue
             item_id = row["item_id"]
+            t0 = time.monotonic()
             try:
                 self.run(row)
             except Cancelled:
-                log.info("[xray] %s : arrêté (ordre supprimé ou fichier changé)", item_id)
+                event(log, "[xray] %s : arrêté (ordre supprimé ou fichier changé)", item_id, item=item_id,
+                      action="job_cancelled", seconds=round(time.monotonic() - t0, 1))
             except Exception as e:
-                log.exception("[xray] %s : échec", item_id)
                 msg = f"{type(e).__name__}: {e}"[:500]
+                done = self.db.one("SELECT COUNT(*) AS n, SUM(done) AS d FROM chunks WHERE item_id=?", (item_id,))
+                event(log, "[xray] %s : échec", item_id, level=logging.ERROR, item=item_id, action="job_failed",
+                      exc_info=True, seconds=round(time.monotonic() - t0, 1), attempts=row["attempts"] + 1,
+                      chunks=done["n"] if done else None, chunksDone=(done["d"] or 0) if done else None, path=row["path"])
                 if self._same(item_id, row["etag"]):
                     self.store.set_status(item_id, "failed", error=msg)
             finally:
@@ -213,8 +221,10 @@ class Worker:
                             guard=self.guard, cancel=self.store.cancel)
         except Exception as e:
             # Une panne ne se répète pas en boucle : le passage est noté fait, avec l'erreur.
-            log.exception("[xray] %s : lecture des lèvres en échec", row["item_id"])
+            event(log, "[xray] %s : lecture des lèvres en échec", row["item_id"], level=logging.ERROR,
+                  item=row["item_id"], action="asd_failed", exc_info=True)
             asdjob._save_run(self.db, row, vm.name, "done", {}, {"error": f"{type(e).__name__}: {e}"[:300]})
+            report.save(self.db, row["item_id"], "lèvres")
         finally:
             self.store.running_id = None
             self.store.cancel.clear()
@@ -252,14 +262,22 @@ class Worker:
         if row["version"] < RESULT_VERSION:
             # Commencé sous d'anciennes règles et pas fini : on repart de zéro plutôt que de
             # mêler, dans un même résultat, des tronçons des deux versions.
-            log.info("[xray] %s : tronçons de la version %d oubliés, reprise à zéro", item_id, row["version"])
+            event(log, "[xray] %s : tronçons de la version %d oubliés, reprise à zéro", item_id, row["version"],
+                  item=item_id, action="version_reset", previous=row["version"], version=RESULT_VERSION)
             with self.db.tx() as c:
                 for table in ("chunks", "shots", "tracks", "results", "voice_regions", "voice_windows", "voice_results",
-                              "asd_votes", "asd_runs"):
+                              "asd_votes", "asd_runs", "reports"):
                     c.execute(f"DELETE FROM {table} WHERE item_id=?", (item_id,))
                 c.execute("UPDATE items SET stats_json=NULL WHERE item_id=?", (item_id,))
         self.store.set_status(item_id, "running", attempts=row["attempts"] + 1, model=model, version=RESULT_VERSION)
         t_job = time.monotonic()
+        raw_skip = row["skip_json"] if "skip_json" in row.keys() else None
+        event(log, "[xray] %s : analyse commencée", item_id, item=item_id, action="job_start", path=path, etag=etag,
+              priority={0: "high", 1: "normal", 2: "low"}.get(row["priority"], row["priority"]),
+              startAt=row["start_at"], attempt=row["attempts"] + 1, seriesId=row["series_id"],
+              originalLanguage=row["original_language"] if "original_language" in row.keys() else None,
+              skip=json.loads(raw_skip) if raw_skip else None, faceModel=model,
+              voiceModel=self.voice_models.name if self.voice_models is not None and self.voice_models.enabled else None)
         info = decode.probe(path)
         if info.duration <= 0:
             raise RuntimeError("durée nulle")
@@ -288,10 +306,27 @@ class Worker:
         self.memory_ids = mem_ids
         self.memory = np.stack(mem).astype(np.float32) if mem else None
         self.skips = self._skips(item_id, row)
-        log.info("[xray] %s : %d acteurs, %d avec référence, %d en mémoire de série, %.0f s de vidéo (%s %s %dx%d), "
-                 "plages sautées : %s", item_id, len(cast), len(refs), len(mem), info.duration, info.codec,
-                 info.profile, info.width, info.height,
-                 ", ".join(f"{a:.0f}–{b:.0f} s" for a, b in self.skips) or "aucune")
+        if raw_skip is not None:
+            skip_source = "ordre"
+        else:
+            cur = self.db.one("SELECT skip_json FROM items WHERE item_id=?", (item_id,))
+            skip_source = "jellyfin" if cur is not None and cur["skip_json"] is not None else "aucune"
+        try:
+            prev = self.db.one("SELECT run_json FROM items WHERE item_id=?", (item_id,))
+            facts = report.run_facts(self.models, skip_source,
+                                     json.loads(prev["run_json"]) if prev is not None and prev["run_json"] else None)
+            self.db.run("UPDATE items SET run_json=? WHERE item_id=?", (json.dumps(facts, ensure_ascii=False), item_id))
+        except Exception:  # le rapport ne fait jamais échouer l'analyse
+            log.exception("[xray] %s : faits de l'analyse non gardés", item_id)
+        event(log, "[xray] %s : %d acteurs, %d avec référence, %d en mémoire de série, %.0f s de vidéo (%s %s %dx%d), "
+              "plages sautées : %s", item_id, len(cast), len(refs), len(mem), info.duration, info.codec,
+              info.profile, info.width, info.height,
+              ", ".join(f"{a:.0f}–{b:.0f} s" for a, b in self.skips) or "aucune",
+              item=item_id, action="job_plan", cast=len(cast), refs=len(refs), memory=len(mem),
+              durationS=round(info.duration, 3), codec=info.codec, profile=info.profile, width=info.width,
+              height=info.height, hdr=info.hdr, skipSource=skip_source, skipped=[[a, b] for a, b in self.skips],
+              chunks=self.db.one("SELECT COUNT(*) FROM chunks WHERE item_id=?", (item_id,))[0],
+              chunksDone=self.db.one("SELECT COUNT(*) FROM chunks WHERE item_id=? AND done=1", (item_id,))[0])
         # « Qui parle » : la piste son, lue dans le même ffmpeg que l'image. Sans réseaux prêts ou sans
         # piste, l'image passe seule ; le son manquant sera lu seul plus tard (`voicejob`).
         stage = self._voice()
@@ -304,9 +339,12 @@ class Worker:
                 row = self.store.get(item_id) or row
                 self.voice_track, self.voice_tinfo = voicejob.track_for(self.db, row, path)
                 t = self.voice_track
-                log.info("[xray] %s : voix — piste %s (%s, %s, %d canaux, %s)", item_id,
-                         f"0:{t.index}" if t else "aucune", (self.voice_tinfo or {}).get("reason"),
-                         t.language if t else "-", t.channels if t else 0, t.title if t else "-")
+                event(log, "[xray] %s : voix — piste %s (%s, %s, %d canaux, %s)", item_id,
+                      f"0:{t.index}" if t else "aucune", (self.voice_tinfo or {}).get("reason"),
+                      t.language if t else "-", t.channels if t else 0, t.title if t else "-", item=item_id,
+                      action="voice_track", reason=(self.voice_tinfo or {}).get("reason"),
+                      originalLanguage=(self.voice_tinfo or {}).get("originalLanguage"),
+                      track=audiomod.describe(t) if t else None)
             except Exception:
                 log.exception("[xray] %s : piste son illisible, image seule", item_id)
                 self.voice_track = None
@@ -321,11 +359,17 @@ class Worker:
             if self.store.cancel.is_set() or not self._same(item_id, etag):
                 raise Cancelled()
             if self.store.should_yield(item_id):
-                log.info("[xray] %s : cède la place à un ordre plus pressé", item_id)
+                event(log, "[xray] %s : cède la place à un ordre plus pressé", item_id, item=item_id, action="job_yield",
+                      seconds=round(time.monotonic() - t_job, 1))
                 self.store.set_status(item_id, "queued")
                 return
             self.chunk_audio = [] if self.voice_track is not None else None
+            calls0 = device_calls(self.engine)
             shots, tracks, decoder, clock = self.process_chunk(item_id, path, info, idx, start, end)
+            # Où l'inférence a tourné pendant ce tronçon (rapport de décision) : à côté du chronomètre.
+            chunk_stats = clock.as_dict()
+            if decoder != "skip":
+                chunk_stats["device"] = device_label(calls0, device_calls(self.engine))
             t_write = time.perf_counter()
             with self.db.tx() as c:
                 cur = c.execute("SELECT etag FROM items WHERE item_id=?", (item_id,)).fetchone()
@@ -341,8 +385,9 @@ class Worker:
                          t[0].emb.astype(np.float32).tobytes()),
                     )
                 clock.add("write", time.perf_counter() - t_write)
+                chunk_stats.update(clock.as_dict())
                 c.execute("UPDATE chunks SET done=1, decoder=?, stats=? WHERE item_id=? AND idx=?",
-                          (decoder, json.dumps(clock.as_dict()), item_id, idx))
+                          (decoder, json.dumps(chunk_stats), item_id, idx))
             with job_clock.stage("build"):
                 built = self.checkpoint(item_id, etag, model, info.duration, anchor, refs)
             self._save_job_clock(item_id, job_clock)
@@ -357,10 +402,11 @@ class Worker:
             vres = stage.finish(item_id, etag, row["series_id"], self.voice_tinfo, built)
             if vres is not None:
                 st = vres.stats
-                log.info("[xray] %s : voix — %d voix nommées, %d indécises, %d en désaccord (visages / mémoire), "
-                         "%d trop petites ; %d morceaux sur %d nommés", item_id, st.get("voicesNamed", 0),
-                         st.get("voicesUndecided", 0), st.get("voicesConflict", 0), st.get("voicesSmall", 0),
-                         st.get("named", 0), st.get("pieces", 0))
+                event(log, "[xray] %s : voix — %d voix nommées, %d indécises, %d en désaccord (visages / mémoire), "
+                      "%d trop petites ; %d morceaux sur %d nommés", item_id, st.get("voicesNamed", 0),
+                      st.get("voicesUndecided", 0), st.get("voicesConflict", 0), st.get("voicesSmall", 0),
+                      st.get("named", 0), st.get("pieces", 0), item=item_id, action="voices_done", stats=st,
+                      errors=stage.errors.get(item_id))
         elif stage is not None and self.voice_track is None and built is not None and built.complete:
             voicejob.no_audio(self.db, item_id, etag, self.voice_models.name, self.voice_tinfo)
         if built is not None and built.complete:
@@ -368,8 +414,12 @@ class Worker:
             castmod.update_series(self.db, row["series_id"], model, built, label_t, item_id)
             self.store.set_status(item_id, "done")
             st = job_stats(self.db, item_id, info.duration)
-            log.info("[xray] %s : terminé en %.0f s (%.0f s de calcul, %s× le temps réel), %d scènes — %s",
-                     item_id, time.monotonic() - t_job, st["seconds"], st["realtime"], len(built.scenes), line(st))
+            event(log, "[xray] %s : terminé en %.0f s (%.0f s de calcul, %s× le temps réel), %d scènes — %s",
+                  item_id, time.monotonic() - t_job, st["seconds"], st["realtime"], len(built.scenes), line(st),
+                  item=item_id, action="job_done", seconds=round(time.monotonic() - t_job, 1),
+                  computeSeconds=st["seconds"], realtime=st["realtime"], scenes=len(built.scenes), stages=st["stages"],
+                  counts=st["counts"], decodeSeconds=st.get("decodeSeconds"), skippedSeconds=st.get("skippedSeconds"))
+            report.save(self.db, item_id, "analyse")
 
     def _skips(self, item_id: str, row) -> list[tuple[float, float]]:
         """Plages à ne pas analyser : celles de l'ordre, sinon celles de Jellyfin (gardées avec
@@ -448,7 +498,8 @@ class Worker:
             # Tout le tronçon est sauté (générique) : fait, sans plan ni piste.
             clock = StageClock()
             clock.add("skipped", end - start)
-            log.info("[xray] %s : tronçon %d (%.0f–%.0f s) sauté", item_id, idx, start, end)
+            event(log, "[xray] %s : tronçon %d (%.0f–%.0f s) sauté", item_id, idx, start, end, item=item_id,
+                  action="chunk_skipped", chunk=idx, start=start, end=end)
             if getattr(self, "chunk_audio", None) is not None:
                 self.chunk_audio = []  # rien à écouter : le tronçon est fait, sans parole
             return [], [], "skip", clock
@@ -460,7 +511,8 @@ class Worker:
         except DecodeFailed as e:
             if not want_vaapi:
                 raise RuntimeError(str(e)) from None
-            log.warning("[xray] %s : VA-API en échec sur le tronçon %d, reprise sur le processeur (%s)", item_id, idx, e)
+            event(log, "[xray] %s : VA-API en échec sur le tronçon %d, reprise sur le processeur (%s)", item_id, idx, e,
+                  level=logging.WARNING, item=item_id, action="vaapi_fallback", chunk=idx, error=str(e)[:500])
             try:
                 return self._process(item_id, path, info, idx, start, end, parts, False)
             except DecodeFailed as e2:
@@ -531,12 +583,16 @@ class Worker:
         clock.count("tracks", len(tracks_out))
         sec, n = clock.seconds, clock.counts
         decoder = decoders[0] if decoders else "skip"
-        log.info(
+        event(
+            log,
             "[xray] %s : tronçon %d (%.0f–%.0f s) %s · %d images en %.1f s · %d plans · %d pistes · "
             "détection %.0f ms/image (%d) · empreinte %.1f ms/visage (%d) · attente décodage %.1f s%s",
             item_id, idx, start, end, decoder, n.get("decoded", 0), wall, len(shots_out), len(tracks_out),
             1000 * sec.get("detect", 0.0) / max(n.get("images", 0), 1), n.get("images", 0),
             1000 * sec.get("embed", 0.0) / max(n.get("embedded", 0), 1), n.get("embedded", 0),
             sec.get("decode_wait", 0.0), f" · {skipped:.0f} s sautées" if skipped > 0 else "",
+            item=item_id, action="chunk_done", chunk=idx, start=start, end=end, decoder=decoder,
+            frames=n.get("decoded", 0), seconds=round(wall, 2), shots=len(shots_out), tracks=len(tracks_out),
+            images=n.get("images", 0), embedded=n.get("embedded", 0), skippedSeconds=round(skipped, 1) or None,
         )
         return shots_out, tracks_out, decoder, clock

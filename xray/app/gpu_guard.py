@@ -18,6 +18,7 @@ import time
 import httpx
 
 from .config import settings
+from .logs import event
 
 log = logging.getLogger("xray.guard")
 
@@ -65,7 +66,10 @@ class GpuGuard:
             return self._busy
         with self._lock:
             if busy != self._busy:
-                log.info("iGPU %s par Jellyfin", "occupé" if busy else "libéré")
+                # Le décodage et (avec XRAY_OV_DEVICE=GPU) l'inférence passent sur le processeur tant que
+                # Jellyfin transcode sur l'iGPU, et y reviennent ensuite.
+                event(log, "iGPU %s par Jellyfin", "occupé" if busy else "libéré", action="gpu_guard", busy=busy,
+                      reason="jellyfin_transcode" if busy else "jellyfin_idle")
             self._busy = busy
             self._checked = time.time()
         return busy

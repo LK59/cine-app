@@ -29,6 +29,7 @@ from .config import RESULT_VERSION
 from .db import Database
 from .faces import MODEL_DEFAULTS
 from .jobs import CastMember
+from .logs import event
 from .results import Built, ShotRow, TrackRow, build
 
 log = logging.getLogger("xray.relabel")
@@ -55,13 +56,22 @@ def face_stats(built: Built) -> dict:
 
 
 def write_result(c, item_id: str, etag: str, model: str, built: Built) -> None:
-    """Le résultat des scènes, tel que `/scenes` le sert (même écriture pour l'analyse et le renommage)."""
+    """Le résultat des scènes, tel que `/scenes` le sert (même écriture pour l'analyse et le renommage).
+    Complet, il garde aussi le détail des groupes de visages pour le rapport de décision (`report.py`)."""
+    diag = None
+    if built.complete:
+        from . import report
+
+        try:
+            diag = json.dumps(report.face_diag(built), separators=(",", ":"))
+        except Exception:  # le rapport ne fait jamais échouer un résultat
+            log.exception("[xray] %s : détail des visages pour le rapport impossible", item_id)
     c.execute(
         """INSERT OR REPLACE INTO results (item_id, etag, model, scenes_json, analyzed_until, progress, complete,
-                                          updated, version, stats_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                          updated, version, stats_json, diag_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (item_id, etag, model, json.dumps(built.scenes, separators=(",", ":")), built.analyzed_until,
-         built.progress, 1 if built.complete else 0, time.time(), RESULT_VERSION, json.dumps(face_stats(built))),
+         built.progress, 1 if built.complete else 0, time.time(), RESULT_VERSION, json.dumps(face_stats(built)), diag),
     )
 
 
@@ -112,6 +122,9 @@ def relabel_item(db: Database, item_id: str, voice_model: str | None) -> dict:
                                 final=True)
         if res is not None:
             out["voices"] = {k: res.stats.get(k) for k in ("voicesNamed", "voicesUndecided", "voicesConflict", "speechNamed")}
+    from . import report
+
+    report.save(db, item_id, "renommage")
     return out
 
 
@@ -154,11 +167,14 @@ def run_some(db: Database, voice_model: str | None, budget_s: float = RELABEL_BU
         row = db.one("SELECT item_id FROM relabel_queue ORDER BY seq LIMIT 1")
         if row is None:
             break
+        t1 = time.monotonic()
         try:
             out = relabel_item(db, row["item_id"], voice_model)
-            log.info("[xray] %s : renommé sans relecture — %s", row["item_id"], out)
+            event(log, "[xray] %s : renommé sans relecture — %s", row["item_id"], out, item=row["item_id"],
+                  action="relabel", seconds=round(time.monotonic() - t1, 2), result=out)
         except Exception:
-            log.exception("[xray] %s : renommage en échec", row["item_id"])
+            event(log, "[xray] %s : renommage en échec", row["item_id"], level=logging.ERROR, item=row["item_id"],
+                  action="relabel_failed", exc_info=True)
         db.run("DELETE FROM relabel_queue WHERE item_id=?", (row["item_id"],))
         n += 1
         if time.monotonic() - t0 >= budget_s or should_stop():

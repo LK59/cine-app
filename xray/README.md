@@ -25,6 +25,7 @@ un réseau Docker interne.
 - [Réglages](#réglages)
 - [Calibrage](#calibrage)
 - [Limites connues](#limites-connues)
+- [Journaux et rapport d'analyse](#journaux-et-rapport-danalyse)
 - [Référence de l'API](#référence-de-lapi)
 - [Développement](#développement)
 
@@ -719,6 +720,7 @@ Variables d'environnement (toutes facultatives sauf la clé) :
 | `XRAY_ASD` | `1` | `0` : pas de lecture des lèvres (ni téléchargement de Light-ASD). |
 | `XRAY_ASD_BUDGET_S` | `600` | Plafond de calcul de la lecture des lèvres, par élément (secondes de processeur, ffmpeg compris). |
 | `XRAY_ASD_THREADS` | `2` | Fils de Light-ASD. |
+| `XRAY_COMMIT` | — | Commit de l'image, posé à la construction (`--build-arg XRAY_COMMIT=$(git rev-parse --short HEAD)`) ; repris par le journal et le rapport. |
 | `XRAY_CLUSTER_THRESHOLD` | selon le modèle | Similarité pour regrouper deux pistes (0,42 / 0,40). |
 | `XRAY_LABEL_THRESHOLD` | selon le modèle | Seuil de rejet d'un nom (0,30 / 0,28). |
 
@@ -793,6 +795,130 @@ processeur adapte.
   analysé sans adaptation (le journal le dit) : moins de coupes trouvées, des scènes plus longues.
 - **Le résultat dépend du fichier** : il est lié à son `etag`, et un fichier remplacé doit être
   réanalysé.
+
+---
+
+## Journaux et rapport d'analyse
+
+`docker logs` disparaît avec le conteneur, recréé à chaque déploiement : une analyse ratée la nuit
+n'y était plus le matin, et pourquoi une voix restait sans nom ne se lisait nulle part. Deux choses
+répondent désormais.
+
+### Le journal : `/data/logs/xray.log`
+
+Chaque ligne de journal du service (`app/logs.py`) va **aussi** dans le volume de données, un objet
+JSON par ligne — toujours en plus de la sortie standard, qui garde sa ligne lisible :
+
+```json
+{"ts":"2026-11-10T21:04:12.381+01:00","level":"info","scope":"worker","msg":"[xray] 3f2a… : tronçon 7 (840–960 s) vaapi · …",
+ "itemId":"3f2a…","action":"chunk_done","chunk":7,"decoder":"vaapi","frames":481,"shots":38,"tracks":21,"thread":"worker"}
+```
+
+`ts`, `level`, `scope` (le module : `api`, `worker`, `voicejob`, `asdjob`, `inference`, `guard`,
+`models`, `report`…), `msg`, `itemId` quand l'événement concerne un élément, les champs structurés de
+l'événement (`action` en premier lieu), et pour une erreur `error` et `stack`. **Rotation** à 5 Mo,
+cinq archives (`xray.log.1` la plus récente … `xray.log.5`) : 30 Mo au plus. Les exceptions des routes
+(journal `uvicorn.error`) y vont aussi. Un dossier non inscriptible laisse le service tourner sur la
+seule sortie standard, et le dit.
+
+**Jamais un secret** : `XRAY_API_KEY`, `JELLYFIN_API_KEY` et toute variable d'environnement dont le
+nom contient `KEY`, `TOKEN`, `SECRET` ou `PASSW` sont remplacées par `«secret»` dans chaque ligne
+(fichier et sortie standard), comme ce qui suit `Bearer `, `Token="` ou `api_key=`. Le contenu des
+fichiers n'est jamais journalisé ; les chemins le sont. `tests/test_logs.py` pose de fausses clés et
+vérifie qu'aucune n'apparaît.
+
+Les événements, chacun une fois (`action`) :
+
+| `action` | Quand | Champs principaux |
+|---|---|---|
+| `startup` | démarrage | version, `commit`, fils, `inference`, `ovDevice`, `detectorInt8`, VA-API, `noref`, voix et lèvres activées, seuils de visage, `jellyfin`/`apiKey` (posés ou non, jamais la valeur), `models` (fichiers, versions, SHA-256) |
+| `models_ready` | poids vérifiés (visages, voix, lèvres) | `files` {fichier: SHA-256}, `int8` |
+| `int8` | détecteur INT8 produit, repris, refusé ou non voulu | `state`, `reason`/`error`, `files` |
+| `engine_loaded`, `gpu_unavailable` | réseaux chargés ; iGPU qui ne s'ouvre pas | `engine`, `detector`, `device`, `gpu`, `gpuError` |
+| `gpu_guard`, `device_switch` | Jellyfin prend ou rend l'iGPU ; chaque bascule iGPU ↔ processeur de l'inférence | `busy`, `device`, `previous`, `reason` (`jellyfin_transcode`, `jellyfin_idle`, `start`) |
+| `job_received`, `job_refused` | `POST /jobs` | `priority`, `startAt`, `skip`, `originalLanguage`, `seriesId`, `cast`, `rebindDuration`, `status`, `position` |
+| `job_start`, `job_plan` | début d'un passage | chemin, etag, tentative ; distribution, références, mémoire, codec, HDR, plages sautées et leur source |
+| `chunk_done`, `chunk_skipped`, `vaapi_fallback` | chaque tronçon | décodeur, images, plans, pistes, secondes |
+| `voice_track`, `audio_track` | piste son retenue | `reason`, `originalLanguage`, piste (langue, codec, canaux, disposition, canal écouté, filtre) |
+| `job_done`, `job_yield`, `job_cancelled`, `job_failed` | fin d'un passage | durées, calcul par étape, × temps réel ; erreur et pile |
+| `voice_only_*`, `voices_done` | voix par le son seul ; voix finales | tronçons, secondes de parole, comptes |
+| `asd_start`, `asd_yield`, `asd_done`, `asd_failed` | lecture des lèvres | voix lues et candidats, fenêtres, votes, calcul, plafond, décodeurs |
+| `rebind`, `rebind_refused` | fichier remplacé (`rebindIfSameDuration`) | ancien et nouvel etag, durées |
+| `relabel_requested`, `relabel`, `relabel_failed` | renommages | éléments, résumé |
+| `memory_reset`, `voice_model_reset`, `version_reset`, `item_deleted` | oublis | contributions, modèles, versions |
+| `report`, `report_failed` | rapport refait (une ligne qui le résume) | comptes, `voiceReasons`, `voiceVia`, `gpuShare`, `vaapiShare` |
+
+Lire : `docker exec laterna-xray tail -n 50 /data/logs/xray.log | jq -c .` ; un élément :
+`jq -c 'select(.itemId=="…")' /data/logs/xray.log*`.
+
+### Le rapport de décision : `GET /items/{itemId}/report`
+
+Pour chaque élément, ce qui a été fait, avec quoi, et pourquoi (`app/report.py`). **Refait et gardé en
+base** (table `reports`) à chaque fin de passage qui change le résultat — analyse complète (`trigger:
+"analyse"`), voix par le son seul (`"voix"`), lecture des lèvres (`"lèvres"`), renommage
+(`"renommage"`) —, refait à la demande (`"lecture"`) s'il manque ou date d'un autre fichier. Tout vient
+de la base et des constantes du code : le refaire donne le même rapport. Il ne fait jamais échouer ce
+qui l'appelle. `GET /quality` donne le lien de chacun (`items[].reportUrl`).
+
+| Partie | Contenu |
+|---|---|
+| `service` | version, `commit` (`--build-arg XRAY_COMMIT=…` à la construction), versions des résultats, des voix, de la lecture des lèvres, du rapport ; `analysedWith` : version, commit et nombre de passages de l'analyse de l'image |
+| `results` | version et état des scènes, des voix, de la lecture des lèvres |
+| `models` | visages (détecteur avec `precision` `int8`/`fp32` et les fichiers de l'IR INT8, empreinte, moteur), voix (VAD, empreinte), lèvres : fichier, version publiée, SHA-256, licence |
+| `devices` | inférence : réglage, part des tronçons sur l'iGPU / le processeur / les deux (`chunks`, `gpuShare`) ; décodage : tronçons VA-API / processeur / sautés, images non référencées sautées (`noref`) ; voix (processeur) ; lèvres (décodeurs, appels iGPU/processeur) |
+| `audio` | piste retenue (rang, langue, codec, canaux, disposition), `reason` (`original` : langue d'origine ; `vo` : titre ou marque ; `default` ; `first`), `originalLanguage`, ce qui est écouté (`channelUse` : `centre`, `centre_c2`, `downmix`) et le filtre |
+| `thresholds` | visages (regroupement, rejet, bandes sûre / à confirmer, écart, présence), voix (`VoiceParams` entier), `smallVoice` (6 morceaux, 0,75), lèvres (règles de vote et choix des instants, plafond), scènes (durées, ressemblances, règle des rafales) |
+| `skipped` | plages sautées, leur source (`ordre`, `jellyfin`, `aucune`), secondes |
+| `counts` | tronçons, plans, scènes, pistes et groupes de visages, groupes nommés, voix nommées / indécises / en désaccord / petites / par les lèvres, part de parole nommée, voix tentées et résolues par les lèvres |
+| `cpu` | calcul de l'image par étape, × temps réel, assemblage des voix, lèvres (processeur, durée, plafond) |
+| `voices` | **par voix** (`voiceId` de `/voices`) : `pieces`, `seconds`, `personId`, `via` (`faces`, `memory`, `asd`, `profile`), `confidence` ; sans nom, `reason` (et `reasons` si plusieurs) ; le meilleur `candidate` des visages (`score` de contraste, `margin`, `present`) et les votes des lèvres (`asd` : `votes`, `top`, `share`) |
+| `voiceReasons`, `voiceVia` | les mêmes, comptés |
+| `faceClusters` | par groupe de visages (nommés, puis anonymes de 2 s au moins ; `omitted` pour le reste) : `seconds`, `tracks`, `personId`, `score`, `margin` (sur le deuxième acteur, plancher 0), `band` (`sure`, `confirm`, `doubt`) ; anonyme : `candidate` et `reason` (`doubt_band`, `runner_up_close`, `too_short`, `person_taken`, `no_reference`) |
+
+Raisons d'une voix sans nom, de la plus décisive à la moins (`reason` est la première) :
+
+| Code | Sens |
+|---|---|
+| `conflict_memory` | visages et mémoire de la série nomment deux personnes différentes |
+| `too_few_lines` | moins de `min_lines` (3) morceaux |
+| `small_voice_low_conf` | petite voix (moins de 6 morceaux) nommée sous 0,75 de confiance |
+| `second_big_voice` | une personne, une voix : une autre voix plus fournie et nettement différente a déjà ce nom (téléphone, narration) |
+| `no_consensus` | nommée au seuil du milieu, mais pas par deux des trois seuils |
+| `asd_memory_conflict` | les lèvres désignent quelqu'un que la mémoire de la série contredit |
+| `asd_anonymous_face` | les lèvres désignent un visage sans nom |
+| `asd_too_few_votes` | moins de 3 votes pour le mieux placé |
+| `asd_split_votes` | votes partagés (moins de 70 % pour le mieux placé) |
+| `off_screen_no_candidate` | personne d'assez présent à l'image pendant elle |
+| `low_contrast` | des visages, mais pas plus présents pendant cette voix que pendant les autres (contraste ou marge trop faibles) |
+| `undecided` | rien de ce qui précède |
+
+Exemple (abrégé) :
+
+```json
+{
+  "reportVersion": 1, "itemId": "…", "etag": "…", "status": "done", "trigger": "lèvres",
+  "service": { "version": "1.0.0", "commit": "8c7bbb2", "resultVersion": 5, "voiceVersion": 2, "asdVersion": 1 },
+  "models": { "faces": { "name": "buffalo_l", "detector": { "file": "det_10g.onnx", "sha256": "5838f7fe…", "precision": "int8" } } },
+  "devices": { "inference": { "setting": "GPU", "chunks": { "gpu": 11, "mixed": 2, "cpu": 2 }, "gpuShare": 0.867 },
+               "decode": { "chunks": { "vaapi": 14, "skip": 1 }, "vaapiShare": 1.0, "noref": { "cpu": true, "vaapi": true } } },
+  "audio": { "reason": "original", "originalLanguage": "en",
+             "track": { "index": 1, "language": "eng", "codec": "eac3", "channels": 6, "channelUse": "centre" } },
+  "skipped": { "source": "jellyfin", "ranges": [[0.0, 62.4]], "seconds": 62.4 },
+  "counts": { "scenes": 41, "faceClusters": 63, "facesNamed": 12, "voicesNamed": 23, "voicesUndecided": 9,
+              "voicesConflict": 1, "voicesSmall": 94, "asdTried": 5, "asdResolved": 2 },
+  "voiceReasons": { "too_few_lines": 94, "low_contrast": 6, "off_screen_no_candidate": 2, "conflict_memory": 1, "asd_split_votes": 1 },
+  "voices": [
+    { "voiceId": 7, "pieces": 212, "seconds": 391.5, "personId": 12345, "via": "faces", "confidence": 0.98 },
+    { "voiceId": 9, "pieces": 41, "seconds": 70.2, "personId": 67890, "via": "asd", "confidence": 0.67,
+      "asd": { "votes": 9, "top": 67890, "share": 0.889 } },
+    { "voiceId": 12, "pieces": 33, "seconds": 61.0, "personId": null, "reason": "second_big_voice",
+      "candidate": { "personId": 12345, "score": 0.18, "margin": 0.56, "present": 0.9 } }
+  ],
+  "faceClusters": { "clusters": 63, "named": 12, "reasons": { "doubt_band": 40, "too_short": 6 },
+                    "listed": [ { "cluster": 0, "seconds": 512.3, "tracks": 140, "personId": 12345, "score": 0.61,
+                                  "margin": 0.42, "band": "sure", "confidence": 0.98 } ], "omitted": 30 }
+}
+```
 
 ---
 
@@ -915,6 +1041,12 @@ valable — et rien n'est réanalysé de soi-même : un nouvel ordre au même `e
 sous une version antérieure et pas fini repart de zéro, pour ne jamais mêler deux règles dans un
 même résultat. `404` tant que rien n'est analysé.
 
+### `GET /items/{itemId}/report`
+
+Le rapport de décision de l'élément (ajout compatible, 10/11/2026) ; voir
+[Journaux et rapport d'analyse](#journaux-et-rapport-danalyse). `404` si l'élément est inconnu ; pour un
+élément pas encore fini, le rapport de ce qui est fait (non gardé).
+
 ### `GET /items/{itemId}/voices`
 
 ```json
@@ -945,9 +1077,12 @@ Laterna. `404` tant qu'il n'y a rien. `version` : 1.
 - `POST /relabel` → toute la bibliothèque en file ; `GET /relabel` → `{pending}`.
 - `GET /series/{seriesId}/memory` → `{seriesId, entries: [{kind, model, personId, itemId, weight, score, updated}]}`.
 - `POST /series/{seriesId}/memory/reset`, corps facultatif `{"itemIds": [...]}` → `{removed, queued}`.
-- `GET /quality` → `{overall, movies, series: [...]}` : par série (les moins bien nommées d'abord),
+- `GET /quality` → `{overall, movies, series: [...], items: [...]}` : par série (les moins bien nommées d'abord),
   `items`, `withVoices`, `speechNamed` (part du temps de parole nommée), `facesNamed` (part du temps de
-  visage nommée), `voicesNamed`, `voicesUndecided`, `voicesConflict`, `itemsWithConflict`.
+  visage nommée), `voicesNamed`, `voicesUndecided`, `voicesConflict`, `itemsWithConflict` ; et (ajout
+  compatible, 10/11/2026) `items` : chaque élément fini (`itemId`, `seriesId`, `speechNamed`,
+  `facesNamed`, comptes de voix), les moins bien nommés d'abord, avec `reportUrl`
+  (`/items/{itemId}/report`).
 
 Lecture des lèvres (10/11/2026) : les segments de `/voices` peuvent porter `via: "asd"` ; `/voices`
 passe en `version: 2` ; `/items/{id}` → `voices.voicesAsd` et `voices.asd` (`voicesTried`,
@@ -996,6 +1131,8 @@ xray/
 │   ├── asdjob.py      lecture des lèvres ciblée : voix, instants, pistes, votes, plafond
 │   ├── relabel.py     renommer sans relire (file, lots bornés)
 │   ├── memory.py      mémoire des séries par contribution d'épisode
+│   ├── logs.py        journal JSON tournant dans /data/logs, secrets masqués
+│   ├── report.py      rapport de décision par élément (/items/{id}/report)
 │   └── db.py          SQLite
 └── tests/             contrat HTTP, clé, file, chemins, regroupement et noms sur des
                        empreintes synthétiques, plans et pistes synthétiques, économies de
@@ -1005,7 +1142,8 @@ xray/
                        voix (champ-contrechamp, téléphone, désaccord, consensus), piste son,
                        son du même ffmpeg, renommage identique à l'analyse, mémoire bornée, qualité,
                        lecture des lèvres (poids piégés refusés, réseau contre une référence numpy,
-                       votes, mémoire contredite, renommage), rafales de plans courts
+                       votes, mémoire contredite, renommage), rafales de plans courts,
+                       journal (JSON, rotation, aucune clé), rapport de décision (forme, raisons)
 ```
 
 Les tests n'ont besoin ni des modèles ni du réseau. Ils tournent pendant la construction de

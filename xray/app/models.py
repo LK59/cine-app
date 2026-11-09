@@ -26,6 +26,8 @@ from pathlib import Path
 
 import httpx
 
+from .logs import event
+
 log = logging.getLogger("xray.models")
 
 
@@ -119,6 +121,8 @@ class ModelManager:
         # Détecteur INT8 : état (`off`, `building`, `ready`, `failed`), raison, chemin de l'IR.
         self.int8: dict = {"state": "off", "error": None}
         self.int8_path: Path | None = None
+        # Fichiers de l'IR INT8 et leur SHA-256 (manifeste de `quantize.py`), pour le rapport de décision.
+        self.int8_files: dict | None = None
         self.engine = None
 
     @property
@@ -207,7 +211,10 @@ class ModelManager:
         self.state = "prêt"
         self.error = None
         self.ready = True
-        log.info("modèles : %s prêt (%s)", self.name, self.license)
+        # Chaque fichier vient d'être comparé à son empreinte (ou téléchargé et comparé) : la liste le dit.
+        event(log, "modèles : %s prêt (%s), poids vérifiés", self.name, self.license, action="models_ready",
+              kind="faces", model=self.name, license=self.license,
+              files={mf.name: mf.sha256 for mf in self.spec["files"]}, int8=dict(self.int8), int8Files=self.int8_files)
 
     def int8_wanted(self) -> str | None:
         """None si le détecteur doit être quantifié, sinon pourquoi il ne l'est pas."""
@@ -232,6 +239,7 @@ class ModelManager:
         why = self.int8_wanted()
         if why is not None:
             self.int8 = {"state": "off", "error": why}
+            event(log, "détecteur INT8 non utilisé : %s", why, action="int8", state="off", reason=why)
             return
         spec = next(f for f in self.spec["files"] if f.name == self.spec["detector"])
         self.state = "quantification du détecteur (INT8)"
@@ -239,11 +247,19 @@ class ModelManager:
         path, err = quantize.ensure(self.dir / spec.name, spec.sha256, self.dir / "int8", settings.media_root,
                                     settings.threads)
         if path is None:
-            log.warning("détecteur INT8 indisponible, float32 à la place : %s", err)
+            event(log, "détecteur INT8 indisponible, float32 à la place : %s", err, level=logging.WARNING,
+                  action="int8", state="failed", error=err)
             self.int8 = {"state": "failed", "error": err}
         else:
             self.int8_path = path
             self.int8 = {"state": "ready", "error": None}
+            try:
+                m = quantize.load_manifest(self.dir / "int8", spec.sha256)
+                self.int8_files = dict(m.get("files") or {}) if m else None
+            except Exception:
+                self.int8_files = None
+            event(log, "détecteur INT8 prêt : %s", path.name, action="int8", state="ready", path=str(path),
+                  files=self.int8_files)
 
     @staticmethod
     def _accept(tmp: Path, dest: Path, mf: ModelFile) -> None:
@@ -279,8 +295,10 @@ class ModelManager:
         emb = Embedder(epath, threads, batch=settings.embed_batch, session=esess)
         self.engine = FaceEngine(self.name, det, emb, QualityRules(min_face=min_face))
         st = self.inference_status()
-        log.info("modèles : inférence %s, détecteur %s, iGPU %s, %d fils", st["engine"], st["detector"],
-                 "oui" if st["gpu"] else ("non (" + str(st["gpuError"]) + ")" if gpu else "non"), threads)
+        event(log, "modèles : inférence %s, détecteur %s, iGPU %s, %d fils", st["engine"], st["detector"],
+              "oui" if st["gpu"] else ("non (" + str(st["gpuError"]) + ")" if gpu else "non"), threads,
+              action="engine_loaded", engine=st["engine"], detector=st["detector"], device=st["device"],
+              gpu=st["gpu"], gpuActive=st["gpuActive"], gpuError=st["gpuError"], threads=threads, minFace=min_face)
         return self.engine
 
     def inference_status(self) -> dict:

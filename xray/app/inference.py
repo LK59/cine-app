@@ -48,6 +48,8 @@ from typing import Callable
 
 import numpy as np
 
+from .logs import event
+
 log = logging.getLogger("xray.inference")
 
 
@@ -244,6 +246,8 @@ class RoutedSession:
         self.output_names = gpu.output_names
         self.last: str | None = None
         self._lock = threading.Lock()
+        # Appels servis par chaque périphérique (rapport de décision : part des tronçons sur l'iGPU).
+        self.calls = {"GPU": 0, "CPU": 0}
 
     def on_gpu(self) -> bool:
         if _forced_cpu():
@@ -262,19 +266,26 @@ class RoutedSession:
                 self._cpu = self._cpu_factory()
             return self._cpu
 
-    def _note(self, device: str) -> None:
+    def _note(self, device: str, reason: str) -> None:
+        """Une bascule iGPU ↔ processeur, une ligne avec sa raison : `jellyfin_transcode` (Jellyfin transcode
+        sur l'iGPU, qui lui est laissé), `jellyfin_idle` (il a fini), `start` (premier appel)."""
         if device != self.last:
-            if self.last is not None or device != "GPU":
-                log.info("inférence %s : %s", self.label or "réseau", "iGPU" if device == "GPU" else "processeur")
+            event(log, "inférence %s : %s (%s)", self.label or "réseau", "iGPU" if device == "GPU" else "processeur",
+                  reason, action="device_switch", network=self.label or None, device=device,
+                  previous=self.last, reason=reason if self.last is not None else "start")
             self.last = device
 
     def run(self, names, feed):
         x = next(iter(feed.values()))
-        if self.on_gpu() and self.gpu.accepts_batch(x.shape[0]):
-            self._note("GPU")
-            return self.gpu.run(names, feed)
-        if not _forced_cpu():
-            self._note("CPU")
+        if self.on_gpu():
+            self._note("GPU", "jellyfin_idle")
+            if self.gpu.accepts_batch(x.shape[0]):
+                self.calls["GPU"] += 1
+                return self.gpu.run(names, feed)
+            # Un lot hors des paliers de l'iGPU passe sur le processeur, sans bascule (compté seulement).
+        elif not _forced_cpu():
+            self._note("CPU", "jellyfin_transcode")
+        self.calls["CPU"] += 1
         cpu = self._cpu_session()
         idx = [self.output_names.index(n) for n in names]
         return cpu.run([cpu.output_names[i] for i in idx], {cpu.input_name: x})
@@ -302,10 +313,39 @@ def make_session(path: Path, threads: int, prefer: str = "auto", cpu_path: Path 
         except Exception as e:
             s = cpu()
             s.gpu_error = f"{type(e).__name__}: {e}"[:300]  # type: ignore[attr-defined]
-            log.warning("iGPU indisponible pour %s (%s) : inférence sur le processeur", Path(path).name, s.gpu_error)  # type: ignore[attr-defined]
+            event(log, "iGPU indisponible pour %s (%s) : inférence sur le processeur", Path(path).name,
+                  s.gpu_error, level=logging.WARNING, action="gpu_unavailable", network=label or None,  # type: ignore[attr-defined]
+                  file=Path(path).name, error=s.gpu_error)  # type: ignore[attr-defined]
             return s
         return RoutedSession(g, cpu, use_gpu or (lambda: True), label)
     return cpu()
+
+
+def device_calls(engine) -> dict | None:
+    """Appels servis par l'iGPU et le processeur, toutes sessions routées du moteur (détecteur, empreinte)
+    réunies ; None sans session routée (inférence sur le processeur seulement)."""
+    if engine is None:
+        return None
+    out = {"GPU": 0, "CPU": 0}
+    found = False
+    for part in (getattr(engine, "detector", None), getattr(engine, "embedder", None)):
+        s = getattr(part, "session", None)
+        if isinstance(s, RoutedSession):
+            found = True
+            for k in out:
+                out[k] += s.calls.get(k, 0)
+    return out if found else None
+
+
+def device_label(before: dict | None, after: dict | None) -> str:
+    """`gpu`, `cpu` ou `mixed` entre deux relevés de `device_calls` (`cpu` sans session routée)."""
+    if before is None or after is None:
+        return "cpu"
+    g = after["GPU"] - before["GPU"]
+    c = after["CPU"] - before["CPU"]
+    if g and c:
+        return "mixed"
+    return "gpu" if g else "cpu"
 
 
 def open_session(path: Path, threads: int, prefer: str = "auto"):

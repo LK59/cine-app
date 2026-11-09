@@ -155,6 +155,23 @@ def has_centre(t: AudioTrack) -> bool:
     return any(lay.startswith(p) for p in CENTRE_LAYOUTS) or (not lay and t.channels in (6, 8))
 
 
+def channel_use(t: AudioTrack) -> str:
+    """Ce qui est écouté de la piste : `centre` (canal central déclaré), `centre_c2` (troisième canal d'une
+    piste 5.1/7.1 sans disposition déclarée) ou `downmix` (mélange mono). Même règle qu'`audio_filter`."""
+    if has_centre(t) and t.layout:
+        return "centre"
+    if t.channels >= 6 and not t.layout:
+        return "centre_c2"
+    return "downmix"
+
+
+def describe(t: AudioTrack) -> dict:
+    """La piste pour le journal et le rapport : rang, langue, codec, canaux, disposition, ce qui est écouté."""
+    return {"index": t.index, "language": t.language or None, "codec": t.codec, "channels": t.channels,
+            "layout": t.layout or None, "title": t.title or None, "default": t.default, "original": t.original,
+            "channelUse": channel_use(t), "filter": " ".join(audio_filter(t))}
+
+
 def audio_filter(t: AudioTrack) -> list[str]:
     """Le canal central quand il y en a un, sinon un mélange mono ; 16 kHz."""
     if has_centre(t) and t.layout:

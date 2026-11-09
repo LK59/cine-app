@@ -115,6 +115,9 @@ class VoiceResult:
     piece_asd: list[bool] = field(default_factory=list)
     presence: np.ndarray | None = None
     presence_ids: list[int] = field(default_factory=list)
+    # Rapport de décision (report.py) : par voix (au seuil du milieu), son nom, d'où il vient (`via`), et
+    # pourquoi elle reste sans nom (`reason`, codes stables — voir README, « Journaux et rapport d'analyse »).
+    voices: list[dict] = field(default_factory=list)
 
 
 def normalize_rows(x: np.ndarray) -> np.ndarray:
@@ -266,11 +269,12 @@ def _unit(v: np.ndarray) -> np.ndarray:
 
 def name_once(E: np.ndarray, ok: np.ndarray, pres: np.ndarray, scene_of: np.ndarray, pids: list[int],
               thr: float, p: VoiceParams, memory: dict[int, np.ndarray] | None = None,
-              asd: dict[int, list[int | None]] | None = None):
+              asd: dict[int, list[int | None]] | None = None, diag: dict | None = None):
     """Un avis : regroupement à `thr`, noms par contraste, seconde chance, une personne une voix,
     mémoire de la série, lecture des lèvres, seconde passe. Rend (voix par morceau, personne par morceau
     ou None, personnes nommées par les visages seuls → leurs morceaux, morceaux en désaccord, morceaux
-    nommés par la lecture des lèvres)."""
+    nommés par la lecture des lèvres). `diag` : rempli, par voix, de ce que chaque étape a décidé (pour le
+    rapport ; ne change rien aux noms)."""
     labels = cluster_pieces(E, ok, thr)
     voices = sorted(int(v) for v in set(labels.tolist()) if v > 0)
     n = len(E)
@@ -298,6 +302,9 @@ def name_once(E: np.ndarray, ok: np.ndarray, pres: np.ndarray, scene_of: np.ndar
                          margin=float(score[best] - score[second]) if len(o) > 1 else float(score[best]),
                          present=float(a[best]), scores=score, pres=a)
         M[v] = entry
+        if diag is not None:
+            diag[v] = {"n": entry["n"], "pid": entry["pid"], "score": entry["score"], "margin": entry["margin"],
+                       "present": entry["present"], "hasPeople": bool(pids)}
 
     def accepted(m) -> bool:
         return (m["pid"] is not None and m["n"] >= p.min_lines and m["score"] >= p.min_score
@@ -322,6 +329,9 @@ def name_once(E: np.ndarray, ok: np.ndarray, pres: np.ndarray, scene_of: np.ndar
                       present=float(m["pres"][b]))
             if accepted(m2):
                 M[v] = m2
+                if diag is not None:
+                    diag[v].update(pid=m2["pid"], score=m2["score"], margin=m2["margin"], present=m2["present"],
+                                   secondChance=True)
 
     # Une personne, une voix : la plus fournie garde le nom ; une autre, nettement différente et
     # grosse, est presque toujours une voix hors champ (téléphone, narration).
@@ -331,8 +341,13 @@ def name_once(E: np.ndarray, ok: np.ndarray, pres: np.ndarray, scene_of: np.ndar
         for w in vs[1:]:
             if float(cent[w] @ cent[vs[0]]) < p.onevoice_cos and M[w]["n"] >= p.bigvoice:
                 M[w] = dict(M[w], score=-1.0)
+                if diag is not None:
+                    diag[w]["secondBigVoice"] = True
 
     named = {v: M[v]["pid"] for v in voices if accepted(M[v])}
+    if diag is not None:
+        for v, pid in named.items():
+            diag[v]["faces"] = pid
     for v, pid in named.items():
         face_named.setdefault(pid, []).extend(members[v].tolist())
 
@@ -355,8 +370,12 @@ def name_once(E: np.ndarray, ok: np.ndarray, pres: np.ndarray, scene_of: np.ndar
                     # Les visages disent l'un, la mémoire l'autre : la voix reste sans nom, et le dit.
                     del named[v]
                     conflict.update(members[v].tolist())
+                    if diag is not None:
+                        diag[v]["memoryConflict"] = mem_pid
                 elif v not in named:
                     named[v] = mem_pid
+                    if diag is not None:
+                        diag[v]["memory"] = mem_pid
 
     # Lecture des lèvres : une voix encore sans nom (ni visages ni mémoire), assez fournie, prend le nom
     # que les votes désignent nettement — sauf si la mémoire de la série préfère nettement quelqu'un d'autre.
@@ -374,20 +393,28 @@ def name_once(E: np.ndarray, ok: np.ndarray, pres: np.ndarray, scene_of: np.ndar
             if not total:
                 continue
             who, k = c.most_common(1)[0]
+            if diag is not None:
+                diag[v]["asd"] = {"votes": total, "top": who, "topVotes": k}
             if who is None or k < p.asd_votes or k / total < p.asd_share:
                 continue
             if Pm is not None and who in mem_ids:
                 s = Pm @ cent[v]
                 if float(s.max()) - float(s[mem_ids.index(who)]) >= p.asd_memory_margin:
                     conflict.update(int(i) for i in mine)
+                    if diag is not None:
+                        diag[v]["asdMemoryConflict"] = True
                     continue
             elif Pm is not None:
                 s = Pm @ cent[v]
                 if float(s.max()) >= p.memory_tau and float(s.max()) - (np.sort(s)[-2] if len(s) > 1 else -1.0) >= p.memory_margin:
                     conflict.update(int(i) for i in mine)
+                    if diag is not None:
+                        diag[v]["asdMemoryConflict"] = True
                     continue
             named[v] = who
             by_asd.update(int(i) for i in mine)
+            if diag is not None:
+                diag[v]["asdNamed"] = who
 
     for v, pid in named.items():
         for i in members[v]:
@@ -462,8 +489,10 @@ def build(regions: list[tuple[float, float]], wins: np.ndarray, embs: np.ndarray
     ref_labels = None
     face_named_all: dict[int, list[int]] = {}
     mid = len(p.thresholds) // 2
+    diag: dict[int, dict] = {}
     for k, thr in enumerate(p.thresholds):
-        labels, pred, face_named, conflict, by_asd = name_once(E, ok, pres, scene_of, pids, thr, p, mem, asd_votes)
+        labels, pred, face_named, conflict, by_asd = name_once(E, ok, pres, scene_of, pids, thr, p, mem, asd_votes,
+                                                               diag if k == mid else None)
         for i, who in enumerate(pred):
             votes[i][who] += 1
         for i in by_asd:
@@ -510,10 +539,12 @@ def build(regions: list[tuple[float, float]], wins: np.ndarray, embs: np.ndarray
 
     # Petites voix : un nom seulement avec une confiance haute (voir `small_conf`).
     ref_size = collections.Counter(int(x) for x in ref_labels if x > 0)
+    dropped_small = np.zeros(len(pieces), dtype=bool)
     for i, who in enumerate(final):
         if who is not None and 0 < ref_labels[i] and ref_size[int(ref_labels[i])] < p.small_voice and conf[i] < p.small_conf:
             final[i] = None
             conf[i] = 0.0
+            dropped_small[i] = True
     # Nommé par la lecture des lèvres : la plupart des avis qui donnent ce nom le tiennent d'elle.
     via_asd = [final[i] is not None and asd_runs[i] * 2 >= votes[i][final[i]] for i in range(len(pieces))]
 
@@ -591,4 +622,88 @@ def build(regions: list[tuple[float, float]], wins: np.ndarray, embs: np.ndarray
         "voicesAsd": int(vstat["asd"]),
         "asdVotes": int(sum(len(x) for x in asd_votes.values())),
     }
-    return VoiceResult(segs, profiles, stats, piece_rows, [bool(x) for x in in_conflict], via_asd, pres, list(pids))
+    report = voice_report(pieces, ref_labels, final, conf, in_conflict, via_asd, dropped_small, diag, p)
+    return VoiceResult(segs, profiles, stats, piece_rows, [bool(x) for x in in_conflict], via_asd, pres, list(pids),
+                       report)
+
+
+# Raisons d'une voix sans nom, de la plus décisive à la moins (la première est `reason`).
+REASONS = ("conflict_memory", "too_few_lines", "small_voice_low_conf", "second_big_voice", "no_consensus",
+           "asd_memory_conflict", "asd_anonymous_face", "asd_too_few_votes", "asd_split_votes",
+           "off_screen_no_candidate", "low_contrast", "undecided")
+
+
+def voice_report(pieces, ref_labels, final, conf, in_conflict, via_asd, dropped_small, diag: dict[int, dict],
+                 p: VoiceParams) -> list[dict]:
+    """Par voix (au seuil du milieu, les `voiceId` de `/voices`) : morceaux, secondes, nom final, d'où il
+    vient (`via` : `faces`, `memory`, `asd`, ou `profile` — la seconde passe contre le profil d'une personne
+    nommée), et sans nom, pourquoi (`reason`, et `reasons` quand plusieurs s'appliquent). Le meilleur
+    candidat des visages (contraste local, marge, présence) et les votes de la lecture des lèvres sont
+    donnés tels que l'étape les a vus. Les mêmes règles que `stats` (voix nommée : la moitié de ses
+    morceaux au moins)."""
+    out = []
+    for v in sorted(set(int(x) for x in ref_labels if x > 0)):
+        idx = [int(i) for i in np.where(ref_labels == v)[0]]
+        n = len(idx)
+        secs = sum(pieces[i][1] - pieces[i][0] for i in idx)
+        named_idx = [i for i in idx if final[i] is not None]
+        d = diag.get(v, {})
+        row: dict = {"voiceId": v, "pieces": n, "seconds": round(float(secs), 1), "personId": None}
+        if n >= p.min_lines and sum(1 for i in idx if in_conflict[i]) < 0.5 * n and len(named_idx) >= 0.5 * n:
+            pid = collections.Counter(final[i] for i in named_idx).most_common(1)[0][0]
+            row["personId"] = int(pid)
+            if sum(1 for i in idx if via_asd[i]) >= 0.5 * n:
+                row["via"] = "asd"
+            elif d.get("faces") == pid:
+                row["via"] = "faces"
+            elif d.get("memory") == pid:
+                row["via"] = "memory"
+            else:
+                row["via"] = "profile"
+            row["confidence"] = round(float(np.mean([conf[i] for i in named_idx if final[i] == pid])), 3)
+            row["namedPieces"] = len(named_idx)
+        else:
+            reasons: list[str] = []
+            if n < p.min_lines:
+                reasons.append("too_few_lines")
+            if sum(1 for i in idx if in_conflict[i]) >= 0.5 * n:
+                reasons.append("asd_memory_conflict" if d.get("asdMemoryConflict") and "memoryConflict" not in d
+                               else "conflict_memory")
+            if sum(1 for i in idx if dropped_small[i]) >= 0.5 * n:
+                reasons.append("small_voice_low_conf")
+            if d.get("secondBigVoice"):
+                reasons.append("second_big_voice")
+            if d.get("asdMemoryConflict") and "asd_memory_conflict" not in reasons and "conflict_memory" not in reasons:
+                reasons.append("asd_memory_conflict")
+            if (d.get("faces") is not None or d.get("memory") is not None or d.get("asdNamed") is not None) \
+                    and not reasons:
+                reasons.append("no_consensus")
+            a = d.get("asd")
+            if a and d.get("asdNamed") is None and not d.get("asdMemoryConflict"):
+                if a["top"] is None:
+                    reasons.append("asd_anonymous_face")
+                elif a["topVotes"] < p.asd_votes:
+                    reasons.append("asd_too_few_votes")
+                elif a["topVotes"] / max(a["votes"], 1) < p.asd_share:
+                    reasons.append("asd_split_votes")
+            if n >= p.min_lines and d.get("faces") is None:
+                if not d.get("hasPeople") or d.get("pid") is None or d.get("present", 0.0) < p.min_presence:
+                    reasons.append("off_screen_no_candidate")
+                elif d.get("score", -1.0) < p.min_score or d.get("margin", 0.0) < p.min_margin:
+                    reasons.append("low_contrast")
+            if not reasons:
+                reasons.append("undecided")
+            reasons = sorted(dict.fromkeys(reasons), key=REASONS.index)
+            row["reason"] = reasons[0]
+            if len(reasons) > 1:
+                row["reasons"] = reasons
+            if named_idx:
+                row["namedPieces"] = len(named_idx)
+        if d.get("pid") is not None:
+            row["candidate"] = {"personId": int(d["pid"]), "score": round(float(d["score"]), 3),
+                                "margin": round(float(d["margin"]), 3), "present": round(float(d["present"]), 3)}
+        if d.get("asd"):
+            a = d["asd"]
+            row["asd"] = {"votes": a["votes"], "top": a["top"], "share": round(a["topVotes"] / max(a["votes"], 1), 3)}
+        out.append(row)
+    return out

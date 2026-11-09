@@ -14,10 +14,11 @@ from . import decode
 from .config import VERSION, settings
 from .asd import AsdModels
 from .voice import VoiceModels
-from . import memory, relabel
+from . import logs, memory, relabel, report
 from .db import Database
 from .gpu_guard import GpuGuard
-from .jobs import HEX32, InvalidJob, JobStore, validate_job
+from .jobs import HEX32, PRIORITIES, InvalidJob, JobStore, validate_job
+from .logs import event
 from .models import ModelManager
 from .timing import job_stats
 
@@ -46,9 +47,16 @@ def quality(db) -> dict:
                    LEFT JOIN asd_runs a ON a.item_id = i.item_id AND a.status = 'done'
                    WHERE i.status='done'""")
     groups: dict = {}
+    items: list[dict] = []
     for r in rows:
         f = json.loads(r["fstats"]) if r["fstats"] else {}
         v = json.loads(r["vstats"]) if r["vstats"] else {}
+        # Ajout compatible (11/2026) : chaque élément, avec le lien de son rapport de décision.
+        items.append({"itemId": r["item_id"], "seriesId": r["series_id"],
+                      "speechNamed": v.get("speechNamed") if r["vdone"] else None, "facesNamed": f.get("facesNamed"),
+                      "voicesNamed": v.get("voicesNamed"), "voicesUndecided": v.get("voicesUndecided"),
+                      "voicesConflict": v.get("voicesConflict"), "voicesAsd": v.get("voicesAsd"),
+                      "reportUrl": f"/items/{r['item_id']}/report"})
         g = groups.setdefault(r["series_id"], {"items": 0, "withVoices": 0, "speech": [], "faceT": 0.0, "faceN": 0.0,
                                                 "voicesNamed": 0, "voicesUndecided": 0, "voicesConflict": 0,
                                                 "itemsWithConflict": 0, "voicesAsd": 0, "asdItems": 0, "asdTried": 0,
@@ -92,7 +100,10 @@ def quality(db) -> dict:
             allg[k] = allg[k] + g[k]
     series = [out(k, g) for k, g in groups.items() if k]
     series.sort(key=lambda x: (x["speechNamed"] is None, x["speechNamed"] if x["speechNamed"] is not None else 0, -x["voicesConflict"]))
-    return {"overall": out(None, allg), "movies": out(None, groups[None]) if None in groups else None, "series": series}
+    items.sort(key=lambda x: (x["speechNamed"] is None, x["speechNamed"] if x["speechNamed"] is not None else 0,
+                              -(x["voicesConflict"] or 0), x["itemId"]))
+    return {"overall": out(None, allg), "movies": out(None, groups[None]) if None in groups else None, "series": series,
+            "items": items}
 
 
 def _face_state(db, item_id: str) -> dict | None:
@@ -127,6 +138,11 @@ def create_app(start_background: bool = True, db: Database | None = None, models
         vm = voice_models or VoiceModels(settings.voice_model, settings.models_dir, settings.voice_enabled)
         am = AsdModels(settings.models_dir, settings.asd_enabled and settings.voice_enabled)
         state.update(db=database, store=store, models=mm, guard=guard, voice=vm, asd=am)
+        try:
+            event(log, "démarrage de laterna-xray %s", VERSION, action="startup", journal=str(log_path) if log_path else None,
+                  **report.startup_summary())
+        except Exception:
+            log.exception("résumé de démarrage impossible")
         if not settings.api_key:
             log.error("XRAY_API_KEY vide : toutes les requêtes seront refusées")
         if start_background:
@@ -180,8 +196,18 @@ def create_app(start_background: bool = True, db: Database | None = None, models
         try:
             spec = validate_job(body, settings.media_root)
         except InvalidJob as e:
+            item = body.get("itemId") if isinstance(body, dict) and isinstance(body.get("itemId"), str) else None
+            event(log, "ordre refusé : %s", e, level=logging.WARNING, item=item if item and HEX32.match(item) else None,
+                  action="job_refused", error=str(e))
             return _error(400, str(e))
         status, payload = state["store"].submit(spec)
+        names = {v: k for k, v in PRIORITIES.items()}
+        event(log, "[xray] %s : ordre reçu (%s) — %s", spec.item_id, names.get(spec.priority), payload.get("status"),
+              item=spec.item_id, action="job_received", priority=names.get(spec.priority), startAt=spec.start_at,
+              skip=None if spec.skip is None else [[a, b] for a, b in spec.skip],
+              originalLanguage=spec.original_language, seriesId=spec.series_id, cast=len(spec.cast),
+              photos=sum(len(m.photos) for m in spec.cast), rebindDuration=spec.rebind_duration, path=spec.path,
+              etag=spec.etag, http=status, status=payload.get("status"), position=payload.get("position"))
         return JSONResponse(payload, status_code=status)
 
     @app.get("/items/{item_id}")
@@ -230,6 +256,17 @@ def create_app(start_background: bool = True, db: Database | None = None, models
             "analyzedUntil": float(res["analyzed_until"]),
             "scenes": json.loads(res["scenes_json"]),
         }
+
+    @app.get("/items/{item_id}/report")
+    def get_report(item_id: str):
+        """Le rapport de décision (report.py) : modèles et versions, périphériques, piste son, seuils, plages
+        sautées, comptes, et par voix son nom et d'où il vient, ou pourquoi elle n'en a pas."""
+        if not HEX32.match(item_id):
+            return _error(404, "inconnu")
+        rep = report.get(state["db"], item_id.lower())
+        if rep is None:
+            return _error(404, "inconnu")
+        return rep
 
     @app.get("/items/{item_id}/voices")
     def get_voices(item_id: str):
@@ -280,6 +317,8 @@ def create_app(start_background: bool = True, db: Database | None = None, models
         if row["status"] != "done":
             return _error(409, "analyse pas finie")
         n = relabel.enqueue(state["db"], [row["item_id"]])
+        event(log, "[xray] %s : renommage demandé", row["item_id"], item=row["item_id"], action="relabel_requested",
+              queued=n)
         state["store"].wake()
         return JSONResponse({"queued": n, "pending": relabel.pending(state["db"])}, status_code=202)
 
@@ -289,6 +328,8 @@ def create_app(start_background: bool = True, db: Database | None = None, models
             return _error(404, "inconnu")
         items = relabel.series_items(state["db"], series_id, await _ids(request))
         n = relabel.enqueue(state["db"], items)
+        event(log, "série %s : renommage demandé (%d épisodes, %d mis en file)", series_id.lower(), len(items), n,
+              action="relabel_requested", seriesId=series_id.lower(), items=len(items), queued=n)
         state["store"].wake()
         return JSONResponse({"queued": n, "items": len(items), "pending": relabel.pending(state["db"])}, status_code=202)
 
@@ -297,6 +338,8 @@ def create_app(start_background: bool = True, db: Database | None = None, models
         """Toute la bibliothèque, série par série dans l'ordre des chemins ; servi par lots bornés en temps."""
         ids = [r["item_id"] for r in state["db"].q("SELECT item_id FROM items WHERE status='done' ORDER BY series_id, path")]
         n = relabel.enqueue(state["db"], ids)
+        event(log, "bibliothèque : renommage demandé (%d éléments, %d mis en file)", len(ids), n,
+              action="relabel_requested", scope="all", items=len(ids), queued=n)
         state["store"].wake()
         return JSONResponse({"queued": n, "pending": relabel.pending(state["db"])}, status_code=202)
 
@@ -319,7 +362,8 @@ def create_app(start_background: bool = True, db: Database | None = None, models
         removed = memory.reset(state["db"], sid)
         items = relabel.series_items(state["db"], sid, await _ids(request))
         n = relabel.enqueue(state["db"], items)
-        log.info("[xray] série %s : mémoire réinitialisée (%d contributions), %d épisodes à renommer", sid, removed, n)
+        event(log, "[xray] série %s : mémoire réinitialisée (%d contributions), %d épisodes à renommer", sid, removed, n,
+              action="memory_reset", seriesId=sid, removed=removed, queued=n, items=len(items))
         state["store"].wake()
         return {"removed": removed, "queued": n}
 
@@ -330,13 +374,16 @@ def create_app(start_background: bool = True, db: Database | None = None, models
     @app.delete("/items/{item_id}")
     def delete_item(item_id: str):
         if HEX32.match(item_id):
+            known = state["store"].get(item_id) is not None
             state["store"].delete(item_id)
+            if known:
+                event(log, "[xray] %s : ordre et résultats oubliés (DELETE)", item_id.lower(), item=item_id.lower(),
+                      action="item_deleted")
         return Response(status_code=204)
 
     return app
 
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-# Une ligne par requête sortante (Jellyfin toutes les 30 s, chaque photo) noierait le journal.
-logging.getLogger("httpx").setLevel(logging.WARNING)
+# Sortie standard et `XRAY_DATA_DIR/logs/xray.log` (JSON, tournant) : voir logs.py.
+log_path = logs.setup(settings.data_dir / "logs")
 app = create_app()

@@ -59,6 +59,11 @@ class Built:
     # « Qui parle » (11/2026) : qui est à l'image, plan par plan — (début, fin, personId, part du plan
     # où on le voit), la plus grande de ses pistes du plan. Ce que `voices.py` compare aux voix.
     presence: list = field(default_factory=list)
+    # Rapport de décision (11/2026, report.py) : les références de la distribution, le seuil de rejet et le
+    # nombre de pistes de chaque groupe — de quoi dire pourquoi un groupe est nommé ou non.
+    refs: list | None = None
+    label_threshold: float | None = None
+    cluster_tracks: np.ndarray | None = None
 
 
 def merge_intervals(chunks: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -129,12 +134,13 @@ def _assemble(
             centroids[l] += t.emb * w
             ctime[l] += t.screen_time
         centroids = normalize(centroids)
-        assignments = label_clusters(centroids, ctime, refs, label_threshold, cluster_threshold,
-                                     np.bincount(labels, minlength=k))
+        ctracks = np.bincount(labels, minlength=k)
+        assignments = label_clusters(centroids, ctime, refs, label_threshold, cluster_threshold, ctracks)
     else:
         labels = np.zeros(0, dtype=np.int64)
         centroids = np.zeros((0, 512), dtype=np.float32)
         ctime = np.zeros(0)
+        ctracks = np.zeros(0, dtype=np.int64)
         assignments = {}
 
     # 2. Plans → scènes, plage par plage (deux plages disjointes ne partagent aucune scène).
@@ -178,7 +184,8 @@ def _assemble(
         frac = min(1.0, t.screen_time / max(t.shot_end - t.shot_start, 1e-3))
         shown[key] = max(shown.get(key, 0.0), frac)
     presence = sorted((a, b, pid, f) for (a, b, pid), f in shown.items())
-    return Built(scenes_out, until, round(progress, 4), complete, assignments, centroids, ctime, presence)
+    return Built(scenes_out, until, round(progress, 4), complete, assignments, centroids, ctime, presence,
+                 refs, label_threshold, ctracks)
 
 
 class Assembler:
