@@ -129,6 +129,13 @@ describe("les mots de coulisse (`metaTalk`)", () => {
     expect(metaTalk("Las fuentes no lo dicen.", "")).toEqual(["fuentes"]);
     expect(metaTalk("Die Quellen sagen nichts darüber.", "")).toEqual(["quellen"]);
     expect(metaTalk("D'après le contexte fourni, rien.", "")).toEqual(["contexte"]);
+    // 09/11/2026 (banc des films) : « dans cette scène » passait le filet.
+    expect(metaTalk("Vincent devine les codes dans cette scène.", "")).toEqual(["scène"]);
+    expect(metaTalk("Une réplique dit qu'il ment.", "")).toEqual(["réplique"]);
+    expect(metaTalk("He is in this scene.", "")).toEqual(["scene"]);
+    expect(metaTalk("Er ist in dieser Szene.", "")).toEqual(["szene"]);
+    // Un théâtre ou une scène de crime nommés par l'histoire restent permis.
+    expect(metaTalk("Elle monte sur scène.", "il faut que tu montes sur scène ce soir")).toEqual([]);
   });
   it("un mot que l'histoire emploie elle-même n'est pas de la coulisse", () => {
     expect(metaTalk("Ariadne vole les documents de Saito.", "ariadne : rends-moi ces documents !")).toEqual([]);

@@ -372,7 +372,7 @@ export function askParts(
  * Le rappel ajouté à la seconde demande, quand la première parlait de coulisses (`metaTalk`, 10.27.2).
  */
 export function metaReminder(locale: Locale): string {
-  return `\n\nRappel impératif : le spectateur ne connaît ni « sources », ni « documents », ni « contexte », ni « sous-titres », ni « transcription » — il n'y a que ce qu'il a vu. N'emploie aucun de ces mots, dans aucune langue. Une limite se dit ainsi : « ${SEEN_SO_FAR[locale]} ».`;
+  return `\n\nRappel impératif : le spectateur ne connaît ni « sources », ni « documents », ni « contexte », ni « sous-titres », ni « transcription », ni « scène », ni « réplique » — il n'y a que ce qu'il a vu. N'emploie aucun de ces mots, dans aucune langue. Une limite se dit ainsi : « ${SEEN_SO_FAR[locale]} ».`;
 }
 
 // ── Le filet des mots de coulisse (10.27.2) ──────────────────────────────────────────────────────
@@ -384,7 +384,7 @@ export function metaReminder(locale: Locale): string {
 // ce que vous avez vu, … »), sinon remplacée par une limite dite naturellement (`METALESS_LIMIT`).
 
 const META_WORDS =
-  /(?<![\p{L}-])(sources|documents?|contextes?|sous-titres?|transcriptions?|contexts?|subtitles?|transcripts?|fuentes|documentos?|contextos?|subt[íi]tulos?|transcripci[óo]n(?:es)?|quellen|dokumente?n?|kontexte?s?|untertiteln?|transkripte?n?)(?![\p{L}-])/giu;
+  /(?<![\p{L}-])(sources|documents?|contextes?|sous-titres?|transcriptions?|sc[èe]nes?|r[ée]pliques?|contexts?|subtitles?|transcripts?|scenes?|fuentes|documentos?|contextos?|subt[íi]tulos?|transcripci[óo]n(?:es)?|escenas?|quellen|dokumente?n?|kontexte?s?|untertiteln?|transkripte?n?|szenen?)(?![\p{L}-])/giu;
 
 /** Le texte des sources sans leurs intitulés : ce que l'histoire dit elle-même. */
 function metaMaterial(text: string): string {
