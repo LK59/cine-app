@@ -469,6 +469,20 @@ pass-through accessors for the private members tests drive), and rules both play
 `playerControls/` and `playerNative/` sit outside `src/components/player/` on purpose: the colour
 rule of `design-tokens.test.ts` reads that folder, and the controls carry hand-written text colours.
 
+**The X-Ray library scheduler analyses the whole library in the background** (DECISIONS §138,
+« Le planificateur de la bibliothèque », `src/lib/xray/scheduler.ts`): three tiers — what accounts are
+watching (films in progress, the next five episodes of each series in progress), arrivals of the last
+14 days, then the rest newest first — dated by Radarr/Sonarr's import date, never Jellyfin's `DateCreated`
+(the storage migration stamped 2 015 items with one day), and only files under `/media/movies/` or
+`/media/tv/` (`isLibraryPath`, checked on the real path before every order — never downloads, seeds or
+books). It feeds the service only when nothing plays
+(§88's `mustWaitForPlayback`), in `low`, two items ahead at most, one tick per minute on `globalThis`;
+state lives in `cine.db` (`scanStore.ts`). A file replaced at the same duration (± 1 s) is rebound
+(`rebindIfSameDuration`), never re-analysed, and the player serves its old scenes. Progress and controls:
+Configuration → Acteurs à l'écran (`/api/admin/xray/scan`, admin only). Above tier 1, a tier 0 the admin
+fills by hand (a film, or a whole series season by season — from that page or « Analyser en priorité » on
+the title sheet): ordered `normal`, fed even during playback, animation still refused.
+
 **Books are an option, off by default, kept apart from the cinema** (DECISIONS §127–§128, since
 28/10/2026): `BOOKS_ENABLED`, `BOOKS_REQUESTS_ENABLED`, `BOOKS_GOOGLE_ENRICH` + `GOOGLE_BOOKS_API_KEY`.
 Everything lives in `src/lib/books/`, `src/components/books/`, `/api/books/*` and the `/livres` page

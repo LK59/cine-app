@@ -505,7 +505,9 @@ export const jellyfin = {
         ParentIndexNumber?: number | null;
         IndexNumber?: number | null;
         ProviderIds?: JellyfinItem["ProviderIds"];
-        MediaSources?: { Path?: string | null; ETag?: string | null; Size?: number | null }[] | null;
+        /** Rendu sans `Fields` : la durée, que l'analyse des acteurs compare d'un fichier à l'autre (§138). */
+        RunTimeTicks?: number | null;
+        MediaSources?: { Path?: string | null; ETag?: string | null; Size?: number | null; RunTimeTicks?: number | null }[] | null;
       }[];
     }>(`${cfg.url}/Items?ids=${idSegment(itemId)}&Fields=Path,MediaSources,ProviderIds,SeriesId,ParentIndexNumber,IndexNumber&EnableImages=false&EnableUserData=false`, {
       headers,

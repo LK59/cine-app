@@ -4,6 +4,8 @@ import { isJellyfinId } from "@/lib/jellyfinPath";
 import { logError } from "@/lib/logger";
 import { taskLog } from "@/lib/taskLog";
 import { analysisTarget, castOf, castWithPhotos, nextEpisodeAfter } from "./cast";
+import { keepsAnalysis, rebindAnalysis } from "./rebind";
+import { recordFileVersion } from "./scanStore";
 
 /**
  * Commander l'analyse des acteurs à l'écran (DECISIONS.md §138).
@@ -127,7 +129,25 @@ export async function orderAnalysis(itemId: string, options: OrderOptions, now =
       seriesId: target.seriesId,
       cast: await castWithPhotos(cast),
     };
+    // Un fichier remplacé à durée égale (± 1 s) garde son analyse : rattachée au nouvel `ETag`, rien
+    // n'est réanalysé (§138, 09/11/2026). Le lecteur sert l'ancienne de toute façon (`scenes.ts`).
+    // Une lecture d'état qui échoue ne coûte que le rattachement : la commande part comme avant.
+    const prior = await Promise.resolve()
+      .then(() => xray.itemStatus(id))
+      .catch(() => null);
+    if (prior && prior.etag && prior.etag !== target.etag && prior.status === "done" && target.durationS && keepsAnalysis(id, prior, target.durationS)) {
+      const rebound = await rebindAnalysis(job, target.durationS);
+      // « queued » : une version du service qui ignore le champ l'a mis en file — la commande ci-dessous
+      // n'en remonte que la priorité.
+      if (rebound !== "queued") return { status: "ordered", answer: { itemId: id, status: "done", position: 0 }, cast: cast.length };
+    }
     const answer = await xray.enqueue(job);
+    // La durée de cette version, pour le jour où le fichier sera remplacé.
+    try {
+      recordFileVersion(id, target.etag, target.durationS);
+    } catch (error) {
+      logError("xray/version", error, { itemId: id });
+    }
     // Une ligne par vraie commande : « déjà fait » au même fichier n'en est pas une.
     if (answer.status !== "done") {
       taskLog("acteurs", "analyse commandée", {

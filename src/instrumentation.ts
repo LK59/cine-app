@@ -120,6 +120,15 @@ export async function register() {
       console.error("repliques: démarrage", error);
     }
 
+    // Les acteurs à l'écran (DECISIONS.md §138, planificateur) : la bibliothèque analysée en fond, par
+    // paliers, seulement quand personne ne regarde. Un tour par minute ; rien ne part l'option coupée.
+    try {
+      const { startXrayScheduler } = await import("./lib/xray/scheduler");
+      startXrayScheduler();
+    } catch (error) {
+      console.error("xray: démarrage", error);
+    }
+
     // L'intégrité des fichiers (DECISIONS.md §93) : une passe manuelle interrompue par le redémarrage
     // reprend, et la vérification de nuit des fichiers nouveaux est surveillée — seulement après une
     // première passe lancée par l'administrateur. Gardé, comme les répliques.

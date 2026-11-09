@@ -1,6 +1,7 @@
 "use client";
 
 import { AskTitleControl } from "@/components/ask/AskTitleControl";
+import { XrayPriorityControl } from "@/components/cinema/XrayPriorityControl";
 import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
 import { OfflineDownloadControl, OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
 import { OfflineEpisodeButton, OfflineSeasonDownload } from "@/components/offline/OfflineEpisodeDownload";
@@ -609,7 +610,7 @@ export function CinemaMobileDetail({
 
         {/* Netflix's icon-over-label action row — big touch targets, no text buttons competing
             with the primary white one above. */}
-        <div className="mb-6 flex items-start gap-8">
+        <div className="mb-6 flex flex-wrap items-start gap-x-8 gap-y-4">
           {/* Deux coches identiques côte à côte, dont l'une servait à la fois d'« ajouter » et
               d'« ajouté » : rien ne distinguait les deux boutons ni les deux états. « À voir » puis
               « Vu », la forme de toutes les fiches (`TitleToggles`, §117.4). */}
@@ -619,6 +620,9 @@ export function CinemaMobileDetail({
           <TitleToggleIcon face={WATCHED_FACE} on={watched} onClick={toggleWatched} disabled={watchedBusy} unknown={!watchedKnown} />
           {/* « Poser une question » (§139) : la même pièce que les fiches du bureau, film ou série. */}
           <AskTitleControl itemId={item.jellyfinItemId} variant="icon" />
+          {/* L'administrateur seul, l'option branchée (§138, liste de priorité) ; sur un téléphone étroit,
+              la quatrième icône passe à la ligne plutôt que de serrer les autres. */}
+          <XrayPriorityControl itemId={item.jellyfinItemId} variant="icon" />
         </div>
 
         {/* Des visages plutôt qu'une ligne de noms : chacun ouvre la fiche de la personne, posée
