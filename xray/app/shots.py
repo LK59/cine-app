@@ -52,6 +52,12 @@ MIN_SPLIT_PART = 30.0
 SPLIT_PEOPLE_WINDOW = 60.0
 SPLIT_PEOPLE_BONUS = 0.20
 MAX_SHOT_FRAMES = 120
+# Plan fixe : aucune image du plan ne s'écarte de la première de plus que ceci (vignette 32×18,
+# brute et à contraste égal ; histogramme). Deux images y suffisent — rien n'entre ni ne bouge
+# assez pour changer qui l'on voit. Les seuils sont le quart à peu près de ceux d'une coupe.
+STATIC_THUMB = 0.03
+STATIC_SHAPE = 0.15
+STATIC_HIST = 0.06
 
 
 @dataclass
@@ -91,12 +97,15 @@ def is_cut(prev: Signature, cur: Signature) -> bool:
     return False
 
 
-def frames_to_sample(duration: float) -> int:
+def frames_to_sample(duration: float, static: bool = False) -> int:
     """Deux ou trois images par plan, davantage pour un plan long (une de plus par 10 s, six au
-    plus) : un plan long change de cadre et de personnes."""
+    plus) : un plan long change de cadre et de personnes. Un plan fixe (`Shot.static`) n'en
+    prend que deux, quelle que soit sa durée : ses images se ressemblent toutes."""
     if duration < 0.75:
         return 1
     if duration < 2.0:
+        return 2
+    if static:
         return 2
     if duration < 12.0:
         return 3
@@ -115,6 +124,14 @@ class Shot:
     frames: list[tuple[float, np.ndarray]] = field(default_factory=list)
     hist_sum: np.ndarray | None = None
     n_sig: int = 0
+    first: Signature | None = None
+    # Plus grand écart d'une image du plan à la première (vignette brute, à contraste égal, histogramme).
+    drift: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+    @property
+    def static(self) -> bool:
+        t, sh, hd = self.drift
+        return t <= STATIC_THUMB and sh <= STATIC_SHAPE and hd <= STATIC_HIST
 
     @property
     def hist(self) -> np.ndarray:
@@ -144,6 +161,14 @@ class ShotSplitter:
             self.cur = Shot(start=ts, end=ts + self.step, hist_sum=np.zeros_like(sig.hist))
             self._keep_every, self._seen = 1, 0
         shot = self.cur
+        if shot.first is None:
+            shot.first = sig
+        else:
+            f = shot.first
+            d = (float(np.abs(f.thumb - sig.thumb).mean()),
+                 float(np.abs(f.shape - sig.shape).mean()) if f.shape is not None and sig.shape is not None else 0.0,
+                 hist_distance(f.hist, sig.hist))
+            shot.drift = tuple(max(a, b) for a, b in zip(shot.drift, d))
         shot.end = ts + self.step
         shot.hist_sum += sig.hist
         shot.n_sig += 1

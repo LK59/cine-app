@@ -52,27 +52,19 @@ class Face:
     quality: float = 0.0
     accepted: bool = False
     extra: dict = field(default_factory=dict)
+    # Visage aligné 112×112, gardé entre le tri et l'empreinte (qui peut venir plus tard, par lot).
+    crop: np.ndarray | None = None
 
     @property
     def min_side(self) -> float:
         return float(min(self.box[2] - self.box[0], self.box[3] - self.box[1]))
 
 
-def _session(path: Path, threads: int):
-    import onnxruntime as ort
+def _session(path: Path, threads: int, pad_batch: bool = False):
+    from .config import settings
+    from .inference import open_session
 
-    # Rien ne sort de la machine : pas d'événements de télémétrie d'ONNX Runtime.
-    try:
-        ort.set_default_logger_severity(3)  # avertissements sans portée ici (identifiant de télémétrie)
-        ort.disable_telemetry_events()
-    except AttributeError:
-        pass
-    opts = ort.SessionOptions()
-    opts.intra_op_num_threads = threads
-    opts.inter_op_num_threads = 1
-    opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-    opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-    return ort.InferenceSession(str(path), sess_options=opts, providers=["CPUExecutionProvider"])
+    return open_session(path, threads, settings.inference, pad_batch=pad_batch)
 
 
 def nms(boxes: np.ndarray, scores: np.ndarray, thresh: float) -> list[int]:
@@ -100,13 +92,12 @@ class Scrfd:
 
     def __init__(self, path: Path, threads: int, score_thresh: float = 0.5, nms_thresh: float = 0.4):
         self.session = _session(path, threads)
-        inp = self.session.get_inputs()[0]
-        self.input_name = inp.name
-        shape = inp.shape
+        self.input_name = self.session.input_name
+        shape = self.session.input_shape
         # det_10g accepte une taille quelconque (multiple de 32) : on évite de remplir un carré
         # 640×640 pour une image 640×360 — près de deux fois moins de calcul.
         self.fixed = (int(shape[3]), int(shape[2])) if isinstance(shape[2], int) and isinstance(shape[3], int) else None
-        self.output_names = [o.name for o in self.session.get_outputs()]
+        self.output_names = list(self.session.output_names)
         n = len(self.output_names)
         self.fmc, self.strides, self.anchors = {6: (3, [8, 16, 32], 2), 9: (3, [8, 16, 32], 2),
                                                 10: (5, [8, 16, 32, 64, 128], 1), 15: (5, [8, 16, 32, 64, 128], 1)}[n]
@@ -115,7 +106,7 @@ class Scrfd:
         self.nms_thresh = nms_thresh
         self._centers: dict[tuple[int, int, int], np.ndarray] = {}
 
-    def detect(self, img: np.ndarray) -> list[Face]:
+    def _canvas(self, img: np.ndarray) -> tuple[np.ndarray, float, int, int]:
         h, w = img.shape[:2]
         if self.fixed:
             tw, th = self.fixed
@@ -125,8 +116,41 @@ class Scrfd:
         nw, nh = int(round(w * scale)), int(round(h * scale))
         canvas = np.zeros((th, tw, 3), dtype=np.uint8)
         canvas[:nh, :nw] = img if (nw, nh) == (w, h) else cv2.resize(img, (nw, nh))
+        return canvas, scale, tw, th
+
+    def detect(self, img: np.ndarray) -> list[Face]:
+        canvas, scale, tw, th = self._canvas(img)
         blob = cv2.dnn.blobFromImage(canvas, 1.0 / 128.0, (tw, th), (127.5, 127.5, 127.5), swapRB=True)
         outs = self.session.run(self.output_names, {self.input_name: blob})
+        return self._decode(outs, scale, tw, th, img.shape[1], img.shape[0])
+
+    def detect_batch(self, imgs: list[np.ndarray]) -> list[list[Face]]:
+        """Plusieurs images de même taille en un appel du réseau, quand le moteur sait changer
+        la taille du lot (OpenVINO ; le fichier `det_10g.onnx` fixe un lot de 1, qu'ONNX Runtime
+        respecte). Le lot est complété d'images noires jusqu'à une taille compilée.
+
+        Les sorties d'un lot de N ne sont pas N blocs à la suite : la tête de SCRFD range ses
+        prédictions en (hauteur, largeur, lot, ancre) — mesuré le 09/11/2026, la seule
+        permutation qui redonne exactement les sorties image par image (`split_batched`)."""
+        if len(imgs) <= 1 or not getattr(self.session, "batchable", False) or self.anchors < 1:
+            return [self.detect(im) for im in imgs]
+        if len({im.shape for im in imgs}) != 1:
+            return [self.detect(im) for im in imgs]
+        from .inference import bucket
+
+        n = len(imgs)
+        prepared = [self._canvas(im) for im in imgs]
+        _, scale, tw, th = prepared[0]
+        canvases = [p[0] for p in prepared]
+        nb = bucket(n)
+        canvases += [np.zeros_like(canvases[0])] * (nb - n)
+        blob = cv2.dnn.blobFromImages(canvases, 1.0 / 128.0, (tw, th), (127.5, 127.5, 127.5), swapRB=True)
+        outs = self.session.run(self.output_names, {self.input_name: blob})
+        per = split_batched(outs, nb, self.strides, self.fmc, self.anchors, tw, th)
+        h, w = imgs[0].shape[:2]
+        return [self._decode(per[k], scale, tw, th, w, h) for k in range(n)]
+
+    def _decode(self, outs, scale: float, tw: int, th: int, w: int, h: int) -> list[Face]:
         all_scores, all_boxes, all_kps = [], [], []
         for i, stride in enumerate(self.strides):
             scores = outs[i]
@@ -174,6 +198,21 @@ class Scrfd:
             b[[1, 3]] = b[[1, 3]].clip(0, h)
             out.append(Face(box=b, score=float(scores[i]), kps=kps[i]))
         return out
+
+
+def split_batched(outs: list[np.ndarray], n: int, strides: list[int], fmc: int, anchors: int,
+                  tw: int, th: int) -> list[list[np.ndarray]]:
+    """Sorties de SCRFD pour un lot de `n` images → sorties image par image, chacune rangée comme
+    pour un lot de 1 (hauteur, largeur, ancre). Le lot arrive en (hauteur, largeur, lot, ancre)."""
+    per: list[list[np.ndarray]] = [[None] * len(outs) for _ in range(n)]  # type: ignore[list-item]
+    for j, o in enumerate(outs):
+        stride = strides[j % fmc]
+        gh, gw = th // stride, tw // stride
+        c = o.shape[-1]
+        z = np.asarray(o).reshape(gh, gw, n, anchors, c).transpose(2, 0, 1, 3, 4)
+        for k in range(n):
+            per[k][j] = z[k].reshape(-1, c)
+    return per
 
 
 class YuNet:
@@ -247,20 +286,23 @@ class Embedder:
     w600k_r50 et glintr100 sont tous deux issus d'`arcface_torch` et attendent cette
     normalisation (InsightFace ne retombe sur 0/1 que pour les vieux modèles MXNet convertis)."""
 
-    def __init__(self, path: Path, threads: int):
-        self.session = _session(path, threads)
-        self.input_name = self.session.get_inputs()[0].name
-        self.output_name = self.session.get_outputs()[0].name
-        shape = self.session.get_inputs()[0].shape
+    def __init__(self, path: Path, threads: int, batch: int = 32):
+        # Lots complétés d'images noires sous OpenVINO (formes compilées en nombre borné).
+        self.session = _session(path, threads, pad_batch=True)
+        self.input_name = self.session.input_name
+        self.output_name = self.session.output_names[0]
+        shape = self.session.input_shape
         self.fixed_batch = shape[0] if isinstance(shape[0], int) else None
+        self.batch = max(1, batch)
 
     def embed(self, crops: list[np.ndarray]) -> np.ndarray:
+        """Par lots de `batch` visages : un appel par lot plutôt qu'un par visage. Le réseau
+        calcule chaque image d'un lot à part (normalisation par lot figée à l'inférence) : le
+        résultat est le même qu'un par un, aux arrondis près (`test_faces_batch.py`)."""
         if not crops:
             return np.zeros((0, 512), dtype=np.float32)
-        if self.fixed_batch == 1:
-            outs = [self._run([c]) for c in crops]
-            return np.concatenate(outs)
-        return self._run(crops)
+        step = 1 if self.fixed_batch == 1 else self.batch
+        return np.concatenate([self._run(crops[i:i + step]) for i in range(0, len(crops), step)])
 
     def _run(self, crops: list[np.ndarray]) -> np.ndarray:
         blob = cv2.dnn.blobFromImages(crops, 1.0 / 127.5, (112, 112), (127.5, 127.5, 127.5), swapRB=True)
@@ -292,9 +334,30 @@ class FaceEngine:
         # Chronomètre du tronçon en cours (`timing.StageClock`), posé par l'ouvrier.
         self.clock = StageClock()
 
-    def analyse(self, img: np.ndarray) -> list[Face]:
-        """Détecte tous les visages ; n'empreinte que ceux qui le méritent (taille, netteté,
-        orientation). Les autres restent des présences, utiles pour suivre une piste."""
+    def detect_grade_batch(self, imgs: list[np.ndarray]) -> list[list[Face]]:
+        """`detect_grade` de plusieurs images, la détection par lot quand le détecteur le permet."""
+        if not imgs:
+            return []
+        clock = self.clock
+        t0 = time.perf_counter()
+        batch = getattr(self.detector, "detect_batch", None)
+        found = batch(imgs) if batch is not None else [self.detector.detect(im) for im in imgs]
+        clock.add("detect", time.perf_counter() - t0)
+        clock.count("images", len(imgs))
+        out = []
+        for im, faces in zip(imgs, found):
+            clock.count("faces", len(faces))
+            t1 = time.perf_counter()
+            self._grade(im, faces)
+            clock.add("grade", time.perf_counter() - t1)
+            out.append(faces)
+        return out
+
+    def detect_grade(self, img: np.ndarray) -> list[Face]:
+        """Détecte tous les visages et décide lesquels méritent une empreinte (taille, netteté,
+        orientation) — sans la calculer : l'empreinte vient ensuite, par lot, et seulement pour
+        les meilleurs visages de chaque piste. Les autres restent des présences, utiles pour
+        suivre une piste."""
         clock = self.clock
         t0 = time.perf_counter()
         faces = self.detector.detect(img)
@@ -302,8 +365,12 @@ class FaceEngine:
         clock.add("detect", t1 - t0)
         clock.count("images")
         clock.count("faces", len(faces))
-        crops, idx = [], []
-        for i, f in enumerate(faces):
+        self._grade(img, faces)
+        clock.add("grade", time.perf_counter() - t1)
+        return faces
+
+    def _grade(self, img: np.ndarray, faces: list[Face]) -> None:
+        for f in faces:
             if f.min_side < self.rules.min_face or f.score < self.rules.min_score:
                 continue
             fr = frontal_ratio(f.kps)
@@ -314,7 +381,8 @@ class FaceEngine:
             if sh < self.rules.min_sharpness:
                 continue
             # Qualité ∈ ]0, 1] : confiance du détecteur × taille (saturée à 96 px) × netteté
-            # (saturée) × frontalité. Elle pondère la moyenne des empreintes d'une piste.
+            # (saturée) × frontalité. Elle choisit les visages à empreinter (les meilleurs d'une
+            # piste) et pondère la moyenne de leurs empreintes.
             f.quality = (
                 f.score
                 * min(1.0, f.min_side / 96.0)
@@ -322,16 +390,24 @@ class FaceEngine:
                 * (1.0 - abs(fr - 0.5))
             )
             f.accepted = True
-            crops.append(crop)
-            idx.append(i)
-        t2 = time.perf_counter()
-        clock.add("grade", t2 - t1)
-        if crops:
-            embs = self.embedder.embed(crops)
-            clock.add("embed", time.perf_counter() - t2)
-            clock.count("embedded", len(crops))
-            for j, i in enumerate(idx):
-                faces[i].emb = embs[j]
+            f.crop = crop
+
+    def embed_faces(self, faces: list[Face]) -> None:
+        """Empreinte des visages donnés (déjà triés, `crop` posé), par lots."""
+        todo = [f for f in faces if f.emb is None and f.crop is not None]
+        if not todo:
+            return
+        t0 = time.perf_counter()
+        embs = self.embedder.embed([f.crop for f in todo])
+        self.clock.add("embed", time.perf_counter() - t0)
+        self.clock.count("embedded", len(todo))
+        for f, e in zip(todo, embs):
+            f.emb = e
+
+    def analyse(self, img: np.ndarray) -> list[Face]:
+        """Tout d'un coup : détection, tri, empreinte de chaque bon visage."""
+        faces = self.detect_grade(img)
+        self.embed_faces([f for f in faces if f.accepted])
         return faces
 
     def best_face_embedding(self, img: np.ndarray) -> np.ndarray | None:

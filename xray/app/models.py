@@ -217,5 +217,9 @@ class ModelManager:
             det = Scrfd(self.path("detector"), threads)
         else:
             det = YuNet(self.path("detector"), threads)
-        emb = Embedder(self.path("embedder"), threads)
+        from .config import settings
+
+        emb = Embedder(self.path("embedder"), threads, batch=settings.embed_batch)
+        log.info("modèles : inférence %s / %s, %d fils", getattr(det, "session", None) and det.session.backend or "opencv",
+                 emb.session.backend, threads)
         return FaceEngine(self.name, det, emb, QualityRules(min_face=min_face))

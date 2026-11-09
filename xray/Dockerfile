@@ -9,6 +9,11 @@ ARG PYTHON_IMAGE=python:3.12-slim-bookworm
 FROM ${PYTHON_IMAGE} AS deps
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --prefix=/install -r /tmp/requirements.txt
+# OpenVINO (inférence sur le processeur, plus rapide qu'ONNX Runtime ici — voir README,
+# « Performances ») sans ses dépendances : numpy et packaging sont déjà là, et son paquet de
+# télémétrie (`openvino-telemetry`) ne sert qu'aux outils de conversion — rien ne sort de la machine.
+ARG OPENVINO=openvino==2026.4.1
+RUN pip install --no-cache-dir --no-deps --prefix=/install "${OPENVINO}"
 
 # --- base d'exécution : Python + ffmpeg de Jellyfin --------------------------------------------
 FROM ${PYTHON_IMAGE} AS runtime

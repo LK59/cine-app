@@ -156,7 +156,8 @@ def tonemap_available() -> bool:
 def build_command(path: str, start: float, length: float, info: MediaInfo, vaapi: bool,
                   fps: float, width: int, threads: int) -> list[str]:
     w, h = info.out_size(width)
-    cmd = [settings.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error"]
+    # `-filter_threads` borne aussi les filtres (réduction, adaptation HDR) à `XRAY_THREADS`.
+    cmd = [settings.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-filter_threads", str(threads)]
     tonemap = info.hdr and tonemap_available()
     if vaapi:
         cmd += ["-hwaccel", "vaapi", "-hwaccel_device", settings.vaapi_device, "-hwaccel_output_format", "vaapi"]

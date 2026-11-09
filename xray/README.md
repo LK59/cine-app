@@ -67,9 +67,9 @@ Trois principes :
  │ 2. plans             │   → un plan va d'une coupe à la suivante
  └──────────┬───────────┘
             ▼
- ┌──────────────────────┐   2 à 6 images par plan : détection des visages, alignement,
- │ 3. pistes            │   empreinte ; un même visage suivi d'image en image (recouvrement,
- └──────────┬───────────┘   ressemblance) ; une empreinte moyenne par piste
+ ┌──────────────────────┐   2 à 6 images par plan (2 pour un plan fixe) : détection des visages,
+ │ 3. pistes            │   tri, suivi d'image en image ; empreinte des 2 meilleurs visages de
+ └──────────┬───────────┘   chaque piste, par lots ; une empreinte moyenne par piste
             ▼
  ┌──────────────────────┐   regroupement hiérarchique de toutes les pistes de l'épisode
  │ 4. personnes         │   → un groupe par personne
@@ -85,6 +85,11 @@ Trois principes :
 ```
 
 ### 1. Décodage
+
+Les génériques de début et de fin, les rappels (« précédemment ») et les bandes-annonces ne
+sont pas analysés : Laterna peut les donner dans l'ordre (`skip`), sinon le service les demande à
+Jellyfin (ses *segments*, `GET /MediaSegments/{itemId}`), s'il y a accès. Personne n'y cherche un
+acteur, et un générique défile souvent sur des visages qui n'ont rien à faire dans les scènes.
 
 Le fichier est lu par tronçons de deux minutes. Chaque tronçon est décodé par ffmpeg (la
 version que livre Jellyfin, avec son pilote Intel), réduit à 640 px de large et échantillonné à
@@ -111,18 +116,35 @@ penchent donc vers la coupe.
 ### 3. Pistes
 
 Dans chaque plan, deux ou trois images sont analysées (davantage pour un plan long : une de plus
-toutes les dix secondes, six au plus). Sur chacune :
+toutes les dix secondes, six au plus). Un **plan fixe** — aucune image ne s'écarte de la première
+(vignette brute et à contraste égal, couleurs) de plus du quart à peu près d'une coupe — n'en
+prend que deux, quelle que soit sa durée : rien n'y entre ni n'y bouge assez pour changer qui
+l'on voit. Sur chaque image :
 
 - **détection** des visages et de cinq points (yeux, nez, coins de la bouche) ;
 - **tri** : un visage trop petit (moins de 36 px), flou, ou de profil marqué compte comme une
-  présence, mais ne sert pas à identifier ;
-- **alignement** des bons visages sur un gabarit de 112×112 px, puis **empreinte** : un vecteur
-  de 512 nombres, proche pour deux photos d'une même personne.
+  présence, mais ne sert pas à identifier ; les autres sont **alignés** sur un gabarit de
+  112×112 px et notés (confiance, taille, netteté, frontalité).
 
-D'une image à l'autre du plan, les visages sont reliés en *pistes* — par le recouvrement de leurs
-cadres, ou par la ressemblance de leurs empreintes quand le visage a bougé. Chaque piste reçoit
-une seule empreinte, moyenne de ses visages pondérée par leur qualité, et un temps de présence :
-la durée du plan multipliée par la part des images où elle apparaît.
+D'une image à l'autre du plan, les visages sont reliés en *pistes* par le recouvrement de leurs
+cadres. Puis vient l'**empreinte** — un vecteur de 512 nombres, proche pour deux photos d'une même
+personne —, la partie la plus chère du calcul avec la détection :
+
+- seuls les **deux meilleurs visages** de chaque piste sont empreintés (les autres n'y
+  ajoutaient presque rien : la moyenne de deux bonnes vues vaut celle de trois) ;
+- les empreintes partent **par lots** de 32 visages, de plusieurs plans à la fois : un appel du
+  réseau pour 32 visages coûte bien moins que 32 appels ;
+- dans une **série**, le meilleur visage d'une piste passe d'abord : s'il ressemble très nettement
+  à un personnage déjà nommé dans les épisodes précédents (similarité ≥ 0,60, avec 0,25 d'avance
+  sur le deuxième), le second n'est pas calculé ;
+- un plan où le recouvrement seul ne suffit pas — un recouvrement moyen (0,25 à 0,5) entre deux
+  bons visages, ou deux pistes qui ne se montrent jamais sur la même image (un même visage a pu
+  bouger) — suit la règle complète : tous ses bons visages empreintés, pistes refaites avec la
+  ressemblance des empreintes.
+
+Chaque piste reçoit une seule empreinte, moyenne de ses visages empreintés pondérée par leur
+qualité, et un temps de présence : la durée du plan multipliée par la part des images où elle
+apparaît (toutes ses images comptent, empreintées ou non).
 
 ### 4. Personnes
 
@@ -185,8 +207,9 @@ Il faut Docker, le réseau Docker où vit Laterna (ici `media_net`), et la médi
    ```
 
    La clé partagée est le seul secret : Laterna présente la même. `JELLYFIN_URL` et
-   `JELLYFIN_API_KEY` ne servent qu'à laisser l'iGPU à Jellyfin quand il transcode
-   (voir [Accélération matérielle](#accélération-matérielle)).
+   `JELLYFIN_API_KEY` servent à laisser l'iGPU à Jellyfin quand il transcode
+   (voir [Accélération matérielle](#accélération-matérielle)) et à lire les segments qu'il
+   connaît (génériques, rappels), qui ne sont pas analysés.
 
 3. Adapter dans `docker-compose.yml` :
    - le **chemin de la médiathèque**, monté en lecture seule **au même chemin que dans le
@@ -285,12 +308,22 @@ processeur). `/health` indique si VA-API fonctionne (`decode.vaapi`).
 les sessions de Jellyfin avant chaque ordre et toutes les 30 secondes : si l'une d'elles
 transcode avec l'accélération matérielle, le tronçon suivant est décodé sur le processeur.
 
-**L'inférence se fait sur le processeur** (ONNX Runtime). Le pilote de calcul des iGPU Gen9 n'est
-plus qu'en maintenance, et l'iGPU a déjà fort à faire avec le décodage.
+**L'inférence se fait sur le processeur**, par **OpenVINO** (le moteur d'Intel, livré dans
+l'image) quand il se charge, par ONNX Runtime sinon — les deux lisent les mêmes fichiers `.onnx`
+et rendent les mêmes empreintes (écart mesuré : cosinus ≥ 0,99999). OpenVINO est installé sans
+son paquet de télémétrie, qui ne sert qu'aux outils de conversion. Le pilote de calcul des iGPU
+Gen9 n'est plus qu'en maintenance, et l'iGPU a déjà fort à faire avec le décodage.
 
 **Le service se fait discret** : une analyse à la fois ; `nice 10` et `ionice` en classe basse
-pour lui et le ffmpeg qu'il lance ; `XRAY_THREADS` fils de calcul (4 par défaut) ; et, dans
-l'exemple de composition, `cpus: 4` et `mem_limit: 4g`.
+pour lui et le ffmpeg qu'il lance ; `XRAY_THREADS` fils de calcul (4 par défaut : inférence,
+décodage et filtres de ffmpeg, OpenCV, calcul matriciel) ; et, dans l'exemple de composition,
+`cpus: 4` et `mem_limit: 4g`.
+
+Combien de fils ? Autant que de cœurs qu'on veut bien lui céder, et pas plus que `cpus:` dans la
+composition : au-delà, les fils se disputent les mêmes cœurs et tout ralentit. Sur un processeur
+à 6 cœurs / 12 fils qui sert aussi Jellyfin, `XRAY_THREADS=8` et `cpus: 8` laissent quatre fils au
+reste ; sur 4 cœurs, 3 ; sur une machine partagée avec d'autres services lourds, 4. Le service
+restant en priorité basse, il cède de toute façon le processeur à ce qui en demande.
 
 ---
 
@@ -325,8 +358,11 @@ Variables d'environnement (toutes facultatives sauf la clé) :
 |---|---|---|
 | `XRAY_API_KEY` | — | Clé partagée avec Laterna. **Vide : toutes les requêtes sont refusées.** |
 | `XRAY_MODEL` | `buffalo_l` | `buffalo_l` ou `auraface` (voir plus haut). |
-| `XRAY_THREADS` | `4` | Fils de calcul (inférence, décodage sur processeur). |
-| `JELLYFIN_URL` | — | Adresse de Jellyfin, pour lui laisser l'iGPU. |
+| `XRAY_THREADS` | `4` | Fils de calcul (inférence, décodage et filtres de ffmpeg) ; voir [Accélération matérielle](#accélération-matérielle). |
+| `XRAY_INFERENCE` | `auto` | `auto` (OpenVINO s'il se charge, ONNX Runtime sinon), `openvino`, `onnxruntime`. |
+| `XRAY_EMBED_BATCH` | `32` | Visages empreintés par appel du réseau. |
+| `XRAY_FACES_PER_TRACK` | `2` | Visages empreintés au plus par piste (les meilleurs). |
+| `JELLYFIN_URL` | — | Adresse de Jellyfin, pour lui laisser l'iGPU et lire ses segments (génériques). |
 | `JELLYFIN_API_KEY` | — | Clé d'API Jellyfin (en-tête `Authorization: MediaBrowser Token="…"`). |
 | `XRAY_HWACCEL` | `1` | `0` : jamais de VA-API. |
 | `XRAY_VAAPI_DEVICE` | `/dev/dri/renderD128` | Périphérique VA-API. |
@@ -459,6 +495,7 @@ prêts (réseau, empreinte qui ne correspond pas). `running` est l'`itemId` en c
 | `startAt` | facultatif : position à analyser en premier |
 | `seriesId` | facultatif : pour réutiliser les visages nommés dans la série |
 | `cast` | la distribution de l'épisode ; 12 photos au plus par personne, **adresses `https://image.tmdb.org/` uniquement** |
+| `skip` | facultatif (ajout compatible, 11/2026) : `[{"start": 208.3, "end": 224.8}, …]`, 32 plages au plus, en secondes — génériques, rappel, bande-annonce. Aucun visage n'y est cherché ; les scènes ne les couvrent pas. Absent : le service demande ses segments à Jellyfin (Intro, Outro, Recap, Preview) s'il y a accès ; `[]` : rien n'est sauté et Jellyfin n'est pas consulté |
 
 Réponses :
 
@@ -477,12 +514,21 @@ où il en était.
 ### `GET /items/{itemId}`
 
 ```json
-{ "itemId": "…", "etag": "…", "status": "running", "progress": 0.094, "analyzedUntil": 840.0, "error": null }
+{ "itemId": "…", "etag": "…", "status": "running", "progress": 0.094, "analyzedUntil": 840.0, "error": null,
+  "stats": { "seconds": 61.2, "realtime": 13.7, "skippedSeconds": 0,
+             "stages": { "decode_wait": 1.1, "shots": 2.0, "convert": 0.3, "detect": 30.5, "grade": 1.2,
+                         "embed": 18.4, "track": 0.4, "write": 0.1, "build": 1.0, "photos": 5.9, "other": 0.3 },
+             "counts": { "decoded": 3360, "images": 420, "faces": 610, "embedded": 240, "early_exit": 31 } } }
 ```
 
 `status` : `queued`, `running`, `done` ou `failed`. `progress` : part du fichier analysée.
 `analyzedUntil` : fin de la plage analysée d'un seul tenant à partir du tronçon de `startAt`
-(0 tant que ce tronçon n'est pas fait ; la durée du fichier une fois terminé). `404` si inconnu.
+(0 tant que ce tronçon n'est pas fait ; la durée du fichier une fois terminé). `stats` (ajout
+compatible, 11/2026 ; `null` tant que rien n'est fait) : le temps de calcul des tronçons faits,
+étape par étape, et ce qu'ils ont compté — informatif, pour savoir où le temps passe. Les étapes :
+`decode_wait` (l'analyse attend ffmpeg, qui décode en parallèle), `shots` (coupes), `convert`,
+`detect`, `grade` (tri des visages), `embed`, `track` (pistes), `write`, `build` (regroupement,
+noms, scènes), `photos` (distribution). `404` si inconnu.
 
 ### `GET /items/{itemId}/scenes`
 
@@ -524,7 +570,11 @@ xray/
 │   ├── decode.py      ffmpeg, VA-API
 │   ├── shots.py       plans, choix des images, scènes
 │   ├── faces.py       détection, alignement, empreinte
+│   ├── inference.py   OpenVINO ou ONNX Runtime
+│   ├── pipeline.py    quels visages empreinter, par lots, mémoire de série
 │   ├── tracks.py      pistes dans un plan
+│   ├── segments.py    plages sautées (ordre, segments de Jellyfin)
+│   ├── timing.py      chronomètre par étape
 │   ├── cluster.py     regroupement, noms (algorithme hongrois)
 │   ├── results.py     assemblage des scènes
 │   ├── cast.py        photos de référence, mémoire de la série
@@ -532,7 +582,8 @@ xray/
 │   ├── models.py      téléchargement et vérification des poids
 │   └── db.py          SQLite
 └── tests/             contrat HTTP, clé, file, chemins, regroupement et noms sur des
-                       empreintes synthétiques, plans et pistes synthétiques
+                       empreintes synthétiques, plans et pistes synthétiques, économies de
+                       calcul (meilleurs visages, lots, mémoire, plans fixes, plages, fils)
 ```
 
 Les tests n'ont besoin ni des modèles ni du réseau. Ils tournent pendant la construction de

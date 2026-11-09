@@ -26,15 +26,16 @@ import numpy as np
 
 from . import cast as castmod
 from . import decode
+from . import segments
 from .config import RESULT_VERSION, settings
 from .db import Database
 from .faces import MODEL_DEFAULTS
 from .jobs import CastMember, JobStore
 from .models import ModelManager
 from .results import ShotRow, TrackRow, build
+from .pipeline import ShotFaces
 from .shots import ShotSplitter, frames_to_sample, pick_indices
 from .timing import StageClock, job_stats, line
-from .tracks import link, summarize
 
 log = logging.getLogger("xray.worker")
 
@@ -175,9 +176,20 @@ class Worker:
         self.engine.clock = job_clock
         with job_clock.stage("photos"):
             photos = castmod.photo_embeddings(self.db, self.engine, model, cast, settings.photos_dir)
-        refs = castmod.build_refs(cast, photos, castmod.series_embeddings(self.db, row["series_id"], model))
-        log.info("[xray] %s : %d acteurs, %d avec référence, %.0f s de vidéo (%s %s %dx%d)",
-                 item_id, len(cast), len(refs), info.duration, info.codec, info.profile, info.width, info.height)
+        series = castmod.series_embeddings(self.db, row["series_id"], model)
+        refs = castmod.build_refs(cast, photos, series)
+        # Mémoire de la série, pour la sortie anticipée (`pipeline.memory_match`) : seulement les
+        # personnes de la distribution de cet épisode.
+        cast_ids = {m.person_id for m in cast}
+        mem_ids = [pid for pid in series if pid in cast_ids]
+        mem = [series[pid] for pid in mem_ids]
+        self.memory_ids = mem_ids
+        self.memory = np.stack(mem).astype(np.float32) if mem else None
+        self.skips = self._skips(item_id, row)
+        log.info("[xray] %s : %d acteurs, %d avec référence, %d en mémoire de série, %.0f s de vidéo (%s %s %dx%d), "
+                 "plages sautées : %s", item_id, len(cast), len(refs), len(mem), info.duration, info.codec,
+                 info.profile, info.width, info.height,
+                 ", ".join(f"{a:.0f}–{b:.0f} s" for a, b in self.skips) or "aucune")
         chunks = [(r["idx"], r["start"], r["end"]) for r in
                   self.db.q("SELECT idx, start, end FROM chunks WHERE item_id=? AND done=0 ORDER BY idx", (item_id,))]
         all_chunks = [(r["idx"], r["start"], r["end"]) for r in
@@ -225,6 +237,19 @@ class Worker:
             log.info("[xray] %s : terminé en %.0f s (%.0f s de calcul, %s× le temps réel), %d scènes — %s",
                      item_id, time.monotonic() - t_job, st["seconds"], st["realtime"], len(built.scenes), line(st))
 
+    def _skips(self, item_id: str, row) -> list[tuple[float, float]]:
+        """Plages à ne pas analyser : celles de l'ordre, sinon celles de Jellyfin (gardées avec
+        l'ordre : une reprise saute les mêmes)."""
+        raw = row["skip_json"] if "skip_json" in row.keys() else None
+        if raw is not None:
+            return segments.merge([(float(a), float(b)) for a, b in json.loads(raw)])
+        got = segments.fetch_jellyfin(item_id)
+        if got is None:
+            return []
+        self.db.run("UPDATE items SET skip_json=? WHERE item_id=? AND skip_json IS NULL",
+                    (json.dumps([[a, b] for a, b in got]), item_id))
+        return got
+
     def _save_job_clock(self, item_id: str, clock: StageClock) -> None:
         """Ce qui ne dépend d'aucun tronçon (photos, assemblage) s'ajoute à l'ordre, reprises comprises."""
         with self.db.tx() as c:
@@ -263,77 +288,93 @@ class Worker:
     # --- un tronçon ------------------------------------------------------------------------
 
     def process_chunk(self, item_id: str, path: str, info, idx: int, start: float, end: float):
+        parts = segments.pieces(start, end, getattr(self, "skips", []))
+        if not parts:
+            # Tout le tronçon est sauté (générique) : fait, sans plan ni piste.
+            clock = StageClock()
+            clock.add("skipped", end - start)
+            log.info("[xray] %s : tronçon %d (%.0f–%.0f s) sauté", item_id, idx, start, end)
+            return [], [], "skip", clock
         want_vaapi = (
             settings.hwaccel and decode.vaapi_suits(info) and decode.vaapi_available() and not self.guard.busy()
         )
         try:
-            return self._process(item_id, path, info, idx, start, end, want_vaapi)
+            return self._process(item_id, path, info, idx, start, end, parts, want_vaapi)
         except DecodeFailed as e:
             if not want_vaapi:
                 raise RuntimeError(str(e)) from None
             log.warning("[xray] %s : VA-API en échec sur le tronçon %d, reprise sur le processeur (%s)", item_id, idx, e)
             try:
-                return self._process(item_id, path, info, idx, start, end, False)
+                return self._process(item_id, path, info, idx, start, end, parts, False)
             except DecodeFailed as e2:
                 raise RuntimeError(str(e2)) from None
 
-    def _process(self, item_id, path, info, idx, start, end, vaapi: bool):
+    def _process(self, item_id, path, info, idx, start, end, parts, vaapi: bool):
         w, h = info.out_size(settings.frame_width)
         step = 1.0 / settings.sample_fps
         splitter = ShotSplitter(w, h, step)
-        stats = decode.DecodeStats("vaapi" if vaapi else "cpu")
         engine = self.engine
         clock = StageClock()
         engine.clock = clock
+        faces = ShotFaces(engine, clock, settings.faces_per_track, settings.embed_batch, getattr(self, "memory", None))
         shots_out: list[ShotRow] = []
         tracks_out: list[tuple[TrackRow, int]] = []
         t0 = time.monotonic()
+
+        def collect(rows) -> None:
+            for s0, s1, _n, summ in rows:
+                tracks_out.append((TrackRow(s0, s1, round((s1 - s0) * summ.presence, 3), summ.quality, summ.emb), summ.faces))
 
         def analyse(shot) -> None:
             dur = shot.end - shot.start
             shots_out.append(ShotRow(shot.start, shot.end, shot.hist))
             if not shot.frames:
                 return
-            sel = pick_indices(len(shot.frames), frames_to_sample(dur))
-            per_frame = []
-            for i in sel:
-                with clock.stage("convert"):
-                    bgr = cv2.cvtColor(shot.frames[i][1], cv2.COLOR_YUV2BGR_NV12)
-                per_frame.append(engine.analyse(bgr))
-            t_track = time.perf_counter()
-            for tr in link(per_frame):
-                summ = summarize(tr, len(sel))
-                if summ is None:
-                    continue
-                tracks_out.append((TrackRow(shot.start, shot.end, round(dur * summ.presence, 3), summ.quality, summ.emb), summ.faces))
-            clock.add("track", time.perf_counter() - t_track)
+            static = shot.static
+            want = frames_to_sample(dur, static)
+            if static and want < frames_to_sample(dur):
+                clock.count("static_shots")
+            sel = pick_indices(len(shot.frames), want)
+            with clock.stage("convert"):
+                images = [cv2.cvtColor(shot.frames[i][1], cv2.COLOR_YUV2BGR_NV12) for i in sel]
+            collect(faces.add_images(shot.start, shot.end, images))
 
-        gen = decode.read_frames(path, start, end - start, info, vaapi, stats, self.store.cancel)
-        for ts, frame in _prefetch(gen, clock=clock):
-            with clock.stage("shots"):
-                done = splitter.push(ts, frame)
-            if done is not None:
-                analyse(done)
-        last = splitter.flush(end)
-        if self.store.cancel.is_set():
-            raise Cancelled()
-        if stats.returncode not in (0, None) or stats.frames == 0:
-            raise DecodeFailed(f"ffmpeg ({stats.decoder}) code {stats.returncode} : {stats.stderr[-300:]}")
-        if last is not None:
-            analyse(last)
+        decoders = []
+        skipped = (end - start) - sum(b - a for a, b in parts)
+        if skipped > 0:
+            clock.add("skipped", skipped)
+        for p0, p1 in parts:
+            stats = decode.DecodeStats("vaapi" if vaapi else "cpu")
+            gen = decode.read_frames(path, p0, p1 - p0, info, vaapi, stats, self.store.cancel)
+            for ts, frame in _prefetch(gen, clock=clock):
+                with clock.stage("shots"):
+                    done = splitter.push(ts, frame)
+                if done is not None:
+                    analyse(done)
+            # Une plage sautée coupe le plan : rien ne relie ce qui l'entoure.
+            last = splitter.flush(p1)
+            if self.store.cancel.is_set():
+                raise Cancelled()
+            if stats.returncode not in (0, None) or stats.frames == 0:
+                raise DecodeFailed(f"ffmpeg ({stats.decoder}) code {stats.returncode} : {stats.stderr[-300:]}")
+            if last is not None:
+                analyse(last)
+            clock.add("decode", stats.seconds)
+            clock.count("decoded", stats.frames)
+            decoders.append(stats.decoder)
+        collect(faces.flush())
         wall = time.monotonic() - t0
         clock.add("wall", wall)
-        clock.add("decode", stats.seconds)
-        clock.count("decoded", stats.frames)
         clock.count("shots", len(shots_out))
         clock.count("tracks", len(tracks_out))
         sec, n = clock.seconds, clock.counts
+        decoder = decoders[0] if decoders else "skip"
         log.info(
             "[xray] %s : tronçon %d (%.0f–%.0f s) %s · %d images en %.1f s · %d plans · %d pistes · "
-            "détection %.0f ms/image (%d) · empreinte %.1f ms/visage (%d) · attente décodage %.1f s",
-            item_id, idx, start, end, stats.decoder, stats.frames, wall, len(shots_out), len(tracks_out),
+            "détection %.0f ms/image (%d) · empreinte %.1f ms/visage (%d) · attente décodage %.1f s%s",
+            item_id, idx, start, end, decoder, n.get("decoded", 0), wall, len(shots_out), len(tracks_out),
             1000 * sec.get("detect", 0.0) / max(n.get("images", 0), 1), n.get("images", 0),
             1000 * sec.get("embed", 0.0) / max(n.get("embedded", 0), 1), n.get("embedded", 0),
-            sec.get("decode_wait", 0.0),
+            sec.get("decode_wait", 0.0), f" · {skipped:.0f} s sautées" if skipped > 0 else "",
         )
-        return shots_out, tracks_out, stats.decoder, clock
+        return shots_out, tracks_out, decoder, clock

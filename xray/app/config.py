@@ -46,6 +46,11 @@ class Settings:
     media_root: Path = field(default_factory=lambda: Path(os.environ.get("XRAY_MEDIA_ROOT", "/media")))
     model: str = field(default_factory=lambda: os.environ.get("XRAY_MODEL", "buffalo_l").strip().lower())
     threads: int = field(default_factory=lambda: max(1, _int("XRAY_THREADS", 4)))
+    # Moteur d'inférence : auto (OpenVINO s'il se charge, ONNX Runtime sinon), openvino, onnxruntime.
+    inference: str = field(default_factory=lambda: os.environ.get("XRAY_INFERENCE", "auto").strip().lower())
+    # Visages empreintés par lot (un appel du réseau), et au plus par piste (les meilleurs).
+    embed_batch: int = field(default_factory=lambda: max(1, _int("XRAY_EMBED_BATCH", 32)))
+    faces_per_track: int = field(default_factory=lambda: max(1, _int("XRAY_FACES_PER_TRACK", 2)))
     vaapi_device: str = field(default_factory=lambda: os.environ.get("XRAY_VAAPI_DEVICE", "/dev/dri/renderD128"))
     # « 0 » coupe l'accélération matérielle (décodage toujours sur le processeur).
     hwaccel: bool = field(default_factory=lambda: os.environ.get("XRAY_HWACCEL", "1") not in ("0", "false", "no"))

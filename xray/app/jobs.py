@@ -27,6 +27,7 @@ VIDEO_EXT = {
 }
 MAX_CAST = 300
 MAX_PHOTOS = 12
+MAX_SKIP = 32
 
 
 class InvalidJob(ValueError):
@@ -55,6 +56,8 @@ class JobSpec:
     start_at: float
     series_id: str | None
     cast: list[CastMember] = field(default_factory=list)
+    # Plages à ne pas analyser ; None = non précisé (le service demande alors à Jellyfin).
+    skip: list[tuple[float, float]] | None = None
 
 
 def check_photo_url(url: object) -> str:
@@ -145,6 +148,7 @@ def validate_job(body: object, media_root: Path) -> JobSpec:
             continue
         seen.add(pid)
         cast.append(CastMember(pid, name, character, order, list(dict.fromkeys(photos))))
+    skip = check_skip(body.get("skip"))
     path = check_media_path(body.get("path"), media_root)
     return JobSpec(
         item_id=item_id.lower(),
@@ -154,7 +158,28 @@ def validate_job(body: object, media_root: Path) -> JobSpec:
         start_at=float(start_at),
         series_id=series_id.lower() if series_id else None,
         cast=cast,
+        skip=skip,
     )
+
+
+def check_skip(raw: object) -> list[tuple[float, float]] | None:
+    """`skip` : facultatif, liste de `{start, end}` en secondes (génériques, rappel…)."""
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or len(raw) > MAX_SKIP:
+        raise InvalidJob(f"skip : liste de {MAX_SKIP} plages au plus")
+    out = []
+    for r in raw:
+        if not isinstance(r, dict):
+            raise InvalidJob("skip : objets {start, end} attendus")
+        s, e = r.get("start"), r.get("end")
+        for v in (s, e):
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0:
+                raise InvalidJob("skip : start et end, nombres positifs")
+        if e <= s:
+            raise InvalidJob("skip : end doit dépasser start")
+        out.append((float(s), float(e)))
+    return out
 
 
 class JobStore:
@@ -195,17 +220,18 @@ class JobStore:
                     pass
                 seq = c.execute("SELECT COALESCE(MAX(seq), 0) + 1 FROM items").fetchone()[0]
                 cast_json = json.dumps([m.as_dict() for m in spec.cast], ensure_ascii=False)
+                skip_json = None if spec.skip is None else json.dumps([[a, b] for a, b in spec.skip])
                 c.execute(
-                    """INSERT INTO items (item_id, etag, path, priority, start_at, series_id, cast_json,
+                    """INSERT INTO items (item_id, etag, path, priority, start_at, series_id, cast_json, skip_json,
                                           status, error, seq, version, created, updated)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', NULL, ?, ?, ?, ?)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', NULL, ?, ?, ?, ?)
                        ON CONFLICT(item_id) DO UPDATE SET
                          etag=excluded.etag, path=excluded.path, priority=excluded.priority,
                          start_at=excluded.start_at, series_id=excluded.series_id,
-                         cast_json=excluded.cast_json, status='queued', error=NULL,
+                         cast_json=excluded.cast_json, skip_json=excluded.skip_json, status='queued', error=NULL,
                          seq=excluded.seq, version=excluded.version, updated=excluded.updated""",
                     (spec.item_id, spec.etag, spec.path, spec.priority, spec.start_at, spec.series_id,
-                     cast_json, seq, RESULT_VERSION if row is None or row["etag"] != spec.etag else row["version"],
+                     cast_json, skip_json, seq, RESULT_VERSION if row is None or row["etag"] != spec.etag else row["version"],
                      now, now),
                 )
                 status = "queued"

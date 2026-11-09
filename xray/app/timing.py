@@ -80,6 +80,8 @@ def summary(clock: StageClock, duration: float) -> dict:
         "stages": stages,
         "counts": dict(clock.counts),
     }
+    if sec.get("skipped"):
+        out["skippedSeconds"] = round(sec["skipped"], 1)  # vidéo sautée (génériques, rappel)
     if "decode" in sec:
         out["decodeSeconds"] = round(sec["decode"], 1)  # ffmpeg de bout en bout, en parallèle
     return out

@@ -4,6 +4,13 @@ Dans un plan la caméra ne saute pas : deux détections qui se recouvrent (IoU) 
 empreintes se ressemblent, sur deux images successives, sont la même personne. Une piste porte
 une seule empreinte — la moyenne de ses bons visages, pondérée par leur qualité — ce qui lisse
 un visage flou ou tourné, et divise d'autant le travail du regroupement.
+
+Économie (11/2026) : les pistes se forment d'abord *sans* empreinte, par le seul recouvrement des
+cadres ; seuls les meilleurs visages de chaque piste (`best_faces`) sont ensuite empreintés. Le
+recouvrement franc (≥ 0,5) suffisait déjà à relier deux visages ; l'empreinte ne départageait
+que deux cas — un recouvrement moyen (0,25 à 0,5) à confirmer, et un visage qui a bougé entre
+deux images. Un plan où l'un des deux se présente (`needs_full`) est traité comme avant : tous
+ses bons visages empreintés, pistes refaites avec leurs empreintes.
 """
 
 from __future__ import annotations
@@ -31,6 +38,9 @@ def iou(a: np.ndarray, b: np.ndarray) -> float:
 @dataclass
 class Track:
     faces: list[tuple[int, Face]] = field(default_factory=list)  # (rang de l'image, visage)
+    # Un bon visage relié à une piste qui en avait déjà un, par un recouvrement moyen et sans
+    # empreinte pour le confirmer : la règle complète aurait pu le refuser.
+    weak: bool = False
 
     @property
     def last(self) -> Face:
@@ -70,7 +80,11 @@ def link(frames: list[list[Face]]) -> list[Track]:
         for _, ti, di in pairs:
             if ti in used_t or di in used_d:
                 continue
-            open_tracks[ti].faces.append((fi, faces[di]))
+            t, f = open_tracks[ti], faces[di]
+            if (f.accepted and f.emb is None and iou(t.last.box, f.box) < STRONG_IOU
+                    and any(g.accepted for _, g in t.faces)):
+                t.weak = True
+            t.faces.append((fi, f))
             used_t.add(ti)
             used_d.add(di)
         for di, f in enumerate(faces):
@@ -99,3 +113,30 @@ def summarize(track: Track, n_frames: int) -> TrackSummary | None:
     frames = len({fi for fi, _ in track.faces})
     return TrackSummary(emb=emb.astype(np.float32), quality=float(w.mean()), faces=len(good),
                         presence=min(1.0, frames / max(n_frames, 1)))
+
+
+def accepted_faces(track: Track) -> list[Face]:
+    return [f for _, f in track.faces if f.accepted]
+
+
+def best_faces(track: Track, k: int) -> list[Face]:
+    """Les `k` meilleurs visages de la piste, du meilleur au moins bon : qualité (confiance du
+    détecteur × taille × netteté × frontalité, `FaceEngine.detect_grade`), puis taille."""
+    good = accepted_faces(track)
+    good.sort(key=lambda f: (-f.quality, -f.min_side))
+    return good[:k]
+
+
+def needs_full(tracks: list[Track]) -> bool:
+    """Le plan doit-il passer par la règle complète (tous les bons visages empreintés, pistes
+    refaites avec les empreintes) ? Oui si un lien sans empreinte était douteux (`Track.weak`),
+    ou si deux pistes ayant de bons visages ne se montrent jamais sur la même image : ce peut
+    être un même visage qui a bougé, que seule l'empreinte aurait relié."""
+    if any(t.weak for t in tracks):
+        return True
+    good = [{fi for fi, f in t.faces} for t in tracks if any(f.accepted for _, f in t.faces)]
+    for i in range(len(good)):
+        for j in range(i + 1, len(good)):
+            if not (good[i] & good[j]):
+                return True
+    return False
