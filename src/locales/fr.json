@@ -3605,6 +3605,64 @@
       "hint": "Retrouver un film par une phrase qu'on y entend. Les sous-titres des films sont lus une fois, puis chaque nuit pour les nouveautés."
     }
   },
+  "xrayScan": {
+    "nav": "Acteurs à l'écran",
+    "hint": "Toute la bibliothèque analysée en fond, pour savoir qui est à l'écran dans chaque film et chaque épisode. L'analyse ne tourne que lorsque personne ne regarde.",
+    "title": "Analyse de la bibliothèque",
+    "off": "L'option « Acteurs à l'écran » est coupée, ou n'est pas encore réglée (Configuration → Connexions).",
+    "phase": {
+      "starting": "En attente du premier passage",
+      "planning": "Lecture de la bibliothèque…",
+      "running": "En cours",
+      "waiting-playback": "En attente : quelqu'un regarde un film",
+      "paused": "En pause",
+      "unavailable": "L'analyse ne répond pas — nouvel essai dans une minute",
+      "done": "À jour",
+      "off": "Coupée"
+    },
+    "tier": {
+      "1": "Ce qui se regarde",
+      "2": "Arrivées récentes",
+      "3": "Le reste de la bibliothèque"
+    },
+    "tierWhy": {
+      "1": "Pour chaque compte : les films en cours et les cinq prochains épisodes de chaque série en cours.",
+      "2": "Ce qui est arrivé ces deux dernières semaines, du plus récent au plus ancien.",
+      "3": "Films et épisodes, du plus récent au plus ancien."
+    },
+    "runNow": "Lancer maintenant",
+    "pause": "Mettre en pause",
+    "resume": "Reprendre",
+    "unforce": "Ne plus forcer",
+    "pauseAll": "Tout mettre en pause",
+    "resumeAll": "Tout reprendre",
+    "forced": "Forcé : continue même pendant un film",
+    "paused": "En pause",
+    "items": "Éléments",
+    "done": "Analysés",
+    "queued": "En file",
+    "failed": "Échecs",
+    "excluded": "Écartés",
+    "hours": "Heures de vidéo",
+    "hoursValue": "{done} / {total} h",
+    "eta": "Temps restant",
+    "etaAll": "Toute la bibliothèque : {eta}",
+    "speed": "Vitesse : {x} × le temps réel",
+    "speedUnknown": "Vitesse : pas encore mesurée",
+    "current": "En cours : {title} — {percent} %",
+    "currentOther": "En cours : un titre demandé pendant un film — {percent} %",
+    "errors": "Derniers échecs",
+    "lastError": "Dernier incident : {error}",
+    "excludedWhy": "Écartés : les films et séries d'animation, et ce qui n'a pas de distribution connue.",
+    "etaNote": "Temps de calcul estimé à la vitesse mesurée, sans compter les attentes pendant les films.",
+    "plannedAt": "Bibliothèque relue le {date}",
+    "actionFailed": "L'action n'a pas abouti.",
+    "duration": {
+      "days": "{d} j {h} h",
+      "hours": "{h} h {m} min",
+      "minutes": "{m} min"
+    }
+  },
   "repliques": {
     "admin": {
       "title": "Recherche de répliques",

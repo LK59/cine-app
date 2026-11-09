@@ -3605,6 +3605,64 @@
       "hint": "Encontrar una película por una frase que se dice en ella. Los subtítulos se leen una vez y luego cada noche para lo nuevo."
     }
   },
+  "xrayScan": {
+    "nav": "Actores en pantalla",
+    "hint": "Toda la biblioteca analizada en segundo plano, para saber quién aparece en pantalla en cada película y cada episodio. El análisis solo avanza cuando nadie está viendo nada.",
+    "title": "Análisis de la biblioteca",
+    "off": "La opción «Actores en pantalla» está desactivada o aún no está configurada (Configuración → Conexiones).",
+    "phase": {
+      "starting": "Esperando la primera pasada",
+      "planning": "Leyendo la biblioteca…",
+      "running": "En curso",
+      "waiting-playback": "En espera: alguien está viendo una película",
+      "paused": "En pausa",
+      "unavailable": "El análisis no responde — nuevo intento en un minuto",
+      "done": "Al día",
+      "off": "Desactivado"
+    },
+    "tier": {
+      "1": "Lo que se está viendo",
+      "2": "Llegadas recientes",
+      "3": "El resto de la biblioteca"
+    },
+    "tierWhy": {
+      "1": "Para cada cuenta: las películas empezadas y los cinco próximos episodios de cada serie empezada.",
+      "2": "Lo que llegó en las dos últimas semanas, de lo más reciente a lo más antiguo.",
+      "3": "Películas y episodios, de lo más reciente a lo más antiguo."
+    },
+    "runNow": "Iniciar ahora",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "unforce": "Dejar de forzar",
+    "pauseAll": "Pausar todo",
+    "resumeAll": "Reanudar todo",
+    "forced": "Forzado: sigue incluso durante una película",
+    "paused": "En pausa",
+    "items": "Elementos",
+    "done": "Analizados",
+    "queued": "En cola",
+    "failed": "Fallos",
+    "excluded": "Descartados",
+    "hours": "Horas de vídeo",
+    "hoursValue": "{done} / {total} h",
+    "eta": "Tiempo restante",
+    "etaAll": "Toda la biblioteca: {eta}",
+    "speed": "Velocidad: {x} × el tiempo real",
+    "speedUnknown": "Velocidad: aún sin medir",
+    "current": "En curso: {title} — {percent} %",
+    "currentOther": "En curso: un título pedido durante una película — {percent} %",
+    "errors": "Últimos fallos",
+    "lastError": "Último incidente: {error}",
+    "excludedWhy": "Descartados: las películas y series de animación, y lo que no tiene reparto conocido.",
+    "etaNote": "Tiempo de cálculo estimado a la velocidad medida, sin contar las esperas durante las películas.",
+    "plannedAt": "Biblioteca leída el {date}",
+    "actionFailed": "La acción no se ha completado.",
+    "duration": {
+      "days": "{d} d {h} h",
+      "hours": "{h} h {m} min",
+      "minutes": "{m} min"
+    }
+  },
   "repliques": {
     "admin": {
       "title": "Búsqueda de diálogos",

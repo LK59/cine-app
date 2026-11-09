@@ -9014,6 +9014,86 @@ hors de ce qui défile, saut en pause sans requête, personne touchée = panneau
 → du clavier du lecteur intact) ; `misc-simple-routes.test.ts` (`xrayAvailable` dans la configuration
 publique).
 
+**Le planificateur de la bibliothèque** (09/11/2026, consigne du propriétaire). Jusque-là, seule une séance
+commandait une analyse : la première lecture d'un titre n'avait rien à montrer. Toute la bibliothèque est
+désormais analysée **en fond**, par paliers, et seulement quand personne ne regarde.
+- **Trois paliers, dans l'ordre** (`scanPlan.ts`, `buildPlan`, `watchingRanks`) : (1) ce qui se regarde —
+  pour chaque compte (`getUsers`, liens de partage exclus), les films de « Reprendre » et, pour chaque
+  série de « Reprendre » + « À suivre », l'épisode en cours ou suivant et les quatre d'après
+  (`episodesFrom`, la chaîne de `nextEpisodeAfter`) ; le premier titre de chaque compte avant le deuxième
+  de quiconque, le cinquième épisode après tous les premiers ; relu toutes les dix minutes. (2) Les
+  arrivées des quatorze derniers jours (`NEW_WINDOW_MS`), une file continue. (3) Le reste, films et
+  épisodes, du plus récent au plus ancien ; plan complet relu toutes les six heures.
+- **La date d'entrée vient de Radarr et Sonarr** (`movieFile.dateAdded`, `episodeFile.dateAdded`, rapprochés
+  par TMDB pour les films, TVDB puis TMDB et numéros pour les épisodes — `scanSources.ts`), jamais de
+  `DateCreated` de Jellyfin : mesuré le 09/11/2026, 2 015 éléments datés du 19/08 (la migration de
+  stockage), 712 du 05/10, 585 du 25/10. Le repli sur Jellyfin ne sert qu'à ce que ni Radarr ni Sonarr ne
+  revendique (67 épisodes ce jour-là). FileFlows ne change pas la date d'import : un réencodage ne remonte
+  pas au palier 2, c'est la relecture de l'`ETag` qui le voit.
+- **Écartés** : l'animation (genre « Animation » / « Anime » chez Jellyfin, Radarr ou Sonarr,
+  `isAnimationGenre`) — 1 310 éléments, 552 h ici —, et à la commande, ce qui n'a pas de distribution TMDB
+  ou pas de fichier. Comptés à part, jamais commandés.
+- **Seulement les dossiers des films et des séries** (consigne du propriétaire, 09/11/2026) : le chemin
+  réel du fichier (`analysisTarget`) doit être sous `/media/movies/` ou `/media/tv/` (`isLibraryPath`,
+  `DEFAULT_LIBRARY_ROOTS`, réglables par `XRAY_LIBRARY_ROOTS` pour une autre installation) — jamais les
+  téléchargements, les seeds, les livres (`/media/books`, `/media/books-packs`) ni un autre dossier, même si
+  Jellyfin en listait un élément. Un segment `..`, un chemin relatif ou un voisin au même début
+  (`/media/movies-seeds`) ne passent pas. Écarté avec la raison `outside-library`, vérifié avant toute
+  commande du planificateur. Relevé ce jour-là : 920 films sous `/media/movies`, 9 398 épisodes sous
+  `/media/tv`, rien ailleurs.
+- **Seulement sans lecture** : le signal de la recherche de répliques (§88, `mustWaitForPlayback` — séance
+  Jellyfin, relais de flux, battement, puis cinq minutes). Un tour par minute (`scanTick`, un seul à la fois,
+  état sur `globalThis`, démarré par `instrumentation.ts` trois minutes après le démarrage). Les commandes
+  partent en `low`, **deux à nous en file au plus** (`MAX_PENDING`) et rien si la file du service en compte
+  déjà trois (`MAX_SERVICE_PENDING`) : une commande `high` d'un spectateur ne trouve jamais une longue file
+  devant elle. Pendant une lecture, rien de neuf ne part ; ce qui est déjà en file y reste (le service cède
+  lui-même aux transcodages de Jellyfin).
+- **Déjà fait, rien ne part.** Avant chaque commande, `/items/{id}` : fini au même `ETag` → compté fait ;
+  en file au même `ETag` (la commande d'un spectateur) → compté dans l'avance. Les éléments finis sont
+  relus lentement (dix par tour sans autre travail, chacun au plus une fois par semaine) : un `ETag` changé
+  les remet à vérifier ; un échec est retenté une fois par semaine.
+- **Un fichier remplacé à durée égale garde son analyse** (consigne du propriétaire, 09/11/2026 : les 65
+  épisodes de *MacGyver* réencodés d'AV1 en HEVC ce jour-là). La durée de la version analysée : `durationS`
+  de `/items` (ffprobe, côté service), sinon celle que Laterna a retenue en commandant (`xray_file_versions`,
+  écrite par **toute** commande, celle d'une séance comprise), sinon `analyzedUntil` d'un résultat complet ;
+  comparée à celle de Jellyfin (`durationS` d'`analysisTarget` : `RunTimeTicks` de la source) à une seconde
+  près (`sameDuration`). Égale : la commande part avec `rebindIfSameDuration: true` et `durationS`
+  (`rebindAnalysis`) — 200 `done`, rattachée ; 400, rien n'est commandé et l'ancien résultat reste.
+  Le planificateur (`prepare`) et la commande d'une séance (`orderAnalysis`) font ce même détour, et
+  `/api/player/xray/[itemId]` ne répond plus `stale` dans ce cas : il sert les scènes de l'ancien `ETag`
+  (`scenesForPlayer`, `keepsAnalysis`).
+- **Les gestes** (`/api/admin/xray/scan`, administrateur seul : `adminOnly` et `ADMIN_ONLY_READS` du proxy,
+  déjà couvert par `/api/admin/xray`) : « Lancer maintenant » reprend un palier et le **force** — nourri même
+  pendant une lecture, jusqu'à ce qu'il soit vide (le forçage tombe alors de lui-même : la file continue du
+  palier 2 forcée pour toujours passerait outre chaque lecture) ou retiré (« Ne plus forcer ») ; « Mettre en
+  pause » / « Reprendre » par palier, ou tous. Retenus dans `xray_scan_meta`, à travers un redémarrage.
+- **Le suivi** : Configuration → Acteurs à l'écran (`/parametres/acteurs`, `XrayScanCard`, sur le modèle de
+  `DialogueSearchCard` §88). Par palier : éléments faits / total, en file, échecs, écartés, heures de vidéo
+  faites / totales, temps restant ; en tête : l'état (en cours, en attente d'une lecture, en pause, à jour,
+  injoignable), l'élément en cours et sa progression, la vitesse (× temps réel : durée analysée sur temps
+  de calcul — `stats.seconds` de `/items` — des trente derniers éléments finis, `analysisSpeed`), le temps
+  restant de toute la bibliothèque (temps de calcul, attentes des lectures non comptées), les derniers
+  échecs. L'option coupée (`xrayConfigured` faux) : rien ne tourne, la page le dit. Le public de l'option
+  (`admins`/`tous`) ne compte pas : `admins` analyse aussi toute la bibliothèque.
+- **La base** : `cine.db`, trois tables créées par `scanStore.ts` à la première utilisation
+  (`CREATE TABLE IF NOT EXISTS`, idempotent) : `xray_scan_items` (un élément par ligne : palier, rang, durée,
+  date, état, `ETag`, temps de calcul), `xray_scan_meta`, `xray_file_versions`. Le plan s'écrit par
+  tranches de 500 lignes, la boucle rendue entre deux ; un plan lu vide n'efface rien.
+- **Le journal** : une ligne `[xray]` par lot commandé (palier, nombre, titres ; « passage au palier N »
+  quand il change), par relecture du plan, par geste et par palier forcé terminé — jamais par tour. Les
+  erreurs dans `server.log` (`xray/scan`, `xray/scan-watching`, `xray/version`).
+- **Mesuré le 09/11/2026** (lecture seule, 32 comptes) : palier 1, 402 éléments (351 h) ; palier 2, 586
+  (479 h) ; palier 3, 8 020 (6 746 h) ; animation écartée, 1 310 (552 h). Dates d'import : 920 films par
+  Radarr, 9 331 épisodes par Sonarr, 67 par Jellyfin.
+Porteurs : `src/lib/xray/scanPlan.ts`, `scanSources.ts`, `scanStore.ts`, `scheduler.ts` (`scanTick`,
+`scanAction`, `xrayScanStatus`, `startXrayScheduler`), `rebind.ts` (`keepsAnalysis`, `rebindAnalysis`,
+`jobFor`) ; `src/app/api/admin/xray/scan/route.ts` ; `src/components/settings/XrayScanCard.tsx`,
+`src/app/(dashboard)/parametres/acteurs/page.tsx`. Tests : `xray-scan-plan.test.ts` (paliers, chaîne, dossiers permis,
+animation, durée égale, vitesse, estimation), `xray-scheduler.test.ts` (sans lecture seulement, avance
+bornée, file du service pleine, déjà fait, écartés, hors des dossiers permis, forçage, pauses, un tour à la fois, redémarrage,
+progression et estimation, rattachement et repli sur 400, journal), `xray-same-duration.test.ts` (lecteur
+et commande d'une séance), `xray-scan-route.test.ts` (portes).
+
 ## 139. « Poser une question » : la réponse ne sait que ce que le compte a vu (09/11/2026)
 
 **Règle.** Un spectateur pose une question courte sur le titre qu'il regarde ; Claude Haiku répond en deux à

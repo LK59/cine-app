@@ -34,6 +34,11 @@ export interface AnalysisTarget {
   etag: string;
   seriesId: string | null;
   tmdb: TmdbRef | null;
+  /**
+   * La durée du fichier selon Jellyfin (secondes ; celle de la source, sinon de l'élément), `null`
+   * inconnue. Un fichier remplacé à durée égale (± 1 s) garde son analyse (§138, planificateur).
+   */
+  durationS: number | null;
 }
 
 /** Une personne de la distribution, telle que l'analyse et le lecteur la lisent. */
@@ -68,16 +73,18 @@ export function analysisTarget(itemId: string): Promise<AnalysisTarget | null> {
     // avec le fichier.
     const etag = source?.ETag || (typeof source?.Size === "number" ? `size:${source.Size}` : "");
     if (!etag) return null;
+    const ticks = source?.RunTimeTicks || item.RunTimeTicks || 0;
+    const durationS = ticks > 0 ? Math.round(ticks / 10_000) / 1000 : null;
     if (item.Type === "Movie") {
       const id = Number(getProviderIdCI(item.ProviderIds as Record<string, string> | undefined, "Tmdb"));
-      return { itemId, type: "Movie", path, etag, seriesId: null, tmdb: Number.isInteger(id) && id > 0 ? { kind: "movie", id } : null };
+      return { itemId, type: "Movie", path, etag, seriesId: null, tmdb: Number.isInteger(id) && id > 0 ? { kind: "movie", id } : null, durationS };
     }
     const seriesId = item.SeriesId && isJellyfinId(item.SeriesId) ? item.SeriesId : null;
     const season = positiveInt(item.ParentIndexNumber);
     const episode = positiveInt(item.IndexNumber);
     const tvId = seriesId ? await seriesTmdbId(seriesId) : null;
     const tmdbRef: TmdbRef | null = tvId && season !== null && episode !== null ? { kind: "episode", tvId, season, episode } : null;
-    return { itemId, type: "Episode", path, etag, seriesId, tmdb: tmdbRef };
+    return { itemId, type: "Episode", path, etag, seriesId, tmdb: tmdbRef, durationS };
   });
 }
 

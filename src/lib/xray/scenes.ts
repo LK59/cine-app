@@ -1,6 +1,7 @@
 import { xray, xrayConfigured } from "@/lib/clients/xray";
 import { logError } from "@/lib/logger";
 import { analysisTarget, castOf, tmdbPhotoUrl, type XrayPerson } from "./cast";
+import { keepsAnalysis } from "./rebind";
 
 /**
  * Ce que le lecteur lira des acteurs à l'écran (DECISIONS.md §138) : les scènes du service, jointes à la
@@ -53,8 +54,15 @@ export async function scenesForPlayer(itemId: string): Promise<XrayPlayerPayload
       if (!state) return emptyXray("none");
       return { ...emptyXray(state.status === "done" ? "none" : state.status), analyzedUntil: finite(state.analyzedUntil) };
     }
-    // Le fichier a changé depuis l'analyse : ses temps ne correspondent plus à rien.
-    if (target && result.etag && result.etag !== target.etag) return emptyXray("stale");
+    // Le fichier a changé depuis l'analyse : ses temps ne correspondent plus à rien — sauf s'il a gardé
+    // sa durée à une seconde près (un réencodage : §138, 09/11/2026), où les scènes tombent toujours juste.
+    if (target && result.etag && result.etag !== target.etag) {
+      // La durée lue par le service n'est que dans `/items` : demandée seulement dans ce cas-là.
+      const state = target.durationS ? await xray.itemStatus(id).catch(() => null) : null;
+      const durationS = state && state.etag === result.etag ? (state as { durationS?: number | null }).durationS : null;
+      const kept = keepsAnalysis(id, { etag: result.etag, status: result.complete ? "done" : "running", analyzedUntil: finite(result.analyzedUntil), durationS }, target.durationS, result.complete === true);
+      if (!kept) return emptyXray("stale");
+    }
     // La distribution, pour nommer : un échec de TMDB laisse les visages sans nom, pas le lecteur sans scènes.
     const cast = target?.tmdb ? await castOf(target.tmdb).catch(() => [] as XrayPerson[]) : [];
     const byId = new Map(cast.map((p) => [p.personId, p]));

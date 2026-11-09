@@ -3605,6 +3605,64 @@
       "hint": "Find a film by a line spoken in it. The films' subtitles are read once, then every night for what is new."
     }
   },
+  "xrayScan": {
+    "nav": "On-screen cast",
+    "hint": "The whole library analysed in the background, to know who is on screen in every film and episode. The analysis only runs when nobody is watching.",
+    "title": "Library analysis",
+    "off": "The “On-screen cast” option is off, or not set up yet (Configuration → Connections).",
+    "phase": {
+      "starting": "Waiting for the first pass",
+      "planning": "Reading the library…",
+      "running": "Running",
+      "waiting-playback": "Waiting: someone is watching a film",
+      "paused": "Paused",
+      "unavailable": "The analysis is not answering — trying again in a minute",
+      "done": "Up to date",
+      "off": "Off"
+    },
+    "tier": {
+      "1": "What is being watched",
+      "2": "Recent arrivals",
+      "3": "The rest of the library"
+    },
+    "tierWhy": {
+      "1": "For every account: the films in progress and the next five episodes of every series in progress.",
+      "2": "What arrived in the last two weeks, newest first.",
+      "3": "Films and episodes, newest first."
+    },
+    "runNow": "Run now",
+    "pause": "Pause",
+    "resume": "Resume",
+    "unforce": "Stop forcing",
+    "pauseAll": "Pause everything",
+    "resumeAll": "Resume everything",
+    "forced": "Forced: keeps going even during a film",
+    "paused": "Paused",
+    "items": "Items",
+    "done": "Analysed",
+    "queued": "Queued",
+    "failed": "Failures",
+    "excluded": "Left out",
+    "hours": "Hours of video",
+    "hoursValue": "{done} / {total} h",
+    "eta": "Time left",
+    "etaAll": "Whole library: {eta}",
+    "speed": "Speed: {x} × real time",
+    "speedUnknown": "Speed: not measured yet",
+    "current": "Now: {title} — {percent} %",
+    "currentOther": "Now: a title requested during a film — {percent} %",
+    "errors": "Latest failures",
+    "lastError": "Latest incident: {error}",
+    "excludedWhy": "Left out: animated films and series, and anything without a known cast.",
+    "etaNote": "Computing time estimated at the measured speed, not counting the waits during films.",
+    "plannedAt": "Library read on {date}",
+    "actionFailed": "The action did not go through.",
+    "duration": {
+      "days": "{d} d {h} h",
+      "hours": "{h} h {m} min",
+      "minutes": "{m} min"
+    }
+  },
   "repliques": {
     "admin": {
       "title": "Dialogue search",
