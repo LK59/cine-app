@@ -23,7 +23,7 @@ import { castPerson } from "@/lib/xray/person";
 import { scenesForPlayer } from "@/lib/xray/scenes";
 import { speakerSegments } from "@/lib/xray/voices";
 import { withSpeakers } from "@/lib/ask/voices";
-import { sofarCut, sofarMark } from "@/lib/ask/sofarCut";
+import { sofarCutDetail, sofarMark } from "@/lib/ask/sofarCut";
 import { SOFAR_MOVIE_MIN_S, sofarInput, sofarKey, sofarLookup, sofarParts, sofarScenes, sofarSources, sofarStart, sofarSubscribe, sofarSystem, sofarWaiting, type SofarEntry } from "@/lib/ask/sofar";
 
 /**
@@ -77,9 +77,11 @@ export async function answerSofar(
 ): Promise<NextResponse> {
   const started = Date.now();
   // La coupe tombe sur un début de scène (10.27.2, `sofarCut`) : les scènes d'« À l'écran », celles que le
-  // lecteur reçoit ; sans elles, la marque des cinq minutes. Une panne du service des scènes ne bloque rien.
+  // lecteur reçoit ; sans elles, la marque des cinq minutes. Une panne du service des scènes ne bloque rien. La
+  // personne y entre (10.30.2) : paraissant pour la première fois dans la scène en cours, sa coupe est la
+  // demi-minute de la position — le client fait le même calcul sur les mêmes présences.
   const scenes = await scenesForPlayer(itemId).catch(() => null);
-  const cutoff = sofarCut(body.positionS, scenes);
+  const { cutS: cutoff, why: cutWhy } = sofarCutDetail(body.positionS, scenes, body.personId);
   const base = {
     user: who.user,
     device: who.device,
@@ -87,6 +89,7 @@ export async function answerSofar(
     personId: body.personId,
     bucket: Math.round(sofarMark(body.positionS) / 60),
     cutS: cutoff,
+    cutWhy,
     prewarm: body.prewarm,
   };
 

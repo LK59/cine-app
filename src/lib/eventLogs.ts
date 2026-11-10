@@ -212,8 +212,9 @@ export function logAskQuestion(fields: {
 
 /**
  * « Jusqu'ici » (DECISIONS.md §138–§139, 10.27) : une ligne par texte servi ou préparé, dans le même
- * journal que les questions — compte, appareil, élément, personne (son identifiant TMDB), la tranche de
- * dix minutes, `prewarm` (préparé en fond, panneau fermé), d'où vient le texte (`cache` : `partagé` — gardé
+ * journal que les questions — compte, appareil, élément, personne (son identifiant TMDB), la marque des
+ * cinq minutes et la coupe (`bucket`, `cutS`, `cutWhy`), `prewarm` (préparé en fond, panneau fermé), d'où vient le
+ * texte (`cache` : `partagé` — gardé
  * pour un autre compte qui a vu la même chose —, `compte`, `nouveau` : le modèle appelé), le délai, les
  * jetons, le verdict. **Jamais le texte.**
  */
@@ -222,9 +223,16 @@ export function logJusquici(fields: {
   device: string | null;
   itemId: string;
   personId: number;
+  /** La marque des cinq minutes de la position, en minutes (0, 5, 10…) — `sofarMark`, le repli de la coupe. */
   bucket: number;
-  /** La coupe, en secondes (10.27.2) : le début de la dernière scène avant la marque des cinq minutes. */
+  /**
+   * La coupe, en secondes (`sofarCut`) : depuis 10.30.1, le début de la scène en cours (ou un pas de deux minutes
+   * dans une longue scène) ; depuis 10.30.2, la demi-minute de la position pour une personne qui paraît pour la
+   * première fois dans la scène en cours.
+   */
   cutS?: number;
+  /** Pourquoi la coupe tombe là (10.30.2, `SofarCutWhy`) : `scene`, `step`, `present` ou `fallback` (marque des cinq minutes). */
+  cutWhy?: "scene" | "step" | "present" | "fallback";
   prewarm: boolean;
   cache: "partagé" | "compte" | "nouveau";
   /**

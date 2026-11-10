@@ -9331,7 +9331,8 @@ décrites plus bas ont été remplacées le jour même, chacune le dit).
   famille S7c, `SOFAR_VERSION` 10) ; générées **à la demande** — la demande part au toucher de la pilule —,
   préparées seulement sur une **intention au bureau** (pointeur fin posé 300 ms) ; **coupe** au début de la
   scène d'« À l'écran » en cours, plus les pas de deux minutes déjà passés dans une longue scène (`sofarCut`,
-  le même calcul au client et au serveur ; sans scènes, la marque des cinq minutes) ; trois résumés au plus
+  le même calcul au client et au serveur ; sans scènes, la marque des cinq minutes) — et, pour une personne qui
+  paraît pour la première fois dans la scène en cours, la position arrondie à la demi-minute (10.30.2) ; trois résumés au plus
   avant l'épisode en cours, répliques groupées par scène ; un second passage quand le filet a tout retiré ;
   **gardées trente jours sous l'empreinte de ce qui part au modèle** (partagées entre comptes au même
   endroit), un rejet une heure, une panne jamais, et une panne passagère ouvre une attente de 2 puis 10 min ;
@@ -9342,7 +9343,7 @@ décrites plus bas ont été remplacées le jour même, chacune le dit).
 - **Qui parle** (10.30) : une réplique porte le nom de qui la dit seulement quand l'analyse des voix est
   **complète** et la voix sûre (60 % de la réplique, confiance 0,6, pas de désaccord, pas une réplique courte
   avalée par la voix voisine — 10.30.1).
-- **Journal** : `recherche.log`, `kind: "question"` et `kind: "jusquici"` (étapes, cache, `cutS`, verdict),
+- **Journal** : `recherche.log`, `kind: "question"` et `kind: "jusquici"` (étapes, cache, `cutS`, `cutWhy`, verdict),
   jamais le texte ; `startup.log`, `kind: "clavier"` et `kind: "xray-ui"`.
 
 **Règle.** Un spectateur pose une question courte sur le titre qu'il regarde ; Claude Haiku répond en deux à
@@ -10118,6 +10119,38 @@ Beard → 363, le pas d'une longue scène, le trou entre deux scènes, client et
 les replis) ; `ask-sofar.test.ts` (les répliques des scènes vues partent, celles de la scène en cours non ; deux positions
 dans les deux premières minutes d'une scène, un appel ; version 10) ; `ask-question-1027-2.test.ts` (`stripEmphasisWord`,
 une emphase sur plusieurs mots à travers `AnswerGate` avec le nom en tête, une question).
+
+**10.30.2 — la coupe fine d'une première présence** (`sofarCutDetail`, `sofarCut.ts`, client et serveur ; consigne du
+propriétaire).
+- **Le symptôme** : *Ted Lasso* S01E09, Trent Crimm touché à 5 min 40, dans la conférence de presse (5 min 20 –
+  5 min 48). La coupe au début de la scène (5 min 20) ne laissait rien de lui : « Trent Crimm n'a pas encore eu de
+  moment à lui. » — juste, et inutile : il venait de recevoir la parole sous les yeux du spectateur.
+- **La règle** : quand la personne paraît dans la scène en cours et dans **aucune scène commencée avant elle**, la
+  coupe devient la position arrondie à la demi-minute en dessous (`SOFAR_PRESENT_STEP_S` = 30) — si c'est plus tard
+  que la coupe ordinaire (à 5 min 25, la demi-minute tomberait avant le début de la scène : la coupe ordinaire reste).
+  Jamais après la position : ce qui part a déjà été vu. Sinon rien ne change (Rebecca à 13 min 43 : 13 min 02 ; Keeley
+  à 5 min, vue dès 2 min 11 : 3 min 57 ; une personne absente de la scène en cours : la coupe ordinaire).
+- **Écart voulu — les seules présences d'« À l'écran »**. La consigne disait « rien d'elle dans les sources avant la
+  coupe (présence ou réplique nommée) ». Les répliques nommées (« qui parle », §139 10.30) et les résumés des épisodes
+  d'avant ne sont qu'au serveur ; le client, qui calcule la même coupe pour ses clés (préparation sur intention, textes
+  déjà lus), ne les a pas — une coupe qu'il ne saurait pas refaire donnerait deux clés et une seconde génération. La
+  décision lit donc les présences des scènes, que les deux côtés ont (`people[].personId` du `XrayPlayerPayload`).
+  Conséquences : un personnage récurrent qui paraît pour la première fois **de l'épisode** dans la scène en cours a la
+  coupe fine (plus de contexte, jamais de divulgation) ; une présence dans une scène antérieure suffit à garder la coupe
+  ordinaire, même sans une réplique. Dans une longue scène, la présence dans la scène en cours ne compte pas comme
+  « avant » : la personne y a la demi-minute plutôt que le pas de deux minutes.
+- **Le journal dit pourquoi** : `cutWhy` à côté de `cutS` — `scene` (début de la scène en cours, ou fin de la
+  précédente entre deux scènes), `step` (un pas de deux minutes), `present` (la demi-minute), `fallback` (la marque
+  des cinq minutes). `SOFAR_VERSION` 11 : un « n'a pas encore eu de moment à lui » gardé sous l'ancienne coupe n'est
+  plus relu.
+- **Banc** (Haiku, 2 appels, un à la fois, aucun refus ; le code du dépôt, une copie de la base effacée après) : Trent
+  à 5 min 40 (coupe 5 min 30, `present`) « Trent Crimm, que Ted présente comme journaliste du Daily Planet, se voit
+  donner la parole par Ted, qui vient d'évoquer le dernier match de la saison contre Manchester City. » ; Rebecca à
+  13 min 43 (coupe 13 min 02, `step`, inchangée) « Rebecca Welton, dirigeante du club, avoue à Ted qu'elle l'a engagé
+  pour le faire échouer et qu'elle a saboté son travail. Il lui répond qu'il la pardonne. »
+Tests : `ask-sofar-cut.test.ts` (les scènes réelles de S01E09 avec leurs présences : Trent à 340 s → 330, Rebecca à
+823 s → 782, Keeley à 300 s → 237, une personne absente de la scène en cours, la demi-minute qui ne recule jamais la
+coupe, la seconde entière, les raisons) ; `ask-sofar.test.ts` (`cutWhy` au journal ; version 11).
 
 ## 140. Les fonctions d'IA chez les trois fournisseurs, un seul plafond mensuel, et des réglages qui disent ce qu'ils demandent (09/11/2026)
 

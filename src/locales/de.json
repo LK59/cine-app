@@ -3446,7 +3446,7 @@
       "REPLIQUES_NIGHT_START": "Beginn des Nachtfensters",
       "REPLIQUES_NIGHT_END": "Ende des Nachtfensters",
       "REPLIQUES_LANGUAGES": "Sprachen der Dialoge",
-      "ASK_PERSON_ENABLED": "Fragen zu einer Person: im Bereich eines Darstellers aus „Im Bild“ das Eingabefeld und die vorgeschlagenen Fragen",
+      "ASK_PERSON_ENABLED": "Fragen zu einer Person: im Bereich eines Darstellers aus „Im Bild“ höchstens zwei vorgeschlagene Fragen „In welcher Beziehung steht X zu Y?“ mit den anderen Figuren der Szene (kein freies Eingabefeld)",
       "SOFAR_ENABLED": "„Bisher“ zu einer Figur: im Bereich eines Darstellers aus „Im Bild“ zwei Sätze dazu, was seine Figur bis jetzt getan hat"
     },
     "deployHint": {

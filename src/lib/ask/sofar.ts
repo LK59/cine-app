@@ -56,9 +56,11 @@ import { logError } from "@/lib/logger";
  * les répliques d'une analyse complète portent le nom de qui les dit quand la voix est sûre, et la règle
  * d'attribution change avec elles (`SOFAR_ATTRIBUTION_VOICED`). 10 (10.30.1) : la coupe au début de la scène en
  * cours (`sofarCut`) — la v9 coupait à la dernière scène commencée avant la marque des cinq minutes, et un texte
- * gardé sous une coupe d'avant ne doit plus servir — et les réponses sans Markdown (`stripEmphasisWord`).
+ * gardé sous une coupe d'avant ne doit plus servir — et les réponses sans Markdown (`stripEmphasisWord`). 11 (10.30.2) :
+ * une personne qui paraît pour la première fois dans la scène en cours est coupée à la demi-minute de la position
+ * (`sofarCut`, `present`) — un « n'a pas encore eu de moment à lui » gardé sous la coupe d'avant ne doit plus servir.
  */
-export const SOFAR_VERSION = 10;
+export const SOFAR_VERSION = 11;
 export { SOFAR_BUCKET_S } from "@/lib/ask/sofarCut";
 export const SOFAR_MAX_SENTENCES = 2;
 export const SOFAR_MAX_WORDS = 60;

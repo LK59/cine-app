@@ -52,7 +52,7 @@ export const SOFAR_WAIT_FADE_MS = 350;
  */
 export function sofarSceneCount(scenes: SofarScenes | null | undefined, personId: number, position: number | null): number | null {
   if (!scenes?.scenes.length) return null;
-  const cut = sofarCut(position, scenes);
+  const cut = sofarCut(position, scenes, personId);
   let n = 0;
   for (const s of scenes.scenes as readonly { start: number; people?: readonly { personId?: number }[] }[]) {
     if (s.start < cut && s.people?.some((p) => p.personId === personId)) n++;

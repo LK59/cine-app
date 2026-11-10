@@ -215,7 +215,8 @@ export function useAskTitle({
  * La coupe de « Jusqu'ici » (10.27.2) : la même fonction que le serveur (`sofarCut`), sur les scènes que le
  * lecteur a reçues — ce qui distingue deux préparations d'une même personne, et deux textes gardés sur
  * l'appareil. Depuis 10.30.1, le début de la scène en cours ; sans scènes, la tranche de cinq minutes
- * (`SOFAR_BUCKET_S`).
+ * (`SOFAR_BUCKET_S`). Depuis 10.30.2, elle dépend aussi de la personne (sa première présence dans la scène en
+ * cours : la demi-minute de la position) — d'où `personId` à chaque appel.
  */
 export { SOFAR_BUCKET_S } from "@/lib/ask/sofarCut";
 const prewarmed = new Set<string>();
@@ -235,7 +236,7 @@ export const SOFAR_HOVER_INTENT_MS = 300;
 export function prewarmSofar(itemId: string, personId: number, positionS: number, scenes?: SofarScenes | null): void {
   if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
   if (!Number.isFinite(positionS)) return;
-  const key = `${itemId}:${personId}:${sofarCut(positionS, scenes)}`;
+  const key = `${itemId}:${personId}:${sofarCut(positionS, scenes, personId)}`;
   if (prewarmed.has(key)) return;
   prewarmed.add(key);
   if (prewarmed.size > 2000) prewarmed.delete(prewarmed.values().next().value as string);
@@ -346,7 +347,7 @@ export function sofarPosition(positionS: number | null | undefined): number | nu
   return positionS != null && Number.isFinite(positionS) ? Math.floor(positionS) : null;
 }
 const sofarPos = sofarPosition;
-const sofarReadKey = (itemId: string, personId: number, pos: number | null, scenes?: SofarScenes | null) => `${itemId}:${personId}:${sofarCut(pos, scenes)}`;
+const sofarReadKey = (itemId: string, personId: number, pos: number | null, scenes?: SofarScenes | null) => `${itemId}:${personId}:${sofarCut(pos, scenes, personId)}`;
 
 function sofarFetch(itemId: string, personId: number, pos: number | null, signal: AbortSignal): Promise<Response> {
   return fetch(`/api/cinema/ask/${encodeURIComponent(itemId)}`, {

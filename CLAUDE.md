@@ -302,7 +302,8 @@ Since 2026-11-09 `recherche.log` also has one `kind: "question"` line per « Pos
 `ms`/`firstMs`/`firstWordMs`, `contextMs`/`ttftMs`, `ctx` (`prêt` / `construit`), tokens with cache writes/reads,
 `dialogue`, `meta`, `status` (`ok` / `rejeté` / `limite` / `erreur` / `indisponible` / `abandon`) — and
 one `kind: "jusquici"` line per « Jusqu'ici » (`logJusquici`): person, `bucket` (five-minute mark) and `cutS` (the
-cut actually used, the start of the current scene), `cache` (`partagé` / `compte` / `nouveau`), the same timings,
+cut actually used, the start of the current scene — or, since 10.30.2, the position's half-minute for a person whose
+first presence is the current scene) with `cutWhy` (`scene` / `step` / `present` / `fallback`), `cache` (`partagé` / `compte` / `nouveau`), the same timings,
 `status` (adding `vide`, `attente` — subtitles not ready —, `tôt` — a film before 10 min —, `attente-erreur` —
 back-off after a transient failure, with `waitBy`/`waitLeftS`). Never the question, the answer nor the text.
 `startup.log` also receives, on touch screens, `kind: "clavier"` lines (the ask panel's on-screen keyboard: what
@@ -567,7 +568,8 @@ strips Markdown.
 « Jusqu'ici » texts are keyed by a SHA-256 of exactly what is sent (model, `SOFAR_VERSION`, prompt, message):
 the key follows the prompt and the message by itself, so **bump `SOFAR_VERSION` when anything else that shaped
 a kept text changes** (the filters, a rule of the cut), or texts written under the old rules are served; its cut
-(`sofarCut.ts`) is shared by client and server and must stay identical on both. `ASK_ENABLED`,
+(`sofarCut.ts`) is shared by client and server and must stay identical on both — so it reads only what both
+hold (the scenes and their people), never server-only data such as named lines or past summaries. `ASK_ENABLED`,
 `ASK_PERSON_ENABLED`, `SOFAR_ENABLED` are audiences (the last two follow the first when empty); share links
 get no AI feature whatever they say (`aiAudienceAllows`).
 

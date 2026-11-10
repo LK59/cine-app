@@ -3446,7 +3446,7 @@
       "REPLIQUES_NIGHT_START": "Début de la plage de nuit",
       "REPLIQUES_NIGHT_END": "Fin de la plage de nuit",
       "REPLIQUES_LANGUAGES": "Langues des répliques",
-      "ASK_PERSON_ENABLED": "Questions sur une personne : dans le panneau d'un acteur d'« À l'écran », le champ et les questions proposées",
+      "ASK_PERSON_ENABLED": "Questions sur une personne : dans le panneau d'un acteur d'« À l'écran », au plus deux questions proposées « Quel est le lien entre X et Y ? » avec les autres personnages de la scène (pas de champ libre)",
       "SOFAR_ENABLED": "« Jusqu'ici » : dans le panneau d'un acteur d'« À l'écran », deux phrases sur ce que son personnage a fait jusqu'ici"
     },
     "deployHint": {

@@ -90,7 +90,7 @@ describe("« Jusqu'ici » S7c (10.28.0)", () => {
   });
 
   it("le message du banc, octet pour octet : trois résumés, scènes sans horaire, coupe stricte, la personne en dernier", () => {
-    const cut = sofarCut(330, SCENES);
+    const cut = sofarCut(330, { ...SCENES, scenes: SCENES.scenes.map(({ start, end }) => ({ start, end })) });
     expect(cut).toBe(300);
     const sources = sofarSources(input(cut), PERSON, sofarScenes(payload));
     expect(sources.grouped).toBe(true);
@@ -138,8 +138,9 @@ describe("« Jusqu'ici » S7c (10.28.0)", () => {
     // 4 depuis 10.28.2 (les deux règles des films, plus aucun texte sur le seul synopsis d'un élément sous-titré) ;
     // 5 depuis 10.29.1 (le dernier fait qui le concerne vraiment, plus le dernier moment où il ne fait qu'assister) ;
     // 6, 7 puis 8 en 10.29.2 (une phrase simple quand ni l'épisode en cours ni les épisodes vus ne disent rien de lui ;
-    // la réponse commence par le nom du personnage) ; 9 en 10.30 (« qui parle » : les noms devant les répliques).
-    expect(SOFAR_VERSION).toBe(10);
+    // la réponse commence par le nom du personnage) ; 9 en 10.30 (« qui parle » : les noms devant les répliques) ; 10 en 10.30.1 (la coupe à la scène en
+    // cours) ; 11 en 10.30.2 (la demi-minute pour une première présence dans la scène en cours).
+    expect(SOFAR_VERSION).toBe(11);
     expect(sofarKey("m", "s", "x")).not.toBe(sofarKey("m", "s", "x", 2));
   });
 

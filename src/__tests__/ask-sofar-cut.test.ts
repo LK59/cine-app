@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sofarCut, sofarMark, SOFAR_BUCKET_S, SOFAR_SCENE_STEP_S } from "@/lib/ask/sofarCut";
+import { sofarCut, sofarCutDetail, sofarMark, SOFAR_BUCKET_S, SOFAR_PRESENT_STEP_S, SOFAR_SCENE_STEP_S } from "@/lib/ask/sofarCut";
 import * as client from "@/lib/ask/client";
 import * as server from "@/lib/ask/sofar";
 
@@ -79,5 +79,67 @@ describe("sofarCut", () => {
   it("le client et le serveur lisent la même tranche, de la même source", () => {
     expect(client.SOFAR_BUCKET_S).toBe(SOFAR_BUCKET_S);
     expect(server.SOFAR_BUCKET_S).toBe(SOFAR_BUCKET_S);
+  });
+});
+
+// Les scènes de *Ted Lasso* S01E09 avec leurs présences, telles que le lecteur les reçoit (analyse du 10/11/2026 : la
+// conférence de presse 320 – 348,75 est une scène à part). Identifiants TMDB.
+const REBECCA = 1278487, KEELEY = 36594, TRENT = 19775, TED = 58224, ROY = 21422, NATE = 1509615;
+const E09_PEOPLE: [number, number, number[]][] = [
+  [0, 86.5, [ROY, TED]],
+  [86.5, 110.944, [ROY]],
+  [131.923, 237.673, [REBECCA, TED, KEELEY]],
+  [237.673, 320, [REBECCA, NATE, KEELEY]],
+  [320, 348.75, [TED, TRENT, 1113365, NATE, 2303312]],
+  [348.75, 363.25, [TED, 1113365, NATE]],
+  [363.25, 451.5, [TED, NATE, 1113365]],
+  [451.5, 631, [REBECCA, 34257, TED]],
+  [631, 662.25, [REBECCA, TED]],
+  [662.25, 835.25, [REBECCA, TED]],
+  [835.25, 910.75, [TED, 2627590, 2519330, 1113365]],
+];
+const e09p = {
+  complete: true,
+  analyzedUntil: 1878.127,
+  scenes: E09_PEOPLE.map(([start, end, ids]) => ({ start, end, people: ids.map((personId) => ({ personId })) })),
+};
+
+describe("sofarCut — une première présence dans la scène en cours (10.30.2)", () => {
+  it("Trent Crimm à 5 min 40, dans la conférence de presse (5 min 20 – 5 min 48) : 5 min 30, pas 5 min 20", () => {
+    // Coupé au début de la scène, il n'avait rien avant : « Trent Crimm n'a pas encore eu de moment à lui. »
+    expect(sofarCutDetail(340, e09p, TRENT)).toEqual({ cutS: 330, why: "present" });
+    expect(sofarCut(340.8, e09p, TRENT)).toBe(330);
+    // Sans la personne, la coupe d'avant.
+    expect(sofarCutDetail(340, e09p)).toEqual({ cutS: 320, why: "scene" });
+  });
+
+  it("Rebecca à 13 min 43 et Keeley à 5 min, déjà vues avant la scène en cours : inchangées", () => {
+    expect(sofarCutDetail(823, e09p, REBECCA)).toEqual({ cutS: 782, why: "step" });
+    expect(sofarCutDetail(300, e09p, KEELEY)).toEqual({ cutS: 237, why: "scene" });
+  });
+
+  it("une personne absente de la scène en cours : inchangée, qu'elle ait paru avant ou jamais", () => {
+    expect(sofarCut(340, e09p, REBECCA)).toBe(320);
+    expect(sofarCut(340, e09p, 999)).toBe(320);
+    // Trent plus tard, hors de sa scène : la coupe ordinaire.
+    expect(sofarCutDetail(400, e09p, TRENT)).toEqual({ cutS: 363, why: "scene" });
+  });
+
+  it(`la demi-minute ne recule jamais la coupe, ne dépasse jamais la position, et suit la seconde entière`, () => {
+    // 325 : la demi-minute (300) tombe avant le début de la scène (320) — la coupe ordinaire reste.
+    expect(sofarCutDetail(325, e09p, TRENT)).toEqual({ cutS: 320, why: "scene" });
+    for (let pos = 320; pos < 349; pos += 0.37) {
+      const cut = sofarCut(pos, e09p, TRENT);
+      expect(cut).toBeLessThanOrEqual(pos);
+      expect(cut).toBeGreaterThanOrEqual(320);
+      expect(cut).toBe(sofarCut(Math.floor(pos), e09p, TRENT));
+      if (cut > 320) expect(cut % SOFAR_PRESENT_STEP_S).toBe(0);
+    }
+  });
+
+  it("le repli et l'entre-deux scènes disent leur raison", () => {
+    expect(sofarCutDetail(12 * 60, null, TRENT)).toEqual({ cutS: 600, why: "fallback" });
+    expect(sofarCutDetail(null, e09p, TRENT)).toEqual({ cutS: 0, why: "fallback" });
+    expect(sofarCutDetail(120, e09p, ROY)).toEqual({ cutS: 110, why: "scene" });
   });
 });

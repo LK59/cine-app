@@ -3446,7 +3446,7 @@
       "REPLIQUES_NIGHT_START": "Night window start",
       "REPLIQUES_NIGHT_END": "Night window end",
       "REPLIQUES_LANGUAGES": "Dialogue languages",
-      "ASK_PERSON_ENABLED": "Questions about a person: in the panel of an “On screen” actor, the input and suggested questions",
+      "ASK_PERSON_ENABLED": "Questions about a person: in the panel of an “On screen” actor, up to two suggested questions “How is X connected to Y?” with the other characters in the scene (no free input)",
       "SOFAR_ENABLED": "“So far”: in the panel of an “On screen” actor, two sentences on what their character has done so far"
     },
     "deployHint": {

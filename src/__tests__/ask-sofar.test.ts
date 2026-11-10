@@ -466,8 +466,9 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     expect(sys).not.toContain("ou à quoi il assiste");
   });
 
-  it("la version de la consigne est dans la clé : 10 (10.30.1, la coupe à la scène en cours), et une même entrée sous les versions d'avant donne une autre clé", () => {
-    expect(SOFAR_VERSION).toBe(10);
+  it("la version de la consigne est dans la clé : 11 (10.30.2, la demi-minute pour une première présence dans la scène en cours), et une même entrée sous les versions d'avant donne une autre clé", () => {
+    expect(SOFAR_VERSION).toBe(11);
+    expect(sofarKey(ASK_MODEL, "s", "m", 10)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 9)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 8)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
     expect(sofarKey(ASK_MODEL, "s", "m", 7)).not.toBe(sofarKey(ASK_MODEL, "s", "m"));
@@ -689,7 +690,7 @@ describe("10.27.2 — la coupe tombe sur un début de scène", () => {
     expect(seen[0]).toContain("AVANT-CINQ");
     expect(seen[0]).toContain("Ariadne construit le labyrinthe.");
     expect(seen[0]).not.toContain("APRES-LA-COUPE");
-    expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cutS: 700, bucket: 10 }));
+    expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cutS: 700, cutWhy: "scene", bucket: 10 }));
     const { sofarCut } = await import("@/lib/ask/sofarCut");
     expect(sofarCut(12 * 60, xrayScenes.payload)).toBe(700);
   });

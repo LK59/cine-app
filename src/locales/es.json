@@ -3446,7 +3446,7 @@
       "REPLIQUES_NIGHT_START": "Inicio de la franja nocturna",
       "REPLIQUES_NIGHT_END": "Fin de la franja nocturna",
       "REPLIQUES_LANGUAGES": "Idiomas de los diálogos",
-      "ASK_PERSON_ENABLED": "Preguntas sobre una persona: en el panel de un actor de «En pantalla», el campo y las preguntas propuestas",
+      "ASK_PERSON_ENABLED": "Preguntas sobre una persona: en el panel de un actor de «En pantalla», hasta dos preguntas propuestas «¿Qué relación tiene X con Y?» con los demás personajes de la escena (sin campo libre)",
       "SOFAR_ENABLED": "«Hasta ahora»: en el panel de un actor de «En pantalla», dos frases sobre lo que su personaje ha hecho hasta ahora"
     },
     "deployHint": {
