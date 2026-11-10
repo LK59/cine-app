@@ -569,7 +569,9 @@ extra request; `cueLookupTime` in `src/lib/subtitleSync.ts`, identical arithmeti
 fingerprints do not move); the server player and downloads get a WebVTT rewritten by the subtitle route when the
 address carries `&sync=`. Image subtitles are out of scope.
 
-**« Revenir au début de la scène » ships off** (DECISIONS §143, `SCENE_RESTART_ENABLED`, audience, default `off`).
+**« Revenir au début de la scène » ships off, marked « Lab bêta »** (DECISIONS §143, `SCENE_RESTART_ENABLED`, audience, default `off`;
+the card carries `lab` in `CONFIG_LAYOUT` — a blind pass on 24 unseen titles covered ~1.5 % of resumes and found a
+too-early target, so it stays off and nothing else reads `cut`).
 On a resume after ≥ 4 h, a button offers for 8 s to go back to the start of the current scene — only to a *real*
 scene start, which the service decides per boundary (`xray/app/scenecuts.py`: `entry` and `cut {ok, why}` on
 `/scenes`, an authored chapter or colours **and** people changing, never mid-dialogue, and since `CUTS_VERSION` 2
