@@ -114,6 +114,7 @@ export function getVideo(): HTMLVideoElement {
     if (!hls && current && el.error) void descend(`erreur du lecteur (${el.error.code})`);
   });
   video = el;
+  ensureFollowing();
   return el;
 }
 
@@ -271,8 +272,11 @@ async function descend(why: string) {
   set({ status: "error", error: why });
 }
 
-/** Lance un titre de la bibliothèque. `from` : une position imposée ; sans elle, la reprise du compte. */
-export function play(item: Item, from: number | null = null): Promise<void> {
+/**
+ * Lance un titre de la bibliothèque. `from` : une position imposée ; sans elle, la reprise du compte.
+ * N'est appelé que par les commandes (`commands.ts`).
+ */
+export function open(item: Item, from: number | null = null): Promise<void> {
   return start(item, 0, from);
 }
 
@@ -295,35 +299,38 @@ export async function playTestClip(url: string): Promise<void> {
   await el.play().catch(() => set({ status: "paused" }));
 }
 
-export function togglePause(): void {
-  if (!video) return;
-  const { status } = useStore.getState().playback;
-  if (status === "playing") video.pause();
-  else if (status === "paused") void video.play().catch(() => {});
+/**
+ * Le `<video>` suit l'état : en pause ou non, à la position demandée, muet ou non. C'est ici — et
+ * nulle part ailleurs — que l'élément est commandé.
+ */
+let lastSeek = 0;
+function follow(): void {
+  const { playback } = useStore.getState();
+  if (!video || (playback.status !== "playing" && playback.status !== "paused")) return;
+  if (playback.seek && playback.seek.n !== lastSeek) {
+    lastSeek = playback.seek.n;
+    video.currentTime = playback.seek.to;
+    set({ position: playback.seek.to });
+  }
+  if (playback.wantPaused && !video.paused) video.pause();
+  else if (!playback.wantPaused && video.paused && !video.ended) void video.play().catch(() => set({ wantPaused: true }));
 }
 
-export function seekBy(seconds: number): void {
-  if (!video) return;
-  const { status } = useStore.getState().playback;
-  if (status !== "playing" && status !== "paused") return;
-  const end = Number.isFinite(video.duration) ? video.duration - 1 : Infinity;
-  video.currentTime = Math.max(0, Math.min(end, video.currentTime + seconds));
-  set({ position: video.currentTime });
+let following = false;
+/** Branche le suivi (une fois) : chaque changement de ce qui est voulu est appliqué à l'élément. */
+function ensureFollowing(): void {
+  if (following) return;
+  following = true;
+  useStore.subscribe((state, previous) => {
+    const now = state.playback;
+    const before = previous.playback;
+    if (now.wantPaused !== before.wantPaused || now.seek !== before.seek) follow();
+    if (now.muted !== before.muted) syncMix();
+  });
 }
 
-export function seekTo(seconds: number): void {
-  if (!video) return;
-  video.currentTime = Math.max(0, seconds);
-  set({ position: video.currentTime });
-}
-
-export function toggleMute(): void {
-  set({ muted: !useStore.getState().playback.muted });
-  syncMix();
-}
-
-/** Arrête la lecture et l'annonce à Jellyfin — qui coupe alors le transcodage. */
-export function stop(): void {
+/** Arrête la lecture et l'annonce à Jellyfin — qui coupe alors le transcodage. N'est appelé que par les commandes. */
+export function close(): void {
   generation++;
   finish("close");
   release();

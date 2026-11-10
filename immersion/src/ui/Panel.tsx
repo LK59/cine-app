@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { useStore, useT } from "../state/store";
-import { episodesOf, forgetLibrary, library, search, type Continue, type Episode, type Library, type Title } from "../media/library";
-import { play, stop } from "../media/playback";
-import { closePanel } from "../world/panel";
+import { search, type Continue, type Episode, type Title } from "../media/library";
+import { closePanel, launch, openTitle, panelBack, setPanelQuery, setPanelSeason, setPanelTab, stopPlayback } from "../state/actions";
 import { ExperienceLogo } from "./Logo";
 import { ErrorBoundary } from "./ErrorBoundary";
 
@@ -39,28 +38,12 @@ function ContinueCard({ item, onPlay }: { item: Continue; onPlay: () => void }) 
 }
 
 /** La fiche d'un titre : l'essentiel, et le bouton Lecture. Pour une série, ses épisodes. */
-function Detail({ title, onBack, onPlay }: { title: Title; onBack: () => void; onPlay: (itemId: string, name: string, from: number | null) => void }) {
+function Detail({ title }: { title: Title }) {
   const t = useT();
-  const [episodes, setEpisodes] = useState<{ list: Episode[]; next: string | null } | null>(null);
-  const [season, setSeason] = useState<number | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (title.kind !== "series") return;
-    let alive = true;
-    episodesOf(title.itemId).then(
-      (data) => {
-        if (!alive) return;
-        setEpisodes({ list: data.episodes, next: data.next });
-        const upcoming = data.episodes.find((e) => e.itemId === data.next);
-        setSeason(upcoming?.season ?? data.episodes[0]?.season ?? null);
-      },
-      () => alive && setFailed(true)
-    );
-    return () => {
-      alive = false;
-    };
-  }, [title]);
+  const episodes = useStore((s) => s.panel.episodes);
+  const season = useStore((s) => s.panel.season);
+  const failed = useStore((s) => s.panel.episodesFailed);
+  const onPlay = launch;
 
   const seasons = useMemo(() => [...new Set((episodes?.list ?? []).map((e) => e.season))].sort((a, b) => a - b), [episodes]);
   const next = episodes?.list.find((e) => e.itemId === episodes.next) ?? episodes?.list[0] ?? null;
@@ -72,7 +55,7 @@ function Detail({ title, onBack, onPlay }: { title: Title; onBack: () => void; o
       {title.backdrop ? <img className="detail-backdrop" src={title.backdrop} alt="" /> : null}
       <div className="detail-shade" />
       <div className="detail-body">
-        <button type="button" className="chip" onClick={onBack}>
+        <button type="button" className="chip" onClick={panelBack}>
           ← {t("panel.back")}
         </button>
         <div className="detail-main">
@@ -108,7 +91,7 @@ function Detail({ title, onBack, onPlay }: { title: Title; onBack: () => void; o
             {seasons.length > 1 ? (
               <div className="chips">
                 {seasons.map((n) => (
-                  <button key={n} type="button" className={n === season ? "chip chip-on" : "chip"} onClick={() => setSeason(n)}>
+                  <button key={n} type="button" className={n === season ? "chip chip-on" : "chip"} onClick={() => setPanelSeason(n)}>
                     {t("panel.season")} {n}
                   </button>
                 ))}
@@ -139,59 +122,26 @@ function Detail({ title, onBack, onPlay }: { title: Title; onBack: () => void; o
 
 /**
  * Laterna, dans le chalet : reprendre une lecture, voir ce qui vient d'arriver, chercher un titre,
- * ouvrir sa fiche, le lancer sur la télévision.
+ * ouvrir sa fiche, le lancer sur les télévisions.
+ *
+ * Ce composant ne décide de rien et ne retient rien : il dessine l'état du panneau (`state/store.ts`)
+ * et appelle les actions (`state/actions.ts`). C'est le rendu HTML ; un autre rendu — en 3D, pour un
+ * casque — se brancherait sur le même état et les mêmes actions.
  */
 export function Panel() {
   const t = useT();
   const playback = useStore((s) => s.playback);
-  const [lib, setLib] = useState<Library | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<"movies" | "series">("movies");
-  const [opened, setOpened] = useState<Title | null>(null);
-  const root = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let alive = true;
-    library().then(
-      (data) => alive && setLib(data),
-      () => alive && setFailed(true)
-    );
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // Échap : un cran en arrière — la fiche, puis la recherche, puis le panneau.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      if (opened) setOpened(null);
-      else if (query) setQuery("");
-      else closePanel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [opened, query]);
+  const { library: lib, libraryFailed: failed, query, tab, opened } = useStore((s) => s.panel);
 
   const results = useMemo(() => (lib && query.trim() ? search(lib, query) : null), [lib, query]);
   const browse = useMemo(() => (lib ? [...(tab === "movies" ? lib.movies : lib.series)].sort((a, b) => a.title.localeCompare(b.title)).slice(0, 240) : []), [lib, tab]);
-
-  function launch(itemId: string, name: string, from: number | null) {
-    // « Reprendre » aura changé après cette lecture.
-    forgetLibrary();
-    void play({ id: itemId, title: name }, from);
-    closePanel();
-  }
-
   const active = playback.status === "playing" || playback.status === "paused" || playback.status === "loading";
 
   return (
-    <div className="panel" ref={root} data-testid="panel" onWheel={(e) => e.stopPropagation()}>
+    <div className="panel" data-testid="panel" onWheel={(e) => e.stopPropagation()}>
       <header className="panel-head">
         <ExperienceLogo lit compact />
-        <input className="panel-search" type="search" value={query} onChange={(e) => { setQuery(e.target.value); setOpened(null); }} placeholder={t("panel.search")} autoComplete="off" spellCheck={false} data-testid="panel-search" />
+        <input className="panel-search" type="search" value={query} onChange={(e) => setPanelQuery(e.target.value)} placeholder={t("panel.search")} autoComplete="off" spellCheck={false} data-testid="panel-search" />
         <button type="button" className="chip" onClick={closePanel} data-testid="panel-close">
           {t("panel.close")} <kbd>{t("key.esc")}</kbd>
         </button>
@@ -200,7 +150,7 @@ export function Panel() {
       {opened ? (
         // Une fiche qui ne se dessine pas (une donnée inattendue) ne doit pas emporter le panneau.
         <ErrorBoundary key={opened.key} fallback={<p className="panel-note panel-pad">{t("panel.failed")}</p>}>
-          <Detail title={opened} onBack={() => setOpened(null)} onPlay={launch} />
+          <Detail title={opened} />
         </ErrorBoundary>
       ) : (
         <div className="panel-scroll">
@@ -208,7 +158,7 @@ export function Panel() {
             <section className="now">
               <span className="now-label">{t("panel.nowPlaying")}</span>
               <span className="now-title">{playback.title}</span>
-              <button type="button" className="chip" onClick={stop}>
+              <button type="button" className="chip" onClick={stopPlayback}>
                 ■ {t("panel.stop")}
               </button>
             </section>
@@ -221,7 +171,7 @@ export function Panel() {
               {results.length ? (
                 <div className="grid">
                   {results.map((title) => (
-                    <Poster key={title.key} title={title} onOpen={() => setOpened(title)} />
+                    <Poster key={title.key} title={title} onOpen={() => openTitle(title)} />
                   ))}
                 </div>
               ) : (
@@ -245,22 +195,22 @@ export function Panel() {
                 <h3>{t("panel.recent")}</h3>
                 <div className="row">
                   {lib.recent.map((title) => (
-                    <Poster key={title.key} title={title} onOpen={() => setOpened(title)} />
+                    <Poster key={title.key} title={title} onOpen={() => openTitle(title)} />
                   ))}
                 </div>
               </section>
               <section>
                 <div className="chips">
-                  <button type="button" className={tab === "movies" ? "chip chip-on" : "chip"} onClick={() => setTab("movies")}>
+                  <button type="button" className={tab === "movies" ? "chip chip-on" : "chip"} onClick={() => setPanelTab("movies")}>
                     {t("panel.movies")} <span className="count">{lib.movies.length}</span>
                   </button>
-                  <button type="button" className={tab === "series" ? "chip chip-on" : "chip"} onClick={() => setTab("series")}>
+                  <button type="button" className={tab === "series" ? "chip chip-on" : "chip"} onClick={() => setPanelTab("series")}>
                     {t("panel.series")} <span className="count">{lib.series.length}</span>
                   </button>
                 </div>
                 <div className="grid">
                   {browse.map((title) => (
-                    <Poster key={title.key} title={title} onOpen={() => setOpened(title)} />
+                    <Poster key={title.key} title={title} onOpen={() => openTitle(title)} />
                   ))}
                 </div>
               </section>

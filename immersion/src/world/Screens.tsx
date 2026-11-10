@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Color, LinearFilter, MeshStandardMaterial, PlaneGeometry, RectAreaLight, Scene, ShaderMaterial, SRGBColorSpace, Mesh, Vector2, VideoTexture, type DepthTexture, type PerspectiveCamera } from "three";
+import { Color, Frustum, Group, LinearFilter, Matrix4, Mesh, MeshStandardMaterial, PlaneGeometry, RectAreaLight, Scene, ShaderMaterial, Sphere, SRGBColorSpace, Vector2, Vector3, VideoTexture, type DepthTexture, type PerspectiveCamera } from "three";
 import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
-import { audio } from "../media/audio";
+import { speaker } from "../media/audio";
 import { getVideo } from "../media/playback";
 import { useProfile, useStore } from "../state/store";
 import { effects, VIGNETTE } from "./Effects";
-import { TV } from "./layout";
+import { roomAt, screenHeight, SCREENS } from "./layout";
+import { rig } from "./rig";
 
 /**
- * L'image de la vidéo, cadrée dans l'écran 16:9 (bandes noires pour un film plus large ou plus
+ * L'image de la vidéo, cadrée dans une dalle 16:9 (bandes noires pour un film plus large ou plus
  * étroit). Deux emplois du même programme :
  * - dans la scène (`OVERLAY` absent) : l'écran tel que le reste de l'image le voit — il passera par
  *   le mappage de tons, et sa lumière nourrit le halo ;
@@ -69,33 +70,40 @@ const AMBILIGHT_EVERY_MS = 200;
 const SAMPLE = 8;
 
 const srgbToLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+const frustum = new Frustum();
+const projection = new Matrix4();
+const sphere = new Sphere();
 
 /**
- * La télévision : sa dalle, son cadre, son haut-parleur, et la lumière qu'elle jette dans la pièce.
+ * Les télévisions du chalet. **Un seul flux, une seule texture** : toutes les dalles montrent la même
+ * image, au même instant — rien n'est décodé ni demandé au serveur en plus pour un écran de plus.
  *
- * **Éteinte**, la dalle est un noir brillant où la pièce se reflète.
+ * **Éteinte**, une dalle est un noir brillant où la pièce se reflète.
  *
  * **Allumée**, elle porte la vidéo. Le post-traitement mappe les tons de toute l'image, vidéo
  * comprise (`toneMapped={false}` ne vaut que pour un rendu direct à l'écran) : un film y perdrait
  * ses couleurs. La vidéo est donc redessinée après le compositeur, intacte, par une passe qui relit
  * la profondeur de la scène pour rester derrière ce qui la cache. La version qui traverse le
- * compositeur n'apporte que son halo.
+ * compositeur n'apporte que son halo. Une dalle hors du champ n'est pas redessinée.
  *
  * **L'ambilight** : la couleur moyenne de l'image, relevée cinq fois par seconde sur un canevas de
- * 8 × 8 pixels, éclaire la pièce par une lumière rectangulaire posée sur l'écran, lissée dans le temps.
+ * 8 × 8 pixels, éclaire la pièce — par **une** lumière rectangulaire, posée sur l'écran de la pièce
+ * où se tient le visiteur (les autres écrans éclairent des pièces qu'il ne voit pas). Rien n'est
+ * relevé quand aucun écran n'éclaire la pièce où il est.
  */
-export function Television() {
+export function Screens() {
   const gl = useThree((s) => s.gl);
   const camera = useThree((s) => s.camera) as PerspectiveCamera;
   const profile = useProfile();
   const status = useStore((s) => s.playback.status);
   const video = getVideo();
-  const screen = useRef<Mesh>(null);
+  const groups = useRef<(Group | null)[]>([]);
+  const meshes = useRef<(Mesh | null)[]>([]);
   const light = useRef<RectAreaLight>(null);
   const on = useRef(0);
-  const glow = useRef({ target: new Color(0, 0, 0), current: new Color(0, 0, 0), level: 0, last: 0 });
+  const glow = useRef({ target: new Color(0, 0, 0), current: new Color(0, 0, 0), last: 0 });
 
-  const { texture, sceneMaterial, overlay, off, bezel, sampler } = useMemo(() => {
+  const { texture, sceneMaterial, overlay, off, bezel, sampler, speakers } = useMemo(() => {
     RectAreaLightUniformsLib.init();
     const texture = new VideoTexture(video);
     texture.colorSpace = SRGBColorSpace;
@@ -115,21 +123,26 @@ export function Television() {
       depthWrite: false,
       toneMapped: false,
     });
+    // La passe de la vidéo a sa propre scène : une dalle par écran, à la place exacte de l'écran.
     const overlayScene = new Scene();
-    const overlayMesh = new Mesh(new PlaneGeometry(TV.width, TV.height), overlayMaterial);
-    overlayMesh.matrixAutoUpdate = false;
-    overlayMesh.frustumCulled = false;
-    overlayScene.add(overlayMesh);
+    const overlayMeshes = SCREENS.map((screen) => {
+      const mesh = new Mesh(new PlaneGeometry(screen.width, screenHeight(screen)), overlayMaterial);
+      mesh.matrixAutoUpdate = false;
+      mesh.frustumCulled = false;
+      overlayScene.add(mesh);
+      return mesh;
+    });
     const canvas = document.createElement("canvas");
     canvas.width = SAMPLE;
     canvas.height = SAMPLE;
     return {
       texture,
       sceneMaterial,
-      overlay: { scene: overlayScene, mesh: overlayMesh, material: overlayMaterial },
+      overlay: { scene: overlayScene, meshes: overlayMeshes, material: overlayMaterial },
       off: new MeshStandardMaterial({ color: "#010101", roughness: 0.05, metalness: 0, envMapIntensity: 3 }),
       bezel: new MeshStandardMaterial({ color: "#0b0b0c", roughness: 0.45, metalness: 0.7 }),
-      sampler: { canvas, context: canvas.getContext("2d", { willReadFrequently: true }) },
+      sampler: { context: canvas.getContext("2d", { willReadFrequently: true }) },
+      speakers: SCREENS.map((screen) => speaker(screen.id, screen.loudness)),
     };
   }, [video]);
 
@@ -138,29 +151,24 @@ export function Television() {
       texture.dispose();
       sceneMaterial.dispose();
       overlay.material.dispose();
-      overlay.mesh.geometry.dispose();
+      for (const mesh of overlay.meshes) mesh.geometry.dispose();
       off.dispose();
       bezel.dispose();
     },
     [texture, sceneMaterial, overlay, off, bezel]
   );
 
-  const speaker = useMemo(() => audio().tv, []);
-
   // Après le compositeur (priorité 1) : la vidéo, telle quelle.
   useFrame((_, delta) => {
-    const mesh = screen.current;
-    if (!mesh) return;
     const playing = (status === "playing" || status === "paused") && video.readyState >= 2 && video.videoWidth > 0;
-    // L'écran s'allume et s'éteint en fondu.
+    // Les écrans s'allument et s'éteignent en fondu.
     on.current += ((playing ? 1 : 0) - on.current) * (1 - Math.exp(-delta * 5));
     if (on.current < 0.002) on.current = 0;
     const lit = on.current > 0;
-    mesh.material = lit ? sceneMaterial : off;
 
     if (lit) {
       // Le cadrage : l'image entière dans la dalle, des bandes noires pour le reste.
-      const ratio = video.videoWidth / video.videoHeight / (TV.width / TV.height);
+      const ratio = video.videoWidth / video.videoHeight / (16 / 9);
       const fit = ratio >= 1 ? [1, ratio] : [1 / ratio, 1];
       for (const material of [sceneMaterial, overlay.material]) {
         material.uniforms.uFit.value.set(fit[0], fit[1]);
@@ -168,10 +176,34 @@ export function Television() {
       }
     }
 
-    // ── L'ambilight ──────────────────────────────────────────────────────────
+    // Quels écrans sont dans le champ ? Les autres ne sont pas redessinés.
+    projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    frustum.setFromProjectionMatrix(projection);
+    let anyVisible = false;
+    SCREENS.forEach((screen, i) => {
+      const mesh = meshes.current[i];
+      if (!mesh) return;
+      mesh.material = lit ? sceneMaterial : off;
+      sphere.center.set(...screen.center);
+      sphere.radius = screen.width * 0.6;
+      const visible = lit && frustum.intersectsSphere(sphere);
+      overlay.meshes[i].visible = visible;
+      if (visible) {
+        anyVisible = true;
+        mesh.updateWorldMatrix(true, false);
+        // Dans sa propre scène, la dalle de la passe prend la place exacte de l'écran : sa matrice locale
+        // est celle de l'écran dans le monde (three recalcule la matrice monde à partir d'elle au rendu).
+        overlay.meshes[i].matrix.copy(mesh.matrixWorld);
+        overlay.meshes[i].matrixWorldNeedsUpdate = true;
+      }
+    });
+
+    // ── L'ambilight : l'écran de la pièce où se tient le visiteur ─────────────
+    const here = roomAt(rig.position.x, rig.position.y, rig.position.z);
+    const lamp = SCREENS.find((screen) => screen.room === here) ?? (here === "mezzanine" ? SCREENS[0] : null);
     const g = glow.current;
     const now = performance.now();
-    if (playing && sampler.context && now - g.last > AMBILIGHT_EVERY_MS) {
+    if (playing && lamp && light.current && sampler.context && now - g.last > AMBILIGHT_EVERY_MS) {
       g.last = now;
       try {
         sampler.context.drawImage(video, 0, 0, SAMPLE, SAMPLE);
@@ -191,9 +223,16 @@ export function Television() {
         g.target.setRGB(0, 0, 0);
       }
     }
-    if (!playing) g.target.setRGB(0, 0, 0);
+    if (!playing || !lamp) g.target.setRGB(0, 0, 0);
     g.current.lerp(g.target, 1 - Math.exp(-delta * AMBILIGHT_RATE));
     if (light.current) {
+      if (lamp) {
+        // La lumière se pose sur l'écran de la pièce, à sa taille, tournée vers la pièce (l'axe −Z d'une lumière rectangulaire).
+        light.current.position.set(lamp.center[0] + Math.sin(lamp.yaw) * 0.06, lamp.center[1], lamp.center[2] + Math.cos(lamp.yaw) * 0.06);
+        light.current.rotation.set(0, lamp.yaw + Math.PI, 0);
+        light.current.width = lamp.width * 0.92;
+        light.current.height = screenHeight(lamp) * 0.92;
+      }
       const peak = Math.max(g.current.r, g.current.g, g.current.b);
       // La couleur donne la teinte, la luminance donne la force : une scène sombre éclaire peu.
       light.current.color.copy(g.current).multiplyScalar(peak > 0.0001 ? 1 / peak : 0);
@@ -202,7 +241,7 @@ export function Television() {
 
     // ── La passe de la vidéo, par-dessus le compositeur ──────────────────────
     const composer = effects.composer;
-    if (!lit || !composer) return;
+    if (!anyVisible || !composer) return;
     // La profondeur de la scène. Le compositeur n'en garde une copie stable (recopiée après le rendu
     // de la scène) que si un effet la demande ; on la lui fait donc créer. Ces deux membres sont
     // internes à la bibliothèque — d'où la forme, et l'épinglage exact de sa version.
@@ -215,11 +254,6 @@ export function Television() {
     gl.getDrawingBufferSize(uniforms.uResolution.value);
     uniforms.uNear.value = camera.near;
     uniforms.uFar.value = camera.far;
-    mesh.updateWorldMatrix(true, false);
-    // Dans sa propre scène, la dalle de la passe prend la place exacte de l'écran : sa matrice locale
-    // est celle de l'écran dans le monde (three recalcule la matrice monde à partir d'elle au rendu).
-    overlay.mesh.matrix.copy(mesh.matrixWorld);
-    overlay.mesh.matrixWorldNeedsUpdate = true;
     const autoClear = gl.autoClear;
     gl.autoClear = false;
     gl.setRenderTarget(null);
@@ -228,24 +262,44 @@ export function Television() {
   }, 2);
 
   return (
-    <group position={[TV.x, TV.y, TV.z]} rotation-y={-Math.PI / 2} name="tv">
-      <mesh ref={screen} name="tv-screen" material={off}>
-        <planeGeometry args={[TV.width, TV.height]} />
-      </mesh>
-      {/* Le cadre : quatre baguettes noires autour de la dalle. */}
-      {[
-        [0, TV.height / 2 + 0.014, TV.width + 0.056, 0.028],
-        [0, -TV.height / 2 - 0.014, TV.width + 0.056, 0.028],
-        [TV.width / 2 + 0.014, 0, 0.028, TV.height],
-        [-TV.width / 2 - 0.014, 0, 0.028, TV.height],
-      ].map(([x, y, w, h], i) => (
-        <mesh key={i} position={[x, y, 0.012]} material={bezel}>
-          <boxGeometry args={[w, h, 0.05]} />
-        </mesh>
-      ))}
-      {/* La lumière de l'écran : elle rayonne vers la pièce (l'axe −Z d'une lumière rectangulaire). */}
-      {profile.fillLights ? <rectAreaLight ref={light} args={["#000000", 0, TV.width * 0.92, TV.height * 0.92]} position={[0, 0, 0.06]} rotation-y={Math.PI} /> : null}
-      <primitive object={speaker} position={[0, 0, 0.05]} />
+    <group name="screens">
+      {SCREENS.map((screen, i) => {
+        const h = screenHeight(screen);
+        const frame = Math.max(0.012, screen.width * 0.006);
+        // Le salon a sa dalle encastrée dans la pierre ; les autres sont des téléviseurs accrochés, avec leur coque.
+        const hung = screen.id !== "salon";
+        return (
+          <group key={screen.id} ref={(node) => void (groups.current[i] = node)} position={screen.center} rotation-y={screen.yaw} name={`screen-${screen.id}`}>
+            <mesh ref={(node) => void (meshes.current[i] = node)} material={off}>
+              <planeGeometry args={[screen.width, h]} />
+            </mesh>
+            {[
+              [0, h / 2 + frame / 2, screen.width + frame * 2, frame],
+              [0, -h / 2 - frame / 2, screen.width + frame * 2, frame],
+              [screen.width / 2 + frame / 2, 0, frame, h],
+              [-screen.width / 2 - frame / 2, 0, frame, h],
+            ].map(([x, y, w, hh], k) => (
+              <mesh key={k} position={[x, y, 0.006]} material={bezel}>
+                <boxGeometry args={[w, hh, 0.03]} />
+              </mesh>
+            ))}
+            {hung ? (
+              <mesh position={[0, 0, -0.018]} material={bezel}>
+                <boxGeometry args={[screen.width + frame * 2, h + frame * 2, 0.03]} />
+              </mesh>
+            ) : null}
+            <primitive object={speakers[i]} position={[0, 0, 0.05]} />
+          </group>
+        );
+      })}
+      {/* Une seule lumière d'écran pour tout le chalet : elle suit le visiteur de pièce en pièce. */}
+      {profile.fillLights ? <rectAreaLight ref={light} args={["#000000", 0, 1, 1]} /> : null}
     </group>
   );
+}
+
+/** Pour les tests : la position d'un écran dans l'espace, telle que la scène la tient. */
+export function screenCenter(id: string): Vector3 | null {
+  const screen = SCREENS.find((s) => s.id === id);
+  return screen ? new Vector3(...screen.center) : null;
 }

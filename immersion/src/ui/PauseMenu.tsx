@@ -1,5 +1,5 @@
 import { useStore, useT } from "../state/store";
-import { lockPointer } from "../world/Controls";
+import { quit, resumeVisit } from "../state/actions";
 import { ExperienceLogo } from "./Logo";
 import { Settings } from "./Settings";
 
@@ -7,7 +7,7 @@ import { Settings } from "./Settings";
  * Le menu pause : ouvert par Échap (qui rend le pointeur). « Reprendre » redemande le pointeur — le
  * clic est le geste qu'il faut pour ça.
  */
-export function PauseMenu({ onQuit }: { onQuit: () => void }) {
+export function PauseMenu() {
   const t = useT();
   const view = useStore((s) => s.pauseView);
   const setView = useStore((s) => s.setPauseView);
@@ -18,13 +18,13 @@ export function PauseMenu({ onQuit }: { onQuit: () => void }) {
         <ExperienceLogo lit compact />
         {view === "menu" ? (
           <nav className="pause-actions">
-            <button type="button" className="btn btn-primary" onClick={lockPointer} autoFocus data-testid="resume">
+            <button type="button" className="btn btn-primary" onClick={resumeVisit} autoFocus data-testid="resume">
               {t("pause.resume")}
             </button>
             <button type="button" className="btn" onClick={() => setView("settings")} data-testid="open-settings">
               {t("pause.settings")}
             </button>
-            <button type="button" className="btn btn-quiet" onClick={onQuit} data-testid="quit">
+            <button type="button" className="btn btn-quiet" onClick={quit} data-testid="quit">
               {t("pause.quit")}
             </button>
           </nav>

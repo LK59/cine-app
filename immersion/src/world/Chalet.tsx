@@ -6,14 +6,14 @@ import { Lights } from "./Lights";
 import { Props } from "./Props";
 import { Shell } from "./Shell";
 import { SoundScape } from "./SoundScape";
-import { Television } from "./Television";
+import { Screens } from "./Screens";
 
 /** Le chalet : l'enveloppe du salon, son mobilier, ses lumières, et la nuit autour. */
 export function Chalet() {
   return (
     <group>
       <Shell />
-      <Television />
+      <Screens />
       <SoundScape />
       <Furniture />
       <Props />

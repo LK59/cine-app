@@ -3,26 +3,29 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { applyAcoustics, audio } from "../media/audio";
 import { syncMix } from "../media/playback";
 import { useStore } from "../state/store";
-import { CHANDELIER, ROOM } from "./layout";
+import { CHANDELIER, ROOM, roomAt, SCREENS, type RoomId } from "./layout";
 import { rig } from "./rig";
 
 /**
- * Ce que le visiteur entend d'où il est : `cutoff` est la fréquence au-delà de laquelle le son de la
- * télévision ne lui parvient plus.
+ * Ce qui passe du son d'une pièce à l'autre : la fréquence au-delà de laquelle un écran de la pièce
+ * `from` ne s'entend plus depuis la pièce `to`.
  *
- * Dans le salon, rien n'est filtré. Sous la mezzanine, la pièce est ouverte sur le salon : le son
- * arrive encore clair. Plus loin, derrière un mur, il ne reste que les graves.
+ * Le salon, la cuisine et la mezzanine forment un seul volume ouvert : le son y circule presque
+ * intact. Le couloir est derrière un mur percé d'une porte ; la chambre, derrière deux.
  */
-export function acousticsAt(x: number, z: number): number {
-  if (z <= ROOM.south + 0.2) return 20000;
-  const depth = Math.min(1, (z - ROOM.south) / (ROOM.back - ROOM.south));
-  const lateral = Math.abs(x) > ROOM.halfW ? 0.25 : 1;
-  return (9000 - depth * 5200) * lateral;
+const OPEN: RoomId[] = ["salon", "cuisine", "mezzanine"];
+export function cutoffBetween(from: RoomId, to: RoomId): number {
+  if (from === to) return 20000;
+  const fromOpen = OPEN.includes(from);
+  const toOpen = OPEN.includes(to);
+  if (fromOpen && toOpen) return from === "cuisine" || to === "cuisine" ? 6500 : 9000;
+  if (from === "chambre" || to === "chambre") return fromOpen || toOpen ? 650 : 1600;
+  return 1500;
 }
 
 /**
  * L'oreille et les sons d'ambiance : l'écoute est accrochée à la caméra, le vent à la baie, le
- * grésillement des bougies au lustre. Le haut-parleur de la télévision est posé par `Television`.
+ * grésillement des bougies au lustre. Les haut-parleurs des écrans sont posés par `Screens`.
  */
 export function SoundScape() {
   const camera = useThree((s) => s.camera);
@@ -43,7 +46,10 @@ export function SoundScape() {
     syncMix();
   }, [volume, spatial, reverb, muted]);
 
-  useFrame(() => applyAcoustics(acousticsAt(rig.position.x, rig.position.z)));
+  useFrame(() => {
+    const here = roomAt(rig.position.x, rig.position.y, rig.position.z);
+    for (const screen of SCREENS) applyAcoustics(screen.id, cutoffBetween(screen.room, here));
+  });
 
   return (
     <>

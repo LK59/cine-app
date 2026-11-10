@@ -10,12 +10,17 @@ const page = await context.newPage();
 page.on("console", (m) => (m.type() === "error" || m.type() === "warning") && !/THREE.Clock|deprecated/.test(m.text()) && console.log(`[${m.type()}]`, m.text().slice(0, 400)));
 page.on("pageerror", (e) => console.log("[pageerror]", e.message, String(e.stack).split("\n").slice(1, 4).join(" | ")));
 await page.addInitScript((q) => localStorage.setItem("laterna:immersion:settings:v2", JSON.stringify({ quality: q })), process.env.QUALITY || "medium");
+// Avec les identifiants du compte de test dans l'environnement, la session est ouverte d'abord.
+if (process.env.JELLYFIN_TEST_USER) {
+  const login = await context.request.post(`${BASE}/api/auth/jellyfin`, { data: { username: process.env.JELLYFIN_TEST_USER, password: process.env.JELLYFIN_TEST_PASSWORD } });
+  console.log("connexion du compte de test :", login.status());
+}
 await page.goto(`${BASE}/immersion`);
 await page.getByTestId("enter").waitFor({ state: "visible", timeout: 180_000 });
 await page.getByTestId("enter").click();
 await page.waitForFunction(() => window.__immersion.store.getState().phase === "world");
 await page.evaluate(() => {
-  window.__immersion.panelDebug.skipLockCheck = true;
+  window.__immersion.debug.skipCaptureCheck = true;
   window.__immersion.store.getState().setMode("walk");
 });
 await page.waitForTimeout(1200);

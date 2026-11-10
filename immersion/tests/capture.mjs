@@ -88,8 +88,8 @@ const ui = async (name) => {
 };
 if (wanted.some((w) => ["panneau", "fiche", "pause", "reglages"].includes(w))) {
   await page.evaluate(() => {
-    const { rig, store, panelDebug } = window.__immersion;
-    panelDebug.skipLockCheck = true;
+    const { rig, store, debug } = window.__immersion;
+    debug.skipCaptureCheck = true;
     const target = rig.position.clone();
     target.set(-0.6, 0, -1.5);
     rig.teleport = target;
@@ -113,10 +113,8 @@ if (wanted.some((w) => ["panneau", "fiche", "pause", "reglages"].includes(w))) {
     await page.evaluate(() => window.__immersion.closePanel());
   }
   if (wanted.includes("pause") || wanted.includes("reglages")) {
-    // Comme Échap : le pointeur est rendu (s'il était pris), et le menu pause s'ouvre.
-    await page.evaluate(() => document.pointerLockElement && document.exitPointerLock());
-    await page.waitForTimeout(400);
-    await page.evaluate(() => window.__immersion.store.getState().setMode("paused"));
+    // L'intention « menu » — ce que vaut Échap : le regard est rendu, le menu pause s'ouvre.
+    await page.evaluate(() => window.__immersion.emit("menu"));
     if (wanted.includes("pause")) await ui("pause");
     if (wanted.includes("reglages")) {
       await page.getByTestId("open-settings").click();

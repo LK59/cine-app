@@ -175,28 +175,38 @@ salon, pièce par pièce. Lumière précalculée par pièce. **Découpage par pi
 courante et ce qui se voit par les ouvertures. Le **canapé** : c'est ce qui fait le plus « maquette » — un
 vrai modèle ou une géométrie plus riche (coutures, coussins arrondis, plis), avec le tissu lin déjà choisi.
 
-### La porte de la VR reste ouverte (décision — voir `docs/VR.md`, À ÉCRIRE)
+### Les portes de la VR et du multijoueur restent ouvertes (décisions — `docs/VR.md`, `docs/MULTIJOUEUR.md`)
 
-Pas de VR en phase 1, **aucun code WebXR ni `@react-three/xr`**. Mais l'architecture ne doit rien fermer :
+Ni VR ni réseau en phase 1 : **aucun code WebXR, aucun `@react-three/xr`, aucun WebSocket**. Mais
+l'architecture ne ferme rien, et c'est fait :
 
-- **Interface séparée de la scène** : un état et des actions communs (store) ; le rendu de l'interface
-  (catalogue, fiche, HUD, menu pause, réglages) est remplaçable — HTML aujourd'hui, 3D plus tard. Pas de
-  logique enfermée dans des composants DOM.
-- **Entrées par une couche d'actions** (« avancer », « valider », « ouvrir le panneau », « viser ») :
-  clavier/souris aujourd'hui, manettes ou mains demain.
-- **Caméra et déplacements** derrière la même couche (le verrou du pointeur et WASD ne sont qu'une
-  implémentation).
+- **Interface séparée de la scène** : l'état du panneau, du menu, des réglages et de la lecture vit dans
+  `src/state/store.ts` ; tout passe par `src/state/actions.ts`. Les composants de `src/ui/` dessinent
+  l'état et appellent les actions — un rendu en 3D lirait le même état.
+- **Entrées par une couche d'intentions** (`src/input/intents.ts`) : « ouvrir », « valider », « s'asseoir »,
+  « retour », un mouvement, un regard. Clavier et souris (`keyboardMouse.ts`) ne sont qu'un périphérique.
+- **Personnage ≠ caméra, et pas de singleton** (`src/world/rig.ts`) : un registre de personnages
+  (identifiant, position, orientation) ; celui de la page est l'entrée `local` ; `Player.tsx` pose la
+  caméra d'après lui.
+- **L'état de lecture est la vérité, le `<video>` le suit** : ce qui est voulu (titre, pause, saut) est
+  écrit dans `Playback` par les **commandes** (`src/media/commands.ts`, `dispatch`) ; `follow()` dans
+  `src/media/playback.ts` y conforme l'élément. Aucun composant ne touche au `<video>`.
+- **Rien ne suppose un seul compte** : chaque page négocie, rapporte et journalise sous sa session.
 - Réglages de rendu par préréglages (un futur « VR » s'y ajoute).
 
 ## Plan de travail (ordre)
 
 1. [x] Dossier `/immersion`, entrée par la recherche, service de la page, déplacements et collisions
 2. [x] Salon : géométrie, matières, lumière temps réel, mobilier, objets
-3. [x] Télévision, vidéo, son spatialisé, rapports Jellyfin, journal — **reste : vérification de bout en
-       bout avec un vrai film sur l'instance jetable (négociation, HDR, arrêt du transcodage)**
-4. [x] Panneau dans le monde, HUD, menu pause, réglages — **reste : scénarios Playwright**
-5. [ ] Couche d'actions + interface pilotée par le store (porte VR) ; `docs/VR.md`
-6. [ ] Plusieurs télévisions (architecture « écrans »)
+3. [x] Télévision, vidéo, son spatialisé, rapports Jellyfin, journal — **vérifié de bout en bout** avec le
+       compte de test sur l'instance jetable (`tests/e2e/03-lecture.spec.ts`) : film SDR, film HDR converti
+       en SDR 1080p, pause / sauts / reprise par les commandes, arrêt au changement de film et à la sortie
+       de page (position écrite côté Jellyfin), aucun ffmpeg restant. Seul un navigateur tué net laisse une
+       séance, que Jellyfin referme de lui-même
+4. [x] Panneau dans le monde, HUD, menu pause, réglages — scénarios : `02-monde`, `03-lecture` (reste : un
+       scénario du panneau)
+5. [x] Couche d'intentions et d'actions, interface pilotée par le store, commandes de lecture, registre de personnages ; `docs/VR.md`, `docs/MULTIJOUEUR.md`
+6. [x] Plusieurs télévisions : une texture partagée, un haut-parleur par écran, une lumière d'écran qui suit le visiteur (`Screens.tsx`) — **reste : poser les écrans de la cuisine et de la chambre dans de vraies pièces**
 7. [ ] Pièces : cuisine + TV, mezzanine + escalier, couloir, chambre ; découpage par pièces ; canapé
 8. [ ] Extérieur en couches : panorama Blender (relief réel), plan intermédiaire, sapins 3D, neige qui tombe
 9. [ ] Lumière précalculée (export de la géométrie → cuisson Blender → `lightMap`), par pièce
@@ -266,17 +276,21 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
 
 ## Phase 2
 
-- **VR** : voir `docs/VR.md` (à écrire à l'étape 5).
-- Multijoueur, mini-jeux, mobile : hors périmètre de la phase 1.
+- **VR** : voir [`docs/VR.md`](docs/VR.md).
+- **Multijoueur** : voir [`docs/MULTIJOUEUR.md`](docs/MULTIJOUEUR.md).
+- Mini-jeux, mobile : hors périmètre de la phase 1.
 
 ## Problèmes ouverts
 
-- Lecture d'un vrai film pas encore vérifiée de bout en bout (les identifiants du compte de test sont
-  maintenant sur la machine).
-- Le canapé, l'extérieur et la lumière sont à refaire selon les retours ci-dessus.
+- Le canapé, l'extérieur et la lumière sont à refaire selon les retours ci-dessus (deux sous-traitances en
+  cours : panorama Blender dans `tools/panorama/`, modèle du canapé dans `tools/sofa/` ; image Blender
+  partagée `immersion-blender`, `tools/blender/`).
+- Sous forte charge de la machine, le contexte WebGL du navigateur de test peut se perdre au chargement
+  (l'écran « Le rendu 3D s'est interrompu » s'affiche alors — c'est le comportement voulu) : relancer.
+- Le serveur d'aperçu redirige `/` vers la page du mode ; sur la vraie application `/` est le cinéma.
 
 ## Prochaine action
 
-Image de test reconstruite depuis le dernier commit → instance jetable → connexion du compte de test →
-lancer un film SDR puis un film HDR sur la télévision, vérifier l'image sur la texture, les lignes du
-journal, et qu'aucun transcodage ne survit à la sortie. Puis l'étape 5 (couche d'actions, `docs/VR.md`).
+Étape 7 : les pièces (cuisine + sa télévision, escalier et mezzanine, couloir, chambre), le découpage par
+pièces. Puis l'extérieur en couches (quand le panorama est livré), le canapé (quand le modèle est livré),
+la lumière précalculée, le bouton « Mesurer », l'affiche, la livraison.

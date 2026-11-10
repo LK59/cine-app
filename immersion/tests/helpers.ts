@@ -33,7 +33,11 @@ export async function enterWorld(page: Page): Promise<void> {
   await enter.click();
   await expect.poll(() => state(page, "phase"), { timeout: 15_000 }).toBe("world");
   // Sans écran, le verrou du pointeur peut être refusé : le monde s'ouvre alors en pause.
-  await page.evaluate(() => (window as unknown as { __immersion: Immersion }).__immersion.store.getState().setMode("walk"));
+  await page.evaluate(() => {
+    const handle = (window as unknown as { __immersion: Immersion & { debug: { skipCaptureCheck: boolean } } }).__immersion;
+    handle.debug.skipCaptureCheck = true;
+    handle.store.getState().setMode("walk");
+  });
 }
 
 /** Pose le visiteur à un endroit, le regard dans une direction. */

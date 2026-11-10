@@ -3,17 +3,17 @@ import { useStore } from "./state/store";
 import { checkCapability } from "./lib/capability";
 import { accountLang, leaveToLaterna, SessionExpired, watchSession } from "./lib/session";
 import { World } from "./world/World";
-import { unlockPointer } from "./world/Controls";
 import { rig, resetRig } from "./world/rig";
 import { Intro } from "./ui/Intro";
 import { PauseMenu } from "./ui/PauseMenu";
 import { Hints } from "./ui/Hints";
 import { FpsCounter, Hud } from "./ui/Hud";
-import { closePanel, openPanel, panelDebug } from "./world/panel";
+import { closePanel, debug, openPanel } from "./state/actions";
+import { emit } from "./input/intents";
 import { ContextLost, Crashed, SessionEnded, Unsupported } from "./ui/Screens";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
-import { disposeAudio, resumeAudio } from "./media/audio";
-import { play, playTestClip, stop, stopOnLeave } from "./media/playback";
+import { getVideo, playTestClip, stopOnLeave } from "./media/playback";
+import { dispatch } from "./media/commands";
 
 /**
  * La page du mode : ce qui s'affiche selon la phase.
@@ -42,21 +42,11 @@ export function App() {
       }
     );
     // Prise de test et de capture : l'état, et le visiteur qu'on peut poser où l'on veut.
-    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, play, playTestClip, stop, openPanel, closePanel, panelDebug };
+    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug };
     // La page s'en va, quelle qu'en soit la raison : l'arrêt de la lecture part quand même.
     window.addEventListener("pagehide", stopOnLeave);
     return () => window.removeEventListener("pagehide", stopOnLeave);
   }, [boot]);
-
-  /** Quitter : le monde est démonté (le canevas libère ses ressources), puis la page part. */
-  const quit = useCallback(() => {
-    unlockPointer();
-    // Dans l'ordre : la lecture est arrêtée et annoncée, le son rendu, puis le monde démonté.
-    stop();
-    disposeAudio();
-    useStore.getState().setPhase("leaving");
-    setTimeout(leaveToLaterna, 60);
-  }, []);
 
   if (phase === "checking") return null;
   if (phase === "unsupported") return <Unsupported onRetry={boot} />;
@@ -72,10 +62,10 @@ export function App() {
           {mode === "walk" ? <Hints /> : null}
           {mode === "walk" ? <Hud /> : null}
           {showFps ? <FpsCounter /> : null}
-          {mode === "paused" ? <PauseMenu onQuit={quit} /> : null}
+          {mode === "paused" ? <PauseMenu /> : null}
         </>
       ) : (
-        <Intro onEnter={resumeAudio} />
+        <Intro />
       )}
     </ErrorBoundary>
   );
