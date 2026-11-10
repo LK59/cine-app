@@ -45,6 +45,14 @@ encode() {
 IFS=, read -ra GROUPS_ <<< "$ONLY"
 for g in "${GROUPS_[@]}"; do
   BL "$g" --group "$g" --samples "$SAMPLES" ${SOFA_ARGS[@]+"${SOFA_ARGS[@]}"} ${EXTRA[@]+"${EXTRA[@]}"}
+  # Le canapé : ses coutures sont des creux d'un ou deux texels, cuits presque noirs — à l'écran, des traits
+  # sombres en pointillé le long des coussins. Les clairs sont dilatés de trois texels (filtre « maximum »)
+  # avant l'encodage : les traits disparaissent, l'ombrage large reste. L'original est gardé à côté.
+  if [ "$g" = sofa ]; then
+    command -v ffmpeg >/dev/null || { echo "ffmpeg manquant : nécessaire pour adoucir la lightmap du canapé" >&2; exit 3; }
+    cp assets-src/bake/work/sofa.png assets-src/bake/work/sofa_brut.png
+    ffmpeg -v error -y -i assets-src/bake/work/sofa_brut.png -vf "format=gbrp,dilation,dilation,dilation" assets-src/bake/work/sofa.png
+  fi
   case "$g" in sofa|nuit) encode "$g" 700000;; *) encode "$g" 2300000;; esac
 done
 python3 -I tools/bake/assemble.py
