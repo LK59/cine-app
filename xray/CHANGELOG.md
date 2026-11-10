@@ -6,6 +6,16 @@ chaque rapport de décision (`service.version`) et dans la ligne de démarrage d
 Les versions des résultats (`RESULT_VERSION`, `VOICE_VERSION`, `ASD_VERSION`) suivent leur propre règle
 (`app/config.py`) : elles ne bougent que quand un résultat ancien devient incomparable.
 
+## Non publiée
+
+- **Débuts de scène** (« Revenir au début de la scène » côté Laterna) : par frontière de scène, le point d'entrée
+  (`entry`, reculé jusqu'au début d'une phrase commencée juste avant) et le verdict (`cut: {ok, why}` — chapitre
+  d'auteur, ou couleurs **et** personnes qui changent ; refus au milieu d'un dialogue, même lieu, montage, îlot),
+  la part de parole et les chapitres du fichier, en ajout compatible de `/items/{id}/scenes`. Mesuré à
+  l'assemblage depuis ce qui est en base, chapitres lus une fois par ffprobe ; les résultats d'avant sont repris en
+  tâche de fond sans décoder. Version propre (`CUTS_VERSION` 1) : `RESULT_VERSION`, les scènes et leurs personnes
+  ne changent pas. Voir `docs/PIPELINE.md` §12.
+
 ## 1.4.0
 
 - **Synchro des sous-titres** : mesure, à la demande, du décalage et de la dérive de chaque piste de sous-titres

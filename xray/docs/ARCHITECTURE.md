@@ -207,9 +207,13 @@ sequenceDiagram
   compte a vu, coupées au début de la scène en cours), des questions sur les liens entre personnages de la
   scène, et les questions sur le titre. Les **scènes** servent à couper et à grouper les répliques, les
   **voix** à les attribuer (« Nom : … ») — seulement quand l'analyse des voix est complète.
+- **« Revenir au début de la scène »** (`SCENE_RESTART_ENABLED`, livré coupé) : à la reprise après 4 h ou plus,
+  la scène en cours relue depuis son point d'entrée — seulement vers une frontière que le service dit sûre
+  (`entry`, `cut` de `/scenes`, [PIPELINE.md](PIPELINE.md#12-débuts-de-scène)). Décidé dans le navigateur sur
+  les scènes déjà lues, aucune requête de plus ; coupé, seulement mesuré au journal du lecteur.
 
 Le détail de ces écrans et de leurs règles est dans le registre des décisions de Laterna
-(`DECISIONS.md`, §138 à §140).
+(`DECISIONS.md`, §138 à §140, §142).
 
 ---
 
@@ -303,11 +307,11 @@ Les tables de `xray.db` :
 
 | Table | Une ligne par | Contenu |
 |---|---|---|
-| `items` | élément commandé | ETag, chemin, priorité (0 `high`, 1 `normal`, 2 `low`), `startAt`, série, distribution, état, erreur, durée, modèle, rang d'arrivée, tentatives, version des résultats |
+| `items` | élément commandé | ETag, chemin, priorité (0 `high`, 1 `normal`, 2 `low`), `startAt`, série, distribution, état, erreur, durée, modèle, rang d'arrivée, tentatives, version des résultats, chapitres du fichier (`chapters_json`, ffprobe une fois) |
 | `chunks` | tronçon de 2 min | bornes, fait ou non, décodeur utilisé |
 | `shots` | plan | bornes, histogramme de couleurs |
 | `tracks` | piste de visage | plan, temps de présence, qualité, nombre de visages, **empreinte** (512 nombres) |
-| `results` | élément | scènes (JSON), plage analysée, avancement, complet, version |
+| `results` | élément | scènes (JSON), plage analysée, avancement, complet, version ; mesures des frontières de scène (`bounds_json`, avec leur `CUTS_VERSION`) |
 | `photo_emb` | photo de référence × modèle | empreinte (ou rien : photo sans visage exploitable, jamais retentée) |
 | `voice_regions` | zone de parole | bornes, tronçon |
 | `voice_windows` | fenêtre de voix de 1,5 s | bornes, **empreinte** (demi-précision) |

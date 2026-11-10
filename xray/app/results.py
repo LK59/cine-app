@@ -28,7 +28,8 @@ import numpy as np
 
 from .cluster import Assignment, PersonRefs, cluster_embeddings, label_clusters, labels_from_linkage
 from .faces import normalize
-from .shots import CachedSimilarity, ShotInfo, Similarity, group_scenes
+from .scenecuts import boundary_features
+from .shots import _PLAIN, CachedSimilarity, ShotInfo, Similarity, group_scenes
 
 
 @dataclass
@@ -64,6 +65,9 @@ class Built:
     refs: list | None = None
     label_threshold: float | None = None
     cluster_tracks: np.ndarray | None = None
+    # « Revenir au début de la scène » (11/2026, scenecuts.py) : une mesure par frontière de scène (couleurs,
+    # visages de part et d'autre, début du fichier ou après un trou). Ne change rien aux scènes.
+    bounds: list = field(default_factory=list)
 
 
 def merge_intervals(chunks: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -152,9 +156,12 @@ def _assemble(
         key=lambda s: s.start,
     )
     scenes_out: list[dict] = []
+    bounds: list[dict] = []
     for a, b in intervals:
         part = [s for s in infos if a - 1e-3 <= s.start < b]
-        for scene in group_scenes(part, sim=sim):
+        groups = group_scenes(part, sim=sim)
+        bounds += boundary_features(groups, sim or _PLAIN, first_interval=a <= 1e-3)
+        for scene in groups:
             start, end = scene[0].start, min(scene[-1].end, b)
             people: dict[int, dict] = {}
             for s in scene:
@@ -184,8 +191,9 @@ def _assemble(
         frac = min(1.0, t.screen_time / max(t.shot_end - t.shot_start, 1e-3))
         shown[key] = max(shown.get(key, 0.0), frac)
     presence = sorted((a, b, pid, f) for (a, b, pid), f in shown.items())
+    bounds.sort(key=lambda x: x["t"])
     return Built(scenes_out, until, round(progress, 4), complete, assignments, centroids, ctime, presence,
-                 refs, label_threshold, ctracks)
+                 refs, label_threshold, ctracks, bounds)
 
 
 class Assembler:

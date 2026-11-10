@@ -1,5 +1,6 @@
 import { positionUnknownAnswer } from "@/lib/playbackPrefetch";
 import { isUpstreamUnreachable, withCode } from "@/lib/upstreamError";
+import { noteLastPlayedAt } from "@/lib/sceneRestartSession";
 
 /**
  * D'où part une lecture — la décision, écrite une fois.
@@ -53,7 +54,14 @@ export async function resolveResumeAt(itemId: string, resumeAt: number | undefin
     // le dit au lieu d'ouvrir.
     if (await positionUnknownAnswer(response)) throw withCode(new Error("position de reprise inconnue : Jellyfin ne répond pas"), "upstream_unreachable");
     if (!response.ok) return 0;
-    const state = (await response.json()) as { resumeSeconds?: unknown } | null;
+    const state = (await response.json()) as { resumeSeconds?: unknown; lastPlayedAt?: unknown } | null;
+    // La dernière lecture, gelée pour « Revenir au début de la scène » (§142) : le lecteur serveur ouvert
+    // seul ne lit pas `playback-state` autrement.
+    try {
+      if (typeof state?.lastPlayedAt === "string" || state?.lastPlayedAt === null) noteLastPlayedAt(itemId, state.lastPlayedAt);
+    } catch {
+      /* rien */
+    }
     return typeof state?.resumeSeconds === "number" && state.resumeSeconds > 0 ? state.resumeSeconds : 0;
   } catch (error) {
     if (isUpstreamUnreachable(error)) throw error;

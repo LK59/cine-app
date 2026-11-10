@@ -2,7 +2,7 @@
 
 /**
  * Les invites flottantes du lecteur, visibles même commandes masquées : « Passer l'intro / le
- * récap », la ligne de la minuterie de veille, « Vous êtes toujours là ? » et la carte de l'épisode
+ * récap » — ou, à sa place, « Revenir au début de la scène » (§142) —, la ligne de la minuterie de veille, « Vous êtes toujours là ? » et la carte de l'épisode
  * suivant. Ce qui décide de les montrer reste dans `PlayerControls` ; elles ne font que s'afficher.
  */
 
@@ -16,6 +16,8 @@ import { PROMPT_BOTTOM } from "@/components/playerControls/layout";
 export function PlayerPrompts({
   skipNow,
   onSkip,
+  sceneRestart = null,
+  onSceneRestart,
   sleepWarning,
   askStillThere,
   showNextUp,
@@ -26,6 +28,9 @@ export function PlayerPrompts({
 }: {
   skipNow: ActiveSkip | null;
   onSkip: (end: number) => void;
+  /** « Revenir au début de la scène » à montrer (`useSceneRestart`) ; `null` quand l'intro a la place. */
+  sceneRestart?: { target: number } | null;
+  onSceneRestart?: () => void;
   sleepWarning: number | null;
   askStillThere: boolean;
   showNextUp: boolean;
@@ -53,6 +58,27 @@ export function PlayerPrompts({
           }}
         >
           {skipNow.kind === "recap" ? t("player.skipRecap") : t("player.skipIntro")}
+        </button>
+      )}
+
+      {/* « Revenir au début de la scène » (§142) : à la place de « Passer l'intro », huit secondes à la reprise.
+          Un vrai bouton — le focus du clavier et de la navigation spatiale le trouve comme l'autre. */}
+      {!skipNow && sceneRestart && onSceneRestart && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSceneRestart();
+          }}
+          data-liquid
+          data-player-surface-ignore
+          className="player-pill pointer-events-auto absolute px-4 py-2.5 text-sm font-medium text-white"
+          style={{
+            bottom: PROMPT_BOTTOM,
+            right: "max(1rem, env(safe-area-inset-right))",
+          }}
+        >
+          {t("player.sceneRestart")}
         </button>
       )}
 

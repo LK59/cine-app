@@ -39,6 +39,13 @@ export interface PlaybackState {
    * `upstream_unreachable` : `resumeSeconds` ne vaut alors rien, et le lecteur n'ouvre pas à zéro.
    */
   positionUnknown?: true;
+  /**
+   * La dernière lecture de ce titre par ce compte selon Jellyfin (`UserData.LastPlayedDate`, ISO), `null`
+   * s'il n'en a pas — « Revenir au début de la scène » (DECISIONS.md §142) mesure ainsi l'absence, sans
+   * requête de plus. Gelée par le lecteur à l'ouverture (`sceneRestartSession.ts`) : ses rapports de
+   * progression la font avancer pendant la séance.
+   */
+  lastPlayedAt?: string | null;
 }
 
 export async function GET(req: NextRequest, props: { params: Promise<{ itemId: string }> }) {
@@ -91,8 +98,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     }
   }
 
+  // Jellyfin écrit sept chiffres après la seconde : rendue à la forme courte (ms), que tout navigateur relit.
+  const lastPlayedMs = Date.parse(item?.UserData?.LastPlayedDate ?? "");
   return NextResponse.json<PlaybackState>({
     resumeSeconds: (item?.UserData?.PlaybackPositionTicks ?? 0) / 10_000_000,
+    lastPlayedAt: Number.isFinite(lastPlayedMs) ? new Date(lastPlayedMs).toISOString() : null,
     preferences: configuration
       ? {
           audioLanguage: seriesLanguage ?? configuration.AudioLanguagePreference ?? null,

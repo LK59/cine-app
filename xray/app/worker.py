@@ -45,7 +45,7 @@ from .results import Assembler, ShotRow, TrackRow, build
 from .pipeline import ShotFaces
 from .shots import ShotSplitter, frames_to_sample, pick_indices
 from .timing import StageClock, job_stats, line
-from . import asdjob, relabel, report, subsyncjob, voicejob
+from . import asdjob, relabel, report, scenecuts, subsyncjob, voicejob
 
 log = logging.getLogger("xray.worker")
 
@@ -200,7 +200,10 @@ class Worker:
             # moins cher que l'image), jamais devant un ordre `normal` ou `high`.
             # La synchro des sous-titres (`subsyncjob.py`) d'abord parmi ces travaux d'appoint : un administrateur
             # vient de la demander, et elle est courte — jamais devant un ordre `normal` ou `high` pour autant.
-            if (row is None or row["priority"] >= 2) and (self._subsync() or self._relabel() or self._voice_only() or self._asd()):
+            # Les débuts de scène des résultats d'avant (scenecuts.py) en tout dernier : quelques secondes de
+            # regroupement par élément, sans décoder ni écouter.
+            if (row is None or row["priority"] >= 2) and (self._subsync() or self._relabel() or self._voice_only() or self._asd()
+                                                          or self._scene_cuts()):
                 continue
             row = self.store.claim(self.lane) if row is not None else None
             if row is None:
@@ -385,6 +388,15 @@ class Worker:
                              "SELECT 1 FROM items WHERE status='queued' AND priority < 2 LIMIT 1") is not None)
         return True
 
+    def _scene_cuts(self) -> bool:
+        """La mesure des frontières de scène et la lecture des chapitres des éléments finis qui n'en ont pas
+        (scenecuts.backfill_some), par lots bornés en temps ; jamais devant un ordre `normal` ou `high`."""
+        if scenecuts.next_backfill(self.db) is None:
+            return False
+        n = scenecuts.backfill_some(self.db, should_stop=lambda: self.db.one(
+            "SELECT 1 FROM items WHERE status='queued' AND priority < 2 LIMIT 1") is not None)
+        return n > 0
+
     def _same(self, item_id: str, etag: str) -> bool:
         cur = self.store.get(item_id)
         return cur is not None and cur["etag"] == etag
@@ -559,6 +571,8 @@ class Worker:
         if built is not None and built.complete:
             _, label_t = thresholds(model)
             castmod.update_series(self.db, row["series_id"], model, built, label_t, item_id)
+            # Les chapitres du fichier, une fois (« Revenir au début de la scène », scenecuts.py) : l'en-tête seul.
+            scenecuts.store_chapters(self.db, item_id, path)
             self.store.set_status(item_id, "done")
             st = job_stats(self.db, item_id, info.duration)
             event(log, "[xray] %s : terminé en %.0f s (%.0f s de calcul, %s× le temps réel), %d scènes — %s",

@@ -65,6 +65,8 @@ describe("GET /api/config/public", () => {
       sofarAvailable: false,
       // Les acteurs à l'écran (§138) : absents de cette configuration, donc aucune requête au lecteur.
       xrayAvailable: false,
+      // « Revenir au début de la scène » (§142) : livré coupé.
+      sceneRestartAvailable: false,
       bookRequests: false,
       // Pas de nouvelle adresse dans cette configuration : rien à proposer à la connexion (§119).
       passageHost: null,

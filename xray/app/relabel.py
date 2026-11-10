@@ -24,6 +24,7 @@ import time
 import numpy as np
 
 from . import cast as castmod
+from . import scenecuts
 from . import voicejob
 from .config import RESULT_VERSION
 from .db import Database
@@ -66,12 +67,16 @@ def write_result(c, item_id: str, etag: str, model: str, built: Built) -> None:
             diag = json.dumps(report.face_diag(built), separators=(",", ":"))
         except Exception:  # le rapport ne fait jamais échouer un résultat
             log.exception("[xray] %s : détail des visages pour le rapport impossible", item_id)
+    # Les mesures des frontières de scène (« Revenir au début de la scène », scenecuts.py), à part des scènes :
+    # gardées seulement pour un résultat complet, le seul que Laterna en lit.
+    bounds = scenecuts.bounds_doc(built.bounds) if built.complete else None
     c.execute(
         """INSERT OR REPLACE INTO results (item_id, etag, model, scenes_json, analyzed_until, progress, complete,
-                                          updated, version, stats_json, diag_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                          updated, version, stats_json, diag_json, bounds_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (item_id, etag, model, json.dumps(built.scenes, separators=(",", ":")), built.analyzed_until,
-         built.progress, 1 if built.complete else 0, time.time(), RESULT_VERSION, json.dumps(face_stats(built)), diag),
+         built.progress, 1 if built.complete else 0, time.time(), RESULT_VERSION, json.dumps(face_stats(built)), diag,
+         bounds),
     )
 
 
@@ -94,6 +99,22 @@ def rebuild_faces(db: Database, row, model: str | None = None) -> Built:
     cluster_t, label_t = face_thresholds(model)
     anchor = 0.0
     return build(float(row["duration"] or 0.0), done, len(chunks), anchor, shots, tracks, refs, label_t, cluster_t)
+
+
+def rebuild_bounds(db: Database, row) -> list[dict]:
+    """Les mesures des frontières de scène d'un élément (scenecuts.py), refaites depuis la base : le
+    regroupement des pistes et des plans seul — sans photos ni noms, qui n'y entrent pas."""
+    item_id = row["item_id"]
+    model = row["model"] or "buffalo_l"
+    chunks = db.q("SELECT start, end, done FROM chunks WHERE item_id=?", (item_id,))
+    done = [(r["start"], r["end"]) for r in chunks if r["done"]]
+    shots = [ShotRow(r["start"], r["end"], np.frombuffer(r["hist"], dtype=np.float32))
+             for r in db.q("SELECT start, end, hist FROM shots WHERE item_id=?", (item_id,))]
+    tracks = [TrackRow(r["shot_start"], r["shot_end"], r["screen_time"], r["quality"], np.frombuffer(r["emb"], dtype=np.float32))
+              for r in db.q("SELECT shot_start, shot_end, screen_time, quality, emb FROM tracks WHERE item_id=? ORDER BY id",
+                            (item_id,))]
+    cluster_t, label_t = face_thresholds(model)
+    return build(float(row["duration"] or 0.0), done, len(chunks), 0.0, shots, tracks, [], label_t, cluster_t).bounds
 
 
 def relabel_item(db: Database, item_id: str, voice_model: str | None) -> dict:

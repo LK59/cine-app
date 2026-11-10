@@ -76,6 +76,9 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "XRAY_ENABLED", group: "xray", kind: "audience", need: "optional", fallback: "off", inApp: true },
   { key: "XRAY_URL", group: "xray", kind: "url", need: "optional", fallback: "http://laterna-xray:8000", inApp: true, placeholder: "http://laterna-xray:8000" },
   { key: "XRAY_API_KEY", group: "xray", kind: "secret", need: "optional", fallback: "", inApp: true },
+  // « Revenir au début de la scène » (DECISIONS.md §142) : livré coupé — la décision est mesurée au journal
+  // (`sceneRestart` de la ligne `stop`) avant que le bouton ne soit montré à qui que ce soit.
+  { key: "SCENE_RESTART_ENABLED", group: "xray", kind: "audience", need: "optional", fallback: "off", inApp: true },
   // ── Les sous-titres générés (DECISIONS.md §69) ──
   // Traduits par une IA en ligne à partir d'un sous-titre complet du titre. Sans clé, la fonction
   // n'existe pas : aucune route ne l'annonce. La clé ne quitte jamais le serveur (`secret`).

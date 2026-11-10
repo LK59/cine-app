@@ -274,7 +274,10 @@ class Database:
                            # Rapport de décision (11/2026, report.py) : les faits de l'analyse (versions,
                            # précision du détecteur, plages sautées et leur source), le détail des groupes
                            # de visages et des voix.
-                           ("items", "run_json"), ("results", "diag_json"), ("voice_results", "diag_json")):
+                           ("items", "run_json"), ("results", "diag_json"), ("voice_results", "diag_json"),
+                           # « Revenir au début de la scène » (11/2026, scenecuts.py) : la mesure des frontières
+                           # d'un résultat complet, et les chapitres du fichier (ffprobe, une fois).
+                           ("results", "bounds_json"), ("items", "chapters_json")):
             cols = {r[1] for r in self._conn.execute(f"PRAGMA table_info({table})")}
             if col not in cols:
                 kind = "INTEGER NOT NULL DEFAULT 0" if col == "voice" else ("REAL" if col in ("voice_tried", "relabeled") else "TEXT")

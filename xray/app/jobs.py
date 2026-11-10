@@ -351,7 +351,9 @@ class JobStore:
                   knownDuration=known, durationS=spec.rebind_duration, oldEtag=row["etag"], etag=spec.etag)
             return False
         now = time.time()
-        c.execute("UPDATE items SET etag=?, path=?, updated=? WHERE item_id=?", (spec.etag, spec.path, now, spec.item_id))
+        # Les chapitres sont relus sur le nouveau fichier (scenecuts.backfill_some) : un réencodage peut les perdre.
+        c.execute("UPDATE items SET etag=?, path=?, updated=?, chapters_json=NULL WHERE item_id=?",
+                  (spec.etag, spec.path, now, spec.item_id))
         c.execute("UPDATE results SET etag=?, updated=? WHERE item_id=?", (spec.etag, now, spec.item_id))
         # Les voix suivent : mêmes temps, même durée.
         c.execute("UPDATE voice_results SET etag=?, updated=? WHERE item_id=?", (spec.etag, now, spec.item_id))
@@ -368,7 +370,7 @@ class JobStore:
                       "asd_votes", "asd_runs", "reports"):
             c.execute(f"DELETE FROM {table} WHERE item_id=?", (item_id,))
         c.execute("UPDATE items SET stats_json=NULL, voice_track_json=NULL, voice_model=NULL, voice_error=NULL, "
-                  "voice_tried=NULL, run_json=NULL WHERE item_id=?", (item_id,))
+                  "voice_tried=NULL, run_json=NULL, chapters_json=NULL WHERE item_id=?", (item_id,))
 
     def delete(self, item_id: str) -> None:
         item_id = item_id.lower()

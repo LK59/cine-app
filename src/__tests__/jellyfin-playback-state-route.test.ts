@@ -82,6 +82,16 @@ describe("l'état du spectateur", () => {
     expect(body.resumeSeconds).toBeCloseTo(2285.2863837, 4);
   });
 
+  // « Revenir au début de la scène » (§142) : l'absence se mesure sur la réponse que le lecteur lit déjà.
+  it("donne la dernière lecture selon Jellyfin, ou null", async () => {
+    mockUserData.mockResolvedValue({ UserData: { PlaybackPositionTicks: 0, LastPlayedDate: "2026-11-09T20:15:00.0000000Z" } });
+    expect((await (await get()).json()).lastPlayedAt).toBe("2026-11-09T20:15:00.000Z");
+    mockUserData.mockResolvedValue({ UserData: { PlaybackPositionTicks: 0, LastPlayedDate: "pas une date" } });
+    expect((await (await get()).json()).lastPlayedAt).toBeNull();
+    mockUserData.mockResolvedValue({ UserData: { PlaybackPositionTicks: 0 } });
+    expect((await (await get()).json()).lastPlayedAt).toBeNull();
+  });
+
   // Le film s'ouvre à son début plutôt que de ne pas s'ouvrir : c'est le raisonnement que tient
   // déjà tout ce chemin quand Jellyfin ne répond pas.
   it("répond zéro quand Jellyfin ne dit rien de l'élément", async () => {

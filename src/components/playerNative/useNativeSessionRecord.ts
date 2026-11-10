@@ -30,6 +30,7 @@ import { useWatchedClockRun } from "@/components/player/session/useWatchedClockR
 import { recordsResume } from "@/components/player/session/habitWatch";
 import { timelinePosition, useSessionTimeline } from "@/components/player/session/useSessionTimeline";
 import { gaveUpFields } from "@/components/player/session/gaveUp";
+import { endSceneRestart, sceneRestartLogFields } from "@/lib/sceneRestartSession";
 
 /**
  * La copie de secours du bilan (`unsentStop`) est réécrite quand la séance a gagné ce temps regardé
@@ -139,9 +140,11 @@ export function useNativeSessionRecord({
         ...sleepTimerLogFields(sleepTimerStore.get()),
         // Ce que la lenteur a fait paraître pendant la séance, et les choix faits (§78).
         ...slowFields(),
+        // « Revenir au début de la scène » (§142) : ce qui a été décidé — rien sans les acteurs à l'écran.
+        ...sceneRestartLogFields(itemId),
       };
     },
-    [tally, watched, intendedPosition, slowFields, describeFileRef, pathRef, remuxRef, videoElRef, lastVideoElRef, mountedAtRef, everReadyRef]
+    [tally, watched, intendedPosition, slowFields, describeFileRef, pathRef, remuxRef, videoElRef, lastVideoElRef, mountedAtRef, everReadyRef, itemId]
   );
   /**
    * Comment la séance s'est terminée — la ligne `stop` du journal.
@@ -165,6 +168,7 @@ export function useNativeSessionRecord({
     (why: "close" | "next" | "page" | "unmount") => {
       if (!lifecycle.claimStop()) return;
       reportPlayback("stop", stopFields(why));
+      endSceneRestart(itemId);
       clearUnsentStop(sessionId);
       // De quoi reprendre, pris dans ce que le lecteur tient en mémoire — voir `keepOnStop`. Lu ici,
       // avant que le pipeline soit détruit (la croix, puis `stopPlaybackNow` ; au démontage, cet
@@ -182,7 +186,7 @@ export function useNativeSessionRecord({
         /* la reprise se fera par le réseau */
       }
     },
-    [stopFields, sessionId, lifecycle, bench, remuxRef, positionRef, isSceneRef]
+    [stopFields, sessionId, lifecycle, bench, remuxRef, positionRef, isSceneRef, itemId]
   );
   /**
    * Le bilan gardé sur l'appareil, tenu à jour tant que la séance vit.

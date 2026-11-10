@@ -15,6 +15,7 @@ import { useSystemPip } from "@/components/playerControls/useSystemPip";
 import { useChapters, useTrickplay } from "@/components/playerControls/useTrickplay";
 import { PlayerTopBar } from "@/components/playerControls/PlayerTopBar";
 import { PlayerPrompts } from "@/components/playerControls/PlayerPrompts";
+import { useSceneRestart } from "@/components/playerControls/useSceneRestart";
 import { PlayerNextUp } from "@/components/playerControls/PlayerNextUp";
 import { PlayerSettingsMenu, type MenuView } from "@/components/playerControls/PlayerSettingsMenu";
 import { BOTTOM_EDGE, PROMPT_BOTTOM } from "@/components/playerControls/layout";
@@ -721,6 +722,22 @@ export function PlayerControls({
   const xrayOffered = useXrayAvailable() && xrayable && !lab;
   const xrayPayload = useXrayScenes(itemId, xrayOffered);
   /**
+   * « Revenir au début de la scène » (§142) : décidé une fois par séance sur ces mêmes scènes, à la première
+   * image ; montré seulement au public réglé (`SCENE_RESTART_ENABLED`, coupé par défaut) — voir `useSceneRestart`.
+   */
+  const sceneRestart = useSceneRestart({
+    itemId,
+    offered: xrayOffered,
+    payload: xrayPayload,
+    currentTime,
+    playing,
+    settled: !loading && !openingQuiet && !resuming,
+    castActive: !!castActive,
+    introSkip,
+    recapSkip,
+    creditsStart,
+  });
+  /**
    * La rangée et le bouton de la question paraissent **avec les commandes, en lecture comme en pause**
    * (10.27) ; jamais panneau ouvert, pendant une reprise, l'ouverture du film ou une diffusion. La scène de
    * l'instant se cherche en mémoire à chaque rendu — aucune requête.
@@ -845,6 +862,8 @@ export function PlayerControls({
   // l'élément. Ne touche pas l'état `currentTime` : `skip` et « Passer l'intro » laissent `seeked`
   // le poser, seul `commitSeek` le pose lui-même.
   function seekElement(video: HTMLVideoElement, time: number) {
+    // Un saut avant la première image refuse « Revenir au début de la scène » ; pendant qu'il est montré, le retire.
+    sceneRestart.noteSeek();
     onSeekRequest?.(time);
     video.currentTime = time;
   }
@@ -1111,6 +1130,9 @@ export function PlayerControls({
         onSkip={(end) => {
           if (videoRef.current) seekElement(videoRef.current, end);
         }}
+        // « Passer l'intro / le récap » garde la priorité : une invite à la fois, au même endroit.
+        sceneRestart={skipNow ? null : sceneRestart.prompt}
+        onSceneRestart={() => sceneRestart.use((target) => commitSeek(target))}
         sleepWarning={sleepWarning}
         askStillThere={askStillThere}
         // La petite carte ne reste que pour une diffusion : l'image est sur le téléviseur.
@@ -1173,7 +1195,11 @@ export function PlayerControls({
             downloadable={downloadable}
             audioTracks={audioTracks}
             currentAudioId={currentAudioId}
-            onChangeAudio={onChangeAudio}
+            onChangeAudio={(id) => {
+              // Un changement de piste avant la première image refuse « Revenir au début de la scène » (§142).
+              sceneRestart.noteTrack();
+              onChangeAudio(id);
+            }}
             subtitleTracks={subtitleTracks}
             currentSubtitleId={currentSubtitleId}
             onChangeSubtitle={onChangeSubtitle}
