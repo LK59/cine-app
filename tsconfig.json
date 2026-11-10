@@ -40,6 +40,8 @@
   "exclude": [
     "node_modules",
     ".claude",
-    "streamdeck-plugin"
+    "streamdeck-plugin",
+    // Le mode « Immersion » : un projet à part (three, son propre tsconfig), vérifié par son propre build.
+    "immersion"
   ]
 }

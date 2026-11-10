@@ -29,3 +29,16 @@ gallery
 
 # Le service laterna-xray a son propre Dockerfile et sa propre image.
 xray
+
+# Le mode « Immersion » (immersion/PROGRESS.md) : seul ce que son étape de build lit entre dans le
+# contexte — ni ses dépendances, ni son build local, ni les fichiers bruts des assets, ni ses outils,
+# ses tests et ses notes (un changement là ne doit pas refaire son build).
+immersion/node_modules
+immersion/dist
+immersion/assets-src
+immersion/tools
+immersion/tests
+immersion/captures
+immersion/test-results
+immersion/.env
+immersion/*.md

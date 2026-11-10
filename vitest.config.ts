@@ -65,7 +65,9 @@ export default defineConfig({
     env: { DATA_DIR: TEST_DATA_DIR, SETUP_COMPLETE: "true" },
     // Les copies de travail d'agents (`.claude/worktrees/…`) vivent dans le dépôt : sans ceci,
     // la vérification lançait aussi leurs tests, à moitié écrits, contre leurs propres sources.
-    exclude: [...configDefaults.exclude, "**/.claude/**"],
+    // `immersion/` est un projet à part (le mode 3D caché) : ses tests sont des scénarios Playwright,
+    // lancés par ses propres outils, avec ses propres dépendances.
+    exclude: [...configDefaults.exclude, "**/.claude/**", "immersion/**"],
   },
   resolve: {
     alias: {
