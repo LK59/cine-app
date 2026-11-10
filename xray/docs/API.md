@@ -196,11 +196,11 @@ résultat **complet** déjà mesuré, et seulement alors :
 
 ```json
 {
-  "…": "…", "speechShare": 0.561, "cutsVersion": 1,
+  "…": "…", "speechShare": 0.561, "cutsVersion": 2,
   "chapters": { "kind": "auteur", "count": 12, "aligned": 4 },
   "scenes": [
-    { "start": 1086.25, "end": 1174.25, "people": [ "…" ], "entry": 1086.25, "cut": { "ok": true, "why": "deux-signaux" } },
-    { "start": 1174.25, "end": 1319.75, "people": [ "…" ], "entry": 1171.424, "cut": { "ok": false, "why": "même-lieu" } }
+    { "start": 1086.25, "end": 1174.25, "people": [ "…" ], "entry": 1086.25, "cut": { "ok": true, "why": "deux-signaux" }, "pauses": [[1131.6, 1138.2]] },
+    { "start": 1174.25, "end": 1319.75, "people": [ "…" ], "entry": 1171.424, "cut": { "ok": false, "why": "même-lieu" }, "pauses": [] }
   ]
 }
 ```
@@ -208,10 +208,11 @@ résultat **complet** déjà mesuré, et seulement alors :
 | Champ | Sens |
 |---|---|
 | `scenes[].entry` | d'où repartir pour revoir cette scène : son début, ou le début d'une phrase commencée 3 s au plus avant |
-| `scenes[].cut` | `ok` : un vrai début de scène ; `why` : `début`, `après-saut`, `chapitre`, `deux-signaux` — ou, refusé, `parole`, `même-lieu`, `montage`, `îlot`. Absent pour une frontière sans mesure (résultat d'avant regroupé autrement) |
+| `scenes[].cut` | `ok` : un vrai début de scène ; `why` : `début`, `après-saut`, `chapitre`, `deux-signaux` — ou, refusé, `parole`, `même-lieu`, `montage`, `îlot`, et depuis `cutsVersion` 2 `court` (une scène voisine de moins de 40 s), `muet` (aucune réplique dans les 60 s après l'entrée), `enchaîné` (moins de 1,5 s de silence autour de l'entrée). Absent pour une frontière sans mesure (résultat d'avant regroupé autrement) |
+| `scenes[].pauses` | *(`cutsVersion` 2)* les silences d'au moins 5 s qui suivent une prise de parole et **commencent** dans cette scène, `[début, fin]` en secondes ; la fin peut dépasser la scène. Présent avec `cut` |
 | `speechShare` | part du temps des scènes où l'on parle ; `null` tant que « qui parle » n'est pas complet (et alors ni `entry` ni `cut`) |
 | `chapters` | `kind` : `auteur`, `automatique`, `marqueurs`, `aucun`, `illisible`, `inconnu` ; `count` ; `aligned` (frontières sûres par un chapitre) |
-| `cutsVersion` | version des règles des débuts de scène (1) — indépendante de `version` |
+| `cutsVersion` | version des règles des débuts de scène (2) — indépendante de `version` ; les règles s'appliquent à la lecture, une nouvelle version vaut aussitôt pour tous les résultats mesurés |
 
 Sans mesure (résultat partiel, élément pas encore repris), la réponse est exactement celle d'avant.
 
@@ -499,3 +500,4 @@ scènes sont regroupées à neuf à chaque assemblage depuis les plans gardés e
 | 10/11/2026 | `/items/{id}/report` ; `items[]` avec `reportUrl` dans `/quality` |
 | 10/11/2026 | synchro des sous-titres : `POST /subsync/jobs`, `GET /subsync/results`, `subsync` dans `/health` |
 | 10/11/2026 | débuts de scène : `entry` et `cut` par scène, `speechShare`, `chapters`, `cutsVersion` dans `/items/{id}/scenes` (résultat complet mesuré) |
+| 10/11/2026 | débuts de scène, `cutsVersion` 2 : refus `court`, `muet`, `enchaîné` ; `pauses` par scène |

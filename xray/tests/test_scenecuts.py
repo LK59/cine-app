@@ -151,7 +151,7 @@ def test_regles_des_coupes():
         {"t": 160.0, "sim": 0.9, "fb": 3, "fa": 3, "fj": 0.5},   # même décor, mêmes personnes
         {"t": 200.0, **CHANGE},                                  # au milieu d'une phrase commencée 10 s avant
         {"t": 215.0, "sim": 0.5, "fb": 0, "fa": 0, "fj": None},  # deux scènes courtes sans visage ni parole
-        {"t": 230.0, "sim": 0.81, "fb": 2, "fa": 2, "fj": 0.15}, # deux signaux, juste au seuil
+        {"t": 230.0, "sim": 0.81, "fb": 2, "fa": 2, "fj": 0.15}, # deux signaux au seuil, après 15 s : court
         {"t": 400.0, "sim": 0.5, "fb": 3, "fa": 1, "fj": 0.0},   # couleurs seules : un seul signal
         {"t": 500.0, "sim": 0.95, "fb": 3, "fa": 3, "fj": 1.0},  # même lieu, mais un chapitre d'auteur
     ]
@@ -164,7 +164,7 @@ def test_regles_des_coupes():
         (160.0, False, "même-lieu"),
         (200.0, False, "parole"),
         (215.0, False, "montage"),
-        (230.0, True, "deux-signaux"),
+        (230.0, False, "court"),
         (400.0, False, "même-lieu"),
         (500.0, True, "chapitre"),
     ]
@@ -183,7 +183,7 @@ def test_chapitre_l_emporte_sur_la_parole_et_garde_l_entree():
     scenes = [_scene(0, 100), _scene(100, 300)]
     bounds = [{"t": 0.0, "first": True}, {"t": 100.0, "sim": 0.95, "fb": 0, "fa": 0, "fj": None}]
     out = sc.decide(scenes, bounds, sc.speech_runs([(98.5, 110.0)]), [101.5])
-    assert out[1] == {"entry": 98.5, "cut": {"ok": True, "why": "chapitre"}}
+    assert out[1] == {"entry": 98.5, "cut": {"ok": True, "why": "chapitre"}, "pauses": [[110.0, 300.0]]}
     # Un chapitre à plus de 2 s ne dit rien.
     out = sc.decide(scenes, bounds, [], [102.5])
     assert out[1]["cut"]["ok"] is False
@@ -200,16 +200,50 @@ def test_ilot():
     scenes[2] = _scene(200, 260)
     scenes[3] = _scene(260, 400)
     bounds[3] = {"t": 260.0, **same}
-    assert sc.decide(scenes, bounds, [], [])[2]["cut"] == {"ok": True, "why": "deux-signaux"}
+    # (une réplique 5 s après la coupe : sans elle, elle serait `muet`)
+    assert sc.decide(scenes, bounds, sc.speech_runs([(205.0, 215.0)]), [])[2]["cut"] == {"ok": True, "why": "deux-signaux"}
 
 
 def test_apres_un_trou_et_frontiere_sans_mesure():
     scenes = [_scene(62.4, 200), _scene(200, 300), _scene(300, 400)]
     bounds = [{"t": 62.4, "gap": True}, {"t": 300.0, **CHANGE}]
-    out = sc.decide(scenes, bounds, [], [])
+    out = sc.decide(scenes, bounds, sc.speech_runs([(310.0, 320.0)]), [])
     assert out[0]["cut"] == {"ok": True, "why": "après-saut"}
     assert out[1] is None  # regroupée autrement que la mesure : rien n'est dit
     assert out[2]["cut"]["ok"] is True
+
+
+def test_deux_signaux_resserres():
+    """Version 2 : une coupe aux deux signaux est refusée près d'une scène courte (`court`), sans réplique dans la
+    minute (`muet`) ou quand la parole ne s'y arrête pas (`enchaîné`). Les chapitres d'auteur n'y passent pas."""
+    scenes = [_scene(0, 100), _scene(100, 130), _scene(130, 250), _scene(250, 400), _scene(400, 600), _scene(600, 800)]
+    bounds = [{"t": 0.0, "first": True}] + [{"t": float(t), **CHANGE} for t in (100, 130, 250, 400, 600)]
+    runs = sc.speech_runs([(320.0, 330.0), (390.0, 399.5), (400.5, 410.0), (590.0, 598.0), (601.0, 610.0)])
+    out = sc.decide(scenes, bounds, runs, [])
+    assert [x["cut"]["why"] for x in out] == ["début", "court", "court", "muet", "enchaîné", "deux-signaux"]
+    assert [x["cut"]["ok"] for x in out] == [True, False, False, False, False, True]
+    # 30 s de scène d'un côté (court), 70 s sans un mot (muet), 1 s de silence autour de la coupe (enchaîné) ;
+    # 3 s de silence autour de la dernière : gardée.
+    assert sc.speech_gaps(runs, 600.0) == (2.0, 1.0)
+    assert sc.speech_gaps(runs, 250.0) == (float("inf"), 70.0)
+    # Un chapitre d'auteur au même endroit reste sûr.
+    assert sc.decide(scenes, bounds, runs, [400.0])[4]["cut"] == {"ok": True, "why": "chapitre"}
+    # Un refus de la version 2 ne fait pas d'îlot de sa voisine (l'îlot se juge sur la version 1).
+    assert out[5]["cut"]["ok"] is True
+
+
+def test_silences_par_scene():
+    """Les silences d'au moins 5 s après une prise de parole, rangés là où ils commencent, fin comprise même
+    au-delà de la scène ; rien avant la première réplique."""
+    scenes = [_scene(0, 100), _scene(100, 130), _scene(130, 250), _scene(250, 400), _scene(400, 600), _scene(600, 800)]
+    bounds = [{"t": 0.0, "first": True}] + [{"t": float(t), **CHANGE} for t in (100, 130, 250, 400, 600)]
+    runs = sc.speech_runs([(320.0, 330.0), (390.0, 399.5), (400.5, 410.0), (590.0, 598.0), (601.0, 610.0)])
+    out = sc.decide(scenes, bounds, runs, [])
+    assert [x["pauses"] for x in out] == [[], [], [], [[330.0, 390.0]], [[410.0, 590.0]], [[610.0, 800.0]]]
+    # Un silence qui enjambe une frontière reste entier, dans la scène où il commence.
+    assert sc.pauses_by_scene(sc.speech_runs([(90.0, 95.0), (140.0, 150.0)]), scenes[:3]) == [[[95.0, 140.0]], [], [[150.0, 250.0]]]
+    assert sc.pauses_by_scene([], scenes) == [[] for _ in scenes]
+    assert sc.pauses_by_scene(runs, []) == []
 
 
 # ---- /scenes : un ajout compatible ----------------------------------------------------------------
@@ -260,6 +294,21 @@ def test_scenes_mesurees(client):
     assert body["chapters"] == {"kind": "auteur", "count": 2, "aligned": 1}
     assert body["cutsVersion"] == sc.CUTS_VERSION
     assert body["version"] == 5
+    # Les silences (version 2) : après 102 s jusqu'à la réplique de 150 s, puis jusqu'à la fin.
+    assert body["scenes"][0]["pauses"] == [] and body["scenes"][1]["pauses"] == [[102.0, 150.0], [210.0, 300.0]]
+
+
+def test_nouvelles_regles_sans_nouvelle_mesure(client):
+    """Les règles s'appliquent à la lecture : une mesure gardée de la version des mesures du jour sert les règles
+    du jour (`cutsVersion`) sans être refaite — monter `CUTS_VERSION` ne relance pas le rattrapage."""
+    client.post("/jobs", json=job(), headers=AUTH)
+    _done(client.db, chapters={"chapters": []})
+    client.db.run("UPDATE results SET bounds_json=? WHERE item_id=?",
+                  (sc.bounds_doc([{"t": 0.0, "first": True}]), ITEM))
+    assert json.loads(sc.bounds_doc([]))["v"] == sc.BOUNDS_VERSION
+    assert sc.next_backfill(client.db) is None
+    body = client.get(f"/items/{ITEM}/scenes", headers=AUTH).json()
+    assert body["cutsVersion"] == sc.CUTS_VERSION and body["scenes"][0]["cut"] == {"ok": True, "why": "début"}
 
 
 def test_parole_inconnue_pas_de_verdict(client):
@@ -312,6 +361,6 @@ def test_mesure_des_resultats_d_avant(client, monkeypatch):
     res = db.one("SELECT scenes_json, bounds_json FROM results WHERE item_id=?", (ITEM,))
     assert json.loads(res["scenes_json"]) == stored
     doc = json.loads(res["bounds_json"])
-    assert doc["v"] == sc.CUTS_VERSION and [x["t"] for x in doc["bounds"]] == [0.0, 40.0]
+    assert doc["v"] == sc.BOUNDS_VERSION and [x["t"] for x in doc["bounds"]] == [0.0, 40.0]
     chapters = json.loads(db.one("SELECT chapters_json FROM items WHERE item_id=?", (ITEM,))["chapters_json"])
     assert "error" in chapters

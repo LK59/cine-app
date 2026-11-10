@@ -59,6 +59,26 @@ describe("scenesForPlayer", () => {
     expect(out).not.toHaveProperty("chapters");
   });
 
+  it("les silences (`cutsVersion` 2) passent avec le verdict, relus paire par paire", async () => {
+    svc.scenes = {
+      ...plain,
+      speechShare: 0.56,
+      cutsVersion: 2,
+      scenes: [
+        { start: 0, end: 100, people: [], entry: 0, cut: { ok: true, why: "début" }, pauses: [] },
+        { start: 100, end: 200, people: [], entry: 100, cut: { ok: false, why: "court" }, pauses: [[120, 130], [150, "x"], [190, 180], [1, 2, 3], 4, [205.5, 240]] },
+        { start: 200, end: 300, people: [], pauses: [[210, 220]] },
+        { start: 300, end: 400, people: [], entry: 300, cut: { ok: true, why: "chapitre" }, pauses: "non" },
+      ],
+    };
+    const out = await scenesForPlayer(ITEM);
+    expect(out.scenes[0]).toEqual({ start: 0, end: 100, people: [], entry: 0, cut: { ok: true, why: "début" }, pauses: [] });
+    expect(out.scenes[1].pauses).toEqual([[120, 130], [205.5, 240]]);
+    // Sans verdict, rien de la mesure ne passe ; des silences illisibles : absents (le lecteur ne propose rien).
+    expect(out.scenes[2]).toEqual({ start: 200, end: 300, people: [] });
+    expect(out.scenes[3]).not.toHaveProperty("pauses");
+  });
+
   it("la parole inconnue reste dite (`null`)", async () => {
     svc.scenes = { ...plain, speechShare: null, scenes: [] };
     expect((await scenesForPlayer(ITEM)).speechShare).toBeNull();

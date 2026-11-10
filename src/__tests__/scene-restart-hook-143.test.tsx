@@ -28,9 +28,9 @@ const PAYLOAD: XrayPlayerPayload = {
   analyzedUntil: 600,
   speechShare: 0.5,
   scenes: [
-    { start: 0, end: 100, people: [person], entry: 0, cut: { ok: true, why: "début" } },
-    { start: 100, end: 300, people: [person], entry: 98, cut: { ok: true, why: "deux-signaux" } },
-    { start: 300, end: 600, people: [person], entry: 300, cut: { ok: false, why: "même-lieu" } },
+    { start: 0, end: 100, people: [person], entry: 0, cut: { ok: true, why: "début" }, pauses: [] },
+    { start: 100, end: 300, people: [person], entry: 98, cut: { ok: true, why: "deux-signaux" }, pauses: [[200, 204]] },
+    { start: 300, end: 600, people: [person], entry: 300, cut: { ok: false, why: "même-lieu" }, pauses: [] },
   ],
 };
 

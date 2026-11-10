@@ -10424,14 +10424,35 @@ service dit donc, **frontière par frontière**, si l'on peut y revenir et d'où
   `même-lieu`, `montage` (deux scènes de moins de 25 s sans visage ni parole), `îlot` (une scène sûre de moins d'une
   minute entre deux refus). R&D du 10/11/2026 sur 44 frontières jugées à l'œil (*Ted Lasso*, *Le Flambeau*,
   *House of the Dragon*) : un seul signal acceptait 7 fausses frontières sur 22.
+- **`cutsVersion` 2** (10/11/2026, service 1.6.0), après les îlots et pour `deux-signaux` seulement (les chapitres
+  d'auteur, tous justes à la mesure, n'y passent pas) : refusée `court` (la scène d'avant ou d'après dure moins de
+  40 s, `SHORT_SCENE_S`), `muet` (personne ne parle dans les 60 s après le point d'entrée, `FIRST_SPEECH_MAX_S`),
+  `enchaîné` (moins de 1,5 s de silence en tout de part et d'autre du point d'entrée, `CUT_QUIET_MIN_S` : la
+  conversation continue par-dessus le changement de plan) ;
+- `pauses` (version 2) : chaque silence d'au moins 5 s qui suit une prise de parole, `[début, fin]`, dans la scène
+  où il **commence** (sa fin peut la dépasser : Laterna le mesure entier).
+
+Les règles s'appliquent **à la lecture** de `/scenes` : `CUTS_VERSION` (servie comme `cutsVersion`) ne touche pas
+aux mesures gardées, qui portent leur propre version, `BOUNDS_VERSION` (1) — monter la première vaut aussitôt pour
+tous les résultats mesurés, sans rattrapage ; seule la seconde relance `backfill_some`.
 
 Côté Laterna, la décision est **une fonction pure**, `decideSceneRestart` (`src/lib/sceneRestart.ts`), dans l'ordre
 de ses refus : analyse complète et mesurée, parole connue et ≥ 20 % du temps, absence ≥ 4 h (Jellyfin,
 `UserData.LastPlayedDate`), ni saut ni changement de piste avant la première image, pas dans la première minute,
 ni dans l'intro, le récap, le générique de fin ou les dernières scènes sans visage, aucune coupe sûre dans les
-20 dernières secondes ; la cible est la dernière coupe sûre ≥ 20 s avant la position, à son `entry`, de 20 s à
-3 min en arrière, et l'on ne remonte que par-dessus des refus `même-lieu` — jamais par-dessus une phrase coupée,
-un îlot, un montage ou une frontière sans verdict.
+20 dernières secondes ; la cible est la dernière coupe sûre ≥ 20 s avant la position, à son `entry`, de 20 à
+**90 s** en arrière (`trop-loin`), jamais `début` ni `après-saut` (`cible-début`, `cible-après-saut` : des bords de
+l'analyse, pas des débuts reconnus) ; **aucune frontière refusée** entre la cible et la position, `même-lieu`
+compris (`coupe-<raison>`), ni sans verdict (`coupe-inconnue`) ; chaque scène de la cible à la position porte ses
+silences (sinon `pauses-inconnues` : un service en `cutsVersion` 1 ne fait rien proposer) et **aucun silence de 5 s**
+ou plus ne commence après le point d'entrée et avant la position, mesuré jusqu'à elle (`pause`).
+
+**Le resserrement (10/11/2026).** Seconde R&D : 17 titres (films et séries, dialogues et action), une position de
+reprise toutes les 10 s (6 850 positions), chaque cible jugée à l'œil sur ses images, et « trop tôt » quand la scène
+regardée avait changé entre la cible et la position. Règles de la première version (cible jusqu'à 3 min, en
+enjambant les `même-lieu`) : bouton à 21,8 % des positions, bonne cible 64 % du temps seulement. Avec la
+`cutsVersion` 2 et les règles ci-dessus : **3,2 %** des positions, 49 cibles, recul médian 44 s, **toutes justes**
+(217 propositions sur 217). Le bouton paraît rarement — c'est voulu : il ne doit jamais ramener ailleurs.
 
 **Livré coupé.** `SCENE_RESTART_ENABLED` (public `off` / `admins` / `tous`, défaut `off`, groupe des acteurs à
 l'écran) : coupé, le bouton n'est jamais montré, mais la décision tourne là où « À l'écran » a déjà lu les scènes
@@ -10461,13 +10482,14 @@ l'écran) ; `playback-state` donne `lastPlayedAt` (aucune requête de plus : `fe
 (`useServerSessionRecord`) ; `sceneRestartAvailable` dans `/api/config/public`, **suivi, jamais demandé**, absent
 des doubles des empreintes — elles ne bougent pas.
 
-**Ce qui diffère exprès.** La première minute du fichier est refusée sur la *position* ; une cible au tout début
-(`début`, à 0) reste permise. Le lecteur serveur ouvert seul ne lit `playback-state` que s'il ne connaît pas sa
+**Ce qui diffère exprès.** La première minute du fichier est refusée sur la *position*, et le début du fichier
+n'est jamais une cible (`cible-début`) ; `début` et `après-saut` restent pourtant des coupes sûres pour le reste
+(une reprise juste après est une `scène-récente`, et l'on ne remonte pas par-dessus une plage sautée). Le lecteur serveur ouvert seul ne lit `playback-state` que s'il ne connaît pas sa
 position : sinon `absence-inconnue`.
 
 **Tests.** `scene-restart-143.test.ts` (la décision sur les frontières de *Ted Lasso* et du *Flambeau* telles que
-le service les rend, la séance, le journal), `scene-restart-hook-143.test.tsx` (coupé : mesuré et jamais montré ;
+le service les rendait en version 1, les cibles refusées, le recul de 90 s, les silences, la séance, le journal), `scene-restart-hook-143.test.tsx` (coupé : mesuré et jamais montré ;
 allumé : huit secondes, issues, une fois par séance), `scene-restart-payload-143.test.ts` (le passage par
 `scenesForPlayer`), `jellyfin-playback-state-route.test.ts` (`lastPlayedAt`) ; côté service
-`xray/tests/test_scenecuts.py` (chapitres, mesures, entrée, règles, `/scenes` inchangé sans mesure, résultats
-d'avant).
+`xray/tests/test_scenecuts.py` (chapitres, mesures, entrée, règles, deux signaux resserrés, silences, `/scenes`
+inchangé sans mesure, résultats d'avant, règles nouvelles sans nouvelle mesure).

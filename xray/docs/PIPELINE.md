@@ -514,7 +514,14 @@ d'écart) et les chapitres (`items.chapters_json`) :
   25 s, sans visage de part et d'autre ni parole qui traverse) ; `deux-signaux` (les couleurs changent,
   `sim` ≤ 0,82, **et** les personnes aussi, `fj` ≤ 0,15 avec deux groupes au moins de chaque côté) ; sinon refus
   `même-lieu`. Puis **îlot** : une scène acceptée aux deux signaux, de moins de 60 s, entre deux frontières
-  refusées, est refusée (`îlot`).
+  refusées, est refusée (`îlot`). Enfin (version 2) les **deux signaux resserrés**, après les îlots : une coupe
+  `deux-signaux` est refusée si la scène d'avant ou d'après dure moins de 40 s (`court`), si personne ne parle
+  dans les 60 s qui suivent le point d'entrée (`muet`), ou si le silence avant et après le point d'entrée fait
+  moins de 1,5 s en tout (`enchaîné` : la conversation continue par-dessus le changement de plan). Les chapitres
+  d'auteur, tous justes à la mesure, n'y passent pas.
+- **`pauses`** (version 2) : les silences d'au moins 5 s qui suivent une prise de parole — jusqu'à la suivante,
+  ou jusqu'à la fin de la dernière scène —, `[début, fin]`, rangés dans la scène où ils **commencent** (la fin
+  peut dépasser la scène). Laterna ne propose pas de revenir au début d'une scène par-dessus l'un d'eux.
 - **Chapitres** : `auteur` (servent à l'alignement), `automatique` (intervalles égaux à 2 s ou 2 % près, ou
   « Chapter N » à des minutes rondes : un outil, pas un auteur), `marqueurs` (intro, épisode, générique : des
   segments), `aucun`, `illisible`, `inconnu` (pas encore lus). Un résumé `{kind, count, aligned}` est servi.
@@ -524,14 +531,20 @@ d'écart) et les chapitres (`items.chapters_json`) :
 Mesuré le 10/11/2026 sur 44 frontières jugées à l'œil (*Ted Lasso* S01E09, *Le Flambeau* S01E01, *House of the
 Dragon* S01E01) : la règle à **un** signal (couleurs *ou* personnes) acceptait 22 frontières dont 7 fausses ; deux
 signaux (choix du propriétaire) en acceptent beaucoup moins, presque toutes justes — le bouton paraît moins
-souvent, mais ne ramène pas au milieu d'une scène. Les seuils sont des constantes nommées de `scenecuts.py`.
+souvent, mais ne ramène pas au milieu d'une scène. Une seconde mesure le même jour, sur dix-sept titres (une
+position de reprise toutes les 10 s, chaque cible jugée à l'œil), a donné la version 2 : la version 1 laissait
+passer des allers-retours entre deux décors d'une même scène et des plans d'ambiance ; avec ses refus et les règles
+de Laterna resserrées (DECISIONS §143), le bouton paraît à 3 % des positions, et chaque fois au bon endroit. Les
+seuils sont des constantes nommées de `scenecuts.py`.
 
-**Les résultats d'avant** : un élément fini sans mesure (ou d'une autre `CUTS_VERSION`), ou dont les chapitres
+**Les résultats d'avant** : un élément fini sans mesure (ou d'une autre `BOUNDS_VERSION`), ou dont les chapitres
 n'ont jamais été lus, est repris en tâche de fond par la voie A (`backfill_some`, après tous les autres travaux
 d'appoint, jamais devant un ordre `normal` ou `high`, lots de 10 s) : regroupement des pistes et des plans refait
 depuis la base, comme le renommage, mais **seules les mesures sont écrites** — scènes, personnes et version
 restent celles du résultat ; une frontière regroupée autrement qu'à l'époque reste sans verdict. Les mesures
-portent leur version, `CUTS_VERSION` (1) : `RESULT_VERSION` ne bouge pas.
+portent leur version, `BOUNDS_VERSION` (1), qui ne monte que si ce qui est mesuré change ; les règles, appliquées
+à chaque lecture, portent la leur, `CUTS_VERSION` (2), servie comme `cutsVersion` — une règle nouvelle vaut
+aussitôt pour tous les résultats mesurés, sans rattrapage. `RESULT_VERSION` ne bouge pas.
 
 ---
 

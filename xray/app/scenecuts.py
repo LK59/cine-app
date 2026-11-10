@@ -28,13 +28,22 @@ Ce qui s'y ajoute à la lecture (`annotate`, servi par `/items/{id}/scenes`) :
   personnes changent (`fj` ≤ 0,15 avec deux groupes au moins de chaque côté) ; sinon `même-lieu`. Deux scènes
   de moins de 25 s sans visages ni parole sont un `montage`, et une scène sûre de moins d'une minute entre deux
   frontières refusées un `îlot`.
+- puis (version 2) les **deux signaux resserrés** : la coupe est refusée si la scène d'avant ou d'après dure
+  moins de 40 s (`court`), si personne ne parle dans la minute après le point d'entrée (`muet`), ou si la parole
+  s'y arrête moins de 1,5 s en tout (`enchaîné`). Les chapitres d'auteur n'y passent pas ;
+- les **silences** (`pauses`) : chaque silence d'au moins 5 s qui suit une prise de parole, `[début, fin]`, dans
+  la scène où il commence — Laterna ne propose pas de revenir par-dessus.
 
 Mesuré le 10/11/2026 sur 44 frontières jugées à l'œil (*Ted Lasso*, *Le Flambeau*, *House of the Dragon*) :
 un seul signal (couleurs *ou* personnes) acceptait 7 frontières fausses sur 22 acceptées ; deux signaux en
-acceptent beaucoup moins, presque toutes justes. Les seuils sont des constantes nommées, ici.
+acceptent beaucoup moins, presque toutes justes. La version 2 vient d'une seconde mesure le même jour (dix-sept
+titres, une position de reprise toutes les 10 s, chaque cible jugée à l'œil) : les deux signaux de la version 1
+laissaient encore passer des allers-retours entre deux décors d'une même scène et des plans d'ambiance. Les seuils
+sont des constantes nommées, ici.
 
 Rien de ceci ne touche les scènes, leurs personnes, ni la version des résultats (`RESULT_VERSION`) : les
-champs sont des **ajouts compatibles** de `/scenes`, et ils portent leur propre version (`CUTS_VERSION`).
+champs sont des **ajouts compatibles** de `/scenes`, et ils portent leur propre version (`CUTS_VERSION` pour les
+règles, `BOUNDS_VERSION` pour les mesures gardées).
 """
 
 from __future__ import annotations
@@ -51,10 +60,17 @@ from .config import settings
 log = logging.getLogger("xray.scenecuts")
 
 # Version des débuts de scène (`cutsVersion` de /scenes) : à monter quand une règle ou un seuil d'ici
-# change. Les mesures gardées (`results.bounds_json`) portent la leur ; une mesure d'une autre version est
-# refaite en tâche de fond (`backfill_some`), sans rien décoder.
+# change. Les verdicts sont calculés à chaque lecture de `/scenes` : une nouvelle version vaut aussitôt pour
+# tous les résultats déjà mesurés.
+# Seules les règles de lecture (`decide`) changent avec elle : les mesures gardées portent la leur,
+# `BOUNDS_VERSION`, et ne sont refaites que quand ce qui est *mesuré* change.
 #   1 — (10/11/2026) première version : chapitres, parole, deux signaux, montage, îlot.
-CUTS_VERSION = 1
+#   2 — (10/11/2026) les deux signaux resserrés (`court`, `muet`, `enchaîné`) et les silences (`pauses`).
+CUTS_VERSION = 2
+# Version des mesures gardées (`results.bounds_json`, champ `v`) : à monter seulement quand `boundary_features`
+# change. Une mesure d'une autre version est refaite en tâche de fond (`backfill_some`), sans rien décoder ; les
+# règles, elles, s'appliquent à la lecture et suivent `CUTS_VERSION` d'elles-mêmes.
+BOUNDS_VERSION = 1
 
 # Les personnes : groupes de visages vus dans la minute de part et d'autre (dans les deux scènes voisines).
 PEOPLE_WINDOW_S = 60.0
@@ -75,6 +91,19 @@ FACE_GROUPS_MIN = 2
 MONTAGE_MAX_S = 25.0
 # Îlot : une scène sûre plus courte que ceci entre deux frontières refusées.
 ISLAND_MAX_S = 60.0
+# Deux signaux resserrés (version 2, R&D du 10/11/2026, positions jugées à l'œil sur 17 titres) : une coupe
+# aux deux signaux est refusée quand la scène d'avant ou celle d'après dure moins que ceci (`court` : un plan
+# de coupe, un aller-retour entre deux décors d'une même scène)…
+SHORT_SCENE_S = 40.0
+# … quand personne ne parle dans tant de secondes après le point d'entrée (`muet` : un plan d'ambiance, un
+# montage — revenir là, c'est revenir avant le début de ce qu'on regardait)…
+FIRST_SPEECH_MAX_S = 60.0
+# … ou quand, autour du point d'entrée, la parole s'arrête moins longtemps que ceci (`enchaîné` : la réplique
+# d'après répond à celle d'avant, la conversation continue par-dessus le changement de plan).
+CUT_QUIET_MIN_S = 1.5
+# Les silences d'au moins tant, après une prise de parole, sont servis par scène (`pauses`) : Laterna ne
+# propose pas de revenir par-dessus l'un d'eux (la scène a déjà changé de temps, sinon de lieu).
+PAUSE_MIN_S = 5.0
 # Chapitres automatiques : intervalles égaux à tant près (ou à 2 % de leur médiane).
 EVEN_TOLERANCE_S = 2.0
 EVEN_TOLERANCE_SHARE = 0.02
@@ -152,6 +181,39 @@ def speech_share(runs: list[tuple[float, float]], spans: list[tuple[float, float
                 break
             spoken += min(b, e) - max(a, s)
     return round(min(1.0, spoken / total), 4)
+
+
+def speech_gaps(runs: list[tuple[float, float]], t: float) -> tuple[float, float]:
+    """Le silence avant l'instant `t` (depuis la fin de la dernière prise de parole finie à `t`) et après lui
+    (jusqu'au début de la suivante) ; `inf` sans parole de ce côté. Une prise de parole qui commence à `t` (le
+    point d'entrée reculé jusqu'à elle) donne un silence d'après nul."""
+    before = after = float("inf")
+    for s, e in runs:
+        if e <= t + 0.01:
+            before = t - e
+        if s >= t - 0.01:
+            after = s - t
+            break
+    return before, after
+
+
+def pauses_by_scene(runs: list[tuple[float, float]], scenes: list[dict]) -> list[list[list[float]]]:
+    """Les silences d'au moins `PAUSE_MIN_S` qui suivent une prise de parole — jusqu'à la suivante, ou jusqu'à la
+    fin de la dernière scène —, rangés dans la scène où ils **commencent** : `[début, fin]`, la fin pouvant
+    dépasser la scène (un silence ne s'arrête pas à une frontière, et Laterna le mesure en entier)."""
+    out: list[list[list[float]]] = [[] for _ in scenes]
+    if not scenes:
+        return out
+    last = max(float(sc["end"]) for sc in scenes)
+    for k, (_, a) in enumerate(runs):
+        b = runs[k + 1][0] if k + 1 < len(runs) else last
+        if b - a < PAUSE_MIN_S:
+            continue
+        for i, sc in enumerate(scenes):
+            if float(sc["start"]) <= a < float(sc["end"]):
+                out[i].append([round(a, 3), round(b, 3)])
+                break
+    return out
 
 
 # ---- les chapitres ---------------------------------------------------------------------------------
@@ -246,8 +308,8 @@ def chapters_of(doc: dict | None) -> tuple[str, list[float]]:
 
 def decide(scenes: list[dict], bounds: list[dict], runs: list[tuple[float, float]],
            chapter_starts: list[float]) -> list[dict | None]:
-    """Pour chaque scène de `scenes` (le résultat servi), `{"entry", "cut": {"ok", "why"}}` — ou `None` si sa
-    frontière n'a pas de mesure (un résultat d'avant, regroupé autrement)."""
+    """Pour chaque scène de `scenes` (le résultat servi, dans l'ordre), `{"entry", "cut": {"ok", "why"}, "pauses"}`
+    — ou `None` si sa frontière n'a pas de mesure (un résultat d'avant, regroupé autrement)."""
     by_t = {round(b["t"], 3): b for b in bounds}
     out: list[dict | None] = []
     for i, sc in enumerate(scenes):
@@ -288,6 +350,24 @@ def decide(scenes: list[dict], bounds: list[dict], runs: list[tuple[float, float
         if (cur["cut"]["why"] == "deux-signaux" and not before["cut"]["ok"] and not after["cut"]["ok"]
                 and length < ISLAND_MAX_S):
             cur["cut"] = {"ok": False, "why": "îlot"}
+    # Les deux signaux resserrés (version 2), **après** les îlots : l'îlot se juge sur les verdicts de la
+    # version 1, comme mesuré — un refus de plus ici ne fait pas d'une voisine un îlot. Les chapitres d'auteur,
+    # tous justes à la mesure, n'y passent pas.
+    for i, x in enumerate(out):
+        if x is None or i == 0 or x["cut"]["why"] != "deux-signaux":
+            continue
+        prev_len = float(scenes[i]["start"]) - float(scenes[i - 1]["start"])
+        cur_len = float(scenes[i]["end"]) - float(scenes[i]["start"])
+        quiet_before, quiet_after = speech_gaps(runs, x["entry"])
+        if prev_len < SHORT_SCENE_S or cur_len < SHORT_SCENE_S:
+            x["cut"] = {"ok": False, "why": "court"}
+        elif quiet_after > FIRST_SPEECH_MAX_S:
+            x["cut"] = {"ok": False, "why": "muet"}
+        elif quiet_before + quiet_after < CUT_QUIET_MIN_S:
+            x["cut"] = {"ok": False, "why": "enchaîné"}
+    for x, pauses in zip(out, pauses_by_scene(runs, scenes)):
+        if x is not None:
+            x["pauses"] = pauses
     return out
 
 
@@ -305,7 +385,7 @@ def annotate(db, res) -> dict | None:
         if not res["complete"] or not res["bounds_json"]:
             return None
         doc = json.loads(res["bounds_json"])
-        if int(doc.get("v", 0)) != CUTS_VERSION:
+        if int(doc.get("v", 0)) != BOUNDS_VERSION:
             return None
         scenes = json.loads(res["scenes_json"])
         item = db.one("SELECT chapters_json FROM items WHERE item_id=?", (res["item_id"],))
@@ -332,7 +412,7 @@ def annotate(db, res) -> dict | None:
 
 
 def bounds_doc(bounds: list[dict]) -> str:
-    return json.dumps({"v": CUTS_VERSION, "bounds": bounds}, separators=(",", ":"))
+    return json.dumps({"v": BOUNDS_VERSION, "bounds": bounds}, separators=(",", ":"))
 
 
 def next_backfill(db):
@@ -343,7 +423,7 @@ def next_backfill(db):
            WHERE i.status='done' AND r.complete=1 AND r.etag = i.etag
              AND (r.bounds_json IS NULL OR r.bounds_json NOT LIKE ? OR i.chapters_json IS NULL)
            ORDER BY i.updated DESC LIMIT 1""",
-        (f'{{"v":{CUTS_VERSION},%',),
+        (f'{{"v":{BOUNDS_VERSION},%',),
     )
 
 
@@ -360,7 +440,7 @@ def backfill_item(db, row) -> dict:
         doc = store_chapters(db, item_id, row["path"])
         out["chapters"] = "error" if "error" in doc else len(doc.get("chapters") or [])
     res = db.one("SELECT bounds_json, scenes_json FROM results WHERE item_id=?", (item_id,))
-    if res is not None and not (res["bounds_json"] or "").startswith(f'{{"v":{CUTS_VERSION},'):
+    if res is not None and not (res["bounds_json"] or "").startswith(f'{{"v":{BOUNDS_VERSION},'):
         bounds = rebuild_bounds(db, row)
         stored = {round(float(s["start"]), 3) for s in json.loads(res["scenes_json"])}
         kept = [b for b in bounds if round(b["t"], 3) in stored]

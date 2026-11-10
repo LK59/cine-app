@@ -312,7 +312,7 @@ Les tables de `xray.db` :
 | `chunks` | tronçon de 2 min | bornes, fait ou non, décodeur utilisé |
 | `shots` | plan | bornes, histogramme de couleurs |
 | `tracks` | piste de visage | plan, temps de présence, qualité, nombre de visages, **empreinte** (512 nombres) |
-| `results` | élément | scènes (JSON), plage analysée, avancement, complet, version ; mesures des frontières de scène (`bounds_json`, avec leur `CUTS_VERSION`) |
+| `results` | élément | scènes (JSON), plage analysée, avancement, complet, version ; mesures des frontières de scène (`bounds_json`, avec leur `BOUNDS_VERSION`) |
 | `photo_emb` | photo de référence × modèle | empreinte (ou rien : photo sans visage exploitable, jamais retentée) |
 | `voice_regions` | zone de parole | bornes, tronçon |
 | `voice_windows` | fenêtre de voix de 1,5 s | bornes, **empreinte** (demi-précision) |

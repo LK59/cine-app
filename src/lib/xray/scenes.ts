@@ -32,6 +32,8 @@ export interface XrayPlayerScene {
   /** « Revenir au début de la scène » (§143) : le point d'entrée et le verdict du service — absents sans mesure. */
   entry?: number;
   cut?: { ok: boolean; why: string };
+  /** Les silences ≥ 5 s qui commencent dans la scène (`[début, fin]`, §143) — absents sans mesure ou d'un service d'avant. */
+  pauses?: [number, number][];
 }
 
 export interface XrayPlayerPayload {
@@ -48,13 +50,27 @@ export const emptyXray = (status: XrayPlayerStatus): XrayPlayerPayload => ({ sta
 
 const finite = (n: unknown, fallback = 0): number => (typeof n === "number" && Number.isFinite(n) ? n : fallback);
 
-/** Le point d'entrée et le verdict d'un début de scène (§143), relus avec soin : rien d'autre ne passe. */
-function sceneCutOf(scene: { entry?: unknown; cut?: unknown }): Pick<XrayPlayerScene, "entry" | "cut"> {
+/** Les silences d'une scène (§143, `cutsVersion` 2) : des paires de nombres finis, bornées ; sinon absents. */
+function pausesOf(raw: unknown): [number, number][] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: [number, number][] = [];
+  for (const p of raw.slice(0, 200)) {
+    if (Array.isArray(p) && p.length === 2 && p.every((n) => typeof n === "number" && Number.isFinite(n)) && p[1] >= p[0]) {
+      out.push([p[0], p[1]]);
+    }
+  }
+  return out;
+}
+
+/** Le point d'entrée, le verdict et les silences d'un début de scène (§143), relus avec soin : rien d'autre ne passe. */
+function sceneCutOf(scene: { entry?: unknown; cut?: unknown; pauses?: unknown }): Pick<XrayPlayerScene, "entry" | "cut" | "pauses"> {
   const cut = scene.cut as { ok?: unknown; why?: unknown } | null | undefined;
   if (!cut || typeof cut.ok !== "boolean" || typeof cut.why !== "string") return {};
+  const pauses = pausesOf(scene.pauses);
   return {
     ...(typeof scene.entry === "number" && Number.isFinite(scene.entry) ? { entry: scene.entry } : {}),
     cut: { ok: cut.ok, why: cut.why.slice(0, 40) },
+    ...(pauses ? { pauses } : {}),
   };
 }
 

@@ -572,8 +572,11 @@ address carries `&sync=`. Image subtitles are out of scope.
 **« Revenir au début de la scène » ships off** (DECISIONS §143, `SCENE_RESTART_ENABLED`, audience, default `off`).
 On a resume after ≥ 4 h, a button offers for 8 s to go back to the start of the current scene — only to a *real*
 scene start, which the service decides per boundary (`xray/app/scenecuts.py`: `entry` and `cut {ok, why}` on
-`/scenes`, an authored chapter or colours **and** people changing, never mid-dialogue; its own `CUTS_VERSION`,
-`RESULT_VERSION` untouched, existing scenes and people byte-identical). Laterna's one decision is
+`/scenes`, an authored chapter or colours **and** people changing, never mid-dialogue, and since `CUTS_VERSION` 2
+never beside a scene under 40 s, without a line in the next minute or with less than 1.5 s of silence at the cut;
+`pauses`, the ≥ 5 s silences, per scene; rules apply at read time, the stored measures carry `BOUNDS_VERSION`, so a
+rule change needs no backfill; `RESULT_VERSION` untouched, existing scenes and people byte-identical). Laterna goes
+back 20 to 90 s, never to `début`/`après-saut`, never across a refused boundary or a 5 s pause. Its one decision is
 `decideSceneRestart` (`src/lib/sceneRestart.ts`), run by `useSceneRestart` in `PlayerControls` on the scenes « À
 l'écran » already read, once per session across rebuilds and handovers (`sceneRestartSession.ts`, last play from
 `playback-state`'s `lastPlayedAt`, frozen at open). Off, nothing is shown but the `stop` line carries

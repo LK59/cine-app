@@ -18,16 +18,17 @@ import {
 /**
  * « Revenir au début de la scène » (DECISIONS.md §143).
  *
- * Les deux titres de la R&D du 10/11/2026, tels que le service les rend (`xray/app/scenecuts.py` sur les
- * frontières et les zones de parole gardées en base) : début, point d'entrée, verdict de chaque scène —
- * [début, fin, entrée, sûre, raison].
+ * Les deux titres de la R&D du 10/11/2026, tels que le service les rendait en `cutsVersion` 1
+ * (`xray/app/scenecuts.py` sur les frontières et les zones de parole gardées en base) : début, point d'entrée,
+ * verdict de chaque scène — [début, fin, entrée, sûre, raison]. Ils servent de terrain aux règles de Laterna ;
+ * les silences (`pauses`, version 2) y sont vides, sauf quand un test en pose.
  */
 type Row = [number, number, number, 0 | 1, string];
 const TED: Row[] = [[0.0, 86.5, 0.0, 1, "début"], [86.5, 110.944, 86.5, 0, "même-lieu"], [131.923, 237.673, 131.923, 1, "après-saut"], [237.673, 320.0, 237.673, 0, "même-lieu"], [320.0, 348.75, 318.592, 0, "même-lieu"], [348.75, 363.25, 348.064, 0, "même-lieu"], [363.25, 451.5, 363.25, 0, "parole"], [451.5, 631.0, 451.5, 0, "même-lieu"], [631.0, 662.25, 631.0, 0, "même-lieu"], [662.25, 835.25, 662.25, 0, "même-lieu"], [835.25, 910.75, 835.25, 0, "même-lieu"], [910.75, 945.0, 910.75, 0, "même-lieu"], [945.0, 957.0, 945.0, 0, "même-lieu"], [957.0, 995.25, 957.0, 0, "îlot"], [995.25, 1020.75, 995.25, 0, "même-lieu"], [1020.75, 1031.25, 1020.75, 0, "même-lieu"], [1031.25, 1086.25, 1029.28, 0, "même-lieu"], [1086.25, 1174.25, 1086.25, 1, "deux-signaux"], [1174.25, 1319.75, 1171.424, 0, "même-lieu"], [1319.75, 1476.0, 1319.75, 1, "deux-signaux"], [1476.0, 1648.25, 1476.0, 0, "même-lieu"], [1648.25, 1714.5, 1648.25, 0, "même-lieu"], [1714.5, 1869.25, 1714.5, 0, "parole"]];
 const FLA: Row[] = [[0.0, 85.0, 0.0, 1, "début"], [85.0, 109.5, 82.656, 1, "deux-signaux"], [109.5, 125.75, 109.5, 1, "deux-signaux"], [125.75, 161.25, 125.75, 0, "parole"], [161.25, 178.5, 161.25, 0, "même-lieu"], [178.5, 202.5, 176.0, 0, "même-lieu"], [202.5, 242.5, 202.5, 0, "parole"], [242.5, 252.5, 241.28, 0, "même-lieu"], [252.5, 415.75, 252.5, 0, "même-lieu"], [415.75, 511.0, 415.75, 1, "deux-signaux"], [511.0, 578.75, 511.0, 0, "même-lieu"], [578.75, 633.25, 576.704, 0, "même-lieu"], [633.25, 732.75, 633.25, 0, "même-lieu"], [732.75, 754.25, 732.75, 0, "parole"], [754.25, 831.0, 754.25, 0, "parole"], [831.0, 859.75, 831.0, 0, "îlot"], [859.75, 924.0, 859.75, 0, "même-lieu"], [924.0, 959.0, 924.0, 0, "parole"], [959.0, 1043.25, 959.0, 0, "parole"], [1043.25, 1065.75, 1043.25, 0, "parole"], [1065.75, 1086.25, 1064.864, 0, "même-lieu"], [1086.25, 1132.5, 1086.25, 0, "parole"], [1132.5, 1142.5, 1131.872, 0, "îlot"], [1142.5, 1191.0, 1142.5, 0, "parole"], [1191.0, 1273.25, 1191.0, 0, "même-lieu"], [1273.25, 1452.75, 1272.224, 0, "même-lieu"], [1452.75, 1547.0, 1452.096, 1, "deux-signaux"], [1547.0, 1571.75, 1545.024, 0, "même-lieu"], [1571.75, 1620.75, 1571.75, 0, "même-lieu"], [1620.75, 1665.25, 1620.75, 0, "parole"], [1665.25, 1697.0, 1663.648, 0, "même-lieu"], [1697.0, 1861.25, 1697.0, 0, "même-lieu"], [1861.25, 1891.168, 1861.25, 0, "même-lieu"]];
 
 const scenesOf = (rows: Row[]): SceneRestartScene[] =>
-  rows.map(([start, end, entry, ok, why]) => ({ start, end, entry, cut: { ok: ok === 1, why }, people: [{}] }));
+  rows.map(([start, end, entry, ok, why]) => ({ start, end, entry, cut: { ok: ok === 1, why }, people: [{}], pauses: [] }));
 
 const NOW = Date.parse("2026-11-10T20:00:00Z");
 const YESTERDAY = "2026-11-09T21:00:00.000Z";
@@ -51,19 +52,26 @@ const at = (rows: Row[], position: number, over?: Partial<SceneRestartInput>) =>
 };
 
 describe("la décision, sur Ted Lasso (R&D du 10/11/2026)", () => {
-  it("revient au début de la scène qui suit le générique d'ouverture", () => {
-    expect(at(TED, 200)).toEqual({ target: 131.923, back: 68.08 });
-  });
-  it("enjambe un « même lieu » pour revenir au vrai début de la scène", () => {
-    // 1174.25 coupe un même décor filmé autrement : la scène commence à 1086.25.
-    expect(at(TED, 1200)).toEqual({ target: 1086.25, back: 113.75 });
+  it("revient au début d'une scène sûre", () => {
     expect(at(TED, 1350)).toEqual({ target: 1319.75, back: 30.25 });
+    expect(at(TED, 1170)).toEqual({ target: 1086.25, back: 83.75 });
+  });
+  it("jamais au début du fichier, ni à la reprise après le générique d'ouverture", () => {
+    // 131,923 s suit une plage sautée : un bord de l'analyse, pas un début de scène reconnu.
+    expect(at(TED, 200)).toBe("cible-après-saut");
+    expect(at(TED.filter((r) => r[0] < 100), 70, { introSkip: null })).toBe("cible-début");
+  });
+  it("n'enjambe pas un « même lieu », ni rien d'autre de refusé", () => {
+    // 1174,25 s coupe un même décor filmé autrement : y remonter dépassait souvent le début de ce qu'on regardait.
+    expect(at(TED, 1176)).toBe("coupe-même-lieu");
   });
   it("ne propose rien quand la scène vient de commencer", () => {
     expect(at(TED, 150)).toBe("scène-récente");
     expect(at(TED, 1100)).toBe("scène-récente");
   });
-  it("ne remonte pas au-delà de trois minutes", () => {
+  it("ne remonte pas au-delà d'une minute et demie", () => {
+    expect(at(TED, 1200)).toBe("trop-loin");
+    expect(at(TED, 1410)).toBe("trop-loin");
     expect(at(TED, 360)).toBe("trop-loin");
     expect(at(TED, 1600)).toBe("trop-loin");
     // L'îlot de 957 s n'est pas une cible : la dernière coupe sûre est loin derrière.
@@ -80,13 +88,14 @@ describe("la décision, sur Le Flambeau (R&D du 10/11/2026)", () => {
     expect(at(FLA, 470)).toEqual({ target: 415.75, back: 54.25 });
     // Le point d'entrée : la phrase commencée 0,65 s avant la coupe.
     expect(at(FLA, 1500)).toEqual({ target: 1452.096, back: 47.9 });
-    expect(at(FLA, 1550)).toEqual({ target: 1452.096, back: 97.9 });
+    expect(at(FLA, 1540)).toEqual({ target: 1452.096, back: 87.9 });
+    expect(at(FLA, 1550)).toBe("trop-loin");
   });
   it("n'enjambe jamais une coupe au milieu d'une phrase", () => {
     expect(at(FLA, 190)).toBe("coupe-parole");
   });
   it("ni un îlot", () => {
-    // 1132.5 est un îlot entre deux phrases coupées : rien de sûr à moins de trois minutes.
+    // 1132.5 est un îlot entre deux phrases coupées : rien de sûr à moins d'une minute et demie.
     expect(at(FLA, 1160)).toBe("trop-loin");
     const rows = FLA.map((r) => (r[0] === 1132.5 ? ([r[0], r[1], r[2], 0, "îlot"] as Row) : r));
     rows[21] = [1086.25, 1132.5, 1086.25, 1, "deux-signaux"];
@@ -100,10 +109,35 @@ describe("la décision, sur Le Flambeau (R&D du 10/11/2026)", () => {
   });
 });
 
+describe("les silences", () => {
+  const withPauses = (pauses: [number, number][]) => {
+    const base = input(TED, 1350).payload!;
+    return { payload: { ...base, scenes: base.scenes.map((s) => (s.start === 1319.75 ? { ...s, pauses } : s)) } };
+  };
+  const OFFER = { target: 1319.75, back: 30.25 };
+  it("un silence de 5 s après le point d'entrée, avant la position : rien", () => {
+    expect(at(TED, 1350, withPauses([[1330, 1335]]))).toBe("pause");
+    expect(at(TED, 1350, withPauses([[1330, 1334.9]]))).toEqual(OFFER);
+  });
+  it("mesuré jusqu'à la position seulement", () => {
+    expect(at(TED, 1350, withPauses([[1345, 1400]]))).toBe("pause");
+    expect(at(TED, 1350, withPauses([[1346, 1400]]))).toEqual(OFFER);
+    expect(at(TED, 1350, withPauses([[1351, 1400]]))).toEqual(OFFER);
+  });
+  it("un silence commencé au point d'entrée ne compte pas (une ouverture sans un mot)", () => {
+    expect(at(TED, 1350, withPauses([[1319.75, 1340]]))).toEqual(OFFER);
+  });
+  it("sans silences connus (un service d'avant la version 2), rien", () => {
+    const base = input(TED, 1350).payload!;
+    const old = { ...base, scenes: base.scenes.map((s) => ({ start: s.start, end: s.end, people: s.people, entry: s.entry, cut: s.cut })) };
+    expect(at(TED, 1350, { payload: old })).toBe("pauses-inconnues");
+  });
+});
+
 describe("les conditions", () => {
   it("une absence de quatre heures au moins, connue", () => {
-    expect(at(TED, 200, { lastPlayedAt: "2026-11-10T17:00:00.000Z" })).toBe("absence-courte");
-    expect(at(TED, 200, { lastPlayedAt: "2026-11-10T16:00:00.000Z" })).toEqual({ target: 131.923, back: 68.08 });
+    expect(at(TED, 1350, { lastPlayedAt: "2026-11-10T17:00:00.000Z" })).toBe("absence-courte");
+    expect(at(TED, 1350, { lastPlayedAt: "2026-11-10T16:00:00.000Z" })).toEqual({ target: 1319.75, back: 30.25 });
     expect(at(TED, 200, { lastPlayedAt: null })).toBe("absence-inconnue");
     expect(at(TED, 200, { lastPlayedAt: "pas une date" })).toBe("absence-inconnue");
   });
@@ -128,9 +162,9 @@ describe("les conditions", () => {
     expect(at(TED, 1700, { payload: faceless, creditsStart: null })).toBe("fin-sans-visages");
   });
   it("une frontière sans verdict entre la cible et la position bloque", () => {
-    const base = input(TED, 1200).payload!;
+    const base = input(TED, 1176).payload!;
     const unknown = { ...base, scenes: base.scenes.map((s) => (s.start === 1174.25 ? { start: s.start, end: s.end, people: s.people } : s)) };
-    expect(at(TED, 1200, { payload: unknown })).toBe("coupe-inconnue");
+    expect(at(TED, 1176, { payload: unknown })).toBe("coupe-inconnue");
   });
 });
 

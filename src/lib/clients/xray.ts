@@ -81,10 +81,15 @@ export interface XrayScene {
    * « Revenir au début de la scène » (ajout compatible du 10/11/2026, DECISIONS.md §143, `xray/app/scenecuts.py`) :
    * pour un résultat complet et mesuré, d'où repartir (reculé jusqu'au début d'une phrase commencée juste avant la
    * coupe) et si ce début de scène en est un vrai (`why` : `début`, `après-saut`, `chapitre`, `deux-signaux` ; refusé :
-   * `parole`, `même-lieu`, `montage`, `îlot`). Absents sinon.
+   * `parole`, `même-lieu`, `montage`, `îlot`, et depuis `cutsVersion` 2 `court`, `muet`, `enchaîné`). Absents sinon.
    */
   entry?: number;
   cut?: { ok: boolean; why: string };
+  /**
+   * `cutsVersion` 2 : les silences d'au moins 5 s qui suivent une prise de parole et **commencent** dans cette scène,
+   * `[début, fin]` — la fin peut dépasser la scène. Absents d'un service d'avant.
+   */
+  pauses?: [number, number][];
 }
 
 export interface XrayScenes {
