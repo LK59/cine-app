@@ -11,8 +11,10 @@ Une seule connexion, protégée par un verrou : l'API et les ouvriers (une voie 
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -174,6 +176,15 @@ CREATE TABLE IF NOT EXISTS series_faces (
 """
 
 
+log = logging.getLogger("xray.db")
+
+# Taille des pages de la base (10/11/2026). Une empreinte de visage fait 2 Kio (512 float32) : avec les
+# 4 Kio par défaut, une seule ligne de `tracks` tient par page et la moitié de chaque page restait vide —
+# 60 Mo pour 10 h analysées. À 16 Kio, sept lignes par page : 44 Mo, sans rien changer à ce qui est
+# gardé (mesuré sur la base de production : 8 Kio → 47 Mo, 32 Kio → 43 Mo).
+PAGE_SIZE = 16384
+
+
 class Database:
     def __init__(self, path: Path | str):
         if str(path) != ":memory:":
@@ -182,10 +193,31 @@ class Database:
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.RLock()
         with self._lock:
+            self._page_size()
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.executescript(SCHEMA)
             self._migrate()
+
+    def _page_size(self) -> None:
+        """`PAGE_SIZE` pour une base neuve ; une base existante aux pages plus petites est réécrite une
+        fois (VACUUM, hors WAL : la taille des pages ne change pas en WAL). Il faut alors autant de place
+        libre que la base en occupe, et le temps de la réécrire (quelques secondes par Go)."""
+        current = self._conn.execute("PRAGMA page_size").fetchone()[0]
+        if current >= PAGE_SIZE:
+            return
+        has_tables = self._conn.execute("SELECT count(*) FROM sqlite_master").fetchone()[0] > 0
+        if not has_tables:
+            self._conn.execute(f"PRAGMA page_size={PAGE_SIZE}")
+            return
+        from .logs import event
+        started = time.monotonic()
+        self._conn.execute("PRAGMA journal_mode=DELETE")
+        self._conn.execute(f"PRAGMA page_size={PAGE_SIZE}")
+        self._conn.execute("VACUUM")
+        event(log, "base réécrite en pages de %d octets (%d avant)", PAGE_SIZE, current,
+              action="db_page_size", before=current, after=PAGE_SIZE,
+              seconds=round(time.monotonic() - started, 2))
 
     def _migrate(self) -> None:
         """Colonnes ajoutées après coup. Une base d'avant la version 2 des résultats n'a pas de

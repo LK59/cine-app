@@ -314,7 +314,11 @@ Les tables de `xray.db` :
 | `reports` | élément | rapport de décision (JSON) |
 | `series_faces` | — | ancienne mémoire des visages, reprise une fois comme contribution `legacy` |
 
-**Ce que coûte un épisode** : environ 1 Mo pour les visages et 0,7 Mo pour les voix. **Ce qui permet de
+**Ce que coûte une heure analysée** : environ 4,3 Mo (mesuré sur 10 h, novembre 2026), dont près de la
+moitié pour les empreintes de visages et un tiers pour celles des voix. La base est en pages de 16 Kio
+(`PAGE_SIZE`, `db.py`) : avec les 4 Kio par défaut, une seule empreinte de visage (2 Kio) tenait par page et
+la base pesait 27 % de plus ; une base plus ancienne est réécrite une fois au démarrage (`db_page_size` au
+journal ; il faut autant de place libre qu'elle occupe). **Ce qui permet de
 tout refaire sans relire le fichier** : `shots`, `tracks`, `voice_regions`, `voice_windows`, `asd_votes`.
 
 Côté Laterna, trois tables dans `cine.db` : `xray_scan_items` (le plan : un élément par ligne, palier,
