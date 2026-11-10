@@ -216,3 +216,35 @@ describe("les motifs du diagnostic (06/10/2026)", () => {
     expect(d?.reasons).toEqual([{ reason: "stall", count: 2 }]);
   });
 });
+
+// 10/11/2026 : « À gérer » listait une diffusion Chromecast et des blocages d'une connexion lente.
+describe("ce que le lecteur a géré n'est pas à gérer", () => {
+  it("une relance de l'échelle pendant une diffusion qui a joué ensuite : pas un échec", () => {
+    const records = seance("kab", "tv", MAC, false, [
+      { kind: "fallback", reason: "diffusion demandée", cast: true },
+      { kind: "cast", player: "serveur", cast: true, target: "chromecast" },
+      { kind: "start", player: "serveur", why: "ladder", rung: 1, cast: true, target: "chromecast" },
+      { kind: "stop", player: "serveur", why: "close", watched: 1000 },
+    ]);
+    expect(diagnoseTitles(buildSeances(records)).find((d) => d.itemId === "tv")).toBeUndefined();
+  });
+
+  it("la même relance hors diffusion reste un échec", () => {
+    const records = seance("kab", "pc", MAC, false, [{ kind: "start", player: "serveur", why: "ladder", rung: 1 }]);
+    expect(diagnoseTitles(buildSeances(records)).find((d) => d.itemId === "pc")).toBeDefined();
+  });
+
+  it("un blocage juste avant la bascule pour connexion lente compte avec le réseau", () => {
+    const records = seance("nath", "got", IPHONE, true, [{ kind: "fallback", reason: "connexion trop lente (saccades, version allégée demandée)" }]);
+    const [s] = buildSeances(records);
+    expect(s.stalls).toBe(0);
+    expect(s.netStalls).toBe(1);
+    expect(diagnoseTitles(buildSeances(records)).find((d) => d.itemId === "got")).toBeUndefined();
+  });
+
+  it("un blocage loin de toute bascule reste un blocage", () => {
+    const records = seance("nath", "far", IPHONE, true, [{ kind: "fallback", reason: "connexion trop lente (saccades, version allégée demandée)", _t: 1_790_000_000_000 + 3_600_000_000 }]);
+    const [s] = buildSeances(records);
+    expect(s.stalls).toBe(1);
+  });
+});

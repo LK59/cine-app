@@ -323,8 +323,10 @@ export function alarmsOf(now: number, clearedAt: number): Alarms {
     server.set(scope, e);
   }
   const failedLogins = readRecords("auth", since).filter((r) => r._t > since && r.kind === "login-failed");
+  // Une notification non remise : un vrai échec d'envoi. Un abonnement que le service déclare mort (404/410) est
+  // retiré, c'est le ménage d'un appareil disparu, pas un souci à gérer (10/11/2026).
   const failedNotifs = readRecords("notifications", since).filter(
-    (r) => r._t > since && (Array.isArray(r.recipients) ? (r.recipients as Record<string, unknown>[]) : []).some((x) => Number(x.failed) > 0 || Number(x.removed) > 0)
+    (r) => r._t > since && (Array.isArray(r.recipients) ? (r.recipients as Record<string, unknown>[]) : []).some((x) => Number(x.failed) > 0)
   );
   const summary = (list: LogRecord[]) => (list.length ? { count: list.length, lastAt: Math.max(...list.map((r) => r._t)) } : null);
   return {

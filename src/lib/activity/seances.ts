@@ -262,6 +262,10 @@ export function lineLateByMs(r: { kind?: unknown; lateByMs?: unknown; resent?: u
   return late !== null && late > 0 ? late : null;
 }
 
+/** Un blocage pris dans une bascule pour connexion lente : jusqu'à 3 min avant elle, 1 min après (`finish`). */
+const SLOW_LINK_STALL_BEFORE_MS = 3 * 60_000;
+const SLOW_LINK_STALL_AFTER_MS = 60_000;
+
 /** Une connexion trop lente : un incident du lien, pas du fichier — voir `Seance.slowLinks`. */
 function noteSlowLink(s: Seance, r: LogRecord): void {
   s.slowLinks = (s.slowLinks ?? 0) + 1;
@@ -417,6 +421,24 @@ function finish(s: Seance): Seance {
   if (server) {
     s.seeks += server.seeks;
     s.audioSwitches += server.audioSwitches;
+  }
+  // Une diffusion vers un téléviseur (§64) cherche le format que le récepteur accepte : une relance de l'échelle
+  // de repli pendant une diffusion qui a joué ensuite, c'est la négociation prévue, pas une panne à gérer
+  // (10/11/2026 — Chromecast : « aucune image en 25 s → son en AAC », puis 17 min regardées).
+  if (s.onTv && s.errors === 0) {
+    for (const r of s.restarts) if (r.why === "ladder") r.failure = false;
+  }
+  // Les blocages juste avant (ou pendant) une bascule pour connexion lente sont ce lien lent : le diagnostic du
+  // lien n'avait pas encore conclu à ce moment-là. Ils comptent avec le réseau, pas avec le fichier (10/11/2026).
+  const slowAt = s.incidents.filter((i) => i.kind === "slowLink").map((i) => i.t);
+  if (slowAt.length && s.stalls > 0) {
+    for (const i of s.incidents) {
+      if (i.kind === "stall" && slowAt.some((t) => i.t <= t + SLOW_LINK_STALL_AFTER_MS && i.t >= t - SLOW_LINK_STALL_BEFORE_MS)) {
+        i.kind = "netStall";
+        s.stalls -= 1;
+        s.netStalls = (s.netStalls ?? 0) + 1;
+      }
+    }
   }
   // Une ou deux reconstructions et rien d'autre : rattrapées, voir `Seance.recovered`.
   if (s.rebuilds > 0 && s.rebuilds <= RECOVERED_MAX && s.errors === 0 && s.fallbacks === 0) {

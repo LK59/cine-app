@@ -67,6 +67,14 @@ function payloadFor(payload: PushPayload | LocalizedPush, lang: string | null): 
   return payload(LOCALES.includes(lang as Locale) ? (lang as Locale) : "fr");
 }
 
+/** La raison courte d'un échec d'envoi : le code HTTP du service (Apple, Google, Mozilla) s'il y en a un. */
+function pushErrorText(err: unknown): string {
+  const status = err && typeof err === "object" && "statusCode" in err ? (err as { statusCode?: unknown }).statusCode : undefined;
+  if (typeof status === "number") return `HTTP ${status}`;
+  const message = err instanceof Error ? err.message : String(err);
+  return message.slice(0, 120);
+}
+
 async function dispatchPush(subs: ReturnType<typeof pushDb.getAll>, input: PushPayload | LocalizedPush): Promise<void> {
   if (subs.length === 0) return;
   // Le journal garde la version française : il se lit ici, et une seule ligne par envoi.
@@ -78,7 +86,9 @@ async function dispatchPush(subs: ReturnType<typeof pushDb.getAll>, input: PushP
     userPrefs.set(uid, notificationPrefsDb.getForUser(uid));
   }
   // Ce qu'il est advenu de l'envoi, par compte — pour le journal des notifications.
-  const outcome = new Map(uniqueUsers.map((user) => [user, { user, sent: 0, failed: 0, removed: 0, muted: false }]));
+  // `error` : la raison du premier échec (code HTTP du service de notification, sinon le message), pour que le
+  // journal dise pourquoi une notification n'est pas partie — l'alerte « non remise » n'en disait rien (10/11/2026).
+  const outcome = new Map(uniqueUsers.map((user) => [user, { user, sent: 0, failed: 0, removed: 0, muted: false, error: undefined as string | undefined }]));
 
   await Promise.allSettled(
     subs.map(async (sub) => {
@@ -99,7 +109,10 @@ async function dispatchPush(subs: ReturnType<typeof pushDb.getAll>, input: PushP
         if (shouldRemovePushSubscription(err)) {
           pushDb.remove(sub.endpoint);
           tally.removed += 1;
-        } else tally.failed += 1;
+        } else {
+          tally.failed += 1;
+          tally.error ??= pushErrorText(err);
+        }
       }
     })
   );

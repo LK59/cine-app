@@ -388,7 +388,7 @@ export function logNotificationSent(fields: {
   title: string;
   body: string;
   /** Par compte : envoyées, refusées (abonnement expiré, retiré), écartées par ses réglages. */
-  recipients: { user: string; sent: number; failed: number; removed: number; muted: boolean }[];
+  recipients: { user: string; sent: number; failed: number; removed: number; muted: boolean; error?: string }[];
 }): void {
   try {
     appendJsonLine(
