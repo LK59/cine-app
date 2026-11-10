@@ -1,0 +1,960 @@
+{
+ "totalBytes": 28261144,
+ "assets": [
+  {
+   "id": "wood_floor",
+   "kind": "textures",
+   "slug": "old_wooden_floor_02",
+   "files": [
+    {
+     "path": "textures/wood_floor/arm.ktx2",
+     "bytes": 357434
+    },
+    {
+     "path": "textures/wood_floor/color.ktx2",
+     "bytes": 838532
+    },
+    {
+     "path": "textures/wood_floor/normal.ktx2",
+     "bytes": 1920857
+    }
+   ],
+   "bytes": 3116823
+  },
+  {
+   "id": "wood_beam",
+   "kind": "textures",
+   "slug": "dark_wood",
+   "files": [
+    {
+     "path": "textures/wood_beam/arm.ktx2",
+     "bytes": 653678
+    },
+    {
+     "path": "textures/wood_beam/color.ktx2",
+     "bytes": 782302
+    },
+    {
+     "path": "textures/wood_beam/normal.ktx2",
+     "bytes": 1072234
+    }
+   ],
+   "bytes": 2508214
+  },
+  {
+   "id": "wood_planks_ceiling",
+   "kind": "textures",
+   "slug": "wooden_planks",
+   "files": [
+    {
+     "path": "textures/wood_planks_ceiling/arm.ktx2",
+     "bytes": 98699
+    },
+    {
+     "path": "textures/wood_planks_ceiling/color.ktx2",
+     "bytes": 181723
+    },
+    {
+     "path": "textures/wood_planks_ceiling/normal.ktx2",
+     "bytes": 168987
+    }
+   ],
+   "bytes": 449409
+  },
+  {
+   "id": "stone_wall",
+   "kind": "textures",
+   "slug": "rustic_stone_wall_02",
+   "files": [
+    {
+     "path": "textures/stone_wall/arm.ktx2",
+     "bytes": 713562
+    },
+    {
+     "path": "textures/stone_wall/color.ktx2",
+     "bytes": 858900
+    },
+    {
+     "path": "textures/stone_wall/normal.ktx2",
+     "bytes": 1093499
+    }
+   ],
+   "bytes": 2665961
+  },
+  {
+   "id": "stone_slab",
+   "kind": "textures",
+   "slug": "slate_floor_02",
+   "files": [
+    {
+     "path": "textures/stone_slab/arm.ktx2",
+     "bytes": 174564
+    },
+    {
+     "path": "textures/stone_slab/color.ktx2",
+     "bytes": 202907
+    },
+    {
+     "path": "textures/stone_slab/normal.ktx2",
+     "bytes": 80963
+    }
+   ],
+   "bytes": 458434
+  },
+  {
+   "id": "fabric_sofa",
+   "kind": "textures",
+   "slug": "hessian_380",
+   "files": [
+    {
+     "path": "textures/fabric_sofa/arm.ktx2",
+     "bytes": 233766
+    },
+    {
+     "path": "textures/fabric_sofa/color.ktx2",
+     "bytes": 217786
+    },
+    {
+     "path": "textures/fabric_sofa/normal.ktx2",
+     "bytes": 241415
+    }
+   ],
+   "bytes": 692967
+  },
+  {
+   "id": "fabric_pillow",
+   "kind": "textures",
+   "slug": "poly_wool_herringbone",
+   "files": [
+    {
+     "path": "textures/fabric_pillow/arm.ktx2",
+     "bytes": 252384
+    },
+    {
+     "path": "textures/fabric_pillow/color.ktx2",
+     "bytes": 226844
+    },
+    {
+     "path": "textures/fabric_pillow/normal.ktx2",
+     "bytes": 225120
+    }
+   ],
+   "bytes": 704348
+  },
+  {
+   "id": "rug",
+   "kind": "textures",
+   "slug": "curly_teddy_natural",
+   "files": [
+    {
+     "path": "textures/rug/arm.ktx2",
+     "bytes": 251151
+    },
+    {
+     "path": "textures/rug/color.ktx2",
+     "bytes": 215011
+    },
+    {
+     "path": "textures/rug/normal.ktx2",
+     "bytes": 211062
+    }
+   ],
+   "bytes": 677224
+  },
+  {
+   "id": "plaster",
+   "kind": "textures",
+   "slug": "beige_wall_002",
+   "files": [
+    {
+     "path": "textures/plaster/arm.ktx2",
+     "bytes": 53796
+    },
+    {
+     "path": "textures/plaster/color.ktx2",
+     "bytes": 65837
+    },
+    {
+     "path": "textures/plaster/normal.ktx2",
+     "bytes": 93224
+    }
+   ],
+   "bytes": 212857
+  },
+  {
+   "id": "snow",
+   "kind": "textures",
+   "slug": "snow_02",
+   "files": [
+    {
+     "path": "textures/snow/arm.ktx2",
+     "bytes": 156393
+    },
+    {
+     "path": "textures/snow/color.ktx2",
+     "bytes": 196114
+    },
+    {
+     "path": "textures/snow/normal.ktx2",
+     "bytes": 270936
+    }
+   ],
+   "bytes": 623443
+  },
+  {
+   "id": "leather",
+   "kind": "textures",
+   "slug": "brown_leather",
+   "files": [
+    {
+     "path": "textures/leather/arm.ktx2",
+     "bytes": 243546
+    },
+    {
+     "path": "textures/leather/color.ktx2",
+     "bytes": 214463
+    },
+    {
+     "path": "textures/leather/normal.ktx2",
+     "bytes": 240978
+    }
+   ],
+   "bytes": 698987
+  },
+  {
+   "id": "counter_stone",
+   "kind": "textures",
+   "slug": "granite_tile",
+   "files": [
+    {
+     "path": "textures/counter_stone/arm.ktx2",
+     "bytes": 163781
+    },
+    {
+     "path": "textures/counter_stone/color.ktx2",
+     "bytes": 198561
+    },
+    {
+     "path": "textures/counter_stone/normal.ktx2",
+     "bytes": 149433
+    }
+   ],
+   "bytes": 511775
+  },
+  {
+   "id": "linen_white",
+   "kind": "textures",
+   "slug": "jogging_melange",
+   "files": [
+    {
+     "path": "textures/linen_white/arm.ktx2",
+     "bytes": 197157
+    },
+    {
+     "path": "textures/linen_white/color.ktx2",
+     "bytes": 217612
+    },
+    {
+     "path": "textures/linen_white/normal.ktx2",
+     "bytes": 204716
+    }
+   ],
+   "bytes": 619485
+  },
+  {
+   "id": "metal_black",
+   "kind": "textures",
+   "slug": "metal_plate_02",
+   "files": [
+    {
+     "path": "textures/metal_black/arm.ktx2",
+     "bytes": 255421
+    },
+    {
+     "path": "textures/metal_black/color.ktx2",
+     "bytes": 208784
+    },
+    {
+     "path": "textures/metal_black/normal.ktx2",
+     "bytes": 35762
+    }
+   ],
+   "bytes": 499967
+  },
+  {
+   "id": "bark",
+   "kind": "textures",
+   "slug": "pine_bark",
+   "files": [
+    {
+     "path": "textures/bark/arm.ktx2",
+     "bytes": 206926
+    },
+    {
+     "path": "textures/bark/color.ktx2",
+     "bytes": 237643
+    },
+    {
+     "path": "textures/bark/normal.ktx2",
+     "bytes": 300519
+    }
+   ],
+   "bytes": 745088
+  },
+  {
+   "id": "modern_coffee_table_01",
+   "kind": "model",
+   "slug": "modern_coffee_table_01",
+   "files": [
+    {
+     "path": "models/modern_coffee_table_01/baseColor_1.ktx2",
+     "bytes": 140716
+    },
+    {
+     "path": "models/modern_coffee_table_01/metallicRoughness_1.ktx2",
+     "bytes": 143829
+    },
+    {
+     "path": "models/modern_coffee_table_01/modern_coffee_table_01.bin",
+     "bytes": 90944
+    },
+    {
+     "path": "models/modern_coffee_table_01/modern_coffee_table_01.gltf",
+     "bytes": 3359
+    },
+    {
+     "path": "models/modern_coffee_table_01/normal_1.ktx2",
+     "bytes": 99790
+    }
+   ],
+   "bytes": 478638,
+   "triangles": 4504
+  },
+  {
+   "id": "modern_coffee_table_02",
+   "kind": "model",
+   "slug": "modern_coffee_table_02",
+   "files": [
+    {
+     "path": "models/modern_coffee_table_02/baseColor_1.ktx2",
+     "bytes": 48843
+    },
+    {
+     "path": "models/modern_coffee_table_02/baseColor_2.ktx2",
+     "bytes": 175444
+    },
+    {
+     "path": "models/modern_coffee_table_02/metallicRoughness_1.ktx2",
+     "bytes": 83783
+    },
+    {
+     "path": "models/modern_coffee_table_02/metallicRoughness_2.ktx2",
+     "bytes": 163343
+    },
+    {
+     "path": "models/modern_coffee_table_02/modern_coffee_table_02.bin",
+     "bytes": 511272
+    },
+    {
+     "path": "models/modern_coffee_table_02/modern_coffee_table_02.gltf",
+     "bytes": 5564
+    },
+    {
+     "path": "models/modern_coffee_table_02/normal_1.ktx2",
+     "bytes": 11256
+    },
+    {
+     "path": "models/modern_coffee_table_02/normal_2.ktx2",
+     "bytes": 55103
+    }
+   ],
+   "bytes": 1054608,
+   "triangles": 13645
+  },
+  {
+   "id": "side_table_01",
+   "kind": "model",
+   "slug": "side_table_01",
+   "files": [
+    {
+     "path": "models/side_table_01/baseColor_1.ktx2",
+     "bytes": 62603
+    },
+    {
+     "path": "models/side_table_01/metallicRoughness_1.ktx2",
+     "bytes": 52527
+    },
+    {
+     "path": "models/side_table_01/normal_1.ktx2",
+     "bytes": 26865
+    },
+    {
+     "path": "models/side_table_01/side_table_01.bin",
+     "bytes": 67160
+    },
+    {
+     "path": "models/side_table_01/side_table_01.gltf",
+     "bytes": 3274
+    }
+   ],
+   "bytes": 212429,
+   "triangles": 2756
+  },
+  {
+   "id": "potted_plant_01",
+   "kind": "model",
+   "slug": "potted_plant_01",
+   "files": [
+    {
+     "path": "models/potted_plant_01/baseColor_1.ktx2",
+     "bytes": 66426
+    },
+    {
+     "path": "models/potted_plant_01/baseColor_2.ktx2",
+     "bytes": 57632
+    },
+    {
+     "path": "models/potted_plant_01/metallicRoughness_1.ktx2",
+     "bytes": 58955
+    },
+    {
+     "path": "models/potted_plant_01/metallicRoughness_2.ktx2",
+     "bytes": 46846
+    },
+    {
+     "path": "models/potted_plant_01/normal_1.ktx2",
+     "bytes": 75168
+    },
+    {
+     "path": "models/potted_plant_01/normal_2.ktx2",
+     "bytes": 84655
+    },
+    {
+     "path": "models/potted_plant_01/potted_plant_01.bin",
+     "bytes": 177020
+    },
+    {
+     "path": "models/potted_plant_01/potted_plant_01.gltf",
+     "bytes": 8892
+    }
+   ],
+   "bytes": 575594,
+   "triangles": 7775
+  },
+  {
+   "id": "potted_plant_02",
+   "kind": "model",
+   "slug": "potted_plant_02",
+   "files": [
+    {
+     "path": "models/potted_plant_02/baseColor_1.ktx2",
+     "bytes": 58669
+    },
+    {
+     "path": "models/potted_plant_02/baseColor_2.ktx2",
+     "bytes": 62059
+    },
+    {
+     "path": "models/potted_plant_02/metallicRoughness_1.ktx2",
+     "bytes": 46130
+    },
+    {
+     "path": "models/potted_plant_02/metallicRoughness_2.ktx2",
+     "bytes": 41633
+    },
+    {
+     "path": "models/potted_plant_02/normal_1.ktx2",
+     "bytes": 31992
+    },
+    {
+     "path": "models/potted_plant_02/normal_2.ktx2",
+     "bytes": 73689
+    },
+    {
+     "path": "models/potted_plant_02/potted_plant_02.bin",
+     "bytes": 171076
+    },
+    {
+     "path": "models/potted_plant_02/potted_plant_02.gltf",
+     "bytes": 7407
+    }
+   ],
+   "bytes": 492655,
+   "triangles": 7830
+  },
+  {
+   "id": "ceramic_vase_01",
+   "kind": "model",
+   "slug": "ceramic_vase_01",
+   "files": [
+    {
+     "path": "models/ceramic_vase_01/baseColor_1.ktx2",
+     "bytes": 11195
+    },
+    {
+     "path": "models/ceramic_vase_01/ceramic_vase_01.bin",
+     "bytes": 127396
+    },
+    {
+     "path": "models/ceramic_vase_01/ceramic_vase_01.gltf",
+     "bytes": 3297
+    },
+    {
+     "path": "models/ceramic_vase_01/metallicRoughness_1.ktx2",
+     "bytes": 36054
+    },
+    {
+     "path": "models/ceramic_vase_01/normal_1.ktx2",
+     "bytes": 10124
+    }
+   ],
+   "bytes": 188066,
+   "triangles": 7598
+  },
+  {
+   "id": "ceramic_vase_03",
+   "kind": "model",
+   "slug": "ceramic_vase_03",
+   "files": [
+    {
+     "path": "models/ceramic_vase_03/baseColor_1.ktx2",
+     "bytes": 56344
+    },
+    {
+     "path": "models/ceramic_vase_03/ceramic_vase_03.bin",
+     "bytes": 129380
+    },
+    {
+     "path": "models/ceramic_vase_03/ceramic_vase_03.gltf",
+     "bytes": 3289
+    },
+    {
+     "path": "models/ceramic_vase_03/metallicRoughness_1.ktx2",
+     "bytes": 55909
+    },
+    {
+     "path": "models/ceramic_vase_03/normal_1.ktx2",
+     "bytes": 59876
+    }
+   ],
+   "bytes": 304798,
+   "triangles": 7598
+  },
+  {
+   "id": "wooden_bowl_01",
+   "kind": "model",
+   "slug": "wooden_bowl_01",
+   "files": [
+    {
+     "path": "models/wooden_bowl_01/baseColor_1.ktx2",
+     "bytes": 51040
+    },
+    {
+     "path": "models/wooden_bowl_01/metallicRoughness_1.ktx2",
+     "bytes": 44600
+    },
+    {
+     "path": "models/wooden_bowl_01/normal_1.ktx2",
+     "bytes": 60022
+    },
+    {
+     "path": "models/wooden_bowl_01/wooden_bowl_01.bin",
+     "bytes": 111184
+    },
+    {
+     "path": "models/wooden_bowl_01/wooden_bowl_01.gltf",
+     "bytes": 3332
+    }
+   ],
+   "bytes": 270178,
+   "triangles": 7600
+  },
+  {
+   "id": "Lantern_01",
+   "kind": "model",
+   "slug": "Lantern_01",
+   "files": [
+    {
+     "path": "models/Lantern_01/Lantern_01.bin",
+     "bytes": 153440
+    },
+    {
+     "path": "models/Lantern_01/Lantern_01.gltf",
+     "bytes": 5226
+    },
+    {
+     "path": "models/Lantern_01/baseColor_1.ktx2",
+     "bytes": 55452
+    },
+    {
+     "path": "models/Lantern_01/metallicRoughness_1.ktx2",
+     "bytes": 72201
+    },
+    {
+     "path": "models/Lantern_01/normal_1.ktx2",
+     "bytes": 62823
+    }
+   ],
+   "bytes": 349142,
+   "triangles": 7634
+  },
+  {
+   "id": "wooden_candlestick",
+   "kind": "model",
+   "slug": "wooden_candlestick",
+   "files": [
+    {
+     "path": "models/wooden_candlestick/baseColor_1.ktx2",
+     "bytes": 68954
+    },
+    {
+     "path": "models/wooden_candlestick/metallicRoughness_1.ktx2",
+     "bytes": 68062
+    },
+    {
+     "path": "models/wooden_candlestick/normal_1.ktx2",
+     "bytes": 62037
+    },
+    {
+     "path": "models/wooden_candlestick/wooden_candlestick.bin",
+     "bytes": 121388
+    },
+    {
+     "path": "models/wooden_candlestick/wooden_candlestick.gltf",
+     "bytes": 3312
+    }
+   ],
+   "bytes": 323753,
+   "triangles": 7599
+  },
+  {
+   "id": "mantel_clock_01",
+   "kind": "model",
+   "slug": "mantel_clock_01",
+   "files": [
+    {
+     "path": "models/mantel_clock_01/baseColor_1.ktx2",
+     "bytes": 60883
+    },
+    {
+     "path": "models/mantel_clock_01/mantel_clock_01.bin",
+     "bytes": 127888
+    },
+    {
+     "path": "models/mantel_clock_01/mantel_clock_01.gltf",
+     "bytes": 5718
+    },
+    {
+     "path": "models/mantel_clock_01/metallicRoughness_1.ktx2",
+     "bytes": 66825
+    },
+    {
+     "path": "models/mantel_clock_01/normal_1.ktx2",
+     "bytes": 58654
+    }
+   ],
+   "bytes": 319968,
+   "triangles": 7597
+  },
+  {
+   "id": "modern_arm_chair_01",
+   "kind": "model",
+   "slug": "modern_arm_chair_01",
+   "files": [
+    {
+     "path": "models/modern_arm_chair_01/baseColor_1.ktx2",
+     "bytes": 162117
+    },
+    {
+     "path": "models/modern_arm_chair_01/baseColor_2.ktx2",
+     "bytes": 85350
+    },
+    {
+     "path": "models/modern_arm_chair_01/metallicRoughness_1.ktx2",
+     "bytes": 159874
+    },
+    {
+     "path": "models/modern_arm_chair_01/metallicRoughness_2.ktx2",
+     "bytes": 101237
+    },
+    {
+     "path": "models/modern_arm_chair_01/modern_arm_chair_01.bin",
+     "bytes": 147112
+    },
+    {
+     "path": "models/modern_arm_chair_01/modern_arm_chair_01.gltf",
+     "bytes": 5566
+    },
+    {
+     "path": "models/modern_arm_chair_01/normal_1.ktx2",
+     "bytes": 191167
+    },
+    {
+     "path": "models/modern_arm_chair_01/normal_2.ktx2",
+     "bytes": 119348
+    }
+   ],
+   "bytes": 971771,
+   "triangles": 8916
+  },
+  {
+   "id": "mid_century_lounge_chair",
+   "kind": "model",
+   "slug": "mid_century_lounge_chair",
+   "files": [
+    {
+     "path": "models/mid_century_lounge_chair/baseColor_1.ktx2",
+     "bytes": 190542
+    },
+    {
+     "path": "models/mid_century_lounge_chair/metallicRoughness_1.ktx2",
+     "bytes": 190227
+    },
+    {
+     "path": "models/mid_century_lounge_chair/mid_century_lounge_chair.bin",
+     "bytes": 104136
+    },
+    {
+     "path": "models/mid_century_lounge_chair/mid_century_lounge_chair.gltf",
+     "bytes": 3375
+    },
+    {
+     "path": "models/mid_century_lounge_chair/normal_1.ktx2",
+     "bytes": 219862
+    }
+   ],
+   "bytes": 708142,
+   "triangles": 6148
+  },
+  {
+   "id": "Ottoman_01",
+   "kind": "model",
+   "slug": "Ottoman_01",
+   "files": [
+    {
+     "path": "models/Ottoman_01/Ottoman_01.bin",
+     "bytes": 81540
+    },
+    {
+     "path": "models/Ottoman_01/Ottoman_01.gltf",
+     "bytes": 3252
+    },
+    {
+     "path": "models/Ottoman_01/baseColor_1.ktx2",
+     "bytes": 174617
+    },
+    {
+     "path": "models/Ottoman_01/metallicRoughness_1.ktx2",
+     "bytes": 182849
+    },
+    {
+     "path": "models/Ottoman_01/normal_1.ktx2",
+     "bytes": 264309
+    }
+   ],
+   "bytes": 706567,
+   "triangles": 4240
+  },
+  {
+   "id": "hanging_picture_frame_02",
+   "kind": "model",
+   "slug": "hanging_picture_frame_02",
+   "files": [
+    {
+     "path": "models/hanging_picture_frame_02/baseColor_1.ktx2",
+     "bytes": 56351
+    },
+    {
+     "path": "models/hanging_picture_frame_02/baseColor_2.ktx2",
+     "bytes": 53485
+    },
+    {
+     "path": "models/hanging_picture_frame_02/hanging_picture_frame_02.bin",
+     "bytes": 68568
+    },
+    {
+     "path": "models/hanging_picture_frame_02/hanging_picture_frame_02.gltf",
+     "bytes": 6862
+    },
+    {
+     "path": "models/hanging_picture_frame_02/metallicRoughness_1.ktx2",
+     "bytes": 42645
+    },
+    {
+     "path": "models/hanging_picture_frame_02/metallicRoughness_2.ktx2",
+     "bytes": 35251
+    },
+    {
+     "path": "models/hanging_picture_frame_02/normal_1.ktx2",
+     "bytes": 7242
+    },
+    {
+     "path": "models/hanging_picture_frame_02/normal_2.ktx2",
+     "bytes": 17734
+    }
+   ],
+   "bytes": 288138,
+   "triangles": 3678
+  },
+  {
+   "id": "bar_chair_round_01",
+   "kind": "model",
+   "slug": "bar_chair_round_01",
+   "files": [
+    {
+     "path": "models/bar_chair_round_01/bar_chair_round_01.bin",
+     "bytes": 551696
+    },
+    {
+     "path": "models/bar_chair_round_01/bar_chair_round_01.gltf",
+     "bytes": 3429
+    },
+    {
+     "path": "models/bar_chair_round_01/baseColor_1.ktx2",
+     "bytes": 190507
+    },
+    {
+     "path": "models/bar_chair_round_01/metallicRoughness_1.ktx2",
+     "bytes": 203241
+    },
+    {
+     "path": "models/bar_chair_round_01/normal_1.ktx2",
+     "bytes": 151222
+    }
+   ],
+   "bytes": 1100095,
+   "triangles": 14373
+  },
+  {
+   "id": "vintage_day_bed",
+   "kind": "model",
+   "slug": "vintage_day_bed",
+   "files": [
+    {
+     "path": "models/vintage_day_bed/baseColor_1.ktx2",
+     "bytes": 224731
+    },
+    {
+     "path": "models/vintage_day_bed/metallicRoughness_1.ktx2",
+     "bytes": 167948
+    },
+    {
+     "path": "models/vintage_day_bed/normal_1.ktx2",
+     "bytes": 284805
+    },
+    {
+     "path": "models/vintage_day_bed/vintage_day_bed.bin",
+     "bytes": 48292
+    },
+    {
+     "path": "models/vintage_day_bed/vintage_day_bed.gltf",
+     "bytes": 3309
+    }
+   ],
+   "bytes": 729085,
+   "triangles": 2715
+  },
+  {
+   "id": "ClassicNightstand_01",
+   "kind": "model",
+   "slug": "ClassicNightstand_01",
+   "files": [
+    {
+     "path": "models/ClassicNightstand_01/ClassicNightstand_01.bin",
+     "bytes": 40348
+    },
+    {
+     "path": "models/ClassicNightstand_01/ClassicNightstand_01.gltf",
+     "bytes": 3336
+    },
+    {
+     "path": "models/ClassicNightstand_01/baseColor_1.ktx2",
+     "bytes": 52883
+    },
+    {
+     "path": "models/ClassicNightstand_01/metallicRoughness_1.ktx2",
+     "bytes": 44044
+    },
+    {
+     "path": "models/ClassicNightstand_01/normal_1.ktx2",
+     "bytes": 64841
+    }
+   ],
+   "bytes": 205452,
+   "triangles": 2002
+  },
+  {
+   "id": "wooden_lantern_01",
+   "kind": "model",
+   "slug": "wooden_lantern_01",
+   "files": [
+    {
+     "path": "models/wooden_lantern_01/baseColor_1.ktx2",
+     "bytes": 65331
+    },
+    {
+     "path": "models/wooden_lantern_01/baseColor_2.ktx2",
+     "bytes": 46571
+    },
+    {
+     "path": "models/wooden_lantern_01/metallicRoughness_1.ktx2",
+     "bytes": 71648
+    },
+    {
+     "path": "models/wooden_lantern_01/metallicRoughness_2.ktx2",
+     "bytes": 60807
+    },
+    {
+     "path": "models/wooden_lantern_01/normal_1.ktx2",
+     "bytes": 76559
+    },
+    {
+     "path": "models/wooden_lantern_01/normal_2.ktx2",
+     "bytes": 4652
+    },
+    {
+     "path": "models/wooden_lantern_01/wooden_lantern_01.bin",
+     "bytes": 146000
+    },
+    {
+     "path": "models/wooden_lantern_01/wooden_lantern_01.gltf",
+     "bytes": 9573
+    }
+   ],
+   "bytes": 481141,
+   "triangles": 7600
+  },
+  {
+   "id": "qwantani_night_puresky",
+   "kind": "hdri",
+   "slug": "qwantani_night_puresky",
+   "files": [
+    {
+     "path": "hdri/qwantani_night_puresky.hdr",
+     "bytes": 1389258
+    },
+    {
+     "path": "hdri/qwantani_night_puresky_bg.jpg",
+     "bytes": 295238
+    }
+   ],
+   "bytes": 1684496
+  },
+  {
+   "id": "kloppenheim_02_puresky",
+   "kind": "hdri",
+   "slug": "kloppenheim_02_puresky",
+   "files": [
+    {
+     "path": "hdri/kloppenheim_02_puresky.hdr",
+     "bytes": 1393622
+    },
+    {
+     "path": "hdri/kloppenheim_02_puresky_bg.jpg",
+     "bytes": 237824
+    }
+   ],
+   "bytes": 1631446
+  }
+ ]
+}

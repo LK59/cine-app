@@ -40,8 +40,8 @@ export interface QualityProfile {
   dpr: [number, number];
   /** Taille des cartes d'ombre ; 0 = aucune ombre temps réel. */
   shadowMap: number;
-  /** Occlusion ambiante en espace écran : aucune, demi-résolution, pleine. */
-  ao: "none" | "half" | "full";
+  /** Occlusion ambiante en espace écran : aucune, légère (peu d'échantillons), pleine. */
+  ao: "none" | "light" | "full";
   bloom: boolean;
   smaa: boolean;
   /** Nombre de flocons. */
@@ -55,7 +55,7 @@ export interface QualityProfile {
 export const QUALITY: Record<Quality, QualityProfile> = {
   low: { dpr: [0.6, 0.85], shadowMap: 0, ao: "none", bloom: false, smaa: false, snow: 1500, fillLights: false, anisotropy: 2 },
   medium: { dpr: [0.75, 1], shadowMap: 1024, ao: "none", bloom: true, smaa: true, snow: 4000, fillLights: true, anisotropy: 4 },
-  high: { dpr: [0.9, 1.25], shadowMap: 2048, ao: "half", bloom: true, smaa: true, snow: 8000, fillLights: true, anisotropy: 8 },
+  high: { dpr: [0.9, 1.25], shadowMap: 2048, ao: "light", bloom: true, smaa: true, snow: 8000, fillLights: true, anisotropy: 8 },
   ultra: { dpr: [1, 2], shadowMap: 4096, ao: "full", bloom: true, smaa: true, snow: 16000, fillLights: true, anisotropy: 16 },
 };
 

@@ -1,7 +1,10 @@
 import { Suspense, useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
-import { NoToneMapping, SRGBColorSpace } from "three";
+import { NoToneMapping, PCFSoftShadowMap, SRGBColorSpace } from "three";
+import { PerformanceMonitor } from "@react-three/drei";
+import { QUALITY } from "../lib/settings";
+import { Effects } from "./Effects";
 import { useStore } from "../state/store";
 import { PLAYER } from "./layout";
 import { Controls } from "./Controls";
@@ -30,13 +33,19 @@ export function World() {
   const hidden = useHidden();
   const fov = useStore((s) => s.settings.fov);
   const setPhase = useStore((s) => s.setPhase);
+  const profile = useStore((s) => QUALITY[s.settings.quality]);
+  // L'échelle de résolution, entre les bornes du préréglage : le moniteur de performance la fait
+  // descendre quand les images tardent, et remonter quand la carte graphique suit.
+  const [scale, setScale] = useState(1);
+  const dpr = Math.min(window.devicePixelRatio || 1, profile.dpr[1]) * scale;
+  const floor = profile.dpr[0] / profile.dpr[1];
 
   return (
     <Canvas
       className="world"
       frameloop={hidden ? "never" : "always"}
-      dpr={1}
-      shadows
+      dpr={Math.max(0.5, dpr)}
+      shadows={profile.shadowMap > 0 ? { type: PCFSoftShadowMap } : false}
       gl={{ antialias: false, alpha: false, stencil: false, powerPreference: "high-performance" }}
       camera={{ fov, near: 0.06, far: 600, position: [PLAYER.spawn[0], PLAYER.eye, PLAYER.spawn[2]] }}
       onCreated={({ gl }) => {
@@ -50,12 +59,14 @@ export function World() {
         });
       }}
     >
+      <PerformanceMonitor onChange={({ factor }) => setScale(Math.round((floor + (1 - floor) * factor) * 20) / 20)} />
       <Suspense fallback={null}>
         <Physics gravity={[0, -9.81, 0]} timeStep="vary">
           <Chalet />
           <Player />
         </Physics>
         <Controls />
+        <Effects />
         <SceneReady />
       </Suspense>
     </Canvas>
