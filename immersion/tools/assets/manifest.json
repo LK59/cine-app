@@ -1,0 +1,461 @@
+{
+ "assets": [
+  {
+   "id": "wood_floor",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "old_wooden_floor_02",
+   "resolution": "2k",
+   "out": "textures/wood_floor",
+   "use": "Parquet : sol du grand salon (planches longues, brun foncé verni).",
+   "alternates": [
+    "plank_flooring_04",
+    "old_wooden_floor_03"
+   ]
+  },
+  {
+   "id": "wood_beam",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "dark_wood",
+   "resolution": "2k",
+   "out": "textures/wood_beam",
+   "use": "Grosses poutres du toit et poteaux (fil du bois dans un seul sens).",
+   "alternates": [
+    "stained_pine",
+    "rough_wood"
+   ]
+  },
+  {
+   "id": "wood_planks_ceiling",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "wooden_planks",
+   "resolution": "1k",
+   "out": "textures/wood_planks_ceiling",
+   "use": "Plafond et lambris des murs (lames chaudes).",
+   "alternates": [
+    "wood_planks",
+    "coated_pine_02"
+   ]
+  },
+  {
+   "id": "stone_wall",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "rustic_stone_wall_02",
+   "resolution": "2k",
+   "out": "textures/stone_wall",
+   "use": "Mur en pierre autour du grand écran.",
+   "alternates": [
+    "stacked_stone_wall",
+    "rock_wall_08"
+   ]
+  },
+  {
+   "id": "stone_slab",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "slate_floor_02",
+   "resolution": "1k",
+   "out": "textures/stone_slab",
+   "use": "Dessus du banc devant la cheminée (dalle de schiste).",
+   "alternates": [
+    "slate_floor",
+    "stone_tiles_02"
+   ]
+  },
+  {
+   "id": "fabric_sofa",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "hessian_380",
+   "resolution": "1k",
+   "out": "textures/fabric_sofa",
+   "use": "Tissu beige des canapés.",
+   "alternates": [
+    "curly_teddy_natural",
+    "polar_fleece"
+   ]
+  },
+  {
+   "id": "fabric_pillow",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "poly_wool_herringbone",
+   "resolution": "1k",
+   "out": "textures/fabric_pillow",
+   "use": "Coussins (tissu plus sombre, à chevrons).",
+   "alternates": [
+    "knitted_fleece",
+    "wool_boucle"
+   ]
+  },
+  {
+   "id": "rug",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "curly_teddy_natural",
+   "resolution": "1k",
+   "out": "textures/rug",
+   "use": "Tapis de laine beige.",
+   "alternates": [
+    "hessian_230",
+    "polar_fleece"
+   ]
+  },
+  {
+   "id": "plaster",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "beige_wall_002",
+   "resolution": "1k",
+   "out": "textures/plaster",
+   "use": "Murs en plâtre crème, légèrement rugueux.",
+   "alternates": [
+    "plastered_wall_04",
+    "white_stucco"
+   ]
+  },
+  {
+   "id": "snow",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "snow_02",
+   "resolution": "1k",
+   "out": "textures/snow",
+   "use": "Neige fraîche au sol dehors.",
+   "alternates": [
+    "snow_01",
+    "snow_floor"
+   ]
+  },
+  {
+   "id": "leather",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "brown_leather",
+   "resolution": "1k",
+   "out": "textures/leather",
+   "use": "Cuir brun (fauteuils, détails).",
+   "alternates": [
+    "fabric_leather_01",
+    "leather_red_02"
+   ]
+  },
+  {
+   "id": "counter_stone",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "granite_tile",
+   "resolution": "1k",
+   "out": "textures/counter_stone",
+   "use": "Plan de travail de la cuisine (granit sombre).",
+   "alternates": [
+    "granite_tile_03",
+    "granite_tile_04"
+   ]
+  },
+  {
+   "id": "linen_white",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "jogging_melange",
+   "resolution": "1k",
+   "out": "textures/linen_white",
+   "use": "Linge de lit blanc / crème.",
+   "alternates": [
+    "terlenka",
+    "curly_teddy_natural"
+   ]
+  },
+  {
+   "id": "metal_black",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "metal_plate_02",
+   "resolution": "1k",
+   "out": "textures/metal_black",
+   "use": "Fer forgé noir (cadres, pieds, accessoires).",
+   "alternates": [
+    "black_painted_planks",
+    "worn_shutter"
+   ]
+  },
+  {
+   "id": "bark",
+   "kind": "textures",
+   "source": "polyhaven",
+   "slug": "pine_bark",
+   "resolution": "1k",
+   "out": "textures/bark",
+   "use": "Écorce de conifère (troncs dehors).",
+   "alternates": [
+    "knotted_pine_bark",
+    "japanese_cedar_bark"
+   ]
+  },
+  {
+   "id": "modern_coffee_table_01",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "modern_coffee_table_01",
+   "resolution": "1k",
+   "out": "models/modern_coffee_table_01",
+   "textureSize": 1024,
+   "maxTriangles": 15000,
+   "use": "Table basse du salon."
+  },
+  {
+   "id": "modern_coffee_table_02",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "modern_coffee_table_02",
+   "resolution": "1k",
+   "out": "models/modern_coffee_table_02",
+   "textureSize": 1024,
+   "maxTriangles": 15000,
+   "use": "Table basse (variante)."
+  },
+  {
+   "id": "side_table_01",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "side_table_01",
+   "resolution": "1k",
+   "out": "models/side_table_01",
+   "textureSize": 512,
+   "maxTriangles": 15000,
+   "use": "Table d'appoint à côté des canapés."
+  },
+  {
+   "id": "potted_plant_01",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "potted_plant_01",
+   "resolution": "1k",
+   "out": "models/potted_plant_01",
+   "textureSize": 512,
+   "maxTriangles": 8000,
+   "use": "Plante en pot."
+  },
+  {
+   "id": "potted_plant_02",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "potted_plant_02",
+   "resolution": "1k",
+   "out": "models/potted_plant_02",
+   "textureSize": 512,
+   "maxTriangles": 8000,
+   "use": "Plante en pot (variante)."
+  },
+  {
+   "id": "ceramic_vase_01",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "ceramic_vase_01",
+   "resolution": "1k",
+   "out": "models/ceramic_vase_01",
+   "textureSize": 512,
+   "maxTriangles": 8000,
+   "use": "Vase en céramique."
+  },
+  {
+   "id": "ceramic_vase_03",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "ceramic_vase_03",
+   "resolution": "1k",
+   "out": "models/ceramic_vase_03",
+   "textureSize": 512,
+   "maxTriangles": 8000,
+   "use": "Vase en céramique (variante)."
+  },
+  {
+   "id": "wooden_bowl_01",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "wooden_bowl_01",
+   "resolution": "1k",
+   "out": "models/wooden_bowl_01",
+   "textureSize": 512,
+   "maxTriangles": 8000,
+   "use": "Bol en bois décoratif."
+  },
+  {
+   "id": "Lantern_01",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "Lantern_01",
+   "resolution": "1k",
+   "out": "models/Lantern_01",
+   "textureSize": 512,
+   "maxTriangles": 8000,
+   "use": "Lanterne en laiton."
+  },
+  {
+   "id": "wooden_candlestick",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "wooden_candlestick",
+   "resolution": "1k",
+   "out": "models/wooden_candlestick",
+   "textureSize": 512,
+   "maxTriangles": 8000,
+   "use": "Bougeoir en bois."
+  },
+  {
+   "id": "mantel_clock_01",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "mantel_clock_01",
+   "resolution": "1k",
+   "out": "models/mantel_clock_01",
+   "textureSize": 512,
+   "maxTriangles": 8000,
+   "use": "Horloge posée sur la cheminée."
+  },
+  {
+   "id": "modern_arm_chair_01",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "modern_arm_chair_01",
+   "resolution": "1k",
+   "out": "models/modern_arm_chair_01",
+   "textureSize": 1024,
+   "maxTriangles": 15000,
+   "use": "Fauteuil moderne."
+  },
+  {
+   "id": "mid_century_lounge_chair",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "mid_century_lounge_chair",
+   "resolution": "1k",
+   "out": "models/mid_century_lounge_chair",
+   "textureSize": 1024,
+   "maxTriangles": 15000,
+   "use": "Fauteuil lounge des années 50."
+  },
+  {
+   "id": "Ottoman_01",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "Ottoman_01",
+   "resolution": "1k",
+   "out": "models/Ottoman_01",
+   "textureSize": 1024,
+   "maxTriangles": 15000,
+   "use": "Pouf."
+  },
+  {
+   "id": "hanging_picture_frame_02",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "hanging_picture_frame_02",
+   "resolution": "1k",
+   "out": "models/hanging_picture_frame_02",
+   "textureSize": 512,
+   "maxTriangles": 8000,
+   "use": "Cadre accroché au mur."
+  },
+  {
+   "id": "bar_chair_round_01",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "bar_chair_round_01",
+   "resolution": "1k",
+   "out": "models/bar_chair_round_01",
+   "textureSize": 1024,
+   "maxTriangles": 15000,
+   "use": "Tabouret de bar rond."
+  },
+  {
+   "id": "vintage_day_bed",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "vintage_day_bed",
+   "resolution": "1k",
+   "out": "models/vintage_day_bed",
+   "textureSize": 1024,
+   "maxTriangles": 15000,
+   "use": "Banquette-lit ancienne."
+  },
+  {
+   "id": "ClassicNightstand_01",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "ClassicNightstand_01",
+   "resolution": "1k",
+   "out": "models/ClassicNightstand_01",
+   "textureSize": 512,
+   "maxTriangles": 15000,
+   "use": "Table de chevet."
+  },
+  {
+   "id": "wooden_lantern_01",
+   "kind": "model",
+   "source": "polyhaven",
+   "slug": "wooden_lantern_01",
+   "resolution": "1k",
+   "out": "models/wooden_lantern_01",
+   "textureSize": 512,
+   "maxTriangles": 8000,
+   "use": "Lanterne en bois."
+  },
+  {
+   "id": "qwantani_night_puresky",
+   "kind": "hdri",
+   "source": "polyhaven",
+   "slug": "qwantani_night_puresky",
+   "resolution": "1k",
+   "out": "hdri/qwantani_night_puresky",
+   "bgWidth": 3072,
+   "use": "Ciel de nuit étoilé (candidat principal)."
+  },
+  {
+   "id": "kloppenheim_02_puresky",
+   "kind": "hdri",
+   "source": "polyhaven",
+   "slug": "kloppenheim_02_puresky",
+   "resolution": "1k",
+   "out": "hdri/kloppenheim_02_puresky",
+   "bgWidth": 3072,
+   "use": "Ciel clair de fin de soirée."
+  },
+  {
+   "id": "qwantani_moonrise_puresky",
+   "kind": "hdri",
+   "source": "polyhaven",
+   "slug": "qwantani_moonrise_puresky",
+   "resolution": "1k",
+   "out": "hdri/qwantani_moonrise_puresky",
+   "bgWidth": 3072,
+   "use": "Lever de lune.",
+   "contactOnly": true
+  },
+  {
+   "id": "rogland_clear_night",
+   "kind": "hdri",
+   "source": "polyhaven",
+   "slug": "rogland_clear_night",
+   "resolution": "1k",
+   "out": "hdri/rogland_clear_night",
+   "bgWidth": 3072,
+   "use": "Nuit claire avec horizon.",
+   "contactOnly": true
+  },
+  {
+   "id": "moonlit_golf",
+   "kind": "hdri",
+   "source": "polyhaven",
+   "slug": "moonlit_golf",
+   "resolution": "1k",
+   "out": "hdri/moonlit_golf",
+   "bgWidth": 3072,
+   "use": "Paysage de nuit éclairé par la lune.",
+   "contactOnly": true
+  }
+ ]
+}

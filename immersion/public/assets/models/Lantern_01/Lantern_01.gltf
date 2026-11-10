@@ -1,0 +1,287 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.1",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 20730,
+      "bufferView": 0,
+      "byteOffset": 0
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 2172,
+      "bufferView": 0,
+      "byteOffset": 41460
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 5029,
+      "normalized": true,
+      "bufferView": 1,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 5029,
+      "bufferView": 1,
+      "byteOffset": 4
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 5029,
+      "max": [
+        13593,
+        32767,
+        10809
+      ],
+      "min": [
+        -13593,
+        -32767,
+        -10809
+      ],
+      "normalized": true,
+      "bufferView": 1,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 441,
+      "normalized": true,
+      "bufferView": 2,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 441,
+      "max": [
+        32767,
+        31931,
+        32767
+      ],
+      "min": [
+        -32767,
+        -31931,
+        -32767
+      ],
+      "normalized": true,
+      "bufferView": 2,
+      "byteOffset": 4
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 441,
+      "normalized": true,
+      "bufferView": 2,
+      "byteOffset": 12
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 45804,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 45804,
+      "byteLength": 100580,
+      "byteStride": 20,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 146384,
+      "byteLength": 7056,
+      "byteStride": 16,
+      "target": 34962
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 1
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 2
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "name": "Lantern_01_brass_nor_gl",
+      "mimeType": "image/ktx2",
+      "uri": "normal_1.ktx2"
+    },
+    {
+      "name": "Lantern_01_brass_diff",
+      "mimeType": "image/ktx2",
+      "uri": "baseColor_1.ktx2"
+    },
+    {
+      "name": "Lantern_01_brass_metallic-Lantern_01_brass_roughness",
+      "mimeType": "image/ktx2",
+      "uri": "metallicRoughness_1.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Lantern_01.bin",
+      "byteLength": 153440
+    }
+  ],
+  "materials": [
+    {
+      "name": "Lantern_01_brass",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        }
+      },
+      "normalTexture": {
+        "index": 1
+      },
+      "extensions": {
+        "KHR_materials_transmission": {
+          "transmissionFactor": 1
+        }
+      }
+    },
+    {
+      "name": "Lantern_01_glass",
+      "alphaMode": "BLEND",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        }
+      },
+      "normalTexture": {
+        "index": 1
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Mesh",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 2,
+            "TEXCOORD_0": 3,
+            "POSITION": 4
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    },
+    {
+      "name": "Mesh.002",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 5,
+            "POSITION": 6,
+            "TEXCOORD_0": 7
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 1
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Lantern_01",
+      "translation": [
+        0.00010506808757781982,
+        0.14718701704987325,
+        -1.1175870895385742e-8
+      ],
+      "scale": [
+        0.14697144165984355,
+        0.14697144165984355,
+        0.14697144165984355
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "Lantern_01_glass",
+      "translation": [
+        0.00002973899245262146,
+        0.09552381560206413,
+        -0.000016335397958755493
+      ],
+      "scale": [
+        0.03503626212477684,
+        0.03503626212477684,
+        0.03503626212477684
+      ],
+      "mesh": 1
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0,
+        1
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "KHR_materials_transmission",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
+}

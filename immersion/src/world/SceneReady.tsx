@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useRef } from "react";
 import { useStore } from "../state/store";
 
@@ -20,5 +20,12 @@ export function SceneReady() {
     }
   });
   useEffect(() => () => setSceneReady(false), [setSceneReady]);
+  // La scène et le moteur, pour les tests et les captures (voir `window.__immersion` dans App).
+  const scene = useThree((s) => s.scene);
+  const gl = useThree((s) => s.gl);
+  useEffect(() => {
+    const handle = (window as unknown as { __immersion?: Record<string, unknown> }).__immersion;
+    if (handle) Object.assign(handle, { scene, gl });
+  }, [scene, gl]);
   return null;
 }

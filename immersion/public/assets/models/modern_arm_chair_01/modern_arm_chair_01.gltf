@@ -1,0 +1,300 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.1",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 16824,
+      "bufferView": 0,
+      "byteOffset": 0
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 9924,
+      "bufferView": 0,
+      "byteOffset": 33648
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 3884,
+      "normalized": true,
+      "bufferView": 1,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 3884,
+      "max": [
+        26279,
+        22938,
+        31603
+      ],
+      "min": [
+        -26279,
+        -32767,
+        -30639
+      ],
+      "normalized": true,
+      "bufferView": 1,
+      "byteOffset": 4
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 3884,
+      "normalized": true,
+      "bufferView": 1,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 1967,
+      "normalized": true,
+      "bufferView": 2,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 1967,
+      "max": [
+        22746,
+        32767,
+        29879
+      ],
+      "min": [
+        -22958,
+        -10529,
+        -31603
+      ],
+      "normalized": true,
+      "bufferView": 2,
+      "byteOffset": 4
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 1967,
+      "normalized": true,
+      "bufferView": 2,
+      "byteOffset": 12
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 53496,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 53496,
+      "byteLength": 62144,
+      "byteStride": 16,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 115640,
+      "byteLength": 31472,
+      "byteStride": 16,
+      "target": 34962
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 1
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 2
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 4
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 3
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 5
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "name": "modern_arm_chair_01_legs_nor_gl",
+      "mimeType": "image/ktx2",
+      "uri": "normal_1.ktx2"
+    },
+    {
+      "name": "modern_arm_chair_01_legs_diff",
+      "mimeType": "image/ktx2",
+      "uri": "baseColor_1.ktx2"
+    },
+    {
+      "name": "modern_arm_chair_01_legs_metal-modern_arm_chair_01_legs_rough",
+      "mimeType": "image/ktx2",
+      "uri": "metallicRoughness_1.ktx2"
+    },
+    {
+      "name": "modern_arm_chair_01_pillow_nor_gl",
+      "mimeType": "image/ktx2",
+      "uri": "normal_2.ktx2"
+    },
+    {
+      "name": "modern_arm_chair_01_pillow_diff",
+      "mimeType": "image/ktx2",
+      "uri": "baseColor_2.ktx2"
+    },
+    {
+      "name": "modern_arm_chair_01_pillow_metal-modern_arm_chair_01_pillow_rough",
+      "mimeType": "image/ktx2",
+      "uri": "metallicRoughness_2.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "modern_arm_chair_01.bin",
+      "byteLength": 147112
+    }
+  ],
+  "materials": [
+    {
+      "name": "modern_arm_chair_01_legs",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        }
+      },
+      "normalTexture": {
+        "index": 1
+      }
+    },
+    {
+      "name": "modern_arm_chair_01_pillow",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 3
+        },
+        "metallicRoughnessTexture": {
+          "index": 5
+        }
+      },
+      "normalTexture": {
+        "index": 4
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.007",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 2,
+            "POSITION": 3,
+            "TEXCOORD_0": 4
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 5,
+            "POSITION": 6,
+            "TEXCOORD_0": 7
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 1
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "modern_arm_chair_01",
+      "translation": [
+        0.003363475203514099,
+        0.5118076237413334,
+        -0.08217088878154755
+      ],
+      "scale": [
+        0.5114260283735348,
+        0.5114260283735348,
+        0.5114260283735348
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "blend_export.001",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
+}

@@ -5,9 +5,29 @@ Il est mis à jour à la fin de chaque étape et avant toute opération longue.
 
 ## État actuel
 
-- **Étape en cours : 1** (dossier, déclencheur, service de la page, scène vide, déplacements).
-- Branche `immersion`. Rien n'est encore fusionné ni déployé.
+- **Étape en cours : 1** (dossier, entrée par la recherche, service de la page, scène provisoire, déplacements).
+- Branche `immersion`, dans une **copie de travail à part** (`git worktree`, dossier voisin de la copie
+  principale `…-immersion`). La copie principale reste sur `main` : on n'y travaille pas.
+- Rien n'est encore fusionné ni déployé.
 - Prochaine action : voir « Prochaine action » en bas de fichier.
+
+## Règles de travail (rappel)
+
+- **Portail de l'application** avant tout commit qui touche à son code, sans tuyau, code de sortie lu ;
+  depuis la copie de travail, les dépendances de la copie principale sont montées en lecture seule :
+  `docker run --rm -v "$PWD":/app -v <copie principale>/node_modules:/app/node_modules:ro -w /app node:26-alpine sh -c 'set -e; npm run typecheck; npm run lint -- --max-warnings=0; npm test'`.
+  Quelques tests de chronométrage peuvent échouer seuls sous charge : relancer jusqu'au vert.
+- **Compte de test** : le compte Jellyfin de test de la maison (`claude-test`), jamais un autre, jamais un
+  compte réel ; identifiants dans `immersion/.env` (ignoré par git). Aucune session ouverte sur la
+  production : les tests de bout en bout tournent sur une instance jetable.
+- **Déploiement**, aux jalons validés seulement : lectures en cours vérifiées d'abord ; version montée dans
+  `package.json` et `package-lock.json` (commit à part) ; fusion dans `main` ; image construite depuis une
+  copie propre de `main` (`docker build -t cine-app:latest --build-arg BUILD_REF=<sha> .`), puis
+  `docker compose up -d --no-build` dans la copie principale, puis `docker builder prune -f --max-used-space 15GB` ;
+  push en arrière-plan, CI lue après. Pas de page Nouveautés (c'est un secret).
+- **Machine partagée** : conteneurs nommés `immersion-*`, supprimés après usage, `docker ps` vérifié en fin
+  d'étape ; captures sur le processeur graphique brèves.
+- **Poids** : ~40 Mo au total dans le dépôt et dans l'image, pas plus. Le poids réel est noté plus bas.
 
 ## Ce que le dépôt est vraiment (relevé avant de commencer)
 
@@ -47,12 +67,23 @@ La politique de sécurité (CSP) générale suffit telle quelle (`wasm-unsafe-ev
 dans un `.glb`** (three les relit par `fetch(blob:)`, que `connect-src` refuse). Les modèles sont
 donc des `.gltf` avec `.bin` et `.ktx2` à côté.
 
-### Déclencheur
+### Entrée — une affiche dans la recherche
 
-`PlayerSearchPanel` : si le champ vaut exactement `immersion*` (espaces retirés, casse ignorée), la
-frappe n'entre pas dans l'état de la recherche — donc aucune requête, aucune ligne d'historique —
-et la page part vers `/immersion` par `window.location.assign`. La règle est dans
-`src/lib/immersionTrigger.ts`.
+Chercher exactement « immersion » (espaces et casse ignorés) pose en tête des résultats une affiche de
+plus, « Le Chalet » / « Laterna Experience », au format des autres (`PlayerResultCard`). La presser
+part vers `/immersion` par une navigation ordinaire. Tout autre mot reste une recherche. La règle est
+dans `src/lib/immersionTrigger.ts` (DECISIONS.md §144) ; l'affiche est `immersion/public/poster.jpg`,
+une image du vrai chalet (capture de la scène, refaite quand la scène change).
+
+La première idée — rediriger dès que le champ vaut `immersion*` — a été abandonnée pour celle-ci :
+l'application parle par affiches, et celle-ci ne se montre qu'à qui cherche ce mot.
+
+### Accueil — « Laterna Experience »
+
+La page s'ouvre sur la marque de Laterna animée (le L se dresse, le faisceau s'allume, « Laterna
+Experience »), qui sert d'écran de chargement : la barre suit le chargement réel de la scène, puis
+devient « Cliquer pour entrer » — le geste que le navigateur exige pour verrouiller le pointeur et
+laisser sortir du son.
 
 ### Lecture — le chemin du lecteur serveur, même route
 
@@ -101,12 +132,13 @@ Hors de `/immersion` (tout est additif, sauf la ligne du déclencheur) :
 
 | Fichier | Nature |
 |---|---|
-| `src/components/player/PlayerSearchPanel.tsx` | **modifié** : le déclencheur (import + 4 lignes) |
-| `src/lib/immersionTrigger.ts` | nouveau : la règle du déclencheur |
+| `src/components/player/PlayerSearchPanel.tsx` | **modifié** : l'affiche du Chalet (un import, trois endroits) |
+| `src/lib/immersionTrigger.ts` | nouveau : la règle (le mot, l'adresse, l'affiche) |
 | `src/lib/immersionFiles.ts` | nouveau : lecture des fichiers du build |
 | `src/app/immersion/route.ts` | nouveau : la page |
 | `src/app/api/immersion/[...path]/route.ts` | nouveau : ses fichiers |
-| `src/__tests__/immersion-*.test.ts` | nouveaux : tests des trois précédents |
+| `src/__tests__/immersion-{trigger,files,proxy}.test.ts` | nouveaux : la règle, le service des fichiers, le proxy |
+| `DECISIONS.md` | §144 : la règle, sa fonction, son appelant, ses tests |
 | `Dockerfile` | une étape de build en plus, une copie en plus |
 | `.dockerignore` | ce qui n'entre pas dans le build |
 | `tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts` | `immersion` exclu (projet à part), comme `streamdeck-plugin` |
@@ -127,23 +159,29 @@ Dépendances de `/immersion` : `three`, `@react-three/fiber`, `@react-three/drei
 - **Captures** : Playwright 1.63 (image officielle), Chromium sans écran. Le processeur graphique
   intégré de la machine est utilisable (`--device /dev/dri`, `--use-angle=gl-egl`) ; à défaut,
   SwiftShader.
-- **Compte de test** Jellyfin `immersion-test` (sans droits d'administration), identifiants dans
-  `immersion/.env` (ignoré par git).
+- **Compte de test** : celui de la maison (voir « Règles de travail »). En attendant ses identifiants,
+  l'instance jetable reçoit une session posée directement dans **sa** base (rien côté Jellyfin) : elle
+  ouvre les pages et le catalogue, pas la lecture.
 
 ## Étapes
 
-1. [ ] Dossier `/immersion`, déclencheur, service de la page, scène vide, déplacements et collisions
+1. [ ] Dossier `/immersion`, entrée par la recherche, service de la page, scène provisoire, déplacements et collisions
 2. [ ] Salon : géométrie, matériaux, éclairage
 3. [ ] TV, vidéo, son spatialisé, rapports Jellyfin
 4. [ ] Interface dans le monde, HUD, menu pause, réglages
 5. [ ] Extérieur, neige, ambilight, post-traitement, finitions
 6. [ ] Autres pièces du chalet
 
+## Poids
+
+(à relever quand les assets sont produits : `public/assets/`, `dist/`, total commité)
+
 ## Problèmes ouverts
 
-(aucun pour l'instant)
+- Les identifiants du compte de test ne sont pas sur la machine : sans eux, la lecture d'un vrai film
+  (étape 3) ne peut pas être vérifiée de bout en bout sur l'instance jetable.
 
 ## Prochaine action
 
-Écrire le projet Vite, les deux routes de service et le déclencheur ; lancer le portail de
-l'application ; construire une image de test ; premier test Playwright.
+Portail de l'application vert → commit de l'étape 1 côté application ; image de test ; instance jetable ;
+scénarios Playwright `tests/e2e/01-entree` et `02-monde`.

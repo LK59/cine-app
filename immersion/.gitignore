@@ -6,3 +6,6 @@ assets-src/
 captures/
 test-results/
 .env
+# Planches de contrôle des assets : refaites par tools/assets/previews.mjs.
+tools/assets/previews/
+tests/node_modules/

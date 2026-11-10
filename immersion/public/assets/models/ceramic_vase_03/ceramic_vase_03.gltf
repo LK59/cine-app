@@ -1,0 +1,188 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.1",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 22794,
+      "bufferView": 0,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 5237,
+      "normalized": true,
+      "bufferView": 1,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 5237,
+      "max": [
+        8877,
+        32767,
+        8877
+      ],
+      "min": [
+        -8877,
+        -32767,
+        -8877
+      ],
+      "normalized": true,
+      "bufferView": 1,
+      "byteOffset": 4
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 5237,
+      "normalized": true,
+      "bufferView": 1,
+      "byteOffset": 12
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 45588,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 45588,
+      "byteLength": 83792,
+      "byteStride": 16,
+      "target": 34962
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 1
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 2
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "name": "ceramic_vase_03_nor_gl",
+      "mimeType": "image/ktx2",
+      "uri": "normal_1.ktx2"
+    },
+    {
+      "name": "ceramic_vase_03_diff",
+      "mimeType": "image/ktx2",
+      "uri": "baseColor_1.ktx2"
+    },
+    {
+      "name": "ceramic_vase_03_rough",
+      "mimeType": "image/ktx2",
+      "uri": "metallicRoughness_1.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "ceramic_vase_03.bin",
+      "byteLength": 129380
+    }
+  ],
+  "materials": [
+    {
+      "name": "ceramic_vase_03",
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicRoughnessTexture": {
+          "index": 2
+        }
+      },
+      "normalTexture": {
+        "index": 1
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.001",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 2,
+            "TEXCOORD_0": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "ceramic_vase_03",
+      "translation": [
+        -5.401670932769775e-7,
+        0.2072064436151777,
+        -1.862645149230957e-9
+      ],
+      "scale": [
+        0.20718188517548697,
+        0.20718188517548697,
+        0.20718188517548697
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
+}
