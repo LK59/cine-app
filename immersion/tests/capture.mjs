@@ -111,6 +111,8 @@ for (const name of wanted) {
 // La carte « Le Chalet » de la recherche montre cette image : le vrai chalet, la nuit, la neige, un
 // écran allumé, et le titre posé dessus comme sur une affiche de film.
 if (wanted.includes("affiche")) {
+  // L'affiche montre la pièce éclairée : le mode cinéma (qui baisserait les lampes dès que l'écran s'allume) est coupé.
+  await page.evaluate(() => window.__immersion.store.getState().updateSettings({ cinema: false }));
   await page.evaluate(async () => {
     // Sur l'écran : un plan de film inventé — un crépuscule —, pas la mire.
     const canvas = document.createElement("canvas");

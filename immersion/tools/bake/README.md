@@ -109,7 +109,7 @@ Sans clé `layer` dans l'export : la lune et les noms qui commencent par `bougie
 puissance de deux supérieure, borné à [2, 128] ; au-dessus, écrêté. Le journal de cuisson donne le centile, la portée et le nombre de
 texels écrêtés ; `lightmaps.json` donne les portées. Le fichier `uv.bin` est commun. `lightmaps.json` : `range` (ancien champ) = portée
 de la couche nuit du premier atlas ; par atlas `texture` = couche nuit et `layers: { nuit: { texture, range }, lampes: { texture, range } }`
-(aussi pour `sofa`). Budgets KTX2 : 1,8 Mo par 2048², 0,45 Mo par 1024² (`assemble.py` signale un total au-dessus de 9 Mo).
+(aussi pour `sofa`). Budgets KTX2 : 1,8 Mo par 2048², 0,45 Mo par 1024² (0,7 Mo pour le canapé) (`assemble.py` signale un total au-dessus de 9 Mo).
 
 Si l'on ne cuit qu'une couche (`--layers`), l'autre n'est conservée que si le dépliage est identique (empreinte des UV dans
 `assets-src/bake/work/<atlas>.json`) ; sinon elle est retirée de `lightmaps.json` et son KTX2 supprimé.

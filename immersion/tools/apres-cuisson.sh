@@ -18,7 +18,7 @@ docker run --rm --name immersion-build --user "$(id -u):$(id -g)" -e HOME=/tmp -
 say "build : exit=$?"
 cp tests/fixtures/mire.webm dist/mire.webm
 say "captures des pièces"
-STATE="$PWD/$L/immersion-state.json" QUALITY=ultra PW_CPUS=4 timeout 900 tests/capture.sh entree salon tv baie canape vallee ouest charpente cuisine ilot escalier mezzanine balcon couloir chambre lit telechambre reglages > $L/captures.log 2>&1
+STATE="$PWD/$L/immersion-state.json" QUALITY=ultra PW_CPUS=4 timeout 1500 tests/capture.sh entree salon tv baie canape charpente cuisine ilot escalier mezzanine balcon couloir chambre lit telechambre terrasse bain dehors vue foyer hifi chat plaid porte reglages > $L/captures.log 2>&1
 say "captures : exit=$?"
 say "affiche"
 STATE="$PWD/$L/immersion-state.json" QUALITY=ultra SIZE=1000x1500 PW_CPUS=4 timeout 600 tests/capture.sh affiche > $L/affiche.log 2>&1

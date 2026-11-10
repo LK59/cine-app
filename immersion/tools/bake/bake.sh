@@ -58,7 +58,7 @@ for g in "${GROUPS_[@]}"; do
       cp "assets-src/bake/work/$stem.png" "assets-src/bake/work/${stem}_brut.png"
       ffmpeg -v error -y -i "assets-src/bake/work/${stem}_brut.png" -vf "format=gbrp,dilation,dilation,dilation" "assets-src/bake/work/$stem.png"
     fi
-    case "$g" in sofa|nuit) encode "$stem" 450000;; *) encode "$stem" 1800000;; esac
+    case "$g" in nuit) encode "$stem" 450000;; sofa) encode "$stem" 700000;; *) encode "$stem" 1800000;; esac
   done
 done
 python3 -I tools/bake/assemble.py

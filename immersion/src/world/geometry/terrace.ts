@@ -1,7 +1,15 @@
-import { CylinderGeometry, RingGeometry, SphereGeometry } from "three";
+import { CylinderGeometry, RingGeometry, SphereGeometry, type BufferGeometry } from "three";
 import { DOOR, ROOM, TERRACE, TUB, span, type Solid } from "../layout";
 import { Kits } from "./envelope";
 import type { Part } from "./types";
+
+/** Retourne une surface vers son dedans : ses faces (par symétrie) **et** ses normales — sans quoi elle s'éclaire à l'envers. */
+function inward<T extends BufferGeometry>(geometry: T): T {
+  geometry.scale(-1, 1, 1);
+  const normal = geometry.getAttribute("normal");
+  for (let i = 0; i < normal.count; i++) normal.setXYZ(i, -normal.getX(i), -normal.getY(i), -normal.getZ(i));
+  return geometry;
+}
 
 /**
  * La terrasse : un platelage de plain-pied devant la baie, son garde-corps coiffé de neige, des
@@ -75,7 +83,7 @@ export function buildTerrace(): Part {
   const { radius, height } = TUB;
   timber.add(new CylinderGeometry(radius, radius, height, 44, 1, true), { at: [TUB.x, height / 2, TUB.z] }, 1);
   // L'intérieur : la même paroi, tournée vers le dedans.
-  wood.add(new CylinderGeometry(radius - 0.07, radius - 0.07, height, 44, 1, true).scale(-1, 1, 1), { at: [TUB.x, height / 2, TUB.z] }, 1);
+  wood.add(inward(new CylinderGeometry(radius - 0.07, radius - 0.07, height, 44, 1, true)), { at: [TUB.x, height / 2, TUB.z] }, 1);
   wood.add(new RingGeometry(radius - 0.08, radius + 0.03, 48).rotateX(-Math.PI / 2), { at: [TUB.x, height, TUB.z] });
   for (const y of [0.2, height - 0.2]) metal.add(new CylinderGeometry(radius + 0.006, radius + 0.006, 0.045, 44, 1, true), { at: [TUB.x, y, TUB.z] });
   // Le banc immergé, dont on ne voit que le bord sous l'eau.
