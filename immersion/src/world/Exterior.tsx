@@ -7,8 +7,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { ROOM } from "./layout";
 import { WEST_WINDOW, WEST_WINDOWS } from "./Shell";
 import { configureKtx2 } from "./textures";
-import { QUALITY } from "../lib/settings";
-import { useStore } from "../state/store";
+import { useProfile } from "../state/store";
 
 /**
  * La lune, deux fois : là où on la **voit** dans le ciel (assez basse pour entrer dans le cadre de la
@@ -234,7 +233,7 @@ function firGeometry() {
     parts.push(paint(cone, new Color("#05110d"), new Color("#6f87ab"), y - height * 0.1, y + height));
   }
   const merged = mergeGeometries(
-    parts.map((p) => p.toNonIndexed()),
+    parts.map((p) => (p.index ? p.toNonIndexed() : p)),
     false
   )!;
   merged.computeVertexNormals();
@@ -246,7 +245,7 @@ function firGeometry() {
  * voit. Rien de ce qui est ici n'a besoin d'être beau de près : on ne sort pas.
  */
 export function Exterior() {
-  const profile = useStore((s) => QUALITY[s.settings.quality]);
+  const profile = useProfile();
   const gl = useThree((s) => s.gl);
   const detail = useLoader(KTX2Loader, assetUrl("textures/snow/normal.ktx2"), configureKtx2(gl));
 

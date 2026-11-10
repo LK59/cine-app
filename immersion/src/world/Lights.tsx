@@ -1,8 +1,7 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { PointLight } from "three";
-import { QUALITY } from "../lib/settings";
-import { useStore } from "../state/store";
+import { useProfile } from "../state/store";
 import { BREAST, CHANDELIER, LAMPS, ROOM } from "./layout";
 import { MOONLIGHT_FROM } from "./Exterior";
 
@@ -20,7 +19,7 @@ import { MOONLIGHT_FROM } from "./Exterior";
  * Les ombres sont calculées une fois puis figées (`Atmosphere`) : rien ne bouge dans la pièce.
  */
 export function Lights() {
-  const profile = useStore((s) => QUALITY[s.settings.quality]);
+  const profile = useProfile();
   const chandelier = useRef<PointLight>(null);
   const shadows = profile.shadowMap > 0;
   const cubeSize = Math.min(1024, profile.shadowMap);

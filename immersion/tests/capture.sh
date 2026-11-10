@@ -15,7 +15,10 @@ mkdir -p "$ROOT/captures"
 if [ ! -d "$HERE/node_modules/@playwright/test" ]; then
   docker run --rm --name immersion-pw-npm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$HERE:/w" -w /w "$IMAGE" npm install --no-audit --no-fund >/dev/null
 fi
-exec docker run --rm --name "immersion-capture-$$" --network host --ipc host --cpus "${PW_CPUS:-4}" "${GPU[@]}" \
+# STATE : un fichier d'état Playwright (la session du compte de test), pour une page qui parle à l'application.
+STATE_MOUNT=()
+[ -n "${STATE:-}" ] && [ -f "$STATE" ] && STATE_MOUNT=(-v "$STATE:/tmp/immersion-state.json:ro")
+exec docker run --rm --name "immersion-capture-$$" "${STATE_MOUNT[@]}" --network host --ipc host --cpus "${PW_CPUS:-4}" "${GPU[@]}" \
   --user "$(id -u):$(id -g)" -e HOME=/tmp -e BASE="${BASE:-http://localhost:5198}" -e IMMERSION_GL="$GL" \
-  -e QUALITY="${QUALITY:-high}" -e SIZE="${SIZE:-1600x900}" -e CAPTURES=/immersion/captures \
+  -e TV="${TV:-}" -e QUALITY="${QUALITY:-high}" -e SIZE="${SIZE:-1600x900}" -e CAPTURES=/immersion/captures \
   -v "$ROOT:/immersion" -w /immersion/tests "$IMAGE" node capture.mjs "$@"

@@ -1,0 +1,339 @@
+import type Hls from "hls.js";
+import { IDLE_PLAYBACK, useStore } from "../state/store";
+import { SessionExpired } from "../lib/session";
+import { isHdrFile, isHdrRange, negotiate, PlaybackRefused, reportProgress, reportStop, resumePosition, type Negotiation, type NegotiateOptions, type ReportTarget } from "./api";
+import { logLine, newLogSession } from "./log";
+import { applyMix, connectVideo } from "./audio";
+
+/**
+ * La lecture sur la télévision du chalet.
+ *
+ * Un seul élément `<video>`, jamais affiché, pour toute la visite : son image devient la texture de
+ * l'écran (`Television`), sa piste entre dans le graphe audio (`audio.ts`) — ce qui ne peut se faire
+ * qu'une fois par élément, d'où l'élément unique. `crossOrigin="anonymous"` est posé avant toute
+ * source : le flux vient de la même origine (`/api/jellyfin/stream/…`), donc la texture reste
+ * lisible et le son exploitable.
+ *
+ * Le parcours est celui du lecteur serveur de Laterna : négociation par la route, puis le fichier
+ * tel quel (DirectPlay) ou un flux HLS lu par hls.js (DirectStream, Transcode). Trois partis pris
+ * propres au chalet :
+ * - le son est demandé en **stéréo au plus** (`api.ts`) : il sort d'une seule source, la télévision ;
+ * - une image **HDR est convertie en SDR par le serveur**, par défaut (réglage `hdrToSdr`) — dans une
+ *   texture WebGL elle sortirait délavée ; une image SDR n'est jamais transcodée pour ça ;
+ * - **chaque sortie annonce l'arrêt** à Jellyfin (changement de film, fin, erreur, « Quitter »,
+ *   fermeture de l'onglet) : c'est ce qui coupe le transcodage. Un flux abandonné sans arrêt laisse
+ *   un ffmpeg tourner pour personne.
+ *
+ * Une erreur de décodage fait descendre d'un échelon — l'image en H.264 — avant d'abandonner.
+ */
+const HLS_CONFIG = { backBufferLength: 90, maxBufferLength: 30, maxMaxBufferLength: 90 } as const;
+const PROGRESS_EVERY_MS = 10_000;
+const MAX_NETWORK_RETRIES = 6;
+const MAX_MEDIA_RECOVERIES = 2;
+
+/** Les échelons de repli, dans l'ordre. Le son est déjà ré-encodé en stéréo dès le premier. */
+const LADDER: NegotiateOptions[] = [{}, { videoH264Only: true }];
+
+/** Pourquoi une lecture s'arrête — le `why` de sa ligne `stop`. */
+type StopWhy = "close" | "next" | "page" | "ended" | "error";
+
+interface Item {
+  id: string;
+  title: string;
+}
+
+let video: HTMLVideoElement | null = null;
+let hls: Hls | null = null;
+let target: ReportTarget | null = null;
+let beat: ReturnType<typeof setInterval> | null = null;
+/** Chaque nouvelle lecture invalide les rappels de la précédente. */
+let generation = 0;
+let current: { item: Item; rung: number } | null = null;
+let lastPosition = 0;
+let lastPaint = 0;
+/** Ce que la séance en cours a regardé : pour le bilan de sa ligne `stop`. */
+let watch = { since: 0, seconds: 0 };
+
+/**
+ * La fin d'une séance, en un seul endroit : l'arrêt annoncé à Jellyfin (qui coupe le transcodage) et
+ * la ligne `stop` du journal. Rien si aucune séance n'est ouverte — on peut l'appeler sans crainte.
+ */
+function finish(why: StopWhy, lastGasp = false): void {
+  const ending = target;
+  if (!ending) return;
+  target = null;
+  const at = video && Number.isFinite(video.currentTime) ? video.currentTime : lastPosition;
+  if (watch.since) watch.seconds += (performance.now() - watch.since) / 1000;
+  watch.since = 0;
+  reportStop(ending, why === "ended" && video && Number.isFinite(video.duration) ? video.duration : at);
+  logLine("stop", { itemId: ending.itemId, title: useStore.getState().playback.title, why, at: Math.round(at), watched: Math.round(watch.seconds) }, lastGasp);
+}
+
+const set = (patch: Parameters<ReturnType<typeof useStore.getState>["setPlayback"]>[0]) => useStore.getState().setPlayback(patch);
+
+function sendProgress() {
+  if (target && video) reportProgress(target, video.currentTime, video.paused);
+}
+
+/** L'élément vidéo de la visite, créé à la première demande. */
+export function getVideo(): HTMLVideoElement {
+  if (video) return video;
+  const el = document.createElement("video");
+  el.crossOrigin = "anonymous";
+  el.playsInline = true;
+  el.preload = "auto";
+  el.addEventListener("playing", () => {
+    if (!watch.since) watch.since = performance.now();
+    set({ status: "playing", waiting: false, error: null });
+  });
+  el.addEventListener("pause", () => {
+    if (watch.since) watch.seconds += (performance.now() - watch.since) / 1000;
+    watch.since = 0;
+    if (!el.ended && useStore.getState().playback.status === "playing") set({ status: "paused" });
+    sendProgress();
+  });
+  el.addEventListener("waiting", () => set({ waiting: true }));
+  el.addEventListener("canplay", () => set({ waiting: false }));
+  el.addEventListener("seeked", sendProgress);
+  el.addEventListener("durationchange", () => Number.isFinite(el.duration) && set({ duration: el.duration }));
+  el.addEventListener("timeupdate", () => {
+    lastPosition = el.currentTime;
+    const now = performance.now();
+    // Deux fois par seconde suffisent à une barre de progression.
+    if (now - lastPaint < 450) return;
+    lastPaint = now;
+    set({ position: el.currentTime });
+  });
+  el.addEventListener("ended", () => {
+    finish("ended");
+    release();
+    set({ status: "ended", position: el.duration || lastPosition });
+  });
+  el.addEventListener("error", () => {
+    // Avec hls.js, les erreurs passent par lui ; celle-ci ne compte que pour un fichier lu tel quel.
+    if (!hls && current && el.error) void descend(`erreur du lecteur (${el.error.code})`);
+  });
+  video = el;
+  return el;
+}
+
+/** Détache le flux en cours. L'arrêt, lui, est annoncé par `finish` — toujours avant. */
+function release() {
+  if (beat) clearInterval(beat);
+  beat = null;
+  if (hls) {
+    try {
+      hls.destroy();
+    } catch {
+      // Déjà détruit.
+    }
+    hls = null;
+  }
+}
+
+function unload() {
+  if (!video) return;
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+}
+
+/** Applique volume, silence et spatialisation des réglages au graphe audio. */
+export function syncMix(): void {
+  const state = useStore.getState();
+  applyMix({ volume: state.settings.volume, muted: state.playback.muted, spatial: state.settings.spatial, reverb: state.settings.reverb });
+}
+
+async function start(item: Item, rung: number, from: number | null, cause: "open" | "ladder" = "open") {
+  const mine = ++generation;
+  const el = getVideo();
+  // Un autre titre jouait : sa séance se referme d'abord.
+  finish(cause === "ladder" ? "error" : "next");
+  release();
+  unload();
+  current = { item, rung };
+  watch = { since: 0, seconds: 0 };
+  set({ ...IDLE_PLAYBACK, muted: useStore.getState().playback.muted, status: "loading", itemId: item.id, title: item.title });
+
+  /** Referme une séance que la négociation vient d'ouvrir chez Jellyfin et dont on ne veut plus. */
+  const abandon = (n: Negotiation, at: number) =>
+    reportStop({ itemId: item.id, playSessionId: n.playSessionId, mediaSourceId: n.mediaSourceId, playMethod: n.playbackInfo.playMethod }, at);
+
+  try {
+    connectVideo(el);
+    syncMix();
+    const convert = useStore.getState().settings.hdrToSdr;
+    const [resumeAt, hdr] = await Promise.all([from ?? resumePosition(item.id), convert ? isHdrFile(item.id) : Promise.resolve(false)]);
+    if (mine !== generation) return;
+    let sdr = hdr === true;
+    let negotiation = await negotiate(item.id, { ...LADDER[rung], resumeAt, sdr });
+    // La question « ce fichier est-il HDR ? » est restée sans réponse : la négociation la donne. Une
+    // image HDR est alors redemandée en SDR — la première séance est refermée, jamais abandonnée.
+    if (convert && !sdr && hdr === null && isHdrRange(negotiation.playbackInfo.video?.rangeType)) {
+      abandon(negotiation, resumeAt);
+      sdr = true;
+      negotiation = await negotiate(item.id, { ...LADDER[rung], resumeAt, sdr });
+    }
+    if (mine !== generation) {
+      // Une autre lecture a pris la place pendant la négociation : celle-ci est rendue tout de suite.
+      abandon(negotiation, resumeAt);
+      return;
+    }
+    target = { itemId: item.id, playSessionId: negotiation.playSessionId, mediaSourceId: negotiation.mediaSourceId, playMethod: negotiation.playbackInfo.playMethod };
+    const info = negotiation.playbackInfo;
+    set({ title: negotiation.title ?? item.title, method: info.playMethod });
+    if (cause === "open") newLogSession();
+    logLine("start", {
+      itemId: item.id,
+      title: negotiation.title ?? item.title,
+      why: cause,
+      ...(cause === "ladder" ? { rung } : {}),
+      path: "immersion",
+      method: info.playMethod,
+      reason: negotiation.isDirectPlay ? "fichier servi tel quel" : info.playMethod === "DirectStream" ? "image copiée, flux remultiplexé par le serveur" : "transcodé par le serveur",
+      hls: negotiation.isDirectPlay ? "aucun" : "hls.js",
+      at: Math.round(resumeAt),
+      video: info.video?.codec ?? null,
+      range: info.video?.rangeType ?? null,
+      audio: "stéréo",
+      // La conversion HDR → SDR par le serveur : le transcodage lourd, à pouvoir retrouver au journal.
+      ...(sdr ? { sdr: "serveur" } : {}),
+      ...(info.transcodeReasons?.length ? { transcodeReasons: info.transcodeReasons.join(",") } : {}),
+    });
+
+    if (negotiation.isDirectPlay) {
+      el.src = negotiation.manifestUrl;
+      if (resumeAt > 0) el.addEventListener("loadedmetadata", () => mine === generation && (el.currentTime = resumeAt), { once: true });
+    } else {
+      const { default: HlsClass } = await import("hls.js");
+      if (mine !== generation) return;
+      if (!HlsClass.isSupported()) throw new Error("Ce navigateur ne sait pas lire ce flux.");
+      const instance = new HlsClass({ ...HLS_CONFIG, ...(resumeAt > 0 ? { startPosition: resumeAt } : {}) });
+      hls = instance;
+      let networkRetries = 0;
+      let mediaRecoveries = 0;
+      instance.on(HlsClass.Events.FRAG_BUFFERED, () => {
+        networkRetries = 0;
+      });
+      instance.on(HlsClass.Events.ERROR, (_event, data) => {
+        if (mine !== generation || !data.fatal) return;
+        if (data.type === HlsClass.ErrorTypes.NETWORK_ERROR && networkRetries++ < MAX_NETWORK_RETRIES) {
+          // Un transcodage qui démarre peut tarder à rendre son premier segment : on redemande, de plus en plus patiemment.
+          setTimeout(() => mine === generation && instance.startLoad(), 800 * networkRetries);
+          return;
+        }
+        if (data.type === HlsClass.ErrorTypes.MEDIA_ERROR && mediaRecoveries++ < MAX_MEDIA_RECOVERIES) {
+          instance.recoverMediaError();
+          return;
+        }
+        void descend(data.details || "flux interrompu");
+      });
+      instance.loadSource(negotiation.manifestUrl);
+      instance.attachMedia(el);
+    }
+
+    beat = setInterval(() => {
+      if (video && !video.paused) sendProgress();
+    }, PROGRESS_EVERY_MS);
+    await el.play().catch(() => {
+      // Lecture refusée sans geste (ne devrait pas arriver : on vient d'un clic) : l'écran reste en pause.
+      if (mine === generation) set({ status: "paused" });
+    });
+  } catch (error) {
+    if (mine !== generation) return;
+    // Une séance déjà ouverte chez Jellyfin se referme, quelle que soit la panne.
+    finish("error");
+    release();
+    unload();
+    current = null;
+    if (error instanceof SessionExpired) return;
+    const message = error instanceof PlaybackRefused ? error.message : error instanceof Error ? error.message : "Lecture impossible.";
+    logLine("error", { itemId: item.id, title: item.title, message: message.slice(0, 200), stage: "ouverture" });
+    set({ status: "error", error: message });
+  }
+}
+
+/** Un échelon plus bas, à la position où l'on était ; au bout de l'échelle, l'erreur s'affiche. */
+async function descend(why: string) {
+  if (!current || !video) return;
+  const { item, rung } = current;
+  const at = video.currentTime || lastPosition;
+  if (rung + 1 < LADDER.length) {
+    console.warn(`[immersion] ${why} — nouvelle négociation (échelon ${rung + 1})`);
+    await start(item, rung + 1, at, "ladder");
+    return;
+  }
+  logLine("error", { itemId: item.id, title: item.title, message: why.slice(0, 200), position: Math.round(at) });
+  finish("error");
+  release();
+  unload();
+  current = null;
+  set({ status: "error", error: why });
+}
+
+/** Lance un titre de la bibliothèque. `from` : une position imposée ; sans elle, la reprise du compte. */
+export function play(item: Item, from: number | null = null): Promise<void> {
+  return start(item, 0, from);
+}
+
+/**
+ * Une vidéo quelconque sur l'écran, sans Jellyfin : pour les captures et les tests du rendu (image,
+ * son, éclairage), qui n'ont pas à dépendre d'un film de la bibliothèque.
+ */
+export async function playTestClip(url: string): Promise<void> {
+  generation++;
+  const el = getVideo();
+  finish("next");
+  release();
+  unload();
+  current = null;
+  connectVideo(el);
+  syncMix();
+  set({ ...IDLE_PLAYBACK, status: "loading", title: "Mire" });
+  el.src = url;
+  el.loop = true;
+  await el.play().catch(() => set({ status: "paused" }));
+}
+
+export function togglePause(): void {
+  if (!video) return;
+  const { status } = useStore.getState().playback;
+  if (status === "playing") video.pause();
+  else if (status === "paused") void video.play().catch(() => {});
+}
+
+export function seekBy(seconds: number): void {
+  if (!video) return;
+  const { status } = useStore.getState().playback;
+  if (status !== "playing" && status !== "paused") return;
+  const end = Number.isFinite(video.duration) ? video.duration - 1 : Infinity;
+  video.currentTime = Math.max(0, Math.min(end, video.currentTime + seconds));
+  set({ position: video.currentTime });
+}
+
+export function seekTo(seconds: number): void {
+  if (!video) return;
+  video.currentTime = Math.max(0, seconds);
+  set({ position: video.currentTime });
+}
+
+export function toggleMute(): void {
+  set({ muted: !useStore.getState().playback.muted });
+  syncMix();
+}
+
+/** Arrête la lecture et l'annonce à Jellyfin — qui coupe alors le transcodage. */
+export function stop(): void {
+  generation++;
+  finish("close");
+  release();
+  unload();
+  if (video) video.loop = false;
+  current = null;
+  set({ ...IDLE_PLAYBACK, muted: useStore.getState().playback.muted });
+}
+
+/** La page s'en va (fermeture, rechargement, retour au cinéma) : l'arrêt part quand même (`keepalive`). */
+export function stopOnLeave(): void {
+  finish("page", true);
+}

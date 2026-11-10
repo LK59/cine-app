@@ -3,11 +3,23 @@ import { useThree } from "@react-three/fiber";
 import { useStore } from "../state/store";
 import { listenKeyboard, type Action } from "./input";
 import { look, rig } from "./rig";
-import { SOFA } from "./layout";
+import { SOFA, TV } from "./layout";
+import { openPanel } from "./panel";
 import { Vector3 } from "three";
+import { seekBy, toggleMute, togglePause } from "../media/playback";
 
-/** Ce que les touches d'action déclenchent ; la lecture s'y branche à l'étape de la télévision. */
-export const actions: { handlers: Partial<Record<Action, () => void>> } = { handlers: {} };
+/**
+ * Ce que les touches d'action déclenchent. La lecture est branchée ici ; `interact` (ouvrir le
+ * panneau Laterna) est posé par l'interface.
+ */
+export const actions: { handlers: Partial<Record<Action, () => void>> } = {
+  handlers: {
+    playPause: togglePause,
+    mute: toggleMute,
+    seekBack: () => seekBy(-10),
+    seekForward: () => seekBy(10),
+  },
+};
 
 let canvasRef: HTMLCanvasElement | null = null;
 
@@ -54,8 +66,22 @@ export function Controls() {
       if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
       look(e.movementX, e.movementY, useStore.getState().settings.sensitivity);
     };
+    // Un clic sur la télévision l'ouvre : le rayon du regard est croisé avec le plan de la dalle.
+    const onClick = () => {
+      const state = useStore.getState();
+      if (document.pointerLockElement !== canvas || state.phase !== "world" || state.mode !== "walk") return;
+      const dx = -Math.sin(rig.yaw) * Math.cos(rig.pitch);
+      const dy = Math.sin(rig.pitch);
+      const dz = -Math.cos(rig.yaw) * Math.cos(rig.pitch);
+      if (dx <= 0.01) return;
+      const reach = (TV.x - rig.eye.x) / dx;
+      const y = rig.eye.y + dy * reach;
+      const z = rig.eye.z + dz * reach;
+      if (reach < 9 && Math.abs(y - TV.y) < TV.height / 2 && Math.abs(z - TV.z) < TV.width / 2) openPanel();
+    };
     document.addEventListener("pointerlockchange", onLockChange);
     document.addEventListener("mousemove", onMove);
+    document.addEventListener("mousedown", onClick);
 
     const stopKeyboard = listenKeyboard(
       (action) => {
@@ -69,7 +95,10 @@ export function Controls() {
           }
           return;
         }
+        if (action === "interact") return openPanel();
         actions.handlers[action]?.();
+        // Un geste de lecture montre le HUD un instant.
+        state.wakeHud();
       },
       () => {
         const state = useStore.getState();
@@ -80,6 +109,7 @@ export function Controls() {
     return () => {
       document.removeEventListener("pointerlockchange", onLockChange);
       document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mousedown", onClick);
       stopKeyboard();
       if (document.pointerLockElement === canvas) document.exitPointerLock();
       canvasRef = null;

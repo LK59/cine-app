@@ -3,8 +3,7 @@ import { useLoader, useThree } from "@react-three/fiber";
 import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
 import { Color, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace, NoColorSpace, Vector2, type Texture, type WebGLRenderer } from "three";
 import { assetUrl, BASIS_PATH } from "../lib/assets";
-import { QUALITY } from "../lib/settings";
-import { useStore } from "../state/store";
+import { useProfile } from "../state/store";
 
 /**
  * Les matières du chalet : des jeux de textures PBR (couleur, normales, et une carte « ARM » —
@@ -70,7 +69,7 @@ function prepare(texture: Texture, anisotropy: number, srgb: boolean): Texture {
  */
 export function usePbr(set: TextureSet, options: PbrOptions = {}): MeshStandardMaterial {
   const gl = useThree((s) => s.gl);
-  const anisotropy = useStore((s) => QUALITY[s.settings.quality].anisotropy);
+  const anisotropy = useProfile().anisotropy;
   const [color, normal, arm] = useLoader(KTX2Loader, [assetUrl(`textures/${set}/color.ktx2`), assetUrl(`textures/${set}/normal.ktx2`), assetUrl(`textures/${set}/arm.ktx2`)], configureKtx2(gl));
   const { tint, roughness = 1, bump = 1, env = 1, metal = false, saturation = 1 } = options;
 
