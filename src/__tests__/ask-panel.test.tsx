@@ -194,6 +194,14 @@ describe("le panneau", () => {
     await screen.findByText("Ariadne construit le labyrinthe.");
   });
 
+  it("sur le côté, le panneau est haut de son contenu : au plus la hauteur permise, jamais étiré jusqu'en bas (11/11/2026)", () => {
+    panel();
+    const section = document.querySelector<HTMLElement>("[data-ask-panel]")!;
+    expect(section.dataset.mode).toBe("side");
+    expect(section.style.height).toBe("");
+    expect(section.style.maxHeight).not.toBe("");
+  });
+
   it("une rotation pendant la frappe : le clavier se referme, le texte reste, le panneau se replace", async () => {
     panel({ placement: "sheet", where: "fiche" });
     const section = () => document.querySelector<HTMLElement>("[data-ask-panel]")!;

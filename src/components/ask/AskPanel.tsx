@@ -420,7 +420,10 @@ export function AskPanel({ itemId, where, position, sofarPosition, onClose, pers
           transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
           transition: swipe.dragging ? "none" : swipe.touched ? "transform 280ms cubic-bezier(0.32, 0.72, 0, 1)" : undefined,
         }
-      : { top: layout.top, height: layout.height };
+      : // Sur le côté (ordinateur, tablette) aussi : haut de son contenu, au plus la hauteur permise — une fiche
+        // d'acteur de quelques lignes occupait tout l'écran, de haut en bas, et ses propositions tombaient sur la
+        // barre de lecture (11/11/2026).
+        { top: layout.top, maxHeight: layout.height };
   const motion = sheet
     ? sheetMotionClass({ swipe, leaving: closing, revealed: false, out: "animate-fade-out-down", into: "animate-slide-up" })
     : closing
