@@ -6,6 +6,16 @@ chaque rapport de décision (`service.version`) et dans la ligne de démarrage d
 Les versions des résultats (`RESULT_VERSION`, `VOICE_VERSION`, `ASD_VERSION`) suivent leur propre règle
 (`app/config.py`) : elles ne bougent que quand un résultat ancien devient incomparable.
 
+## 1.6.0
+
+- **Débuts de scène resserrés** (`cutsVersion` 2) : une coupe aux deux signaux est refusée à côté d'une scène de
+  moins de 40 s (`court`), sans réplique dans la minute qui suit (`muet`), ou quand la parole ne s'y arrête pas
+  1,5 s (`enchaîné`) ; les chapitres d'auteur n'y passent pas. Nouveau champ `pauses` par scène : les silences
+  d'au moins 5 s qui suivent une prise de parole. Ajouts compatibles de `/items/{id}/scenes`.
+- Les règles s'appliquent à la lecture : les mesures gardées portent désormais leur propre version
+  (`BOUNDS_VERSION`), et un changement de règle vaut aussitôt pour tous les résultats mesurés, sans rattrapage en
+  tâche de fond. `RESULT_VERSION`, les scènes et leurs personnes ne changent pas. Voir `docs/PIPELINE.md` §12.
+
 ## 1.5.0
 
 - **Débuts de scène** (« Revenir au début de la scène » côté Laterna) : par frontière de scène, le point d'entrée
