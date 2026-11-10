@@ -10,10 +10,7 @@ run() { docker run --rm --name immersion-sofa-gt --cpus 5 --user "$(id -u):$(id 
 run sh -c '
 set -e
 cd /work/assets-src/sofa
-gltf-transform dedup sofa_raw.gltf tmp/a.gltf
-gltf-transform prune tmp/a.gltf tmp/b.gltf
-gltf-transform weld tmp/b.gltf tmp/c.gltf
-gltf-transform meshopt tmp/c.gltf /work/public/assets/models/sofa/sofa.gltf --level high --quantize-position 14 --quantize-normal 10 --quantize-texcoord 14
+node /work/tools/sofa/optimize.mjs /work/assets-src/sofa/sofa_raw.gltf /work/public/assets/models/sofa/sofa.gltf
 cd /work
 ls -l public/assets/models/sofa
 gltf-transform inspect public/assets/models/sofa/sofa.gltf

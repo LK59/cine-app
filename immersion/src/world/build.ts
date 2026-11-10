@@ -100,6 +100,42 @@ export class Kit {
     return this.box([Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0)], { at: [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2] }, grain);
   }
 
+  /**
+   * Un mur percé : une plaque verticale d'épaisseur `t`, le long de X (`axis: "x"`, à la cote `at` en Z)
+   * ou le long de Z (`axis: "z"`, à la cote `at` en X), de `a0` à `a1`, du sol `y0` à la hauteur `top`
+   * (un nombre, ou une fonction de la position pour un pignon), moins ses ouvertures — portes et
+   * fenêtres, données par leurs bornes le long du mur et en hauteur.
+   */
+  wall(axis: "x" | "z", at: number, t: number, a0: number, a1: number, y0: number, top: number | ((a: number) => number), openings: { a0: number; a1: number; y0: number; y1: number }[] = [], step = 0.5): this {
+    const cuts = new Set<number>([a0, a1]);
+    for (const o of openings) {
+      if (o.a0 > a0 && o.a0 < a1) cuts.add(o.a0);
+      if (o.a1 > a0 && o.a1 < a1) cuts.add(o.a1);
+    }
+    // Un sommet en pente se suit par bandes étroites.
+    if (typeof top === "function") for (let a = a0 + step; a < a1 - 1e-6; a += step) cuts.add(Math.round(a * 1000) / 1000);
+    const edges = [...cuts].sort((p, q) => p - q);
+    for (let i = 0; i < edges.length - 1; i++) {
+      const s0 = edges[i];
+      const s1 = edges[i + 1];
+      if (s1 - s0 < 1e-4) continue;
+      const mid = (s0 + s1) / 2;
+      const height = typeof top === "function" ? Math.min(top(s0), top(s1)) : top;
+      // Les vides de cette bande, du bas vers le haut ; entre eux, le mur.
+      const holes = openings.filter((o) => mid > o.a0 && mid < o.a1).sort((p, q) => p.y0 - q.y0);
+      let from = y0;
+      for (const hole of [...holes, { y0: height, y1: height }]) {
+        const to = Math.min(hole.y0, height);
+        if (to - from > 1e-4) {
+          if (axis === "x") this.span(s0, s1, from, to, at, at + t);
+          else this.span(at, at + t, from, to, s0, s1);
+        }
+        from = Math.max(from, hole.y1);
+      }
+    }
+    return this;
+  }
+
   /** Une poutre tendue d'un point à un autre (section `w` × `h`, le fil dans sa longueur). */
   beam(from: [number, number, number], to: [number, number, number], w: number, h: number): this {
     const a = new Vector3(...from);

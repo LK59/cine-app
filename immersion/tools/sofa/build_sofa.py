@@ -41,13 +41,13 @@ ARM_TOP = 0.64
 DECK_TOP = 0.225
 SEAT_BASE = 0.22             # underside of seat cushions
 SEAT_H = 0.225               # nominal cushion thickness (before crown)
-SEAT_CROWN = 0.042           # extra height at the centre of a seat cushion
+SEAT_CROWN = 0.033           # extra height at the centre of a seat cushion
 SEAT_BOTTOM_R, SEAT_TOP_R = 0.03, 0.09
 BACK_H = 0.50                # back cushion height
 BACK_T = 0.27                # back cushion thickness
 BACK_LEAN_DEG = 12.0
 BACK_TOP_R = 0.085
-SEAT_GAP = 0.024             # nominal gap between neighbouring modules
+SEAT_GAP = 0.040             # nominal gap between neighbouring modules
 PIPING_R = 0.0075
 CORNER_STEPS = 4             # mesh rows inside each rounded zone
 MID_STEP = 0.085             # mesh spacing on flat zones
@@ -338,6 +338,7 @@ INNER_N_Z = Z_NORTH_BACK + SHELL_INSET + SHELL_T
 INNER_S_Z = Z_SOUTH_BACK - SHELL_INSET - SHELL_T
 UP = np.array([0, 1.0, 0])
 SEAT_TOPS = []
+PARTS = []   # (kind, vertices, faces) of every cushion, for the overlap check
 
 # wall descriptors: front direction f, along-wall u, point on the inner face used as origin
 WALLS = {
@@ -379,15 +380,18 @@ def build_cushions():
         rng = np.random.default_rng(rng_master.integers(1 << 31))
         w = WALLS[wall]
         Ha = (width - SEAT_GAP) / 2 * rng.uniform(0.985, 1.005)
-        Hb = (depth - 0.004) / 2
+        corner = wall == "long" and (s - INNER_N_Z < 0.5 * depth + 0.1 or INNER_S_Z - s < 0.5 * depth + 0.1)
+        shrink = 0.9 * SEAT_GAP if corner else 0.004
+        Hb = (depth - shrink) / 2
         Hc = SEAT_H / 2 * rng.uniform(0.97, 1.03)
         P, F, UV, pv, pf, puv = make_cushion("seat", Ha, Hb, Hc, rng)
         M = np.stack([w["u"], w["f"], UP], 1)
         # small pitch/yaw so no two modules are aligned perfectly
         M = rot_axis(w["f"], math.radians(rng.uniform(-0.8, 0.8))) @ rot_axis(w["u"], math.radians(rng.uniform(-0.8, 0.8))) @ rot_axis(UP, math.radians(rng.uniform(-0.5, 0.5))) @ M
-        o = wall_point(wall, s, depth / 2)
+        o = wall_point(wall, s, depth / 2 - (shrink / 2 if corner else 0.0))
         o[1] = SEAT_BASE + Hc + rng.uniform(-0.002, 0.003)
         Wc = place(cush, P, F, UV, pv, pf, puv, M, o)
+        PARTS.append(("seat", Wc, F))
         SEAT_TOPS.append(Wc[:, 1].max())
         seats.append((wall, s, width, depth))
 
@@ -417,7 +421,7 @@ def build_cushions():
     pitch = (INNER_S_Z - INNER_N_Z) / n_back_long
     for i in range(n_back_long):
         back_mods.append(("long", INNER_N_Z + pitch * (i + 0.5), pitch))
-    x0 = -2.03
+    x0 = -1.97
     pw = (WING_END_X - x0) / 4
     for i in range(4):
         back_mods.append(("north", x0 + pw * (i + 0.5), pw))
@@ -433,7 +437,8 @@ def build_cushions():
         M, o = lean_frame(wall, s, rng, Hb, Hc, lean)
         # a touch of sideways roll
         M = rot_axis(M[:, 2], math.radians(rng.uniform(-1.2, 1.2))) @ M
-        place(cush, P, F, UV, pv, pf, puv, M, o)
+        Wb = place(cush, P, F, UV, pv, pf, puv, M, o)
+        PARTS.append(("back", Wb, F))
         back_info.append(dict(wall=wall, s=s, width=width, lean=lean))
     return cush, seats, back_info
 
@@ -841,6 +846,17 @@ def main():
     tri = {m.name: m.tris() for m in meshes}
     bbox = {m.name: [m.V.min(0).round(4).tolist(), m.V.max(0).round(4).tolist()] for m in meshes}
     allV = np.vstack([m.V for m in meshes])
+    # neighbours of the same kind must not poke through each other
+    bvhs = [BVHTree.FromPolygons(W.tolist(), [list(f) for f in F]) for (_, W, F) in PARTS]
+    hits = 0
+    for i in range(len(PARTS)):
+        for j in range(i + 1, len(PARTS)):
+            if PARTS[i][0] == PARTS[j][0]:
+                h_ = len(bvhs[i].overlap(bvhs[j]))
+                hits += h_
+                if h_:
+                    print('  overlap', PARTS[i][0], i, PARTS[j][0], j, h_, np.round(PARTS[i][1].mean(0), 2), np.round(PARTS[j][1].mean(0), 2))
+    print("SAME-KIND CUSHION OVERLAPS (triangle pairs)", hits)
     print("SEATTOP", round(min(SEAT_TOPS), 3), round(float(np.mean(SEAT_TOPS)), 3), round(max(SEAT_TOPS), 3))
     print("TRIANGLES", tri, "total", sum(tri.values()))
     print("BBOX", bbox)
@@ -851,9 +867,21 @@ def main():
         if tri[k] > v:
             print("OVER BUDGET", k, tri[k], v)
     objs = []
+    # The glTF exporter only writes TEXCOORD_0 when the material samples a texture, so each placeholder
+    # material carries a 1x1 image node on its base colour. tools/sofa/optimize.mjs strips the texture again.
+    colours = {"sofa_frame": (0.70, 0.62, 0.50), "sofa_cushions": (0.74, 0.66, 0.54),
+               "pillows_a": (0.50, 0.40, 0.32), "pillows_b": (0.60, 0.60, 0.55)}
     for m in meshes:
         mat = bpy.data.materials.new(m.name + "_mat")
-        mat.diffuse_color = (0.8, 0.75, 0.65, 1)
+        mat.use_nodes = True
+        mat.use_backface_culling = True
+        nt = mat.node_tree
+        bsdf = nt.nodes["Principled BSDF"]
+        img = bpy.data.images.new(m.name + "_px", 1, 1)
+        img.pixels = [*colours[m.name], 1.0]
+        tex = nt.nodes.new("ShaderNodeTexImage")
+        tex.image = img
+        nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
         objs.append(to_object(m, mat))
     bpy.ops.object.select_all(action="DESELECT")
     for o in objs:
@@ -862,7 +890,7 @@ def main():
     raw = os.path.join(OUT, "sofa_raw.gltf")
     bpy.ops.export_scene.gltf(filepath=raw, export_format="GLTF_SEPARATE", use_selection=True, export_yup=True,
                               export_apply=False, export_texcoords=True, export_normals=True, export_tangents=False,
-                              export_materials="EXPORT", export_image_format="NONE", export_cameras=False,
+                              export_materials="EXPORT", export_image_format="AUTO", export_cameras=False,
                               export_lights=False, export_extras=False)
     json.dump({"tri": tri, "bbox": bbox, "pillows": rep, "seatTop": float(np.mean(SEAT_TOPS))}, open(os.path.join(OUT, "stats.json"), "w"), indent=1)
 

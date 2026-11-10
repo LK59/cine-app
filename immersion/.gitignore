@@ -9,3 +9,6 @@ test-results/
 # Planches de contrôle des assets : refaites par tools/assets/previews.mjs.
 tools/assets/previews/
 tests/node_modules/
+__pycache__/
+# Aperçus de mise au point des outils (rendus Blender) : refaits par leurs scripts.
+tools/*/previews/

@@ -4,7 +4,7 @@ import { CapsuleCollider, RigidBody, useRapier, type RapierCollider, type Rapier
 import { Euler, MathUtils, PerspectiveCamera, Vector3 } from "three";
 import { useStore } from "../state/store";
 import { motion } from "../input/intents";
-import { nearestScreen, PLAYER, ROOM, SOFA } from "./layout";
+import { nearestScreen, PLAYER, ROOM, roomAt, SOFA } from "./layout";
 import { rig } from "./rig";
 
 const euler = new Euler(0, 0, 0, "YXZ");
@@ -126,6 +126,7 @@ export function Player() {
     const inRoom = rig.position.z < ROOM.south + 0.5 && Math.abs(rig.position.x) < ROOM.halfW && rig.position.y < 1;
     const near = nearestScreen(eye.x, eye.y, eye.z);
     state.setNear({ screen: near.distance < near.screen.reach ? near.screen.id : null, sofa: inRoom });
+    state.setRoom(roomAt(rig.position.x, rig.position.y, rig.position.z));
   });
 
   return (

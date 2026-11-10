@@ -22,6 +22,15 @@ export const VIEWS = {
   canape: { x: -1.08, z: -1.5, yaw: -Math.PI / 2, pitch: 0.06, seated: true },
   charpente: { x: 3.4, z: 2.2, yaw: 0.85, pitch: 0.62 },
   retour: { x: 2.6, z: -5.2, yaw: 2.55, pitch: 0.05 },
+  // Les autres pièces.
+  cuisine: { x: -2.6, z: 5.0, yaw: -2.2, pitch: -0.05 },
+  ilot: { x: 1.3, z: 4.6, yaw: Math.PI, pitch: -0.12 },
+  escalier: { x: -3.2, z: 4.4, yaw: 2.6, pitch: 0.1 },
+  mezzanine: { x: -2.5, z: 8.6, y: 2.9, yaw: -0.9, pitch: -0.12 },
+  balcon: { x: 0.5, z: 4.7, y: 2.9, yaw: 0.1, pitch: -0.28 },
+  couloir: { x: -4.6, z: 10.9, yaw: -Math.PI / 2, pitch: 0 },
+  chambre: { x: -0.2, z: 12.9, yaw: 1.05, pitch: -0.06 },
+  lit: { x: -2.4, z: 16.0, yaw: -0.5, pitch: -0.08 },
 };
 
 const wanted = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(VIEWS);
@@ -67,7 +76,7 @@ for (const name of wanted) {
   await page.evaluate((v) => {
     const { rig, store } = window.__immersion;
     const target = rig.position.clone();
-    target.set(v.x, 0, v.z);
+    target.set(v.x, v.y || 0, v.z);
     rig.teleport = target;
     rig.yaw = v.yaw;
     rig.pitch = v.pitch;

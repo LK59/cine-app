@@ -38,6 +38,7 @@ def dem(x, y):
     return res * (1 - w) + 450.0 * w
 Z0 = float(dem(np.array([0.0]), np.array([0.0]))[0]); EYE = Z0 + CAM_H
 print("terrain at viewpoint", Z0, flush=True)
+os.makedirs("assets-src/panorama/final/out", exist_ok=True); open("assets-src/panorama/final/out/terrain_z.txt", "w").write(str(Z0))
 
 rng = np.random.default_rng(7)
 LAT_N = 256; LATT = [rng.random((LAT_N, LAT_N)).astype(np.float32) for _ in range(3)]
@@ -79,7 +80,7 @@ def ring_mesh(half, step, hole, idx):
     on_slope = smooth(4, 14, slope)                                  # valley floor is patchy, slopes are wooded
     dens = np.clip(0.2 + on_slope * 0.75 + (mf - 0.5) * 1.4 - (out_h > 1500) * 0.0, 0, 1)
     forest = (below * smooth(0.35, 0.6, dens) * (1 - smooth(46, 56, slope))).astype(np.float32)
-    rock = smooth(51, 62, slope + (mf - 0.5) * 7).astype(np.float32)
+    rock = smooth(55, 67, slope + (mf - 0.5) * 6).astype(np.float32)
     if amp_scale > 0:
         canopy = fbm(X, Y, 14.0, 3, 0) - 0.5; broad = fbm(X, Y, 60.0, 3, 2) - 0.5
         out_h = out_h + amp_scale * (canopy * (1.0 + 5.0 * forest) * 3.0 + broad * 3.0 * (1 + rock)).astype(np.float32)
@@ -160,7 +161,7 @@ def noise(scale, detail, rough=0.55):
 n1 = noise(0.12, 5); n2 = noise(0.55, 3)
 # masks sharpened with fine noise
 Fm = ramp(math_("ADD", fa.outputs["Fac"], math_("MULTIPLY", math_("SUBTRACT", n1, 0.5), 0.5)), 0.42, 0.58)
-Rm = ramp(math_("ADD", ra.outputs["Fac"], math_("MULTIPLY", math_("SUBTRACT", n1, 0.5), 0.4)), 0.42, 0.58)
+Rm = ramp(math_("ADD", ra.outputs["Fac"], math_("MULTIPLY", math_("SUBTRACT", n1, 0.5), 0.15)), 0.45, 0.55)
 def mixrgb(fac, a, b):
     n = nd("ShaderNodeMix"); n.data_type = "RGBA"
     nt.links.new(fac, n.inputs["Factor"]); n.inputs["A"].default_value = a if isinstance(a, tuple) else (0, 0, 0, 1)
@@ -169,7 +170,7 @@ def mixrgb(fac, a, b):
     if not isinstance(b, tuple): nt.links.new(b, n.inputs["B"])
     return n.outputs["Result"]
 snow = mixrgb(ramp(n1, 0.35, 0.7), (0.74, 0.79, 0.88, 1), (0.88, 0.91, 0.97, 1))
-forest = mixrgb(ramp(n2, 0.5, 0.78), mixrgb(n2, (0.006, 0.020, 0.030, 1), (0.014, 0.042, 0.052, 1)), (0.16, 0.21, 0.30, 1))
+forest = mixrgb(ramp(n2, 0.5, 0.78), mixrgb(n2, (0.004, 0.016, 0.028, 1), (0.010, 0.034, 0.048, 1)), (0.16, 0.21, 0.30, 1))
 rockc = mixrgb(n1, (0.030, 0.034, 0.050, 1), (0.062, 0.070, 0.092, 1))
 col = mixrgb(Rm, mixrgb(Fm, snow, forest), rockc)
 bsdf = nd("ShaderNodeBsdfPrincipled")
@@ -179,7 +180,7 @@ bsdf.inputs["Specular IOR Level"].default_value = 0.25
 bump = nd("ShaderNodeBump"); bump.inputs["Distance"].default_value = 1.0
 hgt = nd("ShaderNodeMix"); hgt.data_type = "FLOAT"
 nt.links.new(Fm, hgt.inputs["Factor"]); nt.links.new(n1, hgt.inputs["A"]); nt.links.new(n2, hgt.inputs["B"])
-nt.links.new(hgt.outputs["Result"], bump.inputs["Height"]); bump.inputs["Strength"].default_value = 0.55
+nt.links.new(hgt.outputs["Result"], bump.inputs["Height"]); bump.inputs["Strength"].default_value = 0.3
 nt.links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
 surf = bsdf.outputs["BSDF"]
 
@@ -188,7 +189,7 @@ camd = nd("ShaderNodeCameraData")
 dist = camd.outputs["View Distance"]
 sep = nd("ShaderNodeSeparateXYZ"); nt.links.new(pos.outputs["Position"], sep.inputs[0])
 zmid = math_("MULTIPLY", math_("ADD", sep.outputs["Z"], EYE), 0.5)
-dens = math_("MULTIPLY", math_("POWER", 2.718281828, math_("MULTIPLY", math_("MAXIMUM", math_("SUBTRACT", zmid, 900.0), 0.0), -1 / 1100.0)), 1 / 6500.0)
+dens = math_("MULTIPLY", math_("POWER", 2.718281828, math_("MULTIPLY", math_("MAXIMUM", math_("SUBTRACT", zmid, 900.0), 0.0), -1 / 1100.0)), 1 / 4800.0)
 tau = math_("MULTIPLY", dist, dens)
 T = math_("POWER", 2.718281828, math_("MULTIPLY", tau, -1.0))
 em = nd("ShaderNodeEmission"); em.inputs["Color"].default_value = (*HAZE_COLOR, 1); em.inputs["Strength"].default_value = 1.0

@@ -69,6 +69,25 @@ export const PLAN = {
   bedroomDoor: { x: -1.2, width: 0.95, height: 2.1 },
 } as const;
 
+/** La cuisine : ses meubles fixes, le long du mur du fond, et son îlot. */
+export const KITCHEN = {
+  /** Meubles bas, le long du mur du fond : de `x0` à `x1`, profondeur, hauteur du plan. */
+  run: { x0: -0.95, x1: 4.9, depth: 0.62, top: 0.92 },
+  /** L'armoire haute (réfrigérateur intégré), à gauche des meubles bas. */
+  tall: { x0: -1.75, x1: -0.95, height: 2.15 },
+  island: { x0: 0.1, x1: 2.7, z0: 6.25, z1: 7.25, top: 0.92 },
+  /** La fenêtre au-dessus de l'évier. */
+  window: { x0: 2.5, x1: 4.5, y0: 1.16, y1: 2.12 },
+  /** Le buffet sous la télévision, contre le mur est. */
+  sideboard: { z0: 6.35, z1: 8.25, depth: 0.46, top: 0.82 },
+} as const;
+
+/** La chambre : le lit, tête contre le mur ouest, face à sa télévision. */
+export const BED = { headX: -ROOM.halfW + 0.16, length: 2.12, z: ROOM.back + 1.7 + 2.6, width: 1.9, top: 0.56 } as const;
+
+/** Les ouvertures vitrées hors du salon : la fenêtre de la cuisine, celle de la chambre. */
+export const BEDROOM_WINDOW = { x0: -3.9, x1: -0.9, y0: 0.55, y1: 2.2 } as const;
+
 export type RoomId = "salon" | "cuisine" | "mezzanine" | "couloir" | "chambre";
 
 /** Dans quelle pièce se trouve ce point (les pieds du visiteur) ? */

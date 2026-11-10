@@ -4,8 +4,8 @@ import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
 import { BackSide, BufferAttribute, Color, ConeGeometry, CylinderGeometry, DoubleSide, InstancedMesh, MeshStandardMaterial, NoColorSpace, Object3D, PlaneGeometry, RepeatWrapping, Shape, ShapeGeometry, ShaderMaterial, SphereGeometry, Vector3 } from "three";
 import { assetUrl } from "../lib/assets";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { ROOM } from "./layout";
-import { WEST_WINDOW, WEST_WINDOWS } from "./Shell";
+import { BEDROOM_WINDOW, KITCHEN, PLAN, ROOM } from "./layout";
+import { WEST_WINDOW, WEST_WINDOWS } from "./geometry/salon";
 import { configureKtx2 } from "./textures";
 import { useProfile } from "../state/store";
 
@@ -360,6 +360,13 @@ export function Exterior() {
       <mesh geometry={terrain} material={snowMaterial} />
       <instancedMesh ref={firs} args={[fir.geometry, fir.material, firCount]} key={firCount} frustumCulled={false} />
       <mesh geometry={gable} material={glass} position={[0, 0, ROOM.north + 0.13]} renderOrder={3} />
+      {/* La fenêtre de la cuisine et celle de la chambre, dans leurs murs sud. */}
+      <mesh material={glass} position={[(KITCHEN.window.x0 + KITCHEN.window.x1) / 2, (KITCHEN.window.y0 + KITCHEN.window.y1) / 2, ROOM.back + 0.02]} renderOrder={3}>
+        <planeGeometry args={[KITCHEN.window.x1 - KITCHEN.window.x0, KITCHEN.window.y1 - KITCHEN.window.y0]} />
+      </mesh>
+      <mesh material={glass} position={[(BEDROOM_WINDOW.x0 + BEDROOM_WINDOW.x1) / 2, (BEDROOM_WINDOW.y0 + BEDROOM_WINDOW.y1) / 2, PLAN.bedroom.z1 - 0.01]} renderOrder={3}>
+        <planeGeometry args={[BEDROOM_WINDOW.x1 - BEDROOM_WINDOW.x0, BEDROOM_WINDOW.y1 - BEDROOM_WINDOW.y0]} />
+      </mesh>
       {WEST_WINDOWS.map((z) => (
         <mesh key={z} geometry={pane} material={glass} position={[-ROOM.halfW + 0.02, (WEST_WINDOW.sill + WEST_WINDOW.top) / 2, z]} rotation-y={Math.PI / 2} renderOrder={3} />
       ))}
