@@ -1,0 +1,33 @@
+{
+  "name": "laterna-immersion",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "description": "Le mode « Immersion » de Laterna : un chalet 3D caché, servi à part de l'application.",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build && node scripts/postbuild.mjs"
+  },
+  "dependencies": {
+    "@react-three/drei": "10.7.9",
+    "@react-three/fiber": "9.8.2",
+    "@react-three/postprocessing": "3.2.2",
+    "@react-three/rapier": "2.2.0",
+    "hls.js": "1.7.4",
+    "postprocessing": "6.39.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "three": "0.187.0",
+    "zustand": "5.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/three": "0.187.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.7"
+  }
+}

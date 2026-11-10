@@ -1,0 +1,9 @@
+{
+  "name": "laterna-immersion-tests",
+  "private": true,
+  "type": "module",
+  "description": "Scénarios Playwright du mode Immersion : tests de bout en bout et captures. Lancés par tests/run.sh.",
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
