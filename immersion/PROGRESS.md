@@ -1,187 +1,282 @@
 # Mode « Immersion » — journal de chantier
 
-Ce fichier suffit, avec le cahier des charges, à reprendre le chantier là où il s'est arrêté.
-Il est mis à jour à la fin de chaque étape et avant toute opération longue.
+Ce fichier suffit, avec le cahier des charges d'origine, à reprendre le chantier là où il s'est
+arrêté. Il est mis à jour à la fin de chaque étape et avant toute opération longue. **Le relire en
+entier après toute reprise.**
 
-## État actuel
+## État actuel (à jour)
 
-- **Étape en cours : 1** (dossier, entrée par la recherche, service de la page, scène provisoire, déplacements).
-- Branche `immersion`, dans une **copie de travail à part** (`git worktree`, dossier voisin de la copie
-  principale `…-immersion`). La copie principale reste sur `main` : on n'y travaille pas.
-- Rien n'est encore fusionné ni déployé.
-- Prochaine action : voir « Prochaine action » en bas de fichier.
+- Branche `immersion`, dans une **copie de travail à part** (`git worktree`, dossier voisin de la
+  copie principale, suffixe `-immersion`). La copie principale reste sur `main` : on n'y travaille pas.
+- Rien n'est encore fusionné ni déployé. Version visée pour la première livraison : **10.34.0**
+  (rebaser sur `main` avant de fusionner ; prévenir l'autre session de travail avant tout build de prod).
+- **Fait et commité** : entrée par la recherche, routes de service, projet Vite, salon (géométrie,
+  matières, lumière temps réel), télévision (vidéo, passe hors mappage de tons, ambilight, son
+  spatialisé), lecture par la route du lecteur serveur (stéréo, HDR → SDR, arrêt, journal), panneau
+  Laterna dans le monde, HUD, menu pause, réglages, préréglages + Auto.
+- **En cours / à faire** : voir « Plan de travail » plus bas.
 
 ## Règles de travail (rappel)
 
 - **Portail de l'application** avant tout commit qui touche à son code, sans tuyau, code de sortie lu ;
   depuis la copie de travail, les dépendances de la copie principale sont montées en lecture seule :
   `docker run --rm -v "$PWD":/app -v <copie principale>/node_modules:/app/node_modules:ro -w /app node:26-alpine sh -c 'set -e; npm run typecheck; npm run lint -- --max-warnings=0; npm test'`.
-  Quelques tests de chronométrage peuvent échouer seuls sous charge : relancer jusqu'au vert.
-- **Compte de test** : le compte Jellyfin de test de la maison (`claude-test`), jamais un autre, jamais un
-  compte réel ; identifiants dans `immersion/.env` (ignoré par git). Aucune session ouverte sur la
-  production : les tests de bout en bout tournent sur une instance jetable.
+  Quelques tests de chronométrage échouent seuls sous charge : relancer **au calme** (rien d'autre de
+  lourd sur la machine) jusqu'au vert. Jamais de commit sur un portail rouge. Ne pas modifier le code de
+  l'application pendant qu'un portail tourne.
+- **Compte de test** : le compte Jellyfin de test de la maison, jamais un autre, jamais un compte réel ;
+  identifiants dans `immersion/.env` (ignoré par git ; variables `JELLYFIN_TEST_USER` /
+  `JELLYFIN_TEST_PASSWORD`). Jamais affichés. Aucune session sur la production : les tests de bout en bout
+  tournent sur une instance jetable. Tout nettoyage côté Jellyfin se fait par l'identifiant exact du
+  compte de test.
 - **Déploiement**, aux jalons validés seulement : lectures en cours vérifiées d'abord ; version montée dans
   `package.json` et `package-lock.json` (commit à part) ; fusion dans `main` ; image construite depuis une
   copie propre de `main` (`docker build -t cine-app:latest --build-arg BUILD_REF=<sha> .`), puis
   `docker compose up -d --no-build` dans la copie principale, puis `docker builder prune -f --max-used-space 15GB` ;
   push en arrière-plan, CI lue après. Pas de page Nouveautés (c'est un secret).
 - **Machine partagée** : conteneurs nommés `immersion-*`, supprimés après usage, `docker ps` vérifié en fin
-  d'étape ; captures sur le processeur graphique brèves.
-- **Poids** : ~40 Mo au total dans le dépôt et dans l'image, pas plus. Le poids réel est noté plus bas.
+  d'étape ; captures sur le processeur graphique brèves ; rendus Blender bornés (`--cpus 6`).
+- **Poids** : ~40 Mo au total dans le dépôt et dans l'image, pas plus. Voir « Poids ».
+- **Documents** (ce fichier, README, ASSETS, DECISIONS) : génériques — ni prénom, ni réglage personnel.
 
 ## Ce que le dépôt est vraiment (relevé avant de commencer)
 
 Le cahier des charges parle d'un front React et d'un back FastAPI. Le dépôt est une application
 **Next.js 16** (App Router, React 19, TypeScript, un seul conteneur). Conséquences :
 
-- Il n'y a pas de « montage statique FastAPI » : la page est servie par **deux routes de service**
-  ajoutées à l'application (voir « Service de la page »).
-- Le navigateur ne parle jamais à Jellyfin : tout passe par les routes `/api/jellyfin/*` de
-  l'application, **sur la même origine**. Il n'y a donc **aucun CORS à configurer** :
-  `crossOrigin="anonymous"` sur une vidéo de même origine donne une texture lisible et un son
-  exploitable par Web Audio. Rien n'a été changé chez Jellyfin.
-- Il n'y a ni Node ni npm sur la machine : tout tourne dans Docker (builds, outils, tests).
-- La session est un cookie `httpOnly` vérifié par `src/proxy.ts` pour toute adresse hors liste
-  publique. `/immersion` et `/api/immersion/*` n'y sont pas : sans session, la page renvoie à la
-  connexion et les fichiers répondent 401. Un lien de partage (rôle `share`, liste fermée) n'y a
-  pas accès.
+- Pas de « montage statique FastAPI » : la page est servie par **deux routes de service** de l'application.
+- Le navigateur ne parle jamais à Jellyfin : tout passe par `/api/jellyfin/*`, **sur la même origine**.
+  **Aucun CORS à configurer** ; `crossOrigin="anonymous"` sur une vidéo de même origine donne une texture
+  lisible et un son exploitable. Rien n'a été changé chez Jellyfin.
+- Ni Node ni npm sur la machine : tout tourne dans Docker.
+- La session est un cookie `httpOnly` vérifié par `src/proxy.ts`. `/immersion` et `/api/immersion/*` ne
+  sont dans aucune liste publique : sans session, la page renvoie à la connexion (307) et les fichiers
+  répondent 401. Un lien de partage n'y a pas accès.
 
 ## Décisions (et pourquoi)
 
 ### Service de la page — routes de service, pas `public/`
 
 - `GET /immersion` (`src/app/immersion/route.ts`) rend `index.html` du build.
-- `GET /api/immersion/<fichier>` (`src/app/api/immersion/[...path]/route.ts`) rend les fichiers du
-  build (JS, textures, modèles). Vite est configuré avec `base: "/api/immersion/"`.
-- Le build (`immersion/dist`) est produit par une étape à part du `Dockerfile` et copié dans
-  l'image sous `/app/immersion-dist`. Absent (développement, tests) : les deux routes répondent 404.
+- `GET /api/immersion/<fichier>` (`src/app/api/immersion/[...path]/route.ts`) rend les fichiers du build.
+  Vite a `base: "/api/immersion/"`. Logique commune : `src/lib/immersionFiles.ts` (types servis, cache
+  `immutable` pour les fichiers nommés par leur contenu ou portant `?v=`, `.br` servi par les marqueurs
+  de cadrage de l'application).
+- Le build (`immersion/dist`) est produit par l'étape `immersion` du `Dockerfile` et copié sous
+  `/app/immersion-dist`. Absent : les deux routes répondent 404.
+- Pourquoi pas `public/immersion/` : le service worker recopie dans son cache tout GET hors `/api/` qui
+  n'est ni une image ni une page, et ce cache n'est jamais purgé. Pourquoi pas le relais inverse : il est
+  partagé et ne connaît pas la session.
+- La politique de sécurité (CSP) générale suffit, à une condition : **aucune ressource embarquée dans un
+  `.glb`** (three les relit par `fetch(blob:)`, que `connect-src` refuse). Modèles en `.gltf` + `.bin` +
+  `.ktx2` séparés ; pas de police ni d'environnement chargés d'un CDN.
 
-Pourquoi pas `public/immersion/` : le service worker de l'application (`public/sw.js`) recopie dans
-son cache tout GET hors `/api/` qui n'est ni une image ni une page. Les dizaines de mégaoctets de
-textures y auraient été gardés en double, pour toujours (ce cache n'est jamais purgé). Sous
-`/api/`, le worker ne touche à rien — et `sw.js` n'a pas à être modifié. Pourquoi pas le relais
-inverse : il est partagé avec d'autres sites et ne connaît pas la session.
+### Entrée — une affiche dans la recherche (DECISIONS.md §144)
 
-La politique de sécurité (CSP) générale suffit telle quelle (`wasm-unsafe-eval`, `worker-src blob:`,
-`media-src blob:`), à une condition tenue par le pipeline d'assets : **aucune ressource embarquée
-dans un `.glb`** (three les relit par `fetch(blob:)`, que `connect-src` refuse). Les modèles sont
-donc des `.gltf` avec `.bin` et `.ktx2` à côté.
-
-### Entrée — une affiche dans la recherche
-
-Chercher exactement « immersion » (espaces et casse ignorés) pose en tête des résultats une affiche de
-plus, « Le Chalet » / « Laterna Experience », au format des autres (`PlayerResultCard`). La presser
-part vers `/immersion` par une navigation ordinaire. Tout autre mot reste une recherche. La règle est
-dans `src/lib/immersionTrigger.ts` (DECISIONS.md §144) ; l'affiche est `immersion/public/poster.jpg`,
-une image du vrai chalet (capture de la scène, refaite quand la scène change).
-
-La première idée — rediriger dès que le champ vaut `immersion*` — a été abandonnée pour celle-ci :
-l'application parle par affiches, et celle-ci ne se montre qu'à qui cherche ce mot.
+Chercher exactement « immersion » pose en tête des résultats l'affiche « Le Chalet » / « Laterna
+Experience » (`PlayerResultCard`). La presser part vers `/immersion`. Règle : `src/lib/immersionTrigger.ts`.
+L'affiche est `immersion/public/poster.jpg` — **à produire** : une capture du vrai chalet (2:3), refaite
+quand la scène change. (La première idée, rediriger sur `immersion*`, est abandonnée.)
 
 ### Accueil — « Laterna Experience »
 
-La page s'ouvre sur la marque de Laterna animée (le L se dresse, le faisceau s'allume, « Laterna
-Experience »), qui sert d'écran de chargement : la barre suit le chargement réel de la scène, puis
-devient « Cliquer pour entrer » — le geste que le navigateur exige pour verrouiller le pointeur et
-laisser sortir du son.
+La marque de Laterna animée (le L se dresse, le faisceau s'allume) sert d'écran de chargement : la barre
+suit le chargement réel, puis devient « Cliquer pour entrer » (le geste qu'exigent le verrou du pointeur et
+le son).
 
-### Lecture — le chemin du lecteur serveur, même route
+### Lecture — le chemin du lecteur serveur, même route (validé)
 
-Le lecteur principal a deux chemins : le remultiplexeur local (plusieurs milliers de lignes, lié à
-Next) et le lecteur serveur (`POST /api/jellyfin/playback/start` → DirectPlay / DirectStream /
-Transcode par Jellyfin, lu par hls.js). L'Immersion utilise **la même route** que le lecteur
-serveur, avec le même corps de demande : c'est elle qui construit le DeviceProfile
-(`buildDeviceProfile`) et dérive la méthode de lecture. Rien n'est réécrit côté serveur.
+`POST /api/jellyfin/playback/start`, même corps que le lecteur serveur ; hls.js ; rapports
+`progress` / `stop` ; reprise par `/api/jellyfin/playback-state/<id>`. Lus tels quels dans le code de
+l'application (alias `@/` → `../src`) : `codecSupport.ts`, `webkitEngine.ts`, `networkBitrate.ts` (copiés
+dans l'étape Docker). Quatre points validés par le propriétaire :
 
-- **Importé en lecture seule** (alias `@/` → `../src`) : `src/lib/codecSupport.ts` (et
-  `webkitEngine.ts` dont il dépend) — la détection des codecs, avec son cache `localStorage`
-  partagé : l'Immersion annonce exactement ce que le lecteur principal annonce.
-- **Réécrit en version minimale** dans `immersion/src/media/` : l'appel de négociation, le
-  câblage hls.js, les rapports `playing` / `progress` / `stop`, la reprise
-  (`/api/jellyfin/playback-state/<id>`). Les modules d'origine tirent tout le lecteur avec eux.
-- « Forcer SDR » = le champ `lighter: true` de la même route (profil sans HDR, 1080p au plus).
+1. **Stéréo au plus** : `forceAudioTranscode: true` dans la demande (le profil plafonne à 2 canaux ; une
+   piste stéréo lisible est copiée, le reste ré-encodé en AAC stéréo).
+2. **Arrêt à chaque sortie** (« Quitter », `pagehide`, changement de film, fin, erreur) : un seul chemin,
+   `finish()` dans `src/media/playback.ts` — rapport `stop` (Jellyfin coupe le transcodage) + ligne `stop`.
+   **À vérifier en fin d'étape : plus aucune séance de transcodage du compte de test après une sortie.**
+3. **Journal** : toutes les lignes (`start`, `stop`, `error`) portent `player: "immersion"`
+   (`src/media/log.ts`). Côté application : `src/lib/activity/seances.ts` reconnaît ce lecteur et
+   `diagnosis.ts` l'écarte du diagnostic « le fichier ou l'appareil ».
+4. **HDR → SDR par le serveur, actif par défaut, pour les seuls fichiers HDR** : la plage vidéo est lue
+   avant de négocier (`/api/jellyfin/direct/<id>` → `video.isHdr`) ; HDR → `lighter: true` (profil sans
+   HDR, 1080p au plus) ; SDR → négociation normale. Réglage « Conversion HDR → SDR ». La ligne `start`
+   porte `sdr: "serveur"`.
 
 ### Physique — `@react-three/rapier`
 
-Contrôleur de personnage cinématique de Rapier (capsule) : glissement le long des murs, marches
-franchies seules (escalier de la mezzanine), collage au sol. La géométrie du chalet est écrite en
-code, donc ses collisions sont des boîtes posées à côté — pas de maillage à traverser. Coût : le
-module WebAssembly (~600 Ko compressé), chargé seulement sur cette page.
+Contrôleur de personnage cinématique (capsule) : glissement le long des murs, marches franchies seules
+(escalier de la mezzanine), collage au sol. Collisions = boîtes déclarées à côté de la géométrie.
 
 ### Panneau Laterna — drei `<Html transform>`
 
-Du vrai DOM posé dans le monde : texte net, champ de recherche natif, affiches en `<img>` (pas de
-texture à téléverser, pas de CORS sur les images). L'occultation ne se pose pas : à l'ouverture le
-pointeur est libéré et la caméra se place face au panneau.
+Du vrai DOM posé dans le monde, devant le visiteur, entre lui et la télévision la plus proche : texte net,
+champ de recherche natif, affiches en `<img>`. Taille réglée pour ~1 pixel de contenu par pixel d'écran.
 
 ### Rendu — vidéo hors du mappage de tons
 
-Avec un compositeur de post-traitement, le mappage de tons s'applique à toute l'image, vidéo
-comprise (`toneMapped={false}` n'agit que sur un rendu direct à l'écran). La vidéo est donc
-redessinée **après** le compositeur, telle quelle, par une passe qui teste la profondeur de la
-scène ; la version qui passe par le compositeur ne sert qu'au halo (bloom).
+AgX dans le compositeur. La vidéo est redessinée **après** le compositeur, telle quelle, par une passe qui
+relit la profondeur de la scène (`Television.tsx`) ; la version qui traverse le compositeur ne sert qu'au
+halo. `VideoTexture` de three n'est téléversée qu'à chaque nouvelle image du film
+(`requestVideoFrameCallback`, c'est three qui le fait).
 
-### Ombres
+### Stratégie qualité (décision du propriétaire)
 
-Rien ne bouge dans le chalet (le visiteur n'a pas de corps) : les cartes d'ombre sont calculées une
-fois puis figées (`shadowMap.autoUpdate = false`).
+Cible : **Ultra à la résolution native, 60 images/s, sur un Intel Core Ultra 7 255H (Arc 140T)**. Le
+processeur graphique du serveur (UHD 630) n'est qu'un plancher de test.
 
-## Plan des fichiers
+1. **Lumière précalculée** (lightmaps + occlusion ambiante cuites dans Blender sans écran) pour toute la
+   géométrie fixe, pièce par pièce. Elle remplace l'occlusion en espace écran (N8AO), qui reste au plus
+   une option d'Ultra. — **À FAIRE.**
+2. **Temps réel limité à ce qui bouge** : scintillement des bougies, lumière des écrans (ambilight),
+   neige, une seule ombre dynamique au plus. Reflets par une capture de la pièce faite une fois
+   (`Atmosphere.tsx`, fait).
+3. **Vidéo** : téléversement par image seulement (fait, voir plus haut). Si un flux 4K copié pèse trop,
+   mesurer une texture plafonnée à 1080p avant de décider.
+4. **Préréglages** (`src/lib/settings.ts`, fait) : Ultra = tout, à la résolution native ; Élevé / Moyen /
+   Bas en dessous ; **suréchantillonnage** (au-delà du natif) = option à part, coupée par défaut.
+5. **« Auto » par défaut** (fait) : part d'Ultra ; le moniteur de performance baisse d'abord la résolution
+   interne puis coupe les effets coûteux un par un (`AUTO_LEVELS`), et remonte s'il y a de la marge.
+6. **Mesure sur la vraie cible** — **À FAIRE** : bouton « Mesurer » (réglages) qui joue un parcours de
+   caméra fixe de 20 s par préréglage, avec et sans vidéo, et envoie images/s moyennes et 1 % bas au
+   journal (`startup.log`, `kind: "immersion-bench"`, avec le nom du processeur graphique —
+   `WEBGL_debug_renderer_info` — et la résolution réelle de rendu). C'est sur ces chiffres, relevés sur
+   la machine cible, que se règlent Auto et l'objectif Ultra. Côté application : une branche de plus
+   dans `/api/viewport-diag` (déjà ouverte aux comptes) et dans `logViewportDiag`.
 
-Hors de `/immersion` (tout est additif, sauf la ligne du déclencheur) :
+### Décor extérieur en couches (retour du propriétaire — À FAIRE)
+
+Les sapins en cônes et le relief simplifié trop près de la vitre cassent l'illusion. À remplacer par :
+
+- **Fond** : une vraie chaîne de montagnes rendue **une fois, hors ligne** (Blender sans écran) à partir
+  d'un relief réel libre (Copernicus GLO-30 ou SRTM — licence vérifiée et notée dans ASSETS.md), neige,
+  clair de lune, ciel étoilé cohérent avec l'éclairage. Sortie : une grande image panoramique fixe
+  (cylindrique ou équirectangulaire, KTX2 ou tuiles), vue longue (sommets à plusieurs kilomètres, vallée en
+  contrebas). Coût à l'affichage : à peine plus qu'une texture.
+- **Plan intermédiaire** : forêts et vallons en cartes / imposteurs à quelques centaines de mètres, avec un
+  léger décalage de parallaxe.
+- **Premier plan** : quelques vrais sapins 3D enneigés (instanciés), le sol de neige près du chalet ; la
+  neige qui tombe reste devant.
+- L'HDRI ne sert plus qu'à l'éclairage et aux reflets.
+
+### Plusieurs télévisions synchronisées (À FAIRE)
+
+- **Un** `<video>`, **une** `VideoTexture`, partagés par tous les écrans (salon, cuisine, autres pièces).
+- Son : la même source vers une `PositionalAudio` **par écran** (panoramiques en parallèle depuis le même
+  `MediaElementSource`) ; le son suit l'écran le plus proche ; le passe-bas derrière les murs reste.
+- Ambilight par écran ; un écran hors de vue n'est ni rendu ni échantillonné.
+- Une seule lecture, pilotée depuis n'importe quel écran (le panneau s'ouvre devant la télévision où l'on est).
+
+### Chalet complet (À FAIRE)
+
+Cuisine ouverte avec sa télévision, mezzanine avec escalier, couloir, chambre(s) — même finition que le
+salon, pièce par pièce. Lumière précalculée par pièce. **Découpage par pièces** : ne dessiner que la pièce
+courante et ce qui se voit par les ouvertures. Le **canapé** : c'est ce qui fait le plus « maquette » — un
+vrai modèle ou une géométrie plus riche (coutures, coussins arrondis, plis), avec le tissu lin déjà choisi.
+
+### La porte de la VR reste ouverte (décision — voir `docs/VR.md`, À ÉCRIRE)
+
+Pas de VR en phase 1, **aucun code WebXR ni `@react-three/xr`**. Mais l'architecture ne doit rien fermer :
+
+- **Interface séparée de la scène** : un état et des actions communs (store) ; le rendu de l'interface
+  (catalogue, fiche, HUD, menu pause, réglages) est remplaçable — HTML aujourd'hui, 3D plus tard. Pas de
+  logique enfermée dans des composants DOM.
+- **Entrées par une couche d'actions** (« avancer », « valider », « ouvrir le panneau », « viser ») :
+  clavier/souris aujourd'hui, manettes ou mains demain.
+- **Caméra et déplacements** derrière la même couche (le verrou du pointeur et WASD ne sont qu'une
+  implémentation).
+- Réglages de rendu par préréglages (un futur « VR » s'y ajoute).
+
+## Plan de travail (ordre)
+
+1. [x] Dossier `/immersion`, entrée par la recherche, service de la page, déplacements et collisions
+2. [x] Salon : géométrie, matières, lumière temps réel, mobilier, objets
+3. [x] Télévision, vidéo, son spatialisé, rapports Jellyfin, journal — **reste : vérification de bout en
+       bout avec un vrai film sur l'instance jetable (négociation, HDR, arrêt du transcodage)**
+4. [x] Panneau dans le monde, HUD, menu pause, réglages — **reste : scénarios Playwright**
+5. [ ] Couche d'actions + interface pilotée par le store (porte VR) ; `docs/VR.md`
+6. [ ] Plusieurs télévisions (architecture « écrans »)
+7. [ ] Pièces : cuisine + TV, mezzanine + escalier, couloir, chambre ; découpage par pièces ; canapé
+8. [ ] Extérieur en couches : panorama Blender (relief réel), plan intermédiaire, sapins 3D, neige qui tombe
+9. [ ] Lumière précalculée (export de la géométrie → cuisson Blender → `lightMap`), par pièce
+10. [ ] Bouton « Mesurer » + ligne `immersion-bench`
+11. [ ] Affiche `poster.jpg` (capture), finitions, captures de référence, tests complets
+12. [ ] Rebase sur `main`, portail, version 10.34.0, fusion, build, déploiement, vérification, push
+
+Sous-traitance (agents plus légers, tâches mécaniques bornées) : panorama Blender à partir d'un relief réel ;
+modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu restent ici.
+
+## Fichiers touchés hors de `/immersion`
 
 | Fichier | Nature |
 |---|---|
 | `src/components/player/PlayerSearchPanel.tsx` | **modifié** : l'affiche du Chalet (un import, trois endroits) |
 | `src/lib/immersionTrigger.ts` | nouveau : la règle (le mot, l'adresse, l'affiche) |
 | `src/lib/immersionFiles.ts` | nouveau : lecture des fichiers du build |
-| `src/app/immersion/route.ts` | nouveau : la page |
-| `src/app/api/immersion/[...path]/route.ts` | nouveau : ses fichiers |
-| `src/__tests__/immersion-{trigger,files,proxy}.test.ts` | nouveaux : la règle, le service des fichiers, le proxy |
-| `DECISIONS.md` | §144 : la règle, sa fonction, son appelant, ses tests |
-| `Dockerfile` | une étape de build en plus, une copie en plus |
+| `src/app/immersion/route.ts`, `src/app/api/immersion/[...path]/route.ts` | nouveaux : la page, ses fichiers |
+| `src/lib/activity/seances.ts`, `src/lib/activity/diagnosis.ts` | **modifiés** : le lecteur « immersion » reconnu, écarté du diagnostic (demandé : point 3 de la lecture) |
+| `src/__tests__/immersion-{trigger,files,proxy,activity}.test.ts` | nouveaux |
+| `DECISIONS.md` | §144 |
+| `Dockerfile` | étape `immersion`, copie du build, `rm -rf immersion` dans l'étape de l'application |
 | `.dockerignore` | ce qui n'entre pas dans le build |
-| `tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts` | `immersion` exclu (projet à part), comme `streamdeck-plugin` |
-
-Dans `/immersion` : projet Vite + React 19 + TypeScript (`src/`), assets optimisés
-(`public/assets/`), pipeline d'assets (`tools/assets/`), tests et captures Playwright (`tests/`).
-
-Dépendances de `/immersion` : `three`, `@react-three/fiber`, `@react-three/drei`,
-`@react-three/postprocessing` (+ `postprocessing`), `@react-three/rapier`, `hls.js`, `zustand`,
-`react`, `react-dom` ; en développement `vite`, `@vitejs/plugin-react`, `typescript`,
-`@types/three`, `@playwright/test`.
+| `tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts` | `immersion` exclu, comme `streamdeck-plugin` |
+| à venir : `src/app/api/viewport-diag/route.ts`, `src/lib/eventLogs.ts` | la ligne `immersion-bench` (point 6 de la stratégie qualité) |
 
 ## Environnements de travail
 
-- **Build et outils** : conteneurs `node:26-alpine` nommés `immersion-*`, supprimés après usage.
-- **Instance jetable** de l'application (image construite depuis un commit, dossier de données
-  jetable, port local) pour les tests de bout en bout — jamais la production.
-- **Captures** : Playwright 1.63 (image officielle), Chromium sans écran. Le processeur graphique
-  intégré de la machine est utilisable (`--device /dev/dri`, `--use-angle=gl-egl`) ; à défaut,
-  SwiftShader.
-- **Compte de test** : celui de la maison (voir « Règles de travail »). En attendant ses identifiants,
-  l'instance jetable reçoit une session posée directement dans **sa** base (rien côté Jellyfin) : elle
-  ouvre les pages et le catalogue, pas la lecture.
+- **Build** : `docker run --rm --user $(id -u):$(id -g) -e HOME=/tmp -v "$PWD/..":/repo -w /repo/immersion node:26-alpine npm run build`
+  (le `tsc` strict puis Vite). Mise au point : `npx vite build --minify false`.
+- **Aperçu** : `vite preview` dans un conteneur `immersion-preview` (port local 5198) ; avec
+  `LATERNA_URL=http://127.0.0.1:3097`, les routes de l'application sont relayées vers l'instance jetable.
+- **Instance jetable** de l'application : `tools/regress-lecteur/regress.sh build|start|clean <commit>`
+  (variables `REGRESS_WORK`, `REGRESS_ENV`, `REGRESS_DB`, `REGRESS_PORT=3097`) — image construite depuis un
+  commit, données jetables. Ses fonctions de fond qui parlent à d'autres services sont coupées dans **sa**
+  base après démarrage.
+- **Captures** : `tests/capture.sh <vues…>` (Playwright 1.63, Chromium sans écran, processeur graphique de la
+  machine par `--device /dev/dri` + `--use-angle=gl-egl`). `TV=1` joue une mire ; `STATE=<fichier>` donne la
+  session ; `QUALITY=` choisit le préréglage. Vues : `entree salon tv baie canape charpente retour`, et
+  l'interface : `panneau fiche pause reglages`.
+- **Scénarios** : `tests/run.sh` (`tests/e2e/`).
+- **Assets** : `tools/assets/` (image `immersion-assets-tools` ; `fetch.py`, `build.sh`, `gen-assets-md.py`).
 
-## Étapes
+## Pièges rencontrés (ne pas les refaire)
 
-1. [ ] Dossier `/immersion`, entrée par la recherche, service de la page, scène provisoire, déplacements et collisions
-2. [ ] Salon : géométrie, matériaux, éclairage
-3. [ ] TV, vidéo, son spatialisé, rapports Jellyfin
-4. [ ] Interface dans le monde, HUD, menu pause, réglages
-5. [ ] Extérieur, neige, ambilight, post-traitement, finitions
-6. [ ] Autres pièces du chalet
+- Une texture dont un côté n'est pas une puissance de deux, compressée par blocs avec mipmaps et répétée,
+  sort **noire** : le pipeline ramène tout à des puissances de deux.
+- N8AO 2.0 en demi-résolution casse avec three r187 (cible de rendu multiple) : toujours en pleine résolution.
+- `EffectComposer` (postprocessing 6.39) : la profondeur stable n'existe que si on appelle
+  `createDepthTexture()` ; membres internes — version épinglée.
+- La passe de la vidéo vit dans sa propre scène : c'est la matrice **locale** de sa dalle qu'il faut poser.
+- Avec les matières ordinaires, la lumière du lustre sortait par la baie et grisait la neige : le dehors a
+  ses propres shaders, qui ignorent les lumières de la pièce.
+- La sortie « standalone » de Next emporte tout le dossier du projet : `immersion/` est retiré de l'étape de
+  build de l'application.
+- Le verrou du pointeur est demandé de façon asynchrone : dans un script, rendre le pointeur avant d'ouvrir
+  le menu pause, sinon le mode repasse en « visite ».
+- `tsc` de `/immersion` n'inclut pas `vite.config.ts` (il lui faudrait les types de Node).
 
 ## Poids
 
-(à relever quand les assets sont produits : `public/assets/`, `dist/`, total commité)
+- `public/assets/` : **28,3 Mo** (textures 15,1 ; modèles 9,6 ; HDRI 3,2). `dist/` : ~37 Mo (assets, code
+  ~4 Mo, jumeaux `.br` ~4,5 Mo).
+- Marge restante avant 40 Mo commités : ~10 Mo pour le panorama, les lightmaps, le canapé, les pièces.
+  Leviers si besoin : retirer les jeux de textures inutilisés (`metal_black`, `bark`), les deux HDRI si la
+  vue n'en dépend plus, les modèles non posés.
+
+## Phase 2
+
+- **VR** : voir `docs/VR.md` (à écrire à l'étape 5).
+- Multijoueur, mini-jeux, mobile : hors périmètre de la phase 1.
 
 ## Problèmes ouverts
 
-- Les identifiants du compte de test ne sont pas sur la machine : sans eux, la lecture d'un vrai film
-  (étape 3) ne peut pas être vérifiée de bout en bout sur l'instance jetable.
+- Lecture d'un vrai film pas encore vérifiée de bout en bout (les identifiants du compte de test sont
+  maintenant sur la machine).
+- Le canapé, l'extérieur et la lumière sont à refaire selon les retours ci-dessus.
 
 ## Prochaine action
 
-Portail de l'application vert → commit de l'étape 1 côté application ; image de test ; instance jetable ;
-scénarios Playwright `tests/e2e/01-entree` et `02-monde`.
+Image de test reconstruite depuis le dernier commit → instance jetable → connexion du compte de test →
+lancer un film SDR puis un film HDR sur la télévision, vérifier l'image sur la texture, les lignes du
+journal, et qu'aucun transcodage ne survit à la sortie. Puis l'étape 5 (couche d'actions, `docs/VR.md`).
