@@ -10410,6 +10410,14 @@ manque, état du serveur, Connexions sans interrupteur X-Ray), `navItems.test.ts
 
 ## 143. « Revenir au début de la scène » : un vrai début de scène, ou rien — livré coupé (10/11/2026)
 
+**État : laboratoire (« Lab bêta »), coupé.** Une passe à l'aveugle sur 24 titres jamais vus, avec les règles
+resserrées (`cutsVersion` 2), n'a couvert qu'environ 1,5 % des reprises et a trouvé un renvoi trop tôt (un
+prologue monté en séquence courte) : le « zéro faux » n'est pas acquis. La carte de Configuration porte
+l'étiquette « Lab bêta » (`lab` dans `CONFIG_LAYOUT`), son texte dit de la laisser coupée, et **rien d'autre ne
+s'appuie sur ces débuts de scène** — la rangée « À l'écran » et « Jusqu'ici » lisent les scènes, jamais `cut`.
+Piste étudiée pour plus tard : une combinaison apprise d'indices image et son (couleurs, visages, voix, silences,
+ambiance sonore, lieu), validée sur des titres tenus à part avant tout rallumage.
+
 **Règle.** À la reprise d'un titre laissé **depuis quatre heures au moins**, un bouton propose, huit secondes à
 partir de la première image, de revenir au début de la scène en cours — **seulement si ce début en est un vrai**.
 Une scène de `laterna-xray` est un regroupement de plans par les couleurs et les visages : une de ses frontières

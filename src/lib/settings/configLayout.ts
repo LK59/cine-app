@@ -45,6 +45,12 @@ export interface ConfigCard {
   anchor?: string;
   /** Ce qu'il faut pour que la fonction marche. */
   needs?: readonly ConfigNeed[];
+  /**
+   * Une fonction de laboratoire : réglable, mais pas encore assez fiable pour être allumée ; la carte
+   * porte l'étiquette « Lab bêta » et rien d'autre ne s'appuie dessus (« Revenir au début de la scène »,
+   * 10/11/2026 : la passe à l'aveugle a trouvé des renvois trop tôt et ~1,5 % de reprises couvertes).
+   */
+  lab?: boolean;
   /** La fonction dont la carte montre l'état (`/api/subtitle-gen/admin` → `features`). */
   feature?: AiFeatureId;
   /** Une carte au contenu propre : le fournisseur d'IA (modèle prérempli, dépense, tableau). */
@@ -139,13 +145,15 @@ export const CONFIG_LAYOUT = {
       needs: ["xrayService"],
       feature: "xray",
     },
-    // « Revenir au début de la scène » (§143) : livré coupé, allumé ici après validation des débuts de scène.
+    // « Revenir au début de la scène » (§143) : coupé et marqué « Lab bêta » — les débuts de scène ne sont
+    // pas encore assez sûrs (passe à l'aveugle du 10/11/2026) ; à rallumer seulement après une validation.
     {
       group: "xray",
       keys: ["SCENE_RESTART_ENABLED"],
       titleKey: "config.sceneRestart.title",
       whyKey: "config.sceneRestart.why",
       needs: ["xrayService", "xrayOn"],
+      lab: true,
     },
   ],
   /** Recadrage automatique : agrandir l'image au-dessus des bandes noires (lecteur intégré). */

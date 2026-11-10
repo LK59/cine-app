@@ -3673,8 +3673,9 @@
     },
     "sceneRestart": {
       "title": "Zum Anfang der Szene",
-      "why": "Wird ein Titel nach einigen Stunden fortgesetzt, wird einige Sekunden lang angeboten, zum Anfang der aktuellen Szene zurückzukehren – nur wenn dieser Anfang sicher ist. Standardmäßig aus."
-    }
+      "why": "Beim Fortsetzen eines Titels nach einigen Stunden würde es für einige Sekunden anbieten, zum Anfang der aktuellen Szene zurückzuspringen. Experimentell: Szenenanfänge sind noch nicht zuverlässig genug, lassen Sie es aus."
+    },
+    "labBeta": "Lab-Beta"
   },
   "xrayScan": {
     "nav": "Darsteller im Bild",

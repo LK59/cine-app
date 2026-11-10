@@ -42,6 +42,7 @@ export function SettingsGroupCard({
   dimmed = false,
   choices,
   notes,
+  lab = false,
 }: {
   group: SettingGroup;
   /**
@@ -71,6 +72,8 @@ export function SettingsGroupCard({
    * elle ne se règle pas (13/10/2026).
    */
   whyKey?: string;
+  /** Une fonction de laboratoire, pas encore fiable : l'étiquette « Lab bêta » à côté de l'intitulé. */
+  lab?: boolean;
   /** Seulement ces réglages du groupe (l'assistant montre le relais du lecteur à part, avec Jellyfin). */
   keys?: readonly string[];
   views: Map<string, SettingView>;
@@ -100,6 +103,9 @@ export function SettingsGroupCard({
         <h3 className="text-base font-semibold text-white">{t(titleKey ?? `setup.groups.${group}.title`)}</h3>
         {!titleKey && group !== "app" && group !== "playback" && group !== "defaults" && group !== "deployment" && (
           <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${NEED_TONE[need]}`}>{t(`setup.need.${need}`)}</span>
+        )}
+        {lab && (
+          <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-warning">{t("config.labBeta")}</span>
         )}
       </header>
       {status}

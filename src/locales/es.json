@@ -3673,8 +3673,9 @@
     },
     "sceneRestart": {
       "title": "Volver al inicio de la escena",
-      "why": "Al retomar un título tras unas horas, propone durante unos segundos volver al inicio de la escena en curso, solo cuando ese inicio es seguro. Desactivado por defecto."
-    }
+      "why": "Al reanudar un título tras unas horas, propondría durante unos segundos volver al inicio de la escena actual. Experimental: los inicios de escena aún no son lo bastante fiables, déjelo desactivado."
+    },
+    "labBeta": "Lab beta"
   },
   "xrayScan": {
     "nav": "Actores en pantalla",

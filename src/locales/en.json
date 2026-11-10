@@ -3673,8 +3673,9 @@
     },
     "sceneRestart": {
       "title": "Back to the start of the scene",
-      "why": "When a title is resumed after a few hours, offers for a few seconds to go back to the start of the current scene — only when that start is certain. Off by default."
-    }
+      "why": "When resuming a title after a few hours, would offer for a few seconds to go back to the start of the current scene. Experimental: scene starts are not reliable enough yet, keep it off."
+    },
+    "labBeta": "Lab beta"
   },
   "xrayScan": {
     "nav": "On-screen cast",

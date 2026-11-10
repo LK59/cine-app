@@ -148,6 +148,7 @@ export function ConfigurationSection({ cards, showMissing = false }: { cards: re
               status={card.feature ? <FeatureState id={card.feature} /> : undefined}
               needs={card.needs?.length ? <FeatureNeeds needs={card.needs} missing={missing} /> : undefined}
               dimmed={missing.length > 0}
+              lab={card.lab}
               views={views}
               draft={draft}
               errors={errors}

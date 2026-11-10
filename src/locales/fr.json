@@ -3673,8 +3673,9 @@
     },
     "sceneRestart": {
       "title": "Revenir au début de la scène",
-      "why": "À la reprise d'un titre après quelques heures, propose quelques secondes de revenir au début de la scène en cours — seulement quand ce début est sûr. Coupé par défaut."
-    }
+      "why": "À la reprise d'un titre après quelques heures, proposerait quelques secondes de revenir au début de la scène en cours. Expérimental : les débuts de scène ne sont pas encore assez sûrs, laissez-le coupé."
+    },
+    "labBeta": "Lab bêta"
   },
   "xrayScan": {
     "nav": "Acteurs à l'écran",
