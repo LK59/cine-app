@@ -14,6 +14,13 @@ ligne**, et ne parle qu'à Laterna, par un réseau Docker interne.
 
 ---
 
+> **Démarrage rapide** : copier [`docker-compose.example.yml`](docker-compose.example.yml), créer un `.env`
+> avec `XRAY_API_KEY`, adapter le chemin de la médiathèque (même chemin que dans Jellyfin, lecture seule),
+> l'utilisateur et le groupe `render`, `docker compose up -d` ; puis dans Laterna, Configuration →
+> Connexions (adresse + clé) et Fonctions intelligentes → Acteurs à l'écran. Détails :
+> [Installation](#installation) et [Brancher Laterna](#brancher-laterna). Sans ce service, Laterna
+> fonctionne normalement : tout ce qui s'appuie dessus est coupé par défaut.
+
 ## Sommaire
 
 - [Ce qu'il fait](#ce-quil-fait)
@@ -105,7 +112,7 @@ voit la rangée et le panneau, jamais les autres titres de la bibliothèque, et 
 | **Visages** | détecteur SCRFD quantifié en INT8 sur place, empreinte ArcFace ; noms par les photos TMDB et la mémoire de la série, un acteur par groupe |
 | **Voix** | Silero VAD, WeSpeaker ResNet34 ; consensus de trois seuils ; ~2 répliques sur 3 nommées, **96 à 97 % justes** sur trois titres étiquetés à la main ; une voix hors champ au téléphone nommée sur quatorze |
 | **Lecture des lèvres** | Light-ASD, seulement pour les voix indécises, plafonnée par élément : sur un film, 67,9 → 75,5 % des répliques nommées, toutes justes |
-| **Toute une bibliothèque** | une médiathèque d'environ dix mille films et épisodes (~7 600 h de vidéo) → de l'ordre de 500 à 550 h de calcul, en fond, seulement quand personne ne regarde (estimation tirée des vitesses mesurées) |
+| **Toute une bibliothèque** | une médiathèque d'environ dix mille films et épisodes (~7 600 h de vidéo) → de l'ordre de 500 à 550 h de calcul, en fond, à basse priorité, lectures comprises (le service laisse l'iGPU aux transcodages de Jellyfin) — estimation tirée des vitesses mesurées |
 | **Place** | ~1,7 Mo par épisode en base ; poids des modèles 180 Mo (+ voix et lèvres) |
 
 ---

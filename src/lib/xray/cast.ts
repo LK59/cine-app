@@ -1,4 +1,5 @@
 import { tmdb, TMDB_IMAGE_BASE, type TmdbCreditedPerson } from "@/lib/clients/tmdb";
+import { HttpError } from "@/lib/http";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { getProviderIdCI, withCache, withPersistentCache } from "@/lib/server-cache";
 import { mapInBatches } from "@/lib/inBatches";
@@ -142,7 +143,7 @@ export function castOf(ref: TmdbRef): Promise<XrayPerson[]> {
     const people =
       ref.kind === "movie"
         ? [...((await tmdb.getMovieCredits(ref.id)).cast ?? [])].sort(byOrder)
-        : await tmdb.getEpisodeCredits(ref.tvId, ref.season, ref.episode).then((c) => [...(c.cast ?? [])].sort(byOrder).concat([...(c.guest_stars ?? [])].sort(byOrder)));
+        : await episodePeople(ref.tvId, ref.season, ref.episode);
     const out: XrayPerson[] = [];
     const seen = new Map<number, XrayPerson>();
     for (const person of people) {
@@ -160,6 +161,37 @@ export function castOf(ref: TmdbRef): Promise<XrayPerson[]> {
     }
     return out;
   });
+}
+
+/**
+ * Les personnes d'un épisode : ses rôles crédités puis ses invités. Quand TMDB ne connaît pas l'épisode
+ * (404 — une saison que TVDB et Sonarr rattachent à la série, que TMDB range dans une autre série ou ne
+ * liste pas), la distribution de toute la série à la place : les acteurs réguliers sont nommés, seuls les
+ * invités de l'épisode manquent. Avant, l'élément échouait et l'épisode restait sans X-Ray (« La Flamme »
+ * S02E04, 10/11/2026). Toute autre erreur reste une erreur.
+ */
+async function episodePeople(tvId: number, season: number, episode: number): Promise<TmdbCreditedPerson[]> {
+  try {
+    const c = await tmdb.getEpisodeCredits(tvId, season, episode);
+    return [...(c.cast ?? [])].sort(byOrder).concat([...(c.guest_stars ?? [])].sort(byOrder));
+  } catch (err) {
+    if (!(err instanceof HttpError) || err.status !== 404) throw err;
+    const all = await tmdb.getTvAggregateCredits(tvId);
+    return [...(all.cast ?? [])]
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        order: p.order,
+        profile_path: p.profile_path,
+        // Les rôles du plus joué au moins joué : le premier est celui qu'on voit le plus.
+        character: [...(p.roles ?? [])]
+          .sort((a, b) => (b.episode_count ?? 0) - (a.episode_count ?? 0))
+          .map((r) => (r.character ?? "").trim())
+          .filter(Boolean)
+          .join(" / "),
+      }))
+      .sort(byOrder);
+  }
 }
 
 /** Les meilleures photos d'une personne chez TMDB (chemins), par note — une semaine sur disque. */

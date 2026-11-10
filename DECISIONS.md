@@ -8909,7 +8909,9 @@ rien.
 mémoire) : le chemin du fichier tel que Jellyfin le voit (le service monte la médiathèque au même chemin,
 en lecture seule), l'`ETag` de la source (sinon `size:<octets>`), la série, et le titre chez TMDB (le film,
 ou la série — par TVDB si Jellyfin n'a que lui — avec saison et épisode). `castOf` : la distribution de
-**cet** épisode (`/tv/{id}/season/{s}/episode/{e}/credits` : rôles crédités puis invités) ou du film
+**cet** épisode (`/tv/{id}/season/{s}/episode/{e}/credits` : rôles crédités puis invités — et, si TMDB ne connaît
+pas l'épisode (404 : une saison que TVDB rattache à la série et que TMDB range ailleurs), la distribution de toute la
+série, `/tv/{id}/aggregate_credits`, sans les invités, 10/11/2026 ; toute autre erreur reste une erreur) ou du film
 (`/movie/{id}/credits`), dans l'ordre du générique, une personne une fois (deux rôles joints), quarante au
 plus. `castWithPhotos` : la photo principale puis les mieux notées de `/person/{id}/images`, huit au plus,
 en adresses `https://image.tmdb.org/t/p/w185…` — les seules que le service accepte ; un album qui ne répond
@@ -8938,7 +8940,7 @@ dans la route, `ADMIN_ONLY_READS` dans le proxy, et l'écriture hors de la liste
 (`scenesForPlayer`) ; `tmdb.getEpisodeCredits` / `getMovieCredits`, `jellyfin.getItemForAnalysis`.
 **Appelants.** `/api/player/log` (déclencheur), `/api/player/xray/[itemId]`, `/api/admin/xray`,
 `testService` (Tester). **Tests.** `xray-client.test.ts` (contrat, Bearer, adresse relue, 404 = rien,
-Tester, réglages), `xray-orders.test.ts` (commande, distribution invités compris, photos, mémoire, borne
+Tester, réglages), `xray-cast-fallback.test.ts` (repli sur la série), `xray-orders.test.ts` (commande, distribution invités compris, photos, mémoire, borne
 par compte, panne, épisode suivant), `xray-player-route.test.ts` (200 partout, caché = `none`, `stale`,
 jointure), `xray-proxy-admin.test.ts` (portes), `xray-trigger.test.ts` (la ligne `start`) ;
 `share-gate.test.ts` parcourt la nouvelle route avec les autres.

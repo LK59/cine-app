@@ -375,6 +375,15 @@ function createTmdbClient(lang = "fr-FR") {
       fetchJson<{ cast?: TmdbCreditedPerson[]; guest_stars?: TmdbCreditedPerson[] }>(
         `${BASE}/tv/${tmdbTvId}/season/${seasonNumber}/episode/${episodeNumber}/credits?api_key=${cfg.apiKey}`
       ),
+    /**
+     * La distribution de **toute** une série, chaque personne avec ses rôles et leur nombre d'épisodes :
+     * le repli de l'X-Ray quand TMDB ne connaît pas l'épisode (une saison que TVDB rattache à la série et
+     * que TMDB range dans une autre — « La Flamme » S02 est « Le Flambeau » chez TMDB, 10/11/2026).
+     */
+    getTvAggregateCredits: (tmdbTvId: number) =>
+      fetchJson<{ cast?: (Omit<TmdbCreditedPerson, "character"> & { roles?: { character?: string | null; episode_count?: number }[] })[] }>(
+        `${BASE}/tv/${tmdbTvId}/aggregate_credits?api_key=${cfg.apiKey}`
+      ),
     /** La distribution d'un film, dans l'ordre du générique (§138). */
     getMovieCredits: (tmdbId: number) =>
       fetchJson<{ cast?: TmdbCreditedPerson[] }>(`${BASE}/movie/${tmdbId}/credits?api_key=${cfg.apiKey}`),

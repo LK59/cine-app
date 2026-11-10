@@ -438,6 +438,42 @@ shared with the Jellyfin apps), password, signed-in devices, notifications, inte
 
 ---
 
+## Optional: actors on screen (`laterna-xray`)
+
+Without it, nothing changes: every feature that relies on it is off by default (`XRAY_ENABLED`,
+`SCENE_RESTART_ENABLED`, `ASK_ENABLED` and the AI features that follow it), and Laterna sends nothing
+anywhere until an address **and** a key are set. With it, the player shows who is on screen, scene by
+scene, and who is speaking.
+
+**What it needs**: Docker, the Docker network Laterna is on, the media library (read-only), ~4 GB of
+memory (8 GB if inference runs on an Intel iGPU), a few GB of disk for its database. An Intel iGPU
+is optional and makes it about twice as fast. It calls no online AI service.
+
+1. In a folder of its own, copy [`xray/docker-compose.example.yml`](xray/docker-compose.example.yml) to
+   `docker-compose.yml`, and create a `.env` beside it:
+
+   ```sh
+   XRAY_API_KEY=<shared key>            # openssl rand -hex 32
+   JELLYFIN_URL=http://jellyfin:8096     # optional: yields the iGPU to Jellyfin's transcodes
+   JELLYFIN_API_KEY=<Jellyfin API key>   # optional
+   ```
+
+2. In `docker-compose.yml`, adapt three things: the **library path**, mounted read-only **at the same path
+   as in the Jellyfin container**; the **user** (`user: "UID:GID"`) owning the media files; the host's
+   **`render` group number** (`getent group render`) — or remove `devices` and `group_add` without an iGPU.
+3. `docker compose up -d`, then `docker logs -f laterna-xray` until the models are reported ready (the first
+   start downloads and checks them, a few minutes, once).
+4. In Laterna: **Configuration → Connections → Actors on screen**: address `http://laterna-xray:8000` and the
+   same key, then *Test connection*.
+5. **Configuration → Smart features → Actors on screen**: open it to `admins` first, then everyone. The
+   library is then analysed in the background, at low priority; progress is on the same page.
+
+Updating: `docker compose pull && docker compose up -d` — results already computed stay served. Everything
+else (hardware acceleration, settings, troubleshooting, models and licences) is in
+[xray/README.md](xray/README.md).
+
+---
+
 ## 6. Updates and backups
 
 ### Updating
