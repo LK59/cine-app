@@ -3,6 +3,7 @@ import { useLoader, useThree } from "@react-three/fiber";
 import { Color, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace, NoColorSpace, Vector2, type Texture } from "three";
 import { assetUrl } from "../lib/assets";
 import { ktx2For } from "./ktx2";
+import { applyScreenLight } from "./screenLight";
 import { useProfile } from "../state/store";
 
 /**
@@ -87,6 +88,8 @@ export function usePbr(set: TextureSet, options: PbrOptions = {}): MeshStandardM
         shader.fragmentShader = shader.fragmentShader
           .replace("void main() {", "uniform float uSaturation;\nvoid main() {")
           .replace("#include <map_fragment>", "#include <map_fragment>\n\tdiffuseColor.rgb = mix(vec3(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722))), diffuseColor.rgb, uSaturation);");
+        // Cette matière a sa propre retouche : la lumière des écrans (posée d'office sur les autres) s'y ajoute ici.
+        applyScreenLight(shader);
       };
       // Le programme diffère de celui d'une matière ordinaire : three doit le savoir pour ne pas les confondre.
       material.customProgramCacheKey = () => "saturation";

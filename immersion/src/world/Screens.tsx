@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Color, Frustum, Group, LinearFilter, Matrix4, Mesh, MeshStandardMaterial, PlaneGeometry, RectAreaLight, Scene, ShaderMaterial, Sphere, SRGBColorSpace, Vector2, Vector3, VideoTexture, type DepthTexture, type PerspectiveCamera } from "three";
-import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
+import { CanvasTexture, Color, Frustum, Group, LinearFilter, Matrix4, Mesh, MeshStandardMaterial, PlaneGeometry, Scene, ShaderMaterial, Sphere, SRGBColorSpace, Vector2, Vector3, VideoTexture, type DepthTexture, type PerspectiveCamera } from "three";
 import { speaker } from "../media/audio";
 import { getVideo } from "../media/playback";
-import { useProfile, useStore } from "../state/store";
+import { useStore } from "../state/store";
 import { effects, VIGNETTE } from "./Effects";
-import { roomAt, screenHeight, SCREENS } from "./layout";
-import { rig } from "./rig";
+import { screenHeight, SCREENS } from "./layout";
+import { screenLight, ZONES_X, ZONES_Y } from "./screenLight";
 
 /**
  * L'image de la vidéo, cadrée dans une dalle 16:9 (bandes noires pour un film plus large ou plus
@@ -64,10 +63,12 @@ const SCREEN_FRAGMENT = /* glsl */ `
   }
 `;
 
-/** Lissage de la couleur d'ambiance, par seconde. */
-const AMBILIGHT_RATE = 3.2;
-const AMBILIGHT_EVERY_MS = 200;
-const SAMPLE = 8;
+/** Lissage des couleurs d'ambiance, par seconde. */
+const AMBILIGHT_RATE = 4.5;
+/** La copie réduite de l'image : relue quinze fois par seconde (les reflets flous, les zones). */
+const SAMPLE_EVERY_MS = 66;
+const SAMPLE_W = 48;
+const SAMPLE_H = 27;
 
 const srgbToLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
 const frustum = new Frustum();
@@ -86,25 +87,21 @@ const sphere = new Sphere();
  * la profondeur de la scène pour rester derrière ce qui la cache. La version qui traverse le
  * compositeur n'apporte que son halo. Une dalle hors du champ n'est pas redessinée.
  *
- * **L'ambilight** : la couleur moyenne de l'image, relevée cinq fois par seconde sur un canevas de
- * 8 × 8 pixels, éclaire la pièce — par **une** lumière rectangulaire, posée sur l'écran de la pièce
- * où se tient le visiteur (les autres écrans éclairent des pièces qu'il ne voit pas). Rien n'est
- * relevé quand aucun écran n'éclaire la pièce où il est.
+ * **La lumière des écrans** — l'ambilight par zones et le reflet du film — est dans `screenLight.ts`,
+ * greffée sur toutes les matières. Ici, on la nourrit : une copie réduite de l'image (48 × 27), relue
+ * quinze fois par seconde, sert de version floue pour les reflets et donne la couleur de chaque zone.
  */
 export function Screens() {
   const gl = useThree((s) => s.gl);
   const camera = useThree((s) => s.camera) as PerspectiveCamera;
-  const profile = useProfile();
   const status = useStore((s) => s.playback.status);
   const video = getVideo();
   const groups = useRef<(Group | null)[]>([]);
   const meshes = useRef<(Mesh | null)[]>([]);
-  const light = useRef<RectAreaLight>(null);
   const on = useRef(0);
-  const glow = useRef({ target: new Color(0, 0, 0), current: new Color(0, 0, 0), last: 0 });
+  const zones = useRef({ target: Array.from({ length: ZONES_X * ZONES_Y }, () => new Color(0, 0, 0)), last: 0 });
 
   const { texture, sceneMaterial, overlay, off, bezel, sampler, speakers } = useMemo(() => {
-    RectAreaLightUniformsLib.init();
     const texture = new VideoTexture(video);
     texture.colorSpace = SRGBColorSpace;
     texture.minFilter = LinearFilter;
@@ -133,15 +130,22 @@ export function Screens() {
       return mesh;
     });
     const canvas = document.createElement("canvas");
-    canvas.width = SAMPLE;
-    canvas.height = SAMPLE;
+    canvas.width = SAMPLE_W;
+    canvas.height = SAMPLE_H;
+    const blur = new CanvasTexture(canvas);
+    blur.colorSpace = SRGBColorSpace;
+    blur.minFilter = LinearFilter;
+    blur.magFilter = LinearFilter;
+    blur.generateMipmaps = false;
+    screenLight.uniforms.uSlVideo.value = texture;
+    screenLight.uniforms.uSlBlur.value = blur;
     return {
       texture,
       sceneMaterial,
       overlay: { scene: overlayScene, meshes: overlayMeshes, material: overlayMaterial },
       off: new MeshStandardMaterial({ color: "#010101", roughness: 0.05, metalness: 0, envMapIntensity: 3 }),
       bezel: new MeshStandardMaterial({ color: "#0b0b0c", roughness: 0.45, metalness: 0.7 }),
-      sampler: { context: canvas.getContext("2d", { willReadFrequently: true }) },
+      sampler: { context: canvas.getContext("2d", { willReadFrequently: true }), blur },
       speakers: SCREENS.map((screen) => speaker(screen.id, screen.loudness)),
     };
   }, [video]);
@@ -149,13 +153,15 @@ export function Screens() {
   useEffect(
     () => () => {
       texture.dispose();
+      sampler.blur.dispose();
+      screenLight.uniforms.uSlOn.value = 0;
       sceneMaterial.dispose();
       overlay.material.dispose();
       for (const mesh of overlay.meshes) mesh.geometry.dispose();
       off.dispose();
       bezel.dispose();
     },
-    [texture, sceneMaterial, overlay, off, bezel]
+    [texture, sceneMaterial, overlay, off, bezel, sampler]
   );
 
   // Après le compositeur (priorité 1) : la vidéo, telle quelle.
@@ -174,7 +180,9 @@ export function Screens() {
         material.uniforms.uFit.value.set(fit[0], fit[1]);
         material.uniforms.uOn.value = on.current;
       }
+      screenLight.uniforms.uSlFit.value.set(fit[0], fit[1]);
     }
+    screenLight.uniforms.uSlOn.value = on.current;
 
     // Quels écrans sont dans le champ ? Les autres ne sont pas redessinés.
     projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
@@ -198,46 +206,43 @@ export function Screens() {
       }
     });
 
-    // ── L'ambilight : l'écran de la pièce où se tient le visiteur ─────────────
-    const here = roomAt(rig.position.x, rig.position.y, rig.position.z);
-    const lamp = SCREENS.find((screen) => screen.room === here) ?? (here === "mezzanine" ? SCREENS[0] : null);
-    const g = glow.current;
+    // ── La copie réduite de l'image : les reflets flous, et la couleur de chaque zone ──
+    const z = zones.current;
     const now = performance.now();
-    if (playing && lamp && light.current && sampler.context && now - g.last > AMBILIGHT_EVERY_MS) {
-      g.last = now;
+    if (playing && sampler.context && now - z.last > SAMPLE_EVERY_MS) {
+      z.last = now;
       try {
-        sampler.context.drawImage(video, 0, 0, SAMPLE, SAMPLE);
-        const pixels = sampler.context.getImageData(0, 0, SAMPLE, SAMPLE).data;
-        let r = 0;
-        let gr = 0;
-        let b = 0;
-        for (let i = 0; i < pixels.length; i += 4) {
-          r += srgbToLinear(pixels[i] / 255);
-          gr += srgbToLinear(pixels[i + 1] / 255);
-          b += srgbToLinear(pixels[i + 2] / 255);
+        sampler.context.drawImage(video, 0, 0, SAMPLE_W, SAMPLE_H);
+        sampler.blur.needsUpdate = true;
+        const pixels = sampler.context.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
+        const zoneW = SAMPLE_W / ZONES_X;
+        const zoneH = SAMPLE_H / ZONES_Y;
+        for (let zy = 0; zy < ZONES_Y; zy++) {
+          for (let zx = 0; zx < ZONES_X; zx++) {
+            let r = 0;
+            let g = 0;
+            let b = 0;
+            let n = 0;
+            for (let y = Math.floor(zy * zoneH); y < Math.floor((zy + 1) * zoneH); y++) {
+              for (let x = Math.floor(zx * zoneW); x < Math.floor((zx + 1) * zoneW); x++) {
+                const i = (y * SAMPLE_W + x) * 4;
+                r += srgbToLinear(pixels[i] / 255);
+                g += srgbToLinear(pixels[i + 1] / 255);
+                b += srgbToLinear(pixels[i + 2] / 255);
+                n += 1;
+              }
+            }
+            z.target[zy * ZONES_X + zx].setRGB(r / n, g / n, b / n);
+          }
         }
-        const n = pixels.length / 4;
-        g.target.setRGB(r / n, gr / n, b / n);
       } catch {
         // Image illisible (source d'une autre origine) : pas d'ambiance, la lecture continue.
-        g.target.setRGB(0, 0, 0);
+        for (const color of z.target) color.setRGB(0, 0, 0);
       }
     }
-    if (!playing || !lamp) g.target.setRGB(0, 0, 0);
-    g.current.lerp(g.target, 1 - Math.exp(-delta * AMBILIGHT_RATE));
-    if (light.current) {
-      if (lamp) {
-        // La lumière se pose sur l'écran de la pièce, à sa taille, tournée vers la pièce (l'axe −Z d'une lumière rectangulaire).
-        light.current.position.set(lamp.center[0] + Math.sin(lamp.yaw) * 0.06, lamp.center[1], lamp.center[2] + Math.cos(lamp.yaw) * 0.06);
-        light.current.rotation.set(0, lamp.yaw + Math.PI, 0);
-        light.current.width = lamp.width * 0.92;
-        light.current.height = screenHeight(lamp) * 0.92;
-      }
-      const peak = Math.max(g.current.r, g.current.g, g.current.b);
-      // La couleur donne la teinte, la luminance donne la force : une scène sombre éclaire peu.
-      light.current.color.copy(g.current).multiplyScalar(peak > 0.0001 ? 1 / peak : 0);
-      light.current.intensity = peak * 14 * on.current;
-    }
+    if (!playing) for (const color of z.target) color.setRGB(0, 0, 0);
+    const ease = 1 - Math.exp(-delta * AMBILIGHT_RATE);
+    screenLight.uniforms.uSlZones.value.forEach((color, i) => color.lerp(z.target[i], ease));
 
     // ── La passe de la vidéo, par-dessus le compositeur ──────────────────────
     const composer = effects.composer;
@@ -292,8 +297,6 @@ export function Screens() {
           </group>
         );
       })}
-      {/* Une seule lumière d'écran pour tout le chalet : elle suit le visiteur de pièce en pièce. */}
-      {profile.fillLights ? <rectAreaLight ref={light} args={["#000000", 0, 1, 1]} /> : null}
     </group>
   );
 }

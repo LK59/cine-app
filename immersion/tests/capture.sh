@@ -21,4 +21,4 @@ STATE_MOUNT=()
 exec docker run --rm --name "immersion-capture-$$" "${STATE_MOUNT[@]}" --network host --ipc host --cpus "${PW_CPUS:-4}" "${GPU[@]}" \
   --user "$(id -u):$(id -g)" -e HOME=/tmp -e BASE="${BASE:-http://localhost:5198}" -e IMMERSION_GL="$GL" \
   -e TV="${TV:-}" -e QUALITY="${QUALITY:-high}" -e SIZE="${SIZE:-1600x900}" -e CAPTURES=/immersion/captures \
-  -v "$ROOT:/immersion" -w /immersion/tests "$IMAGE" node capture.mjs "$@"
+  -v "$ROOT:/immersion" -w /immersion/tests "$IMAGE" node ${SCRIPT:-capture.mjs} "$@"

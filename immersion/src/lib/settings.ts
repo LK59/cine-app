@@ -26,6 +26,8 @@ export interface Settings {
   /** Champ de vision vertical, en degrés. */
   fov: number;
   showFps: boolean;
+  /** Mode cinéma : quand un film joue, les lampes baissent d'elles-mêmes et l'écran éclaire la pièce. */
+  cinema: boolean;
   /**
    * Conversion HDR → SDR par le serveur, pour les fichiers HDR seulement (HDR10, HDR10+, HLG, Dolby
    * Vision) : dans une texture WebGL, une image HDR sort délavée. Activée par défaut ; la couper garde
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 1,
   fov: 68,
   showFps: false,
+  cinema: true,
   hdrToSdr: true,
 };
 
@@ -123,6 +126,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     sensitivity: clamp(r.sensitivity, 0.2, 3, d.sensitivity),
     fov: clamp(r.fov, 50, 100, d.fov),
     showFps: typeof r.showFps === "boolean" ? r.showFps : d.showFps,
+    cinema: typeof r.cinema === "boolean" ? r.cinema : d.cinema,
     hdrToSdr: typeof r.hdrToSdr === "boolean" ? r.hdrToSdr : d.hdrToSdr,
   };
 }

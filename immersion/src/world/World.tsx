@@ -12,6 +12,10 @@ import { Player } from "./Player";
 import { Chalet } from "./Chalet";
 import { SceneReady } from "./SceneReady";
 import { PanelAnchor } from "./PanelAnchor";
+import { installScreenLight } from "./screenLight";
+
+// Avant toute matière : la lumière des écrans se greffe sur toutes les matières « standard ».
+installScreenLight();
 
 /** Vrai tant que l'onglet est masqué : le rendu s'arrête alors tout à fait. */
 function useHidden(): boolean {

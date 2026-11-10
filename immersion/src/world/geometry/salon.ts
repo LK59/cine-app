@@ -1,5 +1,5 @@
 import { CylinderGeometry, LatheGeometry, Vector2 } from "three";
-import { BREAST, CHANDELIER, LAMPS, ROOM, SOFA, TABLE, TRUSSES, TV, roofY, span, type Solid } from "../layout";
+import { BREAST, CHANDELIER, FIRE, LAMPS, ROOM, SOFA, TABLE, TRUSSES, TV, roofY, span, type Solid } from "../layout";
 import { Kits, roof } from "./envelope";
 import type { Part } from "./types";
 
@@ -40,7 +40,24 @@ export function buildSalon(): Part {
   const top = roofY(BREAST.face) + 0.06;
   stone.span(BREAST.face, W, 0, top, BREAST.z0, tvZ0);
   stone.span(BREAST.face, W, 0, top, tvZ1, BREAST.z1);
-  stone.span(BREAST.face, W, 0, tvY0, tvZ0, tvZ1);
+  // Sous l'écran, le massif est creusé du foyer : la pierre l'entoure, une tôle noire le tapisse.
+  stone.span(BREAST.face, W, 0, FIRE.y0, tvZ0, tvZ1);
+  stone.span(BREAST.face, W, FIRE.y1, tvY0, tvZ0, tvZ1);
+  stone.span(BREAST.face, W, FIRE.y0, FIRE.y1, tvZ0, FIRE.z0);
+  stone.span(BREAST.face, W, FIRE.y0, FIRE.y1, FIRE.z1, tvZ1);
+  stone.span(BREAST.face + FIRE.depth, W, FIRE.y0, FIRE.y1, FIRE.z0, FIRE.z1);
+  const fx = BREAST.face + FIRE.depth;
+  const fireMetal = kits.get("metal");
+  fireMetal.span(fx - 0.012, fx, FIRE.y0, FIRE.y1, FIRE.z0, FIRE.z1);
+  fireMetal.span(BREAST.face, fx, FIRE.y0, FIRE.y0 + 0.012, FIRE.z0, FIRE.z1);
+  fireMetal.span(BREAST.face, fx, FIRE.y1 - 0.012, FIRE.y1, FIRE.z0, FIRE.z1);
+  fireMetal.span(BREAST.face, fx, FIRE.y0, FIRE.y1, FIRE.z0, FIRE.z0 + 0.012);
+  fireMetal.span(BREAST.face, fx, FIRE.y0, FIRE.y1, FIRE.z1 - 0.012, FIRE.z1);
+  // Le cadre de l'ouverture, à fleur de pierre.
+  fireMetal.span(BREAST.face - 0.012, BREAST.face, FIRE.y0 - 0.03, FIRE.y0, FIRE.z0 - 0.03, FIRE.z1 + 0.03);
+  fireMetal.span(BREAST.face - 0.012, BREAST.face, FIRE.y1, FIRE.y1 + 0.03, FIRE.z0 - 0.03, FIRE.z1 + 0.03);
+  fireMetal.span(BREAST.face - 0.012, BREAST.face, FIRE.y0, FIRE.y1, FIRE.z0 - 0.03, FIRE.z0);
+  fireMetal.span(BREAST.face - 0.012, BREAST.face, FIRE.y0, FIRE.y1, FIRE.z1, FIRE.z1 + 0.03);
   stone.span(BREAST.face, W, tvY1, top, tvZ0, tvZ1);
   // Le fond de la niche, derrière la dalle.
   stone.span(TV.x + 0.06, W, tvY0, tvY1, tvZ0, tvZ1);

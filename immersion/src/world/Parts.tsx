@@ -21,8 +21,8 @@ function PartView({ part, group, materials, visible, lightmaps }: { part: Part; 
     const atlas = group && lightmaps ? lightmaps.atlases[group] : undefined;
     return (Object.keys(part.meshes) as MaterialId[]).map((id) => {
       const geometry = part.meshes[id]!;
-      const lit = atlas && lightmaps && attachLightmapUv(geometry, atlas.uvs.get(`${group}__${id}`));
-      return { id, geometry, material: lit ? bakedVariant(materials[id], atlas.texture, lightmaps.range) : materials[id] };
+      const lit = atlas && attachLightmapUv(geometry, atlas.uvs.get(`${group}__${id}`));
+      return { id, geometry, material: lit && group ? bakedVariant(materials[id], group, atlas) : materials[id] };
     });
   }, [part, group, materials, lightmaps]);
   return (

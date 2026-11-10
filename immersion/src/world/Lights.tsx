@@ -1,8 +1,9 @@
 import { useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import type { PointLight } from "three";
 import { useProfile, useStore } from "../state/store";
-import { breathe } from "./lightmaps";
+import { breathe, setLampLevel, type LampGroup } from "./lightmaps";
+import { lampLevels } from "./lampLevels";
 import { BREAST, CHANDELIER, LAMPS, ROOM } from "./layout";
 import { NIGHT_LAMPS } from "./geometry/night";
 import { PENDANTS } from "./geometry/south";
@@ -26,6 +27,11 @@ import { MOONLIGHT_FROM } from "./Exterior";
  * rebonds — de leur lightmap. Il ne reste en temps réel que trois lumières sans ombre, pour les
  * reflets et pour les objets posés (plantes, fauteuil, bougies), et le souffle des bougies.
  */
+const GROUPS: LampGroup[] = ["salon", "sud", "nuit"];
+/** Ce qu'il reste des lampes pendant un film, et pendant sa pause. */
+const CINEMA_PLAYING = 0.1;
+const CINEMA_PAUSED = 0.45;
+
 export function Lights() {
   const profile = useProfile();
   const chandelier = useRef<PointLight>(null);
@@ -35,11 +41,33 @@ export function Lights() {
   const lampY = 1.5;
   const base = useMemo(() => ({ chandelier: 210 }), []);
 
-  useFrame(({ clock }) => {
+  const pendant = useRef<PointLight>(null);
+  const bedside = useRef<PointLight>(null);
+  const scene = useThree((three) => three.scene);
+
+  useFrame(({ clock }, delta) => {
     // Le souffle des bougies : quelques pour cent, lentement — sensible, jamais clignotant.
     const t = clock.elapsedTime;
     const flicker = 1 + 0.035 * Math.sin(t * 7.3) + 0.025 * Math.sin(t * 12.7 + 1.3) + 0.02 * Math.sin(t * 3.1 + 0.4);
-    if (chandelier.current) chandelier.current.intensity = base.chandelier * flicker;
+
+    // Le niveau des lampes, pièce par pièce : leurs interrupteurs, et le **mode cinéma** — quand un film
+    // joue, elles baissent en deux secondes et l'écran prend le dessus ; en pause elles remontent à demi.
+    const state = useStore.getState();
+    const playback = state.playback;
+    const film = state.settings.cinema && (playback.status === "playing" || playback.status === "paused" || playback.status === "loading");
+    const dim = !film ? 1 : playback.status === "paused" || playback.wantPaused ? CINEMA_PAUSED : CINEMA_PLAYING;
+    const ease = 1 - Math.exp(-Math.min(delta, 0.1) * 1.6);
+    for (const group of GROUPS) {
+      const target = (state.lamps[group] ? 1 : 0) * dim;
+      lampLevels[group] += (target - lampLevels[group]) * ease;
+      if (Math.abs(target - lampLevels[group]) < 0.002) lampLevels[group] = target;
+      setLampLevel(group, lampLevels[group]);
+    }
+    if (chandelier.current) chandelier.current.intensity = base.chandelier * flicker * lampLevels.salon;
+    if (pendant.current) pendant.current.intensity = 20 * lampLevels.sud;
+    if (bedside.current) bedside.current.intensity = 12 * lampLevels.nuit;
+    // Les reflets d'ambiance ont été capturés lampes allumées : ils baissent avec elles.
+    scene.environmentIntensity = 0.5 * (0.3 + 0.7 * lampLevels.salon);
     if (baked) breathe(1 + (flicker - 1) * 0.6);
   });
 
@@ -50,8 +78,8 @@ export function Lights() {
         <pointLight ref={chandelier} position={[CHANDELIER.x, CHANDELIER.y + 0.42, CHANDELIER.z]} color="#ffc98f" intensity={base.chandelier} distance={18} decay={2} />
         {profile.fillLights ? (
           <>
-            <pointLight position={[PENDANTS[1][0], PENDANTS[1][1] - 0.15, PENDANTS[1][2]]} color="#ffcf9a" intensity={20} distance={8} decay={2} />
-            <pointLight position={[NIGHT_LAMPS.bedside[0][0] + 0.9, 1.25, (NIGHT_LAMPS.bedside[0][2] + NIGHT_LAMPS.bedside[1][2]) / 2]} color="#ffc083" intensity={12} distance={7.5} decay={2} />
+            <pointLight ref={pendant} position={[PENDANTS[1][0], PENDANTS[1][1] - 0.15, PENDANTS[1][2]]} color="#ffcf9a" intensity={20} distance={8} decay={2} />
+            <pointLight ref={bedside} position={[NIGHT_LAMPS.bedside[0][0] + 0.9, 1.25, (NIGHT_LAMPS.bedside[0][2] + NIGHT_LAMPS.bedside[1][2]) / 2]} color="#ffc083" intensity={12} distance={7.5} decay={2} />
           </>
         ) : null}
       </group>

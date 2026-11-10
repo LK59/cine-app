@@ -1,9 +1,11 @@
 import { useMemo } from "react";
+import { useFrame } from "@react-three/fiber";
 import { Color, CylinderGeometry, DoubleSide, MeshPhysicalMaterial, MeshStandardMaterial, SphereGeometry } from "three";
 import { useStore } from "../state/store";
 import { NIGHT_LAMPS } from "./geometry/night";
 import { PENDANTS } from "./geometry/south";
 import { LAMPS, TABLE } from "./layout";
+import { lampLevels } from "./lampLevels";
 import { visibleGroups } from "./Parts";
 
 /**
@@ -18,6 +20,8 @@ export function Fixtures() {
     () => ({
       // L'abat-jour : un tissu clair éclairé de l'intérieur.
       shade: new MeshStandardMaterial({ color: "#f3e3c8", roughness: 0.9, emissive: new Color("#ffad5c"), emissiveIntensity: 0.85, side: DoubleSide }),
+      // Les mêmes abat-jour dans la chambre : une matière à part, parce que leur lampe s'éteint à part.
+      shadeNight: new MeshStandardMaterial({ color: "#f3e3c8", roughness: 0.9, emissive: new Color("#ffad5c"), emissiveIntensity: 0.85, side: DoubleSide }),
       bulb: new MeshStandardMaterial({ color: "#fff1d6", emissive: new Color("#ffc98a"), emissiveIntensity: 4 }),
       sconce: new MeshStandardMaterial({ color: "#f6e7cf", roughness: 0.8, emissive: new Color("#ffb568"), emissiveIntensity: 1.6, side: DoubleSide }),
       glass: new MeshPhysicalMaterial({ color: "#ffffff", roughness: 0.04, metalness: 0, transparent: true, opacity: 0.16, envMapIntensity: 1.6, depthWrite: false, side: DoubleSide }),
@@ -25,6 +29,13 @@ export function Fixtures() {
     }),
     []
   );
+  // Ce qui luit suit le niveau de sa lampe (interrupteurs, mode cinéma) : éteint, un abat-jour n'émet rien.
+  useFrame(() => {
+    m.shade.emissiveIntensity = 0.85 * lampLevels.salon;
+    m.shadeNight.emissiveIntensity = 0.85 * lampLevels.nuit;
+    m.sconce.emissiveIntensity = 1.6 * lampLevels.nuit;
+    m.bulb.emissiveIntensity = 4 * lampLevels.sud;
+  });
   const g = useMemo(
     () => ({
       shade: new CylinderGeometry(0.25, 0.3, 0.36, 40, 1, true),
@@ -61,7 +72,7 @@ export function Fixtures() {
           <mesh key={i} geometry={g.sconce} material={m.sconce} position={[x, y, z - 0.07]} />
         ))}
         {NIGHT_LAMPS.bedside.map(([x, y, z], i) => (
-          <mesh key={i} geometry={g.bedside} material={m.shade} position={[x, y, z]} />
+          <mesh key={i} geometry={g.bedside} material={m.shadeNight} position={[x, y, z]} />
         ))}
       </group>
     </group>

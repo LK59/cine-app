@@ -33,6 +33,8 @@ interface Graph {
   wind: PositionalAudio;
   /** Le crépitement des bougies : à accrocher au lustre. */
   candles: PositionalAudio;
+  /** Le feu : son ronflement sourd et ses claquements, à accrocher au foyer. */
+  fire: PositionalAudio;
   direct: GainNode;
   wet: GainNode;
   connected: WeakSet<HTMLMediaElement>;
@@ -108,6 +110,33 @@ function crackleBuffer(context: AudioContext): AudioBuffer {
   return buffer;
 }
 
+/** Le feu : un ronflement grave qui ondule, et des claquements secs, serrés, de toutes les forces. */
+function fireBuffer(context: AudioContext): AudioBuffer {
+  const rate = context.sampleRate;
+  const length = rate * 9;
+  const buffer = context.createBuffer(1, length, rate);
+  const data = buffer.getChannelData(0);
+  let seed = 23;
+  const random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  let low = 0;
+  for (let i = 0; i < length; i++) {
+    low = (low + 0.03 * (random() * 2 - 1)) / 1.03;
+    // L'enveloppe se referme sur elle-même : la boucle ne s'entend pas.
+    const swell = 0.7 + 0.3 * Math.sin((i / length) * Math.PI * 2 * 3);
+    data[i] = low * 1.6 * swell;
+  }
+  for (let n = 0; n < 150; n++) {
+    const at = Math.floor(random() * (length - 3000));
+    const strength = Math.pow(random(), 2.2) * 0.9 + 0.05;
+    const size = 30 + Math.floor(random() * 260);
+    for (let i = 0; i < size; i++) data[at + i] += (random() * 2 - 1) * strength * Math.exp(-i / (size * 0.2));
+  }
+  return buffer;
+}
+
 /**
  * Crée le graphe (une fois). Le contexte naît suspendu tant qu'aucun geste n'a eu lieu : c'est le
  * clic d'entrée qui le réveille (`resumeAudio`).
@@ -151,7 +180,9 @@ export function audio(): Graph {
   high.frequency.value = 1800;
   const candles = loop(crackleBuffer(context), 0.16, 2.5, high);
 
-  graph = { context, listener, speakers: new Map(), source: null, convolver, wind, candles, direct, wet, connected: new WeakSet() };
+  const fire = loop(fireBuffer(context), 0.55, 1.8);
+  fire.gain.connect(convolver);
+  graph = { context, listener, speakers: new Map(), source: null, convolver, wind, candles, fire, direct, wet, connected: new WeakSet() };
   return graph;
 }
 
@@ -159,7 +190,7 @@ export function audio(): Graph {
 export function resumeAudio(): void {
   const g = audio();
   void g.context.resume().catch(() => {});
-  for (const sound of [g.wind, g.candles]) if (!sound.isPlaying) sound.play();
+  for (const sound of [g.wind, g.candles, g.fire]) if (!sound.isPlaying) sound.play();
 }
 
 /**
@@ -251,7 +282,7 @@ export function disposeAudio(): void {
   if (!graph) return;
   const g = graph;
   graph = null;
-  for (const sound of [g.wind, g.candles]) {
+  for (const sound of [g.wind, g.candles, g.fire]) {
     try {
       if (sound.isPlaying) sound.stop();
     } catch {

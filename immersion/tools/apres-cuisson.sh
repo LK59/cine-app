@@ -1,16 +1,16 @@
 #!/bin/sh
-# Chaîne sans surveillance, lancée à la pause du 10/11 : attend la fin de la cuisson des lightmaps, puis
+# Chaîne sans surveillance : attend la fin de la cuisson des lightmaps, puis
 # build, captures de chaque pièce et de l'affiche, puis le portail de l'application jusqu'au vert (5 essais).
 # Journaux : immersion/logs/. Usage : sh tools/apres-cuisson.sh   (depuis immersion/)
 cd "$(dirname "$0")/.." || exit 1
 L=logs; mkdir -p $L
 say() { echo "$(date '+%H:%M:%S') $*" >> $L/suite.log; }
-BAKELOG="${BAKELOG:-/dev/null}"
 say "attente de la fin de la cuisson"
 while docker ps --format '{{.Names}}' | grep -q '^immersion-bake'; do sleep 20; done
 sleep 30
 while docker ps --format '{{.Names}}' | grep -q '^immersion-bake'; do sleep 20; done
-cp "$BAKELOG" $L/bake.log 2>/dev/null
+# La cuisson écrit son journal dans logs/bake.log ; lancée ailleurs, BAKELOG dit où le prendre.
+[ -n "${BAKELOG:-}" ] && [ "$BAKELOG" != "$L/bake.log" ] && cp "$BAKELOG" $L/bake.log 2>/dev/null
 say "cuisson finie : $(grep -a 'exit=' $L/bake.log | tail -1) ; $(ls public/assets/lightmaps | tr '\n' ' ')"
 say "build"
 docker run --rm --name immersion-build --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/..":/repo -w /repo/immersion node:26-alpine \
@@ -18,7 +18,7 @@ docker run --rm --name immersion-build --user "$(id -u):$(id -g)" -e HOME=/tmp -
 say "build : exit=$?"
 cp tests/fixtures/mire.webm dist/mire.webm
 say "captures des pièces"
-STATE="$PWD/$L/immersion-state.json" QUALITY=ultra PW_CPUS=4 timeout 900 tests/capture.sh entree salon tv baie canape vallee ouest charpente cuisine ilot escalier mezzanine balcon couloir chambre lit reglages > $L/captures.log 2>&1
+STATE="$PWD/$L/immersion-state.json" QUALITY=ultra PW_CPUS=4 timeout 900 tests/capture.sh entree salon tv baie canape vallee ouest charpente cuisine ilot escalier mezzanine balcon couloir chambre lit telechambre reglages > $L/captures.log 2>&1
 say "captures : exit=$?"
 say "affiche"
 STATE="$PWD/$L/immersion-state.json" QUALITY=ultra SIZE=1000x1500 PW_CPUS=4 timeout 600 tests/capture.sh affiche > $L/affiche.log 2>&1

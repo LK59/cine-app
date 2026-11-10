@@ -1,6 +1,7 @@
 import { Atmosphere } from "./Atmosphere";
 import { Candles } from "./Candles";
 import { Exterior } from "./Exterior";
+import { Fire } from "./Fire";
 import { Fixtures } from "./Fixtures";
 import { Parts } from "./Parts";
 import { Lights } from "./Lights";
@@ -18,6 +19,7 @@ export function Chalet() {
       <SoundScape />
       <Props />
       <Candles />
+      <Fire />
       <Lights />
       <Exterior />
       <Atmosphere />

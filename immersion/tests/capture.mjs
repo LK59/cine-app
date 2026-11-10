@@ -65,7 +65,7 @@ await enter.waitFor({ state: "visible", timeout: 180_000 });
 console.log(`chargé en ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 if (wanted.includes("accueil")) await page.screenshot({ path: `${OUT}/accueil.jpg`, type: "jpeg", quality: 85 });
 await enter.click();
-await page.waitForFunction(() => window.__immersion.store.getState().phase === "world", null, { timeout: 20_000 });
+await page.waitForFunction(() => window.__immersion.store.getState().phase === "world", null, { timeout: 90_000 });
 await page.evaluate(() => window.__immersion.store.getState().setMode("walk"));
 
 // TV=1 : une mire joue sur l'écran pendant les captures (image, halo, ambilight).

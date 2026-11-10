@@ -54,6 +54,21 @@ export const TV = {
 } as const;
 
 /**
+ * Le foyer : une longue ouverture basse dans le massif, sous le manteau et au-dessus du banc de pierre,
+ * centrée sous l'écran — le feu en ruban des chalets d'aujourd'hui.
+ */
+export const FIRE = {
+  z0: TV.z - 1.75,
+  z1: TV.z + 1.75,
+  y0: 0.47,
+  y1: 0.78,
+  /** Profondeur de la niche dans le massif. */
+  depth: 0.3,
+  /** D'où part sa lueur : juste devant l'ouverture, à mi-hauteur des flammes. */
+  glow: [BREAST.face - 0.22, 0.68, TV.z] as [number, number, number],
+} as const;
+
+/**
  * Le plan d'ensemble. Au sud du salon, un corps de bâtiment à deux niveaux : au rez-de-chaussée la
  * cuisine (ouverte sur le salon) et l'escalier ; au-dessus, la mezzanine. Plus au sud, un couloir et
  * une chambre de plain-pied.

@@ -19,13 +19,34 @@ import { ktx2For } from "./ktx2";
 interface Manifest {
   /** Ce que vaut 1,0 dans la texture, en éclairement. */
   range: number;
-  atlases: Record<string, { texture: string; size: number; uv?: string; uvSet?: string; meshes?: { name: string; material: string; offset: number; count: number; probe: number[][] }[] }>;
+  atlases: Record<
+    string,
+    {
+      texture: string;
+      size: number;
+      uv?: string;
+      uvSet?: string;
+      meshes?: { name: string; material: string; offset: number; count: number; probe: number[][] }[];
+      /** Deux cuissons sur les mêmes UV : ce qui reste la nuit (lune, ciel, bougies), et les lampes. */
+      layers?: { nuit: { texture: string; range: number }; lampes: { texture: string; range: number } };
+    }
+  >;
+}
+
+export interface Atlas {
+  /** La lumière de base : tout, ou — quand la cuisson est en deux couches — ce qui reste la nuit. */
+  texture: CompressedTexture;
+  /** Ce que vaut 1,0 dans cette texture, en éclairement. */
+  range: number;
+  /** La couche des lampes, quand elle existe : c'est elle que le mode cinéma et les interrupteurs baissent. */
+  lamps: { texture: CompressedTexture; range: number } | null;
+  /** Pour chaque maillage (`<groupe>__<matière>`), ses UV de lumière. */
+  uvs: Map<string, { uv: Float32Array; probe: number[][] }>;
 }
 
 export interface Lightmaps {
-  range: number;
-  /** Par groupe : la texture, et pour chaque maillage (`<groupe>__<matière>`) ses UV de lumière. */
-  atlases: Record<string, { texture: CompressedTexture; uvs: Map<string, { uv: Float32Array; probe: number[][] }> }>;
+  /** Par groupe de pièces (`salon`, `sud`, `nuit`) et pour le canapé (`sofa`). */
+  atlases: Record<string, Atlas>;
 }
 
 async function load(gl: Parameters<typeof ktx2For>[0]): Promise<Lightmaps | null> {
@@ -37,16 +58,21 @@ async function load(gl: Parameters<typeof ktx2For>[0]): Promise<Lightmaps | null
   const atlases: Lightmaps["atlases"] = {};
   await Promise.all(
     Object.entries(manifest.atlases).map(async ([group, atlas]) => {
-      const [texture, packed] = await Promise.all([
-        loader.loadAsync(assetUrl(`lightmaps/${atlas.texture}`)),
+      const ready = (texture: CompressedTexture) => {
+        texture.colorSpace = SRGBColorSpace;
+        texture.minFilter = LinearMipmapLinearFilter;
+        texture.magFilter = LinearFilter;
+        // Le second jeu d'UV du maillage.
+        texture.channel = 1;
+        texture.needsUpdate = true;
+        return texture;
+      };
+      const base = atlas.layers?.nuit ?? { texture: atlas.texture, range: manifest.range };
+      const [texture, lamps, packed] = await Promise.all([
+        loader.loadAsync(assetUrl(`lightmaps/${base.texture}`)).then(ready),
+        atlas.layers ? loader.loadAsync(assetUrl(`lightmaps/${atlas.layers.lampes.texture}`)).then(ready) : Promise.resolve(null),
         atlas.uv ? fetch(assetUrl(`lightmaps/${atlas.uv}`), { credentials: "same-origin" }).then((r) => (r.ok ? r.arrayBuffer() : null)) : Promise.resolve(null),
       ]);
-      texture.colorSpace = SRGBColorSpace;
-      texture.minFilter = LinearMipmapLinearFilter;
-      texture.magFilter = LinearFilter;
-      // Le second jeu d'UV du maillage.
-      texture.channel = 1;
-      texture.needsUpdate = true;
       const uvs = new Map<string, { uv: Float32Array; probe: number[][] }>();
       if (packed && atlas.meshes) {
         const all = new Uint16Array(packed);
@@ -56,10 +82,10 @@ async function load(gl: Parameters<typeof ktx2For>[0]): Promise<Lightmaps | null
           uvs.set(mesh.name, { uv, probe: mesh.probe });
         }
       }
-      atlases[group] = { texture, uvs };
+      atlases[group] = { texture, range: base.range, lamps: lamps && atlas.layers ? { texture: lamps, range: atlas.layers.lampes.range } : null, uvs };
     })
   );
-  return { range: manifest.range, atlases };
+  return { atlases };
 }
 
 /** Charge la lumière précalculée si elle est là. Sans elle, le chalet est éclairé en temps réel, comme avant. */
@@ -105,10 +131,36 @@ export function attachLightmapUv(geometry: BufferGeometry, baked: { uv: Float32A
   return true;
 }
 
-const variants = new WeakMap<Material, Map<CompressedTexture, Material>>();
-/** Toutes les matières éclairées par une lightmap, et ce que vaut 1,0 dans la leur. */
-const baked = new Set<MeshStandardMaterial>();
-let range = 1;
+/**
+ * Le niveau des lampes de chaque groupe de pièces, de 0 (éteintes) à 1 : écrit par `Lights` (le mode
+ * cinéma, les interrupteurs), lu ici par les matières cuites. Le canapé suit le salon.
+ */
+export type LampGroup = "salon" | "sud" | "nuit";
+const LAMP_GROUP: Record<string, LampGroup> = { salon: "salon", sofa: "salon", sud: "sud", nuit: "nuit" };
+const lampLevel: Record<LampGroup, number> = { salon: 1, sud: 1, nuit: 1 };
+
+interface Baked {
+  material: MeshStandardMaterial;
+  group: LampGroup;
+  range: number;
+  /** Le gain de la couche des lampes (sa portée × le niveau du groupe × le souffle) : un uniforme. */
+  lamps: { value: number } | null;
+  lampRange: number;
+}
+const baked = new Set<Baked>();
+const variants = new WeakMap<Material, Map<Atlas, Material>>();
+let breath = 1;
+
+function refresh(entry: Baked): void {
+  const level = lampLevel[entry.group];
+  if (entry.lamps) {
+    entry.material.lightMapIntensity = entry.range * breath;
+    entry.lamps.value = entry.lampRange * level * breath;
+  } else {
+    // Une cuisson d'une seule couche : tout baisse ensemble, sans jamais faire nuit noire.
+    entry.material.lightMapIntensity = entry.range * breath * (0.25 + 0.75 * level);
+  }
+}
 
 /**
  * Le souffle des bougies sur la lumière cuite : toute la lumière des pièces monte et descend de
@@ -116,39 +168,53 @@ let range = 1;
  * pratique — et ça ne coûte qu'un nombre par matière.
  */
 export function breathe(gain: number): void {
-  for (const material of baked) material.lightMapIntensity = range * gain;
+  breath = gain;
+  for (const entry of baked) refresh(entry);
+}
+
+/** Le niveau des lampes d'un groupe (0 à 1). Appliqué au prochain `breathe`. */
+export function setLampLevel(group: LampGroup, level: number): void {
+  lampLevel[group] = level;
 }
 
 // Le programme d'une matière cuite, en deux retouches de celui de three :
-// - sa lumière diffuse vient de la lightmap **seule** : ni le ciel, ni l'environnement, ni les lampes
-//   temps réel n'y ajoutent rien (la lightmap les contient déjà, rebonds compris — les additionner
-//   éclaircirait tout). Les lampes gardent leurs reflets, l'environnement aussi ;
-// - sauf la lumière de l'écran (une lumière de surface, traitée après les autres), qui change à
-//   chaque image et ne peut pas être cuite : elle éclaire pleinement.
+// - sa lumière diffuse vient de la lightmap **seule** — ses deux couches, la nuit et les lampes : ni le
+//   ciel, ni l'environnement, ni les lumières temps réel n'y ajoutent rien (la lightmap les contient
+//   déjà, rebonds compris — les additionner éclaircirait tout). Les lampes gardent leurs reflets,
+//   l'environnement aussi ;
+// - ce qui bouge — la lumière des écrans, la lueur du feu — vient de `screenLight.ts`, qui s'ajoute
+//   après (la remise à zéro ci-dessous est placée avant lui).
 const RECT_AREA = "#if ( NUM_RECT_AREA_LIGHTS > 0 ) && defined( RE_Direct_RectArea )";
 const BEGIN = ShaderChunk.lights_fragment_begin.replace(RECT_AREA, `reflectedLight.directDiffuse = vec3( 0.0 );\n${RECT_AREA}`);
-const MAPS = ShaderChunk.lights_fragment_maps.replace("irradiance += lightMapIrradiance;", "irradiance = lightMapIrradiance;").replace("iblIrradiance += getIBLIrradiance( geometryNormal );", "");
+const MAPS_ONE = ShaderChunk.lights_fragment_maps.replace("irradiance += lightMapIrradiance;", "irradiance = lightMapIrradiance;").replace("iblIrradiance += getIBLIrradiance( geometryNormal );", "");
+const MAPS_TWO = MAPS_ONE.replace("irradiance = lightMapIrradiance;", "irradiance = lightMapIrradiance + texture2D( uLampMap, vLightMapUv ).rgb * uLampGain;");
 /** Faux si three a changé ces morceaux de programme : mieux vaut alors l'éclairage temps réel qu'une lumière comptée deux fois. */
-export const BAKED_SHADER_OK = BEGIN !== ShaderChunk.lights_fragment_begin && MAPS.includes("irradiance = lightMapIrradiance;") && !MAPS.includes("iblIrradiance +=");
+export const BAKED_SHADER_OK = BEGIN !== ShaderChunk.lights_fragment_begin && MAPS_ONE.includes("irradiance = lightMapIrradiance;") && !MAPS_ONE.includes("iblIrradiance +=") && MAPS_TWO !== MAPS_ONE;
 
-/** La même matière, éclairée par une lightmap (voir ci-dessus ce que cela change à son programme). */
-export function bakedVariant(material: Material, lightMap: CompressedTexture, lightMapRange: number): Material {
-  let byMap = variants.get(material);
-  if (!byMap) variants.set(material, (byMap = new Map()));
-  const existing = byMap.get(lightMap);
+/** La même matière, éclairée par la lightmap de ce groupe (voir ci-dessus ce que cela change à son programme). */
+export function bakedVariant(material: Material, group: string, atlas: Atlas): Material {
+  let byAtlas = variants.get(material);
+  if (!byAtlas) variants.set(material, (byAtlas = new Map()));
+  const existing = byAtlas.get(atlas);
   if (existing) return existing;
   const variant = material.clone() as MeshStandardMaterial;
-  variant.lightMap = lightMap;
-  variant.lightMapIntensity = lightMapRange;
-  range = lightMapRange;
-  baked.add(variant);
+  variant.lightMap = atlas.texture;
+  const lamps = atlas.lamps ? { value: atlas.lamps.range } : null;
+  const entry: Baked = { material: variant, group: LAMP_GROUP[group] ?? "salon", range: atlas.range, lamps, lampRange: atlas.lamps?.range ?? 0 };
+  baked.add(entry);
+  refresh(entry);
   const before = material.onBeforeCompile;
   const key = material.customProgramCacheKey();
   variant.onBeforeCompile = (shader, renderer) => {
     before.call(material, shader, renderer);
-    shader.fragmentShader = shader.fragmentShader.replace("#include <lights_fragment_begin>", BEGIN).replace("#include <lights_fragment_maps>", MAPS);
+    if (lamps && atlas.lamps) {
+      shader.uniforms.uLampMap = { value: atlas.lamps.texture };
+      shader.uniforms.uLampGain = lamps;
+      shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>\nuniform sampler2D uLampMap;\nuniform float uLampGain;`);
+    }
+    shader.fragmentShader = shader.fragmentShader.replace("#include <lights_fragment_begin>", BEGIN).replace("#include <lights_fragment_maps>", lamps ? MAPS_TWO : MAPS_ONE);
   };
-  variant.customProgramCacheKey = () => `${key}|cuit`;
-  byMap.set(lightMap, variant);
+  variant.customProgramCacheKey = () => `${key}|cuit${lamps ? "2" : "1"}`;
+  byAtlas.set(atlas, variant);
   return variant;
 }

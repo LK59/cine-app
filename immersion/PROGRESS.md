@@ -123,7 +123,7 @@ halo. `VideoTexture` de three n'est téléversée qu'à chaque nouvelle image du
 
 ### Stratégie qualité (décision du propriétaire)
 
-Cible : **Ultra à la résolution native, 60 images/s, sur un Intel Core Ultra 7 255H (Arc 140T)**. Le
+Cible : **Ultra à la résolution native, 60 images/s, sur un Intel Core Ultra 7 155H (Arc intégré — précisé par le propriétaire le 10/11 ; le journal disait 255H / Arc 140T)**. Le
 processeur graphique du serveur (UHD 630) n'est qu'un plancher de test.
 
 1. **Lumière précalculée** (lightmaps + occlusion ambiante cuites dans Blender sans écran) pour toute la
@@ -289,6 +289,26 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
 - Marge restante avant 40 Mo commités : ~10 Mo pour le panorama, les lightmaps, le canapé, les pièces.
   Leviers si besoin : retirer les jeux de textures inutilisés (`metal_black`, `bark`), les deux HDRI si la
   vue n'en dépend plus, les modèles non posés.
+
+## Chantier suivant : « le chalet vivant » (demandé par le propriétaire le 10/11 au soir)
+
+À faire **après** la livraison de la 10.34.0, en livraisons successives (10.35.0 et suivantes). Les sept points sont
+tous demandés ; l'ordre ci-dessous va du moins coûteux au plus lourd. Les points qui changent la géométrie fixe
+(3, 5, 7) demandent un nouvel export et une recuisson (`tools/bake/`, ~21 min) : les grouper.
+
+1. [ ] **Le vrai reflet du film** : la texture vidéo reprojetée dans les reflets des vitres, du parquet et de la
+       table basse (aujourd'hui : un rectangle de couleur moyenne, le reflet de la lumière de surface)
+2. [ ] **Mode cinéma** : au lancement d'un film, lustre et lampes baissent en deux secondes (intensité de la
+       lightmap + lumières temps réel), l'ambilight prend le dessus ; retour à l'arrêt
+3. [ ] **Un feu** : poêle dans un angle (ou brasero dehors), flammes animées, lueur qui danse, crépitement
+       spatialisé — vivant même écrans éteints
+4. [ ] **Ambilight par zones** : l'échantillonnage 8×8 existe ; quatre zones au lieu d'une couleur moyenne
+5. [ ] **Le dehors** : forêts du panorama refaites, lumières de village dans la vallée, nuages devant la lune,
+       aurore par moments ; terrasse accessible avec bain fumant
+6. [ ] **Matières de près** : grain et plis des coussins, plaid sur le canapé, buée et givre au bas des vitres,
+       poussière dans le faisceau de l'écran
+7. [ ] **Des choses à faire** : s'allonger sur le lit (écran de la chambre), allumer/éteindre chaque lampe, ouvrir
+       une porte-fenêtre (le vent entre), un chat endormi sur le canapé
 
 ## Phase 2
 

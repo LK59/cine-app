@@ -85,6 +85,12 @@ export interface ImmersionState {
   /** La mesure (« Mesurer », `bench/bench.ts`) : son avancement, ses résultats. `null` : jamais lancée. */
   bench: BenchState | null;
   setBench: (patch: Partial<BenchState>) => void;
+  /** Le feu du foyer : allumé ou non. */
+  fire: boolean;
+  toggleFire: () => void;
+  /** Les lampes de chaque groupe de pièces : allumées ou non (les interrupteurs). */
+  lamps: Record<"salon" | "sud" | "nuit", boolean>;
+  toggleLamps: (group: "salon" | "sud" | "nuit") => void;
   /** La lumière précalculée est-elle en place ? Les lumières temps réel se réduisent alors à ce qui bouge. */
   baked: boolean;
   setBaked: (baked: boolean) => void;
@@ -123,6 +129,10 @@ export const useStore = create<ImmersionState>((set, get) => ({
   nearSofa: false,
   room: "salon",
   baked: false,
+  fire: true,
+  toggleFire: () => set({ fire: !get().fire }),
+  lamps: { salon: true, sud: true, nuit: true },
+  toggleLamps: (group) => set({ lamps: { ...get().lamps, [group]: !get().lamps[group] } }),
   bench: null,
   setBench: (patch) => set({ bench: { ...(get().bench ?? EMPTY_BENCH), ...patch } }),
   setBaked: (baked) => get().baked !== baked && set({ baked }),

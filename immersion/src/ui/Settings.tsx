@@ -55,6 +55,7 @@ export function Settings() {
       <Slider label={t("settings.reverb")} value={settings.reverb} min={0} max={1} step={0.01} onChange={(reverb) => update({ reverb })} format={percent} />
       <Slider label={t("settings.sensitivity")} value={settings.sensitivity} min={0.2} max={3} step={0.05} onChange={(sensitivity) => update({ sensitivity })} format={(v) => `× ${v.toFixed(2)}`} />
       <Slider label={t("settings.fov")} value={settings.fov} min={50} max={100} step={1} onChange={(fov) => update({ fov })} format={(v) => `${v}°`} />
+      <Toggle label={t("settings.cinema")} hint={t("settings.cinema.hint")} value={settings.cinema} onChange={(cinema) => update({ cinema })} testId="setting-cinema" />
       <Toggle label={t("settings.hdr")} hint={t("settings.hdr.hint")} value={settings.hdrToSdr} onChange={(hdrToSdr) => update({ hdrToSdr })} testId="setting-hdr" />
       <Toggle label={t("settings.fps")} value={settings.showFps} onChange={(showFps) => update({ showFps })} testId="setting-fps" />
       <BenchBlock />

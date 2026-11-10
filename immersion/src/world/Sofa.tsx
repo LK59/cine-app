@@ -65,7 +65,7 @@ export function Sofa({ materials, lightmaps }: { materials: Record<MaterialId, M
       if (!mesh.isMesh) return;
       const id = FABRICS[mesh.name] ?? FABRICS[mesh.parent?.name ?? ""] ?? "fabric";
       let material = TILE[id] ? metric(materials[id], TILE[id]!) : materials[id];
-      if (atlas && lightmaps && mesh.geometry.getAttribute("uv1")) material = bakedVariant(material, atlas.texture, lightmaps.range);
+      if (atlas && mesh.geometry.getAttribute("uv1")) material = bakedVariant(material, "sofa", atlas);
       mesh.material = material;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
