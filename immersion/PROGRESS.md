@@ -338,7 +338,19 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
 - Pas encore regardées : `cuisine`, `ilot`, `escalier`, `mezzanine`, `balcon`, `couloir`, `chambre`, `lit`,
   `vallee`, `ouest`, `reglages`.
 
-### Où on en est
+### Arrêt de 19 h 30 (limite de session atteinte)
+
+- **Rebase sur `main` FAIT en local, PAS poussé** : `origin/immersion` porte encore l'historique d'avant (même
+  contenu, étiquette locale `immersion-avant-rebase`). Le pousser demande un `--force-with-lease` sur la branche
+  `immersion`, refusé en mode automatique : à faire avec l'accord du propriétaire, ou ne pas pousser la branche
+  et fusionner directement dans `main`.
+- Le portail vert de 19 h 17 portait sur l'arbre d'AVANT le rebase : **le refaire sur cet arbre avant toute fusion**.
+- Depuis ce portail, deux commits `/immersion` seulement (coutures du canapé, couche intermédiaire du panorama
+  effacée derrière le chalet — cette dernière retouche n'a été vue sur aucune capture).
+- Reste, dans l'ordre : build + captures (`sh tools/apres-cuisson.sh` refait build, captures, affiche et portail ;
+  attention, il réécrit `public/poster.jpg`) ; regarder `cuisine`, `escalier`, `mezzanine`, `couloir`, `lit`,
+  `vallee`, `ouest`, `reglages` ; scénarios Playwright 01–05 ; puis points 5 et 6 ci-dessous.
+
 
 - Poussé : la branche `immersion` sur `origin` (rien sur `main`, rien de déployé).
 - Les cinq scénarios Playwright sont verts (01 sur l'instance jetable ; 02 à 05 sur l'aperçu du build).
