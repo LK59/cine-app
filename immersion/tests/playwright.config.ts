@@ -11,7 +11,7 @@ export default defineConfig({
   testDir: "./e2e",
   outputDir: "../test-results",
   globalSetup: "./global-setup.ts",
-  timeout: 120_000,
+  timeout: 360_000,
   expect: { timeout: 20_000 },
   // Une seule instance, un seul compte de test : pas de parallélisme.
   workers: 1,

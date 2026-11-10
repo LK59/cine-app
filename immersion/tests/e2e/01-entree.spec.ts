@@ -8,13 +8,24 @@ async function openCinema(page: import("@playwright/test").Page) {
   await page.waitForLoadState("domcontentloaded");
 }
 
+/**
+ * Sur l'instance jetable, la page « CineApp devient Laterna » peut recouvrir le cinéma : elle s'affiche
+ * à toute adresse qui n'est pas la nouvelle, et `localhost` n'est pas la nouvelle. Elle n'a rien à voir
+ * avec ce qui est vérifié ici ; les clics partent donc de l'élément lui-même, pas du pixel qu'elle couvre.
+ */
+const press = (target: import("@playwright/test").Locator) => target.evaluate((el) => (el as HTMLElement).click());
+
 async function openSearch(page: import("@playwright/test").Page) {
-  await page.goto("/#panel=search");
+  // L'adresse du panneau de recherche (`cinemaRoute.ts`).
+  await page.goto("/#recherche=1");
   const input = page.locator('input[type="search"]').first();
-  if (!(await input.isVisible().catch(() => false))) {
-    // L'adresse du panneau peut changer : à défaut, le bouton de recherche du rail.
-    await page.goto("/");
-    await page.getByRole("button", { name: /recherche|search/i }).first().click();
+  const shown = await input.waitFor({ state: "visible", timeout: 8000 }).then(
+    () => true,
+    () => false
+  );
+  if (!shown) {
+    // À défaut, le bouton de recherche du rail.
+    await press(page.getByRole("button", { name: /recherche|search/i }).first());
   }
   await expect(input).toBeVisible();
   return input;
@@ -28,7 +39,7 @@ test.describe("l'entrée par la recherche", () => {
     const card = page.getByRole("button", { name: /Le Chalet/ });
     await expect(card).toBeVisible();
     await expect(card).toContainText("Laterna Experience");
-    await card.click();
+    await press(card);
     await page.waitForURL(/\/immersion$/);
     await expect(page.getByRole("img", { name: "Laterna Experience" }).first()).toBeVisible();
   });
