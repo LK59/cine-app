@@ -39,8 +39,10 @@ export interface Seance {
   /**
    * « natif » (remultiplexage — ou canevas, dans les séances d'avant le 24/09/2026), « serveur », ou
    * « hors-ligne » : un téléchargement lu sur l'appareil (journalisé depuis le 02/11/2026).
+   * « immersion » : une lecture sur la télévision du mode Immersion (DECISIONS.md §144) — un flux
+   * négocié comme celui du lecteur serveur, son en stéréo, image parfois convertie en SDR.
    */
-  player: "natif" | "serveur" | "hors-ligne";
+  player: "natif" | "serveur" | "hors-ligne" | "immersion";
   /**
    * Reconstituée après coup (`retro` sur ses lignes) : une séance hors ligne d'avant le 02/11/2026,
    * retrouvée dans l'activité de Jellyfin. Son temps regardé est l'écart entre l'annonce et l'arrêt.
@@ -200,7 +202,7 @@ function isCast(r: LogRecord, reason: string): boolean {
 }
 
 function playerOf(r: LogRecord): Seance["player"] {
-  return r.player === "serveur" ? "serveur" : r.player === "hors-ligne" ? "hors-ligne" : "natif";
+  return r.player === "serveur" ? "serveur" : r.player === "hors-ligne" ? "hors-ligne" : r.player === "immersion" ? "immersion" : "natif";
 }
 
 function blank(id: string, legacy: boolean, r: LogRecord): Seance {

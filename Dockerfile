@@ -22,14 +22,14 @@ RUN --mount=type=cache,target=/root/.npm npm install
 # Le mode « Immersion » : un monde 3D caché, servi à part (`src/lib/immersionFiles.ts`,
 # `immersion/PROGRESS.md`). Son propre projet, ses propres dépendances, son propre build — rien n'en
 # entre dans celui de l'application, et cette étape n'est refaite que si `immersion/` change. Les
-# deux fichiers de `src/lib` sont ceux qu'il importe en lecture seule (la détection des codecs, pour
-# annoncer à Jellyfin exactement ce que le lecteur annonce).
+# trois fichiers de `src/lib` sont ceux qu'il importe en lecture seule (la détection des codecs et le
+# plafond de débit, pour demander à Jellyfin exactement ce que le lecteur demande).
 FROM node:26-alpine AS immersion
 WORKDIR /build/immersion
 COPY immersion/package.json immersion/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY immersion/ ./
-COPY src/lib/codecSupport.ts src/lib/webkitEngine.ts /build/src/lib/
+COPY src/lib/codecSupport.ts src/lib/webkitEngine.ts src/lib/networkBitrate.ts /build/src/lib/
 RUN npm run build
 
 FROM node:26-alpine AS builder
@@ -41,6 +41,10 @@ ENV BUILD_REF=$BUILD_REF
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Le dossier du mode « Immersion » n'a rien à faire dans le build de l'application : son étape à elle
+# l'a déjà lu. Laissé là, la sortie « standalone » de Next — qui emporte tout le dossier du projet —
+# recopiait ses 28 Mo de textures dans l'image, à côté de leur build (relevé sur une image de test).
+RUN rm -rf immersion
 RUN npm test
 # No cache mount on .next/cache any more (26/09/2026). Turbopack keeps its compilation cache
 # there, and a build fed the previous one shipped fresh JavaScript with a stale stylesheet: every
