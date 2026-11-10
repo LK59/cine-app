@@ -10542,3 +10542,30 @@ réellement rendue. Champs connus et bornés, compte tiré de la session, comme 
 404 sans build), `immersion-proxy.test.ts` (307 vers la connexion pour la page, 401 pour les fichiers, hors des
 listes publiques, porte des liens de partage), `immersion-activity.test.ts` (reconnu, hors du diagnostic),
 `viewport-diag-route.test.ts` (la ligne `immersion-bench`) ; de bout en bout, `immersion/tests/e2e/`.
+
+## 145. Les tâches de fond ont un interrupteur, pour les copies de l'application (11/11/2026)
+
+**La règle.** `CINE_BACKGROUND_JOBS=off` : le serveur sert ses pages et ses routes, et rien ne part de
+lui-même — ni notification, ni ménage ou écriture dans Jellyfin, ni masquage des demandes, ni planificateur,
+ni appel payant. Seuls restent les préchauffages en lecture du catalogue (`startCatalogueWarm`, et les deux
+lectures de la fin de `instrumentation.ts`), sans lesquels une instance n'ouvrirait pas comme la production.
+Variable absente, ou toute autre valeur : les tâches tournent. La production ne règle rien.
+
+**Pourquoi.** Une copie de l'application lancée à côté de la vraie — le banc du lecteur
+(`tools/regress-lecteur/`), une instance d'essai — démarre avec les adresses et les clés de la production :
+ses tâches de fond agissent sur les **vrais** services, avec une base recopiée qui n'a pas tout. Le 10/11/2026,
+une instance du banc restée sept heures a retiré toutes les cinq minutes le tag de masquage des 92 titres cachés
+à un compte (sa base n'avait pas les décisions) ; la production le remettait à son passage suivant. `regress.sh`
+neutralisait les tâches une à une (`REPLIQUES_*`, `NEW_ACCOUNT_BLOCKED_TAGS`) : la dernière-née passait toujours.
+
+**Une fonction.** `backgroundJobsEnabled` (`src/lib/backgroundJobs.ts`). **Un appelant** : `src/instrumentation.ts`,
+où chaque `start…()` ne part que derrière `if (jobs)`. `regress.sh` passe la variable à ses instances (et garde
+ses anciennes neutralisations, pour une image d'un commit d'avant l'interrupteur).
+
+**Différent exprès.** Les tâches déclenchées par un geste ne sont pas concernées : un spectateur de l'instance
+qui lance un titre déclenche toujours ce que ce geste déclenche (un rapport de lecture, une analyse à la demande).
+L'interrupteur coupe ce qui part **sans** personne.
+
+**Tests.** `background-jobs.test.ts` : les valeurs reconnues ; la lecture de `instrumentation.ts` — tout
+`start…()` hors de la liste des préchauffages doit être précédé de `if (jobs)`, si bien qu'ajouter une tâche
+sans décider échoue ; et `regress.sh` passe bien la variable.

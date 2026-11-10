@@ -105,6 +105,16 @@ A validated run is kept as the reference and only the candidate is played. Run i
 commit, not a branch. Launched from a worktree, point `REGRESS_ENV`/`REGRESS_DB` at the main
 checkout's `.env` and `data/cine.db`.
 
+**A second copy of the app acts on the real services unless told not to** (DECISIONS §145, 11/11/2026).
+The bench instance (`regress.sh start`) and any trial instance run with production's addresses and keys, so
+every background task started in `src/instrumentation.ts` would act on the real Jellyfin, Jellyseerr or paid
+APIs, from a copied database that lacks part of the state — on 10/11/2026 a bench instance left up for seven
+hours kept undoing the request masking of 92 titles. `CINE_BACKGROUND_JOBS=off` (`src/lib/backgroundJobs.ts`)
+starts the server with none of them, only the read-only catalogue warm-ups; `regress.sh` sets it. Each
+`start…()` in `instrumentation.ts` sits behind `if (jobs)`, and `background-jobs.test.ts` fails if a new one
+does not — adding a task means deciding whether a test copy may run it. Even so, read a test instance's
+`docker logs` two minutes after it starts, and do not leave one up for hours.
+
 **Benches sit beside the suite, all skipped unless given a file or a library root.**
 `reprise.spec.ts` proves, on a real file, that the bytes the resume cache keeps reopen it at a
 position and produce the first segment with nothing else.

@@ -43,44 +43,51 @@ export async function register() {
       console.error(`[setup] setup code unavailable: ${error instanceof Error ? error.message : error}`);
     }
 
+    // L'interrupteur des tâches de fond (`backgroundJobs.ts`, DECISIONS.md §145) : une copie de
+    // l'application lancée à côté de la vraie — le banc, une instance d'essai — ne doit rien faire
+    // d'elle-même aux vrais services. Chaque tâche ci-dessous ne part que derrière `jobs` ; un test
+    // échoue si l'une d'elles l'oublie.
+    const { backgroundJobsEnabled } = await import("./lib/backgroundJobs");
+    const jobs = backgroundJobsEnabled();
+
     const { startNotificationCron } = await import("./lib/notificationJobs");
-    startNotificationCron();
+    if (jobs) startNotificationCron();
 
     const { startTorrentWatch } = await import("./lib/torrentWatch");
-    startTorrentWatch();
+    if (jobs) startTorrentWatch();
 
     const { startStatusCron } = await import("./lib/statusCron");
-    startStatusCron();
+    if (jobs) startStatusCron();
 
     const { startDbBackupCron } = await import("./lib/dbBackup");
-    startDbBackupCron();
+    if (jobs) startDbBackupCron();
 
     // Les appareils « CineApp » que plus aucune session ne réclame, retirés de Jellyfin après trente
     // jours d'inactivité : chaque connexion en inscrit un, et une session jamais déconnectée laissait
     // le sien pour toujours (32 au 29/09/2026). Une fois par jour — voir `jellyfinDevicePrune.ts`.
     const { startJellyfinDevicePruneCron } = await import("./lib/jellyfinDevicePrune");
-    startJellyfinDevicePruneCron();
+    if (jobs) startJellyfinDevicePruneCron();
 
     // Les tags bloqués d'office (« prive ») posés sur chaque compte Jellyfin créé ensuite, dans les
     // cinq minutes — voir `newAccountTags.ts`.
     const { startNewAccountTagsCron } = await import("./lib/newAccountTags");
-    startNewAccountTagsCron();
+    if (jobs) startNewAccountTagsCron();
 
     // Le masquage des demandes pour un compte (option d'une installation) : la liste recopiée dans
     // Jellyfin toutes les cinq minutes — voir `requestHide/run.ts`. Sans compte nommé, rien ne part.
     const { startRequestHideCron } = await import("./lib/requestHide/run");
-    startRequestHideCron();
+    if (jobs) startRequestHideCron();
 
     // Les liens de partage finis : leur compte Jellyfin désactivé, puis effacé un mois plus tard —
     // voir `share/service.ts` (DECISIONS.md §112).
     const { startShareSweep } = await import("./lib/share/service");
-    startShareSweep();
+    if (jobs) startShareSweep();
 
     // Les affiches du catalogue préparées d'avance dans les tailles que les écrans demandent : sans
     // cela, la première personne à voir un titre payait 60 à 350 ms par affiche (25/09/2026). En
     // arrière-plan, une minute après le démarrage — voir `posterPrewarm.ts`.
     const { startPosterPrewarm } = await import("./lib/posterPrewarm");
-    startPosterPrewarm();
+    if (jobs) startPosterPrewarm();
 
     // Les listes de la bibliothèque (Radarr, Sonarr, Jellyfin) lues au démarrage et relues avant
     // d'expirer : aucune ouverture ne les attend plus — voir `withKeptCache`.
@@ -90,14 +97,17 @@ export async function register() {
     // « Précédemment » (option, DECISIONS.md §137) : préparé en fond pour les séries laissées depuis
     // trois heures — la fiche n'attend jamais le modèle ni la lecture des sous-titres.
     const { startRecapCron } = await import("./lib/recap/service");
-    startRecapCron();
+    if (jobs) startRecapCron();
 
     // L'index des livres (option, DECISIONS.md §127), préparé après les préchauffages du catalogue pour
     // qu'aucun lecteur n'attende sa première construction. Option coupée : rien n'est importé ni lancé
     // (l'allumer depuis la Configuration le prépare aussitôt, `/api/settings`).
-    if (config.books?.enabled === true) {
-      const { startBooksPrewarm } = await import("./lib/books/prewarm");
-      startBooksPrewarm();
+    // (La garde `jobs` entoure le bloc au lieu d'y entrer : `books-isolation.test.ts` en fige la forme.)
+    if (jobs) {
+      if (config.books?.enabled === true) {
+        const { startBooksPrewarm } = await import("./lib/books/prewarm");
+        startBooksPrewarm();
+      }
     }
 
     // Les sous-titres générés (DECISIONS.md §69) : les tâches en cours reprennent là où elles
@@ -105,7 +115,7 @@ export async function register() {
     // une base illisible ne doit pas empêcher le serveur de démarrer.
     try {
       const { startEngine } = await import("./lib/subtitleGen/engine");
-      startEngine();
+      if (jobs) startEngine();
     } catch (error) {
       console.error("subtitle-gen: démarrage", error);
     }
@@ -115,7 +125,7 @@ export async function register() {
     // coupée. Gardé, comme les sous-titres générés.
     try {
       const { startRepliquesEngine } = await import("./lib/repliques/engine");
-      startRepliquesEngine();
+      if (jobs) startRepliquesEngine();
     } catch (error) {
       console.error("repliques: démarrage", error);
     }
@@ -124,7 +134,7 @@ export async function register() {
     // paliers, seulement quand personne ne regarde. Un tour par minute ; rien ne part l'option coupée.
     try {
       const { startXrayScheduler } = await import("./lib/xray/scheduler");
-      startXrayScheduler();
+      if (jobs) startXrayScheduler();
     } catch (error) {
       console.error("xray: démarrage", error);
     }
@@ -134,7 +144,7 @@ export async function register() {
     // première passe lancée par l'administrateur. Gardé, comme les répliques.
     try {
       const { startIntegrityEngine } = await import("./lib/integrity/engine");
-      startIntegrityEngine();
+      if (jobs) startIntegrityEngine();
     } catch (error) {
       console.error("integrite: démarrage", error);
     }
@@ -143,7 +153,7 @@ export async function register() {
     // et les versions que plus personne ne télécharge sont effacées (`offline/jobs.ts`).
     try {
       const { startOfflineJobs } = await import("./lib/offline/jobs");
-      startOfflineJobs();
+      if (jobs) startOfflineJobs();
     } catch (error) {
       console.error("hors ligne: démarrage", error);
     }
@@ -151,7 +161,8 @@ export async function register() {
     // Ce qui tourne en arrière-plan, et à quel rythme — la première ligne à lire dans `docker logs`
     // (25/10/2026). Chaque tâche écrit ensuite une ligne par action (`taskLog`), jamais par tour.
     const { taskLog } = await import("./lib/taskLog");
-    taskLog(
+    if (!jobs) taskLog("tâches", "coupées (CINE_BACKGROUND_JOBS=off) : seuls restent les préchauffages du catalogue, en lecture");
+    else taskLog(
       "tâches",
       "planifiées : services 1 min · torrents 15 s · demandes disponibles 5 min · « à voir » et nouveaux épisodes 1 h · " +
         "nouveaux comptes 5 min · liens de partage 1 min · sauvegarde 1×/jour · appareils Jellyfin 1×/jour · " +
