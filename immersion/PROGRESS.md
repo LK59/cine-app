@@ -322,10 +322,17 @@ coûteux, tant que ça reste raisonnable : en Ultra, correct sur une machine san
 couloir), pas lampe par lampe — une couche de lightmap par lampe coûterait trop ; la lumière des écrans et du feu
 ne projette pas d'ombre ; les objets posés (modèles) ne sont pas cuits.
 
-**Reste avant livraison** : intégrer panorama v2 et canapé v2 quand les agents rendent la main ; `export.sh` puis
-`bake.sh --samples 192` (deux couches, cinq atlas) ; captures de chaque lieu ; scénarios 01–07 ; affiche ; poids
-(budget ~40 Mo, à 37 Mo avant la couche des lampes complète) ; portail seul, machine calme ; fusion, build,
-déploiement.
+**État au 10/11, 23 h** — tourne sans surveillance : la cuisson finale en deux couches (`logs/bake.log`, 40 à
+50 min, lancée vers 22 h 55) puis `tools/apres-cuisson.sh` (`logs/suite.log` : build, captures de tous les lieux,
+affiche, portail jusqu'au vert). Le panorama v2 (nuit noire, forêts, village qui éclaire la vallée) est encore en
+rendu chez son agent : à l'arrivée, rebuild et captures `vue`, `baie`, `terrasse`, `dehors`.
+Ajouté depuis : terrasse en surplomb (falaise au nord), nuit noire, canapé v2 + plaid, clavier (AZERTY / QWERTY /
+QWERTZ, réglage), chaîne hi-fi. Scénarios 06, 07, 08 verts ; 01 à 05 à rejouer sur le build final.
+
+**Reste avant livraison** : lire `logs/suite.log` ; regarder `captures/` lieu par lieu ; commiter
+`public/assets/lightmaps/` et l'affiche ; intégrer le panorama v2 ; scénarios 01–08 ; poids (≈ 44 Mo attendus pour
+40 visés) ; portail vert sur cet arbre ; fusion (avance rapide), image candidate, bascule, vérification, push, CI,
+ménage (`cine-regress-c992edf9`, `immersion-preview`).
 
 ## Phase 2
 

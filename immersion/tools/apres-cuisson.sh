@@ -6,9 +6,8 @@ cd "$(dirname "$0")/.." || exit 1
 L=logs; mkdir -p $L
 say() { echo "$(date '+%H:%M:%S') $*" >> $L/suite.log; }
 say "attente de la fin de la cuisson"
-while docker ps --format '{{.Names}}' | grep -q '^immersion-bake'; do sleep 20; done
-sleep 30
-while docker ps --format '{{.Names}}' | grep -q '^immersion-bake'; do sleep 20; done
+# La cuisson enchaîne plusieurs conteneurs : c'est la ligne « exit= » de son journal qui dit qu'elle a fini.
+while ! grep -aq '^exit=' $L/bake.log 2>/dev/null; do sleep 20; done
 # La cuisson écrit son journal dans logs/bake.log ; lancée ailleurs, BAKELOG dit où le prendre.
 [ -n "${BAKELOG:-}" ] && [ "$BAKELOG" != "$L/bake.log" ] && cp "$BAKELOG" $L/bake.log 2>/dev/null
 say "cuisson finie : $(grep -a 'exit=' $L/bake.log | tail -1) ; $(ls public/assets/lightmaps | tr '\n' ' ')"
