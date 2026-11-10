@@ -5,7 +5,7 @@
 #   tests/run.sh e2e/02-monde.spec.ts  un seul fichier
 #   BASE=http://localhost:5199 tests/run.sh
 #
-# Le compte de test vient de immersion/.env (IMMERSION_TEST_USER / IMMERSION_TEST_PASSWORD).
+# Le compte de test vient de immersion/.env (JELLYFIN_TEST_USER / JELLYFIN_TEST_PASSWORD).
 # Le processeur graphique de la machine est passé au conteneur quand /dev/dri existe.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

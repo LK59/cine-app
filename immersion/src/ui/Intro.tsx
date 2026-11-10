@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useProgress } from "@react-three/drei";
 import { useStore, useT } from "../state/store";
-import { movementKeyLabels } from "../world/input";
-import { lockPointer } from "../world/Controls";
+import { movementKeyLabels } from "../input/keyboardMouse";
+import { enterWorld, worldEntered } from "../state/actions";
 import { leaveToLaterna } from "../lib/session";
 import { ExperienceLogo } from "./Logo";
 
@@ -13,9 +13,9 @@ const MIN_INTRO_MS = 2600;
  * L'accueil : la marque qui s'allume, le chargement réel de la scène, puis l'invitation à entrer.
  *
  * Le clic d'entrée n'est pas une formalité : c'est le geste que le navigateur exige pour verrouiller
- * le pointeur et pour laisser sortir du son. Tout ce qui en dépend part de là (`onEnter`).
+ * le pointeur et pour laisser sortir du son. Tout ce qui en dépend part de là (`enterWorld`).
  */
-export function Intro({ onEnter }: { onEnter: () => void }) {
+export function Intro() {
   const t = useT();
   const phase = useStore((s) => s.phase);
   const sceneReady = useStore((s) => s.sceneReady);
@@ -48,14 +48,9 @@ export function Intro({ onEnter }: { onEnter: () => void }) {
   function enter() {
     if (leaving || phase !== "gate") return;
     setLeaving(true);
-    lockPointer();
-    onEnter();
+    enterWorld();
     // Le fondu de sortie (voir `.intro.is-leaving`), puis le monde seul.
-    setTimeout(() => {
-      // Verrou refusé (rare) : le monde s'ouvre sur le menu pause, d'où un clic le redemandera.
-      useStore.getState().setMode(document.pointerLockElement ? "walk" : "paused");
-      setPhase("world");
-    }, 900);
+    setTimeout(worldEntered, 900);
   }
 
   return (

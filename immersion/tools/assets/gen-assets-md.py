@@ -42,9 +42,9 @@ def row(a):
 
 head = "| Nom | Source | Auteur(s) | Licence | Usage | Fichiers produits |\n|---|---|---|---|---|---|"
 out = ["# Assets de l'Immersion", "",
-       "Tout ce qui est listé ici est sous licence **CC0 1.0** (domaine public) : on peut l'utiliser, le modifier et le redistribuer sans condition, même pour un usage commercial. La mention de l'auteur n'est pas obligatoire, mais on la garde par courtoisie.",
+       "Tout ce qui est listé dans les sections Poly Haven est sous licence **CC0 1.0** (domaine public) : on peut l'utiliser, le modifier et le redistribuer sans condition, même pour un usage commercial. La mention de l'auteur n'est pas obligatoire, mais on la garde par courtoisie.",
        "",
-       "Les sources sont toutes sur [Poly Haven](https://polyhaven.com), qui publie uniquement du CC0. Aucun autre site ni aucune autre licence.",
+       "Les textures, modèles et ciels viennent tous de [Poly Haven](https://polyhaven.com), qui publie uniquement du CC0. Une seule autre source existe : le panorama de montagne (section « Autres assets » en bas), sous une licence différente, avec une mention obligatoire.",
        "",
        "Ce fichier est généré : ne pas l'éditer à la main. Il vient de `tools/assets/manifest.json` et des fiches `assets-src/*/info.json`. Pour le refaire : `python3 -I tools/assets/gen-assets-md.py`. Les commandes pour tout reconstruire sont dans `tools/assets/README.md`.",
        "",
@@ -62,5 +62,23 @@ for kind, title in (("textures", "Textures"), ("model", "Modèles 3D"), ("hdri",
         out += ["Le `.hdr` (1k) sert à l'éclairage. Le `_bg.jpg` (4096 px de large) sert de ciel visible.", ""]
     if kind == "model":
         out += ["Géométrie compressée en meshopt, textures en KTX2 (aucune ressource embarquée). La page doit donc fournir un décodeur meshopt et un transcodeur KTX2.", ""]
+extra_p = os.path.join(HERE, "extra-assets.json")
+if os.path.exists(extra_p):
+    out += ["## Autres assets (hors Poly Haven)", "",
+            "Ces assets ne sont pas CC0. Chacun a sa licence et, quand elle l'exige, une mention à reproduire à l'identique.", ""]
+    for a in json.load(open(extra_p))["assets"]:
+        d = os.path.join(ROOT, a["dir"]) if a.get("dir") else None
+        files = sorted(f for f in os.listdir(d)) if d and os.path.isdir(d) else []
+        size = sum(os.path.getsize(os.path.join(d, f)) for f in files)
+        out += [f"### {a['name']} (`{a['id']}`)", "",
+                f"- Contenu : {a['what']}",
+                f"- Source : {a['source_name']}, {a['source_url']}",
+                f"- Licence : [{a['licence_name']}]({a['licence_url']})",
+                f"- Ce que la licence permet et demande : {a['licence_summary']}",
+                f"- Mention obligatoire (à reproduire telle quelle, en anglais) : « {a['attribution']} »",
+                f"- Phrase de non-responsabilité obligatoire : « {a['disclaimer']} »",
+                f"- Dérivé : {a['derived']}",
+                f"- Usage : {a['use']}",
+                "- Fichiers : " + (", ".join(f"`{a['dir']}/{f}`" for f in files) + f", {mb(size)}" if files else "non construit"), ""]
 open(os.path.join(ROOT, "ASSETS.md"), "w", encoding="utf-8").write("\n".join(out).rstrip() + "\n")
 print("ASSETS.md écrit")

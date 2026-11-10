@@ -40,7 +40,7 @@ export const BREAST = {
   z1: 1.5,
 } as const;
 
-/** La télévision, encastrée dans le massif de pierre. 16:9. */
+/** La télévision du salon, encastrée dans le massif de pierre. 16:9. */
 export const TV = {
   width: 4.6,
   height: 4.6 * (9 / 16),
@@ -49,6 +49,77 @@ export const TV = {
   y: 2.42,
   z: -1.5,
 } as const;
+
+/**
+ * Le plan d'ensemble. Au sud du salon, un corps de bâtiment à deux niveaux : au rez-de-chaussée la
+ * cuisine (ouverte sur le salon) et l'escalier ; au-dessus, la mezzanine. Plus au sud, un couloir et
+ * une chambre de plain-pied.
+ */
+export const PLAN = {
+  /** Cloison entre l'escalier (à l'ouest) et la cuisine (à l'est). */
+  stairEast: -4.3,
+  /** L'escalier : une volée droite le long du mur ouest, qui monte vers le sud. */
+  stair: { x0: -ROOM.halfW, x1: -4.3, zBottom: 4.7, zTop: 9.46, steps: 17 },
+  /** Le couloir, derrière le mur du fond. */
+  hall: { x0: -ROOM.halfW, x1: 1.2, z0: ROOM.back, z1: ROOM.back + 1.7, height: 2.6 },
+  /** La chambre, au bout du couloir. */
+  bedroom: { x0: -ROOM.halfW, x1: 1.2, z0: ROOM.back + 1.7, z1: ROOM.back + 6.6, height: 2.6 },
+  /** Les portes : passage du rez-de-chaussée vers le couloir, puis du couloir vers la chambre. */
+  hallDoor: { x: -2.6, width: 1.0, height: 2.1 },
+  bedroomDoor: { x: -1.2, width: 0.95, height: 2.1 },
+} as const;
+
+export type RoomId = "salon" | "cuisine" | "mezzanine" | "couloir" | "chambre";
+
+/** Dans quelle pièce se trouve ce point (les pieds du visiteur) ? */
+export function roomAt(x: number, y: number, z: number): RoomId {
+  if (z > PLAN.bedroom.z0) return "chambre";
+  if (z > ROOM.back) return "couloir";
+  if (z > ROOM.south) return y > ROOM.loft - 0.4 ? "mezzanine" : "cuisine";
+  return y > ROOM.loft - 0.4 ? "mezzanine" : "salon";
+}
+
+/**
+ * Un écran : toutes les télévisions du chalet montrent la même image (un seul flux, une seule
+ * texture) ; chacune a sa place, sa taille, son haut-parleur et sa lumière.
+ */
+export interface Screen {
+  id: string;
+  room: RoomId;
+  /** Centre de la dalle. */
+  center: [number, number, number];
+  /** Rotation de la dalle autour de la verticale : sa face regarde +Z tournée de cet angle. */
+  yaw: number;
+  width: number;
+  /** Jusqu'où le visiteur peut l'ouvrir (touche d'action), en mètres. */
+  reach: number;
+  /** Distance de référence de son haut-parleur : en deçà, plein volume. */
+  loudness: number;
+}
+
+export const SCREENS: Screen[] = [
+  { id: "salon", room: "salon", center: [TV.x, TV.y, TV.z], yaw: -Math.PI / 2, width: TV.width, reach: 6.4, loudness: 5.5 },
+  // Dans la cuisine, sur le mur est, au-dessus du buffet.
+  { id: "cuisine", room: "cuisine", center: [ROOM.halfW - 0.04, 1.72, 7.3], yaw: -Math.PI / 2, width: 1.5, reach: 4.2, loudness: 2.2 },
+  // Dans la chambre, face au lit.
+  { id: "chambre", room: "chambre", center: [PLAN.bedroom.x1 - 0.04, 1.5, PLAN.bedroom.z0 + 2.6], yaw: -Math.PI / 2, width: 1.25, reach: 4, loudness: 2 },
+];
+
+export const screenHeight = (screen: Screen) => (screen.width * 9) / 16;
+
+/** L'écran le plus proche de ce point, et sa distance. */
+export function nearestScreen(x: number, y: number, z: number): { screen: Screen; distance: number } {
+  let best = SCREENS[0];
+  let bestDistance = Infinity;
+  for (const screen of SCREENS) {
+    const d = Math.hypot(screen.center[0] - x, screen.center[1] - y, screen.center[2] - z);
+    if (d < bestDistance) {
+      best = screen;
+      bestDistance = d;
+    }
+  }
+  return { screen: best, distance: bestDistance };
+}
 
 /**
  * Le canapé en U, ouvert vers la télévision : un grand côté à l'ouest (dos au mur ouest, face à

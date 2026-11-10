@@ -1,0 +1,19 @@
+{
+  "assets": [
+    {
+      "id": "panorama",
+      "name": "Panorama alpin de nuit (Chamonix, vue vers le massif du Mont-Blanc)",
+      "what": "Images rendues avec Blender (Cycles) à partir du modèle numérique de surface Copernicus DEM GLO-30 (30 m) : trois couches équirectangulaires (far, mid, near) en KTX2. Le relief est celui des données, le ciel, la neige, la forêt, la lune et les lumières du village sont procéduraux. Ce n'est donc pas un fichier de la source mais une image rendue, dérivée (adaptée) de ces données.",
+      "source_name": "Copernicus DEM GLO-30 (COP-DEM-GLO-30), tuiles N45_00_E006, N45_00_E007, N46_00_E006, N46_00_E007",
+      "source_url": "https://copernicus-dem-30m.s3.amazonaws.com/ (jeu de données public AWS « Copernicus DEM », sans identifiant)",
+      "licence_name": "Licence Copernicus WorldDEM-30 (instance COP-DEM-GLO-30-F : « Full, Free & Open »)",
+      "licence_url": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N45_00_E006_00_DEM/INFO/eula_F.pdf",
+      "licence_summary": "Droits non exclusifs, gratuits, mondiaux et sans limite de durée : reproduction, distribution, communication au public, adaptation, modification et combinaison avec d'autres données (article 4). Obligations (article 6) : citer la source avec la mention ci-dessous quand les données sont adaptées, ajouter la phrase de non-responsabilité, ne pas laisser croire à un soutien officiel, et imposer ces obligations aux utilisateurs suivants. Aucun droit sur les marques ou logos du fournisseur.",
+      "attribution": "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+      "disclaimer": "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30",
+      "derived": "Image rendue (adaptation) : pas une redistribution des données d'altitude. Les tuiles brutes restent dans assets-src/ (non versionné).",
+      "use": "Décor lointain vu par la grande baie : trois couches (far, mid, near) pour la parallaxe.",
+      "dir": "public/assets/panorama"
+    }
+  ]
+}

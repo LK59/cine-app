@@ -1,0 +1,32 @@
+import { useEffect } from "react";
+import { useThree } from "@react-three/fiber";
+import { attachKeyboardMouse } from "../input/keyboardMouse";
+import { captureChanged, listenIntents } from "../state/actions";
+import { useStore } from "../state/store";
+import { look } from "./rig";
+
+/**
+ * Branche le périphérique d'entrée du jour — clavier et souris — sur le canevas, et les actions sur
+ * les intentions. Le reste du monde ne voit ni touche ni souris : seulement `motion`, le regard
+ * (`rig`) et les actions.
+ */
+export function InputDevices() {
+  const canvas = useThree((s) => s.gl.domElement);
+  useEffect(() => {
+    const stopIntents = listenIntents();
+    const detach = attachKeyboardMouse({
+      canvas,
+      onLook: (dx, dy) => look(dx, dy, useStore.getState().settings.sensitivity),
+      onCapture: captureChanged,
+      worldActive: () => {
+        const state = useStore.getState();
+        return state.phase === "world" && state.mode === "walk";
+      },
+    });
+    return () => {
+      detach();
+      stopIntents();
+    };
+  }, [canvas]);
+  return null;
+}

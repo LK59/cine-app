@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { browserLang, translate, type Key, type Lang } from "../lib/i18n";
 import { AUTO_LEVELS, loadSettings, profileOf, saveSettings, type QualityProfile, type Settings } from "../lib/settings";
 import type { Unsupported } from "../lib/capability";
+import type { Episode, Library, Title } from "../media/library";
 
 /**
  * L'état du mode, en un seul endroit.
@@ -17,23 +18,55 @@ import type { Unsupported } from "../lib/capability";
 export type Phase = "checking" | "unsupported" | "loading" | "gate" | "world" | "lost" | "expired" | "leaving";
 export type Mode = "walk" | "paused" | "panel";
 
-/** Ce que la télévision est en train de faire. */
+/**
+ * La lecture. Deux sortes de champs, qu'il ne faut pas confondre :
+ *
+ * - **ce qui est voulu** (`itemId`, `wantPaused`, `seek`, `muted`) : posé par les commandes
+ *   (`media/commands.ts`), et par elles seules. C'est la vérité ; le `<video>` s'y conforme
+ *   (`media/playback.ts`), il n'en est jamais la source. Demain, ces mêmes champs pourront venir d'un
+ *   état partagé entre plusieurs spectateurs (`docs/MULTIJOUEUR.md`) sans que rien d'autre ne change.
+ * - **ce qui est observé** (`status`, `position`, `duration`, `waiting`, `error`, `method`) : ce que le
+ *   `<video>` fait réellement, rapporté ici pour l'affichage.
+ */
 export interface Playback {
   status: "idle" | "loading" | "playing" | "paused" | "ended" | "error";
   itemId: string | null;
   title: string | null;
-  /** Secondes. Mis à jour deux fois par seconde au plus : c'est l'affichage qui lit ceci. */
+  /** Voulu : la lecture est-elle en pause ? */
+  wantPaused: boolean;
+  /** Voulu : un saut à faire. Chaque demande porte un numéro nouveau, pour qu'un même instant demandé deux fois soit rejoué. */
+  seek: { to: number; n: number } | null;
+  /** Observé : secondes. Mis à jour deux fois par seconde au plus — c'est l'affichage qui lit ceci. */
   position: number;
   duration: number;
   muted: boolean;
-  /** Le flux attend-il des données (mise en mémoire tampon) ? */
+  /** Observé : le flux attend-il des données (mise en mémoire tampon) ? */
   waiting: boolean;
   error: string | null;
-  /** DirectPlay, DirectStream ou Transcode — tel que la négociation l'a décidé. */
+  /** Observé : DirectPlay, DirectStream ou Transcode — tel que la négociation l'a décidé. */
   method: string | null;
 }
 
-export const IDLE_PLAYBACK: Playback = { status: "idle", itemId: null, title: null, position: 0, duration: 0, muted: false, waiting: false, error: null, method: null };
+export const IDLE_PLAYBACK: Playback = { status: "idle", itemId: null, title: null, wantPaused: false, seek: null, position: 0, duration: 0, muted: false, waiting: false, error: null, method: null };
+
+/**
+ * Le panneau Laterna, en état pur : ce qui est chargé, cherché, ouvert. Aucun composant ne garde ceci
+ * pour lui — le rendu d'aujourd'hui (du HTML posé dans le monde) n'en est qu'une lecture, et un rendu
+ * en 3D (pour un casque) lirait exactement le même état et appellerait les mêmes actions.
+ */
+export interface PanelState {
+  library: Library | null;
+  libraryFailed: boolean;
+  query: string;
+  tab: "movies" | "series";
+  /** La fiche ouverte. */
+  opened: Title | null;
+  episodes: { list: Episode[]; next: string | null } | null;
+  episodesFailed: boolean;
+  season: number | null;
+}
+
+export const EMPTY_PANEL: PanelState = { library: null, libraryFailed: false, query: "", tab: "movies", opened: null, episodes: null, episodesFailed: false, season: null };
 
 export interface ImmersionState {
   phase: Phase;
@@ -42,8 +75,8 @@ export interface ImmersionState {
   /** Le sous-écran du menu pause. */
   pauseView: "menu" | "settings";
   seated: boolean;
-  /** Le visiteur est-il assez près de la télévision pour l'ouvrir (touche E) ? */
-  nearTv: boolean;
+  /** L'écran que le visiteur peut ouvrir d'ici (touche d'action) — son identifiant, ou rien. */
+  nearScreen: string | null;
   /** Peut-il s'asseoir d'ici (touche F) ? */
   nearSofa: boolean;
   /** La scène est-elle chargée (textures, modèles) ? */
@@ -63,7 +96,9 @@ export interface ImmersionState {
   setMode: (mode: Mode) => void;
   setPauseView: (view: "menu" | "settings") => void;
   setSeated: (seated: boolean) => void;
-  setNear: (near: { tv: boolean; sofa: boolean }) => void;
+  setNear: (near: { screen: string | null; sofa: boolean }) => void;
+  panel: PanelState;
+  setPanel: (patch: Partial<PanelState>) => void;
   setSceneReady: (ready: boolean) => void;
   setLang: (lang: Lang) => void;
   updateSettings: (patch: Partial<Settings>) => void;
@@ -75,7 +110,7 @@ export const useStore = create<ImmersionState>((set, get) => ({
   mode: "paused",
   pauseView: "menu",
   seated: false,
-  nearTv: false,
+  nearScreen: null,
   nearSofa: false,
   sceneReady: false,
   lang: browserLang(),
@@ -94,10 +129,12 @@ export const useStore = create<ImmersionState>((set, get) => ({
   setMode: (mode) => set(mode === "paused" ? { mode } : { mode, pauseView: "menu" }),
   setPauseView: (pauseView) => set({ pauseView }),
   setSeated: (seated) => set({ seated }),
-  setNear: ({ tv, sofa }) => {
+  setNear: ({ screen, sofa }) => {
     const s = get();
-    if (s.nearTv !== tv || s.nearSofa !== sofa) set({ nearTv: tv, nearSofa: sofa });
+    if (s.nearScreen !== screen || s.nearSofa !== sofa) set({ nearScreen: screen, nearSofa: sofa });
   },
+  panel: EMPTY_PANEL,
+  setPanel: (patch) => set({ panel: { ...get().panel, ...patch } }),
   setSceneReady: (sceneReady) => set({ sceneReady }),
   setLang: (lang) => {
     document.documentElement.lang = lang;

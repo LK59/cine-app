@@ -3,7 +3,7 @@ import { useStore, useT } from "../state/store";
 /** Le point de visée et ce que le visiteur peut faire d'ici — discrets, en bas de l'image. */
 export function Hints() {
   const t = useT();
-  const nearTv = useStore((s) => s.nearTv);
+  const nearTv = useStore((s) => s.nearScreen !== null);
   const nearSofa = useStore((s) => s.nearSofa);
   const seated = useStore((s) => s.seated);
   return (

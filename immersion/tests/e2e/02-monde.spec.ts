@@ -27,11 +27,12 @@ test.describe("le monde", () => {
     expect(stopped.x).toBeGreaterThan(-5.5);
     expect(stopped.x).toBeLessThan(-4.9);
 
-    // Le menu pause, puis la sortie vers le cinéma.
-    await page.evaluate(() => (window as unknown as { __immersion: { store: { getState(): { setMode(m: string): void } } } }).__immersion.store.getState().setMode("paused"));
+    // Le menu pause (l'intention « menu », ce que vaut Échap), puis la sortie vers le cinéma.
+    await page.evaluate(() => (window as unknown as { __immersion: { emit(intent: string): void } }).__immersion.emit("menu"));
     await expect(page.getByTestId("pause")).toBeVisible();
     await page.getByTestId("quit").click();
-    await page.waitForURL((url) => url.pathname === "/");
+    // La page part vers le cinéma (`/`). Le serveur d'aperçu, lui, renvoie sa racine vers la page du mode.
+    await page.waitForURL((url) => url.pathname === "/" || url.pathname === "/api/immersion/");
     expect(errors).toEqual([]);
   });
 });

@@ -7,7 +7,7 @@ import { SUPERSAMPLING } from "../lib/settings";
 import { Effects } from "./Effects";
 import { useProfile, useStore } from "../state/store";
 import { PLAYER } from "./layout";
-import { Controls } from "./Controls";
+import { InputDevices } from "./InputDevices";
 import { Player } from "./Player";
 import { Chalet } from "./Chalet";
 import { SceneReady } from "./SceneReady";
@@ -69,7 +69,7 @@ export function World() {
           <Chalet />
           <Player />
         </Physics>
-        <Controls />
+        <InputDevices />
         <PanelAnchor />
         <Effects />
         <SceneReady />

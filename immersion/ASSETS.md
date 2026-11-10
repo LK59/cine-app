@@ -1,8 +1,8 @@
 # Assets de l'Immersion
 
-Tout ce qui est listé ici est sous licence **CC0 1.0** (domaine public) : on peut l'utiliser, le modifier et le redistribuer sans condition, même pour un usage commercial. La mention de l'auteur n'est pas obligatoire, mais on la garde par courtoisie.
+Tout ce qui est listé dans les sections Poly Haven est sous licence **CC0 1.0** (domaine public) : on peut l'utiliser, le modifier et le redistribuer sans condition, même pour un usage commercial. La mention de l'auteur n'est pas obligatoire, mais on la garde par courtoisie.
 
-Les sources sont toutes sur [Poly Haven](https://polyhaven.com), qui publie uniquement du CC0. Aucun autre site ni aucune autre licence.
+Les textures, modèles et ciels viennent tous de [Poly Haven](https://polyhaven.com), qui publie uniquement du CC0. Une seule autre source existe : le panorama de montagne (section « Autres assets » en bas), sous une licence différente, avec une mention obligatoire.
 
 Ce fichier est généré : ne pas l'éditer à la main. Il vient de `tools/assets/manifest.json` et des fiches `assets-src/*/info.json`. Pour le refaire : `python3 -I tools/assets/gen-assets-md.py`. Les commandes pour tout reconstruire sont dans `tools/assets/README.md`.
 
@@ -85,3 +85,19 @@ Géométrie compressée en meshopt, textures en KTX2 (aucune ressource embarqué
 | Moonlit Golf (`moonlit_golf`) | [moonlit_golf](https://polyhaven.com/a/moonlit_golf) | Greg Zaal | CC0 1.0 | Paysage de nuit éclairé par la lune. | non construit |
 
 Le `.hdr` (1k) sert à l'éclairage. Le `_bg.jpg` (4096 px de large) sert de ciel visible.
+
+## Autres assets (hors Poly Haven)
+
+Ces assets ne sont pas CC0. Chacun a sa licence et, quand elle l'exige, une mention à reproduire à l'identique.
+
+### Panorama alpin de nuit (Chamonix, vue vers le massif du Mont-Blanc) (`panorama`)
+
+- Contenu : Images rendues avec Blender (Cycles) à partir du modèle numérique de surface Copernicus DEM GLO-30 (30 m) : trois couches équirectangulaires (far, mid, near) en KTX2. Le relief est celui des données, le ciel, la neige, la forêt, la lune et les lumières du village sont procéduraux. Ce n'est donc pas un fichier de la source mais une image rendue, dérivée (adaptée) de ces données.
+- Source : Copernicus DEM GLO-30 (COP-DEM-GLO-30), tuiles N45_00_E006, N45_00_E007, N46_00_E006, N46_00_E007, https://copernicus-dem-30m.s3.amazonaws.com/ (jeu de données public AWS « Copernicus DEM », sans identifiant)
+- Licence : [Licence Copernicus WorldDEM-30 (instance COP-DEM-GLO-30-F : « Full, Free & Open »)](https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N45_00_E006_00_DEM/INFO/eula_F.pdf)
+- Ce que la licence permet et demande : Droits non exclusifs, gratuits, mondiaux et sans limite de durée : reproduction, distribution, communication au public, adaptation, modification et combinaison avec d'autres données (article 4). Obligations (article 6) : citer la source avec la mention ci-dessous quand les données sont adaptées, ajouter la phrase de non-responsabilité, ne pas laisser croire à un soutien officiel, et imposer ces obligations aux utilisateurs suivants. Aucun droit sur les marques ou logos du fournisseur.
+- Mention obligatoire (à reproduire telle quelle, en anglais) : « produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved »
+- Phrase de non-responsabilité obligatoire : « The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30 »
+- Dérivé : Image rendue (adaptation) : pas une redistribution des données d'altitude. Les tuiles brutes restent dans assets-src/ (non versionné).
+- Usage : Décor lointain vu par la grande baie : trois couches (far, mid, near) pour la parallaxe.
+- Fichiers : non construit
