@@ -131,7 +131,8 @@ interface Live {
   playbackBy: string | null;
   lastTickAt: number;
   lastError: string | null;
-  current: { itemId: string; title: string | null; progress: number } | null;
+  /** `finishing` : l'image est analysée, le service termine (voix, lecture des lèvres, débuts de scène). */
+  current: { itemId: string; title: string | null; progress: number; finishing?: boolean } | null;
   lastBatchTier: ScanTier | null;
 }
 
@@ -482,7 +483,11 @@ async function runTick(now: number): Promise<string | null> {
     slots = Math.min(slots, MAX_SERVICE_PENDING - pending);
     if (!live.current && health.queue?.running) {
       const row = getRow(health.queue.running);
-      live.current = { itemId: health.queue.running, title: row?.title ?? null, progress: 0 };
+      // Un élément déjà fini que le service traite encore : ses finitions (voix, lecture des lèvres, débuts de
+      // scène). Affiché « 0 % » jusqu'au 10/11/2026, comme si l'analyse repartait de zéro.
+      live.current = row?.status === "done"
+        ? { itemId: health.queue.running, title: row.title ?? null, progress: 1, finishing: true }
+        : { itemId: health.queue.running, title: row?.title ?? null, progress: 0 };
     }
     // La liste de priorité part en `normal`, comme l'épisode suivant d'un spectateur (`orders.ts`) : à
     // priorité égale le service sert dans l'ordre d'arrivée, et une commande à nous passée avant serait

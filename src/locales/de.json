@@ -3724,6 +3724,7 @@
     "speedUnknown": "Geschwindigkeit: noch nicht gemessen",
     "current": "Gerade: {title} — {percent} %",
     "currentOther": "Gerade: ein während eines Films angeforderter Titel — {percent} %",
+    "currentFinishing": "Läuft: {title} — Abschluss (Stimmen, Lippenlesen)",
     "errors": "Letzte Fehlschläge",
     "lastError": "Letzter Vorfall: {error}",
     "excludedWhy": "Ausgelassen: Animationsfilme und -serien sowie alles ohne bekannte Besetzung.",

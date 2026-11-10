@@ -3724,6 +3724,7 @@
     "speedUnknown": "Vitesse : pas encore mesurée",
     "current": "En cours : {title} — {percent} %",
     "currentOther": "En cours : un titre demandé pendant un film — {percent} %",
+    "currentFinishing": "En cours : {title} — finitions (voix, lecture des lèvres)",
     "errors": "Derniers échecs",
     "lastError": "Dernier incident : {error}",
     "excludedWhy": "Écartés : les films et séries d'animation, et ce qui n'a pas de distribution connue.",

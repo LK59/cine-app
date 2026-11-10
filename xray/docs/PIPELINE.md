@@ -604,7 +604,7 @@ Détection et empreinte font l'essentiel ; le décodage ne pèse que pour un fil
 |---|---|---|
 | Débit des réseaux (UHD 630) | 4,7 images/s + 19,0 visages/s | 8,7 images/s + 34,8 visages/s |
 | Processeur par image | ~200 ms | 8 ms |
-| Mémoire | sous 1,5 Go (1,2 Go relevé) | ~3,3 Go au pic (`mem_limit: 6g`) |
+| Mémoire | sous 1,5 Go (1,2 Go relevé) | ~3,3 Go au pic pour l'image seule ; avec voix et lecture des lèvres, jusqu'à ~6 Go comptés par le conteneur (tampons de l'iGPU inclus) — `mem_limit: 8g` |
 | Effet sur une transcodification de Jellyfin en cours | −8 % de vitesse | −39 % — d'où la bascule automatique sur le processeur pendant qu'il transcode |
 
 ### Toute une bibliothèque

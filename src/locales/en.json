@@ -3724,6 +3724,7 @@
     "speedUnknown": "Speed: not measured yet",
     "current": "Now: {title} — {percent} %",
     "currentOther": "Now: a title requested during a film — {percent} %",
+    "currentFinishing": "In progress: {title} — finishing (voices, lip reading)",
     "errors": "Latest failures",
     "lastError": "Latest incident: {error}",
     "excludedWhy": "Left out: animated films and series, and anything without a known cast.",

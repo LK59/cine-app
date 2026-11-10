@@ -127,7 +127,9 @@ export function XrayScanCard() {
         <div className="mt-3 space-y-1 text-xs text-subtle">
           {current && (
             <p className="truncate text-white">
-              {current.title
+              {current.finishing && current.title
+                ? t("xrayScan.currentFinishing", { title: current.title })
+                : current.title
                 ? t("xrayScan.current", { title: current.title, percent: Math.round(current.progress * 100) })
                 : t("xrayScan.currentOther", { percent: Math.round(current.progress * 100) })}
             </p>

@@ -370,7 +370,7 @@ GPU_RUNTIME=0` les laisse dehors). À savoir avant de l'activer :
 - **mémoire** : chaque forme de réseau compilée sur l'iGPU garde sa copie des poids, en mémoire
   partagée avec le système. Les lots sont donc complétés jusqu'à des paliers fixes (1, 8 ou 32
   visages ; le détecteur par 1 ou par 8 images), et seules les quatre dernières formes servies
-  restent compilées. Pic mesuré : ~3,3 Go — **passer `mem_limit` à `6g`** dans la composition ;
+  restent compilées. Pic mesuré : ~3,3 Go pour l'image seule, jusqu'à ~6 Go avec les voix et la lecture des lèvres (les tampons de l'iGPU comptent dans la mémoire du conteneur) — **passer `mem_limit` à `8g`** dans la composition ;
 - **Jellyfin garde l'iGPU** : tant qu'il transcode avec l'accélération matérielle (le même relevé
   des sessions que pour le décodage, toutes les 30 s), l'inférence repasse sur le processeur, puis
   revient sur l'iGPU. Mesuré le 09/11/2026 : une transcodification perdait 39 % de sa vitesse avec
@@ -475,7 +475,7 @@ Variables d'environnement du conteneur `laterna-xray` (toutes facultatives sauf 
 | `XRAY_EMBED_BATCH` | `32` | Visages empreintés par appel du réseau. |
 | `XRAY_FACES_PER_TRACK` | `2` | Visages empreintés au plus par piste (les meilleurs). |
 | `XRAY_DETECTOR_INT8` | `1` | Détecteur INT8 produit sur place au premier démarrage (`buffalo_l`, OpenVINO) ; `0` : réseau d'origine. Voir [Modèles et licences](#modèles-et-licences). |
-| `XRAY_OV_DEVICE` | `CPU` | `GPU` : inférence sur l'iGPU Intel (repasse sur le processeur pendant les transcodifications de Jellyfin ; `mem_limit: 6g`). Voir [Accélération matérielle](#accélération-matérielle). |
+| `XRAY_OV_DEVICE` | `CPU` | `GPU` : inférence sur l'iGPU Intel (repasse sur le processeur pendant les transcodifications de Jellyfin ; `mem_limit: 8g`). Voir [Accélération matérielle](#accélération-matérielle). |
 | `XRAY_VAAPI_NOREF` | `1` | `0` : sur l'iGPU, décoder aussi les images non référencées (comme avant la v4). |
 | `XRAY_INCREMENTAL` | `1` | `0` : assemblage refait en entier à chaque tronçon (même résultat, plus cher). |
 | `JELLYFIN_URL` | — | Adresse de Jellyfin, pour lui laisser l'iGPU et lire ses segments (génériques). |
@@ -540,7 +540,7 @@ docker exec laterna-xray python -c "import os,urllib.request as u; \
 | Une voix reste sans nom | Le rapport (`voices`) donne sa raison : `off_screen_no_candidate` (hors champ), `low_contrast` (toujours filmée avec les mêmes), `conflict_memory`, `second_big_voice`… ([docs/API.md](docs/API.md#raisons-dune-voix-sans-nom)). C'est le plus souvent voulu. |
 | Une série nomme mal après une erreur ancienne | Configuration → Acteurs à l'écran → Qualité des noms → « Réinitialiser la mémoire » (`POST /series/{id}/memory/reset`) : la mémoire est effacée et la série renommée sans relire les fichiers. |
 | Laterna montre « rien » pour un titre analysé | La route du lecteur répond `stale` quand le fichier a changé (autre ETag, durée différente) ; `none` pour un titre que le compte n'a pas le droit de voir ; l'option fermée à ce compte (`admins`) répond `off`. |
-| Mémoire épuisée avec l'inférence sur l'iGPU | `XRAY_OV_DEVICE=GPU` demande ~3,3 Go : `mem_limit: 6g`. Sinon revenir à `CPU`. |
+| Mémoire épuisée avec l'inférence sur l'iGPU | `XRAY_OV_DEVICE=GPU` avec les voix demande jusqu'à ~6 Go comptés : `mem_limit: 8g`. Sinon revenir à `CPU`. |
 
 ---
 

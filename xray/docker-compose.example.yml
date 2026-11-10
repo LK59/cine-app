@@ -26,7 +26,7 @@ services:
       # XRAY_VOICE_MODEL: wespeaker_r34
       XRAY_VOICE_THREADS: "2"
       # Inférence sur l'iGPU Intel, en option (voir le README, « Accélération matérielle ») :
-      # XRAY_OV_DEVICE: GPU      # et mem_limit: 6g plus bas
+      # XRAY_OV_DEVICE: GPU      # et mem_limit: 8g plus bas
       # Voies d'analyse (README, « Voies d'analyse ») : auto (défaut) ajoute une voie sur le processeur à
       # côté de l'iGPU quand cpus: atteint 8 et mem_limit 7g ; 1 ou 2 pour imposer.
       # XRAY_LANES: auto
@@ -48,7 +48,7 @@ services:
       - "993"
     # L'analyse est un travail de fond : bornée, et à priorité basse (nice/ionice dans l'image).
     cpus: 6   # 4 pour l'image, 2 pour les voix
-    mem_limit: 4g   # 6g avec XRAY_OV_DEVICE=GPU
+    mem_limit: 4g   # 8g avec XRAY_OV_DEVICE=GPU
     # Sous Jellyfin (1024 par défaut) quand le processeur est disputé : un transcodage passe devant
     # l'analyse, qui garde tout le processeur le reste du temps.
     cpu_shares: 256
