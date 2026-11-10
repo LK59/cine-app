@@ -308,18 +308,49 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
 
 ## Prochaine action
 
-**Le propriétaire a demandé (10/11, 18 h 35) de finir la passe en autonomie, livraison comprise, et de
-reprendre seul après une coupure.** Les six points, dans l'ordre — cocher ici au fur et à mesure :
+**Pause du 10/11 vers 19 h 20 (limite de session).** À la reprise : lire ce fichier, puis `immersion/logs/suite.log`.
 
-1. [ ] Portail vert (le relancer seul, machine calme, jusqu'au vert), puis commit côté application :
-       `src/app/api/viewport-diag/route.ts`, `src/lib/eventLogs.ts`, `src/__tests__/viewport-diag-route.test.ts`,
-       `.dockerignore` (ligne `immersion-bench`)
-2. [ ] Cuisson finale : `tools/bake/export.sh` puis `tools/bake/bake.sh --samples 192 --exposure -1.5` (~21 min),
-       une capture par pièce, commit de `public/assets/lightmaps/` et `tools/bake/`
-3. [~] (scénarios 01–05 verts le 10/11 ; reste : captures du dehors et de chaque pièce après la cuisson) Vérifications : bouton « Mesurer » dans un navigateur, scénarios `01-entree`, `04-panneau`, `05-mesure`
-       (et `02`, `03` de non-régression) sur l'instance jetable ; retouches du dehors revues sur captures
-4. [ ] Affiche `public/poster.jpg` (capture 2:3 du chalet, lumière finale)
-5. [ ] Livraison : rebase sur `main`, portail vert, version 10.34.0 (commit à part, `package.json` +
-       `package-lock.json` ligne 3), fusion, prévenir l'autre session, aucune lecture Jellyfin en cours, build
-       depuis une copie propre de `main`, `docker compose up -d --no-build`, prune, vérification, push en fond, CI
-6. [ ] Ménage (instance jetable, conteneur d'aperçu, `docker ps`), ce fichier à jour, récapitulatif final
+### Ce qui tourne sans surveillance
+
+1. La **cuisson finale des lightmaps** (`tools/bake/bake.sh --samples 192 --exposure -1.5`, conteneurs
+   `immersion-bake-*`), lancée à 18 h 50, ~21 min. Elle écrit `public/assets/lightmaps/` (pas encore commité :
+   le dossier est en cours de réécriture). Son journal est recopié dans `logs/bake.log` à la fin.
+2. La **chaîne `tools/apres-cuisson.sh`** (journal `logs/suite.log`, une ligne par étape) : attend la fin de la
+   cuisson, puis build (`logs/build.log`), captures de chaque pièce en Ultra (`captures/*.jpg`,
+   `logs/captures.log`), affiche recadrée (`public/poster.jpg`, `logs/affiche.log` ; la première version est
+   gardée dans `logs/poster-v1.jpg`), puis le portail de l'application jusqu'au vert, cinq essais au plus
+   (`logs/gate-N.log`, dernière ligne `exit=…`).
+   Si rien de cela n'a tourné (processus coupés) : relancer `sh tools/apres-cuisson.sh` depuis `immersion/`
+   après `tools/bake/bake.sh --samples 192 --exposure -1.5`.
+
+### Où on en est
+
+- Poussé : la branche `immersion` sur `origin` (rien sur `main`, rien de déployé).
+- Les cinq scénarios Playwright sont verts (01 sur l'instance jetable ; 02 à 05 sur l'aperçu du build).
+- **Le côté application (`immersion-bench`, DECISIONS §144, CLAUDE.md) est commité sur la branche SANS portail
+  vert**, à la demande du propriétaire pour la pause : cinq passages rouges d'affilée sur le seul
+  `cinemaRoute.test.tsx` (bloc « une navigation pendant le retour d'une fermeture » : un `popstate` attendu après
+  un vrai `history.back()` de jsdom, 3 ms seul, bloqué 5 s dans la suite complète ; il passe seul, 47/47 ; sans
+  rapport avec ces fichiers). **Aucune fusion tant qu'un portail entier n'est pas vert sur l'arbre rebasé.**
+- Le rebase sur `main` a été tenté puis annulé : il bute sur `immersion/tools/sofa/previews/` (cinq images
+  suivies par un ancien commit, ignorées depuis). Pour le refaire : écarter ce dossier
+  (`mv immersion/tools/sofa/previews /tmp/…`), `git rebase main`, le remettre. **Jamais pendant qu'une cuisson
+  ou une capture tourne** : le rebase retire les fichiers suivis le temps de rejouer les commits.
+
+### Les six points demandés (cocher au fur et à mesure)
+
+1. [~] Portail vert puis commit côté application — commité (voir ci-dessus), portail encore à obtenir : lire
+       `logs/gate-N.log`
+2. [~] Cuisson finale lancée ; reste : regarder `captures/` pièce par pièce (ombres des objets posés, pas de
+       fuite de lumière, canapé), puis commiter `public/assets/lightmaps/`
+3. [~] Scénarios 01–05 verts ; reste : revoir sur captures les retouches du dehors (`vallee`, `ouest`, `baie`,
+       fenêtre de la cuisine dans `cuisine`)
+4. [~] Affiche : première version faite (`logs/poster-v1.jpg`), recadrage en cours par la chaîne — choisir la
+       meilleure des deux, la commiter dans `public/poster.jpg`
+5. [ ] Livraison : rebase sur `main` (voir plus haut), portail vert, version 10.34.0 (commit à part,
+       `package.json` + `package-lock.json` ligne 3), fusion, prévenir l'autre session, aucune lecture Jellyfin en
+       cours, build depuis une copie propre de `main` (`docker build -t cine-app:latest --build-arg
+       BUILD_REF=<sha> .`), `docker compose up -d --no-build` dans la copie principale, `docker builder prune -f
+       --max-used-space 15GB`, vérification, push en fond, CI lue après coup
+6. [ ] Ménage (instance jetable `cine-regress-c992edf9` par `regress.sh clean`, conteneur `immersion-preview`,
+       `docker ps`), ce fichier à jour, récapitulatif final
