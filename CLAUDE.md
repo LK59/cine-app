@@ -487,8 +487,9 @@ watching (films in progress, the next five episodes of each series in progress),
 14 days, then the rest newest first — dated by Radarr/Sonarr's import date, never Jellyfin's `DateCreated`
 (the storage migration stamped 2 015 items with one day), and only files under `/media/movies/` or
 `/media/tv/` (`isLibraryPath`, checked on the real path before every order — never downloads, seeds or
-books). It feeds the service only when nothing plays
-(§88's `mustWaitForPlayback`), in `low`, two items ahead at most, one tick per minute on `globalThis`;
+books). It feeds the service during playback too (since 10/11/2026, `scanWaitsForPlayback`: the service
+yields the iGPU to a Jellyfin transcode and its container's `cpu_shares` sit below Jellyfin's;
+`XRAY_SCAN_DURING_PLAYBACK=false` waits for §88's `mustWaitForPlayback` instead), in `low`, two items ahead at most, one tick per minute on `globalThis`;
 state lives in `cine.db` (`scanStore.ts`). A file replaced at the same duration (± 1 s) is rebound
 (`rebindIfSameDuration`), never re-analysed, and the player serves its old scenes. Progress and controls:
 Configuration → Acteurs à l'écran (`/api/admin/xray/scan`, admin only). Above tier 1, a tier 0 the admin

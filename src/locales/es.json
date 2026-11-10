@@ -3614,7 +3614,7 @@
   },
   "xrayScan": {
     "nav": "Actores en pantalla",
-    "hint": "Toda la biblioteca analizada en segundo plano, para saber quién aparece en pantalla en cada película y cada episodio. El análisis solo avanza cuando nadie está viendo nada.",
+    "hint": "Toda la biblioteca analizada en segundo plano, para saber quién aparece en pantalla en cada película y cada episodio. Sigue durante las reproducciones, siempre por detrás de lo que se está viendo.",
     "title": "Análisis de la biblioteca",
     "off": "La opción «Actores en pantalla» está desactivada o aún no está configurada (Configuración → Conexiones).",
     "phase": {

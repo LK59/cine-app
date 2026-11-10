@@ -3614,7 +3614,7 @@
   },
   "xrayScan": {
     "nav": "Darsteller im Bild",
-    "hint": "Die ganze Mediathek wird im Hintergrund analysiert, damit bei jedem Film und jeder Folge bekannt ist, wer im Bild ist. Die Analyse läuft nur, wenn niemand etwas ansieht.",
+    "hint": "Die ganze Mediathek wird im Hintergrund analysiert, damit bei jedem Film und jeder Folge bekannt ist, wer im Bild ist. Sie läuft auch während der Wiedergabe weiter, immer nach dem, was gerade angesehen wird.",
     "title": "Analyse der Mediathek",
     "off": "Die Option „Darsteller im Bild“ ist ausgeschaltet oder noch nicht eingerichtet (Konfiguration → Verbindungen).",
     "phase": {

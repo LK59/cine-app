@@ -261,6 +261,18 @@ async function refreshWatching(now: number): Promise<void> {
   setWatching(await readWatching(), now - NEW_WINDOW_MS);
 }
 
+/**
+ * Le scan s'arrête-t-il pendant une lecture ? Non par défaut (consigne du propriétaire, 10/11/2026) :
+ * l'analyse ne gêne qu'un transcodage, et le service s'en écarte déjà — il rend l'iGPU dès que Jellyfin
+ * transcode, ses ordres partent en `low` derrière celui d'un spectateur, et son conteneur pèse moins que
+ * Jellyfin quand le processeur est disputé (`cpu_shares`). Attendre la fin de chaque lecture laissait la
+ * bibliothèque des semaines de plus. `XRAY_SCAN_DURING_PLAYBACK=false` (`.env`) rétablit l'attente pour
+ * une machine trop juste. Relu à chaque tour.
+ */
+export function scanWaitsForPlayback(): boolean {
+  return process.env.XRAY_SCAN_DURING_PLAYBACK?.trim().toLowerCase() === "false";
+}
+
 /** Les dossiers permis ont changé (`XRAY_LIBRARY_ROOTS`) : ce qui était « hors des dossiers » est revu. */
 function followLibraryRoots(): void {
   const roots = libraryRoots().join(",");
@@ -439,7 +451,8 @@ async function runTick(now: number): Promise<string | null> {
   }
   const { inflight, waiting } = await followInflight(now);
   let allowed = active;
-  const { wait, signal } = await mustWaitForPlayback(now);
+  const { wait: playing, signal } = await mustWaitForPlayback(now);
+  const wait = playing && scanWaitsForPlayback();
   if (wait) {
     // La liste de priorité est une demande explicite de l'administrateur : elle compte comme forcée —
     // tant qu'elle a du travail ; vide, l'état dit qu'on attend la fin de la lecture.

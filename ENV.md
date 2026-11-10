@@ -106,6 +106,7 @@ Set in the app: **Management → Configuration → Connections**, *Actors on scr
 | `XRAY_URL` | `http://laterna-xray:8000` | The service's address, from inside the container (same Docker network). |
 | `XRAY_API_KEY` | — | The key the service was started with (its own `XRAY_API_KEY`), sent as `Authorization: Bearer`. |
 | `XRAY_LIBRARY_ROOTS` | `/media/movies,/media/tv` | `.env` only. The folders, as Jellyfin sees them, whose files may be analysed — comma-separated. Anything else (downloads, seeds, books, a neighbour such as `/media/movies-seeds`) is never ordered, even if Jellyfin lists it. Changing it re-checks the items skipped as outside. |
+| `XRAY_SCAN_DURING_PLAYBACK` | `true` | `.env` only. Whether the library scan keeps feeding the analysis service while someone is watching. On by default: the analysis only competes with a server-side transcode, and the service already steps aside (it yields the integrated GPU, its orders are `low`, and the example compose gives its container fewer CPU shares than Jellyfin). `false` makes the scan wait for the end of every playback, except the priority list and a tier started by hand — for a server too small to do both. |
 
 ## Playback
 

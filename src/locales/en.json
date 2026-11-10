@@ -3614,7 +3614,7 @@
   },
   "xrayScan": {
     "nav": "On-screen cast",
-    "hint": "The whole library analysed in the background, to know who is on screen in every film and episode. The analysis only runs when nobody is watching.",
+    "hint": "The whole library analysed in the background, to know who is on screen in every film and episode. It keeps going during playback, always behind what viewers are watching.",
     "title": "Library analysis",
     "off": "The “On-screen cast” option is off, or not set up yet (Configuration → Connections).",
     "phase": {

@@ -49,6 +49,9 @@ services:
     # L'analyse est un travail de fond : bornée, et à priorité basse (nice/ionice dans l'image).
     cpus: 6   # 4 pour l'image, 2 pour les voix
     mem_limit: 4g   # 6g avec XRAY_OV_DEVICE=GPU
+    # Sous Jellyfin (1024 par défaut) quand le processeur est disputé : un transcodage passe devant
+    # l'analyse, qui garde tout le processeur le reste du temps.
+    cpu_shares: 256
 
 volumes:
   xray_data:

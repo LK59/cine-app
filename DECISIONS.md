@@ -8841,8 +8841,11 @@ peut décrire une forme remplacée depuis, il le dit).
   `off` / `admins` / `tous` (`XRAY_ENABLED`).
 - **Commandé** par la ligne `start` du journal du lecteur (l'élément en `high`, l'épisode suivant en
   `normal`) **et** par le planificateur de la bibliothèque : palier 0 (liste de priorité de
-  l'administrateur), 1 (ce qui se regarde), 2 (arrivées des quatorze derniers jours), 3 (le reste) ; rien
-  de neuf pendant une lecture sauf palier forcé ou palier 0 ; dossiers permis seulement
+  l'administrateur), 1 (ce qui se regarde), 2 (arrivées des quatorze derniers jours), 3 (le reste) ; **le
+  scan continue pendant une lecture** depuis le 10/11/2026 (`scanWaitsForPlayback` : il ne gêne qu'un
+  transcodage, et la priorité suffit — l'iGPU rendu à Jellyfin, ordres en `low`, `cpu_shares` du conteneur
+  sous ceux de Jellyfin) ; `XRAY_SCAN_DURING_PLAYBACK=false` rétablit l'attente (rien de neuf pendant une
+  lecture sauf palier forcé ou palier 0) ; dossiers permis seulement
   (`XRAY_LIBRARY_ROOTS`) ; animation écartée ; un fichier remplacé à durée égale rattaché sans
   réanalyse ; les épisodes dans l'ordre de la série, et une série finie renommée une fois.
 - **La rangée « À l'écran »** du lecteur : **avec les commandes, en lecture comme en pause** (10.27),
@@ -9179,7 +9182,8 @@ et commande d'une séance), `xray-scan-route.test.ts` (portes, liste de priorit�
   reste affiché jusqu'au succès. La relecture du palier 1 (dix minutes) date sa tentative, plus son succès.
 - **Aucune lecture inutile** : la relecture du plan et du palier 1 se fait après la pause et après
   `mustWaitForPlayback`. Tous les paliers en pause : rien n'est lu (ni Jellyfin, ni les comptes, ni le service).
-  Pendant une lecture : rien, sauf palier forcé ou liste de priorité avec du travail.
+  Pendant une lecture : le scan continue (10/11/2026) ; avec `XRAY_SCAN_DURING_PLAYBACK=false`, rien, sauf palier
+  forcé ou liste de priorité avec du travail.
 - **Le palier 0 ne passe jamais devant un spectateur.** Il part en `normal`, comme l'épisode suivant qu'une
   séance commande (`orders.ts`), et le service sert à priorité égale dans l'ordre d'arrivée
   (`ORDER BY priority, seq`) : une commande à nous arrivée avant aurait été servie avant la sienne. Il n'est

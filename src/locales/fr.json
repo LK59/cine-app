@@ -3614,7 +3614,7 @@
   },
   "xrayScan": {
     "nav": "Acteurs à l'écran",
-    "hint": "Toute la bibliothèque analysée en fond, pour savoir qui est à l'écran dans chaque film et chaque épisode. L'analyse ne tourne que lorsque personne ne regarde.",
+    "hint": "Toute la bibliothèque analysée en fond, pour savoir qui est à l'écran dans chaque film et chaque épisode. Elle continue pendant les lectures, toujours après ce que les spectateurs regardent.",
     "title": "Analyse de la bibliothèque",
     "off": "L'option « Acteurs à l'écran » est coupée, ou n'est pas encore réglée (Configuration → Connexions).",
     "phase": {

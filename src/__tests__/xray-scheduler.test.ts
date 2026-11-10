@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 /**
  * Le planificateur des acteurs à l'écran (DECISIONS.md §138, « Le planificateur de la bibliothèque ») :
@@ -210,7 +210,23 @@ describe("quand personne ne regarde", () => {
   });
 });
 
-describe("pendant une lecture", () => {
+describe("pendant une lecture, par défaut", () => {
+  it("le scan continue (XRAY_SCAN_DURING_PLAYBACK absent)", async () => {
+    play.wait = true;
+    await scanTick(NOW);
+    expect(enqueuedIds()).toEqual([id("1"), id("2")]);
+    expect(xrayScanStatus()).toMatchObject({ phase: "running" });
+  });
+});
+
+describe("pendant une lecture, XRAY_SCAN_DURING_PLAYBACK=false", () => {
+  beforeEach(() => {
+    process.env.XRAY_SCAN_DURING_PLAYBACK = "false";
+  });
+  afterEach(() => {
+    delete process.env.XRAY_SCAN_DURING_PLAYBACK;
+  });
+
   it("rien ne part, et l'état le dit", async () => {
     play.wait = true;
     await scanTick(NOW);
@@ -517,7 +533,8 @@ describe("aucune lecture inutile", () => {
     expect(xrayScanStatus().phase).toBe("paused");
   });
 
-  it("pendant une lecture sans palier forcé : les comptes ne sont pas relus", async () => {
+  it("pendant une lecture sans palier forcé (XRAY_SCAN_DURING_PLAYBACK=false) : les comptes ne sont pas relus", async () => {
+    vi.stubEnv("XRAY_SCAN_DURING_PLAYBACK", "false");
     await scanTick(NOW);
     const reads = lib.watchingReads;
     play.wait = true;

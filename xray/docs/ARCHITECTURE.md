@@ -258,14 +258,18 @@ flowchart TD
 
 ## Partager la machine avec Jellyfin
 
-Jellyfin garde la priorité, à trois niveaux :
+Jellyfin garde la priorité, à quatre niveaux :
 
-1. **Côté Laterna** : le planificateur ne commande rien de neuf pendant une lecture (séance Jellyfin,
-   relais de flux de Laterna, battement de lecture, puis cinq minutes), sauf palier forcé ou palier 0.
-2. **Le décodage** : avec `JELLYFIN_URL` et `JELLYFIN_API_KEY`, le service relit les sessions de Jellyfin
+1. **Côté Laterna** : le planificateur continue pendant une lecture, en `low` (l'ordre d'un spectateur,
+   `high`, passe devant). Avec `XRAY_SCAN_DURING_PLAYBACK=false`, il ne commande rien de neuf pendant une
+   lecture (séance Jellyfin, relais de flux de Laterna, battement de lecture, puis cinq minutes), sauf
+   palier forcé ou palier 0 — pour une machine trop juste pour les deux.
+2. **Le processeur** : `cpu_shares: 256` dans le compose d'exemple, sous les 1024 de Jellyfin. Quand le
+   processeur est disputé, un transcodage passe devant ; le reste du temps l'analyse a tout.
+3. **Le décodage** : avec `JELLYFIN_URL` et `JELLYFIN_API_KEY`, le service relit les sessions de Jellyfin
    avant chaque ordre et toutes les 30 s ; si l'une transcode avec l'accélération matérielle, les tronçons
    suivants sont décodés sur le processeur.
-3. **L'inférence sur l'iGPU** (option `XRAY_OV_DEVICE=GPU`) : tant que Jellyfin transcode sur l'iGPU,
+4. **L'inférence sur l'iGPU** (option `XRAY_OV_DEVICE=GPU`) : tant que Jellyfin transcode sur l'iGPU,
    l'inférence repasse sur le processeur, puis revient (`device_switch` au journal). Mesuré : une
    transcodification perdait 39 % de sa vitesse avec l'inférence sur l'iGPU, 8 % avec l'inférence sur le
    processeur.
