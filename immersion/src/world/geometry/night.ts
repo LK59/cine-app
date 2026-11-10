@@ -109,9 +109,11 @@ export function buildNight(): Part {
   metal.span(-0.66, hall.x1 - 0.06, 0, 0.08, hall.z1 + 0.12, hall.z1 + 0.62);
   for (const x of [-0.46, 0.02, 0.5, 0.96]) cabinet.rounded([0.455, 2.14, 0.022], 0.006, { at: [x, 1.19, hall.z1 + 0.69] }, 1);
   const tv = SCREENS.find((screen) => screen.id === "chambre")!;
-  cabinet.span(hall.x1 - 0.42, hall.x1 - 0.01, 0.1, 0.56, tv.center[2] - 0.85, tv.center[2] + 0.85, 2);
-  wood.span(hall.x1 - 0.44, hall.x1, 0.56, 0.59, tv.center[2] - 0.87, tv.center[2] + 0.87, 2);
-  metal.span(hall.x1 - 0.38, hall.x1 - 0.05, 0, 0.1, tv.center[2] - 0.8, tv.center[2] + 0.8);
+  // Le meuble bas déborde l'écran de chaque côté, comme sous une vraie télévision.
+  const half = tv.width / 2 + 0.22;
+  cabinet.span(hall.x1 - 0.42, hall.x1 - 0.01, 0.1, 0.56, tv.center[2] - half, tv.center[2] + half, 2);
+  wood.span(hall.x1 - 0.44, hall.x1, 0.56, 0.59, tv.center[2] - half - 0.02, tv.center[2] + half + 0.02, 2);
+  metal.span(hall.x1 - 0.38, hall.x1 - 0.05, 0, 0.1, tv.center[2] - half + 0.05, tv.center[2] + half - 0.05);
   // La tringle et les rideaux de la fenêtre : deux pans de lin, tirés de chaque côté.
   metal.beam([win.x0 - 0.5, win.y1 + 0.2, zEnd - 0.12], [win.x1 + 0.5, win.y1 + 0.2, zEnd - 0.12], 0.02, 0.02);
   for (const x of [win.x0 - 0.3, win.x1 + 0.3]) {

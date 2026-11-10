@@ -3,7 +3,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { applyAcoustics, audio } from "../media/audio";
 import { syncMix } from "../media/playback";
 import { useStore } from "../state/store";
-import { CHANDELIER, ROOM, roomAt, SCREENS, type RoomId } from "./layout";
+import { CHANDELIER, rangeGain, ROOM, roomAt, SCREENS, type RoomId } from "./layout";
 import { rig } from "./rig";
 
 /**
@@ -48,7 +48,11 @@ export function SoundScape() {
 
   useFrame(() => {
     const here = roomAt(rig.position.x, rig.position.y, rig.position.z);
-    for (const screen of SCREENS) applyAcoustics(screen.id, cutoffBetween(screen.room, here));
+    for (const screen of SCREENS) {
+      // La distance de l'oreille à la dalle décide de ce qu'il reste de son haut-parleur (sa portée).
+      const distance = Math.hypot(screen.center[0] - rig.eye.x, screen.center[1] - rig.eye.y, screen.center[2] - rig.eye.z);
+      applyAcoustics(screen.id, cutoffBetween(screen.room, here), rangeGain(screen, distance));
+    }
   });
 
   return (

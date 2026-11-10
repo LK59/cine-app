@@ -30,7 +30,9 @@ export const ROOF_ANGLE = Math.atan(ROOF_SLOPE);
 export const roofY = (x: number) => ROOM.ridge - Math.abs(x) * ROOF_SLOPE;
 
 /** Les fermes de la charpente : leur position le long du salon. */
-export const TRUSSES = [-4.25, -1.5, 1.25] as const;
+// Les deux fermes extérieures encadrent le massif de pierre : plus serrées, leurs aisseliers mordaient sur les coins
+// hauts du grand écran, vus du canapé.
+export const TRUSSES = [-4.55, -1.5, 1.55] as const;
 
 /** Le massif de pierre qui porte la télévision : il avance dans la pièce depuis le mur est. */
 export const BREAST = {
@@ -42,11 +44,12 @@ export const BREAST = {
 
 /** La télévision du salon, encastrée dans le massif de pierre. 16:9. */
 export const TV = {
-  width: 4.6,
-  height: 4.6 * (9 / 16),
+  // 5,2 m de large : presque tout le massif (6 m), du dessus des bougies du manteau jusque sous la sablière.
+  width: 5.2,
+  height: 5.2 * (9 / 16),
   /** La dalle, en retrait de la face du massif. */
   x: BREAST.face + 0.07,
-  y: 2.42,
+  y: 2.78,
   z: -1.5,
 } as const;
 
@@ -114,15 +117,27 @@ export interface Screen {
   reach: number;
   /** Distance de référence de son haut-parleur : en deçà, plein volume. */
   loudness: number;
+  /**
+   * Portée de son haut-parleur, en mètres : au-delà, on ne l'entend plus du tout (le son s'éteint en
+   * douceur sur le dernier quart). Les portées se recouvrent exprès : dans la cuisine on entend son
+   * écran et, plus loin, celui du salon ; dans le couloir, celui de la cuisine et celui de la chambre.
+   */
+  range: number;
 }
 
 export const SCREENS: Screen[] = [
-  { id: "salon", room: "salon", center: [TV.x, TV.y, TV.z], yaw: -Math.PI / 2, width: TV.width, reach: 6.4, loudness: 5.5 },
+  { id: "salon", room: "salon", center: [TV.x, TV.y, TV.z], yaw: -Math.PI / 2, width: TV.width, reach: 6.4, loudness: 5.5, range: 14 },
   // Dans la cuisine, sur le mur est, au-dessus du buffet.
-  { id: "cuisine", room: "cuisine", center: [ROOM.halfW - 0.04, 1.72, 7.3], yaw: -Math.PI / 2, width: 1.5, reach: 4.2, loudness: 2.2 },
-  // Dans la chambre, face au lit.
-  { id: "chambre", room: "chambre", center: [PLAN.bedroom.x1 - 0.04, 1.5, PLAN.bedroom.z0 + 2.6], yaw: -Math.PI / 2, width: 1.25, reach: 4, loudness: 2 },
+  { id: "cuisine", room: "cuisine", center: [ROOM.halfW - 0.04, 1.72, 7.3], yaw: -Math.PI / 2, width: 1.5, reach: 4.2, loudness: 2.2, range: 8 },
+  // Dans la chambre, au mur face au lit, au-dessus de son meuble bas.
+  { id: "chambre", room: "chambre", center: [PLAN.bedroom.x1 - 0.04, 1.5, PLAN.bedroom.z0 + 2.6], yaw: -Math.PI / 2, width: 1.9, reach: 4.4, loudness: 2.8, range: 7 },
 ];
+
+/** Ce qui reste du son d'un écran à cette distance de lui : 1 jusqu'aux trois quarts de sa portée, 0 au bout. */
+export function rangeGain(screen: Screen, distance: number): number {
+  const t = Math.min(1, Math.max(0, (distance - screen.range * 0.75) / (screen.range * 0.25)));
+  return 1 - t * t * (3 - 2 * t);
+}
 
 export const screenHeight = (screen: Screen) => (screen.width * 9) / 16;
 

@@ -34,6 +34,8 @@ export const VIEWS = {
   couloir: { x: -4.6, z: 10.9, yaw: -Math.PI / 2, pitch: 0 },
   chambre: { x: -0.2, z: 12.9, yaw: 1.05, pitch: -0.06 },
   lit: { x: -2.4, z: 16.0, yaw: -0.5, pitch: -0.08 },
+  // La télévision de la chambre, vue du pied du lit.
+  telechambre: { x: -2.9, z: 14.3, yaw: -Math.PI / 2, pitch: 0.02 },
 };
 
 const wanted = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(VIEWS);

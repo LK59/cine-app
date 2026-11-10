@@ -9,13 +9,14 @@ import { AudioContext as ThreeAudioContext, AudioListener, PositionalAudio } fro
  * choses s'y ajoutent : un passe-bas qui étouffe le son quand un mur sépare le visiteur de l'écran,
  * et une réverbération courte, dont la réponse impulsionnelle est fabriquée ici.
  *
- *   vidéo ──► passe-bas ──► panoramique ──► gain ──┬──────────────► maître ──► sortie    (par écran)
+ *   vidéo ──► passe-bas ──► portée ──► panoramique ──► gain ──┬──────────────► maître ──► sortie    (par écran)
  *     │                                            └─► convolution ─► dosage ─┘
  *     └──────────────► direct (spatialisation coupée) ─────────────────────┘
  *
  * Il y a **un haut-parleur par écran**, tous branchés en parallèle sur la même source : la même piste,
- * au même instant, sort de chaque télévision avec sa propre atténuation et son propre filtre. Le son
- * suit donc de lui-même l'écran le plus proche quand on change de pièce.
+ * au même instant, sort de chaque télévision avec sa propre atténuation, son propre filtre et sa propre
+ * **portée** — au-delà, cet écran ne s'entend plus. Les portées se recouvrent : par endroits on entend
+ * deux télévisions à la fois, chacune de son côté, et le son suit de lui-même quand on change de pièce.
  *
  * Une fois la piste entrée dans le graphe, **tout** le son de la vidéo passe par lui : le volume et
  * le silence se règlent donc sur le gain maître, jamais sur l'élément.
@@ -24,7 +25,7 @@ interface Graph {
   context: AudioContext;
   listener: AudioListener;
   /** Les haut-parleurs des écrans, par identifiant d'écran : chacun est à accrocher à sa dalle. */
-  speakers: Map<string, { sound: PositionalAudio; lowpass: BiquadFilterNode }>;
+  speakers: Map<string, { sound: PositionalAudio; lowpass: BiquadFilterNode; reach: GainNode }>;
   /** La piste de la vidéo, une fois entrée dans le graphe. */
   source: MediaElementAudioSourceNode | null;
   convolver: ConvolverNode;
@@ -179,9 +180,12 @@ export function speaker(id: string, loudness: number): PositionalAudio {
   lowpass.type = "lowpass";
   lowpass.frequency.value = 20000;
   lowpass.Q.value = 0.5;
-  sound.setFilters([lowpass]);
+  // La portée : un gain propre à ce haut-parleur, fermé quand le visiteur est trop loin de l'écran
+  // (`applyAcoustics`). À part du gain de `PositionalAudio`, qui porte le réglage « son spatialisé ».
+  const reach = g.context.createGain();
+  sound.setFilters([lowpass, reach]);
   sound.gain.connect(g.convolver);
-  g.speakers.set(id, { sound, lowpass });
+  g.speakers.set(id, { sound, lowpass, reach });
   if (g.source) sound.setNodeSource(g.source as unknown as AudioBufferSourceNode);
   return sound;
 }
@@ -218,12 +222,28 @@ export function applyMix(mix: Mix): void {
 
 /**
  * L'acoustique entre le visiteur et un écran : `cutoff` est la fréquence au-delà de laquelle le son de
- * cet écran ne lui parvient plus (un mur entre eux ne laisse passer que les graves).
+ * cet écran ne lui parvient plus (un mur entre eux ne laisse passer que les graves), `reach` ce qu'il
+ * reste de ce son à cette distance (1 près de l'écran, 0 hors de sa portée).
  */
-export function applyAcoustics(screenId: string, cutoff: number): void {
+export function applyAcoustics(screenId: string, cutoff: number, reach: number): void {
   const entry = graph?.speakers.get(screenId);
   if (!graph || !entry) return;
-  entry.lowpass.frequency.setTargetAtTime(cutoff, graph.context.currentTime, 0.18);
+  // Tant que le contexte dort (avant le premier geste, onglet suspendu), son horloge est arrêtée et une
+  // glissade ne partirait jamais : les valeurs sont posées telles quelles, et le son se réveille juste.
+  if (graph.context.state !== "running") {
+    entry.lowpass.frequency.value = cutoff;
+    entry.reach.gain.value = reach;
+    return;
+  }
+  const now = graph.context.currentTime;
+  entry.lowpass.frequency.setTargetAtTime(cutoff, now, 0.18);
+  entry.reach.gain.setTargetAtTime(reach, now, 0.12);
+}
+
+/** Ce que chaque haut-parleur laisse passer à cet instant — pour les tests et le diagnostic. */
+export function speakerLevels(): { id: string; reach: number; cutoff: number }[] {
+  if (!graph) return [];
+  return [...graph.speakers].map(([id, entry]) => ({ id, reach: entry.reach.gain.value, cutoff: entry.lowpass.frequency.value }));
 }
 
 /** Tout rendre : sons d'ambiance arrêtés, contexte fermé. */
