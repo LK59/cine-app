@@ -7,7 +7,7 @@ import { useProfile } from "../state/store";
 import { WEST_WINDOW, WEST_WINDOWS } from "./geometry/salon";
 import { ktx2For } from "./ktx2";
 import { glassMaterial } from "./glass";
-import { BEDROOM_WINDOW, DOOR, KITCHEN, MOON, PLAN, ROOM } from "./layout";
+import { BEDROOM_WINDOW, DOOR, KITCHEN, MOON, PLAN, ROOM, TERRACE } from "./layout";
 import { Snow } from "./Snow";
 
 /** La lune vue dans le ciel, et la direction de sa lumière — voir `MOON` dans le plan. */
@@ -53,16 +53,21 @@ const smooth = (a: number, b: number, x: number) => {
 const FOREGROUND = 240;
 
 /**
- * La hauteur du sol au premier plan. Le chalet est posé sur un replat ; tout autour le terrain
- * s'abaisse — plus vite au nord, vers la vallée — pour que son bord lointain passe sous l'horizon du
- * panorama au lieu de le couper.
+ * La hauteur du sol au premier plan. Le chalet est posé sur un replat, **au bord du vide** : au nord,
+ * passé le garde-corps de la terrasse, le terrain plonge vers la vallée — une vingtaine de mètres en
+ * dix, soixante en quarante. C'est ce qui donne la vue : de la terrasse on regarde le village en
+ * contrebas et le massif en face, pas un champ de neige. Sur les côtés et derrière, la pente est douce.
  */
 export function groundHeight(x: number, z: number): number {
   const r = Math.hypot(x, z);
   const north = 0.55 + 0.45 * smooth(-60, 60, -z);
   const drop = smooth(11, FOREGROUND, r) * 46 * north;
   const rolling = (fbm(x * 0.022 + 3, z * 0.022 + 7) - 0.5) * 7 * smooth(12, 70, r);
-  return -0.42 - drop + rolling;
+  // Le bord du replat : juste au-delà du garde-corps. Devant, le vide ; l'aplomb s'adoucit sur les côtés.
+  const beyond = Math.max(0, TERRACE.z0 - 0.5 - z);
+  const front = 0.35 + 0.65 * smooth(120, 45, Math.abs(x));
+  const cliff = (1 - Math.exp(-beyond / 15)) * 66 * front;
+  return -0.42 - drop - cliff + rolling * (1 - 0.5 * smooth(0, 12, beyond));
 }
 
 /**
@@ -167,7 +172,7 @@ const SKY_FRAGMENT = /* glsl */ `
     // Les étoiles : une grille de directions, une étoile dans une cellule sur quarante.
     vec3 cell = floor(d * 190.0);
     float star = hash(cell);
-    float twinkle = step(0.976, star) * smoothstep(0.02, 0.3, h);
+    float twinkle = step(0.962, star) * smoothstep(0.02, 0.3, h);
     vec3 local = fract(d * 190.0) - 0.5;
     vec3 stars = vec3(0.85, 0.9, 1.0) * twinkle * smoothstep(0.42, 0.0, length(local)) * (0.55 + 1.6 * hash(cell + 3.0));
 
@@ -288,7 +293,7 @@ const SNOW_FRAGMENT = /* glsl */ `
     // La lumière des fenêtres, sur la neige à leur pied.
     vec2 toWindow = vec2(max(abs(vWorld.x) - 5.2, 0.0), max(uNorth - vWorld.z, 0.0));
     float glow = exp(-length(toWindow) * 0.34) * step(vWorld.z, uNorth + 0.5);
-    color += vec3(1.0, 0.62, 0.3) * 0.42 * glow * albedo;
+    color += vec3(1.0, 0.62, 0.3) * 0.36 * glow * albedo;
     // Le bord du premier plan s'efface : derrière lui, ce sont les couches du panorama.
     float alpha = 1.0 - smoothstep(uEdge * 0.72, uEdge, length(vWorld.xz));
     gl_FragColor = vec4(outdoorFog(color, distance), alpha);
@@ -352,11 +357,13 @@ const FIR_FRAGMENT = /* glsl */ `
   }
 `;
 
-const FOG_COLOR = new Color("#0c1a36");
+// Une nuit noire : au loin, tout se fond dans un bleu presque noir.
+const FOG_COLOR = new Color("#03070f");
 const outdoorUniforms = () => ({
   uMoonDir: { value: MOONLIGHT_DIRECTION },
-  uMoonColor: { value: new Color(0.42, 0.56, 0.95) },
-  uSkyColor: { value: new Color(0.035, 0.065, 0.16) },
+  // La lune est la seule lumière du dehors : la neige qu'elle touche est lisible, l'ombre presque noire.
+  uMoonColor: { value: new Color(0.15, 0.21, 0.4) },
+  uSkyColor: { value: new Color(0.006, 0.011, 0.028) },
   uFogColor: { value: FOG_COLOR },
   uFogDensity: { value: 0.0052 },
 });
@@ -473,8 +480,8 @@ export function Exterior() {
         uniforms: {
           uMoon: { value: MOON_DIRECTION.clone() },
           uTime: { value: 0 },
-          uHorizon: { value: new Color(0.075, 0.16, 0.36) },
-          uZenith: { value: new Color(0.012, 0.028, 0.085) },
+          uHorizon: { value: new Color(0.012, 0.024, 0.06) },
+          uZenith: { value: new Color(0.0015, 0.003, 0.011) },
           uFar: { value: null },
           uHasFar: { value: 0 },
           uGain: { value: 1 },
@@ -560,7 +567,9 @@ export function Exterior() {
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
       // Pas devant la baie de trop près : la vue plonge d'abord sur la pente, vers la vallée.
-      if (z < 0 && z > -70 && Math.abs(x) < 12 + (-z - 8) * 0.22) continue;
+      // Rien tout contre la terrasse ni devant elle à sa hauteur : la vue d'abord. Plus bas sur la pente,
+      // les sapins reviennent — on voit leurs cimes en contrebas, ce qui donne la profondeur.
+      if (z < 0 && z > TERRACE.z0 - 14 && Math.abs(x) < 13 + (-z - 8) * 0.25) continue;
       // Des bosquets, pas un semis régulier.
       if (fbm(x * 0.04 + 20, z * 0.04 + 20, 3) < 0.42 + random() * 0.14) continue;
       const height = 6 + random() * 9;
@@ -628,7 +637,7 @@ export function Exterior() {
 }
 
 /**
- * Le panorama est une image finie, faite pour être vue telle quelle ; ici elle traverse le mappage de
- * tons de la scène, qui l'assombrit. Ce gain le compense (réglé à l'œil, sur captures).
+ * Le panorama est une image finie, rendue pour la nuit voulue (noire, la lune, le village) ; ce gain
+ * compense au besoin le mappage de tons de la scène, qu'elle traverse (réglé à l'œil, sur captures).
  */
-const PANORAMA_GAIN = 1.6;
+const PANORAMA_GAIN = 1.0;

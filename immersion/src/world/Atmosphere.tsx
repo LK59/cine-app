@@ -26,7 +26,7 @@ export function Atmosphere() {
   const kept = useRef<Texture | null>(null);
 
   useEffect(() => {
-    scene.fog = new FogExp2("#0c1a36", 0.0048);
+    scene.fog = new FogExp2("#03070f", 0.0048);
     return () => {
       scene.fog = null;
       scene.environment = null;

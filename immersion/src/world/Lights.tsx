@@ -74,7 +74,7 @@ export function Lights() {
   if (baked)
     return (
       <group>
-        <hemisphereLight args={["#6f8fd0", "#2a1d14", 0.22]} />
+        <hemisphereLight args={["#5670a8", "#2a1d14", 0.14]} />
         <pointLight ref={chandelier} position={[CHANDELIER.x, CHANDELIER.y + 0.42, CHANDELIER.z]} color="#ffc98f" intensity={base.chandelier} distance={18} decay={2} />
         {profile.fillLights ? (
           <>
@@ -87,7 +87,7 @@ export function Lights() {
 
   return (
     <group>
-      <hemisphereLight args={["#6f8fd0", "#2a1d14", 0.22]} />
+      <hemisphereLight args={["#5670a8", "#2a1d14", 0.14]} />
 
       <pointLight
         ref={chandelier}

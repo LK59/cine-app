@@ -35,6 +35,8 @@ export const VIEWS = {
   chambre: { x: -0.2, z: 12.9, yaw: 1.05, pitch: -0.06 },
   lit: { x: -2.4, z: 16.0, yaw: -0.5, pitch: -0.08 },
   // La terrasse et son bain, la baie vue du dehors, le foyer et le chat, la chaîne hi-fi.
+  // Au garde-corps, le regard plongeant vers la vallée.
+  vue: { x: -1.2, z: -11.3, yaw: 0.05, pitch: -0.2 },
   terrasse: { x: -2.6, z: -10.6, yaw: -2.1, pitch: -0.08 },
   bain: { x: 1.4, z: -8.3, yaw: -2.2, pitch: -0.22 },
   dehors: { x: -3.8, z: -11.0, yaw: Math.PI + 0.35, pitch: 0.12 },

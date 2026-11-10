@@ -46,7 +46,7 @@ const FRAGMENT = /* glsl */ `
     float d = length(gl_PointCoord - 0.5) * 2.0;
     float a = smoothstep(1.0, 0.2, d) * vFade;
     if (a < 0.01) discard;
-    vec3 cold = vec3(0.62, 0.74, 1.0) * 0.9;
+    vec3 cold = vec3(0.62, 0.74, 1.0) * 0.4;
     vec3 warm = vec3(1.0, 0.74, 0.46) * 1.5;
     gl_FragColor = vec4(mix(cold, warm, vWarm), a);
   }

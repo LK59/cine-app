@@ -169,7 +169,8 @@ fs.writeFileSync(
       groups,
       lights,
       // Le ciel de nuit : un éclairement faible et bleu, qui entre par les ouvertures (elles sont de vrais trous).
-      sky: { color: hex("#5f80c8"), irradiance: 0.5 },
+      // Une nuit noire : le ciel n'apporte presque rien, c'est la lune qui dessine (taches sur le parquet, ombres nettes).
+      sky: { color: hex("#4a66a8"), irradiance: 0.12 },
       // Ce que 1,0 vaut dans la lightmap : l'éclairement est divisé par cette valeur avant d'être écrit (sRGB, 8 bits).
       range: 64,
     },
