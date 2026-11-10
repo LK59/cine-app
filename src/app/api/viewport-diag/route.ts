@@ -10,6 +10,8 @@ import { viewportDiagAllowed } from "@/lib/writeLimits";
  * depuis le 07/11/2026 la mesure d'un retour au premier plan (`kind: "retour"`, `returnDiag.ts`), et depuis
  * le 09/11/2026 le clavier du panneau « Poser une question » (`kind: "clavier"`, `ask/viewport.ts`), et depuis
  * 10.29.1 la rangée « À l'écran » et le panneau d'une personne (`kind: "xray-ui"`, `xrayUiDiag.ts`).
+ * Et la mesure du mode Immersion (`kind: "immersion-bench"`, DECISIONS §144) : il n'a pas d'autre journal que
+ * celui-ci, et ses chiffres — images par seconde par préréglage, carte graphique — décident de ses réglages.
  *
  * Le compte vient de la session, jamais du corps. Seuls les champs connus, bornés ; le reste tombe.
  * Rien n'est renvoyé.
@@ -29,6 +31,9 @@ const XRAY_UI_OPACITIES = ["rowOpacity", "firstOpacity", "panelOpacity", "layerO
 const XRAY_UI_HIDDEN = ["rowHiddenBy", "firstHiddenBy", "panelHiddenBy"] as const;
 const XRAY_UI_BOOLEANS = ["overflow", "early"] as const;
 const XRAY_UI_BOXES = ["row", "first", "pill", "panel"] as const;
+
+/** Les préréglages qu'une mesure du mode Immersion peut nommer. */
+const IMMERSION_PRESETS = new Set(["low", "medium", "high", "ultra"]);
 
 const px = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) && Math.abs(value) < 100_000 ? Math.round(value) : null;
@@ -134,6 +139,45 @@ export async function POST(req: NextRequest) {
         version: str(body.version, 20),
       },
       "xray-ui",
+    );
+    return new NextResponse(null, { status: 204 });
+  }
+  // Le bouton « Mesurer » du mode Immersion (`immersion/src/bench/`) : un parcours fixe de caméra par
+  // préréglage, avec et sans vidéo. Une ligne par passage : cadence moyenne, 1 % le plus lent, carte
+  // graphique annoncée par le navigateur, définition réellement rendue.
+  if (body.kind === "immersion-bench") {
+    const preset = typeof body.preset === "string" && IMMERSION_PRESETS.has(body.preset) ? body.preset : null;
+    if (!preset) return NextResponse.json({ error: "Corps invalide" }, { status: 400 });
+    const rate = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1000 ? Math.round(value * 10) / 10 : null);
+    logViewportDiag(
+      {
+        user: session.jfUser ?? session.u,
+        device: requestDeviceLabel(req),
+        run: str(body.run, 12),
+        preset,
+        video: body.video === true,
+        // Avec vidéo : le film en cours (son décodage compte), ou une mire 1080p faite sur place.
+        videoSource: body.videoSource === "film" || body.videoSource === "mire" ? body.videoSource : undefined,
+        videoHeight: px(body.videoHeight) ?? undefined,
+        fps: rate(body.fps),
+        low1: rate(body.low1),
+        frames: px(body.frames),
+        seconds: rate(body.seconds),
+        renderer: str(body.renderer, 160),
+        vendor: str(body.vendor, 80),
+        width: px(body.width),
+        height: px(body.height),
+        cssWidth: px(body.cssWidth),
+        cssHeight: px(body.cssHeight),
+        dpr: rate(body.dpr),
+        scale: rate(body.scale),
+        supersampling: body.supersampling === true,
+        baked: body.baked === true,
+        hz: px(body.hz),
+        build: str(body.build, 40),
+        version: str(body.version, 20),
+      },
+      "immersion-bench",
     );
     return new NextResponse(null, { status: 204 });
   }

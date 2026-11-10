@@ -38,6 +38,7 @@ immersion/dist
 immersion/assets-src
 immersion/tools
 immersion/tests
+immersion/docs
 immersion/captures
 immersion/test-results
 immersion/.env
