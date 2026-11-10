@@ -94,11 +94,13 @@ def cached_photo_embeddings(db: Database, model: str, cast: list[CastMember]) ->
     return out
 
 
-def series_embeddings(db: Database, series_id: str | None, model: str) -> dict[int, np.ndarray]:
-    """La mémoire des visages de la série : la moyenne pondérée des contributions de ses épisodes (memory.py)."""
+def series_embeddings(db: Database, series_id: str | None, model: str,
+                      exclude_item: str | None = None) -> dict[int, np.ndarray]:
+    """La mémoire des visages de la série : la moyenne pondérée des contributions de ses épisodes (memory.py),
+    sans celle de l'épisode `exclude_item` lui-même."""
     from . import memory
 
-    return memory.recall(db, series_id, "face", model)
+    return memory.recall(db, series_id, "face", model, exclude_item)
 
 
 def build_refs(cast: list[CastMember], photos: dict[int, np.ndarray], series: dict[int, np.ndarray]) -> list[PersonRefs]:

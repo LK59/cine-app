@@ -82,7 +82,7 @@ def rebuild_faces(db: Database, row, model: str | None = None) -> Built:
     cast = [CastMember(c["personId"], c.get("name", ""), c.get("character", ""), c.get("order", 0), c.get("photos", []))
             for c in json.loads(row["cast_json"])]
     refs = castmod.build_refs(cast, castmod.cached_photo_embeddings(db, model, cast),
-                              castmod.series_embeddings(db, row["series_id"], model))
+                              castmod.series_embeddings(db, row["series_id"], model, exclude_item=row["item_id"]))
     item_id = row["item_id"]
     chunks = db.q("SELECT start, end, done FROM chunks WHERE item_id=?", (item_id,))
     done = [(r["start"], r["end"]) for r in chunks if r["done"]]

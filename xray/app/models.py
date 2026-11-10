@@ -270,7 +270,7 @@ class ModelManager:
         os.chmod(tmp, 0o644)
         tmp.replace(dest)
 
-    def load_engine(self, threads: int, min_face: int, use_gpu=None):
+    def load_engine(self, threads: int, min_face: int, use_gpu=None, cpu_only: bool = False):
         """Détecteur et empreinte. Sur le processeur, le détecteur est l'IR INT8 s'il est prêt ;
         avec `XRAY_OV_DEVICE=GPU`, les réseaux d'origine tournent sur l'iGPU tant que `use_gpu()`
         le permet (`inference.RoutedSession`), et sur le processeur sinon."""
@@ -278,7 +278,9 @@ class ModelManager:
         from .faces import Embedder, FaceEngine, QualityRules, Scrfd, YuNet
         from .inference import make_session
 
-        gpu = settings.ov_device == "GPU"
+        # `cpu_only` : la voie B (`lanes.py`) — processeur seul, son propre moteur, sans toucher à celui
+        # de la voie A (`self.engine`, que /health décrit).
+        gpu = settings.ov_device == "GPU" and not cpu_only
         common = {"cache_dir": settings.ov_cache_dir}
         if self.name == "buffalo_l":
             dpath = self.path("detector")
@@ -293,20 +295,23 @@ class ModelManager:
                              gpu=dict(common, buckets=(1, 8, 32), pad=True) if gpu else None,
                              use_gpu=use_gpu, label="empreinte")
         emb = Embedder(epath, threads, batch=settings.embed_batch, session=esess)
-        self.engine = FaceEngine(self.name, det, emb, QualityRules(min_face=min_face))
-        st = self.inference_status()
+        engine = FaceEngine(self.name, det, emb, QualityRules(min_face=min_face))
+        if not cpu_only:
+            self.engine = engine
+        st = self.inference_status(engine)
         event(log, "modèles : inférence %s, détecteur %s, iGPU %s, %d fils", st["engine"], st["detector"],
               "oui" if st["gpu"] else ("non (" + str(st["gpuError"]) + ")" if gpu else "non"), threads,
               action="engine_loaded", engine=st["engine"], detector=st["detector"], device=st["device"],
-              gpu=st["gpu"], gpuActive=st["gpuActive"], gpuError=st["gpuError"], threads=threads, minFace=min_face)
-        return self.engine
+              gpu=st["gpu"], gpuActive=st["gpuActive"], gpuError=st["gpuError"], threads=threads, minFace=min_face,
+              cpuOnly=cpu_only)
+        return engine
 
-    def inference_status(self) -> dict:
+    def inference_status(self, engine=None) -> dict:
         """Pour /health : moteur, précision du détecteur, iGPU demandé, servi, et où l'on en est."""
         from .config import settings
         from .inference import RoutedSession
 
-        eng = self.engine
+        eng = engine if engine is not None else self.engine
         sessions = []
         if eng is not None:
             sessions = [getattr(eng.detector, "session", None), getattr(eng.embedder, "session", None)]
@@ -320,7 +325,7 @@ class ModelManager:
             det is None or isinstance(det, RoutedSession) or getattr(det, "path", None) == self.int8_path)
         return {
             "engine": next((getattr(s, "backend", None) for s in sessions if s is not None), None),
-            "device": settings.ov_device,
+            "device": settings.ov_device if engine is None or routed or engine is self.engine else "CPU",
             "gpu": bool(routed),
             "gpuActive": bool(routed) and all(s.on_gpu() for s in routed),
             "gpuError": errors[0] if errors else None,

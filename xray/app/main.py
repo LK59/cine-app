@@ -14,7 +14,7 @@ from . import decode
 from .config import VERSION, settings
 from .asd import AsdModels
 from .voice import VoiceModels
-from . import logs, memory, relabel, report
+from . import lanes, logs, memory, relabel, report
 from .db import Database
 from .gpu_guard import GpuGuard
 from .jobs import HEX32, PRIORITIES, InvalidJob, JobStore, validate_job
@@ -152,7 +152,18 @@ def create_app(start_background: bool = True, db: Database | None = None, models
             vm.start()
             am.start()
             guard.start()
-            Worker(database, store, mm, guard, vm, am).start()
+            # Voies d'analyse (`lanes.py`) : décidées une fois, journalisées (`action: "lanes"`).
+            plan = lanes.plan()
+            primary = Worker(database, store, mm, guard, vm, am, lane=lanes.PRIMARY,
+                             decode_threads=plan.a_decode_threads)
+            primary.start()
+            workers = [primary]
+            if plan.count >= 2:
+                second = Worker(database, store, mm, guard, vm, am, lane=lanes.CPU_LANE, cpu_only=True,
+                                threads=plan.b_threads)
+                second.start()
+                workers.append(second)
+            state["workers"] = workers
             # Premier essai du périphérique tout de suite : /health le dit dès le démarrage.
             decode.vaapi_available(force=True)
         yield
@@ -184,7 +195,12 @@ def create_app(start_background: bool = True, db: Database | None = None, models
             "inference": _inference(mm),
             # Ajout compatible (11/2026) : « qui parle » — modèle d'empreinte de voix, détection de parole.
             "voice": dict(state["voice"].status(), asd=state["asd"].status()),
-            "queue": {"pending": store.pending_count(), "running": store.running_id},
+            "queue": {"pending": store.pending_count(), "running": store.running_id,
+                      # Ajout compatible (11/2026) : élément en cours par voie, et voies en pause.
+                      "lanes": store.running_ids(),
+                      "paused": [w.lane for w in state.get("workers", []) if getattr(w, "paused", False)]},
+            # Ajout compatible (11/2026) : la décision des voies d'analyse (`lanes.py`).
+            "lanes": lanes.plan().as_dict(),
         }
 
     @app.post("/jobs")

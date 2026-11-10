@@ -4,8 +4,9 @@ Tout ce qui coûte du calcul est écrit au fil de l'eau, tronçon par tronçon :
 (déploiement, coupure) reprend l'analyse au premier tronçon non fait au lieu de tout refaire,
 et un résultat partiel reste lisible pendant ce temps.
 
-Une seule connexion, protégée par un verrou : l'API et l'unique ouvrier écrivent peu et
-brièvement, et un seul écrivain évite tout « database is locked ».
+Une seule connexion, protégée par un verrou : l'API et les ouvriers (une voie d'analyse ou deux,
+`lanes.py`) écrivent peu et brièvement, chacun pour son élément, et un seul écrivain évite tout
+« database is locked » — deux voies attendent le verrou l'une de l'autre, jamais SQLite (mode WAL).
 """
 
 from __future__ import annotations

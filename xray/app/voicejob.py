@@ -27,7 +27,7 @@ from . import memory
 from . import segments
 from .config import VOICE_VERSION, settings
 from .db import Database
-from .logs import event
+from .logs import event, set_lane
 from .voices import VoiceResult, build
 
 log = logging.getLogger("xray.voicejob")
@@ -104,8 +104,10 @@ def load_asd(db: Database, item_id: str) -> list[tuple[float, float, int | None,
             for r in db.q("SELECT start, end, person_id, score, second FROM asd_votes WHERE item_id=? ORDER BY start", (item_id,))]
 
 
-def series_memory(db: Database, series_id: str | None, model: str) -> dict[int, np.ndarray]:
-    return memory.recall(db, series_id, "voice", model)
+def series_memory(db: Database, series_id: str | None, model: str,
+                  exclude_item: str | None = None) -> dict[int, np.ndarray]:
+    """La mémoire des voix de la série, sans la contribution de l'épisode `exclude_item` (memory.recall)."""
+    return memory.recall(db, series_id, "voice", model, exclude_item)
 
 
 def update_series(db: Database, series_id: str | None, model: str, result: VoiceResult, item_id: str = "?") -> int:
@@ -124,7 +126,7 @@ def assemble(db: Database, item_id: str, etag: str, model: str, series_id: str |
         return None
     t0 = time.process_time()
     regions, wins, embs = load_voice(db, item_id)
-    memory = series_memory(db, series_id, model)
+    memory = series_memory(db, series_id, model, exclude_item=item_id)
     result = build(regions, wins, embs, presence, scenes, memory, asd=load_asd(db, item_id))
     done = [(r["start"], r["end"]) for r in chunks if r["voice"]]
     complete = final and len(done) == len(chunks)
@@ -173,6 +175,10 @@ class VoiceStage:
         self.faces: dict[str, tuple[list, list]] = {}
         self.cancel = threading.Event()
         self.errors: dict[str, str] = {}
+        # Tronçons déposés et pas encore écoutés, par élément : avec deux voies d'analyse (`lanes.py`), le
+        # fil est partagé, et `finish` d'un élément n'attend que *ses* tronçons, pas ceux de l'autre voie.
+        self._pending: dict[str, int] = {}
+        self._cv = threading.Condition()
         self._t = threading.Thread(target=self._run, name="voice", daemon=True)
         self._t.start()
 
@@ -181,19 +187,26 @@ class VoiceStage:
             self.faces[item_id] = (list(built.presence), list(built.scenes))
 
     def submit(self, item_id: str, etag: str, idx: int, parts: list[tuple[float, np.ndarray]], series_id: str | None,
-               track: dict | None) -> None:
-        self.q.put((item_id, etag, idx, parts, series_id, track))
+               track: dict | None, lane: str | None = None) -> None:
+        with self._cv:
+            self._pending[item_id] = self._pending.get(item_id, 0) + 1
+        self.q.put((item_id, etag, idx, parts, series_id, track, lane))
+
+    def wait_item(self, item_id: str) -> None:
+        with self._cv:
+            self._cv.wait_for(lambda: self._pending.get(item_id, 0) == 0)
 
     def finish(self, item_id: str, etag: str, series_id: str | None, track: dict | None, built) -> VoiceResult | None:
         """Attend le son des tronçons déposés, puis le résultat final avec les visages complets."""
-        self.q.join()
+        self.wait_item(item_id)
         self.note_faces(item_id, built)
         presence, scenes = self.faces.get(item_id, ([], []))
         return assemble(self.db, item_id, etag, self.model, series_id, track, presence, scenes, final=True)
 
     def _run(self) -> None:
         while True:
-            item_id, etag, idx, parts, series_id, track = self.q.get()
+            item_id, etag, idx, parts, series_id, track, lane = self.q.get()
+            set_lane(lane)
             try:
                 regions: list = []
                 wins_l: list = []
@@ -214,6 +227,14 @@ class VoiceStage:
                 self.errors[item_id] = f"{type(e).__name__}: {e}"[:300]
                 log.exception("[xray] %s : voix du tronçon %d en échec", item_id, idx)
             finally:
+                set_lane(None)
+                with self._cv:
+                    n = self._pending.get(item_id, 1) - 1
+                    if n <= 0:
+                        self._pending.pop(item_id, None)
+                    else:
+                        self._pending[item_id] = n
+                    self._cv.notify_all()
                 self.q.task_done()
 
 

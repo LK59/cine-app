@@ -245,6 +245,11 @@ flowchart TD
   antérieure des résultats repart de zéro.
 - **Annulation** : `DELETE`, ou un nouvel ordre sous un autre ETag, arrête l'analyse en cours
   (`job_cancelled`).
+- **Deux voies** (10/11/2026, `lanes.py`, en option) : à côté de la voie A (iGPU), une voie B sur le
+  processeur seul analyse un *autre* élément `normal`/`low` de 1080p au plus, seulement pendant que la voie A
+  en analyse un, et s'arrête à la fin de son tronçon pendant une transcodification de Jellyfin. Jamais deux
+  voies sur un élément, un `high` toujours à la voie A ; chaque voie a son moteur, son fil des voix et son
+  drapeau d'annulation ; la base est partagée sous son verrou. Voir le README, « Voies d'analyse ».
 - **Discrétion** : `nice 10` et `ionice` en classe basse pour le service et le ffmpeg qu'il lance ;
   `XRAY_THREADS` fils de calcul pour l'image, `XRAY_VOICE_THREADS` pour la voix, `XRAY_ASD_THREADS` pour
   la lecture des lèvres ; dans l'exemple de composition, `cpus: 6` et `mem_limit: 4g`.

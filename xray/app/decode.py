@@ -216,7 +216,8 @@ class DecodeStats:
 def read_frames(path: str, start: float, length: float, info: MediaInfo, vaapi: bool,
                 stats: DecodeStats, cancel: threading.Event | None = None,
                 fps: float | None = None, width: int | None = None,
-                audio=None, audio_out: list | None = None, noref: bool = True) -> Iterator[tuple[float, np.ndarray]]:
+                audio=None, audio_out: list | None = None, noref: bool = True,
+                threads: int | None = None) -> Iterator[tuple[float, np.ndarray]]:
     """Rend (instant absolu, image NV12 (h·3/2 × l)) pour chaque image échantillonnée.
     Les instants sont reconstruits à partir du rang : le filtre `fps` cadence la sortie.
 
@@ -234,7 +235,8 @@ def read_frames(path: str, start: float, length: float, info: MediaInfo, vaapi: 
 
         rfd, wfd = audiomod.open_pipe()
         extra = audiomod.audio_output_args(audio, f"pipe:{wfd}")
-    cmd = build_command(path, start, length, info, vaapi, fps, width, settings.threads, extra, noref=noref)
+    # `threads` : les fils de la voie d'analyse (`lanes.py`) ; `XRAY_THREADS` sinon.
+    cmd = build_command(path, start, length, info, vaapi, fps, width, threads or settings.threads, extra, noref=noref)
     t0 = time.monotonic()
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=frame_bytes * 4,

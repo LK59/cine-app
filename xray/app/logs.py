@@ -22,6 +22,8 @@ import logging.handlers
 import os
 import re
 import sys
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 LOG_NAME = "xray.log"
@@ -39,6 +41,40 @@ _PATTERNS = (
     (re.compile(r"(?i)(api_?key=)[^&\s\"']+"), r"\1" + MASK),
 )
 _MARK = "_xray_handler"
+
+# La voie d'analyse du fil qui écrit (`lanes.py`) : posée par chaque voie pour tout son fil, et par le fil
+# des voix le temps d'un tronçon. Chaque ligne la porte (`lane`), sans rien changer aux appels.
+_lane = threading.local()
+
+
+def set_lane(lane: str | None) -> None:
+    _lane.value = lane
+
+
+def current_lane() -> str | None:
+    return getattr(_lane, "value", None)
+
+
+@contextmanager
+def lane_scope(lane: str | None):
+    prev = current_lane()
+    set_lane(lane)
+    try:
+        yield
+    finally:
+        set_lane(prev)
+
+
+_base_factory = logging.getLogRecordFactory()
+
+
+def _record_factory(*args, **kwargs):
+    rec = _base_factory(*args, **kwargs)
+    rec.lane = current_lane()
+    return rec
+
+
+logging.setLogRecordFactory(_record_factory)
 
 
 def secret_values() -> list[str]:
@@ -113,6 +149,9 @@ class JsonFormatter(logging.Formatter):
         item = item_of(record)
         if item:
             d["itemId"] = item
+        lane = getattr(record, "lane", None)
+        if lane:
+            d["lane"] = lane
         fields = getattr(record, "fields", None)
         if isinstance(fields, dict):
             for k, v in fields.items():
@@ -144,6 +183,9 @@ class TextFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         line = super().format(record)
         fields = getattr(record, "fields", None)
+        lane = getattr(record, "lane", None)
+        if lane:
+            fields = dict(fields or {}, lane=lane) if not (isinstance(fields, dict) and "lane" in fields) else fields
         if isinstance(fields, dict) and fields:
             try:
                 extra = json.dumps({k: v for k, v in fields.items() if v is not None}, ensure_ascii=False,

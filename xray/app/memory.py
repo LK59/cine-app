@@ -53,13 +53,23 @@ def contribute(db: Database, series_id: str | None, kind: str, model: str, item_
     return len(kept)
 
 
-def recall(db: Database, series_id: str | None, kind: str, model: str) -> dict[int, np.ndarray]:
-    """La mémoire : par personne, la moyenne des contributions pondérée par leur poids, normalisée."""
+def recall(db: Database, series_id: str | None, kind: str, model: str,
+           exclude_item: str | None = None) -> dict[int, np.ndarray]:
+    """La mémoire : par personne, la moyenne des contributions pondérée par leur poids, normalisée.
+
+    `exclude_item` : la mémoire *pour* un épisode ne compte jamais sa propre contribution. Sans cela, un
+    épisode refait (réanalyse, renommage, voix refaites après la lecture des lèvres) se lisait lui-même :
+    sa fin d'analyse avait déposé sa contribution, et la reconstruction suivante, aux mêmes entrées, en
+    tirait d'autres noms (Ted Lasso S01E10, 10/11/2026 : 14 voix nommées / 29 indécises à la fin de
+    l'analyse, 13 / 30 après une lecture des lèvres qui n'avait rien nommé). Lue dans un ordre fixe
+    (personne, épisode) : la somme en virgule flottante ne dépend pas de l'ordre des lignes en base."""
     if not series_id:
         return {}
     acc: dict[int, np.ndarray] = {}
-    for r in db.q("SELECT person_id, emb, weight FROM series_memory WHERE series_id=? AND kind=? AND model=?",
-                  (series_id, kind, model)):
+    for r in db.q("""SELECT person_id, emb, weight FROM series_memory
+                     WHERE series_id=? AND kind=? AND model=? AND item_id != ?
+                     ORDER BY person_id, item_id""",
+                  (series_id, kind, model, exclude_item or "")):
         v = np.frombuffer(r["emb"], dtype=np.float32) * float(r["weight"])
         pid = int(r["person_id"])
         acc[pid] = acc[pid] + v if pid in acc else v.copy()

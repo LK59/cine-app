@@ -26,6 +26,7 @@ ligne**, et ne parle qu'à Laterna, par un réseau Docker interne.
 - [Modèles et licences](#modèles-et-licences)
 - [Vie privée](#vie-privée)
 - [Accélération matérielle](#accélération-matérielle)
+- [Voies d'analyse](#voies-danalyse)
 - [Réglages](#réglages)
 - [Dépannage](#dépannage)
 - [Développement](#développement)
@@ -99,7 +100,7 @@ voit la rangée et le panneau, jamais les autres titres de la bibliothèque, et 
 
 | | |
 |---|---|
-| **Vitesse** | ≈ 15× le temps réel : un épisode 4K de 31 min en ≈ 2 min, image et voix ; 13,7× (processeur) à 14,7× (iGPU) sur un épisode 1080p de 42 min — Core i7-8700, détails dans [PIPELINE.md](docs/PIPELINE.md#performances) |
+| **Vitesse** | ≈ 16× le temps réel sur l'iGPU : un épisode 4K de 31 min refait de zéro en 114 s (16,8×, image et voix ; ~121 s avec la lecture des lèvres), trois épisodes 4K à la suite à 15,9× ; 9,8× pendant une transcodification de Jellyfin (inférence rendue au processeur) ; 13,7× (processeur) à 14,7× (iGPU) sur un épisode 1080p de 42 min — Core i7-8700, détails dans [PIPELINE.md](docs/PIPELINE.md#performances) |
 | **Visages** | détecteur SCRFD quantifié en INT8 sur place, empreinte ArcFace ; noms par les photos TMDB et la mémoire de la série, un acteur par groupe |
 | **Voix** | Silero VAD, WeSpeaker ResNet34 ; consensus de trois seuils ; ~2 répliques sur 3 nommées, **96 à 97 % justes** sur trois titres étiquetés à la main ; une voix hors champ au téléphone nommée sur quatorze |
 | **Lecture des lèvres** | Light-ASD, seulement pour les voix indécises, plafonnée par élément : sur un film, 67,9 → 75,5 % des répliques nommées, toutes justes |
@@ -379,8 +380,8 @@ GPU_RUNTIME=0` les laisse dehors). À savoir avant de l'activer :
 Le pilote de calcul des iGPU Gen9 n'est plus qu'en maintenance chez Intel : c'est une option, pas
 le défaut.
 
-**Le service se fait discret** : une analyse à la fois ; `nice 10` et `ionice` en classe basse
-pour lui et le ffmpeg qu'il lance ; `XRAY_THREADS` fils de calcul (4 par défaut : inférence,
+**Le service se fait discret** : une analyse à la fois (deux avec la [seconde voie](#voies-danalyse)) ; `nice 10` et `ionice` en classe basse
+pour lui et le ffmpeg qu'il lance ; `XRAY_THREADS` fils de calcul (le quota du conteneur par défaut : inférence,
 décodage et filtres de ffmpeg, OpenCV, calcul matriciel), plus `XRAY_VOICE_THREADS` (2) pour la voix
 et `XRAY_ASD_THREADS` (2) pour la lecture des lèvres ; et, dans l'exemple de composition, `cpus: 6`
 (4 pour l'image, 2 pour les voix) et `mem_limit: 4g`.
@@ -394,6 +395,66 @@ restant en priorité basse, il cède de toute façon le processeur à ce qui en 
 
 ---
 
+## Voies d'analyse
+
+Pendant une analyse sur l'iGPU, l'iGPU est plein et le processeur reste aux trois quarts libre. Une
+**seconde voie** peut employer ce reste : la **voie A** est le chemin de toujours (VA-API et inférence sur
+l'iGPU, repli sur le processeur pendant une transcodification de Jellyfin) ; la **voie B** analyse un
+*autre* élément sur le processeur seul — exactement le chemin de repli de la voie A (décodage par ffmpeg,
+détecteur INT8 et empreinte sur le processeur).
+
+**Règles.** La voie A prend la tête de la file, comme avant. La voie B ne prend un ordre `normal` ou `low`
+que pendant que la voie A en analyse déjà un, dans l'ordre de la file, jamais le même élément, et
+seulement un fichier de 1080p au plus (`XRAY_LANE_B_MAX_PIXELS`) : un épisode 4K HEVC décodé sur le
+processeur y passait à 3× le temps réel et ralentissait la voie A. Un ordre `high` va toujours à la voie A
+(qui cède entre deux tronçons) ; un élément de la voie B devenu `high` lui est rendu. Pendant une
+transcodification de Jellyfin, la voie B s'arrête à la fin de son tronçon (l'élément retourne en file,
+`lane_pause` / `lane_resume` au journal) : le processeur n'est jamais demandé deux fois. Chaque voie a
+son moteur, son fil des voix et son drapeau d'annulation ; chaque ligne du journal porte sa voie (`lane`),
+chaque tronçon aussi (rapport de décision : `devices.lanes`).
+
+**Décision automatique** (`XRAY_LANES=auto`, le défaut), prise une fois au démarrage et écrite au
+journal (`action: "lanes"`, avec ses entrées et sa raison), dans `/health` (`lanes`) et dans chaque
+rapport : deux voies si l'inférence sur l'iGPU est demandée (`XRAY_OV_DEVICE=GPU`) et que l'iGPU est
+là, que le quota de processeur du conteneur (`cpus:`, lu dans le cgroup — pas `nproc`) atteint 8 fils et
+que la limite de mémoire (`mem_limit`) atteint 7 Gio ; une sinon. Sans iGPU, une voie : deux voies du
+processeur se partageraient les mêmes cœurs. Si l'iGPU ne s'ouvre pas finalement, la voie B s'arrête et
+le journal le dit. Fils : un tiers du budget à la voie B (4 sur 12), quelques-uns au ffmpeg de la voie A
+sur l'iGPU (4), `XRAY_THREADS` (par défaut tout le budget) à la voie A quand elle calcule sur le
+processeur — la voie B est alors arrêtée.
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `XRAY_LANES` | `auto` | `1` ou `2` : imposé, quelles que soient les ressources. |
+| `XRAY_LANE_B_THREADS` | un tiers du budget | Fils de la voie B (inférence et ffmpeg). |
+| `XRAY_LANE_A_DECODE_THREADS` | 4 à deux voies | Fils du ffmpeg de la voie A quand il décode sur l'iGPU. |
+| `XRAY_LANE_B_MAX_PIXELS` | `2304000` (1920×1200) | Plus grande image que la voie B accepte. |
+
+**Mesures** (10/11/2026, Core i7-8700 6 cœurs / 12 fils, UHD 630, `cpus: 12`, sans lecture des lèvres,
+copies jetables de la base) :
+
+| Lot | Une voie | Deux voies |
+|---|---|---|
+| 3 épisodes 1080p HEVC (2 h 29 min) | 429 s, **20,8×** | 406 s, **21,9×** (+6 %) ; pendant le recouvrement, voie A 15,7× + voie B 7,9× = 23,6× (+13 %) |
+| 3 épisodes 4K HEVC (95 min), avant la limite de 1080p et avec 6 fils à la voie B | 358 s, **15,9×** | 581 s, **9,8×** : voie B à 3,3×, voie A ralentie de 16 à 12× |
+| Processeur du conteneur (moyenne) | ~2,8 fils | ~6,8 fils |
+| Mémoire (pic du cgroup, cache de fichiers compris ; usage relevé par `docker stats`) | 3,3 à 3,75 Gio ; 3,2 à 3,4 Gio | 4,9 à 5,05 Gio ; 4,6 à 4,8 Gio |
+
+L'iGPU reste à sa fréquence maximale (1 200 MHz) dans les deux cas. Le gain est donc modeste sur un
+processeur de 6 cœurs, où les deux voies se disputent les cœurs physiques : la voie A perd environ un
+quart de sa vitesse, que la voie B ne rend qu'en partie. Il grandit avec le nombre de cœurs.
+
+**Résultats.** Une voie ou l'autre applique les mêmes règles aux mêmes réseaux ; la voie B produit ce que
+le repli de la voie A produit déjà, avec la même différence d'arithmétique (demi-précision et détecteur
+d'origine sur l'iGPU, INT8 sur le processeur ; réduction `scale_vaapi` contre `scale`). Mesurée sur un
+épisode 1080p de 53 min analysé par chacune, à mémoire de série identique : 843 plans contre 840 et 840
+pistes contre 820 ; 35 bornes de scène sur 40 communes, 33 scènes au même casting ; les mêmes 36
+personnes, mais une avec 820 s de présence au lieu de 575 ; 90,6 % des instants de parole au même nom.
+Les éléments analysés par la voie A dans les deux passages sont, eux, identiques (scènes, casting, temps
+de présence, voix).
+
+---
+
 ## Réglages
 
 ### Le service
@@ -404,7 +465,8 @@ Variables d'environnement du conteneur `laterna-xray` (toutes facultatives sauf 
 |---|---|---|
 | `XRAY_API_KEY` | — | Clé partagée avec Laterna. **Vide : toutes les requêtes sont refusées.** |
 | `XRAY_MODEL` | `buffalo_l` | `buffalo_l` ou `auraface` (voir plus haut). |
-| `XRAY_THREADS` | `4` | Fils de calcul (inférence, décodage et filtres de ffmpeg) ; voir [Accélération matérielle](#accélération-matérielle). |
+| `XRAY_THREADS` | budget du conteneur | Fils de calcul (inférence, décodage et filtres de ffmpeg) ; sans réglage, le quota de processeur du conteneur (`cpus:`). Voir [Accélération matérielle](#accélération-matérielle). |
+| `XRAY_LANES` | `auto` | Voies d'analyse : `auto`, `1` ou `2`. Voir [Voies d'analyse](#voies-danalyse) (autres réglages là). |
 | `XRAY_INFERENCE` | `auto` | `auto` (OpenVINO s'il se charge, ONNX Runtime sinon), `openvino`, `onnxruntime`. |
 | `XRAY_EMBED_BATCH` | `32` | Visages empreintés par appel du réseau. |
 | `XRAY_FACES_PER_TRACK` | `2` | Visages empreintés au plus par piste (les meilleurs). |

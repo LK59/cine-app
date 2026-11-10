@@ -212,12 +212,77 @@ class JobStore:
     def __init__(self, db: Database):
         self.db = db
         self._wake = threading.Event()
-        # Ordre que l'ouvrier traite et drapeau d'annulation (DELETE, ou fichier remplacé).
-        self.running_id: str | None = None
-        self.cancel = threading.Event()
+        # Par voie d'analyse (`lanes.py`) : l'élément qu'elle traite (analyse, ou travail d'appoint de la
+        # voie A : voix seules, lèvres) et son drapeau d'annulation (DELETE, ou fichier remplacé).
+        self.lanes: dict[str, str | None] = {}
+        self._cancels: dict[str, threading.Event] = {}
+        # Voies qui *analysent* un élément pris par `claim` (pas le travail d'appoint).
+        self.analysing: dict[str, str] = {}
+        self._claim = threading.Lock()
         # Au démarrage, un ordre resté « running » a été interrompu : il repart en file,
         # ses tronçons faits restent faits.
         db.run("UPDATE items SET status='queued' WHERE status='running'")
+
+    # --- voies ------------------------------------------------------------------------------
+
+    def cancel_event(self, lane: str = "A") -> threading.Event:
+        ev = self._cancels.get(lane)
+        if ev is None:
+            ev = self._cancels.setdefault(lane, threading.Event())
+        return ev
+
+    @property
+    def cancel(self) -> threading.Event:
+        """Le drapeau de la voie A (l'ouvrier d'avant les voies)."""
+        return self.cancel_event("A")
+
+    @property
+    def running_id(self) -> str | None:
+        return self.lanes.get("A")
+
+    @running_id.setter
+    def running_id(self, value: str | None) -> None:
+        self.lanes["A"] = value
+
+    def running_ids(self) -> dict[str, str]:
+        return {lane: iid for lane, iid in self.lanes.items() if iid}
+
+    def _cancel_item(self, item_id: str) -> None:
+        for lane, iid in list(self.lanes.items()):
+            if iid == item_id:
+                self.cancel_event(lane).set()
+
+    def claim(self, lane: str, cpu_lane: bool = False, accept=None):
+        """L'ordre suivant pour cette voie, marqué pris d'un bloc (jamais deux voies sur un élément).
+        La voie A : la tête de la file, comme l'unique ouvrier d'avant. La voie B (`cpu_lane`) : seulement
+        pendant que la voie A analyse un élément — il y a alors un second ordre —, le premier ordre
+        `normal` ou `low` dans l'ordre de la file ; jamais un `high`, qui revient à la voie A. `accept(row)` :
+        ce que la voie sait faire (la voie B : pas de 4K, `Worker._cpu_suits`) ; un ordre refusé reste en file,
+        à sa place, pour la voie A."""
+        with self._claim:
+            taken = {iid for ln, iid in self.lanes.items() if ln != lane and iid}
+            if cpu_lane and not any(ln != lane for ln in self.analysing):
+                return None
+            rows = self.db.q("SELECT * FROM items WHERE status='queued' ORDER BY priority, seq LIMIT ?",
+                             (len(taken) + 8,))
+            for r in rows:
+                if r["item_id"] in taken:
+                    continue
+                if cpu_lane and r["priority"] < PRIORITIES["normal"]:
+                    continue
+                if accept is not None and not accept(r):
+                    continue
+                self.lanes[lane] = r["item_id"]
+                self.analysing[lane] = r["item_id"]
+                return r
+            return None
+
+    def release(self, lane: str) -> None:
+        with self._claim:
+            self.lanes[lane] = None
+            self.analysing.pop(lane, None)
+            self.cancel_event(lane).clear()
+        self._wake.set()
 
     # --- dépôt -----------------------------------------------------------------------------
 
@@ -243,8 +308,7 @@ class JobStore:
                 if row is not None and row["etag"] != spec.etag:
                     # Le fichier a changé : tout ce qui avait été mesuré sur l'ancien est faux.
                     self._forget(c, spec.item_id)
-                    if self.running_id == spec.item_id:
-                        self.cancel.set()
+                    self._cancel_item(spec.item_id)
                 elif row is not None:
                     # Même fichier, ordre en échec : on réessaie en gardant les tronçons faits.
                     pass
@@ -311,8 +375,7 @@ class JobStore:
         with self.db.tx() as c:
             self._forget(c, item_id)
             c.execute("DELETE FROM items WHERE item_id=?", (item_id,))
-        if self.running_id == item_id:
-            self.cancel.set()
+        self._cancel_item(item_id)
 
     # --- lecture ---------------------------------------------------------------------------
 
@@ -330,7 +393,7 @@ class JobStore:
             "SELECT COUNT(*) FROM items WHERE status='queued' AND (priority < ? OR (priority = ? AND seq < ?))",
             (row["priority"], row["priority"], row["seq"]),
         )[0]
-        busy = self.running_id is not None and self.running_id != row["item_id"]
+        busy = any(iid != row["item_id"] for iid in self.running_ids().values())
         return int(ahead) + (1 if busy else 0)
 
     def pending_count(self) -> int:
@@ -341,11 +404,20 @@ class JobStore:
     def next_job(self):
         return self.db.one("SELECT * FROM items WHERE status='queued' ORDER BY priority, seq LIMIT 1")
 
-    def should_yield(self, item_id: str) -> bool:
-        """Un ordre plus pressé attend : l'ouvrier rend la main entre deux tronçons, sans rien perdre."""
+    def should_yield(self, item_id: str, cpu_lane: bool = False) -> bool:
+        """Un ordre plus pressé attend : l'ouvrier rend la main entre deux tronçons, sans rien perdre.
+        La voie B ne cède qu'à un ordre qu'elle prendrait (`normal` devant un `low`), et rend un élément
+        passé `high` pendant son analyse (la voie A le prendra)."""
         row = self.get(item_id)
         if row is None:
             return True
+        if cpu_lane:
+            if row["priority"] < PRIORITIES["normal"]:
+                return True
+            better = self.db.one(
+                "SELECT 1 FROM items WHERE status='queued' AND priority < ? AND priority >= ? LIMIT 1",
+                (row["priority"], PRIORITIES["normal"]))
+            return better is not None
         better = self.db.one(
             "SELECT 1 FROM items WHERE status='queued' AND priority < ? LIMIT 1", (row["priority"],)
         )

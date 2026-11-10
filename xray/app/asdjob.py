@@ -320,14 +320,17 @@ def run_item(db: Database, row, engine, net, voice_model: str, built, should_sto
     c0, t0 = cpu_now(), time.monotonic()
 
     regions, wins, embs = voicejob.load_voice(db, item_id)
-    memory = voicejob.series_memory(db, row["series_id"], voice_model)
+    memory = voicejob.series_memory(db, row["series_id"], voice_model, exclude_item=item_id)
     before = build(regions, wins, embs, built.presence, built.scenes, memory, asd=voicejob.load_asd(db, item_id))
     plans = state.get("plans")
     if plans is None:
         plans = [{"voice": vp.voice, "size": vp.size, "candidates": vp.candidates, "pieces": vp.pieces}
                  for vp in plan(before, p)]
         state["plans"] = plans
-        state["undecidedBefore"] = before.stats.get("voicesUndecided", 0)
+        # Les voix indécises *du résultat gardé* (celui de la fin de l'analyse) : la reconstruction `before`
+        # lit la mémoire de la série du moment, qu'un autre épisode a pu changer depuis.
+        stored = _stored_voice_stats(db, item_id)
+        state["undecidedBefore"] = stored.get("voicesUndecided", before.stats.get("voicesUndecided", 0))
     vplans = [VoicePlan(d["voice"], d["size"], d["candidates"], [tuple(x) for x in d["pieces"]]) for d in plans]
     wlist = windows(vplans, p)
     stats = {"voicesTried": len(vplans), "windows": len(wlist), "videoSeconds": round(sum(b - a for a, b, _ in wlist), 1)}
@@ -390,9 +393,14 @@ def run_item(db: Database, row, engine, net, voice_model: str, built, should_sto
         nvotes += sum(1 for v in votes if v[3] is not None)
         done_w.add((a, b))
     cpu = round(spent0 + cpu_now() - c0, 1)
-    res = voicejob.assemble(db, item_id, etag, voice_model, row["series_id"],
-                            json.loads(row["voice_track_json"]) if row["voice_track_json"] else None,
-                            built.presence, built.scenes, final=True)
+    if any(v[2] is not None for v in voicejob.load_asd(db, item_id)):
+        res = voicejob.assemble(db, item_id, etag, voice_model, row["series_id"],
+                                json.loads(row["voice_track_json"]) if row["voice_track_json"] else None,
+                                built.presence, built.scenes, final=True)
+    else:
+        # Aucune voix nommée par les lèvres : le résultat de la fin de l'analyse reste tel quel. Le refaire
+        # ici changeait des noms sans aucun vote (mémoire de la série relue, Ted Lasso S01E10, 10/11/2026).
+        res = None
     resolved = 0
     if res is not None:
         rows = res.pieces
@@ -401,10 +409,13 @@ def run_item(db: Database, row, engine, net, voice_model: str, built, should_sto
             if idx and sum(1 for i in idx if rows[i][3] is not None) >= 0.5 * len(idx):
                 resolved += 1
     calls1 = device_calls(engine)
-    stats.update(voicesResolved=resolved, voicesUndecided=(res.stats.get("voicesUndecided") if res else None),
+    kept = _stored_voice_stats(db, item_id) if res is None else {}
+    stats.update(voicesResolved=resolved,
+                 voicesUndecided=(res.stats.get("voicesUndecided") if res else kept.get("voicesUndecided")),
+                 resultKept=res is None,
                  undecidedBefore=state.get("undecidedBefore"), votes=nvotes, cpuSeconds=cpu, capped=capped,
                  wallSeconds=round(time.monotonic() - t0, 1), decoders=sorted(decoders),
-                 voicesAsd=(res.stats.get("voicesAsd") if res else None),
+                 voicesAsd=(res.stats.get("voicesAsd") if res else kept.get("voicesAsd")),
                  # Détecteur et empreinte de cette lecture : appels servis par l'iGPU et le processeur (ce
                  # passage-ci ; Light-ASD lui-même tourne sur le processeur).
                  inference=None if calls0 is None or calls1 is None else
@@ -416,6 +427,14 @@ def run_item(db: Database, row, engine, net, voice_model: str, built, should_sto
           " (plafond atteint)" if capped else "", item=item_id, action="asd_done", **stats)
     _report(db, item_id)
     return "done"
+
+
+def _stored_voice_stats(db: Database, item_id: str) -> dict:
+    r = db.one("SELECT stats_json FROM voice_results WHERE item_id=?", (item_id,))
+    try:
+        return json.loads(r["stats_json"]) if r is not None and r["stats_json"] else {}
+    except ValueError:
+        return {}
 
 
 def _report(db: Database, item_id: str) -> None:

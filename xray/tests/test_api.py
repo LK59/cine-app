@@ -30,7 +30,8 @@ def test_health(client):
     assert body["version"] == "1.0.0"
     assert body["model"] == {"name": "buffalo_l", "ready": True, "license": "non-commercial", "error": None}
     assert body["decode"] == {"vaapi": False, "device": None}
-    assert body["queue"] == {"pending": 0, "running": None}
+    assert body["queue"] == {"pending": 0, "running": None, "lanes": {}, "paused": []}
+    assert body["lanes"]["count"] in (1, 2) and body["lanes"]["reason"]
     inf = body["inference"]  # ajout compatible (11/2026)
     assert inf["device"] == "CPU" and inf["gpu"] is False and inf["detector"] in ("int8", "fp32")
     assert inf["int8"]["state"] in ("off", "building", "ready", "failed")

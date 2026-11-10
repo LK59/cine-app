@@ -69,7 +69,18 @@ class Settings:
     # de Jellyfin tel quel, sans table de correspondance à tenir à jour de part et d'autre.
     media_root: Path = field(default_factory=lambda: Path(os.environ.get("XRAY_MEDIA_ROOT", "/media")))
     model: str = field(default_factory=lambda: os.environ.get("XRAY_MODEL", "buffalo_l").strip().lower())
-    threads: int = field(default_factory=lambda: max(1, _int("XRAY_THREADS", 4)))
+    # Sans réglage : le budget de processeur du conteneur (`cpu_budget`, quota du cgroup). Avec deux voies
+    # d'analyse (`lanes.py`), c'est le budget de la voie A quand elle calcule sur le processeur.
+    threads: int = field(default_factory=lambda: max(1, _int("XRAY_THREADS", cpu_budget())))
+    # Voies d'analyse (`lanes.py`) : `auto` (défaut), `1` ou `2` ; fils de la voie B (processeur) et du
+    # ffmpeg de la voie A quand elle décode sur l'iGPU — 0 = calculé depuis le budget de processeur.
+    lanes: str = field(default_factory=lambda: os.environ.get("XRAY_LANES", "auto").strip().lower() or "auto")
+    lane_b_threads: int = field(default_factory=lambda: max(0, _int("XRAY_LANE_B_THREADS", 0)))
+    lane_a_decode_threads: int = field(default_factory=lambda: max(0, _int("XRAY_LANE_A_DECODE_THREADS", 0)))
+    # La voie B ne prend que les fichiers dont le décodage sur le processeur est bon marché : au plus tant de
+    # pixels par image (1080p par défaut). Un épisode 4K HEVC y était décodé à 3× le temps réel et ralentissait
+    # la voie A d'un quart : moins de débit à deux voies qu'à une (mesuré le 10/11/2026).
+    lane_b_max_pixels: int = field(default_factory=lambda: max(0, _int("XRAY_LANE_B_MAX_PIXELS", 1920 * 1200)))
     # Moteur d'inférence : auto (OpenVINO s'il se charge, ONNX Runtime sinon), openvino, onnxruntime.
     inference: str = field(default_factory=lambda: os.environ.get("XRAY_INFERENCE", "auto").strip().lower())
     # Visages empreintés par lot (un appel du réseau), et au plus par piste (les meilleurs).
@@ -135,6 +146,50 @@ class Settings:
     def ov_cache_dir(self) -> Path:
         """Noyaux OpenCL compilés par OpenVINO pour l'iGPU (gardés d'un démarrage à l'autre)."""
         return self.data_dir / "ov-cache"
+
+
+def cpu_budget() -> int:
+    """Les fils de processeur dont le conteneur dispose vraiment : le quota du cgroup (`cpus:` de la
+    composition, `/sys/fs/cgroup/cpu.max`, ou `cpu.cfs_quota_us` en cgroup v1), borné par les cœurs
+    qu'il peut voir (`sched_getaffinity`). `nproc` seul voit tous les cœurs de l'hôte, quota ou non."""
+    try:
+        seen = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):
+        seen = os.cpu_count() or 1
+    quota = None
+    try:
+        raw = Path("/sys/fs/cgroup/cpu.max").read_text().split()
+        if raw and raw[0] != "max":
+            quota = float(raw[0]) / float(raw[1])
+    except (OSError, ValueError, IndexError, ZeroDivisionError):
+        try:
+            q = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text())
+            per = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read_text())
+            if q > 0 and per > 0:
+                quota = q / per
+        except (OSError, ValueError):
+            pass
+    if quota is not None:
+        return max(1, min(seen, int(quota)))
+    return max(1, seen)
+
+
+def memory_limit() -> int | None:
+    """La limite de mémoire du conteneur en octets (`mem_limit`), None sans limite."""
+    for p in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            raw = Path(p).read_text().strip()
+        except OSError:
+            continue
+        if raw == "max":
+            return None
+        try:
+            v = int(raw)
+        except ValueError:
+            continue
+        # cgroup v1 sans limite : un très grand nombre.
+        return None if v >= 1 << 60 else v
+    return None
 
 
 def _opt_float(name: str) -> float | None:

@@ -1,4 +1,9 @@
-"""L'ouvrier : un seul ordre à la fois, tronçon par tronçon.
+"""L'ouvrier : un ordre à la fois par voie d'analyse, tronçon par tronçon.
+
+Une voie (`lanes.py`) est un ouvrier : la voie A (iGPU, repli sur le processeur, et le travail
+d'appoint — renommages, voix seules, lèvres), et, quand la machine le permet, la voie B (processeur
+seul, un autre élément). Chaque ouvrier garde son moteur, son fil des voix, son élément et son drapeau
+d'annulation ; la base (une connexion sous verrou) est partagée.
 
 Un ordre est découpé en tronçons de deux minutes. Chaque tronçon est décodé, découpé en plans,
 analysé, puis écrit d'un bloc en base, et le résultat de tout l'ordre est recalculé : un
@@ -33,7 +38,8 @@ from .db import Database
 from .faces import MODEL_DEFAULTS
 from .inference import device_calls, device_label
 from .jobs import CastMember, JobStore
-from .logs import event
+from .logs import event, set_lane
+from . import lanes as lanesmod
 from .models import ModelManager
 from .results import Assembler, ShotRow, TrackRow, build
 from .pipeline import ShotFaces
@@ -97,8 +103,18 @@ def _prefetch(gen, depth: int = 48, clock: StageClock | None = None):
 
 
 class Worker:
-    def __init__(self, db: Database, store: JobStore, models: ModelManager, guard, voice_models=None, asd_models=None):
+    def __init__(self, db: Database, store: JobStore, models: ModelManager, guard, voice_models=None, asd_models=None,
+                 lane: str = lanesmod.PRIMARY, cpu_only: bool = False, threads: int | None = None,
+                 decode_threads: int | None = None):
         self.db = db
+        # La voie (`lanes.py`) : A, ou B — processeur seul (`cpu_only`).
+        self.lane = lane
+        self.cpu_only = cpu_only
+        self.threads = threads or settings.threads
+        # Fils de ffmpeg quand il décode sur l'iGPU (borné à deux voies) ; sur le processeur, `threads`.
+        self.decode_threads = decode_threads or self.threads
+        self._voice_lock = threading.Lock()
+        self.paused = False
         self.store = store
         self.models = models
         self.guard = guard
@@ -112,10 +128,21 @@ class Worker:
         self.asd_models = asd_models
         self.asd_net = None
 
+    @property
+    def cancel(self) -> threading.Event:
+        return self.store.cancel_event(self.lane)
+
     def _voice(self) -> "voicejob.VoiceStage | None":
+        # Un fil des voix (et ses réseaux, quelques dizaines de Mo) par voie : partagé, il prenait du retard
+        # derrière l'autre voie, et la fin d'un élément de la voie A attendait 58 s le son de la voie B
+        # (mesuré le 10/11/2026).
         vm = self.voice_models
         if vm is None or not vm.enabled or not vm.ready:
             return None
+        with self._voice_lock:
+            return self._voice_locked(vm)
+
+    def _voice_locked(self, vm) -> "voicejob.VoiceStage | None":
         if self.voice_stage is None:
             try:
                 self.voice_engine = vm.load_engine(settings.voice_threads)
@@ -128,53 +155,132 @@ class Worker:
         return self.voice_stage
 
     def start(self) -> threading.Thread:
-        t = threading.Thread(target=self._loop, name="worker", daemon=True)
+        t = threading.Thread(target=self._loop, name=f"lane-{self.lane}", daemon=True)
         t.start()
         return t
 
+    def _load_engine(self) -> bool:
+        try:
+            if self.cpu_only:
+                # La voie B : le chemin de repli de la voie A (détecteur INT8, empreinte float32, processeur).
+                self.engine = self.models.load_engine(self.threads, settings.min_face, cpu_only=True)
+            else:
+                # Avec l'inférence sur l'iGPU : rendue au processeur tant que Jellyfin y transcode
+                # (dernier état connu du garde, rafraîchi toutes les 30 s ; jamais d'appel réseau ici).
+                self.engine = self.models.load_engine(self.threads, settings.min_face,
+                                                      use_gpu=lambda: not self.guard.busy_now())
+                st = self.models.inference_status()
+                if settings.ov_device == "GPU" and not st.get("gpu"):
+                    lanesmod.plan().gpu_failed(st.get("gpuError"))
+            return True
+        except Exception as e:
+            self.models.error = f"chargement du modèle impossible : {e}"
+            self.models.ready = False
+            log.exception("chargement du modèle")
+            return False
+
     def _loop(self) -> None:
+        set_lane(self.lane)
+        event(log, "voie %s : démarrée (%s, %d fils%s)", self.lane,
+              "processeur" if self.cpu_only else settings.ov_device, self.threads,
+              "" if self.cpu_only else f", ffmpeg {self.decode_threads} fils sur l'iGPU",
+              action="lane_start", cpuOnly=self.cpu_only, threads=self.threads, decodeThreads=self.decode_threads)
+        if self.cpu_only:
+            self._loop_cpu()
+            return
         cv2.setNumThreads(settings.threads)
         while True:
             if not self.models.ready:
                 self.store.wait_for_work(2.0)
                 continue
-            if self.engine is None:
-                try:
-                    # Avec l'inférence sur l'iGPU : rendue au processeur tant que Jellyfin y transcode
-                    # (dernier état connu du garde, rafraîchi toutes les 30 s ; jamais d'appel réseau ici).
-                    self.engine = self.models.load_engine(settings.threads, settings.min_face,
-                                                          use_gpu=lambda: not self.guard.busy_now())
-                except Exception as e:
-                    self.models.error = f"chargement du modèle impossible : {e}"
-                    self.models.ready = False
-                    log.exception("chargement du modèle")
-                    continue
+            if self.engine is None and not self._load_engine():
+                continue
             row = self.store.next_job()
             # Les voix d'un ordre fini avant l'étape des voix : le son seul, avant tout ordre `low` (bien
             # moins cher que l'image), jamais devant un ordre `normal` ou `high`.
             if (row is None or row["priority"] >= 2) and (self._relabel() or self._voice_only() or self._asd()):
                 continue
+            row = self.store.claim(self.lane) if row is not None else None
             if row is None:
                 self.store.wait_for_work(10.0)
                 continue
-            item_id = row["item_id"]
-            t0 = time.monotonic()
+            self._run_claimed(row)
+
+    def _gpu_busy(self) -> bool:
+        return self.guard is not None and self.guard.busy()
+
+    def _loop_cpu(self) -> None:
+        """La voie B : un ordre `normal`/`low` à côté de la voie A, jamais pendant une transcodification."""
+        while True:
+            if lanesmod.plan().count < 2:
+                event(log, "voie %s : arrêtée (%s)", self.lane, lanesmod.plan().reason, action="lane_stop",
+                      reason=lanesmod.plan().reason)
+                return
+            if not self.models.ready:
+                self.store.wait_for_work(2.0)
+                continue
+            if self._gpu_busy():
+                self._pause("jellyfin_transcode")
+                self.store.wait_for_work(10.0)
+                continue
+            self._resume()
+            row = self.store.claim(self.lane, cpu_lane=True, accept=self._cpu_suits)
+            if row is None:
+                self.store.wait_for_work(5.0)
+                continue
+            if self.engine is None and not self._load_engine():
+                self.store.release(self.lane)
+                continue
+            self._run_claimed(row)
+
+    def _cpu_suits(self, row) -> bool:
+        """Le décodage de ce fichier sur le processeur est-il bon marché (`XRAY_LANE_B_MAX_PIXELS`) ? Lu une
+        fois par fichier (ffprobe) ; illisible : laissé à la voie A, qui dira pourquoi."""
+        key = (row["item_id"], row["etag"])
+        cache = self.__dict__.setdefault("_suits", {})
+        if key not in cache:
             try:
-                self.run(row)
-            except Cancelled:
-                event(log, "[xray] %s : arrêté (ordre supprimé ou fichier changé)", item_id, item=item_id,
-                      action="job_cancelled", seconds=round(time.monotonic() - t0, 1))
+                info = decode.probe(row["path"])
+                ok = info.width * info.height <= settings.lane_b_max_pixels
+                why = f"{info.width}×{info.height}"
             except Exception as e:
-                msg = f"{type(e).__name__}: {e}"[:500]
-                done = self.db.one("SELECT COUNT(*) AS n, SUM(done) AS d FROM chunks WHERE item_id=?", (item_id,))
-                event(log, "[xray] %s : échec", item_id, level=logging.ERROR, item=item_id, action="job_failed",
-                      exc_info=True, seconds=round(time.monotonic() - t0, 1), attempts=row["attempts"] + 1,
-                      chunks=done["n"] if done else None, chunksDone=(done["d"] or 0) if done else None, path=row["path"])
-                if self._same(item_id, row["etag"]):
-                    self.store.set_status(item_id, "failed", error=msg)
-            finally:
-                self.store.running_id = None
-                self.store.cancel.clear()
+                ok, why = False, f"{type(e).__name__}"
+            if len(cache) > 1000:
+                cache.clear()
+            cache[key] = ok
+            if not ok:
+                event(log, "[xray] %s : laissé à la voie A (%s)", row["item_id"], why, item=row["item_id"],
+                      action="lane_skip", reason="max_pixels" if why[:1].isdigit() else "probe", size=why)
+        return cache[key]
+
+    def _pause(self, reason: str) -> None:
+        if not self.paused:
+            self.paused = True
+            event(log, "voie %s : en pause (%s)", self.lane, reason, action="lane_pause", reason=reason)
+
+    def _resume(self) -> None:
+        if self.paused:
+            self.paused = False
+            event(log, "voie %s : reprise", self.lane, action="lane_resume", reason="jellyfin_idle")
+
+    def _run_claimed(self, row) -> None:
+        item_id = row["item_id"]
+        t0 = time.monotonic()
+        try:
+            self.run(row)
+        except Cancelled:
+            event(log, "[xray] %s : arrêté (ordre supprimé ou fichier changé)", item_id, item=item_id,
+                  action="job_cancelled", seconds=round(time.monotonic() - t0, 1))
+        except Exception as e:
+            msg = f"{type(e).__name__}: {e}"[:500]
+            done = self.db.one("SELECT COUNT(*) AS n, SUM(done) AS d FROM chunks WHERE item_id=?", (item_id,))
+            event(log, "[xray] %s : échec", item_id, level=logging.ERROR, item=item_id, action="job_failed",
+                  exc_info=True, seconds=round(time.monotonic() - t0, 1), attempts=row["attempts"] + 1,
+                  chunks=done["n"] if done else None, chunksDone=(done["d"] or 0) if done else None, path=row["path"])
+            if self._same(item_id, row["etag"]):
+                self.store.set_status(item_id, "failed", error=msg)
+        finally:
+            self.store.release(self.lane)
 
     def _voice_only(self) -> bool:
         stage = self._voice()
@@ -256,8 +362,6 @@ class Worker:
     def run(self, row) -> None:
         item_id, etag, path = row["item_id"], row["etag"], row["path"]
         model = self.models.name
-        self.store.running_id = item_id
-        self.store.cancel.clear()
         self._asm = None  # assemblage incrémental : repart de la base à chaque passage
         if row["version"] < RESULT_VERSION:
             # Commencé sous d'anciennes règles et pas fini : on repart de zéro plutôt que de
@@ -272,7 +376,8 @@ class Worker:
         self.store.set_status(item_id, "running", attempts=row["attempts"] + 1, model=model, version=RESULT_VERSION)
         t_job = time.monotonic()
         raw_skip = row["skip_json"] if "skip_json" in row.keys() else None
-        event(log, "[xray] %s : analyse commencée", item_id, item=item_id, action="job_start", path=path, etag=etag,
+        event(log, "[xray] %s : analyse commencée (voie %s)", item_id, self.lane, item=item_id, action="job_start",
+              path=path, etag=etag, cpuOnly=self.cpu_only,
               priority={0: "high", 1: "normal", 2: "low"}.get(row["priority"], row["priority"]),
               startAt=row["start_at"], attempt=row["attempts"] + 1, seriesId=row["series_id"],
               originalLanguage=row["original_language"] if "original_language" in row.keys() else None,
@@ -296,7 +401,7 @@ class Worker:
         self.engine.clock = job_clock
         with job_clock.stage("photos"):
             photos = castmod.photo_embeddings(self.db, self.engine, model, cast, settings.photos_dir)
-        series = castmod.series_embeddings(self.db, row["series_id"], model)
+        series = castmod.series_embeddings(self.db, row["series_id"], model, exclude_item=item_id)
         refs = castmod.build_refs(cast, photos, series)
         # Mémoire de la série, pour la sortie anticipée (`pipeline.memory_match`) : seulement les
         # personnes de la distribution de cet épisode.
@@ -314,7 +419,8 @@ class Worker:
         try:
             prev = self.db.one("SELECT run_json FROM items WHERE item_id=?", (item_id,))
             facts = report.run_facts(self.models, skip_source,
-                                     json.loads(prev["run_json"]) if prev is not None and prev["run_json"] else None)
+                                     json.loads(prev["run_json"]) if prev is not None and prev["run_json"] else None,
+                                     engine=self.engine, lane=self.lane)
             self.db.run("UPDATE items SET run_json=? WHERE item_id=?", (json.dumps(facts, ensure_ascii=False), item_id))
         except Exception:  # le rapport ne fait jamais échouer l'analyse
             log.exception("[xray] %s : faits de l'analyse non gardés", item_id)
@@ -356,9 +462,17 @@ class Worker:
         anchor = anchor_chunks[0][1] if anchor_chunks else 0.0
         pending = {c[0] for c in chunks}
         for idx, start, end in [c for c in anchor_chunks if c[0] in pending]:
-            if self.store.cancel.is_set() or not self._same(item_id, etag):
+            if self.cancel.is_set() or not self._same(item_id, etag):
                 raise Cancelled()
-            if self.store.should_yield(item_id):
+            if self.cpu_only and self._gpu_busy():
+                # Jellyfin transcode : la voie A repasse sur le processeur, la voie B s'arrête ici (l'élément
+                # retourne en file, ses tronçons faits restent faits).
+                self._pause("jellyfin_transcode")
+                event(log, "[xray] %s : rendu à la file, voie %s en pause", item_id, self.lane, item=item_id,
+                      action="job_yield", reason="lane_pause", seconds=round(time.monotonic() - t_job, 1))
+                self.store.set_status(item_id, "queued")
+                return
+            if self.store.should_yield(item_id, cpu_lane=self.cpu_only):
                 event(log, "[xray] %s : cède la place à un ordre plus pressé", item_id, item=item_id, action="job_yield",
                       seconds=round(time.monotonic() - t_job, 1))
                 self.store.set_status(item_id, "queued")
@@ -370,6 +484,7 @@ class Worker:
             chunk_stats = clock.as_dict()
             if decoder != "skip":
                 chunk_stats["device"] = device_label(calls0, device_calls(self.engine))
+            chunk_stats["lane"] = self.lane
             t_write = time.perf_counter()
             with self.db.tx() as c:
                 cur = c.execute("SELECT etag FROM items WHERE item_id=?", (item_id,)).fetchone()
@@ -394,7 +509,7 @@ class Worker:
             job_clock = StageClock()
             if stage is not None and self.chunk_audio is not None:
                 stage.note_faces(item_id, built)
-                stage.submit(item_id, etag, idx, self.chunk_audio, row["series_id"], self.voice_tinfo)
+                stage.submit(item_id, etag, idx, self.chunk_audio, row["series_id"], self.voice_tinfo, lane=self.lane)
         with job_clock.stage("build"):
             built = self.checkpoint(item_id, etag, model, info.duration, anchor, refs)
         self._save_job_clock(item_id, job_clock)
@@ -504,7 +619,8 @@ class Worker:
                 self.chunk_audio = []  # rien à écouter : le tronçon est fait, sans parole
             return [], [], "skip", clock
         want_vaapi = (
-            settings.hwaccel and decode.vaapi_suits(info) and decode.vaapi_available() and not self.guard.busy()
+            not self.cpu_only and settings.hwaccel and decode.vaapi_suits(info) and decode.vaapi_available()
+            and not self.guard.busy()
         )
         try:
             return self._process(item_id, path, info, idx, start, end, parts, want_vaapi)
@@ -558,8 +674,9 @@ class Worker:
             stats = decode.DecodeStats("vaapi" if vaapi else "cpu")
             audio_out = getattr(self, "chunk_audio", None)
             track = getattr(self, "voice_track", None) if audio_out is not None else None
-            gen = decode.read_frames(path, p0, p1 - p0, info, vaapi, stats, self.store.cancel, audio=track,
-                                     audio_out=audio_out)
+            gen = decode.read_frames(path, p0, p1 - p0, info, vaapi, stats, self.cancel, audio=track,
+                                     audio_out=audio_out,
+                                     threads=self.decode_threads if vaapi else self.threads)
             for ts, frame in _prefetch(gen, clock=clock):
                 with clock.stage("shots"):
                     done = splitter.push(ts, frame)
@@ -567,7 +684,7 @@ class Worker:
                     analyse(done)
             # Une plage sautée coupe le plan : rien ne relie ce qui l'entoure.
             last = splitter.flush(p1)
-            if self.store.cancel.is_set():
+            if self.cancel.is_set():
                 raise Cancelled()
             if stats.failed:
                 raise DecodeFailed(f"ffmpeg ({stats.decoder}) code {stats.returncode} : {stats.stderr[-300:]}")

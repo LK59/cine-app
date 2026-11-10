@@ -111,10 +111,13 @@ def startup_summary() -> dict:
     }
 
 
-def run_facts(models, skip_source: str | None, previous: dict | None = None) -> dict:
+def run_facts(models, skip_source: str | None, previous: dict | None = None, engine=None, lane: str | None = None) -> dict:
     """Les faits d'un passage d'analyse de l'image, gardés avec l'ordre (`items.run_json`) : le rapport dit
     ce qui a servi *alors*, pas ce que le service a aujourd'hui."""
-    status = models.inference_status() if hasattr(models, "inference_status") else None
+    if hasattr(models, "inference_status"):
+        status = models.inference_status(engine) if engine is not None else models.inference_status()
+    else:
+        status = None
     now = _dt.datetime.now().astimezone().isoformat(timespec="seconds")
     prev = previous or {}
     return {
@@ -127,7 +130,18 @@ def run_facts(models, skip_source: str | None, previous: dict | None = None) -> 
         "hwaccel": settings.hwaccel, "vaapiNoref": settings.vaapi_noref, "sampleFps": settings.sample_fps,
         "chunkSeconds": settings.chunk_seconds, "minFace": settings.min_face,
         "skipSource": skip_source,
+        # Voie d'analyse du passage et décision du service (`lanes.py`).
+        "lanes": _lane_facts(lane),
     }
+
+
+def _lane_facts(lane: str | None) -> dict | None:
+    try:
+        from . import lanes
+
+        return lanes.lane_facts(lane or lanes.PRIMARY)
+    except Exception:  # le rapport ne fait jamais échouer l'analyse
+        return None
 
 
 # ---- visages ---------------------------------------------------------------------------------------------
@@ -274,11 +288,13 @@ def build(db: Database, item_id: str, trigger: str = "lecture") -> dict | None:
     done = [c for c in chunks if c["done"]]
     dec = collections.Counter((c["decoder"] or "?") for c in done)
     dev = collections.Counter()
+    by_lane = collections.Counter()
     for c in done:
         if c["decoder"] == "skip":
             continue
         st = _j(c["stats"]) or {}
         dev[st.get("device") or "unknown"] += 1
+        by_lane[st.get("lane") or "A"] += 1
     analysed = sum(dev.values())
     known_dev = analysed - dev.get("unknown", 0)
     asd_stats = _j(asd["stats_json"]) if asd is not None else None
@@ -291,6 +307,8 @@ def build(db: Database, item_id: str, trigger: str = "lecture") -> dict | None:
                    # Images non référencées sautées : toujours sur le processeur, sur l'iGPU selon le réglage.
                    "noref": {"cpu": True, "vaapi": run.get("vaapiNoref")}},
         "voice": {"device": "CPU", "chunks": sum(1 for c in chunks if c["voice"])},
+        # Tronçons par voie d'analyse (`lanes.py`) ; avant les voies, tout passait par la voie A.
+        "lanes": dict(by_lane),
         "asd": None if not asd_stats else {"decoders": asd_stats.get("decoders"), "inference": asd_stats.get("inference"),
                                            "device": "CPU"},
     }
@@ -388,11 +406,17 @@ def summary(rep: dict) -> tuple[str, dict]:
         "detector": dev.get("detector"), "audioReason": (rep.get("audio") or {}).get("reason"),
         "skippedSeconds": (rep.get("skipped") or {}).get("seconds"),
     }
-    msg = ("[xray] {id} : rapport ({trigger}) — {sc} scènes, {fn}/{fc} groupes de visages nommés, voix {vn} nommées / "
-           "{vu} indécises / {vc} en désaccord / {vs} petites, lèvres {ar}/{at}").format(
-        id=rep.get("itemId"), trigger=rep.get("trigger"), sc=c.get("scenes"), fn=c.get("facesNamed"),
-        fc=c.get("faceClusters"), vn=c.get("voicesNamed"), vu=c.get("voicesUndecided"), vc=c.get("voicesConflict"),
-        vs=c.get("voicesSmall"), ar=c.get("asdResolved"), at=c.get("asdTried"))
+    # Une partie dont le rapport n'a pas les chiffres est omise : un résultat d'avant le détail des visages,
+    # repris par la lecture des lèvres, écrivait « None/None groupes de visages nommés ».
+    parts = [f"{c.get('scenes')} scènes" if c.get("scenes") is not None else None]
+    if c.get("facesNamed") is not None and c.get("faceClusters") is not None:
+        parts.append(f"{c['facesNamed']}/{c['faceClusters']} groupes de visages nommés")
+    if c.get("voicesNamed") is not None:
+        parts.append(f"voix {c.get('voicesNamed')} nommées / {c.get('voicesUndecided') or 0} indécises / "
+                     f"{c.get('voicesConflict') or 0} en désaccord / {c.get('voicesSmall') or 0} petites")
+    if c.get("asdTried") is not None:
+        parts.append(f"lèvres {c.get('asdResolved') or 0}/{c['asdTried']}")
+    msg = f"[xray] {rep.get('itemId')} : rapport ({rep.get('trigger')}) — " + (", ".join(p for p in parts if p) or "vide")
     return msg, {k: v for k, v in fields.items() if v is not None}
 
 

@@ -413,7 +413,9 @@ des épisodes à une série sans relire un seul fichier.
 
 | Mesure | Résultat |
 |---|---|
-| Test de bout en bout, *Ted Lasso* S01E09 (4K, 31 min), image et voix, service complet (09/11/2026) | ≈ 2 min de mur, **≈ 15× le temps réel** |
+| *Ted Lasso* S01E09 (4K HEVC, 31 min) refait de zéro, image et voix, service complet (10/11/2026) | 114 s d'ordre (112 s de calcul), **16,8×** ; 16 tronçons sur 16 décodés en VA-API, inférence sur l'iGPU ; ~121 s avec la lecture des lèvres |
+| *Ted Lasso* S01E10 (4K, 34 min) pendant une transcodification forcée de Jellyfin (10/11/2026) | 208 s, **9,84×** ; 88 % des appels d'inférence sur l'iGPU (rendue au processeur le temps de la transcodification), aucun échec |
+| *Ted Lasso* S01E08 à S01E10 (4K, 95 min) à la suite, une voie (10/11/2026) | 358 s, **15,9×** (110, 115 et 132 s par épisode) ; deux voies : voir [Voies d'analyse](../README.md#voies-danalyse) |
 | *MacGyver* S01E06 (HEVC 1080p, 42 min), v4, processeur, `XRAY_THREADS=10` | 187 s, **13,7×** (relancé plus chargé : 239 s, 10,7×) |
 | Le même, v4, inférence sur l'iGPU | 173 s, **14,7×** |
 | Le même, v3 (avant les optimisations du 09/11 au soir) | 369 s, 6,9× |

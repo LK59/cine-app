@@ -57,7 +57,9 @@ Pour ce que les résultats veulent dire : [PIPELINE.md](PIPELINE.md). Pour qui a
   "voice": { "enabled": true, "name": "wespeaker_r34", "label": "…", "ready": true, "license": "cc-by-4.0",
              "error": null, "vad": { "name": "silero_vad", "version": "6.2", "license": "mit" },
              "asd": { "enabled": true, "ready": true, "license": "mit", "error": null } },
-  "queue": { "pending": 0, "running": null }
+  "queue": { "pending": 0, "running": null, "lanes": {}, "paused": [] },
+  "lanes": { "count": 1, "mode": "auto", "reason": "…", "cpus": 12, "memoryBytes": 6442450944, "gpu": true,
+             "threads": { "A": 12, "ADecode": 12, "B": 0, "voice": 2, "asd": 2 }, "laneBMaxPixels": 2304000 }
 }
 ```
 
@@ -71,7 +73,9 @@ Pour ce que les résultats veulent dire : [PIPELINE.md](PIPELINE.md). Pour qui a
 | `inference` | *(informatif, 11/2026)* `engine` (`openvino`, `onnxruntime`, `null` avant le chargement), `device` (réglage `XRAY_OV_DEVICE`), `gpu` (réseaux chargés sur l'iGPU), `gpuActive` (servis par l'iGPU en ce moment — `false` pendant une transcodification de Jellyfin), `gpuError`, `detector` (`int8` ou `fp32` sur le processeur ; sur l'iGPU, toujours le réseau d'origine), `int8.state` (`off`, `building`, `ready`, `failed`) et `int8.error` |
 | `voice` | *(10/11/2026)* modèle d'empreinte de voix, licence, prêt, erreur, détection de parole ; `voice.asd` : lecture des lèvres |
 | `queue.pending` | ordres en attente |
-| `queue.running` | l'`itemId` en cours d'analyse, sinon `null` |
+| `queue.running` | l'`itemId` en cours d'analyse (voie A), sinon `null` |
+| `queue.lanes`, `queue.paused` | *(10/11/2026)* l'élément de chaque voie d'analyse (`{"A": …, "B": …}`) et les voies en pause (la voie B pendant une transcodification de Jellyfin) |
+| `lanes` | *(10/11/2026)* la décision des voies d'analyse prise au démarrage (README, « Voies d'analyse ») : nombre, `auto` ou imposé, raison, budget de processeur et limite de mémoire lus dans le cgroup, fils de chaque voie |
 
 Laterna lit `/health` pour le bouton « Tester la connexion » (modèle, prêt, décodage matériel) et, côté
 planificateur, pour savoir si la file du service ne contient que ses propres commandes.

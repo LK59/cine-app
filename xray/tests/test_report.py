@@ -81,6 +81,18 @@ def test_hors_champ_sans_candidat(rng):
     r = build(regions, wins, embs, shots_for(regions, turns, shown), scenes_of(regions))
     n = main_row(r, regions, turns, "N")
     assert n["personId"] is None and n["reason"] == "off_screen_no_candidate"
+    # Personne à l'image : pas de faux candidat (note, marge et présence à 0).
+    assert n["candidate"] is None
+
+
+def test_ligne_du_rapport_sans_chiffres_manquants():
+    msg, _ = report.summary({"itemId": ITEM, "trigger": "lèvres", "counts": {"scenes": 12, "voicesNamed": 3,
+                                                                             "voicesUndecided": 1}})
+    assert "None" not in msg and "groupes de visages" not in msg and "lèvres 0" not in msg
+    assert "12 scènes" in msg and "voix 3 nommées / 1 indécises" in msg
+    msg, _ = report.summary({"itemId": ITEM, "trigger": "analyse",
+                             "counts": {"scenes": 2, "facesNamed": 4, "faceClusters": 9, "asdTried": 2, "asdResolved": 1}})
+    assert "4/9 groupes de visages nommés" in msg and "lèvres 1/2" in msg
 
 
 def test_seconde_grosse_voix(rng):

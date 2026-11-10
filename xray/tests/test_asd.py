@@ -440,3 +440,79 @@ def test_un_element_sans_voix_a_lire_est_note_fait(db, rng, monkeypatch):
     st = json.loads(db.one("SELECT stats_json FROM asd_runs WHERE item_id=?", (item,))["stats_json"])
     assert st["voicesTried"] == 0
     assert asdjob.next_item(db, "m") is None
+
+
+def _series_item(db, rng, item, series):
+    """Un épisode d'une série : un dialogue nommé par les visages, et un narrateur hors champ (indécis)."""
+    A, B, N = unit(rng), unit(rng), unit(rng)
+    turns = ["A", "B"] * 10 + ["N"] * 8
+    regions, wins, embs = dialogue(rng, turns, {"A": A, "B": B, "N": N})
+    shown = {"A": [(1, 0.9), (2, 0.2)], "B": [(2, 0.9), (1, 0.2)], "N": []}
+    db.run("""INSERT INTO items (item_id, etag, path, priority, cast_json, status, seq, created, updated, model, duration,
+                                 series_id, voice_model)
+              VALUES (?, 'x', '/media/a.mkv', 2, '[]', 'done', 1, 0, 0, 'buffalo_l', 200, ?, 'm')""", (item, series))
+    db.run("INSERT INTO chunks (item_id, idx, start, end, done, voice) VALUES (?, 0, 0, 200, 1, 1)", (item,))
+    voicejob.store_chunk(db, item, "x", 0, regions, wins, embs)
+    return A, B, regions, shots_for(regions, turns, shown), scenes_of(regions)
+
+
+def test_voix_refaites_identiques_sans_sa_propre_memoire(db, rng, monkeypatch):
+    """Fin d'analyse → (lecture des lèvres sans vote) → reconstruction : le même résultat. La mémoire lue pour un
+    épisode ne compte jamais sa propre contribution, déposée par la fin de son analyse (Ted Lasso S01E10, 10/11/2026 :
+    14/29 voix nommées/indécises à la fin, 13/30 refaites, sans aucun vote)."""
+    from app import memory
+
+    series, item = "c" * 32, "e" * 32
+    A, B, regions, pres, scenes = _series_item(db, rng, item, series)
+    # Un autre épisode a déjà appris A (légèrement autre) ; cet épisode-ci avait une ancienne contribution.
+    memory.contribute(db, series, "voice", "m", "f" * 32, {1: (noisy(rng, A, 0.3), 30.0, 30.0)})
+    memory.contribute(db, series, "voice", "m", item, {2: (noisy(rng, A, 0.2), 60.0, 60.0)})
+    seen = []
+    real = voicejob.build
+
+    def spy(*a, **k):
+        seen.append({pid: v.copy() for pid, v in (a[5] or {}).items()})
+        return real(*a, **k)
+
+    monkeypatch.setattr(voicejob, "build", spy)
+    first = voicejob.assemble(db, item, "x", "m", series, None, pres, scenes, final=True)
+    # La fin de l'analyse a remplacé la contribution de l'épisode…
+    assert db.one("SELECT COUNT(*) FROM series_memory WHERE item_id=? AND kind='voice'", (item,))[0] > 0
+    again = voicejob.assemble(db, item, "x", "m", series, None, pres, scenes, final=True)
+    # … que ni la première ni la seconde lecture ne comptent : même mémoire, même résultat.
+    assert seen[0].keys() == seen[1].keys() == {1}
+    assert all(np.array_equal(seen[0][k], seen[1][k]) for k in seen[0])
+    assert again.segments == first.segments and again.stats == first.stats and again.voices == first.voices
+
+
+def test_lecture_des_levres_sans_nom_garde_le_resultat(db, rng, monkeypatch):
+    series, item = "c" * 32, "e" * 32
+    A, B, turns, regions, wins, embs, pres = _ensemble(rng)
+    scenes = scenes_of(regions)
+    db.run("""INSERT INTO items (item_id, etag, path, priority, cast_json, status, seq, created, updated, model, duration,
+                                 series_id, voice_model)
+              VALUES (?, 'x', '/media/a.mkv', 2, '[]', 'done', 1, 0, 0, 'buffalo_l', 200, ?, 'm')""", (item, series))
+    db.run("INSERT INTO chunks (item_id, idx, start, end, done, voice) VALUES (?, 0, 0, 200, 1, 1)", (item,))
+    voicejob.store_chunk(db, item, "x", 0, regions, wins, embs)
+    voicejob.assemble(db, item, "x", "m", series, None, pres, scenes, final=True)
+    kept = db.one("SELECT segments_json, stats_json, updated FROM voice_results WHERE item_id=?", (item,))
+    assert json.loads(kept["stats_json"])["voicesUndecided"] >= 1
+
+    sc = scenes
+
+    class Built:
+        presence, scenes, assignments, centroids = pres, sc, {}, None
+
+    monkeypatch.setattr(asdjob.decode, "probe", lambda p: None)
+    monkeypatch.setattr(asdjob.voicejob, "track_for", lambda db, row, path: (None, None))
+    monkeypatch.setattr(asdjob, "_decode_window", lambda *a, **k: ([], np.zeros(0, np.int16), "cpu"))
+    monkeypatch.setattr(asdjob, "link_tracks", lambda *a, **k: [])
+    monkeypatch.setattr(asdjob, "identify", lambda *a, **k: None)
+    monkeypatch.setattr(asdjob, "score_tracks", lambda *a, **k: None)
+    monkeypatch.setattr(asdjob, "piece_votes", lambda tracks, a, pcs, p: [(s, e, None, 0.0, None, 0) for s, e in pcs])
+    row = db.one("SELECT * FROM items WHERE item_id=?", (item,))
+    assert asdjob.run_item(db, row, None, None, "m", Built(), lambda: False) == "done"
+    after = db.one("SELECT segments_json, stats_json, updated FROM voice_results WHERE item_id=?", (item,))
+    assert tuple(after) == tuple(kept)
+    st = json.loads(db.one("SELECT stats_json FROM asd_runs WHERE item_id=?", (item,))["stats_json"])
+    assert st["resultKept"] and st["voicesUndecided"] == st["undecidedBefore"] == json.loads(kept["stats_json"])["voicesUndecided"]

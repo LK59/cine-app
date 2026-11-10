@@ -699,7 +699,12 @@ def voice_report(pieces, ref_labels, final, conf, in_conflict, via_asd, dropped_
                 row["reasons"] = reasons
             if named_idx:
                 row["namedPieces"] = len(named_idx)
-        if d.get("pid") is not None:
+        off_screen = "off_screen_no_candidate" in (row.get("reasons") or [row.get("reason")])
+        if off_screen:
+            # Personne à l'image pour cette voix : le « candidat » n'était qu'une valeur par défaut (note, marge
+            # et présence à 0) que le rapport donnait pour un vrai candidat.
+            row["candidate"] = None
+        elif d.get("pid") is not None:
             row["candidate"] = {"personId": int(d["pid"]), "score": round(float(d["score"]), 3),
                                 "margin": round(float(d["margin"]), 3), "present": round(float(d["present"]), 3)}
         if d.get("asd"):
