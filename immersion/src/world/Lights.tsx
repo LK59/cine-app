@@ -3,6 +3,8 @@ import { useFrame } from "@react-three/fiber";
 import type { PointLight } from "three";
 import { useProfile } from "../state/store";
 import { BREAST, CHANDELIER, LAMPS, ROOM } from "./layout";
+import { NIGHT_LAMPS } from "./geometry/night";
+import { PENDANTS } from "./geometry/south";
 import { MOONLIGHT_FROM } from "./Exterior";
 
 /**
@@ -59,8 +61,12 @@ export function Lights() {
           ))}
           <pointLight position={[BREAST.face - 0.75, 0.75, BREAST.z0 + 0.5]} color="#ffa055" intensity={9} distance={6.5} decay={2} />
           <pointLight position={[BREAST.face - 0.75, 0.75, BREAST.z1 - 0.5]} color="#ffa055" intensity={9} distance={6.5} decay={2} />
-          {/* La partie sud, sous la mezzanine : une lumière d'appoint, en attendant la cuisine. */}
-          <pointLight position={[0.5, 2.2, ROOM.south + 3]} color="#ffb672" intensity={14} distance={9} decay={2} />
+          {/* La cuisine : ses suspensions ; la mezzanine : sa lampe de lecture. */}
+          <pointLight position={[PENDANTS[1][0], PENDANTS[1][1] - 0.15, PENDANTS[1][2]]} color="#ffcf9a" intensity={20} distance={8} decay={2} />
+          <pointLight position={[1.2, ROOM.loft + 1.7, 7.4]} color="#ffc488" intensity={11} distance={8} decay={2} />
+          {/* Le couloir : ses appliques ; la chambre : ses lampes de chevet. */}
+          <pointLight position={[-2, 1.9, NIGHT_LAMPS.sconces[0][2] - 0.5]} color="#ffbf80" intensity={9} distance={6} decay={2} />
+          <pointLight position={[NIGHT_LAMPS.bedside[0][0] + 0.9, 1.25, (NIGHT_LAMPS.bedside[0][2] + NIGHT_LAMPS.bedside[1][2]) / 2]} color="#ffc083" intensity={12} distance={7.5} decay={2} />
         </>
       ) : (
         <pointLight position={[-3.2, lampY, CHANDELIER.z]} color="#ffbd7a" intensity={20} distance={11} decay={2} />

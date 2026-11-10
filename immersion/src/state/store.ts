@@ -79,6 +79,9 @@ export interface ImmersionState {
   nearScreen: string | null;
   /** Peut-il s'asseoir d'ici (touche F) ? */
   nearSofa: boolean;
+  /** La pièce où se tient le visiteur : elle décide de ce qui se dessine et de ce qui s'entend. */
+  room: "salon" | "cuisine" | "mezzanine" | "couloir" | "chambre";
+  setRoom: (room: ImmersionState["room"]) => void;
   /** La scène est-elle chargée (textures, modèles) ? */
   sceneReady: boolean;
   lang: Lang;
@@ -112,6 +115,8 @@ export const useStore = create<ImmersionState>((set, get) => ({
   seated: false,
   nearScreen: null,
   nearSofa: false,
+  room: "salon",
+  setRoom: (room) => get().room !== room && set({ room }),
   sceneReady: false,
   lang: browserLang(),
   settings: loadSettings(),

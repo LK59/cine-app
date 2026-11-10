@@ -1,10 +1,10 @@
 import { Atmosphere } from "./Atmosphere";
 import { Candles } from "./Candles";
 import { Exterior } from "./Exterior";
-import { Furniture } from "./Furniture";
+import { Fixtures } from "./Fixtures";
+import { Parts } from "./Parts";
 import { Lights } from "./Lights";
 import { Props } from "./Props";
-import { Shell } from "./Shell";
 import { SoundScape } from "./SoundScape";
 import { Screens } from "./Screens";
 
@@ -12,10 +12,10 @@ import { Screens } from "./Screens";
 export function Chalet() {
   return (
     <group>
-      <Shell />
+      <Parts blockSofa />
+      <Fixtures />
       <Screens />
       <SoundScape />
-      <Furniture />
       <Props />
       <Candles />
       <Lights />

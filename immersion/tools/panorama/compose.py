@@ -47,9 +47,9 @@ def sky_image(w, h):
     img = img + mw[..., None] * np.array([0.0035, 0.0045, 0.0075], np.float32) * 1.6
     return img.astype(np.float32)
 def add_stars(img):
-    h, w, _ = img.shape; NST = 14000
+    h, w, _ = img.shape; NST = 30000
     saz = rng.uniform(-180, 180, NST); sel = np.degrees(np.arcsin(rng.uniform(np.sin(math.radians(EL_MIN - 2)), np.sin(math.radians(EL_MAX + 2)), NST)))
-    mag = 0.03 + 1.6 * rng.random(NST) ** 9           # a few bright stars, many faint ones
+    mag = 0.05 + 2.6 * rng.random(NST) ** 9           # a few bright stars, many faint ones
     tint = rng.choice([0, 1, 2], NST, p=[0.6, 0.2, 0.2])
     cols = np.array([[0.85, 0.92, 1.0], [1.0, 0.88, 0.72], [0.72, 0.82, 1.0]], np.float32)[tint]
     fade = np.clip((sel + 2) / 14.0, 0, 1) ** 0.8      # extinction near the horizon

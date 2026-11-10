@@ -1,0 +1,28 @@
+{
+  "meshes": [
+    "sofa_frame",
+    "sofa_cushions",
+    "pillows_a",
+    "pillows_b"
+  ],
+  "triangles": {
+    "sofa_frame": 9962,
+    "sofa_cushions": 56656,
+    "pillows_a": 9680,
+    "pillows_b": 7744
+  },
+  "bbox": {
+    "min": [
+      -2.549,
+      0.048,
+      -3.851
+    ],
+    "max": [
+      1.471,
+      0.995,
+      0.853
+    ]
+  },
+  "seatHeight": 0.482,
+  "generator": "tools/sofa/build_sofa.py"
+}
