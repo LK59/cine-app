@@ -469,7 +469,9 @@ export function Exterior() {
       const geometry = new CylinderGeometry(radius, radius, radius * 1.4, 96, 1, true);
       return { geometry, material, radius };
     };
-    return { mid: make(1400, [0.6, 0.7]), near: make(340, [0.15, 0.23]) };
+    // Derrière le chalet, la couche intermédiaire montre des pentes proches en grandes facettes (le relief est à 30 m) :
+    // elle s'efface aussi, et la fenêtre de la cuisine donne sur le lointain.
+    return { mid: make(1400, [0.3, 0.4]), near: make(340, [0.15, 0.23]) };
   }, []);
 
   // Quand le panorama arrive : il prend la place du ciel de secours, et donne ses teintes et sa lune.

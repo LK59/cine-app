@@ -83,3 +83,9 @@ montre : pas de reflets, pas de verre, pas de ciel (le noir des fenêtres est le
   quantifié grossièrement (c'est le format demandé).
 - Densité de texels ~25–33/m (3–4 cm) : tous les côtés de toutes les poutres reçoivent la même densité, visibles ou non.
 - Le débruitage n'a pas de guide d'albedo/normale : de très fines ombres (3 px) peuvent être un peu adoucies.
+
+## Le canapé : coutures adoucies
+
+La lightmap du canapé passe par une dilatation des clairs (trois texels, `ffmpeg` de la machine) avant son
+encodage : ses coutures, cuites presque noires sur un ou deux texels, dessinaient des traits sombres en
+pointillé le long des coussins. Le PNG d'origine reste dans `assets-src/bake/work/sofa_brut.png`.
