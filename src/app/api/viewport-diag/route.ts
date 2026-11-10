@@ -156,13 +156,19 @@ export async function POST(req: NextRequest) {
         run: str(body.run, 12),
         preset,
         video: body.video === true,
-        // Avec vidéo : le film en cours (son décodage compte), ou une mire 1080p faite sur place.
+        // Avec vidéo : le film en cours (son décodage compte), ou une mire 1080p (un fichier, depuis 10.34.4).
         videoSource: body.videoSource === "film" || body.videoSource === "mire" ? body.videoSource : undefined,
         videoHeight: px(body.videoHeight) ?? undefined,
         fps: rate(body.fps),
         low1: rate(body.low1),
         frames: px(body.frames),
         seconds: rate(body.seconds),
+        // Les à-coups (10.34.4) : la pire image, les images de plus de 33 et 50 ms, et où sur le parcours
+        // tombent les cinq pires (« 0.42:61;… ») — un « 1 % le plus lent » bas ne disait pas pourquoi.
+        maxMs: px(body.maxMs) ?? undefined,
+        over33: px(body.over33) ?? undefined,
+        over50: px(body.over50) ?? undefined,
+        slowAt: typeof body.slowAt === "string" && /^[0-9.:;]{0,60}$/.test(body.slowAt) ? body.slowAt : undefined,
         renderer: str(body.renderer, 160),
         vendor: str(body.vendor, 80),
         width: px(body.width),

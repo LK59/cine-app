@@ -186,13 +186,26 @@ describe("POST /api/viewport-diag", () => {
       dpr: 2,
       scale: 1,
       baked: true,
+      maxMs: 61.4,
+      over33: 12,
+      over50: 3,
+      slowAt: "0.42:61;0.43:55",
       extra: "rien",
     });
     expect(res.status).toBe(204);
     const [line, kind] = mockLog.mock.calls[0];
     expect(kind).toBe("immersion-bench");
     expect(line).toMatchObject({ user: "louis", run: "abcdef123456", preset: "ultra", video: true, fps: 58.9, low1: 41.3, frames: 1178, width: 2880, height: 1800, baked: true, supersampling: false });
+    expect(line).toMatchObject({ maxMs: 61, over33: 12, over50: 3, slowAt: "0.42:61;0.43:55" });
     expect(line).not.toHaveProperty("extra");
+  });
+
+  it("une mesure du mode Immersion : un relevé d'à-coups mal formé tombe, la ligne reste", async () => {
+    expect((await post({ kind: "immersion-bench", preset: "low", fps: 60, slowAt: "<script>", maxMs: "beaucoup" })).status).toBe(204);
+    const [line] = mockLog.mock.calls[0];
+    expect(line.preset).toBe("low");
+    expect(line.slowAt).toBeUndefined();
+    expect(line.maxMs).toBeUndefined();
   });
 
   it("une mesure du mode Immersion sans préréglage connu : 400, rien d'écrit", async () => {

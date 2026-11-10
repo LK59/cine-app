@@ -10535,7 +10535,11 @@ le connaissent pas.
 **Sa mesure.** Le bouton « Mesurer » de ses réglages joue un parcours fixe par préréglage, avec et sans vidéo,
 et envoie une ligne par passage à `startup.log` (`kind: "immersion-bench"`, par `/api/viewport-diag` — le mode n'a
 pas d'autre journal) : cadence moyenne, 1 % le plus lent, carte graphique annoncée par le navigateur, définition
-réellement rendue. Champs connus et bornés, compte tiré de la session, comme les autres relevés de cette route.
+réellement rendue — et, depuis 10.34.4, les à-coups : la pire image (`maxMs`), le nombre d'images de plus de 33 et
+50 ms (`over33`, `over50`) et où sur le parcours tombent les cinq pires (`slowAt`, « 0.42:61;… ») ; un « 1 % le plus
+lent » bas ne disait pas s'il venait d'un endroit de la maison ou de sursauts réguliers. « Avec vidéo » joue le film
+en cours, sinon une mire qui est un vrai fichier 1080p (dessinée dans la page, elle pesait sur la mesure). Champs
+connus et bornés, compte tiré de la session, comme les autres relevés de cette route.
 
 **Tests.** `immersion-trigger.test.ts` (le mot exact, l'adresse, et aucun import de three ni du projet dans
 `src/`), `immersion-files.test.ts` (types servis, cache, `.br` par les marqueurs de §131, jamais hors du dossier,
