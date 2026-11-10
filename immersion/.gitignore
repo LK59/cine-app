@@ -1,0 +1,8 @@
+node_modules/
+dist/
+# Les fichiers bruts téléchargés (textures, modèles en pleine définition) : refaits par tools/assets.
+assets-src/
+# Captures et rapports des scénarios Playwright.
+captures/
+test-results/
+.env
