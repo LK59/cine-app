@@ -340,7 +340,7 @@ export const config = {
       return optional("XRAY_API_KEY");
     },
     /**
-     * « Revenir au début de la scène » (DECISIONS.md §142) : à qui le bouton est montré — `off` (défaut),
+     * « Revenir au début de la scène » (DECISIONS.md §143) : à qui le bouton est montré — `off` (défaut),
      * `admins`, `tous`. Coupé, la décision tourne quand même là où les scènes sont lues, et la ligne `stop`
      * dit ce qu'elle aurait proposé (`sceneRestart`) : de quoi mesurer avant d'allumer.
      */

@@ -486,7 +486,7 @@ ffmpeg, rien sur l'iGPU. Chaque mesure garde la version de l'algorithme (`ALGO_V
 
 ## 12. Débuts de scène
 
-*(10/11/2026, `app/scenecuts.py`)* Pour « Revenir au début de la scène » (Laterna, DECISIONS §142) : une
+*(10/11/2026, `app/scenecuts.py`)* Pour « Revenir au début de la scène » (Laterna, DECISIONS §143) : une
 frontière de scène est-elle un **vrai** début de scène, et d'où repartir ? Une scène d'ici regroupe des plans
 par les couleurs et les visages (§ Scènes) : une frontière peut tomber au milieu d'un dialogue en
 champ-contrechamp entre deux décors, entre deux angles d'une même pièce, ou dans un montage rapide sans

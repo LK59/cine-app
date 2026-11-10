@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
     // Les acteurs à l'écran (DECISIONS.md §138) : l'option branchée et ouverte à ce compte. Le lecteur ne
     // demande ses scènes qu'avec elle — sans, aucune requête de plus à l'ouverture d'un film.
     xrayAvailable: !!session && xrayOpenTo(session) && xrayConfigured(),
-    // « Revenir au début de la scène » (DECISIONS.md §142) : le bouton montré à ce compte. Coupé (défaut), la
+    // « Revenir au début de la scène » (DECISIONS.md §143) : le bouton montré à ce compte. Coupé (défaut), la
     // décision tourne quand même sur les scènes d'« À l'écran » et n'est que mesurée (`sceneRestart` du bilan).
     sceneRestartAvailable: !!session && xrayOpenTo(session) && xrayConfigured() && audienceAllows(sceneRestartAudience(), session),
     // « Demander un livre » : seulement avec les livres eux-mêmes.

@@ -1,5 +1,5 @@
 /**
- * « Revenir au début de la scène » (DECISIONS.md §142) : à la reprise d'un film laissé depuis des heures, faut-il
+ * « Revenir au début de la scène » (DECISIONS.md §143) : à la reprise d'un film laissé depuis des heures, faut-il
  * proposer de revenir au début de la scène en cours, et où ? **Une seule fonction, pure**, lue par les commandes
  * des trois lecteurs (`PlayerControls` : natif, serveur, hors ligne) et par ses tests — elle ne lit ni réseau,
  * ni horloge, ni stockage : tout lui est donné.

@@ -63,7 +63,7 @@ export async function forgetAccountOnDevice(budgetMs: number): Promise<void> {
   // ne recharge pas la page : le compte suivant, ouvrant le même film dans les trente secondes,
   // reprenait à la position du compte qui venait de partir (chasse aux bugs du 22/09/2026).
   step(forgetPrefetchedPlaybackState);
-  // Et la dernière lecture gelée pour « Revenir au début de la scène » (§142), rangée par titre elle aussi.
+  // Et la dernière lecture gelée pour « Revenir au début de la scène » (§143), rangée par titre elle aussi.
   step(forgetSceneRestart);
   // La description des fichiers aussi : la route la refuse à un compte qui lit par le serveur.
   step(forgetDirectInfo);

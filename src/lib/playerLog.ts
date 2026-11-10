@@ -118,7 +118,7 @@ const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop
  * une génération en écrit une dizaine.
  */
 /**
- * `debut-scene` (10/11/2026, DECISIONS.md §142) : « Revenir au début de la scène » montré, une ligne par séance
+ * `debut-scene` (10/11/2026, DECISIONS.md §143) : « Revenir au début de la scène » montré, une ligne par séance
  * — `outcome` (`utilisé`, `ignoré`, `saut`, `fermé`), la position, la cible et le recul. Seulement le bouton
  * allumé pour ce compte ; coupé, la décision n'est que mesurée, sur le bilan (`sceneRestart`).
  */
@@ -127,7 +127,7 @@ export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "er
 /** Les valeurs de `sleepTimer` qu'une ligne peut porter — celles du menu, et rien d'autre. */
 const SLEEP_TIMER_VALUES = new Set(["15", "30", "60", "90", "episode"]);
 /**
- * `sceneRestart` du bilan (§142) : ce que « Revenir au début de la scène » a décidé — `aurait-proposé` (bouton
+ * `sceneRestart` du bilan (§143) : ce que « Revenir au début de la scène » a décidé — `aurait-proposé` (bouton
  * coupé), `proposé:<issue>`, `non:<raison>`. Une forme fixe, et hors du plafond des quarante champs comme
  * `sleepTimer` : ajoutée à un bilan déjà plein, elle aurait été la première à tomber — et c'est la mesure qui
  * décide d'allumer le bouton.

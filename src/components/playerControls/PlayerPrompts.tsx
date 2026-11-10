@@ -2,7 +2,7 @@
 
 /**
  * Les invites flottantes du lecteur, visibles même commandes masquées : « Passer l'intro / le
- * récap » — ou, à sa place, « Revenir au début de la scène » (§142) —, la ligne de la minuterie de veille, « Vous êtes toujours là ? » et la carte de l'épisode
+ * récap » — ou, à sa place, « Revenir au début de la scène » (§143) —, la ligne de la minuterie de veille, « Vous êtes toujours là ? » et la carte de l'épisode
  * suivant. Ce qui décide de les montrer reste dans `PlayerControls` ; elles ne font que s'afficher.
  */
 
@@ -61,7 +61,7 @@ export function PlayerPrompts({
         </button>
       )}
 
-      {/* « Revenir au début de la scène » (§142) : à la place de « Passer l'intro », huit secondes à la reprise.
+      {/* « Revenir au début de la scène » (§143) : à la place de « Passer l'intro », huit secondes à la reprise.
           Un vrai bouton — le focus du clavier et de la navigation spatiale le trouve comme l'autre. */}
       {!skipNow && sceneRestart && onSceneRestart && (
         <button

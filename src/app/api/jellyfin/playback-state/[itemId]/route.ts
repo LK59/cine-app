@@ -41,7 +41,7 @@ export interface PlaybackState {
   positionUnknown?: true;
   /**
    * La dernière lecture de ce titre par ce compte selon Jellyfin (`UserData.LastPlayedDate`, ISO), `null`
-   * s'il n'en a pas — « Revenir au début de la scène » (DECISIONS.md §142) mesure ainsi l'absence, sans
+   * s'il n'en a pas — « Revenir au début de la scène » (DECISIONS.md §143) mesure ainsi l'absence, sans
    * requête de plus. Gelée par le lecteur à l'ouverture (`sceneRestartSession.ts`) : ses rapports de
    * progression la font avancer pendant la séance.
    */

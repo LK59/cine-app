@@ -17,7 +17,7 @@ import {
 import type { XrayPlayerPayload } from "@/lib/xray/scenes";
 
 /**
- * « Revenir au début de la scène » dans les commandes (DECISIONS.md §142) : la décision (`decideSceneRestart`)
+ * « Revenir au début de la scène » dans les commandes (DECISIONS.md §143) : la décision (`decideSceneRestart`)
  * prise **une fois par séance**, à la première image à la position de reprise, sur les scènes qu'« À l'écran »
  * a déjà lues (`useXrayScenes`) — aucune requête de plus. Le bouton n'est montré qu'au public réglé
  * (`SCENE_RESTART_ENABLED`, `sceneRestartAvailable` de la configuration publique, **suivie, jamais demandée**) ;

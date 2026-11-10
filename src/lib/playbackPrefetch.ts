@@ -42,7 +42,7 @@ export function fetchPlaybackState(itemId: string, timeoutMs = PLAYBACK_STATE_TI
     .then(async (response) => {
       if (response.ok) {
         const state = (await response.json()) as PlaybackState;
-        // La dernière lecture, gelée pour « Revenir au début de la scène » (§142) — dans son propre garde :
+        // La dernière lecture, gelée pour « Revenir au début de la scène » (§143) — dans son propre garde :
         // une note qui échoue ne doit pas coûter l'ouverture.
         try {
           noteLastPlayedAt(itemId, state?.lastPlayedAt);

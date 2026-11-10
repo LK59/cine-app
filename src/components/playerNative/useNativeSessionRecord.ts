@@ -140,7 +140,7 @@ export function useNativeSessionRecord({
         ...sleepTimerLogFields(sleepTimerStore.get()),
         // Ce que la lenteur a fait paraître pendant la séance, et les choix faits (§78).
         ...slowFields(),
-        // « Revenir au début de la scène » (§142) : ce qui a été décidé — rien sans les acteurs à l'écran.
+        // « Revenir au début de la scène » (§143) : ce qui a été décidé — rien sans les acteurs à l'écran.
         ...sceneRestartLogFields(itemId),
       };
     },

@@ -722,7 +722,7 @@ export function PlayerControls({
   const xrayOffered = useXrayAvailable() && xrayable && !lab;
   const xrayPayload = useXrayScenes(itemId, xrayOffered);
   /**
-   * « Revenir au début de la scène » (§142) : décidé une fois par séance sur ces mêmes scènes, à la première
+   * « Revenir au début de la scène » (§143) : décidé une fois par séance sur ces mêmes scènes, à la première
    * image ; montré seulement au public réglé (`SCENE_RESTART_ENABLED`, coupé par défaut) — voir `useSceneRestart`.
    */
   const sceneRestart = useSceneRestart({
@@ -1196,7 +1196,7 @@ export function PlayerControls({
             audioTracks={audioTracks}
             currentAudioId={currentAudioId}
             onChangeAudio={(id) => {
-              // Un changement de piste avant la première image refuse « Revenir au début de la scène » (§142).
+              // Un changement de piste avant la première image refuse « Revenir au début de la scène » (§143).
               sceneRestart.noteTrack();
               onChangeAudio(id);
             }}

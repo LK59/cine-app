@@ -105,7 +105,7 @@ export function useServerSessionRecord({
       ...(switchGapRef.current !== null ? { switchGapMs: switchGapRef.current } : {}),
       ...(reloadGapRef.current !== null ? { reloadGapMs: reloadGapRef.current } : {}),
       ...(lighterClearedRef.current ? { lighterCleared: true } : {}),
-      // « Revenir au début de la scène » (§142) : ce qui a été décidé — rien sans les acteurs à l'écran.
+      // « Revenir au début de la scène » (§143) : ce qui a été décidé — rien sans les acteurs à l'écran.
       ...sceneRestartLogFields(logContext.current.itemId) };
     },
     [watched, videoRef, linkMeterRef, streamNeedRef, startupRef, logContext, positionNow, tallyRef, subtitleSwitchesRef, restartsRef, errorRef, sessionPlayedRef, sessionStartedAtRef, slowLogRef, switchGapRef, reloadGapRef, lighterClearedRef]

@@ -1,5 +1,5 @@
 /**
- * Ce que « Revenir au début de la scène » retient d'une séance (DECISIONS.md §142), hors des composants.
+ * Ce que « Revenir au début de la scène » retient d'une séance (DECISIONS.md §143), hors des composants.
  *
  * Une séance survit à ce qui remonte les commandes : une reconstruction du lecteur natif, un passage de main
  * au lecteur serveur. Le bouton est proposé **une fois par séance** et jamais de nouveau après l'un ou
