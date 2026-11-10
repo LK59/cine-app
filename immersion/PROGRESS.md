@@ -338,6 +338,22 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
 - Pas encore regardées : `cuisine`, `ilot`, `escalier`, `mezzanine`, `balcon`, `couloir`, `chambre`, `lit`,
   `vallee`, `ouest`, `reglages`.
 
+### Reprise (10/11 au soir) — demandes du propriétaire, puis livraison
+
+Demandé : une télévision dans la chambre, le son de **toutes** les télévisions avec une portée maximale et des
+zones où l'on en entend deux, l'écran du salon plus grand ; puis finir le plan, commiter, pousser, déployer.
+
+- [x] Écran du salon 4,6 → 5,2 m (`TV`, `layout.ts`), relevé au-dessus des bougies du manteau ; fermes extérieures
+      écartées (`TRUSSES`) pour dégager les coins de l'image. Écran de la chambre 1,25 → 1,9 m, meuble bas élargi.
+- [x] Portée par haut-parleur (`Screen.range`, `rangeGain`, `applyAcoustics`) : salon 14 m, cuisine 8, chambre 7,
+      fondu sur le dernier quart. Recouvrements voulus : cuisine + salon, mezzanine + cuisine, est du couloir :
+      cuisine + chambre. Scénario `06-son` vert.
+- [x] Rebase sur `main` fait, version 10.34.0 commitée.
+- [ ] Recuisson des lightmaps (géométrie du salon et de la chambre changée) : `logs/bake.log`, puis
+      `sh tools/apres-cuisson.sh` (build, captures, affiche, portail) — **le portail doit être vert sur cet arbre**
+- [ ] Scénarios 01–06, regard sur les captures, commit des lightmaps et de l'affiche
+- [ ] Fusion dans `main` (avance rapide), build depuis une copie propre, déploiement, vérification, push, CI, ménage
+
 ### Arrêt de 19 h 30 (limite de session atteinte)
 
 - **Rebase sur `main` FAIT en local, PAS poussé** : `origin/immersion` porte encore l'historique d'avant (même
