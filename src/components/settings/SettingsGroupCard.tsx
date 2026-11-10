@@ -35,10 +35,29 @@ export function SettingsGroupCard({
   footer,
   keys,
   whyKey,
+  titleKey,
+  anchor,
+  status,
+  needs,
+  dimmed = false,
   choices,
   notes,
 }: {
   group: SettingGroup;
+  /**
+   * L'intitulé, quand la carte ne montre qu'une partie de son groupe — une fonction parmi celles qui
+   * partagent le fournisseur d'IA, les livres parmi les réglages de l'application (§142). Donné, la
+   * carte ne porte ni l'étiquette « Facultatif/Obligatoire » ni l'aide « où trouver la clé » du groupe.
+   */
+  titleKey?: string;
+  /** Un `id` pour qu'un lien d'une autre carte y mène (« nécessite une clé d'IA » → le fournisseur). */
+  anchor?: string;
+  /** L'état de la fonction en une ligne, sous l'intitulé (§142). */
+  status?: React.ReactNode;
+  /** Ce dont la fonction a besoin, et le lien vers ce qui manque (§142). */
+  needs?: React.ReactNode;
+  /** Un besoin manque : les champs s'estompent, restent modifiables — on peut préparer avant de brancher. */
+  dimmed?: boolean;
   /**
    * Une liste proposée pour un champ texte (les modèles d'un fournisseur, §140) : un menu, plus « Autre… »
    * qui rend le champ libre — une valeur hors liste s'y montre telle quelle.
@@ -65,23 +84,29 @@ export function SettingsGroupCard({
   const t = useT();
   const defs = SETTINGS.filter((s) => s.group === group && (!keys || keys.includes(s.key)));
   const need = defs.some((d) => d.need === "required") ? "required" : "optional";
-  const testable = (TESTABLE_GROUPS as readonly string[]).includes(group);
+  // Le test de connexion n'a de sens que sur une carte qui montre l'adresse du service : la carte
+  // « Acteurs à l'écran » des Fonctions intelligentes ne montre que le public (§142).
+  const testable = (TESTABLE_GROUPS as readonly string[]).includes(group) && defs.some((d) => d.kind === "url");
   // Une aide (où trouver la clé) seulement pour les services : un texte absent revient sous la
   // forme de sa clé, qu'il ne faut pas afficher.
   const helpKey = `setup.groups.${group}.help`;
-  const help = t(helpKey) === helpKey ? "" : t(helpKey);
+  // Une carte titrée à part (une fonction) ne la garde que si elle montre une clé : le fournisseur d'IA oui,
+  // l'interrupteur des acteurs à l'écran non (son aide parle de l'adresse, qui est dans Connexions).
+  const help = (titleKey && !defs.some((d) => d.kind === "secret")) || t(helpKey) === helpKey ? "" : t(helpKey);
 
   return (
-    <section className="settings-card rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+    <section id={anchor} data-dimmed={dimmed ? "" : undefined} className="settings-card scroll-mt-20 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
       <header className="mb-3 flex flex-wrap items-center gap-2">
-        <h3 className="text-base font-semibold text-white">{t(`setup.groups.${group}.title`)}</h3>
-        {group !== "app" && group !== "playback" && group !== "defaults" && group !== "deployment" && (
+        <h3 className="text-base font-semibold text-white">{t(titleKey ?? `setup.groups.${group}.title`)}</h3>
+        {!titleKey && group !== "app" && group !== "playback" && group !== "defaults" && group !== "deployment" && (
           <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${NEED_TONE[need]}`}>{t(`setup.need.${need}`)}</span>
         )}
       </header>
-      <p className={`${help ? "mb-1" : "mb-4"} text-sm text-muted`}>{t(whyKey ?? `setup.groups.${group}.why`)}</p>
-      {help && <p className="mb-4 text-xs text-subtle">{help}</p>}
-      {group === "xray" && (
+      {status}
+      <p className={`${help || needs ? "mb-1" : "mb-4"} text-sm text-muted`}>{t(whyKey ?? `setup.groups.${group}.why`)}</p>
+      {help && <p className={`${needs ? "mb-1" : "mb-4"} text-xs text-subtle`}>{help}</p>}
+      {needs && <div className="mb-4">{needs}</div>}
+      {group === "xray" && testable && (
         // Le service se déploie à part : son guide est sur le dépôt public (§138).
         <p className="-mt-2 mb-4 text-xs">
           <a href={XRAY_GUIDE_URL} target="_blank" rel="noopener noreferrer" className="font-medium text-accent-400 hover:underline">
@@ -90,7 +115,7 @@ export function SettingsGroupCard({
         </p>
       )}
 
-      <div className="space-y-4">
+      <div className={`space-y-4 ${dimmed ? "opacity-50" : ""}`}>
         {defs.filter((d) => d.inApp).map((def) => {
           const view = views.get(def.key);
           const value = draft[def.key] ?? (def.kind === "secret" ? "" : view?.value ?? "");

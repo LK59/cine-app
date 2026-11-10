@@ -54,7 +54,9 @@
       "downloads": "Downloads"
     },
     "sections": {
-      "services": "Dienste"
+      "services": "Dienste",
+      "smart": "Intelligente Funktionen",
+      "installation": "Installation"
     },
     "tmdb": "TMDB",
     "parts": {
@@ -64,11 +66,14 @@
     "config": {
       "connections": "Verbindungen",
       "playback": "Wiedergabe",
-      "subtitles": "Generierte Untertitel",
       "accounts": "Neue Konten",
       "admin": "Administrator",
       "deployment": "Bereitstellung",
-      "dialogue": "Dialogsuche"
+      "dialogue": "Dialogsuche",
+      "diffusion": "Streaming und offline",
+      "books": "Bücher",
+      "ai": "Künstliche Intelligenz",
+      "autoFrame": "Automatischer Bildzuschnitt"
     },
     "backToCinema": "Zurück zum Kino",
     "accountPreferences": "Ihre Einstellungen sind unter Konto",
@@ -3351,7 +3356,7 @@
       },
       "xray": {
         "title": "Darsteller im Bild",
-        "why": "Optional, standardmäßig aus. Ein neben der App installierter Dienst erkennt Szene für Szene die Darsteller im Bild, damit sich während eines Films oder einer Folge sagen lässt, wer zu sehen ist. Eingeschaltet fordert jede Wiedergabe die Analyse des gesehenen Titels an, danach die der nächsten Folge.",
+        "why": "Optional. Ein neben der App installierter Dienst erkennt Szene für Szene die Darsteller im Bild. Hier seine Adresse und sein Schlüssel; die Funktion selbst wird unter Intelligente Funktionen → Darsteller im Bild eingeschaltet.",
         "help": "Adresse und Schlüssel des Dienstes (seine Variable XRAY_API_KEY). Die Installation beschreibt xray/README.md.",
         "guide": "Den Analysedienst installieren (Bereitstellungsanleitung)"
       },
@@ -3402,7 +3407,7 @@
       "JACKETT_API_KEY": "Jackett-API-Schlüssel",
       "OMDB_API_KEY": "OMDb-Schlüssel",
       "MDBLIST_API_KEY": "MDBList-Schlüssel",
-      "XRAY_ENABLED": "Darsteller im Bild analysieren",
+      "XRAY_ENABLED": "Darsteller im Bild offen für",
       "XRAY_URL": "Adresse des Analysedienstes",
       "XRAY_API_KEY": "Schlüssel des Analysedienstes",
       "APP_LANGUAGE": "Standardsprache",
@@ -3435,9 +3440,9 @@
       "DESCRIBE_SEARCH_ENABLED": "Suche per Beschreibung: einen in einem Satz beschriebenen Film oder eine Serie finden",
       "RECAP_ENABLED": "„Bisher“: auf der Seite einer laufenden Serie an die zuletzt gesehenen Ereignisse erinnern",
       "ASK_ENABLED": "Fragen zu einem Titel: auf einer Titelseite oder bei angehaltenem Film anhand des bereits Gesehenen antworten",
-      "SUBTITLE_GEN_PROVIDER": "Anbieter",
-      "SUBTITLE_GEN_API_KEY": "Schlüssel des Anbieters",
-      "SUBTITLE_GEN_MODEL": "Modell",
+      "SUBTITLE_GEN_PROVIDER": "KI-Anbieter",
+      "SUBTITLE_GEN_API_KEY": "Schlüssel des KI-Anbieters",
+      "SUBTITLE_GEN_MODEL": "Modell der generierten Untertitel (die anderen Funktionen nutzen das schnelle Modell des Anbieters)",
       "SUBTITLE_GEN_BUDGET_USD": "Monatslimit für alle kostenpflichtigen Funktionen (Dollar)",
       "SUBTITLE_GEN_PRICE_INPUT": "Eingabepreis pro Million Tokens (leer: bekannter Tarif)",
       "SUBTITLE_GEN_PRICE_OUTPUT": "Ausgabepreis pro Million Tokens (leer: bekannter Tarif)",
@@ -3484,7 +3489,7 @@
       "forgot": "Vergessen: docker exec -it cine-app node server-boot/reset-admin-password.mjs"
     },
     "restartNote": "Wirkt ab dem nächsten Start des Containers.",
-    "later": "Später, in der Verwaltung → Konfiguration: Chromecast (Wiedergabe), generierte Untertitel und was neue Konten erhalten (Neue Konten).",
+    "later": "Später, in der Verwaltung → Konfiguration: Chromecast (Streaming und offline), die KI-Funktionen (Intelligente Funktionen) und was neue Konten erhalten (Neue Konten).",
     "testBlock": {
       "title": "Der Verbindungstest ist fehlgeschlagen:",
       "hint": "Korrigieren und „Weiter“ tippen, um es erneut zu versuchen, oder fortfahren: Alles lässt sich auch später unter Konfiguration → Verbindungen einstellen."
@@ -3594,10 +3599,7 @@
       "hint": "Adresse und Schlüssel jedes Dienstes. Ein hier gesetzter Wert ersetzt den aus der .env."
     },
     "playback": {
-      "hint": "Der integrierte Player und sein Rückgriff auf den Server-Player. Gilt ohne Neustart."
-    },
-    "subtitles": {
-      "hint": "Übersetzung durch eine Online-KI: Anbieter, Schlüssel, Monatsbudget."
+      "hint": "Der integrierte Player und seine Übergabe an Jellyfin für Dateien, die der Browser nicht abspielt. Gilt ohne Neustart."
     },
     "accounts": {
       "hint": "Was ein Konto erhält, solange es nichts gewählt hat, und der Willkommensbildschirm dafür."
@@ -3610,13 +3612,68 @@
     },
     "dialogue": {
       "hint": "Einen Film über einen gesprochenen Satz finden. Die Untertitel werden einmal gelesen, danach jede Nacht für Neues."
+    },
+    "diffusion": {
+      "hint": "Chromecast und auf dem Gerät gespeicherte Downloads. Gilt ohne Neustart."
+    },
+    "cast": {
+      "title": "Chromecast",
+      "why": "Einen Film an einen Chromecast-Fernseher senden. Der Empfänger von Google genügt; eine Kennung braucht nur eine Installation, die einen eigenen registriert hat."
+    },
+    "offline": {
+      "title": "Offline-Downloads",
+      "why": "Jellyfin bereitet eine leichtere Fassung vor, die das Gerät behält, um sie ohne Netz anzusehen. Über den auf dem Server erlaubten Platz hinaus werden die ältesten bereits abgeholten Fassungen gelöscht."
+    },
+    "books": {
+      "hint": "Die EPUB-Dateien der Jellyfin-Bibliothek, in der App gelesen. Standardmäßig aus.",
+      "title": "Bücher",
+      "why": "Ein Raster der Bücher aus Jellyfin und ein Reader in der App. Ausgeschaltet sieht eine Installation ohne Bücher nichts davon."
+    },
+    "bookRequests": {
+      "title": "Buchanfragen",
+      "why": "„Ein Buch anfragen“ schickt eine Anfrage an den Administrator, der das Buch von Hand hinzufügt."
+    },
+    "googleBooks": {
+      "title": "Google Books",
+      "why": "Ergänzt, was einem Buch fehlt — Zusammenfassung, Cover, Genres, Jahr —, nie das, was Jellyfin oder die Datei schon sagen. Braucht einen Google-Books-Schlüssel."
+    },
+    "ai": {
+      "hint": "Ein Online-KI-Anbieter, ein Schlüssel und ein gemeinsames Monatslimit, dann jede Funktion, die sie nutzt.",
+      "providerTitle": "Gemeinsamer KI-Anbieter",
+      "featuresTitle": "Die Funktionen, die ihn nutzen",
+      "featuresIntro": "Jede wird einzeln eingeschaltet, für alle Konten oder nur für Administratoren. Ohne Schlüssel erscheint keine."
+    },
+    "xray": {
+      "featureTitle": "Darsteller im Bild",
+      "featureWhy": "Sagt, wer während eines Films oder einer Folge im Bild ist. Eingeschaltet fordert jede Wiedergabe die Analyse des gesehenen Titels an, danach die der nächsten Folge; die ganze Bibliothek wird im Hintergrund analysiert."
+    },
+    "autoFrame": {
+      "hint": "Das Bild über die schwarzen Balken eines Films vergrößern, anhand seiner Vorschaubilder.",
+      "title": "Automatischer Bildzuschnitt",
+      "why": "Trägt ein Film seine schwarzen Balken im Bild, vergrößert der Player es, bis es den Bildschirm füllt. Die Balken werden auf den Vorschaubildern von Jellyfin erkannt."
+    },
+    "needs": {
+      "aiKey": "einen KI-Schlüssel",
+      "xrayService": "den X-Ray-Dienst",
+      "xrayOn": "eingeschaltete Darsteller im Bild",
+      "booksOn": "eingeschaltete Bücher",
+      "playerOn": "den integrierten Player",
+      "missing": "Inaktiv: braucht {need}.",
+      "ready": "Braucht {list}: bereit.",
+      "fix": {
+        "aiKey": "KI-Anbieter einrichten",
+        "xrayService": "Dienst anbinden (Verbindungen)",
+        "xrayOn": "Darsteller im Bild einschalten",
+        "booksOn": "Bücher einschalten",
+        "playerOn": "Player einschalten"
+      }
     }
   },
   "xrayScan": {
     "nav": "Darsteller im Bild",
     "hint": "Die ganze Mediathek wird im Hintergrund analysiert, damit bei jedem Film und jeder Folge bekannt ist, wer im Bild ist. Sie läuft auch während der Wiedergabe weiter, immer nach dem, was gerade angesehen wird.",
     "title": "Analyse der Mediathek",
-    "off": "Die Option „Darsteller im Bild“ ist ausgeschaltet oder noch nicht eingerichtet (Konfiguration → Verbindungen).",
+    "off": "Die Darsteller im Bild sind ausgeschaltet oder ihr Dienst ist nicht angebunden: Schalten Sie sie oben ein und richten Sie den Dienst unter Konfiguration → Verbindungen ein.",
     "phase": {
       "starting": "Wartet auf den ersten Durchgang",
       "planning": "Mediathek wird gelesen…",
@@ -4399,7 +4456,7 @@
   "subSync": {
     "nav": "Untertitel-Synchronität",
     "hint": "Misst auf Anfrage, ob jeder Text-Untertitel auf die Sprache im Film fällt, und richtet ihn bei der Anzeige neu aus — nie in der Datei. Ohne Klick hier wird nichts gemessen oder korrigiert.",
-    "off": "Dafür muss die Option „Schauspieler im Bild“ eingerichtet sein (Konfiguration → Verbindungen): Sie hört die Sprache der Filme ab.",
+    "off": "Dafür müssen die Darsteller im Bild eingeschaltet (Intelligente Funktionen → Darsteller im Bild) und ihr Dienst angebunden sein (Verbindungen): Er hört die Sprache der Filme ab.",
     "filterLabel": "Anzeigen",
     "filter": {
       "affected": "Zu korrigieren",

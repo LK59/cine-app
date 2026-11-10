@@ -54,7 +54,9 @@
       "downloads": "Downloads"
     },
     "sections": {
-      "services": "Services"
+      "services": "Services",
+      "smart": "Smart features",
+      "installation": "Installation"
     },
     "tmdb": "TMDB",
     "parts": {
@@ -64,11 +66,14 @@
     "config": {
       "connections": "Connections",
       "playback": "Playback",
-      "subtitles": "Generated subtitles",
       "accounts": "New accounts",
       "admin": "Administrator",
       "deployment": "Deployment",
-      "dialogue": "Dialogue search"
+      "dialogue": "Dialogue search",
+      "diffusion": "Casting and offline",
+      "books": "Books",
+      "ai": "Artificial intelligence",
+      "autoFrame": "Automatic reframing"
     },
     "backToCinema": "Back to Cinema",
     "accountPreferences": "Your preferences are in Account",
@@ -3351,7 +3356,7 @@
       },
       "xray": {
         "title": "Actors on screen",
-        "why": "Optional, off by default. A service installed next to the app recognises, scene by scene, the actors in the picture, so it can tell who is on screen during a film or an episode. When on, each playback asks for the title being watched to be analysed, then the next episode.",
+        "why": "Optional. A service installed next to the app recognises, scene by scene, the actors in the picture. Here, its address and key; the feature itself is turned on in Smart features → Actors on screen.",
         "help": "The service's address and key (its XRAY_API_KEY variable). Installing it is described in xray/README.md.",
         "guide": "Install the analysis service (deployment guide)"
       },
@@ -3402,7 +3407,7 @@
       "JACKETT_API_KEY": "Jackett API key",
       "OMDB_API_KEY": "OMDb key",
       "MDBLIST_API_KEY": "MDBList key",
-      "XRAY_ENABLED": "Analyse the actors on screen",
+      "XRAY_ENABLED": "Actors on screen open to",
       "XRAY_URL": "Analysis service address",
       "XRAY_API_KEY": "Analysis service key",
       "APP_LANGUAGE": "Default language",
@@ -3435,9 +3440,9 @@
       "DESCRIBE_SEARCH_ENABLED": "Search by description: find a film or series described in one sentence",
       "RECAP_ENABLED": "“Previously”: on the page of a series in progress, recall the latest events watched",
       "ASK_ENABLED": "Questions about a title: on a title page or with the film paused, answer from what the account has already watched",
-      "SUBTITLE_GEN_PROVIDER": "Provider",
-      "SUBTITLE_GEN_API_KEY": "Provider key",
-      "SUBTITLE_GEN_MODEL": "Model",
+      "SUBTITLE_GEN_PROVIDER": "AI provider",
+      "SUBTITLE_GEN_API_KEY": "AI provider key",
+      "SUBTITLE_GEN_MODEL": "Model for generated subtitles (the other features use the provider's fast model)",
       "SUBTITLE_GEN_BUDGET_USD": "Monthly limit for all paid features (dollars)",
       "SUBTITLE_GEN_PRICE_INPUT": "Input price per million tokens (empty: known rate)",
       "SUBTITLE_GEN_PRICE_OUTPUT": "Output price per million tokens (empty: known rate)",
@@ -3484,7 +3489,7 @@
       "forgot": "Forgot it: docker exec -it cine-app node server-boot/reset-admin-password.mjs"
     },
     "restartNote": "Takes effect the next time the container starts.",
-    "later": "Later, in management → Configuration: Chromecast (Playback), generated subtitles, and what new accounts receive (New accounts).",
+    "later": "Later, in management → Configuration: Chromecast (Casting and offline), AI features (Smart features), and what new accounts receive (New accounts).",
     "testBlock": {
       "title": "The connection test failed:",
       "hint": "Fix it and press “Next” to try again, or continue: everything can also be set later in Configuration → Connections."
@@ -3594,10 +3599,7 @@
       "hint": "The address and key of each service. A value set here overrides the one in .env."
     },
     "playback": {
-      "hint": "The built-in player and its fallback to the server player. Applied without a restart."
-    },
-    "subtitles": {
-      "hint": "Translation by an online AI: provider, key, monthly budget."
+      "hint": "The built-in player and its hand-over to Jellyfin for files the browser can't play. Applied without a restart."
     },
     "accounts": {
       "hint": "What an account gets until it chooses otherwise, and the welcome screen to offer it."
@@ -3610,13 +3612,68 @@
     },
     "dialogue": {
       "hint": "Find a film by a line spoken in it. The films' subtitles are read once, then every night for what is new."
+    },
+    "diffusion": {
+      "hint": "Chromecast and downloads kept on the device. Applied without a restart."
+    },
+    "cast": {
+      "title": "Chromecast",
+      "why": "Send a film to a Chromecast TV. Google's receiver is enough; an ID is only for an installation that registered its own."
+    },
+    "offline": {
+      "title": "Offline downloads",
+      "why": "Jellyfin prepares a lighter version, which the device keeps to watch without a network. Past the space allowed on the server, the oldest versions already fetched are deleted."
+    },
+    "books": {
+      "hint": "EPUB files from the Jellyfin library, read in the app. Off by default.",
+      "title": "Books",
+      "why": "A grid of Jellyfin's books and an in-app reader. Off, an installation without books sees nothing of them."
+    },
+    "bookRequests": {
+      "title": "Book requests",
+      "why": "“Request a book” sends a request to the administrator, who adds the book by hand."
+    },
+    "googleBooks": {
+      "title": "Google Books",
+      "why": "Fills in what a book is missing — summary, cover, genres, year — never what Jellyfin or the file already say. Needs a Google Books key."
+    },
+    "ai": {
+      "hint": "One online AI provider, one key and one shared monthly limit, then every feature that uses them.",
+      "providerTitle": "Shared AI provider",
+      "featuresTitle": "The features that use it",
+      "featuresIntro": "Each one is turned on separately, for every account or for administrators only. Without a key, none of them appears."
+    },
+    "xray": {
+      "featureTitle": "Actors on screen",
+      "featureWhy": "Tells who is in the picture during a film or an episode. When on, each playback asks for the title being watched to be analysed, then the next episode; the whole library is analysed in the background."
+    },
+    "autoFrame": {
+      "hint": "Enlarge the picture over a film's black bars, based on its thumbnails.",
+      "title": "Automatic reframing",
+      "why": "When a film carries its black bars inside the picture, the player enlarges it to fill the screen. The bars are found on Jellyfin's thumbnails."
+    },
+    "needs": {
+      "aiKey": "an AI key",
+      "xrayService": "the X-Ray service",
+      "xrayOn": "actors on screen turned on",
+      "booksOn": "books turned on",
+      "playerOn": "the built-in player",
+      "missing": "Inactive: needs {need}.",
+      "ready": "Needs {list}: ready.",
+      "fix": {
+        "aiKey": "Set up the AI provider",
+        "xrayService": "Connect the service (Connections)",
+        "xrayOn": "Turn on actors on screen",
+        "booksOn": "Turn on books",
+        "playerOn": "Turn on the player"
+      }
     }
   },
   "xrayScan": {
     "nav": "On-screen cast",
     "hint": "The whole library analysed in the background, to know who is on screen in every film and episode. It keeps going during playback, always behind what viewers are watching.",
     "title": "Library analysis",
-    "off": "The “On-screen cast” option is off, or not set up yet (Configuration → Connections).",
+    "off": "Actors on screen are off, or their service is not connected: turn them on above, and set up the service in Configuration → Connections.",
     "phase": {
       "starting": "Waiting for the first pass",
       "planning": "Reading the library…",
@@ -4399,7 +4456,7 @@
   "subSync": {
     "nav": "Subtitle sync",
     "hint": "Measures, on request, whether each text subtitle lands on the film's speech, and realigns it on screen — never in the file. Nothing is measured or corrected without a click here.",
-    "off": "This needs the “Actors on screen” option set up (Configuration → Connections): it is what listens to the films' speech.",
+    "off": "This needs actors on screen turned on (Smart features → Actors on screen) and their service connected (Connections): it is what listens to the films' speech.",
     "filterLabel": "Show",
     "filter": {
       "affected": "To fix",

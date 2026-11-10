@@ -8,13 +8,15 @@ import { useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { SettingsGroupCard, type Draft } from "@/components/settings/SettingsGroupCard";
 import { DEFAULT_MODELS, PROVIDERS, modelChoices, type ProviderName } from "@/lib/subtitleGen/pricing";
-import { AiFeaturesBlock, FEATURE_SETTING, featureNote, type FeatureStatusView } from "@/components/settings/AiFeaturesBlock";
+import { AiFeaturesBlock, type FeatureStatusView } from "@/components/settings/AiFeaturesBlock";
 import type { SettingView } from "@/lib/settings/schema";
 
 /**
- * Les sous-titres générés dans « Réglages serveur » (DECISIONS.md §69) : la carte de réglages
- * commune (fournisseur, clé masquée, modèle, budget, prix), puis la dépense du mois et les tâches,
- * avec reprendre et annuler.
+ * Le fournisseur d'IA commun, dans Fonctions intelligentes → Intelligence artificielle (DECISIONS.md
+ * §69, §140, §142) : la carte de réglages commune (fournisseur, clé masquée, modèle, plafond, prix),
+ * puis la dépense du mois et le tableau « ce que chaque fonction fait selon le fournisseur ». Les
+ * fonctions qui s'en servent ont chacune leur carte en dessous ; les tâches des sous-titres générés
+ * suivent la leur (`SubtitleJobs`).
  *
  * Deux choses que la carte commune ne sait pas faire : le champ modèle arrive **prérempli** avec
  * celui du fournisseur, et changer de fournisseur y met le modèle par défaut du nouveau — sauf si
@@ -37,7 +39,7 @@ interface AdminJob {
   viewers: number;
 }
 
-interface AdminPayload {
+export interface AiAdminPayload {
   available: boolean;
   hasKey: boolean;
   provider: ProviderName;
@@ -54,12 +56,24 @@ interface AdminPayload {
   jobs: AdminJob[];
 }
 
+/**
+ * L'état des fonctions d'IA et du fournisseur, tel que le serveur le voit (`/api/subtitle-gen/admin`,
+ * réservé à l'administrateur). Une seule clé SWR pour toutes les cartes qui le lisent : la page IA,
+ * les acteurs à l'écran. Rafraîchi toutes les 10 s, comme l'était la carte des sous-titres.
+ */
+export function useAiAdmin() {
+  return useSWR<AiAdminPayload>("/api/subtitle-gen/admin", fetcher, { refreshInterval: 10_000 });
+}
+
 const usd = (n: number) => (n < 0.01 && n > 0 ? n.toFixed(4) : n.toFixed(2));
 
-export function SubtitleGenCard({
+export function AiProviderCard({
   views,
   draft,
   errors,
+  keys,
+  titleKey,
+  anchor,
   onDraft,
   onReset,
   footer,
@@ -67,14 +81,15 @@ export function SubtitleGenCard({
   views: Map<string, SettingView>;
   draft: Draft;
   errors: Record<string, string>;
+  keys?: readonly string[];
+  titleKey?: string;
+  anchor?: string;
   onDraft: (key: string, value: string) => void;
   onReset: (key: string) => void;
   footer: React.ReactNode;
 }) {
   const t = useT();
-  const toast = useToast();
-  const { data, mutate } = useSWR<AdminPayload>("/api/subtitle-gen/admin", fetcher, { refreshInterval: 10_000 });
-  const [acting, setActing] = useState<string | null>(null);
+  const { data } = useAiAdmin();
 
   const provider = (draft.SUBTITLE_GEN_PROVIDER ?? views.get("SUBTITLE_GEN_PROVIDER")?.value ?? "anthropic") as ProviderName;
   // Le modèle prérempli : la valeur réglée, sinon le défaut du fournisseur choisi.
@@ -95,27 +110,16 @@ export function SubtitleGenCard({
     onDraft(key, value);
   };
 
-  async function act(jobId: string, action: "resume" | "cancel") {
-    setActing(jobId);
-    const url = action === "resume" ? `/api/subtitle-gen/jobs/${jobId}/resume` : `/api/subtitle-gen/admin/jobs/${jobId}/cancel`;
-    const res = await fetch(url, { method: "POST" }).catch(() => null);
-    setActing(null);
-    if (!res?.ok) toast.error(t("subtitleGen.admin.actionFailed"));
-    await mutate();
-  }
-
   const readRate = data ? cacheReadRate(data.month) : null;
   const knownProvider: ProviderName = (PROVIDERS as readonly string[]).includes(provider) ? provider : "anthropic";
-  // Sous chaque réglage de fonction : ce qu'elle coûte, ce qu'elle demande, ce qui l'empêche de marcher.
-  const statuses = data?.features ?? [];
-  const notes = Object.fromEntries(
-    Object.entries(FEATURE_SETTING).map(([key, id]) => [key, featureNote(t, statuses.find((s) => s.id === id), id)])
-  );
 
   return (
     <div className="space-y-3">
       <SettingsGroupCard
         group="subtitles"
+        keys={keys}
+        titleKey={titleKey}
+        anchor={anchor}
         views={shownViews}
         draft={draft}
         errors={errors}
@@ -123,7 +127,6 @@ export function SubtitleGenCard({
         onReset={onReset}
         footer={footer}
         choices={{ SUBTITLE_GEN_MODEL: modelChoices(knownProvider) }}
-        notes={notes}
       />
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
         {!data ? (
@@ -167,52 +170,73 @@ export function SubtitleGenCard({
               </p>
             </div>
             {data.features && <AiFeaturesBlock provider={data.provider} statuses={data.features} />}
-            <div>
-              <h4 className="mb-2 text-sm font-semibold text-white">{t("subtitleGen.admin.jobsTitle")}</h4>
-              {data.jobs.length === 0 ? (
-                <p className="text-sm text-subtle">{t("subtitleGen.admin.noJobs")}</p>
-              ) : (
-                <ul className="divide-y divide-white/5">
-                  {data.jobs.map((job) => (
-                    <li key={job.jobId} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm text-white">
-                          {job.title ?? job.jobId} · {job.target.toUpperCase()}
-                        </p>
-                        <p className="text-xs text-subtle">
-                          {t(`subtitleGen.admin.status.${job.status}`)}
-                          {job.reason ? ` — ${t(`subtitleGen.admin.reasons.${job.reason}`)}` : ""}
-                          {" · "}
-                          {t("subtitleGen.admin.progress", { done: job.done, total: job.total })}
-                          {" · "}
-                          {usd(job.cost)} $ · {job.createdBy}
-                          {job.viewers > 0 ? ` · ${t("subtitleGen.admin.viewers", { n: job.viewers })}` : ""}
-                          {job.status === "done" && job.presentState ? ` · ${t(`subtitleGen.admin.present.${job.presentState}`)}` : ""}
-                        </p>
-                      </div>
-                      <div className="flex gap-1.5">
-                        {job.status === "paused" && (
-                          <button type="button" className="btn btn-sm" disabled={acting !== null} onClick={() => act(job.jobId, "resume")}>
-                            <Play size={13} />
-                            {t("subtitleGen.admin.resume")}
-                          </button>
-                        )}
-                        {(job.status === "running" || job.status === "preparing" || job.status === "paused") && (
-                          <button type="button" className="btn btn-sm" disabled={acting !== null} onClick={() => act(job.jobId, "cancel")}>
-                            {job.status === "paused" ? <X size={13} /> : <Pause size={13} />}
-                            {t("subtitleGen.admin.cancel")}
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
           </div>
         )}
       </section>
     </div>
+  );
+}
+
+/** Les tâches des sous-titres générés, sous la carte de la fonction : reprendre, annuler. */
+export function SubtitleJobs() {
+  const t = useT();
+  const toast = useToast();
+  const { data, mutate } = useAiAdmin();
+  const [acting, setActing] = useState<string | null>(null);
+
+  async function act(jobId: string, action: "resume" | "cancel") {
+    setActing(jobId);
+    const url = action === "resume" ? `/api/subtitle-gen/jobs/${jobId}/resume` : `/api/subtitle-gen/admin/jobs/${jobId}/cancel`;
+    const res = await fetch(url, { method: "POST" }).catch(() => null);
+    setActing(null);
+    if (!res?.ok) toast.error(t("subtitleGen.admin.actionFailed"));
+    await mutate();
+  }
+
+  if (!data) return null;
+  return (
+    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-subtitle-jobs="">
+      <h4 className="mb-2 text-sm font-semibold text-white">{t("subtitleGen.admin.jobsTitle")}</h4>
+      {data.jobs.length === 0 ? (
+        <p className="text-sm text-subtle">{t("subtitleGen.admin.noJobs")}</p>
+      ) : (
+        <ul className="divide-y divide-white/5">
+          {data.jobs.map((job) => (
+            <li key={job.jobId} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm text-white">
+                  {job.title ?? job.jobId} · {job.target.toUpperCase()}
+                </p>
+                <p className="text-xs text-subtle">
+                  {t(`subtitleGen.admin.status.${job.status}`)}
+                  {job.reason ? ` — ${t(`subtitleGen.admin.reasons.${job.reason}`)}` : ""}
+                  {" · "}
+                  {t("subtitleGen.admin.progress", { done: job.done, total: job.total })}
+                  {" · "}
+                  {usd(job.cost)} $ · {job.createdBy}
+                  {job.viewers > 0 ? ` · ${t("subtitleGen.admin.viewers", { n: job.viewers })}` : ""}
+                  {job.status === "done" && job.presentState ? ` · ${t(`subtitleGen.admin.present.${job.presentState}`)}` : ""}
+                </p>
+              </div>
+              <div className="flex gap-1.5">
+                {job.status === "paused" && (
+                  <button type="button" className="btn btn-sm" disabled={acting !== null} onClick={() => act(job.jobId, "resume")}>
+                    <Play size={13} />
+                    {t("subtitleGen.admin.resume")}
+                  </button>
+                )}
+                {(job.status === "running" || job.status === "preparing" || job.status === "paused") && (
+                  <button type="button" className="btn btn-sm" disabled={acting !== null} onClick={() => act(job.jobId, "cancel")}>
+                    {job.status === "paused" ? <X size={13} /> : <Pause size={13} />}
+                    {t("subtitleGen.admin.cancel")}
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

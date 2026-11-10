@@ -4429,9 +4429,10 @@ deux interfaces :
 - **Gestion** (`/gestion`, administrateur) : l'*installation*, en deux parties —
   **Infrastructure** (accueil en tableau de bord : téléchargements en cours, état des services,
   disque, résumé de l'Activité ; puis Films, Séries, Téléchargements, Calendrier, Statistiques,
-  Imports, et les pages des services) et **Configuration** (Connexions, Lecture, Sous-titres
-  générés, Nouveaux comptes, Administrateur, et en dernier Déploiement — ce qui exige de toucher au
-  compose, expliqué avec la ligne à copier).
+  Imports, et les pages des services) et **Configuration** (Connexions, Lecture, Diffusion et
+  hors-ligne, Livres ; les Fonctions intelligentes ; Nouveaux comptes, Administrateur, et en dernier
+  Déploiement — ce qui exige de toucher au compose, expliqué avec la ligne à copier). La répartition
+  des pages de la Configuration elle-même, et la façon dont une fonction dit ce qui lui manque : §142.
 - **Les ponts** : « Ouvrir la gestion » dans le panneau Compte ; « Retour au cinéma » en tête de la
   navigation de la gestion (barre latérale et feuille du téléphone). Aucun autre lien ne traverse,
   sauf le lien discret « Vos préférences sont dans Compte » sous la Configuration, et le résumé de
@@ -7708,7 +7709,7 @@ attentes réellement mesurées.
 
 ## 127. Les livres : une option, coupée par défaut, sans rien toucher du cinéma
 
-**Règle.** `BOOKS_ENABLED` (Configuration → Lecture, ou `.env` ; coupée par défaut, relue à chaque
+**Règle.** `BOOKS_ENABLED` (Configuration → Livres depuis le 10/11/2026 — Lecture avant, §142 —, ou `.env` ; coupée par défaut, relue à chaque
 accès comme tout réglage, §48) ajoute une troisième catégorie à la bascule de l'accueil — Films,
 Séries, Livres — et une page `/livres` : les EPUB que Jellyfin range comme livres
 (`IncludeItemTypes=Book`), une fiche par livre, et un lecteur dans l'application. Coupée, rien
@@ -8867,7 +8868,8 @@ contrat fixé des deux côtés (v1 : `GET /health`, `POST /jobs`, `GET /items/{i
 `DELETE /items/{id}`, une clé en `Authorization: Bearer`). Une option de l'installation, **coupée par
 défaut** (`XRAY_ENABLED`), avec son adresse (`XRAY_URL`, `http://laterna-xray:8000`) et sa clé
 (`XRAY_API_KEY`) : Configuration → Connexions, carte « Acteurs à l'écran », comme les autres services
-(réglage → `.env` → défaut, relus à chaque appel, §48). « Tester la connexion » lit `/health` et dit le
+(réglage → `.env` → défaut, relus à chaque appel, §48) — depuis le 10/11/2026 (§142), Connexions ne
+garde que l'adresse et la clé, et le public se règle dans Fonctions intelligentes → Acteurs à l'écran. « Tester la connexion » lit `/health` et dit le
 modèle, s'il est prêt (il se télécharge au premier lancement du service) et si le décodage matériel est
 disponible (`testService`, `XrayFacts`). Sans les trois — allumée, une adresse, une clé —
 (`xrayConfigured`), rien ne part vers le service et rien n'est lu. L'écran qui les montre : la rangée
@@ -10342,3 +10344,66 @@ survit ou non), `subtitle-sync-routes.test.ts` (proxy et routes administrateur s
 série, relecture seulement en attente, mesure d'un autre fichier écartée, recaler une saison périmée refusé, la
 route des sous-titres qui réécrit seulement avec `&sync=`), `subtitle-sync-card.test.tsx` (la page) ; côté service
 `xray/tests/test_subsync.py`.
+
+## 142. La Configuration : une place par fonction, et ce qui lui manque dit sur sa carte (10/11/2026)
+
+**Règle.** Chaque réglage réglable dans l'application se montre **sur une page et une seule** de la
+Configuration, et la page d'un réglage est écrite une fois, dans `CONFIG_LAYOUT`
+(`src/lib/settings/configLayout.ts`) — les pages lisent leurs cartes là, aucune ne tient sa liste. La
+disposition, validée par le propriétaire :
+- **Connexions** : les services seulement — adresse, clé, test —, le service des acteurs à l'écran compris
+  (`XRAY_URL`, `XRAY_API_KEY`), et la carte Application (`POSTER_PREWARM`, `VAPID_SUBJECT`).
+- **Lecture** : le lecteur seulement (`PLAYER_ENABLED`, `PLAYER_SERVER_FALLBACK`).
+- **Diffusion et hors-ligne** : le Chromecast (`CHROMECAST_FOR_EVERYONE`, `CAST_RECEIVER_APP_ID`), puis les
+  téléchargements (`OFFLINE_*`).
+- **Livres** : `BOOKS_ENABLED`, puis les demandes et Google Books, qui disent ne rien faire sans lui.
+- **Fonctions intelligentes**, un groupe de la navigation : **Intelligence artificielle** (`/parametres/ia` : le
+  fournisseur commun — `SUBTITLE_GEN_PROVIDER`, `_API_KEY`, `_MODEL`, `_BUDGET_USD`, `_PRICE_*` —, la dépense
+  et le tableau par fournisseur, puis une carte par fonction : sous-titres générés avec leurs tâches,
+  recherche par description, « Précédemment », questions sur un titre, sur un acteur, « Jusqu'ici ») ;
+  **Acteurs à l'écran** (`XRAY_ENABLED`, l'analyse de la bibliothèque, la qualité des noms — la place des
+  réglages propres à la fonction qui viendront, entre l'interrupteur et l'analyse) ; **Synchro des
+  sous-titres** ; **Recherche de répliques** ; **Recadrage automatique** (`PLAYER_AUTO_FRAME`).
+- **Installation** : Nouveaux comptes, Administrateur, Déploiement — inchangés.
+
+**Une carte de fonction dit toujours la même chose, au même endroit** : son interrupteur ou son public ; ce
+dont elle a besoin (`needs` : `aiKey`, `xrayService`, `xrayOn`, `booksOn`, `playerOn`), écrit même quand tout
+est là (« Nécessite une clé d'IA : prêt ») ; quand un besoin manque d'après les réglages **enregistrés**, la
+carte s'estompe — ses champs restent modifiables, on peut préparer avant de brancher — et un lien mène où
+il se règle (`NEED_HREF`) ; et son état en une ligne quand le serveur le donne sans frais (`featureStatuses`,
+§140, lu par `/api/subtitle-gen/admin` : public, raison du blocage, payant ou non). `missingNeeds` applique les
+règles du serveur (`xrayConfigured`, `featureSettings().hasKey`, `config.player.enabled`, `config.books.enabled`).
+
+**Rien ne change pour une installation existante.** Ni clé renommée, ni groupe du schéma déplacé, ni défaut :
+une carte prend un groupe de `schema.ts` et quelques-unes de ses clés, et n'enregistre que celles-là. Les
+clés `SUBTITLE_GEN_*` gardent le nom qu'elles avaient quand les sous-titres étaient seuls à s'en servir ;
+seuls leurs libellés disent « fournisseur d'IA ». Les adresses gardent leur nom (`/parametres/acteurs`,
+`/repliques`, `/synchro-sous-titres`) : la navigation est regroupée sans lien à réécrire. Une seule a changé,
+`/parametres/sous-titres` → `/parametres/ia`, parce qu'elle nommait une fonction parmi six ; l'ancienne
+répond `308` (`permanentRedirect`, comme les adresses déplacées du proxy) et reste à l'administrateur par son
+premier segment (`ADMIN_ONLY_PAGES`).
+
+**Pourquoi.** « Sous-titres » tenait toutes les fonctions d'IA ; « Lecture » mêlait le lecteur, le
+hors-ligne, les livres, le Chromecast et le recadrage ; les acteurs à l'écran étaient coupés en deux
+(l'interrupteur dans Connexions, l'analyse ailleurs) ; et ce qui empêchait une fonction de marcher se lisait
+dans une phrase sous un champ, sans chemin vers la cause.
+
+**Porteurs.** `src/lib/settings/configLayout.ts` (`CONFIG_LAYOUT`, `CUSTOM_CARD_GROUPS`, `missingNeeds`,
+`NEED_HREF`), `src/components/settings/ConfigurationSection.tsx` (`FeatureState`), `FeatureNeeds.tsx`
+(`FeatureNeeds`, `FeatureNeedsNotice` pour une page à carte propre), `SettingsGroupCard.tsx` (`titleKey`,
+`anchor`, `status`, `needs`, `dimmed` ; le test de connexion seulement sur une carte qui montre une adresse),
+`SubtitleGenCard.tsx` (`AiProviderCard`, `SubtitleJobs`, `useAiAdmin`), `AiFeaturesBlock.tsx`
+(`featureStateLine`), `src/components/navItems.ts` (trois groupes dans la partie Configuration).
+
+**Appelants.** Les pages `src/app/(dashboard)/parametres/**` ; la synchro des sous-titres
+(`FeatureNeedsNotice`).
+
+**Ce qui diffère exprès.** La recherche de répliques garde sa carte propre (`DialogueSearchCard`, qui
+enregistre ses clés et refuse l'option sans dossier des films monté) : `CUSTOM_CARD_GROUPS`. La feuille de
+navigation du téléphone reste à plat par partie (§81) : les intitulés de groupe n'y sont pas.
+
+**Tests.** `config-layout.test.ts` (chaque réglage une fois et une seule, clés dans le groupe de leur carte,
+Connexions et Lecture réduites, une carte d'état par fonction de la table §140 avec les mêmes besoins, textes
+dans les quatre langues, `missingNeeds`, liens vers des pages qui existent, pages réservées, redirection 308,
+pages sans liste à elles), `config-layout-ui.test.tsx` (carte estompée et lien quand la clé d'IA ou le service
+manque, état du serveur, Connexions sans interrupteur X-Ray), `navItems.test.ts` (trois groupes, entrée active).

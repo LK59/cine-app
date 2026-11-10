@@ -81,8 +81,8 @@ Tout est optionnel et coupé par défaut ; chaque fonction a son public (`off`, 
 | **Le panneau d'une personne** | touchée dans la rangée : photo, âge, lieu, courte biographie TMDB, deux ou trois de ses autres titres dans la bibliothèque | la distribution, TMDB | non |
 | **« Jusqu'ici »** (en tête du panneau) | une ou deux phrases sur le personnage, d'après **ce que le compte a déjà vu** — coupées au début de la scène en cours, jamais au-delà | les scènes (coupe, répliques groupées par scène) et les voix (« Nom : réplique ») | oui |
 | **Les questions** | sur les liens entre les personnages de la scène (panneau d'une personne), ou libres sur le titre (bouton rond au bout de la rangée, fiches) | les voix, quand l'analyse est complète | oui |
-| **Configuration → Acteurs à l'écran** | l'analyse de toute la bibliothèque en fond, par paliers, avec pause, priorités, vitesse, temps restant et **qualité des noms** par série | `/items`, `/quality`, `/health` | — |
-| **Configuration → Synchro des sous-titres** | à la demande seulement (« Scanner ») : pour chaque sous-titre texte d'un film, d'une saison ou d'une série, son décalage et sa dérive par rapport à la parole, avec un verdict ; « Recaler » corrige **à l'affichage**, jamais dans le fichier | `/subsync/jobs`, `/subsync/results` | non |
+| **Configuration → Fonctions intelligentes → Acteurs à l'écran** | l'analyse de toute la bibliothèque en fond, par paliers, avec pause, priorités, vitesse, temps restant et **qualité des noms** par série | `/items`, `/quality`, `/health` | — |
+| **Configuration → Fonctions intelligentes → Synchro des sous-titres** | à la demande seulement (« Scanner ») : pour chaque sous-titre texte d'un film, d'une saison ou d'une série, son décalage et sa dérive par rapport à la parole, avec un verdict ; « Recaler » corrige **à l'affichage**, jamais dans le fichier | `/subsync/jobs`, `/subsync/results` | non |
 
 Le service lui-même n'appelle aucune IA en ligne : « Jusqu'ici » et les questions sont des fonctions de
 Laterna, qui n'envoient au fournisseur choisi que du texte (résumés, répliques, noms). Un lien de partage
@@ -188,20 +188,23 @@ docker build -t laterna-xray:local --build-arg XRAY_COMMIT=$(git rev-parse --sho
 
 ## Brancher Laterna
 
-Dans Laterna, **Configuration → Connexions**, carte « Acteurs à l'écran » :
+Dans Laterna, deux endroits, un par sorte de réglage :
 
-1. choisir pour qui l'option est ouverte : `admins` pour commencer, puis `tous` ;
-2. adresse du service : `http://laterna-xray:8000` ;
-3. clé : la valeur de `XRAY_API_KEY`.
+1. **Configuration → Connexions**, carte « Acteurs à l'écran » : l'adresse du service
+   (`http://laterna-xray:8000`) et la clé (la valeur de `XRAY_API_KEY`). « Tester la connexion » lit
+   `/health` et dit le modèle, s'il est prêt et si le décodage matériel fonctionne ;
+2. **Configuration → Fonctions intelligentes → Acteurs à l'écran** : pour qui la fonction est ouverte
+   (`XRAY_ENABLED`) — `admins` pour commencer, puis `tous`. La carte dit « nécessite le service X-Ray »,
+   avec un lien vers Connexions, tant que l'adresse ou la clé manquent.
 
-« Tester la connexion » lit `/health` et dit le modèle, s'il est prêt et si le décodage matériel
-fonctionne. Laterna envoie ensuite les ordres lui-même — en priorité haute quand quelqu'un regarde, à
-partir de la position de lecture — et, en fond, analyse toute la bibliothèque quand personne ne regarde
-(Configuration → **Acteurs à l'écran** : progression, pause, liste de priorité, qualité des noms).
+Laterna envoie ensuite les ordres lui-même — en priorité haute quand quelqu'un regarde, à partir de la
+position de lecture — et, en fond, analyse toute la bibliothèque (même page, sous l'interrupteur :
+progression, pause, liste de priorité, qualité des noms).
 
-Les fonctions d'IA qui s'appuient sur l'analyse — « Jusqu'ici » et les questions — se règlent à part,
-avec le fournisseur, la clé et le plafond mensuel des fonctions payantes (Configuration → Sous-titres
-générés ; `ASK_ENABLED`, `ASK_PERSON_ENABLED`, `SOFAR_ENABLED`, voir le `ENV.md` de Laterna).
+Les fonctions d'IA qui s'appuient sur l'analyse — « Jusqu'ici » et les questions sur un acteur — se
+règlent à part, avec le fournisseur, la clé et le plafond mensuel des fonctions payantes (Configuration →
+Fonctions intelligentes → Intelligence artificielle ; `ASK_ENABLED`, `ASK_PERSON_ENABLED`,
+`SOFAR_ENABLED`, voir le `ENV.md` de Laterna).
 
 ---
 
