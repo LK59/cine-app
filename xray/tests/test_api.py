@@ -3,7 +3,7 @@
 import json
 import time
 
-from app.config import RESULT_VERSION
+from app.config import RESULT_VERSION, VERSION
 from conftest import AUTH, EPISODE, ITEM, ITEM2, MEDIA, job
 
 
@@ -27,7 +27,7 @@ def test_health(client):
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
-    assert body["version"] == "1.0.0"
+    assert body["version"] == VERSION
     assert body["model"] == {"name": "buffalo_l", "ready": True, "license": "non-commercial", "error": None}
     assert body["decode"] == {"vaapi": False, "device": None}
     assert body["queue"] == {"pending": 0, "running": None, "lanes": {}, "paused": []}

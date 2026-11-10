@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from app import relabel, report
+from app.config import VERSION
 from app.voices import REASONS, VoiceParams, build
 from conftest import AUTH, ITEM, ITEM2, unit
 from test_relabel import SERIES, fresh, seed
@@ -180,7 +181,7 @@ def test_schema_du_rapport(db):
     assert rep is not None
     assert set(rep) >= {"reportVersion", "itemId", "etag", "status", "service", "results", "models", "devices", "audio",
                         "thresholds", "skipped", "counts", "cpu", "voices", "faceClusters", "voiceReasons", "voiceVia"}
-    assert rep["service"]["version"] == "1.0.0" and rep["service"]["analysedWith"]["commit"] == "abc1234"
+    assert rep["service"]["version"] == VERSION and rep["service"]["analysedWith"]["commit"] == "abc1234"
     m = rep["models"]
     for f in (m["faces"]["detector"], m["faces"]["embedder"], m["voice"]["vad"], m["voice"]["embedder"], m["asd"]):
         assert len(f["sha256"]) == 64 and set(f["sha256"]) <= HEX64 and f["version"]

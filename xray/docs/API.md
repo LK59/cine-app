@@ -50,7 +50,7 @@ Pour ce que les résultats veulent dire : [PIPELINE.md](PIPELINE.md). Pour qui a
 ```json
 {
   "ok": true,
-  "version": "1.0.0",
+  "version": "1.4.0",
   "model": { "name": "buffalo_l", "ready": true, "license": "non-commercial", "error": null },
   "decode": { "vaapi": true, "device": "/dev/dri/renderD128" },
   "inference": { "engine": "openvino", "device": "CPU", "gpu": false, "gpuActive": false, "gpuError": null,
@@ -275,7 +275,7 @@ De la plus décisive à la moins (`reason` est la première) :
 ```json
 {
   "reportVersion": 1, "itemId": "…", "etag": "…", "status": "done", "trigger": "lèvres",
-  "service": { "version": "1.0.0", "commit": "8c7bbb2", "resultVersion": 5, "voiceVersion": 2, "asdVersion": 1 },
+  "service": { "version": "1.4.0", "commit": "8c7bbb2", "resultVersion": 5, "voiceVersion": 2, "asdVersion": 1 },
   "models": { "faces": { "name": "buffalo_l", "detector": { "file": "det_10g.onnx", "sha256": "5838f7fe…", "precision": "int8" } } },
   "devices": { "inference": { "setting": "GPU", "chunks": { "gpu": 11, "mixed": 2, "cpu": 2 }, "gpuShare": 0.867 },
                "decode": { "chunks": { "vaapi": 14, "skip": 1 }, "vaapiShare": 1.0, "noref": { "cpu": true, "vaapi": true } } },

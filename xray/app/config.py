@@ -10,7 +10,10 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VERSION = "1.0.0"
+# Version du service (X.Y.Z, comme Laterna : majeure pour une refonte, mineure pour une fonction ou un lot de
+# changements de comportement, correctif sinon), montée dans un commit à elle avant chaque déploiement. L'historique
+# est dans CHANGELOG.md ; elle est servie par /health, écrite dans chaque rapport et au démarrage du journal.
+VERSION = "1.4.0"
 # Version du format et de l'algorithme des résultats (`version` de /scenes). À monter quand
 # un changement rend les anciens résultats incomparables : Laterna peut alors les redemander.
 # Chaque résultat garde la version qui l'a produit : un résultat ancien reste servi tel quel (il
