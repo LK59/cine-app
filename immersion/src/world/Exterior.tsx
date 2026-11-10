@@ -362,8 +362,8 @@ const FOG_COLOR = new Color("#03070f");
 const outdoorUniforms = () => ({
   uMoonDir: { value: MOONLIGHT_DIRECTION },
   // La lune est la seule lumière du dehors : la neige qu'elle touche est lisible, l'ombre presque noire.
-  uMoonColor: { value: new Color(0.15, 0.21, 0.4) },
-  uSkyColor: { value: new Color(0.006, 0.011, 0.028) },
+  uMoonColor: { value: new Color(0.07, 0.1, 0.19) },
+  uSkyColor: { value: new Color(0.004, 0.007, 0.018) },
   uFogColor: { value: FOG_COLOR },
   uFogDensity: { value: 0.0052 },
 });
@@ -640,4 +640,4 @@ export function Exterior() {
  * Le panorama est une image finie, rendue pour la nuit voulue (noire, la lune, le village) ; ce gain
  * compense au besoin le mappage de tons de la scène, qu'elle traverse (réglé à l'œil, sur captures).
  */
-const PANORAMA_GAIN = 1.0;
+const PANORAMA_GAIN = 1.35;

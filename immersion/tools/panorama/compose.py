@@ -34,7 +34,7 @@ def sky_image(w, h):
     cosd = np.sin(e) * math.sin(me) + np.cos(e) * math.cos(me) * np.cos(a - ma)
     th = np.degrees(np.arccos(np.clip(cosd, -1, 1)))
     glow = 0.55 * np.exp(-(th / 3.0) ** 2) + 0.10 * np.exp(-(th / 11.0) ** 2) + 0.030 * np.exp(-th / 30.0)
-    img = img + glow[..., None] * np.array(MOON_COLOR, np.float32) * np.array([0.8, 0.95, 1.25], np.float32) * 0.5
+    img = img + glow[..., None] * np.array(MOON_COLOR, np.float32) * np.array([0.8, 0.95, 1.25], np.float32) * 0.22
     # faint Milky Way band: a great circle tilted 62 deg, modulated by noise
     ax = np.radians(205.0); n = np.array([math.sin(math.radians(62)) * math.cos(ax), math.sin(math.radians(62)) * math.sin(ax), math.cos(math.radians(62))])
     ca, sa = np.cos(a + math.radians(HEADING)), np.sin(a + math.radians(HEADING))
@@ -45,12 +45,12 @@ def sky_image(w, h):
     lump = np.kron(lat_n, np.ones((int(np.ceil(h / 64)) + 1, int(np.ceil(w / 128)) + 1), np.float32))[:h, :w]
     for _ in range(3): lump = (lump + np.roll(lump, 6, 0) + np.roll(lump, -6, 0) + np.roll(lump, 6, 1) + np.roll(lump, -6, 1)) / 5
     mw = np.exp(-(bdeg / 9.0) ** 2) * (0.5 + 1.2 * lump) * np.clip(EL / 6.0, 0, 1)
-    img = img + mw[..., None] * np.array([0.0035, 0.0045, 0.0075], np.float32) * 1.6
+    img = img + mw[..., None] * np.array([0.0030, 0.0038, 0.0062], np.float32) * 1.0
     return img.astype(np.float32)
 def add_stars(img):
-    h, w, _ = img.shape; NST = int(30000 * (LON1 - LON0) / 360)
+    h, w, _ = img.shape; NST = int(44000 * (LON1 - LON0) / 360)
     saz = rng.uniform(LON0, LON1, NST); sel = np.degrees(np.arcsin(rng.uniform(np.sin(math.radians(EL_MIN - 2)), np.sin(math.radians(EL_MAX + 2)), NST)))
-    mag = 0.05 + 2.6 * rng.random(NST) ** 9           # a few bright stars, many faint ones
+    mag = 0.10 + 3.2 * rng.random(NST) ** 8           # a few bright stars, many faint ones
     tint = rng.choice([0, 1, 2], NST, p=[0.6, 0.2, 0.2])
     cols = np.array([[0.85, 0.92, 1.0], [1.0, 0.88, 0.72], [0.72, 0.82, 1.0]], np.float32)[tint]
     fade = np.clip((sel + 2) / 14.0, 0, 1) ** 0.8      # extinction near the horizon
@@ -88,8 +88,8 @@ def bloom(prem):
     b = np.maximum(prem.max(-1) - 1.2, 0)
     if b.max() <= 0: return prem
     out = prem.copy(); warm = np.array([1.0, 0.62, 0.30], np.float32)
-    h1 = gblur(b, 1.3); h2 = gblur(b, 7.0); h3 = gblur(b, 30.0)
-    out += (h1 * 0.30)[..., None] * np.array([1.0, 0.8, 0.55], np.float32) + (h2 * 0.35)[..., None] * warm + (h3 * 0.9)[..., None] * warm * 0.5
+    h1 = gblur(b, 1.3); h2 = gblur(b, 7.0); h3 = gblur(b, 60.0)
+    out += (h1 * 0.35)[..., None] * np.array([1.0, 0.8, 0.55], np.float32) + (h2 * 0.30)[..., None] * warm + (h3 * 1.6)[..., None] * warm * 0.5
     return out
 def layer(name):
     p = load_exr(f"{src}/{name}.exr"); a = np.clip(p[..., 3], 0, 1); prem = bloom(np.maximum(p[..., :3], 0))
@@ -123,7 +123,7 @@ if len(result) == 3:
         return (x[0::2, 0::2] + x[1::2, 0::2] + x[0::2, 1::2] + x[1::2, 1::2]) / 4
     far2 = box2(far_d); mid, ma = result["mid"]; near, na = result["near"]
     far2 = far2[:mid.shape[0], :mid.shape[1]]
-    if far2.shape[0] < mid.shape[0]: far2 = np.pad(far2, ((0, mid.shape[0] - far2.shape[0]), (0, 0), (0, 0)), mode='edge')
+    far2 = np.pad(far2, ((0, mid.shape[0] - far2.shape[0]), (0, mid.shape[1] - far2.shape[1]), (0, 0)), mode='edge')
     comp = near * na[..., None] + (1 - na[..., None]) * (mid * ma[..., None] + (1 - ma[..., None]) * far2)
     os.makedirs(f"{out}/previews", exist_ok=True)
     save_png(f"{out}/previews/composite.png", to8(comp))
@@ -134,16 +134,34 @@ if len(result) == 3:
         y0c = np.clip(y0, 0, hh - 1); y1c = np.clip(y0 + 1, 0, hh - 1)
         g = (lambda yy, xx: img[yy, np.clip(xx, 0, ww - 1)]) if SECTOR else (lambda yy, xx: img[yy, xx % ww])
         return (g(y0c, x0) * (1 - fx) + g(y0c, x0 + 1) * fx) * (1 - fy) + (g(y1c, x0) * (1 - fx) + g(y1c, x0 + 1) * fx) * fy
-    def view(yaw, w=1600, h=900, hfov=75.0):
+    def view(yaw, w=1600, h=900, hfov=75.0, vfov=None, pitch=0.0):
+        ty = math.tan(math.radians(vfov / 2)) if vfov else math.tan(math.radians(hfov / 2)) * h / w
+        tx = ty * w / h
         u = (np.arange(w) + 0.5) / w * 2 - 1; v = 1 - (np.arange(h) + 0.5) / h * 2
-        tx = math.tan(math.radians(hfov / 2)); X, Y = np.meshgrid(u * tx, v * tx * h / w)
-        az = yaw + np.degrees(np.arctan2(X, 1.0)); el = np.degrees(np.arctan2(Y, np.hypot(X, 1.0)))
+        X, Y = np.meshgrid(u * tx, v * ty); p = math.radians(pitch)
+        dx = X; dy = math.cos(p) - Y * math.sin(p); dz = math.sin(p) + Y * math.cos(p)     # camera pitched about the horizontal axis
+        az = yaw + np.degrees(np.arctan2(dx, dy)); el = np.degrees(np.arctan2(dz, np.hypot(dx, dy)))
         az = (az + 180) % 360 - 180
         c = sample(far_d, az, el)
+        c = np.where((el < EL_MIN)[..., None], np.array(HAZE_COLOR, np.float32) * 0.75, c)   # below the band: nothing rendered (the page draws the foreground)
         sm = lambda e0, e1, v: (lambda t: t * t * (3 - 2 * t))(np.clip((v - e0) / (e1 - e0), 0, 1))
         # the page fades the layers with the azimuth: near gone by 83 deg, mid by 144 deg
         for img, al, fade in ((mid, ma, 1 - sm(108, 144, np.abs(az))), (near, na, 1 - sm(55, 83, np.abs(az)))):
-            a_ = sample(al[..., None], az, el)[..., 0] * fade; a_ = a_[..., None]; c = sample(img, az, el) * a_ + (1 - a_) * c
+            a_ = sample(al[..., None], az, el)[..., 0] * fade * (el >= EL_MIN); a_ = a_[..., None]; c = sample(img, az, el) * a_ + (1 - a_) * c
         return c
     for nm, yaw in ((("main_view", 0),) if SECTOR else (("main_view", 0), ("left_view", -90), ("right_view", 90))):
         save_png(f"{out}/previews/{nm}.png", to8(view(yaw)))
+    save_png(f"{out}/previews/terrace_view.png", to8(view(0, vfov=68.0, pitch=-14.0)))
+
+if len(result) == 3:
+    lum = oetf(comp).dot(np.array([0.2126, 0.7152, 0.0722], np.float32))
+    cov = (na + ma > 0.5) | (far2[..., 0] > -1)
+    print("display luminance percentiles of the composite (1,25,50,75,95,99):", [round(float(v), 3) for v in np.percentile(lum, [1, 25, 50, 75, 95, 99])], flush=True)
+    # highest elevation of near/mid content in the front +-60 deg (the terrace view must not be blocked)
+    h_, w_ = na.shape; azc = (np.arange(w_) + 0.5) / w_ * 360 - 180 if not SECTOR else LON0 + (np.arange(w_) + 0.5) / w_ * (LON1 - LON0)
+    for nm_, al_ in (("near", na), ("mid", ma)):
+        top = []
+        for j in np.nonzero(np.abs(azc) <= 60)[0]:
+            rows = np.nonzero(al_[:, j] > 0.25)[0]
+            if len(rows): top.append(EL_MAX - (rows[0] + 0.5) / h_ * (EL_MAX - EL_MIN))
+        print(f"{nm_}: highest elevation of content within +-60 deg = {max(top):.1f} deg", flush=True) if top else print(nm_, "no content")

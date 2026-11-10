@@ -140,10 +140,14 @@ def build_trees():
         T = len(x)
         Vt, Ft, ns = tree_template(tiers, sides); nv = len(Vt)
         Hh = (9.0 + trng.random(T) * 6.0) * sc * (0.55 + 0.45 * np.clip(dn * 1.5, 0, 1))
+        # nothing may rise above -3 deg in the front +-62 deg within 1.2 km: the terrace view looks DOWN into the valley
+        dd_ = np.hypot(x, y); az_ = (np.degrees(np.arctan2(x, y)) - HEADING + 180) % 360 - 180
+        top_el = np.degrees(np.arctan2(z + Hh - EYE, dd_))
+        okt = ~((np.abs(az_) <= 62) & (top_el > -3.0))
+        x, y, z, dn, Hh = x[okt], y[okt], z[okt], dn[okt], Hh[okt]; T = len(x)
         yaw = trng.random(T) * 2 * math.pi; cy = np.cos(yaw).astype(np.float32); sy = np.sin(yaw).astype(np.float32)
         wid = (0.8 + 0.4 * trng.random(T)).astype(np.float32)
         jit = (1 + 0.22 * (trng.random((T, nv)) - 0.5)).astype(np.float32)
-        is_ring = np.ones(nv, bool); is_ring[ns::ns + 1] = False       # apex vertices keep r = 0
         vx = Vt[None, :, 0] * jit * wid[:, None]; vy = Vt[None, :, 1] * jit * wid[:, None]
         rx = vx * cy[:, None] - vy * sy[:, None]; ry = vx * sy[:, None] + vy * cy[:, None]
         Hf = Hh.astype(np.float32)[:, None]
@@ -250,7 +254,7 @@ class B:    # tiny node-building helper bound to a node tree
         """haze (distance- and height-dependent extinction + in-scatter) and the distance clip for camera rays"""
         camd = s.nd("ShaderNodeCameraData"); dist = camd.outputs["View Distance"]
         zmid = s.mth("MULTIPLY", s.mth("ADD", pos_z, EYE), 0.5)
-        dens = s.mth("MULTIPLY", s.mth("POWER", 2.718281828, s.mth("MULTIPLY", s.mth("MAXIMUM", s.mth("SUBTRACT", zmid, 900.0), 0.0), -1 / 1100.0)), 1 / 4800.0)
+        dens = s.mth("MULTIPLY", s.mth("POWER", 2.718281828, s.mth("MULTIPLY", s.mth("MAXIMUM", s.mth("SUBTRACT", zmid, 900.0), 0.0), -1 / 1100.0)), 1 / 22000.0)
         T = s.mth("POWER", 2.718281828, s.mth("MULTIPLY", s.mth("MULTIPLY", dist, dens), -1.0))
         em = s.nd("ShaderNodeEmission"); em.inputs["Color"].default_value = (*HAZE_COLOR, 1)
         hz = s.nd("ShaderNodeMixShader"); s.nt.links.new(s.mth("SUBTRACT", 1.0, T), hz.inputs[0]); s.nt.links.new(surf, hz.inputs[1]); s.nt.links.new(em.outputs[0], hz.inputs[2])
@@ -315,6 +319,42 @@ if MODE != "marker":
             make_mesh(f"trees{zi}", v, f, {"tint": ("FLOAT", tint)}, tree_mat)
         log("trees built")
 
+
+# ---------------- the villages light the snow: warm point lights above each cluster ----------------
+def build_village_glow():
+    lr = np.random.default_rng(5); cs, sn = math.sin(VALLEY_BEARING), math.cos(VALLEY_BEARING); tot = 0
+    for (name, la, lo_, cnt, sa, sc_, R) in VILLAGES:
+        cx, cy = enu(la, lo_); nl = max(2, cnt // 55); P = GLOW_POWER * (cnt / 760.0) ** 0.9 / nl
+        for k in range(nl):
+            u = lr.normal(0, sa * 0.7); v = lr.normal(0, sc_ * 0.7)
+            x = cx + u * cs + v * sn; y = cy + u * sn - v * cs; z = float(ground(np.array([x]), np.array([y]))[0]) + 38.0
+            L = bpy.data.lights.new(f"glow_{name}_{k}", "POINT"); L.energy = P; L.color = (1.0, 0.50, 0.20); L.shadow_soft_size = 30.0
+            ob = bpy.data.objects.new(L.name, L); scene.collection.objects.link(ob); ob.location = (x, y, z); tot += 1
+    log(f"village glow lights: {tot}")
+def build_river():
+    """the river as a dark ribbon: the lowest point across the valley, searched along the chain of villages"""
+    order = sorted(range(len(VILLAGES)), key=lambda i: (VILLAGES[i][2], VILLAGES[i][1]))
+    P0 = [VILL_XY[i] for i in order]; pts = []
+    for a, b_ in zip(P0[:-1], P0[1:]):
+        L = float(np.hypot(*(b_ - a))); n = max(2, int(L / 40)); t = np.linspace(0, 1, n, endpoint=False)
+        pts.append(a[None] + (b_ - a)[None] * t[:, None])
+    pts = np.concatenate(pts + [P0[-1][None]]); d = np.gradient(pts, axis=0); d /= np.maximum(np.hypot(d[:, 0], d[:, 1]), 1e-6)[:, None]
+    nrm = np.stack([-d[:, 1], d[:, 0]], 1); offs = np.arange(-450, 451, 15.0)
+    C = pts[:, None, :] + nrm[:, None, :] * offs[None, :, None]
+    Hh = ground(C[..., 0], C[..., 1]) + 0.03 * np.abs(offs)[None, :]      # lowest point, a little biased towards the line
+    best = offs[Hh.argmin(1)]; k = 9; best = np.convolve(np.pad(best, k, mode="edge"), np.ones(2 * k + 1) / (2 * k + 1), mode="valid")
+    cen = pts + nrm * best[:, None]; dd = np.gradient(cen, axis=0); dd /= np.maximum(np.hypot(dd[:, 0], dd[:, 1]), 1e-6)[:, None]
+    nn = np.stack([-dd[:, 1], dd[:, 0]], 1); wdt = 9.0
+    A = cen + nn * wdt; Bq = cen - nn * wdt
+    zA = ground(A[:, 0], A[:, 1]) + 0.35; zB = ground(Bq[:, 0], Bq[:, 1]) + 0.35
+    V = np.concatenate([np.c_[A, zA], np.c_[Bq, zB]]).astype(np.float32); n = len(cen)
+    F = np.array([(i, i + 1, n + i + 1, n + i) for i in range(n - 1)], np.int32)
+    rm = bpy.data.materials.new("river"); rm.use_nodes = True; b = B(new_mat_nodes(rm)); nt = b.nt
+    bs = b.nd("ShaderNodeBsdfPrincipled"); bs.inputs["Base Color"].default_value = (0.006, 0.012, 0.022, 1); bs.inputs["Roughness"].default_value = 0.12
+    sp = b.nd("ShaderNodeSeparateXYZ"); nt.links.new(b.nd("ShaderNodeNewGeometry").outputs["Position"], sp.inputs[0])
+    b.finish(bs.outputs["BSDF"], sp.outputs["Z"], lo, hi)
+    make_mesh("river", V, F, {}, rm); log("river ribbon", n)
+
 # ---------------- village lights ----------------
 def build_lights():
     lr = np.random.default_rng(3); pts = []; cols = []; strs = []
@@ -372,6 +412,8 @@ def build_lights():
     make_mesh("lights", V.reshape(-1, 3).astype(np.float32), F, {"lcol": ("FLOAT_COLOR", np.concatenate([colv, np.ones((len(colv), 1), np.float32)], 1)), "lstr": ("FLOAT", emis.astype(np.float32))}, lm)
     log(f"lights: {len(pts)}")
 if MODE == "beauty" and "--nolights" not in argv: build_lights()
+if MODE == "beauty" and "--nolights" not in argv:
+    build_village_glow(); build_river()
 if MODE == "marker":
     for (az, el, rgb) in [(0, 0, (1, 0, 0)), (90, 20, (0, 1, 0)), (-90, -20, (0, 0, 1)), (180, 10, (1, 1, 0))]:
         a = math.radians(HEADING + az); e = math.radians(el); d = Vector((math.sin(a) * math.cos(e), math.cos(a) * math.cos(e), math.sin(e))) * 100
