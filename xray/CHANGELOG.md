@@ -6,7 +6,7 @@ chaque rapport de décision (`service.version`) et dans la ligne de démarrage d
 Les versions des résultats (`RESULT_VERSION`, `VOICE_VERSION`, `ASD_VERSION`) suivent leur propre règle
 (`app/config.py`) : elles ne bougent que quand un résultat ancien devient incomparable.
 
-## Non publiée
+## 1.5.0
 
 - **Débuts de scène** (« Revenir au début de la scène » côté Laterna) : par frontière de scène, le point d'entrée
   (`entry`, reculé jusqu'au début d'une phrase commencée juste avant) et le verdict (`cut: {ok, why}` — chapitre
