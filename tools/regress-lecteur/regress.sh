@@ -92,10 +92,14 @@ start() {
   # L'application tourne en 1001:1000 comme en production (accès aux dossiers de la bibliothèque) :
   # le dossier doit lui être inscriptible.
   chmod -R g+rwX "$data"; chmod g+s "$data" "$data/logs"
+  # REQUEST_HIDE_ACCOUNT vidé : le masquage des demandes écrit dans le vrai Jellyfin toutes les cinq minutes.
+  # Avec la base recopiée, sans ses décisions, l'instance « rendait » au compte visé tout ce que la production
+  # lui masque — et la production le remasquait au passage suivant (10/11/2026, sept heures durant).
   docker run -d --name "$(container_of "$sha")" \
     --env-file "$ENV_FILE" \
     -e COOKIE_SECURE=false -e TZ=Europe/Paris \
     -e REPLIQUES_ENABLED=false -e REPLIQUES_NIGHTLY=false -e NEW_ACCOUNT_BLOCKED_TAGS= \
+    -e REQUEST_HIDE_ACCOUNT= \
     -v "$MEDIA:$MEDIA:ro" -v "$data:/app/data" \
     --user 1001:1000 --network "$NETWORK" -p "127.0.0.1:$PORT:3000" \
     --memory 2g --security-opt no-new-privileges:true --cap-drop ALL \
