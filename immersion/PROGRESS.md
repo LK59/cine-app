@@ -290,25 +290,42 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
   Leviers si besoin : retirer les jeux de textures inutilisés (`metal_black`, `bark`), les deux HDRI si la
   vue n'en dépend plus, les modèles non posés.
 
-## Chantier suivant : « le chalet vivant » (demandé par le propriétaire le 10/11 au soir)
+## « Le chalet vivant » (demandé le 10/11 au soir — fait d'une traite, à livrer en une fois)
 
-À faire **après** la livraison de la 10.34.0, en livraisons successives (10.35.0 et suivantes). Les sept points sont
-tous demandés ; l'ordre ci-dessous va du moins coûteux au plus lourd. Les points qui changent la géométrie fixe
-(3, 5, 7) demandent un nouvel export et une recuisson (`tools/bake/`, ~21 min) : les grouper.
+Le propriétaire a demandé les sept points d'un coup, plus une chaîne hi-fi, « magnifique même si c'est plus
+coûteux, tant que ça reste raisonnable : en Ultra, correct sur une machine sans carte graphique dédiée ».
 
-1. [ ] **Le vrai reflet du film** : la texture vidéo reprojetée dans les reflets des vitres, du parquet et de la
-       table basse (aujourd'hui : un rectangle de couleur moyenne, le reflet de la lumière de surface)
-2. [ ] **Mode cinéma** : au lancement d'un film, lustre et lampes baissent en deux secondes (intensité de la
-       lightmap + lumières temps réel), l'ambilight prend le dessus ; retour à l'arrêt
-3. [ ] **Un feu** : poêle dans un angle (ou brasero dehors), flammes animées, lueur qui danse, crépitement
-       spatialisé — vivant même écrans éteints
-4. [ ] **Ambilight par zones** : l'échantillonnage 8×8 existe ; quatre zones au lieu d'une couleur moyenne
-5. [ ] **Le dehors** : forêts du panorama refaites, lumières de village dans la vallée, nuages devant la lune,
-       aurore par moments ; terrasse accessible avec bain fumant
-6. [ ] **Matières de près** : grain et plis des coussins, plaid sur le canapé, buée et givre au bas des vitres,
-       poussière dans le faisceau de l'écran
-7. [ ] **Des choses à faire** : s'allonger sur le lit (écran de la chambre), allumer/éteindre chaque lampe, ouvrir
-       une porte-fenêtre (le vent entre), un chat endormi sur le canapé
+1. [x] **Le vrai reflet du film** et 4. [x] **l'ambilight par zones** : `screenLight.ts`, greffé sur toutes les
+       matières standard (prototype de `MeshStandardMaterial` + les trois matières à retouche propre). Six zones
+       par écran, halo sur le mur porteur, reflet par rayon réfléchi sur le plan de la dalle (image nette + copie
+       48×27 pour les surfaces rugueuses). Tous les écrans éclairent, chacun dans le volume de sa pièce. La
+       lumière rectangulaire de three est retirée.
+2. [x] **Mode cinéma** (`Lights.tsx`, réglage `cinema`, actif par défaut) : les lampes tombent à 10 % pendant
+       un film, 45 % en pause. Repose sur la **cuisson en deux couches** (`nuit` / `lampes`, `lightmaps.ts`,
+       `tools/bake/`) ; avec une cuisson d'une seule couche, tout baisse ensemble.
+3. [x] **Le feu** (`Fire.tsx`, `FIRE` dans le plan) : foyer en ruban creusé dans le massif sous le manteau,
+       flammes et braises en bruit, lueur dansante par `screenLight`, crépitement spatialisé. S'allume et
+       s'éteint (E).
+5. [x] **Le dehors** : ciel avec nuages qui dérivent et aurore par moments (`Exterior.tsx`) ; **terrasse**
+       (`geometry/terrace.ts`, groupe cuit `terrasse`) avec garde-corps enneigé et **bain nordique**
+       (`HotTub.tsx` : eau, vapeur, bouillonnement) ; **porte-fenêtre** coulissante (`Door.tsx`). Panorama v2
+       (forêts, village) : sous-traité, à intégrer.
+6. [x] **Matières de près** : givre au bas des vitres (`glass.ts`), poussière dans le faisceau (`Dust.tsx`),
+       grain léger (`Effects.tsx`). Canapé v2 (plis, coussins, plaid) : sous-traité, à intégrer.
+7. [x] **Des choses à faire** (`interactions.ts`) : s'allonger sur le lit, entrer dans le bain, lampes par
+       pièce, feu, porte, chat (`Cat.tsx`), musique. Scénario `07-vie` vert.
+8. [x] **Chaîne hi-fi** (`HiFi.tsx`, `media/music.ts`) : platines au salon et dans la chambre, une enceinte par
+       pièce (portée et filtre comme les écrans), deux morceaux de jazz calme (Kevin MacLeod, CC BY 4.0, crédités
+       dans les réglages et `ASSETS.md`), tue pendant un film.
+
+**Limites connues** : les interrupteurs agissent par groupe de pièces (salon / cuisine-mezzanine / chambre-
+couloir), pas lampe par lampe — une couche de lightmap par lampe coûterait trop ; la lumière des écrans et du feu
+ne projette pas d'ombre ; les objets posés (modèles) ne sont pas cuits.
+
+**Reste avant livraison** : intégrer panorama v2 et canapé v2 quand les agents rendent la main ; `export.sh` puis
+`bake.sh --samples 192` (deux couches, cinq atlas) ; captures de chaque lieu ; scénarios 01–07 ; affiche ; poids
+(budget ~40 Mo, à 37 Mo avant la couche des lampes complète) ; portail seul, machine calme ; fusion, build,
+déploiement.
 
 ## Phase 2
 

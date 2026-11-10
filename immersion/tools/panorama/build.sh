@@ -1,12 +1,13 @@
 #!/bin/sh
 # Full render chain from the DEM mosaic (run from immersion/): 3 Cycles layers + coverage mask, post-processing, previews.
-# Then: fit4.mjs, encode.sh and write_json.py — exact commands in README.md
+# Then: tools/panorama/encode.sh assets-src/panorama/final/out public/assets/panorama   and   python3 -I tools/panorama/write_json.py
+# The layers are rendered directly at 8192x1368 / 4096x684 (heights are multiples of 4, as block-compressed textures require).
 set -e
 d=assets-src/panorama/final; mkdir -p $d
-tools/panorama/run.sh far 5 tools/panorama/render.py far $d/far.exr --samples ${FAR_SPP:-56}
+tools/panorama/run.sh far 5 tools/panorama/render.py far $d/far.exr --samples ${FAR_SPP:-24}
 tools/panorama/run.sh farc 5 tools/panorama/render.py far $d/far_cover.exr --mode cover
-tools/panorama/run.sh mid 5 tools/panorama/render.py mid $d/mid.exr --samples ${NEAR_SPP:-64}
-tools/panorama/run.sh near 5 tools/panorama/render.py near $d/near.exr --samples ${NEAR_SPP:-64}
+tools/panorama/run.sh mid 5 tools/panorama/render.py mid $d/mid.exr --samples ${NEAR_SPP:-40}
+tools/panorama/run.sh near 5 tools/panorama/render.py near $d/near.exr --samples ${NEAR_SPP:-40}
 tools/panorama/run.sh compose 5 tools/panorama/compose.py $d $d/out
 mkdir -p tools/panorama/previews
 tools/panorama/jpg.sh $d/out/previews/composite.png tools/panorama/previews/composite.jpg 4096 90

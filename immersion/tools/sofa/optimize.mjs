@@ -17,7 +17,7 @@ const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies(
 const doc = await io.read(inp);
 const root = doc.getRoot();
 // Placeholder colours (the app assigns its own PBR materials by mesh name).
-const COLOURS = { sofa_frame: [0.70, 0.62, 0.50], sofa_cushions: [0.74, 0.66, 0.54], pillows_a: [0.50, 0.40, 0.32], pillows_b: [0.60, 0.60, 0.55] };
+const COLOURS = { sofa_frame: [0.70, 0.62, 0.50], sofa_cushions: [0.74, 0.66, 0.54], pillows_a: [0.50, 0.40, 0.32], pillows_b: [0.60, 0.60, 0.55], plaid: [0.45, 0.20, 0.18] };
 for (const mesh of root.listMeshes()) {
   for (const p of mesh.listPrimitives()) {
     const m = p.getMaterial();

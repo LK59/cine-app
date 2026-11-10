@@ -7,7 +7,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from params import *
 from imgio import *
 ARGS = sys.argv[sys.argv.index("--") + 1:]
-src, out = ARGS[0], ARGS[1]; os.makedirs(out, exist_ok=True)
+src, out = ARGS[0], ARGS[1]
+LON0, LON1 = [float(v) for v in ARGS[ARGS.index("--lon") + 1].split(",")] if "--lon" in ARGS else (-180.0, 180.0)
+SECTOR = "--lon" in ARGS; os.makedirs(out, exist_ok=True)
 rng = np.random.default_rng(11)
 
 def tonemap(x):   # linear scene -> linear display (soft shoulder above 0.55), keeps low values untouched
@@ -18,7 +20,7 @@ def oetf(x):
 def eotf(x):
     return np.where(x <= 0.04045, x / 12.92, np.power((x + 0.055) / 1.055, 2.4))
 def dir_grid(w, h):
-    az = (np.arange(w) + 0.5) / w * 360 - 180; el = EL_MAX - (np.arange(h) + 0.5) / h * (EL_MAX - EL_MIN)
+    az = LON0 + (np.arange(w) + 0.5) / w * (LON1 - LON0); el = EL_MAX - (np.arange(h) + 0.5) / h * (EL_MAX - EL_MIN)
     return np.meshgrid(az, el)
 def sky_image(w, h):
     AZ, EL = dir_grid(w, h)
@@ -39,28 +41,28 @@ def sky_image(w, h):
     v = np.stack([np.cos(e) * sa, np.cos(e) * ca, np.sin(e)], -1)
     bdeg = np.degrees(np.arcsin(np.clip(v @ n, -1, 1)))
     lat_n = rng.random((64, 128)).astype(np.float32)
-    xi = ((AZ + 180) / 360 * 128).astype(np.float32); yi = ((EL + 30) / 70 * 64).astype(np.float32)
-    # smooth lumpy modulation by repeated box blur of low-res noise (upsampled)
+        # smooth lumpy modulation by repeated box blur of low-res noise (upsampled)
     lump = np.kron(lat_n, np.ones((int(np.ceil(h / 64)) + 1, int(np.ceil(w / 128)) + 1), np.float32))[:h, :w]
     for _ in range(3): lump = (lump + np.roll(lump, 6, 0) + np.roll(lump, -6, 0) + np.roll(lump, 6, 1) + np.roll(lump, -6, 1)) / 5
     mw = np.exp(-(bdeg / 9.0) ** 2) * (0.5 + 1.2 * lump) * np.clip(EL / 6.0, 0, 1)
     img = img + mw[..., None] * np.array([0.0035, 0.0045, 0.0075], np.float32) * 1.6
     return img.astype(np.float32)
 def add_stars(img):
-    h, w, _ = img.shape; NST = 30000
-    saz = rng.uniform(-180, 180, NST); sel = np.degrees(np.arcsin(rng.uniform(np.sin(math.radians(EL_MIN - 2)), np.sin(math.radians(EL_MAX + 2)), NST)))
+    h, w, _ = img.shape; NST = int(30000 * (LON1 - LON0) / 360)
+    saz = rng.uniform(LON0, LON1, NST); sel = np.degrees(np.arcsin(rng.uniform(np.sin(math.radians(EL_MIN - 2)), np.sin(math.radians(EL_MAX + 2)), NST)))
     mag = 0.05 + 2.6 * rng.random(NST) ** 9           # a few bright stars, many faint ones
     tint = rng.choice([0, 1, 2], NST, p=[0.6, 0.2, 0.2])
     cols = np.array([[0.85, 0.92, 1.0], [1.0, 0.88, 0.72], [0.72, 0.82, 1.0]], np.float32)[tint]
     fade = np.clip((sel + 2) / 14.0, 0, 1) ** 0.8      # extinction near the horizon
-    px = (saz + 180) / 360 * w - 0.5; py = (EL_MAX - sel) / (EL_MAX - EL_MIN) * h - 0.5
+    px = (saz - LON0) / (LON1 - LON0) * w - 0.5; py = (EL_MAX - sel) / (EL_MAX - EL_MIN) * h - 0.5
     sig = 0.55
     for dy in range(-2, 3):
         for dx in range(-2, 3):
             xx = np.floor(px).astype(int) + dx; yy = np.floor(py).astype(int) + dy
             wgt = np.exp(-(((xx - px) ** 2 + (yy - py) ** 2) / (2 * sig ** 2))) * (0.75 / (2 * math.pi * sig ** 2 / 1.0)) * 0.35
             ok = (yy >= 0) & (yy < h)
-            np.add.at(img, (yy[ok], xx[ok] % w), (wgt * mag * fade)[ok, None] * cols[ok])
+            ok = ok & (xx >= 0) & (xx < w)
+            np.add.at(img, (yy[ok], xx[ok]), (wgt * mag * fade)[ok, None] * cols[ok])
     return img
 def bleed(rgb, a, iters=10):   # fill colour under transparent pixels with the nearest opaque colours (no dark fringes)
     rgb = rgb.copy(); known = (a > 0.02).astype(np.float32)
@@ -77,8 +79,20 @@ def dither(x8f):   # x in 0..255 float, triangular dither of +-1 LSB
     return np.clip(np.round(x8f + n * 0.75), 0, 255).astype(np.uint8)
 def to8(rgb_lin): return dither(oetf(rgb_lin) * 255.0)
 
+def gblur(a, sigma):
+    h, w = a.shape; fy = np.fft.fftfreq(h)[:, None]; fx = np.fft.rfftfreq(w)[None, :]
+    k = np.exp(-2 * (math.pi * sigma) ** 2 * (fx ** 2 + fy ** 2))
+    return np.fft.irfft2(np.fft.rfft2(a) * k, s=a.shape).astype(np.float32)
+def bloom(prem):
+    """lights are tiny and very bright (linear >> 1): a short halo and a faint warm glow around villages"""
+    b = np.maximum(prem.max(-1) - 1.2, 0)
+    if b.max() <= 0: return prem
+    out = prem.copy(); warm = np.array([1.0, 0.62, 0.30], np.float32)
+    h1 = gblur(b, 1.3); h2 = gblur(b, 7.0); h3 = gblur(b, 30.0)
+    out += (h1 * 0.30)[..., None] * np.array([1.0, 0.8, 0.55], np.float32) + (h2 * 0.35)[..., None] * warm + (h3 * 0.9)[..., None] * warm * 0.5
+    return out
 def layer(name):
-    p = load_exr(f"{src}/{name}.exr"); a = np.clip(p[..., 3], 0, 1); prem = np.maximum(p[..., :3], 0)
+    p = load_exr(f"{src}/{name}.exr"); a = np.clip(p[..., 3], 0, 1); prem = bloom(np.maximum(p[..., :3], 0))
     straight = np.where(a[..., None] > 1e-4, prem / np.maximum(a, 1e-4)[..., None], 0)
     return straight, a   # linear scene straight colour, alpha
 
@@ -108,16 +122,17 @@ if len(result) == 3:
         x = x[:x.shape[0] // 2 * 2]
         return (x[0::2, 0::2] + x[1::2, 0::2] + x[0::2, 1::2] + x[1::2, 1::2]) / 4
     far2 = box2(far_d); mid, ma = result["mid"]; near, na = result["near"]
+    far2 = far2[:mid.shape[0], :mid.shape[1]]
     if far2.shape[0] < mid.shape[0]: far2 = np.pad(far2, ((0, mid.shape[0] - far2.shape[0]), (0, 0), (0, 0)), mode='edge')
     comp = near * na[..., None] + (1 - na[..., None]) * (mid * ma[..., None] + (1 - ma[..., None]) * far2)
     os.makedirs(f"{out}/previews", exist_ok=True)
     save_png(f"{out}/previews/composite.png", to8(comp))
     def sample(img, az, el):
         hh, ww = img.shape[:2]
-        px = (az + 180) / 360 * ww - 0.5; py = (EL_MAX - el) / (EL_MAX - EL_MIN) * hh - 0.5
+        px = (az - LON0) / (LON1 - LON0) * ww - 0.5; py = (EL_MAX - el) / (EL_MAX - EL_MIN) * hh - 0.5
         x0 = np.floor(px).astype(int); y0 = np.floor(py).astype(int); fx = (px - x0)[..., None]; fy = (py - y0)[..., None]
         y0c = np.clip(y0, 0, hh - 1); y1c = np.clip(y0 + 1, 0, hh - 1)
-        g = lambda yy, xx: img[yy, xx % ww]
+        g = (lambda yy, xx: img[yy, np.clip(xx, 0, ww - 1)]) if SECTOR else (lambda yy, xx: img[yy, xx % ww])
         return (g(y0c, x0) * (1 - fx) + g(y0c, x0 + 1) * fx) * (1 - fy) + (g(y1c, x0) * (1 - fx) + g(y1c, x0 + 1) * fx) * fy
     def view(yaw, w=1600, h=900, hfov=75.0):
         u = (np.arange(w) + 0.5) / w * 2 - 1; v = 1 - (np.arange(h) + 0.5) / h * 2
@@ -125,8 +140,10 @@ if len(result) == 3:
         az = yaw + np.degrees(np.arctan2(X, 1.0)); el = np.degrees(np.arctan2(Y, np.hypot(X, 1.0)))
         az = (az + 180) % 360 - 180
         c = sample(far_d, az, el)
-        for img, al in ((mid, ma), (near, na)):
-            a_ = sample(al[..., None], az, el); c = sample(img, az, el) * a_ + (1 - a_) * c
+        sm = lambda e0, e1, v: (lambda t: t * t * (3 - 2 * t))(np.clip((v - e0) / (e1 - e0), 0, 1))
+        # the page fades the layers with the azimuth: near gone by 83 deg, mid by 144 deg
+        for img, al, fade in ((mid, ma, 1 - sm(108, 144, np.abs(az))), (near, na, 1 - sm(55, 83, np.abs(az)))):
+            a_ = sample(al[..., None], az, el)[..., 0] * fade; a_ = a_[..., None]; c = sample(img, az, el) * a_ + (1 - a_) * c
         return c
-    for nm, yaw in (("main_view", 0), ("left_view", -90), ("right_view", 90)):
+    for nm, yaw in ((("main_view", 0),) if SECTOR else (("main_view", 0), ("left_view", -90), ("right_view", 90))):
         save_png(f"{out}/previews/{nm}.png", to8(view(yaw)))

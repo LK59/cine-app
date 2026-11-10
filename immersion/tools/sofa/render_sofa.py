@@ -10,6 +10,7 @@ args = sys.argv[sys.argv.index("--") + 1:]
 GLTF, OUT = args[0], args[1]
 VIEWS = args[2].split(",") if len(args) > 2 else ["front", "three_quarter", "close_cushions", "top"]
 SAMPLES = int(args[3]) if len(args) > 3 else 96
+RAKING = (args[4] != "flat") if len(args) > 4 else True
 os.makedirs(OUT, exist_ok=True)
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -98,7 +99,14 @@ def area(loc, size, energy, color, rot=(0, 0, 0)):
     o = bpy.data.objects.new("a", d); o.location = loc; o.rotation_euler = rot
     sc.collection.objects.link(o); return o
 area((cx + 1.2, cy, 3.4), 3.0, 700, (1.0, 0.82, 0.62), (0, math.radians(8), 0))
-area((6.0, cy, 2.2), 4.0, 140, (0.85, 0.9, 1.0), (0, math.radians(-65), 0))
+def aim(o, tgt):
+    d = Vector(tgt) - o.location
+    o.rotation_euler = d.to_track_quat("-Z", "Y").to_euler()
+# low raking light from the open side: shows creases and folds (glTF (3.2, 0.7, -1.0) -> blender (3.2, 1.0, 0.7))
+rk = area((-0.8, -4.6, 0.9), 2.2, 1500 if RAKING else 0, (1.0, 0.9, 0.78))   # from the south, grazing the east-facing surfaces
+aim(rk, (-1.0, 1.5, 0.5))
+rk2 = area((6.0, cy, 2.2), 4.0, 60, (0.85, 0.9, 1.0))
+aim(rk2, (-1.0, cy, 0.4))
 w = bpy.data.worlds.new("w"); w.use_nodes = True
 w.node_tree.nodes["Background"].inputs["Color"].default_value = (0.35, 0.33, 0.3, 1)
 w.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.2
@@ -121,6 +129,9 @@ VIEWDEF = {
     "three_quarter": dict(loc=(5.0, 3.0, 5.2), tgt=(-0.5, 0.35, -1.5), lens=32),
     "close_cushions": dict(loc=(0.15, 1.15, -1.55), tgt=(-2.05, 0.55, -1.7), lens=40),
     "close2": dict(loc=(2.6, 1.3, 1.6), tgt=(0.2, 0.45, -0.1), lens=40),
+    "plaid": dict(loc=(-0.2, 1.35, -1.6), tgt=(-2.0, 0.55, -2.8), lens=45),
+    "plaid2": dict(loc=(-4.2, 1.5, -2.8), tgt=(-2.4, 0.5, -2.8), lens=40),
+    "pillow": dict(loc=(-0.55, 0.95, -0.3), tgt=(-2.0, 0.65, -0.55), lens=50),
     "top": dict(loc=(-0.55, 9.0, -1.5), tgt=(-0.55, 0, -1.5), lens=50, ortho=7.4),
 }
 grid = []

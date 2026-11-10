@@ -32,7 +32,7 @@ export async function enterWorld(page: Page): Promise<void> {
   // Large : sur une machine occupée, le chargement (textures, programmes) peut dépasser la minute.
   await expect(enter).toBeVisible({ timeout: 240_000 });
   await enter.click();
-  await expect.poll(() => state(page, "phase"), { timeout: 15_000 }).toBe("world");
+  await expect.poll(() => state(page, "phase"), { timeout: 90_000 }).toBe("world");
   // Sans écran, le verrou du pointeur peut être refusé : le monde s'ouvre alors en pause.
   await page.evaluate(() => {
     const handle = (window as unknown as { __immersion: Immersion & { debug: { skipCaptureCheck: boolean } } }).__immersion;

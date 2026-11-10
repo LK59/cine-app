@@ -32,9 +32,11 @@ for (const node of root.listNodes()) {
 }
 // UV1 (lightmap) check: every primitive has TEXCOORD_0 and TEXCOORD_1, and no two triangles cover the
 // same pixel centre of a 1024x1024 grid (rasterised); also the sum of triangle areas.
-const R = 1024, cover = new Uint8Array(R * R);
+const R = 1024, cover = new Uint8Array(R * R), owner = new Int16Array(R * R).fill(-1), pairs = {};
+let curMesh = 0;
 let overlapPx = 0, area = 0, minU = 1e9, maxU = -1e9;
 for (const mesh of root.listMeshes()) for (const prim of mesh.listPrimitives()) {
+  curMesh = root.listMeshes().indexOf(mesh);
   const sem = prim.listSemantics();
   if (!sem.includes("TEXCOORD_0") || !sem.includes("TEXCOORD_1")) throw new Error("missing UV set on " + mesh.getName() + ": " + sem);
   const uv = prim.getAttribute("TEXCOORD_1"), idx = prim.getIndices();
@@ -53,11 +55,11 @@ for (const mesh of root.listMeshes()) for (const prim of mesh.listPrimitives()) 
       const l1 = ((b[1] - c[1]) * (px - c[0]) + (c[0] - b[0]) * (py - c[1])) / den;
       const l2 = ((c[1] - a[1]) * (px - c[0]) + (a[0] - c[0]) * (py - c[1])) / den;
       const l3 = 1 - l1 - l2;
-      if (l1 > 1e-6 && l2 > 1e-6 && l3 > 1e-6) { if (cover[y * R + x]++ === 1) overlapPx++; }
+      if (l1 > 1e-6 && l2 > 1e-6 && l3 > 1e-6) { const k = y * R + x; if (cover[k]++ >= 1) { if (cover[k] === 2) overlapPx++; const key = root.listMeshes()[owner[k]]?.getName() + '+' + mesh.getName(); pairs[key] = (pairs[key] || 0) + 1; } else owner[k] = curMesh; }
     }
   }
 }
-console.log("UV1 range px", minU.toFixed(1), maxU.toFixed(1), "triangle area / atlas", (area / (R * R)).toFixed(3), "pixels covered twice or more", overlapPx);
+console.log("UV1 range px", minU.toFixed(1), maxU.toFixed(1), "triangle area / atlas", (area / (R * R)).toFixed(3), "pixels covered twice or more", overlapPx, JSON.stringify(pairs));
 const r = (v) => Math.round(v * 1000) / 1000;
 const out = {
   meshes: names, triangles, bbox: { min: all.min.map(r), max: all.max.map(r) },

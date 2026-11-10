@@ -3,27 +3,29 @@
     "sofa_frame",
     "sofa_cushions",
     "pillows_a",
-    "pillows_b"
+    "pillows_b",
+    "plaid"
   ],
   "triangles": {
     "sofa_frame": 9962,
-    "sofa_cushions": 56656,
-    "pillows_a": 9680,
-    "pillows_b": 7744
+    "sofa_cushions": 71344,
+    "pillows_a": 15360,
+    "pillows_b": 12288,
+    "plaid": 9568
   },
   "bbox": {
     "min": [
-      -2.549,
+      -2.55,
       0.048,
       -3.851
     ],
     "max": [
       1.471,
-      0.995,
+      1.074,
       0.853
     ]
   },
-  "seatHeight": 0.482,
+  "seatHeight": 0.473,
   "lightmapUv": "TEXCOORD_1",
   "generator": "tools/sofa/build_sofa.py"
 }

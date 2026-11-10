@@ -40,6 +40,8 @@ EXPOSURE = opt("--exposure", 0.0, float)
 PACK_MARGIN_PX = opt("--margin", 6, int)
 BAKE_MARGIN_PX = 6
 THREADS = opt("--threads", 5, int)
+LAYERS = opt("--layers", "nuit,lampes").split(",")   # nuit : lune, ciel, bougies ; lampes : tout le reste
+LAMP_SHARE = 0.15            # aperçus « cinema » : les lampes à 15 %
 TEXEL_METAL = 0.5          # échelle linéaire des îlots de la matière `metal`
 SOFA_ALBEDO = {"sofa": [0.62, 0.54, 0.44], "pillows": [0.3, 0.24, 0.18]}
 SNOW = [0.8, 0.85, 0.95]
@@ -59,6 +61,8 @@ def b2g(p):
 def reset():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     sc = bpy.context.scene
+    LIGHT_OBJS.clear()
+    SKY.clear()
     sc.render.engine = "CYCLES"
     cy = sc.cycles
     cy.device = "CPU"
@@ -153,6 +157,24 @@ def check_order(ob, V, probe=None):
             assert d <= 0.001, f"{ob.name} : sonde {a} != {b}"
     return err, out
 
+LIGHT_OBJS = []   # (objet, couche)
+SKY = {}
+
+def layer_of(L):
+    """Couche d'une lumière : `layer` de l'export ; à défaut la lune et les bougies sont de la nuit, le reste des lampes."""
+    if L.get("layer"):
+        return L["layer"]
+    return "nuit" if (L["name"] == "lune" or L["name"].startswith("bougie")) else "lampes"
+
+def set_layer(layer):
+    """N'allume que les lumières de la couche (le ciel appartient à `nuit`) ; la géométrie reste entière."""
+    # L'énergie, pas `hide_render` : un changement de visibilité n'était pas relu par la cuisson suivante dans la même
+    # session (les deux couches sortaient avec les mêmes lumières) ; l'énergie, comme la force du ciel, l'est.
+    for ob, l in LIGHT_OBJS:
+        ob.data.energy = ob["base_energy"] if l == layer else 0.0
+    if "node" in SKY:
+        SKY["node"].inputs["Strength"].default_value = SKY["strength"] if layer == "nuit" else 0.0
+
 def add_lights(lights, factors):
     for L in lights:
         if L["type"] == "point":
@@ -171,6 +193,8 @@ def add_lights(lights, factors):
         d.color = L["color"][:3]
         d.use_shadow = True
         bpy.context.scene.collection.objects.link(ob)
+        ob["base_energy"] = d.energy
+        LIGHT_OBJS.append((ob, layer_of(L)))
 
 def add_sky(color, irradiance, factors):
     w = bpy.data.worlds.new("sky")
@@ -179,6 +203,7 @@ def add_sky(color, irradiance, factors):
     bg = nt.nodes["Background"]
     bg.inputs["Color"].default_value = (color[0], color[1], color[2], 1.0)
     bg.inputs["Strength"].default_value = irradiance * factors["sky"]
+    SKY["node"], SKY["strength"] = bg, irradiance * factors["sky"]
     bpy.context.scene.world = w
 
 def add_ground():
@@ -485,12 +510,17 @@ def denoise(arr):
     sc.render.image_settings.file_format = "OPEN_EXR"
     sc.render.image_settings.color_depth = "32"
     sc.render.image_settings.color_mode = "RGB"
-    path = os.path.join(WORK, "dn_out.exr")
+    # un nom par appel, et l'image retirée après lecture : Blender rendait sinon le résultat du premier débruitage
+    # pour tous les suivants de la même session (deux couches identiques).
+    path = os.path.join(WORK, f"dn_out_{int(time.time() * 1000)}.exr")
     sc.render.filepath = path
     bpy.ops.render.render(write_still=True, scene="dn")
     out = bpy.data.images.load(path)
     out.colorspace_settings.name = "Non-Color"
-    r = read_image(out)
+    r = read_image(out).copy()
+    bpy.data.images.remove(out)
+    bpy.data.images.remove(img)
+    bpy.data.scenes.remove(sc)
     os.remove(path)
     return r
 
@@ -508,8 +538,16 @@ def read_png(path):
 
 # ---------------------------------------------------------------- cuisson d'un atlas
 
-def finish_atlas(name, img, size, rng):
-    """Image flottante de Blender (bas en haut) -> PNG sRGB 8 bits de E/range, haut en bas."""
+def pick_range(e):
+    """Portée d'une couche, tirée des données : 99,9e centile de l'éclairement (canal max, texels cuits) x 1,25,
+    arrondi à la puissance de deux supérieure, borné à [2, 128]."""
+    v = e[e.max(axis=2) > 0].max(axis=1) if (e.max(axis=2) > 0).any() else np.zeros(1)
+    p = float(np.percentile(v, 99.9))
+    r = 2.0 ** math.ceil(math.log2(max(p * 1.25, 1e-9)))
+    return float(min(max(r, 2.0), 128.0)), p
+
+def finish_atlas(name, img, size, layer):
+    """Image flottante de Blender (bas en haut) -> PNG sRGB 8 bits de E/range (haut en bas) ; renvoie aussi la portée choisie."""
     raw = read_image(img)[:, :, :3]
     t0 = time.time()
     try:
@@ -519,17 +557,23 @@ def finish_atlas(name, img, size, rng):
         log("DÉBRUITAGE ÉCHOUÉ :", repr(e))
         raise
     raw_valid = raw.max(axis=2) > 0
-    e = den * PI / rng
-    e[~raw_valid] = 0.0   # hors des îlots et de leurs marges : zéro (le débruiteur y avait laissé des traces)
-    np.save(os.path.join(WORK, f"{name}.bu.npy"), e.astype(np.float32))   # tel que Blender le tient : bas en haut
+    E = np.maximum(den, 0) * PI                      # éclairement, unités de la page
+    E[~raw_valid] = 0.0                              # hors des îlots et de leurs marges : zéro (le débruiteur y avait laissé des traces)
+    rng, p999 = pick_range(E)
+    e = E / rng
+    nclip = int(((e.max(axis=2) > 1.0) & raw_valid).sum())
+    ncooked = int(raw_valid.sum())
+    log(f"couche {layer} : 99,9e centile E = {p999:.3f}, portée {rng:g}, texels écrêtés {nclip} sur {ncooked} ({100.0 * nclip / max(ncooked, 1):.3f} %)")
+    stem = name if layer == "nuit" else f"{name}_{layer}"
+    np.save(os.path.join(WORK, f"{stem}.bu.npy"), e.astype(np.float32))   # tel que Blender le tient : bas en haut
     png = np.round(srgb_oetf(np.flipud(e)) * 255.0).astype(np.uint8)       # le fichier : haut en bas
-    write_png(os.path.join(WORK, f"{name}.png"), png)
-    return png, raw
+    write_png(os.path.join(WORK, f"{stem}.png"), png)
+    return png, raw, {"range": rng, "p999": round(p999, 4), "clippedTexels": nclip, "bakedTexels": ncooked}
 
-def verify_flip(name, uv_page16, png):
+def verify_flip(stem, uv_page16, png):
     """Deux lectures indépendantes d'un même sommet : le PNG écrit, lu avec les UV de la page (v = 0 : première ligne),
     et l'image de Blender (bas en haut), lue avec v_b = 1 - v. Elles doivent coïncider ; le sens inverse, non."""
-    bu = np.load(os.path.join(WORK, f"{name}.bu.npy"))
+    bu = np.load(os.path.join(WORK, f"{stem}.bu.npy"))
     h, w = png.shape[:2]
     pick = np.random.default_rng(1).integers(0, len(uv_page16), 6000)
     u = uv_page16[pick, 0] / 65535.0
@@ -539,8 +583,39 @@ def verify_flip(name, uv_page16, png):
     b = np.round(srgb_oetf(bu[np.clip(((1.0 - v) * h).astype(int), 0, h - 1), x]) * 255.0)
     c = np.round(srgb_oetf(bu[np.clip((v * h).astype(int), 0, h - 1), x]) * 255.0)
     good, bad = np.abs(a - b).mean(), np.abs(a - c).mean()
-    log(f"vérification de l'orientation (PNG relu avec les UV de uv.bin contre l'image de Blender) : écart moyen {good:.3f}/255 ; sens inversé : {bad:.2f}/255")
+    log(f"[{stem}] vérification de l'orientation (PNG relu avec les UV de uv.bin contre l'image de Blender) : écart moyen {good:.3f}/255 ; sens inversé : {bad:.2f}/255")
     assert good < 1.0 and (good * 3 < bad or bad < 1.0), "orientation de l'image incohérente avec uv.bin"
+
+def stem_of(g, layer):
+    return g if layer == "nuit" else f"{g}_{layer}"
+
+def bake_layers(img, targets, g, size):
+    """Une cuisson par couche sur les mêmes UV ; chaque couche n'allume que ses lumières."""
+    out = {}
+    for layer in LAYERS:
+        set_layer(layer)
+        t0 = time.time()
+        bake_selected(targets, BAKE_MARGIN_PX)
+        tb = time.time() - t0
+        log(f"cuisson {g}/{layer} : {tb:.0f} s")
+        png, raw, info = finish_atlas(g, img, size, layer)
+        info["bakeSeconds"] = round(tb, 1)
+        info["texture"] = f"{stem_of(g, layer)}.ktx2"
+        out[layer] = (png, raw, info)
+    return out
+
+def merge_layers(g, uvhash, new):
+    """Garde les couches d'un passage précédent seulement si les UV (donc le dépliage) sont identiques."""
+    p = os.path.join(WORK, f"{g}.json")
+    layers = {}
+    if os.path.exists(p):
+        old = json.load(open(p))
+        if old.get("uvHash") == uvhash:
+            layers.update(old["atlas"].get("layers", {}))
+        elif set(LAYERS) != {"nuit", "lampes"}:
+            log("ATTENTION : dépliage différent du passage précédent, les autres couches sont invalidées (à recuire)")
+    layers.update({l: {"texture": v[2]["texture"], "range": v[2]["range"]} for l, v in new.items()})
+    return layers
 
 def bake_group(group, scene, factors):
     t_all = time.time()
@@ -556,13 +631,9 @@ def bake_group(group, scene, factors):
         ob.data.materials.clear()
         ob.data.materials.append(diffuse_material(m["name"], m["albedo"], img))
     targets = [objs[m["name"]][0] for m in grp["meshes"]]
-    log(f"cuisson {group} : {size}², {SAMPLES} échantillons, {len(scene['lights'])} lumières")
-    t0 = time.time()
-    bake_selected(targets, BAKE_MARGIN_PX)
-    t_bake = time.time() - t0
-    log(f"cuisson : {t_bake:.0f} s")
-    png, raw = finish_atlas(group, img, size, scene["range"])
-    # UV de la page + fichier
+    log(f"cuisson {group} : {size}², {SAMPLES} échantillons, couches {','.join(LAYERS)}, {len(scene['lights'])} lumières")
+    res = bake_layers(img, targets, group, size)
+    # UV de la page + fichier (un seul, commun aux couches)
     chunks, entries, dens = [], [], {}
     off = 0
     for m in grp["meshes"]:
@@ -577,10 +648,15 @@ def bake_group(group, scene, factors):
     allq = np.concatenate(chunks)
     os.makedirs(OUT, exist_ok=True)
     allq.astype("<u2").tofile(os.path.join(OUT, f"{group}.uv.bin"))
-    verify_flip(group, allq.astype(np.int64), png)
-    used = float((raw.max(axis=2) > 0).mean())
-    info = {"texture": f"{group}.ktx2", "size": size, "uv": f"{group}.uv.bin", "meshes": entries}
-    json.dump({"atlas": info, "stats": {"bakeSeconds": round(t_bake, 1), "totalSeconds": round(time.time() - t_all, 1), "samples": SAMPLES,
+    import hashlib
+    uvhash = hashlib.sha256(allq.astype("<u2").tobytes()).hexdigest()[:16]
+    for layer, (png, raw, info) in res.items():
+        verify_flip(stem_of(group, layer), allq.astype(np.int64), png)
+    used = float((next(iter(res.values()))[1].max(axis=2) > 0).mean())
+    layers = merge_layers(group, uvhash, res)
+    info = {"texture": layers.get("nuit", {}).get("texture", f"{group}.ktx2"), "size": size, "uv": f"{group}.uv.bin", "meshes": entries, "layers": layers}
+    json.dump({"atlas": info, "uvHash": uvhash,
+               "stats": {"totalSeconds": round(time.time() - t_all, 1), "samples": SAMPLES, "layers": {l: v[2] for l, v in res.items()},
                "texelsPerMetre": {k: round(v, 1) for k, v in dens.items()}, "atlasCoverage": round(used, 3)}},
               open(os.path.join(WORK, f"{group}.json"), "w"), indent=1)
     log(f"densité (texels/m) : { {k: round(v, 1) for k, v in dens.items()} } ; atlas utilisé à {used * 100:.0f} %")
@@ -595,12 +671,12 @@ def bake_sofa(scene, factors):
         key = "pillows" if o.name.startswith("pillows_") else "sofa"
         o.data.materials.clear()
         o.data.materials.append(diffuse_material(o.name, SOFA_ALBEDO[key], img))
-    t0 = time.time()
-    bake_selected(sofa, BAKE_MARGIN_PX)
-    t_bake = time.time() - t0
-    png, raw = finish_atlas("sofa", img, size, scene["range"])
-    json.dump({"atlas": {"texture": "sofa.ktx2", "size": size, "uvSet": "TEXCOORD_1"},
-               "stats": {"bakeSeconds": round(t_bake, 1), "totalSeconds": round(time.time() - t_all, 1), "samples": SAMPLES,
+    res = bake_layers(img, sofa, "sofa", size)
+    import hashlib
+    uvhash = hashlib.sha256(open(SOFA, "rb").read()).hexdigest()[:16]
+    layers = merge_layers("sofa", uvhash, res)
+    json.dump({"atlas": {"texture": layers.get("nuit", {}).get("texture", "sofa.ktx2"), "size": size, "uvSet": "TEXCOORD_1", "layers": layers}, "uvHash": uvhash,
+               "stats": {"totalSeconds": round(time.time() - t_all, 1), "samples": SAMPLES, "layers": {l: v[2] for l, v in res.items()},
                          "meshes": [o.name for o in sofa]}}, open(os.path.join(WORK, "sofa.json"), "w"), indent=1)
     log(f"sofa terminé en {time.time() - t_all:.0f} s")
 
@@ -615,7 +691,10 @@ CAMERAS = {
     "lune": ((3.0, 1.64, -0.5), (0.0, 0.0, -6)),   # en plus : le sol près de la baie nord (lune, ombre des meneaux), à exposer plus fort
 }
 
-def emission_material(name, albedo, image, uvname, rng, flat=None):
+LAMP_NODES = []   # nœuds d'échelle des couches « lampes » : (nœud, échelle de base), pour les aperçus « cinema »
+
+def emission_material(name, albedo, layers, uvname, flat=None):
+    """Émission = somme des couches (lightmap x portée x poids) x albedo / pi ; `layers` : [(image, portée, couche)]."""
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     nt = m.node_tree
@@ -623,31 +702,59 @@ def emission_material(name, albedo, image, uvname, rng, flat=None):
         nt.nodes.remove(n)
     out = nt.nodes.new("ShaderNodeOutputMaterial")
     em = nt.nodes.new("ShaderNodeEmission")
-    if image is None:
+    if not layers:
         em.inputs["Color"].default_value = (albedo[0] * flat, albedo[1] * flat, albedo[2] * flat, 1)
         em.inputs["Strength"].default_value = 1.0
     else:
         uvn = nt.nodes.new("ShaderNodeUVMap")
         uvn.uv_map = uvname
-        t = nt.nodes.new("ShaderNodeTexImage")
-        t.image = image
-        t.interpolation = "Linear"
-        t.extension = "EXTEND"
+        total = None
+        for image, rng, layer in layers:
+            t = nt.nodes.new("ShaderNodeTexImage")
+            t.image = image
+            t.interpolation = "Linear"
+            t.extension = "EXTEND"
+            nt.links.new(uvn.outputs["UV"], t.inputs["Vector"])
+            sc = nt.nodes.new("ShaderNodeVectorMath")
+            sc.operation = "SCALE"
+            sc.inputs["Scale"].default_value = rng / PI
+            nt.links.new(t.outputs["Color"], sc.inputs[0])
+            if layer == "lampes":
+                LAMP_NODES.append((sc, rng / PI))
+            if total is None:
+                total = sc
+            else:
+                ad = nt.nodes.new("ShaderNodeVectorMath")
+                ad.operation = "ADD"
+                nt.links.new(total.outputs["Vector"], ad.inputs[0])
+                nt.links.new(sc.outputs["Vector"], ad.inputs[1])
+                total = ad
         mix = nt.nodes.new("ShaderNodeMix")
         mix.data_type = "RGBA"
         mix.blend_type = "MULTIPLY"
         mix.inputs["Factor"].default_value = 1.0
         mix.inputs["B"].default_value = (albedo[0], albedo[1], albedo[2], 1)
-        nt.links.new(uvn.outputs["UV"], t.inputs["Vector"])
-        nt.links.new(t.outputs["Color"], mix.inputs["A"])
+        nt.links.new(total.outputs["Vector"], mix.inputs["A"])
         nt.links.new(mix.outputs["Result"], em.inputs["Color"])
-        em.inputs["Strength"].default_value = rng / PI
+        em.inputs["Strength"].default_value = 1.0
     nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
     return m
 
+def load_layers(stem_g, at):
+    """Images PNG de chaque couche cuite de l'atlas : [(image, portée, couche)]."""
+    res = []
+    for layer, info in at.get("layers", {"nuit": {"range": 64}}).items():
+        p = os.path.join(WORK, f"{stem_of(stem_g, layer)}.png")
+        if not os.path.exists(p):
+            continue
+        img = bpy.data.images.load(p)
+        img.colorspace_settings.name = "sRGB"
+        res.append((img, info["range"], layer))
+    return res
+
 def preview():
     scene = load_scene_json()
-    rng = scene["range"]
+    LAMP_NODES.clear()
     sc = reset()
     sc.cycles.samples = 24
     sc.cycles.use_adaptive_sampling = False
@@ -660,8 +767,7 @@ def preview():
     lm = json.load(open(os.path.join(OUT, "lightmaps.json")))
     for g, grp in scene["groups"].items():
         at = lm["atlases"][g]
-        img = bpy.data.images.load(os.path.join(WORK, f"{g}.png"))
-        img.colorspace_settings.name = "sRGB"
+        lay_imgs = load_layers(g, at)
         q = np.fromfile(os.path.join(OUT, at["uv"]), dtype="<u2").reshape(-1, 2).astype(np.float64) / 65535.0
         for m, e in zip(grp["meshes"], at["meshes"]):
             V, _ = parse_obj(os.path.join(SRC, m["file"]))
@@ -670,21 +776,25 @@ def preview():
             lay = ob.data.uv_layers.new(name="lightmap")
             lay.data.foreach_set("uv", uv.astype(np.float32).reshape(-1))
             ob.data.materials.clear()
-            ob.data.materials.append(emission_material(m["name"], m["albedo"], img, "lightmap", rng))
-    sofa_baked = SOFA and os.path.exists(os.path.join(WORK, "sofa.png"))
+            ob.data.materials.append(emission_material(m["name"], m["albedo"], lay_imgs, "lightmap"))
+    sofa_baked = SOFA and os.path.exists(os.path.join(WORK, "sofa.png")) and "sofa" in lm["atlases"]
     if sofa_baked:
-        simg = bpy.data.images.load(os.path.join(WORK, "sofa.png"))
-        simg.colorspace_settings.name = "sRGB"
+        simgs = load_layers("sofa", lm["atlases"]["sofa"])
         for o in import_sofa(SOFA):
             key = "pillows" if o.name.startswith("pillows_") else "sofa"
             o.data.materials.clear()
-            o.data.materials.append(emission_material(o.name, SOFA_ALBEDO[key], simg, o.data.uv_layers.active.name, rng))
+            o.data.materials.append(emission_material(o.name, SOFA_ALBEDO[key], simgs, o.data.uv_layers.active.name))
     else:
-        for m in [m for m in scene["groups"]["salon"]["occluders"] if m.get("sofa", True)]:   # non cuit : gris sombre uniforme (le canapé réel est dessiné par la page)
+        pass
+    # les occluders (boîtes posées, et le canapé en boîtes sans le vrai) ne sont pas cuits : gris sombre uniforme
+    for grp in scene["groups"].values():
+        for m in grp.get("occluders", []):
+            if sofa_baked and m.get("sofa", True):
+                continue
             V, _ = parse_obj(os.path.join(SRC, m["file"]))
             ob = make_object(m["name"], V, m["albedo"])
             ob.data.materials.clear()
-            ob.data.materials.append(emission_material(m["name"], m["albedo"], None, None, rng, flat=0.02))
+            ob.data.materials.append(emission_material(m["name"], m["albedo"], [], None, flat=0.02))
     sc.view_settings.view_transform = "AgX"
     sc.view_settings.look = "None"
     sc.view_settings.exposure = EXPOSURE
@@ -706,14 +816,18 @@ def preview():
         cam.location = g2b(eye)
         d = Vector(g2b(tgt)) - Vector(g2b(eye))
         cam.rotation_euler = d.to_track_quat("-Z", "Y").to_euler()
-        sc.render.filepath = os.path.join(PREV, f"{name}.jpg")
-        bpy.ops.render.render(write_still=True)
-        log("aperçu", name, "exposition", EXPOSURE, "EV")
+        for suffix, share in (("", 1.0), ("_cinema", LAMP_SHARE)):
+            for node, base in LAMP_NODES:
+                node.inputs["Scale"].default_value = base * share
+            sc.render.filepath = os.path.join(PREV, f"{name}{suffix}.jpg")
+            bpy.ops.render.render(write_still=True)
+            log("aperçu", name + suffix, "exposition", EXPOSURE, "EV")
 
 def atlas_previews(scene):
     import imagecodecs
     for g in list(scene["groups"]) + ["sofa"]:
-        p = os.path.join(WORK, f"{g}.png")
+      for layer in ("nuit", "lampes"):
+        p = os.path.join(WORK, f"{stem_of(g, layer)}.png")
         if not os.path.exists(p):
             continue
         a = read_png(p).astype(np.float32) / 255.0
@@ -722,8 +836,8 @@ def atlas_previews(scene):
         k = 0.8 / max(float(np.percentile(pos, 99)) if pos.size else 1.0, 1e-6)   # lisible : le 99e centile à 0,8
         v = np.clip(srgb_oetf(np.clip(lin * k, 0, 1)) * 255.0, 0, 255).astype(np.uint8)
         os.makedirs(PREV, exist_ok=True)
-        open(os.path.join(PREV, f"{g}_atlas.jpg"), "wb").write(imagecodecs.jpeg8_encode(v, level=90))
-        log(f"atlas {g} : facteur d'exposition de l'aperçu x{k:.1f}")
+        open(os.path.join(PREV, f"{stem_of(g, layer)}_atlas.jpg"), "wb").write(imagecodecs.jpeg8_encode(v, level=90))
+        log(f"atlas {stem_of(g, layer)} : facteur d'exposition de l'aperçu x{k:.1f}")
 
 # ---------------------------------------------------------------- main
 

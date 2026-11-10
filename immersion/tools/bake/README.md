@@ -6,12 +6,13 @@ chaque surface, la page le lit comme `lightMap` (second jeu d'UV). Presque aucun
     tools/bake/bake.sh                                  # tout : salon, sud, nuit (+ sofa si le fichier existe), encodage, aperçus
     tools/bake/bake.sh --only nuit --samples 64          # un seul atlas
     tools/bake/bake.sh --only sofa --sofa assets-src/sofa/sofa_bake.glb
+    tools/bake/bake.sh --layers nuit                     # une seule couche (les UV doivent rester ceux du passage précédent)
     tools/bake/bake.sh --calibrate                       # refait l'étalonnage seul (et l'affiche)
     tools/bake/bake.sh --exposure -1.5 --no-preview      # exposition des aperçus / pas d'aperçu
 
 Depuis `immersion/`. Options : `--only a,b` (groupes `salon`, `sud`, `nuit`, `sofa`), `--sofa fichier.glb` (défaut
 `assets-src/sofa/sofa_bake.glb`, utilisé s'il existe), `--samples N` (défaut 128, adaptatif), `--margin PX` (marge de
-rangement, défaut 6 px à la taille de l'atlas), `--calibrate`, `--exposure EV`, `--no-preview`.
+rangement, défaut 6 px à la taille de l'atlas), `--layers nuit,lampes` (défaut : les deux), `--calibrate`, `--exposure EV`, `--no-preview`.
 Prérequis : les images Docker `immersion-blender` et `immersion-assets-tools` ; les entrées de `tools/bake/export.sh`
 (`assets-src/bake/scene.json` + OBJ). Les conteneurs s'appellent `immersion-bake-*`, `--rm`, `--cpus 5`.
 
@@ -89,3 +90,30 @@ montre : pas de reflets, pas de verre, pas de ciel (le noir des fenêtres est le
 La lightmap du canapé passe par une dilatation des clairs (trois texels, `ffmpeg` de la machine) avant son
 encodage : ses coutures, cuites presque noires sur un ou deux texels, dessinaient des traits sombres en
 pointillé le long des coussins. Le PNG d'origine reste dans `assets-src/bake/work/sofa_brut.png`.
+
+## Deux couches de lumière (nuit / lampes)
+
+Chaque atlas est cuit deux fois sur les mêmes UV (dépliage et rangement faits une seule fois) :
+
+| couche | lumières allumées | fichier |
+|---|---|---|
+| `nuit` | les lumières `"layer": "nuit"` de `scene.json` (la lune, les bougies) + le ciel | `<atlas>.ktx2` |
+| `lampes` | les lumières `"layer": "lampes"` (lustre, lampadaires, suspensions, mezzanine, appliques, chevets), ciel éteint | `<atlas>_lampes.ktx2` |
+
+Sans clé `layer` dans l'export : la lune et les noms qui commencent par `bougie` sont `nuit`, le reste `lampes`. Toute la géométrie
+(occluders, canapé, sol de neige) est présente dans les deux cuissons ; une couche éteint les lumières de l'autre en mettant leur
+énergie à zéro (`hide_render` n'était pas relu d'une cuisson à l'autre dans la même session de Blender). La page additionne les deux :
+`E = E_nuit + k · E_lampes` (k = 1 plein feu, 0,15 « cinéma », 0 lampes éteintes).
+
+**Portée par couche et par atlas**, tirée des données : 99,9e centile de l'éclairement (canal max, texels cuits) × 1,25, arrondi à la
+puissance de deux supérieure, borné à [2, 128] ; au-dessus, écrêté. Le journal de cuisson donne le centile, la portée et le nombre de
+texels écrêtés ; `lightmaps.json` donne les portées. Le fichier `uv.bin` est commun. `lightmaps.json` : `range` (ancien champ) = portée
+de la couche nuit du premier atlas ; par atlas `texture` = couche nuit et `layers: { nuit: { texture, range }, lampes: { texture, range } }`
+(aussi pour `sofa`). Budgets KTX2 : 1,8 Mo par 2048², 0,45 Mo par 1024² (`assemble.py` signale un total au-dessus de 9 Mo).
+
+Si l'on ne cuit qu'une couche (`--layers`), l'autre n'est conservée que si le dépliage est identique (empreinte des UV dans
+`assets-src/bake/work/<atlas>.json`) ; sinon elle est retirée de `lightmaps.json` et son KTX2 supprimé.
+Le canapé : les deux PNG sont dilatés (ffmpeg) avant l'encodage.
+
+Aperçus : `<vue>.jpg` = nuit + lampes à pleine puissance ; `<vue>_cinema.jpg` = lampes à 15 % ; `<atlas>_atlas.jpg` et
+`<atlas>_lampes_atlas.jpg`.
