@@ -318,6 +318,15 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
   `data:image/` dans `dist/`. Reste dans le bundle un `Function(…)` de la colle de Rapier, jamais appelé quand
   `globalThis` existe (la physique tourne sous la politique, scénario 02).
 
+- **Ne jamais relire l'image de la vidéo par un canevas 2D** (11/11/2026, première mesure sur la machine cible :
+  56 images par seconde écrans éteints en Ultra, 21 avec vidéo, et la même chute à tous les préréglages). La
+  copie réduite pour l'ambilight passait par `drawImage(video)` + `getImageData`, quinze fois par seconde : pour
+  une image décodée par la carte graphique, le navigateur la rapatrie en mémoire et le rendu attend. Elle est
+  faite par la carte graphique (petite cible de rendu, `Screens.tsx`) et relue sans attendre
+  (`readRenderTargetPixelsAsync`). Et la mire de la mesure, un canevas capté en flux, pesait elle-même sur la
+  mesure : c'est un fichier (`assets/bench/mire.webm`). La ligne `immersion-bench` porte `maxMs`, `over33`,
+  `over50`, `slowAt` pour situer les à-coups — à lire avant de retoucher quoi que ce soit au rendu.
+
 ## Poids
 
 - `public/assets/` : **28,3 Mo** (textures 15,1 ; modèles 9,6 ; HDRI 3,2). `dist/` : ~37 Mo (assets, code
@@ -382,6 +391,34 @@ rapide) ; image depuis une copie propre ; bascule ; vérification ; push ; CI ; 
 - Sous forte charge de la machine, le contexte WebGL du navigateur de test peut se perdre au chargement
   (l'écran « Le rendu 3D s'est interrompu » s'affiche alors — c'est le comportement voulu) : relancer.
 - Le serveur d'aperçu redirige `/` vers la page du mode ; sur la vraie application `/` est le cinéma.
+
+## V2 — la nuit du 11/11/2026 (demande du propriétaire après son premier essai)
+
+**Consigne : un seul déploiement, à la fin** (« ne fais pas 50 déploiements »). Tout s'accumule sur la branche
+`immersion` ; commit, push, build et bascule une fois, quand tout est vérifié. Prévenir l'autre session avant le build.
+
+Son retour, sur un portable Core Ultra 7 155H (Arc intégré), Chrome, 2560 × 1229 :
+- mesure : Ultra 56 i/s écrans éteints (1 % à 30), **21 avec vidéo** ; Bas 148 → 35. La chute est la même à tous
+  les préréglages et **aussi quand la lecture est en pause** ; la vidéo saccade ; « gros input lag » ;
+- reflets des vitres et des télévisions trop forts, pas beaux ;
+- la rambarde en haut de l'escalier monte trop haut et trop près du mur (mélange de barrières) ;
+- de la cuisine on voit un bloc — la chambre ; un couloir bizarre ; architecture « correcte mais perfectible » ;
+- les lumières : « hyper belles » — **ne pas les abîmer** ;
+- il veut : 60 i/s stables en Ultra pendant une lecture sur sa machine ; l'ambilight allégé ou coupé si besoin ;
+  le mobile (joystick + deux ou trois boutons) ; plus de commandes de lecture (pistes audio, sous-titres).
+
+Ordre de travail :
+1. **Banc sur une vraie carte graphique** : ce serveur a une UHD 630 (`/dev/dri/renderD128`), plus faible que la
+   cible. Faire tourner Chromium dessus (conteneur `immersion-gpu`), mesurer effet par effet. Les tests d'avant
+   tournaient en rendu logiciel, qui cache ces coûts.
+2. Performances (cible ci-dessus) ; 3. reflets ; 4. rambarde, bloc de la chambre, couloir, cohérence (toute
+   géométrie changée = recuisson du groupe) ; 5. latence des commandes à vérifier une fois le rendu remonté ;
+   6. commandes tactiles ; 7. pistes audio et sous-titres.
+
+Déjà fait cette nuit, **non commité, non déployé** (portail de l'application en cours sur la ligne de mesure) :
+copie réduite de la vidéo par la carte graphique (`Screens.tsx`), mire de mesure en fichier, `maxMs`/`over33`/
+`over50`/`slowAt` dans la ligne `immersion-bench` (route + test côté application), zoom à la molette une fois
+installé (`view`, `Player.tsx`), commandes de lecture dans le panneau (`NowPlaying`), scénario 09.
 
 ## Prochaine action
 

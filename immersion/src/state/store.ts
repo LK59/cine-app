@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { create } from "zustand";
 import { browserLang, translate, type Key, type Lang } from "../lib/i18n";
 import { AUTO_LEVELS, loadSettings, profileOf, saveSettings, type Quality, type QualityProfile, type Settings } from "../lib/settings";
@@ -95,6 +96,9 @@ export interface ImmersionState {
   /** La mesure (« Mesurer », `bench/bench.ts`) : son avancement, ses résultats. `null` : jamais lancée. */
   bench: BenchState | null;
   setBench: (patch: Partial<BenchState>) => void;
+  /** Des champs du profil de qualité forcés par le banc de rendu ; `null` en temps normal. */
+  perfProfile: Partial<QualityProfile> | null;
+  setPerfProfile: (profile: Partial<QualityProfile> | null) => void;
   /** Les lettres de déplacement reconnues sur ce clavier (« ZQSD », « WASD ») ; `null` : pas encore su. */
   keysSeen: string | null;
   setKeysSeen: (label: string) => void;
@@ -164,6 +168,8 @@ export const useStore = create<ImmersionState>((set, get) => ({
   toggleLamps: (group) => set({ lamps: { ...get().lamps, [group]: !get().lamps[group] } }),
   bench: null,
   setBench: (patch) => set({ bench: { ...(get().bench ?? EMPTY_BENCH), ...patch } }),
+  perfProfile: null,
+  setPerfProfile: (perfProfile) => set({ perfProfile }),
   setBaked: (baked) => get().baked !== baked && set({ baked }),
   setRoom: (room) => get().room !== room && set({ room }),
   sceneReady: false,
@@ -223,7 +229,10 @@ const EMPTY_BENCH: BenchState = { running: false, preset: null, video: false, pr
 /** Le profil de qualité en vigueur. Une référence stable par niveau : rien ne se redessine pour rien. */
 export function useProfile(): QualityProfile {
   // Pendant une mesure, c'est elle qui choisit le préréglage — sans toucher aux réglages gardés.
-  return useStore((s) => profileOf(s.bench?.running && s.bench.preset ? s.bench.preset : s.settings.quality, s.autoLevel));
+  const profile = useStore((s) => profileOf(s.bench?.running && s.bench.preset ? s.bench.preset : s.settings.quality, s.autoLevel));
+  // Le banc de rendu (`tests/perf.mjs`) peut forcer des champs du profil, pour mesurer ce que chacun coûte.
+  const forced = useStore((s) => s.perfProfile);
+  return useMemo(() => (forced ? { ...profile, ...forced } : profile), [profile, forced]);
 }
 
 /** Les lettres des touches de déplacement à afficher : celles du réglage s'il force une disposition, sinon celles reconnues. */

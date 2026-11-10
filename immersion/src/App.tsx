@@ -14,7 +14,10 @@ import { SEATS, THINGS } from "./world/interactions";
 import { Hints } from "./ui/Hints";
 import { FpsCounter, Hud } from "./ui/Hud";
 import { closePanel, debug, openPanel } from "./state/actions";
-import { emit } from "./input/intents";
+import { emit, view } from "./input/intents";
+import { perf } from "./lib/perf";
+import { effects } from "./world/Effects";
+import { screenLight } from "./world/screenLight";
 import { ContextLost, Crashed, SessionEnded, Unsupported } from "./ui/Screens";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { getVideo, playTestClip, stopOnLeave } from "./media/playback";
@@ -48,7 +51,7 @@ export function App() {
       }
     );
     // Prise de test et de capture : l'état, et le visiteur qu'on peut poser où l'on veut.
-    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug, benchTiming, speakerLevels, musicLevels, things: THINGS.map(({ id, at }) => ({ id, at })), seats: SEATS };
+    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug, benchTiming, view, perf, effects, screenLight, speakerLevels, musicLevels, things: THINGS.map(({ id, at }) => ({ id, at })), seats: SEATS };
     // La page s'en va, quelle qu'en soit la raison : l'arrêt de la lecture part quand même.
     window.addEventListener("pagehide", stopOnLeave);
     return () => window.removeEventListener("pagehide", stopOnLeave);

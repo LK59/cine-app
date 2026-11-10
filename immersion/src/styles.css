@@ -771,14 +771,77 @@ kbd {
 }
 .now {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  flex-direction: column;
+  gap: 12px;
   margin-top: 16px;
   padding: 12px 14px 12px 18px;
   border-radius: 16px;
   background: rgb(251 191 36 / 0.09);
   box-shadow: inset 0 0 0 1px rgb(251 191 36 / 0.22);
 }
+.now-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.now-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* La barre : fine à l'œil, haute sous le pointeur. */
+.now-bar {
+  position: relative;
+  flex: 1;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.now-bar::before,
+.now-bar > span {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 9px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.16);
+}
+.now-bar > span {
+  background: var(--brand);
+  transform-origin: left center;
+}
+.now-bar:hover::before {
+  background: rgb(255 255 255 / 0.26);
+}
+.now-bar:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.now-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.now-space {
+  flex: 1;
+}
+.now-volume {
+  display: inline-flex;
+  align-items: center;
+}
+.now-volume input {
+  width: 120px;
+  accent-color: var(--brand);
+}
+
 .now-label {
   font-size: 11px;
   font-weight: 650;
@@ -1225,4 +1288,14 @@ kbd {
   font-size: 11px;
   line-height: 1.45;
   opacity: 0.45;
+}
+
+/* Un libellé pour les lecteurs d'écran, hors de l'image. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

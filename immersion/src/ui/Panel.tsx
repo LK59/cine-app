@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, type MouseEvent } from "react";
 import { useStore, useT } from "../state/store";
+import { dispatch } from "../media/commands";
 import { search, type Continue, type Episode, type Title } from "../media/library";
 import { closePanel, launch, openTitle, panelBack, setPanelQuery, setPanelSeason, setPanelTab, stopPlayback } from "../state/actions";
 import { ExperienceLogo } from "./Logo";
@@ -120,6 +121,74 @@ function Detail({ title }: { title: Title }) {
   );
 }
 
+const stamp = (seconds: number) => {
+  const s = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const rest = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${rest}` : `${m}:${rest}`;
+};
+
+/**
+ * Ce qui joue sur les télévisions, et de quoi le commander à la souris : lecture ou pause, reculer,
+ * avancer, aller à un instant en cliquant la barre, le son. Le clavier faisait déjà tout cela (Espace,
+ * flèches, M) — mais rien ne le disait une fois le panneau ouvert, où il n'y avait qu'« Arrêter ».
+ * Tout passe par les commandes (`media/commands.ts`), comme le clavier.
+ */
+function NowPlaying() {
+  const t = useT();
+  const playback = useStore((s) => s.playback);
+  const volume = useStore((s) => s.settings.volume);
+  const update = useStore((s) => s.updateSettings);
+  const live = playback.status === "playing" || playback.status === "paused";
+  const ratio = playback.duration > 0 ? Math.min(1, playback.position / playback.duration) : 0;
+  const seekTo = (e: MouseEvent<HTMLButtonElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    if (box.width > 0 && playback.duration > 0) dispatch({ type: "seek", to: Math.max(0, Math.min(1, (e.clientX - box.left) / box.width)) * playback.duration });
+  };
+  return (
+    <section className="now" data-testid="now">
+      <div className="now-head">
+        <span className="now-label">{t("panel.nowPlaying")}</span>
+        <span className="now-title">{playback.title}</span>
+        <button type="button" className="chip" onClick={stopPlayback}>
+          ■ {t("panel.stop")}
+        </button>
+      </div>
+      {live ? (
+        <>
+          <div className="now-progress">
+            <span className="tabular">{stamp(playback.position)}</span>
+            <button type="button" className="now-bar" onClick={seekTo} aria-label={t("panel.seek")} data-testid="now-bar">
+              <span style={{ transform: `scaleX(${ratio})` }} />
+            </button>
+            <span className="tabular">{playback.duration > 0 ? stamp(playback.duration) : ""}</span>
+          </div>
+          <div className="now-controls">
+            <button type="button" className="chip" onClick={() => dispatch({ type: "seekBy", delta: -10 })} aria-label={t("panel.back10")}>
+              −10 s
+            </button>
+            <button type="button" className="chip chip-on" onClick={() => dispatch({ type: "toggle" })} data-testid="now-toggle">
+              {playback.wantPaused ? `▶ ${t("panel.play")}` : `❚❚ ${t("panel.pause")}`}
+            </button>
+            <button type="button" className="chip" onClick={() => dispatch({ type: "seekBy", delta: 30 })} aria-label={t("panel.forward30")}>
+              +30 s
+            </button>
+            <span className="now-space" />
+            <button type="button" className={playback.muted ? "chip chip-on" : "chip"} onClick={() => dispatch({ type: "mute" })} data-testid="now-mute">
+              {playback.muted ? t("panel.unmute") : t("panel.mute")}
+            </button>
+            <label className="now-volume">
+              <span className="sr-only">{t("settings.volume")}</span>
+              <input type="range" min={0} max={1} step={0.01} value={volume} onChange={(e) => update({ volume: Number(e.target.value) })} data-testid="now-volume" />
+            </label>
+          </div>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
 /**
  * Laterna, dans le chalet : reprendre une lecture, voir ce qui vient d'arriver, chercher un titre,
  * ouvrir sa fiche, le lancer sur les télévisions.
@@ -155,13 +224,7 @@ export function Panel() {
       ) : (
         <div className="panel-scroll">
           {active ? (
-            <section className="now">
-              <span className="now-label">{t("panel.nowPlaying")}</span>
-              <span className="now-title">{playback.title}</span>
-              <button type="button" className="chip" onClick={stopPlayback}>
-                ■ {t("panel.stop")}
-              </button>
-            </section>
+            <NowPlaying />
           ) : null}
           {failed ? <p className="panel-note">{t("panel.failed")}</p> : null}
           {!lib && !failed ? <p className="panel-note">{t("panel.loading")}…</p> : null}

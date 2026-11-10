@@ -1,4 +1,5 @@
 import { Vector2, Vector3, type PerspectiveCamera, type WebGLRenderer } from "three";
+import { assetUrl } from "../lib/assets";
 import { api } from "../lib/session";
 import { SUPERSAMPLING, QUALITY, type Quality } from "../lib/settings";
 import { dispatch } from "../media/commands";
@@ -63,6 +64,8 @@ export const benchRun = {
   /** Le début du passage, sur l'horloge de `performance.now()`. */
   startedAt: 0,
   frames: [] as number[],
+  /** Pour chaque image, où en était le parcours (0 à 1) : situe les images lentes. */
+  at: [] as number[],
   last: 0,
   /** Le moteur de rendu, déposé par `BenchProbe`. */
   gl: null as WebGLRenderer | null,
@@ -79,7 +82,10 @@ export function benchPose(camera: PerspectiveCamera, now: number): Vector3 {
 /** Une image vient d'être rendue. */
 export function benchFrame(now: number): void {
   if (!benchRun.active) return;
-  if (benchRun.last) benchRun.frames.push(now - benchRun.last);
+  if (benchRun.last) {
+    benchRun.frames.push(now - benchRun.last);
+    benchRun.at.push((now - benchRun.startedAt) / (timing.seconds * 1000));
+  }
   benchRun.last = now;
 }
 
@@ -101,31 +107,12 @@ function rendererName(gl: WebGLRenderer): { renderer: string | null; vendor: str
   }
 }
 
-/** Une mire animée en 1080p, faite sur place : de quoi mesurer « avec vidéo » sans lancer un film. */
-function testStream(): { stream: MediaStream; stop: () => void } {
-  const canvas = document.createElement("canvas");
-  canvas.width = 1920;
-  canvas.height = 1080;
-  const context = canvas.getContext("2d")!;
-  let frame = 0;
-  const timer = setInterval(() => {
-    const t = frame++ / 30;
-    for (let i = 0; i < 8; i++) {
-      context.fillStyle = `hsl(${(i * 45 + t * 40) % 360} 70% ${35 + 20 * Math.sin(t + i)}%)`;
-      context.fillRect(i * 240, 0, 240, 1080);
-    }
-    context.fillStyle = "#fff";
-    context.fillRect(((t * 300) % 2120) - 200, 480, 200, 120);
-  }, 1000 / 30);
-  const stream = canvas.captureStream(30);
-  return {
-    stream,
-    stop: () => {
-      clearInterval(timer);
-      stream.getTracks().forEach((track) => track.stop());
-    },
-  };
-}
+/**
+ * La mire de la mesure : un vrai fichier vidéo (1080p, VP9), décodé comme un film. Elle était d'abord
+ * dessinée dans la page (un canevas capté en flux) : le dessin, la capture et l'envoi de chaque image à la
+ * carte graphique pesaient sur la mesure elle-même — « avec vidéo » comptait surtout le coût de la mire.
+ */
+const TEST_CLIP = "bench/mire.webm";
 
 async function pass(preset: Quality, video: boolean, gl: WebGLRenderer, run: string, videoSource: "film" | "mire" | null): Promise<BenchResult | null> {
   const store = useStore.getState();
@@ -134,6 +121,7 @@ async function pass(preset: Quality, video: boolean, gl: WebGLRenderer, run: str
   await wait(timing.settleMs);
   if (cancelled) return null;
   benchRun.frames = [];
+  benchRun.at = [];
   benchRun.last = 0;
   benchRun.startedAt = performance.now();
   benchRun.active = true;
@@ -143,7 +131,16 @@ async function pass(preset: Quality, video: boolean, gl: WebGLRenderer, run: str
   }
   benchRun.active = false;
   if (cancelled) return null;
-  const frames = benchRun.frames.slice().sort((a, b) => b - a);
+  // Les à-coups : la pire image, combien dépassent 33 et 50 ms, et où sur le parcours tombent les cinq pires
+  // (« 0.42:61 » : à 42 % du parcours, 61 ms). Une moyenne ne dit pas si le « 1 % le plus lent » vient d'un
+  // endroit de la maison ou de sursauts réguliers.
+  const raw = benchRun.frames;
+  const order = raw.map((_, i) => i).sort((a, b) => raw[b] - raw[a]);
+  const slowAt = order
+    .slice(0, 5)
+    .map((i) => `${benchRun.at[i].toFixed(2)}:${Math.round(raw[i])}`)
+    .join(";");
+  const frames = raw.slice().sort((a, b) => b - a);
   if (frames.length < 10) return null;
   const total = frames.reduce((sum, ms) => sum + ms, 0);
   const slowest = frames.slice(0, Math.max(1, Math.round(frames.length / 100)));
@@ -170,6 +167,10 @@ async function pass(preset: Quality, video: boolean, gl: WebGLRenderer, run: str
       low1,
       frames: frames.length,
       seconds: total / 1000,
+      maxMs: frames[0],
+      over33: frames.filter((ms) => ms > 33).length,
+      over50: frames.filter((ms) => ms > 50).length,
+      slowAt,
       hz,
       renderer,
       vendor,
@@ -198,15 +199,15 @@ export async function runBench(): Promise<void> {
   const film = before.status === "playing" || before.status === "paused";
   store.setBench({ running: true, results: [], preset: null, video: false, progress: 0, step: 0, steps: PRESETS.length * 2 });
   const results: BenchResult[] = [];
-  let mire: ReturnType<typeof testStream> | null = null;
+  let mire = false;
   try {
     for (const video of [false, true]) {
       if (video) {
         // Avec vidéo : le film en cours s'il y en a un — c'est son décodage qu'on veut compter —, sinon une mire.
         if (film) dispatch({ type: "play" });
         else {
-          mire = testStream();
-          await playTestClip(mire.stream);
+          mire = true;
+          await playTestClip(assetUrl(TEST_CLIP));
         }
       } else if (film) dispatch({ type: "pause" });
       for (const preset of PRESETS) {
@@ -222,7 +223,6 @@ export async function runBench(): Promise<void> {
   } finally {
     benchRun.active = false;
     if (mire) {
-      mire.stop();
       dispatch({ type: "stop" });
     } else if (film) dispatch({ type: before.wantPaused ? "pause" : "play" });
     useStore.getState().setBench({ running: false, preset: null, progress: 0 });

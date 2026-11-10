@@ -182,7 +182,7 @@ const FRAGMENT_MAIN = /* glsl */ `
             vec2 inFrame = step( vec2( 0.0 ), uv ) * step( uv, vec2( 1.0 ) );
             // L'image nette est lue telle que le navigateur la donne (codée sRGB) : décodée ici.
             vec3 sharp = pow( texture2D( uSlVideo, uv ).rgb, vec3( 2.2 ) );
-            vec3 blurred = texture2D( uSlBlur, uv ).rgb;
+            vec3 blurred = pow( texture2D( uSlBlur, uv ).rgb, vec3( 2.2 ) );
             vec3 image = mix( sharp, blurred, smoothstep( 0.04, 0.4, material.roughness ) ) * inFrame.x * inFrame.y;
             vec3 fresnel = F_Schlick( material.specularColor, material.specularF90, slNoV );
             float gloss = 1.0 - material.roughness;

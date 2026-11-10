@@ -33,6 +33,21 @@ export const motion = {
   run: false,
 };
 
+/**
+ * Le cadrage voulu quand on est installé (canapé, lit, bain) : 0, la vue normale ; 1, la télévision la plus
+ * proche remplit l'image. `scale` est ce que le visiteur (`Player`) en a fait — le champ réel rapporté au
+ * champ réglé —, pour que le regard tourne moins vite quand l'image est rapprochée.
+ */
+export const view = {
+  zoom: 0,
+  scale: 1,
+};
+
+/** Rapproche (positif) ou éloigne l'image d'un cran. */
+export function zoomBy(step: number): void {
+  view.zoom = Math.max(0, Math.min(1, view.zoom + step));
+}
+
 type Handler = (intent: Intent) => void;
 const handlers = new Set<Handler>();
 

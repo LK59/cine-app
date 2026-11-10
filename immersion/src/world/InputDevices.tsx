@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useThree } from "@react-three/fiber";
+import { view } from "../input/intents";
 import { attachKeyboardMouse, movementKeyLabels } from "../input/keyboardMouse";
 import { captureChanged, listenIntents } from "../state/actions";
 import { useStore } from "../state/store";
@@ -16,7 +17,8 @@ export function InputDevices() {
     const stopIntents = listenIntents();
     const detach = attachKeyboardMouse({
       canvas,
-      onLook: (dx, dy) => look(dx, dy, useStore.getState().settings.sensitivity),
+      // Image rapprochée, regard ralenti d'autant : le même geste déplace l'image de la même distance à l'écran.
+      onLook: (dx, dy) => look(dx, dy, useStore.getState().settings.sensitivity * view.scale),
       onCapture: captureChanged,
       worldActive: () => {
         const state = useStore.getState();

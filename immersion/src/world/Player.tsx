@@ -3,9 +3,9 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { CapsuleCollider, RigidBody, useRapier, type RapierCollider, type RapierRigidBody } from "@react-three/rapier";
 import { Euler, MathUtils, PerspectiveCamera, Vector3 } from "three";
 import { useStore } from "../state/store";
-import { motion } from "../input/intents";
+import { motion, view } from "../input/intents";
 import { seatNear, SEATS, thingAimed } from "./interactions";
-import { nearestScreen, PLAYER, roomAt } from "./layout";
+import { nearestScreen, PLAYER, roomAt, screenHeight } from "./layout";
 import { rig } from "./rig";
 import { benchPose, benchRun } from "../bench/bench";
 
@@ -30,6 +30,7 @@ export function Player() {
   const fall = useRef(0);
   const eyeHeight = useRef<number>(PLAYER.eye);
   const seatBlend = useRef(0);
+  const zoom = useRef(0);
 
   const controller = useMemo(() => {
     const c = world.createCharacterController(0.02);
@@ -129,8 +130,22 @@ export function Player() {
     rig.eye.copy(eye);
     euler.set(rig.pitch, rig.yaw, 0);
     camera.quaternion.setFromEuler(euler);
-    if (camera.fov !== state.settings.fov) {
-      camera.fov = state.settings.fov;
+    // Installé, la molette rapproche l'image — jusqu'à ce que la télévision la plus proche la remplisse
+    // (hauteur et largeur, avec un peu de marge). Debout, la vue revient d'elle-même à la normale.
+    if (!state.seated) view.zoom = 0;
+    zoom.current += (view.zoom - zoom.current) * (1 - Math.exp(-dt * 9));
+    if (Math.abs(view.zoom - zoom.current) < 0.001) zoom.current = view.zoom;
+    let fov = state.settings.fov;
+    if (zoom.current > 0) {
+      const tv = nearestScreen(eye.x, eye.y, eye.z);
+      const fitHeight = 2 * Math.atan((screenHeight(tv.screen) * 0.54) / tv.distance);
+      const fitWidth = 2 * Math.atan((tv.screen.width * 0.54) / tv.distance / camera.aspect);
+      const tight = Math.max(12, Math.min(fov, MathUtils.radToDeg(Math.max(fitHeight, fitWidth))));
+      fov += (tight - fov) * MathUtils.smootherstep(zoom.current, 0, 1);
+    }
+    view.scale = fov / state.settings.fov;
+    if (Math.abs(camera.fov - fov) > 0.005) {
+      camera.fov = fov;
       camera.updateProjectionMatrix();
     }
 

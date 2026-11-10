@@ -26,9 +26,14 @@ export function Hints() {
           </span>
         ) : null}
         {seated ? (
-          <span className="hint">
-            <kbd>F</kbd> {t("hint.stand")}
-          </span>
+          <>
+            <span className="hint">
+              <kbd>F</kbd> {t("hint.stand")}
+            </span>
+            <span className="hint" data-testid="hint-zoom">
+              <kbd>{t("key.wheel")}</kbd> {t("hint.zoom")}
+            </span>
+          </>
         ) : nearSeat ? (
           <span className="hint" data-testid="hint-seat">
             <kbd>F</kbd> {t(SEATS[nearSeat].hint)}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { CanvasTexture, Color, Frustum, Group, LinearFilter, Matrix4, Mesh, MeshStandardMaterial, PlaneGeometry, Scene, ShaderMaterial, Sphere, SRGBColorSpace, Vector2, Vector3, VideoTexture, type DepthTexture, type PerspectiveCamera } from "three";
+import { Camera, Color, Frustum, Group, LinearFilter, Matrix4, Mesh, MeshStandardMaterial, PlaneGeometry, RGBAFormat, Scene, ShaderMaterial, Sphere, SRGBColorSpace, UnsignedByteType, Vector2, Vector3, VideoTexture, WebGLRenderTarget, type DepthTexture, type PerspectiveCamera } from "three";
+import { perf } from "../lib/perf";
 import { speaker } from "../media/audio";
 import { getVideo } from "../media/playback";
 import { useStore } from "../state/store";
@@ -70,6 +71,67 @@ const SAMPLE_EVERY_MS = 66;
 const SAMPLE_W = 48;
 const SAMPLE_H = 27;
 
+/**
+ * La copie réduite de l'image vidéo — les reflets flous et la couleur de chaque zone d'ambiance.
+ *
+ * Elle est faite **par la carte graphique**, dans une petite cible de rendu, et ses octets sont relus sans
+ * attendre (`readRenderTargetPixelsAsync`). Elle passait par un canevas 2D (`drawImage` de la vidéo puis
+ * `getImageData`) : pour une image décodée par la carte graphique, le navigateur doit alors la rapatrier
+ * en mémoire, quinze fois par seconde, et tout le rendu attend. Mesuré le 11/11/2026 sur une puce graphique
+ * intégrée : 56 images par seconde écrans éteints, 21 avec vidéo, à tous les préréglages — un coût fixe par
+ * image, indépendant de la qualité.
+ *
+ * Les valeurs restent codées sRGB, comme le navigateur donne la vidéo : c'est `screenLight` qui les décode,
+ * et `zoneColors` pour les zones.
+ */
+const SAMPLE_VERTEX = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+  }
+`;
+const SAMPLE_FRAGMENT = /* glsl */ `
+  varying vec2 vUv;
+  uniform sampler2D uVideo;
+  uniform vec2 uTexel;
+  void main() {
+    // Seize lectures par point : chacune moyenne déjà quatre points de l'image (filtrage linéaire).
+    vec3 sum = vec3(0.0);
+    for (int y = 0; y < 4; y++) {
+      for (int x = 0; x < 4; x++) {
+        vec2 offset = (vec2(float(x), float(y)) + 0.5) / 4.0 - 0.5;
+        sum += texture2D(uVideo, vUv + offset * uTexel).rgb;
+      }
+    }
+    gl_FragColor = vec4(sum / 16.0, 1.0);
+  }
+`;
+
+/** La couleur moyenne de chaque zone, en linéaire. Les lignes relues vont de bas en haut ; les zones, de haut en bas. */
+function zoneColors(pixels: Uint8Array, target: Color[]): void {
+  const zoneW = SAMPLE_W / ZONES_X;
+  const zoneH = SAMPLE_H / ZONES_Y;
+  for (let zy = 0; zy < ZONES_Y; zy++) {
+    for (let zx = 0; zx < ZONES_X; zx++) {
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let n = 0;
+      for (let y = Math.floor(zy * zoneH); y < Math.floor((zy + 1) * zoneH); y++) {
+        for (let x = Math.floor(zx * zoneW); x < Math.floor((zx + 1) * zoneW); x++) {
+          const i = ((SAMPLE_H - 1 - y) * SAMPLE_W + x) * 4;
+          r += srgbToLinear(pixels[i] / 255);
+          g += srgbToLinear(pixels[i + 1] / 255);
+          b += srgbToLinear(pixels[i + 2] / 255);
+          n += 1;
+        }
+      }
+      target[zy * ZONES_X + zx].setRGB(r / n, g / n, b / n);
+    }
+  }
+}
+
 const srgbToLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
 const frustum = new Frustum();
 const projection = new Matrix4();
@@ -99,7 +161,7 @@ export function Screens() {
   const groups = useRef<(Group | null)[]>([]);
   const meshes = useRef<(Mesh | null)[]>([]);
   const on = useRef(0);
-  const zones = useRef({ target: Array.from({ length: ZONES_X * ZONES_Y }, () => new Color(0, 0, 0)), last: 0 });
+  const zones = useRef({ target: Array.from({ length: ZONES_X * ZONES_Y }, () => new Color(0, 0, 0)), last: 0, reading: false, pixels: new Uint8Array(SAMPLE_W * SAMPLE_H * 4) });
 
   const { texture, sceneMaterial, overlay, off, bezel, sampler, speakers } = useMemo(() => {
     const texture = new VideoTexture(video);
@@ -129,23 +191,29 @@ export function Screens() {
       overlayScene.add(mesh);
       return mesh;
     });
-    const canvas = document.createElement("canvas");
-    canvas.width = SAMPLE_W;
-    canvas.height = SAMPLE_H;
-    const blur = new CanvasTexture(canvas);
-    blur.colorSpace = SRGBColorSpace;
-    blur.minFilter = LinearFilter;
-    blur.magFilter = LinearFilter;
-    blur.generateMipmaps = false;
+    // La copie réduite de l'image, faite par la carte graphique (voir `SAMPLE_FRAGMENT`).
+    const target = new WebGLRenderTarget(SAMPLE_W, SAMPLE_H, { format: RGBAFormat, type: UnsignedByteType, depthBuffer: false, minFilter: LinearFilter, magFilter: LinearFilter, generateMipmaps: false });
+    const sampleMaterial = new ShaderMaterial({
+      vertexShader: SAMPLE_VERTEX,
+      fragmentShader: SAMPLE_FRAGMENT,
+      uniforms: { uVideo: { value: texture }, uTexel: { value: new Vector2(1 / SAMPLE_W, 1 / SAMPLE_H) } },
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    const sampleScene = new Scene();
+    const sampleMesh = new Mesh(new PlaneGeometry(2, 2), sampleMaterial);
+    sampleMesh.frustumCulled = false;
+    sampleScene.add(sampleMesh);
     screenLight.uniforms.uSlVideo.value = texture;
-    screenLight.uniforms.uSlBlur.value = blur;
+    screenLight.uniforms.uSlBlur.value = target.texture;
     return {
       texture,
       sceneMaterial,
       overlay: { scene: overlayScene, meshes: overlayMeshes, material: overlayMaterial },
       off: new MeshStandardMaterial({ color: "#010101", roughness: 0.05, metalness: 0, envMapIntensity: 3 }),
       bezel: new MeshStandardMaterial({ color: "#0b0b0c", roughness: 0.45, metalness: 0.7 }),
-      sampler: { context: canvas.getContext("2d", { willReadFrequently: true }), blur },
+      sampler: { target, scene: sampleScene, camera: new Camera(), material: sampleMaterial, mesh: sampleMesh },
       speakers: SCREENS.map((screen) => speaker(screen.id, screen.loudness)),
     };
   }, [video]);
@@ -153,7 +221,10 @@ export function Screens() {
   useEffect(
     () => () => {
       texture.dispose();
-      sampler.blur.dispose();
+      sampler.target.dispose();
+      sampler.material.dispose();
+      sampler.mesh.geometry.dispose();
+      screenLight.uniforms.uSlBlur.value = null;
       screenLight.uniforms.uSlOn.value = 0;
       sceneMaterial.dispose();
       overlay.material.dispose();
@@ -182,7 +253,7 @@ export function Screens() {
       }
       screenLight.uniforms.uSlFit.value.set(fit[0], fit[1]);
     }
-    screenLight.uniforms.uSlOn.value = on.current;
+    screenLight.uniforms.uSlOn.value = perf.screenLight ? on.current : 0;
 
     // Quels écrans sont dans le champ ? Les autres ne sont pas redessinés.
     projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
@@ -209,35 +280,23 @@ export function Screens() {
     // ── La copie réduite de l'image : les reflets flous, et la couleur de chaque zone ──
     const z = zones.current;
     const now = performance.now();
-    if (playing && sampler.context && now - z.last > SAMPLE_EVERY_MS) {
+    if (playing && perf.sample && now - z.last > SAMPLE_EVERY_MS) {
       z.last = now;
-      try {
-        sampler.context.drawImage(video, 0, 0, SAMPLE_W, SAMPLE_H);
-        sampler.blur.needsUpdate = true;
-        const pixels = sampler.context.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
-        const zoneW = SAMPLE_W / ZONES_X;
-        const zoneH = SAMPLE_H / ZONES_Y;
-        for (let zy = 0; zy < ZONES_Y; zy++) {
-          for (let zx = 0; zx < ZONES_X; zx++) {
-            let r = 0;
-            let g = 0;
-            let b = 0;
-            let n = 0;
-            for (let y = Math.floor(zy * zoneH); y < Math.floor((zy + 1) * zoneH); y++) {
-              for (let x = Math.floor(zx * zoneW); x < Math.floor((zx + 1) * zoneW); x++) {
-                const i = (y * SAMPLE_W + x) * 4;
-                r += srgbToLinear(pixels[i] / 255);
-                g += srgbToLinear(pixels[i + 1] / 255);
-                b += srgbToLinear(pixels[i + 2] / 255);
-                n += 1;
-              }
-            }
-            z.target[zy * ZONES_X + zx].setRGB(r / n, g / n, b / n);
-          }
-        }
-      } catch {
-        // Image illisible (source d'une autre origine) : pas d'ambiance, la lecture continue.
-        for (const color of z.target) color.setRGB(0, 0, 0);
+      const previous = gl.getRenderTarget();
+      gl.setRenderTarget(sampler.target);
+      gl.render(sampler.scene, sampler.camera);
+      gl.setRenderTarget(previous);
+      // La lecture des couleurs ne bloque rien : la carte graphique rend les octets quand elle les a
+      // (une à deux images plus tard), et une seule lecture est en route à la fois.
+      if (!z.reading) {
+        z.reading = true;
+        gl.readRenderTargetPixelsAsync(sampler.target, 0, 0, SAMPLE_W, SAMPLE_H, z.pixels)
+          .then(() => zoneColors(z.pixels, z.target))
+          // Lecture refusée : pas d'ambiance, la lecture du film continue.
+          .catch(() => z.target.forEach((color) => color.setRGB(0, 0, 0)))
+          .finally(() => {
+            z.reading = false;
+          });
       }
     }
     if (!playing) for (const color of z.target) color.setRGB(0, 0, 0);
@@ -246,7 +305,7 @@ export function Screens() {
 
     // ── La passe de la vidéo, par-dessus le compositeur ──────────────────────
     const composer = effects.composer;
-    if (!anyVisible || !composer) return;
+    if (!anyVisible || !composer || !perf.overlay) return;
     // La profondeur de la scène. Le compositeur n'en garde une copie stable (recopiée après le rendu
     // de la scène) que si un effet la demande ; on la lui fait donc créer. Ces deux membres sont
     // internes à la bibliothèque — d'où la forme, et l'épinglage exact de sa version.

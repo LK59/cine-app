@@ -1,4 +1,4 @@
-import { device, emit, motion, resetMotion, type Intent } from "./intents";
+import { device, emit, motion, resetMotion, type Intent, zoomBy } from "./intents";
 
 /**
  * Le clavier et la souris : le seul périphérique d'aujourd'hui.
@@ -137,6 +137,12 @@ export function attachKeyboardMouse({ canvas, onLook, onCapture, worldActive, la
   const onMouseDown = (e: MouseEvent) => {
     if (e.button === 0 && document.pointerLockElement === canvas && worldActive()) emit("select");
   };
+  // La molette rapproche l'image (assis seulement : c'est `Player` qui en décide). Un cran de molette vaut
+  // un huitième de la course ; un pavé tactile envoie de petits pas, qui s'additionnent.
+  const onWheel = (e: WheelEvent) => {
+    if (!worldActive()) return;
+    zoomBy(Math.max(-0.2, Math.min(0.2, -e.deltaY / 800)));
+  };
   const onLockChange = () => {
     const captured = document.pointerLockElement === canvas;
     if (!captured) onBlur();
@@ -165,8 +171,10 @@ export function attachKeyboardMouse({ canvas, onLook, onCapture, worldActive, la
   window.addEventListener("blur", onBlur);
   document.addEventListener("mousemove", onMouseMove);
   document.addEventListener("mousedown", onMouseDown);
+  document.addEventListener("wheel", onWheel, { passive: true });
   document.addEventListener("pointerlockchange", onLockChange);
   return () => {
+    document.removeEventListener("wheel", onWheel);
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
     window.removeEventListener("blur", onBlur);
