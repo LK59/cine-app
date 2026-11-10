@@ -139,6 +139,14 @@ export const CONFIG_LAYOUT = {
       needs: ["xrayService"],
       feature: "xray",
     },
+    // « Revenir au début de la scène » (§143) : livré coupé, allumé ici après validation des débuts de scène.
+    {
+      group: "xray",
+      keys: ["SCENE_RESTART_ENABLED"],
+      titleKey: "config.sceneRestart.title",
+      whyKey: "config.sceneRestart.why",
+      needs: ["xrayService", "xrayOn"],
+    },
   ],
   /** Recadrage automatique : agrandir l'image au-dessus des bandes noires (lecteur intégré). */
   autoFrame: [{ group: "playback", keys: ["PLAYER_AUTO_FRAME"], titleKey: "config.autoFrame.title", whyKey: "config.autoFrame.why", needs: ["playerOn"] }],

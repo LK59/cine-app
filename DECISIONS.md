@@ -10407,3 +10407,67 @@ Connexions et Lecture réduites, une carte d'état par fonction de la table §14
 dans les quatre langues, `missingNeeds`, liens vers des pages qui existent, pages réservées, redirection 308,
 pages sans liste à elles), `config-layout-ui.test.tsx` (carte estompée et lien quand la clé d'IA ou le service
 manque, état du serveur, Connexions sans interrupteur X-Ray), `navItems.test.ts` (trois groupes, entrée active).
+
+## 143. « Revenir au début de la scène » : un vrai début de scène, ou rien — livré coupé (10/11/2026)
+
+**Règle.** À la reprise d'un titre laissé **depuis quatre heures au moins**, un bouton propose, huit secondes à
+partir de la première image, de revenir au début de la scène en cours — **seulement si ce début en est un vrai**.
+Une scène de `laterna-xray` est un regroupement de plans par les couleurs et les visages : une de ses frontières
+peut tomber au milieu d'un dialogue, entre deux angles d'une même pièce ou dans un montage sans personne. Le
+service dit donc, **frontière par frontière**, si l'on peut y revenir et d'où partir (`xray/app/scenecuts.py`,
+`xray/docs/PIPELINE.md` « 12. Débuts de scène ») :
+- `entry` : une phrase commencée 3 s au plus avant la coupe y ramène le point d'entrée ;
+- `cut: {ok, why}` — sûre : `début`, `après-saut` (après une plage sautée), `chapitre` (un chapitre d'auteur à 2 s
+  près ; des chapitres à intervalles égaux sont automatiques, ignorés), `deux-signaux` (**choix du propriétaire** :
+  les couleurs changent, `sim` ≤ 0,82, **et** les personnes aussi, Jaccard des groupes de visages ≤ 0,15 avec deux
+  groupes au moins de chaque côté) ; refusée : `parole` (une phrase traverse la coupe depuis plus de 3 s),
+  `même-lieu`, `montage` (deux scènes de moins de 25 s sans visage ni parole), `îlot` (une scène sûre de moins d'une
+  minute entre deux refus). R&D du 10/11/2026 sur 44 frontières jugées à l'œil (*Ted Lasso*, *Le Flambeau*,
+  *House of the Dragon*) : un seul signal acceptait 7 fausses frontières sur 22.
+
+Côté Laterna, la décision est **une fonction pure**, `decideSceneRestart` (`src/lib/sceneRestart.ts`), dans l'ordre
+de ses refus : analyse complète et mesurée, parole connue et ≥ 20 % du temps, absence ≥ 4 h (Jellyfin,
+`UserData.LastPlayedDate`), ni saut ni changement de piste avant la première image, pas dans la première minute,
+ni dans l'intro, le récap, le générique de fin ou les dernières scènes sans visage, aucune coupe sûre dans les
+20 dernières secondes ; la cible est la dernière coupe sûre ≥ 20 s avant la position, à son `entry`, de 20 s à
+3 min en arrière, et l'on ne remonte que par-dessus des refus `même-lieu` — jamais par-dessus une phrase coupée,
+un îlot, un montage ou une frontière sans verdict.
+
+**Livré coupé.** `SCENE_RESTART_ENABLED` (public `off` / `admins` / `tous`, défaut `off`, groupe des acteurs à
+l'écran) : coupé, le bouton n'est jamais montré, mais la décision tourne là où « À l'écran » a déjà lu les scènes
+et le bilan `stop` porte `sceneRestart: "aurait-proposé" | "non:<raison>"` — de quoi mesurer avant d'allumer.
+Allumé : `proposé:<utilisé|ignoré|saut|fermé>` sur le bilan, et une ligne `debut-scene` par séance (issue, position,
+cible, recul). Sans les acteurs à l'écran (option coupée, Fire TV, lecteur hors ligne, banc), **rien** : ni
+décision, ni champ.
+
+**Une fois par séance.** Une reconstruction du lecteur natif ou un passage de main au lecteur serveur remonte les
+commandes ; la décision n'est pas reprise (`sceneRestartSession.ts`, un magasin par élément, fini par la ligne
+`stop` — `endSceneRestart`). La dernière lecture y est **gelée à l'ouverture** : les rapports de progression
+avancent `LastPlayedDate` pendant la séance, et une relecture dirait « il y a une minute ».
+
+**Porteurs.**
+- Service : `scenecuts.boundary_features` (à l'assemblage, `results._assemble` → `Built.bounds`, gardé dans
+  `results.bounds_json`), `scenecuts.annotate` (à la lecture de `/scenes`, avec les zones de parole et les chapitres
+  — `items.chapters_json`, ffprobe une fois à la fin de l'analyse), `scenecuts.backfill_some` (les résultats d'avant,
+  sans décoder : regroupement refait depuis la base, seules les mesures écrites ; frontière regroupée autrement
+  qu'à l'époque laissée sans verdict). Version propre `CUTS_VERSION` : **`RESULT_VERSION` ne bouge pas**, les
+  scènes et leurs personnes restent octet pour octet.
+- Laterna : `decideSceneRestart` ; `sceneRestartSession.ts` ; `useSceneRestart` (`playerControls/`) ;
+  le bouton dans `PlayerPrompts`, à la place de « Passer l'intro / le récap », qui garde la priorité.
+
+**Appelants.** `PlayerControls` (les trois hôtes : natif, serveur, hors ligne — ce dernier sans acteurs à
+l'écran) ; `playback-state` donne `lastPlayedAt` (aucune requête de plus : `fetchPlaybackState` et
+`resolveResumeAt` la notent) ; les bilans `stop` du natif (`useNativeSessionRecord`) et du serveur
+(`useServerSessionRecord`) ; `sceneRestartAvailable` dans `/api/config/public`, **suivi, jamais demandé**, absent
+des doubles des empreintes — elles ne bougent pas.
+
+**Ce qui diffère exprès.** La première minute du fichier est refusée sur la *position* ; une cible au tout début
+(`début`, à 0) reste permise. Le lecteur serveur ouvert seul ne lit `playback-state` que s'il ne connaît pas sa
+position : sinon `absence-inconnue`.
+
+**Tests.** `scene-restart-143.test.ts` (la décision sur les frontières de *Ted Lasso* et du *Flambeau* telles que
+le service les rend, la séance, le journal), `scene-restart-hook-143.test.tsx` (coupé : mesuré et jamais montré ;
+allumé : huit secondes, issues, une fois par séance), `scene-restart-payload-143.test.ts` (le passage par
+`scenesForPlayer`), `jellyfin-playback-state-route.test.ts` (`lastPlayedAt`) ; côté service
+`xray/tests/test_scenecuts.py` (chapitres, mesures, entrée, règles, `/scenes` inchangé sans mesure, résultats
+d'avant).

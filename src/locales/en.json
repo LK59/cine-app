@@ -502,6 +502,7 @@
       "reserveStop": "Reserve stopped ({why})",
       "bursts": "{n} burst|{n} bursts",
       "fluidity": "Probe {probe}",
+      "sceneRestart": "Scene start: {outcome}",
       "frames": "{n} frames, {long} long",
       "worst": "worst {worst} · p95 {p95}",
       "subtitleGen": "Generated subtitles: {event}",
@@ -2022,6 +2023,7 @@
     "subtitleSizeXLarge": "Extra large",
     "skipIntro": "Skip intro",
     "skipRecap": "Skip recap",
+    "sceneRestart": "Back to the start of the scene",
     "nextEpisode": "Next episode",
     "nextEpisodeIn": "Next episode · {n}s",
     "playNow": "Play now",
@@ -3410,6 +3412,7 @@
       "XRAY_ENABLED": "Actors on screen open to",
       "XRAY_URL": "Analysis service address",
       "XRAY_API_KEY": "Analysis service key",
+      "SCENE_RESTART_ENABLED": "“Back to the start of the scene”: when resuming after four hours or more, a button offers to rewatch the start of the current scene (off: only measured, in the log)",
       "APP_LANGUAGE": "Default language",
       "COOKIE_SECURE": "Served over HTTPS (secure cookies)",
       "PLAYER_ENABLED": "Built-in player",
@@ -3667,6 +3670,10 @@
         "booksOn": "Turn on books",
         "playerOn": "Turn on the player"
       }
+    },
+    "sceneRestart": {
+      "title": "Back to the start of the scene",
+      "why": "When a title is resumed after a few hours, offers for a few seconds to go back to the start of the current scene — only when that start is certain. Off by default."
     }
   },
   "xrayScan": {

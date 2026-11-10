@@ -14,7 +14,7 @@ from . import decode
 from .config import VERSION, settings
 from .asd import AsdModels
 from .voice import VoiceModels
-from . import lanes, logs, memory, relabel, report, subsyncjob
+from . import lanes, logs, memory, relabel, report, scenecuts, subsyncjob
 from .db import Database
 from .gpu_guard import GpuGuard
 from .jobs import HEX32, PRIORITIES, InvalidJob, JobStore, validate_job
@@ -264,7 +264,7 @@ def create_app(start_background: bool = True, db: Database | None = None, models
         res = state["db"].one("SELECT * FROM results WHERE item_id=?", (item_id.lower(),))
         if res is None:
             return _error(404, "aucun résultat")
-        return {
+        body = {
             "itemId": res["item_id"],
             "etag": res["etag"],
             "model": res["model"],
@@ -275,6 +275,18 @@ def create_app(start_background: bool = True, db: Database | None = None, models
             "analyzedUntil": float(res["analyzed_until"]),
             "scenes": json.loads(res["scenes_json"]),
         }
+        # Ajout compatible (10/11/2026, scenecuts.py) : pour un résultat complet déjà mesuré, le point d'entrée
+        # et le verdict de chaque début de scène (`entry`, `cut`), la part de parole et les chapitres. Les
+        # scènes et leurs personnes restent exactement ce qu'elles étaient ; sans mesure, rien n'est ajouté.
+        extra = scenecuts.annotate(state["db"], res)
+        if extra is not None:
+            for scene, more in zip(body["scenes"], extra["scenes"]):
+                if more is not None:
+                    scene.update(more)
+            body["speechShare"] = extra["speechShare"]
+            body["chapters"] = extra["chapters"]
+            body["cutsVersion"] = extra["cutsVersion"]
+        return body
 
     @app.get("/items/{item_id}/report")
     def get_report(item_id: str):

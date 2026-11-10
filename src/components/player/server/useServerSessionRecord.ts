@@ -17,6 +17,7 @@ import { saveUnsentStop, clearUnsentStop } from "@/lib/unsentStop";
 import { sleepTimerLogFields, sleepTimerStore } from "@/lib/sleepTimer";
 import type { SessionTally, WatchedClock } from "@/lib/playerSessionTally";
 import { gaveUpFields } from "@/components/player/session/gaveUp";
+import { endSceneRestart, sceneRestartLogFields } from "@/lib/sceneRestartSession";
 
 export function useServerSessionRecord({
   videoRef,
@@ -103,7 +104,9 @@ export function useServerSessionRecord({
       ...slowLogRef.current.fields(),
       ...(switchGapRef.current !== null ? { switchGapMs: switchGapRef.current } : {}),
       ...(reloadGapRef.current !== null ? { reloadGapMs: reloadGapRef.current } : {}),
-      ...(lighterClearedRef.current ? { lighterCleared: true } : {}) };
+      ...(lighterClearedRef.current ? { lighterCleared: true } : {}),
+      // « Revenir au début de la scène » (§142) : ce qui a été décidé — rien sans les acteurs à l'écran.
+      ...sceneRestartLogFields(logContext.current.itemId) };
     },
     [watched, videoRef, linkMeterRef, streamNeedRef, startupRef, logContext, positionNow, tallyRef, subtitleSwitchesRef, restartsRef, errorRef, sessionPlayedRef, sessionStartedAtRef, slowLogRef, switchGapRef, reloadGapRef, lighterClearedRef]
   );
@@ -139,6 +142,7 @@ export function useServerSessionRecord({
       const step = negotiatedStepRef.current;
       if (step && !carriedOnlyRef.current && !lighterClearedRef.current && !logContext.current.bench) rememberLighter(step);
       reportPlayback("stop", stopFields(why, true));
+      endSceneRestart(logContext.current.itemId);
       if (logContext.current.session) clearUnsentStop(logContext.current.session);
     },
     [stopFields, stopAlreadySent, logContext, negotiatedStepRef, carriedOnlyRef, lighterClearedRef]

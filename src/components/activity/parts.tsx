@@ -734,6 +734,9 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
         t("activity.line.frames", { n: numOf(line.frames) ?? 0, long: numOf(line.longFrames) ?? 0 }),
         t("activity.line.worst", { worst: secs(numOf(line.worstMs)), p95: secs(numOf(line.p95Ms)) })
       );
+    // « Revenir au début de la scène » montré (§142) : son issue, la cible et le recul.
+    case "debut-scene":
+      return join(t("activity.line.sceneRestart", { outcome: strOf(line.outcome) ?? "?" }), numOf(line.target) != null && clock(numOf(line.target)), numOf(line.back) != null && `−${numOf(line.back)} s`);
     case "subtitle-gen":
       return join(t("activity.line.subtitleGen", { event: strOf(line.event) ?? "?" }), strOf(line.target), numOf(line.ms) != null && secs(numOf(line.ms)));
     // Les connexions (`auth.log`) : l'appareil et l'adresse, et pour un refus sa raison.

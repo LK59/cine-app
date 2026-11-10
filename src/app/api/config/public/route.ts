@@ -9,6 +9,16 @@ import { recapAvailable } from "@/lib/recap/service";
 import { askAvailableFor } from "@/lib/ask/service";
 import { askPersonAvailableFor, sofarAvailableFor } from "@/lib/aiFeatures";
 import { xrayConfigured, xrayOpenTo } from "@/lib/clients/xray";
+import { audienceAllows, parseAudience, type Audience } from "@/lib/featureAudience";
+
+/** Le public du bouton ; une configuration illisible vaut « coupé », jamais une erreur de cette route. */
+function sceneRestartAudience(): Audience {
+  try {
+    return (config.xray as { sceneRestart?: Audience }).sceneRestart ?? parseAudience("off");
+  } catch {
+    return "off";
+  }
+}
 
 /**
  * Ce que l'interface a besoin de savoir avant d'afficher quoi que ce soit.
@@ -57,6 +67,9 @@ export async function GET(req: NextRequest) {
     // Les acteurs à l'écran (DECISIONS.md §138) : l'option branchée et ouverte à ce compte. Le lecteur ne
     // demande ses scènes qu'avec elle — sans, aucune requête de plus à l'ouverture d'un film.
     xrayAvailable: !!session && xrayOpenTo(session) && xrayConfigured(),
+    // « Revenir au début de la scène » (DECISIONS.md §142) : le bouton montré à ce compte. Coupé (défaut), la
+    // décision tourne quand même sur les scènes d'« À l'écran » et n'est que mesurée (`sceneRestart` du bilan).
+    sceneRestartAvailable: !!session && xrayOpenTo(session) && xrayConfigured() && audienceAllows(sceneRestartAudience(), session),
     // « Demander un livre » : seulement avec les livres eux-mêmes.
     bookRequests: config.books?.requests === true && booksShown,
     // La disposition de l'accueil, réglée par l'exploitant (DECISIONS.md §52).

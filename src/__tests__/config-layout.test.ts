@@ -48,7 +48,7 @@ describe("une place par réglage", () => {
     expect(keys).toContain("XRAY_URL");
     expect(keys).toContain("XRAY_API_KEY");
     expect(keys).not.toContain("XRAY_ENABLED");
-    expect(CONFIG_LAYOUT.xray.flatMap(keysOf)).toEqual(["XRAY_ENABLED"]);
+    expect(CONFIG_LAYOUT.xray.flatMap(keysOf)).toEqual(["XRAY_ENABLED", "SCENE_RESTART_ENABLED"]);
   });
 
   it("Lecture : le lecteur seulement ; le reste a sa page", () => {
@@ -71,13 +71,14 @@ describe("une place par réglage", () => {
     ]);
     // Chaque fonction de la table (§140) a sa carte, qui montre son état, sur la page IA ou celle des acteurs.
     for (const f of AI_FEATURES) {
-      const card = [...CONFIG_LAYOUT.aiFeatures, ...CONFIG_LAYOUT.xray].find((c) => c.feature === f.id);
+      const card = ([...CONFIG_LAYOUT.aiFeatures, ...CONFIG_LAYOUT.xray] as ConfigCard[]).find((c) => c.feature === f.id);
       expect([f.id, card?.keys]).toEqual([f.id, [f.setting]]);
     }
   });
 
   it("les besoins des cartes suivent ceux de la table des fonctions", () => {
-    for (const card of [...CONFIG_LAYOUT.aiFeatures, ...CONFIG_LAYOUT.xray] as ConfigCard[]) {
+    // Les cartes de fonction seulement : « Revenir au début de la scène » (§143) n'est pas une fonction de la table.
+    for (const card of ([...CONFIG_LAYOUT.aiFeatures, ...CONFIG_LAYOUT.xray] as ConfigCard[]).filter((c) => c.feature)) {
       const row = AI_FEATURES.find((f) => f.id === card.feature)!;
       const needs = card.needs ?? [];
       expect([row.id, row.needs.includes("provider")]).toEqual([row.id, needs.includes("aiKey")]);

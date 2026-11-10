@@ -29,6 +29,9 @@ export interface XrayPlayerScene {
   start: number;
   end: number;
   people: XrayPlayerPerson[];
+  /** « Revenir au début de la scène » (§142) : le point d'entrée et le verdict du service — absents sans mesure. */
+  entry?: number;
+  cut?: { ok: boolean; why: string };
 }
 
 export interface XrayPlayerPayload {
@@ -37,11 +40,23 @@ export interface XrayPlayerPayload {
   complete: boolean;
   analyzedUntil: number;
   scenes: XrayPlayerScene[];
+  /** La part du temps où l'on parle (§142) ; absente sans mesure, `null` inconnue. */
+  speechShare?: number | null;
 }
 
 export const emptyXray = (status: XrayPlayerStatus): XrayPlayerPayload => ({ status, complete: false, analyzedUntil: 0, scenes: [] });
 
 const finite = (n: unknown, fallback = 0): number => (typeof n === "number" && Number.isFinite(n) ? n : fallback);
+
+/** Le point d'entrée et le verdict d'un début de scène (§142), relus avec soin : rien d'autre ne passe. */
+function sceneCutOf(scene: { entry?: unknown; cut?: unknown }): Pick<XrayPlayerScene, "entry" | "cut"> {
+  const cut = scene.cut as { ok?: unknown; why?: unknown } | null | undefined;
+  if (!cut || typeof cut.ok !== "boolean" || typeof cut.why !== "string") return {};
+  return {
+    ...(typeof scene.entry === "number" && Number.isFinite(scene.entry) ? { entry: scene.entry } : {}),
+    cut: { ok: cut.ok, why: cut.why.slice(0, 40) },
+  };
+}
 
 /** Les scènes d'un élément pour le lecteur. Ne lève jamais. */
 export async function scenesForPlayer(itemId: string): Promise<XrayPlayerPayload> {
@@ -82,8 +97,20 @@ export async function scenesForPlayer(itemId: string): Promise<XrayPlayerPayload
             confidence: finite(p.confidence),
           };
         }),
+      // Seulement quand le service les donne : sans eux, la scène reste exactement celle d'avant (§142).
+      ...sceneCutOf(scene),
     }));
-    return { status: result.complete ? "done" : "running", complete: result.complete === true, analyzedUntil: finite(result.analyzedUntil), scenes };
+    return {
+      status: result.complete ? "done" : "running",
+      complete: result.complete === true,
+      analyzedUntil: finite(result.analyzedUntil),
+      scenes,
+      ...(typeof result.speechShare === "number" && Number.isFinite(result.speechShare)
+        ? { speechShare: result.speechShare }
+        : result.speechShare === null
+          ? { speechShare: null }
+          : {}),
+    };
   } catch (error) {
     logError("xray/scenes", error, { itemId: id });
     return emptyXray("unavailable");

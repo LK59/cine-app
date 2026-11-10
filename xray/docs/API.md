@@ -191,6 +191,30 @@ Ce que Laterna montre dans la rangée « À l'écran ».
   [Versions des résultats](#versions-des-résultats)).
 - `404` tant que rien n'est analysé.
 
+**Débuts de scène** *(ajout compatible du 10/11/2026, [PIPELINE.md](PIPELINE.md#12-débuts-de-scène))* — pour un
+résultat **complet** déjà mesuré, et seulement alors :
+
+```json
+{
+  "…": "…", "speechShare": 0.561, "cutsVersion": 1,
+  "chapters": { "kind": "auteur", "count": 12, "aligned": 4 },
+  "scenes": [
+    { "start": 1086.25, "end": 1174.25, "people": [ "…" ], "entry": 1086.25, "cut": { "ok": true, "why": "deux-signaux" } },
+    { "start": 1174.25, "end": 1319.75, "people": [ "…" ], "entry": 1171.424, "cut": { "ok": false, "why": "même-lieu" } }
+  ]
+}
+```
+
+| Champ | Sens |
+|---|---|
+| `scenes[].entry` | d'où repartir pour revoir cette scène : son début, ou le début d'une phrase commencée 3 s au plus avant |
+| `scenes[].cut` | `ok` : un vrai début de scène ; `why` : `début`, `après-saut`, `chapitre`, `deux-signaux` — ou, refusé, `parole`, `même-lieu`, `montage`, `îlot`. Absent pour une frontière sans mesure (résultat d'avant regroupé autrement) |
+| `speechShare` | part du temps des scènes où l'on parle ; `null` tant que « qui parle » n'est pas complet (et alors ni `entry` ni `cut`) |
+| `chapters` | `kind` : `auteur`, `automatique`, `marqueurs`, `aucun`, `illisible`, `inconnu` ; `count` ; `aligned` (frontières sûres par un chapitre) |
+| `cutsVersion` | version des règles des débuts de scène (1) — indépendante de `version` |
+
+Sans mesure (résultat partiel, élément pas encore repris), la réponse est exactement celle d'avant.
+
 ---
 
 ## `GET /items/{itemId}/voices`
@@ -474,3 +498,4 @@ scènes sont regroupées à neuf à chaque assemblage depuis les plans gardés e
 | 10/11/2026 | lecture des lèvres : `via: "asd"`, `/voices` en version 2, `voices.asd`, `voice.asd` |
 | 10/11/2026 | `/items/{id}/report` ; `items[]` avec `reportUrl` dans `/quality` |
 | 10/11/2026 | synchro des sous-titres : `POST /subsync/jobs`, `GET /subsync/results`, `subsync` dans `/health` |
+| 10/11/2026 | débuts de scène : `entry` et `cut` par scène, `speechShare`, `chapters`, `cutsVersion` dans `/items/{id}/scenes` (résultat complet mesuré) |

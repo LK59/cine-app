@@ -502,6 +502,7 @@
       "reserveStop": "Reserva detenida ({why})",
       "bursts": "{n} ráfaga|{n} ráfagas",
       "fluidity": "Sonda {probe}",
+      "sceneRestart": "Inicio de escena: {outcome}",
       "frames": "{n} fotogramas, {long} largos",
       "worst": "peor {worst} · p95 {p95}",
       "subtitleGen": "Subtítulos generados: {event}",
@@ -2022,6 +2023,7 @@
     "subtitleSizeXLarge": "Muy grande",
     "skipIntro": "Saltar intro",
     "skipRecap": "Saltar resumen",
+    "sceneRestart": "Volver al inicio de la escena",
     "nextEpisode": "Siguiente episodio",
     "nextEpisodeIn": "Siguiente episodio · {n}s",
     "playNow": "Reproducir ahora",
@@ -3410,6 +3412,7 @@
       "XRAY_ENABLED": "Actores en pantalla abiertos a",
       "XRAY_URL": "Dirección del servicio de análisis",
       "XRAY_API_KEY": "Clave del servicio de análisis",
+      "SCENE_RESTART_ENABLED": "«Volver al inicio de la escena»: al reanudar tras cuatro horas o más, un botón propone volver a ver el inicio de la escena actual (desactivado: solo se mide, en el registro)",
       "APP_LANGUAGE": "Idioma por defecto",
       "COOKIE_SECURE": "Servida en HTTPS (cookies seguras)",
       "PLAYER_ENABLED": "Reproductor integrado",
@@ -3667,6 +3670,10 @@
         "booksOn": "Activar los libros",
         "playerOn": "Activar el reproductor"
       }
+    },
+    "sceneRestart": {
+      "title": "Volver al inicio de la escena",
+      "why": "Al retomar un título tras unas horas, propone durante unos segundos volver al inicio de la escena en curso, solo cuando ese inicio es seguro. Desactivado por defecto."
     }
   },
   "xrayScan": {

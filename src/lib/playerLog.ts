@@ -71,7 +71,7 @@ export function benchPlayerLogFiles(): string[] {
 }
 
 /** What the browser is allowed to report. Anything else is dropped rather than written. */
-const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall", "cast", "reserve", "pause", "opening", "subtitle-gen", "fluidite"]);
+const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop", "audio", "seek", "stall", "cast", "reserve", "pause", "opening", "subtitle-gen", "fluidite", "debut-scene"]);
 
 /**
  * `audio` est arrivé le 20/09/2026, et pour une raison qui vaut d'être dite : le changement de
@@ -117,10 +117,22 @@ const KINDS = new Set(["start", "fallback", "network", "rebuild", "error", "stop
  * `via` jellyfin ou repli), `erreur` (`code`), `échec`. Une ligne de détail, sous le budget horaire :
  * une génération en écrit une dizaine.
  */
-export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast" | "reserve" | "pause" | "opening" | "subtitle-gen" | "fluidite";
+/**
+ * `debut-scene` (10/11/2026, DECISIONS.md §142) : « Revenir au début de la scène » montré, une ligne par séance
+ * — `outcome` (`utilisé`, `ignoré`, `saut`, `fermé`), la position, la cible et le recul. Seulement le bouton
+ * allumé pour ce compte ; coupé, la décision n'est que mesurée, sur le bilan (`sceneRestart`).
+ */
+export type PlayerEventKind = "start" | "fallback" | "network" | "rebuild" | "error" | "stop" | "audio" | "seek" | "stall" | "cast" | "reserve" | "pause" | "opening" | "subtitle-gen" | "fluidite" | "debut-scene";
 
 /** Les valeurs de `sleepTimer` qu'une ligne peut porter — celles du menu, et rien d'autre. */
 const SLEEP_TIMER_VALUES = new Set(["15", "30", "60", "90", "episode"]);
+/**
+ * `sceneRestart` du bilan (§142) : ce que « Revenir au début de la scène » a décidé — `aurait-proposé` (bouton
+ * coupé), `proposé:<issue>`, `non:<raison>`. Une forme fixe, et hors du plafond des quarante champs comme
+ * `sleepTimer` : ajoutée à un bilan déjà plein, elle aurait été la première à tomber — et c'est la mesure qui
+ * décide d'allumer le bouton.
+ */
+const SCENE_RESTART_VALUE = /^(?:aurait-proposé|proposé:(?:utilisé|ignoré|saut|fermé)|non:[a-zà-ÿ-]{1,40})$/;
 
 export function isPlayerEventKind(value: unknown): value is PlayerEventKind {
   return typeof value === "string" && KINDS.has(value);
@@ -265,7 +277,7 @@ export function logPlaybackEvent(
   //
   // `sleepTimer` de même (02/10/2026), la minuterie de veille : une valeur du menu, ajoutée à un
   // bilan déjà plein — sous le plafond, elle aurait été la première à tomber.
-  const { build, version, resent, lateByMs, sleepTimer, ...rest } = fields;
+  const { build, version, resent, lateByMs, sleepTimer, sceneRestart, ...rest } = fields;
   const late = typeof lateByMs === "number" && Number.isFinite(lateByMs) && lateByMs >= 0 && lateByMs <= MAX_LATE_MS ? Math.round(lateByMs) : null;
   const head = {
     ...server,
@@ -274,6 +286,7 @@ export function logPlaybackEvent(
     ...(resent === true ? { resent: true } : {}),
     ...(late !== null ? { lateByMs: late } : {}),
     ...(typeof sleepTimer === "string" && SLEEP_TIMER_VALUES.has(sleepTimer) ? { sleepTimer } : {}),
+    ...(typeof sceneRestart === "string" && SCENE_RESTART_VALUE.test(sceneRestart) ? { sceneRestart } : {}),
   };
   // Lu à l'appel : un test bascule `NODE_ENV` sans recharger le module.
   const dev = process.env.NODE_ENV === "development";

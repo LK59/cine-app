@@ -1,6 +1,7 @@
 "use client";
 
 import { forgetPrefetchedPlaybackState } from "@/lib/playbackPrefetch";
+import { forgetSceneRestart } from "@/lib/sceneRestartSession";
 import { forgetDirectInfo } from "@/lib/directInfo";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { clearPersistedCache } from "@/lib/persistentCache";
@@ -62,6 +63,8 @@ export async function forgetAccountOnDevice(budgetMs: number): Promise<void> {
   // ne recharge pas la page : le compte suivant, ouvrant le même film dans les trente secondes,
   // reprenait à la position du compte qui venait de partir (chasse aux bugs du 22/09/2026).
   step(forgetPrefetchedPlaybackState);
+  // Et la dernière lecture gelée pour « Revenir au début de la scène » (§142), rangée par titre elle aussi.
+  step(forgetSceneRestart);
   // La description des fichiers aussi : la route la refuse à un compte qui lit par le serveur.
   step(forgetDirectInfo);
   // Les recherches récentes ne sont rangées sous aucun compte : le suivant voyait ce que le

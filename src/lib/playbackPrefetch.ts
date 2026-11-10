@@ -1,4 +1,5 @@
 import type { PlaybackState } from "@/app/api/jellyfin/playback-state/[itemId]/route";
+import { noteLastPlayedAt } from "@/lib/sceneRestartSession";
 
 /**
  * Les deux réponses que le lecteur natif attend avant de pouvoir ouvrir un film — demandées dès
@@ -39,7 +40,17 @@ const PLAYBACK_STATE_TIMEOUT_MS = 8000;
 export function fetchPlaybackState(itemId: string, timeoutMs = PLAYBACK_STATE_TIMEOUT_MS): Promise<PlaybackState | null> {
   return fetch(`/api/jellyfin/playback-state/${itemId}`, { signal: AbortSignal.timeout(timeoutMs) })
     .then(async (response) => {
-      if (response.ok) return (await response.json()) as PlaybackState;
+      if (response.ok) {
+        const state = (await response.json()) as PlaybackState;
+        // La dernière lecture, gelée pour « Revenir au début de la scène » (§142) — dans son propre garde :
+        // une note qui échoue ne doit pas coûter l'ouverture.
+        try {
+          noteLastPlayedAt(itemId, state?.lastPlayedAt);
+        } catch {
+          /* rien */
+        }
+        return state;
+      }
       // Jellyfin injoignable (14/10/2026, §92) : la position est *inconnue*, pas nulle. Le lecteur
       // n'ouvre pas à zéro sur cette réponse — ses rapports auraient effacé la reprise.
       if (await positionUnknownAnswer(response)) return { resumeSeconds: 0, preferences: null, positionUnknown: true as const };

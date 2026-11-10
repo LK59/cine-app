@@ -77,6 +77,14 @@ export interface XrayScene {
   start: number;
   end: number;
   people: XrayScenePerson[];
+  /**
+   * « Revenir au début de la scène » (ajout compatible du 10/11/2026, DECISIONS.md §142, `xray/app/scenecuts.py`) :
+   * pour un résultat complet et mesuré, d'où repartir (reculé jusqu'au début d'une phrase commencée juste avant la
+   * coupe) et si ce début de scène en est un vrai (`why` : `début`, `après-saut`, `chapitre`, `deux-signaux` ; refusé :
+   * `parole`, `même-lieu`, `montage`, `îlot`). Absents sinon.
+   */
+  entry?: number;
+  cut?: { ok: boolean; why: string };
 }
 
 export interface XrayScenes {
@@ -87,6 +95,10 @@ export interface XrayScenes {
   complete: boolean;
   analyzedUntil: number;
   scenes: XrayScene[];
+  /** Ajouts compatibles du 10/11/2026 (§142) : part du temps où l'on parle (`null` : inconnue), chapitres du fichier. */
+  speechShare?: number | null;
+  chapters?: { kind: string; count: number; aligned: number };
+  cutsVersion?: number;
 }
 
 /**

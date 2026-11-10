@@ -484,6 +484,57 @@ ffmpeg, rien sur l'iGPU. Chaque mesure garde la version de l'algorithme (`ALGO_V
 
 ---
 
+## 12. Débuts de scène
+
+*(10/11/2026, `app/scenecuts.py`)* Pour « Revenir au début de la scène » (Laterna, DECISIONS §142) : une
+frontière de scène est-elle un **vrai** début de scène, et d'où repartir ? Une scène d'ici regroupe des plans
+par les couleurs et les visages (§ Scènes) : une frontière peut tomber au milieu d'un dialogue en
+champ-contrechamp entre deux décors, entre deux angles d'une même pièce, ou dans un montage rapide sans
+personne. **Rien n'est relu du fichier** : tout vient de ce qui est gardé en base, et des chapitres lus une
+fois par ffprobe (l'en-tête seul).
+
+**À l'assemblage** (`boundary_features`, appelé par `results._assemble` pour chaque plage d'un seul tenant),
+une mesure par frontière, gardée avec un résultat complet (`results.bounds_json`) :
+
+| Champ | Sens |
+|---|---|
+| `sim` | ressemblance des couleurs des deux scènes (histogrammes moyens pondérés par la durée des plans) |
+| `fb`, `fa` | groupes de visages — **anonymes compris** — vus dans la minute d'avant (scène d'avant) et d'après (scène d'après) |
+| `fj` | leur indice de Jaccard ; `null` sans aucun visage |
+| `first`, `gap` | début du fichier ; première scène après une plage non analysée (générique sauté) |
+
+**À la lecture de `/scenes`** (`annotate`), avec les zones de parole de « qui parle » (fusionnées sous 0,5 s
+d'écart) et les chapitres (`items.chapters_json`) :
+
+- **`entry`** : une parole qui traverse la coupe (commencée et finie à plus de 0,15 s de part et d'autre) et a
+  commencé **3 s au plus** avant elle y ramène le point d'entrée — revenir au milieu d'une phrase n'est pas
+  revenir au début d'une scène ;
+- **`cut: {ok, why}`**, dans l'ordre : `début` ; `après-saut` ; `chapitre` (un chapitre d'auteur à 2 s près) ;
+  refus `parole` (la phrase a commencé plus de 3 s avant la coupe) ; refus `montage` (deux scènes de moins de
+  25 s, sans visage de part et d'autre ni parole qui traverse) ; `deux-signaux` (les couleurs changent,
+  `sim` ≤ 0,82, **et** les personnes aussi, `fj` ≤ 0,15 avec deux groupes au moins de chaque côté) ; sinon refus
+  `même-lieu`. Puis **îlot** : une scène acceptée aux deux signaux, de moins de 60 s, entre deux frontières
+  refusées, est refusée (`îlot`).
+- **Chapitres** : `auteur` (servent à l'alignement), `automatique` (intervalles égaux à 2 s ou 2 % près, ou
+  « Chapter N » à des minutes rondes : un outil, pas un auteur), `marqueurs` (intro, épisode, générique : des
+  segments), `aucun`, `illisible`, `inconnu` (pas encore lus). Un résumé `{kind, count, aligned}` est servi.
+- **`speechShare`** : part du temps des scènes où l'on parle ; `null` tant que « qui parle » n'est pas complet
+  pour ce fichier — et alors aucun `entry` ni `cut` (sans la parole, la règle `parole` ne verrait rien).
+
+Mesuré le 10/11/2026 sur 44 frontières jugées à l'œil (*Ted Lasso* S01E09, *Le Flambeau* S01E01, *House of the
+Dragon* S01E01) : la règle à **un** signal (couleurs *ou* personnes) acceptait 22 frontières dont 7 fausses ; deux
+signaux (choix du propriétaire) en acceptent beaucoup moins, presque toutes justes — le bouton paraît moins
+souvent, mais ne ramène pas au milieu d'une scène. Les seuils sont des constantes nommées de `scenecuts.py`.
+
+**Les résultats d'avant** : un élément fini sans mesure (ou d'une autre `CUTS_VERSION`), ou dont les chapitres
+n'ont jamais été lus, est repris en tâche de fond par la voie A (`backfill_some`, après tous les autres travaux
+d'appoint, jamais devant un ordre `normal` ou `high`, lots de 10 s) : regroupement des pistes et des plans refait
+depuis la base, comme le renommage, mais **seules les mesures sont écrites** — scènes, personnes et version
+restent celles du résultat ; une frontière regroupée autrement qu'à l'époque reste sans verdict. Les mesures
+portent leur version, `CUTS_VERSION` (1) : `RESULT_VERSION` ne bouge pas.
+
+---
+
 ## Performances
 
 ### Vitesse
