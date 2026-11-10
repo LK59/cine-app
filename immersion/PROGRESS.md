@@ -7,7 +7,8 @@ entier après toute reprise.**
 ## État actuel (à jour)
 
 - **Livré : 10.34.0, en production depuis le 10/11/2026 à 23 h 47** (`020a0b04`), puis **10.34.1 le 11/11 à 0 h 04**
-  (`b14b2510` : l'interrupteur des tâches de fond, DECISIONS §145 — rien ne change dans le mode). Le mode est
+  (`b14b2510` : l'interrupteur des tâches de fond, DECISIONS §145 — rien ne change dans le mode), puis **10.34.2 le
+  11/11** (`6511d9a4` : la page ne se chargeait pas en production, voir « Pièges rencontrés »). Le mode est
   accessible en cherchant exactement `immersion` dans la recherche du cinéma (affiche « Le Chalet »).
 - La branche `immersion` et `main` sont au même commit. La copie de travail à part (suffixe `-immersion`) reste
   l'endroit où travailler ; la copie principale reste sur `main`. `origin/immersion` porte un ancien historique
@@ -276,6 +277,9 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
   (le `tsc` strict puis Vite). Mise au point : `npx vite build --minify false`.
 - **Aperçu** : `vite preview` dans un conteneur `immersion-preview` (port local 5198) ; avec
   `LATERNA_URL=http://127.0.0.1:3097`, les routes de l'application sont relayées vers l'instance jetable.
+  Il sert le build **sous la politique de sécurité de l'application**, lue dans `next.config.js`. Sans instance
+  derrière, `SANS_APPLICATION=1 BASE=http://127.0.0.1:5198 tests/run.sh e2e/02… 05… 06… 07… 08…` rejoue ce qui ne
+  demande rien à l'application (les scénarios 01, 03 et 04 ont besoin d'une instance).
 - **Instance jetable** de l'application : `tools/regress-lecteur/regress.sh build|start|clean <commit>`
   (variables `REGRESS_WORK`, `REGRESS_ENV`, `REGRESS_DB`, `REGRESS_PORT=3097`) — image construite depuis un
   commit, données jetables. Ses fonctions de fond qui parlent à d'autres services sont coupées dans **sa**
@@ -302,6 +306,17 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
 - Le verrou du pointeur est demandé de façon asynchrone : dans un script, rendre le pointeur avant d'ouvrir
   le menu pause, sinon le mode repasse en « visite ».
 - `tsc` de `/immersion` n'inclut pas `vite.config.ts` (il lui faudrait les types de Node).
+
+- **La page tourne sous la politique de sécurité de l'application, et tout test doit la subir aussi**
+  (11/11/2026). En 10.34.0 et 10.34.1 le chargement restait à 86 % en production : le transcodeur Basis de three
+  (colle « embind » d'emscripten) fabrique ses fonctions avec `new Function`, interdit par `script-src` sans
+  `'unsafe-eval'`, jusque dans le travailleur de `KTX2Loader` — aucune texture ne se décodait. Les huit scénarios
+  étaient verts : l'aperçu ne posait pas cette politique. Depuis : le transcodeur est émis sans fabrication de
+  code (`withoutEval`, `vite.config.ts` — le build échoue si three change le fichier), l'aperçu pose la politique,
+  et SMAA (tables en images `data:`, refusées par `img-src`) a laissé place à FXAA. Avant d'ajouter une
+  dépendance qui charge du WebAssembly, un travailleur ou des images embarquées : chercher `Function(`, `eval(` et
+  `data:image/` dans `dist/`. Reste dans le bundle un `Function(…)` de la colle de Rapier, jamais appelé quand
+  `globalThis` existe (la physique tourne sous la politique, scénario 02).
 
 ## Poids
 
