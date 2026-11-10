@@ -6,15 +6,35 @@ entier après toute reprise.**
 
 ## État actuel (à jour)
 
-- Branche `immersion`, dans une **copie de travail à part** (`git worktree`, dossier voisin de la
-  copie principale, suffixe `-immersion`). La copie principale reste sur `main` : on n'y travaille pas.
-- Rien n'est encore fusionné ni déployé. Version visée pour la première livraison : **10.34.0**
-  (rebaser sur `main` avant de fusionner ; prévenir l'autre session de travail avant tout build de prod).
-- **Fait et commité** : entrée par la recherche, routes de service, projet Vite, salon (géométrie,
-  matières, lumière temps réel), télévision (vidéo, passe hors mappage de tons, ambilight, son
-  spatialisé), lecture par la route du lecteur serveur (stéréo, HDR → SDR, arrêt, journal), panneau
-  Laterna dans le monde, HUD, menu pause, réglages, préréglages + Auto.
-- **En cours / à faire** : voir « Plan de travail » plus bas.
+- **Livré : 10.34.0, en production depuis le 10/11/2026 à 23 h 47** (`main` = `020a0b04`, poussé). Le mode est
+  accessible en cherchant exactement `immersion` dans la recherche du cinéma (affiche « Le Chalet »).
+- La branche `immersion` et `main` sont au même commit. La copie de travail à part (suffixe `-immersion`) reste
+  l'endroit où travailler ; la copie principale reste sur `main`. `origin/immersion` porte un ancien historique
+  (d'avant le rebase) : ne pas s'y fier, repartir de `main`.
+- Contenu : le chalet complet (salon, cuisine, mezzanine, couloir, chambre, terrasse en surplomb et bain), trois
+  télévisions synchronisées, lumière cuite en deux couches, « le chalet vivant » (voir plus bas), chaîne hi-fi,
+  clavier AZERTY / QWERTY / QWERTZ.
+- Vérifié : portail de l'application vert, tests du Dockerfile verts, huit scénarios Playwright verts sur le build
+  de production servi par l'aperçu. **Pas vérifié** : les scénarios à travers l'image finale (voir « Incident »),
+  et rien sur la machine cible — le bouton « Mesurer » des réglages donnera les chiffres.
+
+### Incident du 10/11 — l'instance du banc et le masquage des demandes
+
+Mon instance jetable (`tools/regress-lecteur/regress.sh start`) est restée ~7 h 30. Le banc lance l'application
+avec le `.env` de la production : la tâche `requestHide` y tournait contre le vrai Jellyfin, avec une base recopiée
+sans les décisions de masquage — toutes les cinq minutes elle retirait le tag de masquage des 92 titres cachés au
+compte visé, et la production le remettait à son passage suivant. Arrêtée à 23 h 39 ; état rétabli par la
+production. Corrigé dans le banc : `REQUEST_HIDE_ACCOUNT` vidé et X-Ray coupé au lancement (réglages `XRAY*` écartés
+de la base recopiée). **À retenir : une instance du banc parle aux vrais services ; ne jamais la laisser tourner des
+heures, et vérifier `docker logs` de l'instance dès son démarrage.** Proposé au propriétaire, pas fait : un
+interrupteur unique qui coupe toutes les tâches de fond d'une instance de banc (`instrumentation.ts`).
+
+### Suite possible
+
+- Mesures sur la machine cible (bouton « Mesurer »), puis réglage des préréglages d'après `startup.log`
+  (`kind: "immersion-bench"`).
+- Phase 2 : multijoueur (`docs/MULTIJOUEUR.md`), VR (`docs/VR.md`).
+- Poids : `public/assets` fait 41 Mo pour 40 visés (lumière en deux couches, musique, terrasse).
 
 ## Règles de travail (rappel)
 
@@ -349,92 +369,6 @@ rapide) ; image depuis une copie propre ; bascule ; vérification ; push ; CI ; 
 
 ## Prochaine action
 
-**Pause du 10/11 vers 19 h 20 (limite de session).** À la reprise : lire ce fichier, puis `immersion/logs/suite.log`.
-
-### Ce qui tourne sans surveillance
-
-1. La **cuisson finale des lightmaps** (`tools/bake/bake.sh --samples 192 --exposure -1.5`, conteneurs
-   `immersion-bake-*`), lancée à 18 h 50, ~21 min. Elle écrit `public/assets/lightmaps/` (pas encore commité :
-   le dossier est en cours de réécriture). Son journal est recopié dans `logs/bake.log` à la fin.
-2. La **chaîne `tools/apres-cuisson.sh`** (journal `logs/suite.log`, une ligne par étape) : attend la fin de la
-   cuisson, puis build (`logs/build.log`), captures de chaque pièce en Ultra (`captures/*.jpg`,
-   `logs/captures.log`), affiche recadrée (`public/poster.jpg`, `logs/affiche.log` ; la première version est
-   gardée dans `logs/poster-v1.jpg`), puis le portail de l'application jusqu'au vert, cinq essais au plus
-   (`logs/gate-N.log`, dernière ligne `exit=…`).
-   Si rien de cela n'a tourné (processus coupés) : relancer `sh tools/apres-cuisson.sh` depuis `immersion/`
-   après `tools/bake/bake.sh --samples 192 --exposure -1.5`.
-
-### Reprise de 19 h 18 — la chaîne est allée au bout
-
-- `logs/suite.log` : cuisson `exit=0`, build, 17 captures, affiche, et **portail VERT au premier essai**
-  (`logs/gate-1.log`, 845 fichiers, `exit=0`) sur le commit `ecffedc8` de la branche (application + lightmaps
-  comprises) : l'avertissement « sans portail vert » ci-dessous est levé pour cet arbre. Il reste à le refaire
-  sur l'arbre **rebasé** avant la fusion.
-- Affiche : la version recadrée (écran allumé visible) est retenue et commitée dans `public/poster.jpg`.
-- Vu sur `captures/` : salon, entrée et affiche bons avec la lumière cuite. **Défaut à corriger : le canapé
-  montre des traits sombres en pointillé le long des coutures** (`captures/canape.jpg`) — texels de la lightmap
-  `sofa` cuits noirs dans le creux du passepoil. Piste : dilater les clairs de `assets-src/bake/work/sofa.png`
-  (filtre « maximum » 5×5) avant l'encodage KTX2, dans `tools/bake/` pour que ce soit reproductible ; à défaut,
-  ne pas poser de lightmap sur le canapé (`Sofa.tsx`).
-- Pas encore regardées : `cuisine`, `ilot`, `escalier`, `mezzanine`, `balcon`, `couloir`, `chambre`, `lit`,
-  `vallee`, `ouest`, `reglages`.
-
-### Reprise (10/11 au soir) — demandes du propriétaire, puis livraison
-
-Demandé : une télévision dans la chambre, le son de **toutes** les télévisions avec une portée maximale et des
-zones où l'on en entend deux, l'écran du salon plus grand ; puis finir le plan, commiter, pousser, déployer.
-
-- [x] Écran du salon 4,6 → 5,2 m (`TV`, `layout.ts`), relevé au-dessus des bougies du manteau ; fermes extérieures
-      écartées (`TRUSSES`) pour dégager les coins de l'image. Écran de la chambre 1,25 → 1,9 m, meuble bas élargi.
-- [x] Portée par haut-parleur (`Screen.range`, `rangeGain`, `applyAcoustics`) : salon 14 m, cuisine 8, chambre 7,
-      fondu sur le dernier quart. Recouvrements voulus : cuisine + salon, mezzanine + cuisine, est du couloir :
-      cuisine + chambre. Scénario `06-son` vert.
-- [x] Rebase sur `main` fait, version 10.34.0 commitée.
-- [ ] Recuisson des lightmaps (géométrie du salon et de la chambre changée) : `logs/bake.log`, puis
-      `sh tools/apres-cuisson.sh` (build, captures, affiche, portail) — **le portail doit être vert sur cet arbre**
-- [ ] Scénarios 01–06, regard sur les captures, commit des lightmaps et de l'affiche
-- [ ] Fusion dans `main` (avance rapide), build depuis une copie propre, déploiement, vérification, push, CI, ménage
-
-### Arrêt de 19 h 30 (limite de session atteinte)
-
-- **Rebase sur `main` FAIT en local, PAS poussé** : `origin/immersion` porte encore l'historique d'avant (même
-  contenu, étiquette locale `immersion-avant-rebase`). Le pousser demande un `--force-with-lease` sur la branche
-  `immersion`, refusé en mode automatique : à faire avec l'accord du propriétaire, ou ne pas pousser la branche
-  et fusionner directement dans `main`.
-- Le portail vert de 19 h 17 portait sur l'arbre d'AVANT le rebase : **le refaire sur cet arbre avant toute fusion**.
-- Depuis ce portail, deux commits `/immersion` seulement (coutures du canapé, couche intermédiaire du panorama
-  effacée derrière le chalet — cette dernière retouche n'a été vue sur aucune capture).
-- Reste, dans l'ordre : build + captures (`sh tools/apres-cuisson.sh` refait build, captures, affiche et portail ;
-  attention, il réécrit `public/poster.jpg`) ; regarder `cuisine`, `escalier`, `mezzanine`, `couloir`, `lit`,
-  `vallee`, `ouest`, `reglages` ; scénarios Playwright 01–05 ; puis points 5 et 6 ci-dessous.
-
-
-- Poussé : la branche `immersion` sur `origin` (rien sur `main`, rien de déployé).
-- Les cinq scénarios Playwright sont verts (01 sur l'instance jetable ; 02 à 05 sur l'aperçu du build).
-- **Le côté application (`immersion-bench`, DECISIONS §144, CLAUDE.md) est commité sur la branche SANS portail
-  vert**, à la demande du propriétaire pour la pause : cinq passages rouges d'affilée sur le seul
-  `cinemaRoute.test.tsx` (bloc « une navigation pendant le retour d'une fermeture » : un `popstate` attendu après
-  un vrai `history.back()` de jsdom, 3 ms seul, bloqué 5 s dans la suite complète ; il passe seul, 47/47 ; sans
-  rapport avec ces fichiers). **Aucune fusion tant qu'un portail entier n'est pas vert sur l'arbre rebasé.**
-- Le rebase sur `main` a été tenté puis annulé : il bute sur `immersion/tools/sofa/previews/` (cinq images
-  suivies par un ancien commit, ignorées depuis). Pour le refaire : écarter ce dossier
-  (`mv immersion/tools/sofa/previews /tmp/…`), `git rebase main`, le remettre. **Jamais pendant qu'une cuisson
-  ou une capture tourne** : le rebase retire les fichiers suivis le temps de rejouer les commits.
-
-### Les six points demandés (cocher au fur et à mesure)
-
-1. [~] Portail vert puis commit côté application — commité (voir ci-dessus), portail encore à obtenir : lire
-       `logs/gate-N.log`
-2. [~] Cuisson finale lancée ; reste : regarder `captures/` pièce par pièce (ombres des objets posés, pas de
-       fuite de lumière, canapé), puis commiter `public/assets/lightmaps/`
-3. [~] Scénarios 01–05 verts ; reste : revoir sur captures les retouches du dehors (`vallee`, `ouest`, `baie`,
-       fenêtre de la cuisine dans `cuisine`)
-4. [~] Affiche : première version faite (`logs/poster-v1.jpg`), recadrage en cours par la chaîne — choisir la
-       meilleure des deux, la commiter dans `public/poster.jpg`
-5. [ ] Livraison : rebase sur `main` (voir plus haut), portail vert, version 10.34.0 (commit à part,
-       `package.json` + `package-lock.json` ligne 3), fusion, prévenir l'autre session, aucune lecture Jellyfin en
-       cours, build depuis une copie propre de `main` (`docker build -t cine-app:latest --build-arg
-       BUILD_REF=<sha> .`), `docker compose up -d --no-build` dans la copie principale, `docker builder prune -f
-       --max-used-space 15GB`, vérification, push en fond, CI lue après coup
-6. [ ] Ménage (instance jetable `cine-regress-c992edf9` par `regress.sh clean`, conteneur `immersion-preview`,
-       `docker ps`), ce fichier à jour, récapitulatif final
+Rien d'en cours. Attendre le retour du propriétaire après son premier essai (fluidité, ressenti en mouvement),
+puis régler d'après ses mesures. Les notes de pause et de reprise du 10/11 qui figuraient ici sont dans
+l'historique git de ce fichier.
