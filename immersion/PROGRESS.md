@@ -323,6 +323,21 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
    Si rien de cela n'a tourné (processus coupés) : relancer `sh tools/apres-cuisson.sh` depuis `immersion/`
    après `tools/bake/bake.sh --samples 192 --exposure -1.5`.
 
+### Reprise de 19 h 18 — la chaîne est allée au bout
+
+- `logs/suite.log` : cuisson `exit=0`, build, 17 captures, affiche, et **portail VERT au premier essai**
+  (`logs/gate-1.log`, 845 fichiers, `exit=0`) sur le commit `ecffedc8` de la branche (application + lightmaps
+  comprises) : l'avertissement « sans portail vert » ci-dessous est levé pour cet arbre. Il reste à le refaire
+  sur l'arbre **rebasé** avant la fusion.
+- Affiche : la version recadrée (écran allumé visible) est retenue et commitée dans `public/poster.jpg`.
+- Vu sur `captures/` : salon, entrée et affiche bons avec la lumière cuite. **Défaut à corriger : le canapé
+  montre des traits sombres en pointillé le long des coutures** (`captures/canape.jpg`) — texels de la lightmap
+  `sofa` cuits noirs dans le creux du passepoil. Piste : dilater les clairs de `assets-src/bake/work/sofa.png`
+  (filtre « maximum » 5×5) avant l'encodage KTX2, dans `tools/bake/` pour que ce soit reproductible ; à défaut,
+  ne pas poser de lightmap sur le canapé (`Sofa.tsx`).
+- Pas encore regardées : `cuisine`, `ilot`, `escalier`, `mezzanine`, `balcon`, `couloir`, `chambre`, `lit`,
+  `vallee`, `ouest`, `reglages`.
+
 ### Où on en est
 
 - Poussé : la branche `immersion` sur `origin` (rien sur `main`, rien de déployé).
