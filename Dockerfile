@@ -19,6 +19,19 @@ COPY --from=manifest /m/ ./
 # place, so a dependency change re-downloads only what actually changed.
 RUN --mount=type=cache,target=/root/.npm npm install
 
+# Le mode « Immersion » : un monde 3D caché, servi à part (`src/lib/immersionFiles.ts`,
+# `immersion/PROGRESS.md`). Son propre projet, ses propres dépendances, son propre build — rien n'en
+# entre dans celui de l'application, et cette étape n'est refaite que si `immersion/` change. Les
+# deux fichiers de `src/lib` sont ceux qu'il importe en lecture seule (la détection des codecs, pour
+# annoncer à Jellyfin exactement ce que le lecteur annonce).
+FROM node:26-alpine AS immersion
+WORKDIR /build/immersion
+COPY immersion/package.json immersion/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
+COPY immersion/ ./
+COPY src/lib/codecSupport.ts src/lib/webkitEngine.ts /build/src/lib/
+RUN npm run build
+
 FROM node:26-alpine AS builder
 # Le repère du build, repris tel quel dans les réglages. `.git` n'entre pas dans le contexte de
 # build (voir .dockerignore), donc le hash ne peut venir que d'ici :
@@ -69,6 +82,8 @@ COPY --from=builder --chown=cineapp:cineapp /app/.next/static ./.next/static
 # Le point d'entrée : il remet les fichiers statiques des builds précédents avant de lancer le
 # serveur (voir server-boot/staticCarryover.mjs).
 COPY --from=builder --chown=cineapp:cineapp /app/server-boot ./server-boot
+# Le build du mode « Immersion », servi par deux routes (voir l'étape `immersion`).
+COPY --from=immersion --chown=cineapp:cineapp /build/immersion/dist ./immersion-dist
 # Copy compiled better-sqlite3 native module (compiled for Alpine in deps stage)
 COPY --from=deps --chown=cineapp:cineapp /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=deps --chown=cineapp:cineapp /app/node_modules/web-push ./node_modules/web-push

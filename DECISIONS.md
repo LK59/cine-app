@@ -10503,3 +10503,33 @@ allumé : huit secondes, issues, une fois par séance), `scene-restart-payload-1
 `scenesForPlayer`), `jellyfin-playback-state-route.test.ts` (`lastPlayedAt`) ; côté service
 `xray/tests/test_scenecuts.py` (chapitres, mesures, entrée, règles, deux signaux resserrés, silences, `/scenes`
 inchangé sans mesure, résultats d'avant, règles nouvelles sans nouvelle mesure).
+
+## 144. Le mode « Immersion » : une affiche de plus dans la recherche, et un projet à part (10/11/2026)
+
+**La règle.** Chercher exactement « immersion » (espaces et casse ignorés) pose en tête des résultats une
+affiche de plus, « Le Chalet », au format de toutes les autres. La presser n'ouvre pas une fiche : la page part
+vers `/immersion` par une navigation ordinaire. Tout autre mot — « immersio », « immersion totale » — reste une
+recherche. Rien d'autre dans l'application ne mène au mode, et rien ne l'annonce.
+
+**Une fonction.** `isImmersionQuery` et `enterImmersion` (`src/lib/immersionTrigger.ts`), avec l'adresse de la
+page, celle de l'affiche et son titre. **Un appelant** : `PlayerSearchPanel` (la carte est un `PlayerResultCard`
+ordinaire, sous les puces « Tout » et « Films »).
+
+**Ce que l'application en sait, et pas plus.** Le mode est un projet à part — `immersion/` à la racine, ses
+dépendances (three), son build (une étape du `Dockerfile`), ses tests (Playwright), son journal
+(`immersion/PROGRESS.md`). L'application ne fait que servir son build : la page par `src/app/immersion/route.ts`,
+ses fichiers par `src/app/api/immersion/[...path]/route.ts`, tous deux par `serveImmersionFile`
+(`src/lib/immersionFiles.ts`). Sous `/api/` et non dans `public/` : le service worker recopie dans son cache tout
+GET hors `/api/` qui n'est ni une image ni une page, et ce cache n'est jamais purgé. Derrière le proxy comme
+toute adresse : sans session, la page renvoie à la connexion et ses fichiers répondent 401 ; un lien de partage
+n'y a pas accès (liste fermée). `immersion/` est exclu du typage, du lint et des tests de l'application
+(`tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts`), comme `streamdeck-plugin`.
+
+**Différent exprès.** Le lecteur du mode n'est pas celui de l'application : il passe par la négociation du
+lecteur serveur (`POST /api/jellyfin/playback/start`) et n'écrit rien dans `player.log`. Les empreintes du
+lecteur ne le connaissent pas.
+
+**Tests.** `immersion-trigger.test.ts` (le mot exact, l'adresse, et aucun import de three ni du projet dans
+`src/`), `immersion-files.test.ts` (types servis, cache, `.br` par les marqueurs de §131, jamais hors du dossier,
+404 sans build), `immersion-proxy.test.ts` (307 vers la connexion pour la page, 401 pour les fichiers, hors des
+listes publiques, porte des liens de partage) ; de bout en bout, `immersion/tests/e2e/`.

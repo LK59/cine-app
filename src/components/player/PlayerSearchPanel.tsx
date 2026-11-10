@@ -28,6 +28,7 @@ import { DialogueResults } from "./DialogueResults";
 import { DescribedResults } from "./DescribedResults";
 import { describeSearchUrl, looksLikeDescription } from "@/lib/describeQuery";
 import { useDescribeSearch, type DescribeResponse } from "@/lib/useDescribeSearch";
+import { enterImmersion, IMMERSION_POSTER, IMMERSION_SUBTITLE, IMMERSION_TITLE, isImmersionQuery } from "@/lib/immersionTrigger";
 import { BooksSearchEntry } from "@/components/books/BooksMode";
 
 type Filter = "all" | "movie" | "series" | "person" | "dialogue" | "book";
@@ -377,8 +378,11 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
   const shownDescribed = describeWanted && (filter === "all" || filter === "movie" || filter === "series") ? describedEntries.filter((e) => filter === "all" || e.kind === filter) : [];
   const describing = describeWanted && described.loading;
 
+  // L'affiche du mode « Immersion » (`immersionTrigger.ts`) : en tête des résultats, pour ce mot seul.
+  const chalet = isImmersionQuery(typed) && (filter === "all" || filter === "movie");
+
   const empty =
-    searching && filter !== "dialogue" && debounced === typed && !isLoading && !failed && counts.all === 0 && counts.book === 0 && !(showDialogue && (dialogue.loading || counts.dialogue > 0)) && !describing && shownDescribed.length === 0;
+    !chalet && searching && filter !== "dialogue" && debounced === typed && !isLoading && !failed && counts.all === 0 && counts.book === 0 && !(showDialogue && (dialogue.loading || counts.dialogue > 0)) && !describing && shownDescribed.length === 0;
   const unreachable = searching && debounced === typed && failed;
 
   // La fiche s'ouvre par-dessus la recherche, qui reste montée dessous : le retour du navigateur
@@ -513,8 +517,9 @@ export function PlayerSearchPanel({ leaving, replaced, fromTab }: { leaving?: bo
           <DescribedResults entries={shownDescribed} loading={describing} waitKey={typed} onOpen={openTitle} />
         )}
 
-        {(shownTitles.length > 0 || shownPersons.length > 0) && (
+        {(chalet || shownTitles.length > 0 || shownPersons.length > 0) && (
           <div ref={gridRef} className="player-grid mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 player-grid-fluid">
+            {chalet && <PlayerResultCard key="immersion" kind="movie" title={IMMERSION_TITLE} subtitle={IMMERSION_SUBTITLE} poster={IMMERSION_POSTER} showKind={false} onOpen={enterImmersion} />}
             {shownTitles.map((r) => (
               <PlayerResultCard
                 key={r.key}
