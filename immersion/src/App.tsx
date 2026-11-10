@@ -6,6 +6,7 @@ import { World } from "./world/World";
 import { rig, resetRig } from "./world/rig";
 import { Intro } from "./ui/Intro";
 import { PauseMenu } from "./ui/PauseMenu";
+import { BenchOverlay } from "./ui/BenchOverlay";
 import { Hints } from "./ui/Hints";
 import { FpsCounter, Hud } from "./ui/Hud";
 import { closePanel, debug, openPanel } from "./state/actions";
@@ -25,6 +26,7 @@ import { dispatch } from "./media/commands";
 export function App() {
   const phase = useStore((s) => s.phase);
   const mode = useStore((s) => s.mode);
+  const measuring = useStore((s) => s.bench?.running === true);
   const showFps = useStore((s) => s.settings.showFps);
 
   const boot = useCallback(() => {
@@ -62,7 +64,8 @@ export function App() {
           {mode === "walk" ? <Hints /> : null}
           {mode === "walk" ? <Hud /> : null}
           {showFps ? <FpsCounter /> : null}
-          {mode === "paused" ? <PauseMenu /> : null}
+          {/* Pendant une mesure, le menu s'efface : la scène est rendue comme en visite. */}
+          {measuring ? <BenchOverlay /> : mode === "paused" ? <PauseMenu /> : null}
         </>
       ) : (
         <Intro />

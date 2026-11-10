@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { useLoader, useThree } from "@react-three/fiber";
-import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
-import { Color, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace, NoColorSpace, Vector2, type Texture, type WebGLRenderer } from "three";
-import { assetUrl, BASIS_PATH } from "../lib/assets";
+import { Color, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace, NoColorSpace, Vector2, type Texture } from "three";
+import { assetUrl } from "../lib/assets";
+import { ktx2For } from "./ktx2";
 import { useProfile } from "../state/store";
 
 /**
@@ -27,14 +27,6 @@ export type TextureSet =
   | "counter_stone"
   | "linen_white"
   | "bark";
-
-/** Le chargeur KTX2 doit savoir ce que cette carte graphique sait décompresser. */
-export function configureKtx2(gl: WebGLRenderer) {
-  return (loader: KTX2Loader) => {
-    loader.setTranscoderPath(BASIS_PATH);
-    loader.detectSupport(gl);
-  };
-}
 
 export interface PbrOptions {
   /** Teinte multipliée à la couleur de la texture. */
@@ -70,7 +62,7 @@ function prepare(texture: Texture, anisotropy: number, srgb: boolean): Texture {
 export function usePbr(set: TextureSet, options: PbrOptions = {}): MeshStandardMaterial {
   const gl = useThree((s) => s.gl);
   const anisotropy = useProfile().anisotropy;
-  const [color, normal, arm] = useLoader(KTX2Loader, [assetUrl(`textures/${set}/color.ktx2`), assetUrl(`textures/${set}/normal.ktx2`), assetUrl(`textures/${set}/arm.ktx2`)], configureKtx2(gl));
+  const [color, normal, arm] = useLoader(ktx2For(gl), [assetUrl(`textures/${set}/color.ktx2`), assetUrl(`textures/${set}/normal.ktx2`), assetUrl(`textures/${set}/arm.ktx2`)]);
   const { tint, roughness = 1, bump = 1, env = 1, metal = false, saturation = 1 } = options;
 
   return useMemo(() => {

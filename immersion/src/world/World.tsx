@@ -35,9 +35,12 @@ export function World() {
   const fov = useStore((s) => s.settings.fov);
   const setPhase = useStore((s) => s.setPhase);
   const profile = useProfile();
-  const auto = useStore((s) => s.settings.quality === "auto");
+  // « Auto » ne s'ajuste pas pendant une mesure : c'est elle qui tient le préréglage.
+  const auto = useStore((s) => s.settings.quality === "auto" && !s.bench?.running);
   const supersampling = useStore((s) => s.settings.supersampling);
   const stepAuto = useStore((s) => s.stepAuto);
+  // Avec la lumière précalculée, plus aucune ombre n'est calculée en temps réel.
+  const baked = useStore((s) => s.baked);
   // La résolution de rendu : la native de l'écran, à l'échelle du profil — et au-delà seulement si
   // le suréchantillonnage est demandé.
   const dpr = Math.min(3, (window.devicePixelRatio || 1) * profile.scale * (supersampling ? SUPERSAMPLING : 1));
@@ -47,9 +50,9 @@ export function World() {
       className="world"
       frameloop={hidden ? "never" : "always"}
       dpr={Math.max(0.4, dpr)}
-      shadows={profile.shadowMap > 0 ? { type: PCFShadowMap } : false}
+      shadows={profile.shadowMap > 0 && !baked ? { type: PCFShadowMap } : false}
       gl={{ antialias: false, alpha: false, stencil: false, powerPreference: "high-performance" }}
-      camera={{ fov, near: 0.06, far: 600, position: [PLAYER.spawn[0], PLAYER.eye, PLAYER.spawn[2]] }}
+      camera={{ fov, near: 0.06, far: 3000, position: [PLAYER.spawn[0], PLAYER.eye, PLAYER.spawn[2]] }}
       onCreated={({ gl }) => {
         gl.outputColorSpace = SRGBColorSpace;
         // Le mappage de tons est fait par le post-traitement (AgX), pas par le moteur.

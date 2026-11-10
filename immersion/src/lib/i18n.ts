@@ -90,6 +90,14 @@ const fr = {
   "settings.fps": "Afficher les images par seconde",
   "settings.hdr": "Conversion HDR → SDR",
   "settings.hdr.hint": "Le serveur convertit les films HDR, qui sortiraient délavés sur cet écran. Les films SDR ne sont jamais concernés.",
+  "bench.title": "Mesurer cette machine",
+  "bench.hint": "Un parcours fixe de 20 s par préréglage, écrans éteints puis avec vidéo. Environ trois minutes ; le résultat est envoyé au serveur.",
+  "bench.run": "Mesurer",
+  "bench.running": "Mesure en cours",
+  "bench.screensOff": "Écrans éteints",
+  "bench.withVideo": "Avec vidéo",
+  "bench.cancel": "Interrompre",
+  "bench.legend": "Images par seconde : moyenne · 1 % le plus lent",
 };
 
 export type Key = keyof typeof fr;
@@ -177,6 +185,14 @@ const en: Record<Key, string> = {
   "settings.fps": "Show frames per second",
   "settings.hdr": "HDR → SDR conversion",
   "settings.hdr.hint": "The server converts HDR films, which would look washed out on this screen. SDR films are never affected.",
+  "bench.title": "Measure this machine",
+  "bench.hint": "A fixed 20 s path per preset, screens off then with video. About three minutes; the result is sent to the server.",
+  "bench.run": "Measure",
+  "bench.running": "Measuring",
+  "bench.screensOff": "Screens off",
+  "bench.withVideo": "With video",
+  "bench.cancel": "Stop",
+  "bench.legend": "Frames per second: average · 1% low",
 };
 
 const es: Record<Key, string> = {
@@ -262,6 +278,14 @@ const es: Record<Key, string> = {
   "settings.fps": "Mostrar imágenes por segundo",
   "settings.hdr": "Conversión HDR → SDR",
   "settings.hdr.hint": "El servidor convierte las películas HDR, que se verían deslavadas en esta pantalla. Las películas SDR nunca se ven afectadas.",
+  "bench.title": "Medir este equipo",
+  "bench.hint": "Un recorrido fijo de 20 s por ajuste, con las pantallas apagadas y luego con vídeo. Unos tres minutos; el resultado se envía al servidor.",
+  "bench.run": "Medir",
+  "bench.running": "Midiendo",
+  "bench.screensOff": "Pantallas apagadas",
+  "bench.withVideo": "Con vídeo",
+  "bench.cancel": "Interrumpir",
+  "bench.legend": "Imágenes por segundo: media · 1 % más lento",
 };
 
 const de: Record<Key, string> = {
@@ -347,6 +371,14 @@ const de: Record<Key, string> = {
   "settings.fps": "Bilder pro Sekunde anzeigen",
   "settings.hdr": "HDR → SDR-Umwandlung",
   "settings.hdr.hint": "Der Server wandelt HDR-Filme um, die auf diesem Bildschirm ausgewaschen aussähen. SDR-Filme sind nie betroffen.",
+  "bench.title": "Dieses Gerät messen",
+  "bench.hint": "Ein fester 20-s-Pfad pro Voreinstellung, erst mit ausgeschalteten Bildschirmen, dann mit Video. Etwa drei Minuten; das Ergebnis wird an den Server gesendet.",
+  "bench.run": "Messen",
+  "bench.running": "Messung läuft",
+  "bench.screensOff": "Bildschirme aus",
+  "bench.withVideo": "Mit Video",
+  "bench.cancel": "Abbrechen",
+  "bench.legend": "Bilder pro Sekunde: Mittel · langsamstes 1 %",
 };
 
 export const DICTIONARIES: Record<Lang, Record<Key, string>> = { fr, en, es, de };

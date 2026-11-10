@@ -1,21 +1,10 @@
 import { useMemo } from "react";
 import { useLoader, useThree } from "@react-three/fiber";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import type { Mesh, Object3D, WebGLRenderer } from "three";
-import { assetUrl, BASIS_PATH } from "../lib/assets";
-
-/** Un chargeur KTX2 par moteur de rendu, partagé par tous les modèles. */
-const ktx2Loaders = new WeakMap<WebGLRenderer, KTX2Loader>();
-function ktx2For(gl: WebGLRenderer): KTX2Loader {
-  let loader = ktx2Loaders.get(gl);
-  if (!loader) {
-    loader = new KTX2Loader().setTranscoderPath(BASIS_PATH).detectSupport(gl);
-    ktx2Loaders.set(gl, loader);
-  }
-  return loader;
-}
+import type { Mesh, Object3D } from "three";
+import { assetUrl } from "../lib/assets";
+import { ktx2For } from "./ktx2";
 
 export type ModelId =
   | "modern_arm_chair_01"

@@ -186,6 +186,18 @@ export const PLAYER = {
   spawnPitch: 0.04,
 } as const;
 
+/**
+ * La lune, deux fois : là où on la **voit** dans le ciel (assez basse pour entrer dans le cadre de la
+ * baie depuis le canapé), et d'où vient sa **lumière** (plus haute : ses rayons tombent sur le parquet
+ * au pied de la baie, avec l'ombre des petits bois, au lieu de zébrer le canapé). L'écart ne se lit pas.
+ */
+export const MOON = {
+  seen: [-0.3, 0.52, -0.8] as [number, number, number],
+  lightFrom: [-5, 22, -11] as [number, number, number],
+  color: "#8fb2ff",
+  intensity: 1.15,
+} as const;
+
 /** Une boîte de collision : centre, demi-dimensions, rotation éventuelle autour de Y. */
 export interface Solid {
   p: [number, number, number];

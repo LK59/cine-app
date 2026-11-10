@@ -1,7 +1,7 @@
 import { Bloom, EffectComposer, N8AO, SMAA, ToneMapping, Vignette } from "@react-three/postprocessing";
 import { ToneMappingMode, type EffectComposer as Composer } from "postprocessing";
 import { HalfFloatType } from "three";
-import { useProfile } from "../state/store";
+import { useProfile, useStore } from "../state/store";
 
 /**
  * Le post-traitement : peu d'effets, chacun à sa place.
@@ -25,6 +25,9 @@ export const effects: { composer: Composer | null } = { composer: null };
 
 export function Effects() {
   const profile = useProfile();
+  // L'occlusion ambiante est cuite avec la lumière : en espace écran elle la compterait deux fois.
+  const baked = useStore((s) => s.baked);
+  const ao = baked ? "none" : profile.ao;
   return (
     <EffectComposer
       ref={(composer) => {
@@ -32,12 +35,12 @@ export function Effects() {
       }}
       multisampling={0}
       frameBufferType={HalfFloatType}
-      key={`${profile.ao}-${profile.bloom}-${profile.smaa}`}
+      key={`${ao}-${profile.bloom}-${profile.smaa}`}
     >
       {/* Toujours en pleine résolution : le chemin demi-résolution de N8AO 2.0 crée une cible de rendu
           multiple que three r187 ne sait plus préparer (« texture.mipmaps » indéfini) — vu à la première
           capture. Le préréglage règle donc le nombre d'échantillons, pas la résolution. */}
-      {profile.ao !== "none" ? <N8AO aoRadius={1.1} distanceFalloff={1.2} intensity={2.4} quality={profile.ao === "full" ? "high" : "low"} color="#0a0503" /> : <></>}
+      {ao !== "none" ? <N8AO aoRadius={1.1} distanceFalloff={1.2} intensity={2.4} quality={ao === "full" ? "high" : "low"} color="#0a0503" /> : <></>}
       {profile.bloom ? <Bloom mipmapBlur intensity={0.5} luminanceThreshold={1.05} luminanceSmoothing={0.25} radius={0.7} /> : <></>}
       <ToneMapping mode={ToneMappingMode.AGX} />
       <Vignette offset={VIGNETTE.offset} darkness={VIGNETTE.darkness} />

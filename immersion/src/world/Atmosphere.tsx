@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { CubeCamera, FogExp2, HalfFloatType, LinearMipmapLinearFilter, PMREMGenerator, WebGLCubeRenderTarget, type Texture } from "three";
-import { useProfile } from "../state/store";
+import { useProfile, useStore } from "../state/store";
 import { CHANDELIER } from "./layout";
 
 /**
@@ -21,6 +21,7 @@ export function Atmosphere() {
   const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);
   const profile = useProfile();
+  const baked = useStore((s) => s.baked);
   const frame = useRef(0);
   const kept = useRef<Texture | null>(null);
 
@@ -35,10 +36,11 @@ export function Atmosphere() {
     };
   }, [scene, gl]);
 
-  // Un préréglage qui change refait les ombres (leur taille a changé) et l'environnement.
+  // Un préréglage qui change refait les ombres (leur taille a changé) et l'environnement ; la lumière
+  // précalculée qui arrive aussi — la pièce capturée n'est plus éclairée pareil.
   useEffect(() => {
     frame.current = 0;
-  }, [profile.shadowMap, profile.fillLights]);
+  }, [profile.shadowMap, profile.fillLights, baked]);
 
   useFrame(() => {
     if (frame.current < 0) return;

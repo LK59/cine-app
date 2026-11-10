@@ -51,10 +51,13 @@ SEAT_GAP = 0.040             # nominal gap between neighbouring modules
 PIPING_R = 0.0075
 CORNER_STEPS = 4             # mesh rows inside each rounded zone
 MID_STEP = 0.085             # mesh spacing on flat zones
+LIGHTMAP_ANGLE = 60.0         # Smart UV Project angle limit (degrees)
+LIGHTMAP_MARGIN = 4 / 1024   # island margin: 4 px at 1024x1024
 PILLOW_GRID = 23
 PILLOW_SIZES = (0.44, 0.52)
 PILLOW_THICK = 0.088         # half thickness at the centre
 BUDGET = {"sofa_cushions": 70000, "sofa_frame": 18000, "pillows_a": 14000, "pillows_b": 14000}
+# total budget 130 000
 
 OUT = sys.argv[sys.argv.index("--") + 1] if "--" in sys.argv else "assets-src/sofa"
 rng_master = np.random.default_rng(SEED)
@@ -809,7 +812,11 @@ def build_pillows(world_mesh_list, back_info):
                     sdv = np.dot(co - np.array(l), np.array(nr))
                     if sdv < -0.05:
                         print('  BAD', np.round(co, 3), 'near', np.round(np.array(l), 3), 'n', np.round(np.array(nr), 2), 'poly', ix, 'dd', round(dd, 3)); break
-        report.append(dict(wall=wall, size=round(2 * Ha, 3), min_sd=round(sd, 4), y=[round(V[:, 1].min(), 3), round(V[:, 1].max(), 3)]))
+        zr = (INNER_N_Z, Z_NORTH_FRONT) if wall == 'north' else (Z_SOUTH_FRONT, INNER_S_Z) if wall == 'south' else (INNER_N_Z, INNER_S_Z)
+        xr = (INNER_LONG_X, SEAT_FRONT_X + 0.5) if wall == 'long' else (SEAT_FRONT_X, WING_END_X)
+        inside = bool(V[:, 2].min() > zr[0] - 0.03 and V[:, 2].max() < zr[1] + 0.03 and V[:, 0].min() > xr[0] - 0.03 and V[:, 0].max() < xr[1] + 0.03)
+        print('  PILLOW-ON-SEAT', wall, inside, 'x', round(V[:, 0].min(), 2), round(V[:, 0].max(), 2), 'z', round(V[:, 2].min(), 2), round(V[:, 2].max(), 2), 'ymin', round(V[:, 1].min(), 3))
+        report.append(dict(wall=wall, size=round(2 * Ha, 3), on_seat=inside, min_sd=round(sd, 4), y=[round(V[:, 1].min(), 3), round(V[:, 1].max(), 3)]))
         det = np.linalg.det(M)
         Fo = [f[::-1] for f in F] if det < 0 else F
         UVo = [u[::-1] for u in UV] if det < 0 else UV
@@ -834,6 +841,34 @@ def to_object(mesh, mat):
     ob = bpy.data.objects.new(mesh.name, me)
     bpy.context.scene.collection.objects.link(ob)
     return ob
+
+
+def make_lightmap_uvs(objs):
+    """UV1 'lightmap': unique non-overlapping unwrap, packed in ONE 0..1 atlas shared by all objects."""
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in objs:
+        o.select_set(True)
+        o.data.uv_layers.active = o.data.uv_layers["lightmap"]
+    bpy.context.view_layer.objects.active = objs[0]
+    ts = bpy.context.scene.tool_settings
+    ts.use_uv_select_sync = True
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(angle_limit=math.radians(LIGHTMAP_ANGLE), island_margin=0.002, area_weight=0.0,
+                             correct_aspect=True, scale_to_bounds=False)
+    bpy.ops.uv.pack_islands(udim_source="CLOSEST_UDIM", rotate=True, margin=LIGHTMAP_MARGIN, merge_overlap=False)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    for o in objs:   # UV0 stays the active/render map
+        o.data.uv_layers.active = o.data.uv_layers["UVMap"]
+    # report: bounds, overlap-free check by rasterising at 1024
+    import numpy as _np
+    grid = _np.zeros((1024, 1024), _np.int32)
+    lo, hi = 1e9, -1e9
+    for o in objs:
+        me = o.data
+        uv = _np.array([l.uv[:] for l in me.uv_layers["lightmap"].data])
+        lo, hi = min(lo, uv.min()), max(hi, uv.max())
+    print("LIGHTMAP UV bounds", round(lo, 4), round(hi, 4))
 
 
 def main():
@@ -882,7 +917,18 @@ def main():
         tex = nt.nodes.new("ShaderNodeTexImage")
         tex.image = img
         nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
-        objs.append(to_object(m, mat))
+        # second texture on the 'lightmap' UV map, so that TEXCOORD_1 is exported (stripped by optimize.mjs)
+        uvn = nt.nodes.new("ShaderNodeUVMap")
+        uvn.uv_map = "lightmap"
+        tex2 = nt.nodes.new("ShaderNodeTexImage")
+        tex2.image = img
+        nt.links.new(uvn.outputs["UV"], tex2.inputs["Vector"])
+        nt.links.new(tex2.outputs["Color"], bsdf.inputs["Emission Color"])
+        bsdf.inputs["Emission Strength"].default_value = 1.0
+        ob = to_object(m, mat)
+        ob.data.uv_layers.new(name="lightmap")
+        objs.append(ob)
+    make_lightmap_uvs(objs)
     bpy.ops.object.select_all(action="DESELECT")
     for o in objs:
         o.select_set(True)

@@ -1,21 +1,17 @@
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLoader, useThree } from "@react-three/fiber";
-import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
-import { BackSide, BufferAttribute, Color, ConeGeometry, CylinderGeometry, DoubleSide, InstancedMesh, MeshStandardMaterial, NoColorSpace, Object3D, PlaneGeometry, RepeatWrapping, Shape, ShapeGeometry, ShaderMaterial, SphereGeometry, Vector3 } from "three";
-import { assetUrl } from "../lib/assets";
+import { BackSide, BufferAttribute, Color, ConeGeometry, CylinderGeometry, DoubleSide, InstancedMesh, LinearFilter, LinearMipmapLinearFilter, MeshStandardMaterial, NoColorSpace, Object3D, PlaneGeometry, RepeatWrapping, Shape, ShapeGeometry, ShaderMaterial, SphereGeometry, SRGBColorSpace, Vector2, Vector3, type CompressedTexture } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { BEDROOM_WINDOW, KITCHEN, PLAN, ROOM } from "./layout";
-import { WEST_WINDOW, WEST_WINDOWS } from "./geometry/salon";
-import { configureKtx2 } from "./textures";
+import { assetUrl } from "../lib/assets";
 import { useProfile } from "../state/store";
+import { WEST_WINDOW, WEST_WINDOWS } from "./geometry/salon";
+import { ktx2For } from "./ktx2";
+import { BEDROOM_WINDOW, KITCHEN, MOON, PLAN, ROOM } from "./layout";
+import { Snow } from "./Snow";
 
-/**
- * La lune, deux fois : là où on la **voit** dans le ciel (assez basse pour entrer dans le cadre de la
- * baie depuis le canapé), et d'où vient sa **lumière** (plus haute : ses rayons tombent sur le parquet
- * au pied de la baie, avec l'ombre des petits bois, au lieu de zébrer le canapé). L'écart ne se lit pas.
- */
-export const MOON_DIRECTION = new Vector3(-0.3, 0.52, -0.8).normalize();
-export const MOONLIGHT_FROM = new Vector3(-5, 22, -11);
+/** La lune vue dans le ciel, et la direction de sa lumière — voir `MOON` dans le plan. */
+export const MOON_DIRECTION = new Vector3(...MOON.seen).normalize();
+export const MOONLIGHT_FROM = new Vector3(...MOON.lightFrom);
 const MOONLIGHT_DIRECTION = MOONLIGHT_FROM.clone().normalize();
 
 // ── Un bruit simple et reproductible : le relief est le même à chaque visite ─────────────────────
@@ -52,22 +48,82 @@ const smooth = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 
+/** Jusqu'où va le premier plan modelé ; au-delà, ce sont les couches du panorama. */
+const FOREGROUND = 240;
+
 /**
- * La hauteur du terrain. Le chalet est posé sur un replat ; au nord la pente descend vers une
- * vallée, puis remonte en montagnes — ce que la baie cadre. Ailleurs, des crêtes ferment l'horizon.
+ * La hauteur du sol au premier plan. Le chalet est posé sur un replat ; tout autour le terrain
+ * s'abaisse — plus vite au nord, vers la vallée — pour que son bord lointain passe sous l'horizon du
+ * panorama au lieu de le couper.
  */
 export function groundHeight(x: number, z: number): number {
   const r = Math.hypot(x, z);
-  // Le replat, puis la descente vers la vallée du nord.
-  const drop = smooth(9, 95, -z) * 22 + smooth(12, 70, r) * 3;
-  const rolling = (fbm(x * 0.02 + 3, z * 0.02 + 7) - 0.5) * 9 * smooth(10, 60, r);
-  // Les montagnes : au-delà de la vallée, un massif, plus haut au nord et au nord-est.
-  const far = smooth(120, 330, r);
-  const ridge = Math.pow(fbm(x * 0.006 + 11, z * 0.006 + 5, 6), 1.5);
-  const north = 0.55 + 0.45 * smooth(-150, 150, -z + x * 0.25);
-  const mountains = far * (30 + ridge * 235) * north;
-  return -0.42 - drop + rolling + mountains;
+  const north = 0.55 + 0.45 * smooth(-60, 60, -z);
+  const drop = smooth(11, FOREGROUND, r) * 46 * north;
+  const rolling = (fbm(x * 0.022 + 3, z * 0.022 + 7) - 0.5) * 7 * smooth(12, 70, r);
+  return -0.42 - drop + rolling;
 }
+
+/**
+ * Le panorama lointain (`public/assets/panorama/`, rendu une fois hors ligne à partir d'un relief
+ * réel — voir `tools/panorama/`) : trois images équirectangulaires recadrées en hauteur.
+ * `far` porte les sommets et le ciel ; `mid` et `near`, les pentes plus proches, détourées.
+ */
+interface PanoramaMeta {
+  elevationMin: number;
+  elevationMax: number;
+  layers: Record<"far" | "mid" | "near", { file: string; from?: number }>;
+  moon?: { azimuthDeg: number; elevationDeg: number };
+  sky?: { horizon: [number, number, number]; zenith: [number, number, number] };
+}
+interface Panorama {
+  meta: PanoramaMeta;
+  far: CompressedTexture;
+  mid: CompressedTexture;
+  near: CompressedTexture;
+}
+
+/** Charge le panorama s'il est là ; sans lui, le ciel dessiné par le code suffit à faire nuit. */
+function usePanorama(): Panorama | null {
+  const gl = useThree((s) => s.gl);
+  const [panorama, setPanorama] = useState<Panorama | null>(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const response = await fetch(assetUrl("panorama/panorama.json"), { credentials: "same-origin" });
+      if (!response.ok) return;
+      const meta = (await response.json()) as PanoramaMeta;
+      const loader = ktx2For(gl);
+      const [far, mid, near] = await Promise.all((["far", "mid", "near"] as const).map((layer) => loader.loadAsync(assetUrl(`panorama/${meta.layers[layer].file}`))));
+      for (const texture of [far, mid, near]) {
+        texture.colorSpace = SRGBColorSpace;
+        // L'image fait le tour de l'horizon : elle se répète en largeur, pas en hauteur.
+        texture.wrapS = RepeatWrapping;
+        texture.minFilter = LinearMipmapLinearFilter;
+        texture.magFilter = LinearFilter;
+        texture.anisotropy = 4;
+        texture.needsUpdate = true;
+      }
+      if (alive) setPanorama({ meta, far, mid, near });
+    })().catch(() => {
+      // Panorama absent ou illisible : le ciel de secours reste en place.
+    });
+    return () => {
+      alive = false;
+    };
+  }, [gl]);
+  return panorama;
+}
+
+/** Du sens de regard à la coordonnée dans une image du panorama : l'azimut 0 (le nord, la baie) est au centre. */
+const PANORAMA_GLSL = /* glsl */ `
+  uniform vec2 uElevation;
+  vec2 panoramaUv(vec3 d) {
+    float azimuth = atan(d.x, -d.z);
+    float elevation = degrees(asin(clamp(d.y, -1.0, 1.0)));
+    return vec2(azimuth / 6.2831853 + 0.5, (uElevation.y - elevation) / (uElevation.y - uElevation.x));
+  }
+`;
 
 const SKY_VERTEX = /* glsl */ `
   varying vec3 vDirection;
@@ -79,17 +135,18 @@ const SKY_VERTEX = /* glsl */ `
 `;
 const SKY_FRAGMENT = /* glsl */ `
   uniform vec3 uMoon;
+  uniform vec3 uHorizon;
+  uniform vec3 uZenith;
+  uniform sampler2D uFar;
+  uniform float uHasFar;
+  uniform float uGain;
   varying vec3 vDirection;
+  ${PANORAMA_GLSL}
   float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
-  void main() {
-    vec3 d = normalize(vDirection);
+  vec3 night(vec3 d) {
     float h = clamp(d.y, -0.2, 1.0);
-    // L'heure bleue : un zénith profond, un horizon plus clair, encore un peu de jour au nord-ouest.
-    vec3 zenith = vec3(0.012, 0.028, 0.085);
-    vec3 horizon = vec3(0.075, 0.16, 0.36);
-    vec3 sky = mix(horizon, zenith, pow(smoothstep(-0.05, 0.75, h), 0.62));
-    float dusk = pow(max(dot(normalize(vec3(d.x, 0.0, d.z)), normalize(vec3(-0.75, 0.0, -0.66))), 0.0), 3.0) * pow(1.0 - smoothstep(0.0, 0.42, h), 2.0);
-    sky += vec3(0.11, 0.15, 0.24) * dusk;
+    // L'heure bleue : un zénith profond, un horizon plus clair.
+    vec3 sky = mix(uHorizon, uZenith, pow(smoothstep(-0.05, 0.75, h), 0.62));
     // Les étoiles : une grille de directions, une étoile dans une cellule sur quarante.
     vec3 cell = floor(d * 190.0);
     float star = hash(cell);
@@ -100,18 +157,54 @@ const SKY_FRAGMENT = /* glsl */ `
     float m = dot(d, normalize(uMoon));
     sky += vec3(1.0, 0.97, 0.9) * smoothstep(0.99955, 0.9997, m) * 5.5;
     sky += vec3(0.32, 0.42, 0.62) * (pow(max(m, 0.0), 420.0) * 0.9 + pow(max(m, 0.0), 26.0) * 0.16);
-    gl_FragColor = vec4(sky, 1.0);
+    return sky;
+  }
+  void main() {
+    vec3 d = normalize(vDirection);
+    vec3 color = night(d);
+    if (uHasFar > 0.5) {
+      vec2 uv = panoramaUv(d);
+      // Dans la bande du panorama : son image. Au-dessus : le ciel dessiné ici, raccordé en fondu
+      // sur le haut de l'image (les teintes du ciel sont celles du rendu).
+      vec3 far = texture2D(uFar, vec2(uv.x, clamp(uv.y, 0.002, 0.998))).rgb * uGain;
+      float inside = smoothstep(0.0, 0.12, uv.y);
+      color = uv.y > 1.0 ? far * 0.6 : mix(color, far, inside);
+    }
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
+
+const LAYER_VERTEX = /* glsl */ `
+  varying vec3 vWorld;
+  void main() {
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorld = world.xyz;
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+const LAYER_FRAGMENT = /* glsl */ `
+  uniform sampler2D uMap;
+  uniform vec3 uOrigin;
+  uniform float uGain;
+  varying vec3 vWorld;
+  ${PANORAMA_GLSL}
+  void main() {
+    // La direction est prise depuis le point de vue du rendu (le chalet), pas depuis la caméra : la
+    // couche est un décor posé à distance, qui glisse un peu devant le fond quand on se déplace.
+    vec2 uv = panoramaUv(normalize(vWorld - uOrigin));
+    if (uv.y < 0.0 || uv.y > 1.0) discard;
+    vec4 texel = texture2D(uMap, uv);
+    if (texel.a < 0.004) discard;
+    gl_FragColor = vec4(texel.rgb * uGain, texel.a);
   }
 `;
 
 /**
- * Le dehors a son propre éclairage, écrit ici : la lune, le ciel, la brume — et rien d'autre.
+ * Le premier plan a son propre éclairage, écrit ici : la lune, le ciel, la brume — et rien d'autre.
  *
- * Avec les matières ordinaires, la lumière orangée du lustre sortait par la baie et, mêlée au bleu de
- * la lune sur une neige presque blanche, donnait du gris : la nuit bleue de la référence disparaissait.
- * Ces matières-ci ignorent les lumières de la pièce (et coûtent bien moins : la neige couvre la moitié
- * des pixels de la baie). La lueur chaude au pied des fenêtres est ajoutée à la main, là où elle a un
- * sens.
+ * Avec les matières ordinaires, la lumière du lustre sortait par la baie et, mêlée au bleu de la lune
+ * sur une neige presque blanche, donnait du gris. Ces matières-ci ignorent les lumières de la pièce
+ * (et coûtent bien moins). La lueur chaude au pied des fenêtres est ajoutée à la main.
  */
 const OUTDOOR_COMMON = /* glsl */ `
   uniform vec3 uMoonDir;
@@ -124,27 +217,23 @@ const OUTDOOR_COMMON = /* glsl */ `
     return mix(color, uFogColor, clamp(f, 0.0, 1.0));
   }
 `;
-
 const SNOW_VERTEX = /* glsl */ `
-  attribute vec3 color;
   varying vec3 vWorld;
   varying vec3 vNormal;
-  varying vec3 vTint;
   void main() {
     vec4 world = modelMatrix * vec4(position, 1.0);
     vWorld = world.xyz;
     vNormal = normalize(mat3(modelMatrix) * normal);
-    vTint = color;
     gl_Position = projectionMatrix * viewMatrix * world;
   }
 `;
 const SNOW_FRAGMENT = /* glsl */ `
   ${OUTDOOR_COMMON}
   uniform sampler2D uDetail;
-  uniform vec3 uWindow;
+  uniform float uNorth;
+  uniform float uEdge;
   varying vec3 vWorld;
   varying vec3 vNormal;
-  varying vec3 vTint;
   void main() {
     float distance = length(cameraPosition - vWorld);
     // Le grain de la neige, près du chalet seulement : au loin il ne ferait que scintiller.
@@ -152,19 +241,20 @@ const SNOW_FRAGMENT = /* glsl */ `
     float near = 1.0 - smoothstep(18.0, 70.0, distance);
     vec3 n = normalize(vNormal + vec3(detail.x, 0.0, detail.y) * 0.5 * near);
     float moon = max(dot(n, uMoonDir), 0.0);
-    vec3 albedo = vec3(0.9, 0.93, 1.0) * vTint;
+    vec3 albedo = vec3(0.9, 0.93, 1.0);
     vec3 color = albedo * (uSkyColor + uMoonColor * moon);
     // La poudreuse renvoie la lune en paillettes.
     vec3 view = normalize(cameraPosition - vWorld);
-    color += uMoonColor * pow(max(dot(reflect(-uMoonDir, n), view), 0.0), 48.0) * 0.35 * near * vTint.b;
+    color += uMoonColor * pow(max(dot(reflect(-uMoonDir, n), view), 0.0), 48.0) * 0.35 * near;
     // La lumière des fenêtres, sur la neige à leur pied.
-    vec2 toWindow = vec2(max(abs(vWorld.x) - 5.2, 0.0), max(uWindow.z - vWorld.z, 0.0));
-    float glow = exp(-length(toWindow) * 0.34) * step(vWorld.z, uWindow.z + 0.5);
+    vec2 toWindow = vec2(max(abs(vWorld.x) - 5.2, 0.0), max(uNorth - vWorld.z, 0.0));
+    float glow = exp(-length(toWindow) * 0.34) * step(vWorld.z, uNorth + 0.5);
     color += vec3(1.0, 0.62, 0.3) * 0.42 * glow * albedo;
-    gl_FragColor = vec4(outdoorFog(color, distance), 1.0);
+    // Le bord du premier plan s'efface : derrière lui, ce sont les couches du panorama.
+    float alpha = 1.0 - smoothstep(uEdge * 0.72, uEdge, length(vWorld.xz));
+    gl_FragColor = vec4(outdoorFog(color, distance), alpha);
   }
 `;
-
 const FIR_VERTEX = /* glsl */ `
   attribute vec3 color;
   varying vec3 vWorld;
@@ -201,12 +291,16 @@ const outdoorUniforms = () => ({
   uMoonColor: { value: new Color(0.42, 0.56, 0.95) },
   uSkyColor: { value: new Color(0.035, 0.065, 0.16) },
   uFogColor: { value: FOG_COLOR },
-  uFogDensity: { value: 0.0048 },
+  uFogDensity: { value: 0.0052 },
 });
 
 const dummy = new Object3D();
 
-/** Un sapin : un tronc et sept étages de branches, de plus en plus courts, la neige sur le dessus. */
+/**
+ * Un sapin : un tronc, et neuf étages de branches en étoile — chaque étage est un cône dont un sommet
+ * sur deux est rentré et abaissé, ce qui donne des branches qui retombent au lieu d'un cône lisse.
+ * La neige tient sur le dessus de chaque étage.
+ */
 function firGeometry() {
   const parts = [];
   const paint = (geometry: ConeGeometry | CylinderGeometry, low: Color, high: Color, y0: number, y1: number) => {
@@ -221,16 +315,25 @@ function firGeometry() {
     geometry.setAttribute("color", new BufferAttribute(colors, 3));
     return geometry;
   };
-  parts.push(paint(new CylinderGeometry(0.03, 0.05, 0.2, 6).translate(0, 0.1, 0), new Color("#120d09"), new Color("#120d09"), 0, 1));
-  const tiers = 7;
+  parts.push(paint(new CylinderGeometry(0.022, 0.045, 0.2, 6).translate(0, 0.1, 0), new Color("#120d09"), new Color("#120d09"), 0, 1));
+  const tiers = 9;
   for (let i = 0; i < tiers; i++) {
     const t = i / (tiers - 1);
-    const radius = 0.3 * (1 - t * 0.8);
-    const height = 0.3 - t * 0.1;
-    const y = 0.14 + t * 0.66;
-    // Chaque étage est un cône ouvert, un peu décalé en rotation : la silhouette n'est pas un cône lisse.
-    const cone = new ConeGeometry(radius, height, 11, 1, true).rotateY(i * 0.9).translate(0, y + height / 2, 0);
-    parts.push(paint(cone, new Color("#05110d"), new Color("#6f87ab"), y - height * 0.1, y + height));
+    const radius = 0.29 * (1 - t * 0.84);
+    const height = 0.24 - t * 0.09;
+    const y = 0.1 + t * 0.72;
+    const cone = new ConeGeometry(radius, height, 14, 1, true);
+    const positions = cone.getAttribute("position");
+    for (let v = 0; v < positions.count; v++) {
+      // La base du cône : un sommet sur deux rentre et descend — des branches, pas un abat-jour.
+      if (positions.getY(v) > -height / 2 + 0.001) continue;
+      const angle = Math.atan2(positions.getZ(v), positions.getX(v));
+      const lobe = Math.round((angle / (Math.PI * 2)) * 14);
+      const inward = lobe % 2 === 0 ? 1 : 0.62;
+      positions.setXYZ(v, positions.getX(v) * inward, positions.getY(v) - (lobe % 2 === 0 ? height * 0.22 : 0), positions.getZ(v) * inward);
+    }
+    cone.rotateY(i * 0.7).translate(0, y + height / 2, 0);
+    parts.push(paint(cone, new Color("#040d0a"), new Color("#7d95b8"), y - height * 0.25, y + height));
   }
   const merged = mergeGeometries(
     parts.map((p) => (p.index ? p.toNonIndexed() : p)),
@@ -241,40 +344,34 @@ function firGeometry() {
 }
 
 /**
- * Le dehors : la nuit, la neige, les sapins, les montagnes — et les vitrages par lesquels on les
- * voit. Rien de ce qui est ici n'a besoin d'être beau de près : on ne sort pas.
+ * Le dehors, en couches :
+ *
+ * 1. **le fond** — le ciel, et la chaîne de montagnes du panorama (une texture, à l'infini) ;
+ * 2. **le plan intermédiaire** — deux couches détourées du même panorama, posées à quelques centaines
+ *    de mètres : elles glissent légèrement devant le fond quand on se déplace ;
+ * 3. **le premier plan** — le sol de neige autour du chalet et de vrais sapins ;
+ * 4. **la neige qui tombe**, devant tout cela ;
+ * et les vitrages par lesquels on regarde. Rien ici n'a besoin d'être beau de près : on ne sort pas.
  */
 export function Exterior() {
   const profile = useProfile();
   const gl = useThree((s) => s.gl);
-  const detail = useLoader(KTX2Loader, assetUrl("textures/snow/normal.ktx2"), configureKtx2(gl));
+  const detail = useLoader(ktx2For(gl), assetUrl("textures/snow/normal.ktx2"));
+  const panorama = usePanorama();
 
   const terrain = useMemo(() => {
-    const size = 900;
-    const segments = 150;
+    const size = FOREGROUND * 2;
+    const segments = 110;
     const geometry = new PlaneGeometry(size, size, segments, segments).rotateX(-Math.PI / 2);
     const positions = geometry.getAttribute("position");
-    const uv = geometry.getAttribute("uv");
-    const colors = new Float32Array(positions.count * 3);
-    const c = new Color();
-    const forest = new Color("#10202c");
-    const white = new Color("#ffffff");
     for (let i = 0; i < positions.count; i++) {
       // Un maillage plus serré près du chalet : la grille est resserrée vers son centre.
       const gx = positions.getX(i) / (size / 2);
       const gz = positions.getZ(i) / (size / 2);
-      const x = Math.sign(gx) * Math.pow(Math.abs(gx), 1.9) * (size / 2);
-      const z = Math.sign(gz) * Math.pow(Math.abs(gz), 1.9) * (size / 2);
-      const y = groundHeight(x, z);
-      positions.setXYZ(i, x, y, z);
-      uv.setXY(i, x / 7, z / 7);
-      // Au loin, les pentes moyennes sont boisées : une bande sombre sous les sommets blancs.
-      const r = Math.hypot(x, z);
-      const band = smooth(110, 200, r) * (1 - smooth(55, 120, y)) * smooth(0.35, 0.6, fbm(x * 0.03, z * 0.03, 3));
-      c.copy(white).lerp(forest, band * 0.8);
-      colors.set([c.r, c.g, c.b], i * 3);
+      const x = Math.sign(gx) * Math.pow(Math.abs(gx), 1.7) * (size / 2);
+      const z = Math.sign(gz) * Math.pow(Math.abs(gz), 1.7) * (size / 2);
+      positions.setXYZ(i, x, groundHeight(x, z), z);
     }
-    geometry.setAttribute("color", new BufferAttribute(colors, 3));
     geometry.computeVertexNormals();
     return geometry;
   }, []);
@@ -287,22 +384,79 @@ export function Exterior() {
     return new ShaderMaterial({
       vertexShader: SNOW_VERTEX,
       fragmentShader: SNOW_FRAGMENT,
-      uniforms: { ...outdoorUniforms(), uDetail: { value: detail }, uWindow: { value: new Vector3(0, 0, ROOM.north) } },
+      uniforms: { ...outdoorUniforms(), uDetail: { value: detail }, uNorth: { value: ROOM.north }, uEdge: { value: FOREGROUND } },
+      transparent: true,
     });
   }, [detail]);
 
   const sky = useMemo(
     () => ({
       geometry: new SphereGeometry(1, 48, 24),
-      material: new ShaderMaterial({ vertexShader: SKY_VERTEX, fragmentShader: SKY_FRAGMENT, uniforms: { uMoon: { value: MOON_DIRECTION } }, side: BackSide, depthWrite: false, fog: false }),
+      material: new ShaderMaterial({
+        vertexShader: SKY_VERTEX,
+        fragmentShader: SKY_FRAGMENT,
+        uniforms: {
+          uMoon: { value: MOON_DIRECTION.clone() },
+          uHorizon: { value: new Color(0.075, 0.16, 0.36) },
+          uZenith: { value: new Color(0.012, 0.028, 0.085) },
+          uFar: { value: null },
+          uHasFar: { value: 0 },
+          uGain: { value: 1 },
+          uElevation: { value: new Vector2(-28, 32) },
+        },
+        side: BackSide,
+        depthWrite: false,
+        fog: false,
+      }),
     }),
     []
   );
 
-  // ── Les sapins : un seul maillage instancié ─────────────────────────────────
+  // Les deux couches détourées : des cylindres centrés sur le chalet.
+  const layers = useMemo(() => {
+    const make = (radius: number) => {
+      const material = new ShaderMaterial({
+        vertexShader: LAYER_VERTEX,
+        fragmentShader: LAYER_FRAGMENT,
+        uniforms: { uMap: { value: null }, uOrigin: { value: new Vector3(0, 1.64, 0) }, uGain: { value: 1 }, uElevation: { value: new Vector2(-28, 32) } },
+        transparent: true,
+        depthWrite: false,
+        side: BackSide,
+        fog: false,
+      });
+      // Assez haut pour couvrir toute la bande du panorama vue depuis le chalet.
+      const geometry = new CylinderGeometry(radius, radius, radius * 1.4, 96, 1, true);
+      return { geometry, material, radius };
+    };
+    return { mid: make(1400), near: make(340) };
+  }, []);
+
+  // Quand le panorama arrive : il prend la place du ciel de secours, et donne ses teintes et sa lune.
+  useEffect(() => {
+    if (!panorama) return;
+    const { meta } = panorama;
+    const elevation = new Vector2(meta.elevationMin, meta.elevationMax);
+    sky.material.uniforms.uFar.value = panorama.far;
+    sky.material.uniforms.uHasFar.value = 1;
+    sky.material.uniforms.uElevation.value = elevation;
+    sky.material.uniforms.uGain.value = PANORAMA_GAIN;
+    if (meta.sky) {
+      sky.material.uniforms.uHorizon.value.setRGB(...meta.sky.horizon).multiplyScalar(PANORAMA_GAIN);
+      sky.material.uniforms.uZenith.value.setRGB(...meta.sky.zenith).multiplyScalar(PANORAMA_GAIN);
+    }
+    // La lune est déjà dans l'image : celle du ciel de secours sort du cadre.
+    sky.material.uniforms.uMoon.value.set(0, -1, 0);
+    for (const [name, layer] of Object.entries(layers) as ["mid" | "near", (typeof layers)["mid"]][]) {
+      layer.material.uniforms.uMap.value = panorama[name];
+      layer.material.uniforms.uElevation.value = elevation;
+      layer.material.uniforms.uGain.value = PANORAMA_GAIN;
+    }
+  }, [panorama, sky, layers]);
+
+  // ── Les sapins du premier plan : un seul maillage instancié ─────────────────
   const firs = useRef<InstancedMesh>(null);
   const fir = useMemo(() => ({ geometry: firGeometry(), material: new ShaderMaterial({ vertexShader: FIR_VERTEX, fragmentShader: FIR_FRAGMENT, uniforms: outdoorUniforms() }) }), []);
-  const firCount = profile.snow >= 8000 ? 900 : profile.snow >= 4000 ? 600 : 320;
+  const firCount = profile.snow >= 8000 ? 260 : profile.snow >= 4000 ? 170 : 90;
   useLayoutEffect(() => {
     const mesh = firs.current;
     if (!mesh) return;
@@ -313,23 +467,19 @@ export function Exterior() {
       return seed / 2147483647;
     };
     let guard = 0;
-    while (placed < firCount && guard++ < firCount * 40) {
-      // Plus denses vers le nord (ce que la baie regarde), jusqu'au pied des montagnes.
+    while (placed < firCount && guard++ < firCount * 60) {
       const angle = random() * Math.PI * 2;
-      const radius = 15 + Math.pow(random(), 1.5) * 230;
+      const radius = 24 + Math.pow(random(), 1.3) * (FOREGROUND * 0.62);
       const x = Math.cos(angle) * radius;
-      const z = Math.sin(angle) * radius * (Math.sin(angle) < 0 ? 1.15 : 0.7);
-      // Pas devant la baie de trop près : la vue plonge d'abord sur la pente.
-      if (z < 0 && z > -42 && Math.abs(x) < 13 + (-z - 8) * 0.15) continue;
-      if (radius < 30) continue;
+      const z = Math.sin(angle) * radius;
+      // Pas devant la baie de trop près : la vue plonge d'abord sur la pente, vers la vallée.
+      if (z < 0 && z > -70 && Math.abs(x) < 12 + (-z - 8) * 0.22) continue;
       // Des bosquets, pas un semis régulier.
-      if (fbm(x * 0.035 + 20, z * 0.035 + 20, 3) < 0.44 + random() * 0.12) continue;
-      const y = groundHeight(x, z);
-      if (y > 70) continue;
-      const height = 4.5 + random() * 7.5;
-      dummy.position.set(x, y - 0.2, z);
-      dummy.rotation.set(0, random() * Math.PI, 0);
-      dummy.scale.set(height * (0.85 + random() * 0.3), height, height * (0.85 + random() * 0.3));
+      if (fbm(x * 0.04 + 20, z * 0.04 + 20, 3) < 0.42 + random() * 0.14) continue;
+      const height = 6 + random() * 9;
+      dummy.position.set(x, groundHeight(x, z) - 0.3, z);
+      dummy.rotation.set((random() - 0.5) * 0.06, random() * Math.PI, (random() - 0.5) * 0.06);
+      dummy.scale.set(height * (0.8 + random() * 0.3), height, height * (0.8 + random() * 0.3));
       dummy.updateMatrix();
       mesh.setMatrixAt(placed++, dummy.matrix);
     }
@@ -356,9 +506,16 @@ export function Exterior() {
 
   return (
     <group>
-      <mesh geometry={sky.geometry} material={sky.material} scale={500} frustumCulled={false} renderOrder={-10} />
-      <mesh geometry={terrain} material={snowMaterial} />
+      <mesh geometry={sky.geometry} material={sky.material} scale={2500} frustumCulled={false} renderOrder={-10} />
+      {panorama ? (
+        <>
+          <mesh geometry={layers.mid.geometry} material={layers.mid.material} frustumCulled={false} renderOrder={-9} />
+          <mesh geometry={layers.near.geometry} material={layers.near.material} frustumCulled={false} renderOrder={-8} />
+        </>
+      ) : null}
+      <mesh geometry={terrain} material={snowMaterial} renderOrder={-7} />
       <instancedMesh ref={firs} args={[fir.geometry, fir.material, firCount]} key={firCount} frustumCulled={false} />
+      <Snow />
       <mesh geometry={gable} material={glass} position={[0, 0, ROOM.north + 0.13]} renderOrder={3} />
       {/* La fenêtre de la cuisine et celle de la chambre, dans leurs murs sud. */}
       <mesh material={glass} position={[(KITCHEN.window.x0 + KITCHEN.window.x1) / 2, (KITCHEN.window.y0 + KITCHEN.window.y1) / 2, ROOM.back + 0.02]} renderOrder={3}>
@@ -373,3 +530,9 @@ export function Exterior() {
     </group>
   );
 }
+
+/**
+ * Le panorama est une image finie, faite pour être vue telle quelle ; ici elle traverse le mappage de
+ * tons de la scène, qui l'assombrit. Ce gain le compense (réglé à l'œil, sur captures).
+ */
+const PANORAMA_GAIN = 1.6;

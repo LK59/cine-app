@@ -12,7 +12,7 @@ import { Screens } from "./Screens";
 export function Chalet() {
   return (
     <group>
-      <Parts blockSofa />
+      <Parts />
       <Fixtures />
       <Screens />
       <SoundScape />

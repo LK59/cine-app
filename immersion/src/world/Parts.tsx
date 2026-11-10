@@ -1,4 +1,7 @@
-import { useMemo } from "react";
+import { Suspense, useMemo } from "react";
+import { ErrorBoundary } from "../ui/ErrorBoundary";
+import { attachLightmapUv, bakedVariant, useLightmaps, type Lightmaps } from "./lightmaps";
+import { Sofa } from "./Sofa";
 import { DoubleSide, type Material } from "three";
 import { useStore } from "../state/store";
 import { buildNight } from "./geometry/night";
@@ -11,11 +14,21 @@ import { Solids } from "./Solids";
 /** Les petites pièces sans ombre portée : elles n'y gagneraient rien, la carte d'ombre y perdrait. */
 const NO_SHADOW = new Set<MaterialId>(["rug", "white"]);
 
-function PartView({ part, materials, visible }: { part: Part; materials: Record<MaterialId, Material>; visible: boolean }) {
+function PartView({ part, group, materials, visible, lightmaps }: { part: Part; group?: GroupId; materials: Record<MaterialId, Material>; visible: boolean; lightmaps?: Lightmaps | null }) {
+  // Pour chaque maillage : sa matière, éclairée par la lightmap de son groupe quand ses UV de lumière
+  // ont pu être posés (voir `attachLightmapUv`).
+  const resolved = useMemo(() => {
+    const atlas = group && lightmaps ? lightmaps.atlases[group] : undefined;
+    return (Object.keys(part.meshes) as MaterialId[]).map((id) => {
+      const geometry = part.meshes[id]!;
+      const lit = atlas && lightmaps && attachLightmapUv(geometry, atlas.uvs.get(`${group}__${id}`));
+      return { id, geometry, material: lit ? bakedVariant(materials[id], atlas.texture, lightmaps.range) : materials[id] };
+    });
+  }, [part, group, materials, lightmaps]);
   return (
     <group visible={visible}>
-      {(Object.keys(part.meshes) as MaterialId[]).map((id) => (
-        <mesh key={id} geometry={part.meshes[id]} material={materials[id]} castShadow={!NO_SHADOW.has(id)} receiveShadow material-side={id === "planks" ? DoubleSide : undefined} name={`part-${id}`} />
+      {resolved.map(({ id, geometry, material }) => (
+        <mesh key={id} geometry={geometry} material={material} castShadow={!NO_SHADOW.has(id)} receiveShadow material-side={id === "planks" ? DoubleSide : undefined} name={`part-${id}`} />
       ))}
     </group>
   );
@@ -35,22 +48,32 @@ export function visibleGroups(room: string): Record<GroupId, boolean> {
  * Le chalet bâti : ses trois groupes de pièces, un maillage par matière dans chacun. La géométrie vient
  * de fonctions pures (`geometry/`) — les mêmes que lit l'outil de cuisson de la lumière.
  */
-export function Parts({ blockSofa }: { blockSofa: boolean }) {
+export function Parts() {
   const materials = useMaterials();
+  const lightmaps = useLightmaps();
   const room = useStore((s) => s.room);
   const parts = useMemo(() => ({ salon: buildSalon(), sud: buildSouth(), nuit: buildNight() }), []);
-  const sofa = useMemo(() => (blockSofa ? buildBlockSofa() : null), [blockSofa]);
   const visible = visibleGroups(room);
   return (
     <>
       {(Object.keys(parts) as GroupId[]).map((id) => (
         <group key={id} name={`group-${id}`}>
-          <PartView part={parts[id]} materials={materials} visible={visible[id]} />
+          <PartView part={parts[id]} group={id} materials={materials} visible={visible[id]} lightmaps={lightmaps} />
           {/* Les collisions, elles, ne dépendent pas de ce qui se dessine. */}
           <Solids solids={parts[id].solids} />
         </group>
       ))}
-      {sofa ? <PartView part={sofa} materials={materials} visible={visible.salon} /> : null}
+      {/* Le canapé : le modèle ; s'il ne se charge pas, sa version en boîtes tient sa place. */}
+      <ErrorBoundary fallback={<BlockSofa materials={materials} visible={visible.salon} />}>
+        <Suspense fallback={null}>
+          <Sofa materials={materials} lightmaps={lightmaps} />
+        </Suspense>
+      </ErrorBoundary>
     </>
   );
+}
+
+function BlockSofa({ materials, visible }: { materials: Record<MaterialId, Material>; visible: boolean }) {
+  const part = useMemo(() => buildBlockSofa(), []);
+  return <PartView part={part} materials={materials} visible={visible} />;
 }

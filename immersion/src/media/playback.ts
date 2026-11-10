@@ -135,6 +135,7 @@ function release() {
 function unload() {
   if (!video) return;
   video.pause();
+  video.srcObject = null;
   video.removeAttribute("src");
   video.load();
 }
@@ -284,7 +285,7 @@ export function open(item: Item, from: number | null = null): Promise<void> {
  * Une vidéo quelconque sur l'écran, sans Jellyfin : pour les captures et les tests du rendu (image,
  * son, éclairage), qui n'ont pas à dépendre d'un film de la bibliothèque.
  */
-export async function playTestClip(url: string): Promise<void> {
+export async function playTestClip(source: string | MediaStream): Promise<void> {
   generation++;
   const el = getVideo();
   finish("next");
@@ -294,8 +295,10 @@ export async function playTestClip(url: string): Promise<void> {
   connectVideo(el);
   syncMix();
   set({ ...IDLE_PLAYBACK, status: "loading", title: "Mire" });
-  el.src = url;
-  el.loop = true;
+  if (typeof source === "string") {
+    el.src = source;
+    el.loop = true;
+  } else el.srcObject = source;
   await el.play().catch(() => set({ status: "paused" }));
 }
 
