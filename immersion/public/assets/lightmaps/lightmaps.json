@@ -1,5 +1,5 @@
 {
- "range": 64,
+ "range": 32.0,
  "atlases": {
   "salon": {
    "texture": "salon.ktx2",
@@ -33,7 +33,7 @@
      "name": "salon__stone",
      "material": "stone",
      "offset": 36,
-     "count": 252,
+     "count": 396,
      "probe": [
       [
        5.8,
@@ -42,8 +42,8 @@
       ],
       [
        5.1,
-       0.0,
-       0.85
+       0.47,
+       -3.25
       ],
       [
        4.5,
@@ -55,7 +55,7 @@
     {
      "name": "salon__slab",
      "material": "slab",
-     "offset": 288,
+     "offset": 432,
      "count": 36,
      "probe": [
       [
@@ -78,7 +78,7 @@
     {
      "name": "salon__plaster",
      "material": "plaster",
-     "offset": 324,
+     "offset": 468,
      "count": 360,
      "probe": [
       [
@@ -101,8 +101,8 @@
     {
      "name": "salon__timber",
      "material": "timber",
-     "offset": 684,
-     "count": 6444,
+     "offset": 828,
+     "count": 6516,
      "probe": [
       [
        -0.14,
@@ -110,9 +110,9 @@
        4.0
       ],
       [
-       5.08,
-       3.603,
-       1.35
+       4.823,
+       4.136,
+       1.65
       ],
       [
        3.43,
@@ -122,9 +122,32 @@
      ]
     },
     {
+     "name": "salon__metal",
+     "material": "metal",
+     "offset": 7344,
+     "count": 5976,
+     "probe": [
+      [
+       5.4,
+       0.78,
+       0.25
+      ],
+      [
+       -0.719,
+       4.69,
+       -2.828
+      ],
+      [
+       -5.44,
+       0.1,
+       -0.89
+      ]
+     ]
+    },
+    {
      "name": "salon__planks",
      "material": "planks",
-     "offset": 7128,
+     "offset": 13320,
      "count": 72,
      "probe": [
       [
@@ -147,7 +170,7 @@
     {
      "name": "salon__rug",
      "material": "rug",
-     "offset": 7200,
+     "offset": 13392,
      "count": 1764,
      "probe": [
       [
@@ -170,8 +193,8 @@
     {
      "name": "salon__leather",
      "material": "leather",
-     "offset": 8964,
-     "count": 3528,
+     "offset": 15156,
+     "count": 4104,
      "probe": [
       [
        3.612,
@@ -179,22 +202,22 @@
        -2.188
       ],
       [
-       3.612,
-       0.382,
-       0.012
+       3.625,
+       0.126,
+       -0.804
       ],
       [
-       2.782,
-       0.132,
-       -0.818
+       -5.43,
+       0.445,
+       0.12
       ]
      ]
     },
     {
      "name": "salon__wood",
      "material": "wood",
-     "offset": 12492,
-     "count": 4272,
+     "offset": 19260,
+     "count": 4308,
      "probe": [
       [
        1.02,
@@ -202,41 +225,51 @@
        -1.095
       ],
       [
-       -0.423,
-       0.141,
-       -1.174
+       -0.424,
+       0.139,
+       -1.824
       ],
       [
-       -2.63,
-       0.538,
-       1.4
+       -5.48,
+       0.62,
+       -0.965
       ]
      ]
     },
     {
-     "name": "salon__metal",
-     "material": "metal",
-     "offset": 16764,
-     "count": 5616,
+     "name": "salon__cabinet",
+     "material": "cabinet",
+     "offset": 23568,
+     "count": 288,
      "probe": [
       [
-       -0.447,
-       0.35,
-       -1.832
+       -5.0,
+       0.59,
+       -0.92
       ],
       [
-       -1.3,
-       4.69,
-       -2.34
+       -5.0,
+       0.59,
+       -0.45
       ],
       [
-       -0.1,
-       8.08,
-       -1.5
+       -5.48,
+       0.59,
+       0.19
       ]
      ]
     }
-   ]
+   ],
+   "layers": {
+    "nuit": {
+     "texture": "salon.ktx2",
+     "range": 32.0
+    },
+    "lampes": {
+     "texture": "salon_lampes.ktx2",
+     "range": 128.0
+    }
+   }
   },
   "sud": {
    "texture": "sud.ktx2",
@@ -542,7 +575,17 @@
       ]
      ]
     }
-   ]
+   ],
+   "layers": {
+    "nuit": {
+     "texture": "sud.ktx2",
+     "range": 2.0
+    },
+    "lampes": {
+     "texture": "sud_lampes.ktx2",
+     "range": 32.0
+    }
+   }
   },
   "nuit": {
    "texture": "nuit.ktx2",
@@ -660,7 +703,7 @@
       [
        0.76,
        0.59,
-       13.43
+       13.11
       ]
      ]
     },
@@ -683,7 +726,7 @@
       [
        0.78,
        0.56,
-       13.45
+       13.13
       ]
      ]
     },
@@ -714,7 +757,7 @@
      "name": "nuit__metal",
      "material": "metal",
      "offset": 50364,
-     "count": 1068,
+     "count": 1140,
      "probe": [
       [
        -4.535,
@@ -722,7 +765,7 @@
        10.61
       ],
       [
-       -5.068,
+       -5.052,
        0.86,
        12.938
       ],
@@ -736,7 +779,7 @@
     {
      "name": "nuit__rug",
      "material": "rug",
-     "offset": 51432,
+     "offset": 51504,
      "count": 3528,
      "probe": [
       [
@@ -759,7 +802,7 @@
     {
      "name": "nuit__fabric",
      "material": "fabric",
-     "offset": 54960,
+     "offset": 55032,
      "count": 7056,
      "probe": [
       [
@@ -782,7 +825,7 @@
     {
      "name": "nuit__pillowB",
      "material": "pillowB",
-     "offset": 62016,
+     "offset": 62088,
      "count": 1764,
      "probe": [
       [
@@ -805,7 +848,7 @@
     {
      "name": "nuit__pillowA",
      "material": "pillowA",
-     "offset": 63780,
+     "offset": 63852,
      "count": 1764,
      "probe": [
       [
@@ -828,7 +871,7 @@
     {
      "name": "nuit__leather",
      "material": "leather",
-     "offset": 65544,
+     "offset": 65616,
      "count": 1764,
      "probe": [
       [
@@ -848,12 +891,164 @@
       ]
      ]
     }
-   ]
+   ],
+   "layers": {
+    "nuit": {
+     "texture": "nuit.ktx2",
+     "range": 2.0
+    },
+    "lampes": {
+     "texture": "nuit_lampes.ktx2",
+     "range": 128.0
+    }
+   }
+  },
+  "terrasse": {
+   "texture": "terrasse.ktx2",
+   "size": 1024,
+   "uv": "terrasse.uv.bin",
+   "meshes": [
+    {
+     "name": "terrasse__timber",
+     "material": "timber",
+     "offset": 0,
+     "count": 1200,
+     "probe": [
+      [
+       5.8,
+       0.0,
+       -11.85
+      ],
+      [
+       -5.79,
+       1.05,
+       -7.07
+      ],
+      [
+       2.7,
+       0.52,
+       -8.67
+      ]
+     ]
+    },
+    {
+     "name": "terrasse__planks",
+     "material": "planks",
+     "offset": 1200,
+     "count": 36,
+     "probe": [
+      [
+       5.8,
+       0.0,
+       -7.02
+      ],
+      [
+       -5.8,
+       -0.07,
+       -7.02
+      ],
+      [
+       -5.8,
+       0.0,
+       -11.9
+      ]
+     ]
+    },
+    {
+     "name": "terrasse__wood",
+     "material": "wood",
+     "offset": 1236,
+     "count": 792,
+     "probe": [
+      [
+       3.35,
+       0.88,
+       -8.74
+      ],
+      [
+       2.384,
+       0.88,
+       -10.009
+      ],
+      [
+       3.98,
+       0.38,
+       -9.75
+      ]
+     ]
+    },
+    {
+     "name": "terrasse__metal",
+     "material": "metal",
+     "offset": 2028,
+     "count": 852,
+     "probe": [
+      [
+       5.74,
+       0.288,
+       -11.832
+      ],
+      [
+       4.061,
+       0.222,
+       -10.571
+      ],
+      [
+       3.35,
+       0.702,
+       -8.664
+      ]
+     ]
+    },
+    {
+     "name": "terrasse__snow",
+     "material": "snow",
+     "offset": 2880,
+     "count": 14580,
+     "probe": [
+      [
+       5.673,
+       1.178,
+       -11.772
+      ],
+      [
+       -5.501,
+       0.071,
+       -8.491
+      ],
+      [
+       3.113,
+       0.9,
+       -10.907
+      ]
+     ]
+    }
+   ],
+   "layers": {
+    "nuit": {
+     "texture": "terrasse.ktx2",
+     "range": 4.0
+    },
+    "lampes": {
+     "texture": "terrasse_lampes.ktx2",
+     "range": 4.0
+    }
+   }
   },
   "sofa": {
    "texture": "sofa.ktx2",
    "size": 1024,
-   "uvSet": "TEXCOORD_1"
+   "uvSet": "TEXCOORD_1",
+   "layers": {
+    "nuit": {
+     "texture": "sofa.ktx2",
+     "range": 2.0
+    },
+    "lampes": {
+     "texture": "sofa_lampes.ktx2",
+     "range": 16.0
+    }
+   }
   }
  },
  "lights": {
@@ -867,5 +1062,5 @@
    "sky": 1.0
   }
  },
- "generated": "2026-11-10T18:09:29Z"
+ "generated": "2026-11-10T22:18:46Z"
 }

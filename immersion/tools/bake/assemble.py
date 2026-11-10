@@ -5,7 +5,8 @@ cal = json.load(open(f"{work}/calibration.json"))
 scene = json.load(open("assets-src/bake/scene.json"))
 atlases = {}
 total = 0
-for g in ("salon", "sud", "nuit", "sofa"):
+# Les groupes viennent de l'export (un atlas par groupe de pièces), plus le canapé, cuit à part.
+for g in [*scene["groups"], "sofa"]:
     p = f"{work}/{g}.json"
     if not os.path.exists(p):
         continue

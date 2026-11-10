@@ -18,6 +18,8 @@ test("le panneau : bibliothèque, recherche, fiche, lecture", async ({ page }) =
   const errors = watchErrors(page);
   await enterWorld(page);
   await place(page, 1.6, -1.6, -Math.PI / 2);
+  // « Ouvrir Laterna » n'est proposé qu'une fois la proximité de l'écran recalculée (une image après le déplacement).
+  await expect.poll(() => state(page, "nearScreen"), { timeout: 15_000 }).toBe("salon");
   await page.evaluate(() => (window as unknown as { __immersion: Handle }).__immersion.openPanel());
   const panel = page.getByTestId("panel");
   await expect(panel).toBeVisible();

@@ -766,6 +766,8 @@ def preview():
     sc.world = w
     lm = json.load(open(os.path.join(OUT, "lightmaps.json")))
     for g, grp in scene["groups"].items():
+        if g not in lm["atlases"]:   # un groupe pas encore cuit : il n'apparaît pas dans l'aperçu
+            continue
         at = lm["atlases"][g]
         lay_imgs = load_layers(g, at)
         q = np.fromfile(os.path.join(OUT, at["uv"]), dtype="<u2").reshape(-1, 2).astype(np.float64) / 65535.0

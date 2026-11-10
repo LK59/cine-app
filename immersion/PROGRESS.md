@@ -322,17 +322,14 @@ coûteux, tant que ça reste raisonnable : en Ultra, correct sur une machine san
 couloir), pas lampe par lampe — une couche de lightmap par lampe coûterait trop ; la lumière des écrans et du feu
 ne projette pas d'ombre ; les objets posés (modèles) ne sont pas cuits.
 
-**État au 10/11, 23 h** — tourne sans surveillance : la cuisson finale en deux couches (`logs/bake.log`, 40 à
-50 min, lancée vers 22 h 55) puis `tools/apres-cuisson.sh` (`logs/suite.log` : build, captures de tous les lieux,
-affiche, portail jusqu'au vert). Le panorama v2 (nuit noire, forêts, village qui éclaire la vallée) est encore en
-rendu chez son agent : à l'arrivée, rebuild et captures `vue`, `baie`, `terrasse`, `dehors`.
-Ajouté depuis : terrasse en surplomb (falaise au nord), nuit noire, canapé v2 + plaid, clavier (AZERTY / QWERTY /
-QWERTZ, réglage), chaîne hi-fi. Scénarios 06, 07, 08 verts ; 01 à 05 à rejouer sur le build final.
+**État au 10/11, 23 h 30 — prêt à livrer.** Cuisson finale en deux couches faite (cinq atlas, 8,6 Mo), panorama
+v2 intégré, appliques ajoutées dans la chambre. Portail de l'application **vert** (`logs/gate-1.log`, 846 fichiers,
+`exit=0`) sur l'arbre rebasé en 10.34.0 ; rien n'a changé hors de `immersion/` depuis. Les huit scénarios
+Playwright passent sur le build de production. Poids de `public/assets` : 41 Mo.
 
-**Reste avant livraison** : lire `logs/suite.log` ; regarder `captures/` lieu par lieu ; commiter
-`public/assets/lightmaps/` et l'affiche ; intégrer le panorama v2 ; scénarios 01–08 ; poids (≈ 44 Mo attendus pour
-40 visés) ; portail vert sur cet arbre ; fusion (avance rapide), image candidate, bascule, vérification, push, CI,
-ménage (`cine-regress-c992edf9`, `immersion-preview`).
+**Reste** : instance jetable du commit final et scénarios à travers l'application ; fusion dans `main` (avance
+rapide) ; image depuis une copie propre ; bascule ; vérification ; push ; CI ; prévenir l'autre session (scan X-Ray
+à relancer) ; ménage (`cine-regress-*`, `immersion-preview`).
 
 ## Phase 2
 

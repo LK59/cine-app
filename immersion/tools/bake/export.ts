@@ -154,6 +154,7 @@ const lights = [
   ...CANDLES.slice(26).map((c, i) => ({ type: "point", name: `bougie-${i}`, layer: "nuit", position: [c.p[0] - (c.p[0] > BREAST.face - 1 ? 0.06 : 0), c.p[1] + c.h + 0.06, c.p[2]], color: hex("#ffa055"), intensity: 1.6, radius: 0.03 })),
   ...PENDANTS.map(([x, y, z], i) => ({ type: "point", name: `suspension-${i}`, layer: "lampes", position: [x, y - 0.02, z], color: hex("#ffcf9a"), intensity: 8, radius: 0.05 })),
   { type: "point", name: "mezzanine", layer: "lampes", position: [1.2, ROOM.loft + 1.7, 7.4], color: hex("#ffc488"), intensity: 11, radius: 0.2 },
+  ...NIGHT_LAMPS.screenSconces.map(([x, y, z], i) => ({ type: "point", name: `applique-ecran-${i}`, layer: "lampes", position: [x - 0.12, y, z], color: hex("#ffbf80"), intensity: 6, radius: 0.06 })),
   ...NIGHT_LAMPS.sconces.map(([x, y, z], i) => ({ type: "point", name: `applique-${i}`, layer: "lampes", position: [x, y, z - 0.16], color: hex("#ffbf80"), intensity: 5, radius: 0.06 })),
   ...NIGHT_LAMPS.bedside.map(([x, y, z], i) => ({ type: "point", name: `chevet-${i}`, layer: "lampes", position: [x, y, z], color: hex("#ffc083"), intensity: 6, radius: 0.1 })),
   // Le bain : la lumière au fond de la cuve, qui remonte par l'eau et teinte la margelle.

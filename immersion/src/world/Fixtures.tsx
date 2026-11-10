@@ -71,6 +71,9 @@ export function Fixtures() {
         {NIGHT_LAMPS.sconces.map(([x, y, z], i) => (
           <mesh key={i} geometry={g.sconce} material={m.sconce} position={[x, y, z - 0.07]} />
         ))}
+        {NIGHT_LAMPS.screenSconces.map(([x, y, z], i) => (
+          <mesh key={`tv-${i}`} geometry={g.sconce} material={m.sconce} position={[x, y, z]} />
+        ))}
         {NIGHT_LAMPS.bedside.map(([x, y, z], i) => (
           <mesh key={i} geometry={g.bedside} material={m.shadeNight} position={[x, y, z]} />
         ))}

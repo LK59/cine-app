@@ -20,6 +20,14 @@ export const NIGHT_LAMPS = {
     [BED.headX + 0.28, 0.98, BED.z - BED.width / 2 - 0.42],
     [BED.headX + 0.28, 0.98, BED.z + BED.width / 2 + 0.42],
   ] as [number, number, number][],
+  /**
+   * Deux appliques de part et d'autre de la télévision de la chambre, sur le mur est : sans elles, ce
+   * mur — à l'opposé des lampes de chevet — restait dans le noir.
+   */
+  screenSconces: [
+    [PLAN.bedroom.x1 - 0.07, 1.78, BED.z - 1.42],
+    [PLAN.bedroom.x1 - 0.07, 1.78, BED.z + 1.42],
+  ] as [number, number, number][],
 };
 
 /**
@@ -67,6 +75,7 @@ export function buildNight(): Part {
   wood.span(-4.6, -3.4, 0.78, 0.82, z0, z0 + 0.34, 0);
   for (const x of [-4.55, -3.45]) metal.span(x - 0.015, x + 0.015, 0, 0.78, z0 + 0.03, z0 + 0.31);
   for (const [x, y, z] of NIGHT_LAMPS.sconces) metal.span(x - 0.05, x + 0.05, y - 0.16, y - 0.12, z - 0.09, z);
+  for (const [x, y, z] of NIGHT_LAMPS.screenSconces) metal.span(x - 0.02, x + 0.07, y - 0.16, y - 0.12, z - 0.05, z + 0.05);
   kits.get("rug").rounded([5.6, 0.02, 0.9], 0.01, { at: [-2.1, 0.01, (z0 + hall.z1) / 2 - 0.02] });
 
   // ── La chambre ──────────────────────────────────────────────────────────────

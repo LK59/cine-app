@@ -4,7 +4,8 @@
 # Voir tools/bake/README.md.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-ONLY="salon,sud,nuit"; ONLY_GIVEN=0; SOFA="assets-src/sofa/sofa_bake.glb"; SAMPLES=128; CAL=0; PREVIEW=1; LAYERS="nuit,lampes"; EXPO=""; MARGIN=""; CPUS=5
+# Par défaut : tous les groupes de l'export (salon, sud, nuit, terrasse… — la liste vient de scene.json).
+ONLY="$(python3 -I -c "import json;print(','.join(json.load(open('assets-src/bake/scene.json'))['groups']))" 2>/dev/null || echo salon,sud,nuit)"; ONLY_GIVEN=0; SOFA="assets-src/sofa/sofa_bake.glb"; SAMPLES=128; CAL=0; PREVIEW=1; LAYERS="nuit,lampes"; EXPO=""; MARGIN=""; CPUS=5
 while [ $# -gt 0 ]; do
   case "$1" in
     --only) ONLY="$2"; ONLY_GIVEN=1; shift 2;;
@@ -58,7 +59,7 @@ for g in "${GROUPS_[@]}"; do
       cp "assets-src/bake/work/$stem.png" "assets-src/bake/work/${stem}_brut.png"
       ffmpeg -v error -y -i "assets-src/bake/work/${stem}_brut.png" -vf "format=gbrp,dilation,dilation,dilation" "assets-src/bake/work/$stem.png"
     fi
-    case "$g" in nuit) encode "$stem" 450000;; sofa) encode "$stem" 700000;; *) encode "$stem" 1800000;; esac
+    case "$g" in nuit) encode "$stem" 450000;; sofa|terrasse) encode "$stem" 700000;; *) encode "$stem" 1800000;; esac
   done
 done
 python3 -I tools/bake/assemble.py
