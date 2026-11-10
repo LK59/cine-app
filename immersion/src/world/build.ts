@@ -73,6 +73,9 @@ function place(geometry: BufferGeometry, { at, rot, order }: Placement): BufferG
   return geometry.applyMatrix4(matrix);
 }
 
+/** Sans index : la fusion veut des pièces toutes indexées ou toutes non indexées. */
+const flat = (geometry: BufferGeometry) => (geometry.index ? geometry.toNonIndexed() : geometry);
+
 /** Les pièces d'une même matière, fusionnées en un seul maillage. */
 export class Kit {
   private parts: BufferGeometry[] = [];
@@ -106,14 +109,14 @@ export class Kit {
     // L'axe X local de la boîte est couché sur la direction de la poutre.
     quaternion.setFromUnitVectors(new Vector3(1, 0, 0), b.clone().sub(a).normalize());
     matrix.compose(a.add(b).multiplyScalar(0.5), quaternion, scale);
-    this.parts.push(geometry.applyMatrix4(matrix).toNonIndexed());
+    this.parts.push(flat(geometry.applyMatrix4(matrix)));
     return this;
   }
 
   /** N'importe quelle géométrie : ses UV sont posés ici, puis elle est placée. */
   add(geometry: BufferGeometry, placement: Placement, grain: Axis | null = null): this {
     const projected = projectUVs(geometry, this.tile, grain);
-    this.parts.push(place(projected, placement).toNonIndexed());
+    this.parts.push(flat(place(projected, placement)));
     return this;
   }
 

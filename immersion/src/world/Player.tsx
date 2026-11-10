@@ -104,7 +104,16 @@ export function Player() {
     if (Math.abs(target - seatBlend.current) < 0.001) seatBlend.current = target;
     if (seatBlend.current > 0) eye.lerp(seat, MathUtils.smootherstep(seatBlend.current, 0, 1));
 
+    // Le panneau est ouvert : le regard glisse vers lui, par le plus court chemin.
+    if (rig.aim && state.mode === "panel") {
+      const k = 1 - Math.exp(-dt * 9);
+      const turn = Math.atan2(Math.sin(rig.aim.yaw - rig.yaw), Math.cos(rig.aim.yaw - rig.yaw));
+      rig.yaw += turn * k;
+      rig.pitch += (rig.aim.pitch - rig.pitch) * k;
+    }
+
     camera.position.copy(eye);
+    rig.eye.copy(eye);
     euler.set(rig.pitch, rig.yaw, 0);
     camera.quaternion.setFromEuler(euler);
     if (camera.fov !== state.settings.fov) {

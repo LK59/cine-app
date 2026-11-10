@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { DoubleSide, MeshStandardMaterial } from "three";
+import { DoubleSide } from "three";
 import { Kit } from "./build";
 import { BREAST, ROOF_ANGLE, ROOM, TRUSSES, TV, roofY, span, type Solid } from "./layout";
 import { Solids } from "./Solids";
@@ -192,10 +192,6 @@ export function Shell() {
     return { floor: floor.build(), stone: stone.build(), slab: slab.build(), plaster: plaster.build(), timber: timber.build(), ceiling: ceiling.build() };
   }, []);
 
-  // La dalle de la télévision, éteinte : un noir brillant, où se reflète la pièce.
-  const screenOff = useMemo(() => new MeshStandardMaterial({ color: "#010101", roughness: 0.05, metalness: 0, envMapIntensity: 3 }), []);
-  const bezel = useMemo(() => new MeshStandardMaterial({ color: "#0b0b0c", roughness: 0.45, metalness: 0.7 }), []);
-
   return (
     <group>
       <mesh geometry={geometry.floor} material={floorMat} receiveShadow />
@@ -204,22 +200,6 @@ export function Shell() {
       <mesh geometry={geometry.plaster} material={plasterMat} receiveShadow />
       <mesh geometry={geometry.timber} material={timberMat} receiveShadow castShadow />
       <mesh geometry={geometry.ceiling} material={ceilingMat} material-side={DoubleSide} receiveShadow castShadow />
-      {/* Le cadre de l'écran : quatre baguettes noires autour de la dalle. */}
-      <group position={[TV.x, TV.y, TV.z]} rotation-y={-Math.PI / 2} name="tv">
-        <mesh name="tv-screen" material={screenOff}>
-          <planeGeometry args={[TV.width, TV.height]} />
-        </mesh>
-        {[
-          [0, TV.height / 2 + 0.014, TV.width + 0.056, 0.028],
-          [0, -TV.height / 2 - 0.014, TV.width + 0.056, 0.028],
-          [TV.width / 2 + 0.014, 0, 0.028, TV.height],
-          [-TV.width / 2 - 0.014, 0, 0.028, TV.height],
-        ].map(([x, y, w, h], i) => (
-          <mesh key={i} position={[x, y, 0.012]} material={bezel}>
-            <boxGeometry args={[w, h, 0.05]} />
-          </mesh>
-        ))}
-      </group>
       <Solids solids={SOLIDS} />
     </group>
   );

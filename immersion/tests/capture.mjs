@@ -38,7 +38,7 @@ page.on("pageerror", (e) => errors.push("pageerror: " + e.message + "\n" + Strin
 page.on("response", (r) => r.status() >= 400 && errors.push(`HTTP ${r.status()} ${r.url()}`));
 await page.addInitScript((quality) => {
   try {
-    const key = "laterna:immersion:settings:v1";
+    const key = "laterna:immersion:settings:v2";
     const current = JSON.parse(localStorage.getItem(key) || "{}");
     localStorage.setItem(key, JSON.stringify({ ...current, quality }));
   } catch {}
@@ -53,6 +53,13 @@ if (wanted.includes("accueil")) await page.screenshot({ path: `${OUT}/accueil.jp
 await enter.click();
 await page.waitForFunction(() => window.__immersion.store.getState().phase === "world", null, { timeout: 20_000 });
 await page.evaluate(() => window.__immersion.store.getState().setMode("walk"));
+
+// TV=1 : une mire joue sur l'écran pendant les captures (image, halo, ambilight).
+if (process.env.TV) {
+  await page.evaluate(() => window.__immersion.playTestClip("/api/immersion/mire.webm"));
+  await page.waitForFunction(() => window.__immersion.store.getState().playback.status === "playing", null, { timeout: 30_000 });
+  await page.waitForTimeout(2500);
+}
 
 for (const name of wanted) {
   const view = VIEWS[name];
@@ -71,6 +78,52 @@ for (const name of wanted) {
   await page.addStyleTag({ content: ".reticle,.hints{display:none!important}" });
   await page.screenshot({ path: `${OUT}/${name}.jpg`, type: "jpeg", quality: 85 });
   console.log(`capture ${name}`);
+}
+
+// ── L'interface : le panneau Laterna, une fiche, le menu pause, les réglages ─────────────────────
+const ui = async (name) => {
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: `${OUT}/${name}.jpg`, type: "jpeg", quality: 88 });
+  console.log(`capture ${name}`);
+};
+if (wanted.some((w) => ["panneau", "fiche", "pause", "reglages"].includes(w))) {
+  await page.evaluate(() => {
+    const { rig, store, panelDebug } = window.__immersion;
+    panelDebug.skipLockCheck = true;
+    const target = rig.position.clone();
+    target.set(-0.6, 0, -1.5);
+    rig.teleport = target;
+    rig.yaw = -Math.PI / 2;
+    rig.pitch = 0;
+    store.getState().setSeated(false);
+  });
+  await page.waitForTimeout(900);
+  if (wanted.includes("panneau") || wanted.includes("fiche")) {
+    await page.evaluate(() => window.__immersion.openPanel());
+    await page.getByTestId("panel").waitFor({ state: "visible", timeout: 15_000 });
+    await page.waitForTimeout(2500);
+    if (wanted.includes("panneau")) await ui("panneau");
+    if (wanted.includes("fiche")) {
+      // Un vrai clic de souris, à l'endroit où l'affiche est dessinée (le panneau est en perspective).
+      const box = await page.locator(".panel section:nth-of-type(2) .row .poster").first().boundingBox();
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 3);
+      await page.waitForTimeout(1500);
+      await ui("fiche");
+    }
+    await page.evaluate(() => window.__immersion.closePanel());
+  }
+  if (wanted.includes("pause") || wanted.includes("reglages")) {
+    // Comme Échap : le pointeur est rendu (s'il était pris), et le menu pause s'ouvre.
+    await page.evaluate(() => document.pointerLockElement && document.exitPointerLock());
+    await page.waitForTimeout(400);
+    await page.evaluate(() => window.__immersion.store.getState().setMode("paused"));
+    if (wanted.includes("pause")) await ui("pause");
+    if (wanted.includes("reglages")) {
+      await page.getByTestId("open-settings").click();
+      await ui("reglages");
+    }
+    await page.evaluate(() => window.__immersion.store.getState().setMode("walk"));
+  }
 }
 
 const fps = await page.evaluate(

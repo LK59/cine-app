@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { browserLang, translate, type Key, type Lang } from "../lib/i18n";
-import { loadSettings, saveSettings, type Settings } from "../lib/settings";
+import { AUTO_LEVELS, loadSettings, profileOf, saveSettings, type QualityProfile, type Settings } from "../lib/settings";
 import type { Unsupported } from "../lib/capability";
 
 /**
@@ -17,6 +17,24 @@ import type { Unsupported } from "../lib/capability";
 export type Phase = "checking" | "unsupported" | "loading" | "gate" | "world" | "lost" | "expired" | "leaving";
 export type Mode = "walk" | "paused" | "panel";
 
+/** Ce que la télévision est en train de faire. */
+export interface Playback {
+  status: "idle" | "loading" | "playing" | "paused" | "ended" | "error";
+  itemId: string | null;
+  title: string | null;
+  /** Secondes. Mis à jour deux fois par seconde au plus : c'est l'affichage qui lit ceci. */
+  position: number;
+  duration: number;
+  muted: boolean;
+  /** Le flux attend-il des données (mise en mémoire tampon) ? */
+  waiting: boolean;
+  error: string | null;
+  /** DirectPlay, DirectStream ou Transcode — tel que la négociation l'a décidé. */
+  method: string | null;
+}
+
+export const IDLE_PLAYBACK: Playback = { status: "idle", itemId: null, title: null, position: 0, duration: 0, muted: false, waiting: false, error: null, method: null };
+
 export interface ImmersionState {
   phase: Phase;
   unsupported: Unsupported | null;
@@ -32,6 +50,14 @@ export interface ImmersionState {
   sceneReady: boolean;
   lang: Lang;
   settings: Settings;
+  /** Le niveau courant d'« Auto » (0 = Ultra) : réglé par le moniteur de performance, jamais gardé. */
+  autoLevel: number;
+  stepAuto: (delta: number) => void;
+  playback: Playback;
+  setPlayback: (patch: Partial<Playback>) => void;
+  /** Le HUD de lecture se montre un instant à chaque geste (lecture, saut, son) : ce compteur le réveille. */
+  hudWake: number;
+  wakeHud: () => void;
   setPhase: (phase: Phase) => void;
   setUnsupported: (why: Unsupported | null) => void;
   setMode: (mode: Mode) => void;
@@ -54,6 +80,15 @@ export const useStore = create<ImmersionState>((set, get) => ({
   sceneReady: false,
   lang: browserLang(),
   settings: loadSettings(),
+  autoLevel: 0,
+  stepAuto: (delta) => {
+    const next = Math.max(0, Math.min(AUTO_LEVELS.length - 1, get().autoLevel + delta));
+    if (next !== get().autoLevel) set({ autoLevel: next });
+  },
+  playback: IDLE_PLAYBACK,
+  setPlayback: (patch) => set({ playback: { ...get().playback, ...patch } }),
+  hudWake: 0,
+  wakeHud: () => set({ hudWake: get().hudWake + 1 }),
   setPhase: (phase) => set({ phase }),
   setUnsupported: (unsupported) => set({ unsupported, phase: unsupported ? "unsupported" : "loading" }),
   setMode: (mode) => set(mode === "paused" ? { mode } : { mode, pauseView: "menu" }),
@@ -79,4 +114,9 @@ export const useStore = create<ImmersionState>((set, get) => ({
 export function useT(): (key: Key) => string {
   const lang = useStore((s) => s.lang);
   return (key) => translate(lang, key);
+}
+
+/** Le profil de qualité en vigueur. Une référence stable par niveau : rien ne se redessine pour rien. */
+export function useProfile(): QualityProfile {
+  return useStore((s) => profileOf(s.settings.quality, s.autoLevel));
 }
