@@ -34,6 +34,21 @@
         "public/assets/models/sofa/sofa.bin",
         "public/assets/models/sofa/sofa.json"
       ]
+    },
+    {
+      "id": "fonts",
+      "name": "Polices Inter et Outfit (sous-ensembles latins, WOFF2)",
+      "what": "Deux polices variables servies par la page elle-même (aucune requête vers un service de polices) : Inter pour les textes, Outfit pour le logo et les titres.",
+      "source_name": "Inter (Rasmus Andersson) ; Outfit (The Outfit Project Authors)",
+      "source_url": "https://github.com/rsms/inter ; https://github.com/Outfitio/Outfit-Fonts",
+      "licence_name": "SIL Open Font License 1.1",
+      "licence_url": "public/fonts/OFL-Inter.txt, public/fonts/OFL-Outfit.txt (dans ce dépôt)",
+      "licence_summary": "Utilisation, copie, intégration et redistribution libres, y compris avec un logiciel, tant que la licence et les mentions de droits accompagnent les fichiers et que les polices ne sont pas vendues seules.",
+      "attribution": "Les deux fichiers de licence sont servis à côté des polices.",
+      "disclaimer": "Aucune.",
+      "derived": "Sous-ensembles non modifiés.",
+      "use": "L'interface du mode : accueil, menu, réglages, panneau.",
+      "dir": "public/fonts"
     }
   ]
 }

@@ -19,6 +19,9 @@ export const VIEWS = {
   salon: { x: -3.6, z: 2.6, yaw: -0.75, pitch: 0.1 },
   tv: { x: -0.2, z: -1.5, yaw: -Math.PI / 2, pitch: 0.12 },
   baie: { x: 1.4, z: 1.2, yaw: 0.12, pitch: 0.22 },
+  // Le dehors : au pied de la baie, puis par une fenêtre ouest.
+  vallee: { x: 0.3, z: -5.6, yaw: 0.05, pitch: 0.02 },
+  ouest: { x: -3.6, z: -3.2, yaw: 1.35, pitch: 0.02 },
   canape: { x: -1.08, z: -1.5, yaw: -Math.PI / 2, pitch: 0.06, seated: true },
   charpente: { x: 3.4, z: 2.2, yaw: 0.85, pitch: 0.62 },
   retour: { x: 2.6, z: -5.2, yaw: 2.55, pitch: 0.05 },

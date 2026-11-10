@@ -7,6 +7,7 @@ import { rig, resetRig } from "./world/rig";
 import { Intro } from "./ui/Intro";
 import { PauseMenu } from "./ui/PauseMenu";
 import { BenchOverlay } from "./ui/BenchOverlay";
+import { timing as benchTiming } from "./bench/bench";
 import { Hints } from "./ui/Hints";
 import { FpsCounter, Hud } from "./ui/Hud";
 import { closePanel, debug, openPanel } from "./state/actions";
@@ -44,7 +45,7 @@ export function App() {
       }
     );
     // Prise de test et de capture : l'état, et le visiteur qu'on peut poser où l'on veut.
-    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug };
+    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug, benchTiming };
     // La page s'en va, quelle qu'en soit la raison : l'arrêt de la lecture part quand même.
     window.addEventListener("pagehide", stopOnLeave);
     return () => window.removeEventListener("pagehide", stopOnLeave);

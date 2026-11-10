@@ -44,7 +44,7 @@ head = "| Nom | Source | Auteur(s) | Licence | Usage | Fichiers produits |\n|---
 out = ["# Assets de l'Immersion", "",
        "Tout ce qui est listé dans les sections Poly Haven est sous licence **CC0 1.0** (domaine public) : on peut l'utiliser, le modifier et le redistribuer sans condition, même pour un usage commercial. La mention de l'auteur n'est pas obligatoire, mais on la garde par courtoisie.",
        "",
-       "Les textures, modèles et ciels viennent tous de [Poly Haven](https://polyhaven.com), qui publie uniquement du CC0. Une seule autre source existe : le panorama de montagne (section « Autres assets » en bas), sous une licence différente, avec une mention obligatoire.",
+       "Les textures et les modèles viennent de [Poly Haven](https://polyhaven.com), qui publie uniquement du CC0. Le reste est décrit dans la section « Autres assets » en bas : le panorama de montagne (une licence différente, avec une mention obligatoire), le canapé (création du projet) et les polices (OFL).",
        "",
        "Ce fichier est généré : ne pas l'éditer à la main. Il vient de `tools/assets/manifest.json` et des fiches `assets-src/*/info.json`. Pour le refaire : `python3 -I tools/assets/gen-assets-md.py`. Les commandes pour tout reconstruire sont dans `tools/assets/README.md`.",
        "",

@@ -35,7 +35,10 @@ tools/panorama/run.sh vp 5 tools/panorama/viewpoint.py
 tools/panorama/build.sh
 
 # 4. KTX2 (UASTC + RDO + zstd, sRGB, mipmaps) et panorama.json
-tools/panorama/encode.sh assets-src/panorama/final/out public/assets/panorama 1.0 1.0
+# hauteurs ramenées à un multiple de 4 (exigé par les textures compressées : sinon la couche s'affiche noire)
+docker run --rm --name immersion-pano-fit --cpus 3 --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/work -w /work \
+  --entrypoint node immersion-assets-tools tools/panorama/fit4.mjs assets-src/panorama/final/out assets-src/panorama/final/fit4
+tools/panorama/encode.sh assets-src/panorama/final/fit4 public/assets/panorama 1.5 1.0
 python3 -I tools/panorama/write_json.py
 python3 -I tools/assets/gen-assets-md.py
 ```

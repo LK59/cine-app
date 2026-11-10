@@ -25,8 +25,7 @@ export type TextureSet =
   | "snow"
   | "leather"
   | "counter_stone"
-  | "linen_white"
-  | "bark";
+  | "linen_white";
 
 export interface PbrOptions {
   /** Teinte multipliée à la couleur de la texture. */

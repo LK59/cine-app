@@ -2,13 +2,13 @@
 
 Tout ce qui est listé dans les sections Poly Haven est sous licence **CC0 1.0** (domaine public) : on peut l'utiliser, le modifier et le redistribuer sans condition, même pour un usage commercial. La mention de l'auteur n'est pas obligatoire, mais on la garde par courtoisie.
 
-Les textures, modèles et ciels viennent tous de [Poly Haven](https://polyhaven.com), qui publie uniquement du CC0. Une seule autre source existe : le panorama de montagne (section « Autres assets » en bas), sous une licence différente, avec une mention obligatoire.
+Les textures et les modèles viennent de [Poly Haven](https://polyhaven.com), qui publie uniquement du CC0. Le reste est décrit dans la section « Autres assets » en bas : le panorama de montagne (une licence différente, avec une mention obligatoire), le canapé (création du projet) et les polices (OFL).
 
 Ce fichier est généré : ne pas l'éditer à la main. Il vient de `tools/assets/manifest.json` et des fiches `assets-src/*/info.json`. Pour le refaire : `python3 -I tools/assets/gen-assets-md.py`. Les commandes pour tout reconstruire sont dans `tools/assets/README.md`.
 
-Poids total de `public/assets/` : **28.3 Mo**.
+Poids total de `public/assets/` : **21.3 Mo**.
 
-## Textures (15)
+## Textures (13)
 
 | Nom | Source | Auteur(s) | Licence | Usage | Fichiers produits |
 |---|---|---|---|---|---|
@@ -25,8 +25,6 @@ Poids total de `public/assets/` : **28.3 Mo**.
 | Brown Leather (`leather`) | [brown_leather](https://polyhaven.com/a/brown_leather) | Rob Tuytel | CC0 1.0 | Cuir brun (fauteuils, détails). | `textures/leather/` : color, normal, arm (.ktx2), 0.7 Mo |
 | Granite Tile (`counter_stone`) | [granite_tile](https://polyhaven.com/a/granite_tile) | Charlotte Baglioni | CC0 1.0 | Plan de travail de la cuisine (granit sombre). | `textures/counter_stone/` : color, normal, arm (.ktx2), 0.5 Mo |
 | Jogging Melange (`linen_white`) | [jogging_melange](https://polyhaven.com/a/jogging_melange) | colormass, Rico Cilliers | CC0 1.0 | Linge de lit blanc / crème. | `textures/linen_white/` : color, normal, arm (.ktx2), 0.6 Mo |
-| Metal Plate 02 (`metal_black`) | [metal_plate_02](https://polyhaven.com/a/metal_plate_02) | Rob Tuytel | CC0 1.0 | Fer forgé noir (cadres, pieds, accessoires). | `textures/metal_black/` : color, normal, arm (.ktx2), 0.5 Mo |
-| Pine Bark (`bark`) | [pine_bark](https://polyhaven.com/a/pine_bark) | Dimitrios Savva | CC0 1.0 | Écorce de conifère (troncs dehors). | `textures/bark/` : color, normal, arm (.ktx2), 0.7 Mo |
 
 Chaque texture existe en trois cartes : `color` (sRGB), `normal` (convention OpenGL) et `arm` (occlusion en rouge, rugosité en vert, métal en bleu).
 
@@ -45,15 +43,11 @@ Alternatives écartées (au cas où on change d'avis) :
 - `leather` : [fabric_leather_01](https://polyhaven.com/a/fabric_leather_01), [leather_red_02](https://polyhaven.com/a/leather_red_02)
 - `counter_stone` : [granite_tile_03](https://polyhaven.com/a/granite_tile_03), [granite_tile_04](https://polyhaven.com/a/granite_tile_04)
 - `linen_white` : [terlenka](https://polyhaven.com/a/terlenka), [curly_teddy_natural](https://polyhaven.com/a/curly_teddy_natural)
-- `metal_black` : [black_painted_planks](https://polyhaven.com/a/black_painted_planks), [worn_shutter](https://polyhaven.com/a/worn_shutter)
-- `bark` : [knotted_pine_bark](https://polyhaven.com/a/knotted_pine_bark), [japanese_cedar_bark](https://polyhaven.com/a/japanese_cedar_bark)
 
-## Modèles 3D (19)
+## Modèles 3D (15)
 
 | Nom | Source | Auteur(s) | Licence | Usage | Fichiers produits |
 |---|---|---|---|---|---|
-| Modern Coffee Table 01 (`modern_coffee_table_01`) | [modern_coffee_table_01](https://polyhaven.com/a/modern_coffee_table_01) | Amin | CC0 1.0 | Table basse du salon. | `models/modern_coffee_table_01/modern_coffee_table_01.gltf` + .bin + 3 .ktx2, 4504 triangles, 0.5 Mo |
-| Modern Coffee Table 02 (`modern_coffee_table_02`) | [modern_coffee_table_02](https://polyhaven.com/a/modern_coffee_table_02) | Amin | CC0 1.0 | Table basse (variante). | `models/modern_coffee_table_02/modern_coffee_table_02.gltf` + .bin + 6 .ktx2, 13645 triangles, 1.1 Mo |
 | Side Table 01 (`side_table_01`) | [side_table_01](https://polyhaven.com/a/side_table_01) | James Ray Cock | CC0 1.0 | Table d'appoint à côté des canapés. | `models/side_table_01/side_table_01.gltf` + .bin + 3 .ktx2, 2756 triangles, 0.2 Mo |
 | Potted Plant 01 (`potted_plant_01`) | [potted_plant_01](https://polyhaven.com/a/potted_plant_01) | Rico Cilliers | CC0 1.0 | Plante en pot. | `models/potted_plant_01/potted_plant_01.gltf` + .bin + 6 .ktx2, 7775 triangles, 0.6 Mo |
 | Potted Plant 02 (`potted_plant_02`) | [potted_plant_02](https://polyhaven.com/a/potted_plant_02) | Rico Cilliers | CC0 1.0 | Plante en pot (variante). | `models/potted_plant_02/potted_plant_02.gltf` + .bin + 6 .ktx2, 7830 triangles, 0.5 Mo |
@@ -65,24 +59,17 @@ Alternatives écartées (au cas où on change d'avis) :
 | Mantel Clock 01 (`mantel_clock_01`) | [mantel_clock_01](https://polyhaven.com/a/mantel_clock_01) | Yann Kervran, Rico Cilliers | CC0 1.0 | Horloge posée sur la cheminée. | `models/mantel_clock_01/mantel_clock_01.gltf` + .bin + 3 .ktx2, 7597 triangles, 0.3 Mo |
 | Modern Arm Chair 01 (`modern_arm_chair_01`) | [modern_arm_chair_01](https://polyhaven.com/a/modern_arm_chair_01) | Vibrant Nordic | CC0 1.0 | Fauteuil moderne. | `models/modern_arm_chair_01/modern_arm_chair_01.gltf` + .bin + 6 .ktx2, 8916 triangles, 1.0 Mo |
 | Mid Century Lounge Chair (`mid_century_lounge_chair`) | [mid_century_lounge_chair](https://polyhaven.com/a/mid_century_lounge_chair) | Kuutti Siitonen | CC0 1.0 | Fauteuil lounge des années 50. | `models/mid_century_lounge_chair/mid_century_lounge_chair.gltf` + .bin + 3 .ktx2, 6148 triangles, 0.7 Mo |
-| Ottoman 01 (`Ottoman_01`) | [Ottoman_01](https://polyhaven.com/a/Ottoman_01) | Caspian Fortune | CC0 1.0 | Pouf. | `models/Ottoman_01/Ottoman_01.gltf` + .bin + 3 .ktx2, 4240 triangles, 0.7 Mo |
 | Hanging Picture Frame 02 (`hanging_picture_frame_02`) | [hanging_picture_frame_02](https://polyhaven.com/a/hanging_picture_frame_02) | James Ray Cock | CC0 1.0 | Cadre accroché au mur. | `models/hanging_picture_frame_02/hanging_picture_frame_02.gltf` + .bin + 6 .ktx2, 3678 triangles, 0.3 Mo |
 | Bar Chair Round 01 (`bar_chair_round_01`) | [bar_chair_round_01](https://polyhaven.com/a/bar_chair_round_01) | Dairon Sanchez | CC0 1.0 | Tabouret de bar rond. | `models/bar_chair_round_01/bar_chair_round_01.gltf` + .bin + 3 .ktx2, 14373 triangles, 1.1 Mo |
 | Vintage Day Bed (`vintage_day_bed`) | [vintage_day_bed](https://polyhaven.com/a/vintage_day_bed) | Aron Łyczek | CC0 1.0 | Banquette-lit ancienne. | `models/vintage_day_bed/vintage_day_bed.gltf` + .bin + 3 .ktx2, 2715 triangles, 0.7 Mo |
-| Classic Nightstand 01 (`ClassicNightstand_01`) | [ClassicNightstand_01](https://polyhaven.com/a/ClassicNightstand_01) | Kirill Sannikov | CC0 1.0 | Table de chevet. | `models/ClassicNightstand_01/ClassicNightstand_01.gltf` + .bin + 3 .ktx2, 2002 triangles, 0.2 Mo |
 | Wooden Lantern 01 (`wooden_lantern_01`) | [wooden_lantern_01](https://polyhaven.com/a/wooden_lantern_01) | James Ray Cock | CC0 1.0 | Lanterne en bois. | `models/wooden_lantern_01/wooden_lantern_01.gltf` + .bin + 6 .ktx2, 7600 triangles, 0.5 Mo |
 
 Géométrie compressée en meshopt, textures en KTX2 (aucune ressource embarquée). La page doit donc fournir un décodeur meshopt et un transcodeur KTX2.
 
-## Ciels (HDRI) (5)
+## Ciels (HDRI) (0)
 
 | Nom | Source | Auteur(s) | Licence | Usage | Fichiers produits |
 |---|---|---|---|---|---|
-| Qwantani Night (Pure Sky) (`qwantani_night_puresky`) | [qwantani_night_puresky](https://polyhaven.com/a/qwantani_night_puresky) | Greg Zaal, Jarod Guest | CC0 1.0 | Ciel de nuit étoilé (candidat principal). | `hdri/qwantani_night_puresky.hdr`, `hdri/qwantani_night_puresky_bg.jpg`, 1.7 Mo |
-| Kloppenheim 02 (Pure Sky) (`kloppenheim_02_puresky`) | [kloppenheim_02_puresky](https://polyhaven.com/a/kloppenheim_02_puresky) | Greg Zaal, Jarod Guest | CC0 1.0 | Ciel clair de fin de soirée. | `hdri/kloppenheim_02_puresky.hdr`, `hdri/kloppenheim_02_puresky_bg.jpg`, 1.6 Mo |
-| Qwantani Moonrise (Pure Sky) (`qwantani_moonrise_puresky`) | [qwantani_moonrise_puresky](https://polyhaven.com/a/qwantani_moonrise_puresky) | Greg Zaal, Jarod Guest | CC0 1.0 | Lever de lune. | non construit |
-| Rogland Clear Night (`rogland_clear_night`) | [rogland_clear_night](https://polyhaven.com/a/rogland_clear_night) | Greg Zaal | CC0 1.0 | Nuit claire avec horizon. | non construit |
-| Moonlit Golf (`moonlit_golf`) | [moonlit_golf](https://polyhaven.com/a/moonlit_golf) | Greg Zaal | CC0 1.0 | Paysage de nuit éclairé par la lune. | non construit |
 
 Le `.hdr` (1k) sert à l'éclairage. Le `_bg.jpg` (4096 px de large) sert de ciel visible.
 
@@ -100,4 +87,28 @@ Ces assets ne sont pas CC0. Chacun a sa licence et, quand elle l'exige, une ment
 - Phrase de non-responsabilité obligatoire : « The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30 »
 - Dérivé : Image rendue (adaptation) : pas une redistribution des données d'altitude. Les tuiles brutes restent dans assets-src/ (non versionné).
 - Usage : Décor lointain vu par la grande baie : trois couches (far, mid, near) pour la parallaxe.
-- Fichiers : non construit
+- Fichiers : `public/assets/panorama/far.ktx2`, `public/assets/panorama/mid.ktx2`, `public/assets/panorama/near.ktx2`, `public/assets/panorama/panorama.json`, 5.3 Mo
+
+### Canapé d'angle en U avec coussins (sofa_frame, sofa_cushions, pillows_a, pillows_b) (`sofa`)
+
+- Contenu : Modèle 3D original, généré par script (Blender en ligne de commande, géométrie calculée en numpy) : coque, accoudoirs et socle, 24 coussins d'assise et de dossier avec passepoil, 9 coussins décoratifs. Aucune texture (UV0 à l'échelle du monde : 1 unité = 1 m de tissu).
+- Source : original — generated by tools/sofa/build_sofa.py, tools/sofa/README.md (dans ce dépôt)
+- Licence : [same as the repository](LICENSE (à la racine du dépôt))
+- Ce que la licence permet et demande : Création originale du projet : aucune source tierce, la licence est celle du dépôt.
+- Mention obligatoire (à reproduire telle quelle, en anglais) : « Aucune mention obligatoire. »
+- Phrase de non-responsabilité obligatoire : « Aucune. »
+- Dérivé : Non : aucun modèle ou donnée tiers n'est utilisé.
+- Usage : Le grand canapé en U du salon, face au grand écran (gabarit exact : voir public/assets/models/sofa/sofa.json).
+- Fichiers : `public/assets/models/sofa/sofa.bin`, `public/assets/models/sofa/sofa.gltf`, `public/assets/models/sofa/sofa.json`, 1.4 Mo
+
+### Polices Inter et Outfit (sous-ensembles latins, WOFF2) (`fonts`)
+
+- Contenu : Deux polices variables servies par la page elle-même (aucune requête vers un service de polices) : Inter pour les textes, Outfit pour le logo et les titres.
+- Source : Inter (Rasmus Andersson) ; Outfit (The Outfit Project Authors), https://github.com/rsms/inter ; https://github.com/Outfitio/Outfit-Fonts
+- Licence : [SIL Open Font License 1.1](public/fonts/OFL-Inter.txt, public/fonts/OFL-Outfit.txt (dans ce dépôt))
+- Ce que la licence permet et demande : Utilisation, copie, intégration et redistribution libres, y compris avec un logiciel, tant que la licence et les mentions de droits accompagnent les fichiers et que les polices ne sont pas vendues seules.
+- Mention obligatoire (à reproduire telle quelle, en anglais) : « Les deux fichiers de licence sont servis à côté des polices. »
+- Phrase de non-responsabilité obligatoire : « Aucune. »
+- Dérivé : Sous-ensembles non modifiés.
+- Usage : L'interface du mode : accueil, menu, réglages, panneau.
+- Fichiers : `public/fonts/OFL-Inter.txt`, `public/fonts/OFL-Outfit.txt`, `public/fonts/inter-latin-ext.woff2`, `public/fonts/inter-latin.woff2`, `public/fonts/outfit-latin.woff2`, 0.2 Mo

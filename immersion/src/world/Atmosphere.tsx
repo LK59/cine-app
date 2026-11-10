@@ -49,7 +49,7 @@ export function Atmosphere() {
     if (frame.current <= 5) gl.shadowMap.needsUpdate = true;
     if (frame.current === 3 || frame.current === 5) {
       const target = new WebGLCubeRenderTarget(256, { type: HalfFloatType, generateMipmaps: true, minFilter: LinearMipmapLinearFilter });
-      const camera = new CubeCamera(0.1, 500, target);
+      const camera = new CubeCamera(0.1, 3000, target);
       camera.position.set(CHANDELIER.x, 2.3, CHANDELIER.z);
       camera.update(gl, scene);
       const pmrem = new PMREMGenerator(gl);

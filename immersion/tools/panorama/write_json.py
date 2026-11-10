@@ -5,7 +5,8 @@ import params as P
 extra = json.load(open("tools/assets/extra-assets.json"))["assets"][0]
 layers = {}
 for k, (lo, hi, w, h) in P.LAYERS.items():
-    layers[k] = {"file": f"{k}.ktx2", "width": w, "height": h, "from": lo}
+    # La hauteur encodée est ramenée au multiple de 4 supérieur (fit4.mjs) : les textures compressées l'exigent.
+    layers[k] = {"file": f"{k}.ktx2", "width": w, "height": -(-h // 4) * 4, "from": lo}
 terrain = float(open("assets-src/panorama/final/out/terrain_z.txt").read())
 doc = {"elevationMin": P.EL_MIN, "elevationMax": P.EL_MAX, "layers": layers,
        "main": {"lat": P.LAT, "lon": P.LON, "altitude": round(terrain, 1), "headingDeg": P.HEADING},
