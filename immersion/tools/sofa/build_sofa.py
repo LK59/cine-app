@@ -776,7 +776,7 @@ def make_pillow(Ha, rng, nG=PILLOW_GRID, chop=False, dimple=0.0, squash_body=Fal
             ht = h
             if chop:                                         # karate chop: a crease across the top
                 cx = tx * math.cos(chop_ang) + ty * math.sin(chop_ang)
-                ht = h - 0.034 * math.exp(-(cx / 0.13) ** 2) * gy ** 0.6 * (T / PILLOW_THICK)
+                ht = h - 0.05 * math.exp(-(cx / 0.12) ** 2) * gy ** 0.6 * (T / PILLOW_THICK)
             elif dimple:
                 ht = h - dimple * math.exp(-((tx ** 2 + ty ** 2) / 0.12))
             border = (i in (0, nG - 1)) or (j in (0, nG - 1))
@@ -792,9 +792,9 @@ def make_pillow(Ha, rng, nG=PILLOW_GRID, chop=False, dimple=0.0, squash_body=Fal
     Nn[:, 2] = np.where(P[:, 2] >= 0, 1.0, -1.0)
     Hh = np.array([Ha, Ha, 1.0])
     # creases out of the corners (both sheets), stronger on the visible one
-    P = corner_creases(P, Nn, Hh, rng, 0.0105, rad=0.20, axes=(0, 1), nmax=4)
+    P = corner_creases(P, Nn, Hh, rng, 0.017, rad=0.22, axes=(0, 1), nmax=4)
     P = corner_folds(P, Nn, Hh, rng, 0.0050, rad=0.13, axes=(0, 1))
-    P = undulation(P, Nn, rng, 0.0045, lam=(0.15, 0.35))
+    P = undulation(P, Nn, rng, 0.0075, lam=(0.15, 0.35))
     # cupping / sag
     P[:, 2] += rng.uniform(-0.03, 0.03) * (P[:, 0] / Ha) ** 2 - rng.uniform(0, 0.03) * (P[:, 1] / Ha) ** 2
     # dog-ears: the corners flick to one side
@@ -955,11 +955,15 @@ def build_pillows(world_mesh_list, back_info):
         Fp_ = [f[::-1] for f in pf] if det < 0 else pf
         UVp_ = [u[::-1] for u in puv] if det < 0 else puv
         target.add(V, Fo, UVo, psm)
+        if target.lm is None:
+            target.lm = []
+        target.lm += [[(x_ + (0.3 if k_ % 2 else 0.0), y_) for (x_, y_) in u] for k_, u in enumerate(UVo)]   # underside = its own island
         off_ = len(base_v) + sum(len(x) for x in placed_v)
         placed_v.append(V)
         placed_f += [tuple(i + off_ for i in f) for f in Fo]
         bvh = BVHTree.FromPolygons(np.vstack([base_v] + placed_v).tolist(), base_f + placed_f)
         target.add(Vt, Fp_, UVp_, ptsm)
+        target.lm += [None] * len(Fp_)
     return pa, pb, report
 
 
@@ -994,7 +998,7 @@ def build_plaid(bvh):
     zs = PLAID_ZC + np.linspace(-W / 2, W / 2, nv)
     xs = np.arange(-2.58, -0.50, 0.005)
     # --- heightfield seen from above, dilated 3 cm sideways so the blanket bridges the gaps between modules
-    dz = np.arange(-0.03, 0.031, 0.01)
+    dz = np.arange(-0.07, 0.071, 0.014)
     cols = []
     for z in zs:
         H = np.full(len(xs), np.nan)
@@ -1007,6 +1011,14 @@ def build_plaid(bvh):
             if best is not None:
                 H[k] = best
         cols.append(H)
+    # dilate the heights along x as well (a few cm): the cloth cannot dip between the ears of two cushions
+    for H in cols:
+        Hf = np.where(np.isnan(H), -9.0, H)
+        D = Hf.copy()
+        for sh in range(1, 7):
+            D[sh:] = np.maximum(D[sh:], Hf[:-sh])
+            D[:-sh] = np.maximum(D[:-sh], Hf[sh:])
+        H[:] = np.where(np.isnan(H), np.nan, np.maximum(D, Hf))
     profiles = []
     for z, H in zip(zs, cols):
         ok = np.where(~np.isnan(H))[0]
@@ -1055,6 +1067,15 @@ def build_plaid(bvh):
         u = np.linspace(0, L, nu)
         profiles.append(np.stack([np.interp(u, sa, Q3[:, c]) for c in range(3)], 1))
     G = np.array(profiles).transpose(1, 0, 2)            # (nu, nv, 3) base surface
+    # cloth is continuous across the width: smooth the columns against each other, then push out of the sofa again
+    for _ in range(3):
+        for _ in range(6):
+            G[:, 1:-1] = 0.25 * G[:, :-2] + 0.5 * G[:, 1:-1] + 0.25 * G[:, 2:]
+        for _ in range(2):
+            G[1:-1] = 0.25 * G[:-2] + 0.5 * G[1:-1] + 0.25 * G[2:]
+        for i in range(nu):
+            for j in range(nv):
+                G[i, j] = signed_push(G[i, j], bvh, PLAID_CLEAR, 3)
     uu = np.linspace(0, L, nu)[:, None] * np.ones((1, nv))
     vv = np.ones((nu, 1)) * np.linspace(0, W, nv)[None, :]
     Pu = np.gradient(G, axis=0)
@@ -1080,7 +1101,7 @@ def build_plaid(bvh):
     f1 = 0.5 + 0.5 * np.sin(2 * math.pi * vv / 0.23 + ph[0] + 1.7 * np.sin(2 * math.pi * uu / 0.55 + ph[1]))
     f2 = 0.5 + 0.5 * np.sin(2 * math.pi * uu / 0.33 + ph[2] + 2.2 * np.sin(2 * math.pi * vv / 0.8 + ph[3]))
     f3 = 0.5 + 0.5 * np.sin(2 * math.pi * (vv * 0.6 + uu * 0.8) / 0.4 + ph[4])
-    fold = (0.004 + 0.011 * free) * f1 + 0.0075 * f2 * (1 - 0.6 * free) + 0.0040 * f3
+    fold = (0.005 + 0.016 * free) * f1 + 0.0100 * f2 * (1 - 0.6 * free) + 0.0055 * f3
     G = G + Nn * fold[..., None]
     # wavy edges, sideways
     edge_w = smoothstep((0.16 - np.minimum(vv, W - vv)) / 0.16)
@@ -1163,7 +1184,7 @@ def build_plaid(bvh):
                     dh = unit(dh + 1e-9)
                     pos = pos + dh * step + np.array([0, 0, lat * 0.3])
                     h = surface_height(bvh, pos[0], pos[2])
-                    pos[1] = (h + 0.004) if h is not None else pos[1] - 0.6 * step
+                    pos[1] = (h + 0.004) if h is not None else pos[1]
                 wk = pitch * widths[k - 1]
                 rows.append((pos.copy(), wk))
             strand_ids.append(rows)
@@ -1261,15 +1282,16 @@ def make_lightmap_uvs(objs, meshes):
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
     bpy.ops.uv.unwrap(method="ANGLE_BASED", fill_holes=True, correct_aspect=True, use_subsurf_data=False, margin=0.0)
-    for o, m in zip(objs, meshes):
-        if m.lm is not None:
-            flat = np.array([c for f in m.lm for c in f], float)
-            o.update_from_editmode()
     bpy.ops.object.mode_set(mode="OBJECT")
     for o, m in zip(objs, meshes):
-        if m.lm is not None:
-            flat = np.array([c for f in m.lm for c in f], float)
-            o.data.uv_layers["lightmap"].data.foreach_set("uv", flat.ravel())
+        if m.lm is not None:       # parametric faces keep their own layout; None = keep the unwrap
+            me = o.data
+            layer = me.uv_layers["lightmap"]
+            cur = np.array([l.uv[:] for l in layer.data])
+            for fi, poly in enumerate(me.polygons):
+                if m.lm[fi] is not None:
+                    cur[poly.loop_start:poly.loop_start + poly.loop_total] = m.lm[fi]
+            layer.data.foreach_set("uv", cur.ravel())
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
     bpy.ops.uv.average_islands_scale()

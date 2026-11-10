@@ -4,8 +4,9 @@ Modèle original, entièrement généré par script. Aucune texture, aucune sour
 Sortie : `public/assets/models/sofa/sofa.gltf` + `sofa.bin` (géométrie meshopt) + `sofa.json`.
 
 Meshes (un seul matériau chacun, l'application pose ses matériaux d'après le nom) :
-`sofa_frame`, `sofa_cushions`, `pillows_a` (5), `pillows_b` (4). Repère glTF : X est, Y haut, Z sud.
-UV0 à l'échelle du monde : 1 unité = 1 m de tissu. Pas de tangentes, pas de couleurs de sommet.
+`sofa_frame`, `sofa_cushions`, `pillows_a` (5), `pillows_b` (4), `plaid` (plaid en laine, frange aux deux bouts courts ; le matériau doit être double face pour la frange). Repère glTF : X est, Y haut, Z sud.
+UV0 à l'échelle du monde : 1 unité = 1 m de tissu (plaid : U = longueur développée du drapé, V = largeur, sans déformation). UV1 (`TEXCOORD_1`) : atlas de lightmap unique, non chevauchant, partagé par tous les meshes (marge 8 px à 1024, ≈ 63 % rempli). Pas de tangentes, pas de couleurs de sommet.
+`assets-src/sofa/sofa_bake.glb` : copie non compressée (mêmes sommets, même ordre que `sofa.gltf`) pour cuire la lightmap.
 
 Toutes les commandes se lancent depuis `immersion/`. Prérequis : les images Docker
 `immersion-blender` (`docker build -t immersion-blender tools/blender`) et
@@ -51,4 +52,11 @@ docker run --rm --name immersion-sofa-render --cpus 5 --user $(id -u):$(id -g) -
 - Pas de simulation de tissu : le résultat est reproductible bit à bit (graine `SEED`).
 - Blender n'écrit TEXCOORD_0 que si le matériau échantillonne une texture : chaque matériau de
   remplissage a donc un nœud image de 1 px, que `optimize.mjs` retire ensuite.
+- Plis : creux rayonnant des coins (2 à 4 par coin), plis de tirage le long du bord avant, creux d'assise décentré,
+  plis horizontaux des dossiers là où ils fléchissent, ondulation basse fréquence ; chaque coussin a sa graine.
+- Coussins décoratifs : oreilles pincées, creux « karaté » ou fossette sur certains, deux écrasés, couture (tube) sur l'arête.
+- Plaid : colonnes de profil lues par lancers de rayons sur les coussins (hauteur vue du dessus, dilatée), lissées et poussées hors du
+  canapé, puis plis sortants uniquement ; deux feuilles qui se rejoignent au bord, frange en peigne. `PLAID_ZC` règle sa position.
+- UV1 : coutures (coin de chaque coussin, dessous des tubes, bord des feuilles), dépliage, échelle moyenne par aire 3D, empaquetage concave
+  (`LIGHTMAP_MARGIN`), le plaid et les coussins décoratifs gardent leur paramétrage propre (aucun chevauchement).
 - Le script vérifie qu'aucun coussin du même type ne traverse son voisin (`SAME-KIND CUSHION OVERLAPS`).

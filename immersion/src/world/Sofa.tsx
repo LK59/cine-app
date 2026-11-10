@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useLoader, useThree } from "@react-three/fiber";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import type { Material, Mesh, MeshStandardMaterial, Object3D, Texture } from "three";
+import { DoubleSide, type Material, type Mesh, type MeshStandardMaterial, type Object3D, type Texture } from "three";
 import { assetUrl } from "../lib/assets";
 import { useStore } from "../state/store";
 import type { MaterialId } from "./geometry/types";
@@ -32,19 +32,21 @@ function tartan(material: Material, tile: number): Material {
         vec2 m = vMapUv * ${tile.toFixed(3)};
         vec2 band = step( 0.5, fract( m / 0.22 ) );
         vec2 line = smoothstep( 0.035, 0.02, abs( fract( m / 0.22 + 0.25 ) - 0.5 ) );
-        vec3 red = vec3( 0.42, 0.05, 0.04 );
-        vec3 green = vec3( 0.04, 0.13, 0.09 );
+        vec3 red = vec3( 0.2, 0.018, 0.02 );
+        vec3 green = vec3( 0.016, 0.055, 0.04 );
         vec3 weave = mix( red, green, band.x * 0.75 );
         weave = mix( weave, weave * 0.45, band.y * 0.6 );
-        weave = mix( weave, vec3( 0.86, 0.8, 0.62 ), max( line.x, line.y ) * 0.7 );
+        weave = mix( weave, vec3( 0.5, 0.44, 0.3 ), max( line.x, line.y ) * 0.6 );
         // La texture garde son grain (sa valeur), le tartan donne la couleur.
         float grain = dot( diffuseColor.rgb, vec3( 0.3333 ) );
-        diffuseColor.rgb = weave * ( 0.55 + grain * 1.6 );
+        diffuseColor.rgb = weave * ( 0.6 + grain * 1.2 );
       }`
     );
   };
   const key = material.customProgramCacheKey();
   variant.customProgramCacheKey = () => `${key}|tartan`;
+  // Deux nappes minces et une frange : on en voit l'envers.
+  variant.side = DoubleSide;
   return variant;
 }
 

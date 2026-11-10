@@ -62,7 +62,7 @@ for (const mesh of root.listMeshes()) for (const prim of mesh.listPrimitives()) 
 console.log("UV1 range px", minU.toFixed(1), maxU.toFixed(1), "triangle area / atlas", (area / (R * R)).toFixed(3), "pixels covered twice or more", overlapPx, JSON.stringify(pairs));
 const r = (v) => Math.round(v * 1000) / 1000;
 const out = {
-  meshes: names, triangles, bbox: { min: all.min.map(r), max: all.max.map(r) },
+  meshes: names, triangles, meshBounds: Object.fromEntries(Object.entries(bbox).map(([k, b]) => [k, { min: b.min.map((v) => Math.round(v * 1000) / 1000), max: b.max.map((v) => Math.round(v * 1000) / 1000) }])), bbox: { min: all.min.map(r), max: all.max.map(r) },
   seatHeight, lightmapUv: "TEXCOORD_1", generator: "tools/sofa/build_sofa.py",
 };
 fs.writeFileSync(file.replace(/sofa\.gltf$/, "sofa.json"), JSON.stringify(out, null, 2) + "\n");

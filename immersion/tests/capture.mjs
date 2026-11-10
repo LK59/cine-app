@@ -41,6 +41,9 @@ export const VIEWS = {
   bain: { x: 1.4, z: -8.3, yaw: -2.2, pitch: -0.22 },
   dehors: { x: -3.8, z: -11.0, yaw: Math.PI + 0.35, pitch: 0.12 },
   foyer: { x: 1.9, z: -0.3, yaw: -Math.PI / 2 - 0.25, pitch: -0.2 },
+  // Le plaid et les coussins, de près.
+  plaid: { x: -0.9, z: -2.3, yaw: 1.25, pitch: -0.42 },
+  coussins: { x: -0.4, z: -0.6, yaw: 0.9, pitch: -0.35 },
   chat: { x: 2.3, z: -1.0, yaw: -Math.PI / 2 - 0.55, pitch: -0.5 },
   hifi: { x: -3.6, z: -0.1, yaw: Math.PI / 2, pitch: -0.25 },
   porte: { x: -0.6, z: -4.6, yaw: 0.05, pitch: -0.02 },
