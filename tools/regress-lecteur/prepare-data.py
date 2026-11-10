@@ -6,7 +6,8 @@ N'en recopie que ce qu'il faut pour servir le cinéma comme la production :
 - `kv_cache` — les réponses TMDB et le reste du cache disque : sans lui, chaque instance neuve
   redemanderait toute la bibliothèque à TMDB (quota partagé) et ouvrirait plus lentement ;
 - `app_settings` — **sauf** les clés des sous-titres générés, de la recherche de répliques, des
-  alertes et des tags posés d'office aux nouveaux comptes ;
+  alertes, des tags posés d'office aux nouveaux comptes et des acteurs à l'écran (sans quoi le
+  planificateur de l'instance enverrait ses propres ordres au vrai service d'analyse) ;
 - `sessions`, réduite à la colonne `jf_device` (jeton, compte et appareil effacés) : le ménage des
   appareils Jellyfin (`jellyfinDevicePrune.ts`, quinze minutes après le démarrage) protège les
   appareils des sessions vivantes. Sur une base vide, il aurait retiré de Jellyfin ceux d'appareils
@@ -20,7 +21,7 @@ import re
 import sqlite3
 import sys
 
-DROP_SETTINGS = re.compile(r"^(SUBTITLE_GEN|REPLIQUES|NEW_ACCOUNT|__ACTIVITY|__DIAGNOSIS)|ALERT|PUSH|WEBHOOK", re.I)
+DROP_SETTINGS = re.compile(r"^(SUBTITLE_GEN|REPLIQUES|NEW_ACCOUNT|XRAY|__ACTIVITY|__DIAGNOSIS)|ALERT|PUSH|WEBHOOK", re.I)
 
 
 def main() -> int:
