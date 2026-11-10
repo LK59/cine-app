@@ -27,5 +27,5 @@ if [ ! -d "$HERE/node_modules/@playwright/test" ]; then
 fi
 exec docker run --rm --name "$NAME" --network host --ipc host --cpus "${PW_CPUS:-6}" "${GPU[@]}" \
   --user "$(id -u):$(id -g)" -e HOME=/tmp --env-file "$ROOT/.env" \
-  -e BASE="${BASE:-http://localhost:3097}" -e IMMERSION_GL="$GL" -e CAPTURES=/immersion/captures \
+  -e SANS_APPLICATION="${SANS_APPLICATION:-}" -e BASE="${BASE:-http://localhost:3097}" -e IMMERSION_GL="$GL" -e CAPTURES=/immersion/captures \
   -v "$ROOT:/immersion" -w /immersion/tests "$IMAGE" npx playwright test "$@"

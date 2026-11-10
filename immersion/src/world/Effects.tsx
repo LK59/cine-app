@@ -1,4 +1,4 @@
-import { Bloom, EffectComposer, N8AO, SMAA, ToneMapping, Vignette } from "@react-three/postprocessing";
+import { Bloom, EffectComposer, FXAA, N8AO, ToneMapping, Vignette } from "@react-three/postprocessing";
 import { Effect, ToneMappingMode, type EffectComposer as Composer } from "postprocessing";
 import { useMemo } from "react";
 import { HalfFloatType } from "three";
@@ -13,7 +13,7 @@ import { useProfile, useStore } from "../state/store";
  * - Un **halo** léger sur ce qui dépasse le blanc (flammes, abat-jour, écran).
  * - Une **occlusion ambiante** en espace écran aux préréglages hauts seulement : elle coûte cher à
  *   un processeur graphique intégré.
- * - **Vignette**, puis **SMAA**.
+ * - **Vignette**, puis l'anticrénelage (**FXAA**).
  *
  * Le rendu de la scène se fait en demi-flottants : les flammes y valent plus que 1, et c'est ce
  * surplus que le halo ramasse.
@@ -69,7 +69,10 @@ export function Effects() {
 {/* Un grain très léger : il casse les aplats des dégradés sombres (les bandes d'un ciel de nuit) et donne
           à l'image sa matière. La vidéo, redessinée après le compositeur, n'en reçoit pas. */}
       {profile.bloom ? <primitive object={grain} dispose={null} /> : <></>}
-      {profile.smaa ? <SMAA /> : <></>}
+      {/* FXAA et non SMAA : SMAA charge ses deux tables depuis des images embarquées (`data:`), que la politique
+          de sécurité de l'application refuse (`img-src` sans `data:`) — l'effet restait sans ses tables en
+          production. FXAA n'est qu'un programme : rien à charger. */}
+      {profile.smaa ? <FXAA /> : <></>}
     </EffectComposer>
   );
 }

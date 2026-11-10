@@ -8,6 +8,8 @@ export function watchErrors(page: Page): string[] {
     const text = msg.text();
     // Le rendu logiciel de Chromium sans écran signale ses propres lenteurs : ce n'est pas la page.
     if (/GPU stall due to ReadPixels|Automatic fallback to software WebGL/i.test(text)) return;
+    // Sans application derrière l'aperçu (SANS_APPLICATION), ses routes répondent 502 : attendu, et seulement là.
+    if (process.env.SANS_APPLICATION && /status of 502/.test(text)) return;
     errors.push(text);
   };
   page.on("console", onConsole);

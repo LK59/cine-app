@@ -6,6 +6,13 @@ import { request } from "@playwright/test";
  */
 export default async function globalSetup() {
   const base = process.env.BASE || "http://localhost:3097";
+  // SANS_APPLICATION=1 : l'aperçu seul, sans instance derrière — pour ce qui ne demande rien à l'application
+  // (le monde, le son, les interactions, le clavier) et doit quand même tourner sous sa politique de sécurité.
+  if (process.env.SANS_APPLICATION) {
+    const fs = await import("node:fs");
+    fs.writeFileSync("/tmp/immersion-state.json", JSON.stringify({ cookies: [], origins: [] }));
+    return;
+  }
   const user = process.env.JELLYFIN_TEST_USER;
   const password = process.env.JELLYFIN_TEST_PASSWORD;
   if (!user || !password) throw new Error("JELLYFIN_TEST_USER / JELLYFIN_TEST_PASSWORD manquants (immersion/.env)");
