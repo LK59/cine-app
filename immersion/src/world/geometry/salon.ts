@@ -1,5 +1,5 @@
 import { CylinderGeometry, LatheGeometry, Vector2 } from "three";
-import { BREAST, CHANDELIER, FIRE, LAMPS, ROOM, SOFA, TABLE, TRUSSES, TV, roofY, span, type Solid } from "../layout";
+import { BREAST, CHANDELIER, DOOR, FIRE, HIFI, LAMPS, ROOM, SOFA, TABLE, TRUSSES, TV, roofY, span, type Solid } from "../layout";
 import { Kits, roof } from "./envelope";
 import type { Part } from "./types";
 
@@ -122,7 +122,10 @@ export function buildSalon(): Part {
   // La baie nord : poteaux jusqu'au toit, traverses, petits bois.
   const zb = N + 0.13;
   for (const x of BAY_POSTS) timber.span(x - 0.13, x + 0.13, 0, roofY(x) - 0.1, zb - 0.13, zb + 0.13, 1);
-  timber.beam([-W, 0.14, zb], [W, 0.14, zb], 0.26, 0.28);
+  // La lisse basse s'interrompt devant la porte-fenêtre : un simple seuil, qu'on enjambe sans y penser.
+  timber.beam([-W, 0.14, zb], [DOOR.x0 - 0.02, 0.14, zb], 0.26, 0.28);
+  timber.beam([DOOR.x1 + 0.02, 0.14, zb], [W, 0.14, zb], 0.26, 0.28);
+  timber.span(DOOR.x0 - 0.02, DOOR.x1 + 0.02, 0, 0.02, zb - 0.12, zb + 0.12, 0);
   timber.beam([-W, 3.2, zb], [W, 3.2, zb], 0.22, 0.2);
   timber.beam([-W, ROOM.eave - 0.02, zb], [W, ROOM.eave - 0.02, zb], 0.26, 0.26);
   for (const side of [-1, 1]) timber.beam([side * (W - 0.1), ROOM.eave + 0.02, zb], [side * 0.05, ROOM.ridge - 0.34, zb], 0.22, 0.24);
@@ -132,7 +135,8 @@ export function buildSalon(): Part {
     const mid = (x0 + x1) / 2;
     // En bas : de grands vitrages, une seule traverse.
     timber.beam([x0, 2.25, zb], [x1, 2.25, zb], 0.05, 0.05);
-    timber.span(mid - 0.025, mid + 0.025, 0.28, 3.1, zb - 0.025, zb + 0.025, 1);
+    // Dans la travée de la porte, ce montant descend jusqu'au sol : c'est contre lui que le vantail ferme.
+    timber.span(mid - 0.025, mid + 0.025, Math.abs(mid) < 0.01 ? 0.02 : 0.28, 3.1, zb - 0.025, zb + 0.025, 1);
     // Au-dessus : les petits carreaux.
     timber.beam([x0, 3.92, zb], [x1, 3.92, zb], 0.045, 0.045);
     for (const t of [1 / 3, 2 / 3]) {
@@ -198,11 +202,36 @@ export function buildSalon(): Part {
   metal.add(new CylinderGeometry(0.09, 0.05, 0.14, 16), { at: [hub[0], hub[1] + 0.05, hub[2]] });
 
   const { backX, frontX, wingEnd, z0, z1, depth } = SOFA;
+  // ── La console de la chaîne hi-fi : basse, sous la fenêtre ouest, avec sa niche à disques ──────
+  {
+    const c = HIFI.console;
+    const cabinetKit = kits.get("cabinet");
+    cabinetKit.span(c.x0, c.x1, 0.1, c.top - 0.03, c.z0, c.z0 + 0.03, 1);
+    cabinetKit.span(c.x0, c.x1, 0.1, c.top - 0.03, c.z1 - 0.03, c.z1, 1);
+    cabinetKit.span(c.x0, c.x1, 0.1, 0.13, c.z0, c.z1, 2);
+    cabinetKit.span(c.x0, c.x0 + 0.02, 0.1, c.top - 0.03, c.z0, c.z1, 2);
+    // Deux portes pleines aux extrémités, une niche ouverte au milieu.
+    for (const [a, b] of [
+      [c.z0 + 0.03, c.z0 + 0.5],
+      [c.z1 - 0.5, c.z1 - 0.03],
+    ]) cabinetKit.span(c.x1 - 0.02, c.x1, 0.13, c.top - 0.03, a, b, 1);
+    cabinetKit.span(c.x0, c.x1, 0.13, c.top - 0.03, c.z0 + 0.5, c.z0 + 0.52, 1);
+    cabinetKit.span(c.x0, c.x1, 0.13, c.top - 0.03, c.z1 - 0.52, c.z1 - 0.5, 1);
+    kits.get("wood").span(c.x0, c.x1 + 0.015, c.top - 0.03, c.top, c.z0 - 0.015, c.z1 + 0.015, 2);
+    kits.get("metal").span(c.x0 + 0.04, c.x1 - 0.04, 0, 0.1, c.z0 + 0.06, c.z1 - 0.06);
+    // Les disques, debout dans la niche : des tranches de pochettes.
+    const sleeves = kits.get("leather");
+    for (let i = 0; i < 16; i++) sleeves.span(c.x0 + 0.05, c.x1 - 0.06, 0.135, 0.135 + 0.31 + (i % 3) * 0.006, c.z0 + 0.56 + i * 0.034, c.z0 + 0.56 + i * 0.034 + 0.028);
+  }
+
   const solids: Solid[] = [
     span(-40, 40, -1, 0, -40, 40),
     span(-W - 0.4, -W, 0, 9, N, S),
     span(W, W + 0.4, 0, 9, N, S),
-    span(-W, W, 0, 9, N - 0.4, N + 0.06),
+    // La baie, moins le passage de la porte-fenêtre (le vantail a sa propre collision, `Door.tsx`).
+    span(-W, DOOR.x0, 0, 9, N - 0.1, N + 0.26),
+    span(DOOR.x1, W, 0, 9, N - 0.1, N + 0.26),
+    span(DOOR.x0, DOOR.x1, 2.25, 9, N - 0.1, N + 0.26),
     // Le massif de pierre et le banc de l'âtre à son pied.
     span(BREAST.face, W, 0, 5, BREAST.z0, BREAST.z1),
     span(BREAST.face - 0.66, BREAST.face, 0, 0.46, BREAST.z0 - 0.2, BREAST.z1 + 0.2),
@@ -216,6 +245,7 @@ export function buildSalon(): Part {
     span(2.75, 3.65, 0, 0.42, -3.05, -2.15),
     span(2.75, 3.65, 0, 0.42, -0.85, 0.05),
     ...LAMPS.map(([x, z]) => span(x - 0.2, x + 0.2, 0, 1.8, z - 0.2, z + 0.2)),
+    span(HIFI.console.x0, HIFI.console.x1, 0, HIFI.console.top + 0.3, HIFI.console.z0, HIFI.console.z1),
   ];
 
   return { meshes: kits.build(), solids };

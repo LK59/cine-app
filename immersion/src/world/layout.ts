@@ -69,6 +69,18 @@ export const FIRE = {
 } as const;
 
 /**
+ * La porte-fenêtre : le vantail ouest de la travée centrale de la baie. Il coulisse vers l'est, derrière
+ * le vantail fixe, et ouvre sur la terrasse.
+ */
+export const DOOR = { x0: -0.97, x1: -0.025, height: 2.22, slide: 0.93 } as const;
+
+/** La terrasse, devant la baie : un platelage de plain-pied, bordé d'un garde-corps, face à la vallée. */
+export const TERRACE = { x0: -ROOM.halfW - 0.3, x1: ROOM.halfW + 0.3, z0: ROOM.north - 4.9, z1: ROOM.north - 0.02, rail: 1.05 } as const;
+
+/** Le bain nordique : une cuve de bois ronde, à l'angle nord-est de la terrasse. */
+export const TUB = { x: 3.35, z: ROOM.north - 2.75, radius: 1.08, height: 0.88, water: 0.74 } as const;
+
+/**
  * Le plan d'ensemble. Au sud du salon, un corps de bâtiment à deux niveaux : au rez-de-chaussée la
  * cuisine (ouverte sur le salon) et l'escalier ; au-dessus, la mezzanine. Plus au sud, un couloir et
  * une chambre de plain-pied.
@@ -106,10 +118,11 @@ export const BED = { headX: -ROOM.halfW + 0.16, length: 2.12, z: ROOM.back + 1.7
 /** Les ouvertures vitrées hors du salon : la fenêtre de la cuisine, celle de la chambre. */
 export const BEDROOM_WINDOW = { x0: -3.9, x1: -0.9, y0: 0.55, y1: 2.2 } as const;
 
-export type RoomId = "salon" | "cuisine" | "mezzanine" | "couloir" | "chambre";
+export type RoomId = "salon" | "cuisine" | "mezzanine" | "couloir" | "chambre" | "terrasse";
 
 /** Dans quelle pièce se trouve ce point (les pieds du visiteur) ? */
 export function roomAt(x: number, y: number, z: number): RoomId {
+  if (z < ROOM.north) return "terrasse";
   if (z > PLAN.bedroom.z0) return "chambre";
   if (z > ROOM.back) return "couloir";
   if (z > ROOM.south) return y > ROOM.loft - 0.4 ? "mezzanine" : "cuisine";
@@ -150,7 +163,50 @@ export const SCREENS: Screen[] = [
 
 /** Ce qui reste du son d'un écran à cette distance de lui : 1 jusqu'aux trois quarts de sa portée, 0 au bout. */
 export function rangeGain(screen: Screen, distance: number): number {
-  const t = Math.min(1, Math.max(0, (distance - screen.range * 0.75) / (screen.range * 0.25)));
+  return fadeByRange(screen.range, distance);
+}
+
+/**
+ * La chaîne hi-fi. Une console basse sous la fenêtre ouest du salon porte la platine et deux enceintes ;
+ * une seconde platine est sur le meuble de la chambre. Les deux commandent **la même** musique
+ * d'ambiance, diffusée par une enceinte dans chaque pièce — comme un film sur les écrans : une seule
+ * source, un haut-parleur par enceinte, chacun avec sa portée.
+ */
+export const HIFI = {
+  /** La console du salon : contre le mur ouest, sous la troisième fenêtre. */
+  console: { x0: -ROOM.halfW + 0.02, x1: -ROOM.halfW + 0.5, z0: -0.95, z1: 0.71, top: 0.62 },
+  /** Les platines : leur centre, posé sur un meuble. */
+  decks: [
+    { id: "salon", at: [-ROOM.halfW + 0.27, 0.62, -0.12] as [number, number, number], yaw: Math.PI / 2 },
+    { id: "chambre", at: [PLAN.bedroom.x1 - 0.24, 0.59, PLAN.bedroom.z0 + 2.6 - 0.72] as [number, number, number], yaw: -Math.PI / 2 },
+  ],
+} as const;
+
+export interface Loudspeaker {
+  id: string;
+  room: RoomId;
+  /** Le centre de l'enceinte. */
+  center: [number, number, number];
+  /** Vers où elle joue : rotation autour de la verticale (sa face regarde +Z tournée de cet angle). */
+  yaw: number;
+  loudness: number;
+  range: number;
+}
+
+export const LOUDSPEAKERS: Loudspeaker[] = [
+  // Au salon : les deux enceintes de la console (un seul haut-parleur, entre elles).
+  { id: "salon", room: "salon", center: [-ROOM.halfW + 0.3, 0.8, -0.12], yaw: Math.PI / 2, loudness: 3.2, range: 12 },
+  // Dans la cuisine : sur l'étagère, près de la fenêtre.
+  { id: "cuisine", room: "cuisine", center: [0.35, 1.69, ROOM.back - 0.14], yaw: Math.PI, loudness: 1.8, range: 6.5 },
+  // Sur la mezzanine : au sol, près de la plante.
+  { id: "mezzanine", room: "mezzanine", center: [4.25, ROOM.loft + 0.17, 9.45], yaw: -Math.PI * 0.75, loudness: 1.8, range: 6.5 },
+  // Dans la chambre : sur le meuble, de l'autre côté de l'écran.
+  { id: "chambre", room: "chambre", center: [PLAN.bedroom.x1 - 0.2, 0.59 + 0.16, PLAN.bedroom.z0 + 2.6 + 0.98], yaw: -Math.PI / 2, loudness: 2, range: 6.5 },
+];
+
+/** Ce qui reste du son d'une source à cette distance d'elle : 1 jusqu'aux trois quarts de sa portée, 0 au bout. */
+export function fadeByRange(range: number, distance: number): number {
+  const t = Math.min(1, Math.max(0, (distance - range * 0.75) / (range * 0.25)));
   return 1 - t * t * (3 - 2 * t);
 }
 

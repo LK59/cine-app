@@ -22,7 +22,8 @@ export type MaterialId =
   | "counter"
   | "linen"
   | "cabinet"
-  | "white";
+  | "white"
+  | "snow";
 
 /**
  * Une partie du chalet : ce qui se dessine (un maillage par matière) et ce qui arrête le visiteur.
@@ -35,4 +36,4 @@ export interface Part {
 }
 
 /** Les groupes de pièces : ce qui se dessine ensemble, et dont la lumière est cuite ensemble. */
-export type GroupId = "salon" | "sud" | "nuit";
+export type GroupId = "salon" | "sud" | "nuit" | "terrasse";

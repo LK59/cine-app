@@ -24,6 +24,8 @@ export function useMaterials(): Record<MaterialId, Material> {
   const linen = usePbr("linen_white", { tint: "#f1ece2", bump: 1.2, env: 0.25 });
   // Les façades de la cuisine et des rangements : un chêne fumé, mat.
   const cabinet = usePbr("wood_beam", { tint: "#6f655c", roughness: 1.1, env: 0.45, saturation: 0.3 });
+  // La neige posée sur la terrasse : mate, à peine bleutée.
+  const snow = usePbr("snow", { tint: "#e9eef8", roughness: 1.0, bump: 0.8, env: 0.15 });
   const plain = useMemo(
     () => ({
       metal: new MeshStandardMaterial({ color: "#0d0d0e", roughness: 0.48, metalness: 0.85, envMapIntensity: 0.9 }),
@@ -32,7 +34,7 @@ export function useMaterials(): Record<MaterialId, Material> {
     []
   );
   return useMemo(
-    () => ({ floor, timber, planks, stone, slab, plaster, fabric, pillowA, pillowB, rug, leather, wood, counter, linen, cabinet, ...plain }),
-    [floor, timber, planks, stone, slab, plaster, fabric, pillowA, pillowB, rug, leather, wood, counter, linen, cabinet, plain]
+    () => ({ floor, timber, planks, stone, slab, plaster, fabric, pillowA, pillowB, rug, leather, wood, counter, linen, cabinet, snow, ...plain }),
+    [floor, timber, planks, stone, slab, plaster, fabric, pillowA, pillowB, rug, leather, wood, counter, linen, cabinet, snow, plain]
   );
 }

@@ -19,8 +19,9 @@ import { Kits } from "../../src/world/geometry/envelope";
 import { NIGHT_LAMPS, buildNight } from "../../src/world/geometry/night";
 import { buildBlockSofa, buildSalon } from "../../src/world/geometry/salon";
 import { PENDANTS, buildSouth } from "../../src/world/geometry/south";
+import { buildTerrace } from "../../src/world/geometry/terrace";
 import type { MaterialId, Part } from "../../src/world/geometry/types";
-import { BREAST, CHANDELIER, KITCHEN, LAMPS, MOON, PLAN, ROOM } from "../../src/world/layout";
+import { BREAST, CHANDELIER, KITCHEN, LAMPS, MOON, PLAN, ROOM, TUB } from "../../src/world/layout";
 
 const OUT = process.env.BAKE_OUT || "assets-src/bake";
 fs.mkdirSync(OUT, { recursive: true });
@@ -44,10 +45,11 @@ const ALBEDO: Record<MaterialId, [number, number, number]> = {
   linen: [0.75, 0.72, 0.66],
   cabinet: [0.07, 0.06, 0.05],
   white: [0.6, 0.56, 0.5],
+  snow: [0.82, 0.86, 0.94],
 };
 
 /** Taille de l'atlas de lumière de chaque groupe, en pixels. */
-const ATLAS: Record<string, number> = { salon: 2048, sud: 2048, nuit: 1024 };
+const ATLAS: Record<string, number> = { salon: 2048, sud: 2048, nuit: 1024, terrasse: 1024 };
 
 function writeObj(file: string, name: string, geometry: BufferGeometry): number {
   const position = geometry.getAttribute("position");
@@ -98,11 +100,11 @@ function propShadows(): Record<string, Part> {
   return Object.fromEntries(Object.entries(kits).map(([group, k]) => [group, { meshes: k.build(), solids: [] }]));
 }
 
-const parts: Record<string, Part> = { salon: buildSalon(), sud: buildSouth(), nuit: buildNight() };
+const parts: Record<string, Part> = { salon: buildSalon(), sud: buildSouth(), nuit: buildNight(), terrasse: buildTerrace() };
 // Ce qui fait de l'ombre et renvoie de la lumière sans recevoir de lightmap ici : les objets posés, et
 // la version en boîtes du canapé (la cuisson la remplace par le vrai modèle quand on le lui donne).
 const shadows = propShadows();
-const occluders: Record<string, Part[]> = { salon: [buildBlockSofa(), shadows.salon], sud: [shadows.sud], nuit: [shadows.nuit] };
+const occluders: Record<string, Part[]> = { salon: [buildBlockSofa(), shadows.salon], sud: [shadows.sud], nuit: [shadows.nuit], terrasse: [] };
 
 const groups: Record<string, { atlas: number; meshes: unknown[]; occluders: unknown[] }> = {};
 for (const [group, part] of Object.entries(parts)) {
@@ -136,21 +138,27 @@ const hex = (color: string): [number, number, number] => {
  * Les lumières, dans les unités de la page (three.js) : une lumière ponctuelle d'intensité I éclaire
  * une surface à la distance d, de face, de I / d² ; une lumière directionnelle d'intensité S, de S.
  * C'est cette grandeur — l'éclairement — que la lightmap doit contenir.
+ *
+ * Deux couches : `lampes` — ce que le mode cinéma et les interrupteurs baissent (le lustre, les lampes
+ * électriques) — et `nuit` — ce qui reste : la lune, le ciel, les bougies posées, la lueur du bain.
+ * Le feu du foyer n'est pas cuit : sa lueur danse (`src/world/Fire.tsx`).
  */
 const lights = [
   // Le lustre : ses vingt-six bougies, résumées en un anneau de huit sources à mi-hauteur de ses deux cercles.
   ...Array.from({ length: 8 }, (_, i) => {
     const a = (i / 8) * Math.PI * 2;
-    return { type: "point", name: `lustre-${i}`, position: [CHANDELIER.x + Math.cos(a) * 1.2, CHANDELIER.y + 0.42, CHANDELIER.z + Math.sin(a) * 1.2], color: hex("#ffc98f"), intensity: 210 / 8, radius: 0.12 };
+    return { type: "point", name: `lustre-${i}`, layer: "lampes", position: [CHANDELIER.x + Math.cos(a) * 1.2, CHANDELIER.y + 0.42, CHANDELIER.z + Math.sin(a) * 1.2], color: hex("#ffc98f"), intensity: 210 / 8, radius: 0.12 };
   }),
-  ...LAMPS.map(([x, z], i) => ({ type: "point", name: `lampadaire-${i}`, position: [x, 1.5, z], color: hex("#ffd0a0"), intensity: 18, radius: 0.16 })),
+  ...LAMPS.map(([x, z], i) => ({ type: "point", name: `lampadaire-${i}`, layer: "lampes", position: [x, 1.5, z], color: hex("#ffd0a0"), intensity: 18, radius: 0.16 })),
   // Les bougies du manteau, du banc de l'âtre et de la table basse (celles du lustre sont comptées plus haut).
-  ...CANDLES.slice(26).map((c, i) => ({ type: "point", name: `bougie-${i}`, position: [c.p[0] - (c.p[0] > BREAST.face - 1 ? 0.06 : 0), c.p[1] + c.h + 0.06, c.p[2]], color: hex("#ffa055"), intensity: 1.6, radius: 0.03 })),
-  ...PENDANTS.map(([x, y, z], i) => ({ type: "point", name: `suspension-${i}`, position: [x, y - 0.02, z], color: hex("#ffcf9a"), intensity: 8, radius: 0.05 })),
-  { type: "point", name: "mezzanine", position: [1.2, ROOM.loft + 1.7, 7.4], color: hex("#ffc488"), intensity: 11, radius: 0.2 },
-  ...NIGHT_LAMPS.sconces.map(([x, y, z], i) => ({ type: "point", name: `applique-${i}`, position: [x, y, z - 0.16], color: hex("#ffbf80"), intensity: 5, radius: 0.06 })),
-  ...NIGHT_LAMPS.bedside.map(([x, y, z], i) => ({ type: "point", name: `chevet-${i}`, position: [x, y, z], color: hex("#ffc083"), intensity: 6, radius: 0.1 })),
-  { type: "sun", name: "lune", from: MOON.lightFrom, color: hex(MOON.color), intensity: MOON.intensity, angleDeg: 0.6 },
+  ...CANDLES.slice(26).map((c, i) => ({ type: "point", name: `bougie-${i}`, layer: "nuit", position: [c.p[0] - (c.p[0] > BREAST.face - 1 ? 0.06 : 0), c.p[1] + c.h + 0.06, c.p[2]], color: hex("#ffa055"), intensity: 1.6, radius: 0.03 })),
+  ...PENDANTS.map(([x, y, z], i) => ({ type: "point", name: `suspension-${i}`, layer: "lampes", position: [x, y - 0.02, z], color: hex("#ffcf9a"), intensity: 8, radius: 0.05 })),
+  { type: "point", name: "mezzanine", layer: "lampes", position: [1.2, ROOM.loft + 1.7, 7.4], color: hex("#ffc488"), intensity: 11, radius: 0.2 },
+  ...NIGHT_LAMPS.sconces.map(([x, y, z], i) => ({ type: "point", name: `applique-${i}`, layer: "lampes", position: [x, y, z - 0.16], color: hex("#ffbf80"), intensity: 5, radius: 0.06 })),
+  ...NIGHT_LAMPS.bedside.map(([x, y, z], i) => ({ type: "point", name: `chevet-${i}`, layer: "lampes", position: [x, y, z], color: hex("#ffc083"), intensity: 6, radius: 0.1 })),
+  // Le bain : la lumière au fond de la cuve, qui remonte par l'eau et teinte la margelle.
+  { type: "point", name: "bain", layer: "nuit", position: [TUB.x, TUB.water + 0.12, TUB.z], color: hex("#2fd6d0"), intensity: 3.2, radius: 0.5 },
+  { type: "sun", name: "lune", layer: "nuit", from: MOON.lightFrom, color: hex(MOON.color), intensity: MOON.intensity, angleDeg: 0.6 },
 ];
 
 fs.writeFileSync(

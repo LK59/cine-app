@@ -87,7 +87,7 @@ Ces assets ne sont pas CC0. Chacun a sa licence et, quand elle l'exige, une ment
 - Phrase de non-responsabilité obligatoire : « The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30 »
 - Dérivé : Image rendue (adaptation) : pas une redistribution des données d'altitude. Les tuiles brutes restent dans assets-src/ (non versionné).
 - Usage : Décor lointain vu par la grande baie : trois couches (far, mid, near) pour la parallaxe.
-- Fichiers : `public/assets/panorama/far.ktx2`, `public/assets/panorama/mid.ktx2`, `public/assets/panorama/near.ktx2`, `public/assets/panorama/panorama.json`, 5.3 Mo
+- Fichiers : `public/assets/panorama/far.ktx2`, `public/assets/panorama/mid.ktx2`, `public/assets/panorama/near.ktx2`, `public/assets/panorama/panorama.json`, 4.5 Mo
 
 ### Canapé d'angle en U avec coussins (sofa_frame, sofa_cushions, pillows_a, pillows_b) (`sofa`)
 
@@ -99,7 +99,7 @@ Ces assets ne sont pas CC0. Chacun a sa licence et, quand elle l'exige, une ment
 - Phrase de non-responsabilité obligatoire : « Aucune. »
 - Dérivé : Non : aucun modèle ou donnée tiers n'est utilisé.
 - Usage : Le grand canapé en U du salon, face au grand écran (gabarit exact : voir public/assets/models/sofa/sofa.json).
-- Fichiers : `public/assets/models/sofa/sofa.bin`, `public/assets/models/sofa/sofa.gltf`, `public/assets/models/sofa/sofa.json`, 1.4 Mo
+- Fichiers : `public/assets/models/sofa/sofa.bin`, `public/assets/models/sofa/sofa.gltf`, `public/assets/models/sofa/sofa.json`, 1.6 Mo
 
 ### Polices Inter et Outfit (sous-ensembles latins, WOFF2) (`fonts`)
 
@@ -112,3 +112,15 @@ Ces assets ne sont pas CC0. Chacun a sa licence et, quand elle l'exige, une ment
 - Dérivé : Sous-ensembles non modifiés.
 - Usage : L'interface du mode : accueil, menu, réglages, panneau.
 - Fichiers : `public/fonts/OFL-Inter.txt`, `public/fonts/OFL-Outfit.txt`, `public/fonts/inter-latin-ext.woff2`, `public/fonts/inter-latin.woff2`, `public/fonts/outfit-latin.woff2`, 0.2 Mo
+
+### Musique d'ambiance de la chaîne hi-fi : « Lobby Time », « Bossa Antigua » (Kevin MacLeod) (`music`)
+
+- Contenu : Deux morceaux de jazz calme, ré-encodés en AAC mono 64 kb/s (niveau normalisé, métadonnées retirées) à partir des MP3 publiés par l'auteur. Joués en boucle par la chaîne hi-fi du chalet, à faible niveau.
+- Source : Kevin MacLeod — incompetech.com (ISRC USUAN1600054, USUAN1700069), https://incompetech.com/music/royalty-free/ (fichiers : mp3-royaltyfree/Lobby Time.mp3, mp3-royaltyfree/Bossa Antigua.mp3)
+- Licence : [Creative Commons Attribution 4.0 International (CC BY 4.0) — la licence « Creative Commons » gratuite du site, qui demande de créditer la musique](https://creativecommons.org/licenses/by/4.0/ ; conditions du site : https://incompetech.com/music/royalty-free/licenses/)
+- Ce que la licence permet et demande : Utilisation, copie, adaptation et redistribution libres, y compris à but commercial, à condition de créditer l'auteur, d'indiquer la licence et de signaler les modifications. Ici : conversion en mono et ré-encodage.
+- Mention obligatoire (à reproduire telle quelle, en anglais) : « « Lobby Time », « Bossa Antigua » — Kevin MacLeod (incompetech.com). Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/ — mention reprise dans les réglages du mode. »
+- Phrase de non-responsabilité obligatoire : « Aucune. »
+- Dérivé : Oui : mono, AAC 64 kb/s, niveau normalisé. Les MP3 d'origine restent dans assets-src/music/ (non versionné).
+- Usage : Le fond musical que les platines du salon et de la chambre mettent en marche ; il se tait pendant un film.
+- Fichiers : `public/assets/music/bossa-antigua.mp4`, `public/assets/music/lobby-time.mp4`, 3.9 Mo

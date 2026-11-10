@@ -4,13 +4,14 @@ import { CapsuleCollider, RigidBody, useRapier, type RapierCollider, type Rapier
 import { Euler, MathUtils, PerspectiveCamera, Vector3 } from "three";
 import { useStore } from "../state/store";
 import { motion } from "../input/intents";
-import { nearestScreen, PLAYER, ROOM, roomAt, SOFA } from "./layout";
+import { seatNear, SEATS, thingAimed } from "./interactions";
+import { nearestScreen, PLAYER, roomAt } from "./layout";
 import { rig } from "./rig";
 import { benchPose, benchRun } from "../bench/bench";
 
 const euler = new Euler(0, 0, 0, "YXZ");
 const eye = new Vector3();
-const seat = new Vector3(...SOFA.seatEye);
+const seat = new Vector3();
 
 /**
  * Le visiteur : une capsule déplacée par le contrôleur de personnage de Rapier, et la caméra posée
@@ -114,7 +115,7 @@ export function Player() {
     const target = state.seated ? 1 : 0;
     seatBlend.current += (target - seatBlend.current) * (1 - Math.exp(-dt * 4.5));
     if (Math.abs(target - seatBlend.current) < 0.001) seatBlend.current = target;
-    if (seatBlend.current > 0) eye.lerp(seat, MathUtils.smootherstep(seatBlend.current, 0, 1));
+    if (seatBlend.current > 0) eye.lerp(seat.set(...SEATS[state.seatSpot].eye), MathUtils.smootherstep(seatBlend.current, 0, 1));
 
     // Le panneau est ouvert : le regard glisse vers lui, par le plus court chemin.
     if (rig.aim && state.mode === "panel") {
@@ -133,11 +134,13 @@ export function Player() {
       camera.updateProjectionMatrix();
     }
 
-    // Ce que le visiteur peut faire d'ici : ouvrir l'écran le plus proche, s'asseoir.
-    const inRoom = rig.position.z < ROOM.south + 0.5 && Math.abs(rig.position.x) < ROOM.halfW && rig.position.y < 1;
+    // Ce que le visiteur peut faire d'ici : ouvrir l'écran le plus proche, s'installer quelque part,
+    // agir sur ce qu'il regarde de près.
+    const room = roomAt(rig.position.x, rig.position.y, rig.position.z);
     const near = nearestScreen(eye.x, eye.y, eye.z);
-    state.setNear({ screen: near.distance < near.screen.reach ? near.screen.id : null, sofa: inRoom });
-    state.setRoom(roomAt(rig.position.x, rig.position.y, rig.position.z));
+    const thing = walking && !state.seated ? thingAimed(eye, rig.yaw, rig.pitch) : null;
+    state.setNear({ screen: near.distance < near.screen.reach && room !== "terrasse" ? near.screen.id : null, seat: seatNear(room, rig.position.x, rig.position.y, rig.position.z), thing: thing?.id ?? null });
+    state.setRoom(room);
   });
 
   return (

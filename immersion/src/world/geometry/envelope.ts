@@ -24,6 +24,7 @@ export class Kits {
     linen: 0.6,
     cabinet: 1.3,
     white: 1,
+    snow: 3.2,
   };
 
   get(id: string): Kit {

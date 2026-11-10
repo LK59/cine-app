@@ -49,6 +49,21 @@
       "derived": "Sous-ensembles non modifiés.",
       "use": "L'interface du mode : accueil, menu, réglages, panneau.",
       "dir": "public/fonts"
+    },
+    {
+      "id": "music",
+      "name": "Musique d'ambiance de la chaîne hi-fi : « Lobby Time », « Bossa Antigua » (Kevin MacLeod)",
+      "what": "Deux morceaux de jazz calme, ré-encodés en AAC mono 64 kb/s (niveau normalisé, métadonnées retirées) à partir des MP3 publiés par l'auteur. Joués en boucle par la chaîne hi-fi du chalet, à faible niveau.",
+      "source_name": "Kevin MacLeod — incompetech.com (ISRC USUAN1600054, USUAN1700069)",
+      "source_url": "https://incompetech.com/music/royalty-free/ (fichiers : mp3-royaltyfree/Lobby Time.mp3, mp3-royaltyfree/Bossa Antigua.mp3)",
+      "licence_name": "Creative Commons Attribution 4.0 International (CC BY 4.0) — la licence « Creative Commons » gratuite du site, qui demande de créditer la musique",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/ ; conditions du site : https://incompetech.com/music/royalty-free/licenses/",
+      "licence_summary": "Utilisation, copie, adaptation et redistribution libres, y compris à but commercial, à condition de créditer l'auteur, d'indiquer la licence et de signaler les modifications. Ici : conversion en mono et ré-encodage.",
+      "attribution": "« Lobby Time », « Bossa Antigua » — Kevin MacLeod (incompetech.com). Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/ — mention reprise dans les réglages du mode.",
+      "disclaimer": "Aucune.",
+      "derived": "Oui : mono, AAC 64 kb/s, niveau normalisé. Les MP3 d'origine restent dans assets-src/music/ (non versionné).",
+      "use": "Le fond musical que les platines du salon et de la chambre mettent en marche ; il se tait pendant un film.",
+      "dir": "public/assets/music"
     }
   ]
 }

@@ -51,14 +51,14 @@ const FLAME_FRAGMENT = /* glsl */ `
     vec2 p = vec2(x * 4.5 + uSeed * 3.0 + 0.35 * sin(y * 5.0 + t * 2.0 + x * 2.0), y * 2.6 - t * 1.9);
     float n = fbm(p) * 0.65 + fbm(p * 2.3 + 3.0) * 0.35;
     float height = y / (tongue * uLevel + 0.001);
-    float flame = smoothstep(1.0, 0.1, height + (0.5 - n) * 1.25);
+    float flame = smoothstep(1.05, 0.3, height + (0.5 - n) * 1.7);
     // Les bords du foyer : les flammes y sont plus basses.
     flame *= smoothstep(0.0, 0.035, vUv.x) * smoothstep(1.0, 0.965, vUv.x);
     if (flame < 0.004) discard;
-    // Du cœur presque blanc à l'orange, puis au rouge sombre des pointes.
-    vec3 color = mix(vec3(0.9, 0.12, 0.02), vec3(1.0, 0.5, 0.08), smoothstep(0.0, 0.5, flame));
-    color = mix(color, vec3(1.0, 0.86, 0.5), smoothstep(0.55, 1.0, flame) * (1.0 - smoothstep(0.0, 0.55, height)));
-    gl_FragColor = vec4(color * flame * 3.4, flame);
+    // Rouge sombre aux pointes, orange dans le corps ; le jaune clair seulement au cœur, près des bûches.
+    vec3 color = mix(vec3(0.75, 0.07, 0.01), vec3(1.0, 0.42, 0.05), smoothstep(0.05, 0.65, flame));
+    color = mix(color, vec3(1.0, 0.78, 0.32), smoothstep(0.7, 1.0, flame) * (1.0 - smoothstep(0.0, 0.45, height)));
+    gl_FragColor = vec4(color * flame * 2.1, flame);
   }
 `;
 
@@ -114,7 +114,7 @@ export function Fire() {
       embers: new ShaderMaterial({ vertexShader: FLAME_VERTEX, fragmentShader: EMBER_FRAGMENT, uniforms: { uTime: { value: 0 }, uLevel: { value: 1 } } }),
       bed: new PlaneGeometry(WIDTH, FIRE.depth - 0.06),
       log: new CylinderGeometry(0.045, 0.05, 1, 10),
-      bark: new MeshStandardMaterial({ color: "#1a120c", roughness: 0.95, emissive: new Color("#ff4a0a"), emissiveIntensity: 0.22 }),
+      bark: new MeshStandardMaterial({ color: "#0e0a07", roughness: 0.95, emissive: new Color("#ff3a06"), emissiveIntensity: 0.05 }),
     };
   }, []);
   useEffect(
@@ -137,7 +137,7 @@ export function Fire() {
     }
     parts.embers.uniforms.uTime.value = t;
     parts.embers.uniforms.uLevel.value = level.value;
-    parts.bark.emissiveIntensity = 0.06 + 0.2 * level.value;
+    parts.bark.emissiveIntensity = 0.015 + 0.05 * level.value;
     // Sa lueur : chaude, qui danse — plus nerveuse que le souffle des bougies.
     const dance = 0.82 + 0.1 * Math.sin(t * 9.1) + 0.07 * Math.sin(t * 15.3 + 1.1) + 0.06 * Math.sin(t * 4.3 + 0.5) + 0.05 * Math.sin(t * 23.0);
     const strength = (0.12 + 0.88 * level.value) * dance * 15;

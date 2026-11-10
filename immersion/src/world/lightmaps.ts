@@ -136,7 +136,8 @@ export function attachLightmapUv(geometry: BufferGeometry, baked: { uv: Float32A
  * cinéma, les interrupteurs), lu ici par les matières cuites. Le canapé suit le salon.
  */
 export type LampGroup = "salon" | "sud" | "nuit";
-const LAMP_GROUP: Record<string, LampGroup> = { salon: "salon", sofa: "salon", sud: "sud", nuit: "nuit" };
+// La terrasse reçoit la lumière du salon par la baie : ses lampes sont celles du salon.
+const LAMP_GROUP: Record<string, LampGroup> = { salon: "salon", sofa: "salon", terrasse: "salon", sud: "sud", nuit: "nuit" };
 const lampLevel: Record<LampGroup, number> = { salon: 1, sud: 1, nuit: 1 };
 
 interface Baked {

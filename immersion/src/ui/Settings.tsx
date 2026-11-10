@@ -59,6 +59,10 @@ export function Settings() {
       <Toggle label={t("settings.hdr")} hint={t("settings.hdr.hint")} value={settings.hdrToSdr} onChange={(hdrToSdr) => update({ hdrToSdr })} testId="setting-hdr" />
       <Toggle label={t("settings.fps")} value={settings.showFps} onChange={(showFps) => update({ showFps })} testId="setting-fps" />
       <BenchBlock />
+      {/* La mention que la licence de la musique demande (Creative Commons Attribution — voir ASSETS.md). */}
+      <p className="credits">
+        {t("credits.music")} : « Lobby Time », « Bossa Antigua » — Kevin MacLeod (incompetech.com). Licensed under Creative Commons: By Attribution 4.0 License, http://creativecommons.org/licenses/by/4.0/
+      </p>
       {/* La mention que la licence du relief demande, telle quelle (voir ASSETS.md). */}
       <p className="credits">
         {t("credits.relief")} : produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved. The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30.

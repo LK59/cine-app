@@ -1,9 +1,11 @@
 import { device, onIntent, type Intent } from "../input/intents";
 import { disposeAudio, resumeAudio } from "../media/audio";
+import { disposeMusic } from "../media/music";
 import { episodesOf, forgetLibrary, library, type Title } from "../media/library";
 import { dispatch } from "../media/commands";
 import { leaveToLaterna } from "../lib/session";
 import { SCREENS, SOFA } from "../world/layout";
+import { SEATS, THINGS } from "../world/interactions";
 import { aimedScreen, placePanel } from "../world/panel";
 import { rig } from "../world/rig";
 import { EMPTY_PANEL, useStore } from "./store";
@@ -52,6 +54,7 @@ export function captureChanged(captured: boolean): void {
 export function quit(): void {
   device.current.release();
   dispatch({ type: "stop" });
+  disposeMusic();
   disposeAudio();
   state().setPhase("leaving");
   setTimeout(leaveToLaterna, 60);
@@ -150,10 +153,14 @@ export function stopPlayback(): void {
 export function toggleSeat(): void {
   const s = state();
   if (s.seated) return s.setSeated(false);
-  if (!s.nearSofa) return;
-  // Le corps va se poser devant le canapé : c'est là qu'on se relève.
-  rig.teleport = new Vector3(...SOFA.standPoint);
-  s.setSeated(true);
+  const spot = s.nearSeat;
+  if (!spot) return;
+  const seat = SEATS[spot];
+  // Le corps va se poser à côté : c'est là qu'on se relève.
+  rig.teleport = new Vector3(...seat.stand);
+  if (seat.yaw !== undefined) rig.yaw = seat.yaw;
+  if (seat.pitch !== undefined) rig.pitch = seat.pitch;
+  s.setSeated(true, spot);
 }
 
 // ── Les intentions ───────────────────────────────────────────────────────────────────────────────
@@ -174,8 +181,12 @@ function handle(intent: Intent): void {
     return;
   }
   switch (intent) {
-    case "interact":
+    case "interact": {
+      // Une chose regardée de près passe avant l'écran : une lampe, le feu, la porte, le chat.
+      const thing = s.nearThing ? THINGS.find((candidate) => candidate.id === s.nearThing) : null;
+      if (thing) return thing.act(s);
       return openPanel();
+    }
     case "select": {
       const screen = aimedScreen();
       if (screen) openPanel(screen.id);

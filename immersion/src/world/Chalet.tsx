@@ -1,7 +1,11 @@
 import { Atmosphere } from "./Atmosphere";
 import { Candles } from "./Candles";
 import { Exterior } from "./Exterior";
+import { Cat } from "./Cat";
+import { Dust } from "./Dust";
 import { Fire } from "./Fire";
+import { HiFi } from "./HiFi";
+import { HotTub } from "./HotTub";
 import { Fixtures } from "./Fixtures";
 import { Parts } from "./Parts";
 import { Lights } from "./Lights";
@@ -20,6 +24,10 @@ export function Chalet() {
       <Props />
       <Candles />
       <Fire />
+      <HotTub />
+      <HiFi />
+      <Cat />
+      <Dust />
       <Lights />
       <Exterior />
       <Atmosphere />

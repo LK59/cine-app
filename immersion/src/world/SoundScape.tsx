@@ -1,9 +1,10 @@
 import { useEffect, useMemo } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { applyAcoustics, audio } from "../media/audio";
+import { applyAcoustics, audio, setWind } from "../media/audio";
 import { syncMix } from "../media/playback";
 import { useStore } from "../state/store";
-import { CHANDELIER, rangeGain, ROOM, roomAt, SCREENS, type RoomId } from "./layout";
+import { applyMusicAcoustics } from "../media/music";
+import { CHANDELIER, fadeByRange, LOUDSPEAKERS, rangeGain, ROOM, roomAt, SCREENS, type RoomId } from "./layout";
 import { rig } from "./rig";
 
 /**
@@ -14,8 +15,10 @@ import { rig } from "./rig";
  * intact. Le couloir est derrière un mur percé d'une porte ; la chambre, derrière deux.
  */
 const OPEN: RoomId[] = ["salon", "cuisine", "mezzanine"];
-export function cutoffBetween(from: RoomId, to: RoomId): number {
+export function cutoffBetween(from: RoomId, to: RoomId, doorOpen = false): number {
   if (from === to) return 20000;
+  // Dehors, on entend le salon à travers la baie : étouffé porte close, presque net porte ouverte.
+  if (to === "terrasse") return OPEN.includes(from) ? (doorOpen ? 6500 : 1100) : 300;
   const fromOpen = OPEN.includes(from);
   const toOpen = OPEN.includes(to);
   if (fromOpen && toOpen) return from === "cuisine" || to === "cuisine" ? 6500 : 9000;
@@ -48,10 +51,18 @@ export function SoundScape() {
 
   useFrame(() => {
     const here = roomAt(rig.position.x, rig.position.y, rig.position.z);
+    const doorOpen = useStore.getState().door;
+    // Le vent : dedans, on l'entend à peine derrière les vitres ; porte ouverte ou dehors, il est là.
+    setWind(here === "terrasse" ? 1 : doorOpen ? 0.55 : 0.22);
+    // Les enceintes de la chaîne hi-fi : même acoustique que les écrans.
+    for (const speaker of LOUDSPEAKERS) {
+      const distance = Math.hypot(speaker.center[0] - rig.eye.x, speaker.center[1] - rig.eye.y, speaker.center[2] - rig.eye.z);
+      applyMusicAcoustics(speaker.id, cutoffBetween(speaker.room, here, doorOpen), fadeByRange(speaker.range, distance));
+    }
     for (const screen of SCREENS) {
       // La distance de l'oreille à la dalle décide de ce qu'il reste de son haut-parleur (sa portée).
       const distance = Math.hypot(screen.center[0] - rig.eye.x, screen.center[1] - rig.eye.y, screen.center[2] - rig.eye.z);
-      applyAcoustics(screen.id, cutoffBetween(screen.room, here), rangeGain(screen, distance));
+      applyAcoustics(screen.id, cutoffBetween(screen.room, here, doorOpen), rangeGain(screen, distance));
     }
   });
 

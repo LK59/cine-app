@@ -35,6 +35,10 @@ interface Graph {
   candles: PositionalAudio;
   /** Le feu : son ronflement sourd et ses claquements, à accrocher au foyer. */
   fire: PositionalAudio;
+  /** Le bouillonnement du bain, sur la terrasse. */
+  tub: PositionalAudio;
+  /** Le ronronnement du chat. */
+  purr: PositionalAudio;
   direct: GainNode;
   wet: GainNode;
   connected: WeakSet<HTMLMediaElement>;
@@ -106,6 +110,59 @@ function crackleBuffer(context: AudioContext): AudioBuffer {
     const strength = 0.25 + random() * 0.75;
     const size = 40 + Math.floor(random() * 220);
     for (let i = 0; i < size; i++) data[at + i] += (random() * 2 - 1) * strength * Math.exp(-i / (size * 0.22));
+  }
+  return buffer;
+}
+
+/** Le ronronnement : un grave qui vibre vingt-cinq fois par seconde, au rythme lent d'un souffle. */
+function purrBuffer(context: AudioContext): AudioBuffer {
+  const rate = context.sampleRate;
+  const length = rate * 6;
+  const buffer = context.createBuffer(1, length, rate);
+  const data = buffer.getChannelData(0);
+  let seed = 5;
+  const random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  let low = 0;
+  for (let i = 0; i < length; i++) {
+    const t = i / rate;
+    low = (low + 0.2 * (random() * 2 - 1)) / 1.2;
+    // Deux souffles par boucle : l'inspiration ronronne plus fort que l'expiration.
+    const breath = 0.55 + 0.45 * Math.sin((t / 3) * Math.PI * 2);
+    const rattle = Math.pow(0.5 + 0.5 * Math.sin(2 * Math.PI * 25 * t), 3);
+    data[i] = (Math.sin(2 * Math.PI * 52 * t) * 0.5 + low * 1.4) * rattle * breath;
+  }
+  return buffer;
+}
+
+/** Le bain : un bouillonnement doux — un bruit filtré, piqué de petites bulles. */
+function bubbleBuffer(context: AudioContext): AudioBuffer {
+  const rate = context.sampleRate;
+  const length = rate * 8;
+  const buffer = context.createBuffer(1, length, rate);
+  const data = buffer.getChannelData(0);
+  let seed = 91;
+  const random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  let low = 0;
+  for (let i = 0; i < length; i++) {
+    low = (low + 0.08 * (random() * 2 - 1)) / 1.08;
+    data[i] = low * 0.9 * (0.8 + 0.2 * Math.sin((i / length) * Math.PI * 2 * 5));
+  }
+  // Les bulles : de très courtes notes qui montent.
+  for (let n = 0; n < 420; n++) {
+    const at = Math.floor(random() * (length - 2400));
+    const pitch = 420 + random() * 900;
+    const size = 500 + Math.floor(random() * 1500);
+    const strength = 0.05 + random() * 0.16;
+    for (let i = 0; i < size; i++) {
+      const t = i / rate;
+      data[at + i] += Math.sin(2 * Math.PI * (pitch + 900 * t * 14) * t) * strength * Math.sin((Math.PI * i) / size);
+    }
   }
   return buffer;
 }
@@ -182,7 +239,9 @@ export function audio(): Graph {
 
   const fire = loop(fireBuffer(context), 0.55, 1.8);
   fire.gain.connect(convolver);
-  graph = { context, listener, speakers: new Map(), source: null, convolver, wind, candles, fire, direct, wet, connected: new WeakSet() };
+  const tub = loop(bubbleBuffer(context), 0.5, 1.6);
+  const purr = loop(purrBuffer(context), 0.0, 0.5);
+  graph = { context, listener, speakers: new Map(), source: null, convolver, wind, candles, fire, tub, purr, direct, wet, connected: new WeakSet() };
   return graph;
 }
 
@@ -190,7 +249,7 @@ export function audio(): Graph {
 export function resumeAudio(): void {
   const g = audio();
   void g.context.resume().catch(() => {});
-  for (const sound of [g.wind, g.candles, g.fire]) if (!sound.isPlaying) sound.play();
+  for (const sound of [g.wind, g.candles, g.fire, g.tub, g.purr]) if (!sound.isPlaying) sound.play();
 }
 
 /**
@@ -271,6 +330,14 @@ export function applyAcoustics(screenId: string, cutoff: number, reach: number):
   entry.reach.gain.setTargetAtTime(reach, now, 0.12);
 }
 
+/** La force du vent, de 0 à 1 : faible derrière les vitres, pleine dehors. Glisse en une seconde. */
+export function setWind(level: number): void {
+  if (!graph) return;
+  const now = graph.context.currentTime;
+  if (graph.context.state !== "running") graph.wind.gain.gain.value = 0.5 * level * 2;
+  else graph.wind.gain.gain.setTargetAtTime(0.5 * level * 2, now, 0.6);
+}
+
 /** Ce que chaque haut-parleur laisse passer à cet instant — pour les tests et le diagnostic. */
 export function speakerLevels(): { id: string; reach: number; cutoff: number }[] {
   if (!graph) return [];
@@ -282,7 +349,7 @@ export function disposeAudio(): void {
   if (!graph) return;
   const g = graph;
   graph = null;
-  for (const sound of [g.wind, g.candles, g.fire]) {
+  for (const sound of [g.wind, g.candles, g.fire, g.tub, g.purr]) {
     try {
       if (sound.isPlaying) sound.stop();
     } catch {

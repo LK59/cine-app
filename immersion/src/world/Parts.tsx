@@ -2,11 +2,13 @@ import { Suspense, useMemo } from "react";
 import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { attachLightmapUv, bakedVariant, useLightmaps, type Lightmaps } from "./lightmaps";
 import { Sofa } from "./Sofa";
+import { Door } from "./Door";
 import { DoubleSide, type Material } from "three";
 import { useStore } from "../state/store";
 import { buildNight } from "./geometry/night";
 import { buildBlockSofa, buildSalon } from "./geometry/salon";
 import { buildSouth } from "./geometry/south";
+import { buildTerrace } from "./geometry/terrace";
 import type { GroupId, MaterialId, Part } from "./geometry/types";
 import { useMaterials } from "./materials";
 import { Solids } from "./Solids";
@@ -41,7 +43,7 @@ function PartView({ part, group, materials, visible, lightmaps }: { part: Part; 
  * partie nuit est derrière un mur plein.
  */
 export function visibleGroups(room: string): Record<GroupId, boolean> {
-  return { salon: room !== "chambre", sud: true, nuit: room !== "mezzanine" };
+  return { salon: room !== "chambre", sud: true, nuit: room !== "mezzanine" && room !== "terrasse", terrasse: room !== "chambre" && room !== "couloir" };
 }
 
 /**
@@ -52,7 +54,7 @@ export function Parts() {
   const materials = useMaterials();
   const lightmaps = useLightmaps();
   const room = useStore((s) => s.room);
-  const parts = useMemo(() => ({ salon: buildSalon(), sud: buildSouth(), nuit: buildNight() }), []);
+  const parts = useMemo(() => ({ salon: buildSalon(), sud: buildSouth(), nuit: buildNight(), terrasse: buildTerrace() }), []);
   const visible = visibleGroups(room);
   return (
     <>
@@ -63,6 +65,7 @@ export function Parts() {
           <Solids solids={parts[id].solids} />
         </group>
       ))}
+      <Door materials={materials} />
       {/* Le canapé : le modèle ; s'il ne se charge pas, sa version en boîtes tient sa place. */}
       <ErrorBoundary fallback={<BlockSofa materials={materials} visible={visible.salon} />}>
         <Suspense fallback={null}>

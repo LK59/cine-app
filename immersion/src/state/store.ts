@@ -3,6 +3,8 @@ import { browserLang, translate, type Key, type Lang } from "../lib/i18n";
 import { AUTO_LEVELS, loadSettings, profileOf, saveSettings, type Quality, type QualityProfile, type Settings } from "../lib/settings";
 import type { Unsupported } from "../lib/capability";
 import type { Episode, Library, Title } from "../media/library";
+import type { SeatId } from "../world/interactions";
+import type { RoomId } from "../world/layout";
 
 /**
  * L'état du mode, en un seul endroit.
@@ -78,13 +80,26 @@ export interface ImmersionState {
   /** L'écran que le visiteur peut ouvrir d'ici (touche d'action) — son identifiant, ou rien. */
   nearScreen: string | null;
   /** Peut-il s'asseoir d'ici (touche F) ? */
-  nearSofa: boolean;
+  /** Le siège qu'on peut prendre d'ici (canapé, lit, bain), et celui où l'on est installé. */
+  nearSeat: SeatId | null;
+  seatSpot: SeatId;
+  /** La chose regardée de près sur laquelle on peut agir (`interactions.ts`). */
+  nearThing: string | null;
+  /** Le chat vient d'être caressé (instant, en millisecondes). */
+  petAt: number;
+  pet: () => void;
   /** La pièce où se tient le visiteur : elle décide de ce qui se dessine et de ce qui s'entend. */
-  room: "salon" | "cuisine" | "mezzanine" | "couloir" | "chambre";
+  room: RoomId;
   setRoom: (room: ImmersionState["room"]) => void;
   /** La mesure (« Mesurer », `bench/bench.ts`) : son avancement, ses résultats. `null` : jamais lancée. */
   bench: BenchState | null;
   setBench: (patch: Partial<BenchState>) => void;
+  /** La chaîne hi-fi : en marche ou non (la musique se tait d'elle-même pendant un film). */
+  music: boolean;
+  toggleMusic: () => void;
+  /** La porte-fenêtre de la terrasse : ouverte ou non. */
+  door: boolean;
+  toggleDoor: () => void;
   /** Le feu du foyer : allumé ou non. */
   fire: boolean;
   toggleFire: () => void;
@@ -110,8 +125,8 @@ export interface ImmersionState {
   setUnsupported: (why: Unsupported | null) => void;
   setMode: (mode: Mode) => void;
   setPauseView: (view: "menu" | "settings") => void;
-  setSeated: (seated: boolean) => void;
-  setNear: (near: { screen: string | null; sofa: boolean }) => void;
+  setSeated: (seated: boolean, spot?: SeatId) => void;
+  setNear: (near: { screen: string | null; seat: SeatId | null; thing: string | null }) => void;
   panel: PanelState;
   setPanel: (patch: Partial<PanelState>) => void;
   setSceneReady: (ready: boolean) => void;
@@ -126,9 +141,17 @@ export const useStore = create<ImmersionState>((set, get) => ({
   pauseView: "menu",
   seated: false,
   nearScreen: null,
-  nearSofa: false,
+  nearSeat: null,
+  seatSpot: "sofa",
+  nearThing: null,
+  petAt: 0,
+  pet: () => set({ petAt: performance.now() }),
   room: "salon",
   baked: false,
+  music: false,
+  toggleMusic: () => set({ music: !get().music }),
+  door: false,
+  toggleDoor: () => set({ door: !get().door }),
   fire: true,
   toggleFire: () => set({ fire: !get().fire }),
   lamps: { salon: true, sud: true, nuit: true },
@@ -153,10 +176,10 @@ export const useStore = create<ImmersionState>((set, get) => ({
   setUnsupported: (unsupported) => set({ unsupported, phase: unsupported ? "unsupported" : "loading" }),
   setMode: (mode) => set(mode === "paused" ? { mode } : { mode, pauseView: "menu" }),
   setPauseView: (pauseView) => set({ pauseView }),
-  setSeated: (seated) => set({ seated }),
-  setNear: ({ screen, sofa }) => {
+  setSeated: (seated, spot) => set(spot ? { seated, seatSpot: spot } : { seated }),
+  setNear: ({ screen, seat, thing }) => {
     const s = get();
-    if (s.nearScreen !== screen || s.nearSofa !== sofa) set({ nearScreen: screen, nearSofa: sofa });
+    if (s.nearScreen !== screen || s.nearSeat !== seat || s.nearThing !== thing) set({ nearScreen: screen, nearSeat: seat, nearThing: thing });
   },
   panel: EMPTY_PANEL,
   setPanel: (patch) => set({ panel: { ...get().panel, ...patch } }),

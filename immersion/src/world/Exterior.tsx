@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useLoader, useThree } from "@react-three/fiber";
-import { BackSide, BufferAttribute, Color, ConeGeometry, type BufferGeometry, CylinderGeometry, DoubleSide, InstancedMesh, LinearFilter, LinearMipmapLinearFilter, MeshStandardMaterial, NoColorSpace, Object3D, PlaneGeometry, RepeatWrapping, Shape, ShapeGeometry, ShaderMaterial, SphereGeometry, SRGBColorSpace, Vector2, Vector3, type CompressedTexture } from "three";
+import { useFrame, useLoader, useThree } from "@react-three/fiber";
+import { BackSide, BufferAttribute, Color, ConeGeometry, type BufferGeometry, CylinderGeometry, DoubleSide, InstancedMesh, LinearFilter, LinearMipmapLinearFilter, NoColorSpace, Path, Object3D, PlaneGeometry, RepeatWrapping, Shape, ShapeGeometry, ShaderMaterial, SphereGeometry, SRGBColorSpace, Vector2, Vector3, type CompressedTexture } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { assetUrl } from "../lib/assets";
 import { useProfile } from "../state/store";
 import { WEST_WINDOW, WEST_WINDOWS } from "./geometry/salon";
 import { ktx2For } from "./ktx2";
-import { BEDROOM_WINDOW, KITCHEN, MOON, PLAN, ROOM } from "./layout";
+import { glassMaterial } from "./glass";
+import { BEDROOM_WINDOW, DOOR, KITCHEN, MOON, PLAN, ROOM } from "./layout";
 import { Snow } from "./Snow";
 
 /** La lune vue dans le ciel, et la direction de sa lumière — voir `MOON` dans le plan. */
@@ -142,9 +143,25 @@ const SKY_FRAGMENT = /* glsl */ `
   uniform float uGain;
   varying vec3 vDirection;
   ${PANORAMA_GLSL}
+  uniform float uTime;
   float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+  float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float noise2(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), f.x), mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), f.x), f.y);
+  }
+  float fbm2(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 4; i++) { v += a * noise2(p); p = p * 2.05 + 11.3; a *= 0.5; }
+    return v;
+  }
   vec3 night(vec3 d) {
     float h = clamp(d.y, -0.2, 1.0);
+    vec3 moonDir = normalize(uMoon);
+    float m = dot(d, moonDir);
     // L'heure bleue : un zénith profond, un horizon plus clair.
     vec3 sky = mix(uHorizon, uZenith, pow(smoothstep(-0.05, 0.75, h), 0.62));
     // Les étoiles : une grille de directions, une étoile dans une cellule sur quarante.
@@ -152,12 +169,29 @@ const SKY_FRAGMENT = /* glsl */ `
     float star = hash(cell);
     float twinkle = step(0.976, star) * smoothstep(0.02, 0.3, h);
     vec3 local = fract(d * 190.0) - 0.5;
-    sky += vec3(0.85, 0.9, 1.0) * twinkle * smoothstep(0.42, 0.0, length(local)) * (0.55 + 1.6 * hash(cell + 3.0));
-    // La lune : un disque net et son halo.
-    float m = dot(d, normalize(uMoon));
-    sky += vec3(1.0, 0.97, 0.9) * smoothstep(0.99955, 0.9997, m) * 5.5;
+    vec3 stars = vec3(0.85, 0.9, 1.0) * twinkle * smoothstep(0.42, 0.0, length(local)) * (0.55 + 1.6 * hash(cell + 3.0));
+
+    // Les nuages : de longs bancs minces qui dérivent ; ils cachent les étoiles, voilent la lune, et
+    // s'argentent en passant devant elle.
+    vec2 cp = d.xz / (d.y + 0.32) * 1.15 + vec2(uTime * 0.0045, uTime * 0.0016);
+    float cloud = smoothstep(0.46, 0.8, fbm2(cp)) * smoothstep(0.06, 0.34, d.y);
+    float lining = pow(max(m, 0.0), 10.0);
+    vec3 cloudColor = mix(uHorizon * 0.55, vec3(0.42, 0.5, 0.66), lining);
+
+    // L'aurore : des draperies vertes, mauves en haut, au nord, au-dessus des sommets. Elle va et
+    // vient — une présence qui monte et retombe sur plusieurs minutes.
+    float azimuth = atan(d.x, -d.z);
+    float presence = smoothstep(0.42, 0.7, noise2(vec2(uTime * 0.008, 3.7)));
+    float band = smoothstep(0.3, 0.46, d.y) * smoothstep(0.98, 0.62, d.y) * smoothstep(1.5, 0.35, abs(azimuth));
+    float drape = fbm2(vec2(azimuth * 2.6 + uTime * 0.012, uTime * 0.02 + d.y * 0.6));
+    float rays = 0.55 + 0.45 * sin(azimuth * 46.0 + drape * 9.0 + uTime * 0.25);
+    vec3 aurora = mix(vec3(0.08, 0.95, 0.42), vec3(0.5, 0.22, 0.85), smoothstep(0.42, 0.85, d.y)) * band * smoothstep(0.38, 0.7, drape) * rays * presence * 0.55;
+
+    sky += stars * (1.0 - cloud) + aurora * (1.0 - cloud * 0.8);
+    // La lune : un disque net et son halo — derrière les nuages, il n'en reste que la lueur.
+    sky += vec3(1.0, 0.97, 0.9) * smoothstep(0.99955, 0.9997, m) * 5.5 * (1.0 - cloud * 0.88);
     sky += vec3(0.32, 0.42, 0.62) * (pow(max(m, 0.0), 420.0) * 0.9 + pow(max(m, 0.0), 26.0) * 0.16);
-    return sky;
+    return mix(sky, cloudColor, cloud * 0.72);
   }
   void main() {
     vec3 d = normalize(vDirection);
@@ -438,6 +472,7 @@ export function Exterior() {
         fragmentShader: SKY_FRAGMENT,
         uniforms: {
           uMoon: { value: MOON_DIRECTION.clone() },
+          uTime: { value: 0 },
           uHorizon: { value: new Color(0.075, 0.16, 0.36) },
           uZenith: { value: new Color(0.012, 0.028, 0.085) },
           uFar: { value: null },
@@ -452,6 +487,10 @@ export function Exterior() {
     }),
     []
   );
+
+  useFrame(({ clock }) => {
+    sky.material.uniforms.uTime.value = clock.elapsedTime;
+  });
 
   // Les deux couches détourées : des cylindres centrés sur le chalet.
   const layers = useMemo(() => {
@@ -539,7 +578,8 @@ export function Exterior() {
   // ── Les vitrages : presque rien, sauf un reflet ─────────────────────────────
   // Un miroir presque transparent : ce qu'on voit du vitrage, c'est la pièce qui s'y reflète faiblement
   // par-dessus la nuit — les lampes dans les carreaux, comme sur une vraie baie le soir.
-  const glass = useMemo(() => new MeshStandardMaterial({ color: "#ffffff", roughness: 0.03, metalness: 1, transparent: true, opacity: 0.13, envMapIntensity: 1.3, depthWrite: false, side: DoubleSide }), []);
+  // Les vitrages : une matière par famille de fenêtres — le givre monte depuis leur traverse basse.
+  const glass = useMemo(() => ({ bay: glassMaterial(0.28, 0.6), west: glassMaterial(WEST_WINDOW.sill, 0.5), kitchen: glassMaterial(KITCHEN.window.y0, 0.4), bedroom: glassMaterial(BEDROOM_WINDOW.y0, 0.45) }), []);
   const gable = useMemo(() => {
     const shape = new Shape();
     shape.moveTo(-ROOM.halfW, 0.2);
@@ -548,6 +588,14 @@ export function Exterior() {
     shape.lineTo(0, ROOM.ridge);
     shape.lineTo(-ROOM.halfW, ROOM.eave);
     shape.closePath();
+    // Le passage de la porte-fenêtre : son vantail porte son propre vitrage (`Door.tsx`).
+    const door = new Path();
+    door.moveTo(DOOR.x0, 0.2);
+    door.lineTo(DOOR.x1, 0.2);
+    door.lineTo(DOOR.x1, 2.25);
+    door.lineTo(DOOR.x0, 2.25);
+    door.closePath();
+    shape.holes.push(door);
     return new ShapeGeometry(shape);
   }, []);
   const pane = useMemo(() => new PlaneGeometry(WEST_WINDOW.width, WEST_WINDOW.top - WEST_WINDOW.sill), []);
@@ -564,16 +612,16 @@ export function Exterior() {
       <mesh geometry={terrain} material={snowMaterial} renderOrder={-7} />
       <instancedMesh ref={firs} args={[fir.geometry, fir.material, firCount]} key={firCount} frustumCulled={false} />
       <Snow />
-      <mesh geometry={gable} material={glass} position={[0, 0, ROOM.north + 0.13]} renderOrder={3} />
+      <mesh geometry={gable} material={glass.bay} position={[0, 0, ROOM.north + 0.13]} renderOrder={3} />
       {/* La fenêtre de la cuisine et celle de la chambre, dans leurs murs sud. */}
-      <mesh material={glass} position={[(KITCHEN.window.x0 + KITCHEN.window.x1) / 2, (KITCHEN.window.y0 + KITCHEN.window.y1) / 2, ROOM.back + 0.02]} renderOrder={3}>
+      <mesh material={glass.kitchen} position={[(KITCHEN.window.x0 + KITCHEN.window.x1) / 2, (KITCHEN.window.y0 + KITCHEN.window.y1) / 2, ROOM.back + 0.02]} renderOrder={3}>
         <planeGeometry args={[KITCHEN.window.x1 - KITCHEN.window.x0, KITCHEN.window.y1 - KITCHEN.window.y0]} />
       </mesh>
-      <mesh material={glass} position={[(BEDROOM_WINDOW.x0 + BEDROOM_WINDOW.x1) / 2, (BEDROOM_WINDOW.y0 + BEDROOM_WINDOW.y1) / 2, PLAN.bedroom.z1 - 0.01]} renderOrder={3}>
+      <mesh material={glass.bedroom} position={[(BEDROOM_WINDOW.x0 + BEDROOM_WINDOW.x1) / 2, (BEDROOM_WINDOW.y0 + BEDROOM_WINDOW.y1) / 2, PLAN.bedroom.z1 - 0.01]} renderOrder={3}>
         <planeGeometry args={[BEDROOM_WINDOW.x1 - BEDROOM_WINDOW.x0, BEDROOM_WINDOW.y1 - BEDROOM_WINDOW.y0]} />
       </mesh>
       {WEST_WINDOWS.map((z) => (
-        <mesh key={z} geometry={pane} material={glass} position={[-ROOM.halfW + 0.02, (WEST_WINDOW.sill + WEST_WINDOW.top) / 2, z]} rotation-y={Math.PI / 2} renderOrder={3} />
+        <mesh key={z} geometry={pane} material={glass.west} position={[-ROOM.halfW + 0.02, (WEST_WINDOW.sill + WEST_WINDOW.top) / 2, z]} rotation-y={Math.PI / 2} renderOrder={3} />
       ))}
     </group>
   );
