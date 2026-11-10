@@ -1,9 +1,10 @@
-import { useStore, useT } from "../state/store";
+import { useMovementKeys, useStore, useT } from "../state/store";
 import type { QualityChoice } from "../lib/settings";
 import type { Key } from "../lib/i18n";
 import { runBench } from "../bench/bench";
 
 const QUALITIES: QualityChoice[] = ["auto", "low", "medium", "high", "ultra"];
+const KEYBOARDS = ["auto", "azerty", "qwerty", "qwertz"] as const;
 
 function Slider({ label, value, min, max, step, onChange, format }: { label: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void; format: (value: number) => string }) {
   return (
@@ -32,6 +33,7 @@ export function Settings() {
   const t = useT();
   const settings = useStore((s) => s.settings);
   const update = useStore((s) => s.updateSettings);
+  const keys = useMovementKeys();
   const percent = (v: number) => `${Math.round(v * 100)} %`;
 
   return (
@@ -53,6 +55,21 @@ export function Settings() {
       <Slider label={t("settings.volume")} value={settings.volume} min={0} max={1} step={0.01} onChange={(volume) => update({ volume })} format={percent} />
       <Toggle label={t("settings.spatial")} hint={t("settings.spatial.hint")} value={settings.spatial} onChange={(spatial) => update({ spatial })} />
       <Slider label={t("settings.reverb")} value={settings.reverb} min={0} max={1} step={0.01} onChange={(reverb) => update({ reverb })} format={percent} />
+      <div className="setting setting-block">
+        <span className="setting-label">
+          {t("settings.keyboard")}
+          <small>
+            {t("settings.keyboard.hint")} <kbd>{keys}</kbd>
+          </small>
+        </span>
+        <div className="segmented" role="radiogroup">
+          {KEYBOARDS.map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={settings.keyboard === k} className={settings.keyboard === k ? "is-on" : ""} onClick={() => update({ keyboard: k })} data-testid={`keyboard-${k}`}>
+              {k === "auto" ? t("quality.auto") : k.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </div>
       <Slider label={t("settings.sensitivity")} value={settings.sensitivity} min={0.2} max={3} step={0.05} onChange={(sensitivity) => update({ sensitivity })} format={(v) => `× ${v.toFixed(2)}`} />
       <Slider label={t("settings.fov")} value={settings.fov} min={50} max={100} step={1} onChange={(fov) => update({ fov })} format={(v) => `${v}°`} />
       <Toggle label={t("settings.cinema")} hint={t("settings.cinema.hint")} value={settings.cinema} onChange={(cinema) => update({ cinema })} testId="setting-cinema" />

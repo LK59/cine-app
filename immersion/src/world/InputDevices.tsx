@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useThree } from "@react-three/fiber";
-import { attachKeyboardMouse } from "../input/keyboardMouse";
+import { attachKeyboardMouse, movementKeyLabels } from "../input/keyboardMouse";
 import { captureChanged, listenIntents } from "../state/actions";
 import { useStore } from "../state/store";
 import { look } from "./rig";
@@ -22,7 +22,11 @@ export function InputDevices() {
         const state = useStore.getState();
         return state.phase === "world" && state.mode === "walk";
       },
+      layout: () => useStore.getState().settings.keyboard,
+      onLayoutSeen: (label) => useStore.getState().setKeysSeen(label),
     });
+    // Ce que le navigateur sait dire de la disposition, quand il sait (sinon : la langue, puis la première touche).
+    void movementKeyLabels().then((label) => useStore.getState().keysSeen === null && useStore.getState().setKeysSeen(label));
     return () => {
       detach();
       stopIntents();

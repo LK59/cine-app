@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useProgress } from "@react-three/drei";
-import { useStore, useT } from "../state/store";
-import { movementKeyLabels } from "../input/keyboardMouse";
+import { useStore, useT, useMovementKeys } from "../state/store";
 import { enterWorld, worldEntered } from "../state/actions";
 import { leaveToLaterna } from "../lib/session";
 import { ExperienceLogo } from "./Logo";
@@ -23,14 +22,13 @@ export function Intro() {
   const { progress, active } = useProgress();
   const [lit, setLit] = useState(false);
   const [minElapsed, setMinElapsed] = useState(false);
-  const [keysLabel, setKeysLabel] = useState("WASD");
+  const keysLabel = useMovementKeys();
   const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     // Une image plus tard : la transition CSS part de l'état éteint.
     const raf = requestAnimationFrame(() => setLit(true));
     const timer = setTimeout(() => setMinElapsed(true), MIN_INTRO_MS);
-    void movementKeyLabels().then(setKeysLabel);
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(timer);

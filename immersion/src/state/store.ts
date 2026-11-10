@@ -3,6 +3,7 @@ import { browserLang, translate, type Key, type Lang } from "../lib/i18n";
 import { AUTO_LEVELS, loadSettings, profileOf, saveSettings, type Quality, type QualityProfile, type Settings } from "../lib/settings";
 import type { Unsupported } from "../lib/capability";
 import type { Episode, Library, Title } from "../media/library";
+import { FORCED_LABEL } from "../input/keyboardMouse";
 import type { SeatId } from "../world/interactions";
 import type { RoomId } from "../world/layout";
 
@@ -94,6 +95,9 @@ export interface ImmersionState {
   /** La mesure (« Mesurer », `bench/bench.ts`) : son avancement, ses résultats. `null` : jamais lancée. */
   bench: BenchState | null;
   setBench: (patch: Partial<BenchState>) => void;
+  /** Les lettres de déplacement reconnues sur ce clavier (« ZQSD », « WASD ») ; `null` : pas encore su. */
+  keysSeen: string | null;
+  setKeysSeen: (label: string) => void;
   /** La chaîne hi-fi : en marche ou non (la musique se tait d'elle-même pendant un film). */
   music: boolean;
   toggleMusic: () => void;
@@ -148,6 +152,8 @@ export const useStore = create<ImmersionState>((set, get) => ({
   pet: () => set({ petAt: performance.now() }),
   room: "salon",
   baked: false,
+  keysSeen: null,
+  setKeysSeen: (keysSeen) => get().keysSeen !== keysSeen && set({ keysSeen }),
   music: false,
   toggleMusic: () => set({ music: !get().music }),
   door: false,
@@ -218,4 +224,9 @@ const EMPTY_BENCH: BenchState = { running: false, preset: null, video: false, pr
 export function useProfile(): QualityProfile {
   // Pendant une mesure, c'est elle qui choisit le préréglage — sans toucher aux réglages gardés.
   return useStore((s) => profileOf(s.bench?.running && s.bench.preset ? s.bench.preset : s.settings.quality, s.autoLevel));
+}
+
+/** Les lettres des touches de déplacement à afficher : celles du réglage s'il force une disposition, sinon celles reconnues. */
+export function useMovementKeys(): string {
+  return useStore((s) => (s.settings.keyboard === "auto" ? (s.keysSeen ?? "WASD") : FORCED_LABEL[s.settings.keyboard]));
 }

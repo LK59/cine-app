@@ -26,6 +26,11 @@ export interface Settings {
   /** Champ de vision vertical, en degrés. */
   fov: number;
   showFps: boolean;
+  /**
+   * Le clavier : `auto` — les touches de déplacement sont lues par leur position (ZQSD en AZERTY, WASD
+   * ailleurs, sans rien régler) ; sinon la disposition est forcée, et elles sont lues par leur lettre.
+   */
+  keyboard: "auto" | "azerty" | "qwerty" | "qwertz";
   /** Mode cinéma : quand un film joue, les lampes baissent d'elles-mêmes et l'écran éclaire la pièce. */
   cinema: boolean;
   /**
@@ -46,6 +51,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fov: 68,
   showFps: false,
   cinema: true,
+  keyboard: "auto",
   hdrToSdr: true,
 };
 
@@ -127,6 +133,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     fov: clamp(r.fov, 50, 100, d.fov),
     showFps: typeof r.showFps === "boolean" ? r.showFps : d.showFps,
     cinema: typeof r.cinema === "boolean" ? r.cinema : d.cinema,
+    keyboard: r.keyboard === "azerty" || r.keyboard === "qwerty" || r.keyboard === "qwertz" ? r.keyboard : "auto",
     hdrToSdr: typeof r.hdrToSdr === "boolean" ? r.hdrToSdr : d.hdrToSdr,
   };
 }
