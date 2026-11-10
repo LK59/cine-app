@@ -168,4 +168,35 @@ describe("POST /api/viewport-diag", () => {
     expect(line).not.toHaveProperty("firstHiddenBy");
     expect(String(line.firstTop)).toHaveLength(60);
   });
+
+  it("la mesure du mode Immersion : une ligne « immersion-bench » bornée, au nom de la session", async () => {
+    const res = await post({
+      kind: "immersion-bench",
+      user: "quelqu'un d'autre",
+      run: "abcdef123456-de-trop",
+      preset: "ultra",
+      video: true,
+      fps: 58.94,
+      low1: 41.26,
+      frames: 1178,
+      seconds: 20,
+      renderer: "ANGLE (Intel, Intel(R) Arc(TM) 140T GPU, OpenGL 4.6)",
+      width: 2880,
+      height: 1800,
+      dpr: 2,
+      scale: 1,
+      baked: true,
+      extra: "rien",
+    });
+    expect(res.status).toBe(204);
+    const [line, kind] = mockLog.mock.calls[0];
+    expect(kind).toBe("immersion-bench");
+    expect(line).toMatchObject({ user: "louis", run: "abcdef123456", preset: "ultra", video: true, fps: 58.9, low1: 41.3, frames: 1178, width: 2880, height: 1800, baked: true, supersampling: false });
+    expect(line).not.toHaveProperty("extra");
+  });
+
+  it("une mesure du mode Immersion sans préréglage connu : 400, rien d'écrit", async () => {
+    expect((await post({ kind: "immersion-bench", preset: "extrême", fps: 60 })).status).toBe(400);
+    expect(mockLog).not.toHaveBeenCalled();
+  });
 });

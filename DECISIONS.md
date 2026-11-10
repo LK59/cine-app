@@ -10526,10 +10526,19 @@ n'y a pas accès (liste fermée). `immersion/` est exclu du typage, du lint et d
 (`tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts`), comme `streamdeck-plugin`.
 
 **Différent exprès.** Le lecteur du mode n'est pas celui de l'application : il passe par la négociation du
-lecteur serveur (`POST /api/jellyfin/playback/start`) et n'écrit rien dans `player.log`. Les empreintes du
-lecteur ne le connaissent pas.
+lecteur serveur (`POST /api/jellyfin/playback/start`, son toujours en stéréo, conversion HDR → SDR par le
+serveur pour les fichiers HDR). Ses lignes dans `player.log` portent `player: "immersion"` — jamais celles du
+lecteur serveur : l'activité les reconnaît (`playerOf`, `seances.ts`) et les tient hors du diagnostic
+fichier-ou-appareil (`diagnosis.ts`), qui parle des deux lecteurs de l'application. Les empreintes du lecteur ne
+le connaissent pas.
+
+**Sa mesure.** Le bouton « Mesurer » de ses réglages joue un parcours fixe par préréglage, avec et sans vidéo,
+et envoie une ligne par passage à `startup.log` (`kind: "immersion-bench"`, par `/api/viewport-diag` — le mode n'a
+pas d'autre journal) : cadence moyenne, 1 % le plus lent, carte graphique annoncée par le navigateur, définition
+réellement rendue. Champs connus et bornés, compte tiré de la session, comme les autres relevés de cette route.
 
 **Tests.** `immersion-trigger.test.ts` (le mot exact, l'adresse, et aucun import de three ni du projet dans
 `src/`), `immersion-files.test.ts` (types servis, cache, `.br` par les marqueurs de §131, jamais hors du dossier,
 404 sans build), `immersion-proxy.test.ts` (307 vers la connexion pour la page, 401 pour les fichiers, hors des
-listes publiques, porte des liens de partage) ; de bout en bout, `immersion/tests/e2e/`.
+listes publiques, porte des liens de partage), `immersion-activity.test.ts` (reconnu, hors du diagnostic),
+`viewport-diag-route.test.ts` (la ligne `immersion-bench`) ; de bout en bout, `immersion/tests/e2e/`.
