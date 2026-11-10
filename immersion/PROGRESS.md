@@ -6,7 +6,8 @@ entier après toute reprise.**
 
 ## État actuel (à jour)
 
-- **Livré : 10.34.0, en production depuis le 10/11/2026 à 23 h 47** (`main` = `020a0b04`, poussé). Le mode est
+- **Livré : 10.34.0, en production depuis le 10/11/2026 à 23 h 47** (`020a0b04`), puis **10.34.1 le 11/11 à 0 h 04**
+  (`b14b2510` : l'interrupteur des tâches de fond, DECISIONS §145 — rien ne change dans le mode). Le mode est
   accessible en cherchant exactement `immersion` dans la recherche du cinéma (affiche « Le Chalet »).
 - La branche `immersion` et `main` sont au même commit. La copie de travail à part (suffixe `-immersion`) reste
   l'endroit où travailler ; la copie principale reste sur `main`. `origin/immersion` porte un ancien historique
@@ -26,8 +27,8 @@ sans les décisions de masquage — toutes les cinq minutes elle retirait le tag
 compte visé, et la production le remettait à son passage suivant. Arrêtée à 23 h 39 ; état rétabli par la
 production. Corrigé dans le banc : `REQUEST_HIDE_ACCOUNT` vidé et X-Ray coupé au lancement (réglages `XRAY*` écartés
 de la base recopiée). **À retenir : une instance du banc parle aux vrais services ; ne jamais la laisser tourner des
-heures, et vérifier `docker logs` de l'instance dès son démarrage.** Proposé au propriétaire, pas fait : un
-interrupteur unique qui coupe toutes les tâches de fond d'une instance de banc (`instrumentation.ts`).
+heures, et vérifier `docker logs` de l'instance dès son démarrage.** L'interrupteur unique demandé ensuite par
+le propriétaire est livré en 10.34.1 : `CINE_BACKGROUND_JOBS=off`, que `regress.sh` passe à ses instances.
 
 ### Suite possible
 
