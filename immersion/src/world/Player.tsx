@@ -6,6 +6,7 @@ import { useStore } from "../state/store";
 import { motion } from "../input/intents";
 import { nearestScreen, PLAYER, ROOM, roomAt, SOFA } from "./layout";
 import { rig } from "./rig";
+import { benchPose, benchRun } from "../bench/bench";
 
 const euler = new Euler(0, 0, 0, "YXZ");
 const eye = new Vector3();
@@ -55,6 +56,16 @@ export function Player() {
       rig.teleport = null;
       velocity.current.set(0, 0, 0);
       fall.current = 0;
+    }
+
+    // Une mesure est en cours : la caméra suit son parcours fixe. Le personnage, lui, ne bouge pas — il
+    // retrouve sa place à la fin ; seule la pièce « où l'on est » suit la caméra, pour que ce qui se
+    // dessine soit ce qu'un visiteur verrait de là.
+    if (benchRun.active) {
+      const at = benchPose(camera, performance.now());
+      rig.eye.copy(at);
+      state.setRoom(roomAt(at.x, 0, at.z));
+      return;
     }
 
     // Le mouvement voulu, tel que le périphérique d'entrée le tient (`input/intents.ts`).

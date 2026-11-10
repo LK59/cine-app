@@ -207,10 +207,24 @@ l'architecture ne ferme rien, et c'est fait :
        scénario du panneau)
 5. [x] Couche d'intentions et d'actions, interface pilotée par le store, commandes de lecture, registre de personnages ; `docs/VR.md`, `docs/MULTIJOUEUR.md`
 6. [x] Plusieurs télévisions : une texture partagée, un haut-parleur par écran, une lumière d'écran qui suit le visiteur (`Screens.tsx`) — **reste : poser les écrans de la cuisine et de la chambre dans de vraies pièces**
-7. [ ] Pièces : cuisine + TV, mezzanine + escalier, couloir, chambre ; découpage par pièces ; canapé
-8. [ ] Extérieur en couches : panorama Blender (relief réel), plan intermédiaire, sapins 3D, neige qui tombe
-9. [ ] Lumière précalculée (export de la géométrie → cuisson Blender → `lightMap`), par pièce
-10. [ ] Bouton « Mesurer » + ligne `immersion-bench`
+7. [x] Pièces : cuisine + TV, mezzanine + escalier, couloir, chambre ; découpage par pièces (`visibleGroups`) ;
+       canapé : vrai modèle (`tools/sofa/`, 84 000 triangles, 1,36 Mo) avec le tissu de la maison, la version en
+       boîtes en secours si le modèle ne se charge pas
+8. [~] Extérieur en couches (`Exterior.tsx`, `Snow.tsx`) : ciel + panorama lointain, deux couches détourées sur
+       cylindres (parallaxe), sol de neige modelé qui plonge vers la vallée, sapins instanciés, neige qui tombe
+       (nuage de points animé par la carte graphique). **Reste : brancher le panorama livré par `tools/panorama/`
+       (fichiers `public/assets/panorama/{far,mid,near}.ktx2` + `panorama.json`), régler le gain et les raccords
+       sur captures ; sans panorama le ciel de secours suffit**
+9. [~] Lumière précalculée : `tools/bake/export.ts` (géométrie en OBJ dans l'ordre des sommets de la page +
+       `scene.json` : lumières, teintes, boîtes d'ombre des objets posés) → cuisson Blender (`tools/bake/bake.sh`,
+       sous-traitée) → `public/assets/lightmaps/` ; côté page `lightmaps.ts` (UV de lumière posés si les sommets
+       témoins concordent, variante de matière : diffuse = lightmap seule, la lumière de l'écran en plus, reflets
+       gardés), `Lights.tsx` réduit à trois lumières sans ombre, plus de N8AO ni d'ombres temps réel quand la
+       lumière cuite est là. **Reste : recevoir la cuisson, relancer l'export (boîtes d'ombre ajoutées après le
+       premier export) puis la cuisson avec `--sofa`, vérifier sur captures**
+10. [x] Bouton « Mesurer » (`src/bench/bench.ts`, `ui/BenchOverlay.tsx`, bloc dans les réglages) + ligne
+        `immersion-bench` (route `viewport-diag`, test) — **reste : le portail vert avant de commiter le côté
+        application, et un passage réel sur l'instance jetable**
 11. [ ] Affiche `poster.jpg` (capture), finitions, captures de référence, tests complets
 12. [ ] Rebase sur `main`, portail, version 10.34.0, fusion, build, déploiement, vérification, push
 
@@ -231,7 +245,7 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
 | `Dockerfile` | étape `immersion`, copie du build, `rm -rf immersion` dans l'étape de l'application |
 | `.dockerignore` | ce qui n'entre pas dans le build |
 | `tsconfig.json`, `eslint.config.mjs`, `vitest.config.ts` | `immersion` exclu, comme `streamdeck-plugin` |
-| à venir : `src/app/api/viewport-diag/route.ts`, `src/lib/eventLogs.ts` | la ligne `immersion-bench` (point 6 de la stratégie qualité) |
+| `src/app/api/viewport-diag/route.ts`, `src/lib/eventLogs.ts`, `src/__tests__/viewport-diag-route.test.ts` | **modifiés** : la ligne `immersion-bench` (point 6 de la stratégie qualité) |
 
 ## Environnements de travail
 
@@ -282,15 +296,16 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
 
 ## Problèmes ouverts
 
-- Le canapé, l'extérieur et la lumière sont à refaire selon les retours ci-dessus (deux sous-traitances en
-  cours : panorama Blender dans `tools/panorama/`, modèle du canapé dans `tools/sofa/` ; image Blender
-  partagée `immersion-blender`, `tools/blender/`).
+- Sous-traitances en cours : panorama Blender (`tools/panorama/`), cuisson des lightmaps (`tools/bake/`) ;
+  image Blender partagée `immersion-blender` (`tools/blender/`). Le canapé est livré et intégré.
+- Avec la lumière cuite, les objets posés (modèles) ne projettent plus d'ombre temps réel : leur ombre vient
+  des boîtes d'ombre de l'export (`propShadows`, à tenir à jour si un objet déménage dans `Props.tsx`).
 - Sous forte charge de la machine, le contexte WebGL du navigateur de test peut se perdre au chargement
   (l'écran « Le rendu 3D s'est interrompu » s'affiche alors — c'est le comportement voulu) : relancer.
 - Le serveur d'aperçu redirige `/` vers la page du mode ; sur la vraie application `/` est le cinéma.
 
 ## Prochaine action
 
-Étape 7 : les pièces (cuisine + sa télévision, escalier et mezzanine, couloir, chambre), le découpage par
-pièces. Puis l'extérieur en couches (quand le panorama est livré), le canapé (quand le modèle est livré),
-la lumière précalculée, le bouton « Mesurer », l'affiche, la livraison.
+Recevoir les deux sous-traitances en cours (panorama, cuisson des lightmaps), les brancher et les vérifier
+sur captures ; commiter le côté application (`immersion-bench`) une fois le portail vert ; puis l'affiche,
+le scénario du panneau, les poids, et la livraison (étape 12).

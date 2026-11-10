@@ -1,7 +1,8 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { PointLight } from "three";
-import { useProfile } from "../state/store";
+import { useProfile, useStore } from "../state/store";
+import { breathe } from "./lightmaps";
 import { BREAST, CHANDELIER, LAMPS, ROOM } from "./layout";
 import { NIGHT_LAMPS } from "./geometry/night";
 import { PENDANTS } from "./geometry/south";
@@ -19,11 +20,17 @@ import { MOONLIGHT_FROM } from "./Exterior";
  * - un ciel très faible pour que rien ne soit jamais tout à fait noir.
  *
  * Les ombres sont calculées une fois puis figées (`Atmosphere`) : rien ne bouge dans la pièce.
+ *
+ * **Avec la lumière précalculée** (`lightmaps.ts`), presque tout cela disparaît : les murs, les sols,
+ * la charpente et les meubles construits tiennent leur lumière — et leurs ombres, douces, avec les
+ * rebonds — de leur lightmap. Il ne reste en temps réel que trois lumières sans ombre, pour les
+ * reflets et pour les objets posés (plantes, fauteuil, bougies), et le souffle des bougies.
  */
 export function Lights() {
   const profile = useProfile();
   const chandelier = useRef<PointLight>(null);
-  const shadows = profile.shadowMap > 0;
+  const baked = useStore((s) => s.baked);
+  const shadows = profile.shadowMap > 0 && !baked;
   const cubeSize = Math.min(1024, profile.shadowMap);
   const lampY = 1.5;
   const base = useMemo(() => ({ chandelier: 210 }), []);
@@ -33,7 +40,22 @@ export function Lights() {
     const t = clock.elapsedTime;
     const flicker = 1 + 0.035 * Math.sin(t * 7.3) + 0.025 * Math.sin(t * 12.7 + 1.3) + 0.02 * Math.sin(t * 3.1 + 0.4);
     if (chandelier.current) chandelier.current.intensity = base.chandelier * flicker;
+    if (baked) breathe(1 + (flicker - 1) * 0.6);
   });
+
+  if (baked)
+    return (
+      <group>
+        <hemisphereLight args={["#6f8fd0", "#2a1d14", 0.22]} />
+        <pointLight ref={chandelier} position={[CHANDELIER.x, CHANDELIER.y + 0.42, CHANDELIER.z]} color="#ffc98f" intensity={base.chandelier} distance={18} decay={2} />
+        {profile.fillLights ? (
+          <>
+            <pointLight position={[PENDANTS[1][0], PENDANTS[1][1] - 0.15, PENDANTS[1][2]]} color="#ffcf9a" intensity={20} distance={8} decay={2} />
+            <pointLight position={[NIGHT_LAMPS.bedside[0][0] + 0.9, 1.25, (NIGHT_LAMPS.bedside[0][2] + NIGHT_LAMPS.bedside[1][2]) / 2]} color="#ffc083" intensity={12} distance={7.5} decay={2} />
+          </>
+        ) : null}
+      </group>
+    );
 
   return (
     <group>

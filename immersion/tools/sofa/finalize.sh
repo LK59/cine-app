@@ -10,7 +10,7 @@ run() { docker run --rm --name immersion-sofa-gt --cpus 5 --user "$(id -u):$(id 
 run sh -c '
 set -e
 cd /work/assets-src/sofa
-node /work/tools/sofa/optimize.mjs /work/assets-src/sofa/sofa_raw.gltf /work/public/assets/models/sofa/sofa.gltf
+node /work/tools/sofa/optimize.mjs /work/assets-src/sofa/sofa_raw.gltf /work/public/assets/models/sofa/sofa.gltf /work/assets-src/sofa/sofa_bake.glb
 cd /work
 ls -l public/assets/models/sofa
 gltf-transform inspect public/assets/models/sofa/sofa.gltf

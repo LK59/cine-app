@@ -24,5 +24,6 @@
     ]
   },
   "seatHeight": 0.482,
+  "lightmapUv": "TEXCOORD_1",
   "generator": "tools/sofa/build_sofa.py"
 }

@@ -1,6 +1,7 @@
 import { useStore, useT } from "../state/store";
 import type { QualityChoice } from "../lib/settings";
 import type { Key } from "../lib/i18n";
+import { runBench } from "../bench/bench";
 
 const QUALITIES: QualityChoice[] = ["auto", "low", "medium", "high", "ultra"];
 
@@ -56,6 +57,53 @@ export function Settings() {
       <Slider label={t("settings.fov")} value={settings.fov} min={50} max={100} step={1} onChange={(fov) => update({ fov })} format={(v) => `${v}°`} />
       <Toggle label={t("settings.hdr")} hint={t("settings.hdr.hint")} value={settings.hdrToSdr} onChange={(hdrToSdr) => update({ hdrToSdr })} testId="setting-hdr" />
       <Toggle label={t("settings.fps")} value={settings.showFps} onChange={(showFps) => update({ showFps })} testId="setting-fps" />
+      <BenchBlock />
+    </div>
+  );
+}
+
+/** « Mesurer » : lance la mesure, et montre ses résultats — un tableau préréglage × sans/avec vidéo. */
+function BenchBlock() {
+  const t = useT();
+  const results = useStore((s) => s.bench?.results);
+  const cell = (preset: string, video: boolean) => {
+    const r = results?.find((x) => x.preset === preset && x.video === video);
+    return r ? `${Math.round(r.fps)} · ${Math.round(r.low1)}` : "—";
+  };
+  const size = results?.[0];
+  return (
+    <div className="setting setting-block" data-testid="bench">
+      <span className="setting-label">
+        {t("bench.title")}
+        <small>{t("bench.hint")}</small>
+      </span>
+      <button type="button" className="btn" onClick={() => void runBench()} data-testid="bench-run">
+        {t("bench.run")}
+      </button>
+      {results?.length ? (
+        <table className="bench-table tabular" data-testid="bench-results">
+          <thead>
+            <tr>
+              <th />
+              <th>{t("bench.screensOff")}</th>
+              <th>{t("bench.withVideo")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(["ultra", "high", "medium", "low"] as const).map((preset) => (
+              <tr key={preset}>
+                <th>{t(`quality.${preset}` as Key)}</th>
+                <td>{cell(preset, false)}</td>
+                <td>{cell(preset, true)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <caption>
+            {t("bench.legend")}
+            {size ? ` — ${size.width} × ${size.height}` : ""}
+          </caption>
+        </table>
+      ) : null}
     </div>
   );
 }

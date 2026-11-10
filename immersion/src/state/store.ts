@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { browserLang, translate, type Key, type Lang } from "../lib/i18n";
-import { AUTO_LEVELS, loadSettings, profileOf, saveSettings, type QualityProfile, type Settings } from "../lib/settings";
+import { AUTO_LEVELS, loadSettings, profileOf, saveSettings, type Quality, type QualityProfile, type Settings } from "../lib/settings";
 import type { Unsupported } from "../lib/capability";
 import type { Episode, Library, Title } from "../media/library";
 
@@ -82,6 +82,12 @@ export interface ImmersionState {
   /** La pièce où se tient le visiteur : elle décide de ce qui se dessine et de ce qui s'entend. */
   room: "salon" | "cuisine" | "mezzanine" | "couloir" | "chambre";
   setRoom: (room: ImmersionState["room"]) => void;
+  /** La mesure (« Mesurer », `bench/bench.ts`) : son avancement, ses résultats. `null` : jamais lancée. */
+  bench: BenchState | null;
+  setBench: (patch: Partial<BenchState>) => void;
+  /** La lumière précalculée est-elle en place ? Les lumières temps réel se réduisent alors à ce qui bouge. */
+  baked: boolean;
+  setBaked: (baked: boolean) => void;
   /** La scène est-elle chargée (textures, modèles) ? */
   sceneReady: boolean;
   lang: Lang;
@@ -116,6 +122,10 @@ export const useStore = create<ImmersionState>((set, get) => ({
   nearScreen: null,
   nearSofa: false,
   room: "salon",
+  baked: false,
+  bench: null,
+  setBench: (patch) => set({ bench: { ...(get().bench ?? EMPTY_BENCH), ...patch } }),
+  setBaked: (baked) => get().baked !== baked && set({ baked }),
   setRoom: (room) => get().room !== room && set({ room }),
   sceneReady: false,
   lang: browserLang(),
@@ -158,7 +168,21 @@ export function useT(): (key: Key) => string {
   return (key) => translate(lang, key);
 }
 
+export interface BenchState {
+  running: boolean;
+  /** Le préréglage du passage en cours. */
+  preset: Quality | null;
+  video: boolean;
+  /** Avancement du passage en cours, de 0 à 1. */
+  progress: number;
+  step: number;
+  steps: number;
+  results: { preset: Quality; video: boolean; fps: number; low1: number; width: number; height: number }[];
+}
+const EMPTY_BENCH: BenchState = { running: false, preset: null, video: false, progress: 0, step: 0, steps: 0, results: [] };
+
 /** Le profil de qualité en vigueur. Une référence stable par niveau : rien ne se redessine pour rien. */
 export function useProfile(): QualityProfile {
-  return useStore((s) => profileOf(s.settings.quality, s.autoLevel));
+  // Pendant une mesure, c'est elle qui choisit le préréglage — sans toucher aux réglages gardés.
+  return useStore((s) => profileOf(s.bench?.running && s.bench.preset ? s.bench.preset : s.settings.quality, s.autoLevel));
 }

@@ -1152,3 +1152,64 @@ kbd {
 .panel-pad {
   padding: 0 26px;
 }
+
+/* ── La mesure (« Mesurer ») ─────────────────────────────────────────────── */
+.bench-overlay {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  z-index: 30;
+  display: grid;
+  gap: 8px;
+  min-width: 260px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(10, 12, 18, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #f3efe8;
+  font-size: 13px;
+}
+.bench-overlay strong {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.bench-bar {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.bench-bar i {
+  display: block;
+  height: 100%;
+  background: #e8b06a;
+  transition: width 0.25s linear;
+}
+.bench-table {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.bench-table th,
+.bench-table td {
+  padding: 5px 8px;
+  text-align: right;
+  font-weight: 400;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.bench-table tbody th,
+.bench-table thead th:first-child {
+  text-align: left;
+}
+.bench-table thead th {
+  opacity: 0.6;
+}
+.bench-table caption {
+  caption-side: bottom;
+  padding-top: 8px;
+  text-align: left;
+  font-size: 12px;
+  opacity: 0.55;
+}

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useRef } from "react";
 import { useStore } from "../state/store";
+import { benchFrame, benchRun } from "../bench/bench";
 
 /**
  * Dit à l'accueil que la scène est prête. Monté dans la même frontière `Suspense` que le chalet :
@@ -12,6 +13,8 @@ export function SceneReady() {
   const frames = useRef(0);
   const setSceneReady = useStore((s) => s.setSceneReady);
   useFrame(() => {
+    // Une mesure en cours chronomètre chaque image (`bench/bench.ts`).
+    benchFrame(performance.now());
     if (frames.current < 0) return;
     frames.current += 1;
     if (frames.current >= 8) {
@@ -26,6 +29,10 @@ export function SceneReady() {
   useEffect(() => {
     const handle = (window as unknown as { __immersion?: Record<string, unknown> }).__immersion;
     if (handle) Object.assign(handle, { scene, gl });
+    benchRun.gl = gl;
+    return () => {
+      benchRun.gl = null;
+    };
   }, [scene, gl]);
   return null;
 }
