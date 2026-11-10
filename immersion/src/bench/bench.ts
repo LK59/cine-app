@@ -2,7 +2,7 @@ import { Vector2, Vector3, type PerspectiveCamera, type WebGLRenderer } from "th
 import { api } from "../lib/session";
 import { SUPERSAMPLING, QUALITY, type Quality } from "../lib/settings";
 import { dispatch } from "../media/commands";
-import { playTestClip } from "../media/playback";
+import { getVideo, playTestClip } from "../media/playback";
 import { useStore } from "../state/store";
 
 /**
@@ -165,7 +165,7 @@ async function pass(preset: Quality, video: boolean, gl: WebGLRenderer, run: str
       preset,
       video,
       videoSource,
-      videoHeight: video ? (document.querySelector("video")?.videoHeight ?? null) : null,
+      videoHeight: video ? getVideo().videoHeight || null : null,
       fps,
       low1,
       frames: frames.length,

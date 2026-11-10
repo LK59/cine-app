@@ -210,18 +210,20 @@ l'architecture ne ferme rien, et c'est fait :
 7. [x] Pièces : cuisine + TV, mezzanine + escalier, couloir, chambre ; découpage par pièces (`visibleGroups`) ;
        canapé : vrai modèle (`tools/sofa/`, 84 000 triangles, 1,36 Mo) avec le tissu de la maison, la version en
        boîtes en secours si le modèle ne se charge pas
-8. [~] Extérieur en couches (`Exterior.tsx`, `Snow.tsx`) : ciel + panorama lointain, deux couches détourées sur
-       cylindres (parallaxe), sol de neige modelé qui plonge vers la vallée, sapins instanciés, neige qui tombe
-       (nuage de points animé par la carte graphique). **Reste : brancher le panorama livré par `tools/panorama/`
-       (fichiers `public/assets/panorama/{far,mid,near}.ktx2` + `panorama.json`), régler le gain et les raccords
-       sur captures ; sans panorama le ciel de secours suffit**
+8. [x] Extérieur en couches (`Exterior.tsx`, `Snow.tsx`) : ciel + panorama lointain (`public/assets/panorama/`,
+       relief Copernicus GLO-30 rendu dans Blender par `tools/panorama/`), deux couches détourées sur cylindres
+       (parallaxe ; la plus proche s'efface hors de l'axe de la vallée), sol de neige, sapins instanciés en
+       couronnes de branches (neige posée par le programme), neige qui tombe. Vérifié sur captures (`vallee`,
+       `baie`, `ouest`). Sans panorama le ciel de secours suffit
 9. [~] Lumière précalculée : `tools/bake/export.ts` (géométrie en OBJ dans l'ordre des sommets de la page +
-       `scene.json` : lumières, teintes, boîtes d'ombre des objets posés) → cuisson Blender (`tools/bake/bake.sh`,
-       sous-traitée) → `public/assets/lightmaps/` ; côté page `lightmaps.ts` (UV de lumière posés si les sommets
-       témoins concordent, variante de matière : diffuse = lightmap seule, la lumière de l'écran en plus, reflets
-       gardés), `Lights.tsx` réduit à trois lumières sans ombre, plus de N8AO ni d'ombres temps réel quand la
-       lumière cuite est là. **Reste : recevoir la cuisson, relancer l'export (boîtes d'ombre ajoutées après le
-       premier export) puis la cuisson avec `--sofa`, vérifier sur captures**
+       `scene.json` : lumières, teintes, boîtes d'ombre des objets posés) → `tools/bake/bake.sh` (Blender Cycles,
+       ~21 min à 192 échantillons, étalonnage vérifiable par `--calibrate`) → `public/assets/lightmaps/` (4 atlas,
+       4,2 Mo) ; côté page `lightmaps.ts` (UV de lumière posés si les sommets témoins concordent, variante de
+       matière : diffuse = lightmap seule, la lumière de l'écran en plus, reflets gardés), `Lights.tsx` réduit à
+       trois lumières sans ombre, plus de N8AO ni d'ombres temps réel quand la lumière cuite est là.
+       Première cuisson livrée et chargée par la page. **Reste : relancer `export.sh` (boîtes d'ombre des objets
+       ajoutées après le premier export) puis `bake.sh --samples 192`, vérifier chaque pièce sur captures,
+       commiter `public/assets/lightmaps/` et `tools/bake/`**
 10. [x] Bouton « Mesurer » (`src/bench/bench.ts`, `ui/BenchOverlay.tsx`, bloc dans les réglages) + ligne
         `immersion-bench` (route `viewport-diag`, test) — **reste : le portail vert avant de commiter le côté
         application, et un passage réel sur l'instance jetable**
@@ -306,6 +308,18 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
 
 ## Prochaine action
 
-Recevoir les deux sous-traitances en cours (panorama, cuisson des lightmaps), les brancher et les vérifier
-sur captures ; commiter le côté application (`immersion-bench`) une fois le portail vert ; puis l'affiche,
-le scénario du panneau, les poids, et la livraison (étape 12).
+**Le propriétaire a demandé (10/11, 18 h 35) de finir la passe en autonomie, livraison comprise, et de
+reprendre seul après une coupure.** Les six points, dans l'ordre — cocher ici au fur et à mesure :
+
+1. [ ] Portail vert (le relancer seul, machine calme, jusqu'au vert), puis commit côté application :
+       `src/app/api/viewport-diag/route.ts`, `src/lib/eventLogs.ts`, `src/__tests__/viewport-diag-route.test.ts`,
+       `.dockerignore` (ligne `immersion-bench`)
+2. [ ] Cuisson finale : `tools/bake/export.sh` puis `tools/bake/bake.sh --samples 192 --exposure -1.5` (~21 min),
+       une capture par pièce, commit de `public/assets/lightmaps/` et `tools/bake/`
+3. [~] (scénarios 01–05 verts le 10/11 ; reste : captures du dehors et de chaque pièce après la cuisson) Vérifications : bouton « Mesurer » dans un navigateur, scénarios `01-entree`, `04-panneau`, `05-mesure`
+       (et `02`, `03` de non-régression) sur l'instance jetable ; retouches du dehors revues sur captures
+4. [ ] Affiche `public/poster.jpg` (capture 2:3 du chalet, lumière finale)
+5. [ ] Livraison : rebase sur `main`, portail vert, version 10.34.0 (commit à part, `package.json` +
+       `package-lock.json` ligne 3), fusion, prévenir l'autre session, aucune lecture Jellyfin en cours, build
+       depuis une copie propre de `main`, `docker compose up -d --no-build`, prune, vérification, push en fond, CI
+6. [ ] Ménage (instance jetable, conteneur d'aperçu, `docker ps`), ce fichier à jour, récapitulatif final

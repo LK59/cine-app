@@ -1040,8 +1040,15 @@ kbd {
   flex-direction: column;
   gap: 4px;
   width: 100%;
+  /* La liste défile dans la carte ; sans ce minimum elle ne rétrécirait pas, elle déborderait. */
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
+}
+/* Chaque réglage garde sa hauteur : comprimés par la carte, ils se chevauchaient (la mention du relief
+   recouvrait le bouton « Mesurer » — trouvé par le scénario de la mesure). */
+.settings > * {
+  flex-shrink: 0;
 }
 .setting {
   display: grid;

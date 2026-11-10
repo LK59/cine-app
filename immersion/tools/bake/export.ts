@@ -65,7 +65,6 @@ function writeObj(file: string, name: string, geometry: BufferGeometry): number 
   return position.count;
 }
 
-const parts: Record<string, Part> = { salon: buildSalon(), sud: buildSouth(), nuit: buildNight() };
 /**
  * Les objets posés (des modèles, placés dans `src/world/Props.tsx`) ne sont pas cuits, mais ils font
  * de l'ombre : chacun est résumé ici par une ou deux boîtes à sa place — assez pour l'ombre douce d'un
