@@ -558,6 +558,16 @@ carries `backdrop-filter` children** — on iOS it left the row and panel unpain
 with `followOnlyOptions` and absent from the player fingerprints' doubles: the fingerprints must not change
 when touching these features.
 
+**Subtitle sync is measured on request and corrected at display** (DECISIONS §141, since 10/11/2026):
+Configuration → Synchro des sous-titres asks `laterna-xray` (`POST /subsync/jobs`, `xray/app/subsync.py`) whether
+each text subtitle lands on the speech (offset, drift, verdict); nothing is measured unless an admin clicks
+« Scanner », nothing applied unless « Recaler », the library scheduler never triggers it, and no media or
+subtitle file is ever written — corrections live in `subtitle_sync` (`cine.db`), keyed by the file's Jellyfin
+`ETag` (another version is stale, never applied). The native player gets them in the `direct` description (no
+extra request; `cueLookupTime` in `src/lib/subtitleSync.ts`, identical arithmetic at scale 1, so the player
+fingerprints do not move); the server player and downloads get a WebVTT rewritten by the subtitle route when the
+address carries `&sync=`. Image subtitles are out of scope.
+
 **AI features share one provider, one key and one monthly ceiling** (DECISIONS §135, §137, §139, §140):
 generated subtitles, description search, « Précédemment », questions about a title or a person, « Jusqu'ici »
 — Anthropic, OpenAI or Google (`subtitleGen/providers/`), every call written to `ai_spend_days` /

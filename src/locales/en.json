@@ -4395,5 +4395,65 @@
     "resetConfirm": "Forget and rename",
     "resetDone": "Memory cleared: the series will be renamed.",
     "unavailable": "The service does not report these figures yet."
+  },
+  "subSync": {
+    "nav": "Subtitle sync",
+    "hint": "Measures, on request, whether each text subtitle lands on the film's speech, and realigns it on screen — never in the file. Nothing is measured or corrected without a click here.",
+    "off": "This needs the “Actors on screen” option set up (Configuration → Connections): it is what listens to the films' speech.",
+    "filterLabel": "Show",
+    "filter": {
+      "affected": "To fix",
+      "measured": "Measured",
+      "all": "All"
+    },
+    "counts": "{measured} measured · {affected} to fix · {applied} realigned",
+    "pendingShort": "{n} in progress",
+    "pending": "{n} measurements in progress…",
+    "movies": "Movies · {n}",
+    "series": "Series · {n}",
+    "season": "Season {n}",
+    "specials": "Specials",
+    "scan": "Scan",
+    "apply": "Realign",
+    "reject": "Reject",
+    "reset": "Restore",
+    "scanned": "{n} measurements requested",
+    "changed": "{n} tracks updated",
+    "actionFailed": "Not possible right now.",
+    "none": "Nothing to show here.",
+    "unavailable": "The library could not be read: only titles already measured are shown.",
+    "imageNote": "Image subtitles (PGS, VobSub) cannot be measured. A season or a series only realigns reliable measurements; a single track is realigned by hand.",
+    "job": {
+      "queued": "Measuring",
+      "failed": "Measurement failed: {error}"
+    },
+    "track": {
+      "external": "file",
+      "forced": "forced",
+      "hi": "SDH"
+    },
+    "offset": "offset {v}",
+    "drift": "drift {v}",
+    "confidence": {
+      "high": "reliable",
+      "medium": "to check",
+      "low": "unsure"
+    },
+    "verdict": {
+      "ok": "In sync",
+      "shifted": "Offset",
+      "drift": "Drift",
+      "uncertain": "Uncertain",
+      "edit": "Different cut",
+      "image": "Images",
+      "fewCues": "Too few lines",
+      "error": "Unreadable"
+    },
+    "status": {
+      "measured": "measured",
+      "applied": "realigned",
+      "rejected": "rejected"
+    },
+    "stale": "file changed since measured"
   }
 }

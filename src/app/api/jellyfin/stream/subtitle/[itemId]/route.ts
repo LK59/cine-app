@@ -8,6 +8,8 @@ import { isJellyfinId, isSubtitleStreamIndex, isUnderJellyfinPrefix } from "@/li
 import { castPassFor, castPreflightFor } from "@/lib/castToken";
 import { castPreflightResponse, withCastCors } from "@/lib/castCors";
 import { assertVisible } from "@/lib/itemVisibility";
+import { syncForSubtitleStream } from "@/lib/subtitleSync/serve";
+import { rewriteVttTimes } from "@/lib/subtitleSync";
 
 type SubtitleParams = { params: Promise<{ itemId: string }> };
 
@@ -86,6 +88,22 @@ async function subtitle(req: NextRequest, { params }: SubtitleParams, notePass: 
       headers: jellyfinAuthHeaders(config.jellyfin.apiKey),
     });
     if (!res.ok) return new NextResponse(null, { status: 404 });
+
+    /**
+     * Une piste recalée par un administrateur (DECISIONS.md §141), demandée **avec `&sync=`** — par le lecteur
+     * serveur, un téléviseur, un téléchargement : ses temps sont réécrits ici, `t → a + s·t`. Sans ce paramètre
+     * (le lecteur natif, qui applique la correction lui-même à chaque recherche de ligne), le fichier sort tel
+     * quel : jamais deux fois. La correction n'est lue que pour la version actuelle du fichier ; sinon, ou en cas
+     * de doute, le WebVTT de Jellyfin part tel quel.
+     */
+    if (req.nextUrl.searchParams.has("sync")) {
+      const sync = await syncForSubtitleStream(itemId, mediaSourceId, Number(index));
+      if (sync) {
+        return new NextResponse(rewriteVttTimes(await res.text(), sync), {
+          headers: { "Content-Type": "text/vtt", "Cache-Control": "private, max-age=3600" },
+        });
+      }
+    }
 
     const blob = await res.blob();
     return new NextResponse(blob, {

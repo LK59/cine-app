@@ -22,6 +22,7 @@ Pour ce que les résultats veulent dire : [PIPELINE.md](PIPELINE.md). Pour qui a
 - [Renommer sans relire](#renommer-sans-relire)
 - [Mémoire des séries](#mémoire-des-séries)
 - [`GET /quality`](#get-quality)
+- [Synchro des sous-titres](#synchro-des-sous-titres)
 - [`DELETE /items/{itemId}`](#delete-itemsitemid)
 - [Versions des résultats](#versions-des-résultats)
 - [Historique du contrat](#historique-du-contrat)
@@ -348,10 +349,92 @@ lecture des lèvres. Laterna l'affiche dans Configuration → Acteurs à l'écra
 
 ---
 
+## Synchro des sous-titres
+
+*(10/11/2026)* Mesurer si chaque sous-titre **texte** d'un élément tombe sur la parole du fichier — ceux du
+conteneur, et les fichiers posés à côté dont Laterna donne les chemins —, avec le modèle
+`t_parole = offset + scale · t_sous-titre`. Le service ne corrige rien et n'écrit jamais dans la médiathèque :
+Laterna garde les mesures, un administrateur décide, la correction s'applique à l'affichage. **Seulement à la
+demande** : aucun ordre ne naît dans le service, ni du planificateur de Laterna. La méthode et les seuils :
+[PIPELINE.md](PIPELINE.md#11-synchro-des-sous-titres).
+
+### `POST /subsync/jobs`
+
+```json
+{
+  "itemId": "0123456789abcdef0123456789abcdef",
+  "path": "/media/tv/Série/Saison 1/Série - S01E01.mkv",
+  "etag": "f0e1d2c3…",
+  "priority": "low",
+  "externals": [
+    { "path": "/media/tv/Série/Saison 1/Série - S01E01.fr.srt", "language": "fre", "title": null,
+      "forced": false, "hi": false }
+  ],
+  "originalLanguage": "en",
+  "force": false
+}
+```
+
+| Champ | | |
+|---|---|---|
+| `itemId`, `path`, `etag` | requis | comme `POST /jobs` (fichier vidéo dans la médiathèque montée) |
+| `priority` | facultatif | `high`, `normal` ou `low` (défaut) — l'ordre **entre ordres de synchro** ; tous passent après les ordres d'analyse `high` et `normal` |
+| `externals` | facultatif | 64 au plus ; chaque `path` dans la médiathèque montée, liens résolus, extension `.srt`, `.ass`, `.ssa` ou `.vtt` |
+| `originalLanguage` | facultatif | la piste son à écouter, comme `POST /jobs` |
+| `force` | facultatif | mesurer de nouveau même si rien n'a changé |
+
+Réponses : `202 {"itemId", "status": "queued", "position"}` ; `200 {"status": "done"}` si la mesure existe
+déjà pour ce fichier, ces fichiers à côté (chemin, taille, date) et cet algorithme ; un doublon en file ne
+relance rien (la priorité peut seulement monter) ; `400 {"error": "…"}` (champ fautif).
+
+### `GET /subsync/results?itemId=a,b,…` · `GET /subsync/results?since=<epoch>`
+
+200 éléments au plus par `itemId` ; `since` : ce qui a bougé depuis. Un élément inconnu est rendu dans la liste
+avec `status: "unknown"` — jamais un 404. Sans l'un ni l'autre : `400`.
+
+```json
+{
+  "now": 1762790000.0, "version": 1,
+  "items": [
+    { "itemId": "…", "etag": "f0e1…", "resultEtag": "f0e1…", "status": "done", "error": null, "position": 0,
+      "version": 1, "speechSource": "voix", "durationS": 2612.3, "speechSeconds": 1190.2,
+      "audioTrack": null, "updated": 1762789990.1,
+      "tracks": [
+        { "trackKey": "emb:3", "kind": "embedded", "streamIndex": 3, "path": null, "codec": "subrip",
+          "language": "fre", "title": "SDH", "default": false, "forced": false, "hi": true,
+          "cues": 660, "speechCues": 599, "soundCues": 61,
+          "offset": -2.455, "scale": 1.0, "scaleLabel": "1", "z": 7.08, "madMs": 20.0, "windows": 12,
+          "candidateWindows": 12, "inliers": 1.0, "cover": 0.81, "maxErrorS": 2.455,
+          "reliable": true, "confidence": "high", "verdict": "décalé",
+          "global": { "scaleLabel": "1", "scale": 1.0, "offset": -2.46, "cover": 0.81, "z": 7.08 } },
+        { "trackKey": "emb:4", "kind": "embedded", "codec": "hdmv_pgs_subtitle", "verdict": "image", "…": "…" },
+        { "trackKey": "ext:/media/tv/…/Série - S01E01.fr.srt", "kind": "external", "size": 41230,
+          "mtime": 1762700000, "verdict": "ok", "…": "…" }
+      ] }
+  ]
+}
+```
+
+- `status` : `queued`, `running`, `done`, `failed` (avec `error`), `unknown`. `etag` est celui de l'ordre ;
+  `resultEtag` celui de la mesure rendue — les deux diffèrent pendant qu'un nouvel ordre attend, et la mesure
+  d'avant reste lisible.
+- `trackKey` : `emb:<index du flux>` (l'index de ffprobe, celui de Jellyfin) ou `ext:<chemin tel que donné>`.
+- `speechSource` : `voix` (les zones de parole de « qui parle », élément analysé au même fichier, voix
+  complètes) ou `parole-seule` (une passe de détection de parole faite pour la synchro).
+- `verdict` : `ok`, `décalé`, `dérive`, `incertain`, `montage`, `image` (piste en images, non mesurée),
+  `peu-de-répliques`, `erreur` (piste illisible, avec `error`). `confidence` : `high` (fiable), `medium`, `low`.
+- `scaleLabel` : `1`, `25→23.976`, `23.976→25`, `24→23.976`, `23.976→24`, `25→24`, `24→25`, ou `null` pour une
+  échelle libre.
+
+`/health` porte aussi `subsync: {pending, version}` (ordres en file ou en cours, version de l'algorithme).
+
+---
+
 ## `DELETE /items/{itemId}`
 
 Oublie l'ordre et le résultat (fichier remplacé, résultat à refaire avec les règles du jour), et arrête
-l'analyse s'il était en cours. Toujours `204`.
+l'analyse s'il était en cours. Toujours `204`. Les mesures de la synchro des sous-titres ne sont pas touchées :
+elles portent leur propre `etag`.
 
 ---
 
@@ -390,3 +473,4 @@ scènes sont regroupées à neuf à chaque assemblage depuis les plans gardés e
 | 10/11/2026 | « Qui parle » : `originalLanguage`, `/items/{id}/voices`, `voices` et `faces` dans `/items/{id}`, `voice` dans `/health`, renommer sans relire, mémoire des séries, `/quality` |
 | 10/11/2026 | lecture des lèvres : `via: "asd"`, `/voices` en version 2, `voices.asd`, `voice.asd` |
 | 10/11/2026 | `/items/{id}/report` ; `items[]` avec `reportUrl` dans `/quality` |
+| 10/11/2026 | synchro des sous-titres : `POST /subsync/jobs`, `GET /subsync/results`, `subsync` dans `/health` |

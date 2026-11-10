@@ -164,6 +164,43 @@ CREATE TABLE IF NOT EXISTS reports (
     report_json TEXT NOT NULL,
     updated     REAL NOT NULL
 );
+-- « Synchro des sous-titres » (subsyncjob.py, 11/2026) : ses ordres, à part de ceux de l'analyse ; le résultat
+-- par élément (une mesure par piste, `tracks_json`) avec la version de l'algorithme ; la parole écoutée par la
+-- passe « parole seule », gardée pour ne pas réécouter un fichier inchangé.
+CREATE TABLE IF NOT EXISTS subsync_jobs (
+    item_id           TEXT PRIMARY KEY,
+    etag              TEXT NOT NULL,
+    path              TEXT NOT NULL,
+    externals_json    TEXT NOT NULL,
+    ext_sig           TEXT,
+    original_language TEXT,
+    priority          INTEGER NOT NULL,
+    status            TEXT NOT NULL,          -- queued | running | done | failed
+    error             TEXT,
+    seq               INTEGER NOT NULL,
+    attempts          INTEGER NOT NULL DEFAULT 0,
+    created           REAL NOT NULL,
+    updated           REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS subsync_results (
+    item_id       TEXT PRIMARY KEY,
+    etag          TEXT NOT NULL,
+    version       INTEGER NOT NULL,
+    speech_source TEXT NOT NULL,              -- voix | parole-seule
+    tracks_json   TEXT NOT NULL,
+    stats_json    TEXT,
+    ext_sig       TEXT,
+    updated       REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS subsync_speech (
+    item_id      TEXT PRIMARY KEY,
+    etag         TEXT NOT NULL,
+    source       TEXT NOT NULL,
+    regions_json TEXT NOT NULL,
+    valid_json   TEXT NOT NULL,
+    track_json   TEXT,
+    updated      REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS series_faces (
     series_id TEXT NOT NULL,
     model     TEXT NOT NULL,

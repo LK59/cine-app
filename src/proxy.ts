@@ -285,6 +285,10 @@ const ADMIN_ONLY_READS: RegExp[] = [
   // Les acteurs à l'écran vus du banc : l'état du service et de n'importe quel élément (§138). La route
   // le vérifie aussi (`adminOnly`) ; sa commande (POST) n'est pas dans la liste blanche des écritures.
   /^\/api\/admin\/xray(\/|$)/,
+  // La synchro des sous-titres (§141) : les pistes et les titres de toute la bibliothèque, tags bloqués
+  // compris. La route le vérifie aussi (`adminOnly`) ; ses écritures (scan, décision) ne sont pas dans la
+  // liste blanche des comptes.
+  /^\/api\/admin\/subsync(\/|$)/,
 ];
 
 function isAdminOnlyRead(pathname: string): boolean {

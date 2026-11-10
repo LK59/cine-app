@@ -25,6 +25,7 @@ sur une machine chargée par d'autres travaux, ce qui est dit à chaque fois.
 - [8. Qui parle](#8-qui-parle)
 - [9. Lecture des lèvres ciblée](#9-lecture-des-lèvres-ciblée)
 - [10. Renommer sans relire](#10-renommer-sans-relire)
+- [11. Synchro des sous-titres](#11-synchro-des-sous-titres)
 - [Performances](#performances)
 - [Qualité mesurée](#qualité-mesurée)
 - [Calibrage](#calibrage)
@@ -404,6 +405,82 @@ les seuils du code et la mémoire de la série du moment, par lots de 20 s au pl
 
 C'est ce qui permet de changer une règle de noms, de réinitialiser la mémoire d'une série ou d'ajouter
 des épisodes à une série sans relire un seul fichier.
+
+---
+
+## 11. Synchro des sous-titres
+
+À part de l'analyse : un sous-titre texte tombe-t-il sur la parole, et sinon de combien
+(`app/subsync.py` pour la mesure, `app/subsyncjob.py` pour l'ordre ; API :
+[API.md](API.md#synchro-des-sous-titres)). **Seulement à la demande** d'un administrateur, depuis
+Configuration → Synchro des sous-titres ; rien ne se mesure de soi-même, et rien n'est jamais écrit dans
+la médiathèque.
+
+**Le modèle.** `t_parole = a + s · t_sous-titre`, sur l'horloge du fichier : `a` un décalage, `s` une
+échelle — une dérive, celle d'un sous-titre fait pour une autre cadence d'image (25 i/s au lieu de
+23,976 : 4 % ; 24 au lieu de 23,976 : une seconde par quart d'heure).
+
+**La parole.** Celle de « qui parle » (`voice_regions`) quand l'élément est analysé au même fichier avec
+ses voix complètes ; la zone écoutée est alors celle des tronçons faits, moins les plages sautées. Sinon
+une passe « parole seule » : Silero sur tout le son, mêmes réglages qu'à l'étape 8 (canal central à
+16 kHz, seuil 0,5, jointure 0,25 s, au moins 0,2 s), plus `aresample=async=1:first_pts=0` — une piste son
+qui commence après le début du fichier est complétée de silence, sinon toute la parole serait mesurée en
+avance de ce retard. **Une seule lecture du fichier** : le même ffmpeg sort le son (un tuyau) et chaque
+piste texte du conteneur (SubRip, ASS/SSA, WebVTT, mov_text, convertis en SubRip dans un dossier
+temporaire). La parole écoutée est gardée (`subsync_speech`) : une nouvelle mesure du même fichier ne la
+réécoute pas. Les fichiers posés à côté du film sont lus directement (`.srt`, `.ass`, `.ssa`, `.vtt`).
+
+**Les répliques.** Seulement celles qui parlent : une réplique dont toutes les lignes sont entre crochets,
+entre parenthèses, après ♪ / ♫ ou # (sous-titres pour sourds et malentendants) est comptée à part
+(`soundCues`) et ne sert pas à la mesure.
+
+**La mesure.**
+
+1. Deux masques binaires à 10 ms sur toute la durée du fichier : la parole, les répliques.
+2. **Décalage global** : corrélation croisée des deux masques par FFT, à ±120 s, pour les sept échelles
+   connues (1, 25→23,976 et l'inverse, 24→23,976 et l'inverse, 25→24 et l'inverse). La FFT de la parole
+   est faite une fois pour toutes les échelles et toutes les pistes de l'élément. La couverture la plus
+   haute gagne ; sa netteté `z` : la hauteur du pic au-dessus de la médiane des décalages éloignés de plus
+   de 2 s, en écarts types.
+3. **Fenêtres locales** : 5 min du sous-titre toutes les 2 min 30 ; au moins 15 répliques, une zone dont
+   la parole a été écoutée à 80 % ; recorrélée à ±3 s autour de la prédiction globale **sur la seule
+   portion du film qu'elle touche** (pas une FFT de toute la durée par fenêtre) ; gardée si `z ≥ 3`.
+4. **La droite** : Theil-Sen (pente médiane des paires distantes de plus de 5 min, ordonnée médiane) →
+   `a`, `s`. L'échelle est ramenée à 1 à 30 ppm près, au rapport connu le plus proche à 60 ppm près — et,
+   ajouté au port, quand l'écart ne déplace aucune réplique de plus de 0,15 s sur la piste, ou quand ce
+   rapport explique les fenêtres presque aussi bien que la pente libre (écart médian au plus 25 % ou
+   20 ms de plus) : sur un épisode de 40 min, la pente libre ne se tient qu'à 50–100 ppm près, et un simple
+   décalage y sortait en « dérive ». `a` est alors recalculé avec l'échelle retenue ; `madMs` (écart médian
+   des fenêtres à la droite) et `inliers` (part à moins de 0,3 s) aussi.
+
+**Fiable** : `z ≥ 5`, au moins 6 fenêtres, `inliers ≥ 0,8`, `madMs ≤ 150`, au moins 100 répliques parlées.
+
+| Verdict | Quand |
+|---|---|
+| `ok` | fiable, et l'erreur `|a + (s − 1)·t|` reste sous 0,5 s sur toute la piste |
+| `décalé` | fiable, échelle 1 |
+| `dérive` | fiable, une autre échelle |
+| `montage` | au moins 6 fenêtres nettes, pas sur une droite, et au moins 60 % des fenêtres possibles nettes, avec un pic global (`z ≥ 3`) — un autre montage, des coupures |
+| `peu-de-répliques` | moins de 100 répliques parlées |
+| `incertain` | tout le reste |
+| `image` | piste en images (PGS, VobSub, DVB) : pas mesurée |
+| `erreur` | piste illisible (le message suit) |
+
+**Mesuré sur le banc de R&D** (huit titres, 2 films et 6 épisodes, sous-titres du conteneur et à côté,
+chacun décalé de +2,5 s, −7 s, +0,3 s, passé à 25 i/s, à 25 i/s + 3 s, et coupé de 4 s au milieu) : les
+32 variantes décalées ou passées à 25 i/s retrouvées (décalage à quelques centièmes près, échelle nommée), les
+originaux et les « +0,3 s » dits `ok`, sept coupures sur huit dites `montage` (la huitième, un saut au-delà de ±3 s sur un épisode
+court, garde une majorité de fenêtres sur la droite et sort `ok`), deux sous-titres d'un autre titre dits
+`incertain`. Le sous-titre anglais posé à côté de l'un des films sort, tel qu'il est, en `dérive 23.976→24`
+avec 3,8 s de décalage : une vraie dérive, que le prototype trouvait déjà. Coût de la mesure, la parole en main : **0,2 à 1,2 s de processeur
+par piste** (15 s dans le prototype, qui refaisait une FFT de toute la durée par fenêtre). La passe
+« parole seule » d'un film de 2 h 30 : environ 40 s de décodage et 60 s de détection (un fil).
+
+**L'ordre dans la file.** Une file à elle (`subsync_jobs`), servie par la voie A quand aucun ordre
+d'analyse `high` ou `normal` n'attend — avant les ordres `low` du fond et les travaux d'appoint (une
+synchro demandée est courte) —, qui rend la main entre deux blocs de son dès qu'un spectateur commande
+une analyse : l'ordre revient en file et repartira du début. Le son et les sous-titres seulement, un fil de
+ffmpeg, rien sur l'iGPU. Chaque mesure garde la version de l'algorithme (`ALGO_VERSION`, 1).
 
 ---
 

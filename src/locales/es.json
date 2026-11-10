@@ -4395,5 +4395,65 @@
     "resetConfirm": "Olvidar y renombrar",
     "resetDone": "Memoria borrada: la serie se va a renombrar.",
     "unavailable": "El servicio aún no da estas cifras."
+  },
+  "subSync": {
+    "nav": "Sincronía de subtítulos",
+    "hint": "Mide, a petición, si cada subtítulo de texto cae sobre las voces de la película, y lo reajusta en pantalla — nunca en el archivo. Nada se mide ni se corrige sin un clic aquí.",
+    "off": "Hace falta la opción «Actores en pantalla» configurada (Configuración → Conexiones): es la que escucha las voces de las películas.",
+    "filterLabel": "Mostrar",
+    "filter": {
+      "affected": "Por corregir",
+      "measured": "Medidos",
+      "all": "Todo"
+    },
+    "counts": "{measured} medidos · {affected} por corregir · {applied} reajustados",
+    "pendingShort": "{n} en curso",
+    "pending": "{n} mediciones en curso…",
+    "movies": "Películas · {n}",
+    "series": "Series · {n}",
+    "season": "Temporada {n}",
+    "specials": "Especiales",
+    "scan": "Analizar",
+    "apply": "Reajustar",
+    "reject": "Rechazar",
+    "reset": "Restablecer",
+    "scanned": "{n} mediciones solicitadas",
+    "changed": "{n} pistas actualizadas",
+    "actionFailed": "No es posible por ahora.",
+    "none": "Nada que mostrar aquí.",
+    "unavailable": "No se pudo leer la biblioteca: solo se muestran los títulos ya medidos.",
+    "imageNote": "Los subtítulos de imagen (PGS, VobSub) no se pueden medir. Una temporada o una serie solo reajusta las mediciones fiables; una pista sola se reajusta a mano.",
+    "job": {
+      "queued": "Midiendo",
+      "failed": "Medición fallida: {error}"
+    },
+    "track": {
+      "external": "archivo",
+      "forced": "forzados",
+      "hi": "SDH"
+    },
+    "offset": "desfase {v}",
+    "drift": "deriva {v}",
+    "confidence": {
+      "high": "fiable",
+      "medium": "por revisar",
+      "low": "dudosa"
+    },
+    "verdict": {
+      "ok": "Sincronizado",
+      "shifted": "Desfasado",
+      "drift": "Deriva",
+      "uncertain": "Incierto",
+      "edit": "Otro montaje",
+      "image": "Imágenes",
+      "fewCues": "Muy pocas líneas",
+      "error": "Ilegible"
+    },
+    "status": {
+      "measured": "medido",
+      "applied": "reajustado",
+      "rejected": "rechazado"
+    },
+    "stale": "archivo cambiado desde la medición"
   }
 }

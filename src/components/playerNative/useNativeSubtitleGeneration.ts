@@ -8,6 +8,7 @@ import { reportPlayback } from "@/lib/reportPlayback";
 import { isGeneratingTrack, type SubtitleGeneration } from "@/lib/subtitleGen/generation";
 import { ExternalSubtitleTrack, type ExternalSubtitleSource } from "@/lib/webcodecs/externalSubtitles";
 import { generationErrorText } from "@/components/player/nativeHostHelpers";
+import { cueLookupTime } from "@/lib/subtitleSync";
 
 export function useNativeSubtitleGeneration({
   generation,
@@ -150,11 +151,12 @@ export function useNativeSubtitleGeneration({
         const lane = generationLane();
         if (!element || !lane) return;
         if (lane === "second") {
-          if (!secondExternalRef.current) showSecondGeneratedAt(element.currentTime - secondOffsetRef.current - fileDelayRef.current);
+          // Une génération n'a jamais de correction (§141) : échelle 1, le calcul d'avant à l'identique.
+          if (!secondExternalRef.current) showSecondGeneratedAt(cueLookupTime(element.currentTime, fileDelayRef.current, secondOffsetRef.current, 1, true));
           return;
         }
         if (externalSubtitleRef.current) return;
-        showGeneratedAt(element.currentTime - subtitleOffsetRef.current - fileDelayRef.current);
+        showGeneratedAt(cueLookupTime(element.currentTime, fileDelayRef.current, subtitleOffsetRef.current, 1, true));
       }),
     [generation, generationLane, showGeneratedAt, showSecondGeneratedAt, externalSubtitleRef, fileDelayRef, secondExternalRef, secondOffsetRef, subtitleOffsetRef, videoElRef]
   );

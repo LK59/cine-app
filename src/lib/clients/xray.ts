@@ -136,6 +136,66 @@ export interface XrayQuality {
   series: XrayQualityGroup[];
 }
 
+/**
+ * « Synchro des sous-titres » (DECISIONS.md §141, ajout compatible au contrat v1) : un ordre de mesure des
+ * sous-titres texte d'un élément — ceux du conteneur, et les fichiers à côté dont on donne les chemins
+ * (tels que Jellyfin les voit, le service voit la médiathèque au même chemin).
+ */
+export interface XraySubsyncJob {
+  itemId: string;
+  path: string;
+  etag: string;
+  priority: XrayPriority;
+  externals: { path: string; language: string | null; title: string | null; forced: boolean; hi: boolean }[];
+  originalLanguage?: string | null;
+  force?: boolean;
+}
+
+export type XraySubsyncVerdict = "ok" | "décalé" | "dérive" | "incertain" | "montage" | "image" | "peu-de-répliques" | "erreur";
+
+/** La mesure d'une piste, telle que le service la rend. */
+export interface XraySubsyncTrack {
+  trackKey: string;
+  kind: "embedded" | "external";
+  streamIndex: number | null;
+  path: string | null;
+  codec: string | null;
+  language: string | null;
+  title: string | null;
+  forced: boolean;
+  hi: boolean;
+  size?: number;
+  mtime?: number;
+  offset: number | null;
+  scale: number | null;
+  scaleLabel: string | null;
+  z: number | null;
+  madMs: number | null;
+  windows: number;
+  inliers: number | null;
+  cover: number | null;
+  maxErrorS: number | null;
+  reliable: boolean;
+  confidence: "high" | "medium" | "low";
+  verdict: XraySubsyncVerdict;
+  speechCues?: number | null;
+  error?: string;
+}
+
+export interface XraySubsyncItem {
+  itemId: string;
+  /** Le fichier de l'ordre en cours ; `resultEtag` celui de la mesure rendue (les deux diffèrent pendant qu'une nouvelle attend). */
+  etag?: string;
+  resultEtag?: string;
+  status: "queued" | "running" | "done" | "failed" | "unknown";
+  error?: string | null;
+  position?: number;
+  version?: number | null;
+  speechSource?: "voix" | "parole-seule" | null;
+  tracks: XraySubsyncTrack[];
+  updated?: number;
+}
+
 /** Une lecture : le service est local, il répond en bien moins. */
 const READ_TIMEOUT_MS = 5000;
 /** Une commande : le service range l'ordre et répond, sans rien analyser avant de répondre. */
@@ -257,6 +317,24 @@ export const xray = {
     const res = await call("/quality");
     if (!res.ok) return refused(res, "quality");
     return (await res.json()) as XrayQuality;
+  },
+
+  /**
+   * Commande la mesure des sous-titres d'un élément (§141) — seulement depuis un clic de l'administrateur.
+   * Déjà mesuré au même fichier, mêmes fichiers à côté : 200 `done`, rien n'est relancé.
+   */
+  subsyncEnqueue: async (job: XraySubsyncJob): Promise<XrayJobAnswer> => {
+    const res = await call("/subsync/jobs", { method: "POST", body: JSON.stringify(job), timeoutMs: ORDER_TIMEOUT_MS });
+    if (!res.ok) return refused(res, "subsync/jobs");
+    return (await res.json()) as XrayJobAnswer;
+  },
+
+  /** L'état et les mesures de ces éléments (200 au plus) ; un élément inconnu se lit `status: "unknown"`. */
+  subsyncResults: async (itemIds: readonly string[]): Promise<XraySubsyncItem[]> => {
+    if (itemIds.length === 0) return [];
+    const res = await call(`/subsync/results?itemId=${itemIds.slice(0, 200).map(encodeURIComponent).join(",")}`);
+    if (!res.ok) return refused(res, "subsync/results");
+    return ((await res.json()) as { items?: XraySubsyncItem[] }).items ?? [];
   },
 
   /** Oublie le résultat d'un élément (fichier remplacé). Inconnu : rien à oublier, pas une erreur. */

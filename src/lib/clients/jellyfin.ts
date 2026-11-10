@@ -513,6 +513,28 @@ export const jellyfin = {
       headers,
     }).then((page) => page.Items?.[0] ?? null),
 
+  /**
+   * Plusieurs éléments d'un appel, avec leur fichier et ses pistes (`MediaSources` → `MediaStreams`, chemin des
+   * sous-titres à côté compris) — la « Synchro des sous-titres » (§141) : ce qu'il faut mesurer, et la version
+   * actuelle du fichier (`ETag`) contre laquelle une mesure est périmée. Clé du serveur : une page d'administration.
+   */
+  getItemsWithStreams: (itemIds: readonly string[]) =>
+    fetchJson<{
+      Items?: {
+        Id: string;
+        Type?: string;
+        Name?: string;
+        ProductionYear?: number | null;
+        SeriesId?: string | null;
+        SeriesName?: string | null;
+        ParentIndexNumber?: number | null;
+        IndexNumber?: number | null;
+        MediaSources?: JellyfinMediaSource[] | null;
+      }[];
+    }>(`${cfg.url}/Items?ids=${itemIds.map(idSegment).join(",")}&Fields=MediaSources,Path&EnableImages=false&EnableUserData=false`, {
+      headers,
+    }).then((page) => page.Items ?? []),
+
   getSystemInfo: () =>
     fetchJson<{ ServerName: string; Version: string }>(`${cfg.url}/System/Info`, { headers }),
   getSessions: () => fetchJson<JellyfinSession[]>(`${cfg.url}/Sessions`, { headers }),

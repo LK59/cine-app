@@ -1,7 +1,9 @@
 "use client";
 
 import { useRevealAfterFrame } from "@/lib/useRevealAfterFrame";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { cueLookupTime, subSyncLogField } from "@/lib/subtitleSync";
+import type { NativeSubtitleSync } from "@/components/playerNative/useNativeSubtitleLanes";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { playerBootstrapOptions } from "@/lib/swr";
@@ -699,6 +701,14 @@ export function ExperimentalPlayerHost({
    */
   const subtitleOffsetRef = useRef(0);
   const [subtitleOffset, setSubtitleOffset] = useState(0);
+  /**
+   * « Synchro des sous-titres » (DECISIONS.md §141) : l'échelle de la correction de chaque voie (1 sans correction)
+   * et les corrections appliquées à ce fichier, lues dans sa description. Le décalage, lui, est `subtitleOffsetRef`
+   * — il part de la correction quand la piste est choisie, et le spectateur l'ajuste comme avant.
+   */
+  const subtitleScaleRef = useRef(1);
+  const secondScaleRef = useRef(1);
+  const subtitleSyncRef = useRef<NativeSubtitleSync | null>(null);
   /** Abandons a subtitle file still in flight when the player closes, or another is chosen. */
   const subtitleFetchRef = useRef<AbortController | null>(null);
 
@@ -760,6 +770,9 @@ export function ExperimentalPlayerHost({
     showWarning,
     tRef,
     fileDelayRef,
+    subtitleScaleRef,
+    secondScaleRef,
+    subtitleSyncRef,
   });
 
   // Reset for every attempt, not fixed at the mount. A rebuild lowers `ready`, and measured from
@@ -1022,6 +1035,11 @@ export function ExperimentalPlayerHost({
     return sample && session.labSample ? labSampleInfo(sample, session.labSample.sizeBytes) : null;
   });
   const info = labInfo ?? fileInfo;
+  // Les corrections de synchro de ce fichier (§141), posées avant tout effet qui choisirait une piste : un effet de
+  // mise en page passe avant les effets ordinaires du même rendu. Sans correction (le cas ordinaire), `null`.
+  useLayoutEffect(() => {
+    subtitleSyncRef.current = info?.subtitleSync ? { byIndex: info.subtitleSync, embedded: info.embeddedSubtitleIndexes } : null;
+  }, [info]);
   /**
    * Quand la description du fichier est arrivée — la condition de tout le reste : le lecteur ne lit
    * pas un octet du film avant elle. Pour la ligne `opening` (`infoMs`) : trois ouvertures sur 291
@@ -1874,6 +1892,8 @@ export function ExperimentalPlayerHost({
         // Ce que la réserve d'avance s'autorise sur cet appareil — c'était la ligne `reserve/départ`,
         // une requête de plus à chaque pipeline (13/10/2026, `reservePlanFacts`).
         ...reservePlanFacts(),
+        // Les corrections de synchro appliquées à ce fichier (§141) — seulement s'il y en a.
+        ...subSyncLogField(info.subtitleSync),
       });
     };
 
@@ -2633,7 +2653,8 @@ export function ExperimentalPlayerHost({
     seeks.request(seconds);
     // Une génération active l'apprend tout de suite (sur l'horloge du fichier) : le serveur traduit
     // d'abord là où le spectateur va, et un saut dans une zone pas encore faite est mesuré.
-    generation.noteSeek(seconds - (generationLane() === "second" ? secondOffsetRef.current : subtitleOffsetRef.current) - fileDelayRef.current);
+    // Une génération n'a jamais de correction (§141) : échelle 1, le calcul d'avant à l'identique.
+    generation.noteSeek(cueLookupTime(seconds, fileDelayRef.current, generationLane() === "second" ? secondOffsetRef.current : subtitleOffsetRef.current, 1, true));
     // Une reconstruction pas encore ouverte rouvre directement là.
     lifecycle.seekDuringRebuild(seconds);
     // Mesuré une fois le chemin natif en marche : c'est le `seeked` de son élément qui ferme la

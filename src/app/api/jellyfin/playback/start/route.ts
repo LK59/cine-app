@@ -24,6 +24,7 @@ import { masterVariantFacts } from "@/lib/playbackPanel";
 import { forwardedFor } from "@/lib/clientAddress";
 import { transcodeTargetBps } from "@/lib/slowLink";
 import { castSubtitleStream, parseCastSubtitle } from "@/lib/castSubtitle";
+import { subtitleSyncByIndex } from "@/lib/subtitleSync/store";
 
 // Both "no Jellyfin identity in session" and "Jellyfin rejected our stored
 // token" boil down to the same user-facing action: log back in with Jellyfin
@@ -382,6 +383,13 @@ export async function POST(req: NextRequest) {
      * L'étiquette se construit donc côté navigateur, parce que lui seul sait dans quelle langue
      * l'interface est réglée. Ici on n'envoie que ce qui vient du fichier.
      */
+    /**
+     * Les corrections de synchro appliquées (DECISIONS.md §141), par index Jellyfin : le WebVTT d'une piste
+     * recalée est réécrit par la route des sous-titres (`&sync=` — sa version, l'adresse étant gardée une heure
+     * en cache). Jamais pour une diffusion : les sous-titres y vont dans le flux (`subtitlesInStream`) ou
+     * incrustés dans l'image, que rien ici ne réécrit. Absent sans correction : la réponse d'avant.
+     */
+    const syncByIndex = forCast || burnIndex !== undefined ? undefined : subtitleSyncByIndex(itemId, source.ETag, source.MediaStreams ?? []);
     const subtitleTracks = (source.MediaStreams ?? [])
       .filter((s) => s.Type === "Subtitle")
       .map((s) => ({
@@ -398,7 +406,11 @@ export async function POST(req: NextRequest) {
         ...(castTarget ? { isText: s.IsTextSubtitleStream ?? null } : {}),
         url:
           `/api/jellyfin/stream/subtitle/${itemId}?mediaSourceId=${source.Id}&index=${s.Index}` +
+          (syncByIndex?.[String(s.Index)] ? `&sync=${syncByIndex[String(s.Index)].version}` : "") +
           (castPass ? `&${CAST_TOKEN_PARAM}=${encodeURIComponent(castPass)}` : ""),
+        ...(syncByIndex?.[String(s.Index)]
+          ? { sync: { offset: syncByIndex[String(s.Index)].offset, scale: syncByIndex[String(s.Index)].scale } }
+          : {}),
       }));
 
     const audioTracks = (source.MediaStreams ?? [])

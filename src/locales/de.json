@@ -4395,5 +4395,65 @@
     "resetConfirm": "Vergessen und neu benennen",
     "resetDone": "Gedächtnis gelöscht: die Serie wird neu benannt.",
     "unavailable": "Der Dienst liefert diese Zahlen noch nicht."
+  },
+  "subSync": {
+    "nav": "Untertitel-Synchronität",
+    "hint": "Misst auf Anfrage, ob jeder Text-Untertitel auf die Sprache im Film fällt, und richtet ihn bei der Anzeige neu aus — nie in der Datei. Ohne Klick hier wird nichts gemessen oder korrigiert.",
+    "off": "Dafür muss die Option „Schauspieler im Bild“ eingerichtet sein (Konfiguration → Verbindungen): Sie hört die Sprache der Filme ab.",
+    "filterLabel": "Anzeigen",
+    "filter": {
+      "affected": "Zu korrigieren",
+      "measured": "Gemessen",
+      "all": "Alle"
+    },
+    "counts": "{measured} gemessen · {affected} zu korrigieren · {applied} ausgerichtet",
+    "pendingShort": "{n} laufen",
+    "pending": "{n} Messungen laufen…",
+    "movies": "Filme · {n}",
+    "series": "Serien · {n}",
+    "season": "Staffel {n}",
+    "specials": "Specials",
+    "scan": "Messen",
+    "apply": "Ausrichten",
+    "reject": "Ablehnen",
+    "reset": "Zurücksetzen",
+    "scanned": "{n} Messungen angefordert",
+    "changed": "{n} Spuren aktualisiert",
+    "actionFailed": "Gerade nicht möglich.",
+    "none": "Hier gibt es nichts zu zeigen.",
+    "unavailable": "Die Mediathek konnte nicht gelesen werden: Nur bereits gemessene Titel werden gezeigt.",
+    "imageNote": "Bild-Untertitel (PGS, VobSub) lassen sich nicht messen. Eine Staffel oder Serie richtet nur verlässliche Messungen aus; eine einzelne Spur wird von Hand ausgerichtet.",
+    "job": {
+      "queued": "Wird gemessen",
+      "failed": "Messung fehlgeschlagen: {error}"
+    },
+    "track": {
+      "external": "Datei",
+      "forced": "erzwungen",
+      "hi": "SDH"
+    },
+    "offset": "Versatz {v}",
+    "drift": "Drift {v}",
+    "confidence": {
+      "high": "verlässlich",
+      "medium": "zu prüfen",
+      "low": "unsicher"
+    },
+    "verdict": {
+      "ok": "Synchron",
+      "shifted": "Versetzt",
+      "drift": "Drift",
+      "uncertain": "Unsicher",
+      "edit": "Andere Schnittfassung",
+      "image": "Bilder",
+      "fewCues": "Zu wenige Zeilen",
+      "error": "Unlesbar"
+    },
+    "status": {
+      "measured": "gemessen",
+      "applied": "ausgerichtet",
+      "rejected": "abgelehnt"
+    },
+    "stale": "Datei seit der Messung geändert"
   }
 }

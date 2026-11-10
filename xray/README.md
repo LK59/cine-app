@@ -82,6 +82,7 @@ Tout est optionnel et coupé par défaut ; chaque fonction a son public (`off`, 
 | **« Jusqu'ici »** (en tête du panneau) | une ou deux phrases sur le personnage, d'après **ce que le compte a déjà vu** — coupées au début de la scène en cours, jamais au-delà | les scènes (coupe, répliques groupées par scène) et les voix (« Nom : réplique ») | oui |
 | **Les questions** | sur les liens entre les personnages de la scène (panneau d'une personne), ou libres sur le titre (bouton rond au bout de la rangée, fiches) | les voix, quand l'analyse est complète | oui |
 | **Configuration → Acteurs à l'écran** | l'analyse de toute la bibliothèque en fond, par paliers, avec pause, priorités, vitesse, temps restant et **qualité des noms** par série | `/items`, `/quality`, `/health` | — |
+| **Configuration → Synchro des sous-titres** | à la demande seulement (« Scanner ») : pour chaque sous-titre texte d'un film, d'une saison ou d'une série, son décalage et sa dérive par rapport à la parole, avec un verdict ; « Recaler » corrige **à l'affichage**, jamais dans le fichier | `/subsync/jobs`, `/subsync/results` | non |
 
 Le service lui-même n'appelle aucune IA en ligne : « Jusqu'ici » et les questions sont des fonctions de
 Laterna, qui n'envoient au fournisseur choisi que du texte (résumés, répliques, noms). Un lien de partage
@@ -485,7 +486,7 @@ Variables d'environnement du conteneur `laterna-xray` (toutes facultatives sauf 
 | `XRAY_CHUNK_SECONDS` | `120` | Longueur d'un tronçon. |
 | `XRAY_FFMPEG`, `XRAY_FFPROBE` | `ffmpeg`, `ffprobe` | Programmes à lancer (ceux de jellyfin-ffmpeg dans l'image). |
 | `XRAY_MIN_FACE` | `36` | Plus petit visage identifiable, en pixels (image de 640 px). |
-| `XRAY_VOICE` | `1` | `0` : pas d'étape « qui parle » (ni téléchargement, ni son lu). |
+| `XRAY_VOICE` | `1` | `0` : pas d'étape « qui parle » (ni téléchargement, ni son lu) — et la synchro des sous-titres ne peut plus écouter la parole d'un élément qui n'a pas déjà ses voix (la mesure le dit en échec). |
 | `XRAY_VOICE_MODEL` | `wespeaker_r34` | Empreinte de voix : `wespeaker_r34` (CC BY 4.0) ou `campplus_en` (Apache-2.0). Changer de modèle refait les voix par le son seul. |
 | `XRAY_VOICE_THREADS` | `2` | Fils des réseaux de la voix, à côté de ceux de l'image. |
 | `XRAY_VOICE_TRACK` | `original` | `original` : la version originale quand elle existe ; `default` : la piste par défaut du fichier. |

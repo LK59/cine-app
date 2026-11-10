@@ -45,7 +45,7 @@ from .results import Assembler, ShotRow, TrackRow, build
 from .pipeline import ShotFaces
 from .shots import ShotSplitter, frames_to_sample, pick_indices
 from .timing import StageClock, job_stats, line
-from . import asdjob, relabel, report, voicejob
+from . import asdjob, relabel, report, subsyncjob, voicejob
 
 log = logging.getLogger("xray.worker")
 
@@ -198,7 +198,9 @@ class Worker:
             row = self.store.next_job()
             # Les voix d'un ordre fini avant l'étape des voix : le son seul, avant tout ordre `low` (bien
             # moins cher que l'image), jamais devant un ordre `normal` ou `high`.
-            if (row is None or row["priority"] >= 2) and (self._relabel() or self._voice_only() or self._asd()):
+            # La synchro des sous-titres (`subsyncjob.py`) d'abord parmi ces travaux d'appoint : un administrateur
+            # vient de la demander, et elle est courte — jamais devant un ordre `normal` ou `high` pour autant.
+            if (row is None or row["priority"] >= 2) and (self._subsync() or self._relabel() or self._voice_only() or self._asd()):
                 continue
             row = self.store.claim(self.lane) if row is not None else None
             if row is None:
@@ -300,6 +302,36 @@ class Worker:
             self.store.running_id = None
             self.store.cancel.clear()
         return True
+
+    def _subsync(self) -> bool:
+        """Un ordre de synchro des sous-titres (`subsyncjob.py`) : rend la main entre deux blocs de son dès qu'un
+        ordre d'analyse `normal` ou `high` attend, ou si l'élément est supprimé."""
+        row = subsyncjob.next_job(self.db)
+        if row is None:
+            return False
+        self.store.running_id = row["item_id"]
+        try:
+            subsyncjob.run_job(
+                self.db, row, self._subsync_vad,
+                lambda: self.store.cancel.is_set() or self.db.one(
+                    "SELECT 1 FROM items WHERE status='queued' AND priority < 2 LIMIT 1") is not None)
+        finally:
+            self.store.running_id = None
+            self.store.cancel.clear()
+        return True
+
+    def _subsync_vad(self):
+        """Silero seul, chargé à la première passe « parole seule » — le fichier que « qui parle » télécharge et
+        vérifie (`voice.VAD_FILE`) ; sans lui, rien (la passe le dit)."""
+        if getattr(self, "_vad", None) is None:
+            from .voice import VAD_FILE
+
+            vm = self.voice_models
+            path = (vm.dir if vm is not None else settings.models_dir / "voice") / VAD_FILE.name
+            if vm is not None and not vm.ready or not path.exists():
+                return None
+            self._vad = subsyncjob.Vad(path)
+        return self._vad
 
     def _asd(self) -> bool:
         """La lecture des lèvres d'un élément aux voix complètes (voir `asdjob.py`) : après le son seul et

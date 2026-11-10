@@ -128,6 +128,7 @@ import {
 import { introKey } from "@/lib/playbackIntro";
 import { usePlayerBackClose } from "@/lib/playerHistory";
 import { PlayerReauthScreen } from "@/components/player/PlayerReauthScreen";
+import { subSyncFromTracks } from "@/lib/subtitleSync";
 
 export type PlayMethod = JellyfinPlayback["playMethod"];
 
@@ -1294,6 +1295,8 @@ function ActivePlayer({
         ...(warmed ? { prewarm: { ...prewarmFields(warmed), used: true } } : {}),
         ...startup.fields(),
         ...slowLogRef.current.fields(),
+        // Les pistes recalées par un administrateur (§141), réécrites par la route des sous-titres — seulement s'il y en a.
+        ...subSyncFromTracks(data.subtitleTracks),
       });
       // Le besoin du fichier d'origine en pleine qualité : ce que le lien doit retrouver pour que la
       // lecture suivante revienne au lecteur natif (`LinkRecovery`, §78).

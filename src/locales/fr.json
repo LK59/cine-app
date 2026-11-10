@@ -4395,5 +4395,65 @@
     "resetConfirm": "Oublier et renommer",
     "resetDone": "Mémoire effacée : la série va être renommée.",
     "unavailable": "Le service ne donne pas encore ces chiffres."
+  },
+  "subSync": {
+    "nav": "Synchro des sous-titres",
+    "hint": "Mesure, à la demande, si chaque sous-titre texte tombe sur la parole du film, et le recale à l'affichage — jamais dans le fichier. Rien n'est mesuré ni corrigé sans un clic ici.",
+    "off": "Il faut l'option « Acteurs à l'écran » réglée (Configuration → Connexions) : c'est elle qui écoute la parole des films.",
+    "filterLabel": "Montrer",
+    "filter": {
+      "affected": "À corriger",
+      "measured": "Mesurés",
+      "all": "Tout"
+    },
+    "counts": "{measured} mesurés · {affected} à corriger · {applied} recalés",
+    "pendingShort": "{n} en cours",
+    "pending": "{n} mesures en cours…",
+    "movies": "Films · {n}",
+    "series": "Séries · {n}",
+    "season": "Saison {n}",
+    "specials": "Hors saison",
+    "scan": "Scanner",
+    "apply": "Recaler",
+    "reject": "Refuser",
+    "reset": "Rétablir",
+    "scanned": "{n} mesures demandées",
+    "changed": "{n} pistes mises à jour",
+    "actionFailed": "Action impossible pour le moment.",
+    "none": "Rien à montrer ici.",
+    "unavailable": "La bibliothèque n'a pas pu être lue : seuls les titres déjà mesurés sont montrés.",
+    "imageNote": "Les sous-titres en images (PGS, VobSub) ne se mesurent pas. Une saison ou une série ne recale que les mesures fiables ; une piste seule se recale à la main.",
+    "job": {
+      "queued": "Mesure en cours",
+      "failed": "Mesure en échec : {error}"
+    },
+    "track": {
+      "external": "fichier",
+      "forced": "forcés",
+      "hi": "SDH"
+    },
+    "offset": "décalage {v}",
+    "drift": "dérive {v}",
+    "confidence": {
+      "high": "fiable",
+      "medium": "à vérifier",
+      "low": "peu sûre"
+    },
+    "verdict": {
+      "ok": "Calé",
+      "shifted": "Décalé",
+      "drift": "Dérive",
+      "uncertain": "Incertain",
+      "edit": "Autre montage",
+      "image": "Images",
+      "fewCues": "Trop peu de répliques",
+      "error": "Illisible"
+    },
+    "status": {
+      "measured": "mesuré",
+      "applied": "recalé",
+      "rejected": "refusé"
+    },
+    "stale": "fichier changé depuis la mesure"
   }
 }

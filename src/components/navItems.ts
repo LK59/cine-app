@@ -20,6 +20,7 @@ import {
   MessageSquareQuote,
   ScanSearch,
   ScanFace,
+  Timer,
 } from "lucide-react";
 import type { ServiceKey } from "@/lib/services";
 
@@ -102,6 +103,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/parametres/repliques", navKey: "nav.config.dialogue", icon: MessageSquareQuote },
       // L'analyse des acteurs à l'écran de toute la bibliothèque, en fond (DECISIONS.md §138, planificateur).
       { href: "/parametres/acteurs", navKey: "xrayScan.nav", icon: ScanFace },
+      // Mesurer et recaler les sous-titres, à la demande (DECISIONS.md §141) — par le même service.
+      { href: "/parametres/synchro-sous-titres", navKey: "subSync.nav", icon: Timer },
       { href: "/parametres/comptes", navKey: "nav.config.accounts", icon: UserPlus },
       { href: "/parametres/administration", navKey: "nav.config.admin", icon: KeyRound },
       { href: "/parametres/deploiement", navKey: "nav.config.deployment", icon: Container },

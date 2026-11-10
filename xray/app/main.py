@@ -14,7 +14,7 @@ from . import decode
 from .config import VERSION, settings
 from .asd import AsdModels
 from .voice import VoiceModels
-from . import lanes, logs, memory, relabel, report
+from . import lanes, logs, memory, relabel, report, subsyncjob
 from .db import Database
 from .gpu_guard import GpuGuard
 from .jobs import HEX32, PRIORITIES, InvalidJob, JobStore, validate_job
@@ -138,6 +138,7 @@ def create_app(start_background: bool = True, db: Database | None = None, models
         vm = voice_models or VoiceModels(settings.voice_model, settings.models_dir, settings.voice_enabled)
         am = AsdModels(settings.models_dir, settings.asd_enabled and settings.voice_enabled)
         state.update(db=database, store=store, models=mm, guard=guard, voice=vm, asd=am)
+        subsyncjob.reset_running(database)
         try:
             event(log, "démarrage de laterna-xray %s", VERSION, action="startup", journal=str(log_path) if log_path else None,
                   **report.startup_summary())
@@ -201,6 +202,8 @@ def create_app(start_background: bool = True, db: Database | None = None, models
                       "paused": [w.lane for w in state.get("workers", []) if getattr(w, "paused", False)]},
             # Ajout compatible (11/2026) : la décision des voies d'analyse (`lanes.py`).
             "lanes": lanes.plan().as_dict(),
+            # Ajout compatible (11/2026) : la synchro des sous-titres — ordres en file ou en cours.
+            "subsync": {"pending": subsyncjob.pending_count(state["db"]), "version": subsyncjob.subsync.ALGO_VERSION},
         }
 
     @app.post("/jobs")
@@ -386,6 +389,43 @@ def create_app(start_background: bool = True, db: Database | None = None, models
     @app.get("/quality")
     def get_quality():
         return quality(state["db"])
+
+    # ---- synchro des sous-titres (11/2026, subsyncjob.py) -----------------------------------------------
+
+    @app.post("/subsync/jobs")
+    async def post_subsync_job(request: Request):
+        """Mesurer les sous-titres texte d'un élément (ceux du conteneur, et les fichiers à côté dont Laterna donne
+        les chemins). Seulement à la demande d'un administrateur, côté Laterna ; jamais de soi-même."""
+        try:
+            body = json.loads(await request.body() or b"null")
+        except (ValueError, UnicodeDecodeError):
+            return _error(400, "JSON invalide")
+        try:
+            spec = subsyncjob.validate(body, settings.media_root)
+        except InvalidJob as e:
+            item = body.get("itemId") if isinstance(body, dict) and isinstance(body.get("itemId"), str) else None
+            event(log, "ordre de synchro refusé : %s", e, level=logging.WARNING,
+                  item=item if item and HEX32.match(item) else None, action="subsync_refused", error=str(e))
+            return _error(400, str(e))
+        status, payload = subsyncjob.submit(state["db"], spec)
+        names = {v: k for k, v in PRIORITIES.items()}
+        event(log, "[xray] %s : ordre de synchro des sous-titres reçu (%s) — %s", spec.item_id, names.get(spec.priority),
+              payload.get("status"), item=spec.item_id, action="subsync_received", priority=names.get(spec.priority),
+              externals=len(spec.externals), force=spec.force, path=spec.path, etag=spec.etag, http=status,
+              status=payload.get("status"), position=payload.get("position"))
+        state["store"].wake()
+        return JSONResponse(payload, status_code=status)
+
+    @app.get("/subsync/results")
+    def get_subsync_results(itemId: str | None = None, since: float | None = None):
+        """Les ordres et mesures : `?itemId=a,b,…` (200 au plus), ou `?since=<epoch>` (ce qui a bougé depuis). Un
+        élément inconnu se lit `status: "unknown"` dans la liste — jamais un 404."""
+        if itemId is not None:
+            ids = [i for i in itemId.split(",") if HEX32.match(i)][:200]
+            return subsyncjob.results(state["db"], ids)
+        if since is not None and since == since:
+            return subsyncjob.results(state["db"], None, max(0.0, float(since)))
+        return _error(400, "itemId ou since attendu")
 
     @app.delete("/items/{item_id}")
     def delete_item(item_id: str):

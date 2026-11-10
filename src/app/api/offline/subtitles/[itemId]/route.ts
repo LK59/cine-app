@@ -7,6 +7,7 @@ import { assertVisible } from "@/lib/itemVisibility";
 import { jellyfinAuthHeaders } from "@/lib/jellyfinAuth";
 import { passJellyfinFetch } from "@/lib/jellyfinBreaker";
 import { TEXT_SUBTITLE_FORMATS } from "@/lib/subtitleGen/source";
+import { subtitleSyncByIndex } from "@/lib/subtitleSync/store";
 
 /**
  * Les sous-titres texte d'un titre, pour les garder avec son téléchargement (Louis, 19/10/2026 —
@@ -32,12 +33,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ item
     Items?: {
       MediaSources?: {
         Id?: string;
-        MediaStreams?: { Type?: string; Index?: number; Codec?: string; Language?: string; Title?: string; IsForced?: boolean; IsHearingImpaired?: boolean; IsExternal?: boolean }[];
+        ETag?: string;
+        MediaStreams?: { Type?: string; Index?: number; Codec?: string; Language?: string; Title?: string; IsForced?: boolean; IsHearingImpaired?: boolean; IsExternal?: boolean; Path?: string }[];
       }[];
     }[];
   };
   const source = page.Items?.[0]?.MediaSources?.[0];
   const mediaSourceId = source?.Id ?? itemId;
+  // Une piste recalée par un administrateur (§141) se télécharge déjà corrigée : la route des sous-titres la
+  // réécrit quand l'adresse porte `&sync=`. Le lecteur hors ligne lit le fichier tel quel.
+  const syncByIndex = subtitleSyncByIndex(itemId, source?.ETag, source?.MediaStreams ?? []);
   const subtitles = (source?.MediaStreams ?? [])
     .filter((s) => s.Type === "Subtitle" && typeof s.Index === "number" && TEXT_SUBTITLE_FORMATS.has((s.Codec ?? "").toLowerCase()))
     .map((s) => ({
@@ -47,7 +52,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ item
       isForced: s.IsForced === true,
       isHearingImpaired: s.IsHearingImpaired === true,
       isExternal: s.IsExternal === true,
-      url: `/api/jellyfin/stream/subtitle/${itemId}?mediaSourceId=${encodeURIComponent(mediaSourceId)}&index=${s.Index}`,
+      url:
+        `/api/jellyfin/stream/subtitle/${itemId}?mediaSourceId=${encodeURIComponent(mediaSourceId)}&index=${s.Index}` +
+        (syncByIndex?.[String(s.Index)] ? `&sync=${syncByIndex[String(s.Index)].version}` : ""),
     }));
   return NextResponse.json({ subtitles }, { headers: { "Cache-Control": "private, no-store" } });
 }

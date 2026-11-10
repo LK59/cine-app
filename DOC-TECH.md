@@ -1644,6 +1644,33 @@ Two details of real server responses the parser must handle: a **BOM** before th
 and **position settings** at the end of a cue timing line (`region:subtitle line:90%`) which are not
 part of the text.
 
+### Subtitle sync corrections
+
+An administrator can have each text subtitle measured against the film's speech and **realign** it
+(DECISIONS.md §141; measurement in `xray/app/subsync.py`). The correction is `t_speech = a + s · t_sub`
+on the file clock — `a` an offset, `s` a scale (a subtitle made for 25 fps on a 23.976 file). It is
+never written into a file; it applies at display, and only for the file version (Jellyfin `ETag`)
+that was measured.
+
+- **Native player.** The file description (`/api/jellyfin/direct`) carries `subtitleSync`, by Jellyfin
+  stream index, **only when a correction is applied** — otherwise the payload, and the player, are
+  exactly as before. Choosing a track looks it up (`syncForChoice`): the « décalage » row then starts
+  at `a` (rounded to the hundredth) instead of 0, and the viewer still shifts it by half-seconds; the
+  scale is held beside it. Every cue lookup goes through `cueLookupTime` — a file beside the film
+  `(p − fileDelay − offset) / s`, a container track `fileDelay + (p − fileDelay − offset) / s` — which
+  at `s = 1` performs the previous arithmetic operation for operation. Generated subtitles always use
+  scale 1. The `start` line carries `subSync` when a correction exists.
+- **Server player, televisions, downloads.** `playback/start` and `/api/offline/subtitles` add
+  `&sync=<decision time>` to a realigned track's address (a new decision changes the address, which the
+  browser caches for an hour); the subtitle route then rewrites the WebVTT's cue times (`a + s·t`,
+  clamped at 0), after re-reading the stream and the file's `ETag` from Jellyfin. Without `&sync=` the
+  WebVTT is served untouched — the native player never asks for it, or the correction would apply
+  twice. Casting with subtitles in the stream or burnt into the picture is not corrected. The server
+  player's own offset control then shifts relative to the corrected file.
+- **Clock.** Jellyfin's `Stream.vtt` is timed on the file clock (an external `.srt` converted as is; an
+  embedded track extracted by ffmpeg, whose zero is the file's start) — the same clock the service
+  measures on. Not re-verified on a file whose container start time is not zero.
+
 ### Generated subtitles
 
 A full text subtitle of the title can be translated into another language, on demand and during

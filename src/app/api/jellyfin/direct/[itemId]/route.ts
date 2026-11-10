@@ -17,6 +17,8 @@ import { FILE_MISSING, HttpError, UPSTREAM_UNREACHABLE, UpstreamUnreachableError
 // source (DECISIONS.md §69). Anything else is a picture and has nothing to read.
 import { TEXT_SUBTITLE_FORMATS } from "@/lib/subtitleGen/source";
 import { generatedForDirect } from "@/lib/subtitleGen/direct";
+import { subtitleSyncByIndex } from "@/lib/subtitleSync/store";
+import type { SubtitleSync } from "@/lib/subtitleSync";
 
 // Containers the experimental player's demuxer understands. Matroska is 99.7% of this library;
 // anything else is refused with a reason rather than half-played.
@@ -148,7 +150,14 @@ export interface DirectPlayInfo {
   recapSkip: { start: number; end: number } | null;
   /** Where the closing credits begin, which is when the next episode is offered. */
   creditsStart: number | null;
+  /**
+   * Les corrections de synchro **appliquées** par un administrateur à ce fichier-ci (DECISIONS.md §141), par
+   * index Jellyfin de la piste — un fichier à côté comme une piste du conteneur. Absent sans correction : la
+   * réponse est alors exactement celle d'avant, et le lecteur aussi.
+   */
+  subtitleSync?: Record<string, SubtitleSync & { label: string | null }>;
 }
+
 
 /** Le temps qu'on accorde au logo : cette réponse est sur le chemin de l'ouverture du film. */
 const LOGO_BUDGET_MS = 500;
@@ -375,6 +384,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ itemId: s
     logoUrl,
     ...playerMarkers(timestamps),
   };
+  const subtitleSync = subtitleSyncByIndex(itemId, source.ETag, streams);
+  if (subtitleSync) payload.subtitleSync = subtitleSync;
 
   return NextResponse.json(payload);
 }

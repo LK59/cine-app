@@ -241,6 +241,11 @@ flowchart TD
   journal) et reprend ensuite là où il en était — rien n'est perdu, les tronçons faits sont en base.
 - **Le travail de fond** (renommages, son seul, lecture des lèvres) ne passe **jamais devant un ordre
   `normal` ou `high`** et rend la main entre deux lots ou deux fenêtres.
+- **La synchro des sous-titres** (11/2026, `subsyncjob.py`, [PIPELINE.md](PIPELINE.md#11-synchro-des-sous-titres))
+  a sa propre file (`subsync_jobs`), remplie **seulement** par `POST /subsync/jobs` — un clic d'administrateur
+  dans Laterna, jamais le planificateur. La voie A la sert comme le travail de fond (jamais devant un ordre
+  `normal` ou `high`), en premier parmi lui ; elle rend la main entre deux blocs de son (`subsync_yield`) et
+  repart du début. Laterna relit `GET /subsync/results` seulement tant qu'une mesure demandée n'est pas revenue.
 - **Reprise** : un redémarrage reprend au premier tronçon non fait ; un ordre commencé sous une version
   antérieure des résultats repart de zéro.
 - **Annulation** : `DELETE`, ou un nouvel ordre sous un autre ETag, arrête l'analyse en cours
@@ -313,6 +318,9 @@ Les tables de `xray.db` :
 | `asd_runs` | élément | état (`partial` / `done`), reprise, bilan |
 | `reports` | élément | rapport de décision (JSON) |
 | `series_faces` | — | ancienne mémoire des visages, reprise une fois comme contribution `legacy` |
+| `subsync_jobs` | élément dont la synchro des sous-titres est demandée | ETag, chemin, fichiers à côté (et leur signature : chemin, taille, date), priorité, état, erreur |
+| `subsync_results` | élément | une mesure par piste (JSON), source de la parole, version de l'algorithme, ETag mesuré |
+| `subsync_speech` | élément × ETag | la parole écoutée par la passe « parole seule », et la zone écoutée |
 
 **Ce que coûte une heure analysée** : environ 4,3 Mo (mesuré sur 10 h, novembre 2026), dont près de la
 moitié pour les empreintes de visages et un tiers pour celles des voix. La base est en pages de 16 Kio
@@ -324,7 +332,9 @@ tout refaire sans relire le fichier** : `shots`, `tracks`, `voice_regions`, `voi
 Côté Laterna, trois tables dans `cine.db` : `xray_scan_items` (le plan : un élément par ligne, palier,
 rang, durée, date, état, ETag, temps de calcul), `xray_scan_meta` (pauses, forçages, liste de priorité) et
 `xray_file_versions` (la durée de chaque version commandée, pour le rattachement à durée égale). Les
-textes de « Jusqu'ici » sont dans `sofar_texts` (trente jours).
+textes de « Jusqu'ici » sont dans `sofar_texts` (trente jours). La synchro des sous-titres : `subtitle_sync`
+(une mesure par piste, sa version de fichier, la décision de l'administrateur) et `subtitle_sync_jobs` (les
+mesures demandées et pas encore revenues).
 
 ---
 
@@ -371,12 +381,16 @@ n'apparaît.
 | `relabel_requested`, `relabel`, `relabel_failed` | renommages | éléments, résumé |
 | `memory_reset`, `voice_model_reset`, `version_reset`, `item_deleted` | oublis | contributions, modèles, versions |
 | `report`, `report_failed` | rapport refait (une ligne qui le résume) | comptes, `voiceReasons`, `voiceVia`, `gpuShare`, `vaapiShare` |
+| `subsync_received`, `subsync_refused` | `POST /subsync/jobs` | `priority`, `externals`, `force`, `status`, `position` |
+| `subsync_start`, `subsync_done`, `subsync_yield`, `subsync_failed` | synchro des sous-titres d'un élément | fichiers à côté ; pistes et `verdicts`, `speechSource`, `speechSeconds`, `cpuSeconds` ; erreur et pile |
 
 Lire : `docker exec laterna-xray tail -n 50 /data/logs/xray.log | jq -c .` ; un élément :
 `docker exec laterna-xray sh -c 'cat /data/logs/xray.log*' | jq -c 'select(.itemId=="…")'`.
 
 Côté Laterna : `docker logs cine-app` porte une ligne `[xray]` par lot commandé, relecture du plan, geste
 et palier forcé terminé ; `data/logs/server.log` les erreurs (`xray/order`, `xray/scan`, `xray/version`…).
+La synchro des sous-titres y écrit `[tâche] synchro des sous-titres · …` (mesure demandée, passe terminée avec
+ses verdicts, recalé / refusé / rétabli) et ses erreurs sous `subtitle-sync/*`.
 
 ### Le rapport de décision : `GET /items/{itemId}/report`
 

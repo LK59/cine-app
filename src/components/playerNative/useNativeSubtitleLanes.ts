@@ -7,8 +7,36 @@ import type { useT } from "@/components/TranslationProvider";
 import { isGeneratingTrack, type SubtitleGeneration } from "@/lib/subtitleGen/generation";
 import type { RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 import { ExternalSubtitleTrack, isExternalTrack, type ExternalSubtitleSource } from "@/lib/webcodecs/externalSubtitles";
-import { noticeText } from "@/components/player/nativeHostHelpers";
+import { jellyfinSubtitleIndex, noticeText } from "@/components/player/nativeHostHelpers";
 import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
+import { cueLookupTime, isNeutralSync, startingOffset, type SubtitleSync } from "@/lib/subtitleSync";
+
+/**
+ * Les corrections de synchro appliquées à ce fichier (DECISIONS.md §141), telles que la description du fichier
+ * les donne (`DirectPlayInfo.subtitleSync`, par index Jellyfin) — avec de quoi retrouver l'index d'une piste du
+ * conteneur. `null` sans correction : tout se passe alors exactement comme avant.
+ */
+export interface NativeSubtitleSync {
+  byIndex: Record<string, SubtitleSync>;
+  embedded: number[] | undefined;
+}
+
+/**
+ * La correction d'une piste choisie : `null` pour une génération, une piste sans correction, ou sans description.
+ * Les pistes du conteneur sont demandées seulement s'il y a une correction (`fileTracks`, lu à la demande) : sans
+ * correction, ce choix ne touche à rien de plus qu'avant.
+ */
+export function syncForChoice(
+  id: number | null,
+  held: NativeSubtitleSync | null,
+  fileTracks: () => Parameters<typeof jellyfinSubtitleIndex>[1],
+  sources: { id: number; url: string }[]
+): SubtitleSync | null {
+  if (id === null || !held || isGeneratingTrack(id)) return null;
+  const index = jellyfinSubtitleIndex(id, fileTracks(), held.embedded, sources);
+  const sync = index === null ? undefined : held.byIndex[String(index)];
+  return sync && !isNeutralSync(sync) ? sync : null;
+}
 
 export function useNativeSubtitleLanes({
   generation,
@@ -32,6 +60,9 @@ export function useNativeSubtitleLanes({
   showWarning,
   tRef,
   fileDelayRef,
+  subtitleScaleRef,
+  secondScaleRef,
+  subtitleSyncRef,
 }: {
   generation: SubtitleGeneration;
   wantedSubtitleRef: RefObject<number | null>;
@@ -54,6 +85,10 @@ export function useNativeSubtitleLanes({
   showWarning: (text: string | null) => void;
   tRef: RefObject<ReturnType<typeof useT>>;
   fileDelayRef: RefObject<number>;
+  /** L'échelle de la correction de chaque voie (§141) ; 1 sans correction. */
+  subtitleScaleRef: RefObject<number>;
+  secondScaleRef: RefObject<number>;
+  subtitleSyncRef: RefObject<NativeSubtitleSync | null>;
 }) {
   /**
    * Quelle voie porte la génération active : une seule génération est sondée et dessinée à la fois
@@ -76,11 +111,12 @@ export function useNativeSubtitleLanes({
     secondFetchRef.current?.abort();
     secondFetchRef.current = null;
     secondOffsetRef.current = 0;
+    secondScaleRef.current = 1;
     setSecondOffset(0);
     setSecondSubtitle(null);
     setSecondText(null);
     setSecondIsNotice(false);
-  }, [secondExternalRef, secondFetchRef, secondOffsetRef, secondWantedRef, setSecondIsNotice, setSecondOffset, setSecondSubtitle, setSecondText]);
+  }, [secondExternalRef, secondFetchRef, secondOffsetRef, secondScaleRef, secondWantedRef, setSecondIsNotice, setSecondOffset, setSecondSubtitle, setSecondText]);
 
   /**
    * Chooses a subtitle, from the menu or from the viewer's account — a track of the file, told to
@@ -94,9 +130,13 @@ export function useNativeSubtitleLanes({
       const second = secondWantedRef.current;
       if (second !== null && !secondSurvives(id, second, isGeneratingTrack(id) && isGeneratingTrack(second))) clearSecond();
       wantedSubtitleRef.current = id;
-      // Un décalage corrige une piste, pas la suivante.
-      subtitleOffsetRef.current = 0;
-      setSubtitleOffset(0);
+      // Un décalage corrige une piste, pas la suivante. Une piste qu'un administrateur a recalée (§141) part
+      // de sa correction — le spectateur peut encore l'ajuster ; toute autre part de zéro, comme avant.
+      const sync = syncForChoice(id, subtitleSyncRef.current, () => remuxRef.current?.subtitleTracks ?? [], sources);
+      const start = startingOffset(sync);
+      subtitleOffsetRef.current = start;
+      subtitleScaleRef.current = sync ? sync.scale : 1;
+      setSubtitleOffset(start);
       setCurrentSubtitle(id);
       setSubtitle(null);
 
@@ -139,7 +179,7 @@ export function useNativeSubtitleLanes({
           if (!fetching.signal.aborted) showWarning(tRef.current("player.experimental.externalSubtitlesUnavailable"));
         });
     },
-    [showWarning, generation, clearSecond, externalSubtitleRef, remuxRef, secondWantedRef, setCurrentSubtitle, setSubtitle, setSubtitleIsNotice, setSubtitleOffset, subtitleFetchRef, subtitleOffsetRef, tRef, wantedSubtitleRef]
+    [showWarning, generation, clearSecond, externalSubtitleRef, remuxRef, secondWantedRef, setCurrentSubtitle, setSubtitle, setSubtitleIsNotice, setSubtitleOffset, subtitleFetchRef, subtitleOffsetRef, subtitleScaleRef, subtitleSyncRef, tRef, wantedSubtitleRef]
   );
 
   /**
@@ -156,6 +196,14 @@ export function useNativeSubtitleLanes({
       clearSecond();
       secondWantedRef.current = id;
       setSecondSubtitle(id);
+      // Le second part de sa correction comme le principal (§141).
+      const sync = syncForChoice(id, subtitleSyncRef.current, () => remuxRef.current?.subtitleTracks ?? [], sources);
+      if (sync) {
+        const start = startingOffset(sync);
+        secondOffsetRef.current = start;
+        secondScaleRef.current = sync.scale;
+        setSecondOffset(start);
+      }
       generation.activate(generating ? id : isGeneratingTrack(primary) ? primary : null);
       if (id === null || generating || !isExternalTrack(id)) return;
       const source = sources.find((candidate) => candidate.id === id);
@@ -170,7 +218,7 @@ export function useNativeSubtitleLanes({
           if (!fetching.signal.aborted) showWarning(tRef.current("player.experimental.externalSubtitlesUnavailable"));
         });
     },
-    [showWarning, generation, clearSecond, secondExternalRef, secondFetchRef, secondWantedRef, setSecondSubtitle, tRef, wantedSubtitleRef]
+    [showWarning, generation, clearSecond, remuxRef, secondExternalRef, secondFetchRef, secondOffsetRef, secondScaleRef, secondWantedRef, setSecondOffset, setSecondSubtitle, subtitleSyncRef, tRef, wantedSubtitleRef]
   );
 
   /**
@@ -230,9 +278,16 @@ export function useNativeSubtitleLanes({
         return;
       }
       setSecondIsNotice(false);
-      setSecondText(isExternalTrack(id) ? (secondExternalRef.current?.textAt(at - fileDelay) ?? null) : fromContainer(at, id));
+      // La recherche de ligne passe par `cueLookupTime` (§141) : à l'échelle 1, le calcul d'avant à l'identique.
+      const offset = secondOffsetRef.current;
+      const scale = secondScaleRef.current;
+      setSecondText(
+        isExternalTrack(id)
+          ? (secondExternalRef.current?.textAt(cueLookupTime(playerSeconds, fileDelay, offset, scale, true)) ?? null)
+          : fromContainer(cueLookupTime(playerSeconds, fileDelay, offset, scale, false), id)
+      );
     },
-    [generationLane, showSecondGeneratedAt, secondExternalRef, secondOffsetRef, secondWantedRef, setSecondIsNotice, setSecondText]
+    [generationLane, showSecondGeneratedAt, secondExternalRef, secondOffsetRef, secondScaleRef, secondWantedRef, setSecondIsNotice, setSecondText]
   );
 
   /**
@@ -255,10 +310,17 @@ export function useNativeSubtitleLanes({
         return;
       }
       setSubtitleIsNotice(false);
-      // Un fichier à côté du film est daté sur l'horloge du fichier, pas sur celle du lecteur.
-      setSubtitle(external ? external.textAt(at - fileDelay) : fromContainer(at));
+      // Un fichier à côté du film est daté sur l'horloge du fichier, pas sur celle du lecteur. La correction
+      // d'une piste recalée (§141) s'applique ici : `cueLookupTime`, qui à l'échelle 1 refait le calcul d'avant.
+      const offset = subtitleOffsetRef.current;
+      const scale = subtitleScaleRef.current;
+      setSubtitle(
+        external
+          ? external.textAt(cueLookupTime(playerSeconds, fileDelay, offset, scale, true))
+          : fromContainer(cueLookupTime(playerSeconds, fileDelay, offset, scale, false))
+      );
     },
-    [generationLane, showGeneratedAt, showSecondAt, externalSubtitleRef, fileDelayRef, setSubtitle, setSubtitleIsNotice, subtitleOffsetRef]
+    [generationLane, showGeneratedAt, showSecondAt, externalSubtitleRef, fileDelayRef, setSubtitle, setSubtitleIsNotice, subtitleOffsetRef, subtitleScaleRef]
   );
 
   return { generationLane, clearSecond, chooseSubtitle, chooseSecond, showGeneratedAt, showSecondGeneratedAt, showSubtitleAt };

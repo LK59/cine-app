@@ -661,6 +661,69 @@ function migrate(db: Database.Database): void {
     );
   `);
   try { db.exec("ALTER TABLE series_recaps ADD COLUMN about TEXT"); } catch { /* already exists */ }
+  // « Synchro des sous-titres » (DECISIONS.md §141, 10/11/2026). `subtitle_sync` : une mesure par piste de
+  // sous-titres (`emb:<index>` du conteneur, `ext:<chemin>` d'un fichier à côté), avec la version du fichier
+  // mesuré (`media_etag`, et taille / date du fichier à côté) — une autre version rend la ligne périmée, jamais
+  // appliquée — et la décision de l'administrateur (`status` : measured / applied / rejected, qui, quand).
+  // `subtitle_sync_jobs` : les mesures demandées au service, le temps qu'elles reviennent (`pass_id` : un clic).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS subtitle_sync (
+      item_id       TEXT    NOT NULL,
+      track_key     TEXT    NOT NULL,
+      media_etag    TEXT    NOT NULL,
+      ext_size      INTEGER,
+      ext_mtime     INTEGER,
+      kind          TEXT    NOT NULL,
+      stream_index  INTEGER,
+      codec         TEXT,
+      language      TEXT,
+      title         TEXT,
+      forced        INTEGER NOT NULL DEFAULT 0,
+      hi            INTEGER NOT NULL DEFAULT 0,
+      offset_s      REAL,
+      scale         REAL,
+      scale_label   TEXT,
+      z             REAL,
+      mad_ms        REAL,
+      windows       INTEGER,
+      inliers       REAL,
+      cover         REAL,
+      max_error_s   REAL,
+      confidence    TEXT,
+      verdict       TEXT    NOT NULL,
+      reliable      INTEGER NOT NULL DEFAULT 0,
+      status        TEXT    NOT NULL DEFAULT 'measured',
+      measured_at   INTEGER NOT NULL,
+      decided_at    INTEGER,
+      decided_by    TEXT,
+      speech_source TEXT,
+      algo_version  INTEGER,
+      item_kind     TEXT,
+      item_title    TEXT,
+      series_id     TEXT,
+      series_title  TEXT,
+      season        INTEGER,
+      episode       INTEGER,
+      PRIMARY KEY (item_id, track_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_subtitle_sync_series ON subtitle_sync(series_id, season);
+    CREATE TABLE IF NOT EXISTS subtitle_sync_jobs (
+      item_id      TEXT    PRIMARY KEY,
+      media_etag   TEXT    NOT NULL,
+      state        TEXT    NOT NULL,
+      error        TEXT,
+      pass_id      TEXT    NOT NULL,
+      launched_at  INTEGER NOT NULL,
+      launched_by  TEXT,
+      finished_at  INTEGER,
+      item_kind    TEXT,
+      item_title   TEXT,
+      series_id    TEXT,
+      series_title TEXT,
+      season       INTEGER,
+      episode      INTEGER
+    );
+  `);
   // « Jusqu'ici » (DECISIONS.md §139, 10.27) : deux phrases sur un personnage, gardées trente jours sous
   // l'empreinte de ce qui est parti au modèle (`sofarKey` — langue, élément, personne, tranche, résumés
   // envoyés, modèle, version de la consigne), partagées par les comptes qui ont vu la même chose. `by` :

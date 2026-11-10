@@ -10278,3 +10278,67 @@ n'arrive qu'au `message_delta` de la fin). Le même relevé part avec la panne d
 aucun compteur : son entrée est estimée sur le texte envoyé, sans sortie. Coupé avant `message_start`, rien n'est
 compté (rien de connu). Tests : `ai-spend-abort-10281.test.ts` (le vrai `MessageStream` du SDK, le transport en
 double : flux interrompu, flux fini, question rejetée, panneau refermé, « Jusqu'ici » rejeté puis rouvert).
+
+## 141. La synchro des sous-titres : mesurée à la demande, corrigée à l'affichage (10/11/2026)
+
+**Règle.** Un sous-titre texte peut être décalé ou dériver par rapport à la parole du fichier (une version
+faite pour un autre montage, une autre cadence d'image). `laterna-xray` le **mesure** — modèle
+`t_parole = a + s · t_sous-titre`, verdicts `ok` / `décalé` / `dérive` / `incertain` / `montage` / `image` /
+`peu-de-répliques` (méthode : `xray/docs/PIPELINE.md`, « 11. Synchro des sous-titres ») — et Laterna
+**applique** la correction à l'affichage. Trois interdits du propriétaire, tenus par construction :
+- **rien sans un clic** : une mesure ne part que de « Scanner » (Configuration → Synchro des sous-titres,
+  `launchScan`), une correction ne s'applique que par « Recaler » (`decideScope`). Le planificateur des acteurs
+  à l'écran n'en sait rien ; les résultats ne sont relus que tant qu'une mesure demandée n'est pas revenue
+  (`pullPending`, un minuteur qui s'arrête seul) ;
+- **jamais un fichier modifié** : ni la vidéo, ni le sous-titre (liens de seed, médiathèque en lecture seule) —
+  la correction vit dans `cine.db` (`subtitle_sync`) ;
+- **les sous-titres en images** (PGS, VobSub) sont hors champ : listés avec le verdict `image`, jamais mesurés.
+
+**La version du fichier.** Une mesure garde l'`ETag` Jellyfin du fichier mesuré (`media_etag`, et la taille et
+la date d'un fichier à côté, que le service lit). Une correction n'est lue **que pour l'`ETag` que Jellyfin
+donne maintenant** (`appliedFor`) : un fichier remplacé rend la ligne périmée, jamais appliquée, et « Recaler »
+la refuse (la version est relue chez Jellyfin au moment de décider). Une nouvelle mesure du même fichier qui dit
+la même chose garde la décision ; une mesure différente revient à « mesuré » (`recordMeasurement`). Limite
+connue : un fichier à côté réécrit au même chemin (Bazarr qui en trouve un meilleur) ne change pas l'`ETag` de
+la vidéo — la correction resterait lue jusqu'à la mesure suivante, qui la remet à « mesuré ».
+
+**Une saison, une série, un élément entier** ne recalent que des mesures **fiables** d'un décalage ou d'une
+dérive (`APPLICABLE_VERDICTS`, `decide(…, { strict: true })`) ; une piste seule, toute mesure qui a un décalage
+(l'administrateur l'a regardée).
+
+**Porteurs.**
+- `src/lib/subtitleSync.ts` (pur, client et serveur) : `cueLookupTime(p, fileDelay, offset, scale, onFileClock)`
+  — fichier à côté `(p − fileDelay − offset) / scale`, piste du conteneur `fileDelay + (p − fileDelay − offset) /
+  scale`, **à l'échelle 1 le calcul d'avant opération pour opération** ; `rewriteVttTimes` (`t → a + s·t`) ;
+  `subtitleTrackKey` (`emb:<index>` / `ext:<chemin>`) ; `startingOffset` ; `subSyncLogField`.
+- `src/lib/subtitleSync/store.ts` : `recordMeasurement`, `appliedFor`, `subtitleSyncByIndex` (clé → index
+  Jellyfin, pour les trois lecteurs), `decide`, la file des mesures demandées.
+- `src/lib/subtitleSync/admin.ts` : `launchScan`, `pullPending`, `treeView`, `seriesView`, `decideScope`.
+
+**Appelants.**
+- **Lecteur natif** : la description du fichier porte `subtitleSync` (par index Jellyfin) seulement s'il y a une
+  correction (`/api/jellyfin/direct`) — aucune requête de plus ; `useNativeSubtitleLanes` (`syncForChoice` au
+  choix d'une piste : le décalage du menu part de la correction, le spectateur l'ajuste encore ; `showSubtitleAt`
+  et `showSecondAt` par `cueLookupTime`), `useNativeSubtitleGeneration` et `noteSeekRequest` (générations : échelle
+  1, jamais corrigées). Ligne `start` : `subSync` seulement avec une correction.
+- **Lecteur serveur** : `playback/start` ajoute `&sync=<version de la décision>` à l'adresse d'une piste recalée
+  (l'adresse est gardée une heure en cache) et `sync: {offset, scale}` ; la route des sous-titres réécrit alors le
+  WebVTT (`syncForSubtitleStream`, version relue chez Jellyfin). Les contrôles du lecteur serveur décalent ensuite
+  par rapport au fichier corrigé (ils partent de 0). Ligne `start` : `subSync` (`subSyncFromTracks`).
+- **Téléchargements** : `/api/offline/subtitles` ajoute le même `&sync=` ; le fichier gardé sur l'appareil est déjà
+  corrigé.
+
+**Ce qui diffère exprès.** Le lecteur natif applique la correction **à chaque recherche de ligne** et ne demande
+jamais `&sync=` (sinon elle s'appliquerait deux fois) ; le lecteur serveur et les téléchargements lisent un WebVTT
+réécrit. Une diffusion (sous-titres dans le flux, `subtitlesInStream`, ou incrustés, `burnSubtitles`) n'est pas
+corrigée : rien ne réécrit ces chemins-là.
+
+**Pas de réglage, pas d'option publique.** La page n'a d'effet qu'avec les acteurs à l'écran branchés
+(`xrayConfigured`) ; le lecteur ne lit rien de plus sans correction — les empreintes du lecteur sont inchangées.
+
+**Tests.** `subtitle-sync.test.ts` (`cueLookupTime` à l'échelle 1 bit pour bit sur 20 000 tirages, modèle,
+réécriture, clés, portées), `subtitle-sync-store.test.ts` (rien d'office, version, portée stricte, décision qui
+survit ou non), `subtitle-sync-routes.test.ts` (proxy et routes administrateur seul, portées refusées, scan d'une
+série, relecture seulement en attente, mesure d'un autre fichier écartée, recaler une saison périmée refusé, la
+route des sous-titres qui réécrit seulement avec `&sync=`), `subtitle-sync-card.test.tsx` (la page) ; côté service
+`xray/tests/test_subsync.py`.
