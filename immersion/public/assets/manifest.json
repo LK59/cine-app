@@ -1,5 +1,5 @@
 {
- "totalBytes": 28261144,
+ "totalBytes": 21254882,
  "assets": [
   {
    "id": "wood_floor",
@@ -260,116 +260,6 @@
     }
    ],
    "bytes": 619485
-  },
-  {
-   "id": "metal_black",
-   "kind": "textures",
-   "slug": "metal_plate_02",
-   "files": [
-    {
-     "path": "textures/metal_black/arm.ktx2",
-     "bytes": 255421
-    },
-    {
-     "path": "textures/metal_black/color.ktx2",
-     "bytes": 208784
-    },
-    {
-     "path": "textures/metal_black/normal.ktx2",
-     "bytes": 35762
-    }
-   ],
-   "bytes": 499967
-  },
-  {
-   "id": "bark",
-   "kind": "textures",
-   "slug": "pine_bark",
-   "files": [
-    {
-     "path": "textures/bark/arm.ktx2",
-     "bytes": 206926
-    },
-    {
-     "path": "textures/bark/color.ktx2",
-     "bytes": 237643
-    },
-    {
-     "path": "textures/bark/normal.ktx2",
-     "bytes": 300519
-    }
-   ],
-   "bytes": 745088
-  },
-  {
-   "id": "modern_coffee_table_01",
-   "kind": "model",
-   "slug": "modern_coffee_table_01",
-   "files": [
-    {
-     "path": "models/modern_coffee_table_01/baseColor_1.ktx2",
-     "bytes": 140716
-    },
-    {
-     "path": "models/modern_coffee_table_01/metallicRoughness_1.ktx2",
-     "bytes": 143829
-    },
-    {
-     "path": "models/modern_coffee_table_01/modern_coffee_table_01.bin",
-     "bytes": 90944
-    },
-    {
-     "path": "models/modern_coffee_table_01/modern_coffee_table_01.gltf",
-     "bytes": 3359
-    },
-    {
-     "path": "models/modern_coffee_table_01/normal_1.ktx2",
-     "bytes": 99790
-    }
-   ],
-   "bytes": 478638,
-   "triangles": 4504
-  },
-  {
-   "id": "modern_coffee_table_02",
-   "kind": "model",
-   "slug": "modern_coffee_table_02",
-   "files": [
-    {
-     "path": "models/modern_coffee_table_02/baseColor_1.ktx2",
-     "bytes": 48843
-    },
-    {
-     "path": "models/modern_coffee_table_02/baseColor_2.ktx2",
-     "bytes": 175444
-    },
-    {
-     "path": "models/modern_coffee_table_02/metallicRoughness_1.ktx2",
-     "bytes": 83783
-    },
-    {
-     "path": "models/modern_coffee_table_02/metallicRoughness_2.ktx2",
-     "bytes": 163343
-    },
-    {
-     "path": "models/modern_coffee_table_02/modern_coffee_table_02.bin",
-     "bytes": 511272
-    },
-    {
-     "path": "models/modern_coffee_table_02/modern_coffee_table_02.gltf",
-     "bytes": 5564
-    },
-    {
-     "path": "models/modern_coffee_table_02/normal_1.ktx2",
-     "bytes": 11256
-    },
-    {
-     "path": "models/modern_coffee_table_02/normal_2.ktx2",
-     "bytes": 55103
-    }
-   ],
-   "bytes": 1054608,
-   "triangles": 13645
   },
   {
    "id": "side_table_01",
@@ -727,35 +617,6 @@
    "triangles": 6148
   },
   {
-   "id": "Ottoman_01",
-   "kind": "model",
-   "slug": "Ottoman_01",
-   "files": [
-    {
-     "path": "models/Ottoman_01/Ottoman_01.bin",
-     "bytes": 81540
-    },
-    {
-     "path": "models/Ottoman_01/Ottoman_01.gltf",
-     "bytes": 3252
-    },
-    {
-     "path": "models/Ottoman_01/baseColor_1.ktx2",
-     "bytes": 174617
-    },
-    {
-     "path": "models/Ottoman_01/metallicRoughness_1.ktx2",
-     "bytes": 182849
-    },
-    {
-     "path": "models/Ottoman_01/normal_1.ktx2",
-     "bytes": 264309
-    }
-   ],
-   "bytes": 706567,
-   "triangles": 4240
-  },
-  {
    "id": "hanging_picture_frame_02",
    "kind": "model",
    "slug": "hanging_picture_frame_02",
@@ -855,35 +716,6 @@
    "triangles": 2715
   },
   {
-   "id": "ClassicNightstand_01",
-   "kind": "model",
-   "slug": "ClassicNightstand_01",
-   "files": [
-    {
-     "path": "models/ClassicNightstand_01/ClassicNightstand_01.bin",
-     "bytes": 40348
-    },
-    {
-     "path": "models/ClassicNightstand_01/ClassicNightstand_01.gltf",
-     "bytes": 3336
-    },
-    {
-     "path": "models/ClassicNightstand_01/baseColor_1.ktx2",
-     "bytes": 52883
-    },
-    {
-     "path": "models/ClassicNightstand_01/metallicRoughness_1.ktx2",
-     "bytes": 44044
-    },
-    {
-     "path": "models/ClassicNightstand_01/normal_1.ktx2",
-     "bytes": 64841
-    }
-   ],
-   "bytes": 205452,
-   "triangles": 2002
-  },
-  {
    "id": "wooden_lantern_01",
    "kind": "model",
    "slug": "wooden_lantern_01",
@@ -923,38 +755,6 @@
    ],
    "bytes": 481141,
    "triangles": 7600
-  },
-  {
-   "id": "qwantani_night_puresky",
-   "kind": "hdri",
-   "slug": "qwantani_night_puresky",
-   "files": [
-    {
-     "path": "hdri/qwantani_night_puresky.hdr",
-     "bytes": 1389258
-    },
-    {
-     "path": "hdri/qwantani_night_puresky_bg.jpg",
-     "bytes": 295238
-    }
-   ],
-   "bytes": 1684496
-  },
-  {
-   "id": "kloppenheim_02_puresky",
-   "kind": "hdri",
-   "slug": "kloppenheim_02_puresky",
-   "files": [
-    {
-     "path": "hdri/kloppenheim_02_puresky.hdr",
-     "bytes": 1393622
-    },
-    {
-     "path": "hdri/kloppenheim_02_puresky_bg.jpg",
-     "bytes": 237824
-    }
-   ],
-   "bytes": 1631446
   }
  ]
 }

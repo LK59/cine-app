@@ -1,6 +1,6 @@
 #!/bin/sh
 # Full render chain from the DEM mosaic (run from immersion/): 3 Cycles layers + coverage mask, post-processing, previews.
-# Then: tools/panorama/encode.sh assets-src/panorama/final public/assets/panorama   and   python3 -I tools/panorama/write_json.py
+# Then: fit4.mjs, encode.sh and write_json.py — exact commands in README.md
 set -e
 d=assets-src/panorama/final; mkdir -p $d
 tools/panorama/run.sh far 5 tools/panorama/render.py far $d/far.exr --samples ${FAR_SPP:-56}

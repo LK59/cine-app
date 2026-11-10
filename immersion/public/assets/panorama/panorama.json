@@ -1,0 +1,53 @@
+{
+  "elevationMin": -28.0,
+  "elevationMax": 32.0,
+  "layers": {
+    "far": {
+      "file": "far.ktx2",
+      "width": 8192,
+      "height": 1368,
+      "from": 2500.0
+    },
+    "mid": {
+      "file": "mid.ktx2",
+      "width": 4096,
+      "height": 684,
+      "from": 600.0
+    },
+    "near": {
+      "file": "near.ktx2",
+      "width": 4096,
+      "height": 684,
+      "from": 120.0
+    }
+  },
+  "main": {
+    "lat": 45.914,
+    "lon": 6.82,
+    "altitude": 1822.7,
+    "headingDeg": 152.0
+  },
+  "moon": {
+    "azimuthDeg": -35.0,
+    "elevationDeg": 38.0
+  },
+  "sky": {
+    "horizon": [
+      0.03,
+      0.072,
+      0.17
+    ],
+    "zenith": [
+      0.0016,
+      0.0042,
+      0.023
+    ]
+  },
+  "moonColor": [
+    0.62,
+    0.78,
+    1.0
+  ],
+  "attribution": "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
+  "disclaimer": "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30"
+}

@@ -9,7 +9,6 @@ import { ktx2For } from "./ktx2";
 export type ModelId =
   | "modern_arm_chair_01"
   | "mid_century_lounge_chair"
-  | "Ottoman_01"
   | "side_table_01"
   | "potted_plant_01"
   | "potted_plant_02"
@@ -22,10 +21,7 @@ export type ModelId =
   | "mantel_clock_01"
   | "hanging_picture_frame_02"
   | "bar_chair_round_01"
-  | "vintage_day_bed"
-  | "ClassicNightstand_01"
-  | "modern_coffee_table_01"
-  | "modern_coffee_table_02";
+  | "vintage_day_bed";
 
 interface ModelProps {
   id: ModelId;

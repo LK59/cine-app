@@ -98,6 +98,7 @@ const fr = {
   "bench.withVideo": "Avec vidéo",
   "bench.cancel": "Interrompre",
   "bench.legend": "Images par seconde : moyenne · 1 % le plus lent",
+  "credits.relief": "Relief des montagnes",
 };
 
 export type Key = keyof typeof fr;
@@ -193,6 +194,7 @@ const en: Record<Key, string> = {
   "bench.withVideo": "With video",
   "bench.cancel": "Stop",
   "bench.legend": "Frames per second: average · 1% low",
+  "credits.relief": "Mountain terrain",
 };
 
 const es: Record<Key, string> = {
@@ -286,6 +288,7 @@ const es: Record<Key, string> = {
   "bench.withVideo": "Con vídeo",
   "bench.cancel": "Interrumpir",
   "bench.legend": "Imágenes por segundo: media · 1 % más lento",
+  "credits.relief": "Relieve de las montañas",
 };
 
 const de: Record<Key, string> = {
@@ -379,6 +382,7 @@ const de: Record<Key, string> = {
   "bench.withVideo": "Mit Video",
   "bench.cancel": "Abbrechen",
   "bench.legend": "Bilder pro Sekunde: Mittel · langsamstes 1 %",
+  "credits.relief": "Gelände der Berge",
 };
 
 export const DICTIONARIES: Record<Lang, Record<Key, string>> = { fr, en, es, de };

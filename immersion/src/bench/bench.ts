@@ -24,8 +24,8 @@ export interface BenchResult {
   height: number;
 }
 
-export const BENCH_SECONDS = 20;
-const SETTLE_MS = 1800;
+/** La durée d'un passage, et le temps laissé au préréglage pour se mettre en place. Les tests les raccourcissent. */
+export const timing = { seconds: 20, settleMs: 1800 };
 const PRESETS: Quality[] = ["ultra", "high", "medium", "low"];
 
 /** Le parcours : où sont les yeux, ce qu'ils regardent, à cinq instants ; entre eux, une courbe. */
@@ -70,7 +70,7 @@ export const benchRun = {
 
 /** Pose la caméra sur le parcours. Renvoie la position des yeux. */
 export function benchPose(camera: PerspectiveCamera, now: number): Vector3 {
-  const t = (now - benchRun.startedAt) / (BENCH_SECONDS * 1000);
+  const t = (now - benchRun.startedAt) / (timing.seconds * 1000);
   along(eyes, t, camera.position);
   camera.lookAt(along(targets, t, scratch));
   return camera.position;
@@ -131,15 +131,15 @@ async function pass(preset: Quality, video: boolean, gl: WebGLRenderer, run: str
   const store = useStore.getState();
   store.setBench({ preset, video, progress: 0 });
   // Le temps que le préréglage se mette en place : ombres, programmes, taille du rendu.
-  await wait(SETTLE_MS);
+  await wait(timing.settleMs);
   if (cancelled) return null;
   benchRun.frames = [];
   benchRun.last = 0;
   benchRun.startedAt = performance.now();
   benchRun.active = true;
-  for (let elapsed = 0; elapsed < BENCH_SECONDS * 1000 && !cancelled; elapsed = performance.now() - benchRun.startedAt) {
-    useStore.getState().setBench({ progress: elapsed / (BENCH_SECONDS * 1000) });
-    await wait(250);
+  for (let elapsed = 0; elapsed < timing.seconds * 1000 && !cancelled; elapsed = performance.now() - benchRun.startedAt) {
+    useStore.getState().setBench({ progress: elapsed / (timing.seconds * 1000) });
+    await wait(Math.min(250, timing.seconds * 100));
   }
   benchRun.active = false;
   if (cancelled) return null;

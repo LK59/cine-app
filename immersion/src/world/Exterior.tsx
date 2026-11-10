@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLoader, useThree } from "@react-three/fiber";
-import { BackSide, BufferAttribute, Color, ConeGeometry, CylinderGeometry, DoubleSide, InstancedMesh, LinearFilter, LinearMipmapLinearFilter, MeshStandardMaterial, NoColorSpace, Object3D, PlaneGeometry, RepeatWrapping, Shape, ShapeGeometry, ShaderMaterial, SphereGeometry, SRGBColorSpace, Vector2, Vector3, type CompressedTexture } from "three";
+import { BackSide, BufferAttribute, Color, ConeGeometry, type BufferGeometry, CylinderGeometry, DoubleSide, InstancedMesh, LinearFilter, LinearMipmapLinearFilter, MeshStandardMaterial, NoColorSpace, Object3D, PlaneGeometry, RepeatWrapping, Shape, ShapeGeometry, ShaderMaterial, SphereGeometry, SRGBColorSpace, Vector2, Vector3, type CompressedTexture } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { assetUrl } from "../lib/assets";
 import { useProfile } from "../state/store";
@@ -186,6 +186,7 @@ const LAYER_FRAGMENT = /* glsl */ `
   uniform sampler2D uMap;
   uniform vec3 uOrigin;
   uniform float uGain;
+  uniform vec2 uSides;
   varying vec3 vWorld;
   ${PANORAMA_GLSL}
   void main() {
@@ -194,8 +195,12 @@ const LAYER_FRAGMENT = /* glsl */ `
     vec2 uv = panoramaUv(normalize(vWorld - uOrigin));
     if (uv.y < 0.0 || uv.y > 1.0) discard;
     vec4 texel = texture2D(uMap, uv);
-    if (texel.a < 0.004) discard;
-    gl_FragColor = vec4(texel.rgb * uGain, texel.a);
+    // La couche la plus proche ne tient que face à la vallée : sur les côtés et derrière le chalet, ce
+    // sont des pentes à cent mètres, étirées par leur image — elles s'effacent (uSides : de quel écart
+    // à l'axe de la baie, en fraction de tour, à quel écart).
+    float alpha = texel.a * (1.0 - smoothstep(uSides.x, uSides.y, abs(uv.x - 0.5)));
+    if (alpha < 0.004) discard;
+    gl_FragColor = vec4(texel.rgb * uGain, alpha);
   }
 `;
 
@@ -259,7 +264,8 @@ const FIR_VERTEX = /* glsl */ `
   attribute vec3 color;
   varying vec3 vWorld;
   varying vec3 vNormal;
-  varying vec3 vTint;
+  varying vec3 vShape;
+  varying float vTree;
   void main() {
     mat4 m = modelMatrix;
     #ifdef USE_INSTANCING
@@ -268,7 +274,9 @@ const FIR_VERTEX = /* glsl */ `
     vec4 world = m * vec4(position, 1.0);
     vWorld = world.xyz;
     vNormal = normalize(mat3(m) * normal);
-    vTint = color;
+    vShape = color;
+    // Un nombre par arbre, tiré de sa place : chaque sapin a sa teinte et sa charge de neige.
+    vTree = fract(sin(dot(m[3].xz, vec2(12.9898, 78.233))) * 43758.5453);
     gl_Position = projectionMatrix * viewMatrix * world;
   }
 `;
@@ -276,12 +284,37 @@ const FIR_FRAGMENT = /* glsl */ `
   ${OUTDOOR_COMMON}
   varying vec3 vWorld;
   varying vec3 vNormal;
-  varying vec3 vTint;
+  varying vec3 vShape;
+  varying float vTree;
+  float cell(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+  // Un bruit lissé : des paquets de neige aux bords doux, pas des carrés.
+  float grain(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(
+      mix(mix(cell(i), cell(i + vec3(1, 0, 0)), f.x), mix(cell(i + vec3(0, 1, 0)), cell(i + vec3(1, 1, 0)), f.x), f.y),
+      mix(mix(cell(i + vec3(0, 0, 1)), cell(i + vec3(1, 0, 1)), f.x), mix(cell(i + vec3(0, 1, 1)), cell(i + vec3(1, 1, 1)), f.x), f.y),
+      f.z
+    );
+  }
   void main() {
     vec3 n = normalize(vNormal);
-    float moon = max(dot(n, uMoonDir), 0.0) * 0.8 + 0.2 * max(n.y, 0.0);
-    vec3 color = vTint * (uSkyColor * 1.1 + uMoonColor * moon);
-    gl_FragColor = vec4(outdoorFog(color, length(cameraPosition - vWorld)), 1.0);
+    // Les branches sont des nappes sans épaisseur : vues par-dessous, leur normale se retourne.
+    if (!gl_FrontFacing) n = -n;
+    float distance = length(cameraPosition - vWorld);
+    // La neige : sur ce qui regarde le ciel, davantage vers la pointe des branches et en haut de
+    // l'arbre, par paquets irréguliers ; dessous, les aiguilles, presque noires la nuit.
+    float clumps = mix(grain(vWorld * 2.3), grain(vWorld * 7.1), 0.35);
+    float snow = smoothstep(0.5, 0.78, n.y * 0.5 + vShape.x * 0.26 + vShape.y * 0.1 + clumps * 0.42 + vTree * 0.1);
+    snow *= step(0.5, float(gl_FrontFacing));
+    vec3 needles = mix(vec3(0.012, 0.03, 0.022), vec3(0.03, 0.055, 0.04), vTree) * (0.55 + 0.45 * vShape.x);
+    vec3 albedo = mix(needles, vec3(0.86, 0.9, 1.0), snow);
+    float moon = max(dot(n, uMoonDir), 0.0);
+    // Le cœur de l'arbre est dans sa propre ombre.
+    float shade = mix(0.35, 1.0, vShape.x);
+    vec3 color = albedo * (uSkyColor * 1.2 + uMoonColor * moon * shade);
+    gl_FragColor = vec4(outdoorFog(color, distance), 1.0);
   }
 `;
 
@@ -297,43 +330,51 @@ const outdoorUniforms = () => ({
 const dummy = new Object3D();
 
 /**
- * Un sapin : un tronc, et neuf étages de branches en étoile — chaque étage est un cône dont un sommet
- * sur deux est rentré et abaissé, ce qui donne des branches qui retombent au lieu d'un cône lisse.
- * La neige tient sur le dessus de chaque étage.
+ * Un sapin : un tronc et seize étages de branches. Chaque étage est une couronne de branches de
+ * longueurs inégales qui retombent vers leur pointe — pas un cône lisse —, et chaque étage tourne et
+ * penche un peu autrement que le précédent. La neige n'est pas peinte ici : c'est le programme de la
+ * matière qui la pose sur ce qui regarde le ciel (`FIR_FRAGMENT`).
+ *
+ * L'attribut `color` porte deux mesures par sommet : à quel point on est près de la pointe d'une
+ * branche (rouge), et la hauteur dans l'arbre (vert).
  */
 function firGeometry() {
-  const parts = [];
-  const paint = (geometry: ConeGeometry | CylinderGeometry, low: Color, high: Color, y0: number, y1: number) => {
-    const positions = geometry.getAttribute("position");
-    const colors = new Float32Array(positions.count * 3);
-    const c = new Color();
-    for (let i = 0; i < positions.count; i++) {
-      const t = Math.min(1, Math.max(0, (positions.getY(i) - y0) / (y1 - y0)));
-      c.copy(low).lerp(high, t * t * t);
-      colors.set([c.r, c.g, c.b], i * 3);
-    }
-    geometry.setAttribute("color", new BufferAttribute(colors, 3));
-    return geometry;
+  let seed = 7;
+  const random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
   };
-  parts.push(paint(new CylinderGeometry(0.022, 0.045, 0.2, 6).translate(0, 0.1, 0), new Color("#120d09"), new Color("#120d09"), 0, 1));
-  const tiers = 9;
+  const parts: BufferGeometry[] = [];
+  const trunk = new CylinderGeometry(0.012, 0.03, 0.34, 6).translate(0, 0.17, 0);
+  trunk.setAttribute("color", new BufferAttribute(new Float32Array(trunk.getAttribute("position").count * 3), 3));
+  parts.push(trunk);
+  const tiers = 16;
+  const segments = 22;
   for (let i = 0; i < tiers; i++) {
     const t = i / (tiers - 1);
-    const radius = 0.29 * (1 - t * 0.84);
-    const height = 0.24 - t * 0.09;
-    const y = 0.1 + t * 0.72;
-    const cone = new ConeGeometry(radius, height, 14, 1, true);
+    // La silhouette : large en bas, effilée, avec un léger ventre.
+    const radius = 0.3 * Math.pow(1 - t, 0.85) + 0.012;
+    const height = 0.15 - t * 0.07;
+    const y = 0.12 + t * 0.8;
+    const cone = new ConeGeometry(radius, height, segments, 2, true);
     const positions = cone.getAttribute("position");
+    const colors = new Float32Array(positions.count * 3);
+    const lengths = Array.from({ length: segments }, () => 0.62 + random() * 0.5);
     for (let v = 0; v < positions.count; v++) {
-      // La base du cône : un sommet sur deux rentre et descend — des branches, pas un abat-jour.
-      if (positions.getY(v) > -height / 2 + 0.001) continue;
+      const py = positions.getY(v);
+      // 0 au sommet de l'étage (contre le tronc), 1 à la pointe des branches.
+      const out = 1 - (py + height / 2) / height;
       const angle = Math.atan2(positions.getZ(v), positions.getX(v));
-      const lobe = Math.round((angle / (Math.PI * 2)) * 14);
-      const inward = lobe % 2 === 0 ? 1 : 0.62;
-      positions.setXYZ(v, positions.getX(v) * inward, positions.getY(v) - (lobe % 2 === 0 ? height * 0.22 : 0), positions.getZ(v) * inward);
+      const lobe = ((Math.round((angle / (Math.PI * 2)) * segments) % segments) + segments) % segments;
+      // Une branche sur deux est une vraie branche ; entre deux, la couronne se creuse.
+      const reach = lobe % 2 === 0 ? lengths[lobe] : lengths[lobe] * 0.5;
+      const k = 1 + (reach - 1) * out;
+      positions.setXYZ(v, positions.getX(v) * k, py - out * out * height * (lobe % 2 === 0 ? 0.55 : 0.1), positions.getZ(v) * k);
+      colors.set([out, t, 0], v * 3);
     }
-    cone.rotateY(i * 0.7).translate(0, y + height / 2, 0);
-    parts.push(paint(cone, new Color("#040d0a"), new Color("#7d95b8"), y - height * 0.25, y + height));
+    cone.setAttribute("color", new BufferAttribute(colors, 3));
+    cone.rotateX((random() - 0.5) * 0.09).rotateZ((random() - 0.5) * 0.09).rotateY(random() * Math.PI * 2).translate(0, y + height / 2, 0);
+    parts.push(cone);
   }
   const merged = mergeGeometries(
     parts.map((p) => (p.index ? p.toNonIndexed() : p)),
@@ -414,11 +455,11 @@ export function Exterior() {
 
   // Les deux couches détourées : des cylindres centrés sur le chalet.
   const layers = useMemo(() => {
-    const make = (radius: number) => {
+    const make = (radius: number, sides: [number, number]) => {
       const material = new ShaderMaterial({
         vertexShader: LAYER_VERTEX,
         fragmentShader: LAYER_FRAGMENT,
-        uniforms: { uMap: { value: null }, uOrigin: { value: new Vector3(0, 1.64, 0) }, uGain: { value: 1 }, uElevation: { value: new Vector2(-28, 32) } },
+        uniforms: { uMap: { value: null }, uOrigin: { value: new Vector3(0, 1.64, 0) }, uGain: { value: 1 }, uElevation: { value: new Vector2(-28, 32) }, uSides: { value: new Vector2(...sides) } },
         transparent: true,
         depthWrite: false,
         side: BackSide,
@@ -428,7 +469,7 @@ export function Exterior() {
       const geometry = new CylinderGeometry(radius, radius, radius * 1.4, 96, 1, true);
       return { geometry, material, radius };
     };
-    return { mid: make(1400), near: make(340) };
+    return { mid: make(1400, [0.6, 0.7]), near: make(340, [0.15, 0.23]) };
   }, []);
 
   // Quand le panorama arrive : il prend la place du ciel de secours, et donne ses teintes et sa lune.
@@ -444,8 +485,13 @@ export function Exterior() {
       sky.material.uniforms.uHorizon.value.setRGB(...meta.sky.horizon).multiplyScalar(PANORAMA_GAIN);
       sky.material.uniforms.uZenith.value.setRGB(...meta.sky.zenith).multiplyScalar(PANORAMA_GAIN);
     }
-    // La lune est déjà dans l'image : celle du ciel de secours sort du cadre.
-    sky.material.uniforms.uMoon.value.set(0, -1, 0);
+    // La lune du panorama est au-dessus de sa bande d'image (qui s'arrête à 32°) : c'est le ciel dessiné
+    // ici qui en porte le disque, à l'endroit d'où le rendu a éclairé les montagnes.
+    if (meta.moon) {
+      const azimuth = (meta.moon.azimuthDeg * Math.PI) / 180;
+      const elevation = (meta.moon.elevationDeg * Math.PI) / 180;
+      sky.material.uniforms.uMoon.value.set(Math.sin(azimuth) * Math.cos(elevation), Math.sin(elevation), -Math.cos(azimuth) * Math.cos(elevation));
+    }
     for (const [name, layer] of Object.entries(layers) as ["mid" | "near", (typeof layers)["mid"]][]) {
       layer.material.uniforms.uMap.value = panorama[name];
       layer.material.uniforms.uElevation.value = elevation;
@@ -455,7 +501,7 @@ export function Exterior() {
 
   // ── Les sapins du premier plan : un seul maillage instancié ─────────────────
   const firs = useRef<InstancedMesh>(null);
-  const fir = useMemo(() => ({ geometry: firGeometry(), material: new ShaderMaterial({ vertexShader: FIR_VERTEX, fragmentShader: FIR_FRAGMENT, uniforms: outdoorUniforms() }) }), []);
+  const fir = useMemo(() => ({ geometry: firGeometry(), material: new ShaderMaterial({ vertexShader: FIR_VERTEX, fragmentShader: FIR_FRAGMENT, uniforms: outdoorUniforms(), side: DoubleSide }) }), []);
   const firCount = profile.snow >= 8000 ? 260 : profile.snow >= 4000 ? 170 : 90;
   useLayoutEffect(() => {
     const mesh = firs.current;
@@ -491,7 +537,7 @@ export function Exterior() {
   // ── Les vitrages : presque rien, sauf un reflet ─────────────────────────────
   // Un miroir presque transparent : ce qu'on voit du vitrage, c'est la pièce qui s'y reflète faiblement
   // par-dessus la nuit — les lampes dans les carreaux, comme sur une vraie baie le soir.
-  const glass = useMemo(() => new MeshStandardMaterial({ color: "#ffffff", roughness: 0.03, metalness: 1, transparent: true, opacity: 0.13, envMapIntensity: 2.2, depthWrite: false, side: DoubleSide }), []);
+  const glass = useMemo(() => new MeshStandardMaterial({ color: "#ffffff", roughness: 0.03, metalness: 1, transparent: true, opacity: 0.13, envMapIntensity: 1.3, depthWrite: false, side: DoubleSide }), []);
   const gable = useMemo(() => {
     const shape = new Shape();
     shape.moveTo(-ROOM.halfW, 0.2);
