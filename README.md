@@ -293,7 +293,7 @@ installation with `OFFLINE_DOWNLOADS`, administrators only with `OFFLINE_DOWNLOA
 
 ## Books (optional)
 
-Off by default. With `BOOKS_ENABLED` turned on (Configuration → Playback, or `.env`), the home
+Off by default. With `BOOKS_ENABLED` turned on (Configuration → Books, or `.env`), the home
 screen's Movies / Series switch gains a third category, « Books »: the EPUB files of Jellyfin's book
 libraries, grouped by series in volume order, with a « Continue reading » row, a full grid
 (`/livres`), a sheet per book and an in-app reader — pages or continuous scroll, a choice of page-turn animation, text size, font,

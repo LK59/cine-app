@@ -13,7 +13,10 @@ import {
   Activity,
   PlugZap,
   Clapperboard,
-  Languages,
+  Cast,
+  BookOpen,
+  Sparkles,
+  Crop,
   UserPlus,
   KeyRound,
   Container,
@@ -95,16 +98,36 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     part: "configuration",
     // Dans l'ordre où l'on règle une installation : les services d'abord, ce qui exige de toucher
-    // au compose en dernier — c'est la seule page qui ne se règle pas d'ici.
+    // au compose en dernier — c'est la seule page qui ne se règle pas d'ici. Une place par fonction
+    // (DECISIONS.md §142) : la page d'un réglage est écrite dans `CONFIG_LAYOUT` (configLayout.ts).
     items: [
       { href: "/parametres", navKey: "nav.config.connections", icon: PlugZap },
       { href: "/parametres/lecture", navKey: "nav.config.playback", icon: Clapperboard },
-      { href: "/parametres/sous-titres", navKey: "nav.config.subtitles", icon: Languages },
-      { href: "/parametres/repliques", navKey: "nav.config.dialogue", icon: MessageSquareQuote },
-      // L'analyse des acteurs à l'écran de toute la bibliothèque, en fond (DECISIONS.md §138, planificateur).
+      { href: "/parametres/diffusion", navKey: "nav.config.diffusion", icon: Cast },
+      { href: "/parametres/livres", navKey: "nav.config.books", icon: BookOpen },
+    ],
+  },
+  {
+    part: "configuration",
+    // Fonctions intelligentes (§142) : le fournisseur d'IA commun et ce qui s'en sert, puis ce que le
+    // service des acteurs à l'écran rend possible. Les adresses gardent leur nom d'avant le
+    // regroupement (`/parametres/acteurs`, `/repliques`, `/synchro-sous-titres`) : aucun lien à
+    // réécrire ; seule « Sous-titres générés » a changé (`/parametres/sous-titres` → 308 vers `/ia`).
+    titleKey: "nav.sections.smart",
+    items: [
+      { href: "/parametres/ia", navKey: "nav.config.ai", icon: Sparkles },
+      // À qui la fonction est ouverte, et l'analyse de toute la bibliothèque en fond (§138, planificateur).
       { href: "/parametres/acteurs", navKey: "xrayScan.nav", icon: ScanFace },
       // Mesurer et recaler les sous-titres, à la demande (DECISIONS.md §141) — par le même service.
       { href: "/parametres/synchro-sous-titres", navKey: "subSync.nav", icon: Timer },
+      { href: "/parametres/repliques", navKey: "nav.config.dialogue", icon: MessageSquareQuote },
+      { href: "/parametres/recadrage", navKey: "nav.config.autoFrame", icon: Crop },
+    ],
+  },
+  {
+    part: "configuration",
+    titleKey: "nav.sections.installation",
+    items: [
       { href: "/parametres/comptes", navKey: "nav.config.accounts", icon: UserPlus },
       { href: "/parametres/administration", navKey: "nav.config.admin", icon: KeyRound },
       { href: "/parametres/deploiement", navKey: "nav.config.deployment", icon: Container },

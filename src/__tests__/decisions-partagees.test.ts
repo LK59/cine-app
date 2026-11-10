@@ -809,7 +809,7 @@ describe("les notifications se règlent à un seul endroit", () => {
   // (23/09/2026). Il n'en reste qu'un : le panneau Compte.
   it("la gestion ne dessine plus ses propres interrupteurs de notification", () => {
     // Toutes les pages de la Configuration (DECISIONS.md §81), et leurs cartes communes.
-    const src = ["", "/lecture", "/sous-titres", "/comptes", "/administration", "/deploiement"]
+    const src = ["", "/lecture", "/diffusion", "/livres", "/ia", "/acteurs", "/synchro-sous-titres", "/repliques", "/recadrage", "/comptes", "/administration", "/deploiement"]
       .map((p) => lire(`src/app/(dashboard)/parametres${p}/page.tsx`))
       .concat(lire("src/components/settings/AdminTools.tsx"))
       .join("\n");

@@ -8,26 +8,45 @@ import { ErrorState } from "@/components/StateViews";
 import { useT } from "@/components/TranslationProvider";
 import { useToast } from "@/components/Toast";
 import { SettingsGroupCard, type Draft } from "@/components/settings/SettingsGroupCard";
-import { SubtitleGenCard } from "@/components/settings/SubtitleGenCard";
-import { SETTINGS_BY_KEY, type SettingGroup, type SettingView } from "@/lib/settings/schema";
+import { AiProviderCard, SubtitleJobs, useAiAdmin } from "@/components/settings/SubtitleGenCard";
+import { featureStateLine } from "@/components/settings/AiFeaturesBlock";
+import { FeatureNeeds } from "@/components/settings/FeatureNeeds";
+import { missingNeeds, type ConfigCard } from "@/lib/settings/configLayout";
+import { SETTINGS_BY_KEY, type SettingView } from "@/lib/settings/schema";
+import type { AiFeatureId } from "@/lib/aiFeatureTable";
 
 /**
- * Les cartes de réglages d'une page de Configuration (DECISIONS.md §48, §81).
+ * Les cartes de réglages d'une page de Configuration (DECISIONS.md §48, §81, §142).
  *
  * La page « Réglages serveur » tenait toutes les cartes à la suite ; la Configuration les répartit
- * sur plusieurs pages (Connexions, Lecture, Sous-titres, Comptes). Le brouillon, l'enregistrement
- * par carte, « Revenir à la valeur du .env » et l'avertissement de ce qui manque sont écrits ici
- * une fois, pour toutes.
+ * sur plusieurs pages, dont la disposition est écrite une fois (`CONFIG_LAYOUT`, configLayout.ts).
+ * Le brouillon, l'enregistrement par carte, « Revenir à la valeur du .env » et l'avertissement de
+ * ce qui manque sont écrits ici une fois, pour toutes.
  *
  * Une carte = un groupe du schéma, éventuellement réduit à quelques clés : l'assistant de premier
  * lancement fait déjà ainsi (`SettingsGroupCard` avec `keys`), et une carte n'enregistre que les
- * champs qu'elle montre.
+ * champs qu'elle montre. Une carte de fonction dit en plus ce dont elle a besoin et son état.
  */
-export type ConfigCard = { group: SettingGroup; keys?: readonly string[] };
+export type { ConfigCard };
 
 type SettingsPayload = { settings: SettingView[]; missing: string[] };
 
 const cardId = (c: ConfigCard) => `${c.group}:${c.keys?.join(",") ?? "*"}`;
+
+/** L'état d'une fonction en une ligne, lu du serveur (§140) ; rien tant qu'il n'est pas arrivé. */
+function FeatureState({ id }: { id: AiFeatureId }) {
+  const t = useT();
+  const { data } = useAiAdmin();
+  const status = data?.features?.find((f) => f.id === id);
+  const line = featureStateLine(t, status, id);
+  if (!line) return null;
+  const warn = !!status?.blocked && status.audience !== "off";
+  return (
+    <p className={`mb-1 text-xs font-medium ${warn ? "text-warning" : status?.audience === "off" ? "text-subtle" : "text-success"}`} data-feature-state={id}>
+      {line}
+    </p>
+  );
+}
 
 export function ConfigurationSection({ cards, showMissing = false }: { cards: readonly ConfigCard[]; showMissing?: boolean }) {
   const t = useT();
@@ -100,11 +119,45 @@ export function ConfigurationSection({ cards, showMissing = false }: { cards: re
             </button>
           </div>
         );
-        // Les sous-titres générés ont leur carte : modèle prérempli, dépense, tâches (§69).
-        if (card.group === "subtitles") {
-          return <SubtitleGenCard key={id} views={views} draft={draft} errors={errors} onDraft={onDraft} onReset={reset} footer={footer} />;
+        // Le fournisseur d'IA commun a sa carte : modèle prérempli, dépense, tableau (§69, §140).
+        if (card.special === "aiProvider") {
+          return (
+            <AiProviderCard
+              key={id}
+              keys={card.keys}
+              titleKey={card.titleKey}
+              anchor={card.anchor}
+              views={views}
+              draft={draft}
+              errors={errors}
+              onDraft={onDraft}
+              onReset={reset}
+              footer={footer}
+            />
+          );
         }
-        return <SettingsGroupCard key={id} group={card.group} keys={card.keys} views={views} draft={draft} errors={errors} onDraft={onDraft} onReset={reset} footer={footer} />;
+        const missing = missingNeeds(card.needs, views);
+        return (
+          <div key={id} className="space-y-3">
+            <SettingsGroupCard
+              group={card.group}
+              keys={card.keys}
+              titleKey={card.titleKey}
+              whyKey={card.whyKey}
+              anchor={card.anchor}
+              status={card.feature ? <FeatureState id={card.feature} /> : undefined}
+              needs={card.needs?.length ? <FeatureNeeds needs={card.needs} missing={missing} /> : undefined}
+              dimmed={missing.length > 0}
+              views={views}
+              draft={draft}
+              errors={errors}
+              onDraft={onDraft}
+              onReset={reset}
+              footer={footer}
+            />
+            {card.after === "subtitleJobs" && <SubtitleJobs />}
+          </div>
+        );
       })}
     </div>
   );

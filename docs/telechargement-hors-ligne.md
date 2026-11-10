@@ -167,7 +167,7 @@ préparation en cours), `/api/offline/details/<id>` (la fiche et les repères),
 
 ## Administration
 
-- **Réglages** (Gestion → Configuration → Lecture) :
+- **Réglages** (Gestion → Configuration → Diffusion et hors-ligne) :
 
   | Variable | Défaut | Rôle |
   |---|---|---|

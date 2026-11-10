@@ -492,7 +492,7 @@ yields the iGPU to a Jellyfin transcode and its container's `cpu_shares` sit bel
 `XRAY_SCAN_DURING_PLAYBACK=false` waits for §88's `mustWaitForPlayback` instead), in `low`, two items ahead at most, one tick per minute on `globalThis`;
 state lives in `cine.db` (`scanStore.ts`). A file replaced at the same duration (± 1 s) is rebound
 (`rebindIfSameDuration`), never re-analysed, and the player serves its old scenes. Progress and controls:
-Configuration → Acteurs à l'écran (`/api/admin/xray/scan`, admin only). Above tier 1, a tier 0 the admin
+Configuration → Fonctions intelligentes → Acteurs à l'écran (`/api/admin/xray/scan`, admin only). Above tier 1, a tier 0 the admin
 fills by hand (a film, or a whole series season by season — from that page or « Analyser en priorité » on
 the title sheet): ordered `normal`, fed even during playback, animation still refused — but only while the
 service's queue holds nothing but our own orders, so it never overtakes a viewer's. One item's TMDB or
@@ -544,7 +544,8 @@ widening `"movies" | "series"` would ripple through twenty places. Turned off, e
 **Actors on screen are a sidecar service, off by default** (DECISIONS §138, since 09/11/2026):
 `laterna-xray` (its code under `xray/`, its own image, outside the gate) recognises actors scene by
 scene; Laterna only commands and reads it (`src/lib/clients/xray.ts`, `src/lib/xray/`), behind
-`XRAY_ENABLED` + `XRAY_URL` + `XRAY_API_KEY` (Configuration → Connections). The trigger is the player
+`XRAY_ENABLED` + `XRAY_URL` + `XRAY_API_KEY` (address and key in Configuration → Connections, the audience in
+Configuration → Smart features → Actors on screen, DECISIONS §142). The trigger is the player
 log's `start` line — the only one all three players send, with the item and the position: the item
 goes out `high` from there, the next episode `normal`, fire-and-forget, one order per item. The player's
 read, `GET /api/player/xray/[itemId]`, answers 200 with `scenes: []` and a `status` for every absence —
@@ -559,7 +560,7 @@ with `followOnlyOptions` and absent from the player fingerprints' doubles: the f
 when touching these features.
 
 **Subtitle sync is measured on request and corrected at display** (DECISIONS §141, since 10/11/2026):
-Configuration → Synchro des sous-titres asks `laterna-xray` (`POST /subsync/jobs`, `xray/app/subsync.py`) whether
+Configuration → Fonctions intelligentes → Synchro des sous-titres asks `laterna-xray` (`POST /subsync/jobs`, `xray/app/subsync.py`) whether
 each text subtitle lands on the speech (offset, drift, verdict); nothing is measured unless an admin clicks
 « Scanner », nothing applied unless « Recaler », the library scheduler never triggers it, and no media or
 subtitle file is ever written — corrections live in `subtitle_sync` (`cine.db`), keyed by the file's Jellyfin

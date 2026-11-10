@@ -18,16 +18,19 @@ export interface FeatureStatusView {
   blocked: "provider" | "price" | "xray" | "budget" | null;
 }
 
-/** La phrase sous le réglage d'une fonction : coût, prérequis, et ce qui la bloque. */
-export function featureNote(t: (key: string, vars?: Record<string, string | number>) => string, status: FeatureStatusView | undefined, id: AiFeatureId): string {
+/**
+ * L'état d'une fonction en une ligne, en tête de sa carte (§142) : à qui elle est ouverte, ce qui
+ * la bloque s'il y a lieu, et si elle coûte. Remplace la phrase qui suivait chaque réglage sous la
+ * carte commune des sous-titres, quand toutes les fonctions y tenaient.
+ */
+export function featureStateLine(t: (key: string, vars?: Record<string, string | number>) => string, status: FeatureStatusView | undefined, id: AiFeatureId): string {
   const row = AI_FEATURES.find((f) => f.id === id);
-  if (!row) return "";
-  const parts = [t(row.paid ? "aiFeatures.paid" : "aiFeatures.free"), t("aiFeatures.needsLabel", { needs: row.needs.map((n) => t(`aiFeatures.needs.${n}`)).join(", ") })];
-  if (status?.blocked && status.audience !== "off") parts.push(t(`aiFeatures.blocked.${status.blocked}`));
+  if (!row || !status) return "";
+  const parts = [t(`setup.audience.${status.audience}`)];
+  if (status.blocked && status.audience !== "off") parts.push(t(`aiFeatures.blocked.${status.blocked}`));
+  parts.push(t(row.paid ? "aiFeatures.paid" : "aiFeatures.free"));
   return parts.join(" · ");
 }
-
-export const FEATURE_SETTING: Record<string, AiFeatureId> = Object.fromEntries(AI_FEATURES.map((f) => [f.setting, f.id]));
 
 export function AiFeaturesBlock({ provider, statuses }: { provider: ProviderName; statuses: readonly FeatureStatusView[] }) {
   const t = useT();

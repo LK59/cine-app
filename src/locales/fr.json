@@ -54,7 +54,9 @@
       "downloads": "Téléchargements"
     },
     "sections": {
-      "services": "Services"
+      "services": "Services",
+      "smart": "Fonctions intelligentes",
+      "installation": "Installation"
     },
     "tmdb": "TMDB",
     "parts": {
@@ -64,11 +66,14 @@
     "config": {
       "connections": "Connexions",
       "playback": "Lecture",
-      "subtitles": "Sous-titres générés",
       "accounts": "Nouveaux comptes",
       "admin": "Administrateur",
       "deployment": "Déploiement",
-      "dialogue": "Recherche de répliques"
+      "dialogue": "Recherche de répliques",
+      "diffusion": "Diffusion et hors-ligne",
+      "books": "Livres",
+      "ai": "Intelligence artificielle",
+      "autoFrame": "Recadrage automatique"
     },
     "backToCinema": "Retour au cinéma",
     "accountPreferences": "Vos préférences sont dans Compte",
@@ -3351,7 +3356,7 @@
       },
       "xray": {
         "title": "Acteurs à l'écran",
-        "why": "Facultatif, coupé par défaut. Un service installé à côté de l'application reconnaît, scène par scène, les acteurs présents à l'image, pour pouvoir dire qui est à l'écran pendant un film ou un épisode. Allumé, chaque lecture demande l'analyse du titre regardé, puis celle de l'épisode suivant.",
+        "why": "Facultatif. Un service installé à côté de l'application reconnaît, scène par scène, les acteurs présents à l'image. Ici, son adresse et sa clé ; la fonction elle-même s'allume dans Fonctions intelligentes → Acteurs à l'écran.",
         "help": "L'adresse et la clé du service (sa variable XRAY_API_KEY). Son installation est décrite dans xray/README.md.",
         "guide": "Installer le service d'analyse (guide de déploiement)"
       },
@@ -3402,7 +3407,7 @@
       "JACKETT_API_KEY": "Clé API Jackett",
       "OMDB_API_KEY": "Clé OMDb",
       "MDBLIST_API_KEY": "Clé MDBList",
-      "XRAY_ENABLED": "Analyser les acteurs à l'écran",
+      "XRAY_ENABLED": "Acteurs à l'écran ouverts à",
       "XRAY_URL": "Adresse du service d'analyse",
       "XRAY_API_KEY": "Clé du service d'analyse",
       "APP_LANGUAGE": "Langue par défaut",
@@ -3435,9 +3440,9 @@
       "DESCRIBE_SEARCH_ENABLED": "Recherche par description : retrouver un film ou une série décrit en une phrase",
       "RECAP_ENABLED": "« Précédemment » : sur la fiche d'une série en cours, rappeler les derniers faits vus",
       "ASK_ENABLED": "Questions sur un titre : sur une fiche ou le film en pause, répondre d'après ce que le compte a déjà vu",
-      "SUBTITLE_GEN_PROVIDER": "Fournisseur",
-      "SUBTITLE_GEN_API_KEY": "Clé du fournisseur",
-      "SUBTITLE_GEN_MODEL": "Modèle",
+      "SUBTITLE_GEN_PROVIDER": "Fournisseur d'IA",
+      "SUBTITLE_GEN_API_KEY": "Clé du fournisseur d'IA",
+      "SUBTITLE_GEN_MODEL": "Modèle des sous-titres générés (les autres fonctions prennent le modèle rapide du fournisseur)",
       "SUBTITLE_GEN_BUDGET_USD": "Plafond mensuel de toutes les fonctions payantes (dollars)",
       "SUBTITLE_GEN_PRICE_INPUT": "Prix en entrée, par million de jetons (vide : tarif connu)",
       "SUBTITLE_GEN_PRICE_OUTPUT": "Prix en sortie, par million de jetons (vide : tarif connu)",
@@ -3484,7 +3489,7 @@
       "forgot": "Mot de passe oublié : docker exec -it cine-app node server-boot/reset-admin-password.mjs"
     },
     "restartNote": "Prend effet au prochain démarrage du conteneur.",
-    "later": "Plus tard, dans la gestion → Configuration : le Chromecast (Lecture), les sous-titres générés, et ce que reçoivent les nouveaux comptes (Nouveaux comptes).",
+    "later": "Plus tard, dans la gestion → Configuration : le Chromecast (Diffusion et hors-ligne), les fonctions d'IA (Fonctions intelligentes), et ce que reçoivent les nouveaux comptes (Nouveaux comptes).",
     "testBlock": {
       "title": "Le test de connexion a échoué :",
       "hint": "Corrigez puis touchez « Suivant » pour réessayer, ou continuez : tout se règle aussi plus tard dans Configuration → Connexions."
@@ -3594,10 +3599,7 @@
       "hint": "L'adresse et la clé de chaque service. Une valeur réglée ici remplace celle du .env."
     },
     "playback": {
-      "hint": "Le lecteur intégré et son repli vers le lecteur du serveur. Appliqué sans redémarrage."
-    },
-    "subtitles": {
-      "hint": "Une traduction par une IA en ligne : fournisseur, clé, budget du mois."
+      "hint": "Le lecteur intégré et son relais vers Jellyfin pour les fichiers que le navigateur ne lit pas. Appliqué sans redémarrage."
     },
     "accounts": {
       "hint": "Ce que reçoit un compte qui n'a rien choisi, et l'écran d'accueil à lui proposer."
@@ -3610,13 +3612,68 @@
     },
     "dialogue": {
       "hint": "Retrouver un film par une phrase qu'on y entend. Les sous-titres des films sont lus une fois, puis chaque nuit pour les nouveautés."
+    },
+    "diffusion": {
+      "hint": "Le Chromecast et les téléchargements gardés sur l'appareil. Appliqué sans redémarrage."
+    },
+    "cast": {
+      "title": "Chromecast",
+      "why": "Envoyer un film vers un téléviseur Chromecast. Le récepteur de Google suffit ; un identifiant ne sert qu'à une installation qui a enregistré le sien."
+    },
+    "offline": {
+      "title": "Téléchargements hors ligne",
+      "why": "Jellyfin prépare une version légère, que l'appareil garde pour la regarder sans réseau. Au-delà de la place permise sur le serveur, les versions les plus anciennes déjà récupérées s'effacent."
+    },
+    "books": {
+      "hint": "Les EPUB de la bibliothèque Jellyfin, lus dans l'application. Coupé par défaut.",
+      "title": "Livres",
+      "why": "Une grille des livres de Jellyfin et un lecteur dans l'application. Coupée, une installation sans livres n'en voit rien."
+    },
+    "bookRequests": {
+      "title": "Demandes de livres",
+      "why": "« Demander un livre » envoie une demande à l'administrateur, qui ajoute le livre à la main."
+    },
+    "googleBooks": {
+      "title": "Google Books",
+      "why": "Complète ce qui manque à un livre — résumé, couverture, genres, année —, jamais ce que Jellyfin ou le fichier disent déjà. Il faut une clé Google Books."
+    },
+    "ai": {
+      "hint": "Un fournisseur d'IA en ligne, une clé et un plafond mensuel communs, puis chaque fonction qui s'en sert.",
+      "providerTitle": "Fournisseur d'IA commun",
+      "featuresTitle": "Les fonctions qui s'en servent",
+      "featuresIntro": "Chacune s'allume à part, pour tous les comptes ou pour les administrateurs seulement. Sans clé, aucune n'apparaît."
+    },
+    "xray": {
+      "featureTitle": "Acteurs à l'écran",
+      "featureWhy": "Dit qui est à l'image pendant un film ou un épisode. Allumé, chaque lecture demande l'analyse du titre regardé, puis celle de l'épisode suivant ; la bibliothèque entière est analysée en fond."
+    },
+    "autoFrame": {
+      "hint": "Agrandir l'image au-dessus des bandes noires d'un film, d'après ses vignettes.",
+      "title": "Recadrage automatique",
+      "why": "Quand un film porte ses bandes noires dans l'image, le lecteur l'agrandit pour remplir l'écran. Les bandes sont repérées sur les vignettes de Jellyfin."
+    },
+    "needs": {
+      "aiKey": "une clé d'IA",
+      "xrayService": "le service X-Ray",
+      "xrayOn": "les acteurs à l'écran allumés",
+      "booksOn": "les livres allumés",
+      "playerOn": "le lecteur intégré",
+      "missing": "Inactive : nécessite {need}.",
+      "ready": "Nécessite {list} : prêt.",
+      "fix": {
+        "aiKey": "Régler le fournisseur d'IA",
+        "xrayService": "Brancher le service (Connexions)",
+        "xrayOn": "Allumer les acteurs à l'écran",
+        "booksOn": "Allumer les livres",
+        "playerOn": "Allumer le lecteur"
+      }
     }
   },
   "xrayScan": {
     "nav": "Acteurs à l'écran",
     "hint": "Toute la bibliothèque analysée en fond, pour savoir qui est à l'écran dans chaque film et chaque épisode. Elle continue pendant les lectures, toujours après ce que les spectateurs regardent.",
     "title": "Analyse de la bibliothèque",
-    "off": "L'option « Acteurs à l'écran » est coupée, ou n'est pas encore réglée (Configuration → Connexions).",
+    "off": "Les acteurs à l'écran sont coupés, ou leur service n'est pas branché : allumez-les ci-dessus, et réglez le service dans Configuration → Connexions.",
     "phase": {
       "starting": "En attente du premier passage",
       "planning": "Lecture de la bibliothèque…",
@@ -4399,7 +4456,7 @@
   "subSync": {
     "nav": "Synchro des sous-titres",
     "hint": "Mesure, à la demande, si chaque sous-titre texte tombe sur la parole du film, et le recale à l'affichage — jamais dans le fichier. Rien n'est mesuré ni corrigé sans un clic ici.",
-    "off": "Il faut l'option « Acteurs à l'écran » réglée (Configuration → Connexions) : c'est elle qui écoute la parole des films.",
+    "off": "Il faut les acteurs à l'écran allumés (Fonctions intelligentes → Acteurs à l'écran) et leur service branché (Connexions) : c'est lui qui écoute la parole des films.",
     "filterLabel": "Montrer",
     "filter": {
       "affected": "À corriger",

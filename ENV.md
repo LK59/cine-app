@@ -36,13 +36,37 @@ empty value, not the default.
 
 | Kind | Where it is set | Variables |
 |---|---|---|
-| **Settable in the app** | Management → Configuration, or the environment | Service addresses and keys, playback, generated subtitles, defaults for accounts, poster preparation, notification contact |
+| **Settable in the app** | Management → Configuration, or the environment | Service addresses and keys, playback, casting and offline, books, the AI provider and the smart features, defaults for accounts, poster preparation, notification contact |
 | **Deployment only** | The compose file or `.env`. Management → Configuration → Deployment shows the line to add | `TZ`, the media paths, poster sizes and languages, an administrator account fixed by `.env` |
 | **Never in the app** | The compose file or `.env` only, or generated | `SESSION_SECRET`, `TRUSTED_PROXIES`, `COOKIE_SECURE`, `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` |
 
 The last row is kept out of the app on purpose: these values decide how the container is reached
 and who is believed, and a wrong one set from the interface could lock everyone out, the settings
 page included.
+
+## Where each setting lives in the app
+
+One place per feature: a setting appears on one page only, and a feature that needs something else
+(an AI key, the actors-on-screen service) says so on its card, greyed out, with a link to what is
+missing.
+
+| Management → Configuration → | Variables |
+|---|---|
+| **Connections** | Every service's address and key (Jellyfin, TMDB, Radarr, Sonarr, Jellyseerr, qBittorrent, Bazarr, Jackett, OMDb, MDBList), the actors-on-screen service (`XRAY_URL`, `XRAY_API_KEY`), `POSTER_PREWARM`, `VAPID_SUBJECT` |
+| **Playback** | `PLAYER_ENABLED`, `PLAYER_SERVER_FALLBACK` |
+| **Casting and offline** | `CHROMECAST_FOR_EVERYONE`, `CAST_RECEIVER_APP_ID`, `OFFLINE_DOWNLOADS`, `OFFLINE_DOWNLOADS_FOR_EVERYONE`, `OFFLINE_SERVER_QUOTA_GB` |
+| **Books** | `BOOKS_ENABLED`, `BOOKS_REQUESTS_ENABLED`, `BOOKS_GOOGLE_ENRICH`, `GOOGLE_BOOKS_API_KEY` |
+| **Smart features → Artificial intelligence** | The shared AI provider (`SUBTITLE_GEN_PROVIDER`, `_API_KEY`, `_MODEL`, `_BUDGET_USD`, `_PRICE_INPUT`, `_PRICE_OUTPUT`), then each feature using it: `SUBTITLE_GEN_ENABLED`, `DESCRIBE_SEARCH_ENABLED`, `RECAP_ENABLED`, `ASK_ENABLED`, `ASK_PERSON_ENABLED`, `SOFAR_ENABLED` |
+| **Smart features → Actors on screen** | `XRAY_ENABLED`, the library analysis and the quality of the names |
+| **Smart features → Subtitle sync** | Nothing to set: measured on request (needs actors on screen) |
+| **Smart features → Dialogue search** | `REPLIQUES_*` |
+| **Smart features → Automatic reframing** | `PLAYER_AUTO_FRAME` |
+| **New accounts** | `APP_LANGUAGE`, `HOME_CONTINUE_HERO`, `NEW_ACCOUNT_BLOCKED_TAGS` |
+| **Deployment** | Shows the deployment-only variables below, with the line to add |
+
+The variables keep their names whatever page shows them: the `SUBTITLE_GEN_*` keys date from when
+generated subtitles were the only AI feature, and now configure the provider all of them share.
+The AI page's old address, `/parametres/sous-titres`, redirects to `/parametres/ia`.
 
 ---
 
@@ -87,7 +111,7 @@ An optional companion service, `laterna-xray`, recognises the actors in the pict
 and who is speaking (its installation, contract and measurements: `xray/README.md`). **Off by
 default.** When on, each playback asks it to analyse the title being watched, from the current
 position, then the next episode of a series; a background scheduler works through the rest of the
-library while nothing is playing (Management → Configuration → *On-screen cast*: progress, pause,
+library in the background (Management → Configuration → Smart features → *Actors on screen*: progress, pause,
 a priority list, the quality of the names per series). The cast of that episode or film and several
 photos per person come from TMDB.
 
@@ -97,8 +121,10 @@ biography and their other titles in the library. The AI features built on it («
 questions about a person) have their own settings, under *AI features* below. Share links see the
 row and the panel without the library titles, and never any AI feature.
 
-Set in the app: **Management → Configuration → Connections**, *Actors on screen* card, whose
-*Test the connection* button shows the service's model, whether it is ready, and hardware decoding.
+Set in the app in two places, one per kind of setting: the service's address and key in
+**Management → Configuration → Connections**, *Actors on screen* card, whose *Test the connection*
+button shows the service's model, whether it is ready, and hardware decoding; who the feature is on
+for (`XRAY_ENABLED`) in **Smart features → Actors on screen**, above the library analysis.
 
 | Variable | Default | Role |
 |---|---|---|
@@ -116,21 +142,53 @@ Set in the app: **Management → Configuration → Playback**. Applied without a
 |---|---|---|
 | `PLAYER_ENABLED` | `true` | Films play inside Laterna. The browser reads the file and plays it natively: the server only serves bytes. `false` removes in-app playback; the *Open in Jellyfin* links remain. |
 | `PLAYER_SERVER_FALLBACK` | `true` | A file the browser cannot play is handed to Jellyfin, which converts it if it must. `false` guarantees no playback ever starts a transcode: such files show a playback error, and casting and the lighter version for slow connections are not offered. |
-| `PLAYER_AUTO_FRAME` | `true` | Enlarges the picture over black bars baked into the file. Needs Jellyfin's trickplay images; without them the picture is shown as it is. |
+
+## Casting and offline
+
+Set in the app: **Management → Configuration → Casting and offline**. Applied without a restart.
+
+| Variable | Default | Role |
+|---|---|---|
 | `CHROMECAST_FOR_EVERYONE` | `true` | `true`: every account sees the Chromecast button. `false`: administrators only. |
 | `CAST_RECEIVER_APP_ID` | Google's Default Media Receiver | The receiver application a Chromecast opens: eight hexadecimal characters, from the Google Cast developer console. Any other value falls back to the default. |
 | `OFFLINE_DOWNLOADS` | `true` | Downloads for offline viewing (beta): Jellyfin prepares a lighter version that the device keeps. `false` removes the button and refuses any preparation. See [docs/telechargement-hors-ligne.md](docs/telechargement-hors-ligne.md). |
 | `OFFLINE_DOWNLOADS_FOR_EVERYONE` | `true` | `true`: every account can download for offline viewing. `false`: administrators only. |
 | `OFFLINE_SERVER_QUOTA_GB` | `50` | Room, in GB, the prepared copies may take in `data/offline/`. Past it, copies every device has fully fetched are deleted, oldest first; copies still being prepared or downloaded are never deleted, so the total can exceed it for a while. |
 
-## Generated subtitles
+## Books
 
-Translates an existing full text subtitle of a title into another language, during playback, with
-an online AI. Without a key the feature does not appear anywhere. The key stays on the server.
+Optional, off by default: a grid of the EPUB files in Jellyfin's libraries and an in-app reader
+(see the README). Turned off, every books route answers « not found » and no books code loads.
 
-Set in the app: **Management → Configuration → Generated subtitles** (card *AI features*), which also
-shows the month's spending for all paid features, what each feature does with each provider, what
-blocks it, and the subtitle jobs.
+Set in the app: **Management → Configuration → Books**. The requests and Google Books cards say they
+do nothing while books are off.
+
+| Variable | Default | Role |
+|---|---|---|
+| `BOOKS_ENABLED` | `false` | Turns books on for the installation. |
+| `BOOKS_REQUESTS_ENABLED` | `false` | « Request a book »: a request to the administrator, who adds the book by hand. No effect while `BOOKS_ENABLED` is off. |
+| `BOOKS_GOOGLE_ENRICH` | `false` | Fills in what a book is missing from Google Books — summary, cover, genres, year —, never what Jellyfin or the EPUB already say. Needs `BOOKS_ENABLED` and a key. |
+| `GOOGLE_BOOKS_API_KEY` | — | Google Books API key, sent in the `X-Goog-Api-Key` header. |
+
+## Automatic reframing
+
+Set in the app: **Management → Configuration → Smart features → Automatic reframing**.
+
+| Variable | Default | Role |
+|---|---|---|
+| `PLAYER_AUTO_FRAME` | `true` | Enlarges the picture over black bars baked into the file. Needs the built-in player (`PLAYER_ENABLED`) and Jellyfin's trickplay images; without them the picture is shown as it is. |
+
+## AI features
+
+One online AI provider, one key and one monthly ceiling serve every paid feature: generated
+subtitles (an existing full text subtitle translated into another language during playback),
+search by description, « Previously », questions and « So far ». Without a key none of them appears
+anywhere. The key stays on the server.
+
+Set in the app: **Management → Configuration → Smart features → Artificial intelligence**: the
+shared provider first (with the month's spending for all paid features and what each feature does
+with each provider), then one card per feature with who it is on for, what it needs (an AI key; the
+actors-on-screen service for the last two) and its state, the subtitle jobs under their card.
 
 | Variable | Default | Role |
 |---|---|---|
@@ -155,7 +213,7 @@ titles. **Off by default.** It can only be turned on when the films folder is mo
 inside the container — `MEDIA_ROOT` / `MOVIES_PATH` below, the same folder Radarr calls its root
 folder for films; the page says why when it is greyed out.
 
-Set in the app: **Management → Configuration → Dialogue search**, which also starts the initial
+Set in the app: **Management → Configuration → Smart features → Dialogue search**, which also starts the initial
 indexing, shows its progress, and rebuilds the index.
 
 | Variable | Default | Role |

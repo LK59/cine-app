@@ -104,9 +104,10 @@ pendant la construction) et sa propre publication d'image (`ghcr.io/lk59/laterna
 
 ### Le réglage
 
-Configuration → Connexions, carte « Acteurs à l'écran » : un **public** (`XRAY_ENABLED` : `off` par
-défaut, `admins`, `tous`), l'adresse (`XRAY_URL`, `http://laterna-xray:8000`) et la clé (`XRAY_API_KEY`) ;
-« Tester la connexion » lit `/health`. Sans les trois, rien ne part vers le service et rien n'est lu.
+Configuration → Connexions, carte « Acteurs à l'écran » : l'adresse (`XRAY_URL`,
+`http://laterna-xray:8000`) et la clé (`XRAY_API_KEY`) ; « Tester la connexion » lit `/health`.
+Configuration → Fonctions intelligentes → Acteurs à l'écran : le **public** (`XRAY_ENABLED` : `off` par
+défaut, `admins`, `tous`). Sans les trois, rien ne part vers le service et rien n'est lu.
 `admins` ne restreint que ce qui se montre et les commandes des séances : le planificateur analyse quand
 même toute la bibliothèque.
 

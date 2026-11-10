@@ -49,6 +49,18 @@ describe("navigation", () => {
     expect(NAV_ITEMS[NAV_ITEMS.length - 1].href).toBe("/parametres/deploiement");
   });
 
+  // DECISIONS.md §142 : une place par fonction, les fonctions intelligentes rangées ensemble.
+  it("range la Configuration en trois groupes, les Fonctions intelligentes au milieu", () => {
+    const groups = NAV_PARTS[1].groups.map((g) => [g.titleKey ?? null, g.items.map((i) => i.href)]);
+    expect(groups).toEqual([
+      [null, ["/parametres", "/parametres/lecture", "/parametres/diffusion", "/parametres/livres"]],
+      ["nav.sections.smart", ["/parametres/ia", "/parametres/acteurs", "/parametres/synchro-sous-titres", "/parametres/repliques", "/parametres/recadrage"]],
+      ["nav.sections.installation", ["/parametres/comptes", "/parametres/administration", "/parametres/deploiement"]],
+    ]);
+    // L'ancienne page des sous-titres générés n'a plus d'entrée : elle renvoie vers /parametres/ia.
+    expect(NAV_ITEMS.some((i) => i.href === "/parametres/sous-titres")).toBe(false);
+  });
+
   it("donne une page à chaque entrée de la Configuration", () => {
     for (const { href } of NAV_PARTS[1].groups.flatMap((g) => g.items)) {
       expect([href, existsSync(`src/app/(dashboard)${href}/page.tsx`)]).toEqual([href, true]);
@@ -58,6 +70,8 @@ describe("navigation", () => {
   it("n'allume qu'une entrée : la plus précise", () => {
     expect(activeNavHref("/parametres")).toBe("/parametres");
     expect(activeNavHref("/parametres/lecture")).toBe("/parametres/lecture");
+    expect(activeNavHref("/parametres/ia")).toBe("/parametres/ia");
+    expect(activeNavHref("/parametres/synchro-sous-titres")).toBe("/parametres/synchro-sous-titres");
     expect(activeNavHref("/radarr/12")).toBe("/radarr");
     expect(activeNavHref("/ailleurs")).toBeNull();
   });
@@ -73,7 +87,7 @@ describe("navigation", () => {
   });
 
   it("ne garde ni la langue, ni les sessions, ni la couleur d'accent dans la gestion", () => {
-    const pages = ["", "/lecture", "/sous-titres", "/comptes", "/administration", "/deploiement"].map((p) => `src/app/(dashboard)/parametres${p}/page.tsx`);
+    const pages = ["", "/lecture", "/diffusion", "/livres", "/ia", "/acteurs", "/synchro-sous-titres", "/repliques", "/recadrage", "/comptes", "/administration", "/deploiement"].map((p) => `src/app/(dashboard)/parametres${p}/page.tsx`);
     const src = [...pages, "src/components/settings/AdminTools.tsx"].map((f) => readFileSync(f, "utf8")).join("\n");
     expect(src).not.toMatch(/LanguageSection|SessionsCard|useTheme|ACCENT_PRESETS|\/api\/auth\/sessions|setLocale/);
   });

@@ -91,6 +91,7 @@ services:
   # actors in each scene and who speaks, reading the media folder read-only at the same path Jellyfin
   # uses; everything it computes stays on this server. Its
   # compose service, image and options are described in xray/README.md; once it runs on this
-  # network, turn it on in Management → Configuration → Connections (XRAY_ENABLED, XRAY_API_KEY).
+  # network, connect it in Management → Configuration → Connections (XRAY_URL, XRAY_API_KEY) and
+  # turn it on in Smart features → Actors on screen (XRAY_ENABLED).
   # laterna-xray:
   #   see xray/README.md
