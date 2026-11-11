@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useProgress } from "@react-three/drei";
 import { useStore, useT, useMovementKeys } from "../state/store";
 import { enterWorld, worldEntered } from "../state/actions";
@@ -21,7 +21,7 @@ export function Intro() {
   const phase = useStore((s) => s.phase);
   const sceneReady = useStore((s) => s.sceneReady);
   const setPhase = useStore((s) => s.setPhase);
-  const { progress, active } = useProgress();
+  const { progress, active, loaded, total } = useProgress();
   const [lit, setLit] = useState(false);
   const [minElapsed, setMinElapsed] = useState(false);
   const keysLabel = useMovementKeys();
@@ -42,8 +42,34 @@ export function Intro() {
     if (ready && phase === "loading") setPhase("gate");
   }, [ready, phase, setPhase]);
 
-  // La barre ne recule jamais et n'affiche 100 % qu'une fois la scène vraiment prête.
-  const shown = ready ? 100 : Math.min(97, Math.max(4, Math.round(progress)));
+  // Le chargement en deux temps, qu'on nomme : **le téléchargement** des décors (leur compte avance), puis **la
+  // préparation** de la scène (programmes, premières images). La barre ne recule jamais — le total des fichiers
+  // grandit en route, le pourcentage brut faisait des allers-retours — et elle ne reste jamais figée : pendant la
+  // préparation, qui n'a pas de mesure, elle avance doucement vers la fin.
+  // Avant le premier fichier demandé, c'est déjà le téléchargement qui s'annonce — pas la préparation.
+  const everActive = useRef(false);
+  if (active) everActive.current = true;
+  const downloading = active || !everActive.current;
+  const [shown, setShown] = useState(4);
+  const target = useRef(4);
+  target.current = ready ? 100 : downloading ? Math.max(target.current, Math.min(86, 4 + progress * 0.82)) : Math.max(target.current, 86);
+  useEffect(() => {
+    if (ready) {
+      setShown(100);
+      return;
+    }
+    const timer = setInterval(() => {
+      setShown((current) => {
+        // Vers la cible, d'un pas mesuré ; arrivée à la cible pendant la préparation, elle continue vers 98 %, de plus en plus lentement.
+        const goal = target.current >= 86 ? 98 : target.current;
+        const pace = goal > target.current ? 0.012 : 0.16;
+        const next = current + Math.max(0, goal - current) * pace;
+        return next - current < 0.02 ? current : next;
+      });
+    }, 80);
+    return () => clearInterval(timer);
+  }, [ready]);
+  const percent = Math.round(shown);
 
   function enter() {
     if (leaving || phase !== "gate") return;
@@ -68,11 +94,18 @@ export function Intro() {
             </button>
           ) : (
             <>
-              <div className="intro-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={shown}>
+              <div className="intro-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
                 <span style={{ transform: `scaleX(${shown / 100})` }} />
               </div>
               <p className="intro-detail">
-                {t("loading.title")} · <span className="tabular">{shown} %</span>
+                {downloading ? t("loading.download") : t("loading.prepare")}
+                {downloading && total > 0 ? (
+                  <span className="tabular">
+                    {" "}
+                    · {loaded} / {total}
+                  </span>
+                ) : null}
+                <span className="tabular"> · {percent} %</span>
               </p>
             </>
           )}

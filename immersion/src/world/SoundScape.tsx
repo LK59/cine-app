@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { applyAcoustics, audio, setWind } from "../media/audio";
+import { ambience, applyAcoustics, audio, DUCKED, setWind } from "../media/audio";
 import { syncMix } from "../media/playback";
 import { useStore } from "../state/store";
 import { applyMusicAcoustics } from "../media/music";
@@ -52,6 +52,10 @@ export function SoundScape() {
   useFrame(() => {
     const here = roomAt(rig.position.x, rig.position.y, rig.position.z);
     const doorOpen = useStore.getState().door;
+    // Pendant un film, les bruits de fond se mettent en retrait (ils reviennent à la pause).
+    const playback = useStore.getState().playback;
+    const film = playback.status === "playing" && !playback.wantPaused;
+    ambience.value += ((film ? DUCKED : 1) - ambience.value) * 0.03;
     // Le vent : dedans, on l'entend à peine derrière les vitres ; porte ouverte ou dehors, il est là.
     setWind(here === "terrasse" ? 1 : doorOpen ? 0.55 : 0.22);
     // Les enceintes de la chaîne hi-fi : même acoustique que les écrans.

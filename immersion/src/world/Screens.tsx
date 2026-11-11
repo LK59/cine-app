@@ -66,10 +66,11 @@ const SCREEN_FRAGMENT = /* glsl */ `
       float d = distance(screenUv, vec2(0.5));
       color *= smoothstep(0.8, uVignette.x * 0.799, d * (uVignette.y + uVignette.x));
     #endif
+    // Pas de conversion vers l'espace de l'écran dans la passe finale : l'image de la vidéo y est déjà (le
+    // navigateur la donne codée sRGB, telle qu'un écran l'attend). Elle y était convertie une seconde fois —
+    // un gris moyen de 128 sortait à 187, un noir de 40 à 110 : des films délavés, aux noirs gris (constaté
+    // par le propriétaire sur des films HDR, vérifié sur des aplats connus : tests/couleur.mjs).
     gl_FragColor = vec4(color, alpha);
-    #ifdef OVERLAY
-      #include <colorspace_fragment>
-    #endif
   }
 `;
 

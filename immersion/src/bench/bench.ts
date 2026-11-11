@@ -1,5 +1,6 @@
 import { Vector2, Vector3, type PerspectiveCamera, type WebGLRenderer } from "three";
 import { assetUrl } from "../lib/assets";
+import { isTouchDevice } from "../lib/capability";
 import { api } from "../lib/session";
 import { SUPERSAMPLING, QUALITY, type Quality } from "../lib/settings";
 import { dispatch } from "../media/commands";
@@ -197,7 +198,12 @@ export async function runBench(): Promise<void> {
   const run = Math.random().toString(36).slice(2, 14);
   const before = store.playback;
   const film = before.status === "playing" || before.status === "paused";
-  store.setBench({ running: true, results: [], preset: null, video: false, progress: 0, step: 0, steps: PRESETS.length * 2 });
+  // Sur un téléphone ou une tablette, seul le préréglage en cours est mesuré : passer de l'un à l'autre refait
+  // les tampons de rendu à chaque fois, et la mémoire d'un appareil mobile n'y a pas résisté (le rendu 3D s'est
+  // interrompu pendant une mesure sur un iPhone, 11/11/2026).
+  const chosen = store.settings.quality;
+  const presets: Quality[] = isTouchDevice() ? [chosen === "auto" ? "medium" : chosen] : PRESETS;
+  store.setBench({ running: true, results: [], preset: null, video: false, progress: 0, step: 0, steps: presets.length * 2 });
   const results: BenchResult[] = [];
   let mire = false;
   try {
@@ -210,7 +216,7 @@ export async function runBench(): Promise<void> {
           await playTestClip(assetUrl(TEST_CLIP));
         }
       } else if (film) dispatch({ type: "pause" });
-      for (const preset of PRESETS) {
+      for (const preset of presets) {
         if (cancelled) return;
         useStore.getState().setBench({ step: results.length + 1 });
         const result = await pass(preset, video, gl, run, video ? (film ? "film" : "mire") : null);

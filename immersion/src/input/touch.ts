@@ -23,9 +23,11 @@ export interface TouchOptions {
   onLook: (dx: number, dy: number) => void;
   onCapture: (captured: boolean) => void;
   worldActive: () => boolean;
+  /** Le visiteur est-il installé (canapé, lit, bain) ? Alors il n'y a pas de manche : voir `onStart`. */
+  seated: () => boolean;
 }
 
-export function attachTouch({ surface, onLook, onCapture, worldActive }: TouchOptions): () => void {
+export function attachTouch({ surface, onLook, onCapture, worldActive, seated }: TouchOptions): () => void {
   let held = false;
   let stickId: number | null = null;
   const looks = new Map<number, { x: number; y: number; x0: number; y0: number; at: number }>();
@@ -47,7 +49,9 @@ export function attachTouch({ surface, onLook, onCapture, worldActive }: TouchOp
     if (!worldActive()) return;
     e.preventDefault();
     for (const touch of Array.from(e.changedTouches)) {
-      if (stickId === null && touch.clientX < window.innerWidth * 0.42) {
+      // Assis, tout l'écran sert au regard et au cadrage : deux doigts où que ce soit rapprochent l'image. Avec
+      // le manche à gauche, le premier doigt posé là faisait se lever au lieu de zoomer (on se lève par son bouton).
+      if (stickId === null && !seated() && touch.clientX < window.innerWidth * 0.42) {
         stickId = touch.identifier;
         Object.assign(stick, { active: true, x0: touch.clientX, y0: touch.clientY, x: touch.clientX, y: touch.clientY });
       } else {

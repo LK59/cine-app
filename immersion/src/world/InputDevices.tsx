@@ -34,7 +34,7 @@ export function InputDevices() {
       const state = useStore.getState();
       return state.phase === "world" && state.mode === "walk";
     };
-    const detachTouch = isTouchDevice() ? attachTouch({ surface: canvas, onLook: (dx, dy) => look(dx, dy, useStore.getState().settings.sensitivity * view.scale), onCapture: captureChanged, worldActive }) : null;
+    const detachTouch = isTouchDevice() ? attachTouch({ surface: canvas, onLook: (dx, dy) => look(dx, dy, useStore.getState().settings.sensitivity * view.scale), onCapture: captureChanged, worldActive, seated: () => useStore.getState().seated }) : null;
     // Ce que le navigateur sait dire de la disposition, quand il sait (sinon : la langue, puis la première touche).
     void movementKeyLabels().then((label) => useStore.getState().keysSeen === null && useStore.getState().setKeysSeen(label));
     return () => {

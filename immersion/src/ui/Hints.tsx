@@ -1,6 +1,34 @@
+import { useEffect, useRef } from "react";
+import { motion } from "../input/intents";
 import { isTouchDevice } from "../lib/capability";
+import { rig } from "../world/rig";
 import { useStore, useT } from "../state/store";
 import { SEATS, THINGS } from "../world/interactions";
+
+/**
+ * Le point de visée. Immobile quelques secondes — on regarde un film —, il s'efface en fondu ; il revient dès
+ * que le regard tourne ou que l'on se déplace.
+ */
+function Reticle() {
+  const dot = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let raf = 0;
+    let moved = performance.now();
+    let last = { yaw: rig.yaw, pitch: rig.pitch };
+    const tick = (now: number) => {
+      if (Math.abs(rig.yaw - last.yaw) > 0.0005 || Math.abs(rig.pitch - last.pitch) > 0.0005 || motion.forward !== 0 || motion.strafe !== 0) {
+        moved = now;
+        last = { yaw: rig.yaw, pitch: rig.pitch };
+      }
+      dot.current?.classList.toggle("is-idle", now - moved > RETICLE_IDLE_MS);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <div className="reticle" ref={dot} aria-hidden data-testid="reticle" />;
+}
+const RETICLE_IDLE_MS = 2500;
 
 /** Le point de visée et ce que le visiteur peut faire d'ici — discrets, en bas de l'image. */
 export function Hints() {
@@ -14,10 +42,10 @@ export function Hints() {
     return thing ? thing.hint(s) : null;
   });
   // Au doigt, ces gestes sont des boutons (`TouchControls`) : la légende des touches n'a pas lieu d'être.
-  if (isTouchDevice()) return <div className="reticle" aria-hidden />;
+  if (isTouchDevice()) return <Reticle />;
   return (
     <>
-      <div className="reticle" aria-hidden />
+      <Reticle />
       <div className="hints">
         {thingHint ? (
           <span className="hint" data-testid="hint-thing">

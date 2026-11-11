@@ -285,18 +285,40 @@ kbd {
   animation: intro-rise 0.8s var(--ease-out) 1.7s both;
 }
 .intro-bar {
-  width: 240px;
-  height: 2px;
-  border-radius: 2px;
-  background: rgb(255 255 255 / 0.12);
+  position: relative;
+  width: 280px;
+  height: 3px;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.1);
   overflow: hidden;
 }
 .intro-bar span {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, rgb(255 255 255 / 0.9), var(--brand));
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgb(255 255 255 / 0.85), var(--brand));
   transform-origin: 0 50%;
-  transition: transform 0.35s ease-out;
+  /* La valeur est déjà lissée (un pas toutes les 80 ms) : une transition courte, linéaire, qui ne rebondit pas. */
+  transition: transform 0.12s linear;
+}
+/* Un reflet qui passe sur toute la barre : même quand le pourcentage attend, on voit que ça travaille. */
+.intro-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+  transform: translateX(-100%);
+  animation: intro-sheen 1.6s ease-in-out infinite;
+}
+@keyframes intro-sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .intro-bar::after {
+    animation: none;
+  }
 }
 .intro-detail {
   margin: 0;
@@ -1443,4 +1465,50 @@ kbd {
 }
 .now-track select option {
   color: #111;
+}
+
+/* Le point de visée s'efface quand rien ne bouge. */
+.reticle {
+  transition: opacity 0.25s;
+}
+.reticle.is-idle {
+  opacity: 0;
+  transition: opacity 0.9s;
+}
+
+/* Le menu et les réglages sur un téléphone en paysage : toute la hauteur, sans logo ni cadre, pour que la
+   liste des réglages ait de la place (il en restait un et demi à l'écran). */
+@media (pointer: coarse) and (max-height: 560px) {
+  .veil {
+    padding: 0;
+  }
+  .pause,
+  .pause.is-wide {
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    gap: 10px;
+    padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .pause .xp-logo {
+    display: none;
+  }
+  .pause:not(.is-wide) {
+    justify-content: center;
+  }
+  .pause:not(.is-wide) .pause-actions {
+    width: min(360px, 100%);
+  }
+  .pause.is-wide .settings {
+    flex: 1;
+  }
+  .pause.is-wide .pause-actions {
+    flex-direction: row;
+  }
+  .pause-title {
+    font-size: 15px;
+  }
 }

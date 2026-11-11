@@ -60,17 +60,21 @@ test("un téléphone en paysage : manche, regard, boutons, panneau à plat", asy
   await expect(sit).toBeVisible();
   await sit.tap();
   await expect.poll(() => state(page, "seated")).toBe(true);
+  // Un doigt de chaque côté de l'écran, comme on le fait naturellement : assis, il n'y a pas de manche — le
+  // doigt de gauche ne fait pas se lever, les deux cadrent.
+  await touch(cdp, "touchStart", [{ x: 300, y: 200, id: 3 }]);
   await touch(cdp, "touchStart", [
-    { x: 560, y: 200, id: 3 },
-    { x: 620, y: 200, id: 4 },
+    { x: 300, y: 200, id: 3 },
+    { x: 540, y: 200, id: 4 },
   ]);
   for (const spread of [40, 80, 120, 160])
     await touch(cdp, "touchMove", [
-      { x: 560 - spread, y: 200, id: 3 },
-      { x: 620 + spread, y: 200, id: 4 },
+      { x: 300 - spread, y: 200, id: 3 },
+      { x: 540 + spread, y: 200, id: 4 },
     ]);
   await touch(cdp, "touchEnd", []);
   expect(await page.evaluate(() => (window as unknown as { __immersion: Handle }).__immersion.view.zoom)).toBeGreaterThan(0.5);
+  expect(await state(page, "seated")).toBe(true);
   await sit.tap();
   await expect.poll(() => state(page, "seated")).toBe(false);
 

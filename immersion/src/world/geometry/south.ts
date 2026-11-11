@@ -8,6 +8,16 @@ const S = ROOM.south;
 const B = ROOM.back;
 const LOFT = ROOM.loft;
 
+/**
+ * Les appliques de l'escalier : une à mi-volée sur le mur ouest, une au-dessus du palier sur le mur du fond.
+ * Sans elles la cage n'avait aucune lampe à elle — noire pendant un film, sombre le reste du temps. Elles ne
+ * sont que des lumières et un abat-jour (`Fixtures`) : rien n'est ajouté à la géométrie cuite.
+ */
+export const STAIR_SCONCES: { at: [number, number, number]; out: [number, number, number] }[] = [
+  { at: [-W + 0.07, 2.75, 6.3], out: [1, 0, 0] },
+  { at: [-4.9, LOFT + 1.72, B - 0.07], out: [0, 0, -1] },
+];
+
 /** Où sont suspendues les lampes de l'îlot (le bas de l'abat-jour). */
 export const PENDANTS: [number, number, number][] = [0.55, 1.4, 2.25].map((x) => [x, 1.92, (KITCHEN.island.z0 + KITCHEN.island.z1) / 2]);
 

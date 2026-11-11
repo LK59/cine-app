@@ -68,7 +68,10 @@ export function World() {
         // Le contexte perdu (pilote relancé, trop d'onglets 3D) : on le dit, plutôt qu'une image figée.
         gl.domElement.addEventListener("webglcontextlost", (e) => {
           e.preventDefault();
-          setPhase("lost");
+          // Sauf quand on s'en va : en quittant, le monde est démonté et rend lui-même son contexte — l'écran
+          // « Le rendu 3D s'est interrompu » passait alors une fraction de seconde avant l'application.
+          const phase = useStore.getState().phase;
+          if (phase !== "leaving" && phase !== "expired") setPhase("lost");
         });
       }}
     >

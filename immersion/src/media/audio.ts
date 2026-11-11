@@ -239,7 +239,7 @@ export function audio(): Graph {
 
   const fire = loop(fireBuffer(context), 0.55, 1.8);
   fire.gain.connect(convolver);
-  const tub = loop(bubbleBuffer(context), 0.5, 1.6);
+  const tub = loop(bubbleBuffer(context), TUB, 1.6);
   const purr = loop(purrBuffer(context), 0.0, 0.5);
   graph = { context, listener, speakers: new Map(), source: null, convolver, wind, candles, fire, tub, purr, direct, wet, connected: new WeakSet() };
   return graph;
@@ -330,12 +330,23 @@ export function applyAcoustics(screenId: string, cutoff: number, reach: number):
   entry.reach.gain.setTargetAtTime(reach, now, 0.12);
 }
 
+/**
+ * Les bruits de fond (le vent, le bain, le feu) pendant un film : en retrait. `value` va de 1 (rien ne joue) à
+ * `DUCKED` ; tenu par `SoundScape`, lu ici et par le feu.
+ */
+export const ambience = { value: 1 };
+export const DUCKED = 0.4;
+const WIND = 0.6;
+const TUB = 0.3;
+
 /** La force du vent, de 0 à 1 : faible derrière les vitres, pleine dehors. Glisse en une seconde. */
 export function setWind(level: number): void {
   if (!graph) return;
   const now = graph.context.currentTime;
-  if (graph.context.state !== "running") graph.wind.gain.gain.value = 0.5 * level * 2;
-  else graph.wind.gain.gain.setTargetAtTime(0.5 * level * 2, now, 0.6);
+  const gain = WIND * level * ambience.value;
+  if (graph.context.state !== "running") graph.wind.gain.gain.value = gain;
+  else graph.wind.gain.gain.setTargetAtTime(gain, now, 0.6);
+  graph.tub.setVolume(TUB * ambience.value);
 }
 
 /** Ce que chaque haut-parleur laisse passer à cet instant — pour les tests et le diagnostic. */

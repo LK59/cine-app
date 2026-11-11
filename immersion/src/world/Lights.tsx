@@ -28,9 +28,16 @@ import { MOONLIGHT_FROM } from "./Exterior";
  * reflets et pour les objets posés (plantes, fauteuil, bougies), et le souffle des bougies.
  */
 const GROUPS: LampGroup[] = ["salon", "sud", "nuit"];
-/** Ce qu'il reste des lampes pendant un film, et pendant sa pause. */
-const CINEMA_PLAYING = 0.1;
-const CINEMA_PAUSED = 0.45;
+/**
+ * Ce qu'il reste des lampes pendant un film, et pendant sa pause, pièce par pièce. Le salon — la salle — baisse
+ * franchement ; la cuisine, l'escalier et la mezzanine, le couloir et la chambre gardent de quoi y voir : à
+ * 10 % partout, le haut de l'escalier et le couloir étaient dans le noir pendant une lecture.
+ */
+const CINEMA: Record<LampGroup, { playing: number; paused: number }> = {
+  salon: { playing: 0.14, paused: 0.5 },
+  sud: { playing: 0.5, paused: 0.75 },
+  nuit: { playing: 0.6, paused: 0.8 },
+};
 
 export function Lights() {
   const profile = useProfile();
@@ -55,9 +62,10 @@ export function Lights() {
     const state = useStore.getState();
     const playback = state.playback;
     const film = state.settings.cinema && (playback.status === "playing" || playback.status === "paused" || playback.status === "loading");
-    const dim = !film ? 1 : playback.status === "paused" || playback.wantPaused ? CINEMA_PAUSED : CINEMA_PLAYING;
+    const pausedNow = playback.status === "paused" || playback.wantPaused;
     const ease = 1 - Math.exp(-Math.min(delta, 0.1) * 1.6);
     for (const group of GROUPS) {
+      const dim = !film ? 1 : pausedNow ? CINEMA[group].paused : CINEMA[group].playing;
       const target = (state.lamps[group] ? 1 : 0) * dim;
       lampLevels[group] += (target - lampLevels[group]) * ease;
       if (Math.abs(target - lampLevels[group]) < 0.002) lampLevels[group] = target;

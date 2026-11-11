@@ -468,6 +468,30 @@ Fait dans la nuit :
 - Scénarios 02, 05, 06, 07, 08, 09, 10, 11 verts sur ce build, sous la politique de sécurité (01, 03, 04 demandent
   une instance de l'application : non rejoués).
 
+## Retour du propriétaire sur la v2 (11/11/2026, matin) — corrigé en 10.35.1
+
+Essai sur un iPhone 15 Pro Max : « impressionnant », fluide, 60 images par seconde en Ultra même en lecture ; le
+changement de piste audio a marché sur un vrai film (deux lignes `why: "audio"` au journal). Ses remarques, et
+ce qui a été fait :
+- **Couleurs ternes** (films HDR, mais aussi SDR) : une vraie erreur — la passe finale de la vidéo convertissait
+  une seconde fois l'image vers l'espace de l'écran (128 → 187, 40 → 110). Retirée (`Screens.tsx`) ; vérifiée
+  sur des aplats connus (`tests/couleur.mjs`) et gardée par le scénario 12 (`readPng` dans `helpers.ts`).
+- **Zoom assis au doigt** : le doigt posé à gauche prenait le manche et faisait se lever. Assis, plus de manche :
+  tout l'écran sert au regard et au cadrage (`touch.ts`, option `seated`).
+- **Trop sombre pendant un film** hors du salon : le mode cinéma baisse pièce par pièce (`CINEMA` dans
+  `Lights.tsx` : salon 0,14 ; sud 0,5 ; nuit 0,6), et la cage d'escalier a deux appliques (`STAIR_SCONCES`,
+  lumières et abat-jour seulement — recuisson de la seule couche `lampes` de `sud`, les autres gardées : la
+  géométrie n'ayant pas changé, le dépliage est le même).
+- **Bruits de fond** : vent et bain plus bas, et en retrait pendant un film (`ambience`, `audio.ts`).
+- **Réglages sur téléphone** : menu et réglages en plein écran, sans logo ni cadre.
+- **Point de visée** : s'efface après 2,5 s sans mouvement (`Reticle`, `Hints.tsx`).
+- **« Rendu 3D interrompu » en quittant** : le contexte rendu par le démontage n'est plus pris pour une panne.
+- **Barre de chargement** : ne recule plus (0 recul sur une liaison de 20 Mb/s, `tests/chargement.mjs`), dit
+  « Téléchargement des décors · n / total » puis « Préparation de la scène », et un reflet y passe en continu.
+- **Plantage pendant la mesure sur iPhone** : au changement de préréglage, pendant les passages avec film. Au
+  doigt, la mesure ne joue plus que le préréglage en cours. Ses lignes d'avant : Ultra 45 i/s écrans éteints,
+  60 avec film ; sur iPhone tous les préréglages rendent à la même définition (la densité est plafonnée à 1,5).
+
 ## Prochaine action
 
 La v2 est livrée (10.35.0). Attendre le retour du propriétaire :

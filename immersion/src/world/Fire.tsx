@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { AdditiveBlending, Color, CylinderGeometry, DoubleSide, MeshStandardMaterial, PlaneGeometry, ShaderMaterial } from "three";
-import { audio } from "../media/audio";
+import { audio, ambience } from "../media/audio";
 import { useStore } from "../state/store";
 import { BREAST, FIRE } from "./layout";
 import { visibleGroups } from "./Parts";
@@ -143,7 +143,7 @@ export function Fire() {
     const strength = (0.12 + 0.88 * level.value) * dance * 15;
     screenLight.uniforms.uSlFire.value.set(...FIRE.glow);
     screenLight.uniforms.uSlFireColor.value.setRGB(1.0 * strength, 0.42 * strength, 0.12 * strength);
-    graph.fire.setVolume(0.55 * (0.15 + 0.85 * level.value));
+    graph.fire.setVolume(0.45 * (0.15 + 0.85 * level.value) * (0.5 + 0.5 * ambience.value));
   });
 
   const x = BREAST.face + FIRE.depth;

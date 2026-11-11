@@ -1,3 +1,4 @@
+import { inflateSync } from "node:zlib";
 import { expect, type ConsoleMessage, type Page } from "@playwright/test";
 
 /** Les erreurs de console et de page d'un scénario — aucune n'est tolérée. */
@@ -64,4 +65,45 @@ export async function position(page: Page): Promise<{ x: number; y: number; z: n
     const p = (window as unknown as { __immersion: Immersion }).__immersion.rig.position;
     return { x: p.x, y: p.y, z: p.z };
   });
+}
+
+/**
+ * Lit un PNG (8 bits, RVB ou RVBA, non entrelacé — ce que rend `page.screenshot`) : de quoi vérifier une
+ * couleur à l'écran sans dépendance de plus.
+ */
+export function readPng(png: Buffer): { width: number; height: number; at(x: number, y: number): [number, number, number] } {
+  const width = png.readUInt32BE(16);
+  const height = png.readUInt32BE(20);
+  const channels = png[25] === 6 ? 4 : 3;
+  const data: Buffer[] = [];
+  for (let at = 8; at < png.length; ) {
+    const length = png.readUInt32BE(at);
+    if (png.toString("latin1", at + 4, at + 8) === "IDAT") data.push(png.subarray(at + 8, at + 8 + length));
+    at += 12 + length;
+  }
+  const raw = inflateSync(Buffer.concat(data));
+  const stride = width * channels;
+  const pixels = Buffer.alloc(stride * height);
+  for (let y = 0; y < height; y++) {
+    const filter = raw[y * (stride + 1)];
+    for (let x = 0; x < stride; x++) {
+      const value = raw[y * (stride + 1) + 1 + x];
+      const left = x >= channels ? pixels[y * stride + x - channels] : 0;
+      const up = y > 0 ? pixels[(y - 1) * stride + x] : 0;
+      const corner = x >= channels && y > 0 ? pixels[(y - 1) * stride + x - channels] : 0;
+      let predicted = 0;
+      if (filter === 1) predicted = left;
+      else if (filter === 2) predicted = up;
+      else if (filter === 3) predicted = (left + up) >> 1;
+      else if (filter === 4) {
+        const p = left + up - corner;
+        const pa = Math.abs(p - left);
+        const pb = Math.abs(p - up);
+        const pc = Math.abs(p - corner);
+        predicted = pa <= pb && pa <= pc ? left : pb <= pc ? up : corner;
+      }
+      pixels[y * stride + x] = (value + predicted) & 255;
+    }
+  }
+  return { width, height, at: (x, y) => [pixels[y * stride + x * channels], pixels[y * stride + x * channels + 1], pixels[y * stride + x * channels + 2]] };
 }

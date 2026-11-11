@@ -18,7 +18,7 @@ import { CANDLES } from "../../src/world/candles";
 import { Kits } from "../../src/world/geometry/envelope";
 import { NIGHT_LAMPS, buildNight } from "../../src/world/geometry/night";
 import { buildBlockSofa, buildSalon } from "../../src/world/geometry/salon";
-import { PENDANTS, buildSouth } from "../../src/world/geometry/south";
+import { PENDANTS, STAIR_SCONCES, buildSouth } from "../../src/world/geometry/south";
 import { PORCH_LAMP, buildOutside } from "../../src/world/geometry/outside";
 import { buildTerrace } from "../../src/world/geometry/terrace";
 import type { MaterialId, Part } from "../../src/world/geometry/types";
@@ -202,6 +202,7 @@ const lights = [
   ...NIGHT_LAMPS.screenSconces.map(([x, y, z], i) => ({ type: "point", name: `applique-ecran-${i}`, layer: "lampes", position: [x - 0.12, y, z], color: hex("#ffbf80"), intensity: 6, radius: 0.06 })),
   ...NIGHT_LAMPS.sconces.map(([x, y, z], i) => ({ type: "point", name: `applique-${i}`, layer: "lampes", position: [x, y, z - 0.16], color: hex("#ffbf80"), intensity: 5, radius: 0.06 })),
   ...NIGHT_LAMPS.bedside.map(([x, y, z], i) => ({ type: "point", name: `chevet-${i}`, layer: "lampes", position: [x, y, z], color: hex("#ffc083"), intensity: 6, radius: 0.1 })),
+  ...STAIR_SCONCES.map(({ at, out }, i) => ({ type: "point", name: `applique-escalier-${i}`, layer: "lampes", position: [at[0] + out[0] * 0.16, at[1], at[2] + out[2] * 0.16], color: hex("#ffbf80"), intensity: 7, radius: 0.06 })),
   // La lanterne du dehors, près de la porte d'entrée : elle dessine le bardage et la neige de l'aile.
   { type: "point", name: "lanterne-entree", layer: "lampes", position: PORCH_LAMP, color: hex("#ffb264"), intensity: 7, radius: 0.05 },
   // Le bain : la lumière au fond de la cuve, qui remonte par l'eau et teinte la margelle.
