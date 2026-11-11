@@ -496,12 +496,30 @@ ce qui a été fait :
 
 ## Prochaine action
 
-La v2 est livrée (10.35.0). Attendre le retour du propriétaire :
-- sa mesure (« Mesurer », lignes `immersion-bench` de `startup.log`, avec `maxMs`, `over33`, `over50`, `slowAt`) :
-  la cible est 60 images par seconde stables en Ultra pendant une lecture ; si des à-coups restent, `slowAt` dit où ;
-- le tactile sur un vrai iPhone (jamais essayé : mémoire des textures, flux par ManagedMediaSource, son) ;
-- les pistes audio et les sous-titres sur un vrai film (testés avec des réponses écrites à la main).
+**Demandé par le propriétaire le 11/11/2026 (à faire, pas commencé)** — le confort de regarder :
 
+1. **Enchaîner sans quitter le canapé.** À la fin d'un épisode, proposer « épisode suivant » (compte à rebours,
+   annulable) ; pendant le générique de début et le récapitulatif, « passer ». La négociation
+   (`POST /api/jellyfin/playback/start`) rend déjà `introSkip`, `recapSkip` et `creditsStart` (voir
+   `playerMarkers` côté application) : le mode ne les lit pas encore (`media/api.ts`, type `Negotiation`).
+   L'épisode suivant se trouve par la liste des épisodes de la série (`media/library.ts`, `episodesOf`) ; lancer
+   par la commande `open` (`media/commands.ts`), jamais en touchant au `<video>`.
+2. **Une télécommande légère.** Le panneau complet couvre l'image pour une simple pause. Une barre discrète au bas
+   de l'écran (lecture / pause, −10 s, +30 s, barre de progression, sous-titres) : au clic ou à la molette sur
+   ordinateur quand on regarde l'écran, au toucher sur mobile — sans ouvrir le panneau. Les gestes passent par les
+   mêmes commandes que `NowPlaying` (`ui/Panel.tsx`) ; `ui/Hud.tsx` affiche déjà titre et progression.
+
+À tenir : textes dans les quatre langues (`lib/i18n.ts`) ; un scénario par fonction, jouable sans instance
+(`SANS_APPLICATION=1`, réponses de l'application écrites à la main comme dans `tests/e2e/11-pistes.spec.ts`) ;
+`docker build --target immersion .` avant de livrer ; une seule livraison à la fin.
+
+Ensuite, selon son retour : entrer plus vite (charger le salon d'abord), des préréglages qui se distinguent
+vraiment sur téléphone (la densité y est plafonnée à 1,5 : tous rendent à la même définition), le multijoueur.
+
+Toujours attendu de lui :
+- sa mesure sur ordinateur (« Mesurer », lignes `immersion-bench` de `startup.log`, avec `maxMs`, `over33`, `over50`, `slowAt`) :
+  la cible est 60 images par seconde stables en Ultra pendant une lecture ; si des à-coups restent, `slowAt` dit où ;
+- les sous-titres sur un vrai film ; le plantage pendant « Mesurer » sur iPhone (contourné, cause non prouvée).
 Leviers de performance encore disponibles, par ordre de rendement mesuré sur l'UHD 630 : le halo (bloom, ~7 ms
 sur 60 — à demi-définition ou à moins de niveaux) ; les lumières ponctuelles temps réel (reflets seulement, ~5 ms) ;
 l'environnement (~5 ms) ; le relief des matières (~7 ms).
