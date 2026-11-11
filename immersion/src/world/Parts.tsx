@@ -44,8 +44,17 @@ function PartView({ part, group, materials, visible, lightmaps }: { part: Part; 
  * partie nuit est derrière un mur plein.
  */
 export function visibleGroups(room: string): Record<GroupId, boolean> {
-  // Le dehors de l'aile de la chambre ne se voit que par la fenêtre de la cuisine et celle de la chambre.
-  return { salon: room !== "chambre", sud: true, nuit: room !== "mezzanine" && room !== "terrasse", terrasse: room !== "chambre" && room !== "couloir", dehors: room === "cuisine" || room === "chambre" || room === "salon" };
+  // Le dehors de l'aile de la chambre se voit par la fenêtre de la cuisine et celle de la chambre. Il est aussi
+  // dessiné depuis la mezzanine (11/11/2026), par sécurité : on y voyait le ciel en points bleus par des fentes
+  // entre le toit et le pignon. Ces fentes sont fermées dans la géométrie (`GABLE_TOP`) ; une qui resterait, vers
+  // le bas, montrerait le toit de l'aile plutôt que le vide. Coût mesuré : rien de lisible (voir PROGRESS).
+  return {
+    salon: room !== "chambre",
+    sud: true,
+    nuit: room !== "mezzanine" && room !== "terrasse",
+    terrasse: room !== "chambre" && room !== "couloir",
+    dehors: room === "cuisine" || room === "chambre" || room === "salon" || room === "mezzanine",
+  };
 }
 
 /**

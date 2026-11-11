@@ -1,12 +1,18 @@
 import { BoxGeometry, ConeGeometry, CylinderGeometry, SphereGeometry } from "three";
-import { KITCHEN, PLAN, ROOM, SCREENS, roofY, span, type Solid } from "../layout";
-import { Kits, roof } from "./envelope";
+import { KITCHEN, PLAN, ROOM, SCREENS, span, type Solid } from "../layout";
+import { GABLE_TOP, Kits, roof } from "./envelope";
 import type { Part } from "./types";
 
 const W = ROOM.halfW;
 const S = ROOM.south;
 const B = ROOM.back;
 const LOFT = ROOM.loft;
+/**
+ * La poutre de rive de la mezzanine : son dessus au dessous du parquet (2,5 cm sous LOFT), sa hauteur,
+ * sa demi-largeur (elle est centrée sur `ROOM.south`). Son dessous descend 1,5 cm sous celui des solives
+ * (LOFT − 0,37), qui s'y emboîtent : à 5 mm près, les deux faces se seraient disputé les pixels.
+ */
+const RIM = { top: LOFT - 0.025, height: 0.36, half: 0.15 } as const;
 
 /**
  * Les appliques de l'escalier : une à mi-volée sur le mur ouest, une au-dessus du palier sur le mur du fond.
@@ -42,13 +48,19 @@ export function buildSouth(): Part {
 
   // ── L'enveloppe : sol, murs, toit ───────────────────────────────────────────
   floor.span(-W, W, -0.06, 0, S, B, 2);
-  stone.span(W, W + 0.3, 0, ROOM.eave + 0.2, S, B);
-  plaster.wall("z", -W - 0.3, 0.3, S, B, 0, ROOM.eave + 0.2);
-  roof(kits, S, B);
-  // Le mur du fond (un pignon) : la porte du couloir, la fenêtre de la cuisine.
+  // Les murs latéraux vont jusqu'au nu extérieur du pignon : ils s'arrêtaient à sa face intérieure, et
+  // l'angle de la maison restait un poteau de vide sous le toit.
+  stone.span(W, W + 0.3, 0, ROOM.eave + 0.2, S, B + 0.3);
+  plaster.wall("z", -W - 0.3, 0.3, S, B + 0.3, 0, ROOM.eave + 0.2);
+  // Les lames du toit passent par-dessus le pignon et le débordent de 10 cm.
+  roof(kits, S, B, 0, 0.4);
+  // Le mur du fond (un pignon) : la porte du couloir, la fenêtre de la cuisine. Son haut suit la pente et
+  // entre dans l'épaisseur des lames (`GABLE_TOP`). Il montait en escalier par bandes de 50 cm, chacune à la
+  // hauteur de son bout le plus bas, et les lames s'arrêtaient contre sa face : entre chaque marche et elles,
+  // un jour en triangle — de la mezzanine, des points bleus (le ciel) tout le long du pignon.
   const door = PLAN.hallDoor;
   const win = KITCHEN.window;
-  plaster.wall("x", B, 0.3, -W, W, 0, (x) => roofY(x) + 0.25, [
+  plaster.wall("x", B, 0.3, -W, W, 0, GABLE_TOP, [
     { a0: door.x - door.width / 2, a1: door.x + door.width / 2, y0: 0, y1: door.height },
     { a0: win.x0, a1: win.x1, y0: win.y0, y1: win.y1 },
   ]);
@@ -66,18 +78,29 @@ export function buildSouth(): Part {
     [-W, PLAN.stairEast, st.zTop, B],
   ];
   for (const [x0, x1, z0, z1] of slabs) {
-    floor.span(x0, x1, LOFT - 0.025, LOFT, z0, z1, 2);
+    // Côté salon, le parquet avance jusqu'au nu de la poutre de rive (un nez de plancher) : c'est lui qui la
+    // couvre, et plus le dessus de la poutre affleurant le parquet.
+    floor.span(x0, x1, LOFT - 0.025, LOFT, z0 === S ? S - RIM.half : z0, z1, 2);
     planks.span(x0, x1, LOFT - 0.2, LOFT - 0.025, z0, z1, 0);
   }
-  timber.beam([-W, LOFT - 0.17, S], [W, LOFT - 0.17, S], 0.3, 0.34);
-  for (const x of [-W + 0.15, -2.2, 2.2, W - 0.15]) timber.span(x - 0.15, x + 0.15, 0, LOFT - 0.34, S - 0.15, S + 0.15, 1);
+  // La poutre de rive, sous le bord de la mezzanine. Son dessus était à LOFT, la hauteur même du parquet, sur
+  // les 15 cm où elle passe sous lui : deux faces dans un même plan, qui se disputaient les pixels — un
+  // clignotement au pied de la rambarde. Elle est descendue sous le parquet ; les poteaux la suivent.
+  timber.beam([-W, RIM.top - RIM.height / 2, S], [W, RIM.top - RIM.height / 2, S], RIM.half * 2, RIM.height);
+  for (const x of [-W + 0.15, -2.2, 2.2, W - 0.15]) timber.span(x - 0.15, x + 0.15, 0, RIM.top - RIM.height, S - RIM.half, S + RIM.half, 1);
   for (let x = -W + 0.5; x < W; x += 0.9) if (x > PLAN.stairEast + 0.1) timber.beam([x, LOFT - 0.28, S], [x, LOFT - 0.28, B], 0.12, 0.18);
   // Garde-corps : le long du vide sur le salon, et autour de la trémie de l'escalier.
-  const rail = (from: [number, number], to: [number, number]) => {
+  // `meets` : ce garde-corps finit contre la main courante d'un autre. Sa main courante s'arrête alors au flanc
+  // de l'autre et son dernier barreau n'est pas posé (l'autre en a un au même endroit) : les deux mains
+  // courantes se recouvraient sur un carré de 4,5 cm, dessus contre dessus, et deux barreaux identiques
+  // occupaient la même place — de quoi clignoter à l'angle de la trémie.
+  const rail = (from: [number, number], to: [number, number], meets = false) => {
     const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
-    timber.beam([from[0], LOFT + 1.02, from[1]], [to[0], LOFT + 1.02, to[1]], 0.09, 0.07);
+    const trim = meets ? 0.045 / length : 0;
+    const end: [number, number] = [to[0] - (to[0] - from[0]) * trim, to[1] - (to[1] - from[1]) * trim];
+    timber.beam([from[0], LOFT + 1.02, from[1]], [end[0], LOFT + 1.02, end[1]], 0.09, 0.07);
     const count = Math.max(2, Math.round(length / 0.135));
-    for (let i = 0; i <= count; i++) {
+    for (let i = 0; i <= (meets ? count - 1 : count); i++) {
       const x = from[0] + ((to[0] - from[0]) * i) / count;
       const z = from[1] + ((to[1] - from[1]) * i) / count;
       timber.span(x - 0.016, x + 0.016, LOFT, LOFT + 1.0, z - 0.016, z + 0.016, 1);
@@ -86,7 +109,7 @@ export function buildSouth(): Part {
   rail([-W + 0.1, S], [W - 0.1, S]);
   // Le long de la trémie sur toute sa longueur, jusqu'au palier : c'est lui qui garde le vide de l'escalier.
   rail([PLAN.stairEast, st.zBottom], [PLAN.stairEast, st.zTop]);
-  rail([-W + 0.1, st.zBottom], [PLAN.stairEast, st.zBottom]);
+  rail([-W + 0.1, st.zBottom], [PLAN.stairEast, st.zBottom], true);
 
   // ── L'escalier : une volée droite, marches de bois, limon, rampe ────────────
   const solids: Solid[] = [];
@@ -116,8 +139,11 @@ export function buildSouth(): Part {
     if (top - y < 0.25) continue;
     timber.span(st.x1 - 0.046, st.x1 - 0.014, y - 0.05, top, z - 0.016, z + 0.016, 1);
   }
-  // Le dessous de l'escalier, fermé côté cuisine par un panneau qui suit la pente.
-  planks.wall("z", st.x1 - 0.02, 0.04, st.zBottom + run, st.zTop, 0, (z) => Math.max(0.02, ((z - st.zBottom) / run) * rise - 0.32), [], 0.28);
+  // Le dessous de l'escalier, fermé côté cuisine par un panneau qui suit la pente et entre de 3 cm sous le
+  // limon. Il s'arrêtait 2 à 19 cm plus bas, en escalier : une fente ouverte sous tout le limon.
+  const stringerSlope = (stairTop[1] - (rise - 0.12)) / (st.zTop - st.zBottom);
+  const stringerBottom = (z: number) => rise - 0.12 + (z - st.zBottom) * stringerSlope - 0.15 * Math.hypot(1, stringerSlope);
+  planks.wall("z", st.x1 - 0.02, 0.04, st.zBottom + run, st.zTop, 0, (z) => Math.max(0.02, stringerBottom(z) + 0.03), [], 0.28);
   solids.push(span(st.x1 - 0.06, st.x1 + 0.04, 0, LOFT + 1.05, st.zBottom + 0.9, st.zTop));
   solids.push(span(st.x1 - 0.06, st.x1 + 0.04, 0, 1.2, st.zBottom, st.zBottom + 0.9));
 

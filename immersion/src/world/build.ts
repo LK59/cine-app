@@ -127,13 +127,40 @@ export class Kit {
       for (const hole of [...holes, { y0: height, y1: height }]) {
         const to = Math.min(hole.y0, height);
         if (to - from > 1e-4) {
-          if (axis === "x") this.span(s0, s1, from, to, at, at + t);
+          // Le dernier morceau d'une bande en pente suit la pente : son dessus va de `top(s0)` à `top(s1)`.
+          // Il était plat, à la plus basse des deux hauteurs — un mur en escalier sous le toit, et entre
+          // chaque marche et les planches un jour en triangle par où, de la mezzanine, on voyait le ciel.
+          const sloped = typeof top === "function" && to === height && Math.abs(top(s0) - top(s1)) > 1e-6;
+          if (sloped) this.slopedBlock(axis, at, t, s0, s1, from, top(s0), top(s1));
+          else if (axis === "x") this.span(s0, s1, from, to, at, at + t);
           else this.span(at, at + t, from, to, s0, s1);
         }
         from = Math.max(from, hole.y1);
       }
     }
     return this;
+  }
+
+  /**
+   * Un bloc de mur dont le dessus est en pente : de `s0` à `s1` le long du mur, du bas `y0` jusqu'à `top0`
+   * en `s0` et `top1` en `s1`. Une boîte dont on relève les sommets du dessus ; ses faces restent planes.
+   */
+  private slopedBlock(axis: "x" | "z", at: number, t: number, s0: number, s1: number, y0: number, top0: number, top1: number): void {
+    const length = s1 - s0;
+    const high = Math.max(top0, top1);
+    const geometry = new BoxGeometry(axis === "x" ? length : t, high - y0, axis === "x" ? t : length);
+    const positions = geometry.getAttribute("position");
+    const along = axis === "x" ? 0 : 2;
+    for (let i = 0; i < positions.count; i++) {
+      if (positions.getY(i) <= 0) continue;
+      // Le long du mur, de -length/2 (en s0) à +length/2 (en s1) : la hauteur voulue, centrée sur la boîte.
+      const k = positions.getComponent(i, along) / length + 0.5;
+      positions.setY(i, top0 + (top1 - top0) * k - (high + y0) / 2);
+    }
+    positions.needsUpdate = true;
+    geometry.computeVertexNormals();
+    const centre = (s0 + s1) / 2;
+    this.add(geometry, { at: axis === "x" ? [centre, (high + y0) / 2, at + t / 2] : [at + t / 2, (high + y0) / 2, centre] });
   }
 
   /** Une poutre tendue d'un point à un autre (section `w` × `h`, le fil dans sa longueur). */
