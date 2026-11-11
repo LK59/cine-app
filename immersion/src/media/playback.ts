@@ -1,3 +1,4 @@
+import { loadSubtitles } from "./subtitles";
 import type Hls from "hls.js";
 import { IDLE_PLAYBACK, useStore } from "../state/store";
 import { SessionExpired } from "../lib/session";
@@ -48,7 +49,7 @@ let target: ReportTarget | null = null;
 let beat: ReturnType<typeof setInterval> | null = null;
 /** Chaque nouvelle lecture invalide les rappels de la précédente. */
 let generation = 0;
-let current: { item: Item; rung: number } | null = null;
+let current: { item: Item; rung: number; audio: number | null; subtitle: number | null } | null = null;
 let lastPosition = 0;
 let lastPaint = 0;
 /** Ce que la séance en cours a regardé : pour le bilan de sa ligne `stop`. */
@@ -81,6 +82,9 @@ export function getVideo(): HTMLVideoElement {
   const el = document.createElement("video");
   el.crossOrigin = "anonymous";
   el.playsInline = true;
+  // Sur iPhone, le flux passe par ManagedMediaSource, que Safari n'ouvre que si la diffusion vers un autre
+  // appareil est coupée sur l'élément (il n'est de toute façon jamais montré : son image est une texture).
+  el.disableRemotePlayback = true;
   el.preload = "auto";
   el.addEventListener("playing", () => {
     if (!watch.since) watch.since = performance.now();
@@ -146,16 +150,17 @@ export function syncMix(): void {
   applyMix({ volume: state.settings.volume, muted: state.playback.muted, spatial: state.settings.spatial, reverb: state.settings.reverb });
 }
 
-async function start(item: Item, rung: number, from: number | null, cause: "open" | "ladder" = "open") {
+async function start(item: Item, rung: number, from: number | null, cause: "open" | "ladder" | "audio" = "open", audio: number | null = null, subtitle: number | null = null) {
   const mine = ++generation;
   const el = getVideo();
   // Un autre titre jouait : sa séance se referme d'abord.
   finish(cause === "ladder" ? "error" : "next");
   release();
   unload();
-  current = { item, rung };
+  current = { item, rung, audio, subtitle };
   watch = { since: 0, seconds: 0 };
-  set({ ...IDLE_PLAYBACK, muted: useStore.getState().playback.muted, status: "loading", itemId: item.id, title: item.title });
+  void loadSubtitles(null);
+  set({ ...IDLE_PLAYBACK, muted: useStore.getState().playback.muted, status: "loading", itemId: item.id, title: item.title, audioIndex: audio });
 
   /** Referme une séance que la négociation vient d'ouvrir chez Jellyfin et dont on ne veut plus. */
   const abandon = (n: Negotiation, at: number) =>
@@ -168,13 +173,14 @@ async function start(item: Item, rung: number, from: number | null, cause: "open
     const [resumeAt, hdr] = await Promise.all([from ?? resumePosition(item.id), convert ? isHdrFile(item.id) : Promise.resolve(false)]);
     if (mine !== generation) return;
     let sdr = hdr === true;
-    let negotiation = await negotiate(item.id, { ...LADDER[rung], resumeAt, sdr });
+    const wanted = audio !== null ? { audioStreamIndex: audio } : {};
+    let negotiation = await negotiate(item.id, { ...LADDER[rung], ...wanted, resumeAt, sdr });
     // La question « ce fichier est-il HDR ? » est restée sans réponse : la négociation la donne. Une
     // image HDR est alors redemandée en SDR — la première séance est refermée, jamais abandonnée.
     if (convert && !sdr && hdr === null && isHdrRange(negotiation.playbackInfo.video?.rangeType)) {
       abandon(negotiation, resumeAt);
       sdr = true;
-      negotiation = await negotiate(item.id, { ...LADDER[rung], resumeAt, sdr });
+      negotiation = await negotiate(item.id, { ...LADDER[rung], ...wanted, resumeAt, sdr });
     }
     if (mine !== generation) {
       // Une autre lecture a pris la place pendant la négociation : celle-ci est rendue tout de suite.
@@ -183,7 +189,9 @@ async function start(item: Item, rung: number, from: number | null, cause: "open
     }
     target = { itemId: item.id, playSessionId: negotiation.playSessionId, mediaSourceId: negotiation.mediaSourceId, playMethod: negotiation.playbackInfo.playMethod };
     const info = negotiation.playbackInfo;
-    set({ title: negotiation.title ?? item.title, method: info.playMethod });
+    set({ title: negotiation.title ?? item.title, method: info.playMethod, audioTracks: negotiation.audioTracks ?? [], subtitleTracks: negotiation.subtitleTracks ?? [] });
+    // Les sous-titres choisis suivent un changement de piste audio ou d'échelon.
+    if (subtitle !== null) chooseSubtitle(subtitle);
     if (cause === "open") newLogSession();
     logLine("start", {
       itemId: item.id,
@@ -262,7 +270,7 @@ async function descend(why: string) {
   const at = video.currentTime || lastPosition;
   if (rung + 1 < LADDER.length) {
     console.warn(`[immersion] ${why} — nouvelle négociation (échelon ${rung + 1})`);
-    await start(item, rung + 1, at, "ladder");
+    await start(item, rung + 1, at, "ladder", current.audio, current.subtitle);
     return;
   }
   logLine("error", { itemId: item.id, title: item.title, message: why.slice(0, 200), position: Math.round(at) });
@@ -279,6 +287,31 @@ async function descend(why: string) {
  */
 export function open(item: Item, from: number | null = null): Promise<void> {
   return start(item, 0, from);
+}
+
+/**
+ * Une autre piste audio : le serveur ne mélange qu'une piste dans le flux, il faut donc le lui redemander —
+ * à la position où l'on est, avec les mêmes sous-titres.
+ */
+export function switchAudio(index: number): void {
+  if (!current || !video) return;
+  const at = Number.isFinite(video.currentTime) ? video.currentTime : lastPosition;
+  void start(current.item, current.rung, at, "audio", index, current.subtitle);
+}
+
+/** Les sous-titres à lire (index Jellyfin), ou aucun. Une piste qui ne se lit pas en texte retombe sur « aucun ». */
+export function chooseSubtitle(index: number | null): void {
+  if (!current) return;
+  const mine = current;
+  const track = index === null ? null : (useStore.getState().playback.subtitleTracks.find((t) => t.index === index) ?? null);
+  mine.subtitle = track ? track.index : null;
+  set({ subtitleIndex: mine.subtitle });
+  void loadSubtitles(track ? track.url : null).then((ok) => {
+    if (!ok && current === mine && mine.subtitle === track?.index) {
+      mine.subtitle = null;
+      set({ subtitleIndex: null });
+    }
+  });
 }
 
 /**
@@ -335,6 +368,7 @@ function ensureFollowing(): void {
 /** Arrête la lecture et l'annonce à Jellyfin — qui coupe alors le transcodage. N'est appelé que par les commandes. */
 export function close(): void {
   generation++;
+  void loadSubtitles(null);
   finish("close");
   release();
   unload();

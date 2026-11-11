@@ -88,8 +88,11 @@ export const TUB = { x: 3.35, z: ROOM.north - 2.75, radius: 1.08, height: 0.88, 
 export const PLAN = {
   /** Cloison entre l'escalier (à l'ouest) et la cuisine (à l'est). */
   stairEast: -4.3,
-  /** L'escalier : une volée droite le long du mur ouest, qui monte vers le sud. */
-  stair: { x0: -ROOM.halfW, x1: -4.3, zBottom: 4.7, zTop: 9.46, steps: 17 },
+  /**
+   * L'escalier : une volée droite le long du mur ouest, qui monte vers le sud. Il s'arrête à plus d'un mètre
+   * du mur du fond : arrivé en haut, on a un vrai palier devant soi (il n'y en avait que 54 cm).
+   */
+  stair: { x0: -ROOM.halfW, x1: -4.3, zBottom: 4.7, zTop: 8.95, steps: 17 },
   /** Le couloir, derrière le mur du fond. */
   hall: { x0: -ROOM.halfW, x1: 1.2, z0: ROOM.back, z1: ROOM.back + 1.7, height: 2.6 },
   /** La chambre, au bout du couloir. */

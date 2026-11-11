@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useLoader, useThree } from "@react-three/fiber";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import type { Mesh, Object3D } from "three";
+import type { Mesh, MeshPhysicalMaterial, Object3D } from "three";
 import { assetUrl } from "../lib/assets";
 import { ktx2For } from "./ktx2";
 
@@ -53,6 +53,20 @@ export function Model({ id, position, turn = 0, scale = 1, shadow = true }: Mode
       if (!mesh.isMesh) return;
       mesh.castShadow = shadow;
       mesh.receiveShadow = true;
+      // Jamais de « transmission » (le verre physique de glTF) : dès qu'une seule matière en porte, three
+      // redessine toute la scène une seconde fois par image dans un tampon à part, pour la montrer à travers.
+      // Les deux lanternes en portaient : la moitié du temps d'une image, et un blocage d'un tiers de seconde
+      // chaque seconde sur une puce graphique intégrée (mesuré le 11/11/2026, `tests/hitch.mjs`). Leur verre
+      // est un maillage à part, simplement transparent.
+      for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        const physical = material as MeshPhysicalMaterial;
+        if (physical.isMeshPhysicalMaterial && physical.transmission > 0) {
+          physical.transmission = 0;
+          physical.transmissionMap = null;
+          physical.thickness = 0;
+          physical.needsUpdate = true;
+        }
+      }
     });
     return copy;
   }, [gltf, shadow]);

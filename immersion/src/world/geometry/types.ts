@@ -36,4 +36,4 @@ export interface Part {
 }
 
 /** Les groupes de pièces : ce qui se dessine ensemble, et dont la lumière est cuite ensemble. */
-export type GroupId = "salon" | "sud" | "nuit" | "terrasse";
+export type GroupId = "salon" | "sud" | "nuit" | "terrasse" | "dehors";

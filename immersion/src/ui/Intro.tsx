@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useProgress } from "@react-three/drei";
 import { useStore, useT, useMovementKeys } from "../state/store";
 import { enterWorld, worldEntered } from "../state/actions";
+import { isTouchDevice } from "../lib/capability";
 import { leaveToLaterna } from "../lib/session";
 import { ExperienceLogo } from "./Logo";
 
@@ -16,6 +17,7 @@ const MIN_INTRO_MS = 2600;
  */
 export function Intro() {
   const t = useT();
+  const touch = isTouchDevice();
   const phase = useStore((s) => s.phase);
   const sceneReady = useStore((s) => s.sceneReady);
   const setPhase = useStore((s) => s.setPhase);
@@ -62,7 +64,7 @@ export function Intro() {
         <div className="intro-status" aria-live="polite">
           {phase === "gate" ? (
             <button type="button" className="intro-enter" onClick={enter} autoFocus data-testid="enter">
-              {t("gate.enter")}
+              {touch ? t("gate.enter.touch") : t("gate.enter")}
             </button>
           ) : (
             <>
@@ -76,7 +78,12 @@ export function Intro() {
           )}
         </div>
       </div>
-      <ul className="intro-keys" aria-hidden={phase !== "gate"}>
+{touch ? (
+        <p className="intro-keys intro-touch" aria-hidden={phase !== "gate"}>
+          {t("gate.touch")}
+        </p>
+      ) : (
+              <ul className="intro-keys" aria-hidden={phase !== "gate"}>
         <li>
           <kbd>{keysLabel}</kbd> {t("gate.move")}
         </li>
@@ -96,6 +103,7 @@ export function Intro() {
           <kbd>{t("key.esc")}</kbd> {t("gate.pause")}
         </li>
       </ul>
+      )}
     </div>
   );
 }

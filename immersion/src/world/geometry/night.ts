@@ -1,6 +1,7 @@
 import { CylinderGeometry } from "three";
 import { BED, BEDROOM_WINDOW, PLAN, ROOM, SCREENS, span, type Solid } from "../layout";
 import { Kits } from "./envelope";
+import { FRONT_DOOR } from "./outside";
 import type { Part } from "./types";
 
 const W = ROOM.halfW;
@@ -77,6 +78,35 @@ export function buildNight(): Part {
   for (const [x, y, z] of NIGHT_LAMPS.sconces) metal.span(x - 0.05, x + 0.05, y - 0.16, y - 0.12, z - 0.09, z);
   for (const [x, y, z] of NIGHT_LAMPS.screenSconces) metal.span(x - 0.02, x + 0.07, y - 0.16, y - 0.12, z - 0.05, z + 0.05);
   kits.get("rug").rounded([5.6, 0.02, 0.9], 0.01, { at: [-2.1, 0.01, (z0 + hall.z1) / 2 - 0.02] });
+  // Le couloir est **l'entrée** du chalet : au bout, à l'est, la porte d'entrée (fermée — dehors c'est la
+  // nuit et la neige), son paillasson ; contre le mur, une patère, deux manteaux, une écharpe, un banc et
+  // des bottes dessous. Sans cela c'était un couloir de six mètres qui ne menait qu'à une chambre.
+  const fd = FRONT_DOOR;
+  const fx = hall.x1;
+  for (const z of [fd.z - fd.width / 2 - 0.05, fd.z + fd.width / 2 + 0.05]) timber.span(fx - 0.05, fx + 0.01, 0, fd.height + 0.1, z - 0.05, z + 0.05, 1);
+  timber.beam([fx - 0.02, fd.height + 0.06, fd.z - fd.width / 2 - 0.12], [fx - 0.02, fd.height + 0.06, fd.z + fd.width / 2 + 0.12], 0.07, 0.1);
+  wood.span(fx - 0.035, fx - 0.004, 0.015, fd.height, fd.z - fd.width / 2, fd.z + fd.width / 2, 1);
+  for (const y of [0.3, 1.05, 1.8]) wood.beam([fx - 0.042, y, fd.z - fd.width / 2 + 0.04], [fx - 0.042, y, fd.z + fd.width / 2 - 0.04], 0.016, 0.1);
+  metal.span(fx - 0.09, fx - 0.035, 1.0, 1.035, fd.z + fd.width / 2 - 0.2, fd.z + fd.width / 2 - 0.07);
+  kits.get("leather").rounded([0.55, 0.018, 0.8], 0.008, { at: [fx - 0.42, 0.009, fd.z] });
+  // La patère et ce qui y pend.
+  wood.span(-0.55, 0.85, 1.6, 1.72, z0, z0 + 0.028, 0);
+  for (const x of [-0.4, -0.1, 0.2, 0.5, 0.75]) metal.add(new CylinderGeometry(0.011, 0.011, 0.07, 8), { at: [x, 1.66, z0 + 0.06], rot: [Math.PI / 2, 0, 0] });
+  kits.get("leather").rounded([0.46, 0.92, 0.13], 0.06, { at: [-0.4, 1.2, z0 + 0.1] });
+  kits.get("fabric").rounded([0.42, 0.84, 0.12], 0.055, { at: [0.2, 1.24, z0 + 0.1], rot: [0, 0, 0.03] });
+  kits.get("pillowB").rounded([0.13, 0.7, 0.06], 0.025, { at: [0.5, 1.31, z0 + 0.075], rot: [0, 0, -0.04] });
+  // Le banc et les bottes.
+  wood.rounded([1.3, 0.05, 0.36], 0.012, { at: [0.15, 0.45, z0 + 0.2] }, 0);
+  for (const x of [-0.42, 0.72]) metal.span(x - 0.02, x + 0.02, 0, 0.43, z0 + 0.05, z0 + 0.35);
+  for (const [x, lean] of [
+    [-0.12, 0.05],
+    [0.04, -0.04],
+    [0.36, 0.03],
+    [0.52, -0.02],
+  ] as const) {
+    kits.get("leather").rounded([0.11, 0.3, 0.12], 0.04, { at: [x, 0.15, z0 + 0.14], rot: [0, 0, lean] });
+    kits.get("leather").rounded([0.11, 0.09, 0.27], 0.035, { at: [x, 0.045, z0 + 0.2] });
+  }
 
   // ── La chambre ──────────────────────────────────────────────────────────────
   const bx0 = BED.headX;
@@ -138,6 +168,8 @@ export function buildNight(): Part {
     span(door.x + door.width / 2, hall.x1, 0, h, hall.z1 - PARTITION / 2, hall.z1 + PARTITION / 2),
     // Le fond du couloir, côté est (le mur du fond du corps principal fait le reste).
     span(-4.65, -3.35, 0, 0.85, z0, z0 + 0.36),
+    // Le banc de l'entrée.
+    span(-0.5, 0.82, 0, 0.5, z0, z0 + 0.4),
     span(bx0 - 0.1, bx1 + 0.08, 0, 0.75, bz0 - 0.06, bz1 + 0.06),
     span(bx1 + 0.2, bx1 + 0.64, 0, 0.45, BED.z - 0.75, BED.z + 0.75),
     ...NIGHT_LAMPS.bedside.map(([, , lz]) => span(bx0, bx0 + 0.5, 0, 0.6, lz - 0.26, lz + 0.26)),

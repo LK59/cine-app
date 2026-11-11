@@ -89,8 +89,11 @@ if (process.env.TV) {
 }
 
 for (const name of wanted) {
-  const view = VIEWS[name];
+  // Une vue libre : « nom=x,z,lacet,tangage[,y] » (par exemple dehors-est=7,13,1.57,0).
+  const free = /^([a-z0-9-]+)=(-?[\d.]+),(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)(?:,(-?[\d.]+))?$/.exec(name);
+  const view = free ? { x: Number(free[2]), z: Number(free[3]), yaw: Number(free[4]), pitch: Number(free[5]), y: Number(free[6] || 0) } : VIEWS[name];
   if (!view) continue;
+  const file = free ? free[1] : name;
   await page.evaluate((v) => {
     const { rig, store } = window.__immersion;
     const target = rig.position.clone();
@@ -103,8 +106,8 @@ for (const name of wanted) {
   await page.waitForTimeout(view.seated ? 2600 : 1200);
   // Sans l'interface : seulement le monde.
   await page.addStyleTag({ content: ".reticle,.hints{display:none!important}" });
-  await page.screenshot({ path: `${OUT}/${name}.jpg`, type: "jpeg", quality: 85 });
-  console.log(`capture ${name}`);
+  await page.screenshot({ path: `${OUT}/${file}.jpg`, type: "jpeg", quality: 85 });
+  console.log(`capture ${file}`);
 }
 
 // ── L'affiche : `affiche`, avec SIZE=1000x1500 — écrite dans public/poster.jpg ──────────────────

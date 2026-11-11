@@ -33,8 +33,16 @@ export function useMaterials(): Record<MaterialId, Material> {
     }),
     []
   );
-  return useMemo(
-    () => ({ floor, timber, planks, stone, slab, plaster, fabric, pillowA, pillowB, rug, leather, wood, counter, linen, cabinet, snow, ...plain }),
-    [floor, timber, planks, stone, slab, plaster, fabric, pillowA, pillowB, rug, leather, wood, counter, linen, cabinet, snow, plain]
-  );
+  return useMemo(() => {
+    // Le reflet du film ne se lit que sur ce qui est assez lisse : ces matières-là seulement le calculent
+    // (`screenLight.ts`, `SL_MIRROR`).
+    for (const material of [floor, counter, slab, leather, plain.metal] as MeshStandardMaterial[]) {
+      if (material.defines?.SL_MIRROR === undefined) {
+        material.defines = { ...(material.defines ?? {}), SL_MIRROR: "" };
+        material.needsUpdate = true;
+      }
+    }
+    return { floor, timber, planks, stone, slab, plaster, fabric, pillowA, pillowB, rug, leather, wood, counter, linen, cabinet, snow, ...plain };
+  },
+  [floor, timber, planks, stone, slab, plaster, fabric, pillowA, pillowB, rug, leather, wood, counter, linen, cabinet, snow, plain]);
 }

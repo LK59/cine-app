@@ -1,5 +1,5 @@
 import { useStore } from "../state/store";
-import { open, close } from "./playback";
+import { chooseSubtitle, close, open, switchAudio } from "./playback";
 
 /**
  * Les commandes de lecture : la **seule** porte par laquelle on agit sur ce qui joue.
@@ -21,6 +21,10 @@ export type Command =
   /** Avancer ou reculer de tant de secondes. */
   | { type: "seekBy"; delta: number }
   | { type: "mute"; muted?: boolean }
+  /** Écouter cette piste audio (index Jellyfin) : le flux est renégocié, à la position où l'on est. */
+  | { type: "audio"; index: number }
+  /** Lire ces sous-titres (index Jellyfin), ou aucun. */
+  | { type: "subtitle"; index: number | null }
   /** Arrêter et éteindre les écrans. */
   | { type: "stop" };
 
@@ -60,6 +64,12 @@ export function dispatch(command: Command, _origin: "local" | "remote" = "local"
     }
     case "mute":
       state.setPlayback({ muted: command.muted ?? !playback.muted });
+      return;
+    case "audio":
+      if (live && command.index !== playback.audioIndex) switchAudio(command.index);
+      return;
+    case "subtitle":
+      if (live) chooseSubtitle(command.index);
       return;
   }
 }

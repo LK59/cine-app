@@ -12,7 +12,7 @@ chaque surface, la page le lit comme `lightMap` (second jeu d'UV). Presque aucun
 
 Depuis `immersion/`. Options : `--only a,b` (groupes `salon`, `sud`, `nuit`, `sofa`), `--sofa fichier.glb` (défaut
 `assets-src/sofa/sofa_bake.glb`, utilisé s'il existe), `--samples N` (défaut 128, adaptatif), `--margin PX` (marge de
-rangement, défaut 6 px à la taille de l'atlas), `--layers nuit,lampes` (défaut : les deux), `--calibrate`, `--exposure EV`, `--no-preview`.
+rangement, défaut 6 px à la taille de l'atlas), `--layers nuit,lampes,ecrans` (défaut : les trois), `--calibrate`, `--exposure EV`, `--no-preview`.
 Prérequis : les images Docker `immersion-blender` et `immersion-assets-tools` ; les entrées de `tools/bake/export.sh`
 (`assets-src/bake/scene.json` + OBJ). Les conteneurs s'appellent `immersion-bake-*`, `--rm`, `--cpus 5`.
 
@@ -90,6 +90,21 @@ montre : pas de reflets, pas de verre, pas de ciel (le noir des fenêtres est le
 La lightmap du canapé passe par une dilatation des clairs (trois texels, `ffmpeg` de la machine) avant son
 encodage : ses coutures, cuites presque noires sur un ou deux texels, dessinaient des traits sombres en
 pointillé le long des coussins. Le PNG d'origine reste dans `assets-src/bake/work/sofa_brut.png`.
+
+## La couche des écrans (`ecrans`)
+
+Une troisième cuisson sur les mêmes UV : les dalles des télévisions, en lumières de surface (`type: "area"` dans
+`scene.json`). Chaque dalle est coupée en trois bandes verticales — gauche, centre, droite de l'image —, d'une
+couleur pure chacune (rouge, vert, bleu) : la texture `<groupe>_ecrans.ktx2` contient donc, canal par canal, ce
+que chaque tiers de l'image envoie sur chaque surface, ombres et rebonds compris. Autour de chaque dalle, des
+bandes étroites tournées vers le mur donnent le halo. À l'affichage (`src/world/lightmaps.ts`), chaque canal est
+multiplié par la couleur du tiers correspondant du film : une lecture de texture, là où le calcul par pixel
+coûtait plus d'un quart d'une image sur une puce graphique intégrée.
+
+Pour cette couche seulement, chaque matière renvoie son gris (`set_layer` dans `bake.py`) : colorée, elle
+ferait rebondir le tiers « rouge » plus fort que le « bleu ». L'énergie d'une lumière de surface est le quart de
+celle d'une lumière ponctuelle de même intensité (une surface lambertienne rayonne P / π de face, un point
+P / 4π).
 
 ## Deux couches de lumière (nuit / lampes)
 

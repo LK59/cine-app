@@ -1,3 +1,4 @@
+import { isTouchDevice } from "../lib/capability";
 import { useStore, useT } from "../state/store";
 import { SEATS, THINGS } from "../world/interactions";
 
@@ -12,6 +13,8 @@ export function Hints() {
     const thing = s.nearThing ? THINGS.find((candidate) => candidate.id === s.nearThing) : null;
     return thing ? thing.hint(s) : null;
   });
+  // Au doigt, ces gestes sont des boutons (`TouchControls`) : la légende des touches n'a pas lieu d'être.
+  if (isTouchDevice()) return <div className="reticle" aria-hidden />;
   return (
     <>
       <div className="reticle" aria-hidden />

@@ -19,9 +19,10 @@ import { Kits } from "../../src/world/geometry/envelope";
 import { NIGHT_LAMPS, buildNight } from "../../src/world/geometry/night";
 import { buildBlockSofa, buildSalon } from "../../src/world/geometry/salon";
 import { PENDANTS, buildSouth } from "../../src/world/geometry/south";
+import { PORCH_LAMP, buildOutside } from "../../src/world/geometry/outside";
 import { buildTerrace } from "../../src/world/geometry/terrace";
 import type { MaterialId, Part } from "../../src/world/geometry/types";
-import { BREAST, CHANDELIER, KITCHEN, LAMPS, MOON, PLAN, ROOM, TUB } from "../../src/world/layout";
+import { BREAST, CHANDELIER, KITCHEN, LAMPS, MOON, PLAN, ROOM, SCREENS, TUB, screenHeight } from "../../src/world/layout";
 
 const OUT = process.env.BAKE_OUT || "assets-src/bake";
 fs.mkdirSync(OUT, { recursive: true });
@@ -49,7 +50,7 @@ const ALBEDO: Record<MaterialId, [number, number, number]> = {
 };
 
 /** Taille de l'atlas de lumière de chaque groupe, en pixels. */
-const ATLAS: Record<string, number> = { salon: 2048, sud: 2048, nuit: 1024, terrasse: 1024 };
+const ATLAS: Record<string, number> = { salon: 2048, sud: 2048, nuit: 1024, terrasse: 1024, dehors: 512 };
 
 function writeObj(file: string, name: string, geometry: BufferGeometry): number {
   const position = geometry.getAttribute("position");
@@ -100,11 +101,11 @@ function propShadows(): Record<string, Part> {
   return Object.fromEntries(Object.entries(kits).map(([group, k]) => [group, { meshes: k.build(), solids: [] }]));
 }
 
-const parts: Record<string, Part> = { salon: buildSalon(), sud: buildSouth(), nuit: buildNight(), terrasse: buildTerrace() };
+const parts: Record<string, Part> = { salon: buildSalon(), sud: buildSouth(), nuit: buildNight(), terrasse: buildTerrace(), dehors: buildOutside() };
 // Ce qui fait de l'ombre et renvoie de la lumière sans recevoir de lightmap ici : les objets posés, et
 // la version en boîtes du canapé (la cuisson la remplace par le vrai modèle quand on le lui donne).
 const shadows = propShadows();
-const occluders: Record<string, Part[]> = { salon: [buildBlockSofa(), shadows.salon], sud: [shadows.sud], nuit: [shadows.nuit], terrasse: [] };
+const occluders: Record<string, Part[]> = { salon: [buildBlockSofa(), shadows.salon], sud: [shadows.sud], nuit: [shadows.nuit], terrasse: [], dehors: [] };
 
 const groups: Record<string, { atlas: number; meshes: unknown[]; occluders: unknown[] }> = {};
 for (const [group, part] of Object.entries(parts)) {
@@ -143,7 +144,51 @@ const hex = (color: string): [number, number, number] => {
  * électriques) — et `nuit` — ce qui reste : la lune, le ciel, les bougies posées, la lueur du bain.
  * Le feu du foyer n'est pas cuit : sa lueur danse (`src/world/Fire.tsx`).
  */
+/**
+ * Les écrans : la couche `ecrans`. Chaque dalle est coupée en trois bandes verticales — gauche, centre,
+ * droite de l'image —, chacune une surface lumineuse d'une couleur pure : rouge, vert, bleu. La lightmap de
+ * la couche contient donc, canal par canal, ce que chaque tiers de l'image envoie sur chaque surface, ombres
+ * et rebonds compris ; la page n'a plus qu'à multiplier chaque canal par la couleur du tiers correspondant du
+ * film (`lightmaps.ts`). Le calcul par pixel que cela remplace coûtait plus d'un quart d'une image.
+ *
+ * Autour de chaque dalle, des bandes étroites tournées vers le mur : le halo d'un téléviseur à
+ * rétro-éclairage d'ambiance, qui prend la couleur du bord le plus proche.
+ *
+ * `intensity` : la luminance (1) × l'aire — l'éclairement de face à la distance d vaut intensity / d².
+ */
+const ZONE_COLORS: [number, number, number][] = [
+  [1, 0, 0],
+  [0, 1, 0],
+  [0, 0, 1],
+];
+const HALO = 0.5;
+const screens = SCREENS.flatMap((s) => {
+  const h = screenHeight(s);
+  const right = [Math.cos(s.yaw), 0, -Math.sin(s.yaw)];
+  const normal = [Math.sin(s.yaw), 0, Math.cos(s.yaw)];
+  const at = (u: number, v: number, out: number) => [s.center[0] + right[0] * u + normal[0] * out, s.center[1] + v, s.center[2] + right[2] * u + normal[2] * out];
+  const third = s.width / 3;
+  const faces = ZONE_COLORS.map((color, j) => ({ type: "area", name: `ecran-${s.id}-${j}`, layer: "ecrans", position: at((j - 1) * third, 0, 0.03), normal, size: [third, h], color, intensity: third * h }));
+  // Le halo : une bande par bord et par tiers, à quelques centimètres du mur, tournée vers lui et vers le dehors.
+  const tilt = (ou: number, ov: number) => {
+    const d = [right[0] * ou - normal[0] * 0.75, ov, right[2] * ou - normal[2] * 0.75];
+    const l = Math.hypot(d[0], d[1], d[2]);
+    return d.map((c) => c / l);
+  };
+  const strip = 0.1;
+  const halo = [
+    { name: "g", color: ZONE_COLORS[0], position: at(-s.width / 2 - 0.02, 0, 0.07), normal: tilt(-0.66, 0), size: [strip, h] },
+    { name: "d", color: ZONE_COLORS[2], position: at(s.width / 2 + 0.02, 0, 0.07), normal: tilt(0.66, 0), size: [strip, h] },
+    ...ZONE_COLORS.flatMap((color, j) => [
+      { name: `h${j}`, color, position: at((j - 1) * third, h / 2 + 0.02, 0.07), normal: tilt(0, 0.66), size: [third, strip] },
+      { name: `b${j}`, color, position: at((j - 1) * third, -h / 2 - 0.02, 0.07), normal: tilt(0, -0.66), size: [third, strip] },
+    ]),
+  ].map((e) => ({ type: "area", name: `halo-${s.id}-${e.name}`, layer: "ecrans", position: e.position, normal: e.normal, size: e.size, color: e.color, intensity: e.size[0] * e.size[1] * HALO * 6 }));
+  return [...faces, ...halo];
+});
+
 const lights = [
+  ...screens,
   // Le lustre : ses vingt-six bougies, résumées en un anneau de huit sources à mi-hauteur de ses deux cercles.
   ...Array.from({ length: 8 }, (_, i) => {
     const a = (i / 8) * Math.PI * 2;
@@ -157,6 +202,8 @@ const lights = [
   ...NIGHT_LAMPS.screenSconces.map(([x, y, z], i) => ({ type: "point", name: `applique-ecran-${i}`, layer: "lampes", position: [x - 0.12, y, z], color: hex("#ffbf80"), intensity: 6, radius: 0.06 })),
   ...NIGHT_LAMPS.sconces.map(([x, y, z], i) => ({ type: "point", name: `applique-${i}`, layer: "lampes", position: [x, y, z - 0.16], color: hex("#ffbf80"), intensity: 5, radius: 0.06 })),
   ...NIGHT_LAMPS.bedside.map(([x, y, z], i) => ({ type: "point", name: `chevet-${i}`, layer: "lampes", position: [x, y, z], color: hex("#ffc083"), intensity: 6, radius: 0.1 })),
+  // La lanterne du dehors, près de la porte d'entrée : elle dessine le bardage et la neige de l'aile.
+  { type: "point", name: "lanterne-entree", layer: "lampes", position: PORCH_LAMP, color: hex("#ffb264"), intensity: 7, radius: 0.05 },
   // Le bain : la lumière au fond de la cuve, qui remonte par l'eau et teinte la margelle.
   { type: "point", name: "bain", layer: "nuit", position: [TUB.x, TUB.water + 0.12, TUB.z], color: hex("#2fd6d0"), intensity: 3.2, radius: 0.5 },
   { type: "sun", name: "lune", layer: "nuit", from: MOON.lightFrom, color: hex(MOON.color), intensity: MOON.intensity, angleDeg: 0.6 },

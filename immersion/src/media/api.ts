@@ -20,6 +20,9 @@ export interface Negotiation {
   manifestUrl: string;
   isDirectPlay: boolean;
   title: string | null;
+  /** Les pistes du fichier, telles que Jellyfin les numérote (`index`). */
+  audioTracks?: AudioTrack[];
+  subtitleTracks?: SubtitleTrack[];
   playbackInfo: {
     playMethod: PlayMethod;
     transcodeReasons: string[];
@@ -28,7 +31,31 @@ export interface Negotiation {
   };
 }
 
+export interface AudioTrack {
+  index: number;
+  language: string | null;
+  title: string | null;
+  codec: string | null;
+  channels: number | null;
+  profile: string | null;
+  isDefault: boolean;
+}
+
+export interface SubtitleTrack {
+  index: number;
+  language: string | null;
+  title: string | null;
+  isDefault: boolean;
+  isForced: boolean;
+  isHearingImpaired: boolean;
+  isExternal: boolean;
+  /** L'adresse de la piste en WebVTT (texte seulement). */
+  url: string;
+}
+
 export interface NegotiateOptions {
+  /** La piste audio voulue (index Jellyfin) ; absente : celle que le serveur choisit. */
+  audioStreamIndex?: number;
   /** Position de départ, en secondes. */
   resumeAt?: number;
   /**
@@ -68,6 +95,7 @@ export async function negotiate(itemId: string, options: NegotiateOptions = {}):
     // stéréo (`reencodeAudio: "stereo"` dans `buildDeviceProfile`) : une piste stéréo lisible est
     // copiée, tout le reste est ré-encodé en AAC stéréo par Jellyfin.
     forceAudioTranscode: true,
+    ...(options.audioStreamIndex !== undefined ? { audioStreamIndex: options.audioStreamIndex } : {}),
     ...(options.videoH264Only ? { videoH264Only: true } : {}),
     forCast: false,
     // Toujours hls.js ici, même sur WebKit : le HLS natif ne donne ni texture fiable ni son au

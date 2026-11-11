@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Camera, Color, Frustum, Group, LinearFilter, Matrix4, Mesh, MeshStandardMaterial, PlaneGeometry, RGBAFormat, Scene, ShaderMaterial, Sphere, SRGBColorSpace, UnsignedByteType, Vector2, Vector3, VideoTexture, WebGLRenderTarget, type DepthTexture, type PerspectiveCamera } from "three";
+import { Camera, CanvasTexture, Color, Frustum, Group, LinearFilter, Matrix4, Mesh, MeshStandardMaterial, PlaneGeometry, RGBAFormat, Scene, ShaderMaterial, Sphere, SRGBColorSpace, UnsignedByteType, Vector2, Vector3, VideoTexture, WebGLRenderTarget, type DepthTexture, type PerspectiveCamera } from "three";
 import { perf } from "../lib/perf";
+import { cueAt, drawCue, SUBTITLE_SIZE } from "../media/subtitles";
 import { speaker } from "../media/audio";
 import { getVideo } from "../media/playback";
 import { useStore } from "../state/store";
 import { effects, VIGNETTE } from "./Effects";
 import { screenHeight, SCREENS } from "./layout";
-import { screenLight, ZONES_X, ZONES_Y } from "./screenLight";
+import { applyScreenLight, screenLight, ZONES_X, ZONES_Y } from "./screenLight";
 
 /**
  * L'image de la vidéo, cadrée dans une dalle 16:9 (bandes noires pour un film plus large ou plus
@@ -26,6 +27,8 @@ const SCREEN_VERTEX = /* glsl */ `
 `;
 const SCREEN_FRAGMENT = /* glsl */ `
   uniform sampler2D uVideo;
+  uniform sampler2D uSub;
+  uniform float uSubOn;
   uniform vec2 uFit;
   uniform float uOn;
   uniform float uGain;
@@ -42,6 +45,12 @@ const SCREEN_FRAGMENT = /* glsl */ `
     vec2 uv = (vUv - 0.5) * uFit + 0.5;
     vec2 inside = step(vec2(0.0), uv) * step(uv, vec2(1.0));
     vec3 color = texture2D(uVideo, uv).rgb * inside.x * inside.y * uGain;
+    // Les sous-titres : un bandeau posé au bas de la dalle (pas de l'image — sous un film large, ils
+    // tombent en partie dans la bande noire, comme sur une télévision).
+    if (uSubOn > 0.5 && vUv.y < SUB_BAND) {
+      vec4 sub = texture2D(uSub, vec2(vUv.x, vUv.y / SUB_BAND));
+      color = mix(color, sub.rgb * uGain, sub.a);
+    }
     float alpha = uOn;
     #ifdef OVERLAY
       // Ce qui est devant l'écran dans la scène (un lustre, un dossier) le cache ici aussi : la
@@ -70,6 +79,8 @@ const AMBILIGHT_RATE = 4.5;
 const SAMPLE_EVERY_MS = 66;
 const SAMPLE_W = 48;
 const SAMPLE_H = 27;
+/** La part de la hauteur de la dalle où se posent les sous-titres (le canevas y est étiré). */
+const SUB_BAND = "0.3";
 
 /**
  * La copie réduite de l'image vidéo — les reflets flous et la couleur de chaque zone d'ambiance.
@@ -161,21 +172,30 @@ export function Screens() {
   const groups = useRef<(Group | null)[]>([]);
   const meshes = useRef<(Mesh | null)[]>([]);
   const on = useRef(0);
+  const subtitleShown = useRef("");
   const zones = useRef({ target: Array.from({ length: ZONES_X * ZONES_Y }, () => new Color(0, 0, 0)), last: 0, reading: false, pixels: new Uint8Array(SAMPLE_W * SAMPLE_H * 4) });
 
-  const { texture, sceneMaterial, overlay, off, bezel, sampler, speakers } = useMemo(() => {
+  const { texture, sceneMaterial, overlay, off, bezel, sampler, subtitles, speakers } = useMemo(() => {
     const texture = new VideoTexture(video);
     texture.colorSpace = SRGBColorSpace;
     texture.minFilter = LinearFilter;
     texture.magFilter = LinearFilter;
     texture.generateMipmaps = false;
-    const uniforms = () => ({ uVideo: { value: texture }, uFit: { value: new Vector2(1, 1) }, uOn: { value: 0 }, uGain: { value: 1 } });
+    const subCanvas = document.createElement("canvas");
+    subCanvas.width = SUBTITLE_SIZE.width;
+    subCanvas.height = SUBTITLE_SIZE.height;
+    const subs = new CanvasTexture(subCanvas);
+    subs.minFilter = LinearFilter;
+    subs.magFilter = LinearFilter;
+    subs.generateMipmaps = false;
+    const subOn = { value: 0 };
+    const uniforms = () => ({ uVideo: { value: texture }, uSub: { value: subs }, uSubOn: subOn, uFit: { value: new Vector2(1, 1) }, uOn: { value: 0 }, uGain: { value: 1 } });
     // Dans la scène : au-dessus de 1, pour que les images claires débordent un peu en halo.
-    const sceneMaterial = new ShaderMaterial({ vertexShader: SCREEN_VERTEX, fragmentShader: SCREEN_FRAGMENT, uniforms: { ...uniforms(), uGain: { value: 1.35 } }, toneMapped: false });
+    const sceneMaterial = new ShaderMaterial({ defines: { SUB_BAND }, vertexShader: SCREEN_VERTEX, fragmentShader: SCREEN_FRAGMENT, uniforms: { ...uniforms(), uGain: { value: 1.35 } }, toneMapped: false });
     const overlayMaterial = new ShaderMaterial({
       vertexShader: SCREEN_VERTEX,
       fragmentShader: SCREEN_FRAGMENT,
-      defines: { OVERLAY: "" },
+      defines: { OVERLAY: "", SUB_BAND },
       uniforms: { ...uniforms(), uDepth: { value: null }, uResolution: { value: new Vector2(1, 1) }, uNear: { value: 0.1 }, uFar: { value: 100 }, uVignette: { value: new Vector2(VIGNETTE.offset, VIGNETTE.darkness) } },
       transparent: true,
       depthTest: false,
@@ -207,13 +227,22 @@ export function Screens() {
     sampleScene.add(sampleMesh);
     screenLight.uniforms.uSlVideo.value = texture;
     screenLight.uniforms.uSlBlur.value = target.texture;
+    // Une dalle éteinte ne renvoie presque rien des lampes : sans cela, le lustre y posait un disque éblouissant.
+    const off = new MeshStandardMaterial({ color: "#010101", roughness: 0.22, metalness: 0, envMapIntensity: 0.7 });
+    off.onBeforeCompile = (shader) => {
+      applyScreenLight(shader);
+      shader.fragmentShader = shader.fragmentShader.replace("#include <lights_fragment_end>", "#include <lights_fragment_end>\nreflectedLight.directSpecular *= 0.05;");
+    };
+    off.customProgramCacheKey = () => "dalle-eteinte";
     return {
       texture,
       sceneMaterial,
       overlay: { scene: overlayScene, meshes: overlayMeshes, material: overlayMaterial },
-      off: new MeshStandardMaterial({ color: "#010101", roughness: 0.05, metalness: 0, envMapIntensity: 3 }),
+      // Une dalle éteinte : noire, à peine brillante. À 3 de reflet et presque sans rugosité c'était un miroir.
+      off,
       bezel: new MeshStandardMaterial({ color: "#0b0b0c", roughness: 0.45, metalness: 0.7 }),
       sampler: { target, scene: sampleScene, camera: new Camera(), material: sampleMaterial, mesh: sampleMesh },
+      subtitles: { texture: subs, context: subCanvas.getContext("2d"), on: subOn },
       speakers: SCREENS.map((screen) => speaker(screen.id, screen.loudness)),
     };
   }, [video]);
@@ -222,6 +251,7 @@ export function Screens() {
     () => () => {
       texture.dispose();
       sampler.target.dispose();
+      subtitles.texture.dispose();
       sampler.material.dispose();
       sampler.mesh.geometry.dispose();
       screenLight.uniforms.uSlBlur.value = null;
@@ -232,7 +262,7 @@ export function Screens() {
       off.dispose();
       bezel.dispose();
     },
-    [texture, sceneMaterial, overlay, off, bezel, sampler]
+    [texture, sceneMaterial, overlay, off, bezel, sampler, subtitles]
   );
 
   // Après le compositeur (priorité 1) : la vidéo, telle quelle.
@@ -254,6 +284,15 @@ export function Screens() {
       screenLight.uniforms.uSlFit.value.set(fit[0], fit[1]);
     }
     screenLight.uniforms.uSlOn.value = perf.screenLight ? on.current : 0;
+
+    // La réplique du moment : redessinée seulement quand elle change.
+    const line = playing ? cueAt(video.currentTime) : "";
+    if (line !== subtitleShown.current && subtitles.context) {
+      subtitleShown.current = line;
+      drawCue(subtitles.context, line);
+      subtitles.texture.needsUpdate = true;
+      subtitles.on.value = line ? 1 : 0;
+    }
 
     // Quels écrans sont dans le champ ? Les autres ne sont pas redessinés.
     projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);

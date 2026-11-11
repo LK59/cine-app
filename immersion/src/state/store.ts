@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { browserLang, translate, type Key, type Lang } from "../lib/i18n";
 import { AUTO_LEVELS, loadSettings, profileOf, saveSettings, type Quality, type QualityProfile, type Settings } from "../lib/settings";
-import type { Unsupported } from "../lib/capability";
+import { isTouchDevice, type Unsupported } from "../lib/capability";
+import type { AudioTrack, SubtitleTrack } from "../media/api";
 import type { Episode, Library, Title } from "../media/library";
 import { FORCED_LABEL } from "../input/keyboardMouse";
 import type { SeatId } from "../world/interactions";
@@ -49,9 +50,14 @@ export interface Playback {
   error: string | null;
   /** Observé : DirectPlay, DirectStream ou Transcode — tel que la négociation l'a décidé. */
   method: string | null;
+  /** Observé : les pistes du fichier ; voulu : celle que l'on écoute (`null` : le choix du serveur), celle que l'on lit (`null` : aucune). */
+  audioTracks: AudioTrack[];
+  subtitleTracks: SubtitleTrack[];
+  audioIndex: number | null;
+  subtitleIndex: number | null;
 }
 
-export const IDLE_PLAYBACK: Playback = { status: "idle", itemId: null, title: null, wantPaused: false, seek: null, position: 0, duration: 0, muted: false, waiting: false, error: null, method: null };
+export const IDLE_PLAYBACK: Playback = { status: "idle", itemId: null, title: null, wantPaused: false, seek: null, position: 0, duration: 0, muted: false, waiting: false, error: null, method: null, audioTracks: [], subtitleTracks: [], audioIndex: null, subtitleIndex: null };
 
 /**
  * Le panneau Laterna, en état pur : ce qui est chargé, cherché, ouvert. Aucun composant ne garde ceci
@@ -175,7 +181,8 @@ export const useStore = create<ImmersionState>((set, get) => ({
   sceneReady: false,
   lang: browserLang(),
   settings: loadSettings(),
-  autoLevel: 0,
+  // Au doigt (téléphone, tablette), « Auto » part bas et remonte si la machine suit — l'inverse d'un ordinateur.
+  autoLevel: isTouchDevice() ? 6 : 0,
   stepAuto: (delta) => {
     const next = Math.max(0, Math.min(AUTO_LEVELS.length - 1, get().autoLevel + delta));
     if (next !== get().autoLevel) set({ autoLevel: next });

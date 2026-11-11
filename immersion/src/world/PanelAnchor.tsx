@@ -1,4 +1,5 @@
 import { Html } from "@react-three/drei";
+import { flatPanel } from "../lib/capability";
 import { useStore } from "../state/store";
 import { Panel } from "../ui/Panel";
 import { PANEL, panelPose } from "./panel";
@@ -12,7 +13,8 @@ import { PANEL, panelPose } from "./panel";
  */
 export function PanelAnchor() {
   const open = useStore((s) => s.phase === "world" && s.mode === "panel");
-  if (!open) return null;
+  // Petit écran tactile : le panneau est dessiné à plat, par-dessus le monde (`App`).
+  if (!open || flatPanel()) return null;
   return (
     <group position={panelPose.position} rotation-y={panelPose.yaw}>
       <Html transform distanceFactor={(PANEL.width / PANEL.pixels) * 400} zIndexRange={[8, 0]} pointerEvents="auto" style={{ width: PANEL.pixels, height: PANEL.height }}>

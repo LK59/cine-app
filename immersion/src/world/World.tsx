@@ -1,8 +1,9 @@
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { NoToneMapping, PCFShadowMap, SRGBColorSpace } from "three";
 import { PerformanceMonitor } from "@react-three/drei";
+import { isTouchDevice } from "../lib/capability";
 import { SUPERSAMPLING } from "../lib/settings";
 import { Effects } from "./Effects";
 import { useProfile, useStore } from "../state/store";
@@ -39,6 +40,7 @@ export function World() {
   const fov = useStore((s) => s.settings.fov);
   const setPhase = useStore((s) => s.setPhase);
   const profile = useProfile();
+  const touch = useMemo(() => isTouchDevice(), []);
   // « Auto » ne s'ajuste pas pendant une mesure : c'est elle qui tient le préréglage.
   const auto = useStore((s) => s.settings.quality === "auto" && !s.bench?.running);
   const supersampling = useStore((s) => s.settings.supersampling);
@@ -47,7 +49,9 @@ export function World() {
   const baked = useStore((s) => s.baked);
   // La résolution de rendu : la native de l'écran, à l'échelle du profil — et au-delà seulement si
   // le suréchantillonnage est demandé.
-  const dpr = Math.min(3, (window.devicePixelRatio || 1) * profile.scale * (supersampling ? SUPERSAMPLING : 1));
+  // Un téléphone annonce trois points par pixel : rendu tel quel, ce serait plus de points qu'un écran d'ordinateur
+  // pour une puce bien moins forte. Au doigt, la densité est plafonnée.
+  const dpr = Math.min(touch ? 1.5 : 3, (window.devicePixelRatio || 1) * profile.scale * (supersampling ? SUPERSAMPLING : 1));
 
   return (
     <Canvas

@@ -3,6 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { Color, CylinderGeometry, DoubleSide, MeshPhysicalMaterial, MeshStandardMaterial, SphereGeometry } from "three";
 import { useStore } from "../state/store";
 import { NIGHT_LAMPS } from "./geometry/night";
+import { PORCH_LAMP } from "./geometry/outside";
 import { PENDANTS } from "./geometry/south";
 import { LAMPS, TABLE } from "./layout";
 import { lampLevels } from "./lampLevels";
@@ -78,6 +79,8 @@ export function Fixtures() {
           <mesh key={i} geometry={g.bedside} material={m.shadeNight} position={[x, y, z]} />
         ))}
       </group>
+      {/* La lanterne du dehors, près de la porte d'entrée : son verre dépoli, qui luit avec les lampes de la chambre. */}
+      <mesh geometry={g.sconce} material={m.sconce} position={PORCH_LAMP} scale={[0.75, 1.2, 0.75]} visible={visible.dehors} />
     </group>
   );
 }

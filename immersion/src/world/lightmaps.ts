@@ -28,7 +28,7 @@ interface Manifest {
       uvSet?: string;
       meshes?: { name: string; material: string; offset: number; count: number; probe: number[][] }[];
       /** Deux cuissons sur les mêmes UV : ce qui reste la nuit (lune, ciel, bougies), et les lampes. */
-      layers?: { nuit: { texture: string; range: number }; lampes: { texture: string; range: number } };
+      layers?: { nuit: { texture: string; range: number }; lampes: { texture: string; range: number }; ecrans?: { texture: string; range: number } };
     }
   >;
 }
@@ -40,6 +40,12 @@ export interface Atlas {
   range: number;
   /** La couche des lampes, quand elle existe : c'est elle que le mode cinéma et les interrupteurs baissent. */
   lamps: { texture: CompressedTexture; range: number } | null;
+  /**
+   * La couche des écrans, quand elle existe : ce que chaque tiers de l'image (gauche, centre, droite — rouge,
+   * vert, bleu) envoie sur chaque surface, ombres et rebonds compris. Multipliée à l'affichage par la couleur
+   * de chaque tiers du film.
+   */
+  screens: { texture: CompressedTexture; range: number } | null;
   /** Pour chaque maillage (`<groupe>__<matière>`), ses UV de lumière. */
   uvs: Map<string, { uv: Float32Array; probe: number[][] }>;
 }
@@ -68,9 +74,10 @@ async function load(gl: Parameters<typeof ktx2For>[0]): Promise<Lightmaps | null
         return texture;
       };
       const base = atlas.layers?.nuit ?? { texture: atlas.texture, range: manifest.range };
-      const [texture, lamps, packed] = await Promise.all([
+      const [texture, lamps, screens, packed] = await Promise.all([
         loader.loadAsync(assetUrl(`lightmaps/${base.texture}`)).then(ready),
         atlas.layers ? loader.loadAsync(assetUrl(`lightmaps/${atlas.layers.lampes.texture}`)).then(ready) : Promise.resolve(null),
+        atlas.layers?.ecrans ? loader.loadAsync(assetUrl(`lightmaps/${atlas.layers.ecrans.texture}`)).then(ready) : Promise.resolve(null),
         atlas.uv ? fetch(assetUrl(`lightmaps/${atlas.uv}`), { credentials: "same-origin" }).then((r) => (r.ok ? r.arrayBuffer() : null)) : Promise.resolve(null),
       ]);
       const uvs = new Map<string, { uv: Float32Array; probe: number[][] }>();
@@ -82,7 +89,13 @@ async function load(gl: Parameters<typeof ktx2For>[0]): Promise<Lightmaps | null
           uvs.set(mesh.name, { uv, probe: mesh.probe });
         }
       }
-      atlases[group] = { texture, range: base.range, lamps: lamps && atlas.layers ? { texture: lamps, range: atlas.layers.lampes.range } : null, uvs };
+      atlases[group] = {
+        texture,
+        range: base.range,
+        lamps: lamps && atlas.layers ? { texture: lamps, range: atlas.layers.lampes.range } : null,
+        screens: screens && atlas.layers?.ecrans ? { texture: screens, range: atlas.layers.ecrans.range } : null,
+        uvs,
+      };
     })
   );
   return { atlases };
@@ -137,7 +150,8 @@ export function attachLightmapUv(geometry: BufferGeometry, baked: { uv: Float32A
  */
 export type LampGroup = "salon" | "sud" | "nuit";
 // La terrasse reçoit la lumière du salon par la baie : ses lampes sont celles du salon.
-const LAMP_GROUP: Record<string, LampGroup> = { salon: "salon", sofa: "salon", terrasse: "salon", sud: "sud", nuit: "nuit" };
+// Le dehors de l'aile de la chambre : sa lanterne s'éteint avec les lampes de la chambre.
+const LAMP_GROUP: Record<string, LampGroup> = { salon: "salon", sofa: "salon", terrasse: "salon", sud: "sud", nuit: "nuit", dehors: "nuit" };
 const lampLevel: Record<LampGroup, number> = { salon: 1, sud: 1, nuit: 1 };
 
 interface Baked {
@@ -189,6 +203,19 @@ const RECT_AREA = "#if ( NUM_RECT_AREA_LIGHTS > 0 ) && defined( RE_Direct_RectAr
 const BEGIN = ShaderChunk.lights_fragment_begin.replace(RECT_AREA, `reflectedLight.directDiffuse = vec3( 0.0 );\n${RECT_AREA}`);
 const MAPS_ONE = ShaderChunk.lights_fragment_maps.replace("irradiance += lightMapIrradiance;", "irradiance = lightMapIrradiance;").replace("iblIrradiance += getIBLIrradiance( geometryNormal );", "");
 const MAPS_TWO = MAPS_ONE.replace("irradiance = lightMapIrradiance;", "irradiance = lightMapIrradiance + texture2D( uLampMap, vLightMapUv ).rgb * uLampGain;");
+// La couche des écrans : un tiers d'image par canal, chacun multiplié par la couleur de ce tiers dans le film
+// (`uSlZones`, tenu par `Screens`). Une lecture de texture, là où le calcul par pixel — trois écrans, leurs
+// zones, pour chaque point de chaque matière — coûtait plus d'un quart d'une image.
+const SCREENS_ADD = /* glsl */ `
+  {
+    vec3 slThirds = texture2D( uScreenMap, vLightMapUv ).rgb * uScreenRange;
+    // Tout contre la dalle, le halo est cent fois plus fort que la lumière de la pièce : il est adouci (un
+    // genou), sans quoi le mur brûle au blanc autour de l'image. La pièce, bien plus faible, n'y perd presque rien.
+    slThirds /= 1.0 + slThirds * 0.6;
+    irradiance += ( uSlZones[ 0 ] * slThirds.r + uSlZones[ 1 ] * slThirds.g + uSlZones[ 2 ] * slThirds.b ) * ( uSlGain * uSlOn );
+  }
+`;
+const withScreens = (maps: string) => maps.replace(/(irradiance = lightMapIrradiance[^;]*;)/, `$1\n${SCREENS_ADD}`);
 /** Faux si three a changé ces morceaux de programme : mieux vaut alors l'éclairage temps réel qu'une lumière comptée deux fois. */
 export const BAKED_SHADER_OK = BEGIN !== ShaderChunk.lights_fragment_begin && MAPS_ONE.includes("irradiance = lightMapIrradiance;") && !MAPS_ONE.includes("iblIrradiance +=") && MAPS_TWO !== MAPS_ONE;
 
@@ -201,6 +228,7 @@ export function bakedVariant(material: Material, group: string, atlas: Atlas): M
   const variant = material.clone() as MeshStandardMaterial;
   variant.lightMap = atlas.texture;
   const lamps = atlas.lamps ? { value: atlas.lamps.range } : null;
+  const screens = atlas.screens;
   const entry: Baked = { material: variant, group: LAMP_GROUP[group] ?? "salon", range: atlas.range, lamps, lampRange: atlas.lamps?.range ?? 0 };
   baked.add(entry);
   refresh(entry);
@@ -213,9 +241,17 @@ export function bakedVariant(material: Material, group: string, atlas: Atlas): M
       shader.uniforms.uLampGain = lamps;
       shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>\nuniform sampler2D uLampMap;\nuniform float uLampGain;`);
     }
-    shader.fragmentShader = shader.fragmentShader.replace("#include <lights_fragment_begin>", BEGIN).replace("#include <lights_fragment_maps>", lamps ? MAPS_TWO : MAPS_ONE);
+    if (screens) {
+      shader.uniforms.uScreenMap = { value: screens.texture };
+      shader.uniforms.uScreenRange = { value: screens.range };
+      shader.fragmentShader = shader.fragmentShader.replace("#include <common>", `#include <common>\nuniform sampler2D uScreenMap;\nuniform float uScreenRange;`);
+    }
+    const maps = lamps ? MAPS_TWO : MAPS_ONE;
+    shader.fragmentShader = shader.fragmentShader.replace("#include <lights_fragment_begin>", BEGIN).replace("#include <lights_fragment_maps>", screens ? withScreens(maps) : maps);
   };
-  variant.customProgramCacheKey = () => `${key}|cuit${lamps ? "2" : "1"}`;
+  // Avec la couche des écrans, le programme de la matière n'a plus à calculer leur lumière (`screenLight.ts`).
+  if (screens) variant.defines = { ...(variant.defines ?? {}), SL_BAKED: "" };
+  variant.customProgramCacheKey = () => `${key}|cuit${lamps ? "2" : "1"}${screens ? "e" : ""}`;
   byAtlas.set(atlas, variant);
   return variant;
 }

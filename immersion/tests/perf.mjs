@@ -11,7 +11,9 @@ import { chromium } from "@playwright/test";
 const BASE = process.env.BASE || "http://localhost:5198";
 const QUALITY = process.env.QUALITY || "ultra";
 const [W, H] = (process.env.SIZE || "1280x614").split("x").map(Number);
-const SECONDS = Number(process.env.SECONDS || 6);
+const SECONDS = Number(process.env.MEASURE_S || 6);
+// MODE=eteint : les variantes sont mesurées écrans éteints (le coût de la scène elle-même).
+const MODE = process.env.MODE || "video";
 const gl = process.env.IMMERSION_GL === "egl" ? ["--use-gl=angle", "--use-angle=gl-egl", "--enable-gpu"] : ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"];
 
 const VIEWS = {
@@ -32,6 +34,22 @@ const VARIANTS = {
   "sans anticrénelage": ["h.store.getState().setPerfProfile({ smaa: false })", "h.store.getState().setPerfProfile(null)"],
   "sans neige": ["h.store.getState().setPerfProfile({ snow: 0 })", "h.store.getState().setPerfProfile(null)"],
   "échelle 0,8": ["h.store.getState().setPerfProfile({ scale: 0.8 })", "h.store.getState().setPerfProfile(null)"],
+  "sans halo ni anticrénelage": ["h.store.getState().setPerfProfile({ bloom: false, smaa: false })", "h.store.getState().setPerfProfile(null)"],
+  "filtrage 4×": ["h.store.getState().setPerfProfile({ anisotropy: 4 })", "h.store.getState().setPerfProfile(null)"],
+  "sans environnement": ["h.perfEnv = h.scene.environment; h.scene.environment = null", "h.scene.environment = h.perfEnv"],
+  "matières sans éclairage": [
+    "h.scene.traverse((o) => { if (o.isMesh && o.material && o.material.isMeshStandardMaterial) { o.userData.perfMat = o.material; o.material = new h.perf.three.MeshBasicMaterial({ map: o.material.map, color: o.material.color, transparent: o.material.transparent, opacity: o.material.opacity, side: o.material.side }); } })",
+    "h.scene.traverse((o) => { if (o.userData.perfMat) { o.material.dispose(); o.material = o.userData.perfMat; delete o.userData.perfMat; } })",
+  ],
+  "sans lampes": ["h.scene.traverse((o) => { if (o.isLight && o.visible) { o.visible = false; o.userData.perfLight = true; } })", "h.scene.traverse((o) => { if (o.userData.perfLight) { o.visible = true; delete o.userData.perfLight; } })"],
+  "sans relief": [
+    "h.scene.traverse((o) => { const m = o.material; if (o.isMesh && m && m.isMeshStandardMaterial && (m.normalMap || m.roughnessMap || m.aoMap || m.metalnessMap)) { o.userData.perfMaps = [m.normalMap, m.roughnessMap, m.aoMap, m.metalnessMap]; m.normalMap = m.roughnessMap = m.aoMap = m.metalnessMap = null; m.needsUpdate = true; } })",
+    "h.scene.traverse((o) => { if (o.userData.perfMaps) { const m = o.material; [m.normalMap, m.roughnessMap, m.aoMap, m.metalnessMap] = o.userData.perfMaps; m.needsUpdate = true; delete o.userData.perfMaps; } })",
+  ],
+  "avec transmission (avant)": [
+    "h.scene.traverse((o) => { if (o.name === 'Lantern_01' && o.material) { o.material.transmission = 1; o.material.needsUpdate = true; } })",
+    "h.scene.traverse((o) => { if (o.name === 'Lantern_01' && o.material) { o.material.transmission = 0; o.material.needsUpdate = true; } })",
+  ],
   "sans transparents": [
     "h.scene.traverse((o) => { if (o.isMesh && o.material && o.material.transparent && o.visible) { o.visible = false; o.userData.perfHidden = true; } })",
     "h.scene.traverse((o) => { if (o.userData.perfHidden) { o.visible = true; delete o.userData.perfHidden; } })",
@@ -66,8 +84,7 @@ await page.evaluate(() => window.__immersion.store.getState().setMode("walk"));
 console.log(await page.evaluate(() => {
   const g = window.__immersion.gl.getContext();
   const ext = g.getExtension("WEBGL_debug_renderer_info");
-  const size = window.__immersion.gl.getDrawingBufferSize({ x: 0, y: 0, set(x, y) { this.x = x; this.y = y; return this; } });
-  return `${ext ? g.getParameter(ext.UNMASKED_RENDERER_WEBGL) : "?"} — rendu ${size.x}×${size.y}`;
+  return `${ext ? g.getParameter(ext.UNMASKED_RENDERER_WEBGL) : "?"} — rendu ${g.drawingBufferWidth}×${g.drawingBufferHeight}`;
 }), `— ${QUALITY}`);
 
 const measure = (seconds) =>
@@ -85,14 +102,18 @@ const measure = (seconds) =>
             frames.sort((a, b) => b - a);
             const total = frames.reduce((s, f) => s + f, 0);
             const slow = frames.slice(0, Math.max(1, Math.round(frames.length / 100)));
-            resolve({ fps: (frames.length / total) * 1000, ms: total / frames.length, low: slow.reduce((s, f) => s + f, 0) / slow.length, max: frames[0] });
+            // La médiane est le coût d'une image ordinaire ; la moyenne compte aussi les blocages (ici, sous
+            // navigateur sans écran, une image chargée déclenche un blocage d'une demi-seconde par seconde).
+            resolve({ fps: (frames.length / total) * 1000, ms: frames[Math.floor(frames.length / 2)], mean: total / frames.length, long: frames.filter((f) => f > 120).length, low: slow.reduce((s, f) => s + f, 0) / slow.length, max: frames[0] });
           }
         };
         requestAnimationFrame(tick);
       }),
     seconds * 1000
   );
-const line = (label, r, ref) => console.log(`  ${label.padEnd(28)} ${r.fps.toFixed(1).padStart(6)} i/s   ${r.ms.toFixed(1).padStart(6)} ms   1 % lent ${r.low.toFixed(0).padStart(4)} ms   pire ${r.max.toFixed(0).padStart(4)} ms${ref ? `   ${(r.ms - ref.ms >= 0 ? "+" : "") + (r.ms - ref.ms).toFixed(1)} ms` : ""}`);
+// Le chiffre qui compte est la moyenne : sans écran, le navigateur présente à 60 Hz tant qu'il peut puis
+// bloque d'un coup quand la carte graphique ne suit pas — la médiane reste à 16,7 ms et ne dit rien.
+const line = (label, r, ref) => console.log(`  ${label.padEnd(30)} ${r.mean.toFixed(1).padStart(6)} ms  (${(1000 / r.mean).toFixed(0).padStart(3)} i/s)${ref ? `   ${(r.mean - ref.mean >= 0 ? "+" : "") + (r.mean - ref.mean).toFixed(1)} ms` : ""}`);
 const run = (code) => page.evaluate(`(() => { const h = window.__immersion; ${code}; })()`);
 
 // Les appels de dessin et les triangles d'une image (toutes passes confondues).
@@ -118,10 +139,10 @@ if (process.env.TREE) {
     const out = [];
     const count = (o) => { let meshes = 0; let tris = 0; o.traverse((c) => { if (c.isMesh || c.isPoints || c.isInstancedMesh) { meshes++; const g = c.geometry; const n = g.index ? g.index.count : g.attributes.position ? g.attributes.position.count : 0; tris += (n / 3) * (c.isInstancedMesh ? c.count : 1); } }); return [meshes, Math.round(tris)]; };
     const walk = (o, depth) => {
-      if (depth > 3) return;
+      if (depth > 5) return;
       const [meshes, tris] = count(o);
-      if (meshes) out.push(`${"  ".repeat(depth)}${o.name || o.type} — ${meshes} objets, ${tris} triangles`);
-      for (const c of o.children) if (!c.isMesh || c.name) walk(c, depth + 1);
+      if (meshes && (tris > 2000 || depth < 2)) out.push(`${"  ".repeat(depth)}${o.name || o.type}${o.isInstancedMesh ? ` ×${o.count}` : ""} — ${meshes} objets, ${tris} triangles`);
+      for (const c of o.children) walk(c, depth + 1);
     };
     walk(window.__immersion.scene, 0);
     return out.join("\n");
@@ -148,6 +169,17 @@ for (const name of wantedViews) {
   await page.waitForTimeout(1500);
   const off = await measure(SECONDS);
   line("écrans éteints", off);
+  if (MODE === "eteint") {
+    for (const variant of wantedVariants) {
+      if (!VARIANTS[variant]) continue;
+      await run(VARIANTS[variant][0]);
+      await page.waitForTimeout(2500);
+      line(`· ${variant}`, await measure(SECONDS), off);
+      await run(VARIANTS[variant][1]);
+      await page.waitForTimeout(1200);
+    }
+    continue;
+  }
   await page.evaluate(() => window.__immersion.playTestClip("/api/immersion/mire.webm"));
   await page.waitForFunction(() => window.__immersion.store.getState().playback.status === "playing", null, { timeout: 30_000 });
   await page.waitForTimeout(3500);

@@ -8,6 +8,7 @@ import { useStore } from "../state/store";
 import { buildNight } from "./geometry/night";
 import { buildBlockSofa, buildSalon } from "./geometry/salon";
 import { buildSouth } from "./geometry/south";
+import { buildOutside } from "./geometry/outside";
 import { buildTerrace } from "./geometry/terrace";
 import type { GroupId, MaterialId, Part } from "./geometry/types";
 import { useMaterials } from "./materials";
@@ -43,7 +44,8 @@ function PartView({ part, group, materials, visible, lightmaps }: { part: Part; 
  * partie nuit est derrière un mur plein.
  */
 export function visibleGroups(room: string): Record<GroupId, boolean> {
-  return { salon: room !== "chambre", sud: true, nuit: room !== "mezzanine" && room !== "terrasse", terrasse: room !== "chambre" && room !== "couloir" };
+  // Le dehors de l'aile de la chambre ne se voit que par la fenêtre de la cuisine et celle de la chambre.
+  return { salon: room !== "chambre", sud: true, nuit: room !== "mezzanine" && room !== "terrasse", terrasse: room !== "chambre" && room !== "couloir", dehors: room === "cuisine" || room === "chambre" || room === "salon" };
 }
 
 /**
@@ -54,7 +56,7 @@ export function Parts() {
   const materials = useMaterials();
   const lightmaps = useLightmaps();
   const room = useStore((s) => s.room);
-  const parts = useMemo(() => ({ salon: buildSalon(), sud: buildSouth(), nuit: buildNight(), terrasse: buildTerrace() }), []);
+  const parts = useMemo(() => ({ salon: buildSalon(), sud: buildSouth(), nuit: buildNight(), terrasse: buildTerrace(), dehors: buildOutside() }), []);
   const visible = visibleGroups(room);
   return (
     <>

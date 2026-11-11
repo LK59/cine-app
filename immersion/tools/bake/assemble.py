@@ -14,7 +14,7 @@ for g in [*scene["groups"], "sofa"]:
     # une couche n'est annoncée que si son KTX2 existe ; les KTX2 d'une couche invalidée sont retirés
     a["layers"] = {l: v for l, v in a.get("layers", {}).items() if os.path.exists(f"{out}/{v['texture']}")}
     keep = {v["texture"] for v in a["layers"].values()}
-    for stale in (f"{g}.ktx2", f"{g}_lampes.ktx2"):
+    for stale in (f"{g}.ktx2", f"{g}_lampes.ktx2", f"{g}_ecrans.ktx2"):
         if stale not in keep and os.path.exists(f"{out}/{stale}"):
             os.remove(f"{out}/{stale}")
     if "nuit" not in a["layers"]:
@@ -30,4 +30,4 @@ doc = {
     "generated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }
 json.dump(doc, open(f"{out}/lightmaps.json", "w"), indent=1)
-print("lightmaps.json :", ", ".join(atlases), f"; KTX2 au total : {total} octets" + ("  (> 9 Mo !)" if total > 9_000_000 else ""))
+print("lightmaps.json :", ", ".join(atlases), f"; KTX2 au total : {total} octets" + ("  (> 13 Mo !)" if total > 13_000_000 else ""))

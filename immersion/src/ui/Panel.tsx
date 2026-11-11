@@ -1,5 +1,6 @@
 import { useMemo, type MouseEvent } from "react";
 import { useStore, useT } from "../state/store";
+import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
 import { dispatch } from "../media/commands";
 import { search, type Continue, type Episode, type Title } from "../media/library";
 import { closePanel, launch, openTitle, panelBack, setPanelQuery, setPanelSeason, setPanelTab, stopPlayback } from "../state/actions";
@@ -141,6 +142,24 @@ function NowPlaying() {
   const volume = useStore((s) => s.settings.volume);
   const update = useStore((s) => s.updateSettings);
   const live = playback.status === "playing" || playback.status === "paused";
+  const lang = useStore((s) => s.lang);
+  // Les noms des pistes : ceux du lecteur de l'application (`@/lib/trackLabel`), dans la langue du compte.
+  const audioLabels = useMemo(
+    () =>
+      labelAudioTracks(
+        playback.audioTracks.map((track) => ({ number: track.index, language: track.language, name: track.title, isDefault: track.isDefault, isForced: false, codecId: track.codec, channels: track.channels, profile: track.profile })),
+        { locale: lang, canaux: (n) => `${n} ${t("track.channels")}`, piste: (n) => `${t("track.track")} ${n}` }
+      ),
+    [playback.audioTracks, lang, t]
+  );
+  const subtitleLabels = useMemo(
+    () =>
+      labelSubtitleTracks(
+        playback.subtitleTracks.map((track) => ({ number: track.index, language: track.language, name: track.title, isDefault: track.isDefault, isForced: track.isForced, isHearingImpaired: track.isHearingImpaired, isExternal: track.isExternal })),
+        { locale: lang, forces: t("track.forced"), complets: t("track.full"), malentendants: t("track.sdh"), externe: t("track.external"), piste: (n) => `${t("track.track")} ${n}` }
+      ),
+    [playback.subtitleTracks, lang, t]
+  );
   const ratio = playback.duration > 0 ? Math.min(1, playback.position / playback.duration) : 0;
   const seekTo = (e: MouseEvent<HTMLButtonElement>) => {
     const box = e.currentTarget.getBoundingClientRect();
@@ -183,6 +202,39 @@ function NowPlaying() {
               <input type="range" min={0} max={1} step={0.01} value={volume} onChange={(e) => update({ volume: Number(e.target.value) })} data-testid="now-volume" />
             </label>
           </div>
+          {audioLabels.length > 1 || subtitleLabels.length > 0 ? (
+            <div className="now-tracks">
+              {audioLabels.length > 1 ? (
+                <label className="now-track">
+                  <span>{t("panel.audio")}</span>
+                  <select
+                    value={playback.audioIndex ?? playback.audioTracks.find((track) => track.isDefault)?.index ?? playback.audioTracks[0]?.index ?? ""}
+                    onChange={(e) => dispatch({ type: "audio", index: Number(e.target.value) })}
+                    data-testid="now-audio"
+                  >
+                    {audioLabels.map((track) => (
+                      <option key={track.number} value={track.number}>
+                        {track.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              {subtitleLabels.length > 0 ? (
+                <label className="now-track">
+                  <span>{t("panel.subtitles")}</span>
+                  <select value={playback.subtitleIndex ?? ""} onChange={(e) => dispatch({ type: "subtitle", index: e.target.value === "" ? null : Number(e.target.value) })} data-testid="now-subtitles">
+                    <option value="">{t("panel.subtitles.none")}</option>
+                    {subtitleLabels.map((track) => (
+                      <option key={track.number} value={track.number}>
+                        {track.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+          ) : null}
         </>
       ) : null}
     </section>

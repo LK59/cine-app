@@ -329,11 +329,11 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
 
 ## Poids
 
-- `public/assets/` : **28,3 Mo** (textures 15,1 ; modèles 9,6 ; HDRI 3,2). `dist/` : ~37 Mo (assets, code
-  ~4 Mo, jumeaux `.br` ~4,5 Mo).
-- Marge restante avant 40 Mo commités : ~10 Mo pour le panorama, les lightmaps, le canapé, les pièces.
-  Leviers si besoin : retirer les jeux de textures inutilisés (`metal_black`, `bark`), les deux HDRI si la
-  vue n'en dépend plus, les modèles non posés.
+- `public/assets/` : **46 Mo** au 11/11/2026 (v2) — textures, modèles, panorama, lightmaps (13 Mo : six atlas,
+  trois couches), musique, mire de mesure (1,4 Mo). C'est au-dessus des 40 Mo visés au départ.
+- Leviers si besoin : les couches `ecrans` sont lisses — encodées à demi-définition elles perdraient ~2 Mo sans
+  se voir ; les jeux de textures inutilisés (`metal_black`, `bark`), les HDRI si la vue n'en dépend plus, les
+  modèles non posés.
 
 ## « Le chalet vivant » (demandé le 10/11 au soir — fait d'une traite, à livrer en une fois)
 
@@ -415,13 +415,60 @@ Ordre de travail :
    géométrie changée = recuisson du groupe) ; 5. latence des commandes à vérifier une fois le rendu remonté ;
    6. commandes tactiles ; 7. pistes audio et sous-titres.
 
-Déjà fait cette nuit, **non commité, non déployé** (portail de l'application en cours sur la ligne de mesure) :
-copie réduite de la vidéo par la carte graphique (`Screens.tsx`), mire de mesure en fichier, `maxMs`/`over33`/
-`over50`/`slowAt` dans la ligne `immersion-bench` (route + test côté application), zoom à la molette une fois
-installé (`view`, `Player.tsx`), commandes de lecture dans le panneau (`NowPlaying`), scénario 09.
+### État à 2 h (tout est sur la branche `immersion`, **rien n'est déployé** ; prod = 10.34.3)
+
+Commités (22ff093d, e73a6bc6 ; portail vert) : copie réduite de la vidéo par la carte graphique, mire de mesure en
+fichier, `maxMs`/`over33`/`over50`/`slowAt` (route + test côté application), zoom à la molette assis, commandes
+de lecture dans le panneau (`NowPlaying`), scénario 09, banc `tests/perf.mjs`.
+
+**Le banc tourne sur la vraie puce graphique du serveur** (UHD 630, `IMMERSION_GL=egl`, déjà le défaut de
+`capture.sh`) : `SCRIPT=perf.mjs SIZE=2560x1229 QUALITY=ultra tests/capture.sh canape` (variantes : `VARIANTS=`,
+`MODE=eteint`) ; `SCRIPT=hitch.mjs` (images longues, `BISECT=2`) ; `SCRIPT=inspect.mjs PREP='…'`. Lire la
+**moyenne**, pas la médiane (sans écran, le navigateur présente à 60 Hz puis bloque d'un coup). Le scan X-Ray
+utilise le même iGPU : demander à l'autre session de le mettre en pause pendant les mesures, et la prévenir à la fin.
+
+Mesuré, à la résolution du propriétaire (2560 × 1229, Ultra, vue du canapé), sur l'UHD 630 :
+- avant : 126 ms écrans éteints. **La moitié venait de deux lanternes** (glTF `KHR_materials_transmission`) : three
+  redessine alors toute la scène une seconde fois par image. Retiré dans `Model.tsx` → ~60 ms.
+- avec vidéo : ~80 ms, dont ~21 pour la lumière des écrans calculée dans toutes les matières. Sur sa machine
+  (≈ 7 fois plus rapide, d'après ses 17,8 ms d'origine) : ~11 ms, soit ~85 i/s estimés, contre 21 mesurés.
+
+Non commité, en cours :
+- **couche `ecrans` de la lightmap** : les dalles cuites en lumières de surface, un tiers d'image par canal
+  (`tools/bake/export.ts`, `bake.py` type `area`, albédo gris pour cette couche) ; à l'affichage une lecture de
+  texture (`lightmaps.ts`, `SL_BAKED`) ; le reflet du film seulement sur les matières lisses (`SL_MIRROR`) ; trois
+  zones au lieu de six. Cuisson complète lancée (`logs/bake-v2.log`, ~45 min). **À faire après : régler le gain à
+  l'œil contre l'ancien rendu (captures TV=1), puis banc.** Copie des lightmaps d'avant : `assets-src/bake/avant/`.
+- reflets : vitres (plus de reflet direct des lampes, `envMapIntensity` 0,55), dalle éteinte moins miroir ;
+- structure : escalier raccourci (palier de 1,05 m), rampe arrêtée sous le plancher, garde-corps de la trémie sur
+  toute sa longueur ; nouveau groupe `dehors` (`geometry/outside.ts` : toit, neige, bardage, porte d'entrée,
+  lanterne de l'aile de la chambre) ; le couloir devient l'entrée (porte, patère, banc).
+- **tactile** : `input/touch.ts` (manche à gauche, regard à droite, toucher bref = valider, deux doigts = cadrer),
+  `ui/TouchControls.tsx` (boutons agir / s'asseoir / lecture / menu), `capability.ts` (`isTouchDevice`, paysage
+  exigé, `flatPanel` : sur petit écran le panneau est à plat, plein écran), « Auto » part du niveau 6 et la densité
+  de points est plafonnée à 1,5 ; scénario 10 (téléphone émulé 844 × 390). **Jamais essayé sur un vrai iPhone** :
+  mémoire des textures, ManagedMediaSource et son restent à constater sur l'appareil.
+- **pistes audio et sous-titres** : `media/subtitles.ts` (WebVTT de la route du lecteur serveur, réplique du
+  moment dessinée dans un canevas posé au bas des dalles, `Screens.tsx`), `switchAudio` (négociation refaite
+  avec `audioStreamIndex`), deux listes dans `NowPlaying`, noms par `@/lib/trackLabel` ; scénario 11 (réponses
+  de l'application écrites à la main — pas d'instance). Sous-titres en images : hors périmètre.
+- **Résultat mesuré (2 h 50, iGPU libre, 2560 × 1229, Ultra, UHD 630)** : canapé 59 ms écrans éteints, 61 ms avec
+  vidéo (au départ 126 et ~145) ; entrée 56 / 57 ; cuisine 57 / 55. La vidéo ne coûte plus rien de mesurable ; le
+  halo (bloom) reste le premier poste des effets (~7 ms). Sur la machine du propriétaire (≈ 7 fois plus rapide
+  d'après sa première mesure) : ~9 ms par image, estimés — **à confirmer par son bouton « Mesurer »**.
+- Cuisson v2 faite (trois couches, six atlas, 11,9 Mo de KTX2 ; `logs/bake-v2.log`) ; le halo autour des dalles
+  est adouci à l'affichage (un genou dans `lightmaps.ts`), il brûlait au blanc.
+- Scénarios 02, 05, 06, 07, 08, 09, 10, 11 verts sur ce build, sous la politique de sécurité (01, 03, 04 demandent
+  une instance de l'application : non rejoués).
 
 ## Prochaine action
 
-Rien d'en cours. Attendre le retour du propriétaire après son premier essai (fluidité, ressenti en mouvement),
-puis régler d'après ses mesures. Les notes de pause et de reprise du 10/11 qui figuraient ici sont dans
-l'historique git de ce fichier.
+La v2 est prête à livrer en une fois (10.35.0). Ensuite, attendre le retour du propriétaire :
+- sa mesure (« Mesurer », lignes `immersion-bench` de `startup.log`, avec `maxMs`, `over33`, `over50`, `slowAt`) :
+  la cible est 60 images par seconde stables en Ultra pendant une lecture ; si des à-coups restent, `slowAt` dit où ;
+- le tactile sur un vrai iPhone (jamais essayé : mémoire des textures, flux par ManagedMediaSource, son) ;
+- les pistes audio et les sous-titres sur un vrai film (testés avec des réponses écrites à la main).
+
+Leviers de performance encore disponibles, par ordre de rendement mesuré sur l'UHD 630 : le halo (bloom, ~7 ms
+sur 60 — à demi-définition ou à moins de niveaux) ; les lumières ponctuelles temps réel (reflets seulement, ~5 ms) ;
+l'environnement (~5 ms) ; le relief des matières (~7 ms).

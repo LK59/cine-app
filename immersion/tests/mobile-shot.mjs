@@ -1,0 +1,28 @@
+// Captures sur un téléphone émulé en paysage (844 × 390, tactile) : l'accueil, le monde, le panneau.
+import { chromium } from "@playwright/test";
+const BASE = process.env.BASE || "http://localhost:5198";
+const OUT = process.env.CAPTURES || "/immersion/captures";
+const gl = process.env.IMMERSION_GL === "egl" ? ["--use-gl=angle", "--use-angle=gl-egl", "--enable-gpu"] : ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"];
+const browser = await chromium.launch({ args: [...gl, "--ignore-gpu-blocklist", "--autoplay-policy=no-user-gesture-required"] });
+const context = await browser.newContext({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+const page = await context.newPage();
+page.on("pageerror", (e) => console.log("pageerror:", e.message));
+await page.goto(`${BASE}/immersion`);
+const enter = page.getByTestId("enter");
+await enter.waitFor({ state: "visible", timeout: 240_000 });
+await page.waitForTimeout(1500);
+console.log("bouton :", JSON.stringify(await enter.boundingBox()), "puis", JSON.stringify(await page.waitForTimeout(700).then(() => enter.boundingBox())));
+await page.screenshot({ path: `${OUT}/mobile-accueil.jpg`, type: "jpeg", quality: 85 });
+await enter.dispatchEvent("click");
+await page.waitForFunction(() => window.__immersion.store.getState().phase === "world", null, { timeout: 90_000 });
+await page.waitForTimeout(2500);
+console.log("mode :", await page.evaluate(() => window.__immersion.store.getState().mode), "— niveau auto :", await page.evaluate(() => window.__immersion.store.getState().autoLevel));
+await page.evaluate(() => { const { rig } = window.__immersion; const t = rig.position.clone(); t.set(1.6, 0, -1.5); rig.teleport = t; rig.yaw = -Math.PI / 2; rig.pitch = 0.1; });
+await page.waitForTimeout(1500);
+await page.screenshot({ path: `${OUT}/mobile-monde.jpg`, type: "jpeg", quality: 85 });
+await page.evaluate(() => window.__immersion.playTestClip("/api/immersion/mire.webm"));
+await page.waitForTimeout(2500);
+await page.evaluate(() => window.__immersion.openPanel("salon"));
+await page.waitForTimeout(1500);
+await page.screenshot({ path: `${OUT}/mobile-panneau.jpg`, type: "jpeg", quality: 85 });
+await browser.close();

@@ -74,7 +74,8 @@ export function buildSouth(): Part {
     }
   };
   rail([-W + 0.1, S], [W - 0.1, S]);
-  rail([PLAN.stairEast, st.zBottom], [PLAN.stairEast, st.zTop - 0.9]);
+  // Le long de la trémie sur toute sa longueur, jusqu'au palier : c'est lui qui garde le vide de l'escalier.
+  rail([PLAN.stairEast, st.zBottom], [PLAN.stairEast, st.zTop]);
   rail([-W + 0.1, st.zBottom], [PLAN.stairEast, st.zBottom]);
 
   // ── L'escalier : une volée droite, marches de bois, limon, rampe ────────────
@@ -89,15 +90,25 @@ export function buildSouth(): Part {
   // Le limon, côté pièce, et la rampe qui le suit.
   const stairTop: [number, number, number] = [st.x1 - 0.03, LOFT - 0.12, st.zTop];
   timber.beam([st.x1 - 0.03, -0.12 + rise, st.zBottom], stairTop, 0.06, 0.3);
-  timber.beam([st.x1 - 0.03, rise + 0.95, st.zBottom + 0.1], [st.x1 - 0.03, LOFT + 0.95, st.zTop], 0.07, 0.06);
+  // La rampe s'arrête sous le plancher de la mezzanine, à un poteau : plus haut, c'est le garde-corps de la
+  // trémie qui borde l'escalier. Elle montait jusqu'en haut, dans le même plan que lui — deux barrières
+  // mêlées, la rampe en travers à hauteur de poitrine. Sous le plancher, les barreaux montent jusqu'à lui.
+  const under = LOFT - 0.2;
+  const railFrom: [number, number, number] = [st.x1 - 0.03, rise + 0.95, st.zBottom + 0.1];
+  const railRise = (LOFT + 0.95 - railFrom[1]) / (st.zTop - railFrom[2]);
+  const railEndZ = railFrom[2] + (under - 0.06 - railFrom[1]) / railRise;
+  timber.beam(railFrom, [st.x1 - 0.03, under - 0.06, railEndZ], 0.07, 0.06);
+  timber.span(st.x1 - 0.07, st.x1 + 0.01, ((railEndZ - st.zBottom) / run) * rise - 0.05, under, railEndZ - 0.04, railEndZ + 0.04, 1);
   for (let i = 0; i <= st.steps; i += 1) {
     const z = st.zBottom + 0.1 + i * run * 0.985;
-    const y = (i + 1) * rise;
-    timber.span(st.x1 - 0.046, st.x1 - 0.014, Math.min(y, LOFT) - 0.05, Math.min(y, LOFT) + 0.93, z - 0.016, z + 0.016, 1);
+    const y = Math.min((i + 1) * rise, LOFT);
+    const top = z < railEndZ ? railFrom[1] + (z - railFrom[2]) * railRise - 0.02 : under;
+    if (top - y < 0.25) continue;
+    timber.span(st.x1 - 0.046, st.x1 - 0.014, y - 0.05, top, z - 0.016, z + 0.016, 1);
   }
   // Le dessous de l'escalier, fermé côté cuisine par un panneau qui suit la pente.
   planks.wall("z", st.x1 - 0.02, 0.04, st.zBottom + run, st.zTop, 0, (z) => Math.max(0.02, ((z - st.zBottom) / run) * rise - 0.32), [], 0.28);
-  solids.push(span(st.x1 - 0.06, st.x1 + 0.04, 0, LOFT + 1.05, st.zBottom + 0.9, st.zTop - 0.9));
+  solids.push(span(st.x1 - 0.06, st.x1 + 0.04, 0, LOFT + 1.05, st.zBottom + 0.9, st.zTop));
   solids.push(span(st.x1 - 0.06, st.x1 + 0.04, 0, 1.2, st.zBottom, st.zBottom + 0.9));
 
   // ── La cuisine ──────────────────────────────────────────────────────────────

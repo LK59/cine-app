@@ -24,7 +24,7 @@ export function Unsupported({ onRetry }: { onRetry: () => void }) {
       <button type="button" className="btn btn-primary" onClick={leaveToLaterna} data-testid="back">
         {t("back")}
       </button>
-      {why === "screen" ? (
+      {why === "screen" || why === "rotate" ? (
         <button type="button" className="btn" onClick={onRetry}>
           {t("retry")}
         </button>

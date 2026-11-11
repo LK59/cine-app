@@ -40,7 +40,7 @@ EXPOSURE = opt("--exposure", 0.0, float)
 PACK_MARGIN_PX = opt("--margin", 6, int)
 BAKE_MARGIN_PX = 6
 THREADS = opt("--threads", 5, int)
-LAYERS = opt("--layers", "nuit,lampes").split(",")   # nuit : lune, ciel, bougies ; lampes : tout le reste
+LAYERS = opt("--layers", "nuit,lampes,ecrans").split(",")   # nuit : lune, ciel, bougies ; lampes : le reste ; ecrans : les dalles, un tiers d'image par canal
 LAMP_SHARE = 0.15            # aperçus « cinema » : les lampes à 15 %
 TEXEL_METAL = 0.5          # échelle linéaire des îlots de la matière `metal`
 SOFA_ALBEDO = {"sofa": [0.62, 0.54, 0.44], "pillows": [0.3, 0.24, 0.18]}
@@ -172,6 +172,19 @@ def set_layer(layer):
     # session (les deux couches sortaient avec les mêmes lumières) ; l'énergie, comme la force du ciel, l'est.
     for ob, l in LIGHT_OBJS:
         ob.data.energy = ob["base_energy"] if l == layer else 0.0
+    # La couche des écrans porte un tiers d'image par canal : une matière colorée y ferait rebondir le tiers
+    # « rouge » plus fort que le « bleu ». Pour elle, chaque matière renvoie donc son gris — la même part pour les trois.
+    for m in bpy.data.materials:
+        n = next((x for x in m.node_tree.nodes if x.type == "BSDF_DIFFUSE"), None) if m.use_nodes else None
+        if n is None or n.inputs["Color"].is_linked:
+            continue
+        if "albedo_r" not in m:
+            c = n.inputs["Color"].default_value
+            m["albedo_r"], m["albedo_g"], m["albedo_b"] = c[0], c[1], c[2]
+        r, g, b = m["albedo_r"], m["albedo_g"], m["albedo_b"]
+        if layer == "ecrans":
+            r = g = b = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        n.inputs["Color"].default_value = (r, g, b, 1.0)
     if "node" in SKY:
         SKY["node"].inputs["Strength"].default_value = SKY["strength"] if layer == "nuit" else 0.0
 
@@ -183,6 +196,17 @@ def add_lights(lights, factors):
             d.shadow_soft_size = L["radius"]
             ob = bpy.data.objects.new(L["name"], d)
             ob.location = g2b(L["position"])
+        elif L["type"] == "area":
+            # Une surface qui rayonne comme un écran (lambertienne) : de face, son intensité vaut P / pi, quand
+            # celle d'une lumière ponctuelle vaut P / (4 pi) — d'où le quart de l'énergie pour la même intensité.
+            d = bpy.data.lights.new(L["name"], "AREA")
+            d.shape = "RECTANGLE"
+            d.size, d.size_y = L["size"][0], L["size"][1]
+            d.energy = L["intensity"] * factors["point"] / 4.0
+            ob = bpy.data.objects.new(L["name"], d)
+            ob.location = g2b(L["position"])
+            # Une lumière de surface éclaire vers -Z ; Y reste vers le haut, donc X court le long de la dalle.
+            ob.rotation_euler = Vector(g2b(L["normal"])).normalized().to_track_quat("-Z", "Y").to_euler()
         else:
             d = bpy.data.lights.new(L["name"], "SUN")
             d.energy = L["intensity"] * factors["sun"]
@@ -612,7 +636,7 @@ def merge_layers(g, uvhash, new):
         old = json.load(open(p))
         if old.get("uvHash") == uvhash:
             layers.update(old["atlas"].get("layers", {}))
-        elif set(LAYERS) != {"nuit", "lampes"}:
+        elif set(LAYERS) != {"nuit", "lampes", "ecrans"}:
             log("ATTENTION : dépliage différent du passage précédent, les autres couches sont invalidées (à recuire)")
     layers.update({l: {"texture": v[2]["texture"], "range": v[2]["range"]} for l, v in new.items()})
     return layers

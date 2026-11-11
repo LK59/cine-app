@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { useThree } from "@react-three/fiber";
 import { view } from "../input/intents";
 import { attachKeyboardMouse, movementKeyLabels } from "../input/keyboardMouse";
+import { attachTouch } from "../input/touch";
+import { isTouchDevice } from "../lib/capability";
 import { captureChanged, listenIntents } from "../state/actions";
 import { useStore } from "../state/store";
 import { look } from "./rig";
@@ -27,9 +29,16 @@ export function InputDevices() {
       layout: () => useStore.getState().settings.keyboard,
       onLayoutSeen: (label) => useStore.getState().setKeysSeen(label),
     });
+    // Au doigt : l'écran tactile prend la place du pointeur verrouillé (un clavier branché reste écouté).
+    const worldActive = () => {
+      const state = useStore.getState();
+      return state.phase === "world" && state.mode === "walk";
+    };
+    const detachTouch = isTouchDevice() ? attachTouch({ surface: canvas, onLook: (dx, dy) => look(dx, dy, useStore.getState().settings.sensitivity * view.scale), onCapture: captureChanged, worldActive }) : null;
     // Ce que le navigateur sait dire de la disposition, quand il sait (sinon : la langue, puis la première touche).
     void movementKeyLabels().then((label) => useStore.getState().keysSeen === null && useStore.getState().setKeysSeen(label));
     return () => {
+      detachTouch?.();
       detach();
       stopIntents();
     };

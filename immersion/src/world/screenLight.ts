@@ -6,7 +6,7 @@ import { PLAN, ROOM, SCREENS, screenHeight } from "./layout";
  *
  * Deux choses, que three ne sait pas faire à ce prix :
  *
- * - **l'ambilight par zones** : chaque écran est découpé en six zones (trois colonnes, deux rangées),
+ * - **l'ambilight par zones** : chaque écran est découpé en trois zones — gauche, centre, droite —,
  *   dont la couleur est relevée sur l'image du film. Chaque zone éclaire la pièce comme une petite
  *   surface lumineuse — le mur à gauche de l'écran prend la teinte du bord gauche de l'image, le
  *   plafond celle du haut. Une lumière rectangulaire de three (`RectAreaLight`) n'a qu'une couleur,
@@ -25,11 +25,19 @@ import { PLAN, ROOM, SCREENS, screenHeight } from "./layout";
  *
  * Le programme est greffé sur **toutes** les matières « standard » (`installScreenLight`) : les
  * matières construites, les modèles, les vitres. Les uniformes sont partagés : une écriture par image.
+ *
+ * **Ce que chaque matière en garde** (11/11/2026 — calculé partout, il coûtait plus d'un quart d'une image
+ * sur une puce graphique intégrée) :
+ * - une matière à lumière cuite avec la couche des écrans (`SL_BAKED`, posé par `lightmaps.ts`) ne calcule
+ *   plus l'ambilight ni le halo : ils sont dans sa lightmap, ombres et rebonds compris ;
+ * - le reflet du film n'est calculé que par les matières qui peuvent le montrer (`SL_MIRROR` : le parquet,
+ *   la pierre polie, le métal, les vitres) ;
+ * - le reste (les modèles posés, sans lightmap) garde le calcul d'origine — quelques pixels à l'écran.
  */
 const N = SCREENS.length;
 /** Colonnes et rangées de zones par écran. */
 export const ZONES_X = 3;
-export const ZONES_Y = 2;
+export const ZONES_Y = 1;
 const ZONES = ZONES_X * ZONES_Y;
 
 /** Le volume ouvert : salon, cuisine, mezzanine. */
@@ -124,6 +132,7 @@ const FRAGMENT_MAIN = /* glsl */ `
     }
 
     // ── Les écrans ────────────────────────────────────────────────────────────
+    #if ! defined( SL_BAKED ) || defined( SL_MIRROR )
     if ( uSlOn > 0.001 ) {
       vec3 slR = reflect( - slV, slN );
       float slNoV = saturate( dot( slN, slV ) );
@@ -137,6 +146,7 @@ const FRAGMENT_MAIN = /* glsl */ `
         float front = dot( vSlWorld - c, n );
         if ( front < 0.0 ) continue;
 
+        #ifndef SL_BAKED
         // L'ambilight : chaque zone, une petite surface qui éclaire (éclairement = luminance × aire ×
         // les deux cosinus / distance²).
         vec3 E = vec3( 0.0 );
@@ -167,6 +177,8 @@ const FRAGMENT_MAIN = /* glsl */ `
           }
         }
 
+        #endif
+        #ifdef SL_MIRROR
         // Le reflet : le rayon réfléchi rencontre-t-il la dalle ?
         float toward = dot( slR, n );
         if ( toward < -0.0001 ) {
@@ -189,8 +201,10 @@ const FRAGMENT_MAIN = /* glsl */ `
             reflectedLight.directSpecular += image * fresnel * ( cover * gloss * gloss * uSlMirror * uSlGain * 0.12 * uSlOn );
           }
         }
+        #endif
       }
     }
+    #endif
   }
 `;
 

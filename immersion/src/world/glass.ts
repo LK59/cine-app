@@ -37,6 +37,9 @@ const FROST_PARS = /* glsl */ `
 function frostPatch(base: number, height: number) {
   return (shader: WebGLProgramParametersWithUniforms) => {
     applyScreenLight(shader);
+    // Pas de reflet direct des lampes : sur un miroir aussi lisse, chaque lumière ponctuelle donnait un disque
+    // éblouissant cerné de noir, posé sur la nuit — trois dans la fenêtre de la cuisine.
+    shader.fragmentShader = shader.fragmentShader.replace("#include <lights_fragment_end>", "#include <lights_fragment_end>\nreflectedLight.directSpecular = vec3( 0.0 );");
     shader.uniforms.uFrostBase = { value: base };
     shader.uniforms.uFrostHeight = { value: height };
     shader.fragmentShader = shader.fragmentShader
@@ -58,8 +61,10 @@ function frostPatch(base: number, height: number) {
 
 /** Un vitrage dont la traverse basse est à `base` mètres du sol ; le givre y monte sur `height` mètres au plus. */
 export function glassMaterial(base: number, height = 0.55): MeshStandardMaterial {
-  const material = new MeshStandardMaterial({ color: "#ffffff", roughness: 0.03, metalness: 1, transparent: true, opacity: 0.13, envMapIntensity: 1.3, depthWrite: false, side: DoubleSide });
+  // Un reflet de la pièce discret : à 1,3 il couvrait la nuit dehors.
+  const material = new MeshStandardMaterial({ color: "#ffffff", roughness: 0.03, metalness: 1, transparent: true, opacity: 0.1, envMapIntensity: 0.55, depthWrite: false, side: DoubleSide });
+  material.defines = { SL_MIRROR: "" };
   material.onBeforeCompile = frostPatch(base, height);
-  material.customProgramCacheKey = () => "vitrage-givre";
+  material.customProgramCacheKey = () => "vitrage-givre-2";
   return material;
 }

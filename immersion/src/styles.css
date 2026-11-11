@@ -83,8 +83,15 @@ kbd {
   inset: 0;
   width: 100vw !important;
   height: 100vh !important;
+  /* Sur un téléphone, la hauteur réellement visible (la barre du navigateur va et vient). */
+  height: 100dvh !important;
   display: block;
   outline: none;
+  /* Les doigts pilotent la visite : ni défilement, ni zoom de la page, ni sélection. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .leaving {
@@ -1298,4 +1305,142 @@ kbd {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* ── L'écran tactile ───────────────────────────────────────────────────────── */
+.touch {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.touch-stick {
+  position: absolute;
+  left: -58px;
+  top: -58px;
+  width: 116px;
+  height: 116px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.07);
+  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.28);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.touch-knob {
+  position: absolute;
+  left: 34px;
+  top: 34px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.5);
+}
+.touch-menu,
+.touch-button {
+  pointer-events: auto;
+  border: 0;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  background: rgb(18 16 14 / 0.55);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.22);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  -webkit-tap-highlight-color: transparent;
+}
+.touch-menu {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  font-size: 18px;
+}
+.touch-actions {
+  position: absolute;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+.touch-button {
+  min-width: 56px;
+  height: 56px;
+  padding: 0 18px;
+  border-radius: 28px;
+  font-size: 15px;
+}
+.touch-main {
+  background: rgb(251 191 36 / 0.85);
+  color: #1a1408;
+  box-shadow: none;
+}
+.intro-touch {
+  max-width: 560px;
+  margin: 0 auto;
+  text-align: center;
+  line-height: 1.5;
+}
+/* Un téléphone en paysage : le panneau à plat, sur tout l'écran. */
+.panel-flat {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+}
+.panel-flat .panel {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  font-size: 14px;
+  animation: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.panel-flat .panel-head {
+  padding: 8px 14px;
+  gap: 10px;
+}
+
+/* L'accueil sur un téléphone en paysage : le logo plus petit, la légende sous le bouton. */
+@media (max-height: 480px) {
+  .intro-center {
+    transform: scale(0.66);
+    transform-origin: center 34%;
+  }
+  .intro-keys {
+    bottom: 8px;
+    font-size: 11px;
+  }
+}
+
+/* Les pistes : audio, sous-titres. */
+.now-tracks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+}
+.now-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.now-track select {
+  height: 34px;
+  max-width: 300px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.1);
+  color: #fff;
+  font: inherit;
+}
+.now-track select option {
+  color: #111;
 }
