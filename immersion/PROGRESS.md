@@ -327,6 +327,11 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
   mesure : c'est un fichier (`assets/bench/mire.webm`). La ligne `immersion-bench` porte `maxMs`, `over33`,
   `over50`, `slowAt` pour situer les à-coups — à lire avant de retoucher quoi que ce soit au rendu.
 
+- **Un import `@/lib/…` de plus dans `immersion/src` doit être ajouté au `COPY` de l'étape `immersion` du
+  `Dockerfile`** (11/11/2026) : cette étape ne reçoit que les fichiers de l'application qu'on lui nomme. Le build
+  lancé depuis le dépôt entier passait ; celui de l'image a échoué (`Cannot find module '@/lib/trackLabel'`). Pour
+  le voir avant : `docker build --target immersion .` depuis la racine.
+
 ## Poids
 
 - `public/assets/` : **46 Mo** au 11/11/2026 (v2) — textures, modèles, panorama, lightmaps (13 Mo : six atlas,

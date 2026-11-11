@@ -22,14 +22,16 @@ RUN --mount=type=cache,target=/root/.npm npm install
 # Le mode « Immersion » : un monde 3D caché, servi à part (`src/lib/immersionFiles.ts`,
 # `immersion/PROGRESS.md`). Son propre projet, ses propres dépendances, son propre build — rien n'en
 # entre dans celui de l'application, et cette étape n'est refaite que si `immersion/` change. Les
-# trois fichiers de `src/lib` sont ceux qu'il importe en lecture seule (la détection des codecs et le
-# plafond de débit, pour demander à Jellyfin exactement ce que le lecteur demande).
+# fichiers de `src/lib` sont ceux qu'il importe en lecture seule : la détection des codecs et le plafond de
+# débit (pour demander à Jellyfin exactement ce que le lecteur demande), et le nom des pistes (pour les
+# nommer comme le lecteur). Un import de plus dans `immersion/src` (`@/lib/…`) s'ajoute ici — sans quoi
+# cette étape échoue, alors que le build lancé depuis le dépôt entier passe (11/11/2026).
 FROM node:26-alpine AS immersion
 WORKDIR /build/immersion
 COPY immersion/package.json immersion/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY immersion/ ./
-COPY src/lib/codecSupport.ts src/lib/webkitEngine.ts src/lib/networkBitrate.ts /build/src/lib/
+COPY src/lib/codecSupport.ts src/lib/webkitEngine.ts src/lib/networkBitrate.ts src/lib/trackLabel.ts src/lib/trackPreferences.ts /build/src/lib/
 RUN npm run build
 
 FROM node:26-alpine AS builder
