@@ -6,8 +6,9 @@ entier après toute reprise.**
 
 ## État actuel (à jour)
 
-- **Sur la branche, non livré** : enchaîner les épisodes et la télécommande — voir « Le confort de regarder » ; et
-  **les décors en trois paquets** (ban CrowdSec du 11/11, voir « Pièges rencontrés », scénario 15) — urgent.
+- **10.36.0 le 11/11 vers 10 h** (`88acbd48`) : **les décors en trois paquets** (ban CrowdSec du matin, voir
+  « Pièges rencontrés », scénario 15 : 5 noms par chargement en production au lieu de 73, 0 réponse 4xx), enchaîner
+  les épisodes et la télécommande (voir « Le confort de regarder »).
 - **10.35.1 le 11/11 au matin** (`929e2388`) : les corrections du premier essai du propriétaire sur iPhone — voir
   « Retour du propriétaire sur la v2 ».
 - **V2 livrée : 10.35.0, en production depuis le 11/11/2026 vers 3 h 15** (`dcd3f449`) — voir « V2 — la nuit du
@@ -510,9 +511,8 @@ ce qui a été fait :
   doigt, la mesure ne joue plus que le préréglage en cours. Ses lignes d'avant : Ultra 45 i/s écrans éteints,
   60 avec film ; sur iPhone tous les préréglages rendent à la même définition (la densité est plafonnée à 1,5).
 
-## Le confort de regarder (demandé le 11/11/2026) — fait, pas encore livré
+## Le confort de regarder (demandé le 11/11/2026) — livré en 10.36.0
 
-Fait sur la branche `immersion`, **non déployé** (une seule livraison à la fin, comme d'habitude) :
 
 1. **Enchaîner sans quitter le canapé** (`media/upNext.ts`, `ui/Prompts.tsx`). Les règles sont celles du lecteur de
    l'application (`PlayerControls`) : « Passer l'intro / le récap » par `activeSkip` (`@/lib/playerSkip`, lu tel
@@ -548,10 +548,9 @@ refermée — `finish("next")`/`"ended"`), sur un vrai iPhone (la carte en haut 
 
 ## Prochaine action
 
-Livrer « le confort de regarder » quand le propriétaire le demande : portail de l'application (seul le `Dockerfile`
-change hors du mode), `docker build --target immersion .`, version, fusion, image, bascule. Puis, sur un vrai
-épisode avec le compte de test : la carte au générique, l'enchaînement, plus aucune séance du premier épisode chez
-Jellyfin.
+Sur un vrai épisode, avec le compte de test et une instance jetable : la carte au générique, l'enchaînement, et
+plus aucune séance du premier épisode chez Jellyfin. Retour du propriétaire sur la télécommande et l'enchaînement
+(iPhone : la carte en haut de l'écran en paysage).
 
 Ensuite, selon son retour : entrer plus vite (charger le salon d'abord), des préréglages qui se distinguent
 vraiment sur téléphone (la densité y est plafonnée à 1,5 : tous rendent à la même définition), le multijoueur.
