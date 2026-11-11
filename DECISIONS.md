@@ -10556,6 +10556,18 @@ connus et bornés, compte tiré de la session, comme les autres relevés de cett
 (`secondes:de>vers` suivi de `f` cadence, `a` à-coups, `m` marge pour remonter), la cadence moyenne et les images de
 plus de 50 ms. Sans elle, rien ne disait si « Auto » avait trouvé son niveau.
 
+**Chaque visite au journal, et ses erreurs (11/11/2026).** La ligne `immersion-auto` part maintenant à chaque visite,
+« Auto » ou non (le nom est resté pour ne pas couper la suite des lignes) : la qualité choisie (`quality`), la phase la
+plus avancée atteinte (`phase`) et celle du départ (`end`), la durée depuis l'ouverture de la page (`seconds`, origine
+aussi des secondes de `changes`), le nombre d'erreurs (`errors`) et de pertes du contexte WebGL (`contextLost`) ;
+les champs d'« Auto » sont `null` et `auto: false` quand il n'a pas tourné. Qualité et phases sont des listes fermées
+dans la route. Les erreurs elles-mêmes vont où vont celles du cinéma — `/api/client-error`, `scope: "client"` dans
+`server.log` — avec une source `immersion:window`, `immersion:rejection`, `immersion:crash` (la barrière de l'écran de
+secours) ou `immersion:webgl` (le contexte perdu, avec l'instant, la qualité et la pièce) : un visiteur avait vu « des
+écrans noirs en marchant » et rien n'en restait. Le mode a son propre émetteur (`immersion/src/lib/errorLog.ts`, même
+corps que `reportClientError`) parce qu'il s'arrête au premier refus 4xx — le pare-feu bannit sur les 4xx répétées,
+et une session expirée répondrait 403 à chaque erreur — et qu'il s'en tient à cinq envois par visite.
+
 **Le pare-feu (10.36.0).** Le mode ne demande ses décors qu'en trois paquets (`immersion/vite.config.ts`,
 `assetPacks`) : CrowdSec bannit de tout le serveur une adresse qui demande plus de ~40 noms de fichiers non
 statiques distincts en rafale, et le chalet en demandait 73. Le garde-fou est `immersion/tests/e2e/15-requetes`.
@@ -10564,7 +10576,9 @@ statiques distincts en rafale, et le chalet en demandait 73. Le garde-fou est `i
 `src/`), `immersion-files.test.ts` (types servis, cache, `.br` par les marqueurs de §131, jamais hors du dossier,
 404 sans build), `immersion-proxy.test.ts` (307 vers la connexion pour la page, 401 pour les fichiers, hors des
 listes publiques, porte des liens de partage), `immersion-activity.test.ts` (reconnu, hors du diagnostic),
-`viewport-diag-route.test.ts` (les lignes `immersion-bench` et `immersion-auto`) ; de bout en bout, `immersion/tests/e2e/`.
+`viewport-diag-route.test.ts` (les lignes `immersion-bench` et `immersion-auto`, avec ou sans « Auto ») ; de bout en
+bout, `immersion/tests/e2e/` (`16-auto` : la ligne de visite hors « Auto », une erreur et une perte du contexte
+envoyées et comptées).
 
 ## 145. Les tâches de fond ont un interrupteur, pour les copies de l'application (11/11/2026)
 

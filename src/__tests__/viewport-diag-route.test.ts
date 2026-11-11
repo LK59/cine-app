@@ -243,6 +243,34 @@ describe("POST /api/viewport-diag", () => {
     expect(line.fps).toBe(60);
   });
 
+  it("une visite du mode Immersion hors « Auto » : qualité, phases, erreurs et pertes du contexte, bornées", async () => {
+    const res = await post({
+      kind: "immersion-auto",
+      quality: "medium",
+      phase: "world",
+      end: "lost",
+      seconds: 95,
+      errors: 2,
+      contextLost: 1,
+      auto: false,
+      startLevel: null,
+      changes: null,
+      fps: null,
+      renderer: "ANGLE (Intel, Intel(R) Graphics, Direct3D11)",
+    });
+    expect(res.status).toBe(204);
+    const [line, kind] = mockLog.mock.calls[0];
+    expect(kind).toBe("immersion-auto");
+    expect(line).toMatchObject({ user: "louis", quality: "medium", phase: "world", end: "lost", seconds: 95, errors: 2, contextLost: 1, auto: false, startLevel: null, fps: null });
+    expect(line.changes).toBeUndefined();
+  });
+
+  it("une visite du mode Immersion : une qualité ou une phase inconnue tombe", async () => {
+    expect((await post({ kind: "immersion-auto", quality: "extrême", phase: "<b>", end: "ailleurs", errors: "beaucoup", auto: "oui" })).status).toBe(204);
+    const [line] = mockLog.mock.calls[0];
+    expect(line).toMatchObject({ quality: null, phase: null, end: null, errors: null, auto: false });
+  });
+
   it("une mesure du mode Immersion sans préréglage connu : 400, rien d'écrit", async () => {
     expect((await post({ kind: "immersion-bench", preset: "extrême", fps: 60 })).status).toBe(400);
     expect(mockLog).not.toHaveBeenCalled();

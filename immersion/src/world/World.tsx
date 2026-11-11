@@ -15,6 +15,7 @@ import { PanelAnchor } from "./PanelAnchor";
 import { installScreenLight } from "./screenLight";
 import { AutoQuality } from "./AutoQuality";
 import { loadPacks } from "../lib/packs";
+import { reportContextLost } from "../lib/errorLog";
 
 // Avant toute matière : la lumière des écrans se greffe sur toutes les matières « standard ».
 installScreenLight();
@@ -78,8 +79,13 @@ export function World() {
           e.preventDefault();
           // Sauf quand on s'en va : en quittant, le monde est démonté et rend lui-même son contexte — l'écran
           // « Le rendu 3D s'est interrompu » passait alors une fraction de seconde avant l'application.
-          const phase = useStore.getState().phase;
-          if (phase !== "leaving" && phase !== "expired") setPhase("lost");
+          const state = useStore.getState();
+          const phase = state.phase;
+          if (phase === "leaving" || phase === "expired") return;
+          // Au journal : « des écrans noirs en marchant » chez un visiteur n'avaient laissé aucune trace. L'instant, la
+          // phase, la qualité et la pièce aident à dire si c'est la machine (mémoire, pilote) ou un endroit du chalet.
+          reportContextLost(`${Math.round(performance.now() / 1000)} s, phase ${phase}, qualité ${state.settings.quality}${state.settings.quality === "auto" ? ` niveau ${state.autoLevel}` : ""}, pièce ${state.room}`);
+          setPhase("lost");
         });
       }}
     >
