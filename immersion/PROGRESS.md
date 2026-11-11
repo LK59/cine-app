@@ -6,6 +6,8 @@ entier après toute reprise.**
 
 ## État actuel (à jour)
 
+- **10.35.1 le 11/11 au matin** (`929e2388`) : les corrections du premier essai du propriétaire sur iPhone — voir
+  « Retour du propriétaire sur la v2 ».
 - **V2 livrée : 10.35.0, en production depuis le 11/11/2026 vers 3 h 15** (`dcd3f449`) — voir « V2 — la nuit du
   11/11/2026 » plus bas : ce qui a été mesuré, ce qui ne l'a pas été.
 - **Livré : 10.34.0, en production depuis le 10/11/2026 à 23 h 47** (`020a0b04`), puis **10.34.1 le 11/11 à 0 h 04**
