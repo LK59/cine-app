@@ -58,7 +58,12 @@ export function buildOutside(): Part {
   planks.wall("z", x1, 0.04, z0 - 0.3, z1, plinth, eave + 0.04, [{ a0: door.z - door.width / 2 - 0.1, a1: door.z + door.width / 2 + 0.1, y0: plinth, y1: door.height + 0.1 }]);
   // Sud (le pignon) : percé de la fenêtre de la chambre.
   stone.wall("x", z1, 0.07, x0, x1 + 0.04, 0, plinth);
-  planks.wall("x", z1, 0.04, x0, x1 + 0.04, plinth, (x) => wingRoofY(x) + 0.02, [{ a0: win.x0 - 0.1, a1: win.x1 + 0.1, y0: win.y0 - 0.1, y1: win.y1 + 0.1 }], 0.12);
+  // Son haut suit la pente et entre dans l'épaisseur du toit (la ligne médiane des planches, `wingRoofY` +
+  // 0,06) ; il montait en escalier juste sous elles, un jour en triangle à chaque marche. Deux appels, coupés
+  // au faîtage, pour que la pointe tombe sur un bord de bande et ne soit pas rognée.
+  const gableOpening = [{ a0: win.x0 - 0.1, a1: win.x1 + 0.1, y0: win.y0 - 0.1, y1: win.y1 + 0.1 }];
+  planks.wall("x", z1, 0.04, x0, centre, plinth, (x) => wingRoofY(x) + 0.06, gableOpening, 0.12);
+  planks.wall("x", z1, 0.04, centre, x1 + 0.04, plinth, (x) => wingRoofY(x) + 0.06, gableOpening, 0.12);
   // Ouest.
   stone.wall("z", x0 - 0.07, 0.07, z0, z1, 0, plinth);
   planks.wall("z", x0 - 0.04, 0.04, z0, z1, plinth, eave + 0.04);

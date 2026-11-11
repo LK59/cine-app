@@ -23,6 +23,10 @@ const VIEWS = {
   cuisine: { x: -2.6, z: 5.0, yaw: -2.2, pitch: -0.05 },
   chambre: { x: -0.2, z: 12.9, yaw: 1.05, pitch: -0.06 },
   terrasse: { x: -2.6, z: -10.6, yaw: -2.1, pitch: -0.08 },
+  // La mezzanine : vers la bibliothèque et le pignon, puis vers le salon par-dessus la rambarde.
+  mezzanine: { x: -2.5, z: 8.6, y: 2.9, yaw: -0.9, pitch: -0.12 },
+  "mezz-pignon": { x: 0, z: 6, y: 2.9, yaw: Math.PI, pitch: 0.2 },
+  "mezz-salon": { x: 0.5, z: 4.7, y: 2.9, yaw: 0.1, pitch: -0.28 },
 };
 
 // Chaque variante : ce qu'elle change dans la page, et comment le défaire.

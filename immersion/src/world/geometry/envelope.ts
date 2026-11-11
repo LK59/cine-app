@@ -42,11 +42,22 @@ export class Kits {
 }
 
 /**
+ * Ce que les lames du toit dépassent du faîtage, de chaque côté : les deux pans se croisent au lieu de se
+ * toucher par une arête. Une jonction bout à bout ne tient qu'au millimètre près, et le moindre écart
+ * laisse passer le ciel en pointillé — c'est ce qu'on voyait de la mezzanine le long du pignon du fond
+ * (11/11/2026) ; au faîtage les pans ne se recouvraient que de 1,5 cm, par leur seule épaisseur.
+ */
+const RIDGE_OVERLAP = 0.02;
+
+/**
  * Le toit du corps principal sur une tranche de sa longueur : les lames du plafond sous les
  * chevrons, le faîtage, les sablières, les pannes, les chevrons. Le salon et la partie sud en ont
  * chacun leur tranche — deux groupes distincts, pour le dessin comme pour la lumière cuite.
+ *
+ * `overhang` prolonge les lames au-delà de `z0`, `overhangEnd` au-delà de `z1` : au droit d'un pignon,
+ * elles passent par-dessus le mur au lieu de s'arrêter contre sa face (voir `GABLE_TOP`).
  */
-export function roof(kits: Kits, z0: number, z1: number, overhang = 0): void {
+export function roof(kits: Kits, z0: number, z1: number, overhang = 0, overhangEnd = 0): void {
   const timber = kits.get("timber");
   const planks = kits.get("planks");
   const ridgeY = ROOM.ridge - 0.22;
@@ -61,8 +72,19 @@ export function roof(kits: Kits, z0: number, z1: number, overhang = 0): void {
       if (z < z0 || z >= z1) continue;
       timber.beam([side * (W - 0.05), ROOM.eave - 0.04, z], [side * 0.14, roofY(0.14) - 0.09, z], 0.09, 0.15);
     }
-    const slopeLength = Math.hypot(W + 0.4, (W + 0.4) * Math.tan(ROOF_ANGLE));
-    const cx = (side * (W + 0.4)) / 2;
-    planks.box([slopeLength, 0.05, z1 - z0 + overhang], { at: [cx, roofY(cx) + 0.09, (z0 + z1 - overhang) / 2], rot: [0, 0, -side * ROOF_ANGLE] }, 2);
+    // Le pan, du faîtage (dépassé de `RIDGE_OVERLAP`) jusqu'à 0,4 m au-delà du mur : sa ligne médiane suit
+    // `roofY + 0,09` — c'est elle que vise le haut des pignons.
+    const reach = W + 0.4 + RIDGE_OVERLAP;
+    const slopeLength = reach / Math.cos(ROOF_ANGLE);
+    const cx = side * ((W + 0.4 - RIDGE_OVERLAP) / 2);
+    const cy = ROOM.ridge + 0.09 - ((W + 0.4 - RIDGE_OVERLAP) / 2) * Math.tan(ROOF_ANGLE);
+    planks.box([slopeLength, 0.05, z1 - z0 + overhang + overhangEnd], { at: [cx, cy, (z0 - overhang + z1 + overhangEnd) / 2], rot: [0, 0, -side * ROOF_ANGLE] }, 2);
   }
 }
+
+/**
+ * Le haut d'un pignon du corps principal : la ligne médiane des lames du toit. Le mur entre ainsi dans
+ * leur épaisseur (5 cm, de `roofY + 0,06` à `roofY + 0,12`) sans percer le dessus ; les lames, elles,
+ * passent par-dessus le mur.
+ */
+export const GABLE_TOP = (x: number) => roofY(x) + 0.09;

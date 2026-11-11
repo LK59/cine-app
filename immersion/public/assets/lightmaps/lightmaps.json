@@ -151,8 +151,8 @@
      "count": 72,
      "probe": [
       [
-       -0.015,
-       8.71,
+       0.005,
+       8.725,
        4.0
       ],
       [
@@ -161,8 +161,8 @@
        4.0
       ],
       [
-       0.015,
-       8.71,
+       -0.005,
+       8.725,
        -7.4
       ]
      ]
@@ -271,7 +271,7 @@
     },
     "ecrans": {
      "texture": "salon_ecrans.ktx2",
-     "range": 8.0
+     "range": 16.0
     }
    }
   },
@@ -307,7 +307,7 @@
      "name": "sud__timber",
      "material": "timber",
      "offset": 144,
-     "count": 7416,
+     "count": 7380,
      "probe": [
       [
        -0.14,
@@ -315,8 +315,8 @@
        10.0
       ],
       [
-       2.041,
-       3.9,
+       1.874,
+       2.9,
        4.016
       ],
       [
@@ -329,13 +329,13 @@
     {
      "name": "sud__planks",
      "material": "planks",
-     "offset": 7560,
+     "offset": 7524,
      "count": 1332,
      "probe": [
       [
-       -0.015,
-       8.71,
-       10.0
+       0.005,
+       8.725,
+       10.4
       ],
       [
        -5.44,
@@ -344,7 +344,7 @@
       ],
       [
        -4.32,
-       2.525,
+       2.58,
        8.87
       ]
      ]
@@ -352,13 +352,13 @@
     {
      "name": "sud__plaster",
      "material": "plaster",
-     "offset": 8892,
+     "offset": 8856,
      "count": 1044,
      "probe": [
       [
        -5.5,
        4.8,
-       10.0
+       10.3
       ],
       [
        0.0,
@@ -367,7 +367,7 @@
       ],
       [
        5.0,
-       4.85,
+       5.054,
        10.0
       ]
      ]
@@ -375,18 +375,18 @@
     {
      "name": "sud__stone",
      "material": "stone",
-     "offset": 9936,
+     "offset": 9900,
      "count": 36,
      "probe": [
       [
        5.8,
        4.8,
-       10.0
+       10.3
       ],
       [
        5.5,
        0.0,
-       10.0
+       10.3
       ],
       [
        5.5,
@@ -398,7 +398,7 @@
     {
      "name": "sud__cabinet",
      "material": "cabinet",
-     "offset": 9972,
+     "offset": 9936,
      "count": 35280,
      "probe": [
       [
@@ -421,7 +421,7 @@
     {
      "name": "sud__counter",
      "material": "counter",
-     "offset": 45252,
+     "offset": 45216,
      "count": 1836,
      "probe": [
       [
@@ -444,7 +444,7 @@
     {
      "name": "sud__metal",
      "material": "metal",
-     "offset": 47088,
+     "offset": 47052,
      "count": 984,
      "probe": [
       [
@@ -467,7 +467,7 @@
     {
      "name": "sud__wood",
      "material": "wood",
-     "offset": 48072,
+     "offset": 48036,
      "count": 792,
      "probe": [
       [
@@ -490,7 +490,7 @@
     {
      "name": "sud__leather",
      "material": "leather",
-     "offset": 48864,
+     "offset": 48828,
      "count": 3132,
      "probe": [
       [
@@ -513,7 +513,7 @@
     {
      "name": "sud__white",
      "material": "white",
-     "offset": 51996,
+     "offset": 51960,
      "count": 3636,
      "probe": [
       [
@@ -536,7 +536,7 @@
     {
      "name": "sud__pillowB",
      "material": "pillowB",
-     "offset": 55632,
+     "offset": 55596,
      "count": 6552,
      "probe": [
       [
@@ -559,7 +559,7 @@
     {
      "name": "sud__rug",
      "material": "rug",
-     "offset": 62184,
+     "offset": 62148,
      "count": 1764,
      "probe": [
       [
@@ -1068,7 +1068,7 @@
        10.43
       ],
       [
-       -2.08,
+       -2.15,
        2.3,
        16.94
       ],
@@ -1202,7 +1202,7 @@
     },
     "lampes": {
      "texture": "dehors_lampes.ktx2",
-     "range": 32.0
+     "range": 128.0
     },
     "ecrans": {
      "texture": "dehors_ecrans.ktx2",
@@ -1241,5 +1241,5 @@
    "sky": 1.0
   }
  },
- "generated": "2026-11-11T06:07:29Z"
+ "generated": "2026-11-11T14:13:15Z"
 }
