@@ -150,8 +150,13 @@ export function syncMix(): void {
   applyMix({ volume: state.settings.volume, muted: state.playback.muted, spatial: state.settings.spatial, reverb: state.settings.reverb });
 }
 
+/** L'ouverture suivante reste en pause une fois prête (la télévision commune d'un salon : `net/tv.ts`). */
+let nextOpenPaused = false;
+
 async function start(item: Item, rung: number, from: number | null, cause: "open" | "ladder" | "audio" = "open", audio: number | null = null, subtitle: number | null = null) {
   const mine = ++generation;
+  const startPaused = cause === "open" && nextOpenPaused;
+  nextOpenPaused = false;
   const el = getVideo();
   // Un autre titre jouait : sa séance se referme d'abord.
   finish(cause === "ladder" ? "error" : "next");
@@ -255,6 +260,13 @@ async function start(item: Item, rung: number, from: number | null, cause: "open
     beat = setInterval(() => {
       if (video && !video.paused) sendProgress();
     }, PROGRESS_EVERY_MS);
+    if (startPaused) {
+      // Ouvert pour un départ commun : chargé, calé, en pause — le flux continue de se remplir. Le départ viendra du
+      // salon (`net/tv.ts`).
+      set({ wantPaused: true });
+      el.addEventListener("canplay", () => mine === generation && useStore.getState().playback.status === "loading" && set({ status: "paused" }), { once: true });
+      return;
+    }
     await el.play().catch(() => {
       // Lecture refusée sans geste (ne devrait pas arriver : on vient d'un clic) : l'écran reste en pause.
       if (mine === generation) set({ status: "paused" });
@@ -295,8 +307,28 @@ async function descend(why: string) {
  * Lance un titre de la bibliothèque. `from` : une position imposée ; sans elle, la reprise du compte.
  * N'est appelé que par les commandes (`commands.ts`).
  */
-export function open(item: Item, from: number | null = null): Promise<void> {
+export function open(item: Item, from: number | null = null, paused = false): Promise<void> {
+  nextOpenPaused = paused;
   return start(item, 0, from);
+}
+
+/**
+ * Où en est l'élément, pour la télévision commune (`net/tv.ts`) : la position, combien de secondes sont chargées
+ * devant, et s'il peut démarrer sans attendre.
+ */
+export function playbackClock(): { time: number; ahead: number; ready: boolean; ended: boolean } {
+  const el = video;
+  if (!el) return { time: 0, ahead: 0, ready: false, ended: false };
+  let ahead = 0;
+  for (let i = 0; i < el.buffered.length; i++) {
+    if (el.buffered.start(i) <= el.currentTime + 0.25 && el.buffered.end(i) > el.currentTime) ahead = el.buffered.end(i) - el.currentTime;
+  }
+  return { time: el.currentTime, ahead, ready: el.readyState >= 3, ended: el.ended };
+}
+
+/** La vitesse de lecture, pour rattraper doucement un décalage avec le salon (± 5 %, bornée). */
+export function setPlaybackRate(rate: number): void {
+  if (video) video.playbackRate = Math.min(1.1, Math.max(0.9, rate));
 }
 
 /**

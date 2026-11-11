@@ -761,6 +761,15 @@ function migrate(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_quiz_scores_account ON quiz_scores(account);
   `);
+  // L'avatar d'un compte dans les salons du chalet (DECISIONS.md §146, étape 5) : `[couleur, chapeau, écharpe,
+  // lunettes]` en JSON.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS avatar_looks (
+      account    TEXT    PRIMARY KEY,
+      look       TEXT    NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  `);
   // Les liens de partage (DECISIONS.md §112) : un film ou une série, un mot de passe (haché), une
   // fin, et le compte Jellyfin technique qui garde la reprise du lien. La ligne reste après
   // l'expiration — ce que le lien a consommé se lit encore dans l'Activité.
@@ -2620,6 +2629,24 @@ export const sofarDb = {
       removed += changes;
       if (changes < CLEANUP_BATCH || Date.now() - startedAt > CLEANUP_BUDGET_MS) return removed;
     }
+  },
+};
+
+/** L'avatar d'un compte dans les salons (DECISIONS.md §146) — voir la table dans `migrate()`. */
+export const avatarDb = {
+  get(account: string): [number, number, number, number] | null {
+    const row = getDb().prepare("SELECT look FROM avatar_looks WHERE account = ?").get(account) as { look: string } | undefined;
+    if (!row) return null;
+    try {
+      return JSON.parse(row.look) as [number, number, number, number];
+    } catch {
+      return null;
+    }
+  },
+  set(account: string, look: [number, number, number, number], now = Date.now()): void {
+    getDb()
+      .prepare("INSERT INTO avatar_looks (account, look, updated_at) VALUES (?, ?, ?) ON CONFLICT(account) DO UPDATE SET look = excluded.look, updated_at = excluded.updated_at")
+      .run(account, JSON.stringify(look), now);
   },
 };
 

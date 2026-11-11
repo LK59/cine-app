@@ -1,5 +1,6 @@
 import type { ClientMessage, ServerMessage, Visibility } from "../../../salons/src/protocol";
 import type { QuizView } from "../../../salons/src/quiz";
+import type { Look } from "../../../salons/src/tv";
 import { useStore } from "../state/store";
 import { forgetPoses, poses, pushPose } from "./poses";
 import { applyShared, installSharedSink, seedShared } from "./sync";
@@ -108,6 +109,9 @@ function onMessage(message: ServerMessage): void {
       attempt = 0;
       passRefusals = 0;
       setNet({ status: "online", you: message.you, room: message.room, error: null, offset: message.now - Date.now() });
+      // Notre apparence, pour les autres : celle du compte (lue une fois), sinon aucune — chacun en tire une de notre
+      // identifiant.
+      void loadLook().then((look) => look && send({ t: "look", look }));
       save();
       syncClock();
       if (clockTimer) clearInterval(clockTimer);
@@ -178,6 +182,12 @@ function onMessage(message: ServerMessage): void {
     case "game":
       if (state.room) setNet({ room: { ...state.room, game: message.game } });
       for (const listener of gameListeners) listener(message.game, message.result);
+      return;
+    case "tv":
+      if (state.room) setNet({ room: { ...state.room, tv: message.tv } });
+      return;
+    case "look":
+      if (state.room) setNet({ room: { ...state.room, members: state.room.members.map((m) => (m.id === message.id ? { ...m, look: message.look } : m)) } });
       return;
     case "error":
       // Un salon disparu (fermé, service redémarré) n'est plus à rejoindre au prochain retour.
@@ -349,6 +359,39 @@ export function requestRoster(): Promise<string | null> {
   });
 }
 
+/** Les intentions de la télévision commune (`net/tv.ts`) : c'est le service qui les applique. */
+export function sendTv(message: Extract<ClientMessage, { t: "tv.open" | "tv.ready" | "tv.play" | "tv.pause" | "tv.seek" | "tv.stop" }>): boolean {
+  return send(message);
+}
+
+let lookLoaded: Promise<Look | null> | null = null;
+
+/** L'apparence du compte (`/api/salons/avatar`), lue une fois par page. */
+function loadLook(): Promise<Look | null> {
+  lookLoaded ??= fetch("/api/salons/avatar", { credentials: "same-origin", cache: "no-store" })
+    .then((res) => (res.ok ? (res.json() as Promise<{ look?: Look | null }>) : null))
+    .then((body) => {
+      const look = body?.look ?? null;
+      if (look && !net().look) setNet({ look });
+      return look;
+    })
+    .catch(() => null);
+  return lookLoaded;
+}
+
+/** Change notre apparence : gardée pour le compte, montrée aux autres tout de suite. */
+export function setLook(look: Look): void {
+  setNet({ look });
+  lookLoaded = Promise.resolve(look);
+  if (net().room) send({ t: "look", look });
+  void fetch("/api/salons/avatar", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ look }) }).catch(() => {});
+}
+
+/** Lit notre apparence (pour l'écran « À plusieurs »), sans se connecter. */
+export function readLook(): void {
+  void loadLook();
+}
+
 /** Les intentions de la partie (lancer, répondre, arrêter) : c'est le service qui les applique. */
 export function sendGame(message: Extract<ClientMessage, { t: "game.start" | "game.answer" | "game.stop" }>): boolean {
   return send(message);
@@ -364,6 +407,28 @@ export function onGame(listener: GameListener): () => void {
 }
 
 installSharedSink((key, value) => send({ t: "set", key, value }), serverNow);
+
+/**
+ * Une invitation par lien : `…/immersion#salon=CODE`. Lue une fois à l'arrivée ; le code quitte l'adresse aussitôt
+ * (un rechargement ne rejoint pas une seconde fois un salon qu'on aurait quitté). Rend le code, ou `null`.
+ */
+export function joinFromLink(): string | null {
+  const match = /(?:^#|&)salon=([A-Za-z0-9]{6})(?:&|$)/.exec(location.hash);
+  if (!match) return null;
+  const code = match[1].toUpperCase();
+  history.replaceState(null, "", location.pathname + location.search);
+  void probeSalons().then((available) => {
+    if (!available) return;
+    void connect();
+    joinRoom(code);
+  });
+  return code;
+}
+
+/** L'adresse qui invite dans ce salon. */
+export function inviteLink(code: string): string {
+  return `${location.origin}${location.pathname}#salon=${code}`;
+}
 
 /** Pour les scénarios : coupe la connexion comme le ferait le réseau (la reprise doit suivre). */
 export function dropForTest(): void {

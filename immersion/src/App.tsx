@@ -27,7 +27,9 @@ import { Chat } from "./ui/Chat";
 import { QuizHud } from "./ui/QuizHud";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { getVideo, playTestClip, stopOnLeave } from "./media/playback";
-import { dropForTest } from "./net/salons";
+import { dropForTest, joinFromLink } from "./net/salons";
+import { installSharedTv, sharedTvDebug } from "./net/tv";
+import { TvStatus } from "./ui/TvStatus";
 import { poses } from "./net/poses";
 import { dispatch } from "./media/commands";
 import { startUpNext } from "./media/upNext";
@@ -60,6 +62,10 @@ export function App() {
     watchSession(() => useStore.getState().setPhase("expired"));
     boot();
     startUpNext();
+    // La télévision commune d'un salon (rien ne part tant qu'on n'est dans aucun salon).
+    installSharedTv();
+    // Arrivé par un lien d'invitation (`#salon=CODE`) : on rejoint ce salon — seul cas où le chargement parle aux salons.
+    joinFromLink();
     accountLang().then(
       (lang) => lang && useStore.getState().setLang(lang),
       (err) => {
@@ -67,7 +73,7 @@ export function App() {
       }
     );
     // Prise de test et de capture : l'état, et le visiteur qu'on peut poser où l'on veut.
-    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug, benchTiming, view, cueAt, perf, effects, screenLight, speakerLevels, musicLevels, things: THINGS.map(({ id, at }) => ({ id, at })), seats: SEATS, screens: Object.fromEntries(SCREENS.map((screen) => [screen.id, screen])), salons: { drop: dropForTest, poses: () => [...poses.keys()] } };
+    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug, benchTiming, view, cueAt, perf, effects, screenLight, speakerLevels, musicLevels, things: THINGS.map(({ id, at }) => ({ id, at })), seats: SEATS, screens: Object.fromEntries(SCREENS.map((screen) => [screen.id, screen])), salons: { drop: dropForTest, poses: () => [...poses.keys()], tv: sharedTvDebug } };
     // Ce qu'aucune barrière n'attrape (rappels, minuteurs, promesses) part au serveur (`errorLog.ts`).
     const unwatchErrors = watchErrors();
     // La page s'en va, quelle qu'en soit la raison : l'arrêt de la lecture part quand même.
@@ -119,6 +125,7 @@ export function App() {
           {/* « Devine le film » : les réponses sur l'écran de chacun ; le chat du salon. */}
           {mode === "walk" || mode === "remote" ? <QuizHud /> : null}
           <Chat />
+          <TvStatus />
           {showFps ? <FpsCounter /> : null}
           {/* Pendant une mesure, le menu s'efface : la scène est rendue comme en visite. */}
           {measuring ? <BenchOverlay /> : mode === "paused" ? <PauseMenu /> : null}

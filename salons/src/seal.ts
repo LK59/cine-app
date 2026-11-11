@@ -11,8 +11,10 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, 
  *   peuvent voir — un joueur ne peut pas s'inventer des compagnons.
  * - **Le résultat d'une partie** (`result`) : signé par le service, pour que l'application n'enregistre de records à
  *   plusieurs que ceux qu'il a comptés.
+ * - **Le titre de la télévision commune** (`tv`) : signé par l'application, après avoir vérifié que tous les présents
+ *   peuvent le voir.
  */
-export type SealPurpose = "roster" | "result";
+export type SealPurpose = "roster" | "result" | "tv";
 
 const derive = (key: string, purpose: string) => createHash("sha256").update(`laterna-salons:${purpose}:${key}`).digest();
 const b64 = (data: Buffer | string) => Buffer.from(data).toString("base64url");
@@ -76,6 +78,16 @@ export interface Roster {
   room: string;
   /** Les comptes présents (`sub` des laissez-passer). */
   subs: string[];
+  exp: number;
+}
+
+/**
+ * Le droit de lancer un titre sur la télévision commune d'un salon, signé par l'application après avoir vérifié que
+ * **chaque** présent peut voir ce titre (ses tags bloqués, sa bibliothèque). Le service ne lance rien d'autre.
+ */
+export interface TvTicket {
+  room: string;
+  itemId: string;
   exp: number;
 }
 

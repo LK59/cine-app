@@ -34,7 +34,7 @@ COPY immersion/ ./
 COPY src/lib/codecSupport.ts src/lib/webkitEngine.ts src/lib/networkBitrate.ts src/lib/trackLabel.ts src/lib/trackPreferences.ts src/lib/playerSkip.ts /build/src/lib/
 # Le contrat des salons du chalet (§146) : les messages et le moteur de « Devine le film », écrits une fois,
 # côté service.
-COPY salons/src/protocol.ts salons/src/quiz.ts /build/salons/src/
+COPY salons/src/protocol.ts salons/src/quiz.ts salons/src/tv.ts /build/salons/src/
 RUN npm run build
 
 FROM node:26-alpine AS builder

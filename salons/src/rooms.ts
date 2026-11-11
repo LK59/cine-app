@@ -2,7 +2,8 @@ import { randomBytes, randomInt } from "node:crypto";
 import type { PassClaims } from "./pass.ts";
 import { CODE_ALPHABET, CODE_LENGTH, LIMITS, SHARED_OBJECTS, type ClientMessage, type ErrorCode, type MemberView, type RoomView, type ServerMessage, type Visibility } from "./protocol.ts";
 import { QuizGame } from "./quiz.ts";
-import { openAnswers, signValue, type Roster, type SignedResult } from "./seal.ts";
+import { openAnswers, signValue, verifyValue, type Roster, type SignedResult, type TvTicket } from "./seal.ts";
+import { READY_TIMEOUT_MS, SharedTv, type Look } from "./tv.ts";
 
 /**
  * Les salons, sans réseau : qui est où, ce qui est partagé, et ce qui arrive à une coupure.
@@ -46,6 +47,7 @@ interface Member {
   p: number[] | null;
   /** Les instants des derniers messages du chat (débit borné). */
   chatTimes: number[];
+  look: Look | null;
 }
 
 interface Room {
@@ -62,6 +64,9 @@ interface Room {
   /** Le bilan signé de la partie finie, rendu à qui arrive après. */
   result: string | null;
   cancelGameTick: (() => void) | null;
+  /** La télévision commune, et le délai au-delà duquel une préparation démarre sans les retardataires. */
+  tv: SharedTv | null;
+  cancelTvTimeout: (() => void) | null;
 }
 
 const defaultSchedule = (fn: () => void, ms: number) => {
@@ -100,7 +105,7 @@ export class Lobby {
       conn.send({ t: "welcome", you: { id: kept.id, name: kept.name }, resume: kept.resume, now: this.now(), room: kept.room ? this.view(kept.room) : null });
       return new MemberHandle(this, kept, conn);
     }
-    const member: Member = { id: token(8), account: claims.sub, name: claims.name, admin: claims.admin, resume: token(18), conn, room: null, cancelExpiry: null, p: null, chatTimes: [] };
+    const member: Member = { id: token(8), account: claims.sub, name: claims.name, admin: claims.admin, resume: token(18), conn, room: null, cancelExpiry: null, p: null, chatTimes: [], look: null };
     this.byResume.set(member.resume, member);
     conn.send({ t: "welcome", you: { id: member.id, name: member.name }, resume: member.resume, now: this.now(), room: null });
     return new MemberHandle(this, member, conn);
@@ -125,6 +130,8 @@ export class Lobby {
     if (member.conn !== conn) return;
     member.conn = null;
     if (member.room) this.broadcast(member.room, { t: "away", id: member.id, away: true });
+    // Une préparation n'attend pas quelqu'un qui vient de partir : les autres sont peut-être tous prêts.
+    if (member.room?.tv?.phase === "preparing") this.tvChanged(member.room);
     member.cancelExpiry = this.schedule(() => {
       member.cancelExpiry = null;
       this.byResume.delete(member.resume);
@@ -142,7 +149,14 @@ export class Lobby {
           t: "rooms",
           rooms: [...this.rooms.values()]
             .filter((room) => room.visibility === "public")
-            .map((room) => ({ code: room.code, name: room.name, count: room.members.size, max: LIMITS.maxMembers })),
+            .map((room) => ({
+              code: room.code,
+              name: room.name,
+              count: room.members.size,
+              max: LIMITS.maxMembers,
+              names: [...room.members.values()].slice(0, 4).map((m) => m.name),
+              activity: room.game && room.game.phase !== "end" ? ("quiz" as const) : room.tv ? ("tv" as const) : null,
+            })),
         });
       case "create": {
         if (this.rooms.size >= LIMITS.maxRooms) return this.fail(member, "too-many-rooms", "Trop de salons ouverts en ce moment.");
@@ -159,6 +173,8 @@ export class Lobby {
           game: null,
           result: null,
           cancelGameTick: null,
+          tv: null,
+          cancelTvTimeout: null,
         };
         this.rooms.set(room.code, room);
         this.log(`salon ouvert ${room.code} (${room.visibility === "public" ? "public" : "privé"}) par ${member.name}`);
@@ -219,6 +235,8 @@ export class Lobby {
         const players = [...room.members.values()].filter((m) => m.conn).map((m) => ({ id: m.id, name: m.name }));
         room.game = new QuizGame(message.game, opened.answers, players, this.now());
         room.result = null;
+        // Le jeu prend la télévision.
+        if (room.tv) this.setTv(room, null, member);
         this.log(`partie lancée dans ${room.code} (${message.game.variant}, ${message.game.rounds.length} manches, ${players.length} joueur(s))`);
         return this.gameChanged(room);
       }
@@ -231,6 +249,62 @@ export class Lobby {
         // « A répondu » pour tous ; la justesse, seulement à la révélation (qui peut venir de cette réponse).
         return before !== room.game.phase ? this.gameChanged(room) : this.broadcast(room, { t: "game", game: room.game.view() });
       }
+      case "tv.open": {
+        const room = member.room;
+        if (!room) return this.fail(member, "not-in-room", "Rejoignez d'abord un salon.");
+        const ticket = this.key ? verifyValue<TvTicket>(message.ticket, this.key, "tv") : null;
+        if (!ticket || ticket.room !== room.code || typeof ticket.itemId !== "string" || ticket.exp <= this.now()) {
+          return this.fail(member, "bad-ticket", "Ce titre n'est pas autorisé pour ce salon.");
+        }
+        if (room.game && room.game.phase !== "end") return this.fail(member, "game-running", "Une partie occupe la télévision.");
+        // Plusieurs pages demandent souvent la même chose au même instant (l'épisode suivant, à la fin d'un décompte) :
+        // une seule préparation.
+        if (room.tv && room.tv.itemId === ticket.itemId && room.tv.phase === "preparing") return;
+        const now = this.now();
+        if (room.tv && room.tv.itemId === ticket.itemId) room.tv.prepare(message.from, now);
+        else room.tv = new SharedTv(ticket.itemId, message.title, message.from, now);
+        this.log(`télévision de ${room.code} : ${message.title}`);
+        return this.tvChanged(room, member);
+      }
+      case "tv.ready": {
+        const room = member.room;
+        if (!room?.tv) return;
+        if (room.tv.markReady(member.id, message.epoch, this.present(room))) {
+          room.tv.start(this.now());
+          return this.tvChanged(room, member);
+        }
+        return this.broadcast(room, { t: "tv", tv: room.tv.view() });
+      }
+      case "tv.play": {
+        const tv = member.room?.tv;
+        if (!tv || tv.phase !== "paused") return;
+        tv.prepare(tv.position, this.now());
+        return this.tvChanged(member.room!, member);
+      }
+      case "tv.pause": {
+        const tv = member.room?.tv;
+        if (!tv || tv.phase === "paused") return;
+        tv.pause(this.now());
+        return this.tvChanged(member.room!, member);
+      }
+      case "tv.seek": {
+        const tv = member.room?.tv;
+        if (!tv) return;
+        // En pause, on déplace la position sans repartir ; sinon, une préparation à la nouvelle position.
+        if (tv.phase === "paused") tv.position = message.to;
+        else tv.prepare(message.to, this.now());
+        return this.tvChanged(member.room!, member);
+      }
+      case "tv.stop": {
+        const room = member.room;
+        if (!room?.tv) return;
+        return this.setTv(room, null, member);
+      }
+      case "look": {
+        member.look = message.look;
+        if (member.room) this.broadcast(member.room, { t: "look", id: member.id, look: message.look }, member);
+        return;
+      }
       case "game.stop": {
         const room = member.room;
         if (!room?.game) return;
@@ -241,6 +315,40 @@ export class Lobby {
         return this.broadcast(room, { t: "game", game: null });
       }
     }
+  }
+
+  /** Les présents connectés d'un salon : ceux qu'une préparation attend. */
+  private present(room: Room): string[] {
+    return [...room.members.values()].filter((m) => m.conn).map((m) => m.id);
+  }
+
+  private setTv(room: Room, tv: SharedTv | null, by?: Member): void {
+    room.cancelTvTimeout?.();
+    room.cancelTvTimeout = null;
+    room.tv = tv;
+    if (!tv) this.broadcast(room, { t: "tv", tv: null, ...(by ? { by: by.id } : {}) });
+  }
+
+  /**
+   * Diffuse la télévision ; en préparation, planifie le départ sans les retardataires (`READY_TIMEOUT_MS`), ou démarre
+   * tout de suite si tous les présents sont déjà prêts (le dernier pas encore prêt vient de partir).
+   */
+  private tvChanged(room: Room, by?: Member): void {
+    const tv = room.tv;
+    if (!tv) return;
+    room.cancelTvTimeout?.();
+    room.cancelTvTimeout = null;
+    if (tv.allReady(this.present(room))) tv.start(this.now());
+    if (tv.phase === "preparing") {
+      const epoch = tv.epoch;
+      room.cancelTvTimeout = this.schedule(() => {
+        room.cancelTvTimeout = null;
+        if (room.tv !== tv || tv.epoch !== epoch || tv.phase !== "preparing") return;
+        tv.start(this.now());
+        this.tvChanged(room);
+      }, READY_TIMEOUT_MS);
+    }
+    this.broadcast(room, { t: "tv", tv: tv.view(), ...(by ? { by: by.id } : {}) });
   }
 
   /** Diffuse la partie, et planifie le prochain changement de phase à l'heure du service. */
@@ -280,6 +388,7 @@ export class Lobby {
     room.peak = Math.max(room.peak, room.members.size);
     // Arrivé en cours de partie : il joue à partir de la manche suivante.
     if (room.game && room.game.phase !== "end") room.game.addPlayer(member.id, member.name);
+    // Sa propre apparence, s'il l'a déjà dite : les autres la reçoivent avec son arrivée (`enter`).
     this.broadcast(room, { t: "enter", member: this.memberView(member) }, member);
     this.send(member, { t: "joined", room: this.view(room), now: this.now() });
     if (room.result && room.game?.phase === "end") this.send(member, { t: "game", game: room.game.view(), result: room.result });
@@ -298,7 +407,10 @@ export class Lobby {
     if (room.members.size === 0) {
       room.cancelGameTick?.();
       room.cancelGameTick = null;
-    }
+      room.cancelTvTimeout?.();
+      room.cancelTvTimeout = null;
+      room.tv = null;
+    } else if (room.tv?.phase === "preparing") this.tvChanged(room);
     if (room.members.size === 0 && !room.cancelClose) {
       room.cancelClose = this.schedule(() => {
         room.cancelClose = null;
@@ -318,7 +430,7 @@ export class Lobby {
   }
 
   private memberView(member: Member): MemberView {
-    return { id: member.id, name: member.name, away: member.conn === null, p: member.p };
+    return { id: member.id, name: member.name, away: member.conn === null, p: member.p, look: member.look };
   }
 
   private view(room: Room): RoomView {
@@ -329,6 +441,7 @@ export class Lobby {
       members: [...room.members.values()].map((m) => this.memberView(m)),
       state: Object.fromEntries(room.state),
       game: room.game ? room.game.view() : null,
+      tv: room.tv ? room.tv.view() : null,
     };
   }
 

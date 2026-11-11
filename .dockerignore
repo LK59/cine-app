@@ -16,13 +16,15 @@ npm-debug.log*
 # Le plugin Stream Deck : un paquet à part, installé sur l'ordinateur où le Stream Deck est branché.
 streamdeck-plugin
 
-# Le service laterna-salons (§146) a son propre Dockerfile et sa propre image. Quatre fichiers seulement en
-# entrent ici, écrits une fois et partagés : le contrat du protocole et le moteur de « Devine le film » (importés
-# par le mode Immersion), le sceau des parties (importé par l'application), et le laissez-passer (que les tests de
-# l'application éprouvent contre le code du service).
+# Le service laterna-salons (§146) a son propre Dockerfile et sa propre image. Cinq fichiers seulement en
+# entrent ici, écrits une fois et partagés : le contrat du protocole, le moteur de « Devine le film » et la
+# télévision commune (importés par le mode Immersion ; `tv.ts` aussi par l'application, pour l'apparence des avatars),
+# le sceau (importé par l'application), et le laissez-passer (que les tests de l'application éprouvent contre le code
+# du service).
 salons
 !salons/src/protocol.ts
 !salons/src/quiz.ts
+!salons/src/tv.ts
 !salons/src/seal.ts
 !salons/src/pass.ts
 

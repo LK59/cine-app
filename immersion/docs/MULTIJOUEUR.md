@@ -91,13 +91,18 @@ comment chaque étape est vérifiée. Tout ce qui n'y figure pas est hors périm
   et ne s'applique qu'à son retour ; le premier arrivé pose l'état de son chalet) ; présence (`world/Others.tsx` :
   positions des yeux quantifiées, ~12/s au plus quand on bouge, montrées 120 ms dans le passé entre deux positions ;
   silhouette, tête qui suit le regard, nom) ; chat (T, Entrée, en bas à gauche, s'efface en dix secondes).
-- **Étape 3 — à faire** : la télévision commune.
+- **Étape 3 — faite** : la télévision commune (`salons/src/tv.ts`, `immersion/src/net/tv.ts`) — les gestes de lecture
+  partent au service, chacun cale son flux en pause, « prêt », départ commun à une heure du service, écart rattrapé
+  par la vitesse (± 5 %) ou un saut au-delà de 1,5 s ; le titre n'est lancé que si l'application a vérifié que chaque
+  présent peut le voir (`/api/salons/titre`). Le son, les pistes et les sous-titres restent à chacun.
 - **Étape 4 — faite** : « Devine le film » — `salons/src/quiz.ts` (moteur commun, solo et salon), préparation par
   l'application (`src/lib/quiz/`, titres que tous peuvent voir, affiche sans texte quand elle existe, leurres du même
   genre, images par jeton chiffré), réponses scellées (`seal.ts`), bilan signé par le service, records
   (`quiz_scores`) et Échap → Statistiques. Trois variantes : tout mélangé, affiches, de plus en plus vite. La
   réplique comme indice n'est pas faite (elle demanderait les sous-titres de chaque film).
-- **Étape 5 — à faire** : avatars personnalisables, liste des salons et invitations par lien.
+- **Étape 5 — faite** : apparence (couleur, chapeau, écharpe, lunettes — « À plusieurs » → « Mon avatar », gardée par
+  compte : `/api/salons/avatar`), liste des salons publics avec les présents et ce qui s'y passe, lien d'invitation
+  (`/immersion#salon=CODE`, bouton « Copier le lien d'invitation »).
 
 ## Ordre de travail (une livraison par étape)
 

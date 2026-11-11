@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { CanvasTexture, Color, Group, LinearFilter, SRGBColorSpace } from "three";
+import { CanvasTexture, Group, LinearFilter, SRGBColorSpace } from "three";
+import type { Look } from "../../../salons/src/tv";
 import { poses, type PoseSample } from "../net/poses";
 import { sendPos } from "../net/salons";
 import { useStore } from "../state/store";
+import { defaultLook, LOOK_COLORS, LOOK_SCARVES } from "./avatarLook";
 import { rig } from "./rig";
 
 /**
@@ -15,17 +17,12 @@ import { rig } from "./rig";
  * le passé, entre les deux positions qui encadrent cet instant : un mouvement fluide malgré des paquets irréguliers.
  * C'est la position des **yeux** qui voyage (pas des pieds) : assis, la tête est plus bas, et le corps suit.
  *
- * La couleur vient de l'identifiant (les avatars personnalisables sont l'étape 5).
+ * L'apparence (étape 5) : couleur, chapeau, écharpe, lunettes, choisie par chacun (« À plusieurs » → « Mon avatar »,
+ * gardée pour le compte) ; sans choix, une couleur tirée de l'identifiant, la même chez tous.
  */
 const DELAY_MS = 120;
 const SEND_EVERY_MS = 80;
 const HEARTBEAT_MS = 2000;
-
-function colorOf(id: string): Color {
-  let h = 0;
-  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return new Color().setHSL((h % 360) / 360, 0.55, 0.55);
-}
 
 function nameTexture(name: string): CanvasTexture {
   const canvas = document.createElement("canvas");
@@ -66,10 +63,98 @@ function poseAt(samples: PoseSample[], t: number): PoseSample | null {
   return samples[samples.length - 1];
 }
 
-function Avatar({ id, name }: { id: string; name: string }) {
+/** Le corps et l'écharpe d'une apparence. */
+export function AvatarBody({ look }: { look: Look }) {
+  const [color, , scarf] = look;
+  const body = LOOK_COLORS[color] ?? LOOK_COLORS[0];
+  return (
+    <>
+      {/* Le corps, sous les yeux. */}
+      <mesh position={[0, -0.82, 0]}>
+        <capsuleGeometry args={[0.2, 0.9, 4, 12]} />
+        <meshStandardMaterial color={body} roughness={0.7} />
+      </mesh>
+      {scarf >= 0 ? (
+        <mesh position={[0, -0.25, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.14, 0.05, 8, 20]} />
+          <meshStandardMaterial color={LOOK_SCARVES[scarf] ?? LOOK_SCARVES[0]} roughness={0.9} />
+        </mesh>
+      ) : null}
+    </>
+  );
+}
+
+export function AvatarHead({ look }: { look: Look }) {
+  const [color, hat, , glasses] = look;
+  const accent = LOOK_COLORS[(color + 5) % LOOK_COLORS.length];
+  return (
+    <>
+      <mesh>
+        <sphereGeometry args={[0.15, 20, 14]} />
+        <meshStandardMaterial color="#e9d9c6" roughness={0.6} />
+      </mesh>
+      {glasses ? (
+        // Des lunettes noires : un bandeau devant les yeux — on voit de quel côté il regarde.
+        <mesh position={[0, 0.01, -0.13]}>
+          <boxGeometry args={[0.2, 0.06, 0.04]} />
+          <meshStandardMaterial color="#1a1a1e" roughness={0.3} />
+        </mesh>
+      ) : (
+        <>
+          <mesh position={[-0.05, 0.02, -0.138]}>
+            <sphereGeometry args={[0.018, 8, 6]} />
+            <meshStandardMaterial color="#1a1a1e" />
+          </mesh>
+          <mesh position={[0.05, 0.02, -0.138]}>
+            <sphereGeometry args={[0.018, 8, 6]} />
+            <meshStandardMaterial color="#1a1a1e" />
+          </mesh>
+        </>
+      )}
+      {hat === 1 ? (
+        // Bonnet et pompon.
+        <>
+          <mesh position={[0, 0.05, 0]}>
+            <sphereGeometry args={[0.158, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2]} />
+            <meshStandardMaterial color={accent} roughness={0.95} />
+          </mesh>
+          <mesh position={[0, 0.215, 0]}>
+            <sphereGeometry args={[0.04, 10, 8]} />
+            <meshStandardMaterial color="#f4efe6" roughness={1} />
+          </mesh>
+        </>
+      ) : hat === 2 ? (
+        // Casquette, visière devant.
+        <>
+          <mesh position={[0, 0.06, 0]}>
+            <sphereGeometry args={[0.155, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2]} />
+            <meshStandardMaterial color={accent} roughness={0.8} />
+          </mesh>
+          <mesh position={[0, 0.07, -0.16]}>
+            <boxGeometry args={[0.2, 0.015, 0.12]} />
+            <meshStandardMaterial color={accent} roughness={0.8} />
+          </mesh>
+        </>
+      ) : hat === 3 ? (
+        // Haut-de-forme.
+        <>
+          <mesh position={[0, 0.12, 0]}>
+            <cylinderGeometry args={[0.24, 0.24, 0.015, 24]} />
+            <meshStandardMaterial color="#1c1c20" roughness={0.6} />
+          </mesh>
+          <mesh position={[0, 0.24, 0]}>
+            <cylinderGeometry args={[0.13, 0.13, 0.24, 24]} />
+            <meshStandardMaterial color="#1c1c20" roughness={0.6} />
+          </mesh>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+function Avatar({ id, name, look }: { id: string; name: string; look: Look }) {
   const group = useRef<Group>(null);
   const head = useRef<Group>(null);
-  const color = useMemo(() => colorOf(id), [id]);
   const label = useMemo(() => nameTexture(name), [name]);
   useEffect(() => () => label.dispose(), [label]);
 
@@ -86,23 +171,11 @@ function Avatar({ id, name }: { id: string; name: string }) {
 
   return (
     <group ref={group} visible={false}>
-      {/* Le corps, sous les yeux (assis, il passe dans le siège : la silhouette reste simple jusqu'à l'étape 5). */}
-      <mesh position={[0, -0.82, 0]}>
-        <capsuleGeometry args={[0.2, 0.9, 4, 12]} />
-        <meshStandardMaterial color={color} roughness={0.7} />
-      </mesh>
+      <AvatarBody look={look} />
       <group ref={head}>
-        <mesh>
-          <sphereGeometry args={[0.15, 20, 14]} />
-          <meshStandardMaterial color="#e9d9c6" roughness={0.6} />
-        </mesh>
-        {/* Une visière : de quel côté il regarde. */}
-        <mesh position={[0, 0.01, -0.13]}>
-          <boxGeometry args={[0.2, 0.06, 0.04]} />
-          <meshStandardMaterial color="#1a1a1e" roughness={0.3} />
-        </mesh>
+        <AvatarHead look={look} />
       </group>
-      <sprite position={[0, 0.38, 0]} scale={[0.9, 0.17, 1]}>
+      <sprite position={[0, look[1] === 3 ? 0.5 : 0.38, 0]} scale={[0.9, 0.17, 1]}>
         <spriteMaterial map={label} depthWrite={false} transparent />
       </sprite>
     </group>
@@ -135,7 +208,7 @@ export function Others() {
     <>
       <PresenceSender />
       {others.map((m) => (
-        <Avatar key={m.id} id={m.id} name={m.name} />
+        <Avatar key={m.id} id={m.id} name={m.name} look={m.look ?? defaultLook(m.id)} />
       ))}
     </>
   );

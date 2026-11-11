@@ -29,8 +29,8 @@ export async function state<T = unknown>(page: Page, key: string): Promise<T> {
 }
 
 /** Ouvre la page, attend la fin du chargement, entre dans le monde. */
-export async function enterWorld(page: Page): Promise<void> {
-  await page.goto("/immersion");
+export async function enterWorld(page: Page, path = "/immersion"): Promise<void> {
+  await page.goto(path);
   const enter = page.getByTestId("enter");
   // Large : sur une machine occupée, le chargement (textures, programmes) peut dépasser la minute.
   await expect(enter).toBeVisible({ timeout: 240_000 });

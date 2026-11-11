@@ -1,4 +1,5 @@
 import { parseGameData, type QuizGameData, type QuizView } from "./quiz.ts";
+import { parseLook, type Look, type TvView } from "./tv.ts";
 
 /**
  * Le protocole des salons : ce qu'un client peut dire, ce que le service répond, et les bornes.
@@ -77,7 +78,19 @@ export type ClientMessage =
   /** Lance une partie : ce que voient les joueurs, et les réponses scellées par l'application. */
   | { t: "game.start"; game: QuizGameData; sealed: string }
   | { t: "game.answer"; round: number; choice: number }
-  | { t: "game.stop" };
+  | { t: "game.stop" }
+  /**
+   * La télévision commune : lancer un titre (avec le droit signé par l'application, `seal.ts` « tv »), se dire prêt
+   * pour une préparation, reprendre, mettre en pause, sauter, arrêter (`tv.ts`).
+   */
+  | { t: "tv.open"; ticket: string; title: string; from: number }
+  | { t: "tv.ready"; epoch: number }
+  | { t: "tv.play" }
+  | { t: "tv.pause" }
+  | { t: "tv.seek"; to: number }
+  | { t: "tv.stop" }
+  /** Son apparence (`tv.ts`, `Look`). */
+  | { t: "look"; look: Look };
 
 /** Ce qu'un participant voit d'un autre. */
 export interface MemberView {
@@ -87,6 +100,8 @@ export interface MemberView {
   away: boolean;
   /** Sa dernière position connue (voir `pos`), ou rien. */
   p?: number[] | null;
+  /** Son apparence, s'il l'a dite. */
+  look?: Look | null;
 }
 
 export interface RoomView {
@@ -98,13 +113,15 @@ export interface RoomView {
   state: Record<string, { v: number; value: unknown }>;
   /** La partie de « Devine le film » en cours (ou la dernière, finie), sinon rien. */
   game: QuizView | null;
+  /** La télévision commune, ou rien. */
+  tv: TvView | null;
 }
 
 /** Ce que le service envoie. */
 export type ServerMessage =
   | { t: "welcome"; you: { id: string; name: string }; resume: string; now: number; room: RoomView | null }
   | { t: "pong"; c: number; s: number }
-  | { t: "rooms"; rooms: { code: string; name: string; count: number; max: number }[] }
+  | { t: "rooms"; rooms: PublicRoomView[] }
   | { t: "joined"; room: RoomView; now: number }
   | { t: "left" }
   | { t: "enter"; member: MemberView }
@@ -116,9 +133,21 @@ export type ServerMessage =
   | { t: "roster"; token: string }
   /** L'état de la partie ; à la fin, `result` : le bilan signé par le service, que l'application enregistre. */
   | { t: "game"; game: QuizView | null; result?: string }
+  | { t: "tv"; tv: TvView | null; by?: string }
+  | { t: "look"; id: string; look: Look }
   | { t: "error"; code: ErrorCode; message: string };
 
-export type ErrorCode = "malformed" | "unknown" | "rate" | "full" | "too-many-rooms" | "no-room" | "not-in-room" | "already-in-room" | "bad-value" | "game-running" | "bad-game";
+export type ErrorCode = "malformed" | "unknown" | "rate" | "full" | "too-many-rooms" | "no-room" | "not-in-room" | "already-in-room" | "bad-value" | "game-running" | "bad-game" | "bad-ticket";
+
+/** Un salon public, tel que la liste le montre : qui y est (les premiers noms) et ce qui s'y passe. */
+export interface PublicRoomView {
+  code: string;
+  name: string;
+  count: number;
+  max: number;
+  names: string[];
+  activity: "tv" | "quiz" | null;
+}
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
@@ -177,6 +206,25 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return Number.isInteger(data.round) && Number.isInteger(data.choice) ? { t: "game.answer", round: data.round as number, choice: data.choice as number } : null;
     case "game.stop":
       return { t: "game.stop" };
+    case "tv.open": {
+      const from = typeof data.from === "number" && Number.isFinite(data.from) ? Math.max(0, Math.min(data.from, 360_000)) : 0;
+      const title = cleanName(data.title, 160);
+      return typeof data.ticket === "string" && data.ticket.length <= 2048 && title ? { t: "tv.open", ticket: data.ticket, title, from } : null;
+    }
+    case "tv.ready":
+      return Number.isInteger(data.epoch) ? { t: "tv.ready", epoch: data.epoch as number } : null;
+    case "tv.play":
+      return { t: "tv.play" };
+    case "tv.pause":
+      return { t: "tv.pause" };
+    case "tv.seek":
+      return typeof data.to === "number" && Number.isFinite(data.to) && data.to >= 0 && data.to <= 360_000 ? { t: "tv.seek", to: data.to } : null;
+    case "tv.stop":
+      return { t: "tv.stop" };
+    case "look": {
+      const look = parseLook(data.look);
+      return look ? { t: "look", look } : null;
+    }
     default:
       return null;
   }

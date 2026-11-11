@@ -12,9 +12,9 @@ change.
 
 - Des **salons** publics (listés, ouverts à tout compte de la maison) ou privés (un code d'invitation de six
   caractères), huit personnes au plus.
-- L'**état partagé** du chalet : les lampes (trois groupes), la porte, le feu, la musique — et, aux étapes
-  suivantes, la télévision, les positions, le chat, les jeux. Le reste du chalet est le même pour tous et ne
-  passe pas par ici.
+- L'**état partagé** du chalet : les lampes (trois groupes), la porte, le feu, la musique, la **télévision
+  commune** ; les positions et l'apparence de chacun, le chat, « Devine le film ». Le reste du chalet est le même
+  pour tous et ne passe pas par ici.
 - Une **horloge** commune : chaque client mesure son décalage avec le service (`ping`/`pong`), et tout ce qui
   doit arriver au même moment chez tous est daté en heure du service.
 
@@ -64,6 +64,13 @@ quel par le chalet (`immersion/src/net/`).
 | `{ t: "game.start", game, sealed }` | lance « Devine le film » : la partie et ses réponses scellées par l'application |
 | `{ t: "game.answer", round, choice }` | une réponse (une par manche) ; `{ t: "game", game }` à chaque changement, `result` signé à la fin |
 | `{ t: "game.stop" }` | arrête la partie pour tous |
+| `{ t: "tv.open", ticket, title, from }` | lance un titre sur la télévision commune — `ticket` : le droit signé par l'application pour ce salon et ce titre (`seal.ts`, « tv ») ; → `{ t: "tv", tv }` à tous |
+| `{ t: "tv.ready", epoch }` | prêt pour la préparation `epoch` ; quand tous les présents le sont, la lecture part à une heure du service |
+| `{ t: "tv.play" }`, `{ t: "tv.pause" }`, `{ t: "tv.seek", to }`, `{ t: "tv.stop" }` | reprendre (nouvelle préparation), pause, saut, arrêt — pour tous |
+| `{ t: "look", look }` | son apparence `[couleur, chapeau, écharpe, lunettes]` (`tv.ts`, bornée) → `{ t: "look", id, look }` aux autres |
+
+`{ t: "list" }` rend aussi, pour chaque salon public, les premiers noms présents et ce qui s'y passe (`activity` :
+`tv`, `quiz` ou rien).
 
 Le service est **l'autorité** : un changement n'existe qu'une fois appliqué ici et numéroté (`v`, par objet) ; un
 client ignore un `state` plus vieux que ce qu'il a. À l'arrivée — et à chaque reprise — `joined`/`welcome` porte
@@ -89,6 +96,15 @@ et les scores), et le chalet le fait tourner lui-même quand on joue seul, sans 
 arrivent **scellées** par l'application (`src/seal.ts`, AES-256-GCM sous la clé partagée) : le joueur qui lance les
 transporte sans pouvoir les lire. À la fin, le service **signe le bilan** ; l'application n'enregistre de records à
 plusieurs que ceux-là. `seal.ts` est importé tel quel par l'application (`src/lib/quiz/`).
+
+## La télévision commune
+
+`src/tv.ts`. Chacun lit **son propre flux** (sa séance Jellyfin) ; seul l'état est partagé : le titre, la phase
+(`preparing`, `playing`, `paused`), la position et l'**heure de départ** en heure du service. Lancer, reprendre ou
+sauter ouvre une préparation numérotée (`epoch`) : chacun cale son flux en pause et répond « prêt » ; quand tous les
+présents l'ont dit — ou au bout de 20 s, ou dès qu'un absent part —, la lecture part 1,2 s plus tard pour tous. Le
+service ne lance qu'un titre que l'application a signé pour ce salon, après avoir vérifié que chaque présent peut le
+voir. Une partie de « Devine le film » prend la télévision.
 
 ## Développer
 

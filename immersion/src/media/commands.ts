@@ -16,7 +16,7 @@ export type Command =
    * Lancer un titre. `from` : une position imposée ; `null` : la reprise du compte. `auto` : l'épisode suivant
    * lancé par la fin d'un décompte (`upNext.ts`), le seul geste qui ne dit pas que quelqu'un est là.
    */
-  | { type: "open"; item: { id: string; title: string }; from: number | null; auto?: boolean }
+  | { type: "open"; item: { id: string; title: string }; from: number | null; auto?: boolean; paused?: boolean }
   | { type: "play" }
   | { type: "pause" }
   | { type: "toggle" }
@@ -34,15 +34,26 @@ export type Command =
 
 let seekCount = 0;
 
-export function dispatch(command: Command, _origin: "local" | "remote" = "local"): void {
+/**
+ * Dans un salon, la télévision est commune (`net/tv.ts`) : lancer, reprendre, mettre en pause, sauter et arrêter
+ * partent au service au lieu de s'appliquer ici, et reviennent comme commandes `remote`. Le relais rend `true` quand il
+ * a pris la commande. Le son, les pistes et les sous-titres restent à chacun.
+ */
+let sharedPlayback: ((command: Command) => boolean) | null = null;
+export function setSharedPlayback(sink: ((command: Command) => boolean) | null): void {
+  sharedPlayback = sink;
+}
+
+export function dispatch(command: Command, origin: "local" | "remote" = "local"): void {
   const state = useStore.getState();
   const playback = state.playback;
   const live = playback.status === "playing" || playback.status === "paused";
   if (!(command.type === "open" && command.auto)) noteViewerPresent();
+  if (origin === "local" && sharedPlayback?.(command)) return;
   switch (command.type) {
     case "open":
-      state.setPlayback({ wantPaused: false, seek: null });
-      void open(command.item, command.from);
+      state.setPlayback({ wantPaused: !!command.paused, seek: null });
+      void open(command.item, command.from, !!command.paused);
       return;
     case "stop":
       close();

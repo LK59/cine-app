@@ -289,3 +289,80 @@ test("une partie à deux, de bout en bout : réponses scellées ouvertes par le 
   assert.equal(openAnswers(sealAnswers({ gameId: "x", answers: [1], exp: 5000 }, KEY), KEY, 6000), null);
   assert.equal(openAnswers(sealAnswers({ gameId: "x", answers: [1], exp: 5000 }, KEY), "autre-clé", 1000), null);
 });
+
+import { signValue as signTicket } from "./seal.ts";
+import { READY_TIMEOUT_MS } from "./tv.ts";
+
+function pair() {
+  const h = keyed();
+  const a = h.join("Alice");
+  const b = h.join("Bob");
+  a.handle.receive({ t: "create", visibility: "public", name: "Ciné" });
+  const code = a.last("joined")!.room.code;
+  b.handle.receive({ t: "join", code });
+  const ticket = (itemId: string, room = code) => signTicket({ room, itemId, exp: h.now() + 60_000 }, KEY, "tv");
+  return { ...h, a, b, code, ticket };
+}
+
+test("télévision commune : un titre autorisé, chacun prêt, départ ensemble à l'heure donnée", () => {
+  const { a, b, ticket, now } = pair();
+  a.handle.receive({ t: "tv.open", ticket: "faux", title: "Film", from: 0 });
+  assert.equal(a.last("error")!.code, "bad-ticket");
+  a.handle.receive({ t: "tv.open", ticket: ticket("film-1", "AUTRE1"), title: "Film", from: 0 });
+  assert.equal(a.last("error")!.code, "bad-ticket", "un droit signé pour un autre salon");
+  a.handle.receive({ t: "tv.open", ticket: ticket("film-1"), title: "Film", from: 42 });
+  const prep = b.last("tv")!.tv!;
+  assert.equal(prep.phase, "preparing");
+  assert.equal(prep.position, 42);
+  a.handle.receive({ t: "tv.ready", epoch: prep.epoch });
+  assert.equal(b.last("tv")!.tv!.phase, "preparing", "Bob n'est pas encore prêt");
+  b.handle.receive({ t: "tv.ready", epoch: prep.epoch });
+  const go = a.last("tv")!.tv!;
+  assert.equal(go.phase, "playing");
+  assert.ok(go.anchor > now());
+  // Un second « lancer » du même titre en préparation est ignoré ; un autre titre repart de zéro.
+  b.handle.receive({ t: "tv.pause" });
+  assert.equal(a.last("tv")!.tv!.phase, "paused");
+  b.handle.receive({ t: "tv.play" });
+  assert.equal(a.last("tv")!.tv!.phase, "preparing");
+});
+
+test("une préparation part sans le retardataire au bout du délai, ou dès qu'il s'en va", () => {
+  const { a, b, ticket, advance, join, code } = pair();
+  a.handle.receive({ t: "tv.open", ticket: ticket("film-1"), title: "Film", from: 0 });
+  a.handle.receive({ t: "tv.ready", epoch: a.last("tv")!.tv!.epoch });
+  advance(READY_TIMEOUT_MS);
+  assert.equal(b.last("tv")!.tv!.phase, "playing");
+  // Une nouvelle préparation ; Bob se coupe : Alice, prête, n'attend plus.
+  a.handle.receive({ t: "tv.seek", to: 100 });
+  a.handle.receive({ t: "tv.ready", epoch: a.last("tv")!.tv!.epoch });
+  b.handle.disconnected();
+  assert.equal(a.last("tv")!.tv!.phase, "playing");
+  assert.equal(a.last("tv")!.tv!.position, 100);
+  // Qui arrive voit la télévision dans l'état du salon.
+  const c = join("Chloé");
+  c.handle.receive({ t: "join", code });
+  assert.equal(c.last("joined")!.room.tv!.itemId, "film-1");
+});
+
+test("une partie prend la télévision ; la liste des salons dit qui est là et ce qui s'y passe", () => {
+  const { a, b, ticket, now, join } = pair();
+  a.handle.receive({ t: "tv.open", ticket: ticket("film-1"), title: "Film", from: 0 });
+  const c = join("Chloé");
+  c.handle.receive({ t: "list" });
+  assert.deepEqual(c.last("rooms")!.rooms[0], { code: a.last("joined")!.room.code, name: "Ciné", count: 2, max: 8, names: ["Alice", "Bob"], activity: "tv" });
+  const game = { id: "partie-tv-0001", variant: "mixte" as const, rounds: [0, 1, 2].map((i) => ({ kind: "tagline" as const, text: `n${i}`, choices: ["A", "B", "C", "D"] as [string, string, string, string] })) };
+  a.handle.receive({ t: "game.start", game, sealed: sealAnswers({ gameId: game.id, answers: [0, 0, 0], exp: now() + 60_000 }, KEY) });
+  assert.equal(b.last("tv")!.tv, null);
+  a.handle.receive({ t: "tv.open", ticket: ticket("film-2"), title: "Autre", from: 0 });
+  assert.equal(a.last("error")!.code, "game-running");
+});
+
+test("l'apparence est relayée aux autres, et connue de qui arrive ensuite", () => {
+  const { a, b, code, join } = pair();
+  a.handle.receive({ t: "look", look: [2, 1, 3, 1] });
+  assert.deepEqual(b.last("look"), { t: "look", id: a.handle.id, look: [2, 1, 3, 1] });
+  const c = join("Chloé");
+  c.handle.receive({ t: "join", code });
+  assert.deepEqual(c.last("joined")!.room.members.find((m) => m.name === "Alice")!.look, [2, 1, 3, 1]);
+});

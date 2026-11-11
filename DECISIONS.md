@@ -10661,3 +10661,14 @@ réponses données (`soloGames.ts`). Records : `quiz_scores`, lus par `/api/quiz
 fichiers partagés du service entrent seuls dans le contexte de l'image (`.dockerignore`). Tests : `quiz-build`,
 `quiz-routes` ; dans le service, `quiz.test.ts` et les parties de `rooms.test.ts` ; dans le chalet, les scénarios 18
 (lampes, porte, présence, chat) et 19 (seul, et à deux avec un vrai service).
+
+**Étapes 3 et 5 (11/11/2026, même section).** *La télévision commune* : en salon, les gestes de lecture (lancer,
+reprendre, pause, saut, arrêt) passent par le relais `setSharedPlayback` de `immersion/src/media/commands.ts` jusqu'au
+service (`salons/src/tv.ts`) ; chaque page lit son propre flux et le cale sur l'état du salon (`immersion/src/net/tv.ts`
+— préparation en pause, « prêt », départ commun à une heure du service, écart rattrapé par la vitesse ou un saut). Un
+titre ne se lance que muni d'un droit signé par l'application pour ce salon (`/api/salons/titre`, « tv » de
+`seal.ts`) après vérification que **chaque** présent le voit (`getItemFile` sous son identifiant : tags bloqués et
+bibliothèques compris) — un refus ne dit pas à cause de qui. *Avatars* : quatre indices bornés (`parseLook`, même
+fichier, importé par l'application) gardés par compte (`avatar_looks`, `/api/salons/avatar`). Lien d'invitation :
+`/immersion#salon=CODE`, lu une fois puis retiré de l'adresse. Tests : `salons-titre-avatar` ; `tv.test.ts` et
+`rooms.test.ts` dans le service ; scénario 20 du chalet (deux navigateurs, vrai service).

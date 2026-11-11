@@ -1777,6 +1777,84 @@ kbd {
   background: rgb(255 255 255 / 0.06);
   cursor: pointer;
 }
+.salons-room-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+.salons-room-who {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 12.5px;
+  color: rgb(255 255 255 / 0.6);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.salons-code .chip {
+  margin-left: 10px;
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+/* « Mon avatar » : des pastilles de couleur et des choix en puces, une ligne par partie. */
+.avatar-editor {
+  margin-top: 14px;
+}
+.avatar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+}
+.avatar-row > span {
+  min-width: 78px;
+  font-size: 13px;
+  color: rgb(255 255 255 / 0.66);
+}
+.avatar-row .chip {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+.swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.swatch.is-on {
+  border-color: #fff;
+}
+.swatch:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+/* La télévision commune se prépare (`ui/TvStatus.tsx`). */
+.tv-status {
+  position: fixed;
+  top: max(18px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  max-width: calc(100vw - 32px);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgb(10 10 12 / 0.62);
+  color: #f4efe6;
+  font-size: 13.5px;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .salons-room:hover:not(:disabled) {
   background: rgb(255 255 255 / 0.12);
 }

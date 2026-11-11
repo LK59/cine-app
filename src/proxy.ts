@@ -76,6 +76,10 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   // l'appelant (seul : recomptés par l'application ; à plusieurs : signés par le service des salons).
   "POST /api/quiz/partie",
   "POST /api/quiz/resultat",
+  // La télévision commune (§146) : demander le droit de lancer un titre pour son salon (la route vérifie chaque
+  // présent, n'écrit rien) ; et choisir l'apparence de son propre avatar.
+  "POST /api/salons/titre",
+  "PUT /api/salons/avatar",
   // « Signaler un problème » : créer le sien. Les routes vérifient que c'est bien le sien pour tout
   // le reste (modifier un brouillon, commenter, fermer, retirer une image).
   "POST /api/reports",

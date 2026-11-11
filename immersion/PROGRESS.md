@@ -647,9 +647,11 @@ film » (`game/quiz.ts`, `game/tv.ts`, `ui/QuizHud.tsx`, touches 1 à 4 ; pannea
 Statistiques). Scénarios 18 et 19. Pièges : un bouton du panneau 3D se clique par `dispatchEvent("click")` dans un
 scénario (il bouge tant que le regard se tourne vers lui) ; la touche T et les chiffres sont lus par leur position.
 
-**Restent** : l'étape 3 (la télévision commune — effort élevé conseillé) et l'étape 5 (avatars personnalisables,
-liste des salons soignée, invitations par lien). Puis le déploiement : une version de Laterna, et le conteneur
-`laterna-salons` selon `../salons/docs/DEPLOIEMENT.md`.
+**Étapes 3 et 5 faites le 11/11 (nuit)** : télévision commune (`net/tv.ts` — le relais `setSharedPlayback` de
+`media/commands.ts` envoie les gestes au service ; `open(…, paused)` et `playbackClock`/`setPlaybackRate` dans
+`media/playback.ts`), apparence des avatars (`world/avatarLook.ts`, `AvatarBody`/`AvatarHead` dans `world/Others.tsx`,
+« Mon avatar » dans `ui/Salons.tsx`), liste des salons enrichie, lien d'invitation (`joinFromLink`), ligne « Tout le
+monde se prépare » (`ui/TvStatus.tsx`). Scénario 20. Tout le plan multijoueur est fait ; déployé avec Laterna 10.38.0.
 
 ## Prochaine action
 
