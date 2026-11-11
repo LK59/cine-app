@@ -98,11 +98,13 @@ export function cancelBench(): void {
 }
 
 export function rendererName(gl: WebGLRenderer): { renderer: string | null; vendor: string | null } {
+  // Un contexte déjà rendu (la page qui s'en va) répond `null` : c'est « inconnu », pas le mot « null » au journal.
+  const text = (value: unknown) => (value === null || value === undefined ? null : String(value));
   try {
     const context = gl.getContext();
     const info = context.getExtension("WEBGL_debug_renderer_info");
-    if (!info) return { renderer: String(context.getParameter(context.RENDERER)), vendor: String(context.getParameter(context.VENDOR)) };
-    return { renderer: String(context.getParameter(info.UNMASKED_RENDERER_WEBGL)), vendor: String(context.getParameter(info.UNMASKED_VENDOR_WEBGL)) };
+    if (!info) return { renderer: text(context.getParameter(context.RENDERER)), vendor: text(context.getParameter(context.VENDOR)) };
+    return { renderer: text(context.getParameter(info.UNMASKED_RENDERER_WEBGL)), vendor: text(context.getParameter(info.UNMASKED_VENDOR_WEBGL)) };
   } catch {
     return { renderer: null, vendor: null };
   }

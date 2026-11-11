@@ -17,6 +17,9 @@ const CODE = { fps: "f", acoups: "a", marge: "m" } as const;
 
 const visit = {
   gl: null as WebGLRenderer | null,
+  /** La puce graphique, relevée à l'arrivée : en partant, le contexte est souvent déjà rendu (le journal disait « null »). */
+  renderer: null as string | null,
+  vendor: null as string | null,
   startedAt: 0,
   startLevel: 0,
   best: 0,
@@ -32,7 +35,7 @@ const visit = {
 export const autoLog = {
   start(level: number, gl: WebGLRenderer): void {
     if (visit.startedAt) return;
-    Object.assign(visit, { gl, startedAt: performance.now(), startLevel: level, best: level, worst: level });
+    Object.assign(visit, { gl, ...rendererName(gl), startedAt: performance.now(), startLevel: level, best: level, worst: level });
   },
   frame(ms: number): void {
     visit.frames += 1;
@@ -54,7 +57,7 @@ export function sendAutoLog(): void {
   visit.sent = true;
   const gl = visit.gl;
   const size = gl ? gl.getDrawingBufferSize(new Vector2()) : null;
-  const { renderer, vendor } = gl ? rendererName(gl) : { renderer: null, vendor: null };
+  const { renderer, vendor } = visit;
   void fetch("/api/viewport-diag", {
     method: "POST",
     credentials: "same-origin",

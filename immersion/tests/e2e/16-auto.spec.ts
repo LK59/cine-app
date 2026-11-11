@@ -95,12 +95,17 @@ test("Auto descend quand la machine peine, et le dit au journal en partant", asy
 
   // En partant, la ligne de la visite. (L'évènement que le navigateur émet en quittant la page, émis à la main : une
   // requête partie d'une page qui se décharge échappe à l'interception de Playwright.)
+  // Le contexte graphique est rendu avant que la ligne parte, comme quand la page s'en va pour de bon : le nom de la
+  // puce doit avoir été relevé avant (la ligne disait « null » en 10.37.0).
+  await page.evaluate(() => (window as unknown as { __immersion: { gl: { forceContextLoss(): void } } }).__immersion.gl.forceContextLoss());
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
   await expect.poll(() => lines.find((l) => l.kind === "immersion-auto"), { timeout: 10_000 }).toBeTruthy();
   const line = lines.find((l) => l.kind === "immersion-auto")!;
   expect(line.startLevel).toBe(start);
   expect(line.worst).toBeGreaterThanOrEqual(start + 2);
   expect(line.count).toBeGreaterThanOrEqual(2);
+  expect(typeof line.renderer).toBe("string");
+  expect(line.renderer).not.toBe("null");
   expect(String(line.changes)).toMatch(/^\d+:\d+>\d+[fa](;\d+:\d+>\d+[fam])+$/);
   expect(errors).toEqual([]);
 });
