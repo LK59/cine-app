@@ -653,6 +653,13 @@ scénario (il bouge tant que le regard se tourne vers lui) ; la touche T et les 
 « Mon avatar » dans `ui/Salons.tsx`), liste des salons enrichie, lien d'invitation (`joinFromLink`), ligne « Tout le
 monde se prépare » (`ui/TvStatus.tsx`). Scénario 20. Tout le plan multijoueur est fait ; déployé avec Laterna 10.38.0.
 
+**10.38.1 (11/11, retours de Louis)** : textes des jeux et des salons simplifiés ; menu « À plusieurs » qui défile
+(« Mon avatar » le faisait déborder) ; ligne « Salon « … » · 👥 n · lecture partagée » sous l'en-tête du panneau — la
+télévision commune n'était signalée nulle part ; liste publique rafraîchie au retour à l'accueil des salons et toutes
+les 8 s (par la WebSocket) ; un salon quitté par le dernier ferme aussitôt (service) ; redessin immédiat après un
+changement de résolution (`RedrawOnResize`, écrans noirs d'un instant quand « Auto » change de niveau — cause
+probable, non prouvée sur la machine) ; « Auto » repart du niveau de la visite précédente sur l'appareil.
+
 ## Prochaine action
 
 Sur un vrai épisode, avec le compte de test et une instance jetable : la carte au générique, l'enchaînement, et

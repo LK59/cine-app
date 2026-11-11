@@ -1679,6 +1679,10 @@ kbd {
   gap: 12px;
   width: 100%;
   text-align: left;
+  /* Le contenu défile dans la carte (« Mon avatar » la faisait déborder sous l'écran, sans défilement). */
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 .salons-note {
   margin: 0;
@@ -1753,6 +1757,11 @@ kbd {
   display: flex;
   gap: 8px;
 }
+.salons-join input::placeholder {
+  /* L'espacement et les capitales du code coupaient l'indication (« CODE D'UN S »). */
+  letter-spacing: normal;
+  text-transform: none;
+}
 .salons-join input {
   width: 9.5em;
   height: 38px;
@@ -1776,6 +1785,13 @@ kbd {
   color: #fff;
   background: rgb(255 255 255 / 0.06);
   cursor: pointer;
+}
+.panel-room {
+  margin: 0;
+  padding: 8px 22px;
+  font-size: 13px;
+  color: rgb(255 255 255 / 0.78);
+  background: rgb(255 255 255 / 0.05);
 }
 .salons-room-main {
   display: flex;
@@ -1989,6 +2005,8 @@ kbd {
   gap: 10px;
   width: 100%;
   text-align: left;
+  min-height: 0;
+  overflow-y: auto;
 }
 .stats-table {
   width: 100%;

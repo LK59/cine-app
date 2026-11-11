@@ -3364,8 +3364,8 @@
       },
       "salons": {
         "title": "Salons du chalet",
-        "why": "Facultatif. Un service installé à côté de l'application permet de se retrouver à plusieurs dans le mode Immersion : salons publics ou privés, lampes, feu, musique et télévision partagés, jeux. Sans lui, le chalet et ses jeux restent jouables seul.",
-        "help": "L'adresse et la clé du service (sa variable SALONS_KEY, la même des deux côtés). Son installation est décrite dans salons/docs/DEPLOIEMENT.md.",
+        "why": "Pour jouer à plusieurs dans le mode Immersion : salons, télévision partagée, jeux. Demande le service laterna-salons ; sans lui, le chalet se joue seul.",
+        "help": "L'adresse du service et sa clé (SALONS_KEY, la même des deux côtés). Installation : salons/docs/DEPLOIEMENT.md.",
         "guide": "Installer le service des salons (guide de déploiement)"
       },
       "app": {

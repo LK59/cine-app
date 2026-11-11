@@ -81,7 +81,9 @@ export const PlayerResultCard = memo(function PlayerResultCard({
       data-nav-item
       className="pressable group flex flex-col text-left focus-visible:outline-none"
     >
-      <div className="relative overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10 transition duration-200 group-hover:ring-white/30 group-focus-visible:ring-2 group-focus-visible:ring-accent-500">
+      {/* Le fond clair ne sert qu'à une carte sans affiche. Derrière une affiche, il dépassait d'une fraction de pixel
+          sous l'image et, sur une affiche presque noire (« Le Chalet »), se lisait comme une ligne blanche en bas. */}
+      <div className={`relative overflow-hidden rounded-lg ${poster ? "bg-black" : "bg-white/5"} ring-1 ring-white/10 transition duration-200 group-hover:ring-white/30 group-focus-visible:ring-2 group-focus-visible:ring-accent-500`}>
         <div className={kind === "person" ? "aspect-[2/3]" : "aspect-[2/3]"}>
           {poster ? (
             /* `unoptimized` : ces adresses sont déjà des images TMDB demandées à la taille de la

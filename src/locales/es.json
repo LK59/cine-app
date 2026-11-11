@@ -3364,8 +3364,8 @@
       },
       "salons": {
         "title": "Salas del chalet",
-        "why": "Opcional. Un servicio instalado junto a la aplicación permite reunirse en el modo Inmersión: salas públicas o privadas, lámparas, fuego, música y televisión compartidos, juegos. Sin él, el chalet y sus juegos siguen pudiendo jugarse en solitario.",
-        "help": "La dirección y la clave del servicio (su variable SALONS_KEY, la misma en ambos lados). Su instalación se describe en salons/docs/DEPLOIEMENT.md.",
+        "why": "Para jugar con otros en el modo Inmersión: salas, televisión compartida, juegos. Requiere el servicio laterna-salons; sin él, el chalet es para un solo jugador.",
+        "help": "La dirección del servicio y su clave (SALONS_KEY, la misma en ambos lados). Instalación: salons/docs/DEPLOIEMENT.md.",
         "guide": "Instalar el servicio de salas (guía de despliegue)"
       },
       "app": {

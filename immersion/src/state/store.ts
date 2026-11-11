@@ -190,6 +190,29 @@ export interface ImmersionState {
   updateSettings: (patch: Partial<Settings>) => void;
 }
 
+/**
+ * Le niveau d'« Auto » atteint sur cet appareil, gardé d'une visite à l'autre : partir d'Ultra à chaque fois coûtait
+ * une quinzaine de secondes saccadées sur un portable à puce intégrée, le temps de redescendre (11/11/2026). Une
+ * commodité seulement : sans stockage (navigation privée), « Auto » part comme avant.
+ */
+const AUTO_LEVEL_KEY = "laterna-immersion:auto-level";
+function rememberedAutoLevel(): number | null {
+  try {
+    const raw = localStorage.getItem(AUTO_LEVEL_KEY);
+    const level = raw === null ? NaN : Number(raw);
+    return Number.isInteger(level) && level >= 0 && level < AUTO_LEVELS.length ? level : null;
+  } catch {
+    return null;
+  }
+}
+function rememberAutoLevel(level: number): void {
+  try {
+    localStorage.setItem(AUTO_LEVEL_KEY, String(level));
+  } catch {
+    /* sans stockage : rien à garder */
+  }
+}
+
 export const useStore = create<ImmersionState>((set, get) => ({
   phase: "checking",
   unsupported: null,
@@ -244,11 +267,14 @@ export const useStore = create<ImmersionState>((set, get) => ({
   setPacks: (packs) => set({ packs }),
   lang: browserLang(),
   settings: loadSettings(),
-  // Au doigt (téléphone, tablette), « Auto » part bas et remonte si la machine suit — l'inverse d'un ordinateur.
-  autoLevel: isTouchDevice() ? 6 : 0,
+  // « Auto » part du niveau atteint à la visite précédente sur cet appareil ; la première fois, au doigt (téléphone,
+  // tablette) il part bas et remonte si la machine suit — l'inverse d'un ordinateur, qui part d'Ultra.
+  autoLevel: rememberedAutoLevel() ?? (isTouchDevice() ? 6 : 0),
   stepAuto: (delta) => {
     const next = Math.max(0, Math.min(AUTO_LEVELS.length - 1, get().autoLevel + delta));
-    if (next !== get().autoLevel) set({ autoLevel: next });
+    if (next === get().autoLevel) return;
+    set({ autoLevel: next });
+    rememberAutoLevel(next);
   },
   playback: IDLE_PLAYBACK,
   setPlayback: (patch) => set({ playback: { ...get().playback, ...patch } }),

@@ -230,6 +230,23 @@ function NowPlaying() {
 }
 
 /**
+ * Dans un salon, une ligne sous l'en-tête : son nom, combien on est, et que ce qui se lance ici passe chez tout le
+ * monde (`net/tv.ts`). Sans elle, rien ne disait que la télévision était commune — un film lancé chez soi y arrivait
+ * chez les autres sans qu'on l'ait su.
+ */
+function RoomBar() {
+  const t = useT();
+  const room = useStore((s) => s.net.room);
+  if (!room) return null;
+  const count = room.members.filter((m) => !m.away).length;
+  return (
+    <p className="panel-room" data-testid="panel-room">
+      {t("panel.room").replace("{name}", room.name).replace("{count}", String(count))}
+    </p>
+  );
+}
+
+/**
  * Les jeux de la télévision : « Devine le film », en trois variantes. Dans un salon, la partie est pour tous les
  * présents ; seul, elle tourne dans la page (`game/quiz.ts`). Lancer referme le panneau : la télévision montre le jeu.
  */
@@ -295,6 +312,7 @@ export function Panel() {
           {t("panel.close")} <kbd>{t("key.esc")}</kbd>
         </button>
       </header>
+      <RoomBar />
 
       {opened ? (
         // Une fiche qui ne se dessine pas (une donnée inattendue) ne doit pas emporter le panneau.

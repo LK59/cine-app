@@ -135,20 +135,42 @@ test("sans retour dans le délai, la place est rendue au salon ; un jeton d'un a
   assert.notEqual(join("Bob", resume).last("welcome")!.you.id, b.handle.id);
 });
 
-test("un salon vide se ferme après le délai, pas avant, et pas si quelqu'un revient", () => {
+test("le dernier qui quitte ferme le salon aussitôt : il disparaît de la liste", () => {
+  const { lobby, join } = harness();
+  const a = join("Alice");
+  a.handle.receive({ t: "create", visibility: "public", name: "" });
+  const code = codeOf(a);
+  const b = join("Bob");
+  b.handle.receive({ t: "list" });
+  assert.equal(b.last("rooms")!.rooms.length, 1);
+  a.handle.receive({ t: "leave" });
+  assert.equal(lobby.stats().rooms, 0);
+  b.handle.receive({ t: "list" });
+  assert.deepEqual(b.last("rooms")!.rooms, []);
+  b.handle.receive({ t: "join", code });
+  assert.equal(b.last("error")!.code, "no-room");
+  // Créer un autre salon quitte le premier : vide, il ferme aussi.
+  a.handle.receive({ t: "create", visibility: "public", name: "" });
+  a.handle.receive({ t: "create", visibility: "public", name: "" });
+  assert.equal(lobby.stats().rooms, 1);
+});
+
+test("vidé par une coupure, le salon attend : caché de la liste, fermé après le délai, gardé si quelqu'un revient", () => {
   const { lobby, join, advance } = harness();
   const a = join("Alice");
   a.handle.receive({ t: "create", visibility: "public", name: "" });
   const code = codeOf(a);
-  a.handle.receive({ t: "leave" });
-  advance(LIMITS.emptyRoomMs - 1);
-  assert.equal(lobby.stats().rooms, 1);
-  join("Bob").handle.receive({ t: "join", code });
+  a.handle.disconnected();
+  const b = join("Bob");
+  b.handle.receive({ t: "list" });
+  assert.deepEqual(b.last("rooms")!.rooms, [], "personne de connecté : pas dans la liste");
+  advance(LIMITS.resumeMs + LIMITS.emptyRoomMs - 1);
+  assert.equal(lobby.stats().rooms, 1, "la place expire, puis le salon attend encore son délai");
+  b.handle.receive({ t: "join", code });
   advance(LIMITS.emptyRoomMs);
   assert.equal(lobby.stats().rooms, 1);
-  const c = join("Chloé");
-  c.handle.receive({ t: "join", code });
-  assert.equal(lobby.stats().members, 2);
+  b.handle.receive({ t: "leave" });
+  assert.equal(lobby.stats().rooms, 0);
 });
 
 test("créer en étant déjà dans un salon : on quitte le premier", () => {

@@ -78,7 +78,9 @@ l'état complet du salon.
 
 **Coupures** : `welcome` rend un jeton de reprise ; une nouvelle connexion qui le présente (même compte, dans les
 60 s) retrouve la même place et le même salon. Les autres voient la personne « absente » entre-temps
-(`{ t: "away" }`). Un salon vide est fermé après 60 s.
+(`{ t: "away" }`). Un salon que le dernier **quitte** (« Quitter », ou un autre salon) ferme aussitôt ; vidé par
+une **coupure**, il attend 60 s de plus que la place du dernier, et ne figure plus dans la liste publique dès que
+personne n'y est connecté.
 
 **Bornes** (`LIMITS`) : 4 Kio par message, 8 personnes par salon, 64 salons, 30 messages par seconde (rafale de 60)
 — au-delà la connexion est coupée (4429).

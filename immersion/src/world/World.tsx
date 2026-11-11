@@ -1,5 +1,5 @@
 import { Suspense, use, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Canvas } from "@react-three/fiber";
+import { advance, Canvas, useStore as useFiberStore } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { NoToneMapping, PCFShadowMap, SRGBColorSpace } from "three";
 import { isTouchDevice } from "../lib/capability";
@@ -40,6 +40,30 @@ function useHidden(): boolean {
     return () => document.removeEventListener("visibilitychange", onChange);
   }, []);
   return hidden;
+}
+
+/**
+ * Redessine aussitôt quand la résolution change (« Auto » qui change de niveau, fenêtre redimensionnée).
+ *
+ * Changer la taille du canevas l'efface ; le moteur la change en dehors d'une image (au rendu de React), et le
+ * navigateur pouvait afficher le canevas vide avant l'image suivante — un écran noir d'un instant, vu sur un portable
+ * dont « Auto » changeait trois fois de niveau en onze secondes (11/11/2026). L'image est rendue dans la foulée,
+ * avant que le navigateur affiche quoi que ce soit ; le post-traitement se met à la nouvelle taille dans cette image.
+ */
+function RedrawOnResize() {
+  const fiberStore = useFiberStore();
+  useEffect(
+    () =>
+      fiberStore.subscribe((state, before) => {
+        if (state.viewport.dpr === before.viewport.dpr && state.size.width === before.size.width && state.size.height === before.size.height) return;
+        // Le moteur se redimensionne dans son propre abonné, inscrit avant celui-ci : on dessine après lui.
+        queueMicrotask(() => {
+          if (state.frameloop !== "never") advance(performance.now());
+        });
+      }),
+    [fiberStore]
+  );
+  return null;
 }
 
 /**
@@ -93,6 +117,7 @@ export function World() {
       {/* « Auto » : la qualité suit la machine dans les deux sens (`AutoQuality`) ; il ne fait rien sous un préréglage
           choisi à la main, ni pendant une mesure. */}
       <AutoQuality />
+      <RedrawOnResize />
       <Suspense fallback={null}>
         <PacksReady>
           <Physics gravity={[0, -9.81, 0]} timeStep="vary">

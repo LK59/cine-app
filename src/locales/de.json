@@ -3364,8 +3364,8 @@
       },
       "salons": {
         "title": "Räume des Chalets",
-        "why": "Optional. Ein neben der Anwendung installierter Dienst ermöglicht es, sich im Immersionsmodus zu treffen: öffentliche oder private Räume, gemeinsame Lampen, Feuer, Musik und Fernseher, Spiele. Ohne ihn bleiben das Chalet und seine Spiele allein spielbar.",
-        "help": "Adresse und Schlüssel des Dienstes (seine Variable SALONS_KEY, auf beiden Seiten gleich). Die Installation ist in salons/docs/DEPLOIEMENT.md beschrieben.",
+        "why": "Zum gemeinsamen Spielen im Immersionsmodus: Räume, gemeinsamer Fernseher, Spiele. Benötigt den Dienst laterna-salons; ohne ihn ist das Chalet ein Einzelspielermodus.",
+        "help": "Adresse und Schlüssel des Dienstes (SALONS_KEY, auf beiden Seiten gleich). Installation: salons/docs/DEPLOIEMENT.md.",
         "guide": "Raumdienst installieren (Bereitstellungsanleitung)"
       },
       "app": {

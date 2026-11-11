@@ -18,7 +18,9 @@ import { READY_TIMEOUT_MS, SharedTv, type Look } from "./tv.ts";
  * - **une coupure n'est pas un départ** : la place est gardée `LIMITS.resumeMs`, marquée « absent », et le jeton
  *   de reprise rendu à l'arrivée la rend à qui revient (même compte, nouvelle connexion) — un redéploiement de
  *   l'application coupe toutes les connexions d'un coup, et personne ne doit perdre son salon pour autant ;
- * - **un salon vide n'est fermé qu'après `LIMITS.emptyRoomMs`**, pour la même raison.
+ * - **un salon vidé par une coupure n'est fermé qu'après `LIMITS.emptyRoomMs`**, pour la même raison ; vidé par un
+ *   départ voulu (« Quitter », un autre salon), il ferme aussitôt — et un salon où personne n'est connecté ne figure
+ *   plus dans la liste publique.
  */
 export interface Connection {
   send(message: ServerMessage): void;
@@ -148,7 +150,8 @@ export class Lobby {
         return this.send(member, {
           t: "rooms",
           rooms: [...this.rooms.values()]
-            .filter((room) => room.visibility === "public")
+            // Personne de connecté (tous coupés, en attente de reprise) : le salon n'est plus montré.
+            .filter((room) => room.visibility === "public" && [...room.members.values()].some((m) => m.conn))
             .map((room) => ({
               code: room.code,
               name: room.name,
@@ -160,7 +163,7 @@ export class Lobby {
         });
       case "create": {
         if (this.rooms.size >= LIMITS.maxRooms) return this.fail(member, "too-many-rooms", "Trop de salons ouverts en ce moment.");
-        if (member.room) this.removeFromRoom(member);
+        if (member.room) this.removeFromRoom(member, true);
         const room: Room = {
           code: this.freeCode(),
           name: message.name || `Salon de ${member.name}`,
@@ -185,12 +188,12 @@ export class Lobby {
         if (!room) return this.fail(member, "no-room", "Aucun salon ne porte ce code.");
         if (member.room === room) return this.send(member, { t: "joined", room: this.view(room), now: this.now() });
         if (room.members.size >= LIMITS.maxMembers) return this.fail(member, "full", "Ce salon est complet.");
-        if (member.room) this.removeFromRoom(member);
+        if (member.room) this.removeFromRoom(member, true);
         return this.enter(member, room);
       }
       case "leave": {
         if (!member.room) return this.fail(member, "not-in-room", "Pas de salon à quitter.");
-        this.removeFromRoom(member);
+        this.removeFromRoom(member, true);
         return this.send(member, { t: "left" });
       }
       case "set": {
@@ -396,7 +399,8 @@ export class Lobby {
     if (room.game && room.game.phase !== "end" && !room.cancelGameTick) this.gameChanged(room);
   }
 
-  private removeFromRoom(member: Member): void {
+  /** `left` : un départ voulu — vide, le salon ferme aussitôt ; sinon (place expirée) il attend `emptyRoomMs`. */
+  private removeFromRoom(member: Member, left = false): void {
     const room = member.room;
     if (!room) return;
     room.members.delete(member.id);
@@ -411,14 +415,21 @@ export class Lobby {
       room.cancelTvTimeout = null;
       room.tv = null;
     } else if (room.tv?.phase === "preparing") this.tvChanged(room);
-    if (room.members.size === 0 && !room.cancelClose) {
-      room.cancelClose = this.schedule(() => {
-        room.cancelClose = null;
-        if (room.members.size > 0 || this.rooms.get(room.code) !== room) return;
-        this.rooms.delete(room.code);
-        this.log(`salon fermé ${room.code} après ${Math.round((this.now() - room.openedAt) / 60_000)} min, ${room.peak} participant(s) au plus`);
-      }, LIMITS.emptyRoomMs);
+    if (room.members.size > 0) return;
+    const close = () => {
+      if (room.members.size > 0 || this.rooms.get(room.code) !== room) return;
+      this.rooms.delete(room.code);
+      this.log(`salon fermé ${room.code} après ${Math.round((this.now() - room.openedAt) / 60_000)} min, ${room.peak} participant(s) au plus`);
+    };
+    if (left) {
+      room.cancelClose?.();
+      room.cancelClose = null;
+      return close();
     }
+    room.cancelClose ??= this.schedule(() => {
+      room.cancelClose = null;
+      close();
+    }, LIMITS.emptyRoomMs);
   }
 
   private freeCode(): string {

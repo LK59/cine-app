@@ -84,6 +84,15 @@ export function Salons() {
     });
   }, []);
 
+  // La liste publique se tient à jour tant que l'accueil des salons est ouvert (par la WebSocket déjà ouverte :
+  // aucune requête HTTP, rien que le pare-feu compterait).
+  const inLobby = net.status === "online" && !net.room;
+  useEffect(() => {
+    if (!inLobby) return;
+    const timer = setInterval(listRooms, 8000);
+    return () => clearInterval(timer);
+  }, [inLobby]);
+
   if (net.status === "checking") return <p className="salons-note">{t("salons.checking")}</p>;
   if (net.status === "unavailable") return <p className="salons-note" data-testid="salons-unavailable">{t("salons.unavailable")}</p>;
 

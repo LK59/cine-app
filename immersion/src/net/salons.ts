@@ -142,7 +142,10 @@ function onMessage(message: ServerMessage): void {
       save();
       return;
     case "left":
-      setNet({ room: null, chat: [] });
+      // De retour à l'accueil des salons : la liste d'avant l'entrée est périmée (elle montrait encore le salon
+      // qu'on vient de fermer en le quittant).
+      setNet({ room: null, chat: [], publicRooms: [] });
+      send({ t: "list" });
       forgetPoses();
       for (const listener of gameListeners) listener(null, undefined);
       save();

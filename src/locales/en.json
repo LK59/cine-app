@@ -3364,8 +3364,8 @@
       },
       "salons": {
         "title": "Chalet rooms",
-        "why": "Optional. A service installed next to the app lets people meet in Immersion mode: public or private rooms, shared lamps, fire, music and television, games. Without it, the chalet and its games remain playable alone.",
-        "help": "The service's address and key (its SALONS_KEY variable, the same on both sides). Its installation is described in salons/docs/DEPLOIEMENT.md.",
+        "why": "To play together in Immersion mode: rooms, shared TV, games. Requires the laterna-salons service; without it, the chalet is single-player.",
+        "help": "The service's address and key (SALONS_KEY, the same on both sides). Setup: salons/docs/DEPLOIEMENT.md.",
         "guide": "Install the rooms service (deployment guide)"
       },
       "app": {
