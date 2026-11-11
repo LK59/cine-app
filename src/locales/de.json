@@ -1043,7 +1043,7 @@
         "errors": "Fehlschläge"
       },
       "aiCost": {
-        "title": "Ausgaben der kostenpflichtigen KI-Funktionen (alle: Untertitel, Suche, „Bisher“ zu Serie und Figur, Fragen) — in ungefähren Euro, 1 $ ≈ {rate} €",
+        "title": "Ausgaben der kostenpflichtigen KI-Funktionen (alle: Untertitel, Suche, „Bisher“, Fragen, „Bis jetzt“) — in ungefähren Euro, 1 $ ≈ {rate} €",
         "today": "Heute",
         "week": "7 Tage",
         "days30": "30 Tage",
@@ -3381,7 +3381,7 @@
       },
       "subtitles": {
         "title": "KI-Funktionen",
-        "why": "Ein Online-KI-Anbieter (Claude, OpenAI oder Google), ein Schlüssel und ein Monatslimit dienen allen kostenpflichtigen Funktionen: generierte Untertitel, Suche per Beschreibung, „Bisher“ zu einer Serie, Fragen und „Bisher“ zu einer Figur. Ohne Schlüssel erscheint keine davon.",
+        "why": "Ein Online-KI-Anbieter (Claude, OpenAI oder Google), ein Schlüssel und ein Monatslimit dienen allen kostenpflichtigen Funktionen: generierte Untertitel, Suche per Beschreibung, „Bisher“, Fragen und „Bis jetzt“. Ohne Schlüssel erscheint keine davon.",
         "help": "Der Schlüssel bleibt auf dem Server: Er wird nie an Geräte gesendet und nie in die Protokolle geschrieben."
       },
       "dialogue": {
@@ -3455,7 +3455,7 @@
       "REPLIQUES_NIGHT_END": "Ende des Nachtfensters",
       "REPLIQUES_LANGUAGES": "Sprachen der Dialoge",
       "ASK_PERSON_ENABLED": "Fragen zu einer Person: im Bereich eines Darstellers aus „Im Bild“ höchstens zwei vorgeschlagene Fragen „In welcher Beziehung steht X zu Y?“ mit den anderen Figuren der Szene (kein freies Eingabefeld)",
-      "SOFAR_ENABLED": "„Bisher“ zu einer Figur: im Bereich eines Darstellers aus „Im Bild“ zwei Sätze dazu, was seine Figur bis jetzt getan hat"
+      "SOFAR_ENABLED": "„Bis jetzt“: im Bereich eines Darstellers aus „Im Bild“ zwei Sätze dazu, was seine Figur bis jetzt getan hat"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml unter „environment“:",
@@ -4371,7 +4371,7 @@
     "previous": "Vorherige Personen",
     "next": "Weitere Personen",
     "photo": "Foto von {name}",
-    "sofar": "Bisher",
+    "sofar": "Bis jetzt",
     "sofarLittle": "Bisher zu wenig gesehen, um mehr zu sagen.",
     "sofarWait": {
       "scenes": "Die Szene mit {name} wird durchgesehen…|Die {n} Szenen mit {name} werden durchgesehen…",
@@ -4397,10 +4397,10 @@
     "names": {
       "subtitles": "Generierte Untertitel",
       "describe": "Suche per Beschreibung",
-      "recap": "„Bisher“ zu einer Serie",
+      "recap": "„Bisher“",
       "askTitle": "Fragen zu einem Titel",
       "askPerson": "Fragen zu einer Person",
-      "sofar": "„Bisher“ zu einer Figur",
+      "sofar": "„Bis jetzt“",
       "xray": "Darsteller im Bild"
     },
     "what": {
