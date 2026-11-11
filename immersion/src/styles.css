@@ -564,6 +564,13 @@ kbd {
   animation: intro-rise 0.25s var(--ease-out) both;
 }
 
+/* Le rappel « Échap pour fermer », hors du panneau : toujours lisible, même si le panneau en 3D se dessine par-dessus
+   le bas de l'image (`zIndexRange` de `PanelAnchor` va jusqu'à 8). */
+.hints-panel {
+  bottom: 14px;
+  z-index: 9;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .intro-snow,
   .intro-snow::after,

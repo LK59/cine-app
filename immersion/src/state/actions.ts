@@ -1,4 +1,4 @@
-import { device, onIntent, type Intent } from "../input/intents";
+import { device, onIntent, view, type Intent } from "../input/intents";
 import { disposeAudio, resumeAudio } from "../media/audio";
 import { disposeMusic } from "../media/music";
 import { episodesOf, forgetLibrary, library, type Title } from "../media/library";
@@ -81,6 +81,9 @@ export function openPanel(screenId?: string): void {
   const screen = SCREENS.find((candidate) => candidate.id === (screenId ?? (s.mode === "remote" ? remoteScreen : null) ?? s.nearScreen));
   if (!screen) return;
   placePanel(screen);
+  // Assis, l'image rapprochée (molette) ne laisse qu'une douzaine de degrés de champ : le panneau, réduit pour y tenir
+  // (`panelScale`), deviendrait illisible. Il s'ouvre sur la vue normale.
+  view.zoom = 0;
   loadLibrary();
   // Le mode d'abord : rendre le regard ensuite est voulu, et ne doit pas ouvrir le menu pause.
   s.setMode("panel");

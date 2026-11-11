@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo } from "react";
-import { useStore } from "./state/store";
+import { useStore, useT } from "./state/store";
 import { checkCapability, flatPanel, isTouchDevice } from "./lib/capability";
 import { Panel } from "./ui/Panel";
 import { accountLang, leaveToLaterna, SessionExpired, watchSession } from "./lib/session";
@@ -12,6 +12,7 @@ import { speakerLevels } from "./media/audio";
 import { timing as benchTiming } from "./bench/bench";
 import { musicLevels } from "./media/music";
 import { SEATS, THINGS } from "./world/interactions";
+import { SCREENS } from "./world/layout";
 import { Hints } from "./ui/Hints";
 import { FpsCounter, Hud } from "./ui/Hud";
 import { closePanel, debug, openPanel } from "./state/actions";
@@ -43,6 +44,7 @@ export function App() {
   const measuring = useStore((s) => s.bench?.running === true);
   const showFps = useStore((s) => s.settings.showFps);
   const touch = useMemo(() => isTouchDevice(), []);
+  const t = useT();
 
   const boot = useCallback(() => {
     const state = useStore.getState();
@@ -60,7 +62,7 @@ export function App() {
       }
     );
     // Prise de test et de capture : l'état, et le visiteur qu'on peut poser où l'on veut.
-    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug, benchTiming, view, cueAt, perf, effects, screenLight, speakerLevels, musicLevels, things: THINGS.map(({ id, at }) => ({ id, at })), seats: SEATS };
+    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug, benchTiming, view, cueAt, perf, effects, screenLight, speakerLevels, musicLevels, things: THINGS.map(({ id, at }) => ({ id, at })), seats: SEATS, screens: Object.fromEntries(SCREENS.map((screen) => [screen.id, screen])) };
     // La page s'en va, quelle qu'en soit la raison : l'arrêt de la lecture part quand même.
     window.addEventListener("pagehide", stopOnLeave);
     // Ce qu'« Auto » a fait de la visite : une ligne au journal, en partant.
@@ -91,6 +93,16 @@ export function App() {
           {mode === "panel" && flatPanel() ? (
             <div className="panel-flat">
               <Panel />
+            </div>
+          ) : null}
+          {/* Le panneau en 3D se ferme à Échap : dit en dehors de lui, toujours à l'écran. Un visiteur l'a ouvert trop
+              près d'un mur, le bouton « Fermer » est sorti du champ, et il s'est cru « bloqué dans la fenêtre Laterna ».
+              Au doigt, pas de touche : le bouton suffit (et le panneau à plat le garde à l'écran). */}
+          {mode === "panel" && !touch ? (
+            <div className="hints hints-panel">
+              <span className="hint" data-testid="panel-escape">
+                <kbd>{t("key.esc")}</kbd> {t("panel.escape")}
+              </span>
             </div>
           ) : null}
           {mode === "walk" ? <Hud /> : null}
