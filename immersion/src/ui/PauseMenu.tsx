@@ -2,6 +2,7 @@ import { useStore, useT } from "../state/store";
 import { quit, resumeVisit } from "../state/actions";
 import { ExperienceLogo } from "./Logo";
 import { Settings } from "./Settings";
+import { Salons } from "./Salons";
 
 /**
  * Le menu pause : ouvert par Échap (qui rend le pointeur). « Reprendre » redemande le pointeur — le
@@ -14,12 +15,15 @@ export function PauseMenu() {
 
   return (
     <div className="veil" data-testid="pause">
-      <div className={`card pause${view === "settings" ? " is-wide" : ""}`}>
+      <div className={`card pause${view !== "menu" ? " is-wide" : ""}`}>
         <ExperienceLogo lit compact />
         {view === "menu" ? (
           <nav className="pause-actions">
             <button type="button" className="btn btn-primary" onClick={resumeVisit} autoFocus data-testid="resume">
               {t("pause.resume")}
+            </button>
+            <button type="button" className="btn" onClick={() => setView("salons")} data-testid="open-salons">
+              {t("pause.salons")}
             </button>
             <button type="button" className="btn" onClick={() => setView("settings")} data-testid="open-settings">
               {t("pause.settings")}
@@ -28,6 +32,16 @@ export function PauseMenu() {
               {t("pause.quit")}
             </button>
           </nav>
+        ) : view === "salons" ? (
+          <>
+            <h2 className="pause-title">{t("salons.title")}</h2>
+            <Salons />
+            <nav className="pause-actions">
+              <button type="button" className="btn" onClick={() => setView("menu")} data-testid="salons-back">
+                ← {t("panel.back")}
+              </button>
+            </nav>
+          </>
         ) : (
           <>
             <h2 className="pause-title">{t("settings.title")}</h2>

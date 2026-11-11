@@ -10,6 +10,7 @@ import { dataDirProblem, startupRefusal } from "./startupChecks.mjs";
 import { applyFirstRunSecrets } from "./firstRunSecrets.mjs";
 import { linkImageCache } from "./imageCache.mjs";
 import { FRAMING_ENV, installResponseFraming } from "./responseFraming.mjs";
+import { installSalonsRelay } from "./salonsRelay.mjs";
 
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dataDir = process.env.DATA_DIR || path.join(appDir, "data");
@@ -94,6 +95,8 @@ http.createServer = function (...args) {
     // Avant Next, donc sous le module `compression` qu'il branche ensuite : voir responseFraming.mjs.
     installResponseFraming(req, res);
   });
+  // Les WebSockets des salons du chalet (§146) : prises avant Next, relayées vers `laterna-salons`.
+  installSalonsRelay(server);
   return server;
 };
 process.env.CINE_PEER_HEADER = "1";

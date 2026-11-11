@@ -6,6 +6,7 @@ import { isTouchDevice, type Unsupported } from "../lib/capability";
 import type { AudioTrack, Span, SubtitleTrack } from "../media/api";
 import type { Episode, Library, Title } from "../media/library";
 import { FORCED_LABEL } from "../input/keyboardMouse";
+import { IDLE_NET, type NetState } from "../net/types";
 import type { SeatId } from "../world/interactions";
 import type { RoomId } from "../world/layout";
 
@@ -100,7 +101,7 @@ export interface ImmersionState {
   unsupported: Unsupported | null;
   mode: Mode;
   /** Le sous-écran du menu pause. */
-  pauseView: "menu" | "settings";
+  pauseView: "menu" | "settings" | "salons";
   seated: boolean;
   /** L'écran que le visiteur peut ouvrir d'ici (touche d'action) — son identifiant, ou rien. */
   nearScreen: string | null;
@@ -163,7 +164,10 @@ export interface ImmersionState {
   setPhase: (phase: Phase) => void;
   setUnsupported: (why: Unsupported | null) => void;
   setMode: (mode: Mode) => void;
-  setPauseView: (view: "menu" | "settings") => void;
+  setPauseView: (view: "menu" | "settings" | "salons") => void;
+  /** Les salons du chalet (`net/salons.ts`) : connexion, salon courant, salons publics. Écrit par ce module seul. */
+  net: NetState;
+  setNet: (patch: Partial<NetState>) => void;
   setSeated: (seated: boolean, spot?: SeatId) => void;
   setNear: (near: { screen: string | null; seat: SeatId | null; thing: string | null; aimed?: string | null }) => void;
   panel: PanelState;
@@ -229,6 +233,8 @@ export const useStore = create<ImmersionState>((set, get) => ({
   setUnsupported: (unsupported) => set({ unsupported, phase: unsupported ? "unsupported" : "loading" }),
   setMode: (mode) => set(mode === "paused" ? { mode } : { mode, pauseView: "menu" }),
   setPauseView: (pauseView) => set({ pauseView }),
+  net: IDLE_NET,
+  setNet: (patch) => set({ net: { ...get().net, ...patch } }),
   setSeated: (seated, spot) => set(spot ? { seated, seatSpot: spot } : { seated }),
   setNear: ({ screen, seat, thing, aimed = null }) => {
     const s = get();

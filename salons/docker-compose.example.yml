@@ -1,0 +1,23 @@
+# laterna-salons — à côté de Laterna (docs/DEPLOIEMENT.md).
+#
+# Le service n'a pas de port publié : l'application l'atteint sur le réseau Docker qu'ils partagent, et les
+# navigateurs passent par l'application (même adresse, même HTTPS). Remplacez `media_net` par le réseau de
+# votre conteneur Laterna.
+services:
+  laterna-salons:
+    image: ghcr.io/lk59/laterna-salons:latest
+    # Ou, construit depuis ce dossier : build: .
+    container_name: laterna-salons
+    restart: unless-stopped
+    environment:
+      # La même valeur que « Clé du service des salons » dans Laterna (Configuration → Connexions).
+      # 32 caractères au moins : `openssl rand -hex 32`.
+      SALONS_KEY: ${SALONS_KEY:?SALONS_KEY manquante}
+    networks:
+      - media_net
+    mem_limit: 256m
+    cpus: 1
+
+networks:
+  media_net:
+    external: true

@@ -551,6 +551,18 @@ widening `"movies" | "series"` would ripple through twenty places. Turned off, e
   `readerPrefsStore.ts` — a type with none takes the account's latest; the device keeps a local copy);
   the reading list `book_list` (`readingList.ts`, « À lire » in Ma liste through `BooksMode`, kept on finish like a watched film).
 
+**The chalet's rooms are a sidecar service, off by default** (DECISIONS §146, since 11/11/2026): `laterna-salons`
+(`salons/`, Node 26 + WebSocket, its own Dockerfile, tests, CI and deployment guide `salons/docs/DEPLOIEMENT.md`,
+outside the app's typecheck, lint and tests) carries Immersion multiplayer — rooms, shared lamps/door/fire/music,
+later the shared TV, presence, chat and games (`immersion/docs/MULTIJOUEUR.md`). Browsers only ever open
+`/api/salons/ws` **on Laterna's own address**; `server-boot/salonsRelay.mjs` (installed by `boot.mjs` before Next)
+relays that upgrade to `SALONS_URL` on the Docker network — no reverse-proxy change, no published port. Entry is a
+five-minute pass signed with the shared `SALONS_KEY` (`GET /api/salons/pass`, always 200, `{ available: false }` when
+off for that session, share links included); the format lives in `src/lib/salons/pass.ts` and `salons/src/pass.ts`,
+held together by a shared test vector. The protocol is one file, `salons/src/protocol.ts`, imported as-is by the
+chalet (`.dockerignore` lets only it and `pass.ts` in). Without the service, the chalet and its games stay
+single-player. Settings: Configuration → Connections → « Salons du chalet ».
+
 **Actors on screen are a sidecar service, off by default** (DECISIONS §138, since 09/11/2026):
 `laterna-xray` (its code under `xray/`, its own image, outside the gate) recognises actors scene by
 scene; Laterna only commands and reads it (`src/lib/clients/xray.ts`, `src/lib/xray/`), behind

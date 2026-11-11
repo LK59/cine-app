@@ -94,6 +94,9 @@ export const CONFIG_LAYOUT = {
     // Le service des acteurs à l'écran (§138) : son adresse et sa clé. La fonction elle-même — à qui
     // elle est ouverte — se règle dans Fonctions intelligentes → Acteurs à l'écran.
     { group: "xray", keys: ["XRAY_URL", "XRAY_API_KEY"], anchor: "xray" },
+    // Les salons du chalet (§146) : le service, son adresse et sa clé, et à qui le jeu à plusieurs est ouvert —
+    // une seule carte : sans service, l'interrupteur n'a rien à allumer.
+    { group: "salons", keys: ["SALONS_ENABLED", "SALONS_URL", "SALONS_KEY"], anchor: "salons" },
     { group: "app", keys: ["POSTER_PREWARM", "VAPID_SUBJECT"] },
   ],
   /** Lecture : le lecteur intégré et son relais vers Jellyfin, rien d'autre. */

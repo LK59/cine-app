@@ -320,6 +320,22 @@ export const config = {
       return optional("GOOGLE_BOOKS_API_KEY", "");
     },
   },
+  // Les salons du chalet (DECISIONS.md §146) : un service à part, `laterna-salons`, le temps réel du mode
+  // Immersion à plusieurs. Coupé par défaut ; relu à chaque appel — le couper ferme l'entrée à la demande de
+  // laissez-passer suivante, sans redémarrage. Ni l'adresse ni la clé ne sont recopiées ailleurs.
+  salons: {
+    /** À qui (`featureAudience.ts`) : `off` (défaut), `admins`, `tous`. */
+    get audience() {
+      return parseAudience(optional("SALONS_ENABLED", "off"));
+    },
+    get url() {
+      return optional("SALONS_URL", "http://laterna-salons:8090");
+    },
+    /** Partagée avec le service : elle signe les laissez-passer. Jamais renvoyée au navigateur. */
+    get key() {
+      return optional("SALONS_KEY", "");
+    },
+  },
   // L'analyse des acteurs à l'écran (DECISIONS.md §138) : un service à part, `laterna-xray`, qui
   // reconnaît les visages scène par scène. Coupée par défaut ; relue à chaque appel comme le reste —
   // la couper arrête les commandes à la séance suivante, sans redémarrage. Ni l'adresse ni la clé ne

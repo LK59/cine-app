@@ -6,6 +6,6 @@ import nextConfig from "eslint-config-next";
 // data/ holds the previous builds' bundles too (data/static-previous, kept by server-boot).
 // src/lib/books/foliate/ is foliate-js copied as-is from upstream (README there): not our code.
 // immersion/ is the hidden 3D mode: its own project, dependencies and checks (immersion/PROGRESS.md).
-const config = [...nextConfig, { ignores: ["public/sw.js", ".next-dev/**", ".claude/**", "src/lib/webcodecs/truehd/truehd-wasm.mjs", "src/lib/webcodecs/aac/aac-wasm.mjs","server-boot/*.d.mts", "data/**", "streamdeck-plugin/**", "src/lib/books/foliate/**", "immersion/**"] }];
+const config = [...nextConfig, { ignores: ["public/sw.js", ".next-dev/**", ".claude/**", "src/lib/webcodecs/truehd/truehd-wasm.mjs", "src/lib/webcodecs/aac/aac-wasm.mjs","server-boot/*.d.mts", "data/**", "streamdeck-plugin/**", "src/lib/books/foliate/**", "immersion/**", "salons/**"] }];
 
 export default config;

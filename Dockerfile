@@ -32,6 +32,8 @@ COPY immersion/package.json immersion/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY immersion/ ./
 COPY src/lib/codecSupport.ts src/lib/webkitEngine.ts src/lib/networkBitrate.ts src/lib/trackLabel.ts src/lib/trackPreferences.ts src/lib/playerSkip.ts /build/src/lib/
+# Le contrat des salons du chalet (§146) : les messages, écrits une fois, côté service.
+COPY salons/src/protocol.ts /build/salons/src/
 RUN npm run build
 
 FROM node:26-alpine AS builder
@@ -48,6 +50,8 @@ COPY . .
 # recopiait ses 28 Mo de textures dans l'image, à côté de leur build (relevé sur une image de test).
 RUN rm -rf immersion
 RUN npm test
+# Les deux fichiers du service des salons n'étaient là que pour les tests (voir .dockerignore).
+RUN rm -rf salons
 # No cache mount on .next/cache any more (26/09/2026). Turbopack keeps its compilation cache
 # there, and a build fed the previous one shipped fresh JavaScript with a stale stylesheet: every
 # rule added to globals.css since the last build was missing from the image, while the gate and

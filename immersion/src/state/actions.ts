@@ -214,7 +214,7 @@ function handle(intent: Intent): void {
   if (s.mode === "paused") {
     // Dans les réglages, « retour » revient au menu ; au menu, il reprend la visite.
     if (intent === "back") {
-      if (s.pauseView === "settings") s.setPauseView("menu");
+      if (s.pauseView !== "menu") s.setPauseView("menu");
       else resumeVisit();
     }
     return;

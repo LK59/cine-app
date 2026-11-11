@@ -3362,6 +3362,12 @@
         "help": "The service's address and key (its XRAY_API_KEY variable). Installing it is described in xray/README.md.",
         "guide": "Install the analysis service (deployment guide)"
       },
+      "salons": {
+        "title": "Chalet rooms",
+        "why": "Optional. A service installed next to the app lets people meet in Immersion mode: public or private rooms, shared lamps, fire, music and television, games. Without it, the chalet and its games remain playable alone.",
+        "help": "The service's address and key (its SALONS_KEY variable, the same on both sides). Its installation is described in salons/docs/DEPLOIEMENT.md.",
+        "guide": "Install the rooms service (deployment guide)"
+      },
       "app": {
         "title": "Application",
         "why": "Poster preparation and the contact address for notifications."
@@ -3412,6 +3418,9 @@
       "XRAY_ENABLED": "Actors on screen open to",
       "XRAY_URL": "Analysis service address",
       "XRAY_API_KEY": "Analysis service key",
+      "SALONS_ENABLED": "Multiplayer open to",
+      "SALONS_URL": "Rooms service address",
+      "SALONS_KEY": "Rooms service key",
       "SCENE_RESTART_ENABLED": "“Back to the start of the scene”: when resuming after four hours or more, a button offers to rewatch the start of the current scene (off: only measured, in the log)",
       "APP_LANGUAGE": "Default language",
       "COOKIE_SECURE": "Served over HTTPS (secure cookies)",

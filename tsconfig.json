@@ -42,6 +42,8 @@
     ".claude",
     "streamdeck-plugin",
     // Le mode « Immersion » : un projet à part (three, son propre tsconfig), vérifié par son propre build.
-    "immersion"
+    "immersion",
+    // Le service des salons du chalet (§146) : un paquet à part (Node 26, son tsconfig, ses tests).
+    "salons"
   ]
 }

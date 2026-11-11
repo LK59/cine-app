@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { CircleCheck, CircleAlert, Loader2, RotateCcw } from "lucide-react";
 import { AUDIENCES, parseAudience } from "@/lib/featureAudience";
 import { useT } from "@/components/TranslationProvider";
-import { XRAY_GUIDE_URL } from "@/lib/appBuild";
+import { SALONS_GUIDE_URL, XRAY_GUIDE_URL } from "@/lib/appBuild";
 import { DEPLOYMENT_GUIDE, SETTINGS, TESTABLE_GROUPS, type SettingGroup, type SettingView, type TestableGroup } from "@/lib/settings/schema";
 
 /**
@@ -112,11 +112,11 @@ export function SettingsGroupCard({
       <p className={`${help || needs ? "mb-1" : "mb-4"} text-sm text-muted`}>{t(whyKey ?? `setup.groups.${group}.why`)}</p>
       {help && <p className={`${needs ? "mb-1" : "mb-4"} text-xs text-subtle`}>{help}</p>}
       {needs && <div className="mb-4">{needs}</div>}
-      {group === "xray" && testable && (
-        // Le service se déploie à part : son guide est sur le dépôt public (§138).
+      {(group === "xray" || group === "salons") && testable && (
+        // Les services qui se déploient à part : leur guide est sur le dépôt public (§138, §146).
         <p className="-mt-2 mb-4 text-xs">
-          <a href={XRAY_GUIDE_URL} target="_blank" rel="noopener noreferrer" className="font-medium text-accent-400 hover:underline">
-            {t("setup.groups.xray.guide")}
+          <a href={group === "xray" ? XRAY_GUIDE_URL : SALONS_GUIDE_URL} target="_blank" rel="noopener noreferrer" className="font-medium text-accent-400 hover:underline">
+            {t(`setup.groups.${group}.guide`)}
           </a>
         </p>
       )}

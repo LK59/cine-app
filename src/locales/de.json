@@ -3362,6 +3362,12 @@
         "help": "Adresse und Schlüssel des Dienstes (seine Variable XRAY_API_KEY). Die Installation beschreibt xray/README.md.",
         "guide": "Den Analysedienst installieren (Bereitstellungsanleitung)"
       },
+      "salons": {
+        "title": "Räume des Chalets",
+        "why": "Optional. Ein neben der Anwendung installierter Dienst ermöglicht es, sich im Immersionsmodus zu treffen: öffentliche oder private Räume, gemeinsame Lampen, Feuer, Musik und Fernseher, Spiele. Ohne ihn bleiben das Chalet und seine Spiele allein spielbar.",
+        "help": "Adresse und Schlüssel des Dienstes (seine Variable SALONS_KEY, auf beiden Seiten gleich). Die Installation ist in salons/docs/DEPLOIEMENT.md beschrieben.",
+        "guide": "Raumdienst installieren (Bereitstellungsanleitung)"
+      },
       "app": {
         "title": "Anwendung",
         "why": "Die Vorbereitung der Poster und die Kontaktadresse für Benachrichtigungen."
@@ -3412,6 +3418,9 @@
       "XRAY_ENABLED": "Darsteller im Bild offen für",
       "XRAY_URL": "Adresse des Analysedienstes",
       "XRAY_API_KEY": "Schlüssel des Analysedienstes",
+      "SALONS_ENABLED": "Mehrspielermodus geöffnet für",
+      "SALONS_URL": "Adresse des Raumdienstes",
+      "SALONS_KEY": "Schlüssel des Raumdienstes",
       "SCENE_RESTART_ENABLED": "„Zum Anfang der Szene“: beim Fortsetzen nach vier Stunden oder mehr bietet eine Schaltfläche an, den Anfang der laufenden Szene erneut zu sehen (aus: nur im Protokoll gemessen)",
       "APP_LANGUAGE": "Standardsprache",
       "COOKIE_SECURE": "Über HTTPS ausgeliefert (sichere Cookies)",

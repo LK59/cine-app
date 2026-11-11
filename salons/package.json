@@ -1,0 +1,21 @@
+{
+  "name": "laterna-salons",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Les salons du chalet de Laterna : le temps réel du mode Immersion à plusieurs.",
+  "type": "module",
+  "engines": { "node": ">=26" },
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "node --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ws": "8.22.2"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "@types/ws": "8.18.2",
+    "typescript": "7.0.2"
+  }
+}

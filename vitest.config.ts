@@ -67,7 +67,8 @@ export default defineConfig({
     // la vérification lançait aussi leurs tests, à moitié écrits, contre leurs propres sources.
     // `immersion/` est un projet à part (le mode 3D caché) : ses tests sont des scénarios Playwright,
     // lancés par ses propres outils, avec ses propres dépendances.
-    exclude: [...configDefaults.exclude, "**/.claude/**", "immersion/**"],
+    // `salons/` aussi : le service des salons a ses propres tests (`node --test`), dans sa propre image.
+    exclude: [...configDefaults.exclude, "**/.claude/**", "immersion/**", "salons/**"],
   },
   resolve: {
     alias: {

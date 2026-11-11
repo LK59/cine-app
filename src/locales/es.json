@@ -3362,6 +3362,12 @@
         "help": "La dirección y la clave del servicio (su variable XRAY_API_KEY). Su instalación se describe en xray/README.md.",
         "guide": "Instalar el servicio de análisis (guía de despliegue)"
       },
+      "salons": {
+        "title": "Salas del chalet",
+        "why": "Opcional. Un servicio instalado junto a la aplicación permite reunirse en el modo Inmersión: salas públicas o privadas, lámparas, fuego, música y televisión compartidos, juegos. Sin él, el chalet y sus juegos siguen pudiendo jugarse en solitario.",
+        "help": "La dirección y la clave del servicio (su variable SALONS_KEY, la misma en ambos lados). Su instalación se describe en salons/docs/DEPLOIEMENT.md.",
+        "guide": "Instalar el servicio de salas (guía de despliegue)"
+      },
       "app": {
         "title": "Aplicación",
         "why": "La preparación de carteles y la dirección de contacto de las notificaciones."
@@ -3412,6 +3418,9 @@
       "XRAY_ENABLED": "Actores en pantalla abiertos a",
       "XRAY_URL": "Dirección del servicio de análisis",
       "XRAY_API_KEY": "Clave del servicio de análisis",
+      "SALONS_ENABLED": "Juego en grupo abierto a",
+      "SALONS_URL": "Dirección del servicio de salas",
+      "SALONS_KEY": "Clave del servicio de salas",
       "SCENE_RESTART_ENABLED": "«Volver al inicio de la escena»: al reanudar tras cuatro horas o más, un botón propone volver a ver el inicio de la escena actual (desactivado: solo se mide, en el registro)",
       "APP_LANGUAGE": "Idioma por defecto",
       "COOKIE_SECURE": "Servida en HTTPS (cookies seguras)",

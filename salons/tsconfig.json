@@ -1,0 +1,18 @@
+{
+  // Le service tourne tel quel sous Node 26, qui retire les types au chargement : seule la syntaxe
+  // effaçable est permise (pas d'enum, pas de paramètres-propriétés), et les imports nomment leur `.ts`.
+  // Ce fichier ne sert qu'à la vérification (`npm run typecheck`) : rien n'est compilé.
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

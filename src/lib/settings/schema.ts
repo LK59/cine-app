@@ -19,7 +19,7 @@
 
 export type SettingKind = "url" | "secret" | "text" | "boolean" | "select" | "profile" | "number" | "audience";
 export type SettingNeed = "required" | "optional";
-export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "xray" | "playback" | "subtitles" | "dialogue" | "app" | "defaults" | "deployment";
+export type SettingGroup = "jellyfin" | "tmdb" | "radarr" | "sonarr" | "jellyseerr" | "qbittorrent" | "bazarr" | "jackett" | "ratings" | "xray" | "salons" | "playback" | "subtitles" | "dialogue" | "app" | "defaults" | "deployment";
 
 export interface SettingDef {
   key: string;
@@ -76,6 +76,13 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "XRAY_ENABLED", group: "xray", kind: "audience", need: "optional", fallback: "off", inApp: true },
   { key: "XRAY_URL", group: "xray", kind: "url", need: "optional", fallback: "http://laterna-xray:8000", inApp: true, placeholder: "http://laterna-xray:8000" },
   { key: "XRAY_API_KEY", group: "xray", kind: "secret", need: "optional", fallback: "", inApp: true },
+  // ── Les salons du chalet (DECISIONS.md §146) ──
+  // Un service à part (`laterna-salons`, `salons/README.md`) : le temps réel du mode Immersion à plusieurs.
+  // Coupé par défaut ; sans lui (ou coupé), le chalet et ses jeux restent jouables seul. À qui : `off`, `admins`,
+  // `tous` (`featureAudience.ts`). La clé est partagée avec le service : elle signe les laissez-passer.
+  { key: "SALONS_ENABLED", group: "salons", kind: "audience", need: "optional", fallback: "off", inApp: true },
+  { key: "SALONS_URL", group: "salons", kind: "url", need: "optional", fallback: "http://laterna-salons:8090", inApp: true, placeholder: "http://laterna-salons:8090" },
+  { key: "SALONS_KEY", group: "salons", kind: "secret", need: "optional", fallback: "", inApp: true },
   // « Revenir au début de la scène » (DECISIONS.md §143) : livré coupé — la décision est mesurée au journal
   // (`sceneRestart` de la ligne `stop`) avant que le bouton ne soit montré à qui que ce soit.
   { key: "SCENE_RESTART_ENABLED", group: "xray", kind: "audience", need: "optional", fallback: "off", inApp: true },
@@ -213,7 +220,7 @@ export const DEPLOYMENT_GUIDE: readonly DeploymentGuideEntry[] = [
 export const GENERATED_SECRETS = ["SESSION_SECRET", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"] as const;
 
 /** Les services qu'on peut tester, et les réglages que le test lit. */
-export const TESTABLE_GROUPS = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "xray"] as const;
+export const TESTABLE_GROUPS = ["jellyfin", "tmdb", "radarr", "sonarr", "jellyseerr", "qbittorrent", "bazarr", "jackett", "xray", "salons"] as const;
 export type TestableGroup = (typeof TESTABLE_GROUPS)[number];
 
 /** D'où vient une valeur. */

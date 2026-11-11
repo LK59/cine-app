@@ -10592,3 +10592,45 @@ L'interrupteur coupe ce qui part **sans** personne.
 **Tests.** `background-jobs.test.ts` : les valeurs reconnues ; la lecture de `instrumentation.ts` — tout
 `start…()` hors de la liste des préchauffages doit être précédé de `if (jobs)`, si bien qu'ajouter une tâche
 sans décider échoue ; et `regress.sh` passe bien la variable.
+
+## 146. Les salons du chalet : un service à part, atteint par l'adresse de Laterna (11/11/2026)
+
+**La règle.** Le mode Immersion à plusieurs passe par un service à part, `laterna-salons` (`salons/`, Node 26 +
+WebSocket, son Dockerfile, ses tests, sa CI `salons.yml`), facultatif et coupé par défaut. Les navigateurs ne le
+voient jamais : ils ouvrent `/api/salons/ws` **sur l'adresse de Laterna**, et le programme de démarrage relaie cette
+connexion montante vers le service sur le réseau Docker (`server-boot/salonsRelay.mjs`, branché par
+`server-boot/boot.mjs` avant Next, comme le cadrage des réponses). Même domaine, même HTTPS, même politique de
+sécurité (`connect-src 'self'`), aucun changement du relais inverse, aucun port publié.
+
+**Pourquoi un service à part.** Next ne tient pas de connexion permanente, et surtout un salon doit survivre aux
+redéploiements de Laterna (plusieurs par jour) : dans le conteneur de l'application, chaque déploiement fermerait
+toutes les parties. Ici, un déploiement coupe les connexions une seconde, et chaque client reprend sa place (jeton
+de reprise, 60 s).
+
+**Qui entre.** `GET /api/salons/pass` (derrière la session) signe un laissez-passer de cinq minutes avec la clé
+partagée `SALONS_KEY` ; le service le vérifie et ne connaît ni compte ni secret de session. Le format est écrit des
+deux côtés (`src/lib/salons/pass.ts`, `salons/src/pass.ts`) et un vecteur commun les tient ensemble. La route répond
+**toujours 200** à une session : `{ available: false }` quand le jeu à plusieurs n'est pas pour elle (`SALONS_ENABLED`
+— audience `off`/`admins`/`tous`, `featureAudience.ts` —, clé absente ou courte, lien de partage) ; le chalet reste
+alors solitaire, jeux compris. Un laissez-passer refusé ferme la WebSocket en 4401 **après** la poignée de main :
+jamais une réponse 4xx que CrowdSec compterait (§144, « le pare-feu »).
+
+**L'adresse du service** est un réglage comme les autres (`SALONS_URL`, réglage → `.env` → défaut) ; le relais, hors
+de Next, la reçoit de la route du laissez-passer sous un symbole partagé (`src/lib/salons/relay.ts`) — publiée juste
+avant chaque connexion, retirée quand la fonction est coupée (le relais répond alors 503).
+
+**Le protocole** est un seul fichier, `salons/src/protocol.ts`, que le chalet importe tel quel (l'étape `immersion`
+du Dockerfile le copie ; `.dockerignore` ne laisse entrer de `salons/` que lui et `pass.ts`, que les tests de
+l'application éprouvent). Le service est l'autorité : un changement d'objet partagé n'existe qu'appliqué et numéroté
+par lui, diffusé à tous, demandeur compris. Le plan des étapes suivantes (présence, télévision commune, « Devine le
+film », chat, avatars) est dans `immersion/docs/MULTIJOUEUR.md`.
+
+**Réglages** : Configuration → Connexions → « Salons du chalet » (`SALONS_ENABLED`, `SALONS_URL`, `SALONS_KEY`), avec
+« Tester » (`/health` derrière la clé) et le lien vers `salons/docs/DEPLOIEMENT.md`.
+
+**Tests.** Dans le service (`node --test`, 23 cas : laissez-passer, protocole, salons à horloge simulée, transport avec
+de vrais clients WebSocket — refus en 4401, débit en 4429, message trop gros, reprise, arrêt en 4503).
+`salons-pass.test.ts` (vecteur commun, route : ouverte, coupée, réservée, clé courte, lien de partage — toujours 200),
+`salons-relay.test.ts` (poignée de main et octets relayés dans les deux sens, autres connexions montantes laissées à
+Next, 503 sans adresse, 502 service injoignable, autre origine refusée). Dans le chalet, le scénario
+`immersion/tests/e2e/18-salons.spec.ts` (deux navigateurs, un vrai service).

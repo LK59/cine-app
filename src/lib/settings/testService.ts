@@ -99,6 +99,14 @@ export async function testService(group: TestableGroup, valueOf: (key: string) =
           },
         };
       }
+      case "salons": {
+        // Le service des salons (§146) : `/health` derrière la clé partagée, qui dit sa version.
+        const res = await get(`${trimSlash(valueOf("SALONS_URL"))}/health`, { Authorization: `Bearer ${valueOf("SALONS_KEY")}` });
+        const bad = status(res);
+        if (bad) return bad;
+        const health = (await res.json()) as { version?: string };
+        return { ok: true, detail: `laterna-salons ${health.version ?? ""}`.trim() };
+      }
       case "qbittorrent": {
         const base = trimSlash(valueOf("QBITTORRENT_URL"));
         const res = await fetch(`${base}/api/v2/auth/login`, {

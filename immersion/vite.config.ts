@@ -275,12 +275,22 @@ export default defineConfig(({ command }) => ({
     port: 5199,
     strictPort: true,
     fs: { allow: [path.resolve(here, "..")] },
-    // En développement, les routes de l'application viennent d'une instance jetable.
-    proxy: process.env.LATERNA_URL
-      ? {
-          "^/api/(?!immersion/)": { target: process.env.LATERNA_URL, changeOrigin: false },
-          "^/(_next|favicon|login)": { target: process.env.LATERNA_URL, changeOrigin: false },
-        }
-      : undefined,
+    // En développement, les routes de l'application viennent d'une instance jetable ; et la WebSocket des salons
+    // (`SALONS_DEV_URL`, un conteneur `laterna-salons` de test) est relayée comme l'application la relaie en production
+    // (`server-boot/salonsRelay.mjs` : `/api/salons/ws` → `/ws` du service). L'aperçu reprend ces relais.
+    proxy:
+      process.env.LATERNA_URL || process.env.SALONS_DEV_URL
+        ? {
+            ...(process.env.SALONS_DEV_URL
+              ? { "^/api/salons/ws": { target: process.env.SALONS_DEV_URL, ws: true, changeOrigin: true, rewrite: (p: string) => p.replace(/^\/api\/salons\/ws/, "/ws") } }
+              : {}),
+            ...(process.env.LATERNA_URL
+              ? {
+                  "^/api/(?!immersion/|salons/ws)": { target: process.env.LATERNA_URL, changeOrigin: false },
+                  "^/(_next|favicon|login)": { target: process.env.LATERNA_URL, changeOrigin: false },
+                }
+              : {}),
+          }
+        : undefined,
   },
 }));

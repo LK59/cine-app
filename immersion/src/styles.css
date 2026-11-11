@@ -1671,3 +1671,116 @@ kbd {
     padding: 10px 12px 12px;
   }
 }
+
+/* « À plusieurs » (`ui/Salons.tsx`), dans le menu pause. */
+.salons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+}
+.salons-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.salons-error {
+  margin: 0;
+  font-size: 13px;
+  color: #f87171;
+}
+.salons-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.salons-name {
+  font-size: 16px;
+}
+.salons-sub {
+  flex: 1;
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--subtle);
+}
+.salons-tag {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--muted);
+  background: rgb(255 255 255 / 0.08);
+}
+.salons-code {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.salons-code code {
+  margin-left: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 15px;
+  letter-spacing: 0.18em;
+  color: #fff;
+  background: rgb(255 255 255 / 0.1);
+}
+.salons-members,
+.salons-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.salons-members li {
+  font-size: 14px;
+}
+.salons-members li.is-away {
+  opacity: 0.55;
+}
+.salons-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.salons-join {
+  display: flex;
+  gap: 8px;
+}
+.salons-join input {
+  width: 9.5em;
+  height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  font: inherit;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgb(255 255 255 / 0.1);
+}
+.salons-room {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  font: inherit;
+  color: #fff;
+  background: rgb(255 255 255 / 0.06);
+  cursor: pointer;
+}
+.salons-room:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.12);
+}
+.salons-room:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
