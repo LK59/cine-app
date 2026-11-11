@@ -6,6 +6,8 @@ entier après toute reprise.**
 
 ## État actuel (à jour)
 
+- **V2 livrée : 10.35.0, en production depuis le 11/11/2026 vers 3 h 15** (`dcd3f449`) — voir « V2 — la nuit du
+  11/11/2026 » plus bas : ce qui a été mesuré, ce qui ne l'a pas été.
 - **Livré : 10.34.0, en production depuis le 10/11/2026 à 23 h 47** (`020a0b04`), puis **10.34.1 le 11/11 à 0 h 04**
   (`b14b2510` : l'interrupteur des tâches de fond, DECISIONS §145 — rien ne change dans le mode), puis **10.34.2 le
   11/11** (`6511d9a4` : la page ne se chargeait pas en production, voir « Pièges rencontrés »). Le mode est
@@ -420,7 +422,7 @@ Ordre de travail :
    géométrie changée = recuisson du groupe) ; 5. latence des commandes à vérifier une fois le rendu remonté ;
    6. commandes tactiles ; 7. pistes audio et sous-titres.
 
-### État à 2 h (tout est sur la branche `immersion`, **rien n'est déployé** ; prod = 10.34.3)
+### État (tout est livré en 10.35.0 ; ce qui suit est le récit de la nuit)
 
 Commités (22ff093d, e73a6bc6 ; portail vert) : copie réduite de la vidéo par la carte graphique, mire de mesure en
 fichier, `maxMs`/`over33`/`over50`/`slowAt` (route + test côté application), zoom à la molette assis, commandes
@@ -438,7 +440,7 @@ Mesuré, à la résolution du propriétaire (2560 × 1229, Ultra, vue du canapé
 - avec vidéo : ~80 ms, dont ~21 pour la lumière des écrans calculée dans toutes les matières. Sur sa machine
   (≈ 7 fois plus rapide, d'après ses 17,8 ms d'origine) : ~11 ms, soit ~85 i/s estimés, contre 21 mesurés.
 
-Non commité, en cours :
+Fait dans la nuit :
 - **couche `ecrans` de la lightmap** : les dalles cuites en lumières de surface, un tiers d'image par canal
   (`tools/bake/export.ts`, `bake.py` type `area`, albédo gris pour cette couche) ; à l'affichage une lecture de
   texture (`lightmaps.ts`, `SL_BAKED`) ; le reflet du film seulement sur les matières lisses (`SL_MIRROR`) ; trois
@@ -468,7 +470,7 @@ Non commité, en cours :
 
 ## Prochaine action
 
-La v2 est prête à livrer en une fois (10.35.0). Ensuite, attendre le retour du propriétaire :
+La v2 est livrée (10.35.0). Attendre le retour du propriétaire :
 - sa mesure (« Mesurer », lignes `immersion-bench` de `startup.log`, avec `maxMs`, `over33`, `over50`, `slowAt`) :
   la cible est 60 images par seconde stables en Ultra pendant une lecture ; si des à-coups restent, `slowAt` dit où ;
 - le tactile sur un vrai iPhone (jamais essayé : mémoire des textures, flux par ManagedMediaSource, son) ;
