@@ -67,6 +67,13 @@ export interface PlannedItem {
   importedAt: number;
   /** L'ordre dans le palier, croissant. */
   rank: number;
+  /**
+   * Le rang que l'élément tient dans le palier de sa date (2 ou 3), même quand il est au palier 1 : c'est
+   * celui qu'il reprend en quittant le palier 1 ou la liste de priorité (chasse aux défauts du 11/11/2026 —
+   * il gardait son rang de visionnage, `distance × 10 000`, et passait derrière tout son palier jusqu'à la
+   * relecture du plan, six heures plus tard). Absent : `rank`.
+   */
+  planRank?: number;
   /** `animation` : compté à part, jamais commandé. */
   excluded: "animation" | null;
 }
@@ -204,7 +211,12 @@ export function buildPlan(library: readonly LibraryEntry[], watching: Map<string
       excluded: e.animation ? "animation" : null,
     });
   }
-  return inEpisodeOrder(out, library);
+  const plan = inEpisodeOrder(out, library);
+  // Le rang hors du palier 1 : celui que le même plan donnerait sans aucun compte en cours (dans l'ordre des
+  // épisodes de sa série, comme les autres), pour qu'un élément qui quitte le palier 1 reprenne sa place.
+  const base = watching.size > 0 ? new Map(buildPlan(library, new Map(), now).map((p) => [p.itemId, p.rank])) : null;
+  for (const p of plan) p.planRank = p.tier === 1 && base ? (base.get(p.itemId) ?? p.rank) : p.rank;
+  return plan;
 }
 
 /**

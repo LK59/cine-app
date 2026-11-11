@@ -29,6 +29,7 @@ import { AskPanel } from "@/components/ask/AskPanel";
 import { prewarmSofar, sofarPosition, startSofar, useAskAvailable, useAskPersonAvailable, useAskPrepare, useSofarAvailable } from "@/lib/ask/client";
 import { PlayerOnScreen } from "@/components/playerControls/PlayerOnScreen";
 import { useXrayUiDiag } from "@/lib/xrayUiDiag";
+import { noteXrayOffered, noteXrayScene, noteXrayTap } from "@/lib/xrayUsage";
 import { useOnScreenPlacement } from "@/components/playerControls/useOnScreenPlacement";
 import { onScreenPeople, sceneAt, useXrayAvailable, useXrayScenes } from "@/lib/xray/client";
 import type { XrayPlayerPerson } from "@/lib/xray/scenes";
@@ -748,6 +749,15 @@ export function PlayerControls({
   // Le relevé `xray-ui` de cette séance (10.29.1, `xrayUiDiag.ts`) : la rangée, les touchers, le panneau.
   const xrayDiag = useXrayUiDiag(itemId);
   const rowShown = rowAllowed && (askOffered || scenePeople.length > 0);
+  // L'usage, porté par le bilan `stop` (`xrayUsage.ts`, 11/11/2026) : l'option proposée, chaque scène où la rangée
+  // a paru avec quelqu'un, commandes visibles. Rien sans l'option — le bilan reste celui d'avant.
+  const usageScene = xrayOffered && visible && rowShown && scenePeople.length > 0 && sceneNow ? sceneNow.start : null;
+  useEffect(() => {
+    if (xrayOffered) noteXrayOffered(itemId);
+  }, [itemId, xrayOffered]);
+  useEffect(() => {
+    if (usageScene !== null) noteXrayScene(itemId, usageScene);
+  }, [itemId, usageScene]);
   const onScreenWrapRef = useRef<HTMLDivElement>(null);
   const centerGroupRef = useRef<HTMLDivElement>(null);
   const titleRowRef = useRef<HTMLDivElement>(null);
@@ -767,6 +777,7 @@ export function PlayerControls({
     // demande (`useSofar`). La position est lue **une fois**, ici (10.28.1) : la demande et le panneau prennent le
     // même nombre, donc la même coupe — à une limite de tranche, l'heure affichée et celle que le panneau
     // relisait donnaient deux clés.
+    noteXrayTap(itemId, person.personId);
     const at = positionNow ? positionNow() : (videoRef.current?.currentTime ?? null);
     const sofarAt = sofarOffered ? startSofar(itemId, person.personId, at, xrayPayload) : sofarPosition(at);
     setMenu(null);

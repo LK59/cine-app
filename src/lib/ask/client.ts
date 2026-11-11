@@ -455,7 +455,11 @@ export function useSofar(itemId: string, personId: number, positionS: number | n
               if (sofarRead.size > SOFAR_READ_MAX) sofarRead.delete(sofarRead.keys().next().value as string);
             }
             finish(text ? { state: "done", text } : { state: "little", text: "" });
-          } else if (ev.t === "error" && ev.code === "off") finish({ state: "none", text: "" });
+          } else if (ev.t === "error" && (ev.code === "off" || ev.code === "budget")) {
+            // Le plafond mensuel atteint : la section se tait, comme l'option coupée — elle affichait « Encore trop
+            // peu vu pour en dire plus » tout le reste du mois (chasse aux défauts du 11/11/2026).
+            finish({ state: "none", text: "" });
+          }
           else finish({ state: "little", text: "" });
         });
         // Fini sans sa ligne de fin (connexion coupée) : une panne.

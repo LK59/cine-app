@@ -1042,6 +1042,16 @@
         "median": "Délai médian",
         "errors": "Échecs"
       },
+      "aiUsage": {
+        "title": "Acteurs à l'écran, questions et « Jusqu'ici »",
+        "summary": "{n} usage sur sept jours|{n} usages sur sept jours",
+        "xray": "Séances avec un acteur touché",
+        "xrayHint": "sur {seances} séances proposées · {taps} touchers · {accounts} comptes",
+        "questions": "Questions posées",
+        "sofar": "« Jusqu'ici »",
+        "sofarHint": "{empty} sans rien à dire · {accounts} comptes",
+        "failures": "Échecs"
+      },
       "aiCost": {
         "title": "Dépense des fonctions d'IA payantes (toutes : sous-titres, recherche, « Précédemment », questions, « Jusqu'ici ») — en euros approximatifs, 1 $ ≈ {rate} €",
         "today": "Aujourd'hui",

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import Database from "better-sqlite3";
 import { NEWS_LANGS, sanitizeContent } from "@/lib/news/content";
-import { NEWS_1037_CONTENT, NEWS_1037_SEED, NEWS_1037_VERSION } from "@/lib/news/page1037";
+import { NEWS_1037_CONTENT, NEWS_1037_SEED, NEWS_1037_VERSION, news1037Content } from "@/lib/news/page1037";
 import { seedQuietNewsPage } from "@/lib/db";
 
 /** La page « 10.37 » (11/11/2026) : l'historique rempli sans fenêtre, seulement ce que tout compte a. */
@@ -24,6 +24,17 @@ describe("la page Nouveautés 10.37", () => {
     }
     expect(JSON.stringify(NEWS_1037_CONTENT.fr)).not.toMatch(/\b(tu|ton|ta|tes|toi)\b|-toi\b/);
     expect(JSON.stringify(NEWS_1037_CONTENT.de)).not.toMatch(/\b(du|dein|deine|dich|dir)\b/);
+  });
+
+  it("sans « Précédemment » là où l'option est coupée (l'image publique) ; complète là où elle est allumée", () => {
+    expect(news1037Content(true)).toBe(NEWS_1037_CONTENT);
+    const off = news1037Content(false);
+    for (const lang of NEWS_LANGS) {
+      const text = JSON.stringify(off[lang]);
+      expect(text, lang).not.toMatch(/Précédemment|Previously|Anteriormente|Bisher/);
+      expect(off[lang]!.sections.length, lang).toBe(1);
+      expect(sanitizeContent(off[lang]), lang).toEqual(off[lang]);
+    }
   });
 
   it("est publiée sans fenêtre, une seule fois, au-dessus d'un brouillon", () => {

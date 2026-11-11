@@ -292,7 +292,8 @@ export interface SofarEntry {
  * qui suit la fin de la précédente — jamais plus. Pendant ce temps, un toucher montre la ligne discrète sans appeler
  * le modèle (`sofarWaiting`, `status: "attente-erreur"` à `recherche.log`). En mémoire seulement : un redémarrage
  * l'oublie, et c'est voulu. Un texte, « rien à dire » ou un rejet du filet effacent l'attente de la clé et du compte.
- * Un refus du modèle ou une réponse coupée au plafond ne sont pas passagers : ils restent des pannes ordinaires.
+ * Un refus du modèle ou une réponse coupée au plafond ne sont pas passagers : gardés une heure sous leur clé
+ * (`SofarFinalError`, 11/11/2026), ils n'ouvrent pas d'attente pour le compte.
  */
 export const SOFAR_FAIL_WAIT_MS = 2 * 60_000;
 export const SOFAR_FAIL_WAIT_MAX_MS = 10 * 60_000;
@@ -332,6 +333,44 @@ export function sofarNoteFailure(key: string, account: string, now = Date.now())
   noteFailure(failures.byAccount, account, now);
 }
 
+// ── Les pannes qui se reproduisent : gardées une heure, comme un rejet (11/11/2026) ─────────────────
+
+/**
+ * Un refus du modèle, une réponse coupée au plafond de jetons, un texte vidé deux fois par le filet des mots de
+ * coulisse (chasse aux défauts du 11/11/2026) : la même entrée redonne la même chose — ce n'est pas une panne
+ * passagère. Rien n'en était gardé, et chaque ouverture du panneau au même endroit relançait le modèle (deux
+ * passages pour un texte vidé), chaque fois payé, chaque fois pour rien. Gardé désormais sous la même clé, une
+ * heure (`SOFAR_REJECT_KEEP_MS`, la durée d'un rejet) : la ligne discrète sans appel. En mémoire, sur `globalThis`
+ * comme les attentes : un redémarrage l'oublie, et la tranche suivante change la clé de toute façon.
+ */
+export class SofarFinalError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SofarFinalError";
+  }
+}
+
+type KeptFailure = { state: "erreur" | "vide"; by: string; at: number };
+const KEPT_KEY = Symbol.for("cine-app.askSofarKeptFailures");
+const sharedKept = globalThis as typeof globalThis & { [KEPT_KEY]?: Map<string, KeptFailure> };
+const keptFailures = (sharedKept[KEPT_KEY] ??= new Map());
+
+function keepFailure(key: string, state: KeptFailure["state"], by: string, now = Date.now()): void {
+  keptFailures.delete(key);
+  keptFailures.set(key, { state, by, at: now });
+  while (keptFailures.size > SOFAR_FAIL_MAX) keptFailures.delete(keptFailures.keys().next().value as string);
+}
+
+function keptFailure(key: string, now: number): KeptFailure | null {
+  const k = keptFailures.get(key);
+  if (!k) return null;
+  if (now - k.at > SOFAR_REJECT_KEEP_MS) {
+    keptFailures.delete(key);
+    return null;
+  }
+  return k;
+}
+
 /** Le modèle a répondu (texte, « rien à dire », rejet) : plus d'attente pour cette clé ni ce compte. */
 function sofarClearFailure(key: string, account: string): void {
   failures.byKey.delete(key);
@@ -361,6 +400,9 @@ const store = (shared[STORE_KEY] ??= new Map());
 export function sofarLookup(key: string, now = Date.now()): SofarEntry | null {
   const running = store.get(key);
   if (running) return running;
+  // Une panne qui se reproduit, gardée une heure (11/11/2026) : servie comme elle a fini, sans appel.
+  const failed = keptFailure(key, now);
+  if (failed) return { key, by: failed.by, at: failed.at, state: failed.state, sentences: [], shown: "", listeners: new Set(), done: Promise.resolve({ state: failed.state, ms: 0 }) };
   let row: ReturnType<typeof sofarDb.get> = null;
   try {
     row = sofarDb.get(key);
@@ -381,8 +423,9 @@ export function sofarLookup(key: string, now = Date.now()): SofarEntry | null {
 
 /**
  * Lancer la génération d'une clé. Détachée : elle va au bout même si personne ne lit plus. Une panne
- * (réseau, 5xx, 429, refus, délai) n'est pas gardée — la demande suivante réessaiera ; un « rien à dire »
- * l'est trente jours, un nom inconnu une heure (on ne repaie pas la même chose à chaque réouverture).
+ * passagère (réseau, 5xx, 429, délai) n'est pas gardée — la demande suivante réessaiera ; un « rien à dire »
+ * l'est trente jours, un nom inconnu une heure, et depuis le 11/11/2026 un refus, une réponse coupée au plafond
+ * ou un texte vidé deux fois une heure aussi (`keepFailure`) — on ne repaie pas la même chose à chaque réouverture.
  */
 export function sofarStart(
   key: string,
@@ -405,7 +448,7 @@ export function sofarStart(
       }
     }
   };
-  const finish = (state: Exclude<SofarState, "running">, unkept = false) => {
+  const finish = (state: Exclude<SofarState, "running">, unkept = false, final = false) => {
     entry.state = state;
     entry.at = Date.now();
     store.delete(key);
@@ -414,7 +457,10 @@ export function sofarStart(
     // n'est pas « rien à dire », la demande suivante réessaie.
     // Le modèle a répondu : une attente ouverte par une panne passée se referme (10.29.2).
     if (state !== "erreur") sofarClearFailure(key, by);
-    if (!unkept && (state === "ok" || state === "vide" || state === "rejeté")) {
+    // Une panne qui se reproduit (refus, plafond de jetons) ou un texte vidé deux fois : gardés une heure, en
+    // mémoire (`keepFailure`, 11/11/2026) — ni en base ni trente jours, ce n'est pas « rien à dire ».
+    if ((final && state === "erreur") || (unkept && state === "vide")) keepFailure(key, state, by);
+    else if (!unkept && (state === "ok" || state === "vide" || state === "rejeté")) {
       try {
         sofarDb.put(key, state, state === "ok" ? JSON.stringify(entry.sentences) : null, by, entry.at);
       } catch (err) {
@@ -487,9 +533,10 @@ export function sofarStart(
           if (fin.cacheWrite !== undefined) sum.cacheWrite = (sum.cacheWrite ?? 0) + fin.cacheWrite;
           if (fin.cacheRead !== undefined) sum.cacheRead = (sum.cacheRead ?? 0) + fin.cacheRead;
         }
-        if (fin && fin.stop === "refusal") throw new Error("refus du modèle (stop_reason: refusal)");
-        // Le plafond atteint (10.27.2) : une panne, jamais gardée — la ligne discrète à l'écran.
-        if (fin && fin.stop === "max_tokens") throw new Error("réponse coupée au plafond (stop_reason: max_tokens)");
+        // Un refus ou le plafond atteint (10.27.2) : une panne — la ligne discrète à l'écran —, gardée une heure
+        // depuis le 11/11/2026 (`SofarFinalError`) : la même entrée redonnerait la même chose.
+        if (fin && fin.stop === "refusal") throw new SofarFinalError("refus du modèle (stop_reason: refusal)");
+        if (fin && fin.stop === "max_tokens") throw new SofarFinalError("réponse coupée au plafond (stop_reason: max_tokens)");
         // Tout retiré par le filet des mots de coulisse, rien d'autre en cause : un second passage, une fois.
         if (attempt === 0 && !rejected && !gate.nothing && gate.sentences.length === 0 && gate.rewritten) {
           regenerated = true;
@@ -510,7 +557,8 @@ export function sofarStart(
           }
         : {};
       // Un nom inconnu retire tout, même une phrase déjà rendue : l'écran ne garde rien. Un second passage encore
-      // vidé par le filet : « vide », la ligne discrète — rien de gardé, la demande suivante réessaie.
+      // vidé par le filet : « vide », la ligne discrète — gardé une heure en mémoire seulement (11/11/2026), jamais
+      // trente jours en base comme un « rien à dire ».
       const emptied = regenerated && !rejected && gate.sentences.length === 0 && !gate.nothing;
       const state = rejected ? "rejeté" : gate.nothing || gate.sentences.length === 0 ? "vide" : "ok";
       entry.sentences = state === "ok" ? [...gate.sentences] : [];
@@ -530,7 +578,7 @@ export function sofarStart(
       entry.shown = "";
       // Une panne passagère ouvre l'attente (10.29.2) — avant `finish`, qui libère les lecteurs.
       if (sofarTransient(error)) sofarNoteFailure(key, by);
-      finish("erreur");
+      finish("erreur", false, error instanceof SofarFinalError);
       return { state: "erreur" as const, ms: Date.now() - started, error };
     }
   })();
@@ -562,4 +610,5 @@ export function resetSofarForTests(): void {
   store.clear();
   failures.byKey.clear();
   failures.byAccount.clear();
+  keptFailures.clear();
 }

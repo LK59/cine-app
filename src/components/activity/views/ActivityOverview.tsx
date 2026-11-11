@@ -31,6 +31,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  Tv,
+  MessageCircleQuestion,
   X,
   Stethoscope,
   Users,
@@ -38,6 +40,7 @@ import {
 } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { dollars, euros, type AiCostStats } from "@/lib/activity/aiCost";
+import { aiUsageEmpty } from "@/lib/activity/aiUsage";
 import { fmtTime } from "@/lib/format";
 import { apiAction } from "@/lib/apiAction";
 import { useToast } from "@/components/Toast";
@@ -1083,6 +1086,36 @@ function Details({ data, dash }: { data: Overview; dash: Dashboard | undefined }
             <Tile icon={Sparkles} label={t("activity.dash.describe.model")} value={dash.describe.modelCalls} hint={pct(dash.describe.modelCalls, dash.describe.searches)} />
             <Tile icon={Gauge} label={t("activity.dash.describe.median")} value={dash.describe.medianMs !== null ? secs(dash.describe.medianMs) : "—"} />
             <Tile icon={AlertTriangle} label={t("activity.dash.describe.errors")} value={dash.describe.errors} tone={dash.describe.errors ? "warn" : "good"} />
+          </div>
+          <ActivityLink to={{ kind: "logs", preset: { source: "search" } }} className="block border-t border-white/5 px-4 py-2.5 text-xs text-accent-400 hover:underline">
+            {t("activity.logs.open")}
+          </ActivityLink>
+        </Fold>
+      )}
+      {dash?.aiUsage && !aiUsageEmpty(dash.aiUsage) && (
+        // Sept jours d'acteurs à l'écran, de questions et de « Jusqu'ici » (11/11/2026, `aiUsage.ts`) : relus du
+        // bilan des séances et de `recherche.log`, rien de plus n'est écrit pour eux.
+        <Fold id="ai-usage" title={t("activity.dash.aiUsage.title")} icon={Tv} summary={t("activity.dash.aiUsage.summary", { n: dash.aiUsage.xrayTaps + dash.aiUsage.questions + dash.aiUsage.sofar })}>
+          <div className="grid grid-cols-2 gap-3 p-3 md:grid-cols-4">
+            <Tile
+              icon={Tv}
+              label={t("activity.dash.aiUsage.xray")}
+              value={dash.aiUsage.xrayTapSeances}
+              hint={t("activity.dash.aiUsage.xrayHint", { seances: dash.aiUsage.xraySeances, taps: dash.aiUsage.xrayTaps, accounts: dash.aiUsage.xrayAccounts })}
+            />
+            <Tile
+              icon={MessageCircleQuestion}
+              label={t("activity.dash.aiUsage.questions")}
+              value={dash.aiUsage.questions}
+              hint={t("activity.dash.describe.accounts", { n: dash.aiUsage.questionAccounts })}
+            />
+            <Tile
+              icon={Sparkles}
+              label={t("activity.dash.aiUsage.sofar")}
+              value={dash.aiUsage.sofar}
+              hint={t("activity.dash.aiUsage.sofarHint", { empty: pct(dash.aiUsage.sofarEmpty, dash.aiUsage.sofar), accounts: dash.aiUsage.sofarAccounts })}
+            />
+            <Tile icon={AlertTriangle} label={t("activity.dash.aiUsage.failures")} value={dash.aiUsage.failures} tone={dash.aiUsage.failures ? "warn" : "good"} />
           </div>
           <ActivityLink to={{ kind: "logs", preset: { source: "search" } }} className="block border-t border-white/5 px-4 py-2.5 text-xs text-accent-400 hover:underline">
             {t("activity.logs.open")}

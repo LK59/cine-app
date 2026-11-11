@@ -1,4 +1,5 @@
 import { jellyfin, type JellyfinItem } from "@/lib/clients/jellyfin";
+import { HttpError } from "@/lib/http";
 import { sonarr } from "@/lib/clients/sonarr";
 import { cachedJellyfinMoviesAdmin, cachedJellyfinSeriesAdmin, cachedMovies, cachedSeries, getProviderIdCI } from "@/lib/server-cache";
 import { mapInBatches, yieldToLoop } from "@/lib/inBatches";
@@ -109,15 +110,29 @@ export async function readLibrary(): Promise<LibraryEntry[]> {
 }
 
 /**
+ * Un compte que Jellyfin refuse (4xx : supprimé ou désactivé entre `getUsers` et ses listes) n'a rien en
+ * cours ; tout le reste — 5xx, réseau, disjoncteur ouvert — lève : c'est une panne, pas une liste vide.
+ */
+const goneAccount = (error: unknown): JellyfinItem[] => {
+  if (error instanceof HttpError && error.status >= 400 && error.status < 500) return [];
+  throw error;
+};
+
+/**
  * Le palier 1 : pour chaque compte, « Reprendre » puis « À suivre », et les épisodes de chaque série
  * en cours. Les comptes des liens de partage n'en sont pas (`getUsers` les retire).
+ *
+ * Une liste illisible **lève** (chasse aux défauts du 11/11/2026, hors compte refusé : `goneAccount`) : elle valait « rien en cours », et une
+ * panne passagère de Jellyfin vidait le palier 1 pour dix minutes — ses éléments retombaient aux paliers 2
+ * et 3. Levée, le palier 1 en place est gardé (`refreshWatching`, `refreshPlan`). Les épisodes d'une série
+ * illisibles, eux, ne retirent rien : l'épisode en cours reste au palier 1, seul.
  */
 export async function readWatching(): Promise<Map<string, number>> {
   const users = await jellyfin.getUsers();
   const lists = await mapInBatches(users, 3, async (user) => {
     const [resume, nextUp] = await Promise.all([
-      jellyfin.getResumeItems(user.Id).then((r) => r.Items ?? []).catch(() => [] as JellyfinItem[]),
-      jellyfin.getNextUpGlobal(user.Id, 10).catch(() => [] as JellyfinItem[]),
+      jellyfin.getResumeItems(user.Id).then((r) => r.Items ?? []).catch(goneAccount),
+      jellyfin.getNextUpGlobal(user.Id, 10).catch(goneAccount),
     ]);
     const list: WatchingEntry[] = [];
     for (const item of [...resume, ...nextUp]) {

@@ -10672,3 +10672,33 @@ bibliothèques compris) — un refus ne dit pas à cause de qui. *Avatars* : qua
 fichier, importé par l'application) gardés par compte (`avatar_looks`, `/api/salons/avatar`). Lien d'invitation :
 `/immersion#salon=CODE`, lu une fois puis retiré de l'adresse. Tests : `salons-titre-avatar` ; `tv.test.ts` et
 `rooms.test.ts` dans le service ; scénario 20 du chalet (deux navigateurs, vrai service).
+
+## 147. Chasse aux défauts avant l'ouverture des acteurs à l'écran à tous les comptes (11/11/2026)
+
+Une relecture de §137 à §140 et §145, le soir où X-Ray, les questions et « Jusqu'ici » passent de `admins` à `tous`.
+
+- **La commande d'une séance** (`orders.ts`, `api/player/log`) ne part que pour un élément que le compte voit
+  (`assertVisible` — l'élément venait du corps de la ligne `start`, résolu avec la clé du serveur), dans les dossiers
+  permis (`isLibraryPath`) et jamais pour l'animation que le plan écarte (`isAnimationExcluded`) ; une commande forcée
+  par l'administrateur passe. L'épisode suivant n'est cherché qu'à une vraie commande, plus à chaque `start` d'une
+  même séance (une relecture complète de la série chez Jellyfin à chaque reconstruction).
+- **Le planificateur** (§138) : « Analyser en priorité » rouvre un échec ; un élément déjà en file en `low` est
+  remonté en `normal` sans bloquer la liste ; le rang du plan (`plan_rank`) est rendu à un élément qui quitte le
+  palier 1 ou la priorité ; une panne de Jellyfin garde le palier 1 au lieu de le vider, et il se relit toutes les
+  dix minutes même quand le plan attend ; l'animation s'impose à une ligne déjà écartée ; rien n'est montré « en
+  cours » en pause.
+- **« Précédemment »** (§137) : coupé au **début** de la tranche (`recapCutS`, clé `:v2`) — la clé est partagée par
+  tous les comptes d'une tranche, et un texte coupé à 29:50 servait 9 min 40 d'épisode à qui s'était arrêté à 20:10 ;
+  `aucun` ne prend plus la clé partagée ; un `rejeté`/`vide` d'un autre compte se retente une fois au bout d'une heure ;
+  une série en échec ne bloque plus le passage (recul 15 min, 1 h, 6 h).
+- **Le filet des noms** (§139) : en mot entier (`containsWord` : « Anne » passait dans « année »), le pluriel des
+  sources accepté ; « M. », « Dr. »… ne ferment plus une phrase (`isTitleAbbreviation`) ; en allemand, où tout nom
+  commun a sa majuscule, seuls les noms déclarés (`NOMS:` / `noms`) sont vérifiés, et leur absence rejette.
+- **« Jusqu'ici »** : un refus, une réponse coupée ou un texte vidé deux fois sont gardés une heure (`keepFailure`) au
+  lieu d'être repayés à chaque ouverture ; le plafond atteint tait la section au lieu de dire « trop peu vu ».
+- **§140** : une borne commune par compte et par jour local, 300 appels payants (`aiDailyTake`, questions,
+  « Jusqu'ici », recherche par description) — le plafond mensuel est commun, un seul compte pouvait le vider pour tous.
+  Chez OpenAI et Google, les sources partent dans le message, plus dans les consignes.
+- **L'usage** se mesure sans ligne de plus : le bilan `stop` porte `xray: "s3 t2 p2"` (`xrayUsage.ts`), relu avec
+  `recherche.log` par la tuile d'Activité (`activity/aiUsage.ts`).
+- **§145** : la copie de développement (`docker-compose.dev.yml`) démarre avec `CINE_BACKGROUND_JOBS=off`.

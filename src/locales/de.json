@@ -1042,6 +1042,16 @@
         "median": "Mittlere Dauer",
         "errors": "Fehlschläge"
       },
+      "aiUsage": {
+        "title": "Im Bild, Fragen und „Bis jetzt“",
+        "summary": "{n} Nutzung in sieben Tagen|{n} Nutzungen in sieben Tagen",
+        "xray": "Sitzungen mit angetipptem Darsteller",
+        "xrayHint": "von {seances} angebotenen Sitzungen · {taps} Antipper · {accounts} Konten",
+        "questions": "Gestellte Fragen",
+        "sofar": "„Bis jetzt“",
+        "sofarHint": "{empty} ohne Aussage · {accounts} Konten",
+        "failures": "Fehler"
+      },
       "aiCost": {
         "title": "Ausgaben der kostenpflichtigen KI-Funktionen (alle: Untertitel, Suche, „Bisher“, Fragen, „Bis jetzt“) — in ungefähren Euro, 1 $ ≈ {rate} €",
         "today": "Heute",

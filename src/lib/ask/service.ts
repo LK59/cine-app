@@ -375,19 +375,23 @@ export const MODEL_WHOLE_MS = 30_000;
  * même `AnswerGate` (noms, mots interdits) que chez Anthropic, phrase par phrase. Réflexion basse comme
  * chez Anthropic. Un refus devient `stop: "refusal"` (la panne dite) ; une limite de débit garde son 429.
  *
- * Le préfixe partagé (`prefixEnd`, 10.27.2) va dans `stable`, la personne ou la question dans `user` :
- * chez ces deux fournisseurs, le cache est implicite sur les préfixes identiques — le même découpage que
- * le point de cache explicite d'Anthropic, relu au même prix réduit. Les mêmes plafonds de sortie.
+ * **Les sources restent des données** (chasse aux défauts du 11/11/2026) : le message entier — sources, où en
+ * est le spectateur, puis la personne ou la question — part en message utilisateur, seules les consignes en
+ * instructions système. Le préfixe partagé partait dans `stable`, que ces deux fournisseurs placent dans leurs
+ * instructions (`instructions` d'OpenAI, `systemInstruction` de Gemini) : des sous-titres et des synopsis lus
+ * avec l'autorité des consignes — une réplique qui dit « ignore les règles » n'y est plus qu'une réplique. Leur
+ * cache est implicite sur les préfixes identiques de toute la demande, message compris : la consigne (fixe par
+ * langue) puis le début du message (les sources) restent ce préfixe. `prefixEnd` ne sert qu'au point de cache
+ * explicite d'Anthropic, dont l'appel ne change pas. Les mêmes plafonds de sortie.
  */
-function askOtherProvider({ system, message, prefixEnd, maxTokens, signal, feature = "askTitle" }: Parameters<AskModel>[0]): AskModelRun {
+function askOtherProvider({ system, message, maxTokens, signal, feature = "askTitle" }: Parameters<AskModel>[0]): AskModelRun {
   const timeout = AbortSignal.timeout(MODEL_WHOLE_MS);
-  const split = !!prefixEnd && prefixEnd > 0 && prefixEnd < message.length;
   const reply = featureComplete(
     {
       system,
-      stable: split ? [message.slice(0, prefixEnd)] : [],
+      stable: [],
       cache: false,
-      user: split ? message.slice(prefixEnd) : message,
+      user: message,
       schemaName: "answer",
       maxOutputTokens: maxTokens ?? ASK_MAX_OUTPUT_TOKENS,
       effort: "low",

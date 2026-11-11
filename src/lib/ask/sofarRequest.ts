@@ -18,7 +18,7 @@ import { logJusquici } from "@/lib/eventLogs";
 import { createRateLimiter } from "@/lib/rateLimiter";
 import { askWhereLine, metaReminder } from "@/lib/ask/core";
 import { SOFAR_MAX_OUTPUT_TOKENS, askModelName, currentAskModel, gatherAskContext } from "@/lib/ask/service";
-import { aiBudgetReached } from "@/lib/aiFeatures";
+import { aiBudgetReached, aiDailyTake } from "@/lib/aiFeatures";
 import { castPerson } from "@/lib/xray/person";
 import { scenesForPlayer } from "@/lib/xray/scenes";
 import { speakerSegments } from "@/lib/xray/voices";
@@ -155,7 +155,8 @@ export async function answerSofar(
       logJusquici({ ...base, cache, status: "limite", ms: Date.now() - started });
       return oneShot({ t: "error", code: "budget" });
     }
-    if (!perHour(who.account)) {
+    // La borne horaire, puis la journalière commune à tous les appels payants du compte (11/11/2026, `aiDailyTake`).
+    if (!perHour(who.account) || !aiDailyTake(who.account)) {
       logJusquici({ ...base, cache, status: "limite", ms: Date.now() - started });
       return oneShot({ t: "error", code: "limite" });
     }

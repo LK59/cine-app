@@ -154,6 +154,31 @@ describe("la commande d'un élément", () => {
     expect(mockTaskLog).not.toHaveBeenCalled();
   });
 
+  it("ni un fichier hors des dossiers permis, ni l'animation écartée par le plan — sauf commande forcée (11/11/2026)", async () => {
+    const { orderAnalysis } = await import("@/lib/xray/orders");
+    const { getDb } = await import("@/lib/db");
+    (await import("@/lib/xray/scanStore")).planSize(); // la table, créée à la première lecture
+    getDb()
+      .prepare("INSERT OR REPLACE INTO xray_scan_items (item_id, tier, kind, title, status, reason) VALUES (?, 3, 'Movie', 'Animé', 'excluded', 'animation')")
+      .run(MOVIE);
+    try {
+      expect(await orderAnalysis(MOVIE, { priority: "high" })).toEqual({ status: "unavailable", reason: "animation" });
+      expect(state.enqueued).toEqual([]);
+      expect((await orderAnalysis(MOVIE, { priority: "high", force: true })).status).toBe("ordered");
+    } finally {
+      getDb().prepare("DELETE FROM xray_scan_items WHERE item_id = ?").run(MOVIE);
+    }
+  });
+
+  it("un épisode déjà commandé n'entraîne pas une relecture de la série à chaque ligne `start`", async () => {
+    const { noteSessionStart } = await import("@/lib/xray/orders");
+    noteSessionStart(EP1, 10, "louis");
+    await vi.waitFor(() => expect(state.enqueued).toHaveLength(2));
+    noteSessionStart(EP1, 20, "louis");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(state.enqueued).toHaveLength(2);
+  });
+
   it("borne les commandes neuves d'un compte", async () => {
     const { orderAnalysis } = await import("@/lib/xray/orders");
     const ids = Array.from({ length: 31 }, (_, i) => i.toString(16).padStart(32, "0"));

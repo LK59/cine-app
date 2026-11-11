@@ -42,15 +42,23 @@ vi.mock("@/lib/clients/tmdb", () => ({
   createTmdbClient: () => tmdbMock,
   TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p",
 }));
+// Le cache disque des phrases : traversé d'office ; `persist.on` le fait garder (la borne du jour, 11/11/2026).
+const persist = vi.hoisted(() => ({ on: false, kept: new Map<string, unknown>() }));
 vi.mock("@/lib/server-cache", () => ({
   cachedMovies: async () => [{ tmdbId: 137, id: 7, hasFile: true }],
   cachedSeries: async () => [],
   withCache: async (_key: string, _ttl: number, fn: () => Promise<unknown>) => fn(),
-  withPersistentCache: async (_key: string, _ttl: number, fn: () => Promise<unknown>) => fn(),
+  withPersistentCache: async (key: string, _ttl: number, fn: () => Promise<unknown>) => {
+    if (persist.on && persist.kept.has(key)) return persist.kept.get(key);
+    const value = await fn();
+    if (persist.on) persist.kept.set(key, value);
+    return value;
+  },
 }));
 
 import { looksLikeDescription, describeKey } from "@/lib/describeQuery";
 import { parseDescribed, pickTmdbMatch, setDescribeModelForTests, type DescribedTitle } from "@/lib/describeSearch";
+import { AI_CALLS_PER_DAY, aiDailyTake, resetAiDailyForTests } from "@/lib/aiFeatures";
 
 const movie = (id: number, title: string, date: string, original = title) => ({
   id, title, original_title: original, release_date: date, overview: "", poster_path: null, backdrop_path: null, vote_average: 7, genre_ids: [],
@@ -78,6 +86,9 @@ beforeEach(() => {
   settings.provider = "anthropic";
   settings.apiKey = "sk-test";
   model.mockReset();
+  persist.on = false;
+  persist.kept.clear();
+  resetAiDailyForTests();
   logError.mockReset();
   searchLog.mockReset();
   setDescribeModelForTests(model);
@@ -211,5 +222,28 @@ describe("/api/search/describe", () => {
     expect(body.results).toEqual([]);
     expect(logError).toHaveBeenCalledWith("describe-search", expect.any(Error));
     expect(searchLog).toHaveBeenCalledWith(expect.objectContaining({ status: "erreur", words: 9 }));
+  });
+});
+
+describe("la borne journalière commune aux appels payants (11/11/2026)", () => {
+  it(`${AI_CALLS_PER_DAY} par compte et par jour, questions et « Jusqu'ici » compris : au-delà, « limite » et rien ne part ; une réponse du cache ne compte pas`, async () => {
+    model.mockResolvedValue([]);
+    persist.on = true;
+    // Le compte a déjà fait le reste de ses appels du jour ailleurs (questions, « Jusqu'ici ») : il lui en reste deux.
+    for (let i = 0; i < AI_CALLS_PER_DAY - 2; i++) expect(aiDailyTake("jf-libre")).toBe(true);
+    expect((await call("le film où un type revit la même journée")).status).toBe(200);
+    // La même phrase, servie par le cache : rien n'a coûté, la place est rendue.
+    expect((await call("le film où un type revit la même journée")).status).toBe(200);
+    expect(model).toHaveBeenCalledTimes(1);
+    // La dernière place sert donc encore une phrase nouvelle…
+    expect((await call("le film où une femme perd la mémoire chaque nuit")).status).toBe(200);
+    expect(model).toHaveBeenCalledTimes(2);
+    // …puis la borne est atteinte : « limite », le modèle n'est pas appelé.
+    const over = await call("le film où un robot tombe amoureux dans l'espace");
+    expect(over).toEqual({ status: 429, body: { available: true, results: [] } });
+    expect(model).toHaveBeenCalledTimes(2);
+    expect(searchLog).toHaveBeenLastCalledWith(expect.objectContaining({ status: "limite" }));
+    // Un autre compte n'en est pas touché.
+    expect((await call("le film où un robot tombe amoureux dans l'espace", "bloque")).status).toBe(200);
   });
 });

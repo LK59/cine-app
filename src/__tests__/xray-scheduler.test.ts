@@ -126,7 +126,7 @@ vi.mock("@/lib/logger", () => ({ logError: (...a: unknown[]) => mockLogError(...
 
 import { HttpError } from "@/lib/http";
 import { MAX_PENDING, prioritizeTitle, readControls, readPriority, scanAction, scanTick, startXrayScheduler, unprioritizeTitle, xrayScanStatus, __testing } from "@/lib/xray/scheduler";
-import { getRow, markRow, recordFileVersion, setPriorityRows, upsertPlanSlice, wipeScanStore, writeMeta } from "@/lib/xray/scanStore";
+import { getRow, markRow, nextPending, recordFileVersion, reopenStale, setPriorityRows, upsertPlanSlice, wipeScanStore, writeMeta } from "@/lib/xray/scanStore";
 
 function movie(c: string, daysAgo: number, over: Record<string, unknown> = {}) {
   return { itemId: id(c), kind: "Movie", title: `Film ${c}`, seriesId: null, durationS: 3600, importedAt: NOW - daysAgo * DAY, createdAt: null, animation: false, ...over };
@@ -676,5 +676,117 @@ describe("une série dans l'ordre de ses épisodes, puis renommée une fois (10.
     await scanTick(NOW + 180_000);
     expect(svc.relabeled).toEqual([{ seriesId: id("s"), itemIds: [id("b"), id("c"), id("a")] }]);
     expect(mockTaskLog).toHaveBeenCalledWith("xray", "série renommée", { série: "Show", épisodes: 3 });
+  });
+});
+
+// ─── La chasse aux défauts du 11/11/2026 ─────────────────────────────────────
+
+describe("chasse aux défauts du 11/11/2026", () => {
+  const filmTitle = (c: string) => ({ kind: "Movie", title: `Film ${c}`, animation: false, rows: [{ itemId: id(c), kind: "Movie", title: `Film ${c}`, seriesId: null, durationS: 3600 }] });
+
+  it("« Analyser en priorité » rouvre un échec tout de suite : relancé en normal, plus compté comme traité", async () => {
+    lib.titles.set(id("1"), filmTitle("1"));
+    await scanTick(NOW);
+    finish("1", "failed", "décodage impossible");
+    await scanTick(NOW + 60_000);
+    expect(getRow(id("1"))?.status).toBe("failed");
+    await prioritizeTitle(id("1"), NOW + 90_000);
+    expect(getRow(id("1"))).toMatchObject({ tier: 0 });
+    expect(xrayScanStatus().priority.items[0]).toMatchObject({ failed: 0 });
+    finish("2");
+    finish("3");
+    await scanTick(NOW + 120_000);
+    expect(svc.enqueued.filter((j) => j.itemId === id("1")).map((j) => j.priority)).toEqual(["low", "normal"]);
+  });
+
+  it("un écarté (hors animation) mis en priorité est revu ; l'animation reste écartée ; la relecture du plan ne rouvre rien", () => {
+    const row = (c: string) => ({ itemId: id(c), kind: "Movie" as const, title: `Film ${c}`, seriesId: null, durationS: 3600 });
+    setPriorityRows(id("p"), [row("7"), row("8"), row("9")], 100_000);
+    markRow(id("7"), { status: "excluded", reason: "no-cast" });
+    markRow(id("8"), { status: "excluded", reason: "animation" });
+    markRow(id("9"), { status: "failed", error: "x" });
+    // La relecture du plan (sans `reopen`) : rien ne bouge.
+    setPriorityRows(id("p"), [row("7"), row("8"), row("9")], 100_000);
+    expect(getRow(id("7"))?.status).toBe("excluded");
+    expect(getRow(id("9"))?.status).toBe("failed");
+    // Le geste : rouverts, l'erreur gardée (elle fait relancer un échec du service).
+    setPriorityRows(id("p"), [row("7"), row("8"), row("9")], 100_000, true);
+    expect(getRow(id("7"))).toMatchObject({ status: "pending", reason: null });
+    expect(getRow(id("8"))).toMatchObject({ status: "excluded", reason: "animation" });
+    expect(getRow(id("9"))).toMatchObject({ status: "pending", error: "x" });
+  });
+
+  it("un élément déjà en file en low, mis en priorité : remonté en normal, et la liste ne se bloque pas sur lui", async () => {
+    lib.titles.set(id("1"), filmTitle("1"));
+    await scanTick(NOW); // 1 (palier 1) et 2 (palier 2) commandés en low
+    finish("2");
+    svc.pending = 1; // l'élément 1, toujours en attente au service
+    svc.enqueued = [];
+    await prioritizeTitle(id("1"), NOW + 60_000);
+    expect(getRow(id("1"))).toMatchObject({ tier: 0, status: "queued" });
+    expect(svc.enqueued.filter((j) => j.itemId === id("1")).map((j) => j.priority)).toEqual(["normal"]);
+    // L'attente au service est la nôtre : le fond continue (avant, rien ne partait plus).
+    await scanTick(NOW + 120_000);
+    expect(enqueuedIds()).toContain(id("3"));
+  });
+
+  it("un élément qui quitte le palier 1 reprend le rang de sa date, pas son rang de visionnage", async () => {
+    lib.library = [movie("1", 20), movie("2", 1), movie("3", 30), movie("4", 60), movie("5", 90), movie("6", 2, { animation: true })];
+    lib.watching = new Map([[id("1"), 20_001]]); // le cinquième épisode d'une série, par exemple
+    svc.pending = 3; // rien ne part au premier tour
+    await scanTick(NOW);
+    expect(getRow(id("1"))).toMatchObject({ tier: 1, rank: 20_001 });
+    lib.watching = new Map();
+    svc.pending = 0;
+    await scanTick(NOW + 11 * 60_000);
+    expect(getRow(id("1"))?.tier).toBe(3);
+    // Le plus récent du palier 3 passe en tête du palier 3 — il passait derrière tout le palier.
+    expect(enqueuedIds()).toEqual([id("2"), id("1")]);
+  });
+
+  it("un titre retiré de la priorité reprend le rang de sa date dans son palier", async () => {
+    lib.titles.set(id("3"), filmTitle("3"));
+    svc.pending = 3;
+    await scanTick(NOW);
+    await prioritizeTitle(id("3"), NOW + 60_000);
+    expect(getRow(id("3"))?.tier).toBe(0);
+    unprioritizeTitle(id("3"), NOW + 60_000);
+    expect(nextPending([3], 3).map((r) => r.itemId)).toEqual([id("3"), id("4"), id("5")]);
+  });
+
+  it("la relecture du plan en attente après un échec : le palier 1 est quand même relu toutes les dix minutes", async () => {
+    await scanTick(NOW);
+    lib.libraryError = new HttpError("Jellyfin : 502", 502);
+    await scanTick(NOW + 7 * HOUR); // relecture en échec : la suivante dans 15 min
+    lib.watching = new Map([[id("4"), 1]]);
+    await scanTick(NOW + 7 * HOUR + 11 * 60_000);
+    expect(lib.libraryReads).toBe(2);
+    expect(getRow(id("4"))?.tier).toBe(1);
+  });
+
+  it("un écarté sans distribution dont le genre devient l'animation reste écarté pour l'animation, jamais rouvert", () => {
+    const item = (excluded: "animation" | null) => ({ itemId: id("9"), tier: 3 as const, kind: "Movie" as const, title: "Film 9", seriesId: null, durationS: 3600, importedAt: NOW - DAY, rank: 1, excluded });
+    upsertPlanSlice([item(null)], 1);
+    markRow(id("9"), { status: "excluded", reason: "no-cast", checkedAt: NOW });
+    upsertPlanSlice([item("animation")], 2);
+    expect(getRow(id("9"))).toMatchObject({ status: "excluded", reason: "animation" });
+    reopenStale(NOW + 30 * DAY, 50);
+    expect(getRow(id("9"))).toMatchObject({ status: "excluded", reason: "animation" });
+  });
+
+  it("tout en pause ou l'option coupée : plus rien n'est affiché « en cours »", async () => {
+    await scanTick(NOW);
+    svc.statuses.set(id("1"), { itemId: id("1"), etag: "v1", status: "running", progress: 0.37, analyzedUntil: 0, error: null });
+    await scanTick(NOW + 60_000);
+    expect(xrayScanStatus().current).toMatchObject({ itemId: id("1"), progress: 0.37 });
+    writeMeta("controls", { paused: [0, 1, 2, 3], forced: [] });
+    await scanTick(NOW + 120_000);
+    expect(xrayScanStatus().current).toBeNull();
+    writeMeta("controls", { paused: [], forced: [] });
+    await scanTick(NOW + 180_000);
+    expect(xrayScanStatus().current).not.toBeNull();
+    svc.configured = false;
+    await scanTick(NOW + 240_000);
+    expect(__testing.live.current).toBeNull();
   });
 });

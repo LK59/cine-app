@@ -27,7 +27,7 @@ vi.mock("@/lib/clients/xray", () => ({
 const target = vi.hoisted(() => ({ etag: "v2", durationS: 2551.4 as number | null }));
 vi.mock("@/lib/xray/cast", () => ({
   originalLanguageOf: () => "en",
-  analysisTarget: async (itemId: string) => ({ itemId, type: "Episode", path: "/media/m.mkv", etag: target.etag, seriesId: null, tmdb: { kind: "episode", tvId: 1, season: 1, episode: 1 }, durationS: target.durationS }),
+  analysisTarget: async (itemId: string) => ({ itemId, type: "Episode", path: "/media/movies/m.mkv", etag: target.etag, seriesId: null, tmdb: { kind: "episode", tvId: 1, season: 1, episode: 1 }, durationS: target.durationS }),
   castOf: async () => [{ personId: 7, name: "Lucas Till", character: "Angus MacGyver", order: 0, profilePath: "/lt.jpg" }],
   castWithPhotos: async () => [{ personId: 7, name: "Lucas Till", character: "Angus MacGyver", order: 0, photos: [] }],
   tmdbPhotoUrl: (p: string) => `https://image.tmdb.org/t/p/w185${p}`,

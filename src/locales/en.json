@@ -1042,6 +1042,16 @@
         "median": "Median delay",
         "errors": "Failures"
       },
+      "aiUsage": {
+        "title": "On screen, questions and “So far”",
+        "summary": "{n} use over seven days|{n} uses over seven days",
+        "xray": "Sessions with an actor tapped",
+        "xrayHint": "of {seances} sessions offered · {taps} taps · {accounts} accounts",
+        "questions": "Questions asked",
+        "sofar": "“So far”",
+        "sofarHint": "{empty} with nothing to say · {accounts} accounts",
+        "failures": "Failures"
+      },
       "aiCost": {
         "title": "Spending on paid AI features (all of them: subtitles, search, “Previously”, questions, “So far”) — approximate euros, $1 ≈ €{rate}",
         "today": "Today",

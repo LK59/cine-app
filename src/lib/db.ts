@@ -16,7 +16,7 @@ import { booksNewsPage } from "@/lib/news/page107";
 import { NEWS_105_CONTENT, NEWS_105_SEED, NEWS_105_VERSION } from "@/lib/news/page105";
 import { NEWS_1013_CONTENT, NEWS_1013_REFRESH, NEWS_1013_SEED, NEWS_1013_VERSION } from "@/lib/news/page1013";
 import { NEWS_1025_CONTENT, NEWS_1025_SEED, NEWS_1025_VERSION } from "@/lib/news/page1025";
-import { NEWS_1037_CONTENT, NEWS_1037_SEED, NEWS_1037_VERSION } from "@/lib/news/page1037";
+import { NEWS_1037_SEED, NEWS_1037_VERSION, news1037Content } from "@/lib/news/page1037";
 import { config } from "@/lib/config";
 import { FIXES_LEDGER, RETIRED_LEDGER_ITEMS, ledgerMarker, ledgerTarget, withLedgerEntry, withoutLedgerItems, type FixLedgerEntry } from "@/lib/news/fixesLedger";
 import { NEWS_8672_CONTENT, NEWS_8672_FIRST_VERSION, NEWS_8672_REPUBLISH, NEWS_8672_SEED, NEWS_8672_VERSION } from "@/lib/news/page8672";
@@ -1033,7 +1033,8 @@ function migrate(db: Database.Database): void {
   seedNewsPage(db, NEWS_1025_SEED, NEWS_1025_VERSION, NEWS_1025_CONTENT, Date.now(), "draft");
   // Les versions 10.14 à 10.37 (11/11/2026) : discrète, comme la 10.5 — l'historique se remplit sans
   // fenêtre (Louis : « sans faire d'annonce »). Seulement ce que tout compte a déjà (`page1037.ts`).
-  seedQuietNewsPage(db, NEWS_1037_SEED, NEWS_1037_VERSION, NEWS_1037_CONTENT);
+  // « Précédemment » seulement là où l'option est allumée : coupée par défaut, l'image publique ne l'a pas.
+  seedQuietNewsPage(db, NEWS_1037_SEED, NEWS_1037_VERSION, news1037Content(config.recap?.enabled === true));
   // Les corrections livrées, ajoutées à l'historique des pages publiées (`fixesLedger.ts`).
   applyFixesLedger(db);
   retireLedgerItems(db);

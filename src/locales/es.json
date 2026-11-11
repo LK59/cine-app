@@ -1042,6 +1042,16 @@
         "median": "Tiempo mediano",
         "errors": "Fallos"
       },
+      "aiUsage": {
+        "title": "En pantalla, preguntas y «Hasta ahora»",
+        "summary": "{n} uso en siete días|{n} usos en siete días",
+        "xray": "Sesiones con un actor tocado",
+        "xrayHint": "de {seances} sesiones ofrecidas · {taps} toques · {accounts} cuentas",
+        "questions": "Preguntas hechas",
+        "sofar": "«Hasta ahora»",
+        "sofarHint": "{empty} sin nada que decir · {accounts} cuentas",
+        "failures": "Fallos"
+      },
       "aiCost": {
         "title": "Gasto de las funciones de IA de pago (todas: subtítulos, búsqueda, «Anteriormente», preguntas, «Hasta ahora») — en euros aproximados, 1 $ ≈ {rate} €",
         "today": "Hoy",

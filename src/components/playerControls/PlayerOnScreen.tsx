@@ -161,8 +161,48 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth, on
       release.current?.();
     }, ONSCREEN_SETTLE_MS);
   }, []);
+  /**
+   * La fin d'un appui, entendue où qu'elle ait lieu (chasse aux défauts du 11/11/2026). Seuls le `pointerup` /
+   * `pointercancel` / `touchend` reçus par la rangée la levaient : à la souris, un appui sur une pilule relâché
+   * hors de la rangée, ou un clic droit (le menu contextuel avale le `pointerup`), laissait `touching` vrai pour
+   * de bon — la rangée gardait ses visages, la molette n'y relançait plus rien, `toStart` restait bloqué. Le
+   * temps de l'appui, la fenêtre l'écoute (en capture : un `stopPropagation` ailleurs ne l'avale pas), et un
+   * `contextmenu` le termine aussi ; les écouteurs partent avec l'appui, et au démontage.
+   */
+  const detachPress = useRef<(() => void) | null>(null);
+  const pressEnd = useCallback(() => {
+    detachPress.current?.();
+    detachPress.current = null;
+    pointerDown.current = false;
+    touchSettle();
+  }, [touchSettle]);
+  const pressStart = useCallback(() => {
+    pointerDown.current = true;
+    touchStart();
+    if (detachPress.current) return;
+    const types = ["pointerup", "pointercancel", "contextmenu"] as const;
+    for (const type of types) window.addEventListener(type, pressEnd, true);
+    detachPress.current = () => {
+      for (const type of types) window.removeEventListener(type, pressEnd, true);
+    };
+  }, [touchStart, pressEnd]);
+  /**
+   * Un démontage pendant une tenue rend la main (chasse aux défauts du 11/11/2026). Le parent retire la rangée
+   * dès que la scène de l'instant n'a plus de personne nommée, ou pendant un chargement ou une reprise ; ce
+   * nettoyage effaçait la relance sans l'appeler. Sur iPhone : glisser la rangée, lâcher, une coupe vers un plan
+   * sans visage dans les 600 ms — et les commandes, tenues par `onHold`, restaient sur le film jusqu'au
+   * prochain toucher. `touchingNow` est vrai du premier signe jusqu'à la relance : `onRelease` part une fois.
+   */
   useEffect(() => () => {
     if (settleTimer.current !== undefined) window.clearTimeout(settleTimer.current);
+    settleTimer.current = undefined;
+    detachPress.current?.();
+    detachPress.current = null;
+    pointerDown.current = false;
+    if (touchingNow.current) {
+      touchingNow.current = false;
+      release.current?.();
+    }
   }, []);
 
   /** Au début — jamais sous un doigt, ni après qu'on l'a fait défiler dans cette scène. */
@@ -381,26 +421,13 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth, on
                 measure();
                 if (touching) touchSettle();
               }}
-              onPointerDown={() => {
-                pointerDown.current = true;
-                touchStart();
-              }}
-              onPointerUp={() => {
-                pointerDown.current = false;
-                touchSettle();
-              }}
-              onPointerCancel={() => {
-                pointerDown.current = false;
-                touchSettle();
-              }}
-              onTouchStart={() => {
-                pointerDown.current = true;
-                touchStart();
-              }}
-              onTouchEnd={() => {
-                pointerDown.current = false;
-                touchSettle();
-              }}
+              // `pressEnd` est aussi écouté sur la fenêtre le temps de l'appui (voir `pressStart`) : ceux-ci restent
+              // pour le `touchend`, qu'un doigt envoie toujours à ce qu'il a touché.
+              onPointerDown={pressStart}
+              onPointerUp={pressEnd}
+              onPointerCancel={pressEnd}
+              onTouchStart={pressStart}
+              onTouchEnd={pressEnd}
               className={`player-onscreen-row ${live} flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain`}
             >
               {list.map((person) => pill(person, false))}

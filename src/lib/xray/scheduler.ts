@@ -240,7 +240,13 @@ async function refreshIfDue(now: number): Promise<string | null> {
   if (planSize() === 0 || now - plannedAt >= PLAN_EVERY_MS) {
     const tried = readMeta<PlanTried>(PLAN_TRIED_KEY);
     const failures = tried && typeof tried.failures === "number" ? tried.failures : 0;
-    if (failures > 0 && tried && now - tried.at < planBackoffMs(failures)) return tried.error;
+    if (failures > 0 && tried && now - tried.at < planBackoffMs(failures)) {
+      // La relecture du plan attend son tour, pas celle du palier 1 : elle sortait d'ici sans relire les
+      // comptes, et le palier 1 n'était plus relu que toutes les six heures tant que la bibliothèque
+      // échouait (chasse aux défauts du 11/11/2026).
+      await refreshWatchingIfDue(now);
+      return tried.error;
+    }
     try {
       await refreshPlan(now);
       writeMeta(PLAN_TRIED_KEY, { at: now, failures: 0, error: null } satisfies PlanTried);
@@ -252,8 +258,14 @@ async function refreshIfDue(now: number): Promise<string | null> {
       return text;
     }
   }
-  if (now - (readMeta<number>(WATCHING_KEY) ?? 0) >= WATCH_EVERY_MS) await refreshWatching(now).catch((error: unknown) => logError("xray/scan-watching", error));
+  await refreshWatchingIfDue(now);
   return null;
+}
+
+/** Le palier 1 relu s'il a dix minutes. Une liste illisible lève dans `readWatching` : le palier 1 en place reste. */
+async function refreshWatchingIfDue(now: number): Promise<void> {
+  if (planSize() === 0 || now - (readMeta<number>(WATCHING_KEY) ?? 0) < WATCH_EVERY_MS) return;
+  await refreshWatching(now).catch((error: unknown) => logError("xray/scan-watching", error));
 }
 
 async function refreshWatching(now: number): Promise<void> {
@@ -436,6 +448,9 @@ async function runTick(now: number): Promise<string | null> {
   live.lastTickAt = now;
   if (!xrayConfigured()) {
     live.phase = "off";
+    // Plus rien n'est suivi : l'élément du dernier tour restait affiché « Titre — 37 % », figé (chasse
+    // aux défauts du 11/11/2026).
+    live.current = null;
     return null;
   }
   // Rien que la base : les écartés et les échecs à revoir, les dossiers permis qui ont changé.
@@ -448,6 +463,9 @@ async function runTick(now: number): Promise<string | null> {
     // Tout en pause : aucune lecture, ni de la bibliothèque, ni des comptes, ni du service.
     live.phase = "paused";
     live.playbackBy = null;
+    // Le service n'est pas relu : ce qu'il traite n'est plus connu, rien n'est donc affiché « en cours »
+    // (il restait « Titre — 37 % », figé, jusqu'à la reprise — chasse aux défauts du 11/11/2026).
+    live.current = null;
     return null;
   }
   const { inflight, waiting } = await followInflight(now);
@@ -651,6 +669,7 @@ export async function scanAction(action: ScanAction, tier: ScanTier | null): Pro
     await Promise.race([scanTick(), new Promise<void>((resolve) => setTimeout(resolve, 5000).unref?.())]);
   } else if (action === "pause" && readControls().paused.length === SCAN_TIERS.length) {
     live.phase = "paused";
+    live.current = null;
   }
 }
 
@@ -674,7 +693,31 @@ async function applyPriority(): Promise<void> {
   const list = readPriority();
   for (let i = 0; i < list.length; i++) {
     const found = await readPriorityTitle(list[i].id);
-    if (found && !found.animation) setPriorityRows(list[i].id, found.rows, (i + 1) * PRIORITY_RANK_STEP);
+    if (found && !found.animation) await raiseToNormal(setPriorityRows(list[i].id, found.rows, (i + 1) * PRIORITY_RANK_STEP));
+  }
+}
+
+/**
+ * Les éléments de la liste de priorité déjà en file au service pour le fond (en `low`) : recommandés en
+ * `normal` — le service ne relance rien pour une commande en double, il en remonte seulement la priorité
+ * (`submit`, contrat). Ils restent `queued` chez nous, donc comptés dans ce qui est à nous dans la file
+ * (`followInflight`). Avant (chasse aux défauts du 11/11/2026), ils repassaient `pending` : la file du
+ * service les comptait en attente sans qu'ils soient reconnus comme les nôtres, et la liste de priorité
+ * ne partait plus (« une commande de spectateur attend ») jusqu'à ce que le service les traite en `low`.
+ * Un échec (service, Jellyfin, TMDB) laisse l'élément en `low` : il sera fait quand même, un peu plus tard.
+ */
+async function raiseToNormal(itemIds: readonly string[]): Promise<void> {
+  for (const itemId of itemIds) {
+    try {
+      const target = await analysisTarget(itemId);
+      if (!target || !isLibraryPath(target.path) || !target.tmdb) continue;
+      const state = await xray.itemStatus(target.itemId);
+      if (state?.status !== "queued" || state.etag !== target.etag) continue;
+      const built = await jobFor(target, "normal");
+      if (built) await xray.enqueue(built.job);
+    } catch (error) {
+      logError("xray/scan-raise", error, { itemId });
+    }
   }
 }
 
@@ -684,6 +727,7 @@ export type PrioritizeRefusal = "not-found" | "animation";
  * « Analyser en priorité » : un film, ou tous les épisodes d'une série dans l'ordre (saison par saison,
  * les spéciaux à la fin), au palier 0 — vérifiés comme les autres (déjà fait, durée égale, dossiers
  * permis, distribution), commandés en `normal`, nourris même pendant une lecture, deux d'avance au plus.
+ * Ce qui était en échec ou écarté (hors animation) est revu tout de suite, sans attendre la semaine.
  * L'animation reste écartée : le titre est refusé (`animation`) et la page le dit. Retenu dans `cine.db`.
  */
 export async function prioritizeTitle(itemId: string, now = Date.now()): Promise<PrioritizeRefusal | null> {
@@ -696,7 +740,8 @@ export async function prioritizeTitle(itemId: string, now = Date.now()): Promise
   const entry: PriorityEntry = { id, kind: found.kind, title: found.title, addedAt: at >= 0 ? list[at].addedAt : now };
   if (at < 0) list.push(entry);
   writeMeta(PRIORITY_KEY, list);
-  setPriorityRows(id, found.rows, (list.findIndex((e) => e.id === id) + 1) * PRIORITY_RANK_STEP);
+  // Le geste rouvre les échecs et les écartés du titre (`reopen`), et remonte ce qui attend déjà en `low`.
+  await raiseToNormal(setPriorityRows(id, found.rows, (list.findIndex((e) => e.id === id) + 1) * PRIORITY_RANK_STEP, true));
   taskLog("xray", "mis en priorité", { titre: found.title, éléments: found.rows.length });
   // Le tour part tout de suite, sans être attendu au-delà de quelques secondes.
   await Promise.race([scanTick(), new Promise<void>((resolve) => setTimeout(resolve, 5000).unref?.())]);
@@ -783,7 +828,8 @@ export function xrayScanStatus(): XrayScanStatus {
     plannedAt: readMeta<number>(PLANNED_KEY),
     lastTickAt: live.lastTickAt,
     lastError: live.lastError,
-    current: live.current,
+    // L'option coupée entre deux tours : rien n'est affiché « en cours ».
+    current: configured ? live.current : null,
     speed: speed === null ? null : Math.round(speed * 10) / 10,
     tiers,
     priority,

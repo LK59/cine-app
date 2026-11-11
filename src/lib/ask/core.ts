@@ -16,7 +16,7 @@
 // « Je ne sais pas d'après ce qui a été vu ».
 
 import type { Locale } from "@/lib/i18n";
-import { unknownNames, type Cue } from "@/lib/recap/core";
+import { capitalsRuleApplies, isTitleAbbreviation, unknownNames, type Cue } from "@/lib/recap/core";
 import { cueLine } from "@/lib/ask/voices";
 import { stripSimpleMarkdown } from "@/lib/format";
 
@@ -570,6 +570,13 @@ export type GateResult = {
 /** La fin d'une phrase, au bout d'un mot : . ! ? ou … (puis guillemet ou parenthèse fermants). */
 const SENTENCE_END = /[.!?…]+["»”’)]*$/u;
 /**
+ * …sauf le point d'une abréviation de titre (chasse aux défauts du 11/11/2026) : « M. Kurtz » faisait de « M. »
+ * une phrase finie et de « Kurtz » le premier mot de la suivante — que la règle des majuscules ne vérifie jamais.
+ */
+export function endsSentence(word: string): boolean {
+  return SENTENCE_END.test(word) && !isTitleAbbreviation(word);
+}
+/**
  * Les premiers mots d'une phrase qui peut commencer par « D'après les sources, … » (`META_PREFIX`) : la phrase
  * est retenue jusqu'à `LEAD_HOLD_WORDS` mots, le temps de savoir si sa tête se reformule — une tête déjà
  * montrée ne se reformule plus. Toute autre phrase coule mot par mot.
@@ -639,7 +646,8 @@ export class AnswerGate {
 
   /**
    * `limits` : la coupe de la réponse — cinq phrases et 120 mots d'office, deux phrases pour « Jusqu'ici ».
-   * `meta` : le filet des mots de coulisse (10.27.2) ; sans lui, aucune phrase n'est regardée pour cela.
+   * `meta` : le filet des mots de coulisse (10.27.2) ; sans lui, aucune phrase n'est regardée pour cela. Sa langue
+   * (`meta.locale`, celle de la réponse) dit aussi si la règle des majuscules vaut (pas en allemand, 11/11/2026).
    * `nothing` : le mot qui, seul en première phrase, veut dire « rien à dire » (« Jusqu'ici », `SOFAR_NOTHING`).
    */
   constructor(
@@ -671,8 +679,10 @@ export class AnswerGate {
     this.buffer += delta;
     if (this.phase === "names") {
       const head = this.buffer.replace(/^\s+/, "");
-      // Le modèle n'a pas suivi le format : aucune liste à vérifier, la règle des majuscules reste.
+      // Le modèle n'a pas suivi le format : aucune liste à vérifier, la règle des majuscules reste — sauf en
+      // allemand, où elle n'est pas tendue (`capitalsRuleApplies`) : sans liste, rien ne serait vérifié, rejeté.
       if (head.length >= NAMES_PREFIX.length && !head.toUpperCase().startsWith(NAMES_PREFIX)) {
+        if (!capitalsRuleApplies(this.meta?.locale)) return this.reject([NAMES_PREFIX]);
         this.phase = "answer";
         this.buffer = head;
       } else {
@@ -683,7 +693,7 @@ export class AnswerGate {
           .split(/[,;]/)
           .map((n) => n.trim().split(/\s+/).map(stripEmphasisWord).filter(Boolean).join(" "))
           .filter((n) => n && !/^[—–-]+$/.test(n));
-        const unknown = unknownNames("", this.sources, names);
+        const unknown = unknownNames("", this.sources, names, this.meta?.locale);
         if (unknown.length) return this.reject(unknown);
         this.phase = "answer";
         this.buffer = head.slice(nl + 1).replace(/^\s+/, "");
@@ -746,7 +756,7 @@ export class AnswerGate {
       return;
     }
     this.sentence.push(w);
-    const unknown = unknownNames(this.sentence.join(" "), this.sources);
+    const unknown = unknownNames(this.sentence.join(" "), this.sources, [], this.meta?.locale);
     if (unknown.length) {
       this.close();
       out.release = [];
@@ -774,7 +784,7 @@ export class AnswerGate {
         this.nameMiss = true;
       } else if (this.hold === "name") this.hold = "none";
     }
-    if (SENTENCE_END.test(w)) {
+    if (endsSentence(w)) {
       this.finishSentence(out);
       return;
     }

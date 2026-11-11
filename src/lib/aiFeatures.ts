@@ -73,6 +73,59 @@ export function aiBudgetReached(now = Date.now()): boolean {
   }
 }
 
+// ── La borne journalière par compte (chasse aux défauts du 11/11/2026) ─────────────────────────────
+
+/**
+ * Les appels payants qu'un compte déclenche — questions sur un titre ou une personne, « Jusqu'ici » écrit (pas un
+ * texte gardé), recherche par description passée au modèle (pas une réponse du cache) — comptés ensemble, par jour
+ * (le jour local du foyer). Le plafond mensuel est commun (§140) : seules des bornes horaires existaient (200
+ * « Jusqu'ici », 60 questions, 30 recherches par minute), et un seul compte qui boucle pouvait le vider pour tout
+ * le foyer en une journée. 300 est très au-dessus de l'usage (une soirée chargée en fait quelques dizaines) :
+ * cette borne n'arrête qu'une boucle. Au-delà : le statut `limite` déjà écrit aux journaux, et le même écran que la
+ * borne horaire. En mémoire, sur `globalThis` comme les autres bornes : un redémarrage la remet à zéro. Personne
+ * n'en est exempté, administrateur compris — comme les bornes horaires.
+ */
+export const AI_CALLS_PER_DAY = 300;
+const DAILY_KEY = Symbol.for("cine-app.aiDailyCalls");
+const sharedDaily = globalThis as typeof globalThis & { [DAILY_KEY]?: Map<string, { day: string; count: number }> };
+const daily = (sharedDaily[DAILY_KEY] ??= new Map());
+/** Une borne contre une fuite : un compte par entrée, le foyer en a quelques-uns. */
+const DAILY_MAX_ACCOUNTS = 2000;
+
+/** Le jour local du foyer (le fuseau du serveur, `TZ`) : la borne repart à minuit chez lui, pas à minuit UTC. */
+function localDay(now: number): string {
+  const d = new Date(now);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Prendre une place pour un appel payant de ce compte aujourd'hui : `false` (rien de pris) une fois la borne
+ * atteinte. Pris **avant** l'appel : des demandes parallèles ne passent pas toutes avant que la première compte.
+ */
+export function aiDailyTake(account: string, now = Date.now()): boolean {
+  const day = localDay(now);
+  const entry = daily.get(account);
+  if (!entry || entry.day !== day) {
+    daily.delete(account);
+    daily.set(account, { day, count: 1 });
+    while (daily.size > DAILY_MAX_ACCOUNTS) daily.delete(daily.keys().next().value as string);
+    return true;
+  }
+  if (entry.count >= AI_CALLS_PER_DAY) return false;
+  entry.count++;
+  return true;
+}
+
+/** Rendre la place d'un appel qui n'a finalement rien coûté (une recherche servie par le cache). */
+export function aiDailyRefund(account: string, now = Date.now()): void {
+  const entry = daily.get(account);
+  if (entry && entry.day === localDay(now) && entry.count > 0) entry.count--;
+}
+
+export function resetAiDailyForTests(): void {
+  daily.clear();
+}
+
 const NOTICE_KEY = Symbol.for("cine-app.aiBudgetNotice");
 const shared = globalThis as typeof globalThis & { [NOTICE_KEY]?: { month: string | null } };
 const notice = (shared[NOTICE_KEY] ??= { month: null });

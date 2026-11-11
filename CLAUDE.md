@@ -581,6 +581,11 @@ a title hidden from the account reads exactly like one never analysed. `XRAY_ENA
 current one found in memory) and the person panel (`AskPanel` + `AskPersonHeader`: TMDB facts through
 `src/lib/tmdbPerson.ts`, the cinema's own person path). **No mask or `background-clip: text` on anything that
 carries `backdrop-filter` children** — on iOS it left the row and panel unpainted (DECISIONS §138, 10.29.1).
+Usage is measured without a line of its own: the session's `stop` carries `xray: "s3 t2 p2"` (scenes where the row
+showed someone, actor taps, people tapped — `src/lib/xrayUsage.ts`, absent when the option is not offered), and
+Activity's « Acteurs à l'écran, questions et « Jusqu'ici » » fold reads it with `recherche.log` (`activity/aiUsage.ts`).
+A session's order only reaches the service for a title the account can see (`assertVisible`), inside the library
+roots, and never for animation the plan excluded (11/11/2026).
 `xrayAvailable` / `askAvailable` / `askPersonAvailable` / `sofarAvailable` are read from the public config
 with `followOnlyOptions` and absent from the player fingerprints' doubles: the fingerprints must not change
 when touching these features.

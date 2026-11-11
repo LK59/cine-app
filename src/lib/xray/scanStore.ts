@@ -11,8 +11,8 @@ import type { PlannedItem, ScanTier } from "./scanPlan";
  *   alors. C'est elle qui dit qu'un fichier remplacé **à durée égale** (± 1 s) — un réencodage, les 65
  *   épisodes de *MacGyver* passés d'AV1 à HEVC le 09/11/2026 — garde son analyse : ses temps tombent
  *   toujours juste. Écrite par toute commande, celle du lecteur (`orders.ts`) comme celle du fond.
- * - `xray_scan_items` : le plan du fond (`scheduler.ts`) — un élément par ligne, son palier, son rang,
- *   son état (`pending`, `queued`, `done`, `failed`, `excluded`), l'`ETag` analysé, et, une fois fini,
+ * - `xray_scan_items` : le plan du fond (`scheduler.ts`) — un élément par ligne, son palier, son rang
+ *   (et `plan_rank`, le rang de sa date, repris en quittant le palier 1 ou la liste de priorité), son état (`pending`, `queued`, `done`, `failed`, `excluded`), l'`ETag` analysé, et, une fois fini,
  *   le temps de calcul que le service a mesuré (la vitesse de l'estimation).
  * - `xray_scan_meta` : les gestes de l'administrateur (pause et forçage par palier) et les dates des
  *   relectures du plan — ce qui doit survivre à un redémarrage.
@@ -60,6 +60,10 @@ function db(): Database.Database {
         value TEXT NOT NULL
       );
     `);
+    // `plan_rank` (chasse aux défauts du 11/11/2026) : ajoutée à une table déjà en production. Vide jusqu'à
+    // la relecture suivante du plan ; d'ici là, un élément qui quitte son palier garde son rang (`COALESCE`).
+    const columns = d.prepare("PRAGMA table_info(xray_scan_items)").all() as { name: string }[];
+    if (!columns.some((c) => c.name === "plan_rank")) d.exec("ALTER TABLE xray_scan_items ADD COLUMN plan_rank INTEGER");
     ready.add(d);
   }
   return d;
@@ -124,15 +128,19 @@ const COLUMNS = `item_id AS itemId, tier, kind, title, series_id AS seriesId, du
 export function upsertPlanSlice(items: readonly PlannedItem[], generation: number): void {
   const d = db();
   const insert = d.prepare(
-    `INSERT INTO xray_scan_items (item_id, tier, kind, title, series_id, duration_s, imported_at, rank, status, reason, plan_seen)
-     VALUES (@itemId, @tier, @kind, @title, @seriesId, @durationS, @importedAt, @rank, @status, @reason, @generation)
+    `INSERT INTO xray_scan_items (item_id, tier, kind, title, series_id, duration_s, imported_at, rank, plan_rank, status, reason, plan_seen)
+     VALUES (@itemId, @tier, @kind, @title, @seriesId, @durationS, @importedAt, @rank, @planRank, @status, @reason, @generation)
      ON CONFLICT(item_id) DO UPDATE SET
        tier = CASE WHEN xray_scan_items.tier = 0 THEN 0 ELSE excluded.tier END,
        kind = excluded.kind, title = excluded.title, series_id = excluded.series_id, duration_s = excluded.duration_s,
        rank = CASE WHEN xray_scan_items.tier = 0 THEN xray_scan_items.rank ELSE excluded.rank END,
+       plan_rank = excluded.plan_rank,
        plan_seen = excluded.plan_seen,
+       -- Un écarté pour une autre raison (sans distribution, sans fichier…) dont le genre devient l'animation
+       -- passe « animation » : il gardait sa raison, reopenStale le rouvrait la semaine suivante et le
+       -- planificateur le commandait (chasse aux défauts du 11/11/2026).
        status = CASE
-         WHEN excluded.status = 'excluded' AND xray_scan_items.status IN ('pending', 'failed') THEN 'excluded'
+         WHEN excluded.status = 'excluded' AND xray_scan_items.status IN ('pending', 'failed', 'excluded') THEN 'excluded'
          WHEN excluded.status = 'excluded' THEN xray_scan_items.status
          WHEN xray_scan_items.status = 'excluded' AND xray_scan_items.reason = 'animation' THEN 'pending'
          WHEN xray_scan_items.imported_at <> 0 AND xray_scan_items.imported_at <> excluded.imported_at AND xray_scan_items.status IN ('failed', 'excluded') THEN 'pending'
@@ -140,7 +148,7 @@ export function upsertPlanSlice(items: readonly PlannedItem[], generation: numbe
            AND xray_scan_items.duration_s > 0 AND excluded.duration_s > 0 AND ABS(xray_scan_items.duration_s - excluded.duration_s) > 1 THEN 'pending'
          ELSE xray_scan_items.status END,
        reason = CASE
-         WHEN excluded.status = 'excluded' AND xray_scan_items.status IN ('pending', 'failed') THEN excluded.reason
+         WHEN excluded.status = 'excluded' AND xray_scan_items.status IN ('pending', 'failed', 'excluded') THEN excluded.reason
          WHEN xray_scan_items.status = 'excluded' AND xray_scan_items.reason = 'animation' AND excluded.status <> 'excluded' THEN NULL
          ELSE xray_scan_items.reason END,
        imported_at = excluded.imported_at`,
@@ -156,6 +164,7 @@ export function upsertPlanSlice(items: readonly PlannedItem[], generation: numbe
         durationS: item.durationS,
         importedAt: Math.round(item.importedAt),
         rank: item.rank,
+        planRank: item.planRank ?? item.rank,
         status: item.excluded ? "excluded" : "pending",
         reason: item.excluded,
         generation,
@@ -171,18 +180,28 @@ export function dropUnseen(generation: number): number {
 
 /**
  * Le palier 1 relu seul (toutes les dix minutes) : ce qui y entre y passe, ce qui en sort retrouve le
- * palier de sa date (2 dans la fenêtre des arrivées, 3 sinon). Les éléments que le plan ne connaît pas
- * encore attendent la relecture complète.
+ * palier de sa date (2 dans la fenêtre des arrivées, 3 sinon) **et le rang que le plan lui y donne**
+ * (`plan_rank`). Jusqu'au 11/11/2026 il gardait son rang de visionnage (`distance × 10 000 + place`) et
+ * passait derrière tout son palier jusqu'à la relecture du plan (chasse aux défauts). Les éléments que le
+ * plan ne connaît pas encore attendent la relecture complète.
  */
 export function setWatching(ranks: Map<string, number>, newSince: number): void {
   const d = db();
   d.transaction(() => {
-    d.prepare("UPDATE xray_scan_items SET tier = CASE WHEN imported_at >= ? THEN 2 ELSE 3 END WHERE tier = 1").run(newSince);
+    d.prepare("UPDATE xray_scan_items SET tier = CASE WHEN imported_at >= ? THEN 2 ELSE 3 END, rank = COALESCE(plan_rank, rank) WHERE tier = 1").run(newSince);
     // La liste de priorité (palier 0) passe avant : un élément qui y est n'en descend pas.
     const one = d.prepare("UPDATE xray_scan_items SET tier = 1, rank = ? WHERE item_id = ? AND tier <> 0");
     for (const [id, rank] of ranks) one.run(rank, id.toLowerCase());
   })();
-  // Les paliers 2 et 3 se lisent par date (`nextPending`) : le rang n'y sert pas.
+}
+
+/**
+ * Écarté par le plan pour l'animation (§138) : une séance qui le lance ne le commande pas non plus (chasse aux
+ * défauts du 11/11/2026 — la ligne `start` commandait ce que le planificateur refuse). Un élément que le plan
+ * n'a pas encore vu n'est pas écarté.
+ */
+export function isAnimationExcluded(itemId: string): boolean {
+  return !!db().prepare("SELECT 1 FROM xray_scan_items WHERE item_id = ? AND status = 'excluded' AND reason = 'animation'").get(itemId.toLowerCase());
 }
 
 export function planSize(): number {
@@ -335,36 +354,62 @@ export interface PriorityRow {
  * Les éléments d'un titre de la liste de priorité passent au palier 0, dans l'ordre donné, à partir de
  * `baseRank` ; un élément que le plan n'a pas encore lu est ajouté (il attend d'être vérifié). Son état
  * est gardé : un élément déjà fait le reste.
+ *
+ * `reopen` — le geste « Analyser en priorité » (chasse aux défauts du 11/11/2026) : un échec, ou un écarté
+ * pour une autre raison que l'animation, repasse à vérifier tout de suite. Il attendait la relance
+ * hebdomadaire (`reopenStale`), et le palier 0 le comptait comme traité. L'`error` est gardée : c'est elle
+ * qui fait relancer un échec du service au même fichier (`prepare`). La relecture du plan
+ * (`applyPriority`) ne rouvre rien : un élément qui échoue encore n'est pas recommandé toutes les six heures.
+ *
+ * Rend les éléments **déjà en file au service pour le fond** (en `low`) : ils restent `queued` — comptés
+ * dans ce qui est à nous dans la file — et l'appelant les recommande en `normal`. Jusqu'au 11/11/2026 ils
+ * repassaient `pending` : le service les comptait en attente, le planificateur ne les reconnaissait plus
+ * comme siens, et la liste de priorité attendait, bloquée, que le service les traite en `low`.
  */
-export function setPriorityRows(entryId: string, rows: readonly PriorityRow[], baseRank: number): void {
+export function setPriorityRows(entryId: string, rows: readonly PriorityRow[], baseRank: number, reopen = false): string[] {
   const d = db();
+  const before = d.prepare("SELECT tier, status FROM xray_scan_items WHERE item_id = ?");
   const upsert = d.prepare(
     `INSERT INTO xray_scan_items (item_id, tier, kind, title, series_id, duration_s, rank, status, priority_of)
      VALUES (@itemId, 0, @kind, @title, @seriesId, @durationS, @rank, 'pending', @entryId)
      ON CONFLICT(item_id) DO UPDATE SET tier = 0, rank = excluded.rank, priority_of = excluded.priority_of,
-       -- Une commande « low » du fond déjà en file est revue : la prochaine la remonte en « normal ».
-       status = CASE WHEN xray_scan_items.status = 'queued' AND xray_scan_items.tier <> 0 THEN 'pending' ELSE xray_scan_items.status END,
+       status = CASE WHEN @reopen = 1 AND (xray_scan_items.status = 'failed'
+           OR (xray_scan_items.status = 'excluded' AND COALESCE(xray_scan_items.reason, '') <> 'animation')) THEN 'pending'
+         ELSE xray_scan_items.status END,
+       reason = CASE WHEN @reopen = 1 AND xray_scan_items.status = 'excluded' AND COALESCE(xray_scan_items.reason, '') <> 'animation' THEN NULL
+         ELSE xray_scan_items.reason END,
        duration_s = CASE WHEN excluded.duration_s > 0 THEN excluded.duration_s ELSE xray_scan_items.duration_s END`,
   );
+  const raised: string[] = [];
   d.transaction(() => {
-    rows.forEach((row, i) =>
+    rows.forEach((row, i) => {
+      const itemId = row.itemId.toLowerCase();
+      const was = before.get(itemId) as { tier: number; status: ScanStatus } | undefined;
+      if (was && was.status === "queued" && was.tier !== 0) raised.push(itemId);
       upsert.run({
-        itemId: row.itemId.toLowerCase(),
+        itemId,
         kind: row.kind,
         title: row.title.slice(0, 200),
         seriesId: row.seriesId,
         durationS: row.durationS,
         rank: baseRank + i,
         entryId: entryId.toLowerCase(),
-      }),
-    );
+        reopen: reopen ? 1 : 0,
+      });
+    });
   })();
+  return raised;
 }
 
-/** Un titre retiré de la liste : ses éléments retrouvent le palier de leur date (le 1 à la relecture suivante). */
+/**
+ * Un titre retiré de la liste : ses éléments retrouvent le palier de leur date (le 1 à la relecture suivante)
+ * et le rang que le plan leur y donne — ils gardaient leur rang de priorité (≥ 100 000) et passaient derrière
+ * tout leur palier jusqu'à la relecture du plan (chasse aux défauts du 11/11/2026). Un élément que le plan n'a
+ * pas encore lu (`plan_rank` vide) garde le sien jusque-là.
+ */
 export function clearPriorityRows(entryId: string, newSince: number): number {
   return db()
-    .prepare("UPDATE xray_scan_items SET tier = CASE WHEN imported_at >= ? THEN 2 ELSE 3 END, priority_of = NULL WHERE priority_of = ?")
+    .prepare("UPDATE xray_scan_items SET tier = CASE WHEN imported_at >= ? THEN 2 ELSE 3 END, rank = COALESCE(plan_rank, rank), priority_of = NULL WHERE priority_of = ?")
     .run(newSince, entryId.toLowerCase()).changes;
 }
 

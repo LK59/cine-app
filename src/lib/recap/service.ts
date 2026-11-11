@@ -235,18 +235,89 @@ export function defaultRecapModelForTests(): RecapModel {
 /** Une limite de débit : le passage s'arrête au premier refus (règle des bancs, 08/11/2026). */
 class RecapRateLimited extends Error {}
 
+// ── Ce que la base partagée ne doit pas garder pour tous (chasse aux défauts du 11/11/2026) ─────────
+
+/**
+ * Un `rejeté` ou un `vide` est obtenu avec les sources **d'un** compte (ses épisodes finis, son texte d'avant) mais
+ * gardé sous la clé partagée : les autres comptes arrêtés au même endroit lisaient « déjà » et n'avaient jamais de
+ * texte, trente jours. Désormais un autre compte réessaie, une fois, passé ce délai — jamais le même compte (ses
+ * sources n'ont pas changé, il repaierait la même réponse). En mémoire, sur `globalThis` : après un redémarrage,
+ * le délai repart du premier passage qui revoit la clé, sans appel immédiat.
+ */
+export const RECAP_RETRY_OTHERS_MS = 60 * 60 * 1000;
+/**
+ * `aucun` (pas d'épisode fini) dépend du compte : il n'est plus écrit sous la clé partagée — il y bloquait les
+ * autres comptes trente jours. Le même compte n'est pas relu à chaque passage pour autant : une heure.
+ */
+const RECAP_NONE_WAIT_MS = 60 * 60 * 1000;
+/**
+ * Une série en échec (Jellyfin, sous-titres, modèle hors limite de débit) est mise de côté pour ce compte : 15 min,
+ * puis 1 h, puis 6 h. Le passage s'arrêtait à la première erreur, dans le même ordre à chaque fois : une série qui
+ * échouait toujours bloquait tous les comptes suivants, toutes les cinq minutes, et un délai du modèle se payait
+ * à chaque passage.
+ */
+const RECAP_BACKOFF_MS = [15 * 60 * 1000, 60 * 60 * 1000, 6 * 60 * 60 * 1000] as const;
+const RECAP_MEMORY_MAX = 5000;
+
+const MEMORY_KEY = Symbol.for("cine-app.recapMemory");
+const sharedMemory = globalThis as typeof globalThis & {
+  [MEMORY_KEY]?: { negative: Map<string, { at: number; tried: Set<string> }>; none: Map<string, number>; failed: Map<string, { until: number; count: number }> };
+};
+const memory = (sharedMemory[MEMORY_KEY] ??= { negative: new Map(), none: new Map(), failed: new Map() });
+
+function bounded<K, V>(map: Map<K, V>, key: K, value: V): void {
+  map.delete(key);
+  map.set(key, value);
+  while (map.size > RECAP_MEMORY_MAX) map.delete(map.keys().next().value as K);
+}
+
+/** Ce compte peut-il réessayer une clé gardée `rejeté`/`vide` par un autre ? (`RECAP_RETRY_OTHERS_MS`) */
+function mayRetryNegative(key: string, jfId: string, now: number): boolean {
+  const seen = memory.negative.get(key);
+  if (!seen) {
+    // Gardée avant ce démarrage : le délai repart d'ici, personne n'est encore réputé l'avoir tentée.
+    bounded(memory.negative, key, { at: now, tried: new Set() });
+    return false;
+  }
+  return !seen.tried.has(jfId) && now - seen.at >= RECAP_RETRY_OTHERS_MS;
+}
+
+function noteNegative(key: string, jfId: string, now: number): void {
+  const tried = memory.negative.get(key)?.tried ?? new Set<string>();
+  tried.add(jfId);
+  bounded(memory.negative, key, { at: now, tried });
+}
+
+/** Une série de ce compte en échec : mise de côté (`RECAP_BACKOFF_MS`). */
+function noteSeriesFailure(jfId: string, seriesId: string, now: number): void {
+  const id = `${jfId}:${seriesId}`;
+  const count = (memory.failed.get(id)?.count ?? 0) + 1;
+  bounded(memory.failed, id, { until: now + RECAP_BACKOFF_MS[Math.min(count, RECAP_BACKOFF_MS.length) - 1], count });
+}
+
+function seriesOnHold(jfId: string, seriesId: string, now: number): boolean {
+  return (memory.failed.get(`${jfId}:${seriesId}`)?.until ?? 0) > now;
+}
+
+export function resetRecapMemoryForTests(): void {
+  memory.negative.clear();
+  memory.none.clear();
+  memory.failed.clear();
+}
+
 type Outcome = "préparé" | "gardé" | "officiel" | "rejeté" | "vide" | "déjà" | "pas encore" | "aucun";
 
 /**
  * Préparer le « Précédemment » d'une série pour un compte, s'il y a lieu (règles de Louis, 08/11/2026) :
  * - rien regardé de la série depuis dix minutes (et, vérifié par le passage, aucune lecture en cours) ;
  * - aucun épisode fini : rien (`aucun`) — sans résumé officiel où s'appuyer, des dialogues seuls sont
- *   trop risqués, la fiche garde le synopsis ;
+ *   trop risqués, la fiche garde le synopsis ; jamais écrit sous la clé partagée (11/11/2026) ;
  * - un seul résumé et pas de dialogues (épisode suivant pas commencé, ou sans sous-titres) : ce résumé
  *   tel quel (`officiel`), sans modèle — rien à condenser ;
  * - sinon le modèle, qui reçoit le texte que ce compte avait plus tôt dans l'histoire et le garde si
  *   les dix minutes de plus n'ont rien apporté d'important.
- * Le résultat — même un rejet — est gardé.
+ * Le résultat — même un rejet — est gardé ; un rejet ou un vide n'arrête un autre compte qu'une heure
+ * (`RECAP_RETRY_OTHERS_MS`, 11/11/2026).
  */
 export async function prepareRecap(
   account: { jfId: string; user: string; locale: Locale },
@@ -256,10 +327,16 @@ export async function prepareRecap(
   const key = recapKey(state.episode.Id, state.positionS, account.locale);
   const order = (state.episode.ParentIndexNumber ?? 0) * 1000 + (state.episode.IndexNumber ?? 0);
   const step = recapStep(state.positionS);
-  if (recapDb.get(key)) {
+  const held = recapDb.get(key);
+  // `aucun` d'avant le 11/11/2026 (écrit sous la clé partagée par un compte sans épisode fini) : ne vaut rien
+  // pour les autres. Un `rejeté`/`vide` : un autre compte peut réessayer, une fois, passé une heure.
+  const stale = held?.status === "aucun" || ((held?.status === "rejeté" || held?.status === "vide") && mayRetryNegative(key, account.jfId, now));
+  if (held && !stale) {
     recapDb.setLast(account.jfId, state.seriesId, key, order, step);
     return "déjà";
   }
+  const noneAt = memory.none.get(`${account.jfId}:${key}`);
+  if (noneAt !== undefined && now - noneAt < RECAP_NONE_WAIT_MS) return "aucun";
   const episodes = await episodesOf(account.jfId, state.seriesId);
   const lastPlayed = Math.max(0, ...episodes.map((e) => Date.parse(e.UserData?.LastPlayedDate ?? "") || 0));
   if (now - lastPlayed < RECAP_IDLE_MS) return "pas encore";
@@ -269,7 +346,8 @@ export async function prepareRecap(
     .filter((e) => e.UserData?.Played && (e.Overview ?? "").trim())
     .map((e) => ({ code: code(e), title: e.Name, overview: (e.Overview ?? "").trim() }));
   if (!current || !done.length) {
-    recapDb.put(key, state.seriesId, "aucun", null, now);
+    // Propre à ce compte (ses épisodes finis) : en mémoire, pour lui seul — jamais sous la clé partagée.
+    bounded(memory.none, `${account.jfId}:${key}`, now);
     return "aucun";
   }
   const cues = state.positionS >= RECAP_STARTED_S ? await cuesOf(current, account.locale) : [];
@@ -297,9 +375,10 @@ export async function prepareRecap(
     if (status === 429) throw new RecapRateLimited();
     throw err;
   }
-  const verdict = judgeRecap(answer.raw, input.sources, previous);
+  const verdict = judgeRecap(answer.raw, input.sources, previous, account.locale);
   recapDb.put(key, state.seriesId, verdict.status, verdict.status === "ok" ? verdict.text : null, now);
   if (verdict.status === "ok") recapDb.setLast(account.jfId, state.seriesId, key, order, step);
+  else noteNegative(key, account.jfId, now);
   const kept = verdict.status === "ok" && verdict.kept;
   logRecap({ ...base, status: kept ? "gardé" : verdict.status, ms: Date.now() - started, inTokens: answer.inTokens, outTokens: answer.outTokens, ...(verdict.status === "rejeté" ? { names: verdict.names } : {}) });
   return kept ? "gardé" : verdict.status === "ok" ? "préparé" : verdict.status;
@@ -324,7 +403,8 @@ const pass = (shared[PASS_KEY] ??= { running: false, started: false });
  * leurs séries en cours, une préparation à la fois. Une série qu'un compte est en train de regarder
  * (même en pause, sur n'importe quel appareil, d'après `/Sessions`) est laissée : sa position avance
  * en continu, et Jellyfin ne date parfois une lecture qu'à son début.
- * Arrêté au premier refus de débit ou à la première panne. Il tourne même quand quelqu'un regarde un
+ * Arrêté au premier refus de débit ou au plafond mensuel ; une autre panne ne touche que sa série, mise de côté
+ * un temps pour ce compte (`RECAP_BACKOFF_MS`, 11/11/2026), et le passage continue. Il tourne même quand quelqu'un regarde un
  * film : la première version attendait que plus rien ne joue nulle part, et avec un foyer entier, elle
  * n'a jamais tourné (08/11/2026). Lire les sous-titres d'un épisode est une lecture comme une autre.
  */
@@ -345,11 +425,32 @@ export async function runRecapPass(now = Date.now()): Promise<{ prepared: number
     for (const user of await jellyfin.getUsers()) {
       if (!active.has(user.Id) || !userPrefsDb.getShowRecap(user.Id)) continue;
       const locale = accountLocale(user.Id);
-      for (const state of await positionsOf(user.Id, now)) {
+      let states: Awaited<ReturnType<typeof positionsOf>>;
+      try {
+        states = await positionsOf(user.Id, now);
+      } catch (err) {
+        // « À suivre » illisible pour ce compte : les suivants passent quand même (11/11/2026).
+        logError("recap", err);
+        continue;
+      }
+      for (const state of states) {
         if (made >= PER_PASS || aiBudgetReached()) return result;
         if (watching.has(`${user.Id}:${state.seriesId}`)) continue;
-        // Même déjà prêt (par un autre compte au même endroit), le passage note où en est ce compte.
-        const outcome = await prepareRecap({ jfId: user.Id, user: user.Name, locale }, state, now);
+        if (seriesOnHold(user.Id, state.seriesId, now)) continue;
+        let outcome: Outcome;
+        try {
+          // Même déjà prêt (par un autre compte au même endroit), le passage note où en est ce compte.
+          outcome = await prepareRecap({ jfId: user.Id, user: user.Name, locale }, state, now);
+        } catch (err) {
+          // Une limite de débit arrête tout (le fournisseur refuse pour tous) ; une autre panne met cette série
+          // de côté pour ce compte, comptée dans la borne du passage (un délai du modèle se paie aussi).
+          if (err instanceof RecapRateLimited) throw err;
+          logError("recap", err, { series: state.seriesId });
+          noteSeriesFailure(user.Id, state.seriesId, now);
+          made++;
+          continue;
+        }
+        memory.failed.delete(`${user.Id}:${state.seriesId}`);
         if (outcome === "préparé" || outcome === "gardé" || outcome === "rejeté" || outcome === "vide") made++;
         if (outcome === "préparé" || outcome === "gardé" || outcome === "officiel") result.prepared++;
         if (outcome === "rejeté" || outcome === "vide") result.rejected++;

@@ -49,7 +49,19 @@ export function recapStep(positionS: number): number {
  * comptes — deux personnes arrêtées au même endroit lisent le même texte, demandé une fois.
  */
 export function recapKey(episodeId: string, positionS: number, locale: Locale): string {
-  return `${episodeId}:${recapStep(positionS)}:${locale}`;
+  // `v2` (11/11/2026) : les textes d'avant coupaient à la position de l'arrêt du premier compte — voir `recapCutS`.
+  return `${episodeId}:${recapStep(positionS)}:${locale}:v2`;
+}
+
+/**
+ * Où s'arrêtent les dialogues envoyés : le **début** de la tranche, pas la position de l'arrêt (chasse aux défauts
+ * du 11/11/2026). La clé est partagée par tous les comptes d'une même tranche : coupé à la position du premier
+ * arrêté à 29:50, le texte servait jusqu'à 9 min 40 d'épisode à celui qui s'était arrêté à 20:10. Coupé au début
+ * de la tranche, il ne dit rien que chacun des comptes qui le lisent n'ait vu.
+ */
+export function recapCutS(positionS: number): number {
+  const step = recapStep(positionS);
+  return step === 0 ? positionS : Math.max(RECAP_STARTED_S, (step - 1) * RECAP_STEP_S);
 }
 
 export interface Cue {
@@ -161,13 +173,12 @@ export interface RecapInput {
 /** Ce qui part au modèle, et le texte des sources contre lequel sa réponse est vérifiée. */
 export function recapSources(input: RecapInput): { message: string; sources: string; usedDialogue: boolean } {
   const started = input.positionS >= RECAP_STARTED_S;
-  const lines = started
-    ? input.cues.filter((c) => c.startS <= input.positionS && c.startS >= input.positionS - RECAP_WINDOW_S).map((c) => c.text)
-    : [];
+  const cut = recapCutS(input.positionS);
+  const lines = started ? input.cues.filter((c) => c.startS <= cut && c.startS >= cut - RECAP_WINDOW_S).map((c) => c.text) : [];
   // Avec des dialogues, le dernier épisode fini suffit — le banc remontait sinon un épisode trop loin.
   const done = input.done.filter((e) => e.overview.trim()).slice(lines.length ? -1 : -2);
   const parts = done.map((e) => `### ${e.code} « ${e.title} » — résumé officiel\n${e.overview.trim()}`);
-  const minutes = Math.floor(input.positionS / 60);
+  const minutes = Math.floor(cut / 60);
   if (lines.length) {
     parts.push(`### ${input.current.code} « ${input.current.title} » — épisode EN COURS, dialogues des 10 minutes avant l'arrêt à ${minutes} min\n${lines.join("\n")}`);
   }
@@ -226,17 +237,71 @@ export const RECAP_SCHEMA = {
 } as const;
 
 /**
+ * Les abréviations de titre devant un nom, en fr/en/es/de (chasse aux défauts du 11/11/2026) : leur point
+ * n'est pas une fin de phrase. Le filet le prenait pour tel — « M. Kurtz », « Dr. Wilson », « Sra. García » —, et
+ * le nom qui suit passait pour un début de phrase, que la règle des majuscules ne regarde jamais. Seulement avec
+ * une majuscule (« M. », « Mme », « Dr. ») : « follow me. » ou « the end. » restent des fins de phrase.
+ */
+const TITLE_ABBREVIATIONS = new Set([
+  "m", "mm", "mme", "mmes", "mlle", "mlles", "me", "mgr", "dr", "pr", "prof", "st", "ste",
+  "mr", "mrs", "ms", "messrs", "drs", "sr", "sra", "srta", "sres", "dra", "dña", "hr", "hrn", "fr", "frl",
+]);
+
+/** « M. », « Dr. », « Sra. » — un mot (guillemet ouvrant permis) qui n'est qu'une abréviation de titre suivie d'un point. */
+export function isTitleAbbreviation(word: string): boolean {
+  const m = /^[«"“(]*(\p{Lu}\p{L}{0,5})\.$/u.exec(word);
+  return !!m && TITLE_ABBREVIATIONS.has(m[1].toLowerCase());
+}
+
+/**
+ * La règle des majuscules vaut-elle dans cette langue ? Pas en allemand (chasse aux défauts du 11/11/2026) : tous
+ * les noms communs y prennent une majuscule (« Der Mann verlässt das Haus »), chacun passait pour un nom propre
+ * absent des sources, et presque toute réponse allemande était rejetée — chaque rejet payé. En allemand, seul le
+ * filet des noms déclarés par le modèle (`NOMS:`, `noms`) reste ; une réponse qui n'en déclare pas est rejetée.
+ */
+export function capitalsRuleApplies(locale: Locale | null | undefined): boolean {
+  return locale !== "de";
+}
+
+/**
  * Les noms que les sources ne contiennent pas — venus de la mémoire du modèle. Deux filets : les mots
  * à majuscule hors début de phrase, et les noms que le modèle déclare lui-même (`noms`) — un nom en
  * tête de phrase (« Sansa refuse… », la forme la plus courante) échappe au premier, et ne peut pas
  * être distingué d'un « Pendant » sans liste de mots par langue. Comparé sans casse, mot à mot, à
- * l'intérieur des sources (« Greyjoy » dans « Yara Greyjoy »).
+ * l'intérieur des sources (« Greyjoy » dans « Yara Greyjoy »). `locale` : la langue de la réponse — en
+ * allemand, le premier filet n'est pas tendu (`capitalsRuleApplies`).
  */
-export function unknownNames(text: string, sources: string, declared: readonly string[] = []): string[] {
+export function unknownNames(text: string, sources: string, declared: readonly string[] = [], locale?: Locale | null): string[] {
   const low = sources.toLowerCase();
-  const inner = text.match(/(?<![.!?]\s|^)\b\p{Lu}[\p{L}'’-]{2,}/gu) ?? [];
+  const capitals = capitalsRuleApplies(locale);
+  const inner: string[] = capitals ? (text.match(/(?<![.!?]\s|^)\b\p{Lu}[\p{L}'’-]{2,}/gu) ?? []) : [];
+  // Le nom qui suit une abréviation de titre (« M. Kurtz ») : la règle ci-dessus le croit en tête de phrase.
+  if (capitals) {
+    for (const m of text.matchAll(/(?<![\p{L}\p{N}])(\p{Lu}\p{L}{0,5})\.\s(?=(\p{Lu}[\p{L}'’-]{2,}))/gu)) {
+      if (TITLE_ABBREVIATIONS.has(m[1].toLowerCase())) inner.push(m[2]);
+    }
+  }
   const named = declared.flatMap((n) => n.match(/\p{Lu}[\p{L}'’-]{2,}/gu) ?? []);
-  return [...new Set([...inner, ...named].filter((w) => !low.includes(w.toLowerCase().replace(/['’]s$/, ""))))];
+  // Le titre lui-même (« Mme », « Mrs », « Prof ») n'est pas un nom : seul celui qui le suit l'est.
+  return [...new Set([...inner.filter((w) => !TITLE_ABBREVIATIONS.has(w.toLowerCase())), ...named].filter((w) => !containsWord(low, w.toLowerCase().replace(/['’]s$/, ""))))];
+}
+
+/**
+ * Le mot entier, pas une suite de lettres (chasse aux défauts du 11/11/2026) : « Anne » passait parce que les
+ * sous-titres disaient « année », « Ned » dans « turned », « Paul » dans « épaule ». Une lettre ou un chiffre de
+ * part et d'autre, et ce n'est pas le nom ; une apostrophe, un tiret, une espace ou la ponctuation le bordent
+ * (« d'Anne », « Yara Greyjoy », « Jean-Luc »).
+ */
+function containsWord(haystack: string, word: string): boolean {
+  if (!word) return true;
+  for (let at = haystack.indexOf(word); at >= 0; at = haystack.indexOf(word, at + 1)) {
+    const before = at > 0 ? haystack[at - 1] : "";
+    // Un pluriel des sources (« les Stark » / « the Starks ») vaut le nom.
+    const end = haystack[at + word.length] === "s" ? at + word.length + 1 : at + word.length;
+    const after = haystack[end] ?? "";
+    if (!/[\p{L}\p{N}]/u.test(before) && !/[\p{L}\p{N}]/u.test(after)) return true;
+  }
+  return false;
 }
 
 export type RecapVerdict = { status: "ok"; text: string; kept?: true } | { status: "rejeté"; names: string[] } | { status: "vide" };
@@ -245,7 +310,7 @@ export type RecapVerdict = { status: "ok"; text: string; kept?: true } | { statu
  * Le jugement d'une réponse : nettoyée, coupée, et rejetée au moindre nom inconnu. « Inchangé » rend
  * le texte précédent tel quel — le modèle juge que les dix minutes de plus n'ont rien changé.
  */
-export function judgeRecap(raw: unknown, sources: string, previous?: string | null): RecapVerdict {
+export function judgeRecap(raw: unknown, sources: string, previous?: string | null, locale?: Locale | null): RecapVerdict {
   if ((raw as { inchange?: unknown } | null)?.inchange === true && previous?.trim()) return { status: "ok", text: previous.trim(), kept: true };
   const list = (raw as { phrases?: unknown } | null)?.phrases;
   const phrases = (Array.isArray(list) ? list : [])
@@ -266,7 +331,9 @@ export function judgeRecap(raw: unknown, sources: string, previous?: string | nu
   if (!kept.length) return { status: "vide" };
   const text = kept.join(" ");
   const declaredRaw = (raw as { noms?: unknown } | null)?.noms;
+  // En allemand, les noms déclarés sont le seul filet (`capitalsRuleApplies`) : sans eux, rien n'est vérifié — rejeté.
+  if (!Array.isArray(declaredRaw) && !capitalsRuleApplies(locale)) return { status: "rejeté", names: ["noms"] };
   const declared = Array.isArray(declaredRaw) ? declaredRaw.filter((n): n is string => typeof n === "string") : [];
-  const names = unknownNames(text, sources, declared);
+  const names = unknownNames(text, sources, declared, locale);
   return names.length ? { status: "rejeté", names } : { status: "ok", text };
 }

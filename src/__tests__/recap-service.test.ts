@@ -21,12 +21,13 @@ vi.mock("@/lib/http", async (orig) => ({
   fetchJson: async (url: string) => ({ Items: url.includes("/Items?") ? playedMock() : await nextUpMock() }),
 }));
 
-import { prepareRecap, readyRecapsFor, setRecapModelForTests } from "@/lib/recap/service";
+import { prepareRecap, readyRecapsFor, resetRecapMemoryForTests, setRecapModelForTests, RECAP_RETRY_OTHERS_MS } from "@/lib/recap/service";
 import { recapDb, userPrefsDb } from "@/lib/db";
 import type { JellyfinItem } from "@/lib/clients/jellyfin";
 
 const HOUR = 60 * 60 * 1000;
 const LUCAS = "d".repeat(32);
+const EMMA = "e".repeat(32);
 const NOW = Date.parse("2026-11-08T20:00:00Z");
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
 
@@ -67,6 +68,8 @@ beforeEach(() => {
   playedMock.mockReturnValue([]);
   // La langue du compte est celle de ses préférences ; l'installation des tests est en anglais.
   userPrefsDb.setLang(LUCAS, "fr");
+  userPrefsDb.setLang(EMMA, "fr");
+  resetRecapMemoryForTests();
 });
 
 describe("la préparation", () => {
@@ -130,7 +133,7 @@ describe("la préparation", () => {
     expect(await prepareRecap(account, stateOf(s, 1300), NOW)).toBe("rejeté");
     nextUpMock.mockResolvedValue([{ ...stateOf(s, 1300).episode, SeriesId: s.id }]);
     expect(await readyRecapsFor(LUCAS)).toEqual({});
-    expect(recapDb.get(`${s.items[4].Id}:3:fr`)?.status).toBe("rejeté");
+    expect(recapDb.get(`${s.items[4].Id}:3:fr:v2`)?.status).toBe("rejeté");
   });
 
   it("dix minutes plus loin, le modèle reçoit le texte d'avant et peut le garder ; jamais celui d'un autre compte", async () => {
@@ -142,7 +145,7 @@ describe("la préparation", () => {
     setRecapModelForTests(model);
     expect(await prepareRecap(account, stateOf(s, 1300), NOW)).toBe("gardé");
     expect(model.mock.calls[0][1]).toContain("Ted Lasso arrive à Richmond.");
-    expect(recapDb.get(`${s.items[4].Id}:3:fr`)).toEqual({ status: "ok", text: "Ted Lasso arrive à Richmond." });
+    expect(recapDb.get(`${s.items[4].Id}:3:fr:v2`)).toEqual({ status: "ok", text: "Ted Lasso arrive à Richmond." });
     // Un autre compte, plus loin dans l'histoire : lucas ne reçoit pas son texte.
     recapDb.setLast(LUCAS, s.id, "x", 9999, 9);
     expect(await prepareRecap(account, stateOf(s, 1900), NOW)).toBe("vide");
@@ -156,6 +159,67 @@ describe("la préparation", () => {
     const s = episodes(5 * HOUR);
     serve(s.items);
     await expect(prepareRecap(account, stateOf(s, 1300), NOW)).rejects.toThrow();
-    expect(recapDb.get(`${s.items[4].Id}:3:fr`)).toBeNull();
+    expect(recapDb.get(`${s.items[4].Id}:3:fr:v2`)).toBeNull();
+  });
+});
+
+describe("la clé partagée ne garde pas ce qui dépend d'un compte (11/11/2026)", () => {
+  const emma = { jfId: EMMA, user: "emma", locale: "fr" as const };
+  /** Les mêmes épisodes, vus autrement : `played` premiers finis pour ce compte. */
+  const seenBy = (series: ReturnType<typeof episodes>, played: number) =>
+    series.items.map((e, i) => ({ ...e, UserData: { ...e.UserData, Played: i < played, LastPlayedDate: ago(5 * HOUR) } }));
+  const good = async () => ({ raw: { noms: ["Ted Lasso"], phrases: [{ texte: "Ted Lasso arrive à Richmond.", episodes: [] }] }, inTokens: 1, outTokens: 1 });
+
+  it("un compte sans épisode fini (`aucun`) n'occupe pas la clé : un autre compte au même endroit reçoit son texte", async () => {
+    const model = vi.fn(good);
+    setRecapModelForTests(model);
+    const s = episodes(5 * HOUR, 0);
+    serve(seenBy(s, 0));
+    expect(await prepareRecap(account, stateOf(s, 1300), NOW)).toBe("aucun");
+    expect(recapDb.get(`${s.items[4].Id}:3:fr:v2`)).toBeNull();
+    // Le même compte n'est pas relu à chaque passage : une heure sans lire Jellyfin.
+    const reads = fetchMock.mock.calls.length;
+    expect(await prepareRecap(account, stateOf(s, 1300), NOW + 60_000)).toBe("aucun");
+    expect(fetchMock.mock.calls.length).toBe(reads);
+    serve(seenBy(s, 4));
+    expect(await prepareRecap(emma, stateOf(s, 1300), NOW)).toBe("préparé");
+    expect(model).toHaveBeenCalledTimes(1);
+  });
+
+  it("un `aucun` gardé sous la clé avant le correctif ne bloque plus personne", async () => {
+    setRecapModelForTests(good);
+    const s = episodes(5 * HOUR);
+    recapDb.put(`${s.items[4].Id}:3:fr:v2`, s.id, "aucun", null, NOW);
+    serve(s.items);
+    expect(await prepareRecap(emma, stateOf(s, 1300), NOW)).toBe("préparé");
+  });
+
+  it("un rejet obtenu avec les sources d'un compte : un autre compte réessaie une fois passé le délai, jamais le même", async () => {
+    let n = 0;
+    setRecapModelForTests(async () => (++n === 1 ? { raw: { noms: ["Keeley Jones"], phrases: [{ texte: "Keeley Jones quitte Richmond.", episodes: [] }] }, inTokens: 1, outTokens: 1 } : good()));
+    const s = episodes(5 * HOUR);
+    serve(s.items);
+    expect(await prepareRecap(account, stateOf(s, 1300), NOW)).toBe("rejeté");
+    // Avant le délai : « déjà », sans appel.
+    expect(await prepareRecap(emma, stateOf(s, 1300), NOW + 60_000)).toBe("déjà");
+    expect(n).toBe(1);
+    // Le même compte ne repaie pas la même réponse, même après le délai.
+    expect(await prepareRecap(account, stateOf(s, 1300), NOW + RECAP_RETRY_OTHERS_MS + 60_000)).toBe("déjà");
+    expect(n).toBe(1);
+    // Un autre compte, passé le délai : une nouvelle tentative, et le texte est gardé pour tous.
+    expect(await prepareRecap(emma, stateOf(s, 1300), NOW + RECAP_RETRY_OTHERS_MS + 60_000)).toBe("préparé");
+    expect(n).toBe(2);
+    expect(recapDb.get(`${s.items[4].Id}:3:fr:v2`)).toEqual({ status: "ok", text: "Ted Lasso arrive à Richmond." });
+  });
+
+  it("un rejet gardé avant un redémarrage : le délai repart du premier passage qui le revoit, sans appel immédiat", async () => {
+    const model = vi.fn(good);
+    setRecapModelForTests(model);
+    const s = episodes(5 * HOUR);
+    recapDb.put(`${s.items[4].Id}:3:fr:v2`, s.id, "vide", null, NOW - 10 * HOUR);
+    serve(s.items);
+    expect(await prepareRecap(emma, stateOf(s, 1300), NOW)).toBe("déjà");
+    expect(model).not.toHaveBeenCalled();
+    expect(await prepareRecap(emma, stateOf(s, 1300), NOW + RECAP_RETRY_OTHERS_MS)).toBe("préparé");
   });
 });

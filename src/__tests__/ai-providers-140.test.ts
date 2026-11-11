@@ -227,11 +227,27 @@ describe("les garde-fous ne dépendent pas du fournisseur", () => {
 
   it("ce qui part au modèle s'arrête à la position, comme chez Anthropic", async () => {
     await question(account());
-    // Le préfixe partagé dans `stable` (cache implicite du fournisseur), la question dans `user`.
     const sent = [...calls[0].call.stable, calls[0].call.user].join("");
     expect(sent).toContain("Ariadne construit le labyrinthe.");
     expect(sent).not.toContain("Fischer");
     expect(calls[0].call.user).toContain("Que vient-il de se passer ?");
+  });
+
+  it.each(["openai", "google"])("les sources restent des données (%s, 11/11/2026) : dans le message, jamais dans les instructions système", async (provider) => {
+    cfg.provider = provider;
+    await question(account());
+    await sofar(account());
+    await settle();
+    expect(calls).toHaveLength(2);
+    for (const { call } of calls) {
+      // `stable` part dans `instructions` (OpenAI) / `systemInstruction` (Gemini) : rien des sources n'y va.
+      expect(call.stable).toEqual([]);
+      expect(call.system).not.toContain("Ariadne construit le labyrinthe.");
+      expect(call.system).not.toContain("Dom Cobb vole des secrets");
+      // Les sources d'abord dans le message — le début commun que leur cache implicite relit.
+      expect(call.user.startsWith("<sources>")).toBe(true);
+      expect(call.user).toContain("Ariadne construit le labyrinthe.");
+    }
   });
 
   it("« Jusqu'ici » (OpenAI) : gardé et partagé — le second compte ne rappelle pas le fournisseur", async () => {

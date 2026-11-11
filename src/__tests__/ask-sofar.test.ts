@@ -55,6 +55,7 @@ import { askContent, ASK_MODEL, SOFAR_MAX_OUTPUT_TOKENS } from "@/lib/ask/servic
 import { metaReminder, type AskContextInput } from "@/lib/ask/core";
 import { SOFAR_DIALOGUE_WAIT_MS, SOFAR_PER_HOUR } from "@/lib/ask/sofarRequest";
 import { getDb, sofarDb } from "@/lib/db";
+import { AI_CALLS_PER_DAY, aiDailyTake } from "@/lib/aiFeatures";
 
 const MOVIE = "a".repeat(32);
 const ticks = (s: number) => s * 10_000_000;
@@ -291,6 +292,39 @@ describe("préparé en fond", () => {
     const kept = await sofar(a, { prewarm: true, positionS: 601 });
     expect(kept.events).toEqual([{ t: "queued" }]);
   });
+
+  it(`la borne journalière commune (11/11/2026) : ${AI_CALLS_PER_DAY} appels payants par jour local, questions et « Jusqu'ici » ensemble — puis « limite », le lendemain de nouveau`, async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      // 23 h passées, heure du foyer : le jour change à minuit local.
+      const t0 = new Date(2026, 10, 11, 23, 0, 0).getTime();
+      vi.setSystemTime(t0);
+      let n = 0;
+      setAskModelForTests((req) => scripted(`NOMS: Ariadne\n\nAriadne construit le labyrinthe numéro ${++n}.`)(req));
+      const a = account();
+      const jfId = sessions[a].jfId!;
+      // Le compte a déjà posé tant de questions aujourd'hui qu'il ne lui reste qu'un appel.
+      for (let i = 0; i < AI_CALLS_PER_DAY - 1; i++) expect(aiDailyTake(jfId)).toBe(true);
+      expect((await sofar(a, { prewarm: true })).events).toEqual([{ t: "queued" }]);
+      await settle();
+      expect(n).toBe(1);
+      // Plein : une nouvelle entrée de « Jusqu'ici » et une question répondent « limite », sans appel.
+      expect((await sofar(a, { prewarm: true, positionS: 25 * 60 })).events).toEqual([{ t: "error", code: "limite" }]);
+      expect((await question(a)).events).toEqual([{ t: "error", code: "limite" }]);
+      expect(n).toBe(1);
+      expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ status: "limite" }));
+      expect(askLog).toHaveBeenCalledWith(expect.objectContaining({ status: "limite" }));
+      // Un texte déjà gardé ne coûte rien : servi quand même.
+      expect((await sofar(a, { prewarm: true })).events).toEqual([{ t: "queued" }]);
+      // Un autre compte n'en est pas touché.
+      expect((await sofar(account(), { prewarm: true, positionS: 25 * 60 })).events).toEqual([{ t: "queued" }]);
+      // Minuit passé chez le foyer : de nouveau.
+      vi.setSystemTime(new Date(2026, 10, 12, 0, 1, 0).getTime());
+      expect((await sofar(a, { prewarm: true, positionS: 35 * 60 })).events).toEqual([{ t: "queued" }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("les pannes du modèle : dites proprement, jamais gardées", () => {
@@ -433,15 +467,35 @@ describe("10.29.2 — une panne passagère : une attente courte avant de rappele
     }
   });
 
-  it("un refus du modèle n'ouvre pas d'attente : le toucher suivant le redemande (une panne ordinaire)", async () => {
-    let n = 0;
-    setAskModelForTests((req) => (n++, scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe.", [], "refusal")(req)));
-    const a = account();
-    await sofar(a);
-    await settle();
-    await sofar(a);
-    await settle();
-    expect(n).toBe(2);
+  it("un refus du modèle : gardé une heure sous sa clé (11/11/2026) — la même entrée n'est pas repayée, une autre entrée du compte passe", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const t0 = Date.parse("2026-11-11T20:00:00Z");
+      vi.setSystemTime(t0);
+      let n = 0;
+      setAskModelForTests((req) => (n++, scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe.", [], "refusal")(req)));
+      const a = account();
+      expect((await sofar(a)).events.at(-1)).toEqual({ t: "error", code: "erreur" });
+      await settle();
+      // La même entrée, ce compte ou un autre : la ligne discrète, sans appel — au journal, `erreur` lue du cache.
+      expect((await sofar(a)).events).toEqual([{ t: "error", code: "erreur" }]);
+      expect((await sofar(account())).events).toEqual([{ t: "error", code: "erreur" }]);
+      expect(n).toBe(1);
+      expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cache: "compte", status: "erreur" }));
+      // Pas une panne passagère : aucune attente pour le compte, une autre entrée part.
+      await sofar(a, { positionS: 25 * 60 });
+      await settle();
+      expect(n).toBe(2);
+      // Une heure passée : redemandé.
+      vi.setSystemTime(t0 + SOFAR_REJECT_KEEP_MS + 1000);
+      await sofar(a);
+      await settle();
+      expect(n).toBe(3);
+      // Jamais en base : ce n'est ni un texte ni « rien à dire ».
+      expect(getDb().prepare("SELECT COUNT(*) AS n FROM sofar_texts").get()).toEqual({ n: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -554,7 +608,7 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     expect(r.text).toBe("Ariadne construit le labyrinthe.");
   });
 
-  it("le second passage encore vidé : la ligne discrète, rien de gardé, jamais un troisième appel", async () => {
+  it("le second passage encore vidé : la ligne discrète, gardée une heure en mémoire (11/11/2026), jamais un troisième appel", async () => {
     const reqs: { message: string }[] = [];
     setAskModelForTests(sequence(["NOMS: Ariadne\n\nAriadne dessine dans cette scène.", "NOMS: Ariadne\n\nUne réplique le dit."], reqs));
     const r = await sofar(account());
@@ -563,11 +617,23 @@ describe("10.27.2 — « rien à dire » réservé à l'absent, la version dans 
     expect(r.events.at(-1)).toEqual({ t: "rejected" });
     await settle();
     expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ status: "vide", meta: "regénéré" }));
-    // Rien de gardé : ce n'est pas « rien à dire », la demande suivante redemande.
+    // Gardé une heure (11/11/2026) : la même entrée ne repaie pas deux passages à chaque ouverture — mais pas en
+    // base, ce n'est pas « rien à dire » (trente jours).
     const model = vi.fn(scripted("NOMS: Ariadne\n\nAriadne construit le labyrinthe."));
     setAskModelForTests(model);
-    expect((await sofar(account())).text).toBe("Ariadne construit le labyrinthe.");
-    expect(model).toHaveBeenCalledTimes(1);
+    expect((await sofar(account())).events).toEqual([{ t: "rejected" }]);
+    expect(model).not.toHaveBeenCalled();
+    expect(sofarLog).toHaveBeenCalledWith(expect.objectContaining({ cache: "partagé", status: "vide" }));
+    expect(getDb().prepare("SELECT COUNT(*) AS n FROM sofar_texts").get()).toEqual({ n: 0 });
+    // L'heure passée, la demande suivante redemande.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + SOFAR_REJECT_KEEP_MS + 1000);
+      expect((await sofar(account())).text).toBe("Ariadne construit le labyrinthe.");
+      expect(model).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -655,7 +721,7 @@ describe("10.27.2 — le cache de prompts : le préfixe partagé d'abord, la per
 });
 
 describe("10.27.2 — le plafond de sortie de « Jusqu'ici »", () => {
-  it("parti avec son plafond ; atteint, une panne jamais gardée (la ligne discrète à l'écran)", async () => {
+  it("parti avec son plafond ; atteint, une panne gardée une heure en mémoire, jamais en base (la ligne discrète à l'écran)", async () => {
     const seen: (number | undefined)[] = [];
     setAskModelForTests(({ maxTokens }) => {
       seen.push(maxTokens);
@@ -669,6 +735,9 @@ describe("10.27.2 — le plafond de sortie de « Jusqu'ici »", () => {
     expect(r.events.at(-1)).toEqual({ t: "error", code: "erreur" });
     await settle();
     expect(getDb().prepare("SELECT COUNT(*) AS n FROM sofar_texts").get()).toEqual({ n: 0 });
+    // La même entrée redonnerait la même réponse coupée (11/11/2026) : la réouverture n'appelle plus le modèle.
+    expect((await sofar(account())).events).toEqual([{ t: "error", code: "erreur" }]);
+    expect(seen).toHaveLength(1);
   });
 });
 

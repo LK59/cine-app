@@ -226,6 +226,29 @@ describe("AnswerGate — la réponse vérifiée mot par mot (10.28.0 ; phrase pa
     expect(said(gate.push("Le film parle de rêves. "))).toBe("Le film parle de rêves.");
   });
 
+  it("« M. Kurtz » : le point d'une abréviation ne finit pas la phrase, le nom qui suit est vérifié (11/11/2026)", () => {
+    const gate = new AnswerGate(sources);
+    const out = gate.push("NOMS: Cobb\n\nCobb rencontre M. Saito à Tokyo. ");
+    expect(out.release).toEqual([]);
+    expect(out.rejected).toEqual(["Saito"]);
+    // Une abréviation connue des sources passe, et ne compte pas pour une phrase.
+    const ok = new AnswerGate(`${sources}\nLe docteur Miles.`);
+    ok.push("NOMS: Cobb, Miles\n\nCobb consulte Dr. Miles. Ariadne écoute. ");
+    expect(ok.sentences).toEqual(["Cobb consulte Dr. Miles.", "Ariadne écoute."]);
+  });
+
+  it("en allemand : les noms communs à majuscule passent, les noms déclarés restent vérifiés, et sans ligne des noms rien ne passe (11/11/2026)", () => {
+    const de = { locale: "de" as const, sources, retry: false, onMeta: "replace" as const };
+    const gate = new AnswerGate(sources, undefined, de);
+    gate.push("NOMS: Ariadne\n\nAriadne baut das Labyrinth für den Traum. ");
+    expect(gate.end().rejected).toBeUndefined();
+    expect(gate.text).toBe("Ariadne baut das Labyrinth für den Traum.");
+    // La même réponse en français aurait été rejetée par la règle des majuscules.
+    expect(new AnswerGate(sources, undefined, { ...de, locale: "fr" }).push("NOMS: Ariadne\n\nAriadne baut das Labyrinth für den Traum. ").rejected).toEqual(["Labyrinth"]);
+    expect(new AnswerGate(sources, undefined, de).push("NOMS: Ariadne, Saito\n\nAriadne baut. ").rejected).toEqual(["Saito"]);
+    expect(new AnswerGate(sources, undefined, de).push("Ariadne baut das Labyrinth. ").rejected).toEqual(["NOMS:"]);
+  });
+
   it("la longueur demandée n'est pas tenue : coupée à cinq phrases", () => {
     const gate = new AnswerGate(sources);
     const out = gate.push("NOMS: —\n\n" + "Une phrase. ".repeat(8));

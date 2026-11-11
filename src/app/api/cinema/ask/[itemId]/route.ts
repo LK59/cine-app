@@ -9,7 +9,7 @@ import { logError } from "@/lib/logger";
 import { logAskQuestion } from "@/lib/eventLogs";
 import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { ASK_MAX_OUTPUT_TOKENS, askAvailableFor, currentAskModel, gatherAskContext, prepareAskContext } from "@/lib/ask/service";
-import { aiBudgetReached, askPersonAvailableFor, sofarAvailableFor } from "@/lib/aiFeatures";
+import { aiBudgetReached, aiDailyTake, askPersonAvailableFor, sofarAvailableFor } from "@/lib/aiFeatures";
 import { answerSofar, readSofarBody } from "@/lib/ask/sofarRequest";
 import { actorFactsForAsk } from "@/lib/xray/person";
 import { speakerSegments } from "@/lib/xray/voices";
@@ -51,8 +51,10 @@ export const dynamic = "force-dynamic";
  * Ce qui est vu est lu sous l'identité du compte (`gatherAskContext`) : un titre caché répond
  * `indisponible`, comme un titre inconnu. Réglée sur `admins`, l'option répond « off » à tout autre compte.
  * Un lien de partage reçoit toujours « off » (10.28.1, `aiAudienceAllows` : aucune fonction d'IA pour un
- * lien) ; `SHARE_RULES` garde la route (portée `path`) pour que ce refus soit un 200, pas un 403. Bornée par compte : 60 questions par heure, 300 par jour (10.27 : le propriétaire ne veut
- * pas brider — les bornes ne gardent que d'un client qui boucle). Une ligne par question dans
+ * lien) ; `SHARE_RULES` garde la route (portée `path`) pour que ce refus soit un 200, pas un 403. Bornée par compte : 60 questions par heure (10.27 : le propriétaire ne veut
+ * pas brider — les bornes ne gardent que d'un client qui boucle), et depuis le 11/11/2026 la borne journalière
+ * commune à tous les appels payants du compte (`aiDailyTake`, 300 par jour local) — elle remplace les 300 questions
+ * par 24 h glissantes, qui laissaient « Jusqu'ici » et la recherche vider le plafond mensuel à côté. Une ligne par question dans
  * `recherche.log` (`logAskQuestion`) — jamais la question ni la réponse.
  *
  * `POST { mode: "jusquici", personId, positionS, prewarm? }` : « Jusqu'ici », deux phrases sur un
@@ -78,9 +80,7 @@ export const dynamic = "force-dynamic";
  * `server.log` (`ask/model`), `erreur` au journal ; l'écran propose « Réessayer ».
  */
 export const ASK_PER_HOUR = 60;
-export const ASK_PER_DAY = 300;
 const perHour = createRateLimiter(ASK_PER_HOUR, 60 * 60 * 1000);
-const perDay = createRateLimiter(ASK_PER_DAY, 24 * 60 * 60 * 1000);
 
 const PRIVATE = { "Cache-Control": "private, no-store" };
 const STREAM_HEADERS = {
@@ -173,7 +173,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ itemId: 
     return oneShot({ t: "error", code: "indisponible" });
   }
   const account = session.jfId;
-  if (!perHour(account) || !perDay(account)) {
+  if (!perHour(account) || !aiDailyTake(account)) {
     logAskQuestion({ ...who, status: "limite", ms: 0 });
     return oneShot({ t: "error", code: "limite" });
   }

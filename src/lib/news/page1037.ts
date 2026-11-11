@@ -1,4 +1,4 @@
-import type { NewsContentByLang } from "./content";
+import type { NewsContent, NewsContentByLang, NewsLang } from "./content";
 
 /**
  * La page « 10.37 » — ce que les versions 10.14 à 10.37 ont changé pour tout le monde (11/11/2026).
@@ -130,4 +130,26 @@ export const NEWS_1037_CONTENT: NewsContentByLang = {
     fixesSummary: "Dieses Update fügt „Bisher“ zu Serien hinzu und strafft die Titelseiten am Computer.",
     fixes: [],
   },
+};
+
+/**
+ * Le contenu semé sur une installation : « Précédemment » seulement là où l'option est allumée (chasse aux défauts
+ * du 11/11/2026) — l'image publique la livre coupée (`RECAP_ENABLED`), et la page l'annonçait avec son réglage.
+ */
+export function news1037Content(recapEnabled: boolean): NewsContentByLang {
+  if (recapEnabled) return NEWS_1037_CONTENT;
+  const without = (lang: NewsLang): NewsContent | null => {
+    const content = NEWS_1037_CONTENT[lang];
+    if (!content) return null;
+    const sections = content.sections.filter((section) => !section.entries.some((e) => e.icon === "next"));
+    return { ...content, sections, fixesSummary: FIXES_SUMMARY_WITHOUT_RECAP[lang] };
+  };
+  return { fr: without("fr")!, en: without("en"), es: without("es"), de: without("de") };
+}
+
+const FIXES_SUMMARY_WITHOUT_RECAP: Record<NewsLang, string> = {
+  fr: "Cette mise à jour resserre les fiches sur ordinateur.",
+  en: "This update tightens title pages on computers.",
+  es: "Esta actualización ajusta las fichas en el ordenador.",
+  de: "Dieses Update strafft die Titelseiten am Computer.",
 };

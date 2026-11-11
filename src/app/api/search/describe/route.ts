@@ -6,6 +6,7 @@ import { catalogueMembers } from "@/lib/catalogueMembers";
 import { createTmdbClient, tmdb } from "@/lib/clients/tmdb";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
 import { createRateLimiter } from "@/lib/rateLimiter";
+import { aiDailyRefund, aiDailyTake } from "@/lib/aiFeatures";
 import { LOCALE_COOKIE, getTmdbLocale, type Locale } from "@/lib/i18n";
 import { logError } from "@/lib/logger";
 import { logDescribeSearch } from "@/lib/eventLogs";
@@ -27,7 +28,8 @@ export const dynamic = "force-dynamic";
  * d'ici : seulement des titres retrouvés dans TMDB.
  *
  * Une borne par compte : chaque phrase nouvelle est un appel payant. Trente par minute laisse taper
- * en paix et arrête une boucle.
+ * en paix et arrête une boucle. Depuis le 11/11/2026, aussi la borne journalière commune à tous les appels payants
+ * du compte (`aiDailyTake`) : prise avant, rendue quand le cache a répondu sans le modèle.
  *
  * Chaque phrase laisse une ligne dans `recherche.log` (`logDescribeSearch`) : compte, mots, délai,
  * cache ou modèle, résultats — jamais la phrase.
@@ -47,7 +49,8 @@ export async function GET(req: NextRequest) {
   const started = Date.now();
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
   const who = { user: session?.jfUser ?? session?.u ?? "anonyme", device: requestDeviceLabel(req), words: q.split(/\s+/).length };
-  if (!describeAllowed(session?.jfId ?? session?.u ?? "anonyme")) {
+  const account = session?.jfId ?? session?.u ?? "anonyme";
+  if (!describeAllowed(account)) {
     logDescribeSearch({ ...who, status: "limite", ms: Date.now() - started });
     return NextResponse.json({ available, results: [] }, { status: 429 });
   }
@@ -57,6 +60,10 @@ export async function GET(req: NextRequest) {
   const tmdbLocale = getTmdbLocale(locale);
   const client = tmdbLocale === "fr-FR" ? tmdb : createTmdbClient(tmdbLocale);
   if (!client.isEnabled()) return NextResponse.json({ available, results: [] });
+  if (!aiDailyTake(account)) {
+    logDescribeSearch({ ...who, status: "limite", ms: Date.now() - started });
+    return NextResponse.json({ available, results: [] }, { status: 429 });
+  }
 
   let titles;
   let modelMs: number | undefined;
@@ -65,10 +72,14 @@ export async function GET(req: NextRequest) {
       modelMs = ms;
     });
   } catch (error) {
+    // Une panne n'est pas rendue à la borne du jour : l'appel a pu être facturé.
     logError("describe-search", error);
     logDescribeSearch({ ...who, status: "erreur", ms: Date.now() - started });
     return NextResponse.json({ available, results: [] }, { status: 502 });
   }
+
+  // Servie par le cache, sans le modèle : rien n'a coûté, la place du jour est rendue.
+  if (modelMs === undefined) aiDailyRefund(account);
 
   const [hits, movies, series, members] = await Promise.all([
     Promise.all(titles.map((t) => findOnTmdb(t, client, tmdbLocale).catch(() => null))),

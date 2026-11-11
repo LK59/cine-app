@@ -5,7 +5,8 @@ import { logError } from "@/lib/logger";
 import { taskLog } from "@/lib/taskLog";
 import { analysisTarget, castOf, castWithPhotos, nextEpisodeAfter, originalLanguageOf } from "./cast";
 import { keepsAnalysis, rebindAnalysis } from "./rebind";
-import { recordFileVersion } from "./scanStore";
+import { isAnimationExcluded, recordFileVersion } from "./scanStore";
+import { isLibraryPath } from "./scanPlan";
 
 /**
  * Commander l'analyse des acteurs à l'écran (DECISIONS.md §138).
@@ -61,7 +62,7 @@ export function forgetXrayOrders(): void {
 export type OrderOutcome =
   | { status: "off" }
   | { status: "skipped"; reason: "recent" | "limit" }
-  | { status: "unavailable"; reason: "no-file" | "no-cast" }
+  | { status: "unavailable"; reason: "no-file" | "no-cast" | "outside" | "animation" }
   | { status: "ordered"; answer: XrayJobAnswer; cast: number }
   | { status: "failed"; error: string };
 
@@ -117,6 +118,14 @@ export async function orderAnalysis(itemId: string, options: OrderOptions, now =
   try {
     const target = await analysisTarget(id);
     if (!target) return { status: "unavailable", reason: "no-file" };
+    // Les deux refus du planificateur valent aussi pour une séance (chasse aux défauts du 11/11/2026) : jamais un
+    // fichier hors des dossiers permis (téléchargements, seeds), jamais l'animation écartée — ouverte à tous, la
+    // ligne `start` aurait fait analyser en `high` les 1 300 éléments animés au fil des visionnages. Une commande
+    // forcée par l'administrateur (`/api/admin/xray`) passe.
+    if (!options.force) {
+      if (!isLibraryPath(target.path)) return { status: "unavailable", reason: "outside" };
+      if (isAnimationExcluded(id)) return { status: "unavailable", reason: "animation" };
+    }
     // Sans distribution, le service n'aurait aucun visage à nommer : rien n'est commandé.
     const cast = target.tmdb ? await castOf(target.tmdb) : [];
     if (cast.length === 0) return { status: "unavailable", reason: "no-cast" };
@@ -179,9 +188,11 @@ export function noteSessionStart(itemId: unknown, position: unknown, account: st
     const at = typeof position === "number" && Number.isFinite(position) && position > 0 ? position : undefined;
     void (async () => {
       const outcome = await orderAnalysis(itemId, { priority: "high", startAt: at, account });
-      // L'épisode suivant, seulement quand celui-ci a été commandé ou l'était déjà : un élément sans
-      // fichier ni distribution n'entraîne pas la série.
-      if (outcome.status !== "ordered" && !(outcome.status === "skipped" && outcome.reason === "recent")) return;
+      // L'épisode suivant, seulement quand celui-ci vient d'être commandé : déjà commandé (`recent`), le suivant
+      // l'a été avec lui — chaque reconstruction, relance ou changement de piste relisait sinon toute la série
+      // chez Jellyfin (chasse aux défauts du 11/11/2026). Un élément sans fichier ni distribution n'entraîne pas
+      // la série.
+      if (outcome.status !== "ordered") return;
       const target = await analysisTarget(itemId.toLowerCase());
       if (target?.type !== "Episode" || !target.seriesId) return;
       const next = nextEpisodeAfter(await jellyfin.getEpisodesAdmin(target.seriesId), target.itemId);

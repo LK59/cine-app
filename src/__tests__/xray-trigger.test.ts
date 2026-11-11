@@ -27,6 +27,12 @@ vi.mock("@/lib/share/guard", () => ({
   shareRefusal: async (session: { role?: string }, itemId: unknown) => (session.role === "share" && itemId !== "a".repeat(32) ? new Response(null, { status: 403 }) : null),
 }));
 
+// Un titre caché à ce compte (tag bloqué) : Jellyfin le refuse sous son identité.
+const HIDDEN = "c".repeat(32);
+vi.mock("@/lib/itemVisibility", () => ({
+  assertVisible: async (_session: unknown, itemId: string) => (itemId === "c".repeat(32) ? new Response(null, { status: 404 }) : null),
+}));
+
 const ITEM = "a".repeat(32);
 
 async function post(kind: string, fields: Record<string, unknown>) {
@@ -44,13 +50,13 @@ beforeEach(() => {
 describe("POST /api/player/log → acteurs à l'écran", () => {
   it("une ligne `start` commande l'analyse de l'élément, à sa position, au nom du compte", async () => {
     expect((await post("start", { itemId: ITEM, at: 812.4, path: "remux" })).status).toBe(200);
-    expect(mockNote).toHaveBeenCalledWith(ITEM, 812.4, "louis");
+    await vi.waitFor(() => expect(mockNote).toHaveBeenCalledWith(ITEM, 812.4, "louis"));
     expect(mockLog).toHaveBeenCalledTimes(1);
   });
 
   it("le lecteur du serveur aussi (sa ligne porte `at` = la reprise)", async () => {
     await post("start", { itemId: ITEM, at: 0, path: "serveur", why: "open" });
-    expect(mockNote).toHaveBeenCalledWith(ITEM, 0, "louis");
+    await vi.waitFor(() => expect(mockNote).toHaveBeenCalledWith(ITEM, 0, "louis"));
   });
 
   it("ni les autres lignes, ni un banc, ni le lecteur hors ligne, ni l'option coupée", async () => {
@@ -71,7 +77,7 @@ describe("POST /api/player/log → acteurs à l'écran", () => {
     expect(mockNote).not.toHaveBeenCalled();
     mockVerify.mockResolvedValue({ u: "admin", jfId: "f".repeat(32), role: "admin" });
     await post("start", { itemId: ITEM, at: 5 });
-    expect(mockNote).toHaveBeenCalledWith(ITEM, 5, "admin");
+    await vi.waitFor(() => expect(mockNote).toHaveBeenCalledWith(ITEM, 5, "admin"));
   });
 
   it("un lien de partage : seulement son titre", async () => {
@@ -79,6 +85,13 @@ describe("POST /api/player/log → acteurs à l'écran", () => {
     await post("start", { itemId: "b".repeat(32), at: 1 });
     expect(mockNote).not.toHaveBeenCalled();
     await post("start", { itemId: ITEM, at: 1 });
-    expect(mockNote).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(mockNote).toHaveBeenCalledTimes(1));
+  });
+
+  it("un titre caché à ce compte n'est jamais commandé (chasse aux défauts du 11/11/2026)", async () => {
+    await post("start", { itemId: HIDDEN, at: 1 });
+    await post("start", { itemId: ITEM, at: 1 });
+    await vi.waitFor(() => expect(mockNote).toHaveBeenCalledTimes(1));
+    expect(mockNote).toHaveBeenCalledWith(ITEM, 1, "louis");
   });
 });

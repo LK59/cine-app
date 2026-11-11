@@ -36,6 +36,9 @@ services:
       # Keeps `next dev` out of .next/, which the production image build also writes to — running
       # both at once would otherwise have them fighting over the same directory.
       - NEXT_DIST_DIR=.next-dev
+      # A second copy of the app talks to the real services through the same .env and data/ (DECISIONS §145):
+      # notifications, request masking, the backup, paid recaps would all run twice. Background jobs stay off.
+      - CINE_BACKGROUND_JOBS=off
     command: sh -c "npm run dev -- --port 3000"
     volumes:
       # The working tree itself: this is what makes an edit visible without a rebuild.

@@ -11,6 +11,7 @@ import { readRecords, type LogRecord } from "@/lib/activity/logReader";
 import { acknowledgeSeances, dismissedIssues } from "@/lib/activity/alertsCleared";
 import { lastLocalDays, localDay, problemsOf, seancesSince } from "@/lib/activity/accounts";
 import { aiCostStats, utcDay, type AiCostStats } from "@/lib/activity/aiCost";
+import { aiUsageStats, type AiUsageStats } from "@/lib/activity/aiUsage";
 import { aiBudget } from "@/lib/aiFeatures";
 import { spendDb } from "@/lib/subtitleGen/store";
 import type { Seance } from "@/lib/activity/seances";
@@ -101,6 +102,8 @@ export interface Dashboard {
   describe: DescribeStats;
   /** Ce que coûtent les fonctions d'IA payantes, lu de la source du plafond (10.28.0, `aiCost.ts`, §140). */
   aiCost: AiCostStats;
+  /** Sept jours d'acteurs à l'écran, de questions et de « Jusqu'ici » (11/11/2026, `aiUsage.ts`). */
+  aiUsage: AiUsageStats;
   /** Les lignes de « À gérer » qui viennent des journaux du serveur, d'après l'effacement. */
   alarms: Alarms;
   /** Les lignes effacées une à une — `alertsCleared.ts`. */
@@ -292,6 +295,12 @@ export function describeStats(now = Date.now()): DescribeStats {
  * Le coût des fonctions d'IA (§140, 10.28.0) : la source même du plafond — le mois (`aiBudget`) et les journées
  * par fonction (`ai_spend_days`) —, jamais un second calcul.
  */
+/** Sept jours d'usage des fonctions de la séance (`aiUsage.ts`) — les journaux déjà lus, rien de plus. */
+export function aiUsageOf(now = Date.now()): AiUsageStats {
+  const since = now - 7 * DAY;
+  return aiUsageStats(readRecords("player", since), readRecords("search", since), since);
+}
+
 export function aiCostOf(now = Date.now()): AiCostStats {
   return aiCostStats(spendDb.days(utcDay(now, 29)), aiBudget(now), now);
 }
@@ -436,6 +445,7 @@ export function dashboard(now = Date.now(), clearedAt = 0): Dashboard {
     describe = { searches: 0, modelCalls: 0, medianMs: null, accounts: 0, errors: 0 };
   }
   const aiCost = safe(() => aiCostOf(now), aiCostStats([], { spent: 0, cap: 0 }, now));
+  const aiUsage = safe(() => aiUsageOf(now), aiUsageStats([], [], now));
   return {
     periods: {
       day: periodStats(month.filter((s) => s.start >= now - DAY)),
@@ -453,6 +463,7 @@ export function dashboard(now = Date.now(), clearedAt = 0): Dashboard {
     hours,
     describe,
     aiCost,
+    aiUsage,
     alarms: safe(() => alarmsOf(now, clearedAt), { server: [], logins: null, notifications: null }),
     dismissed: safe(() => dismissedIssues(), {}),
   };

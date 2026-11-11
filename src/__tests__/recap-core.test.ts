@@ -22,9 +22,16 @@ describe("ce qui part au modèle", () => {
     expect(message).toContain("Petyr convainc");
     expect(message).not.toContain("Daenerys"); // un épisode trop loin, au banc
     expect(message).toContain("- Le roi est mort. - Vive la reine.");
-    expect(message).toContain("Juste avant l'arrêt.");
     expect(message).not.toContain("Tout au début.");
     expect(message).not.toContain("jamais envoyé");
+  });
+
+  it("coupé au début de la tranche, pas à l'arrêt : le texte est partagé par tous les comptes de la tranche (11/11/2026)", () => {
+    // Arrêté à 25:00, tranche 20-30 min : un autre compte arrêté à 20:10 lira le même texte — rien après 20:00.
+    const { message } = recapSources(input);
+    expect(message).not.toContain("Juste avant l'arrêt.");
+    expect(message).toContain("à 20 min");
+    expect(recapSources({ ...input, positionS: 1210 }).message).toBe(message);
   });
 
   it("au début d'un épisode : les deux derniers résumés, aucun dialogue", () => {
@@ -47,7 +54,7 @@ describe("ce qui part au modèle", () => {
 
 describe("la clé", () => {
   it("une tranche par dix minutes, et rien avant deux minutes : l'épisode n'est pas commencé", () => {
-    expect(recapKey("ep", 1530, "fr")).toBe("ep:3:fr");
+    expect(recapKey("ep", 1530, "fr")).toBe("ep:3:fr:v2");
     expect(recapKey("ep", 1250, "fr")).toBe(recapKey("ep", 1790, "fr"));
     expect(recapKey("ep", 1790, "fr")).not.toBe(recapKey("ep", 1810, "fr"));
     expect(recapKey("ep", 0, "fr")).toBe(recapKey("ep", 90, "fr"));
@@ -94,6 +101,41 @@ describe("le jugement de la réponse", () => {
   it("« inchangé » rend le texte précédent tel quel ; sans texte précédent, c'est une réponse vide", () => {
     expect(judgeRecap({ inchange: true, noms: [], phrases: [] }, sources, "Jon Snow marche.")).toEqual({ status: "ok", text: "Jon Snow marche.", kept: true });
     expect(judgeRecap({ inchange: true, noms: [], phrases: [] }, sources, null)).toEqual({ status: "vide" });
+  });
+
+  it("un nom se cherche en mot entier, pas dans un mot courant ; le pluriel des sources vaut le nom (11/11/2026)", () => {
+    const src = "Une année plus tard, il se tient l'épaule. The Starks turned back. D'Arya, rien.";
+    expect(unknownNames("Elle parle à Anne et à Paul.", src)).toEqual(["Anne", "Paul"]);
+    expect(unknownNames("Il aide Ned.", src)).toEqual(["Ned"]);
+    expect(unknownNames("Il rejoint les Stark, puis Arya.", src)).toEqual([]);
+  });
+
+  it("une abréviation de titre n'est pas une fin de phrase : le nom qui la suit est vérifié (11/11/2026)", () => {
+    const src = "Willard remonte le fleuve. Le docteur Wilson soigne Rosa.";
+    // « M. Kurtz », « Dr. Wilson » : le nom suit un point, mais pas une phrase finie.
+    expect(unknownNames("Willard cherche M. Kurtz.", src)).toEqual(["Kurtz"]);
+    expect(unknownNames("Willard cherche Mr. Kurtz et Mme Rosa.", src)).toEqual(["Kurtz"]);
+    expect(unknownNames("Rosa voit Dr. Wilson, puis Sra. García et Hr. Becker.", src)).toEqual(["García", "Becker"]);
+    expect(unknownNames("M. Kurtz attend.", src)).toEqual(["Kurtz"]);
+    // Une vraie fin de phrase garde sa règle : le premier mot de la suivante n'est pas vérifié par les majuscules.
+    expect(unknownNames("Willard remonte le fleuve. Pendant ce temps, Rosa attend.", src)).toEqual([]);
+    expect(unknownNames("Il le suit. Me voilà.", src)).toEqual([]);
+    expect(unknownNames("Follow me. Kurtz waits.", src)).toEqual([]);
+  });
+
+  it("en allemand, la règle des majuscules n'est pas tendue — seuls les noms déclarés le sont (11/11/2026)", () => {
+    const src = "Jon Snow marschiert gegen Ramsay Bolton.";
+    const text = "Jon Snow verlässt die Burg und führt seine Armee in die Schlacht.";
+    // Chaque nom commun allemand (« Burg », « Armee », « Schlacht ») passait pour un nom propre inconnu.
+    expect(unknownNames(text, src)).toEqual(["Burg", "Armee", "Schlacht"]);
+    expect(unknownNames(text, src, [], "de")).toEqual([]);
+    expect(unknownNames(text, src, ["Jon Snow", "Sansa"], "de")).toEqual(["Sansa"]);
+    expect(judgeRecap({ noms: ["Jon Snow"], phrases: [{ texte: text, episodes: [] }] }, src, null, "de")).toEqual({ status: "ok", text });
+    expect(judgeRecap({ noms: ["Jon Snow", "Brienne"], phrases: [{ texte: text, episodes: [] }] }, src, null, "de")).toEqual({ status: "rejeté", names: ["Brienne"] });
+    // Sans liste déclarée, rien ne serait vérifié : rejeté.
+    expect(judgeRecap({ phrases: [{ texte: text, episodes: [] }] }, src, null, "de")).toEqual({ status: "rejeté", names: ["noms"] });
+    // Les autres langues gardent les deux filets.
+    expect(judgeRecap({ noms: [], phrases: [{ texte: "Jon Snow rejoint Brienne.", episodes: [] }] }, src, null, "fr")).toEqual({ status: "rejeté", names: ["Brienne"] });
   });
 
   it("le texte précédent est donné au modèle et compte parmi les sources", () => {

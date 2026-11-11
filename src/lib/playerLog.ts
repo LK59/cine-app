@@ -2,6 +2,7 @@ import { TIMELINE_MAX_CHARS } from "@/lib/playbackTimeline";
 import { redactLogText } from "@/lib/stripAccessToken";
 import path from "node:path";
 import { LOG_DIR, appendJsonLine, logGenerations } from "@/lib/logFile";
+import { XRAY_USAGE_VALUE } from "@/lib/xrayUsage";
 
 /**
  * What actually happened during playback, for everybody, written to a file.
@@ -277,7 +278,8 @@ export function logPlaybackEvent(
   //
   // `sleepTimer` de même (02/10/2026), la minuterie de veille : une valeur du menu, ajoutée à un
   // bilan déjà plein — sous le plafond, elle aurait été la première à tomber.
-  const { build, version, resent, lateByMs, sleepTimer, sceneRestart, ...rest } = fields;
+  // `xray` de même (11/11/2026, `xrayUsage.ts`) : trois compteurs courts, l'usage des acteurs à l'écran.
+  const { build, version, resent, lateByMs, sleepTimer, sceneRestart, xray, ...rest } = fields;
   const late = typeof lateByMs === "number" && Number.isFinite(lateByMs) && lateByMs >= 0 && lateByMs <= MAX_LATE_MS ? Math.round(lateByMs) : null;
   const head = {
     ...server,
@@ -287,6 +289,7 @@ export function logPlaybackEvent(
     ...(late !== null ? { lateByMs: late } : {}),
     ...(typeof sleepTimer === "string" && SLEEP_TIMER_VALUES.has(sleepTimer) ? { sleepTimer } : {}),
     ...(typeof sceneRestart === "string" && SCENE_RESTART_VALUE.test(sceneRestart) ? { sceneRestart } : {}),
+    ...(typeof xray === "string" && XRAY_USAGE_VALUE.test(xray) ? { xray } : {}),
   };
   // Lu à l'appel : un test bascule `NODE_ENV` sans recharger le module.
   const dev = process.env.NODE_ENV === "development";

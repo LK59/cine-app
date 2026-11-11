@@ -8,6 +8,8 @@ import { recoverLostPosition } from "@/lib/lostStopPosition";
 import { playerLogAllowed } from "@/lib/writeLimits";
 import { alreadyWritten, isLineId } from "@/lib/playerLogIds";
 import { noteSessionStart } from "@/lib/xray/orders";
+import { assertVisible } from "@/lib/itemVisibility";
+import { isJellyfinId } from "@/lib/jellyfinPath";
 import { xrayConfigured, xrayOpenTo } from "@/lib/clients/xray";
 
 /**
@@ -61,7 +63,18 @@ export async function POST(req: NextRequest) {
   // partage. Sans attente : la réponse part tout de suite, et rien d'ici ne peut la faire échouer.
   // Réglée sur `admins`, seules les séances des administrateurs commandent une analyse (`xrayOpenTo`).
   if (body.kind === "start" && xrayConfigured() && xrayOpenTo(session) && !cleaned.bench && cleaned.player !== "hors-ligne" && !(await shareRefusal(session, cleaned.itemId))) {
-    noteSessionStart(cleaned.itemId, cleaned.at, session.u);
+    // Seulement un élément que ce compte voit (chasse aux défauts du 11/11/2026) : l'élément vient du corps de
+    // la ligne, et la commande résout le fichier avec la clé du serveur — n'importe quel compte pouvait faire
+    // analyser en `high` un titre caché par un tag bloqué. Le verdict de la séance est déjà connu le plus souvent
+    // (le flux vient de passer par `assertVisible`) ; sans attente, la réponse part tout de suite.
+    const itemId = cleaned.itemId;
+    if (isJellyfinId(itemId)) {
+      void assertVisible(session, itemId)
+        .then((refused) => {
+          if (!refused) noteSessionStart(itemId, cleaned.at, session.u);
+        })
+        .catch(() => {});
+    }
   }
   return NextResponse.json({ ok: true });
 }
