@@ -47,7 +47,8 @@ export function visibleGroups(room: string): Record<GroupId, boolean> {
   // Le dehors de l'aile de la chambre se voit par la fenêtre de la cuisine et celle de la chambre. Il est aussi
   // dessiné depuis la mezzanine (11/11/2026), par sécurité : on y voyait le ciel en points bleus par des fentes
   // entre le toit et le pignon. Ces fentes sont fermées dans la géométrie (`GABLE_TOP`) ; une qui resterait, vers
-  // le bas, montrerait le toit de l'aile plutôt que le vide. Coût mesuré : rien de lisible (voir PROGRESS).
+  // le bas, montrerait le toit de l'aile plutôt que le vide. Coût : 8 à 12 appels de dessin et ~10 000 triangles
+  // de plus (sur 1,3 million) ; sur la puce du serveur, l'écart de cadence se perd dans le bruit de la mesure.
   return {
     salon: room !== "chambre",
     sud: true,
