@@ -1,72 +1,97 @@
-# Immersion à plusieurs — plan (phase 2)
+# Immersion à plusieurs — plan arrêté (11/11/2026)
 
-La phase 1 ne contient **aucun code réseau**. Ce document dit ce qui est visé, comment, et ce que la
-phase 1 a fait pour ne rien fermer.
+Ce document remplace le premier jet de la phase 1. Il fixe ce qui sera construit, dans quel ordre, et
+comment chaque étape est vérifiée. Tout ce qui n'y figure pas est hors périmètre tant qu'il n'y est pas ajouté.
 
-## Regarder ensemble
+## Décisions
 
-Chaque participant lit **son propre flux** : une séance Jellyfin par personne, négociée pour son
-navigateur comme aujourd'hui. Personne ne relaie de vidéo à personne. Ce qui est partagé, c'est un petit
-**état de lecture** :
-
-```
-{ titre, position, lecture | pause, horodatage du serveur }
-```
-
-Chaque client s'y conforme : il connaît l'heure du serveur (décalage mesuré à la connexion), en déduit
-la position attendue à l'instant présent, et corrige la sienne — par une légère variation de
-`playbackRate` (± 5 %) pour un écart de moins de deux secondes, par un saut au-delà. Une pause, un saut
-ou un changement de titre par l'un est une **commande** envoyée au service, qui met à jour l'état et le
-diffuse à tous.
-
-Charge serveur : **une lecture par participant** (un transcodage chacun si son navigateur l'exige). À
-borner : nombre de participants par salon, et la « conversion HDR → SDR » multipliée d'autant.
-
-## Un service temps réel à part
-
-Next.js n'est pas fait pour tenir des connexions permanentes. Le temps réel vit dans un **service à
-part** (WebSocket), sur le modèle du service des acteurs à l'écran : son propre conteneur, son propre
-code, commandé par l'application.
-
-- **Entrée derrière la session Laterna** : l'application délivre un laissez-passer court (signé, lié à
-  la session et au compte) ; le service ne parle qu'à qui le présente. Aucun compte ni mot de passe dans
-  le service.
-- **Salons** : créés par un participant, rejoints par une invitation ; état en mémoire, rien de durable.
-- **Messages** : commandes de lecture (`open`, `play`, `pause`, `seek`), positions des personnages (dix à
-  vingt par seconde, interpolées à l'arrivée), présence.
-
-## Droits
-
-Un titre ne se lance pour le groupe **que si tous les participants peuvent le voir** : les tags bloqués
-de chaque compte s'appliquent. C'est l'application qui répond — le service lui demande, pour un titre et
-une liste de comptes, « tous peuvent-ils ? » — et un refus ne dit pas à cause de qui. Chaque client
-négocie ensuite sa propre lecture, sous son propre compte : un participant sans droit sur un titre ne
-recevrait de toute façon aucun flux.
-
-Chaque client **rapporte sa propre progression** à Jellyfin (reprise, « vu ») : rien n'est écrit au nom
-d'un autre.
-
-## Ensuite
-
-- **Avatars** : une silhouette simple par participant (tête orientée comme son regard), son nom.
-- **La voix** (WebRTC, pair à pair pour de petits groupes, avec un serveur de relais en secours),
-  spatialisée comme le reste : une `PositionalAudio` par participant.
-
-## Ce que la phase 1 a préparé
-
-| Besoin du multijoueur | Où c'est dans la phase 1 |
+| Sujet | Décision |
 |---|---|
-| Un état de lecture qui n'est pas le `<video>` | `Playback` dans `src/state/store.ts` : ce qui est **voulu** (titre, pause, saut) y est écrit ; le `<video>` s'y conforme (`follow()` dans `src/media/playback.ts`) et n'en est jamais la source. Un état partagé n'aurait qu'à écrire au même endroit. |
-| Des commandes de lecture en un seul endroit | `src/media/commands.ts` : `open`, `play`, `pause`, `toggle`, `seek`, `seekBy`, `mute`, `stop`, par `dispatch(commande, origine)`. Aucun composant ne touche à l'élément vidéo. C'est là que les commandes partiront au réseau et en reviendront. |
-| Un personnage local parmi d'autres | `src/world/rig.ts` : un registre de personnages (identifiant, position, orientation) ; celui de la page est l'entrée `local`. La caméra le lit, elle n'est pas son état. |
-| Rien qui suppose un seul compte | Chaque page négocie, rapporte et journalise sous sa propre session ; aucun état de lecture n'est gardé côté application. |
+| Où vit le temps réel | Un **service à part**, conteneur `laterna-salons` (Node, WebSocket), sur le modèle du service des acteurs à l'écran. Les salons et leur état vivent en mémoire dans ce service : ils **survivent aux redéploiements de l'application**. |
+| Comment on l'atteint | **Par l'adresse de Laterna**, sans toucher au relais inverse (qui laisse déjà passer les WebSockets) : le programme de démarrage de l'application (`server-boot/boot.mjs`) relaie la connexion montante `/api/salons/ws` vers le service, sur le réseau Docker. Même origine : la politique de sécurité (`connect-src 'self'`) n'a pas à changer. |
+| Qui entre | Un **laissez-passer** court (signé par l'application, lié à la session et au compte, quelques minutes) que le service vérifie à la connexion. Aucun compte ni secret de session dans le service. Les liens de partage (`share`) n'y ont pas accès. |
+| Salons | **Publics** (listés, ouverts à tout compte de la maison) et **privés** (code d'invitation, lien). **8 personnes au plus.** En solo : un salon d'une personne, même code. |
+| État du chalet | **Sans état** (identique pour tous, rien de synchronisé) **sauf** : les **écrans** (ce qui joue), les **lampes** (trois groupes), la **musique** (en marche, morceau, position), la **porte** et le **feu**. |
+| Avatars | **Personnalisables**, construits par le code (formes simples, couleurs, accessoires) — **aucun fichier à télécharger**. Choix gardés par compte, dans l'application. Nom au-dessus de la tête, tête qui suit le regard, marche animée. |
+| Discussion | **Un chat texte** dans le salon, à la façon d'un jeu : une touche pour écrire, Entrée pour envoyer, les messages s'affichent en bas à gauche puis s'effacent. **Pas de voix.** |
+| Mini-jeu | **« Devine le film »** : manches chronométrées, réponses en **QCM**, sur la télévision, chacun gardant la liberté de se déplacer. |
+| Records | **Gardés par compte**, consultables dans le menu (Échap) → **Statistiques**. |
 
-## Effort et ordre
+## Le protocole
 
-1. **Le service** (4 à 6 jours) : WebSocket, salons, laissez-passer délivré par l'application, horloge.
-2. **Lecture synchronisée** (4 à 6 jours) : état partagé, commandes par le réseau, correction de dérive,
-   vérification des droits de tous.
-3. **Présence** (3 à 4 jours) : positions, interpolation, avatars simples, noms.
-4. **Invitations et interface** (3 à 4 jours) : créer un salon, inviter, rejoindre, quitter ; qui est là.
-5. **La voix** (5 à 8 jours) : WebRTC, relais, spatialisation, coupure du micro.
-6. **Mesure de charge** : combien de lectures simultanées le serveur tient, transcodages compris.
+- Messages **JSON** sur la WebSocket, petits, chacun avec un type (`hello`, `snapshot`, `op`, `state`, `pos`,
+  `chat`, `game`, `ping`/`pong`). Le service est **l'autorité** : un client envoie une **intention**
+  (« allumer les lampes du salon », « pause »), le service l'applique, la numérote et la **diffuse à tous** — le
+  client qui l'a demandée l'applique à son retour, pas avant (pas de divergence possible).
+- **À l'arrivée** (et à chaque reconnexion) : un `snapshot` complet de l'état du salon. Ensuite seulement des
+  **changements**, chacun portant la **version** de l'objet : un message plus vieux que l'état connu est ignoré.
+- **L'horloge** : décalage mesuré par `ping`/`pong` à la connexion puis régulièrement (le plus court aller-retour
+  fait foi) ; tout ce qui est daté l'est en heure du service.
+- **Positions** : 10 à 15 par seconde au plus, **seulement quand on bouge**, quantifiées (centimètres, angles
+  en entiers) ; interpolées à l'arrivée avec ~100 ms de retard voulu, extrapolées brièvement si un paquet manque.
+- **Reconnexion** : coupure (déploiement de l'application, réseau) → nouvelle connexion avec le même salon et
+  un nouveau laissez-passer, `snapshot`, et l'on repart. Le service garde la place d'un participant 60 s.
+- **Bornes** : taille des messages, cadence par participant (positions, chat, intentions), nombre de salons.
+  Un client qui dépasse est coupé, pas puni silencieusement.
+
+## La télévision commune
+
+- Chacun lit **son propre flux** (sa propre séance Jellyfin, négociée pour son navigateur, comme aujourd'hui).
+  Seul l'**état de lecture** est partagé : titre, position, lecture ou pause, heure du service.
+- **Démarrage quand tout le monde est prêt** : le service annonce le titre et la position ; chaque client
+  négocie, **précharge** (premières secondes en mémoire tampon) et répond « prêt » ; quand tous sont prêts (ou au
+  bout d'un délai, ceux qui ne le sont pas suivent seuls), le service fixe **l'instant de départ** dans un futur
+  proche, et chacun démarre à cet instant. Même chose pour une reprise après pause ou un saut.
+- **Dérive** : chaque client compare sa position à celle attendue ; écart sous 2 s → `playbackRate` ± 5 %
+  le temps de rattraper ; au-delà → saut.
+- **Droits** : un titre ne se lance pour le salon **que si tous les participants peuvent le voir** (tags
+  bloqués de chacun). C'est l'application qui répond, et un refus ne dit pas à cause de qui. Chacun rapporte sa
+  propre progression à Jellyfin.
+
+## « Devine le film »
+
+- **Lancé sur une télévision** (celle du salon ou une autre) ; la question s'affiche **sur l'écran 3D**, les
+  quatre propositions **sur l'écran de chacun** : touches **1 à 4** au clavier (sans libérer le curseur — on
+  continue de marcher, de regarder), quatre boutons au doigt.
+- **Manches chronométrées**, comme les jeux de « blind test » : un indice apparaît, le temps file, la première
+  bonne réponse rapporte le plus ; une réponse fausse bloque le joueur pour la manche. Indices : **affiche floue
+  qui se précise**, image du film (fond), **réplique**, slogan, distribution, année. Séries de 10 manches,
+  puis le tableau des résultats ; des variantes (tout en affiches, rythme qui accélère) se règlent au lancement.
+- **Préparé par l'application, pas par le navigateur** : les manches sont tirées **parmi les titres que tous
+  les participants peuvent voir** ; les images sont servies par une route du jeu **sans l'identifiant du titre
+  dans l'adresse** (personne ne triche en lisant le réseau) ; le service tient le chronomètre et les scores.
+- **Records** : à la fin d'une partie, l'application enregistre le score de chaque compte (meilleur score, meilleure
+  série, justesse, parties jouées, par variante). Menu Échap → **Statistiques** : les siens et le classement de
+  la maison.
+
+## Le chat
+
+- Une touche ouvre la saisie (sans libérer le curseur au-delà de la frappe), Entrée envoie, Échap annule ; au
+  doigt, un bouton. 200 caractères au plus, texte brut, cadence bornée.
+- Les messages (nom, texte) s'affichent en bas à gauche et s'effacent après quelques secondes ; la saisie
+  ouverte montre les derniers. **Rien n'est gardé** une fois le salon fermé ; rien n'est écrit au journal.
+
+## Pare-feu, journaux, tests
+
+- La WebSocket est **une seule connexion** : rien de nouveau pour la règle des noms de fichiers. Les images du
+  jeu passent par **une seule route** ; le scénario 15 (noms distincts, réponses 4xx) est étendu à une partie.
+- Journaux : une ligne par salon ouvert et fermé (durée, participants, parties jouées) dans `docker logs` du
+  service ; les erreurs des clients par la route d'erreurs de l'application.
+- Tests : unitaires dans le service (protocole, versions, horloge, bornes, droits) ; scénarios Playwright à
+  **deux ou trois navigateurs dans le même salon** (une lampe allumée par l'un l'est chez les autres, une pause,
+  un départ synchronisé, le chat, une partie complète, la reconnexion après un redémarrage du service).
+- Toute instance de test de l'application tourne avec `CINE_BACKGROUND_JOBS=off`, est arrêtée dès les tests
+  finis, et ses `docker logs` sont lus deux minutes après son démarrage. Conteneurs de test nommés, `docker ps`
+  vérifié à la fin.
+
+## Ordre de travail (une livraison par étape)
+
+1. **Le service et la connexion** : conteneur `laterna-salons`, laissez-passer, relais par `boot.mjs`, salons
+   (créer, rejoindre, quitter, publics et privés), horloge, reconnexion, bornes ; tests unitaires et un scénario à
+   deux navigateurs.
+2. **Le chalet partagé** : lampes, porte, feu, musique synchronisés ; présence (positions, avatars simples avec
+   nom) ; le chat.
+3. **La télévision commune** : état de lecture partagé, préchargement et départ quand tous sont prêts, dérive,
+   droits de tous.
+4. **« Devine le film »** : manches, indices, QCM, scores, records et Statistiques.
+5. **Avatars personnalisables, liste des salons, invitations** ; finitions.
