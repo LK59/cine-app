@@ -6,6 +6,10 @@ entier après toute reprise.**
 
 ## État actuel (à jour)
 
+- **Sur la branche `salons` (worktree `/opt/stacks/cine-app-salons`), non livré au 11/11 au soir** : les retours
+  d'un ami (voir « Retour d'un premier visiteur ») et **l'étape 1 du multijoueur** (voir « Les salons du chalet »).
+  Vérifié : portail de l'application vert, scénarios 02 et 05 à 18 verts. À livrer : une version de Laterna, puis
+  le conteneur `laterna-salons` selon `salons/docs/DEPLOIEMENT.md`.
 - **10.36.0 le 11/11 vers 10 h** (`88acbd48`) : **les décors en trois paquets** (ban CrowdSec du matin, voir
   « Pièges rencontrés », scénario 15 : 5 noms par chargement en production au lieu de 73, 0 réponse 4xx), enchaîner
   les épisodes et la télécommande (voir « Le confort de regarder »).
@@ -295,7 +299,13 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
   machine par `--device /dev/dri` + `--use-angle=gl-egl`). `TV=1` joue une mire ; `STATE=<fichier>` donne la
   session ; `QUALITY=` choisit le préréglage. Vues : `entree salon tv baie canape charpente retour`, et
   l'interface : `panneau fiche pause reglages`.
-- **Scénarios** : `tests/run.sh` (`tests/e2e/`).
+- **Scénarios** : `tests/run.sh` (`tests/e2e/`). Il exige `immersion/.env` (le compte de test), même avec
+  `SANS_APPLICATION=1` : une nouvelle copie de travail doit le recopier.
+- **Salons** (scénario 18) : un service de test et un aperçu qui relaie sa WebSocket —
+  `docker build -t laterna-salons:test ../salons`, puis
+  `docker run -d --rm --name immersion-salons-test --network host -e PORT=8097 -e SALONS_KEY=cle-de-test-des-salons-scenario-18-0123456789 laterna-salons:test`,
+  et l'aperçu avec `-e SALONS_DEV_URL=http://127.0.0.1:8097`. Ports des copies parallèles : 5198 (copie principale),
+  5195 (salons), 5196 (cuisson) — un seul aperçu par port.
 - **Assets** : `tools/assets/` (image `immersion-assets-tools` ; `fetch.py`, `build.sh`, `gen-assets-md.py`).
 
 ## Pièges rencontrés (ne pas les refaire)
@@ -352,6 +362,17 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
   rechargement, au plus 25 noms non statiques et aucune 4xx (6 noms, 0 4xx après ; 73 avant). **Tout nouvel asset
   va dans un paquet** (un dossier ajouté à `PACKS`) ; un nouvel appel `fetch` d'asset passe par `assetBytes`.
   Ne jamais faire répondre 404 une absence attendue (204), ni relancer en boucle une requête refusée.
+
+- **Le pointeur verrouillé garde tous les clics** (11/11/2026) : dans un scénario, ouvrir le menu en posant le mode
+  (`setMode("paused")`) laisse le pointeur au canevas, et aucun bouton du menu ne reçoit le clic (Playwright
+  « retrying click action » à l'infini). Toujours par l'intention : `emit("menu")`, qui rend le pointeur.
+- **Jamais deux faces dans un même plan, ni des lames qui s'arrêtent contre la face d'un mur** (11/11/2026) : la
+  poutre de rive de la mezzanine avait son dessus au niveau du parquet (clignotement sous la rambarde), le pignon du
+  fond montait en escalier sous le toit (le ciel par les marches). Les murs à sommet en pente (`Kit.wall` avec une
+  fonction de hauteur) ont maintenant un vrai dessus en pente, les pignons entrent dans l'épaisseur des lames
+  (`GABLE_TOP`), les lames passent par-dessus, les deux pans se croisent au faîtage.
+- Un `ErrorEvent` envoyé à la main à `window` ne déclenche pas `pageerror` dans Playwright ; un refus 4xx voulu
+  apparaît dans la console et `watchErrors` le relève (le scénario 16 le filtre).
 
 ## Poids
 
@@ -575,6 +596,54 @@ parfaitement stable à 60. Trois changements, validés par lui :
    arrivée, pire, meilleur, chaque changement `secondes:de>vers` + `f`/`a`/`m`). Scénario 16 : la décision sur des
    cadences fabriquées (la machine de test ne tient pas 60 images/s, elle ne pourrait jamais justifier une
    remontée), et une vraie descente sous un rendu freiné, avec sa ligne.
+
+## Retour d'un premier visiteur (11/11/2026, après-midi) — corrigé sur la branche `salons`
+
+Un ami, sur Windows et Chrome : du clignotement, des trous dans la toiture à la mezzanine, des écrans noirs en
+marchant, et coincé dans le panneau Laterna ouvert trop près d'un mur. Son passage se retrouve dans le journal du
+relais inverse (sa connexion et le chargement des paquets) mais nulle part chez nous : le chalet n'envoyait aucune
+erreur. Corrigé par deux agents, intégré et revérifié :
+
+1. **Le panneau tient toujours dans le champ** (`panelScale`, `world/panel.ts`, marge de 12 % ; appliqué à chaque
+   image dans `PanelAnchor.tsx`) au lieu de déborder : moins de ~1,2 m d'un écran, « Fermer » sortait de la
+   fenêtre (39 positions sur 84). Rappel « Échap pour fermer » hors du panneau (clavier seulement). L'image
+   rapprochée assise est remise à zéro à l'ouverture du panneau. Garde-fou : scénario 17 (84 positions).
+2. **Les erreurs du chalet au journal** (`lib/errorLog.ts` → `/api/client-error`, sources `immersion:window`,
+   `:rejection`, `:crash`, `:webgl` — la perte du contexte avec l'instant, la qualité et la pièce) : 5 envois au plus
+   par visite, arrêt au premier 4xx. **La ligne de visite part toujours** (`immersion-auto`, avec `quality`,
+   `phase`, `end`, `errors`, `contextLost`, `auto`) ; ses secondes comptent depuis l'ouverture de la page.
+   **Les écrans noirs ne sont pas reproduits** : la prochaine fois, ces lignes diront ce qui s'est passé.
+3. **Mezzanine** : poutre de rive sous le parquet (`RIM`), parquet jusqu'au nu de la poutre, mains courantes de la
+   trémie qui ne se recouvrent plus. **Toit** : pignons dans l'épaisseur des lames, lames par-dessus, croisement au
+   faîtage (points bleus : 54 → 0, 86 → 0) ; le dehors de l'aile est aussi dessiné depuis la mezzanine (filet de
+   sécurité, ~10 000 triangles). **Recuisson complète** (54 min, 6 cœurs, 12,7 Mo) : lumière identique à l'œil sur
+   les planches avant/après ; deux portées recalculées (écrans du salon 16, lampes du dehors 128 — le dehors éclairé
+   par la lanterne est quantifié plus grossièrement : à surveiller). `perf.mjs` a trois vues de mezzanine.
+   Restent, sans jour visible de l'intérieur : la jonction bout à bout des lames du salon et du sud, les murs
+   latéraux qui dépassent au-dessus des lames vus du dehors, les angles du garde-corps de la terrasse (non vérifiés).
+
+## Les salons du chalet — étape 1 (11/11/2026) — sur la branche `salons`
+
+Le plan arrêté avec le propriétaire est `docs/MULTIJOUEUR.md` ; la décision côté application, DECISIONS §146 ; le
+service, `../salons/` (README, `docs/DEPLOIEMENT.md`). Fait :
+
+- **Le service `laterna-salons`** (Node 26 + WebSocket, TypeScript exécuté tel quel) : salons publics et privés
+  (code de six caractères, 8 personnes, 64 salons), objets partagés versionnés (`lampes.salon|sud|nuit`, `porte`,
+  `feu`, `musique`), horloge (`ping`/`pong`), place gardée 60 s après une coupure (jeton de reprise), bornes de taille
+  et de débit, `/health` derrière la clé. 23 tests. Image : tests dans la construction.
+- **Par l'adresse de Laterna** : `/api/salons/ws` relayé par `server-boot/salonsRelay.mjs` (avant Next) ; laissez-passer
+  de 5 min (`/api/salons/pass`, toujours 200 ; refus en 4401 après la poignée de main, jamais un 4xx).
+- **Réglages** : Connexions → « Salons du chalet » (audience, adresse, clé, « Tester », lien vers le guide).
+- **Le chalet** : `src/net/salons.ts` (connexion unique, file d'intentions, reprise, horloge — `serverNow()`),
+  `src/net/types.ts` (l'état, à part pour éviter une boucle d'imports avec le store), Échap → « À plusieurs »
+  (`ui/Salons.tsx`). **Rien n'est demandé avant d'ouvrir cet écran** (scénario 15 inchangé). Le contrat des messages
+  est `../salons/src/protocol.ts`, importé tel quel (copié par l'étape `immersion` du Dockerfile).
+- **Scénario 18** : deux navigateurs et un vrai service — salon privé par code, code inconnu, coupure qui rend la
+  même place, salon public par la liste, « Jouer seul », écran solitaire sans service.
+
+**Étape suivante (2)** : brancher lampes, porte, feu et musique sur `setShared` / l'état du salon (le service les
+accepte déjà), la présence (positions quantifiées, interpolées ; avatars simples avec nom) et le chat. Effort
+conseillé : moyen.
 
 ## Prochaine action
 
