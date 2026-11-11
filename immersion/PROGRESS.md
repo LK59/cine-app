@@ -548,6 +548,12 @@ refermée — `finish("next")`/`"ended"`), sur un vrai iPhone (la carte en haut 
 
 ## Préparer, rendre la mémoire, « Auto » (11/11/2026, après la mesure d'un second PC) — 10.37.0
 
+**Livré en 10.37.0 le 11/11 vers 11 h 40** (`aaee18e0`). Coût de la préparation mesuré sur la puce du serveur (sans
+écran) : +4 s au premier chargement à froid (27,2 → 31,1 s), rien au rechargement (6,8 → 6,5 s). Son gain n'est pas
+mesurable ici (sans écran, le navigateur présente par rafales : des images de 250 à 500 ms avec ou sans elle) —
+**à confirmer par « Mesurer » sur le portable 255H** : les à-coups de fin de parcours (`slowAt` ≈ 0,8–1,0) doivent
+disparaître du premier passage.
+
 Mesure du propriétaire sur un portable Core Ultra 7 255H **en simple canal** (une barrette de 16 Go, d'où « Intel
 Graphics » et non « Arc », mémoire pleine à 97 %) : Ultra 22 images/s écrans éteints (à 1549 × 843, la fenêtre a changé
 d'écran pendant la mesure — les autres passages sont aux 2/3), à-coups de 400 à 550 ms en fin de parcours, Moyen
