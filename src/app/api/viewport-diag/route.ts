@@ -12,6 +12,8 @@ import { viewportDiagAllowed } from "@/lib/writeLimits";
  * 10.29.1 la rangée « À l'écran » et le panneau d'une personne (`kind: "xray-ui"`, `xrayUiDiag.ts`).
  * Et la mesure du mode Immersion (`kind: "immersion-bench"`, DECISIONS §144) : il n'a pas d'autre journal que
  * celui-ci, et ses chiffres — images par seconde par préréglage, carte graphique — décident de ses réglages.
+ * Depuis 10.37.0, ce que son réglage « Auto » a fait d'une visite (`kind: "immersion-auto"`, une ligne en partant :
+ * niveaux de départ, d'arrivée, pire et meilleur, chaque changement et sa raison).
  *
  * Le compte vient de la session, jamais du corps. Seuls les champs connus, bornés ; le reste tombe.
  * Rien n'est renvoyé.
@@ -184,6 +186,36 @@ export async function POST(req: NextRequest) {
         version: str(body.version, 20),
       },
       "immersion-bench",
+    );
+    return new NextResponse(null, { status: 204 });
+  }
+  // « Auto » du mode Immersion (`immersion/src/world/AutoQuality.tsx`) : une ligne par visite, envoyée en partant.
+  if (body.kind === "immersion-auto") {
+    const level = (value: unknown) => (typeof value === "number" && Number.isInteger(value) && value >= 0 && value < 32 ? value : null);
+    const rate = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1000 ? Math.round(value * 10) / 10 : null);
+    logViewportDiag(
+      {
+        user: session.jfUser ?? session.u,
+        device: requestDeviceLabel(req),
+        startLevel: level(body.startLevel),
+        level: level(body.level),
+        best: level(body.best),
+        worst: level(body.worst),
+        count: px(body.count),
+        // « 12:0>1f;40:1>0m » : la seconde de la visite, le niveau quitté et atteint, la raison (cadence, à-coups, marge).
+        changes: typeof body.changes === "string" && /^[0-9:>;fam]{0,600}$/.test(body.changes) ? body.changes : undefined,
+        seconds: px(body.seconds),
+        fps: rate(body.fps),
+        over50: px(body.over50),
+        renderer: str(body.renderer, 160),
+        vendor: str(body.vendor, 80),
+        width: px(body.width),
+        height: px(body.height),
+        dpr: rate(body.dpr),
+        touch: body.touch === true,
+        build: str(body.build, 40),
+      },
+      "immersion-auto",
     );
     return new NextResponse(null, { status: 204 });
   }

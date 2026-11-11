@@ -20,6 +20,10 @@ const MAGIC = "LTPK";
 const base = import.meta.env.BASE_URL;
 const files = new Map<string, Uint8Array>();
 let pending: Promise<void> | null = null;
+/** Les lectures de décor encore en cours hors de `Suspense` (lumière précalculée, panorama) : voir `holdPacks`. */
+const holds = new Set<Promise<unknown>>();
+/** Les paquets ont été rendus (`releasePacks`) : un chemin empaqueté demandé ensuite est une erreur. */
+let released = false;
 
 /** Le chemin sous la base (`assets/textures/rug/color.ktx2`) d'une adresse de la page, sans sa requête. */
 function pathOf(url: string): string | null {
@@ -39,7 +43,36 @@ function pathOf(url: string): string | null {
 export function packed(url: string): ArrayBuffer | undefined {
   const path = pathOf(url);
   const bytes = path ? files.get(path) : undefined;
+  // Après `releasePacks`, rien ne devrait plus lire un décor : tout est monté d'emblée (les pièces sont cachées,
+  // jamais démontées). Si cela change un jour, la requête partirait vers un fichier qui n'est plus dans le build.
+  if (!bytes && released && path && /^(assets\/(textures|models|lightmaps|panorama)|basis)\//.test(path)) console.error(`[immersion] décor demandé après la libération des paquets : ${path}`);
   return bytes ? (bytes.slice().buffer as ArrayBuffer) : undefined;
+}
+
+/**
+ * Une lecture de décor qui se fait hors de `Suspense` (dans un effet) : les paquets ne sont rendus qu'une fois
+ * qu'elle a abouti, et la scène n'est préparée (`SceneReady`) qu'avec elle. Rend la même promesse.
+ */
+export function holdPacks<T>(work: Promise<T>): Promise<T> {
+  holds.add(work);
+  const done = () => holds.delete(work);
+  work.then(done, done);
+  return work;
+}
+
+/** Résolue quand plus aucune lecture retenue n'est en cours (y compris celles ajoutées en attendant). */
+export async function packsSettled(): Promise<void> {
+  while (holds.size > 0) await Promise.allSettled([...holds]);
+}
+
+/**
+ * Rend la mémoire des paquets (≈ 42 Mo) une fois la scène construite et préparée : three garde déjà sa propre copie
+ * de ce qu'il a décodé, et la carte graphique la sienne — les octets bruts n'étaient plus qu'une troisième copie.
+ */
+export function releasePacks(): void {
+  if (__PACKS__.length === 0) return;
+  files.clear();
+  released = true;
 }
 
 /** Les octets d'un asset (`assets/<file>`) : du paquet, ou du réseau en développement. `null` s'il manque. */

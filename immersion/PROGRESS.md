@@ -546,6 +546,30 @@ ce qui a été fait :
 **Pas vérifié** : sur un vrai épisode (repères de Jellyfin, transcodage enchaîné : la séance précédente doit être
 refermée — `finish("next")`/`"ended"`), sur un vrai iPhone (la carte en haut de l'écran en paysage).
 
+## Préparer, rendre la mémoire, « Auto » (11/11/2026, après la mesure d'un second PC) — 10.37.0
+
+Mesure du propriétaire sur un portable Core Ultra 7 255H **en simple canal** (une barrette de 16 Go, d'où « Intel
+Graphics » et non « Arc », mémoire pleine à 97 %) : Ultra 22 images/s écrans éteints (à 1549 × 843, la fenêtre a changé
+d'écran pendant la mesure — les autres passages sont aux 2/3), à-coups de 400 à 550 ms en fin de parcours, Moyen
+parfaitement stable à 60. Trois changements, validés par lui :
+
+1. **Toute la scène est préparée sous l'accueil** (`world/warmup.ts`, appelé par `SceneReady`) : les objets cachés
+   (pièces hors de vue) montrés le temps de `compileAsync`, puis `initTexture` sur toutes les textures (sauf la
+   vidéo). `SceneReady` attend d'abord ce qui se lit hors de `Suspense` (lumière précalculée, panorama :
+   `holdPacks` / `packsSettled`) — sans quoi leurs programmes se compilaient à l'entrée.
+2. **Les paquets sont rendus** (`releasePacks`) une fois la scène prête : ≈ 42 Mo de JavaScript, une troisième copie
+   (three garde ce qu'il a décodé, la carte graphique aussi). Sûr parce que tout ce qui lit un décor est monté
+   d'emblée (les pièces sont cachées, jamais démontées) ; un décor demandé après la libération écrit une erreur dans la
+   console (le scénario 15 la verrait).
+3. **« Auto » refait** (`world/AutoQuality.tsx`, décision pure dans `world/autoDecision.ts`) : plus de gel définitif au
+   cinquième changement (`flipflops={4}` de drei) ; 3 s de calme après chaque changement ; 10 s avant de remonter
+   après une descente ; un aller-retour bloque la remontée 60 s, doublées à chaque récidive (5 min au plus) ; **les
+   à-coups comptent** (trois images de plus de 50 ms en 2,5 s font descendre ; une seule de plus de 33 ms empêche de
+   remonter). Une ligne par visite au journal, en partant (`startup.log`, `kind: "immersion-auto"` : départ,
+   arrivée, pire, meilleur, chaque changement `secondes:de>vers` + `f`/`a`/`m`). Scénario 16 : la décision sur des
+   cadences fabriquées (la machine de test ne tient pas 60 images/s, elle ne pourrait jamais justifier une
+   remontée), et une vraie descente sous un rendu freiné, avec sa ligne.
+
 ## Prochaine action
 
 Sur un vrai épisode, avec le compte de test et une instance jetable : la carte au générique, l'enchaînement, et

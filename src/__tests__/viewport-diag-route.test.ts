@@ -208,6 +208,41 @@ describe("POST /api/viewport-diag", () => {
     expect(line.maxMs).toBeUndefined();
   });
 
+  it("« Auto » du mode Immersion : une ligne « immersion-auto » bornée, au nom de la session", async () => {
+    const res = await post({
+      kind: "immersion-auto",
+      user: "quelqu'un d'autre",
+      startLevel: 0,
+      level: 2,
+      best: 0,
+      worst: 3,
+      count: 4,
+      changes: "8:0>1f;11:1>2a;30:2>3f;45:3>2m",
+      seconds: 312,
+      fps: 58.94,
+      over50: 12,
+      renderer: "ANGLE (Intel, Intel(R) Graphics, Direct3D11)",
+      width: 1033,
+      height: 562,
+      dpr: 1,
+      touch: false,
+      extra: "rien",
+    });
+    expect(res.status).toBe(204);
+    const [line, kind] = mockLog.mock.calls[0];
+    expect(kind).toBe("immersion-auto");
+    expect(line).toMatchObject({ user: "louis", startLevel: 0, level: 2, best: 0, worst: 3, count: 4, changes: "8:0>1f;11:1>2a;30:2>3f;45:3>2m", seconds: 312, fps: 58.9, over50: 12, width: 1033, touch: false });
+    expect(line).not.toHaveProperty("extra");
+  });
+
+  it("« Auto » du mode Immersion : un relevé mal formé tombe, la ligne reste", async () => {
+    expect((await post({ kind: "immersion-auto", level: 99, changes: "<script>", fps: 60 })).status).toBe(204);
+    const [line] = mockLog.mock.calls[0];
+    expect(line.level).toBeNull();
+    expect(line.changes).toBeUndefined();
+    expect(line.fps).toBe(60);
+  });
+
   it("une mesure du mode Immersion sans préréglage connu : 400, rien d'écrit", async () => {
     expect((await post({ kind: "immersion-bench", preset: "extrême", fps: 60 })).status).toBe(400);
     expect(mockLog).not.toHaveBeenCalled();

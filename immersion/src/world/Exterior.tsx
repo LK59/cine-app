@@ -3,7 +3,7 @@ import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import { BackSide, BufferAttribute, Color, ConeGeometry, type BufferGeometry, CylinderGeometry, DoubleSide, InstancedMesh, LinearFilter, LinearMipmapLinearFilter, NoColorSpace, Path, Object3D, PlaneGeometry, RepeatWrapping, Shape, ShapeGeometry, ShaderMaterial, SphereGeometry, SRGBColorSpace, Vector2, Vector3, type CompressedTexture } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { assetUrl } from "../lib/assets";
-import { assetJson } from "../lib/packs";
+import { assetJson, holdPacks } from "../lib/packs";
 import { useProfile } from "../state/store";
 import { WEST_WINDOW, WEST_WINDOWS } from "./geometry/salon";
 import { ktx2For } from "./ktx2";
@@ -96,7 +96,8 @@ function usePanorama(): Panorama | null {
   const [panorama, setPanorama] = useState<Panorama | null>(null);
   useEffect(() => {
     let alive = true;
-    (async () => {
+    // Retenue comme la lumière précalculée : voir `holdPacks`.
+    void holdPacks((async () => {
       const meta = await assetJson<PanoramaMeta>(assetUrl("panorama/panorama.json"));
       if (!meta) return;
       const loader = ktx2For(gl);
@@ -113,7 +114,7 @@ function usePanorama(): Panorama | null {
       if (alive) setPanorama({ meta, far, mid, near });
     })().catch(() => {
       // Panorama absent ou illisible : le ciel de secours reste en place.
-    });
+    }));
     return () => {
       alive = false;
     };

@@ -97,7 +97,7 @@ export function cancelBench(): void {
   cancelled = true;
 }
 
-function rendererName(gl: WebGLRenderer): { renderer: string | null; vendor: string | null } {
+export function rendererName(gl: WebGLRenderer): { renderer: string | null; vendor: string | null } {
   try {
     const context = gl.getContext();
     const info = context.getExtension("WEBGL_debug_renderer_info");

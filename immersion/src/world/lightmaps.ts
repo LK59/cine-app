@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useThree } from "@react-three/fiber";
 import { BufferAttribute, LinearFilter, LinearMipmapLinearFilter, ShaderChunk, SRGBColorSpace, type BufferGeometry, type CompressedTexture, type Material, type MeshStandardMaterial } from "three";
 import { assetUrl } from "../lib/assets";
-import { assetBytes, assetJson } from "../lib/packs";
+import { assetBytes, assetJson, holdPacks } from "../lib/packs";
 import { useStore } from "../state/store";
 import { ktx2For } from "./ktx2";
 
@@ -107,7 +107,8 @@ export function useLightmaps(): Lightmaps | null {
   const [lightmaps, setLightmaps] = useState<Lightmaps | null>(null);
   useEffect(() => {
     let alive = true;
-    load(gl).then(
+    // Retenue : la scène n'est préparée et les paquets rendus qu'une fois la lumière posée (`SceneReady`).
+    holdPacks(load(gl)).then(
       (loaded) => alive && loaded && setLightmaps(loaded),
       () => {
         // Lumière cuite absente ou illisible : l'éclairage temps réel reste en place.

@@ -2,7 +2,6 @@ import { Suspense, use, useEffect, useMemo, useState, type ReactNode } from "rea
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { NoToneMapping, PCFShadowMap, SRGBColorSpace } from "three";
-import { PerformanceMonitor } from "@react-three/drei";
 import { isTouchDevice } from "../lib/capability";
 import { SUPERSAMPLING } from "../lib/settings";
 import { Effects } from "./Effects";
@@ -14,6 +13,7 @@ import { Chalet } from "./Chalet";
 import { SceneReady } from "./SceneReady";
 import { PanelAnchor } from "./PanelAnchor";
 import { installScreenLight } from "./screenLight";
+import { AutoQuality } from "./AutoQuality";
 import { loadPacks } from "../lib/packs";
 
 // Avant toute matière : la lumière des écrans se greffe sur toutes les matières « standard ».
@@ -52,10 +52,7 @@ export function World() {
   const setPhase = useStore((s) => s.setPhase);
   const profile = useProfile();
   const touch = useMemo(() => isTouchDevice(), []);
-  // « Auto » ne s'ajuste pas pendant une mesure : c'est elle qui tient le préréglage.
-  const auto = useStore((s) => s.settings.quality === "auto" && !s.bench?.running);
   const supersampling = useStore((s) => s.settings.supersampling);
-  const stepAuto = useStore((s) => s.stepAuto);
   // Avec la lumière précalculée, plus aucune ombre n'est calculée en temps réel.
   const baked = useStore((s) => s.baked);
   // La résolution de rendu : la native de l'écran, à l'échelle du profil — et au-delà seulement si
@@ -86,9 +83,9 @@ export function World() {
         });
       }}
     >
-      {/* « Auto » : le moniteur mesure les images par seconde ; en dessous de la cible il descend d'un
-          niveau, avec de la marge il remonte. Un préréglage choisi à la main ne bouge pas. */}
-      {auto ? <PerformanceMonitor bounds={(refresh) => (refresh > 90 ? [80, 110] : [50, 58])} flipflops={4} onDecline={() => stepAuto(1)} onIncline={() => stepAuto(-1)} /> : null}
+      {/* « Auto » : la qualité suit la machine dans les deux sens (`AutoQuality`) ; il ne fait rien sous un préréglage
+          choisi à la main, ni pendant une mesure. */}
+      <AutoQuality />
       <Suspense fallback={null}>
         <PacksReady>
           <Physics gravity={[0, -9.81, 0]} timeStep="vary">

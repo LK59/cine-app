@@ -10547,11 +10547,20 @@ lent » bas ne disait pas s'il venait d'un endroit de la maison ou de sursauts r
 en cours, sinon une mire qui est un vrai fichier 1080p (dessinée dans la page, elle pesait sur la mesure). Champs
 connus et bornés, compte tiré de la session, comme les autres relevés de cette route.
 
+**Son réglage « Auto » au journal (10.37.0).** Une ligne par visite, envoyée quand la page s'en va
+(`kind: "immersion-auto"`, même route) : niveaux de départ, d'arrivée, pire et meilleur, chaque changement
+(`secondes:de>vers` suivi de `f` cadence, `a` à-coups, `m` marge pour remonter), la cadence moyenne et les images de
+plus de 50 ms. Sans elle, rien ne disait si « Auto » avait trouvé son niveau.
+
+**Le pare-feu (10.36.0).** Le mode ne demande ses décors qu'en trois paquets (`immersion/vite.config.ts`,
+`assetPacks`) : CrowdSec bannit de tout le serveur une adresse qui demande plus de ~40 noms de fichiers non
+statiques distincts en rafale, et le chalet en demandait 73. Le garde-fou est `immersion/tests/e2e/15-requetes`.
+
 **Tests.** `immersion-trigger.test.ts` (le mot exact, l'adresse, et aucun import de three ni du projet dans
 `src/`), `immersion-files.test.ts` (types servis, cache, `.br` par les marqueurs de §131, jamais hors du dossier,
 404 sans build), `immersion-proxy.test.ts` (307 vers la connexion pour la page, 401 pour les fichiers, hors des
 listes publiques, porte des liens de partage), `immersion-activity.test.ts` (reconnu, hors du diagnostic),
-`viewport-diag-route.test.ts` (la ligne `immersion-bench`) ; de bout en bout, `immersion/tests/e2e/`.
+`viewport-diag-route.test.ts` (les lignes `immersion-bench` et `immersion-auto`) ; de bout en bout, `immersion/tests/e2e/`.
 
 ## 145. Les tâches de fond ont un interrupteur, pour les copies de l'application (11/11/2026)
 

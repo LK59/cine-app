@@ -26,6 +26,7 @@ import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { getVideo, playTestClip, stopOnLeave } from "./media/playback";
 import { dispatch } from "./media/commands";
 import { startUpNext } from "./media/upNext";
+import { sendAutoLog } from "./lib/autoLog";
 import { Prompts } from "./ui/Prompts";
 import { Remote } from "./ui/Remote";
 
@@ -62,11 +63,14 @@ export function App() {
     (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug, benchTiming, view, cueAt, perf, effects, screenLight, speakerLevels, musicLevels, things: THINGS.map(({ id, at }) => ({ id, at })), seats: SEATS };
     // La page s'en va, quelle qu'en soit la raison : l'arrêt de la lecture part quand même.
     window.addEventListener("pagehide", stopOnLeave);
+    // Ce qu'« Auto » a fait de la visite : une ligne au journal, en partant.
+    window.addEventListener("pagehide", sendAutoLog);
     // Un téléphone que l'on tourne en paysage : l'écran « tournez l'appareil » s'efface de lui-même.
     const retry = () => useStore.getState().phase === "unsupported" && boot();
     window.addEventListener("resize", retry);
     return () => {
       window.removeEventListener("pagehide", stopOnLeave);
+      window.removeEventListener("pagehide", sendAutoLog);
       window.removeEventListener("resize", retry);
     };
   }, [boot]);
