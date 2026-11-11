@@ -76,6 +76,8 @@ test("Auto descend quand la machine peine, et le dit au journal en partant", asy
     lines.push(route.request().postDataJSON());
     await route.fulfill({ status: 204 });
   });
+  // La perte du contexte forcée plus bas part aussi à la route des erreurs.
+  await page.route("**/api/client-error", (route) => route.fulfill({ status: 204 }));
   await enterWorld(page);
   await page.evaluate(() => (window as unknown as { __immersion: Handle }).__immersion.store.getState().updateSettings({ quality: "auto" }));
   const start = await level(page);
@@ -107,5 +109,66 @@ test("Auto descend quand la machine peine, et le dit au journal en partant", asy
   expect(typeof line.renderer).toBe("string");
   expect(line.renderer).not.toBe("null");
   expect(String(line.changes)).toMatch(/^\d+:\d+>\d+[fa](;\d+:\d+>\d+[fam])+$/);
+  expect(line).toMatchObject({ auto: true, quality: "auto", phase: "world", contextLost: 1 });
   expect(errors).toEqual([]);
+});
+
+/**
+ * La ligne de visite part aussi hors « Auto » (avant le 11/11/2026 au soir, rien sous un préréglage choisi), et les
+ * erreurs du chalet partent à la route des erreurs du cinéma (`/api/client-error`, source `immersion:…`) : une erreur
+ * que rien n'attrape, une perte du contexte WebGL. Un refus 4xx de la route arrête tout envoi (le pare-feu du serveur
+ * bannit sur les 4xx répétées).
+ */
+test("une visite hors Auto laisse sa ligne ; ses erreurs et sa perte de contexte partent au serveur", async ({ page }) => {
+  test.setTimeout(300_000);
+  const errors = watchErrors(page);
+  const lines: Record<string, unknown>[] = [];
+  const reports: Record<string, unknown>[] = [];
+  let refuse = false;
+  await page.route("**/api/viewport-diag", async (route) => {
+    lines.push(route.request().postDataJSON());
+    await route.fulfill({ status: 204 });
+  });
+  await page.route("**/api/client-error", async (route) => {
+    reports.push(route.request().postDataJSON());
+    await route.fulfill({ status: refuse ? 403 : 200, contentType: "application/json", body: "{}" });
+  });
+  // « Moyen » choisi avant d'entrer (réglages gardés par le navigateur) : « Auto » ne tourne pas une image.
+  await page.addInitScript(() => localStorage.setItem("laterna:immersion:settings:v2", JSON.stringify({ quality: "medium" })));
+  await enterWorld(page);
+
+  // Une erreur que rien n'attrape (émise à la main : une vraie ferait échouer le scénario par `watchErrors`).
+  const fire = (message: string) => page.evaluate((m) => window.dispatchEvent(new ErrorEvent("error", { message: m, error: new Error(m) })), message);
+  await fire("panne d'essai");
+  await expect.poll(() => reports.length).toBe(1);
+  expect(reports[0]).toMatchObject({ source: "immersion:window", name: "Error", message: "panne d'essai" });
+  // La même, une seconde fois : déjà dite, rien ne part.
+  await fire("panne d'essai");
+
+  // La perte du contexte : comptée, et envoyée avec ce qui aide à la lire.
+  await page.evaluate(() => (window as unknown as { __immersion: { gl: { forceContextLoss(): void } } }).__immersion.gl.forceContextLoss());
+  await expect.poll(() => state(page, "phase")).toBe("lost");
+  await expect.poll(() => reports.length).toBe(2);
+  expect(reports[1]).toMatchObject({ source: "immersion:webgl", name: "WebGLContextLost" });
+  expect(String(reports[1].message)).toMatch(/phase world, qualité medium/);
+
+  // La route refuse (403) : après ce refus, plus rien ne part.
+  refuse = true;
+  await fire("deuxième panne");
+  await expect.poll(() => reports.length).toBe(3);
+  await page.waitForTimeout(300);
+  await fire("troisième panne");
+  await page.waitForTimeout(1000);
+  expect(reports.length).toBe(3);
+
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
+  await expect.poll(() => lines.find((l) => l.kind === "immersion-auto"), { timeout: 10_000 }).toBeTruthy();
+  const line = lines.find((l) => l.kind === "immersion-auto")!;
+  expect(line).toMatchObject({ quality: "medium", phase: "world", end: "lost", auto: false, startLevel: null, changes: null, fps: null, contextLost: 1 });
+  // Quatre erreurs vues (la répétée et celle tue par le refus comptent), la perte du contexte à part.
+  expect(line.errors).toBe(4);
+  expect(line.seconds).toBeGreaterThan(0);
+  expect(typeof line.renderer).toBe("string");
+  // Le refus voulu plus haut, que le navigateur note dans la console.
+  expect(errors.filter((e) => !/status of 403/.test(e))).toEqual([]);
 });

@@ -13,7 +13,8 @@ import { viewportDiagAllowed } from "@/lib/writeLimits";
  * Et la mesure du mode Immersion (`kind: "immersion-bench"`, DECISIONS §144) : il n'a pas d'autre journal que
  * celui-ci, et ses chiffres — images par seconde par préréglage, carte graphique — décident de ses réglages.
  * Depuis 10.37.0, ce que son réglage « Auto » a fait d'une visite (`kind: "immersion-auto"`, une ligne en partant :
- * niveaux de départ, d'arrivée, pire et meilleur, chaque changement et sa raison).
+ * niveaux de départ, d'arrivée, pire et meilleur, chaque changement et sa raison) ; depuis le 11/11/2026 au soir cette ligne part à
+ * chaque visite, « Auto » ou non, avec la qualité choisie, la phase atteinte, les erreurs et les pertes du contexte.
  *
  * Le compte vient de la session, jamais du corps. Seuls les champs connus, bornés ; le reste tombe.
  * Rien n'est renvoyé.
@@ -36,6 +37,9 @@ const XRAY_UI_BOXES = ["row", "first", "pill", "panel"] as const;
 
 /** Les préréglages qu'une mesure du mode Immersion peut nommer. */
 const IMMERSION_PRESETS = new Set(["low", "medium", "high", "ultra"]);
+/** Le réglage de qualité qu'une visite du mode Immersion peut nommer, et ses phases (`immersion/src/state/store.ts`). */
+const IMMERSION_QUALITIES: ReadonlySet<string> = new Set(["auto", ...IMMERSION_PRESETS]);
+const IMMERSION_PHASES: ReadonlySet<string> = new Set(["checking", "unsupported", "loading", "gate", "world", "lost", "expired", "leaving"]);
 
 const px = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) && Math.abs(value) < 100_000 ? Math.round(value) : null;
@@ -189,20 +193,30 @@ export async function POST(req: NextRequest) {
     );
     return new NextResponse(null, { status: 204 });
   }
-  // « Auto » du mode Immersion (`immersion/src/world/AutoQuality.tsx`) : une ligne par visite, envoyée en partant.
+  // La visite du mode Immersion (`immersion/src/lib/autoLog.ts`) : une ligne par visite, envoyée en partant — la
+  // qualité choisie, la phase atteinte, les erreurs et les pertes du contexte WebGL, et ce qu'« Auto » a fait quand il
+  // a tourné (`immersion/src/world/AutoQuality.tsx`). Avant le 11/11/2026 au soir, elle n'existait que sous « Auto ».
   if (body.kind === "immersion-auto") {
+    const among = (value: unknown, allowed: ReadonlySet<string>) => (typeof value === "string" && allowed.has(value) ? value : null);
     const level = (value: unknown) => (typeof value === "number" && Number.isInteger(value) && value >= 0 && value < 32 ? value : null);
     const rate = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1000 ? Math.round(value * 10) / 10 : null);
     logViewportDiag(
       {
         user: session.jfUser ?? session.u,
         device: requestDeviceLabel(req),
+        quality: among(body.quality, IMMERSION_QUALITIES),
+        phase: among(body.phase, IMMERSION_PHASES),
+        end: among(body.end, IMMERSION_PHASES),
+        errors: px(body.errors),
+        contextLost: px(body.contextLost),
+        auto: body.auto === true,
         startLevel: level(body.startLevel),
         level: level(body.level),
         best: level(body.best),
         worst: level(body.worst),
         count: px(body.count),
-        // « 12:0>1f;40:1>0m » : la seconde de la visite, le niveau quitté et atteint, la raison (cadence, à-coups, marge).
+        // « 12:0>1f;40:1>0m » : la seconde de la visite (depuis l'ouverture de la page), le niveau quitté et atteint, la
+        // raison (cadence, à-coups, marge).
         changes: typeof body.changes === "string" && /^[0-9:>;fam]{0,600}$/.test(body.changes) ? body.changes : undefined,
         seconds: px(body.seconds),
         fps: rate(body.fps),
