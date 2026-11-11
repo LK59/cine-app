@@ -58,6 +58,12 @@ quel par le chalet (`immersion/src/net/`).
 | `{ t: "join", code }` | entre dans un salon → `joined` ; erreurs `no-room`, `full` |
 | `{ t: "leave" }` | → `left` |
 | `{ t: "set", key, value }` | change un objet partagé ; diffusé à tous, demandeur compris : `{ t: "state", key, v, value, by }` |
+| `{ t: "pos", p }` | sa position `[cm, cm, cm, mrad, mrad, bits]` — relayée aux autres : `{ t: "pos", id, p }` |
+| `{ t: "chat", text }` | 200 caractères, 5 messages par 10 s → `{ t: "chat", id, name, text, at }` à tous |
+| `{ t: "roster" }` | `{ t: "roster", token }` — les présents, signés pour l'application (`seal.ts`) |
+| `{ t: "game.start", game, sealed }` | lance « Devine le film » : la partie et ses réponses scellées par l'application |
+| `{ t: "game.answer", round, choice }` | une réponse (une par manche) ; `{ t: "game", game }` à chaque changement, `result` signé à la fin |
+| `{ t: "game.stop" }` | arrête la partie pour tous |
 
 Le service est **l'autorité** : un changement n'existe qu'une fois appliqué ici et numéroté (`v`, par objet) ; un
 client ignore un `state` plus vieux que ce qu'il a. À l'arrivée — et à chaque reprise — `joined`/`welcome` porte
@@ -75,6 +81,14 @@ l'état complet du salon.
 | 4401 | laissez-passer absent, mal signé ou expiré : en redemander un |
 | 4429 | trop de messages |
 | 4503 | le service s'arrête : se reconnecter |
+
+## « Devine le film »
+
+Le moteur est **un seul fichier**, `src/quiz.ts` : le service le fait tourner pour un salon (il tient le chronomètre
+et les scores), et le chalet le fait tourner lui-même quand on joue seul, sans service. Les réponses d'une partie
+arrivent **scellées** par l'application (`src/seal.ts`, AES-256-GCM sous la clé partagée) : le joueur qui lance les
+transporte sans pouvoir les lire. À la fin, le service **signe le bilan** ; l'application n'enregistre de records à
+plusieurs que ceux-là. `seal.ts` est importé tel quel par l'application (`src/lib/quiz/`).
 
 ## Développer
 

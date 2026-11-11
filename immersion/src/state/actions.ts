@@ -4,6 +4,7 @@ import { disposeMusic } from "../media/music";
 import { episodesOf, forgetLibrary, library, type Title } from "../media/library";
 import { dispatch } from "../media/commands";
 import { acceptPrompt, dismissPrompt } from "../media/upNext";
+import { answerQuiz } from "../game/quiz";
 import { leaveToLaterna } from "../lib/session";
 import { SCREENS, SOFA } from "../world/layout";
 import { SEATS, THINGS } from "../world/interactions";
@@ -238,6 +239,15 @@ function handle(intent: Intent): void {
       return acceptPrompt();
     case "dismiss":
       return dismissPrompt();
+    case "chat":
+      // Le chat n'existe que dans un salon.
+      if (s.net.room) s.setChatOpen(true);
+      return;
+    case "choice1":
+    case "choice2":
+    case "choice3":
+    case "choice4":
+      return answerQuiz(Number(intent.slice(-1)) - 1);
     case "sit":
       return toggleSeat();
     case "menu":

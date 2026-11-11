@@ -1,5 +1,8 @@
 import type { ClientMessage, ServerMessage, Visibility } from "../../../salons/src/protocol";
+import type { QuizView } from "../../../salons/src/quiz";
 import { useStore } from "../state/store";
+import { forgetPoses, poses, pushPose } from "./poses";
+import { applyShared, installSharedSink, seedShared } from "./sync";
 import { IDLE_NET, type NetState } from "./types";
 
 export type { NetState, NetStatus, PublicRoom } from "./types";
@@ -101,6 +104,7 @@ function onMessage(message: ServerMessage): void {
   switch (message.t) {
     case "welcome": {
       resume = message.resume;
+      if (message.room) enterRoom(message.room, false);
       attempt = 0;
       passRefusals = 0;
       setNet({ status: "online", you: message.you, room: message.room, error: null, offset: message.now - Date.now() });
@@ -129,17 +133,21 @@ function onMessage(message: ServerMessage): void {
     case "rooms":
       return setNet({ publicRooms: message.rooms });
     case "joined":
-      setNet({ room: message.room, error: null });
+      setNet({ room: message.room, error: null, chat: state.room?.code === message.room.code ? state.chat : [] });
+      enterRoom(message.room, true);
       save();
       return;
     case "left":
-      setNet({ room: null });
+      setNet({ room: null, chat: [] });
+      forgetPoses();
+      for (const listener of gameListeners) listener(null, undefined);
       save();
       return;
     case "enter":
       if (state.room) setNet({ room: { ...state.room, members: [...state.room.members.filter((m) => m.id !== message.member.id), message.member] } });
       return;
     case "exit":
+      poses.delete(message.id);
       if (state.room) setNet({ room: { ...state.room, members: state.room.members.filter((m) => m.id !== message.id) } });
       return;
     case "away":
@@ -150,9 +158,27 @@ function onMessage(message: ServerMessage): void {
       if (!room) return;
       // Un changement plus vieux que ce qu'on a (arrivé en retard) ne revient pas en arrière.
       if ((room.state[message.key]?.v ?? 0) >= message.v) return;
-      setNet({ room: { ...room, state: { ...room.state, [message.key]: { v: message.v, value: message.value } } } });
+      const next = { ...room.state, [message.key]: { v: message.v, value: message.value } };
+      setNet({ room: { ...room, state: next } });
+      applyShared(next);
       return;
     }
+    case "pos":
+      pushPose(message.id, message.p);
+      return;
+    case "chat":
+      setNet({ chat: [...state.chat, { id: message.id, name: message.name, text: message.text, at: Date.now() }].slice(-50) });
+      return;
+    case "roster": {
+      const waiting = rosterWaiters;
+      rosterWaiters = [];
+      for (const resolve of waiting) resolve(message.token);
+      return;
+    }
+    case "game":
+      if (state.room) setNet({ room: { ...state.room, game: message.game } });
+      for (const listener of gameListeners) listener(message.game, message.result);
+      return;
     case "error":
       // Un salon disparu (fermé, service redémarré) n'est plus à rejoindre au prochain retour.
       if (message.code === "no-room") forget();
@@ -231,7 +257,10 @@ async function open(): Promise<void> {
     ws = null;
     if (clockTimer) clearInterval(clockTimer);
     clockTimer = null;
-    if (!wanted) return setNet({ ...IDLE_NET, status: "off" });
+    if (!wanted) {
+      forgetPoses();
+      return setNet({ ...IDLE_NET, status: "off" });
+    }
     // Laissez-passer refusé : un autre, une fois ; deux de suite, la clé ne correspond pas — on n'insiste pas.
     if (event.code === CLOSE_PASS && ++passRefusals >= 2) {
       wanted = false;
@@ -279,6 +308,62 @@ export function leaveRoom(): void {
 export function setShared(key: string, value: unknown): void {
   send({ t: "set", key, value });
 }
+
+/**
+ * Arrivé dans un salon (ou revenu dans le sien) : son état appliqué au chalet, les positions connues des autres, la
+ * partie en cours. Le premier arrivé d'un salon neuf y pose l'état de son chalet.
+ */
+function enterRoom(room: NonNullable<NetState["room"]>, fresh: boolean): void {
+  applyShared(room.state);
+  forgetPoses(new Set(room.members.map((m) => m.id)));
+  for (const m of room.members) if (m.p && m.id !== net().you?.id) pushPose(m.id, m.p);
+  if (fresh && room.members.length === 1) seedShared(room);
+  for (const listener of gameListeners) listener(room.game, undefined);
+}
+
+/** Où l'on est, pour les autres (`[cm, cm, cm, mrad, mrad, bits]`). Rien hors d'un salon. */
+export function sendPos(p: number[]): void {
+  if (net().room) send({ t: "pos", p });
+}
+
+export function sendChat(text: string): void {
+  const clean = text.trim().slice(0, 200);
+  if (clean && net().room) send({ t: "chat", text: clean });
+}
+
+let rosterWaiters: ((token: string | null) => void)[] = [];
+
+/** La liste des présents signée par le service, pour préparer une partie ; `null` sans réponse (5 s). */
+export function requestRoster(): Promise<string | null> {
+  return new Promise((resolve) => {
+    if (!send({ t: "roster" })) return resolve(null);
+    const timer = setTimeout(() => {
+      rosterWaiters = rosterWaiters.filter((w) => w !== done);
+      resolve(null);
+    }, 5000);
+    const done = (token: string | null) => {
+      clearTimeout(timer);
+      resolve(token);
+    };
+    rosterWaiters.push(done);
+  });
+}
+
+/** Les intentions de la partie (lancer, répondre, arrêter) : c'est le service qui les applique. */
+export function sendGame(message: Extract<ClientMessage, { t: "game.start" | "game.answer" | "game.stop" }>): boolean {
+  return send(message);
+}
+
+type GameListener = (game: QuizView | null, result: string | undefined) => void;
+const gameListeners = new Set<GameListener>();
+
+/** La partie du salon, à chaque changement (`game/quiz.ts`). Rend de quoi se désabonner. */
+export function onGame(listener: GameListener): () => void {
+  gameListeners.add(listener);
+  return () => gameListeners.delete(listener);
+}
+
+installSharedSink((key, value) => send({ t: "set", key, value }), serverNow);
 
 /** Pour les scénarios : coupe la connexion comme le ferait le réseau (la reprise doit suivre). */
 export function dropForTest(): void {

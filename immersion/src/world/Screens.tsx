@@ -3,6 +3,8 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { Camera, CanvasTexture, Color, Frustum, Group, LinearFilter, Matrix4, Mesh, MeshStandardMaterial, PlaneGeometry, RGBAFormat, Scene, ShaderMaterial, Sphere, SRGBColorSpace, UnsignedByteType, Vector2, Vector3, VideoTexture, WebGLRenderTarget, type DepthTexture, type PerspectiveCamera } from "three";
 import { perf } from "../lib/perf";
 import { cueAt, drawCue, SUBTITLE_SIZE } from "../media/subtitles";
+import { drawQuiz, quizTv } from "../game/tv";
+import { serverNow } from "../net/salons";
 import { speaker } from "../media/audio";
 import { getVideo } from "../media/playback";
 import { useStore } from "../state/store";
@@ -269,14 +271,31 @@ export function Screens() {
   // Après le compositeur (priorité 1) : la vidéo, telle quelle.
   useFrame((_, delta) => {
     const playing = (status === "playing" || status === "paused") && video.readyState >= 2 && video.videoWidth > 0;
+    // « Devine le film » (`game/tv.ts`) : pendant une partie, les écrans montrent le jeu à la place du film — même
+    // dalle, même lumière d'écran. Redessiné une vingtaine de fois par seconde (l'indice se précise en continu).
+    const quiz = useStore.getState().quiz;
+    const showQuiz = !!quiz && !!quizTv.texture;
+    if (showQuiz) {
+      const now = performance.now();
+      if (now - quizTv.lastDraw > 50) {
+        quizTv.lastDraw = now;
+        drawQuiz(quiz.view, quiz.you, quiz.choice, quiz.mode === "salon" ? serverNow() : Date.now(), useStore.getState().lang);
+      }
+    }
+    if (showQuiz !== quizTv.active) {
+      quizTv.active = showQuiz;
+      const source = showQuiz ? quizTv.texture! : texture;
+      for (const material of [sceneMaterial, overlay.material, sampler.material]) material.uniforms.uVideo.value = source;
+      screenLight.uniforms.uSlVideo.value = source;
+    }
     // Les écrans s'allument et s'éteignent en fondu.
-    on.current += ((playing ? 1 : 0) - on.current) * (1 - Math.exp(-delta * 5));
+    on.current += ((playing || showQuiz ? 1 : 0) - on.current) * (1 - Math.exp(-delta * 5));
     if (on.current < 0.002) on.current = 0;
     const lit = on.current > 0;
 
     if (lit) {
-      // Le cadrage : l'image entière dans la dalle, des bandes noires pour le reste.
-      const ratio = video.videoWidth / video.videoHeight / (16 / 9);
+      // Le cadrage : l'image entière dans la dalle, des bandes noires pour le reste (le jeu est déjà au 16:9).
+      const ratio = showQuiz ? 1 : video.videoWidth / video.videoHeight / (16 / 9);
       const fit = ratio >= 1 ? [1, ratio] : [1 / ratio, 1];
       for (const material of [sceneMaterial, overlay.material]) {
         material.uniforms.uFit.value.set(fit[0], fit[1]);
@@ -320,7 +339,7 @@ export function Screens() {
     // ── La copie réduite de l'image : les reflets flous, et la couleur de chaque zone ──
     const z = zones.current;
     const now = performance.now();
-    if (playing && perf.sample && now - z.last > SAMPLE_EVERY_MS) {
+    if ((playing || showQuiz) && perf.sample && now - z.last > SAMPLE_EVERY_MS) {
       z.last = now;
       const previous = gl.getRenderTarget();
       gl.setRenderTarget(sampler.target);

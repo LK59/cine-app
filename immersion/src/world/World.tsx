@@ -14,6 +14,7 @@ import { SceneReady } from "./SceneReady";
 import { PanelAnchor } from "./PanelAnchor";
 import { installScreenLight } from "./screenLight";
 import { AutoQuality } from "./AutoQuality";
+import { Others } from "./Others";
 import { loadPacks } from "../lib/packs";
 import { reportContextLost } from "../lib/errorLog";
 
@@ -99,6 +100,8 @@ export function World() {
             <Player />
           </Physics>
           <InputDevices />
+          {/* Les autres participants d'un salon (rien hors salon). */}
+          <Others />
           <PanelAnchor />
           <Effects />
           <SceneReady />

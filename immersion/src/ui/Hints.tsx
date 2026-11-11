@@ -37,6 +37,7 @@ export function Hints() {
   const nearSeat = useStore((s) => s.nearSeat);
   const seated = useStore((s) => s.seated);
   const aimed = useStore((s) => s.aimedScreen !== null);
+  const inRoom = useStore((s) => !!s.net.room);
   // L'indication d'une chose dépend de son état (allumer / éteindre) : relue avec lui.
   const thingHint = useStore((s) => {
     const thing = s.nearThing ? THINGS.find((candidate) => candidate.id === s.nearThing) : null;
@@ -58,6 +59,11 @@ export function Hints() {
           </span>
         ) : null}
         {/* Pendant une lecture, cliquer l'écran visé pose la télécommande (`openRemote`). */}
+        {inRoom ? (
+          <span className="hint" data-testid="hint-chat">
+            <kbd>T</kbd> {t("chat.open")}
+          </span>
+        ) : null}
         {aimed && !thingHint ? (
           <span className="hint" data-testid="hint-remote">
             <kbd>{t("key.mouse")}</kbd> {t("hint.remote")}

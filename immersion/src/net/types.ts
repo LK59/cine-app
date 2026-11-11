@@ -25,6 +25,16 @@ export interface NetState {
   offset: number;
   /** Ce plus court aller-retour, en millisecondes. */
   rtt: number;
+  /** Les derniers messages du chat du salon (les plus récents à la fin), gardés le temps du salon. */
+  chat: ChatLine[];
 }
 
-export const IDLE_NET: NetState = { status: "off", you: null, room: null, publicRooms: [], error: null, offset: 0, rtt: 0 };
+export interface ChatLine {
+  id: string;
+  name: string;
+  text: string;
+  /** Heure locale de réception (pour l'effacement), en millisecondes. */
+  at: number;
+}
+
+export const IDLE_NET: NetState = { status: "off", you: null, room: null, publicRooms: [], error: null, offset: 0, rtt: 0, chat: [] };

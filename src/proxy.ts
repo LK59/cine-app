@@ -72,6 +72,10 @@ const GUEST_ALLOWED_MUTATIONS = new Set([
   "POST /api/remote-diag",
   // Le relevé de hauteur de l'app installée sur iOS (viewportWatch.ts) : même règle.
   "POST /api/viewport-diag",
+  // « Devine le film » (§146) : préparer une partie et rendre son bilan. Les routes n'écrivent que les scores de
+  // l'appelant (seul : recomptés par l'application ; à plusieurs : signés par le service des salons).
+  "POST /api/quiz/partie",
+  "POST /api/quiz/resultat",
   // « Signaler un problème » : créer le sien. Les routes vérifient que c'est bien le sien pour tout
   // le reste (modifier un brouillon, commenter, fermer, retirer une image).
   "POST /api/reports",

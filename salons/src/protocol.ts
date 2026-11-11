@@ -1,3 +1,5 @@
+import { parseGameData, type QuizGameData, type QuizView } from "./quiz.ts";
+
 /**
  * Le protocole des salons : ce qu'un client peut dire, ce que le service répond, et les bornes.
  *
@@ -25,6 +27,10 @@ export const LIMITS = {
   resumeMs: 60_000,
   /** Un salon vide est fermé après ce délai (le temps qu'un dernier participant revienne). */
   emptyRoomMs: 60_000,
+  /** Un message du chat : 200 caractères, et cinq messages par dix secondes au plus. */
+  maxChat: 200,
+  chatPerWindow: 5,
+  chatWindowMs: 10_000,
 } as const;
 
 /** L'alphabet des codes de salon : sans 0/O ni 1/I/L, pour se les dicter. */
@@ -59,7 +65,19 @@ export type ClientMessage =
   | { t: "create"; visibility: Visibility; name: string }
   | { t: "join"; code: string }
   | { t: "leave" }
-  | { t: "set"; key: string; value: unknown };
+  | { t: "set"; key: string; value: unknown }
+  /**
+   * Où l'on est : `[x, y, z, lacet, tangage, état]` — positions en centimètres, angles en milliradians, état en
+   * bits (1 : assis). Des entiers : quelques octets, et rien qui ne se compare mal.
+   */
+  | { t: "pos"; p: number[] }
+  | { t: "chat"; text: string }
+  /** Demande la liste des présents signée par le service (`seal.ts`), pour préparer une partie. */
+  | { t: "roster" }
+  /** Lance une partie : ce que voient les joueurs, et les réponses scellées par l'application. */
+  | { t: "game.start"; game: QuizGameData; sealed: string }
+  | { t: "game.answer"; round: number; choice: number }
+  | { t: "game.stop" };
 
 /** Ce qu'un participant voit d'un autre. */
 export interface MemberView {
@@ -67,6 +85,8 @@ export interface MemberView {
   name: string;
   /** Coupé depuis peu : sa place est gardée (`LIMITS.resumeMs`). */
   away: boolean;
+  /** Sa dernière position connue (voir `pos`), ou rien. */
+  p?: number[] | null;
 }
 
 export interface RoomView {
@@ -76,6 +96,8 @@ export interface RoomView {
   members: MemberView[];
   /** L'état de chaque objet partagé déjà touché, avec sa version. */
   state: Record<string, { v: number; value: unknown }>;
+  /** La partie de « Devine le film » en cours (ou la dernière, finie), sinon rien. */
+  game: QuizView | null;
 }
 
 /** Ce que le service envoie. */
@@ -89,9 +111,14 @@ export type ServerMessage =
   | { t: "exit"; id: string }
   | { t: "away"; id: string; away: boolean }
   | { t: "state"; key: string; v: number; value: unknown; by: string }
+  | { t: "pos"; id: string; p: number[] }
+  | { t: "chat"; id: string; name: string; text: string; at: number }
+  | { t: "roster"; token: string }
+  /** L'état de la partie ; à la fin, `result` : le bilan signé par le service, que l'application enregistre. */
+  | { t: "game"; game: QuizView | null; result?: string }
   | { t: "error"; code: ErrorCode; message: string };
 
-export type ErrorCode = "malformed" | "unknown" | "rate" | "full" | "too-many-rooms" | "no-room" | "not-in-room" | "already-in-room" | "bad-value";
+export type ErrorCode = "malformed" | "unknown" | "rate" | "full" | "too-many-rooms" | "no-room" | "not-in-room" | "already-in-room" | "bad-value" | "game-running" | "bad-game";
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
@@ -131,6 +158,25 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return { t: "leave" };
     case "set":
       return typeof data.key === "string" && data.key.length <= 40 && "value" in data ? { t: "set", key: data.key, value: data.value } : null;
+    case "pos": {
+      const p = data.p;
+      if (!Array.isArray(p) || p.length !== 6 || !p.every((n) => Number.isInteger(n) && Math.abs(n) <= 100_000)) return null;
+      return { t: "pos", p: p as number[] };
+    }
+    case "chat": {
+      const text = cleanName(data.text, LIMITS.maxChat);
+      return text ? { t: "chat", text } : null;
+    }
+    case "roster":
+      return { t: "roster" };
+    case "game.start": {
+      const game = parseGameData(data.game);
+      return game && typeof data.sealed === "string" && data.sealed.length <= 4096 ? { t: "game.start", game, sealed: data.sealed } : null;
+    }
+    case "game.answer":
+      return Number.isInteger(data.round) && Number.isInteger(data.choice) ? { t: "game.answer", round: data.round as number, choice: data.choice as number } : null;
+    case "game.stop":
+      return { t: "game.stop" };
     default:
       return null;
   }

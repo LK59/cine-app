@@ -22,7 +22,7 @@ function signPass(claims: { sub: string; name: string; admin: boolean; exp: numb
  */
 const KEY = "cle-de-test-des-salons-scenario-18-0123456789";
 
-type Handle = { emit(intent: string): void; store: { getState(): { setMode(m: string): void; net: { status: string; you: { id: string } | null; room: { code: string; members: { name: string; away: boolean }[] } | null } } }; salons: { drop(): void } };
+type Handle = { emit(intent: string): void; salons: { drop(): void; poses(): string[] }; store: { getState(): { setMode(m: string): void; net: { status: string; you: { id: string } | null; room: { code: string; members: { name: string; away: boolean }[] } | null } } } };
 const net = (page: Page) => page.evaluate(() => (window as unknown as { __immersion: Handle }).__immersion.store.getState().net);
 
 async function visitor(browser: Browser, name: string, available = true) {
@@ -68,6 +68,36 @@ test("deux navigateurs dans un salon privé puis public ; une coupure garde la p
   await expect(b.page.getByTestId("salons-members").locator("li")).toHaveCount(2);
   await expect(a.page.getByTestId("salons-members").locator("li")).toHaveCount(2);
   await expect(a.page.getByTestId("salons-members")).toContainText("Bob");
+
+  // Le chalet partagé : une lampe éteinte par Alice l'est chez Bob ; la porte ouverte par Bob l'est chez Alice.
+  const chalet = (page: Page) => page.evaluate(() => {
+    const s = (window as unknown as { __immersion: { store: { getState(): { lamps: { salon: boolean }; door: boolean } } } }).__immersion.store.getState();
+    return { lamp: s.lamps.salon, door: s.door };
+  });
+  const act = (page: Page, what: "lamp" | "door") =>
+    page.evaluate((w) => {
+      const s = (window as unknown as { __immersion: { store: { getState(): { toggleLamps(g: string): void; toggleDoor(): void } } } }).__immersion.store.getState();
+      if (w === "lamp") s.toggleLamps("salon");
+      else s.toggleDoor();
+    }, what);
+  const before0 = await chalet(b.page);
+  await act(a.page, "lamp");
+  await expect.poll(async () => (await chalet(b.page)).lamp, { timeout: 10_000 }).toBe(!before0.lamp);
+  expect((await chalet(a.page)).lamp).toBe(!before0.lamp);
+  await act(b.page, "door");
+  await expect.poll(async () => (await chalet(a.page)).door, { timeout: 10_000 }).toBe(!before0.door);
+
+  // La présence : chacun reçoit la position de l'autre (son avatar).
+  await expect.poll(() => b.page.evaluate(() => (window as unknown as { __immersion: Handle }).__immersion.salons.poses().length), { timeout: 10_000 }).toBe(1);
+
+  // Le chat : Alice écrit, Bob lit (le menu refermé : on revient dans le chalet).
+  await a.page.evaluate(() => (window as unknown as { __immersion: { store: { getState(): { setMode(m: string): void; setChatOpen(o: boolean): void } } } }).__immersion.store.getState().setMode("walk"));
+  await a.page.evaluate(() => (window as unknown as { __immersion: { store: { getState(): { setChatOpen(o: boolean): void } } } }).__immersion.store.getState().setChatOpen(true));
+  await a.page.getByTestId("chat-input").fill("Bonsoir le chalet");
+  await a.page.getByTestId("chat-input").press("Enter");
+  await expect(b.page.getByTestId("chat")).toContainText("Bonsoir le chalet");
+  await expect(b.page.getByTestId("chat")).toContainText("Alice");
+  await openSalons(a.page);
 
   // Une coupure chez Bob : absent chez Alice, puis de retour à la même place, dans le même salon.
   const before = (await net(b.page)).you!.id;

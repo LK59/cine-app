@@ -7,6 +7,7 @@ import type { AudioTrack, Span, SubtitleTrack } from "../media/api";
 import type { Episode, Library, Title } from "../media/library";
 import { FORCED_LABEL } from "../input/keyboardMouse";
 import { IDLE_NET, type NetState } from "../net/types";
+import type { QuizUi } from "../game/types";
 import type { SeatId } from "../world/interactions";
 import type { RoomId } from "../world/layout";
 
@@ -101,7 +102,7 @@ export interface ImmersionState {
   unsupported: Unsupported | null;
   mode: Mode;
   /** Le sous-écran du menu pause. */
-  pauseView: "menu" | "settings" | "salons";
+  pauseView: "menu" | "settings" | "salons" | "stats";
   seated: boolean;
   /** L'écran que le visiteur peut ouvrir d'ici (touche d'action) — son identifiant, ou rien. */
   nearScreen: string | null;
@@ -140,6 +141,18 @@ export interface ImmersionState {
   /** Les lampes de chaque groupe de pièces : allumées ou non (les interrupteurs). */
   lamps: Record<"salon" | "sud" | "nuit", boolean>;
   toggleLamps: (group: "salon" | "sud" | "nuit") => void;
+  /**
+   * En salon, lampes, porte, feu et musique ne changent pas ici : l'intention part au service, et l'état ne bouge
+   * qu'à son retour (`net/sync.ts` pose ce relais ; il rend `true` quand il a pris le geste). Seul, `null`.
+   */
+  sharedSink: ((key: string, value: unknown) => boolean) | null;
+  setSharedSink: (sink: ((key: string, value: unknown) => boolean) | null) => void;
+  /** La saisie du chat est ouverte (les touches vont au texte, pas au visiteur). */
+  chatOpen: boolean;
+  setChatOpen: (open: boolean) => void;
+  /** La partie de « Devine le film » en cours ou finie (`game/quiz.ts`), ou rien. */
+  quiz: QuizUi | null;
+  setQuiz: (quiz: QuizUi | null) => void;
   /** La lumière précalculée est-elle en place ? Les lumières temps réel se réduisent alors à ce qui bouge. */
   baked: boolean;
   setBaked: (baked: boolean) => void;
@@ -164,7 +177,7 @@ export interface ImmersionState {
   setPhase: (phase: Phase) => void;
   setUnsupported: (why: Unsupported | null) => void;
   setMode: (mode: Mode) => void;
-  setPauseView: (view: "menu" | "settings" | "salons") => void;
+  setPauseView: (view: "menu" | "settings" | "salons" | "stats") => void;
   /** Les salons du chalet (`net/salons.ts`) : connexion, salon courant, salons publics. Écrit par ce module seul. */
   net: NetState;
   setNet: (patch: Partial<NetState>) => void;
@@ -195,13 +208,31 @@ export const useStore = create<ImmersionState>((set, get) => ({
   keysSeen: null,
   setKeysSeen: (keysSeen) => get().keysSeen !== keysSeen && set({ keysSeen }),
   music: false,
-  toggleMusic: () => set({ music: !get().music }),
+  toggleMusic: () => {
+    const next = !get().music;
+    if (!get().sharedSink?.("musique", next)) set({ music: next });
+  },
   door: false,
-  toggleDoor: () => set({ door: !get().door }),
+  toggleDoor: () => {
+    const next = !get().door;
+    if (!get().sharedSink?.("porte", next)) set({ door: next });
+  },
   fire: true,
-  toggleFire: () => set({ fire: !get().fire }),
+  toggleFire: () => {
+    const next = !get().fire;
+    if (!get().sharedSink?.("feu", next)) set({ fire: next });
+  },
   lamps: { salon: true, sud: true, nuit: true },
-  toggleLamps: (group) => set({ lamps: { ...get().lamps, [group]: !get().lamps[group] } }),
+  toggleLamps: (group) => {
+    const next = !get().lamps[group];
+    if (!get().sharedSink?.(`lampes.${group}`, next)) set({ lamps: { ...get().lamps, [group]: next } });
+  },
+  sharedSink: null,
+  setSharedSink: (sharedSink) => set({ sharedSink }),
+  chatOpen: false,
+  setChatOpen: (chatOpen) => get().chatOpen !== chatOpen && set({ chatOpen }),
+  quiz: null,
+  setQuiz: (quiz) => set({ quiz }),
   bench: null,
   setBench: (patch) => set({ bench: { ...(get().bench ?? EMPTY_BENCH), ...patch } }),
   perfProfile: null,

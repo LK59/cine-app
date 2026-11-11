@@ -84,6 +84,21 @@ comment chaque étape est vérifiée. Tout ce qui n'y figure pas est hors périm
   finis, et ses `docker logs` sont lus deux minutes après son démarrage. Conteneurs de test nommés, `docker ps`
   vérifié à la fin.
 
+## Où on en est (11/11/2026)
+
+- **Étape 1 — faite** : service, laissez-passer, relais, salons publics et privés, horloge, reprise, bornes.
+- **Étape 2 — faite** : lampes, porte, feu, musique synchronisés (`net/sync.ts` — en salon, un geste part au service
+  et ne s'applique qu'à son retour ; le premier arrivé pose l'état de son chalet) ; présence (`world/Others.tsx` :
+  positions des yeux quantifiées, ~12/s au plus quand on bouge, montrées 120 ms dans le passé entre deux positions ;
+  silhouette, tête qui suit le regard, nom) ; chat (T, Entrée, en bas à gauche, s'efface en dix secondes).
+- **Étape 3 — à faire** : la télévision commune.
+- **Étape 4 — faite** : « Devine le film » — `salons/src/quiz.ts` (moteur commun, solo et salon), préparation par
+  l'application (`src/lib/quiz/`, titres que tous peuvent voir, affiche sans texte quand elle existe, leurres du même
+  genre, images par jeton chiffré), réponses scellées (`seal.ts`), bilan signé par le service, records
+  (`quiz_scores`) et Échap → Statistiques. Trois variantes : tout mélangé, affiches, de plus en plus vite. La
+  réplique comme indice n'est pas faite (elle demanderait les sous-titres de chaque film).
+- **Étape 5 — à faire** : avatars personnalisables, liste des salons et invitations par lien.
+
 ## Ordre de travail (une livraison par étape)
 
 1. **Le service et la connexion** : conteneur `laterna-salons`, laissez-passer, relais par `boot.mjs`, salons

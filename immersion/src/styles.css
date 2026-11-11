@@ -1784,3 +1784,161 @@ kbd {
   opacity: 0.5;
   cursor: default;
 }
+
+/* Le chat du salon (`ui/Chat.tsx`) : en bas à gauche, au-dessus des indications. */
+.chat {
+  position: fixed;
+  left: max(18px, env(safe-area-inset-left));
+  bottom: 96px;
+  z-index: 8;
+  width: min(440px, calc(100vw - 36px));
+  pointer-events: none;
+}
+.chat-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+.chat-lines li {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 5px 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.35;
+  color: #fff;
+  background: rgb(10 10 12 / 0.55);
+  overflow-wrap: anywhere;
+}
+.chat-lines strong {
+  margin-right: 4px;
+  color: var(--brand);
+}
+.chat-form input {
+  pointer-events: auto;
+  width: 100%;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  font: inherit;
+  color: #fff;
+  background: rgb(10 10 12 / 0.78);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+.touch-chat {
+  right: max(68px, calc(env(safe-area-inset-right) + 54px));
+}
+
+/* « Devine le film » : les réponses sur l'écran de chacun (`ui/QuizHud.tsx`). */
+.quiz-hud {
+  position: fixed;
+  left: 50%;
+  /* Au-dessus des indications du bas (« F S'asseoir »…), qu'elle couvrait. */
+  bottom: max(68px, env(safe-area-inset-bottom));
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(760px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.quiz-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+.quiz-choice {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 14px;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  color: #fff;
+  background: rgb(10 10 12 / 0.66);
+  box-shadow: inset 0 0 0 1px var(--ring);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.quiz-choice:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+.quiz-choice.is-mine {
+  box-shadow: inset 0 0 0 2px var(--brand);
+}
+.quiz-choice.is-right {
+  opacity: 1;
+  box-shadow: inset 0 0 0 2px #4ade80;
+  background: rgb(22 101 52 / 0.55);
+}
+.quiz-status {
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: rgb(10 10 12 / 0.6);
+}
+.quiz-actions {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+.games {
+  margin-top: 14px;
+}
+
+/* Échap → Statistiques (`ui/Stats.tsx`). */
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+}
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: var(--muted);
+}
+.stats-table th {
+  padding: 6px 8px 6px 0;
+  font-weight: 600;
+  color: #fff;
+  text-align: left;
+}
+.stats-table td {
+  padding: 6px 8px;
+}
+.stats-board {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-left: 22px;
+  font-size: 14px;
+}
+.stats-board li span:first-child {
+  display: inline-block;
+  min-width: 12em;
+}
+.stats-board li.is-you {
+  color: var(--brand);
+}

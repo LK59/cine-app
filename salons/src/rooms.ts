@@ -1,6 +1,8 @@
 import { randomBytes, randomInt } from "node:crypto";
 import type { PassClaims } from "./pass.ts";
 import { CODE_ALPHABET, CODE_LENGTH, LIMITS, SHARED_OBJECTS, type ClientMessage, type ErrorCode, type MemberView, type RoomView, type ServerMessage, type Visibility } from "./protocol.ts";
+import { QuizGame } from "./quiz.ts";
+import { openAnswers, signValue, type Roster, type SignedResult } from "./seal.ts";
 
 /**
  * Les salons, sans réseau : qui est où, ce qui est partagé, et ce qui arrive à une coupure.
@@ -22,6 +24,8 @@ export interface Connection {
 }
 
 export interface LobbyOptions {
+  /** La clé partagée avec l'application : elle ouvre les réponses d'une partie et signe présents et résultats. */
+  key?: string;
   now?: () => number;
   /** Planifie `fn` dans `ms` ; rend de quoi l'annuler. */
   schedule?: (fn: () => void, ms: number) => () => void;
@@ -38,6 +42,10 @@ interface Member {
   room: Room | null;
   /** Annule la fin de la place gardée (la personne est revenue). */
   cancelExpiry: (() => void) | null;
+  /** Dernière position connue (`pos`), pour qui arrive ensuite. */
+  p: number[] | null;
+  /** Les instants des derniers messages du chat (débit borné). */
+  chatTimes: number[];
 }
 
 interface Room {
@@ -49,6 +57,11 @@ interface Room {
   openedAt: number;
   peak: number;
   cancelClose: (() => void) | null;
+  /** La partie en cours, ou la dernière finie (montrée jusqu'à la suivante). */
+  game: QuizGame | null;
+  /** Le bilan signé de la partie finie, rendu à qui arrive après. */
+  result: string | null;
+  cancelGameTick: (() => void) | null;
 }
 
 const defaultSchedule = (fn: () => void, ms: number) => {
@@ -63,8 +76,10 @@ export class Lobby {
   private readonly now: () => number;
   private readonly schedule: (fn: () => void, ms: number) => () => void;
   private readonly log: (line: string) => void;
+  private readonly key: string;
 
   constructor(options: LobbyOptions = {}) {
+    this.key = options.key ?? "";
     this.now = options.now ?? Date.now;
     this.schedule = options.schedule ?? defaultSchedule;
     this.log = options.log ?? ((line) => console.log(`[salons] ${line}`));
@@ -85,7 +100,7 @@ export class Lobby {
       conn.send({ t: "welcome", you: { id: kept.id, name: kept.name }, resume: kept.resume, now: this.now(), room: kept.room ? this.view(kept.room) : null });
       return new MemberHandle(this, kept, conn);
     }
-    const member: Member = { id: token(8), account: claims.sub, name: claims.name, admin: claims.admin, resume: token(18), conn, room: null, cancelExpiry: null };
+    const member: Member = { id: token(8), account: claims.sub, name: claims.name, admin: claims.admin, resume: token(18), conn, room: null, cancelExpiry: null, p: null, chatTimes: [] };
     this.byResume.set(member.resume, member);
     conn.send({ t: "welcome", you: { id: member.id, name: member.name }, resume: member.resume, now: this.now(), room: null });
     return new MemberHandle(this, member, conn);
@@ -141,6 +156,9 @@ export class Lobby {
           openedAt: this.now(),
           peak: 0,
           cancelClose: null,
+          game: null,
+          result: null,
+          cancelGameTick: null,
         };
         this.rooms.set(room.code, room);
         this.log(`salon ouvert ${room.code} (${room.visibility === "public" ? "public" : "privé"}) par ${member.name}`);
@@ -169,7 +187,89 @@ export class Lobby {
         room.state.set(message.key, { v, value: message.value });
         return this.broadcast(room, { t: "state", key: message.key, v, value: message.value, by: member.id });
       }
+      case "pos": {
+        // Hors d'un salon, une position ne va nulle part : ignorée sans erreur (elle part en continu).
+        if (!member.room) return;
+        member.p = message.p;
+        return this.broadcast(member.room, { t: "pos", id: member.id, p: message.p }, member);
+      }
+      case "chat": {
+        const room = member.room;
+        if (!room) return this.fail(member, "not-in-room", "Rejoignez d'abord un salon.");
+        const now = this.now();
+        member.chatTimes = member.chatTimes.filter((t) => now - t < LIMITS.chatWindowMs);
+        if (member.chatTimes.length >= LIMITS.chatPerWindow) return this.fail(member, "rate", "Trop de messages : attendez un instant.");
+        member.chatTimes.push(now);
+        return this.broadcast(room, { t: "chat", id: member.id, name: member.name, text: message.text, at: now });
+      }
+      case "roster": {
+        const room = member.room;
+        if (!room) return this.fail(member, "not-in-room", "Rejoignez d'abord un salon.");
+        const roster: Roster = { room: room.code, subs: [...new Set([...room.members.values()].map((m) => m.account))], exp: this.now() + 10 * 60_000 };
+        return this.send(member, { t: "roster", token: signValue(roster, this.key, "roster") });
+      }
+      case "game.start": {
+        const room = member.room;
+        if (!room) return this.fail(member, "not-in-room", "Rejoignez d'abord un salon.");
+        if (room.game && room.game.phase !== "end") return this.fail(member, "game-running", "Une partie est déjà en cours.");
+        const opened = this.key ? openAnswers(message.sealed, this.key, this.now()) : null;
+        if (!opened || opened.gameId !== message.game.id || opened.answers.length !== message.game.rounds.length) {
+          return this.fail(member, "bad-game", "Partie refusée : préparée pour un autre salon, ou trop ancienne.");
+        }
+        const players = [...room.members.values()].filter((m) => m.conn).map((m) => ({ id: m.id, name: m.name }));
+        room.game = new QuizGame(message.game, opened.answers, players, this.now());
+        room.result = null;
+        this.log(`partie lancée dans ${room.code} (${message.game.variant}, ${message.game.rounds.length} manches, ${players.length} joueur(s))`);
+        return this.gameChanged(room);
+      }
+      case "game.answer": {
+        const room = member.room;
+        if (!room?.game) return;
+        const before = room.game.phase;
+        const taken = room.game.answer(member.id, message.round, message.choice, this.now());
+        if (taken === null) return;
+        // « A répondu » pour tous ; la justesse, seulement à la révélation (qui peut venir de cette réponse).
+        return before !== room.game.phase ? this.gameChanged(room) : this.broadcast(room, { t: "game", game: room.game.view() });
+      }
+      case "game.stop": {
+        const room = member.room;
+        if (!room?.game) return;
+        room.cancelGameTick?.();
+        room.cancelGameTick = null;
+        room.game = null;
+        room.result = null;
+        return this.broadcast(room, { t: "game", game: null });
+      }
     }
+  }
+
+  /** Diffuse la partie, et planifie le prochain changement de phase à l'heure du service. */
+  private gameChanged(room: Room): void {
+    const game = room.game;
+    if (!game) return;
+    room.cancelGameTick?.();
+    room.cancelGameTick = null;
+    if (game.phase === "end") {
+      if (!room.result) {
+        const result: SignedResult = {
+          gameId: game.data.id,
+          variant: game.data.variant,
+          room: room.code,
+          at: this.now(),
+          players: game.final().map((p) => ({ sub: room.members.get(p.id)?.account ?? "", name: p.name, score: p.score, correct: p.correct, total: p.total, bestStreak: p.bestStreak })).filter((p) => p.sub),
+        };
+        room.result = signValue(result, this.key, "result");
+        this.log(`partie finie dans ${room.code} (${result.players.length} joueur(s))`);
+      }
+      return this.broadcast(room, { t: "game", game: game.view(), result: room.result });
+    }
+    this.broadcast(room, { t: "game", game: game.view() });
+    room.cancelGameTick = this.schedule(() => {
+      room.cancelGameTick = null;
+      if (room.game !== game) return;
+      game.tick(this.now());
+      this.gameChanged(room);
+    }, Math.max(0, game.endsAt - this.now()));
   }
 
   private enter(member: Member, room: Room): void {
@@ -178,8 +278,13 @@ export class Lobby {
     room.members.set(member.id, member);
     member.room = room;
     room.peak = Math.max(room.peak, room.members.size);
+    // Arrivé en cours de partie : il joue à partir de la manche suivante.
+    if (room.game && room.game.phase !== "end") room.game.addPlayer(member.id, member.name);
     this.broadcast(room, { t: "enter", member: this.memberView(member) }, member);
     this.send(member, { t: "joined", room: this.view(room), now: this.now() });
+    if (room.result && room.game?.phase === "end") this.send(member, { t: "game", game: room.game.view(), result: room.result });
+    // Un salon vidé en pleine partie avait arrêté son chronomètre : il repart avec le premier qui revient.
+    if (room.game && room.game.phase !== "end" && !room.cancelGameTick) this.gameChanged(room);
   }
 
   private removeFromRoom(member: Member): void {
@@ -187,7 +292,13 @@ export class Lobby {
     if (!room) return;
     room.members.delete(member.id);
     member.room = null;
+    member.p = null;
+    room.game?.removePlayer(member.id);
     this.broadcast(room, { t: "exit", id: member.id });
+    if (room.members.size === 0) {
+      room.cancelGameTick?.();
+      room.cancelGameTick = null;
+    }
     if (room.members.size === 0 && !room.cancelClose) {
       room.cancelClose = this.schedule(() => {
         room.cancelClose = null;
@@ -207,7 +318,7 @@ export class Lobby {
   }
 
   private memberView(member: Member): MemberView {
-    return { id: member.id, name: member.name, away: member.conn === null };
+    return { id: member.id, name: member.name, away: member.conn === null, p: member.p };
   }
 
   private view(room: Room): RoomView {
@@ -217,6 +328,7 @@ export class Lobby {
       visibility: room.visibility,
       members: [...room.members.values()].map((m) => this.memberView(m)),
       state: Object.fromEntries(room.state),
+      game: room.game ? room.game.view() : null,
     };
   }
 

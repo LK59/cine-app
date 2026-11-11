@@ -17,7 +17,7 @@ import { device, emit, motion, resetMotion, type Intent, zoomBy } from "./intent
  * - Le regard : la souris, pointeur verrouillé. Échap ne parvient pas à la page tant qu'il l'est — le
  *   navigateur le garde pour rendre le pointeur. C'est donc la **perte du verrou** qui vaut « menu ».
  */
-const BY_LETTER: Record<string, Intent> = { e: "interact", f: "sit", m: "mute" };
+const BY_LETTER: Record<string, Intent> = { e: "interact", f: "sit", m: "mute", t: "chat" };
 const BY_CODE: Record<string, Intent> = {
   KeyE: "interact",
   KeyF: "sit",
@@ -30,9 +30,19 @@ const BY_CODE: Record<string, Intent> = {
   Enter: "accept",
   NumpadEnter: "accept",
   Backspace: "dismiss",
+  KeyT: "chat",
+  // « Devine le film » : les chiffres par leur position (en AZERTY, sans Maj, la touche 1 donne « & »).
+  Digit1: "choice1",
+  Digit2: "choice2",
+  Digit3: "choice3",
+  Digit4: "choice4",
+  Numpad1: "choice1",
+  Numpad2: "choice2",
+  Numpad3: "choice3",
+  Numpad4: "choice4",
 };
 /** Les touches lues par leur position, jamais par leur lettre. */
-const POSITIONAL = new Set(["Space", "Enter", "NumpadEnter", "Backspace"]);
+const POSITIONAL = new Set(["Space", "Enter", "NumpadEnter", "Backspace", "Digit1", "Digit2", "Digit3", "Digit4", "Numpad1", "Numpad2", "Numpad3", "Numpad4"]);
 const REPEATABLE = new Set<Intent>(["seekBack", "seekForward"]);
 
 type Direction = "forward" | "back" | "left" | "right" | "run";

@@ -97,6 +97,25 @@ export function setMusic(on: boolean, quiet: boolean): void {
 }
 
 /** La musique s'entend-elle en ce moment ? (La platine tourne quand c'est le cas.) */
+/**
+ * Dans un salon, la musique part du même endroit chez tous (`net/sync.ts`) : ce morceau, à ce nombre de secondes
+ * depuis son départ (au-delà de sa durée, on reprend au début — les morceaux s'enchaînent ensuite chez chacun).
+ */
+export function cueMusic(track: number, seconds: number): void {
+  const d = ensure();
+  const index = ((track % TRACKS.length) + TRACKS.length) % TRACKS.length;
+  if (d.track !== index || !d.element.src) {
+    d.track = index;
+    d.element.src = assetUrl(TRACKS[index]);
+  }
+  const place = () => {
+    const duration = d.element.duration;
+    d.element.currentTime = Number.isFinite(duration) && duration > 0 ? seconds % duration : seconds;
+  };
+  if (d.element.readyState >= 1) place();
+  else d.element.addEventListener("loadedmetadata", place, { once: true });
+}
+
 export function musicPlaying(): boolean {
   return !!deck && deck.wanted && !deck.quiet;
 }

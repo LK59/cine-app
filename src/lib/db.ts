@@ -741,6 +741,26 @@ function migrate(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_sofar_texts_created ON sofar_texts(created_at);
   `);
+  // « Devine le film » (DECISIONS.md §146) : un score par compte et par partie. `mode` : `solo` (joué sans service,
+  // vérifié par l'application) ou `salon` (compté et signé par le service). Une partie n'est enregistrée qu'une fois
+  // par compte, quel que soit le nombre de joueurs qui renvoient le bilan.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS quiz_scores (
+      game_id     TEXT    NOT NULL,
+      account     TEXT    NOT NULL,
+      name        TEXT    NOT NULL,
+      mode        TEXT    NOT NULL,
+      variant     TEXT    NOT NULL,
+      score       INTEGER NOT NULL,
+      correct     INTEGER NOT NULL,
+      total       INTEGER NOT NULL,
+      best_streak INTEGER NOT NULL,
+      players     INTEGER NOT NULL,
+      at          INTEGER NOT NULL,
+      PRIMARY KEY (game_id, account)
+    );
+    CREATE INDEX IF NOT EXISTS idx_quiz_scores_account ON quiz_scores(account);
+  `);
   // Les liens de partage (DECISIONS.md §112) : un film ou une série, un mot de passe (haché), une
   // fin, et le compte Jellyfin technique qui garde la reprise du lien. La ligne reste après
   // l'expiration — ce que le lien a consommé se lit encore dans l'Activité.
@@ -2600,6 +2620,54 @@ export const sofarDb = {
       removed += changes;
       if (changes < CLEANUP_BATCH || Date.now() - startedAt > CLEANUP_BUDGET_MS) return removed;
     }
+  },
+};
+
+/** « Devine le film » (DECISIONS.md §146) — voir la table dans `migrate()`. */
+export interface QuizScoreRow {
+  gameId: string;
+  account: string;
+  name: string;
+  mode: "solo" | "salon";
+  variant: string;
+  score: number;
+  correct: number;
+  total: number;
+  bestStreak: number;
+  players: number;
+  at: number;
+}
+
+export const quizDb = {
+  /** Enregistre des scores ; une partie déjà enregistrée pour un compte ne l'est pas deux fois. Rend combien sont neufs. */
+  record(rows: QuizScoreRow[]): number {
+    const stmt = getDb().prepare(
+      "INSERT OR IGNORE INTO quiz_scores (game_id, account, name, mode, variant, score, correct, total, best_streak, players, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+    let added = 0;
+    getDb().transaction(() => {
+      for (const r of rows) added += stmt.run(r.gameId, r.account, r.name, r.mode, r.variant, r.score, r.correct, r.total, r.bestStreak, r.players, r.at).changes;
+    })();
+    return added;
+  },
+  /** Les chiffres d'un compte, par variante. */
+  mine(account: string): { variant: string; games: number; best: number; bestStreak: number; correct: number; total: number; wins: number }[] {
+    return getDb()
+      .prepare(
+        `SELECT variant, COUNT(*) AS games, MAX(score) AS best, MAX(best_streak) AS bestStreak, SUM(correct) AS correct, SUM(total) AS total,
+                SUM(CASE WHEN players > 1 AND score = (SELECT MAX(o.score) FROM quiz_scores o WHERE o.game_id = q.game_id) THEN 1 ELSE 0 END) AS wins
+         FROM quiz_scores q WHERE account = ? GROUP BY variant ORDER BY variant`
+      )
+      .all(account) as { variant: string; games: number; best: number; bestStreak: number; correct: number; total: number; wins: number }[];
+  },
+  /** Le classement de la maison : le meilleur score de chaque compte (toutes variantes), les dix premiers. */
+  board(limit = 10): { account: string; name: string; best: number; games: number }[] {
+    return getDb()
+      .prepare(
+        `SELECT account, (SELECT name FROM quiz_scores n WHERE n.account = q.account ORDER BY at DESC LIMIT 1) AS name, MAX(score) AS best, COUNT(*) AS games
+         FROM quiz_scores q GROUP BY account ORDER BY best DESC LIMIT ?`
+      )
+      .all(limit) as { account: string; name: string; best: number; games: number }[];
   },
 };
 

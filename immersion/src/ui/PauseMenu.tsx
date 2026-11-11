@@ -3,6 +3,7 @@ import { quit, resumeVisit } from "../state/actions";
 import { ExperienceLogo } from "./Logo";
 import { Settings } from "./Settings";
 import { Salons } from "./Salons";
+import { Stats } from "./Stats";
 
 /**
  * Le menu pause : ouvert par Échap (qui rend le pointeur). « Reprendre » redemande le pointeur — le
@@ -25,6 +26,9 @@ export function PauseMenu() {
             <button type="button" className="btn" onClick={() => setView("salons")} data-testid="open-salons">
               {t("pause.salons")}
             </button>
+            <button type="button" className="btn" onClick={() => setView("stats")} data-testid="open-stats">
+              {t("pause.stats")}
+            </button>
             <button type="button" className="btn" onClick={() => setView("settings")} data-testid="open-settings">
               {t("pause.settings")}
             </button>
@@ -32,6 +36,16 @@ export function PauseMenu() {
               {t("pause.quit")}
             </button>
           </nav>
+        ) : view === "stats" ? (
+          <>
+            <h2 className="pause-title">{t("stats.title")}</h2>
+            <Stats />
+            <nav className="pause-actions">
+              <button type="button" className="btn" onClick={() => setView("menu")} data-testid="stats-back">
+                ← {t("panel.back")}
+              </button>
+            </nav>
+          </>
         ) : view === "salons" ? (
           <>
             <h2 className="pause-title">{t("salons.title")}</h2>

@@ -23,9 +23,12 @@ import { effects } from "./world/Effects";
 import { screenLight } from "./world/screenLight";
 import { ContextLost, Crashed, SessionEnded, Unsupported } from "./ui/Screens";
 import { TouchControls } from "./ui/TouchControls";
+import { Chat } from "./ui/Chat";
+import { QuizHud } from "./ui/QuizHud";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { getVideo, playTestClip, stopOnLeave } from "./media/playback";
 import { dropForTest } from "./net/salons";
+import { poses } from "./net/poses";
 import { dispatch } from "./media/commands";
 import { startUpNext } from "./media/upNext";
 import { sendAutoLog } from "./lib/autoLog";
@@ -64,7 +67,7 @@ export function App() {
       }
     );
     // Prise de test et de capture : l'état, et le visiteur qu'on peut poser où l'on veut.
-    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug, benchTiming, view, cueAt, perf, effects, screenLight, speakerLevels, musicLevels, things: THINGS.map(({ id, at }) => ({ id, at })), seats: SEATS, screens: Object.fromEntries(SCREENS.map((screen) => [screen.id, screen])), salons: { drop: dropForTest } };
+    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug, benchTiming, view, cueAt, perf, effects, screenLight, speakerLevels, musicLevels, things: THINGS.map(({ id, at }) => ({ id, at })), seats: SEATS, screens: Object.fromEntries(SCREENS.map((screen) => [screen.id, screen])), salons: { drop: dropForTest, poses: () => [...poses.keys()] } };
     // Ce qu'aucune barrière n'attrape (rappels, minuteurs, promesses) part au serveur (`errorLog.ts`).
     const unwatchErrors = watchErrors();
     // La page s'en va, quelle qu'en soit la raison : l'arrêt de la lecture part quand même.
@@ -113,6 +116,9 @@ export function App() {
           {mode === "walk" ? <Hud /> : null}
           {mode === "remote" ? <Remote /> : null}
           {mode === "walk" || mode === "remote" ? <Prompts /> : null}
+          {/* « Devine le film » : les réponses sur l'écran de chacun ; le chat du salon. */}
+          {mode === "walk" || mode === "remote" ? <QuizHud /> : null}
+          <Chat />
           {showFps ? <FpsCounter /> : null}
           {/* Pendant une mesure, le menu s'efface : la scène est rendue comme en visite. */}
           {measuring ? <BenchOverlay /> : mode === "paused" ? <PauseMenu /> : null}

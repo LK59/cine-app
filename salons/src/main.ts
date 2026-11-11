@@ -17,7 +17,7 @@ if (key.length < 32) {
 const port = Number(process.env.PORT ?? 8090);
 const version = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string }).version;
 
-const server = createSalonsServer({ key, lobby: new Lobby(), version });
+const server = createSalonsServer({ key, lobby: new Lobby({ key }), version });
 server.listen(port, () => console.log(`[salons] à l'écoute sur le port ${port}`));
 
 // Un arrêt propre : chaque client reçoit « redémarrage » et se reconnecte de lui-même.

@@ -1,4 +1,7 @@
-import { useMemo, type MouseEvent } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
+import type { Key } from "../lib/i18n";
+import { startQuiz, stopQuiz } from "../game/quiz";
+import { QUIZ_VARIANTS, type QuizVariant } from "../../../salons/src/quiz";
 import { useStore, useT } from "../state/store";
 import { useTrackLabels } from "./trackLabels";
 import { dispatch } from "../media/commands";
@@ -227,6 +230,46 @@ function NowPlaying() {
 }
 
 /**
+ * Les jeux de la télévision : « Devine le film », en trois variantes. Dans un salon, la partie est pour tous les
+ * présents ; seul, elle tourne dans la page (`game/quiz.ts`). Lancer referme le panneau : la télévision montre le jeu.
+ */
+function Games() {
+  const t = useT();
+  const quiz = useStore((s) => s.quiz);
+  const inRoom = useStore((s) => !!s.net.room);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const launch = async (variant: QuizVariant) => {
+    setBusy(true);
+    setError(null);
+    const failure = await startQuiz(variant);
+    setBusy(false);
+    if (failure) setError(t(`quiz.err.${failure}` as Key));
+    else closePanel();
+  };
+  return (
+    <section className="games" data-testid="games">
+      <h3>{t("quiz.title")}</h3>
+      <p className="panel-note">{inRoom ? t("quiz.inRoom") : t("quiz.solo")}</p>
+      {quiz && quiz.view.phase !== "end" ? (
+        <button type="button" className="chip" onClick={stopQuiz} data-testid="quiz-stop">
+          ■ {t("quiz.stop")}
+        </button>
+      ) : (
+        <div className="chips">
+          {QUIZ_VARIANTS.map((variant) => (
+            <button key={variant} type="button" className="chip" disabled={busy} onClick={() => void launch(variant)} data-testid={`quiz-start-${variant}`}>
+              ▶ {t(`quiz.variant.${variant}` as Key)}
+            </button>
+          ))}
+        </div>
+      )}
+      {error ? <p className="panel-note" data-testid="quiz-error">{error}</p> : null}
+    </section>
+  );
+}
+
+/**
  * Laterna, dans le chalet : reprendre une lecture, voir ce qui vient d'arriver, chercher un titre,
  * ouvrir sa fiche, le lancer sur les télévisions.
  *
@@ -263,6 +306,7 @@ export function Panel() {
           {active ? (
             <NowPlaying />
           ) : null}
+          <Games />
           {failed ? <p className="panel-note">{t("panel.failed")}</p> : null}
           {!lib && !failed ? <p className="panel-note">{t("panel.loading")}…</p> : null}
           {lib && results ? (

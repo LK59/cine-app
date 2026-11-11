@@ -10648,3 +10648,16 @@ de vrais clients WebSocket — refus en 4401, débit en 4429, message trop gros,
 `salons-relay.test.ts` (poignée de main et octets relayés dans les deux sens, autres connexions montantes laissées à
 Next, 503 sans adresse, 502 service injoignable, autre origine refusée). Dans le chalet, le scénario
 `immersion/tests/e2e/18-salons.spec.ts` (deux navigateurs, un vrai service).
+
+**Étapes 2 et 4 (11/11/2026, même section).** *Le chalet partagé* : en salon, `toggleLamps`/`toggleDoor`/`toggleFire`/
+`toggleMusic` ne changent rien eux-mêmes — le store passe le geste au relais `sharedSink` (`immersion/src/net/sync.ts`),
+qui l'envoie au service ; l'état ne change qu'au retour, chez tous en même temps. La présence et le chat passent par le
+même service (positions des yeux quantifiées, chat borné à 5 messages par 10 s). *« Devine le film »* : le moteur est
+un seul fichier (`salons/src/quiz.ts`) joué par le service en salon et par la page seule ; l'application prépare la
+partie parmi les films que **tous** les présents peuvent voir (liste signée par le service, `seal.ts`), scelle les
+réponses pour le service, sert les images par un jeton chiffré (`/api/quiz/image?t=`, un seul nom pour le pare-feu,
+204 sur une absence), et n'enregistre que des bilans signés par le service — ou, seul, recomptés par elle à partir des
+réponses données (`soloGames.ts`). Records : `quiz_scores`, lus par `/api/quiz/stats` (Échap → Statistiques). Les
+fichiers partagés du service entrent seuls dans le contexte de l'image (`.dockerignore`). Tests : `quiz-build`,
+`quiz-routes` ; dans le service, `quiz.test.ts` et les parties de `rooms.test.ts` ; dans le chalet, les scénarios 18
+(lampes, porte, présence, chat) et 19 (seul, et à deux avec un vrai service).

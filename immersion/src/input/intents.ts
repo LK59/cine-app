@@ -28,7 +28,14 @@ export type Intent =
   /** Accepter l'invite du moment : passer l'intro ou le récap, lancer l'épisode suivant (`media/upNext.ts`). */
   | "accept"
   /** Écarter la carte de l'épisode suivant (« Regarder le générique »). */
-  | "dismiss";
+  | "dismiss"
+  /** Ouvrir la saisie du chat du salon. */
+  | "chat"
+  /** Répondre à « Devine le film » : la proposition 1, 2, 3 ou 4. */
+  | "choice1"
+  | "choice2"
+  | "choice3"
+  | "choice4";
 
 /** Le mouvement voulu, dans le repère du visiteur : −1 à 1 sur chaque axe. */
 export const motion = {

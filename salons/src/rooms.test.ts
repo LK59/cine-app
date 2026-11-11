@@ -165,3 +165,127 @@ test("créer en étant déjà dans un salon : on quitte le premier", () => {
 // Garde de type : le harnais rend des poignées.
 const _typeCheck: MemberHandle | null = null;
 void _typeCheck;
+
+import { openAnswers, sealAnswers, verifyValue, type Roster, type SignedResult } from "./seal.ts";
+import { INTRO_MS } from "./quiz.ts";
+
+const KEY = "clé-des-tests-du-salon-0123456789abcdef";
+
+function keyed() {
+  let now = 1000;
+  const timers: { at: number; fn: () => void; live: boolean }[] = [];
+  const lobby = new Lobby({
+    key: KEY,
+    now: () => now,
+    schedule: (fn, ms) => {
+      const t = { at: now + ms, fn, live: true };
+      timers.push(t);
+      return () => void (t.live = false);
+    },
+    log: () => {},
+  });
+  const advance = (ms: number) => {
+    const until = now + ms;
+    for (;;) {
+      const next = timers.filter((t) => t.live && t.at <= until).sort((a, b) => a.at - b.at)[0];
+      if (!next) break;
+      now = Math.max(now, next.at);
+      next.live = false;
+      next.fn();
+    }
+    now = until;
+  };
+  const join = (name: string) => {
+    const inbox: ServerMessage[] = [];
+    const handle = lobby.connect({ sub: `compte-${name}`, name, admin: false, exp: Infinity }, { send: (m) => inbox.push(m) });
+    const last = <T extends ServerMessage["t"]>(t: T) => [...inbox].reverse().find((m) => m.t === t) as Extract<ServerMessage, { t: T }> | undefined;
+    return { inbox, handle, last };
+  };
+  return { lobby, advance, join, now: () => now };
+}
+
+test("la position va aux autres seulement, et reste connue de qui arrive ensuite", () => {
+  const { join } = keyed();
+  const a = join("Alice");
+  const b = join("Bob");
+  a.handle.receive({ t: "create", visibility: "private", name: "" });
+  const code = a.last("joined")!.room.code;
+  b.handle.receive({ t: "join", code });
+  a.handle.receive({ t: "pos", p: [100, 0, -250, 1571, 0, 1] });
+  assert.deepEqual(b.last("pos"), { t: "pos", id: a.handle.id, p: [100, 0, -250, 1571, 0, 1] });
+  assert.equal(a.inbox.filter((m) => m.t === "pos").length, 0);
+  const c = join("Chloé");
+  c.handle.receive({ t: "join", code });
+  assert.deepEqual(c.last("joined")!.room.members.find((m) => m.name === "Alice")!.p, [100, 0, -250, 1571, 0, 1]);
+});
+
+test("le chat : diffusé à tous avec le nom ; cinq messages par dix secondes au plus", () => {
+  const { join, advance } = keyed();
+  const a = join("Alice");
+  const b = join("Bob");
+  a.handle.receive({ t: "create", visibility: "private", name: "" });
+  b.handle.receive({ t: "join", code: a.last("joined")!.room.code });
+  for (let i = 0; i < 6; i++) a.handle.receive({ t: "chat", text: `message ${i}` });
+  assert.equal(b.inbox.filter((m) => m.t === "chat").length, 5);
+  assert.equal(a.last("error")!.code, "rate");
+  assert.equal(b.last("chat")!.name, "Alice");
+  advance(10_000);
+  a.handle.receive({ t: "chat", text: "encore" });
+  assert.equal(b.last("chat")!.text, "encore");
+});
+
+test("la liste des présents est signée par le service, pour cet usage seulement", () => {
+  const { join } = keyed();
+  const a = join("Alice");
+  const b = join("Bob");
+  a.handle.receive({ t: "create", visibility: "private", name: "" });
+  b.handle.receive({ t: "join", code: a.last("joined")!.room.code });
+  a.handle.receive({ t: "roster" });
+  const token = a.last("roster")!.token;
+  assert.deepEqual(verifyValue<Roster>(token, KEY, "roster")!.subs.sort(), ["compte-Alice", "compte-Bob"]);
+  assert.equal(verifyValue(token, KEY, "result"), null);
+  assert.equal(verifyValue(token, KEY + "x", "roster"), null);
+});
+
+test("une partie à deux, de bout en bout : réponses scellées ouvertes par le service, révélation, bilan signé", () => {
+  const { join, advance, now } = keyed();
+  const a = join("Alice");
+  const b = join("Bob");
+  a.handle.receive({ t: "create", visibility: "private", name: "" });
+  b.handle.receive({ t: "join", code: a.last("joined")!.room.code });
+  const game = { id: "partie-test-01", variant: "mixte" as const, rounds: [0, 1, 2].map((i) => ({ kind: "tagline" as const, text: `n${i}`, choices: ["A", "B", "C", "D"] as [string, string, string, string] })) };
+  // Scellée pour une autre partie : refusée.
+  a.handle.receive({ t: "game.start", game, sealed: sealAnswers({ gameId: "autre", answers: [0, 0, 0], exp: now() + 60_000 }, KEY) });
+  assert.equal(a.last("error")!.code, "bad-game");
+  a.handle.receive({ t: "game.start", game, sealed: sealAnswers({ gameId: game.id, answers: [2, 0, 1], exp: now() + 60_000 }, KEY) });
+  assert.equal(b.last("game")!.game!.phase, "intro");
+  b.handle.receive({ t: "game.start", game, sealed: sealAnswers({ gameId: game.id, answers: [2, 0, 1], exp: now() + 60_000 }, KEY) });
+  assert.equal(b.last("error")!.code, "game-running");
+  advance(INTRO_MS);
+  assert.equal(a.last("game")!.game!.phase, "question");
+  assert.equal(a.last("game")!.game!.answer, null);
+  for (let r = 0; r < 3; r++) {
+    const answer = [2, 0, 1][r];
+    a.handle.receive({ t: "game.answer", round: r, choice: answer });
+    b.handle.receive({ t: "game.answer", round: r, choice: (answer + 1) % 4 });
+    const view = b.last("game")!.game!;
+    assert.equal(view.phase, "reveal");
+    assert.equal(view.answer, answer);
+    advance(view.endsAt - now());
+  }
+  const end = a.last("game")!;
+  assert.equal(end.game!.phase, "end");
+  const result = verifyValue<SignedResult>(end.result, KEY, "result")!;
+  assert.equal(result.gameId, game.id);
+  const alice = result.players.find((p) => p.sub === "compte-Alice")!;
+  assert.equal(alice.correct, 3);
+  assert.ok(alice.score > 3000);
+  assert.equal(result.players.find((p) => p.sub === "compte-Bob")!.score, 0);
+  // Qui arrive après la fin voit le bilan.
+  const c = join("Chloé");
+  c.handle.receive({ t: "join", code: a.last("joined")!.room.code });
+  assert.equal(c.last("game")!.result, end.result);
+  // Le sceau ne s'ouvre qu'avec la clé, et pas après son heure.
+  assert.equal(openAnswers(sealAnswers({ gameId: "x", answers: [1], exp: 5000 }, KEY), KEY, 6000), null);
+  assert.equal(openAnswers(sealAnswers({ gameId: "x", answers: [1], exp: 5000 }, KEY), "autre-clé", 1000), null);
+});

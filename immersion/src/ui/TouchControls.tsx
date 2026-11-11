@@ -16,6 +16,7 @@ export function TouchControls() {
   const nearSeat = useStore((s) => s.nearSeat);
   const seated = useStore((s) => s.seated);
   const live = useStore((s) => s.playback.status === "playing" || s.playback.status === "paused");
+  const inRoom = useStore((s) => !!s.net.room);
   const paused = useStore((s) => s.playback.wantPaused);
   const thingHint = useStore((s) => {
     const thing = s.nearThing ? THINGS.find((candidate) => candidate.id === s.nearThing) : null;
@@ -59,6 +60,11 @@ export function TouchControls() {
       <button type="button" className="touch-menu" onPointerDown={press("menu")} aria-label={t("gate.pause")} data-testid="touch-menu">
         ☰
       </button>
+      {inRoom ? (
+        <button type="button" className="touch-menu touch-chat" onPointerDown={press("chat")} aria-label={t("chat.open")} data-testid="touch-chat">
+          💬
+        </button>
+      ) : null}
       <div className="touch-actions">
         {live ? (
           <button type="button" className="touch-button" onPointerDown={press("playPause")} data-testid="touch-play">
