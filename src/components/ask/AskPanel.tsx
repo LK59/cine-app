@@ -389,10 +389,16 @@ export function AskPanel({ itemId, where, position, sofarPosition, onClose, pers
     inputRef.current?.blur();
   }
 
+  // La minuterie de `onBlur` est annulée au démontage : un panneau fermé dans les 350 ms ne touche plus à la
+  // page (et sous jsdom, elle se déclenchait après la fin du test, `window` déjà parti — portail du 11/11).
+  const restoreTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(restoreTimer.current), []);
+
   function onBlur() {
     setFocused(false);
     // Le clavier a fini de partir avant qu'on remette la page à sa place (iOS la laisse parfois décalée).
-    window.setTimeout(() => {
+    window.clearTimeout(restoreTimer.current);
+    restoreTimer.current = window.setTimeout(() => {
       if (pageAt.current) restorePageScroll(window, pageAt.current);
     }, 350);
   }
