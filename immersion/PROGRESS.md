@@ -641,9 +641,15 @@ service, `../salons/` (README, `docs/DEPLOIEMENT.md`). Fait :
 - **Scénario 18** : deux navigateurs et un vrai service — salon privé par code, code inconnu, coupure qui rend la
   même place, salon public par la liste, « Jouer seul », écran solitaire sans service.
 
-**Étape suivante (2)** : brancher lampes, porte, feu et musique sur `setShared` / l'état du salon (le service les
-accepte déjà), la présence (positions quantifiées, interpolées ; avatars simples avec nom) et le chat. Effort
-conseillé : moyen.
+**Étapes 2 et 4 faites le 11/11 au soir** (voir `docs/MULTIJOUEUR.md`, « Où on en est », et DECISIONS §146) : chalet
+partagé (`net/sync.ts`), présence (`world/Others.tsx`, `net/poses.ts`), chat (`ui/Chat.tsx`, touche T), « Devine le
+film » (`game/quiz.ts`, `game/tv.ts`, `ui/QuizHud.tsx`, touches 1 à 4 ; panneau Laterna → « Devine le film » ; Échap →
+Statistiques). Scénarios 18 et 19. Pièges : un bouton du panneau 3D se clique par `dispatchEvent("click")` dans un
+scénario (il bouge tant que le regard se tourne vers lui) ; la touche T et les chiffres sont lus par leur position.
+
+**Restent** : l'étape 3 (la télévision commune — effort élevé conseillé) et l'étape 5 (avatars personnalisables,
+liste des salons soignée, invitations par lien). Puis le déploiement : une version de Laterna, et le conteneur
+`laterna-salons` selon `../salons/docs/DEPLOIEMENT.md`.
 
 ## Prochaine action
 
