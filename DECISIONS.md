@@ -3757,6 +3757,10 @@ sans les republier). Un compte qui avait déjà des pages à voir garde son reta
 elles —, et un compte jamais croisé la reçoit comme toute page récente. Le registre des corrections
 vise désormais cette page (`page: "10.5"`) ; elle reprend au mot près celles de la 10.1 à la 10.5,
 que le registre ne double pas en les versant ensuite (`withLedgerEntry`).
+Une seconde page discrète, « 10.37 » (11/11/2026, `page1037.ts`), remplit l'historique des 10.14 à 10.37 :
+seulement ce que tout compte a déjà (« Précédemment », les fiches du bureau en une page) — ni les fonctions
+encore réservées aux administrateurs, annoncées à leur ouverture (brouillon « 10.33 »), ni le « Lab bêta »,
+ni le mode caché. Les entrées suivantes du registre visent cette page (`page: "10.37"`).
 
 **« Voir plus ›».** Dans la fenêtre, l'entrée des corrections ne montre que sa phrase ; « Voir plus » ferme
 la fenêtre (`closedBy: "voir-plus"`) et ouvre Compte → Nouveautés (`#nouveautes=corrections:<id>`, la
