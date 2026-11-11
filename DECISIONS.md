@@ -10530,7 +10530,13 @@ lecteur serveur (`POST /api/jellyfin/playback/start`, son toujours en stéréo, 
 serveur pour les fichiers HDR). Ses lignes dans `player.log` portent `player: "immersion"` — jamais celles du
 lecteur serveur : l'activité les reconnaît (`playerOf`, `seances.ts`) et les tient hors du diagnostic
 fichier-ou-appareil (`diagnosis.ts`), qui parle des deux lecteurs de l'application. Les empreintes du lecteur ne
-le connaissent pas.
+le connaissent pas. Depuis la v2 (11/11/2026) il choisit sa piste audio — la négociation est refaite avec
+`audioStreamIndex`, à la position où l'on est — et lit les sous-titres texte par la route du lecteur serveur
+(`/api/jellyfin/stream/subtitle/…`), nommés par `@/lib/trackLabel` comme dans l'application.
+
+**Ordinateur et tactile (v2).** Le mode se visitait à la souris et au clavier seulement ; il se pilote aussi au
+doigt (un manche à gauche, le regard à droite, des boutons pour les gestes du clavier), téléphone tenu en
+paysage. Rien ne change côté application : l'affiche de la recherche est la même sur tous les appareils.
 
 **Sa mesure.** Le bouton « Mesurer » de ses réglages joue un parcours fixe par préréglage, avec et sans vidéo,
 et envoie une ligne par passage à `startup.log` (`kind: "immersion-bench"`, par `/api/viewport-diag` — le mode n'a

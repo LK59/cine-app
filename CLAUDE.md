@@ -599,12 +599,13 @@ l'écran » already read, once per session across rebuilds and handovers (`scene
 `immersion/` at the root — its own `package.json`, Vite build (a `Dockerfile` stage copies `dist` to
 `immersion-dist`), Playwright tests and journal (`immersion/PROGRESS.md`, read it before touching anything
 there) — excluded from the app's typecheck, lint and tests like `streamdeck-plugin`. A first-person 3D chalet
-whose televisions play the library; desktop only. The app's whole share: searching exactly `immersion` adds one
+whose televisions play the library; mouse and keyboard, or touch (phone in landscape) since 11/11/2026. The app's whole share: searching exactly `immersion` adds one
 poster, « Le Chalet », to the results (`src/lib/immersionTrigger.ts`, one caller, `PlayerSearchPanel`); the page
 is served at `/immersion` and its files under `/api/immersion/*` (`src/lib/immersionFiles.ts`) — under `/api/`
 because the service worker caches every other non-image GET forever — both behind the proxy like any address.
 It plays through the server player's negotiation (`POST /api/jellyfin/playback/start`, stereo only, server-side
-HDR → SDR for HDR files), sends `stop` on every exit, and its `player.log` lines carry `player: "immersion"`,
+HDR → SDR for HDR files; an audio track change renegotiates with `audioStreamIndex`, text subtitles come from the
+server player's subtitle route), sends `stop` on every exit, and its `player.log` lines carry `player: "immersion"`,
 which the activity page recognises and keeps out of the file-or-device diagnosis. Its « Mesurer » button writes
 one `kind: "immersion-bench"` line per pass to `startup.log` through `/api/viewport-diag` (average fps, 1 % low,
 the GPU the browser names, the resolution actually rendered). The player fingerprints do not know it.
