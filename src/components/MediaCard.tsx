@@ -95,7 +95,7 @@ export function MediaCard({
   if (!href) return <div className={surface}>{body}</div>;
 
   return (
-    <Link href={href} className={surface} {...anchorProps}>
+    <Link prefetch={false} href={href} className={surface} {...anchorProps}>
       {body}
     </Link>
   );

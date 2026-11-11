@@ -132,7 +132,7 @@ export function IntegrityPanel() {
                     <span className="min-w-0 break-words">{f.title ?? f.path}</span>
                   </p>
                   {href && (
-                    <Link href={href} className="btn btn-sm shrink-0 rounded-full">
+                    <Link prefetch={false} href={href} className="btn btn-sm shrink-0 rounded-full">
                       {t(f.kind === "movie" ? "libraryCheck.integrity.replaceRadarr" : "libraryCheck.integrity.replaceSonarr")}
                     </Link>
                   )}

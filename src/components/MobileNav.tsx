@@ -39,7 +39,7 @@ function SheetSection({
         {items.map(({ href, label, icon: Icon }) => {
           const active = isActive(href);
           return (
-            <Link
+            <Link prefetch={false}
               key={href}
               href={href}
               onTouchStart={() => prefetchRoute(href)}
@@ -253,7 +253,7 @@ export function MobileNav() {
               {PINNED.map(({ href, label, icon: Icon }) => {
                 const active = isActive(href);
                 return (
-                  <Link
+                  <Link prefetch={false}
                     key={href}
                     href={href}
                     data-lens={href}

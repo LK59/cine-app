@@ -26,7 +26,7 @@ export function FeatureNeeds({ needs, missing }: { needs: readonly ConfigNeed[];
         <p key={need} className="flex flex-wrap items-center gap-x-1.5 text-warning" data-need-missing={need}>
           <CircleAlert size={13} aria-hidden />
           {t("config.needs.missing", { need: t(`config.needs.${need}`) })}
-          <Link href={NEED_HREF[need]} className="font-medium text-accent-400 hover:underline">
+          <Link prefetch={false} href={NEED_HREF[need]} className="font-medium text-accent-400 hover:underline">
             {t(`config.needs.fix.${need}`)}
           </Link>
         </p>

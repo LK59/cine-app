@@ -311,7 +311,7 @@ export function CapabilitySection({ configureHref }: { configureHref?: string } 
             <p className="-mt-2 mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs text-subtle" data-testid="capabilities-not-configured">
               <span>{t('health.capabilitiesNotConfigured', { n: String(unconfiguredCount) })}</span>
               {configureHref && (
-                <Link href={configureHref} className="inline-flex items-center gap-0.5 font-medium text-muted hover:text-white">
+                <Link prefetch={false} href={configureHref} className="inline-flex items-center gap-0.5 font-medium text-muted hover:text-white">
                   {t('dashboard.configure')} <ChevronRight size={12} />
                 </Link>
               )}

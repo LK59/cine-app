@@ -16,7 +16,7 @@ export function RequestHideLink() {
   const { data } = useSWR<{ enabled?: boolean; account?: string }>("/api/admin/request-hide?state=1", fetcher, { shouldRetryOnError: false, revalidateOnFocus: false });
   if (!data?.enabled) return null;
   return (
-    <Link href="/jellyseerr/masquage" className="btn btn-ghost btn-sm">
+    <Link prefetch={false} href="/jellyseerr/masquage" className="btn btn-ghost btn-sm">
       <EyeOff size={14} /> {t("requestHide.link", { account: data.account ?? "" })}
     </Link>
   );

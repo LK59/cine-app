@@ -323,7 +323,7 @@ export default function SonarrPage() {
                 {visible.map((show, i) => {
                   const complete = (show.statistics?.episodeFileCount ?? 0) >= (show.statistics?.episodeCount ?? 1);
                   return (
-                    <Link
+                    <Link prefetch={false}
                       key={show.id}
                       href={`/sonarr/${show.id}`}
                       data-nav-idx={i}

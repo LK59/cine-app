@@ -53,7 +53,7 @@ function EventRow({ ev, t, dateLocale }: { ev: ImportEvent; t: TFn; dateLocale: 
       {/* Title + detail */}
       <div className="min-w-0 flex-1">
         {ev.href ? (
-          <Link href={ev.href} className="block truncate text-sm font-medium text-white hover:text-accent-400">
+          <Link prefetch={false} href={ev.href} className="block truncate text-sm font-medium text-white hover:text-accent-400">
             {ev.title}
           </Link>
         ) : (

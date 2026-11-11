@@ -236,7 +236,7 @@ function LoginForm() {
             >
               {t("auth.local.heading")}
             </button>
-            <Link
+            <Link prefetch={false}
               href="/status"
               data-liquid-pan="wide"
               className="settings-glass-btn flex w-fit items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs text-slate-400 transition-colors hover:text-slate-200"
@@ -295,7 +295,7 @@ function LoginForm() {
         {/* Un lien de partage reçu (DECISIONS.md §112) : son code et son mot de passe se tapent ailleurs
             que dans ce formulaire, qui n'ouvre que les comptes du foyer. Aussi discret que la porte de
             service — la plupart des invités arrivent directement par l'adresse du lien. */}
-        <Link
+        <Link prefetch={false}
           href="/partage"
           data-liquid-pan="wide"
           className="settings-glass-btn mx-auto mt-3 block w-fit rounded-full px-3.5 py-1.5 text-xs text-slate-400 transition-colors hover:text-slate-200"
@@ -304,7 +304,7 @@ function LoginForm() {
         </Link>
 
         {passageHere && (
-          <Link
+          <Link prefetch={false}
             href="/passage"
             data-passage-login-link=""
             data-liquid-pan="wide"

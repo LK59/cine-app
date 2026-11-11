@@ -10,7 +10,7 @@ export default function NotFound() {
           <p className="text-sm text-slate-400 max-w-xs">
             Cette page n&apos;existe pas ou a été déplacée.
           </p>
-          <Link
+          <Link prefetch={false}
             href="/"
             className="mt-2 rounded-lg border border-white/10 bg-white/5 px-5 py-2 text-sm transition-colors hover:bg-white/10"
           >

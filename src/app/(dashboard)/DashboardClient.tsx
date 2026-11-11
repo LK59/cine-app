@@ -119,7 +119,7 @@ function TorrentsSection({ torrents }: { torrents: TorrentItem[] }) {
       title={t('dashboard.activeDownloads')}
       icon={Download}
       action={
-        <Link href="/qbittorrent" className="flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
+        <Link prefetch={false} href="/qbittorrent" className="flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
           {active.length > 4 ? t('dashboard.showMore', { n: String(active.length - 4) }) : t('dashboard.open')}
           <ChevronRight size={13} />
         </Link>
@@ -239,7 +239,7 @@ function ServicesSection({ services }: { services: ServiceStatus[] }) {
         {unconfigured.length > 0 && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5 text-xs text-subtle" data-testid="services-not-configured">
             <span>{t("dashboard.servicesNotConfigured", { list: unconfigured.map((s) => SERVICE_META[s.name]!.label).join(", ") })}</span>
-            <Link href={CONNECTIONS_HREF} className="inline-flex items-center gap-0.5 font-medium text-muted hover:text-white">
+            <Link prefetch={false} href={CONNECTIONS_HREF} className="inline-flex items-center gap-0.5 font-medium text-muted hover:text-white">
               {t("dashboard.configure")} <ChevronRight size={12} />
             </Link>
           </div>
@@ -256,7 +256,7 @@ function TorrentsNotConfigured() {
     <Panel title={t("dashboard.activeDownloads")} icon={Download}>
       <div className="px-4 py-6 text-sm text-subtle">
         <p>{t("dashboard.torrentsNotConfigured")}</p>
-        <Link href={CONNECTIONS_HREF} className="mt-2 inline-flex items-center gap-0.5 text-xs font-medium text-muted hover:text-white">
+        <Link prefetch={false} href={CONNECTIONS_HREF} className="mt-2 inline-flex items-center gap-0.5 text-xs font-medium text-muted hover:text-white">
           {t("dashboard.configure")} <ChevronRight size={12} />
         </Link>
       </div>
@@ -279,7 +279,7 @@ function DiskSection({ disk, updatedAt, computing }: { disk: DiskStats; updatedA
         // (installation neuve, 13/10/2026) : un état vide qui dit quoi faire.
         <div className="px-4 py-6 text-sm text-subtle">
           <p>{t('dashboard.storageNoMedia')}</p>
-          <Link href={DEPLOYMENT_HREF} className="mt-2 inline-flex items-center gap-0.5 text-xs font-medium text-muted hover:text-white">
+          <Link prefetch={false} href={DEPLOYMENT_HREF} className="mt-2 inline-flex items-center gap-0.5 text-xs font-medium text-muted hover:text-white">
             {t('dashboard.storageHowTo')} <ChevronRight size={12} />
           </Link>
         </div>
@@ -303,7 +303,7 @@ function DiskSection({ disk, updatedAt, computing }: { disk: DiskStats; updatedA
             <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-white/30" />{t('dashboard.storageOther', { size: fmtSize(other) })}</span>
             <span className="ml-auto text-subtle">{t('dashboard.storageUsed', { pct: ((disk.disk.used / disk.disk.total) * 100).toFixed(1) })}</span>
           </div>
-          <Link href="/stats" className="mt-3 inline-flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
+          <Link prefetch={false} href="/stats" className="mt-3 inline-flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
             {t('nav.stats')} <ChevronRight size={13} />
           </Link>
         </div>
@@ -347,7 +347,7 @@ function ActivityDigestSection() {
       title={t("dashboard.activityDigest.title")}
       icon={Radio}
       action={
-        <Link href={ACTIVITY_HREF} className="flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
+        <Link prefetch={false} href={ACTIVITY_HREF} className="flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
           {t("dashboard.activityDigest.open")} <ChevronRight size={13} />
         </Link>
       }
@@ -402,7 +402,7 @@ function LibraryCheckSection() {
       title={t("libraryCheck.overview.title")}
       icon={ScanSearch}
       action={
-        <Link href="/controle" className="flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
+        <Link prefetch={false} href="/controle" className="flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
           {t("libraryCheck.overview.open")} <ChevronRight size={13} />
         </Link>
       }
@@ -435,7 +435,7 @@ function ImportsSection({ items }: { items: ActivityItem[] }) {
       title={t('dashboard.importsTitle')}
       icon={PackageCheck}
       action={
-        <Link href="/timeline" className="flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
+        <Link prefetch={false} href="/timeline" className="flex items-center gap-0.5 text-xs text-subtle hover:text-muted">
           {t('dashboard.open')} <ChevronRight size={13} />
         </Link>
       }
@@ -459,7 +459,7 @@ function ImportsSection({ items }: { items: ActivityItem[] }) {
               </div>
             );
             return item.href ? (
-              <Link key={item.id} href={item.href} className="block hover:bg-white/4">{content}</Link>
+              <Link prefetch={false} key={item.id} href={item.href} className="block hover:bg-white/4">{content}</Link>
             ) : <div key={item.id}>{content}</div>;
           })}
         </div>

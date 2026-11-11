@@ -161,7 +161,7 @@ function HBar({ label, value, max, color, fmt }: {
 function TopPeopleSection({ people }: { people: PeopleStats }) {
   const t = useT();
   const PersonRow = ({ p, i }: { p: PeopleStats["topActors"][number]; i: number }) => (
-    <Link href={`/person/${p.tmdbId}`} className="flex items-center gap-3 rounded-lg p-2 hover:bg-white/5 transition-colors">
+    <Link prefetch={false} href={`/person/${p.tmdbId}`} className="flex items-center gap-3 rounded-lg p-2 hover:bg-white/5 transition-colors">
       <span className="w-5 shrink-0 text-right text-xs text-subtle">{i + 1}</span>
       {p.photoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element

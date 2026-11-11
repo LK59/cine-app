@@ -40,7 +40,7 @@ export function BackToCinema({ className = "", onNavigate }: { className?: strin
 export function AccountPreferencesLink({ className = "", onNavigate }: { className?: string; onNavigate?: () => void }) {
   const t = useT();
   return (
-    <Link
+    <Link prefetch={false}
       href={ACCOUNT_PREFERENCES_HREF}
       onClick={onNavigate}
       data-account-preferences

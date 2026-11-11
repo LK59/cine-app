@@ -88,6 +88,7 @@ const recentlyPrefetched = new Map<string, number>();
 /** Pour les tests : oublier ce qui a déjà été demandé. */
 export function resetTitleSheetPrefetch(): void {
   recentlyPrefetched.clear();
+  lastDetailPrefetchAt = -Infinity;
 }
 
 /**
@@ -128,13 +129,32 @@ export function prefetchRoute(href: string) {
   for (const key of keys) void preloadQuietly(key);
 }
 
+/**
+ * Le survol d'une grille de la gestion ne doit pas ressembler à un robot (11/11/2026).
+ *
+ * Le pare-feu devant le proxy (CrowdSec, `http-crawl-non_statics`) bannit pour des heures une adresse
+ * qui demande plus de 40 adresses distinctes non statiques en rafale (le seau se vide de deux par
+ * seconde). Chaque affiche survolée en demande deux à elle seule ; un balayage de la souris sur une
+ * grille en vaut des dizaines en deux secondes. Une avance au plus par 600 ms : un survol de passage
+ * n'avance rien, et la fiche se charge à l'ouverture comme sans avance.
+ */
+const DETAIL_PREFETCH_GAP_MS = 600;
+let lastDetailPrefetchAt = -Infinity;
+function detailPrefetchAllowed(now = Date.now()): boolean {
+  if (now - lastDetailPrefetchAt < DETAIL_PREFETCH_GAP_MS) return false;
+  lastDetailPrefetchAt = now;
+  return true;
+}
+
 export function prefetchMovieDetail(id: number) {
+  if (!detailPrefetchAllowed()) return;
   void preloadQuietly(`/api/radarr/movies/${id}`);
   void preloadQuietly(`/api/radarr/movies/${id}/info`);
   void preloadQuietly("/api/radarr/meta");
 }
 
 export function prefetchSeriesDetail(id: number) {
+  if (!detailPrefetchAllowed()) return;
   void preloadQuietly(`/api/sonarr/series/${id}`);
   void preloadQuietly(`/api/sonarr/series/${id}/info`);
   void preloadQuietly("/api/sonarr/meta");

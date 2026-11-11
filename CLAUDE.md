@@ -943,6 +943,12 @@ dictionaries' values.
   grid of books without covers did it to a viewer, cutting them off the whole app. A missing image answers
   `204` (`/api/books/<id>/cover`, `/api/jellyfin/image`), and code that keeps an image with `fetch` accepts
   only a non-empty `200`. Before adding a per-item route, decide what its "nothing here" answers.
+  Successes count too (11/11/2026): `http-crawl-non_statics` bans an address that asks for more than ~40
+  *distinct* non-static names in a burst (bucket of 40, leaking two a second) — Next's viewport prefetch of
+  the Statistics page's ~60 `/person/<id>` links banned the administrator's computer, and the Immersion
+  chalet's ~70 asset files an iPhone. Every `<Link>` carries `prefetch={false}`, hover prefetch of a grid
+  is throttled (`prefetch.ts`), and `pare-feu-rafales.test.ts` fails otherwise; a page that loads many
+  files bundles them (Immersion's packs, its `15-requetes` test).
 - **A pathological file is the normal case here.** The library holds six-audio-track files mixing
   FLAC / AC-3 / DTS / TrueHD at 1, 6 and 8 channels, 24-bit FLAC, mono defaults, Dolby Vision 4K.
   Test player changes against `The Exorcist (1973)` before believing them.

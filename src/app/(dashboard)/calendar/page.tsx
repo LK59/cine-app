@@ -120,7 +120,7 @@ function EventDetailPanel({ ev, onClose }: { ev: CalendarEvent; onClose: () => v
         {detail && <p className="mt-0.5 text-xs text-muted">{detail}</p>}
         <div className="mt-3">
           {isLibrary && ev.href
-            ? <Link href={ev.href} className="inline-flex items-center gap-1.5 rounded-lg bg-accent-600/20 px-3 py-1.5 text-xs font-medium text-accent-400 hover:bg-accent-600/30">{t('calendar.viewSheet')}</Link>
+            ? <Link prefetch={false} href={ev.href} className="inline-flex items-center gap-1.5 rounded-lg bg-accent-600/20 px-3 py-1.5 text-xs font-medium text-accent-400 hover:bg-accent-600/30">{t('calendar.viewSheet')}</Link>
             : <EventActions ev={ev} />
           }
         </div>
@@ -146,7 +146,7 @@ function EventPill({ ev, onSelect }: { ev: CalendarEvent; onSelect: (ev: Calenda
     </div>
   );
 
-  if (isLibrary && ev.href) return <Link href={ev.href}>{inner}</Link>;
+  if (isLibrary && ev.href) return <Link prefetch={false} href={ev.href}>{inner}</Link>;
   return <div onClick={() => onSelect(ev)}>{inner}</div>;
 }
 
@@ -283,7 +283,7 @@ function ListView({ events, today, dateLocale }: { events: CalendarEvent[]; toda
                   </div>
                 );
                 return isLibrary && ev.href
-                  ? <Link key={ev.id} href={ev.href}>{row}</Link>
+                  ? <Link prefetch={false} key={ev.id} href={ev.href}>{row}</Link>
                   : <div key={ev.id}>{row}</div>;
               })}
             </div>

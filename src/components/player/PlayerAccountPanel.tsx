@@ -755,7 +755,7 @@ function StatusRow() {
   const t = useT();
   return (
     <Row icon={Activity} title={t("player.account.status")} hint={t("player.account.statusHint")}>
-      <Link href="/status?from=compte" aria-label={t("player.account.openStatus")} className="btn btn-ghost btn-sm">
+      <Link prefetch={false} href="/status?from=compte" aria-label={t("player.account.openStatus")} className="btn btn-ghost btn-sm">
         {t("player.account.open")}
       </Link>
     </Row>

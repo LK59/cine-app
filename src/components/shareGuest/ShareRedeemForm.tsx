@@ -171,7 +171,7 @@ export function ShareRedeemForm({ code: fixedCode, household }: { code: string |
         </div>
 
         {/* Le retour vers la connexion, pour qui est arrivé ici par erreur — un compte du foyer. */}
-        <Link
+        <Link prefetch={false}
           href="/login"
           data-liquid-pan="wide"
           className="settings-glass-btn mx-auto mt-8 flex w-fit items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs text-slate-400 transition-colors hover:text-slate-200"

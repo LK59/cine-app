@@ -311,7 +311,7 @@ export default function RadarrPage() {
             <>
               <div className="card divide-y divide-white/5">
                 {visible.map((movie, i) => (
-                  <Link
+                  <Link prefetch={false}
                     key={movie.id}
                     href={`/radarr/${movie.id}`}
                     data-nav-idx={i}

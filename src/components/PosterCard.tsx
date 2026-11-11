@@ -259,7 +259,7 @@ export function PosterCard({ item, mediaType, size = "grid", onAdded }: Props) {
 
             <div className="flex items-center gap-1">
               {item.libraryHref ? (
-                <Link
+                <Link prefetch={false}
                   href={item.libraryHref}
                   onClick={(e) => e.stopPropagation()}
                   className="flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-[11px] font-medium text-white hover:bg-white/25 transition-colors"

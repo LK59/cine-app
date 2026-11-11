@@ -85,7 +85,7 @@ function RequestRow({ r, showActions, onApprove, onDecline }: {
   );
 
   return r.cinemaHref ? (
-    <Link href={r.cinemaHref} className="block hover:bg-white/5 transition-colors">
+    <Link prefetch={false} href={r.cinemaHref} className="block hover:bg-white/5 transition-colors">
       {inner}
     </Link>
   ) : (

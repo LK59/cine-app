@@ -130,7 +130,7 @@ function CreditCard({ c }: { c: PersonCredit }) {
     </MediaCard>
   );
 
-  if (c.libraryHref) return <Link href={c.libraryHref}>{content}</Link>;
+  if (c.libraryHref) return <Link prefetch={false} href={c.libraryHref}>{content}</Link>;
   return (
     <>
       {content}

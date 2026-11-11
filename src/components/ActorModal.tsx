@@ -168,7 +168,7 @@ function CreditCard({ credit, onAdded }: { credit: Credit; onAdded: (tmdbId: num
   );
 
   if (isInLib && credit.libraryHref) {
-    return <Link href={credit.libraryHref} onClick={(e) => e.stopPropagation()}>{inner}</Link>;
+    return <Link prefetch={false} href={credit.libraryHref} onClick={(e) => e.stopPropagation()}>{inner}</Link>;
   }
   return inner;
 }

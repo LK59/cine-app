@@ -206,7 +206,7 @@ function ApiChecksSection() {
                   <CircleDashed size={13} className="text-subtle" />
                   <span className="text-sm font-medium text-muted">{t(group)}</span>
                   <span className="text-xs text-subtle">{t('health.statusNotConfigured')}</span>
-                  <Link href={CONNECTIONS_HREF} className="ml-auto inline-flex items-center gap-0.5 text-xs font-medium text-muted hover:text-white">
+                  <Link prefetch={false} href={CONNECTIONS_HREF} className="ml-auto inline-flex items-center gap-0.5 text-xs font-medium text-muted hover:text-white">
                     {t('dashboard.configure')} <ChevronRight size={12} />
                   </Link>
                 </div>
@@ -449,7 +449,7 @@ function TechnicalDetail() {
           {unconfigured.length > 0 && (
             <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs text-subtle" data-testid="health-services-not-configured">
               <span>{t('dashboard.servicesNotConfigured', { list: unconfigured.map((s) => s.name).join(", ") })}</span>
-              <Link href={CONNECTIONS_HREF} className="inline-flex items-center gap-0.5 font-medium text-muted hover:text-white">
+              <Link prefetch={false} href={CONNECTIONS_HREF} className="inline-flex items-center gap-0.5 font-medium text-muted hover:text-white">
                 {t('dashboard.configure')} <ChevronRight size={12} />
               </Link>
             </div>

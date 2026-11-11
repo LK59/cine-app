@@ -65,7 +65,7 @@ function StatusScreen({ back }: { back: string }) {
               <p className="text-xs text-slate-400">{t('health.pageTitle')}</p>
             </div>
           </div>
-          <Link href={back} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white">
+          <Link prefetch={false} href={back} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white">
             <ArrowLeft size={14} /> {t('common.back')}
           </Link>
         </div>

@@ -87,7 +87,7 @@ export function Sidebar() {
                         // ordinaire. L'estomper vaut mieux que la retirer.
                         const off = !!service && !isConfigured(service);
                         return (
-                          <Link
+                          <Link prefetch={false}
                             key={href}
                             href={href}
                             onMouseEnter={() => prefetchRoute(href)}
