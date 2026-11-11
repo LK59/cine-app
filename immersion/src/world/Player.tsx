@@ -7,6 +7,7 @@ import { motion, view } from "../input/intents";
 import { seatNear, SEATS, thingAimed } from "./interactions";
 import { nearestScreen, PLAYER, roomAt, screenHeight } from "./layout";
 import { rig } from "./rig";
+import { aimedScreen } from "./panel";
 import { benchPose, benchRun } from "../bench/bench";
 
 const euler = new Euler(0, 0, 0, "YXZ");
@@ -154,7 +155,11 @@ export function Player() {
     const room = roomAt(rig.position.x, rig.position.y, rig.position.z);
     const near = nearestScreen(eye.x, eye.y, eye.z);
     const thing = walking && !state.seated ? thingAimed(eye, rig.yaw, rig.pitch) : null;
-    state.setNear({ screen: near.distance < near.screen.reach && room !== "terrasse" ? near.screen.id : null, seat: seatNear(room, rig.position.x, rig.position.y, rig.position.z), thing: thing?.id ?? null });
+    // L'écran visé (que le clic ouvre) n'est cherché que pendant une lecture : c'est la seule fois où l'indication
+    // de la télécommande en dépend.
+    const playing = state.playback.status === "playing" || state.playback.status === "paused";
+    const aimed = walking && playing && room !== "terrasse" ? (aimedScreen()?.id ?? null) : null;
+    state.setNear({ screen: near.distance < near.screen.reach && room !== "terrasse" ? near.screen.id : null, seat: seatNear(room, rig.position.x, rig.position.y, rig.position.z), thing: thing?.id ?? null, aimed });
     state.setRoom(room);
   });
 

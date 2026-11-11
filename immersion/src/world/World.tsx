@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, use, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { NoToneMapping, PCFShadowMap, SRGBColorSpace } from "three";
@@ -14,9 +14,20 @@ import { Chalet } from "./Chalet";
 import { SceneReady } from "./SceneReady";
 import { PanelAnchor } from "./PanelAnchor";
 import { installScreenLight } from "./screenLight";
+import { loadPacks } from "../lib/packs";
 
 // Avant toute matière : la lumière des écrans se greffe sur toutes les matières « standard ».
 installScreenLight();
+
+/**
+ * Rien de ce qui charge un décor ne se monte avant les paquets (`lib/packs.ts`) : un chargeur parti plus tôt irait
+ * chercher son fichier seul — c'est ce que le pare-feu punit, et le fichier n'est plus dans le build. Les enfants
+ * ne sont même pas rendus d'avance : React prépare sinon les frères d'un composant suspendu.
+ */
+function PacksReady({ children }: { children: ReactNode }) {
+  use(loadPacks());
+  return children;
+}
 
 /** Vrai tant que l'onglet est masqué : le rendu s'arrête alors tout à fait. */
 function useHidden(): boolean {
@@ -79,14 +90,16 @@ export function World() {
           niveau, avec de la marge il remonte. Un préréglage choisi à la main ne bouge pas. */}
       {auto ? <PerformanceMonitor bounds={(refresh) => (refresh > 90 ? [80, 110] : [50, 58])} flipflops={4} onDecline={() => stepAuto(1)} onIncline={() => stepAuto(-1)} /> : null}
       <Suspense fallback={null}>
-        <Physics gravity={[0, -9.81, 0]} timeStep="vary">
-          <Chalet />
-          <Player />
-        </Physics>
-        <InputDevices />
-        <PanelAnchor />
-        <Effects />
-        <SceneReady />
+        <PacksReady>
+          <Physics gravity={[0, -9.81, 0]} timeStep="vary">
+            <Chalet />
+            <Player />
+          </Physics>
+          <InputDevices />
+          <PanelAnchor />
+          <Effects />
+          <SceneReady />
+        </PacksReady>
       </Suspense>
     </Canvas>
   );

@@ -160,7 +160,11 @@ async function start(item: Item, rung: number, from: number | null, cause: "open
   current = { item, rung, audio, subtitle };
   watch = { since: 0, seconds: 0 };
   void loadSubtitles(null);
-  set({ ...IDLE_PLAYBACK, muted: useStore.getState().playback.muted, status: "loading", itemId: item.id, title: item.title, audioIndex: audio });
+  // Le même titre renégocié (autre piste audio, échelon plus bas) garde ce qu'on sait de lui : ses repères et
+  // l'épisode qui le suit ne changent pas, et `upNext` ne les redemande qu'à un nouveau titre.
+  const before = useStore.getState().playback;
+  const same = before.itemId === item.id;
+  set({ ...IDLE_PLAYBACK, muted: before.muted, status: "loading", itemId: item.id, title: item.title, audioIndex: audio, ...(same ? { markers: before.markers, next: before.next } : {}) });
 
   /** Referme une séance que la négociation vient d'ouvrir chez Jellyfin et dont on ne veut plus. */
   const abandon = (n: Negotiation, at: number) =>
@@ -189,7 +193,13 @@ async function start(item: Item, rung: number, from: number | null, cause: "open
     }
     target = { itemId: item.id, playSessionId: negotiation.playSessionId, mediaSourceId: negotiation.mediaSourceId, playMethod: negotiation.playbackInfo.playMethod };
     const info = negotiation.playbackInfo;
-    set({ title: negotiation.title ?? item.title, method: info.playMethod, audioTracks: negotiation.audioTracks ?? [], subtitleTracks: negotiation.subtitleTracks ?? [] });
+    set({
+      title: negotiation.title ?? item.title,
+      method: info.playMethod,
+      audioTracks: negotiation.audioTracks ?? [],
+      subtitleTracks: negotiation.subtitleTracks ?? [],
+      markers: { intro: negotiation.introSkip ?? null, recap: negotiation.recapSkip ?? null, credits: negotiation.creditsStart ?? null },
+    });
     // Les sous-titres choisis suivent un changement de piste audio ou d'échelon.
     if (subtitle !== null) chooseSubtitle(subtitle);
     if (cause === "open") newLogSession();

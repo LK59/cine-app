@@ -1,8 +1,8 @@
 import { useMemo, type MouseEvent } from "react";
 import { useStore, useT } from "../state/store";
-import { labelAudioTracks, labelSubtitleTracks } from "@/lib/trackLabel";
+import { useTrackLabels } from "./trackLabels";
 import { dispatch } from "../media/commands";
-import { search, type Continue, type Episode, type Title } from "../media/library";
+import { episodeName as nameOf, search, type Continue, type Episode, type Title } from "../media/library";
 import { closePanel, launch, openTitle, panelBack, setPanelQuery, setPanelSeason, setPanelTab, stopPlayback } from "../state/actions";
 import { ExperienceLogo } from "./Logo";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -50,7 +50,7 @@ function Detail({ title }: { title: Title }) {
   const seasons = useMemo(() => [...new Set((episodes?.list ?? []).map((e) => e.season))].sort((a, b) => a - b), [episodes]);
   const next = episodes?.list.find((e) => e.itemId === episodes.next) ?? episodes?.list[0] ?? null;
   const facts = [title.year, title.kind === "movie" ? clock(title.minutes) : title.seasons ? `${title.seasons} ${t("panel.season").toLowerCase()}${title.seasons > 1 ? "s" : ""}` : null, title.rating ? `★ ${title.rating.toFixed(1)}` : null].filter(Boolean);
-  const episodeName = (e: Episode) => `${title.title} — S${String(e.season).padStart(2, "0")}E${String(e.episode).padStart(2, "0")} · ${e.title}`;
+  const episodeName = (e: Episode) => nameOf(title.title, e);
 
   return (
     <div className="detail">
@@ -142,26 +142,11 @@ function NowPlaying() {
   const volume = useStore((s) => s.settings.volume);
   const update = useStore((s) => s.updateSettings);
   const live = playback.status === "playing" || playback.status === "paused";
-  const lang = useStore((s) => s.lang);
-  // Les noms des pistes : ceux du lecteur de l'application (`@/lib/trackLabel`), dans la langue du compte.
-  const audioLabels = useMemo(
-    () =>
-      labelAudioTracks(
-        playback.audioTracks.map((track) => ({ number: track.index, language: track.language, name: track.title, isDefault: track.isDefault, isForced: false, codecId: track.codec, channels: track.channels, profile: track.profile })),
-        { locale: lang, canaux: (n) => `${n} ${t("track.channels")}`, piste: (n) => `${t("track.track")} ${n}` }
-      ),
-    [playback.audioTracks, lang, t]
-  );
-  const subtitleLabels = useMemo(
-    () =>
-      labelSubtitleTracks(
-        playback.subtitleTracks.map((track) => ({ number: track.index, language: track.language, name: track.title, isDefault: track.isDefault, isForced: track.isForced, isHearingImpaired: track.isHearingImpaired, isExternal: track.isExternal })),
-        { locale: lang, forces: t("track.forced"), complets: t("track.full"), malentendants: t("track.sdh"), externe: t("track.external"), piste: (n) => `${t("track.track")} ${n}` }
-      ),
-    [playback.subtitleTracks, lang, t]
-  );
+  const { audio: audioLabels, subtitles: subtitleLabels } = useTrackLabels();
   const ratio = playback.duration > 0 ? Math.min(1, playback.position / playback.duration) : 0;
   const seekTo = (e: MouseEvent<HTMLButtonElement>) => {
+    // Activée au clavier (Espace, Entrée sur la barre focalisée), le clic n'a pas de position : il menait au début.
+    if (e.detail === 0) return;
     const box = e.currentTarget.getBoundingClientRect();
     if (box.width > 0 && playback.duration > 0) dispatch({ type: "seek", to: Math.max(0, Math.min(1, (e.clientX - box.left) / box.width)) * playback.duration });
   };

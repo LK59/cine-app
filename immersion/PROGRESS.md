@@ -6,6 +6,8 @@ entier après toute reprise.**
 
 ## État actuel (à jour)
 
+- **Sur la branche, non livré** : enchaîner les épisodes et la télécommande — voir « Le confort de regarder » ; et
+  **les décors en trois paquets** (ban CrowdSec du 11/11, voir « Pièges rencontrés », scénario 15) — urgent.
 - **10.35.1 le 11/11 au matin** (`929e2388`) : les corrections du premier essai du propriétaire sur iPhone — voir
   « Retour du propriétaire sur la v2 ».
 - **V2 livrée : 10.35.0, en production depuis le 11/11/2026 vers 3 h 15** (`dcd3f449`) — voir « V2 — la nuit du
@@ -336,6 +338,20 @@ modèle du canapé ; script de cuisson des lightmaps. L'architecture et le rendu
   lancé depuis le dépôt entier passait ; celui de l'image a échoué (`Cannot find module '@/lib/trackLabel'`). Pour
   le voir avant : `docker build --target immersion .` depuis la racine.
 
+- **Le pare-feu du serveur compte les noms de fichiers** (11/11/2026, un iPhone banni 4 h de tout le serveur en
+  ouvrant le chalet). CrowdSec (`http-crawl-non_statics`) bannit au-delà de ~40 **noms** distincts « non statiques »
+  en rafale — le dernier segment du chemin, sans dossier ni `?v=` ; seuls `.jpg .png .svg .webp .css .js .mjs .mp3
+  .mp4 .woff2 .ttf…` sont statiques, donc `.ktx2 .bin .gltf .json .wasm .webm` comptent, et toute réponse
+  404/403/502 aussi ; `http-probing` bannit à ~10 réponses 404/403/400 en 10 s. Le chalet en demandait ≈ 180 (73
+  noms distincts). Depuis : **trois paquets** (`packs/textures.bin`, `modeles.bin`, `lumiere.bin` — `assetPacks`
+  dans `vite.config.ts`, retirés du build un à un par `postbuild.mjs`), lus par `src/lib/packs.ts` avant que rien
+  ne se monte (`PacksReady`, `World.tsx`) et rendus aux chargeurs par `THREE.Cache` (une copie à chaque fois :
+  `KTX2Loader` cède son tampon au travailleur), à la page par `assetBytes` / `assetJson`. Un paquet refusé arrête
+  le chargement (jamais de repli fichier par fichier). Garde-fou : **scénario 15** — un chargement puis un
+  rechargement, au plus 25 noms non statiques et aucune 4xx (6 noms, 0 4xx après ; 73 avant). **Tout nouvel asset
+  va dans un paquet** (un dossier ajouté à `PACKS`) ; un nouvel appel `fetch` d'asset passe par `assetBytes`.
+  Ne jamais faire répondre 404 une absence attendue (204), ni relancer en boucle une requête refusée.
+
 ## Poids
 
 - `public/assets/` : **46 Mo** au 11/11/2026 (v2) — textures, modèles, panorama, lightmaps (13 Mo : six atlas,
@@ -494,24 +510,48 @@ ce qui a été fait :
   doigt, la mesure ne joue plus que le préréglage en cours. Ses lignes d'avant : Ultra 45 i/s écrans éteints,
   60 avec film ; sur iPhone tous les préréglages rendent à la même définition (la densité est plafonnée à 1,5).
 
+## Le confort de regarder (demandé le 11/11/2026) — fait, pas encore livré
+
+Fait sur la branche `immersion`, **non déployé** (une seule livraison à la fin, comme d'habitude) :
+
+1. **Enchaîner sans quitter le canapé** (`media/upNext.ts`, `ui/Prompts.tsx`). Les règles sont celles du lecteur de
+   l'application (`PlayerControls`) : « Passer l'intro / le récap » par `activeSkip` (`@/lib/playerSkip`, lu tel
+   quel — ajouté au `COPY` de l'étape `immersion` du `Dockerfile`) ; au générique de fin (`creditsStart` de la
+   négociation, ou la dernière seconde faute de repère) la carte de l'épisode suivant, décompte de 10 s qui ne
+   court qu'en lecture ou une fois l'épisode fini, « Regarder le générique » qui l'écarte jusqu'à la fin ; au bout
+   de trois enchaînements sans un geste, la question « Vous êtes toujours là ? » (`media/presence.ts`, remis à zéro
+   par toute commande du visiteur). L'épisode suivant : `/api/player/item/<id>` (la série) puis `episodesOf`, règle
+   de `nextEpisodeIn` reprise dans `nextEpisodeAfter` (spéciaux à part), lancé par la commande `open` (`auto: true`)
+   à sa position de reprise. Pointeur verrouillé : **Entrée** accepte, **Retour arrière** écarte ; au doigt, les
+   boutons. Un changement de piste audio garde repères et épisode suivant (`playback.ts`).
+2. **La télécommande** (`ui/Remote.tsx`, mode `remote` du store). Pendant une lecture, cliquer (ou toucher) l'écran
+   visé la pose au bas de l'image au lieu d'ouvrir le panneau : titre, barre (clic, et molette sur la barre :
+   ±10 s par cran), −10 s, lecture / pause, +30 s, sous-titres, « Ouvrir Laterna » (le panneau complet devant le
+   même écran). Un clic hors d'elle ou Échap la retire et rend le regard ; au doigt elle s'en va seule après 8 s
+   sans geste. Sans film, cliquer l'écran ouvre le panneau comme avant ; E l'ouvre toujours. Indication
+   « Souris · Télécommande » quand un écran est visé pendant une lecture (`aimedScreen` dans le store, calculé
+   par `Player` seulement pendant une lecture). **La molette hors de la barre reste le cadrage assis** : lui donner
+   aussi la télécommande aurait fait se lever la barre à chaque zoom.
+- Au passage : Espace ou Entrée sur une barre de progression focalisée (panneau, télécommande) envoyait un clic
+  sans position, qui ramenait au début — ignoré (`detail === 0`).
+- Noms des pistes partagés par le panneau et la télécommande (`ui/trackLabels.ts`) ; nom d'un épisode écrit une
+  fois (`episodeName`, `library.ts`). Textes dans les quatre langues.
+- Scénarios **13** (passer l'intro à Entrée, carte, pause qui gèle le décompte, générique regardé, enchaînement à
+  la position de reprise, pas d'enchaînement vers les spéciaux ; trois enchaînements puis la question) et **14**
+  (souris : panneau sans film, télécommande pendant un film, commandes, barre, molette, sous-titres, panneau par
+  elle, sortie par clic et Échap ; doigt : toucher, commande, départ seul), jouables sans instance. Pour les jouer :
+  `cp tests/fixtures/mire.webm dist/` après le build (la mire de 12 s des scénarios 09, 11, 13, 14 n'est pas dans
+  le build).
+
+**Pas vérifié** : sur un vrai épisode (repères de Jellyfin, transcodage enchaîné : la séance précédente doit être
+refermée — `finish("next")`/`"ended"`), sur un vrai iPhone (la carte en haut de l'écran en paysage).
+
 ## Prochaine action
 
-**Demandé par le propriétaire le 11/11/2026 (à faire, pas commencé)** — le confort de regarder :
-
-1. **Enchaîner sans quitter le canapé.** À la fin d'un épisode, proposer « épisode suivant » (compte à rebours,
-   annulable) ; pendant le générique de début et le récapitulatif, « passer ». La négociation
-   (`POST /api/jellyfin/playback/start`) rend déjà `introSkip`, `recapSkip` et `creditsStart` (voir
-   `playerMarkers` côté application) : le mode ne les lit pas encore (`media/api.ts`, type `Negotiation`).
-   L'épisode suivant se trouve par la liste des épisodes de la série (`media/library.ts`, `episodesOf`) ; lancer
-   par la commande `open` (`media/commands.ts`), jamais en touchant au `<video>`.
-2. **Une télécommande légère.** Le panneau complet couvre l'image pour une simple pause. Une barre discrète au bas
-   de l'écran (lecture / pause, −10 s, +30 s, barre de progression, sous-titres) : au clic ou à la molette sur
-   ordinateur quand on regarde l'écran, au toucher sur mobile — sans ouvrir le panneau. Les gestes passent par les
-   mêmes commandes que `NowPlaying` (`ui/Panel.tsx`) ; `ui/Hud.tsx` affiche déjà titre et progression.
-
-À tenir : textes dans les quatre langues (`lib/i18n.ts`) ; un scénario par fonction, jouable sans instance
-(`SANS_APPLICATION=1`, réponses de l'application écrites à la main comme dans `tests/e2e/11-pistes.spec.ts`) ;
-`docker build --target immersion .` avant de livrer ; une seule livraison à la fin.
+Livrer « le confort de regarder » quand le propriétaire le demande : portail de l'application (seul le `Dockerfile`
+change hors du mode), `docker build --target immersion .`, version, fusion, image, bascule. Puis, sur un vrai
+épisode avec le compte de test : la carte au générique, l'enchaînement, plus aucune séance du premier épisode chez
+Jellyfin.
 
 Ensuite, selon son retour : entrer plus vite (charger le salon d'abord), des préréglages qui se distinguent
 vraiment sur téléphone (la densité y est plafonnée à 1,5 : tous rendent à la même définition), le multijoueur.

@@ -91,10 +91,13 @@ function withoutEval(source: string): string {
  * Le transcodeur Basis de three, que `KTX2Loader` va chercher par adresse : pris dans
  * `node_modules` plutôt que recopié dans le dépôt, servi en développement et émis au build.
  */
+const BASIS_DIR = path.join(here, "node_modules/three/examples/jsm/libs/basis");
+const BASIS_FILES = ["basis_transcoder.js", "basis_transcoder.wasm"];
+const readBasis = (name: string) => (name.endsWith(".js") ? Buffer.from(withoutEval(fs.readFileSync(path.join(BASIS_DIR, name), "utf8"))) : fs.readFileSync(path.join(BASIS_DIR, name)));
+
 function basisTranscoder(): Plugin {
-  const dir = path.join(here, "node_modules/three/examples/jsm/libs/basis");
-  const files = ["basis_transcoder.js", "basis_transcoder.wasm"];
-  const read = (name: string) => (name.endsWith(".js") ? Buffer.from(withoutEval(fs.readFileSync(path.join(dir, name), "utf8"))) : fs.readFileSync(path.join(dir, name)));
+  const files = BASIS_FILES;
+  const read = readBasis;
   return {
     name: "immersion-basis",
     configureServer(server) {
@@ -178,11 +181,82 @@ function assetsVersion(): string {
   return hash.digest("hex").slice(0, 10);
 }
 
+/**
+ * Les paquets d'assets : les décors en **trois fichiers** au lieu de deux cents.
+ *
+ * Le pare-feu du serveur (CrowdSec, `http-crawl-non_statics`) bannit pour des heures, et de tout le serveur,
+ * une adresse qui demande plus de ~40 noms de fichiers distincts « non statiques » en rafale — et `.ktx2`,
+ * `.bin`, `.gltf`, `.json`, `.wasm` en sont tous. Le 11/11/2026 au matin, ouvrir le chalet (≈ 180 fichiers) a
+ * banni un iPhone pour 4 h. Les fichiers sont donc regroupés ici, et la page les reprend dans ces paquets
+ * (`src/lib/packs.ts`) : `THREE.Cache` les rend aux chargeurs de three sans une requête. Le garde-fou est le
+ * scénario `15-requetes` (noms distincts et réponses 4xx d'un chargement, puis d'un second).
+ *
+ * Format : « LTPK », la longueur de l'en-tête (u32, petit-boutiste), l'en-tête en JSON
+ * (`{ files: { "<chemin sous la base>": [début, longueur] } }`, positions comptées après l'en-tête), puis
+ * les fichiers bout à bout. `postbuild.mjs` retire ensuite du build les fichiers empaquetés : l'image ne
+ * grossit pas.
+ */
+const PACKS: { name: string; from: string[] }[] = [
+  { name: "textures", from: ["assets/textures", "basis"] },
+  { name: "modeles", from: ["assets/models"] },
+  { name: "lumiere", from: ["assets/lightmaps", "assets/panorama"] },
+];
+
+/** Les fichiers d'un dossier empaqueté : `[chemin sous la base, contenu]`, dans un ordre stable. */
+function packSources(dir: string): [string, Buffer][] {
+  if (dir === "basis") return BASIS_FILES.map((name) => [`basis/${name}`, readBasis(name)]);
+  const root = path.join(here, "public");
+  const out: [string, Buffer][] = [];
+  const walk = (full: string) => {
+    if (!fs.existsSync(full)) return;
+    for (const entry of fs.readdirSync(full, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const next = path.join(full, entry.name);
+      if (entry.isDirectory()) walk(next);
+      else out.push([path.relative(root, next).split(path.sep).join("/"), fs.readFileSync(next)]);
+    }
+  };
+  walk(path.join(root, dir));
+  return out;
+}
+
+let builtPacks: { name: string; data: Buffer }[] | null = null;
+function buildPacks(): { name: string; data: Buffer }[] {
+  if (builtPacks) return builtPacks;
+  builtPacks = PACKS.map(({ name, from }) => {
+    const sources = from.flatMap(packSources);
+    const files: Record<string, [number, number]> = {};
+    let offset = 0;
+    for (const [file, bytes] of sources) {
+      files[file] = [offset, bytes.length];
+      offset += bytes.length;
+    }
+    const header = Buffer.from(JSON.stringify({ files }));
+    const prefix = Buffer.alloc(8);
+    prefix.write("LTPK", 0, "ascii");
+    prefix.writeUInt32LE(header.length, 4);
+    return { name, data: Buffer.concat([prefix, header, ...sources.map(([, bytes]) => bytes)]) };
+  });
+  return builtPacks;
+}
+
+function assetPacks(): Plugin {
+  return {
+    name: "immersion-packs",
+    apply: "build",
+    generateBundle() {
+      for (const pack of buildPacks()) this.emitFile({ type: "asset", fileName: `packs/${pack.name}.bin`, source: pack.data });
+    },
+  };
+}
+
 export default defineConfig(({ command }) => ({
   base: BASE,
-  plugins: [react(), basisTranscoder(), pageAddress()],
+  plugins: [react(), basisTranscoder(), pageAddress(), assetPacks()],
   define: {
     __ASSETS_VERSION__: JSON.stringify(command === "build" ? assetsVersion() : "dev"),
+    // Le nom et la taille de chaque paquet : la barre de chargement compte les octets reçus. En développement, aucun
+    // paquet — les fichiers sont servis un à un par Vite.
+    __PACKS__: JSON.stringify(command === "build" ? buildPacks().map((pack) => ({ name: pack.name, bytes: pack.data.length })) : []),
   },
   resolve: {
     // `@/` désigne le code de l'application (lecture seule) : seuls quelques modules sans

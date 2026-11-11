@@ -47,12 +47,16 @@ export function Intro() {
   // grandit en route, le pourcentage brut faisait des allers-retours — et elle ne reste jamais figée : pendant la
   // préparation, qui n'a pas de mesure, elle avance doucement vers la fin.
   // Avant le premier fichier demandé, c'est déjà le téléchargement qui s'annonce — pas la préparation.
+  // Avec les paquets de décors (`lib/packs.ts`), le téléchargement, ce sont leurs octets ; les chargeurs de three
+  // qui suivent ne lisent plus que la mémoire — c'est déjà la préparation.
+  const packs = useStore((s) => s.packs);
   const everActive = useRef(false);
   if (active) everActive.current = true;
-  const downloading = active || !everActive.current;
+  const downloading = packs ? packs.loaded < packs.total : active || !everActive.current;
+  const fetched = packs ? (packs.total > 0 ? (packs.loaded / packs.total) * 100 : 100) : progress;
   const [shown, setShown] = useState(4);
   const target = useRef(4);
-  target.current = ready ? 100 : downloading ? Math.max(target.current, Math.min(86, 4 + progress * 0.82)) : Math.max(target.current, 86);
+  target.current = ready ? 100 : downloading ? Math.max(target.current, Math.min(86, 4 + fetched * 0.82)) : Math.max(target.current, 86);
   useEffect(() => {
     if (ready) {
       setShown(100);
@@ -99,7 +103,12 @@ export function Intro() {
               </div>
               <p className="intro-detail">
                 {downloading ? t("loading.download") : t("loading.prepare")}
-                {downloading && total > 0 ? (
+                {downloading && packs ? (
+                  <span className="tabular">
+                    {" "}
+                    · {Math.round(packs.loaded / 1e6)} / {Math.round(packs.total / 1e6)} {t("unit.mb")}
+                  </span>
+                ) : downloading && total > 0 ? (
                   <span className="tabular">
                     {" "}
                     · {loaded} / {total}

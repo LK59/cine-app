@@ -1,5 +1,6 @@
 import { useStore } from "../state/store";
 import { chooseSubtitle, close, open, switchAudio } from "./playback";
+import { noteViewerPresent } from "./presence";
 
 /**
  * Les commandes de lecture : la **seule** porte par laquelle on agit sur ce qui joue.
@@ -11,8 +12,11 @@ import { chooseSubtitle, close, open, switchAudio } from "./playback";
  * sens du paramètre `origin`, qui ne sert encore à rien.
  */
 export type Command =
-  /** Lancer un titre. `from` : une position imposée ; `null` : la reprise du compte. */
-  | { type: "open"; item: { id: string; title: string }; from: number | null }
+  /**
+   * Lancer un titre. `from` : une position imposée ; `null` : la reprise du compte. `auto` : l'épisode suivant
+   * lancé par la fin d'un décompte (`upNext.ts`), le seul geste qui ne dit pas que quelqu'un est là.
+   */
+  | { type: "open"; item: { id: string; title: string }; from: number | null; auto?: boolean }
   | { type: "play" }
   | { type: "pause" }
   | { type: "toggle" }
@@ -34,6 +38,7 @@ export function dispatch(command: Command, _origin: "local" | "remote" = "local"
   const state = useStore.getState();
   const playback = state.playback;
   const live = playback.status === "playing" || playback.status === "paused";
+  if (!(command.type === "open" && command.auto)) noteViewerPresent();
   switch (command.type) {
     case "open":
       state.setPlayback({ wantPaused: false, seek: null });

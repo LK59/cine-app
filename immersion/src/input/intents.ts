@@ -24,7 +24,11 @@ export type Intent =
   /** Revenir d'un cran : fermer une fiche, vider la recherche, fermer le panneau. */
   | "back"
   /** Ouvrir le menu (pause). */
-  | "menu";
+  | "menu"
+  /** Accepter l'invite du moment : passer l'intro ou le récap, lancer l'épisode suivant (`media/upNext.ts`). */
+  | "accept"
+  /** Écarter la carte de l'épisode suivant (« Regarder le générique »). */
+  | "dismiss";
 
 /** Le mouvement voulu, dans le repère du visiteur : −1 à 1 sur chaque axe. */
 export const motion = {

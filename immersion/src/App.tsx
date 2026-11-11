@@ -25,6 +25,9 @@ import { TouchControls } from "./ui/TouchControls";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { getVideo, playTestClip, stopOnLeave } from "./media/playback";
 import { dispatch } from "./media/commands";
+import { startUpNext } from "./media/upNext";
+import { Prompts } from "./ui/Prompts";
+import { Remote } from "./ui/Remote";
 
 /**
  * La page du mode : ce qui s'affiche selon la phase.
@@ -48,6 +51,7 @@ export function App() {
   useEffect(() => {
     watchSession(() => useStore.getState().setPhase("expired"));
     boot();
+    startUpNext();
     accountLang().then(
       (lang) => lang && useStore.getState().setLang(lang),
       (err) => {
@@ -86,6 +90,8 @@ export function App() {
             </div>
           ) : null}
           {mode === "walk" ? <Hud /> : null}
+          {mode === "remote" ? <Remote /> : null}
+          {mode === "walk" || mode === "remote" ? <Prompts /> : null}
           {showFps ? <FpsCounter /> : null}
           {/* Pendant une mesure, le menu s'efface : la scène est rendue comme en visite. */}
           {measuring ? <BenchOverlay /> : mode === "paused" ? <PauseMenu /> : null}

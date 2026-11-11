@@ -31,7 +31,7 @@ WORKDIR /build/immersion
 COPY immersion/package.json immersion/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY immersion/ ./
-COPY src/lib/codecSupport.ts src/lib/webkitEngine.ts src/lib/networkBitrate.ts src/lib/trackLabel.ts src/lib/trackPreferences.ts /build/src/lib/
+COPY src/lib/codecSupport.ts src/lib/webkitEngine.ts src/lib/networkBitrate.ts src/lib/trackLabel.ts src/lib/trackPreferences.ts src/lib/playerSkip.ts /build/src/lib/
 RUN npm run build
 
 FROM node:26-alpine AS builder

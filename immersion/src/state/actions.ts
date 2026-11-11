@@ -3,6 +3,7 @@ import { disposeAudio, resumeAudio } from "../media/audio";
 import { disposeMusic } from "../media/music";
 import { episodesOf, forgetLibrary, library, type Title } from "../media/library";
 import { dispatch } from "../media/commands";
+import { acceptPrompt, dismissPrompt } from "../media/upNext";
 import { leaveToLaterna } from "../lib/session";
 import { SCREENS, SOFA } from "../world/layout";
 import { SEATS, THINGS } from "../world/interactions";
@@ -75,8 +76,9 @@ function loadLibrary(): void {
 /** Ouvre le panneau devant l'écran donné (ou celui que le visiteur peut ouvrir d'ici). */
 export function openPanel(screenId?: string): void {
   const s = state();
-  if (s.phase !== "world" || s.mode !== "walk") return;
-  const screen = SCREENS.find((candidate) => candidate.id === (screenId ?? s.nearScreen));
+  // Depuis la télécommande aussi : son bouton « Laterna » ouvre le panneau complet devant le même écran.
+  if (s.phase !== "world" || (s.mode !== "walk" && s.mode !== "remote")) return;
+  const screen = SCREENS.find((candidate) => candidate.id === (screenId ?? (s.mode === "remote" ? remoteScreen : null) ?? s.nearScreen));
   if (!screen) return;
   placePanel(screen);
   loadLibrary();
@@ -91,6 +93,12 @@ export function closePanel(): void {
   if (s.mode !== "panel") return;
   rig.aim = null;
   s.setPanel({ opened: null, episodes: null, episodesFailed: false, season: null });
+  backToWalk();
+}
+
+/** Rend le regard au visiteur — après le panneau ou la télécommande. À appeler dans un geste. */
+function backToWalk(): void {
+  const s = state();
   s.setMode("walk");
   device.current.capture();
   if (debug.skipCaptureCheck) return;
@@ -144,6 +152,30 @@ export function launch(itemId: string, name: string, from: number | null): void 
   closePanel();
 }
 
+// ── La télécommande ──────────────────────────────────────────────────────────────────────────────
+
+/** L'écran devant lequel la télécommande a été ouverte : c'est devant lui que « Laterna » ouvre le panneau. */
+let remoteScreen: string | null = null;
+
+/**
+ * Pose la télécommande au bas de l'image (`ui/Remote.tsx`) : lecture, sauts, progression, sous-titres, sans
+ * couvrir l'image comme le panneau. Le regard est rendu le temps de s'en servir — c'est ce qui permet de la
+ * cliquer. Seulement pendant une lecture : sans film, toucher l'écran ouvre le panneau, comme avant.
+ */
+export function openRemote(screenId: string): void {
+  const s = state();
+  if (s.phase !== "world" || s.mode !== "walk") return;
+  remoteScreen = screenId;
+  s.setMode("remote");
+  device.current.release();
+}
+
+/** Retire la télécommande et rend le regard. À appeler dans un geste (un clic hors d'elle, Échap). */
+export function closeRemote(): void {
+  if (state().mode !== "remote") return;
+  backToWalk();
+}
+
 export function stopPlayback(): void {
   dispatch({ type: "stop" });
 }
@@ -172,6 +204,10 @@ function handle(intent: Intent): void {
     if (intent === "back") panelBack();
     return;
   }
+  if (s.mode === "remote") {
+    if (intent === "back") closeRemote();
+    return;
+  }
   if (s.mode === "paused") {
     // Dans les réglages, « retour » revient au menu ; au menu, il reprend la visite.
     if (intent === "back") {
@@ -188,10 +224,17 @@ function handle(intent: Intent): void {
       return openPanel();
     }
     case "select": {
+      // Pendant une lecture, l'écran visé appelle la télécommande ; le panneau complet reste sous E (ou par elle).
       const screen = aimedScreen();
-      if (screen) openPanel(screen.id);
+      const playing = s.playback.status === "playing" || s.playback.status === "paused";
+      if (screen && playing) openRemote(screen.id);
+      else if (screen) openPanel(screen.id);
       return;
     }
+    case "accept":
+      return acceptPrompt();
+    case "dismiss":
+      return dismissPrompt();
     case "sit":
       return toggleSeat();
     case "menu":

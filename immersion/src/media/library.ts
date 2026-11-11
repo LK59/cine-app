@@ -224,6 +224,24 @@ export async function episodesOf(seriesItemId: string): Promise<{ episodes: Epis
   return { episodes, next: data.nextEpisode?.itemId ?? null };
 }
 
+/**
+ * L'épisode qui suit celui-ci — la règle de `nextEpisodeIn` (`@/lib/nextEpisode`), reprise sur la liste à plat
+ * que rend `episodesOf` (saisons puis épisodes, dans l'ordre de la route) : la fin d'une saison enchaîne sur la
+ * suivante, rien après le dernier ; les spéciaux (saison 0) ont leur propre chaîne et ne rejoignent jamais celle
+ * des saisons. Pas importée telle quelle : elle lit le type de la route, que l'étape de build du mode n'a pas.
+ */
+export function nextEpisodeAfter(episodes: Episode[], currentItemId: string): Episode | null {
+  const regular = episodes.filter((e) => e.season !== 0);
+  const chain = regular.some((e) => e.itemId === currentItemId) ? regular : episodes.filter((e) => e.season === 0);
+  const index = chain.findIndex((e) => e.itemId === currentItemId);
+  return index === -1 || index === chain.length - 1 ? null : chain[index + 1];
+}
+
+/** « Série — S01E02 · Titre » : le nom d'un épisode, tel que le serveur le donne à la négociation. */
+export function episodeName(series: string, e: Episode): string {
+  return `${series} — S${String(e.season).padStart(2, "0")}E${String(e.episode).padStart(2, "0")} · ${e.title}`;
+}
+
 const fold = (text: string) =>
   text
     .toLowerCase()

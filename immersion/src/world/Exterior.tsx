@@ -3,6 +3,7 @@ import { useFrame, useLoader, useThree } from "@react-three/fiber";
 import { BackSide, BufferAttribute, Color, ConeGeometry, type BufferGeometry, CylinderGeometry, DoubleSide, InstancedMesh, LinearFilter, LinearMipmapLinearFilter, NoColorSpace, Path, Object3D, PlaneGeometry, RepeatWrapping, Shape, ShapeGeometry, ShaderMaterial, SphereGeometry, SRGBColorSpace, Vector2, Vector3, type CompressedTexture } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { assetUrl } from "../lib/assets";
+import { assetJson } from "../lib/packs";
 import { useProfile } from "../state/store";
 import { WEST_WINDOW, WEST_WINDOWS } from "./geometry/salon";
 import { ktx2For } from "./ktx2";
@@ -96,9 +97,8 @@ function usePanorama(): Panorama | null {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const response = await fetch(assetUrl("panorama/panorama.json"), { credentials: "same-origin" });
-      if (!response.ok) return;
-      const meta = (await response.json()) as PanoramaMeta;
+      const meta = await assetJson<PanoramaMeta>(assetUrl("panorama/panorama.json"));
+      if (!meta) return;
       const loader = ktx2For(gl);
       const [far, mid, near] = await Promise.all((["far", "mid", "near"] as const).map((layer) => loader.loadAsync(assetUrl(`panorama/${meta.layers[layer].file}`))));
       for (const texture of [far, mid, near]) {

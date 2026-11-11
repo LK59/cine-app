@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { browserLang, translate, type Key, type Lang } from "../lib/i18n";
 import { AUTO_LEVELS, loadSettings, profileOf, saveSettings, type Quality, type QualityProfile, type Settings } from "../lib/settings";
 import { isTouchDevice, type Unsupported } from "../lib/capability";
-import type { AudioTrack, SubtitleTrack } from "../media/api";
+import type { AudioTrack, Span, SubtitleTrack } from "../media/api";
 import type { Episode, Library, Title } from "../media/library";
 import { FORCED_LABEL } from "../input/keyboardMouse";
 import type { SeatId } from "../world/interactions";
@@ -15,13 +15,14 @@ import type { RoomId } from "../world/layout";
  * `phase` dit où en est la page ; `mode` dit, une fois dans le monde, qui tient le pointeur :
  * - `walk` : le pointeur est verrouillé, la souris tourne la tête ;
  * - `paused` : Échap a rendu le pointeur, le menu pause est ouvert ;
- * - `panel` : le panneau Laterna est ouvert, le pointeur sert à cliquer dedans.
+ * - `panel` : le panneau Laterna est ouvert, le pointeur sert à cliquer dedans ;
+ * - `remote` : la télécommande (`ui/Remote.tsx`) est posée au bas de l'image, le pointeur sert à la toucher.
  *
  * Le rendu 3D ne lit ici que par sélecteurs (ou par `getState()` dans la boucle d'image) : une
  * valeur qui change à chaque image n'a rien à faire dans cet état.
  */
 export type Phase = "checking" | "unsupported" | "loading" | "gate" | "world" | "lost" | "expired" | "leaving";
-export type Mode = "walk" | "paused" | "panel";
+export type Mode = "walk" | "paused" | "panel" | "remote";
 
 /**
  * La lecture. Deux sortes de champs, qu'il ne faut pas confondre :
@@ -55,9 +56,25 @@ export interface Playback {
   subtitleTracks: SubtitleTrack[];
   audioIndex: number | null;
   subtitleIndex: number | null;
+  /** Observé : les repères de l'épisode (secondes), rendus par la négociation ; tous nuls pour un film. */
+  markers: { intro: Span | null; recap: Span | null; credits: number | null };
+  /**
+   * Observé : l'épisode qui suit celui-ci dans sa série, et où le reprendre (`media/upNext.ts`) ; `null` pour
+   * un film, un dernier épisode, ou tant que la liste n'est pas arrivée.
+   */
+  next: { itemId: string; title: string; from: number } | null;
 }
 
-export const IDLE_PLAYBACK: Playback = { status: "idle", itemId: null, title: null, wantPaused: false, seek: null, position: 0, duration: 0, muted: false, waiting: false, error: null, method: null, audioTracks: [], subtitleTracks: [], audioIndex: null, subtitleIndex: null };
+/** Ce que l'invite au bas de l'image propose maintenant (`media/upNext.ts`), ou rien. */
+export type Prompt =
+  /** « Passer l'intro » ou « Passer le récap » : mène à `end`. */
+  | { kind: "skip"; what: "intro" | "recap"; end: number }
+  /** L'épisode suivant, dans `countdown` secondes — décompte arrêté pendant une pause (`running`). */
+  | { kind: "next"; title: string; countdown: number; running: boolean }
+  /** Trois épisodes enchaînés sans un geste : on demande au lieu de continuer. */
+  | { kind: "stillThere"; title: string };
+
+export const IDLE_PLAYBACK: Playback = { status: "idle", itemId: null, title: null, wantPaused: false, seek: null, position: 0, duration: 0, muted: false, waiting: false, error: null, method: null, audioTracks: [], subtitleTracks: [], audioIndex: null, subtitleIndex: null, markers: { intro: null, recap: null, credits: null }, next: null };
 
 /**
  * Le panneau Laterna, en état pur : ce qui est chargé, cherché, ouvert. Aucun composant ne garde ceci
@@ -93,6 +110,8 @@ export interface ImmersionState {
   seatSpot: SeatId;
   /** La chose regardée de près sur laquelle on peut agir (`interactions.ts`). */
   nearThing: string | null;
+  /** L'écran que le regard vise pendant une lecture (le clic y pose la télécommande), ou rien. */
+  aimedScreen: string | null;
   /** Le chat vient d'être caressé (instant, en millisecondes). */
   petAt: number;
   pet: () => void;
@@ -125,6 +144,9 @@ export interface ImmersionState {
   setBaked: (baked: boolean) => void;
   /** La scène est-elle chargée (textures, modèles) ? */
   sceneReady: boolean;
+  /** Le téléchargement des paquets de décors, en octets (`lib/packs.ts`) ; `null` sans paquets (développement). */
+  packs: { loaded: number; total: number } | null;
+  setPacks: (packs: { loaded: number; total: number }) => void;
   lang: Lang;
   settings: Settings;
   /** Le niveau courant d'« Auto » (0 = Ultra) : réglé par le moniteur de performance, jamais gardé. */
@@ -135,12 +157,15 @@ export interface ImmersionState {
   /** Le HUD de lecture se montre un instant à chaque geste (lecture, saut, son) : ce compteur le réveille. */
   hudWake: number;
   wakeHud: () => void;
+  /** L'invite du moment (passer l'intro, épisode suivant), posée par `media/upNext.ts` seul. */
+  prompt: Prompt | null;
+  setPrompt: (prompt: Prompt | null) => void;
   setPhase: (phase: Phase) => void;
   setUnsupported: (why: Unsupported | null) => void;
   setMode: (mode: Mode) => void;
   setPauseView: (view: "menu" | "settings") => void;
   setSeated: (seated: boolean, spot?: SeatId) => void;
-  setNear: (near: { screen: string | null; seat: SeatId | null; thing: string | null }) => void;
+  setNear: (near: { screen: string | null; seat: SeatId | null; thing: string | null; aimed?: string | null }) => void;
   panel: PanelState;
   setPanel: (patch: Partial<PanelState>) => void;
   setSceneReady: (ready: boolean) => void;
@@ -158,6 +183,7 @@ export const useStore = create<ImmersionState>((set, get) => ({
   nearSeat: null,
   seatSpot: "sofa",
   nearThing: null,
+  aimedScreen: null,
   petAt: 0,
   pet: () => set({ petAt: performance.now() }),
   room: "salon",
@@ -179,6 +205,8 @@ export const useStore = create<ImmersionState>((set, get) => ({
   setBaked: (baked) => get().baked !== baked && set({ baked }),
   setRoom: (room) => get().room !== room && set({ room }),
   sceneReady: false,
+  packs: null,
+  setPacks: (packs) => set({ packs }),
   lang: browserLang(),
   settings: loadSettings(),
   // Au doigt (téléphone, tablette), « Auto » part bas et remonte si la machine suit — l'inverse d'un ordinateur.
@@ -191,14 +219,20 @@ export const useStore = create<ImmersionState>((set, get) => ({
   setPlayback: (patch) => set({ playback: { ...get().playback, ...patch } }),
   hudWake: 0,
   wakeHud: () => set({ hudWake: get().hudWake + 1 }),
+  prompt: null,
+  setPrompt: (prompt) => {
+    const now = get().prompt;
+    // Recalculée deux fois par seconde : ne rien redessiner quand elle dit la même chose.
+    if (JSON.stringify(now) !== JSON.stringify(prompt)) set({ prompt });
+  },
   setPhase: (phase) => set({ phase }),
   setUnsupported: (unsupported) => set({ unsupported, phase: unsupported ? "unsupported" : "loading" }),
   setMode: (mode) => set(mode === "paused" ? { mode } : { mode, pauseView: "menu" }),
   setPauseView: (pauseView) => set({ pauseView }),
   setSeated: (seated, spot) => set(spot ? { seated, seatSpot: spot } : { seated }),
-  setNear: ({ screen, seat, thing }) => {
+  setNear: ({ screen, seat, thing, aimed = null }) => {
     const s = get();
-    if (s.nearScreen !== screen || s.nearSeat !== seat || s.nearThing !== thing) set({ nearScreen: screen, nearSeat: seat, nearThing: thing });
+    if (s.nearScreen !== screen || s.nearSeat !== seat || s.nearThing !== thing || s.aimedScreen !== aimed) set({ nearScreen: screen, nearSeat: seat, nearThing: thing, aimedScreen: aimed });
   },
   panel: EMPTY_PANEL,
   setPanel: (patch) => set({ panel: { ...get().panel, ...patch } }),

@@ -23,12 +23,24 @@ export interface Negotiation {
   /** Les pistes du fichier, telles que Jellyfin les numérote (`index`). */
   audioTracks?: AudioTrack[];
   subtitleTracks?: SubtitleTrack[];
+  /**
+   * Les repères de l'épisode, en secondes, quand Jellyfin l'a analysé (`playerMarkers` côté application) :
+   * le générique d'ouverture, le « précédemment », le début du générique de fin. Nuls pour un film.
+   */
+  introSkip?: Span | null;
+  recapSkip?: Span | null;
+  creditsStart?: number | null;
   playbackInfo: {
     playMethod: PlayMethod;
     transcodeReasons: string[];
     video: { codec: string | null; width: number | null; height: number | null; rangeType: string | null } | null;
     audio: { codec: string | null; channels: number | null } | null;
   };
+}
+
+export interface Span {
+  start: number;
+  end: number;
 }
 
 export interface AudioTrack {
@@ -126,6 +138,20 @@ export async function isHdrFile(itemId: string): Promise<boolean | null> {
     const info = await apiJson<{ video?: { isHdr?: boolean; rangeType?: string | null } | null }>(`/api/jellyfin/direct/${itemId}`);
     if (!info.video) return null;
     return typeof info.video.isHdr === "boolean" ? info.video.isHdr : isHdrRange(info.video.rangeType);
+  } catch (error) {
+    if (error instanceof SessionExpired) throw error;
+    return null;
+  }
+}
+
+/**
+ * La série d'un épisode (`/api/player/item/<id>`, la route du menu « Épisodes » du lecteur) ; `null` pour un
+ * film, un titre hors des droits du compte, ou une route qui ne répond pas — il n'y a alors rien à enchaîner.
+ */
+export async function seriesOf(itemId: string): Promise<string | null> {
+  try {
+    const item = await apiJson<{ seriesId?: string | null }>(`/api/player/item/${itemId}`);
+    return typeof item.seriesId === "string" && item.seriesId ? item.seriesId : null;
   } catch (error) {
     if (error instanceof SessionExpired) throw error;
     return null;

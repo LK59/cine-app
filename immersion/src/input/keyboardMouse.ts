@@ -8,6 +8,7 @@ import { device, emit, motion, resetMotion, type Intent, zoomBy } from "./intent
  *   AZERTY, W-A-S-D en QWERTY comme en QWERTZ. Rien à régler. Le réglage « Clavier » permet de forcer
  *   une disposition : les touches sont alors lues par leur **lettre** (Z Q S D, ou W A S D) — pour un
  *   clavier dont les positions ne disent pas la vérité (touches réaffectées, disposition exotique).
+ * - Espace, les flèches, Entrée et Retour arrière sont lus par leur position.
  * - **Les autres touches** (E, F, M) sont des initiales : elles sont lues par leur **lettre**, pour que
  *   la touche gravée « M » soit bien celle qui coupe le son (en AZERTY elle n'est pas à la place du M
  *   américain). Si la lettre n'existe pas sur ce clavier (cyrillique, grec…), la position sert de repli.
@@ -24,7 +25,14 @@ const BY_CODE: Record<string, Intent> = {
   Space: "playPause",
   ArrowLeft: "seekBack",
   ArrowRight: "seekForward",
+  // L'invite au bas de l'image (passer l'intro, épisode suivant) : le pointeur est verrouillé, on ne peut pas
+  // la cliquer — Entrée l'accepte, Retour arrière écarte la carte.
+  Enter: "accept",
+  NumpadEnter: "accept",
+  Backspace: "dismiss",
 };
+/** Les touches lues par leur position, jamais par leur lettre. */
+const POSITIONAL = new Set(["Space", "Enter", "NumpadEnter", "Backspace"]);
 const REPEATABLE = new Set<Intent>(["seekBack", "seekForward"]);
 
 type Direction = "forward" | "back" | "left" | "right" | "run";
@@ -113,7 +121,7 @@ export function attachKeyboardMouse({ canvas, onLook, onCapture, worldActive, la
     const letter = letterOf(e);
     // (Une ponctuation n'est pas « un clavier sans lettres latines » : en AZERTY, la virgule est à la place du M américain.)
     const foreignLetter = e.key.length === 1 && /\p{L}/u.test(e.key) && !letter;
-    const intent = e.code === "Space" || e.code.startsWith("Arrow") ? BY_CODE[e.code] : letter ? BY_LETTER[letter] : foreignLetter ? BY_CODE[e.code] : undefined;
+    const intent = POSITIONAL.has(e.code) || e.code.startsWith("Arrow") ? BY_CODE[e.code] : letter ? BY_LETTER[letter] : foreignLetter ? BY_CODE[e.code] : undefined;
     // Une touche qui déplace ne fait rien d'autre (en disposition forcée, une lettre peut être les deux).
     if (!intent || (direction && direction !== "run")) return;
     // Espace et les flèches feraient défiler la page ou réactiveraient le dernier bouton cliqué.

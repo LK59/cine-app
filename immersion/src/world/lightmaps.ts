@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useThree } from "@react-three/fiber";
 import { BufferAttribute, LinearFilter, LinearMipmapLinearFilter, ShaderChunk, SRGBColorSpace, type BufferGeometry, type CompressedTexture, type Material, type MeshStandardMaterial } from "three";
 import { assetUrl } from "../lib/assets";
+import { assetBytes, assetJson } from "../lib/packs";
 import { useStore } from "../state/store";
 import { ktx2For } from "./ktx2";
 
@@ -56,9 +57,8 @@ export interface Lightmaps {
 }
 
 async function load(gl: Parameters<typeof ktx2For>[0]): Promise<Lightmaps | null> {
-  const response = await fetch(assetUrl("lightmaps/lightmaps.json"), { credentials: "same-origin" });
-  if (!response.ok) return null;
-  const manifest = (await response.json()) as Manifest;
+  const manifest = await assetJson<Manifest>(assetUrl("lightmaps/lightmaps.json"));
+  if (!manifest) return null;
   if (!BAKED_SHADER_OK) return null;
   const loader = ktx2For(gl);
   const atlases: Lightmaps["atlases"] = {};
@@ -78,7 +78,7 @@ async function load(gl: Parameters<typeof ktx2For>[0]): Promise<Lightmaps | null
         loader.loadAsync(assetUrl(`lightmaps/${base.texture}`)).then(ready),
         atlas.layers ? loader.loadAsync(assetUrl(`lightmaps/${atlas.layers.lampes.texture}`)).then(ready) : Promise.resolve(null),
         atlas.layers?.ecrans ? loader.loadAsync(assetUrl(`lightmaps/${atlas.layers.ecrans.texture}`)).then(ready) : Promise.resolve(null),
-        atlas.uv ? fetch(assetUrl(`lightmaps/${atlas.uv}`), { credentials: "same-origin" }).then((r) => (r.ok ? r.arrayBuffer() : null)) : Promise.resolve(null),
+        atlas.uv ? assetBytes(assetUrl(`lightmaps/${atlas.uv}`)) : Promise.resolve(null),
       ]);
       const uvs = new Map<string, { uv: Float32Array; probe: number[][] }>();
       if (packed && atlas.meshes) {

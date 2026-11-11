@@ -1512,3 +1512,155 @@ kbd {
     font-size: 15px;
   }
 }
+
+/* L'invite du moment (`ui/Prompts.tsx`) : en bas à droite, hors de la barre de lecture centrée. Au-dessus du
+   tactile (z 6) : ses boutons se touchent comme ceux des commandes. */
+.prompts {
+  position: fixed;
+  right: max(28px, env(safe-area-inset-right));
+  bottom: max(28px, env(safe-area-inset-bottom));
+  z-index: 7;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+.prompt-pill,
+.prompt-card {
+  pointer-events: auto;
+  color: #fff;
+  background: rgb(10 10 12 / 0.62);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  animation: card-in 0.24s var(--ease-out) both;
+}
+.prompt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.prompt-card {
+  width: min(340px, calc(100vw - 48px));
+  padding: 14px 16px 14px;
+  border-radius: 20px;
+}
+.prompt-heading {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.prompt-title {
+  margin: 4px 0 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.prompt-meter {
+  display: block;
+  height: 3px;
+  margin-bottom: 12px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.14);
+  overflow: hidden;
+}
+.prompt-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--brand);
+  transform-origin: left center;
+  transition: transform 1s linear;
+}
+.prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.prompt-actions .btn,
+.prompt-pill {
+  gap: 8px;
+}
+.prompt-actions kbd,
+.prompt-pill kbd {
+  font-size: 11px;
+}
+
+/* La télécommande (`ui/Remote.tsx`) : au bas de l'image, sans la couvrir. Le fond invisible derrière elle
+   reçoit le clic « ailleurs », qui la retire et rend le regard. */
+.remote-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+}
+.remote {
+  position: fixed;
+  left: 50%;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(680px, calc(100vw - 32px));
+  padding: 12px 16px 14px;
+  border-radius: 20px;
+  background: rgb(10 10 12 / 0.66);
+  box-shadow: inset 0 0 0 1px var(--ring);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transform: translateX(-50%);
+  animation: remote-in 0.22s var(--ease-out) both;
+}
+@keyframes remote-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+}
+.remote-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.remote-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.remote-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.remote-toggle {
+  min-width: 108px;
+  justify-content: center;
+}
+.remote-subtitles {
+  margin-left: auto;
+}
+.remote-subtitles select {
+  max-width: 220px;
+}
+/* Au doigt sur un téléphone en paysage : l'invite passe en haut, les boutons du tactile tiennent le coin bas. */
+@media (pointer: coarse) and (max-height: 560px) {
+  .prompts {
+    top: max(12px, env(safe-area-inset-top));
+    bottom: auto;
+    right: 50%;
+    transform: translateX(50%);
+  }
+  .remote {
+    padding: 10px 12px 12px;
+  }
+}
