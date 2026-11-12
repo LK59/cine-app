@@ -1225,6 +1225,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.39.5",
+    page: "10.37",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Sur iPhone, un film repris après un passage dans une autre app continue là où il en était, sans sauter de passage ni changer de lecteur.",
+        en: "On iPhone, a film resumed after switching to another app carries on where it was, without skipping a passage or changing player.",
+        es: "En iPhone, una película retomada tras pasar por otra app continúa donde estaba, sin saltarse ningún fragmento ni cambiar de reproductor.",
+        de: "Auf dem iPhone läuft ein Film nach einem Abstecher in eine andere App dort weiter, wo er war – ohne übersprungene Stelle und ohne Wechsel des Players.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

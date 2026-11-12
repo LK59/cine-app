@@ -353,6 +353,42 @@ describe("arrière-plan puis retour : l'ordre des trois écouteurs", () => {
     expect(logged("rebuild")).toHaveLength(1);
   });
 
+  it("l'ancien pipeline qui parle encore après la reconstruction ne compte pas : une fermeture, une perte — le retour suivant reconstruit aussi", async () => {
+    // iPhone de mathis, 12/11/2026 : au retour, « source fermée en arrière-plan », puis deux « Media failed to
+    // decode » du pipeline déjà remplacé dans les 4 ms — trois reconstructions comptées, 12 s sautées, et le
+    // retour d'après passé au lecteur serveur, budget vide.
+    const second = fakeRemux();
+    const third = fakeRemux();
+    const opened = [remux, second, third];
+    nextProbe = () => ({ path: "remux", start: async () => opened.shift() ?? fakeRemux(), discard: vi.fn() });
+    mount();
+    await waitFor(() => expect(probes).toHaveLength(1));
+    await ready();
+    act(() => setVisibility("hidden"));
+    remux.lost = true;
+    remux.position = 423.8;
+    act(() => {
+      setVisibility("visible");
+      probes[0].onError("InvalidStateError (MediaSource closed, élément code 3 « Media failed to decode »)");
+      probes[0].onError("InvalidStateError (MediaSource closed, élément code 3 « Media failed to decode »)");
+    });
+    await waitFor(() => expect(probes).toHaveLength(2), { timeout: 3000 });
+    await ready();
+    expect(probes[1].startSeconds).toBeCloseTo(423.8, 1);
+    expect(logged("rebuild")).toHaveLength(1);
+    expect(events.some((e) => e.startsWith("trace:panne d'un pipeline déjà remplacé, ignorée"))).toBe(true);
+
+    // Deux minutes plus tard, le même geste : une reconstruction de plus, pas le lecteur serveur.
+    act(() => setVisibility("hidden"));
+    second.lost = true;
+    second.position = 484.9;
+    act(() => setVisibility("visible"));
+    await waitFor(() => expect(probes).toHaveLength(3), { timeout: 3000 });
+    expect(probes[2].startSeconds).toBeCloseTo(484.9, 1);
+    expect(logged("rebuild")).toHaveLength(2);
+    expect(logged("fallback")).toHaveLength(0);
+  });
+
   it("le lecteur fermé, un passage en arrière-plan n'écrit plus rien, et un retour ne reconstruit rien", async () => {
     const { unmount } = mount();
     await waitFor(() => expect(probes).toHaveLength(1));

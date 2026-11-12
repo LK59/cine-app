@@ -570,6 +570,30 @@ describe("empreinte — lecteur natif : arrière-plan", () => {
     await closeByCross();
     await fingerprint();
   });
+
+  it("source fermée au retour, l'ancien pipeline crie encore deux fois : une seule reconstruction", async () => {
+    // iPhone, 12/11/2026 : trois reconstructions en 4 ms pour une seule fermeture (voir `pipelineGenerationRef`).
+    await openAndPlay();
+    await play(10);
+    rec.step("caché 50 s, source fermée");
+    setVisibility("hidden");
+    await rec.advance(50_000);
+    const old = lastProbe();
+    current.lost = true;
+    current.position = 140;
+    act(() => {
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+      Object.defineProperty(document, "hidden", { value: false, configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+      old.onError("InvalidStateError (MediaSource closed, élément code 3 « Media failed to decode »)");
+      old.onError("InvalidStateError (MediaSource closed, élément code 3 « Media failed to decode »)");
+    });
+    await rec.advance(1_000);
+    await firstPicture(137);
+    rec.dom("après retour");
+    await closeByCross();
+    await fingerprint();
+  });
 });
 
 describe("empreinte — lecteur natif : réseau", () => {

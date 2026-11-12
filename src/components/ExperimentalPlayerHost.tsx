@@ -246,6 +246,19 @@ export function ExperimentalPlayerHost({
     restoreRememberedVolume(videoElRef.current);
   }, []);
   const remuxRef = useRef<RemuxPlayback | null>(null);
+  /**
+   * Le numéro du pipeline que le lecteur attend — avancé par `restart` au moment même où une
+   * reconstruction est acceptée, avant que l'effet ne démonte l'ancien.
+   *
+   * Entre les deux, l'ancien pipeline, déjà mort, parle encore : son chien de garde et ses sauts
+   * refusés appellent `onError`, et `sourceLost` comptait chaque écho comme une perte de plus.
+   * iPhone de mathis, 12/11/2026 : une source fermée par iOS au retour d'arrière-plan écrite trois
+   * fois en 4 ms — budget de trois reconstructions vidé d'un coup, 12 s sautées « au-delà du passage
+   * qui vient d'échouer », et le retour suivant passé au lecteur serveur. Les trois seuls replis de ce
+   * genre en deux mois de journaux (mathis, nath, lucas) venaient de ces rafales (point fragile n°3,
+   * docs/cycle-de-vie-lecteur.md).
+   */
+  const pipelineGenerationRef = useRef(0);
   /** La réserve d'avance en mémoire du lecteur en cours — voir `MemoryReserve`. */
   const reserveRef = useRef<MemoryReserve | null>(null);
   /** Le dernier élément vidéo du pipeline, pour `syncFacts` — voir `reportStop`. */
@@ -923,6 +936,7 @@ export function ExperimentalPlayerHost({
       trace(`reprise refusée : ${why} — le lecteur a passé la main ou se ferme`);
       return;
     }
+    pipelineGenerationRef.current += 1;
     trace(`reprise : ${why} — reconstruction à ${at.toFixed(1)} s`);
     // Le registre des tentatives (§67), en observation : une reconstruction automatique qui en rejoue
     // une déjà échouée, au même endroit et sur la même piste, sans lecture entre-temps, est notée.
@@ -1717,6 +1731,8 @@ export function ExperimentalPlayerHost({
     }
 
     let cancelled = false;
+    // Le numéro de ce pipeline-ci — voir `pipelineGenerationRef`.
+    const generation = pipelineGenerationRef.current;
     // Ce pipeline-ci a-t-il donné une image ? Propre à chaque ouverture — un changement de piste ou
     // une reconstruction en ouvre une neuve. `everReadyRef` (le lecteur a-t-il jamais joué) ne
     // suffisait pas : après la première image, une piste à PCE choisie au menu et refusée par Safari
@@ -2340,6 +2356,13 @@ export function ExperimentalPlayerHost({
       // ce composant (voir startRemux) ni la garde de démarrage de la source.
       startPaused: lifecycle.keepPaused,
       onError: (message, kind, facts) => {
+        // Un pipeline déjà remplacé — une reconstruction est acceptée, l'effet ne l'a pas encore
+        // démonté — ou déjà démonté : sa panne est celle que la reconstruction répare. Ni budget, ni
+        // saut, ni ligne au journal ; une trace seulement.
+        if (cancelled || generation !== pipelineGenerationRef.current) {
+          trace(`panne d'un pipeline déjà remplacé, ignorée (${message})`);
+          return;
+        }
         // Une zone illisible (§93), la tête arrivée au relais : rien de ce qui suit ne la concerne —
         // ni reconstruction (la même zone attendrait), ni piste, ni dialogues. La main passe.
         if (facts?.unreadableZone === true) {

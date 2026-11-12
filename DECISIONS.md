@@ -10757,3 +10757,29 @@ le seuil, ré-encodage au-delà, piste non décodable gardée sans sonde, « enj
 l'AC-3 lu une seule fois) ; l'empreinte `natif/pistes-son-en-retard…` ; les autres empreintes inchangées.
 `audio-gap-bench.spec.ts` (banc, sauté sans `GAP_FILES`) : sur les vrais fichiers, à 0, 10 et 600 s, iPhone et
 Chrome simulés, avant et après — toute piste sans trou donne des octets audio identiques.
+
+## 149. Une source perdue compte une fois : l'écho d'un pipeline remplacé est ignoré (12/11/2026)
+
+**Règle.** Une panne signalée par `onError` ne compte que si elle vient du pipeline que le lecteur attend. `restart`
+avance `pipelineGenerationRef` au moment où une reconstruction est acceptée ; chaque pipeline retient le numéro
+qu'il avait à son ouverture, et une panne d'un pipeline remplacé — ou déjà démonté (`cancelled`) — n'écrit qu'une
+trace : ni `sourceLost`, ni budget, ni saut, ni ligne au journal.
+
+**Pourquoi.** Entre `restart` et le nettoyage de l'effet qui détruit l'ancien pipeline, celui-ci parle encore : son
+chien de garde et ses sauts refusés appellent `onError`, et `onError` lisait `remuxRef.current` — encore lui, déjà
+`lost`. iPhone de mathis (iOS 18.7.5, *Les Gardiens de la Galaxie Vol. 3*, 4K Dolby Vision) : une source fermée par
+iOS pendant 49 s d'arrière-plan, écrite trois fois en 4 ms (« source fermée en arrière-plan », puis deux « Media
+failed to decode » `attempt` 2 et 3) — le budget de trois reconstructions (`MAX_REBUILDS`, 180 s) vidé d'un coup,
+12 s sautées comme « le même endroit deux fois », et le retour suivant, deux minutes plus tard, passé au lecteur
+serveur. Sur deux mois de journaux, les trois replis de ce genre (mathis, nath, lucas) venaient tous de ces rafales.
+Le décodeur d'iOS, lui, lâche parfois au départ en arrière-plan ou à une pause (WebKit, bug 298146 : au retour, un
+rendu « interrompu » de statut inconnu pris pour une panne fatale, non corrigé dans Safari 18) ; une reconstruction
+le répare presque toujours. Ce n'est pas lui qu'on corrige ici, c'est notre comptage.
+
+**Différent exprès.** Pas d'attente au retour avant de reconstruire : les traces montrent la panne *avant* le
+retour (au départ ou à une pause), une attente ne l'éviterait pas. `onStall` et `onStarting` gardent leur lecture
+de `remuxRef` (point fragile n°3 de `docs/cycle-de-vie-lecteur.md`, en partie corrigé).
+
+**Tests.** `ExperimentalPlayerHost-cycle.test.tsx` (« l'ancien pipeline qui parle encore… » : trois reconstructions
+sans la règle, une avec ; le retour suivant reconstruit au lieu de passer la main) ; l'empreinte
+`natif/arriere-plan-source-fermee-au-retour…` ; les autres empreintes inchangées.
