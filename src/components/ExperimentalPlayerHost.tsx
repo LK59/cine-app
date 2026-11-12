@@ -2402,7 +2402,11 @@ export function ExperimentalPlayerHost({
         // lecteur serveur) porte le même relevé que `rebuild` — tampons au dernier envoi, images,
         // fragment sous la tête (14/10/2026). Le relais lui-même n'en dépend pas.
         let lossFacts: Record<string, unknown> | undefined;
-        if (lost?.kind === "giveUp") {
+        // Un tampon plein avant la première image (12/11/2026) : le même relevé. *The Circle* sur un iPhone
+        // finissait ainsi, vingt secondes après l'ouverture, sans rien dire des tampons — son son ne commence
+        // qu'à 30 s, et seules les plages de chaque piste diront si c'est là que Safari attendait.
+        const quotaAtOpening = !pictureSeenRef.current && message.includes("QuotaExceededError");
+        if (lost?.kind === "giveUp" || quotaAtOpening) {
           try {
             lossFacts = remuxRef.current?.lossReport();
           } catch {
