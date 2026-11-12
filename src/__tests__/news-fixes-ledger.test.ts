@@ -96,7 +96,7 @@ describe("le registre lui-même", () => {
   // « 10.0 » : la page de Laterna, semée seulement sur l'installation qui annonce sa nouvelle adresse ;
   // ailleurs `ledgerTarget` retombe sur la dernière page publiée. « 10.7 » : les livres, sur la même seule
   // installation — ses entrées portent `onlyOnPage` et attendent leur page au lieu de retomber ailleurs.
-  const pages = ["8.44", "8.48", "8.61", "8.64", "8.68", "9.0", "9.1", "10.0", "10.5", "10.7", "10.13"];
+  const pages = ["8.44", "8.48", "8.61", "8.64", "8.68", "9.0", "9.1", "10.0", "10.5", "10.7", "10.13", "10.37"];
 
   it("chaque entrée vise une page qui existe, dans les quatre langues, aux bornes d'une page", () => {
     for (const e of FIXES_LEDGER) {

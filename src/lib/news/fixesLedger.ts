@@ -1211,6 +1211,20 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.39.2",
+    // La page de lancement « 10.39 » n'existe qu'en base (brouillon renommé) : la dernière page du code.
+    page: "10.37",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Les films dont le son ne commence qu'après quelques secondes d'image se lancent de nouveau dès le début, sur iPhone comme ailleurs.",
+        en: "Films whose sound only begins a few seconds after the picture start from the very beginning again, on iPhone and elsewhere.",
+        es: "Las películas cuyo sonido empieza unos segundos después de la imagen vuelven a iniciarse desde el principio, en iPhone y en los demás dispositivos.",
+        de: "Filme, deren Ton erst einige Sekunden nach dem Bild beginnt, starten wieder ganz von vorn – auf dem iPhone wie überall.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
