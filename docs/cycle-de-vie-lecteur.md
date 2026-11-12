@@ -420,8 +420,8 @@ test, 3 et 9 restent notés.
    sa fin, `restart` ne garde pas non plus la pause : une source perdue sur l'écran de fin est
    reconstruite **en lecture**. C'est le symptôme que le code a déjà corrigé le 24/09 pour le seul
    retour d'arrière-plan. De même, `restart` ne remet pas `ended` à faux.
-3. **En partie corrigé (12/11/2026, DECISIONS §149) : `onError` ignore un pipeline remplacé ou démonté**
-   (`pipelineGenerationRef`, avancé par `restart`). Ce qui suit vaut encore pour `onStall` et `onStarting`.
+3. **Corrigé (12/11/2026, DECISIONS §149) : `onError` et `onStall` ignorent un pipeline remplacé ou démonté**
+   (`pipelineGenerationRef`, avancé par `restart`) ; `onStarting` n'en accepte plus que la fin d'une attente.
    **Les rappels du moteur ne regardent pas `cancelled`, et lisent `remuxRef` global.** `onError`,
    `onStall` et `onStarting` sont fermés sur l'effet d'un pipeline, mais le test « la source est
    perdue » lit `remuxRef.current`, c'est-à-dire le pipeline *courant*. La sûreté repose entièrement

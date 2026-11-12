@@ -2458,6 +2458,9 @@ export function ExperimentalPlayerHost({
       },
       onWarning: showPipelineWarning,
       onStarting: (at) => {
+        // Un pipeline remplacé n'ouvre plus d'attente (roue, reprise comptée) sur le suivant ; qu'il en
+        // ferme une reste sans danger — la fin d'une attente ne se compte qu'une fois (`resumeEnded`).
+        if (at !== null && (cancelled || generation !== pipelineGenerationRef.current)) return;
         setStartingAt(at);
         // Seules les reprises comptent : la toute première lecture est l'ouverture, que la ligne
         // `start` mesure déjà (`openedInMs`).
@@ -2469,7 +2472,11 @@ export function ExperimentalPlayerHost({
       },
       // Une horloge qui ne bouge plus alors que l'élément dit jouer : écrit tel quel, une fois par
       // blocage. Rien à décider ici — les reprises sont déjà en cours dans la source.
-      onStall: (facts) => reportPlayback("stall", { ...describeFileRef.current(), path: "remux", ...facts, ...tally.backgroundFacts(Date.now()) }),
+      // Un pipeline remplacé ne bloque plus rien : sa ligne `stall` décrirait le suivant (`describeFileRef`).
+      onStall: (facts) => {
+        if (cancelled || generation !== pipelineGenerationRef.current) return;
+        reportPlayback("stall", { ...describeFileRef.current(), path: "remux", ...facts, ...tally.backgroundFacts(Date.now()) });
+      },
     })
       .then((probe) => {
         if (cancelled) {

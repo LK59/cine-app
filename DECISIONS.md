@@ -10777,8 +10777,9 @@ rendu « interrompu » de statut inconnu pris pour une panne fatale, non corrig�
 le répare presque toujours. Ce n'est pas lui qu'on corrige ici, c'est notre comptage.
 
 **Différent exprès.** Pas d'attente au retour avant de reconstruire : les traces montrent la panne *avant* le
-retour (au départ ou à une pause), une attente ne l'éviterait pas. `onStall` et `onStarting` gardent leur lecture
-de `remuxRef` (point fragile n°3 de `docs/cycle-de-vie-lecteur.md`, en partie corrigé).
+retour (au départ ou à une pause), une attente ne l'éviterait pas. `onStall` suit la même règle (sa ligne décrirait le
+pipeline suivant) ; `onStarting` d'un pipeline remplacé peut encore *fermer* une attente — sans danger, et
+`declareReady` la ferme de toute façon — mais plus en ouvrir une (point fragile n°3, corrigé).
 
 **Tests.** `ExperimentalPlayerHost-cycle.test.tsx` (« l'ancien pipeline qui parle encore… » : trois reconstructions
 sans la règle, une avec ; le retour suivant reconstruit au lieu de passer la main) ; l'empreinte

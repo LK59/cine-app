@@ -65,6 +65,7 @@ vi.mock("@/components/PlayerControls", () => ({
   VOLUME_STORAGE_KEY: "cine:player-volume",
   PlayerControls: (props: {
     loading: boolean;
+    resuming?: boolean;
     subtitleTracks: { id: number; label: string }[];
     currentSubtitleId?: number | null;
     onChangeSubtitle: (id: number | null) => void;
@@ -77,6 +78,7 @@ vi.mock("@/components/PlayerControls", () => ({
     <div
       data-testid="controls"
       data-loading={String(props.loading)}
+      data-resuming={String(props.resuming ?? false)}
       data-current-subtitle={String(props.currentSubtitleId ?? "")}
       data-current-second={String(props.secondSubtitle?.currentId ?? "")}
     >
@@ -114,7 +116,7 @@ vi.mock("@/lib/usePlayerEnabled", () => ({ usePlayerServerFallback: () => true }
 vi.mock("@/lib/webcodecs/memoryReserve", () => ({ reservePlanFacts: () => ({}), MemoryReserve: { start: () => ({ stop: vi.fn(() => ({})) }) } }));
 vi.mock("@/lib/resumeCache/keepOnStop", () => ({ keepOnStop: vi.fn(async () => 0) }));
 
-type Probe = { startSeconds: number; onError: (message: string) => void };
+type Probe = { startSeconds: number; onError: (message: string) => void; onStall: (facts: Record<string, unknown>) => void; onStarting: (at: number | null) => void };
 let probes: Probe[] = [];
 let nextProbe: () => unknown;
 
@@ -377,6 +379,13 @@ describe("arrière-plan puis retour : l'ordre des trois écouteurs", () => {
     expect(probes[1].startSeconds).toBeCloseTo(423.8, 1);
     expect(logged("rebuild")).toHaveLength(1);
     expect(events.some((e) => e.startsWith("trace:panne d'un pipeline déjà remplacé, ignorée"))).toBe(true);
+    // Ses autres signaux non plus : ni ligne `stall`, ni attente ouverte sur le lecteur neuf.
+    act(() => {
+      probes[0].onStall({ stalledAt: 423.8 });
+      probes[0].onStarting(423.8);
+    });
+    expect(logged("stall")).toHaveLength(0);
+    expect(screen.getByTestId("controls").dataset.resuming).toBe("false");
 
     // Deux minutes plus tard, le même geste : une reconstruction de plus, pas le lecteur serveur.
     act(() => setVisibility("hidden"));
