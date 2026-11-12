@@ -1520,6 +1520,39 @@ What the first device test (2026-09-21, Braveheart VF ↔ VO) taught, and what n
 - **A pause stays a pause**: `startPaused` reaches `PlaybackGuard.opened`, which otherwise took a
   player opened standing still for a failed start and started it.
 
+### Sound that starts after the picture (2026-11-12, DECISIONS §148)
+
+Some files have no audio block for the first seconds of a track while the picture starts at 0 —
+*The Circle* (AC-3, first block at 30.0 s), *Green Book* (AAC VF at 24 s, VO at 0.02 s), *WALL·E*
+(E-AC-3 VF at 11.8 s), *The Wolf of Wall Street* (AAC VF at 8.8 s); the container still says the
+track starts at 0. A MediaSource plays only the intersection of its buffers, so nothing under the
+head was playable: above `LANDING_REACH_SECONDS` the recovery restarted on the same spot until the
+audio buffer overflowed and the server player took over (and failed too); below, the landing put
+the head on the first sound and skipped the opening pictures.
+
+- **The decision** is `audioLeadGapSeconds` (`audioLeadGap.ts`): the first sound more than
+  `AUDIO_LEAD_GAP_SECONDS` (2 s) after the first picture read. Ordinary files sit below (tens of
+  ms, 0.2 s of reordering); the census of 12/11/2026 finds 63 tracks of 44 films from 0.59 to 30 s,
+  29 of them under 2 s (about fifteen at exactly 1.00 s, *1917* included).
+- **Filled by silence, through the re-encode.** `withLeadSilence` puts zero PCM — the first real
+  block's channel count and rate, ending on it to the sample — in front of the decoder's stream in
+  `AudioTranscoder.seekTo`, so every seek, rebuild and track change fills from the start of the
+  segment's picture. Without a gap the decoder's blocks pass through unchanged (same objects).
+- **A copied track with a gap is re-encoded** (`Remuxer.open`): the opening probe — the loop that
+  already read an AC-3/E-AC-3 frame for its description, now run for every copied track our chain
+  decodes in standard order (`dialogueCanShape`) — reads from where playback starts to the track's
+  first block. A gap there, or one a pipeline of this page saw earlier on that track
+  (`rememberLeadGap`), opens a transcoder instead of copying. If no transcoder can open, the copy of
+  before (`audioGap: "enjambé"`). Hand-made silent AC-3/E-AC-3 frames were the alternative: no
+  browser encodes them, and nothing here could prove Apple's decoder takes ours.
+- **Cost.** The opening of a gap file waits for the gap's bytes (8 MB for *The Circle*, 24 MB for
+  *WALL·E*): the only way to know where the silence ends. AC-3/E-AC-3 already paid it for their
+  description. A gap track is re-encoded for the whole page session (second lossy generation, a
+  decoder on the device), never a file without a gap: `audio-gap-bench.spec.ts` checks those bytes.
+- **Not covered.** A first pipeline of the page opened *past* the gap (a resume) does not know the
+  head: a seek back into the gap behaves as before. The `start` line carries `audioLeadGapS` and
+  `audioGap` only for a gap file.
+
 ### One codec per file (the fallback)
 
 **Mid-buffer codec transitions do not exist here.** If a file's tracks cannot all be delivered

@@ -4,6 +4,7 @@
 import { warmNextEpisode } from "@/lib/nextEpisodeWarmup";
 import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
 import { takeAacDecodeRoute, takeTrueHdThread } from "@/lib/webcodecs/softwareAudio";
+import { audioLeadGapFields, type AudioLeadGap } from "@/lib/webcodecs/audioLeadGap";
 import type { SeekTiming } from "@/lib/hostSeek";
 import { seekElapsed } from "@/components/player/session/seekElapsed";
 import { traceRecent } from "@/lib/webcodecs/trace";
@@ -53,6 +54,19 @@ export function trueHdThreadFacts(): Record<string, unknown> {
   const thread = takeTrueHdThread();
   if (!thread) return {};
   return { truehdThread: thread.thread, ...(thread.workerRefusal !== undefined ? { truehdWorkerError: thread.workerRefusal } : {}) };
+}
+
+/**
+ * Le son qui commence après l'image (DECISIONS.md §148) : `audioLeadGapS` et `audioGap` (« silence »,
+ * comblé ; « enjambé », copié comme avant), pour la ligne `start`. Rien pour tout autre fichier — sa
+ * ligne ne change pas —, ni pour un pipeline qui ne sait pas le dire. Jamais la panne de la ligne.
+ */
+export function audioLeadGapFacts(remux: { audioLeadGap?(): AudioLeadGap | null } | null): Record<string, unknown> {
+  try {
+    return audioLeadGapFields(remux?.audioLeadGap?.());
+  } catch {
+    return {};
+  }
 }
 
 /**

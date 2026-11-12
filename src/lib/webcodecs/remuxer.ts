@@ -17,7 +17,8 @@ import { subtitleText, TEXT_SUBTITLE_CODECS, type SubtitleCue } from "./subtitle
 import { av1CodecString, joinBytes, strayUnits, avcCodecString, hevcCodecString, isRandomAccessPoint, isRaslPicture, nalLengthSize, dolbyVisionCodecString, withCappedLightLevels } from "./codecConfig";
 import type { MatroskaFile, MatroskaTrack, MediaSample, TrackColour } from "./matroska";
 import { clusterOffsetForTime, cueTimeAfter, cueTimeAtOrBefore } from "./matroska";
-import { isReadAbandoned, type NetworkWindow } from "./byteSource";
+import { isNetworkFailure, isReadAbandoned, type NetworkWindow } from "./byteSource";
+import { audioLeadGapSeconds, rememberLeadGap, rememberedLeadGap, type AudioLeadGap } from "./audioLeadGap";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
 import { audioSampleEntryFor, isOpusHead, videoSampleEntry } from "./mp4SampleEntries";
 // `opusCopyConsidered` (DECISIONS.md §66) et `geckoEngine` : écrits ici jusqu'au 22/10/2026.
@@ -567,6 +568,43 @@ function probeOffset(file: MatroskaFile, startSeconds: number, videoTrackNumber:
 }
 
 /**
+ * Ce que la sonde a vu en lisant depuis un endroit du fichier : le premier bloc de la piste audio,
+ * son instant, et l'instant de la première image lue avant lui. Voir `probeTrackStart`.
+ */
+interface TrackStart {
+  frame: Uint8Array | null;
+  firstAudioUs: number | null;
+  /** `null` quand le son est arrivé avant toute image — rangé devant l'image clé, le cas courant. */
+  firstVideoUs: number | null;
+}
+
+/** Combien de blocs la sonde lit au plus avant de conclure que la piste n'a rien à partir de là. */
+const PROBE_SAMPLES = 20_000;
+
+/**
+ * Lit depuis `from` jusqu'au premier bloc de la piste audio — avec son propre lecteur, dont les
+ * échantillons sont jetés (voir `describeAudio`) — et note la première image lue avant lui.
+ *
+ * C'était la boucle de `describeAudio`, pour l'AC-3 et l'E-AC-3 : leur description est dans une
+ * trame. Elle dit aussi, sans un octet de plus, si le son commence après l'image (DECISIONS.md §148)
+ * — « The Circle » : 8 Mo d'image avant le premier bloc AC-3, à 30 s. Pour les autres pistes copiées
+ * que la chaîne sait décoder, c'est une lecture de plus, mais des mêmes octets : ceux de la grappe
+ * où la lecture commence, que le lecteur principal demande juste après (cache de `HttpByteSource`),
+ * et dans un fichier ordinaire le son y est dès les premiers blocs.
+ */
+async function probeTrackStart(source: ByteSource, file: MatroskaFile, from: number, track: MatroskaTrack, videoTrackNumber: number | null): Promise<TrackStart> {
+  const probe = createSampleReader(source, file, from);
+  let firstVideoUs: number | null = null;
+  for (let i = 0; i < PROBE_SAMPLES; i++) {
+    const sample = await probe.next();
+    if (!sample) break;
+    if (sample.trackNumber === track.number) return { frame: sample.data, firstAudioUs: sample.timestampUs, firstVideoUs };
+    if (firstVideoUs === null && sample.trackNumber === videoTrackNumber) firstVideoUs = sample.timestampUs;
+  }
+  return { frame: null, firstAudioUs: null, firstVideoUs };
+}
+
+/**
  * Builds the box that tells a decoder how to read this audio track.
  *
  * AC-3 and E-AC-3 carry no description in the Matroska header — it has to be read out of a frame.
@@ -587,17 +625,15 @@ async function describeAudio(
    * la même trame se trouve dans la grappe que la lecture va de toute façon charger (relu le
    * 23/09/2026). Le début du fichier reste le repli.
    */
-  preferred: number = start
+  preferred: number = start,
+  /** Ce que la sonde de `Remuxer.open` a déjà lu depuis `preferred` : pas relu une seconde fois. */
+  firstPass: TrackStart | null = null
 ): Promise<MuxTrackInfo> {
   let firstFrame: Uint8Array | null = null;
   if (track.codecId === "A_AC3" || track.codecId === "A_EAC3") {
     for (const from of preferred === start ? [start] : [preferred, start]) {
-      const probe = createSampleReader(source, file, from);
-      for (let i = 0; i < 20_000 && !firstFrame; i++) {
-        const sample = await probe.next();
-        if (!sample) break;
-        if (sample.trackNumber === track.number) firstFrame = sample.data;
-      }
+      const found = from === preferred && firstPass ? firstPass : await probeTrackStart(source, file, from, track, null);
+      firstFrame = found.frame;
       if (firstFrame) break;
     }
     if (!firstFrame) throw new Error("Aucune trame audio trouvée pour décrire la piste AC-3.");
@@ -778,6 +814,13 @@ export class Remuxer {
   private dropLeading = false;
   /** Les RASL écartées depuis la dernière reprise, pour la trace. */
   private leadingDropped = 0;
+  /** Le son de la piste commence après l'image, et ce qu'on en a fait — voir `audioLeadGap` (§148). */
+  private leadGap: AudioLeadGap | null = null;
+  /**
+   * Une piste que le navigateur prendrait telle quelle, ré-encodée pour combler un son en retard
+   * (§148) : le transcodeur qui remplace un encodeur en échec doit s'ouvrir de la même façon.
+   */
+  private decodesCopiedTrack = false;
   private pendingSubtitles: MediaSample[] = [];
   private clampedSamples = 0;
   private sequence = 1;
@@ -843,17 +886,71 @@ export class Remuxer {
     if (audioTrack && !playableAudio(audioTrack)) throw new Error(`Audio non remultiplexable : ${audioTrack.codecId}`);
 
     const start = file.firstClusterOffset ?? file.segmentDataStart;
+    const delivery = audioTrack ? audioDelivery(audioTrack, file, settings) : "none";
     // A track that cannot ride in the container is decoded and encoded again on the way through,
     // and the encoder — not the file — is then what describes it.
-    const transcoder =
-      audioTrack && audioDelivery(audioTrack, file, settings) === "transcode"
+    let transcoder =
+      audioTrack && delivery === "transcode"
         ? await AudioTranscoder.open(source, audioTrack, startSeconds, unifiedAudioChannels(file, settings) ?? undefined, file, settings.dialogue)
         : null;
     if (transcoder) assertContainerTakes(transcoder);
+    // Une piste déjà ré-encodée (le DTS partout, le Dolby sur Chrome) : le transcodeur comble le trou
+    // de lui-même à chaque saut ; ce qu'il a vu à l'amorçage n'est que pour le journal. Décidé depuis
+    // la position demandée, là où l'amorçage a commencé : depuis l'image clé, un film ordinaire repris
+    // à 10 s sur une clé à 0 se disait en retard de 10 s (banc du 12/11/2026, « Wall Street » sur
+    // Chrome). Mais mesuré depuis cette image clé (l'index, rien de lu) : c'est de là que le silence
+    // part, et « WALL·E » repris à 10 s disait sinon 1,8 s pour 11,8 s comblées.
+    const primedFirst = transcoder?.firstPrimedSeconds;
+    let leadGap: AudioLeadGap | null = null;
+    if (typeof primedFirst === "number" && audioLeadGapSeconds(Math.max(0, startSeconds), primedFirst) !== null) {
+      const readFromUs = startSeconds > 0 ? (cueTimeAtOrBefore(file, Math.round(startSeconds * 1e6), videoTrack.number) ?? 0) : 0;
+      leadGap = { gapS: primedFirst - readFromUs / TIMESCALE, action: "silence" };
+    }
+
+    // Le son copié qui commence après l'image (DECISIONS.md §148) : sondé là où la lecture commence,
+    // et, s'il est en retard — ou si un pipeline de cette page l'a déjà vu en retard —, décodé et
+    // ré-encodé pour que le transcodeur comble le trou par du silence. Seulement une piste que notre
+    // chaîne décode dans l'ordre standard des canaux : la question de « Améliorer les dialogues »,
+    // la même réponse. Tout autre fichier garde exactement sa copie, à l'octet près.
+    const preferred = probeOffset(file, startSeconds, videoTrack.number, start);
+    let firstPass: TrackStart | null = null;
+    let decodesCopiedTrack = false;
+    if (audioTrack && delivery === "copy" && dialogueCanShape(audioTrack)) {
+      firstPass = await probeTrackStart(source, file, preferred, audioTrack, videoTrack.number);
+      const seen =
+        firstPass.firstAudioUs !== null && firstPass.firstVideoUs !== null
+          ? audioLeadGapSeconds(firstPass.firstVideoUs / TIMESCALE, firstPass.firstAudioUs / TIMESCALE)
+          : null;
+      if (seen !== null) rememberLeadGap(file, audioTrack.number, seen);
+      // La mémoire, seulement si la piste a du son à partir d'ici : une VF plus courte que le film,
+      // reprise dans son générique muet, n'a rien à décoder — l'amorçage lirait jusqu'à la fin.
+      const gapS = seen ?? (firstPass.firstAudioUs !== null ? rememberedLeadGap(file, audioTrack.number) : undefined) ?? null;
+      if (gapS !== null) {
+        trace(
+          seen !== null
+            ? `son en retard : la piste ${audioTrack.number} (${audioTrack.codecId}) commence ${gapS.toFixed(2)} s après l'image — ré-encodée pour combler par du silence`
+            : `son en retard : la piste ${audioTrack.number} commence tard dans ce fichier (vu plus tôt sur cette page) — ré-encodée pour pouvoir y revenir`
+        );
+        try {
+          transcoder = await AudioTranscoder.open(source, audioTrack, startSeconds, unifiedAudioChannels(file, settings) ?? undefined, file, settings.dialogue, true);
+          assertContainerTakes(transcoder);
+          decodesCopiedTrack = true;
+          leadGap = { gapS, action: "silence" };
+        } catch (error) {
+          // Le réseau ou un saut : remontés tels quels, comme partout ici. Tout autre échec — pas
+          // d'encodeur, un codec que ce navigateur ne reprend pas — rend la copie d'avant : le trou
+          // est enjambé comme il l'était, ce qui vaut mieux que de refuser le chemin pour lui.
+          if (isReadAbandoned(error) || isNetworkFailure(error)) throw error;
+          transcoder = null;
+          leadGap = { gapS, action: "enjambé" };
+          trace(`son en retard : ré-encodage impossible (${error instanceof Error ? error.message : String(error)}) — copié tel quel, trou enjambé`);
+        }
+      }
+    }
     const audioInfo = audioTrack
       ? transcoder
         ? transcodedAudioInfo(transcoder, audioTrack)
-        : await describeAudio(source, file, start, audioTrack, probeOffset(file, startSeconds, videoTrack.number, start))
+        : await describeAudio(source, file, start, audioTrack, preferred, firstPass)
       : null;
     // Le seul lecteur strict (§93) : une zone illisible y lève `UnreadableZone`, que `MseSource`
     // passe à l'hôte sans reprise. La sonde du son (`describeAudio`) et les transcodeurs gardent
@@ -877,7 +974,7 @@ export class Remuxer {
       language: videoTrack.language ?? "und",
     };
 
-    return new Remuxer(
+    const remuxer = new Remuxer(
       file,
       videoTrack,
       audioTrack,
@@ -889,6 +986,17 @@ export class Remuxer {
       dolbyVision ? dolbyVisionCodecString(dolbyVision.record) : null,
       settings
     );
+    remuxer.leadGap = leadGap;
+    remuxer.decodesCopiedTrack = decodesCopiedTrack;
+    return remuxer;
+  }
+
+  /**
+   * Le son de la piste ouverte commence après l'image, et ce que ce pipeline en a fait — `null` pour
+   * tout fichier ordinaire. Pour la ligne `start` (DECISIONS.md §148).
+   */
+  audioLeadGap(): AudioLeadGap | null {
+    return this.leadGap;
   }
 
   plan(): RemuxPlan {
@@ -1343,7 +1451,7 @@ export class Remuxer {
     const previous = this.transcoder;
     let next: AudioTranscoder;
     try {
-      next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file, this.settings) ?? undefined, this.file, this.settings.dialogue);
+      next = await AudioTranscoder.open(this.source, track, at, unifiedAudioChannels(this.file, this.settings) ?? undefined, this.file, this.settings.dialogue, this.decodesCopiedTrack);
     } catch (error) {
       // Une lecture coupée par un saut n'est pas un échec de l'encodeur : elle ne compte pas dans
       // le budget de reconstructions — sans quoi quelques sauts pendant une panne d'encodeur

@@ -16,6 +16,7 @@ import { keptRangeAt, type MatroskaFile, type MatroskaTrack } from "./matroska";
 import { forgetMediaHeader, mediaHeaderKey, openMediaFile } from "./mediaFile";
 import { MseSource, type RecoveryFacts, type UnreadableZoneEvent } from "./mseSource";
 import { choosePlaybackPath, NATIVE_PATH, type ChosenPath } from "./pathSelector";
+import type { AudioLeadGap } from "./audioLeadGap";
 import { Remuxer, playableAudio, deliveredAudio, primeAudioDelivery, audioDelivery, dialogueCanShape, type TrackedCue } from "./remuxer";
 import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 import { trace, traceReset } from "./trace";
@@ -628,6 +629,11 @@ export class RemuxPlayback {
 
   audioTiming(): { sourceMs: number; encoderMs: number } | null {
     return this.remuxer.audioTiming();
+  }
+
+  /** Le son qui commence après l'image, et ce que ce pipeline en a fait — voir `Remuxer.audioLeadGap` (§148). */
+  audioLeadGap(): AudioLeadGap | null {
+    return this.remuxer.audioLeadGap();
   }
 
   get diagnostics(): Record<string, string> {

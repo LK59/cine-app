@@ -17,6 +17,7 @@ import { SoftwareAudioTrack, type DecodedAudio } from "./softwareAudio";
 import type { ByteSource } from "./byteSource";
 import type { MatroskaFile, MatroskaTrack } from "./matroska";
 import { trace } from "./trace";
+import { withLeadSilence } from "./audioLeadGap";
 // Système Apple, pas moteur WebKit — voir `browserEngine.ts`, où elle vit depuis le 22/10/2026.
 import { appleAudioToolbox } from "./browserEngine";
 export { appleAudioToolbox };
@@ -230,6 +231,8 @@ interface Primed {
   config: AudioEncoderConfig;
   /** Où vont les images de l'encodeur ; redirigé vers le transcodeur une fois qu'il existe. */
   sink: EncoderSink;
+  /** L'instant du premier bloc décodé à l'amorçage — le premier son à partir de l'ouverture (§148). */
+  firstSeconds: number | null;
 }
 
 /**
@@ -291,6 +294,7 @@ async function primeEncoder(
   // Primed where playback is, not at the start of the film: this also runs on a language
   // change, and reading the opening back two hours in is network traffic spent on nothing.
   const primer = decoder.samples(Math.max(0, fromSeconds));
+  let firstSeconds: number | null = null;
   const prime = async () => {
     // Fed, then waited on — never flushed. A flush asks a frame-based encoder to produce a
     // frame from whatever it happens to hold, and doing that after a single 512-sample block,
@@ -300,6 +304,7 @@ async function primeEncoder(
       for (let i = 0; i < 8; i++) {
         const next = await primer.next();
         if (next.done) return;
+        firstSeconds ??= next.value.timestampSeconds;
         encode(encoder, next.value, outChannels, config.codec);
       }
       for (let i = 0; i < 200 && encoder.encodeQueueSize > 0; i++) {
@@ -349,7 +354,7 @@ async function primeEncoder(
       timedOut,
     };
   }
-  return { encoder, description, config, sink };
+  return { encoder, description, config, sink, firstSeconds };
 }
 
 /**
@@ -505,7 +510,13 @@ export class AudioTranscoder {
      * « Améliorer les dialogues » (`dialogueEnhance.ts`), ou rien : sans lui, chaque bloc va à
      * l'encodeur exactement comme avant. Remis à zéro à chaque saut, comme l'encodeur.
      */
-    private readonly enhancer: DialogueEnhancer | null = null
+    private readonly enhancer: DialogueEnhancer | null = null,
+    /**
+     * L'instant du premier son décodé à l'amorçage, depuis l'ouverture — de quoi dire, pour la ligne
+     * `start`, que le son commence après l'image (DECISIONS.md §148). Le silence, lui, est décidé à
+     * chaque saut (`seekTo`), sur le début exact de l'image du segment.
+     */
+    readonly firstPrimedSeconds: number | null = null
   ) {}
 
   /** What the encoder actually produced, not what it was asked for. */
@@ -551,15 +562,23 @@ export class AudioTranscoder {
      * Le traitement des voix demandé pour cette ouverture (`RemuxOptions.dialogue`). Absent ou
      * « off » : aucun processeur n'est créé.
      */
-    dialogue?: DialogueMode
+    dialogue?: DialogueMode,
+    /**
+     * Une piste que le navigateur prendrait telle quelle, décodée ici parce que son son commence
+     * après l'image (DECISIONS.md §148). Comme pour « Améliorer les dialogues », un AAC multicanal
+     * passe alors par le décodeur dont l'ordre des canaux est mesuré.
+     */
+    copiedTrack = false
   ): Promise<AudioTranscoder> {
     const Encoder = (globalThis as { AudioEncoder?: typeof AudioEncoder }).AudioEncoder;
     if (!Encoder) throw new Error("Ce navigateur ne sait pas encoder de l'audio.");
 
     trace(`transcodage audio : chargement du décodeur ${track.codecId}`);
     // « Améliorer les dialogues » sur un AAC multicanal : le décodeur dont l'ordre est mesuré, partout
-    // (voir `SoftwareAudioTrack.open`). Sans traitement, rien ne change : la route d'avant.
-    const measuredAacDecoder = !!dialogue && dialogue !== "off" && track.codecId === "A_AAC" && (track.audio?.channels ?? 2) > 2;
+    // (voir `SoftwareAudioTrack.open`). Sans traitement, rien ne change : la route d'avant. Même
+    // règle pour une piste copiée ailleurs, décodée pour combler un son en retard (§148) : c'est la
+    // promesse de `dialogueCanShape`, qui décide des deux.
+    const measuredAacDecoder = ((!!dialogue && dialogue !== "off") || copiedTrack) && track.codecId === "A_AAC" && (track.audio?.channels ?? 2) > 2;
     const decoder = await SoftwareAudioTrack.open(source, track.number, track.codecId, file, measuredAacDecoder ? { measuredAacDecoder } : {});
     // Tout ce qui suit peut lever — l'amorçage qui échoue sur le décodeur, une description que
     // l'on ne sait pas relire —, et le décodeur (pour le TrueHD, un contexte WebAssembly) comme
@@ -641,7 +660,7 @@ export class AudioTranscoder {
       if (attempt.timedOut) break;
     }
     if (!primed) throw new Error(failure || "L'encodeur audio n'a pas décrit le flux qu'il produit.");
-    const { encoder, description, sink, config } = primed;
+    const { encoder, description, sink, config, firstSeconds } = primed;
     onPrimed(encoder);
 
     // Asking for a profile is not the same as being given it. The description is the only
@@ -724,7 +743,8 @@ export class AudioTranscoder {
       codecString,
       config,
       renew,
-      enhancer
+      enhancer,
+      firstSeconds
     );
     sink.frame = (frame) => transcoder.collect(frame);
     sink.failed = (message) => transcoder.fail(message);
@@ -769,7 +789,12 @@ export class AudioTranscoder {
       this.failure ??= `Encodage audio interrompu : ${error instanceof Error ? error.message : String(error)}`;
     }
 
-    this.generator = this.decoder.samples(Math.max(0, seconds));
+    // Précédé du silence qui manque quand le premier son arrive bien après `seconds` — le début de
+    // l'image du segment (DECISIONS.md §148). Sans trou, le flux du décodeur passe tel quel.
+    const from = Math.max(0, seconds);
+    this.generator = withLeadSilence(this.decoder.samples(from), from, (gap) =>
+      trace(`transcodage audio : le son commence ${gap.toFixed(2)} s après l'image (${from.toFixed(1)} s) — comblé par du silence`)
+    );
     // Un flux neuf, un encodeur neuf : les deux horloges repartent d'ici.
     this.timing = { firstInUs: null, inFrames: 0, firstOutUs: null, outFrames: 0 };
     this.pending = [];

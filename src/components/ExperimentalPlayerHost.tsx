@@ -141,6 +141,7 @@ import {
 } from "@/components/playerNative/NativeOverlays";
 import {
   aacRouteFacts,
+  audioLeadGapFacts,
   trueHdThreadFacts,
   castSubtitleOf,
   generationMenu,
@@ -1887,6 +1888,9 @@ export function ExperimentalPlayerHost({
         ...aacRouteFacts(),
         // Et un TrueHD : décodé dans un worker, ou sur le fil principal faute de worker (et pourquoi).
         ...trueHdThreadFacts(),
+        // Un son qui commence après l'image (§148) : son retard, et s'il a été comblé de silence.
+        // Écrit seulement pour un tel fichier : la ligne de tout autre film ne change pas.
+        ...audioLeadGapFacts(remuxRef.current),
         // Écrit seulement quand il est actif : la ligne de tout autre compte ne change pas.
         ...(openedDialogue !== "off" ? { dialogue: openedDialogue } : {}),
         // Ce que la réserve d'avance s'autorise sur cet appareil — c'était la ligne `reserve/départ`,

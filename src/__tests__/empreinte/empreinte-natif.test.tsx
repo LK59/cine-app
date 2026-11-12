@@ -472,6 +472,26 @@ describe("empreinte — lecteur natif : pistes", () => {
     await fingerprint();
   });
 
+  it("son en retard sur l'image (VF comblée de silence), puis la VO, sans retard", async () => {
+    // DECISIONS.md §148 — « Green Book » : la VF commence 24 s après l'image, la VO avec elle. Le
+    // pipeline dit ce qu'il a fait du retard ; la ligne `start` le porte pour la VF, et seulement elle.
+    pipe.next = (options) => {
+      const track = typeof options.audioTrackNumber === "number" ? options.audioTrackNumber : 1;
+      current = fakeRemux({ currentAudioTrack: track, audioLeadGap: () => (track === 1 ? { gapS: 24.02, action: "silence" } : null) });
+      const opened = current;
+      return { path: "remux", start: async () => opened, discard: () => note("remux", "discard") };
+    };
+    await openAndPlay();
+    await play(5);
+    rec.step("audio → anglais");
+    await pick("player.audio", /anglais/i);
+    await rec.flush();
+    await firstPicture(125);
+    await play(3);
+    await closeByCross();
+    await fingerprint();
+  });
+
   it("sous-titres : piste du conteneur, puis fichier à côté (en vol puis arrivé), puis aucun", async () => {
     data.info = info({ externalSubtitles: [{ id: -10, language: "spa", title: null, url: "/api/jellyfin/stream/subtitle/film-1?mediaSourceId=film-1&index=9" }] });
     let release: () => void = () => {};

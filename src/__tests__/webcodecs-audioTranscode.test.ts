@@ -668,3 +668,70 @@ describe("« Améliorer les dialogues » — le décodeur d'un AAC multicanal", 
     expect(optionsOf()).toEqual({});
   });
 });
+
+/**
+ * Le son qui commence après l'image (DECISIONS.md §148) : « The Circle », iPhone, 12/11/2026 — la
+ * piste n'a aucun bloc avant 30 s. Le transcodeur comble l'écart par du silence à chaque saut, et le
+ * dit à l'amorçage pour le journal ; sans trou, rien ne change.
+ */
+describe("AudioTranscoder — le son en retard sur l'image", () => {
+  it("un saut dans le trou rend du son dès l'instant demandé, silence compris", async () => {
+    vi.stubGlobal("AudioEncoder", fakeEncoderClass());
+    // Où qu'on le lui demande, le décodeur ne rend rien avant 30 s : c'est ce que fait mediabunny
+    // sur un fichier dont la piste commence là.
+    samples.mockImplementation(() => decoded(400, 30));
+    const { AudioTranscoder } = await load();
+    const transcoder = await AudioTranscoder.open(source as never, track as never, 10);
+
+    transcoder.seekTo(10);
+    const frames = await transcoder.framesUpTo(12);
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames[0].timestampUs).toBe(10_000_000);
+    // Contigu jusqu'à la borne : une trame AAC toutes les 1024 images (à l'arrondi des microsecondes
+    // près — l'encodeur factice se recale sur l'instant de chaque bloc qui ouvre une trame).
+    for (let i = 1; i < frames.length; i++) expect(Math.abs(frames[i].timestampUs - frames[i - 1].timestampUs - (1024 / 48000) * 1e6)).toBeLessThanOrEqual(2);
+    expect(frames[frames.length - 1].timestampUs).toBeLessThan(12_000_000);
+    transcoder.close();
+  });
+
+  it("enchaîne le vrai son là où il commence, sans trou", async () => {
+    vi.stubGlobal("AudioEncoder", fakeEncoderClass());
+    samples.mockImplementation(() => decoded(400, 30));
+    const { AudioTranscoder } = await load();
+    const transcoder = await AudioTranscoder.open(source as never, track as never, 0);
+    transcoder.seekTo(27);
+    const frames = await transcoder.framesUpTo(31);
+    const span = frames[frames.length - 1].timestampUs - frames[0].timestampUs;
+    expect(frames[0].timestampUs).toBe(27_000_000);
+    // Quatre secondes d'affilée, de 27 à 31 s (au-delà du seuil de 2 s) : le passage du silence au son ne laisse rien.
+    expect(span).toBeGreaterThan(3_900_000);
+    expect(frames.length).toBe(Math.round(span / ((1024 / 48000) * 1e6)) + 1);
+    transcoder.close();
+  });
+
+  it("dit à l'amorçage où vient le premier son depuis l'ouverture, pour le journal", async () => {
+    vi.stubGlobal("AudioEncoder", fakeEncoderClass());
+    const { AudioTranscoder } = await load();
+    samples.mockImplementation(() => decoded(400, 30));
+    const late = await AudioTranscoder.open(source as never, track as never, 0);
+    expect(late.firstPrimedSeconds).toBe(30);
+    late.close();
+    samples.mockImplementation((from: number) => decoded(400, from));
+    const ordinary = await AudioTranscoder.open(source as never, track as never, 120);
+    expect(ordinary.firstPrimedSeconds).toBe(120);
+    ordinary.close();
+  });
+
+  it("une piste copiée ailleurs, décodée pour son retard : un AAC 5.1 passe par le décodeur mesuré", async () => {
+    vi.stubGlobal("AudioEncoder", fakeEncoderClass());
+    samples.mockImplementation(() => decoded(8));
+    const { AudioTranscoder } = await load();
+    const { SoftwareAudioTrack } = await import("@/lib/webcodecs/softwareAudio");
+    const open = vi.mocked(SoftwareAudioTrack.open);
+    const aac51 = { number: 2, codecId: "A_AAC", language: "fra", audio: { sampleRate: 48000, channels: 6 } };
+    (await AudioTranscoder.open(source as never, aac51 as never, 0, undefined, undefined, undefined, true)).close();
+    expect(open.mock.calls.at(-1)?.[4]).toEqual({ measuredAacDecoder: true });
+    (await AudioTranscoder.open(source as never, aac51 as never, 0, undefined, undefined, undefined, false)).close();
+    expect(open.mock.calls.at(-1)?.[4]).toEqual({});
+  });
+});

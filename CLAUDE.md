@@ -773,6 +773,12 @@ on it — *1917* declares `fre` on its French track and nothing on its English o
 giveaway was that Jellyfin reported `eng` for the same track. When two readings of one file
 disagree, that gap *is* the bug.
 
+**A track's sound may start long after its picture** — *The Circle*'s AC-3 has no block before 30 s,
+*Green Book*'s VF none before 24 s, while the container says 0 (DECISIONS §148). A MediaSource plays
+only the intersection of its buffers, so the player fills that gap with silence through the re-encode
+(`withLeadSilence`, `audioLeadGap.ts`) rather than landing past it; a copied track with such a gap is
+re-encoded for it. Which track starts late is decided by `audioLeadGapSeconds` alone.
+
 **A subtitle is forced when the flag says so — or when only its title does** (51 of 392 here).
 Its type comes from flags and not from text: 459 of 855 tracks have no title at all.
 

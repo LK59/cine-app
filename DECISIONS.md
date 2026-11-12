@@ -10702,3 +10702,58 @@ Une relecture de §137 à §140 et §145, le soir où X-Ray, les questions et «
 - **L'usage** se mesure sans ligne de plus : le bilan `stop` porte `xray: "s3 t2 p2"` (`xrayUsage.ts`), relu avec
   `recherche.log` par la tuile d'Activité (`activity/aiUsage.ts`).
 - **§145** : la copie de développement (`docker-compose.dev.yml`) démarre avec `CINE_BACKGROUND_JOBS=off`.
+
+## 148. Le son qui commence après l'image : comblé de silence, jamais enjambé (12/11/2026)
+
+**La règle.** Quand le premier son de la piste ouverte arrive plus de `AUDIO_LEAD_GAP_SECONDS` (2 s depuis la relecture du 12/11/2026 — sous ce seuil, une ou deux secondes d’ouverture enjambées, presque toujours du noir, ne valent pas un ré-encodage du film entier) après la
+première image lue, le lecteur natif joue l'image dès son début, muette, et comble l'écart par du silence jusqu'au
+premier échantillon réel — comme le fichier d'origine se lit ailleurs. Une ouverture, un saut, une reconstruction
+ou un changement de piste dans le trou comblent de la même façon. Sous le seuil, rien ne change.
+
+**Pourquoi.** *The Circle* sur iPhone, 12/11/2026 : la piste AC-3 n'a aucun bloc avant 30 s (le conteneur annonce
+0). Une MediaSource ne joue que l'intersection de ses tampons — image dès 1,4 s, son dès 30,2 s, rien sous la tête —,
+`recover()` relançait au même endroit, le tampon audio de WebKit (5 % du quota) débordait, le lecteur serveur
+prenait la main et échouait aussi. Sous 15 s d'écart, `landingFor` posait la tête sur le premier son : le film
+partait, sans ses premières secondes d'image, et un retour à 0 s'y recalait. Presque toujours une VF plus courte en
+tête que sa VO : *Green Book* (VF 24 s, VO 0,02 s), *WALL·E* (VF 11,8 s), *The Wolf of Wall Street* (VF 8,8 s, trouvé
+par le banc), *Scary Movie*, *The Ledge*, *RRR*, *Fly Me to the Moon*… Recensement du 12/11/2026 (931 films, toutes
+pistes, ouvertes à 0) : 63 pistes de 44 films au-delà du seuil — 34 au-delà de 2 s, 29 entre 0,5 et 2 s (dont une
+quinzaine à 1,00 s tout rond, *1917* compris, vérifiés à ffprobe) ; aucune piste vue en retard à 600 s qui ne l'était
+pas à 0.
+
+**Une fonction.** `audioLeadGapSeconds` (`src/lib/webcodecs/audioLeadGap.ts`) décide ; `withLeadSilence` fabrique
+le silence (plans nuls aux canaux et à la fréquence du premier bloc réel, total arrondi une fois pour finir sur lui à
+l'échantillon près, produit au fil de la demande). **Appelants** : `Remuxer.open` (sonde de la piste copiée, et le
+retard vu à l'amorçage d'une piste déjà ré-encodée, pour le journal), `AudioTranscoder.seekTo` (chaque saut,
+depuis le début de l'image du segment). La mémoire de la page : `rememberLeadGap` / `rememberedLeadGap`, sous l'objet
+du fichier (`rememberedHeaders` le rend tel quel d'une ouverture à l'autre).
+
+**Comment.** Par le ré-encodage existant, seul endroit où l'on sait faire du silence dans n'importe quel codec. Une
+piste déjà ré-encodée (DTS, TrueHD ; le Dolby sur Chrome) comble d'elle-même. Une piste **copiée** est sondée là où
+la lecture commence — la boucle qui lisait déjà une trame AC-3/E-AC-3 pour la décrire, étendue à toute piste copiée
+que `dialogueCanShape` sait décoder dans l'ordre standard (même question que « Améliorer les dialogues », même
+réponse) — et, en retard (ou vue en retard plus tôt sur la page), ouverte par un transcodeur (`copiedTrack` : un AAC
+multicanal passe par le décodeur mesuré). Aucun transcodeur possible : la copie d'avant, trou enjambé.
+
+**Différent exprès.**
+- Écarté : des trames silencieuses écrites à la main dans le codec copié. Une trame AAC-LC se fabrique ; une AC-3 ou
+  E-AC-3 beaucoup moins, aucun navigateur n'en encode, et rien ici ne prouverait que le décodeur d'Apple prend les
+  nôtres. Un seul mécanisme, déjà éprouvé tous les jours, plutôt qu'un pari par codec.
+- La sonde ne lit jamais la tête du fichier pour une reprise (des mégaoctets en itinérance, relu le 23/09/2026) :
+  le premier pipeline d'une page ouvert *au-delà* du trou ne le connaît pas, et un saut en arrière dans le trou s'y
+  comporte comme avant. Vu une fois sur la page, la piste reste ré-encodée pour tous ses pipelines suivants.
+- Le prix, pour un fichier à trou seulement : l'ouverture attend les octets du trou (8 Mo pour *The Circle*, 24 Mo
+  pour *WALL·E* — l'AC-3 et l'E-AC-3 les lisaient déjà pour leur description) ; et la piste est ré-encodée
+  (seconde génération avec perte, un décodeur sur l'appareil), comme un DTS. Sous 2 s, ce prix achète une ou deux
+  secondes d'image d'ouverture que l'atterrissage sautait sans autre dommage : relever `AUDIO_LEAD_GAP_SECONDS` à 2
+  rendrait leur copie à ces 29 pistes, et c'est le seul réglage à toucher.
+- Le journal : `start` porte `audioLeadGapS` et `audioGap` (`silence` / `enjambé`) pour un fichier à trou, rien pour
+  les autres (`audioLeadGapFacts`, `nativeHostHelpers.ts`).
+
+**Tests.** `audioLeadGap.test.ts` (seuil, son avant l'image, durée exacte du silence, canaux, fréquence, identité des
+blocs sans trou, fermeture du flux du décodeur sur un saut) ; `webcodecs-audioTranscode.test.ts` (saut dans le trou,
+enchaînement sans trou au premier son, décodeur mesuré) ; `webcodecs-remuxer.test.ts` (copie gardée sans trou et sous
+le seuil, ré-encodage au-delà, piste non décodable gardée sans sonde, « enjambé » sans encodeur, mémoire de la page,
+l'AC-3 lu une seule fois) ; l'empreinte `natif/pistes-son-en-retard…` ; les autres empreintes inchangées.
+`audio-gap-bench.spec.ts` (banc, sauté sans `GAP_FILES`) : sur les vrais fichiers, à 0, 10 et 600 s, iPhone et
+Chrome simulés, avant et après — toute piste sans trou donne des octets audio identiques.

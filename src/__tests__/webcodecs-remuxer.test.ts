@@ -11,6 +11,10 @@ import type { ByteSource } from "@/lib/webcodecs/byteSource";
 const opened: { closed: boolean }[] = [];
 let transcoderCodec = "mp4a.40.2";
 let failNextFrames = false;
+/** Le prochain `AudioTranscoder.open` échoue — un navigateur sans encodeur. */
+let failNextOpen = false;
+/** Le premier son vu à l'amorçage par le transcodeur suivant (§148). */
+let primedFirst: number | null = null;
 /** Ce que rend `framesUpTo`, et où on le lui a demandé — par défaut, rien. */
 let framesHook: ((endSeconds: number) => Promise<{ data: Uint8Array; timestampUs: number; durationUs: number }[]>) | null = null;
 /** Les arguments du dernier `AudioTranscoder.open` — le 6e est le traitement des voix. */
@@ -28,6 +32,7 @@ vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
           sampleEntry: new Uint8Array([0, 0, 0, 8, 0x6d, 0x70, 0x34, 0x61]),
           sampleRate: 48000,
           channels: 6,
+          firstPrimedSeconds: primedFirst,
           seekTo: () => {},
           framesUpTo: async (endSeconds: number) => {
             if (failNextFrames) {
@@ -40,6 +45,10 @@ vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
             this.closed = true;
           },
         };
+        if (failNextOpen) {
+          failNextOpen = false;
+          throw new Error("Ce navigateur ne sait pas encoder de l'audio.");
+        }
         opened.push(instance);
         return instance;
       },
@@ -53,8 +62,13 @@ vi.mock("@/lib/webcodecs/audioTranscode", async (importOriginal) => {
 let readerSamples: MediaSample[] = [];
 /** Où le remultiplexeur a repointé le lecteur. */
 const readerSeeks: number[] = [];
+/** Combien de lecteurs ont été créés — la sonde du son en est un (§148). */
+const readers = { created: 0 };
 vi.mock("@/lib/webcodecs/sampleReader", () => ({
   SampleReader: class {
+    constructor() {
+      readers.created += 1;
+    }
     private queue = [...readerSamples];
     async next() {
       return this.queue.shift() ?? null;
@@ -922,5 +936,129 @@ describe("« Améliorer les dialogues » — la décision de livraison", () => {
     await Remuxer.open(SOURCE, FILE, VIDEO, AAC_STEREO, { width: 1920, height: 1080 }, null, 0, { dialogue: "strong" });
     expect(opened).toHaveLength(1);
     expect(lastTranscoderArgs[5]).toBe("strong");
+  });
+});
+
+/**
+ * Le son copié qui commence après l'image (DECISIONS.md §148) — « The Circle », iPhone, 12/11/2026 :
+ * l'image tamponnée dès 1,4 s, le son seulement dès 30,2 s, et rien de lisible sous la tête.
+ */
+describe("le son qui commence après l'image", () => {
+  const aac = (timestampUs: number): MediaSample => ({ trackNumber: 2, timestampUs, durationUs: 21_333, isKey: true, data: new Uint8Array([0x21, 0x10, 0x04]) });
+  /** Des images toutes les 40 ms et le son à partir de `audioFromUs`, rangés comme dans une grappe. */
+  const layout = (audioFromUs: number) =>
+    [...Array.from({ length: 50 }, (_, i) => idr(i * 40_000)), ...Array.from({ length: 50 }, (_, i) => aac(audioFromUs + i * 21_333))].sort(
+      (a, b) => a.timestampUs - b.timestampUs
+    );
+  // Un fichier à lui : la mémoire de la page est rangée sous l'objet du fichier, et `FILE` sert à
+  // tous les autres tests.
+  const fresh = (): MatroskaFile => ({ ...FILE, tracks: [...FILE.tracks] });
+
+  beforeEach(() => {
+    opened.length = 0;
+    readers.created = 0;
+  });
+  afterEach(() => {
+    readerSamples = [];
+  });
+
+  it("sans trou, la copie d'avant : aucun transcodeur, rien au journal", async () => {
+    readerSamples = layout(20_000);
+    const remuxer = await Remuxer.open(SOURCE, fresh(), VIDEO, AUDIO_FR, { width: 1920, height: 1080 });
+    expect(opened).toHaveLength(0);
+    expect(remuxer.diagnostics().transcodedAudio).toBe(false);
+    expect(remuxer.audioLeadGap()).toBeNull();
+    expect(remuxer.plan().audioMimeType).toBe('audio/mp4; codecs="mp4a.40.2"');
+  });
+
+  it("sous le seuil (0,4 s), la copie d'avant", async () => {
+    readerSamples = layout(400_000);
+    const remuxer = await Remuxer.open(SOURCE, fresh(), VIDEO, AUDIO_FR, { width: 1920, height: 1080 });
+    expect(opened).toHaveLength(0);
+    expect(remuxer.audioLeadGap()).toBeNull();
+  });
+
+  it("au-delà, la piste est ré-encodée pour que le transcodeur comble l'écart, et le journal le dit", async () => {
+    readerSamples = layout(2_500_000);
+    const remuxer = await Remuxer.open(SOURCE, fresh(), VIDEO, AUDIO_FR, { width: 1920, height: 1080 });
+    expect(opened).toHaveLength(1);
+    // Ouvert comme une piste copiée ailleurs (le décodeur mesuré pour un AAC multicanal).
+    expect(lastTranscoderArgs[6]).toBe(true);
+    expect(remuxer.diagnostics().transcodedAudio).toBe(true);
+    expect(remuxer.audioLeadGap()).toEqual({ gapS: 2.5, action: "silence" });
+  });
+
+  it("une piste que notre chaîne ne décode pas dans un ordre connu reste copiée, sans sonde", async () => {
+    // Un AAC 7.1 : l'ordre de sortie du décodeur n'a jamais été mesuré (`dialogueCanShape`).
+    const aac71 = track({ number: 2, type: "audio", codecId: "A_AAC", codecPrivate: Uint8Array.from([0x11, 0xb8]), audio: { sampleRate: 48000, channels: 8 } });
+    readerSamples = layout(30_000_000);
+    const remuxer = await Remuxer.open(SOURCE, fresh(), VIDEO, aac71, { width: 1920, height: 1080 });
+    expect(opened).toHaveLength(0);
+    expect(readers.created).toBe(1);
+    expect(remuxer.audioLeadGap()).toBeNull();
+  });
+
+  it("sans encodeur, le trou est enjambé comme avant, et le journal le dit", async () => {
+    readerSamples = layout(30_000_000);
+    failNextOpen = true;
+    const remuxer = await Remuxer.open(SOURCE, fresh(), VIDEO, AUDIO_FR, { width: 1920, height: 1080 });
+    expect(remuxer.diagnostics().transcodedAudio).toBe(false);
+    expect(remuxer.audioLeadGap()).toEqual({ gapS: 30, action: "enjambé" });
+  });
+
+  it("vu une fois sur la page, la piste reste ré-encodée là où la sonde ne le voit plus (reprise, changement de piste au-delà)", async () => {
+    const file = fresh();
+    readerSamples = layout(30_000_000);
+    await Remuxer.open(SOURCE, file, VIDEO, AUDIO_FR, { width: 1920, height: 1080 });
+    // Rouvert plus loin dans le film : le son est là où la lecture commence.
+    readerSamples = layout(0);
+    const later = await Remuxer.open(SOURCE, file, VIDEO, AUDIO_FR, { width: 1920, height: 1080 }, null, 600);
+    expect(opened).toHaveLength(2);
+    expect(later.audioLeadGap()).toEqual({ gapS: 30, action: "silence" });
+    // L'autre piste du même fichier n'a rien de retenu : copiée.
+    const other = await Remuxer.open(SOURCE, file, VIDEO, AUDIO_EN, { width: 1920, height: 1080 }, null, 600);
+    expect(opened).toHaveLength(2);
+    expect(other.audioLeadGap()).toBeNull();
+  });
+
+  it("l'AC-3 copié n'est pas lu deux fois : la sonde du trou est celle qui décrit la piste", async () => {
+    // Une trame AC-3 5.1 à 48 kHz : mot de synchronisation, CRC, fscod/frmsizecod, bsid 8, acmod 7, LFE.
+    const frame = new Uint8Array([0x0b, 0x77, 0, 0, 0x1c, 0x40, 0xe1, 0, 0, 0, 0, 0]);
+    const ac3 = track({ number: 2, type: "audio", codecId: "A_AC3", audio: { sampleRate: 48000, channels: 6 } });
+    readerSamples = [idr(0), { trackNumber: 2, timestampUs: 10_000, durationUs: 32_000, isKey: true, data: frame }, idr(40_000)];
+    const remuxer = await Remuxer.open(SOURCE, fresh(), VIDEO, ac3, { width: 1920, height: 1080 });
+    // Une sonde, un lecteur principal : comme avant la règle.
+    expect(readers.created).toBe(2);
+    expect(opened).toHaveLength(0);
+    expect(remuxer.plan().audioMimeType).toBe('audio/mp4; codecs="ac-3"');
+  });
+
+  it("une piste déjà ré-encodée : le transcodeur comble de lui-même, le journal le dit depuis l'image clé de reprise", async () => {
+    const dts = track({ number: 7, type: "audio", codecId: "A_DTS", audio: { sampleRate: 48000, channels: 6 } });
+    // Image clé à 0 s seulement — un générique en un seul groupe, comme « WALL·E ».
+    const file: MatroskaFile = { ...fresh(), tracks: [...FILE.tracks, dts], cues: [{ timeUs: 0, track: 1, clusterOffset: 0 }] as never };
+    primedFirst = 12.5;
+    try {
+      const resumed = await Remuxer.open(SOURCE, file, VIDEO, dts, { width: 1920, height: 1080 }, null, 10);
+      expect(resumed.audioLeadGap()).toEqual({ gapS: 12.5, action: "silence" });
+      primedFirst = 10.02;
+      const ordinary = await Remuxer.open(SOURCE, file, VIDEO, dts, { width: 1920, height: 1080 }, null, 0);
+      expect(ordinary.audioLeadGap()).toEqual({ gapS: 10.02, action: "silence" });
+      primedFirst = 0.01;
+      expect((await Remuxer.open(SOURCE, file, VIDEO, dts, { width: 1920, height: 1080 })).audioLeadGap()).toBeNull();
+      // Un film ordinaire repris à 10 s sur une image clé à 0 : l'amorçage commence à 10 s et y trouve
+      // du son. Rien à dire — mesuré depuis la clé, il se disait en retard de 10 s.
+      primedFirst = 9.98;
+      expect((await Remuxer.open(SOURCE, file, VIDEO, dts, { width: 1920, height: 1080 }, null, 10)).audioLeadGap()).toBeNull();
+    } finally {
+      primedFirst = null;
+    }
+  });
+
+  it("un son qui arrive avant toute image n'est pas un trou", async () => {
+    readerSamples = [aac(0), ...layout(5_000_000)];
+    const remuxer = await Remuxer.open(SOURCE, fresh(), VIDEO, AUDIO_FR, { width: 1920, height: 1080 });
+    expect(opened).toHaveLength(0);
+    expect(remuxer.audioLeadGap()).toBeNull();
   });
 });
