@@ -786,6 +786,31 @@ describe("MseSource", () => {
       await expect((mse as unknown as { fill(): Promise<void> }).fill()).resolves.toBeUndefined();
     });
 
+    it("ne lève rien non plus quand la source se dit encore ouverte mais que ses tampons sont retirés", async () => {
+      // iPhone, 12/11/2026 : *The Circle* repris après 38 min en arrière-plan — iOS avait retiré les tampons,
+      // la source n'était pas encore `closed`, et l'élagage levait InvalidStateError en rejet non géré.
+      vi.spyOn(navigator, "userAgent", "get").mockReturnValue(IPAD);
+      Object.defineProperty(navigator, "maxTouchPoints", { value: 5, configurable: true });
+      traceReset();
+      const video = fakeVideo();
+      const mse = await MseSource.attach(video, heavyRemuxer(200), PLAN, { onError: vi.fn(), onWarning: vi.fn() });
+      await until(() => traceText().includes("budget WebKit mobile"), "le budget écrit dans la trace");
+      expect(FakeSource.instances[0].readyState).not.toBe("closed");
+      const kept = video.buffered;
+      const frozen = { length: kept.length, start: (i: number) => kept.start(i), end: (i: number) => kept.end(i) };
+      Object.defineProperty(video, "buffered", { get: () => frozen, configurable: true });
+      for (const buffer of FakeSource.instances[0].buffers) {
+        Object.defineProperty(buffer, "buffered", {
+          get: () => {
+            throw new DOMException("The object is in an invalid state.", "InvalidStateError");
+          },
+          configurable: true,
+        });
+      }
+      (video as unknown as { currentTime: number }).currentTime = 60;
+      await expect((mse as unknown as { trimBehind(): void }).trimBehind()).toBeUndefined();
+    });
+
     it("ne retire jamais le groupe d'images où se trouve la tête", async () => {
       // La norme MSE prolonge un retrait jusqu'à l'image clé suivante : avec un groupe de 28 s
       // ouvert à 10 s et la tête à 30 s, un retrait jusqu'à 30 − budget emportait l'image sous la

@@ -1206,14 +1206,22 @@ export class MseSource {
     // n'y est plus lève InvalidStateError, et la levée remontait de `runFill` en rejet non géré —
     // une erreur navigateur au journal pour une panne que la reconstruction réparait déjà.
     if (this.source.readyState === "closed") return;
-    const wanted = this.video.currentTime - budget.behindSeconds;
-    for (const queue of [this.videoOps, this.audioOps]) {
-      const buffer = queue?.buffer;
-      if (!queue || !buffer || buffer.buffered.length === 0) continue;
-      const until = this.behindCut(queue, wanted, 0);
-      if (until <= 0) continue;
-      if (buffer.buffered.start(0) >= until - TRIM_SLACK_SECONDS) continue;
-      void this.removeRange(queue, 0, until).catch(() => {});
+    // Et une source encore « open » dont les tampons sont déjà retirés (12/11/2026, iPhone, *The Circle* repris
+    // après 38 min en arrière-plan) : iOS reprend les tampons avant que la source ne se dise fermée, et la même
+    // levée repartait au journal comme erreur navigateur pendant que la reconstruction reprenait le film. Un
+    // élagage n'est qu'un ménage : il ne lève jamais.
+    try {
+      const wanted = this.video.currentTime - budget.behindSeconds;
+      for (const queue of [this.videoOps, this.audioOps]) {
+        const buffer = queue?.buffer;
+        if (!queue || !buffer || buffer.buffered.length === 0) continue;
+        const until = this.behindCut(queue, wanted, 0);
+        if (until <= 0) continue;
+        if (buffer.buffered.start(0) >= until - TRIM_SLACK_SECONDS) continue;
+        void this.removeRange(queue, 0, until).catch(() => {});
+      }
+    } catch {
+      // Un tampon retiré par la plateforme : la perte de la source est signalée par ailleurs (`lost`).
     }
   }
 
