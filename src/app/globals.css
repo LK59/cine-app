@@ -2170,6 +2170,63 @@ body:has(.gestion-liquid) .glass-window {
 @keyframes player-onscreen-out { to { opacity: 0; } }
 /* Le bouton de la question : rond, icône seule, du verre des pilules. */
 .player-ask-btn { width: 40px; height: 40px; border-radius: 999px; padding: 0; }
+/* « À l'écran » à la demande (13/11/2026) : un bouton rond à gauche, juste au-dessus du titre, de la taille de celui de
+   la question. Fermé, deux silhouettes ; ouvert, une croix — l'une tourne et s'efface pendant que l'autre arrive. La
+   rangée sort du bouton vers la droite : le corps glisse et paraît, chaque pilule suit avec 40 ms de retard sur la
+   précédente (`--chip-i`, posé par `PlayerOnScreen`), le bouton de la question en dernier ; la fermeture rentre plus
+   vite, d'un seul geste. `opacity` et `transform` seulement : un parent à opacité < 1 isole le flou des pilules
+   pendant le fondu, mais il est fini en un quart de seconde, et c'est l'état ouvert qui compte. */
+.player-onscreen-toggle { position: relative; width: 40px; height: 40px; border-radius: 999px; padding: 0; }
+.player-onscreen-toggle > svg {
+  position: absolute;
+  transition: opacity 220ms ease-out, transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.player-onscreen-toggle-close { opacity: 0; transform: rotate(-90deg) scale(0.6); }
+[data-onscreen-open="true"] .player-onscreen-toggle-people { opacity: 0; transform: rotate(90deg) scale(0.6); }
+[data-onscreen-open="true"] .player-onscreen-toggle-close { opacity: 1; transform: none; }
+[data-onscreen-body] {
+  transform-origin: left bottom;
+  transition: opacity 180ms ease-in, transform 200ms ease-in;
+}
+[data-onscreen-open="false"] [data-onscreen-body] { opacity: 0; transform: translateX(-12px) scale(0.98); }
+[data-onscreen-open="true"] [data-onscreen-body] {
+  opacity: 1;
+  transform: none;
+  transition: opacity 240ms ease-out, transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Les pilules qui arrivent ou partent à un changement de scène gardent leur propre fondu (`player-onscreen-in/out`). */
+[data-onscreen-open="true"] .player-onscreen-pill:not(.player-onscreen-in):not(.player-onscreen-out),
+[data-onscreen-open="true"] .player-onscreen-label {
+  animation: player-onscreen-chip 360ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--chip-i, 0) * 40ms);
+}
+[data-onscreen-open="true"] .player-ask-btn {
+  animation: player-onscreen-chip 360ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: 200ms;
+}
+@keyframes player-onscreen-chip { from { opacity: 0; transform: translateX(-16px); } }
+@media (prefers-reduced-motion: reduce) {
+  .player-onscreen-toggle > svg,
+  [data-onscreen-body] { transition: none; }
+  [data-onscreen-open="true"] .player-onscreen-pill:not(.player-onscreen-in):not(.player-onscreen-out),
+  [data-onscreen-open="true"] .player-onscreen-label,
+  [data-onscreen-open="true"] .player-ask-btn { animation: none; }
+}
+/* Sur un téléphone (13/11/2026) : des pilules compactes — la photo et le nom ; le personnage est dans le panneau
+   que le toucher ouvre. Les boutons du centre 15 % plus petits (48/64 → 42/54 debout, 56/72 → 48/62 couché). */
+@media (pointer: coarse) and (max-width: 640px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .player-onscreen-character { display: none; }
+  .player-onscreen-photo { width: 28px; height: 28px; }
+  .player-onscreen-pill { padding-right: 0.75rem; }
+}
+@media (pointer: coarse) and (max-width: 640px) {
+  .player-center-btn { width: 42px; height: 42px; }
+  .player-center-btn[data-size="main"] { width: 54px; height: 54px; }
+}
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .player-center-btn { width: 48px; height: 48px; }
+  .player-center-btn[data-size="main"] { width: 62px; height: 62px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .player-onscreen-in, .player-onscreen-out { animation: none; }
 }

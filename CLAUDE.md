@@ -579,7 +579,7 @@ a title hidden from the account reads exactly like one never analysed. `XRAY_ENA
 (`off` / `admins` / `tous`, `featureAudience.ts`). The viewer screens: the « À l'écran » row of
 `PlayerControls` (`PlayerOnScreen`, with the controls in play and pause; scenes read once per item, the
 current one found in memory) and the person panel (`AskPanel` + `AskPersonHeader`: TMDB facts through
-`src/lib/tmdbPerson.ts`, the cinema's own person path). **No mask or `background-clip: text` on anything that
+`src/lib/tmdbPerson.ts`, the cinema's own person path). Since 13/11/2026 the row is **hidden by default** (§151): a round button left of the title opens it and turns into a cross (also a touch swipe up/down, or I), the choice lasting the session (`onScreenSession.ts`). **No mask or `background-clip: text` on anything that
 carries `backdrop-filter` children** — on iOS it left the row and panel unpainted (DECISIONS §138, 10.29.1).
 Usage is measured without a line of its own: the session's `stop` carries `xray: "s3 t2 p2"` (scenes where the row
 showed someone, actor taps, people tapped — `src/lib/xrayUsage.ts`, absent when the option is not offered), and

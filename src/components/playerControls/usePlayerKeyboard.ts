@@ -23,11 +23,13 @@ export function usePlayerKeyboard(
   togglePlay: () => void,
   skip: (deltaSeconds: number) => void,
   showControls: (delayMs?: number) => void,
-  suspendedRef: RefObject<boolean>
+  suspendedRef: RefObject<boolean>,
+  /** I : ouvrir ou fermer « À l'écran » (13/11/2026) — absent, la touche ne fait rien. */
+  toggleOnScreen?: () => void
 ) {
   // Les gestes du clavier lus au moment de la touche : `skip` dépend de `onSeekRequest`, qui peut
   // changer d'un rendu à l'autre, et l'écouteur, lui, n'est posé qu'une fois.
-  const keyActionsRef = useLatest({ togglePlay, skip });
+  const keyActionsRef = useLatest({ togglePlay, skip, toggleOnScreen });
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (suspendedRef.current) return;
@@ -69,6 +71,14 @@ export function usePlayerKeyboard(
       // bouton focalisé, il garde son rôle — l'activer.
       if (key === "Enter" && (!active || active === document.body || active === document.documentElement)) {
         playPause(true);
+        return;
+      }
+      // I, sans modificateur : « À l'écran », comme le glissement au doigt et le bouton de la pilule.
+      if (e.code === "KeyI" && !e.ctrlKey && !e.metaKey && !e.altKey && keyActionsRef.current.toggleOnScreen) {
+        e.preventDefault();
+        if (e.repeat) return;
+        keyActionsRef.current.toggleOnScreen();
+        showControls();
         return;
       }
       const left = e.code === "ArrowLeft" || key === "ArrowLeft" || key === "MediaRewind";

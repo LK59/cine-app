@@ -20,6 +20,7 @@ import { gaveUpFields } from "@/components/player/session/gaveUp";
 import { endSceneRestart, sceneRestartLogFields } from "@/lib/sceneRestartSession";
 import { endXrayUsage, xrayLogFields } from "@/lib/xrayUsage";
 import { endReplayUsage, replayLogFields } from "@/lib/replaySubtitles";
+import { endOnScreenSession } from "@/lib/onScreenSession";
 
 export function useServerSessionRecord({
   videoRef,
@@ -149,6 +150,7 @@ export function useServerSessionRecord({
       endSceneRestart(logContext.current.itemId);
       endXrayUsage(logContext.current.itemId);
       endReplayUsage(logContext.current.itemId);
+      endOnScreenSession(logContext.current.itemId);
       if (logContext.current.session) clearUnsentStop(logContext.current.session);
     },
     [stopFields, stopAlreadySent, logContext, negotiatedStepRef, carriedOnlyRef, lighterClearedRef]

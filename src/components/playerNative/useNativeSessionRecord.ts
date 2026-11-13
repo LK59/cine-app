@@ -33,6 +33,7 @@ import { gaveUpFields } from "@/components/player/session/gaveUp";
 import { endSceneRestart, sceneRestartLogFields } from "@/lib/sceneRestartSession";
 import { endXrayUsage, xrayLogFields } from "@/lib/xrayUsage";
 import { endReplayUsage, replayLogFields } from "@/lib/replaySubtitles";
+import { endOnScreenSession } from "@/lib/onScreenSession";
 
 /**
  * La copie de secours du bilan (`unsentStop`) est réécrite quand la séance a gagné ce temps regardé
@@ -177,6 +178,7 @@ export function useNativeSessionRecord({
       endSceneRestart(itemId);
       endXrayUsage(itemId);
       endReplayUsage(itemId);
+      endOnScreenSession(itemId);
       clearUnsentStop(sessionId);
       // De quoi reprendre, pris dans ce que le lecteur tient en mémoire — voir `keepOnStop`. Lu ici,
       // avant que le pipeline soit détruit (la croix, puis `stopPlaybackNow` ; au démontage, cet

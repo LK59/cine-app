@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, cleanup, act, fireEvent, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
+import { endOnScreenSession, forgetOnScreenSessions } from "@/lib/onScreenSession";
 import { useRef, type ReactNode, type RefObject } from "react";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -204,6 +205,15 @@ const diagPosts = (fetchMock: ReturnType<typeof stubFetch>) =>
     .map(([, init]) => JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>);
 const CONFIG = { xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true };
 
+/** « À l'écran » est masquée par défaut depuis le 13/11/2026 : le bouton rond de gauche l'ouvre. */
+async function openRow(container: HTMLElement) {
+  const toggle = await waitFor(() => container.querySelector<HTMLElement>('[data-player-nav="onscreen"]')!);
+  fireEvent.click(toggle);
+  await waitFor(() => expect(container.querySelector('[data-onscreen-open="true"]')).toBeTruthy());
+}
+// Le choix ouvert/fermé tient la séance de l'élément (`onScreenSession.ts`) : chaque test repart masqué.
+beforeEach(() => forgetOnScreenSessions());
+
 describe("dans le lecteur : le geste sous le doigt", () => {
   // jsdom ne pose rien : le geste ne vise qu'un bouton qui a une largeur, et sous le doigt (la boîte est à 0,0).
   beforeEach(() => {
@@ -216,6 +226,7 @@ describe("dans le lecteur : le geste sous le doigt", () => {
     let video: HTMLVideoElement | null = null;
     const { container } = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 610, false);
+    await openRow(container);
     const pill = await waitFor(() => container.querySelector<HTMLElement>('[data-onscreen-person="2"]')!);
     act(() => void pill.dispatchEvent(touch("pointerdown", 0, 0)));
     expect(pill.style.transform).toMatch(/scale/);
@@ -233,6 +244,7 @@ describe("dans le lecteur : le geste sous le doigt", () => {
     let video: HTMLVideoElement | null = null;
     const { container } = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 610, false);
+    await openRow(container);
     const pill = await waitFor(() => container.querySelector<HTMLElement>('[data-onscreen-person="2"]')!);
     act(() => void pill.dispatchEvent(touch("pointerdown", 10, 10)));
     act(() => void window.dispatchEvent(touch("pointermove", 40, 11)));
@@ -247,6 +259,7 @@ describe("dans le lecteur : le geste sous le doigt", () => {
     let video: HTMLVideoElement | null = null;
     const { container } = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 610, false);
+    await openRow(container);
     const pill = await waitFor(() => container.querySelector<HTMLElement>('[data-onscreen-person="2"]')!);
     fireEvent.scroll(container.querySelector("[data-onscreen-row]")!);
     act(() => void pill.dispatchEvent(touch("pointerdown")));
@@ -260,6 +273,7 @@ describe("dans le lecteur : le geste sous le doigt", () => {
     let video: HTMLVideoElement | null = null;
     const { container } = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 610, false);
+    await openRow(container);
     const ask = await waitFor(() => container.querySelector<HTMLElement>('[data-player-nav="ask"]')!);
     act(() => void ask.dispatchEvent(touch("pointerdown", 0, 0)));
     expect(ask.style.transform).toMatch(/scale/);
@@ -307,6 +321,7 @@ describe("le relevé `xray-ui` (10.29.1)", () => {
     let video: HTMLVideoElement | null = null;
     const { container } = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 610, false);
+    await openRow(container);
     const pill = await waitFor(() => container.querySelector<HTMLElement>('[data-onscreen-person="2"]')!);
     await frame();
     await waitFor(() => expect(diagPosts(fetchMock).some((p) => p.event === "row")).toBe(true));
@@ -333,10 +348,111 @@ describe("le relevé `xray-ui` (10.29.1)", () => {
     let video: HTMLVideoElement | null = null;
     const { container } = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 610, false);
+    await openRow(container);
     const pill = await waitFor(() => container.querySelector<HTMLElement>('[data-onscreen-person="2"]')!);
     await frame();
     fireEvent.click(pill);
     await waitFor(() => expect(container.querySelector("[data-ask-panel]")).toBeTruthy());
     expect(diagPosts(fetchMock)).toHaveLength(0);
+  });
+});
+
+describe("« À l'écran » à la demande (13/11/2026)", () => {
+  afterEach(() => vi.restoreAllMocks());
+  const wrapOf = (c: HTMLElement) => c.querySelector<HTMLElement>("[data-onscreen-wrap]")!;
+  const toggleOf = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-player-nav="onscreen"]')!;
+
+  it("masquée par défaut, même en pause : le bouton rond seul, la rangée inerte, la question hors d'atteinte", async () => {
+    stubFetch();
+    let video: HTMLVideoElement | null = null;
+    const { container } = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
+    await at(video!, 610, false);
+    await waitFor(() => expect(toggleOf(container)).toBeTruthy());
+    expect(wrapOf(container).getAttribute("data-onscreen-open")).toBe("false");
+    expect(toggleOf(container).getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector("[data-onscreen-body]")!.hasAttribute("inert")).toBe(true);
+    expect(container.querySelector('[data-player-nav="ask"]')!.className).toContain("pointer-events-none");
+  });
+
+  it("le bouton ouvre puis referme ; le choix tient la séance, et la suivante repart masquée", async () => {
+    stubFetch();
+    let video: HTMLVideoElement | null = null;
+    const first = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
+    await at(video!, 610, true);
+    await openRow(first.container);
+    expect(toggleOf(first.container).getAttribute("aria-expanded")).toBe("true");
+    expect(first.container.querySelector('[data-player-nav="ask"]')!.className).toContain("pointer-events-auto");
+    // Une reconstruction remonte les commandes : la rangée reste ouverte.
+    first.unmount();
+    const second = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
+    await at(video!, 610, true);
+    await waitFor(() => expect(wrapOf(second.container).getAttribute("data-onscreen-open")).toBe("true"));
+    fireEvent.click(toggleOf(second.container));
+    expect(wrapOf(second.container).getAttribute("data-onscreen-open")).toBe("false");
+    fireEvent.click(toggleOf(second.container));
+    second.unmount();
+    // La ligne `stop` partie : la séance suivante repart masquée.
+    endOnScreenSession("item-1");
+    const third = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
+    await at(video!, 610, true);
+    await waitFor(() => expect(toggleOf(third.container)).toBeTruthy());
+    expect(wrapOf(third.container).getAttribute("data-onscreen-open")).toBe("false");
+  });
+
+  it("elle suit les commandes : cachées puis rappelées, elle revient dépliée — sauf après une minute cachées", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      stubFetch();
+      let video: HTMLVideoElement | null = null;
+      const { container } = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
+      await at(video!, 610, true);
+      await openRow(container);
+      const chrome = () => container.querySelector("[data-chrome]")?.getAttribute("data-chrome");
+      const surface = container.querySelector<HTMLElement>(".player-liquid")!;
+      // Un toucher sur l'image affiche ou masque les commandes : la rangée ne les retient pas.
+      const tap = async () => {
+        await act(async () => void surface.dispatchEvent(touch("pointerdown", 300, 300)));
+        await act(async () => void fireEvent.click(surface));
+      };
+      await tap();
+      expect(chrome()).toBe("hidden");
+      // Rappelées avant la minute : toujours dépliée.
+      await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)));
+      await tap();
+      expect(chrome()).toBe("shown");
+      expect(wrapOf(container).getAttribute("data-onscreen-open")).toBe("true");
+      // Cachées une minute de suite : repliée sans bruit, et les commandes rappelées reviennent sans elle.
+      await tap();
+      expect(chrome()).toBe("hidden");
+      await act(async () => void (await vi.advanceTimersByTimeAsync(61_000)));
+      await tap();
+      expect(chrome()).toBe("shown");
+      expect(wrapOf(container).getAttribute("data-onscreen-open")).toBe("false");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("la touche I ouvre et ferme ; un glissement au doigt vers le haut ouvre, vers le bas ferme", async () => {
+    stubFetch();
+    let video: HTMLVideoElement | null = null;
+    const { container } = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
+    await at(video!, 610, false);
+    await waitFor(() => expect(toggleOf(container)).toBeTruthy());
+    await act(async () => void fireEvent.keyDown(window, { key: "i", code: "KeyI" }));
+    expect(wrapOf(container).getAttribute("data-onscreen-open")).toBe("true");
+    await act(async () => void fireEvent.keyDown(window, { key: "i", code: "KeyI" }));
+    expect(wrapOf(container).getAttribute("data-onscreen-open")).toBe("false");
+    const surface = container.querySelector<HTMLElement>(".player-liquid")!;
+    fireEvent.touchStart(surface, { touches: [{ clientX: 200, clientY: 300 }] });
+    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 205, clientY: 220 }] });
+    expect(wrapOf(container).getAttribute("data-onscreen-open")).toBe("true");
+    // De côté plutôt que vers le bas : rien.
+    fireEvent.touchStart(surface, { touches: [{ clientX: 100, clientY: 200 }] });
+    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 220, clientY: 260 }] });
+    expect(wrapOf(container).getAttribute("data-onscreen-open")).toBe("true");
+    fireEvent.touchStart(surface, { touches: [{ clientX: 200, clientY: 200 }] });
+    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 195, clientY: 290 }] });
+    expect(wrapOf(container).getAttribute("data-onscreen-open")).toBe("false");
   });
 });

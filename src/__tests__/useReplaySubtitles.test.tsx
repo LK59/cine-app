@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { useReplaySubtitles } from "@/components/playerControls/useReplaySubtitles";
+import { REPLAY_NOTICE_MS, useReplaySubtitles } from "@/components/playerControls/useReplaySubtitles";
 import { forgetReplayUsage, replayLogFields } from "@/lib/replaySubtitles";
 
 // Le déclencheur et la fenêtre des sous-titres d'un passage rejoué (§150), côté commandes : ce que l'empreinte
@@ -25,6 +25,25 @@ function setup(opts: { paused?: boolean; track?: number | null } = {}) {
 beforeEach(() => forgetReplayUsage());
 
 describe("useReplaySubtitles", () => {
+  it("le message ne dure que le temps de le lire ; l'aide, elle, continue", () => {
+    vi.useFakeTimers();
+    try {
+      const { hook } = setup();
+      act(() => hook.result.current.noteSkip(-10, 100));
+      expect(hook.result.current.notice).toBe(true);
+      act(() => void vi.advanceTimersByTime(REPLAY_NOTICE_MS - 100));
+      expect(hook.result.current.notice).toBe(true);
+      act(() => void vi.advanceTimersByTime(200));
+      expect(hook.result.current.notice).toBe(false);
+      expect(hook.result.current.active).toBe(true);
+      // Un second recul allonge l'aide sans remontrer le message.
+      act(() => hook.result.current.noteSkip(-10, 95));
+      expect(hook.result.current.notice).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("en pause, un recul n'ouvre rien", () => {
     const { show, hook } = setup({ paused: true });
     act(() => hook.result.current.noteSkip(-10, 100));

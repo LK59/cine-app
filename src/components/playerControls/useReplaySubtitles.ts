@@ -12,11 +12,17 @@
  * - Elle se ferme à cette fin, à tout autre saut, à un choix dans le menu des sous-titres, quand l'hôte n'a
  *   plus de piste à donner (une diffusion commence), et au démontage des commandes (une reconstruction, la
  *   fermeture) : `show(null)` rend l'affichage d'avant, rien n'a jamais été choisi.
- * - La pastille touchée : un vrai choix (`onChangeSubtitle`, compté comme tel), et l'aide se ferme.
+ * - Le message (`notice`) : une ligne de texte, le temps de la lire (`REPLAY_NOTICE_MS`), pas toute la durée de
+ *   l'aide — retour de Louis sur iPhone le 13/11/2026 : en pilule, posé sur la rangée « À l'écran » et resté tout
+ *   le passage, il chargeait l'écran. Le toucher garde les sous-titres pour de bon (`onChangeSubtitle`, un vrai
+ *   choix, compté comme tel), et l'aide se ferme.
  */
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { extendReplayWindow, isReplayRewind, noteReplayKept, noteReplayShown, type ReplayWindow } from "@/lib/replaySubtitles";
 import { useLatest } from "@/components/playerControls/useLatest";
+
+/** Le temps de lire « Sous-titres pour ce passage », puis le message s'efface (l'aide, elle, continue). */
+export const REPLAY_NOTICE_MS = 3500;
 
 export interface ReplaySubtitleHost {
   /** La piste que l'aide montrerait maintenant, ou `null` — demandée au recul, puis à chaque `timeupdate` de l'aide. */
@@ -37,6 +43,8 @@ export function useReplaySubtitles({
   onChangeSubtitle: (id: number | null) => void;
 }) {
   const [open, setOpen] = useState<ReplayWindow | null>(null);
+  const [notice, setNotice] = useState(false);
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Lu par les écouteurs et par les gestes : l'état rendu peut avoir un tour de retard sur deux reculs d'affilée.
   const openRef = useRef<ReplayWindow | null>(null);
   const hostRef = useLatest(host);
@@ -45,6 +53,9 @@ export function useReplaySubtitles({
     if (!openRef.current) return;
     openRef.current = null;
     setOpen(null);
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = null;
+    setNotice(false);
     hostRef.current?.show(null);
   }, [hostRef]);
 
@@ -66,6 +77,12 @@ export function useReplaySubtitles({
       if (!current) {
         hostRef.current?.show(next.track);
         noteReplayShown(itemId);
+        setNotice(true);
+        if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = setTimeout(() => {
+          noticeTimerRef.current = null;
+          setNotice(false);
+        }, REPLAY_NOTICE_MS);
       }
     },
     [videoRef, hostRef, end, itemId]
@@ -95,10 +112,11 @@ export function useReplaySubtitles({
 
   // Les commandes démontées (reconstruction, fermeture, passage de main) : l'hôte rend son affichage d'avant.
   useEffect(() => () => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     if (!openRef.current) return;
     openRef.current = null;
     hostRef.current?.show(null);
   }, [hostRef]);
 
-  return { active: open !== null, noteSkip, end, keep };
+  return { active: open !== null, notice: open !== null && notice, noteSkip, end, keep };
 }

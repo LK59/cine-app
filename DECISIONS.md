@@ -10824,3 +10824,30 @@ gardées par la pastille), absent tant qu'aucune n'a paru (`playerLog.ts` n'acce
 en avant, pastille, démontage, diffusion) ; `PlayerHost-deuxSousTitres.test.tsx` (serveur : modes rendus, forcée
 reprise, jamais d'images) ; l'empreinte `natif/sauts-et-pause-sous-titres-d-un-passage-rejoue…` ; les autres
 empreintes inchangées. Nouveautés : page discrète « 10.40 » (`page1040.ts`).
+
+## 151. « À l'écran » masquée par défaut, ouverte par un bouton qui devient une croix (13/11/2026)
+
+**Règle.** La rangée « À l'écran » (§138) et le bouton de la question (§139) ne paraissent plus avec les commandes :
+un bouton rond de 40 px, à gauche juste au-dessus du titre (là où la rangée se pose), l'ouvre — elle sort de lui vers
+la droite, pilule après pilule — et devient une croix qui la referme. Un glissement au doigt sur l'image, commandes
+affichées (vers le haut : ouvrir, vers le bas : fermer), et la touche I font de même. **Masquée par défaut, en lecture
+comme en pause** ; le choix tient la séance — pause, reconstruction du lecteur natif, passage au lecteur serveur — et
+la suivante repart masquée (`onScreenSession.ts`, fini par la ligne `stop`). Elle **suit toujours les commandes** :
+cachées puis rappelées, elle revient dépliée — mais une minute de commandes cachées (`ONSCREEN_FOLD_HIDDEN_MS`) veut
+dire qu'on regarde le film, et elle se replie sans bruit (choix de Louis). Le bouton de la question n'existe que dans
+la rangée ouverte. Les sous-titres
+passent au-dessus de la rangée ouverte (`onChromeEdges` la compte).
+
+**Pourquoi.** Retour de Louis sur iPhone : affichée avec les commandes à chaque fois, elle chargeait l'écran et
+cachait la réplique, pour 5 séances où quelqu'un l'a touchée en deux jours (82 où elle était proposée). Sur un
+téléphone, les pilules sont aussi compactes (photo et nom ; le personnage est dans le panneau) et les boutons du
+centre 15 % plus petits.
+
+**Différent exprès.** Pas d'ouverture d'office en pause (proposée, puis écartée par Louis : « par défaut on masque
+toujours la rangée qui prend trop de place »). Le bouton n'est pas dans la pilule des réglages : à l'endroit de la
+rangée, on comprend ce qu'il ouvre et elle sort de lui.
+
+**Porteurs.** `PlayerControls` (`onScreenAvailable`, `rowOpen`, `openOnScreen`, le glissement sur la surface),
+`usePlayerKeyboard` (I), `onScreenSession.ts`, `PlayerOnScreen` (`--chip-i`), globals.css (`.player-onscreen-toggle`,
+`[data-onscreen-open]`). **Tests.** `xray-ui-10291.test.tsx` (« À l'écran » à la demande ; les gestes sous le doigt,
+rangée ouverte) ; empreintes inchangées (la rangée n'y est pas proposée).

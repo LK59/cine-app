@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { PersonAvatar } from "@/components/ask/AskPersonHeader";
@@ -362,9 +362,12 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth, on
   const live = visible ? "pointer-events-auto" : "pointer-events-none";
   const entering = (id: number) => shown.fresh.includes(id);
 
-  const pill = (person: XrayPlayerPerson, leaving: boolean) => (
+  // `index` : le rang de la pilule, pour qu'à l'ouverture de la rangée elles sortent du bouton l'une après l'autre
+  // (`--chip-i`, globals.css, 13/11/2026).
+  const pill = (person: XrayPlayerPerson, leaving: boolean, index = 0) => (
     <button
       key={`${leaving ? "out" : "in"}:${person.personId}`}
+      style={{ "--chip-i": index } as CSSProperties}
       type="button"
       data-onscreen-person={leaving ? undefined : person.personId}
       data-onscreen-leaving={leaving ? person.personId : undefined}
@@ -430,7 +433,7 @@ export function PlayerOnScreen({ people, visible, onPick, trailing, maxWidth, on
               onTouchEnd={pressEnd}
               className={`player-onscreen-row ${live} flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain`}
             >
-              {list.map((person) => pill(person, false))}
+              {list.map((person, index) => pill(person, false, index))}
               {shown.leaving.map((person) => pill(person, true))}
             </div>
             {/* Le fondu du bord droit : un voile au-dessus des pilules, sous les flèches, jamais un masque sur la

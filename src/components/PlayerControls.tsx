@@ -3,7 +3,7 @@
 import type { TrickplayInfo } from "@/lib/trickplayTile";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Maximize, Minimize, Captions, AudioLines, Loader2, RotateCcw, RotateCw, EllipsisVertical, SkipForward, Layers, ChevronRight, MessageCircleQuestion } from "lucide-react";
+import { Play, Pause, Maximize, Minimize, Captions, AudioLines, Loader2, RotateCcw, RotateCw, EllipsisVertical, SkipForward, Layers, ChevronRight, MessageCircleQuestion, UsersRound, X } from "lucide-react";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import type { HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
@@ -17,6 +17,7 @@ import { PlayerTopBar } from "@/components/playerControls/PlayerTopBar";
 import { PlayerPrompts } from "@/components/playerControls/PlayerPrompts";
 import { useSceneRestart } from "@/components/playerControls/useSceneRestart";
 import { useReplaySubtitles, type ReplaySubtitleHost } from "@/components/playerControls/useReplaySubtitles";
+import { ONSCREEN_FOLD_HIDDEN_MS, onScreenOpenFor, setOnScreenOpen } from "@/lib/onScreenSession";
 import { PlayerNextUp } from "@/components/playerControls/PlayerNextUp";
 import { PlayerSettingsMenu, type MenuView } from "@/components/playerControls/PlayerSettingsMenu";
 import { BOTTOM_EDGE, PROMPT_BOTTOM } from "@/components/playerControls/layout";
@@ -403,29 +404,6 @@ export function PlayerControls({
    * Les rangées glissent de 4 px en apparaissant (`translate-y-1`) : la mesure prise pendant ce
    * glissement est fausse d'autant au plus, et la suivante la corrige.
    */
-  useEffect(() => {
-    if (!onChromeEdges) return;
-    if (!visible || hidden) {
-      onChromeEdges(null);
-      return;
-    }
-    const root = liquidRootRef.current;
-    const top = topRowRef.current;
-    const bottom = bottomRowRef.current;
-    if (!root || !top || !bottom) return;
-    const measure = () => {
-      const area = root.getBoundingClientRect();
-      onChromeEdges({
-        top: top.getBoundingClientRect().bottom - area.top,
-        bottom: area.bottom - bottom.getBoundingClientRect().top,
-      });
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    for (const el of [root, top, bottom]) observer.observe(el);
-    return () => observer.disconnect();
-  }, [visible, hidden, onChromeEdges]);
   // Démonté (fermeture, passage au mini-lecteur), il n'y a plus de commandes à éviter.
   useEffect(() => () => onChromeEdges?.(null), [onChromeEdges]);
   const [menu, setMenu] = useState<null | MenuView>(null);
@@ -748,9 +726,16 @@ export function PlayerControls({
     creditsStart,
   });
   /**
-   * La rangée et le bouton de la question paraissent **avec les commandes, en lecture comme en pause**
-   * (10.27) ; jamais panneau ouvert, pendant une reprise, l'ouverture du film ou une diffusion. La scène de
-   * l'instant se cherche en mémoire à chaque rendu — aucune requête.
+   * La rangée « À l'écran » et le bouton de la question : jamais panneau ouvert, pendant une reprise, l'ouverture
+   * du film ou une diffusion. La scène de l'instant se cherche en mémoire à chaque rendu — aucune requête.
+   *
+   * **Masquée par défaut, ouverte à la demande** (13/11/2026, retour de Louis sur iPhone) : affichée avec les
+   * commandes à chaque fois (10.27), elle chargeait l'écran et cachait les sous-titres, pour 5 séances où quelqu'un
+   * l'a touchée en deux jours. Un bouton rond, à gauche juste au-dessus du titre — là où la rangée paraît —, l'ouvre
+   * et devient une croix ; un glissement au doigt (haut : ouvrir, bas : fermer) et la touche I font de même. Le
+   * choix tient la séance (`onScreenSession.ts`) ; elle suit les commandes, et se replie après une minute de
+   * commandes cachées (`ONSCREEN_FOLD_HIDDEN_MS`). Le bouton de la question n'existe que dans la rangée ouverte. Montée tant qu'elle peut servir, pour que l'ouverture et la
+   * fermeture s'animent (`data-onscreen-open`).
    */
   const rowAllowed = !askOpen && !resuming && !loading && !openingQuiet && !castActive;
   const sceneNow = xrayOffered && rowAllowed ? sceneAt(xrayPayload, currentTime) : null;
@@ -758,9 +743,31 @@ export function PlayerControls({
   // Le relevé `xray-ui` de cette séance (10.29.1, `xrayUiDiag.ts`) : la rangée, les touchers, le panneau.
   const xrayDiag = useXrayUiDiag(itemId);
   const rowShown = rowAllowed && (askOffered || scenePeople.length > 0);
+  const onScreenAvailable = rowAllowed && (askOffered || (xrayOffered && (xrayPayload?.scenes.length ?? 0) > 0));
+  const [onScreenOpen, setOnScreenOpenState] = useState(() => onScreenOpenFor(itemId));
+  const rowOpen = onScreenAvailable && onScreenOpen;
+  const openOnScreen = (open: boolean) => {
+    if (!onScreenAvailable || open === onScreenOpen) return;
+    setMenu(null);
+    setOnScreenOpenState(open);
+    setOnScreenOpen(itemId, open);
+  };
+  const toggleOnScreen = () => openOnScreen(!onScreenOpen);
+  // Dépliée, elle suit les commandes : cachées puis rappelées, elle revient avec elles. Mais **une minute sans
+  // commandes** (Louis, 13/11/2026) veut dire qu'on regarde le film, pas « À l'écran » : elle se replie sans bruit,
+  // et les commandes rappelées ensuite reviennent sans elle. Le minuteur vit dans un effet ; l'état change dans son
+  // rappel, jamais dans le corps de l'effet.
+  useEffect(() => {
+    if (visible || !onScreenOpen) return;
+    const timer = window.setTimeout(() => {
+      setOnScreenOpenState(false);
+      setOnScreenOpen(itemId, false);
+    }, ONSCREEN_FOLD_HIDDEN_MS);
+    return () => window.clearTimeout(timer);
+  }, [visible, onScreenOpen, itemId]);
   // L'usage, porté par le bilan `stop` (`xrayUsage.ts`, 11/11/2026) : l'option proposée, chaque scène où la rangée
   // a paru avec quelqu'un, commandes visibles. Rien sans l'option — le bilan reste celui d'avant.
-  const usageScene = xrayOffered && visible && rowShown && scenePeople.length > 0 && sceneNow ? sceneNow.start : null;
+  const usageScene = xrayOffered && visible && rowOpen && rowShown && scenePeople.length > 0 && sceneNow ? sceneNow.start : null;
   useEffect(() => {
     if (xrayOffered) noteXrayOffered(itemId);
   }, [itemId, xrayOffered]);
@@ -768,9 +775,39 @@ export function PlayerControls({
     if (usageScene !== null) noteXrayScene(itemId, usageScene);
   }, [itemId, usageScene]);
   const onScreenWrapRef = useRef<HTMLDivElement>(null);
+  // Ce que les commandes occupent, à éviter par les sous-titres — voir plus haut (déclaré ici pour lire `rowOpen`).
+  useEffect(() => {
+    if (!onChromeEdges) return;
+    if (!visible || hidden) {
+      onChromeEdges(null);
+      return;
+    }
+    const root = liquidRootRef.current;
+    const top = topRowRef.current;
+    const bottom = bottomRowRef.current;
+    if (!root || !top || !bottom) return;
+    // « À l'écran » ouvert (13/11/2026) : les sous-titres passent au-dessus de la rangée, pas dessous — affichée
+    // avec les commandes, elle cachait la réplique. Mesurée sur sa place d'arrivée (`offsetTop`), pas pendant son
+    // glissement d'ouverture.
+    const wrap = rowOpen ? onScreenWrapRef.current : null;
+    const measure = () => {
+      const area = root.getBoundingClientRect();
+      const bottomTop = bottom.getBoundingClientRect().top - area.top;
+      const wrapTop = wrap ? wrap.offsetTop : Infinity;
+      onChromeEdges({
+        top: top.getBoundingClientRect().bottom - area.top,
+        bottom: area.height - Math.min(bottomTop, wrapTop),
+      });
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    for (const el of [root, top, bottom, ...(wrap ? [wrap] : [])]) observer.observe(el);
+    return () => observer.disconnect();
+  }, [visible, hidden, onChromeEdges, rowOpen]);
   const centerGroupRef = useRef<HTMLDivElement>(null);
   const titleRowRef = useRef<HTMLDivElement>(null);
-  const onScreenPlace = useOnScreenPlacement({ wrap: onScreenWrapRef, center: centerGroupRef, titleRow: titleRowRef, tools: settingsPillRef }, rowShown && scenePeople.length > 0);
+  const onScreenPlace = useOnScreenPlacement({ wrap: onScreenWrapRef, center: centerGroupRef, titleRow: titleRowRef, tools: settingsPillRef }, onScreenAvailable);
   // Le film s'ouvre, une des trois portes ouverte à la séance (10.27.2, §139) : le serveur prépare le contexte
   // des questions et de « Jusqu'ici » (l'élément, ses épisodes, les répliques) — `prepareAskContext`. Une fois
   // par élément.
@@ -835,7 +872,34 @@ export function PlayerControls({
    * paie à la place : son premier clic met en pause, le second relance, et le `dblclick` passe en
    * plein écran — un arrêt de l'ordre du quart de seconde, ce que fait YouTube.
    */
+  // Le glissement d'« À l'écran » au doigt (13/11/2026) : vers le haut ouvre, vers le bas ferme — sur l'image seule,
+  // commandes affichées, un doigt, franc (50 px au moins, nettement plus vertical qu'horizontal, en moins de 0,6 s).
+  const swipeRef = useRef<{ x: number; y: number; at: number } | null>(null);
+  const swipedRef = useRef(false);
+  function onSurfaceTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+    const touch = e.touches[0];
+    swipeRef.current =
+      e.touches.length === 1 && touch && isEmptySurface(e.target, e.currentTarget) ? { x: touch.clientX, y: touch.clientY, at: Date.now() } : null;
+  }
+  function onSurfaceTouchEnd(e: React.TouchEvent<HTMLDivElement>) {
+    const start = swipeRef.current;
+    swipeRef.current = null;
+    const touch = e.changedTouches[0];
+    if (!start || !touch || !visible || !onScreenAvailable) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Date.now() - start.at > 600 || Math.abs(dy) < 50 || Math.abs(dy) < Math.abs(dx) * 1.5) return;
+    swipedRef.current = true;
+    openOnScreen(dy < 0);
+    showControls();
+  }
+
   function onSurfaceClick(e: React.MouseEvent<HTMLDivElement>) {
+    // Un glissement n'est pas un toucher : ni commandes masquées, ni pause.
+    if (swipedRef.current) {
+      swipedRef.current = false;
+      return;
+    }
     // L'appui d'abord, le `click` seulement à défaut : WebKit iOS déclare « mouse » sur le `click`
     // d'un tap au doigt, alors que son `pointerdown` dit bien « touch » — lu sur le `click`, chaque
     // toucher de l'image mettait le film en pause au lieu d'afficher les commandes (11/10/2026).
@@ -1042,7 +1106,7 @@ export function PlayerControls({
     setCueOffsets((all) => ({ ...all, [id]: Math.round(((all[id] ?? 0) + deltaSeconds) * 10) / 10 }));
   }
 
-  usePlayerKeyboard(togglePlay, skip, showControls, suspendedRef);
+  usePlayerKeyboard(togglePlay, skip, showControls, suspendedRef, toggleOnScreen);
 
   if (hidden) return null;
 
@@ -1057,6 +1121,8 @@ export function PlayerControls({
       className={`player-liquid absolute inset-0 z-10 select-none ${!visible && playing ? "cursor-none" : ""}`}
       ref={liquidRootRef}
       onClick={onSurfaceClick}
+      onTouchStart={onSurfaceTouchStart}
+      onTouchEnd={onSurfaceTouchEnd}
       onDoubleClick={onSurfaceDoubleClick}
       onPointerDown={(e) => {
         lastPointerTypeRef.current = e.pointerType;
@@ -1157,7 +1223,7 @@ export function PlayerControls({
         // « Passer l'intro / le récap » garde la priorité : une invite à la fois, au même endroit.
         sceneRestart={skipNow ? null : sceneRestart.prompt}
         onSceneRestart={() => sceneRestart.use((target) => commitSeek(target))}
-        replaySubtitle={replay.active}
+        replaySubtitle={replay.notice}
         onKeepReplaySubtitle={replay.keep}
         sleepWarning={sleepWarning}
         askStillThere={askStillThere}
@@ -1315,13 +1381,14 @@ export function PlayerControls({
           </div>
         )}
 
-        {/* « À l'écran » (§138) et le bouton de la question (§139) : avec les commandes, en lecture comme en
-            pause, juste au-dessus du bloc du titre, à gauche — loin de « Passer l'intro » et de l'épisode
-            suivant, posés à droite ; elle va aussi loin que possible à droite et ne s'arrête avant les
-            boutons du centre (ou la pilule des outils) que s'ils partagent sa hauteur
-            (`useOnScreenPlacement`, 10.27.1). Le bouton rond de la question reste au bout, hors de ce qui défile — seul
-            quand personne n'est reconnu. */}
-        {rowShown &&
+        {/* « À l'écran » (§138) et le bouton de la question (§139), juste au-dessus du bloc du titre, à gauche — loin
+            de « Passer l'intro » et de l'épisode suivant, posés à droite ; la rangée va aussi loin que possible à droite
+            et ne s'arrête avant les boutons du centre (ou la pilule des outils) que s'ils partagent sa hauteur
+            (`useOnScreenPlacement`, 10.27.1). Depuis le 13/11/2026, **masquée par défaut** : le bouton rond de gauche
+            l'ouvre — elle sort de lui vers la droite, pilule après pilule — et devient une croix qui la referme. Le
+            bouton de la question reste au bout de la rangée ouverte, hors de ce qui défile — seul quand personne
+            n'est reconnu. */}
+        {onScreenAvailable &&
           (() => {
             const askButton = askOffered ? (
               <button
@@ -1337,7 +1404,7 @@ export function PlayerControls({
                   setAskOpen(true);
                 }}
                 data-liquid
-                className={`player-fade player-pill player-ask-btn ${visible ? "pointer-events-auto" : "pointer-events-none"} flex shrink-0 items-center justify-center text-white`}
+                className={`player-fade player-pill player-ask-btn ${visible && rowOpen ? "pointer-events-auto" : "pointer-events-none"} flex shrink-0 items-center justify-center text-white`}
               >
                 <MessageCircleQuestion size={20} aria-hidden />
               </button>
@@ -1346,27 +1413,48 @@ export function PlayerControls({
               <div
                 ref={onScreenWrapRef}
                 data-onscreen-wrap=""
-                className="player-chrome-x pointer-events-none absolute inset-x-0 flex"
+                data-onscreen-open={rowOpen ? "true" : "false"}
+                className="player-chrome-x pointer-events-none absolute inset-x-0 flex items-end gap-2"
                 style={{ bottom: onScreenPlace.bottom ?? PROMPT_BOTTOM }}
               >
-                {scenePeople.length > 0 ? (
-                  <PlayerOnScreen
-                    people={scenePeople}
-                    visible={visible}
-                    trailing={askButton}
-                    maxWidth={onScreenPlace.maxWidth}
-                    // Toucher ou faire défiler la rangée tient les commandes affichées ; la fin du geste relance
-                    // leur décompte ordinaire (10.27.2 — elles partaient sous le doigt).
-                    onHold={holdControls}
-                    onIntent={onPersonIntent}
-                    onRelease={() => showControls(10000)}
-                    onPick={pickPerson}
-                    diag={xrayDiag}
-                    sceneStart={sceneNow?.start ?? null}
-                  />
-                ) : (
-                  askButton
-                )}
+                <button
+                  type="button"
+                  data-player-nav="onscreen"
+                  data-player-surface-ignore
+                  aria-label={t("xray.onScreen")}
+                  title={t("xray.onScreen")}
+                  aria-expanded={rowOpen}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleOnScreen();
+                    showControls();
+                  }}
+                  data-liquid
+                  className={`player-fade player-pill player-onscreen-toggle ${visible ? "pointer-events-auto" : "pointer-events-none"} flex shrink-0 items-center justify-center text-white`}
+                >
+                  <UsersRound size={20} aria-hidden className="player-onscreen-toggle-people" />
+                  <X size={20} aria-hidden className="player-onscreen-toggle-close" />
+                </button>
+                <div data-onscreen-body="" inert={!rowOpen} className="min-w-0 flex-1">
+                  {!rowShown ? null : scenePeople.length > 0 ? (
+                    <PlayerOnScreen
+                      people={scenePeople}
+                      visible={visible && rowOpen}
+                      trailing={askButton}
+                      maxWidth={onScreenPlace.maxWidth}
+                      // Toucher ou faire défiler la rangée tient les commandes affichées ; la fin du geste relance
+                      // leur décompte ordinaire (10.27.2 — elles partaient sous le doigt).
+                      onHold={holdControls}
+                      onIntent={onPersonIntent}
+                      onRelease={() => showControls(10000)}
+                      onPick={pickPerson}
+                      diag={xrayDiag}
+                      sceneStart={sceneNow?.start ?? null}
+                    />
+                  ) : (
+                    askButton
+                  )}
+                </div>
               </div>
             );
           })()}

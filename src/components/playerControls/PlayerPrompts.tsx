@@ -88,9 +88,10 @@ export function PlayerPrompts({
         </button>
       )}
 
-      {/* Les sous-titres d'un passage rejoué (§150) : une ligne discrète, comme sur l'Apple TV, le temps du
-          passage. Un toucher les garde pour de bon. La minuterie de veille, plus rare et plus urgente, a la place. */}
-      {replaySubtitle && sleepWarning === null && onKeepReplaySubtitle && (
+      {/* Les sous-titres d'un passage rejoué (§150) : une ligne de texte seule, sans pilule, le temps de la lire
+          (`REPLAY_NOTICE_MS`) — au centre, juste sous la barre du haut, où rien d'autre ne se pose (ni « À l'écran »,
+          ni les invites du bas, ni la ligne de sous-titres). La toucher garde les sous-titres pour de bon. */}
+      {replaySubtitle && onKeepReplaySubtitle && (
         <button
           type="button"
           data-player-surface-ignore
@@ -100,13 +101,10 @@ export function PlayerPrompts({
             onKeepReplaySubtitle();
           }}
           title={t("player.replaySubtitles.keep")}
-          className="player-pill pointer-events-auto absolute flex items-center gap-2 px-3.5 py-1.5 text-xs text-white/80"
-          style={{
-            bottom: PROMPT_BOTTOM,
-            left: "max(1rem, env(safe-area-inset-left))",
-          }}
+          className="pointer-events-auto absolute left-1/2 flex -translate-x-1/2 animate-fade-in items-center gap-1.5 whitespace-nowrap px-2 py-1 text-xs font-medium text-white/85 [text-shadow:0_1px_3px_rgba(0,0,0,0.85)]"
+          style={{ top: "calc(max(1rem, calc(env(safe-area-inset-top) + 1rem)) + 4.25rem)" }}
         >
-          <Captions size={12} aria-hidden />
+          <Captions size={12} aria-hidden className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]" />
           <span>{t("player.replaySubtitles.on")}</span>
         </button>
       )}
