@@ -180,6 +180,25 @@ describe("hls.js — caractérisation", () => {
     expect(negotiations()).toHaveLength(count);
   });
 
+  it("la marche H.264 passe à l'épisode suivant : il part en H.264, sans repasser par les erreurs (13/11/2026)", async () => {
+    playback.session = { itemId: "ep-1", openId: 1, resumeAt: 0, title: "Épisode 1" };
+    const { rerender } = render(<PlayerHost />);
+    await waitFor(() => expect(fake.listeners.get("hlsError")?.length).toBeTruthy());
+    for (let i = 0; i < 4; i++) fatal("mediaError");
+    await waitFor(() => expect(negotiations().at(-1)).toMatchObject({ videoH264Only: true }), { timeout: 3000 });
+    const before = negotiations().length;
+    // L'épisode suivant enchaîné : même ouverture (`openId`), autre élément — le lecteur n'est pas remonté.
+    playback.session = { itemId: "ep-2", openId: 1, resumeAt: 0, title: "Épisode 2" };
+    rerender(<PlayerHost />);
+    await waitFor(() => expect(negotiations().length).toBeGreaterThan(before), { timeout: 3000 });
+    expect(negotiations()[before]).toMatchObject({ itemId: "ep-2", videoH264Only: true, forceAudioTranscode: true });
+  });
+
+  it("une ouverture neuve ne l'hérite pas", async () => {
+    await mounted();
+    expect(negotiations().at(-1)?.videoH264Only).toBeFalsy();
+  });
+
   it("erreur réseau : six relances au délai doublé (plafonné à 15 s), puis l'écran d'erreur", async () => {
     await mounted();
     vi.useFakeTimers();

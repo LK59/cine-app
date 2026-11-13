@@ -1944,6 +1944,13 @@ function ActivePlayer({
     // même, par la même fonction — DECISIONS.md §35.
     restoreRememberedVolume(videoRef.current);
 
+    // La marche H.264 (§67) héritée à l'épisode suivant (13/11/2026) : ce lecteur enchaîne les épisodes sans être
+    // remonté, et cet effet repart quand `itemId` change. Le décodeur qui a refusé l'image d'un épisode refuse celle
+    // du suivant — sans cela, l'épisode repartait dans le codec d'origine, la marche était notée déjà tentée, et la
+    // séance finissait sur « Lecture interrompue », que « Réessayer » rejouait à l'identique. Lu ici, avant que la
+    // négociation de l'épisode ne remplace `lastPlaybackOpts` ; une ouverture neuve (autre `openId`) repart de rien.
+    const inheritedH264 = lastPlaybackOpts.current?.videoH264Only === true;
+
     const graceMs = fromReload ? 3000 : 0;
     // Une position absente veut dire « demande au serveur », pas « du début » — voir
     // `resolveResumeAt`. Ce lecteur la lisait comme un zéro, et c'est lui qui s'ouvre quand le
@@ -1980,7 +1987,12 @@ function ActivePlayer({
           : continuesSession && logSession.current.id === continuesSession
             ? "handover"
             : "open";
-        startPlayback({ resumeAt: at, audioStreamIndex: initialAudioStreamIndex, cause: { why } });
+        startPlayback({
+          resumeAt: at,
+          audioStreamIndex: initialAudioStreamIndex,
+          ...(inheritedH264 ? { videoH264Only: true, forceAudioTranscode: true } : {}),
+          cause: inheritedH264 ? { why, rung: H264_RUNG, trigger: "image en H.264 héritée de l'épisode précédent" } : { why },
+        });
       }, () => {
         // Position inconnue, Jellyfin muet (14/10/2026, §92) : `resolveResumeAt` lève plutôt que de
         // rendre zéro — ouvrir au début aurait laissé nos rapports effacer la reprise. Le dire.
