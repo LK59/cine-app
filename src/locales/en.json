@@ -1530,10 +1530,20 @@
       "scanError": "The storage scan failed: {error}",
       "forecastAdminOnly": "Admins only",
       "monthlyGrowthLabel": "GB added per month (last 12 months)",
-      "legend": "What do the badges mean?"
+      "legend": "What do the badges mean?",
+      "scanPending": "Storage scan in progress…",
+      "forecastStableSamples": "Stable usage — no clear growth over the last {days} days",
+      "forecastMethodSamples": "Measured on actual disk usage (last {days} days)",
+      "forecastMethodImports": "Estimated from imported files, replacements included — disk readings: {days} of {min} days"
     },
     "empty": "Nothing to show yet",
-    "emptyHint": "The figures arrive once Radarr, Sonarr and Jellyfin have answered at least once."
+    "emptyHint": "The figures arrive once Radarr, Sonarr and Jellyfin have answered at least once.",
+    "unavailable": {
+      "radarr": "Radarr is not responding: movies count as zero here.",
+      "sonarr": "Sonarr is not responding: series and episodes count as zero here."
+    },
+    "diskPending": "Measuring the disk…",
+    "peoplePending": "Looking up actors and directors…"
   },
   "calendar": {
     "pageTitle": "Calendar",

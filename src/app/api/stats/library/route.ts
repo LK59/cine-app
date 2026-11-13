@@ -16,13 +16,23 @@ export interface LibraryStats {
   monthlySeries: Record<string, number>;
   genres: Record<string, number>;
   decades: Record<string, number>;
+  /**
+   * Les services qui n'ont pas répondu (13/11/2026) : leur part des chiffres vaut zéro. Radarr en
+   * panne, la page affichait « 0 film » sans un mot — une bibliothèque vide et une panne se lisaient
+   * pareil. Un service non configuré n'y figure pas : `cachedMovies`/`cachedSeries` rendent alors une
+   * liste vide sans lever (§89), et `NotConfiguredNote` le dit à sa façon.
+   */
+  unavailable: ("radarr" | "sonarr")[];
 }
 
 export async function GET() {
+  const unavailable: LibraryStats["unavailable"] = [];
   const [movies, series] = await Promise.all([
-    cachedMovies().catch(() => []),
-    cachedSeries().catch(() => []),
+    cachedMovies().catch(() => { unavailable.push("radarr"); return []; }),
+    cachedSeries().catch(() => { unavailable.push("sonarr"); return []; }),
   ]);
+  // L'ordre d'arrivée des pannes ne doit pas changer la réponse.
+  unavailable.sort();
 
   const quality: Record<string, number> = {};
   const monthlyMovies: Record<string, number> = {};
@@ -97,6 +107,7 @@ export async function GET() {
     monthlySeries,
     genres,
     decades,
+    unavailable,
   };
 
   return NextResponse.json(stats);

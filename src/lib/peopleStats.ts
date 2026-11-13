@@ -1,0 +1,200 @@
+import { tmdb, TMDB_IMAGE_BASE } from "@/lib/clients/tmdb";
+import { withPersistentCache, cachedMovies, cachedSeries } from "@/lib/server-cache";
+
+/** Les acteurs et réalisateurs les plus présents de la bibliothèque (page Statistiques). */
+
+export interface PeopleStat {
+  name: string;
+  count: number;
+  photoUrl: string | null;
+  tmdbId: number;
+}
+
+export interface PeopleStats {
+  topActors: PeopleStat[];
+  topDirectors: PeopleStat[];
+  computedAt: number;
+  computing: boolean;
+}
+
+interface CreditsResult {
+  created_by?: { id: number; name: string; profile_path?: string | null }[];
+  credits?: {
+    cast?: { id: number; name: string; profile_path?: string | null }[];
+    crew?: { id: number; name: string; job: string; profile_path?: string | null }[];
+  };
+}
+
+/**
+ * Seul ce que le décompte lit est gardé (08/10/2026) : les cinquante premiers rôles, les
+ * réalisateurs, les créateurs. Le titre TMDB entier était rangé sur disque et en mémoire — 768
+ * films, 37 Mo, 262 Ko pour le plus gros —, relu et analysé à chaque recalcul (130 ms de lectures
+ * SQLite et 180 ms d'analyse synchrones). Nouvelle clé `credits:v2:` : les anciennes entrées ne
+ * sont plus lues, et le ménage du cache les efface.
+ */
+function projectCredits(details: CreditsResult): CreditsResult {
+  const person = (p: { id: number; name: string; profile_path?: string | null }) => ({ id: p.id, name: p.name, profile_path: p.profile_path ?? null });
+  return {
+    created_by: (details.created_by ?? []).map(person),
+    credits: {
+      cast: (details.credits?.cast ?? []).slice(0, 50).map(person),
+      crew: (details.credits?.crew ?? []).filter((c) => c.job === "Director").map((c) => ({ ...person(c), job: c.job })),
+    },
+  };
+}
+
+/** Runs `fn` over `items` with at most `limit` in flight at once, settling like Promise.allSettled.
+ *  TMDB rate-limits bursty traffic — firing 700+ requests at once (one per movie/series) reliably
+ *  triggered 429s, and those failures used to get cached as "no credits" for 7 days (see below),
+ *  which is why the top-actors list used to differ on every reload. */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        results[i] = { status: "fulfilled", value: await fn(items[i]) };
+      } catch (reason) {
+        results[i] = { status: "rejected", reason };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+async function computePeopleStats(): Promise<Omit<PeopleStats, "computing">> {
+  const [movies, series] = await Promise.all([
+    cachedMovies().catch(() => []),
+    cachedSeries().catch(() => []),
+  ]);
+
+  const eligibleMovies = movies.filter((m) => m.tmdbId && m.hasFile);
+  const eligibleSeries = series.filter((s) => s.tmdbId && (s.statistics?.episodeFileCount ?? 0) > 0);
+
+  // Fetch credits for movies and series (cached per item for 7 days, on disk too — see
+  // withPersistentCache). Errors are NOT caught here: letting them reject means the cache never
+  // stores a failed fetch as if it were valid data, so a transient TMDB hiccup just gets retried
+  // on the next computation instead of poisoning the cache for a week.
+  const [movieResults, seriesResults] = await Promise.all([
+    mapWithConcurrency(eligibleMovies, 8, (m) =>
+      withPersistentCache(`credits:v2:movie:${m.tmdbId}`, 7 * 24 * 3600_000, async () => projectCredits(await tmdb.getMovie(m.tmdbId)))
+    ),
+    mapWithConcurrency(eligibleSeries, 8, (s) =>
+      withPersistentCache(`credits:v2:tv:${s.tmdbId}`, 7 * 24 * 3600_000, async () => projectCredits(await tmdb.getTv(s.tmdbId!)))
+    ),
+  ]);
+
+  const actorCount = new Map<number, { name: string; count: number; photoUrl: string | null }>();
+  const directorCount = new Map<number, { name: string; count: number; photoUrl: string | null }>();
+
+  function addDirector(id: number, name: string, profilePath?: string | null) {
+    const existing = directorCount.get(id);
+    if (existing) existing.count++;
+    else directorCount.set(id, {
+      name,
+      count: 1,
+      photoUrl: profilePath ? `${TMDB_IMAGE_BASE}/w185${profilePath}` : null,
+    });
+  }
+
+  function processCredits(result: PromiseSettledResult<CreditsResult | null>) {
+    if (result.status !== "fulfilled" || !result.value) return;
+    const credits = result.value.credits;
+
+    for (const actor of (credits?.cast ?? []).slice(0, 50)) {
+      const existing = actorCount.get(actor.id);
+      if (existing) existing.count++;
+      else actorCount.set(actor.id, {
+        name: actor.name,
+        count: 1,
+        photoUrl: actor.profile_path ? `${TMDB_IMAGE_BASE}/w185${actor.profile_path}` : null,
+      });
+    }
+
+    for (const creator of result.value.created_by ?? []) {
+      addDirector(creator.id, creator.name, creator.profile_path);
+    }
+
+    for (const crew of credits?.crew ?? []) {
+      if (crew.job !== "Director") continue;
+      addDirector(crew.id, crew.name, crew.profile_path);
+    }
+  }
+
+  for (const r of movieResults) processCredits(r as PromiseSettledResult<CreditsResult | null>);
+  for (const r of seriesResults) processCredits(r as PromiseSettledResult<CreditsResult | null>);
+
+  const topActors: PeopleStat[] = [...actorCount.entries()]
+    .map(([id, v]) => ({ tmdbId: id, ...v }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 30);
+
+  const topDirectors: PeopleStat[] = [...directorCount.entries()]
+    .map(([id, v]) => ({ tmdbId: id, ...v }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 30);
+
+  return { topActors, topDirectors, computedAt: Date.now() };
+}
+
+// ─── Fire-and-forget cache (mirrors storage-scan.ts) ──────────────────────────
+// This computation used to run synchronously inside the request (await withCache(...)), which
+// meant the very first load after a cache miss (e.g. right after a redeploy) blocked for the
+// full ~700-request TMDB fetch. Returning a stale/empty result immediately and recomputing in the
+// background keeps the stats page responsive at all times.
+
+const EMPTY: Omit<PeopleStats, "computing" | "computedAt"> = { topActors: [], topDirectors: [] };
+
+/**
+ * Sorti de la route le 13/11/2026 pour être préparé au démarrage (`statsPrewarm.ts`), et son état posé
+ * sur `globalThis` : `instrumentation.ts` et la route sont compilés en points d'entrée séparés, chacun
+ * avec sa copie du module — un calcul préparé dans l'une n'aurait jamais été lu par l'autre.
+ */
+interface PeopleState { cached: Omit<PeopleStats, "computing"> | null; running: Promise<void> | null }
+function state(): PeopleState {
+  const g = globalThis as unknown as Record<symbol, PeopleState | undefined>;
+  return (g[Symbol.for("laterna.peopleStats")] ??= { cached: null, running: null });
+}
+const CACHE_TTL_MS = 6 * 3600_000;
+
+async function computeAsync(): Promise<void> {
+  const st = state();
+  try {
+    st.cached = await computePeopleStats();
+  } catch {
+    // Keep serving the previous value (if any) rather than clobbering it with an error state.
+  } finally {
+    st.running = null;
+  }
+}
+
+function triggerCompute(): Promise<void> {
+  const st = state();
+  st.running ??= computeAsync();
+  return st.running;
+}
+
+export const EMPTY_PEOPLE_STATS: PeopleStats = { computedAt: 0, computing: false, ...EMPTY };
+
+export function getPeopleStats(forceRefresh = false): PeopleStats {
+  if (!tmdb.isEnabled()) return EMPTY_PEOPLE_STATS;
+  const st = state();
+  const expired = !st.cached || Date.now() - st.cached.computedAt > CACHE_TTL_MS;
+  if (forceRefresh || expired) void triggerCompute();
+  if (st.cached) return { ...st.cached, computing: st.running !== null };
+  return { computedAt: 0, computing: true, ...EMPTY };
+}
+
+/** Le calcul lancé (ou rejoint) et attendu, pour la préparation au démarrage. Rien sans TMDB. */
+export function warmPeopleStats(): Promise<void> {
+  if (!tmdb.isEnabled()) return Promise.resolve();
+  const st = state();
+  if (st.cached && Date.now() - st.cached.computedAt <= CACHE_TTL_MS) return st.running ?? Promise.resolve();
+  return triggerCompute();
+}

@@ -1530,10 +1530,20 @@
       "scanError": "L'analyse du stockage a échoué : {error}",
       "forecastAdminOnly": "Réservé aux administrateurs",
       "monthlyGrowthLabel": "Go ajoutés par mois (12 derniers mois)",
-      "legend": "Que disent les pastilles ?"
+      "legend": "Que disent les pastilles ?",
+      "scanPending": "Analyse du stockage en cours…",
+      "forecastStableSamples": "Utilisation stable — pas de croissance nette sur les {days} derniers jours",
+      "forecastMethodSamples": "Mesuré sur l'occupation réelle du disque ({days} derniers jours)",
+      "forecastMethodImports": "Estimé d'après les fichiers importés, remplacements compris — relevés du disque : {days} j sur {min}"
     },
     "empty": "Aucune statistique à afficher",
-    "emptyHint": "Les chiffres arrivent dès que Radarr, Sonarr et Jellyfin ont répondu au moins une fois."
+    "emptyHint": "Les chiffres arrivent dès que Radarr, Sonarr et Jellyfin ont répondu au moins une fois.",
+    "unavailable": {
+      "radarr": "Radarr ne répond pas : les films comptent pour zéro ici.",
+      "sonarr": "Sonarr ne répond pas : les séries et les épisodes comptent pour zéro ici."
+    },
+    "diskPending": "Mesure du disque en cours…",
+    "peoplePending": "Recherche des acteurs et réalisateurs en cours…"
   },
   "calendar": {
     "pageTitle": "Calendrier",

@@ -94,6 +94,19 @@ export async function register() {
     const { startCatalogueWarm } = await import("./lib/catalogueWarm");
     startCatalogueWarm();
 
+    // La page Statistiques préparée après les préchauffages du catalogue — mesure du disque, analyse du
+    // stockage, acteurs et réalisateurs — pour que sa première ouverture n'attende rien (13/11/2026,
+    // `statsPrewarm.ts`). Derrière l'interrupteur : une copie de test n'a pas à parcourir le disque ni
+    // à appeler TMDB d'elle-même.
+    const { startStatsPrewarm } = await import("./lib/statsPrewarm");
+    if (jobs) startStatsPrewarm();
+
+    // L'occupation réelle du disque relevée une fois par jour, pour la prévision de saturation
+    // (DECISIONS.md §153, `diskSamples.ts`). Pas sur une copie de test : sa base est une recopie, et
+    // ses relevés n'y serviraient à rien.
+    const { startDiskSampleCron } = await import("./lib/diskSamples");
+    if (jobs) startDiskSampleCron();
+
     // « Précédemment » (option, DECISIONS.md §137) : préparé en fond pour les séries laissées depuis
     // trois heures — la fiche n'attend jamais le modèle ni la lecture des sous-titres.
     const { startRecapCron } = await import("./lib/recap/service");
@@ -166,6 +179,7 @@ export async function register() {
       "tâches",
       "planifiées : services 1 min · torrents 15 s · demandes disponibles 5 min · « à voir » et nouveaux épisodes 1 h · " +
         "nouveaux comptes 5 min · liens de partage 1 min · sauvegarde 1×/jour · appareils Jellyfin 1×/jour · " +
+        "occupation du disque 1×/jour · statistiques préparées au démarrage · " +
         "listes de la bibliothèque relues avant d'expirer · hors ligne, sous-titres générés, répliques et intégrité selon leur file"
     );
 

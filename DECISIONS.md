@@ -10960,3 +10960,42 @@ pastilles, fenêtre), `CinemaMobileDetail` (film : rond, pastilles, fenêtre ; s
 - **Pas de rond quand Jellyfin a perdu le fichier** (`fileMissing`) : rien à décrire.
 - **Pas d'or.** Le blanc et le gris des fiches seulement : l'or de la marque dit ce qui est « à moi »
   (`design-tokens.test.ts`), et ni la dynamique d'un fichier ni sa piste par défaut ne le sont.
+
+## 153. La prévision de saturation suit l'occupation réelle du disque, relevée chaque jour (13/11/2026)
+
+**Règle.** La prévision de saturation (page Statistiques, administrateurs) prend la pente de l'occupation
+**réelle** du disque des médias — `df`, une ligne par jour dans `disk_samples` (`cine.db`, 400 jours au plus) —
+par moindres carrés sur les 90 derniers jours, dès **14 jours de relevés et 10 relevés au moins**. D'ici là, elle
+retombe sur l'ancienne méthode : la taille des fichiers importés chaque mois (moyenne des trois derniers mois
+complets). La page dit laquelle sert, en une ligne discrète sous la prévision.
+
+**Pourquoi.** Les imports comptent un remplacement par une meilleure version comme un ajout entier : octobre 2026
+affichait 4,36 To « ajoutés » pour un disque qui avait pris bien moins, puisque chaque fichier remplacé libère sa
+place. La date de saturation arrivait donc trop tôt. L'occupation réelle compte un remplacement pour sa différence,
+une suppression en moins, un seed en cours pour ce qu'il pèse — ce qui remplit vraiment le disque.
+
+**Le seuil.** L'occupation d'un jour bouge pour d'autres raisons que la croissance : un pack de saison qui se
+télécharge puis se lie, un remplacement qui double un film le temps de l'import, une passe de ménage. Sur une
+semaine, un seul de ces évènements fait la pente ; deux semaines couvrent deux fois le rythme du foyer (les demandes
+arrivent surtout le week-end) et la régression les absorbe. Dix relevés au moins : un serveur arrêté la plupart de
+ces jours ne trace pas une droite entre deux points. Attendre ne coûte rien, la méthode des imports répond d'ici là.
+
+**Porteurs.** `src/lib/diskSamples.ts` (`recordDiskSample`, `readDiskSamples`, `slopeFromSamples`,
+`sampleDiskOnce`, `startDiskSampleCron`, `MIN_SAMPLE_SPAN_DAYS`), `src/lib/diskUsage.ts` (`df`, sorti de
+`disk-stats.ts` : l'importer lançait l'inventaire complet), `computeDiskForecast` (`src/lib/diskForecast.ts`,
+champs `method`, `sampleDays`, `minSampleDays`). **Appelants.** `src/instrumentation.ts` (`if (jobs)
+startDiskSampleCron()` — un premier passage trois minutes après le démarrage, puis toutes les heures, une écriture
+par jour : le jour relevé est retenu en mémoire, puis lu dans la base, et l'insertion ne remplace jamais),
+`/api/stats/storage-forecast`, `ForecastLine` (`src/app/(dashboard)/stats/page.tsx`). **Tests.**
+`stats-disk-samples.test.ts`, `stats-prewarm.test.ts` (la garde `jobs`), `stats-pending.test.ts`,
+`diskForecast-zero-months.test.ts`, `stats-page-layout.test.tsx`.
+
+**Différent exprès.**
+- **Pas sur une copie de test** (`CINE_BACKGROUND_JOBS=off`, §145) : sa base est une recopie, ses relevés n'y
+  serviraient à rien et iraient se mêler à ceux d'une base qui n'est pas la sienne.
+- **Seule la taille de disque actuelle compte** : un disque agrandi change l'occupation d'un coup sans que la
+  bibliothèque ait grandi, donc les relevés d'avant un changement de `total` (à 0,1 % près) sont écartés.
+- **Un disque qui se vide est « stable »**, jamais une date dans le passé.
+- **La prévision est dite une fois**, sous la barre du disque, à côté de l'espace libre ; le graphique des imports
+  mensuels l'y accompagne. La section Stockage ne la répète plus.
+- **Gardé dans la sauvegarde** (`dbBackup`) : un historique de relevés perdu ne se reconstruit pas.

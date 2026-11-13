@@ -39,14 +39,69 @@ function ForecastLine({ forecast }: { forecast: DiskForecast | undefined }) {
   if (forecast.trend === "insufficient_data") {
     return <p className="text-xs text-subtle">{t('stats.storage.forecastInsufficientData')}</p>;
   }
+  // D'où vient la pente, en une mention discrète (13/11/2026, DECISIONS.md §153) : les relevés
+  // quotidiens du disque, ou les imports — remplacements compris, donc pessimistes — d'ici là.
+  const method = forecast.method === "samples"
+    ? t('stats.storage.forecastMethodSamples', { days: String(forecast.sampleDays) })
+    : forecast.method === "imports"
+      ? t('stats.storage.forecastMethodImports', { days: String(forecast.sampleDays), min: String(forecast.minSampleDays) })
+      : null;
+  const methodLine = method && <p className="mt-0.5 text-[11px] text-subtle">{method}</p>;
   if (forecast.trend === "stable") {
-    return <p className="text-xs text-subtle">{t('stats.storage.forecastStable', { months: String(forecast.monthsUsed) })}</p>;
+    const stable = forecast.method === "samples"
+      ? t('stats.storage.forecastStableSamples', { days: String(forecast.sampleDays) })
+      : t('stats.storage.forecastStable', { months: String(forecast.monthsUsed) });
+    return <div><p className="text-xs text-subtle">{stable}</p>{methodLine}</div>;
   }
   const rate = fmtSize((forecast.growthBytesPerDay ?? 0) * 7);
   const days = forecast.daysUntilFull ?? 0;
   const key = days < 7 ? 'stats.storage.forecastGrowingSoon' : 'stats.storage.forecastGrowing';
   const color = days < 14 ? "text-danger" : days < 45 ? "text-warning" : "text-muted";
-  return <p className={`text-xs ${color}`}>{t(key, { days: String(days), rate })}</p>;
+  return <div><p className={`text-xs ${color}`}>{t(key, { days: String(days), rate })}</p>{methodLine}</div>;
+}
+
+/**
+ * La place d'un bloc qui arrive tard, tenue d'avance (13/11/2026) : la mesure du disque, l'analyse du
+ * stockage et les acteurs se calculent en arrière-plan, et chacun en arrivant poussait la suite de la
+ * page de plusieurs centaines de pixels — ce qu'on lisait sautait. Des cartes vides à peu près de la
+ * taille du bloc final, et une ligne qui dit ce qui se calcule.
+ */
+function PendingCard({ className }: { className: string }) {
+  return <div aria-hidden className={`card animate-pulse bg-white/[0.02] ${className}`} />;
+}
+
+function PendingHeading({ title, label }: { title: string; label: string }) {
+  return (
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <h2 className="text-sm font-semibold text-white">{title}</h2>
+      <span role="status" className="flex items-center gap-1.5 text-xs text-subtle">
+        <RefreshCw size={12} className="animate-spin" /> {label}
+      </span>
+    </div>
+  );
+}
+
+/** La section Stockage avant sa première analyse : même grille, mêmes rangées. */
+function StorageSectionPlaceholder() {
+  const t = useT();
+  return (
+    <section className="mb-8" data-testid="storage-placeholder">
+      <PendingHeading title={t('stats.storage.title')} label={t('stats.storage.scanPending')} />
+      <div className="mb-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <PendingCard className="h-[108px]" />
+        <PendingCard className="h-[108px]" />
+      </div>
+      <div className="mb-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <PendingCard className="h-[360px]" />
+        <PendingCard className="h-[360px]" />
+      </div>
+      <div className="mb-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <PendingCard className="h-[360px]" />
+        <PendingCard className="h-[360px]" />
+      </div>
+      <PendingCard className="h-[360px]" />
+    </section>
+  );
 }
 
 /**
@@ -229,7 +284,7 @@ function ListCard({ icon: Icon, iconColor, title, count, emptyLabel, legend, chi
   );
 }
 
-function StorageSection({ storage, onRefresh, forecast, isAdmin }: { storage: StorageStats; onRefresh: () => void; forecast: DiskForecast | undefined; isAdmin: boolean }) {
+function StorageSection({ storage, onRefresh }: { storage: StorageStats; onRefresh: () => void }) {
   const t = useT();
   const movieMax = Math.max(storage.movieFiles.total, 1);
   const seriesMax = Math.max(storage.seriesFiles.total, 1);
@@ -265,16 +320,8 @@ function StorageSection({ storage, onRefresh, forecast, isAdmin }: { storage: St
         </p>
       )}
 
-      {isAdmin && (
-        <div className="card mb-5 p-4">
-          <h3 className="mb-1.5 text-sm font-semibold text-muted">{t('stats.storage.forecastTitle')}</h3>
-          <ForecastLine forecast={forecast} />
-          {forecast && forecast.monthlyGrowth.some((m) => m.bytes > 0) && (
-            <MonthlyGrowthChart monthlyGrowth={forecast.monthlyGrowth} />
-          )}
-        </div>
-      )}
-
+      {/* La prévision de saturation n'est plus ici (13/11/2026) : elle était dite deux fois, sous la
+          barre du disque et dans cette section. Elle reste sous la barre, à côté de l'espace libre. */}
       <div className="mb-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card p-4 space-y-3">
           <HBar label={t('stats.storage.hardlinkMovies')} value={storage.movieFiles.hardlinked} max={movieMax}
@@ -417,13 +464,14 @@ export default function StatsPage() {
   );
   // Les quatre sources calculées en arrière-plan reviennent vite tant que le serveur calcule, puis
   // au rythme lent : la première réponse après un démarrage est vide (`statsRefreshInterval`).
-  const { data: disk } = useSWR<DiskStats>("/api/stats", fetcher, { refreshInterval: statsRefreshInterval });
+  // Les erreurs servent aux places tenues d'avance : une source qui a échoué n'est pas « en cours ».
+  const { data: disk, error: diskError } = useSWR<DiskStats>("/api/stats", fetcher, { refreshInterval: statsRefreshInterval });
   const additionsTip = useBarTip();
   // Regular (polling) SWR, not immutable: the route now returns instantly with a possibly-stale
   // or empty result while it recomputes in the background (fire-and-forget, like storage stats),
   // so the client needs to keep checking back until the first computation lands.
-  const { data: people } = useSWR<PeopleStats>("/api/stats/people", fetcher, { refreshInterval: statsRefreshInterval });
-  const { data: storage, mutate: refreshStorage } = useSWR<StorageStats>("/api/stats/storage", fetcher, { refreshInterval: statsRefreshInterval });
+  const { data: people, error: peopleError } = useSWR<PeopleStats>("/api/stats/people", fetcher, { refreshInterval: statsRefreshInterval });
+  const { data: storage, error: storageError, mutate: refreshStorage } = useSWR<StorageStats>("/api/stats/storage", fetcher, { refreshInterval: statsRefreshInterval });
   // Admin-only, both server- (403 for guests) and client-gated — null key skips the fetch entirely.
   const { data: forecast } = useSWR<DiskForecast>(
     isAdmin ? "/api/stats/storage-forecast" : null,
@@ -485,6 +533,13 @@ export default function StatsPage() {
 
       {lib && (
         <>
+          {/* Radarr ou Sonarr en panne : leur part vaut zéro, et la page le dit au lieu de montrer une
+              bibliothèque vide (13/11/2026). `?.` : une réponse d'avant ce champ ne l'a pas. */}
+          {lib.unavailable?.map((service) => (
+            <p key={service} role="status" className="mb-3 flex items-center gap-1.5 text-xs text-warning" data-testid={`unavailable-${service}`}>
+              <AlertTriangle size={12} /> {t(`stats.unavailable.${service}`)}
+            </p>
+          ))}
           {/* Summary cards */}
           <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <StatCard icon={Film} label={t('stats.cards.movies')} value={lib.movies.total}
@@ -531,19 +586,33 @@ export default function StatsPage() {
                   <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-white/20" />{t('stats.diskLegend.other')} — {fmtSize(Math.max(0, disk.disk.used - disk.moviesBytes - disk.tvBytes - disk.seedsBytes))}</span>
                   <span className="ml-auto text-subtle">{t('stats.diskUsed', { pct: ((disk.disk.used / disk.disk.total) * 100).toFixed(1) })}</span>
                 </div>
+                {/* La prévision, une seule fois, ici (13/11/2026) — et le graphique des imports qui
+                    sert de repli tant que les relevés du disque sont trop courts. */}
                 {isAdmin && (
-                  <div className="mt-3 border-t border-white/5 pt-3">
+                  <div className="mt-3 border-t border-white/5 pt-3" data-testid="disk-forecast">
                     <ForecastLine forecast={forecast} />
+                    {forecast && forecast.monthlyGrowth.some((m) => m.bytes > 0) && (
+                      <MonthlyGrowthChart monthlyGrowth={forecast.monthlyGrowth} />
+                    )}
                   </div>
                 )}
               </div>
             </section>
           )}
+          {/* La mesure du disque pas encore rendue : sa place est tenue (pas après un échec ni sans
+              dossier de médias — `computing` est alors faux, et la section n'a rien à montrer). */}
+          {(!disk ? !diskError : disk.computing === true && disk.disk.total <= 0) && (
+            <section className="mb-8" data-testid="disk-placeholder">
+              <PendingHeading title={t('stats.diskStorage')} label={t('stats.diskPending')} />
+              <PendingCard className={isAdmin ? "h-[250px]" : "h-[80px]"} />
+            </section>
+          )}
 
           {/* Storage cleanup */}
           {storage && storage.computedAt > 0 && (
-            <StorageSection storage={storage} onRefresh={handleStorageRefresh} forecast={forecast} isAdmin={isAdmin} />
+            <StorageSection storage={storage} onRefresh={handleStorageRefresh} />
           )}
+          {(!storage ? !storageError : storage.computedAt === 0) && <StorageSectionPlaceholder />}
 
           {/* Monthly additions */}
           <section className="mb-8">
@@ -672,6 +741,15 @@ export default function StatsPage() {
             <section className="mb-8">
               <h2 className="mb-3 text-sm font-semibold text-white">{t('stats.topPeople')}</h2>
               <TopPeopleSection people={people} />
+            </section>
+          )}
+          {(!people ? !peopleError : people.computing && people.computedAt === 0) && (
+            <section className="mb-8" data-testid="people-placeholder">
+              <PendingHeading title={t('stats.topPeople')} label={t('stats.peoplePending')} />
+              <div className="grid gap-5 md:grid-cols-2">
+                <PendingCard className="h-[1630px]" />
+                <PendingCard className="h-[1630px]" />
+              </div>
             </section>
           )}
         </>

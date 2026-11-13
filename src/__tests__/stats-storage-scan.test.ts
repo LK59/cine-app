@@ -203,3 +203,30 @@ describe("loopBreather — l'analyse rend la main au serveur", () => {
     expect(order).toEqual(["calcul (10 ms)", "requête en attente", "calcul (25 ms)"]);
   });
 });
+
+describe("fsSlots — le parcours du disque borne ce qu'il a en vol", () => {
+  // 13/11/2026 : ~35 000 `stat`/`readdir` lancés d'un coup, relus par la boucle en une passe — des
+  // blocages de 250 à 770 ms mesurés sur la production (`stats-scan-bench.spec.ts`).
+  it("n'a jamais plus de `max` opérations en vol, et les finit toutes", async () => {
+    const { fsSlots } = await import("@/lib/storage-scan");
+    const slot = fsSlots(3);
+    let active = 0;
+    let peak = 0;
+    const results = await Promise.all(Array.from({ length: 20 }, (_, i) => slot(async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((r) => setTimeout(r, 1));
+      active--;
+      return i;
+    })));
+    expect(peak).toBe(3);
+    expect(results).toEqual(Array.from({ length: 20 }, (_, i) => i));
+  });
+
+  it("libère sa place quand une opération échoue", async () => {
+    const { fsSlots } = await import("@/lib/storage-scan");
+    const slot = fsSlots(1);
+    await expect(slot(async () => { throw new Error("EACCES"); })).rejects.toThrow("EACCES");
+    expect(await slot(async () => "suite")).toBe("suite");
+  });
+});

@@ -2,6 +2,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
 import { MEDIA_ROOT, MOVIES_PATH, TV_PATH, SEEDS_PATH } from "@/lib/media-paths";
+import { dfStatsAsync, parseDfLine, UNKNOWN_DISK } from "@/lib/diskUsage";
 
 const execAsync = promisify(exec);
 
@@ -26,8 +27,17 @@ export interface DiskStats {
 
 // ─── Internal state ───────────────────────────────────────────────────────────
 
-let cached: DiskStats | null = null;
-let computing = false;
+/**
+ * L'état vit sur `globalThis` (13/11/2026), comme le cache du serveur : la préparation au démarrage
+ * (`statsPrewarm.ts`, lancée par `instrumentation.ts`) et les routes sont compilées en points d'entrée
+ * séparés, chacun avec sa copie de ce module — une mesure préparée dans l'une n'aurait jamais été lue
+ * par l'autre.
+ */
+interface DiskState { cached: DiskStats | null; computing: boolean }
+function state(): DiskState {
+  const g = globalThis as unknown as Record<symbol, DiskState | undefined>;
+  return (g[Symbol.for("laterna.diskStats")] ??= { cached: null, computing: false });
+}
 const CACHE_TTL_MS = 10 * 60_000;
 
 /** Maps "dev:ino" -> size for every regular file under `path`, deduping hardlinks
@@ -62,33 +72,9 @@ function sumSizes(map: Map<string, number>): number {
   return total;
 }
 
-async function dfStatsAsync(path: string): Promise<{ total: number; used: number; free: number }> {
-  try {
-    // -P (POSIX format) forces single-line output regardless of filesystem name length.
-    // Without it, `df` wraps onto a second line once the filesystem name is long enough
-    // (e.g. a ZFS dataset or LVM name) — `tail -1` would then grab a line that happens to
-    // start with the numeric columns instead of the filesystem name, shifting every field
-    // by one. That only "worked" here by accident, for however long the mount's name stayed
-    // long enough to trigger the wrap.
-    const { stdout } = await execAsync(`df -B1 -P "${path}" 2>/dev/null | tail -1`, { timeout: 5_000 });
-    return parseDfLine(stdout);
-  } catch { return { total: -1, used: -1, free: -1 }; }
-}
-
-const UNKNOWN_DISK = { total: -1, used: -1, free: -1 };
-
-/**
- * La dernière ligne de `df -B1 -P`. Sur un chemin absent, `df` n'écrit que son en-tête, et
- * `tail -1` le rendait : « 1-blocks » se lisait 1 octet, « Used » et « Available » NaN — la carte
- * Stockage d'une installation sans dossier de médias affichait « — libres sur 1.0 B » (13/10/2026).
- * Tout ce qui n'est pas trois nombres est « inconnu ».
- */
-export function parseDfLine(stdout: string): { total: number; used: number; free: number } {
-  const parts = stdout.trim().split(/\s+/);
-  const [total, used, free] = [parts[1], parts[2], parts[3]].map((p) => (p !== undefined && /^\d+$/.test(p) ? Number(p) : NaN));
-  if (!Number.isFinite(total) || !Number.isFinite(used) || !Number.isFinite(free) || total <= 0) return UNKNOWN_DISK;
-  return { total, used, free };
-}
+// `df` et sa lecture vivent dans `diskUsage.ts` (13/11/2026) : le relevé quotidien de l'occupation
+// (`diskSamples.ts`) en a besoin sans importer ce module, dont le chargement lance l'inventaire entier.
+export { parseDfLine };
 
 /** Le dossier des médias existe-t-il dans le conteneur ? Sans lui, il n'y a rien à mesurer. */
 async function mediaRootPresent(): Promise<boolean> {
@@ -100,9 +86,10 @@ async function mediaRootPresent(): Promise<boolean> {
 }
 
 async function computeAsync(): Promise<void> {
+  const st = state();
   try {
     if (!(await mediaRootPresent())) {
-      cached = { moviesBytes: 0, tvBytes: 0, seedsBytes: 0, disk: UNKNOWN_DISK, computedAt: Date.now(), computing: false, error: null, mediaMissing: true };
+      st.cached = { moviesBytes: 0, tvBytes: 0, seedsBytes: 0, disk: UNKNOWN_DISK, computedAt: Date.now(), computing: false, error: null, mediaMissing: true };
       return;
     }
     const [movieInodes, tvInodes, seedInodes, disk] = await Promise.all([
@@ -122,29 +109,31 @@ async function computeAsync(): Promise<void> {
       if (!movieInodes.has(key) && !tvInodes.has(key)) seedsBytes += size;
     }
 
-    cached = { moviesBytes, tvBytes, seedsBytes, disk, computedAt: Date.now(), computing: false, error: null };
+    st.cached = { moviesBytes, tvBytes, seedsBytes, disk, computedAt: Date.now(), computing: false, error: null };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    cached = cached
-      ? { ...cached, computing: false, error: msg }
+    st.cached = st.cached
+      ? { ...st.cached, computing: false, error: msg }
       : { moviesBytes: -1, tvBytes: -1, seedsBytes: -1, disk: { total: -1, used: -1, free: -1 }, computedAt: Date.now(), computing: false, error: msg };
   } finally {
-    computing = false;
+    st.computing = false;
   }
 }
 
 function triggerCompute(): void {
-  if (computing) return;
-  computing = true;
+  const st = state();
+  if (st.computing) return;
+  st.computing = true;
   computeAsync(); // fire-and-forget — truly non-blocking
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export function getDiskStats(forceRefresh = false): DiskStats {
-  const expired = !cached || Date.now() - cached.computedAt > CACHE_TTL_MS;
+  const st = state();
+  const expired = !st.cached || Date.now() - st.cached.computedAt > CACHE_TTL_MS;
   if (forceRefresh || expired) triggerCompute();
-  if (cached) return { ...cached, computing };
+  if (st.cached) return { ...st.cached, computing: st.computing };
   return { moviesBytes: -1, tvBytes: -1, seedsBytes: -1, disk: { total: -1, used: -1, free: -1 }, computedAt: 0, computing: true, error: null };
 }
 

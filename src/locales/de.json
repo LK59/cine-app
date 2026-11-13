@@ -1530,10 +1530,20 @@
       "scanError": "Die Speicheranalyse ist fehlgeschlagen: {error}",
       "forecastAdminOnly": "Nur für Administratoren",
       "monthlyGrowthLabel": "GB pro Monat hinzugefügt (letzte 12 Monate)",
-      "legend": "Was bedeuten die Markierungen?"
+      "legend": "Was bedeuten die Markierungen?",
+      "scanPending": "Speicheranalyse läuft …",
+      "forecastStableSamples": "Stabile Nutzung — kein klares Wachstum in den letzten {days} Tagen",
+      "forecastMethodSamples": "Gemessen an der tatsächlichen Belegung des Datenträgers (letzte {days} Tage)",
+      "forecastMethodImports": "Geschätzt aus importierten Dateien, Ersetzungen inbegriffen — Messungen des Datenträgers: {days} von {min} Tagen"
     },
     "empty": "Noch nichts anzuzeigen",
-    "emptyHint": "Die Zahlen erscheinen, sobald Radarr, Sonarr und Jellyfin mindestens einmal geantwortet haben."
+    "emptyHint": "Die Zahlen erscheinen, sobald Radarr, Sonarr und Jellyfin mindestens einmal geantwortet haben.",
+    "unavailable": {
+      "radarr": "Radarr antwortet nicht: Filme zählen hier als null.",
+      "sonarr": "Sonarr antwortet nicht: Serien und Episoden zählen hier als null."
+    },
+    "diskPending": "Datenträger wird gemessen …",
+    "peoplePending": "Schauspieler und Regisseure werden gesucht …"
   },
   "calendar": {
     "pageTitle": "Kalender",

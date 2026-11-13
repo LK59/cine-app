@@ -83,6 +83,25 @@ describe("GET /api/stats/library", () => {
     expect(body.decades).toEqual({ "1990s": 2, "2020s": 1 });
   });
 
+  // 13/11/2026 : Radarr en panne, la route rendait une liste vide et la page « 0 film » sans un mot.
+  it("nomme le service qui n'a pas répondu, et lui seul", async () => {
+    mockCachedMovies.mockRejectedValue(new Error("ECONNREFUSED"));
+    mockCachedSeries.mockResolvedValue([{ statistics: { episodeCount: 3, episodeFileCount: 3 }, genres: [] }]);
+    const { GET } = await import("@/app/api/stats/library/route");
+    const body = await (await GET()).json();
+    expect(body.unavailable).toEqual(["radarr"]);
+    expect(body.movies.total).toBe(0);
+    expect(body.series.total).toBe(1);
+
+    mockCachedSeries.mockRejectedValue(new Error("timeout"));
+    expect((await (await GET()).json()).unavailable).toEqual(["radarr", "sonarr"]);
+
+    mockCachedMovies.mockResolvedValue([]);
+    mockCachedSeries.mockResolvedValue([]);
+    // Deux listes vides qui ont répondu (ou un service non configuré, §89) : rien à signaler.
+    expect((await (await GET()).json()).unavailable).toEqual([]);
+  });
+
   it("sums episode counts across all series", async () => {
     mockCachedSeries.mockResolvedValue([
       { statistics: { episodeCount: 10, episodeFileCount: 8 }, genres: [] },

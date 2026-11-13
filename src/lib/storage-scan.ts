@@ -118,11 +118,38 @@ function parseReleaseKey(name: string): { key: string; kind: "movie" | "series";
   return null;
 }
 
+/**
+ * Au plus `max` opérations de fichier en vol à la fois (13/11/2026).
+ *
+ * Le parcours lançait d'un coup un `stat` par fichier et un `readdir` par dossier — ~35 000 sur la vraie
+ * bibliothèque. Les fils de libuv les finissent plus vite que la boucle ne les relit, et la boucle relit
+ * en une passe tout ce qui est fini : mesuré sur la production (`stats-scan-bench.spec.ts`), des blocages
+ * de 250 à 770 ms d'un trait pendant le parcours, alors que le reste de l'analyse rendait déjà la main
+ * toutes les ~20 ms. Trente-deux en vol bornent ce qu'une passe peut avoir à relire.
+ */
+export function fsSlots(max: number): <T>(fn: () => Promise<T>) => Promise<T> {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (active >= max) await new Promise<void>((resolve) => waiting.push(resolve));
+    active++;
+    try {
+      return await fn();
+    } finally {
+      active--;
+      waiting.shift()?.();
+    }
+  };
+}
+
+const FS_SLOTS = 32;
+const fsSlot = fsSlots(FS_SLOTS);
+
 async function walk(root: string, depth = 0, maxDepth = 8): Promise<FileStat[]> {
   if (depth > maxDepth) return [];
   let entries;
   try {
-    entries = await fs.readdir(root, { withFileTypes: true });
+    entries = await fsSlot(() => fs.readdir(root, { withFileTypes: true }));
   } catch {
     return [];
   }
@@ -138,7 +165,7 @@ async function walk(root: string, depth = 0, maxDepth = 8): Promise<FileStat[]> 
     fileEntries.map(async (e): Promise<FileStat | null> => {
       const full = path.join(root, e.name);
       try {
-        const st = await fs.stat(full);
+        const st = await fsSlot(() => fs.stat(full));
         return { name: e.name, relPath: path.relative(MEDIA_ROOT, full), size: st.size, dev: st.dev, ino: st.ino, nlink: st.nlink, mtimeMs: st.mtimeMs };
       } catch {
         return null;
@@ -238,7 +265,17 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   // just re-seed the leftover, or the file will reappear if it re-checks the torrent). qBittorrent
   // names a torrent's save folder (or the file itself, for single-file torrents) after the
   // torrent's own name — matching against any path segment works regardless of nesting depth.
-  const activeTorrentNames = new Set(qbTorrents.map((t) => t.name.trim().toLowerCase()));
+  //
+  // Respiration dès ici (13/11/2026) : mesuré sur la production, la fin du parcours enchaînait sans
+  // rendre la main la lecture de la liste qBittorrent, cet index, les titres des films et l'index des
+  // seeds — ~150 ms d'un trait, chaque morceau sous les 20 ms du souffle mais aucun ne l'appelant.
+  const breathe = loopBreather();
+  await yieldToLoop();
+  const activeTorrentNames = new Set<string>();
+  for (const t of qbTorrents) {
+    await breathe();
+    activeTorrentNames.add(t.name.trim().toLowerCase());
+  }
   function isActiveInQbittorrent(relPaths: string[]): boolean {
     if (activeTorrentNames.size === 0) return false;
     for (const relPath of relPaths) {
@@ -256,9 +293,12 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   // English-titled seed release vs. the library's French title) — the plain filename
   // key alone would treat them as two unrelated movies. Reuse the same fuzzy
   // localized/original-title matching used by search, keyed by year to keep it cheap.
-  const breathe = loopBreather();
   const hintsByYear = new Map<number, MovieHint[]>();
   for (const m of radarrMovies) {
+    // Relu le 13/11/2026 : `movieHintOf` lit les titres traduits (`getTitleNames`), dans SQLite pour
+    // un film que la mémoire n'a pas encore — près d'un millier de lectures synchrones d'un trait
+    // quand l'analyse part avant le préchauffage des titres. La boucle respire comme les autres.
+    await breathe();
     const arr = hintsByYear.get(m.year);
     const hint = movieHintOf(m);
     if (arr) arr.push(hint);
@@ -355,6 +395,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
 
   const seedIndex = new Map<string, SeedFile[]>();
   for (const f of seedFiles) {
+    await breathe();
     const key = `${f.dev}:${f.ino}`;
     const arr = seedIndex.get(key);
     if (arr) arr.push(f);
@@ -518,8 +559,15 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   notHardlinked.sort((a, b) => b.sizeBytes - a.sizeBytes);
 
   const addedAt = await libraryDatesAdded(radarrMovies, sonarrSeries);
-  const monthlyGrowth = computeMonthlyGrowth([...movieItems, ...seriesItems], (item, f) =>
-    addedAt.get(libraryKey(item.type, f.relPath)));
+  // La date de chaque fichier lue d'avance, en respirant (13/11/2026) : `libraryKey` (deux opérations de
+  // chemin par fichier) dans `computeMonthlyGrowth` tenait la boucle 80 à 100 ms d'un trait, mesuré sur
+  // la production. Le calcul lui-même reste synchrone : une table de dates, il ne fait que ranger.
+  const dateOf = new Map<FileStat, number | undefined>();
+  for (const item of [...movieItems, ...seriesItems]) {
+    await breathe();
+    for (const f of item.files) dateOf.set(f, addedAt.get(libraryKey(item.type, f.relPath)));
+  }
+  const monthlyGrowth = computeMonthlyGrowth([...movieItems, ...seriesItems], (_item, f) => dateOf.get(f));
 
   return {
     computedAt: Date.now(),
@@ -682,33 +730,53 @@ const EMPTY: Omit<StorageStats, "computing" | "computedAt" | "error"> = {
   monthlyGrowth: [],
 };
 
-let cached: Omit<StorageStats, "computing"> | null = null;
-let computing = false;
+/**
+ * L'état vit sur `globalThis` (13/11/2026), comme le cache du serveur : l'analyse préparée au
+ * démarrage (`statsPrewarm.ts`, depuis `instrumentation.ts`) l'est dans une autre copie de ce module
+ * que celle de la route — sans cela, la route ne l'aurait jamais lue et l'aurait refaite.
+ */
+interface ScanState { cached: Omit<StorageStats, "computing"> | null; running: Promise<void> | null }
+function state(): ScanState {
+  const g = globalThis as unknown as Record<symbol, ScanState | undefined>;
+  return (g[Symbol.for("laterna.storageScan")] ??= { cached: null, running: null });
+}
 const CACHE_TTL_MS = 30 * 60_000;
 
 async function computeAsync(): Promise<void> {
+  const st = state();
   try {
-    cached = await computeStorageStats();
+    st.cached = await computeStorageStats();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    cached = cached ? { ...cached, error: msg } : { computedAt: Date.now(), error: msg, ...EMPTY };
+    st.cached = st.cached ? { ...st.cached, error: msg } : { computedAt: Date.now(), error: msg, ...EMPTY };
   } finally {
-    computing = false;
+    st.running = null;
   }
 }
 
-function triggerCompute(): void {
-  if (computing) return;
-  computing = true;
-  computeAsync();
+function triggerCompute(): Promise<void> {
+  const st = state();
+  st.running ??= computeAsync();
+  return st.running;
 }
 
 export function getStorageStats(forceRefresh = false): StorageStats {
-  const expired = !cached || Date.now() - cached.computedAt > CACHE_TTL_MS;
-  if (forceRefresh || expired) triggerCompute();
-  if (cached) return { ...cached, computing };
+  const st = state();
+  const expired = !st.cached || Date.now() - st.cached.computedAt > CACHE_TTL_MS;
+  if (forceRefresh || expired) void triggerCompute();
+  if (st.cached) return { ...st.cached, computing: st.running !== null };
   return { computedAt: 0, computing: true, error: null, ...EMPTY };
 }
 
+/**
+ * L'analyse lancée (ou rejointe si elle tourne) et attendue : la préparation au démarrage enchaîne
+ * ses calculs l'un après l'autre plutôt que de les lancer ensemble (`statsPrewarm.ts`).
+ */
+export function warmStorageStats(): Promise<void> {
+  const st = state();
+  if (st.cached && Date.now() - st.cached.computedAt <= CACHE_TTL_MS) return st.running ?? Promise.resolve();
+  return triggerCompute();
+}
+
 // Warm up on module load
-triggerCompute();
+void triggerCompute();

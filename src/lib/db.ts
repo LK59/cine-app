@@ -990,6 +990,19 @@ function migrate(db: Database.Database): void {
   `);
   // L'appareil de la dernière page lue (§129) : l'activité dit « lu en dernier sur iPhone ».
   try { db.exec("ALTER TABLE book_progress ADD COLUMN last_device TEXT"); } catch { /* already exists */ }
+  // L'occupation réelle du disque des médias, relevée une fois par jour (13/11/2026, DECISIONS.md §153,
+  // `diskSamples.ts`) : la prévision de saturation suit sa pente au lieu d'additionner les imports,
+  // remplacements compris. Une ligne par jour, 400 jours au plus — gardée dans la sauvegarde : un
+  // historique perdu ne se reconstruit pas.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS disk_samples (
+      day         TEXT    PRIMARY KEY,
+      used_bytes  INTEGER NOT NULL,
+      free_bytes  INTEGER NOT NULL,
+      total_bytes INTEGER NOT NULL,
+      sampled_at  INTEGER NOT NULL
+    );
+  `);
   seedInitialNews(db);
   // En brouillon : Louis la publie depuis Activité → Nouveautés une fois la fonction testée (12/10/2026).
   seedNewsPage(db, NEWS_848_SEED, NEWS_848_VERSION, NEWS_848_CONTENT, Date.now(), "draft");
