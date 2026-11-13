@@ -178,8 +178,13 @@ export function CinemaEpisodeBrowser({
   // Échap et Retour arrière referment ; une feuille ouverte depuis une ligne (téléchargement hors
   // ligne) a ses touches — Échap la referme, elle, pas cet écran derrière elle (règle 2 des fiches).
   // La règle de toutes les fiches : `useSheetKeys`.
+  //
+  // Ni pendant sa sortie (`closing`, 13/11/2026, règle 2) : Échap puis Entrée sur l'épisode focalisé —
+  // ou un clic — dans les 220 ms de l'animation lançait l'épisode, puis la fermeture différée faisait
+  // son `history.back()`, qui retirait l'entrée du lecteur à peine posée : l'épisode s'ouvrait et se
+  // refermait aussitôt, et l'écran restait dans l'adresse.
   useSheetKeys({
-    listening: !playerOwnsKeyboard,
+    listening: !playerOwnsKeyboard && !closing,
     onClose: requestClose,
     onKey: (e) => {
       const active = document.activeElement as HTMLElement | null;
@@ -244,7 +249,8 @@ export function CinemaEpisodeBrowser({
       // Le rail du lecteur est posé sur le bord gauche de l'écran, au-dessus de cette fiche :
       // sans ce retrait, la colonne de texte et le bouton Retour passeraient dessous. La variable
       // vaut 0 partout ailleurs, donc rien ne bouge hors du lecteur.
-      style={{ zIndex: 49, paddingLeft: "var(--player-rail, 0px)" }}
+      // Sortant, il ne prend plus rien au pointeur (règle 2 des fiches) — voir `useSheetKeys` plus haut.
+      style={{ zIndex: 49, paddingLeft: "var(--player-rail, 0px)", pointerEvents: closing ? "none" : undefined }}
     >
       <SheetBackButton onClick={requestClose} />
 
@@ -317,7 +323,8 @@ export function CinemaEpisodeBrowser({
                 // Focalisable quand même : les flèches parcourent la liste et font défiler le synopsis.
                 aria-disabled={!playerEnabled || undefined}
                 onClick={(e) => {
-                  if (!playerEnabled) return;
+                  // Entrée sur un bouton déjà focalisé passe outre `pointer-events` : la garde est ici aussi.
+                  if (!playerEnabled || closing) return;
                   lastPlayed.current = e.currentTarget;
                   onPlayEpisode(ep);
                 }}

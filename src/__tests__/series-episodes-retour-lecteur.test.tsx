@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, cleanup, waitFor, act } from "@testing-library/react";
+import { render, cleanup, waitFor, act, fireEvent } from "@testing-library/react";
 import { SWRConfig } from "swr";
 
 /**
@@ -10,8 +10,8 @@ import { SWRConfig } from "swr";
  * Entrée lançait l'épisode « À suivre » au lieu de celui qu'on voyait (13/11/2026). Le focus revient sur
  * l'écran des épisodes.
  */
-const S = vi.hoisted(() => ({ mode: "full" as "idle" | "full" }));
-vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: S.mode, play: vi.fn() }) }));
+const S = vi.hoisted(() => ({ mode: "full" as "idle" | "full", play: vi.fn() }));
+vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => ({ mode: S.mode, play: S.play }) }));
 vi.mock("@/lib/usePlayerEnabled", () => ({
   usePlayerEnabled: () => true,
   usePlayerEnabledState: () => true,
@@ -138,5 +138,27 @@ describe("« Plus d'épisodes » sous le lecteur, le lecteur refermé (13/11/202
     await waitFor(() => expect(document.body.querySelector('[data-episode-season="true"]')).not.toBeNull());
     await frames();
     expect(document.body.querySelectorAll('[data-episode-season="true"]')).toHaveLength(1);
+  });
+
+  /**
+   * Échap, puis Entrée sur l'épisode focalisé pendant les 220 ms de la sortie : l'épisode partait, et la
+   * fermeture différée retirait aussitôt l'entrée d'historique du lecteur (règle 2 des fiches, 13/11/2026).
+   */
+  it("pendant sa sortie, l'écran des épisodes ne lance plus d'épisode", async () => {
+    S.mode = "idle";
+    S.play.mockClear();
+    window.history.replaceState(null, "", "/#serie=7&episodes=1&tab=series");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <CinemaSeriesDetail item={SERIES} onClose={vi.fn()} />
+      </SWRConfig>
+    );
+    await waitFor(() => expect(document.body.querySelector('[data-episode-item="true"]')).not.toBeNull());
+    await frames();
+    const episode = document.body.querySelector<HTMLButtonElement>('[data-episode-item="true"]')!;
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.click(episode);
+    expect(S.play).not.toHaveBeenCalled();
   });
 });
