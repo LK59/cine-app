@@ -128,3 +128,17 @@ export async function readCatalogueBody<T>(url: string, res: Response): Promise<
 export function catalogueTitles<T>(payload: Pick<HydratedPayload<T>, "items" | "spotlight" | "rows">): T[] {
   return payload.items ?? [...payload.spotlight, ...Object.values(payload.rows).flat()];
 }
+
+/**
+ * Le catalogue est-il vide — aucun titre du tout, pour ce compte ?
+ *
+ * Les écrans le lisaient sur la sélection (`spotlight.length === 0`) : les dix dernières arrivées,
+ * **filtrées par les tags bloqués du compte** (`withoutHidden`). Un compte dont les tags couvrent les
+ * dix derniers imports recevait une sélection vide sur des centaines de titres visibles, et le bureau
+ * le prenait pour une bibliothèque vide : « bibliothèque vide » en plein écran, sans onglet Séries ni
+ * fiche ouvrable par l'adresse (13/11/2026). La bannière, elle, se rabat déjà sur les récents ajouts.
+ * Une seule question, posée par le bureau et le téléphone : il n'y a rien quand aucun titre n'est là.
+ */
+export function catalogueIsEmpty<T>(payload: Pick<HydratedPayload<T>, "items" | "spotlight" | "rows">): boolean {
+  return catalogueTitles(payload).length === 0;
+}

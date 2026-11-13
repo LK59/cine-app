@@ -26,7 +26,7 @@ import { createPortal } from "react-dom";
 import { Play, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet, catalogueErrorView } from "@/lib/swr";
-import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
+import { cinemaFetcher, catalogueTitles, catalogueIsEmpty } from "@/lib/cinemaPayload";
 import { sheetRepairDuring } from "@/lib/catalogueOutage";
 import { CatalogueOutageBanner, CatalogueUnavailable, useCatalogueOutage } from "@/components/cinema/CatalogueOutage";
 import { useRole } from "@/lib/useRole";
@@ -1139,7 +1139,8 @@ export function CinemaClient() {
     );
   }
 
-  if (movies && movies.spotlight.length === 0) {
+  // Aucun titre du tout, et non une sélection vide — voir `catalogueIsEmpty` (13/11/2026).
+  if (movies && catalogueIsEmpty(movies)) {
     return createPortal(
       <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-ink p-8 text-center" style={{ ...zLayer, paddingLeft: "var(--player-rail, 0px)" }}>
         <p className="max-w-sm text-sm text-muted">{t("cinema.empty")}</p>
@@ -1581,7 +1582,7 @@ export function CinemaClient() {
               {catalogueErrorView(seriesError, series) !== null && (
                 <p className="px-8 text-sm text-danger sm:px-12">{errorMessage(seriesError, t, t("errors.loadFailed"), locale)}</p>
               )}
-              {series && series.spotlight.length === 0 && (
+              {series && catalogueIsEmpty(series) && (
                 <p className="px-8 text-sm text-muted sm:px-12">{t("cinema.empty")}</p>
               )}
 

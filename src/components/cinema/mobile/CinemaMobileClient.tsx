@@ -37,7 +37,7 @@ import { useFreshPersonalLists } from "@/lib/freshLists";
 import { fetcher, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY, nothingToShowYet, catalogueErrorView } from "@/lib/swr";
 import { sheetRepairDuring } from "@/lib/catalogueOutage";
 import { CatalogueOutageBanner, CatalogueUnavailable, useCatalogueOutage } from "@/components/cinema/CatalogueOutage";
-import { cinemaFetcher, catalogueTitles } from "@/lib/cinemaPayload";
+import { cinemaFetcher, catalogueTitles, catalogueIsEmpty } from "@/lib/cinemaPayload";
 import { unresolvedSheetRequest, useRepairUnresolvedSheet } from "@/lib/useRepairUnresolvedSheet";
 import { useCatalogueRefresh } from "@/lib/useCatalogueRefresh";
 import { catalogueRanks, useCatalogueRow } from "@/lib/useCatalogueRow";
@@ -723,7 +723,7 @@ export function CinemaMobileClient() {
         )}
         {shownErrorView === "ligne" && <p className="px-4 pt-6 text-sm text-danger">{errorMessage(shownError, t, t("errors.loadFailed"), locale)}</p>}
         <CatalogueOutageBanner outage={outage} className="px-4 pt-3 text-center" />
-        {!loading && payload && payload.spotlight.length === 0 && (
+        {!loading && payload && catalogueIsEmpty(payload) && (
           <p className="px-4 pt-6 text-sm text-muted">{t("cinema.empty")}</p>
         )}
 
