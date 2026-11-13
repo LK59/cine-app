@@ -2151,9 +2151,14 @@ body:has(.gestion-liquid) .glass-window {
    hauteur), qui interdirait ici de faire glisser la rangée en partant d'une pilule. */
 .player-onscreen-row [data-liquid-pan] { touch-action: pan-x; }
 /* Le geste liquide allume la pilule appuyée (`data-lit`), comme le rond seul des commandes. */
-.player-liquid .player-onscreen-pill[data-lit],
 .player-liquid .player-ask-btn[data-lit],
 .player-liquid .player-onscreen-toggle[data-lit] { box-shadow: var(--glass-edge), var(--glass-lit), 0 8px 24px rgb(0 0 0 / 0.28); }
+/* Les pilules d'« À l'écran » sans ombre portée (13/11/2026) : elles vivent dans une rangée qui défile, qui coupe tout
+   ce qui dépasse de ses bords — les ombres des pilules voisines (24 px de flou) s'y fondaient en une bande voilée,
+   coupée net aux bords de la rangée, de la première pilule au bord de l'écran (l'iPhone de Louis, sur une image
+   claire). Le liseré du verre suffit à les détacher de l'image ; l'appui allume le reflet, sans ombre non plus. */
+.player-liquid .player-onscreen-pill { box-shadow: var(--glass-edge); }
+.player-liquid .player-onscreen-pill[data-lit] { box-shadow: var(--glass-edge), var(--glass-lit); }
 .player-onscreen-photo { width: 32px; height: 32px; }
 .player-onscreen-name { font-size: 13px; }
 .player-onscreen-character { font-size: 11px; }
