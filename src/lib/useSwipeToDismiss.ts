@@ -247,6 +247,20 @@ export function useSwipeToDismiss(
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    /**
+     * Un appui venu d'un portail n'est pas un appui sur la poignée (13/11/2026).
+     *
+     * React fait remonter ses événements par l'arbre des composants, pas par celui de la page : une
+     * fenêtre rendue dans `document.body` par un composant posé *dans* la poignée — « Partager », dont le
+     * bouton vit sur la bannière de la fiche du téléphone — lui envoyait chacun de ses appuis. Depuis que
+     * toute la fenêtre se tire au doigt (`ActionSheet`, 13/11/2026), la glisser vers le bas tirait la fiche
+     * du film dessous : la poignée prenait la capture du pointeur, la fiche suivait le doigt et se
+     * refermait, la fenêtre restait figée — et sur Chrome pour Android, la capture volait le `click` de ses
+     * boutons (« Créer le lien » ne répondait pas). Seul ce que la poignée contient dans la page la tire.
+     */
+    const handle = e.currentTarget as unknown;
+    const target = e.target as unknown;
+    if (typeof Node !== "undefined" && handle instanceof Node && target instanceof Node && !handle.contains(target)) return;
     // La carte est déjà lancée vers sa fermeture (le pont du relâché) : elle ne se ressaisit plus.
     if (bridging.current) return;
     active.current = true;

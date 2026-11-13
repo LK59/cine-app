@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { renderHook, act, cleanup } from "@testing-library/react";
+import { renderHook, act, cleanup, render, fireEvent, screen } from "@testing-library/react";
+import { createPortal } from "react-dom";
 import { FIRST_MOVE_SLOP_MAX_PX, useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 import { sheetMotionClass } from "@/lib/sheetMotion";
 
@@ -361,5 +362,30 @@ describe("la carte suit le doigt sans rendu par mouvement", () => {
     expect(hook.result.current.dragging).toBe(false);
     expect(card.style.transform).toBe("translateY(0px)");
     expect(follow).toHaveBeenLastCalledWith(0, card);
+  });
+});
+
+/**
+ * Un portail rendu dans la poignée (« Partager » sur la bannière de la fiche du téléphone) : React fait
+ * remonter ses appuis jusqu'à la poignée par l'arbre des composants. Glisser la fenêtre vers le bas tirait
+ * — et refermait — la fiche du film dessous (13/11/2026).
+ */
+describe("useSwipeToDismiss — un appui venu d'un portail", () => {
+  function Handle({ onDismiss }: { onDismiss: () => void }) {
+    const swipe = useSwipeToDismiss(onDismiss);
+    return (
+      <div data-testid="poignee" data-dragging={String(swipe.dragging)} {...swipe.handlers}>
+        <span data-testid="dedans">bannière</span>
+        {createPortal(<div data-testid="fenetre">fenêtre posée dessus</div>, document.body)}
+      </div>
+    );
+  }
+
+  it("ne tire pas la fiche : seul ce que la poignée contient dans la page la saisit", () => {
+    render(<Handle onDismiss={vi.fn()} />);
+    fireEvent.pointerDown(screen.getByTestId("fenetre"), { pointerId: 1, clientY: 100 });
+    expect(screen.getByTestId("poignee").getAttribute("data-dragging")).toBe("false");
+    fireEvent.pointerDown(screen.getByTestId("dedans"), { pointerId: 1, clientY: 100 });
+    expect(screen.getByTestId("poignee").getAttribute("data-dragging")).toBe("true");
   });
 });
