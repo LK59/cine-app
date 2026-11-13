@@ -105,7 +105,7 @@ export function useSheetPlay(
   // Le libellé de « Continuer à regarder » (« Reprendre S2:É3 · 30 min »), le même que la rangée d'où
   // l'on vient peut-être ; « Lire en ligne » quand le téléchargement passe en tête (19/10/2026).
   const label = offlinePlayable
-    ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, facts.resumeTicks, facts.resumeKnown), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done", episodeCode).online
+    ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, facts.resumeTicks, facts.resumeKnown), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done", episodeCode, locale).online
     : formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks, facts.seasonNumber, facts.episodeNumber, facts.rewatch, locale);
   return {
     facts,

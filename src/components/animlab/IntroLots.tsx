@@ -14,7 +14,7 @@ import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { CinemaTagline } from "@/components/cinema/CinemaDetailExtras";
 import { BELOW_SECTION_CLASS, CAST_CLASS, CAST_SHOWN, COLUMN_GAP, COLUMN_STYLE, CinemaOverview, HORIZONTAL_VEIL, MENU_STYLE, SECTION_CLASS, VERTICAL_VEIL } from "@/components/cinema/CinemaDetailLayout";
 import { MENU_BADGE, MENU_ROW, MENU_ROW_INACTIVE } from "@/components/cinema/detailMenu";
-import { useT } from "@/components/TranslationProvider";
+import { useLocale, useT } from "@/components/TranslationProvider";
 import { formatMinutes } from "@/lib/format";
 import { genreLabel } from "@/lib/top10Label";
 import { tmdbResize } from "@/lib/images";
@@ -1069,7 +1069,8 @@ function SheetPosterRow({
 /** La ligne d'infos des deux fiches : année, note, durée, qualité, genres — dans l'ordre des vraies. */
 function MetaLine({ title, truncateGenres = false }: { title: CinemaMovie; truncateGenres?: boolean }) {
   const t = useT();
-  const runtime = formatMinutes(title.runtimeMinutes);
+  const { locale } = useLocale();
+  const runtime = formatMinutes(title.runtimeMinutes, locale);
   return (
     <>
       <span>{title.year}</span>

@@ -12,7 +12,7 @@ vi.mock("@/lib/swr", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/swr")>()),
   fetcher: () => new Promise(() => {}),
 }));
-vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
+vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr", setLocale: () => {} }) }));
 vi.mock("@/components/cinema/CinemaLogo", () => ({ CinemaLogo: () => null }));
 
 import { CinemaHero, HeroBannerControls } from "@/components/cinema/CinemaHero";

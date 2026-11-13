@@ -17,7 +17,7 @@ vi.mock("swr", () => ({
   // Un cache vide : chaque bannière passe par la réponse simulée ci-dessus — voir `useHeroInfo`.
   useSWRConfig: () => ({ cache: new Map() }),
 }));
-vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
+vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr", setLocale: () => {} }) }));
 
 import { CinemaSeriesHero } from "@/components/cinema/CinemaSeriesHero";
 import { CinemaHero } from "@/components/cinema/CinemaHero";

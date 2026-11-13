@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, cleanup } from "@testing-library/react";
 
-vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k }));
+vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr", setLocale: () => {} }) }));
 
 import { HeroOverview } from "@/components/cinema/CinemaHero";
 

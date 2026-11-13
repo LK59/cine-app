@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "re
 import useSWR from "swr";
 import { Check } from "lucide-react";
 import { fetcher, playerBootstrapOptions } from "@/lib/swr";
-import { useT } from "@/components/TranslationProvider";
+import { useLocale, useT } from "@/components/TranslationProvider";
 import { episodeResumeAt } from "@/lib/nextEpisode";
 import { formatDurationShort, formatMinutes } from "@/lib/format";
 import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress";
@@ -70,6 +70,7 @@ export function PlayerEpisodesMenu({
   onPick: (episode: { itemId: string; title: string; resumeAt: number }) => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const { data, error } = useSWR<CinemaEpisodesPayload>(episodesKey(seriesId), fetcher, {
     ...playerBootstrapOptions,
     revalidateOnMount: true,
@@ -149,8 +150,8 @@ export function PlayerEpisodesMenu({
                 {current
                   ? t("player.episodes.current")
                   : started
-                    ? t("cinema.timeRemaining", { time: formatDurationShort(ep.runtimeTicks! - ep.resumeTicks!) })
-                    : formatMinutes(ep.runtimeMinutes)}
+                    ? t("cinema.timeRemaining", { time: formatDurationShort(ep.runtimeTicks! - ep.resumeTicks!, locale) })
+                    : formatMinutes(ep.runtimeMinutes, locale)}
               </span>
             </span>
           </button>

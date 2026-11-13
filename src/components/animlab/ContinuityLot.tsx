@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale } from "@/components/TranslationProvider";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ArrowLeft, Bookmark, Check, Play, Video, X } from "lucide-react";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
@@ -24,11 +25,12 @@ import { sheetTimeout, clearSheetTimeout } from "@/lib/sheetMorph/dom";
 const backdropOf = (m: CinemaMovie) => tmdbResize(m.backdropUrl, "w1280") ?? m.backdropUrl ?? "";
 
 function Meta({ title }: { title: CinemaMovie }) {
+  const { locale } = useLocale();
   return (
     <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
       <span>{title.year}</span>
       {title.imdbRating && <ImdbBadge rating={title.imdbRating} size="sm" />}
-      {formatMinutes(title.runtimeMinutes) && <span>{formatMinutes(title.runtimeMinutes)}</span>}
+      {formatMinutes(title.runtimeMinutes, locale) && <span>{formatMinutes(title.runtimeMinutes, locale)}</span>}
     </div>
   );
 }

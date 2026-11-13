@@ -287,13 +287,14 @@ function PosterCard({
 
 function FilmCard({ download: d, onShow }: { download: OfflineDownload; onShow: () => void }) {
   const t = useT();
+  const { locale } = useLocale();
   const poster = usePosterUrl(d);
   const remaining = offlineRemainingSeconds(d);
   const caption =
     d.state !== "done"
       ? offlineStatusLabel(d, t)
       : remaining !== null && !d.watchedToEnd
-        ? t("cinema.timeRemaining", { time: formatDurationShort(remaining * 1e7) })
+        ? t("cinema.timeRemaining", { time: formatDurationShort(remaining * 1e7, locale) })
         : [d.year, t(`player.downloads.${d.quality}`)].filter(Boolean).join(" · ");
   return (
     <PosterCard

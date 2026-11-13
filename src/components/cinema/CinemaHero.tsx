@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Info, Play } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
-import { useT } from "@/components/TranslationProvider";
+import { useLocale, useT } from "@/components/TranslationProvider";
 import { genreLabel } from "@/lib/top10Label";
 import type { CinemaMovie } from "@/app/api/cinema/movies/route";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
@@ -323,6 +323,7 @@ export function CinemaHero({
   onOpen?: () => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   // Le synopsis et la distribution, par la requête légère de la bannière — voir `useHeroInfo`.
   // (La bande-annonce que la bannière remontait autrefois au fond vidéo n'a plus d'écouteur : le
   // fond vidéo a été retiré du grand écran.)
@@ -367,8 +368,8 @@ export function CinemaHero({
         {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
         {/* La durée au survol, et non seulement dans la fiche : c'est elle qui décide si on lance
             le film ce soir, donc elle a sa place avant qu'on ouvre quoi que ce soit. */}
-        {"runtimeMinutes" in item && formatMinutes(item.runtimeMinutes) && (
-          <span>{formatMinutes(item.runtimeMinutes)}</span>
+        {"runtimeMinutes" in item && formatMinutes(item.runtimeMinutes, locale) && (
+          <span>{formatMinutes(item.runtimeMinutes, locale)}</span>
         )}
         <QualityBadges quality={item.quality} />
         {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}

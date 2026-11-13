@@ -148,13 +148,15 @@ export function offlinePlayLabels(
   runtimeSeconds: number | null | undefined,
   complete = true,
   /** L'épisode que la fiche d'une série lancerait (« S1:É5 »), dit sur « Lire en ligne » aussi. */
-  episodeCode?: string | null
+  episodeCode?: string | null,
+  /** La langue de l'interface : « 30 min » en français (13/11/2026). */
+  locale?: string
 ): { offline: string; online: string } {
   const withEpisode = (label: string) => (episodeCode ? `${label} · ${episodeCode}` : label);
   if (resumeSeconds < 30 || !runtimeSeconds) {
     return { offline: t(complete ? "player.downloads.playDownloaded" : "player.downloads.playDownloading"), online: withEpisode(t("player.downloads.playOnline")) };
   }
-  const time = t("cinema.timeRemaining", { time: formatDurationShort(Math.max(0, runtimeSeconds - resumeSeconds) * 1e7) });
+  const time = t("cinema.timeRemaining", { time: formatDurationShort(Math.max(0, runtimeSeconds - resumeSeconds) * 1e7, locale) });
   return {
     offline: t(complete ? "player.downloads.resumeDownloaded" : "player.downloads.resumeDownloading", { time }),
     online: episodeCode ? `${t("player.downloads.resumeOnline", { time: episodeCode })} · ${time}` : t("player.downloads.resumeOnline", { time }),
@@ -182,6 +184,7 @@ export function OfflinePlayButton({
   badgeClassName?: string;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const playback = usePlayback();
   const resume = sharedResumeSeconds(download, onlineResumeTicks, onlineKnown);
   // Ce que Jellyfin sait, rapporté sur l'appareil : la page des téléchargements et la fiche hors
@@ -206,7 +209,7 @@ export function OfflinePlayButton({
       : episodeCode
         ? offlineStatusLabel(download, t)
         : t("player.downloads.fileDownloading"),
-    resumes ? t("cinema.timeRemaining", { time: formatDurationShort(Math.max(0, download.runtimeSeconds - resume) * 1e7) }) : null,
+    resumes ? t("cinema.timeRemaining", { time: formatDurationShort(Math.max(0, download.runtimeSeconds - resume) * 1e7, locale) }) : null,
   ]
     .filter(Boolean)
     .join(" · ");

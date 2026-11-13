@@ -79,7 +79,7 @@ export function OfflineTitleSheet({
   const poster = useOfflineImage(film, POSTER_FILE, film?.hasPoster);
   const facts = film ? artwork : (artwork?.series ?? null);
   const name = film ? film.title : (series?.title ?? "");
-  const runtime = film?.runtimeSeconds ? formatMinutes(Math.round(film.runtimeSeconds / 60)) : null;
+  const runtime = film?.runtimeSeconds ? formatMinutes(Math.round(film.runtimeSeconds / 60), locale) : null;
   const year = facts?.year ?? film?.year ?? null;
   const genres = (facts?.genres ?? []).slice(0, 3).map((g) => genreLabel(g, t));
   // Lire en tête : le film, ou l'épisode commencé / le premier pas vu parmi ceux de l'appareil.
@@ -439,6 +439,7 @@ function ProgressLine({ download: d }: { download: OfflineDownload }) {
  */
 function EpisodeRow({ download: d, size }: { download: OfflineDownload; size: "phone" | "desktop" }) {
   const t = useT();
+  const { locale } = useLocale();
   const playback = usePlayback();
   const thumbnail = useOfflineImage(d, POSTER_FILE, d.hasPoster);
   const playable = offlinePlayable(d);
@@ -486,9 +487,9 @@ function EpisodeRow({ download: d, size }: { download: OfflineDownload; size: "p
           {d.state !== "done" ? (
             <p className="mt-0.5 text-xs text-subtle">{offlineStatusLabel(d, t)}</p>
           ) : remaining !== null && !d.watchedToEnd ? (
-            <p className="mt-0.5 text-xs text-accent-400">{t("cinema.timeRemaining", { time: formatDurationShort(remaining * 1e7) })}</p>
+            <p className="mt-0.5 text-xs text-accent-400">{t("cinema.timeRemaining", { time: formatDurationShort(remaining * 1e7, locale) })}</p>
           ) : (
-            d.runtimeSeconds > 0 && <p className="mt-0.5 text-xs text-subtle">{formatMinutes(Math.round(d.runtimeSeconds / 60))}</p>
+            d.runtimeSeconds > 0 && <p className="mt-0.5 text-xs text-subtle">{formatMinutes(Math.round(d.runtimeSeconds / 60), locale)}</p>
           )}
           {d.artwork?.overview && <p className={`mt-1 text-xs leading-5 text-muted ${phone ? "line-clamp-3" : "line-clamp-2"}`}>{d.artwork.overview}</p>}
         </div>
