@@ -21,9 +21,14 @@ vi.mock("@/components/MiniPlayer", () => ({
 }));
 vi.mock("@/components/PlaybackInfoPanel", () => ({ PlaybackInfoPanel: () => null }));
 vi.mock("@/components/ExperimentalPlayerHost", () => ({ ExperimentalPlayerHost: () => <div data-testid="natif" /> }));
+// Les dernières propriétés reçues par les commandes : de quoi changer de piste comme le menu.
+const controls = vi.hoisted(() => ({ props: null as null | { onChangeAudio: (id: number) => void } }));
 vi.mock("@/components/PlayerControls", () => ({
   VOLUME_STORAGE_KEY: "volume",
-  PlayerControls: () => <div data-testid="commandes" />,
+  PlayerControls: (props: { onChangeAudio: (id: number) => void }) => {
+    controls.props = props;
+    return <div data-testid="commandes" />;
+  },
 }));
 const playback = {
   session: null as null | Record<string, unknown>,
@@ -400,5 +405,20 @@ describe("une négociation remplacée avant sa première image (13/11/2026)", ()
     Object.defineProperty(video, "currentTime", { configurable: true, get: () => 0, set: (v: number) => void sets.push(v) });
     act(() => void video.dispatchEvent(new Event("loadeddata")));
     expect(sets).toHaveLength(1);
+  });
+
+  // La marche H.264 répond à un décodeur qui refuse l'image du fichier (§67) : un changement de piste audio repartait
+  // sans elle, en HEVC copié — erreurs média, marche déjà tentée, écran « Lecture interrompue », et « Réessayer »
+  // rejouait la même demande (13/11/2026).
+  it("un changement de piste après la marche H.264 la garde", async () => {
+    await mounted();
+    for (let i = 0; i < 4; i++) fatal("mediaError");
+    await waitFor(() => expect(negotiations().at(-1)).toMatchObject({ videoH264Only: true }), { timeout: 3000 });
+    await waitFor(() => expect(fake.listeners.get("hlsError")?.length).toBeGreaterThan(1));
+    act(() => void document.querySelector("video")!.dispatchEvent(new Event("loadeddata")));
+    const count = negotiations().length;
+    act(() => controls.props!.onChangeAudio(3));
+    await waitFor(() => expect(negotiations()).toHaveLength(count + 1));
+    expect(negotiations().at(-1)).toMatchObject({ audioStreamIndex: 3, videoH264Only: true, forceAudioTranscode: true });
   });
 });

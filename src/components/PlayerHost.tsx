@@ -1752,7 +1752,11 @@ function ActivePlayer({
         // 22/10/2026 ils le suivaient, la page revenait sans intention et le film se fermait sans
         // rien dire (audit du 22/10/2026).
       }
-      startPlayback({ audioStreamIndex: id, resumeAt, cause: { why: "audio" } });
+      // La marche H.264 (§67) suit la piste : elle répond à un décodeur qui refuse l'image du fichier, pas à
+      // une langue. Sans elle, le changement repartait en HEVC copié, retombait en erreurs média sur une marche
+      // déjà tentée, et finissait sur « Lecture interrompue » — que « Réessayer » rejouait à l'identique (13/11/2026).
+      const h264 = lastPlaybackOpts.current?.videoH264Only ? { videoH264Only: true, forceAudioTranscode: true } : {};
+      startPlayback({ audioStreamIndex: id, resumeAt, ...h264, cause: { why: "audio" } });
     },
     [startPlayback, itemId, title, reloadCarryNow, reportPositionNow, bench]
   );
