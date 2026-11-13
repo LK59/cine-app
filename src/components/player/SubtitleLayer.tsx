@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { overlayCss, subtitleRowStyle, SUBTITLE_LAYER_STYLE, type ChromeEdges, type SubtitleStyle } from "@/lib/subtitleStyle";
 import { primaryDualCss, secondOverlayCss } from "@/lib/dualSubtitles";
 import { subtitlePlacement } from "@/lib/webcodecs/subtitleMarkup";
@@ -57,10 +58,10 @@ export function SubtitleLayer({
             // Ni taille ni couleur écrites ici : ce lecteur dessine ses lignes lui-même, et il
             // ignorait donc les réglages de sous-titres, qui ne touchaient que les pistes natives.
             // Un réglage qui marche un film sur deux n'est pas un réglage — voir `subtitleStyle`.
-            className="max-w-4xl whitespace-pre-line text-center font-display font-medium leading-snug"
-            style={overlayCss(style)}
+            className="w-full max-w-4xl whitespace-pre-line text-center font-display font-medium leading-snug"
+            style={lineCss(overlayCss(style))}
           >
-            {placed.text}
+            <span style={boxCss(overlayCss(style))}>{placed.text}</span>
           </p>
         </div>
       </div>
@@ -74,10 +75,10 @@ export function SubtitleLayer({
   const otherCss = secondOverlayCss(style);
   // Deux lignes au plus chacune sur un téléphone en portrait (`.subtitle-dual-text`) : à deux, elles
   // couvraient sinon un tiers de l'image.
-  const lineClass = "subtitle-dual-text max-w-4xl whitespace-pre-line text-center font-display font-medium leading-snug";
+  const lineClass = "subtitle-dual-text w-full max-w-4xl whitespace-pre-line text-center font-display font-medium leading-snug";
   const mainLine = main && (
-    <p data-subtitle-primary="" data-subtitle-notice={primaryNotice ? "" : undefined} dir="auto" className={lineClass} style={mainCss}>
-      {main.text}
+    <p data-subtitle-primary="" data-subtitle-notice={primaryNotice ? "" : undefined} dir="auto" className={lineClass} style={lineCss(mainCss)}>
+      <span style={boxCss(mainCss)}>{main.text}</span>
     </p>
   );
   const otherLine = other && (
@@ -87,9 +88,9 @@ export function SubtitleLayer({
       dir="auto"
       // Un souffle entre les deux, à l'échelle du texte : collés, ils se lisaient comme une seule réplique.
       className={`${lineClass} mb-[0.3em]`}
-      style={otherCss}
+      style={lineCss(otherCss)}
     >
-      {other.text}
+      <span style={boxCss(otherCss)}>{other.text}</span>
     </p>
   );
   const topLines = [other?.top ? otherLine : null, main?.top ? mainLine : null].filter(Boolean);
@@ -123,4 +124,26 @@ export function SubtitleLayer({
       )}
     </div>
   );
+}
+
+/**
+ * Une ligne de sous-titres prend toute la largeur de sa rangée (jusqu'à `max-w-4xl`) et centre son texte ; la boîte
+ * éventuelle (fond, rembourrage, coins) est portée par le texte lui-même, ligne par ligne (13/11/2026).
+ *
+ * Pourquoi : la ligne s'ajustait à son texte (largeur « de contenu » d'un élément flex), avec une taille de police en
+ * unités du conteneur (`cqh`/`cqw`). Sur l'iPhone de Louis, couché, *Mr. Robot* S01E03 : « Elliot, si on ne peut
+ * pas / parler de ça... » s'affichait sur trois lignes dans une colonne d'un huitième de l'écran — une largeur de
+ * contenu restée celle d'une autre taille de zone, le texte dessiné à la bonne. WebKit de bureau et Chromium ne le
+ * reproduisent pas. Une ligne à la largeur de sa rangée n'a plus de largeur de contenu à calculer.
+ */
+const BOX_KEYS = ["backgroundColor", "padding", "borderRadius", "boxDecorationBreak", "WebkitBoxDecorationBreak"] as const;
+function lineCss(css: CSSProperties): CSSProperties {
+  const out: Record<string, unknown> = { ...css };
+  for (const key of BOX_KEYS) delete out[key];
+  return out as CSSProperties;
+}
+function boxCss(css: CSSProperties): CSSProperties | undefined {
+  const out: Record<string, unknown> = {};
+  for (const key of BOX_KEYS) if (css[key] !== undefined) out[key] = css[key];
+  return Object.keys(out).length ? (out as CSSProperties) : undefined;
 }
