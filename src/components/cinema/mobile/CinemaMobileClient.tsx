@@ -723,7 +723,7 @@ export function CinemaMobileClient() {
         )}
         {shownErrorView === "ligne" && <p className="px-4 pt-6 text-sm text-danger">{errorMessage(shownError, t, t("errors.loadFailed"), locale)}</p>}
         <CatalogueOutageBanner outage={outage} className="px-4 pt-3 text-center" />
-        {!loading && payload && catalogueIsEmpty(payload) && (
+        {!loading && payload && catalogueIsEmpty<CinemaMovie | CinemaSeries>(payload) && (
           <p className="px-4 pt-6 text-sm text-muted">{t("cinema.empty")}</p>
         )}
 
