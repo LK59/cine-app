@@ -138,8 +138,9 @@ export function CinemaSeriesDetail({
   // L'habillage des deux fiches du bureau (`useDesktopSheetShell`) : l'arrivée par un retour, la
   // fermeture différée (Échap/Retour arrière, le bouton Retour, la poignée passent tous par
   // `requestClose`), le trajet ou la continuité (§61), la poignée au doigt, le focus rendu au retour
-  // du lecteur, et le drapeau « le spectateur a bougé lui-même » remis à zéro à chaque titre.
-  const shell = useDesktopSheetShell({ subjectKey: item.sonarrId, underneath, onClose });
+  // du lecteur — sauf sous « Plus d'épisodes », qui le reprend lui-même (`covered`, 13/11/2026) —, et le
+  // drapeau « le spectateur a bougé lui-même » remis à zéro à chaque titre.
+  const shell = useDesktopSheetShell({ subjectKey: item.sonarrId, underneath, covered: episodesShown, onClose });
   const { containerRef, userHasMovedFocus, markUserMovedFocus, revealed, morph, requestClose, playerOwnsKeyboard } = shell;
 
   // Drives both the second snap section and the chevron pointing at it: with nothing similar in

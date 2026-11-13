@@ -49,11 +49,18 @@ export interface DesktopSheetShell {
 export function useDesktopSheetShell({
   subjectKey,
   underneath,
+  covered = false,
   onClose,
 }: {
   /** L'identité du titre montré (`radarrId`, `sonarrId`) : un titre similaire rouvre la même fiche. */
   subjectKey: number | string | undefined;
   underneath: boolean;
+  /**
+   * Un écran de la fiche elle-même est posé par-dessus — « Plus d'épisodes » de la série. Le lecteur
+   * refermé ne rend pas alors le focus à la fiche, cachée dessous : c'est cet écran qui le reprend
+   * (`CinemaEpisodeBrowser`). Voir l'effet plus bas.
+   */
+  covered?: boolean;
   onClose: () => void;
 }): DesktopSheetShell {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -119,12 +126,18 @@ export function useDesktopSheetShell({
   const playback = usePlayback();
   const playerOwnsKeyboard = playerHoldsKeyboard(playback);
   const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
+  //
+  // Ni quand « Plus d'épisodes » couvre la fiche (`covered`, 13/11/2026) : un épisode lancé de là laisse
+  // cet écran ouvert sous le lecteur, et le lecteur refermé posait le focus sur « Lire » de la série,
+  // caché dessous — les flèches ne bougeaient plus rien (l'écran des épisodes ne les prend que depuis
+  // ses propres boutons), et Entrée lançait l'épisode « À suivre » au lieu de celui qu'on voyait. Le
+  // défaut de BUREAU-23 (15/10/2026), par le second chemin du focus.
   useEffect(() => {
-    if (!underneath && wasPlayerFullScreen.current && !playerOwnsKeyboard) {
+    if (!underneath && !covered && wasPlayerFullScreen.current && !playerOwnsKeyboard) {
       focusFirstAction(containerRef.current);
     }
     wasPlayerFullScreen.current = playerOwnsKeyboard;
-  }, [playerOwnsKeyboard, underneath]);
+  }, [playerOwnsKeyboard, underneath, covered]);
 
   return { containerRef, userHasMovedFocus, markUserMovedFocus, revealed, closing, requestClose, morph, gripStyle, grip, playerOwnsKeyboard };
 }

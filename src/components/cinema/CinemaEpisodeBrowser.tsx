@@ -149,6 +149,29 @@ export function CinemaEpisodeBrowser({
   const playback = usePlayback();
   const playerOwnsKeyboard = playerHoldsKeyboard(playback);
 
+  /**
+   * Le lecteur refermé, le focus revient ici — sur l'épisode lancé s'il est encore à l'écran, sinon sur
+   * la saison ouverte (13/11/2026). Il n'avait personne pour le reprendre : la fiche série dessous le
+   * posait sur son « Lire », caché par cet écran, et plus aucune flèche ne bougeait rien (elles ne partent
+   * que des boutons d'ici). La fiche s'en abstient désormais (`useDesktopSheetShell`, `covered`).
+   */
+  const lastPlayed = useRef<HTMLButtonElement | null>(null);
+  const wasPlayerFullScreen = useRef(playerOwnsKeyboard);
+  useEffect(() => {
+    if (wasPlayerFullScreen.current && !playerOwnsKeyboard) {
+      const list = containerRef.current;
+      const played = lastPlayed.current;
+      (played?.isConnected && list?.contains(played)
+        ? played
+        : (list?.querySelector<HTMLButtonElement>(`[data-episode-season="true"][data-season="${selectedSeason}"]`) ??
+          list?.querySelector<HTMLButtonElement>('[data-episode-season="true"]'))
+      )?.focus({ preventScroll: true });
+    }
+    wasPlayerFullScreen.current = playerOwnsKeyboard;
+    // `selectedSeason` lu au moment du retour, pas suivi : changer de saison ne doit pas déplacer le focus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerOwnsKeyboard]);
+
   // Left/Right move between the season list and the episode list; Up/Down cycle within
   // whichever one currently has focus — same roving-focus convention as the player's own
   // directional nav and CinemaMovieDetail's vertical menu.
@@ -293,8 +316,10 @@ export function CinemaEpisodeBrowser({
                 data-episode-item="true"
                 // Focalisable quand même : les flèches parcourent la liste et font défiler le synopsis.
                 aria-disabled={!playerEnabled || undefined}
-                onClick={() => {
-                  if (playerEnabled) onPlayEpisode(ep);
+                onClick={(e) => {
+                  if (!playerEnabled) return;
+                  lastPlayed.current = e.currentTarget;
+                  onPlayEpisode(ep);
                 }}
                 className="flex min-w-0 flex-1 items-start gap-4 rounded-lg p-3 text-left transition-colors hover:bg-white/10 active:transform-none active:bg-white/15 active:delay-75 focus-visible:bg-white/10 focus-visible:outline-none"
               >
