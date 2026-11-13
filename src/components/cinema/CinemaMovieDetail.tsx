@@ -25,7 +25,8 @@ import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuAr
 import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, SHORT_HIDE, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
 import { useDesktopSheetShell, DesktopSheetFrame, DetailTrailerRow } from "@/components/cinema/DesktopSheetShell";
 import { useSheetPlay } from "@/lib/useSheetPlay";
-import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
+import { CinemaRatingsLine, CinemaTagline, DottedFacts, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
+import { qualityBadges } from "@/lib/videoQuality";
 import { sheetOverview, sheetRuntimeMinutes, sheetLeadFacts } from "@/lib/sheetFacts";
 import { DetailIconActions } from "@/components/cinema/DetailIconActions";
 import { TitleDetailsSheet } from "@/components/cinema/TitleDetails";
@@ -239,7 +240,8 @@ export function CinemaMovieDetail({
         >
           <CinemaDetailTitle title={item.title} logoUrl={item.logoUrl} />
 
-          <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
+          {/* Un « · » entre chaque élément, comme au téléphone (`DottedFacts`, 13/11/2026). */}
+          <DottedFacts className="flex flex-wrap items-center gap-3 text-sm text-muted">
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
             {/* Voir la note jumelle de la fiche téléphone : la durée manquait, et c'est la
@@ -250,9 +252,14 @@ export function CinemaMovieDetail({
               <span>{runtimeLabel(sheetRuntimeMinutes(item.runtimeMinutes, info?.tmdb?.runtime), false)}</span>
             )}
             {/* Touchées, elles ouvrent « Détails » (§152) — sauf quand Jellyfin a perdu le fichier : rien à décrire. */}
-            <QualityBadges quality={item.quality} onOpen={fileMissing ? undefined : () => setShowDetails(true)} openLabel={t("cinema.details.title")} />
-          {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
-          </div>
+            {/* Les pastilles n'entrent que si elles ont quelque chose à dire, sans quoi un point resterait seul. */}
+            {qualityBadges(item.quality).length > 0 && (
+              <span className="flex items-center gap-2">
+                <QualityBadges quality={item.quality} onOpen={fileMissing ? undefined : () => setShowDetails(true)} openLabel={t("cinema.details.title")} />
+              </span>
+            )}
+            {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
+          </DottedFacts>
 
           {!lead.taglineKnown ? <ReservedLine className={`h-[1.1rem] ${SHORT_HIDE}`} /> : <CinemaTagline text={lead.tagline} className={`${SHORT_HIDE} ${lead.taglineLate ? late.fade : ""}`} />}
 

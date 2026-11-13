@@ -104,7 +104,7 @@ export function TitleToggleRound({ face, on, onClick, disabled, unknown }: Toggl
   const { OnIcon, OffIcon } = face;
   const label = on ? t(face.onLabel) : t(face.offLabel);
   return (
-    <div data-round-toggle="" className={`flex w-14 flex-col items-center gap-1 ${unknown ? "opacity-50" : ""}`}>
+    <div data-round-toggle="" className={`flex min-w-14 flex-col items-center gap-1 ${unknown ? "opacity-50" : ""}`}>
       <button
         type="button"
         data-detail-menu
@@ -118,11 +118,12 @@ export function TitleToggleRound({ face, on, onClick, disabled, unknown }: Toggl
         // La forme, puis une seule teinte : allumé, l'or de la pastille du menu (`ROUND_ACTION_ON`) ; jamais les
         // deux à la fois (10.27.0 : le blanc de l'éteint l'emportait, l'or avait disparu).
         // L'estompe de l'état inconnu est portée par le conteneur : bouton et légende ensemble.
+        // La légende tient sur une ligne (« Dans ma liste ») : le conteneur s'élargit plutôt (Louis, 13/11/2026).
         className={`${ROUND_ACTION_SHAPE} ${on ? ROUND_ACTION_ON : ROUND_ACTION_IDLE}`}
       >
         <ToggleGlyph on={on} onIcon={<OnIcon size={19} />} offIcon={<OffIcon size={18} />} />
       </button>
-      <span aria-hidden="true" data-round-caption="" className={`text-center text-[11px] leading-tight transition-colors duration-200 ${on ? "text-brand" : "text-muted"}`}>
+      <span aria-hidden="true" data-round-caption="" className={`whitespace-nowrap text-center text-[11px] leading-tight transition-colors duration-200 ${on ? "text-brand" : "text-muted"}`}>
         {t(shortLabel(face, on))}
       </span>
     </div>

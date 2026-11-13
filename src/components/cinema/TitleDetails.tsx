@@ -316,7 +316,7 @@ function SubtitlesBlock({ data, locale, t }: { data: FileStreamsResponse; locale
 export function TitleDetailsRound({ onOpen }: { onOpen: () => void }) {
   const t = useT();
   return (
-    <div data-round-toggle="" className="flex w-14 flex-col items-center gap-1">
+    <div data-round-toggle="" className="flex min-w-14 flex-col items-center gap-1">
       <button
         type="button"
         data-detail-menu
@@ -328,7 +328,7 @@ export function TitleDetailsRound({ onOpen }: { onOpen: () => void }) {
       >
         <Info size={19} />
       </button>
-      <span aria-hidden="true" data-round-caption="" className="text-center text-[11px] leading-tight text-muted">
+      <span aria-hidden="true" data-round-caption="" className="whitespace-nowrap text-center text-[11px] leading-tight text-muted">
         {t("cinema.details.caption")}
       </span>
     </div>

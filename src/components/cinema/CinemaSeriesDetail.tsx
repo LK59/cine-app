@@ -30,7 +30,7 @@ import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, SHORT_HIDE, CinemaOverview, Cinem
 import { useDesktopSheetShell, DesktopSheetFrame, DetailTrailerRow } from "@/components/cinema/DesktopSheetShell";
 import { playEpisodeFrom } from "@/lib/episodeRow";
 import { useSheetPlay } from "@/lib/useSheetPlay";
-import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
+import { CinemaRatingsLine, CinemaTagline, DottedFacts, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, sheetLeadFacts, sheetEpisodeRuntime, sheetSeasonCount } from "@/lib/sheetFacts";
 import { OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
 import { DetailIconActions } from "@/components/cinema/DetailIconActions";
@@ -272,7 +272,8 @@ export function CinemaSeriesDetail({
         >
           <CinemaDetailTitle title={item.title} logoUrl={item.logoUrl} />
 
-          <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
+          {/* Un « · » entre chaque élément, comme au téléphone (`DottedFacts`, 13/11/2026). */}
+          <DottedFacts className="flex flex-wrap items-center gap-3 text-sm text-muted">
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
             {/* « 4 saisons », à la place qu'il a au téléphone — avant la durée d'un épisode : le bureau ne
@@ -281,7 +282,7 @@ export function CinemaSeriesDetail({
             {/* Celle du catalogue, là dès l'ouverture ; celle de TMDB en fondu sinon — voir `sheetEpisodeRuntime`. */}
             {runtimeLabel(episodeRuntime.minutes, true) && <span className={episodeRuntime.late ? late.fade : ""}>{runtimeLabel(episodeRuntime.minutes, true)}</span>}
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
-          </div>
+          </DottedFacts>
 
           {!lead.taglineKnown ? <ReservedLine className={`h-[1.1rem] ${SHORT_HIDE}`} /> : <CinemaTagline text={lead.tagline} className={`${SHORT_HIDE} ${lead.taglineLate ? late.fade : ""}`} />}
 
