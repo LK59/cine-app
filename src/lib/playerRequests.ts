@@ -46,8 +46,31 @@ export async function getPlayerRequests(session: SessionPayload): Promise<Player
   const { userId, cookie } = await resolveJellyseerrIdentity(session);
   if (userId == null) return [];
 
-  const data = await jellyseerr.getRequestsByUser(userId, cookie).catch(() => ({ results: [] }));
-  return decorate(data.results);
+  const data = await jellyseerr.getRequestsByUser(userId, cookie, ALL_REQUESTS).catch(() => ({ results: [] }));
+  return decorate(requestsToShow(data.results));
+}
+
+/** De quoi tenir toutes les demandes d'un compte : la plus grosse en comptait 104 le 13/11/2026. */
+const ALL_REQUESTS = 1000;
+/** Les plus récentes, toutes affichées quel que soit leur état — la page d'avant. */
+export const RECENT_REQUESTS = 50;
+
+/**
+ * Ce que l'écran montre : les 50 demandes les plus récentes, **et toutes celles qui ne sont pas closes**
+ * (13/11/2026). Seules les 50 dernières étaient lues : au-delà, une demande toujours en cours disparaissait
+ * de l'écran alors même qu'il range « ce qu'on attend » en premier. Relevé le 13/11/2026 chez Jellyseerr :
+ * six comptes au-delà de 50 demandes, et onze demandes encore en traitement, chez quatre d'entre eux
+ * (janvier à octobre), introuvables dans leur « Mes demandes ». Une demande close au-delà des 50 — ce que
+ * `resolveRequestState` dit arrivé (média 4, 5) ou retiré (média 6, 7), ou refusée (demande 3) — reste
+ * hors de l'écran, comme avant : c'est de l'histoire, et la garder coûterait une lecture de fiche par
+ * titre à chaque ouverture.
+ */
+export function requestsToShow(requests: JellyseerrRequest[], recent = RECENT_REQUESTS): JellyseerrRequest[] {
+  return requests.filter((r, i) => {
+    if (i < recent) return true;
+    const media = r.media?.status;
+    return r.status !== 3 && media !== 4 && media !== 5 && media !== 6 && media !== 7;
+  });
 }
 
 /** Sept jours : au-delà, un titre arrivé n'est plus une nouvelle, c'est la bibliothèque. */

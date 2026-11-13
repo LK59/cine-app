@@ -112,9 +112,10 @@ export const jellyseerr = {
       `${cfg.url}/api/v1/request?filter=all&take=${Math.min(200, Math.max(1, Math.floor(take)))}&sort=added`,
       { headers }
     ),
-  getRequestsByUser: (userId: number, cookie?: string) =>
+  /** Les plus récentes d'abord ; `take` : 50 par défaut, la page qu'affichent la gestion et l'activité. */
+  getRequestsByUser: (userId: number, cookie?: string, take = 50) =>
     fetchJson<{ results: JellyseerrRequest[]; pageInfo: { results: number } }>(
-      `${cfg.url}/api/v1/request?filter=all&requestedBy=${userId}&take=50&sort=added`,
+      `${cfg.url}/api/v1/request?filter=all&requestedBy=${userId}&take=${Math.min(1000, Math.max(1, Math.floor(take)))}&sort=added`,
       { headers: authHeaders(cookie) }
     ),
   getUsers: (cookie?: string) =>
