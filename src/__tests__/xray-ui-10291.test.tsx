@@ -477,4 +477,27 @@ describe("« À l'écran » à la demande (13/11/2026)", () => {
     fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 195, clientY: 290 }] });
     expect(wrapOf(container).getAttribute("data-onscreen-open")).toBe("false");
   });
+
+  // 13/11/2026 : aucun navigateur n'émet de `click` après un doigt qui a glissé de 50 px. Le drapeau posé pour
+  // avaler ce clic-là restait donc levé, et c'était le toucher suivant — « masquer les commandes » — qui était perdu.
+  it("après un glissement, le toucher suivant sur l'image masque bien les commandes", async () => {
+    stubFetch();
+    let video: HTMLVideoElement | null = null;
+    const { container } = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
+    await at(video!, 610, true);
+    await waitFor(() => expect(toggleOf(container)).toBeTruthy());
+    const chrome = () => container.querySelector("[data-chrome]")?.getAttribute("data-chrome");
+    const surface = container.querySelector<HTMLElement>(".player-liquid")!;
+    expect(chrome()).toBe("shown");
+    // Le glissement : ni `click` derrière lui, comme sur un vrai écran tactile.
+    fireEvent.touchStart(surface, { touches: [{ clientX: 200, clientY: 300 }] });
+    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 205, clientY: 220 }] });
+    expect(wrapOf(container).getAttribute("data-onscreen-open")).toBe("true");
+    // Puis un vrai toucher, sur place : il masque les commandes.
+    fireEvent.touchStart(surface, { touches: [{ clientX: 300, clientY: 300 }] });
+    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 300, clientY: 300 }] });
+    await act(async () => void surface.dispatchEvent(touch("pointerdown", 300, 300)));
+    await act(async () => void fireEvent.click(surface));
+    expect(chrome()).toBe("hidden");
+  });
 });

@@ -881,6 +881,10 @@ export function PlayerControls({
   const swipeRef = useRef<{ x: number; y: number; at: number } | null>(null);
   const swipedRef = useRef(false);
   function onSurfaceTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+    // Un doigt qui a glissé de 50 px n'est suivi d'aucun `click` : le drapeau d'un glissement précédent restait
+    // levé et avalait le `click` du toucher suivant — commandes ni masquées ni rappelées (13/11/2026). Un `click`
+    // émis malgré tout après un glissement arrive avant tout nouveau `touchstart` : il reste avalé.
+    swipedRef.current = false;
     const touch = e.touches[0];
     swipeRef.current =
       e.touches.length === 1 && touch && isEmptySurface(e.target, e.currentTarget) ? { x: touch.clientX, y: touch.clientY, at: Date.now() } : null;
