@@ -80,8 +80,10 @@ describe("une page publiée sans fenêtre", () => {
 });
 
 describe("la page 10.5", () => {
-  it("reprend au mot près les corrections du registre depuis la 10.1, dans les quatre langues", () => {
-    const since = FIXES_LEDGER.filter((e) => compareVersions(e.version, "10.1") >= 0);
+  // De la 10.1 à la 10.6 exclue (13/11/2026) : les corrections suivantes appartiennent aux pages suivantes.
+  const ownVersions = (e: (typeof FIXES_LEDGER)[number]) => compareVersions(e.version, "10.1") >= 0 && compareVersions(e.version, "10.6") < 0;
+  it("reprend au mot près les corrections du registre de la 10.1 à la 10.6, dans les quatre langues", () => {
+    const since = FIXES_LEDGER.filter(ownVersions);
     expect(since.length).toBeGreaterThan(0);
     for (const lang of NEWS_LANGS) {
       const items = NEWS_105_CONTENT[lang]!.fixes.flatMap((g) => g.items);
@@ -92,7 +94,7 @@ describe("la page 10.5", () => {
   it("le registre versé ensuite ne double rien", () => {
     getDb().prepare("DELETE FROM migrations_done WHERE name = ? OR name LIKE 'news-fix:%'").run(NEWS_105_SEED);
     seedQuietNewsPage(getDb(), NEWS_105_SEED, NEWS_105_VERSION, NEWS_105_CONTENT);
-    applyFixesLedger(getDb(), FIXES_LEDGER.filter((e) => compareVersions(e.version, "10.1") >= 0));
+    applyFixesLedger(getDb(), FIXES_LEDGER.filter(ownVersions));
     const content = JSON.parse((getDb().prepare("SELECT content FROM news_pages WHERE version = '10.5'").get() as { content: string }).content);
     expect(content).toEqual(JSON.parse(JSON.stringify(NEWS_105_CONTENT)));
   });

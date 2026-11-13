@@ -17,12 +17,19 @@ export const NEWS_105_VERSION = "10.5";
 export const NEWS_105_SEED = "news-seed-10.5-discrete";
 /** Les corrections reprises du registre : à partir de cette version. */
 const FIXES_FROM = "10.1";
+/**
+ * Et jusqu'à cette version, exclue (13/11/2026) : sans borne de fin, chaque correction ajoutée au registre depuis
+ * venait grossir cette page sur une installation neuve — au-delà des dix groupes d'une page le jour où des groupes
+ * nouveaux sont apparus. La page dit les versions qu'elle couvre, pas les suivantes.
+ */
+const FIXES_UNTIL = "10.6";
 
 /** Les corrections du registre depuis `FIXES_FROM`, par groupe, dans l'ordre où elles sont livrées. */
 function ledgerFixes(lang: NewsLang): NewsContent["fixes"] {
   const groups: NewsContent["fixes"] = [];
   for (const entry of FIXES_LEDGER) {
     if (compareVersions(entry.version, FIXES_FROM) < 0) continue;
+    if (compareVersions(entry.version, FIXES_UNTIL) >= 0) continue;
     const title = entry.group[lang];
     let group = groups.find((g) => g.title === title);
     if (!group) {

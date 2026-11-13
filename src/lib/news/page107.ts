@@ -25,11 +25,18 @@ export const NEWS_107_REFRESH = "news-refresh-10.7-livres-signets";
 export const NEWS_107_AMEND = "news-amend-10.7-livres-par-compte";
 /** Les corrections reprises du registre : à partir de cette version (ce que la page 10.5 n'annonçait pas). */
 const FIXES_FROM = "10.5.6";
+/**
+ * Et jusqu'à cette version, exclue (13/11/2026) : sans borne de fin, chaque correction ajoutée au registre depuis
+ * venait grossir cette page sur une installation neuve — au-delà des dix groupes d'une page le jour où des groupes
+ * nouveaux sont apparus. La page dit les versions qu'elle couvre, pas les suivantes.
+ */
+const FIXES_UNTIL = "10.8";
 
 function ledgerFixes(lang: NewsLang): NewsContent["fixes"] {
   const groups: NewsContent["fixes"] = [];
   for (const entry of FIXES_LEDGER) {
     if (compareVersions(entry.version, FIXES_FROM) < 0) continue;
+    if (compareVersions(entry.version, FIXES_UNTIL) >= 0) continue;
     const title = entry.group[lang];
     let group = groups.find((g) => g.title === title);
     if (!group) {
