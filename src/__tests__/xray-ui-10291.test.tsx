@@ -268,13 +268,13 @@ describe("dans le lecteur : le geste sous le doigt", () => {
     act(() => void window.dispatchEvent(touch("pointerup")));
   });
 
-  it("le bouton rond de la question : le geste du rond seul des commandes (gonfle, s'allume)", async () => {
+  it("le bouton rond d'« À l'écran » : le geste du rond seul des commandes (gonfle, s'allume)", async () => {
     stubFetch();
     let video: HTMLVideoElement | null = null;
     const { container } = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 610, false);
     await openRow(container);
-    const ask = await waitFor(() => container.querySelector<HTMLElement>('[data-player-nav="ask"]')!);
+    const ask = await waitFor(() => container.querySelector<HTMLElement>('[data-player-nav="onscreen"]')!);
     act(() => void ask.dispatchEvent(touch("pointerdown", 0, 0)));
     expect(ask.style.transform).toMatch(/scale/);
     expect(ask.hasAttribute("data-lit")).toBe(true);
@@ -337,9 +337,9 @@ describe("le relevé `xray-ui` (10.29.1)", () => {
     fireEvent.click(container.querySelector("[data-ask-backdrop]")!);
     await act(async () => void (await vi.advanceTimersByTimeAsync(300)));
     await waitFor(() => expect(diagPosts(fetchMock).find((p) => p.event === "close")).toMatchObject({ personId: 2, reason: "fond" }));
-    // La rangée revient : une ligne de plus, montée à nouveau.
+    // La rangée est restée pendant la fiche (13/11/2026) : pas de nouvelle montée, donc pas de ligne de plus.
     await frame();
-    await waitFor(() => expect(diagPosts(fetchMock).filter((p) => p.event === "row")).toHaveLength(2));
+    expect(diagPosts(fetchMock).filter((p) => p.event === "row")).toHaveLength(1);
     expect(diagPosts(fetchMock).length).toBeLessThanOrEqual(XRAY_UI_DIAG_MAX);
   });
 
@@ -362,7 +362,7 @@ describe("« À l'écran » à la demande (13/11/2026)", () => {
   const wrapOf = (c: HTMLElement) => c.querySelector<HTMLElement>("[data-onscreen-wrap]")!;
   const toggleOf = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-player-nav="onscreen"]')!;
 
-  it("masquée par défaut, même en pause : le bouton rond seul, la rangée inerte, la question hors d'atteinte", async () => {
+  it("masquée par défaut, même en pause : le bouton rond seul, la rangée inerte, pas de question dans le lecteur", async () => {
     stubFetch();
     let video: HTMLVideoElement | null = null;
     const { container } = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
@@ -371,7 +371,7 @@ describe("« À l'écran » à la demande (13/11/2026)", () => {
     expect(wrapOf(container).getAttribute("data-onscreen-open")).toBe("false");
     expect(toggleOf(container).getAttribute("aria-expanded")).toBe("false");
     expect(container.querySelector("[data-onscreen-body]")!.hasAttribute("inert")).toBe(true);
-    expect(container.querySelector('[data-player-nav="ask"]')!.className).toContain("pointer-events-none");
+    expect(container.querySelector('[data-player-nav="ask"]')).toBeNull();
   });
 
   it("le bouton ouvre puis referme ; le choix tient la séance, et la suivante repart masquée", async () => {
@@ -381,7 +381,6 @@ describe("« À l'écran » à la demande (13/11/2026)", () => {
     await at(video!, 610, true);
     await openRow(first.container);
     expect(toggleOf(first.container).getAttribute("aria-expanded")).toBe("true");
-    expect(first.container.querySelector('[data-player-nav="ask"]')!.className).toContain("pointer-events-auto");
     // Une reconstruction remonte les commandes : la rangée reste ouverte.
     first.unmount();
     const second = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
@@ -431,6 +430,29 @@ describe("« À l'écran » à la demande (13/11/2026)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("une fiche ouverte laisse la rangée ; un toucher sur un autre acteur ouvre le sien, ailleurs la fiche se ferme", async () => {
+    stubFetch();
+    let video: HTMLVideoElement | null = null;
+    const { container } = withConfig(CONFIG, <Harness onVideoRef={(v) => (video = v)} />);
+    await at(video!, 610, false);
+    await openRow(container);
+    fireEvent.click(await waitFor(() => container.querySelector<HTMLElement>('[data-onscreen-person="2"]')!));
+    await waitFor(() => expect(container.querySelector("[data-ask-panel] [data-ask-person='2']")).toBeTruthy());
+    // La rangée est toujours là, ouverte.
+    expect(container.querySelector('[data-onscreen-person="2"]')).toBeTruthy();
+    expect(wrapOf(container).getAttribute("data-onscreen-open")).toBe("true");
+    // Un toucher sur le fond, à l'endroit d'une autre pilule (vue à travers lui) : sa fiche à elle.
+    const other = container.querySelector<HTMLElement>("[data-onscreen-person]:not([data-onscreen-person='2'])")!;
+    const otherId = other.getAttribute("data-onscreen-person");
+    vi.spyOn(other, "getBoundingClientRect").mockReturnValue({ left: 100, right: 200, top: 300, bottom: 340, x: 100, y: 300, width: 100, height: 40, toJSON: () => ({}) } as DOMRect);
+    fireEvent.click(container.querySelector("[data-ask-backdrop]")!, { clientX: 150, clientY: 320 });
+    await waitFor(() => expect(container.querySelector(`[data-ask-panel] [data-ask-person='${otherId}']`)).toBeTruthy());
+    // Ailleurs : la fiche se ferme, la rangée reste.
+    fireEvent.click(container.querySelector("[data-ask-backdrop]")!, { clientX: 600, clientY: 100 });
+    await waitFor(() => expect(container.querySelector("[data-ask-panel]")).toBeNull());
+    expect(wrapOf(container).getAttribute("data-onscreen-open")).toBe("true");
   });
 
   it("la touche I ouvre et ferme ; un glissement au doigt vers le haut ouvre, vers le bas ferme", async () => {

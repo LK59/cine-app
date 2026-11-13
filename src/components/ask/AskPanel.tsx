@@ -70,6 +70,11 @@ export interface AskPanelProps {
    */
   sofarPosition?: number | null;
   onClose: () => void;
+  /**
+   * Un toucher sur le fond, à ce point de l'écran : vrai s'il a servi à quelque chose de visible dessous (au lecteur,
+   * une autre pilule d'« À l'écran » — 13/11/2026), et le panneau reste ouvert ; faux ou absent, il se referme.
+   */
+  onBackdropTap?: (x: number, y: number) => boolean;
   /** Une personne d'« À l'écran » (§138) : le panneau s'ouvre sur elle. */
   person?: XrayPlayerPerson;
   /** Les personnes de la même scène — pour proposer « son lien avec … ». */
@@ -210,6 +215,26 @@ function useKeyboardDiag(
  * panneau de Roy a été monté puis refermé 2,4 s plus tard sans avoir paru : sans doute invisible, et refermé par
  * un toucher sur son fond. Lu une fois, dans un minuteur et au démontage : rien pendant le rendu.
  */
+/** Les hauteurs du panneau, pour le relevé `open` — chacune dans sa garde : un relevé ne doit jamais casser l'ouverture. */
+function panelSizeFacts(panel: HTMLElement | null, layer: HTMLElement | null): Record<string, unknown> {
+  try {
+    if (!panel) return {};
+    const cs = getComputedStyle(panel);
+    const vv = window.visualViewport;
+    return {
+      sizeStyle: (panel.getAttribute("style") ?? "").slice(0, 120),
+      sizeMax: cs.maxHeight,
+      sizeH: cs.height,
+      sizeKids: [...panel.children].map((c) => Math.round(c.getBoundingClientRect().height)).join(","),
+      sizeVv: vv ? `${Math.round(vv.width)}x${Math.round(vv.height)}@${Math.round(vv.offsetTop)}` : null,
+      sizeInner: `${window.innerWidth}x${window.innerHeight}`,
+      sizeLayer: layer ? Math.round(layer.getBoundingClientRect().height) : null,
+    };
+  } catch {
+    return {};
+  }
+}
+
 function useXrayPanelDiag(
   diag: XrayUiDiagFn | undefined,
   personId: number | null,
@@ -250,6 +275,10 @@ function useXrayPanelDiag(
         panelEffOpacity: eff.effOpacity,
         panelHiddenBy: eff.hiddenBy ?? undefined,
         top: hitAt(document, box, panel, backdrop),
+        // 13/11/2026 : en paysage sur l'iPhone, le panneau s'ouvrait haut de 0 (10.41.1), et l'émulation WebKit ne le
+        // reproduit pas. Ce que la mise en page lui a donné (`style` posé), ce que le navigateur en a fait, la vue
+        // visuelle et la hauteur de chaque bloc : de quoi dire lequel tombe à zéro.
+        ...panelSizeFacts(panel, layer),
       });
     };
     const timer = window.setTimeout(() => check(false), XRAY_UI_PANEL_CHECK_MS);
@@ -261,7 +290,7 @@ function useXrayPanelDiag(
   }, [panelRef, backdropRef, layerRef, closeReasonNow]);
 }
 
-export function AskPanel({ itemId, where, position, sofarPosition, onClose, person, scene, ask: askEnabled = true, sofar: sofarEnabled = askEnabled, placement, suggestions, scenes, diag }: AskPanelProps) {
+export function AskPanel({ itemId, where, position, sofarPosition, onClose, person, scene, ask: askEnabled = true, sofar: sofarEnabled = askEnabled, placement, suggestions, scenes, diag, onBackdropTap }: AskPanelProps) {
   const t = useT();
   const { exchanges, ask, retry, busy, full } = useAskTitle({
     itemId,
@@ -464,8 +493,11 @@ export function AskPanel({ itemId, where, position, sofarPosition, onClose, pers
         aria-hidden
         data-ask-backdrop=""
         className="absolute inset-0"
-        onClick={() => {
+        onClick={(e) => {
           if (focused) inputRef.current?.blur();
+          // Un toucher sur ce qui se voit à travers le fond et qui sait y répondre (une autre pilule d'« À
+          // l'écran », 13/11/2026) : à lui, et le panneau reste ouvert.
+          else if (onBackdropTap?.(e.clientX, e.clientY)) return;
           else closeBy("fond");
         }}
       />

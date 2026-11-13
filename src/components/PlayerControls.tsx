@@ -3,7 +3,7 @@
 import type { TrickplayInfo } from "@/lib/trickplayTile";
 import { CinemaLogo } from "@/components/cinema/CinemaLogo";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { Play, Pause, Maximize, Minimize, Captions, AudioLines, Loader2, RotateCcw, RotateCw, EllipsisVertical, SkipForward, Layers, ChevronRight, MessageCircleQuestion, UsersRound, X } from "lucide-react";
+import { Play, Pause, Maximize, Minimize, Captions, AudioLines, Loader2, RotateCcw, RotateCw, EllipsisVertical, SkipForward, Layers, ChevronRight, UsersRound, X } from "lucide-react";
 import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import type { HdrCapChoice } from "@/lib/webcodecs/hdrDisplay";
 import { useT } from "@/components/TranslationProvider";
@@ -432,7 +432,7 @@ export function PlayerControls({
     if (!root) return;
     // Le bouton rond de la question (§139) est une cible comme le rond seul des commandes (10.29.1) : la même
     // marge de toucher, et il s'allume sous le doigt.
-    const press = createLiquidPress({ targets: ".player-pill-btn, .player-center-btn, .player-capsule, .player-ask-btn" });
+    const press = createLiquidPress({ targets: ".player-pill-btn, .player-center-btn, .player-capsule, .player-ask-btn, .player-onscreen-toggle" });
     // Les pilules d'« À l'écran » (§138, 10.29.1) : le geste des boutons posés dans ce qu'on fait glisser
     // (`data-liquid-pan="press"`, le même que `useLiquidDelegation`) — elles gonflent à l'appui et rebondissent au
     // relâchement, et rendent la main dès que le doigt part de côté (la rangée défile, et le clic natif n'a pas
@@ -737,13 +737,17 @@ export function PlayerControls({
    * commandes cachées (`ONSCREEN_FOLD_HIDDEN_MS`). Le bouton de la question n'existe que dans la rangée ouverte. Montée tant qu'elle peut servir, pour que l'ouverture et la
    * fermeture s'animent (`data-onscreen-open`).
    */
-  const rowAllowed = !askOpen && !resuming && !loading && !openingQuiet && !castActive;
+  // Une fiche d'acteur ouverte laisse la rangée en place (13/11/2026) : on passe d'un acteur à l'autre sans la voir
+  // disparaître (`onBackdropTap` du panneau), et un toucher ailleurs referme la fiche.
+  const rowAllowed = !resuming && !loading && !openingQuiet && !castActive;
   const sceneNow = xrayOffered && rowAllowed ? sceneAt(xrayPayload, currentTime) : null;
   const scenePeople = onScreenPeople(sceneNow);
   // Le relevé `xray-ui` de cette séance (10.29.1, `xrayUiDiag.ts`) : la rangée, les touchers, le panneau.
   const xrayDiag = useXrayUiDiag(itemId);
-  const rowShown = rowAllowed && (askOffered || scenePeople.length > 0);
-  const onScreenAvailable = rowAllowed && (askOffered || (xrayOffered && (xrayPayload?.scenes.length ?? 0) > 0));
+  // Le bouton de la question n'est plus dans le lecteur (13/11/2026, Louis : celui de la fiche du titre suffit, et
+  // poser une question en regardant n'est pas ergonomique) : la rangée n'existe que par les personnes à l'écran.
+  const rowShown = rowAllowed && scenePeople.length > 0;
+  const onScreenAvailable = rowAllowed && xrayOffered && (xrayPayload?.scenes.length ?? 0) > 0;
   const [onScreenOpen, setOnScreenOpenState] = useState(() => onScreenOpenFor(itemId));
   const rowOpen = onScreenAvailable && onScreenOpen;
   const openOnScreen = (open: boolean) => {
@@ -1385,29 +1389,10 @@ export function PlayerControls({
             de « Passer l'intro » et de l'épisode suivant, posés à droite ; la rangée va aussi loin que possible à droite
             et ne s'arrête avant les boutons du centre (ou la pilule des outils) que s'ils partagent sa hauteur
             (`useOnScreenPlacement`, 10.27.1). Depuis le 13/11/2026, **masquée par défaut** : le bouton rond de gauche
-            l'ouvre — elle sort de lui vers la droite, pilule après pilule — et devient une croix qui la referme. Le
-            bouton de la question suit la croix, hors de ce qui défile — seul quand personne n'est reconnu. */}
+            l'ouvre — elle sort de lui vers la droite, pilule après pilule — et devient une croix qui la referme. Plus de
+            bouton de la question dans le lecteur : il reste sur la fiche du titre. */}
         {onScreenAvailable &&
           (() => {
-            const askButton = askOffered ? (
-              <button
-                type="button"
-                data-player-nav="ask"
-                data-player-surface-ignore
-                aria-label={t("ask.title")}
-                title={t("ask.title")}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenu(null);
-                  setAskPerson(null);
-                  setAskOpen(true);
-                }}
-                data-liquid
-                className={`player-fade player-pill player-ask-btn ${visible && rowOpen ? "pointer-events-auto" : "pointer-events-none"} flex shrink-0 items-center justify-center text-white`}
-              >
-                <MessageCircleQuestion size={20} aria-hidden />
-              </button>
-            ) : null;
             return (
               <div
                 ref={onScreenWrapRef}
@@ -1434,11 +1419,10 @@ export function PlayerControls({
                   <UsersRound size={20} aria-hidden className="player-onscreen-toggle-people" />
                   <X size={20} aria-hidden className="player-onscreen-toggle-close" />
                 </button>
-                {/* Le bouton de la question à côté de la croix, et les pilules jusqu'au bord de l'écran (Louis, 13/11/2026) :
-                    au bout de la rangée, il laissait au milieu de l'écran une pilule tranchée sous le voile, collée à lui. */}
+                {/* Les pilules jusqu'au bord de l'écran (Louis, 13/11/2026) : au bout de la rangée, le bouton de la
+                    question laissait au milieu de l'écran une pilule tranchée sous le voile. */}
                 <div data-onscreen-body="" inert={!rowOpen} className="flex min-w-0 flex-1 items-end gap-2">
-                  {rowShown && askButton}
-                  {rowShown && scenePeople.length > 0 && (
+                  {rowShown && (
                     <div className="min-w-0 flex-1">
                       <PlayerOnScreen
                         people={scenePeople}
@@ -1585,6 +1569,8 @@ export function PlayerControls({
       </div>
       {askOpen && (
         <AskPanel
+          // Une autre personne : un autre panneau — sa propre entrée, ses propres demandes.
+          key={askPerson ? `personne:${askPerson.person.personId}` : "question"}
           itemId={itemId}
           where="lecteur"
           placement="player"
@@ -1596,6 +1582,21 @@ export function PlayerControls({
           diag={xrayDiag}
           ask={askPerson ? askPersonOffered : askOffered}
           sofar={sofarOffered}
+          onBackdropTap={(x, y) => {
+            // Une autre pilule d'« À l'écran », visible à travers le fond : sa fiche, à la place de celle-ci.
+            const pills = onScreenWrapRef.current?.querySelectorAll<HTMLElement>("[data-onscreen-person]") ?? [];
+            for (const pill of pills) {
+              const box = pill.getBoundingClientRect();
+              // Une pilule sans taille (pas encore posée, ou qui s'efface) n'attrape rien.
+              if (box.width === 0 || box.height === 0) continue;
+              if (x < box.left || x > box.right || y < box.top || y > box.bottom) continue;
+              const person = scenePeople.find((p) => String(p.personId) === pill.dataset.onscreenPerson);
+              if (!person || !rowOpen) return false;
+              pickPerson(person);
+              return true;
+            }
+            return false;
+          }}
           onClose={() => {
             setAskOpen(false);
             setAskPerson(null);

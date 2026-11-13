@@ -197,12 +197,13 @@ describe("la rangée « À l'écran » du lecteur", () => {
     expect(xrayCalls(fetchMock).length).toBe(before);
   });
 
-  it("une scène sans personne : pas de rangée, la pilule de la question seule", async () => {
+  it("une scène sans personne : pas de rangée — et plus de question dans le lecteur (13/11/2026), seul le bouton d'« À l'écran »", async () => {
     stubFetch();
     let video: HTMLVideoElement | null = null;
     const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await atPosition(video!, 60);
-    await waitFor(() => expect(container.querySelector('[data-player-nav="ask"]')).toBeTruthy());
+    await waitFor(() => expect(container.querySelector('[data-player-nav="onscreen"]')).toBeTruthy());
+    expect(container.querySelector('[data-player-nav="ask"]')).toBeNull();
     expect(container.querySelector("[data-player-onscreen]")).toBeNull();
     expect(screen.queryByText("xray.onScreen")).toBeNull();
   });

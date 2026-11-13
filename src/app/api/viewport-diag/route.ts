@@ -34,6 +34,7 @@ const XRAY_UI_OPACITIES = ["rowOpacity", "firstOpacity", "panelOpacity", "layerO
 const XRAY_UI_HIDDEN = ["rowHiddenBy", "firstHiddenBy", "panelHiddenBy"] as const;
 const XRAY_UI_BOOLEANS = ["overflow", "early"] as const;
 const XRAY_UI_BOXES = ["row", "first", "pill", "panel"] as const;
+const XRAY_UI_SIZES = ["sizeStyle", "sizeMax", "sizeH", "sizeKids", "sizeVv", "sizeInner"] as const;
 
 /** Les préréglages qu'une mesure du mode Immersion peut nommer. */
 const IMMERSION_PRESETS = new Set(["low", "medium", "high", "ultra"]);
@@ -118,6 +119,15 @@ export async function POST(req: NextRequest) {
       if (typeof v === "number" && Number.isFinite(v)) fields[key] = Math.max(0, Math.min(1, Math.round(v * 100) / 100));
     }
     for (const key of XRAY_UI_BOOLEANS) if (typeof body[key] === "boolean") fields[key] = body[key];
+    // Les hauteurs du panneau à l'ouverture (13/11/2026 : panneau haut de 0 en paysage sur l'iPhone) — du texte court.
+    for (const key of XRAY_UI_SIZES) {
+      const v = str(body[key], key === "sizeStyle" ? 120 : 40);
+      if (v !== null) fields[key] = v;
+    }
+    if (body.sizeLayer !== undefined) {
+      const n = px(body.sizeLayer);
+      if (n !== null) fields.sizeLayer = n;
+    }
     for (const key of XRAY_UI_BOXES) {
       const b = boxFrom(body[key]);
       if (b) fields[key] = b;

@@ -10844,6 +10844,13 @@ cachait la réplique, pour 5 séances où quelqu'un l'a touchée en deux jours (
 téléphone, les pilules sont aussi compactes (photo et nom ; le personnage est dans le panneau). Les boutons du centre
 réduits de 15 % en 10.41.0 ont repris leur taille en 10.41.1 (« perturbant », Louis).
 
+**La fiche d'un acteur (10.42.0, Louis).** Plus de bouton de la question dans le lecteur : celui de la fiche du titre
+suffit, et poser une question en regardant n'est pas ergonomique. La fiche d'un acteur ne fait plus disparaître la
+rangée : elle reste en place, un toucher sur une autre pilule (vue à travers le fond transparent du panneau,
+`onBackdropTap` d'`AskPanel`) ouvre la fiche de celle-ci, un toucher ailleurs referme la fiche. Le relevé `open` porte
+les hauteurs du panneau (`size*`) : en paysage sur l'iPhone, il s'est ouvert haut de 0 en 10.41.1 sans que l'émulation
+WebKit le reproduise.
+
 **Différent exprès.** Pas d'ouverture d'office en pause (proposée, puis écartée par Louis : « par défaut on masque
 toujours la rangée qui prend trop de place »). Le bouton n'est pas dans la pilule des réglages : à l'endroit de la
 rangée, on comprend ce qu'il ouvre et elle sort de lui.

@@ -354,26 +354,28 @@ async function at(video: HTMLVideoElement, t: number, playing: boolean) {
 }
 
 describe("dans le lecteur : avec les commandes, en lecture comme en pause", () => {
-  it("film en lecture, commandes affichées : la rangée et le bouton rond de la question", async () => {
+  it("film en lecture, commandes affichées : la rangée (ouverte par son bouton), sans question dans le lecteur (13/11/2026)", async () => {
     stubFetch();
     let video: HTMLVideoElement | null = null;
     const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 10, true);
     await waitFor(() => expect(container.querySelector("[data-player-onscreen]")).toBeTruthy());
-    const ask = container.querySelector<HTMLElement>('[data-player-nav="ask"]')!;
-    // Une icône seule, nommée pour les lecteurs d'écran.
-    expect(ask.textContent).toBe("");
-    expect(ask.getAttribute("aria-label")).toBe("ask.title");
+    expect(container.querySelector('[data-player-nav="ask"]')).toBeNull();
+    // Le bouton d'« À l'écran » : une icône seule, nommée pour les lecteurs d'écran.
+    const toggle = container.querySelector<HTMLElement>('[data-player-nav="onscreen"]')!;
+    expect(toggle.textContent).toBe("");
+    expect(toggle.getAttribute("aria-label")).toBe("xray.onScreen");
     // La rangée part avec les commandes : dans la couche des commandes, qui porte leur état.
     expect(container.querySelector("[data-chrome]")!.contains(container.querySelector("[data-player-onscreen]"))).toBe(true);
   });
 
-  it("personne de reconnu : le bouton rond seul, sans rangée", async () => {
+  it("personne de reconnu : le bouton d'« À l'écran » seul, sans rangée ni question", async () => {
     stubFetch();
     let video: HTMLVideoElement | null = null;
     const { container } = withConfig({ xrayAvailable: true, askAvailable: true, askPersonAvailable: true, sofarAvailable: true }, <Harness onVideoRef={(v) => (video = v)} />);
     await at(video!, 60, true);
-    await waitFor(() => expect(container.querySelector('[data-player-nav="ask"]')).toBeTruthy());
+    await waitFor(() => expect(container.querySelector('[data-player-nav="onscreen"]')).toBeTruthy());
+    expect(container.querySelector('[data-player-nav="ask"]')).toBeNull();
     expect(container.querySelector("[data-player-onscreen]")).toBeNull();
   });
 
