@@ -65,7 +65,13 @@ describe("les deux fiches de série disent « 4 saisons » par la même règle",
     }
   });
 
-  it("le téléphone sépare sa ligne d'infos par `DottedFacts`", () => {
-    expect(code("src/components/cinema/mobile/CinemaMobileDetail.tsx")).toMatch(/<DottedFacts className="mb-4 /);
+  it("les trois fiches séparent leur ligne d'infos par `DottedFacts`, les genres sur leur propre ligne dessous", () => {
+    for (const file of ["src/components/cinema/mobile/CinemaMobileDetail.tsx", "src/components/cinema/CinemaMovieDetail.tsx", "src/components/cinema/CinemaSeriesDetail.tsx"]) {
+      const src = code(file);
+      expect(src, file).toMatch(/<DottedFacts className="flex flex-wrap/);
+      // Les genres après la fin de la rangée à points, jamais dedans : sinon un « · » orphelin au bout de la ligne.
+      const row = src.slice(src.indexOf("<DottedFacts"), src.indexOf("</DottedFacts>"));
+      expect(row, file).not.toMatch(/item\.genres/);
+    }
   });
 });

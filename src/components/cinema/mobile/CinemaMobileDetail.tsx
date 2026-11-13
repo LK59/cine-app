@@ -528,7 +528,10 @@ export function CinemaMobileDetail({
 
         {/* Un « · » entre chaque élément (`DottedFacts`, 13/11/2026) : la pastille de qualité n'entre
             que si elle a quelque chose à dire, sans quoi le point resterait seul. */}
-        <DottedFacts className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
+        {/* Les genres sur leur propre ligne, sous la rangée à points (13/11/2026) : dedans, ils passaient à la ligne
+            et laissaient un « · » orphelin au bout de la première. Ils ont déjà les leurs. */}
+        <div className="mb-4">
+        <DottedFacts className="flex flex-wrap items-center gap-2 text-sm text-muted">
           {!!item.year && <span>{item.year}</span>}
           {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
           {/* Celui du catalogue, là dès l'ouverture ; la liste des épisodes le remplace à son arrivée
@@ -550,8 +553,9 @@ export function CinemaMobileDetail({
               />
             </span>
           )}
-          {item.genres.length > 0 && <span className="truncate">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
         </DottedFacts>
+        {item.genres.length > 0 && <p className="mt-1.5 truncate text-sm text-muted">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</p>}
+        </div>
 
         {playPending && (
           <div

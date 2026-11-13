@@ -240,7 +240,9 @@ export function CinemaMovieDetail({
         >
           <CinemaDetailTitle title={item.title} logoUrl={item.logoUrl} />
 
-          {/* Un « · » entre chaque élément, comme au téléphone (`DottedFacts`, 13/11/2026). */}
+          {/* Un « · » entre chaque élément, comme au téléphone (`DottedFacts`, 13/11/2026) ; les genres sur leur
+              propre ligne dessous — dans la rangée, ils passaient à la ligne derrière un « · » orphelin. */}
+          <div className="flex flex-col gap-1.5">
           <DottedFacts className="flex flex-wrap items-center gap-3 text-sm text-muted">
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
@@ -258,8 +260,9 @@ export function CinemaMovieDetail({
                 <QualityBadges quality={item.quality} onOpen={fileMissing ? undefined : () => setShowDetails(true)} openLabel={t("cinema.details.title")} />
               </span>
             )}
-            {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
           </DottedFacts>
+          {item.genres.length > 0 && <p className="text-sm text-muted">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</p>}
+          </div>
 
           {!lead.taglineKnown ? <ReservedLine className={`h-[1.1rem] ${SHORT_HIDE}`} /> : <CinemaTagline text={lead.tagline} className={`${SHORT_HIDE} ${lead.taglineLate ? late.fade : ""}`} />}
 

@@ -231,9 +231,10 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
           show ? "translate-y-0 duration-[480ms] ease-[cubic-bezier(0.34,1.32,0.64,1)]" : "translate-y-[110%] duration-300 ease-in"
         }`}
       >
-        {/* Drag handle — main swipe target */}
+        {/* Drag handle — main swipe target. Centrée sur un grand écran (`centerOnWide`), la fenêtre ne se tire pas :
+            la poignée n'y a rien à dire (13/11/2026, « Détails » sur ordinateur). */}
         <div
-          className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing touch-none select-none"
+          className={`flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing touch-none select-none ${centerOnWide ? "sm:hidden" : ""}`}
           onPointerDown={dragStart}
           onPointerMove={dragMove}
           onPointerUp={dragEnd}
