@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logError } from "@/lib/logger";
 import { jellyfin } from "@/lib/clients/jellyfin";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
@@ -117,10 +118,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ itemId: str
       ...(await originalLanguageParam(req)),
     } satisfies FileStreamsResponse);
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Jellyfin injoignable" },
-      { status: 502 }
-    );
+    // Le message de Jellyfin reste au journal, jamais dans la réponse (13/11/2026) : ouverte à tous les comptes
+    // pour « Détails » (§152), la route renvoyait tel quel « 404 Not Found: … » et l'adresse amont qu'il cite.
+    logError("jellyfin-streams", error, { itemId });
+    return NextResponse.json({ error: "Jellyfin injoignable" }, { status: 502 });
   }
 }
 

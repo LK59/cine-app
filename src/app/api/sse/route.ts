@@ -13,6 +13,8 @@ const ACTIVE = new Set(["downloading", "stalledDL", "metaDL", "forcedDL", "check
 // `checkingUP` sont aussi des états d'après le téléchargement.
 const DONE = new Set(["uploading", "stalledUP", "forcedUP", "pausedUP", "stoppedUP", "queuedUP", "checkingUP", "completed"]);
 
+/** Le signe de vie du flux, sous le délai d'inactivité du reverse proxy. */
+export const SSE_HEARTBEAT_MS = 30_000;
 const encoder = new TextEncoder();
 // All open SSE connections
 const clients = new Set<ReadableStreamDefaultController<Uint8Array>>();
@@ -80,8 +82,19 @@ export async function GET(req: NextRequest) {
     start(controller) {
       clients.add(controller);
       controller.enqueue(encoder.encode(`event: connected\ndata: {}\n\n`));
+      // Un signe de vie toutes les 30 s (13/11/2026) : sans un octet pendant une heure, le reverse proxy coupait le
+      // flux (trois fois en quatre jours) et le navigateur se reconnectait. Une ligne de commentaire SSE, que
+      // `EventSource` ignore.
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(`: vivant\n\n`));
+        } catch {
+          clearInterval(heartbeat);
+        }
+      }, SSE_HEARTBEAT_MS);
 
       req.signal.addEventListener("abort", () => {
+        clearInterval(heartbeat);
         clients.delete(controller);
         try { controller.close(); } catch {}
         // Stop polling when no clients remain — reset state for next connect

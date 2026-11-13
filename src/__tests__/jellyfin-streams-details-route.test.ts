@@ -9,6 +9,7 @@ import type { FileStreamsResponse } from "@/app/api/jellyfin/streams/[itemId]/ro
  * page de gestion restant la même.
  */
 
+vi.mock("@/lib/logger", () => ({ logError: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
 const mockVerify = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => mockVerify(...a) }));
@@ -134,5 +135,12 @@ describe("GET /api/jellyfin/streams/[itemId] — la fenêtre « Détails » (§1
     mockGetSources.mockRejectedValue(new Error("Jellyfin injoignable"));
     const res = await call();
     expect(res.status).toBe(502);
+  });
+
+  it("le message brut de Jellyfin ne sort jamais dans la réponse (13/11/2026)", async () => {
+    mockGetSources.mockRejectedValue(new Error("404 Not Found: http://jellyfin:8096/Items/abc"));
+    const res = await call();
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "Jellyfin injoignable" });
   });
 });

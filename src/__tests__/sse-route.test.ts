@@ -85,6 +85,21 @@ describe("GET /api/sse", () => {
     abort();
   });
 
+  it("envoie un signe de vie toutes les 30 s, et plus rien après la fermeture (13/11/2026)", async () => {
+    const { GET, SSE_HEARTBEAT_MS } = await import("@/app/api/sse/route");
+    // Les minuteries des modules chargés (balayage du cache…) : seules celles de la connexion doivent partir.
+    const before = vi.getTimerCount();
+    const { req, abort } = fakeReq();
+    const res = await GET(req);
+    const reader = res.body!.getReader();
+    await reader.read();
+    await vi.advanceTimersByTimeAsync(SSE_HEARTBEAT_MS);
+    const { value } = await reader.read();
+    expect(new TextDecoder().decode(value)).toBe(": vivant\n\n");
+    abort();
+    expect(vi.getTimerCount()).toBe(before);
+  });
+
   it("removes the client on abort without throwing", async () => {
     const { GET } = await import("@/app/api/sse/route");
     const { req, abort } = fakeReq();
