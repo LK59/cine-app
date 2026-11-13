@@ -10849,7 +10849,8 @@ suffit, et poser une question en regardant n'est pas ergonomique. La fiche d'un 
 rangée : elle reste en place, un toucher sur une autre pilule (vue à travers le fond transparent du panneau,
 `onBackdropTap` d'`AskPanel`) ouvre la fiche de celle-ci, un toucher ailleurs referme la fiche. Le relevé `open` porte
 les hauteurs du panneau (`size*`) : en paysage sur l'iPhone, il s'est ouvert haut de 0 en 10.41.1 sans que l'émulation
-WebKit le reproduise.
+WebKit le reproduise. Le relevé a donné la cause (10.42.1) : `visualViewport` y répondait 932 × 0, la fenêtre faisant
+932 × 430 — une vue vide est désormais remplacée par la fenêtre (`visibleArea`, `src/lib/ask/viewport.ts`).
 
 **Différent exprès.** Pas d'ouverture d'office en pause (proposée, puis écartée par Louis : « par défaut on masque
 toujours la rangée qui prend trop de place »). Le bouton n'est pas dans la pilule des réglages : à l'endroit de la

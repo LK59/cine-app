@@ -144,6 +144,22 @@ export function isTouchPhone(win: Window): boolean {
   }
 }
 
+/**
+ * La vue visuelle, ou la fenêtre quand elle n'en dit rien d'utilisable.
+ *
+ * 13/11/2026 : sur l'iPhone de Louis, en paysage dans l'application installée, `visualViewport` répondait 932 × 0
+ * alors que la fenêtre faisait 932 × 430 — le panneau d'une personne s'ouvrait haut de 0, invisible, et le toucher
+ * suivant tombait sur le fond qui le refermait. Une vue sans hauteur ou sans largeur n'est pas une mesure : la
+ * fenêtre la remplace, entière.
+ */
+export function visibleArea(
+  vv: Pick<VisualViewport, "height" | "width" | "offsetTop" | "scale"> | null | undefined,
+  win: Pick<Window, "innerHeight" | "innerWidth">
+): { height: number; offsetTop: number; width: number; scale: number } {
+  if (vv && vv.height > 0 && vv.width > 0) return { height: vv.height, offsetTop: vv.offsetTop, width: vv.width, scale: vv.scale ?? 1 };
+  return { height: win.innerHeight, offsetTop: 0, width: win.innerWidth, scale: 1 };
+}
+
 type Measured = Omit<ViewportFacts, "baseline" | "focused" | "touchPhone" | "settling">;
 
 function read(win: Window, layer: HTMLElement | null): Measured {
@@ -154,10 +170,7 @@ function read(win: Window, layer: HTMLElement | null): Measured {
   } catch {
     layerTop = 0;
   }
-  const base = vv
-    ? { height: vv.height, offsetTop: vv.offsetTop, width: vv.width, scale: vv.scale ?? 1 }
-    : { height: win.innerHeight, offsetTop: 0, width: win.innerWidth, scale: 1 };
-  return { ...base, layoutHeight: win.innerHeight, layerTop };
+  return { ...visibleArea(vv, win), layoutHeight: win.innerHeight, layerTop };
 }
 
 const sameFacts = (a: Omit<ViewportFacts, "focused">, b: Omit<ViewportFacts, "focused">) =>
