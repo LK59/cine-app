@@ -1526,6 +1526,8 @@
       "forecastGrowingSoon": "Weniger als eine Woche bis zur Sättigung beim aktuellen Tempo (+{rate}/Woche)",
       "forecastStable": "Stabile Nutzung — kein klarer Wachstumstrend über die letzten {months} Monate",
       "forecastInsufficientData": "Noch nicht genug Verlauf für eine Prognose — in ein paar Tagen erneut prüfen",
+      "forecastPending": "Wird berechnet …",
+      "scanError": "Die Speicheranalyse ist fehlgeschlagen: {error}",
       "forecastAdminOnly": "Nur für Administratoren",
       "monthlyGrowthLabel": "GB pro Monat hinzugefügt (letzte 12 Monate)",
       "legend": "Was bedeuten die Markierungen?"

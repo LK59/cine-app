@@ -18,6 +18,15 @@ export interface DiskForecast {
   daysUntilFull: number | null;
   monthlyGrowth: { month: string; bytes: number }[];
   monthsUsed: number;
+  /**
+   * L'analyse du stockage ou la mesure du disque n'a pas encore rendu son premier résultat
+   * (13/11/2026). Les deux tournent en arrière-plan et répondent vide d'ici là : la prévision
+   * tombait alors dans « insufficient_data », que la page traduit « Historique insuffisant —
+   * revient dans quelques jours » — c'était le message vu à chaque ouverture après un déploiement,
+   * pour une analyse qui finit en une dizaine de secondes. `pending` dit « en cours » et fait
+   * revenir la page vite (`statsRefreshInterval`).
+   */
+  pending: boolean;
 }
 
 /** Derives a saturation forecast straight from what's already on disk — how many GB got added
@@ -31,6 +40,11 @@ export function computeDiskForecast(): DiskForecast {
   const storage = getStorageStats();
   const disk = getDiskStats();
   const monthlyGrowth = storage.monthlyGrowth;
+  // `computedAt === 0` : jamais calculé dans ce processus (une analyse échouée, elle, a une date).
+  const pending = storage.computedAt === 0 || disk.computedAt === 0;
+  if (pending) {
+    return { trend: "insufficient_data", growthBytesPerDay: null, daysUntilFull: null, monthlyGrowth, monthsUsed: 0, pending };
+  }
 
   // The current month is still in progress — including it would understate the real monthly
   // rate (e.g. "3 GB so far" on the 2nd of the month reads as a near-empty month).
@@ -42,16 +56,16 @@ export function computeDiskForecast(): DiskForecast {
   const recentMonths = completeMonths.slice(-MONTHS_FOR_AVERAGE);
 
   if (recentMonths.every((m) => m.bytes <= 0) || disk.disk.total <= 0) {
-    return { trend: "insufficient_data", growthBytesPerDay: null, daysUntilFull: null, monthlyGrowth, monthsUsed: recentMonths.length };
+    return { trend: "insufficient_data", growthBytesPerDay: null, daysUntilFull: null, monthlyGrowth, monthsUsed: recentMonths.length, pending: false };
   }
 
   const avgBytesPerMonth = recentMonths.reduce((s, m) => s + m.bytes, 0) / recentMonths.length;
   const growthBytesPerDay = avgBytesPerMonth / AVG_DAYS_PER_MONTH;
 
   if (growthBytesPerDay < MIN_GROWTH_BYTES_PER_DAY) {
-    return { trend: "stable", growthBytesPerDay, daysUntilFull: null, monthlyGrowth, monthsUsed: recentMonths.length };
+    return { trend: "stable", growthBytesPerDay, daysUntilFull: null, monthlyGrowth, monthsUsed: recentMonths.length, pending: false };
   }
 
   const daysUntilFull = Math.round(disk.disk.free / growthBytesPerDay);
-  return { trend: "growing", growthBytesPerDay, daysUntilFull, monthlyGrowth, monthsUsed: recentMonths.length };
+  return { trend: "growing", growthBytesPerDay, daysUntilFull, monthlyGrowth, monthsUsed: recentMonths.length, pending: false };
 }

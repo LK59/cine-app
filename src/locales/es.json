@@ -1526,6 +1526,8 @@
       "forecastGrowingSoon": "Menos de una semana antes de saturarse al ritmo actual (+{rate}/semana)",
       "forecastStable": "Uso estable — sin tendencia de crecimiento clara en los últimos {months} meses",
       "forecastInsufficientData": "Historial insuficiente para una previsión — vuelve en unos días",
+      "forecastPending": "Calculando…",
+      "scanError": "El análisis del almacenamiento ha fallado: {error}",
       "forecastAdminOnly": "Solo administradores",
       "monthlyGrowthLabel": "GB añadidos por mes (últimos 12 meses)",
       "legend": "¿Qué indican las etiquetas?"

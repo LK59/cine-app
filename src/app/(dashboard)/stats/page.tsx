@@ -6,6 +6,7 @@ import useSWR from "swr";
 import Link from "next/link";
 import { fetcher } from "@/lib/swr";
 import { INTERVALS } from "@/lib/refresh-intervals";
+import { statsRefreshInterval } from "@/lib/statsPolling";
 import { PageHeader } from "@/components/PageHeader";
 import { LoadingState, ErrorState, EmptyState } from "@/components/StateViews";
 import { BarChart2, Film, Tv, HardDrive, Layers, Zap, Link2, Copy, Share2, RefreshCw, AlertTriangle, type LucideIcon } from "lucide-react";
@@ -24,12 +25,17 @@ interface DiskStats {
   tvBytes: number;
   seedsBytes: number;
   disk: { total: number; used: number; free: number };
+  computing?: boolean;
 }
 
 function ForecastLine({ forecast }: { forecast: DiskForecast | undefined }) {
   const t = useT();
   if (!forecast) return null;
 
+  // Avant la première analyse, ce n'est pas l'historique qui manque : c'est le calcul qui tourne.
+  if (forecast.pending) {
+    return <p className="text-xs text-subtle">{t('stats.storage.forecastPending')}</p>;
+  }
   if (forecast.trend === "insufficient_data") {
     return <p className="text-xs text-subtle">{t('stats.storage.forecastInsufficientData')}</p>;
   }
@@ -252,6 +258,13 @@ function StorageSection({ storage, onRefresh, forecast, isAdmin }: { storage: St
         </div>
       </div>
 
+      {/* Une analyse échouée rendait des listes vides — « rien à nettoyer » — sans un mot (13/11/2026). */}
+      {storage.error && (
+        <p className="mb-3 flex items-center gap-1.5 text-xs text-danger">
+          <AlertTriangle size={12} /> {t('stats.storage.scanError', { error: storage.error })}
+        </p>
+      )}
+
       {isAdmin && (
         <div className="card mb-5 p-4">
           <h3 className="mb-1.5 text-sm font-semibold text-muted">{t('stats.storage.forecastTitle')}</h3>
@@ -402,18 +415,20 @@ export default function StatsPage() {
   const { data: lib, error: libError, isLoading, mutate: retryLib } = useSWR<LibraryStats>(
     "/api/stats/library", fetcher, { refreshInterval: INTERVALS.SLOW }
   );
-  const { data: disk } = useSWR<DiskStats>("/api/stats", fetcher, { refreshInterval: INTERVALS.SLOW });
+  // Les quatre sources calculées en arrière-plan reviennent vite tant que le serveur calcule, puis
+  // au rythme lent : la première réponse après un démarrage est vide (`statsRefreshInterval`).
+  const { data: disk } = useSWR<DiskStats>("/api/stats", fetcher, { refreshInterval: statsRefreshInterval });
   const additionsTip = useBarTip();
   // Regular (polling) SWR, not immutable: the route now returns instantly with a possibly-stale
   // or empty result while it recomputes in the background (fire-and-forget, like storage stats),
   // so the client needs to keep checking back until the first computation lands.
-  const { data: people } = useSWR<PeopleStats>("/api/stats/people", fetcher, { refreshInterval: INTERVALS.SLOW });
-  const { data: storage, mutate: refreshStorage } = useSWR<StorageStats>("/api/stats/storage", fetcher, { refreshInterval: INTERVALS.SLOW });
+  const { data: people } = useSWR<PeopleStats>("/api/stats/people", fetcher, { refreshInterval: statsRefreshInterval });
+  const { data: storage, mutate: refreshStorage } = useSWR<StorageStats>("/api/stats/storage", fetcher, { refreshInterval: statsRefreshInterval });
   // Admin-only, both server- (403 for guests) and client-gated — null key skips the fetch entirely.
   const { data: forecast } = useSWR<DiskForecast>(
     isAdmin ? "/api/stats/storage-forecast" : null,
     fetcher,
-    { refreshInterval: INTERVALS.SLOW }
+    { refreshInterval: statsRefreshInterval }
   );
 
   async function handleStorageRefresh() {

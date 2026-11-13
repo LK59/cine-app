@@ -1526,6 +1526,8 @@
       "forecastGrowingSoon": "Less than a week until full at the current rate (+{rate}/week)",
       "forecastStable": "Stable usage — no clear growth trend over the last {months} months",
       "forecastInsufficientData": "Not enough history for a forecast yet — check back in a few days",
+      "forecastPending": "Calculating…",
+      "scanError": "The storage scan failed: {error}",
       "forecastAdminOnly": "Admins only",
       "monthlyGrowthLabel": "GB added per month (last 12 months)",
       "legend": "What do the badges mean?"

@@ -1526,6 +1526,8 @@
       "forecastGrowingSoon": "Moins d'une semaine avant saturation au rythme actuel (+{rate}/semaine)",
       "forecastStable": "Utilisation stable — pas de tendance de croissance nette sur les {months} derniers mois",
       "forecastInsufficientData": "Historique insuffisant pour une prévision — revient dans quelques jours",
+      "forecastPending": "Calcul en cours…",
+      "scanError": "L'analyse du stockage a échoué : {error}",
       "forecastAdminOnly": "Réservé aux administrateurs",
       "monthlyGrowthLabel": "Go ajoutés par mois (12 derniers mois)",
       "legend": "Que disent les pastilles ?"

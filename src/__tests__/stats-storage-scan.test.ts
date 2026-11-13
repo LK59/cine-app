@@ -183,3 +183,23 @@ describe("analyse du stockage (page Statistiques)", () => {
     expect(stats.monthlyGrowth).toHaveLength(12);
   });
 });
+
+describe("loopBreather — l'analyse rend la main au serveur", () => {
+  // 13/11/2026 : le rapprochement des seeds tenait la boucle 3,7 à 5,8 s d'un trait sur la vraie
+  // bibliothèque ; tout le serveur attendait (`/api/auth/me` en 7 s). Après ~20 ms de calcul, une
+  // respiration laisse passer ce qui attend.
+  it("ne cède rien sous le budget, puis laisse passer ce qui attend", async () => {
+    const { loopBreather } = await import("@/lib/storage-scan");
+    let clock = 0;
+    const breathe = loopBreather(20, () => clock);
+    const order: string[] = [];
+    setImmediate(() => order.push("requête en attente"));
+    clock = 10;
+    await breathe();
+    order.push("calcul (10 ms)");
+    clock = 25;
+    await breathe();
+    order.push("calcul (25 ms)");
+    expect(order).toEqual(["calcul (10 ms)", "requête en attente", "calcul (25 ms)"]);
+  });
+});

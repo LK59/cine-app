@@ -18,8 +18,8 @@ vi.mock("@/lib/clients/tmdb", () => ({ tmdb: mockTmdb, TMDB_IMAGE_BASE: "https:/
 const mockGetStorageStats = vi.fn();
 vi.mock("@/lib/storage-scan", () => ({ getStorageStats: (...args: unknown[]) => mockGetStorageStats(...args) }));
 
-function fakeReq(params: Record<string, string> = {}): NextRequest {
-  return { nextUrl: { searchParams: new URLSearchParams(params) } } as unknown as NextRequest;
+function fakeReq(params: Record<string, string> = {}, headers: Record<string, string> = {}): NextRequest {
+  return { nextUrl: { searchParams: new URLSearchParams(params) }, headers: new Headers(headers) } as unknown as NextRequest;
 }
 
 beforeEach(() => {
@@ -135,5 +135,26 @@ describe("GET /api/stats/storage", () => {
     const { GET } = await import("@/app/api/stats/storage/route");
     await GET(fakeReq());
     expect(mockGetStorageStats).toHaveBeenCalledWith(false);
+  });
+
+  // 13/11/2026 : 1,15 Mo de JSON en clair toutes les deux minutes. Une relecture d'une analyse
+  // inchangée doit coûter un 304, pas le mégaoctet.
+  it("répond un 304 à une relecture d'une analyse inchangée", async () => {
+    mockGetStorageStats.mockReturnValue({ computedAt: 1, computing: false, seedOrphans: [] });
+    const { GET } = await import("@/app/api/stats/storage/route");
+    const first = await GET(fakeReq());
+    const etag = first.headers.get("etag");
+    expect(etag).toBeTruthy();
+    const again = await GET(fakeReq({}, { "if-none-match": etag! }));
+    expect(again.status).toBe(304);
+  });
+});
+
+describe("GET /api/stats — l'état du calcul passe au client", () => {
+  it("transmet `computing`, sans quoi la page attendait deux minutes une mesure prête en trois secondes", async () => {
+    mockGetDiskStats.mockReturnValue({ moviesBytes: -1, tvBytes: -1, seedsBytes: -1, disk: { total: -1, used: -1, free: -1 }, computing: true, computedAt: 0 });
+    const { GET } = await import("@/app/api/stats/route");
+    const body = await (await GET()).json();
+    expect(body.computing).toBe(true);
   });
 });

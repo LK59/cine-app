@@ -8,6 +8,7 @@ import { getTitleNames } from "@/lib/titleNames";
 import type { RadarrMovie } from "@/lib/clients/radarr";
 import type { SonarrSeries } from "@/lib/clients/sonarr";
 import { MEDIA_ROOT, MOVIES_PATH, TV_PATH, SEED_MOVIES_PATH, SEED_TV_PATH, CROSS_SEED_PATH } from "@/lib/media-paths";
+import { yieldToLoop } from "@/lib/inBatches";
 
 const VIDEO_EXT = new Set([".mkv", ".mp4", ".avi", ".m4v", ".ts", ".wmv", ".mov"]);
 const EPISODE_TAG_RE = /^(.*?)[.\s_-]*S(\d{1,2})E(\d{1,3})\b/i;
@@ -197,6 +198,26 @@ function displayTitle(name: string): string {
   return m ? `${m[1].replace(/[._]/g, " ").trim()} · S${m[2].padStart(2, "0")}E${m[3].padStart(3, "0")}` : name;
 }
 
+/**
+ * Rend la main à la boucle d'évènements après ~`budgetMs` de calcul d'affilée (13/11/2026).
+ *
+ * Le rapprochement des seeds avec Radarr/Sonarr (`bestTitleMatchScore`, distance d'édition mot à
+ * mot) tenait la boucle d'un trait : 3,7 à 5,8 s mesurés sur la vraie bibliothèque (~13 000 fichiers
+ * seed, 200 séries, 970 films), à chaque analyse — au premier passage sur Statistiques après un
+ * déploiement, puis toutes les 30 minutes tant que la page reste ouverte. Pendant ce temps tout le
+ * serveur attendait : `/api/auth/me` a répondu en 7 s le 13/11, la prévision de saturation est
+ * partie d'autant plus tard, et les flux des spectateurs avec. Le travail est le même ; il est
+ * seulement découpé.
+ */
+export function loopBreather(budgetMs = 20, now: () => number = () => performance.now()): () => Promise<void> {
+  let since = now();
+  return async () => {
+    if (now() - since < budgetMs) return;
+    await yieldToLoop();
+    since = now();
+  };
+}
+
 async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   // Movie codec comes from Radarr's own mediaInfo (already fetched/cached elsewhere in
   // the app, one bulk call) — more reliable than filename sniffing, since Radarr often
@@ -235,6 +256,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   // English-titled seed release vs. the library's French title) — the plain filename
   // key alone would treat them as two unrelated movies. Reuse the same fuzzy
   // localized/original-title matching used by search, keyed by year to keep it cheap.
+  const breathe = loopBreather();
   const hintsByYear = new Map<number, MovieHint[]>();
   for (const m of radarrMovies) {
     const arr = hintsByYear.get(m.year);
@@ -242,14 +264,22 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
     if (arr) arr.push(hint);
     else hintsByYear.set(m.year, [hint]);
   }
+  // Gardé par titre et année, comme les séries plus bas : un même nom de release est demandé jusqu'à
+  // trois fois (doublons, orphelins, cross-seed), et chaque demande comparait tous les films de
+  // l'année avec tous leurs titres.
+  const movieHintCache = new Map<string, MovieHint | null>();
   function resolveMovieHint(rawTitle: string, year: number) {
+    const cacheKey = `${year}:${rawTitle}`;
+    if (movieHintCache.has(cacheKey)) return movieHintCache.get(cacheKey)!;
     let best: MovieHint | null = null;
     let bestScore = 0;
     for (const c of hintsByYear.get(year) ?? []) {
       const score = bestTitleMatchScore(c.titles, rawTitle);
       if (score > bestScore) { bestScore = score; best = c; }
     }
-    return bestScore >= 75 ? best : null;
+    const result = bestScore >= 75 ? best : null;
+    movieHintCache.set(cacheKey, result);
+    return result;
   }
 
   // Same idea as Radarr hints above, but for series: a season-pack seed's episode names are
@@ -378,6 +408,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   // suit pas (« Berlin and the Lady with an Ermine », « Le Flambeau ») mais que Jellyfin montre
   // comme une série à part — Sonarr, lui, n'a qu'une série pour chaque paire.
   for (const item of movieItems) {
+    await breathe();
     for (const f of item.files) {
       if (libraryInodes.has(`${f.dev}:${f.ino}`)) continue;
       libraryInodes.add(`${f.dev}:${f.ino}`);
@@ -388,6 +419,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
     }
   }
   for (const item of seriesItems) {
+    await breathe();
     let h264Bytes = 0;
     for (const f of item.files) {
       if (libraryInodes.has(`${f.dev}:${f.ino}`)) continue;
@@ -403,6 +435,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   heaviestH264.sort((a, b) => b.sizeBytes - a.sizeBytes);
   const heaviestH264Top = heaviestH264.slice(0, 50);
   for (const f of seedFiles) {
+    await breathe();
     addReleaseCandidate(f.name, f.relPath, f.dev, f.ino, f.size, false);
   }
 
@@ -419,6 +452,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   // sibling release (same title/episode) anywhere else in the library or seed pool.
   const seedOrphanMap = new Map<string, { title: string; fileName: string; sizeBytes: number; trackers: Set<string>; paths: Set<string>; inCatalog: boolean }>();
   for (const f of seedFiles) {
+    await breathe();
     const key = `${f.dev}:${f.ino}`;
     if (libraryInodes.has(key) || duplicateInodes.has(key)) continue;
     let entry = seedOrphanMap.get(key);
@@ -444,6 +478,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   // Cross-seed grouped by tracker
   const trackerMap = new Map<string, { totalBytes: number; files: { title: string; fileName: string; relativePath: string; sizeBytes: number; linkedToLibrary: boolean }[] }>();
   for (const f of seedFiles) {
+    await breathe();
     if (f.origin !== "cross-seed" || !f.tracker) continue;
     let group = trackerMap.get(f.tracker);
     if (!group) {
@@ -460,6 +495,7 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   // Duplicates: groups with more than one distinct physical file for the same title/episode
   const duplicates: StorageStats["duplicates"] = [];
   for (const [key, group] of releaseGroups) {
+    await breathe();
     if (group.releases.length < 2) continue;
     const sorted = [...group.releases].sort((a, b) => b.sizeBytes - a.sizeBytes);
     // « En trop » = ce que libère la suppression des autres copies, en gardant celle que la
