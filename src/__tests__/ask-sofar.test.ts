@@ -291,7 +291,10 @@ describe("préparé en fond", () => {
     await settle();
     const kept = await sofar(a, { prewarm: true, positionS: 601 });
     expect(kept.events).toEqual([{ t: "queued" }]);
-  });
+    // 200 passages par la route : 1,5 à 3,1 s d'habitude, plus de 5 s sur un runner chargé (build GHCR
+    // de la 10.39.6, 12/11/2026). Coupé, il laissait ses préparations appeler le modèle pendant les
+    // tests suivants — neuf échecs en cascade pour un seul délai.
+  }, 30_000);
 
   it(`la borne journalière commune (11/11/2026) : ${AI_CALLS_PER_DAY} appels payants par jour local, questions et « Jusqu'ici » ensemble — puis « limite », le lendemain de nouveau`, async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
