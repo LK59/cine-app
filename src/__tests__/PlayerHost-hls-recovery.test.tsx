@@ -381,3 +381,24 @@ describe("hls.js 1.7 — une coupure a sa borne : l'écran final à 48 s", () =>
     expect(JSON.parse((second[1] as RequestInit).body as string).startTicks).toBe(1500 * 10_000_000);
   });
 });
+
+describe("une négociation remplacée avant sa première image (13/11/2026)", () => {
+  // hls.js garde le même élément d'une négociation à l'autre : l'écouteur `loadeddata` d'une négociation remplacée
+  // restait posé et partait au chargement de la suivante — un second saut de reprise vers l'ancienne position, une
+  // « image en N ms » notée pour une marche qui n'en avait jamais montré, ses exclusions retenues comme réussies.
+  beforeEach(() => {
+    playback.session = { itemId: "film", openId: 1, resumeAt: 600, title: "Film" };
+  });
+
+  it("au chargement de la suivante, seul son écouteur à elle pose la reprise", async () => {
+    await mounted();
+    for (let i = 0; i < 4; i++) fatal("mediaError");
+    await waitFor(() => expect(negotiations().at(-1)).toMatchObject({ videoH264Only: true }), { timeout: 3000 });
+    await waitFor(() => expect(fake.listeners.get("hlsError")?.length).toBeGreaterThan(1));
+    const video = document.querySelector("video")!;
+    const sets: number[] = [];
+    Object.defineProperty(video, "currentTime", { configurable: true, get: () => 0, set: (v: number) => void sets.push(v) });
+    act(() => void video.dispatchEvent(new Event("loadeddata")));
+    expect(sets).toHaveLength(1);
+  });
+});

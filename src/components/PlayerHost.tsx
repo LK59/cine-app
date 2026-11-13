@@ -1348,6 +1348,11 @@ function ActivePlayer({
         // first, so the resume seek only fires once the initial bootstrap has already succeeded.
         "loadeddata",
         () => {
+          // Une négociation remplacée avant sa première image (marche de l'échelle, H.264, bascule allégée,
+          // « Réessayer ») : hls.js garde le même élément, et cet écouteur partait au chargement de la
+          // suivante — second saut de reprise, « image en N ms » d'une marche qui n'en avait montré aucune,
+          // exclusions retenues comme réussies (13/11/2026). C'est l'écouteur de la suivante qui répond.
+          if (generation !== playbackGeneration.current) return;
           if (loadWatchdog.current) clearTimeout(loadWatchdog.current);
           loadWatchdog.current = null;
           if (linkWatch.current) clearInterval(linkWatch.current);
@@ -1526,6 +1531,8 @@ function ActivePlayer({
         video.addEventListener(
           "loadeddata",
           () => {
+            // Le sous-titre d'une négociation remplacée : la suivante pose le sien (voir plus haut, 13/11/2026).
+            if (generation !== playbackGeneration.current) return;
             // En mode deux sous-titres, c'est `useServerDualSubtitles` qui pose les modes.
             if (secondSubtitleRef.current !== null) return;
             const position = tracks.findIndex((st) => st.index === wantedSubtitle);
