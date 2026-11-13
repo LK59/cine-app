@@ -1,3 +1,4 @@
+import { ServiceNotConfiguredError } from "@/lib/serviceConfigured";
 import fs from "fs/promises";
 import path from "path";
 import { cachedMovies, cachedSeries } from "@/lib/server-cache";
@@ -251,14 +252,26 @@ async function computeStorageStats(): Promise<Omit<StorageStats, "computing">> {
   // renames files to "Title (Year).mkv" with no codec tag left in the name at all.
   // Series use the filename heuristic below: probing every episode's mediainfo, or
   // calling Sonarr per-series, made the scan too slow to be usable.
+  // Un service qui ne répond pas arrête l'analyse (13/11/2026) : avalé en liste vide, Radarr ou Sonarr en panne
+  // faisait passer tout un rayon pour des seeds sans titre, et qBittorrent en panne des fichiers encore partagés
+  // pour des orphelins — sur la page même où l'on décide quoi supprimer. L'erreur s'affiche (`storage.error`) et
+  // le résultat précédent reste.
+  const down: string[] = [];
+  // Un service simplement absent de cette installation (`ServiceNotConfiguredError`) n'est pas une panne : liste vide.
+  const needed = <T,>(name: string, work: Promise<T[]>): Promise<T[]> =>
+    work.catch((error: unknown) => {
+      if (!(error instanceof ServiceNotConfiguredError)) down.push(name);
+      return [] as T[];
+    });
   const [movieItems, seriesItems, seedFiles, radarrMovies, sonarrSeries, qbTorrents] = await Promise.all([
     walkLibraryGrouped(MOVIES_PATH, "movie"),
     walkLibraryGrouped(TV_PATH, "series"),
     walkSeeds(),
-    cachedMovies().catch(() => []),
-    cachedSeries().catch(() => []),
-    qbittorrent.getTorrents().catch(() => []),
+    needed("Radarr", cachedMovies()),
+    needed("Sonarr", cachedSeries()),
+    needed("qBittorrent", qbittorrent.getTorrents()),
   ]);
+  if (down.length > 0) throw new Error(`${down.join(", ")} ne répond pas : analyse interrompue pour ne pas classer à tort des fichiers`);
 
   // A seed-side file with no qBittorrent record at all is safe to delete outright; one that
   // still matches a live torrent should be removed there first (qBittorrent will otherwise

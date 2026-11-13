@@ -230,3 +230,27 @@ describe("fsSlots — le parcours du disque borne ce qu'il a en vol", () => {
     expect(await slot(async () => "suite")).toBe("suite");
   });
 });
+
+describe("un service en panne pendant l'analyse (13/11/2026)", () => {
+  async function scanOnce() {
+    delete (globalThis as unknown as Record<symbol, unknown>)[Symbol.for("laterna.storageScan")];
+    const { warmStorageStats, getStorageStats } = await import("@/lib/storage-scan");
+    await warmStorageStats();
+    return getStorageStats();
+  }
+
+  it("Radarr ne répond pas : l'analyse s'arrête avec une erreur, aucun seed classé orphelin à tort", async () => {
+    mockCachedMovies.mockRejectedValueOnce(new Error("connect ECONNREFUSED"));
+    const s = await scanOnce();
+    expect(s.error).toMatch(/Radarr/);
+    expect(s.seedOrphans).toEqual([]);
+  });
+
+  it("un service simplement absent de l'installation n'arrête rien", async () => {
+    const { ServiceNotConfiguredError } = await import("@/lib/serviceConfigured");
+    mockCachedMovies.mockRejectedValueOnce(new ServiceNotConfiguredError("radarr"));
+    const s = await scanOnce();
+    expect(s.error).toBeNull();
+    expect(s.computedAt).toBeGreaterThan(0);
+  });
+});
