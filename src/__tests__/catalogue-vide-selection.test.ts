@@ -26,7 +26,7 @@ describe("catalogueIsEmpty", () => {
     for (const file of ["src/components/cinema/CinemaClient.tsx", "src/components/cinema/mobile/CinemaMobileClient.tsx"]) {
       const source = readFileSync(path.join(process.cwd(), file), "utf8");
       expect(source, file).not.toMatch(/spotlight\.length === 0/);
-      expect(source, file).toMatch(/catalogueIsEmpty\(/);
+      expect(source, file).toMatch(/catalogueIsEmpty(<[^>]*>)?\(/);
     }
   });
 
