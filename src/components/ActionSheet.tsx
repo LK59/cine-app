@@ -45,11 +45,16 @@ interface Props {
    * téléchargement hors ligne, 19/10/2026 : piste son et qualité). Absent partout ailleurs.
    */
   children?: ReactNode;
+  /**
+   * Le nom du dialogue quand la feuille n'a pas d'en-tête écrit (`title`) — la fenêtre « Détails » d'un
+   * film (§152, 13/11/2026) dessine le sien, le logo du film, dans `children`.
+   */
+  ariaLabel?: string;
 }
 
 const CLOSE_THRESHOLD = 80; // px dragged down to trigger close
 
-export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSubtitle, poster: livePoster, actions, role = "dialog", centerOnWide = false, children }: Props) {
+export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSubtitle, poster: livePoster, actions, role = "dialog", centerOnWide = false, children, ariaLabel }: Props) {
   /**
    * L'en-tête reste celui de l'ouverture pendant la sortie.
    *
@@ -200,7 +205,10 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
     <div
       data-action-sheet
       className={`fixed inset-0 z-60 flex items-end ${centerOnWide ? "sm:items-center sm:justify-center" : ""}`}
-      style={{ touchAction: "none" }}
+      // Pendant sa sortie (refermée, encore montée 300 ms pour glisser), elle ne prend plus rien au doigt
+      // ni à la souris (règle 2 des fiches, 13/11/2026) : un second appui sur le fond ou la croix rappelait
+      // `onClose`, et ce qui est dessous attendait la fin de l'animation pour répondre.
+      style={{ touchAction: "none", pointerEvents: open ? undefined : "none" }}
     >
       {/* Backdrop */}
       <div
@@ -213,7 +221,7 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
         ref={sheetRef}
         role={role}
         aria-modal="true"
-        aria-label={title}
+        aria-label={title ?? ariaLabel}
         // Le verre liquide (DECISIONS.md §45), et une carte qui flotte au lieu d'une bande collée au
         // bas : arrondie de partout, à 8 px des bords. Elle arrive avec un léger rebond — le
         // dépassement de la courbe la fait monter un peu au-delà de sa place, puis s'y poser — et

@@ -288,14 +288,23 @@ export interface SubtitleLabelOptions {
   piste: (n: number) => string;
 }
 
+/**
+ * Le type d'un sous-titre, sans les mots : la même décision pour les menus des lecteurs (`typeSousTitre`)
+ * et pour la fenêtre « Détails » d'un film (§152, 13/11/2026), qui l'affiche en étiquette sous la langue.
+ */
+export function subtitleKind(track: NamedTrack & { isHearingImpaired?: boolean }): "sdh" | "forced" | "full" {
+  // Les malentendants avant les forcés : une piste peut porter les deux drapeaux, et c'est la
+  // description des sons qui change le plus ce qu'on voit à l'écran.
+  if (track.isHearingImpaired || titleSaysHearingImpaired(track.name)) return "sdh";
+  if (isForcedTrack(track)) return "forced";
+  return "full";
+}
+
 function typeSousTitre(track: SubtitleTrackFacts, options: SubtitleLabelOptions): string {
   if (track.origin === "generating" && options.enCours) return options.enCours;
   if (track.origin === "generated" && options.genere) return options.genere;
-  // Les malentendants avant les forcés : une piste peut porter les deux drapeaux, et c'est la
-  // description des sons qui change le plus ce qu'on voit à l'écran.
-  if (track.isHearingImpaired || titleSaysHearingImpaired(track.name)) return options.malentendants;
-  if (isForcedTrack(track)) return options.forces;
-  return options.complets;
+  const kind = subtitleKind(track);
+  return kind === "sdh" ? options.malentendants : kind === "forced" ? options.forces : options.complets;
 }
 
 export function labelSubtitleTracks(

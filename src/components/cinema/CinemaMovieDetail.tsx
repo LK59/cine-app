@@ -28,6 +28,7 @@ import { useSheetPlay } from "@/lib/useSheetPlay";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, sheetRuntimeMinutes, sheetLeadFacts } from "@/lib/sheetFacts";
 import { DetailIconActions } from "@/components/cinema/DetailIconActions";
+import { TitleDetailsSheet } from "@/components/cinema/TitleDetails";
 import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
 
 const TrailerModal = dynamic(() => import("@/components/TrailerModal").then((m) => m.TrailerModal), { ssr: false });
@@ -82,6 +83,9 @@ export function CinemaMovieDetail({
   const runtimeLabel = useRuntimeLabel();
   const [showTrailer, setShowTrailer] = useState(false);
   const [showSynopsis, setShowSynopsis] = useState(false);
+  // La fenêtre « Détails » (§152, 13/11/2026) : ouverte par le rond « Infos » ou une pastille de qualité.
+  // Une feuille posée sur la fiche, hors de l'adresse comme Partager et Télécharger — voir `TitleDetailsSheet`.
+  const [showDetails, setShowDetails] = useState(false);
   const { data: info, error: infoError } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
   // L'accroche, la distribution et la bande-annonce n'arrivent que par cette réponse : leur place
   // est tenue dès l'ouverture, et elles s'y posent en fondu — voir `useLateArrival`.
@@ -245,7 +249,8 @@ export function CinemaMovieDetail({
             {runtimeLabel(sheetRuntimeMinutes(item.runtimeMinutes, info?.tmdb?.runtime), false) && (
               <span>{runtimeLabel(sheetRuntimeMinutes(item.runtimeMinutes, info?.tmdb?.runtime), false)}</span>
             )}
-            <QualityBadges quality={item.quality} />
+            {/* Touchées, elles ouvrent « Détails » (§152) — sauf quand Jellyfin a perdu le fichier : rien à décrire. */}
+            <QualityBadges quality={item.quality} onOpen={fileMissing ? undefined : () => setShowDetails(true)} openLabel={t("cinema.details.title")} />
           {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
           </div>
 
@@ -344,6 +349,7 @@ export function CinemaMovieDetail({
               watched={{ on: watched, onClick: toggleWatched, disabled: flagsBusy, unknown: !flagsKnown }}
               list={listable ? { on: inList, onClick: toggleAddToList } : null}
               askItemId={item.jellyfinItemId}
+              onDetails={fileMissing ? undefined : () => setShowDetails(true)}
             />
           </div>
 
@@ -402,6 +408,17 @@ export function CinemaMovieDetail({
           <CinemaRatingsLine imdbId={info?.imdbId} />
         </CinemaDetailModal>
       )}
+
+      {/* « Détails » (§152) : la même feuille qu'au téléphone, centrée sur grand écran (`centerOnWide`) ; le
+          focus revient au rond ou à la pastille qui l'a ouverte (`ActionSheet`). */}
+      <TitleDetailsSheet
+        open={showDetails}
+        onClose={() => setShowDetails(false)}
+        itemId={item.jellyfinItemId}
+        tmdbId={item.tmdbId}
+        title={item.title}
+        logoUrl={item.logoUrl}
+      />
     </DesktopSheetFrame>,
     document.body
   );

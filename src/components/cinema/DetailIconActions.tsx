@@ -2,6 +2,7 @@
 
 import { AskTitleControl } from "@/components/ask/AskTitleControl";
 import { TitleToggleRound, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
+import { TitleDetailsRound } from "@/components/cinema/TitleDetails";
 
 /**
  * La rangée de boutons ronds des fiches du bureau, film et série (10.27, 09/11/2026 — DECISIONS.md §117.4
@@ -32,7 +33,18 @@ interface ToggleState {
   unknown?: boolean;
 }
 
-export function DetailIconActions({ watched, list, askItemId }: { watched: ToggleState; list: ToggleState | null; askItemId: string | null | undefined }) {
+export function DetailIconActions({
+  watched,
+  list,
+  askItemId,
+  onDetails,
+}: {
+  watched: ToggleState;
+  list: ToggleState | null;
+  askItemId: string | null | undefined;
+  /** La fenêtre « Détails » (§152, 13/11/2026) : la fiche de film seulement — la fiche série ne la passe pas. */
+  onDetails?: () => void;
+}) {
   return (
     // `items-start` (13/11/2026) : « Vu » et « À voir » portent une légende sous leur rond, pas la question ;
     // alignés au centre, les trois ronds ne tombaient plus sur la même ligne.
@@ -42,6 +54,8 @@ export function DetailIconActions({ watched, list, askItemId }: { watched: Toggl
       <TitleToggleRound face={WATCHED_FACE} {...watched} />
       {list && <TitleToggleRound face={WATCHLIST_FACE} {...list} />}
       <AskTitleControl itemId={askItemId} variant="round" />
+      {/* « Infos » (§152) : le dernier rond, après la question — ce qu'on consulte, après ce qu'on fait. */}
+      {onDetails && <TitleDetailsRound onOpen={onDetails} />}
     </div>
   );
 }

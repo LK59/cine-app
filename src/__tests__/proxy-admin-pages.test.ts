@@ -75,9 +75,12 @@ describe("proxy — les pages de la gestion", () => {
   // données ». Les dernières lectures que seules ses pages faisaient.
   it("refuse aussi les données que seules ces pages lisent", async () => {
     const { proxy } = await import("@/proxy");
-    for (const path of ["/api/health", "/api/discover/movies", "/api/jellyfin/redirect", "/api/jellyfin/streams/abc", "/api/jellyfin/series/abc/episodes", "/api/watchlist/ratings"]) {
+    for (const path of ["/api/health", "/api/discover/movies", "/api/jellyfin/redirect", "/api/jellyfin/series/abc/episodes", "/api/watchlist/ratings"]) {
       expect([path, (await proxy(req(path))).status]).toEqual([path, 403]);
     }
+    // Sauf les pistes d'un fichier depuis le 13/11/2026 (§152) : la fenêtre « Détails » d'un film les lit
+    // pour tout compte, avec son compte Jellyfin.
+    expect((await proxy(req("/api/jellyfin/streams/abc"))).status).toBe(200);
     mockVerify.mockResolvedValue({ u: "admin", role: "admin" });
     expect((await proxy(req("/api/health"))).status).toBe(200);
   });

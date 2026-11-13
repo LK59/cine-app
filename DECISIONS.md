@@ -10872,3 +10872,54 @@ rangée, on comprend ce qu'il ouvre et elle sort de lui.
 `usePlayerKeyboard` (I), `onScreenSession.ts`, `PlayerOnScreen` (`--chip-i`), globals.css (`.player-onscreen-toggle`,
 `[data-onscreen-open]`). **Tests.** `xray-ui-10291.test.tsx` (« À l'écran » à la demande ; les gestes sous le doigt,
 rangée ouverte) ; empreintes inchangées (la rangée n'y est pas proposée).
+
+## 152. La fenêtre « Détails » d'un film : le fichier dit pour tout le monde (13/11/2026)
+
+**Règle.** Une fiche de **film** ouvre une petite fenêtre qui décrit son fichier, en tête le logo du film (le titre
+écrit à défaut), puis trois blocs. **Image** : en grand la définition (« 4K », « 1080p »…, lue sur la largeur *et*
+la hauteur — un 1080p en scope fait 1920 × 800) et la dynamique (« Dolby Vision », « HDR10+ », « HDR10 », « HLG »,
+rien pour SDR), en petit le codec (« HEVC 10 bits », et le profil Dolby Vision quand Jellyfin le donne) ; un encart
+« Débit : X Mb/s » et dessous « Connexion conseillée pour la qualité d'origine : Y Mb/s ». **Son** : une ligne par
+piste, **avec les étiquettes des menus du lecteur** (`labelAudioTracks`, mêmes mots, « (VO) » compris par `?tmdb=`),
+la piste par défaut et l'audiodescription marquées. **Sous-titres** : regroupés par langue, le type en étiquette
+(« Complets », « Forcés », « Malentendants », par `subtitleKind`, la décision des menus), « fichier à part » et
+« générés par Laterna » signalés, deux pistes pareilles comptées (« ×2 »). Rien sur la taille, les images par
+seconde, l'échantillonnage. Une erreur, une absence se disent dans la fenêtre.
+
+**Ouverture.** Téléphone : un rond « i » sur la bannière, juste à gauche de la croix (Partager glisse d'un cran à
+gauche quand l'administrateur le voit). Bureau : un rond « Infos » de plus dans la rangée `DetailIconActions`, en
+dernier, avec sa légende. Partout : les pastilles de qualité (`QualityBadges`, prop `onOpen`), **la pastille seule
+pour zone de toucher**. Une feuille `ActionSheet` (le glisser vers le bas, le fond, Échap, sa croix ; centrée sur
+grand écran, `centerOnWide`) : **hors de l'adresse**, comme Partager, Télécharger et la question — l'adresse dit quel
+écran est ouvert, pas ce qu'on consulte dessus ; la fiche dessous se tait tant qu'elle est là (§117.1). Refermée,
+elle ne prend plus rien au pointeur pendant sa descente (`ActionSheet`, règle 2 des fiches — pour toutes les feuilles).
+
+**Données.** `/api/jellyfin/streams/[itemId]`, lue avec le compte Jellyfin de la session (un titre caché reste
+introuvable), **demandée à l'ouverture seulement**. Champs ajoutés, tous facultatifs — la carte Fichier de la gestion
+lit la même réponse : `bitrate` (`MediaSource.Bitrate`), `video.bitDepth`, `video.dynamicRange` (`dynamicRangeOf`),
+`video.dvProfile`, et par piste `index`, `name` (le `Title` brut, que `trackLabel` lit), `profile`, `generated`
+(`generatedForDirect`, une lecture de `cine.db`) ; `originalLanguage` avec `?tmdb=`. La route sort des
+`ADMIN_ONLY_READS` du proxy, où elle était depuis le 15/10/2026 comme lecture de la seule gestion : elle ne porte ni
+chemin ni nom de sortie. Les liens de partage ne l'atteignent pas (`shareGate`, liste fermée).
+
+**Porteurs.** `src/lib/titleDetails.ts` (`advisedConnectionMbps`, `ADVISED_MARGIN`, `bitrateMbps`, `definitionLabel`,
+`dynamicRangeOf`, `videoCodecLabel`) ; `src/components/cinema/TitleDetails.tsx` (`TitleDetailsSheet`, `TitleDetailsRound`,
+`subtitleGroups`) ; `subtitleKind` (`trackLabel.ts`). **Appelants.** `CinemaMovieDetail` (rond, pastilles, fenêtre),
+`CinemaMobileDetail` (film seulement : rond, pastilles, fenêtre), `DetailIconActions` (`onDetails`).
+**Tests.** `titleDetails.test.ts`, `jellyfin-streams-details-route.test.ts`, `title-details-sheet.test.tsx`,
+`fiche-details-entrees.test.tsx`, `proxy-admin-pages.test.ts`, `news-page-1043.test.ts`.
+
+**Différent exprès.**
+- **L'Atmos tel que le fichier le déclare, sans réserve.** Sous l'étiquette, le profil lu par Jellyfin (« Dolby
+  TrueHD + Dolby Atmos »), ou « Dolby Atmos » quand seul le titre de la piste le dit. Aucune phrase sur ce que le
+  lecteur fait du son (Louis, 13/11/2026) : c'est non contractuel, et les informations techniques de la lecture
+  décrivent déjà la lecture réelle. Les pastilles, elles, gardent leur règle (`videoQuality.ts`) : rien sur l'audio.
+- **Le débit conseillé est une marge, pas une condition** : ×1,5 le débit moyen (les scènes chargées d'un encodage à
+  débit variable dépassent la moyenne d'autant ; ×2 aurait conseillé 100 Mb/s pour un 4K à 50), arrondi vers le haut
+  à l'unité jusqu'à 10, à 5 jusqu'à 50, à 10 au-delà. En dessous, le lecteur passe de lui-même à une version allégée
+  (§78) : d'où « pour la qualité d'origine ».
+- **Films seulement.** Une série n'a pas un fichier mais des centaines : ni rond, ni pastille touchable sur sa fiche.
+  Ni les bannières de l'accueil (une pastille y serait touchée en faisant défiler), ni la fiche d'un lien de partage.
+- **Pas de rond quand Jellyfin a perdu le fichier** (`fileMissing`) : rien à décrire.
+- **Pas d'or.** Le blanc et le gris des fiches seulement : l'or de la marque dit ce qui est « à moi »
+  (`design-tokens.test.ts`), et ni la dynamique d'un fichier ni sa piste par défaut ne le sont.

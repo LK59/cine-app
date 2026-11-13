@@ -163,6 +163,8 @@ export interface JellyfinMediaStream {
   // smpte2084/bt2020 by parsing the HEVC SPS. So this is the authoritative HDR signal.
   VideoRange?: string;
   VideoRangeType?: string;
+  /** Le profil Dolby Vision (5, 7, 8…) quand Jellyfin l'a lu — la fenêtre « Détails » (§152). */
+  DvProfile?: number;
   Width?: number;
   Height?: number;
   Channels?: number;

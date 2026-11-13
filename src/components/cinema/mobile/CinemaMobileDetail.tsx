@@ -9,7 +9,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
-import { Check, Play, RotateCcw, Video, X } from "lucide-react";
+import { Check, Info, Play, RotateCcw, Video, X } from "lucide-react";
+import { TitleDetailsSheet } from "@/components/cinema/TitleDetails";
 import { fetcher } from "@/lib/swr";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useSheetKeys } from "@/lib/useSheetKeys";
@@ -343,6 +344,10 @@ export function CinemaMobileDetail({
   // Lire lancerait, téléchargé, passe en tête comme un film (Louis, 19/10/2026) ; la suite de la
   // série, relue à la fin d'un épisode — voir `useSheetPlay`.
   const { fileMissing, offlinePlayable, episodeCode: offlineEpisodeCode, getNextEpisode } = sheetPlay;
+  // « Détails » (DECISIONS.md §152, 13/11/2026) : les films seulement — une série n'a pas un fichier mais des
+  // centaines —, avec un fichier à décrire, et jamais sur la fiche du dessous, qui ne répond à rien.
+  const detailsOffered = !isSeries && !fileMissing && !inert;
+  const [showDetails, setShowDetails] = useState(false);
   // La place du bouton est tenue tant qu'on ne sait ni si la lecture est ouverte, ni — pour une
   // série jamais commencée — quel épisode elle lancerait.
   const playPending = playerEnabled === undefined || sheetPlay.playPending;
@@ -473,13 +478,30 @@ export function CinemaMobileDetail({
         >
           <X size={18} />
         </button>
+        {/* « Détails » (§152, 13/11/2026) : un rond « i » juste à gauche de la croix, le même verre — un film
+            seulement, et pas quand Jellyfin a perdu son fichier (rien à décrire). */}
+        {detailsOffered && (
+          <button
+            type="button"
+            {...NOT_THE_HANDLE}
+            onClick={() => setShowDetails(true)}
+            aria-label={t("cinema.details.title")}
+            data-sheet-glass=""
+            data-liquid
+            data-details-open=""
+            className="nav-glass absolute right-14 top-3 flex h-9 w-9 items-center justify-center rounded-full text-white"
+          >
+            <Info size={18} />
+          </button>
+        )}
         {/* Partager ce titre par un lien (DECISIONS.md §112) : une pastille de verre à côté de la croix,
-            hors des boutons de la fiche — administrateur seul, film ou série entière. */}
+            hors des boutons de la fiche — administrateur seul, film ou série entière. À gauche du rond
+            « i » quand il est là (13/11/2026). */}
         {shareableFrom(isSeries ? "series" : "movie", { jellyfinItemId: item.jellyfinItemId, fileMissing }) && (
           <ShareButton
             variant="icon"
             {...NOT_THE_HANDLE}
-            iconClassName="nav-glass absolute right-14 top-3 flex h-9 w-9 items-center justify-center rounded-full text-white"
+            iconClassName={`nav-glass absolute ${detailsOffered ? "right-25" : "right-14"} top-3 flex h-9 w-9 items-center justify-center rounded-full text-white`}
             sheetGlass
             kind={isSeries ? "series" : "movie"}
             itemId={item.jellyfinItemId}
@@ -520,7 +542,12 @@ export function CinemaMobileDetail({
           {runtimeLabel(runtimeMinutes, isSeries) && <span className={runtimeLate ? late.fade : ""}>{runtimeLabel(runtimeMinutes, isSeries)}</span>}
           {"quality" in item && qualityBadges(item.quality).length > 0 && (
             <span className="flex items-center gap-2">
-              <QualityBadges quality={item.quality} />
+              {/* Sur une fiche de film, touchées, elles ouvrent « Détails » (§152) ; celles d'une série restent du texte. */}
+              <QualityBadges
+                quality={item.quality}
+                onOpen={detailsOffered ? () => setShowDetails(true) : undefined}
+                openLabel={t("cinema.details.title")}
+              />
             </span>
           )}
           {item.genres.length > 0 && <span className="truncate">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
@@ -781,6 +808,19 @@ export function CinemaMobileDetail({
 
       {showTrailer && lead.trailerKey && (
         <TrailerModal youtubeKey={lead.trailerKey} title={item.title} onClose={() => setShowTrailer(false)} />
+      )}
+
+      {/* « Détails » (§152) : une feuille qui monte du bas, refermée en la glissant vers le bas, par le fond
+          ou par sa croix (`ActionSheet`). Hors de l'adresse, comme Télécharger et Partager. */}
+      {detailsOffered && (
+        <TitleDetailsSheet
+          open={showDetails}
+          onClose={() => setShowDetails(false)}
+          itemId={item.jellyfinItemId}
+          tmdbId={(item as CinemaMovie).tmdbId}
+          title={item.title}
+          logoUrl={item.logoUrl}
+        />
       )}
     </div>,
     document.body

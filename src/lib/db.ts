@@ -18,6 +18,7 @@ import { NEWS_1013_CONTENT, NEWS_1013_REFRESH, NEWS_1013_SEED, NEWS_1013_VERSION
 import { NEWS_1025_CONTENT, NEWS_1025_SEED, NEWS_1025_VERSION } from "@/lib/news/page1025";
 import { NEWS_1037_SEED, NEWS_1037_VERSION, news1037Content } from "@/lib/news/page1037";
 import { NEWS_1040_CONTENT, NEWS_1040_SEED, NEWS_1040_VERSION } from "@/lib/news/page1040";
+import { NEWS_1043_CONTENT, NEWS_1043_SEED, NEWS_1043_VERSION } from "@/lib/news/page1043";
 import { config } from "@/lib/config";
 import { FIXES_LEDGER, RETIRED_LEDGER_ITEMS, ledgerMarker, ledgerTarget, withLedgerEntry, withoutLedgerItems, type FixLedgerEntry } from "@/lib/news/fixesLedger";
 import { NEWS_8672_CONTENT, NEWS_8672_FIRST_VERSION, NEWS_8672_REPUBLISH, NEWS_8672_SEED, NEWS_8672_VERSION } from "@/lib/news/page8672";
@@ -1038,6 +1039,8 @@ function migrate(db: Database.Database): void {
   seedQuietNewsPage(db, NEWS_1037_SEED, NEWS_1037_VERSION, news1037Content(config.recap?.enabled === true));
   // Les sous-titres d'un passage rejoué (13/11/2026, §150) : discrète aussi, pour tous — sans réglage, rien à filtrer.
   seedQuietNewsPage(db, NEWS_1040_SEED, NEWS_1040_VERSION, NEWS_1040_CONTENT);
+  // « Détails » sur les fiches de films (13/11/2026, §152) : discrète aussi, pour tous — sans réglage.
+  seedQuietNewsPage(db, NEWS_1043_SEED, NEWS_1043_VERSION, NEWS_1043_CONTENT);
   // Les corrections livrées, ajoutées à l'historique des pages publiées (`fixesLedger.ts`).
   applyFixesLedger(db);
   retireLedgerItems(db);

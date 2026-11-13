@@ -18,19 +18,48 @@ import { qualityBadges, type VideoQuality } from "@/lib/videoQuality";
  * casserait cet alignement. Le prix est qu'une colonne flex les étire chacune sur toute sa
  * largeur, ce qui est arrivé une fois, sur la bannière du téléphone en paysage.
  */
-export function QualityBadges({ quality, className = "" }: { quality: VideoQuality | null | undefined; className?: string }) {
+export function QualityBadges({
+  quality,
+  className = "",
+  onOpen,
+  openLabel,
+}: {
+  quality: VideoQuality | null | undefined;
+  className?: string;
+  /**
+   * Touchée, une pastille ouvre la fenêtre « Détails » du film (DECISIONS.md §152, 13/11/2026). **Fiches de
+   * films seulement** : les bannières de l'accueil, les fiches de séries et la fiche d'un lien de partage ne la
+   * passent pas, et leurs pastilles restent du texte. La zone de toucher est la pastille elle-même, sans marge
+   * élargie : posée dans la ligne d'infos, à côté de l'année et de la durée, une cible plus grande s'ouvrait
+   * au moindre défilement du doigt.
+   */
+  onOpen?: () => void;
+  /** Le nom de ce que la pastille ouvre, pour les lecteurs d'écran (« Détails »). */
+  openLabel?: string;
+}) {
   const badges = qualityBadges(quality);
   if (badges.length === 0) return null;
+  const look = `rounded border border-white/25 px-1.5 py-px text-[11px] font-semibold uppercase tracking-wide text-muted ${className}`;
   return (
     <>
-      {badges.map((badge) => (
-        <span
-          key={badge}
-          className={`rounded border border-white/25 px-1.5 py-px text-[11px] font-semibold uppercase tracking-wide text-muted ${className}`}
-        >
-          {badge}
-        </span>
-      ))}
+      {badges.map((badge) =>
+        onOpen ? (
+          <button
+            key={badge}
+            type="button"
+            data-quality-open=""
+            onClick={onOpen}
+            aria-label={openLabel ? `${badge} — ${openLabel}` : badge}
+            className={`${look} cursor-pointer transition-colors hover:border-white/50 hover:text-white focus-visible:border-white focus-visible:text-white focus-visible:outline-none`}
+          >
+            {badge}
+          </button>
+        ) : (
+          <span key={badge} className={look}>
+            {badge}
+          </span>
+        )
+      )}
     </>
   );
 }

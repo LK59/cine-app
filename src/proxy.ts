@@ -256,7 +256,10 @@ const ADMIN_ONLY_READS: RegExp[] = [
   /^\/api\/health\/?$/,
   /^\/api\/discover\/movies\/?$/,
   /^\/api\/jellyfin\/redirect\/?$/,
-  /^\/api\/jellyfin\/streams\/[^/]+\/?$/,
+  // `/api/jellyfin/streams/<id>` en est ressorti le 13/11/2026 (DECISIONS.md §152) : la fenêtre « Détails »
+  // d'une fiche de film la lit pour tout compte. Elle ne dit que les pistes du fichier — ni chemin, ni nom
+  // de sortie — et la lit avec le compte Jellyfin de la session : un titre caché par un tag bloqué reste
+  // introuvable. Les liens de partage ne l'atteignent pas (`shareGate`, liste fermée).
   /^\/api\/jellyfin\/series\/[^/]+\/episodes\/?$/,
   /^\/api\/watchlist\/ratings\/?$/,
   // Le panneau des sous-titres générés : dépense du mois, tâches de tous les comptes (§69).

@@ -2842,6 +2842,29 @@
       "retry": "Erneut versuchen",
       "retrying": "Neuer Versuch…",
       "nextRetry": "Neuer Versuch in {n} s"
+    },
+    "details": {
+      "title": "Details",
+      "caption": "Infos",
+      "picture": "Bild",
+      "sound": "Ton",
+      "subtitles": "Untertitel",
+      "bitrate": "Bitrate: {rate}",
+      "advised": "Empfohlene Verbindung für die Originalqualität: {rate}",
+      "mbps": "{n} Mbit/s",
+      "bits": "{n} Bit",
+      "dvProfile": "Profil {n}",
+      "default": "Standard",
+      "audioDescription": "Audiodeskription",
+      "subFull": "Vollständig",
+      "subForced": "Erzwungen",
+      "subSdh": "Für Hörgeschädigte",
+      "subGenerated": "von Laterna erstellt",
+      "subExternal": "separate Datei",
+      "unknownLanguage": "Sprache nicht angegeben",
+      "noAudio": "Keine Tonspur",
+      "noSubtitles": "Keine Untertitel",
+      "unavailable": "Die Details zu diesem Film sind im Moment nicht verfügbar."
     }
   },
   "services": {
