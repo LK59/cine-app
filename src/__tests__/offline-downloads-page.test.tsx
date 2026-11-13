@@ -132,7 +132,7 @@ describe("OfflineDownloadsView", () => {
     expect(screen.getByRole("button", { name: /^Dune/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Ted Lasso/ })).toBeTruthy();
     // Les épisodes ne sont pas dans la grille : ils sont dans la fiche de la série.
-    expect(screen.queryByText("player.downloads.season:1")).toBeNull();
+    expect(screen.queryByText("cinema.season:1")).toBeNull();
   });
 
   it("la fiche d'une série : ses saisons, ses épisodes, et Lire sur celui qu'on a commencé", async () => {
@@ -140,8 +140,8 @@ describe("OfflineDownloadsView", () => {
     render(<OfflineDownloadsView />);
     await openCard(/^Ted Lasso/);
     expect(screen.getByRole("dialog", { name: "Ted Lasso" })).toBeTruthy();
-    expect(screen.getByText("player.downloads.season:1")).toBeTruthy();
-    expect(screen.getByText("player.downloads.season:2")).toBeTruthy();
+    expect(screen.getByText("cinema.season:1")).toBeTruthy();
+    expect(screen.getByText("cinema.season:2")).toBeTruthy();
     expect(screen.getByText("3. Épisode 3")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /common\.resume.*cinema\.episodeShort:3,2/ }));
     expect(play).toHaveBeenCalledWith({ itemId: "ep-e2", title: "Ted Lasso — S02E03", resumeAt: 1200, offline: { id: "e2" } });
