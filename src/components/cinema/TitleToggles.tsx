@@ -24,16 +24,36 @@ import { ROUND_ACTION_IDLE, ROUND_ACTION_ON, ROUND_ACTION_SHAPE } from "@/compon
  * Quatre dessins, un par mise en page — la ligne du menu (fiche découverte du bureau), le bouton rond des
  * fiches de bibliothèque du bureau (10.27, `DetailIconActions`), l'icône sous libellé du téléphone, le
  * bouton pleine largeur de la fiche TMDB au téléphone — et un seul jeu de mots et d'icônes.
+ *
+ * **Les libellés courts** (13/11/2026, relecture des fiches par le propriétaire) : sous une icône — la
+ * rangée du téléphone, la légende des boutons ronds du bureau — « Marquer comme vu » devient « Vu », à
+ * côté de « À voir » et « Poser une question » : la phrase passait sur deux lignes et la rangée ne se
+ * lisait plus d'un coup d'œil. Éteint et allumé disent alors le même mot ; l'icône (coche nue, cercle
+ * coché d'or) et `aria-pressed` portent l'état. Les dessins à phrase (ligne du menu, bouton pleine
+ * largeur, `aria-label` des ronds) gardent « Marquer comme vu ».
  */
 export interface ToggleFace {
   offLabel: string;
   onLabel: string;
+  /** Le libellé éteint sous une icône, quand la phrase est trop longue pour elle (`shortLabel`). */
+  shortOffLabel?: string;
   OffIcon: ComponentType<{ size?: number; className?: string }>;
   OnIcon: ComponentType<{ size?: number; className?: string }>;
 }
 
 export const WATCHLIST_FACE: ToggleFace = { offLabel: "watchlist.statuses.toWatch", onLabel: "cinema.inMyList", OffIcon: Plus, OnIcon: BookmarkCheck };
-export const WATCHED_FACE: ToggleFace = { offLabel: "cinema.markWatched", onLabel: "cinema.watchedState", OffIcon: Check, OnIcon: CircleCheck };
+export const WATCHED_FACE: ToggleFace = {
+  offLabel: "cinema.markWatched",
+  onLabel: "cinema.watchedState",
+  shortOffLabel: "cinema.watchedState",
+  OffIcon: Check,
+  OnIcon: CircleCheck,
+};
+
+/** Le mot posé sous une icône : la forme courte quand la face en a une (voir plus haut). */
+export function shortLabel(face: ToggleFace, on: boolean): string {
+  return on ? face.onLabel : (face.shortOffLabel ?? face.offLabel);
+}
 
 interface ToggleProps {
   face: ToggleFace;
@@ -69,35 +89,47 @@ export function TitleToggleRow({ face, on, onClick, disabled, unknown }: ToggleP
 }
 
 /**
- * Le bouton rond des fiches de bibliothèque du bureau (10.27, `DetailIconActions`) : l'icône seule, le
- * libellé pour les lecteurs d'écran (`aria-label`) et en bulle au survol (`title`). Porte
- * `data-detail-menu` : les flèches y descendent comme dans le menu.
+ * Le bouton rond des fiches de bibliothèque du bureau (10.27, `DetailIconActions`) : l'icône, le libellé
+ * pour les lecteurs d'écran (`aria-label`) et en bulle au survol (`title`). Porte `data-detail-menu` : les
+ * flèches y descendent comme dans le menu.
+ *
+ * Et une légende visible dessous (13/11/2026) : les deux ronds n'avaient aucun texte, et rien ne disait
+ * lequel était « Vu » et lequel « À voir » à qui ne survole pas. Les mots courts de la rangée du téléphone
+ * (`shortLabel`), petits et atténués ; allumée, la légende prend l'or du bouton. Hors du bouton : la
+ * forme ronde et sa cible restent celles des autres ronds, et la légende est cachée aux lecteurs d'écran,
+ * qui ont déjà l'`aria-label`.
  */
 export function TitleToggleRound({ face, on, onClick, disabled, unknown }: ToggleProps) {
   const t = useT();
   const { OnIcon, OffIcon } = face;
   const label = on ? t(face.onLabel) : t(face.offLabel);
   return (
-    <button
-      type="button"
-      data-detail-menu
-      data-round-action={face === WATCHED_FACE ? "watched" : "list"}
-      onClick={onClick}
-      disabled={disabled}
-      aria-pressed={on}
-      aria-label={label}
-      title={label}
-      data-on={on ? "" : undefined}
-      // La forme, puis une seule teinte : allumé, l'or de la pastille du menu (`ROUND_ACTION_ON`) ; jamais les
-      // deux à la fois (10.27.0 : le blanc de l'éteint l'emportait, l'or avait disparu).
-      className={`${ROUND_ACTION_SHAPE} ${on ? ROUND_ACTION_ON : ROUND_ACTION_IDLE} ${unknown ? "opacity-50" : ""}`}
-    >
-      <ToggleGlyph on={on} onIcon={<OnIcon size={19} />} offIcon={<OffIcon size={18} />} />
-    </button>
+    <div data-round-toggle="" className={`flex w-14 flex-col items-center gap-1 ${unknown ? "opacity-50" : ""}`}>
+      <button
+        type="button"
+        data-detail-menu
+        data-round-action={face === WATCHED_FACE ? "watched" : "list"}
+        onClick={onClick}
+        disabled={disabled}
+        aria-pressed={on}
+        aria-label={label}
+        title={label}
+        data-on={on ? "" : undefined}
+        // La forme, puis une seule teinte : allumé, l'or de la pastille du menu (`ROUND_ACTION_ON`) ; jamais les
+        // deux à la fois (10.27.0 : le blanc de l'éteint l'emportait, l'or avait disparu).
+        // L'estompe de l'état inconnu est portée par le conteneur : bouton et légende ensemble.
+        className={`${ROUND_ACTION_SHAPE} ${on ? ROUND_ACTION_ON : ROUND_ACTION_IDLE}`}
+      >
+        <ToggleGlyph on={on} onIcon={<OnIcon size={19} />} offIcon={<OffIcon size={18} />} />
+      </button>
+      <span aria-hidden="true" data-round-caption="" className={`text-center text-[11px] leading-tight transition-colors duration-200 ${on ? "text-brand" : "text-muted"}`}>
+        {t(shortLabel(face, on))}
+      </span>
+    </div>
   );
 }
 
-/** L'icône sous son libellé, dans la rangée d'actions de la fiche du téléphone. */
+/** L'icône sous son libellé court (`shortLabel`), dans la rangée d'actions de la fiche du téléphone. */
 export function TitleToggleIcon({ face, on, onClick, disabled, unknown }: ToggleProps) {
   const t = useT();
   const { OnIcon, OffIcon } = face;
@@ -111,7 +143,7 @@ export function TitleToggleIcon({ face, on, onClick, disabled, unknown }: Toggle
       className={unknown === undefined ? "flex w-16 flex-col items-center gap-1.5" : `flex w-16 flex-col items-center gap-1.5 ${unknown ? "opacity-40" : ""}`}
     >
       <ToggleGlyph on={on} onIcon={<OnIcon size={22} className="text-brand" />} offIcon={<OffIcon size={22} className="text-white" />} />
-      <span className="text-center text-xs leading-tight text-muted">{on ? t(face.onLabel) : t(face.offLabel)}</span>
+      <span className="text-center text-xs leading-tight text-muted">{t(shortLabel(face, on))}</span>
     </button>
   );
 }

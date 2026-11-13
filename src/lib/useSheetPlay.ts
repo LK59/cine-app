@@ -8,7 +8,7 @@ import { usePlaybackPrefetch } from "@/lib/usePlaybackPrefetch";
 import { useNextEpisodeFromCache } from "@/lib/useNextEpisodeFromCache";
 import { formatContinueLabel } from "@/lib/cinemaContinueLabel";
 import { offlinePlayLabels, sharedResumeSeconds, useOfflinePlayable } from "@/components/offline/OfflineDownloadControl";
-import { useT } from "@/components/TranslationProvider";
+import { useLocale, useT } from "@/components/TranslationProvider";
 import type { OfflineDownload } from "@/lib/offline/downloads";
 import type { CinemaProgressPayload } from "@/app/api/cinema/progress/[itemId]/route";
 import type { CinemaEpisodesPayload } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
@@ -67,6 +67,7 @@ export function useSheetPlay(
   }: { prefetch?: boolean; offline?: boolean } = {}
 ): SheetPlay {
   const t = useT();
+  const { locale } = useLocale();
   const isSeries = title.kind === "series";
   const episodesKey = `/api/cinema/series/${title.jellyfinItemId}/episodes`;
   const { data: episodesData, error: episodesError } = useSWR<CinemaEpisodesPayload>(isSeries ? episodesKey : null, fetcher);
@@ -105,7 +106,7 @@ export function useSheetPlay(
   // l'on vient peut-être ; « Lire en ligne » quand le téléchargement passe en tête (19/10/2026).
   const label = offlinePlayable
     ? offlinePlayLabels(t, sharedResumeSeconds(offlinePlayable, facts.resumeTicks, facts.resumeKnown), offlinePlayable.runtimeSeconds, offlinePlayable.state === "done", episodeCode).online
-    : formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks, facts.seasonNumber, facts.episodeNumber, facts.rewatch);
+    : formatContinueLabel(t, facts.resumeTicks, facts.runtimeTicks, facts.seasonNumber, facts.episodeNumber, facts.rewatch, locale);
   return {
     facts,
     episodesData,

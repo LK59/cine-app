@@ -2,7 +2,6 @@
 
 import { AskTitleControl } from "@/components/ask/AskTitleControl";
 import { TitleToggleRound, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
-import { XrayPriorityControl } from "@/components/cinema/XrayPriorityControl";
 
 /**
  * La rangée de boutons ronds des fiches du bureau, film et série (10.27, 09/11/2026 — DECISIONS.md §117.4
@@ -17,7 +16,8 @@ import { XrayPriorityControl } from "@/components/cinema/XrayPriorityControl";
  * Le verre des autres boutons ronds de la fiche (Retour, Partager : `bg-black/55`, `float-edge`) ; l'état
  * « dans ma liste » / « vu » en or, comme la pastille de la ligne qu'ils remplacent (§83, option B) ; un
  * libellé pour les lecteurs d'écran (`aria-label`) et une bulle au survol (`title`, pointeur fin — un
- * appareil tactile ne survole pas). Chacun porte `data-detail-menu` : les flèches du clavier et de la
+ * appareil tactile ne survole pas) ; depuis le 13/11/2026, « Vu » et « À voir » ont aussi une légende
+ * visible sous leur rond (`TitleToggleRound`). Chacun porte `data-detail-menu` : les flèches du clavier et de la
  * télécommande y descendent comme dans le reste du menu.
  *
  * La fiche du téléphone garde sa rangée d'icônes sous libellé (`TitleToggleIcon`) ; la fiche découverte
@@ -34,12 +34,14 @@ interface ToggleState {
 
 export function DetailIconActions({ watched, list, askItemId }: { watched: ToggleState; list: ToggleState | null; askItemId: string | null | undefined }) {
   return (
-    <div data-detail-icon-actions="" className="mt-1 flex items-center gap-3 px-2">
+    // `items-start` (13/11/2026) : « Vu » et « À voir » portent une légende sous leur rond, pas la question ;
+    // alignés au centre, les trois ronds ne tombaient plus sur la même ligne.
+    // Plus de « Analyser en priorité » ici (13/11/2026, §138) : la liste de priorité se gère depuis la
+    // console seulement.
+    <div data-detail-icon-actions="" className="mt-1 flex items-start gap-3 px-2">
       <TitleToggleRound face={WATCHED_FACE} {...watched} />
       {list && <TitleToggleRound face={WATCHLIST_FACE} {...list} />}
       <AskTitleControl itemId={askItemId} variant="round" />
-      {/* L'administrateur seul, l'option branchée : « Analyser en priorité » (§138, liste de priorité). */}
-      <XrayPriorityControl itemId={askItemId} variant="round" />
     </div>
   );
 }

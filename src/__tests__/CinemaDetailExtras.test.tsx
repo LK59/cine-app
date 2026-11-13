@@ -28,8 +28,9 @@ describe("CinemaTagline", () => {
 describe("useRuntimeLabel", () => {
   it("dit la durée d'un film, et celle d'un épisode pour une série", () => {
     const { result } = renderHook(() => useRuntimeLabel());
-    expect(result.current(125, false)).toBe("2h05");
-    expect(result.current(45, true)).toBe('cinema.perEpisode:{"time":"45min"}');
+    // En français, la typographie française (13/11/2026) : « 2 h 05 », « 45 min/ép. ».
+    expect(result.current(125, false)).toBe("2\u00a0h\u00a005");
+    expect(result.current(45, true)).toBe('cinema.perEpisode:{"time":"45\u00a0min"}');
     expect(result.current(null, true)).toBeNull();
     expect(result.current(0, false)).toBeNull();
   });

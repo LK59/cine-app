@@ -1,7 +1,6 @@
 "use client";
 
 import { AskTitleControl } from "@/components/ask/AskTitleControl";
-import { XrayPriorityControl } from "@/components/cinema/XrayPriorityControl";
 import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
 import { OfflineDownloadControl, OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
 import { OfflineEpisodeButton, OfflineSeasonDownload } from "@/components/offline/OfflineEpisodeDownload";
@@ -33,7 +32,7 @@ import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { CinemaSimilarRow, useCinemaSimilar } from "@/components/cinema/CinemaSimilarRow";
 import { CinemaMovieCollectionRow } from "@/components/cinema/CinemaCollectionRow";
 import { CinemaCastRow, type CinemaCastMember } from "@/components/cinema/CinemaCastRow";
-import { useT } from "@/components/TranslationProvider";
+import { useLocale, useT } from "@/components/TranslationProvider";
 import SeriesRecap from "@/components/cinema/SeriesRecap";
 import { useSeriesRecap } from "@/lib/useSeriesRecap";
 import { useLiquidDelegation } from "@/lib/liquidGlass/useLiquidDelegation";
@@ -46,8 +45,9 @@ import { resumeAtFor } from "@/lib/resumePosition";
 import { useQueuedPlay } from "@/lib/useQueuedPlay";
 import { episodeRowFacts, playEpisodeFrom } from "@/lib/episodeRow";
 import { useSheetPlay } from "@/lib/useSheetPlay";
-import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
-import { sheetOverview, sheetRuntimeMinutes, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
+import { CinemaTagline, DottedFacts, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
+import { sheetOverview, sheetRuntimeMinutes, sheetLeadFacts, sheetEpisodeRuntime, sheetSeasonCount } from "@/lib/sheetFacts";
+import { qualityBadges } from "@/lib/videoQuality";
 import { FadeInImg } from "@/components/FadeInImg";
 import { useImageRetry } from "@/lib/useImageRetry";
 import { TitleToggleIcon, WATCHED_FACE, WATCHLIST_FACE } from "@/components/cinema/TitleToggles";
@@ -104,6 +104,7 @@ export function CinemaMobileDetail({
   underneath?: boolean;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const runtimeLabel = useRuntimeLabel();
   const short = useIsShortViewport();
   const playback = usePlayback();
@@ -267,7 +268,7 @@ export function CinemaMobileDetail({
   // reparaît par le même chemin qu'un visuel arrivé tard — le fondu de la doublure (`useSheetMorph`).
   const backdrop = useImageRetry(backdropSrc, { mode: "probe" });
   const seasons = useMemo(() => episodesData?.seasons ?? [], [episodesData]);
-  const seasonCount = isSeries ? seasons.length || ((item as CinemaSeries).seasonCount ?? 0) : 0;
+  const seasonCount = isSeries ? sheetSeasonCount(seasons.length, (item as CinemaSeries).seasonCount) : 0;
   // Ce qui manque à la série — pour Sonarr, pas pour Jellyseerr : la série est là, ce sont des
   // fichiers qui manquent. Voir CinemaMissingEpisodes.
   const missing = usePlayerSeriesRequests(isSeries ? (item as { sonarrId?: number }).sonarrId : null);
@@ -503,8 +504,10 @@ export function CinemaMobileDetail({
       <div data-sheet-content="" className={`relative -mt-6 px-4 pb-16 tablet:px-8 ${short ? "mx-auto w-full max-w-xl" : ""}`}>
         <PhoneSheetTitle title={item.title} logoUrl={item.logoUrl} />
 
-        <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
-          <span>{item.year}</span>
+        {/* Un « · » entre chaque élément (`DottedFacts`, 13/11/2026) : la pastille de qualité n'entre
+            que si elle a quelque chose à dire, sans quoi le point resterait seul. */}
+        <DottedFacts className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
+          {!!item.year && <span>{item.year}</span>}
           {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
           {/* Celui du catalogue, là dès l'ouverture ; la liste des épisodes le remplace à son arrivée
               (toujours la plus fraîche) — d'ordinaire par le même nombre (08/10/2026). */}
@@ -515,9 +518,13 @@ export function CinemaMobileDetail({
           {/* Celle du catalogue d'abord, là dès l'ouverture — pour une série aussi, depuis le
               08/10/2026 (`sheetEpisodeRuntime`) ; celle de TMDB s'insère en fondu à défaut. */}
           {runtimeLabel(runtimeMinutes, isSeries) && <span className={runtimeLate ? late.fade : ""}>{runtimeLabel(runtimeMinutes, isSeries)}</span>}
-          <QualityBadges quality={"quality" in item ? item.quality : undefined} />
+          {"quality" in item && qualityBadges(item.quality).length > 0 && (
+            <span className="flex items-center gap-2">
+              <QualityBadges quality={item.quality} />
+            </span>
+          )}
           {item.genres.length > 0 && <span className="truncate">{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
-        </div>
+        </DottedFacts>
 
         {playPending && (
           <div
@@ -620,9 +627,8 @@ export function CinemaMobileDetail({
           <TitleToggleIcon face={WATCHED_FACE} on={watched} onClick={toggleWatched} disabled={watchedBusy} unknown={!watchedKnown} />
           {/* « Poser une question » (§139) : la même pièce que les fiches du bureau, film ou série. */}
           <AskTitleControl itemId={item.jellyfinItemId} variant="icon" />
-          {/* L'administrateur seul, l'option branchée (§138, liste de priorité) ; sur un téléphone étroit,
-              la quatrième icône passe à la ligne plutôt que de serrer les autres. */}
-          <XrayPriorityControl itemId={item.jellyfinItemId} variant="icon" />
+          {/* Plus de « Analyser en priorité » ici (13/11/2026, §138) : la liste de priorité se gère
+              depuis la console seulement. */}
         </div>
 
         {/* Des visages plutôt qu'une ligne de noms : chacun ouvre la fiche de la personne, posée
@@ -686,7 +692,7 @@ export function CinemaMobileDetail({
             <div className="space-y-4">
               {(belowFold ? episodes : episodes.slice(0, EPISODES_FIRST)).map((episode) => {
                 // Le temps restant ou la durée, et « À suivre » : la règle des trois listes (`episodeRowFacts`).
-                const row = episodeRowFacts(episode, nextEpisode?.itemId);
+                const row = episodeRowFacts(episode, nextEpisode?.itemId, locale);
                 return (
                 // Un conteneur et deux boutons côte à côte : l'épisode, et son téléchargement à droite —
                 // jamais un bouton dans un autre.

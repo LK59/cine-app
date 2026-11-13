@@ -196,7 +196,8 @@ describe("CinemaMobileDetail — ce que l'appareil sait, tout de suite", () => {
     drawWithResume();
     const text = document.body.textContent ?? "";
     expect(text).toContain("Le synopsis du catalogue");
-    expect(text).toContain("2h16");
+    // La typographie française (13/11/2026) : la langue des doubles est le français.
+    expect(text).toContain("2\u00a0h\u00a016");
     expect(text).toContain("common.resume · cinema.timeRemaining");
   });
 

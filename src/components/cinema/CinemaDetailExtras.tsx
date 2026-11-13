@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDown } from "lucide-react";
-import { useState } from "react";
+import { Children, useState, type ReactNode } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
 import { useT, useLocale } from "@/components/TranslationProvider";
@@ -57,15 +57,45 @@ export function CinemaTagline({ text, className = "" }: { text: string | null | 
 /**
  * La durée telle qu'on la dit : celle du film, ou celle d'un épisode pour une série
  * (« 45min/ép. ») — la question qu'on se pose avant de commencer une série n'est pas sa durée
- * totale, c'est ce qu'engage un épisode.
+ * totale, c'est ce qu'engage un épisode. Dans la typographie de la langue de l'écran (« 50 min/ép. »,
+ * « 2 h 47 » en français — `formatMinutes`, 13/11/2026).
  */
 export function useRuntimeLabel() {
   const t = useT();
+  const { locale } = useLocale();
   return (minutes: number | null | undefined, perEpisode: boolean): string | null => {
-    const time = formatMinutes(minutes);
+    const time = formatMinutes(minutes, locale);
     if (!time) return null;
     return perEpisode ? t("cinema.perEpisode", { time }) : time;
   };
+}
+
+/**
+ * Les faits d'une ligne d'infos, séparés par « · » — la ligne sous le logo de la fiche du téléphone.
+ *
+ * Elle posait l'année, la note, « 4 saisons » et « 50min/ép. » côte à côte, sans rien entre eux, alors
+ * que les genres au bout avaient leurs « · » : on lisait « 2015 [IMDb 8.5] 4 saisons 50min/ép. » d'un
+ * seul tenant (relecture des fiches par le propriétaire, 13/11/2026). Un point entre chaque élément
+ * présent, jamais en tête, en queue ni doublé : l'appelant ne passe que ce qui s'affiche (`false`,
+ * `null` sont écartés), et une pièce qui peut se rendre vide doit être gardée par sa propre condition.
+ * Le point est décoratif (`aria-hidden`).
+ */
+export function DottedFacts({ children, className = "" }: { children: ReactNode; className?: string }) {
+  const items = Children.toArray(children);
+  return (
+    <div className={className}>
+      {items.flatMap((item, i) =>
+        i === 0
+          ? [item]
+          : [
+              <span key={`dot-${i}`} aria-hidden="true" data-fact-dot="" className="text-subtle">
+                ·
+              </span>,
+              item,
+            ]
+      )}
+    </div>
+  );
 }
 
 /**

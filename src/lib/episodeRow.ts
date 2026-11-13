@@ -32,11 +32,12 @@ export interface EpisodeRowFacts {
   isNext: boolean;
 }
 
-export function episodeRowFacts(ep: EpisodeLike, nextEpisodeId: string | null | undefined): EpisodeRowFacts {
+/** `locale` : la typographie des durées de la langue de l'écran (« 23 min » en français, 13/11/2026). */
+export function episodeRowFacts(ep: EpisodeLike, nextEpisodeId: string | null | undefined, locale?: string): EpisodeRowFacts {
   const started = !!ep.resumeTicks && !!ep.runtimeTicks && !ep.watched;
   return {
-    remaining: started ? formatDurationShort(ep.runtimeTicks! - ep.resumeTicks!) : null,
-    runtime: !started && ep.runtimeMinutes ? formatMinutes(ep.runtimeMinutes) : null,
+    remaining: started ? formatDurationShort(ep.runtimeTicks! - ep.resumeTicks!, locale) : null,
+    runtime: !started && ep.runtimeMinutes ? formatMinutes(ep.runtimeMinutes, locale) : null,
     isNext: ep.jellyfinItemId === nextEpisodeId,
   };
 }

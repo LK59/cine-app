@@ -221,13 +221,22 @@ export function CinemaOverview({
       <p
         ref={bodyRef}
         // Sélectionnable : c'est du texte, on doit pouvoir le copier même s'il est dans un bouton.
-        className="clamp-fade-n select-text text-sm text-white drop-shadow-sm sm:text-base"
+        //
+        // Coupé par `line-clamp`, sur des lignes entières et avec « … » (13/11/2026, relecture des fiches
+        // par le propriétaire). C'était un fondu sous une hauteur bornée à `lignes × 1lh` (`clamp-fade-n`) :
+        // une ligne qui porte un glyphe d'une police de secours est plus haute que l'interligne, et la
+        // coupure tombait alors au milieu d'une ligne — on voyait le haut des lettres de la suivante. La
+        // coupure de `line-clamp` suit les vraies lignes. Le nombre de lignes reste celui que la mesure
+        // ci-dessus choisit, et « Voir plus » s'affiche aux mêmes conditions (`scrollHeight` dépasse
+        // toujours `clientHeight` sur un texte coupé).
+        className="line-clamp-(--clamp-lines) select-text text-sm text-white drop-shadow-sm sm:text-base"
         style={{ ["--clamp-lines" as string]: String(lines) }}
       >
         {text}
       </p>
       {(clamped || alwaysOpenable) && (
-        <span className="mt-0.5 inline-block text-xs font-medium text-muted group-hover:text-white">
+        // Un peu d'air au-dessus (13/11/2026) : « Voir plus » était collé sous la dernière ligne.
+        <span className="mt-1.5 inline-block text-xs font-medium text-muted group-hover:text-white">
           {readMore}
         </span>
       )}

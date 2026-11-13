@@ -55,3 +55,17 @@ describe("commencé, durée inconnue", () => {
     expect(formatContinueCaption(tt, 0, 2e10, 1, 3)).toBe("cinema.upNext · S1 · É3");
   });
 });
+
+// Le bouton principal des fiches (13/11/2026) : « Reprendre · 30 min restantes » en français.
+describe("formatContinueLabel — la langue de l'écran", () => {
+  const thirty = 30 * 60 * 10_000_000;
+  it("en français, l'espace avant « min »", () => {
+    const tt = (key: string, vars?: Record<string, unknown>) => (key === "cinema.timeRemaining" ? `${vars?.time} restantes` : key.split(".").pop()!);
+    expect(formatContinueLabel(tt, thirty, 2 * thirty, null, null, false, "fr")).toBe("resume · 30\u00a0min restantes");
+  });
+  it("sans langue, ou dans une autre : la forme d'avant", () => {
+    const tt = (key: string, vars?: Record<string, unknown>) => (key === "cinema.timeRemaining" ? `${vars?.time} left` : key.split(".").pop()!);
+    expect(formatContinueLabel(tt, thirty, 2 * thirty)).toBe("resume · 30min left");
+    expect(formatContinueLabel(tt, thirty, 2 * thirty, null, null, false, "en")).toBe("resume · 30min left");
+  });
+});

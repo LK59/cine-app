@@ -273,6 +273,16 @@ export function sheetLeadFacts(
 }
 
 /**
+ * Le nombre de saisons d'une série, sur la ligne d'infos de ses fiches (« 4 saisons ») : celui de la liste
+ * des épisodes quand elle est là (toujours la plus fraîche), sinon celui du catalogue, là dès l'ouverture
+ * (08/10/2026). Le téléphone l'affichait, le bureau jamais ; une règle pour les deux depuis le 13/11/2026.
+ * Zéro : rien à dire.
+ */
+export function sheetSeasonCount(listSeasons: number | null | undefined, catalogue: number | null | undefined): number {
+  return listSeasons || catalogue || 0;
+}
+
+/**
  * La durée d'un épisode sur la fiche d'une série (« 43min/ép. ») : celle du catalogue, là dès
  * l'ouverture, sinon celle de la description (`late` : elle garde alors son fondu). Elle était la
  * dernière à arriver en décalé (08/10/2026). Une règle pour les deux fiches de série.

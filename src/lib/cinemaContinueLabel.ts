@@ -17,11 +17,16 @@ export function formatContinueLabel(
   seasonNumber?: number | null,
   episodeNumber?: number | null,
   /** Une série vue en entier, relancée depuis le premier épisode : « Lire », pas « À suivre ». */
-  rewatch?: boolean
+  rewatch?: boolean,
+  /**
+   * La langue de l'écran, pour la typographie du temps restant : « 30 min restantes » en français sur le
+   * bouton des fiches (13/11/2026, `formatDurationShort`). Sans elle, la forme d'avant.
+   */
+  locale?: string
 ): string {
   const hasResume = !!resumeTicks && resumeTicks > 0;
   const remaining = hasResume && runtimeTicks ? Math.max(runtimeTicks - resumeTicks!, 0) : null;
-  const timeLabel = remaining !== null ? t("cinema.timeRemaining", { time: formatDurationShort(remaining) }) : null;
+  const timeLabel = remaining !== null ? t("cinema.timeRemaining", { time: formatDurationShort(remaining, locale) }) : null;
   const episodeCode =
     seasonNumber != null && episodeNumber != null
       ? t("cinema.episodeShort", { episode: episodeNumber, season: seasonNumber })

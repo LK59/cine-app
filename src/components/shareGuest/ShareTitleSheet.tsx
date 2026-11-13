@@ -479,6 +479,7 @@ function PhoneEpisodes({
   onPlay: (episode: CinemaEpisode) => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const playerEnabled = usePlayerEnabledState();
   const seasonNumbers = useMemo(() => orderSeasons(seasons.map((s) => s.seasonNumber)), [seasons]);
   // La saison de l'épisode à suivre, sinon la règle de la fiche (`openingSeason`) — figée au montage.
@@ -508,7 +509,7 @@ function PhoneEpisodes({
       <div className="space-y-4">
         {episodes.map((episode) => {
           // Le temps restant ou la durée, et « À suivre » : la règle des trois listes (`episodeRowFacts`).
-          const row = episodeRowFacts(episode, nextEpisodeId);
+          const row = episodeRowFacts(episode, nextEpisodeId, locale);
           return (
           <button
             key={episode.jellyfinItemId}

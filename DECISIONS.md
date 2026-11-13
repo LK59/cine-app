@@ -7044,6 +7044,18 @@ et tient aussi. Tests : `decisions-partagees.test.ts` (les deux fiches posent `D
 `fiche-boutons-deux-etats.test.tsx` (lisent le libellé d'un bouton rond), `CinemaLogo.test.tsx` (le plafond
 en `vh`).
 
+**Les libellés courts sous une icône** (13/11/2026, relecture des fiches par le propriétaire). Sous une
+icône — la rangée d'actions du téléphone (`TitleToggleIcon`) et, nouvelle, la légende visible sous les deux
+ronds « Vu » et « À voir » du bureau (`TitleToggleRound`, petite, atténuée, en or allumée, cachée aux
+lecteurs d'écran) —, « Marquer comme vu » devient « Vu » : la phrase passait sur deux lignes à côté de
+« À voir » et « Poser une question ». Éteint et allumé disent alors le même mot ; l'icône et `aria-pressed`
+portent l'état. **Voulu :** les dessins à phrase gardent « Marquer comme vu » — la ligne du menu de la fiche
+découverte (`TitleToggleRow`), le bouton pleine largeur de la fiche TMDB au téléphone (`TitleToggleWide`) et
+l'`aria-label` des ronds. Porteurs : `shortOffLabel` sur `WATCHED_FACE` (la clé `cinema.watchedState`) et
+`shortLabel(face, on)`, `src/components/cinema/TitleToggles.tsx`. Les ronds de la rangée s'alignent par le
+haut (`items-start`) : la question n'a pas de légende. Tests : `fiche-a-voir-vu-forme.test.tsx`,
+`fiche-libelles-courts.test.tsx`.
+
 **10.27.1 : l'or rendu aux deux boutons allumés.** En 10.27.0, « Vu » et « Dans ma liste » allumés
 s'affichaient comme éteints : la classe de l'allumé (`bg-ink text-brand ring-brand/60`) s'ajoutait à celle du
 verre (`bg-black/55 text-white`) sur le même bouton, et entre deux couleurs de texte d'une même classe c'est
@@ -9146,17 +9158,15 @@ désormais analysée **en fond**, par paliers, et seulement quand personne ne re
   remonte la priorité d'un double). **Nourris même pendant une lecture** (une demande explicite vaut
   forçage), tant qu'ils ont du travail ; les deux d'avance restent la borne. Déjà fait, durée égale,
   dossiers permis, distribution : les mêmes vérifications. **L'animation reste écartée** : le titre est
-  refusé (`animation`, 409 — jamais 404) et la page comme la fiche le disent. Retiré (`unprioritizeTitle`),
+  refusé (`animation`, 409 — jamais 404) et la page le dit. Retiré (`unprioritizeTitle`),
   un élément retrouve le palier de sa date, le palier 1 relu au tour suivant ; ce qui est fait reste fait.
   Où : la carte « Analyse prioritaire » de Configuration → Acteurs à l'écran (un champ qui cherche dans les
   deux catalogues du cinéma par `searchCinemaLibrary`, chaque titre avec ses éléments faits / total, son
-  temps restant, et un bouton pour le retirer ; pause et reprise du palier 0) ; et sur la fiche du cinéma,
-  pour l'administrateur seul et l'option branchée (`XrayPriorityControl` : présentation — la route est la
-  porte), « Analyser en priorité » : un **bouton rond de plus** dans la rangée du bureau (`DetailIconActions`,
-  la rangée ne gagne pas de hauteur : la fiche tient toujours en une page, §117.4), une icône sous libellé
-  au téléphone (la rangée passe à la ligne plutôt que de serrer les autres). Un message bref confirme. Le
-  rôle n'est demandé qu'une fois l'option connue ouverte : une fiche sans l'option ne fait aucune requête de
-  plus. Route : `POST /api/admin/xray/scan` `{ action: "prioritize" | "unprioritize", itemId }`.
+  temps restant, et un bouton pour le retirer ; pause et reprise du palier 0), **et nulle part ailleurs**.
+  Les fiches du cinéma ont porté un bouton « Analyser en priorité » (administrateur seul, option branchée) ;
+  il en est retiré le 13/11/2026 à la demande du propriétaire, qui gère la liste depuis la console : un
+  geste d'administration n'a pas sa place dans une fiche que regarde le foyer. Route :
+  `POST /api/admin/xray/scan` `{ action: "prioritize" | "unprioritize", itemId }`.
 Porteurs : `src/lib/xray/scanPlan.ts`, `scanSources.ts`, `scanStore.ts`, `scheduler.ts` (`scanTick`,
 `scanAction`, `xrayScanStatus`, `startXrayScheduler`), `rebind.ts` (`keepsAnalysis`, `rebindAnalysis`,
 `jobFor`) ; `src/app/api/admin/xray/scan/route.ts` ; `src/components/settings/XrayScanCard.tsx`,
@@ -9164,7 +9174,7 @@ Porteurs : `src/lib/xray/scanPlan.ts`, `scanSources.ts`, `scanStore.ts`, `schedu
 animation, durée égale, vitesse, estimation), `xray-scheduler.test.ts` (sans lecture seulement, avance
 bornée, file du service pleine, déjà fait, écartés, hors des dossiers permis, forçage, pauses, un tour à la fois, redémarrage,
 progression et estimation, rattachement et repli sur 400, journal), `xray-same-duration.test.ts` (lecteur
-et commande d'une séance), `xray-scan-route.test.ts` (portes, liste de priorité, refus de l'animation), `xray-priority-control.test.tsx` (le bouton de la fiche : administrateur seul, confirmation, refus de l'animation) ; la liste de priorité dans `xray-scheduler.test.ts` (avant le palier 1, en `normal`, saison par saison, pendant une lecture, redémarrage et relecture du plan, retrait).
+et commande d'une séance), `xray-scan-route.test.ts` (portes, liste de priorité, refus de l'animation) ; la liste de priorité dans `xray-scheduler.test.ts` (avant le palier 1, en `normal`, saison par saison, pendant une lecture, redémarrage et relecture du plan, retrait).
 
 **Revue du planificateur** (09/11/2026, relecture indépendante des deux commits du jour). Ce qui a changé :
 - **Un élément en erreur ne bloque plus la file.** Toute erreur levée par `prepare` (TMDB dans `jobFor` /

@@ -60,3 +60,11 @@ describe("playEpisodeFrom", () => {
     expect(play.mock.calls[0][0].resumeAt).toBe(0);
   });
 });
+
+describe("episodeRowFacts — la langue de l'écran (13/11/2026)", () => {
+  it("en français, « 23 min » et « 47 min » ; sans langue, inchangé", () => {
+    expect(episodeRowFacts(ep({ resumeTicks: 14_400_000_000 }), null, "fr").remaining).toBe("23\u00a0min");
+    expect(episodeRowFacts(ep(), null, "fr").runtime).toBe("47\u00a0min");
+    expect(episodeRowFacts(ep(), null).runtime).toBe("47min");
+  });
+});

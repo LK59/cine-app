@@ -23,14 +23,29 @@ export function formatResumeTicks(ticks: number): string {
   return h > 0 ? `${h}h${String(m).padStart(2, "0")}min${ss}` : `${m}min${ss}`;
 }
 
+/**
+ * Heures et minutes, à la typographie de la langue (13/11/2026, relecture des fiches par le
+ * propriétaire). En français, une espace insécable avant l'unité et entre les heures et les minutes :
+ * « 50 min », « 2 h 47 », « 2 h » pile — la fiche écrivait « 50min/ép. » et « 30min restantes », collés
+ * comme une abréviation anglaise. L'insécable est celle de `fmtSize` (« 56,5 Mo ») : l'unité ne part
+ * jamais seule à la ligne. Les autres langues, et un appel sans langue, gardent la forme d'avant
+ * (« 1h10 », « 45min »), inchangée.
+ */
+function hoursMinutes(h: number, m: number, locale: string | undefined): string {
+  if (locale?.toLowerCase().startsWith("fr")) {
+    if (h === 0) return `${m}\u00a0min`;
+    return m === 0 ? `${h}\u00a0h` : `${h}\u00a0h\u00a0${String(m).padStart(2, "0")}`;
+  }
+  return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m}min`;
+}
+
 /** Formats Jellyfin ticks (100ns units) into a short, minute-precision duration (e.g. "1h10",
  *  "30min") — no seconds, unlike formatResumeTicks: this is for a REMAINING-time label (Cinema
- *  Mode's Continue Watching cards), where second-level precision would be noise. */
-export function formatDurationShort(ticks: number): string {
+ *  Mode's Continue Watching cards), where second-level precision would be noise.
+ *  Avec une langue, sa typographie — voir `hoursMinutes`. */
+export function formatDurationShort(ticks: number, locale?: string): string {
   const totalMinutes = Math.round(ticks / 10_000_000 / 60);
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m}min`;
+  return hoursMinutes(Math.floor(totalMinutes / 60), totalMinutes % 60, locale);
 }
 
 /**
@@ -38,13 +53,11 @@ export function formatDurationShort(ticks: number): string {
  *
  * Au-delà d'une heure, personne ne compte en minutes — un épisode de 70 min oblige à faire la
  * division soi-même pour savoir ce qu'on s'engage à regarder. En dessous, la minute reste la
- * bonne unité et « 0h45 » serait une coquetterie.
+ * bonne unité et « 0h45 » serait une coquetterie. Avec une langue, sa typographie (`hoursMinutes`).
  */
-export function formatMinutes(minutes: number | null | undefined): string | null {
+export function formatMinutes(minutes: number | null | undefined, locale?: string): string | null {
   if (!minutes || minutes <= 0) return null;
-  const h = Math.floor(minutes / 60);
-  const m = Math.round(minutes % 60);
-  return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m}min`;
+  return hoursMinutes(Math.floor(minutes / 60), Math.round(minutes % 60), locale);
 }
 
 /** Formats a qBittorrent ETA in seconds into a short label — qBittorrent uses 8640000 (100 days)

@@ -12,7 +12,7 @@ import { useSheetKeys } from "@/lib/useSheetKeys";
 import { useSheetBehind, arrivedByBack } from "@/lib/cinemaRoute";
 import { usePlayerSeriesRequests } from "@/lib/usePlayerSeriesRequests";
 import { CinemaMissingEpisodes } from "@/components/cinema/CinemaMissingEpisodes";
-import { useT } from "@/components/TranslationProvider";
+import { useLocale, useT } from "@/components/TranslationProvider";
 import { SheetBackButton } from "@/components/cinema/DesktopSheetShell";
 import { usePlayback } from "@/components/PlaybackProvider";
 import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
@@ -54,6 +54,7 @@ export function CinemaEpisodeBrowser({
   onPlayEpisode: (episode: CinemaEpisode) => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const missing = usePlayerSeriesRequests(sonarrId);
   // Lecture intégrée fermée (`PLAYER_ENABLED=false`) : la liste reste lisible, mais une ligne ne
@@ -265,7 +266,7 @@ export function CinemaEpisodeBrowser({
             )}
             {episodes.map((ep) => {
               // Le temps restant ou la durée, et « À suivre » : la règle des trois listes (`episodeRowFacts`).
-              const row = episodeRowFacts(ep, nextEpisodeId);
+              const row = episodeRowFacts(ep, nextEpisodeId, locale);
               return (
               // La ligne est un conteneur, et non plus un bouton : le bouton de téléchargement est à
               // côté de celui de l'épisode, jamais dedans (un bouton dans un bouton n'est pas du HTML

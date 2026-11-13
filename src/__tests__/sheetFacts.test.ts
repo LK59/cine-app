@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { localPlayTarget, sheetOverview, sheetPlayFacts, sheetRuntimeMinutes, type ResumeFeedItem } from "@/lib/sheetFacts";
+import { localPlayTarget, sheetOverview, sheetPlayFacts, sheetRuntimeMinutes, sheetSeasonCount, type ResumeFeedItem } from "@/lib/sheetFacts";
 import type { CinemaNextUpItem } from "@/app/api/cinema/next-up/route";
 import { prefetchLibraryItem, prefetchTitleSheet, resetTitleSheetPrefetch } from "@/lib/prefetch";
 import { progressKey } from "@/lib/swr";
@@ -171,5 +171,16 @@ describe("une série jamais commencée", () => {
   it("préfère « À suivre » au premier épisode", () => {
     const next = [{ sonarrId: 7, jellyfinItemId: "s1e4", resumeTicks: null, runtimeTicks: null, seasonNumber: 1, episodeNumber: 4 }] as never;
     expect(localPlayTarget(title, [], next)).toMatchObject({ itemId: "s1e4" });
+  });
+});
+
+// « 4 saisons » sur les deux fiches de série (13/11/2026) : le bureau ne l'affichait pas.
+describe("sheetSeasonCount", () => {
+  it("la liste des épisodes d'abord, le catalogue en attendant, rien sinon", () => {
+    expect(sheetSeasonCount(5, 4)).toBe(5);
+    expect(sheetSeasonCount(undefined, 4)).toBe(4);
+    expect(sheetSeasonCount(0, 4)).toBe(4);
+    expect(sheetSeasonCount(undefined, undefined)).toBe(0);
+    expect(sheetSeasonCount(null, null)).toBe(0);
   });
 });

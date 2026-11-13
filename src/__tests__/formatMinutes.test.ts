@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatMinutes } from "@/lib/format";
+import { formatDurationShort, formatMinutes } from "@/lib/format";
 
 describe("formatMinutes", () => {
   // Le point de départ : « 70 min » oblige à faire la division soi-même pour savoir ce qu'on
@@ -26,5 +26,41 @@ describe("formatMinutes", () => {
     expect(formatMinutes(null)).toBeNull();
     expect(formatMinutes(undefined)).toBeNull();
     expect(formatMinutes(-5)).toBeNull();
+  });
+});
+
+// Relecture des fiches par le propriétaire (13/11/2026) : en français, une espace (insécable, comme
+// `fmtSize`) avant l'unité et entre heures et minutes — « 50 min/ép. », « 2 h 47 ». Les autres langues,
+// et un appel sans langue, gardent la forme d'avant.
+describe("formatMinutes / formatDurationShort — la typographie de la langue", () => {
+  const NB = "\u00a0";
+  it("en français : « 50 min », « 2 h 47 », « 1 h 05 », « 2 h » pile", () => {
+    expect(formatMinutes(50, "fr")).toBe(`50${NB}min`);
+    expect(formatMinutes(167, "fr")).toBe(`2${NB}h${NB}47`);
+    expect(formatMinutes(65, "fr")).toBe(`1${NB}h${NB}05`);
+    expect(formatMinutes(120, "fr")).toBe(`2${NB}h`);
+    expect(formatMinutes(0, "fr")).toBeNull();
+  });
+
+  it("le temps restant aussi : « 30 min », « 1 h 10 »", () => {
+    expect(formatDurationShort(30 * 60 * 10_000_000, "fr")).toBe(`30${NB}min`);
+    expect(formatDurationShort(70 * 60 * 10_000_000, "fr-FR")).toBe(`1${NB}h${NB}10`);
+  });
+
+  it("en anglais, espagnol, allemand et sans langue : inchangé", () => {
+    for (const locale of ["en", "es", "de", undefined]) {
+      expect(formatMinutes(50, locale)).toBe("50min");
+      expect(formatMinutes(167, locale)).toBe("2h47");
+      expect(formatMinutes(120, locale)).toBe("2h00");
+      expect(formatDurationShort(30 * 60 * 10_000_000, locale)).toBe("30min");
+    }
+  });
+
+  it("la fiche du téléphone : « 50 min/ép. » et « 30 min restantes » avec le vrai dictionnaire", async () => {
+    const { createT } = await import("@/lib/i18n");
+    const fr = (await import("@/locales/fr.json")).default as Record<string, unknown>;
+    const t = createT(fr, fr, "fr");
+    expect(t("cinema.perEpisode", { time: formatMinutes(50, "fr")! })).toBe(`50${NB}min/ép.`);
+    expect(t("cinema.timeRemaining", { time: formatDurationShort(30 * 60 * 10_000_000, "fr") })).toBe(`30${NB}min restantes`);
   });
 });

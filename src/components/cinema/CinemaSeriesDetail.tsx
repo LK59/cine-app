@@ -31,7 +31,7 @@ import { useDesktopSheetShell, DesktopSheetFrame, DetailTrailerRow } from "@/com
 import { playEpisodeFrom } from "@/lib/episodeRow";
 import { useSheetPlay } from "@/lib/useSheetPlay";
 import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
-import { sheetOverview, sheetLeadFacts, sheetEpisodeRuntime } from "@/lib/sheetFacts";
+import { sheetOverview, sheetLeadFacts, sheetEpisodeRuntime, sheetSeasonCount } from "@/lib/sheetFacts";
 import { OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
 import { DetailIconActions } from "@/components/cinema/DetailIconActions";
 import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
@@ -148,6 +148,7 @@ export function CinemaSeriesDetail({
   const hasSimilar = !!onSelectSimilar && similar.length > 0;
   const cast = info?.tmdb?.cast ?? [];
   const runtimeLabel = useRuntimeLabel();
+  const seasonCount = sheetSeasonCount(episodesData?.seasons?.length, item.seasonCount);
   const hasBelow = hasSimilar || cast.length > 0;
 
   const playerEnabled = usePlayerEnabled();
@@ -274,6 +275,9 @@ export function CinemaSeriesDetail({
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
             <span>{item.year}</span>
             {item.imdbRating && <ImdbBadge rating={item.imdbRating} size="sm" />}
+            {/* « 4 saisons », à la place qu'il a au téléphone — avant la durée d'un épisode : le bureau ne
+                l'affichait pas (13/11/2026). Même règle, même phrase (`sheetSeasonCount`). */}
+            {seasonCount > 0 && <span>{t("cinema.seasonCount", { n: seasonCount })}</span>}
             {/* Celle du catalogue, là dès l'ouverture ; celle de TMDB en fondu sinon — voir `sheetEpisodeRuntime`. */}
             {runtimeLabel(episodeRuntime.minutes, true) && <span className={episodeRuntime.late ? late.fade : ""}>{runtimeLabel(episodeRuntime.minutes, true)}</span>}
             {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}

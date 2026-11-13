@@ -157,17 +157,21 @@ describe("la forme de « À voir » et « Vu »", () => {
 
   it("téléphone : À voir puis Vu, sur la fiche de bibliothèque comme sur la fiche TMDB", async () => {
     mobile = true;
-    const phone = [
-      { label: "À voir", icon: "lucide-plus", pressed: "false" },
-      { label: "Marquer comme vu", icon: "lucide-check", pressed: "false" },
-    ];
+    // Sous une icône, le libellé court « Vu » (13/11/2026) ; le bouton pleine largeur de la fiche TMDB
+    // garde sa phrase. Même ordre, mêmes icônes, même état annoncé.
     const { unmount } = render(withSwr(<CinemaMobileDetail item={MOVIE} mediaType="movies" onClose={vi.fn()} />));
-    expect(toggles()).toEqual(phone);
+    expect(toggles()).toEqual([
+      { label: "À voir", icon: "lucide-plus", pressed: "false" },
+      { label: "Vu", icon: "lucide-check", pressed: "false" },
+    ]);
     unmount();
     document.body.innerHTML = "";
     render(withSwr(<PlayerDiscoverSheet tmdbId={2} mediaType="movie" />));
     await screen.findByRole("heading", { level: 1, name: "Matchbox" });
-    expect(toggles()).toEqual(phone);
+    expect(toggles()).toEqual([
+      { label: "À voir", icon: "lucide-plus", pressed: "false" },
+      { label: "Marquer comme vu", icon: "lucide-check", pressed: "false" },
+    ]);
   });
 
   it("le même message à l'ajout depuis la fiche TMDB que depuis la bibliothèque", async () => {

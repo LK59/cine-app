@@ -61,6 +61,18 @@ describe("le résumé d'une fiche cinéma", () => {
     expect(container.querySelector("[data-detail-actions]")).toBeNull();
   });
 
+  // 13/11/2026 : le fondu sous une hauteur bornée coupait au milieu d'une ligne (le haut des lettres de la
+  // suivante dépassait) ; `line-clamp` coupe sur des lignes entières, avec « … », au même nombre de lignes.
+  it("se coupe sur des lignes entières, au nombre mesuré, et laisse de l'air à « Voir plus »", () => {
+    clampTo(true);
+    render(<CinemaOverview text="Un très long synopsis." readMore="Voir plus" onOpen={vi.fn()} maxLines={5} />);
+    const body = screen.getByText("Un très long synopsis.");
+    expect(body.className.split(/\s+/)).toContain("line-clamp-(--clamp-lines)");
+    expect(body.className).not.toContain("clamp-fade");
+    expect(body.style.getPropertyValue("--clamp-lines")).toBe("2");
+    expect(screen.getByText("Voir plus").className.split(/\s+/)).toContain("mt-1.5");
+  });
+
   it("laisse le texte sélectionnable, bien qu'il soit dans un bouton", () => {
     clampTo(true);
     render(<CinemaOverview text="Un très long synopsis." readMore="Voir plus" onOpen={vi.fn()} />);

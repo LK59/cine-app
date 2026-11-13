@@ -6,7 +6,6 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
 import { fetcher } from "@/lib/swr";
-import { formatMinutes } from "@/lib/format";
 import { ImdbBadge } from "@/components/ImdbBadge";
 import { QualityBadges } from "@/components/cinema/QualityBadges";
 import { CinemaSimilarRow, useCinemaSimilar, similarRowKeyNav } from "@/components/cinema/CinemaSimilarRow";
@@ -26,7 +25,7 @@ import { MENU_ROW, MENU_ROW_INACTIVE, MENU_BADGE, focusFirstAction, detailMenuAr
 import { COLUMN_STYLE, MENU_STYLE, COLUMN_GAP, SHORT_HIDE, CinemaOverview, CinemaDetailModal } from "@/components/cinema/CinemaDetailLayout";
 import { useDesktopSheetShell, DesktopSheetFrame, DetailTrailerRow } from "@/components/cinema/DesktopSheetShell";
 import { useSheetPlay } from "@/lib/useSheetPlay";
-import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival } from "@/components/cinema/CinemaDetailExtras";
+import { CinemaRatingsLine, CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { sheetOverview, sheetRuntimeMinutes, sheetLeadFacts } from "@/lib/sheetFacts";
 import { DetailIconActions } from "@/components/cinema/DetailIconActions";
 import { CinemaDetailPages, CinemaDetailTitle, CinemaDetailCastLine } from "@/components/cinema/CinemaDetailPages";
@@ -80,6 +79,7 @@ export function CinemaMovieDetail({
   underneath?: boolean;
 }) {
   const t = useT();
+  const runtimeLabel = useRuntimeLabel();
   const [showTrailer, setShowTrailer] = useState(false);
   const [showSynopsis, setShowSynopsis] = useState(false);
   const { data: info, error: infoError } = useSWR<RadarrInfo>(`/api/radarr/movies/${item.radarrId}/info`, fetcher);
@@ -241,8 +241,9 @@ export function CinemaMovieDetail({
             {/* Voir la note jumelle de la fiche téléphone : la durée manquait, et c'est la
                 troisième chose qu'on veut savoir avant de lancer un film. */}
             {/* Celle du catalogue, là dès l'ouverture ; TMDB seulement quand il n'en a pas. */}
-            {formatMinutes(sheetRuntimeMinutes(item.runtimeMinutes, info?.tmdb?.runtime)) && (
-              <span>{formatMinutes(sheetRuntimeMinutes(item.runtimeMinutes, info?.tmdb?.runtime))}</span>
+            {/* Par `useRuntimeLabel`, comme les autres fiches : « 2 h 47 » en français (13/11/2026). */}
+            {runtimeLabel(sheetRuntimeMinutes(item.runtimeMinutes, info?.tmdb?.runtime), false) && (
+              <span>{runtimeLabel(sheetRuntimeMinutes(item.runtimeMinutes, info?.tmdb?.runtime), false)}</span>
             )}
             <QualityBadges quality={item.quality} />
           {item.genres.length > 0 && <span>{item.genres.slice(0, 3).map((g) => genreLabel(g, t)).join(" · ")}</span>}
