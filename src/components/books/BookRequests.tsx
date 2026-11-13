@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import useSWR from "swr";
 import { Check, Loader2, X } from "lucide-react";
-import { useT } from "@/components/TranslationProvider";
+import { useLocale, useT } from "@/components/TranslationProvider";
+import { getDateLocale } from "@/lib/i18n";
 import { fetcher } from "@/lib/swr";
 import { displayTitle } from "@/lib/books/displayTitle";
 import type { BookSummary } from "@/lib/books/types";
@@ -196,16 +197,20 @@ function Field({ label, value, onChange, max, required, autoFocus }: { label: st
 
 function RequestRow({ request, children }: { request: BookRequestView; children?: React.ReactNode }) {
   const t = useT();
+  // La date dans la langue du compte, pas celle du navigateur — un compte anglais sur un Mac en français
+  // lisait « 29/10/2026 » (13/11/2026, comme `formatDay` du panneau Compte le 08/10/2026) ; et la réponse
+  // entre les guillemets de sa langue, non les nôtres partout.
+  const { locale } = useLocale();
   return (
     <div className="rounded-xl bg-white/5 px-4 py-3">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="font-medium leading-snug">{request.title}</p>
           <p className="mt-0.5 text-sm text-subtle">
-            {[request.author, new Date(request.createdAt).toLocaleDateString()].filter(Boolean).join(" · ")}
+            {[request.author, new Date(request.createdAt).toLocaleDateString(getDateLocale(locale))].filter(Boolean).join(" · ")}
           </p>
           {request.note && <p className="mt-1.5 whitespace-pre-line text-sm text-muted">{request.note}</p>}
-          {request.reply && <p className="mt-1.5 text-sm text-white">« {request.reply} »</p>}
+          {request.reply && <p className="mt-1.5 text-sm text-white">{t("books.requests.reply", { text: request.reply })}</p>}
         </div>
         <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[request.status]}`}>{t(`books.requests.status.${request.status}`)}</span>
       </div>

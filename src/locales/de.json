@@ -4293,6 +4293,7 @@
       "by": "Gewünscht von {user}",
       "maybeHere": "Vielleicht schon da: „{title}“",
       "replyPlaceholder": "Ein Wort an die Person (optional)",
+      "reply": "„{text}“",
       "markAdded": "Hinzugefügt",
       "markRefused": "Abgelehnt",
       "reopen": "Wieder offen",

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import { useT } from "@/components/TranslationProvider";
+import { useLocale, useT } from "@/components/TranslationProvider";
 import {
   FONTS,
   FONT_SIZE_RANGE,
@@ -336,11 +336,16 @@ function Switch({ on, onChange, label, colors }: { on: boolean; onChange: (v: bo
 
 export function ReaderSettingsPanel({ prefs, colors, onChange, onClose }: { prefs: ReaderPrefs; colors: Colors; onChange: (patch: Partial<ReaderPrefs>) => void; onClose: () => void }) {
   const t = useT();
+  // Les pourcentages et l'interligne dans la langue du compte (13/11/2026) : « 100 % » était écrit en dur,
+  // avec l'espace française jusqu'en anglais (« 100% » partout ailleurs dans le lecteur, `books.reader.percent`),
+  // et l'interligne gardait le point décimal en français, espagnol et allemand.
+  const { locale } = useLocale();
+  const percent = (pct: number) => t("books.reader.percent", { pct });
   return (
     <PanelFrame colors={colors} title={t("books.reader.settings")} onClose={onClose} side="right">
       {/* La taille d'abord, comme dans Livres d'Apple : un petit « A », un grand « A », un pas par
           appui — le même pas et les mêmes bornes que le curseur dessous, le clavier et le pincement. */}
-      <Row label={t("books.reader.fontSize")} value={`${prefs.fontSize} %`}>
+      <Row label={t("books.reader.fontSize")} value={percent(prefs.fontSize)}>
         <div className="flex items-stretch gap-2">
           <button
             type="button"
@@ -407,7 +412,7 @@ export function ReaderSettingsPanel({ prefs, colors, onChange, onClose }: { pref
         />
       </Row>
 
-      <Row label={t("books.reader.lineHeight")} value={prefs.lineHeight.toFixed(2)}>
+      <Row label={t("books.reader.lineHeight")} value={new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(prefs.lineHeight)}>
         <Slider value={prefs.lineHeight} {...LINE_HEIGHT_RANGE} onChange={(lineHeight) => onChange({ lineHeight })} label={t("books.reader.lineHeight")} colors={colors} />
       </Row>
 
@@ -428,10 +433,10 @@ export function ReaderSettingsPanel({ prefs, colors, onChange, onClose }: { pref
         <Switch on={prefs.tapTurns} onChange={(tapTurns) => onChange({ tapTurns })} label={t("books.reader.tapTurns")} colors={colors} />
       </div>
 
-      <Row label={t("books.reader.brightness")} value={`${Math.round(prefs.brightness * 100)} %`}>
+      <Row label={t("books.reader.brightness")} value={percent(Math.round(prefs.brightness * 100))}>
         <Slider value={prefs.brightness} min={0.4} max={1} step={0.05} onChange={(brightness) => onChange({ brightness })} label={t("books.reader.brightness")} colors={colors} />
       </Row>
-      <Row label={t("books.reader.warmth")} value={`${Math.round(prefs.warmth * 100)} %`}>
+      <Row label={t("books.reader.warmth")} value={percent(Math.round(prefs.warmth * 100))}>
         <Slider value={prefs.warmth} min={0} max={1} step={0.05} onChange={(warmth) => onChange({ warmth })} label={t("books.reader.warmth")} colors={colors} />
       </Row>
     </PanelFrame>
