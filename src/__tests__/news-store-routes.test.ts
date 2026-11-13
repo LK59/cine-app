@@ -31,6 +31,7 @@ import { NEWS_848_CONTENT, NEWS_848_SEED, NEWS_848_VERSION } from "@/lib/news/pa
 import { NEWS_90_VERSION } from "@/lib/news/page90";
 import { NEWS_105_VERSION } from "@/lib/news/page105";
 import { NEWS_1037_VERSION } from "@/lib/news/page1037";
+import { NEWS_1040_VERSION } from "@/lib/news/page1040";
 import { NEWS_864_VERSION } from "@/lib/news/page864";
 import { NEWS_8672_VERSION } from "@/lib/news/page8672";
 import { STARTUP_LOG } from "@/lib/eventLogs";
@@ -70,14 +71,15 @@ describe("la page initiale, publiée par la migration", () => {
     // La 8.67.2 aussi (Louis, 18/10/2026).
     // La 9.0 (téléchargements hors ligne) aussi, publiée pour tous le 20/10/2026 (`publishNewsDraft`).
     // La 10.5 aussi, mais sans fenêtre (`seedQuietNewsPage`, 27/10/2026) : aucun compte n'existe encore ici.
-    // La 10.37 de même (11/11/2026).
-    expect(pages.map((p) => p.version)).toEqual([NEWS_1037_VERSION, NEWS_105_VERSION, NEWS_90_VERSION, NEWS_8672_VERSION, NEWS_864_VERSION, INITIAL_NEWS_VERSION]);
-    const initial = pages[5];
-    const p864 = pages[4];
-    const p8672 = pages[3];
-    const p90 = pages[2];
-    const p105 = pages[1];
-    const p1037 = pages[0];
+    // La 10.37 de même (11/11/2026), et la 10.40 (13/11/2026).
+    expect(pages.map((p) => p.version)).toEqual([NEWS_1040_VERSION, NEWS_1037_VERSION, NEWS_105_VERSION, NEWS_90_VERSION, NEWS_8672_VERSION, NEWS_864_VERSION, INITIAL_NEWS_VERSION]);
+    const initial = pages[6];
+    const p864 = pages[5];
+    const p8672 = pages[4];
+    const p90 = pages[3];
+    const p105 = pages[2];
+    const p1037 = pages[1];
+    const p1040 = pages[0];
     // Complétée le 19/10 : la rotation en paysage d'abord, puis « Plus d'épisodes ».
     expect(p8672.content.fr.sections[0].entries.map((e) => e.title)).toEqual(["Écran en paysage", "Plus d'épisodes"]);
     // Ses corrections viennent du registre (`fixesLedger.ts`), versé dans les pages publiées.
@@ -90,11 +92,11 @@ describe("la page initiale, publiée par la migration", () => {
     expect(draft.content.fr.sections[0].entries[0].title).toBe("Connexion lente");
     for (const lang of ["en", "es", "de"] as const) expect(draft.content[lang]?.sections.length).toBe(1);
     // En brouillon, elle ne s'annonce à personne.
-    expect(newsFor("un-compte-quelconque").unseen).toEqual([p1037.id, p105.id, p90.id]);
+    expect(newsFor("un-compte-quelconque").unseen).toEqual([p1040.id, p1037.id, p105.id]);
     // Publiée depuis Activité : un compte qui n'a rien vu reçoit les trois, la plus récente d'abord.
     newsDb.publish(draft.id);
     // Trois au plus (FIRST_VIEW_PAGES) : les plus anciennes restent dans Compte → Nouveautés.
-    expect(newsFor("un-autre").unseen).toEqual([draft.id, p1037.id, p105.id]);
+    expect(newsFor("un-autre").unseen).toEqual([draft.id, p1040.id, p1037.id]);
   });
 
   it("second démarrage : rien ne change — ni nouvelle page, ni republication, ni réarmement", () => {

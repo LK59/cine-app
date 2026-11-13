@@ -16,6 +16,7 @@ import { useChapters, useTrickplay } from "@/components/playerControls/useTrickp
 import { PlayerTopBar } from "@/components/playerControls/PlayerTopBar";
 import { PlayerPrompts } from "@/components/playerControls/PlayerPrompts";
 import { useSceneRestart } from "@/components/playerControls/useSceneRestart";
+import { useReplaySubtitles, type ReplaySubtitleHost } from "@/components/playerControls/useReplaySubtitles";
 import { PlayerNextUp } from "@/components/playerControls/PlayerNextUp";
 import { PlayerSettingsMenu, type MenuView } from "@/components/playerControls/PlayerSettingsMenu";
 import { BOTTOM_EDGE, PROMPT_BOTTOM } from "@/components/playerControls/layout";
@@ -182,6 +183,11 @@ interface PlayerControlsProps {
   subtitleOffset?: { seconds: number; onShift: (deltaSeconds: number) => void };
   /** Voir `SecondSubtitleMenu`. */
   secondSubtitle?: SecondSubtitleMenu;
+  /**
+   * Les sous-titres d'un passage rejoué (§150, `useReplaySubtitles`) : la piste que l'hôte montrerait, et de
+   * quoi la montrer sur une voie à part. Absent : jamais d'aide (un hôte sans sous-titres à montrer).
+   */
+  replaySubtitle?: ReplaySubtitleHost;
   hidden: boolean;
   loading: boolean;
   /**
@@ -328,6 +334,7 @@ export function PlayerControls({
   onChangeSubtitle,
   subtitleOffset: hostSubtitleOffset,
   secondSubtitle,
+  replaySubtitle,
   hidden,
   loading,
   resuming = false,
@@ -726,6 +733,8 @@ export function PlayerControls({
    * « Revenir au début de la scène » (§143) : décidé une fois par séance sur ces mêmes scènes, à la première
    * image ; montré seulement au public réglé (`SCENE_RESTART_ENABLED`, coupé par défaut) — voir `useSceneRestart`.
    */
+  /** Les sous-titres d'un passage rejoué (§150) : ouverts par un recul de −10 s, fermés à la fin du passage. */
+  const replay = useReplaySubtitles({ itemId, videoRef, host: replaySubtitle, onChangeSubtitle });
   const sceneRestart = useSceneRestart({
     itemId,
     offered: xrayOffered,
@@ -872,9 +881,11 @@ export function PlayerControls({
   // Un saut, dit d'abord à l'hôte (`onSeekRequest` — le lecteur natif s'y prépare) puis fait sur
   // l'élément. Ne touche pas l'état `currentTime` : `skip` et « Passer l'intro » laissent `seeked`
   // le poser, seul `commitSeek` le pose lui-même.
-  function seekElement(video: HTMLVideoElement, time: number) {
+  function seekElement(video: HTMLVideoElement, time: number, replayRewind = false) {
     // Un saut avant la première image refuse « Revenir au début de la scène » ; pendant qu'il est montré, le retire.
     sceneRestart.noteSeek();
+    // Tout autre saut que le recul d'un passage rejoué ferme son aide (§150) ; `skip` dit lui-même lequel il est.
+    if (!replayRewind) replay.end();
     onSeekRequest?.(time);
     video.currentTime = time;
   }
@@ -894,7 +905,9 @@ export function PlayerControls({
     const from = positionNow ? positionNow() : video.currentTime;
     const limit = video.duration || duration || from;
     const target = Math.min(Math.max(0, from + deltaSeconds), limit);
-    seekElement(video, target);
+    seekElement(video, target, true);
+    // Lu avant le saut : la position d'où l'on recule est la fin du passage à sous-titrer (§150).
+    replay.noteSkip(deltaSeconds, from);
   }
 
   // Split in two: dragging the seek bar only moves the thumb/displayed time locally (no real
@@ -1144,6 +1157,8 @@ export function PlayerControls({
         // « Passer l'intro / le récap » garde la priorité : une invite à la fois, au même endroit.
         sceneRestart={skipNow ? null : sceneRestart.prompt}
         onSceneRestart={() => sceneRestart.use((target) => commitSeek(target))}
+        replaySubtitle={replay.active}
+        onKeepReplaySubtitle={replay.keep}
         sleepWarning={sleepWarning}
         askStillThere={askStillThere}
         // La petite carte ne reste que pour une diffusion : l'image est sur le téléviseur.
@@ -1213,7 +1228,11 @@ export function PlayerControls({
             }}
             subtitleTracks={subtitleTracks}
             currentSubtitleId={currentSubtitleId}
-            onChangeSubtitle={onChangeSubtitle}
+            onChangeSubtitle={(id) => {
+              // Un choix dans le menu remplace l'aide d'un passage rejoué (§150).
+              replay.end();
+              onChangeSubtitle(id);
+            }}
             subtitleOffset={subtitleOffset}
             shiftSubtitles={shiftSubtitles}
             secondSubtitle={secondSubtitle}

@@ -412,6 +412,31 @@ describe("empreinte — lecteur natif : ouverture et fermeture", () => {
 });
 
 describe("empreinte — lecteur natif : sauts et pause", () => {
+  it("sous-titres d'un passage rejoué (§150) : deux reculs en lecture, la fin du passage, puis gardés par la pastille", async () => {
+    await openAndPlay();
+    await play(5);
+    rec.step("← en lecture, sans sous-titre : le passage sous-titré dans la langue de l'audio");
+    await key("ArrowLeft");
+    await seekArrives();
+    rec.dom("aide montrée");
+    await play(3);
+    rec.step("un second ← pendant l'aide : la fin reste celle du premier");
+    await key("ArrowLeft");
+    await seekArrives();
+    await play(21);
+    rec.dom("passage fini, aide éteinte");
+    rec.step("← encore, puis la pastille touchée : un vrai choix");
+    await key("ArrowLeft");
+    await seekArrives();
+    const pill = document.querySelector("[data-replay-subtitles]");
+    if (!pill) throw new Error("pastille absente");
+    await click(pill);
+    await play(15);
+    rec.dom("gardés");
+    await closeByCross();
+    await fingerprint();
+  });
+
   it("sauts : clavier, bouton +10, deux à la suite (le premier remplacé), en pause", async () => {
     await openAndPlay();
     await play(5);

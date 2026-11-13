@@ -19,6 +19,7 @@ import type { SessionTally, WatchedClock } from "@/lib/playerSessionTally";
 import { gaveUpFields } from "@/components/player/session/gaveUp";
 import { endSceneRestart, sceneRestartLogFields } from "@/lib/sceneRestartSession";
 import { endXrayUsage, xrayLogFields } from "@/lib/xrayUsage";
+import { endReplayUsage, replayLogFields } from "@/lib/replaySubtitles";
 
 export function useServerSessionRecord({
   videoRef,
@@ -108,7 +109,8 @@ export function useServerSessionRecord({
       ...(lighterClearedRef.current ? { lighterCleared: true } : {}),
       // « Revenir au début de la scène » (§143) : ce qui a été décidé — rien sans les acteurs à l'écran.
       ...sceneRestartLogFields(logContext.current.itemId),
-      ...xrayLogFields(logContext.current.itemId) };
+      ...xrayLogFields(logContext.current.itemId),
+      ...replayLogFields(logContext.current.itemId) };
     },
     [watched, videoRef, linkMeterRef, streamNeedRef, startupRef, logContext, positionNow, tallyRef, subtitleSwitchesRef, restartsRef, errorRef, sessionPlayedRef, sessionStartedAtRef, slowLogRef, switchGapRef, reloadGapRef, lighterClearedRef]
   );
@@ -146,6 +148,7 @@ export function useServerSessionRecord({
       reportPlayback("stop", stopFields(why, true));
       endSceneRestart(logContext.current.itemId);
       endXrayUsage(logContext.current.itemId);
+      endReplayUsage(logContext.current.itemId);
       if (logContext.current.session) clearUnsentStop(logContext.current.session);
     },
     [stopFields, stopAlreadySent, logContext, negotiatedStepRef, carriedOnlyRef, lighterClearedRef]

@@ -400,10 +400,11 @@ export async function POST(req: NextRequest) {
         isForced: s.IsForced ?? false,
         isHearingImpaired: s.IsHearingImpaired ?? false,
         isExternal: s.IsExternal ?? false,
-        // Pour un Chromecast seulement : une piste texte s'allume sur le récepteur sans relancer le
-        // flux, une piste en images doit être incrustée par le serveur — voir `ChromecastPlayer`.
-        // Absent ailleurs, pour que la réponse des autres lecteurs reste ce qu'elle était.
-        ...(castTarget ? { isText: s.IsTextSubtitleStream ?? null } : {}),
+        // Pour un Chromecast : une piste texte s'allume sur le récepteur sans relancer le flux, une piste
+        // en images doit être incrustée par le serveur — voir `ChromecastPlayer`. Ailleurs, seulement
+        // `false` (13/11/2026) : l'aide d'un passage rejoué (§150) ne prend jamais une piste en images.
+        // Une piste texte reste sans le champ, la réponse d'avant.
+        ...(castTarget ? { isText: s.IsTextSubtitleStream ?? null } : s.IsTextSubtitleStream === false ? { isText: false } : {}),
         url:
           `/api/jellyfin/stream/subtitle/${itemId}?mediaSourceId=${source.Id}&index=${s.Index}` +
           (syncByIndex?.[String(s.Index)] ? `&sync=${syncByIndex[String(s.Index)].version}` : "") +

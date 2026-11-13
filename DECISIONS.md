@@ -10784,3 +10784,43 @@ pipeline suivant) ; `onStarting` d'un pipeline remplacé peut encore *fermer* un
 **Tests.** `ExperimentalPlayerHost-cycle.test.tsx` (« l'ancien pipeline qui parle encore… » : trois reconstructions
 sans la règle, une avec ; le retour suivant reconstruit au lieu de passer la main) ; l'empreinte
 `natif/arriere-plan-source-fermee-au-retour…` ; les autres empreintes inchangées.
+
+## 150. Les sous-titres d'un passage rejoué : le temps du passage, jamais un choix (13/11/2026)
+
+**Règle.** Un recul court (−10 s : bouton, flèche ←, recul de l'écran verrouillé ; `isReplayRewind`, de 5 à 15 s),
+**film en lecture**, sans sous-titre complet à l'écran, affiche le passage rejoué sous-titré, de la cible jusqu'à la
+position d'avant le premier recul plus 2 s (`REPLAY_TAIL_S`) ; chaque recul de plus pendant l'aide allonge d'autant.
+Une pastille discrète (« Sous-titres pour ce passage ») le dit ; la toucher en fait un vrai choix. Tout autre saut,
+un choix au menu, une diffusion qui commence ou le démontage des commandes l'éteignent. Pour tous, sans réglage —
+décision de Louis : rien d'infra, rien de critique.
+
+**La piste** (`pickReplaySubtitle`) : un complet en texte — jamais une forcée, jamais une piste en images —, dans la
+langue de la forcée à l'écran (VO avec forcés français : l'aide en français), sinon dans celle de l'audio entendu (on
+lit les mots qu'on entend), sinon dans celle du compte puis de l'interface ; sinon rien, et pas de pastille. Rien non
+plus avec un complet déjà à l'écran, un second sous-titre (§87), une génération en cours, ou pendant une diffusion.
+
+**Pourquoi.** 1 296 des 7 249 sauts de `player.log` sont des −10 s, souvent deux ou trois d'affilée : « je n'ai pas
+compris ce qu'il a dit ». L'Apple TV fait la même chose. Mesuré sur 10 487 films et épisodes : 93,6 % ont un complet
+texte dans la langue de leur audio par défaut, 2,5 % prennent la langue du compte, 3,9 % rien (aucun complet, ou
+seulement des images).
+
+**Jamais un choix.** Ni préférence, ni `subtitleSwitches`, ni piste reprise à l'épisode suivant, ni menu changé :
+chaque lecteur montre l'aide **sur une voie à part** et rend l'affichage d'avant. Natif : `showReplay` dans
+`useNativeSubtitleLanes`, lue dans les lignes déjà en mémoire (toutes les pistes texte sont recueillies) avec sa
+propre correction de synchro (§141), un fichier à côté du film lu à la première aide. Serveur : les modes des
+`<track>` posés comme `changeSubtitle`, sans rien compter ni retenir — aucune renégociation. Hors ligne : la piste
+gardée sur l'appareil, lue à la place de la choisie. Les règles et la fenêtre vivent dans un seul module
+(`src/lib/replaySubtitles.ts`) et un seul hook des commandes (`useReplaySubtitles`).
+
+**Différent exprès.** En pause, un recul n'ouvre rien : on revoit une image, on ne réécoute pas — et les scénarios
+d'empreinte « ← en pause » restent identiques. Côté serveur, la langue Jellyfin des sous-titres n'arrive pas jusqu'au
+lecteur : la langue de l'interface en tient lieu. La route de négociation n'envoie `isText: false` que pour une piste
+en images (une piste texte reste sans le champ, la réponse d'avant ; le Chromecast garde son `isText` complet).
+
+**Mesuré sans ligne de plus.** Le bilan `stop` des trois lecteurs porte `replaySubs: "a2 g1"` (aides montrées,
+gardées par la pastille), absent tant qu'aucune n'a paru (`playerLog.ts` n'accepte que cette forme).
+
+**Tests.** `replay-subtitles.test.ts` (la piste, la fenêtre, le relevé) ; `useReplaySubtitles.test.tsx` (pause, saut
+en avant, pastille, démontage, diffusion) ; `PlayerHost-deuxSousTitres.test.tsx` (serveur : modes rendus, forcée
+reprise, jamais d'images) ; l'empreinte `natif/sauts-et-pause-sous-titres-d-un-passage-rejoue…` ; les autres
+empreintes inchangées. Nouveautés : page discrète « 10.40 » (`page1040.ts`).

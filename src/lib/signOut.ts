@@ -3,6 +3,7 @@
 import { forgetPrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 import { forgetSceneRestart } from "@/lib/sceneRestartSession";
 import { forgetXrayUsage } from "@/lib/xrayUsage";
+import { forgetReplayUsage } from "@/lib/replaySubtitles";
 import { forgetDirectInfo } from "@/lib/directInfo";
 import { touchHintHeaders } from "@/lib/deviceLabel";
 import { clearPersistedCache } from "@/lib/persistentCache";
@@ -67,6 +68,7 @@ export async function forgetAccountOnDevice(budgetMs: number): Promise<void> {
   // Et la dernière lecture gelée pour « Revenir au début de la scène » (§143), rangée par titre elle aussi.
   step(forgetSceneRestart);
   step(forgetXrayUsage);
+  step(forgetReplayUsage);
   // La description des fichiers aussi : la route la refuse à un compte qui lit par le serveur.
   step(forgetDirectInfo);
   // Les recherches récentes ne sont rangées sous aucun compte : le suivant voyait ce que le

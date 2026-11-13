@@ -87,6 +87,7 @@ import {
   type ExternalSubtitleSource,
 } from "@/lib/webcodecs/externalSubtitles";
 import { chooseAudioTrack, chooseSubtitleTrack, toJellyfinLanguage, trackLanguage } from "@/lib/trackPreferences";
+import { pickReplaySubtitle } from "@/lib/replaySubtitles";
 import { noteSeriesLanguage } from "@/lib/noteSeriesLanguage";
 import { isGeneratingTrack, SubtitleGeneration } from "@/lib/subtitleGen/generation";
 import { useWakeLock } from "@/lib/useWakeLock";
@@ -762,7 +763,7 @@ export function ExperimentalPlayerHost({
   /** Le choix retenu sur l'appareil n'est réappliqué qu'une fois par lecteur, à la première ouverture. */
   const dualMemoryAppliedRef = useRef(false);
 
-  const { generationLane, clearSecond, chooseSubtitle, chooseSecond, showGeneratedAt, showSecondGeneratedAt, showSubtitleAt } = useNativeSubtitleLanes({
+  const { generationLane, clearSecond, chooseSubtitle, chooseSecond, showGeneratedAt, showSecondGeneratedAt, showSubtitleAt, showReplay } = useNativeSubtitleLanes({
     generation,
     wantedSubtitleRef,
     secondWantedRef,
@@ -1285,6 +1286,26 @@ export function ExperimentalPlayerHost({
    * s'ouvre à son début sur ses pistes par défaut, ce qui vaut mieux que de ne pas s'ouvrir.
    */
   const [playbackState, setPlaybackState] = useState<PlaybackState | null | undefined>(undefined);
+  /**
+   * Les sous-titres d'un passage rejoué (§150) : la piste que l'aide montrerait maintenant — jamais une génération
+   * en cours, qu'on ne sait pas dater — et la voie qui la dessine (`showReplay`). Seulement sur ce chemin-ci : le
+   * lecteur serveur qui a pris la main a la sienne.
+   */
+  const replayTrack = useMemo(() => {
+    if (path !== "remux") return null;
+    const audio = tracks.audio.find((track) => track.number === currentAudio) ?? null;
+    return pickReplaySubtitle({
+      tracks: subtitleChoices.filter((track) => !isGeneratingTrack(track.number)).map((track) => ({ ...track, id: track.number, text: true })),
+      current: currentSubtitle,
+      second: secondSubtitle,
+      audioLanguage: audio ? trackLanguage(audio) : null,
+      accountLanguages: [playbackState?.preferences?.subtitleLanguage, locale],
+    });
+  }, [path, tracks.audio, currentAudio, subtitleChoices, currentSubtitle, secondSubtitle, playbackState, locale]);
+  const replaySubtitle = useMemo(
+    () => ({ track: () => replayTrack, show: (id: number | null) => showReplay(id, externalsRef.current) }),
+    [replayTrack, showReplay]
+  );
   useEffect(() => {
     let abandoned = false;
     // Un délai de garde, parce que cette lecture est devenue une condition d'ouverture.
@@ -3092,6 +3113,7 @@ export function ExperimentalPlayerHost({
               // En mode deux sous-titres, le principal fait partie du choix retenu (§87).
               if (wasDual) rememberDual(trackOfSubtitle(wantedSubtitleRef.current), trackOfSubtitle(secondWantedRef.current));
             }}
+            replaySubtitle={replaySubtitle}
             secondSubtitle={
               path === "remux"
                 ? ({

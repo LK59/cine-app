@@ -523,6 +523,7 @@ export function OfflinePlayerHost({ session, mode }: { session: PlaybackSession;
               subtitleTracks={subs.tracks}
               currentSubtitleId={subs.current}
               onChangeSubtitle={subs.choose}
+              replaySubtitle={subs.replaySubtitle}
               onChromeEdges={setChromeEdges}
               hidden={false}
               loading={false}

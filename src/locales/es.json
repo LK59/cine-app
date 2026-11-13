@@ -2034,6 +2034,10 @@
     "skipIntro": "Saltar intro",
     "skipRecap": "Saltar resumen",
     "sceneRestart": "Volver al inicio de la escena",
+    "replaySubtitles": {
+      "on": "Subtítulos para este fragmento",
+      "keep": "Mantener los subtítulos"
+    },
     "nextEpisode": "Siguiente episodio",
     "nextEpisodeIn": "Siguiente episodio · {n}s",
     "playNow": "Reproducir ahora",

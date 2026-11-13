@@ -24,6 +24,7 @@ type ControlsProps = {
   currentSubtitleId: number | null;
   onChangeSubtitle: (id: number | null) => void;
   secondSubtitle?: { currentId: number | null; onChange: (id: number | null) => void; offset?: unknown; generation?: unknown };
+  replaySubtitle?: { track: () => number | null; show: (id: number | null) => void };
 };
 let controls: ControlsProps | null = null;
 vi.mock("@/components/PlayerControls", () => ({
@@ -187,6 +188,72 @@ describe("deux sous-titres — lecteur serveur", () => {
     await waitFor(() => expect(controls!.secondSubtitle!.currentId).toBe(3));
     expect(controls!.currentSubtitleId).toBe(2);
     await waitFor(() => expect(modes()).toEqual(["hidden", "hidden"]));
+  });
+});
+
+describe("sous-titres d'un passage rejoué — lecteur serveur (§150)", () => {
+  it("sans sous-titre : l'aide montre la piste de la langue du compte, puis rend l'état d'avant — sans rien choisir", async () => {
+    await opened();
+    // Aucune langue d'audio connue ici : celle de l'interface (fr) en tient lieu.
+    expect(controls!.replaySubtitle!.track()).toBe(3);
+    await act(async () => controls!.replaySubtitle!.show(3));
+    expect(modes()).toEqual(["disabled", "showing"]);
+    expect(controls!.currentSubtitleId).toBeNull();
+    await act(async () => controls!.replaySubtitle!.show(null));
+    expect(modes()).toEqual(["disabled", "disabled"]);
+    expect(controls!.currentSubtitleId).toBeNull();
+  });
+
+  it("un complet déjà choisi, ou deux sous-titres : pas d'aide", async () => {
+    await opened();
+    await act(async () => controls!.onChangeSubtitle(2));
+    expect(controls!.replaySubtitle!.track()).toBeNull();
+    await act(async () => controls!.secondSubtitle!.onChange(3));
+    expect(controls!.replaySubtitle!.track()).toBeNull();
+  });
+
+  it("une forcée à l'écran : l'aide passe au complet de sa langue, puis la forcée revient", async () => {
+    const forced = { index: 4, url: "/s4.vtt", language: "fre", title: "Forcés", isDefault: false };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ playSessionId: "p", mediaSourceId: "m", manifestUrl: "/x.m3u8", audioTracks: [], subtitleTracks: [...SUBTITLES, forced] }),
+        text: async () => "",
+      }))
+    );
+    render(<PlayerHost />);
+    await waitFor(() => expect(controls?.subtitleTracks).toHaveLength(3));
+    await act(async () => controls!.onChangeSubtitle(4));
+    expect(modes()).toEqual(["disabled", "disabled", "showing"]);
+    expect(controls!.replaySubtitle!.track()).toBe(3);
+    await act(async () => controls!.replaySubtitle!.show(3));
+    expect(modes()).toEqual(["disabled", "showing", "disabled"]);
+    await act(async () => controls!.replaySubtitle!.show(null));
+    expect(modes()).toEqual(["disabled", "disabled", "showing"]);
+    expect(controls!.currentSubtitleId).toBe(4);
+  });
+
+  it("jamais une piste en images", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          playSessionId: "p",
+          mediaSourceId: "m",
+          manifestUrl: "/x.m3u8",
+          audioTracks: [],
+          subtitleTracks: [{ index: 5, url: "/s5.vtt", language: "fre", title: null, isDefault: false, isText: false }],
+        }),
+        text: async () => "",
+      }))
+    );
+    render(<PlayerHost />);
+    await waitFor(() => expect(controls?.subtitleTracks).toHaveLength(1));
+    expect(controls!.replaySubtitle!.track()).toBeNull();
   });
 });
 

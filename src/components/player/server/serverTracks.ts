@@ -25,6 +25,8 @@ export interface ExternalSubtitleTrack {
   isForced?: boolean;
   isHearingImpaired?: boolean;
   isExternal?: boolean;
+  /** `false` pour une piste en images (PGS, VobSub) ; absent pour une piste texte (§150). */
+  isText?: boolean | null;
 }
 
 /** Une piste de ce lecteur, dans les termes du choix des pistes (`trackPreferences`) — §87. */

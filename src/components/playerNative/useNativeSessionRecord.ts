@@ -32,6 +32,7 @@ import { timelinePosition, useSessionTimeline } from "@/components/player/sessio
 import { gaveUpFields } from "@/components/player/session/gaveUp";
 import { endSceneRestart, sceneRestartLogFields } from "@/lib/sceneRestartSession";
 import { endXrayUsage, xrayLogFields } from "@/lib/xrayUsage";
+import { endReplayUsage, replayLogFields } from "@/lib/replaySubtitles";
 
 /**
  * La copie de secours du bilan (`unsentStop`) est réécrite quand la séance a gagné ce temps regardé
@@ -145,6 +146,8 @@ export function useNativeSessionRecord({
         ...sceneRestartLogFields(itemId),
         // L'usage des acteurs à l'écran (`xrayUsage.ts`) — rien sans l'option proposée.
         ...xrayLogFields(itemId),
+        // Les sous-titres d'un passage rejoué (§150) — rien tant qu'aucune aide n'a paru.
+        ...replayLogFields(itemId),
       };
     },
     [tally, watched, intendedPosition, slowFields, describeFileRef, pathRef, remuxRef, videoElRef, lastVideoElRef, mountedAtRef, everReadyRef, itemId]
@@ -173,6 +176,7 @@ export function useNativeSessionRecord({
       reportPlayback("stop", stopFields(why));
       endSceneRestart(itemId);
       endXrayUsage(itemId);
+      endReplayUsage(itemId);
       clearUnsentStop(sessionId);
       // De quoi reprendre, pris dans ce que le lecteur tient en mémoire — voir `keepOnStop`. Lu ici,
       // avant que le pipeline soit détruit (la croix, puis `stopPlaybackNow` ; au démontage, cet

@@ -2,7 +2,7 @@
 // second (« Deux sous-titres », DECISIONS.md §87), fichiers à côté du film et générations (§70) :
 // le choix d'une piste et la ligne à écrire à chaque instant. Sorti tel quel de l'hôte le 23/10/2026 ;
 // l'état et les références restent déclarés dans l'hôte, qui les lit aussi, et passent ici.
-import { useCallback, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { useT } from "@/components/TranslationProvider";
 import { isGeneratingTrack, type SubtitleGeneration } from "@/lib/subtitleGen/generation";
 import type { RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
@@ -103,6 +103,46 @@ export function useNativeSubtitleLanes({
     if (isGeneratingTrack(second) && generation.targetOf(second) === active) return "second";
     return null;
   }, [generation, secondWantedRef, wantedSubtitleRef]);
+
+  /**
+   * La voie de l'aide d'un passage rejoué (§150) : une piste montrée à la place du principal le temps du
+   * passage, sans rien choisir — ni `wantedSubtitleRef`, ni le pipeline, ni le menu. Ses propres références,
+   * internes : rien d'autre que cette voie ne les lit.
+   */
+  const replayRef = useRef<{ id: number; offset: number; scale: number; external: ExternalSubtitleTrack | null } | null>(null);
+  const replayFetchRef = useRef<AbortController | null>(null);
+
+  /** Montre `id` sur la voie de l'aide ; `null` l'éteint, et le principal reprend à la ligne suivante. */
+  const showReplay = useCallback(
+    (id: number | null, sources: ExternalSubtitleSource[]) => {
+      replayFetchRef.current?.abort();
+      replayFetchRef.current = null;
+      if (id === null) {
+        if (replayRef.current) {
+          replayRef.current = null;
+          setSubtitle(null);
+        }
+        return;
+      }
+      // Calée comme si elle était choisie (§141) : sa correction à elle, jamais le décalage réglé sur le principal.
+      const sync = syncForChoice(id, subtitleSyncRef.current, () => remuxRef.current?.subtitleTracks ?? [], sources);
+      const lane = { id, offset: startingOffset(sync), scale: sync ? sync.scale : 1, external: null as ExternalSubtitleTrack | null };
+      replayRef.current = lane;
+      if (!isExternalTrack(id)) return;
+      const source = sources.find((candidate) => candidate.id === id);
+      if (!source) return;
+      // Un fichier à côté du film : lu à la première aide, comme au choix. Un échec ne dit rien — l'aide n'est
+      // qu'un plus, et le passage reste lisible sans elle.
+      const fetching = new AbortController();
+      replayFetchRef.current = fetching;
+      void ExternalSubtitleTrack.load(source, fetching.signal)
+        .then((loaded) => {
+          if (replayRef.current === lane) lane.external = loaded;
+        })
+        .catch(() => {});
+    },
+    [remuxRef, setSubtitle, subtitleSyncRef]
+  );
 
   /** Retire le second : un seul sous-titre. */
   const clearSecond = useCallback(() => {
@@ -303,6 +343,17 @@ export function useNativeSubtitleLanes({
       const external = externalSubtitleRef.current;
       fileDelayRef.current = fileDelay;
       showSecondAt(playerSeconds, fromContainer, fileDelay);
+      // L'aide d'un passage rejoué (§150) prend la place du principal — une forcée, ou rien — le temps du passage.
+      const replay = replayRef.current;
+      if (replay) {
+        setSubtitleIsNotice(false);
+        setSubtitle(
+          isExternalTrack(replay.id)
+            ? (replay.external?.textAt(cueLookupTime(playerSeconds, fileDelay, replay.offset, replay.scale, true)) ?? null)
+            : fromContainer(cueLookupTime(playerSeconds, fileDelay, replay.offset, replay.scale, false), replay.id)
+        );
+        return;
+      }
       // Une génération est datée comme un fichier à côté du film : sur l'horloge du fichier. Celle du
       // principal seulement : une génération affichée par le second ne remplace pas le principal (§87).
       if (!external && generationLane() === "primary") {
@@ -323,5 +374,5 @@ export function useNativeSubtitleLanes({
     [generationLane, showGeneratedAt, showSecondAt, externalSubtitleRef, fileDelayRef, setSubtitle, setSubtitleIsNotice, subtitleOffsetRef, subtitleScaleRef]
   );
 
-  return { generationLane, clearSecond, chooseSubtitle, chooseSecond, showGeneratedAt, showSecondGeneratedAt, showSubtitleAt };
+  return { generationLane, clearSecond, chooseSubtitle, chooseSecond, showGeneratedAt, showSecondGeneratedAt, showSubtitleAt, showReplay };
 }

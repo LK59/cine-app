@@ -2034,6 +2034,10 @@
     "skipIntro": "Passer l’intro",
     "skipRecap": "Passer le récap",
     "sceneRestart": "Revenir au début de la scène",
+    "replaySubtitles": {
+      "on": "Sous-titres pour ce passage",
+      "keep": "Garder les sous-titres"
+    },
     "nextEpisode": "Épisode suivant",
     "nextEpisodeIn": "Épisode suivant · {n}s",
     "playNow": "Lire maintenant",

@@ -93,15 +93,18 @@ describe("POST /api/jellyfin/playback/start — castTarget « chromecast »", ()
     expect(res.status).toBe(200);
   });
 
-  it("dit de chaque sous-titre s'il est en texte — et seulement pour un Chromecast", async () => {
+  it("dit de chaque sous-titre s'il est en texte pour un Chromecast — ailleurs, seulement d'une piste en images (§150)", async () => {
     const { POST } = await import("@/app/api/jellyfin/playback/start/route");
     const cast = await (await POST(req({ itemId: validId, castTarget: "chromecast" }))).json();
     expect(cast.subtitleTracks.map((s: { index: number; isText: unknown }) => [s.index, s.isText])).toEqual([
       [2, false],
       [3, true],
     ]);
+    // Hors diffusion : `false` pour la piste en images (l'aide d'un passage rejoué ne la prend jamais), et une piste
+    // texte reste sans le champ — la réponse d'avant.
     const page = await (await POST(req({ itemId: validId }))).json();
-    for (const st of page.subtitleTracks) expect(st).not.toHaveProperty("isText");
+    expect(page.subtitleTracks.find((st: { index: number }) => st.index === 2)).toMatchObject({ isText: false });
+    expect(page.subtitleTracks.find((st: { index: number }) => st.index === 3)).not.toHaveProperty("isText");
   });
 
   it("une autre valeur est ignorée : profil de la page, sans diffusion", async () => {

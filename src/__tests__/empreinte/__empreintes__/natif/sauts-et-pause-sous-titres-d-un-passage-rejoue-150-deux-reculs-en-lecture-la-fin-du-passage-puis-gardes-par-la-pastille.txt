@@ -1,0 +1,139 @@
+fetch GET /api/subtitle-gen/options?itemId=film-1
+fetch GET /api/jellyfin/playback-state/film-1
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522800000,"fields":{"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"non décidé","why":"lost","at":120,"watched":0,"ended":false,"rebuild":0,"gaveUpAfterMs":0,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":0,"seekWaitMs":0,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{}},"account":null}
+fetch GET /api/player/frame/film-1
+step monté
+probe {"audioPreferences":null,"audioTrackNumber":null,"fileVersion":null,"startPaused":false,"startSeconds":120,"streamUrl":"/stream.mkv","videoRangeType":"SDR"}
+log start {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","reason":"remultiplexage → lecteur natif","openedInMs":0,"at":120,"rebuild":0,"displayHdr":"inconnu","hdrLightCap":"natif","hdrChoice":"auto","wideGamut":"inconnu"}
+media video play
+fetch GET /api/jellyfin/chapters?itemId=film-1
+fetch GET /api/jellyfin/trickplay/info?itemId=film-1
+fetch POST /api/jellyfin/playback/playing {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1200000000,"isPaused":false,"visible":true}
+storage local set cine:player-volume {"volume":1,"muted":false}
+storage local set cine:player-volume {"volume":1,"muted":false}
+dom ouverture
+    video
+    h1 "Un film"
+    p "player.experimental.resumeAt:{\"time\":\"2 min 00\"}"
+    button "common.close"
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Un film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=0 valuetext=player.seekValue:{"at":"0:00","total":"0:00"}
+trace élément : repart à 120.00 s
+storage local set cine:last-watched {"film-1":1792522800000,"ep-1":1792522800000}
+step première image
+dom première image
+    video
+    h1 "Un film"
+    p "player.experimental.resumeAt:{\"time\":\"2 min 00\"}"
+    button "common.close"
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Un film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=120 valuetext=player.seekValue:{"at":"2:00","total":"1:00:00"}
+step ← en lecture, sans sous-titre : le passage sous-titré dans la langue de l'audio
+media video currentTime= 115
+log seek {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","from":125,"to":115,"buffered":false,"ranges":"vide","tookMs":300,"steps":""}
+dom aide montrée
+    video
+    p "Réplique."
+    button "player.replaySubtitles.on"
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Un film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=115 valuetext=player.seekValue:{"at":"1:55","total":"1:00:00"}
+log opening {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","firstMoveMs":0,"infoMs":0,"steps":""}
+fetch POST /api/jellyfin/playback/progress {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1150000000,"isPaused":false,"visible":true}
+step un second ← pendant l'aide : la fin reste celle du premier
+media video currentTime= 108
+log seek {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","from":118,"to":108,"buffered":false,"ranges":"vide","tookMs":300,"steps":""}
+fetch POST /api/jellyfin/playback/progress {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1080000000,"isPaused":false,"visible":true}
+storage local set cine:last-watched {"film-1":1792522815600,"ep-1":1792522800000}
+dom passage fini, aide éteinte
+    video
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Un film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=129 valuetext=player.seekValue:{"at":"2:09","total":"1:00:00"}
+step ← encore, puis la pastille touchée : un vrai choix
+media video currentTime= 119
+log seek {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","from":129,"to":119,"buffered":false,"ranges":"vide","tookMs":300,"steps":""}
+fetch POST /api/jellyfin/playback/progress {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1190000000,"isPaused":false,"visible":true}
+remux selectSubtitleTrack 5
+storage local set cine:unsent-stop:00000001 {"savedAt":1792522830000,"fields":{"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","why":"lost","at":119,"watched":30,"ended":false,"rebuild":0,"audio":1,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":3,"seekWaitMs":900,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{"netMB":0,"recvMbps":0,"linkMbps":0,"linkBusyPct":0,"req":0,"readWaitS":0,"buildS":0,"audioS":0,"appendS":0,"longTaskS":0,"longTasks":0,"lagMaxMs":0,"slowestMs":0,"linkVerdict":"inconnue","linkS":0,"cores":12},"replaySubs":"a2 g1"},"account":null}
+fetch POST /api/jellyfin/playback/progress {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1190000000,"isPaused":false,"visible":true}
+storage local set cine:last-watched {"film-1":1792522830900,"ep-1":1792522800000}
+dom gardés
+    video
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Un film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=134 valuetext=player.seekValue:{"at":"2:14","total":"1:00:00"}
+step croix
+beacon /api/player/log stop {"itemId":"film-1","title":"Un film","container":"mkv","video":"hevc 1920x1080 10bit","range":"SDR","agent":"<agent>","session":"00000001","path":"remux","why":"close","at":134,"watched":45,"ended":false,"rebuild":0,"audio":1,"waits":0,"waitedMs":0,"longestWaitMs":0,"seeks":3,"seekWaitMs":900,"audioSwitches":0,"backgrounds":0,"backgroundMs":0,"backgroundRebuilds":0,"resumes":0,"resumeWaitMs":0,"longestResumeMs":0,"diag":{"netMB":0,"recvMbps":0,"linkMbps":0,"linkBusyPct":0,"req":0,"readWaitS":0,"buildS":0,"audioS":0,"appendS":0,"longTaskS":0,"longTasks":0,"lagMaxMs":0,"slowestMs":0,"linkVerdict":"inconnue","linkS":0,"cores":12},"replaySubs":"a2 g1","timeline":"124,5,0,0,-,L;109,10,0,0,-,L;114,15,0,0,-,L;119,20,0,0,-,L;124,25,0,0,-,L;119,30,0,0,-,L;124,35,0,0,-,L;129,40,0,0,-,L;134,45,0,0,-,L"}
+storage local remove cine:unsent-stop:00000001
+keepOnStop
+fetch POST /api/jellyfin/playback/stop {"client":"Lumen by Laterna","itemId":"film-1","playSessionId":"cine-engine-film-1","mediaSourceId":"film-1","playMethod":"DirectPlay","announce":true,"positionTicks":1340000000,"isPaused":false,"visible":true}
+refreshAfterPlayback {}
+playback close 1
+dom fermé
+    video
+    button "common.close"
+    button "player.minimize"
+    button "player.castConfirm.confirm" inert
+    button "player.mute"
+    input "player.volume" type=range value=1
+    button "10"
+    button "player.pause"
+    button "10"
+    p "Un film"
+    button "player.audio"
+    button "player.subtitles"
+    button "player.moreOptions"
+    input "player.seekLabel" type=range value=134 valuetext=player.seekValue:{"at":"2:14","total":"1:00:00"}

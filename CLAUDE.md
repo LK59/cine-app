@@ -616,6 +616,14 @@ l'écran » already read, once per session across rebuilds and handovers (`scene
 `sceneRestart: "aurait-proposé" | "non:<raison>"` — read that before turning it on. On: `proposé:<issue>` and one
 `debut-scene` line per session. Without X-Ray offered, nothing at all; the fingerprints do not move.
 
+**A replayed passage is subtitled for a moment** (DECISIONS §150, since 13/11/2026, for everyone, no setting): a
+−10 s while playing, with no full subtitle on screen, shows the passage in a full text track — the language of the
+forced track on screen, else of the audio, else of the account — until 2 s past where the first rewind started, then
+gives back the previous display. Never a choice (no preference, no `subtitleSwitches`): each player draws it on a lane
+of its own (`showReplay` natively, `<track>` modes on the server player, the kept file offline); rules in
+`src/lib/replaySubtitles.ts`, trigger and pill in `useReplaySubtitles`. The `stop` line carries `replaySubs: "a2 g1"`
+(shown, kept) only once one has appeared, so the existing fingerprints do not move.
+
 **The « Immersion » mode is a separate project the app only serves** (DECISIONS §144, since 10/11/2026):
 `immersion/` at the root — its own `package.json`, Vite build (a `Dockerfile` stage copies `dist` to
 `immersion-dist`), Playwright tests and journal (`immersion/PROGRESS.md`, read it before touching anything

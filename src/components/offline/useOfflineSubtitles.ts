@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useState, type RefObject } from "react";
+import { pickReplaySubtitle } from "@/lib/replaySubtitles";
 import { useLocale, useT } from "@/components/TranslationProvider";
 import { labelSubtitleTracks } from "@/lib/trackLabel";
 import { cueTextAt, parseSubtitles } from "@/lib/webcodecs/externalSubtitles";
@@ -17,6 +18,9 @@ export function useOfflineSubtitles(download: OfflineDownload | null, videoRef: 
   const t = useT();
   const { locale } = useLocale();
   const [current, setCurrent] = useState<number | null>(null);
+  // L'aide d'un passage rejoué (§150) : montrée à la place de la piste choisie le temps du passage, sans la changer.
+  const [replay, setReplay] = useState<number | null>(null);
+  const shown = replay ?? current;
   const [cues, setCues] = useState<readonly SubtitleCue[]>([]);
   const [text, setText] = useState<string | null>(null);
   const subtitles = download?.subtitles;
@@ -40,23 +44,23 @@ export function useOfflineSubtitles(download: OfflineDownload | null, videoRef: 
     return labels.map((l) => ({ id: l.number, label: l.label }));
   }, [subtitles, locale, t]);
 
-  // La piste choisie, lue sur l'appareil.
+  // La piste montrée (la choisie, ou l'aide), lue sur l'appareil.
   useEffect(() => {
     const account = offlineAccount();
-    if (current === null || !account || !id) return;
+    if (shown === null || !account || !id) return;
     let cancelled = false;
-    void readOfflineSubtitle(account, id, current).then((vtt) => {
+    void readOfflineSubtitle(account, id, shown).then((vtt) => {
       if (!cancelled) setCues(vtt ? parseSubtitles(vtt) : []);
     });
     return () => {
       cancelled = true;
     };
-  }, [current, id]);
+  }, [shown, id]);
 
   // La ligne à l'instant, suivie à chaque `timeupdate` (et au saut).
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || current === null) return;
+    if (!video || shown === null) return;
     const read = () => setText(cueTextAt(cues, video.currentTime));
     read();
     video.addEventListener("timeupdate", read);
@@ -65,12 +69,39 @@ export function useOfflineSubtitles(download: OfflineDownload | null, videoRef: 
       video.removeEventListener("timeupdate", read);
       video.removeEventListener("seeked", read);
     };
-  }, [cues, current, videoRef]);
+  }, [cues, shown, videoRef]);
 
   const choose = (next: number | null) => {
     setCurrent(next);
     setCues([]);
     setText(null);
   };
-  return { tracks, current, choose, text: current === null ? null : text };
+  // Gardés avec le téléchargement, ce sont des WebVTT : du texte, toujours. La langue de l'audio n'est notée que
+  // pour un épisode (celle demandée, reprise au suivant) ; un film part de la langue du compte.
+  const audioLanguage = download?.episode?.audioLanguage ?? null;
+  const replayTrack = useCallback(
+    () =>
+      pickReplaySubtitle({
+        tracks: (subtitles ?? []).map((s) => ({
+          id: s.index,
+          language: s.language,
+          name: s.title,
+          isDefault: false,
+          isForced: s.isForced,
+          isHearingImpaired: s.isHearingImpaired,
+          text: true,
+        })),
+        current,
+        audioLanguage,
+        accountLanguages: [locale],
+      }),
+    [subtitles, current, audioLanguage, locale]
+  );
+  const showReplay = useCallback((next: number | null) => {
+    setReplay(next);
+    setCues([]);
+    setText(null);
+  }, []);
+  const replaySubtitle = useMemo(() => ({ track: replayTrack, show: showReplay }), [replayTrack, showReplay]);
+  return { tracks, current, choose, text: shown === null ? null : text, replaySubtitle };
 }

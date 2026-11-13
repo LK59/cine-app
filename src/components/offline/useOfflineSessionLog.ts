@@ -1,5 +1,6 @@
 "use client";
 
+import { endReplayUsage, replayLogFields } from "@/lib/replaySubtitles";
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { clearUnsentStop, saveUnsentStop, touchUnsentStop } from "@/lib/unsentStop";
@@ -76,6 +77,8 @@ export function useOfflineSessionLog(
       ended,
       deviceMB: Math.round(counts.current.device / 1e5) / 10,
       serverMB: Math.round(counts.current.server / 1e5) / 10,
+      // Les sous-titres d'un passage rejoué (§150) — rien tant qu'aucune aide n'a paru.
+      ...replayLogFields(download.itemId),
     });
     // Le bilan gardé sur l'appareil, réécrit quand il a changé, et à chaque passage en arrière-plan :
     // c'est là qu'iOS tue une page.
@@ -109,6 +112,7 @@ export function useOfflineSessionLog(
       if (sentRef.current) return;
       sentRef.current = true;
       reportPlayback("stop", { ...stopFields(), why: whyRef.current });
+      endReplayUsage(download.itemId);
       clearUnsentStop(session);
     };
     // Une séance par ouverture : l'hôte change de clé avec elle.

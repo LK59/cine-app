@@ -67,6 +67,7 @@ import {
 } from "@/components/player/server/serverTracks";
 
 import { useAccountPreferencesLoader } from "@/lib/useAccountPreferences";
+import { pickReplaySubtitle } from "@/lib/replaySubtitles";
 import { usePlayerServerFallback } from "@/lib/usePlayerEnabled";
 import { ExperimentalPlayerHost } from "@/components/ExperimentalPlayerHost";
 import { PlaybackInfoPanel } from "@/components/PlaybackInfoPanel";
@@ -1854,6 +1855,38 @@ function ActivePlayer({
     [castSession, changeSubtitle]
   );
 
+  /**
+   * Les sous-titres d'un passage rejoué (§150) : la piste que l'aide montrerait — jamais pendant une diffusion, où
+   * le téléviseur garde celui incrusté au lancement — et, pour la montrer, les modes des `<track>` posés comme
+   * `changeSubtitle` les pose, sans rien retenir ni compter. Éteinte, l'aide rend le principal choisi. Un seul
+   * sous-titre seulement : avec un second, `pickReplaySubtitle` ne propose rien et `useServerDualSubtitles`
+   * garde la main sur les modes.
+   */
+  const replayTrack = useCallback((): number | null => {
+    if (castSession || castActiveRef.current) return null;
+    return pickReplaySubtitle({
+      tracks: externalSubtitleTracks.map((st) => ({ ...subtitleFacts(st), id: st.index, text: st.isText !== false })),
+      current: currentSubtitleRef.current,
+      second: secondSubtitleRef.current,
+      audioLanguage: currentAudioId === null ? null : (audioLanguagesRef.current.get(currentAudioId) ?? null),
+      // La langue Jellyfin des sous-titres n'arrive pas jusqu'ici : celle de l'interface en tient lieu.
+      accountLanguages: [locale],
+    });
+  }, [castSession, externalSubtitleTracks, currentAudioId, locale]);
+  const showReplay = useCallback(
+    (id: number | null) => {
+      const video = videoRef.current;
+      if (!video) return;
+      const shown = id ?? currentSubtitleRef.current;
+      const position = shown === null ? -1 : externalSubtitleTracks.findIndex((t) => t.index === shown);
+      for (let i = 0; i < video.textTracks.length; i++) {
+        video.textTracks[i].mode = i === position ? "showing" : "disabled";
+      }
+    },
+    [externalSubtitleTracks]
+  );
+  const replaySubtitle = useMemo(() => ({ track: replayTrack, show: showReplay }), [replayTrack, showReplay]);
+
   /** Le second sous-titre (§87) : jamais le principal, jamais sans principal. */
   const changeSecondSubtitle = useCallback((id: number | null) => {
     const primary = currentSubtitleRef.current;
@@ -2571,6 +2604,7 @@ function ActivePlayer({
           currentSubtitleId={currentSubtitleId}
           onChangeSubtitle={requestSubtitleChange}
           secondSubtitle={{ currentId: secondSubtitleId, onChange: changeSecondSubtitle }}
+          replaySubtitle={replaySubtitle}
           hidden={!!error || needsReauth}
           loading={loading}
           openingQuiet={introCovering}

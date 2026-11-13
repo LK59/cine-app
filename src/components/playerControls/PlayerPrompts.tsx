@@ -2,11 +2,12 @@
 
 /**
  * Les invites flottantes du lecteur, visibles même commandes masquées : « Passer l'intro / le
- * récap » — ou, à sa place, « Revenir au début de la scène » (§143) —, la ligne de la minuterie de veille, « Vous êtes toujours là ? » et la carte de l'épisode
+ * récap » — ou, à sa place, « Revenir au début de la scène » (§143) —, les sous-titres d'un passage rejoué (§150),
+ * la ligne de la minuterie de veille, « Vous êtes toujours là ? » et la carte de l'épisode
  * suivant. Ce qui décide de les montrer reste dans `PlayerControls` ; elles ne font que s'afficher.
  */
 
-import { X, Moon } from "lucide-react";
+import { X, Moon, Captions } from "lucide-react";
 import { useT } from "@/components/TranslationProvider";
 import { noteViewerPresent } from "@/lib/autoAdvance";
 import { sleepTimerStore } from "@/lib/sleepTimer";
@@ -18,6 +19,8 @@ export function PlayerPrompts({
   onSkip,
   sceneRestart = null,
   onSceneRestart,
+  replaySubtitle = false,
+  onKeepReplaySubtitle,
   sleepWarning,
   askStillThere,
   showNextUp,
@@ -31,6 +34,9 @@ export function PlayerPrompts({
   /** « Revenir au début de la scène » à montrer (`useSceneRestart`) ; `null` quand l'intro a la place. */
   sceneRestart?: { target: number } | null;
   onSceneRestart?: () => void;
+  /** Le passage rejoué est sous-titré (§150) : la pastille, qui les garde pour de bon si on la touche. */
+  replaySubtitle?: boolean;
+  onKeepReplaySubtitle?: () => void;
   sleepWarning: number | null;
   askStillThere: boolean;
   showNextUp: boolean;
@@ -79,6 +85,29 @@ export function PlayerPrompts({
           }}
         >
           {t("player.sceneRestart")}
+        </button>
+      )}
+
+      {/* Les sous-titres d'un passage rejoué (§150) : une ligne discrète, comme sur l'Apple TV, le temps du
+          passage. Un toucher les garde pour de bon. La minuterie de veille, plus rare et plus urgente, a la place. */}
+      {replaySubtitle && sleepWarning === null && onKeepReplaySubtitle && (
+        <button
+          type="button"
+          data-player-surface-ignore
+          data-replay-subtitles=""
+          onClick={(e) => {
+            e.stopPropagation();
+            onKeepReplaySubtitle();
+          }}
+          title={t("player.replaySubtitles.keep")}
+          className="player-pill pointer-events-auto absolute flex items-center gap-2 px-3.5 py-1.5 text-xs text-white/80"
+          style={{
+            bottom: PROMPT_BOTTOM,
+            left: "max(1rem, env(safe-area-inset-left))",
+          }}
+        >
+          <Captions size={12} aria-hidden />
+          <span>{t("player.replaySubtitles.on")}</span>
         </button>
       )}
 
