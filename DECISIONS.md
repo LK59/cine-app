@@ -10790,7 +10790,9 @@ sans la règle, une avec ; le retour suivant reconstruit au lieu de passer la ma
 **Règle.** Un recul court (−10 s : bouton, flèche ←, recul de l'écran verrouillé ; `isReplayRewind`, de 5 à 15 s),
 **film en lecture**, sans sous-titre complet à l'écran, affiche le passage rejoué sous-titré, de la cible jusqu'à la
 position d'avant le premier recul plus 2 s (`REPLAY_TAIL_S`) ; chaque recul de plus pendant l'aide allonge d'autant.
-Une pastille discrète (« Sous-titres pour ce passage ») le dit ; la toucher en fait un vrai choix. Tout autre saut,
+Une ligne de texte seule (« Sous-titres pour ce passage », 3,5 s) le dit, dans la barre du haut — sur la ligne de la
+croix et du volume, ou juste dessous sur un téléphone debout (10.42.2 ; une pilule au milieu de l'écran puis une ligne
+sous la barre avaient été jugées gênantes) ; la toucher en fait un vrai choix. Tout autre saut,
 un choix au menu, une diffusion qui commence ou le démontage des commandes l'éteignent. Pour tous, sans réglage —
 décision de Louis : rien d'infra, rien de critique.
 

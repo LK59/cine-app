@@ -2205,6 +2205,13 @@ body:has(.gestion-liquid) .glass-window {
   animation: player-onscreen-chip 360ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 @keyframes player-onscreen-chip { from { opacity: 0; transform: translateX(-16px); } }
+/* « Sous-titres pour ce passage » (§150) : centré sur la ligne de la croix et du volume — son retrait, plus la moitié de
+   la croix (52 px au doigt). Un téléphone debout n'a pas la place entre les boutons : juste sous la ligne, dans la bande
+   noire au-dessus du film. */
+.player-replay-notice { top: calc(max(1rem, calc(env(safe-area-inset-top) + 1rem)) + 26px); }
+@media (max-width: 500px) and (orientation: portrait) {
+  .player-replay-notice { top: calc(max(1rem, calc(env(safe-area-inset-top) + 1rem)) + 52px + 1.25rem); }
+}
 /* Une fiche d'acteur ouverte laisse la rangée en place (13/11/2026) — sauf sous la feuille du téléphone debout, qui la
    recouvre : à travers son verre, les pilules se lisaient au milieu du texte, et rien n'y est touchable. Elle s'efface
    le temps de la feuille et revient avec sa fermeture. */

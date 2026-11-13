@@ -89,8 +89,10 @@ export function PlayerPrompts({
       )}
 
       {/* Les sous-titres d'un passage rejoué (§150) : une ligne de texte seule, sans pilule, le temps de la lire
-          (`REPLAY_NOTICE_MS`) — au centre, juste sous la barre du haut, où rien d'autre ne se pose (ni « À l'écran »,
-          ni les invites du bas, ni la ligne de sous-titres). La toucher garde les sous-titres pour de bon. */}
+          (`REPLAY_NOTICE_MS`) — **dans la barre du haut**, centrée sur la ligne de la croix et du volume, là où vont
+          les messages d'état (Louis, 13/11/2026 : sous la barre, elle tombait au milieu de l'image, souvent sur les
+          visages). Sur un téléphone debout, la croix et la diffusion occupent la moitié gauche de cette ligne : juste
+          dessous, dans la bande noire au-dessus du film. La toucher garde les sous-titres pour de bon. */}
       {replaySubtitle && onKeepReplaySubtitle && (
         <button
           type="button"
@@ -101,8 +103,8 @@ export function PlayerPrompts({
             onKeepReplaySubtitle();
           }}
           title={t("player.replaySubtitles.keep")}
-          className="pointer-events-auto absolute left-1/2 flex -translate-x-1/2 animate-fade-in items-center gap-1.5 whitespace-nowrap px-2 py-1 text-xs font-medium text-white/85 [text-shadow:0_1px_3px_rgba(0,0,0,0.85)]"
-          style={{ top: "calc(max(1rem, calc(env(safe-area-inset-top) + 1rem)) + 4.25rem)" }}
+          // Sa hauteur : `.player-replay-notice` (globals.css) — sur la ligne du haut, ou juste dessous sur un téléphone debout.
+          className="player-replay-notice pointer-events-auto absolute left-1/2 flex -translate-x-1/2 -translate-y-1/2 animate-fade-in items-center gap-1.5 whitespace-nowrap px-2 py-1 text-xs font-medium text-white/85 [text-shadow:0_1px_3px_rgba(0,0,0,0.85)]"
         >
           <Captions size={12} aria-hidden className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]" />
           <span>{t("player.replaySubtitles.on")}</span>
