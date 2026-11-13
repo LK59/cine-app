@@ -15,6 +15,8 @@ import os from "os";
  * toujours eux-mêmes et l'emportent sur celui-ci.
  */
 const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "cine-test-data-"));
+// Lu par `vitest.global-setup.ts`, qui tourne dans ce processus-ci, avant les fils (la base modèle).
+process.env.CINE_TEST_DATA_ROOT = TEST_DATA_DIR;
 
 /**
  * Le fuseau du foyer, pour toute la suite (15/10/2026).
@@ -42,10 +44,22 @@ export default defineConfig({
     // `// @vitest-environment jsdom` docblock at the top of the file, rather than paying the
     // jsdom setup cost across every test file.
     environment: "node",
+    /**
+     * Des délais à la mesure de la machine la plus chargée qui fait tourner la suite (13/11/2026).
+     *
+     * Le défaut de Vitest (5 s par test, 10 s par crochet) tombait sur les machines de GitHub et dans la
+     * construction de l'image, où la suite tourne à côté du reste : le même jour, « Jusqu'ici » (200
+     * générations, 1,5 à 3,1 s d'habitude), les livres (87 ms ici, plus de 5 s au premier accès à la base),
+     * la navigation de la fiche — trois builds GHCR rouges pour rien. Un vrai blocage se voit encore : 20 s,
+     * c'est 100 fois le temps ordinaire d'un test.
+     */
+    testTimeout: 20_000,
+    hookTimeout: 30_000,
     // Des fils plutôt que des processus, isolés comme avant — voir `process.env.TZ` plus haut.
     pool: "threads",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
+    globalSetup: ["./vitest.global-setup.ts"],
     /**
      * L'ancien défaut, écrit noir sur blanc plutôt que subi.
      *
@@ -62,7 +76,8 @@ export default defineConfig({
     // `SETUP_COMPLETE` : la suite se comporte comme une installation configurée — sans lui, le
     // proxy enverrait chaque page vers l'assistant de premier lancement (DECISIONS.md §48). Les
     // tests de l'assistant le retirent eux-mêmes.
-    env: { DATA_DIR: TEST_DATA_DIR, SETUP_COMPLETE: "true" },
+    // `CINE_TEST_DATA_ROOT` : la racine, sous laquelle `vitest.setup.ts` donne à chaque fichier sa propre base.
+    env: { DATA_DIR: TEST_DATA_DIR, CINE_TEST_DATA_ROOT: TEST_DATA_DIR, SETUP_COMPLETE: "true" },
     // Les copies de travail d'agents (`.claude/worktrees/…`) vivent dans le dépôt : sans ceci,
     // la vérification lançait aussi leurs tests, à moitié écrits, contre leurs propres sources.
     // `immersion/` est un projet à part (le mode 3D caché) : ses tests sont des scénarios Playwright,
