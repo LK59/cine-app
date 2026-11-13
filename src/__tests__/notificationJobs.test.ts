@@ -290,12 +290,46 @@ describe("checkNewEpisodes", () => {
     expect(await recentEpisodeImports(Date.now() - 2 * 3600_000)).toEqual([]);
   });
 
-  it("décrit l'épisode importé, clé de dédoublonnage comprise", async () => {
-    importsInSonarr([severanceImport()]);
+  it("décrit l'épisode importé, clés de dédoublonnage comprises", async () => {
+    importsInSonarr([severanceImport({ episodeId: 3514 })]);
     const { recentEpisodeImports } = await import("@/lib/notificationJobs");
     expect(await recentEpisodeImports(Date.now() - 2 * 3600_000)).toEqual([
-      { id: 101, tmdb_id: 7, title: "Severance", detail: "S02E01" },
+      { id: 101, episodeId: 3514, tmdb_id: 7, title: "Severance", detail: "S02E01" },
     ]);
+  });
+
+  // 13/11/2026 : une meilleure version du même épisode (1080p la nuit, 2160p quelques heures plus tard)
+  // est un second import, avec un second identifiant d'enregistrement — « Nouvel épisode » repartait.
+  // Constaté sur *Ted Lasso* S04E09 (deux fois) et S04E10 (trois fois) dans `notifications.log`.
+  it("n'annonce pas une seconde fois un épisode dont le fichier a été remplacé", async () => {
+    importsInSonarr([severanceImport({ id: 202, episodeId: 3514 })]);
+    aSeriesEveryoneCouldFollow();
+    mockGetUsers.mockResolvedValue([{ Id: "u1", Name: "louis" }]);
+    mockNextUp.mockResolvedValue([{ SeriesId: "jf-severance" }]);
+    // L'import de la nuit (enregistrement 101) a été annoncé, et l'épisode 3514 noté avec lui.
+    mockAvailabilityNotifDb.hasBeenNotified.mockImplementation((kind: string, id: number) =>
+      (kind === "episode:louis" && id === 101) || (kind === "episode-id:louis" && id === 3514)
+    );
+
+    const { checkNewEpisodes } = await import("@/lib/notificationJobs");
+    await checkNewEpisodes();
+    expect(mockSendPushToUser).not.toHaveBeenCalled();
+  });
+
+  it("deux imports du même épisode dans la même fenêtre font une notification d'un épisode", async () => {
+    importsInSonarr([severanceImport({ id: 301, episodeId: 3514 }), severanceImport({ id: 302, episodeId: 3514 })]);
+    aSeriesEveryoneCouldFollow();
+    mockGetUsers.mockResolvedValue([{ Id: "u1", Name: "louis" }]);
+    mockNextUp.mockResolvedValue([{ SeriesId: "jf-severance" }]);
+    mockAvailabilityNotifDb.hasBeenNotified.mockReturnValue(false);
+
+    const { checkNewEpisodes } = await import("@/lib/notificationJobs");
+    await checkNewEpisodes();
+    expect(mockSendPushToUser).toHaveBeenCalledTimes(1);
+    expect(mockSendPushToUser).toHaveBeenCalledWith("louis", expect.objectContaining({ body: "Severance — S02E01 est disponible" }));
+    expect(mockAvailabilityNotifDb.markNotified).toHaveBeenCalledWith("episode:louis", 301);
+    expect(mockAvailabilityNotifDb.markNotified).toHaveBeenCalledWith("episode:louis", 302);
+    expect(mockAvailabilityNotifDb.markNotified).toHaveBeenCalledWith("episode-id:louis", 3514);
   });
 
   it("dit l'épisode dans la notification", async () => {

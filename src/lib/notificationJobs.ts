@@ -125,14 +125,20 @@ export async function checkWatchlistAvailability(): Promise<void> {
  * L'identifiant de l'enregistrement Sonarr sert de clé de dédoublonnage : il est unique et stable.
  * Cent entrées couvrent largement deux heures — l'historique mêle recherches, imports et
  * suppressions, mais pas à ce rythme ici.
+ *
+ * `episodeId` (l'épisode chez Sonarr) dédoublonne en plus par épisode (13/11/2026) : un même épisode
+ * importé deux fois — la version 1080p de la nuit, puis la 2160p qui la remplace quelques heures plus
+ * tard — fait deux enregistrements, donc deux clés, et « Nouvel épisode » partait deux fois. Constaté
+ * dans `notifications.log` : *Ted Lasso* S04E09 annoncé deux fois le 30/09, S04E10 trois fois (07/10,
+ * 12/10, 13/10), chacun à la suite d'un remplacement de fichier dans l'historique de Sonarr.
  */
 export async function recentEpisodeImports(
   since: number
-): Promise<{ id: number; tmdb_id: number; title: string; detail: string | null }[]> {
+): Promise<{ id: number; episodeId: number | null; tmdb_id: number; title: string; detail: string | null }[]> {
   // Sans Sonarr configuré, aucun import d'épisode à annoncer — et rien à lui demander (§48, §89).
   if (!serviceConfigured("sonarr")) return [];
   const history = await sonarr.getHistory(100);
-  const imports: { id: number; tmdb_id: number; title: string; detail: string | null }[] = [];
+  const imports: { id: number; episodeId: number | null; tmdb_id: number; title: string; detail: string | null }[] = [];
   for (const record of history.records ?? []) {
     if (record?.eventType !== "downloadFolderImported") continue;
     const at = Date.parse(record.date);
@@ -142,6 +148,7 @@ export async function recentEpisodeImports(
     const episode = record.episode;
     imports.push({
       id: record.id,
+      episodeId: typeof record.episodeId === "number" && record.episodeId > 0 ? record.episodeId : null,
       tmdb_id: tmdbId,
       title: record.series?.title ?? record.sourceTitle ?? "",
       detail: episode
@@ -195,6 +202,9 @@ export async function checkNewEpisodes(): Promise<void> {
         // La clé porte le nom du compte : le même épisode s'annonce à plusieurs personnes, et une
         // seule fois à chacune. Sans ça, le premier averti faisait taire tous les autres.
         if (availabilityNotifDb.hasBeenNotified(`episode:${userName}`, ev.id)) continue;
+        // Et une fois par épisode : un remplacement de fichier (une meilleure version) n'est pas un
+        // nouvel épisode — voir `recentEpisodeImports`.
+        if (ev.episodeId !== null && availabilityNotifDb.hasBeenNotified(`episode-id:${userName}`, ev.episodeId)) continue;
         const bySeries = pending.get(userName) ?? new Map<string, typeof recentImports>();
         bySeries.set(seriesId, [...(bySeries.get(seriesId) ?? []), ev]);
         pending.set(userName, bySeries);
@@ -202,7 +212,9 @@ export async function checkNewEpisodes(): Promise<void> {
     }
 
     for (const [userName, bySeries] of pending) {
-      for (const episodes of bySeries.values()) {
+      for (const imports of bySeries.values()) {
+        // Deux imports du même épisode dans la même fenêtre comptent pour un seul épisode.
+        const episodes = imports.filter((ev, i) => ev.episodeId === null || imports.findIndex((o) => o.episodeId === ev.episodeId) === i);
         const [first] = episodes;
         await sendPushToUser(userName, {
           title: "📺 Nouvel épisode",
@@ -214,7 +226,10 @@ export async function checkNewEpisodes(): Promise<void> {
           tag: "new-episode",
           category: "new-episode",
         });
-        for (const ev of episodes) availabilityNotifDb.markNotified(`episode:${userName}`, ev.id);
+        for (const ev of imports) {
+          availabilityNotifDb.markNotified(`episode:${userName}`, ev.id);
+          if (ev.episodeId !== null) availabilityNotifDb.markNotified(`episode-id:${userName}`, ev.episodeId);
+        }
       }
     }
   } catch (err) {
