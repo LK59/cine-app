@@ -1,6 +1,6 @@
 "use client";
 
-import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
+import { missingCount, openingSeason, orderSeasons, seasonName } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Play, Check } from "lucide-react";
@@ -283,7 +283,7 @@ export function CinemaEpisodeBrowser({
                 }`}
               >
                 <span className="truncate">
-                  {seasonNumber === 0 ? t("cinema.specials") : t("cinema.season", { n: seasonNumber })}
+                  {seasonName(seasonNumber, t)}
                 </span>
                 {/* Le compte de ce qui manque, à côté de la saison : c'est ce qu'on cherche à
                     savoir en parcourant cette colonne. */}

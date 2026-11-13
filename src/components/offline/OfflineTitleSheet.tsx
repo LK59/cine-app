@@ -1,5 +1,6 @@
 "use client";
 
+import { seasonName } from "@/lib/seasonOrder";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Check, Download, Film, Pause, Play, RotateCcw, Trash2, Tv, X } from "lucide-react";
@@ -167,7 +168,7 @@ export function OfflineTitleSheet({
     <div className={isMobile ? "mt-2" : "w-full max-w-3xl rounded-2xl bg-black/60 p-5 ring-1 ring-white/10 backdrop-blur-md"}>
       {series.seasons.map((season) => (
         <section key={season.season} className="mb-5">
-          <h3 className="mb-2 text-sm font-semibold text-white">{t("player.downloads.season", { n: season.season })}</h3>
+          <h3 className="mb-2 text-sm font-semibold text-white">{seasonName(season.season, t)}</h3>
           <div className="flex flex-col gap-1">
             {season.episodes.map((d) => (
               <EpisodeRow key={d.id} download={d} size={isMobile ? "phone" : "desktop"} />

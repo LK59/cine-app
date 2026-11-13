@@ -24,7 +24,7 @@ import { CinemaEpisodeProgress } from "@/components/cinema/CinemaEpisodeProgress
 import { CinemaTagline, ReservedLine, useLateArrival, useRuntimeLabel } from "@/components/cinema/CinemaDetailExtras";
 import { useSheetPlay } from "@/lib/useSheetPlay";
 import { episodeRowFacts, playEpisodeFrom } from "@/lib/episodeRow";
-import { openingSeason, orderSeasons } from "@/lib/seasonOrder";
+import { openingSeason, orderSeasons, seasonName } from "@/lib/seasonOrder";
 import { sheetOverview, sheetRuntimeMinutes, sheetEpisodeRuntime, sheetLeadFacts } from "@/lib/sheetFacts";
 import { FadeInImg } from "@/components/FadeInImg";
 import { PosterImage } from "@/components/PosterImage";
@@ -501,7 +501,7 @@ function PhoneEpisodes({
               onClick={() => setSelected(n)}
               className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-sm transition-colors ${n === active ? "bg-white font-medium text-ink" : "bg-white/10 text-muted"}`}
             >
-              {n === 0 ? t("cinema.specials") : t("cinema.season", { n })}
+              {seasonName(n, t)}
             </button>
           ))}
         </div>

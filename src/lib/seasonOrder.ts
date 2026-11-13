@@ -41,3 +41,15 @@ export function openingSeason(owned: Iterable<number>, missing: Iterable<number>
 export function missingCount(season: { episodes: { released: boolean }[] } | undefined): number {
   return season?.episodes.filter((ep) => ep.released).length ?? 0;
 }
+
+/**
+ * Le nom d'une saison : « Saison 3 », et « Épisodes spéciaux » pour la saison 0 — une écriture pour tous
+ * les écrans qui en nomment une.
+ *
+ * Chacun l'écrivait de son côté, et la fiche hors ligne d'une série l'avait oublié : des spéciaux
+ * téléchargés s'y rangeaient sous « Saison 0 », quand toutes les autres listes disaient « Épisodes
+ * spéciaux » (13/11/2026).
+ */
+export function seasonName(n: number, t: (key: string, vars?: Record<string, string | number>) => string): string {
+  return n === 0 ? t("cinema.specials") : t("cinema.season", { n });
+}

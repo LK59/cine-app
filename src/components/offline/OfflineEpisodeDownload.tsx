@@ -1,5 +1,6 @@
 "use client";
 
+import { seasonName } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { AlertTriangle, ArrowDownToLine, Check, CircleCheck, Download, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
@@ -439,7 +440,7 @@ function OfflineSeasonDownloadOn({
           restoreFocus(buttonRef);
         }}
         centerOnWide
-        title={`${series.seriesTitle} — ${seasonNumber === 0 ? t("cinema.specials") : t("cinema.season", { n: seasonNumber })}`}
+        title={`${series.seriesTitle} — ${seasonName(seasonNumber, t)}`}
         subtitle={t("player.downloads.seasonSheet", { n: remaining.length })}
         poster={posterUrl ?? null}
         actions={[

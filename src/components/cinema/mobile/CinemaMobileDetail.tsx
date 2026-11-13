@@ -4,7 +4,7 @@ import { AskTitleControl } from "@/components/ask/AskTitleControl";
 import { ShareButton, shareableFrom } from "@/components/share/ShareControl";
 import { OfflineDownloadControl, OfflinePlayButton } from "@/components/offline/OfflineDownloadControl";
 import { OfflineEpisodeButton, OfflineSeasonDownload } from "@/components/offline/OfflineEpisodeDownload";
-import { missingCount, openingSeason, orderSeasons } from "@/lib/seasonOrder";
+import { missingCount, openingSeason, orderSeasons, seasonName } from "@/lib/seasonOrder";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
@@ -695,7 +695,7 @@ export function CinemaMobileDetail({
                         active ? "bg-white text-ink font-medium" : "bg-white/10 text-muted"
                       }`}
                     >
-                      {seasonNumber === 0 ? t("cinema.specials") : t("cinema.season", { n: seasonNumber })}
+                      {seasonName(seasonNumber, t)}
                       {/* Ce qui manque, dit sur la pastille elle-même : c'est ce qu'on cherche en
                           parcourant cette rangée. */}
                       {gap > 0 && (
