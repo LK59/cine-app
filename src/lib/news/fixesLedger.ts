@@ -1301,6 +1301,92 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
         de: "Auf Französisch folgen Zeitangaben jetzt überall in der App der französischen Typografie („2 h 47“, „50 min“).",
       },
     ],
+  },  {
+    version: "10.44.0",
+    page: "10.43",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Changer de langue audio ne fait plus disparaître les sous-titres, sur iPhone comme ailleurs.",
+        en: "Changing the audio language no longer turns subtitles off, on iPhone and elsewhere.",
+        es: "Cambiar el idioma del audio ya no apaga los subtítulos, en iPhone y en los demás dispositivos.",
+        de: "Ein Wechsel der Tonsprache schaltet die Untertitel nicht mehr aus – auf dem iPhone wie überall.",
+      },
+      {
+        fr: "Sur certains appareils Android, changer de langue audio n'interrompt plus le film.",
+        en: "On some Android devices, changing the audio language no longer stops the film.",
+        es: "En algunos dispositivos Android, cambiar el idioma del audio ya no interrumpe la película.",
+        de: "Auf manchen Android-Geräten unterbricht ein Wechsel der Tonsprache den Film nicht mehr.",
+      },
+    ],
+  },
+  {
+    version: "10.44.0",
+    page: "10.43",
+    group: { fr: "Navigation", en: "Navigation", es: "Navegación", de: "Navigation" },
+    items: [
+      {
+        fr: "Un compte aux contenus filtrés ne voit plus « bibliothèque vide » à la place de son accueil.",
+        en: "An account with filtered content no longer sees “library empty” instead of its home screen.",
+        es: "Una cuenta con contenido filtrado ya no ve «biblioteca vacía» en lugar de su inicio.",
+        de: "Ein Konto mit gefilterten Inhalten sieht statt seiner Startseite nicht mehr „Bibliothek leer“.",
+      },
+      {
+        fr: "Au clavier ou à la télécommande, le retour d'un épisode lancé depuis « Plus d'épisodes » garde la main sur cette liste.",
+        en: "With a keyboard or remote, coming back from an episode started in “More episodes” keeps you in that list.",
+        es: "Con teclado o mando, al volver de un episodio iniciado desde «Más episodios» sigue en esa lista.",
+        de: "Mit Tastatur oder Fernbedienung bleiben Sie nach einer aus „Weitere Folgen“ gestarteten Folge in dieser Liste.",
+      },
+      {
+        fr: "« Plus d'épisodes » ouvert depuis un titre similaire répond de nouveau aux flèches.",
+        en: "“More episodes” opened from a similar title responds to the arrow keys again.",
+        es: "«Más episodios» abierto desde un título similar vuelve a responder a las flechas.",
+        de: "„Weitere Folgen“, aus einem ähnlichen Titel geöffnet, reagiert wieder auf die Pfeiltasten.",
+      },
+      {
+        fr: "Un geste fait pendant la fermeture de « Plus d'épisodes » ne lance plus un épisode qui se referme aussitôt.",
+        en: "A gesture made while “More episodes” is closing no longer starts an episode that closes right away.",
+        es: "Un gesto hecho mientras se cierra «Más episodios» ya no inicia un episodio que se cierra al instante.",
+        de: "Eine Geste während des Schließens von „Weitere Folgen“ startet keine Folge mehr, die sich sofort wieder schließt.",
+      },
+      {
+        fr: "Les épisodes spéciaux téléchargés s'appellent « Épisodes spéciaux », plus « Saison 0 ».",
+        en: "Downloaded special episodes are called “Specials”, no longer “Season 0”.",
+        es: "Los episodios especiales descargados se llaman «Especiales», ya no «Temporada 0».",
+        de: "Heruntergeladene Specials heißen „Specials“, nicht mehr „Staffel 0“.",
+      },
+      {
+        fr: "Dans les Nouveautés, « Voir plus » sous une version ancienne ouvre bien ses propres corrections.",
+        en: "In What’s New, “See more” under an older version opens that version's own fixes.",
+        es: "En Novedades, «Ver más» bajo una versión anterior abre sus propias correcciones.",
+        de: "In den Neuigkeiten öffnet „Mehr anzeigen“ unter einer älteren Version deren eigene Korrekturen.",
+      },
+    ],
+  },
+  {
+    version: "10.44.0",
+    page: "10.43",
+    group: { fr: "Demandes et notifications", en: "Requests and notifications", es: "Solicitudes y notificaciones", de: "Anfragen und Benachrichtigungen" },
+    items: [
+      {
+        fr: "La notification « Nouvel épisode » n'arrive plus qu'une fois, même quand le fichier est remplacé par une meilleure version.",
+        en: "The “New episode” notification now arrives only once, even when the file is replaced by a better version.",
+        es: "La notificación «Nuevo episodio» llega una sola vez, aunque el archivo se sustituya por una versión mejor.",
+        de: "Die Benachrichtigung „Neue Folge“ kommt nur noch einmal, auch wenn die Datei durch eine bessere Version ersetzt wird.",
+      },
+      {
+        fr: "« Mes demandes » montre de nouveau toutes vos demandes en cours, même anciennes.",
+        en: "“My requests” shows all your pending requests again, even old ones.",
+        es: "«Mis solicitudes» vuelve a mostrar todas sus solicitudes en curso, incluso las antiguas.",
+        de: "„Meine Anfragen“ zeigt wieder alle laufenden Anfragen, auch ältere.",
+      },
+      {
+        fr: "Les liens de partage voient moins d'informations sur le fonctionnement de l'app.",
+        en: "Share links see less information about how the app is set up.",
+        es: "Los enlaces para compartir ven menos información sobre el funcionamiento de la app.",
+        de: "Freigabelinks sehen weniger Informationen über die Einrichtung der App.",
+      },
+    ],
   },
 ];
 
