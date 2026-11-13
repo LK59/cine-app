@@ -503,8 +503,8 @@ yields the iGPU to a Jellyfin transcode and its container's `cpu_shares` sit bel
 state lives in `cine.db` (`scanStore.ts`). A file replaced at the same duration (± 1 s) is rebound
 (`rebindIfSameDuration`), never re-analysed, and the player serves its old scenes. Progress and controls:
 Configuration → Fonctions intelligentes → Acteurs à l'écran (`/api/admin/xray/scan`, admin only). Above tier 1, a tier 0 the admin
-fills by hand (a film, or a whole series season by season — from that page or « Analyser en priorité » on
-the title sheet): ordered `normal`, fed even during playback, animation still refused — but only while the
+fills by hand (a film, or a whole series season by season — from that page only; the title sheet's « Analyser en
+priorité » was removed on 13/11/2026): ordered `normal`, fed even during playback, animation still refused — but only while the
 service's queue holds nothing but our own orders, so it never overtakes a viewer's. One item's TMDB or
 Jellyfin error fails that item, never the queue; a failed library read backs off (15 min, 1 h, 6 h); with
 every tier paused, or during playback with nothing forced, nothing is read; it never runs under `next dev`.
