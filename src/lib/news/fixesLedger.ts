@@ -1238,6 +1238,70 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.42.1",
+    page: "10.40",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Sur iPhone en paysage, la fiche d'un acteur touché dans « À l'écran » s'ouvre de nouveau au lieu de rester invisible.",
+        en: "On iPhone in landscape, tapping an actor in “On screen” opens their page again instead of leaving it invisible.",
+        es: "En iPhone en horizontal, la ficha de un actor tocado en «En pantalla» vuelve a abrirse en lugar de quedar invisible.",
+        de: "Auf dem iPhone im Querformat öffnet sich die Seite eines in „Im Bild“ angetippten Schauspielers wieder, statt unsichtbar zu bleiben.",
+      },
+    ],
+  },
+  {
+    version: "10.42.3",
+    page: "10.40",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Les sous-titres ne se replient plus sur trois lignes étroites au milieu de l'image : une réplique garde la largeur de l'écran.",
+        en: "Subtitles no longer fold into three narrow lines in the middle of the picture: a line keeps the width of the screen.",
+        es: "Los subtítulos ya no se pliegan en tres líneas estrechas en medio de la imagen: cada frase conserva el ancho de la pantalla.",
+        de: "Untertitel werden nicht mehr in drei schmale Zeilen mitten im Bild umbrochen: Ein Satz behält die Breite des Bildschirms.",
+      },
+    ],
+  },
+  {
+    version: "10.42.5",
+    page: "10.40",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Plus de rectangle voilé autour des acteurs de la rangée « À l'écran » sur les images claires.",
+        en: "No more hazy rectangle around the actors in the “On screen” row over bright pictures.",
+        es: "Ya no aparece un rectángulo velado alrededor de los actores de la fila «En pantalla» sobre imágenes claras.",
+        de: "Kein verschleiertes Rechteck mehr um die Schauspieler der Reihe „Im Bild“ bei hellen Bildern.",
+      },
+    ],
+  },
+  {
+    version: "10.43.0",
+    page: "10.43",
+    group: { fr: "Fiches", en: "Title pages", es: "Fichas", de: "Titelseiten" },
+    items: [
+      {
+        fr: "Sur ordinateur, le résumé d'une fiche s'arrête sur une ligne entière au lieu d'être coupé à mi-hauteur.",
+        en: "On a computer, a title's summary now stops on a whole line instead of being cut halfway through one.",
+        es: "En el ordenador, el resumen de una ficha termina en una línea completa en lugar de cortarse a media altura.",
+        de: "Am Computer endet die Zusammenfassung einer Titelseite auf einer ganzen Zeile, statt mitten in einer Zeile abgeschnitten zu werden.",
+      },
+      {
+        fr: "Sur ordinateur, la fiche d'une série indique aussi son nombre de saisons.",
+        en: "On a computer, a series page also shows its number of seasons.",
+        es: "En el ordenador, la ficha de una serie también indica su número de temporadas.",
+        de: "Am Computer zeigt die Seite einer Serie auch die Anzahl ihrer Staffeln.",
+      },
+      {
+        fr: "Les durées s'écrivent à la française partout dans l'app : « 2 h 47 », « 50 min ».",
+        en: "In French, durations now follow French typography throughout the app (“2 h 47”, “50 min”).",
+        es: "En francés, las duraciones siguen ahora la tipografía francesa en toda la app («2 h 47», «50 min»).",
+        de: "Auf Französisch folgen Zeitangaben jetzt überall in der App der französischen Typografie („2 h 47“, „50 min“).",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */
