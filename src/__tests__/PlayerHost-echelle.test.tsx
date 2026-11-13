@@ -113,13 +113,20 @@ function loadElement() {
   act(() => void video().dispatchEvent(new Event("loadeddata")));
 }
 
+/**
+ * Sur une horloge simulée (13/11/2026) : les délais de l'échelle (1,2 s × marche) étaient attendus pour de vrai,
+ * 54 s pour ce fichier à chaque passage de la suite. Même budget qu'avant — six secondes, en temps simulé.
+ */
 async function nextNegotiation(count: number) {
-  await waitFor(() => expect(negociations.length).toBe(count), { timeout: 6000 });
+  for (let i = 0; i < 120 && negociations.length < count; i++) await act(() => vi.advanceTimersByTimeAsync(50));
+  expect(negociations.length).toBe(count);
   // Laisse la négociation finir de poser la source avant le geste suivant.
   await act(async () => {});
 }
 
 beforeEach(() => {
+  // `shouldAdvanceTime` : l'horloge avance aussi d'elle-même, pour les attentes de Testing Library.
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(async () => {});
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
   vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
@@ -135,6 +142,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -220,7 +228,7 @@ describe("une diffusion établie pendant le délai d'une reprise l'annule", () =
     act(() => void el.dispatchEvent(new Event("error")));
   }
   /** Plus que le délai de la marche (1,2 s) : la minuterie a eu le temps de partir. */
-  const pastDelay = () => act(() => new Promise((resolve) => setTimeout(resolve, 1700)));
+  const pastDelay = () => act(() => vi.advanceTimersByTimeAsync(1700));
 
   it("échelle du son (code 4) : aucune renégociation, la raison au journal, plus de reconnexion", { timeout: 20_000 }, async () => {
     stubFetch();

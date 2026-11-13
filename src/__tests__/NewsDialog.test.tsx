@@ -58,7 +58,23 @@ const posts = (url: string) =>
     .filter(([u, init]) => u === url && (init as RequestInit | undefined)?.method === "POST")
     .map(([, init]) => JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>);
 
+/**
+ * Sur une horloge simulée (13/11/2026) : le délai d'ouverture de la fenêtre et les « rien ne s'ouvre en 1,6 s »
+ * étaient attendus pour de vrai — 15 s pour ce fichier. Même budget qu'avant, trois secondes, en temps simulé.
+ */
+async function advanceUntil<T>(find: () => T, budgetMs = 3000): Promise<T> {
+  for (let t = 0; ; t += 50) {
+    try {
+      return find();
+    } catch (error) {
+      if (t >= budgetMs) throw error;
+    }
+    await act(() => vi.advanceTimersByTimeAsync(50));
+  }
+}
+
 beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.stubGlobal("fetch", fetchMock);
   Element.prototype.scrollIntoView = vi.fn();
   Element.prototype.scrollBy = vi.fn() as unknown as Element["scrollBy"];
@@ -69,6 +85,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   fetchMock.mockClear();
   vi.unstubAllGlobals();
 });
@@ -169,7 +186,7 @@ const drawGate = () =>
 describe("NewsGate", () => {
   it("s'ouvre sur l'accueil, et « Voir plus » mène à Compte → Nouveautés, sur les corrections de la page la plus récente", async () => {
     drawGate();
-    expect(await screen.findByRole("dialog", {}, { timeout: 3000 })).toBeTruthy();
+    expect(await advanceUntil(() => screen.getByRole("dialog"))).toBeTruthy();
     fireEvent.click(screen.getAllByText("news.seeMore")[0]);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(readCinemaRoute().news).toBe("corrections:2");
@@ -177,7 +194,7 @@ describe("NewsGate", () => {
 
   it("« Voir plus » sous la page la plus ancienne mène à ses corrections à elle (13/11/2026)", async () => {
     drawGate();
-    expect(await screen.findByRole("dialog", {}, { timeout: 3000 })).toBeTruthy();
+    expect(await advanceUntil(() => screen.getByRole("dialog"))).toBeTruthy();
     fireEvent.click(screen.getAllByText("news.seeMore")[1]);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(readCinemaRoute().news).toBe("corrections:1");
@@ -186,7 +203,7 @@ describe("NewsGate", () => {
   it("ne s'ouvre pas pendant un film, ni par-dessus une fiche ouverte par lien, ni avant l'écran d'accueil", async () => {
     playbackMode = "full";
     drawGate();
-    await act(() => new Promise((r) => setTimeout(r, 1600)));
+    await act(() => vi.advanceTimersByTimeAsync(1600));
     expect(screen.queryByRole("dialog")).toBeNull();
     cleanup();
 
@@ -194,7 +211,7 @@ describe("NewsGate", () => {
     window.history.replaceState(null, "", "/#film=12");
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     drawGate();
-    await act(() => new Promise((r) => setTimeout(r, 1600)));
+    await act(() => vi.advanceTimersByTimeAsync(1600));
     expect(screen.queryByRole("dialog")).toBeNull();
     cleanup();
 
@@ -202,7 +219,7 @@ describe("NewsGate", () => {
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     onboardingPending = true;
     drawGate();
-    await act(() => new Promise((r) => setTimeout(r, 1600)));
+    await act(() => vi.advanceTimersByTimeAsync(1600));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
@@ -223,19 +240,19 @@ describe("NewsGate", () => {
         <Relecture />
       </SWRConfig>
     );
-    await act(() => new Promise((r) => setTimeout(r, 300)));
+    await act(() => vi.advanceTimersByTimeAsync(300));
     onboardingPending = false;
     await act(async () => {
       await relire();
     });
-    await act(() => new Promise((r) => setTimeout(r, 1600)));
+    await act(() => vi.advanceTimersByTimeAsync(1600));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("rien à voir : rien", async () => {
     payload = { pages: [P2, P1], unseen: [], relaunched: false };
     drawGate();
-    await act(() => new Promise((r) => setTimeout(r, 1600)));
+    await act(() => vi.advanceTimersByTimeAsync(1600));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
@@ -254,7 +271,7 @@ describe("NewsGate", () => {
         <Relecture />
       </SWRConfig>
     );
-    expect(await screen.findByRole("dialog", {}, { timeout: 3000 })).toBeTruthy();
+    expect(await advanceUntil(() => screen.getByRole("dialog"))).toBeTruthy();
     payload = { pages: [P2, P1], unseen: [], relaunched: false };
     await act(async () => {
       await relire();
@@ -267,7 +284,7 @@ describe("NewsGate", () => {
   it("une relance de l'administrateur est mesurée `auto: false`", async () => {
     payload = { pages: [P2, P1], unseen: [2], relaunched: true };
     drawGate();
-    fireEvent.click(await screen.findByText("news.ok", {}, { timeout: 3000 }));
+    fireEvent.click(await advanceUntil(() => screen.getByText("news.ok")));
     expect(posts("/api/release-notes/event")[0]).toMatchObject({ auto: false, noteIds: [2] });
   });
 });

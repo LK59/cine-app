@@ -1138,7 +1138,9 @@ describe("changer de piste audio", () => {
   // autre que celle ouverte » ne consomme pas le budget. Un pipeline qui rouvre toujours sur une autre
   // piste la rejoue sans fin. Prouvée et non corrigée (étape 2 : observation seulement) — à basculer en
   // `it` quand le registre sera activé sur ce chemin.
-  it.fails("un pipeline qui rouvre toujours sur une autre piste n'est pas reconstruit sans fin", async () => {
+  // Le défaut tourne sans fin : ce test échouait par l'expiration des 20 s, à chaque passage de la suite. Trois
+  // secondes suffisent à le voir échouer — et à le voir passer le jour où il sera corrigé (13/11/2026).
+  it.fails("un pipeline qui rouvre toujours sur une autre piste n'est pas reconstruit sans fin", { timeout: 3000 }, async () => {
     mount();
     await waitFor(() => expect(screen.getByText(/^audio:Anglais/)).toBeTruthy());
     // Chaque pipeline suivant ouvre sur la piste 1, quelle que soit celle demandée.

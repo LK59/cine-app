@@ -45,8 +45,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Runs `npm test` inside the build (see Dockerfile) — the build fails,
-      # and nothing gets published, if a test breaks.
+      # The tests already ran in the `verify` job this one `needs`, on this same commit: the build skips
+      # them (`SKIP_TESTS=1`, see Dockerfile) instead of running the whole suite a second time.
       - name: Short commit ref
         id: ref
         run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
@@ -61,6 +61,7 @@ jobs:
           # build timestamp instead. Short form, like a local `git rev-parse --short HEAD`.
           build-args: |
             BUILD_REF=${{ steps.ref.outputs.short }}
+            SKIP_TESTS=1
           tags: |
             ghcr.io/lk59/cine-app:latest
             ghcr.io/lk59/cine-app:${{ github.sha }}

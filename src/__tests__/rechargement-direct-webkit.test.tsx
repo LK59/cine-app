@@ -75,7 +75,24 @@ const startBodies: Record<string, unknown>[] = [];
 const playerNegotiations = () => startBodies.filter((b) => b.prewarm !== true);
 const starts = () => reported.filter((r) => r.kind === "start").map((r) => r.fields);
 
+/**
+ * Sur une horloge simulée (13/11/2026) : la page rechargée attend 3 s avant de négocier (`graceMs`), et ces attentes
+ * étaient réelles — 21 s pour ce fichier. Même budget qu'avant, six secondes, en temps simulé.
+ */
+async function advanceUntil(check: () => void, budgetMs = 6000) {
+  for (let t = 0; ; t += 50) {
+    try {
+      check();
+      return;
+    } catch (error) {
+      if (t >= budgetMs) throw error;
+    }
+    await act(() => vi.advanceTimersByTimeAsync(50));
+  }
+}
+
 beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(async () => {});
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
   vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
@@ -118,6 +135,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   sessionStorage.clear();
   vi.restoreAllMocks();
@@ -168,7 +186,7 @@ describe("WebKit : la bascule natif → serveur recharge la page tout de suite",
     // La page rechargée.
     cleanup();
     page();
-    await waitFor(() => expect(starts()).toHaveLength(1), { timeout: 6000 });
+    await advanceUntil(() => expect(starts()).toHaveLength(1));
     expect(document.querySelector("[data-testid=natif]")).toBeNull();
     // Le préchauffage repris : aucune négociation de plus, même séance Jellyfin.
     expect(playerNegotiations()).toHaveLength(0);
@@ -201,8 +219,8 @@ describe("WebKit : la bascule natif → serveur recharge la page tout de suite",
       Promise.reject(new DOMException("pas de geste", "NotAllowedError"))
     );
     page();
-    await waitFor(() => expect(document.querySelector("[data-lighter-tap-notice]")).not.toBeNull(), { timeout: 6000 });
-    await act(() => new Promise((r) => setTimeout(r, 5200)));
+    await advanceUntil(() => expect(document.querySelector("[data-lighter-tap-notice]")).not.toBeNull());
+    await act(() => vi.advanceTimersByTimeAsync(5200));
     expect(document.querySelector("[data-lighter-tap-notice]")).not.toBeNull();
     act(() => void document.querySelector("video")!.dispatchEvent(new Event("playing")));
     await waitFor(() => expect(document.querySelector("[data-lighter-tap-notice]")).toBeNull());
@@ -278,7 +296,7 @@ describe("tout rechargement emporte le palier allégé en cours", () => {
       JSON.stringify({ itemId: "film", title: "Film", audioStreamIndex: 3, resumeAt: 300, server: true, carry: { lighter: { ...STEP, real: false } } })
     );
     page();
-    await waitFor(() => expect(starts()).toHaveLength(1), { timeout: 6000 });
+    await advanceUntil(() => expect(starts()).toHaveLength(1));
     expect(playerNegotiations()[0]).toMatchObject({ lighter: true, maxBitrate: 1_500_000, audioStreamIndex: 3 });
     expect(starts()[0]).toMatchObject({ why: "audio-reload", lighterMbps: 1.5, lighterCarried: true, lighterReloaded: true });
     act(() => void document.querySelector("video")!.dispatchEvent(new Event("loadeddata")));
@@ -292,7 +310,7 @@ describe("tout rechargement emporte le palier allégé en cours", () => {
       JSON.stringify({ itemId: "film", title: "Film", audioStreamIndex: 3, resumeAt: 300, server: true, carry: { lighter: { ...STEP, real: true } } })
     );
     page();
-    await waitFor(() => expect(starts()).toHaveLength(1), { timeout: 6000 });
+    await advanceUntil(() => expect(starts()).toHaveLength(1));
     expect(starts()[0]).toMatchObject({ why: "audio-reload", lighterMbps: 1.5, lighterReloaded: true });
     expect(starts()[0].lighterCarried).toBeUndefined();
     cleanup();
@@ -306,7 +324,7 @@ describe("tout rechargement emporte le palier allégé en cours", () => {
       JSON.stringify({ itemId: "film", title: "Film", audioStreamIndex: 3, resumeAt: 300, server: true, carry: { lighter: { ...STEP, real: true } } })
     );
     page();
-    await waitFor(() => expect(starts()).toHaveLength(1), { timeout: 6000 });
+    await advanceUntil(() => expect(starts()).toHaveLength(1));
     expect(playerNegotiations()[0].lighter).toBeUndefined();
   }, 10_000);
 });

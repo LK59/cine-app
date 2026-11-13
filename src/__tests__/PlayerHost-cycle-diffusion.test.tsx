@@ -78,11 +78,17 @@ let negociations: Record<string, unknown>[] = [];
 const lignes = (kind: string) => reportPlayback.mock.calls.filter(([k]) => k === kind).map(([, f]) => f as Record<string, unknown>);
 const video = () => document.querySelector("video")!;
 const fire = (name: string) => act(() => void video().dispatchEvent(new Event(name)));
+/**
+ * Sur une horloge simulée (13/11/2026), comme `PlayerHost-echelle` : les délais du lecteur (relances, rechargements)
+ * étaient attendus pour de vrai — 12 s pour ce fichier. Même budget qu'avant, six secondes, en temps simulé.
+ */
+const FAKE_CLOCK = { shouldAdvanceTime: true, toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] } as const;
 async function nextNegotiation(count: number) {
-  await waitFor(() => expect(negociations.length).toBe(count), { timeout: 6000 });
+  for (let i = 0; i < 120 && negociations.length < count; i++) await act(() => vi.advanceTimersByTimeAsync(50));
+  expect(negociations.length).toBe(count);
   await act(async () => {});
 }
-const wait = (ms: number) => act(() => new Promise((resolve) => setTimeout(resolve, ms)));
+const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 
 /** La route AirPlay telle que l'élément la lit : l'attribut de WebKit, et l'API standard `remote`. */
 const route = vi.hoisted(() => ({ wireless: false, remote: null as null | (EventTarget & { state: string }) }));
@@ -96,6 +102,7 @@ function failElement(code: number) {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ ...FAKE_CLOCK, toFake: [...FAKE_CLOCK.toFake] });
   vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(async () => {});
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
   vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});

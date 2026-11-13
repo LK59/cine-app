@@ -50,7 +50,12 @@ COPY . .
 # l'a déjà lu. Laissé là, la sortie « standalone » de Next — qui emporte tout le dossier du projet —
 # recopiait ses 28 Mo de textures dans l'image, à côté de leur build (relevé sur une image de test).
 RUN rm -rf immersion
-RUN npm test
+# Les tests, sauf quand ce même commit vient de les passer (13/11/2026) : la CI construit l'image après son job
+# `verify` sur le même commit, et un déploiement local après le portail — la suite tournait deux fois par
+# livraison (~2 min chacune). `SKIP_TESTS=1` ne se passe que dans ces deux cas ; sans lui, un
+# `docker compose build` à la main reste gardé comme avant.
+ARG SKIP_TESTS=""
+RUN if [ "$SKIP_TESTS" = "1" ]; then echo "tests déjà passés sur ce commit (SKIP_TESTS=1)"; else npm test; fi
 # No cache mount on .next/cache any more (26/09/2026). Turbopack keeps its compilation cache
 # there, and a build fed the previous one shipped fresh JavaScript with a stale stylesheet: every
 # rule added to globals.css since the last build was missing from the image, while the gate and

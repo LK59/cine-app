@@ -13,7 +13,8 @@ name: Verify
 #     workflow was written alongside had been sitting unnoticed.
 #
 # `npm test` stays in the Dockerfile as well as here: it is what protects a manual
-# `docker compose build` on the server, which doesn't go through GitHub at all.
+# `docker compose build` on the server, which doesn't go through GitHub at all. The publish
+# workflow's build passes `SKIP_TESTS=1`, since this job just ran them on the same commit.
 
 on:
   push:

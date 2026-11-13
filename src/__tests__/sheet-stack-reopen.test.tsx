@@ -89,7 +89,8 @@ async function back(close: () => void) {
   });
 }
 /** Le sursis de sortie de la coquille (`SHEET_OUT_MS + SHEET_UNMOUNT_SLACK_MS` sur téléphone). */
-const outlast = () => act(() => new Promise((r) => setTimeout(r, 700)));
+// Sur une horloge simulée (13/11/2026) : 22 sursis réels de 700 ms, 16 s pour ce fichier. Le même sursis, simulé.
+const outlast = () => act(() => vi.advanceTimersByTimeAsync(700));
 
 const dialogs = () => Array.from(document.body.querySelectorAll<HTMLElement>("[role=dialog]"));
 const rootOf = (dialog: HTMLElement) => dialog.parentElement as HTMLElement;
@@ -128,11 +129,13 @@ function expectLivePersonOnTop() {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   window.history.replaceState(null, "", "/");
   window.dispatchEvent(new PopStateEvent("popstate"));
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 

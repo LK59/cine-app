@@ -53,6 +53,8 @@ docker run --rm -v "$PWD":/app -w /app node:26-alpine npx vitest run src/__tests
 # The prune keeps BuildKit's cache bounded: each build still adds ~0.5 GB (compile, test, final
 # layers), and nothing else ever removes it.
 BUILD_REF=$(tools/build-ref.sh) docker compose build && docker compose up -d && docker builder prune -f --max-used-space 15GB
+# When the gate just passed on exactly this commit (no tracked file modified), the build may skip
+# its own run of the suite: add `--build-arg SKIP_TESTS=1` (`docker build`) — CI's publish job does.
 ```
 
 The dependency install is cached across deploys because the `manifest` stage feeds `npm install`
@@ -78,6 +80,20 @@ the production `server.log`. A test fails if that isolation disappears. That dir
 every file of the run: a file that empties or rewrites whole tables gives itself its own `DATA_DIR`
 (`await vi.hoisted(...)` before importing `@/lib/db`, as `news-page-105.test.ts` does) — sharing it made
 the image build fail on « database is locked » under load.
+
+**The lint keeps a cache** (`node_modules/.cache/eslint/`, content-hashed, since 13/11/2026): 61 s cold, 3 s when
+little changed — 80 % of it is the React Compiler rule, which judges each file alone, so a cached verdict holds.
+ESLint invalidates it on a config change but not on a plugin upgrade: after upgrading an ESLint plugin, delete
+that folder. CI lints without it.
+
+**Where the suite's time goes** (measured 13/11/2026): it is bound by the processor (~1 100 s of CPU for ~118 s,
+9.4 of 12 cores busy), 41 % of it mounting jsdom in each file's fresh thread. Real-time waits barely count —
+the slowest files were moved to fake clocks (`PlayerHost-echelle` 54 s → 1 s and five others) without moving the
+total. `pool: "vmThreads"` was measured: 48 s and 420 s of CPU, but 10 files depend on a real realm
+(`instanceof Error` from native modules, `window.location`, `performance.getEntriesByName`), `process.env` is
+shared by the files a worker runs in turn (a per-file reset fixes that), and the full suite still failed about one
+run in three on tests that pass alone (`AppSignature`, `cinemaRoute`, `response-framing`) — not adopted until that
+is understood.
 
 `set -e` and no pipes: `npm test | grep` swallows the exit code, and a red test has been pushed
 that way before. Read the gate's exit status before committing.
