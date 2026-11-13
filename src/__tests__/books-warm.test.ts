@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import type { NextRequest } from "next/server";
 
@@ -65,6 +65,14 @@ const PAIRS: [string, string, string][] = [
   ["La Pays des fourrures", "Le pays des fourrures", "Jules Verne"],
   ["Sauve-moi", "Sauve-moi", "Guillaume Musso"],
 ];
+
+// La base de test ouverte une fois, avant tout (13/11/2026) : sa création et ses migrations tombaient sur le premier
+// test qui lit les métadonnées connues (`buildIndex` → `knownMeta`) — 87 ms ici, plus de 5 s sur la machine du build
+// GHCR de la 10.41.1, qui a échoué là-dessus. Ce coût unique a son propre délai, hors de celui d'un test.
+beforeAll(async () => {
+  const { getDb } = await import("@/lib/db");
+  getDb();
+}, 60_000);
 
 beforeEach(() => {
   vi.clearAllMocks();
