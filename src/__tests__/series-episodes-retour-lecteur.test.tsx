@@ -118,4 +118,25 @@ describe("« Plus d'épisodes » sous le lecteur, le lecteur refermé (13/11/202
     expect(active?.closest("[data-detail-actions]")).toBeNull();
     expect(active?.getAttribute("data-episode-season")).toBe("true");
   });
+
+  /**
+   * Série A, série B par « Titres similaires » posée dessus, « Plus d'épisodes » dans B : l'adresse dit
+   * `episodes=1` pour les deux fiches montées. A, recouverte, dessinait aussi son écran des épisodes, dont
+   * les flèches passaient avant celles de B (règle 2 des fiches, 13/11/2026).
+   */
+  it("une fiche série recouverte ne dessine pas son propre écran des épisodes", async () => {
+    S.mode = "idle";
+    window.history.replaceState(null, "", "/#serie=8&episodes=1&tab=series");
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    const OTHER = { ...SERIES, sonarrId: 8, jellyfinItemId: "jfs2", title: "Une autre" } as unknown as CinemaSeries;
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <CinemaSeriesDetail key="a" item={SERIES} onClose={vi.fn()} underneath />
+        <CinemaSeriesDetail key="b" item={OTHER} onClose={vi.fn()} />
+      </SWRConfig>
+    );
+    await waitFor(() => expect(document.body.querySelector('[data-episode-season="true"]')).not.toBeNull());
+    await frames();
+    expect(document.body.querySelectorAll('[data-episode-season="true"]')).toHaveLength(1);
+  });
 });

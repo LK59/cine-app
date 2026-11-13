@@ -91,7 +91,12 @@ export function CinemaSeriesDetail({
   const [showSynopsis, setShowSynopsis] = useState(false);
   // In the URL like every other Cinema layer, so Back closes the season browser and returns to
   // this sheet instead of leaving the mode (see lib/cinemaRoute).
-  const showEpisodes = useCinemaRoute().episodes;
+  // Jamais pour une fiche recouverte (13/11/2026, règle 2) : `episodes` est un drapeau de l'adresse, pas
+  // de cette fiche. Série A ouverte, série B par « Titres similaires » posée dessus, puis « Plus
+  // d'épisodes » dans B : A, gardée montée dessous, dessinait aussi son écran des épisodes — dans un
+  // portail, hors de son cadre inerte —, qui écoutait les flèches avant celui de B et y volait le focus
+  // (Bas ne dépassait plus la première saison).
+  const showEpisodes = useCinemaRoute().episodes && !underneath;
   const setShowEpisodes = (open: boolean) =>
     open ? cinemaNavigate({ episodes: true }) : cinemaClose({ episodes: false });
   const { data: info, error: infoError } = useSWR<SonarrInfo>(`/api/sonarr/series/${item.sonarrId}/info`, fetcher);
