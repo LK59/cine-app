@@ -66,9 +66,10 @@ export function NewsGate() {
     <NewsDialog
       pages={pages}
       auto={shown.auto}
-      onClose={(by) => {
+      onClose={(by, pageId) => {
         setPhase("done");
-        if (by === "voir-plus") cinemaNavigate({ news: `corrections:${pages[0].id}` });
+        // Les corrections de la page sous laquelle « Voir plus » a été touché — voir `NewsDialog`.
+        if (by === "voir-plus") cinemaNavigate({ news: `corrections:${pageId ?? pages[0].id}` });
       }}
     />
   );

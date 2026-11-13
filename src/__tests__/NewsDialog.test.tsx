@@ -105,7 +105,8 @@ describe("la fenêtre", () => {
     const onClose = vi.fn();
     render(<NewsDialog pages={[P2, P1]} auto={false} onClose={onClose} />);
     gesture(screen.getByRole("dialog"));
-    expect(onClose).toHaveBeenCalledWith(by);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose.mock.calls[0][0]).toBe(by);
     const sent = posts("/api/release-notes/event");
     expect(sent[0]).toMatchObject({ event: "fenêtre", closedBy: by, noteIds: [2, 1], auto: false, scrolled: false });
     expect(typeof sent[0].shownMs).toBe("number");
@@ -146,14 +147,14 @@ describe("la fenêtre", () => {
     render(<NewsDialog pages={[P1]} auto onClose={onClose} />);
     (document.activeElement as HTMLElement).blur();
     fireEvent.keyDown(window, { key: "Enter" });
-    expect(onClose).toHaveBeenCalledWith("ok");
+    expect(onClose).toHaveBeenCalledWith("ok", undefined);
   });
 
   it("l'aperçu de l'éditeur ne mesure rien et ne marque rien", () => {
     const onClose = vi.fn();
     render(<NewsDialog pages={[P1]} auto preview onClose={onClose} />);
     fireEvent.click(screen.getByText("news.ok"));
-    expect(onClose).toHaveBeenCalledWith("ok");
+    expect(onClose).toHaveBeenCalledWith("ok", undefined);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
@@ -172,6 +173,14 @@ describe("NewsGate", () => {
     fireEvent.click(screen.getAllByText("news.seeMore")[0]);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(readCinemaRoute().news).toBe("corrections:2");
+  });
+
+  it("« Voir plus » sous la page la plus ancienne mène à ses corrections à elle (13/11/2026)", async () => {
+    drawGate();
+    expect(await screen.findByRole("dialog", {}, { timeout: 3000 })).toBeTruthy();
+    fireEvent.click(screen.getAllByText("news.seeMore")[1]);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(readCinemaRoute().news).toBe("corrections:1");
   });
 
   it("ne s'ouvre pas pendant un film, ni par-dessus une fiche ouverte par lien, ni avant l'écran d'accueil", async () => {

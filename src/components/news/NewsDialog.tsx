@@ -37,7 +37,12 @@ export function NewsDialog({
   preview?: boolean;
   /** La langue à montrer à la place de celle de l'interface — l'aperçu d'une traduction. */
   lang?: string;
-  onClose: (closedBy: NewsClosedBy) => void;
+  /**
+   * `pageId` : sur « Voir plus », la page sous laquelle il a été touché (13/11/2026). Plusieurs pages en
+   * retard, la fenêtre les empile : « Voir plus » sous la plus ancienne menait aux corrections de la plus
+   * récente — ou nulle part quand celle-ci n'en avait pas, la plus ancienne restant repliée.
+   */
+  onClose: (closedBy: NewsClosedBy, pageId?: number) => void;
 }) {
   const t = useT();
   const { locale } = useLocale();
@@ -54,7 +59,7 @@ export function NewsDialog({
   const ids = pages.map((p) => p.id);
   const idsKey = ids.join(",");
 
-  const close = (by: NewsClosedBy) => {
+  const close = (by: NewsClosedBy, pageId?: number) => {
     if (closedRef.current) return;
     closedRef.current = true;
     if (!preview) {
@@ -67,7 +72,7 @@ export function NewsDialog({
       });
       if (by === "voir-plus") sendNewsEvent("voir-plus", { noteIds: ids });
     }
-    onClose(by);
+    onClose(by, pageId);
   };
   useEffect(() => {
     closeRef.current = close;
@@ -195,7 +200,7 @@ export function NewsDialog({
                     <span aria-hidden className="h-px flex-1 bg-white/10" />
                   </p>
                 )}
-                <NewsContentView content={contentFor(page.content, lang ?? locale)} onSeeMore={() => close("voir-plus")} />
+                <NewsContentView content={contentFor(page.content, lang ?? locale)} onSeeMore={() => close("voir-plus", page.id)} />
               </div>
             ))}
           </div>
