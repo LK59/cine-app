@@ -45,6 +45,15 @@ describe("GET /api/config/public", () => {
     expect(body.defaultLang).toBe("fr");
   });
 
+  // 13/11/2026 : la route est publique, donc servie avant `shareGate` — un invité de lien de partage
+  // apprenait quels services tournent derrière (§112 : rien n'existe pour lui hors de son titre).
+  it("ne dit pas ce qui est branché à un lien de partage", async () => {
+    mockVerifySessionFull.mockResolvedValue({ role: "share", sh: "abc" });
+    const { GET } = await import("@/app/api/config/public/route");
+    const body = await (await GET(configReq())).json();
+    expect(body.configured).toBeUndefined();
+  });
+
   it("says what is connected, and never how", async () => {
     mockVerifySessionFull.mockResolvedValue({ role: "user" });
     const { GET } = await import("@/app/api/config/public/route");

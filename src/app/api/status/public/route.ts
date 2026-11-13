@@ -55,7 +55,12 @@ export async function GET(req: NextRequest) {
   // Une session ouverte voit tout ; sans elle, l'essentiel seulement — voir `anonymousStatus`. Et
   // sans session, pas d'interrogation en direct : le dernier relevé a au plus une minute.
   const session = await verifySessionFull(req.cookies.get(SESSION_COOKIE)?.value);
+  // Un lien de partage (DECISIONS.md §112) lit ce qu'un inconnu lit (13/11/2026) : la route est publique,
+  // le proxy la sert donc avant `shareGate`, et la session d'un invité de passage recevait chaque
+  // capacité, ses services — client BitTorrent et indexeurs compris — et leurs incidents, exactement ce
+  // que l'audit du 26/09/2026 avait retiré aux visiteurs sans session.
+  const member = session !== null && session.role !== "share";
   // `?refresh=1` = le bouton « rafraîchir maintenant ». Tout le reste lit le dernier relevé.
-  const payload = await buildStatusPayload(!!session && req.nextUrl.searchParams.get("refresh") === "1");
-  return NextResponse.json(session ? payload : anonymousStatus(payload));
+  const payload = await buildStatusPayload(member && req.nextUrl.searchParams.get("refresh") === "1");
+  return NextResponse.json(member ? payload : anonymousStatus(payload));
 }

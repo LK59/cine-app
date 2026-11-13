@@ -77,6 +77,9 @@ export async function GET(req: NextRequest) {
     // La nouvelle adresse du passage (DECISIONS.md §119), nom d'hôte seul : la page de connexion y
     // propose le code de passage. Publique comme la page Nouveautés qui l'annonce à tous les comptes.
     passageHost: passageTarget(config.news?.laternaAddress)?.host ?? null,
-    ...(session ? { configured: configuredServices(config) } : {}),
+    // Ni pour un lien de partage (13/11/2026) : route publique, servie avant `shareGate` — l'invité
+    // apprenait quels services tournent derrière, ce que l'audit du 26/09/2026 cachait aux inconnus.
+    // Seules les pages de la gestion lisent ce champ (`useConfiguredServices`).
+    ...(session && session.role !== "share" ? { configured: configuredServices(config) } : {}),
   });
 }

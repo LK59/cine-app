@@ -8,7 +8,8 @@ vi.mock("@/lib/rateLimiter", () => ({
 vi.mock("@/lib/api-helpers", () => ({ getClientIp: () => "1.2.3.4" }));
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
 let signedIn = true;
-vi.mock("@/lib/session", () => ({ verifySessionFull: async () => (signedIn ? { u: "louis", role: "user" } : null) }));
+let role = "user";
+vi.mock("@/lib/session", () => ({ verifySessionFull: async () => (signedIn ? { u: "louis", role } : null) }));
 
 const runAllServiceChecks = vi.fn(async () => ({}));
 const computeCapabilities = vi.fn(() => [
@@ -133,5 +134,26 @@ describe("sans session (26/09/2026)", () => {
     expect(body.overall).toBe("ok");
     expect(JSON.stringify(body)).not.toContain("qbittorrent");
     signedIn = true;
+  });
+});
+
+// 13/11/2026 : la route est publique, servie par le proxy avant `shareGate` — la session d'un lien de
+// partage recevait toutes les capacités et leurs services, et pouvait relancer les sondes en direct.
+describe("un lien de partage", () => {
+  it("lit ce qu'un inconnu lit, sans interrogation en direct", async () => {
+    role = "share";
+    snapshot = {
+      capabilities: [
+        { id: "watchJellyfin", status: "ok", note: null, dependsOn: [{ service: "jellyfin", status: "ok" }], softDependsOn: [] },
+        { id: "download", status: "down", note: null, dependsOn: [{ service: "qbittorrent", status: "down" }], softDependsOn: [] },
+      ],
+      checkedAt: Date.now() - 30_000,
+    } as never;
+    const { GET } = await import("@/app/api/status/public/route");
+    const body = await (await GET(fakeReq("?refresh=1"))).json();
+    expect(body.capabilities.map((c: { id: string }) => c.id)).toEqual(["watchJellyfin"]);
+    expect(runAllServiceChecks).not.toHaveBeenCalled();
+    expect(JSON.stringify(body)).not.toContain("qbittorrent");
+    role = "user";
   });
 });
