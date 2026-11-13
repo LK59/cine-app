@@ -1,4 +1,5 @@
 import { prettyCodec } from "@/lib/fileTracks";
+import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
 
 /**
  * La fenêtre « Détails » d'un film (DECISIONS.md §152, 13/11/2026) : ce qui se dit de l'image d'un
@@ -95,4 +96,46 @@ export function bitrateMbps(bitrateBps: number | null | undefined): number | nul
   if (typeof bitrateBps !== "number" || !Number.isFinite(bitrateBps) || bitrateBps <= 0) return null;
   const mbps = bitrateBps / 1_000_000;
   return mbps < 10 ? Math.round(mbps * 10) / 10 : Math.round(mbps);
+}
+
+/** Une piste son telle que la fenêtre la reçoit de la route — ce que la règle d'ouverture lit. */
+export interface OpeningAudioCandidate {
+  language: string | null;
+  /** Le `Title` brut du conteneur, que `trackLanguage` et `isAudioDescription` lisent. */
+  name?: string | null;
+  title?: string | null;
+  isDefault: boolean;
+  channels: number | null;
+}
+
+/**
+ * La piste que la fenêtre marque « Par défaut » : **celle que le lecteur ouvrira pour ce compte**, et non
+ * le drapeau du fichier (Louis, 13/11/2026 — une VO anglaise marquée par défaut dans le fichier était
+ * annoncée « Par défaut » à un compte réglé en français, qui ouvrait pourtant sur la VF).
+ *
+ * La même règle que le lecteur à l'ouverture (`remuxPlayback.preferredAudio`, `ExperimentalPlayerHost`) :
+ * les préférences Jellyfin du compte (`playback-state`, la langue de la série comprise) passées à
+ * `chooseAudioTrack` ; quand elle ne choisit rien — pas de langue, `playDefaultAudioTrack`, la langue
+ * absente du fichier, préférences inconnues —, la piste par défaut du fichier, puis la première, comme le
+ * lecteur. Sans le prédicat « ce chemin la porte » ni les canaux *livrés* : ils dépendent du navigateur,
+ * et la fenêtre parle pour tous les appareils : deux pistes de la langue demandée se départagent par les
+ * canaux de la source (`rank` sans `delivered`). Sur un iPhone, une TrueHD 7.1 et une AC-3 5.1 de la même
+ * langue peuvent donc différer d'ici à ce que le lecteur ouvre (§3) — un cas rare, accepté.
+ *
+ * Rend le rang de la piste dans la liste, `null` pour un fichier sans son.
+ */
+export function openingAudioIndex(audio: readonly OpeningAudioCandidate[], preferences: TrackPreferences | null): number | null {
+  if (audio.length === 0) return null;
+  const tracks = audio.map((a, i) => ({
+    language: a.language,
+    name: a.name ?? a.title ?? null,
+    isDefault: a.isDefault,
+    isForced: false,
+    channels: a.channels,
+    at: i,
+  }));
+  const chosen = preferences ? chooseAudioTrack(tracks, preferences) : null;
+  if (chosen) return chosen.at;
+  const flagged = audio.findIndex((a) => a.isDefault);
+  return flagged >= 0 ? flagged : 0;
 }

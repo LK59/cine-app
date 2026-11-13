@@ -46,8 +46,9 @@ export function DetailIconActions({
   onDetails?: () => void;
 }) {
   return (
-    // `items-start` (13/11/2026) : « Vu » et « À voir » portent une légende sous leur rond, pas la question ;
-    // alignés au centre, les trois ronds ne tombaient plus sur la même ligne.
+    // `items-start` (13/11/2026) : les ronds portent une légende sous eux, de hauteurs qui pourraient
+    // différer ; alignés en haut, ils restent sur la même ligne. La question a la sienne depuis le même jour
+    // (« Question », `AskTitleControl`).
     // Plus de « Analyser en priorité » ici (13/11/2026, §138) : la liste de priorité se gère depuis la
     // console seulement.
     <div data-detail-icon-actions="" className="mt-1 flex items-start gap-3 px-2">

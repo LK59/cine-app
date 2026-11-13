@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
 import { Check, Info, Play, RotateCcw, Video, X } from "lucide-react";
-import { TitleDetailsSheet } from "@/components/cinema/TitleDetails";
+import { EpisodeDetailsButton, TitleDetailsSheet } from "@/components/cinema/TitleDetails";
 import { fetcher } from "@/lib/swr";
 import { useDelayedClose } from "@/lib/useDelayedClose";
 import { useSheetKeys } from "@/lib/useSheetKeys";
@@ -783,8 +783,10 @@ export function CinemaMobileDetail({
                     {episode.overview && <p className="mt-1 line-clamp-3 text-xs leading-5 text-muted">{episode.overview}</p>}
                   </div>
                 </button>
-                {/* À hauteur de la vignette (72 px) : centré sur elle, pas sur le synopsis. */}
-                {offlineSeries && <OfflineEpisodeButton series={offlineSeries} seasons={seasons} episode={episode} posterUrl={item.posterUrl} size="phone" className="mt-4" />}
+                {/* À hauteur de la vignette (72 px) : centré sur elle, pas sur le synopsis. Le « i » des
+                    détails de l'épisode juste avant le téléchargement (§152, 13/11/2026). */}
+                <EpisodeDetailsButton episode={episode} seriesTitle={item.title} seriesLogoUrl={item.logoUrl} size="phone" className="mt-4" />
+                {offlineSeries &&<OfflineEpisodeButton series={offlineSeries} seasons={seasons} episode={episode} posterUrl={item.posterUrl} size="phone" className="mt-4" />}
                 </div>
                 );
               })}

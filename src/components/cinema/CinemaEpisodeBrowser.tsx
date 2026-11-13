@@ -19,6 +19,7 @@ import { playerHoldsKeyboard } from "@/lib/playerKeyboard";
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import type { CinemaSeason, CinemaEpisode } from "@/app/api/cinema/series/[jellyfinId]/episodes/route";
 import { OfflineEpisodeButton, OfflineSeasonDownload } from "@/components/offline/OfflineEpisodeDownload";
+import { EpisodeDetailsButton } from "@/components/cinema/TitleDetails";
 
 // "Plus d'épisodes" — Netflix's own TV-app episode browser: seasons as a vertical list on the
 // left, that season's episodes (thumbnail/title/duration/synopsis) on the right. Opened from
@@ -33,6 +34,7 @@ export function CinemaEpisodeBrowser({
   seriesItemId,
   posterUrl,
   nextEpisodeId,
+  episodeDetails,
   onClose,
   onPlayEpisode,
 }: {
@@ -50,6 +52,11 @@ export function CinemaEpisodeBrowser({
   // too so it's obvious at a glance which episode picking "Plus d'épisodes" would have landed on
   // anyway, without having to cross-reference against the detail sheet underneath.
   nextEpisodeId?: string;
+  /**
+   * Le « i » des détails de chaque épisode (§152, 13/11/2026), avec le logo de la série pour en-tête. Absent,
+   * aucun n'est rendu : c'est le cas du lien de partage (`ShareTitleSheet`), qui n'a pas la fenêtre.
+   */
+  episodeDetails?: { logoUrl?: string | null };
   onClose: () => void;
   onPlayEpisode: (episode: CinemaEpisode) => void;
 }) {
@@ -158,24 +165,28 @@ export function CinemaEpisodeBrowser({
       // Le bouton de téléchargement d'une ligne, à sa droite : → depuis l'épisode, ← pour y revenir,
       // ↑/↓ d'un bouton de téléchargement à l'autre — une troisième colonne, comme celle des saisons.
       const inDownloads = active?.getAttribute("data-episode-download") === "true";
-      if (!inSeasons && !inEpisodes && !inDownloads) return;
+      // Le « i » des détails (§152, 13/11/2026), entre l'épisode et son téléchargement : une colonne de plus,
+      // traversée dans l'ordre de l'écran.
+      const inDetails = active?.hasAttribute("data-episode-details") === true;
+      if (!inSeasons && !inEpisodes && !inDownloads && !inDetails) return;
+      const inRow = (selector: string) => active?.closest("[data-episode-row]")?.querySelector<HTMLButtonElement>(selector) ?? null;
 
       if (e.key === "ArrowRight" && inSeasons) {
         e.preventDefault();
         containerRef.current?.querySelector<HTMLButtonElement>('[data-episode-item="true"]:not(:disabled)')?.focus();
         return;
       }
-      if (e.key === "ArrowRight" && inEpisodes) {
-        const download = active?.closest("[data-episode-row]")?.querySelector<HTMLButtonElement>('[data-episode-download="true"]');
-        if (download) {
+      if (e.key === "ArrowRight" && (inEpisodes || inDetails)) {
+        const next = (inEpisodes ? inRow("[data-episode-details]") : null) ?? inRow('[data-episode-download="true"]');
+        if (next) {
           e.preventDefault();
-          download.focus();
+          next.focus();
         }
         return;
       }
-      if (e.key === "ArrowLeft" && inDownloads) {
+      if (e.key === "ArrowLeft" && (inDownloads || inDetails)) {
         e.preventDefault();
-        active?.closest("[data-episode-row]")?.querySelector<HTMLButtonElement>('[data-episode-item="true"]')?.focus();
+        ((inDownloads ? inRow("[data-episode-details]") : null) ?? inRow('[data-episode-item="true"]'))?.focus();
         return;
       }
       if (e.key === "ArrowLeft" && inEpisodes) {
@@ -186,7 +197,13 @@ export function CinemaEpisodeBrowser({
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         e.preventDefault();
         // Un bouton désactivé — une demande déjà faite — ne prend pas le focus : le sauter.
-        const selector = inSeasons ? '[data-episode-season="true"]' : inDownloads ? '[data-episode-download="true"]' : '[data-episode-item="true"]:not(:disabled)';
+        const selector = inSeasons
+          ? '[data-episode-season="true"]'
+          : inDownloads
+            ? '[data-episode-download="true"]'
+            : inDetails
+              ? "[data-episode-details]"
+              : '[data-episode-item="true"]:not(:disabled)';
         const items = Array.from(containerRef.current?.querySelectorAll<HTMLButtonElement>(selector) ?? []);
         const idx = items.indexOf(active as HTMLButtonElement);
         const next = e.key === "ArrowDown" ? items[Math.min(idx + 1, items.length - 1)] : items[Math.max(idx - 1, 0)];
@@ -316,6 +333,8 @@ export function CinemaEpisodeBrowser({
                   {ep.overview && <p className="mt-1 line-clamp-2 text-xs text-muted">{ep.overview}</p>}
                 </div>
               </button>
+              {/* Le « i » juste avant le téléchargement (§152, 13/11/2026). */}
+              {episodeDetails && <EpisodeDetailsButton episode={ep} seriesTitle={title} seriesLogoUrl={episodeDetails.logoUrl} size="desktop" />}
               {offlineSeries && <OfflineEpisodeButton series={offlineSeries} seasons={seasons} episode={ep} posterUrl={posterUrl} size="desktop" />}
               </div>
               );

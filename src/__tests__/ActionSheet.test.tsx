@@ -7,6 +7,7 @@ import { ActionSheet, type SheetAction } from "@/components/ActionSheet";
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 function actions(overrides: Partial<SheetAction> = {}): SheetAction[] {
@@ -109,25 +110,102 @@ describe("ActionSheet", () => {
   });
 
   it("rouverte juste après une fermeture au doigt, elle remonte bien", () => {
-    // 23/09/2026 : la fermeture au doigt laissait `translateY(100%)` écrit sur l'élément, qui
-    // reste monté 300 ms pour sa sortie. Rouverte dans ce délai, la feuille gardait ce style en
-    // ligne, plus fort que la classe qui devait la faire remonter : le fond s'affichait, pas elle.
+    // 23/09/2026 : la fermeture au doigt laissait son décalage écrit sur l'élément, qui reste monté
+    // 300 ms pour sa sortie. Rouverte dans ce délai, la feuille gardait ce style en ligne, plus fort que
+    // la classe qui devait la faire remonter : le fond s'affichait, pas elle. Depuis le 13/11/2026, une
+    // carte neuve à chaque ouverture.
     vi.useFakeTimers();
     const onClose = vi.fn();
     const { rerender } = render(<ActionSheet open onClose={onClose} actions={actions()} />);
     const sheet = document.querySelector<HTMLElement>('[role="dialog"]')!;
     const handle = sheet.firstElementChild as HTMLElement;
-    const pointer = (type: string, clientY: number) =>
-      act(() => void handle.dispatchEvent(new MouseEvent(type, { bubbles: true, clientY })));
-    pointer("pointerdown", 100);
-    pointer("pointermove", 300);
-    pointer("pointerup", 300);
-    expect(sheet.style.transform).toBe("translateY(100%)");
-    act(() => void vi.advanceTimersByTime(220));
+    drag(handle, [100, 300], 300);
     expect(onClose).toHaveBeenCalled();
+    expect(sheet.style.transform).toBe(`translateY(${window.innerHeight}px)`);
     rerender(<ActionSheet open={false} onClose={onClose} actions={actions()} />);
     act(() => void vi.advanceTimersByTime(100));
     rerender(<ActionSheet open onClose={onClose} actions={actions()} />);
     expect(document.querySelector<HTMLElement>('[role="dialog"]')!.style.transform).toBe("");
   });
 });
+
+/**
+ * Le glisser vers le bas (13/11/2026) : le geste des fiches (`useSwipeToDismiss`), depuis toute la feuille et
+ * non plus sa seule poignée — Louis n'arrivait pas à descendre la fenêtre « Détails » au téléphone.
+ */
+describe("ActionSheet — le glisser vers le bas", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const sheetWith = (onClose: () => void, children: React.ReactNode) =>
+    render(
+      <ActionSheet open onClose={onClose} actions={actions()} ariaLabel="Détails">
+        {children}
+      </ActionSheet>
+    );
+
+  it("la feuille suit le doigt depuis son contenu, et se ferme au-delà du seuil", () => {
+    const onClose = vi.fn();
+    sheetWith(onClose, <div data-testid="corps">Image</div>);
+    const sheet = screen.getByRole("dialog");
+    const body = screen.getByTestId("corps");
+    // La première tolérance est retranchée (30 px), puis la carte suit le doigt pixel pour pixel.
+    press(body, "pointerdown", 100, 0);
+    press(body, "pointermove", 130, 100);
+    press(body, "pointermove", 180, 200);
+    expect(sheet.style.transform).toBe("translateY(50px)");
+    press(body, "pointermove", 330, 300);
+    expect(sheet.style.transform).toBe("translateY(200px)");
+    press(body, "pointerup", 330, 1000);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("revient en place en deçà du seuil, sans fermer", () => {
+    const onClose = vi.fn();
+    sheetWith(onClose, <div data-testid="corps">Image</div>);
+    const sheet = screen.getByRole("dialog");
+    const body = screen.getByTestId("corps");
+    press(body, "pointerdown", 100, 0);
+    press(body, "pointermove", 110, 100);
+    press(body, "pointermove", 190, 500);
+    expect(sheet.style.transform).toBe("translateY(80px)");
+    press(body, "pointerup", 190, 2000);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(sheet.style.transform).toBe("translateY(0px)");
+  });
+
+  it("ni depuis un bouton, ni depuis un contenu qui défile", () => {
+    const onClose = vi.fn();
+    sheetWith(
+      onClose,
+      <div data-sheet-scroll="" data-testid="liste">
+        <p data-testid="ligne">Son</p>
+      </div>
+    );
+    const sheet = screen.getByRole("dialog");
+    // Un contenu qui dépasse : le doigt y fait défiler.
+    const list = screen.getByTestId("liste");
+    let height = 900;
+    Object.defineProperty(list, "scrollHeight", { get: () => height });
+    Object.defineProperty(list, "clientHeight", { value: 300 });
+    drag(screen.getByTestId("ligne"), [100, 400], 400);
+    drag(screen.getByRole("button", { name: "Do thing" }), [100, 400], 400);
+    expect(sheet.style.transform).toBe("");
+    expect(onClose).not.toHaveBeenCalled();
+    // Le même contenu qui tient tout se tire comme le reste.
+    height = 300;
+    drag(screen.getByTestId("ligne"), [100, 400], 400);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** Un événement de pointeur à `clientY`, l'horloge du geste posée à `at` ms. */
+function press(el: Element, type: string, clientY: number, at: number) {
+  vi.spyOn(performance, "now").mockReturnValue(at);
+  act(() => void el.dispatchEvent(new MouseEvent(type, { bubbles: true, clientY })));
+}
+
+/** Un glissement lent par ces positions, relâché à `end` — une seconde par étape, jamais un geste vif. */
+function drag(el: Element, path: number[], end: number) {
+  path.forEach((y, i) => press(el, i === 0 ? "pointerdown" : "pointermove", y, i * 1000));
+  press(el, "pointerup", end, path.length * 1000);
+}

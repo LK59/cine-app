@@ -2860,11 +2860,11 @@
       "subForced": "Forcés",
       "subSdh": "Malentendants",
       "subGenerated": "générés par Laterna",
-      "subExternal": "fichier à part",
       "unknownLanguage": "Langue non précisée",
       "noAudio": "Aucune piste son",
       "noSubtitles": "Aucun sous-titre",
-      "unavailable": "Les détails de ce film ne sont pas disponibles pour le moment."
+      "unavailable": "Les détails de ce film ne sont pas disponibles pour le moment.",
+      "unavailableEpisode": "Les détails de cet épisode ne sont pas disponibles pour le moment."
     }
   },
   "services": {
@@ -4390,6 +4390,7 @@
   },
   "ask": {
     "title": "Poser une question",
+    "caption": "Question",
     "placeholder": "Votre question sur ce titre…",
     "send": "Envoyer",
     "hint": "Les réponses ne s'appuient que sur ce que vous avez déjà vu.",

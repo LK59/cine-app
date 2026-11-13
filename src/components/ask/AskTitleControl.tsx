@@ -24,10 +24,18 @@ export function AskTitleControl({ itemId, variant }: { itemId: string | null | u
   return (
     <>
       {variant === "round" ? (
-        <button type="button" data-detail-menu data-ask-open="" data-round-action="ask" aria-label={label} title={label} onClick={() => setOpen(true)} className={ROUND_ACTION}>
-          <MessageCircleQuestion size={19} />
-        </button>
-      ) : variant === "row" ? (
+        // Une légende sous le rond, comme « Vu », « À voir » et « Infos » (Louis, 13/11/2026) : c'était le seul
+        // rond de la rangée sans texte. Un mot court sur une ligne, caché aux lecteurs d'écran qui ont déjà
+        // l'`aria-label` — la forme de `TitleToggleRound`.
+        <div data-round-toggle="" className="flex min-w-14 flex-col items-center gap-1">
+          <button type="button" data-detail-menu data-ask-open="" data-round-action="ask" aria-label={label} title={label} onClick={() => setOpen(true)} className={ROUND_ACTION}>
+            <MessageCircleQuestion size={19} />
+          </button>
+          <span aria-hidden="true" data-round-caption="" className="whitespace-nowrap text-center text-[11px] leading-tight text-muted">
+            {t("ask.caption")}
+          </span>
+        </div>
+      ) :variant === "row" ? (
         <button type="button" data-detail-menu data-ask-open="" onClick={() => setOpen(true)} className={`${MENU_ROW} ${MENU_ROW_INACTIVE}`}>
           <span className={MENU_BADGE}>
             <MessageCircleQuestion size={14} />

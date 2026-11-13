@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, cleanup, screen, fireEvent, act, within } from "@testing-library/react";
+import { render, cleanup, screen, fireEvent, act, within, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { createT } from "@/lib/i18n";
 import fr from "@/locales/fr.json";
@@ -18,13 +18,19 @@ const t = createT(fr as Record<string, unknown>, fr as Record<string, unknown>, 
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => t, useLocale: () => ({ locale: "fr", setLocale: async () => {} }) }));
 const fetched: string[] = [];
 let answer: () => Promise<unknown> = async () => FILE;
+/** Ce que `playback-state` répond : les préférences du compte, d'où le lecteur les prend (13/11/2026). */
+let state: () => Promise<unknown> = async () => ({ resumeSeconds: 0, preferences: null });
 vi.mock("@/lib/swr", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/swr")>()),
   fetcher: (url: string) => {
     fetched.push(url);
-    return answer();
+    return url.startsWith("/api/jellyfin/playback-state/") ? state() : answer();
   },
 }));
+const prefs = (audioLanguage: string | null, playDefaultAudioTrack = false) => async () => ({
+  resumeSeconds: 0,
+  preferences: { audioLanguage, subtitleLanguage: null, subtitleMode: null, playDefaultAudioTrack },
+});
 
 import { TitleDetailsSheet, subtitleGroups } from "@/components/cinema/TitleDetails";
 
@@ -57,6 +63,7 @@ const draw = (open: boolean) =>
 beforeEach(() => {
   fetched.length = 0;
   answer = async () => FILE;
+  state = async () => ({ resumeSeconds: 0, preferences: null });
 });
 afterEach(() => cleanup());
 
@@ -71,7 +78,8 @@ describe("TitleDetailsSheet", () => {
       </SWRConfig>
     );
     await screen.findByText("4K");
-    expect(fetched).toEqual(["/api/jellyfin/streams/jf1?tmdb=603"]);
+    // Le fichier, et les préférences du compte pour « Par défaut » — à l'ouverture seulement.
+    expect(fetched.sort()).toEqual(["/api/jellyfin/playback-state/jf1", "/api/jellyfin/streams/jf1?tmdb=603"]);
   });
 
   it("montre le titre écrit sans logo, et les trois blocs dans l'ordre", async () => {
@@ -110,15 +118,76 @@ describe("TitleDetailsSheet", () => {
     expect(sound.textContent).not.toMatch(/adapte|appareil|contient|lecteur/i);
   });
 
-  it("les sous-titres : par langue, le type en étiquette, l'externe et le généré signalés", async () => {
+  it("les sous-titres : par langue, le type en étiquette, le généré signalé — jamais « fichier à part »", async () => {
     draw(true);
     await screen.findByText("4K");
     const rows = [...document.body.querySelectorAll<HTMLElement>("[data-details-subtitle]")].map((r) => r.textContent);
-    expect(rows).toEqual([
-      "FrançaisForcésComplets",
-      "AnglaisMalentendantsComplets · fichier à part",
-      "AllemandComplets · générés par Laterna",
-    ]);
+    // Une piste posée à côté du film ne se dit plus (Louis, 13/11/2026 : de l'infrastructure, pas ce que voit
+    // le spectateur) ; l'anglais SDH et l'anglais externe sont deux pistes, l'une « Complets ».
+    expect(rows).toEqual(["FrançaisForcésComplets", "AnglaisMalentendantsComplets", "AllemandComplets · générés par Laterna"]);
+    expect(document.body.textContent).not.toContain("fichier à part");
+  });
+
+  describe("« Par défaut » : la piste que le lecteur ouvrira pour ce compte (13/11/2026)", () => {
+    const defaultRow = () =>
+      [...document.body.querySelectorAll<HTMLElement>("[data-details-audio]")].findIndex((r) => r.querySelector('[data-details-tag="default"]'));
+
+    it("la langue du compte présente : sa piste, et non le drapeau du fichier", async () => {
+      state = prefs("fra");
+      draw(true);
+      await screen.findByText("4K");
+      await waitFor(() => expect(defaultRow()).toBe(1));
+      // Une seule piste marquée, et jamais l'audiodescription, même française.
+      expect(document.body.querySelectorAll('[data-details-tag="default"]')).toHaveLength(1);
+      expect(screen.getAllByText("Par défaut")).toHaveLength(1);
+    });
+
+    it("la langue du compte absente du fichier : le drapeau du fichier, comme le lecteur", async () => {
+      state = prefs("jpn");
+      draw(true);
+      await screen.findByText("4K");
+      await waitFor(() => expect(defaultRow()).toBe(0));
+    });
+
+    it("« jouer la piste par défaut » coché : le drapeau du fichier, quelle que soit la langue", async () => {
+      state = prefs("fra", true);
+      draw(true);
+      await screen.findByText("4K");
+      await waitFor(() => expect(defaultRow()).toBe(0));
+    });
+
+    it("préférences illisibles : le drapeau du fichier", async () => {
+      state = async () => {
+        throw new Error("502");
+      };
+      draw(true);
+      await screen.findByText("4K");
+      await waitFor(() => expect(defaultRow()).toBe(0));
+    });
+  });
+
+  it("un épisode : le titre de la série, puis « S1 · É3 — son titre », et la même route", async () => {
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <TitleDetailsSheet open onClose={vi.fn()} itemId="ep3" title="The Office" logoUrl={null} episode={{ season: 1, number: 3, title: "Diversité" }} />
+      </SWRConfig>
+    );
+    await screen.findByText("4K");
+    expect(screen.getByRole("heading", { name: "The Office" })).toBeTruthy();
+    expect(document.body.querySelector("[data-details-episode]")!.textContent).toBe("S1 · É3 — Diversité");
+    expect(fetched).toContain("/api/jellyfin/streams/ep3");
+  });
+
+  it("un épisode introuvable le dit comme un épisode", async () => {
+    answer = async () => {
+      throw new Error("Fichier introuvable");
+    };
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <TitleDetailsSheet open onClose={vi.fn()} itemId="ep3" title="The Office" episode={{ season: 1, number: 3, title: "Diversité" }} />
+      </SWRConfig>
+    );
+    expect(await screen.findByText("Les détails de cet épisode ne sont pas disponibles pour le moment.")).toBeTruthy();
   });
 
   it("compte deux pistes de même étiquette au lieu de les répéter, et met la langue inconnue en dernier", () => {

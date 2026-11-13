@@ -26,6 +26,12 @@ export interface CinemaEpisode {
   runtimeTicks: number | null;
   watched: boolean;
   resumeTicks: number | null;
+  /**
+   * Un épisode que Jellyfin connaît sans fichier (`LocationType: "Virtual"`, quand la bibliothèque affiche
+   * les épisodes manquants) — absent sinon. Le « i » de la ligne (`EpisodeDetailsButton`, §152,
+   * 13/11/2026) ne s'y montre pas : il n'y a rien à décrire.
+   */
+  fileMissing?: true;
 }
 
 export interface CinemaSeason {
@@ -65,6 +71,9 @@ function toCinemaEpisode(arranged: ArrangedEpisode): CinemaEpisode & { path: str
     runtimeTicks: item.RunTimeTicks ?? null,
     watched: item.UserData?.Played ?? false,
     resumeTicks: item.UserData?.PlaybackPositionTicks ?? null,
+    // Le seul signe sûr d'un épisode sans fichier, le même que la synchro des sous-titres et X-Ray lisent ;
+    // posé seulement quand il est vrai, pour ne rien changer aux autres réponses.
+    ...((item as { LocationType?: string }).LocationType === "Virtual" ? { fileMissing: true as const } : {}),
     // Le pont avec Sonarr (le même fichier), retiré avant la réponse.
     path: item.Path ?? null,
   };

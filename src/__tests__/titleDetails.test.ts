@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { ADVISED_MARGIN, advisedConnectionMbps, bitrateMbps, definitionLabel, dynamicRangeOf, videoCodecLabel } from "@/lib/titleDetails";
+import { ADVISED_MARGIN, advisedConnectionMbps, bitrateMbps, definitionLabel, dynamicRangeOf, openingAudioIndex, videoCodecLabel } from "@/lib/titleDetails";
+import type { TrackPreferences } from "@/lib/trackPreferences";
 
 /** Les mots de la fenêtre « Détails » d'un film (DECISIONS.md §152, 13/11/2026). */
 describe("advisedConnectionMbps — la connexion conseillée pour la qualité d'origine", () => {
@@ -73,5 +74,45 @@ describe("videoCodecLabel", () => {
     expect(videoCodecLabel("hevc", 10, bits)).toBe("HEVC 10 bits");
     expect(videoCodecLabel("h264", 8, bits)).toBe("H.264");
     expect(videoCodecLabel(null, 10, bits)).toBeNull();
+  });
+});
+
+/**
+ * « Par défaut » = la piste que le lecteur ouvrira pour ce compte, par sa règle (`chooseAudioTrack`), et non le
+ * drapeau du fichier (Louis, 13/11/2026).
+ */
+describe("openingAudioIndex — la piste qu'ouvrira le lecteur", () => {
+  const track = (language: string | null, channels: number, isDefault = false, name: string | null = null) => ({ language, channels, isDefault, name, title: null });
+  // Une VO anglaise marquée par défaut, une VF stéréo, une VF 5.1, une audiodescription française.
+  const FILE = [track("en", 8, true), track("fr", 2), track("fr", 6, false, "VFF"), track("fr", 2, false, "Français AD")];
+  const prefs = (audioLanguage: string | null, playDefaultAudioTrack = false): TrackPreferences => ({
+    audioLanguage,
+    subtitleLanguage: null,
+    subtitleMode: null,
+    playDefaultAudioTrack,
+  });
+
+  it("la langue du compte présente : sa piste la plus riche, jamais l'audiodescription", () => {
+    // « fra » (Jellyfin) contre « fr » (le fichier) : la même langue, par `normaliseLanguage`.
+    expect(openingAudioIndex(FILE, prefs("fra"))).toBe(2);
+  });
+
+  it("la langue du compte absente : la piste marquée par défaut dans le fichier", () => {
+    expect(openingAudioIndex(FILE, prefs("jpn"))).toBe(0);
+  });
+
+  it("« jouer la piste par défaut » : le drapeau du fichier, même si la langue du compte est là", () => {
+    expect(openingAudioIndex(FILE, prefs("fra", true))).toBe(0);
+  });
+
+  it("sans langue, ou sans préférences lues : le drapeau du fichier, sinon la première piste", () => {
+    expect(openingAudioIndex(FILE, prefs(null))).toBe(0);
+    expect(openingAudioIndex(FILE, null)).toBe(0);
+    expect(openingAudioIndex([track("de", 2), track("fr", 2, true)], null)).toBe(1);
+    expect(openingAudioIndex([track("de", 2), track("fr", 2)], null)).toBe(0);
+  });
+
+  it("un fichier sans son : rien", () => {
+    expect(openingAudioIndex([], prefs("fra"))).toBeNull();
   });
 });

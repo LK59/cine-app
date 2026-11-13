@@ -2860,11 +2860,11 @@
       "subForced": "Forced",
       "subSdh": "SDH",
       "subGenerated": "made by Laterna",
-      "subExternal": "separate file",
       "unknownLanguage": "Language not specified",
       "noAudio": "No audio track",
       "noSubtitles": "No subtitles",
-      "unavailable": "Details for this film are not available right now."
+      "unavailable": "Details for this film are not available right now.",
+      "unavailableEpisode": "Details for this episode are not available right now."
     }
   },
   "services": {
@@ -4390,6 +4390,7 @@
   },
   "ask": {
     "title": "Ask a question",
+    "caption": "Ask",
     "placeholder": "Your question about this title…",
     "send": "Send",
     "hint": "Answers rely only on what you have already watched.",

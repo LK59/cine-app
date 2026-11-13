@@ -1,8 +1,8 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { usePointerCapture } from "@/lib/usePointerCapture";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useSwipeToDismiss } from "@/lib/useSwipeToDismiss";
 
 export interface SheetAction {
   label: string;
@@ -52,7 +52,35 @@ interface Props {
   ariaLabel?: string;
 }
 
-const CLOSE_THRESHOLD = 80; // px dragged down to trigger close
+/**
+ * Ce qui, sous le doigt, ne tire pas la feuille : ce qu'on touche pour s'en servir. La prise du pointeur
+ * par le geste y volerait le `click` (Chrome pour Android le renvoie à qui capture — voir
+ * `NOT_THE_HANDLE`), et un glissement commencé sur un choix doit rester un choix.
+ */
+const NOT_A_GRAB =
+  "button, a[href], input, select, textarea, label, summary, [contenteditable='true'], [contenteditable=''], " +
+  "[role='button'], [role='radio'], [role='radiogroup'], [role='checkbox'], [role='switch'], [role='slider'], [role='tab'], [role='listbox'], [role='option']";
+
+/**
+ * Cet appui commence-t-il un glissement de la feuille ? (13/11/2026)
+ *
+ * La feuille ne se tirait que par sa poignée — une barre de 20 px —, et par son en-tête écrit quand elle en
+ * avait un. Sur la fenêtre « Détails », qui dessine le sien, Louis n'arrivait pas à la descendre. Désormais
+ * **toute la feuille** se tire, comme les fiches (`useSwipeToDismiss`), sauf :
+ *
+ *  - ce qu'on touche pour s'en servir (`NOT_A_GRAB`) ;
+ *  - une zone qui défile (`data-sheet-scroll`) **quand elle dépasse** : le doigt y fait défiler, il ne
+ *    peut pas dire à l'avance s'il veut le contenu ou la feuille. Celle qui tient tout se tire comme le reste ;
+ *  - une fenêtre centrée sur grand écran (`centerOnWide`) : elle n'a pas de poignée, rien n'y glisse.
+ */
+function startsADrag(target: EventTarget | null, centerOnWide: boolean): boolean {
+  if (!(target instanceof Element)) return false;
+  if (target.closest(NOT_A_GRAB)) return false;
+  const scroller = target.closest<HTMLElement>("[data-sheet-scroll]");
+  if (scroller && scroller.scrollHeight > scroller.clientHeight + 1) return false;
+  if (centerOnWide && typeof window.matchMedia === "function" && window.matchMedia("(min-width: 640px)").matches) return false;
+  return true;
+}
 
 export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSubtitle, poster: livePoster, actions, role = "dialog", centerOnWide = false, children, ariaLabel }: Props) {
   /**
@@ -70,24 +98,25 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
   const [mounted, setMounted] = useState(false);
   const [show, setShow] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
-  const startY = useRef(0);
-  const currentY = useRef(0);
-  const dragging = useRef(false);
+  /**
+   * Une carte neuve à chaque ouverture (13/11/2026) : le geste (`useSwipeToDismiss`) garde son état — le
+   * décalage de la carte jetée au doigt — et la feuille reste montée 300 ms pour sa sortie. Rouverte dans ce
+   * délai, la même carte restait hors de l'écran : le fond s'affichait, pas elle (le défaut du 23/09/2026,
+   * alors corrigé en effaçant le style écrit à la main). Une clé par ouverture remet tout à zéro.
+   * Ajustée pendant le rendu, la forme que le compilateur accepte.
+   */
+  const [generation, setGeneration] = useState(0);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setGeneration((g) => g + 1);
+  }
 
   // Deliberately imperative (double-rAF entrance animation + exit-delay unmount) — do not
   // convert to a render-time state adjustment, see the rAF comment below for why the timing
   // must be effect-driven.
   useEffect(() => {
     if (open) {
-      // Ce qu'une fermeture au doigt a écrit sur l'élément, effacé avant de rouvrir : la feuille
-      // reste montée 300 ms pour sa sortie, et rouverte dans ce délai elle gardait
-      // `translateY(100%)` en ligne, plus fort que `translate-y-0` — le fond s'affichait, pas
-      // elle (23/09/2026). Même geste que la feuille « Plus » à son ouverture.
-      const sheet = sheetRef.current;
-      if (sheet) {
-        sheet.style.transform = "";
-        sheet.style.transition = "";
-      }
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setMounted(true);
       // A single rAF often fires before the browser has painted the initial
@@ -157,48 +186,6 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, onClose]);
 
-  // ── Swipe-to-close ────────────────────────────────────────────────────────
-
-  // Voir `usePointerCapture` : rendue à la fin du geste, et au démontage.
-  const capture = usePointerCapture();
-
-  function dragStart(e: React.PointerEvent) {
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    dragging.current = true;
-    startY.current = e.clientY;
-    currentY.current = 0;
-    capture.take(e);
-    if (sheetRef.current) sheetRef.current.style.transition = "none";
-  }
-
-  function dragMove(e: React.PointerEvent) {
-    if (!dragging.current) return;
-    const delta = Math.max(0, e.clientY - startY.current);
-    currentY.current = delta;
-    if (sheetRef.current) sheetRef.current.style.transform = `translateY(${delta}px)`;
-  }
-
-  function dragEnd() {
-    capture.release();
-    if (!dragging.current) return;
-    dragging.current = false;
-    const el = sheetRef.current;
-    if (!el) return;
-
-    if (currentY.current >= CLOSE_THRESHOLD) {
-      // Animate out then close
-      el.style.transition = "transform 0.25s ease-out";
-      el.style.transform = "translateY(100%)";
-      setTimeout(onClose, 220);
-    } else {
-      // Snap back
-      el.style.transition = "transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)";
-      el.style.transform = "";
-      setTimeout(() => { if (el) el.style.transition = ""; }, 300);
-    }
-    currentY.current = 0;
-  }
-
   if (!mounted || typeof document === "undefined") return null;
 
   return createPortal(
@@ -217,40 +204,17 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
       />
 
       {/* Sheet */}
-      <div
-        ref={sheetRef}
-        role={role}
-        aria-modal="true"
-        aria-label={title ?? ariaLabel}
-        // Le verre liquide (DECISIONS.md §45), et une carte qui flotte au lieu d'une bande collée au
-        // bas : arrondie de partout, à 8 px des bords. Elle arrive avec un léger rebond — le
-        // dépassement de la courbe la fait monter un peu au-delà de sa place, puis s'y poser — et
-        // repart sans (04/10/2026). Le glisser pour fermer ne change pas.
-        style={{ marginBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)" }}
-        className={`nav-glass relative mx-2 w-[calc(100%-1rem)] max-w-lg overflow-hidden rounded-[28px] transition-transform sm:mx-auto ${
-          show ? "translate-y-0 duration-[480ms] ease-[cubic-bezier(0.34,1.32,0.64,1)]" : "translate-y-[110%] duration-300 ease-in"
-        }`}
-      >
-        {/* Drag handle — main swipe target. Centrée sur un grand écran (`centerOnWide`), la fenêtre ne se tire pas :
-            la poignée n'y a rien à dire (13/11/2026, « Détails » sur ordinateur). */}
-        <div
-          className={`flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing touch-none select-none ${centerOnWide ? "sm:hidden" : ""}`}
-          onPointerDown={dragStart}
-          onPointerMove={dragMove}
-          onPointerUp={dragEnd}
-          onPointerCancel={dragEnd}
-        >
+      <SheetCard key={generation} cardRef={sheetRef} show={show} role={role} label={title ?? ariaLabel} centerOnWide={centerOnWide} onDismiss={onClose}>
+        {/* La poignée, qui dit qu'on peut tirer. Centrée sur un grand écran (`centerOnWide`), la fenêtre ne se
+            tire pas : la poignée n'y a rien à dire (13/11/2026, « Détails » sur ordinateur). */}
+        <div className={`flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing touch-none select-none ${centerOnWide ? "sm:hidden" : ""}`}>
           <div className="h-1 w-10 rounded-full bg-white/20" />
         </div>
 
-        {/* Card preview header — also draggable */}
+        {/* Card preview header */}
         {(poster || title) && (
           <div
             className="flex items-center gap-3 px-4 pb-3 border-b border-white/10 cursor-grab active:cursor-grabbing touch-none select-none"
-            onPointerDown={dragStart}
-            onPointerMove={dragMove}
-            onPointerUp={dragEnd}
-            onPointerCancel={dragEnd}
           >
             {poster && (
               // eslint-disable-next-line @next/next/no-img-element
@@ -304,8 +268,69 @@ export function ActionSheet({ open, onClose, title: liveTitle, subtitle: liveSub
         {/* La carte flotte déjà au-dessus de l'indicateur d'accueil (sa marge du bas) : il ne reste
             qu'un souffle sous la dernière ligne. */}
         <div style={{ height: 6 }} />
-      </div>
+      </SheetCard>
     </div>,
     document.body
+  );
+}
+
+/**
+ * La carte, et le glisser vers le bas pour la refermer : **le geste des fiches** (`useSwipeToDismiss`,
+ * 13/11/2026), et non plus un geste à part. La carte suit le doigt pixel pour pixel (écrite directement,
+ * sans rendu React par mouvement — option `card`), part du point où le geste est reconnu (la tolérance de
+ * WebKit retranchée), se referme au-delà d'un peu moins d'un quart de l'écran ou sur un geste vif, et revient
+ * sinon. L'ancien geste de la feuille fermait à 80 px fixes, sautait de la tolérance au premier mouvement, et
+ * ne se prenait que par la poignée.
+ *
+ * L'appui est filtré avant d'atteindre le crochet (`startsADrag`) : toute la carte se tire, sauf ce qu'on
+ * touche pour s'en servir et un contenu qui défile.
+ *
+ * Remontée à chaque ouverture (sa `key`, voir `generation`) : l'état du geste ne survit pas à une fermeture.
+ */
+function SheetCard({
+  cardRef,
+  show,
+  role,
+  label,
+  centerOnWide,
+  onDismiss,
+  children,
+}: {
+  cardRef: RefObject<HTMLDivElement | null>;
+  show: boolean;
+  role: "dialog" | "alertdialog";
+  label: string | undefined;
+  centerOnWide: boolean;
+  onDismiss: () => void;
+  children: ReactNode;
+}) {
+  const swipe = useSwipeToDismiss(onDismiss, { card: cardRef });
+  const { onPointerDown, ...follow } = swipe.handlers;
+  return (
+    <div
+      ref={cardRef}
+      role={role}
+      aria-modal="true"
+      aria-label={label}
+      onPointerDown={(e) => {
+        if (startsADrag(e.target, centerOnWide)) onPointerDown(e);
+      }}
+      {...follow}
+      // Le verre liquide (DECISIONS.md §45), et une carte qui flotte au lieu d'une bande collée au
+      // bas : arrondie de partout, à 8 px des bords. Elle arrive avec un léger rebond — le
+      // dépassement de la courbe la fait monter un peu au-delà de sa place, puis s'y poser — et
+      // repart sans (04/10/2026). Sous le doigt, aucune transition : la carte est où est le doigt ; au
+      // relâché, elle revient ou part par la transition de sa classe.
+      style={{
+        marginBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)",
+        transform: swipe.touched ? `translateY(${swipe.offset}px)` : undefined,
+        transition: swipe.dragging ? "none" : undefined,
+      }}
+      className={`nav-glass relative mx-2 w-[calc(100%-1rem)] max-w-lg overflow-hidden rounded-[28px] transition-transform sm:mx-auto ${
+        show ? "translate-y-0 duration-[480ms] ease-[cubic-bezier(0.34,1.32,0.64,1)]" : "translate-y-[110%] duration-300 ease-in"
+      }`}
+    >
+      {children}
+    </div>
   );
 }

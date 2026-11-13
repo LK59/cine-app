@@ -10873,22 +10873,51 @@ rangée, on comprend ce qu'il ouvre et elle sort de lui.
 `[data-onscreen-open]`). **Tests.** `xray-ui-10291.test.tsx` (« À l'écran » à la demande ; les gestes sous le doigt,
 rangée ouverte) ; empreintes inchangées (la rangée n'y est pas proposée).
 
-## 152. La fenêtre « Détails » d'un film : le fichier dit pour tout le monde (13/11/2026)
+## 152. La fenêtre « Détails » d'un film ou d'un épisode : le fichier dit pour tout le monde (13/11/2026)
 
-**Règle.** Une fiche de **film** ouvre une petite fenêtre qui décrit son fichier, en tête le logo du film (le titre
-écrit à défaut), puis trois blocs. **Image** : en grand la définition (« 4K », « 1080p »…, lue sur la largeur *et*
+**Règle.** Une fiche de **film** — et, depuis les retouches du même jour, **chaque ligne d'épisode** — ouvre une
+petite fenêtre qui décrit son fichier, en tête le logo du film (le titre écrit à défaut), puis trois blocs. **Image** : en grand la définition (« 4K », « 1080p »…, lue sur la largeur *et*
 la hauteur — un 1080p en scope fait 1920 × 800) et la dynamique (« Dolby Vision », « HDR10+ », « HDR10 », « HLG »,
 rien pour SDR), en petit le codec (« HEVC 10 bits », et le profil Dolby Vision quand Jellyfin le donne) ; un encart
 « Débit : X Mb/s » et dessous « Connexion conseillée pour la qualité d'origine : Y Mb/s ». **Son** : une ligne par
 piste, **avec les étiquettes des menus du lecteur** (`labelAudioTracks`, mêmes mots, « (VO) » compris par `?tmdb=`),
-la piste par défaut et l'audiodescription marquées. **Sous-titres** : regroupés par langue, le type en étiquette
-(« Complets », « Forcés », « Malentendants », par `subtitleKind`, la décision des menus), « fichier à part » et
-« générés par Laterna » signalés, deux pistes pareilles comptées (« ×2 »). Rien sur la taille, les images par
-seconde, l'échantillonnage. Une erreur, une absence se disent dans la fenêtre.
+l'audiodescription marquée, et **« Par défaut » sur la piste que le lecteur ouvrira pour ce compte** (voir plus bas).
+**Sous-titres** : regroupés par langue, le type en étiquette (« Complets », « Forcés », « Malentendants », par
+`subtitleKind`, la décision des menus), « générés par Laterna » signalé, deux pistes pareilles comptées (« ×2 »).
+« fichier à part » a été retiré (Louis, 13/11/2026) : où la piste est rangée est de l'infrastructure, pas ce que voit
+le spectateur. Rien sur la taille, les images par seconde, l'échantillonnage. Une erreur, une absence se disent
+dans la fenêtre.
+
+**« Par défaut » = le choix du compte** (retouche du 13/11/2026). Ce n'est pas le drapeau du fichier : une VO
+anglaise marquée par défaut était annoncée « Par défaut » à un compte réglé en français, qui ouvrait sur la VF.
+`openingAudioIndex` (`titleDetails.ts`) applique la règle d'ouverture du lecteur : les préférences du compte, lues
+**où le lecteur les lit** — `/api/jellyfin/playback-state/[itemId]`, demandée avec le fichier à l'ouverture de la
+fenêtre seulement (langue du compte, langue retenue pour la série par `seriesLanguage.ts`, `playDefaultAudioTrack`) —
+passées à `chooseAudioTrack` ; quand elle ne choisit rien (pas de langue, `playDefaultAudioTrack`, langue absente du
+fichier, préférences illisibles), la piste marquée par défaut, sinon la première. L'étiquette n'apparaît qu'une fois
+les préférences lues, pour ne pas sauter d'une ligne à l'autre.
+
+**Épisodes** (retouche du 13/11/2026). Un petit « i » juste avant le bouton de téléchargement de chaque ligne
+d'épisode — fiche du téléphone (`CinemaMobileDetail`) et « Plus d'épisodes » du bureau (`CinemaEpisodeBrowser`,
+prop `episodeDetails` que seule `CinemaSeriesDetail` passe) — ouvre la même fenêtre pour l'`itemId` de l'épisode :
+en tête le logo de la série (son titre écrit à défaut), puis « S1 · É3 — Titre » (`cinema.episodeShort`). Pas de
+« i » sur un épisode sans fichier (`fileMissing`, posé par la route des épisodes pour un `LocationType: "Virtual"`),
+ni dans un lien de partage (`ShareTitleSheet` ne passe pas `episodeDetails`). La fenêtre n'est montée qu'au premier
+appui. Au bureau, les flèches traversent la ligne dans l'ordre de l'écran : épisode → « i » → téléchargement.
+
+**Le glisser** (retouche du 13/11/2026). Au téléphone, Louis n'arrivait pas à descendre la fenêtre : elle ne se
+tirait que par sa poignée. `ActionSheet` — pour toutes ses feuilles — prend désormais **le geste des fiches**
+(`useSwipeToDismiss`, carte écrite directement sous le doigt, tolérance du premier mouvement retranchée, fermeture
+au-delà d'un peu moins d'un quart de l'écran ou sur un geste vif, retour sinon) **depuis toute la feuille**, sauf ce
+qu'on touche pour s'en servir (boutons, champs, choix) et un contenu qui défile **quand il dépasse**
+(`data-sheet-scroll`). Une carte neuve à chaque ouverture (`key`), pour que l'état du geste ne survive pas à une
+fermeture. Dans « Détails », l'en-tête et le bloc Image sont hors du défilement : le haut de la feuille se tire
+toujours ; le son et les sous-titres défilent seuls, et ne gardent `touch-action: pan-y` que s'ils dépassent.
+Ordinateur : la fenêtre centrée ne se tire pas ; sa croix est à même distance du bord haut et du bord droit.
 
 **Ouverture.** Téléphone : un rond « i » sur la bannière, juste à gauche de la croix (Partager glisse d'un cran à
 gauche quand l'administrateur le voit). Bureau : un rond « Infos » de plus dans la rangée `DetailIconActions`, en
-dernier, avec sa légende. Partout : les pastilles de qualité (`QualityBadges`, prop `onOpen`), **la pastille seule
+dernier, avec sa légende (la question, juste avant, a la sienne depuis le même jour : « Question »). Partout : les pastilles de qualité (`QualityBadges`, prop `onOpen`), **la pastille seule
 pour zone de toucher**. Une feuille `ActionSheet` (le glisser vers le bas, le fond, Échap, sa croix ; centrée sur
 grand écran, `centerOnWide`) : **hors de l'adresse**, comme Partager, Télécharger et la question — l'adresse dit quel
 écran est ouvert, pas ce qu'on consulte dessus ; la fiche dessous se tait tant qu'elle est là (§117.1). Refermée,
@@ -10903,11 +10932,14 @@ lit la même réponse : `bitrate` (`MediaSource.Bitrate`), `video.bitDepth`, `vi
 chemin ni nom de sortie. Les liens de partage ne l'atteignent pas (`shareGate`, liste fermée).
 
 **Porteurs.** `src/lib/titleDetails.ts` (`advisedConnectionMbps`, `ADVISED_MARGIN`, `bitrateMbps`, `definitionLabel`,
-`dynamicRangeOf`, `videoCodecLabel`) ; `src/components/cinema/TitleDetails.tsx` (`TitleDetailsSheet`, `TitleDetailsRound`,
-`subtitleGroups`) ; `subtitleKind` (`trackLabel.ts`). **Appelants.** `CinemaMovieDetail` (rond, pastilles, fenêtre),
-`CinemaMobileDetail` (film seulement : rond, pastilles, fenêtre), `DetailIconActions` (`onDetails`).
+`dynamicRangeOf`, `openingAudioIndex`, `videoCodecLabel`) ; `src/components/cinema/TitleDetails.tsx` (`TitleDetailsSheet`,
+`TitleDetailsRound`, `EpisodeDetailsButton`, `subtitleGroups`) ; `subtitleKind` (`trackLabel.ts`) ; `chooseAudioTrack`
+(`trackPreferences.ts`) ; le geste, `ActionSheet` + `useSwipeToDismiss`. **Appelants.** `CinemaMovieDetail` (rond,
+pastilles, fenêtre), `CinemaMobileDetail` (film : rond, pastilles, fenêtre ; série : « i » des épisodes),
+`DetailIconActions` (`onDetails`), `CinemaEpisodeBrowser` (« i » des épisodes, via `CinemaSeriesDetail`).
 **Tests.** `titleDetails.test.ts`, `jellyfin-streams-details-route.test.ts`, `title-details-sheet.test.tsx`,
-`fiche-details-entrees.test.tsx`, `proxy-admin-pages.test.ts`, `news-page-1043.test.ts`.
+`fiche-details-entrees.test.tsx`, `details-episodes-question.test.tsx`, `ActionSheet.test.tsx`,
+`proxy-admin-pages.test.ts`, `news-page-1043.test.ts`.
 
 **Différent exprès.**
 - **L'Atmos tel que le fichier le déclare, sans réserve.** Sous l'étiquette, le profil lu par Jellyfin (« Dolby
@@ -10918,8 +10950,13 @@ chemin ni nom de sortie. Les liens de partage ne l'atteignent pas (`shareGate`, 
   débit variable dépassent la moyenne d'autant ; ×2 aurait conseillé 100 Mb/s pour un 4K à 50), arrondi vers le haut
   à l'unité jusqu'à 10, à 5 jusqu'à 50, à 10 au-delà. En dessous, le lecteur passe de lui-même à une version allégée
   (§78) : d'où « pour la qualité d'origine ».
-- **Films seulement.** Une série n'a pas un fichier mais des centaines : ni rond, ni pastille touchable sur sa fiche.
-  Ni les bannières de l'accueil (une pastille y serait touchée en faisant défiler), ni la fiche d'un lien de partage.
+- **Pas sur la fiche d'une série.** Une série n'a pas un fichier mais des centaines : ni rond, ni pastille touchable
+  sur sa fiche — l'entrée est sur chaque épisode. Ni les bannières de l'accueil (une pastille y serait touchée en
+  faisant défiler), ni la fiche d'un lien de partage.
+- **« Par défaut » sans le navigateur.** Le lecteur départage deux pistes de la langue demandée par ce que *ce
+  navigateur* reçoit (`deliveredAudio`, §3) et par ce que ce chemin porte ; la fenêtre parle pour tous les appareils
+  et départage par les canaux de la source. Une TrueHD 7.1 et une AC-3 5.1 de la même langue peuvent donc différer
+  sur un iPhone : cas rare, accepté.
 - **Pas de rond quand Jellyfin a perdu le fichier** (`fileMissing`) : rien à décrire.
 - **Pas d'or.** Le blanc et le gris des fiches seulement : l'or de la marque dit ce qui est « à moi »
   (`design-tokens.test.ts`), et ni la dynamique d'un fichier ni sa piste par défaut ne le sont.

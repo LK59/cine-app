@@ -425,6 +425,7 @@ export function CinemaSeriesDetail({
           seriesItemId={item.jellyfinItemId}
           posterUrl={item.posterUrl}
           nextEpisodeId={episodesData?.nextEpisode?.itemId}
+          episodeDetails={{ logoUrl: item.logoUrl }}
           onClose={() => {
             setShowEpisodes(false);
             // Same focus-restore fix — CinemaEpisodeBrowser unmounting otherwise leaves focus
