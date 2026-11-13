@@ -21,10 +21,18 @@ export function useOfflineSubtitles(download: OfflineDownload | null, videoRef: 
   // L'aide d'un passage rejoué (§150) : montrée à la place de la piste choisie le temps du passage, sans la changer.
   const [replay, setReplay] = useState<number | null>(null);
   const shown = replay ?? current;
-  const [cues, setCues] = useState<readonly SubtitleCue[]>([]);
   const [text, setText] = useState<string | null>(null);
   const subtitles = download?.subtitles;
   const id = download?.id;
+  /**
+   * Les lignes lues, avec la piste et le téléchargement dont elles viennent : valables tant que c'est
+   * encore cette piste qu'on montre (13/11/2026). Elles étaient vidées à chaque choix, alors que la
+   * lecture ne se relance qu'au changement de piste montrée : « Garder » l'aide d'un passage rejoué
+   * (l'aide retirée et la même piste choisie, dans le même rendu) ou rechoisir la piste active laissait la
+   * même piste montrée, sans lignes — les sous-titres qu'on venait de garder disparaissaient.
+   */
+  const [loaded, setLoaded] = useState<{ id: string; track: number; cues: readonly SubtitleCue[] } | null>(null);
+  const cues = loaded && loaded.id === id && loaded.track === shown ? loaded.cues : NO_CUES;
 
   const tracks = useMemo(() => {
     const list = subtitles ?? [];
@@ -50,7 +58,7 @@ export function useOfflineSubtitles(download: OfflineDownload | null, videoRef: 
     if (shown === null || !account || !id) return;
     let cancelled = false;
     void readOfflineSubtitle(account, id, shown).then((vtt) => {
-      if (!cancelled) setCues(vtt ? parseSubtitles(vtt) : []);
+      if (!cancelled) setLoaded({ id, track: shown, cues: vtt ? parseSubtitles(vtt) : NO_CUES });
     });
     return () => {
       cancelled = true;
@@ -71,10 +79,10 @@ export function useOfflineSubtitles(download: OfflineDownload | null, videoRef: 
     };
   }, [cues, shown, videoRef]);
 
+  // Rien à vider : une autre piste montrée n'a pas de lignes tant qu'elles ne sont pas lues (`cues`), et
+  // la ligne à l'instant se relit au changement (l'effet plus haut).
   const choose = (next: number | null) => {
     setCurrent(next);
-    setCues([]);
-    setText(null);
   };
   // Gardés avec le téléchargement, ce sont des WebVTT : du texte, toujours. La langue de l'audio n'est notée que
   // pour un épisode (celle demandée, reprise au suivant) ; un film part de la langue du compte.
@@ -99,9 +107,9 @@ export function useOfflineSubtitles(download: OfflineDownload | null, videoRef: 
   );
   const showReplay = useCallback((next: number | null) => {
     setReplay(next);
-    setCues([]);
-    setText(null);
   }, []);
   const replaySubtitle = useMemo(() => ({ track: replayTrack, show: showReplay }), [replayTrack, showReplay]);
   return { tracks, current, choose, text: shown === null ? null : text, replaySubtitle };
 }
+
+const NO_CUES: readonly SubtitleCue[] = [];
