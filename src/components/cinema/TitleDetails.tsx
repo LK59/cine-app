@@ -61,7 +61,9 @@ export function TitleDetailsSheet({
 
   return (
     <ActionSheet open={open} onClose={onClose} actions={[]} centerOnWide ariaLabel={t("cinema.details.title")}>
-      <div data-title-details="" className="relative px-5 pb-3">
+      {/* En grand, la poignée de l'`ActionSheet` est masquée (fenêtre centrée) : l'en-tête reprend l'espace qu'elle
+          laissait au-dessus du logo, sans quoi il touchait le bord haut (13/11/2026). */}
+      <div data-title-details="" className="relative px-5 pb-3 sm:pt-5">
         <div className="flex min-h-10 items-center pr-12">
           {logoUrl ? (
             <CinemaLogo src={logoUrl} alt={title} surface="player" shadow={false} fallback={<WrittenTitle title={title} />} />
