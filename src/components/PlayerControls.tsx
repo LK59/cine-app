@@ -1386,8 +1386,7 @@ export function PlayerControls({
             et ne s'arrête avant les boutons du centre (ou la pilule des outils) que s'ils partagent sa hauteur
             (`useOnScreenPlacement`, 10.27.1). Depuis le 13/11/2026, **masquée par défaut** : le bouton rond de gauche
             l'ouvre — elle sort de lui vers la droite, pilule après pilule — et devient une croix qui la referme. Le
-            bouton de la question reste au bout de la rangée ouverte, hors de ce qui défile — seul quand personne
-            n'est reconnu. */}
+            bouton de la question suit la croix, hors de ce qui défile — seul quand personne n'est reconnu. */}
         {onScreenAvailable &&
           (() => {
             const askButton = askOffered ? (
@@ -1435,24 +1434,26 @@ export function PlayerControls({
                   <UsersRound size={20} aria-hidden className="player-onscreen-toggle-people" />
                   <X size={20} aria-hidden className="player-onscreen-toggle-close" />
                 </button>
-                <div data-onscreen-body="" inert={!rowOpen} className="min-w-0 flex-1">
-                  {!rowShown ? null : scenePeople.length > 0 ? (
-                    <PlayerOnScreen
-                      people={scenePeople}
-                      visible={visible && rowOpen}
-                      trailing={askButton}
-                      maxWidth={onScreenPlace.maxWidth}
-                      // Toucher ou faire défiler la rangée tient les commandes affichées ; la fin du geste relance
-                      // leur décompte ordinaire (10.27.2 — elles partaient sous le doigt).
-                      onHold={holdControls}
-                      onIntent={onPersonIntent}
-                      onRelease={() => showControls(10000)}
-                      onPick={pickPerson}
-                      diag={xrayDiag}
-                      sceneStart={sceneNow?.start ?? null}
-                    />
-                  ) : (
-                    askButton
+                {/* Le bouton de la question à côté de la croix, et les pilules jusqu'au bord de l'écran (Louis, 13/11/2026) :
+                    au bout de la rangée, il laissait au milieu de l'écran une pilule tranchée sous le voile, collée à lui. */}
+                <div data-onscreen-body="" inert={!rowOpen} className="flex min-w-0 flex-1 items-end gap-2">
+                  {rowShown && askButton}
+                  {rowShown && scenePeople.length > 0 && (
+                    <div className="min-w-0 flex-1">
+                      <PlayerOnScreen
+                        people={scenePeople}
+                        visible={visible && rowOpen}
+                        maxWidth={onScreenPlace.maxWidth}
+                        // Toucher ou faire défiler la rangée tient les commandes affichées ; la fin du geste relance
+                        // leur décompte ordinaire (10.27.2 — elles partaient sous le doigt).
+                        onHold={holdControls}
+                        onIntent={onPersonIntent}
+                        onRelease={() => showControls(10000)}
+                        onPick={pickPerson}
+                        diag={xrayDiag}
+                        sceneStart={sceneNow?.start ?? null}
+                      />
+                    </div>
                   )}
                 </div>
               </div>

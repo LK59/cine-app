@@ -10835,13 +10835,14 @@ comme en pause** ; le choix tient la séance — pause, reconstruction du lecteu
 la suivante repart masquée (`onScreenSession.ts`, fini par la ligne `stop`). Elle **suit toujours les commandes** :
 cachées puis rappelées, elle revient dépliée — mais une minute de commandes cachées (`ONSCREEN_FOLD_HIDDEN_MS`) veut
 dire qu'on regarde le film, et elle se replie sans bruit (choix de Louis). Le bouton de la question n'existe que dans
-la rangée ouverte. Les sous-titres
+la rangée ouverte, **juste après la croix** — à droite des pilules, il laissait au milieu de l'écran une pilule
+tranchée sous le voile, collée à lui (10.41.1) ; les pilules défilent désormais jusqu'au bord de l'écran. Les sous-titres
 passent au-dessus de la rangée ouverte (`onChromeEdges` la compte).
 
 **Pourquoi.** Retour de Louis sur iPhone : affichée avec les commandes à chaque fois, elle chargeait l'écran et
 cachait la réplique, pour 5 séances où quelqu'un l'a touchée en deux jours (82 où elle était proposée). Sur un
-téléphone, les pilules sont aussi compactes (photo et nom ; le personnage est dans le panneau) et les boutons du
-centre 15 % plus petits.
+téléphone, les pilules sont aussi compactes (photo et nom ; le personnage est dans le panneau). Les boutons du centre
+réduits de 15 % en 10.41.0 ont repris leur taille en 10.41.1 (« perturbant », Louis).
 
 **Différent exprès.** Pas d'ouverture d'office en pause (proposée, puis écartée par Louis : « par défaut on masque
 toujours la rangée qui prend trop de place »). Le bouton n'est pas dans la pilule des réglages : à l'endroit de la
