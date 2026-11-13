@@ -22,10 +22,11 @@ vi.mock("@/components/MiniPlayer", () => ({
 vi.mock("@/components/PlaybackInfoPanel", () => ({ PlaybackInfoPanel: () => null }));
 vi.mock("@/components/ExperimentalPlayerHost", () => ({ ExperimentalPlayerHost: () => <div data-testid="natif" /> }));
 // Les dernières propriétés reçues par les commandes : de quoi changer de piste comme le menu.
-const controls = vi.hoisted(() => ({ props: null as null | { onChangeAudio: (id: number) => void } }));
+type ControlsProps = { onChangeAudio: (id: number) => void; onChangeSubtitle: (id: number | null) => void; currentSubtitleId: number | null };
+const controls = vi.hoisted(() => ({ props: null as null | ControlsProps }));
 vi.mock("@/components/PlayerControls", () => ({
   VOLUME_STORAGE_KEY: "volume",
-  PlayerControls: (props: { onChangeAudio: (id: number) => void }) => {
+  PlayerControls: (props: ControlsProps) => {
     controls.props = props;
     return <div data-testid="commandes" />;
   },
@@ -420,5 +421,26 @@ describe("une négociation remplacée avant sa première image (13/11/2026)", ()
     act(() => controls.props!.onChangeAudio(3));
     await waitFor(() => expect(negotiations()).toHaveLength(count + 1));
     expect(negotiations().at(-1)).toMatchObject({ audioStreamIndex: 3, videoH264Only: true, forceAudioTranscode: true });
+  });
+
+  // Chaque négociation repose ses `<track>` : le sous-titre choisi n'était rallumé que s'il venait du relais du
+  // natif. Changer de langue éteignait donc ses sous-titres, menu compris (13/11/2026).
+  it("un changement de piste en place garde le sous-titre choisi", async () => {
+    const before = reponse.subtitleTracks;
+    reponse.subtitleTracks = [{ index: 5, url: "/sub/5.vtt", language: "fre", isDefault: false }] as never[];
+    try {
+      await mounted();
+      act(() => void document.querySelector("video")!.dispatchEvent(new Event("loadeddata")));
+      act(() => controls.props!.onChangeSubtitle(5));
+      await waitFor(() => expect(controls.props!.currentSubtitleId).toBe(5));
+      const count = negotiations().length;
+      act(() => controls.props!.onChangeAudio(3));
+      await waitFor(() => expect(negotiations()).toHaveLength(count + 1));
+      await waitFor(() => expect(fake.listeners.get("hlsError")?.length).toBeGreaterThan(1));
+      await act(async () => {});
+      expect(controls.props!.currentSubtitleId).toBe(5);
+    } finally {
+      reponse.subtitleTracks = before;
+    }
   });
 });

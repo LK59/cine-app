@@ -23,6 +23,7 @@ type ControlsProps = {
   subtitleTracks: { id: number; label: string }[];
   currentSubtitleId: number | null;
   onChangeSubtitle: (id: number | null) => void;
+  onChangeAudio: (id: number) => void;
   secondSubtitle?: { currentId: number | null; onChange: (id: number | null) => void; offset?: unknown; generation?: unknown };
   replaySubtitle?: { track: () => number | null; show: (id: number | null) => void };
 };
@@ -122,6 +123,20 @@ async function opened() {
   render(<PlayerHost />);
   await waitFor(() => expect(controls?.subtitleTracks).toHaveLength(2));
 }
+
+describe("le sous-titre choisi et le changement de piste audio (13/11/2026)", () => {
+  // WebKit recharge la page pour changer de piste : l'intention n'emportait pas le sous-titre, et la page
+  // rechargée repartait sans — à rallumer après chaque changement de langue sur iPhone.
+  it("WebKit : l'intention de rechargement emporte le sous-titre allumé", async () => {
+    sessionStorage.clear();
+    await opened();
+    act(() => controls!.onChangeSubtitle(3));
+    await waitFor(() => expect(controls!.currentSubtitleId).toBe(3));
+    act(() => controls!.onChangeAudio(1));
+    const intent = JSON.parse(sessionStorage.getItem("reload-intent") ?? "null");
+    expect(intent).toMatchObject({ audioStreamIndex: 1, carry: { subtitleStreamIndex: 3 } });
+  });
+});
 
 describe("deux sous-titres — lecteur serveur", () => {
   it("le menu reçoit le second, sans décalage ni génération à lui (les lignes se décalent sur leur piste)", async () => {

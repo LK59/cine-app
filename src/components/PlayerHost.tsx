@@ -1745,7 +1745,11 @@ function ActivePlayer({
         // still actively playing can bring the new page up before the old session is gone.
         // Starting teardown explicitly here buys that release as much head start as possible.
         // (`reloadServerPage` : intention, coupure, rechargement, sous une seule garde.)
-        if (reloadServerPage(() => audioReloadIntent({ itemId, title, audioStreamIndex: id, resumeAt, carry: reloadCarryNow() }), video)) return;
+        // Le sous-titre choisi passe le rechargement, comme le relais du natif (voir plus bas, 13/11/2026).
+        // Sans sous-titre, rien d'écrit : la page rechargée n'en rallume aucun, comme avant.
+        const subtitle = currentSubtitleRef.current;
+        const carry = { ...reloadCarryNow(), ...(subtitle !== null ? { subtitleStreamIndex: subtitle } : {}) };
+        if (reloadServerPage(() => audioReloadIntent({ itemId, title, audioStreamIndex: id, resumeAt, carry }), video)) return;
         // Storage unavailable (private browsing, quota): falls through to the in-place switch
         // below, which will most likely fail on WebKit and show the error screen with « Réessayer ».
         // Coupure et rechargement sont dans le `try`, comme à la fin de l'échelle : du 14/08 au
@@ -1756,6 +1760,10 @@ function ActivePlayer({
       // une langue. Sans elle, le changement repartait en HEVC copié, retombait en erreurs média sur une marche
       // déjà tentée, et finissait sur « Lecture interrompue » — que « Réessayer » rejouait à l'identique (13/11/2026).
       const h264 = lastPlaybackOpts.current?.videoH264Only ? { videoH264Only: true, forceAudioTranscode: true } : {};
+      // Le sous-titre choisi, rallumé par la négociation (`takeSubtitleCarry`) : chaque négociation repose ses
+      // `<track>`, et seul le relais du natif était rallumé — changer de langue éteignait les sous-titres,
+      // menu compris (13/11/2026). Le même titre, donc les mêmes index Jellyfin.
+      subtitleCarryRef.current = currentSubtitleRef.current;
       startPlayback({ audioStreamIndex: id, resumeAt, ...h264, cause: { why: "audio" } });
     },
     [startPlayback, itemId, title, reloadCarryNow, reportPositionNow, bench]
