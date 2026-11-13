@@ -1387,6 +1387,18 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
         de: "Freigabelinks sehen weniger Informationen über die Einrichtung der App.",
       },
     ],
+  },  {
+    version: "10.44.1",
+    page: "10.43",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Sur certains appareils Android, l'épisode suivant ne s'interrompt plus quand le précédent a dû changer de format d'image.",
+        en: "On some Android devices, the next episode no longer stops when the previous one had to switch picture format.",
+        es: "En algunos dispositivos Android, el siguiente episodio ya no se interrumpe cuando el anterior tuvo que cambiar de formato de imagen.",
+        de: "Auf manchen Android-Geräten bricht die nächste Folge nicht mehr ab, wenn die vorige das Bildformat wechseln musste.",
+      },
+    ],
   },
 ];
 
