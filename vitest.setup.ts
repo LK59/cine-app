@@ -24,7 +24,19 @@ if (SUITE_DATA_ROOT) {
 // Les matchers du DOM (`toBeInTheDocument`…) pour les seuls tests sous jsdom (249 fichiers sur 637).
 // Importés partout, ils coûtaient à chaque fichier de la suite : 16 % de son temps (mesuré le
 // 15/10/2026, 128 s → 115 s une fois réservés à jsdom).
-if (typeof document !== "undefined") await import("@testing-library/jest-dom/vitest");
+if (typeof document !== "undefined") {
+  await import("@testing-library/jest-dom/vitest");
+  /**
+   * Les attentes de Testing Library (`findBy…`, `waitFor`) : 5 s au lieu d'1 (13/11/2026).
+   *
+   * Une seconde suffit sur une machine calme, pas quand la suite tourne à côté d'autre chose : le même
+   * jour, `ExperimentalPlayerHost` (« générer des sous-titres ») et `player-search-dialogue` sont tombés
+   * dans le portail sur un élément arrivé un peu après la seconde, et passaient seuls à chaque essai. Un
+   * élément qui n'arrive jamais échoue toujours, 4 s plus tard.
+   */
+  const { configure } = await import("@testing-library/react");
+  configure({ asyncUtilTimeout: 5_000 });
+}
 
 // jsdom implements neither scrollIntoView nor matchMedia — stub the ones this codebase actually
 // calls so component/hook tests that trigger them don't crash. Guarded because this setup file
