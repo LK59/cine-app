@@ -29,4 +29,12 @@ describe("catalogueIsEmpty", () => {
       expect(source, file).toMatch(/catalogueIsEmpty\(/);
     }
   });
+
+  /** Un titre sans genre n'est dans aucune rangée : l'assistant de signalement ne le trouvait pas (13/11/2026). */
+  it("l'assistant de signalement cherche dans tous les titres, pas dans la sélection et les rangées", () => {
+    const source = readFileSync(path.join(process.cwd(), "src/components/reports/ReportWizard.tsx"), "utf8");
+    expect(source).not.toMatch(/spotlight \?\? \[\]\), \.\.\.Object\.values/);
+    expect(source).toMatch(/catalogueTitles\(movies\)/);
+    expect(source).toMatch(/catalogueTitles\(series\)/);
+  });
 });

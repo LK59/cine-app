@@ -8,7 +8,7 @@ import { useToast } from "@/components/Toast";
 import { apiAction } from "@/lib/apiAction";
 import { cinemaClose, cinemaNavigate } from "@/lib/cinemaRoute";
 import { cacheOnlyOptions, MOVIES_CATALOGUE_KEY, SERIES_CATALOGUE_KEY } from "@/lib/swr";
-import { cinemaFetcher } from "@/lib/cinemaPayload";
+import { catalogueTitles, cinemaFetcher } from "@/lib/cinemaPayload";
 import { searchCinemaLibrary } from "@/lib/cinemaSearch";
 import { ISSUE_SETS, OTHER, REPORT_ZONES, issueSetFor, needsTitle, reportPathParts, zoneOf, type ReportNode } from "@/lib/reportTaxonomy";
 import type { CinemaMoviesPayload } from "@/app/api/cinema/movies/route";
@@ -118,8 +118,11 @@ function TitleStep({ value, onPick }: { value: Draft["item"]; onPick: (item: Non
   const { data: movies } = useSWR<CinemaMoviesPayload>(MOVIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
   const { data: series } = useSWR<CinemaSeriesPayload>(SERIES_CATALOGUE_KEY, cinemaFetcher, cacheOnlyOptions);
   const results = useMemo(() => {
-    const allMovies = [...(movies?.spotlight ?? []), ...Object.values(movies?.rows ?? {}).flat()];
-    const allSeries = [...(series?.spotlight ?? []), ...Object.values(series?.rows ?? {}).flat()];
+    // Tous les titres (`catalogueTitles`), pas la sélection et les rangées : un titre sans genre n'est dans
+    // aucune rangée, et le signaler obligeait à le taper à la main — sans fiche, donc sans ses journaux
+    // joints au signalement (13/11/2026). La recherche du cinéma lit déjà `catalogueTitles`.
+    const allMovies = movies ? catalogueTitles(movies) : [];
+    const allSeries = series ? catalogueTitles(series) : [];
     const seen = new Set<string>();
     return searchCinemaLibrary(query, allMovies, allSeries, locale)
       .map((r) => ({ id: r.item.jellyfinItemId, title: r.item.title, year: r.item.year, poster: r.item.posterUrl, kind: r.kind }))
