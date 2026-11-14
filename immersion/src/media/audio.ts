@@ -37,6 +37,9 @@ interface Graph {
   fire: PositionalAudio;
   /** Le bouillonnement du bain, sur la terrasse. */
   tub: PositionalAudio;
+  /** Ce qui passe du dehors à travers la baie : un passe-bas sur le vent, un autre sur le bain (`setOutdoors`). */
+  windMuffle: BiquadFilterNode;
+  tubMuffle: BiquadFilterNode;
   /** Le ronronnement du chat. */
   purr: PositionalAudio;
   direct: GainNode;
@@ -231,7 +234,18 @@ export function audio(): Graph {
   band.type = "bandpass";
   band.frequency.value = 420;
   band.Q.value = 0.45;
+  // Le dehors à travers la baie : sans filtre sur la terrasse, étouffé dedans (`setOutdoors`).
+  const muffle = () => {
+    const filter = context.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 20000;
+    filter.Q.value = 0.5;
+    return filter;
+  };
+  const windMuffle = muffle();
+  const tubMuffle = muffle();
   const wind = loop(windBuffer(context), 0.5, 3.5, band);
+  wind.setFilters([band, windMuffle]);
   const high = context.createBiquadFilter();
   high.type = "highpass";
   high.frequency.value = 1800;
@@ -239,9 +253,9 @@ export function audio(): Graph {
 
   const fire = loop(fireBuffer(context), 0.55, 1.8);
   fire.gain.connect(convolver);
-  const tub = loop(bubbleBuffer(context), TUB, 1.6);
+  const tub = loop(bubbleBuffer(context), TUB, 1.6, tubMuffle);
   const purr = loop(purrBuffer(context), 0.0, 0.5);
-  graph = { context, listener, speakers: new Map(), source: null, convolver, wind, candles, fire, tub, purr, direct, wet, connected: new WeakSet() };
+  graph = { context, listener, speakers: new Map(), source: null, convolver, wind, candles, fire, tub, windMuffle, tubMuffle, purr, direct, wet, connected: new WeakSet() };
   return graph;
 }
 
@@ -337,16 +351,37 @@ export function applyAcoustics(screenId: string, cutoff: number, reach: number):
 export const ambience = { value: 1 };
 export const DUCKED = 0.4;
 const WIND = 0.6;
+/** Le bain à pleine force, sur la terrasse. */
 const TUB = 0.3;
 
-/** La force du vent, de 0 à 1 : faible derrière les vitres, pleine dehors. Glisse en une seconde. */
-export function setWind(level: number): void {
+/**
+ * Ce que le visiteur entend du dehors (le vent, le bain) : `level` de 0 à 1 et `cutoff`, la fréquence au-delà
+ * de laquelle rien ne traverse. Une baie close coupe le dehors comme un vrai vitrage — une vingtaine de décibels
+ * et presque tous les aigus : il n'en reste qu'un souffle sourd. Glisse en une demi-seconde, le temps que la
+ * porte se ferme.
+ */
+export function setOutdoors({ level, cutoff }: { level: number; cutoff: number }): void {
   if (!graph) return;
   const now = graph.context.currentTime;
-  const gain = WIND * level * ambience.value;
-  if (graph.context.state !== "running") graph.wind.gain.gain.value = gain;
-  else graph.wind.gain.gain.setTargetAtTime(gain, now, 0.6);
-  graph.tub.setVolume(TUB * ambience.value);
+  const wind = WIND * level * ambience.value;
+  const tub = TUB * level * ambience.value;
+  if (graph.context.state !== "running") {
+    graph.wind.gain.gain.value = wind;
+    graph.tub.gain.gain.value = tub;
+    graph.windMuffle.frequency.value = cutoff;
+    graph.tubMuffle.frequency.value = cutoff;
+    return;
+  }
+  graph.wind.gain.gain.setTargetAtTime(wind, now, 0.5);
+  graph.tub.gain.gain.setTargetAtTime(tub, now, 0.5);
+  graph.windMuffle.frequency.setTargetAtTime(cutoff, now, 0.35);
+  graph.tubMuffle.frequency.setTargetAtTime(cutoff, now, 0.35);
+}
+
+/** Ce qui passe du dehors à cet instant (gain du vent et du bain, coupure du filtre) — pour les tests. */
+export function outdoorLevels(): { wind: number; tub: number; cutoff: number } | null {
+  if (!graph) return null;
+  return { wind: graph.wind.gain.gain.value, tub: graph.tub.gain.gain.value, cutoff: graph.windMuffle.frequency.value };
 }
 
 /** Ce que chaque haut-parleur laisse passer à cet instant — pour les tests et le diagnostic. */

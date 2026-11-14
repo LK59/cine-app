@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { ambience, applyAcoustics, audio, DUCKED, setWind } from "../media/audio";
+import { ambience, applyAcoustics, audio, DUCKED, setOutdoors } from "../media/audio";
 import { syncMix } from "../media/playback";
 import { useStore } from "../state/store";
 import { applyMusicAcoustics } from "../media/music";
@@ -24,6 +24,17 @@ export function cutoffBetween(from: RoomId, to: RoomId, doorOpen = false): numbe
   if (fromOpen && toOpen) return from === "cuisine" || to === "cuisine" ? 6500 : 9000;
   if (from === "chambre" || to === "chambre") return fromOpen || toOpen ? 650 : 1600;
   return 1500;
+}
+
+/**
+ * Ce qui reste du dehors (vent, bain) selon la pièce et la baie. Porte close, un double vitrage et des murs
+ * de rondins : une vingtaine de décibels de moins (0,08 ≈ −22 dB) et rien au-dessus de quelques centaines de
+ * hertz. Porte ouverte, le dehors entre presque entier dans le volume ouvert, moins dans les pièces du fond.
+ */
+export function outdoorsHeard(here: RoomId, doorOpen: boolean): { level: number; cutoff: number } {
+  if (here === "terrasse") return { level: 1, cutoff: 20000 };
+  if (OPEN.includes(here)) return doorOpen ? { level: 0.6, cutoff: 6000 } : { level: 0.08, cutoff: 380 };
+  return doorOpen ? { level: 0.18, cutoff: 1200 } : { level: 0.03, cutoff: 260 };
 }
 
 /**
@@ -56,8 +67,8 @@ export function SoundScape() {
     const playback = useStore.getState().playback;
     const film = playback.status === "playing" && !playback.wantPaused;
     ambience.value += ((film ? DUCKED : 1) - ambience.value) * 0.03;
-    // Le vent : dedans, on l'entend à peine derrière les vitres ; porte ouverte ou dehors, il est là.
-    setWind(here === "terrasse" ? 1 : doorOpen ? 0.55 : 0.22);
+    // Le vent et le bain : pleins dehors, à peine un souffle sourd derrière la baie close.
+    setOutdoors(outdoorsHeard(here, doorOpen));
     // Les enceintes de la chaîne hi-fi : même acoustique que les écrans.
     for (const speaker of LOUDSPEAKERS) {
       const distance = Math.hypot(speaker.center[0] - rig.eye.x, speaker.center[1] - rig.eye.y, speaker.center[2] - rig.eye.z);

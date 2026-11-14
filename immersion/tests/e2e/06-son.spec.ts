@@ -55,3 +55,31 @@ test("chaque télévision a sa portée, et les portées se recouvrent", async ({
   expect(bedroom.salon.reach).toBeLessThan(0.02);
   expect(errors).toEqual([]);
 });
+
+type Outdoors = { wind: number; tub: number; cutoff: number };
+async function outdoorsAt(page: Page, x: number, z: number): Promise<Outdoors> {
+  await place(page, x, z, 0, 0);
+  await page.waitForTimeout(2500);
+  return page.evaluate(() => (window as unknown as { __immersion: { outdoorLevels(): Outdoors } }).__immersion.outdoorLevels());
+}
+
+/**
+ * Le vent et le bain à travers la baie : porte close, il n'en reste qu'un souffle sourd ; ouverte, le dehors
+ * entre ; sur la terrasse, tout. Demandé le 14/11/2026 : porte fermée, on les entendait presque autant.
+ */
+test("la porte close coupe le vent et le bain", async ({ page }) => {
+  const errors = watchErrors(page);
+  await enterWorld(page);
+  expect(await page.evaluate(() => (window as unknown as { __immersion: { store: { getState(): { door: boolean } } } }).__immersion.store.getState().door)).toBe(false);
+
+  const closed = await outdoorsAt(page, -1.9, -1.5);
+  expect(closed.cutoff).toBeLessThan(500);
+
+  await page.evaluate(() => (window as unknown as { __immersion: { store: { getState(): { toggleDoor(): void } } } }).__immersion.store.getState().toggleDoor());
+  const open = await outdoorsAt(page, -1.9, -1.5);
+  expect(open.cutoff).toBeGreaterThan(4000);
+  // Une vingtaine de décibels entre la porte ouverte et la porte close.
+  expect(closed.wind).toBeLessThan(open.wind / 6);
+  expect(closed.tub).toBeLessThan(open.tub / 6);
+  expect(errors).toEqual([]);
+});

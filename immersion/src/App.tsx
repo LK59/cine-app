@@ -8,7 +8,7 @@ import { rig, resetRig } from "./world/rig";
 import { Intro } from "./ui/Intro";
 import { PauseMenu } from "./ui/PauseMenu";
 import { BenchOverlay } from "./ui/BenchOverlay";
-import { speakerLevels } from "./media/audio";
+import { outdoorLevels, speakerLevels } from "./media/audio";
 import { timing as benchTiming } from "./bench/bench";
 import { musicLevels } from "./media/music";
 import { SEATS, THINGS } from "./world/interactions";
@@ -73,7 +73,7 @@ export function App() {
       }
     );
     // Prise de test et de capture : l'état, et le visiteur qu'on peut poser où l'on veut.
-    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug, benchTiming, view, cueAt, perf, effects, screenLight, speakerLevels, musicLevels, things: THINGS.map(({ id, at }) => ({ id, at })), seats: SEATS, screens: Object.fromEntries(SCREENS.map((screen) => [screen.id, screen])), salons: { drop: dropForTest, poses: () => [...poses.keys()], tv: sharedTvDebug } };
+    (window as unknown as { __immersion?: unknown }).__immersion = { store: useStore, rig, resetRig, dispatch, playTestClip, video: getVideo, openPanel, closePanel, emit, debug, benchTiming, view, cueAt, perf, effects, screenLight, speakerLevels, outdoorLevels, musicLevels, things: THINGS.map(({ id, at }) => ({ id, at })), seats: SEATS, screens: Object.fromEntries(SCREENS.map((screen) => [screen.id, screen])), salons: { drop: dropForTest, poses: () => [...poses.keys()], tv: sharedTvDebug } };
     // Ce qu'aucune barrière n'attrape (rappels, minuteurs, promesses) part au serveur (`errorLog.ts`).
     const unwatchErrors = watchErrors();
     // La page s'en va, quelle qu'en soit la raison : l'arrêt de la lecture part quand même.
