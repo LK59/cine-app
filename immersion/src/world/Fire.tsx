@@ -143,7 +143,8 @@ export function Fire() {
     const strength = (0.12 + 0.88 * level.value) * dance * 15;
     screenLight.uniforms.uSlFire.value.set(...FIRE.glow);
     screenLight.uniforms.uSlFireColor.value.setRGB(1.0 * strength, 0.42 * strength, 0.12 * strength);
-    graph.fire.setVolume(0.45 * (0.15 + 0.85 * level.value) * (0.5 + 0.5 * ambience.value));
+    // 0,45 jusqu'en 10.44.2, jugé trop fort dans le salon (14/11/2026) : environ 4 dB de moins.
+    graph.fire.setVolume(0.27 * (0.15 + 0.85 * level.value) * (0.5 + 0.5 * ambience.value));
   });
 
   const x = BREAST.face + FIRE.depth;
