@@ -20,6 +20,14 @@ export function failuresOf(s: Seance): number {
   return s.errors + s.fallbacks + s.stalls + s.rebuilds + (s.restarts ?? []).filter((r) => r.failure).length;
 }
 
+/**
+ * Un titre dont le seul incident de la période est un blocage, une fois : le lecteur l'a passé et la séance a
+ * continué. « À gérer » ne le liste pas ; il reste dans les chiffres et le diagnostic (14/11/2026).
+ */
+export function isLoneStall(d: Pick<TitleDiagnosis, "failures" | "reasons">): boolean {
+  return d.failures === 1 && d.reasons.length === 1 && d.reasons[0].reason === "stall";
+}
+
 export interface Viewer {
   user: string;
   device: string;

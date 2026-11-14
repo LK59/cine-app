@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildSeances } from "@/lib/activity/seances";
-import { diagnoseTitles } from "@/lib/activity/diagnosis";
+import { diagnoseTitles, isLoneStall } from "@/lib/activity/diagnosis";
 import { friseModel } from "@/lib/activity/frise";
 import { localDay } from "@/lib/activity/accounts";
 import type { LogRecord } from "@/lib/activity/logReader";
@@ -246,5 +246,17 @@ describe("ce que le lecteur a géré n'est pas à gérer", () => {
     const records = seance("nath", "far", IPHONE, true, [{ kind: "fallback", reason: "connexion trop lente (saccades, version allégée demandée)", _t: 1_790_000_000_000 + 3_600_000_000 }]);
     const [s] = buildSeances(records);
     expect(s.stalls).toBe(1);
+  });
+});
+
+describe("« À gérer » et le blocage isolé (14/11/2026)", () => {
+  it("un seul blocage sur un titre ne demande pas de main ; deux, ou une reconstruction, si", () => {
+    const one = diagnoseTitles(buildSeances(seance("a", "seul", IPHONE, true)))[0];
+    expect(one.failures).toBe(1);
+    expect(isLoneStall(one)).toBe(true);
+    const two = diagnoseTitles(buildSeances([...seance("a", "deux", IPHONE, true), ...seance("a", "deux", IPHONE, true)]))[0];
+    expect(isLoneStall(two)).toBe(false);
+    const rebuilt = diagnoseTitles(buildSeances(seance("a", "rec", MAC, false, [{ kind: "fallback", reason: "InvalidStateError" }])))[0];
+    expect(isLoneStall(rebuilt)).toBe(false);
   });
 });

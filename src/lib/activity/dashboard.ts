@@ -317,6 +317,8 @@ export function isAlarmingServerLine(r: LogRecord): boolean {
   // non par la pile : le lecteur des journaux retire `stack` des lignes (`HEAVY_FIELDS`), et le filtre
   // sur la pile laissait passer chacune (revue du 08/11/2026).
   if (r.scope === "books/meta") return false;
+  // La couverture d'un EPUB illisible le dit par `defect` (14/11/2026), pour la même raison.
+  if (r.defect === true) return false;
   return !String(r.stack ?? "").startsWith("EpubDefectError");
 }
 

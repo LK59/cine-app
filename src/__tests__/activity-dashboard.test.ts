@@ -70,6 +70,9 @@ describe("les blocages et le serveur", () => {
     expect(isAlarmingServerLine(line({ level: "error", scope: "books/meta", stack: "EpubDefectError: zip sans fin" }))).toBe(false);
     // Telle que le lecteur des journaux la rend : sans sa pile (08/11/2026).
     expect(isAlarmingServerLine(line({ level: "error", scope: "books/meta", message: "pas d'OPF" }))).toBe(false);
+    // La couverture d'un EPUB illisible, marquée `defect` (14/11/2026) : elle remontait dans « À gérer ».
+    expect(isAlarmingServerLine(line({ level: "error", scope: "books/cover", message: "pas d'OPF", defect: true }))).toBe(false);
+    expect(isAlarmingServerLine(line({ level: "error", scope: "books/cover", message: "Jellyfin injoignable" }))).toBe(true);
     expect(isAlarmingServerLine(line({ level: "info", scope: "admin" }))).toBe(false);
     expect(isAlarmingServerLine(line({ level: "error", scope: "cinema-movies", stack: "Error: boom" }))).toBe(true);
   });

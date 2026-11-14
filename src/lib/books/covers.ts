@@ -92,7 +92,15 @@ async function make(id: string, fileTag: string, name: string): Promise<Buffer |
     }
   } catch (error) {
     s.failedAt.set(name, Date.now());
-    if (error instanceof EpubDefectError) recordMeta(id, fileTag, null, true);
+    if (error instanceof EpubDefectError) {
+      // Un EPUB abîmé n'est pas une panne : écrit une fois, marqué `defect` pour que l'activité ne le compte
+      // pas comme une erreur à traiter (sa pile, seule à le dire, est retirée des lignes relues), et plus
+      // rien tant qu'il reste connu illisible — il remontait dans « À gérer » à chaque grille (14/11/2026).
+      const known = metaOf(id)?.defect === true;
+      recordMeta(id, fileTag, null, true);
+      if (!known) logError("books/cover", error, { itemId: id, where: "lecture de l'OPF", defect: true });
+      return null;
+    }
     logError("books/cover", error, { itemId: id, where: "lecture de l'OPF" });
     return null;
   }

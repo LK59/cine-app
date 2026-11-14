@@ -61,6 +61,7 @@ import { DiagnosisPanel } from "@/components/activity/Diagnosis";
 import { DeviceQualityList, Heatmap, AuthList } from "@/components/activity/insights";
 import type { Seance } from "@/lib/activity/seances";
 import { liveAccounts, pendingReports } from "@/lib/activity/summary";
+import { isLoneStall } from "@/lib/activity/diagnosis";
 import { ActivityLink, goTo, type ActivityView } from "@/components/activity/nav";
 import { NEWS_ADMIN_KEY, NewsTiles, type NewsAdminData } from "@/components/activity/views/ActivityNews";
 import { DOWNLOADS_ADMIN_KEY, DownloadsTiles } from "@/components/activity/views/ActivityDownloads";
@@ -292,6 +293,9 @@ function issuesOf(data: Overview, pending: ReportSummary[], t: T, now: number): 
   }
   for (const d of data.household.diagnosis) {
     if (d.lastFailure < now - 7 * DAY) continue;
+    // Un seul blocage sur ce titre cette semaine : le lecteur l'a passé, la séance a continué. Il reste dans
+    // les chiffres (taux sans incident, diagnostic du titre) mais ne demande pas de main (14/11/2026).
+    if (isLoneStall(d)) continue;
     const seance = d.viewers.flatMap((v) => v.failedSeances)[0];
     out.push({
       key: `titre:${d.key}`,
