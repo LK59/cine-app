@@ -161,6 +161,28 @@ export async function POST(req: NextRequest) {
   // Le bouton « Mesurer » du mode Immersion (`immersion/src/bench/`) : un parcours fixe de caméra par
   // préréglage, avec et sans vidéo. Une ligne par passage : cadence moyenne, 1 % le plus lent, carte
   // graphique annoncée par le navigateur, définition réellement rendue.
+  // La page de test « image dans l'image » (`/pip-test`, 16/11/2026, administrateur seul) : son environnement
+  // (mode écran d'accueil ou onglet, `pictureInPictureEnabled`), l'état des trois vidéos et son journal, bornés.
+  if (body.kind === "pip-test") {
+    if (session.role !== "admin") return new NextResponse(null, { status: 403 });
+    const env = (body.env && typeof body.env === "object" ? body.env : {}) as Record<string, unknown>;
+    const states = (body.states && typeof body.states === "object" ? body.states : {}) as Record<string, unknown>;
+    logViewportDiag(
+      {
+        user: session.jfUser ?? session.u,
+        device: requestDeviceLabel(req),
+        build: str(body.build, 40),
+        standalone: env.displayModeStandalone === true || env.navigatorStandalone === true,
+        pictureInPictureEnabled: env.pictureInPictureEnabled === true,
+        managedMediaSource: env.managedMediaSource === true,
+        userAgent: str(env.userAgent, 300),
+        states: { A: str(states.A, 300), B: str(states.B, 300), C: str(states.C, 300) },
+        log: Array.isArray(body.log) ? body.log.slice(-80).map((line) => str(line, 300)).filter((line): line is string => line !== null) : [],
+      },
+      "pip-test",
+    );
+    return new NextResponse(null, { status: 204 });
+  }
   if (body.kind === "immersion-bench") {
     const preset = typeof body.preset === "string" && IMMERSION_PRESETS.has(body.preset) ? body.preset : null;
     if (!preset) return NextResponse.json({ error: "Corps invalide" }, { status: 400 });

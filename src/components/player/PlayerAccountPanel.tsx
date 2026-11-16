@@ -4,7 +4,7 @@ import { useSignOut } from "@/components/offline/useSignOut";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet, TabletSmartphone, BookOpen, History } from "lucide-react";
+import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet, TabletSmartphone, BookOpen, History, PictureInPicture2 } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { LOCALES, LOCALE_LABELS, getDateLocale, type Locale } from "@/lib/i18n";
@@ -254,6 +254,12 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
                     <Tablet size={16} />
                     {t(ipadSimulator ? "player.account.ipadSimQuit" : "player.account.ipadSim")}
                   </button>
+                  {/* L'image dans l'image, pour un rapport à Apple (16/11/2026) : une mire lue de trois façons,
+                      dans un onglet et dans l'application posée sur l'écran d'accueil (`PipTest.tsx`). */}
+                  <a href="/pip-test" className="btn btn-ghost w-full justify-center sm:w-auto">
+                    <PictureInPicture2 size={16} />
+                    {t("player.account.openPipTest")}
+                  </a>
                 </>
               }
             />

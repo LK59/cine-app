@@ -2478,6 +2478,7 @@
       "openAnimLab": "Miscellaneous tests",
       "ipadSim": "iPad simulator",
       "ipadSimQuit": "Leave iPad simulator",
+      "openPipTest": "Picture in Picture test",
       "notifReportReply": "Reply to a report",
       "notifReportReplyHint": "When one of your reports gets a reply or changes status.",
       "notifReportNew": "New reports",
