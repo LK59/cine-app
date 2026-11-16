@@ -11049,3 +11049,64 @@ de vrais fichiers, avec deux contre-épreuves lues dans le flux (forme du `dec3`
 - **Un drapeau JOC sans son octet de complexité** ne produit aucune extension (GPAC de même) : on n'annonce pas un
   nombre qu'on n'a pas lu.
 - **L'EMDF n'est lu que par le banc** : `addbsi` est la signalisation que la norme et Dolby désignent pour le `dec3`.
+
+## 155. Le moteur de Lumen serveur : une découpe déterministe, jamais sur une clé dont on ne repart pas seul (16/11/2026)
+
+**Règle.** Le moteur (`src/lib/lumenServer/`, étape 2 de `docs/remux-serveur/`) sert un fichier en HLS fMP4 sans
+état : chaque liste, init ou segment se reconstruit depuis le fichier seul, et **toute adresse servie donne demain
+les mêmes octets** tant que `LUMEN_FORMAT_VERSION` (`format.ts`) ne bouge pas. Quatre règles, chacune dans une
+fonction :
+- **Les points de coupe** (`lumenIndex.ts`, `isCut`) : une image clé n'ouvre un segment que si un décodeur peut en
+  partir sans rien perdre — HEVC IDR ou BLA ; HEVC CRA **sans** RASL derrière elle ; H.264 IDR ; H.264 I à point de
+  reprise **sans** image de tête (une image qui la suit au décodage et s'affiche avant elle). Une clé qui ne
+  l'est pas reste *dans* un segment, où ses images de tête ont leurs références. Tout point d'index est vérifié
+  dans l'image (`isRandomAccessPoint`, `isRaslPicture`, lus sur la tête de l'image par `sketchPicture`), jamais
+  cru sur parole.
+- **La découpe** (`selectCuts` + `planSegments`) : la première clé admise au moins 4 s (`LUMEN_TARGET_SEGMENT_US`)
+  après la coupe précédente ; un segment ne descend jamais sous un groupe d'images. Déterministe : elle ne dépend
+  que des instants lus dans le fichier. Au-delà de 30 s (`LUMEN_MAX_SEGMENT_US`) ou de 160 Mo estimés, le fichier
+  est refusé (`segment-trop-long`, `segment-trop-lourd`).
+- **Le délai de présentation D** (`presentationDelayOf`) : la formule du remuxeur (`buildVideo` : délai mesuré +
+  3 images) appliquée une fois, au premier groupe du fichier, et la même pour tous les segments et toutes les pistes.
+- **L'appartenance** (`segment.ts`) : une image appartient au segment de sa clé (ordre de décodage) ; une trame
+  audio au segment qui contient son propre instant ; `mfhd` = N × 1000 + rang + 1 ; la dernière image d'un segment
+  déclare l'écart jusqu'au groupe qui ouvre le suivant (règle 7.3 d'Apple).
+
+**L'éligibilité** (`lumenEligibility`, `eligibility.ts`) rend `ok` ou une raison stable (`LumenRefusalReason`) :
+vidéo autre que H.264/HEVC, Dolby Vision 5 (aucun repli sans DV) ou 7 (couche d'amélioration), Matroska sans Cues
+vidéo, index sans clé admise, segment trop long ou trop lourd ; pour la piste audio choisie : codec non copiable
+(copiables : AAC-LC et HE-AAC explicite, AC-3 et E-AC-3 à 48 kHz, Atmos compris, FLAC — HLS Authoring
+Specification 2.2, 2.5, 2.25), AAC à PCE (§62), SBR implicite (règle 2.24), son qui commence après l'image (§148,
+`audioLeadGapSeconds`), son absent du dernier segment (une piste plus courte que le film).
+
+**Pourquoi.** Une liste sans état ne peut pas reculer au moment de servir un segment, et le serveur ne sait pas si
+un segment est demandé à la suite ou après un saut. Couper sur une CRA à RASL obligerait le décodeur d'Apple à
+écarter lui-même ces RASL après un saut — ce que Safari MSE n'a jamais fait (*Ted Lasso* S02E01, « Media failed to
+decode ») — ou, en les écartant partout, laisserait un trou de 125 ms en lecture continue (1-remuxeur.md §1.2).
+Et un D mesuré par segment (ce que fait le remuxeur à son premier groupe) désynchroniserait les segments entre eux.
+
+**Le prix, mesuré au banc du 16/11/2026** (`lumen-engine-bench.spec.ts`) : les CRA à RASL allongent des segments.
+*Ted Lasso* S02E01 (23 CRA à RASL sur 705 clés) : un segment de 51,9 s ; *2 Guns* (121 sur 955 lues) : 120 s. Les
+deux sont refusés (`segment-trop-long`) et restent au lecteur actuel. Si Safari se révèle écarter seul les RASL
+d'un segment qui commence sur leur CRA (à éprouver, avec `is_leading` dans `sample_flags`), la règle s'assouplit,
+`LUMEN_FORMAT_VERSION` monte, et ces fichiers deviennent servables.
+
+**Différent exprès du remuxeur** : aucune RASL écartée (aucun segment ne commence sur leur CRA) ; la dernière image
+d'un segment mesure son écart au groupe suivant (lu dans les en-têtes des blocs suivants) plutôt que sa propre
+durée ; la dernière série de trames audio mesure son écart au premier bloc du segment suivant ; les fragments
+suivent `planFragments` mais par une copie (`fragmentRanges`) : importer `remuxer.ts` tirerait dans le fil de
+calcul tout le lecteur du navigateur — un test compare les deux forme par forme. Les trames audio d'avant l'origine
+(l'amorce qu'une liste de montage MP4 place en temps négatif) ne sont pas écrites.
+
+**Porteurs.** `format.ts` (version, constantes, noms servis, `parseLumenPath`), `mkvBlocks.ts` (parcours par
+en-têtes, `sketchPicture`), `lumenIndex.ts`, `plan.ts`, `segment.ts`, `playlists.ts`, `eligibility.ts`,
+`indexCache.ts` (sur `globalThis`, borné en octets, clé chemin + taille + mtime + inode), `pool.ts` (file bornée en
+nombre et en mémoire, exécutants à fils ou sur place), `jobs.ts`, `worker.ts`, `engine.ts`, `paths.ts`
+(`LUMEN_PATH_MAP`, déploiement seulement). **Appelants.** Aucun en production : les routes (étape 3).
+**Tests.** `lumenServer-segments.test.ts` (chaque segment de chaque fichier synthétique produit seul puis recollé :
+chaque échantillon une fois, octets intacts, `tfdt` contigus, déterminisme), `lumenServer-index.test.ts` (lecture
+par en-têtes = `SampleReader`, tête d'image = image entière pour les trois prédicats, refus),
+`lumenServer-playlists.test.ts` (règles d'Apple une à une, découpe paresseuse = découpe sur toutes les clés,
+`fragmentRanges` = `planFragments`), `lumenServer-engine.test.ts` (cache, file, `worker_threads`, moteur), fichiers
+générés par `src/__tests__/fixtures/lumen/generate.sh`. **Banc.** `lumen-engine-bench.spec.ts` (sauté sans
+`LUMEN_FILES`) : ffmpeg décode les fenêtres recollées et lit les listes par son démultiplexeur HLS.

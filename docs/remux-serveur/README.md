@@ -1,6 +1,7 @@
 # Lumen serveur — le remux côté serveur, servi en HLS
 
-Conception du 16/11/2026. Rien n'est construit. Les quatre sections jointes détaillent chaque partie, avec
+Conception du 16/11/2026. Étape 1 (signalisation, §154) et étape 2 (le moteur, §155) faites ; rien n'est
+branché en production. Les quatre sections jointes détaillent chaque partie, avec
 références `chemin:ligne` et mesures ; ce document en tire les décisions, l'architecture et l'ordre de travail.
 
 | Section | Contenu |
@@ -127,13 +128,74 @@ environ le double au pic : file bornée, `worker_threads`, `UV_THREADPOOL_SIZE` 
 X-Ray (premier octet jusqu'à 186 ms pendant son analyse). Un déploiement en pleine séance ne casse rien si la
 version du format est stable et la découpe déterministe.
 
+## Étape 2 — le moteur (fait le 16/11/2026, DECISIONS §155)
+
+`src/lib/lumenServer/` : appelable depuis Node, sans état entre les requêtes, appelé par rien en production.
+
+| Pièce | Fichier | Ce qu'elle fait |
+|---|---|---|
+| Lecteur d'index léger | `mkvBlocks.ts`, `lumenIndex.ts` | Cues (Matroska) ou `stss`/`stts`/`ctts` (MP4), chaque clé vérifiée dans l'image par sa tête (`sketchPicture` : quelques dizaines d'octets, pas l'image) ; CRA à RASL et I H.264 à images de tête repérées |
+| Découpe | `plan.ts`, `selectCuts` | Cible 4 s, jamais sous un groupe, jamais sur une clé refusée ; ne vérifie que les candidates dont elle a besoin, par lots de 16 lectures en vol |
+| Segments | `segment.ts` | (fichier, piste, N, plan) → moof+mdat ; `strayUnits`, `isRandomAccessPoint`, `deriveDurations`/`assignDecodeTimes`, `mediaSegment` |
+| Listes | `playlists.ts` | Maître (une variante par groupe audio, attributs de `hlsSignal.ts`), média (VOD, EXT-X-MAP, mêmes EXTINF partout) |
+| Éligibilité | `eligibility.ts` | `ok` ou une raison stable |
+| Cache d'index | `indexCache.ts` | `globalThis`, 32 Mo, clé chemin + taille + mtime + inode, demandes en vol partagées |
+| Octets | `fileSource.ts`, `paths.ts` | Le fichier en lecture seule, derrière `ByteSource` ; `LUMEN_PATH_MAP` (vide = coupé) |
+| Calcul | `pool.ts`, `jobs.ts`, `worker.ts`, `engine.ts` | File bornée (3 constructions, 256 Mo estimés, 24 en attente), `worker_threads` ou sur place |
+
+**Écarts à la conception, et pourquoi.**
+- **Noms `.m4s`** (`v/12.m4s`, `a3/12.m4s`) et non `.mp4` : décision du 16/11/2026, contre la décision 4.
+- **D n'est pas dans l'adresse** : il se recalcule à l'identique depuis le fichier (premier groupe, formule du
+  remuxeur), et la version du format est portée par l'adresse. Rien à faire confiance de ce que le client renvoie.
+- **La fonction de segment n'est pas partagée avec le lecteur navigateur** : la consigne de l'étape interdisait de
+  toucher au remuxeur. Elle appelle les mêmes briques ; deux écarts voulus (§155). La mise en commun reste à faire.
+- **FLAC copié** : la spécification d'Apple le cite (2.2, 2.5, 2.25). AC-3/E-AC-3 hors 48 kHz et AAC à PCE refusés.
+- **La règle RASL coûte des fichiers** : *Ted Lasso* S02E01 (segment de 51,9 s) et *2 Guns* (120 s) sont refusés
+  `segment-trop-long`. Le moteur les traite pourtant sans faute (banc ci-dessous) : c'est Safari qui décidera.
+- **L'index à froid coûte 3 à 14 s** sur le disque partagé (une lecture par point vérifié, plus trois derrière une
+  CRA). L'étape 3 doit le lancer à l'appui sur Lire, ou le garder sur disque (`DATA_DIR`, comme `book-index.json`).
+- **Le fil de calcul est empaqueté à part** : Next n'émet pas d'entrée `worker_threads` côté serveur, et le code
+  TypeScript aux alias `@/` ne se charge pas tel quel. `tools/lumen-worker/build.mjs` (rolldown, déjà installé par
+  vite) en fait un module ESM de 184 Ko qui tourne dans Node nu — c'est lui que le banc a utilisé. L'étape 3
+  l'appellera dans le Dockerfile et passera son chemin à `workerExecutor`.
+
+**Banc** (`lumen-engine-bench.spec.ts`, 16/11/2026, `--cpus 4 -m 3g`, X-Ray en pause) : deux fenêtres (90 s du
+début, 30 s à 60 % du film) et le plus long segment avec ses voisins, vidéo et chaque piste servie, chaque segment
+produit seul par un vrai `worker_threads`. Partout : **0 erreur de décodage** (ffmpeg 8.1.3, décodage complet),
+**0 trou d'image, 0 discontinuité audio, 0 raccord `tfdt`**, durée des listes lue par le démultiplexeur HLS de
+ffmpeg égale à la somme des EXTINF, durée produite de chaque segment vidéo égale à son EXTINF (écart 0 ms ; son :
+−27 à +28 ms, moins d'une trame).
+
+| Fichier | Index froid | Segments (méd./max) | Verdict | Vidéo ms méd./max | Lu max | Pic RSS max |
+|---|---|---|---|---|---|---|
+| *Jane the Virgin* S01E01, H.264 + 2 AAC | 5,6 s¹ | 384 (6 / 6 s) | ok | 15 / 36 | 5,4 Mo | 20 Mo |
+| *Forsaken*, MP4 HEVC + E-AC-3 5.1 | 10,0 s¹ | 1 120 (5 / 9 s) | ok | 5 / 86 | 6,7 Mo | 22 Mo |
+| *The Exorcist*, 4K DV 8.1, GOP 10 s, Atmos | 3,1 s | 860 (9,3 / 14,4 s) | ok (piste 5 refusée : finit 6 s avant l'image) | 43 / 172 | 39 Mo | 100 Mo |
+| *Ted Lasso* S02E01, 4K DV 8.1, Atmos ×3, CRA+RASL | 6,1 s | 322 (5,5 / 51,9 s) | `segment-trop-long` | 39 / 349 | 52 Mo | 116 Mo |
+| *2 Guns*, 4K DV 8.1, E-AC-3 7.1 (cœur AC-3) | 13,7 s | 834 (6,1 / 120 s) | `segment-trop-long` | 49 / 265 | 48 Mo | 86 Mo |
+
+¹ avant la vérification paresseuse (tous les points lus, un à la fois) ; à chaud ensuite : 103 et 258 ms.
+Signalisation vue au banc : `CHANNELS="16/JOC"` pour l'Atmos, `"8"` pour l'E-AC-3 7.1, `SUPPLEMENTAL-CODECS=
+"dvh1.08.06/db1p"` + `VIDEO-RANGE=PQ` pour le DV 8.1. Sorties gardées hors du dépôt.
+
+**Validation des listes.** `mediastreamvalidator` n'existe que sur macOS, et aucun équivalent Linux ne lit le HLS
+fMP4 (muxinc/hlstools vise le MPEG-TS). Les règles d'Apple sont donc vérifiées une à une par
+`lumenServer-playlists.test.ts` (1.32, 7.7, 8.1, 8.2, 8.10, 8.20, 9.1, 9.2, 9.11, 9.14, 9.15, 9.16), et le banc
+fait lire listes et maître par le démultiplexeur HLS de ffmpeg. À repasser par `mediastreamvalidator` sur un Mac.
+
+**Reste incertain avant Safari** (en plus des inconnues ci-dessous) : une CRA sans RASL et une I H.264 à point de
+reprise en tête de segment (Apple écrit « MUST start with an IDR », 7.4) ; des segments de 14 s et un
+TARGETDURATION de 15 ; le BANDWIDTH Matroska, majoré (toutes les pistes audio comptées) ; le NAME et le DEFAULT de
+groupes audio de codecs différents (une variante par groupe).
+
 ## Ordre de travail
 
 1. **Preuve sur appareil** : une instance jetable sert la liste et les segments d'un fichier copiable ; on l'ouvre
    dans Safari sur iPhone et Mac. Mesures : lancement à froid et en reprise, sauts, écran verrouillé, image dans
    l'image dans un onglet, comparés à Lumen dans la page. On continue ou on s'arrête là.
 2. **Socle** : fonction de segment partagée avec le lecteur navigateur (empreintes inchangées), lecteur d'index
-   léger, cache d'index, correctif `dec3()`, signalisation Dolby Vision.
+   léger, cache d'index, correctif `dec3()`, signalisation Dolby Vision. **Fait** (§154, §155), sauf le partage
+   de la fonction de segment avec le lecteur navigateur (voir « Étape 2 »).
 3. **Routes et sécurité** : `/api/lumen/…`, jeton à portée `lumen`, `assertVisible`, `shareGate`, noms `.mp4`,
    workers.
 4. **Client** : option du Compte, route `"lumen"`, `LumenServerHost`, repli, journal, page d'activité.
