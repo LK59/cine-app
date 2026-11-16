@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "ws": "8.22.2"
+    "ws": "8.23.0"
   },
   "devDependencies": {
     "@types/node": "26.6.6",
