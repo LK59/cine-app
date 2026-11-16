@@ -145,6 +145,17 @@ version du format est stable et la découpe déterministe.
    quand les segments partent plus lentement. Images clés forcées aux frontières des segments remuxés pour que les
    variantes soient alignées ; son commun à toutes. Le flux n'est jamais remplacé sous la même liste : un en-tête qui
    change sans être annoncé est une erreur de décodage. Remplacerait à terme la bascule avec coupure de la §78.
+   **Préchauffage piloté par la marge du tampon** : avec ~30 s d'avance, un débit mesuré sous le seuil *de façon
+   durable* (fenêtre de tolérance et hystérésis : une micro-coupure ou une baisse courte ne déclenche rien) lance la
+   fabrication de la variante ; dès que son premier segment est prêt, la bascule est faite à une frontière, et le
+   tampon se remplit avec la version réduite. Une dernière mesure juste avant : si le débit est revenu, on reste sur
+   l'originale ; on y remonte dès qu'il le permet. Dans Safari, la bascule reste la décision du lecteur (aucune API) :
+   le serveur la rend possible et immédiate ; dans l'application native, `preferredPeakBitRate` la pilote exactement.
+   **Options nouvelles, coupées par défaut** (toutes les instances n'ont pas de GPU) : le transcodage passe par
+   Laterna lui-même, avec `/dev/dri` monté dans le conteneur et un ffmpeg VAAPI/QSV ; capacité détectée au démarrage et
+   montrée dans la Configuration. Le même moteur ouvre ensuite d'autres variantes : HDR → SDR pour un écran SDR,
+   sous-titres image incrustés (PGS sans le lecteur Jellyfin), une source que l'appareil ne décode pas (AV1 sur un
+   ancien iPhone), un mode économie de données, des téléchargements hors ligne allégés.
 8. **Application iOS native** : coquille, AVPlayer sur ces mêmes listes, image dans l'image, arrière-plan.
 
 Les étapes 2 (fonction de segment) et 6 (jointures du son) sont les plus délicates : une erreur ne se voit qu'à la
