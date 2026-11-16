@@ -14,6 +14,7 @@ import { FIXTURES, parseFragments } from "./lumenServer-helpers";
 function fakeIndex(identity: FileIdentity, segments = 3): LumenIndex {
   return {
     format: 1,
+    cut: "idr",
     identity,
     container: "matroska",
     durationUs: 1,

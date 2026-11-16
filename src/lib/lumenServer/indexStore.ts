@@ -11,8 +11,9 @@
 // attendait autant sa liste suivante.
 //
 // - **Clé** : chemin local + taille + mtime + inode (`identityKey`), la version du format produit
-//   (`LUMEN_FORMAT_VERSION`) et celle de ce fichier (`STORE_VERSION`), condensées en SHA-256 pour le
-//   nom. Le fichier relu porte sa clé entière, comparée à la lecture : une collision de nom ou un
+//   (`lumenFormatTag` : `LUMEN_FORMAT_VERSION`, et pour une découpe expérimentale sa lettre et sa
+//   révision, §157) et celle de ce fichier (`STORE_VERSION`), condensées en SHA-256 pour le nom. Sous la
+//   découpe `idr`, la clé est exactement celle d'avant l'étape 3b : les index gardés en production valent. Le fichier relu porte sa clé entière, comparée à la lecture : une collision de nom ou un
 //   fichier d'une autre version n'est jamais servi, il est effacé.
 // - **Forme** : `v8.serialize` — le clonage structuré que l'index traverse déjà entre fils
 //   (`worker_threads`), `Uint8Array` des init segments compris. Rien à écrire à la main, et un champ
@@ -32,7 +33,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rename, stat, unlink, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deserialize, serialize } from "node:v8";
-import { identityKey, LUMEN_FORMAT_VERSION, type FileIdentity, type LumenIndex } from "./format";
+import { identityKey, LUMEN_FORMAT_VERSION, lumenFormatTag, type FileIdentity, type LumenCutMode, type LumenIndex } from "./format";
 
 /**
  * La version de ce fichier sur le disque. À monter si l'enveloppe change (ce qui entoure l'index) ;
@@ -50,7 +51,8 @@ interface Envelope {
 }
 
 export interface LumenIndexStore {
-  get(identity: FileIdentity, targetUs?: number): Promise<LumenIndex | null>;
+  get(identity: FileIdentity, targetUs?: number, cut?: LumenCutMode): Promise<LumenIndex | null>;
+  /** Rangé sous la découpe que l'index porte (`index.cut`). */
   put(index: LumenIndex, targetUs?: number): Promise<void>;
 }
 
@@ -59,8 +61,8 @@ export interface IndexStoreOptions {
 }
 
 /** La clé complète d'un index : ce qui doit être identique pour qu'un index gardé vaille. */
-export function storeKey(identity: FileIdentity, targetUs?: number): string {
-  return `${STORE_VERSION}|${LUMEN_FORMAT_VERSION}|${targetUs ?? "-"}|${identityKey(identity)}`;
+export function storeKey(identity: FileIdentity, targetUs?: number, cut: LumenCutMode = "idr"): string {
+  return `${STORE_VERSION}|${lumenFormatTag(cut)}|${targetUs ?? "-"}|${identityKey(identity)}`;
 }
 
 function fileNameOf(key: string): string {
@@ -97,8 +99,8 @@ export function lumenIndexStore(dir: string, options: IndexStoreOptions = {}): L
   };
 
   return {
-    async get(identity, targetUs) {
-      const key = storeKey(identity, targetUs);
+    async get(identity, targetUs, cut = "idr") {
+      const key = storeKey(identity, targetUs, cut);
       const path = join(dir, fileNameOf(key));
       let raw: Buffer;
       try {
@@ -110,6 +112,11 @@ export function lumenIndexStore(dir: string, options: IndexStoreOptions = {}): L
         const envelope = deserialize(raw) as Envelope;
         if (envelope?.store !== STORE_VERSION || envelope.format !== LUMEN_FORMAT_VERSION || envelope.key !== key) throw new Error("autre version");
         if (identityKey(envelope.index.identity) !== identityKey(identity)) throw new Error("autre fichier");
+        // Un index écrit avant l'étape 3b n'a pas de champ `cut` : sa clé est celle de `idr` (la seule
+        // découpe d'alors), c'est donc ce qu'il est. Sans ceci, la liste le lirait comme une découpe
+        // expérimentale et retirerait EXT-X-INDEPENDENT-SEGMENTS des fichiers déjà servis.
+        envelope.index.cut ??= "idr";
+        if (envelope.index.cut !== cut) throw new Error("autre découpe");
         // La date du fichier sert d'ordre d'éviction : lu maintenant, il part en dernier.
         const now = new Date();
         await utimes(path, now, now).catch(() => {});
@@ -122,7 +129,7 @@ export function lumenIndexStore(dir: string, options: IndexStoreOptions = {}): L
     },
 
     async put(index, targetUs) {
-      const key = storeKey(index.identity, targetUs);
+      const key = storeKey(index.identity, targetUs, index.cut ?? "idr");
       const envelope: Envelope = { store: STORE_VERSION, format: LUMEN_FORMAT_VERSION, key, index };
       const bytes = serialize(envelope);
       // Un index plus lourd que tout le cache n'y entre pas : il en chasserait tout le reste.

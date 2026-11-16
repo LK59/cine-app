@@ -6,7 +6,7 @@
 import { join } from "node:path";
 import { FileByteSource } from "@/lib/lumenServer/fileSource";
 import { buildLumenIndex } from "@/lib/lumenServer/lumenIndex";
-import type { LumenIndex } from "@/lib/lumenServer/format";
+import type { LumenCutMode, LumenIndex } from "@/lib/lumenServer/format";
 
 export const FIXTURES = "src/__tests__/fixtures/lumen";
 
@@ -98,8 +98,8 @@ export function endDecode(fragments: ParsedFragment[]): number {
 }
 
 /** L'index d'un fichier des fixtures, construit sur le fil du test. */
-export async function fixtureIndex(name: string, targetUs?: number): Promise<{ index: LumenIndex; source: FileByteSource }> {
+export async function fixtureIndex(name: string, targetUs?: number, cut?: LumenCutMode): Promise<{ index: LumenIndex; source: FileByteSource }> {
   const source = await FileByteSource.open(join(FIXTURES, name), { chunkSize: 16 * 1024, chunks: 64 });
-  const index = await buildLumenIndex(source, source.identity, { targetUs });
+  const index = await buildLumenIndex(source, source.identity, { targetUs, ...(cut ? { cut } : {}) });
   return { index, source };
 }

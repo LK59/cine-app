@@ -15,8 +15,15 @@
 // égarés rendus à leurs images), `isRandomAccessPoint` (la clé, demandée à l'image et non au
 // conteneur), `deriveDurations` + `assignDecodeTimes` (ordre de décodage), `mediaSegment` (muxer).
 // Deux écarts au remuxeur, voulus et propres au HLS :
-// - **aucune RASL n'est écartée** : un segment ne commence jamais sur une CRA qui en a (`lumenIndex.ts`) ;
-//   à l'intérieur d'un segment, leurs références sont là ;
+// - **aucune RASL n'est écartée** : sous la découpe `idr`, un segment ne commence jamais sur une CRA qui
+//   en a (`lumenIndex.ts`) et, à l'intérieur d'un segment, leurs références sont là ; sous les découpes
+//   expérimentales `cra`/`cra-leading` (§157), un segment peut commencer sur une telle CRA et ses RASL y
+//   restent aussi — en lecture continue, leurs références sont dans le segment d'avant, et après un saut
+//   c'est au décodeur de les jeter. `cra-leading` déclare chaque image (`markLeading`, `leadingOf`) : RASL
+//   `is_leading` = 1, RADL 3, toute autre non-clé 2 — de quoi jeter les RASL sans lire le flux. Le reste du
+//   code est le même : un groupe CRA + RASL en tête de segment est un groupe comme ceux qu'un segment
+//   `idr` contient déjà en son milieu (ancré sur sa plus petite présentation, celle de la première RASL,
+//   que le segment précédent prend pour fin — `nextGroupUs`) ;
 // - **la dernière image d'un groupe déclare l'écart au groupe suivant**, y compris au-delà de la fin du
 //   segment (lu dans l'index ou les en-têtes des blocs suivants) : la règle 7.3 d'Apple veut que le
 //   `tfdt` d'un segment prolonge exactement le précédent.
@@ -59,6 +66,8 @@ export interface SegmentSpec {
   limitAt: number | null;
   delayUs: number;
   frameUs: number;
+  /** Découpe `cra-leading` : chaque non-clé porte `is_leading` (RASL 1, RADL 3, sinon 2). Absent : les octets d'avant. */
+  markLeading?: boolean;
   video?: { number: number; codecId: string; lengthSize: number };
   audio?: { number: number; codecId: string; sampleRate: number };
 }
@@ -89,6 +98,7 @@ export function segmentSpec(index: LumenIndex, rendition: LumenRendition, n: num
     limitAt: index.container === "matroska" ? (index.segments[n + 2]?.at ?? null) : null,
     delayUs: index.delayUs,
     frameUs: index.frameUs,
+    ...(index.cut === "cra-leading" ? { markLeading: true } : {}),
   };
   if (rendition.kind === "video") {
     if (!index.video) throw new LumenError("piste-inconnue", "Pas de vidéo.");
@@ -240,13 +250,15 @@ async function buildVideo(source: ByteSource, file: MatroskaFile, spec: SegmentS
     const samples: MuxSample[] = group.map((sample, i) => {
       const offset = ordered.samples[i].compositionOffset + spec.delayUs;
       if (offset < 0) clamped += 1;
-      return {
+      const muxed: MuxSample = {
         data: sample.data,
         decodeTime: ordered.samples[i].decode,
         duration: ordered.samples[i].duration,
         compositionOffset: Math.max(0, offset),
         isKeyframe: i === 0,
       };
+      if (spec.markLeading && i > 0) muxed.isLeading = leadingOf(sample.data, video.codecId, video.lengthSize);
+      return muxed;
     });
     if (g === 0) firstDecodeUs = samples[0].decodeTime;
     // Où le décodage du groupe suivant commence : dans ce segment, sa plus petite présentation ; après
@@ -266,6 +278,28 @@ async function buildVideo(source: ByteSource, file: MatroskaFile, spec: SegmentS
     });
   });
   return { bytes: joinBytes(parts), facts: { samples: pictures.length, groups: groups.length, fragments, clamped, firstDecodeUs, endDecodeUs } };
+}
+
+/**
+ * `is_leading` d'une image non clé (ISO/IEC 14496-12 §8.8.3.1), lu dans le type NAL de sa tranche :
+ * RASL (8, 9) → 1, image de tête qui dépend d'avant sa clé et ne se décode pas après un accès aléatoire ;
+ * RADL (6, 7) → 3, image de tête décodable ; toute autre → 2, pas une image de tête. H.264 : rien dans le
+ * flux ne nomme une image de tête (et la découpe n'ouvre jamais un segment sur une clé qui en a) → 2.
+ * Les clés gardent leurs drapeaux d'avant (`is_leading` 0) : seules les images qu'un lecteur pourrait jeter
+ * ont besoin d'être nommées, et une clé changée de forme changerait une seconde chose à la fois.
+ */
+export function leadingOf(data: Uint8Array, codecId: string, lengthSize: number): 1 | 2 | 3 {
+  if (codecId !== "V_MPEGH/ISO/HEVC") return 2;
+  for (let at = 0; at + lengthSize + 1 <= data.byteLength; ) {
+    let length = 0;
+    for (let i = 0; i < lengthSize; i++) length = length * 256 + data[at + i];
+    if (length <= 0 || at + lengthSize + length > data.byteLength) return 2;
+    const type = (data[at + lengthSize] >> 1) & 0x3f;
+    // Le premier NAL sous 32 est la tranche : c'est lui qui dit ce qu'est l'image (comme `isRaslPicture`).
+    if (type <= 31) return type === 8 || type === 9 ? 1 : type === 6 || type === 7 ? 3 : 2;
+    at += lengthSize + length;
+  }
+  return 2;
 }
 
 // ── Son ──────────────────────────────────────────────────────────────────────

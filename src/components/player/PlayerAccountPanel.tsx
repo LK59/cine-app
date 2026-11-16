@@ -4,7 +4,7 @@ import { useSignOut } from "@/components/offline/useSignOut";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet, TabletSmartphone, BookOpen, History, PictureInPicture2 } from "lucide-react";
+import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet, TabletSmartphone, BookOpen, History, PictureInPicture2, Gauge } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { LOCALES, LOCALE_LABELS, getDateLocale, type Locale } from "@/lib/i18n";
@@ -259,6 +259,12 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
                   <a href="/pip-test" className="btn btn-ghost w-full justify-center sm:w-auto">
                     <PictureInPicture2 size={16} />
                     {t("player.account.openPipTest")}
+                  </a>
+                  {/* Le banc de Lumen serveur (étape 3b, 16/11/2026) : le HLS natif de Lumen serveur sur l'appareil,
+                      chaque découpe (`idr`, `cra`) mesurée — première image, sauts, pistes audio (`LumenTest.tsx`). */}
+                  <a href="/lumen-test" className="btn btn-ghost w-full justify-center sm:w-auto">
+                    <Gauge size={16} />
+                    {t("player.account.openLumenTest")}
                   </a>
                 </>
               }

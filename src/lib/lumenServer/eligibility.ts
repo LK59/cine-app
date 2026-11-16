@@ -10,6 +10,15 @@
 
 import type { LumenIndex, LumenRefusal } from "./format";
 
+/**
+ * La piste qu'ouvrirait la liste quand la page n'en demande pas : celle que le fichier marque, sinon la
+ * première. Ici et non dans `service.ts` : le banc du recensement (`lumen-census-bench.spec.ts`) juge
+ * l'éligibilité exactement comme la route, sans tirer Next et la base dans Node nu.
+ */
+export function defaultAudioTrack(index: LumenIndex): number | null {
+  return (index.audio.find((a) => a.isDefault) ?? index.audio[0])?.number ?? null;
+}
+
 export type LumenEligibility = { ok: true } | ({ ok: false } & LumenRefusal);
 
 /**

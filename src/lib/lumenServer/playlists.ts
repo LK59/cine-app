@@ -14,7 +14,11 @@
 //   (9.16), SUPPLEMENTAL-CODECS pour un Dolby Vision 8.x — tirés de `hlsSignal.ts`, donc de l'init ;
 // - LANGUAGE sur chaque rendu (8.10), NAME par `trackLabel.ts` (l'étiquette des deux lecteurs),
 //   CHANNELS (« 16/JOC » pour un Atmos, 2.8), un seul DEFAULT=YES par groupe, AUTOSELECT=YES ;
-// - EXT-X-INDEPENDENT-SEGMENTS (9.11) : chaque segment commence sur une image d'où l'on décode seul.
+// - EXT-X-INDEPENDENT-SEGMENTS (9.11) : chaque segment commence sur une image d'où l'on décode seul —
+//   sous la découpe `idr` seulement. Sous `cra`/`cra-leading` (§157), un segment qui s'ouvre sur une CRA porte
+//   des RASL qui se réfèrent au segment d'avant : la balise mentirait (rfc8216bis §4.4.2.1, « all media
+//   samples in a Media Segment can be decoded without information from other segments »), elle n'est pas
+//   écrite. Ce que Safari en fait est une des choses que la page `/lumen-test` mesure.
 // Pas d'HDCP-LEVEL (13.5/13.6 sont des « SHOULD » pour du contenu protégé) : l'annoncer ferait refuser
 // la variante à un écran sans HDCP, pour un flux qui n'est pas chiffré.
 //
@@ -80,7 +84,7 @@ export function masterPlaylist(index: LumenIndex, options: MasterOptions): strin
   const chosen = audio.find((a) => a.number === options.audioTrack) ?? audio.find((a) => a.isDefault) ?? audio[0];
   const order = [...groups.keys()].sort((x, y) => Number(groups.get(y)!.includes(chosen!)) - Number(groups.get(x)!.includes(chosen!)));
 
-  const lines = ["#EXTM3U", "#EXT-X-INDEPENDENT-SEGMENTS"];
+  const lines = ["#EXTM3U", ...independentSegments(index)];
   for (const id of order) {
     const members = groups.get(id)!;
     // Un seul DEFAULT par groupe : la piste choisie, sinon celle que le fichier marque, sinon la première.
@@ -119,6 +123,11 @@ export function masterPlaylist(index: LumenIndex, options: MasterOptions): strin
   return `${lines.join("\n")}\n`;
 }
 
+/** EXT-X-INDEPENDENT-SEGMENTS, sauf sous une découpe qui ouvre des segments sur des CRA à RASL. */
+function independentSegments(index: LumenIndex): string[] {
+  return index.cut === "idr" ? ["#EXT-X-INDEPENDENT-SEGMENTS"] : [];
+}
+
 /** Une durée en secondes, au microseconde, sans zéros inutiles : `4.004`, `10.427083`. */
 function seconds(us: number): string {
   return (us / 1e6).toFixed(6).replace(/\.?0+$/, "") || "0";
@@ -133,7 +142,7 @@ export function mediaPlaylist(index: LumenIndex, rendition: LumenRendition): str
     `#EXT-X-TARGETDURATION:${targetDurationOf(index.segments)}`,
     "#EXT-X-MEDIA-SEQUENCE:0",
     "#EXT-X-PLAYLIST-TYPE:VOD",
-    "#EXT-X-INDEPENDENT-SEGMENTS",
+    ...independentSegments(index),
     `#EXT-X-MAP:URI=${quoted(initName(rendition))}`,
   ];
   index.segments.forEach((s, n) => {

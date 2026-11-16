@@ -423,6 +423,52 @@ describe("le cache disque des index", () => {
   });
 });
 
+describe("la découpe expérimentale, choisie par l'adresse (§157)", () => {
+  it("`?cut=cra` : sa propre version (`1c1-`), ses propres segments, la règle intacte à côté", async () => {
+    const idr = await okVerdict(CRA, "?s=lecture-idr");
+    const cra = (await okVerdict(CRA, "?s=lecture-cra&cut=cra")) as Awaited<ReturnType<typeof okVerdict>> & { cutFacts: { cut: string; craRasl: number; longestS: number } };
+    expect(idr.version).toMatch(/^1-[0-9a-f]{12}$/);
+    expect(cra.version).toMatch(/^1c1-[0-9a-f]{12}$/);
+    // La même empreinte de fichier : seule la découpe les sépare.
+    expect(cra.version.slice(4)).toBe(idr.version.slice(2));
+    expect(cra.cutFacts.cut).toBe("cra");
+    expect(cra.cutFacts.craRasl).toBeGreaterThan(0);
+
+    const masterCra = await (await get(cra.master)).text();
+    expect(masterCra).not.toContain("INDEPENDENT-SEGMENTS");
+    const masterIdr = await (await get(idr.master)).text();
+    expect(masterIdr).toContain("#EXT-X-INDEPENDENT-SEGMENTS");
+    const listCra = await (await get(`${baseOf(cra.master)}v.m3u8`)).text();
+    const listIdr = await (await get(`${baseOf(idr.master)}v.m3u8`)).text();
+    // Le fichier de 6 s : un segment sous la règle (une seule IDR), deux en coupant sur la CRA de 4 s.
+    expect(listIdr.match(/\.m4s/g)).toHaveLength(1);
+    expect(listCra.match(/\.m4s/g)).toHaveLength(2);
+    const seg = await get(`${baseOf(cra.master)}v/1.m4s`);
+    expect(seg.status).toBe(200);
+    expect(parseFragments(new Uint8Array(await seg.arrayBuffer()))[0].samples[0].flags).toBe(0x02000000);
+    // Le segment 1 n'existe pas sous la règle : 410, jamais les octets de l'autre découpe.
+    expect((await get(`${baseOf(idr.master)}v/1.m4s`)).status).toBe(410);
+  });
+
+  it("`prepare` porte la découpe ; une découpe inconnue répond 410, jamais 400", async () => {
+    const res = await prepare(CRA, { s: "lecture-prep", cut: "cra-leading" });
+    expect([200, 202]).toContain(res.status);
+    const again = await okVerdict(CRA, "?s=lecture-prep&cut=cra-leading");
+    expect(again.version).toMatch(/^1l1-/);
+    expect((await eligibility(CRA, "?cut=tout")).status).toBe(410);
+    expect((await prepare(CRA, { cut: "tout" })).status).toBe(410);
+    expect((await prepare(CRA, { cut: 3 })).status).toBe(410);
+  });
+
+  it("une version d'une découpe ou d'une révision inconnue : 410 « autre version du format »", async () => {
+    const idr = await okVerdict(CRA, "?s=lecture-x");
+    const hash = idr.version.slice(2);
+    const res = await get(`/api/lumen/${CRA}/1z9-${hash}/lecture-x/master.m3u8`);
+    expect(res.status).toBe(410);
+    expect((await res.json()).code).toBe("lumen-perime");
+  });
+});
+
 describe("la garde de la suite", () => {
   // Une route de plus sous /api/lumen qui oublierait le contrôle d'accès serait ouverte à tout compte
   // muni d'une session dès que le motif du proxy changerait — et à rien d'autre : chaque route le pose.
@@ -439,7 +485,7 @@ describe("la garde de la suite", () => {
     const serve = readFileSync("src/lib/lumenServer/serve.ts", "utf8");
     // L'accès est vérifié avant la moindre lecture de fichier ou d'index.
     expect(serve.indexOf("lumenAccess(req, itemId)")).toBeGreaterThan(0);
-    expect(serve.indexOf("lumenAccess(req, itemId)")).toBeLessThan(serve.indexOf("lumenIndexOf(itemId)"));
+    expect(serve.indexOf("lumenAccess(req, itemId)")).toBeLessThan(serve.indexOf("lumenIndexOf(itemId"));
     expect(readFileSync("src/proxy.ts", "utf8")).toContain("/^\\/api\\/lumen(\\/|$)/");
   });
 });

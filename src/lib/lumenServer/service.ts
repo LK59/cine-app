@@ -35,8 +35,8 @@ import { lumenEngine, type LumenEngine } from "./engine";
 import { inlineExecutor, workerExecutor } from "./pool";
 import { lumenIndexStore } from "./indexStore";
 import { lumenLocalPath } from "./paths";
-import { lumenEligibility } from "./eligibility";
-import { identityKey, LUMEN_FORMAT_VERSION, LumenError, type LumenIndex, type LumenRefusal, type LumenRendition, renditionTag } from "./format";
+import { defaultAudioTrack, lumenEligibility } from "./eligibility";
+import { identityKey, LumenError, lumenFormatTag, type LumenCutMode, type LumenIndex, type LumenRefusal, type LumenRendition, renditionTag } from "./format";
 import { sharedSegment, type BuiltSegment } from "./segmentCache";
 import { targetDurationOf } from "./plan";
 
@@ -172,15 +172,16 @@ export function forgetLumenFiles(): void {
 
 /**
  * L'index de l'élément : son fichier, puis l'index gardé ou construit. Un fichier disparu (renommé
- * par Radarr/Sonarr : `ENOENT` sur l'ancien chemin) fait relire Jellyfin une fois.
+ * par Radarr/Sonarr : `ENOENT` sur l'ancien chemin) fait relire Jellyfin une fois. `cut` : la découpe
+ * (`idr` sauf essai de la page `/lumen-test`, §157) — un index à part par découpe.
  */
-export async function lumenIndexOf(itemId: string): Promise<{ index: LumenIndex } | { refusal: LumenRefusal }> {
+export async function lumenIndexOf(itemId: string, cut: LumenCutMode = "idr"): Promise<{ index: LumenIndex } | { refusal: LumenRefusal }> {
   const engine = lumenServerEngine();
   let file = await lumenFileOf(itemId);
   for (let attempt = 0; ; attempt++) {
     if ("refusal" in file) return file;
     try {
-      return { index: await engine.index(file.path) };
+      return { index: await engine.index(file.path, undefined, cut) };
     } catch (error) {
       if (attempt === 0 && (error as NodeJS.ErrnoException)?.code === "ENOENT") {
         file = await lumenFileOf(itemId, { fresh: true });
@@ -194,18 +195,26 @@ export async function lumenIndexOf(itemId: string): Promise<{ index: LumenIndex 
 // ── La version portée par l'adresse ──────────────────────────────────────────
 
 /**
- * `{format}-{empreinte}` : la version du format produit (`LUMEN_FORMAT_VERSION`) et douze chiffres
- * hexadécimaux du SHA-256 de l'identité du fichier (chemin local, taille, mtime, inode). Un segment
+ * `{format}-{empreinte}` : la version du format produit (`lumenFormatTag` : `LUMEN_FORMAT_VERSION`, suivie
+ * pour une découpe expérimentale de sa lettre et de sa révision — `1-…`, `1c1-…`, `1l1-…`, §157) et douze
+ * chiffres hexadécimaux du SHA-256 de l'identité du fichier (chemin local, taille, mtime, inode). La
+ * découpe est donc dans l'adresse : les URI relatives des listes en héritent, et la route sait quel index
+ * lire sans rien d'autre. Sous `idr`, l'adresse est exactement celle d'avant l'étape 3b. Un segment
  * demandé pour une autre version — fichier remplacé, déploiement qui change le format — reçoit un 410
  * net, jamais les octets d'un autre fichier recollés sur l'init de l'ancien (2-serveur.md §2.1, §2.5).
  * Le chemin local n'y paraît pas en clair : l'adresse finit dans les journaux du relais inverse.
  */
 export function lumenVersionOf(index: LumenIndex): string {
-  return `${LUMEN_FORMAT_VERSION}-${createHash("sha256").update(identityKey(index.identity)).digest("hex").slice(0, 12)}`;
+  return `${lumenFormatTag(index.cut ?? "idr")}-${createHash("sha256").update(identityKey(index.identity)).digest("hex").slice(0, 12)}`;
 }
 
 export function isLumenVersion(value: string): boolean {
-  return /^[1-9]\d{0,3}-[0-9a-f]{12}$/.test(value);
+  return /^[1-9]\d{0,3}(?:[a-z][1-9]\d{0,2})?-[0-9a-f]{12}$/.test(value);
+}
+
+/** La version de format d'une adresse (`1`, `1c1`…) : ce qui précède l'empreinte. */
+export function formatTagOf(version: string): string {
+  return version.slice(0, version.indexOf("-"));
 }
 
 // ── Les réponses ─────────────────────────────────────────────────────────────
@@ -323,9 +332,20 @@ export interface LumenAudioFacts {
   refusal: string | null;
 }
 
+/** Ce que la découpe a donné : la page `/lumen-test` le montre, pour juger `idr` contre `cra` sur pièce. */
+export interface LumenCutFacts {
+  cut: LumenCutMode;
+  /** Le plus long segment, en secondes. */
+  longestS: number;
+  /** Clés vérifiées, CRA à RASL parmi elles, coupes admises. */
+  verified: number;
+  craRasl: number;
+  cuts: number;
+}
+
 export type LumenVerdict =
-  | { ok: true; version: string; master: string; audioTrack: number | null; audio: LumenAudioFacts[]; segments: number; durationS: number; targetS: number }
-  | { ok: false; reason: string; detail?: string; audioTrack: number | null; audio: LumenAudioFacts[]; version?: string }
+  | { ok: true; version: string; master: string; audioTrack: number | null; audio: LumenAudioFacts[]; segments: number; durationS: number; targetS: number; cutFacts: LumenCutFacts }
+  | { ok: false; reason: string; detail?: string; audioTrack: number | null; audio: LumenAudioFacts[]; version?: string; cutFacts?: LumenCutFacts }
   /** L'index se construit encore (2 à 25 s à froid) : redemander, la construction continue sans attendre. */
   | { ok: false; pending: true; reason: "index-en-cours"; audioTrack: number | null; audio: [] };
 
@@ -343,10 +363,7 @@ function audioFacts(index: LumenIndex): LumenAudioFacts[] {
   }));
 }
 
-/** La piste qu'ouvrirait la liste quand la page n'en demande pas : celle que le fichier marque, sinon la première. */
-export function defaultAudioTrack(index: LumenIndex): number | null {
-  return (index.audio.find((a) => a.isDefault) ?? index.audio[0])?.number ?? null;
-}
+export { defaultAudioTrack };
 
 /** L'adresse de la liste maître d'une lecture. `s` dans le chemin : les URI relatives des listes en héritent. */
 export function masterAddress(itemId: string, version: string, s: string, audioTrack: number | null): string {
@@ -358,8 +375,8 @@ export function masterAddress(itemId: string, version: string, s: string, audioT
  * attendre un index qui se construit — au-delà, `pending`, la construction continue (et son échec
  * éventuel va au journal). L'étape 4 appelle `prepare` à l'appui sur Lire, puis décide avec ceci.
  */
-export async function lumenVerdict(itemId: string, options: { audio: number | null | undefined; s: string; waitMs: number }): Promise<LumenVerdict> {
-  const building = lumenIndexOf(itemId);
+export async function lumenVerdict(itemId: string, options: { audio: number | null | undefined; s: string; waitMs: number; cut?: LumenCutMode }): Promise<LumenVerdict> {
+  const building = lumenIndexOf(itemId, options.cut ?? "idr");
   const PENDING = Symbol("pending");
   let timer: ReturnType<typeof setTimeout> | undefined;
   const raced = await Promise.race([
@@ -380,7 +397,14 @@ export async function lumenVerdict(itemId: string, options: { audio: number | nu
   const verdict = lumenEligibility(index, audioTrack);
   const audio = audioFacts(index);
   const version = lumenVersionOf(index);
-  if (!verdict.ok) return { ok: false, reason: verdict.reason, ...(verdict.detail ? { detail: verdict.detail } : {}), audioTrack, audio, version };
+  const cutFacts: LumenCutFacts = {
+    cut: index.cut ?? "idr",
+    longestS: Math.round(index.segments.reduce((m, seg) => Math.max(m, seg.endUs - seg.startUs), 0) / 1000) / 1000,
+    verified: index.keys.verified,
+    craRasl: index.keys.craRasl,
+    cuts: index.keys.cuts,
+  };
+  if (!verdict.ok) return { ok: false, reason: verdict.reason, ...(verdict.detail ? { detail: verdict.detail } : {}), audioTrack, audio, version, cutFacts };
   return {
     ok: true,
     version,
@@ -390,6 +414,7 @@ export async function lumenVerdict(itemId: string, options: { audio: number | nu
     segments: index.segments.length,
     durationS: Math.round(index.durationUs / 1000) / 1000,
     targetS: targetDurationOf(index.segments),
+    cutFacts,
   };
 }
 

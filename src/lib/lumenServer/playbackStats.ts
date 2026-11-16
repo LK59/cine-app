@@ -21,6 +21,12 @@
 const STATE = Symbol.for("cine-app.lumenServer.playbacks");
 export const MAX_PLAYBACKS = 300;
 export const PLAYBACK_IDLE_MS = 6 * 60 * 60 * 1000;
+/**
+ * La trace d'une lecture : ses derniers segments remis, un par ligne courte. Elle sert la page de banc
+ * `/lumen-test` (étape 3b, §157) — qu'a demandé Safari après un saut, le segment d'avant ? —, pas les
+ * lignes du journal du lecteur. 80 entrées de ~30 octets : 2,4 Ko par lecture, 720 Ko au pire pour 300.
+ */
+export const TRACE_ENTRIES = 80;
 
 /** Un identifiant de lecture tel que les adresses le portent : celui que la page tire (étape 4), ou celui que le serveur donne. */
 export function isPlaybackId(value: unknown): value is string {
@@ -67,6 +73,14 @@ export interface PlaybackStats {
   /** Le plus haut segment vidéo demandé, et le dernier. */
   lastVideoN: number | null;
   maxVideoN: number | null;
+  /** Segments audio remis, par piste (numéro dans le fichier) : un changement de piste se voit ici. */
+  audioByTrack: Record<number, number>;
+  /**
+   * Les derniers segments remis, du plus ancien au plus récent : `+12.3s v/41 b23 w0 e45`
+   * (depuis la première requête, nom, construction, attente dans la file, envoi), `p` s'il était
+   * préparé ou partagé, `x` si l'envoi a été coupé. Voir `TRACE_ENTRIES`.
+   */
+  trace: string[];
 }
 
 interface State {
@@ -115,6 +129,8 @@ export function playbackOf(s: string, init: { user: string; itemId: string; vers
       lastError: null,
       lastVideoN: null,
       maxVideoN: null,
+      audioByTrack: {},
+      trace: [],
     };
     st.playbacks.set(key, p);
     // Le plus ancien part : une `Map` garde l'ordre d'insertion, et une lecture vivante est réinsérée.
@@ -149,7 +165,7 @@ export function noteBuilt(p: PlaybackStats, facts: { video: boolean; n: number; 
   p.diskMs += facts.diskMs;
 }
 
-export function noteSent(p: PlaybackStats, facts: { kind: "segment" | "init"; video: boolean; bytes: number; sendMs: number; aborted: boolean }): void {
+export function noteSent(p: PlaybackStats, facts: { kind: "segment" | "init"; video: boolean; bytes: number; sendMs: number; aborted: boolean; track?: number }): void {
   if (facts.aborted) {
     p.aborted += 1;
     return;
@@ -159,8 +175,19 @@ export function noteSent(p: PlaybackStats, facts: { kind: "segment" | "init"; vi
   p.sendMaxMs = Math.max(p.sendMaxMs, facts.sendMs);
   if (facts.kind === "segment") {
     if (facts.video) p.video += 1;
-    else p.audio += 1;
+    else {
+      p.audio += 1;
+      if (facts.track !== undefined) p.audioByTrack[facts.track] = (p.audioByTrack[facts.track] ?? 0) + 1;
+    }
   }
+}
+
+/** Une ligne de la trace d'une lecture (`trace`), bornée à `TRACE_ENTRIES`. */
+export function noteTrace(p: PlaybackStats, entry: { name: string; buildMs: number; waitMs: number; sendMs: number; reused: boolean; aborted: boolean }, now = Date.now()): void {
+  const at = ((now - p.firstAt) / 1000).toFixed(1);
+  const flags = `${entry.reused ? " p" : ""}${entry.aborted ? " x" : ""}`;
+  p.trace.push(`+${at}s ${entry.name} b${Math.round(entry.buildMs)} w${Math.round(entry.waitMs)} e${Math.round(entry.sendMs)}${flags}`);
+  if (p.trace.length > TRACE_ENTRIES) p.trace.splice(0, p.trace.length - TRACE_ENTRIES);
 }
 
 export function noteRefused(p: PlaybackStats, kind: "busy" | "stale" | "error", code?: string): void {

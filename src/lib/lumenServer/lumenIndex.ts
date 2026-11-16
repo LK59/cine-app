@@ -27,6 +27,10 @@
 // départ sur IDR (H.265 §8.1.3, H.264 §D.2.8) ; qu'AVPlayer les accepte en tête de segment reste à voir
 // sur un appareil (README, « Inconnues »). S'il les refuse, la règle devient « IDR seulement »,
 // `LUMEN_FORMAT_VERSION` monte, et les fichiers à CRA (*Ted Lasso*) deviennent `segment-trop-long`.
+//
+// **Les découpes expérimentales `cra` et `cra-leading`** (étape 3b, DECISIONS.md §157, choisies par
+// l'adresse, administrateur seul) admettent aussi une CRA suivie de RASL : la seule différence est dans
+// `isCut`. Tout le reste — vérification des clés, D, son, poids — est le même code.
 
 import type { ByteSource } from "../webcodecs/byteSource";
 import { openMediaFile } from "../webcodecs/mediaFile";
@@ -53,6 +57,7 @@ import {
   type FileIdentity,
   type KeyKind,
   type LumenAudioTrack,
+  type LumenCutMode,
   type LumenIndex,
   type LumenKeyStats,
   type LumenRefusal,
@@ -224,8 +229,13 @@ async function verifyMp4Key(source: ByteSource, file: MatroskaFile, video: Lumen
   return key;
 }
 
-function isCut(key: VerifiedKey): boolean {
-  return key.kind !== "autre" && !key.rasl && !key.leading;
+/**
+ * La clé peut-elle ouvrir un segment ? Sous `idr`, jamais une CRA à RASL ; sous `cra`/`cra-leading`, si :
+ * ses RASL restent dans le segment qu'elle ouvre. L'I H.264 à images de tête reste refusée partout —
+ * rien dans un flux H.264 ne nomme ces images, aucun décodeur ne saura les jeter seul.
+ */
+export function isCut(key: VerifiedKey, cut: LumenCutMode = "idr"): boolean {
+  return key.kind !== "autre" && (!key.rasl || cut !== "idr") && !key.leading;
 }
 
 /** Combien de points d'index vérifier à la fois : des lectures en vol que le disque range lui-même. */
@@ -246,7 +256,13 @@ const VERIFY_BATCH = 16;
  * Déterministe : la chaîne ne dépend que des instants lus dans le fichier, jamais de l'ordre dans
  * lequel les lectures reviennent.
  */
-export async function selectCuts(candidates: Candidate[], targetUs: number, verify: (c: Candidate) => Promise<VerifiedKey | null>, stats: LumenKeyStats): Promise<VerifiedKey[]> {
+export async function selectCuts(
+  candidates: Candidate[],
+  targetUs: number,
+  verify: (c: Candidate) => Promise<VerifiedKey | null>,
+  stats: LumenKeyStats,
+  cut: LumenCutMode = "idr"
+): Promise<VerifiedKey[]> {
   const cuts: VerifiedKey[] = [];
   let threshold = -Infinity;
   let from = 0;
@@ -277,7 +293,7 @@ export async function selectCuts(candidates: Candidate[], targetUs: number, veri
       // Une clé lue avant la précédente coupe (un point d'index qui annonçait un autre instant) ne
       // rouvre rien : la découpe avance toujours.
       const last = cuts[cuts.length - 1];
-      if (key && isCut(key) && (!last || key.timeUs > last.timeUs)) {
+      if (key && isCut(key, cut) && (!last || key.timeUs > last.timeUs)) {
         cuts.push(key);
         threshold = key.timeUs + targetUs;
         continue;
@@ -443,6 +459,8 @@ export interface BuildIndexOptions {
   /** La clé sous laquelle `openMediaFile` garde l'en-tête : l'identité du fichier. */
   headerKey?: string;
   targetUs?: number;
+  /** La règle de découpe (`idr` par défaut ; les deux autres sont expérimentales, §157). */
+  cut?: LumenCutMode;
 }
 
 /** Ce qu'une source qui compte ses lectures expose (`FileByteSource.stats`). */
@@ -463,9 +481,11 @@ export async function buildLumenIndex(source: CountingSource, identity: FileIden
   const reads0 = source.stats?.reads ?? 0;
   const bytes0 = source.stats?.bytes ?? 0;
   const keys = emptyStats();
-  const finish = (index: Omit<LumenIndex, "cost" | "format" | "identity" | "keys">): LumenIndex => ({
+  const cut = options.cut ?? "idr";
+  const finish = (index: Omit<LumenIndex, "cost" | "format" | "cut" | "identity" | "keys">): LumenIndex => ({
     ...index,
     format: LUMEN_FORMAT_VERSION,
+    cut,
     identity,
     keys,
     cost: {
@@ -522,7 +542,7 @@ export async function buildLumenIndex(source: CountingSource, identity: FileIden
   keys.cues = candidates.length;
   const targetUs = options.targetUs ?? LUMEN_TARGET_SEGMENT_US;
   const verify = (c: Candidate) => (file.mp4 ? verifyMp4Key(source, file, video, c.at) : verifyMatroskaKey(source, file, video, c.at));
-  const chosen = await selectCuts(candidates, targetUs, verify, keys);
+  const chosen = await selectCuts(candidates, targetUs, verify, keys, cut);
   const cuts: CutPoint[] = chosen.map((k) => ({ timeUs: k.timeUs, at: k.at }));
   keys.cuts = cuts.length;
   if (cuts.length === 0) return refused(container, durationUs, { reason: "index-invalide", detail: `${keys.cues} points, aucun admis` }, video);

@@ -17,6 +17,7 @@ import { FIXTURES } from "./lumenServer-helpers";
 function fakeIndex(identity: FileIdentity, padding = 0): LumenIndex {
   return {
     format: LUMEN_FORMAT_VERSION,
+    cut: "idr",
     identity,
     container: "matroska",
     durationUs: 6_000_000,

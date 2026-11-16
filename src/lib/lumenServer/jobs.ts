@@ -10,11 +10,11 @@
 
 import { openMediaFile } from "../webcodecs/mediaFile";
 import { FileByteSource } from "./fileSource";
-import { identityKey, LumenError, type LumenIndex } from "./format";
+import { identityKey, LumenError, type LumenCutMode, type LumenIndex } from "./format";
 import { buildLumenIndex } from "./lumenIndex";
 import { buildSegment, type SegmentResult, type SegmentSpec } from "./segment";
 
-export type LumenJob = { type: "index"; path: string; targetUs?: number } | { type: "segment"; spec: SegmentSpec };
+export type LumenJob = { type: "index"; path: string; targetUs?: number; cut?: LumenCutMode } | { type: "segment"; spec: SegmentSpec };
 
 export interface ReadCost {
   reads: number;
@@ -42,7 +42,7 @@ export async function runLumenJob(job: LumenJob): Promise<LumenJobResult> {
   if (job.type === "index") {
     const source = await FileByteSource.open(job.path, INDEX_SOURCE);
     try {
-      const index = await buildLumenIndex(source, source.identity, { targetUs: job.targetUs });
+      const index = await buildLumenIndex(source, source.identity, { targetUs: job.targetUs, cut: job.cut });
       return { type: "index", index, cost: costOf(source, began) };
     } finally {
       source.close();

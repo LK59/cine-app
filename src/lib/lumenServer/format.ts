@@ -22,6 +22,64 @@ import type { TrackColour } from "../webcodecs/matroska";
  */
 export const LUMEN_FORMAT_VERSION = 1;
 
+// ── La règle de découpe ──────────────────────────────────────────────────────
+
+/**
+ * La règle qui dit sur quelles images clés un segment peut commencer (DECISIONS.md §155, §157).
+ *
+ * - **`idr`** — la règle, la seule que sert un appelant qui ne demande rien : une clé dont un décodeur
+ *   repart seul sans rien perdre (IDR, BLA, CRA *sans* RASL, I H.264 sans images de tête).
+ * - **`cra`** — expérimentale (étape 3b) : une CRA suivie de RASL ouvre aussi un segment, et ses RASL
+ *   sont **gardées** dans ce segment. En lecture continue, leurs références sont à la fin du segment
+ *   précédent, déjà décodé ; après un saut, c'est au décodeur de les jeter (H.265 §8.1.3,
+ *   `NoRaslOutputFlag` = 1 sur une CRA qui ouvre un accès aléatoire). Safari sous MediaSource ne l'a
+ *   jamais fait (*Ted Lasso* S02E01, « Media failed to decode ») ; le HLS natif passe par AVFoundation,
+ *   un autre chemin — c'est ce que la page `/lumen-test` doit montrer sur un appareil Apple. Recensement
+ *   du 16/11/2026 (300 fichiers, extrapolé à la bibliothèque) : 40 % des fichiers sont à GOP ouvert, 93 %
+ *   d'entre eux sont refusés sous `idr` (`segment-trop-long`) ; sous `cra`, 88 % de la bibliothèque est
+ *   servable contre 57 %.
+ * - **`cra-leading`** — `cra`, et chaque image non clé nommée dans ses `sample_flags` (`is_leading`,
+ *   ISO/IEC 14496-12 §8.8.3.1) : RASL 1 (image de tête qui dépend d'avant la clé, non décodable après un
+ *   accès aléatoire), RADL 3 (image de tête décodable), toute autre 2. L'indication qu'un démultiplexeur
+ *   (AVFoundation) peut lire sans analyser le flux pour jeter les RASL après un saut — sans elle, le muxer
+ *   écrit 0, « inconnu ». À comparer à `cra` sur les mêmes sauts.
+ *
+ * Les deux modes expérimentaux portent leur propre version de format (`lumenFormatTag`) : ils changent
+ * des frontières de segment et des octets, et rien — cache d'index en mémoire ou sur le disque, segments
+ * gardés, cache du navigateur — ne doit mélanger deux découpes du même fichier.
+ */
+export type LumenCutMode = "idr" | "cra" | "cra-leading";
+export const LUMEN_CUT_MODES: readonly LumenCutMode[] = ["idr", "cra", "cra-leading"];
+
+/**
+ * La révision des modes expérimentaux : à monter quand leur règle change sans que la règle `idr` change
+ * (sinon c'est `LUMEN_FORMAT_VERSION` qui monte, et elle les entraîne).
+ */
+export const LUMEN_CRA_REVISION = 1;
+
+const CUT_LETTER: Record<Exclude<LumenCutMode, "idr">, string> = { cra: "c", "cra-leading": "l" };
+
+/**
+ * La version de format d'une découpe, telle que l'adresse et les clés de cache la portent : `"1"` pour
+ * `idr` — exactement l'ancienne, pour qu'aucune adresse servie ni aucun index gardé ne change —, `"1c1"`
+ * pour `cra`, `"1l1"` pour `cra-leading`.
+ */
+export function lumenFormatTag(cut: LumenCutMode): string {
+  return cut === "idr" ? `${LUMEN_FORMAT_VERSION}` : `${LUMEN_FORMAT_VERSION}${CUT_LETTER[cut]}${LUMEN_CRA_REVISION}`;
+}
+
+/** Le pendant : la découpe que nomme une version de format, ou null (une autre version, un autre format). */
+export function cutModeOfTag(tag: string): LumenCutMode | null {
+  for (const cut of LUMEN_CUT_MODES) if (lumenFormatTag(cut) === tag) return cut;
+  return null;
+}
+
+/** `?cut=` tel qu'une adresse le porte : un mode connu, `undefined` (la règle), ou null (mal formé). */
+export function parseCutMode(raw: string | null | undefined): LumenCutMode | undefined | null {
+  if (raw === null || raw === undefined || raw === "") return undefined;
+  return (LUMEN_CUT_MODES as readonly string[]).includes(raw) ? (raw as LumenCutMode) : null;
+}
+
 /**
  * La durée visée pour un segment. Recommandation de l'étude (1-remuxeur.md §1.2, mesurée sur quatre
  * fichiers à 2, 4 et 6 s) : 4 s donne une médiane de 5 à 9 s sur les fichiers à groupes d'images
@@ -197,6 +255,8 @@ export interface LumenKeyStats {
 /** Ce que l'index d'un fichier dit, une fois pour toutes les requêtes. Sérialisable (clonage structuré). */
 export interface LumenIndex {
   format: number;
+  /** La règle de découpe qui a produit `segments` (`idr` sauf demande expresse). */
+  cut: LumenCutMode;
   identity: FileIdentity;
   container: "matroska" | "mp4";
   durationUs: number;

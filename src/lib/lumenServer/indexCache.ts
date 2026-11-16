@@ -15,6 +15,10 @@
 //   pour l'ancienne version ne reçoit jamais les octets de la nouvelle (`segmentSpec` porte la clé, et
 //   le fil de calcul la revérifie sur le descripteur qu'il ouvre).
 //
+// - **Une entrée par fichier et par découpe** (`variant`, §157) : l'index d'une découpe expérimentale
+//   (`cra`) vit à côté de celui de la règle, jamais à sa place — une page de test qui lit `cra` ne doit ni
+//   chasser ni, surtout, remplacer l'index que sert une vraie lecture.
+//
 // Sans état au sens du protocole : n'importe quel segment se reconstruit depuis le fichier seul. Le
 // cache n'est qu'une accélération — après un déploiement, la première requête relit l'index.
 
@@ -36,7 +40,7 @@ interface Entry {
 }
 
 interface CacheState {
-  /** Par chemin : une seule version gardée par fichier. */
+  /** Par chemin (et découpe) : une seule version gardée par fichier. */
   entries: Map<string, Entry>;
   inflight: Map<string, Promise<LumenIndex>>;
   bytes: number;
@@ -65,6 +69,11 @@ export interface IndexCacheOptions {
   now?: () => number;
   /** L'identité du fichier — `stat` par défaut ; remplaçable dans les tests. */
   identify?: (path: string) => Promise<FileIdentity>;
+  /**
+   * Ce qui distingue deux index du même fichier (la découpe, `lumenFormatTag`). Vide : l'entrée est
+   * celle d'avant — le chemin seul.
+   */
+  variant?: string;
 }
 
 async function statIdentity(path: string): Promise<FileIdentity> {
@@ -80,19 +89,23 @@ export async function cachedLumenIndex(path: string, build: (path: string, ident
   const s = state();
   const now = options.now ?? Date.now;
   const identity = await (options.identify ?? statIdentity)(path);
-  const key = identityKey(identity);
+  const fileKey = identityKey(identity);
+  const variant = options.variant ?? "";
+  // L'entrée et la construction en vol, par découpe ; la clé d'identité, elle, reste celle du fichier.
+  const slot = variant ? `${path}\u0000${variant}` : path;
+  const key = variant ? `${fileKey}\u0000${variant}` : fileKey;
   sweep(s, now(), options.idleMs ?? INDEX_IDLE_MS);
 
-  const held = s.entries.get(path);
+  const held = s.entries.get(slot);
   if (held && held.key === key) {
     held.usedAt = now();
     // Remis en tête de l'ordre d'éviction.
-    s.entries.delete(path);
-    s.entries.set(path, held);
+    s.entries.delete(slot);
+    s.entries.set(slot, held);
     s.hits += 1;
     return held.index;
   }
-  if (held) forget(s, path); // une autre version : celle-ci ne servira plus
+  if (held) forget(s, slot); // une autre version : celle-ci ne servira plus
 
   const pending = s.inflight.get(key);
   if (pending) return pending;
@@ -101,11 +114,11 @@ export async function cachedLumenIndex(path: string, build: (path: string, ident
       const index = await build(path, identity);
       // Construit sur un descripteur ouvert après le `stat` : si le fichier a changé entre les deux,
       // l'index dit l'autre version — on ne le range pas sous cette clé.
-      if (identityKey(index.identity) !== key) return index;
+      if (identityKey(index.identity) !== fileKey) return index;
       s.builds += 1;
       const bytes = indexBytes(index);
-      forget(s, path);
-      s.entries.set(path, { key, index, bytes, usedAt: now() });
+      forget(s, slot);
+      s.entries.set(slot, { key, index, bytes, usedAt: now() });
       s.bytes += bytes;
       const budget = options.budgetBytes ?? INDEX_CACHE_BYTES;
       while (s.bytes > budget && s.entries.size > 1) forget(s, s.entries.keys().next().value!);
