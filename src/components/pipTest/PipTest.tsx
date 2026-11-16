@@ -51,6 +51,7 @@ function environment() {
     managedMediaSource: "ManagedMediaSource" in window,
     mediaSource: "MediaSource" in window,
     userAgent: navigator.userAgent,
+    host: location.host,
   };
 }
 
@@ -247,6 +248,29 @@ export function PipTest() {
           <p className="mt-2 break-words font-mono text-[11px] text-white/70">{states[id]}</p>
         </section>
       ))}
+
+      {/* Les sorties de l'application installée (16/11/2026) : deux contournements proposés ailleurs, à vérifier
+          sur l'appareil. Une adresse d'une autre origine sort du `scope` du manifeste — iOS l'ouvre dans une vue
+          Safari intégrée — et le flux d'exemple d'Apple évite toute question de droits. `x-safari-https:` demande
+          l'ouverture dans Safari lui-même. */}
+      <section className="mt-5 rounded-xl border border-white/15 p-3">
+        <h2 className="font-semibold">Leaving the Home Screen web app</h2>
+        <p className="text-xs text-white/60">Out-of-scope navigation (in-app Safari view), then Safari itself.</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <a
+            className="btn btn-ghost btn-sm"
+            href="https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8"
+            onClick={() => note("link · Apple sample HLS (out of scope)")}
+          >
+            Apple sample stream (out of scope)
+          </a>
+          {env && (
+            <a className="btn btn-ghost btn-sm" href={`x-safari-https://${env.host}/pip-test`} onClick={() => note("link · x-safari-https: this page in Safari")}>
+              Open this page in Safari
+            </a>
+          )}
+        </div>
+      </section>
 
       <section className="mt-5 rounded-xl border border-white/15 p-3">
         <div className="flex items-center justify-between gap-2">
