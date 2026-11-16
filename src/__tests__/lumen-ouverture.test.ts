@@ -27,6 +27,10 @@ const facts = (number: number, language: string, codec: string, channels: number
   servable,
   refusal: servable ? null : "son-codec",
   repairs: [],
+  // La conversion du son (phase 2, §161) : ici, aucune piste convertie.
+  converted: null,
+  convertible: false,
+  convertRefusal: null,
 });
 const prefs = (audioLanguage: string | null, extra: Partial<TrackPreferences> = {}): TrackPreferences => ({
   audioLanguage,
