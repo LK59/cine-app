@@ -15,10 +15,11 @@
 // Next le pose** (`setHeader` / `appendHeader`) — et non à `writeHead` : le module `compression` de
 // Next (`router-server.js`) décide de compresser dans son propre `writeHead`, qui s'exécute *avant*
 // le nôtre (il est installé après). Vu à cet instant, `Content-Encoding` lui fait dire « already
-// encoded » : jamais de gzip par-dessus brotli. En pratique il ne compresse de toute façon aucune
-// réponse de route (relevé le 06/11/2026 sur 16.4.3 et 16.4.5) : `sendResponse` pose les en-têtes en
-// tableaux (`["application/json"]`) et son filtre `compressible` n'accepte qu'une chaîne — il ne
-// compresse que les pages et les fichiers statiques. La règle tient quand même si cela change.
+// encoded » : jamais de gzip par-dessus brotli. Jusqu'à 16.4.5 il ne compressait aucune réponse de
+// route (`sendResponse` posait les en-têtes en tableaux, que son filtre `compressible` refuse) ; depuis
+// 16.4.6 (vercel/next.js#101280) il le fait. Une route qui part en clair avec sa longueur déclarée — un
+// client qui n'accepte que `deflate` — est alors recompressée par lui : il retire `Content-Length` avant
+// notre `writeHead`, et le compte des octets ne s'arme pas (vérifié par compression-reelle.spec.ts).
 //
 // Le fond de la faille GHSA-pc58 est une longueur déclarée qui ne correspond pas au corps envoyé (des
 // octets en trop sont lus comme la réponse suivante). Une longueur n'est donc crue que comme un

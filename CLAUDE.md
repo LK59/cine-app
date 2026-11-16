@@ -414,9 +414,11 @@ Only a length the route *holds* is declared: a body in memory, a file range read
 `createReadStream({ start, end })`, or an upstream (Jellyfin) length when `fetch` did not decode the
 body (no `Content-Encoding` upstream). `boot.mjs` sets `CINE_FRAMING_HEADERS=1`; without it (`next
 dev`, tests) `framingAvailable()` is false and routes answer **uncompressed, without a length** —
-never a compressed body without its label. Next's own `compression` compresses pages and static
-files only: a route response reaches it with array-valued headers, which its `compressible` filter
-rejects, so a plain JSON route goes out uncompressed (16.4.3 and 16.4.5 alike).
+never a compressed body without its label. Up to 16.4.5, Next's own `compression` compressed pages and
+static files only (route headers reached it as arrays, which its `compressible` filter rejects); since
+16.4.6 (vercel/next.js#101280) it compresses route responses too — a plain JSON route now goes out
+gzipped, and a body sent in the clear with its declared length (a client accepting only `deflate`) is
+recompressed by Next, which drops `Content-Length` before the framing's byte count can arm.
 `response-framing.test.ts` drives Next's real `sendResponse` and `compression`;
 `tools/compression-reelle/run.sh` builds the app, starts `boot.mjs` on the standalone output with a
 throwaway `DATA_DIR`, a fake Jellyfin and an app-made session, and reads the catalogue-shaped route,

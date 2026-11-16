@@ -8484,7 +8484,11 @@ lecture directe — Safari, un téléviseur AirPlay — recevait des 206 en morc
 **Relevé en chemin.** La compression de Next ne touche aucune réponse de route, en 16.4.3 comme en 16.4.5 :
 `sendResponse` pose les en-têtes en tableaux et le filtre `compressible` n'accepte qu'une chaîne. Les pages et
 les fichiers statiques restent compressés. Une route JSON qui ne passe pas par `cachedJson` part donc en clair,
-avant comme après — non changé ici.
+avant comme après — non changé ici. **Depuis Next 16.4.6** (16/11/2026, vercel/next.js#101280), elle compresse
+aussi les réponses de route : une route JSON ordinaire part en gzip, et un corps envoyé en clair avec sa longueur
+déclarée (un client qui n'accepte que `deflate`) est recompressé par Next, qui retire `Content-Length` avant
+`writeHead` — le compte de `responseFraming.mjs` ne s'arme pas, rien n'est coupé. Prouvé sur un vrai serveur par
+le cinquième cas de `compression-reelle.spec.ts`.
 
 **Tests.** `response-framing.test.ts` : les règles du marqueur ; le vrai `sendResponse` et le vrai
 `compression` de Next, branchés dans l'ordre de `router-server.js` (la panne reproduite sans le cadrage, brotli,

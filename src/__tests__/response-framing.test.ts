@@ -199,14 +199,27 @@ describe("le vrai envoi de Next (send-response + compression)", () => {
     expect(raw.body.equals(bytes)).toBe(true);
   });
 
-  it("Next ne compresse jamais une réponse de route : son module compression la croit incompressible", async () => {
-    // Relevé le 06/11/2026, et pareil en 16.4.3 : `sendResponse` pose les en-têtes par
-    // `NodeNextResponse.appendHeader`, qui écrit des tableaux (`["application/json"]`), et `compressible`
-    // n'accepte qu'une chaîne — « not compressible ». Ce que les routes ne compressent pas elles-mêmes
-    // part donc en clair, avant comme après ce changement ; seules les pages passent par `compression`.
+  it("depuis Next 16.4.6, une réponse de route est compressée par Next, et reste lisible", async () => {
+    // Jusqu'à 16.4.5 (relevé le 06/11/2026, pareil en 16.4.3), `NodeNextResponse.appendHeader` écrivait
+    // des tableaux (`["application/json"]`) que le filtre `compressible` refuse : aucune route n'était
+    // compressée. 16.4.6 (vercel/next.js#101280) garde une valeur seule en chaîne, et la compression de
+    // Next prend désormais les routes (16/11/2026). Si ce test change encore, relire DECISIONS §131.
     const port = await serve(() => new Response(JSON_TEXT, { headers: { "Content-Type": "application/json" } }));
     const raw = await get(port, "/", { "Accept-Encoding": "gzip" });
-    expect(raw.headers["content-encoding"]).toBeUndefined();
+    expect(raw.headers["content-encoding"]).toBe("gzip");
+    expect(JSON.parse(decode(raw))).toEqual(PAYLOAD);
+  });
+
+  it("une longueur déclarée sur un corps que Next recompresse : effacée, rien n'est coupé", async () => {
+    // Le cas que 16.4.6 ouvre : une route qui part en clair avec `x-cine-length` (un client qui n'accepte
+    // ni brotli ni gzip préparés par nous) et que la compression de Next reprend. Elle retire
+    // `Content-Length` avant notre `writeHead` : le compte ne doit pas s'armer, sans quoi le corps
+    // compressé, plus court que déclaré, couperait la connexion.
+    const port = await serve(() => new Response(JSON_TEXT, { headers: { "Content-Type": "application/json", ...lengthHeader(Buffer.byteLength(JSON_TEXT)) } }));
+    const raw = await get(port, "/", { "Accept-Encoding": "gzip" });
+    expect(raw.error).toBeUndefined();
+    expect(raw.headers["content-encoding"]).toBe("gzip");
+    expect(raw.headers["content-length"]).toBeUndefined();
     expect(JSON.parse(decode(raw))).toEqual(PAYLOAD);
   });
 

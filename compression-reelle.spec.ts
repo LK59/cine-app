@@ -19,7 +19,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
-import { brotliDecompressSync, gunzipSync } from "node:zlib";
+import { brotliDecompressSync, gunzipSync, inflateSync } from "node:zlib";
 
 const REEL = process.env.NEXT_REEL_DIR;
 const ITEM = "0123456789abcdef0123456789abcdef";
@@ -53,6 +53,7 @@ function browserText(raw: Raw): string {
   const enc = raw.headers["content-encoding"];
   if (enc === "br") return brotliDecompressSync(raw.body).toString("utf8");
   if (enc === "gzip") return gunzipSync(raw.body).toString("utf8");
+  if (enc === "deflate") return inflateSync(raw.body).toString("utf8");
   if (enc) throw new Error(`codage inattendu : ${enc}`);
   return raw.body.toString("utf8");
 }
@@ -266,5 +267,45 @@ describe.skipIf(!REEL)("cadrage des réponses sur un vrai serveur Next", () => {
       expect(browserText(raw)).toContain("<html");
       console.log(`[cadrage] /login : gzip ${raw.body.length} o`);
     }
+  });
+
+  // Next 16.4.6 compresse lui-même les réponses de route (vercel/next.js#101280 : un en-tête d'une seule
+  // valeur reste une chaîne, et son filtre `compressible` l'accepte désormais) — jusqu'à 16.4.5, seules les
+  // pages et les fichiers statiques l'étaient. Deux cas que ce changement touche (16/11/2026) :
+  // - une route qui déclare sa longueur (`x-cine-length`) et part en clair parce que le client n'accepte
+  //   ni brotli ni gzip — `deflate` seul, que la compression de Next sait faire : il recompresse le corps,
+  //   retire `Content-Length` avant `writeHead`, et le compte de `responseFraming.mjs` doit se désarmer
+  //   au lieu de couper la connexion sur un corps « plus court que déclaré » ;
+  // - une route JSON ordinaire, sans aucun marqueur : compressée par Next, ou non, mais toujours lisible.
+  it("ce que Next compresse lui-même : une longueur déclarée recompressée ne coupe rien, le JSON reste lisible", async () => {
+    const ref = JSON.parse(browserText(await request(port, "/api/release-notes", authed())));
+    const deflated = await request(port, "/api/release-notes", authed({ "Accept-Encoding": "deflate" }));
+    expect(deflated.status, logs.slice(-2000)).toBe(200);
+    framingIsHonest(deflated);
+    expect([undefined, "deflate"]).toContain(deflated.headers["content-encoding"]);
+    expect(JSON.parse(browserText(deflated))).toEqual(ref);
+
+    const hls = `/api/jellyfin/stream/${ITEM}/main.m3u8?PlaySessionId=s1`;
+    const plainList = browserText(await request(port, hls, authed()));
+    const deflatedList = await request(port, hls, authed({ "Accept-Encoding": "deflate" }));
+    expect(deflatedList.status, logs.slice(-2000)).toBe(200);
+    framingIsHonest(deflatedList);
+    expect([undefined, "deflate"]).toContain(deflatedList.headers["content-encoding"]);
+    expect(browserText(deflatedList)).toBe(plainList);
+
+    const pub = await request(port, "/api/config/public", authed({ "Accept-Encoding": "gzip, deflate, br" }));
+    expect(pub.status, logs.slice(-2000)).toBe(200);
+    framingIsHonest(pub);
+    expect(JSON.parse(browserText(pub))).toBeTypeOf("object");
+    const pubPlain = await request(port, "/api/config/public", authed());
+    framingIsHonest(pubPlain);
+    expect(JSON.parse(browserText(pubPlain))).toEqual(JSON.parse(browserText(pub)));
+
+    expect(logs).not.toContain("[cadrage]");
+    console.log(
+      `[cadrage] Next lui-même : release-notes deflate → ${deflated.headers["content-encoding"] ?? "clair"} ${deflated.body.length} o ; ` +
+        `liste HLS deflate → ${deflatedList.headers["content-encoding"] ?? "clair"} ${deflatedList.body.length} o ; ` +
+        `config/public → ${pub.headers["content-encoding"] ?? "clair"} ${pub.body.length} o (clair ${pubPlain.body.length} o)`
+    );
   });
 });
