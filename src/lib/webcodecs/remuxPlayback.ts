@@ -18,7 +18,8 @@ import { MseSource, type RecoveryFacts, type UnreadableZoneEvent } from "./mseSo
 import { choosePlaybackPath, NATIVE_PATH, type ChosenPath } from "./pathSelector";
 import type { AudioLeadGap } from "./audioLeadGap";
 import { Remuxer, playableAudio, deliveredAudio, primeAudioDelivery, audioDelivery, dialogueCanShape, type TrackedCue } from "./remuxer";
-import { chooseAudioTrack, type TrackPreferences } from "@/lib/trackPreferences";
+import type { TrackPreferences } from "@/lib/trackPreferences";
+import { preferredOpeningTrack } from "@/lib/openingAudioChoice";
 import { trace, traceReset } from "./trace";
 import { diagMedia } from "./playbackDiagnosis";
 import { simultaneousText } from "./subtitleMarkup";
@@ -148,62 +149,40 @@ export type PathProbe = {
 const KEEP_EVERY_SECONDS = 2;
 
 export function preferredAudio(file: MatroskaFile, preferences?: TrackPreferences | null): MatroskaTrack | null {
-  const audio = file.tracks.filter((t) => t.type === "audio");
-  const playable = audio.filter(playableAudio);
-
-  /**
-   * La langue du compte d'abord, quand elle désigne une piste que ce chemin sait porter.
+  /*
+   * La règle elle-même vit dans `preferredOpeningTrack` (`openingAudioChoice.ts`) depuis le 17/11/2026,
+   * sortie d'ici telle quelle pour que Lumen serveur s'ouvre sur la même piste (DECISIONS.md §180). Ce qu'elle
+   * fait, et pourquoi :
    *
-   * Posé **avant** la règle du défaut, et seulement sur les pistes jouables : une préférence qui
-   * désignerait une piste TrueHD ferait refuser le fichier entier alors qu'il joue très bien sur
-   * celle d'à côté. `chooseAudioTrack` rend `null` dès que rien ne correspond — le compte réglé
-   * sur « piste par défaut » compris —, et on retombe alors exactement sur ce qui suit.
+   * La langue du compte d'abord, quand elle désigne une piste que ce chemin sait porter. Posé **avant** la
+   * règle du défaut, et seulement sur les pistes jouables : une préférence qui désignerait une piste TrueHD
+   * ferait refuser le fichier entier alors qu'il joue très bien sur celle d'à côté. `chooseAudioTrack` rend
+   * `null` dès que rien ne correspond — le compte réglé sur « piste par défaut » compris —, et on retombe alors
+   * exactement sur ce qui suit.
    *
-   * **C'est `chooseAudioTrack` et rien d'autre**, et ce n'est pas un détail d'implémentation :
-   * l'écran applique la même fonction dès que le film démarre, et bascule si la piste ouverte
-   * n'est pas la sienne. Ouvrir sur un autre choix — fût-il meilleur — ne supprimerait pas le
-   * changement qu'on cherche à éviter, il le rendrait seulement invisible dans le code.
+   * **C'est `chooseAudioTrack` et rien d'autre**, et ce n'est pas un détail d'implémentation : l'écran applique
+   * la même fonction dès que le film démarre, et bascule si la piste ouverte n'est pas la sienne. Ouvrir sur un
+   * autre choix — fût-il meilleur — ne supprimerait pas le changement qu'on cherche à éviter, il le rendrait
+   * seulement invisible dans le code.
    *
-   * `rank` départage depuis le 20/09 les pistes d'une même langue par le nombre de canaux, avant
-   * le drapeau du fichier : entre une stéréo et une 5.1 anglaises, c'est la 5.1 — ici comme à
-   * l'écran, puisque c'est la même fonction. (Ce paragraphe disait l'inverse, écrit avant ce
-   * changement ; la règle « la plus riche » vaut aussi juste en dessous, sans préférence.)
+   * `rank` départage depuis le 20/09 les pistes d'une même langue par le nombre de canaux, avant le drapeau du
+   * fichier : entre une stéréo et une 5.1 anglaises, c'est la 5.1 — ici comme à l'écran. Parmi les pistes
+   * jouables, et le prédicat sert à départager celles de la même langue : **ici**, on ouvre sur quelque chose
+   * qui joue ; **à l'écran**, `chooseAudioTrack` voit toutes les pistes, et si la langue demandée n'existe
+   * qu'en TrueHD il cède la place au lecteur serveur. Les canaux *livrés*, puis la copie, départagent
+   * (29/09/2026, audit P5) — la même question que l'écran pose par `RemuxPlayback.deliveredAudio`.
+   *
+   * Rien de jouable : le défaut du fichier, pour que le refus nomme son vrai codec. Sinon la langue d'abord,
+   * puis les canaux : sur cette bibliothèque la piste par défaut est souvent un DTS dans une langue avec
+   * seulement une stéréo à côté dans une autre — changer de langue en silence surprend plus que passer de
+   * l'ambiophonie à la stéréo. Le menu propose toujours tout.
    */
-  if (preferences && playable.length > 0) {
-    /**
-     * Parmi les pistes jouables, et le prédicat sert à départager celles de la même langue.
-     *
-     * Deux règles se superposent, et elles ne disent pas la même chose :
-     *
-     *  * **ici**, on ouvre sur quelque chose qui joue — le film doit démarrer ;
-     *  * **à l'écran**, `chooseAudioTrack` voit toutes les pistes, et si la langue demandée
-     *    n'existe qu'en TrueHD il cède la place au lecteur serveur. C'est voulu : le spectateur
-     *    qui demande la VO obtient la VO, fût-ce par un autre lecteur.
-     *
-     * Les deux tombent d'accord dans le cas qui nous occupe — deux pistes de la même langue dont
-     * une seule joue, « Le Mans 66 » — et c'est là que le changement de piste disparaît.
-     */
-    // Et les canaux *livrés*, puis la copie, pour départager (29/09/2026, audit P5) — la même
-    // question que l'écran pose par `RemuxPlayback.deliveredAudio`.
-    const wanted = chooseAudioTrack(playable, preferences, playableAudio, deliveredAudio);
-    if (wanted) return wanted;
-  }
-  // Nothing here works: the file's own default is returned so the refusal names its real codec.
-  if (playable.length === 0) return audio.find((t) => t.isDefault) ?? audio[0] ?? null;
-
-  const preferred = audio.find((t) => t.isDefault) ?? audio[0];
-  const language = preferred?.language ?? null;
-  // Language first, then channel count. On this library the default track is regularly DTS in one
-  // language with only a stereo track beside it in another — silently switching language is a
-  // worse surprise than dropping from surround to stereo, so the language is held onto and the
-  // richest track in it wins. The menu still offers everything.
-  // « La plus riche » au sens de `rank` : les canaux livrés, puis la copie (29/09/2026, audit P5).
-  const sameLanguage = playable.filter((t) => t.language === language);
-  const pool = sameLanguage.length > 0 ? sameLanguage : playable;
-  return pool.reduce((best, t) => {
-    const [a, b] = [deliveredAudio(t), deliveredAudio(best)];
-    return a.channels > b.channels || (a.channels === b.channels && a.copied && !b.copied) ? t : best;
-  }, pool[0]);
+  return preferredOpeningTrack(
+    file.tracks.filter((t) => t.type === "audio"),
+    playableAudio,
+    deliveredAudio,
+    preferences
+  );
 }
 
 /**

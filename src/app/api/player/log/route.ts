@@ -11,6 +11,10 @@ import { noteSessionStart } from "@/lib/xray/orders";
 import { assertVisible } from "@/lib/itemVisibility";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { xrayConfigured, xrayOpenTo } from "@/lib/clients/xray";
+import { isPlaybackId, lumenPlaybackFields } from "@/lib/lumenServer/playbackStats";
+
+/** Les lignes de Lumen serveur que le relevé du serveur complète (DECISIONS.md §180). */
+const LUMEN_ENRICHED = new Set(["stop", "stall", "error", "fallback", "rebuild"]);
 
 /**
  * The player telling the server what happened to it.
@@ -54,6 +58,19 @@ export async function POST(req: NextRequest) {
     cleaned.resumeFix = await recoverLostPosition(session.jfId, cleaned).catch((error: unknown) =>
       `échec : ${error instanceof Error ? error.message : String(error)}`.slice(0, 200)
     );
+  }
+  // Lumen serveur (§180) : la page ne voit rien des requêtes HLS de Safari, le serveur voit tout. Les lignes qui
+  // racontent une panne ou un bilan reçoivent le relevé de la lecture (`srv.*`) — en mémoire, sans attente ; lié au
+  // compte de la session (`lumenPlaybackFields` ne rend rien pour la lecture d'un autre). Un champ déjà présent
+  // n'est jamais écrasé. Une ligne renvoyée après un redémarrage n'a plus de relevé : elle part sans.
+  if (cleaned.player === "lumen-serveur" && LUMEN_ENRICHED.has(body.kind) && isPlaybackId(cleaned.lumenSession)) {
+    try {
+      for (const [key, value] of Object.entries(lumenPlaybackFields(cleaned.lumenSession, session.u))) {
+        if (!(key in cleaned)) cleaned[key] = value;
+      }
+    } catch {
+      // Un relevé illisible ne coûte jamais la ligne.
+    }
   }
   logPlaybackEvent(session.u, body.kind, cleaned);
   // Les acteurs à l'écran (option, DECISIONS.md §138) : une séance qui commence commande l'analyse de

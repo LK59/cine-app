@@ -41,8 +41,10 @@ export interface Seance {
    * « hors-ligne » : un téléchargement lu sur l'appareil (journalisé depuis le 02/11/2026).
    * « immersion » : une lecture sur la télévision du mode Immersion (DECISIONS.md §144) — un flux
    * négocié comme celui du lecteur serveur, son en stéréo, image parfois convertie en SDR.
+   * « lumen-serveur » : le fichier remultiplexé par le serveur de Laterna, lu en HLS natif (DECISIONS.md §180) —
+   * un témoin du fichier, comme le lecteur natif ; une séance relayée ensuite au lecteur serveur devient « serveur ».
    */
-  player: "natif" | "serveur" | "hors-ligne" | "immersion";
+  player: "natif" | "serveur" | "hors-ligne" | "immersion" | "lumen-serveur";
   /**
    * Reconstituée après coup (`retro` sur ses lignes) : une séance hors ligne d'avant le 02/11/2026,
    * retrouvée dans l'activité de Jellyfin. Son temps regardé est l'écart entre l'annonce et l'arrêt.
@@ -202,7 +204,7 @@ function isCast(r: LogRecord, reason: string): boolean {
 }
 
 function playerOf(r: LogRecord): Seance["player"] {
-  return r.player === "serveur" ? "serveur" : r.player === "hors-ligne" ? "hors-ligne" : r.player === "immersion" ? "immersion" : "natif";
+  return r.player === "serveur" ? "serveur" : r.player === "hors-ligne" ? "hors-ligne" : r.player === "immersion" ? "immersion" : r.player === "lumen-serveur" ? "lumen-serveur" : "natif";
 }
 
 function blank(id: string, legacy: boolean, r: LogRecord): Seance {
@@ -300,7 +302,8 @@ function absorb(s: Seance, r: LogRecord): void {
       s.range ??= str(r.range);
       s.container ??= str(r.container);
       if (s.title === "?") s.title = str(r.title) ?? "?";
-      if (r.player === "serveur") {
+      // Lumen serveur dit aussi pourquoi il pose une adresse (`retry`, `audio-reload`) — §180.
+      if (r.player === "serveur" || r.player === "lumen-serveur") {
         if (isServerRestart(r.why)) {
           const why = r.why as string;
           s.restarts.push({ why, label: serverStartWhyLabel(why, r.rung) ?? why, t: r._t, failure: isServerFailureRestart(why) });
@@ -349,7 +352,9 @@ function absorb(s: Seance, r: LogRecord): void {
         noteSlowLink(s, r);
         break;
       }
-      if (isPlannedHandoff(reason)) {
+      // Un déclin de Lumen serveur vers le lecteur actuel (fichier non servi, langue du compte absente) est le
+      // chemin prévu, comme un refus d'emblée du natif : `planned` sur la ligne, pas une phrase (§180).
+      if (isPlannedHandoff(reason) || (r.player === "lumen-serveur" && r.planned === true)) {
         s.planned = (s.planned ?? 0) + 1;
         s.incidents.push({ kind: "planned", t: r._t, reason });
         break;

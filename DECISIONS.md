@@ -11632,3 +11632,61 @@ bêta »), `proxy.ts` (`ADMIN_ONLY_READS`), `instrumentation.ts` (la détection 
   (`conversion` dans l'éligibilité, `X-Lumen-Son: occupe`, `srv.convBusy`).
 - **L'admission ne regarde pas le titre** (la conception voulait privilégier un TrueHD sur iPhone) : le serveur ne sait
   pas encore quel appareil lit ; à reprendre avec l'hôte client, qui le saura.
+
+## 180. Lumen serveur dans le lecteur : une route `"lumen"`, un hôte à part, le lecteur actuel avant l'image, ce chemin après (17/11/2026)
+
+**Règle.** Derrière l'option d'appareil « Lecteur expérimental : remux serveur » (panneau Compte, groupe administrateur,
+`localStorage["cine:lumen-serveur"]`), une lecture en ligne peut passer par Lumen serveur (étape 4 de
+`docs/remux-serveur/`) : le fichier remultiplexé par le serveur, lu par le HLS natif de WebKit.
+- **L'aiguillage** : `choosePlayer` rend `"lumen"` seulement là où il rendrait `"native"`, et seulement si
+  `ctx.lumen` est vrai — `lumenWanted` (`lumenServerChoice.ts`) : l'option (lue une fois par objet séance,
+  `lumenChoiceFor`), WebKit avec son HLS natif (`playsHlsNatively` : iPhone, iPad, Mac — jamais « iOS »), une page qui
+  n'a jamais servi de MediaSource (`noteMediaSourceServed`, posé par le natif à `startRemux` et par le lecteur hors
+  ligne), un titre jamais rendu (`declineLumen`), ni banc, ni extrait, ni hors ligne. Puis le serveur décide
+  (`eligibility` pour la piste choisie) ; un refus est un déclin silencieux. `ctx.lumen` absent : l'appel d'avant.
+- **L'hôte** (`LumenServerHost`, clé `lumen:${itemId}:${openId}`) assemble les pièces partagées : bilan et arrêt
+  gardé (`useServerSessionRecord`, qui accepte désormais `extraStopFields`), position, ouverture animée, deux
+  sous-titres, passage rejoué, fermeture et épisode suivant (`playerClose.ts`), minuterie, `PlayerControls` tel quel.
+  La piste d'ouverture est celle du lecteur actuel, **par la même fonction** : `preferredOpeningTrack`
+  (`openingAudioChoice.ts`), sortie de `preferredAudio` (`remuxPlayback.ts`) telle quelle ; les sous-titres du compte
+  par `chooseSubtitleTrack` (forcés compris), en `<track>` par la route existante — la liste vient de
+  `subtitleTrackFacts`, sortie de la négociation du lecteur serveur pour servir aussi `/api/lumen/{id}/pistes`.
+- **Les leviers mesurés par Louis** : (1) la fiche ouverte fait préparer le fichier (`lumenSheetPrepare.ts` :
+  ½ s de fiche, une en vol, une par titre toutes les 2 min, huit par minute, jamais pendant un film), et l'élément
+  naît `preload="auto"` ; (2) la reprise par `#t=` dans l'adresse, un saut de secours seulement si Safari l'a
+  ignoré. Le son multiplexé (`m1`) : `LUMEN_MUX_AUDIO=1` dans l'environnement, coupé par défaut.
+- **Le repli.** Avant la première image (refus, langue du compte seulement sur une piste non servie, code 4,
+  20 s sans image, seconde erreur après une relance d'une seconde) : le lecteur actuel dans la même page. Après :
+  **la lecture se rétablit sur ce chemin** (`recover`) — le serveur relu (borné à 90 s ; injoignable ou 502/503 =
+  un déploiement : on attend, et rien n'est touché si l'horloge repart seule), une autre version de la liste (les
+  segments répondent 410) rouverte à la position (`rebuild`), la même version rouverte telle quelle ; le lecteur
+  serveur seulement si le fichier n'est plus servi, une piste non servie est choisie, ou au-delà de trois
+  réouvertures. Changement de piste : `audioTracks[i].enabled` dans le groupe exposé (relié au menu par la liste
+  maître lue par la page), sinon la page rechargée avec une intention **sans** `server` (l'aiguillage revient ici).
+- **Le journal** : `player: "lumen-serveur"`, `path: "remux-serveur"` (`ServerPlayerContext.player/path`, absents :
+  `"serveur"` à la même place), `lumenSession` = l'identifiant `s` de l'adresse ; la route du journal joint `srv.*`
+  (`lumenPlaybackFields`) à `stop`, `stall`, `error`, `fallback`, `rebuild`. L'activité reconnaît le lecteur
+  (`seances.ts` : type, relances, `planned` ; `parts.tsx` : étiquette « Remux serveur »).
+
+**Pourquoi.** Les bancs de Louis (iPhone, application installée) : aucune erreur ni image corrompue sur des centaines
+de sauts, des sauts à égalité à débit égal, une première image rattrapée par les deux leviers. Un hôte à part laisse
+les empreintes du lecteur serveur et du natif intactes. Le partage avant/après image suit la cause probable : avant,
+un refus ou une panne du chemin neuf ; après, presque toujours un redémarrage du serveur ou une version changée —
+qu'une réouverture répare sans quitter le chemin (Louis : « un déploiement ne doit jamais casser une lecture »).
+
+**Porteurs.** `src/lib/lumenServerChoice.ts`, `src/lib/playerRoute.ts`, `src/components/PlayerHost.tsx`,
+`src/components/player/lumen/` (`LumenServerHost.tsx`, `lumenOpening.ts`, `lumenLog.ts`), `src/lib/lumenSheetPrepare.ts`,
+`src/lib/openingAudioChoice.ts`, `src/lib/subtitleTrackFacts.ts`, `src/app/api/lumen/[itemId]/pistes/route.ts`,
+`src/app/api/player/log/route.ts`, `PlayerAccountPanel.tsx` (`LumenServerRow`). **Tests.** `lumen-aiguillage.test.ts`,
+`lumen-ouverture.test.ts`, `lumen-journal.test.ts`, `lumen-fiche-preparation.test.ts`, `LumenServerHost.test.tsx` ; les
+empreintes du lecteur, inchangées.
+
+**Différent exprès.**
+- **§24 appliqué** (retour d'arrière-plan en pause) : c'est une lecture ; le lecteur serveur ne l'applique pas.
+- **AirPlay coupé sur l'élément** (`x-webkit-airplay="deny"`, `disableRemotePlayback`) : l'adresse à cookie ne
+  passerait pas au téléviseur ; « Diffuser » passe au lecteur serveur, un choix et non un échec (étape AirPlay à venir).
+- **Pas d'échelle audio, pas de version allégée (§78), pas de réserve en mémoire ni de cache de reprise** : sans
+  objet sur ce chemin ; une connexion trop lente reste sans verdict ici (Safari règle son avance seul).
+- **Absent, à reprendre** : « Améliorer les dialogues » et « Générer des sous-titres » (le son et les sous-titres
+  ne passent pas par la page), l'ajustement aux bandes noires et le plafond HDR (natif seulement), Chromecast (sans
+  objet sur WebKit). Un compte non administrateur sur l'appareil : 403 → déclin, un aller-retour.

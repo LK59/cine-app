@@ -870,6 +870,57 @@ devra : relire l'éligibilité sur un `waiting` de plus de 3 s (ou recevoir l'é
 progression), préparer le lecteur actuel sur un second `<video>` à l'état « tension », et basculer HLS → MediaSource
 (jamais l'inverse, WebKit le refuse) ; la ligne `fallback` portera `why: "son-serveur-occupe"`.
 
+## Étape 4 — le vrai lecteur, derrière une option (17/11/2026, DECISIONS §180)
+
+**Ce qui est en place.** Panneau Compte → groupe administrateur → « Lecteur expérimental : remux serveur » (par
+appareil). Allumée sur un appareil WebKit (iPhone, iPad, Safari sur Mac), une lecture du cinéma passe par Lumen serveur
+quand le serveur dit oui pour la piste que le lecteur actuel aurait ouverte ; sinon le lecteur actuel, sans un mot.
+Coupée, rien ne change : les empreintes du lecteur sont identiques.
+
+| Pièce | Fichier |
+|---|---|
+| L'option, la page sans MediaSource, les titres rendus | `src/lib/lumenServerChoice.ts` (`lumenWanted`) |
+| La route `"lumen"` | `src/lib/playerRoute.ts`, `src/components/PlayerHost.tsx` |
+| L'hôte | `src/components/player/lumen/LumenServerHost.tsx` |
+| Ses décisions pures | `lumenOpening.ts` (piste d'ouverture, numéros Jellyfin ↔ Matroska, liste maître ↔ `audioTracks`), `lumenLog.ts` |
+| Les sous-titres | `GET /api/lumen/{id}/pistes` → `subtitleTrackFacts` (la liste du lecteur serveur) |
+| Le levier (1) | `src/lib/lumenSheetPrepare.ts`, appelé par `usePlaybackPrefetch` |
+| Le relevé serveur dans player.log | `src/app/api/player/log/route.ts` (`srv.*`) |
+
+**Ouverture.** Description, état du spectateur, verdict et sous-titres en parallèle ; la piste par la règle du lecteur
+actuel (`preferredOpeningTrack`) sur les pistes servies — si la langue du compte n'existe qu'en DTS/TrueHD, le lecteur
+actuel, qui les décode ; puis `<video src="master.m3u8?audio=N#t=<reprise>" preload="auto">`. La liste maître est
+relue par la page en arrière-plan : c'est le seul lien sûr entre le menu et `video.audioTracks`.
+
+**Redémarrage du serveur.** Un déploiement ne casse pas une lecture : après la première image, une erreur de l'élément
+ou une horloge figée 35 s relisent le serveur toutes les 3 s pendant 90 s au plus ; tant qu'il ne répond pas, on attend
+(et rien n'est touché si Safari repart seul) ; une autre version de la liste (segments en 410) est rouverte à la
+position, ligne `rebuild` avec `fromVersion`/`toVersion`.
+
+**Réglages serveur.** `LUMEN_MUX_AUDIO=1` (environnement du conteneur) : l'essai du son multiplexé dans les segments
+vidéo (`m1`) pour les lectures de l'application. Coupé par défaut, non prouvé.
+
+**Ce qui manque encore**, voulu ou à reprendre : AirPlay (étape 5 ; « Diffuser » passe au lecteur serveur),
+« Améliorer les dialogues », « Générer des sous-titres », l'ajustement aux bandes noires, le plafond HDR, la version
+allégée sur connexion lente, le cache de reprise sur l'appareil, les pistes que le serveur ne sert pas (conversion du
+son, étape 6 — elles passent au lecteur serveur).
+
+**À éprouver sur l'iPhone** (application installée, puis Safari sur Mac) :
+1. Compte → groupe administrateur → allumer « Lecteur expérimental : remux serveur ».
+2. Ouvrir la fiche d'un titre en cours (*Black Monday* S02E10, *Ghosted*), attendre une seconde, Lire : l'image à la
+   position de reprise ; Activité → la séance porte « Remux serveur », sa ligne `start` `resumeBy: fragment` et
+   `prepared: ok`.
+3. Sauts à la barre, ±10 s, pause et reprise ; le passage rejoué (−10 s) montre ses sous-titres.
+4. Changer de piste son : entre deux pistes du même format (*Ted Lasso*, trois Atmos), sans rechargement ; vers un
+   autre format (AC-3 ↔ AAC), la page se recharge et reprend sur la piste — ligne `audio` `via` à lire.
+5. Sous-titres : un forcé, un complet, deux sous-titres ; « À l'écran », une question, « Jusqu'ici ».
+6. Verrouiller l'écran une minute en pleine lecture : au retour, en pause 3 s avant.
+7. Fin d'épisode : la carte de l'épisode suivant, qui s'ouvre aussi par Lumen serveur.
+8. Pendant une lecture, un déploiement (ou `docker restart cine-app`) : la lecture attend puis reprend, ligne
+   `rebuild` ; aucun `fallback`.
+9. Un titre que le serveur ne sert pas (*Le Prestige*, DTS) : le lecteur actuel s'ouvre, ligne `fallback`
+   `to: natif`, `planned: true`.
+
 ## Ordre de travail
 
 1. **Preuve sur appareil** : une instance jetable sert la liste et les segments d'un fichier copiable ; on l'ouvre
@@ -880,7 +931,8 @@ progression), préparer le lecteur actuel sur un second `<video>` à l'état « 
    de la fonction de segment avec le lecteur navigateur (voir « Étape 2 »).
 3. **Routes et sécurité** : `/api/lumen/…`, `assertVisible`, workers. **Fait** (§156) ; le jeton à portée
    `lumen` attend l'étape AirPlay, `shareGate` n'a pas d'entrée (lien refusé), les noms restent `.m4s`.
-4. **Client** : option du Compte, route `"lumen"`, `LumenServerHost`, repli, journal, page d'activité.
+4. **Client** : option du Compte, route `"lumen"`, `LumenServerHost`, repli, journal, page d'activité. **Fait** (§180),
+   derrière l'option d'appareil de l'administrateur.
 5. **AirPlay** : liste signée vers l'Apple TV, `castProgress` par segment.
 6. **Son converti** : ffmpeg minimal, grille de segments, cache disque. **Fait** (« Phase 2 », §161 à §163), sauf la
    bascule en cours de lecture (avec l'étape 4).

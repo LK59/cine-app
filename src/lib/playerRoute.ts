@@ -1,7 +1,10 @@
 import { castingNow, chromecastNow, lighterNow, type StableTakeover } from "@/lib/useStableFallback";
 
-/** Le lecteur qu'une lecture en ligne monte : natif, télécommande Chromecast, ou lecteur serveur. */
-export type PlayerRoute = "native" | "chromecast" | "server";
+/**
+ * Le lecteur qu'une lecture en ligne monte : natif, télécommande Chromecast, lecteur serveur — ou, derrière
+ * l'option d'appareil de l'administrateur, Lumen serveur (`"lumen"`, DECISIONS.md §180).
+ */
+export type PlayerRoute = "native" | "chromecast" | "server" | "lumen";
 
 /** Ce que l'aiguillage lit de la séance — un sous-ensemble de `PlaybackSession`. */
 interface RoutedSession {
@@ -26,6 +29,15 @@ export function choosePlayer(
     /** Le relais reporté sur cette lecture (`castCarriedTo`). */
     carried: StableTakeover | null;
     takeover: StableTakeover | null | undefined;
+    /**
+     * Lumen serveur est-il permis pour cette séance (`lumenWanted`, `lumenServerChoice.ts`) : l'option de
+     * l'appareil, WebKit et son HLS natif, une page sans MediaSource, un titre jamais rendu au lecteur
+     * actuel. Calculé par `PlayerHost`, jamais ici : cette fonction reste pure. **Lu seulement s'il est
+     * vrai**, et seulement là où la route serait `"native"` — un relais, une diffusion, une version
+     * allégée, une page rechargée sur le lecteur serveur passent avant, comme avant. Absent ou faux :
+     * exactement l'aiguillage d'avant.
+     */
+    lumen?: boolean;
   }
 ): PlayerRoute {
   const { serverFallback, handedOver, carried, takeover } = ctx;
@@ -42,7 +54,7 @@ export function choosePlayer(
   const useNative =
     !serverFallback ||
     (!handedOver.includes(session.itemId) && !carried && !castingNow(takeover, session) && !reloadedOnServer && !lighter);
-  if (useNative) return "native";
+  if (useNative) return ctx.lumen === true ? "lumen" : "native";
   // Vers un Chromecast, le relais n'est pas un lecteur mais une télécommande : le récepteur lit lui-même
   // le flux que Jellyfin lui prépare (DECISIONS.md §64).
   if (chromecastNow(takeover, carried, session)) return "chromecast";

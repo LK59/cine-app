@@ -43,6 +43,7 @@ export function useServerSessionRecord({
   negotiatedStepRef,
   carriedOnlyRef,
   handedOverRef,
+  extraStopFields,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   logContext: RefObject<ServerPlayerContext>;
@@ -66,6 +67,11 @@ export function useServerSessionRecord({
   carriedOnlyRef: RefObject<boolean>;
   /** Posé ici par `markHandedOver` ; lu aussi par l'hôte. */
   handedOverRef: RefObject<boolean>;
+  /**
+   * Ce qu'un autre hôte ajoute au bilan, à la fin de la ligne (Lumen serveur, DECISIONS.md §180 : l'identifiant de
+   * la lecture côté serveur et le décodage). Absent pour le lecteur serveur : sa ligne `stop` reste celle d'avant.
+   */
+  extraStopFields?: () => Record<string, unknown>;
 }) {
   /**
    * Le bilan de la séance à cet instant — la ligne `stop`, et la copie gardée sur l'appareil au cas
@@ -111,9 +117,10 @@ export function useServerSessionRecord({
       // « Revenir au début de la scène » (§143) : ce qui a été décidé — rien sans les acteurs à l'écran.
       ...sceneRestartLogFields(logContext.current.itemId),
       ...xrayLogFields(logContext.current.itemId),
-      ...replayLogFields(logContext.current.itemId) };
+      ...replayLogFields(logContext.current.itemId),
+      ...(extraStopFields ? extraStopFields() : {}) };
     },
-    [watched, videoRef, linkMeterRef, streamNeedRef, startupRef, logContext, positionNow, tallyRef, subtitleSwitchesRef, restartsRef, errorRef, sessionPlayedRef, sessionStartedAtRef, slowLogRef, switchGapRef, reloadGapRef, lighterClearedRef]
+    [extraStopFields, watched, videoRef, linkMeterRef, streamNeedRef, startupRef, logContext, positionNow, tallyRef, subtitleSwitchesRef, restartsRef, errorRef, sessionPlayedRef, sessionStartedAtRef, slowLogRef, switchGapRef, reloadGapRef, lighterClearedRef]
   );
   /** La main est rendue au lecteur natif (fin de diffusion) : la copie gardée n'a plus lieu d'être. */
   const markHandedOver = useCallback(() => {

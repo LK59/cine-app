@@ -4,7 +4,7 @@ import { useSignOut } from "@/components/offline/useSignOut";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet, TabletSmartphone, BookOpen, History, PictureInPicture2, Gauge } from "lucide-react";
+import { LogOut, Languages, Subtitles, KeyRound, MonitorSmartphone, LifeBuoy, Check, Copy, SlidersHorizontal, Activity, Wrench, Megaphone, Sparkles, ChevronDown, UsersRound, MessageSquareWarning, HardDrive, DoorOpen, Rows3, MoveVertical, Tablet, TabletSmartphone, BookOpen, History, PictureInPicture2, Gauge, Server } from "lucide-react";
 import { fetcher } from "@/lib/swr";
 import { apiAction } from "@/lib/apiAction";
 import { LOCALES, LOCALE_LABELS, getDateLocale, type Locale } from "@/lib/i18n";
@@ -19,6 +19,8 @@ import { useReportBadge } from "@/lib/useReportBadge";
 import { cinemaNavigate } from "@/lib/cinemaRoute";
 import { BenchSection } from "./BenchSection";
 import { setIpadSimulator } from "@/lib/ipadSimulator";
+import { lumenServerOn, setLumenServer, subscribeLumenServer } from "@/lib/lumenServerChoice";
+import { playsHlsNatively } from "@/lib/webkitEngine";
 import { useIpadSimulator } from "./IpadSimulatorBadge";
 import { LanguageSelect, SubtitleModeSelect, NotificationChoices, NotificationTest } from "./accountControls";
 import { openOnboarding } from "./onboardingEvents";
@@ -269,6 +271,7 @@ export function PlayerAccountPanel({ leaving, replaced, fromTab }: { leaving?: b
                 </>
               }
             />
+            <LumenServerRow />
             <Section icon={SlidersHorizontal} title={t("player.nav.manage")}>
               <a href="/gestion" className="btn btn-ghost w-full justify-center sm:w-auto">
                 <SlidersHorizontal size={16} />
@@ -395,6 +398,24 @@ function DisplayRows() {
         </Row>
       )}
     </>
+  );
+}
+
+/**
+ * « Lecteur expérimental : remux serveur » (Lumen serveur, DECISIONS.md §180) — rangé sur l'appareil, comme le
+ * simulateur d'iPad : l'administrateur l'allume sur l'iPhone ou le Mac qu'il veut éprouver. Vaut à la prochaine
+ * ouverture d'un film, sans recharger. Hors WebKit, la ligne le dit (« Safari seulement ») : un administrateur sur
+ * Chrome croirait tester, alors que le lecteur actuel reste en place. L'interface ne protège rien : les routes
+ * `/api/lumen` refusent tout autre compte (§156), et un refus ramène le lecteur actuel sans rien dire.
+ */
+function LumenServerRow() {
+  const t = useT();
+  const on = useSyncExternalStore(subscribeLumenServer, lumenServerOn, () => false);
+  const webkit = useSyncExternalStore(noSubscribe, () => playsHlsNatively(), () => true);
+  return (
+    <Row icon={Server} title={t("player.account.lumenServer")} hint={webkit ? t("player.account.lumenServerHint") : t("player.account.lumenServerSafariOnly")}>
+      <Toggle checked={on} ariaLabel={t("player.account.lumenServer")} onChange={(next) => setLumenServer(next)} />
+    </Row>
   );
 }
 

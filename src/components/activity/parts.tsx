@@ -267,6 +267,7 @@ export function SeanceFlags({ s }: { s: Seance }) {
   // « Lecteur serveur prévu » le dit déjà : pas deux étiquettes pour un même fait.
   if (s.player === "serveur" && !s.planned) flags.push({ label: t("activity.flags.server"), tone: "bg-violet-500/15 text-violet-300" });
   if (s.player === "hors-ligne") flags.push({ label: t("activity.flags.offline"), tone: "bg-sky-500/15 text-sky-300" });
+  if (s.player === "lumen-serveur") flags.push({ label: t("activity.flags.lumen"), tone: "bg-sky-500/15 text-sky-300" });
   if (s.retro) flags.push({ label: t("activity.flags.retro"), tone: "bg-white/5 text-muted" });
   if (s.onTv) flags.push({ label: t("activity.flags.tv"), tone: "bg-violet-500/15 text-violet-300" });
   // Le téléviseur nommé quand ce n'est pas AirPlay (DECISIONS.md §64) — absent des séances d'avant.
@@ -665,7 +666,7 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
     case "start": {
       // Le lecteur serveur dit pourquoi il (re)négocie depuis le 10/10/2026 — ouverture, piste,
       // échelon de l'échelle de repli et l'erreur qui l'a provoqué.
-      if (line.player === "serveur" && isStartWhy(line.why)) {
+      if ((line.player === "serveur" || line.player === "lumen-serveur") && isStartWhy(line.why)) {
         return t("activity.line.serverStart", {
           why: t(`activity.line.serverWhy.${line.why}`, { n: numOf(line.rung) ?? 0 }),
           at: clock(numOf(line.at)),

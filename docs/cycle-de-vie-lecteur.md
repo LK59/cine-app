@@ -19,11 +19,12 @@ noms de fonctions et de champs, beaucoup moins. En cas de doute, chercher le nom
 2. [La séance — PlaybackProvider et PlayerHost](#la-séance--playbackprovider-et-playerhost)
 3. [L'hôte natif — ExperimentalPlayerHost](#lhôte-natif--experimentalplayerhost)
 4. [Le moteur — RemuxPlayback et MseSource](#le-moteur--remuxplayback-et-msesource)
-5. [Les contrats entre couches](#les-contrats-entre-couches)
-6. [Quand deux événements se croisent](#quand-deux-événements-se-croisent)
-7. [Les points fragiles](#les-points-fragiles)
-8. [Ce que chaque couche écrit au journal](#ce-que-chaque-couche-écrit-au-journal)
-9. [Vers une machine à états explicite](#vers-une-machine-à-états-explicite)
+5. [L'hôte Lumen serveur — LumenServerHost](#lhôte-lumen-serveur--lumenserverhost)
+6. [Les contrats entre couches](#les-contrats-entre-couches)
+7. [Quand deux événements se croisent](#quand-deux-événements-se-croisent)
+8. [Les points fragiles](#les-points-fragiles)
+9. [Ce que chaque couche écrit au journal](#ce-que-chaque-couche-écrit-au-journal)
+10. [Vers une machine à états explicite](#vers-une-machine-à-états-explicite)
 
 ---
 
@@ -277,6 +278,54 @@ la source d'octets. `MseSource.destroy` : `destroyed`, `guard.destroy()` (qui ap
 `onStarting(null)` pour éteindre la roue), **nouvelle époque**, écouteurs et minuteurs retirés,
 files des tampons fermées (ce qui y attend se résout sans s'exécuter), fin de flux, puis
 `removeAttribute("src")` **avant** `revokeObjectURL`.
+
+---
+
+## L'hôte Lumen serveur — LumenServerHost
+
+Ajouté le 17/11/2026 (étape 4 de `docs/remux-serveur/`, DECISIONS.md §180), derrière l'option d'appareil
+« Lecteur expérimental : remux serveur » de l'administrateur. Une quatrième branche de `PlayerHost` :
+`choosePlayer` rend `"lumen"` seulement là où il rendrait `"native"`, quand `lumenWanted` est vrai (option allumée
+et lue une fois par séance, WebKit avec son HLS natif — iPhone, iPad comme Mac —, page sans MediaSource, titre jamais
+rendu, ni banc ni extrait ni hors ligne). Clé `lumen:${itemId}:${openId}` : un épisode, un hôte, un élément, une
+séance HLS. Le film est remultiplexé par le serveur et lu par `<video src="….m3u8">`.
+
+### Les phases
+
+| Phase | Ce qui la définit | Ce qui la quitte |
+|---|---|---|
+| **Préparation** | l'effet d'ouverture attend, en parallèle, la description (`directInfoForOpening`), l'état du spectateur (`playback-state`), le verdict (`/api/lumen/{id}/eligibility`) et les sous-titres (`/api/lumen/{id}/pistes`) ; 3 s de grâce d'abord après un rechargement de piste (`fromReload`) | l'adresse posée, ou un **déclin** (`fallTo("natif")`) |
+| **Ouverture** | `src` posé (`#t=<reprise>`, `preload="auto"`), chien de garde de 20 s de page visible | `loadeddata` (première image : `pictureRef`), ou déclin (code 4, 20 s, seconde erreur) |
+| **Lecture** | `pictureRef` vrai, la séance annoncée à Jellyfin (`DirectStream`, `lumen-serveur-${itemId}`) | fermeture, épisode suivant, relais au lecteur serveur, ou **réouverture** (`recover`) |
+| **Réouverture** | `recover` relit le serveur (borné à 90 s, toutes les 3 s), puis rouvre la liste — nouvelle version comprise — à la position, sur un élément neuf (`videoKey`) | `loadeddata`, ou l'écran « interrompue » à la borne |
+| **Relayée** | `fellRef` : une ligne `fallback`, `markHandedOver` (ni `stop` ni bilan gardé) | — l'hôte est démonté par l'aiguillage |
+| **Fermée** | `closedRef` (`claimOnce`), comme le lecteur serveur | — |
+
+### Les transitions qui comptent
+
+- **Avant la première image, tout repli va au lecteur actuel** (`declineLumen` → `PlayerHost` se redessine sur
+  `ExperimentalPlayerHost`, même `openId`). MediaSource après HLS natif marche dans la même page ; l'inverse non, d'où
+  `noteMediaSourceServed` (au `startRemux` du natif et à l'ouverture du lecteur hors ligne) que `lumenWanted` lit.
+- **Après la première image, la lecture se rétablit sur ce chemin** : une erreur de l'élément ou une horloge figée
+  35 s appellent `recover`, qui relit `eligibility` pour la piste en cours. Serveur injoignable ou 502/503 (un
+  déploiement) : on attend, et si l'horloge repart seule (Safari réessaie ses segments) on s'arrête sans rien toucher ;
+  autre version (les segments répondent 410) : la nouvelle liste à la position (`rebuild`, « version changée ») ; même
+  version : rouverte telle quelle ; fichier plus servi, ou plus de trois réouvertures : le lecteur serveur par
+  `handOver` (sur WebKit, le rechargement direct de `serverReload.ts`).
+- **Piste audio** : dans le groupe que Safari expose (même codec), `audioTracks[i].enabled` — relié au menu par la
+  liste maître que la page lit (`parseMasterAudio`) ; hors du groupe, la page rechargée avec une intention **sans**
+  `server` (l'aiguillage la renvoie ici, la séance du journal continue par `reloadCarry.continues`) ; une piste non
+  servie (DTS, TrueHD), le lecteur serveur sur cette piste.
+- **Arrière-plan** : §24 s'applique (`BackgroundWatch`), contrairement au lecteur serveur — c'est une lecture.
+
+### Ce qu'il écrit au journal
+
+`player: "lumen-serveur"`, `path: "remux-serveur"`, `session` = l'identifiant de lecture `s` du serveur
+(`lumenSession`). `start` (`why` : `open`, `retry`, `audio-reload` ; `resumeBy`, `prepared`, `negotiateMs`),
+`opening`, `seek` (avec `advanceMs`), `audio` (`via` : `rendition`, `rechargement`, `refus` ; `applied`), `stall`,
+`rebuild` (réouverture, `fromVersion`/`toVersion`), `fallback` (`to` : `natif` / `serveur`, `planned`), `error`,
+`stop` (le bilan de `useServerSessionRecord` + `frames.*`). La route du journal joint `srv.*` (`lumenPlaybackFields`)
+à `stop`, `stall`, `error`, `fallback`, `rebuild`.
 
 ---
 
