@@ -11003,3 +11003,49 @@ par jour : le jour relevé est retenu en mémoire, puis lu dans la base, et l'in
 - **La prévision est dite une fois**, sous la barre du disque, à côté de l'espace libre ; le graphique des imports
   mensuels l'y accompagne. La section Stockage ne la répète plus.
 - **Gardé dans la sauvegarde** (`dbBackup`) : un historique de relevés perdu ne se reconstruit pas.
+
+## 154. La signalisation HLS de Lumen serveur : la liste dit ce que l'init segment contient, MSE n'en sait rien (16/11/2026)
+
+**Règle.** Le chemin HLS de Lumen serveur (`docs/remux-serveur/`) écrit ses entrées d'échantillon avec
+`signalling: "hls"` (`SampleEntryOptions`, `RemuxOptions.signalling`) ; tout autre appelant — le lecteur actuel
+entier — ne passe rien, et chaque entrée reste celle d'avant **à l'octet près**. Sous cette option :
+- **E-AC-3** : un `dec3` complet (`describeEac3` + `dec3Complete`) — chaque sous-flux indépendant, le nombre de ses
+  dépendants, leurs emplacements (`chan_loc`), un débit qui est la somme des sous-flux (F.6.2.2), `bsmod` lu dans
+  `infomdate`, et pour un Atmos l'extension `flag_ec3_extension_type_a` + `complexity_index_type_a` lue dans `addbsi`
+  (ETSI TS 103 420 §8.3). Un premier sous-flux AC-3 (bsid ≤ 10, le cœur des « 7.1 » de Blu-ray) est décrit depuis
+  sa trame AC-3.
+- **Dolby Vision** : la forme dépend du profil, décidée par **une** fonction, `hlsDolbyVisionEntry` — 8.1/8.2/8.4
+  en `hvc1` + `hvcC` + boîte DV recopiée (la forme qu'Apple attend avec `SUPPLEMENTAL-CODECS`), 5 en `dvh1` (la forme
+  MSE), tout le reste en `hvc1` sans boîte DV. Le remuxeur s'en sert pour l'entrée et pour son type MIME, la liste
+  (`hlsVideoSignal`) pour `CODECS`/`SUPPLEMENTAL-CODECS` : les deux ne peuvent pas diverger.
+- **La liste** (`src/lib/lumenServer/hlsSignal.ts`) lit ce que l'entrée porte, jamais un nom de codec de Jellyfin :
+  `CODECS` depuis `hvcC`/`avcC`/`av1C`, `CHANNELS` depuis le `dec3` (« 16/JOC » = la complexité écrite dans la
+  boîte, règle 2.8 d'Apple), `VIDEO-RANGE` depuis la base Dolby Vision, sinon l'élément `Colour` du Matroska, sinon
+  le VUI du SPS (`hevcTransferCharacteristics`, `avcTransferCharacteristics`), sinon SDR.
+
+**Pourquoi.** En MediaSource, Safari décode ce qu'il reçoit : un Atmos annoncé 5.1 joue en 5.1, un `dec3` faux sur un
+7.1 à cœur AC-3 passe quand même. En HLS, la liste maître est lue *avant* le flux et doit concorder avec lui : 681
+pistes Atmos annoncées « 6 » et 25 E-AC-3 7.1 sans leur dépendant, et un DV 8.1 en `dvh1` qui contredit `CODECS`.
+Changer le chemin MSE aurait exposé tout le lecteur pour un chemin réservé à l'administrateur : d'où l'option.
+
+**Porteurs.** `src/lib/webcodecs/mp4SampleEntries.ts` (`describeEac3`, `dec3Complete`, `chanmapToChanLoc`,
+`chanLocChannels`, `ac3Channels`, `hlsDolbyVisionEntry`, `SampleEntryOptions`), `src/lib/webcodecs/remuxer.ts`
+(`RemuxOptions.signalling`, transmis à `describeAudio` et `videoSampleEntry`), `src/lib/lumenServer/hlsSignal.ts`
+(`hlsVideoSignal`, `hlsAudioSignal`, `variantCodecs`). **Appelants.** Aucun en production à ce jour : le futur
+chemin `/api/lumen/…`. **Tests.** `lumenServer-hlsSignal.test.ts` (boîtes octet par octet, traversée de `bsi()`
+champ par champ, identité MSE), `webcodecs-mp4SampleEntries.test.ts` inchangé. **Banc.** `lumen-signal-bench.spec.ts`
+(sauté sans `LUMEN_FILES`) : empreintes des init segments MSE à comparer avant/après, et la signalisation HLS sur
+de vrais fichiers, avec deux contre-épreuves lues dans le flux (forme du `dec3` stable sur 200 blocs ; charges EMDF
+11 et 14 — OAMD et JOC — présentes exactement sur les pistes que `addbsi` dit Atmos).
+
+**Différent exprès.**
+- **`chan_loc` a son bit 0 au poids faible** (tableau F.6.1 : « 8 (MSB) LFE2 »), comme FFmpeg master et GPAC.
+  FFmpeg 9.0.2 écrit encore l'ancien décalage (`chanmap >> 5`) : Lsd/Rsd (0x010) là où le flux dit Lrs/Rrs (0x002).
+  `mp4Demux.ts` (`dec3Format`, lecture des MP4 sources) lit ce champ poids fort d'abord : sur un `dec3` conforme il
+  compterait 7 canaux pour un 7.1. Non corrigé ici (chemin de production, aucun MP4 7.1 dans la bibliothèque).
+- **`num_dep_sub` est le compte des dépendants**, pas la lettre de F.6.2.12 (le `substreamid` du dernier, qui
+  vaudrait 0 pour un seul et ferait disparaître `chan_loc`) : FFmpeg et GPAC font de même.
+- **Le débit est la somme des sous-flux** (F.6.2.2, GPAC) ; FFmpeg n'écrit que celui du sous-flux indépendant.
+- **Un drapeau JOC sans son octet de complexité** ne produit aucune extension (GPAC de même) : on n'annonce pas un
+  nombre qu'on n'a pas lu.
+- **L'EMDF n'est lu que par le banc** : `addbsi` est la signalisation que la norme et Dolby désignent pour le `dec3`.

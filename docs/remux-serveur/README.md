@@ -95,9 +95,10 @@ refusée par le système (WebKit bug 303885, rdar://121964774), et le son en arr
 
 - **`dec3()`** (`src/lib/webcodecs/mp4SampleEntries.ts`) n'écrit ni l'extension JOC ni les sous-flux dépendants :
   681 pistes Atmos seraient annoncées en 5.1, et les E-AC-3 7.1 risquent de sortir en 5.1. À corriger d'abord.
+  **Fait à l'étape 1** (DECISIONS §154) : `dec3` complet sous l'option `signalling: "hls"`, chemin MSE inchangé.
 - **Dolby Vision 8.x en HLS** : entrée `hvc1` avec la boîte DV et `SUPPLEMENTAL-CODECS="dvh1.08.LL/db1p"` (le
   code écrit `dvh1`, la forme MediaSource). `VIDEO-RANGE` souvent absent du MKV : le lire dans le SPS ou reprendre
-  `VideoRangeType` de Jellyfin.
+  `VideoRangeType` de Jellyfin. **Fait à l'étape 1** (§154) : `hvc1` + boîte DV, `hlsVideoSignal`, VUI lu dans le SPS.
 - **Son qui commence après l'image** (§148, 63 pistes) : des segments audio vides ne se fabriquent pas en copie ;
   silence devant (phase 2) ou chemin actuel.
 - **Vérifier l'index coûte cher** avec le lecteur actuel (0,5 à 1,2 Mo lus par point d'index) : un lecteur qui ne
