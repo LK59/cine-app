@@ -1,0 +1,128 @@
+# Généré par le dépouillement de la nuit du 16-17/11 ; voir README.md
+lot df87a946
+reseau aucun
+# A — iGPU, réseau local
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d actuel
+essai va blackmonday 3f79d20c0c10289f3c6df5f72f62b84b actuel
+essai va blackmonday 3f79d20c0c10289f3c6df5f72f62b84b serveur
+essai va ghosted 1694ff6c78fd793f321d348511771a47 serveur
+essai va ghosted 1694ff6c78fd793f321d348511771a47 actuel
+essai va tedlasso edaa7d0071b034dc32fabf1834484278 actuel
+essai va tedlasso edaa7d0071b034dc32fabf1834484278 serveur
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db serveur
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db actuel
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e actuel
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d actuel
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur
+essai va blackmonday 3f79d20c0c10289f3c6df5f72f62b84b serveur
+essai va blackmonday 3f79d20c0c10289f3c6df5f72f62b84b actuel
+essai va ghosted 1694ff6c78fd793f321d348511771a47 actuel
+essai va ghosted 1694ff6c78fd793f321d348511771a47 serveur
+essai va tedlasso edaa7d0071b034dc32fabf1834484278 serveur
+essai va tedlasso edaa7d0071b034dc32fabf1834484278 actuel
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db actuel
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db serveur
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e actuel
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur mux
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db serveur mux
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db serveur
+essai va ghosted 1694ff6c78fd793f321d348511771a47 serveur mux
+essai va ghosted 1694ff6c78fd793f321d348511771a47 serveur
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur mux
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur
+reseau 5g
+# B — iGPU, 5G simulée
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d actuel
+essai va blackmonday 3f79d20c0c10289f3c6df5f72f62b84b actuel
+essai va blackmonday 3f79d20c0c10289f3c6df5f72f62b84b serveur
+essai va ghosted 1694ff6c78fd793f321d348511771a47 serveur
+essai va ghosted 1694ff6c78fd793f321d348511771a47 actuel
+essai va tedlasso edaa7d0071b034dc32fabf1834484278 actuel
+essai va tedlasso edaa7d0071b034dc32fabf1834484278 serveur
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db serveur
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db actuel
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e actuel
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d actuel
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur
+essai va blackmonday 3f79d20c0c10289f3c6df5f72f62b84b serveur
+essai va blackmonday 3f79d20c0c10289f3c6df5f72f62b84b actuel
+essai va ghosted 1694ff6c78fd793f321d348511771a47 actuel
+essai va ghosted 1694ff6c78fd793f321d348511771a47 serveur
+essai va tedlasso edaa7d0071b034dc32fabf1834484278 serveur
+essai va tedlasso edaa7d0071b034dc32fabf1834484278 actuel
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db actuel
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db serveur
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e actuel
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur mux
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db serveur mux
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db serveur
+essai va ghosted 1694ff6c78fd793f321d348511771a47 serveur mux
+essai va ghosted 1694ff6c78fd793f321d348511771a47 serveur
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur mux
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur
+reseau aucun
+# Consommation 1 (décodage logiciel, 1080p ; Lumen serveur d'abord)
+conso sw maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur 900
+conso sw maisonblanche d4513bcf59bba90a23656f40ed816c3d actuel 900
+conso sw pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur 900
+conso sw pearlharbor a1e058d682294a1de3cf5bb47d904e0e actuel 900
+conso sw theknick 579892073db7f5021e7ba6426cb163e5 actuel 900
+reseau wifi-faible
+# C — iGPU, Wi-Fi faible
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d actuel
+essai va blackmonday 3f79d20c0c10289f3c6df5f72f62b84b actuel
+essai va blackmonday 3f79d20c0c10289f3c6df5f72f62b84b serveur
+essai va ghosted 1694ff6c78fd793f321d348511771a47 serveur
+essai va ghosted 1694ff6c78fd793f321d348511771a47 actuel
+essai va tedlasso edaa7d0071b034dc32fabf1834484278 actuel
+essai va tedlasso edaa7d0071b034dc32fabf1834484278 serveur
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db serveur
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db actuel
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e actuel
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d actuel
+essai va maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur
+essai va blackmonday 3f79d20c0c10289f3c6df5f72f62b84b serveur
+essai va blackmonday 3f79d20c0c10289f3c6df5f72f62b84b actuel
+essai va ghosted 1694ff6c78fd793f321d348511771a47 actuel
+essai va ghosted 1694ff6c78fd793f321d348511771a47 serveur
+essai va tedlasso edaa7d0071b034dc32fabf1834484278 serveur
+essai va tedlasso edaa7d0071b034dc32fabf1834484278 actuel
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db actuel
+essai va nottinghill 55027c51fd0cdeceec6062202c73a4db serveur
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur
+essai va pearlharbor a1e058d682294a1de3cf5bb47d904e0e actuel
+reseau aucun
+# Redémarrage du serveur, son réellement joué
+script redemarrage.sh 1500
+script son.sh 1200
+# Consommation 2 (lecteur actuel d'abord)
+conso sw theknick 579892073db7f5021e7ba6426cb163e5 actuel 900
+conso sw pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur 900
+conso sw pearlharbor a1e058d682294a1de3cf5bb47d904e0e actuel 900
+conso sw maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur 900
+conso sw maisonblanche d4513bcf59bba90a23656f40ed816c3d actuel 900
+# D — décodage logiciel, 1080p, réseau local
+essai sw maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur
+essai sw maisonblanche d4513bcf59bba90a23656f40ed816c3d actuel
+essai sw nottinghill 55027c51fd0cdeceec6062202c73a4db actuel
+essai sw nottinghill 55027c51fd0cdeceec6062202c73a4db serveur
+essai sw pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur
+essai sw pearlharbor a1e058d682294a1de3cf5bb47d904e0e actuel
+essai sw maisonblanche d4513bcf59bba90a23656f40ed816c3d actuel
+essai sw maisonblanche d4513bcf59bba90a23656f40ed816c3d serveur
+essai sw nottinghill 55027c51fd0cdeceec6062202c73a4db serveur
+essai sw nottinghill 55027c51fd0cdeceec6062202c73a4db actuel
+essai sw pearlharbor a1e058d682294a1de3cf5bb47d904e0e actuel
+essai sw pearlharbor a1e058d682294a1de3cf5bb47d904e0e serveur
+# Ce qui reste de temps : une passe de la page, en logiciel
+serie sw complète serveur
