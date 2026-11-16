@@ -1,8 +1,9 @@
 # Lumen serveur — le remux côté serveur, servi en HLS
 
-Conception du 16/11/2026. Étapes 1 (signalisation, §154), 2 (le moteur, §155) et 3 (routes et sécurité, §156)
-faites ; aucun écran ne les appelle encore. Les quatre sections jointes détaillent chaque partie, avec
-références `chemin:ligne` et mesures ; ce document en tire les décisions, l'architecture et l'ordre de travail.
+Conception du 16/11/2026. Étapes 1 (signalisation, §154), 2 (le moteur, §155), 3 (routes et sécurité, §156) et
+3b (recensement, découpes d'essai et banc Safari, §157) faites ; seule la page de banc `/lumen-test` les appelle.
+Les quatre sections jointes détaillent chaque partie, avec références `chemin:ligne` et mesures ; ce document en
+tire les décisions, l'architecture et l'ordre de travail.
 
 | Section | Contenu |
 |---|---|
@@ -232,6 +233,92 @@ pendant les essais (un pic à 966 Mo au-dessus d'un repos de ~300 Mo, en plus du
 **Reste incertain.** Ce que Safari et AVPlayer font d'un 410 ou d'un 503 en pleine lecture ; `http-crawl-non_statics`
 sur une Apple TV qui remplit son tampon (noms `.m4s`) ; la mémoire réelle quand plusieurs lectures 4K et une
 analyse X-Ray tournent ensemble ; le comportement d'un `s` partagé entre deux onglets.
+
+## Étape 3b — recensement et banc Safari (16/11/2026, DECISIONS §157)
+
+**La question.** La règle de découpe (`idr`, §155) refuse de couper sur une CRA suivie de RASL. Un HEVC à GOP
+ouvert (défaut de x265) n'a souvent qu'une IDR en tête puis des CRA : ses segments durent des minutes et le
+fichier est refusé (`segment-trop-long`). Safari et AVFoundation savent-ils démarrer un segment HLS sur une CRA
+en jetant ses RASL, comme la norme le prévoit (H.265 §8.1.3) ? Sous MediaSource, non ; en HLS natif, inconnu.
+
+**Le recensement** (`lumen-census-bench.spec.ts`, 300 fichiers, `--cpus 2 -m 2g`, médias en lecture seule, un
+fichier à la fois, lots de 7 minutes séparés de 2 minutes de pause, X-Ray en pause, aucune lecture 4K en cours
+au début de chaque lot). Chaque fichier passe par `buildLumenIndex` puis `lumenEligibility` (piste audio par
+défaut du fichier) sous `idr` puis sous `cra`. Échantillon stratifié (au plus deux épisodes par série),
+extrapolé aux 10 533 fichiers par le poids de chaque strate, intervalle à 95 % :
+
+| Strate | Fichiers | Tirés | Servis `idr` | Servis `cra` | GOP ouvert | Plus long segment, médiane `idr` / `cra` |
+|---|---|---|---|---|---|---|
+| Épisodes HEVC HD | 7 411 | 110 | 53 % | 90 % | 49 % | 15,6 / 12,9 s |
+| Épisodes H.264 | 1 944 | 50 | 80 % | 80 % | 0 % | 7,3 / 7,3 s |
+| Épisodes HEVC 4K | 506 | 35 | 49 % | 100 % | 54 % | 37,3 / 13,6 s |
+| Films HEVC 4K | 283 | 40 | 32 % | 82 % | 62 % | 89,9 / 14,3 s |
+| Films HEVC HD | 258 | 35 | 49 % | 77 % | 51 % | 39,0 / 14,0 s |
+| Films H.264 | 131 | 30 | 83 % | 83 % | 0 % | 13,9 / 13,9 s |
+
+- **Servable avec la piste par défaut : 57 % ± 7 sous `idr`, 88 % ± 5 sous `cra`** (+31 points ± 6, soit
+  ~3 200 fichiers). Vidéo et découpe seules : 64 % ± 7 → 99,8 % ± 0,2.
+- **GOP ouvert** (au moins une CRA à RASL vue) : **40 % ± 7** de la bibliothèque, aucun H.264 ; **93 %** d'entre
+  eux (108 sur 116) sont refusés sous `idr`. Parmi leurs clés vérifiées, 15 % sont des CRA à RASL (médiane ;
+  6 à 35 %) : x265 en pose une à chaque intervalle de clés, et presque aucune IDR (*Don't Look Up* : 1 IDR,
+  1 069 CRA).
+- **Plus long segment par fichier** : sous `idr`, médiane 13,9 s mais p90 120 s, 109 fichiers au-delà de 30 s,
+  le pire 3 516 s (un épisode entier en un segment) ; sous `cra`, médiane 13,8 s, p90 14,3 s, 3 fichiers au-delà
+  de 30 s — deux trous dans les Cues (*Don't Look Up* 297 s, un H.264 à 136 s) et *BlackBerry* (105 s).
+- **Raisons sous `idr`** (extrapolées) : `segment-trop-long` 35,5 %, `son-aac-sbr-implicite` 3,3 %, `son-codec`
+  2,0 % (DTS, Opus), `son-plus-court` 1,4 %, `son-frequence` 0,4 %, `son-en-retard` 0,1 %. **Sous `cra`** :
+  `son-aac-sbr-implicite` 6,3 %, `son-codec` 3,6 %, `son-plus-court` 1,4 %, `son-frequence` 0,4 %,
+  `segment-trop-long` 0,2 %, `son-en-retard` 0,1 % — ce qui reste est le son (phase 2), plus la découpe.
+- **Par codec** (échantillon) : HEVC 180 fichiers (93 servis `idr`, 159 `cra`, 89 à GOP ouvert), HEVC DV 8.1
+  40 (12 → 35, 27 à GOP ouvert), H.264 80 (65 → 65, aucun). Son par défaut : E-AC-3 138, AC-3 87, AAC 37
+  copiables ; AAC à SBR implicite 17, DTS 12, Opus 2 refusés.
+- **Coût de l'index à froid** (sous `idr`) : médiane 3,1 s, p90 12,2 s, pire 39,7 s ; 17 Mo lus en médiane,
+  694 Mo au pire. Sous `cra`, la seconde lecture tombe dans le cache de pages (non mesurée à froid).
+
+**Les découpes d'essai** : `cra` (les RASL gardées dans le segment qu'ouvre leur CRA) et `cra-leading` (`cra`,
+et `is_leading` dans les `sample_flags` : RASL 1, RADL 3, autre 2). Choisies par `?cut=`, portées par la
+version de l'adresse (`1c1-…`, `1l1-…`), administrateur seul ; sans rien demander, rien ne change. Le chemin
+MediaSource du lecteur ne change pas d'un octet : `remux-hash-bench.spec.ts` (init et 36 segments par fichier,
+du début et après deux sauts) donne les mêmes empreintes avant et après sur *Ghosted*, *Ted Lasso* S02E01 et un
+épisode H.264, et les empreintes du lecteur sont inchangées.
+
+**La page `/lumen-test`** (panneau Compte → groupe administrateur → « Banc Lumen serveur ») : un titre (huit
+proposés, ou un identifiant Jellyfin), une découpe, une piste ; « Préparer » donne le verdict (segments, plus
+long segment, CRA à RASL), « Lire » joue la liste maître en HLS natif. Elle mesure le temps jusqu'à la première
+image (`requestVideoFrameCallback`, sinon `playing`), chaque saut (`seeked`, puis le temps qui avance de
+0,3 s : la reprise ; 20 s sans reprise = manqué), les blocages hors saut, les erreurs (`MediaError`), les pistes
+de `video.audioTracks` et un changement de piste (rechargement, `waiting`, et « Entendez-vous la nouvelle
+piste ? »), et `getVideoPlaybackQuality`. « Envoyer les résultats » écrit une ligne `kind: "lumen-test"` dans
+`startup.log`, où le serveur joint pour chaque lecture ses `srv.*`, les segments son par piste et la trace des
+derniers segments remis (lesquels Safari a demandés après chaque saut).
+
+**Protocole, sur l'iPhone (dans l'application installée, puis dans un onglet Safari ; puis le Mac si possible).**
+Pour chaque lecture : Préparer, Lire, attendre la première image, « Lancer le parcours » (10 sauts), regarder
+l'image à chaque reprise — **une image verte, grise, en blocs ou figée pendant que le son continue** est ce que
+la page ne voit pas : la noter —, puis Arrêter. « Envoyer les résultats » après chaque titre (12 lectures au plus
+gardées).
+
+1. *À la Maison Blanche* S03E01 (H.264) — `idr` : le témoin. Temps de première image et de saut de référence.
+2. *Black Monday* S02E10 (HEVC 4K, IDR seules) — `idr` puis `cra` : mêmes segments ; seule l'absence
+   d'`EXT-X-INDEPENDENT-SEGMENTS` change. Si `cra` se comporte autrement, c'est la balise.
+3. *American Housewife* (GOP ouvert court, servi sous les deux) — `idr`, `cra`, `cra-leading` : la comparaison
+   directe sur un même fichier ; « Départ à » 600 s en plus du parcours.
+4. ***Ghosted*** (DV 8.1, Atmos, GOP ouvert) — `cra` puis `cra-leading`, **deux parcours de 20 sauts chacun** :
+   erreurs (code 3 = décodage), sauts manqués, images figées ou corrompues après la reprise. Puis « Piste audio
+   suivante » et répondre à la question.
+5. ***Pearl Harbor*** (HEVC 1080p, GOP ouvert, 132 CRA à RASL vues) — même chose que *Ghosted* : le second
+   HEVC à GOP ouvert de la comparaison `cra` / `cra-leading`, sans Dolby Vision.
+6. *Ted Lasso* S02E01 (DV 8.1, trois Atmos) — `cra` (refusé sous `idr`) : parcours, puis changement de piste entre
+   les trois Atmos.
+7. *Le Prestige* — Préparer seulement, sous `idr` puis `cra` : le verdict passe de `segment-trop-long` (208 s) à
+   `son-codec` (DTS) ; il ne se lit pas avant la conversion du son.
+8. *Alien : Romulus* (E-AC-3 7.1 par défaut) — `idr` : le son 7.1 en HLS natif (sur l'iPhone, réduit par le
+   système ; sur un Mac relié à un ampli, vérifier les 8 canaux).
+
+**Ce qui tranchera** : `cra` ou `cra-leading` sans erreur, sans saut manqué et sans image corrompue sur *Ghosted*
+et *Pearl Harbor*, sur iPhone et Mac → la découpe retenue devient la règle (`LUMEN_FORMAT_VERSION` monte, §157).
+`cra-leading` seule passe → c'est `is_leading` qui manquait. Les deux échouent → la règle `idr` reste, et ces
+fichiers attendent un autre chemin (une IDR forcée par réencodage, ou le lecteur actuel).
 
 ## Ordre de travail
 

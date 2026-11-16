@@ -11173,3 +11173,75 @@ redémarrage, et une garde : chaque route sous `/api/lumen` passe par `lumenAcce
 - **Pas de relais Jellyfin** quand le fichier n'est pas lisible ici (`LUMEN_PATH_MAP` vide, médias non montés) :
   `lecture-impossible`, et le lecteur actuel lit le fichier. Seule la première `MediaSource` est servie.
 - **Pas de compte des liens de partage** (§112) : un lien n'a pas accès à ces routes.
+
+## 157. La découpe expérimentale `cra` de Lumen serveur : choisie par l'adresse, jamais mélangée à la règle (16/11/2026)
+
+**Règle.** Lumen serveur a trois découpes (`LumenCutMode`, `format.ts`), et **une seule sert sans qu'on la
+demande** : `idr` (§155), la règle. `cra` et `cra-leading` sont des essais, étape 3b de `docs/remux-serveur/` :
+- **`cra`** : une CRA suivie de RASL peut ouvrir un segment, et ses RASL y restent — en lecture continue leurs
+  références sont à la fin du segment précédent, après un saut c'est au décodeur de les jeter (H.265 §8.1.3,
+  `NoRaslOutputFlag`). La seule différence de règle est dans `isCut(key, cut)` (`lumenIndex.ts`) ; l'I H.264 à
+  images de tête reste refusée partout (rien dans le flux ne la nomme, aucun décodeur ne saura la jeter seul).
+- **`cra-leading`** : `cra`, et chaque image non clé nommée dans ses `sample_flags` (`is_leading`, ISO/IEC
+  14496-12 §8.8.3.1, deux bits) : RASL 1 (image de tête non décodable après un accès aléatoire), RADL 3 (image
+  de tête décodable), toute autre 2 (`leadingOf`, `segment.ts` ; `MuxSample.isLeading`, `SegmentSpec.markLeading`).
+  Sans l'option, le muxer écrit 0, « inconnu » — ce que fait tout le reste du dépôt. Un démultiplexeur
+  (AVFoundation) peut s'en servir pour jeter les RASL après un saut sans analyser le flux : c'est peut-être la
+  pièce qui manque, et `cra` contre `cra-leading` sur les mêmes sauts le dira. Les clés gardent leurs drapeaux
+  (une seule chose change à la fois). **Pas de boîte `sdtp`** : dans un fragment, les `sample_flags` du `trun`
+  portent déjà `is_leading` et la dépendance pour chaque échantillon, et priment sur toute valeur par défaut
+  (§8.8.8) ; une `sdtp` dans le `traf` répéterait les mêmes deux bits ailleurs, et si Safari lisait l'une et pas
+  l'autre on ne saurait plus laquelle a compté. Elle reste un essai de plus si `cra-leading` échoue.
+- **La découpe est dans l'adresse** : la version de format (`lumenFormatTag`) vaut `1` sous `idr` —
+  exactement l'ancienne —, `1c1` sous `cra`, `1l1` sous `cra-leading` (`LUMEN_CRA_REVISION` à monter quand la
+  règle des essais change seule). Les URI relatives des listes en héritent ; la route lit la découpe dans la
+  version (`cutModeOfTag`), et `eligibility`/`prepare` la reçoivent par `?cut=` / `{ cut }` (`parseCutMode`,
+  410 pour une valeur inconnue). Administrateur seul, comme toutes ces routes (§156).
+- **Rien ne mélange deux découpes** : cache d'index en mémoire (une entrée par fichier *et* découpe,
+  `variant`), cache disque (`storeKey` porte `lumenFormatTag` ; sous `idr` la clé est celle d'avant, les index
+  gardés en production valent, et un index écrit avant l'étape 3b — sans champ `cut` — se relit comme `idr`),
+  segments partagés et cache du navigateur (la version est dans leur adresse).
+- **Les listes d'un essai ne disent pas `EXT-X-INDEPENDENT-SEGMENTS`** : un segment qui s'ouvre sur une CRA
+  porte des RASL qui se réfèrent au segment d'avant, la balise mentirait.
+
+**Pourquoi.** La règle `idr` coûte cher : un HEVC à GOP ouvert (défaut de x265) n'a souvent pour clés que des
+CRA à RASL, et sous `idr` ses segments dépassent 30 s. **Recensement du 16/11/2026** (300 fichiers tirés par
+strates — films et épisodes, HEVC 4K, HEVC HD, H.264 —, extrapolés aux 10 533 fichiers, IC à 95 %) : 40 % ± 7
+des fichiers sont à GOP ouvert, et 93 % d'entre eux sont refusés sous `idr` ; la bibliothèque servable passe de
+**57 % ± 7 sous `idr` à 88 % ± 5 sous `cra`** (vidéo et découpe seules : 64 % → 99,8 %), le reste étant le son
+(SBR implicite, DTS, Opus — phase 2). Détail dans le README de `docs/remux-serveur/`, « Étape 3b ». Couper sur ces CRA les rend servables,
+**si** Safari et AVFoundation savent démarrer un segment sur une CRA en jetant ses RASL. Sous MediaSource, Safari
+ne l'a jamais fait (CLAUDE.md, « A restart on a CRA keyframe drops the RASL pictures ») ; le HLS natif passe
+par un autre chemin, et seule une lecture sur un appareil Apple le dira : la page `/lumen-test`.
+
+**Ce qui tranchera.** Si `cra` (ou `cra-leading`) joue sur iPhone et Mac sans erreur ni image corrompue après les
+sauts, la règle s'assouplit : `LUMEN_FORMAT_VERSION` monte et la découpe retenue devient la règle (la
+révision des essais disparaît). Sinon, les essais restent dans le code le temps d'un autre essai, puis partent.
+
+**Porteurs.** `format.ts` (`LumenCutMode`, `lumenFormatTag`, `cutModeOfTag`, `parseCutMode`), `lumenIndex.ts`
+(`isCut`, `selectCuts`, `BuildIndexOptions.cut`), `segment.ts` (`markLeading`), `webcodecs/mp4Muxer.ts`
+(`isLeading`, octets inchangés sans lui — un test fige l'empreinte d'un segment, et `remux-hash-bench.spec.ts` a
+comparé le code d'avant et d'après sur trois vrais fichiers), `playlists.ts` (`independentSegments`), `indexCache.ts` (`variant`),
+`indexStore.ts`, `engine.ts`, `jobs.ts`, `service.ts` (`lumenVersionOf`, `isLumenVersion`, `formatTagOf`,
+`lumenVerdict` et son `cutFacts`), `serve.ts`, les routes `eligibility` et `prepare`. **La page de banc** :
+`src/app/lumen-test/page.tsx`, `src/components/lumenTest/LumenTest.tsx`, la ligne `kind: "lumen-test"` de
+`startup.log` (`testReport.ts`, par `/api/viewport-diag`) avec le relevé serveur de chaque lecture —
+`playbackStats.ts` tient désormais les segments son par piste (`audioByTrack`) et une trace bornée des segments
+remis (`trace`, 80 entrées), que les lignes du lecteur (`lumenPlaybackFields`) ne portent pas. **Appelants.** La
+page de banc seule ; aucun écran du cinéma. **Tests.** `lumenServer-cra.test.ts` (version de format, `isCut`,
+index par défaut identique à `idr`, chaque image une fois RASL comprises et contiguës sous `cra`, son sur les
+mêmes frontières, `is_leading` image par image sous `cra-leading` et rien sous `cra`, `leadingOf`, empreinte du
+muxer sans l'option, listes sans la balise, caches disque et mémoire séparés, index
+d'avant relu comme `idr`), `lumenServer-routes.test.ts` (« la découpe expérimentale »),
+`lumenServer-testReport.test.ts`, `lumen-test-page.test.tsx`. **Banc.** `lumen-census-bench.spec.ts` (sauté sans
+`LUMEN_CENSUS`) : chaque fichier d'un échantillon passé par `buildLumenIndex` puis `lumenEligibility` sous
+`idr` et sous `cra`. `remux-hash-bench.spec.ts` (sauté sans `REMUX_FILES`) : l'empreinte des init et de 36
+segments du remuxeur MediaSource par fichier (début, sauts à 30 et 60 %), à comparer entre deux versions du code
+— identiques le 16/11/2026 entre `ef56224c` et l'étape 3b sur *Ghosted*, *Ted Lasso* S02E01 et un H.264.
+
+**Différent exprès.**
+- **Le remuxeur du navigateur écarte les RASL** d'un départ sur CRA (`isRaslPicture`, §RASL) ; Lumen serveur
+  sous `cra` les **garde** : un segment HLS sert aussi la lecture continue, où elles s'affichent, et c'est
+  au décodeur d'Apple de les jeter après un saut — exactement ce qu'on veut savoir.
+- **`defaultAudioTrack`** a quitté `service.ts` pour `eligibility.ts` (réexportée) : le banc juge l'éligibilité
+  comme la route sans charger Next ni la base.
