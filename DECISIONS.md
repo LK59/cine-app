@@ -11110,3 +11110,66 @@ par en-têtes = `SampleReader`, tête d'image = image entière pour les trois pr
 `fragmentRanges` = `planFragments`), `lumenServer-engine.test.ts` (cache, file, `worker_threads`, moteur), fichiers
 générés par `src/__tests__/fixtures/lumen/generate.sh`. **Banc.** `lumen-engine-bench.spec.ts` (sauté sans
 `LUMEN_FILES`) : ffmpeg décode les fenêtres recollées et lit les listes par son démultiplexeur HLS.
+
+## 156. Les routes de Lumen serveur : l'administrateur seul, revérifié par la route ; une absence répond 410, jamais 404 (16/11/2026)
+
+**Règle.** Lumen serveur se sert sous `/api/lumen/` (étape 3 de `docs/remux-serveur/`) :
+`GET /api/lumen/{itemId}/{version}/{s}/{nom}` — `master.m3u8?audio=N`, `v.m3u8`, `a{N}.m3u8`, `init-v.mp4`,
+`init-a{N}.mp4`, `v/{k}.m4s`, `a{N}/{k}.m4s` —, `GET /api/lumen/{itemId}/eligibility?audio=N&s=…&wait=ms` et
+`POST /api/lumen/{itemId}/prepare` (`{ audio?, position?, s? }`). Cinq règles :
+- **L'accès** (`lumenAccess`, `service.ts`) : une session administrateur par cookie, revérifiée par chaque route
+  et pas seulement par le proxy (`/api/lumen` dans `ADMIN_ONLY_READS`). Un lien de partage est refusé
+  nommément ; le titre passe par `assertVisible`. **Aucun laissez-passer de diffusion** : `castItemOf` ne
+  reconnaît pas `/api/lumen/…` (le proxy, qui laisse passer un laissez-passer avant de regarder le rôle, ne
+  l'applique donc pas ici) et la route ne lit aucun jeton. Celui d'une Apple TV viendra avec l'étape AirPlay,
+  avec sa propre portée signée.
+- **L'adresse porte tout** : `{version}` = `LUMEN_FORMAT_VERSION` + 12 chiffres du SHA-256 de l'identité du
+  fichier (chemin local, taille, mtime, inode — `lumenVersionOf`) ; `{s}` = l'identifiant de la lecture, **dans
+  le chemin** pour que les URI relatives des listes en héritent sans réécriture. Une autre version que celle du
+  disque répond 410 avec la version actuelle, jamais des octets d'un autre fichier.
+- **Les statuts sont choisis contre CrowdSec** (`http-probing` : plus de dix 404/403/400 sur des noms distincts
+  non statiques ; `.m4s` n'est pas statique) : 410 pour une adresse qui ne désigne plus rien (version, segment
+  hors bornes, piste absente, nom mal formé), 409 pour un fichier non servi (raison stable dans le corps), 503 +
+  `Retry-After: 1` pour une file pleine ou Jellyfin injoignable, 500 pour une vraie erreur — écrite dans
+  `server.log` une fois par minute et par lecture (`logLumenError`), comptée à chaque fois dans le relevé.
+  401/403/404 ne viennent que du contrôle d'accès, qu'un client de l'application ne rencontre pas en rafale.
+- **Les en-têtes** (§131) : listes `application/vnd.apple.mpegurl`, `private, no-cache`, compressées par
+  `encodePlaylist` (Next 16.4.6 ne compresse pas ce type, vérifié sur une instance réelle : maître de 480 o
+  servi en clair avec sa longueur à un client qui accepte gzip et br) ; init et segments `video/mp4`, `private,
+  max-age=86400, immutable` (l'adresse porte la version) ; longueur par `lengthHeader`, jamais `Content-Length`
+  ni `Content-Encoding` ; `Server-Timing` `app`, `idx`, et pour un segment construit `wait`, `build`, `disk`. Une
+  requête `Range` reçoit le corps entier en 200.
+- **Les index sont gardés sur le disque** (`indexStore.ts`, `DATA_DIR/lumen-index`, 64 Mo, le moins récemment lu
+  évincé, clé chemin + taille + mtime + inode + versions, `v8.serialize`, écriture atomique, toute erreur lue
+  comme une absence), lus par le moteur avant la file. Mesuré le 16/11/2026 sur trois fichiers que le cache de
+  pages ne tenait pas : 25,2 s, 22,7 s et 2,0 s à froid ; sur l'instance d'essai, *The Prestige* 28,8 s, puis
+  246 ms à la première requête après un redémarrage (fils de calcul lancés compris) et ~20 ms ensuite.
+
+**Le relevé d'une lecture** (`playbackStats.ts`) : sur `globalThis`, par compte et par `s`, borné (300 lectures,
+six heures) — requêtes par sorte, segments vidéo et son, octets, construction et attente (somme, pire), disque,
+remise au réseau, segments partagés, envois annulés, « occupé », adresses périmées, erreurs. `lumenPlaybackFields(s,
+user)` le rend en champs `srv.*` pour les lignes `stop`, `stall`, `error`, `fallback` (étape 4), vide pour un
+autre compte. **Les segments** sont partagés entre requêtes identiques en vol, et le segment de reprise que
+`prepare` construit est gardé deux minutes (`segmentCache.ts`, 64 Mo). **Le fil de calcul** est empaqueté par le
+Dockerfile dans `server-boot/lumen-worker.mjs` (`lumenWorkerScript`, `LUMEN_WORKER_PATH`, `inline` pour les tests).
+
+**Pourquoi.** Un 404 par segment bannirait un foyer pour des heures après un simple remplacement de fichier ; un
+contrôle laissé au seul proxy s'ouvrirait au premier laissez-passer (2-serveur.md §2.5, risque 1) ; et l'index à
+froid, payé à chaque déploiement, aurait fait attendre vingt secondes la première séance de la journée.
+
+**Porteurs.** `src/lib/lumenServer/service.ts`, `serve.ts`, `indexStore.ts`, `playbackStats.ts`, `segmentCache.ts`,
+`engine.ts` (`store`, `lumenEngine` paresseux, `resetLumenEngine`), `src/app/api/lumen/**/route.ts`, `src/proxy.ts`,
+`Dockerfile`. **Appelants.** Aucun écran à ce jour : l'étape 4 (`LumenServerHost`) appellera `prepare` à l'appui sur
+Lire, `eligibility` pour décider, et `lumenPlaybackFields` depuis la route du journal. **Tests.**
+`lumenServer-routes.test.ts` (accès cas par cas, laissez-passer, titre caché, version et fichier changés, bornes,
+types, longueur, file pleine, index en construction, préparation, relevé, erreur réelle, cache disque après
+redémarrage, et une garde : chaque route sous `/api/lumen` passe par `lumenAccess` et ne lit aucun jeton),
+`lumenServer-proxy.test.ts`, `lumenServer-indexStore.test.ts`.
+
+**Différent exprès.**
+- **Noms `.m4s`** gardés (décision du 16/11/2026) : une exception se prendra côté CrowdSec s'il le faut ; les statuts
+  ci-dessus évitent déjà `http-probing`, pas `http-crawl-non_statics` (seau de 40 noms distincts).
+- **`s` dans le chemin**, pas `?s=` : une requête n'est pas héritée par une URI relative en HLS.
+- **Pas de relais Jellyfin** quand le fichier n'est pas lisible ici (`LUMEN_PATH_MAP` vide, médias non montés) :
+  `lecture-impossible`, et le lecteur actuel lit le fichier. Seule la première `MediaSource` est servie.
+- **Pas de compte des liens de partage** (§112) : un lien n'a pas accès à ces routes.

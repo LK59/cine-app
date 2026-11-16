@@ -55,7 +55,9 @@ export function lumenWorkerScript(): string | null {
   const configured = process.env.LUMEN_WORKER_PATH;
   if (configured === "inline") return null;
   const path = configured || join(process.cwd(), "server-boot", "lumen-worker.mjs");
-  return existsSync(path) ? path : null;
+  // `turbopackIgnore` : un chemin calculé à l'exécution ferait tracer tout le projet dans la sortie
+  // `standalone` (avertissement de `next build`) ; ce fichier est copié par le Dockerfile, pas tracé.
+  return existsSync(/* turbopackIgnore: true */ path) ? path : null;
 }
 
 /** Le cache disque des index, sous `DATA_DIR` (`indexStore.ts`). */

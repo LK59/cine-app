@@ -1,7 +1,7 @@
 # Lumen serveur — le remux côté serveur, servi en HLS
 
-Conception du 16/11/2026. Étape 1 (signalisation, §154) et étape 2 (le moteur, §155) faites ; rien n'est
-branché en production. Les quatre sections jointes détaillent chaque partie, avec
+Conception du 16/11/2026. Étapes 1 (signalisation, §154), 2 (le moteur, §155) et 3 (routes et sécurité, §156)
+faites ; aucun écran ne les appelle encore. Les quatre sections jointes détaillent chaque partie, avec
 références `chemin:ligne` et mesures ; ce document en tire les décisions, l'architecture et l'ordre de travail.
 
 | Section | Contenu |
@@ -188,6 +188,51 @@ reprise en tête de segment (Apple écrit « MUST start with an IDR », 7.4) ; d
 TARGETDURATION de 15 ; le BANDWIDTH Matroska, majoré (toutes les pistes audio comptées) ; le NAME et le DEFAULT de
 groupes audio de codecs différents (une variante par groupe).
 
+## Étape 3 — routes et sécurité (fait le 16/11/2026, DECISIONS §156)
+
+**Ce que l'étape 4 appellera.**
+
+| Requête | Réponse |
+|---|---|
+| `POST /api/lumen/{id}/prepare` `{ audio?, position?, s? }` | à l'appui sur Lire : lance l'index puis, en arrière-plan, le segment de reprise (vidéo + piste) gardé 2 min ; répond tout de suite le verdict ci-dessous (202 `pending` si l'index n'est pas prêt) |
+| `GET /api/lumen/{id}/eligibility?audio=N&s=…&wait=ms` | `{ ok: true, master, version, audioTrack, audio[], segments, durationS, targetS }`, ou `{ ok: false, reason, detail, audio[] }` (raison stable, `LumenRefusalReason`), ou 202 `{ pending: true, reason: "index-en-cours" }` |
+| `GET /api/lumen/{id}/{version}/{s}/master.m3u8?audio=N` | la liste maître ; les URI relatives (`v.m3u8`, `a2.m3u8`, `init-v.mp4`, `v/12.m4s`…) héritent de `{version}/{s}` |
+| `lumenPlaybackFields(s, user)` | les champs `srv.*` du relevé serveur, à ajouter aux lignes `stop`, `stall`, `error`, `fallback` |
+
+`s` : l'identifiant de séance de la page (`[A-Za-z0-9_-]{4,64}`), sinon le serveur en tire un. `audio` : le
+numéro de piste **dans le fichier** (Matroska `TrackNumber`), celui que la description du lecteur porte déjà.
+Statuts : 410 adresse périmée ou inconnue (corps : `version` actuelle), 409 fichier non servi (`reason`), 503
+`Retry-After: 1` occupé, 500 vraie erreur (`server.log`, une fois par minute). Jamais 404/400 pour une absence.
+
+**Sécurité vérifiée.** Cookie administrateur exigé par chaque route (`lumenAccess`) et par le proxy
+(`ADMIN_ONLY_READS`) ; compte ordinaire 403, lien de partage 403, sans session 401 ; un `castToken` sans cookie
+reçoit 401 au proxy (`castItemOf` ne connaît pas `/api/lumen`) et à la route (qui ne lit aucun jeton) ;
+`assertVisible` posé. Un test parcourt `src/app/api/lumen/` et échoue si une route oublie `lumenAccess` ou lit un jeton.
+
+**Mesures** (16/11/2026, X-Ray en pause, instance jetable de l'image construite, `CINE_BACKGROUND_JOBS=off`).
+- **Index à froid**, fichiers hors du cache de pages (fincore 0 sur la branche) : *The Prestige* 25,2 s
+  (224 Mo lus), *Pearl Harbor* 22,7 s (108 Mo), *Black Monday* S02E10 4K 2,0 s (11 Mo). Avec le cache disque :
+  246 ms pour la première requête après un redémarrage (fils lancés compris), ~20 ms ensuite (route entière).
+- **Éligibilité** : *The Prestige* et *Pearl Harbor* (HEVC à GOP ouvert, 162 et 138 CRA à RASL) sont refusés
+  `segment-trop-long` (208,5 s pour le premier) — la règle RASL coûte plus que les deux fichiers du banc de
+  l'étape 2 ; à recenser avant l'étape 4. *The Exorcist* et *Black Monday* : `ok`.
+- **Bout en bout** (*Black Monday* 4K HEVC + 2 AC-3 5.1) : maître 480 o en clair avec sa longueur, liste vidéo
+  445 segments en 626 o brotli, segments 4K de 4,5 à 7 Mo construits en 20–28 ms ; ffprobe lit le maître par HTTP
+  (cookie), ffmpeg décode 16 s du début et 12 s après un saut à 1 200 s sans une erreur, et les segments
+  enregistrés recollés (init + 149..151) décodent sans erreur.
+- **Mémoire sous rafale** (*The Exorcist* 4K DV, 20 segments vidéo distincts en même temps, 160–190 Mo servis,
+  tous 200, file de 3) : RSS 282 Mo au repos, **pics de 534, 966, 661 et 621 Mo** sur quatre rafales, retour
+  à ~450 Mo après vingt secondes. Le surplus vient du ramasse-miettes (tampons transférés libérés en retard),
+  pas d'une fuite. Attente dans la file jusqu'à 2,8 s pour le dernier de la rafale.
+
+**Au déploiement** : `LUMEN_PATH_MAP=/media=/mnt/media/video`, `UV_THREADPOOL_SIZE=8` (les lectures des fils de
+calcul partagent les 4 fils de libuv du processus avec la compression des listes), `mem_limit` relevé à 3 Gio
+pendant les essais (un pic à 966 Mo au-dessus d'un repos de ~300 Mo, en plus du reste de l'application).
+
+**Reste incertain.** Ce que Safari et AVPlayer font d'un 410 ou d'un 503 en pleine lecture ; `http-crawl-non_statics`
+sur une Apple TV qui remplit son tampon (noms `.m4s`) ; la mémoire réelle quand plusieurs lectures 4K et une
+analyse X-Ray tournent ensemble ; le comportement d'un `s` partagé entre deux onglets.
+
 ## Ordre de travail
 
 1. **Preuve sur appareil** : une instance jetable sert la liste et les segments d'un fichier copiable ; on l'ouvre
@@ -196,8 +241,8 @@ groupes audio de codecs différents (une variante par groupe).
 2. **Socle** : fonction de segment partagée avec le lecteur navigateur (empreintes inchangées), lecteur d'index
    léger, cache d'index, correctif `dec3()`, signalisation Dolby Vision. **Fait** (§154, §155), sauf le partage
    de la fonction de segment avec le lecteur navigateur (voir « Étape 2 »).
-3. **Routes et sécurité** : `/api/lumen/…`, jeton à portée `lumen`, `assertVisible`, `shareGate`, noms `.mp4`,
-   workers.
+3. **Routes et sécurité** : `/api/lumen/…`, `assertVisible`, workers. **Fait** (§156) ; le jeton à portée
+   `lumen` attend l'étape AirPlay, `shareGate` n'a pas d'entrée (lien refusé), les noms restent `.m4s`.
 4. **Client** : option du Compte, route `"lumen"`, `LumenServerHost`, repli, journal, page d'activité.
 5. **AirPlay** : liste signée vers l'Apple TV, `castProgress` par segment.
 6. **Son converti** : ffmpeg minimal, grille de segments, cache disque.
