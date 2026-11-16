@@ -11,6 +11,7 @@ import {
   LEVER_SERIES,
   MUX_SERIES,
   MUX_SWITCH_WATCH_MS,
+  CONVERT_SERIES,
   FIRST_FRAME_TIMEOUT_MS,
   FREEZE_CHECK_MS,
   FreezeWatch,
@@ -151,6 +152,10 @@ interface AudioFacts {
   refusal: string | null;
   /** §159 : `sbr-explicite`, `silence-devant`, `silence-derriere` — absent d'une réponse d'avant. */
   repairs?: string[];
+  /** §161 : la cible d'une piste servie convertie, ou null ; convertible si l'option était en service ; pourquoi pas. */
+  converted?: string | null;
+  convertible?: boolean;
+  convertRefusal?: string | null;
 }
 
 interface Verdict {
@@ -1607,7 +1612,7 @@ export function LumenTest() {
         // Les deux lecteurs demandent le verdict du serveur : la piste audio (la même pour les deux) et la durée
         // d'où les positions des sauts sont tirées. Le lecteur actuel demande en plus la description du fichier
         // que son hôte lit avant d'ouvrir — hors du temps de la première image, comme le verdict du serveur.
-        const v = await prepare(t.itemId, null, chosenCut, t.targetS, !!t.modes?.mux);
+        const v = await prepare(t.itemId, t.audio ?? null, chosenCut, t.targetS, !!t.modes?.mux);
         lastVerdict = v;
         pending = null;
         pendingExpected = undefined;
@@ -1624,6 +1629,12 @@ export function LumenTest() {
           if (v?.ok && !t.prepareOnly && !stopped()) {
             setStep("Horloges et débit");
             pending = await chronoBefore(t.itemId, "serveur");
+            // La conversion du son (§163) : le pool ou non, à froid, pour la lecture qui va jouer (son `s`).
+            if (t.modes?.conv) {
+              const q = new URLSearchParams({ s: pending.s, wait: "25000", convPool: t.modes.conv === "pool" ? "1" : "0", convCold: "1" });
+              if (v.audioTrack !== null) q.set("audio", String(v.audioTrack));
+              await fetch(`/api/lumen/${t.itemId}/eligibility?${q}`).catch(() => null);
+            }
             await prepareEarly(t, v, pending);
           }
           return v ? { ok: v.ok, reason: v.reason, detail: v.detail, version: v.version, audioTrack: v.audioTrack, segments: v.segments, longestS: v.cutFacts?.longestS, durationS: v.durationS } : null;
@@ -1816,7 +1827,7 @@ export function LumenTest() {
     video.removeAttribute("src");
     video.load();
     playOf(video).catch(() => {});
-    const seriesOrder = saved?.order ?? (pass === "leviers" || pass === "multiplexé" ? "serveur" : order);
+    const seriesOrder = saved?.order ?? (pass === "leviers" || pass === "multiplexé" || pass === "son" ? "serveur" : order);
     const plan = planOf(pass, seriesOrder);
     const state: AutoState = {
       serie: saved?.serie ?? newPlaybackId().slice(2, 14),
@@ -1840,7 +1851,8 @@ export function LumenTest() {
       note(`série ${state.serie} reprise après le rechargement, à l'essai ${state.index + 1} sur ${plan.length}`);
     } else {
       setAnswers({ damaged: null, damagedTitle: "", audioClean: null, audioChanged: null, lipSync: null });
-      const passLabel = pass === "courte" ? "comparatif rapide" : pass === "leviers" ? "leviers de démarrage" : pass === "multiplexé" ? "son multiplexé" : "complète";
+      const passLabel =
+        pass === "courte" ? "comparatif rapide" : pass === "leviers" ? "leviers de démarrage" : pass === "multiplexé" ? "son multiplexé" : pass === "son" ? "son converti" : "complète";
       note(`série ${state.serie} (${passLabel}, ${seriesOrder === "actuel" ? "lecteur actuel d'abord, rechargement" : "serveur d'abord"}, graine ${state.seed}) : ${plan.length} essais`);
     }
     video.scrollIntoView?.({ block: "start" });
@@ -1922,6 +1934,7 @@ export function LumenTest() {
   const quickMin = Math.round(seriesEstimateS(QUICK_SERIES) / 60);
   const leverMin = Math.round(seriesEstimateS(LEVER_SERIES) / 60);
   const muxMin = Math.round(seriesEstimateS(MUX_SERIES) / 60);
+  const convertMin = Math.round(seriesEstimateS(CONVERT_SERIES) / 60);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 text-sm text-white">
@@ -1966,6 +1979,11 @@ export function LumenTest() {
           alternance, mêmes sauts ; un changement de piste par essai multiplexé. Écoutez le changement de langue et regardez les lèvres : deux questions
           à la fin.
         </p>
+        {/* Le son converti (phase 2, §161) : DTS-HD MA, TrueHD 7.1, Opus, avec sauts et un tour des pistes. Demande
+            l'option « Conversion du son » en service (Configuration → Lecture) ; sinon ces titres sont refusés. */}
+        <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("son")}>
+          {`Son converti (${CONVERT_SERIES.length} essais, Lumen serveur seul, ~${convertMin} min)`}
+        </button>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/60">
           Ordre des lecteurs :
           {(
@@ -2143,6 +2161,7 @@ export function LumenTest() {
                   {a.isDefault ? " · défaut" : ""}
                   {a.refusal ? ` · refus ${a.refusal}` : ""}
                   {a.repairs?.length ? ` · réparée : ${a.repairs.join(", ")}` : ""}
+                  {a.converted ? ` · convertie : ${a.converted}` : a.convertible ? " · convertible (option coupée)" : a.convertRefusal ? ` · non convertible : ${a.convertRefusal}` : ""}
                 </label>
               ))}
             </div>

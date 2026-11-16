@@ -45,10 +45,10 @@ export type Cut = "idr" | "cra" | "cra-leading";
 export type PlayerKind = "serveur" | "actuel";
 
 /**
- * La passe : la série complète (~28 min), le comparatif rapide (~13 min), les leviers de démarrage (~10 min, étape 3e)
- * ou le son multiplexé contre la règle (~18 min, étape 3f).
+ * La passe : la série complète (~28 min), le comparatif rapide (~13 min), les leviers de démarrage (~10 min, étape
+ * 3e), le son multiplexé contre la règle (~18 min, étape 3f) ou le son converti (~10 min, phase 2, DECISIONS §161).
  */
-export type SeriesPass = "complète" | "courte" | "leviers" | "multiplexé";
+export type SeriesPass = "complète" | "courte" | "leviers" | "multiplexé" | "son";
 
 /**
  * L'ordre des lecteurs (étape 3e) : `serveur` — tous les essais serveur, puis ceux du lecteur actuel, dans la même
@@ -71,6 +71,12 @@ export type SeriesOrder = "serveur" | "actuel";
  * - `bandwidth` (d) : `moyen` — BANDWIDTH annoncé au débit moyen plutôt qu'à la crête (`?bw=moyen`).
  */
 export interface TrialModes {
+  /**
+   * La conversion du son (phase 2, §163) : `pool` — les conversions de cette lecture par le pool de ffmpeg pré-lancés ;
+   * `sans-pool` — un processus lancé pour chacune. Les deux **à froid** (`convCold`, rien lu du cache) : chaque
+   * segment converti pour la lecture, sinon le second essai d'un titre trouverait le travail du premier.
+   */
+  conv?: "pool" | "sans-pool";
   mux?: boolean;
   early?: "serveur" | "élément";
   startMode?: "saut" | "ext-x-start" | "fragment";
@@ -84,6 +90,7 @@ export const EARLY_DELAY_MS = 5_000;
 export function modeTag(modes: TrialModes | undefined): string {
   if (!modes) return "";
   const parts: string[] = [];
+  if (modes.conv) parts.push(modes.conv === "pool" ? "pool" : "sanspool");
   if (modes.mux) parts.push("mux");
   if (modes.early) parts.push(modes.early === "serveur" ? "prep" : "fiche");
   if (modes.startMode) parts.push(`depart-${modes.startMode === "ext-x-start" ? "xstart" : modes.startMode === "fragment" ? "frag" : "saut"}`);
@@ -95,6 +102,7 @@ export function modeTag(modes: TrialModes | undefined): string {
 export function modeLabel(modes: TrialModes | undefined): string {
   if (!modes) return "";
   const parts: string[] = [];
+  if (modes.conv) parts.push(modes.conv === "pool" ? "son converti par le pool de ffmpeg (à froid)" : "son converti sans pool (à froid)");
   if (modes.mux) parts.push("son multiplexé");
   if (modes.early) parts.push(modes.early === "serveur" ? "préparé 5 s avant" : "fiche ouverte 5 s avant");
   if (modes.startMode) parts.push(`départ par ${modes.startMode === "ext-x-start" ? "EXT-X-START" : modes.startMode === "fragment" ? "#t=" : "saut"}`);
@@ -115,8 +123,12 @@ export const PRESETS: { key: string; id: string; title: string; note: string }[]
   { key: "ghosted", id: "1694ff6c78fd793f321d348511771a47", title: "Ghosted", note: "HEVC 4K DV 8.1, E-AC-3 Atmos, GOP ouvert" },
   { key: "pearl-harbor", id: "a1e058d682294a1de3cf5bb47d904e0e", title: "Pearl Harbor", note: "HEVC 1080p à GOP ouvert (132 CRA à RASL vues), 3 h" },
   { key: "ted-lasso", id: "edaa7d0071b034dc32fabf1834484278", title: "Ted Lasso S02E01", note: "HEVC 4K DV 8.1, trois Atmos, CRA à RASL" },
-  { key: "prestige", id: "23505fbd074bc303c0a41dbc8a8d207f", title: "Le Prestige", note: "GOP ouvert, son DTS seul : refusé par le serveur tant que la conversion n'existe pas" },
+  { key: "prestige", id: "23505fbd074bc303c0a41dbc8a8d207f", title: "Le Prestige", note: "GOP ouvert, son DTS-HD MA seul : converti en E-AC-3 5.1 quand la conversion du son est en service, refusé sinon" },
   { key: "alien-romulus", id: "697cf1d483e4e736edf416d8b510f19f", title: "Alien : Romulus", note: "HEVC 1080p, E-AC-3 7.1, une clé toutes les 10,4 s" },
+  // Le son converti (phase 2, DECISIONS §161) : chaque famille de codec qui se convertit, sur un vrai titre.
+  { key: "interstellar", id: "660e9a7ac3b39075db4154612c13a5a4", title: "Interstellar (IMAX)", note: "4K, deux DTS-HD MA 5.1 (VF, VO) : converties en E-AC-3 5.1" },
+  { key: "braveheart", id: "c5a250fd9279e15775bda57e6ca27718", title: "Braveheart", note: "VF E-AC-3 copiée, VO TrueHD Atmos 7.1 convertie en E-AC-3 5.1 (repliée, sans Atmos)" },
+  { key: "jojo", id: "2bbf77e0cc99287266d0580ba578bd77", title: "JoJo's Bizarre Adventure S01E01", note: "Opus 2.0 (japonais, anglais) : converti en E-AC-3 2.0" },
 ];
 
 /** La cible de segment par défaut de Lumen serveur, en secondes (`LUMEN_TARGET_SEGMENT_US`). */
@@ -145,6 +157,8 @@ export interface Trial {
   prepareOnly?: Cut[];
   /** Les leviers de démarrage (serveur seulement, étape 3e) ; absent : la règle. */
   modes?: TrialModes;
+  /** La piste audio à ouvrir (numéro Matroska) ; absente : celle que le fichier marque par défaut. */
+  audio?: number;
   /** L'ordre `actuel` : la page se recharge avant cet essai (le premier essai serveur après ceux du lecteur actuel). */
   reloadBefore?: boolean;
   /** La passe « son multiplexé » (étape 3f) : la répétition (1 à 3) de ce mode sur ce titre. */
@@ -179,14 +193,17 @@ const preset = (key: string) => {
   return found;
 };
 
-type TrialOptions = Partial<Pick<Trial, "startAt" | "tours" | "audioTour" | "prepareOnly" | "targetS" | "modes" | "rep" | "playBeforeMs" | "dwellMs" | "audioSwitch">>;
+type TrialOptions = Partial<Pick<Trial, "startAt" | "tours" | "audioTour" | "prepareOnly" | "targetS" | "modes" | "rep" | "playBeforeMs" | "dwellMs" | "audioSwitch" | "audio">>;
 
 function trial(key: string, player: PlayerKind, options: TrialOptions = {}): Trial {
   const p = preset(key);
   const targetS = options.targetS ?? DEFAULT_TARGET_S;
   const tag = modeTag(options.modes);
   return {
-    id: options.prepareOnly ? `${p.key}-preparer` : `${p.key}-${player}${targetS !== DEFAULT_TARGET_S ? `-t${targetS}` : ""}${tag ? `-${tag}` : ""}${options.rep ? `-r${options.rep}` : ""}`,
+    // Un départ en milieu de film sans levier (le son converti, phase 2) se nomme par son instant : deux essais du même titre.
+    id: options.prepareOnly
+      ? `${p.key}-preparer`
+      : `${p.key}-${player}${targetS !== DEFAULT_TARGET_S ? `-t${targetS}` : ""}${tag ? `-${tag}` : ""}${!tag && (options.startAt ?? 0) > 0 ? `-a${options.startAt}` : ""}${options.rep ? `-r${options.rep}` : ""}`,
     key: p.key,
     itemId: p.id,
     title: p.title,
@@ -202,6 +219,7 @@ function trial(key: string, player: PlayerKind, options: TrialOptions = {}): Tri
     ...(options.playBeforeMs !== undefined ? { playBeforeMs: options.playBeforeMs } : {}),
     ...(options.dwellMs !== undefined ? { dwellMs: options.dwellMs } : {}),
     ...(options.audioSwitch ? { audioSwitch: true } : {}),
+    ...(options.audio !== undefined ? { audio: options.audio } : {}),
   };
 }
 
@@ -335,12 +353,40 @@ export const MUX_SERIES: Trial[] = MUX_TITLES.flatMap((key, titleIndex) => {
 });
 
 /**
+ * Le son converti (phase 2, DECISIONS §161, §163), ~10 minutes, Lumen serveur seul, l'option « conversion du son » en
+ * service : chaque famille de codec converti sur un vrai titre, deux fois — **sans pool** (un ffmpeg lancé pour chaque
+ * segment) et **avec le pool** de ffmpeg pré-lancés —, l'ordre alterné d'un titre à l'autre (le second essai d'un titre
+ * lit un disque plus chaud), toutes deux à froid (rien du cache de conversion), avec un parcours de sauts : un segment
+ * son construit après chaque saut, celui que la tâche d'avance n'a pas encore fait.
+ * - *Le Prestige* (DTS-HD MA 5.1 → E-AC-3 5.1) ; puis un départ à 1 800 s, au milieu du film ;
+ * - *Interstellar* (DTS-HD MA 5.1, 4K IMAX) ;
+ * - *Braveheart*, la VO TrueHD Atmos 7.1 (piste 3), repliée en 5.1 ; puis le tour des pistes, entre elle et la VF
+ *   E-AC-3 **copiée** — deux rendus du même groupe `ec-3`, l'un converti, l'autre copié, par `audioTracks` ;
+ * - *JoJo's Bizarre Adventure* S01E01 (Opus 2.0 → E-AC-3 2.0, la cible stéréo).
+ * Ce que l'oreille doit juger : le son à sa place après chaque saut, aucun clic aux jointures, les voix au centre.
+ */
+const pair = (key: string, first: "pool" | "sans-pool", options: TrialOptions = {}): Trial[] =>
+  (first === "pool" ? (["pool", "sans-pool"] as const) : (["sans-pool", "pool"] as const)).map((conv) =>
+    trial(key, "serveur", { tours: [5], ...options, modes: { ...options.modes, conv } })
+  );
+
+export const CONVERT_SERIES: Trial[] = [
+  ...pair("prestige", "sans-pool"),
+  ...pair("interstellar", "pool"),
+  ...pair("braveheart", "sans-pool", { audio: 3 }),
+  ...pair("jojo", "pool"),
+  trial("prestige", "serveur", { startAt: 1800, tours: [5] }),
+  trial("braveheart", "serveur", { audio: 3, tours: [], audioTour: true }),
+];
+
+/**
  * Le plan d'une passe dans l'ordre demandé. `actuel` : les essais du lecteur actuel d'abord, puis ceux du serveur, le
  * premier marqué `reloadBefore` — la page se recharge là (WebKit refuse un HLS natif après une MediaSource). Une passe
  * sans lecteur actuel (les leviers) n'a qu'un ordre.
  */
 export function planOf(pass: SeriesPass, order: SeriesOrder = "serveur"): Trial[] {
-  const plan = pass === "courte" ? QUICK_SERIES : pass === "leviers" ? LEVER_SERIES : pass === "multiplexé" ? MUX_SERIES : SERIES;
+  const plan =
+    pass === "courte" ? QUICK_SERIES : pass === "leviers" ? LEVER_SERIES : pass === "multiplexé" ? MUX_SERIES : pass === "son" ? CONVERT_SERIES : SERIES;
   if (order === "serveur" || !plan.some((t) => t.player === "actuel")) return plan;
   const currentFirst = plan.filter((t) => t.player === "actuel");
   const server = plan.filter((t) => t.player === "serveur");

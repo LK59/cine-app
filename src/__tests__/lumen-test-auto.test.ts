@@ -489,3 +489,29 @@ describe("la détection des gels, sur une horloge factice", () => {
     expect(watch.freezes[0]).toMatchObject({ until: "fin", ms: 3_000 });
   });
 });
+
+describe("la passe « Son converti » (phase 2, DECISIONS §161, §163)", () => {
+  it("Lumen serveur seul, chaque codec avec et sans pool en ordre alterné, ~10 minutes, des noms d'essai distincts", async () => {
+    const { CONVERT_SERIES, planOf, seriesEstimateS } = await import("@/components/lumenTest/autoSeries");
+    expect(planOf("son")).toBe(CONVERT_SERIES);
+    expect(planOf("son", "actuel")).toBe(CONVERT_SERIES);
+    expect(CONVERT_SERIES.every((t) => t.player === "serveur")).toBe(true);
+    expect(CONVERT_SERIES.slice(0, 8).map((t) => `${t.key}:${t.modes?.conv}`)).toEqual([
+      "prestige:sans-pool",
+      "prestige:pool",
+      "interstellar:pool",
+      "interstellar:sans-pool",
+      "braveheart:sans-pool",
+      "braveheart:pool",
+      "jojo:pool",
+      "jojo:sans-pool",
+    ]);
+    expect(new Set(CONVERT_SERIES.map((t) => t.id)).size).toBe(CONVERT_SERIES.length);
+    // La VO TrueHD de *Braveheart* (piste 3), et le tour des pistes entre elle et la VF copiée.
+    expect(CONVERT_SERIES.filter((t) => t.key === "braveheart").every((t) => t.audio === 3)).toBe(true);
+    expect(CONVERT_SERIES.some((t) => t.key === "braveheart" && t.audioTour)).toBe(true);
+    const minutes = seriesEstimateS(CONVERT_SERIES) / 60;
+    expect(minutes).toBeGreaterThan(6);
+    expect(minutes).toBeLessThan(13);
+  });
+});

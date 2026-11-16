@@ -23,11 +23,13 @@
 // LUMEN_CENSUS_CUTS (`idr,cra` par défaut) : les découpes à passer — `cra` seule pour un recensement du son
 // (§159), qui ne dépend pas de la découpe. Chaque ligne porte aussi, pour chaque piste audio, son codec, son
 // refus et ses réparations (`sbr-explicite`, `silence-devant`, `silence-derriere`).
-import { describe, it } from "vitest";
+import { beforeAll, describe, it } from "vitest";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { FileByteSource } from "@/lib/lumenServer/fileSource";
 import { buildLumenIndex } from "@/lib/lumenServer/lumenIndex";
 import { defaultAudioTrack, lumenEligibility } from "@/lib/lumenServer/eligibility";
+import { withConversion, type ConversionContext } from "@/lib/lumenServer/audio/view";
+import { fixtureIndex } from "./src/__tests__/lumenServer-helpers";
 import type { LumenCutMode, LumenIndex } from "@/lib/lumenServer/format";
 import { dolbyVisionInfo } from "@/lib/webcodecs/codecConfig";
 
@@ -50,7 +52,23 @@ function cutSummary(index: LumenIndex, ms: number) {
   const durations = index.segments.map((s) => (s.endUs - s.startUs) / 1e6);
   const audioTrack = defaultAudioTrack(index);
   const verdict = lumenEligibility(index, audioTrack);
+  // La conversion du son en service (phase 2, §161) : le même verdict sur la vue `withConversion` — la piste par
+  // défaut et chaque piste. Les trames de référence n'y décident que de l'init ; celles des fixtures suffisent.
+  const converted = conversionCtx ? withConversion(index, conversionCtx) : null;
+  const convVerdict = converted ? lumenEligibility(converted, audioTrack) : null;
   return {
+    ...(convVerdict
+      ? {
+          conv: {
+            ok: convVerdict.ok,
+            reason: convVerdict.ok ? null : convVerdict.reason,
+            converted: converted!.audio.filter((a) => a.converted).length,
+            defaultConverted: !!converted!.audio.find((a) => a.number === audioTrack)?.converted,
+            servableTracks: converted!.audio.filter((a) => !a.refusal).length,
+            convertRefusals: index.audio.filter((a) => a.convertRefusal).map((a) => a.convertRefusal),
+          },
+        }
+      : {}),
     ok: verdict.ok,
     reason: verdict.ok ? null : verdict.reason,
     detail: verdict.ok ? null : (verdict.detail ?? null),
@@ -67,7 +85,17 @@ function cutSummary(index: LumenIndex, ms: number) {
   };
 }
 
+let conversionCtx: ConversionContext | null = null;
+
 describe.skipIf(!LIST)("recensement de l'éligibilité à Lumen serveur", () => {
+  beforeAll(async () => {
+    const late = await fixtureIndex("eac3-late.mkv");
+    const short = await fixtureIndex("eac3-short.mkv");
+    late.source.close();
+    short.source.close();
+    conversionCtx = { ffmpegVersion: "recensement", ffmpegSha256: "recensement", reference: { "eac3-640-51": late.index.audio[0].firstFrame!, "eac3-256-20": short.index.audio[0].firstFrame! } };
+  });
+
   it(
     "passe chaque fichier par l'index et lumenEligibility, sous idr puis cra",
     async () => {

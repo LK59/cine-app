@@ -1,6 +1,6 @@
 # 5. Convertir le son au serveur — « Lumen serveur », phase 2
 
-Conception et prototype mesuré, le 16/11/2026. Aucun fichier du dépôt modifié. Le prototype vit hors du dépôt,
+Conception et prototype mesuré, le 16/11/2026 ; construite le 17/11/2026 (§5.12, DECISIONS §161 à §163). Le prototype vit hors du dépôt,
 dans le dossier de ce document :
 
 | Chemin | Contenu |
@@ -660,3 +660,35 @@ Les étapes 2 et 6 sont les plus délicates : une erreur de placement ou de basc
    l'avait écartée pour le navigateur, faute d'encodeur, mais le serveur en a un.
 7. **La bascule en cours de lecture** : préparée avec deux `<video>` (moins de coupure, plus de risques sur
    iPhone), ou brute (1 à 2 s de coupure, rien de neuf).
+
+**Tranché par Louis le 16/11/2026** : (1) E-AC-3 partout, 256 kb/s en 2.0 pour la stéréo ; (2) le 7.1 replié en 5.1, le
+FLAC sans perte plus tard ; (3) le cache en deux étages, en mémoire (512 Mo) et sur le disque (`DATA_DIR/lumen-audio`,
+10 Go, LRU) ; (4) ffmpeg toujours dans l'image, l'option coupée par défaut ; (5) les plafonds mesurés ; (6) des zéros
+devant et derrière une piste convertie qui ne couvre pas l'image ; (7) le repli au départ (`son-serveur-occupe`), la
+bascule en cours de lecture avec l'hôte client.
+
+---
+
+## 5.12 Ce qui a été construit, et ce que la mesure a changé (17/11/2026)
+
+Le détail est dans le README (« Phase 2 ») et dans DECISIONS §161 à §163. Ce qui s'écarte de la conception :
+
+- **TrueHD ne se place pas par l'instant du bloc** : une unité d'accès dure 40 échantillons (0,83 ms), et l'instant
+  Matroska, à la milliseconde, ne la désigne pas sans ambiguïté — *Braveheart* date même ses 200 premières unités de
+  milliseconde en milliseconde, et toute la suite garde 55 ms d'avance sur le compte. Chaque unité porte un compteur
+  (`input_timing`, +40 par unité), mais il prend 33 à 36 échantillons de retard sur les trois unités qui précèdent
+  chaque synchronisation majeure : on part toujours d'une synchronisation, placée en arrondissant son écart à la
+  première unité au multiple de 40. Le compteur fait foi, l'instant ne choisit que le tour du modulo.
+- **L'Opus demande une seconde de pré-roulement du décodeur**, pas 0,25 s : avec 0,25 s, une trame E-AC-3 sur deux
+  segments différait de la tâche longue.
+- **Le MP2 et le MP3 se décodent en flottants** (`-c:a mp2float`, `mp3float`) : les décodeurs en entiers de FFmpeg
+  tramaient leur sortie selon la trame de départ (0 trame identique sur 669 et 996) ; pour le MP2, FFmpeg les choisit
+  de lui-même.
+- **La lecture des blocs coûte plus que ffmpeg** (une piste TrueHD range un bloc par unité de 40 échantillons) : elle a
+  ses fils de calcul à elle, et ne part plus 2 s avant la fenêtre.
+- **Les plafonds mesurés** : 2 processus, 6 lectures (au lieu de 2 et 4 proposés) ; le pool de ffmpeg pré-lancés
+  essayé et écarté (le lancement coûte 1 ms). Chiffres : README, « Phase 2 ».
+- **Le flux élémentaire sur l'entrée standard** marche pour les quatre formats (`-f dts`, y compris DTS-HD MA ;
+  `-f truehd` ; `-f mp3`, couches II et III ; l'Opus dans un Ogg minimal à `pre-skip` nul).
+- **Le pré-roulement de l'encodeur** est de 2 trames, celui du décodeur 0,25 s (1 s pour l'Opus) ; aucune liste
+  d'édition : le placement contre la source décodée par ffmpeg est de 0 échantillon partout.

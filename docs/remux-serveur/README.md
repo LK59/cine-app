@@ -2,7 +2,9 @@
 
 Conception du 16/11/2026. Étapes 1 (signalisation, §154), 2 (le moteur, §155), 3 (routes et sécurité, §156),
 3b (recensement, découpes d'essai et banc Safari, §157), 3c (`cra` la règle et l'index des Cues, §158 ;
-comparatif avec le lecteur actuel ; cibles courtes) et 3d (le son copié réparé : SBR implicite, silence, §159) faites ; seule la page de banc `/lumen-test` les appelle.
+comparatif avec le lecteur actuel ; cibles courtes), 3d (le son copié réparé : SBR implicite, silence, §159), 3e (la
+chronologie, §160) et la **phase 2** (la conversion du son, §161 à §163, option coupée par défaut) faites ; seule la
+page de banc `/lumen-test` les appelle.
 Les quatre sections jointes détaillent chaque partie, avec références `chemin:ligne` et mesures ; ce document en
 tire les décisions, l'architecture et l'ordre de travail.
 
@@ -699,6 +701,175 @@ avant la reprise (`recvSeeked`, `recvAdvance`) ; chaque lecture, les segments re
 d'au moins trois titres, sans régression ni réponse négative → l'essai mérite d'aller sur Mac et Apple TV avant d'être
 discuté contre la règle d'Apple ; sinon le levier part avec `trials.ts`, et les groupes son séparés restent la règle.
 
+## Phase 2 — conversion du son (17/11/2026, DECISIONS §161 à §163)
+
+Les pistes que Lumen serveur ne copie pas — DTS, DTS-HD MA, TrueHD, Opus, MP2, MP3 — sont converties **en E-AC-3** au
+serveur (640 kb/s 5.1, 256 kb/s 2.0), au fil de la lecture, par un ffmpeg minimal de l'image. La conception et ses
+mesures sont dans [5-conversion-son.md](5-conversion-son.md) ; ce qui suit est ce qui a été construit et mesuré.
+Code : `src/lib/lumenServer/audio/` ; outil : `tools/ffmpeg-lumen/`.
+
+**L'option est coupée par défaut.** Configuration → Lecture → « Conversion du son (Lumen serveur) » (« Lab bêta ») :
+à qui elle est ouverte (`LUMEN_AUDIO_CONVERT` : `off`, `admins`, `tous`), les processus simultanés, les lectures
+admises, le cache en mémoire et sur le disque ; sous la carte, l'état de ffmpeg (« ffmpeg 7.1.5 détecté : E-AC-3, AC-3,
+AAC, FLAC », ou pourquoi la conversion est indisponible), les lectures qui convertissent, l'occupation du cache, les
+24 dernières heures. Sans l'option, ou sans ffmpeg, Lumen serveur répond comme avant (`son-codec`). Déploiement :
+`LUMEN_FFMPEG_PATH` (vide = pas de conversion), `LUMEN_AUDIO_CACHE_DIR` (un autre volume que `data/`).
+
+**Le chemin d'un segment converti** (`convert.ts`). Les trames cibles du segment (la trame k de 1 536 échantillons
+porte l'instant k·N, et appartient au segment qui contient son instant), la fenêtre de l'encodeur (deux trames de
+pré-roulement, son délai de 256, trois de queue) ; le fil de calcul lit les blocs de la piste (`audio-feed`, sur ses
+deux fils à lui) et rend le flux élémentaire et la position exacte de son premier échantillon ; ffmpeg décode,
+`atrim`/`adelay`/`apad` posent la fenêtre à l'échantillon (des zéros avant le premier son et après une piste courte),
+`pan` replie (la règle de `fold`), l'encodeur E-AC-3 encode ; Node garde les trames du segment et les mux avec
+`tfdt` = k × 32 000 µs + D. Une fenêtre entièrement dans le silence ne lit rien du fichier. **Le placement** se fait
+par le nombre d'échantillons (DTS, MPEG, Opus : l'arrondi de l'instant du bloc sur la trame du codec ; TrueHD : le
+compteur de chaque unité, arrondi aux synchronisations majeures — l'instant Matroska de *Braveheart* garde 55 ms
+d'avance sur le compte) ; le pré-roulement du décodeur est de 0,25 s, **1 s pour l'Opus** ; le MP2 et le MP3 sont
+décodés **en flottants** (les décodeurs en entiers de FFmpeg tramaient leur sortie selon la trame de départ).
+
+**Le cache** : en mémoire (512 Mo) puis sur le disque (`DATA_DIR/lumen-audio`, 10 Go, LRU), clé : version de l'adresse,
+piste, cible, identité de la conversion (`cid` : règles, version et empreinte de ffmpeg), segment ; enveloppe vérifiée
+par SHA-256, écriture atomique. Louis voulait la RAM : le cache disque y est déjà, en pratique — **le cache de pages de
+Linux** garde en mémoire ce qu'on vient d'écrire ou de lire (un segment relu au disque : 2 à 4 ms au banc), sans
+compter dans la mémoire de l'application et rendu au système dès qu'il en a besoin.
+
+**La file et l'avance** : 2 processus ffmpeg (`LUMEN_AUDIO_MAX_JOBS`) ; la demande d'un segment passe devant l'avance
+et prend la place d'une avance en cours ; 120 s converties devant le dernier segment demandé, par tâches de 60 s
+(`nice` 15), arrêtées deux minutes après la dernière requête ; la préparation (`prepare`) convertit le segment de
+reprise en priorité de demande. **L'admission** : au-delà de 6 lectures qui convertissent (`LUMEN_AUDIO_MAX_SESSIONS`),
+d'une attente des demandes de plus d'une seconde (p90 sur 60 s) ou d'une charge de plus de 3 par fil, l'éligibilité
+répond `son-serveur-occupe` et le lecteur actuel prend le titre.
+
+**Les listes** : une piste convertie entre dans le groupe `ec-3` avec la VF copiée, `CHANNELS` 6 ou 2, `LANGUAGE`,
+`NAME` d'après ce qui est servi ; son nom porte l'identité de la conversion (`a3x1a2b3c4d.m3u8`) — un autre ffmpeg est
+une autre adresse. `LUMEN_FORMAT_VERSION` passe à 4. Le relevé (`srv.*`) gagne `convSeg`, `convBuilt`, `convRam`,
+`convDisk`, `convShared`, `convMs`, `convMaxMs`, `convWaitMaxMs`, `convBusy`.
+
+### Le banc sur de vrais fichiers (`lumen-audio-bench.spec.ts`, 17/11/2026)
+
+Le binaire de l'image (étape `ffmpeg-lumen`), X-Ray en pause, `--cpus 2`, médias en lecture seule. Par piste : 10
+segments consécutifs construits chacun par son propre processus, contre la même plage en une seule tâche ; un segment
+refait ; un segment loin dans le film à froid contre le même dans une tâche de trois (le saut) ; le décodage de la
+concaténation (`crccheck+bitstream+explode`) contre la source décodée par ffmpeg depuis le début de la piste et
+repliée par le même `pan` (intercorrélation, RMS par canal).
+
+| Piste | Trames identiques (seuls / tâche) | Déterm. | Saut | Placement | RMS sortie − source | Segment seul (méd.) |
+|---|---|---|---|---|---|---|
+| *Braveheart*, TrueHD Atmos 7.1 → 5.1 | 2 123 / 2 123 | oui | identique | 0 éch. (1,000) | 0,00 dB (LFE −0,14¹) | 319 ms |
+| *Le Prestige*, DTS-HD MA 5.1 | 2 222 / 2 222 | oui | identique | 0 (0,999) | ±0,01 dB | 212 ms |
+| *Interstellar*, DTS-HD MA 5.1 | 2 174 / 2 174 | oui | identique | 0 (1,000) | ±0,01 dB² | 117 ms |
+| *Lost in Translation*, DTS 5.1 | 2 633 / 2 633 | oui | identique | 0 (1,000) | ≤ 0,07 dB | 182 ms |
+| *House* S01E08, Opus 5.1 | 1 789 / 1 789 | oui | identique | 0 (1,000) | ±0,01 dB | 86 ms |
+| *JoJo* S01E01, Opus 2.0 → E-AC-3 2.0 | 2 725 / 2 725 | oui | identique | 0 (1,000) | ±0,01 dB | 104 ms |
+| *Good People* S01E01, MP2 2.0 | 1 348 / 1 348 | oui | identique | 0 (1,000) | 0,00 dB | 45 ms |
+| *The Leftovers* S01E01, MP3 2.0 | 1 922 / 1 922 | oui | identique | 0 (1,000) | 0,00 dB | 56 ms |
+
+¹ Le filtre à 120 Hz du LFE de l'encodeur, sur un LFE presque muet. ² Les ambiances d'*Interstellar* à −88 dBFS
+s'écartent de 1,4 à 2,5 dB : la quantification de l'encodeur à ce niveau. Le décodage de chaque concaténation est sans
+erreur ; le « rapport de clic » aux jointures (dérivée seconde sur ±2 ms) est celui de la source aux mêmes échantillons
+à 0,4 près au pire — les octets étant ceux d'un encodage continu, il n'y a pas de jointure. **L'ordre des canaux**
+(tonalités marquées, sans fichier) : 7.1 → FL 300, FR 400, FC 500, LFE 60, SL 700+900, SR 800+1000 ; 5.1 et
+5.1(side) tels quels, `acmod` 7 + LFE dans les deux cas (le piège du PCE ne touche pas l'E-AC-3) ; 3.0 → L R C, le reste
+silencieux ; mono → les deux canaux. **La synchro image-son** : la VF E-AC-3 de *Braveheart* passée par la chaîne de
+conversion contre sa copie de la phase 1, posées à leur `tfdt` : 0 échantillon d'écart. **Une piste en retard** (*The
+Circle*, VF AC-3 à 30 s, passée par la chaîne) : le son à sa place (0 échantillon), avant lui ce que rend un décodeur
+AC-3 sur des trames encodées depuis des zéros exacts (son tramage, sauf le LFE).
+
+### La charge (17/11/2026, `--cpus 4 -m 3g`, X-Ray en pause)
+
+N conversions en boucle (segments au hasard de *Braveheart* TrueHD, *Le Prestige*, *Lost in Translation*, *JoJo*)
+pendant que le moteur sert les segments 4K de *Black Monday*, une requête à la fois :
+
+| Processus | Segments convertis en 40 s | Segment (méd. / p95) | dont ffmpeg / lecture | Processeur du conteneur | Pic mémoire | Segment vidéo 4K (méd. / p95) |
+|---:|---:|---|---|---:|---:|---|
+| 0 | — | — | — | 1,0 cœur | 502 Mo | 49 / 75 ms |
+| 1 | 88 | 401 / 1 063 ms | 140 / 203 ms | 2,0 | 560 Mo | 52 / 78 ms |
+| 2 | 171 | 383 / 1 168 ms | 139 / 217 ms | 2,9 | 611 Mo | 50 / 77 ms |
+| 4 | 239 | 556 / 1 576 ms | 160 / 360 ms | 3,2 | 639 Mo | 56 / 92 ms |
+| 8 | 234 | 1 286 / 2 428 ms | 169 / 1 080 ms | 3,2 | 626 Mo | 53 / 92 ms |
+
+- **Le premier essai** faisait lire les blocs du son sur les trois fils du remux et dans sa file : à quatre conversions,
+  le segment vidéo passait de 65 à 2 156 ms (p95). Le son a maintenant ses deux fils à lui (`lumenFeedReader`) : le
+  remux n'en sent plus rien. Et la lecture partait 2 s trop tôt : elle part maintenant de la coupe juste avant la
+  fenêtre.
+- **Ce qui coûte, c'est la lecture des blocs**, pas ffmpeg : une piste TrueHD range une unité de 40 échantillons par
+  bloc (1 200 blocs par seconde).
+- **Retenu : 2 processus** (`LUMEN_AUDIO_MAX_JOBS`) — un segment reste à ~0,4 s, quatre processus n'ajoutent que 40 %
+  de débit pour 45 % de latence, huit rien ; **6 lectures** (`LUMEN_AUDIO_MAX_SESSIONS`) — en continu, une lecture
+  demande un segment toutes les 4 à 6 s, six en prennent ~1,2 par seconde sur ~4,3 : le reste est la marge des sauts.
+- **Avec X-Ray en marche** (une mesure, quatre processus, avant la séparation des fils) : ffmpeg passe de 70 à 120 ms
+  en médiane (p95 575 ms) ; la file et l'admission (p90 de l'attente) le voient.
+- **Mémoire** : le pic du processus de banc (moteur, fils, ffmpeg compris) reste sous 640 Mo ; un ffmpeg en prend 5 à
+  13 Mo ; le cache en mémoire ajoute au plus son plafond (512 Mo). Dans les 3 Go du conteneur, avec le pic de 966 Mo du
+  remux 4K mesuré à l'étape 3 : pas de réglage de déploiement à changer.
+
+### Les leviers de lancement (la question de Louis, 17/11/2026)
+
+**Le coût de lancement d'un ffmpeg** (le binaire statique de l'image, 20 répétitions) : `ffmpeg -version` seul, 2,6 ms
+(p90 3,2) — la création du processus et le chargement du binaire. Pour une fenêtre d'une seule trame cible, le premier
+octet rendu par un processus lancé à l'instant, contre le même lancé 300 ms plus tôt et qui attendait ses données :
+
+| Entrée | Lancé à l'instant (méd. / p90) | Pré-lancé (méd. / p90) | `-probesize 32 -analyzeduration 0` |
+|---|---|---|---|
+| DTS-HD MA (*Le Prestige*) | 6 / 7 ms | 6 / 7 ms | 6 ms, mêmes octets |
+| DTS (*Lost in Translation*) | 4 / 4 ms | 3 / 5 ms | 3 ms, mêmes octets |
+| TrueHD 7.1 (*Braveheart*) | 9 / 23 ms | 8 / 10 ms | 8 ms, mêmes octets |
+| Opus (*JoJo*) | 5 / 5 ms | 5 / 5 ms | 4 ms, mêmes octets |
+| f32le (l'encodeur seul) | 2 / 2 ms | 1 / 2 ms | 2 ms, mêmes octets |
+
+Rien n'est sondé inutilement (`-f` explicite ; réduire la sonde ne change ni le temps ni les octets) ni lu (aucun
+fichier de configuration, environnement vide). Le lancement coûte **1 ms** ; le reste du premier octet est le décodage
+du pré-roulement.
+
+**Le pool de ffmpeg pré-lancés** (`ffmpegPool.ts`) a été écrit et mesuré quand même : un processus pré-lancé ne peut
+porter que des arguments connus d'avance, donc la conversion passe par deux processus génériques (un décodeur par
+format, un encodeur par cible) et Node pose la fenêtre entre les deux (`windowPcm`) — **mêmes octets** que la voie à un
+processus (10 sur 10 par piste). Le premier segment converti disponible (`LumenAudio`, 10 positions tirées au hasard
+par piste, des sauts imprévus) :
+
+| Piste | (a) à froid, sans pool | (b) à froid, pool | (c) 300 ms après `prepare` | (d) mémoire / disque | saut pendant l'avance |
+|---|---|---|---|---|---|
+| *Le Prestige* (DTS-HD MA) | 215 / 278 ms | 180 / 254 ms | 0 / 0,1 ms | 0 / 2,5 ms | 507 / 855 ms |
+| *Lost in Translation* (DTS) | 214 / 309 ms | 245 / 338 ms | 0 / 57 ms | 0 / 4,4 ms | 352 / 475 ms |
+| *Braveheart* (TrueHD 7.1) | 569 / 848 ms | 652 / 1 388 ms | 390 / 770 ms | 0,1 / 3,8 ms | 699 / 961 ms |
+| *JoJo* (Opus 2.0) | 83 / 200 ms | 98 / 179 ms | 0,1 / 0,1 ms | 0 / 1,5 ms | 119 / 228 ms |
+
+(médiane / p90). **Le pool n'est pas adopté** (`POOL_DEFAULT = false`) : il gagne 35 ms sur une piste, en perd 15 à
+80 sur les trois autres — le PCM qui traverse Node coûte autant que le lancement qu'il épargne. Il reste un mode
+d'essai (`convPool=1`, la passe « Son converti » de `/lumen-test`). **La conversion n'est pas sur le chemin critique
+quand la page prépare** : 300 ms après `prepare`, le segment de reprise est déjà là, sauf en TrueHD (390 ms restants
+en médiane) ; ensuite l'avance de 120 s couvre la suite, et un segment relu sort de la mémoire en 0,1 ms ou du
+disque en 2 à 4 ms. Reste sur le chemin critique **le saut imprévu** : 0,1 à 0,7 s selon le codec, pendant que l'avance
+tourne (elle cède sa place). Sur l'iPhone, une reprise après un saut prend déjà 1,5 s (étape 3c) ; à mesurer sur
+l'appareil (la passe « Son converti »).
+
+### Le recensement (les 300 fichiers de l'étape 3b, `cra`, extrapolé aux 10 533 fichiers, IC 95 %)
+
+| Piste par défaut servable | Conversion coupée | Conversion en service |
+|---|---|---|
+| Part de la bibliothèque | 96,2 % ± 2,4 (283/300) | **99,8 % ± 0,2** (297/300) |
+
+14 fichiers gagnés (3,6 % ± 2,3 : la piste par défaut DTS, TrueHD ou Opus), 31 pistes converties en tout ; aucune piste
+non convertible dans l'échantillon. Restent `index-troue` (3 fichiers).
+
+### Sur un appareil
+
+À écouter sur l'iPhone (puis le Mac relié à du 5.1), l'option ouverte aux administrateurs, page `/lumen-test`, passe
+**« Son converti »** (~10 min) : *Le Prestige* et *Interstellar* (DTS-HD MA → 5.1), *Braveheart* VO (TrueHD Atmos 7.1
+replié en 5.1), *JoJo* (Opus → 2.0), chacun sans puis avec le pool (ordre alterné), avec sauts ; le tour des pistes de
+*Braveheart* entre la VF copiée et la VO convertie. Écouter : les voix au centre (l'ordre des canaux du décodeur d'Apple
+sur ces trames n'a jamais été entendu), le son à sa place après chaque saut, aucun clic, le niveau en passant de la VF
+(dialnorm de la piste) à la VO convertie (dialnorm −31).
+
+### Pour la bascule en cours de lecture (étape 4, non faite)
+
+L'éligibilité d'une lecture qui convertit rend `conversion: { state: "ok" | "tension", leadS }` — l'avance convertie
+devant le dernier segment demandé, « tension » sous 30 s pendant que des demandes attendent ; un segment converti
+« occupé » répond 503 `Retry-After: 1` avec `X-Lumen-Son: occupe`, compté au relevé (`srv.convBusy`). L'hôte client
+devra : relire l'éligibilité sur un `waiting` de plus de 3 s (ou recevoir l'état dans la réponse du battement de
+progression), préparer le lecteur actuel sur un second `<video>` à l'état « tension », et basculer HLS → MediaSource
+(jamais l'inverse, WebKit le refuse) ; la ligne `fallback` portera `why: "son-serveur-occupe"`.
+
 ## Ordre de travail
 
 1. **Preuve sur appareil** : une instance jetable sert la liste et les segments d'un fichier copiable ; on l'ouvre
@@ -711,7 +882,8 @@ discuté contre la règle d'Apple ; sinon le levier part avec `trials.ts`, et le
    `lumen` attend l'étape AirPlay, `shareGate` n'a pas d'entrée (lien refusé), les noms restent `.m4s`.
 4. **Client** : option du Compte, route `"lumen"`, `LumenServerHost`, repli, journal, page d'activité.
 5. **AirPlay** : liste signée vers l'Apple TV, `castProgress` par segment.
-6. **Son converti** : ffmpeg minimal, grille de segments, cache disque.
+6. **Son converti** : ffmpeg minimal, grille de segments, cache disque. **Fait** (« Phase 2 », §161 à §163), sauf la
+   bascule en cours de lecture (avec l'étape 4).
 7. **Débit adaptatif à la volée** : la liste maître déclare d'emblée des variantes allégées (1080p ~6 Mb/s, 720p
    ~3 Mb/s) à côté de l'originale remuxée ; le lecteur mesure son débit et bascule à une frontière de segment, sans
    coupure. Une variante n'est fabriquée (ffmpeg sur le GPU intégré) qu'au premier segment demandé, ou préchauffée
