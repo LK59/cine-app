@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { LumenTest } from "@/components/lumenTest/LumenTest";
-import { QUICK_SERIES, SERIES, planOf } from "@/components/lumenTest/autoSeries";
+import { MUX_SERIES, QUICK_SERIES, SERIES, planOf } from "@/components/lumenTest/autoSeries";
 
 // La page de banc `/lumen-test` (étape 3b, DECISIONS.md §157) : ce qu'on peut en éprouver sans lecteur
 // HLS — elle se monte, propose les trois découpes, refuse un identifiant mal formé sans appeler le
@@ -142,6 +142,32 @@ describe("la page de banc de Lumen serveur", () => {
     expect(lines.every((l) => (l.auto as { pass: string }).pass === "courte")).toBe(true);
     // Le levier a demande son verdict multiplexé (`mux=1`) ; les autres non.
     expect(eligibility.map((u) => new URL(u, "http://x").searchParams.get("mux") === "1")).toEqual(QUICK_SERIES.map((t) => !!t.modes?.mux));
+  });
+
+  it("« Son multiplexé » (étape 3f) : ses 24 essais, le verdict multiplexé demandé un essai sur deux, ses deux questions et son verdict dans le bilan", async () => {
+    const { lines, eligibility } = refusingServer();
+    render(<LumenTest />);
+    fireEvent.click(screen.getByText(/^Son multiplexé/));
+    const sendSummary = await screen.findByText("Envoyer le bilan", undefined, { timeout: 5000 });
+    expect(lines.map((l) => (l.auto as { trial: string }).trial)).toEqual(MUX_SERIES.map((t) => t.id));
+    expect(lines.every((l) => (l.auto as { pass: string; order: string }).pass === "multiplexé" && (l.auto as { order: string }).order === "serveur")).toBe(true);
+    expect(lines.map((l) => (l.auto as { rep: number }).rep)).toEqual(MUX_SERIES.map((t) => t.rep));
+    expect(eligibility.map((u) => new URL(u, "http://x").searchParams.get("mux") === "1")).toEqual(MUX_SERIES.map((t) => !!t.modes?.mux));
+    // Son propre tableau, pas celui des deux lecteurs ; ses deux questions à la place de celle de Ted Lasso.
+    expect(screen.queryByText("Lecteur actuel", { selector: "th" })).toBeNull();
+    expect(screen.getByText(/^Non-régression :/)).toBeInTheDocument();
+    expect(screen.queryByText(/Ted Lasso\), le son a-t-il changé/)).toBeNull();
+    // « Non » : la question de l'image abîmée, la première ; celle du changement de piste a aussi le sien.
+    fireEvent.click(screen.getAllByText("Non")[0]);
+    fireEvent.click(screen.getByText("Parfois"));
+    fireEvent.click(screen.getByText("Décalée en multiplexé seulement"));
+    fireEvent.click(sendSummary);
+    await screen.findByText(/Bilan envoyé/);
+    const summary = lines.at(-1)!;
+    expect(summary).toMatchObject({ auto: { summary: true, of: MUX_SERIES.length, pass: "multiplexé" }, answers: { damaged: "non", audioChanged: "parfois", lipSync: "non-mux" }, comparison: [] });
+    // Tout refusé : chaque titre a sa ligne, aucun n'est jugé.
+    expect((summary.mux as { titles: unknown[] }).titles).toHaveLength(4);
+    expect(summary.mux).toMatchObject({ overall: { firstFrame: "multiplexé non jugé sur 4 (sur 4 titres)", regressions: "aucune dégradation vue en multiplexé" } });
   });
 
   it("l'ordre « lecteur actuel d'abord » : la série se garde et recharge la page, puis reprend au premier essai serveur après un appui", async () => {

@@ -6,8 +6,11 @@ import { useWakeLock } from "@/lib/useWakeLock";
 import {
   AUDIO_SWITCH_WATCH_MS,
   DEFAULT_TARGET_S,
+  DWELL_AFTER_SEEK_MS,
   EARLY_DELAY_MS,
   LEVER_SERIES,
+  MUX_SERIES,
+  MUX_SWITCH_WATCH_MS,
   FIRST_FRAME_TIMEOUT_MS,
   FREEZE_CHECK_MS,
   FreezeWatch,
@@ -29,6 +32,7 @@ import {
   seriesProgress,
   summaryBody,
   trialTag,
+  type AudioCheck,
   type ComparisonCell,
   type ComparisonRow,
   type Cut,
@@ -49,7 +53,9 @@ import {
   aheadOf,
   buildCascade,
   fetchServerChrono,
+  lumenResourceName,
   probeLink,
+  segmentsByRendition,
   summarizeCascades,
   syncClock,
   type Cascade,
@@ -57,8 +63,10 @@ import {
   type ChronoSummary,
   type ClockSync,
   type PageEvent,
+  type ReceivedLike,
   type ResourceLike,
 } from "./chronology";
+import { analyzeMux, checkAudio, expectedAudio, switchTarget, trackOfUri, type ExpectedAudio, type MuxAnalysis, type MuxChecks, type MuxMetric } from "./muxPass";
 import type { RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 
 /**
@@ -102,6 +110,13 @@ import type { RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
  * dans la ligne. Puis **les leviers de démarrage** en modes d'essai (son multiplexé, préparation précoce, départ
  * par `EXT-X-START` ou `#t=`, débit annoncé moyen), et **l'ordre inversé** : le lecteur actuel d'abord, la page
  * rechargée, puis Lumen serveur — avec un « Touchez pour continuer » pour rendre le son à l'élément.
+ *
+ * Depuis l'étape 3f, **la passe « son multiplexé »** (bouton à part, `MUX_SERIES` et `muxPass.ts`) : quatre titres,
+ * trois essais par mode en alternance, mêmes sauts ; la page y lit en plus la liste maître (une fois par titre et par
+ * mode, sous un identifiant de lecture jetable) pour savoir quelle piste Safari doit allumer, vérifie celle qu'il
+ * allume, change de piste une fois (vers une autre langue) en comptant les segments de la nouvelle piste qu'elle voit
+ * arriver, et finit sur un verdict par titre contre la dispersion des répétitions. Les arrivées des segments côté page
+ * (Resource Timing, que Safari expose aussi pour le HLS natif) entrent dans les cascades de toutes les passes.
  *
  * Textes en français : la page est pour l'administrateur de la maison, pas pour un rapport.
  */
@@ -189,6 +204,14 @@ interface AudioSwitch {
   /** Tour des pistes de la série : erreurs et gels survenus dans les 8 s qui suivent le changement. */
   errors?: number;
   freezes?: number;
+  /**
+   * Passe « son multiplexé » (étape 3f) : le numéro Matroska de la piste visée (lu dans la liste maître), la piste
+   * allumée à la fin de la fenêtre est-elle celle-là (`applied`), et les segments de cette piste que la page a vus
+   * arriver depuis le changement (`segs`, Resource Timing) — la preuve que Safari a vraiment chargé l'autre son.
+   */
+  target?: number;
+  applied?: boolean;
+  segs?: number;
 }
 
 /** Une lecture : tout ce que la page en mesure, mutable pendant qu'elle dure (dans un `ref`). */
@@ -253,6 +276,12 @@ interface Run {
   chronoDone?: Promise<void>;
   /** Le dernier `readyState` et la dernière avance notés par l'échantillonneur (100 ms). */
   sampled?: { rs: number; ahead: number | null };
+  /** Les segments reçus par la page, par rendu (`v`, `vm2`, `a3` — Resource Timing, étape 3f). */
+  rtSegs?: Record<string, number>;
+  /** Passe « son multiplexé » : ce que la liste maître désigne, la piste allumée au départ, et le débit annoncé. */
+  expected?: ExpectedAudio | null;
+  audioCheck?: AudioCheck;
+  streamMbps?: number;
 }
 
 /** Les évènements de la vidéo notés tels quels dans la chronologie (étape 3e). */
@@ -488,6 +517,8 @@ interface AutoView {
   comparison: ComparisonRow[];
   /** Les essais finis, pour le tableau de la chronologie. */
   trials: TrialResult[];
+  /** La passe « son multiplexé » finie : le verdict par titre (`muxPass.ts`). */
+  mux: MuxAnalysis | null;
   order: SeriesOrder;
   stopped: boolean;
   sent: string | null;
@@ -561,12 +592,29 @@ function autoViewOf(state: AutoState | null): AutoView | null {
     elapsedS: (now - state.startedAt) / 1000,
     progress: state.phase === "en-cours" ? seriesProgress(plan, state.index, (now - state.trialStartedAt) / 1000) : 1,
     results: state.results.map(formatResult),
-    comparison: state.phase === "en-cours" ? [] : comparisonRows(state.results),
+    // La passe « son multiplexé » a son propre tableau : le comparatif des deux lecteurs n'y a pas de sens.
+    comparison: state.phase === "en-cours" || state.pass === "multiplexé" ? [] : comparisonRows(state.results),
     trials: state.phase === "en-cours" ? [] : state.results,
+    mux: state.phase === "en-cours" || state.pass !== "multiplexé" ? null : analyzeMux(state.results),
     order: state.order,
     stopped: state.stopped,
     sent: state.sent,
   };
+}
+
+/**
+ * La liste maître d'un essai de la passe « son multiplexé » (étape 3f), lue par la page sous un identifiant de lecture
+ * jetable — ni la chronologie ni le relevé de l'essai ne la comptent : la piste que Safari doit allumer, l'ordre des
+ * rendus, le débit annoncé. Null si elle ne se lit pas : l'essai continue, sa piste n'est simplement pas jugée.
+ */
+async function readMaster(itemId: string, version: string, audioTrack: number | null): Promise<ExpectedAudio | null> {
+  try {
+    const res = await fetch(`/api/lumen/${itemId}/${version}/${newPlaybackId()}/master.m3u8${audioTrack !== null ? `?audio=${audioTrack}` : ""}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return expectedAudio(await res.text());
+  } catch {
+    return null;
+  }
 }
 
 function newPlaybackId(): string {
@@ -600,6 +648,8 @@ function measuresOf(run: Run): TrialMeasures {
     waits: run.waits.count,
     quality: qualityDelta(run.qualityStart, run.quality),
     audioSwitches: run.audioSwitches,
+    ...(run.audioCheck ? { audioCheck: run.audioCheck } : {}),
+    ...(run.streamMbps !== undefined ? { streamMbps: run.streamMbps } : {}),
   };
 }
 
@@ -641,7 +691,22 @@ function reportOf(run: Run): Record<string, unknown> {
     framesPresented: run.watch.presented || undefined,
     freezes: run.watch.freezes.map(({ at, ms: took, afterSeek, until }) => ({ at, ms: took, afterSeek, until })),
     audioTracks: run.audioTracks,
-    audioSwitches: run.audioSwitches.map(({ from, to, ms: took, reloaded, changeEvent, waited, heard, errors, freezes }) => ({ from, to, ms: took, reloaded, changeEvent, waited, heard, errors, freezes })),
+    audioSwitches: run.audioSwitches.map(({ from, to, ms: took, reloaded, changeEvent, waited, heard, errors, freezes, target, applied, segs }) => ({
+      from,
+      to,
+      ms: took,
+      reloaded,
+      changeEvent,
+      waited,
+      heard,
+      errors,
+      freezes,
+      target,
+      applied,
+      segs,
+    })),
+    audioCheck: run.audioCheck,
+    streamMbps: run.streamMbps,
     quality: run.quality,
     qualityStart: run.qualityStart,
     qualityDelta: qualityDelta(run.qualityStart, run.quality),
@@ -655,6 +720,7 @@ function reportOf(run: Run): Record<string, unknown> {
       link: run.link ?? undefined,
       rtLumen: run.rtLumen,
       rtStream: run.rtStream,
+      rtSegs: run.rtSegs,
       summary: run.chrono,
       cascades: run.cascades,
     },
@@ -700,7 +766,7 @@ export function LumenTest() {
   const [touring, setTouring] = useState(false);
   const [auto, setAuto] = useState<AutoView | null>(null);
   const [needTap, setNeedTap] = useState(false);
-  const [answers, setAnswers] = useState<SeriesAnswers>({ damaged: null, damagedTitle: "", audioClean: null });
+  const [answers, setAnswers] = useState<SeriesAnswers>({ damaged: null, damagedTitle: "", audioClean: null, audioChanged: null, lipSync: null });
   // Étape 3e : l'ordre des lecteurs d'une série, les leviers du mode manuel, la série à reprendre après un
   // rechargement (lue une fois, au montage : la page ne se rend que dans le navigateur), les cascades affichées.
   const [order, setOrder] = useState<SeriesOrder>("serveur");
@@ -1024,9 +1090,18 @@ export function LumenTest() {
     run.rtLumen = resources.filter((r) => /\/api\/lumen\/[^/]+\/[^/]+\/[^/]+\/(?:master|v|vm\d+|a\d+|init-)/.test(r.name)).length;
     const stream = resources.filter((r) => r.name.includes("/api/jellyfin/stream"));
     run.rtStream = stream.length;
+    // Ce que la page a vu arriver de Lumen serveur (étape 3f) : Safari expose les requêtes HLS à Resource Timing.
+    const received: ReceivedLike[] =
+      run.player === "serveur"
+        ? resources.flatMap((r) => {
+            const name = lumenResourceName(r.name, run.s);
+            return name ? [{ name, startTime: r.startTime, responseEnd: r.responseEnd, bytes: r.encodedBodySize }] : [];
+          })
+        : [];
+    if (received.length) run.rtSegs = segmentsByRendition(received);
     const entries = run.player === "serveur" && run.clock ? await fetchServerChrono(run.itemId, run.s) : null;
     run.cascades = momentsOf(run).map((m) =>
-      buildCascade(m, run.events, run.player === "serveur" ? { entries: entries ?? [], clock: run.clock, timeOrigin: performance.timeOrigin } : { resources: stream })
+      buildCascade(m, run.events, run.player === "serveur" ? { entries: entries ?? [], clock: run.clock, timeOrigin: performance.timeOrigin, received } : { resources: stream })
     );
     run.chrono = summarizeCascades(run.cascades);
     note(`chronologie ${run.title} · ${playerLabel(run)} : ${run.cascades.length} cascade(s)${run.clock ? ` · horloge ±${Math.round(run.clock.rttMs / 2)} ms` : ""}${entries ? ` · ${entries.length} requête(s) vues du serveur` : ""} · Resource Timing : ${run.rtLumen} requête(s) HLS, ${run.rtStream} plage(s) du lecteur actuel`);
@@ -1293,13 +1368,13 @@ export function LumenTest() {
    * N sauts, chacun suivi de 4 s de lecture : de quoi mesurer sans geste. Partagé avec la série, qui donne les
    * positions (`seekPositions` : les mêmes pour les deux lecteurs d'un titre) ; à la main, au hasard.
    */
-  const runTour = async (n: number, positions?: number[]) => {
+  const runTour = async (n: number, positions?: number[], dwellMs = DWELL_AFTER_SEEK_MS) => {
     const token = ++tourRef.current;
     setTouring(true);
     note(`parcours de ${n} sauts${positions ? ` (positions de la graine : ${positions.join(", ")})` : ""}`);
     for (let i = 0; i < n && tourRef.current === token && runRef.current; i++) {
       await seek("parcours", positions?.[i]);
-      await new Promise((resolve) => setTimeout(resolve, 4000));
+      await new Promise((resolve) => setTimeout(resolve, dwellMs));
     }
     if (tourRef.current === token) note("parcours terminé");
     setTouring(false);
@@ -1307,8 +1382,11 @@ export function LumenTest() {
 
   const tour = () => runTour(Math.max(1, Math.min(60, Math.round(Number(tourCount) || 10))));
 
-  /** Passe à la piste audio suivante par `audioTracks[i].enabled` : sans recharger, si Safari sait faire. */
-  const nextAudio = (): AudioSwitch | null => {
+  /**
+   * Passe à la piste audio suivante — ou à la piste `to` (la passe « son multiplexé » vise une autre langue) — par
+   * `audioTracks[i].enabled` : sans recharger, si Safari sait faire.
+   */
+  const nextAudio = (to?: number): AudioSwitch | null => {
     const video = videoRef.current;
     const run = runRef.current;
     const tracks = tracksOf(video);
@@ -1317,7 +1395,7 @@ export function LumenTest() {
       return null;
     }
     const current = tracks.findIndex((t) => t.enabled);
-    const next = (current + 1) % tracks.length;
+    const next = to !== undefined && to >= 0 && to < tracks.length && to !== current ? to : (current + 1) % tracks.length;
     const sw: AudioSwitch = {
       from: describeTrack(tracks[current], current),
       to: describeTrack(tracks[next], next),
@@ -1435,6 +1513,10 @@ export function LumenTest() {
     // La chronologie préparée pour l'essai qui va lire (identifiant, horloge, débit) : tirée dans `prepare`, hors
     // du temps de la première image, comme le verdict.
     let pending: { s: string; clock: ClockSync | null; link: Run["link"] } | null = null;
+    // La passe « son multiplexé » (étape 3f) : la liste maître lue une fois par titre et par mode — la piste que Safari
+    // doit allumer, les rendus dans l'ordre de `audioTracks`, le débit annoncé — et celle de l'essai qui va lire.
+    const masters = new Map<string, ExpectedAudio | null>();
+    let pendingExpected: ExpectedAudio | null | undefined;
     let logFrom = 0;
     const lineRuns = new Map<number, Record<string, unknown>[]>();
     const plan = state.plan;
@@ -1464,6 +1546,46 @@ export function LumenTest() {
       }
     };
 
+    /**
+     * Le changement de piste de la passe « son multiplexé » (étape 3f) : un seul, vers une piste d'une autre langue
+     * (`switchTarget` — un changement qui s'entend), observé `MUX_SWITCH_WATCH_MS`. En plus de ce que mesure le tour
+     * des pistes (reprise, `waiting`, erreurs, gels), la piste allumée à la fin (appliqué ?) et les segments de la
+     * nouvelle piste que la page a vus arriver (Resource Timing) : en multiplexé, Safari doit quitter le son des
+     * segments vidéo pour un rendu séparé — c'est ce que la spécification d'Apple ne garantit pas.
+     */
+    const switchOnce = async (video: TestVideo | null, run: Run | null) => {
+      const tracks = tracksOf(video);
+      const target = switchTarget(tracks);
+      if (!video || !run || target < 0) {
+        note(`changement de piste : ${tracks.length} piste(s) annoncée(s) par audioTracks, rien à changer`);
+        return;
+      }
+      setStep("Changement de piste");
+      const errorsBefore = run.errors.length;
+      const freezesBefore = run.watch.freezes.length;
+      const sw = nextAudio(target);
+      if (!sw) return;
+      // Le numéro Matroska de la piste visée : le rendu de même rang dans le groupe de la liste maître, si Safari
+      // annonce autant de pistes que la liste en déclare (sinon l'ordre ne se recoupe pas : rien de supposé).
+      const renditions = run.expected?.renditions;
+      const number = renditions && renditions.length === tracks.length ? trackOfUri(renditions[target].uri) : null;
+      if (number !== null) sw.target = number;
+      await sleepUnless(MUX_SWITCH_WATCH_MS, stopped);
+      sw.errors = run.errors.length - errorsBefore;
+      sw.freezes = run.watch.freezes.length - freezesBefore;
+      sw.applied = !!tracksOf(video)[target]?.enabled;
+      if (sw.target !== undefined) {
+        const prefix = `a${sw.target}/`;
+        sw.segs = resourcesNow().filter((r) => {
+          const name = r.startTime >= sw.startedAt - 50 ? lumenResourceName(r.name, run.s) : null;
+          return !!name && name.startsWith(prefix) && name.endsWith(".m4s");
+        }).length;
+      }
+      note(
+        `piste ${sw.to} : ${sw.ms !== undefined ? `reprise ${sw.ms} ms` : "LE TEMPS N'A PAS REPRIS"}${sw.waited ? " · blocage" : ""}${sw.errors ? ` · ${sw.errors} erreur(s)` : ""}${sw.freezes ? ` · ${sw.freezes} gel(s)` : ""} · ${sw.applied ? "appliquée" : "NON APPLIQUÉE"}${sw.segs !== undefined ? ` · ${sw.segs} segment(s) de la piste ${sw.target} reçus` : ""}`
+      );
+    };
+
     return {
       stopped,
       begin: (t, rank) => {
@@ -1488,7 +1610,17 @@ export function LumenTest() {
         const v = await prepare(t.itemId, null, chosenCut, t.targetS, !!t.modes?.mux);
         lastVerdict = v;
         pending = null;
+        pendingExpected = undefined;
         if (t.player === "serveur") {
+          // La liste maître de la passe « son multiplexé », avant l'échantillon de débit (qui reste juste avant l'essai).
+          if (t.rep && v?.ok && v.version && !stopped()) {
+            const k = `${t.key}|${t.modes?.mux ? "mux" : "normal"}`;
+            if (!masters.has(k)) {
+              setStep("Liste maître");
+              masters.set(k, await readMaster(t.itemId, v.version, v.audioTrack));
+            }
+            pendingExpected = masters.get(k) ?? null;
+          }
           if (v?.ok && !t.prepareOnly && !stopped()) {
             setStep("Horloges et débit");
             pending = await chronoBefore(t.itemId, "serveur");
@@ -1524,6 +1656,10 @@ export function LumenTest() {
         if (preloaded) armRun(run);
         run.trial = t.id;
         run.rank = rank;
+        if (pendingExpected !== undefined) {
+          run.expected = pendingExpected;
+          run.streamMbps = pendingExpected?.streamMbps;
+        }
         refusedRef.current = false;
         if (t.player === "actuel") {
           const failed = await openCurrent(run, t.startAt);
@@ -1539,6 +1675,16 @@ export function LumenTest() {
       play: async (duration) => {
         setStep(`Lecture ${Math.round(duration / 1000)} s`);
         await sleepUnless(duration, stopped);
+        // La passe « son multiplexé » : la piste allumée au départ, contre celle que la liste maître désigne — avant
+        // tout changement de piste de l'essai. En multiplexé, c'est la piste sans URI, dans les segments vidéo.
+        const run = runRef.current;
+        if (plan[state.index]?.rep && run && run.expected !== undefined) {
+          run.audioCheck = checkAudio(run.expected, tracksOf(videoRef.current));
+          const c = run.audioCheck;
+          note(
+            `piste au départ : ${c.got ?? "?"}${c.ok === undefined ? " (non jugée)" : c.ok ? " — la bonne" : ` — FAUSSE, attendue ${c.want ?? "?"}`}${run.expected?.muxed === false && run.modes?.mux ? " · liste maître NON multiplexée" : ""}`
+          );
+        }
       },
       tour: async (count, index) => {
         const t = plan[state.index];
@@ -1546,12 +1692,16 @@ export function LumenTest() {
         // Les mêmes positions pour les deux lecteurs du titre : la graine de la série, le titre, le rang du parcours,
         // la durée du verdict serveur (celle de l'élément si le serveur n'en a pas donné).
         const duration = lastVerdict?.durationS ?? videoRef.current?.duration ?? 0;
-        await runTour(count, Number.isFinite(duration) && duration > 0 ? seekPositions(state.seed, t.key, index, count, duration) : undefined);
+        await runTour(count, Number.isFinite(duration) && duration > 0 ? seekPositions(state.seed, t.key, index, count, duration) : undefined, t.dwellMs);
       },
       audioTour: async () => {
         const video = videoRef.current;
         const run = runRef.current;
         const count = tracksOf(video).length;
+        if (plan[state.index]?.audioSwitch) {
+          await switchOnce(video, run);
+          return;
+        }
         if (!video || !run || count < 2) {
           note(`tour des pistes : ${count} piste(s) annoncée(s) par audioTracks, rien à changer`);
           return;
@@ -1666,7 +1816,7 @@ export function LumenTest() {
     video.removeAttribute("src");
     video.load();
     playOf(video).catch(() => {});
-    const seriesOrder = saved?.order ?? (pass === "leviers" ? "serveur" : order);
+    const seriesOrder = saved?.order ?? (pass === "leviers" || pass === "multiplexé" ? "serveur" : order);
     const plan = planOf(pass, seriesOrder);
     const state: AutoState = {
       serie: saved?.serie ?? newPlaybackId().slice(2, 14),
@@ -1689,8 +1839,8 @@ export function LumenTest() {
       outboxRef.current = [...saved.outbox, ...outboxRef.current].slice(-OUTBOX_MAX);
       note(`série ${state.serie} reprise après le rechargement, à l'essai ${state.index + 1} sur ${plan.length}`);
     } else {
-      setAnswers({ damaged: null, damagedTitle: "", audioClean: null });
-      const passLabel = pass === "courte" ? "comparatif rapide" : pass === "leviers" ? "leviers de démarrage" : "complète";
+      setAnswers({ damaged: null, damagedTitle: "", audioClean: null, audioChanged: null, lipSync: null });
+      const passLabel = pass === "courte" ? "comparatif rapide" : pass === "leviers" ? "leviers de démarrage" : pass === "multiplexé" ? "son multiplexé" : "complète";
       note(`série ${state.serie} (${passLabel}, ${seriesOrder === "actuel" ? "lecteur actuel d'abord, rechargement" : "serveur d'abord"}, graine ${state.seed}) : ${plan.length} essais`);
     }
     video.scrollIntoView?.({ block: "start" });
@@ -1771,6 +1921,7 @@ export function LumenTest() {
   const estimateMin = Math.round(seriesEstimateS(SERIES) / 60);
   const quickMin = Math.round(seriesEstimateS(QUICK_SERIES) / 60);
   const leverMin = Math.round(seriesEstimateS(LEVER_SERIES) / 60);
+  const muxMin = Math.round(seriesEstimateS(MUX_SERIES) / 60);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 text-sm text-white">
@@ -1807,6 +1958,14 @@ export function LumenTest() {
         <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("leviers")}>
           {`Leviers de démarrage (${LEVER_SERIES.length} essais, Lumen serveur seul, ~${leverMin} min)`}
         </button>
+        <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("multiplexé")}>
+          {`Son multiplexé (${MUX_SERIES.length} essais, Lumen serveur seul, ~${muxMin} min)`}
+        </button>
+        <p className="mt-1 text-[11px] text-white/50">
+          La passe du son multiplexé : quatre titres, chacun trois fois avec les groupes son séparés (la règle) et trois fois avec le son dans les segments vidéo, en
+          alternance, mêmes sauts ; un changement de piste par essai multiplexé. Écoutez le changement de langue et regardez les lèvres : deux questions
+          à la fin.
+        </p>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/60">
           Ordre des lecteurs :
           {(
@@ -2020,6 +2179,7 @@ export function LumenTest() {
               </div>
             )}
             {auto.comparison.length > 0 && <ComparisonTable rows={auto.comparison} />}
+            {auto.mux && <MuxTable analysis={auto.mux} />}
             {auto.trials.length > 0 && <ChronoTable trials={auto.trials} />}
             {auto.results.length > 0 && (
               <ol className="mt-2 space-y-0.5 font-mono text-[11px] leading-relaxed text-white/80">
@@ -2055,6 +2215,57 @@ export function LumenTest() {
                     </label>
                   )}
                 </fieldset>
+                {auto.pass === "multiplexé" && (
+                  <>
+                    <fieldset>
+                      <legend className="font-semibold">
+                        Quand la piste a changé pendant un essai « son multiplexé » (du français à l&apos;anglais), avez-vous entendu l&apos;autre langue ?
+                      </legend>
+                      <div className="mt-1 flex flex-wrap gap-2">
+                        {(
+                          [
+                            ["oui", "Oui, à chaque fois"],
+                            ["parfois", "Parfois"],
+                            ["non", "Non"],
+                            ["pas-entendu", "Je n'ai pas écouté"],
+                          ] as const
+                        ).map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            className={`btn btn-sm ${answers.audioChanged === value ? "btn-primary" : "btn-ghost"}`}
+                            onClick={() => setAnswers((a) => ({ ...a, audioChanged: value }))}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </fieldset>
+                    <fieldset>
+                      <legend className="font-semibold">La voix était-elle en phase avec les lèvres ?</legend>
+                      <div className="mt-1 flex flex-wrap gap-2">
+                        {(
+                          [
+                            ["oui", "Oui, partout"],
+                            ["non-mux", "Décalée en multiplexé seulement"],
+                            ["non-partout", "Décalée partout"],
+                            ["pas-regardé", "Je n'ai pas regardé"],
+                          ] as const
+                        ).map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            className={`btn btn-sm ${answers.lipSync === value ? "btn-primary" : "btn-ghost"}`}
+                            onClick={() => setAnswers((a) => ({ ...a, lipSync: value }))}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </fieldset>
+                  </>
+                )}
+                {auto.pass !== "multiplexé" && (
                 <fieldset>
                   <legend className="font-semibold">Quand les pistes audio ont changé (Ted Lasso), le son a-t-il changé sans coupure de l&apos;image ?</legend>
                   <div className="mt-1 flex flex-wrap gap-2">
@@ -2076,6 +2287,7 @@ export function LumenTest() {
                     ))}
                   </div>
                 </fieldset>
+                )}
                 <button type="button" className="btn btn-primary btn-sm" onClick={() => void sendSummary()}>
                   Envoyer le bilan
                 </button>
@@ -2222,10 +2434,10 @@ function ChronoTable({ trials }: { trials: TrialResult[] }) {
   const cell = (v: number | undefined, unit = "") => (v === undefined ? "—" : `${v}${unit}`);
   return (
     <div className="mt-3 overflow-x-auto">
-      <table className="w-full min-w-[40rem] border-collapse font-mono text-[11px] text-white/85">
+      <table className="w-full min-w-[44rem] border-collapse font-mono text-[11px] text-white/85">
         <thead>
           <tr className="text-white/60">
-            {["Essai", "lien Mb/s", "1re req.", "seg. prêt", "seeked→reprise", "avance seeked", "avance reprise", "seg. v", "serveur max"].map((h) => (
+            {["Essai", "lien Mb/s", "1re req.", "seg. prêt", "seg. reçu", "seeked→reprise", "avance seeked", "avance reprise", "seg. v", "serveur max"].map((h) => (
               <th key={h} className="px-1.5 py-1 text-right font-normal first:text-left">
                 {h}
               </th>
@@ -2238,10 +2450,12 @@ function ChronoTable({ trials }: { trials: TrialResult[] }) {
               <td className="px-1.5 py-1">
                 {r.title} · {playerLabel(r)}
                 {r.mode ? ` (${r.mode})` : ""}
+                {r.rep ? ` #${r.rep}` : ""}
               </td>
               <td className="px-1.5 py-1 text-right">{cell(r.linkMbps)}</td>
               <td className="px-1.5 py-1 text-right">{cell(r.chrono?.firstReqMs)}</td>
               <td className="px-1.5 py-1 text-right">{cell(r.chrono?.firstVideoReadyMs)}</td>
+              <td className="px-1.5 py-1 text-right">{cell(r.chrono?.firstVideoRecvMs)}</td>
               <td className="px-1.5 py-1 text-right">{cell(r.chrono?.seekedToAdvanceMs)}</td>
               <td className="px-1.5 py-1 text-right">{cell(r.chrono?.aheadSeekedS, " s")}</td>
               <td className="px-1.5 py-1 text-right">{cell(r.chrono?.aheadAdvanceS, " s")}</td>
@@ -2253,7 +2467,8 @@ function ChronoTable({ trials }: { trials: TrialResult[] }) {
       </table>
       <p className="mt-1 text-[10px] text-white/50">
         Médianes des sauts, en ms depuis le geste ; avances en secondes de film déjà dans `buffered`. « seg. prêt » : le premier segment vidéo construit
-        sur le serveur ; « serveur max » : la plus longue préparation d&apos;une réponse de l&apos;essai.
+        sur le serveur ; « seg. reçu » : le même, reçu en entier par l&apos;appareil (Resource Timing) ; « serveur max » : la plus longue préparation
+        d&apos;une réponse de l&apos;essai.
       </p>
     </div>
   );
@@ -2328,6 +2543,112 @@ function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
         </tbody>
       </table>
       <p className="mt-1 text-[10px] text-white/50">En ms : première image ; puis, par saut, médiane/p90 jusqu&apos;à l&apos;image (seeked) et jusqu&apos;à la reprise de la lecture.</p>
+    </div>
+  );
+}
+
+/** Une valeur en secondes à deux décimales (« 0,48 s ») ; un tiret pour ce qui manque. */
+const asSeconds = (v: number | undefined) => (v === undefined ? "—" : `${(v / 1000).toFixed(2).replace(".", ",")} s`);
+
+/** Une mesure comparée : les médianes des deux modes, l'écart, et le verdict. */
+function MetricRow({ label, m }: { label: string; m: MuxMetric }) {
+  return (
+    <tr className="border-t border-white/10 align-top">
+      <td className="px-1.5 py-1">{label}</td>
+      <td className="px-1.5 py-1 text-right">
+        {asSeconds(m.medNormal)}
+        <div className="text-[10px] text-white/50">{m.normal.join(" · ") || "—"}</div>
+      </td>
+      <td className="px-1.5 py-1 text-right">
+        {asSeconds(m.medMux)}
+        <div className="text-[10px] text-white/50">{m.mux.join(" · ") || "—"}</div>
+      </td>
+      <td className="px-1.5 py-1 text-right">{m.diffMs === undefined ? "—" : `${m.diffMs > 0 ? "+" : ""}${m.diffMs} ms`}</td>
+      <td className={`px-1.5 py-1 ${m.kind === "plus-rapide" ? "text-emerald-300" : m.kind === "plus-lent" ? "text-amber-300" : "text-white/70"}`}>{m.verdict}</td>
+    </tr>
+  );
+}
+
+/** Les contrôles d'un mode, en une ligne. */
+function checksLine(c: MuxChecks): string {
+  return [
+    `${c.ok}/${c.trials} essais`,
+    `erreurs ${c.errors}`,
+    `gels ${c.freezes}`,
+    `manqués ${c.missed}`,
+    `blocages ${c.waits}`,
+    `perdues ${c.dropped}`,
+    `corrompues ${c.corrupted}`,
+    c.audioChecked ? `piste au départ ${c.audioOk}/${c.audioChecked}` : "piste au départ non jugée",
+    c.switches
+      ? `changement ${c.switches - c.switchTrouble}/${c.switches} net${c.switchNotApplied ? `, ${c.switchNotApplied} non appliqué` : ""}${c.switchMs !== undefined ? `, reprise ${c.switchMs} ms` : ""}${c.switchSegs !== undefined ? `, ${c.switchSegs} seg. reçus` : ""}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/**
+ * L'écran de fin de la passe « son multiplexé » (étape 3f) : par titre, la première image, l'image au saut et la
+ * reprise — médianes de la règle et du multiplexé, les trois valeurs de chacun dessous, l'écart, le verdict contre la
+ * dispersion des répétitions —, puis chaque essai avec le débit mesuré juste avant (⚠ sous le seuil du titre), et les
+ * contrôles de non-régression. En tête, la synthèse sur les quatre titres.
+ */
+function MuxTable({ analysis }: { analysis: MuxAnalysis }) {
+  return (
+    <div className="mt-3 space-y-4">
+      <div className="rounded-lg border border-white/20 p-2 text-xs">
+        <div>Première image : {analysis.overall.firstFrame}</div>
+        <div>Reprise après un saut : {analysis.overall.resume}</div>
+        <div>Non-régression : {analysis.overall.regressions}</div>
+      </div>
+      {analysis.titles.map((t) => (
+        <div key={t.key} className="overflow-x-auto">
+          <div className="text-xs font-semibold">
+            {t.title}
+            <span className="font-normal text-white/60">
+              {" "}
+              · débit annoncé {t.streamMbps ?? "?"} Mb/s · seuil {t.floorMbps} Mb/s{t.lowLink ? ` · ${t.lowLink} essai${t.lowLink > 1 ? "s" : ""} sous le seuil` : ""}
+            </span>
+          </div>
+          <table className="mt-1 w-full min-w-[40rem] border-collapse font-mono text-[11px] text-white/85">
+            <thead>
+              <tr className="text-white/60">
+                {["Mesure", "normal (méd.)", "multiplexé (méd.)", "écart", "verdict"].map((h, i) => (
+                  <th key={h} className={`px-1.5 py-1 font-normal ${i === 0 || i === 4 ? "text-left" : "text-right"}`}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <MetricRow label="première image" m={t.firstFrame} />
+              <MetricRow label="image au saut" m={t.seeked} />
+              <MetricRow label="reprise" m={t.resume} />
+            </tbody>
+          </table>
+          <ol className="mt-1 space-y-0.5 font-mono text-[10px] text-white/70">
+            {t.trials.map((r) => (
+              <li key={r.rank}>
+                {r.rank}. {r.mode} #{r.rep ?? "?"} · lien {r.linkMbps ?? "?"} Mb/s{r.low ? " ⚠" : ""} · image {r.firstFrameMs ?? "—"} · saut {r.seekedMs ?? "—"} · reprise {r.resumeMs ?? "—"}
+                {r.startRecvMs !== undefined ? ` · 1er seg. reçu +${r.startRecvMs}` : ""}
+                {r.audioOk === false ? " · PISTE FAUSSE" : ""}
+                {r.status !== "ok" ? ` · ${r.status}` : ""}
+              </li>
+            ))}
+          </ol>
+          <div className="mt-1 text-[10px] text-white/70">normal : {checksLine(t.checks.normal)}</div>
+          <div className="text-[10px] text-white/70">multiplexé : {checksLine(t.checks.multiplexé)}</div>
+          <div className={`text-[10px] ${t.regressions.length ? "text-amber-300" : "text-white/60"}`}>
+            {t.regressions.length ? `À regarder : ${t.regressions.join(" ; ")}` : "Rien de dégradé en multiplexé."}
+            {t.tracksSame === true ? " Pistes annoncées identiques dans tous les essais." : ""}
+          </div>
+        </div>
+      ))}
+      <p className="text-[10px] text-white/50">
+        En ms. Un écart n&apos;est déclaré que si les trois répétitions d&apos;un mode sont toutes plus rapides que les trois de l&apos;autre, et de 50 ms au
+        moins ; sinon il est dans le bruit. « positions » : les six sauts, les mêmes dans chaque essai, comparés un à un.
+      </p>
     </div>
   );
 }

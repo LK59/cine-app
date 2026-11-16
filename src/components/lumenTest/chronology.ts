@@ -23,6 +23,14 @@
  * (le serveur remet un segment de 3 Mo en 2 ms à des tampons de plusieurs Mo — noyau, relais inverse) ; ce que
  * Safari demande sans le dire (la page ne voit pas ses requêtes : `performance.getEntriesByType("resource")` est
  * relevé pour le constater, `rtLumen`) ; et le décodage lui-même.
+ *
+ * **Depuis l'étape 3f** (passe « son multiplexé ») : la supposition ci-dessus était fausse. Les lignes de Louis du
+ * 16/11/2026 (iPhone, application installée, iOS 18.7) comptent **82 à 153 entrées Resource Timing par essai** pour
+ * les adresses de Lumen serveur : Safari expose les requêtes HLS d'AVFoundation à la page. Chacune porte son début
+ * et sa fin de réponse sur l'horloge de la page — **l'arrivée réelle de chaque segment sur l'appareil**, ce que ni
+ * le serveur (« remis ») ni `buffered` (« analysé ») ne disaient. La cascade d'un essai serveur les porte à part
+ * (`rx`, `received`), sans rien changer à ce qu'elle disait déjà : quand Safari ne les expose pas (un autre
+ * appareil, une autre version), `rx` est simplement absent.
  */
 
 /** Un échange d'horloge : décalage (horloge du serveur − horloge de la page) et aller-retour, en ms. */
@@ -103,6 +111,38 @@ export interface ResourceLike {
   encodedBodySize?: number;
 }
 
+/**
+ * Une requête de Lumen serveur que la page a vue arriver (Resource Timing, étape 3f) : son nom court (`v/12.m4s`,
+ * `vm2/12.m4s`, `a3/12.m4s`, `init-v.mp4`, `master.m3u8`), son début et la fin de sa réponse sur l'horloge de la page,
+ * et son poids s'il est donné (`encodedBodySize` : 0 ou absent sur certains moteurs pour un chargement du lecteur).
+ */
+export interface ReceivedLike {
+  name: string;
+  startTime: number;
+  responseEnd: number;
+  bytes?: number;
+}
+
+/**
+ * Le nom court d'une adresse de Lumen serveur (`/api/lumen/{id}/{version}/{s}/v/12.m4s` → `v/12.m4s`), si elle est de
+ * la lecture `s` — Resource Timing garde aussi l'échantillon de débit et les échanges d'horloge (`/chrono?…`, un
+ * chemin à deux segments : jamais retenu) et, d'une lecture à l'autre, ce que la page n'a pas encore vidé.
+ */
+export function lumenResourceName(url: string, s: string): string | null {
+  const m = /\/api\/lumen\/[^/]+\/[^/?#]+\/([^/?#]+)\/([^?#]+)/.exec(url);
+  return m && m[1] === s ? m[2] : null;
+}
+
+/** Les segments d'une lecture reçus par la page, comptés par rendu (`v`, `vm2`, `a3`) : de quoi voir qui a été demandé. */
+export function segmentsByRendition(received: readonly ReceivedLike[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of received) {
+    const m = /^([a-z]+\d*)\/\d+\.m4s$/.exec(r.name);
+    if (m) out[m[1]] = (out[m[1]] ?? 0) + 1;
+  }
+  return out;
+}
+
 /** Les instants d'un démarrage ou d'un saut, sur l'horloge de la page. */
 export interface CascadeMoments {
   kind: "départ" | "saut";
@@ -157,8 +197,18 @@ export interface Cascade {
   readyMaxMs?: number;
   /** Octets remis divisés par la durée des envois de la fenêtre, vus du serveur (Mb/s) : majoré par les tampons. */
   srvMbps?: number;
+  /**
+   * Côté page (Resource Timing, étape 3f) : le premier segment vidéo de la fenêtre **reçu en entier** (ms depuis le
+   * geste), les segments vidéo reçus avant `seeked` et avant la reprise, et leur poids (Mo, quand Safari le donne).
+   */
+  firstVideoRecvMs?: number;
+  recvSeeked?: number;
+  recvAdvance?: number;
+  recvAdvanceMB?: number;
   req: string[];
   ev: string[];
+  /** `+105 v/12.m4s l240 k3200` : début de la requête vue par la page, durée jusqu'au dernier octet reçu, Ko. */
+  rx?: string[];
 }
 
 /** Au plus, dans une cascade : de quoi voir une rafale de saut entière sans faire une ligne de journal démesurée. */
@@ -186,7 +236,7 @@ function aheadAt(events: readonly PageEvent[], at: number | undefined): number |
 export function buildCascade(
   m: CascadeMoments,
   events: readonly PageEvent[],
-  input: { entries?: readonly ServerEntry[]; clock?: ClockSync | null; timeOrigin?: number; resources?: readonly ResourceLike[] }
+  input: { entries?: readonly ServerEntry[]; clock?: ClockSync | null; timeOrigin?: number; resources?: readonly ResourceLike[]; received?: readonly ReceivedLike[] }
 ): Cascade {
   const since = (t: number | undefined) => (t === undefined ? undefined : r0(t - m.startedAt));
   const out: Cascade = {
@@ -278,6 +328,39 @@ export function buildCascade(
     }
   }
 
+  // Ce que la page a vu arriver (étape 3f) : la seule mesure de l'arrivée réelle d'un segment sur l'appareil.
+  if (input.received?.length) {
+    const resumeAt = m.advanceAt ?? m.frameAt;
+    const mine = input.received.filter((r) => r.startTime >= from && r.startTime <= m.endAt).sort((a, b) => a.startTime - b.startTime);
+    let recvSeeked = 0;
+    let recvAdvance = 0;
+    let bytesAdvance = 0;
+    const rx: string[] = [];
+    for (const r of mine) {
+      const isSegment = r.name.endsWith(".m4s");
+      const isVideo = /^v(m\d+)?\//.test(r.name);
+      // Une réponse sans fin connue (coupée, ou un moteur qui ne la date pas) n'est pas « reçue ».
+      const done = r.responseEnd > 0 && r.responseEnd >= r.startTime ? r.responseEnd : undefined;
+      if (isSegment && isVideo && done !== undefined) {
+        out.firstVideoRecvMs ??= r0(done - m.startedAt);
+        if (m.seekedAt !== undefined && done <= m.seekedAt) recvSeeked += 1;
+        if (resumeAt !== undefined && done <= resumeAt) {
+          recvAdvance += 1;
+          bytesAdvance += r.bytes ?? 0;
+        }
+      }
+      if (rx.length < CASCADE_REQUESTS) rx.push(`${signed(r.startTime - m.startedAt)} ${r.name}${done !== undefined ? ` l${r0(done - r.startTime)}` : ""}${r.bytes ? ` k${Math.round(r.bytes / 1024)}` : ""}`);
+    }
+    if (mine.length) {
+      if (m.seekedAt !== undefined) out.recvSeeked = recvSeeked;
+      if (resumeAt !== undefined) {
+        out.recvAdvance = recvAdvance;
+        if (bytesAdvance > 0) out.recvAdvanceMB = mb(bytesAdvance);
+      }
+    }
+    if (rx.length) out.rx = rx;
+  }
+
   for (const e of events) {
     if (e.t < from || e.t > m.endAt) continue;
     if (out.ev.length >= CASCADE_EVENTS) break;
@@ -307,6 +390,13 @@ export interface ChronoSummary {
   videoAdvance?: number;
   /** La plus longue préparation d'une réponse, sur tout l'essai (ms). */
   readyMaxMs?: number;
+  /**
+   * Côté page (Resource Timing, étape 3f) : du geste au premier segment vidéo reçu en entier — médiane des sauts, et
+   * au démarrage — et les segments vidéo reçus avant la reprise (médiane). Absents si Safari ne les expose pas.
+   */
+  firstVideoRecvMs?: number;
+  startVideoRecvMs?: number;
+  recvAdvance?: number;
 }
 
 function medianOf(values: (number | undefined)[]): number | undefined {
@@ -326,6 +416,9 @@ export function summarizeCascades(cascades: readonly Cascade[]): ChronoSummary {
     firstVideoReadyMs: medianOf(seeks.map((c) => c.firstVideoReadyMs)),
     seekedToAdvanceMs: medianOf(seeks.map((c) => (c.seekedMs !== undefined && c.advanceMs !== undefined ? c.advanceMs - c.seekedMs : undefined))),
     videoAdvance: medianOf(seeks.map((c) => c.videoAdvance)),
+    firstVideoRecvMs: medianOf(seeks.map((c) => c.firstVideoRecvMs)),
+    startVideoRecvMs: cascades.find((c) => c.k === "départ")?.firstVideoRecvMs,
+    recvAdvance: medianOf(seeks.map((c) => c.recvAdvance)),
   };
   const ready = cascades.map((c) => c.readyMaxMs).filter((v): v is number => typeof v === "number");
   if (ready.length) out.readyMaxMs = Math.max(...ready);

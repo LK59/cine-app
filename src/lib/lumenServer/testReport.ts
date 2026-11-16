@@ -14,6 +14,12 @@
 // portent le lecteur, la passe (`complète`, `courte`) et la graine des positions de saut ; la récapitulative, le
 // tableau comparatif (`comparison`).
 //
+// Depuis l'étape 3f (la passe « son multiplexé », `pass: "multiplexé"`), une ligne d'essai porte aussi sa répétition
+// (`rep`), la piste entendue au départ contre celle que la liste maître désigne (`audioCheck`), le débit annoncé
+// (`streamMbps`), le changement de piste avec ce qu'il a fait (`applied`, `segs`), et la chronologie les arrivées
+// côté page (Resource Timing : `rx`, `recv*`, `rtSegs`) ; la récapitulative, le verdict par titre (`mux`) et deux
+// réponses de plus (`audioChanged`, `lipSync`).
+//
 // Le corps vient du navigateur : tout est relu, borné, et ce qui n'a pas la forme attendue tombe. Le
 // compte vient de la session, jamais du corps ; le relevé serveur d'une lecture n'est joint que s'il
 // appartient à ce compte (`lumenPlaybackStats`).
@@ -26,10 +32,10 @@ const MAX_SEEKS = 80;
 const MAX_LOG = 150;
 /** Les gels d'une lecture (« Tout enchaîner ») : au-delà de 60, la lecture est figée d'un bout à l'autre et le nombre suffit. */
 const MAX_FREEZES = 60;
-/** Les essais résumés d'une ligne récapitulative : la série en compte 14. */
+/** Les essais résumés d'une ligne récapitulative : la série en compte 14, la passe « son multiplexé » 24. */
 const MAX_TRIALS = 30;
 const PLAYERS = new Set(["serveur", "actuel"]);
-const PASSES = new Set(["complète", "courte", "leviers"]);
+const PASSES = new Set(["complète", "courte", "leviers", "multiplexé"]);
 const ORDERS = new Set(["serveur", "actuel"]);
 /** Les leviers d'un essai (`modeTag`, autoSeries.ts) : `mux`, `prep`, `fiche`, `depart-xstart`, `bw`… */
 const modeOf = (v: unknown) => (typeof v === "string" && /^[a-z-]{1,40}$/.test(v) ? v : null);
@@ -66,6 +72,15 @@ const FREEZE_ENDS = new Set(["image", "saut", "masqué", "fin"]);
 const TRIAL_STATUSES = new Set(["ok", "échec", "refusé", "préparé", "arrêté"]);
 const DAMAGED = new Set(["oui", "non"]);
 const AUDIO_CLEAN = new Set(["oui", "non", "pas-entendu"]);
+const AUDIO_CHANGED = new Set(["oui", "parfois", "non", "pas-entendu"]);
+const LIP_SYNC = new Set(["oui", "non-mux", "non-partout", "pas-regardé"]);
+/** Une répétition de la passe « son multiplexé » : 1 à 3 (au plus 9 si la passe grandit). */
+const repOf = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 9 ? v : null);
+/** Une piste vue par la page ou désignée par la liste maître : `langue:étiquette`. */
+const trackText = (v: unknown) => text(v, 100);
+/** La piste au départ (étape 3f) : attendue, allumée, jugée, et les pistes annoncées. */
+const audioCheckOf = (v: unknown) =>
+  pick(v, { ok: bool, want: trackText, got: trackText, tracks: (x) => list(x, 16).map(trackText).filter((y) => y !== null) });
 const oneOf = (allowed: Set<string>) => (v: unknown) => (typeof v === "string" && allowed.has(v) ? v : null);
 /** Le nom d'un essai de la série (`ghosted-cra-leading`, `american-housewife-cra-600`) : minuscules, chiffres, tirets. */
 const trialName = (v: unknown) => (typeof v === "string" && /^[a-z0-9-]{1,40}$/.test(v) ? v : null);
@@ -99,6 +114,10 @@ function chronoSummaryOf(raw: unknown): Record<string, unknown> {
     seekedToAdvanceMs: ms,
     videoAdvance: (v) => num(v, 1e4),
     readyMaxMs: ms,
+    // Côté page (Resource Timing, étape 3f).
+    firstVideoRecvMs: ms,
+    startVideoRecvMs: ms,
+    recvAdvance: (v) => num(v, 1e4),
   });
 }
 
@@ -115,6 +134,15 @@ function chronoOf(raw: unknown): Record<string, unknown> {
     link: (v) => pick(v, { mbps: (x) => num(x, 1e5), ms, via: oneOf(new Set(["rt", "lecture"])), MB: (x) => num(x, 100) }),
     rtLumen: (v) => num(v, 1e5),
     rtStream: (v) => num(v, 1e5),
+    // Les segments reçus par la page, par rendu (`v`, `vm2`, `a3`) : au plus quelques clés courtes.
+    rtSegs: (v) => {
+      const out: Record<string, number> = {};
+      for (const [k, x] of Object.entries(obj(v)).slice(0, 16)) {
+        const n = num(x, 1e5);
+        if (/^[a-z]{1,2}\d{0,4}$/.test(k) && n !== null) out[k] = n;
+      }
+      return out;
+    },
     summary: chronoSummaryOf,
     cascades: (v) =>
       list(v, MAX_CASCADES).map((c) =>
@@ -138,8 +166,13 @@ function chronoOf(raw: unknown): Record<string, unknown> {
           videoAdvance: (x) => num(x, 1e4),
           readyMaxMs: ms,
           srvMbps: (x) => num(x, 1e6),
+          firstVideoRecvMs: ms,
+          recvSeeked: (x) => num(x, 1e4),
+          recvAdvance: (x) => num(x, 1e4),
+          recvAdvanceMB: (x) => num(x, 1e5),
           req: (x) => list(x, 48).map((y) => text(y, 80)).filter((y) => y !== null),
           ev: (x) => list(x, 60).map((y) => text(y, 60)).filter((y) => y !== null),
+          rx: (x) => list(x, 48).map((y) => text(y, 80)).filter((y) => y !== null),
         })
       ),
   });
@@ -211,8 +244,14 @@ function runOf(raw: unknown, user: string): Record<string, unknown> {
           // Le tour des pistes de la série : erreurs et gels dans les 8 s qui suivent le changement.
           errors: (y) => num(y, 1e3),
           freezes: (y) => num(y, 1e3),
+          // La passe « son multiplexé » : la piste visée (numéro Matroska), allumée à la fin, et ses segments reçus.
+          target: (y) => num(y, 1e4),
+          applied: bool,
+          segs: (y) => num(y, 1e4),
         })
       ),
+    audioCheck: audioCheckOf,
+    streamMbps: (v) => num(v, 1e5),
     quality: qualityOf,
     // Les compteurs de décodage à la première image, et la différence avec la fin (`quality`) : ce que l'essai a coûté.
     qualityStart: qualityOf,
@@ -270,6 +309,78 @@ function trialSummaryOf(raw: unknown): Record<string, unknown> {
     audioSwitches: count,
     audioTrouble: count,
     verdicts: (v) => list(v, 4).map((x) => text(x, 200)).filter((x) => x !== null),
+    // La passe « son multiplexé » (étape 3f).
+    rep: repOf,
+    advances: (v) => list(v, 40).map((x) => (x === null ? null : num(x, 1e8))),
+    audioCheck: audioCheckOf,
+    audioSwitch: (v) =>
+      pick(v, { ms: duration, waited: bool, errors: count, freezes: count, applied: bool, segs: count }),
+    streamMbps: (v) => num(v, 1e5),
+  });
+}
+
+/** Une mesure comparée de la passe « son multiplexé » (`MuxMetric`, muxPass.ts). */
+function muxMetricOf(raw: unknown): Record<string, unknown> {
+  const duration = (v: unknown) => num(v, 1e8);
+  const values = (v: unknown) => list(v, 9).map(duration).filter((x) => x !== null);
+  return pick(raw, {
+    normal: values,
+    mux: values,
+    medNormal: duration,
+    medMux: duration,
+    diffMs: duration,
+    noiseMs: duration,
+    separated: bool,
+    kind: oneOf(new Set(["plus-rapide", "plus-lent", "minime", "bruit", "inconnu"])),
+    verdict: (v) => text(v, 200),
+    faster: (v) => num(v, 100),
+    positions: (v) => num(v, 100),
+  });
+}
+
+/** Les contrôles d'un mode (`MuxChecks`, muxPass.ts) : des compteurs et deux médianes. */
+function muxChecksOf(raw: unknown): Record<string, unknown> {
+  const count = (v: unknown) => num(v, 1e7);
+  return pick(raw, Object.fromEntries(["trials", "ok", "errors", "freezes", "missed", "waits", "dropped", "corrupted", "audioChecked", "audioOk", "switches", "switchTrouble", "switchNotApplied", "switchMs", "switchSegs"].map((k) => [k, count])));
+}
+
+/** Le verdict de la passe « son multiplexé », par titre et sur l'ensemble (`MuxAnalysis`, muxPass.ts). */
+function muxAnalysisOf(raw: unknown): Record<string, unknown> {
+  const duration = (v: unknown) => num(v, 1e8);
+  return pick(raw, {
+    titles: (v) =>
+      list(v, 8).map((t) =>
+        pick(t, {
+          key: trialName,
+          title: (x) => text(x, 120),
+          streamMbps: (x) => num(x, 1e5),
+          floorMbps: (x) => num(x, 1e5),
+          lowLink: (x) => num(x, 100),
+          trials: (x) =>
+            list(x, 12).map((r) =>
+              pick(r, {
+                rank: (y) => num(y, 1e3),
+                rep: repOf,
+                mode: oneOf(new Set(["normal", "multiplexé"])),
+                status: oneOf(TRIAL_STATUSES),
+                linkMbps: (y) => num(y, 1e5),
+                low: bool,
+                firstFrameMs: duration,
+                seekedMs: duration,
+                resumeMs: duration,
+                startRecvMs: duration,
+                audioOk: bool,
+              })
+            ),
+          firstFrame: muxMetricOf,
+          seeked: muxMetricOf,
+          resume: muxMetricOf,
+          checks: (x) => pick(x, { normal: muxChecksOf, multiplexé: muxChecksOf }),
+          tracksSame: bool,
+          regressions: (x) => list(x, 12).map((y) => text(y, 160)).filter((y) => y !== null),
+        })
+      ),
+    overall: (v) => pick(v, { firstFrame: (x) => text(x, 200), resume: (x) => text(x, 200), regressions: (x) => text(x, 300) }),
   });
 }
 
@@ -315,6 +426,7 @@ export function lumenTestReport(body: Record<string, unknown>, user: string): Re
           order: oneOf(ORDERS),
           mode: modeOf,
           seed: (x) => (typeof x === "number" && Number.isInteger(x) && x >= 0 && x < 2 ** 32 ? x : null),
+          rep: repOf,
           summary: bool,
           done: (x) => num(x, 1e3),
           elapsedS: (x) => num(x, 1e6),
@@ -325,7 +437,9 @@ export function lumenTestReport(body: Record<string, unknown>, user: string): Re
         list(v, MAX_TRIALS).map((row) =>
           pick(row, { key: trialName, title: (x) => text(x, 120), targetS: targetOf, mode: modeOf, serveur: comparisonCellOf, actuel: comparisonCellOf })
         ),
-      answers: (v) => pick(v, { damaged: oneOf(DAMAGED), damagedTitle: (x) => text(x, 120), audioClean: oneOf(AUDIO_CLEAN) }),
+      answers: (v) =>
+        pick(v, { damaged: oneOf(DAMAGED), damagedTitle: (x) => text(x, 120), audioClean: oneOf(AUDIO_CLEAN), audioChanged: oneOf(AUDIO_CHANGED), lipSync: oneOf(LIP_SYNC) }),
+      mux: muxAnalysisOf,
     }),
     build: text(body.build, 40),
     env: pick(body.env, {

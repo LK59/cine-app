@@ -634,6 +634,71 @@ attente) passe le rechargement dans sessionStorage (`cine:lumen-test-serie`, une
 roaming) ; `buffered` est échantillonné toutes les 100 ms et à chaque évènement ; la chronologie serveur garde 800
 requêtes par lecture ; une cascade porte au plus 48 requêtes et 60 évènements.
 
+## Étape 3f — le son multiplexé, une passe qui tranche
+
+**La question.** Le levier a de l'étape 3e — le son par défaut dans les segments vidéo (`mux=1`, `trials.ts`) — fait-il
+démarrer ou repartir Lumen serveur plus vite, et sans rien casser ? La passe « leviers » du 16/11 ne l'a essayé qu'une
+fois (*À la Maison Blanche* : image 0,48 s, image au saut 0,60 s, reprise 1,25 s), sans témoin sur le même titre, et le
+débit mesuré de l'iPhone y allait de 23 à 100 Mb/s d'un essai à l'autre : rien de concluant. Et la spécification d'auteur
+d'Apple le déconseille (9.5 SHOULD des flux séparés ; 9.6 et 9.7 MUST pour le multicanal et les autres langues) : la passe
+doit aussi montrer que rien ne se dégrade.
+
+**Le plan** (`MUX_SERIES`, `src/components/lumenTest/autoSeries.ts` ; bouton « Son multiplexé », Lumen serveur seul,
+24 essais, ~18 min estimées — la passe « leviers » a pris 4 % de moins que son estimation) :
+- **quatre titres**, chacun à deux pistes de langues différentes : *À la Maison Blanche* S03E01 (H.264 1080p, AC-3 2.0),
+  *Coup de foudre à Notting Hill* (HEVC 1080p à IDR seules, AC-3 5.1 — le multicanal multiplexé, ce que 9.6 interdit),
+  *Ghosted* (4K Dolby Vision 8.1, E-AC-3 Atmos, ~53 Mb/s en moyenne), *Pearl Harbor* (HEVC 1080p à GOP ouvert, sans DV) ;
+- **chaque titre six fois de suite** : la règle (A) et le multiplexé (B) trois fois chacun, en **A-B-B-A-A-B** (une dérive
+  linéaire du réseau pèse autant sur les deux modes), **en miroir un titre sur deux** (B-A-A-B-B-A) : aucun segment n'est
+  gardé par le serveur, seul le cache de pages les garde, donc le premier essai d'un titre est le seul à lire sur un
+  disque froid — ce désavantage tombe ainsi deux fois sur chaque mode ;
+- **les mêmes six sauts dans les six essais d'un titre** (`seekPositions(graine, titre, 0, …)`), ce qui permet la
+  comparaison position par position ; 3 s de lecture avant le parcours, 3 s après chaque saut ;
+- **le débit mesuré juste avant chaque essai** (l'échantillon de 4 Mo de l'étape 3e, après la lecture de la liste
+  maître), dans le tableau de fin ; un essai sous **max(30 Mb/s, 1,5 × le débit moyen annoncé du titre)** est signalé ⚠ ;
+- **par essai** : première image, `seekedMs` et `advanceMs` de chaque saut, la cascade de la chronologie, erreurs, gels,
+  blocages, images perdues et corrompues.
+
+**Les contrôles de non-régression.**
+- **La piste entendue au départ** : la page lit la liste maître de l'essai (une fois par titre et par mode, sous un
+  identifiant de lecture jetable, hors chronologie) et compare la piste allumée de `audioTracks` (langue et étiquette)
+  au rendu DEFAULT du groupe de la variante en tête — en multiplexé, le rendu sans URI. La liste lue dit aussi si elle
+  est bien multiplexée, et le débit annoncé (AVERAGE-BANDWIDTH).
+- **Le changement de piste** : un par essai multiplexé, et un témoin (rendu à rendu) dans le premier essai de la règle
+  de chaque titre, vers une piste d'une autre langue (`switchTarget` : un changement qui s'entend), observé 6 s —
+  reprise, `waiting`, erreurs, gels, la piste allumée à la fin (`applied`), et **les segments de la nouvelle piste que
+  la page a vus arriver** (`segs`) : la preuve que Safari a quitté le son des segments vidéo pour un rendu séparé.
+- **Les pistes annoncées** identiques dans les six essais d'un titre.
+- Ce que la page ne sait pas, deux questions de fin : « avez-vous entendu l'autre langue ? » (oui, parfois, non) et « la
+  voix était-elle en phase avec les lèvres ? » (partout, décalée en multiplexé seulement, décalée partout).
+
+**Le verdict** (`src/components/lumenTest/muxPass.ts`), par titre et par mesure — première image, image au saut, reprise
+(par essai, la médiane de ses sauts) : les médianes des deux modes, l'écart, et **« multiplexé plus rapide (ou lent) de
+X ms » seulement si les trois répétitions d'un mode sont toutes plus rapides que les trois de l'autre** (sous
+l'hypothèse d'aucune différence, une fois sur dix) **et** l'écart d'au moins 50 ms ; sinon « pas de différence au-delà du
+bruit », avec l'écart et la dispersion (la plus grande étendue des deux modes). Pour la reprise, en plus, le compte des
+positions où le multiplexé est le plus rapide (médianes par position, six positions). En tête de l'écran de fin, la
+synthèse sur les quatre titres ; sous chaque titre, chaque essai avec son débit, et les contrôles de chaque mode. La même
+analyse part dans la ligne récapitulative (`.mux`), avec les deux réponses (`.answers.audioChanged`, `.answers.lipSync`).
+
+**Ce que Safari montre à la page.** Les lignes du 16/11 comptent 82 à 153 entrées Resource Timing par essai pour les
+adresses de Lumen serveur : Safari expose à la page les requêtes HLS d'AVFoundation, ce que l'étape 3e croyait
+impossible. Chaque cascade d'un essai serveur (toutes passes) porte donc désormais l'**arrivée réelle de chaque segment
+sur l'appareil** (`rx` : `+105 v/12.m4s l240 k3200` — début vu par la page, durée jusqu'au dernier octet, Ko), le premier
+segment vidéo reçu en entier (`firstVideoRecvMs`, colonne « seg. reçu ») et les segments vidéo reçus avant `seeked` et
+avant la reprise (`recvSeeked`, `recvAdvance`) ; chaque lecture, les segments reçus par rendu (`chrono.rtSegs` :
+`{"vm2": 40, "a3": 4}`). Sans ces entrées (un autre moteur), rien ne change.
+
+**Protocole, sur l'iPhone (application installée), puis le Mac si possible.** « Son multiplexé », le son audible ;
+écouter le changement de langue des essais multiplexés et regarder les lèvres ; répondre aux deux questions, puis
+« Envoyer le bilan ». Lire la passe :
+`jq 'select(.kind=="lumen-test" and .auto.pass=="multiplexé" and .auto.summary) | .mux' startup.log` ; un essai :
+`jq 'select(.auto.serie=="…" and .auto.trial=="ghosted-serveur-mux-r2") | .runs[0]'`.
+
+**Ce qui tranchera** : multiplexé plus rapide de manière nette (répétitions séparées) sur la première image ou la reprise
+d'au moins trois titres, sans régression ni réponse négative → l'essai mérite d'aller sur Mac et Apple TV avant d'être
+discuté contre la règle d'Apple ; sinon le levier part avec `trials.ts`, et les groupes son séparés restent la règle.
+
 ## Ordre de travail
 
 1. **Preuve sur appareil** : une instance jetable sert la liste et les segments d'un fichier copiable ; on l'ouvre

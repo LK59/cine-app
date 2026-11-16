@@ -27,20 +27,28 @@
  * après un appui (`runSeries(…, { from })`), ce qui corrige le biais du cache plus chaud. Et **les leviers de
  * démarrage** (`TrialModes`), essais serveur à côté d'un témoin du même titre.
  *
+ * Depuis l'étape 3f, **la passe « son multiplexé »** (`MUX_SERIES`) : un seul levier, conçu pour trancher — quatre
+ * titres, chacun joué trois fois dans chaque mode en alternance, mêmes sauts partout, le débit mesuré avant chaque
+ * essai, puis un verdict par titre calculé contre la dispersion des répétitions (`muxPass.ts`).
+ *
  * Ce module est la partie sans navigateur — le plan, l'enchaînement, la détection des gels, les lignes, le
  * tableau — pour qu'elle s'éprouve en Node (`lumen-test-auto.test.ts`). Le composant (`LumenTest.tsx`) fournit le
  * pilote : la vidéo, les deux lecteurs, les sauts, les pistes, l'envoi. Rien ici ne touche au moteur.
  */
 
 import type { ChronoSummary } from "./chronology";
+import { analyzeMux } from "./muxPass";
 
 export type Cut = "idr" | "cra" | "cra-leading";
 
 /** Le lecteur d'un essai : Lumen serveur (HLS natif) ou le lecteur de production (Lumen dans la page, MediaSource). */
 export type PlayerKind = "serveur" | "actuel";
 
-/** La passe : la série complète (~28 min), le comparatif rapide (~13 min) ou les leviers de démarrage (~10 min, étape 3e). */
-export type SeriesPass = "complète" | "courte" | "leviers";
+/**
+ * La passe : la série complète (~28 min), le comparatif rapide (~13 min), les leviers de démarrage (~10 min, étape 3e)
+ * ou le son multiplexé contre la règle (~18 min, étape 3f).
+ */
+export type SeriesPass = "complète" | "courte" | "leviers" | "multiplexé";
 
 /**
  * L'ordre des lecteurs (étape 3e) : `serveur` — tous les essais serveur, puis ceux du lecteur actuel, dans la même
@@ -139,10 +147,23 @@ export interface Trial {
   modes?: TrialModes;
   /** L'ordre `actuel` : la page se recharge avant cet essai (le premier essai serveur après ceux du lecteur actuel). */
   reloadBefore?: boolean;
+  /** La passe « son multiplexé » (étape 3f) : la répétition (1 à 3) de ce mode sur ce titre. */
+  rep?: number;
+  /** La lecture avant le premier parcours (ms) ; absente : `PLAY_BEFORE_TOURS_MS`. */
+  playBeforeMs?: number;
+  /** La lecture après chaque saut d'un parcours (ms) ; absente : 4 s. */
+  dwellMs?: number;
+  /**
+   * Un seul changement de piste, vers une piste d'une autre langue s'il y en a une (étape 3f) — à la place du tour de
+   * toutes les pistes : la question est « le changement marche-t-il encore », pas « chaque piste se joue-t-elle ».
+   */
+  audioSwitch?: boolean;
 }
 
 /** Lecture avant le premier parcours : de quoi voir le démarrage, et le premier segment suivant. */
 export const PLAY_BEFORE_TOURS_MS = 10_000;
+/** La lecture après chaque saut d'un parcours, par défaut : de quoi voir un gel et ce que Safari demande ensuite. */
+export const DWELL_AFTER_SEEK_MS = 4_000;
 /** Sans première image passé ce délai (compté une fois `play()` accepté), l'essai est un échec et la série passe. */
 export const FIRST_FRAME_TIMEOUT_MS = 20_000;
 /** Après chaque changement de piste audio : la fenêtre où un blocage, une erreur ou un gel lui est imputé. */
@@ -158,14 +179,14 @@ const preset = (key: string) => {
   return found;
 };
 
-type TrialOptions = Partial<Pick<Trial, "startAt" | "tours" | "audioTour" | "prepareOnly" | "targetS" | "modes">>;
+type TrialOptions = Partial<Pick<Trial, "startAt" | "tours" | "audioTour" | "prepareOnly" | "targetS" | "modes" | "rep" | "playBeforeMs" | "dwellMs" | "audioSwitch">>;
 
 function trial(key: string, player: PlayerKind, options: TrialOptions = {}): Trial {
   const p = preset(key);
   const targetS = options.targetS ?? DEFAULT_TARGET_S;
   const tag = modeTag(options.modes);
   return {
-    id: options.prepareOnly ? `${p.key}-preparer` : `${p.key}-${player}${targetS !== DEFAULT_TARGET_S ? `-t${targetS}` : ""}${tag ? `-${tag}` : ""}`,
+    id: options.prepareOnly ? `${p.key}-preparer` : `${p.key}-${player}${targetS !== DEFAULT_TARGET_S ? `-t${targetS}` : ""}${tag ? `-${tag}` : ""}${options.rep ? `-r${options.rep}` : ""}`,
     key: p.key,
     itemId: p.id,
     title: p.title,
@@ -177,6 +198,10 @@ function trial(key: string, player: PlayerKind, options: TrialOptions = {}): Tri
     audioTour: options.audioTour ?? false,
     prepareOnly: options.prepareOnly,
     ...(options.modes ? { modes: options.modes } : {}),
+    ...(options.rep ? { rep: options.rep } : {}),
+    ...(options.playBeforeMs !== undefined ? { playBeforeMs: options.playBeforeMs } : {}),
+    ...(options.dwellMs !== undefined ? { dwellMs: options.dwellMs } : {}),
+    ...(options.audioSwitch ? { audioSwitch: true } : {}),
   };
 }
 
@@ -259,12 +284,63 @@ export const LEVER_SERIES: Trial[] = [
 ];
 
 /**
+ * La passe « son multiplexé » (étape 3f) : quatre titres variés, chacun joué **trois fois sans et trois fois avec** le
+ * son par défaut multiplexé dans les segments vidéo (`mux`, levier a de l'étape 3e), en alternance A-B-B-A-A-B.
+ *
+ * Pourquoi cette forme. La passe « leviers » du 16/11 n'avait essayé le levier qu'une fois (*À la Maison Blanche* :
+ * image 0,48 s, reprise 1,25 s), sans témoin sur le même titre, et le débit de l'iPhone y a varié de 23 à 100 Mb/s
+ * d'un essai à l'autre : rien de concluant. Ici :
+ * - **les titres** (recensement de l'étape 3b et titres de la page) : un H.264 1080p à son stéréo (*À la Maison
+ *   Blanche*), un HEVC 1080p à son 5.1 (*Notting Hill* — le multicanal multiplexé est ce qu'Apple interdit en 9.6), un
+ *   4K Dolby Vision à E-AC-3 Atmos (*Ghosted*, ~53 Mb/s en moyenne), un HEVC 1080p à GOP ouvert sans Dolby Vision
+ *   (*Pearl Harbor*, 132 CRA à RASL vues). Chacun a deux pistes de langues différentes : le changement de piste
+ *   s'entend ;
+ * - **l'alternance** A-B-B-A-A-B neutralise une dérive linéaire du réseau (même rang moyen pour les deux modes à un
+ *   demi-essai près). Les titres de rang pair la jouent en miroir (B-A-A-B-B-A) : le premier essai d'un titre est le
+ *   seul à lire ses positions sur un disque froid (aucun segment n'est gardé par le serveur, seul le cache de pages
+ *   les garde), et ce désavantage tombe ainsi deux fois sur chaque mode, plutôt que quatre fois sur la règle ;
+ * - **les mêmes sauts partout** : six positions par titre, tirées de la graine de la série et du titre
+ *   (`seekPositions(seed, key, 0, …)`) — les six essais d'un titre les demandent toutes, dans le même ordre ; c'est ce
+ *   qui permet la comparaison position par position (`muxPass.ts`) ;
+ * - **la durée** (~18 minutes estimées, ~17 réelles) : 3 s de lecture avant le parcours, 6 sauts suivis de 3 s de lecture (au lieu de 10 s
+ *   et 4 s : la passe compare deux modes l'un à l'autre, pas à un banc d'avant), un changement de piste dans chaque
+ *   essai multiplexé (6 s observées) et dans le premier essai témoin de chaque titre — la référence de ce que coûte un
+ *   changement de rendu à rendu.
+ */
+export const MUX_TITLES = ["maison-blanche", "notting-hill", "ghosted", "pearl-harbor"] as const;
+/** L'alternance des modes sur un titre : A la règle (groupes son séparés), B le son multiplexé. */
+export const MUX_PATTERN = ["A", "B", "B", "A", "A", "B"] as const;
+export const MUX_SEEKS = 6;
+export const MUX_PLAY_BEFORE_MS = 3_000;
+export const MUX_DWELL_MS = 3_000;
+/** La fenêtre d'un changement de piste de la passe : reprise, `waiting`, erreurs, gels, et les segments de la nouvelle piste. */
+export const MUX_SWITCH_WATCH_MS = 6_000;
+
+export const MUX_SERIES: Trial[] = MUX_TITLES.flatMap((key, titleIndex) => {
+  const pattern = titleIndex % 2 === 0 ? MUX_PATTERN : MUX_PATTERN.map((m) => (m === "A" ? "B" : "A"));
+  const seen = { A: 0, B: 0 };
+  return pattern.map((m) => {
+    const rep = ++seen[m];
+    const mux = m === "B";
+    return trial(key, "serveur", {
+      tours: [MUX_SEEKS],
+      rep,
+      playBeforeMs: MUX_PLAY_BEFORE_MS,
+      dwellMs: MUX_DWELL_MS,
+      // Chaque essai multiplexé change de piste une fois ; la règle, une fois par titre (sa première répétition).
+      audioSwitch: mux || rep === 1,
+      ...(mux ? { modes: { mux: true } } : {}),
+    });
+  });
+});
+
+/**
  * Le plan d'une passe dans l'ordre demandé. `actuel` : les essais du lecteur actuel d'abord, puis ceux du serveur, le
  * premier marqué `reloadBefore` — la page se recharge là (WebKit refuse un HLS natif après une MediaSource). Une passe
  * sans lecteur actuel (les leviers) n'a qu'un ordre.
  */
 export function planOf(pass: SeriesPass, order: SeriesOrder = "serveur"): Trial[] {
-  const plan = pass === "courte" ? QUICK_SERIES : pass === "leviers" ? LEVER_SERIES : SERIES;
+  const plan = pass === "courte" ? QUICK_SERIES : pass === "leviers" ? LEVER_SERIES : pass === "multiplexé" ? MUX_SERIES : SERIES;
   if (order === "serveur" || !plan.some((t) => t.player === "actuel")) return plan;
   const currentFirst = plan.filter((t) => t.player === "actuel");
   const server = plan.filter((t) => t.player === "serveur");
@@ -283,7 +359,10 @@ export function trialEstimateS(t: Trial): number {
   // La chronologie (étape 3e) : cinq échanges d'horloge, un échantillon de débit, la relecture du relevé — ~2 s.
   const chrono = 2;
   const early = t.modes?.early ? EARLY_DELAY_MS / 1000 : 0;
-  return 3 + 5 + chrono + early + PLAY_BEFORE_TOURS_MS / 1000 + seeks * 5.5 + (t.audioTour ? 3 * (AUDIO_SWITCH_WATCH_MS / 1000 + 1) : 0);
+  const play = (t.playBeforeMs ?? PLAY_BEFORE_TOURS_MS) / 1000;
+  const dwell = (t.dwellMs ?? DWELL_AFTER_SEEK_MS) / 1000;
+  const switches = t.audioTour ? 3 * (AUDIO_SWITCH_WATCH_MS / 1000 + 1) : t.audioSwitch ? MUX_SWITCH_WATCH_MS / 1000 + 1 : 0;
+  return 3 + 5 + chrono + early + play + seeks * (1.5 + dwell) + switches;
 }
 
 export function seriesEstimateS(plan: readonly Trial[]): number {
@@ -504,7 +583,24 @@ export interface TrialMeasures {
   errors: string[];
   waits: number;
   quality?: Quality;
-  audioSwitches: { ms?: number; waited: boolean; errors?: number; freezes?: number }[];
+  audioSwitches: { ms?: number; waited: boolean; errors?: number; freezes?: number; applied?: boolean; segs?: number }[];
+  /** La piste entendue au départ contre celle que la liste maître désigne (étape 3f, `muxPass.ts`). */
+  audioCheck?: AudioCheck;
+  /** Le débit moyen annoncé par la liste maître (AVERAGE-BANDWIDTH de la variante lue, Mb/s). */
+  streamMbps?: number;
+}
+
+/**
+ * La piste audio entendue au départ (étape 3f) : `want` — le rendu DEFAULT du groupe de la variante en tête de la liste
+ * maître (`LANGUAGE:NAME`), celui qu'AVFoundation doit ouvrir ; `got` — la piste allumée dans `video.audioTracks`. `ok`
+ * absent : pas de quoi juger (liste maître illisible, `audioTracks` non exposé).
+ */
+export interface AudioCheck {
+  ok?: boolean;
+  want?: string;
+  got?: string;
+  /** Les pistes que `audioTracks` annonce (`langue:étiquette`), dans l'ordre : identiques d'un mode à l'autre ? */
+  tracks?: string[];
 }
 
 /** Une ligne de résultat : ce que l'écran montre d'un essai fini, et ce que la ligne récapitulative en garde. */
@@ -548,6 +644,13 @@ export interface TrialResult {
   /** La chronologie résumée (étape 3e) : réserve à la reprise, première requête, segment prêt, débit du lien. */
   chrono?: ChronoSummary;
   linkMbps?: number;
+  /** La passe « son multiplexé » (étape 3f) : la répétition, et la reprise de chaque saut dans l'ordre (null : manqué). */
+  rep?: number;
+  advances?: (number | null)[];
+  audioCheck?: AudioCheck;
+  /** Le changement de piste de l'essai (le premier), réduit : reprise, blocage, erreurs, gels, appliqué, segments reçus. */
+  audioSwitch?: { ms?: number; waited: boolean; errors: number; freezes: number; applied?: boolean; segs?: number };
+  streamMbps?: number;
 }
 
 export function describeVerdict(cut: Cut, verdict: PreparedVerdict | null): string {
@@ -565,6 +668,7 @@ export function resultOf(t: Trial, rank: number, outcome: TrialOutcome, measures
     player: t.player,
     ...(t.player === "serveur" ? { cut: t.cut, targetS: t.targetS } : {}),
     ...(t.modes ? { mode: modeTag(t.modes) } : {}),
+    ...(t.rep ? { rep: t.rep } : {}),
     status: outcome.status,
     reason: outcome.reason,
     seeks: 0,
@@ -602,6 +706,21 @@ export function resultOf(t: Trial, rank: number, outcome: TrialOutcome, measures
     ...(measures.targetFrameMs !== undefined && measures.targetFrameMs !== measures.firstFrameMs ? { targetFrameMs: measures.targetFrameMs } : {}),
     ...(measures.chrono && Object.keys(measures.chrono).length ? { chrono: measures.chrono } : {}),
     ...(measures.linkMbps !== undefined ? { linkMbps: measures.linkMbps } : {}),
+    ...(t.rep ? { advances: measures.seeks.map((s) => (s.ok && typeof s.advanceMs === "number" ? s.advanceMs : null)) } : {}),
+    ...(measures.audioCheck ? { audioCheck: measures.audioCheck } : {}),
+    ...(t.audioSwitch && switches[0]
+      ? {
+          audioSwitch: {
+            ms: switches[0].ms,
+            waited: switches[0].waited,
+            errors: switches[0].errors ?? 0,
+            freezes: switches[0].freezes ?? 0,
+            ...(switches[0].applied !== undefined ? { applied: switches[0].applied } : {}),
+            ...(switches[0].segs !== undefined ? { segs: switches[0].segs } : {}),
+          },
+        }
+      : {}),
+    ...(measures.streamMbps !== undefined ? { streamMbps: measures.streamMbps } : {}),
   };
 }
 
@@ -617,13 +736,14 @@ export function formatChrono(r: Pick<TrialResult, "chrono" | "linkMbps">): strin
     c?.aheadAdvanceS !== undefined ? `à la reprise ${c.aheadAdvanceS} s` : null,
     c?.videoAdvance !== undefined ? `${c.videoAdvance} seg. vidéo demandés` : null,
     c?.readyMaxMs !== undefined ? `serveur ≤ ${c.readyMaxMs} ms` : null,
+    c?.firstVideoRecvMs !== undefined ? `1er seg. vidéo reçu +${c.firstVideoRecvMs} ms` : null,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
 }
 
 /** La ligne d'écran d'un essai fini : première image, médiane des sauts, gels, erreurs. */
 export function formatResult(r: TrialResult): string {
-  const head = `${r.rank}. ${r.title} · ${playerLabel(r)}${r.mode ? ` (${r.mode})` : ""}`;
+  const head = `${r.rank}. ${r.title} · ${playerLabel(r)}${r.mode ? ` (${r.mode})` : ""}${r.rep ? ` #${r.rep}` : ""}`;
   if (r.verdicts) return `${head} — ${r.verdicts.join(" ; ")}`;
   if (r.status === "refusé") return `${head} — refusé : ${r.reason ?? "?"}`;
   const parts = [
@@ -635,6 +755,8 @@ export function formatResult(r: TrialResult): string {
     `gels ${r.freezes}${r.freezes ? ` (${(r.freezeMs / 1000).toFixed(1)} s)` : ""}`,
     `erreurs ${r.errors}`,
     r.audioSwitches ? `pistes ${r.audioSwitches - (r.audioTrouble ?? 0)}/${r.audioSwitches} nettes` : null,
+    r.audioCheck?.ok !== undefined ? `piste au départ ${r.audioCheck.ok ? "la bonne" : `FAUSSE (${r.audioCheck.got ?? "?"} au lieu de ${r.audioCheck.want ?? "?"})`}` : null,
+    r.audioSwitch?.applied === false ? "CHANGEMENT DE PISTE NON APPLIQUÉ" : null,
     r.status !== "ok" ? `${r.status.toUpperCase()}${r.reason ? ` : ${r.reason}` : ""}` : null,
     formatChrono(r),
   ];
@@ -659,6 +781,7 @@ export interface SeriesDriver {
   start(t: Trial, rank: number, verdict: PreparedVerdict): Promise<StartResult>;
   play(ms: number): Promise<void>;
   tour(count: number, index: number): Promise<void>;
+  /** Le tour des pistes (`audioTour`), ou le seul changement de piste d'un essai `audioSwitch` (étape 3f). */
   audioTour(): Promise<void>;
   /**
    * Ferme l'essai — la lecture s'il y en a une — et rend sa ligne de résultat. Asynchrone depuis l'étape 3e : la
@@ -693,12 +816,12 @@ async function runTrial(t: Trial, rank: number, d: SeriesDriver): Promise<TrialO
   const started = await d.start(t, rank, verdict);
   if (d.stopped()) return { status: "arrêté" };
   if (!started.image) return { status: "échec", reason: started.reason };
-  await d.play(PLAY_BEFORE_TOURS_MS);
+  await d.play(t.playBeforeMs ?? PLAY_BEFORE_TOURS_MS);
   for (let i = 0; i < t.tours.length; i++) {
     if (d.stopped()) return { status: "arrêté" };
     await d.tour(t.tours[i], i);
   }
-  if (t.audioTour && !d.stopped()) await d.audioTour();
+  if ((t.audioTour || t.audioSwitch) && !d.stopped()) await d.audioTour();
   return { status: d.stopped() ? "arrêté" : "ok" };
 }
 
@@ -758,11 +881,29 @@ export interface SeriesAnswers {
   damagedTitle: string;
   /** « Quand les pistes audio ont changé (Ted Lasso), le son a-t-il changé sans coupure de l'image ? » */
   audioClean: "oui" | "non" | "pas-entendu" | null;
+  /**
+   * La passe « son multiplexé » (étape 3f) : « Quand la piste a changé pendant un essai multiplexé, avez-vous entendu
+   * l'autre langue ? » — ce que la page ne sait pas : `audioTracks` peut dire la piste allumée sans que le son suive.
+   */
+  audioChanged?: "oui" | "parfois" | "non" | "pas-entendu" | null;
+  /** « La voix était-elle en phase avec les lèvres ? » — la synchro image-son, que rien ne mesure ici. */
+  lipSync?: "oui" | "non-mux" | "non-partout" | "pas-regardé" | null;
 }
 
 /** Le marquage d'une ligne d'essai : la série (pour joindre ses lignes), l'essai, son rang, le total, le lecteur. */
 export function trialTag(serie: string, t: Trial, rank: number, of: number, meta: { pass: SeriesPass; seed: number; order?: SeriesOrder }) {
-  return { serie, trial: t.id, rank, of, player: t.player, pass: meta.pass, seed: meta.seed, ...(meta.order ? { order: meta.order } : {}), ...(t.modes ? { mode: modeTag(t.modes) } : {}) };
+  return {
+    serie,
+    trial: t.id,
+    rank,
+    of,
+    player: t.player,
+    pass: meta.pass,
+    seed: meta.seed,
+    ...(meta.order ? { order: meta.order } : {}),
+    ...(t.modes ? { mode: modeTag(t.modes) } : {}),
+    ...(t.rep ? { rep: t.rep } : {}),
+  };
 }
 
 /** Ce qu'une colonne du tableau comparatif garde d'un essai. */
@@ -841,11 +982,15 @@ export function summaryBody(
   return {
     auto: { serie, summary: true, of, done: results.length, elapsedS: Math.round(meta.elapsedS), stopped: meta.stopped, pass: meta.pass, seed: meta.seed, ...(meta.order ? { order: meta.order } : {}) },
     trials: results.map((r) => ({ ...r })),
-    comparison: comparisonRows(results),
+    // La passe « son multiplexé » a son propre tableau (`mux`) : celui des deux lecteurs n'y garderait qu'une répétition.
+    comparison: meta.pass === "multiplexé" ? [] : comparisonRows(results),
     answers: {
       damaged: answers.damaged,
       damagedTitle: answers.damaged === "oui" && answers.damagedTitle.trim() ? answers.damagedTitle.trim().slice(0, 120) : undefined,
       audioClean: answers.audioClean,
+      ...(meta.pass === "multiplexé" ? { audioChanged: answers.audioChanged ?? null, lipSync: answers.lipSync ?? null } : {}),
     },
+    // La passe « son multiplexé » : le verdict par titre, celui de l'écran de fin (`muxPass.ts`).
+    ...(meta.pass === "multiplexé" ? { mux: analyzeMux(results) } : {}),
   };
 }
