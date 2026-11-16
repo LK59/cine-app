@@ -3515,7 +3515,12 @@
       "REPLIQUES_NIGHT_END": "Fin de la franja nocturna",
       "REPLIQUES_LANGUAGES": "Idiomas de los diálogos",
       "ASK_PERSON_ENABLED": "Preguntas sobre una persona: en el panel de un actor de «En pantalla», hasta dos preguntas propuestas «¿Qué relación tiene X con Y?» con los demás personajes de la escena (sin campo libre)",
-      "SOFAR_ENABLED": "«Hasta ahora»: en el panel de un actor de «En pantalla», dos frases sobre lo que su personaje ha hecho hasta ahora"
+      "SOFAR_ENABLED": "«Hasta ahora»: en el panel de un actor de «En pantalla», dos frases sobre lo que su personaje ha hecho hasta ahora",
+      "LUMEN_AUDIO_CONVERT": "Convertir en el servidor el sonido que el dispositivo no reproduce (DTS, TrueHD, Opus, MP2/MP3 → E-AC-3)",
+      "LUMEN_AUDIO_MAX_JOBS": "Conversiones simultáneas como máximo",
+      "LUMEN_AUDIO_MAX_SESSIONS": "Reproducciones que convierten como máximo",
+      "LUMEN_AUDIO_RAM_MB": "Sonido convertido guardado en memoria (MB)",
+      "LUMEN_AUDIO_CACHE_GB": "Sonido convertido guardado en disco (GB)"
     },
     "deployHint": {
       "TZ": "En docker-compose.yml, bajo «environment»:",
@@ -3735,7 +3740,16 @@
       "title": "Volver al inicio de la escena",
       "why": "Al reanudar un título tras unas horas, propondría durante unos segundos volver al inicio de la escena actual. Experimental: los inicios de escena aún no son lo bastante fiables, déjelo desactivado."
     },
-    "labBeta": "Lab beta"
+    "labBeta": "Lab beta",
+    "lumenAudio": {
+      "title": "Conversión del sonido (Lumen servidor)",
+      "why": "Las pistas DTS, TrueHD, Opus y MP2/MP3 las convierte el servidor a Dolby Digital Plus (5.1 a 640 kb/s, estéreo a 256 kb/s) durante la reproducción, en lugar del dispositivo. Un 7.1 se reduce a 5.1 y el Atmos de una pista TrueHD no se conserva. Cuando el servidor está demasiado ocupado para una nueva reproducción, convierte el dispositivo, como hoy.",
+      "detected": "ffmpeg {version} detectado: {encoders}",
+      "unavailable": "Conversión no disponible en este servidor ({reason}): el sonido lo convierte el dispositivo.",
+      "now": "Ahora: {sessions} reproducción(es) convirtiendo, {running} conversión(es) en curso, {queued} en espera.",
+      "cache": "Guardado: {memory} en memoria (de {memoryCap}), {disk} en disco (de {diskCap}).",
+      "day": "Últimas 24 h: {segments} segmentos convertidos, {median} ms de mediana, {max} ms en el peor caso, {fallbacks} devuelto(s) al dispositivo."
+    }
   },
   "xrayScan": {
     "nav": "Actores en pantalla",

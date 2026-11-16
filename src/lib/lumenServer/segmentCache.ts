@@ -27,6 +27,8 @@ export interface BuiltSegment {
   diskMs: number;
   /** Segment vidéo ouvert par une image qui n'est pas une clé (un point d'index qui ment, §158). */
   falseKey?: boolean;
+  /** Un segment son converti (§161) : d'où il vient (mémoire, disque, fabriqué, partagé), ffmpeg et lecture. */
+  converted?: { from: "ram" | "disk" | "built" | "shared"; convMs: number; feedMs: number };
 }
 
 interface State {

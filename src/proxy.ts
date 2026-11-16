@@ -300,6 +300,9 @@ const ADMIN_ONLY_READS: RegExp[] = [
   // compris. La route le vérifie aussi (`adminOnly`) ; ses écritures (scan, décision) ne sont pas dans la
   // liste blanche des comptes.
   /^\/api\/admin\/subsync(\/|$)/,
+  // La conversion du son de Lumen serveur (§161) vue de la Configuration : ffmpeg détecté, la file, le cache. La
+  // route le vérifie aussi (`adminOnly`) ; son geste (refaire la détection, POST) n'est pas dans la liste blanche.
+  /^\/api\/admin\/lumen-audio(\/|$)/,
   // Lumen serveur, phase de test (DECISIONS.md §156) : listes, segments, éligibilité, préparation — à
   // l'administrateur seul. Les routes le revérifient (`lumenAccess`) : ce motif ne ferme que les requêtes
   // munies d'une session, et un laissez-passer de diffusion passe *avant* lui (`castPassFor`, plus bas) —

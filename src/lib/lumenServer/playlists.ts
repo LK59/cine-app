@@ -29,6 +29,7 @@ import { labelAudioTracks, type LabelOptions } from "@/lib/trackLabel";
 import { normaliseLanguage } from "@/lib/trackPreferences";
 import { variantCodecs } from "./hlsSignal";
 import { initName, playlistName, segmentName, type LumenAudioTrack, type LumenIndex, type LumenRendition } from "./format";
+import { audioRendition } from "./audio/view";
 import { targetDurationOf } from "./plan";
 
 export interface MasterOptions {
@@ -60,14 +61,16 @@ export function masterPlaylist(index: LumenIndex, options: MasterOptions): strin
     labelAudioTracks(
       // L'Atmos se nomme d'après ce que le `dec3` écrit (« 16/JOC »), comme Jellyfin le nomme dans son
       // profil pour les autres lecteurs : la même étiquette partout.
+      // Une piste convertie (§161) se nomme d'après ce qui est **servi** : de l'E-AC-3 5.1 ou 2.0, jamais
+      // « TrueHD 7.1 » ni « Atmos » (l'Atmos d'une piste TrueHD est perdu, 5-conversion-son.md §5.2).
       audio.map((a) => ({
         number: a.number,
         language: a.language,
         name: a.name,
         isDefault: a.isDefault,
         isForced: a.isForced,
-        codecId: a.codecId,
-        channels: a.channels,
+        codecId: a.converted ? "A_EAC3" : a.codecId,
+        channels: a.converted ? a.converted.channels : a.channels,
         profile: a.signal?.channels.endsWith("/JOC") ? "Dolby Digital Plus + Dolby Atmos" : null,
       })),
       options.labels
@@ -98,7 +101,7 @@ export function masterPlaylist(index: LumenIndex, options: MasterOptions): strin
         `DEFAULT=${a === lead ? "YES" : "NO"}`,
         "AUTOSELECT=YES",
         `CHANNELS=${quoted(a.signal!.channels)}`,
-        `URI=${quoted(playlistName({ kind: "audio", track: a.number }))}`,
+        `URI=${quoted(playlistName(audioRendition(a)))}`,
       ];
       lines.push(`#EXT-X-MEDIA:${attributes.join(",")}`);
     }

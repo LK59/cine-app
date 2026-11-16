@@ -3515,7 +3515,12 @@
       "REPLIQUES_NIGHT_END": "Fin de la plage de nuit",
       "REPLIQUES_LANGUAGES": "Langues des répliques",
       "ASK_PERSON_ENABLED": "Questions sur une personne : dans le panneau d'un acteur d'« À l'écran », au plus deux questions proposées « Quel est le lien entre X et Y ? » avec les autres personnages de la scène (pas de champ libre)",
-      "SOFAR_ENABLED": "« Jusqu'ici » : dans le panneau d'un acteur d'« À l'écran », deux phrases sur ce que son personnage a fait jusqu'ici"
+      "SOFAR_ENABLED": "« Jusqu'ici » : dans le panneau d'un acteur d'« À l'écran », deux phrases sur ce que son personnage a fait jusqu'ici",
+      "LUMEN_AUDIO_CONVERT": "Convertir au serveur le son que l'appareil ne lit pas (DTS, TrueHD, Opus, MP2/MP3 → E-AC-3)",
+      "LUMEN_AUDIO_MAX_JOBS": "Conversions simultanées au plus",
+      "LUMEN_AUDIO_MAX_SESSIONS": "Lectures qui convertissent au plus",
+      "LUMEN_AUDIO_RAM_MB": "Son converti gardé en mémoire (Mo)",
+      "LUMEN_AUDIO_CACHE_GB": "Son converti gardé sur le disque (Go)"
     },
     "deployHint": {
       "TZ": "Dans docker-compose.yml, sous « environment » :",
@@ -3735,7 +3740,16 @@
       "title": "Revenir au début de la scène",
       "why": "À la reprise d'un titre après quelques heures, proposerait quelques secondes de revenir au début de la scène en cours. Expérimental : les débuts de scène ne sont pas encore assez sûrs, laissez-le coupé."
     },
-    "labBeta": "Lab bêta"
+    "labBeta": "Lab bêta",
+    "lumenAudio": {
+      "title": "Conversion du son (Lumen serveur)",
+      "why": "Les pistes DTS, TrueHD, Opus et MP2/MP3 sont converties par le serveur en Dolby Digital Plus (5.1 à 640 kb/s, stéréo à 256 kb/s), au fil de la lecture, plutôt que par l'appareil. Un 7.1 est replié en 5.1, et l'Atmos d'une piste TrueHD n'est pas gardé. Quand le serveur est trop occupé pour une nouvelle lecture, l'appareil convertit, comme aujourd'hui.",
+      "detected": "ffmpeg {version} détecté : {encoders}",
+      "unavailable": "Conversion indisponible sur ce serveur ({reason}) : le son est converti par l'appareil.",
+      "now": "Maintenant : lectures qui convertissent : {sessions} ; conversions en cours : {running} ; en attente : {queued}.",
+      "cache": "Gardé : {memory} en mémoire (sur {memoryCap}), {disk} sur le disque (sur {diskCap}).",
+      "day": "Dernières 24 h : {segments} segments convertis, {median} ms en médiane, {max} ms au pire ; renvois vers l'appareil : {fallbacks}."
+    }
   },
   "xrayScan": {
     "nav": "Acteurs à l'écran",

@@ -123,7 +123,9 @@ export class LumenEngine {
 
   private served(index: LumenIndex, rendition: LumenRendition): boolean {
     if (rendition.kind === "video") return !!index.video && index.segments.length > 0;
-    return index.audio.some((a) => a.number === rendition.track && !a.refusal && !!index.inits.audio[a.number]);
+    // Une piste convertie (§161, la vue `withConversion`) ne se sert que sous le nom de sa conversion actuelle, et
+    // une piste copiée que sous son nom simple : une adresse d'une autre conversion ne désigne plus rien (410).
+    return index.audio.some((a) => a.number === rendition.track && !a.refusal && !!index.inits.audio[a.number] && (a.converted?.cid ?? undefined) === (rendition.conv ?? undefined));
   }
 
   private assertServed(index: LumenIndex, rendition: LumenRendition): void {

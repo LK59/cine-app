@@ -16,6 +16,8 @@ export default function LecturePage() {
   return (
     <ConfigurationPage title={t("nav.config.playback")} subtitle={t("config.playback.hint")}>
       <ConfigurationSection cards={CONFIG_LAYOUT.playback} />
+      {/* La conversion du son de Lumen serveur (§161), sous le lecteur : son option, ses plafonds, l'état de ffmpeg. */}
+      <ConfigurationSection cards={CONFIG_LAYOUT.lumenAudio} />
     </ConfigurationPage>
   );
 }

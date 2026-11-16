@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { isPlaybackId } from "@/lib/lumenServer/playbackStats";
 import { parseCutMode, parseTargetSeconds } from "@/lib/lumenServer/format";
-import { goneResponse, lumenAccess, lumenErrorResponse, lumenVerdict, masterAddress, newPlaybackId, NO_STORE } from "@/lib/lumenServer/service";
+import { conversionModeOf, goneResponse, lumenAccess, lumenErrorResponse, lumenVerdict, masterAddress, newPlaybackId, NO_STORE, playbackKey } from "@/lib/lumenServer/service";
+import { lumenAudio } from "@/lib/lumenServer/audio/conversion";
 import { muxVersion } from "@/lib/lumenServer/trials";
 
 export const dynamic = "force-dynamic";
@@ -40,13 +41,19 @@ export async function GET(req: NextRequest, { params }: Params) {
   const targetUs = parseTargetSeconds(q.get("target"));
   if (targetUs === null) return goneResponse("lumen-inconnu", "Cible inconnue");
   const wait = Number(q.get("wait") ?? DEFAULT_WAIT_MS);
+  const s = rawS ?? newPlaybackId();
+  // Les modes d'essai de la conversion du son (§163, page `/lumen-test`) : le pool de ffmpeg pré-lancés (`convPool=1`
+  // ou `0`) et la lecture froide (`convCold=1`, sans le cache), pour cette lecture seulement. Sans eux, rien ne change.
+  const mode = conversionModeOf(q);
+  if (mode) lumenAudio().setPlaybackMode(playbackKey(session.u, s), mode);
   try {
     const verdict = await lumenVerdict(itemId, {
       audio: rawAudio ? Number(rawAudio) : undefined,
-      s: rawS ?? newPlaybackId(),
+      s,
       waitMs: Number.isFinite(wait) ? Math.min(MAX_WAIT_MS, Math.max(0, wait)) : DEFAULT_WAIT_MS,
       cut,
       targetUs,
+      session,
     });
     if (q.get("mux") === "1" && verdict.ok && verdict.audioTrack !== null) {
       const s = new URL(verdict.master, "http://x").pathname.split("/")[5];

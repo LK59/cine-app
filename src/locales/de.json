@@ -3515,7 +3515,12 @@
       "REPLIQUES_NIGHT_END": "Ende des Nachtfensters",
       "REPLIQUES_LANGUAGES": "Sprachen der Dialoge",
       "ASK_PERSON_ENABLED": "Fragen zu einer Person: im Bereich eines Darstellers aus „Im Bild“ höchstens zwei vorgeschlagene Fragen „In welcher Beziehung steht X zu Y?“ mit den anderen Figuren der Szene (kein freies Eingabefeld)",
-      "SOFAR_ENABLED": "„Bis jetzt“: im Bereich eines Darstellers aus „Im Bild“ zwei Sätze dazu, was seine Figur bis jetzt getan hat"
+      "SOFAR_ENABLED": "„Bis jetzt“: im Bereich eines Darstellers aus „Im Bild“ zwei Sätze dazu, was seine Figur bis jetzt getan hat",
+      "LUMEN_AUDIO_CONVERT": "Ton, den das Gerät nicht abspielt, auf dem Server umwandeln (DTS, TrueHD, Opus, MP2/MP3 → E-AC-3)",
+      "LUMEN_AUDIO_MAX_JOBS": "Höchstens gleichzeitige Umwandlungen",
+      "LUMEN_AUDIO_MAX_SESSIONS": "Höchstens umwandelnde Wiedergaben",
+      "LUMEN_AUDIO_RAM_MB": "Umgewandelter Ton im Arbeitsspeicher (MB)",
+      "LUMEN_AUDIO_CACHE_GB": "Umgewandelter Ton auf der Festplatte (GB)"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml unter „environment“:",
@@ -3735,7 +3740,16 @@
       "title": "Zum Anfang der Szene",
       "why": "Beim Fortsetzen eines Titels nach einigen Stunden würde es für einige Sekunden anbieten, zum Anfang der aktuellen Szene zurückzuspringen. Experimentell: Szenenanfänge sind noch nicht zuverlässig genug, lassen Sie es aus."
     },
-    "labBeta": "Lab-Beta"
+    "labBeta": "Lab-Beta",
+    "lumenAudio": {
+      "title": "Tonumwandlung (Lumen Server)",
+      "why": "DTS-, TrueHD-, Opus- und MP2/MP3-Spuren wandelt der Server während der Wiedergabe in Dolby Digital Plus um (5.1 mit 640 kb/s, Stereo mit 256 kb/s), statt des Geräts. Ein 7.1 wird zu 5.1 zusammengelegt, das Atmos einer TrueHD-Spur bleibt nicht erhalten. Ist der Server für eine neue Wiedergabe zu ausgelastet, wandelt das Gerät um, wie bisher.",
+      "detected": "ffmpeg {version} gefunden: {encoders}",
+      "unavailable": "Umwandlung auf diesem Server nicht verfügbar ({reason}): das Gerät wandelt den Ton um.",
+      "now": "Jetzt: {sessions} umwandelnde Wiedergabe(n), {running} laufende Umwandlung(en), {queued} wartend.",
+      "cache": "Gespeichert: {memory} im Arbeitsspeicher (von {memoryCap}), {disk} auf der Festplatte (von {diskCap}).",
+      "day": "Letzte 24 h: {segments} umgewandelte Segmente, Median {median} ms, höchstens {max} ms, {fallbacks} an das Gerät zurückgegeben."
+    }
   },
   "xrayScan": {
     "nav": "Darsteller im Bild",

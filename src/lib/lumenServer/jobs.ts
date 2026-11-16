@@ -13,8 +13,9 @@ import { FileByteSource } from "./fileSource";
 import { identityKey, LumenError, type LumenCutMode, type LumenIndex } from "./format";
 import { buildLumenIndex } from "./lumenIndex";
 import { buildSegment, type SegmentResult, type SegmentSpec } from "./segment";
+import { readAudioFeed, type AudioFeed, type AudioFeedSpec } from "./audio/feed";
 
-export type LumenJob = { type: "index"; path: string; targetUs?: number; cut?: LumenCutMode } | { type: "segment"; spec: SegmentSpec };
+export type LumenJob = { type: "index"; path: string; targetUs?: number; cut?: LumenCutMode } | { type: "segment"; spec: SegmentSpec } | { type: "audio-feed"; spec: AudioFeedSpec };
 
 export interface ReadCost {
   reads: number;
@@ -25,7 +26,11 @@ export interface ReadCost {
   ms: number;
 }
 
-export type LumenJobResult = { type: "index"; index: LumenIndex; cost: ReadCost } | { type: "segment"; result: SegmentResult; cost: ReadCost };
+export type LumenJobResult =
+  | { type: "index"; index: LumenIndex; cost: ReadCost }
+  | { type: "segment"; result: SegmentResult; cost: ReadCost }
+  /** Le flux élémentaire d'une fenêtre de son à convertir (`audio/feed.ts`), ou null : la fenêtre est dans le silence. */
+  | { type: "audio-feed"; feed: AudioFeed | null; cost: ReadCost };
 
 /** Un index lit par petits morceaux (en-têtes de grappe en grappe) ; un segment lit tout, dans l'ordre. */
 const INDEX_SOURCE = { chunkSize: 16 * 1024, chunks: 64 };
@@ -44,6 +49,20 @@ export async function runLumenJob(job: LumenJob): Promise<LumenJobResult> {
     try {
       const index = await buildLumenIndex(source, source.identity, { targetUs: job.targetUs, cut: job.cut });
       return { type: "index", index, cost: costOf(source, began) };
+    } finally {
+      source.close();
+    }
+  }
+  if (job.type === "audio-feed") {
+    // Les blocs d'une piste à convertir (phase 2, §161) : comme un segment son copié, les en-têtes de tout ce qui
+    // passe et la charge de la seule piste voulue.
+    const { spec } = job;
+    const source = await FileByteSource.open(spec.path, AUDIO_SEGMENT_SOURCE);
+    try {
+      if (identityKey(source.identity) !== spec.key) throw new LumenError("fichier-change", "Le fichier a changé depuis son index.");
+      const file = await openMediaFile(source, spec.key);
+      const feed = await readAudioFeed(source, file, spec);
+      return { type: "audio-feed", feed, cost: costOf(source, began) };
     } finally {
       source.close();
     }

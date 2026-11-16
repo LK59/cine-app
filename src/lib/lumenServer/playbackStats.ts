@@ -84,6 +84,12 @@ export interface PlaybackStats {
   /** Segments audio remis, par piste (numéro dans le fichier) : un changement de piste se voit ici. */
   audioByTrack: Record<number, number>;
   /**
+   * Les segments son convertis (phase 2, §161) : combien, d'où (fabriqués, mémoire, disque, partagés avec une
+   * conversion en vol), le temps de ffmpeg et de la lecture du fichier (somme, pire), l'attente (somme, pire), et
+   * les « occupé » de la conversion. Null tant que la lecture n'a demandé aucun segment converti.
+   */
+  conv: ConvStats | null;
+  /**
    * Les derniers segments remis, du plus ancien au plus récent : `+12.3s v/41 b23 w0 e45`
    * (depuis la première requête, nom, construction, attente dans la file, envoi), `p` s'il était
    * préparé ou partagé, `x` si l'envoi a été coupé. Voir `TRACE_ENTRIES`.
@@ -121,6 +127,20 @@ export interface ChronoEntry {
   aborted?: boolean;
   /** Un statut autre que 200 (410, 409, 503, 500). */
   status?: number;
+}
+
+export interface ConvStats {
+  segments: number;
+  built: number;
+  ram: number;
+  disk: number;
+  shared: number;
+  convMs: number;
+  convMaxMs: number;
+  feedMs: number;
+  waitMs: number;
+  waitMaxMs: number;
+  busy: number;
 }
 
 /** Les requêtes gardées par lecture chronométrée : une série de 20 sauts en fait ~500. */
@@ -179,6 +199,7 @@ export function playbackOf(s: string, init: { user: string; itemId: string; vers
       lastVideoN: null,
       maxVideoN: null,
       audioByTrack: {},
+      conv: null,
       trace: [],
       chrono: null,
     };
@@ -214,6 +235,29 @@ export function noteBuilt(p: PlaybackStats, facts: { video: boolean; n: number; 
   p.waitMs += facts.waitMs;
   p.waitMaxMs = Math.max(p.waitMaxMs, facts.waitMs);
   p.diskMs += facts.diskMs;
+}
+
+function convOf(p: PlaybackStats): ConvStats {
+  return (p.conv ??= { segments: 0, built: 0, ram: 0, disk: 0, shared: 0, convMs: 0, convMaxMs: 0, feedMs: 0, waitMs: 0, waitMaxMs: 0, busy: 0 });
+}
+
+/** Un segment son converti remis (§161) : d'où il vient, et ce qu'il a coûté. */
+export function noteConverted(p: PlaybackStats, facts: { from: "ram" | "disk" | "built" | "shared"; convMs: number; feedMs: number; waitMs: number }): void {
+  const c = convOf(p);
+  c.segments += 1;
+  c[facts.from] += 1;
+  if (facts.from === "built") {
+    c.convMs += facts.convMs;
+    c.convMaxMs = Math.max(c.convMaxMs, facts.convMs);
+    c.feedMs += facts.feedMs;
+  }
+  c.waitMs += facts.waitMs;
+  c.waitMaxMs = Math.max(c.waitMaxMs, facts.waitMs);
+}
+
+/** Un segment son converti refusé « occupé » (file pleine, budget de 8 s dépassé). */
+export function noteConvertBusy(p: PlaybackStats): void {
+  convOf(p).busy += 1;
 }
 
 export function noteSent(p: PlaybackStats, facts: { kind: "segment" | "init"; video: boolean; bytes: number; sendMs: number; aborted: boolean; track?: number }): void {
@@ -297,6 +341,19 @@ export function lumenPlaybackFields(s: string, user: string, now = Date.now()): 
     if (p.lastError) fields["srv.lastError"] = p.lastError;
   }
   if (p.lastVideoN !== null) fields["srv.lastN"] = p.lastVideoN;
+  // La conversion du son (§161), seulement si la lecture en a demandé : nombre, fabriqués / mémoire / disque,
+  // temps de ffmpeg (somme, pire), pire attente, « occupé ».
+  if (p.conv) {
+    fields["srv.convSeg"] = p.conv.segments;
+    fields["srv.convBuilt"] = p.conv.built;
+    if (p.conv.ram) fields["srv.convRam"] = p.conv.ram;
+    if (p.conv.disk) fields["srv.convDisk"] = p.conv.disk;
+    if (p.conv.shared) fields["srv.convShared"] = p.conv.shared;
+    fields["srv.convMs"] = p.conv.convMs;
+    fields["srv.convMaxMs"] = p.conv.convMaxMs;
+    fields["srv.convWaitMaxMs"] = p.conv.waitMaxMs;
+    if (p.conv.busy) fields["srv.convBusy"] = p.conv.busy;
+  }
   return fields;
 }
 

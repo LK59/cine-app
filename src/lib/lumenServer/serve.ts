@@ -38,7 +38,7 @@ import { createT, loadLocaleDict, localeOf } from "@/lib/i18n";
 import type { LabelOptions } from "@/lib/trackLabel";
 import { cuttingOfTag, LUMEN_FORMAT_VERSION, parseLumenPath, segmentName, type LumenPath } from "./format";
 import { lumenEligibility } from "./eligibility";
-import { chronoEntry, isPlaybackId, noteBuilt, noteRefused, noteRequest, noteSent, noteTrace, playbackOf, serverClockMs, type ChronoEntry, type PlaybackStats } from "./playbackStats";
+import { chronoEntry, isPlaybackId, noteBuilt, noteConvertBusy, noteConverted, noteRefused, noteRequest, noteSent, noteTrace, playbackOf, serverClockMs, type ChronoEntry, type PlaybackStats } from "./playbackStats";
 import { masterTrialOptions, muxedInit, muxedMaster, muxedMediaPlaylist, muxedSegment, muxVersion, parseMuxedPath, splitMuxTag, withMasterTrials, type MuxedPath } from "./trials";
 import {
   defaultAudioTrack,
@@ -49,8 +49,10 @@ import {
   lumenErrorResponse,
   lumenIndexOf,
   lumenSegment,
+  lumenConversionContext,
   lumenServerEngine,
   lumenVersionOf,
+  playbackKey,
   refusedResponse,
 } from "./service";
 
@@ -159,7 +161,8 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
   const context = { itemId, s, name };
   let found: Awaited<ReturnType<typeof lumenIndexOf>>;
   try {
-    found = await lumenIndexOf(itemId, cutting);
+    // La vue de la conversion du son (§161) : l'index lui-même sans l'option, sans ffmpeg, ou pour un autre compte.
+    found = await lumenIndexOf(itemId, cutting, await lumenConversionContext(session));
   } catch (error) {
     return lumenErrorResponse(error, context).response;
   }
@@ -190,11 +193,18 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
   const idxMs = performance.now() - receivedAt;
 
   try {
-    const resolved = { engine, index, version: ruled, stats, receivedAt, idxMs, context, chrono };
+    const resolved = { engine, index, version: ruled, stats, receivedAt, idxMs, context, chrono, session: playbackKey(session.u, s) };
     return answer(muxed ? await serveMuxed(req, { ...resolved, path: muxed }) : await serveResolved(req, { ...resolved, path: path as LumenPath, mux }));
   } catch (error) {
     const { response, kind, code } = lumenErrorResponse(error, context);
     noteRefused(stats, kind, code);
+    // Un segment son converti « occupé » (§163) : le dire nommément. Le lecteur de Safari ne lit pas cet en-tête ;
+    // il sert au relevé, au banc, et à l'hôte de l'étape 4 qui voudra distinguer la conversion saturée d'une file
+    // de remux pleine avant de basculer vers le lecteur actuel (5-conversion-son.md §5.7).
+    if (kind === "busy" && path.kind !== "master" && path.kind !== "playlist" && "rendition" in path && path.rendition.kind === "audio" && path.rendition.conv) {
+      noteConvertBusy(stats);
+      response.headers.set("X-Lumen-Son", "occupe");
+    }
     return answer(response);
   }
 }
@@ -202,7 +212,8 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
 /** Une piste multiplexée n'existe que pour une piste servie, et un segment que dans l'index. */
 function muxedServed(index: Parameters<typeof lumenVersionOf>[0], path: MuxedPath): boolean {
   const track = index.audio.find((a) => a.number === path.track);
-  if (!index.video || !track || track.refusal || !index.inits.audio[path.track] || !index.inits.video) return false;
+  // Pas de son converti dans l'essai multiplexé (§161) : il n'a été mesuré qu'avec des pistes copiées.
+  if (!index.video || !track || track.refusal || track.converted || !index.inits.audio[path.track] || !index.inits.video) return false;
   return path.kind !== "segment" || path.n < index.segments.length;
 }
 
@@ -308,6 +319,8 @@ async function serveResolved(
     chrono: ChronoEntry | null;
     /** L'essai multiplexé : la liste maître désigne la piste dans les segments vidéo (`muxedMaster`). */
     mux: boolean;
+    /** La lecture (`playbackKey`), pour l'avance de la conversion du son. */
+    session: string;
   }
 ): Promise<NextResponse> {
   const { engine, index, path, stats } = r;
@@ -349,8 +362,9 @@ async function serveResolved(
     case "segment": {
       noteMediaRead();
       const video = path.rendition.kind === "video";
-      const { segment, reused } = await lumenSegment(engine, index, r.version, path.rendition, path.n);
+      const { segment, reused } = await lumenSegment(engine, index, r.version, path.rendition, path.n, { session: r.session });
       noteBuilt(stats, { video, n: path.n, buildMs: segment.buildMs, waitMs: segment.waitMs, diskMs: segment.diskMs, reused, falseKey: segment.falseKey });
+      if (segment.converted) noteConverted(stats, { ...segment.converted, waitMs: segment.waitMs });
       const track = path.rendition.kind === "audio" ? path.rendition.track : undefined;
       return segmentResponse(r, { bytes: segment.bytes, name: segmentName(path.rendition, path.n), video, track, reused, buildMs: segment.buildMs, waitMs: segment.waitMs, diskMs: segment.diskMs });
     }

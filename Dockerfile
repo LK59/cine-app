@@ -37,6 +37,15 @@ COPY src/lib/codecSupport.ts src/lib/webkitEngine.ts src/lib/networkBitrate.ts s
 COPY salons/src/protocol.ts salons/src/quiz.ts salons/src/tv.ts /build/salons/src/
 RUN npm run build
 
+# Le ffmpeg minimal de Lumen serveur (conversion du son, DECISIONS.md §161, docs/remux-serveur/5-conversion-son.md) :
+# FFmpeg 7.1.5 épinglé (archive vérifiée par SHA-256), lié statiquement, LGPL — `tools/ffmpeg-lumen/build.sh` et
+# son README disent tout. Une étape à part, sur la même Alpine que `node:26-alpine` : gardée en cache tant que le
+# script ne change pas (~2 min sans cache, en CI). Toujours dans l'image (4 Mo), jamais appelé tant que l'option
+# « conversion du son » est coupée (défaut) ; sa présence et sa version sont détectées au démarrage.
+FROM alpine:3.24 AS ffmpeg-lumen
+COPY tools/ffmpeg-lumen/build.sh /build.sh
+RUN JOBS=4 sh /build.sh
+
 FROM node:26-alpine AS builder
 # Le repère du build, repris tel quel dans les réglages. `.git` n'entre pas dans le contexte de
 # build (voir .dockerignore), donc le hash ne peut venir que d'ici :
@@ -105,6 +114,10 @@ COPY --from=builder --chown=cineapp:cineapp /app/.next/static ./.next/static
 COPY --from=builder --chown=cineapp:cineapp /app/server-boot ./server-boot
 # Le build du mode « Immersion », servi par deux routes (voir l'étape `immersion`).
 COPY --from=immersion --chown=cineapp:cineapp /build/immersion/dist ./immersion-dist
+# ffmpeg pour la conversion du son de Lumen serveur (étape `ffmpeg-lumen`) et son offre de source (LGPL).
+# `LUMEN_FFMPEG_PATH` le cherche ici par défaut ; vide, la conversion est vue comme indisponible.
+COPY --from=ffmpeg-lumen /opt/ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=ffmpeg-lumen /opt/ffmpeg/share/ffmpeg-lumen /usr/local/share/ffmpeg-lumen
 # Copy compiled better-sqlite3 native module (compiled for Alpine in deps stage)
 COPY --from=deps --chown=cineapp:cineapp /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=deps --chown=cineapp:cineapp /app/node_modules/web-push ./node_modules/web-push

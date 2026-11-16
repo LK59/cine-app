@@ -32,13 +32,18 @@ import { jellyfin } from "@/lib/clients/jellyfin";
 import { DATA_DIR } from "@/lib/dataDir";
 import { logError } from "@/lib/logger";
 import { lumenEngine, type LumenEngine } from "./engine";
-import { inlineExecutor, workerExecutor } from "./pool";
+import { inlineExecutor, workerExecutor, type LumenExecutor } from "./pool";
 import { lumenIndexStore } from "./indexStore";
 import { lumenLocalPath } from "./paths";
 import { defaultAudioTrack, lumenEligibility } from "./eligibility";
 import { cuttingOf, identityKey, LumenError, lumenFormatTag, type LumenCutting, type LumenIndex, type LumenRefusal, type LumenRendition, renditionTag } from "./format";
 import { sharedSegment, type BuiltSegment } from "./segmentCache";
 import { targetDurationOf } from "./plan";
+import { config } from "@/lib/config";
+import { audienceAllows } from "@/lib/featureAudience";
+import { detectLumenFfmpeg } from "./audio/ffmpeg";
+import { withConversion, type ConversionContext } from "./audio/view";
+import { lumenAudio, type FeedReader, type PlaybackMode } from "./audio/conversion";
 
 // ── Le moteur du processus ───────────────────────────────────────────────────
 
@@ -170,19 +175,82 @@ export function forgetLumenFiles(): void {
   inflightFiles().clear();
 }
 
+// ── La conversion du son (phase 2, DECISIONS.md §161) ────────────────────────
+
+/**
+ * Ce qu'il faut pour servir converties les pistes DTS, TrueHD, Opus et MP2/MP3 de cette requête, ou null : l'option
+ * (`LUMEN_AUDIO_CONVERT`, une audience) n'est pas ouverte à ce compte, c'est un lien de partage, ou ffmpeg n'est pas
+ * là ou pas conforme (`detectLumenFfmpeg`, faite une fois). Null, Lumen serveur se comporte exactement comme sans
+ * la phase 2 : ces pistes restent refusées `son-codec`.
+ */
+export async function lumenConversionContext(session: Pick<SessionPayload, "role"> | null | undefined): Promise<ConversionContext | null> {
+  if (!session || session.role === "share" || !audienceAllows(config.lumen.audioConvert, session)) return null;
+  const detection = await detectLumenFfmpeg();
+  if (!detection.available) return null;
+  return { ffmpegVersion: detection.version, ffmpegSha256: detection.sha256, reference: detection.reference };
+}
+
+const FEED_EXECUTOR = Symbol.for("cine-app.lumenServer.feedExecutor");
+/** Les fils qui lisent les blocs du son à convertir : à eux, pas ceux du remux vidéo. */
+export const LUMEN_FEED_THREADS = 2;
+
+/**
+ * Les fils de calcul de la lecture du son à convertir (`audio-feed`), **à part de ceux du remux** : au banc de charge
+ * du 17/11/2026, quatre conversions qui partageaient les trois fils et la file du moteur faisaient passer un segment
+ * vidéo 4K de 65 à 2 156 ms (p95). Une piste TrueHD range une unité de 40 échantillons par bloc (1 200 blocs par
+ * seconde) : lire 7 s de son, c'est des milliers de blocs à parcourir. Deux fils suffisent : la file de la conversion
+ * borne déjà les lectures simultanées (`LUMEN_AUDIO_MAX_JOBS`).
+ */
+function feedExecutor(engine: LumenEngine): LumenExecutor {
+  const g = globalThis as unknown as Record<symbol, LumenExecutor | undefined>;
+  if (engine.executor.kind === "inline") return engine.executor;
+  const script = lumenWorkerScript();
+  return (g[FEED_EXECUTOR] ??= script ? workerExecutor(pathToFileURL(script), LUMEN_FEED_THREADS) : engine.executor);
+}
+
+/** La lecture d'une fenêtre de son par un fil de calcul (`audio-feed`), sur les fils de la conversion. */
+export function lumenFeedReader(engine: LumenEngine): FeedReader {
+  return async (spec) => {
+    const began = performance.now();
+    const result = await feedExecutor(engine).run({ type: "audio-feed", spec });
+    if (result.type !== "audio-feed") throw new Error("Réponse inattendue du fil de calcul.");
+    return { feed: result.feed, diskMs: result.cost.diskMs, ms: Math.round(performance.now() - began) };
+  };
+}
+
+/**
+ * Les modes d'essai de la conversion d'une lecture, lus dans une requête : `convPool=1|0` (le pool de ffmpeg
+ * pré-lancés, ou pas), `convCold=1` (rien lu du cache). Null : aucun demandé — le défaut.
+ */
+export function conversionModeOf(q: URLSearchParams): PlaybackMode | null {
+  const pool = q.get("convPool");
+  const cold = q.get("convCold");
+  const mode: PlaybackMode = {};
+  if (pool === "1" || pool === "true") mode.pool = true;
+  else if (pool === "0" || pool === "false") mode.pool = false;
+  if (cold === "1" || cold === "true") mode.cold = true;
+  return Object.keys(mode).length ? mode : null;
+}
+
+/** La clé d'une lecture pour l'avance et l'admission : le compte et l'identifiant de la page. */
+export function playbackKey(user: string, s: string): string {
+  return `${user}\u0000${s}`;
+}
+
 /**
  * L'index de l'élément : son fichier, puis l'index gardé ou construit. Un fichier disparu (renommé
  * par Radarr/Sonarr : `ENOENT` sur l'ancien chemin) fait relire Jellyfin une fois. `cutting` : la découpe
  * et sa cible (`cra` et 4 s sauf essai de la page `/lumen-test`, §157, §158) — un index à part par découpe.
  */
-export async function lumenIndexOf(itemId: string, cutting: Partial<LumenCutting> = {}): Promise<{ index: LumenIndex } | { refusal: LumenRefusal }> {
+export async function lumenIndexOf(itemId: string, cutting: Partial<LumenCutting> = {}, conversion: ConversionContext | null = null): Promise<{ index: LumenIndex } | { refusal: LumenRefusal }> {
   const { cut, targetUs } = cuttingOf(cutting.cut, cutting.targetUs);
   const engine = lumenServerEngine();
   let file = await lumenFileOf(itemId);
   for (let attempt = 0; ; attempt++) {
     if ("refusal" in file) return file;
     try {
-      return { index: await engine.index(file.path, targetUs, cut) };
+      // La vue de la conversion (§161) : l'index lui-même quand elle n'est pas permise à cette requête.
+      return { index: withConversion(await engine.index(file.path, targetUs, cut), conversion) };
     } catch (error) {
       if (attempt === 0 && (error as NodeJS.ErrnoException)?.code === "ENOENT") {
         file = await lumenFileOf(itemId, { fresh: true });
@@ -291,8 +359,27 @@ export function lumenErrorResponse(error: unknown, context: Record<string, unkno
 
 // ── Les segments ─────────────────────────────────────────────────────────────
 
-/** Le segment `n` de `rendition`, partagé avec une requête identique en vol ou préparé d'avance. */
-export function lumenSegment(engine: LumenEngine, index: LumenIndex, version: string, rendition: LumenRendition, n: number, options: { keep?: boolean } = {}): Promise<{ segment: BuiltSegment; reused: boolean }> {
+/**
+ * Le segment `n` de `rendition`, partagé avec une requête identique en vol ou préparé d'avance. Une piste servie
+ * convertie (§161, la vue `withConversion`) passe par la conversion : son propre cache en deux étages, sa file, son
+ * avance (`audio/conversion.ts`) ; `session` (`playbackKey`) lui dit quelle lecture avance.
+ */
+export async function lumenSegment(
+  engine: LumenEngine,
+  index: LumenIndex,
+  version: string,
+  rendition: LumenRendition,
+  n: number,
+  options: { keep?: boolean; session?: string } = {}
+): Promise<{ segment: BuiltSegment; reused: boolean }> {
+  const converted = rendition.kind === "audio" ? index.audio.find((a) => a.number === rendition.track && a.converted) : undefined;
+  if (converted) {
+    const r = await lumenAudio().segment({ index, version, track: converted, n, readFeed: lumenFeedReader(engine), session: options.session });
+    return {
+      segment: { bytes: r.bytes, buildMs: r.convMs + r.feedMs, waitMs: r.waitMs, diskMs: 0, converted: { from: r.from, convMs: r.convMs, feedMs: r.feedMs } },
+      reused: r.from !== "built",
+    };
+  }
   return sharedSegment(
     `${index.identity.path}|${version}|${renditionTag(rendition)}|${n}`,
     async () => {
@@ -342,6 +429,13 @@ export interface LumenAudioFacts {
    * `silence-derriere` (trames de silence), ou null — copiée telle quelle.
    */
   repairs: string[];
+  /**
+   * Servie convertie (§161) : la cible (`eac3-640-51`, `eac3-256-20`) ; null sinon. `convertible` : la piste se
+   * convertirait si l'option était en service ; `convertRefusal` : pourquoi elle ne se convertit pas.
+   */
+  converted: string | null;
+  convertible: boolean;
+  convertRefusal: string | null;
 }
 
 /** Ce que la découpe a donné : la page `/lumen-test` le montre, pour juger les découpes sur pièce. */
@@ -360,7 +454,19 @@ export interface LumenCutFacts {
 }
 
 export type LumenVerdict =
-  | { ok: true; version: string; master: string; audioTrack: number | null; audio: LumenAudioFacts[]; segments: number; durationS: number; targetS: number; cutFacts: LumenCutFacts }
+  | {
+      ok: true;
+      version: string;
+      master: string;
+      audioTrack: number | null;
+      audio: LumenAudioFacts[];
+      segments: number;
+      durationS: number;
+      targetS: number;
+      cutFacts: LumenCutFacts;
+      /** La piste choisie est convertie (§161) : l'état de la conversion de cette lecture. */
+      conversion?: { state: "ok" | "tension"; leadS: number };
+    }
   | { ok: false; reason: string; detail?: string; audioTrack: number | null; audio: LumenAudioFacts[]; version?: string; cutFacts?: LumenCutFacts }
   /** L'index se construit encore (2 à 25 s à froid) : redemander, la construction continue sans attendre. */
   | { ok: false; pending: true; reason: "index-en-cours"; audioTrack: number | null; audio: [] };
@@ -381,6 +487,9 @@ function audioFacts(index: LumenIndex): LumenAudioFacts[] {
       ...(a.silence?.leadUntilUs != null ? ["silence-devant"] : []),
       ...(a.silence?.tailFromUs != null ? ["silence-derriere"] : []),
     ],
+    converted: a.converted?.target ?? null,
+    convertible: !!a.convert,
+    convertRefusal: a.convertRefusal ?? null,
   }));
 }
 
@@ -396,8 +505,12 @@ export function masterAddress(itemId: string, version: string, s: string, audioT
  * attendre un index qui se construit — au-delà, `pending`, la construction continue (et son échec
  * éventuel va au journal). L'étape 4 appelle `prepare` à l'appui sur Lire, puis décide avec ceci.
  */
-export async function lumenVerdict(itemId: string, options: { audio: number | null | undefined; s: string; waitMs: number } & Partial<LumenCutting>): Promise<LumenVerdict> {
-  const building = lumenIndexOf(itemId, { cut: options.cut, targetUs: options.targetUs });
+export async function lumenVerdict(
+  itemId: string,
+  options: { audio: number | null | undefined; s: string; waitMs: number; session?: Pick<SessionPayload, "role" | "u"> } & Partial<LumenCutting>
+): Promise<LumenVerdict> {
+  const conversion = await lumenConversionContext(options.session);
+  const building = lumenIndexOf(itemId, { cut: options.cut, targetUs: options.targetUs }, conversion);
   const PENDING = Symbol("pending");
   let timer: ReturnType<typeof setTimeout> | undefined;
   const raced = await Promise.race([
@@ -428,6 +541,16 @@ export async function lumenVerdict(itemId: string, options: { audio: number | nu
     trusted: index.keys.trusted ?? 0,
   };
   if (!verdict.ok) return { ok: false, reason: verdict.reason, ...(verdict.detail ? { detail: verdict.detail } : {}), audioTrack, audio, version, cutFacts };
+  // L'admission (§163) : une lecture qui aurait à convertir ne commence que si le serveur peut la servir sans
+  // dégrader les lectures en cours ; sinon le lecteur actuel prend le titre et convertit dans la page.
+  const chosen = index.audio.find((a) => a.number === audioTrack);
+  let conversionState: { state: "ok" | "tension"; leadS: number } | null = null;
+  if (chosen?.converted && options.session) {
+    const key = playbackKey(options.session.u, options.s);
+    const admission = lumenAudio().admit(key);
+    if (!admission.ok) return { ok: false, reason: "son-serveur-occupe", detail: admission.detail, audioTrack, audio, version, cutFacts };
+    conversionState = lumenAudio().audioState(key);
+  }
   return {
     ok: true,
     version,
@@ -438,6 +561,9 @@ export async function lumenVerdict(itemId: string, options: { audio: number | nu
     durationS: Math.round(index.durationUs / 1000) / 1000,
     targetS: targetDurationOf(index.segments),
     cutFacts,
+    // Pour la bascule en cours de lecture (étape 4) : l'avance convertie et l'état de cette lecture, relus par un
+    // nouvel appel à `eligibility` quand la page voit une attente (5-conversion-son.md §5.7).
+    ...(chosen?.converted ? { conversion: conversionState ?? { state: "ok" as const, leadS: 0 } } : {}),
   };
 }
 

@@ -13,6 +13,7 @@
 import type { HlsAudioSignal, HlsVideoSignal } from "./hlsSignal";
 import type { TrackColour } from "../webcodecs/matroska";
 import type { LumenSilence } from "./audio/silence";
+import type { LumenConvertSource } from "./audio/convertSource";
 
 /**
  * La version du format produit. À monter quand change : la règle de découpe (cible, points de coupe
@@ -31,8 +32,14 @@ import type { LumenSilence } from "./audio/silence";
  * l'AC-3/E-AC-3 à 32 et 44,1 kHz n'est plus refusé. Pour un fichier déjà servi, la liste maître peut gagner des
  * rendus (des pistes refusées hier), et une piste AAC-LC dont le flux porte un SBR que rien n'annonçait change
  * d'init : rien de la 2 ne se relit sous la 3, pour qu'aucun index gardé sur le disque ne serve l'ancienne règle.
+ *
+ * **4** (17/11/2026, DECISIONS §161) : la conversion du son. L'index porte, pour chaque piste DTS, TrueHD, Opus
+ * ou MP2/MP3, de quoi la convertir (`convert` : codec, grille, premier échantillon, fin) ; option en service et
+ * ffmpeg présent, la liste maître gagne ces rendus (`a{N}x{cid}`) et l'éligibilité ne les refuse plus. Un index de
+ * la 3 n'a pas ces faits : rien de la 3 ne se relit sous la 4. Option coupée, les adresses changent de version
+ * mais pas d'octets.
  */
-export const LUMEN_FORMAT_VERSION = 3;
+export const LUMEN_FORMAT_VERSION = 4;
 
 // ── La règle de découpe ──────────────────────────────────────────────────────
 
@@ -250,6 +257,12 @@ export type LumenRefusalReason =
   | "son-sans-trame"
   | "son-en-retard"
   | "son-plus-court"
+  /**
+   * La piste demande une conversion (option en service, ffmpeg présent) mais le serveur n'admet pas de nouvelle
+   * lecture qui convertit (trop de lectures, file trop lente, machine trop chargée, §163) : le lecteur actuel prend
+   * le titre et convertit dans la page. Les lectures en cours ne sont jamais dégradées pour en admettre une autre.
+   */
+  | "son-serveur-occupe"
   | "piste-inconnue";
 
 export interface LumenRefusal {
@@ -293,6 +306,19 @@ export interface LumenAudioTrack {
   configuration?: Uint8Array | null;
   /** Le silence qui complète la piste devant ou derrière (§159), ou null : la piste couvre l'image. */
   silence?: LumenSilence | null;
+  /**
+   * Une piste non copiable que le serveur sait convertir (§161) : ses faits, gardés par l'index. Sa `refusal`
+   * reste `son-codec` dans l'index — la vue `withConversion` (`audio/view.ts`) la lève quand l'option est en
+   * service pour le compte et que ffmpeg est là. Absent : piste copiable, ou non convertible (`convertRefusal`).
+   */
+  convert?: LumenConvertSource;
+  /** Pourquoi une piste non copiable ne se convertit pas (48 kHz seulement, MP4, DTS sans cœur…), pour la page de banc. */
+  convertRefusal?: string;
+  /**
+   * Posé par la vue seulement, jamais par l'index : la piste est servie convertie, vers cette cible, sous cette
+   * identité de conversion (`cid`, dans le nom de ses rendus), avec ces canaux.
+   */
+  converted?: { target: string; cid: string; channels: number };
   signal: HlsAudioSignal | null;
   /** Pourquoi cette piste ne peut pas être servie, ou null. */
   refusal: LumenRefusal | null;
@@ -358,16 +384,20 @@ export interface LumenIndex {
 
 // ── Les noms servis ──────────────────────────────────────────────────────────
 
-/** Une piste servie : la vidéo, ou une piste audio par son numéro dans le fichier. */
-export type LumenRendition = { kind: "video" } | { kind: "audio"; track: number };
+/**
+ * Une piste servie : la vidéo, ou une piste audio par son numéro dans le fichier. `conv` : l'identité de la
+ * conversion d'une piste convertie (§161) — dans le nom, pour qu'une autre conversion (autre ffmpeg, autre règle)
+ * soit une autre adresse et jamais d'autres octets sous la même.
+ */
+export type LumenRendition = { kind: "video" } | { kind: "audio"; track: number; conv?: string };
 
 /**
  * Le nom d'un fichier servi, relatif à la liste maître : `v.m3u8`, `init-v.mp4`, `v/12.m4s`, et pour
- * la piste audio 3 `a3.m3u8`, `init-a3.mp4`, `a3/12.m4s`. Les noms naturels, sans détour pour
- * CrowdSec : décision du 16/11/2026, contre la décision 4 de la conception.
+ * la piste audio 3 `a3.m3u8`, `init-a3.mp4`, `a3/12.m4s` ; convertie, `a3x1a2b3c4d.m3u8`… Les noms naturels,
+ * sans détour pour CrowdSec : décision du 16/11/2026, contre la décision 4 de la conception.
  */
 export function renditionTag(rendition: LumenRendition): string {
-  return rendition.kind === "video" ? "v" : `a${rendition.track}`;
+  return rendition.kind === "video" ? "v" : `a${rendition.track}${rendition.conv ? `x${rendition.conv}` : ""}`;
 }
 
 export function playlistName(rendition: LumenRendition): string {
@@ -397,8 +427,8 @@ export function parseLumenPath(path: string): LumenPath | null {
   if (path === "master.m3u8") return { kind: "master" };
   const tag = (raw: string): LumenRendition | null => {
     if (raw === "v") return { kind: "video" };
-    const m = /^a([1-9]\d{0,3})$/.exec(raw);
-    return m ? { kind: "audio", track: Number(m[1]) } : null;
+    const m = /^a([1-9]\d{0,3})(?:x([0-9a-f]{8}))?$/.exec(raw);
+    return m ? (m[2] ? { kind: "audio", track: Number(m[1]), conv: m[2] } : { kind: "audio", track: Number(m[1]) }) : null;
   };
   let m = /^([a-z0-9]+)\.m3u8$/.exec(path);
   if (m) {

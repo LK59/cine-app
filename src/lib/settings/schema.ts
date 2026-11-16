@@ -146,6 +146,15 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "BOOKS_GOOGLE_ENRICH", group: "playback", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   { key: "GOOGLE_BOOKS_API_KEY", group: "playback", kind: "secret", need: "optional", fallback: "", inApp: true },
   { key: "PLAYER_AUTO_FRAME", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
+  // La conversion du son de Lumen serveur (DECISIONS.md §161 à §163) : DTS, TrueHD, Opus, MP2/MP3 convertis en
+  // E-AC-3 par le ffmpeg de l'image. Coupée par défaut ; « Lab bêta » dans la Configuration. Les plafonds viennent de
+  // la mesure de mise à l'échelle (§163) ; le cache, en mémoire (Mo) et sur le disque (Go, `DATA_DIR/lumen-audio`).
+  // L'emplacement du cache (`LUMEN_AUDIO_CACHE_DIR`) et le binaire (`LUMEN_FFMPEG_PATH`) sont du déploiement seul.
+  { key: "LUMEN_AUDIO_CONVERT", group: "playback", kind: "audience", need: "optional", fallback: "off", inApp: true },
+  { key: "LUMEN_AUDIO_MAX_JOBS", group: "playback", kind: "number", need: "optional", fallback: "2", inApp: true, placeholder: "2" },
+  { key: "LUMEN_AUDIO_MAX_SESSIONS", group: "playback", kind: "number", need: "optional", fallback: "6", inApp: true, placeholder: "6" },
+  { key: "LUMEN_AUDIO_RAM_MB", group: "playback", kind: "number", need: "optional", fallback: "512", inApp: true, placeholder: "512" },
+  { key: "LUMEN_AUDIO_CACHE_GB", group: "playback", kind: "number", need: "optional", fallback: "10", inApp: true, placeholder: "10" },
   // L'application que le Chromecast ouvre (DECISIONS.md §64) : vide, le récepteur public de Google.
   // Pas un secret — l'identifiant d'un récepteur qu'une installation a enregistré elle-même.
   { key: "CAST_RECEIVER_APP_ID", group: "playback", kind: "text", need: "optional", fallback: "", inApp: true, placeholder: "CC1AD845" },

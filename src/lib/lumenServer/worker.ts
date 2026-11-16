@@ -26,11 +26,10 @@ export type WorkerResponse =
 
 /** Les tampons d'une réponse, transférés plutôt que copiés : un segment 4K pèse des dizaines de Mo. */
 export function transferablesOf(result: LumenJobResult): ArrayBuffer[] {
-  if (result.type === "segment") {
-    const buffer = result.result.bytes.buffer;
-    return buffer instanceof ArrayBuffer && result.result.bytes.byteOffset === 0 && result.result.bytes.byteLength === buffer.byteLength ? [buffer] : [];
-  }
-  return [];
+  const bytes = result.type === "segment" ? result.result.bytes : result.type === "audio-feed" ? (result.feed?.bytes ?? null) : null;
+  if (!bytes) return [];
+  const buffer = bytes.buffer;
+  return buffer instanceof ArrayBuffer && bytes.byteOffset === 0 && bytes.byteLength === buffer.byteLength ? [buffer] : [];
 }
 
 // Seulement dans un fil lancé par le pool (`workerData.lumenWorker`) : la suite de tests tourne elle-même

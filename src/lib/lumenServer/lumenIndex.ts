@@ -65,6 +65,7 @@ import { AUDIO_LEAD_GAP_SECONDS, audioLeadGapSeconds } from "../webcodecs/audioL
 import { AAC_RATES, aacHlsPlan, silenceMayFollow, silentAacFrame, type AscFacts } from "./audio/aacStream";
 import { dolbyFrameCount, dolbySilenceRefusal, readDolbyHeader, silentDolbyFrame, type DolbyHeader } from "./audio/dolbySilence";
 import type { LumenSilence } from "./audio/silence";
+import { CONVERT_CODECS, convertSourceOf } from "./audio/convertSource";
 import { hlsAudioSignal, hlsVideoSignal } from "./hlsSignal";
 import { readBlockSamples, sketchPicture, walkBlocks, type BlockHead, type PictureSketch } from "./mkvBlocks";
 import { planSegments, type CutPoint } from "./plan";
@@ -805,12 +806,23 @@ export async function buildLumenIndex(source: CountingSource, identity: FileIden
   // Une piste absente du dernier segment : son dernier bloc, en remontant (seulement pour elle).
   for (const t of audioTracks) {
     const f = facts.get(t.number) as AudioFacts;
-    if (lastStartUs !== null && COPYABLE_AUDIO.has(t.codecId) && (f.lastUs === null || f.lastUs < lastStartUs)) await probeAudioTail(source, file, segments, t.number, f);
+    if (lastStartUs !== null && (COPYABLE_AUDIO.has(t.codecId) || CONVERT_CODECS[t.codecId]) && (f.lastUs === null || f.lastUs < lastStartUs)) await probeAudioTail(source, file, segments, t.number, f);
   }
   const audio: LumenAudioTrack[] = audioTracks.map((t) => {
     const f = facts.get(t.number) as AudioFacts;
     const plan = audioPlan(t, f, segments[0].keyUs, lastStartUs, endUs);
     const signal = plan.refusal ? null : hlsAudioSignal(t, f.firstFrame, plan.configuration);
+    // Une piste non copiable : ses faits de conversion (§161), gardés par l'index quelle que soit l'option — la vue
+    // `withConversion` décide à chaque requête. Le refus `son-codec` reste celui de l'index.
+    const short = lastStartUs !== null && (f.lastUs === null || f.lastUs < lastStartUs);
+    const conversion =
+      plan.refusal?.reason === "son-codec" && CONVERT_CODECS[t.codecId]
+        ? convertSourceOf(
+            { codecId: t.codecId, codecPrivate: t.codecPrivate, channels: t.audio?.channels ?? 2, sampleRate: t.audio?.sampleRate ?? 48000 },
+            { firstUs: f.firstUs, firstFrame: f.firstFrame, lastBlockUs: short ? (f.tail?.timeUs ?? null) : null },
+            container
+          )
+        : null;
     return {
       number: t.number,
       codecId: t.codecId,
@@ -826,6 +838,7 @@ export async function buildLumenIndex(source: CountingSource, identity: FileIden
       // Seulement quand il y a quelque chose à dire : une piste servie comme avant garde la forme d'avant.
       ...(plan.configuration ? { configuration: plan.configuration } : {}),
       ...(plan.silence ? { silence: plan.silence } : {}),
+      ...(conversion?.ok ? { convert: conversion.source } : conversion ? { convertRefusal: conversion.detail } : {}),
       signal,
       refusal: plan.refusal ?? (signal ? null : { reason: "son-codec", detail: "signalisation illisible" }),
     };

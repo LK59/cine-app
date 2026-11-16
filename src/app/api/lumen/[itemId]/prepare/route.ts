@@ -3,6 +3,7 @@ import { isJellyfinId } from "@/lib/jellyfinPath";
 import { isPlaybackId } from "@/lib/lumenServer/playbackStats";
 import { LumenError, parseCutMode, parseTargetSeconds, type LumenCutting } from "@/lib/lumenServer/format";
 import {
+  conversionModeOf,
   defaultAudioTrack,
   goneResponse,
   logLumenError,
@@ -11,13 +12,17 @@ import {
   lumenIndexOf,
   lumenSegment,
   lumenServerEngine,
+  lumenConversionContext,
   lumenVerdict,
   lumenVersionOf,
+  playbackKey,
   newPlaybackId,
   NO_STORE,
   segmentAt,
 } from "@/lib/lumenServer/service";
 import { lumenEligibility } from "@/lib/lumenServer/eligibility";
+import type { ConversionContext } from "@/lib/lumenServer/audio/view";
+import { lumenAudio } from "@/lib/lumenServer/audio/conversion";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +47,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!isJellyfinId(itemId)) return goneResponse("lumen-inconnu", "Élément inconnu");
   const session = await lumenAccess(req, itemId);
   if (session instanceof NextResponse) return session;
-  const body = (await req.json().catch(() => null)) as { audio?: unknown; position?: unknown; s?: unknown; cut?: unknown; target?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { audio?: unknown; position?: unknown; s?: unknown; cut?: unknown; target?: unknown; convPool?: unknown; convCold?: unknown } | null;
   const audio = body?.audio;
   if (audio !== undefined && audio !== null && !(typeof audio === "number" && Number.isInteger(audio) && audio > 0 && audio < 10_000)) {
     return goneResponse("lumen-inconnu", "Piste audio mal formée");
@@ -56,9 +61,13 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (targetUs === null) return goneResponse("lumen-inconnu", "Cible inconnue");
   const cutting = { cut, targetUs };
 
-  void warm(itemId, typeof audio === "number" ? audio : undefined, position, cutting);
+  // Les modes d'essai de la conversion (§163) : comme `eligibility`, pour cette lecture seulement.
+  const mode = conversionModeOf(new URLSearchParams(Object.entries({ convPool: body?.convPool, convCold: body?.convCold }).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])));
+  if (mode) lumenAudio().setPlaybackMode(playbackKey(session.u, s), mode);
+  const conversion = await lumenConversionContext(session);
+  void warm(itemId, typeof audio === "number" ? audio : undefined, position, cutting, conversion, playbackKey(session.u, s));
   try {
-    const verdict = await lumenVerdict(itemId, { audio: typeof audio === "number" ? audio : undefined, s, waitMs: VERDICT_WAIT_MS, ...cutting });
+    const verdict = await lumenVerdict(itemId, { audio: typeof audio === "number" ? audio : undefined, s, waitMs: VERDICT_WAIT_MS, session, ...cutting });
     return NextResponse.json(verdict, { status: "pending" in verdict ? 202 : 200, headers: NO_STORE });
   } catch (error) {
     return lumenErrorResponse(error, { itemId, route: "prepare" }).response;
@@ -70,9 +79,11 @@ export async function POST(req: NextRequest, { params }: Params) {
  * pendant audio, gardés pour la première requête. Une file pleine n'est pas une erreur : la requête de
  * Safari construira le segment elle-même.
  */
-async function warm(itemId: string, audio: number | undefined, position: number, cutting: Partial<LumenCutting>): Promise<void> {
+async function warm(itemId: string, audio: number | undefined, position: number, cutting: Partial<LumenCutting>, conversion: ConversionContext | null, session: string): Promise<void> {
   try {
-    const found = await lumenIndexOf(itemId, cutting);
+    // Avec la conversion permise (§161), le segment de reprise d'une piste convertie est converti ici, en priorité
+    // de demande — avant toute avance — et gardé dans le cache de la conversion.
+    const found = await lumenIndexOf(itemId, cutting, conversion);
     if ("refusal" in found) return;
     const { index } = found;
     const audioTrack = audio ?? defaultAudioTrack(index);
@@ -82,7 +93,7 @@ async function warm(itemId: string, audio: number | undefined, position: number,
     const n = segmentAt(index, position);
     await Promise.all([
       lumenSegment(engine, index, version, { kind: "video" }, n, { keep: true }),
-      ...(audioTrack !== null ? [lumenSegment(engine, index, version, { kind: "audio", track: audioTrack }, n, { keep: true })] : []),
+      ...(audioTrack !== null ? [lumenSegment(engine, index, version, { kind: "audio", track: audioTrack }, n, { keep: true, session })] : []),
     ]);
   } catch (error) {
     if (error instanceof LumenError && error.code === "occupe") return;

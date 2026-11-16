@@ -29,6 +29,13 @@ function envOnly(name: string, fallback = ""): string {
   return process.env[name] ?? fallback;
 }
 
+/** Un entier borné ; une valeur mal formée prend le défaut, une valeur hors bornes la borne. */
+function clampInt(value: string, fallback: number, min: number, max: number): number {
+  const n = Number(value.trim());
+  if (!Number.isFinite(n) || value.trim() === "") return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
 /** Une heure de 0 à 23 ; une valeur mal formée prend le défaut. */
 function hourOf(value: string, fallback: number): number {
   const n = Number(value);
@@ -398,6 +405,38 @@ export const config = {
     // Relu à chaque appel (`lumenServer/paths.ts`), lu par `lumenFileOf` (§156).
     get pathMap() {
       return envOnly("LUMEN_PATH_MAP", "");
+    },
+    // La conversion du son au serveur (phase 2, DECISIONS.md §161) : à qui elle est ouverte (`off` par défaut,
+    // `admins`, `tous`, `featureAudience.ts`). Coupée, ou sans ffmpeg, Lumen serveur refuse une piste DTS,
+    // TrueHD, Opus ou MP2/MP3 comme avant (`son-codec`) et le lecteur actuel la convertit dans la page.
+    get audioConvert() {
+      return parseAudience(optional("LUMEN_AUDIO_CONVERT", "off"));
+    },
+    // Combien de processus ffmpeg à la fois, et combien de lectures admises à la conversion : les défauts
+    // viennent de la mesure de mise à l'échelle du 17/11/2026 (DECISIONS §163) — deux conversions gardent un segment
+    // à ~0,4 s, quatre le portent à 0,56 s (p95 1,6 s), huit à 1,3 s (p95 2,4 s) pour à peine plus de débit ; six
+    // lectures en continu en prennent ~30 %. Bornés ici : une valeur aberrante ne lance pas cinquante processus.
+    get audioMaxJobs() {
+      return clampInt(optional("LUMEN_AUDIO_MAX_JOBS", "2"), 2, 1, 8);
+    },
+    get audioMaxSessions() {
+      return clampInt(optional("LUMEN_AUDIO_MAX_SESSIONS", "6"), 6, 1, 32);
+    },
+    // Le cache des segments convertis : en mémoire (Mo) pour la fenêtre des séances actives, sur le disque (Go,
+    // le moins récemment lu évincé). Relus à chaque appel ; une baisse s'applique au balayage suivant.
+    get audioRamMb() {
+      return clampInt(optional("LUMEN_AUDIO_RAM_MB", "512"), 512, 32, 4096);
+    },
+    get audioCacheGb() {
+      return clampInt(optional("LUMEN_AUDIO_CACHE_GB", "10"), 10, 0, 1000);
+    },
+    // Déploiement seulement (§81) : où est ffmpeg (vide = pas de conversion) et où va le cache disque (un volume
+    // que le compose doit monter s'il n'est pas sous `data/`).
+    get ffmpegPath() {
+      return envOnly("LUMEN_FFMPEG_PATH", "/usr/local/bin/ffmpeg");
+    },
+    get audioCacheDir() {
+      return envOnly("LUMEN_AUDIO_CACHE_DIR", "");
     },
   },
   news: {

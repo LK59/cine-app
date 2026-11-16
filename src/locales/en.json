@@ -3515,7 +3515,12 @@
       "REPLIQUES_NIGHT_END": "Night window end",
       "REPLIQUES_LANGUAGES": "Dialogue languages",
       "ASK_PERSON_ENABLED": "Questions about a person: in the panel of an “On screen” actor, up to two suggested questions “How is X connected to Y?” with the other characters in the scene (no free input)",
-      "SOFAR_ENABLED": "“So far”: in the panel of an “On screen” actor, two sentences on what their character has done so far"
+      "SOFAR_ENABLED": "“So far”: in the panel of an “On screen” actor, two sentences on what their character has done so far",
+      "LUMEN_AUDIO_CONVERT": "Convert on the server the sound devices can't play (DTS, TrueHD, Opus, MP2/MP3 → E-AC-3)",
+      "LUMEN_AUDIO_MAX_JOBS": "Maximum simultaneous conversions",
+      "LUMEN_AUDIO_MAX_SESSIONS": "Maximum playbacks converting at once",
+      "LUMEN_AUDIO_RAM_MB": "Converted sound kept in memory (MB)",
+      "LUMEN_AUDIO_CACHE_GB": "Converted sound kept on disk (GB)"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml, under “environment”:",
@@ -3735,7 +3740,16 @@
       "title": "Back to the start of the scene",
       "why": "When resuming a title after a few hours, would offer for a few seconds to go back to the start of the current scene. Experimental: scene starts are not reliable enough yet, keep it off."
     },
-    "labBeta": "Lab beta"
+    "labBeta": "Lab beta",
+    "lumenAudio": {
+      "title": "Sound conversion (Lumen server)",
+      "why": "DTS, TrueHD, Opus and MP2/MP3 tracks are converted by the server to Dolby Digital Plus (5.1 at 640 kb/s, stereo at 256 kb/s) as the film plays, instead of by the device. A 7.1 is folded to 5.1, and the Atmos of a TrueHD track is not kept. When the server is too busy for a new playback, the device converts, as it does today.",
+      "detected": "ffmpeg {version} found: {encoders}",
+      "unavailable": "Conversion unavailable on this server ({reason}): the device converts the sound.",
+      "now": "Now: {sessions} playback(s) converting, {running} conversion(s) running, {queued} waiting.",
+      "cache": "Kept: {memory} in memory (of {memoryCap}), {disk} on disk (of {diskCap}).",
+      "day": "Last 24 h: {segments} segments converted, {median} ms median, {max} ms worst, {fallbacks} handed back to the device."
+    }
   },
   "xrayScan": {
     "nav": "On-screen cast",
