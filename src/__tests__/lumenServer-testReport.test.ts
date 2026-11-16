@@ -176,6 +176,51 @@ describe("lumenTestReport", () => {
   });
 });
 
+describe("la chronologie (étape 3e, §160)", () => {
+  it("garde l'horloge, le débit, le résumé et les cascades, bornés ; les leviers, l'ordre et la passe des leviers", () => {
+    const cascade = { k: "saut", to: 600.1, firstReqMs: 40, seekedMs: 600, advanceMs: 1450, aheadSeekedS: 8, aheadAdvanceS: 22, srvMbps: 142, req: ["+40 v/150.m4s r90 f91 l160 k5859", 42, "x".repeat(300)], ev: ["+1 seeking rs1 a-"], evil: "y" };
+    const report = lumenTestReport(
+      {
+        auto: { serie: "abc123def456", trial: "ghosted-serveur-mux", rank: 5, of: 12, pass: "leviers", order: "actuel", mode: "mux" },
+        runs: [
+          {
+            itemId: ITEM,
+            player: "serveur",
+            mode: "depart-xstart",
+            startAt: 600,
+            targetFrameMs: 1400,
+            firstFrameAt: 0,
+            chrono: {
+              clock: { offsetMs: 1234.5, rttMs: 22, samples: 5, junk: 1 },
+              link: { mbps: 180, ms: 186, via: "rt", MB: 4 },
+              rtLumen: 0,
+              rtStream: 0,
+              summary: { aheadAdvanceS: 22, seekedToAdvanceMs: 850, nope: 3 },
+              cascades: Array.from({ length: 40 }, () => cascade),
+            },
+          },
+        ],
+        trials: [{ trial: "ghosted-serveur-mux", mode: "mux", chrono: { aheadAdvanceS: 22 }, linkMbps: 180, targetFrameMs: 900 }],
+        comparison: [{ key: "ghosted", mode: "mux", serveur: { status: "ok", chrono: { firstReqMs: 40 }, linkMbps: 180 } }],
+      },
+      "louis"
+    );
+    expect(report.auto).toMatchObject({ pass: "leviers", order: "actuel", mode: "mux" });
+    const run = (report.runs as Record<string, unknown>[])[0];
+    expect(run).toMatchObject({ mode: "depart-xstart", startAt: 600, targetFrameMs: 1400, firstFrameAt: 0 });
+    const chrono = run.chrono as Record<string, unknown>;
+    expect(chrono.clock).toEqual({ offsetMs: 1234.5, rttMs: 22, samples: 5 });
+    expect(chrono.link).toEqual({ mbps: 180, ms: 186, via: "rt", MB: 4 });
+    expect(chrono.summary).toEqual({ aheadAdvanceS: 22, seekedToAdvanceMs: 850 });
+    const cascades = chrono.cascades as Record<string, unknown>[];
+    expect(cascades).toHaveLength(24);
+    expect(cascades[0]).not.toHaveProperty("evil");
+    expect(cascades[0].req).toEqual(["+40 v/150.m4s r90 f91 l160 k5859", "x".repeat(80)]);
+    expect(report.trials).toEqual([{ trial: "ghosted-serveur-mux", mode: "mux", chrono: { aheadAdvanceS: 22 }, linkMbps: 180, targetFrameMs: 900 }]);
+    expect(report.comparison).toEqual([{ key: "ghosted", mode: "mux", serveur: { status: "ok", chrono: { firstReqMs: 40 }, linkMbps: 180 } }]);
+  });
+});
+
 describe("POST /api/viewport-diag, kind lumen-test", () => {
   it("écrit la ligne au nom de la session, pour l'administrateur", async () => {
     const { POST } = await import("@/app/api/viewport-diag/route");

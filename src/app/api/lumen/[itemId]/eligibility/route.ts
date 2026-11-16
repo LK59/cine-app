@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { isPlaybackId } from "@/lib/lumenServer/playbackStats";
 import { parseCutMode, parseTargetSeconds } from "@/lib/lumenServer/format";
-import { goneResponse, lumenAccess, lumenErrorResponse, lumenVerdict, newPlaybackId, NO_STORE } from "@/lib/lumenServer/service";
+import { goneResponse, lumenAccess, lumenErrorResponse, lumenVerdict, masterAddress, newPlaybackId, NO_STORE } from "@/lib/lumenServer/service";
+import { muxVersion } from "@/lib/lumenServer/trials";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,9 @@ const MAX_WAIT_MS = 30_000;
  * `ok` donne l'adresse de la liste maître, avec la version du fichier et l'identifiant de lecture —
  * celui de la page s'il est donné (`s`), sinon un nouveau. `audio` absent : la piste que le fichier
  * marque par défaut. `cut` : une découpe d'essai (`idr`, `cra-leading` — DECISIONS.md §157, §158, la page
- * `/lumen-test`) ; absent, la règle `cra`. `target` : une cible d'essai en secondes (2, 3, 6 ; 4 par défaut). Administrateur seul (`lumenAccess`).
+ * `/lumen-test`) ; absent, la règle `cra`. `target` : une cible d'essai en secondes (2, 3, 6 ; 4 par défaut). `mux=1` :
+ * l'essai du son par défaut multiplexé dans les segments vidéo (étape 3e, `trials.ts`) — la version et l'adresse
+ * rendues portent `m1`, le reste du verdict est celui de la règle. Administrateur seul (`lumenAccess`).
  */
 export async function GET(req: NextRequest, { params }: Params) {
   const { itemId } = await params;
@@ -45,6 +48,11 @@ export async function GET(req: NextRequest, { params }: Params) {
       cut,
       targetUs,
     });
+    if (q.get("mux") === "1" && verdict.ok && verdict.audioTrack !== null) {
+      const s = new URL(verdict.master, "http://x").pathname.split("/")[5];
+      verdict.version = muxVersion(verdict.version);
+      verdict.master = masterAddress(itemId, verdict.version, s, verdict.audioTrack);
+    }
     return NextResponse.json(verdict, { status: "pending" in verdict ? 202 : 200, headers: NO_STORE });
   } catch (error) {
     return lumenErrorResponse(error, { itemId, route: "eligibility" }).response;

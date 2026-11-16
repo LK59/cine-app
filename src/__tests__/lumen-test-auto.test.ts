@@ -1,12 +1,16 @@
 import { describe, it, expect } from "vitest";
 import {
   DEFAULT_TARGET_S,
+  EARLY_DELAY_MS,
   FreezeWatch,
+  LEVER_SERIES,
   PRESETS,
   QUICK_SERIES,
   SERIES,
   comparisonRows,
+  formatChrono,
   formatResult,
+  modeTag,
   planOf,
   qualityDelta,
   resultOf,
@@ -41,7 +45,7 @@ describe("le plan des séries", () => {
     const firstCurrent = plan.findIndex((t) => t.player === "actuel");
     expect(firstCurrent).toBeGreaterThan(0);
     expect(plan.slice(firstCurrent).every((t) => t.player === "actuel")).toBe(true);
-    const server = plan.filter((t) => t.player === "serveur" && !t.prepareOnly && t.targetS === DEFAULT_TARGET_S);
+    const server = plan.filter((t) => t.player === "serveur" && !t.prepareOnly && t.targetS === DEFAULT_TARGET_S && !t.modes);
     const current = plan.filter((t) => t.player === "actuel");
     expect(current.map((t) => [t.key, t.tours])).toEqual(server.map((t) => [t.key, t.tours]));
     expect(new Set(plan.map((t) => t.id)).size).toBe(plan.length);
@@ -81,19 +85,60 @@ describe("le plan des séries", () => {
     expect(byId["black-monday-serveur-t2"]).toMatchObject({ targetS: 2, tours: [10], player: "serveur" });
   });
 
-  it("le comparatif rapide : un H.264, un HEVC à IDR (et sa cible de 2 s), un HEVC à GOP ouvert, un DV 4K Atmos ; 10 sauts, pas de pistes", () => {
+  it("le comparatif rapide : un H.264, un HEVC à IDR, un HEVC à GOP ouvert, un DV 4K Atmos, 10 sauts ; puis les leviers a et b sur Ghosted et Ted Lasso", () => {
     expect(QUICK_SERIES.map((t) => t.id)).toEqual([
       "maison-blanche-serveur",
       "black-monday-serveur",
-      "black-monday-serveur-t2",
       "ghosted-serveur",
       "ted-lasso-serveur",
+      "ghosted-serveur-mux",
+      "ted-lasso-serveur-mux",
+      "ghosted-serveur-prep",
+      "ted-lasso-serveur-prep",
       "maison-blanche-actuel",
       "black-monday-actuel",
       "ghosted-actuel",
       "ted-lasso-actuel",
     ]);
-    expect(QUICK_SERIES.every((t) => t.tours.length === 1 && t.tours[0] === 10 && !t.audioTour)).toBe(true);
+    const base = QUICK_SERIES.filter((t) => !t.modes);
+    expect(base.every((t) => t.tours.length === 1 && t.tours[0] === 10 && !t.audioTour)).toBe(true);
+    expect(QUICK_SERIES.filter((t) => t.modes?.mux).map((t) => t.tours)).toEqual([[5], [5]]);
+    expect(QUICK_SERIES.filter((t) => t.modes?.early).map((t) => t.modes?.early)).toEqual(["serveur", "serveur"]);
+    // Les leviers sont des essais serveur : le lecteur actuel n'en a pas.
+    expect(QUICK_SERIES.filter((t) => t.modes).every((t) => t.player === "serveur")).toBe(true);
+  });
+
+  it("les leviers de démarrage : chaque levier à côté d'un témoin du même titre ; le départ à 600 s par les trois chemins", () => {
+    expect(planOf("leviers")).toBe(LEVER_SERIES);
+    expect(LEVER_SERIES.every((t) => t.player === "serveur")).toBe(true);
+    expect(new Set(LEVER_SERIES.map((t) => t.id)).size).toBe(LEVER_SERIES.length);
+    const starts = LEVER_SERIES.filter((t) => t.modes?.startMode);
+    expect(starts.map((t) => `${t.key}:${t.modes!.startMode}:${t.startAt}`).sort()).toEqual(
+      ["black-monday", "ghosted"].flatMap((k) => ["ext-x-start", "fragment", "saut"].map((m) => `${k}:${m}:600`)).sort()
+    );
+    for (const t of LEVER_SERIES.filter((x) => x.modes && !x.modes.startMode && x.key !== "maison-blanche")) {
+      expect(LEVER_SERIES.some((w) => w.key === t.key && !w.modes), t.id).toBe(true);
+    }
+    expect(modeTag({ startMode: "ext-x-start" })).toBe("depart-xstart");
+    expect(modeTag({ early: "élément" })).toBe("fiche");
+    expect(modeTag({ bandwidth: "moyen" })).toBe("bw");
+    // Les noms passent la règle de la ligne (`trialName` : 40 caractères au plus).
+    for (const t of [...SERIES, ...QUICK_SERIES, ...LEVER_SERIES]) expect(t.id).toMatch(/^[a-z0-9-]{1,40}$/);
+  });
+
+  it("l'ordre « lecteur actuel d'abord » : les mêmes essais, le lecteur actuel en tête, un rechargement avant le premier essai serveur", () => {
+    for (const pass of ["complète", "courte"] as const) {
+      const plan = planOf(pass, "actuel");
+      const straight = planOf(pass);
+      expect(plan.map((t) => t.id).sort()).toEqual(straight.map((t) => t.id).sort());
+      const firstServer = plan.findIndex((t) => t.player === "serveur");
+      expect(plan.slice(0, firstServer).every((t) => t.player === "actuel")).toBe(true);
+      expect(plan.slice(firstServer).every((t) => t.player === "serveur")).toBe(true);
+      expect(plan.filter((t) => t.reloadBefore).map((t) => t.id)).toEqual([plan[firstServer].id]);
+      expect(straight.some((t) => t.reloadBefore)).toBe(false);
+    }
+    // Les leviers n'ont qu'un lecteur : un seul ordre.
+    expect(planOf("leviers", "actuel")).toBe(LEVER_SERIES);
   });
 
   it("estime ~30 minutes pour la série complète, 12 à 15 pour la rapide ; la barre avance sans dépasser l'essai en cours", () => {
@@ -101,7 +146,10 @@ describe("le plan des séries", () => {
     expect(total).toBeGreaterThan(25 * 60);
     expect(total).toBeLessThan(35 * 60);
     expect(seriesEstimateS(QUICK_SERIES)).toBeGreaterThan(9 * 60);
+    // La consigne de l'étape 3e : le comparatif rapide, leviers compris, en moins de 15 minutes.
     expect(seriesEstimateS(QUICK_SERIES)).toBeLessThan(15 * 60);
+    expect(seriesEstimateS(LEVER_SERIES)).toBeLessThan(13 * 60);
+    expect(EARLY_DELAY_MS).toBe(5000);
     expect(seriesProgress(SERIES, 0, 0)).toBe(0);
     const firstShare = seriesProgress(SERIES, 1, 0);
     // Un essai qui dure plus que prévu reste sous sa part : la barre n'annonce jamais l'essai suivant.
@@ -228,6 +276,25 @@ describe("l'enchaînement", () => {
     expect(n).toBe(SERIES.length);
   });
 
+  it("l'ordre « lecteur actuel d'abord » : la série s'arrête pour recharger avant le premier essai serveur, puis reprend là", async () => {
+    const plan = planOf("courte", "actuel");
+    const firstServer = plan.findIndex((t) => t.reloadBefore);
+    const reloads: number[] = [];
+    const before = fakeDriver();
+    before.driver.reload = async (index) => void reloads.push(index);
+    const first = await runSeries(plan, before.driver);
+    expect(reloads).toEqual([firstServer]);
+    expect(first.results.map((r) => r.player)).toEqual(plan.slice(0, firstServer).map(() => "actuel"));
+    expect(before.calls).not.toContain(`begin ${firstServer + 1} ${plan[firstServer].id}`);
+    // Après le rechargement : la série reprend au même rang, sans recharger de nouveau.
+    const after = fakeDriver();
+    after.driver.reload = async (index) => void reloads.push(index);
+    const second = await runSeries(plan, after.driver, undefined, { from: firstServer });
+    expect(reloads).toEqual([firstServer]);
+    expect(second.results.map((r) => r.trial)).toEqual(plan.slice(firstServer).map((t) => t.id));
+    expect(second.results[0].rank).toBe(firstServer + 1);
+  });
+
   it("« Arrêter » finit l'essai en cours — sa ligne part — et rien après", async () => {
     const { driver, calls, sent } = fakeDriver({ stopAfter: "tour 0" });
     const { results, stopped } = await runSeries(SERIES, driver);
@@ -286,15 +353,16 @@ describe("les lignes", () => {
   });
 
   it("chaque ligne porte le lecteur, la passe et la graine ; la récapitulative, le tableau et les deux réponses", () => {
-    expect(trialTag("abc123def456", QUICK_SERIES[5], 6, QUICK_SERIES.length, { pass: "courte", seed: 42 })).toEqual({
+    expect(trialTag("abc123def456", QUICK_SERIES[8], 9, QUICK_SERIES.length, { pass: "courte", seed: 42 })).toEqual({
       serie: "abc123def456",
       trial: "maison-blanche-actuel",
-      rank: 6,
-      of: 9,
+      rank: 9,
+      of: 12,
       player: "actuel",
       pass: "courte",
       seed: 42,
     });
+    expect(trialTag("abc123def456", QUICK_SERIES[4], 5, 12, { pass: "courte", seed: 42, order: "actuel" })).toMatchObject({ trial: "ghosted-serveur-mux", mode: "mux", order: "actuel" });
     const results = SERIES.slice(0, 2).map((t, i) => resultOf(t, i + 1, { status: "ok" }));
     const body = summaryBody("abc123def456", SERIES.length, results, { damaged: "oui", damagedTitle: "  Ghosted  ", audioClean: "pas-entendu" }, { elapsedS: 1834.4, stopped: false, pass: "complète", seed: 42 });
     expect(body.auto).toEqual({ serie: "abc123def456", summary: true, of: 20, done: 2, elapsedS: 1834, stopped: false, pass: "complète", seed: 42 });
@@ -303,6 +371,26 @@ describe("les lignes", () => {
     expect(body.answers).toEqual({ damaged: "oui", damagedTitle: "Ghosted", audioClean: "pas-entendu" });
     // « Non » : le titre tapé avant de changer d'avis ne part pas.
     expect(summaryBody("abc123def456", 9, [], { damaged: "non", damagedTitle: "x", audioClean: null }, { elapsedS: 1, stopped: true, pass: "courte", seed: 1 }).answers).toEqual({ damaged: "non", damagedTitle: undefined, audioClean: null });
+  });
+
+  it("la chronologie d'un essai : dans son résultat, sa ligne d'écran et sa ligne du tableau (un levier a sa propre ligne)", () => {
+    const at = (id: string) => QUICK_SERIES.find((x) => x.id === id)!;
+    const chrono = { aheadAdvanceS: 21.5, aheadSeekedS: 6, firstReqMs: 40, firstVideoReadyMs: 95, seekedToAdvanceMs: 820, videoAdvance: 5, readyMaxMs: 210 };
+    const base = { seeks: [], freezes: [], errors: [], waits: 0, audioSwitches: [] };
+    const r = resultOf(at("ghosted-serveur-mux"), 5, { status: "ok" }, { ...base, firstFrameMs: 700, chrono, linkMbps: 180 });
+    expect(r).toMatchObject({ mode: "mux", chrono, linkMbps: 180 });
+    expect(formatChrono(r)).toBe("lien 180 Mb/s · 1re requête +40 ms · segment prêt +95 ms · seeked→reprise 820 ms · avance à seeked 6 s · à la reprise 21.5 s · 5 seg. vidéo demandés · serveur ≤ 210 ms");
+    expect(formatResult(r)).toMatch(/^5\. Ghosted · serveur \(mux\) — image 700 ms · gels 0 · erreurs 0 · lien 180/);
+    const plain = resultOf(at("ghosted-serveur"), 3, { status: "ok" }, { ...base, firstFrameMs: 1200 });
+    const rows = comparisonRows([plain, r]);
+    expect(rows.map((x) => [x.key, x.mode ?? null, x.serveur?.firstFrameMs])).toEqual([
+      ["ghosted", null, 1200],
+      ["ghosted", "mux", 700],
+    ]);
+    // Un départ en milieu de film : la première image à la position demandée, quand elle diffère de la toute première.
+    const start = resultOf(LEVER_SERIES.find((t) => t.id === "ghosted-serveur-depart-saut")!, 6, { status: "ok" }, { ...base, firstFrameMs: 500, targetFrameMs: 1400 });
+    expect(start.targetFrameMs).toBe(1400);
+    expect(formatResult(start)).toContain("image au départ 1400 ms");
   });
 
   it("les compteurs de décodage : la différence, ou la fin seule s'ils ont été remis à zéro", () => {

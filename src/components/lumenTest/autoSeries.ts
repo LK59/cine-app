@@ -22,18 +22,77 @@
  * positions, donc sur un cache de pages du serveur plus chaud (la construction d'un segment serveur coûtait au pire
  * 257 ms disque compris au banc du 16/11 : l'avantage est borné par là, et il joue *pour* le lecteur actuel).
  *
+ * Depuis l'étape 3e (DECISIONS §160), **l'ordre inverse** aussi (`planOf(pass, "actuel")`) : le lecteur actuel d'abord,
+ * puis la page rechargée (`reloadBefore`, `SeriesDriver.reload`) et Lumen serveur — la série reprend au même rang
+ * après un appui (`runSeries(…, { from })`), ce qui corrige le biais du cache plus chaud. Et **les leviers de
+ * démarrage** (`TrialModes`), essais serveur à côté d'un témoin du même titre.
+ *
  * Ce module est la partie sans navigateur — le plan, l'enchaînement, la détection des gels, les lignes, le
  * tableau — pour qu'elle s'éprouve en Node (`lumen-test-auto.test.ts`). Le composant (`LumenTest.tsx`) fournit le
  * pilote : la vidéo, les deux lecteurs, les sauts, les pistes, l'envoi. Rien ici ne touche au moteur.
  */
+
+import type { ChronoSummary } from "./chronology";
 
 export type Cut = "idr" | "cra" | "cra-leading";
 
 /** Le lecteur d'un essai : Lumen serveur (HLS natif) ou le lecteur de production (Lumen dans la page, MediaSource). */
 export type PlayerKind = "serveur" | "actuel";
 
-/** La passe : la série complète (~30 min) ou le comparatif rapide (~12 min). */
-export type SeriesPass = "complète" | "courte";
+/** La passe : la série complète (~28 min), le comparatif rapide (~13 min) ou les leviers de démarrage (~10 min, étape 3e). */
+export type SeriesPass = "complète" | "courte" | "leviers";
+
+/**
+ * L'ordre des lecteurs (étape 3e) : `serveur` — tous les essais serveur, puis ceux du lecteur actuel, dans la même
+ * page (l'ordre de l'étape 3c) ; `actuel` — l'inverse, **avec un rechargement de la page** entre les deux, puisque
+ * WebKit refuse un HLS natif après une MediaSource dans une même page. Le second ordre corrige le biais du premier :
+ * le lecteur joué en second lit des positions que le premier vient de lire, sur un cache disque plus chaud.
+ */
+export type SeriesOrder = "serveur" | "actuel";
+
+/**
+ * Les leviers de démarrage d'un essai serveur (étape 3e, DECISIONS §160) — chacun un mode d'essai, absent par défaut :
+ * - `mux` (a) : le son par défaut multiplexé dans les segments vidéo (`?mux=1`, version `…m1`, `trials.ts`) — une
+ *   liste, un init et un segment de moins à demander avant la première image ;
+ * - `early` (b) : la préparation précoce, comme à l'ouverture de la fiche — `serveur` : `POST …/prepare` (index et
+ *   segment de départ construits et gardés) puis `EARLY_DELAY_MS` avant Lire ; `élément` : en plus, la source posée
+ *   sur la vidéo avec `preload="auto"` pendant ce délai (Safari charge listes, init et premiers segments) ;
+ * - `startMode` (c), pour un départ en milieu de film (`startAt`) : `saut` — la règle d'aujourd'hui, `currentTime` à
+ *   `loadedmetadata` ; `ext-x-start` — `EXT-X-START:TIME-OFFSET` dans la liste maître (`?start=`) ; `fragment` —
+ *   `#t=` sur l'adresse ;
+ * - `bandwidth` (d) : `moyen` — BANDWIDTH annoncé au débit moyen plutôt qu'à la crête (`?bw=moyen`).
+ */
+export interface TrialModes {
+  mux?: boolean;
+  early?: "serveur" | "élément";
+  startMode?: "saut" | "ext-x-start" | "fragment";
+  bandwidth?: "moyen";
+}
+
+/** Le délai entre Préparer et Lire d'un essai `early` : le temps d'ouvrir une fiche et d'appuyer sur Lire. */
+export const EARLY_DELAY_MS = 5_000;
+
+/** Le nom court des modes d'un essai (identifiant au journal, ligne du tableau) : `mux`, `prep`, `fiche`, `depart-xstart`, `bw`. */
+export function modeTag(modes: TrialModes | undefined): string {
+  if (!modes) return "";
+  const parts: string[] = [];
+  if (modes.mux) parts.push("mux");
+  if (modes.early) parts.push(modes.early === "serveur" ? "prep" : "fiche");
+  if (modes.startMode) parts.push(`depart-${modes.startMode === "ext-x-start" ? "xstart" : modes.startMode === "fragment" ? "frag" : "saut"}`);
+  if (modes.bandwidth) parts.push("bw");
+  return parts.join("-");
+}
+
+/** Les modes d'un essai, en français, pour l'écran. */
+export function modeLabel(modes: TrialModes | undefined): string {
+  if (!modes) return "";
+  const parts: string[] = [];
+  if (modes.mux) parts.push("son multiplexé");
+  if (modes.early) parts.push(modes.early === "serveur" ? "préparé 5 s avant" : "fiche ouverte 5 s avant");
+  if (modes.startMode) parts.push(`départ par ${modes.startMode === "ext-x-start" ? "EXT-X-START" : modes.startMode === "fragment" ? "#t=" : "saut"}`);
+  if (modes.bandwidth) parts.push("débit annoncé moyen");
+  return parts.join(", ");
+}
 
 /**
  * Les titres d'essai, tirés du recensement du 16/11/2026 (docs/remux-serveur/README.md, « Étape 3b ») :
@@ -76,6 +135,10 @@ export interface Trial {
   audioTour: boolean;
   /** Préparer seulement, sous ces découpes, sans lire : le verdict est le résultat (*Le Prestige*). */
   prepareOnly?: Cut[];
+  /** Les leviers de démarrage (serveur seulement, étape 3e) ; absent : la règle. */
+  modes?: TrialModes;
+  /** L'ordre `actuel` : la page se recharge avant cet essai (le premier essai serveur après ceux du lecteur actuel). */
+  reloadBefore?: boolean;
 }
 
 /** Lecture avant le premier parcours : de quoi voir le démarrage, et le premier segment suivant. */
@@ -95,13 +158,14 @@ const preset = (key: string) => {
   return found;
 };
 
-type TrialOptions = Partial<Pick<Trial, "startAt" | "tours" | "audioTour" | "prepareOnly" | "targetS">>;
+type TrialOptions = Partial<Pick<Trial, "startAt" | "tours" | "audioTour" | "prepareOnly" | "targetS" | "modes">>;
 
 function trial(key: string, player: PlayerKind, options: TrialOptions = {}): Trial {
   const p = preset(key);
   const targetS = options.targetS ?? DEFAULT_TARGET_S;
+  const tag = modeTag(options.modes);
   return {
-    id: options.prepareOnly ? `${p.key}-preparer` : `${p.key}-${player}${targetS !== DEFAULT_TARGET_S ? `-t${targetS}` : ""}`,
+    id: options.prepareOnly ? `${p.key}-preparer` : `${p.key}-${player}${targetS !== DEFAULT_TARGET_S ? `-t${targetS}` : ""}${tag ? `-${tag}` : ""}`,
     key: p.key,
     itemId: p.id,
     title: p.title,
@@ -112,6 +176,7 @@ function trial(key: string, player: PlayerKind, options: TrialOptions = {}): Tri
     tours: options.tours ?? [10],
     audioTour: options.audioTour ?? false,
     prepareOnly: options.prepareOnly,
+    ...(options.modes ? { modes: options.modes } : {}),
   };
 }
 
@@ -142,25 +207,68 @@ const FULL_SERVER: Trial[] = [
   trial("prestige", "serveur", { prepareOnly: ["cra"], tours: [] }),
 ];
 
-export const SERIES: Trial[] = [...FULL_SERVER, ...FULL_SERVER.filter((t) => !t.prepareOnly && t.targetS === DEFAULT_TARGET_S).map(current)];
+/** Les essais du lecteur actuel d'une série : un par titre joué par le serveur selon la règle (ni cible d'essai, ni levier). */
+const currentOf = (server: Trial[]) => server.filter((t) => !t.prepareOnly && t.targetS === DEFAULT_TARGET_S && !t.modes).map(current);
+
+export const SERIES: Trial[] = [...FULL_SERVER, ...currentOf(FULL_SERVER)];
 
 /**
- * Le comparatif rapide, ~12 minutes : un H.264 (*À la Maison Blanche*), un HEVC à IDR seules (*Black Monday*,
- * plus sa cible de 2 s), un HEVC à GOP ouvert (*Ghosted*, DV 4K Atmos), un DV 4K à trois Atmos (*Ted Lasso*) ;
- * 10 sauts chacun, sans tour des pistes, chaque titre par les deux lecteurs.
+ * Le comparatif rapide, ~13 minutes : un H.264 (*À la Maison Blanche*), un HEVC à IDR seules (*Black Monday*), un HEVC
+ * à GOP ouvert (*Ghosted*, DV 4K Atmos), un DV 4K à trois Atmos (*Ted Lasso*) ; 10 sauts chacun, sans tour des pistes,
+ * chaque titre par les deux lecteurs. Depuis l'étape 3e, les deux leviers de démarrage sur les deux titres où
+ * l'écart de première image était le plus grand (*Ghosted* 1,26 contre 0,29 s, *Ted Lasso* 1,12 contre 0,35 s) :
+ * le son multiplexé (a, 5 sauts) et la préparation précoce (b, 3 sauts). La cible de 2 s de *Black Monday* en est
+ * sortie : elle a répondu (1,55 s de reprise contre 1,51 s, comparatif du 16/11) et reste dans la série complète.
  */
 const QUICK_SERVER: Trial[] = [
   trial("maison-blanche", "serveur"),
   trial("black-monday", "serveur"),
-  trial("black-monday", "serveur", { targetS: 2 }),
   trial("ghosted", "serveur"),
   trial("ted-lasso", "serveur"),
+  trial("ghosted", "serveur", { modes: { mux: true }, tours: [5] }),
+  trial("ted-lasso", "serveur", { modes: { mux: true }, tours: [5] }),
+  trial("ghosted", "serveur", { modes: { early: "serveur" }, tours: [3] }),
+  trial("ted-lasso", "serveur", { modes: { early: "serveur" }, tours: [3] }),
 ];
 
-export const QUICK_SERIES: Trial[] = [...QUICK_SERVER, ...QUICK_SERVER.filter((t) => t.targetS === DEFAULT_TARGET_S).map(current)];
+export const QUICK_SERIES: Trial[] = [...QUICK_SERVER, ...currentOf(QUICK_SERVER)];
 
-export function planOf(pass: SeriesPass): Trial[] {
-  return pass === "courte" ? QUICK_SERIES : SERIES;
+/**
+ * Les leviers de démarrage (étape 3e), ~10 minutes, Lumen serveur seul : chaque levier à côté d'un essai témoin de la
+ * règle sur le même titre, dans la même passe (même réseau, même heure).
+ * - témoins : *Black Monday*, *Ghosted*, *Ted Lasso* (5 sauts) ;
+ * - (c) le départ à 600 s — une reprise — par saut après le chargement (la règle d'aujourd'hui), par `EXT-X-START`
+ *   et par `#t=`, sur *Black Monday* (HEVC 4K à IDR) et *Ghosted* (GOP ouvert) ;
+ * - (b) la fiche ouverte 5 s avant Lire (préparation serveur et source posée avec `preload="auto"`) ;
+ * - (d) le BANDWIDTH annoncé au débit moyen ;
+ * - (a) le son multiplexé sur un H.264 à son stéréo (*À la Maison Blanche*), le cas le plus simple.
+ */
+export const LEVER_SERIES: Trial[] = [
+  trial("black-monday", "serveur", { tours: [5] }),
+  trial("ghosted", "serveur", { tours: [5] }),
+  trial("ted-lasso", "serveur", { tours: [5] }),
+  ...(["saut", "ext-x-start", "fragment"] as const).flatMap((startMode) => [
+    trial("black-monday", "serveur", { startAt: 600, modes: { startMode }, tours: [3] }),
+    trial("ghosted", "serveur", { startAt: 600, modes: { startMode }, tours: [3] }),
+  ]),
+  trial("ghosted", "serveur", { modes: { early: "élément" }, tours: [3] }),
+  trial("ted-lasso", "serveur", { modes: { early: "élément" }, tours: [3] }),
+  trial("black-monday", "serveur", { modes: { bandwidth: "moyen" }, tours: [5] }),
+  trial("ghosted", "serveur", { modes: { bandwidth: "moyen" }, tours: [5] }),
+  trial("maison-blanche", "serveur", { modes: { mux: true }, tours: [5] }),
+];
+
+/**
+ * Le plan d'une passe dans l'ordre demandé. `actuel` : les essais du lecteur actuel d'abord, puis ceux du serveur, le
+ * premier marqué `reloadBefore` — la page se recharge là (WebKit refuse un HLS natif après une MediaSource). Une passe
+ * sans lecteur actuel (les leviers) n'a qu'un ordre.
+ */
+export function planOf(pass: SeriesPass, order: SeriesOrder = "serveur"): Trial[] {
+  const plan = pass === "courte" ? QUICK_SERIES : pass === "leviers" ? LEVER_SERIES : SERIES;
+  if (order === "serveur" || !plan.some((t) => t.player === "actuel")) return plan;
+  const currentFirst = plan.filter((t) => t.player === "actuel");
+  const server = plan.filter((t) => t.player === "serveur");
+  return [...currentFirst, ...server.map((t, i) => (i === 0 ? { ...t, reloadBefore: true } : t))];
 }
 
 /**
@@ -172,7 +280,10 @@ export function planOf(pass: SeriesPass): Trial[] {
 export function trialEstimateS(t: Trial): number {
   if (t.prepareOnly) return 15 * t.prepareOnly.length;
   const seeks = t.tours.reduce((sum, n) => sum + n, 0);
-  return 3 + 5 + PLAY_BEFORE_TOURS_MS / 1000 + seeks * 5.5 + (t.audioTour ? 3 * (AUDIO_SWITCH_WATCH_MS / 1000 + 1) : 0);
+  // La chronologie (étape 3e) : cinq échanges d'horloge, un échantillon de débit, la relecture du relevé — ~2 s.
+  const chrono = 2;
+  const early = t.modes?.early ? EARLY_DELAY_MS / 1000 : 0;
+  return 3 + 5 + chrono + early + PLAY_BEFORE_TOURS_MS / 1000 + seeks * 5.5 + (t.audioTour ? 3 * (AUDIO_SWITCH_WATCH_MS / 1000 + 1) : 0);
 }
 
 export function seriesEstimateS(plan: readonly Trial[]): number {
@@ -383,6 +494,11 @@ export interface TrialOutcome {
 /** Ce que la lecture d'un essai a mesuré, tiré de la lecture de la page en la fermant. */
 export interface TrialMeasures {
   firstFrameMs?: number;
+  /** La première image à la position de départ demandée (±2 s) : différente de la première image pour un départ en milieu de film. */
+  targetFrameMs?: number;
+  /** La chronologie de l'essai résumée (étape 3e), et le débit mesuré par la page avant la lecture. */
+  chrono?: ChronoSummary;
+  linkMbps?: number;
   seeks: { ok?: boolean; seekedMs?: number; advanceMs?: number }[];
   freezes: Freeze[];
   errors: string[];
@@ -402,6 +518,8 @@ export interface TrialResult {
   /** La découpe et la cible du serveur ; absentes pour le lecteur actuel. */
   cut?: Cut;
   targetS?: number;
+  /** Les leviers de l'essai (`modeTag`), absents pour la règle. */
+  mode?: string;
   status: TrialStatus;
   reason?: string;
   firstFrameMs?: number;
@@ -426,6 +544,10 @@ export interface TrialResult {
   /** Changements de piste suivis d'un blocage, d'une erreur, d'un gel, ou après lesquels le temps n'a pas repris. */
   audioTrouble?: number;
   verdicts?: string[];
+  targetFrameMs?: number;
+  /** La chronologie résumée (étape 3e) : réserve à la reprise, première requête, segment prêt, débit du lien. */
+  chrono?: ChronoSummary;
+  linkMbps?: number;
 }
 
 export function describeVerdict(cut: Cut, verdict: PreparedVerdict | null): string {
@@ -442,6 +564,7 @@ export function resultOf(t: Trial, rank: number, outcome: TrialOutcome, measures
     title: t.title,
     player: t.player,
     ...(t.player === "serveur" ? { cut: t.cut, targetS: t.targetS } : {}),
+    ...(t.modes ? { mode: modeTag(t.modes) } : {}),
     status: outcome.status,
     reason: outcome.reason,
     seeks: 0,
@@ -476,16 +599,36 @@ export function resultOf(t: Trial, rank: number, outcome: TrialOutcome, measures
     ...(switches.length
       ? { audioSwitches: switches.length, audioTrouble: switches.filter((s) => s.ms === undefined || s.waited || (s.errors ?? 0) > 0 || (s.freezes ?? 0) > 0).length }
       : {}),
+    ...(measures.targetFrameMs !== undefined && measures.targetFrameMs !== measures.firstFrameMs ? { targetFrameMs: measures.targetFrameMs } : {}),
+    ...(measures.chrono && Object.keys(measures.chrono).length ? { chrono: measures.chrono } : {}),
+    ...(measures.linkMbps !== undefined ? { linkMbps: measures.linkMbps } : {}),
   };
+}
+
+/** La chronologie d'un essai en une ligne d'écran : où le temps est passé, médianes des sauts. */
+export function formatChrono(r: Pick<TrialResult, "chrono" | "linkMbps">): string | null {
+  const c = r.chrono;
+  const parts = [
+    r.linkMbps !== undefined ? `lien ${r.linkMbps} Mb/s` : null,
+    c?.firstReqMs !== undefined ? `1re requête +${c.firstReqMs} ms` : null,
+    c?.firstVideoReadyMs !== undefined ? `segment prêt +${c.firstVideoReadyMs} ms` : null,
+    c?.seekedToAdvanceMs !== undefined ? `seeked→reprise ${c.seekedToAdvanceMs} ms` : null,
+    c?.aheadSeekedS !== undefined ? `avance à seeked ${c.aheadSeekedS} s` : null,
+    c?.aheadAdvanceS !== undefined ? `à la reprise ${c.aheadAdvanceS} s` : null,
+    c?.videoAdvance !== undefined ? `${c.videoAdvance} seg. vidéo demandés` : null,
+    c?.readyMaxMs !== undefined ? `serveur ≤ ${c.readyMaxMs} ms` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
 }
 
 /** La ligne d'écran d'un essai fini : première image, médiane des sauts, gels, erreurs. */
 export function formatResult(r: TrialResult): string {
-  const head = `${r.rank}. ${r.title} · ${playerLabel(r)}`;
+  const head = `${r.rank}. ${r.title} · ${playerLabel(r)}${r.mode ? ` (${r.mode})` : ""}`;
   if (r.verdicts) return `${head} — ${r.verdicts.join(" ; ")}`;
   if (r.status === "refusé") return `${head} — refusé : ${r.reason ?? "?"}`;
   const parts = [
     r.firstFrameMs !== undefined ? `image ${r.firstFrameMs} ms` : "sans image",
+    r.targetFrameMs !== undefined ? `image au départ ${r.targetFrameMs} ms` : null,
     r.seeks
       ? `sauts : image ${r.seekedMedianMs ?? "—"}/${r.seekedP90Ms ?? "—"} ms, reprise ${r.seekMedianMs ?? "—"}/${r.advanceP90Ms ?? "—"} ms (méd./p90)${r.missed ? `, ${r.missed} manqué${r.missed > 1 ? "s" : ""}` : ""}`
       : null,
@@ -493,6 +636,7 @@ export function formatResult(r: TrialResult): string {
     `erreurs ${r.errors}`,
     r.audioSwitches ? `pistes ${r.audioSwitches - (r.audioTrouble ?? 0)}/${r.audioSwitches} nettes` : null,
     r.status !== "ok" ? `${r.status.toUpperCase()}${r.reason ? ` : ${r.reason}` : ""}` : null,
+    formatChrono(r),
   ];
   return `${head} — ${parts.filter(Boolean).join(" · ")}`;
 }
@@ -516,8 +660,16 @@ export interface SeriesDriver {
   play(ms: number): Promise<void>;
   tour(count: number, index: number): Promise<void>;
   audioTour(): Promise<void>;
-  /** Ferme l'essai — la lecture s'il y en a une — et rend sa ligne de résultat. */
-  close(t: Trial, rank: number, outcome: TrialOutcome): TrialResult;
+  /**
+   * Ferme l'essai — la lecture s'il y en a une — et rend sa ligne de résultat. Asynchrone depuis l'étape 3e : la
+   * chronologie relit le relevé du serveur avant de dessiner les cascades.
+   */
+  close(t: Trial, rank: number, outcome: TrialOutcome): TrialResult | Promise<TrialResult>;
+  /**
+   * L'ordre `actuel` : avant `t` (`reloadBefore`), garder l'état de la série et recharger la page. Ne rend jamais la
+   * main dans un navigateur (la page part) ; la série reprend au rang `index` après l'appui de l'administrateur.
+   */
+  reload?(index: number): Promise<void>;
   /** Envoie la ligne de l'essai ; un échec d'envoi ne change rien à la série (le pilote garde la ligne). */
   send(t: Trial, rank: number, result: TrialResult): Promise<void>;
 }
@@ -556,12 +708,23 @@ async function runTrial(t: Trial, rank: number, d: SeriesDriver): Promise<TrialO
  * pas priver les suivants de leur mesure. « Arrêter » finit l'essai en cours (sa ligne part quand même) et rien
  * après.
  */
-export async function runSeries(plan: readonly Trial[], d: SeriesDriver, onResult?: (result: TrialResult) => void): Promise<{ results: TrialResult[]; stopped: boolean }> {
+export async function runSeries(
+  plan: readonly Trial[],
+  d: SeriesDriver,
+  onResult?: (result: TrialResult) => void,
+  options: { from?: number } = {}
+): Promise<{ results: TrialResult[]; stopped: boolean }> {
   const results: TrialResult[] = [];
-  for (let i = 0; i < plan.length; i++) {
+  const from = options.from ?? 0;
+  for (let i = from; i < plan.length; i++) {
     if (d.stopped()) break;
     const t = plan[i];
     const rank = i + 1;
+    // L'ordre `actuel` : la page se recharge avant le premier essai serveur — sauf si la série reprend justement là.
+    if (t.reloadBefore && i !== from && d.reload) {
+      await d.reload(i);
+      return { results, stopped: d.stopped() };
+    }
     d.begin(t, rank);
     let outcome: TrialOutcome;
     try {
@@ -571,7 +734,7 @@ export async function runSeries(plan: readonly Trial[], d: SeriesDriver, onResul
     }
     let result: TrialResult;
     try {
-      result = d.close(t, rank, outcome);
+      result = await d.close(t, rank, outcome);
     } catch (error) {
       result = resultOf(t, rank, { status: "échec", reason: `fermeture ${errorText(error)}` });
     }
@@ -598,14 +761,17 @@ export interface SeriesAnswers {
 }
 
 /** Le marquage d'une ligne d'essai : la série (pour joindre ses lignes), l'essai, son rang, le total, le lecteur. */
-export function trialTag(serie: string, t: Trial, rank: number, of: number, meta: { pass: SeriesPass; seed: number }) {
-  return { serie, trial: t.id, rank, of, player: t.player, pass: meta.pass, seed: meta.seed };
+export function trialTag(serie: string, t: Trial, rank: number, of: number, meta: { pass: SeriesPass; seed: number; order?: SeriesOrder }) {
+  return { serie, trial: t.id, rank, of, player: t.player, pass: meta.pass, seed: meta.seed, ...(meta.order ? { order: meta.order } : {}), ...(t.modes ? { mode: modeTag(t.modes) } : {}) };
 }
 
 /** Ce qu'une colonne du tableau comparatif garde d'un essai. */
 export interface ComparisonCell {
   status: TrialStatus;
   firstFrameMs?: number;
+  targetFrameMs?: number;
+  chrono?: ChronoSummary;
+  linkMbps?: number;
   seekedMedianMs?: number;
   seekedP90Ms?: number;
   advanceMedianMs?: number;
@@ -622,6 +788,8 @@ export interface ComparisonRow {
   title: string;
   /** 4 pour la comparaison des deux lecteurs ; 2 pour l'essai des segments courts (serveur seul). */
   targetS: number;
+  /** Un levier de démarrage (serveur seul, étape 3e) : sa propre ligne. */
+  mode?: string;
   serveur?: ComparisonCell;
   actuel?: ComparisonCell;
 }
@@ -636,11 +804,14 @@ export function comparisonRows(results: readonly TrialResult[]): ComparisonRow[]
   for (const r of results) {
     if (r.verdicts) continue;
     const targetS = r.player === "serveur" ? (r.targetS ?? DEFAULT_TARGET_S) : DEFAULT_TARGET_S;
-    const id = `${r.key}|${targetS}`;
-    const row = rows.get(id) ?? { key: r.key, title: r.title, targetS };
+    const id = `${r.key}|${targetS}|${r.mode ?? ""}`;
+    const row = rows.get(id) ?? { key: r.key, title: r.title, targetS, ...(r.mode ? { mode: r.mode } : {}) };
     row[r.player] = {
       status: r.status,
       firstFrameMs: r.firstFrameMs,
+      targetFrameMs: r.targetFrameMs,
+      chrono: r.chrono,
+      linkMbps: r.linkMbps,
       seekedMedianMs: r.seekedMedianMs,
       seekedP90Ms: r.seekedP90Ms,
       advanceMedianMs: r.seekMedianMs,
@@ -665,10 +836,10 @@ export function summaryBody(
   of: number,
   results: readonly TrialResult[],
   answers: SeriesAnswers,
-  meta: { elapsedS: number; stopped: boolean; pass: SeriesPass; seed: number }
+  meta: { elapsedS: number; stopped: boolean; pass: SeriesPass; seed: number; order?: SeriesOrder }
 ) {
   return {
-    auto: { serie, summary: true, of, done: results.length, elapsedS: Math.round(meta.elapsedS), stopped: meta.stopped, pass: meta.pass, seed: meta.seed },
+    auto: { serie, summary: true, of, done: results.length, elapsedS: Math.round(meta.elapsedS), stopped: meta.stopped, pass: meta.pass, seed: meta.seed, ...(meta.order ? { order: meta.order } : {}) },
     trials: results.map((r) => ({ ...r })),
     comparison: comparisonRows(results),
     answers: {

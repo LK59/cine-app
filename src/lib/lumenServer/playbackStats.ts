@@ -89,6 +89,46 @@ export interface PlaybackStats {
    * préparé ou partagé, `x` si l'envoi a été coupé. Voir `TRACE_ENTRIES`.
    */
   trace: string[];
+  /**
+   * La chronologie de la lecture, requête par requête (étape 3e, DECISIONS §160) — seulement si la page de banc l'a
+   * demandée (`markChrono`, route `chrono`) ; null sinon : les lectures ordinaires (étape 4) n'en paient rien.
+   */
+  chrono: ChronoEntry[] | null;
+}
+
+/**
+ * Une requête de la lecture, horodatée par le serveur (étape 3e) : ce que la page ne voit pas d'un HLS natif.
+ * `at` est l'arrivée dans la route, sur l'horloge du serveur (`serverClockMs` : ms depuis l'époque, à la
+ * fraction près) — la page la ramène sur la sienne avec le décalage mesuré par la route `chrono`. Les autres
+ * instants sont relatifs à `at`, en ms :
+ * - `ready` : la réponse est prête (liste écrite, init lu, segment construit — file et disque compris) ;
+ * - `first` / `last` : le premier et le dernier morceau de 256 Kio remis au réseau (segments seulement).
+ *   **Remis n'est pas reçu** : entre Node et l'iPhone, les tampons du noyau (les deux sockets) et du relais
+ *   inverse tiennent plusieurs Mo — un segment de 3 Mo « part » en 2 ms. `last` est donc un minorant de
+ *   l'arrivée, et un débit calculé dessus un majorant, sauf sur une rafale bien plus grosse que ces tampons.
+ */
+export interface ChronoEntry {
+  name: string;
+  at: number;
+  ready?: number;
+  first?: number;
+  last?: number;
+  bytes?: number;
+  /** Construction et attente dans la file (segments construits pour cette requête). */
+  build?: number;
+  wait?: number;
+  reused?: boolean;
+  aborted?: boolean;
+  /** Un statut autre que 200 (410, 409, 503, 500). */
+  status?: number;
+}
+
+/** Les requêtes gardées par lecture chronométrée : une série de 20 sauts en fait ~500. */
+export const CHRONO_ENTRIES = 800;
+
+/** L'horloge des horodatages de la chronologie : ms depuis l'époque, à la fraction près, monotone dans le processus. */
+export function serverClockMs(): number {
+  return performance.timeOrigin + performance.now();
 }
 
 interface State {
@@ -140,6 +180,7 @@ export function playbackOf(s: string, init: { user: string; itemId: string; vers
       maxVideoN: null,
       audioByTrack: {},
       trace: [],
+      chrono: null,
     };
     st.playbacks.set(key, p);
     // Le plus ancien part : une `Map` garde l'ordre d'insertion, et une lecture vivante est réinsérée.
@@ -257,6 +298,31 @@ export function lumenPlaybackFields(s: string, user: string, now = Date.now()): 
   }
   if (p.lastVideoN !== null) fields["srv.lastN"] = p.lastVideoN;
   return fields;
+}
+
+/**
+ * La page de banc demande la chronologie de la lecture `s` (route `chrono`, à la synchronisation des horloges,
+ * avant la première requête de Safari) : à partir de là, chaque requête de cette lecture y est notée.
+ */
+export function markChrono(s: string, init: { user: string; itemId: string }, now = Date.now()): PlaybackStats {
+  const p = playbackOf(s, { ...init, version: "" }, now);
+  p.chrono ??= [];
+  return p;
+}
+
+/** Une requête de plus dans la chronologie, ou null si la lecture n'est pas chronométrée. L'appelant la complète. */
+export function chronoEntry(p: PlaybackStats, name: string, at: number): ChronoEntry | null {
+  if (!p.chrono) return null;
+  const entry: ChronoEntry = { name: name.slice(0, 40), at };
+  p.chrono.push(entry);
+  if (p.chrono.length > CHRONO_ENTRIES) p.chrono.splice(0, p.chrono.length - CHRONO_ENTRIES);
+  return entry;
+}
+
+/** La chronologie de la lecture `s` pour ce compte, ou null. */
+export function lumenChronoOf(s: string, user: string): ChronoEntry[] | null {
+  const p = lumenPlaybackStats(s, user);
+  return p?.chrono ? p.chrono.map((e) => ({ ...e })) : null;
 }
 
 /** Pour les tests. */

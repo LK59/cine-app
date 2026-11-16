@@ -38,7 +38,8 @@ import { createT, loadLocaleDict, localeOf } from "@/lib/i18n";
 import type { LabelOptions } from "@/lib/trackLabel";
 import { cuttingOfTag, LUMEN_FORMAT_VERSION, parseLumenPath, segmentName, type LumenPath } from "./format";
 import { lumenEligibility } from "./eligibility";
-import { isPlaybackId, noteBuilt, noteRefused, noteRequest, noteSent, noteTrace, playbackOf, type PlaybackStats } from "./playbackStats";
+import { chronoEntry, isPlaybackId, noteBuilt, noteRefused, noteRequest, noteSent, noteTrace, playbackOf, serverClockMs, type ChronoEntry, type PlaybackStats } from "./playbackStats";
+import { masterTrialOptions, muxedInit, muxedMaster, muxedMediaPlaylist, muxedSegment, muxVersion, parseMuxedPath, splitMuxTag, withMasterTrials, type MuxedPath } from "./trials";
 import {
   defaultAudioTrack,
   formatTagOf,
@@ -92,10 +93,11 @@ async function playlistResponse(req: NextRequest, text: string, serverTiming: st
  * été passé au réseau (`sendMs`, le trajet vu du serveur) ; une annulation (Safari qui abandonne les
  * segments d'avant un saut, une page fermée) est comptée à part.
  */
-export function measuredBody(bytes: Uint8Array, done: (sendMs: number, aborted: boolean) => void): ReadableStream<Uint8Array> {
+export function measuredBody(bytes: Uint8Array, done: (sendMs: number, aborted: boolean) => void, first?: () => void): ReadableStream<Uint8Array> {
   const began = performance.now();
   let at = 0;
   let finished = false;
+  let started = false;
   const finish = (aborted: boolean) => {
     if (finished) return;
     finished = true;
@@ -108,6 +110,11 @@ export function measuredBody(bytes: Uint8Array, done: (sendMs: number, aborted: 
           controller.close();
           finish(false);
           return;
+        }
+        if (!started) {
+          // Le premier morceau demandé par le réseau : la chronologie (étape 3e) y lit l'instant du premier octet.
+          started = true;
+          first?.();
         }
         const end = Math.min(bytes.length, at + SEND_CHUNK);
         controller.enqueue(bytes.subarray(at, end));
@@ -130,6 +137,8 @@ function audioParam(req: NextRequest): number | undefined | null {
 
 export async function serveLumenName(req: NextRequest, params: LumenNameParams): Promise<NextResponse> {
   const receivedAt = performance.now();
+  // L'arrivée sur l'horloge de la chronologie (étape 3e) : notée seulement si la lecture est chronométrée.
+  const arrivedAt = serverClockMs();
   const { itemId, version, s } = params;
   // Une adresse mal formée est une adresse qui ne désigne rien : 410, comme une autre version — un
   // 400 compterait pour CrowdSec (voir `service.ts`).
@@ -139,10 +148,13 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
   if (!isLumenVersion(version) || !isPlaybackId(s)) return goneResponse("lumen-inconnu", "Adresse inconnue");
   // La découpe vient de l'adresse : une version d'un autre format (un déploiement qui l'a fait monter, une
   // révision des essais) ne désigne plus rien.
-  const cutting = cuttingOfTag(formatTagOf(version));
+  // L'essai multiplexé (étape 3e, `trials.ts`) se lit dans la version (`2m1-…`) ; sans lui, rien ne change.
+  const { base, mux } = splitMuxTag(formatTagOf(version));
+  const cutting = cuttingOfTag(base);
   if (!cutting) return goneResponse("lumen-perime", "Autre version du format", { format: LUMEN_FORMAT_VERSION });
   const name = params.name.join("/");
-  if (!parseLumenPath(name)) return goneResponse("lumen-inconnu", "Nom inconnu");
+  const muxed = mux ? parseMuxedPath(name) : null;
+  if (!parseLumenPath(name) && !muxed) return goneResponse("lumen-inconnu", "Nom inconnu");
 
   const context = { itemId, s, name };
   let found: Awaited<ReturnType<typeof lumenIndexOf>>;
@@ -153,30 +165,133 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
   }
   if ("refusal" in found) return refusedResponse(found.refusal);
   const { index } = found;
-  const current = lumenVersionOf(index);
+  const ruled = lumenVersionOf(index);
+  // L'adresse d'un essai multiplexé porte la version de la règle plus `m1` : comparée telle quelle.
+  const current = mux ? muxVersion(ruled) : ruled;
   const stats = playbackOf(s, { user: session.u, itemId, version: current });
-  const parsed = parseLumenPath(name)!;
+  const chrono = chronoEntry(stats, name, arrivedAt);
+  const answer = (response: NextResponse): NextResponse => {
+    if (chrono && response.status !== 200) chrono.status = response.status;
+    return response;
+  };
+  const parsed = parseLumenPath(name) ?? { kind: muxed!.kind };
   noteRequest(stats, parsed.kind);
   if (current !== version) {
     noteRefused(stats, "stale");
-    return goneResponse("lumen-perime", "Le fichier a changé", { version: current });
+    return answer(goneResponse("lumen-perime", "Le fichier a changé", { version: current }));
   }
-  if (index.refusal) return refusedResponse(index.refusal);
+  if (index.refusal) return answer(refusedResponse(index.refusal));
   const engine = lumenServerEngine();
-  const path = engine.resolve(index, name);
+  const path = muxed ? (muxedServed(index, muxed) ? muxed : null) : engine.resolve(index, name);
   if (!path) {
     noteRefused(stats, "stale");
-    return goneResponse("lumen-inconnu", "Piste ou segment hors de l'index");
+    return answer(goneResponse("lumen-inconnu", "Piste ou segment hors de l'index"));
   }
   const idxMs = performance.now() - receivedAt;
 
   try {
-    return await serveResolved(req, { engine, index, version: current, path, stats, receivedAt, idxMs, context });
+    const resolved = { engine, index, version: ruled, stats, receivedAt, idxMs, context, chrono };
+    return answer(muxed ? await serveMuxed(req, { ...resolved, path: muxed }) : await serveResolved(req, { ...resolved, path: path as LumenPath, mux }));
   } catch (error) {
     const { response, kind, code } = lumenErrorResponse(error, context);
     noteRefused(stats, kind, code);
-    return response;
+    return answer(response);
   }
+}
+
+/** Une piste multiplexée n'existe que pour une piste servie, et un segment que dans l'index. */
+function muxedServed(index: Parameters<typeof lumenVersionOf>[0], path: MuxedPath): boolean {
+  const track = index.audio.find((a) => a.number === path.track);
+  if (!index.video || !track || track.refusal || !index.inits.audio[path.track] || !index.inits.video) return false;
+  return path.kind !== "segment" || path.n < index.segments.length;
+}
+
+/** Les instants d'une réponse dans la chronologie : prête maintenant, relatifs à l'arrivée. */
+function noteReady(chrono: ChronoEntry | null): void {
+  if (chrono) chrono.ready = round1(serverClockMs() - chrono.at);
+}
+
+const round1 = (v: number) => Math.round(v * 10) / 10;
+
+/**
+ * L'essai multiplexé (levier a, étape 3e) : la liste, l'init et les segments « vidéo + piste N ». Un segment
+ * multiplexé est fait des deux segments de la règle — construits, partagés et préparés exactement comme eux
+ * (`lumenSegment`, la clé porte la version de la règle : un segment de reprise préparé sert aussi l'essai) —,
+ * dont les fragments sont entrelacés (`muxedSegment`). Rien ici n'est gardé en plus.
+ */
+async function serveMuxed(
+  req: NextRequest,
+  r: {
+    engine: ReturnType<typeof lumenServerEngine>;
+    index: Parameters<typeof lumenVersionOf>[0];
+    version: string;
+    path: MuxedPath;
+    stats: PlaybackStats;
+    receivedAt: number;
+    idxMs: number;
+    chrono: ChronoEntry | null;
+  }
+): Promise<NextResponse> {
+  const { engine, index, path, stats } = r;
+  const audio = { kind: "audio" as const, track: path.track };
+  if (path.kind === "playlist") {
+    const text = muxedMediaPlaylist(engine.playlist(index, { kind: "video" }), path.track);
+    noteReady(r.chrono);
+    return playlistResponse(req, text, timing({ app: performance.now() - r.receivedAt, idx: r.idxMs }));
+  }
+  if (path.kind === "init") {
+    const bytes = muxedInit(engine.init(index, { kind: "video" }), engine.init(index, audio));
+    noteSent(stats, { kind: "init", video: true, bytes: bytes.length, sendMs: 0, aborted: false });
+    noteReady(r.chrono);
+    if (r.chrono) r.chrono.bytes = bytes.length;
+    return new NextResponse(new Uint8Array(bytes), {
+      headers: { "Content-Type": SEGMENT_TYPE, "Cache-Control": SEGMENT_CACHE, "Server-Timing": timing({ app: performance.now() - r.receivedAt, idx: r.idxMs }), ...lengthHeader(bytes.length) },
+    });
+  }
+  noteMediaRead();
+  const [v, a] = await Promise.all([lumenSegment(engine, index, r.version, { kind: "video" }, path.n), lumenSegment(engine, index, r.version, audio, path.n)]);
+  noteBuilt(stats, { video: true, n: path.n, buildMs: v.segment.buildMs, waitMs: v.segment.waitMs, diskMs: v.segment.diskMs, reused: v.reused, falseKey: v.segment.falseKey });
+  noteBuilt(stats, { video: false, n: path.n, buildMs: a.segment.buildMs, waitMs: a.segment.waitMs, diskMs: a.segment.diskMs, reused: a.reused });
+  const bytes = muxedSegment(v.segment.bytes, a.segment.bytes, path.n);
+  return segmentResponse(r, { bytes, name: `vm${path.track}/${path.n}.m4s`, video: true, reused: v.reused && a.reused, buildMs: Math.max(v.segment.buildMs, a.segment.buildMs), waitMs: Math.max(v.segment.waitMs, a.segment.waitMs), diskMs: v.segment.diskMs + a.segment.diskMs });
+}
+
+/**
+ * La réponse d'un segment : le corps remis par morceaux et mesuré (`measuredBody`), le relevé, la trace, et la
+ * chronologie si la lecture en a une (prête, premier et dernier morceau remis).
+ */
+function segmentResponse(
+  r: { stats: PlaybackStats; receivedAt: number; idxMs: number; chrono: ChronoEntry | null },
+  seg: { bytes: Uint8Array; name: string; video: boolean; track?: number; reused: boolean; buildMs: number; waitMs: number; diskMs: number }
+): NextResponse {
+  const { stats, chrono } = r;
+  const bytes = seg.bytes;
+  noteReady(chrono);
+  if (chrono) {
+    chrono.bytes = bytes.length;
+    if (seg.reused) chrono.reused = true;
+    else {
+      chrono.build = Math.round(seg.buildMs);
+      chrono.wait = Math.round(seg.waitMs);
+    }
+  }
+  const body = measuredBody(
+    bytes,
+    (sendMs, aborted) => {
+      if (chrono) {
+        chrono.last = round1(serverClockMs() - chrono.at);
+        if (aborted) chrono.aborted = true;
+      }
+      noteSent(stats, { kind: "segment", video: seg.video, bytes: bytes.length, sendMs: Math.round(sendMs), aborted, track: seg.track });
+      noteTrace(stats, { name: seg.name, buildMs: seg.reused ? 0 : seg.buildMs, waitMs: seg.reused ? 0 : seg.waitMs, sendMs, reused: seg.reused, aborted, bytes: bytes.length });
+    },
+    chrono ? () => (chrono.first = round1(serverClockMs() - chrono.at)) : undefined
+  );
+  const parts: Record<string, number> = { app: performance.now() - r.receivedAt, idx: r.idxMs };
+  if (!seg.reused) Object.assign(parts, { wait: seg.waitMs, build: seg.buildMs, disk: seg.diskMs });
+  return new NextResponse(body, {
+    headers: { "Content-Type": SEGMENT_TYPE, "Cache-Control": SEGMENT_CACHE, "Server-Timing": timing(parts), ...lengthHeader(bytes.length) },
+  });
 }
 
 async function serveResolved(
@@ -190,6 +305,9 @@ async function serveResolved(
     receivedAt: number;
     idxMs: number;
     context: Record<string, unknown>;
+    chrono: ChronoEntry | null;
+    /** L'essai multiplexé : la liste maître désigne la piste dans les segments vidéo (`muxedMaster`). */
+    mux: boolean;
   }
 ): Promise<NextResponse> {
   const { engine, index, path, stats } = r;
@@ -202,15 +320,22 @@ async function serveResolved(
       if (!verdict.ok) return refusedResponse(verdict);
       // Des octets d'un film vont partir : l'indexation des répliques se tait (DECISIONS.md §88).
       noteMediaRead();
-      const text = engine.master(index, { audioTrack, labels: await labelsFor(req) });
+      let text = engine.master(index, { audioTrack, labels: await labelsFor(req) });
+      // Les essais de la seule liste maître (étape 3e, `trials.ts`) : sans `?start=` ni `?bw=`, le texte de la règle.
+      text = withMasterTrials(text, masterTrialOptions(req.nextUrl.searchParams));
+      if (r.mux && audioTrack !== null) text = muxedMaster(text, audioTrack);
+      noteReady(r.chrono);
       return playlistResponse(req, text, timing({ app: performance.now() - r.receivedAt, idx: r.idxMs }));
     }
     case "playlist": {
       const text = engine.playlist(index, path.rendition);
+      noteReady(r.chrono);
       return playlistResponse(req, text, timing({ app: performance.now() - r.receivedAt, idx: r.idxMs }));
     }
     case "init": {
       const bytes = engine.init(index, path.rendition);
+      noteReady(r.chrono);
+      if (r.chrono) r.chrono.bytes = bytes.length;
       noteSent(stats, { kind: "init", video: path.rendition.kind === "video", bytes: bytes.length, sendMs: 0, aborted: false });
       return new NextResponse(new Uint8Array(bytes), {
         headers: {
@@ -226,17 +351,8 @@ async function serveResolved(
       const video = path.rendition.kind === "video";
       const { segment, reused } = await lumenSegment(engine, index, r.version, path.rendition, path.n);
       noteBuilt(stats, { video, n: path.n, buildMs: segment.buildMs, waitMs: segment.waitMs, diskMs: segment.diskMs, reused, falseKey: segment.falseKey });
-      const bytes = segment.bytes;
       const track = path.rendition.kind === "audio" ? path.rendition.track : undefined;
-      const body = measuredBody(bytes, (sendMs, aborted) => {
-        noteSent(stats, { kind: "segment", video, bytes: bytes.length, sendMs: Math.round(sendMs), aborted, track });
-        noteTrace(stats, { name: segmentName(path.rendition, path.n), buildMs: reused ? 0 : segment.buildMs, waitMs: reused ? 0 : segment.waitMs, sendMs, reused, aborted, bytes: bytes.length });
-      });
-      const parts: Record<string, number> = { app: performance.now() - r.receivedAt, idx: r.idxMs };
-      if (!reused) Object.assign(parts, { wait: segment.waitMs, build: segment.buildMs, disk: segment.diskMs });
-      return new NextResponse(body, {
-        headers: { "Content-Type": SEGMENT_TYPE, "Cache-Control": SEGMENT_CACHE, "Server-Timing": timing(parts), ...lengthHeader(bytes.length) },
-      });
+      return segmentResponse(r, { bytes: segment.bytes, name: segmentName(path.rendition, path.n), video, track, reused, buildMs: segment.buildMs, waitMs: segment.waitMs, diskMs: segment.diskMs });
     }
   }
 }

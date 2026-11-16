@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { LumenTest } from "@/components/lumenTest/LumenTest";
-import { QUICK_SERIES, SERIES } from "@/components/lumenTest/autoSeries";
+import { QUICK_SERIES, SERIES, planOf } from "@/components/lumenTest/autoSeries";
 
 // La page de banc `/lumen-test` (étape 3b, DECISIONS.md §157) : ce qu'on peut en éprouver sans lecteur
 // HLS — elle se monte, propose les trois découpes, refuse un identifiant mal formé sans appeler le
@@ -20,6 +20,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  window.sessionStorage.clear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -67,10 +68,16 @@ describe("la page de banc de Lumen serveur", () => {
     vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.reject(new DOMException("pas de source", "NotSupportedError")));
     const eligibility: string[] = [];
     const direct: string[] = [];
+    const chrono: string[] = [];
     const lines: Record<string, unknown>[] = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
+        // La chronologie (étape 3e) : l'échantillon de débit avant chaque essai du lecteur actuel.
+        if (url.includes("/chrono?")) {
+          chrono.push(url);
+          return new Response(new Uint8Array(16), { status: 200 });
+        }
         if (url.startsWith("/api/lumen/")) {
           eligibility.push(url);
           const cut = new URL(url, "http://x").searchParams.get("cut");
@@ -85,11 +92,11 @@ describe("la page de banc de Lumen serveur", () => {
         return new Response(null, { status: 204 });
       })
     );
-    return { eligibility, direct, lines };
+    return { eligibility, direct, lines, chrono };
   }
 
   it("« Tout enchaîner » : chaque essai demandé dans l'ordre et envoyé, même refusé, puis le tableau et le bilan", async () => {
-    const { eligibility, direct, lines } = refusingServer();
+    const { eligibility, direct, lines, chrono } = refusingServer();
     render(<LumenTest />);
     fireEvent.click(screen.getByText(/^Tout enchaîner/));
     const sendSummary = await screen.findByText("Envoyer le bilan", undefined, { timeout: 5000 });
@@ -97,6 +104,9 @@ describe("la page de banc de Lumen serveur", () => {
     const expected = SERIES.flatMap((t) => (t.prepareOnly ?? [t.cut]).map((cut) => `${t.itemId}:${cut}:${t.player === "serveur" && t.targetS !== 4 ? t.targetS : "-"}`));
     expect(eligibility.map((u) => `${u.split("/")[3]}:${new URL(u, "http://x").searchParams.get("cut")}:${new URL(u, "http://x").searchParams.get("target") ?? "-"}`)).toEqual(expected);
     expect(direct.map((u) => u.split("/")[4])).toEqual(SERIES.filter((t) => t.player === "actuel").map((t) => t.itemId));
+    // Un échantillon de débit par essai du lecteur actuel ; aucun échange d'horloge pour un essai serveur refusé.
+    expect(chrono.filter((u) => u.includes("&bytes=")).length).toBe(SERIES.filter((t) => t.player === "actuel").length);
+    expect(chrono.filter((u) => !u.includes("&bytes="))).toEqual([]);
     // Une ligne par essai, marquée de l'essai, de son rang, du lecteur et de la passe, refus compris.
     expect(lines.map((l) => (l.auto as { trial: string; rank: number }).trial)).toEqual(SERIES.map((t) => t.id));
     expect(lines.map((l) => (l.auto as { rank: number }).rank)).toEqual(SERIES.map((_, i) => i + 1));
@@ -124,11 +134,37 @@ describe("la page de banc de Lumen serveur", () => {
   });
 
   it("« Comparatif rapide » : sa propre série, chaque ligne marquée `pass: \"courte\"`", async () => {
-    const { lines } = refusingServer();
+    const { lines, eligibility } = refusingServer();
     render(<LumenTest />);
     fireEvent.click(screen.getByText(/^Comparatif rapide/));
     await screen.findByText("Envoyer le bilan", undefined, { timeout: 5000 });
     expect(lines.map((l) => (l.auto as { trial: string }).trial)).toEqual(QUICK_SERIES.map((t) => t.id));
     expect(lines.every((l) => (l.auto as { pass: string }).pass === "courte")).toBe(true);
+    // Le levier a demande son verdict multiplexé (`mux=1`) ; les autres non.
+    expect(eligibility.map((u) => new URL(u, "http://x").searchParams.get("mux") === "1")).toEqual(QUICK_SERIES.map((t) => !!t.modes?.mux));
+  });
+
+  it("l'ordre « lecteur actuel d'abord » : la série se garde et recharge la page, puis reprend au premier essai serveur après un appui", async () => {
+    const { lines } = refusingServer();
+    const plan = planOf("courte", "actuel");
+    const firstServer = plan.findIndex((t) => t.reloadBefore);
+    const view = render(<LumenTest />);
+    fireEvent.click(screen.getByText("Lecteur actuel d'abord (rechargement)"));
+    fireEvent.click(screen.getByText(/^Comparatif rapide/));
+    // Le rechargement : la série gardée dans sessionStorage, au rang du premier essai serveur.
+    await waitFor(() => expect(window.sessionStorage.getItem("cine:lumen-test-serie")).not.toBeNull(), { timeout: 5000 });
+    const saved = JSON.parse(window.sessionStorage.getItem("cine:lumen-test-serie")!);
+    expect(saved).toMatchObject({ pass: "courte", order: "actuel", index: firstServer });
+    expect(saved.results.map((r: { trial: string }) => r.trial)).toEqual(plan.slice(0, firstServer).map((t) => t.id));
+    expect(lines.map((l) => (l.auto as { trial: string }).trial)).toEqual(plan.slice(0, firstServer).map((t) => t.id));
+    view.unmount();
+    // La page rechargée : « Touchez pour continuer », puis la suite de la série, avec la même série et la même graine.
+    render(<LumenTest />);
+    fireEvent.click(screen.getByText("Touchez pour continuer"));
+    await screen.findByText("Envoyer le bilan", undefined, { timeout: 5000 });
+    expect(window.sessionStorage.getItem("cine:lumen-test-serie")).toBeNull();
+    expect(lines.map((l) => (l.auto as { trial: string }).trial)).toEqual(plan.map((t) => t.id));
+    expect(new Set(lines.map((l) => (l.auto as { serie: string }).serie)).size).toBe(1);
+    expect(lines.every((l) => (l.auto as { order: string }).order === "actuel")).toBe(true);
   });
 });

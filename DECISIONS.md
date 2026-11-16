@@ -11422,3 +11422,57 @@ seuls et recollés, décodés par ffmpeg sans une erreur (`crccheck+bitstream+ex
 identiques, son couvrant l'image à une trame près. Recensement des 300 fichiers : **88,0 % ± 4,5 → 96,2 % ± 2,4**
 servables (piste par défaut, extrapolé), 24 gagnés, aucun perdu ; restent `son-codec` (3,6 %, phase 2) et
 `index-troue` (0,2 %).
+## 160. La chronologie de Lumen serveur, et ses leviers de démarrage en modes d'essai (17/11/2026)
+
+**Règle.** La page de banc `/lumen-test` mesure **d'où vient le temps** d'un démarrage et d'un saut (étape 3e de
+`docs/remux-serveur/`), et les leviers de démarrage sont des **modes d'essai** : sans eux, Lumen serveur sert les mêmes
+listes, les mêmes segments et les mêmes adresses qu'avant, et le lecteur de production ne change pas d'un octet.
+- **Les horloges** (`chronology.ts` : `clockSample`, `bestClock`) : la route `GET /api/lumen/{id}/chrono?s=` rend
+  l'arrivée et le départ de sa réponse sur `serverClockMs` ; la page garde le décalage de l'échange au plus court
+  aller-retour, à la manière de NTP. Le premier échange **marque la lecture chronométrée** (`markChrono`) : seules les
+  lectures de la page de banc tiennent une chronologie (`PlaybackStats.chrono`, 800 requêtes au plus), les autres non.
+- **Côté serveur** (`ChronoEntry`, `serve.ts`) : arrivée, prête, premier et dernier morceau remis (`measuredBody`
+  prend un rappel au premier morceau), poids, préparé, coupé, statut. **Remis n'est pas reçu** — les tampons des
+  sockets tiennent plusieurs Mo ; le débit réel vient d'un échantillon que la page mesure (`?bytes=N`, Resource Timing).
+- **Côté page** : les évènements de `<video>`, `readyState` et l'avance de `buffered` toutes les 100 ms, la première
+  image et la première image à la position demandée ; une **cascade** par démarrage et par saut (`buildCascade`),
+  à l'écran et dans la ligne `kind: "lumen-test"` (`runs[].chrono`, relue et bornée par `testReport.ts`).
+- **Les leviers** (`trials.ts`, `TrialModes`) : (a) le son par défaut multiplexé dans les segments vidéo — **porté par
+  la version de l'adresse** (suffixe `m1` après la découpe, `muxVersion`, `splitMuxTag`), noms `vm{N}.m3u8`,
+  `init-vm{N}.mp4`, `vm{N}/{k}.m4s` qui n'existent que sous cette version ; (b) la préparation précoce (`prep` : `POST
+  …/prepare` 5 s avant Lire ; `fiche` : la source posée en plus, `preload="auto"`) ; (c) le départ par `EXT-X-START`
+  (`?start=`) ou `#t=`, à côté du saut après chargement ; (d) le BANDWIDTH annoncé moyen (`?bw=moyen`). (c) et (d)
+  ne touchent que la liste maître, jamais gardée : une requête suffit, sans version.
+- **L'ordre inverse** : le lecteur actuel d'abord, la page rechargée (sessionStorage `cine:lumen-test-serie`), Lumen
+  serveur ensuite après « Touchez pour continuer » (`planOf(pass, "actuel")`, `reloadBefore`, `SeriesDriver.reload`,
+  `runSeries(…, { from })`).
+
+**Pourquoi.** Le comparatif rapide du 16/11 laissait Lumen serveur 0,2 à 1 s derrière le lecteur actuel à la première
+image et ~0,2 à 0,5 s à la reprise d'un saut, et l'explication en vigueur (« Safari exige une réserve ») n'était pas
+prouvée : la trace serveur datait des remises au réseau qui tombent dans des tampons de plusieurs Mo (segments de 3 à
+10 Mo « remis » en 1 à 60 ms), sur une horloge que rien ne recalait sur celle de la page. Sans arrivée côté appareil
+ni horloge commune, réseau, réserve et serveur se confondaient. Les leviers ne valent qu'avec cette mesure : chacun
+s'essaie à côté d'un témoin du même titre, dans la même passe.
+
+**Ce que les spécifications disent du levier a** (vérifié le 17/11/2026) : RFC 8216 §4.3.4.2.1 — une piste AUDIO sans
+URI est dans les segments de la variante, les autres pistes du groupe gardent leur URI ; §3.3 — un init porte une
+`trak` par piste des fragments. La spécification d'auteur d'Apple le déconseille (9.5 SHOULD, 9.6 et 9.7 MUST pour un
+son multicanal ou une autre langue) : il reste un essai tant qu'iPhone, Mac et Apple TV ne l'ont pas lu sans faute.
+
+**Porteurs.** `src/lib/lumenServer/trials.ts`, `playbackStats.ts` (`ChronoEntry`, `serverClockMs`, `markChrono`,
+`chronoEntry`, `lumenChronoOf`), `serve.ts` (`segmentResponse`, `serveMuxed`, `muxedServed`), les routes `chrono`
+et `eligibility` (`mux=1`), `testReport.ts` (`chronoOf`), `src/components/lumenTest/chronology.ts`, `autoSeries.ts`
+(`TrialModes`, `LEVER_SERIES`, `planOf(pass, order)`), `LumenTest.tsx`. **Appelants.** La page de banc seule.
+**Tests.** `lumen-test-chrono.test.ts` (horloges, avance, cascades serveur et Resource Timing, fenêtre préparée,
+résumé), `lumenServer-trials.test.ts` (versions et noms, listes, rien ne change sans essai, segments multiplexés faits
+des fragments de la règle et renumérotés, route `chrono` : horloge, chronologie, échantillon, accès),
+`lumen-test-auto.test.ts` (plans, ordre inverse et reprise, lignes), `lumen-test-page.test.tsx` (rechargement et
+reprise de bout en bout), `lumenServer-testReport.test.ts`.
+
+**Différent exprès.**
+- **Le levier a n'est pas un champ de `format.ts`** : un suffixe de version lu avant `cuttingOfTag`, pour que la
+  découpe et ses caches n'en sachent rien ; ses segments sont faits de ceux de la règle (mêmes clés de partage), et
+  un segment de reprise préparé sert les deux.
+- **Les listes restent en clair** : le relais inverse retire `Accept-Encoding` vers l'application (règle 10.1 d'Apple
+  non tenue) ; ~30 Ko par liste, pas un levier mesurable — noté, non corrigé (le relais n'est pas à nous).
+- **La chronologie n'entre pas dans player.log** : elle sert la question du banc ; l'étape 4 gardera `srv.*`.

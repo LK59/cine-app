@@ -6,6 +6,8 @@ import { useWakeLock } from "@/lib/useWakeLock";
 import {
   AUDIO_SWITCH_WATCH_MS,
   DEFAULT_TARGET_S,
+  EARLY_DELAY_MS,
+  LEVER_SERIES,
   FIRST_FRAME_TIMEOUT_MS,
   FREEZE_CHECK_MS,
   FreezeWatch,
@@ -14,6 +16,8 @@ import {
   SERIES,
   comparisonRows,
   formatResult,
+  modeLabel,
+  modeTag,
   newSeed,
   planOf,
   playerLabel,
@@ -33,12 +37,28 @@ import {
   type Quality,
   type SeriesAnswers,
   type SeriesDriver,
+  type SeriesOrder,
   type SeriesPass,
   type Trial,
+  type TrialModes,
   type TrialMeasures,
   type TrialResult,
 } from "./autoSeries";
 import { currentPlayerInfo, openCurrentPlayer } from "./currentPlayer";
+import {
+  aheadOf,
+  buildCascade,
+  fetchServerChrono,
+  probeLink,
+  summarizeCascades,
+  syncClock,
+  type Cascade,
+  type CascadeMoments,
+  type ChronoSummary,
+  type ClockSync,
+  type PageEvent,
+  type ResourceLike,
+} from "./chronology";
 import type { RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 
 /**
@@ -74,6 +94,14 @@ import type { RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
  * enchaîner » et « Comparatif rapide » jouent chaque titre par les deux, avec les mêmes sauts (graine commune),
  * tous les essais serveur d'abord (WebKit refuse un HLS natif après une MediaSource dans une même page), et
  * finissent sur un tableau côte à côte. Une cible de segment d'essai (2 s) se choisit aussi à la main.
+ *
+ * Depuis l'étape 3e (17/11/2026, DECISIONS §160), **la chronologie** de chaque démarrage et de chaque saut
+ * (`chronology.ts`) : les horloges de la page et du serveur synchronisées au début de chaque essai, chaque requête
+ * de Safari horodatée par le serveur (arrivée, prête, premier et dernier morceau remis), chaque évènement de la
+ * vidéo avec l'avance de `buffered` devant la position, et une cascade par démarrage et par saut — à l'écran et
+ * dans la ligne. Puis **les leviers de démarrage** en modes d'essai (son multiplexé, préparation précoce, départ
+ * par `EXT-X-START` ou `#t=`, débit annoncé moyen), et **l'ordre inversé** : le lecteur actuel d'abord, la page
+ * rechargée, puis Lumen serveur — avec un « Touchez pour continuer » pour rendre le son à l'élément.
  *
  * Textes en français : la page est pour l'administrateur de la maison, pas pour un rapport.
  */
@@ -122,6 +150,8 @@ interface Verdict {
   durationS?: number;
   targetS?: number;
   cutFacts?: { cut: Cut; targetS?: number; longestS: number; verified: number; craRasl: number; cuts: number; trusted?: number };
+  /** Demandé avec `mux=1` (étape 3e) : la version et l'adresse portent l'essai multiplexé. */
+  muxed?: boolean;
 }
 
 /** Les cibles de segment proposées à la main : 4 s la règle, 2 s l'essai de l'étape 3c. */
@@ -198,7 +228,178 @@ interface Run {
   trial?: string;
   rank?: number;
   end?: string;
+  /** Les leviers de démarrage de la lecture (serveur, étape 3e) ; absent : la règle. */
+  modes?: TrialModes;
+  /** Le départ demandé (s), et la première image à cette position (±2 s) — un départ en milieu de film. */
+  startAt: number;
+  targetFrameMs?: number;
+  /** La position de la toute première image présentée. */
+  firstFrameAt?: number;
+  /**
+   * La source posée d'avance (`early: "élément"`) : tant que Lire n'est pas appuyé, aucune image ne compte. `clickAt`
+   * est alors l'appui sur Lire, et `preloadAt` la pose de la source.
+   */
+  preloaded: boolean;
+  preloadAt?: number;
+  /** La chronologie (étape 3e) : les évènements de la vidéo, l'horloge, l'échantillon de débit, puis les cascades. */
+  events: PageEvent[];
+  clock: ClockSync | null;
+  link: { mbps: number | null; ms: number; via: "rt" | "lecture"; MB: number } | null;
+  cascades?: Cascade[];
+  chrono?: ChronoSummary;
+  rtLumen?: number;
+  rtStream?: number;
+  /** La relecture du relevé serveur et le calcul des cascades, en cours après la fermeture. */
+  chronoDone?: Promise<void>;
+  /** Le dernier `readyState` et la dernière avance notés par l'échantillonneur (100 ms). */
+  sampled?: { rs: number; ahead: number | null };
 }
+
+/** Les évènements de la vidéo notés tels quels dans la chronologie (étape 3e). */
+const CHRONO_EVENTS = [
+  "loadstart",
+  "loadedmetadata",
+  "loadeddata",
+  "canplay",
+  "canplaythrough",
+  "play",
+  "playing",
+  "pause",
+  "waiting",
+  "seeking",
+  "seeked",
+  "progress",
+  "stalled",
+  "suspend",
+  "emptied",
+  "error",
+  "ended",
+] as const;
+
+/**
+ * Un évènement de plus dans la chronologie de la lecture : l'instant, le `readyState`, la position et l'avance de
+ * `buffered` devant elle — ce qu'AVFoundation a déjà reçu et analysé. Jamais plus de `EVENTS_MAX` par lecture.
+ */
+function pushEvent(run: Run, video: HTMLVideoElement, e: string): void {
+  if (run.events.length >= EVENTS_MAX) return;
+  let ahead: number | null = null;
+  try {
+    ahead = aheadOf(video.buffered, video.currentTime);
+  } catch {
+    /* `buffered` illisible (source retirée) : sans avance */
+  }
+  run.events.push({ t: performance.now(), e, rs: video.readyState, ct: Math.round(video.currentTime * 10) / 10, ahead });
+}
+
+/**
+ * Les fenêtres de cascade d'une lecture : le démarrage (de l'appui — ou de la source posée d'avance — à la
+ * première image à la bonne position, plus 2 s), puis chaque saut (du geste à la reprise, plus 1,5 s).
+ */
+function momentsOf(run: Run): CascadeMoments[] {
+  const out: CascadeMoments[] = [];
+  const frameAt = run.firstFrameMs !== undefined ? run.clickAt + run.firstFrameMs : undefined;
+  const targetAt = run.targetFrameMs !== undefined ? run.clickAt + run.targetFrameMs : undefined;
+  const playing = run.events.find((e) => e.e === "playing" && e.t >= run.clickAt);
+  out.push({
+    kind: "départ",
+    to: run.startAt,
+    startedAt: run.clickAt,
+    from: run.preloadAt,
+    playingAt: playing?.t,
+    frameAt: targetAt ?? frameAt,
+    endAt: (targetAt ?? frameAt ?? run.clickAt + FIRST_FRAME_TIMEOUT_MS) + 2000,
+  });
+  for (const m of run.seeks) {
+    const at = (v: number | undefined) => (v === undefined ? undefined : m.startedAt + v);
+    out.push({
+      kind: "saut",
+      to: m.to,
+      startedAt: m.startedAt,
+      seekedAt: at(m.seekedMs),
+      playingAt: at(m.playingMs),
+      advanceAt: at(m.advanceMs),
+      endAt: (at(m.advanceMs) ?? at(m.seekedMs) ?? m.startedAt + SEEK_TIMEOUT_MS) + 1500,
+    });
+  }
+  return out;
+}
+
+/** Les entrées Resource Timing de la page, réduites à ce qu'une cascade lit. */
+function resourcesNow(): ResourceLike[] {
+  try {
+    return (performance.getEntriesByType?.("resource") ?? []).map((e) => {
+      const r = e as PerformanceResourceTiming;
+      return { name: r.name, startTime: r.startTime, responseStart: r.responseStart, responseEnd: r.responseEnd, encodedBodySize: r.encodedBodySize };
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** Les lignes d'écran des cascades d'une lecture : l'en-tête de chacune, puis ses requêtes et ses évènements. */
+function cascadeLines(run: Run): string[] {
+  const out: string[] = [];
+  for (const c of run.cascades ?? []) {
+    const head = [
+      `${c.k === "départ" ? "DÉPART" : "SAUT"} → ${c.to} s`,
+      c.firstReqMs !== undefined ? `1re requête +${c.firstReqMs}` : null,
+      c.firstVideoReadyMs !== undefined ? `1er segment vidéo prêt +${c.firstVideoReadyMs}` : null,
+      c.firstVideoSentMs !== undefined ? `remis +${c.firstVideoSentMs}` : null,
+      c.frameMs !== undefined ? `image +${c.frameMs}` : null,
+      c.seekedMs !== undefined ? `seeked +${c.seekedMs} (avance ${c.aheadSeekedS ?? "—"} s, ${c.videoSeeked ?? "?"} seg. v, ${c.sentSeekedMB ?? "?"} Mo remis)` : null,
+      c.playingMs !== undefined ? `playing +${c.playingMs} (avance ${c.aheadPlayingS ?? "—"} s)` : null,
+      c.advanceMs !== undefined ? `reprise +${c.advanceMs} (avance ${c.aheadAdvanceS ?? "—"} s, ${c.videoAdvance ?? "?"} seg. v, ${c.sentAdvanceMB ?? "?"} Mo remis)` : null,
+      c.srvMbps !== undefined ? `remis à ${c.srvMbps} Mb/s` : null,
+    ].filter(Boolean);
+    out.push(head.join(" · "));
+    for (const line of c.req) out.push(`   req ${line}`);
+    for (const line of c.ev) out.push(`   ev  ${line}`);
+  }
+  return out;
+}
+
+/** Ce que sessionStorage garde d'une série pendant le rechargement de l'ordre `actuel`. */
+interface SavedSeries {
+  serie: string;
+  pass: SeriesPass;
+  order: SeriesOrder;
+  seed: number;
+  /** Le rang (0…) de l'essai par lequel reprendre. */
+  index: number;
+  results: TrialResult[];
+  elapsedMs: number;
+  outbox: Record<string, unknown>[];
+  savedAt: number;
+}
+
+/** La série gardée pour reprise, ou null (rien, trop vieille, ou stockage refusé — la page se rend sans). */
+function readSavedSeries(): SavedSeries | null {
+  try {
+    const raw = typeof window === "undefined" ? null : window.sessionStorage.getItem(SERIES_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as SavedSeries;
+    // Une heure : au-delà, ce n'est plus la même séance d'essai (réseau, cache disque, charge).
+    if (!saved || typeof saved.index !== "number" || Date.now() - saved.savedAt > 60 * 60 * 1000) return null;
+    return saved;
+  } catch {
+    return null;
+  }
+}
+
+function forgetSavedSeries(): void {
+  try {
+    window.sessionStorage.removeItem(SERIES_KEY);
+  } catch {
+    /* rien */
+  }
+}
+
+/** Au plus, par lecture : un parcours de 20 sauts en fait ~600 (évènements, `progress`, échantillons d'avance). */
+const EVENTS_MAX = 2500;
+/** L'échantillon de débit pris avant chaque essai : de quoi dépasser le démarrage lent de TCP, sans coûter une rafale. */
+const PROBE_BYTES = 4 * 1024 * 1024;
+/** La série en cours pendant un rechargement (ordre `actuel`) : sessionStorage, effacée à la reprise. */
+const SERIES_KEY = "cine:lumen-test-serie";
 
 /** Ce qu'une seconde d'avance du temps veut dire : la lecture a repris, pas un simple `timeupdate` du saut. */
 const ADVANCE_S = 0.3;
@@ -285,6 +486,9 @@ interface AutoView {
   results: string[];
   /** Le tableau côte à côte, une fois la série finie. */
   comparison: ComparisonRow[];
+  /** Les essais finis, pour le tableau de la chronologie. */
+  trials: TrialResult[];
+  order: SeriesOrder;
   stopped: boolean;
   sent: string | null;
 }
@@ -293,6 +497,7 @@ interface AutoView {
 interface AutoState {
   serie: string;
   pass: SeriesPass;
+  order: SeriesOrder;
   plan: Trial[];
   /** La graine des positions de saut : la même pour les deux lecteurs d'un titre, portée par chaque ligne. */
   seed: number;
@@ -351,12 +556,14 @@ function autoViewOf(state: AutoState | null): AutoView | null {
     n: plan.length,
     pass: state.pass,
     title: trial.title,
-    player: playerLabel(trial),
+    player: `${playerLabel(trial)}${trial.modes ? ` (${modeLabel(trial.modes)})` : ""}`,
     step: state.step,
     elapsedS: (now - state.startedAt) / 1000,
     progress: state.phase === "en-cours" ? seriesProgress(plan, state.index, (now - state.trialStartedAt) / 1000) : 1,
     results: state.results.map(formatResult),
     comparison: state.phase === "en-cours" ? [] : comparisonRows(state.results),
+    trials: state.phase === "en-cours" ? [] : state.results,
+    order: state.order,
     stopped: state.stopped,
     sent: state.sent,
   };
@@ -384,6 +591,9 @@ function describeTrack(track: AudioTrackLike | undefined, index: number): string
 function measuresOf(run: Run): TrialMeasures {
   return {
     firstFrameMs: run.firstFrameMs,
+    targetFrameMs: run.targetFrameMs,
+    chrono: run.chrono,
+    linkMbps: run.link?.mbps ?? undefined,
     seeks: run.seeks,
     freezes: run.watch.freezes,
     errors: run.errors,
@@ -436,6 +646,18 @@ function reportOf(run: Run): Record<string, unknown> {
     qualityStart: run.qualityStart,
     qualityDelta: qualityDelta(run.qualityStart, run.quality),
     end: run.end,
+    ...(run.modes ? { mode: modeTag(run.modes) } : {}),
+    ...(run.startAt ? { startAt: run.startAt } : {}),
+    targetFrameMs: run.targetFrameMs,
+    firstFrameAt: run.firstFrameAt === undefined ? undefined : Math.round(run.firstFrameAt * 10) / 10,
+    chrono: {
+      clock: run.clock ?? undefined,
+      link: run.link ?? undefined,
+      rtLumen: run.rtLumen,
+      rtStream: run.rtStream,
+      summary: run.chrono,
+      cascades: run.cascades,
+    },
   };
 }
 
@@ -479,6 +701,12 @@ export function LumenTest() {
   const [auto, setAuto] = useState<AutoView | null>(null);
   const [needTap, setNeedTap] = useState(false);
   const [answers, setAnswers] = useState<SeriesAnswers>({ damaged: null, damagedTitle: "", audioClean: null });
+  // Étape 3e : l'ordre des lecteurs d'une série, les leviers du mode manuel, la série à reprendre après un
+  // rechargement (lue une fois, au montage : la page ne se rend que dans le navigateur), les cascades affichées.
+  const [order, setOrder] = useState<SeriesOrder>("serveur");
+  const [modes, setModes] = useState<TrialModes>({});
+  const [resume, setResume] = useState<SavedSeries | null>(() => readSavedSeries());
+  const [cascadeView, setCascadeView] = useState<{ title: string; lines: string[] } | null>(null);
 
   // Un écran qui s'éteint au milieu de la série met la page en arrière-plan et Safari en pause : le verrou est
   // demandé pendant toute la série, et redemandé au retour au premier plan (`useWakeLock`, partagé avec les
@@ -517,6 +745,13 @@ export function LumenTest() {
   // L'environnement, une fois monté ; puis l'état de la vidéo et le délai des sauts, chaque seconde ; et les gels,
   // toutes les 2 s (`FREEZE_CHECK_MS`).
   useEffect(() => {
+    // Resource Timing garde 250 entrées par défaut : un essai du lecteur actuel en fait des centaines (ses plages
+    // d'octets), et la chronologie les relit. Vidé à chaque nouvelle lecture (`startRun`).
+    try {
+      performance.setResourceTimingBufferSize?.(5000);
+    } catch {
+      /* rien */
+    }
     const first = setTimeout(() => {
       const video = document.createElement("video");
       const nav = navigator as Navigator & { standalone?: boolean };
@@ -598,7 +833,7 @@ export function LumenTest() {
       playing: () => {
         const run = runRef.current;
         if (!run) return;
-        if (run.firstFrameMs === undefined && !video.requestVideoFrameCallback) {
+        if (run.firstFrameMs === undefined && !run.preloaded && !video.requestVideoFrameCallback) {
           run.firstFrameMs = ms(now() - run.clickAt);
           run.firstFrameVia = "playing";
           run.qualityStart = qualityOf(video);
@@ -640,6 +875,7 @@ export function LumenTest() {
         const m = run.pending;
         if (m && m.landed !== undefined && video.currentTime > m.landed + ADVANCE_S) {
           m.advanceMs = ms(now() - m.startedAt);
+          pushEvent(run, video, "reprise");
           finishSeek(run, { ok: true });
         }
         for (const sw of run.audioSwitches) {
@@ -669,6 +905,34 @@ export function LumenTest() {
       stalled: () => note("stalled"),
       ended: () => note("ended"),
     };
+    // La chronologie (étape 3e) : chaque évènement noté avec l'avance de `buffered`, avant le traitement propre à
+    // chacun (un `seeked` est noté avant que la mesure du saut ne le lise).
+    const chronoHandlers = CHRONO_EVENTS.map((type) => {
+      const handler = () => {
+        const run = runRef.current;
+        if (run) pushEvent(run, video, type);
+      };
+      video.addEventListener(type, handler);
+      return [type, handler] as const;
+    });
+    // L'échantillonneur : les changements de `readyState` sans évènement propre, et l'avance qui grandit (d'une
+    // seconde au moins) entre deux `progress` — de quoi voir à quel rythme AVFoundation remplit sa réserve.
+    const sampler = setInterval(() => {
+      const run = runRef.current;
+      if (!run) return;
+      const rs = video.readyState;
+      let ahead: number | null = null;
+      try {
+        ahead = aheadOf(video.buffered, video.currentTime);
+      } catch {
+        /* rien */
+      }
+      const last = run.sampled;
+      if (!last || last.rs !== rs) pushEvent(run, video, "rs");
+      else if (ahead !== null && (last.ahead === null || Math.abs(ahead - last.ahead) >= 1)) pushEvent(run, video, "buf");
+      else return;
+      run.sampled = { rs, ahead };
+    }, 100);
     for (const [type, handler] of Object.entries(handlers)) video.addEventListener(type, handler);
     // `audioTracks` n'existe que sur WebKit (Chromium le cache derrière un drapeau) ; jsdom en a une ébauche sans évènements.
     const tracks = typeof video.audioTracks?.addEventListener === "function" ? video.audioTracks : undefined;
@@ -682,6 +946,8 @@ export function LumenTest() {
     tracks?.addEventListener("change", onTracks);
     tracks?.addEventListener("addtrack", onTracks);
     return () => {
+      clearInterval(sampler);
+      for (const [type, handler] of chronoHandlers) video.removeEventListener(type, handler);
       for (const [type, handler] of Object.entries(handlers)) video.removeEventListener(type, handler);
       tracks?.removeEventListener("change", onTracks);
       tracks?.removeEventListener("addtrack", onTracks);
@@ -689,7 +955,7 @@ export function LumenTest() {
   }, [finishSeek, note, refresh]);
 
   /** Le verdict du serveur pour ce titre, cette piste et cette découpe ; l'index se construit au besoin. */
-  const prepare = async (id = itemId, audioTrack = audio, chosenCut = cut, targetS = target) => {
+  const prepare = async (id = itemId, audioTrack = audio, chosenCut = cut, targetS = target, mux = !!modes.mux) => {
     if (!/^[0-9a-f]{32}$/i.test(id)) {
       setBusy("Identifiant Jellyfin attendu (32 caractères hexadécimaux).");
       return null;
@@ -701,6 +967,8 @@ export function LumenTest() {
         const query = new URLSearchParams({ wait: "25000", cut: chosenCut });
         if (targetS !== DEFAULT_TARGET_S) query.set("target", String(targetS));
         if (audioTrack !== null) query.set("audio", String(audioTrack));
+        // L'essai multiplexé (levier a, étape 3e) : la version rendue porte `m1`, la liste maître désigne la piste dans la vidéo.
+        if (mux) query.set("mux", "1");
         const res = await fetch(`/api/lumen/${id}/eligibility?${query}`);
         const body = (await res.json().catch(() => null)) as Verdict | null;
         if (res.status === 202 || body?.pending) continue;
@@ -709,6 +977,7 @@ export function LumenTest() {
           note(`éligibilité : HTTP ${res.status}`);
           return null;
         }
+        body.muxed = mux;
         setVerdict(body);
         setAudio(body.audioTrack);
         setBusy(null);
@@ -738,6 +1007,30 @@ export function LumenTest() {
     // Le lecteur actuel : sa MediaSource fermée, l'élément rendu sans source (`destroy`), après le dernier relevé.
     engineRef.current?.destroy();
     engineRef.current = null;
+    if (video) video.preload = "none";
+    // La chronologie : Resource Timing lu tout de suite (la lecture suivante le vide), puis le relevé du serveur relu
+    // et les cascades dessinées — en arrière-plan ; l'envoi de la ligne l'attend (`chronoDone`).
+    const resources = resourcesNow();
+    run.chronoDone = finalizeChrono(run, resources);
+  };
+
+  /**
+   * Les cascades d'une lecture fermée (étape 3e) : le relevé du serveur pour Lumen serveur (ses requêtes ramenées sur
+   * l'horloge de la page), Resource Timing pour le lecteur actuel (ses propres requêtes de plages), et les évènements
+   * de la vidéo. Ce que Resource Timing voit des requêtes HLS de Safari est compté à part (`rtLumen`) : sur iPhone, on
+   * s'attend à rien — le chargeur d'AVFoundation n'est pas celui de la page.
+   */
+  const finalizeChrono = async (run: Run, resources: ResourceLike[]): Promise<void> => {
+    run.rtLumen = resources.filter((r) => /\/api\/lumen\/[^/]+\/[^/]+\/[^/]+\/(?:master|v|vm\d+|a\d+|init-)/.test(r.name)).length;
+    const stream = resources.filter((r) => r.name.includes("/api/jellyfin/stream"));
+    run.rtStream = stream.length;
+    const entries = run.player === "serveur" && run.clock ? await fetchServerChrono(run.itemId, run.s) : null;
+    run.cascades = momentsOf(run).map((m) =>
+      buildCascade(m, run.events, run.player === "serveur" ? { entries: entries ?? [], clock: run.clock, timeOrigin: performance.timeOrigin } : { resources: stream })
+    );
+    run.chrono = summarizeCascades(run.cascades);
+    note(`chronologie ${run.title} · ${playerLabel(run)} : ${run.cascades.length} cascade(s)${run.clock ? ` · horloge ±${Math.round(run.clock.rttMs / 2)} ms` : ""}${entries ? ` · ${entries.length} requête(s) vues du serveur` : ""} · Resource Timing : ${run.rtLumen} requête(s) HLS, ${run.rtStream} plage(s) du lecteur actuel`);
+    setCascadeView({ title: `${run.title} · ${playerLabel(run)}${run.modes ? ` (${modeLabel(run.modes)})` : ""}`, lines: cascadeLines(run) });
   };
 
   /**
@@ -751,14 +1044,27 @@ export function LumenTest() {
     function onFrame() {
       if (runRef.current !== run || !video.requestVideoFrameCallback) return; // une autre lecture : la boucle s'éteint
       const now = performance.now();
-      if (run.firstFrameMs === undefined) {
-        run.firstFrameMs = ms(now - run.clickAt);
-        run.firstFrameVia = "rvfc";
-        run.qualityStart = qualityOf(video);
-        note(`première image (requestVideoFrameCallback) : ${run.firstFrameMs} ms`);
-        refresh();
+      // Une source posée d'avance (`early: "élément"`) peut présenter une image avant Lire : elle ne compte pas.
+      if (!run.preloaded) {
+        if (run.firstFrameMs === undefined) {
+          run.firstFrameMs = ms(now - run.clickAt);
+          run.firstFrameVia = "rvfc";
+          run.firstFrameAt = video.currentTime;
+          run.qualityStart = qualityOf(video);
+          pushEvent(run, video, "image");
+          note(`première image (requestVideoFrameCallback) : ${run.firstFrameMs} ms à ${video.currentTime.toFixed(1)} s`);
+          refresh();
+        }
+        // La première image à la position demandée : la mesure d'un départ en milieu de film (levier c).
+        if (run.targetFrameMs === undefined && Math.abs(video.currentTime - run.startAt) <= 2) {
+          run.targetFrameMs = ms(now - run.clickAt);
+          if (run.startAt > 0) {
+            pushEvent(run, video, "image-départ");
+            note(`première image à la position de départ (${run.startAt} s) : ${run.targetFrameMs} ms`);
+          }
+        }
+        run.watch.frame(now, video.currentTime);
       }
-      run.watch.frame(now, video.currentTime);
       video.requestVideoFrameCallback(onFrame);
     }
     video.requestVideoFrameCallback(onFrame);
@@ -768,16 +1074,45 @@ export function LumenTest() {
    * Ouvre une lecture de la liste maître dans la vidéo : la lecture précédente fermée, la nouvelle mesurée.
    * Partagé par « Lire » et la série ; ne lance pas `play()` (chacun le fait à sa façon).
    */
-  const startRun = (params: { itemId: string; title: string; player: PlayerKind; cut: Cut; targetS: number; startAt: number; verdict: Verdict; clickAt: number }): Run | null => {
+  const startRun = (params: {
+    itemId: string;
+    title: string;
+    player: PlayerKind;
+    cut: Cut;
+    targetS: number;
+    startAt: number;
+    verdict: Verdict;
+    clickAt: number;
+    /** L'identifiant de lecture, tiré avant la synchronisation des horloges (qui le marque chronométré). */
+    s: string;
+    chrono: { clock: ClockSync | null; link: Run["link"] };
+    modes?: TrialModes;
+    /** Poser la source sans lire (`early: "élément"`) : Lire viendra plus tard (`armRun`). */
+    preload?: boolean;
+  }): Run | null => {
     const video = videoRef.current;
     const current = params.verdict;
     if (!video || (params.player === "serveur" && !current.version)) return null;
     tourRef.current += 1; // un parcours en cours s'arrête
     closeRun("nouvelle lecture");
-    const s = newPlaybackId();
-    const master = `/api/lumen/${params.itemId}/${current.version}/${s}/master.m3u8${current.audioTrack !== null ? `?audio=${current.audioTrack}` : ""}`;
-    // Le lecteur actuel s'ouvre à la position demandée (`startSeconds`, comme l'hôte) : pas de saut de départ.
-    startAtRef.current = params.player === "serveur" ? Math.max(0, params.startAt) : 0;
+    try {
+      performance.clearResourceTimings?.();
+    } catch {
+      /* rien */
+    }
+    const s = params.s;
+    const startAt = Math.max(0, params.startAt);
+    const startMode = params.modes?.startMode ?? "saut";
+    // Les essais de la seule liste maître (étape 3e) : `?start=` (EXT-X-START), `?bw=moyen` ; `#t=` sur l'adresse.
+    const query = new URLSearchParams();
+    if (current.audioTrack !== null) query.set("audio", String(current.audioTrack));
+    if (startAt > 0 && startMode === "ext-x-start") query.set("start", String(startAt));
+    if (params.modes?.bandwidth === "moyen") query.set("bw", "moyen");
+    const search = query.toString();
+    const master = `/api/lumen/${params.itemId}/${current.version}/${s}/master.m3u8${search ? `?${search}` : ""}${startAt > 0 && startMode === "fragment" ? `#t=${startAt}` : ""}`;
+    // Le lecteur actuel s'ouvre à la position demandée (`startSeconds`, comme l'hôte) : pas de saut de départ ; Lumen
+    // serveur saute à `loadedmetadata` sous la règle (`saut`), et pas sous `EXT-X-START` ni `#t=`.
+    startAtRef.current = params.player === "serveur" && startMode === "saut" ? startAt : 0;
     const run: Run = {
       itemId: params.itemId,
       title: params.title || params.itemId,
@@ -797,13 +1132,48 @@ export function LumenTest() {
       audioTracks: [],
       audioSwitches: [],
       watch: new FreezeWatch(),
+      modes: params.modes && Object.keys(params.modes).length ? params.modes : undefined,
+      startAt,
+      preloaded: !!params.preload,
+      preloadAt: params.preload ? params.clickAt : undefined,
+      events: [],
+      clock: params.chrono.clock,
+      link: params.chrono.link,
     };
     runRef.current = run;
-    note(`lecture ${run.title} · ${playerLabel(run)}${run.player === "serveur" ? ` · ${params.cut}` : ""} · piste ${current.audioTrack ?? "—"} · ${s}`);
+    note(
+      `lecture ${run.title} · ${playerLabel(run)}${run.player === "serveur" ? ` · ${params.cut}` : ""}${run.modes ? ` · ${modeLabel(run.modes)}` : ""} · piste ${current.audioTrack ?? "—"} · ${s}${run.clock ? ` · horloge ${run.clock.offsetMs} ms ±${Math.round(run.clock.rttMs / 2)}` : ""}${run.link?.mbps ? ` · lien ${run.link.mbps} Mb/s` : ""}`
+    );
     watchFrames(video, run);
-    if (run.player === "serveur") video.src = master;
+    if (run.player === "serveur") {
+      // La fiche ouverte d'avance : Safari charge listes, init et premiers segments avant Lire.
+      if (params.preload) video.preload = "auto";
+      video.src = master;
+    }
     refresh();
     return run;
+  };
+
+  /** Lire, après une source posée d'avance : l'appui devient l'origine de la mesure. */
+  const armRun = (run: Run) => {
+    run.preloaded = false;
+    run.clickAt = performance.now();
+    const video = videoRef.current;
+    if (video) pushEvent(run, video, "lire");
+  };
+
+  /**
+   * Avant une lecture serveur : l'identifiant de lecture, les horloges synchronisées (ce qui marque la lecture
+   * chronométrée), et un échantillon du débit vers l'appareil. Le lecteur actuel n'a que l'échantillon : ses
+   * requêtes, la page les voit elle-même (Resource Timing).
+   */
+  const chronoBefore = async (id: string, player: PlayerKind): Promise<{ s: string; clock: ClockSync | null; link: Run["link"] }> => {
+    const s = newPlaybackId();
+    const clock = player === "serveur" ? await syncClock(id, s) : null;
+    const probe = await probeLink(id, s, PROBE_BYTES);
+    const link = probe ? { ...probe, MB: PROBE_BYTES / 1024 / 1024 } : null;
+    note(`horloge : ${clock ? `décalage ${clock.offsetMs} ms, aller-retour ${clock.rttMs} ms (${clock.samples} échanges)` : "sans"} · lien : ${link?.mbps ?? "?"} Mb/s (${link?.via ?? "—"})`);
+    return { s, clock, link };
   };
 
   /**
@@ -845,17 +1215,36 @@ export function LumenTest() {
   const play = async () => {
     const video = videoRef.current;
     if (!video) return;
-    const clickAt = performance.now();
     let current = verdict;
-    if (!current || !current.version || current.cutFacts?.cut !== cut || (current.cutFacts?.targetS ?? DEFAULT_TARGET_S) !== target || current.audioTrack !== audio) current = await prepare();
+    if (!current || !current.version || current.cutFacts?.cut !== cut || (current.cutFacts?.targetS ?? DEFAULT_TARGET_S) !== target || current.audioTrack !== audio || !!current.muxed !== !!modes.mux) current = await prepare();
     // Le lecteur actuel lit aussi un fichier que le serveur refuse (le son DTS de *Le Prestige*) : le verdict ne
     // sert alors qu'à connaître la piste.
     if (!current || (player === "serveur" && (!current.ok || !current.version))) {
       if (current && !current.ok) note(`non servi : ${current.reason}`);
       return;
     }
-    const run = startRun({ itemId, title, player, cut, targetS: target, startAt: Number(startAt) || 0, verdict: current, clickAt });
+    // La chronologie (étape 3e) avant l'appui mesuré : horloges, débit. Les leviers ne s'appliquent qu'au serveur.
+    const chrono = await chronoBefore(itemId, player);
+    const runModes = player === "serveur" ? modes : undefined;
+    if (runModes?.early) {
+      await fetch(`/api/lumen/${itemId}/prepare`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audio: current.audioTrack ?? undefined, position: Number(startAt) || 0, s: chrono.s, cut, ...(target !== DEFAULT_TARGET_S ? { target } : {}) }),
+      }).catch(() => null);
+      note(`préparation précoce : ${EARLY_DELAY_MS / 1000} s avant Lire`);
+    }
+    // `serveur` : le serveur prépare seul pendant le délai, la vidéo n'a pas encore de source.
+    if (runModes?.early === "serveur") await new Promise((resolve) => setTimeout(resolve, EARLY_DELAY_MS));
+    const preload = runModes?.early === "élément";
+    const run = startRun({ itemId, title, player, cut, targetS: target, startAt: Number(startAt) || 0, verdict: current, clickAt: performance.now(), s: chrono.s, chrono, modes: runModes, preload });
     if (!run) return;
+    // `élément` : la source est posée, Safari charge pendant le délai ; Lire vient ensuite.
+    if (preload) {
+      await new Promise((resolve) => setTimeout(resolve, EARLY_DELAY_MS));
+      if (runRef.current !== run) return;
+      armRun(run);
+    }
     if (player === "actuel" && (await openCurrent(run, Number(startAt) || 0))) return;
     try {
       await video.play();
@@ -977,6 +1366,8 @@ export function LumenTest() {
 
   const send = async () => {
     const video = videoRef.current;
+    // Les cascades des lectures fermées se dessinent en arrière-plan (`finalizeChrono`) : on les attend.
+    await Promise.all(doneRef.current.map((r) => r.chronoDone?.catch(() => {})));
     const runs = [...doneRef.current];
     const live = runRef.current;
     if (live) {
@@ -1012,6 +1403,28 @@ export function LumenTest() {
   };
 
   /**
+   * La préparation précoce d'un essai (levier b, étape 3e) : `POST …/prepare` (l'index, puis le segment de départ et
+   * son pendant audio construits et gardés deux minutes), puis le délai d'une fiche ouverte avant Lire. `élément` :
+   * la source est en plus posée sur la vidéo pendant ce délai (`preload="auto"`), et `start` n'aura qu'à lire.
+   */
+  const prepareEarly = async (t: Trial, v: Verdict, chrono: { s: string; clock: ClockSync | null; link: Run["link"] }) => {
+    const early = t.modes?.early;
+    if (!early) return;
+    await fetch(`/api/lumen/${t.itemId}/prepare`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audio: v.audioTrack ?? undefined, position: t.startAt, s: chrono.s, cut: t.cut, ...(t.targetS !== DEFAULT_TARGET_S ? { target: t.targetS } : {}) }),
+    }).catch(() => null);
+    const stop = () => autoRef.current?.stopped ?? true;
+    if (early === "élément") {
+      const run = startRun({ itemId: t.itemId, title: t.title, player: t.player, cut: t.cut, targetS: t.targetS, startAt: t.startAt, verdict: v, clickAt: performance.now(), s: chrono.s, chrono, modes: t.modes, preload: true });
+      if (run) run.trial = t.id;
+    }
+    setStep(`Fiche ouverte (${EARLY_DELAY_MS / 1000} s avant Lire)`);
+    await sleepUnless(EARLY_DELAY_MS, stop);
+  };
+
+  /**
    * Le pilote de la série (`SeriesDriver`) : chaque geste du protocole, sur la vraie vidéo, avec les fonctions du
    * mode manuel — le même verdict, la même lecture, le même parcours, le même changement de piste. Construit à
    * l'appui ; l'état qu'il partage avec l'écran vit dans les `ref`.
@@ -1019,6 +1432,9 @@ export function LumenTest() {
   const makeDriver = (state: AutoState): SeriesDriver => {
     const stopped = () => state.stopped;
     let lastVerdict: Verdict | null = null;
+    // La chronologie préparée pour l'essai qui va lire (identifiant, horloge, débit) : tirée dans `prepare`, hors
+    // du temps de la première image, comme le verdict.
+    let pending: { s: string; clock: ClockSync | null; link: Run["link"] } | null = null;
     let logFrom = 0;
     const lineRuns = new Map<number, Record<string, unknown>[]>();
     const plan = state.plan;
@@ -1069,10 +1485,20 @@ export function LumenTest() {
         // Les deux lecteurs demandent le verdict du serveur : la piste audio (la même pour les deux) et la durée
         // d'où les positions des sauts sont tirées. Le lecteur actuel demande en plus la description du fichier
         // que son hôte lit avant d'ouvrir — hors du temps de la première image, comme le verdict du serveur.
-        const v = await prepare(t.itemId, null, chosenCut, t.targetS);
+        const v = await prepare(t.itemId, null, chosenCut, t.targetS, !!t.modes?.mux);
         lastVerdict = v;
+        pending = null;
         if (t.player === "serveur") {
+          if (v?.ok && !t.prepareOnly && !stopped()) {
+            setStep("Horloges et débit");
+            pending = await chronoBefore(t.itemId, "serveur");
+            await prepareEarly(t, v, pending);
+          }
           return v ? { ok: v.ok, reason: v.reason, detail: v.detail, version: v.version, audioTrack: v.audioTrack, segments: v.segments, longestS: v.cutFacts?.longestS, durationS: v.durationS } : null;
+        }
+        if (!stopped()) {
+          setStep("Débit");
+          pending = await chronoBefore(t.itemId, "actuel");
         }
         try {
           const info = await currentPlayerInfo(t.itemId);
@@ -1087,8 +1513,15 @@ export function LumenTest() {
         if (!video || !lastVerdict) return { image: false, reason: "pas de vidéo" };
         setStep("Attente de la première image");
         const verdict: Verdict = { ...lastVerdict, audioTrack: prepared.audioTrack };
-        const run = startRun({ itemId: t.itemId, title: t.title, player: t.player, cut: t.cut, targetS: t.targetS, startAt: t.startAt, verdict, clickAt: performance.now() });
+        const held = runRef.current;
+        // La fiche ouverte d'avance (`early: "élément"`) : la source est déjà posée, Lire part d'ici.
+        const preloaded = held?.preloaded && held.trial === t.id ? held : null;
+        const chrono = pending ?? { s: newPlaybackId(), clock: null, link: null };
+        const run =
+          preloaded ??
+          startRun({ itemId: t.itemId, title: t.title, player: t.player, cut: t.cut, targetS: t.targetS, startAt: t.startAt, verdict, clickAt: performance.now(), s: chrono.s, chrono, modes: t.modes });
         if (!run) return { image: false, reason: "lecture impossible" };
+        if (preloaded) armRun(run);
         run.trial = t.id;
         run.rank = rank;
         refusedRef.current = false;
@@ -1138,7 +1571,7 @@ export function LumenTest() {
           );
         }
       },
-      close: (t, rank, outcome) => {
+      close: async (t, rank, outcome) => {
         const tag = { trial: t.id, rank };
         if (outcome.prepared) {
           lineRuns.set(
@@ -1165,9 +1598,39 @@ export function LumenTest() {
         tourRef.current += 1;
         closeRun(end);
         videoRef.current?.pause();
+        // Les cascades : le relevé du serveur relu, puis dessinées (`finalizeChrono`) — avant la ligne et le résultat.
+        setStep("Chronologie");
+        await run.chronoDone?.catch(() => {});
         lineRuns.set(rank, [reportOf(run)]);
         refresh();
         return resultOf(t, rank, outcome, measuresOf(run));
+      },
+      reload: async (index) => {
+        // L'ordre `actuel` : WebKit refuse un HLS natif dans une page qui a servi une MediaSource. On garde la série
+        // (sessionStorage) et on recharge ; la reprise attend un appui (« Touchez pour continuer »), qui rend aussi à
+        // l'élément le droit de jouer avec le son.
+        setStep("Rechargement de la page");
+        note(`série ${state.serie} : rechargement avant l'essai ${index + 1} (lecteur actuel fini, Lumen serveur ensuite)`);
+        const saved: SavedSeries = {
+          serie: state.serie,
+          pass: state.pass,
+          order: state.order,
+          seed: state.seed,
+          index,
+          results: state.results,
+          elapsedMs: performance.now() - state.startedAt,
+          outbox: outboxRef.current,
+          savedAt: Date.now(),
+        };
+        try {
+          window.sessionStorage.setItem(SERIES_KEY, JSON.stringify(saved));
+        } catch {
+          note("sessionStorage refusé : la série ne peut pas reprendre après le rechargement");
+          state.stopped = true;
+          return;
+        }
+        window.location.reload();
+        await new Promise<void>(() => {});
       },
       send: async (t, rank, result) => {
         const fresh = Math.min(150, logCountRef.current - logFrom);
@@ -1177,7 +1640,7 @@ export function LumenTest() {
             kind: "lumen-test",
             build: APP_BUILD,
             env: envRef.current,
-            auto: { ...trialTag(state.serie, t, rank, plan.length, { pass: state.pass, seed: state.seed }), status: result.status },
+            auto: { ...trialTag(state.serie, t, rank, plan.length, { pass: state.pass, seed: state.seed, order: state.order }), status: result.status },
             runs: lineRuns.get(rank) ?? [],
             log: fresh > 0 ? logRef.current.slice(-fresh) : [],
           },
@@ -1194,7 +1657,7 @@ export function LumenTest() {
    * l'élément vidéo reçoit le droit de jouer avec le son (WebKit le lève sur `load()`/`play()` faits pendant un
    * geste, pour cet élément et ses sources suivantes). Le `play()` sans source est rejeté — sans importance.
    */
-  const runAll = (pass: SeriesPass) => {
+  const runAll = (pass: SeriesPass, saved?: SavedSeries) => {
     const video = videoRef.current;
     if (!video || autoRef.current?.phase === "en-cours") return;
     tourRef.current += 1;
@@ -1203,36 +1666,61 @@ export function LumenTest() {
     video.removeAttribute("src");
     video.load();
     playOf(video).catch(() => {});
-    const plan = planOf(pass);
+    const seriesOrder = saved?.order ?? (pass === "leviers" ? "serveur" : order);
+    const plan = planOf(pass, seriesOrder);
     const state: AutoState = {
-      serie: newPlaybackId().slice(2, 14),
+      serie: saved?.serie ?? newPlaybackId().slice(2, 14),
       pass,
+      order: seriesOrder,
       plan,
-      seed: newSeed(),
-      startedAt: performance.now(),
+      seed: saved?.seed ?? newSeed(),
+      startedAt: performance.now() - (saved?.elapsedMs ?? 0),
       phase: "en-cours",
       stopped: false,
-      index: 0,
+      index: saved?.index ?? 0,
       trialStartedAt: performance.now(),
       step: "Démarrage",
-      results: [],
+      results: saved?.results ?? [],
       sent: null,
     };
     autoRef.current = state;
-    setAnswers({ damaged: null, damagedTitle: "", audioClean: null });
-    note(`série ${state.serie} (${pass === "courte" ? "comparatif rapide" : "complète"}, graine ${state.seed}) : ${plan.length} essais`);
+    if (saved) {
+      // Les lignes restées en attente avant le rechargement repartent avec la suite.
+      outboxRef.current = [...saved.outbox, ...outboxRef.current].slice(-OUTBOX_MAX);
+      note(`série ${state.serie} reprise après le rechargement, à l'essai ${state.index + 1} sur ${plan.length}`);
+    } else {
+      setAnswers({ damaged: null, damagedTitle: "", audioClean: null });
+      const passLabel = pass === "courte" ? "comparatif rapide" : pass === "leviers" ? "leviers de démarrage" : "complète";
+      note(`série ${state.serie} (${passLabel}, ${seriesOrder === "actuel" ? "lecteur actuel d'abord, rechargement" : "serveur d'abord"}, graine ${state.seed}) : ${plan.length} essais`);
+    }
     video.scrollIntoView?.({ block: "start" });
     refreshAuto();
-    void runSeries(plan, makeDriver(state), (result) => {
-      state.results = [...state.results, result];
-      refreshAuto();
-    }).then(({ stopped }) => {
+    void runSeries(
+      plan,
+      makeDriver(state),
+      (result) => {
+        state.results = [...state.results, result];
+        refreshAuto();
+      },
+      { from: state.index }
+    ).then(({ stopped }) => {
       videoRef.current?.pause();
       state.phase = "questions";
       state.step = stopped ? "Arrêtée" : "Terminée";
       note(`série ${state.serie} ${stopped ? "arrêtée" : "terminée"} : ${state.results.length} essai(s)`);
       refreshAuto();
     });
+  };
+
+  /**
+   * La reprise d'une série après le rechargement de l'ordre `actuel` : l'appui sur « Touchez pour continuer » est le
+   * geste qui rend à l'élément le droit de jouer avec le son (`runAll` fait `load()` et `play()` dans ce geste).
+   */
+  const resumeSeries = () => {
+    const saved = resume;
+    setResume(null);
+    forgetSavedSeries();
+    if (saved) runAll(saved.pass, saved);
   };
 
   /** « Arrêter » : l'essai en cours se ferme (sa ligne part quand même), rien après. */
@@ -1272,7 +1760,7 @@ export function LumenTest() {
     const isSummary = (body: Record<string, unknown>) => (body.auto as { summary?: boolean } | undefined)?.summary === true;
     outboxRef.current = [
       ...outboxRef.current.filter((body) => !isSummary(body)),
-      { kind: "lumen-test", build: APP_BUILD, env: envRef.current, ...summaryBody(state.serie, state.plan.length, state.results, answers, { elapsedS: (performance.now() - state.startedAt) / 1000, stopped: state.stopped, pass: state.pass, seed: state.seed }) },
+      { kind: "lumen-test", build: APP_BUILD, env: envRef.current, ...summaryBody(state.serie, state.plan.length, state.results, answers, { elapsedS: (performance.now() - state.startedAt) / 1000, stopped: state.stopped, pass: state.pass, seed: state.seed, order: state.order }) },
     ].slice(-OUTBOX_MAX);
     const ok = await flush();
     state.sent = ok ? "Bilan envoyé. Merci." : `Bilan non envoyé (${outboxRef.current.length} ligne(s) en attente) : réessayer.`;
@@ -1282,6 +1770,7 @@ export function LumenTest() {
 
   const estimateMin = Math.round(seriesEstimateS(SERIES) / 60);
   const quickMin = Math.round(seriesEstimateS(QUICK_SERIES) / 60);
+  const leverMin = Math.round(seriesEstimateS(LEVER_SERIES) / 60);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 text-sm text-white">
@@ -1305,7 +1794,7 @@ export function LumenTest() {
       <section className="mt-4 rounded-xl border border-white/30 bg-white/5 p-3">
         <h2 className="font-semibold">Série automatique</h2>
         <p className="mt-1 text-xs text-white/60">
-          Chaque titre joué par Lumen serveur puis par le lecteur actuel, avec les mêmes sauts ; tous les essais serveur d&apos;abord. Chaque essai part au
+          Chaque titre joué par Lumen serveur et par le lecteur actuel, avec les mêmes sauts, dans l&apos;ordre choisi plus bas ; une chronologie de chaque démarrage et de chaque saut. Chaque essai part au
           journal dès qu&apos;il est fini, et un tableau côte à côte les compare à la fin. Gardez le son audible et regardez de temps en temps : deux
           questions à la fin.
         </p>
@@ -1315,6 +1804,31 @@ export function LumenTest() {
         <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("courte")}>
           {`Comparatif rapide (${QUICK_SERIES.length} essais, ~${quickMin} min)`}
         </button>
+        <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("leviers")}>
+          {`Leviers de démarrage (${LEVER_SERIES.length} essais, Lumen serveur seul, ~${leverMin} min)`}
+        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/60">
+          Ordre des lecteurs :
+          {(
+            [
+              ["serveur", "Lumen serveur d'abord"],
+              ["actuel", "Lecteur actuel d'abord (rechargement)"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setOrder(id)}
+              className={`rounded-lg border px-2 py-1 ${order === id ? "border-white/60 bg-white/10 text-white" : "border-white/15"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-[11px] text-white/50">
+          Le lecteur joué en second lit des positions que le premier vient de lire, sur un cache disque plus chaud. Dans le second ordre, la page se recharge
+          entre les deux (Safari refuse le HLS natif après une MediaSource) : touchez l&apos;écran pour reprendre, le son en dépend.
+        </p>
       </section>
 
       <section className="mt-4 rounded-xl border border-white/15 p-3">
@@ -1388,6 +1902,38 @@ export function LumenTest() {
               {s} s{s === DEFAULT_TARGET_S ? " (la règle)" : " (essai)"}
             </button>
           ))}
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-white/60">
+          Leviers (serveur) :
+          {(
+            [
+              ["mux", "son multiplexé", { mux: !modes.mux }],
+              ["prep", "préparé 5 s avant", { early: modes.early === "serveur" ? undefined : "serveur" }],
+              ["fiche", "fiche ouverte 5 s avant", { early: modes.early === "élément" ? undefined : "élément" }],
+              ["xstart", "départ par EXT-X-START", { startMode: modes.startMode === "ext-x-start" ? undefined : "ext-x-start" }],
+              ["frag", "départ par #t=", { startMode: modes.startMode === "fragment" ? undefined : "fragment" }],
+              ["bw", "débit annoncé moyen", { bandwidth: modes.bandwidth ? undefined : "moyen" }],
+            ] as const
+          ).map(([id, label, change]) => {
+            const on = id === "mux" ? !!modes.mux : id === "prep" ? modes.early === "serveur" : id === "fiche" ? modes.early === "élément" : id === "xstart" ? modes.startMode === "ext-x-start" : id === "frag" ? modes.startMode === "fragment" : !!modes.bandwidth;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setModes((m) => {
+                    const next: TrialModes = { ...m, ...change };
+                    for (const k of Object.keys(next) as (keyof TrialModes)[]) if (!next[k]) delete next[k];
+                    return next;
+                  });
+                  if (id === "mux") setVerdict(null);
+                }}
+                className={`rounded-lg border px-2 py-1 ${on ? "border-white/60 bg-white/10 text-white" : "border-white/15"}`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           {CUTS.map((c) => (
@@ -1474,6 +2020,7 @@ export function LumenTest() {
               </div>
             )}
             {auto.comparison.length > 0 && <ComparisonTable rows={auto.comparison} />}
+            {auto.trials.length > 0 && <ChronoTable trials={auto.trials} />}
             {auto.results.length > 0 && (
               <ol className="mt-2 space-y-0.5 font-mono text-[11px] leading-relaxed text-white/80">
                 {auto.results.map((line, i) => (
@@ -1606,6 +2153,16 @@ export function LumenTest() {
             "Aucune lecture."
           )}
         </div>
+        {cascadeView && (
+          <details className="mt-3 rounded-lg border border-white/15 p-2">
+            <summary className="cursor-pointer text-xs font-semibold">Chronologie de la dernière lecture — {cascadeView.title}</summary>
+            <p className="mt-1 text-[10px] text-white/50">
+              En ms depuis le geste. req : arrivée au serveur, prête (r), premier et dernier morceau remis (f, l) — remis n&apos;est pas reçu, des tampons
+              de plusieurs Mo séparent le serveur de l&apos;appareil —, poids (k, Ko). ev : évènement, readyState, avance de buffered devant la position (s).
+            </p>
+            <pre className="mt-1 max-h-96 overflow-auto whitespace-pre font-mono text-[10px] leading-snug text-white/80">{cascadeView.lines.join("\n")}</pre>
+          </details>
+        )}
       </section>
 
       <section className="mt-4 rounded-xl border border-white/15 p-3">
@@ -1623,12 +2180,82 @@ export function LumenTest() {
         </ol>
       </section>
 
+      {resume && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/90 px-6 text-center text-white">
+          <button type="button" onClick={resumeSeries} className="w-full max-w-md rounded-2xl border border-white/40 bg-white/10 px-6 py-10 text-2xl font-semibold">
+            Touchez pour continuer
+          </button>
+          <p className="max-w-md text-sm text-white/70">
+            La page s&apos;est rechargée entre le lecteur actuel et Lumen serveur. La série reprend à l&apos;essai {resume.index + 1} ; l&apos;appui rend le son à
+            la vidéo.
+          </p>
+          <button
+            type="button"
+            className="text-xs text-white/50 underline"
+            onClick={() => {
+              forgetSavedSeries();
+              setResume(null);
+            }}
+          >
+            Abandonner la série
+          </button>
+        </div>
+      )}
       {needTap && (
         <button type="button" onClick={tap} className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-6 text-center text-2xl font-semibold text-white">
           Touchez pour continuer
         </button>
       )}
     </main>
+  );
+}
+
+/**
+ * La chronologie de chaque essai, à la fin d'une série (étape 3e) : le débit mesuré avant la lecture, puis les
+ * médianes des sauts — première requête au serveur, premier segment vidéo prêt, `seeked` → reprise, avance de
+ * `buffered` à `seeked` et à la reprise, segments vidéo demandés avant la reprise —, et la plus longue préparation
+ * d'une réponse sur le serveur. De quoi lire où passe le temps sans ouvrir le journal.
+ */
+function ChronoTable({ trials }: { trials: TrialResult[] }) {
+  const rows = trials.filter((t) => !t.verdicts && (t.chrono || t.linkMbps !== undefined));
+  if (!rows.length) return null;
+  const cell = (v: number | undefined, unit = "") => (v === undefined ? "—" : `${v}${unit}`);
+  return (
+    <div className="mt-3 overflow-x-auto">
+      <table className="w-full min-w-[40rem] border-collapse font-mono text-[11px] text-white/85">
+        <thead>
+          <tr className="text-white/60">
+            {["Essai", "lien Mb/s", "1re req.", "seg. prêt", "seeked→reprise", "avance seeked", "avance reprise", "seg. v", "serveur max"].map((h) => (
+              <th key={h} className="px-1.5 py-1 text-right font-normal first:text-left">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.rank} className="border-t border-white/10">
+              <td className="px-1.5 py-1">
+                {r.title} · {playerLabel(r)}
+                {r.mode ? ` (${r.mode})` : ""}
+              </td>
+              <td className="px-1.5 py-1 text-right">{cell(r.linkMbps)}</td>
+              <td className="px-1.5 py-1 text-right">{cell(r.chrono?.firstReqMs)}</td>
+              <td className="px-1.5 py-1 text-right">{cell(r.chrono?.firstVideoReadyMs)}</td>
+              <td className="px-1.5 py-1 text-right">{cell(r.chrono?.seekedToAdvanceMs)}</td>
+              <td className="px-1.5 py-1 text-right">{cell(r.chrono?.aheadSeekedS, " s")}</td>
+              <td className="px-1.5 py-1 text-right">{cell(r.chrono?.aheadAdvanceS, " s")}</td>
+              <td className="px-1.5 py-1 text-right">{cell(r.chrono?.videoAdvance)}</td>
+              <td className="px-1.5 py-1 text-right">{cell(r.chrono?.readyMaxMs)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[10px] text-white/50">
+        Médianes des sauts, en ms depuis le geste ; avances en secondes de film déjà dans `buffered`. « seg. prêt » : le premier segment vidéo construit
+        sur le serveur ; « serveur max » : la plus longue préparation d&apos;une réponse de l&apos;essai.
+      </p>
+    </div>
   );
 }
 
@@ -1644,7 +2271,10 @@ function Cells({ cell }: { cell: ComparisonCell | undefined }) {
   const flags = [cell.missed ? `${cell.missed} manqué${cell.missed > 1 ? "s" : ""}` : null, cell.errors ? `${cell.errors} err.` : null, cell.freezes ? `${cell.freezes} gel${cell.freezes > 1 ? "s" : ""}` : null].filter(Boolean);
   return (
     <>
-      <td className="px-1.5 py-1 text-right">{cell.firstFrameMs ?? "—"}</td>
+      <td className="px-1.5 py-1 text-right">
+        {cell.firstFrameMs ?? "—"}
+        {cell.targetFrameMs !== undefined && cell.targetFrameMs !== cell.firstFrameMs && <div className="text-[10px] text-white/60">au départ {cell.targetFrameMs}</div>}
+      </td>
       <td className="px-1.5 py-1 text-right">{pair(cell.seekedMedianMs, cell.seekedP90Ms)}</td>
       <td className="px-1.5 py-1 text-right">
         {pair(cell.advanceMedianMs, cell.advanceP90Ms)}
@@ -1685,10 +2315,11 @@ function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={`${row.key}-${row.targetS}`} className="border-t border-white/10 align-top">
+            <tr key={`${row.key}-${row.targetS}-${row.mode ?? ""}`} className="border-t border-white/10 align-top">
               <td className="px-1.5 py-1">
                 {row.title}
                 {row.targetS !== DEFAULT_TARGET_S ? ` · cible ${row.targetS} s` : ""}
+                {row.mode ? ` · ${row.mode}` : ""}
               </td>
               <Cells cell={row.serveur} />
               <Cells cell={row.actuel} />

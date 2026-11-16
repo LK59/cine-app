@@ -29,7 +29,12 @@ const MAX_FREEZES = 60;
 /** Les essais résumés d'une ligne récapitulative : la série en compte 14. */
 const MAX_TRIALS = 30;
 const PLAYERS = new Set(["serveur", "actuel"]);
-const PASSES = new Set(["complète", "courte"]);
+const PASSES = new Set(["complète", "courte", "leviers"]);
+const ORDERS = new Set(["serveur", "actuel"]);
+/** Les leviers d'un essai (`modeTag`, autoSeries.ts) : `mux`, `prep`, `fiche`, `depart-xstart`, `bw`… */
+const modeOf = (v: unknown) => (typeof v === "string" && /^[a-z-]{1,40}$/.test(v) ? v : null);
+/** Les cascades d'une lecture (étape 3e) : une par démarrage et par saut ; un parcours de 20 sauts plus le départ. */
+const MAX_CASCADES = 24;
 const cutOf = (v: unknown) => (typeof v === "string" && (LUMEN_CUT_MODES as readonly string[]).includes(v) ? v : null);
 /** Une cible de segment, en secondes : un petit entier. */
 const targetOf = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v > 0 && v <= 30 ? v : null);
@@ -83,6 +88,63 @@ function seekOf(raw: unknown): Record<string, unknown> {
   });
 }
 
+/** Le résumé de la chronologie d'un essai (`ChronoSummary`, chronology.ts) : des médianes. */
+function chronoSummaryOf(raw: unknown): Record<string, unknown> {
+  const ms = (v: unknown) => num(v, 1e7);
+  return pick(raw, {
+    aheadAdvanceS: (v) => num(v, 1e5),
+    aheadSeekedS: (v) => num(v, 1e5),
+    firstReqMs: ms,
+    firstVideoReadyMs: ms,
+    seekedToAdvanceMs: ms,
+    videoAdvance: (v) => num(v, 1e4),
+    readyMaxMs: ms,
+  });
+}
+
+/**
+ * La chronologie d'une lecture (étape 3e, DECISIONS §160), telle que la page l'a dessinée : l'horloge (décalage et
+ * aller-retour du meilleur échange), l'échantillon de débit, ce que Resource Timing a vu des requêtes HLS, et une
+ * cascade par démarrage et par saut — instants depuis le geste, avances, et deux listes de lignes courtes (`req`,
+ * `ev`, format dans `chronology.ts`). Tout vient du navigateur : borné, et les lignes ne sont que du texte court.
+ */
+function chronoOf(raw: unknown): Record<string, unknown> {
+  const ms = (v: unknown) => num(v, 1e7);
+  return pick(raw, {
+    clock: (v) => pick(v, { offsetMs: (x) => num(x, 1e12), rttMs: ms, samples: (x) => num(x, 100) }),
+    link: (v) => pick(v, { mbps: (x) => num(x, 1e5), ms, via: oneOf(new Set(["rt", "lecture"])), MB: (x) => num(x, 100) }),
+    rtLumen: (v) => num(v, 1e5),
+    rtStream: (v) => num(v, 1e5),
+    summary: chronoSummaryOf,
+    cascades: (v) =>
+      list(v, MAX_CASCADES).map((c) =>
+        pick(c, {
+          k: oneOf(new Set(["départ", "saut"])),
+          to: (x) => num(x, 1e6),
+          firstReqMs: ms,
+          firstSegMs: ms,
+          firstVideoReadyMs: ms,
+          firstVideoSentMs: ms,
+          seekedMs: ms,
+          playingMs: ms,
+          frameMs: ms,
+          advanceMs: ms,
+          aheadSeekedS: (x) => num(x, 1e5),
+          aheadPlayingS: (x) => num(x, 1e5),
+          aheadAdvanceS: (x) => num(x, 1e5),
+          sentSeekedMB: (x) => num(x, 1e5),
+          sentAdvanceMB: (x) => num(x, 1e5),
+          videoSeeked: (x) => num(x, 1e4),
+          videoAdvance: (x) => num(x, 1e4),
+          readyMaxMs: ms,
+          srvMbps: (x) => num(x, 1e6),
+          req: (x) => list(x, 48).map((y) => text(y, 80)).filter((y) => y !== null),
+          ev: (x) => list(x, 60).map((y) => text(y, 60)).filter((y) => y !== null),
+        })
+      ),
+  });
+}
+
 function runOf(raw: unknown, user: string): Record<string, unknown> {
   const run = pick(raw, {
     itemId: (v) => (typeof v === "string" && /^[0-9a-f]{32}$/i.test(v) ? v : null),
@@ -90,6 +152,8 @@ function runOf(raw: unknown, user: string): Record<string, unknown> {
     player: oneOf(PLAYERS),
     cut: cutOf,
     targetS: targetOf,
+    mode: modeOf,
+    startAt: (v) => num(v, 1e6),
     // Le lecteur actuel : ce que son moteur a ouvert (vidéo, piste, son copié ou réencodé), et la piste ouverte.
     engine: (v) => pick(v, { video: (x) => text(x, 80), audio: (x) => text(x, 80), sound: (x) => text(x, 80) }),
     openedAudio: (v) => num(v, 1e4),
@@ -114,6 +178,10 @@ function runOf(raw: unknown, user: string): Record<string, unknown> {
     loadedMetadataMs: (v) => num(v, 1e7),
     firstFrameMs: (v) => num(v, 1e7),
     firstFrameVia: (v) => (v === "rvfc" || v === "playing" ? v : null),
+    // La première image à la position de départ demandée, et la position de la toute première image (étape 3e).
+    targetFrameMs: (v) => num(v, 1e7),
+    firstFrameAt: (v) => num(v, 1e6),
+    chrono: chronoOf,
     playedS: (v) => num(v, 1e6),
     seeks: (v) => list(v, MAX_SEEKS).map(seekOf),
     waits: (v) => pick(v, { count: (x) => num(x, 1e5), totalMs: (x) => num(x, 1e8), maxMs: (x) => num(x, 1e8) }),
@@ -178,9 +246,13 @@ function trialSummaryOf(raw: unknown): Record<string, unknown> {
     player: oneOf(PLAYERS),
     cut: cutOf,
     targetS: targetOf,
+    mode: modeOf,
     status: oneOf(TRIAL_STATUSES),
     reason: (v) => text(v, 120),
     firstFrameMs: duration,
+    targetFrameMs: duration,
+    chrono: chronoSummaryOf,
+    linkMbps: (v) => num(v, 1e5),
     seeks: count,
     missed: count,
     seekMedianMs: duration,
@@ -208,6 +280,9 @@ function comparisonCellOf(raw: unknown): Record<string, unknown> {
   return pick(raw, {
     status: oneOf(TRIAL_STATUSES),
     firstFrameMs: duration,
+    targetFrameMs: duration,
+    chrono: chronoSummaryOf,
+    linkMbps: (v) => num(v, 1e5),
     seekedMedianMs: duration,
     seekedP90Ms: duration,
     advanceMedianMs: duration,
@@ -237,6 +312,8 @@ export function lumenTestReport(body: Record<string, unknown>, user: string): Re
           status: oneOf(TRIAL_STATUSES),
           player: oneOf(PLAYERS),
           pass: oneOf(PASSES),
+          order: oneOf(ORDERS),
+          mode: modeOf,
           seed: (x) => (typeof x === "number" && Number.isInteger(x) && x >= 0 && x < 2 ** 32 ? x : null),
           summary: bool,
           done: (x) => num(x, 1e3),
@@ -246,7 +323,7 @@ export function lumenTestReport(body: Record<string, unknown>, user: string): Re
       trials: (v) => list(v, MAX_TRIALS).map(trialSummaryOf),
       comparison: (v) =>
         list(v, MAX_TRIALS).map((row) =>
-          pick(row, { key: trialName, title: (x) => text(x, 120), targetS: targetOf, serveur: comparisonCellOf, actuel: comparisonCellOf })
+          pick(row, { key: trialName, title: (x) => text(x, 120), targetS: targetOf, mode: modeOf, serveur: comparisonCellOf, actuel: comparisonCellOf })
         ),
       answers: (v) => pick(v, { damaged: oneOf(DAMAGED), damagedTitle: (x) => text(x, 120), audioClean: oneOf(AUDIO_CLEAN) }),
     }),

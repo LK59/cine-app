@@ -523,6 +523,117 @@ pistes secondaires) et un AAC à PCE (*Rocketman*). Données : `xbench/lumen-ser
 sans clic) et un saut dans le silence puis au-delà de 30 s ; la fin de *Lockerbie* S01E05 ; *Black Butler* S01E19
 (AC-3 32 kHz) ; sur iPhone, Mac, et une Apple TV quand l'étape AirPlay viendra.
 
+## Étape 3e — la chronologie d'un démarrage et d'un saut, et les leviers de démarrage (17/11/2026, DECISIONS §160)
+
+**La question.** Le comparatif rapide du 16/11 (iPhone, application installée) laisse Lumen serveur derrière le lecteur
+actuel : première image 1,08 / 0,88 s (*À la Maison Blanche*), 1,26 / 0,29 s (*Ghosted*), 1,12 / 0,35 s (*Ted Lasso*) ;
+reprise après un saut 1,19 / 1,02 s à 1,75 / 1,52 s, alors que l'image du saut (`seekedMs`) est presque aussi rapide.
+Les segments de 2 s n'y changent rien (1,55 contre 1,51 s). Entre l'image et la reprise : Safari qui attend une
+réserve, le réseau, ou le serveur ?
+
+**Ce que les données existantes prouvent déjà** (lignes `lumen-test` du 16/11, 18:40Z et 20:30Z, trace serveur recollée
+aux sauts de la page en prenant l'arrivée de la liste maître pour l'appui ; `analyse.mjs` hors dépôt) :
+- **Le serveur n'est pas le goulot** : un segment se construit en 10 à 60 ms d'ordinaire, 257 ms au pire au banc 3b,
+  763 ms une fois (*Black Monday*, disque froid) ; la file n'attend presque jamais (w0–w7).
+- **« Remis » n'est pas « reçu »** : la trace donne des segments de 3 à 10 Mo remis au réseau en 1 à 60 ms
+  (`e1`…`e60`), soit plusieurs Gb/s — impossible jusqu'à l'iPhone. Le relais inverse ne garde rien
+  (`proxy_buffering off` sur cet hôte), mais les tampons des sockets du noyau, des deux côtés du relais, tiennent
+  plusieurs Mo. Les quantités « remises avant la reprise » de l'étape 3c (5 segments, ~35 s, ~31 Mo) sont donc des
+  **majorants** de ce que l'iPhone avait reçu : avec elles seules, on ne sépare pas le réseau de la réserve.
+- **Ce que Safari demande** : 2 à 4 segments vidéo avant `seeked`, 5 à 9 avant la reprise (médianes par titre),
+  toujours en rafale, un segment vidéo et un segment son à la fois. Ni un nombre fixe (*Black Monday* : 5 en cible
+  4 s, 8 en cible 2 s), ni une durée fixe (16 s à 56 s de film), ni un poids fixe (21 à 35 Mo).
+- **`playing` arrive avec `seeked`** (écart médian 0) : Safari se dit en lecture alors que l'horloge ne bouge pas.
+- **Les listes partent en clair** : le relais retire `Accept-Encoding` de chaque requête vers l'application
+  (`proxy_set_header Accept-Encoding ""`), donc `encodePlaylist` ne compresse jamais, et le relais ne compresse que
+  `text/html`. La règle 10.1 d'Apple (« MUST deliver playlists using gzip ») n'est pas tenue. ~30 Ko pour une liste de
+  deux heures : pas un levier de démarrage mesurable, noté pour le jour où le relais changera.
+
+Ce qui reste **non prouvé** : que Safari exige une réserve (et combien), qu'elle dépende du débit ou de la définition.
+
+**La chronologie** (`src/components/lumenTest/chronology.ts`, route `GET /api/lumen/{id}/chrono`, `ChronoEntry` dans
+`playbackStats.ts`) :
+- **Les horloges** : cinq échanges au début de chaque essai serveur ; le serveur rend l'arrivée et le départ de sa
+  réponse sur `serverClockMs` (`performance.timeOrigin + performance.now()`), la page garde le décalage de l'échange au
+  plus court aller-retour (NTP). Erreur bornée par la moitié de cet aller-retour, écrite dans la ligne (`clock.rttMs`).
+- **Côté serveur**, chaque requête d'une lecture marquée par ces échanges : arrivée, prête (liste écrite, init lu,
+  segment construit — file et disque compris), premier et dernier morceau de 256 Kio remis, poids, préparé ou partagé,
+  coupé, statut. Une lecture qui ne l'a pas demandé n'en tient rien.
+- **Côté page**, chaque évènement de `<video>` (`loadstart`, `loadedmetadata`, `loadeddata`, `canplay`,
+  `canplaythrough`, `play`, `playing`, `pause`, `waiting`, `seeking`, `seeked`, `progress`, `stalled`, `suspend`,
+  `emptied`, `error`, `ended`), les changements de `readyState` et l'avance de `buffered` échantillonnés toutes les
+  100 ms (`rs`, `buf` — une seconde de plus au moins), la première image (`requestVideoFrameCallback`), la première
+  image à la position de départ, la reprise : chacun avec `readyState`, position et **avance devant la position** —
+  ce qu'AVFoundation a reçu et analysé, la seule mesure de ce que l'appareil a *reçu*.
+- **Le débit réel** : 4 Mo aléatoires demandés à la route `chrono` avant chaque essai, mesurés par la page (Resource
+  Timing, sinon la lecture du corps) — `link.mbps`. Le serveur ne le peut pas (ses envois s'arrêtent dans les tampons).
+  Son propre débit de remise (`srvMbps`) est donné, et dit pour un majorant.
+- **Une cascade par démarrage et par saut**, à l'écran (« Chronologie de la dernière lecture ») et dans la ligne
+  (`runs[].chrono.cascades`) : `req` — `+105 v/12.m4s r23 f25 l140 k3200` (arrivée au serveur ramenée sur l'horloge de
+  la page, prête, premier et dernier morceau remis, Ko) — et `ev` — `+612 seeked rs2 a3.2` ; puis les instants
+  (`firstReqMs`, `firstVideoReadyMs`, `seekedMs`, `playingMs`, `advanceMs`…), l'avance à `seeked`, à `playing` et à la
+  reprise, et ce qui avait été demandé et remis avant. Le lecteur actuel a les siennes depuis Resource Timing (ses
+  plages d'octets, que la page tire elle-même).
+- **Le résumé d'un essai** (`chrono.summary`, tableau « Chronologie » de fin de série) : médianes de la première
+  requête, du premier segment vidéo prêt, de `seeked` → reprise, de l'avance à `seeked` et à la reprise, des segments
+  vidéo demandés, et la plus longue préparation du serveur.
+- **Ce qu'elle ne voit pas** : l'arrivée réelle de chaque segment sur l'iPhone (seulement l'avance que `buffered` en
+  montre) ; les requêtes HLS de Safari côté page — `performance.getEntriesByType("resource")` est relevé pour le
+  constater (`rtLumen` ; on s'attend à 0 sur iPhone, le chargeur d'AVFoundation n'étant pas celui de la page) ; le
+  décodage. **La question se tranche ainsi** : une avance à la reprise à peu près constante en secondes d'un titre à
+  l'autre, avec un lien bien plus rapide que le flux, c'est une réserve exigée par Safari (et sa valeur) ; une avance
+  qui suit le débit ou la définition, une politique de débit ; un premier segment prêt tard, le serveur ; une avance
+  qui monte au rythme du lien mesuré, le réseau.
+
+**Les leviers de démarrage**, chacun un mode d'essai (`src/lib/lumenServer/trials.ts` ; rien ne change sans eux — ni
+liste, ni segment, ni adresse ; les empreintes du lecteur non plus) :
+- **(a) le son par défaut dans les segments vidéo** (`mux=1`) : la version de l'adresse porte `m1` après la découpe (`2m1-…`, `3m1-…` sous le format 3), la liste
+  maître ôte l'URI de la piste par défaut et sa variante lit `vm{N}.m3u8` ; l'init a deux `trak` ; un segment
+  `vm{N}/{k}.m4s` est fait des deux segments de la règle (construits et préparés comme eux), fragments entrelacés par
+  instant de décodage et renumérotés. Une liste, un init et un segment de moins avant la première image. **Ce que
+  disent les spécifications** : RFC 8216 §4.3.4.2.1, une piste AUDIO sans URI est dans les segments de la variante,
+  les autres pistes du groupe gardent la leur — la forme exacte de l'essai ; §3.3, un init peut porter une `trak` par
+  piste des fragments. Mais la spécification d'auteur d'Apple le déconseille : 9.5 « You SHOULD deliver video and
+  audio as separate streams », 9.6 « If you have multichannel audio, you MUST use separate audio streams », 9.7 pour
+  les autres langues (2.17, une seule piste son par segment, est tenue). Un essai contre une règle d'Apple, donc,
+  pour chiffrer le prix des requêtes séparées. Vérifié : init + trois segments d'une fixture décodés par ffmpeg sans
+  erreur (144 images, son entier).
+- **(b) la préparation précoce** : `POST …/prepare` (index, segment de départ et son pendant audio gardés deux
+  minutes), puis 5 s avant Lire (`EARLY_DELAY_MS`) — `prep` ; `fiche` : en plus, la source posée sur la vidéo avec
+  `preload="auto"` pendant ces 5 s (Safari charge listes, init et premiers segments). Le temps de la première image
+  part de l'appui sur Lire ; une image présentée avant ne compte pas.
+- **(c) le départ à la bonne position**, pour une reprise : `saut` (la règle d'aujourd'hui : `currentTime` à
+  `loadedmetadata`), `ext-x-start` (`?start=` sur la liste maître : `EXT-X-START:TIME-OFFSET=…,PRECISE=YES`, RFC 8216
+  §4.3.5.2 — la spécification d'Apple n'en dit rien) et `fragment` (`#t=` sur l'adresse). Mesuré par la première
+  image *à la position demandée* (`targetFrameMs`), à côté de la toute première image.
+- **(d) le débit annoncé** (`?bw=moyen`) : BANDWIDTH à la moyenne plutôt qu'à la crête — un écart à RFC 8216
+  §4.3.4.2, d'essai seulement : AVFoundation pèse peut-être le débit annoncé contre le débit mesuré avant de repartir.
+  D'autres leviers viendront de la chronologie elle-même (taille du premier segment, nombre de requêtes avant
+  l'image) ; les listes compressées n'en sont pas un ici (voir plus haut).
+
+**L'équité du comparatif.** « Ordre des lecteurs » : *Lumen serveur d'abord* (l'ordre de l'étape 3c), ou *Lecteur
+actuel d'abord* — tous ses essais, puis la page se recharge (WebKit refuse un HLS natif après une MediaSource), et
+« Touchez pour continuer » rend à la vidéo le droit de jouer avec le son ; la série (rang, résultats, graine, lignes en
+attente) passe le rechargement dans sessionStorage (`cine:lumen-test-serie`, une heure au plus). Les lignes portent
+`auto.order`. Jouer les deux ordres sépare l'effet du cache disque plus chaud de celui du lecteur.
+
+**Protocole, sur l'iPhone (application installée).**
+- **« Comparatif rapide »** (~13 min estimées, 12 essais) : les quatre titres témoins en 10 sauts par chaque lecteur,
+  plus le son multiplexé (5 sauts) et la préparation précoce (3 sauts) sur *Ghosted* et *Ted Lasso*, les deux titres
+  à l'écart de première image le plus grand. La cible de 2 s de *Black Monday* en est sortie (elle a répondu). À
+  jouer dans les deux ordres.
+- **« Leviers de démarrage »** (~10 min estimées, 14 essais, Lumen serveur seul) : témoins *Black Monday*, *Ghosted*, *Ted
+  Lasso* (5 sauts) ; le départ à 600 s par saut, `EXT-X-START` et `#t=` sur *Black Monday* et *Ghosted* ; la fiche
+  ouverte 5 s avant sur *Ghosted* et *Ted Lasso* ; le débit annoncé moyen sur *Black Monday* et *Ghosted* ; le son
+  multiplexé sur *À la Maison Blanche* (H.264, stéréo).
+- **« Tout enchaîner »** inchangé (~28 min estimées), avec la chronologie.
+- Lire les cascades : `jq 'select(.kind=="lumen-test" and .auto.serie=="…") | .runs[0].chrono'` sur `startup.log` ; le
+  résumé de chaque essai est dans `.trials[].chrono` de la ligne récapitulative.
+
+**Limites.** L'horloge vaut à la moitié de l'aller-retour près (quelques ms sur le Wi-Fi de la maison, ~30 ms en
+roaming) ; `buffered` est échantillonné toutes les 100 ms et à chaque évènement ; la chronologie serveur garde 800
+requêtes par lecture ; une cascade porte au plus 48 requêtes et 60 évènements.
+
 ## Ordre de travail
 
 1. **Preuve sur appareil** : une instance jetable sert la liste et les segments d'un fichier copiable ; on l'ouvre
