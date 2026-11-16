@@ -15,6 +15,7 @@
 // CLAUDE.md) partagent les mêmes bornes.
 
 import { cachedLumenIndex } from "./indexCache";
+import type { LumenIndexStore } from "./indexStore";
 import { inlineExecutor, LumenQueue, type LumenExecutor, type QueueOptions } from "./pool";
 import { masterPlaylist, mediaPlaylist, type MasterOptions } from "./playlists";
 import { segmentSpec, type SegmentResult } from "./segment";
@@ -30,26 +31,57 @@ const AUDIO_SEGMENT_COST = 4 * 1024 * 1024;
 
 export interface LumenEngineOptions extends QueueOptions {
   executor?: LumenExecutor;
+  /**
+   * Le cache des index sur le disque (`indexStore.ts`, étape 3) : lu avant toute construction, écrit
+   * après. Sans lui, chaque redémarrage du processus relit l'index de chaque fichier (2 à 25 s à froid).
+   */
+  store?: LumenIndexStore;
+}
+
+/** D'où vient l'index d'une construction, pour le journal et les tests. */
+export interface IndexBuildStats {
+  /** Construits depuis le média. */
+  built: number;
+  /** Relus sur le disque (`store`). */
+  fromStore: number;
 }
 
 export class LumenEngine {
   readonly queue: LumenQueue;
   readonly executor: LumenExecutor;
+  readonly store: LumenIndexStore | null;
+  readonly builds: IndexBuildStats = { built: 0, fromStore: 0 };
 
   constructor(options: LumenEngineOptions = {}) {
     this.queue = new LumenQueue(options);
     this.executor = options.executor ?? inlineExecutor();
+    this.store = options.store ?? null;
   }
 
-  /** L'index du fichier local `path`, pour sa version actuelle. */
+  /**
+   * L'index du fichier local `path`, pour sa version actuelle : en mémoire, sinon sur le disque, sinon
+   * construit par la file. Lu sur le disque **hors** de la file : quelques millisecondes, qui n'ont pas
+   * à attendre derrière trois segments 4K.
+   */
   index(path: string, targetUs?: number): Promise<LumenIndex> {
-    return cachedLumenIndex(path, (p) =>
-      this.queue.run(INDEX_COST, async () => {
+    return cachedLumenIndex(path, async (p, identity) => {
+      const kept = await this.store?.get(identity, targetUs).catch(() => null);
+      if (kept) {
+        this.builds.fromStore += 1;
+        return kept;
+      }
+      const index = await this.queue.run(INDEX_COST, async () => {
         const result = await this.executor.run({ type: "index", path: p, targetUs });
         if (result.type !== "index") throw new Error("Réponse inattendue du fil de calcul.");
         return result.index;
-      })
-    );
+      });
+      this.builds.built += 1;
+      // Rangé sous l'identité que le fil a lue sur son descripteur : si le fichier a changé entre le
+      // `stat` et l'ouverture, c'est l'index de la nouvelle version, rangé sous sa propre clé.
+      // Attendu : la séance suivante doit le trouver, et l'écriture coûte quelques millisecondes.
+      await this.store?.put(index, targetUs).catch(() => {});
+      return index;
+    });
   }
 
   master(index: LumenIndex, options: MasterOptions): string {
@@ -101,10 +133,19 @@ export class LumenEngine {
 }
 
 /**
- * Le moteur du processus, créé à la première demande. `options` ne compte qu'à la création : l'étape 3
- * le crée au démarrage avec l'exécutant à fils (`workerExecutor`) si le module empaqueté est là.
+ * Le moteur du processus, créé à la première demande. `options` ne compte qu'à la création — d'où la
+ * forme fonction : la route (`service.ts`) passe un exécutant à fils, et le construire à chaque appel
+ * lancerait trois `worker_threads` par requête pour les jeter aussitôt.
  */
-export function lumenEngine(options?: LumenEngineOptions): LumenEngine {
+export function lumenEngine(options?: LumenEngineOptions | (() => LumenEngineOptions)): LumenEngine {
   const g = globalThis as unknown as Record<symbol, LumenEngine | undefined>;
-  return (g[STATE] ??= new LumenEngine(options));
+  return (g[STATE] ??= new LumenEngine(typeof options === "function" ? options() : options));
+}
+
+/** Oublie le moteur du processus (tests) ; ses fils sont arrêtés. */
+export async function resetLumenEngine(): Promise<void> {
+  const g = globalThis as unknown as Record<symbol, LumenEngine | undefined>;
+  const engine = g[STATE];
+  g[STATE] = undefined;
+  await engine?.close();
 }

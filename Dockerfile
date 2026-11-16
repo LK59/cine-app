@@ -62,6 +62,12 @@ RUN if [ "$SKIP_TESTS" = "1" ]; then echo "tests déjà passés sur ce commit (S
 # `next build` both passed. The cache saved four seconds (2.9 s against 6.6 s compiled cold).
 # The image cache the server writes at runtime lives in a volume (docker-compose.yml), not here.
 RUN npm run build
+# Le fil de calcul de Lumen serveur (DECISIONS.md §155, §156) : Next n'émet pas d'entrée pour un
+# `worker_threads` côté serveur, et le code du moteur (TypeScript, alias `@/…`) ne se charge pas tel
+# quel dans Node. rolldown (installé avec vitest) l'empaquette en un module ESM autonome, posé dans
+# `server-boot/` — copié plus bas avec le point d'entrée ; `lumenWorkerScript()` le cherche là. Sans
+# lui, le même calcul se ferait sur la boucle d'événements, celle qui sert tout le reste.
+RUN node tools/lumen-worker/build.mjs server-boot/lumen-worker.mjs
 
 FROM node:26-alpine AS runner
 WORKDIR /app
@@ -94,7 +100,8 @@ COPY --from=builder --chown=cineapp:cineapp /app/public ./public
 COPY --from=builder --chown=cineapp:cineapp /app/.next/standalone ./
 COPY --from=builder --chown=cineapp:cineapp /app/.next/static ./.next/static
 # Le point d'entrée : il remet les fichiers statiques des builds précédents avant de lancer le
-# serveur (voir server-boot/staticCarryover.mjs).
+# serveur (voir server-boot/staticCarryover.mjs). Avec lui, le fil de calcul de Lumen serveur empaqueté
+# à l'étape précédente (`server-boot/lumen-worker.mjs`).
 COPY --from=builder --chown=cineapp:cineapp /app/server-boot ./server-boot
 # Le build du mode « Immersion », servi par deux routes (voir l'étape `immersion`).
 COPY --from=immersion --chown=cineapp:cineapp /build/immersion/dist ./immersion-dist

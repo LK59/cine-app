@@ -300,6 +300,12 @@ const ADMIN_ONLY_READS: RegExp[] = [
   // compris. La route le vérifie aussi (`adminOnly`) ; ses écritures (scan, décision) ne sont pas dans la
   // liste blanche des comptes.
   /^\/api\/admin\/subsync(\/|$)/,
+  // Lumen serveur, phase de test (DECISIONS.md §156) : listes, segments, éligibilité, préparation — à
+  // l'administrateur seul. Les routes le revérifient (`lumenAccess`) : ce motif ne ferme que les requêtes
+  // munies d'une session, et un laissez-passer de diffusion passe *avant* lui (`castPassFor`, plus bas) —
+  // il ne s'applique pas ici parce que `castItemOf` ne reconnaît pas `/api/lumen/…`, et la route ne lit
+  // aucun jeton. La préparation (POST) n'est pas dans la liste blanche des écritures : refusée d'office.
+  /^\/api\/lumen(\/|$)/,
 ];
 
 function isAdminOnlyRead(pathname: string): boolean {

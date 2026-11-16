@@ -392,9 +392,10 @@ export const config = {
   lumen: {
     // Lumen serveur (docs/remux-serveur/, DECISIONS.md §155) : comment un chemin de fichier vu par
     // Jellyfin se lit dans ce conteneur — `racineJellyfin=racineConteneur`, plusieurs paires séparées
-    // par `;` (ici `/media=/mnt/media/video`). Vide, coupé : pas de lecture directe, le relais Jellyfin
-    // seul. Déploiement seulement (§81) : il dit où sont montés les médias, ce que seul le compose sait.
-    // Relu à chaque appel (`lumenServer/paths.ts`). Aucune route ne le lit encore (étape 3).
+    // par `;` (ici `/media=/mnt/media/video`). Vide, coupé : les routes `/api/lumen/…` répondent que le
+    // fichier n'est pas lisible ici (`lecture-impossible`) — le relais Jellyfin en repli n'est pas encore
+    // écrit. Déploiement seulement (§81) : il dit où sont montés les médias, ce que seul le compose sait.
+    // Relu à chaque appel (`lumenServer/paths.ts`), lu par `lumenFileOf` (§156).
     get pathMap() {
       return envOnly("LUMEN_PATH_MAP", "");
     },
