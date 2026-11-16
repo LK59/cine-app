@@ -24,9 +24,11 @@ export const PLAYBACK_IDLE_MS = 6 * 60 * 60 * 1000;
 /**
  * La trace d'une lecture : ses derniers segments remis, un par ligne courte. Elle sert la page de banc
  * `/lumen-test` (étape 3b, §157) — qu'a demandé Safari après un saut, le segment d'avant ? —, pas les
- * lignes du journal du lecteur. 80 entrées de ~30 octets : 2,4 Ko par lecture, 720 Ko au pire pour 300.
+ * lignes du journal du lecteur. 200 entrées de ~40 octets : 8 Ko par lecture, 2,4 Mo au pire pour 300.
+ * 80 jusqu'à l'étape 3c : un parcours de 20 sauts n'en gardait que les cinq ou six derniers, et l'analyse de
+ * ce que Safari charge entre `seeked` et la reprise (README, « Étape 3c ») manquait de sauts.
  */
-export const TRACE_ENTRIES = 80;
+export const TRACE_ENTRIES = 200;
 
 /** Un identifiant de lecture tel que les adresses le portent : celui que la page tire (étape 4), ou celui que le serveur donne. */
 export function isPlaybackId(value: unknown): value is string {
@@ -190,11 +192,21 @@ export function noteSent(p: PlaybackStats, facts: { kind: "segment" | "init"; vi
   }
 }
 
-/** Une ligne de la trace d'une lecture (`trace`), bornée à `TRACE_ENTRIES`. */
-export function noteTrace(p: PlaybackStats, entry: { name: string; buildMs: number; waitMs: number; sendMs: number; reused: boolean; aborted: boolean }, now = Date.now()): void {
+/**
+ * Une ligne de la trace d'une lecture (`trace`), bornée à `TRACE_ENTRIES` : `+12.3s v/41.m4s b23 w0 e45 k8123`
+ * — l'instant où le dernier octet a été remis au réseau, depuis la première requête ; construction, attente
+ * dans la file, envoi (ms) ; et depuis l'étape 3c le poids remis (`k`, en Ko) : combien d'octets Safari a
+ * voulus avant de reprendre après un saut se lit alors sans reconstruire les segments.
+ */
+export function noteTrace(
+  p: PlaybackStats,
+  entry: { name: string; buildMs: number; waitMs: number; sendMs: number; reused: boolean; aborted: boolean; bytes?: number },
+  now = Date.now()
+): void {
   const at = ((now - p.firstAt) / 1000).toFixed(1);
   const flags = `${entry.reused ? " p" : ""}${entry.aborted ? " x" : ""}`;
-  p.trace.push(`+${at}s ${entry.name} b${Math.round(entry.buildMs)} w${Math.round(entry.waitMs)} e${Math.round(entry.sendMs)}${flags}`);
+  const size = entry.bytes !== undefined ? ` k${Math.round(entry.bytes / 1024)}` : "";
+  p.trace.push(`+${at}s ${entry.name} b${Math.round(entry.buildMs)} w${Math.round(entry.waitMs)} e${Math.round(entry.sendMs)}${size}${flags}`);
   if (p.trace.length > TRACE_ENTRIES) p.trace.splice(0, p.trace.length - TRACE_ENTRIES);
 }
 

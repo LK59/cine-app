@@ -158,11 +158,11 @@ describe("lumenTestReport", () => {
     noteBuilt(stats, { video: true, n: 4, buildMs: 30, waitMs: 2, diskMs: 10, reused: false });
     noteSent(stats, { kind: "segment", video: true, bytes: 2_000_000, sendMs: 40, aborted: false });
     noteSent(stats, { kind: "segment", video: false, bytes: 100_000, sendMs: 5, aborted: false, track: 3 });
-    noteTrace(stats, { name: "v/4.m4s", buildMs: 30, waitMs: 2, sendMs: 40, reused: false, aborted: false });
+    noteTrace(stats, { name: "v/4.m4s", buildMs: 30, waitMs: 2, sendMs: 40, reused: false, aborted: false, bytes: 4_500_000 });
     const mine = (lumenTestReport({ runs: [{ s: "lt0002" }] }, "louis").runs as Record<string, unknown>[])[0];
     expect(mine).toMatchObject({ "srv.segV": 1, "srv.segA": 1, "srv.buildMs": 30, "srv.version": "1c1-0123456789ab" });
     expect(mine["srv.audioByTrack"]).toEqual({ 3: 1 });
-    expect((mine["srv.trace"] as string[])[0]).toMatch(/^\+\d+\.\ds v\/4\.m4s b30 w2 e40$/);
+    expect((mine["srv.trace"] as string[])[0]).toMatch(/^\+\d+\.\ds v\/4\.m4s b30 w2 e40 k4395$/);
     const other = (lumenTestReport({ runs: [{ s: "lt0002" }] }, "quelquun").runs as Record<string, unknown>[])[0];
     expect(Object.keys(other).some((k) => k.startsWith("srv."))).toBe(false);
   });

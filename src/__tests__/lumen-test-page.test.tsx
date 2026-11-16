@@ -108,6 +108,7 @@ describe("la page de banc de Lumen serveur", () => {
     // Les positions des sauts se tirent de la même graine pour toute la série.
     expect(new Set(lines.map((l) => (l.auto as { seed: number }).seed)).size).toBe(1);
     expect(screen.getByText(/1\. À la Maison Blanche S03E01 · serveur — refusé : son-codec/)).toBeInTheDocument();
+    expect(screen.getByText(/2\. À la Maison Blanche S03E01 · serveur 2 s — refusé/)).toBeInTheDocument();
     // Le tableau côte à côte.
     expect(screen.getByText("Lumen serveur", { selector: "th" })).toBeInTheDocument();
     expect(screen.getByText("Lecteur actuel", { selector: "th" })).toBeInTheDocument();

@@ -399,15 +399,47 @@ erreur du moteur est un résultat), ni ligne dans player.log.
   médiane/p90, pour chaque lecteur.
 
 **Protocole, sur l'iPhone (application installée, puis un onglet Safari ; puis le Mac).**
-- **« Comparatif rapide »** (~10 min, 8 essais) : *À la Maison Blanche* (H.264), *Black Monday* (HEVC 4K à IDR),
-  *Ghosted* (HEVC à GOP ouvert, DV 4K Atmos), *Ted Lasso* (DV 4K, trois Atmos), 10 sauts chacun, sans tour des
-  pistes, par Lumen serveur puis par le lecteur actuel ; lignes marquées `pass: "courte"`. À lancer d'abord.
-- **« Tout enchaîner »** (~21 min, 15 essais) : les titres de l'étape 3b — les quatre ci-dessus, plus *American
-  Housewife*, *Pearl Harbor* et *Alien : Romulus* —, 10 sauts chacun (20 pour *Ghosted* et *Pearl Harbor*), le
-  tour des pistes sur *Ted Lasso* côté serveur, *Le Prestige* préparé seulement (DTS, refusé par le serveur) ;
-  puis le lecteur actuel sur chaque titre lu.
+- **« Comparatif rapide »** (~11 min, 9 essais) : *À la Maison Blanche* (H.264), *Black Monday* (HEVC 4K à IDR,
+  et sa cible de 2 s), *Ghosted* (HEVC à GOP ouvert, DV 4K Atmos), *Ted Lasso* (DV 4K, trois Atmos), 10 sauts
+  chacun, sans tour des pistes, par Lumen serveur puis par le lecteur actuel ; lignes marquées `pass: "courte"`.
+  À lancer d'abord.
+- **« Tout enchaîner »** (~27 min estimées, 20 essais) : les titres de l'étape 3b — les quatre ci-dessus, plus
+  *American Housewife*, *Pearl Harbor* et *Alien : Romulus* —, plus *Notting Hill* ; 10 sauts chacun (20 pour
+  *Ghosted* et *Pearl Harbor*) ; la cible de 2 s (serveur) sur *À la Maison Blanche*, *Black Monday* et *Notting
+  Hill* ; le tour des pistes sur *Ted Lasso* côté serveur ; *Le Prestige* préparé seulement (DTS, refusé par le
+  serveur) ; puis le lecteur actuel sur chaque titre lu. Compter 30 à 35 minutes réelles.
 - Lire une série : `jq 'select(.kind=="lumen-test" and .auto.serie=="…")'` sur `startup.log` ; le tableau est dans
   la dernière ligne (`.comparison`).
+
+**Les segments plus courts.** Une cible d'essai se choisit par l'adresse (`?target=2`, `{ target: 2 }` ; 2, 3 ou
+6 s, 4 par défaut) : la coupe tombe sur la première clé au moins à la cible de la précédente, et la cible est dans
+la version de format (`2t2-…`), donc dans chaque cache. La série complète joue en cible 2 s, serveur seul, les
+titres dont les clés sont rapprochées d'après le recensement — *Black Monday* (une clé toutes les 2,0 s),
+*Coup de foudre à Notting Hill* (HEVC 1080p, 1,0 s), *À la Maison Blanche* (2,6 s) —, chacun à côté de sa cible
+de 4 s, sur les mêmes positions ; le comparatif rapide, *Black Monday* seul. La mesure qui compte : `advanceMs`.
+
+**Entre `seeked` et la reprise** (banc de Louis du 16/11, `scripts/analyse-saut.mjs` hors dépôt : les 20 sauts
+dont la trace serveur a gardé la rafale, recoupés avec la table des segments de chaque fichier).
+- `advanceMs` compte, par construction, **300 ms de lecture** (le temps doit avancer de 0,3 s) : sur les 253
+  sauts, `advanceMs − seekedMs` vaut 850 ms en médiane (p10 588, p90 1 128), donc ~550 ms d'arrêt réel après
+  `seeked`. `playing` arrive en même temps que `seeked` (écart médian 0) : Safari se dit en lecture alors que
+  l'horloge ne bouge pas encore. L'écart croît avec le débit : ~620 ms sur *À la Maison Blanche* et *American
+  Housewife* (1080p, 1 à 4 Mo par segment), ~900 ms sur *Ghosted*, *Pearl Harbor*, *Alien : Romulus*.
+- **Safari ne repart pas sur le segment du saut** : à `seeked`, 2 segments vidéo remis (médiane ; 1 à 3) ; à la
+  reprise, **5** (médiane ; 3 à 11), soit ~35 s de film devant la position (12 à 76 s) et ~31 Mo (9 à 53 Mo). La
+  reprise suit de ~90 ms (médiane) la remise d'un segment : c'est l'arrivée d'un segment qui la déclenche. Après
+  la reprise, Safari continue d'en demander (2 à 21 dans les 3 s).
+- Ce n'est ni un nombre fixe de segments, ni une durée, ni un poids : *Black Monday* (4 s, 6 à 9 Mo par segment)
+  repart après 4 ou 5 segments, 12 à 19 s, 29 à 39 Mo ; *American Housewife* (1 Mo) après 7 à 11, 35 à 66 s,
+  9 à 17 Mo ; *Alien : Romulus* (10 s, 10 Mo) après 3 à 5, 40 à 51 s, 31 à 53 Mo. Lecture la plus simple : le
+  lecteur d'Apple remplit aussi vite que le lien le permet et ne repart que lorsqu'il juge la lecture tenable
+  (« likely to keep up » d'AVFoundation, qui pèse débit mesuré et réserve) — **une réserve qu'il exige, pas la
+  taille d'un segment**. Des segments de 2 s raccourcissent l'arrivée de la première image ; la réserve, elle,
+  ne devrait pas suivre si elle se compte en temps ou en débit — c'est ce que l'essai en cible 2 s tranchera.
+- Limites de cette lecture : la trace ne datait que la remise au réseau côté serveur (`e`), pas l'arrivée sur
+  l'iPhone — les quantités « avant la reprise » sont des majorants — ; elle ne gardait que 80 segments par
+  lecture (les derniers sauts seulement) ; et l'instant du geste est estimé par l'arrivée de la première requête.
+  Depuis l'étape 3c, la trace garde 200 segments et porte le poids remis (`k`, en Ko).
 
 ## Ordre de travail
 

@@ -230,7 +230,7 @@ async function serveResolved(
       const track = path.rendition.kind === "audio" ? path.rendition.track : undefined;
       const body = measuredBody(bytes, (sendMs, aborted) => {
         noteSent(stats, { kind: "segment", video, bytes: bytes.length, sendMs: Math.round(sendMs), aborted, track });
-        noteTrace(stats, { name: segmentName(path.rendition, path.n), buildMs: reused ? 0 : segment.buildMs, waitMs: reused ? 0 : segment.waitMs, sendMs, reused, aborted });
+        noteTrace(stats, { name: segmentName(path.rendition, path.n), buildMs: reused ? 0 : segment.buildMs, waitMs: reused ? 0 : segment.waitMs, sendMs, reused, aborted, bytes: bytes.length });
       });
       const parts: Record<string, number> = { app: performance.now() - r.receivedAt, idx: r.idxMs };
       if (!reused) Object.assign(parts, { wait: segment.waitMs, build: segment.buildMs, disk: segment.diskMs });

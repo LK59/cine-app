@@ -51,10 +51,14 @@ describe("le plan des séries", () => {
     expect(plan.every((t) => t.cut === "cra")).toBe(true);
   });
 
-  it("la série complète : les titres de l'étape 3b, joués par les deux lecteurs", () => {
+  it("la série complète : les titres de l'étape 3b, et la cible de 2 s sur les titres aux clés rapprochées", () => {
     expect(SERIES.map((t) => t.id)).toEqual([
       "maison-blanche-serveur",
+      "maison-blanche-serveur-t2",
       "black-monday-serveur",
+      "black-monday-serveur-t2",
+      "notting-hill-serveur",
+      "notting-hill-serveur-t2",
       "american-housewife-serveur",
       "ghosted-serveur",
       "pearl-harbor-serveur",
@@ -63,6 +67,7 @@ describe("le plan des séries", () => {
       "prestige-preparer",
       "maison-blanche-actuel",
       "black-monday-actuel",
+      "notting-hill-actuel",
       "american-housewife-actuel",
       "ghosted-actuel",
       "pearl-harbor-actuel",
@@ -73,12 +78,14 @@ describe("le plan des séries", () => {
     expect(byId["ghosted-serveur"].tours).toEqual([20]);
     expect(byId["ted-lasso-serveur"].audioTour).toBe(true);
     expect(byId["prestige-preparer"].prepareOnly).toEqual(["cra"]);
+    expect(byId["black-monday-serveur-t2"]).toMatchObject({ targetS: 2, tours: [10], player: "serveur" });
   });
 
-  it("le comparatif rapide : un H.264, un HEVC à IDR, un HEVC à GOP ouvert, un DV 4K Atmos ; 10 sauts, pas de pistes", () => {
+  it("le comparatif rapide : un H.264, un HEVC à IDR (et sa cible de 2 s), un HEVC à GOP ouvert, un DV 4K Atmos ; 10 sauts, pas de pistes", () => {
     expect(QUICK_SERIES.map((t) => t.id)).toEqual([
       "maison-blanche-serveur",
       "black-monday-serveur",
+      "black-monday-serveur-t2",
       "ghosted-serveur",
       "ted-lasso-serveur",
       "maison-blanche-actuel",
@@ -89,9 +96,9 @@ describe("le plan des séries", () => {
     expect(QUICK_SERIES.every((t) => t.tours.length === 1 && t.tours[0] === 10 && !t.audioTour)).toBe(true);
   });
 
-  it("estime 20 à 35 minutes pour la série complète, 9 à 15 pour la rapide ; la barre avance sans dépasser l'essai en cours", () => {
+  it("estime ~30 minutes pour la série complète, 12 à 15 pour la rapide ; la barre avance sans dépasser l'essai en cours", () => {
     const total = seriesEstimateS(SERIES);
-    expect(total).toBeGreaterThan(20 * 60);
+    expect(total).toBeGreaterThan(25 * 60);
     expect(total).toBeLessThan(35 * 60);
     expect(seriesEstimateS(QUICK_SERIES)).toBeGreaterThan(9 * 60);
     expect(seriesEstimateS(QUICK_SERIES)).toBeLessThan(15 * 60);
@@ -175,16 +182,16 @@ describe("l'enchaînement", () => {
     expect(results.map((r) => r.trial)).toEqual(SERIES.map((t) => t.id));
     expect(sent.map((s) => s.rank)).toEqual(SERIES.map((_, i) => i + 1));
     // Le détail d'un essai : préparer, lire, 10 s, le parcours, fermer, envoyer — puis seulement le suivant.
-    expect(calls.slice(0, 8)).toEqual(["begin 1 maison-blanche-serveur", "prepare maison-blanche-serveur cra", "start 1 maison-blanche-serveur", "play 10000", "tour 0 10", "close 1 ok", "send 1", "begin 2 black-monday-serveur"]);
+    expect(calls.slice(0, 8)).toEqual(["begin 1 maison-blanche-serveur", "prepare maison-blanche-serveur cra", "start 1 maison-blanche-serveur", "play 10000", "tour 0 10", "close 1 ok", "send 1", "begin 2 maison-blanche-serveur-t2"]);
     // Le tour des pistes sur Ted Lasso côté serveur, jamais côté lecteur actuel ; Le Prestige préparé et jamais lu.
-    const ted = calls.slice(calls.indexOf("begin 6 ted-lasso-serveur"), calls.indexOf("begin 7 alien-romulus-serveur"));
-    expect(ted).toEqual(["begin 6 ted-lasso-serveur", "prepare ted-lasso-serveur cra", "start 6 ted-lasso-serveur", "play 10000", "tour 0 10", "audio", "close 6 ok", "send 6"]);
-    expect(calls.slice(calls.indexOf("begin 14 ted-lasso-actuel"), calls.indexOf("begin 15 alien-romulus-actuel"))).not.toContain("audio");
-    const prestige = calls.slice(calls.indexOf("begin 8 prestige-preparer"), calls.indexOf("begin 9 maison-blanche-actuel"));
-    expect(prestige).toEqual(["begin 8 prestige-preparer", "prepare prestige-preparer cra", "close 8 préparé", "send 8"]);
-    expect(results[7].verdicts).toEqual(["cra : servi (10 segments, le plus long 12 s)"]);
-    const ghostedCurrent = calls.slice(calls.indexOf("begin 12 ghosted-actuel"), calls.indexOf("begin 13 pearl-harbor-actuel"));
-    expect(ghostedCurrent).toEqual(["begin 12 ghosted-actuel", "prepare ghosted-actuel cra", "start 12 ghosted-actuel", "play 10000", "tour 0 20", "close 12 ok", "send 12"]);
+    const ted = calls.slice(calls.indexOf("begin 10 ted-lasso-serveur"), calls.indexOf("begin 11 alien-romulus-serveur"));
+    expect(ted).toEqual(["begin 10 ted-lasso-serveur", "prepare ted-lasso-serveur cra", "start 10 ted-lasso-serveur", "play 10000", "tour 0 10", "audio", "close 10 ok", "send 10"]);
+    expect(calls.slice(calls.indexOf("begin 19 ted-lasso-actuel"), calls.indexOf("begin 20 alien-romulus-actuel"))).not.toContain("audio");
+    const prestige = calls.slice(calls.indexOf("begin 12 prestige-preparer"), calls.indexOf("begin 13 maison-blanche-actuel"));
+    expect(prestige).toEqual(["begin 12 prestige-preparer", "prepare prestige-preparer cra", "close 12 préparé", "send 12"]);
+    expect(results[11].verdicts).toEqual(["cra : servi (10 segments, le plus long 12 s)"]);
+    const ghostedCurrent = calls.slice(calls.indexOf("begin 17 ghosted-actuel"), calls.indexOf("begin 18 pearl-harbor-actuel"));
+    expect(ghostedCurrent).toEqual(["begin 17 ghosted-actuel", "prepare ghosted-actuel cra", "start 17 ghosted-actuel", "play 10000", "tour 0 20", "close 17 ok", "send 17"]);
   });
 
   it("un essai qui échoue ne bloque jamais la série — refus, pas d'image, exception", async () => {
@@ -205,8 +212,8 @@ describe("l'enchaînement", () => {
     // Sans image, ni lecture de 10 s ni parcours : on passe à la suite.
     expect(calls.slice(0, 5)).toEqual(["begin 1 maison-blanche-serveur", "prepare maison-blanche-serveur cra", "start 1 maison-blanche-serveur", "close 1 échec", "send 1"]);
     // Un refus du serveur ne lance pas de lecture serveur ; le lecteur actuel joue quand même le titre.
-    expect(calls).not.toContain("start 5 pearl-harbor-serveur");
-    expect(calls).toContain("start 13 pearl-harbor-actuel");
+    expect(calls).not.toContain("start 9 pearl-harbor-serveur");
+    expect(calls).toContain("start 18 pearl-harbor-actuel");
   });
 
   it("un envoi qui échoue ne change rien à la série", async () => {
@@ -249,6 +256,8 @@ describe("les lignes", () => {
     const current = resultOf(SERIES.find((x) => x.id === "ted-lasso-actuel")!, 19, { status: "ok" });
     expect(current).toMatchObject({ player: "actuel", key: "ted-lasso" });
     expect(current).not.toHaveProperty("cut");
+    const short = resultOf(SERIES.find((x) => x.id === "black-monday-serveur-t2")!, 4, { status: "refusé", reason: "x" });
+    expect(formatResult(short)).toBe("4. Black Monday S02E10 · serveur 2 s — refusé : x");
   });
 
   it("le tableau côte à côte : une ligne par titre (et par cible serveur autre que 4 s), les deux lecteurs en face", () => {
@@ -262,38 +271,38 @@ describe("les lignes", () => {
       audioSwitches: [],
     });
     const results = [
-      resultOf(at("black-monday-serveur"), 2, { status: "ok" }, measured([1500, 1400, 1600], [600, 700, 650], 900)),
-      resultOf(at("ghosted-serveur"), 4, { status: "ok" }, measured([1100, 1000, 1200], [500, 450, 520], 800)),
-      resultOf(at("prestige-preparer"), 8, { status: "préparé", prepared: [{ cut: "cra", verdict: null }] }),
-      resultOf(at("black-monday-actuel"), 10, { status: "ok" }, measured([500, 400, 450], [300, 250, 280], 1300)),
+      resultOf(at("black-monday-serveur"), 3, { status: "ok" }, measured([1500, 1400, 1600], [600, 700, 650], 900)),
+      resultOf(at("black-monday-serveur-t2"), 4, { status: "ok" }, measured([1100, 1000, 1200], [500, 450, 520], 800)),
+      resultOf(at("prestige-preparer"), 12, { status: "préparé", prepared: [{ cut: "cra", verdict: null }] }),
+      resultOf(at("black-monday-actuel"), 14, { status: "ok" }, measured([500, 400, 450], [300, 250, 280], 1300)),
     ];
     const rows = comparisonRows(results);
     expect(rows.map((r) => [r.key, r.targetS, !!r.serveur, !!r.actuel])).toEqual([
       ["black-monday", 4, true, true],
-      ["ghosted", 4, true, false],
+      ["black-monday", 2, true, false],
     ]);
     expect(rows[0].serveur).toMatchObject({ firstFrameMs: 900, seekedMedianMs: 650, seekedP90Ms: 700, advanceMedianMs: 1500, advanceP90Ms: 1600 });
     expect(rows[0].actuel).toMatchObject({ firstFrameMs: 1300, seekedMedianMs: 280, advanceMedianMs: 450, advanceP90Ms: 500 });
   });
 
   it("chaque ligne porte le lecteur, la passe et la graine ; la récapitulative, le tableau et les deux réponses", () => {
-    expect(trialTag("abc123def456", QUICK_SERIES[4], 5, QUICK_SERIES.length, { pass: "courte", seed: 42 })).toEqual({
+    expect(trialTag("abc123def456", QUICK_SERIES[5], 6, QUICK_SERIES.length, { pass: "courte", seed: 42 })).toEqual({
       serie: "abc123def456",
       trial: "maison-blanche-actuel",
-      rank: 5,
-      of: 8,
+      rank: 6,
+      of: 9,
       player: "actuel",
       pass: "courte",
       seed: 42,
     });
     const results = SERIES.slice(0, 2).map((t, i) => resultOf(t, i + 1, { status: "ok" }));
     const body = summaryBody("abc123def456", SERIES.length, results, { damaged: "oui", damagedTitle: "  Ghosted  ", audioClean: "pas-entendu" }, { elapsedS: 1834.4, stopped: false, pass: "complète", seed: 42 });
-    expect(body.auto).toEqual({ serie: "abc123def456", summary: true, of: 15, done: 2, elapsedS: 1834, stopped: false, pass: "complète", seed: 42 });
-    expect(body.trials.map((r) => r.trial)).toEqual(["maison-blanche-serveur", "black-monday-serveur"]);
-    expect(body.comparison.map((r) => r.key)).toEqual(["maison-blanche", "black-monday"]);
+    expect(body.auto).toEqual({ serie: "abc123def456", summary: true, of: 20, done: 2, elapsedS: 1834, stopped: false, pass: "complète", seed: 42 });
+    expect(body.trials.map((r) => r.trial)).toEqual(["maison-blanche-serveur", "maison-blanche-serveur-t2"]);
+    expect(body.comparison.map((r) => r.targetS)).toEqual([4, 2]);
     expect(body.answers).toEqual({ damaged: "oui", damagedTitle: "Ghosted", audioClean: "pas-entendu" });
     // « Non » : le titre tapé avant de changer d'avis ne part pas.
-    expect(summaryBody("abc123def456", 8, [], { damaged: "non", damagedTitle: "x", audioClean: null }, { elapsedS: 1, stopped: true, pass: "courte", seed: 1 }).answers).toEqual({ damaged: "non", damagedTitle: undefined, audioClean: null });
+    expect(summaryBody("abc123def456", 9, [], { damaged: "non", damagedTitle: "x", audioClean: null }, { elapsedS: 1, stopped: true, pass: "courte", seed: 1 }).answers).toEqual({ damaged: "non", damagedTitle: undefined, audioClean: null });
   });
 
   it("les compteurs de décodage : la différence, ou la fin seule s'ils ont été remis à zéro", () => {

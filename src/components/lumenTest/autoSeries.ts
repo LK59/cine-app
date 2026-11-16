@@ -43,6 +43,7 @@ export type SeriesPass = "complète" | "courte";
 export const PRESETS: { key: string; id: string; title: string; note: string }[] = [
   { key: "maison-blanche", id: "d4513bcf59bba90a23656f40ed816c3d", title: "À la Maison Blanche S03E01", note: "H.264 1080p, AC-3 2.0, clés toutes les 2,6 s — le témoin" },
   { key: "black-monday", id: "3f79d20c0c10289f3c6df5f72f62b84b", title: "Black Monday S02E10", note: "HEVC 4K à IDR seules, une clé toutes les 2 s" },
+  { key: "notting-hill", id: "55027c51fd0cdeceec6062202c73a4db", title: "Coup de foudre à Notting Hill", note: "HEVC 1080p à IDR seules, une clé par seconde, AC-3 5.1 — la cible de 2 s" },
   { key: "american-housewife", id: "7f17493b25683f0db7125defa08b70a0", title: "American Housewife — Attaque de poux", note: "HEVC 1080p à GOP ouvert court, débit faible" },
   { key: "ghosted", id: "1694ff6c78fd793f321d348511771a47", title: "Ghosted", note: "HEVC 4K DV 8.1, E-AC-3 Atmos, GOP ouvert" },
   { key: "pearl-harbor", id: "a1e058d682294a1de3cf5bb47d904e0e", title: "Pearl Harbor", note: "HEVC 1080p à GOP ouvert (132 CRA à RASL vues), 3 h" },
@@ -120,12 +121,19 @@ const current = (t: Trial): Trial => trial(t.key, "actuel", { tours: t.tours });
 /**
  * La série complète de l'étape 3c, ~30 minutes (`seriesEstimateS`). Les titres de l'étape 3b, un parcours de 10
  * sauts (20 pour les deux HEVC à GOP ouvert qui ont tranché la découpe), puis le lecteur actuel sur chacun.
+ * L'essai des segments courts (cible 2 s, étape 3c) sur les titres dont les clés sont rapprochées — *Black
+ * Monday* (une clé toutes les 2 s), *Notting Hill* (1 s), *À la Maison Blanche* (2,6 s), d'après le recensement
+ * —, chacun à côté de sa cible de 4 s : la mesure qui compte est `advanceMs` après un saut.
  * *Le Prestige* : préparé seulement (son DTS, refusé par le serveur) ; le tour des pistes sur *Ted Lasso* (trois
  * Atmos) seulement. Les essais serveur d'abord (voir l'en-tête).
  */
 const FULL_SERVER: Trial[] = [
   trial("maison-blanche", "serveur"),
+  trial("maison-blanche", "serveur", { targetS: 2 }),
   trial("black-monday", "serveur"),
+  trial("black-monday", "serveur", { targetS: 2 }),
+  trial("notting-hill", "serveur"),
+  trial("notting-hill", "serveur", { targetS: 2 }),
   trial("american-housewife", "serveur"),
   trial("ghosted", "serveur", { tours: [20] }),
   trial("pearl-harbor", "serveur", { tours: [20] }),
@@ -137,13 +145,14 @@ const FULL_SERVER: Trial[] = [
 export const SERIES: Trial[] = [...FULL_SERVER, ...FULL_SERVER.filter((t) => !t.prepareOnly && t.targetS === DEFAULT_TARGET_S).map(current)];
 
 /**
- * Le comparatif rapide, ~12 minutes : un H.264 (*À la Maison Blanche*), un HEVC à IDR seules (*Black Monday*),
- * un HEVC à GOP ouvert (*Ghosted*, DV 4K Atmos), un DV 4K à trois Atmos (*Ted Lasso*) ;
+ * Le comparatif rapide, ~12 minutes : un H.264 (*À la Maison Blanche*), un HEVC à IDR seules (*Black Monday*,
+ * plus sa cible de 2 s), un HEVC à GOP ouvert (*Ghosted*, DV 4K Atmos), un DV 4K à trois Atmos (*Ted Lasso*) ;
  * 10 sauts chacun, sans tour des pistes, chaque titre par les deux lecteurs.
  */
 const QUICK_SERVER: Trial[] = [
   trial("maison-blanche", "serveur"),
   trial("black-monday", "serveur"),
+  trial("black-monday", "serveur", { targetS: 2 }),
   trial("ghosted", "serveur"),
   trial("ted-lasso", "serveur"),
 ];
