@@ -139,7 +139,13 @@ version du format est stable et la découpe déterministe.
 4. **Client** : option du Compte, route `"lumen"`, `LumenServerHost`, repli, journal, page d'activité.
 5. **AirPlay** : liste signée vers l'Apple TV, `castProgress` par segment.
 6. **Son converti** : ffmpeg minimal, grille de segments, cache disque.
-7. **Application iOS native** : coquille, AVPlayer sur ces mêmes listes, image dans l'image, arrière-plan.
+7. **Débit adaptatif à la volée** : la liste maître déclare d'emblée des variantes allégées (1080p ~6 Mb/s, 720p
+   ~3 Mb/s) à côté de l'originale remuxée ; le lecteur mesure son débit et bascule à une frontière de segment, sans
+   coupure. Une variante n'est fabriquée (ffmpeg sur le GPU intégré) qu'au premier segment demandé, ou préchauffée
+   quand les segments partent plus lentement. Images clés forcées aux frontières des segments remuxés pour que les
+   variantes soient alignées ; son commun à toutes. Le flux n'est jamais remplacé sous la même liste : un en-tête qui
+   change sans être annoncé est une erreur de décodage. Remplacerait à terme la bascule avec coupure de la §78.
+8. **Application iOS native** : coquille, AVPlayer sur ces mêmes listes, image dans l'image, arrière-plan.
 
 Les étapes 2 (fonction de segment) et 6 (jointures du son) sont les plus délicates : une erreur ne se voit qu'à la
 lecture.
