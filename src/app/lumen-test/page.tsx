@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { verifySessionFull } from "@/lib/session";
-import { LumenTest } from "@/components/lumenTest/LumenTest";
+import { LumenTestLazy } from "@/components/lumenTest/LumenTestLazy";
 
 /**
  * La page de banc de Lumen serveur (étape 3b, 16/11/2026) — `LumenTest.tsx` dit pourquoi elle existe.
@@ -17,5 +17,5 @@ export const dynamic = "force-dynamic";
 export default async function LumenTestPage() {
   const session = await verifySessionFull((await cookies()).get(SESSION_COOKIE)?.value).catch(() => null);
   if (!session || session.role !== "admin") redirect("/");
-  return <LumenTest />;
+  return <LumenTestLazy />;
 }
