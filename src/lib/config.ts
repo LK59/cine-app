@@ -389,6 +389,16 @@ export const config = {
       return envOnly("REQUEST_HIDE_TAG", "masque-demandes").trim() || "masque-demandes";
     },
   },
+  lumen: {
+    // Lumen serveur (docs/remux-serveur/, DECISIONS.md §155) : comment un chemin de fichier vu par
+    // Jellyfin se lit dans ce conteneur — `racineJellyfin=racineConteneur`, plusieurs paires séparées
+    // par `;` (ici `/media=/mnt/media/video`). Vide, coupé : pas de lecture directe, le relais Jellyfin
+    // seul. Déploiement seulement (§81) : il dit où sont montés les médias, ce que seul le compose sait.
+    // Relu à chaque appel (`lumenServer/paths.ts`). Aucune route ne le lit encore (étape 3).
+    get pathMap() {
+      return envOnly("LUMEN_PATH_MAP", "");
+    },
+  },
   news: {
     // La nouvelle adresse publique annoncée par la page Nouveautés du renommage (`news/pageLaterna.ts`,
     // DECISIONS.md §118). Déploiement seulement, hors du schéma des réglages et de `.env.example` : elle
