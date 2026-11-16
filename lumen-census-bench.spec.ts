@@ -19,6 +19,10 @@
 //
 // La seconde découpe relit le même fichier juste après la première : ses lectures tombent presque toutes
 // dans le cache de pages, son temps n'est pas un temps à froid (seul celui de `idr` l'est, à peu près).
+//
+// LUMEN_CENSUS_CUTS (`idr,cra` par défaut) : les découpes à passer — `cra` seule pour un recensement du son
+// (§159), qui ne dépend pas de la découpe. Chaque ligne porte aussi, pour chaque piste audio, son codec, son
+// refus et ses réparations (`sbr-explicite`, `silence-devant`, `silence-derriere`).
 import { describe, it } from "vitest";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { FileByteSource } from "@/lib/lumenServer/fileSource";
@@ -32,6 +36,7 @@ const OUT = process.env.LUMEN_CENSUS_OUT ?? "/out/recensement.jsonl";
 const BUDGET_MS = Number(process.env.LUMEN_CENSUS_BUDGET_S ?? 420) * 1000;
 /** La source de `jobs.ts` pour un index : petits morceaux, d'en-tête en en-tête. */
 const INDEX_SOURCE = { chunkSize: 16 * 1024, chunks: 64 };
+const CUTS = (process.env.LUMEN_CENSUS_CUTS ?? "idr,cra").split(",").filter((c): c is "idr" | "cra" => c === "idr" || c === "cra");
 
 const round = (value: number, digits = 1) => Math.round(value * 10 ** digits) / 10 ** digits;
 
@@ -92,7 +97,7 @@ describe.skipIf(!LIST)("recensement de l'éligibilité à Lumen serveur", () => 
         try {
           const results: Partial<Record<LumenCutMode, ReturnType<typeof cutSummary>>> = {};
           let first: LumenIndex | null = null;
-          for (const cut of ["idr", "cra"] as const) {
+          for (const cut of CUTS) {
             const source = await FileByteSource.open(row.path, INDEX_SOURCE);
             try {
               const t0 = performance.now();
@@ -121,6 +126,16 @@ describe.skipIf(!LIST)("recensement de l'éligibilité à Lumen serveur", () => 
               defaultRefusal: index.audio.find((a) => a.number === audioTrack)?.refusal?.reason ?? null,
               servable: index.audio.filter((a) => !a.refusal).length,
               hlsChannels: index.audio.find((a) => a.number === audioTrack)?.signal?.channels ?? null,
+              all: index.audio.map((a) => ({
+                number: a.number,
+                codec: a.codecId,
+                channels: a.channels,
+                rate: a.sampleRate,
+                refusal: a.refusal?.reason ?? null,
+                detail: a.refusal?.detail ?? null,
+                ...(a.codecId === "A_AAC" && a.codecPrivate ? { asc: Buffer.from(a.codecPrivate).toString("hex") } : {}),
+                repairs: [...(a.configuration ? ["sbr-explicite"] : []), ...(a.silence?.leadUntilUs != null ? ["silence-devant"] : []), ...(a.silence?.tailFromUs != null ? ["silence-derriere"] : [])],
+              })),
             },
             idr: results.idr,
             cra: results.cra,

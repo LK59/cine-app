@@ -11322,3 +11322,103 @@ défaut, mêmes frontières que `idr` sur un fichier à IDR seules, cible 2 s, c
   des Cues ne le prouve pas. *Black Monday* a joué au banc avec et sans : aucune différence.
 - **Les compteurs de types de clés** (`idr`, `cra`, `craRasl`) ne portent plus que sur les points lus ; la page de
   banc dit « N coupes, M prises des Cues sans lecture » sous la règle.
+
+## 159. Le son copié de Lumen serveur réparé : le SBR implicite rendu explicite, le silence aux paramètres de la piste (17/11/2026)
+
+**Règle.** Lumen serveur (`docs/remux-serveur/`, README « Étape 3d ») ne refuse plus une piste copiable pour
+trois défauts qu'il sait réparer **sans réencoder une seule trame** — les trames du fichier restent copiées à
+l'octet. Une fonction par décision :
+- **SBR implicite** (`aacHlsPlan`, `src/lib/lumenServer/audio/aacStream.ts`) : un HE-AAC dont l'AudioSpecificConfig
+  dit AAC-LC à mi-fréquence, le SBR n'étant annoncé que dans le flux. La règle 2.24 d'Apple l'interdit en fMP4
+  (« HE-AAC in fMP4 files MUST use explicit signaling of SBR data »). Le flux est **parcouru** (`readRawDataBlock` :
+  chaque élément de canaux lu jusqu'au dernier bit de ses données spectrales, sans rien déquantifier, livres de
+  Huffman tirés de FFmpeg 7.1.5 par `tools/aac-tables/`) pour trouver le FIL d'extension `EXT_SBR_DATA` (13 ou 14)
+  derrière chaque élément — comme `decode_extension_payload` de FFmpeg ; une trame n'est lue que si le parcours
+  tombe exactement sur sa fin, et les huit premières trames doivent dire la même chose. Trouvé, la configuration de
+  l'init est **réécrite en signalisation hiérarchique** (`explicitSbrConfig` : type 5, fréquence du cœur, canaux,
+  fréquence double, type 2, GASpecificConfig ; `2B 11 88 00` pour un stéréo 24 → 48 kHz), l'entrée `mp4a` dit 48 kHz
+  et les canaux de la configuration, la liste `mp4a.40.5`. Ce n'est pas le nom du codec ni l'`OutputSamplingFrequency`
+  du Matroska qui décident : un LC sans SBR dont le conteneur annonce le double est refusé (contradiction), un LC dont
+  le flux porte un SBR que rien n'annonçait est réécrit. **Constat** : les 34 pistes de l'échantillon que l'ancien
+  test (LC à mi-fréquence du conteneur) disait « implicites » portaient en fait la signalisation **explicite
+  rétrocompatible** (`13 30 56 E5 98` : LC, puis l'extension 0x2B7 « SBR présent, 48 kHz ») — conforme à 2.24, mais
+  lue `mp4a.40.2` par qui prend le premier type d'objet, ce que faisait `hlsAudioSignal`. Les deux formes sont
+  ramenées à la hiérarchique ; la raison garde son nom (stable) pour ce qui reste refusé.
+- **Silence** (`audio/silence.ts`, `audioPlan` dans `lumenIndex.ts`) : une piste qui commence après l'image (§148,
+  `son-en-retard`) ou finit avant elle (`son-plus-court`) est complétée de **trames de silence aux paramètres
+  exacts de la piste**, placées sur la grille des trames ancrée sur la piste — devant à L − k·F (L : premier bloc
+  réel, F : échantillons par trame ÷ fréquence), derrière à E + j·F (E : fin de la dernière trame réelle) —, une
+  trame appartenant comme toute autre au segment qui contient son instant (§155). Règle 2.15 : un rendu couvre toute
+  la durée du contenu. La trame (`silentDolbyFrame`, `silentAacFrame`) :
+  - **AC-3 et E-AC-3** : syncinfo et `bsi()` **recopiés bit pour bit** d'une vraie trame de la piste (fréquence,
+    taille donc débit, `bsid`, `bsmod`, `acmod`, `lfeon`, `dialnorm`, métadonnées), puis six blocs sans tramage,
+    sans couplage, exposants constants, `csnroffst` = `fsnroffst` = 0 (le cas « toutes les allocations à zéro » de
+    la norme et de FFmpeg, `snr_offset == -960`), aucune mantisse, bourrage, `crc1` (résolu sur GF(2), il est au
+    début de la zone qu'il protège) et `crc2` ;
+  - **AAC-LC** : chaque élément de la configuration 1 à 7, fenêtre longue sinus, `max_sfb` = 0, puis END.
+  Décodées, elles rendent des **zéros exacts** et laissent le décodeur dans l'état d'un décodeur neuf : le son réel
+  qui suit un silence se décode à l'identique, au bit, de son décodage depuis la première trame du fichier.
+- **AC-3 et E-AC-3 à 32 et 44,1 kHz** (`son-frequence`) : servis. La HLS Authoring Specification ne nomme aucune
+  fréquence (relu le 17/11/2026 : ni la section Audio ni la table des `CODECS`), A/52 définit les trois ; la trame
+  doit dire ce que dit le conteneur, sinon refus. Reste à voir sur un appareil (liste de vérification ci-dessous).
+
+**Ce qui reste refusé, nommément.**
+- `son-aac-ps-implicite` (nouvelle raison stable) : un cœur **mono** à SBR implicite. La stéréo paramétrique
+  (HE-AAC v2, `mp4a.40.29`) se signale *dans* les données SBR (`bs_extension_id` 2), qu'il faudrait décoder
+  (enveloppes de Huffman, tables de fréquences dérivées de l'en-tête SBR) pour savoir si elle est là — FFmpeg la
+  suppose. Annoncer 40.5 mono pour un v2 ou 40.29 pour un v1 serait un pari.
+- `son-aac-sbr-implicite` garde son nom pour ce qui ne se répare pas avec certitude (le détail le dit) : flux
+  illisible jusqu'au bout, trames en désaccord, SBR présent mais annoncé absent, double de fréquence sans SBR, cœur
+  au-dessus de 24 kHz, GASpecificConfig inhabituelle.
+- `son-en-retard` / `son-plus-court` avec le détail « silence impossible : … » : **E-AC-3 Atmos (JOC)** — une trame
+  sans charge JOC (EMDF) au milieu d'un flux qui en porte, l'`addbsi` recopié l'annonçant, est ce que recevrait le
+  décodeur Atmos d'Apple ; FFmpeg ignore le JOC, rien ici ne le vérifie, et retirer l'annonce changerait la nature
+  du flux en son milieu — ; E-AC-3 à sous-flux dépendants (« 7.1 »), à moins de six blocs ou à fréquence réduite ;
+  AC-3 de `bsid` 9 ou 10 ; HE-AAC (trame SBR silencieuse non construite) ; FLAC ; une dernière trame AAC en fenêtre
+  `LONG_START` ou courte (la norme veut des fenêtres courtes ensuite) ; un premier bloc au-delà de 180 s ou une fin
+  introuvable dans les 20 dernières minutes.
+
+**Pourquoi construites plutôt que pré-encodées ou reprises.** Une table de trames pré-encodées par ffmpeg ne couvre
+qu'un nombre fini de combinaisons (acmod × lfeon × 19 débits × fréquences, sans compter `dialnorm`), et une trame
+d'un autre débit ou d'un autre en-tête au milieu d'une piste change ce que `dac3`/`dec3` décrit (règle 2.11 :
+tout changement de disposition exige une discontinuité). Une trame silencieuse de la piste elle-même suppose qu'il
+en existe une à zéro numérique — rien ne le garantit (*The Circle* commence son AC-3 sur du son). §148 avait écarté
+les trames écrites à la main pour le navigateur parce qu'elles auraient été invérifiables ; ici le serveur a un
+banc ffmpeg, et chaque trame est jugée par le décodeur (`-err_detect crccheck+bitstream+explode`).
+
+**Cohérent avec la conversion** (5-conversion-son.md §5.4) : grille de trames ancrée sur la piste, placement par
+le nombre d'échantillons et jamais par l'instant du conteneur, `tfdt` = instant + D, contenu d'un segment fonction
+du fichier seul (déterministe, cachable). La conversion de phase 2 remplira ses zéros par ffmpeg ; la copie les
+remplit par une trame du codec de la piste.
+
+**La version.** `LUMEN_FORMAT_VERSION` passe à **3** : pour un fichier déjà servi, la liste maître peut gagner des
+rendus (des pistes refusées hier), et une piste AAC-LC dont le flux porte un SBR que rien n'annonçait change d'init.
+Rien de la 2 ne se relit sous la 3 (adresses, index du disque — `storeKey` porte la version —, cache du navigateur).
+
+**Le lecteur de production ne change pas.** Rien sous `src/lib/webcodecs/` n'est modifié (`git diff` vide) : les
+lecteurs de configuration et de trames de Lumen serveur sont à lui (`audio/bits.ts`), les modules du lecteur ne
+sont qu'importés en lecture. Les empreintes (`src/__tests__/empreinte/`) passent inchangées.
+
+**Porteurs.** `src/lib/lumenServer/audio/aacStream.ts` (`readAsc`, `explicitSbrConfig`, `readRawDataBlock`,
+`aacHlsPlan`, `silentAacFrame`, `silenceMayFollow`), `audio/aacTables.ts` (écrit par `tools/aac-tables/build.sh`),
+`audio/dolbySilence.ts` (`readDolbyHeader`, `dolbySilenceRefusal`, `silentDolbyFrame`, `ac3Crc`),
+`audio/silence.ts` (`LumenSilence`, `silentInstants`, `nextSilentInstant`), `audio/bits.ts`, `lumenIndex.ts`
+(`audioPlan`, `probeAudioStarts` en deux passes, `probeAudioTail`), `segment.ts` (`buildAudio` : trames de silence
+mêlées aux trames réelles), `format.ts` (`LumenAudioTrack.configuration`/`silence`, `son-aac-ps-implicite`,
+version 3), `service.ts` (`repairs` dans les faits de piste). **Appelants.** Les routes `/api/lumen` (la page de
+banc). **Tests.** `lumenServer-son.test.ts` (configuration réécrite octet par octet ; chaque trame AAC d'un vrai
+encodeur parcourue exactement ; FIL SBR inséré trouvé ; décision par le flux ; trames de silence AAC 1 à 7
+parcourues, AC-3/E-AC-3 à CRC nul et en-tête identique au bit ; grille partagée entre segments sans doublon ;
+six fichiers late/short servis, chaque segment seul, recollé sans trou, trames réelles intactes, déterministe ;
+AC-3 32 kHz servi), `lumenServer-index.test.ts`, `lumenServer-playlists.test.ts`, `lumenServer-routes.test.ts`
+(version 3). **Banc.** `lumen-son-bench.spec.ts` (sauté sans `LUMEN_SON_FILES`) et le recensement
+`lumen-census-bench.spec.ts` (`LUMEN_CENSUS_CUTS=cra`, pistes détaillées).
+
+**Mesuré le 17/11/2026** (README « Étape 3d ») : onze vrais fichiers — cinq HE-AAC (*Glass*, *Le Dictateur*,
+*The Pitt*, *Skins*, *Seven Deadly Sins*), *The Circle* (VF à 30 s) et *Minuit dans le jardin…* (3,8 s), trois
+pistes courtes (*Titans* E-AC-3, *Lockerbie*, *Bandit*) et *Black Butler* (AC-3 32 kHz) — : segments construits
+seuls et recollés, décodés par ffmpeg sans une erreur (`crccheck+bitstream+explode`), son réel **identique au bit**
+à la référence (0 d'écart sur 34 M échantillons), silence à zéro exact, rapport de clic de 0 à 0,97, RMS par canal
+identiques, son couvrant l'image à une trame près. Recensement des 300 fichiers : **88,0 % ± 4,5 → 96,2 % ± 2,4**
+servables (piste par défaut, extrapolé), 24 gagnés, aucun perdu ; restent `son-codec` (3,6 %, phase 2) et
+`index-troue` (0,2 %).

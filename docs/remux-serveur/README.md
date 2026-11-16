@@ -1,8 +1,8 @@
 # Lumen serveur — le remux côté serveur, servi en HLS
 
 Conception du 16/11/2026. Étapes 1 (signalisation, §154), 2 (le moteur, §155), 3 (routes et sécurité, §156),
-3b (recensement, découpes d'essai et banc Safari, §157) et 3c (`cra` la règle et l'index des Cues, §158 ;
-comparatif avec le lecteur actuel ; cibles courtes) faites ; seule la page de banc `/lumen-test` les appelle.
+3b (recensement, découpes d'essai et banc Safari, §157), 3c (`cra` la règle et l'index des Cues, §158 ;
+comparatif avec le lecteur actuel ; cibles courtes) et 3d (le son copié réparé : SBR implicite, silence, §159) faites ; seule la page de banc `/lumen-test` les appelle.
 Les quatre sections jointes détaillent chaque partie, avec références `chemin:ligne` et mesures ; ce document en
 tire les décisions, l'architecture et l'ordre de travail.
 
@@ -103,7 +103,8 @@ refusée par le système (WebKit bug 303885, rdar://121964774), et le son en arr
   code écrit `dvh1`, la forme MediaSource). `VIDEO-RANGE` souvent absent du MKV : le lire dans le SPS ou reprendre
   `VideoRangeType` de Jellyfin. **Fait à l'étape 1** (§154) : `hvc1` + boîte DV, `hlsVideoSignal`, VUI lu dans le SPS.
 - **Son qui commence après l'image** (§148, 63 pistes) : des segments audio vides ne se fabriquent pas en copie ;
-  silence devant (phase 2) ou chemin actuel.
+  silence devant (phase 2) ou chemin actuel. **Fait à l'étape 3d** (§159) : trames de silence aux paramètres de la
+  piste, construites en copie, devant comme derrière.
 - **Vérifier l'index coûte cher** avec le lecteur actuel (0,5 à 1,2 Mo lus par point d'index) : un lecteur qui ne
   lit que les en-têtes des blocs, et le cache par version de fichier.
 - **Groupes d'images longs** : *The Exorcist* a une image clé toutes les 10,4 s, des segments de 9 à 14 s et un
@@ -440,6 +441,87 @@ dont la trace serveur a gardé la rafale, recoupés avec la table des segments d
   l'iPhone — les quantités « avant la reprise » sont des majorants — ; elle ne gardait que 80 segments par
   lecture (les derniers sauts seulement) ; et l'instant du geste est estimé par l'arrivée de la première requête.
   Depuis l'étape 3c, la trace garde 200 segments et porte le poids remis (`k`, en Ko).
+
+## Étape 3d — le son copié réparé : SBR, silence, 32 kHz (17/11/2026, DECISIONS §159)
+
+Les refus restants de l'étape 3c étaient presque tous du son ; trois se réparent **sans réencoder une trame**
+(les trames du fichier restent copiées à l'octet). Code : `src/lib/lumenServer/audio/`.
+
+**Le SBR « implicite »** (`son-aac-sbr-implicite`, 6,3 % : la première raison). Le refus venait d'un test sur
+l'en-tête seul (AAC-LC à mi-fréquence du conteneur). Le flux est désormais **parcouru** (`readRawDataBlock` : chaque
+élément de canaux lu jusqu'au dernier bit de ses données spectrales, livres de Huffman de FFmpeg 7.1.5 tirés par
+`tools/aac-tables/`) pour trouver l'élément FIL `EXT_SBR_DATA` derrière chaque élément de canaux, comme le fait
+FFmpeg ; le lecteur actuel, lui, ne le cherche pas (le décodeur du navigateur s'en charge). Trouvé sur les huit
+premières trames, la configuration de l'init est réécrite en **signalisation hiérarchique** (`2B 11 88 00`,
+`mp4a.40.5`, 48 kHz) : le premier type d'objet de l'init est alors celui que dit `CODECS`, sans l'ambiguïté de la
+forme rétrocompatible. Constat du recensement : **les 34 pistes concernées de l'échantillon** (sur 300 fichiers)
+portaient déjà une signalisation **explicite rétrocompatible** (`13 30 56 E5 98` : LC, puis l'extension 0x2B7 qui
+dit « SBR présent, 48 kHz ») — conforme à la règle 2.24, mais lue `mp4a.40.2` par quiconque prend le premier type
+d'objet ; aucune n'était implicite au sens strict. Les deux formes sont ramenées à la hiérarchique. Reste refusé :
+un cœur mono (`son-aac-ps-implicite`, stéréo paramétrique indécidable sans décoder le SBR), un flux illisible ou
+contradictoire.
+
+**Le silence** (`son-en-retard` §148, `son-plus-court`) : des trames de silence **aux paramètres exacts de la
+piste**, construites par le code — AC-3/E-AC-3 : syncinfo et `bsi()` recopiés bit pour bit d'une vraie trame,
+six blocs sans mantisse (`csnroffst` = `fsnroffst` = 0), `crc1`/`crc2` ; AAC-LC : chaque élément vide puis END —,
+placées sur la grille des trames ancrée sur la piste (L − k·F devant, E + j·F derrière), une trame appartenant au
+segment de son instant (§155), comme la conversion de phase 2 (5-conversion-son.md §5.4) le fera par ffmpeg. Pas de
+table pré-encodée (une combinaison manquante, ou un autre débit au milieu de la piste) ni de trame reprise de la
+piste (rien ne garantit qu'il en existe une à zéro numérique). Reste refusé : E-AC-3 Atmos (JOC — le silence sans
+charge JOC n'est pas vérifiable ici), E-AC-3 à dépendants, HE-AAC, FLAC.
+
+**AC-3/E-AC-3 à 32 et 44,1 kHz** (`son-frequence`) : la HLS Authoring Specification ne nomme aucune fréquence ;
+servis si la trame dit ce que dit le conteneur. À confirmer sur un appareil.
+
+**Le banc sur de vrais fichiers** (`lumen-son-bench.spec.ts`, 17/11/2026, X-Ray en pause, `lumen-banc:etape2`,
+ffmpeg 8.1.3 ; fenêtres de 40 s de segments son construits chacun seul, recollés derrière leur init) :
+
+| Fichier | Piste | Réparation | Décodage (`crccheck+bitstream+explode`) | Son réel contre la référence¹ | Silence | Clic² | RMS par canal |
+|---|---|---|---|---|---|---|---|
+| *Glass* (film 4K) | HE-AAC 5.1 | SBR → hiérarchique | sans erreur, « HE-AAC » 48 kHz | **0** d'écart sur 4,6 M échantillons | — | — | identiques |
+| *Le Dictateur* (film) | HE-AAC 2.0 | SBR | sans erreur | **0** (4,2 M) | — | — | identiques |
+| *The Pitt* S01E04 | HE-AAC 5.1 | SBR | sans erreur | **0** (4,5 M) | — | — | identiques |
+| *Skins* S05E05 | HE-AAC 2.0 | SBR | sans erreur | **0** (4,3 M) | — | — | identiques |
+| *Seven Deadly Sins* S02E01 | HE-AAC 2.0 | SBR | sans erreur | **0** (4,5 M) | — | — | identiques |
+| *The Circle* | AC-3 5.1, VF à 30,0 s | 938 trames devant | sans erreur | **0** (2,4 M) | zéros exacts | 0,006 | identiques |
+| *Minuit dans le jardin…* | AC-3 5.1, à 3,76 s | 118 trames devant | sans erreur | **0** (2,2 M) | zéros exacts | 0 | identiques |
+| *L'Attaque des Titans* S01E25 | E-AC-3 2.0, finit 2 s avant | derrière | sans erreur | **0** (2,4 M) | zéros exacts³ | 0,57 | identiques |
+| *Lockerbie* S01E05 | AC-3 5.1, finit 5,8 s avant | derrière | sans erreur | **0** (1,9 M) | zéros exacts³ | 0,97 | identiques |
+| *Bandit* (film) | AC-3 5.1, finit 5 s avant | derrière | sans erreur | **0** (1,9 M) | zéros exacts³ | 0,73 | identiques |
+| *Black Butler* S01E19 | AC-3 2.0 **32 kHz**, courte | derrière | sans erreur, 32 kHz | **0** (1,4 M) | zéros exacts³ | 0 | identiques |
+
+¹ Les trames réelles de la fenêtre, écrites en flux élémentaire (AAC en ADTS **avec la configuration d'origine**),
+décodées par le même ffmpeg depuis un décodeur neuf, contre le décodage des segments à partir de la première trame
+réelle : écart maximal par échantillon. Le silence devant laisse le décodeur dans l'état d'un décodeur neuf, et la
+configuration réécrite rend exactement ce que rendait la découverte du SBR. Les 10 794 trames HE-AAC des fenêtres
+sont toutes parcourues jusqu'à leur dernier octet, toutes avec SBR. ² Énergie de la dérivée seconde sur ±2 ms à la
+jointure, rapportée aux 100 ms de son voisines (sous 1,5 : pas de clic, la mesure de 5-conversion-son.md).
+³ Après la première trame de silence, qui porte le recouvrement de la dernière trame réelle (sa décroissance
+naturelle). Le son couvre l'image : il commence à 0 ou une trame avant, et finit au plus une trame après la dernière
+image (fichiers de test et *Titans* : 23 ms, *Lockerbie* 0, *Bandit* 6 ms ; *The Circle* garde ses 6,4 s de VF au-delà
+de l'image, comme toute piste plus longue que l'image — règle de §155, inchangée).
+
+**Le recensement relancé** (les 300 fichiers de l'étape 3b, `cra`, `LUMEN_CENSUS_CUTS=cra`, 45 s en tout, index :
+médiane 110 ms, p90 299 ms, max 743 ms avec les sondes de début et de fin) :
+
+| | Avant | Après |
+|---|---|---|
+| **Piste par défaut servable** (extrapolé à 10 533 fichiers, IC 95 %) | 88,0 % ± 4,5 (259/300) | **96,2 % ± 2,4** (283/300) |
+| `son-aac-sbr-implicite` | 6,3 % (17) | 0 |
+| `son-plus-court` | 1,4 % (4) | 0 |
+| `son-frequence` | 0,4 % (1) | 0 |
+| `son-en-retard` | 0,1 % (2) | 0 |
+| `son-codec` (DTS, TrueHD, Opus : phase 2) | 3,6 % (14) | 3,6 % (14) |
+| `index-troue` (§158) | — | 0,2 % (3) |
+
+24 fichiers gagnés, aucun perdu. Toutes pistes confondues : 34 pistes HE-AAC réécrites, 16 complétées de silence
+(AC-3 11, E-AC-3 3, AAC 2) ; restent refusées deux pistes E-AC-3 Atmos courtes (*Monkey Man*, *Super Mario Bros.*,
+pistes secondaires) et un AAC à PCE (*Rocketman*). Données : `xbench/lumen-serveur/sbr-silence/`.
+
+**Sur un appareil** (la page `/lumen-test` dit « réparée : … » à côté de la piste) : un HE-AAC réécrit (*Glass*,
+*The Pitt*) — le son, le changement de piste ; *The Circle* en VF depuis 0 (30 s muettes, puis le son à sa place,
+sans clic) et un saut dans le silence puis au-delà de 30 s ; la fin de *Lockerbie* S01E05 ; *Black Butler* S01E19
+(AC-3 32 kHz) ; sur iPhone, Mac, et une Apple TV quand l'étape AirPlay viendra.
 
 ## Ordre de travail
 
