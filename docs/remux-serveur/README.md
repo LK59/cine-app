@@ -292,8 +292,31 @@ piste ? »), et `getVideoPlaybackQuality`. « Envoyer les résultats » écrit u
 `startup.log`, où le serveur joint pour chaque lecture ses `srv.*`, les segments son par piste et la trace des
 derniers segments remis (lesquels Safari a demandés après chaque saut).
 
+**« Tout enchaîner »** (en tête de la page) déroule le protocole ci-dessous d'un seul appui — 14 essais, ~30 minutes
+estimées (plus si des index sont à construire à froid) — dans **un seul `<video>`** dont seule la source change :
+l'appui lève pour cet élément la restriction du son de WebKit, et les `play()` suivants passent ; un `play()` refusé
+malgré tout (`NotAllowedError`) affiche « Touchez pour continuer » et attend. Un verrou d'écran est demandé pendant
+la série et redemandé au retour au premier plan (`useWakeLock`). Chaque essai : préparer, lire, attendre la première
+image (sans image en 20 s : échec noté, essai suivant), 10 s de lecture, le ou les parcours, le tour des pistes
+audio s'il est prévu (un changement par piste par `audioTracks`, 8 s d'observation chacun : reprise, `waiting`,
+erreurs, gels), puis une ligne `kind: "lumen-test"` marquée `auto: { serie, trial, rank, of, status }`. Un essai
+qui échoue n'arrête pas la série ; une ligne non envoyée (réseau, 5xx, 429) attend le prochain envoi ; « Arrêter »
+ferme l'essai en cours, envoie sa ligne et s'arrête. La page relève en plus ce que l'œil voyait seul :
+- **les gels** (`FreezeWatch`, `src/components/lumenTest/autoSeries.ts`) : `requestVideoFrameCallback` compte les
+  images *présentées* ; si `currentTime` avance de plus d'une seconde sans image nouvelle — vérifié toutes les 2 s,
+  et rejugé depuis la cible à chaque saut —, un gel est noté (`freezes` : position de la dernière image, durée
+  estimée, `afterSeek`, `until`). Page cachée ou vidéo sortie de la vue : pas de jugement. Sans
+  `requestVideoFrameCallback`, pas de `framesPresented` ni de gels : non cherchés, et non absents ;
+- **le décodage de l'essai** : `getVideoPlaybackQuality()` à la première image et à la fin (`qualityStart`,
+  `quality`, `qualityDelta` : images, perdues, corrompues) ; les `MediaError` (code et message) comme avant.
+
+Ce que la page ne voit pas — une image *présentée* mais abîmée (verte, en blocs), et si le son a vraiment changé —
+fait l'objet de deux questions en fin de série, envoyées avec chaque essai résumé dans une dernière ligne
+(`auto.summary`, `trials`, `answers`). Lire une série : `jq 'select(.kind=="lumen-test" and .auto.serie=="…")'`
+sur `startup.log`. Le mode manuel reste tel quel, pour refaire un essai à la main.
+
 **Protocole, sur l'iPhone (dans l'application installée, puis dans un onglet Safari ; puis le Mac si possible).**
-Pour chaque lecture : Préparer, Lire, attendre la première image, « Lancer le parcours » (10 sauts), regarder
+« Tout enchaîner » le déroule ; à la main, pour chaque lecture : Préparer, Lire, attendre la première image, « Lancer le parcours » (10 sauts), regarder
 l'image à chaque reprise — **une image verte, grise, en blocs ou figée pendant que le son continue** est ce que
 la page ne voit pas : la noter —, puis Arrêter. « Envoyer les résultats » après chaque titre (12 lectures au plus
 gardées).

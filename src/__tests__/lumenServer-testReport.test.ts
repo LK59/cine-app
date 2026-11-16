@@ -72,6 +72,47 @@ describe("lumenTestReport", () => {
     expect(report.log).toEqual(["ligne", "x".repeat(200)]);
   });
 
+  it("« Tout enchaîner » : l'essai, ses gels et ses compteurs, la ligne récapitulative et ses réponses — bornés", () => {
+    const line = lumenTestReport(
+      {
+        auto: { serie: "abc123def456", trial: "ghosted-cra", rank: 8, of: 14, status: "ok", evil: 1 },
+        runs: [
+          {
+            itemId: ITEM,
+            cut: "cra",
+            trial: "ghosted-cra",
+            rank: 8,
+            framesPresented: 41_000,
+            freezes: [{ at: 600.5, ms: 2400, afterSeek: true, until: "image", x: 1 }, { at: 1, until: "ailleurs" }],
+            qualityStart: { total: 10, dropped: 0, corrupted: 0 },
+            qualityDelta: { total: 40_990, dropped: 12, corrupted: 0 },
+            audioSwitches: [{ from: "0:fr", to: "1:en", ms: 400, waited: false, errors: 0, freezes: 1 }],
+          },
+        ],
+      },
+      "louis"
+    );
+    expect(line.auto).toEqual({ serie: "abc123def456", trial: "ghosted-cra", rank: 8, of: 14, status: "ok" });
+    const [run] = line.runs as Record<string, unknown>[];
+    expect(run).toMatchObject({ trial: "ghosted-cra", rank: 8, framesPresented: 41_000, qualityStart: { total: 10 }, qualityDelta: { total: 40_990, dropped: 12 } });
+    expect(run.freezes).toEqual([{ at: 600.5, ms: 2400, afterSeek: true, until: "image" }, { at: 1 }]);
+    expect(run.audioSwitches).toEqual([{ from: "0:fr", to: "1:en", ms: 400, waited: false, errors: 0, freezes: 1 }]);
+
+    const summary = lumenTestReport(
+      {
+        auto: { serie: "abc123def456", summary: true, of: 14, done: 14, elapsedS: 1834, stopped: false, serieX: "x" },
+        trials: [{ trial: "ted-lasso-cra", rank: 12, title: "Ted Lasso S02E01", cut: "cra", status: "ok", firstFrameMs: 1840, seekMedianMs: 1100, freezes: 1, audioSwitches: 3, audioTrouble: 0, injected: "<x>" }, { trial: "PAS UN NOM", status: "fini" }],
+        answers: { damaged: "oui", damagedTitle: "Ghosted", audioClean: "pas-entendu", extra: "x" },
+      },
+      "louis"
+    );
+    expect(summary.auto).toEqual({ serie: "abc123def456", summary: true, of: 14, done: 14, elapsedS: 1834, stopped: false });
+    expect(summary.trials).toEqual([{ trial: "ted-lasso-cra", rank: 12, title: "Ted Lasso S02E01", cut: "cra", status: "ok", firstFrameMs: 1840, seekMedianMs: 1100, freezes: 1, audioSwitches: 3, audioTrouble: 0 }, {}]);
+    expect(summary.answers).toEqual({ damaged: "oui", damagedTitle: "Ghosted", audioClean: "pas-entendu" });
+    // Une ligne du mode manuel n'en porte rien.
+    expect(Object.keys(lumenTestReport({ runs: [] }, "louis"))).toEqual(["build", "env", "runs", "log"]);
+  });
+
   it("joint le relevé serveur de la lecture — segments, son par piste, trace — pour ce compte seulement", () => {
     const stats = playbackOf("lt0002", { user: "louis", itemId: ITEM, version: "1c1-0123456789ab" });
     noteRequest(stats, "segment");

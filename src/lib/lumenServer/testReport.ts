@@ -18,6 +18,10 @@ import { LUMEN_CUT_MODES } from "./format";
 const MAX_RUNS = 12;
 const MAX_SEEKS = 80;
 const MAX_LOG = 150;
+/** Les gels d'une lecture (« Tout enchaîner ») : au-delà de 60, la lecture est figée d'un bout à l'autre et le nombre suffit. */
+const MAX_FREEZES = 60;
+/** Les essais résumés d'une ligne récapitulative : la série en compte 14. */
+const MAX_TRIALS = 30;
 
 const num = (value: unknown, max = 1e9): number | null =>
   typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= max ? Math.round(value * 1000) / 1000 : null;
@@ -42,6 +46,14 @@ function pick(raw: unknown, rules: Record<string, (value: unknown) => unknown>):
 
 const SEEK_KINDS = new Set(["-10", "+10", "+60", "hasard", "parcours", "barre", "depart"]);
 const HEARD = new Set(["oui", "non"]);
+const FREEZE_ENDS = new Set(["image", "saut", "masqué", "fin"]);
+const TRIAL_STATUSES = new Set(["ok", "échec", "refusé", "préparé", "arrêté"]);
+const DAMAGED = new Set(["oui", "non"]);
+const AUDIO_CLEAN = new Set(["oui", "non", "pas-entendu"]);
+const oneOf = (allowed: Set<string>) => (v: unknown) => (typeof v === "string" && allowed.has(v) ? v : null);
+/** Le nom d'un essai de la série (`ghosted-cra-leading`, `american-housewife-cra-600`) : minuscules, chiffres, tirets. */
+const trialName = (v: unknown) => (typeof v === "string" && /^[a-z0-9-]{1,40}$/.test(v) ? v : null);
+const qualityOf = (v: unknown) => pick(v, { total: (x) => num(x, 1e9), dropped: (x) => num(x, 1e9), corrupted: (x) => num(x, 1e9) });
 
 function seekOf(raw: unknown): Record<string, unknown> {
   return pick(raw, {
@@ -80,6 +92,9 @@ function runOf(raw: unknown, user: string): Record<string, unknown> {
         verified: (x) => num(x, 1e6),
         durationS: (x) => num(x, 1e6),
       }),
+    // « Tout enchaîner » : l'essai et son rang dans la série (la ligne porte aussi `auto`).
+    trial: trialName,
+    rank: (v) => num(v, 1e3),
     loadedMetadataMs: (v) => num(v, 1e7),
     firstFrameMs: (v) => num(v, 1e7),
     firstFrameVia: (v) => (v === "rvfc" || v === "playing" ? v : null),
@@ -87,6 +102,14 @@ function runOf(raw: unknown, user: string): Record<string, unknown> {
     seeks: (v) => list(v, MAX_SEEKS).map(seekOf),
     waits: (v) => pick(v, { count: (x) => num(x, 1e5), totalMs: (x) => num(x, 1e8), maxMs: (x) => num(x, 1e8) }),
     errors: (v) => list(v, 10).map((x) => text(x, 200)).filter((x) => x !== null),
+    // Les images présentées (`requestVideoFrameCallback`) et les gels : la position a avancé de plus d'une seconde
+    // sans image nouvelle — `at` la position de la dernière image, `ms` la durée estimée, `afterSeek` sans image
+    // depuis un saut, `until` ce qui l'a fini. Sans `framesPresented`, les gels n'ont pas été cherchés.
+    framesPresented: (v) => num(v, 1e8),
+    freezes: (v) =>
+      list(v, MAX_FREEZES).map((x) =>
+        pick(x, { at: (y) => num(y, 1e6), ms: (y) => num(y, 1e8), afterSeek: bool, until: oneOf(FREEZE_ENDS) })
+      ),
     audioTracks: (v) => list(v, 16).map((x) => text(x, 160)).filter((x) => x !== null),
     audioSwitches: (v) =>
       list(v, 12).map((x) =>
@@ -101,9 +124,15 @@ function runOf(raw: unknown, user: string): Record<string, unknown> {
           changeEvent: bool,
           waited: bool,
           heard: (y) => (typeof y === "string" && HEARD.has(y) ? y : null),
+          // Le tour des pistes de la série : erreurs et gels dans les 8 s qui suivent le changement.
+          errors: (y) => num(y, 1e3),
+          freezes: (y) => num(y, 1e3),
         })
       ),
-    quality: (v) => pick(v, { total: (x) => num(x, 1e9), dropped: (x) => num(x, 1e9), corrupted: (x) => num(x, 1e9) }),
+    quality: qualityOf,
+    // Les compteurs de décodage à la première image, et la différence avec la fin (`quality`) : ce que l'essai a coûté.
+    qualityStart: qualityOf,
+    qualityDelta: qualityOf,
     end: (v) => text(v, 40),
   });
   // Le relevé serveur de la même lecture, s'il est de ce compte : `srv.*` comme les lignes du lecteur,
@@ -121,9 +150,59 @@ function runOf(raw: unknown, user: string): Record<string, unknown> {
   return run;
 }
 
-/** Le corps d'un « Envoyer les résultats », relu et borné, avec le relevé serveur de chaque lecture. */
+/** Le résumé d'un essai dans la ligne récapitulative de « Tout enchaîner » (`TrialResult`, autoSeries.ts). */
+function trialSummaryOf(raw: unknown): Record<string, unknown> {
+  const count = (v: unknown) => num(v, 1e5);
+  const duration = (v: unknown) => num(v, 1e8);
+  return pick(raw, {
+    trial: trialName,
+    rank: (v) => num(v, 1e3),
+    title: (v) => text(v, 120),
+    cut: (v) => (typeof v === "string" && (LUMEN_CUT_MODES as readonly string[]).includes(v) ? v : null),
+    status: oneOf(TRIAL_STATUSES),
+    reason: (v) => text(v, 120),
+    firstFrameMs: duration,
+    seeks: count,
+    missed: count,
+    seekMedianMs: duration,
+    freezes: count,
+    freezeMs: duration,
+    errors: count,
+    firstError: (v) => text(v, 200),
+    waits: count,
+    frames: (v) => num(v, 1e9),
+    dropped: (v) => num(v, 1e9),
+    corrupted: (v) => num(v, 1e9),
+    audioSwitches: count,
+    audioTrouble: count,
+    verdicts: (v) => list(v, 4).map((x) => text(x, 200)).filter((x) => x !== null),
+  });
+}
+
+/**
+ * Le corps d'un « Envoyer les résultats », relu et borné, avec le relevé serveur de chaque lecture. Depuis
+ * « Tout enchaîner » (16/11/2026), une ligne peut aussi porter `auto` — la série (`serie`, pour joindre ses
+ * lignes), l'essai et son rang, ou `summary` pour la ligne récapitulative —, et celle-ci `trials` (chaque essai
+ * résumé) et `answers` (les deux questions de fin : ce que la page ne voit pas).
+ */
 export function lumenTestReport(body: Record<string, unknown>, user: string): Record<string, unknown> {
   return {
+    ...pick(body, {
+      auto: (v) =>
+        pick(v, {
+          serie: (x) => (typeof x === "string" && /^[0-9a-f]{6,24}$/.test(x) ? x : null),
+          trial: trialName,
+          rank: (x) => num(x, 1e3),
+          of: (x) => num(x, 1e3),
+          status: oneOf(TRIAL_STATUSES),
+          summary: bool,
+          done: (x) => num(x, 1e3),
+          elapsedS: (x) => num(x, 1e6),
+          stopped: bool,
+        }),
+      trials: (v) => list(v, MAX_TRIALS).map(trialSummaryOf),
+      answers: (v) => pick(v, { damaged: oneOf(DAMAGED), damagedTitle: (x) => text(x, 120), audioClean: oneOf(AUDIO_CLEAN) }),
+    }),
     build: text(body.build, 40),
     env: pick(body.env, {
       userAgent: (v) => text(v, 300),

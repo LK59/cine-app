@@ -2,6 +2,30 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { APP_BUILD } from "@/lib/appBuild";
+import { useWakeLock } from "@/lib/useWakeLock";
+import {
+  AUDIO_SWITCH_WATCH_MS,
+  FIRST_FRAME_TIMEOUT_MS,
+  FREEZE_CHECK_MS,
+  FreezeWatch,
+  PRESETS,
+  SERIES,
+  formatResult,
+  qualityDelta,
+  resultOf,
+  runSeries,
+  seriesEstimateS,
+  seriesProgress,
+  summaryBody,
+  trialTag,
+  type Cut,
+  type PreparedVerdict,
+  type Quality,
+  type SeriesAnswers,
+  type SeriesDriver,
+  type TrialMeasures,
+  type TrialResult,
+} from "./autoSeries";
 
 /**
  * La page de banc de Lumen serveur (`/lumen-test`, étape 3b de docs/remux-serveur/, DECISIONS §157,
@@ -22,25 +46,16 @@ import { APP_BUILD } from "@/lib/appBuild";
  * une ligne `kind: "lumen-test"` dans `startup.log`, où le serveur joint ce qu'il a vu des mêmes lectures :
  * segments remis, construction, envoi, et la trace de ce que Safari a demandé après chaque saut.
  *
+ * « Tout enchaîner » (16/11/2026) déroule le protocole entier de l'étape 3b d'un seul appui (`autoSeries.ts` :
+ * le plan, l'enchaînement, la détection des gels) et envoie une ligne par essai, marquée `auto`. Il lit dans
+ * **le même `<video>`** que le mode manuel, en ne changeant que sa source : WebKit lève la restriction du son
+ * pour un élément une fois qu'un geste l'a lancé, et un second élément la reperdrait. Il mesure en plus ce que
+ * seul l'œil voyait jusque-là : les gels (position qui avance sans image présentée, `FreezeWatch`) et les
+ * compteurs de décodage de chaque essai. Une image *présentée* mais abîmée reste invisible à la page — d'où les
+ * deux questions de fin de série.
+ *
  * Textes en français : la page est pour l'administrateur de la maison, pas pour un rapport.
  */
-
-type Cut = "idr" | "cra" | "cra-leading";
-
-/**
- * Les titres d'essai, tirés du recensement du 16/11/2026 (docs/remux-serveur/README.md, « Étape 3b ») :
- * un par cas à éprouver. Des identifiants de cette bibliothèque — ailleurs, le champ libre sert.
- */
-const PRESETS: { id: string; title: string; note: string }[] = [
-  { id: "d4513bcf59bba90a23656f40ed816c3d", title: "À la Maison Blanche S03E01", note: "H.264 1080p, AC-3 2.0 — le témoin : même découpe sous les trois modes" },
-  { id: "3f79d20c0c10289f3c6df5f72f62b84b", title: "Black Monday S02E10", note: "HEVC 4K à IDR seules, segments de 4 s — cra ne change que la balise des listes" },
-  { id: "7f17493b25683f0db7125defa08b70a0", title: "American Housewife — Attaque de poux", note: "HEVC 1080p à GOP ouvert court : idr 15,4 s, cra 12,4 s — les deux modes sur le même fichier" },
-  { id: "1694ff6c78fd793f321d348511771a47", title: "Ghosted", note: "HEVC 4K DV 8.1, E-AC-3 Atmos, GOP ouvert : idr refusé (177 s), cra 13,9 s" },
-  { id: "a1e058d682294a1de3cf5bb47d904e0e", title: "Pearl Harbor", note: "HEVC 1080p à GOP ouvert (132 CRA à RASL vues) : idr refusé (136 s), cra 14,4 s" },
-  { id: "edaa7d0071b034dc32fabf1834484278", title: "Ted Lasso S02E01", note: "HEVC 4K DV 8.1, trois Atmos, CRA à RASL : idr refusé (51,9 s), cra 14 s" },
-  { id: "23505fbd074bc303c0a41dbc8a8d207f", title: "Le Prestige", note: "GOP ouvert : idr 208 s, cra 14,4 s — mais son DTS seul, refusé tant que la conversion n'existe pas" },
-  { id: "697cf1d483e4e736edf416d8b510f19f", title: "Alien : Romulus", note: "HEVC 1080p, E-AC-3 7.1 par défaut, IDR seules : le son 7.1 en HLS" },
-];
 
 const CUTS: { id: Cut; label: string; detail: string }[] = [
   { id: "idr", label: "idr (la règle)", detail: "coupe seulement là où un décodeur repart seul" },
@@ -103,6 +118,9 @@ interface AudioSwitch {
   heard?: "oui" | "non";
   /** La position au changement : l'avance se mesure contre elle. */
   at: number;
+  /** Tour des pistes de la série : erreurs et gels survenus dans les 8 s qui suivent le changement. */
+  errors?: number;
+  freezes?: number;
 }
 
 /** Une lecture : tout ce que la page en mesure, mutable pendant qu'elle dure (dans un `ref`). */
@@ -125,7 +143,14 @@ interface Run {
   errors: string[];
   audioTracks: string[];
   audioSwitches: AudioSwitch[];
-  quality?: { total: number; dropped: number; corrupted: number };
+  quality?: Quality;
+  /** Les compteurs de décodage à la première image : la ligne envoie la différence avec la fin (`qualityDelta`). */
+  qualityStart?: Quality;
+  /** Les images présentées et les gels (position qui avance sans image) — `requestVideoFrameCallback` seul. */
+  watch: FreezeWatch;
+  /** Un essai de « Tout enchaîner » : son nom et son rang dans la série. */
+  trial?: string;
+  rank?: number;
   end?: string;
 }
 
@@ -142,6 +167,37 @@ type TestVideo = HTMLVideoElement & {
 };
 
 const ms = (value: number) => Math.round(value);
+
+/** Attend `duration` ms, par pas de 250 ms, et rend la main plus tôt si `stop()` le dit (« Arrêter »). */
+async function sleepUnless(duration: number, stop: () => boolean): Promise<void> {
+  const until = performance.now() + duration;
+  while (!stop() && performance.now() < until) await new Promise((resolve) => setTimeout(resolve, Math.min(250, Math.max(0, until - performance.now()))));
+}
+
+/** `play()` en promesse dans tous les cas : jsdom rend `undefined`, et une exception synchrone devient un refus. */
+function playOf(video: HTMLVideoElement): Promise<void> {
+  try {
+    return Promise.resolve(video.play());
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
+
+/** Par le nom : un `DOMException` n'est pas un `Error` partout. */
+const isNotAllowed = (error: unknown) => typeof error === "object" && error !== null && (error as { name?: unknown }).name === "NotAllowedError";
+
+/**
+ * La vidéo est-elle à l'écran ? Un navigateur peut cesser de présenter les images d'une vidéo sortie de la vue
+ * (l'administrateur fait défiler pour lire les résultats) : sans cette garde, chaque défilement serait un gel.
+ * Plein écran natif (iOS) : à l'écran.
+ */
+function onScreen(video: TestVideo): boolean {
+  if ((video as TestVideo & { webkitDisplayingFullscreen?: boolean }).webkitDisplayingFullscreen) return true;
+  const box = video.getBoundingClientRect();
+  return box.bottom > 0 && box.top < window.innerHeight && box.width > 0;
+}
+
+const clock = (seconds: number) => `${Math.floor(seconds / 60)} min ${String(Math.floor(seconds % 60)).padStart(2, "0")} s`;
 
 /** Ce que l'écran montre de la lecture en cours : relu dans les `ref` chaque seconde, jamais pendant le rendu. */
 interface View {
@@ -164,6 +220,35 @@ interface View {
   tracks: string[];
   switched: boolean;
   heard?: "oui" | "non";
+  freezes: number;
+}
+
+/** Ce que l'écran montre de la série : relu dans `autoRef` à chaque étape et chaque seconde, jamais au rendu. */
+interface AutoView {
+  phase: "en-cours" | "questions" | "envoyé";
+  k: number;
+  n: number;
+  title: string;
+  cut: Cut;
+  step: string;
+  elapsedS: number;
+  progress: number;
+  results: string[];
+  stopped: boolean;
+  sent: string | null;
+}
+
+/** L'état de la série, mutable pendant qu'elle dure. */
+interface AutoState {
+  serie: string;
+  startedAt: number;
+  phase: AutoView["phase"];
+  stopped: boolean;
+  index: number;
+  trialStartedAt: number;
+  step: string;
+  results: TrialResult[];
+  sent: string | null;
 }
 
 function qualityOf(video: TestVideo | null): Run["quality"] {
@@ -195,6 +280,26 @@ function viewOf(run: Run | null, video: TestVideo | null): View | null {
     tracks: tracksOf(video).map(describeTrack),
     switched: !!last,
     heard: last?.heard,
+    freezes: run.watch.freezes.length,
+  };
+}
+
+function autoViewOf(state: AutoState | null): AutoView | null {
+  if (!state) return null;
+  const now = performance.now();
+  const trial = SERIES[Math.min(state.index, SERIES.length - 1)];
+  return {
+    phase: state.phase,
+    k: Math.min(state.index + 1, SERIES.length),
+    n: SERIES.length,
+    title: trial.title,
+    cut: trial.cut,
+    step: state.step,
+    elapsedS: (now - state.startedAt) / 1000,
+    progress: state.phase === "en-cours" ? seriesProgress(SERIES, state.index, (now - state.trialStartedAt) / 1000) : 1,
+    results: state.results.map(formatResult),
+    stopped: state.stopped,
+    sent: state.sent,
   };
 }
 
@@ -214,6 +319,19 @@ function tracksOf(video: TestVideo | null): AudioTrackLike[] {
 
 function describeTrack(track: AudioTrackLike | undefined, index: number): string {
   return track ? `${index}:${track.language || "?"}:${track.label || "?"}:${track.enabled ? "on" : "off"}` : `${index}:—`;
+}
+
+/** Ce que la série retient d'une lecture pour sa ligne de résultat (`resultOf`). */
+function measuresOf(run: Run): TrialMeasures {
+  return {
+    firstFrameMs: run.firstFrameMs,
+    seeks: run.seeks,
+    freezes: run.watch.freezes,
+    errors: run.errors,
+    waits: run.waits.count,
+    quality: qualityDelta(run.qualityStart, run.quality),
+    audioSwitches: run.audioSwitches,
+  };
 }
 
 /** Ce qui part au serveur d'une lecture : sans les horodatages internes. */
@@ -239,18 +357,29 @@ function reportOf(run: Run): Record<string, unknown> {
     s: run.s,
     version: run.version,
     verdict: run.verdict,
+    trial: run.trial,
+    rank: run.rank,
     loadedMetadataMs: run.loadedMetadataMs,
     firstFrameMs: run.firstFrameMs,
     firstFrameVia: run.firstFrameVia,
     seeks: run.seeks.map(seek),
     waits: run.waits,
     errors: run.errors,
+    // Sans `requestVideoFrameCallback`, rien n'est compté : l'absence de `framesPresented` dit que les gels n'ont
+    // pas été cherchés (et non qu'il n'y en a pas eu).
+    framesPresented: run.watch.presented || undefined,
+    freezes: run.watch.freezes.map(({ at, ms: took, afterSeek, until }) => ({ at, ms: took, afterSeek, until })),
     audioTracks: run.audioTracks,
-    audioSwitches: run.audioSwitches.map(({ from, to, ms: took, reloaded, changeEvent, waited, heard }) => ({ from, to, ms: took, reloaded, changeEvent, waited, heard })),
+    audioSwitches: run.audioSwitches.map(({ from, to, ms: took, reloaded, changeEvent, waited, heard, errors, freezes }) => ({ from, to, ms: took, reloaded, changeEvent, waited, heard, errors, freezes })),
     quality: run.quality,
+    qualityStart: run.qualityStart,
+    qualityDelta: qualityDelta(run.qualityStart, run.quality),
     end: run.end,
   };
 }
+
+/** Une ligne envoyée sans réponse exploitable ; gardée pour le prochain envoi (au plus 30). */
+const OUTBOX_MAX = 30;
 
 export function LumenTest() {
   const videoRef = useRef<TestVideo | null>(null);
@@ -259,6 +388,15 @@ export function LumenTest() {
   const startAtRef = useRef(0);
   const tourRef = useRef(0);
   const seekDone = useRef<(() => void) | null>(null);
+  // Le journal lu hors du rendu : chaque ligne d'essai emporte les lignes écrites depuis son début.
+  const logRef = useRef<string[]>([]);
+  const logCountRef = useRef(0);
+  const envRef = useRef<Record<string, unknown> | null>(null);
+  const autoRef = useRef<AutoState | null>(null);
+  const outboxRef = useRef<Record<string, unknown>[]>([]);
+  // « Touchez pour continuer » : le `play()` refusé attend un geste ; `tapRef` le relâche.
+  const tapRef = useRef<(() => void) | null>(null);
+  const refusedRef = useRef(false);
 
   const [itemId, setItemId] = useState("");
   const [title, setTitle] = useState("");
@@ -273,12 +411,24 @@ export function LumenTest() {
   const [env, setEnv] = useState<{ userAgent: string; standalone: boolean; hlsNative: string; managedMediaSource: boolean; screen: string } | null>(null);
   const [sent, setSent] = useState<string | null>(null);
   const [touring, setTouring] = useState(false);
+  const [auto, setAuto] = useState<AutoView | null>(null);
+  const [needTap, setNeedTap] = useState(false);
+  const [answers, setAnswers] = useState<SeriesAnswers>({ damaged: null, damagedTitle: "", audioClean: null });
+
+  // Un écran qui s'éteint au milieu de la série met la page en arrière-plan et Safari en pause : le verrou est
+  // demandé pendant toute la série, et redemandé au retour au premier plan (`useWakeLock`, partagé avec les
+  // lecteurs, chaque demande dans son try/catch — un refus n'arrête rien).
+  useWakeLock(auto?.phase === "en-cours");
 
   const note = useCallback((line: string) => {
     const at = (performance.now() / 1000).toFixed(1);
-    setLog((lines) => [...lines.slice(-299), `${at}s ${line}`]);
+    const entry = `${at}s ${line}`;
+    logRef.current = [...logRef.current.slice(-399), entry];
+    logCountRef.current += 1;
+    setLog((lines) => [...lines.slice(-299), entry]);
   }, []);
   const refresh = useCallback(() => setView(viewOf(runRef.current, videoRef.current)), []);
+  const refreshAuto = useCallback(() => setAuto(autoViewOf(autoRef.current)), []);
 
   /** Un saut fini (ou manqué) : rangé dans la lecture, et la promesse du parcours relâchée. */
   const finishSeek = useCallback(
@@ -299,29 +449,57 @@ export function LumenTest() {
     [note, refresh]
   );
 
-  // L'environnement, une fois monté ; puis l'état de la vidéo et le délai des sauts, chaque seconde.
+  // L'environnement, une fois monté ; puis l'état de la vidéo et le délai des sauts, chaque seconde ; et les gels,
+  // toutes les 2 s (`FREEZE_CHECK_MS`).
   useEffect(() => {
     const first = setTimeout(() => {
       const video = document.createElement("video");
       const nav = navigator as Navigator & { standalone?: boolean };
-      setEnv({
+      const facts = {
         userAgent: navigator.userAgent,
         standalone: window.matchMedia("(display-mode: standalone)").matches || nav.standalone === true,
         hlsNative: video.canPlayType("application/vnd.apple.mpegurl") || "non",
         managedMediaSource: "ManagedMediaSource" in window,
         screen: `${screen.width}x${screen.height}@${window.devicePixelRatio}`,
-      });
+      };
+      envRef.current = facts;
+      setEnv(facts);
     }, 0);
+    let lastFreezeCheck = 0;
     const timer = setInterval(() => {
       const run = runRef.current;
-      if (run?.pending && performance.now() - run.pending.startedAt > SEEK_TIMEOUT_MS) finishSeek(run, { ok: false, timedOut: true });
+      const now = performance.now();
+      if (run?.pending && now - run.pending.startedAt > SEEK_TIMEOUT_MS) finishSeek(run, { ok: false, timedOut: true });
+      const video = videoRef.current;
+      // Page cachée ou vidéo hors de la vue : `requestVideoFrameCallback` peut se taire alors que le son continue —
+      // ce ne serait pas un gel. On repart alors de la position courante, et on juge de nouveau une fois revenu.
+      if (run && video && now - lastFreezeCheck >= FREEZE_CHECK_MS - 50) {
+        lastFreezeCheck = now;
+        if (document.visibilityState !== "visible" || !onScreen(video)) run.watch.rebase(now, video.currentTime, false);
+        else {
+          const freeze = run.watch.check(now, video.currentTime);
+          if (freeze) note(`GEL : la position avance sans nouvelle image depuis ${freeze.at.toFixed(1)} s${freeze.afterSeek ? " (après un saut)" : ""}`);
+        }
+      }
       refresh();
+      if (autoRef.current?.phase === "en-cours") refreshAuto();
     }, 1000);
     return () => {
       clearTimeout(first);
       clearInterval(timer);
     };
-  }, [finishSeek, refresh]);
+  }, [finishSeek, note, refresh, refreshAuto]);
+
+  // Retour au premier plan : la position a pu avancer sans image (page cachée) ; on repart d'elle.
+  useEffect(() => {
+    const onVisibility = () => {
+      const run = runRef.current;
+      const video = videoRef.current;
+      if (document.visibilityState === "visible" && run && video) run.watch.rebase(performance.now(), video.currentTime, false);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
 
   // Les évènements de la vidéo, branchés une fois : chacun met à jour la lecture en cours.
   useEffect(() => {
@@ -358,6 +536,7 @@ export function LumenTest() {
         if (run.firstFrameMs === undefined && !video.requestVideoFrameCallback) {
           run.firstFrameMs = ms(now() - run.clickAt);
           run.firstFrameVia = "playing";
+          run.qualityStart = qualityOf(video);
           note(`première image (playing) : ${run.firstFrameMs} ms`);
         }
         if (run.pending && run.pending.seekedMs !== undefined && run.pending.playingMs === undefined) run.pending.playingMs = ms(now() - run.pending.startedAt);
@@ -374,12 +553,18 @@ export function LumenTest() {
       },
       seeking: () => {
         const run = runRef.current;
-        if (!run || run.pending) return;
+        if (!run) return;
+        // Le gel se juge de nouveau depuis la cible : l'image d'avant le saut n'a plus à changer.
+        run.watch.rebase(now(), video.currentTime);
+        if (run.pending) return;
         // Un saut que la page n'a pas demandé : la barre native, ou le départ à une position.
         run.pending = { kind: "barre", from: video.currentTime, to: video.currentTime, startedAt: now(), waits: 0 };
       },
       seeked: () => {
-        const m = runRef.current?.pending;
+        const run = runRef.current;
+        // Safari peut atterrir avant la cible (début du segment) : la référence est là où il a atterri.
+        run?.watch.rebase(now(), video.currentTime);
+        const m = run?.pending;
         if (!m || m.seekedMs !== undefined) return;
         m.seekedMs = ms(now() - m.startedAt);
         m.landed = video.currentTime;
@@ -479,10 +664,74 @@ export function LumenTest() {
     const video = videoRef.current;
     if (!run) return;
     if (run.pending) finishSeek(run, { ok: false, error: "lecture arrêtée" });
+    run.watch.end(performance.now());
     run.quality = qualityOf(video ?? null) ?? run.quality;
     run.end = end;
     doneRef.current = [...doneRef.current, run].slice(-12);
     runRef.current = null;
+  };
+
+  /**
+   * Compte les images présentées tant que `run` est la lecture en cours : la première donne le temps jusqu'à
+   * l'image, chacune nourrit la détection des gels. La position notée est `currentTime` au rappel, pas le
+   * `mediaTime` des métadonnées : c'est contre `currentTime` que les gels se jugent, et en HLS les deux
+   * horloges ne partent pas forcément du même zéro.
+   */
+  const watchFrames = (video: TestVideo, run: Run) => {
+    if (!video.requestVideoFrameCallback) return;
+    function onFrame() {
+      if (runRef.current !== run || !video.requestVideoFrameCallback) return; // une autre lecture : la boucle s'éteint
+      const now = performance.now();
+      if (run.firstFrameMs === undefined) {
+        run.firstFrameMs = ms(now - run.clickAt);
+        run.firstFrameVia = "rvfc";
+        run.qualityStart = qualityOf(video);
+        note(`première image (requestVideoFrameCallback) : ${run.firstFrameMs} ms`);
+        refresh();
+      }
+      run.watch.frame(now, video.currentTime);
+      video.requestVideoFrameCallback(onFrame);
+    }
+    video.requestVideoFrameCallback(onFrame);
+  };
+
+  /**
+   * Ouvre une lecture de la liste maître dans la vidéo : la lecture précédente fermée, la nouvelle mesurée.
+   * Partagé par « Lire » et la série ; ne lance pas `play()` (chacun le fait à sa façon).
+   */
+  const startRun = (params: { itemId: string; title: string; cut: Cut; startAt: number; verdict: Verdict; clickAt: number }): Run | null => {
+    const video = videoRef.current;
+    const current = params.verdict;
+    if (!video || !current.version) return null;
+    tourRef.current += 1; // un parcours en cours s'arrête
+    closeRun("nouvelle lecture");
+    const s = newPlaybackId();
+    const master = `/api/lumen/${params.itemId}/${current.version}/${s}/master.m3u8${current.audioTrack !== null ? `?audio=${current.audioTrack}` : ""}`;
+    startAtRef.current = Math.max(0, params.startAt);
+    const run: Run = {
+      itemId: params.itemId,
+      title: params.title || params.itemId,
+      cut: params.cut,
+      audio: current.audioTrack,
+      s,
+      version: current.version,
+      verdict: { ok: current.ok, segments: current.segments, longestS: current.cutFacts?.longestS, targetS: current.targetS, craRasl: current.cutFacts?.craRasl, verified: current.cutFacts?.verified, durationS: current.durationS },
+      clickAt: params.clickAt,
+      seeks: [],
+      pending: null,
+      waits: { count: 0, totalMs: 0, maxMs: 0 },
+      waitingSince: null,
+      errors: [],
+      audioTracks: [],
+      audioSwitches: [],
+      watch: new FreezeWatch(),
+    };
+    runRef.current = run;
+    note(`lecture ${run.title} · ${params.cut} · piste ${current.audioTrack ?? "—"} · ${s}`);
+    watchFrames(video, run);
+    video.src = master;
+    refresh();
+    return run;
   };
 
   const play = async () => {
@@ -495,40 +744,7 @@ export function LumenTest() {
       if (current && !current.ok) note(`non servi : ${current.reason}`);
       return;
     }
-    tourRef.current += 1; // un parcours en cours s'arrête
-    closeRun("nouvelle lecture");
-    const s = newPlaybackId();
-    const master = `/api/lumen/${itemId}/${current.version}/${s}/master.m3u8${current.audioTrack !== null ? `?audio=${current.audioTrack}` : ""}`;
-    startAtRef.current = Math.max(0, Number(startAt) || 0);
-    const run: Run = {
-      itemId,
-      title: title || itemId,
-      cut,
-      audio: current.audioTrack,
-      s,
-      version: current.version,
-      verdict: { ok: current.ok, segments: current.segments, longestS: current.cutFacts?.longestS, targetS: current.targetS, craRasl: current.cutFacts?.craRasl, verified: current.cutFacts?.verified, durationS: current.durationS },
-      clickAt,
-      seeks: [],
-      pending: null,
-      waits: { count: 0, totalMs: 0, maxMs: 0 },
-      waitingSince: null,
-      errors: [],
-      audioTracks: [],
-      audioSwitches: [],
-    };
-    runRef.current = run;
-    note(`lecture ${run.title} · ${cut} · piste ${current.audioTrack ?? "—"} · ${s}`);
-    if (video.requestVideoFrameCallback) {
-      video.requestVideoFrameCallback(() => {
-        if (runRef.current !== run || run.firstFrameMs !== undefined) return;
-        run.firstFrameMs = ms(performance.now() - run.clickAt);
-        run.firstFrameVia = "rvfc";
-        note(`première image (requestVideoFrameCallback) : ${run.firstFrameMs} ms`);
-        refresh();
-      });
-    }
-    video.src = master;
+    if (!startRun({ itemId, title, cut, startAt: Number(startAt) || 0, verdict: current, clickAt })) return;
     try {
       await video.play();
     } catch (error) {
@@ -572,9 +788,8 @@ export function LumenTest() {
     return done;
   };
 
-  /** N sauts au hasard, chacun suivi de 4 s de lecture : de quoi mesurer sans geste. */
-  const tour = async () => {
-    const n = Math.max(1, Math.min(60, Math.round(Number(tourCount) || 10)));
+  /** N sauts au hasard, chacun suivi de 4 s de lecture : de quoi mesurer sans geste. Partagé avec la série. */
+  const runTour = async (n: number) => {
     const token = ++tourRef.current;
     setTouring(true);
     note(`parcours de ${n} sauts`);
@@ -586,18 +801,20 @@ export function LumenTest() {
     setTouring(false);
   };
 
+  const tour = () => runTour(Math.max(1, Math.min(60, Math.round(Number(tourCount) || 10))));
+
   /** Passe à la piste audio suivante par `audioTracks[i].enabled` : sans recharger, si Safari sait faire. */
-  const nextAudio = () => {
+  const nextAudio = (): AudioSwitch | null => {
     const video = videoRef.current;
     const run = runRef.current;
     const tracks = tracksOf(video);
     if (!video || !run || tracks.length < 2) {
       note(`changement de piste impossible : ${tracks.length} piste(s) annoncée(s) par audioTracks`);
-      return;
+      return null;
     }
     const current = tracks.findIndex((t) => t.enabled);
     const next = (current + 1) % tracks.length;
-    run.audioSwitches.push({
+    const sw: AudioSwitch = {
       from: describeTrack(tracks[current], current),
       to: describeTrack(tracks[next], next),
       startedAt: performance.now(),
@@ -605,12 +822,14 @@ export function LumenTest() {
       changeEvent: false,
       waited: false,
       at: video.currentTime,
-    });
+    };
+    run.audioSwitches.push(sw);
     // L'ordre compte peu en HLS (un seul rendu actif par groupe), mais on allume d'abord : jamais sans son.
     tracks[next].enabled = true;
     if (current >= 0 && current !== next) tracks[current].enabled = false;
     note(`piste audio ${current} → ${next} (${tracks[next].language || "?"} ${tracks[next].label || ""})`);
     refresh();
+    return sw;
   };
 
   const heard = (answer: "oui" | "non") => {
@@ -619,6 +838,26 @@ export function LumenTest() {
     sw.heard = answer;
     note(`son de la nouvelle piste entendu : ${answer}`);
     refresh();
+  };
+
+  /**
+   * Envoie les lignes en attente, dans l'ordre. Une ligne qui n'a pas reçu de réponse exploitable (réseau, 5xx,
+   * 429) reste en tête pour le prochain envoi : une série de 30 minutes sur un réseau mobile ne perd pas un essai
+   * pour une coupure. Un refus définitif (400, 403) la retire — la renvoyer n'y changerait rien.
+   */
+  const flush = async (): Promise<boolean> => {
+    while (outboxRef.current.length) {
+      const body = outboxRef.current[0];
+      try {
+        const res = await fetch("/api/viewport-diag", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (!res.ok && (res.status >= 500 || res.status === 429 || res.status === 408)) return false;
+        if (!res.ok) note(`ligne refusée par le serveur (HTTP ${res.status}) : abandonnée`);
+      } catch {
+        return false;
+      }
+      outboxRef.current = outboxRef.current.slice(1);
+    }
+    return true;
   };
 
   const send = async () => {
@@ -648,6 +887,258 @@ export function LumenTest() {
     setAudio(null);
   };
 
+  // --- « Tout enchaîner » -----------------------------------------------------------------------------------
+
+  const setStep = (step: string) => {
+    const state = autoRef.current;
+    if (!state) return;
+    state.step = step;
+    refreshAuto();
+  };
+
+  /**
+   * Le pilote de la série (`SeriesDriver`) : chaque geste du protocole, sur la vraie vidéo, avec les fonctions du
+   * mode manuel — le même verdict, la même lecture, le même parcours, le même changement de piste. Construit à
+   * l'appui ; l'état qu'il partage avec l'écran vit dans les `ref`.
+   */
+  const makeDriver = (state: AutoState): SeriesDriver => {
+    const stopped = () => state.stopped;
+    let lastVerdict: Verdict | null = null;
+    let logFrom = 0;
+    const lineRuns = new Map<number, Record<string, unknown>[]>();
+    const verdictLine = (v: Verdict | null) =>
+      v ? { ok: v.ok, reason: v.reason, detail: v.detail, segments: v.segments, longestS: v.cutFacts?.longestS, targetS: v.targetS, craRasl: v.cutFacts?.craRasl, verified: v.cutFacts?.verified, durationS: v.durationS } : undefined;
+
+    /** Attend la première image : 20 s au plus une fois `play()` accepté ; un refus du geste attend l'appui. */
+    const awaitFirstFrame = async (run: Run): Promise<{ image: true } | { image: false; reason: string }> => {
+      let deadline = performance.now() + FIRST_FRAME_TIMEOUT_MS;
+      for (;;) {
+        if (stopped()) return { image: false, reason: "arrêté" };
+        if (run.firstFrameMs !== undefined) return { image: true };
+        if (run.errors.length) return { image: false, reason: `erreur ${run.errors[0]}`.slice(0, 120) };
+        if (refusedRef.current) {
+          refusedRef.current = false;
+          note("play() refusé (NotAllowedError) : un appui est nécessaire");
+          setStep("En attente d'un appui");
+          setNeedTap(true);
+          await new Promise<void>((resolve) => {
+            tapRef.current = resolve;
+          });
+          deadline = performance.now() + FIRST_FRAME_TIMEOUT_MS;
+          continue;
+        }
+        if (performance.now() > deadline) return { image: false, reason: "sans image après 20 s" };
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    };
+
+    return {
+      stopped,
+      begin: (t, rank) => {
+        state.index = rank - 1;
+        state.trialStartedAt = performance.now();
+        logFrom = logCountRef.current;
+        note(`— essai ${rank}/${SERIES.length} : ${t.id}`);
+        // Les choix du mode manuel suivent la série : un essai à refaire à la main part de là.
+        setItemId(t.itemId);
+        setTitle(t.title);
+        setCut(t.cut);
+        setStartAt(String(t.startAt));
+        setStep("Préparation");
+      },
+      prepare: async (t, chosenCut): Promise<PreparedVerdict | null> => {
+        setStep(`Préparation (${chosenCut})`);
+        const v = await prepare(t.itemId, null, chosenCut);
+        lastVerdict = v;
+        return v ? { ok: v.ok, reason: v.reason, detail: v.detail, version: v.version, audioTrack: v.audioTrack, segments: v.segments, longestS: v.cutFacts?.longestS } : null;
+      },
+      start: async (t, rank) => {
+        const video = videoRef.current;
+        if (!video || !lastVerdict) return { image: false, reason: "pas de vidéo" };
+        setStep("Attente de la première image");
+        const run = startRun({ itemId: t.itemId, title: t.title, cut: t.cut, startAt: t.startAt, verdict: lastVerdict, clickAt: performance.now() });
+        if (!run) return { image: false, reason: "lecture impossible" };
+        run.trial = t.id;
+        run.rank = rank;
+        refusedRef.current = false;
+        playOf(video).catch((error: unknown) => {
+          if (runRef.current !== run) return;
+          if (isNotAllowed(error)) refusedRef.current = true;
+          else note(`play() refusé : ${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}`);
+        });
+        return awaitFirstFrame(run);
+      },
+      play: async (duration) => {
+        setStep(`Lecture ${Math.round(duration / 1000)} s`);
+        await sleepUnless(duration, stopped);
+      },
+      tour: async (count, index) => {
+        const t = SERIES[state.index];
+        setStep(`Parcours ${index + 1}/${t.tours.length} (${count} sauts)`);
+        await runTour(count);
+      },
+      audioTour: async () => {
+        const video = videoRef.current;
+        const run = runRef.current;
+        const count = tracksOf(video).length;
+        if (!video || !run || count < 2) {
+          note(`tour des pistes : ${count} piste(s) annoncée(s) par audioTracks, rien à changer`);
+          return;
+        }
+        // Autant de changements que de pistes : on revient sur celle du départ, chacune entendue une fois.
+        for (let i = 0; i < count && !stopped(); i++) {
+          setStep(`Pistes audio ${i + 1}/${count}`);
+          const errorsBefore = run.errors.length;
+          const freezesBefore = run.watch.freezes.length;
+          const sw = nextAudio();
+          if (!sw) break;
+          await sleepUnless(AUDIO_SWITCH_WATCH_MS, stopped);
+          sw.errors = run.errors.length - errorsBefore;
+          sw.freezes = run.watch.freezes.length - freezesBefore;
+          note(
+            `piste ${sw.to} : ${sw.ms !== undefined ? `reprise ${sw.ms} ms` : "LE TEMPS N'A PAS REPRIS"}${sw.waited ? " · blocage" : ""}${sw.errors ? ` · ${sw.errors} erreur(s)` : ""}${sw.freezes ? ` · ${sw.freezes} gel(s)` : ""}`
+          );
+        }
+      },
+      close: (t, rank, outcome) => {
+        const tag = { trial: t.id, rank };
+        if (outcome.prepared) {
+          lineRuns.set(
+            rank,
+            outcome.prepared.map((p) => ({
+              ...tag,
+              itemId: t.itemId,
+              title: t.title,
+              cut: p.cut,
+              audio: p.verdict?.audioTrack ?? undefined,
+              verdict: p.verdict ? { ok: p.verdict.ok, reason: p.verdict.reason, detail: p.verdict.detail, segments: p.verdict.segments, longestS: p.verdict.longestS } : undefined,
+              end: "préparé seulement",
+            }))
+          );
+          return resultOf(t, rank, outcome);
+        }
+        const run = runRef.current?.trial === t.id && runRef.current.rank === rank ? runRef.current : null;
+        const end = `série : ${outcome.status}${outcome.reason ? ` (${outcome.reason})` : ""}`.slice(0, 40);
+        if (!run) {
+          lineRuns.set(rank, [{ ...tag, itemId: t.itemId, title: t.title, cut: t.cut, verdict: verdictLine(lastVerdict), end }]);
+          return resultOf(t, rank, outcome);
+        }
+        tourRef.current += 1;
+        closeRun(end);
+        videoRef.current?.pause();
+        lineRuns.set(rank, [reportOf(run)]);
+        refresh();
+        return resultOf(t, rank, outcome, measuresOf(run));
+      },
+      send: async (t, rank, result) => {
+        const fresh = Math.min(150, logCountRef.current - logFrom);
+        outboxRef.current = [
+          ...outboxRef.current,
+          {
+            kind: "lumen-test",
+            build: APP_BUILD,
+            env: envRef.current,
+            auto: { ...trialTag(state.serie, t, rank, SERIES.length), status: result.status },
+            runs: lineRuns.get(rank) ?? [],
+            log: fresh > 0 ? logRef.current.slice(-fresh) : [],
+          },
+        ].slice(-OUTBOX_MAX);
+        lineRuns.delete(rank);
+        const ok = await flush();
+        note(ok ? `essai ${rank} envoyé` : `essai ${rank} gardé pour le prochain envoi (${outboxRef.current.length} en attente)`);
+      },
+    };
+  };
+
+  /**
+   * L'appui sur « Tout enchaîner ». Tout ce qui précède le premier `await` se passe dans le geste : c'est là que
+   * l'élément vidéo reçoit le droit de jouer avec le son (WebKit le lève sur `load()`/`play()` faits pendant un
+   * geste, pour cet élément et ses sources suivantes). Le `play()` sans source est rejeté — sans importance.
+   */
+  const runAll = () => {
+    const video = videoRef.current;
+    if (!video || autoRef.current?.phase === "en-cours") return;
+    tourRef.current += 1;
+    closeRun("série");
+    video.muted = false;
+    video.removeAttribute("src");
+    video.load();
+    playOf(video).catch(() => {});
+    const state: AutoState = {
+      serie: newPlaybackId().slice(2, 14),
+      startedAt: performance.now(),
+      phase: "en-cours",
+      stopped: false,
+      index: 0,
+      trialStartedAt: performance.now(),
+      step: "Démarrage",
+      results: [],
+      sent: null,
+    };
+    autoRef.current = state;
+    setAnswers({ damaged: null, damagedTitle: "", audioClean: null });
+    note(`série ${state.serie} : ${SERIES.length} essais`);
+    video.scrollIntoView?.({ block: "start" });
+    refreshAuto();
+    void runSeries(SERIES, makeDriver(state), (result) => {
+      state.results = [...state.results, result];
+      refreshAuto();
+    }).then(({ stopped }) => {
+      videoRef.current?.pause();
+      state.phase = "questions";
+      state.step = stopped ? "Arrêtée" : "Terminée";
+      note(`série ${state.serie} ${stopped ? "arrêtée" : "terminée"} : ${state.results.length} essai(s)`);
+      refreshAuto();
+    });
+  };
+
+  /** « Arrêter » : l'essai en cours se ferme (sa ligne part quand même), rien après. */
+  const stopAll = () => {
+    const state = autoRef.current;
+    if (!state || state.phase !== "en-cours") return;
+    state.stopped = true;
+    tourRef.current += 1;
+    const run = runRef.current;
+    if (run?.pending) finishSeek(run, { ok: false, error: "série arrêtée" });
+    setNeedTap(false);
+    tapRef.current?.();
+    tapRef.current = null;
+    videoRef.current?.pause();
+    note("série : arrêt demandé");
+    setStep("Arrêt…");
+  };
+
+  /** « Touchez pour continuer » : le `play()` refait dans ce geste-ci. */
+  const tap = () => {
+    const video = videoRef.current;
+    setNeedTap(false);
+    if (video) {
+      playOf(video).catch((error: unknown) => {
+        if (isNotAllowed(error)) refusedRef.current = true;
+      });
+    }
+    const resume = tapRef.current;
+    tapRef.current = null;
+    resume?.();
+  };
+
+  const sendSummary = async () => {
+    const state = autoRef.current;
+    if (!state) return;
+    // Un bilan renvoyé après un échec remplace le précédent encore en attente : une seule ligne récapitulative.
+    const isSummary = (body: Record<string, unknown>) => (body.auto as { summary?: boolean } | undefined)?.summary === true;
+    outboxRef.current = [
+      ...outboxRef.current.filter((body) => !isSummary(body)),
+      { kind: "lumen-test", build: APP_BUILD, env: envRef.current, ...summaryBody(state.serie, SERIES.length, state.results, answers, { elapsedS: (performance.now() - state.startedAt) / 1000, stopped: state.stopped }) },
+    ].slice(-OUTBOX_MAX);
+    const ok = await flush();
+    state.sent = ok ? "Bilan envoyé. Merci." : `Bilan non envoyé (${outboxRef.current.length} ligne(s) en attente) : réessayer.`;
+    if (ok) state.phase = "envoyé";
+    refreshAuto();
+  };
+
+  const estimateMin = Math.round(seriesEstimateS(SERIES) / 60);
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 text-sm text-white">
       <h1 className="text-xl font-semibold">Banc Lumen serveur</h1>
@@ -665,6 +1156,17 @@ export function LumenTest() {
         ) : (
           "…"
         )}
+      </section>
+
+      <section className="mt-4 rounded-xl border border-white/30 bg-white/5 p-3">
+        <h2 className="font-semibold">Série automatique</h2>
+        <p className="mt-1 text-xs text-white/60">
+          Le protocole entier de l&apos;étape 3b, d&apos;un seul appui : {SERIES.length} essais, environ {estimateMin} minutes. Chaque essai part au journal dès
+          qu&apos;il est fini. Gardez le son audible et regardez de temps en temps : deux questions à la fin.
+        </p>
+        <button type="button" className="btn btn-primary mt-3 w-full justify-center py-3 text-base" disabled={auto?.phase === "en-cours"} onClick={runAll}>
+          {auto?.phase === "en-cours" ? "Série en cours…" : "Tout enchaîner"}
+        </button>
       </section>
 
       <section className="mt-4 rounded-xl border border-white/15 p-3">
@@ -763,6 +1265,94 @@ export function LumenTest() {
       <section className="mt-4 rounded-xl border border-white/15 p-3">
         <h2 className="font-semibold">3. Lecture</h2>
         <video ref={videoRef} controls playsInline preload="none" className="mt-2 aspect-video w-full rounded-lg bg-black" />
+        {auto && (
+          <div className="mt-3 rounded-lg border border-white/30 bg-white/5 p-3">
+            {auto.phase === "en-cours" ? (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold">
+                    Essai {auto.k} sur {auto.n}
+                  </div>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={stopAll}>
+                    Arrêter
+                  </button>
+                </div>
+                <div className="mt-1 text-xs">
+                  {auto.title} · {auto.cut} — {auto.step}
+                </div>
+                <div className="mt-1 text-xs text-white/60">Écoulé : {clock(auto.elapsedS)}</div>
+                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/15" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(auto.progress * 100)}>
+                  <div className="h-full rounded-full bg-white/80" style={{ width: `${Math.round(auto.progress * 100)}%` }} />
+                </div>
+              </>
+            ) : (
+              <div className="font-semibold">
+                Série {auto.stopped ? "arrêtée" : "terminée"} : {auto.results.length} essai{auto.results.length > 1 ? "s" : ""} en {clock(auto.elapsedS)}
+              </div>
+            )}
+            {auto.results.length > 0 && (
+              <ol className="mt-2 space-y-0.5 font-mono text-[11px] leading-relaxed text-white/80">
+                {auto.results.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ol>
+            )}
+            {auto.phase === "questions" && (
+              <div className="mt-3 space-y-3 text-xs">
+                <fieldset>
+                  <legend className="font-semibold">Avez-vous vu une image abîmée (verte, en blocs) ou figée pendant que le son continuait ?</legend>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {(["non", "oui"] as const).map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`btn btn-sm ${answers.damaged === value ? "btn-primary" : "btn-ghost"}`}
+                        onClick={() => setAnswers((a) => ({ ...a, damaged: value }))}
+                      >
+                        {value === "oui" ? "Oui" : "Non"}
+                      </button>
+                    ))}
+                  </div>
+                  {answers.damaged === "oui" && (
+                    <label className="mt-2 block text-white/60">
+                      Sur quel titre (facultatif)
+                      <input
+                        value={answers.damagedTitle}
+                        onChange={(e) => setAnswers((a) => ({ ...a, damagedTitle: e.target.value }))}
+                        className="mt-1 w-full rounded-lg border border-white/20 bg-black/40 px-2 py-1.5 text-xs text-white"
+                      />
+                    </label>
+                  )}
+                </fieldset>
+                <fieldset>
+                  <legend className="font-semibold">Quand les pistes audio ont changé (Ted Lasso), le son a-t-il changé sans coupure de l&apos;image ?</legend>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {(
+                      [
+                        ["oui", "Oui"],
+                        ["non", "Non"],
+                        ["pas-entendu", "Je n'ai pas entendu"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`btn btn-sm ${answers.audioClean === value ? "btn-primary" : "btn-ghost"}`}
+                        onClick={() => setAnswers((a) => ({ ...a, audioClean: value }))}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => void sendSummary()}>
+                  Envoyer le bilan
+                </button>
+              </div>
+            )}
+            {auto.sent && <p className="mt-2 text-xs text-white/70">{auto.sent}</p>}
+          </div>
+        )}
         <div className="mt-2 flex flex-wrap gap-2">
           <button type="button" className="btn btn-primary btn-sm" onClick={() => void play()}>
             Lire
@@ -794,7 +1384,7 @@ export function LumenTest() {
           </button>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button type="button" className="btn btn-ghost btn-sm" onClick={nextAudio}>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void nextAudio()}>
             Piste audio suivante
           </button>
           {view?.switched && (
@@ -820,7 +1410,8 @@ export function LumenTest() {
                 {view.t.toFixed(1)} s · {view.paused ? "en pause" : "lecture"} · readyState {view.readyState}
               </div>
               <div>
-                sauts {view.seeks} (manqués {view.missed}) · blocages {view.waits.count} ({view.waits.totalMs} ms, pire {view.waits.maxMs} ms) · erreurs {view.errors}
+                sauts {view.seeks} (manqués {view.missed}) · blocages {view.waits.count} ({view.waits.totalMs} ms, pire {view.waits.maxMs} ms) · erreurs {view.errors} · gels{" "}
+                {view.freezes}
               </div>
               <div>
                 images {view.frames ?? "—"} · perdues {view.dropped ?? "—"} · corrompues {view.corrupted ?? "—"}
@@ -847,6 +1438,12 @@ export function LumenTest() {
           ))}
         </ol>
       </section>
+
+      {needTap && (
+        <button type="button" onClick={tap} className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-6 text-center text-2xl font-semibold text-white">
+          Touchez pour continuer
+        </button>
+      )}
     </main>
   );
 }
