@@ -111,11 +111,13 @@ describe("l'index et l'éligibilité", () => {
     expect(index.cost.reads).toBeLessThan(idr.index.cost.reads);
   });
 
-  it("refuse un Matroska sans index, un son en retard, un son plus court que l'image, un codec non copiable", async () => {
+  it("refuse un Matroska sans index, un codec non copiable ; complète un son en retard ou plus court (§159)", async () => {
+    // Un son en retard et un son plus court que l'image sont servis depuis §159, complétés de silence
+    // (lumenServer-son.test.ts) : ils ne sont plus des refus.
     const cases: [string, string, "audio" | "file"][] = [
       ["h264-nocues.mkv", "pas-d-index", "file"],
-      ["h264-late.mkv", "son-en-retard", "audio"],
-      ["h264-short.mkv", "son-plus-court", "audio"],
+      ["h264-late.mkv", "ok", "audio"],
+      ["h264-short.mkv", "ok", "audio"],
     ];
     for (const [name, reason] of cases) {
       const { index, source } = await fixtureIndex(name, 1_000_000);

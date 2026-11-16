@@ -110,7 +110,7 @@ describe("l'administrateur lit un titre", () => {
   it("éligibilité, liste maître, listes média, init et segments : types, cache, contenu", async () => {
     const verdict = await okVerdict(H264, "?s=lecture-1");
     expect(verdict.master).toBe(`/api/lumen/${H264}/${verdict.version}/lecture-1/master.m3u8?audio=${verdict.audioTrack}`);
-    expect(verdict.version).toMatch(/^2-[0-9a-f]{12}$/);
+    expect(verdict.version).toMatch(/^3-[0-9a-f]{12}$/);
     const base = baseOf(verdict.master);
 
     const master = await get(verdict.master);
@@ -240,13 +240,13 @@ describe("les refus d'accès", () => {
 describe("des adresses qui ne désignent plus rien : 410, jamais 404 ni 400", () => {
   it("une autre version du fichier ou du format", async () => {
     const verdict = await okVerdict(H264);
-    const stale = await get(`/api/lumen/${H264}/2-000000000000/lect/v/0.m4s`);
+    const stale = await get(`/api/lumen/${H264}/3-000000000000/lect/v/0.m4s`);
     expect(stale.status).toBe(410);
     expect(await stale.json()).toMatchObject({ code: "lumen-perime", version: verdict.version });
-    // Une adresse du format 1 (la règle `idr` d'avant le 17/11/2026, §158) : le même fichier, plus rien.
-    const format = await get(`/api/lumen/${H264}/${verdict.version.replace(/^2-/, "1-")}/lect/v/0.m4s`);
+    // Une adresse du format 2 (d'avant le son réparé, §159) : le même fichier, plus rien.
+    const format = await get(`/api/lumen/${H264}/${verdict.version.replace(/^3-/, "2-")}/lect/v/0.m4s`);
     expect(format.status).toBe(410);
-    expect(await format.json()).toMatchObject({ code: "lumen-perime", format: 2 });
+    expect(await format.json()).toMatchObject({ code: "lumen-perime", format: 3 });
   });
 
   it("un fichier remplacé en cours de lecture : l'ancienne adresse répond 410 avec la nouvelle version", async () => {
@@ -375,7 +375,7 @@ describe("le relevé d'une lecture", () => {
     await (await get(`${base}init-v.mp4`)).arrayBuffer();
     const v0 = await (await get(`${base}v/0.m4s`)).arrayBuffer();
     const a0 = await (await get(`${base}a${verdict.audioTrack}/0.m4s`)).arrayBuffer();
-    await get(`/api/lumen/${H264}/2-000000000000/lecture-r/v/1.m4s`);
+    await get(`/api/lumen/${H264}/3-000000000000/lecture-r/v/1.m4s`);
     const { lumenPlaybackFields, lumenPlaybackStats } = await import("@/lib/lumenServer/playbackStats");
     const stats = lumenPlaybackStats("lecture-r", "admin")!;
     expect(stats.requests).toEqual({ master: 1, playlist: 1, init: 1, segment: 3 });
@@ -425,11 +425,11 @@ describe("le cache disque des index", () => {
 });
 
 describe("la découpe, choisie par l'adresse (§157, §158)", () => {
-  it("la règle `cra` sans rien demander ; `?cut=idr` : sa propre version (`2i1-`), ses propres segments", async () => {
+  it("la règle `cra` sans rien demander ; `?cut=idr` : sa propre version (`3i1-`), ses propres segments", async () => {
     const idr = (await okVerdict(CRA, "?s=lecture-idr&cut=idr")) as Awaited<ReturnType<typeof okVerdict>> & { cutFacts: { cut: string; craRasl: number; trusted: number } };
     const cra = (await okVerdict(CRA, "?s=lecture-cra")) as Awaited<ReturnType<typeof okVerdict>> & { cutFacts: { cut: string; craRasl: number; trusted: number; longestS: number } };
-    expect(idr.version).toMatch(/^2i1-[0-9a-f]{12}$/);
-    expect(cra.version).toMatch(/^2-[0-9a-f]{12}$/);
+    expect(idr.version).toMatch(/^3i1-[0-9a-f]{12}$/);
+    expect(cra.version).toMatch(/^3-[0-9a-f]{12}$/);
     // La même empreinte de fichier : seule la découpe les sépare.
     expect(idr.version.slice(4)).toBe(cra.version.slice(2));
     expect(cra.cutFacts.cut).toBe("cra");
@@ -458,16 +458,16 @@ describe("la découpe, choisie par l'adresse (§157, §158)", () => {
     const res = await prepare(CRA, { s: "lecture-prep", cut: "cra-leading" });
     expect([200, 202]).toContain(res.status);
     const again = await okVerdict(CRA, "?s=lecture-prep&cut=cra-leading");
-    expect(again.version).toMatch(/^2l1-/);
+    expect(again.version).toMatch(/^3l1-/);
     expect((await eligibility(CRA, "?cut=tout")).status).toBe(410);
     expect((await prepare(CRA, { cut: "tout" })).status).toBe(410);
     expect((await prepare(CRA, { cut: 3 })).status).toBe(410);
   });
 
-  it("`target` : une cible d'essai dans la version (`2t2-`), une autre répond 410, jamais 400", async () => {
+  it("`target` : une cible d'essai dans la version (`3t2-`), une autre répond 410, jamais 400", async () => {
     const two = await okVerdict(H264, "?s=lecture-t2&target=2");
     const four = await okVerdict(H264, "?s=lecture-t4");
-    expect(two.version).toMatch(/^2t2-[0-9a-f]{12}$/);
+    expect(two.version).toMatch(/^3t2-[0-9a-f]{12}$/);
     expect(two.version.slice(4)).toBe(four.version.slice(2));
     expect(two.segments).toBeGreaterThan(four.segments);
     expect((await get(two.master)).status).toBe(200);

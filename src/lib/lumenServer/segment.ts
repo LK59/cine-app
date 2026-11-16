@@ -35,6 +35,7 @@ import { assignDecodeTimes, deriveDurations } from "../webcodecs/decodeOrder";
 import { mediaSegment, type MuxSample, type MuxTrackInfo } from "../webcodecs/mp4Muxer";
 import { readBlockSamples, walkBlocks } from "./mkvBlocks";
 import { fragmentRanges } from "./plan";
+import { nextSilentInstant, silentInstants, type LumenSilence } from "./audio/silence";
 import {
   AUDIO_TRACK_ID,
   FALLBACK_AUDIO_FRAME_US,
@@ -69,7 +70,8 @@ export interface SegmentSpec {
   /** Découpe `cra-leading` : chaque non-clé porte `is_leading` (RASL 1, RADL 3, sinon 2). Absent : les octets d'avant. */
   markLeading?: boolean;
   video?: { number: number; codecId: string; lengthSize: number };
-  audio?: { number: number; codecId: string; sampleRate: number };
+  /** `silence` : les trames qui complètent une piste devant ou derrière (§159) ; absent, les octets d'avant. */
+  audio?: { number: number; codecId: string; sampleRate: number; silence?: LumenSilence };
 }
 
 export interface SegmentResult {
@@ -113,7 +115,7 @@ export function segmentSpec(index: LumenIndex, rendition: LumenRendition, n: num
   }
   const track = index.audio.find((a) => a.number === rendition.track);
   if (!track || track.refusal) throw new LumenError("piste-inconnue", `Piste audio ${rendition.track} non servie.`);
-  return { ...base, audio: { number: track.number, codecId: track.codecId, sampleRate: track.sampleRate } };
+  return { ...base, audio: { number: track.number, codecId: track.codecId, sampleRate: track.sampleRate, ...(track.silence ? { silence: track.silence } : {}) } };
 }
 
 /** Le segment décrit par `spec`, lu dans `source` (`file` : son en-tête, déjà ouvert). */
@@ -325,10 +327,17 @@ async function buildAudio(source: ByteSource, file: MatroskaFile, spec: SegmentS
   // segment prend aussi ce qui précède 0, le dernier tout ce qui suit sa clé.
   const lower = spec.n === 0 ? -Infinity : spec.segment.startUs;
   const upper = spec.next ? spec.segment.endUs : Infinity;
-  const frames: MediaSample[] = [];
+  const silence = audio.silence;
+  let frames: MediaSample[] = [];
   let nextUs: number | null = null;
+  // Avec un silence (§159) : aucun bloc réel avant le premier (`leadUntilUs`) ni après la fin de la dernière
+  // trame (`tailFromUs`) — un segment tout entier dans le silence ne lit rien du fichier.
+  const beforeSound = silence?.leadUntilUs != null && upper <= silence.leadUntilUs;
+  const afterSound = silence?.tailFromUs != null && lower >= silence.tailFromUs;
 
-  if (file.mp4) {
+  if (beforeSound) nextUs = silence?.leadUntilUs ?? null;
+  else if (afterSound) nextUs = null;
+  else if (file.mp4) {
     const t = file.mp4.tracks.find((track) => track.number === audio.number);
     if (!t) throw new LumenError("piste-inconnue", "Piste audio absente de l'index MP4.");
     const pts = (i: number) => t.dtsUs[i] + (t.ctsUs?.[i] ?? 0);
@@ -358,6 +367,14 @@ async function buildAudio(source: ByteSource, file: MatroskaFile, spec: SegmentS
       },
       spec.limitAt ?? undefined
     );
+  }
+  if (silence) {
+    // Les trames de silence du segment, chacune à son instant sur la grille ; la suivante après le segment
+    // borne la dernière trame (réelle ou silencieuse) exactement là où le segment suivant reprend.
+    const quiet = silentInstants(silence, lower, upper).map((t): MediaSample => ({ trackNumber: audio.number, timestampUs: t, durationUs: null, isKey: true, data: silence.frame }));
+    frames = [...quiet.filter((q) => silence.leadUntilUs !== null && q.timestampUs < silence.leadUntilUs), ...frames, ...quiet.filter((q) => !(silence.leadUntilUs !== null && q.timestampUs < silence.leadUntilUs))];
+    const nextQuiet = nextSilentInstant(silence, upper);
+    if (Number.isFinite(upper) && nextQuiet !== null && (nextUs === null || nextQuiet < nextUs)) nextUs = nextQuiet;
   }
   if (frames.length === 0) throw new LumenError("segment-vide", `Segment audio ${spec.n} sans trame (piste ${audio.number}).`);
 

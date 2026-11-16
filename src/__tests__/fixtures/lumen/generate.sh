@@ -51,5 +51,13 @@ $F $V $A $X264 -c:a aac -b:a 32k -f matroska - > h264-nocues.mkv
 # (h) MP4 : H.264 + AAC, index en tête, liste de montage (B-frames).
 $F $V $A $X264 -c:a aac -b:a 32k -movflags +faststart -metadata:s:a:0 language=eng h264.mp4
 
+# (i) à (m) — le son réparé (DECISIONS §159) : AC-3 5.1 et E-AC-3 5.1 qui commencent 3 s après l'image,
+#     AC-3 et E-AC-3 stéréo qui s'arrêtent à 2 s, AC-3 mono à 32 kHz.
+$F $V -itsoffset 3 -f lavfi -i sine=frequency=440:sample_rate=48000:duration=3 $X264 -c:a ac3 -ac 6 -b:a 192k ac3-late.mkv
+$F $V -itsoffset 3 -f lavfi -i sine=frequency=440:sample_rate=48000:duration=3 $X264 -c:a eac3 -ac 6 -b:a 192k eac3-late.mkv
+$F $V -f lavfi -i sine=frequency=440:sample_rate=48000:duration=2 $X264 -c:a ac3 -ac 2 -b:a 96k ac3-short.mkv
+$F $V -f lavfi -i sine=frequency=440:sample_rate=48000:duration=2 $X264 -c:a eac3 -ac 2 -b:a 96k eac3-short.mkv
+$F $V -f lavfi -i sine=frequency=440:sample_rate=32000:duration=6 $X264 -c:a ac3 -b:a 96k ac3-32k.mkv
+
 chown 1000:1000 /o/*.mkv /o/*.mp4
 ls -l /o

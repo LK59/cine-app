@@ -337,6 +337,11 @@ export interface LumenAudioFacts {
   isDefault: boolean;
   servable: boolean;
   refusal: string | null;
+  /**
+   * Ce qui a été réparé pour la servir (§159) : `sbr-explicite` (configuration réécrite), `silence-devant`,
+   * `silence-derriere` (trames de silence), ou null — copiée telle quelle.
+   */
+  repairs: string[];
 }
 
 /** Ce que la découpe a donné : la page `/lumen-test` le montre, pour juger les découpes sur pièce. */
@@ -371,6 +376,11 @@ function audioFacts(index: LumenIndex): LumenAudioFacts[] {
     isDefault: a.isDefault,
     servable: !a.refusal && !!index.inits.audio[a.number],
     refusal: a.refusal?.reason ?? null,
+    repairs: [
+      ...(a.configuration ? ["sbr-explicite"] : []),
+      ...(a.silence?.leadUntilUs != null ? ["silence-devant"] : []),
+      ...(a.silence?.tailFromUs != null ? ["silence-derriere"] : []),
+    ],
   }));
 }
 

@@ -12,6 +12,7 @@
 
 import type { HlsAudioSignal, HlsVideoSignal } from "./hlsSignal";
 import type { TrackColour } from "../webcodecs/matroska";
+import type { LumenSilence } from "./audio/silence";
 
 /**
  * La version du format produit. À monter quand change : la règle de découpe (cible, points de coupe
@@ -23,8 +24,15 @@ import type { TrackColour } from "../webcodecs/matroska";
  * **2** (17/11/2026, DECISIONS §158) : la découpe par défaut devient `cra` — toute image clé de l'index,
  * RASL gardées —, construite depuis les Cues seules. La 1 coupait sous `idr`. Rien de la 1 (adresse,
  * index en mémoire ou sur le disque, segment gardé par le navigateur) ne se relit sous la 2.
+ *
+ * **3** (17/11/2026, DECISIONS §159) : le son copié réparé. Un HE-AAC à SBR implicite est servi avec sa
+ * configuration réécrite en signalisation hiérarchique (une autre init, `CODECS` `mp4a.40.5`) ; une piste
+ * qui commence après l'image ou finit avant elle est complétée de trames de silence (d'autres segments son) ;
+ * l'AC-3/E-AC-3 à 32 et 44,1 kHz n'est plus refusé. Pour un fichier déjà servi, la liste maître peut gagner des
+ * rendus (des pistes refusées hier), et une piste AAC-LC dont le flux porte un SBR que rien n'annonçait change
+ * d'init : rien de la 2 ne se relit sous la 3, pour qu'aucun index gardé sur le disque ne serve l'ancienne règle.
  */
-export const LUMEN_FORMAT_VERSION = 2;
+export const LUMEN_FORMAT_VERSION = 3;
 
 // ── La règle de découpe ──────────────────────────────────────────────────────
 
@@ -237,6 +245,7 @@ export type LumenRefusalReason =
   | "son-codec"
   | "son-aac-pce"
   | "son-aac-sbr-implicite"
+  | "son-aac-ps-implicite"
   | "son-frequence"
   | "son-sans-trame"
   | "son-en-retard"
@@ -277,6 +286,13 @@ export interface LumenAudioTrack {
   firstFrame: Uint8Array | null;
   /** L'instant de ce premier échantillon (µs), ou null s'il n'a pas été trouvé dans la fenêtre lue. */
   firstUs: number | null;
+  /**
+   * La configuration AAC écrite dans l'init quand elle n'est pas le `CodecPrivate` : un SBR implicite rendu
+   * explicite (§159, `aacHlsPlan`). `channels` et `sampleRate` disent alors ce qu'elle dit (48 000, pas 24 000).
+   */
+  configuration?: Uint8Array | null;
+  /** Le silence qui complète la piste devant ou derrière (§159), ou null : la piste couvre l'image. */
+  silence?: LumenSilence | null;
   signal: HlsAudioSignal | null;
   /** Pourquoi cette piste ne peut pas être servie, ou null. */
   refusal: LumenRefusal | null;

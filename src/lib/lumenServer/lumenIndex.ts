@@ -62,6 +62,9 @@ import { assignDecodeTimes, deriveDurations } from "../webcodecs/decodeOrder";
 import { audioSampleEntryFor, parseAacConfig, videoSampleEntry } from "../webcodecs/mp4SampleEntries";
 import { initSegment } from "../webcodecs/mp4Muxer";
 import { AUDIO_LEAD_GAP_SECONDS, audioLeadGapSeconds } from "../webcodecs/audioLeadGap";
+import { AAC_RATES, aacHlsPlan, silenceMayFollow, silentAacFrame, type AscFacts } from "./audio/aacStream";
+import { dolbyFrameCount, dolbySilenceRefusal, readDolbyHeader, silentDolbyFrame, type DolbyHeader } from "./audio/dolbySilence";
+import type { LumenSilence } from "./audio/silence";
 import { hlsAudioSignal, hlsVideoSignal } from "./hlsSignal";
 import { readBlockSamples, sketchPicture, walkBlocks, type BlockHead, type PictureSketch } from "./mkvBlocks";
 import { planSegments, type CutPoint } from "./plan";
@@ -448,44 +451,89 @@ export function presentationDelayOf(presentations: number[]): { delayUs: number;
 
 // ── Le son ───────────────────────────────────────────────────────────────────
 
+/** Combien de trames AAC lire en tête de piste pour juger le SBR (la première décide, les suivantes confirment). */
+const AAC_PROBE_FRAMES = 8;
+
+/**
+ * Jusqu'où chercher le premier bloc d'une piste que la première fenêtre n'a pas trouvé (§159 : on le complète
+ * de silence, encore faut-il savoir où le son commence). *The Circle* : 30 s, le plus long des 63 pistes de §148.
+ */
+const AUDIO_LATE_PROBE_US = 180_000_000;
+
+/** Jusqu'où remonter depuis la fin pour trouver le dernier bloc d'une piste plus courte que l'image. */
+const AUDIO_TAIL_PROBE_US = 20 * 60_000_000;
+
 interface AudioFacts {
   firstUs: number | null;
   firstFrame: Uint8Array | null;
+  /** AAC : les premières trames de la piste, pour `aacHlsPlan`. */
+  firstFrames: Uint8Array[];
   /** L'instant du dernier bloc vu à partir du dernier segment, ou null. */
   lastUs: number | null;
+  /** Une piste absente du dernier segment : son dernier bloc (instant, trames, la dernière trame). */
+  tail: { timeUs: number; frames: number; lastFrame: Uint8Array } | null;
 }
 
-/** Le premier bloc de chaque piste audio, en lisant les en-têtes depuis le début du film. */
+function emptyFacts(): AudioFacts {
+  return { firstUs: null, firstFrame: null, firstFrames: [], lastUs: null, tail: null };
+}
+
+/**
+ * Le premier bloc de chaque piste audio, en lisant les en-têtes depuis le début du film ; pour l'AAC, les
+ * premières trames. Une piste que la première fenêtre (le seuil de §148 et une seconde) ne trouve pas est
+ * cherchée plus loin, jusqu'à `AUDIO_LATE_PROBE_US` — seules les pistes en retard paient cette lecture.
+ */
 async function probeAudioStarts(source: ByteSource, file: MatroskaFile, video: LumenVideoTrack, tracks: MatroskaTrack[]): Promise<Map<number, AudioFacts>> {
-  const facts = new Map<number, AudioFacts>(tracks.map((t) => [t.number, { firstUs: null, firstFrame: null, lastUs: null }]));
+  const facts = new Map<number, AudioFacts>(tracks.map((t) => [t.number, emptyFacts()]));
   if (tracks.length === 0) return facts;
+  const isAac = new Set(tracks.filter((t) => t.codecId === "A_AAC").map((t) => t.number));
   if (file.mp4) {
     for (const t of tracks) {
       const index = file.mp4.tracks.find((x) => x.number === t.number);
       if (!index || index.dtsUs.length === 0) continue;
-      facts.set(t.number, {
-        firstUs: index.dtsUs[0] + (index.ctsUs?.[0] ?? 0),
-        firstFrame: await source.read(index.offsets[0], index.sizes[0]),
-        lastUs: index.dtsUs[index.dtsUs.length - 1] + (index.ctsUs?.[index.dtsUs.length - 1] ?? 0),
-      });
+      const f = facts.get(t.number) as AudioFacts;
+      f.firstUs = index.dtsUs[0] + (index.ctsUs?.[0] ?? 0);
+      f.firstFrame = await source.read(index.offsets[0], index.sizes[0]);
+      f.lastUs = index.dtsUs[index.dtsUs.length - 1] + (index.ctsUs?.[index.dtsUs.length - 1] ?? 0);
+      if (isAac.has(t.number)) {
+        for (let i = 0; i < Math.min(AAC_PROBE_FRAMES, index.dtsUs.length); i++) f.firstFrames.push(await source.read(index.offsets[i], index.sizes[i]));
+      }
     }
     return facts;
   }
+  const done = (number: number) => {
+    const f = facts.get(number) as AudioFacts;
+    return f.firstUs !== null && (!isAac.has(number) || f.firstFrames.length >= AAC_PROBE_FRAMES);
+  };
   let missing = tracks.length;
   let firstVideoUs: number | null = null;
-  await walkBlocks(source, file, file.firstClusterOffset ?? file.segmentDataStart, async (head) => {
-    if (head.track === video.number) {
-      firstVideoUs ??= head.timeUs;
-      return firstVideoUs !== null && head.timeUs > firstVideoUs + AUDIO_PROBE_US ? "stop" : "continue";
-    }
-    const f = facts.get(head.track);
-    if (!f || f.firstUs !== null) return "continue";
-    // Le premier échantillon, comme `probeTrackStart` du remuxeur : c'est lui qui décrit l'AC-3/E-AC-3.
-    const [sample] = await readBlockSamples(source, file, head);
-    f.firstUs = head.timeUs;
-    f.firstFrame = sample?.data ? new Uint8Array(sample.data) : null;
-    return --missing === 0 ? "stop" : "continue";
-  });
+  let horizon = AUDIO_PROBE_US;
+  const walk = () =>
+    walkBlocks(source, file, file.firstClusterOffset ?? file.segmentDataStart, async (head) => {
+      if (head.track === video.number) {
+        firstVideoUs ??= head.timeUs;
+        return firstVideoUs !== null && head.timeUs > firstVideoUs + horizon ? "stop" : "continue";
+      }
+      const f = facts.get(head.track);
+      if (!f || done(head.track)) return "continue";
+      const samples = await readBlockSamples(source, file, head);
+      if (f.firstUs === null) {
+        // Le premier échantillon, comme `probeTrackStart` du remuxeur : c'est lui qui décrit l'AC-3/E-AC-3.
+        f.firstUs = head.timeUs;
+        f.firstFrame = samples[0]?.data ? new Uint8Array(samples[0].data) : null;
+      }
+      if (isAac.has(head.track)) for (const s of samples) if (f.firstFrames.length < AAC_PROBE_FRAMES) f.firstFrames.push(new Uint8Array(s.data));
+      if (done(head.track)) missing -= 1;
+      return missing === 0 ? "stop" : "continue";
+    });
+  await walk();
+  if (tracks.some((t) => facts.get(t.number)?.firstUs === null)) {
+    // Une seconde passe, plus longue, seulement pour une piste qui commence tard : les autres sont faites.
+    missing = tracks.filter((t) => !done(t.number)).length;
+    horizon = AUDIO_LATE_PROBE_US;
+    firstVideoUs = null;
+    await walk();
+  }
   return facts;
 }
 
@@ -500,40 +548,136 @@ async function probeAudioEnds(source: ByteSource, file: MatroskaFile, last: Lume
 }
 
 /**
- * Pourquoi une piste audio ne peut pas être copiée dans le HLS, ou null.
- *
- * Copiables (4-son-compat.md §4.1, HLS Authoring Specification 2.2, 2.5, 2.25) : AAC-LC et HE-AAC à
- * SBR explicite (règle 2.24 : l'implicite est interdit en fMP4), AC-3 et E-AC-3 (Atmos compris, la
- * signalisation de l'étape 1), FLAC (cité par Apple en stéréo et multicanal, fMP4 obligatoire — ce
- * que le remuxeur écrit). Pas Opus (absent de la spécification), ni DTS, TrueHD, MP2, PCM.
- * Refusé par prudence, en attendant un banc sur appareil (« doute » du recensement) : un AAC dont la
- * disposition est un PCE (§62 : un 5.1 que CoreAudio refuse), un AC-3/E-AC-3 hors 48 kHz.
+ * Le dernier bloc d'une piste absente du dernier segment : en remontant segment par segment depuis la fin,
+ * jusqu'à `AUDIO_TAIL_PROBE_US`. Les en-têtes seulement, puis le bloc trouvé (ses trames : la fin du son).
  */
-function audioRefusal(track: MatroskaTrack, facts: AudioFacts | undefined, videoStartUs: number, lastStartUs: number | null): LumenRefusal | null {
-  if (!COPYABLE_AUDIO.has(track.codecId)) return { reason: "son-codec", detail: track.codecId };
+async function probeAudioTail(source: ByteSource, file: MatroskaFile, segments: LumenSegment[], track: number, facts: AudioFacts): Promise<void> {
+  if (file.mp4) {
+    const index = file.mp4.tracks.find((x) => x.number === track);
+    if (!index || index.dtsUs.length === 0) return;
+    const i = index.dtsUs.length - 1;
+    facts.tail = { timeUs: index.dtsUs[i] + (index.ctsUs?.[i] ?? 0), frames: 1, lastFrame: await source.read(index.offsets[i], index.sizes[i]) };
+    return;
+  }
+  const endUs = segments[segments.length - 1].startUs;
+  for (let k = segments.length - 2; k >= 0 && endUs - segments[k].startUs <= AUDIO_TAIL_PROBE_US; k--) {
+    let found: BlockHead | null = null;
+    await walkBlocks(
+      source,
+      file,
+      segments[k].at,
+      (head) => {
+        if (head.track === track && (found === null || head.timeUs >= found.timeUs)) found = head;
+        return "continue";
+      },
+      segments[k + 1].at
+    );
+    if (found) {
+      const samples = await readBlockSamples(source, file, found);
+      const last = samples[samples.length - 1];
+      // La fin du son : autant de trames que l'échantillon en porte (un bloc AC-3 peut en mettre plusieurs
+      // à la suite sans laçage ; une E-AC-3 dépendante ne dure rien de plus que son indépendante).
+      const dolby = file.tracks.find((t) => t.number === track && (t.codecId === "A_AC3" || t.codecId === "A_EAC3"));
+      const frames = samples.reduce((sum, s) => sum + ((dolby ? dolbyFrameCount(new Uint8Array(s.data)) : null) ?? 1), 0);
+      if (last) facts.tail = { timeUs: (found as BlockHead).timeUs, frames, lastFrame: new Uint8Array(last.data) };
+      return;
+    }
+  }
+}
+
+/** Ce que l'index décide pour une piste audio : servie telle quelle, réparée, ou refusée. */
+interface AudioPlan {
+  refusal: LumenRefusal | null;
+  configuration: Uint8Array | null;
+  channels: number;
+  sampleRate: number;
+  silence: LumenSilence | null;
+}
+
+/** Les fréquences de l'AC-3 et de l'E-AC-3 servies (A/52 : fscod 0, 1, 2). */
+const DOLBY_RATES = new Set([48000, 44100, 32000]);
+
+/**
+ * Ce qu'on fait d'une piste audio dans le HLS (DECISIONS.md §155, §159).
+ *
+ * Copiables (4-son-compat.md §4.1, HLS Authoring Specification 2.2, 2.5, 2.25) : AAC-LC et HE-AAC (le
+ * SBR implicite rendu explicite, règle 2.24, `aacHlsPlan`), AC-3 et E-AC-3 (Atmos compris, la
+ * signalisation de l'étape 1) à 48, 44,1 et 32 kHz, FLAC (cité par Apple en stéréo et multicanal, fMP4
+ * obligatoire — ce que le remuxeur écrit). Pas Opus (absent de la spécification), ni DTS, TrueHD, MP2, PCM.
+ * Une piste qui commence après l'image ou finit avant elle est complétée de silence (`audio/silence.ts`)
+ * quand on sait en construire la trame. Refusé par prudence : un AAC dont la disposition est un PCE (§62 :
+ * un 5.1 que CoreAudio refuse), un cœur mono à SBR implicite (HE-AAC v2 possible).
+ */
+function audioPlan(track: MatroskaTrack, facts: AudioFacts, videoStartUs: number, lastStartUs: number | null, endUs: number): AudioPlan {
+  const plan: AudioPlan = { refusal: null, configuration: null, channels: track.audio?.channels ?? 2, sampleRate: track.audio?.sampleRate ?? 48000, silence: null };
+  const refuse = (refusal: LumenRefusal): AudioPlan => ({ ...plan, refusal });
+  if (!COPYABLE_AUDIO.has(track.codecId)) return refuse({ reason: "son-codec", detail: track.codecId });
   const rate = track.audio?.sampleRate ?? 48000;
+  const dolby = track.codecId === "A_AC3" || track.codecId === "A_EAC3";
+  let aacCore: AscFacts | null = null;
+  let sbrRewritten = false;
   if (track.codecId === "A_AAC") {
     const config = track.codecPrivate ? parseAacConfig(track.codecPrivate) : null;
-    if (!config) return { reason: "son-codec", detail: "AAC sans configuration lisible" };
-    if (![2, 5, 29].includes(config.objectType)) return { reason: "son-codec", detail: `AAC type ${config.objectType}` };
-    if (config.channels === 0) return { reason: "son-aac-pce" };
-    // Un LC dont la fréquence est la moitié de celle du conteneur : du HE-AAC à SBR implicite.
-    if (config.objectType === 2 && Math.round(rate) === config.sampleRate * 2) return { reason: "son-aac-sbr-implicite" };
+    if (!config) return refuse({ reason: "son-codec", detail: "AAC sans configuration lisible" });
+    if (![2, 5, 29].includes(config.objectType)) return refuse({ reason: "son-codec", detail: `AAC type ${config.objectType}` });
+    if (config.channels === 0) return refuse({ reason: "son-aac-pce" });
+    const aac = aacHlsPlan(track.codecPrivate as Uint8Array, facts.firstFrames, rate);
+    if (aac.kind === "refus") return refuse({ reason: aac.reason, detail: aac.detail });
+    if (aac.kind === "sbr-explicite") {
+      plan.configuration = aac.configuration;
+      plan.sampleRate = aac.sampleRate;
+      plan.channels = aac.channels;
+      sbrRewritten = true;
+    }
+    aacCore = aac.core;
   }
-  if ((track.codecId === "A_AC3" || track.codecId === "A_EAC3") && Math.round(rate) !== 48000) return { reason: "son-frequence", detail: `${rate} Hz` };
-  if (!facts || facts.firstUs === null) {
-    // Aucun bloc dans la fenêtre lue : la piste commence plus de AUDIO_PROBE_US après l'image.
-    return { reason: "son-en-retard", detail: `> ${AUDIO_PROBE_US / 1e6} s` };
+  if (dolby) {
+    // A/52 définit 48, 44,1 et 32 kHz, et la HLS Authoring Specification ne restreint aucune fréquence (elle
+    // n'en nomme aucune) : seule la trame fait foi, et elle doit dire ce que dit le conteneur.
+    if (!DOLBY_RATES.has(Math.round(rate))) return refuse({ reason: "son-frequence", detail: `${rate} Hz` });
+    const head = facts.firstFrame ? readDolbyHeader(facts.firstFrame) : null;
+    if (head && head.sampleRate !== Math.round(rate)) return refuse({ reason: "son-frequence", detail: `conteneur ${rate} Hz, trame ${head.sampleRate} Hz` });
   }
+  if (facts.firstUs === null) {
+    // Aucun bloc dans la fenêtre lue : la piste commence plus de AUDIO_LATE_PROBE_US après l'image.
+    return refuse({ reason: "son-en-retard", detail: `> ${AUDIO_LATE_PROBE_US / 1e6} s` });
+  }
+  if (dolby && !facts.firstFrame) return refuse({ reason: "son-sans-trame" });
   const gap = audioLeadGapSeconds(videoStartUs / 1e6, facts.firstUs / 1e6);
-  // Une piste copiée qui commence tard n'a pas de trame pour ses premiers segments, et un rendu doit
-  // couvrir toute la durée (règle 2.15) : du silence devant, c'est la phase 2 (conversion).
-  if (gap !== null) return { reason: "son-en-retard", detail: `${gap.toFixed(2)} s` };
-  if ((track.codecId === "A_AC3" || track.codecId === "A_EAC3") && !facts.firstFrame) return { reason: "son-sans-trame" };
-  if (lastStartUs !== null && (facts.lastUs === null || facts.lastUs < lastStartUs)) {
-    return { reason: "son-plus-court", detail: facts.lastUs === null ? "absente du dernier segment" : `finit à ${(facts.lastUs / 1e6).toFixed(1)} s` };
+  const short = lastStartUs !== null && (facts.lastUs === null || facts.lastUs < lastStartUs);
+  if (gap === null && !short) return plan;
+
+  // Le silence : la trame d'abord, puis où elle va. Une piste copiée qui commence tard n'a pas de trame pour
+  // ses premiers segments, une piste courte pour son dernier, et un rendu doit couvrir toute la durée (2.15).
+  const lateReason = (detail: string): LumenRefusal => ({ reason: "son-en-retard", detail: gap !== null ? `${gap.toFixed(2)} s, ${detail}` : detail });
+  const shortReason = (detail: string): LumenRefusal => ({ reason: "son-plus-court", detail });
+  const refuseSilence = (detail: string) => refuse(gap !== null ? lateReason(`silence impossible : ${detail}`) : shortReason(`silence impossible : ${detail}`));
+  let frame: Uint8Array | null = null;
+  let frameUs = 0;
+  if (dolby) {
+    const why = dolbySilenceRefusal(facts.firstFrame as Uint8Array);
+    if (why) return refuseSilence(why);
+    const head = readDolbyHeader(facts.firstFrame as Uint8Array) as DolbyHeader;
+    frame = silentDolbyFrame(facts.firstFrame as Uint8Array);
+    frameUs = ((head.blocks * 256) / head.sampleRate) * 1e6;
+  } else if (track.codecId === "A_AAC") {
+    if (sbrRewritten) return refuseSilence("HE-AAC (trame SBR silencieuse non construite)");
+    // « absent » : l'extension de synchronisation dit « pas de SBR » (ce qu'écrit l'encodeur AAC de FFmpeg).
+    if (!aacCore || aacCore.coreObjectType !== 2 || (aacCore.sbr !== "non-dit" && aacCore.sbr !== "absent") || aacCore.frameLengthFlag) return refuseSilence("AAC hors AAC-LC 1024");
+    frame = silentAacFrame(aacCore.channelConfiguration);
+    frameUs = (1024 / AAC_RATES[aacCore.frequencyIndex]) * 1e6;
+  } else return refuseSilence(track.codecId);
+  if (!frame) return refuseSilence("trame trop petite");
+
+  let tailFromUs: number | null = null;
+  if (short) {
+    if (!facts.tail) return refuse(shortReason(facts.lastUs === null ? "fin introuvable" : `finit à ${(facts.lastUs / 1e6).toFixed(1)} s`));
+    // Après une fenêtre LONG_START ou courte, l'AAC attend des fenêtres courtes ; la trame de silence est longue.
+    if (aacCore && silenceMayFollow(facts.tail.lastFrame, aacCore.frequencyIndex) !== true) return refuse(shortReason("dernière trame AAC en fenêtres courtes"));
+    tailFromUs = facts.tail.timeUs + facts.tail.frames * frameUs;
   }
-  return null;
+  plan.silence = { frame, frameUs, leadUntilUs: gap !== null ? facts.firstUs : null, tailFromUs, endUs };
+  return plan;
 }
 
 // ── L'index ──────────────────────────────────────────────────────────────────
@@ -656,10 +800,17 @@ export async function buildLumenIndex(source: CountingSource, identity: FileIden
   const facts = await probeAudioStarts(source, file, video, audioTracks);
   const last = segments[segments.length - 1];
   await probeAudioEnds(source, file, last, facts);
+  const endUs = Math.max(durationUs, last.endUs);
+  const lastStartUs = segments.length > 1 ? last.startUs : null;
+  // Une piste absente du dernier segment : son dernier bloc, en remontant (seulement pour elle).
+  for (const t of audioTracks) {
+    const f = facts.get(t.number) as AudioFacts;
+    if (lastStartUs !== null && COPYABLE_AUDIO.has(t.codecId) && (f.lastUs === null || f.lastUs < lastStartUs)) await probeAudioTail(source, file, segments, t.number, f);
+  }
   const audio: LumenAudioTrack[] = audioTracks.map((t) => {
-    const f = facts.get(t.number);
-    const trackRefusal = audioRefusal(t, f, segments[0].keyUs, segments.length > 1 ? last.startUs : null);
-    const signal = trackRefusal ? null : hlsAudioSignal(t, f?.firstFrame ?? null);
+    const f = facts.get(t.number) as AudioFacts;
+    const plan = audioPlan(t, f, segments[0].keyUs, lastStartUs, endUs);
+    const signal = plan.refusal ? null : hlsAudioSignal(t, f.firstFrame, plan.configuration);
     return {
       number: t.number,
       codecId: t.codecId,
@@ -668,17 +819,20 @@ export async function buildLumenIndex(source: CountingSource, identity: FileIden
       name: t.name,
       isDefault: t.isDefault,
       isForced: t.isForced,
-      channels: t.audio?.channels ?? 2,
-      sampleRate: t.audio?.sampleRate ?? 48000,
-      firstFrame: f?.firstFrame ?? null,
-      firstUs: f?.firstUs ?? null,
+      channels: plan.channels,
+      sampleRate: plan.sampleRate,
+      firstFrame: f.firstFrame,
+      firstUs: f.firstUs,
+      // Seulement quand il y a quelque chose à dire : une piste servie comme avant garde la forme d'avant.
+      ...(plan.configuration ? { configuration: plan.configuration } : {}),
+      ...(plan.silence ? { silence: plan.silence } : {}),
       signal,
-      refusal: trackRefusal ?? (signal ? null : { reason: "son-codec", detail: "signalisation illisible" }),
+      refusal: plan.refusal ?? (signal ? null : { reason: "son-codec", detail: "signalisation illisible" }),
     };
   });
 
   // ── Les init segments ──
-  const durationSeconds = Math.max(durationUs, last.endUs) / 1e6;
+  const durationSeconds = endUs / 1e6;
   const videoInit = initSegment(
     {
       id: VIDEO_TRACK_ID,
@@ -701,7 +855,7 @@ export async function buildLumenIndex(source: CountingSource, identity: FileIden
           kind: "audio",
           timescale: LUMEN_TIMESCALE,
           sampleEntry: audioSampleEntryFor(
-            { codecId: a.codecId, codecPrivate: a.codecPrivate, channels: a.channels, sampleRate: a.sampleRate, firstFrame: a.firstFrame },
+            { codecId: a.codecId, codecPrivate: a.configuration ?? a.codecPrivate, channels: a.channels, sampleRate: a.sampleRate, firstFrame: a.firstFrame },
             { signalling: "hls" }
           ),
           width: 0,
@@ -721,7 +875,7 @@ export async function buildLumenIndex(source: CountingSource, identity: FileIden
   const peak = segments.reduce((m, s) => Math.max(m, (s.bytes * 8) / Math.max(0.001, (s.endUs - s.startUs) / 1e6)), 0);
   return finish({
     container,
-    durationUs: Math.max(durationUs, last.endUs),
+    durationUs: endUs,
     video,
     audio,
     delayUs,

@@ -79,8 +79,10 @@ describe("la liste maître", () => {
   });
 
   it("sans son copiable : une variante sans AUDIO", async () => {
-    const { index, source } = await fixtureIndex("h264-late.mkv", 1_000_000);
+    // Une piste refusée (h264-late l'était avant §159, qui la complète désormais de silence).
+    const { index: served, source } = await fixtureIndex("h264-aac.mkv", 1_000_000);
     source.close();
+    const index: LumenIndex = { ...served, audio: served.audio.map((a) => ({ ...a, refusal: { reason: "son-codec" as const }, signal: null })) };
     const text = masterPlaylist(index, { audioTrack: null, labels });
     expect(text).not.toContain("#EXT-X-MEDIA");
     expect(text).not.toContain("AUDIO=");

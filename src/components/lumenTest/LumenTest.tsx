@@ -106,6 +106,8 @@ interface AudioFacts {
   isDefault: boolean;
   servable: boolean;
   refusal: string | null;
+  /** §159 : `sbr-explicite`, `silence-devant`, `silence-derriere` — absent d'une réponse d'avant. */
+  repairs?: string[];
 }
 
 interface Verdict {
@@ -1435,6 +1437,7 @@ export function LumenTest() {
                   piste {a.number} · {a.language ?? "?"} · {a.codec} {a.hlsChannels ?? a.channels} · {a.name ?? ""}
                   {a.isDefault ? " · défaut" : ""}
                   {a.refusal ? ` · refus ${a.refusal}` : ""}
+                  {a.repairs?.length ? ` · réparée : ${a.repairs.join(", ")}` : ""}
                 </label>
               ))}
             </div>
