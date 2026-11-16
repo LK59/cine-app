@@ -19,7 +19,7 @@ import type { LumenIndexStore } from "./indexStore";
 import { inlineExecutor, LumenQueue, type LumenExecutor, type QueueOptions } from "./pool";
 import { masterPlaylist, mediaPlaylist, type MasterOptions } from "./playlists";
 import { segmentSpec, type SegmentResult } from "./segment";
-import { LumenError, lumenFormatTag, parseLumenPath, type FileIdentity, type LumenCutMode, type LumenIndex, type LumenPath, type LumenRendition } from "./format";
+import { LUMEN_DEFAULT_CUT, LumenError, lumenFormatTag, parseLumenPath, type FileIdentity, type LumenCutMode, type LumenIndex, type LumenPath, type LumenRendition } from "./format";
 import type { ReadCost } from "./jobs";
 
 const STATE = Symbol.for("cine-app.lumenServer.engine");
@@ -61,10 +61,11 @@ export class LumenEngine {
   /**
    * L'index du fichier local `path`, pour sa version actuelle : en mémoire, sinon sur le disque, sinon
    * construit par la file. Lu sur le disque **hors** de la file : quelques millisecondes, qui n'ont pas
-   * à attendre derrière trois segments 4K. `cut` : la règle de découpe (`idr` sauf essai, §157) — un
-   * index par découpe, en mémoire comme sur le disque.
+   * à attendre derrière trois segments 4K. `cut` et `targetUs` : la découpe et sa cible (`cra` et 4 s sauf
+   * essai, §157, §158) — un index par découpe et par cible, en mémoire comme sur le disque.
    */
-  index(path: string, targetUs?: number, cut: LumenCutMode = "idr"): Promise<LumenIndex> {
+  index(path: string, targetUs?: number, cut: LumenCutMode = LUMEN_DEFAULT_CUT): Promise<LumenIndex> {
+    const tag = lumenFormatTag(cut, targetUs);
     const build = async (p: string, identity: FileIdentity): Promise<LumenIndex> => {
       const kept = await this.store?.get(identity, targetUs, cut).catch(() => null);
       if (kept) {
@@ -72,7 +73,7 @@ export class LumenEngine {
         return kept;
       }
       const index = await this.queue.run(INDEX_COST, async () => {
-        const result = await this.executor.run({ type: "index", path: p, targetUs, ...(cut !== "idr" ? { cut } : {}) });
+        const result = await this.executor.run({ type: "index", path: p, ...(targetUs !== undefined ? { targetUs } : {}), cut });
         if (result.type !== "index") throw new Error("Réponse inattendue du fil de calcul.");
         return result.index;
       });
@@ -80,10 +81,10 @@ export class LumenEngine {
       // Rangé sous l'identité que le fil a lue sur son descripteur : si le fichier a changé entre le
       // `stat` et l'ouverture, c'est l'index de la nouvelle version, rangé sous sa propre clé.
       // Attendu : la séance suivante doit le trouver, et l'écriture coûte quelques millisecondes.
-      await this.store?.put(index, targetUs).catch(() => {});
+      await this.store?.put(index).catch(() => {});
       return index;
     };
-    return cachedLumenIndex(path, build, cut === "idr" ? {} : { variant: lumenFormatTag(cut) });
+    return cachedLumenIndex(path, build, tag === lumenFormatTag() ? {} : { variant: tag });
   }
 
   master(index: LumenIndex, options: MasterOptions): string {

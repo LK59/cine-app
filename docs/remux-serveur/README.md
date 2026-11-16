@@ -1,7 +1,8 @@
 # Lumen serveur — le remux côté serveur, servi en HLS
 
-Conception du 16/11/2026. Étapes 1 (signalisation, §154), 2 (le moteur, §155), 3 (routes et sécurité, §156) et
-3b (recensement, découpes d'essai et banc Safari, §157) faites ; seule la page de banc `/lumen-test` les appelle.
+Conception du 16/11/2026. Étapes 1 (signalisation, §154), 2 (le moteur, §155), 3 (routes et sécurité, §156),
+3b (recensement, découpes d'essai et banc Safari, §157) et 3c (`cra` la règle et l'index des Cues, §158 ;
+comparatif avec le lecteur actuel ; cibles courtes) faites ; seule la page de banc `/lumen-test` les appelle.
 Les quatre sections jointes détaillent chaque partie, avec références `chemin:ligne` et mesures ; ce document en
 tire les décisions, l'architecture et l'ordre de travail.
 
@@ -342,6 +343,34 @@ gardées).
 et *Pearl Harbor*, sur iPhone et Mac → la découpe retenue devient la règle (`LUMEN_FORMAT_VERSION` monte, §157).
 `cra-leading` seule passe → c'est `is_leading` qui manquait. Les deux échouent → la règle `idr` reste, et ces
 fichiers attendent un autre chemin (une IDR forcée par réencodage, ou le lecteur actuel).
+
+**Résultat** (Louis, 16/11/2026, iPhone, application installée, 14 essais, 253 sauts) : 0 erreur, 0 gel, 0 image
+corrompue, aucune image abîmée vue ; *Ghosted* et *Pearl Harbor* passent en `cra` comme en `cra-leading` (le HLS
+natif jette lui-même les RASL ; `is_leading` n'apporte rien). Première image en 0,5 à 1,3 s. Un saut montre
+l'image à la bonne position (`seekedMs`) en 0,62 s médiane (p90 1,05 s), mais la lecture ne repart (`advanceMs`)
+qu'en 1,5 s médiane (p90 2,0 s) ; le serveur n'y est pour rien (construction 257 ms au pire, attente 19 ms au
+pire). → `cra` devient la règle (étape 3c).
+
+## Étape 3c — `cra` la règle, l'index des Cues, le comparatif (17/11/2026, DECISIONS §158)
+
+**La règle.** `LUMEN_FORMAT_VERSION` passe à 2 : sans rien demander, la découpe est `cra` (toute clé de l'index,
+RASL gardées), et son index se lit dans les Cues seules (`trustedCuts`) — seule la première clé est lue. `idr`
+(`?cut=idr`, version `2i1-…`) et `cra-leading` (`2l1-…`) restent des essais. Un segment de plus de 30 s ne vient
+plus que d'un trou dans l'index : `index-troue`. Les listes de la règle ne disent plus
+`EXT-X-INDEPENDENT-SEGMENTS`. Détail, risques acceptés (Cues qui mentent : 3 fichiers sur 300) et sources :
+DECISIONS §158.
+
+**L'index à froid** (17/11/2026, fichiers retirés du cache de pages — `dd iflag=nocache` sur la branche et sur
+mergerfs, `fincore` à 0 —, X-Ray en pause, un vrai fil de calcul, `--cpus 2 -m 2g`) :
+
+| Fichier | `idr` (format 1) | `cra` vérifiée (format 1) | `cra`, index des Cues |
+|---|---|---|---|
+| *The Prestige* | 28,6 s · 13 656 lectures · 214 Mo | 25,1 s · 6 827 · 107 Mo | **0,17 s · 113 · 2,0 Mo** |
+| *Pearl Harbor* | 25,8 s · 6 583 · 103 Mo | 23,8 s · 6 229 · 98 Mo | **0,20 s · 32 · 0,9 Mo** |
+| *Black Monday* S02E10 4K | 2,2 s · 662 · 10 Mo | 2,2 s · 662 · 10 Mo | **0,14 s · 148 · 2,3 Mo** |
+
+Mêmes coupes que la vérification sous `cra` (1 048, 1 639, 445 segments ; plus long 14,3, 14,4, 4,0 s). Le cache
+disque des index (§156) reste utile pour l'essai `idr`, plus guère pour la règle.
 
 ## Ordre de travail
 

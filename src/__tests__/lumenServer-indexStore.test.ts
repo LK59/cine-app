@@ -17,7 +17,8 @@ import { FIXTURES } from "./lumenServer-helpers";
 function fakeIndex(identity: FileIdentity, padding = 0): LumenIndex {
   return {
     format: LUMEN_FORMAT_VERSION,
-    cut: "idr",
+    cut: "cra",
+    targetUs: 4_000_000,
     identity,
     container: "matroska",
     durationUs: 6_000_000,
@@ -27,7 +28,7 @@ function fakeIndex(identity: FileIdentity, padding = 0): LumenIndex {
     frameUs: 41_667,
     frameRate: 24,
     segments: [{ startUs: 0, endUs: 6_000_000, keyUs: 0, at: 0, bytes: 10 }],
-    keys: { cues: 1, verified: 1, rejected: 0, idr: 1, cra: 0, craRasl: 0, leading: 0, cuts: 1 },
+    keys: { cues: 1, verified: 1, rejected: 0, idr: 1, cra: 0, craRasl: 0, leading: 0, cuts: 1, trusted: 0 },
     bandwidth: { peak: 1, average: 1 },
     refusal: null,
     inits: { video: new Uint8Array(padding).fill(9), audio: { 2: new Uint8Array([1, 2, 3]) } },
@@ -61,6 +62,8 @@ describe("le cache disque des index", () => {
     }
     expect(await store.get(id, 6_000_000)).toBeNull();
     expect(storeKey(id)).toContain(`|${LUMEN_FORMAT_VERSION}|`);
+    // Un index de la découpe par défaut n'est pas relu pour un essai, ni l'inverse (§158).
+    expect(await store.get(id, undefined, "idr")).toBeNull();
   });
 
   it("un fichier illisible est une absence, et il est effacé", async () => {

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { isPlaybackId } from "@/lib/lumenServer/playbackStats";
-import { parseCutMode } from "@/lib/lumenServer/format";
+import { parseCutMode, parseTargetSeconds } from "@/lib/lumenServer/format";
 import { goneResponse, lumenAccess, lumenErrorResponse, lumenVerdict, newPlaybackId, NO_STORE } from "@/lib/lumenServer/service";
 
 export const dynamic = "force-dynamic";
@@ -13,14 +13,14 @@ const DEFAULT_WAIT_MS = 2000;
 const MAX_WAIT_MS = 30_000;
 
 /**
- * `GET /api/lumen/{itemId}/eligibility?audio=N&s=<lecture>&wait=<ms>[&cut=cra]` — Lumen serveur peut-il lire cet
+ * `GET /api/lumen/{itemId}/eligibility?audio=N&s=<lecture>&wait=<ms>[&cut=idr][&target=2]` — Lumen serveur peut-il lire cet
  * élément avec cette piste (DECISIONS.md §156) ? Toujours 200 avec `ok`, sauf l'index encore en
  * construction : 202 et `pending`, la construction continue et la question se repose. Un refus porte une
  * raison stable (`LumenRefusalReason`) que l'étape 4 journalise avant de laisser le lecteur actuel lire.
  * `ok` donne l'adresse de la liste maître, avec la version du fichier et l'identifiant de lecture —
  * celui de la page s'il est donné (`s`), sinon un nouveau. `audio` absent : la piste que le fichier
- * marque par défaut. `cut` : une découpe expérimentale (`cra`, `cra-leading` — DECISIONS.md §157, la page
- * `/lumen-test`) ; absent, la règle `idr`. Administrateur seul (`lumenAccess`).
+ * marque par défaut. `cut` : une découpe d'essai (`idr`, `cra-leading` — DECISIONS.md §157, §158, la page
+ * `/lumen-test`) ; absent, la règle `cra`. `target` : une cible d'essai en secondes (2, 3, 6 ; 4 par défaut). Administrateur seul (`lumenAccess`).
  */
 export async function GET(req: NextRequest, { params }: Params) {
   const { itemId } = await params;
@@ -34,6 +34,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (rawS !== null && !isPlaybackId(rawS)) return goneResponse("lumen-inconnu", "Identifiant de lecture mal formé");
   const cut = parseCutMode(q.get("cut"));
   if (cut === null) return goneResponse("lumen-inconnu", "Découpe inconnue");
+  const targetUs = parseTargetSeconds(q.get("target"));
+  if (targetUs === null) return goneResponse("lumen-inconnu", "Cible inconnue");
   const wait = Number(q.get("wait") ?? DEFAULT_WAIT_MS);
   try {
     const verdict = await lumenVerdict(itemId, {
@@ -41,6 +43,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       s: rawS ?? newPlaybackId(),
       waitMs: Number.isFinite(wait) ? Math.min(MAX_WAIT_MS, Math.max(0, wait)) : DEFAULT_WAIT_MS,
       cut,
+      targetUs,
     });
     return NextResponse.json(verdict, { status: "pending" in verdict ? 202 : 200, headers: NO_STORE });
   } catch (error) {

@@ -28,7 +28,7 @@ describe("la page de banc de Lumen serveur", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<LumenTest />);
     expect(screen.getByText("Banc Lumen serveur")).toBeInTheDocument();
-    for (const label of ["idr (la règle)", "cra (essai)", "cra-leading (essai)"]) expect(screen.getByText(label)).toBeInTheDocument();
+    for (const label of ["cra (la règle)", "idr (essai)", "cra-leading (essai)"]) expect(screen.getByText(label)).toBeInTheDocument();
     fireEvent.click(screen.getByText("Préparer"));
     expect(await screen.findByText(/Identifiant Jellyfin attendu/)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
@@ -39,7 +39,7 @@ describe("la page de banc de Lumen serveur", () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url.startsWith(`/api/lumen/${id}/eligibility`)) {
         return new Response(
-          JSON.stringify({ ok: true, version: "1c1-0123456789ab", audioTrack: 2, audio: [{ number: 2, codec: "A_EAC3", language: "fre", name: null, channels: 6, hlsChannels: "6", isDefault: true, servable: true, refusal: null }], segments: 10, targetS: 9, cutFacts: { cut: "cra", longestS: 8.5, verified: 10, craRasl: 4, cuts: 10 } }),
+          JSON.stringify({ ok: true, version: "2i1-0123456789ab", audioTrack: 2, audio: [{ number: 2, codec: "A_EAC3", language: "fre", name: null, channels: 6, hlsChannels: "6", isDefault: true, servable: true, refusal: null }], segments: 10, targetS: 9, cutFacts: { cut: "idr", longestS: 8.5, verified: 10, craRasl: 4, cuts: 10, trusted: 0 } }),
           { status: 200 }
         );
       }
@@ -48,10 +48,10 @@ describe("la page de banc de Lumen serveur", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<LumenTest />);
     fireEvent.change(screen.getByPlaceholderText("32 caractères hexadécimaux"), { target: { value: id } });
-    fireEvent.click(screen.getByText("cra (essai)"));
+    fireEvent.click(screen.getByText("idr (essai)"));
     fireEvent.click(screen.getByText("Préparer"));
-    await screen.findByText(/CRA à RASL vérifiées 4\/10/);
-    expect(String(fetchMock.mock.calls[0][0])).toMatch(/cut=cra(&|$)/);
+    expect((await screen.findAllByText(/CRA à RASL vérifiées 4\/10/)).length).toBeGreaterThan(0);
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/cut=idr(&|$)/);
     fireEvent.click(screen.getByText("Envoyer les résultats"));
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === "/api/viewport-diag")).toBe(true));
     const sentCall = fetchMock.mock.calls.find(([url]) => url === "/api/viewport-diag") as unknown as [string, RequestInit];

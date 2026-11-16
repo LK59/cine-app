@@ -57,11 +57,23 @@ import {
  * Textes en français : la page est pour l'administrateur de la maison, pas pour un rapport.
  */
 
+// `cra` est la règle depuis le format 2 (DECISIONS §158, banc Safari du 16/11/2026) : l'index se construit
+// depuis les Cues. `idr` et `cra-leading` restent des essais, pour refaire une comparaison.
 const CUTS: { id: Cut; label: string; detail: string }[] = [
-  { id: "idr", label: "idr (la règle)", detail: "coupe seulement là où un décodeur repart seul" },
-  { id: "cra", label: "cra (essai)", detail: "coupe aussi sur les CRA, RASL gardées" },
+  { id: "cra", label: "cra (la règle)", detail: "coupe sur toute clé de l'index (IDR ou CRA), RASL gardées ; index des Cues" },
+  { id: "idr", label: "idr (essai)", detail: "coupe seulement là où un décodeur repart seul ; chaque clé lue" },
   { id: "cra-leading", label: "cra-leading (essai)", detail: "cra, et chaque image nommée : is_leading RASL 1, RADL 3, autre 2" },
 ];
+
+/**
+ * Ce que l'index dit de ses clés : sous `idr`, les CRA à RASL parmi les clés lues ; sous la règle `cra`,
+ * l'index des Cues ne lit que la première clé (§158) — le nombre de RASL n'y est pas connu, et ne compte plus.
+ */
+function keysLine(facts: Verdict["cutFacts"]): string {
+  if (!facts) return "clés ?";
+  if (facts.trusted) return `${facts.cuts} coupes, ${facts.trusted} prises des Cues sans lecture`;
+  return `CRA à RASL vérifiées ${facts.craRasl}/${facts.verified}`;
+}
 
 interface AudioFacts {
   number: number;
@@ -86,7 +98,7 @@ interface Verdict {
   segments?: number;
   durationS?: number;
   targetS?: number;
-  cutFacts?: { cut: Cut; longestS: number; verified: number; craRasl: number; cuts: number };
+  cutFacts?: { cut: Cut; targetS?: number; longestS: number; verified: number; craRasl: number; cuts: number; trusted?: number };
 }
 
 type SeekKind = "-10" | "+10" | "+60" | "hasard" | "parcours" | "barre" | "depart";
@@ -400,7 +412,7 @@ export function LumenTest() {
 
   const [itemId, setItemId] = useState("");
   const [title, setTitle] = useState("");
-  const [cut, setCut] = useState<Cut>("idr");
+  const [cut, setCut] = useState<Cut>("cra");
   const [audio, setAudio] = useState<number | null>(null);
   const [startAt, setStartAt] = useState("0");
   const [tourCount, setTourCount] = useState("10");
@@ -647,7 +659,7 @@ export function LumenTest() {
         setAudio(body.audioTrack);
         setBusy(null);
         note(
-          `éligibilité ${chosenCut} en ${ms(performance.now() - began)} ms : ${body.ok ? "ok" : `refus ${body.reason}${body.detail ? ` (${body.detail})` : ""}`} · ${body.segments ?? "?"} segments · le plus long ${body.cutFacts?.longestS ?? "?"} s · CRA à RASL ${body.cutFacts?.craRasl ?? "?"}`
+          `éligibilité ${chosenCut} en ${ms(performance.now() - began)} ms : ${body.ok ? "ok" : `refus ${body.reason}${body.detail ? ` (${body.detail})` : ""}`} · ${body.segments ?? "?"} segments · le plus long ${body.cutFacts?.longestS ?? "?"} s · ${keysLine(body.cutFacts)}`
         );
         return body;
       }
@@ -1237,7 +1249,7 @@ export function LumenTest() {
           <div className="mt-3 font-mono text-[11px] leading-relaxed text-white/80">
             <div>
               {verdict.ok ? "servi" : `refusé : ${verdict.reason}${verdict.detail ? ` (${verdict.detail})` : ""}`} · {verdict.segments ?? "?"} segments · cible {verdict.targetS ?? "?"} s · le plus long{" "}
-              {verdict.cutFacts?.longestS ?? "?"} s · CRA à RASL vérifiées {verdict.cutFacts?.craRasl ?? "?"}/{verdict.cutFacts?.verified ?? "?"} · version {verdict.version ?? "—"}
+              {verdict.cutFacts?.longestS ?? "?"} s · {keysLine(verdict.cutFacts)} · version {verdict.version ?? "—"}
             </div>
             <div className="mt-2 space-y-1">
               {verdict.audio.map((a) => (

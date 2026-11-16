@@ -15,9 +15,9 @@
 //   pour l'ancienne version ne reçoit jamais les octets de la nouvelle (`segmentSpec` porte la clé, et
 //   le fil de calcul la revérifie sur le descripteur qu'il ouvre).
 //
-// - **Une entrée par fichier et par découpe** (`variant`, §157) : l'index d'une découpe expérimentale
-//   (`cra`) vit à côté de celui de la règle, jamais à sa place — une page de test qui lit `cra` ne doit ni
-//   chasser ni, surtout, remplacer l'index que sert une vraie lecture.
+// - **Une entrée par fichier, découpe et cible** (`variant`, §157, §158) : l'index d'un essai (`idr`,
+//   `cra-leading`, une cible de 2 s) vit à côté de celui de la règle (`cra`, 4 s), jamais à sa place — une
+//   page de test ne doit ni chasser ni, surtout, remplacer l'index que sert une vraie lecture.
 //
 // Sans état au sens du protocole : n'importe quel segment se reconstruit depuis le fichier seul. Le
 // cache n'est qu'une accélération — après un déploiement, la première requête relit l'index.
@@ -70,8 +70,8 @@ export interface IndexCacheOptions {
   /** L'identité du fichier — `stat` par défaut ; remplaçable dans les tests. */
   identify?: (path: string) => Promise<FileIdentity>;
   /**
-   * Ce qui distingue deux index du même fichier (la découpe, `lumenFormatTag`). Vide : l'entrée est
-   * celle d'avant — le chemin seul.
+   * Ce qui distingue deux index du même fichier (la découpe et sa cible, `lumenFormatTag`). Vide : la
+   * règle (`cra`, 4 s) — le chemin seul.
    */
   variant?: string;
 }

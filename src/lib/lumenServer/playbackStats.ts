@@ -67,6 +67,12 @@ export interface PlaybackStats {
   busy: number;
   /** Adresses d'une autre version du fichier ou du format (410). */
   stale: number;
+  /**
+   * Segments vidéo ouverts par une image qui n'est pas une clé (un point d'index qui ment, pris par
+   * l'index des Cues, §158) : un saut qui y tombe montre des images abîmées. Compté une fois par segment
+   * construit.
+   */
+  falseKeys: number;
   /** Erreurs réelles (500), et la dernière. */
   errors: number;
   lastError: string | null;
@@ -125,6 +131,7 @@ export function playbackOf(s: string, init: { user: string; itemId: string; vers
       aborted: 0,
       busy: 0,
       stale: 0,
+      falseKeys: 0,
       errors: 0,
       lastError: null,
       lastVideoN: null,
@@ -149,7 +156,8 @@ export function noteRequest(p: PlaybackStats, kind: RequestKind): void {
   p.requests[kind] += 1;
 }
 
-export function noteBuilt(p: PlaybackStats, facts: { video: boolean; n: number; buildMs: number; waitMs: number; diskMs: number; reused: boolean }): void {
+export function noteBuilt(p: PlaybackStats, facts: { video: boolean; n: number; buildMs: number; waitMs: number; diskMs: number; reused: boolean; falseKey?: boolean }): void {
+  if (facts.falseKey && !facts.reused) p.falseKeys += 1;
   if (facts.video) {
     p.lastVideoN = facts.n;
     p.maxVideoN = Math.max(p.maxVideoN ?? facts.n, facts.n);
@@ -230,6 +238,7 @@ export function lumenPlaybackFields(s: string, user: string, now = Date.now()): 
   if (p.aborted) fields["srv.aborted"] = p.aborted;
   if (p.busy) fields["srv.busy"] = p.busy;
   if (p.stale) fields["srv.stale"] = p.stale;
+  if (p.falseKeys) fields["srv.falseKeys"] = p.falseKeys;
   if (p.errors) {
     fields["srv.errors"] = p.errors;
     if (p.lastError) fields["srv.lastError"] = p.lastError;

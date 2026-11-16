@@ -15,9 +15,9 @@
 // égarés rendus à leurs images), `isRandomAccessPoint` (la clé, demandée à l'image et non au
 // conteneur), `deriveDurations` + `assignDecodeTimes` (ordre de décodage), `mediaSegment` (muxer).
 // Deux écarts au remuxeur, voulus et propres au HLS :
-// - **aucune RASL n'est écartée** : sous la découpe `idr`, un segment ne commence jamais sur une CRA qui
-//   en a (`lumenIndex.ts`) et, à l'intérieur d'un segment, leurs références sont là ; sous les découpes
-//   expérimentales `cra`/`cra-leading` (§157), un segment peut commencer sur une telle CRA et ses RASL y
+// - **aucune RASL n'est écartée** : sous l'essai `idr`, un segment ne commence jamais sur une CRA qui
+//   en a (`lumenIndex.ts`) et, à l'intérieur d'un segment, leurs références sont là ; sous la règle `cra`
+//   et l'essai `cra-leading` (§157, §158), un segment peut commencer sur une telle CRA et ses RASL y
 //   restent aussi — en lecture continue, leurs références sont dans le segment d'avant, et après un saut
 //   c'est au décodeur de les jeter. `cra-leading` déclare chaque image (`markLeading`, `leadingOf`) : RASL
 //   `is_leading` = 1, RADL 3, toute autre non-clé 2 — de quoi jeter les RASL sans lire le flux. Le reste du
@@ -82,6 +82,13 @@ export interface SegmentResult {
     clamped: number;
     firstDecodeUs: number;
     endDecodeUs: number;
+    /**
+     * La première image n'est pas une image d'accès aléatoire : un point d'index qui ment, pris sans être
+     * lu par l'index des Cues (§158). Les octets sont ceux qu'on aurait produits de toute façon — le
+     * segment se recolle en lecture continue —, mais un saut qui tombe ici montre des images abîmées
+     * jusqu'à la clé suivante. Compté au relevé de la lecture (`falseKeys`), jamais une erreur.
+     */
+    falseKey: boolean;
   };
 }
 
@@ -277,7 +284,8 @@ async function buildVideo(source: ByteSource, file: MatroskaFile, spec: SegmentS
       }
     });
   });
-  return { bytes: joinBytes(parts), facts: { samples: pictures.length, groups: groups.length, fragments, clamped, firstDecodeUs, endDecodeUs } };
+  const falseKey = !isRandomAccessPoint(pictures[0].data, video.codecId, video.lengthSize);
+  return { bytes: joinBytes(parts), facts: { samples: pictures.length, groups: groups.length, fragments, clamped, firstDecodeUs, endDecodeUs, falseKey } };
 }
 
 /**
@@ -359,7 +367,7 @@ async function buildAudio(source: ByteSource, file: MatroskaFile, spec: SegmentS
   const last = samples[samples.length - 1];
   return {
     bytes,
-    facts: { samples: samples.length, groups: 1, fragments: 1, clamped: 0, firstDecodeUs: samples[0].decodeTime, endDecodeUs: last.decodeTime + last.duration },
+    facts: { samples: samples.length, groups: 1, fragments: 1, clamped: 0, firstDecodeUs: samples[0].decodeTime, endDecodeUs: last.decodeTime + last.duration, falseKey: false },
   };
 }
 

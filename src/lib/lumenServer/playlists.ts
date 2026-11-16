@@ -123,7 +123,12 @@ export function masterPlaylist(index: LumenIndex, options: MasterOptions): strin
   return `${lines.join("\n")}\n`;
 }
 
-/** EXT-X-INDEPENDENT-SEGMENTS, sauf sous une découpe qui ouvre des segments sur des CRA à RASL. */
+/**
+ * EXT-X-INDEPENDENT-SEGMENTS sous la seule découpe qui le garantit, `idr` (chaque coupe lue). Sous la règle
+ * `cra` (§158), un segment peut s'ouvrir sur une CRA dont les RASL se réfèrent au segment d'avant, et
+ * l'index des Cues ne lit pas les clés : même un fichier à IDR seules ne le prouve pas. Le banc Safari du
+ * 16/11/2026 a joué *Black Monday* (IDR seules) avec et sans la balise : aucune différence.
+ */
 function independentSegments(index: LumenIndex): string[] {
   return index.cut === "idr" ? ["#EXT-X-INDEPENDENT-SEGMENTS"] : [];
 }

@@ -4,7 +4,7 @@ import { fragmentRanges, planSegments, targetDurationOf } from "@/lib/lumenServe
 import { initName, parseLumenPath, playlistName, segmentName, type LumenIndex, type LumenRendition } from "@/lib/lumenServer/format";
 import { mapJellyfinPath, parsePathMap } from "@/lib/lumenServer/paths";
 import { __testing as remuxerTesting } from "@/lib/webcodecs/remuxer";
-import { selectCuts, type Candidate, type VerifiedKey } from "@/lib/lumenServer/lumenIndex";
+import { selectCuts, trustedCuts, type Candidate, type VerifiedKey } from "@/lib/lumenServer/lumenIndex";
 import { fixtureIndex } from "./lumenServer-helpers";
 
 // Les listes, vérifiées règle par règle contre la « HLS Authoring Specification for Apple Devices »
@@ -28,7 +28,8 @@ describe("la liste maître", () => {
     const text = masterPlaylist(index, { audioTrack: index.audio[1].number, labels });
     const lines = text.trim().split("\n");
     expect(lines[0]).toBe("#EXTM3U");
-    expect(lines).toContain("#EXT-X-INDEPENDENT-SEGMENTS");
+    // La règle `cra` ne promet pas des segments indépendants (§158) : ses CRA gardent leurs RASL.
+    expect(lines).not.toContain("#EXT-X-INDEPENDENT-SEGMENTS");
 
     const media = lines.filter((l) => l.startsWith("#EXT-X-MEDIA:")).map(attributes);
     // L'Opus n'est pas copiable : absent. Deux codecs, deux groupes.
@@ -159,13 +160,42 @@ describe("la découpe", () => {
       refused.delete(0);
       const verify = async (c: Candidate): Promise<VerifiedKey | null> =>
         c.at % 37 === 5 ? null : { timeUs: c.timeUs, at: c.at, kind: refused.has(c.at) ? "cra" : "idr", rasl: refused.has(c.at), leading: false };
-      const stats = { cues: 0, verified: 0, rejected: 0, idr: 0, cra: 0, craRasl: 0, leading: 0, cuts: 0 };
-      const lazy = await selectCuts(candidates, 4_000_000, verify, stats);
+      const stats = { cues: 0, verified: 0, rejected: 0, idr: 0, cra: 0, craRasl: 0, leading: 0, cuts: 0, trusted: 0 };
+      const lazy = await selectCuts(candidates, 4_000_000, verify, stats, "idr");
       const all = (await Promise.all(candidates.map(verify))).filter((k): k is VerifiedKey => !!k && !k.rasl);
       const greedy = planSegments(all, t, 40_000, 4_000_000).map((s) => s.keyUs);
       expect(lazy.map((k) => k.timeUs)).toEqual(greedy);
       expect(stats.verified).toBeLessThan(candidates.length);
     }
+  });
+
+  it("l'index des Cues (§158) : la découpe gloutonne sur tous les points, une seule lecture — la première clé", async () => {
+    let seed = 11;
+    const random = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+    for (let run = 0; run < 20; run++) {
+      const candidates: Candidate[] = [];
+      let t = 0;
+      for (let i = 0; i < 300; i++) {
+        candidates.push({ timeUs: t, at: i });
+        t += Math.round(500_000 + random() * 2_500_000);
+      }
+      // Les deux premiers points mentent (le fichier commence sur une image non clé, *Gravity Falls*), et
+      // chaque autre est une CRA à RASL une fois sur cinq : sous `cra`, ça ne change rien.
+      const read: number[] = [];
+      const verify = async (c: Candidate): Promise<VerifiedKey | null> => {
+        read.push(c.at);
+        return c.at < 2 ? null : { timeUs: c.timeUs, at: c.at, kind: "cra", rasl: random() < 0.2, leading: false };
+      };
+      const stats = { cues: 0, verified: 0, rejected: 0, idr: 0, cra: 0, craRasl: 0, leading: 0, cuts: 0, trusted: 0 };
+      const cuts = await trustedCuts(candidates, 4_000_000, verify, stats, "cra");
+      const greedy = planSegments(candidates.slice(2), t, 40_000, 4_000_000).map((s) => s.keyUs);
+      expect(cuts.map((k) => k.timeUs)).toEqual(greedy);
+      expect(read).toEqual([0, 1, 2]);
+      expect(stats).toMatchObject({ verified: 3, rejected: 2, trusted: cuts.length - 1 });
+    }
+    // Aucune clé lisible dans les premiers points : aucune coupe (`index-invalide`), sans lire tout le fichier.
+    const none = await trustedCuts([{ timeUs: 0, at: 0 }, { timeUs: 5e6, at: 1 }], 4_000_000, async () => null, { cues: 0, verified: 0, rejected: 0, idr: 0, cra: 0, craRasl: 0, leading: 0, cuts: 0, trusted: 0 }, "cra");
+    expect(none).toEqual([]);
   });
 
   it("les fragments suivent exactement la règle du remuxeur (planFragments)", () => {

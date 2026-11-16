@@ -14,12 +14,15 @@ import { clearLumenIndexCache, lumenIndexCacheStats } from "@/lib/lumenServer/in
 import { LumenEngine } from "@/lib/lumenServer/engine";
 import { isCut, type VerifiedKey } from "@/lib/lumenServer/lumenIndex";
 import {
-  cutModeOfTag,
+  cuttingOfTag,
   identityKey,
   LUMEN_CUT_MODES,
   LUMEN_FORMAT_VERSION,
+  LUMEN_TARGET_SEGMENT_US,
+  LUMEN_TRIAL_TARGETS_S,
   lumenFormatTag,
   parseCutMode,
+  parseTargetSeconds,
   type LumenCutMode,
   type LumenIndex,
   type LumenRendition,
@@ -27,13 +30,13 @@ import {
 import type { MediaSample } from "@/lib/webcodecs/matroska";
 import { endDecode, FIXTURES, fixtureIndex, parseFragments, type ParsedFragment } from "./lumenServer-helpers";
 
-// La découpe expérimentale `cra` (étape 3b, DECISIONS.md §157) : un segment peut commencer sur une CRA
-// suivie de RASL, et ses RASL y restent. Ce que ces tests tiennent :
-// 1. **par défaut, rien ne change** — un index construit sans rien demander est celui de la règle `idr`,
-//    son adresse, sa clé de cache et ses octets sont ceux d'avant ;
+// La découpe `cra` (étape 3b, DECISIONS.md §157 ; la règle depuis le format 2, §158) : un segment peut
+// commencer sur une CRA suivie de RASL, et ses RASL y restent. Ce que ces tests tiennent :
+// 1. **par défaut, c'est `cra`** — un index construit sans rien demander est celui de `cra`, depuis les
+//    Cues ; `idr` reste un essai, avec sa vérification point par point ;
 // 2. **sous `cra`, le contrat d'un HLS sans état tient encore** — chaque image une fois, RASL comprises,
 //    contiguës d'un segment à l'autre, le son sur les mêmes frontières ;
-// 3. **les deux découpes ne se mélangent jamais** — version de format, cache mémoire, cache disque ;
+// 3. **deux découpes, ou deux cibles, ne se mélangent jamais** — version de format, cache mémoire, cache disque ;
 // 4. `cra-leading` nomme chaque image non clé (`is_leading` : RASL 1, RADL 3, autre 2), et le muxer sans
 //    l'option écrit exactement les octets d'avant.
 
@@ -94,22 +97,39 @@ function stable(index: LumenIndex) {
 }
 
 describe("la version de format d'une découpe", () => {
-  it("`idr` garde exactement l'ancienne ; les essais ont chacun la leur, et elles se relisent", () => {
-    expect(lumenFormatTag("idr")).toBe(String(LUMEN_FORMAT_VERSION));
-    const tags = LUMEN_CUT_MODES.map(lumenFormatTag);
-    expect(new Set(tags).size).toBe(LUMEN_CUT_MODES.length);
-    for (const cut of LUMEN_CUT_MODES) expect(cutModeOfTag(lumenFormatTag(cut))).toBe(cut);
-    expect(cutModeOfTag("0")).toBeNull();
-    expect(cutModeOfTag(`${LUMEN_FORMAT_VERSION + 1}`)).toBeNull();
+  it("la règle porte la version seule ; chaque essai (découpe, cible) a la sienne, et elles se relisent", () => {
+    expect(lumenFormatTag()).toBe(String(LUMEN_FORMAT_VERSION));
+    expect(lumenFormatTag("cra", LUMEN_TARGET_SEGMENT_US)).toBe(String(LUMEN_FORMAT_VERSION));
+    expect(lumenFormatTag("idr")).toBe(`${LUMEN_FORMAT_VERSION}i1`);
+    expect(lumenFormatTag("cra-leading")).toBe(`${LUMEN_FORMAT_VERSION}l1`);
+    expect(lumenFormatTag("cra", 2_000_000)).toBe(`${LUMEN_FORMAT_VERSION}t2`);
+    expect(lumenFormatTag("idr", 2_000_000)).toBe(`${LUMEN_FORMAT_VERSION}i1t2`);
+    const all = LUMEN_CUT_MODES.flatMap((cut) => [4, ...LUMEN_TRIAL_TARGETS_S].map((s) => ({ cut, targetUs: s * 1e6 })));
+    const tags = all.map((c) => lumenFormatTag(c.cut, c.targetUs));
+    expect(new Set(tags).size).toBe(all.length);
+    for (const c of all) expect(cuttingOfTag(lumenFormatTag(c.cut, c.targetUs))).toEqual(c);
+    // Le format 1 (la règle `idr` d'avant, ses essais `1c1`, `1l1`) ne désigne plus rien.
+    for (const old of ["0", "1", "1c1", "1l1", `${LUMEN_FORMAT_VERSION + 1}`, `${LUMEN_FORMAT_VERSION}t5`]) expect(cuttingOfTag(old)).toBeNull();
   });
 
   it("`?cut=` : un mode connu, la règle si absent, null sinon", () => {
     expect(parseCutMode(null)).toBeUndefined();
     expect(parseCutMode("")).toBeUndefined();
     expect(parseCutMode("cra")).toBe("cra");
+    expect(parseCutMode("idr")).toBe("idr");
     expect(parseCutMode("cra-leading")).toBe("cra-leading");
     expect(parseCutMode("CRA")).toBeNull();
     expect(parseCutMode("tout")).toBeNull();
+  });
+
+  it("`?target=` : une cible d'essai, 4 s si absente, null sinon", () => {
+    expect(parseTargetSeconds(null)).toBeUndefined();
+    expect(parseTargetSeconds("")).toBeUndefined();
+    expect(parseTargetSeconds("4")).toBe(LUMEN_TARGET_SEGMENT_US);
+    expect(parseTargetSeconds("2")).toBe(2_000_000);
+    expect(parseTargetSeconds(2)).toBe(2_000_000);
+    expect(parseTargetSeconds("6")).toBe(6_000_000);
+    for (const bad of ["5", "02", "2.5", "-2", "deux", "40"]) expect(parseTargetSeconds(bad)).toBeNull();
   });
 
   it("`isCut` : seule la CRA à RASL change d'avis ; l'I H.264 à images de tête reste refusée partout", () => {
@@ -120,29 +140,45 @@ describe("la version de format d'une découpe", () => {
       expect(isCut(key({ kind: "i-recovery", leading: true }), cut)).toBe(false);
       expect(isCut(key({ kind: "autre" }), cut)).toBe(false);
     }
-    expect(isCut(key({ rasl: true }))).toBe(false);
     expect(isCut(key({ rasl: true }), "idr")).toBe(false);
     expect(isCut(key({ rasl: true }), "cra")).toBe(true);
     expect(isCut(key({ rasl: true }), "cra-leading")).toBe(true);
   });
 });
 
-describe("par défaut, rien ne change", () => {
-  it.each(["hevc-cra.mkv", "hevc-idr.mkv", "h264-aac.mkv", "h264.mp4"])("%s : l'index sans découpe demandée est celui de `idr`", async (name) => {
+describe("par défaut, la découpe `cra`, depuis les Cues (§158)", () => {
+  it.each(["hevc-cra.mkv", "hevc-idr.mkv", "h264-aac.mkv", "h264.mp4"])("%s : l'index sans découpe demandée est celui de `cra`", async (name) => {
     const plain = await indexOf(name);
-    const idr = await indexOf(name, "idr");
-    expect(plain.cut).toBe("idr");
-    expect(stable(plain)).toEqual(stable(idr));
+    const cra = await indexOf(name, "cra");
+    expect(plain.cut).toBe("cra");
+    expect(stable(plain)).toEqual(stable(cra));
+    expect(plain.keys.verified).toBe(1);
   });
 
-  it("une CRA à RASL n'ouvre toujours pas de segment sous la règle, et aucun échantillon n'est marqué", async () => {
-    const index = await indexOf("hevc-cra.mkv");
+  it("sur un fichier à IDR seules, les mêmes frontières que `idr` vérifiée", async () => {
+    for (const name of ["hevc-idr.mkv", "h264-aac.mkv"]) {
+      const cra = await indexOf(name);
+      const idr = await indexOf(name, "idr");
+      expect([name, cra.segments]).toEqual([name, idr.segments]);
+    }
+  });
+
+  it("`idr` garde sa vérification : une CRA à RASL n'y ouvre pas de segment, la liste se dit indépendante", async () => {
+    const index = await indexOf("hevc-cra.mkv", "idr");
     expect(index.keys.craRasl).toBeGreaterThan(0);
     expect(index.segments).toHaveLength(1);
     const [segment] = await allSegments(index, { kind: "video" });
     for (const f of segment.fragments) for (const s of f.samples) expect([SYNC, DEPENDENT]).toContain(s.flags);
     expect(mediaPlaylist(index, { kind: "video" })).toContain("#EXT-X-INDEPENDENT-SEGMENTS");
     expect(masterPlaylist(index, { audioTrack: null, labels: LABELS })).toContain("#EXT-X-INDEPENDENT-SEGMENTS");
+  });
+
+  it("une cible de 2 s : la première clé au moins 2 s après la précédente, et plus de segments qu'à 4 s", async () => {
+    const four = await indexOf("hevc-idr.mkv", undefined, 4_000_000);
+    const two = await indexOf("hevc-idr.mkv", undefined, 2_000_000);
+    expect(two.targetUs).toBe(2_000_000);
+    expect(two.segments.length).toBeGreaterThan(four.segments.length);
+    for (let n = 1; n < two.segments.length; n++) expect(two.segments[n].keyUs - two.segments[n - 1].keyUs).toBeGreaterThanOrEqual(2_000_000);
   });
 });
 
@@ -152,7 +188,7 @@ describe.each(["cra", "cra-leading"] as const)("la découpe `%s` sur un HEVC à 
     expect(index.cut).toBe(cut);
     expect(index.refusal).toBeNull();
     expect(index.segments.length).toBeGreaterThan(1);
-    expect(index.keys.craRasl).toBeGreaterThan(0);
+    // L'index des Cues ne lit pas les clés (§158) : ce sont les segments qui montrent les RASL.
     const segments = await allSegments(index, { kind: "video" });
     for (let n = 1; n < segments.length; n++) {
       const first = segments[n].fragments[0];
@@ -246,47 +282,42 @@ describe("le marquage des images de tête", () => {
   });
 });
 
-describe("les deux découpes ne se mélangent jamais", () => {
-  it("cache disque : la clé de `idr` est celle d'avant ; un index `cra` n'est jamais relu pour `idr`, ni l'inverse", async () => {
+describe("deux découpes, ou deux cibles, ne se mélangent jamais", () => {
+  it("cache disque : la règle a sa clé, chaque essai la sienne ; aucun n'est relu pour un autre", async () => {
     const dir = mkdtempSync(join(tmpdir(), "laterna-lumen-cra-store-"));
     const store = lumenIndexStore(dir);
-    const idr = await indexOf("hevc-cra.mkv", undefined, 4_000_000);
-    const cra = await indexOf("hevc-cra.mkv", "cra", 4_000_000);
-    expect(storeKey(idr.identity)).toBe(`${STORE_VERSION}|${LUMEN_FORMAT_VERSION}|-|${identityKey(idr.identity)}`);
-    expect(storeKey(idr.identity, undefined, "cra")).not.toBe(storeKey(idr.identity));
+    const cra = await indexOf("hevc-cra.mkv", undefined, 4_000_000);
+    const idr = await indexOf("hevc-cra.mkv", "idr", 4_000_000);
+    const two = await indexOf("hevc-cra.mkv", undefined, 2_000_000);
+    expect(storeKey(cra.identity)).toBe(`${STORE_VERSION}|${LUMEN_FORMAT_VERSION}|${identityKey(cra.identity)}`);
+    // La clé du format 1 (règle `idr`) ne peut plus être produite : ses index ne sont jamais relus.
+    expect(storeKey(cra.identity, undefined, "idr")).not.toBe(`${STORE_VERSION}|1|-|${identityKey(cra.identity)}`);
+    expect(new Set([storeKey(cra.identity), storeKey(cra.identity, undefined, "idr"), storeKey(cra.identity, 2_000_000)]).size).toBe(3);
 
-    await store.put(cra);
-    expect(await store.get(cra.identity)).toBeNull();
-    expect((await store.get(cra.identity, undefined, "cra"))?.cut).toBe("cra");
     await store.put(idr);
-    expect((await store.get(idr.identity))?.segments).toEqual(idr.segments);
-    expect((await store.get(idr.identity, undefined, "cra"))?.segments).toEqual(cra.segments);
+    expect(await store.get(idr.identity)).toBeNull();
+    expect((await store.get(idr.identity, undefined, "idr"))?.cut).toBe("idr");
+    await store.put(cra);
+    await store.put(two);
+    expect((await store.get(cra.identity))?.segments).toEqual(cra.segments);
+    expect((await store.get(cra.identity, 2_000_000))?.segments).toEqual(two.segments);
+    expect((await store.get(idr.identity, undefined, "idr"))?.segments).toEqual(idr.segments);
   });
 
-  it("cache disque : un index écrit avant l'étape 3b (sans `cut`) se relit comme `idr`", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "laterna-lumen-cra-legacy-"));
-    const store = lumenIndexStore(dir);
-    const idr = await indexOf("hevc-cra.mkv", undefined, 4_000_000);
-    const { cut: _cut, ...legacy } = idr;
-    void _cut;
-    await store.put(legacy as LumenIndex);
-    const read = await store.get(idr.identity);
-    expect(read?.cut).toBe("idr");
-    expect(mediaPlaylist(read!, { kind: "video" })).toContain("#EXT-X-INDEPENDENT-SEGMENTS");
-  });
-
-  it("cache mémoire et moteur : un index par découpe, chacun gardé, aucun ne remplace l'autre", async () => {
+  it("cache mémoire et moteur : un index par découpe et par cible, chacun gardé, aucun ne remplace l'autre", async () => {
     clearLumenIndexCache();
     const engine = new LumenEngine();
     const path = join(FIXTURES, "hevc-cra.mkv");
-    const [idr, cra] = await Promise.all([engine.index(path), engine.index(path, undefined, "cra")]);
-    expect(idr.cut).toBe("idr");
+    const [cra, idr, two] = await Promise.all([engine.index(path), engine.index(path, undefined, "idr"), engine.index(path, 2_000_000)]);
     expect(cra.cut).toBe("cra");
+    expect(idr.cut).toBe("idr");
+    expect(two.targetUs).toBe(2_000_000);
     expect(cra.segments.length).toBeGreaterThan(idr.segments.length);
-    expect(lumenIndexCacheStats().entries).toBe(2);
-    expect(await engine.index(path)).toBe(idr);
-    expect(await engine.index(path, undefined, "cra")).toBe(cra);
-    expect(lumenIndexCacheStats().hits).toBe(2);
+    expect(lumenIndexCacheStats().entries).toBe(3);
+    expect(await engine.index(path)).toBe(cra);
+    expect(await engine.index(path, undefined, "idr")).toBe(idr);
+    expect(await engine.index(path, 2_000_000)).toBe(two);
+    expect(lumenIndexCacheStats().hits).toBe(3);
     await engine.close();
     clearLumenIndexCache();
   });

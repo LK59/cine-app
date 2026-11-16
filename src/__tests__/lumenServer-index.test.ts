@@ -90,13 +90,25 @@ describe("sketchPicture sur des formes que les fichiers synthétiques ne font pa
 });
 
 describe("l'index et l'éligibilité", () => {
-  it("lit l'index en quelques lectures, sans lire les images", async () => {
-    const { index, source } = await fixtureIndex("hevc-cra.mkv");
+  it("`idr` lit l'index en quelques lectures, sans lire les images", async () => {
+    const { index, source } = await fixtureIndex("hevc-cra.mkv", undefined, "idr");
     source.close();
     // À 4 s de cible, seuls les points dont la découpe a besoin sont lus : 0 s (IDR, admise), 4 s
     // (CRA à RASL, refusée), puis 5 s (même chose).
-    expect(index.keys).toMatchObject({ cues: 6, verified: 3, rejected: 0, idr: 1, cra: 2, craRasl: 2, cuts: 1 });
+    expect(index.keys).toMatchObject({ cues: 6, verified: 3, rejected: 0, idr: 1, cra: 2, craRasl: 2, cuts: 1, trusted: 0 });
     expect(index.cost.reads).toBeLessThan(20);
+  });
+
+  it("la règle (`cra`, §158) se construit depuis les Cues : seule la première clé est lue", async () => {
+    const { index, source } = await fixtureIndex("hevc-cra.mkv");
+    source.close();
+    const idr = await fixtureIndex("hevc-cra.mkv", undefined, "idr");
+    idr.source.close();
+    expect(index.cut).toBe("cra");
+    // 0 s (l'IDR, lue), puis 4 s (une CRA à RASL, prise sans être lue) : ses RASL restent dans son segment.
+    expect(index.keys).toMatchObject({ cues: 6, verified: 1, rejected: 0, idr: 1, cra: 0, craRasl: 0, cuts: 2, trusted: 1 });
+    expect(index.segments.map((s) => s.keyUs)).toEqual([0, 4_000_000]);
+    expect(index.cost.reads).toBeLessThan(idr.index.cost.reads);
   });
 
   it("refuse un Matroska sans index, un son en retard, un son plus court que l'image, un codec non copiable", async () => {
@@ -141,11 +153,16 @@ describe("l'index et l'éligibilité", () => {
   });
 
   it("MP4 : son propre index (stss, stts, ctts), sans Cues", async () => {
-    const { index, source } = await fixtureIndex("h264.mp4", 1_000_000);
+    const { index, source } = await fixtureIndex("h264.mp4", 1_000_000, "idr");
     source.close();
     expect(index.container).toBe("mp4");
     expect(index.keys).toMatchObject({ verified: 6, idr: 6, cuts: 6 });
     expect(index.segments.map((s) => s.at)).toEqual([0, 24, 48, 72, 96, 120]);
+    // Sous la règle, le même index (`stss`) sans lire que la première clé : les mêmes segments.
+    const trusted = await fixtureIndex("h264.mp4", 1_000_000);
+    trusted.source.close();
+    expect(trusted.index.keys).toMatchObject({ verified: 1, idr: 1, cuts: 6, trusted: 5 });
+    expect(trusted.index.segments).toEqual(index.segments);
     expect(lumenEligibility(index, index.audio[0].number)).toEqual({ ok: true });
   });
 });

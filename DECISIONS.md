@@ -11217,6 +11217,8 @@ par un autre chemin, et seule une lecture sur un appareil Apple le dira : la pag
 **Ce qui tranchera.** Si `cra` (ou `cra-leading`) joue sur iPhone et Mac sans erreur ni image corrompue après les
 sauts, la règle s'assouplit : `LUMEN_FORMAT_VERSION` monte et la découpe retenue devient la règle (la
 révision des essais disparaît). Sinon, les essais restent dans le code le temps d'un autre essai, puis partent.
+**Tranché le 17/11/2026** : `cra` est passée sans faute au banc de Louis (iPhone, 253 sauts) et devient la règle,
+construite depuis les Cues (§158) ; `idr` et `cra-leading` restent des essais.
 
 **Porteurs.** `format.ts` (`LumenCutMode`, `lumenFormatTag`, `cutModeOfTag`, `parseCutMode`), `lumenIndex.ts`
 (`isCut`, `selectCuts`, `BuildIndexOptions.cut`), `segment.ts` (`markLeading`), `webcodecs/mp4Muxer.ts`
@@ -11245,3 +11247,78 @@ segments du remuxeur MediaSource par fichier (début, sauts à 30 et 60 %), à c
   au décodeur d'Apple de les jeter après un saut — exactement ce qu'on veut savoir.
 - **`defaultAudioTrack`** a quitté `service.ts` pour `eligibility.ts` (réexportée) : le banc juge l'éligibilité
   comme la route sans charger Next ni la base.
+
+## 158. La découpe `cra` devient la règle de Lumen serveur, et son index se lit dans les Cues seules (17/11/2026)
+
+**Règle.** Depuis `LUMEN_FORMAT_VERSION` 2 (`format.ts`), un appelant qui ne demande rien reçoit la découpe
+`cra` (`LUMEN_DEFAULT_CUT`) : **toute image clé de l'index ouvre un segment** au moins 4 s après la précédente,
+et les RASL d'une CRA restent dans le segment qu'elle ouvre. `idr` (l'ancienne règle, §155) et `cra-leading`
+(§157) restent des essais choisis par l'adresse. L'index de la règle se construit **depuis les Cues seules**
+(`trustedCuts`, `lumenIndex.ts`) :
+- la première clé est lue (au plus 8 points du début, `FIRST_KEY_TRIES`) : D se mesure sur son groupe, et un
+  fichier qui commence sur une image non clé n'aurait pas de premier segment (*Gravity Falls* S02E14 : le premier
+  Cue désigne à 53 ms un bloc qui n'est pas clé) ;
+- toutes les autres coupes sont prises à l'instant et dans la grappe que le Cue donne, sans lecture — le même
+  glouton que `selectCuts` dont chaque vérification dirait oui (un test le compare sur 20 tirages) ;
+- MP4 : la même chose sur `stss` ;
+- un segment de plus de 30 s ne peut alors venir que d'un trou dans l'index : refusé `index-troue` (nouvelle
+  raison stable), puisque aucune vérification ne trouverait une clé là où l'index n'en nomme pas ;
+- sans Cues : `pas-d-index`, comme avant (aucun sur les 300 fichiers du recensement).
+`idr` garde la vérification point par point (`selectCuts`) ; `cra-leading` se construit comme `cra` (ses
+`is_leading` sont lus à la construction des segments). Les listes de la règle ne disent pas
+`EXT-X-INDEPENDENT-SEGMENTS` (seul `idr` le garantit).
+
+**La version de l'adresse** (`lumenFormatTag`) : `2` pour la règle, puis pour un essai la lettre de sa
+découpe et la révision des essais (`LUMEN_TRIAL_REVISION`) — `2i1` (`idr`), `2l1` (`cra-leading`) —, et sa
+cible quand elle n'est pas 4 s (`2t2`, `2i1t2` ; cibles admises 2, 3, 6 s, `LUMEN_TRIAL_TARGETS_S`, `?target=`,
+étape 3c). `cuttingOfTag` en est le pendant. Rien du format 1 ne se relit : une adresse `1-…` répond 410
+« autre version du format », les index gardés sur le disque ont une autre clé (`storeKey` sans le champ cible
+d'avant) et partent avec l'éviction, l'index en mémoire est rangé par `lumenFormatTag` (`variant`), le cache du
+navigateur suit l'adresse. L'index porte sa cible (`LumenIndex.targetUs`).
+
+**Pourquoi.** Le banc Safari de Louis (16/11/2026, iPhone, application installée, 14 essais, 253 sauts) : 0
+erreur, 0 gel, 0 image corrompue ; *Ghosted* et *Pearl Harbor*, HEVC à GOP ouvert, passent en `cra` comme en
+`cra-leading` — le HLS natif d'Apple jette lui-même les RASL d'une CRA qui ouvre un accès aléatoire, et
+`is_leading` n'y ajoute rien. Sous `idr`, 57 % de la bibliothèque est servable ; sous `cra`, 88 % (recensement,
+§157). Et sous `cra` le type d'une clé ne change plus la découpe : la lecture de chaque point d'index, qui
+coûtait l'essentiel de l'index à froid, ne sert plus à rien. **Mesuré à froid le 17/11/2026** (fichiers retirés
+du cache de pages sur leur branche et sur mergerfs, `fincore` à 0, X-Ray en pause, un vrai fil de calcul, la
+méthode de l'étape 3) :
+
+| Fichier | `idr` (format 1) | `cra` vérifiée (format 1) | `cra`, index des Cues (format 2) |
+|---|---|---|---|
+| *The Prestige* (11 Go, 1 695 Cues) | 28,6 s · 13 656 lectures · 214 Mo | 25,1 s · 6 827 · 107 Mo | **0,17 s · 113 · 2,0 Mo** |
+| *Pearl Harbor* (6,4 Go, 2 997 Cues) | 25,8 s · 6 583 · 103 Mo | 23,8 s · 6 229 · 98 Mo | **0,20 s · 32 · 0,9 Mo** |
+| *Black Monday* S02E10 4K (3,3 Go) | 2,2 s · 662 · 10 Mo | 2,2 s · 662 · 10 Mo | **0,14 s · 148 · 2,3 Mo** |
+
+Les mêmes coupes que la vérification sous `cra` : 1 048, 1 639 et 445 segments, plus long segment 14,3 s,
+14,4 s et 4,0 s dans les deux colonnes. L'essai `idr` mesuré après le changement coûte ce qu'il coûtait (23,1 s,
+21,9 s, 2,6 s) : sa vérification n'a pas bougé.
+
+**Ce que coûte la confiance, et pourquoi elle est acceptée.** La spécification Matroska (RFC 9559 §22.1) dit que
+chaque clé vidéo « SHOULD » avoir son Cue et qu'il est « RECOMMENDED » de ne pas en donner à une non-clé — une
+recommandation, pas une règle, et le drapeau de clé d'un SimpleBlock (§10.2, §10.4) est ce que le muxer en a cru.
+Recensement : 3 fichiers sur 300 avaient des points d'index sans image d'accès aléatoire. Sondés le 17/11 : 29
+blocs de deux épisodes de *La Petite Maison dans la prairie* marqués clés mais TRAIL_R (NAL 1), et le premier
+Cue de *Gravity Falls* (couvert par la lecture de la première clé). Un segment ouvert sur un tel bloc se recolle
+exactement en lecture continue — ses références sont dans le segment d'avant — ; un saut qui tombe dedans montre
+des images abîmées jusqu'à la clé suivante. Le constructeur le voit (`facts.falseKey`, première image qui n'est
+pas une image d'accès aléatoire) et le relevé de la lecture le compte (`falseKeys`, `srv.falseKeys`), jamais
+une erreur. Une I H.264 à images de tête (GOP ouvert H.264) devient de même une coupe : aucune sur 80 fichiers
+H.264 du recensement. Le repérer coûterait la lecture par point que cet index supprime.
+
+**Porteurs.** `format.ts` (`LUMEN_FORMAT_VERSION`, `LUMEN_DEFAULT_CUT`, `LumenCutting`, `cuttingOf`,
+`lumenFormatTag`, `cuttingOfTag`, `parseTargetSeconds`, `LUMEN_TRIAL_TARGETS_S`, `index-troue`, `keys.trusted`),
+`lumenIndex.ts` (`trustedCuts`, `largestCueGap`), `segment.ts` (`falseKey`), `indexStore.ts`, `engine.ts`,
+`service.ts` (`lumenIndexOf`, `lumenVersionOf`, `isLumenVersion`, `cutFacts.trusted`/`targetS`), `serve.ts`,
+`playbackStats.ts` (`falseKeys`), `playlists.ts`, les routes `eligibility` (`?target=`) et `prepare`
+(`{ target }`), la page `/lumen-test`. **Tests.** `lumenServer-cra.test.ts` (versions et cibles, la règle par
+défaut, mêmes frontières que `idr` sur un fichier à IDR seules, cible 2 s, caches séparés par découpe et cible),
+`lumenServer-playlists.test.ts` (`trustedCuts` = glouton, une lecture par tirage), `lumenServer-index.test.ts`,
+`lumenServer-segments.test.ts` (H.264 à images de tête sous la règle : contigu), `lumenServer-routes.test.ts`.
+
+**Différent exprès.**
+- **`EXT-X-INDEPENDENT-SEGMENTS` disparaît des listes de la règle**, même pour un fichier à IDR seules : l'index
+  des Cues ne le prouve pas. *Black Monday* a joué au banc avec et sans : aucune différence.
+- **Les compteurs de types de clés** (`idr`, `cra`, `craRasl`) ne portent plus que sur les points lus ; la page de
+  banc dit « N coupes, M prises des Cues sans lecture » sous la règle.

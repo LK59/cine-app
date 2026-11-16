@@ -119,27 +119,52 @@ describe.each(SERVED)("%s, segments produits seuls puis recollés", (name) => {
 });
 
 describe("les frontières", () => {
-  it("une CRA suivie de RASL n'ouvre jamais un segment ; une CRA sans RASL, si", async () => {
-    const withRasl = await fixtureIndex("hevc-cra.mkv", 1_000_000);
+  it("sous `idr`, une CRA suivie de RASL n'ouvre jamais un segment ; une CRA sans RASL, si", async () => {
+    const withRasl = await fixtureIndex("hevc-cra.mkv", 1_000_000, "idr");
     withRasl.source.close();
     expect(withRasl.index.keys.cra).toBeGreaterThan(0);
     expect(withRasl.index.keys.craRasl).toBe(withRasl.index.keys.cra);
     // Une seule IDR, en tête : un seul segment, ses RASL gardées à l'intérieur, avec leurs références.
     expect(withRasl.index.segments).toHaveLength(1);
 
-    const without = await fixtureIndex("hevc-cra-sans-rasl.mkv", 1_000_000);
+    const without = await fixtureIndex("hevc-cra-sans-rasl.mkv", 1_000_000, "idr");
     without.source.close();
     expect(without.index.keys.cra).toBeGreaterThan(0);
     expect(without.index.keys.craRasl).toBe(0);
     expect(without.index.segments.length).toBe(without.index.keys.cuts);
   });
 
-  it("une I H.264 suivie d'images de tête n'ouvre jamais un segment", async () => {
-    const { index, source } = await fixtureIndex("h264-opengop.mkv", 1_000_000);
+  it("sous `idr`, une I H.264 suivie d'images de tête n'ouvre jamais un segment", async () => {
+    const { index, source } = await fixtureIndex("h264-opengop.mkv", 1_000_000, "idr");
     source.close();
     expect(index.keys.leading).toBe(5);
     expect(index.keys.cuts).toBe(1);
     expect(index.segments).toHaveLength(1);
+  });
+
+  it("sous la règle (l'index des Cues, §158), elle en ouvre un — le prix connu, et les images restent contiguës", async () => {
+    // Rien dans un flux H.264 ne nomme ses images de tête : l'index des Cues ne lit pas les clés, il coupe
+    // donc là. Recensement du 16/11/2026 : aucune sur 80 fichiers H.264. En lecture continue, chaque image
+    // une fois, et chaque segment prolonge le précédent.
+    const { index, source } = await fixtureIndex("h264-opengop.mkv", 1_000_000);
+    source.close();
+    expect(index.keys.trusted).toBeGreaterThan(0);
+    expect(index.segments.length).toBe(index.keys.cuts);
+    let end: number | null = null;
+    let samples = 0;
+    for (let n = 0; n < index.segments.length; n++) {
+      const job = await runLumenJob({ type: "segment", spec: segmentSpec(index, { kind: "video" }, n) });
+      if (job.type !== "segment") throw new Error("type");
+      if (end !== null) expect(job.result.facts.firstDecodeUs).toBe(end);
+      end = job.result.facts.endDecodeUs;
+      samples += job.result.facts.samples;
+      expect(job.result.facts.falseKey).toBe(false);
+    }
+    const idr = await fixtureIndex("h264-opengop.mkv", 1_000_000, "idr");
+    idr.source.close();
+    const whole = await runLumenJob({ type: "segment", spec: segmentSpec(idr.index, { kind: "video" }, 0) });
+    if (whole.type !== "segment") throw new Error("type");
+    expect(samples).toBe(whole.result.facts.samples);
   });
 
   it("D est le même pour tout le fichier, et aucun décalage n'est borné", async () => {

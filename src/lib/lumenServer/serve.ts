@@ -4,7 +4,8 @@
 // L'adresse porte tout ce qu'il faut pour répondre sans état :
 // - `{version}` (`lumenVersionOf`) : le format produit et l'empreinte du fichier. Une autre que celle du
 //   disque répond 410 avec la version actuelle — jamais les octets d'un autre fichier. Le format dit aussi
-//   la découpe (`1-…` la règle, `1c1-…`/`1l1-…` les essais de §157) : c'est lui qui choisit l'index ;
+//   la découpe et sa cible (`2-…` la règle, `2i1-…`/`2l1-…`/`2t2-…` les essais de §157, §158) : c'est lui
+//   qui choisit l'index ;
 // - `{s}` : l'identifiant de la lecture, dans le chemin et non dans la requête, pour que les URI
 //   relatives des listes (`v.m3u8`, `init-v.mp4`, `v/12.m4s`) en héritent sans réécriture (rfc8216bis
 //   §4.1 : une URI relative se résout contre l'adresse de la liste). Il ne sert qu'au relevé
@@ -35,7 +36,7 @@ import { lengthHeader } from "@/lib/responseFraming";
 import { noteMediaRead } from "@/lib/repliques/playbackActivity";
 import { createT, loadLocaleDict, localeOf } from "@/lib/i18n";
 import type { LabelOptions } from "@/lib/trackLabel";
-import { cutModeOfTag, LUMEN_FORMAT_VERSION, parseLumenPath, segmentName, type LumenPath } from "./format";
+import { cuttingOfTag, LUMEN_FORMAT_VERSION, parseLumenPath, segmentName, type LumenPath } from "./format";
 import { lumenEligibility } from "./eligibility";
 import { isPlaybackId, noteBuilt, noteRefused, noteRequest, noteSent, noteTrace, playbackOf, type PlaybackStats } from "./playbackStats";
 import {
@@ -138,15 +139,15 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
   if (!isLumenVersion(version) || !isPlaybackId(s)) return goneResponse("lumen-inconnu", "Adresse inconnue");
   // La découpe vient de l'adresse : une version d'un autre format (un déploiement qui l'a fait monter, une
   // révision des essais) ne désigne plus rien.
-  const cut = cutModeOfTag(formatTagOf(version));
-  if (!cut) return goneResponse("lumen-perime", "Autre version du format", { format: LUMEN_FORMAT_VERSION });
+  const cutting = cuttingOfTag(formatTagOf(version));
+  if (!cutting) return goneResponse("lumen-perime", "Autre version du format", { format: LUMEN_FORMAT_VERSION });
   const name = params.name.join("/");
   if (!parseLumenPath(name)) return goneResponse("lumen-inconnu", "Nom inconnu");
 
   const context = { itemId, s, name };
   let found: Awaited<ReturnType<typeof lumenIndexOf>>;
   try {
-    found = await lumenIndexOf(itemId, cut);
+    found = await lumenIndexOf(itemId, cutting);
   } catch (error) {
     return lumenErrorResponse(error, context).response;
   }
@@ -224,7 +225,7 @@ async function serveResolved(
       noteMediaRead();
       const video = path.rendition.kind === "video";
       const { segment, reused } = await lumenSegment(engine, index, r.version, path.rendition, path.n);
-      noteBuilt(stats, { video, n: path.n, buildMs: segment.buildMs, waitMs: segment.waitMs, diskMs: segment.diskMs, reused });
+      noteBuilt(stats, { video, n: path.n, buildMs: segment.buildMs, waitMs: segment.waitMs, diskMs: segment.diskMs, reused, falseKey: segment.falseKey });
       const bytes = segment.bytes;
       const track = path.rendition.kind === "audio" ? path.rendition.track : undefined;
       const body = measuredBody(bytes, (sendMs, aborted) => {

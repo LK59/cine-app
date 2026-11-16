@@ -28,9 +28,31 @@
 // sur un appareil (README, « Inconnues »). S'il les refuse, la règle devient « IDR seulement »,
 // `LUMEN_FORMAT_VERSION` monte, et les fichiers à CRA (*Ted Lasso*) deviennent `segment-trop-long`.
 //
-// **Les découpes expérimentales `cra` et `cra-leading`** (étape 3b, DECISIONS.md §157, choisies par
-// l'adresse, administrateur seul) admettent aussi une CRA suivie de RASL : la seule différence est dans
-// `isCut`. Tout le reste — vérification des clés, D, son, poids — est le même code.
+// **L'index des Cues** (découpe par défaut `cra`, format 2, DECISIONS.md §158). Sous `cra`, toute image clé
+// de l'index ouvre un segment, RASL gardées : le banc Safari du 16/11/2026 (iPhone, 253 sauts) a montré
+// que le HLS natif d'Apple les jette seul après un saut. Il n'y a donc plus rien à demander à chaque
+// image clé — son type ne change plus la découpe —, et l'index se construit **depuis les Cues seules** :
+// une coupe par grappe indexée au moins à la cible de la précédente, à l'instant que le Cue donne. Seule
+// la première clé est lue (`trustedCuts`) : D se mesure sur son groupe, et un fichier qui commence sur
+// une image non clé (*Gravity Falls* S02E14 : le premier Cue désigne un bloc non clé à 53 ms) aurait un
+// premier segment introuvable. Ce que cela coûte, et pourquoi c'est accepté :
+// - **un Cue qui ment** (RFC 9559 §22.1 : chaque clé vidéo « SHOULD » être indexée, une non-clé « NOT
+//   RECOMMENDED » — pas interdit) : recensement du 16/11/2026, 3 fichiers sur 300 avaient des points d'index
+//   sans image d'accès aléatoire. Sondés le 17/11 : 29 blocs sur deux épisodes de *La Petite Maison dans la
+//   prairie* drapeautés clé par le Matroska mais TRAIL_R (NAL 1), et le premier Cue de *Gravity Falls*. Un
+//   tel segment se recolle exactement en lecture continue (ses références sont au segment d'avant) ; après
+//   un saut qui tombe dessus, quelques secondes d'image abîmée jusqu'à la clé suivante. Le constructeur le
+//   voit à la lecture (`falseKey`, compté au relevé de la lecture) ; le repérer ici coûterait la lecture
+//   par point que cet index supprime ;
+// - **une I H.264 à images de tête** (GOP ouvert H.264, l'équivalent d'une CRA à RASL que rien ne nomme)
+//   devient une coupe : en lecture continue rien ne change, après un saut ses images de tête n'ont pas leurs
+//   références. Recensement : aucune sur 80 fichiers H.264 (tous les points lus) ;
+// - **un index troué** (un Cue manquant sur des minutes : *Don't Look Up* 297 s, un H.264 136 s) : aucun
+//   chemin ne le répare — la vérification ne cherche des clés qu'aux points d'index —, il est refusé
+//   (`index-troue`, la raison dit pourquoi) ;
+// - **sans Cues** : refusé (`pas-d-index`), comme avant ; aucun sur 300.
+// La découpe d'essai `idr` garde la vérification point par point ci-dessus (`selectCuts`) ; `cra-leading`
+// se construit comme `cra` (ses `is_leading` sont lus à la construction des segments, `segment.ts`).
 
 import type { ByteSource } from "../webcodecs/byteSource";
 import { openMediaFile } from "../webcodecs/mediaFile";
@@ -47,6 +69,7 @@ import {
   AUDIO_TRACK_ID,
   DELAY_MARGIN_FRAMES,
   FALLBACK_FRAME_US,
+  LUMEN_DEFAULT_CUT,
   LUMEN_FORMAT_VERSION,
   LUMEN_MAX_SEGMENT_BYTES,
   LUMEN_MAX_SEGMENT_US,
@@ -230,11 +253,12 @@ async function verifyMp4Key(source: ByteSource, file: MatroskaFile, video: Lumen
 }
 
 /**
- * La clé peut-elle ouvrir un segment ? Sous `idr`, jamais une CRA à RASL ; sous `cra`/`cra-leading`, si :
- * ses RASL restent dans le segment qu'elle ouvre. L'I H.264 à images de tête reste refusée partout —
- * rien dans un flux H.264 ne nomme ces images, aucun décodeur ne saura les jeter seul.
+ * Une clé *lue* peut-elle ouvrir un segment ? Sous `idr`, jamais une CRA à RASL ; sous `cra`/`cra-leading`,
+ * si : ses RASL restent dans le segment qu'elle ouvre. L'I H.264 à images de tête reste refusée partout où
+ * elle est lue — rien dans un flux H.264 ne nomme ces images, aucun décodeur ne saura les jeter seul. (Sous
+ * `cra`, seule la première clé est lue : voir « l'index des Cues » en tête.)
  */
-export function isCut(key: VerifiedKey, cut: LumenCutMode = "idr"): boolean {
+export function isCut(key: VerifiedKey, cut: LumenCutMode): boolean {
   return key.kind !== "autre" && (!key.rasl || cut !== "idr") && !key.leading;
 }
 
@@ -261,7 +285,7 @@ export async function selectCuts(
   targetUs: number,
   verify: (c: Candidate) => Promise<VerifiedKey | null>,
   stats: LumenKeyStats,
-  cut: LumenCutMode = "idr"
+  cut: LumenCutMode
 ): Promise<VerifiedKey[]> {
   const cuts: VerifiedKey[] = [];
   let threshold = -Infinity;
@@ -282,14 +306,7 @@ export async function selectCuts(
     from = chain[chain.length - 1] + 1;
     for (let r = 0; r < chain.length; r++) {
       const key = results[r];
-      stats.verified += 1;
-      if (!key) stats.rejected += 1;
-      else {
-        if (key.kind === "idr") stats.idr += 1;
-        if (key.kind === "cra") stats.cra += 1;
-        if (key.rasl) stats.craRasl += 1;
-        if (key.leading) stats.leading += 1;
-      }
+      countKey(stats, key);
       // Une clé lue avant la précédente coupe (un point d'index qui annonçait un autre instant) ne
       // rouvre rien : la découpe avance toujours.
       const last = cuts[cuts.length - 1];
@@ -304,6 +321,72 @@ export async function selectCuts(
     }
   }
   return cuts;
+}
+
+/** Combien de points d'index lire au plus, du début, pour trouver la première clé (sous `cra`). */
+const FIRST_KEY_TRIES = 8;
+
+/** Compte une clé lue dans les statistiques de l'index. */
+function countKey(stats: LumenKeyStats, key: VerifiedKey | null): void {
+  stats.verified += 1;
+  if (!key) {
+    stats.rejected += 1;
+    return;
+  }
+  if (key.kind === "idr") stats.idr += 1;
+  if (key.kind === "cra") stats.cra += 1;
+  if (key.rasl) stats.craRasl += 1;
+  if (key.leading) stats.leading += 1;
+}
+
+/**
+ * Les coupes de l'index des Cues (découpes `cra`, `cra-leading` — §158) : la première clé lue, puis
+ * chaque point d'index au moins `targetUs` après la coupe précédente, **sans le lire** — à l'instant que
+ * l'index donne, dans la grappe qu'il désigne. Le même glouton que `selectCuts`, dont chaque vérification
+ * dirait oui : sur un fichier dont l'index ne ment pas, les mêmes coupes que `selectCuts` sous `cra` (un
+ * test le vérifie), sans une lecture par point.
+ *
+ * La première clé est lue (au plus `FIRST_KEY_TRIES` points, du début) : D se mesure sur son groupe, et
+ * un fichier qui commence sur une image non clé n'aurait pas de premier segment. Aucune trouvée : aucune
+ * coupe (`index-invalide`).
+ */
+export async function trustedCuts(
+  candidates: Candidate[],
+  targetUs: number,
+  verify: (c: Candidate) => Promise<VerifiedKey | null>,
+  stats: LumenKeyStats,
+  cut: LumenCutMode
+): Promise<CutPoint[]> {
+  let first: VerifiedKey | null = null;
+  let from = 0;
+  for (; from < Math.min(candidates.length, FIRST_KEY_TRIES); from++) {
+    const key = await verify(candidates[from]);
+    countKey(stats, key);
+    if (key && isCut(key, cut)) {
+      first = key;
+      break;
+    }
+  }
+  if (!first) return [];
+  const cuts: CutPoint[] = [{ timeUs: first.timeUs, at: first.at }];
+  let threshold = first.timeUs + targetUs;
+  for (let i = from + 1; i < candidates.length; i++) {
+    const c = candidates[i];
+    // Un point d'avant la coupe précédente (un index dans le désordre) ne rouvre rien : la découpe avance.
+    if (c.timeUs < threshold || c.timeUs <= cuts[cuts.length - 1].timeUs) continue;
+    cuts.push({ timeUs: c.timeUs, at: c.at });
+    threshold = c.timeUs + targetUs;
+    stats.trusted += 1;
+  }
+  return cuts;
+}
+
+/** Le plus grand écart entre deux points d'index consécutifs (µs) : ce qu'un index troué laisse sans coupe. */
+function largestCueGap(candidates: Candidate[], durationUs: number): number {
+  let gap = 0;
+  for (let i = 1; i < candidates.length; i++) gap = Math.max(gap, candidates[i].timeUs - candidates[i - 1].timeUs);
+  if (candidates.length > 0) gap = Math.max(gap, durationUs - candidates[candidates.length - 1].timeUs);
+  return gap;
 }
 
 // ── Le premier groupe : D ────────────────────────────────────────────────────
@@ -459,7 +542,7 @@ export interface BuildIndexOptions {
   /** La clé sous laquelle `openMediaFile` garde l'en-tête : l'identité du fichier. */
   headerKey?: string;
   targetUs?: number;
-  /** La règle de découpe (`idr` par défaut ; les deux autres sont expérimentales, §157). */
+  /** La règle de découpe (`cra` par défaut, depuis les Cues ; `idr` et `cra-leading` sont des essais, §157, §158). */
   cut?: LumenCutMode;
 }
 
@@ -469,7 +552,7 @@ interface CountingSource extends ByteSource {
 }
 
 function emptyStats(): LumenKeyStats {
-  return { cues: 0, verified: 0, rejected: 0, idr: 0, cra: 0, craRasl: 0, leading: 0, cuts: 0 };
+  return { cues: 0, verified: 0, rejected: 0, idr: 0, cra: 0, craRasl: 0, leading: 0, cuts: 0, trusted: 0 };
 }
 
 /**
@@ -481,11 +564,13 @@ export async function buildLumenIndex(source: CountingSource, identity: FileIden
   const reads0 = source.stats?.reads ?? 0;
   const bytes0 = source.stats?.bytes ?? 0;
   const keys = emptyStats();
-  const cut = options.cut ?? "idr";
-  const finish = (index: Omit<LumenIndex, "cost" | "format" | "cut" | "identity" | "keys">): LumenIndex => ({
+  const cut = options.cut ?? LUMEN_DEFAULT_CUT;
+  const targetUs = options.targetUs ?? LUMEN_TARGET_SEGMENT_US;
+  const finish = (index: Omit<LumenIndex, "cost" | "format" | "cut" | "targetUs" | "identity" | "keys">): LumenIndex => ({
     ...index,
     format: LUMEN_FORMAT_VERSION,
     cut,
+    targetUs,
     identity,
     keys,
     cost: {
@@ -540,10 +625,10 @@ export async function buildLumenIndex(source: CountingSource, identity: FileIden
   }
   const candidates = candidatesOf(file, video);
   keys.cues = candidates.length;
-  const targetUs = options.targetUs ?? LUMEN_TARGET_SEGMENT_US;
   const verify = (c: Candidate) => (file.mp4 ? verifyMp4Key(source, file, video, c.at) : verifyMatroskaKey(source, file, video, c.at));
-  const chosen = await selectCuts(candidates, targetUs, verify, keys, cut);
-  const cuts: CutPoint[] = chosen.map((k) => ({ timeUs: k.timeUs, at: k.at }));
+  // `idr` : chaque point dont la découpe a besoin est lu ; `cra` et `cra-leading` : l'index des Cues.
+  const cuts: CutPoint[] =
+    cut === "idr" ? (await selectCuts(candidates, targetUs, verify, keys, cut)).map((k) => ({ timeUs: k.timeUs, at: k.at })) : await trustedCuts(candidates, targetUs, verify, keys, cut);
   keys.cuts = cuts.length;
   if (cuts.length === 0) return refused(container, durationUs, { reason: "index-invalide", detail: `${keys.cues} points, aucun admis` }, video);
 
@@ -559,7 +644,11 @@ export async function buildLumenIndex(source: CountingSource, identity: FileIden
   let refusal: LumenRefusal | null = null;
   const longest = segments.reduce((m, s) => Math.max(m, s.endUs - s.startUs), 0);
   const heaviest = segments.reduce((m, s) => Math.max(m, s.bytes), 0);
-  if (longest > LUMEN_MAX_SEGMENT_US) refusal = { reason: "segment-trop-long", detail: `${(longest / 1e6).toFixed(1)} s` };
+  // Sous l'index des Cues, un segment trop long ne peut venir que d'un trou dans l'index (toute clé
+  // indexée est une coupe) : la raison le dit, la vérification point par point n'y changerait rien.
+  const gap = cut === "idr" ? 0 : largestCueGap(candidates, durationUs);
+  if (longest > LUMEN_MAX_SEGMENT_US && gap > LUMEN_MAX_SEGMENT_US - targetUs) refusal = { reason: "index-troue", detail: `${(gap / 1e6).toFixed(1)} s sans point d'index` };
+  else if (longest > LUMEN_MAX_SEGMENT_US) refusal = { reason: "segment-trop-long", detail: `${(longest / 1e6).toFixed(1)} s` };
   else if (heaviest > LUMEN_MAX_SEGMENT_BYTES) refusal = { reason: "segment-trop-lourd", detail: `${(heaviest / 1048576).toFixed(0)} Mo` };
 
   // ── Le son ──

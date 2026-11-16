@@ -19,58 +19,104 @@ import type { TrackColour } from "../webcodecs/matroska";
  * échelle de temps, numérotation `mfhd`, découpe en fragments), la règle d'appartenance des trames
  * audio à un segment. Ne la change pas : une correction de liste maître qui ne touche ni les
  * frontières ni les octets des segments (un attribut ajouté), un nouveau motif de refus d'éligibilité.
+ *
+ * **2** (17/11/2026, DECISIONS §158) : la découpe par défaut devient `cra` — toute image clé de l'index,
+ * RASL gardées —, construite depuis les Cues seules. La 1 coupait sous `idr`. Rien de la 1 (adresse,
+ * index en mémoire ou sur le disque, segment gardé par le navigateur) ne se relit sous la 2.
  */
-export const LUMEN_FORMAT_VERSION = 1;
+export const LUMEN_FORMAT_VERSION = 2;
 
 // ── La règle de découpe ──────────────────────────────────────────────────────
 
 /**
- * La règle qui dit sur quelles images clés un segment peut commencer (DECISIONS.md §155, §157).
+ * La règle qui dit sur quelles images clés un segment peut commencer (DECISIONS.md §155, §157, §158).
  *
- * - **`idr`** — la règle, la seule que sert un appelant qui ne demande rien : une clé dont un décodeur
- *   repart seul sans rien perdre (IDR, BLA, CRA *sans* RASL, I H.264 sans images de tête).
- * - **`cra`** — expérimentale (étape 3b) : une CRA suivie de RASL ouvre aussi un segment, et ses RASL
- *   sont **gardées** dans ce segment. En lecture continue, leurs références sont à la fin du segment
- *   précédent, déjà décodé ; après un saut, c'est au décodeur de les jeter (H.265 §8.1.3,
- *   `NoRaslOutputFlag` = 1 sur une CRA qui ouvre un accès aléatoire). Safari sous MediaSource ne l'a
- *   jamais fait (*Ted Lasso* S02E01, « Media failed to decode ») ; le HLS natif passe par AVFoundation,
- *   un autre chemin — c'est ce que la page `/lumen-test` doit montrer sur un appareil Apple. Recensement
- *   du 16/11/2026 (300 fichiers, extrapolé à la bibliothèque) : 40 % des fichiers sont à GOP ouvert, 93 %
- *   d'entre eux sont refusés sous `idr` (`segment-trop-long`) ; sous `cra`, 88 % de la bibliothèque est
- *   servable contre 57 %.
- * - **`cra-leading`** — `cra`, et chaque image non clé nommée dans ses `sample_flags` (`is_leading`,
- *   ISO/IEC 14496-12 §8.8.3.1) : RASL 1 (image de tête qui dépend d'avant la clé, non décodable après un
- *   accès aléatoire), RADL 3 (image de tête décodable), toute autre 2. L'indication qu'un démultiplexeur
- *   (AVFoundation) peut lire sans analyser le flux pour jeter les RASL après un saut — sans elle, le muxer
- *   écrit 0, « inconnu ». À comparer à `cra` sur les mêmes sauts.
+ * - **`cra`** — **la règle**, celle que sert un appelant qui ne demande rien (depuis le format 2) :
+ *   toute image clé de l'index (IDR ou CRA) ouvre un segment, et les RASL d'une CRA restent dans le
+ *   segment qu'elle ouvre. En lecture continue, leurs références sont à la fin du segment précédent ;
+ *   après un saut, c'est au décodeur de les jeter (H.265 §8.1.3, `NoRaslOutputFlag` = 1 sur une CRA qui
+ *   ouvre un accès aléatoire). Safari sous MediaSource ne l'a jamais fait (*Ted Lasso* S02E01) ; le HLS
+ *   natif d'Apple, si : banc de Louis du 16/11/2026 (iPhone, 14 essais, 253 sauts, 0 erreur, 0 gel,
+ *   0 image corrompue, *Ghosted* et *Pearl Harbor* à GOP ouvert compris). L'index se construit **depuis
+ *   les Cues seules** (`lumenIndex.ts`, « l'index des Cues ») : seule la première clé est lue.
+ * - **`idr`** — essai (l'ancienne règle, §155) : une clé dont un décodeur repart seul sans rien perdre
+ *   (IDR, BLA, CRA *sans* RASL, I H.264 sans images de tête), chaque point d'index vérifié dans l'image.
+ *   Recensement du 16/11/2026 : 57 % de la bibliothèque servable, contre 88 % sous `cra`.
+ * - **`cra-leading`** — essai : `cra`, et chaque image non clé nommée dans ses `sample_flags`
+ *   (`is_leading`, ISO/IEC 14496-12 §8.8.3.1) : RASL 1, RADL 3, toute autre 2. Le banc du 16/11/2026 n'y a
+ *   vu aucune différence avec `cra` : le HLS d'Apple jette les RASL sans cette indication.
  *
- * Les deux modes expérimentaux portent leur propre version de format (`lumenFormatTag`) : ils changent
- * des frontières de segment et des octets, et rien — cache d'index en mémoire ou sur le disque, segments
- * gardés, cache du navigateur — ne doit mélanger deux découpes du même fichier.
+ * Les essais portent leur propre version de format (`lumenFormatTag`) : ils changent des frontières de
+ * segment et des octets, et rien — cache d'index en mémoire ou sur le disque, segments gardés, cache du
+ * navigateur — ne doit mélanger deux découpes du même fichier.
  */
 export type LumenCutMode = "idr" | "cra" | "cra-leading";
-export const LUMEN_CUT_MODES: readonly LumenCutMode[] = ["idr", "cra", "cra-leading"];
+export const LUMEN_CUT_MODES: readonly LumenCutMode[] = ["cra", "idr", "cra-leading"];
+/** La découpe que sert un appelant qui ne demande rien. */
+export const LUMEN_DEFAULT_CUT: LumenCutMode = "cra";
 
 /**
- * La révision des modes expérimentaux : à monter quand leur règle change sans que la règle `idr` change
- * (sinon c'est `LUMEN_FORMAT_VERSION` qui monte, et elle les entraîne).
+ * La révision des essais (une découpe autre que la règle, une cible autre que 4 s) : à monter quand
+ * leur règle change sans que la règle par défaut change (sinon c'est `LUMEN_FORMAT_VERSION` qui monte,
+ * et elle les entraîne).
  */
-export const LUMEN_CRA_REVISION = 1;
+export const LUMEN_TRIAL_REVISION = 1;
 
-const CUT_LETTER: Record<Exclude<LumenCutMode, "idr">, string> = { cra: "c", "cra-leading": "l" };
+const CUT_LETTER: Record<Exclude<LumenCutMode, "cra">, string> = { idr: "i", "cra-leading": "l" };
 
 /**
- * La version de format d'une découpe, telle que l'adresse et les clés de cache la portent : `"1"` pour
- * `idr` — exactement l'ancienne, pour qu'aucune adresse servie ni aucun index gardé ne change —, `"1c1"`
- * pour `cra`, `"1l1"` pour `cra-leading`.
+ * La durée visée pour un segment. Recommandation de l'étude (1-remuxeur.md §1.2, mesurée sur quatre
+ * fichiers à 2, 4 et 6 s) : 4 s donne une médiane de 5 à 9 s sur les fichiers à groupes d'images
+ * longs et garde les sauts bon marché ailleurs. Apple conseille 6 s (règle 7.5, un « SHOULD ») :
+ * plus court, c'est un saut moins cher, et une liste de 1 800 segments pour deux heures.
  */
-export function lumenFormatTag(cut: LumenCutMode): string {
-  return cut === "idr" ? `${LUMEN_FORMAT_VERSION}` : `${LUMEN_FORMAT_VERSION}${CUT_LETTER[cut]}${LUMEN_CRA_REVISION}`;
+export const LUMEN_TARGET_SEGMENT_US = 4_000_000;
+
+/**
+ * Les cibles d'essai, en secondes (`?target=`, page `/lumen-test`, étape 3c) : une coupe à la première
+ * image clé au moins à la cible de la précédente. 2 s : la question du banc de Louis — un saut revoit
+ * l'image en 0,6 s mais ne repart qu'en 1,5 s ; Safari attend-il un segment, ou une réserve en secondes ?
+ * Une autre cible change toutes les frontières : elle est dans la version de format (`t2`).
+ */
+export const LUMEN_TRIAL_TARGETS_S: readonly number[] = [2, 3, 6];
+
+/** Une découpe et sa cible : ce qui fixe les frontières des segments d'un fichier. */
+export interface LumenCutting {
+  cut: LumenCutMode;
+  /** La cible en µs (`LUMEN_TARGET_SEGMENT_US` par défaut). */
+  targetUs: number;
+}
+
+export const LUMEN_DEFAULT_CUTTING: LumenCutting = { cut: LUMEN_DEFAULT_CUT, targetUs: LUMEN_TARGET_SEGMENT_US };
+
+/** Une découpe complétée de ses valeurs par défaut. */
+export function cuttingOf(cut?: LumenCutMode | null, targetUs?: number | null): LumenCutting {
+  return { cut: cut ?? LUMEN_DEFAULT_CUT, targetUs: targetUs ?? LUMEN_TARGET_SEGMENT_US };
+}
+
+/** La règle telle quelle : aucun essai (découpe par défaut, 4 s). */
+export function isDefaultCutting(c: LumenCutting): boolean {
+  return c.cut === LUMEN_DEFAULT_CUT && c.targetUs === LUMEN_TARGET_SEGMENT_US;
+}
+
+/**
+ * La version de format d'une découpe, telle que l'adresse et les clés de cache la portent : `"2"` pour la
+ * règle (`cra`, 4 s), puis pour un essai la lettre de sa découpe et la révision des essais (`"2i1"` pour
+ * `idr`, `"2l1"` pour `cra-leading`), et sa cible quand elle n'est pas 4 s (`"2t2"`, `"2i1t2"`).
+ */
+export function lumenFormatTag(cut: LumenCutMode = LUMEN_DEFAULT_CUT, targetUs: number = LUMEN_TARGET_SEGMENT_US): string {
+  const letter = cut === "cra" ? "" : `${CUT_LETTER[cut]}${LUMEN_TRIAL_REVISION}`;
+  const target = targetUs === LUMEN_TARGET_SEGMENT_US ? "" : `t${Math.round(targetUs / 1e6)}`;
+  return `${LUMEN_FORMAT_VERSION}${letter}${target}`;
 }
 
 /** Le pendant : la découpe que nomme une version de format, ou null (une autre version, un autre format). */
-export function cutModeOfTag(tag: string): LumenCutMode | null {
-  for (const cut of LUMEN_CUT_MODES) if (lumenFormatTag(cut) === tag) return cut;
+export function cuttingOfTag(tag: string): LumenCutting | null {
+  for (const cut of LUMEN_CUT_MODES) {
+    for (const s of [LUMEN_TARGET_SEGMENT_US / 1e6, ...LUMEN_TRIAL_TARGETS_S]) {
+      if (lumenFormatTag(cut, s * 1e6) === tag) return { cut, targetUs: s * 1e6 };
+    }
+  }
   return null;
 }
 
@@ -81,12 +127,15 @@ export function parseCutMode(raw: string | null | undefined): LumenCutMode | und
 }
 
 /**
- * La durée visée pour un segment. Recommandation de l'étude (1-remuxeur.md §1.2, mesurée sur quatre
- * fichiers à 2, 4 et 6 s) : 4 s donne une médiane de 5 à 9 s sur les fichiers à groupes d'images
- * longs et garde les sauts bon marché ailleurs. Apple conseille 6 s (règle 7.5, un « SHOULD ») :
- * plus court, c'est un saut moins cher, et une liste de 1 800 segments pour deux heures.
+ * `?target=` (secondes) : la cible en µs, `undefined` (4 s), ou null (mal formé, ou pas une cible
+ * d'essai — une cible libre ferait autant de versions d'index que de valeurs essayées).
  */
-export const LUMEN_TARGET_SEGMENT_US = 4_000_000;
+export function parseTargetSeconds(raw: string | number | null | undefined): number | undefined | null {
+  if (raw === null || raw === undefined || raw === "") return undefined;
+  const s = typeof raw === "number" ? raw : /^[1-9]\d?$/.test(raw) ? Number(raw) : NaN;
+  if (s === LUMEN_TARGET_SEGMENT_US / 1e6) return LUMEN_TARGET_SEGMENT_US;
+  return LUMEN_TRIAL_TARGETS_S.includes(s) ? s * 1e6 : null;
+}
 
 /**
  * Au-delà, le fichier n'est pas servi par Lumen serveur (`segment-trop-long`). Un segment ne descend
@@ -183,6 +232,7 @@ export type LumenRefusalReason =
   | "pas-d-index"
   | "index-invalide"
   | "segment-trop-long"
+  | "index-troue"
   | "segment-trop-lourd"
   | "son-codec"
   | "son-aac-pce"
@@ -250,13 +300,20 @@ export interface LumenKeyStats {
   leading: number;
   /** Points de coupe admis. */
   cuts: number;
+  /**
+   * Coupes prises des Cues sans lire l'image (découpe `cra`, l'index des Cues, §158) : tout sauf la
+   * première. Les compteurs de types (`idr`, `cra`, `craRasl`) ne portent que sur les points lus.
+   */
+  trusted: number;
 }
 
 /** Ce que l'index d'un fichier dit, une fois pour toutes les requêtes. Sérialisable (clonage structuré). */
 export interface LumenIndex {
   format: number;
-  /** La règle de découpe qui a produit `segments` (`idr` sauf demande expresse). */
+  /** La règle de découpe qui a produit `segments` (`cra` sauf essai, §158). */
   cut: LumenCutMode;
+  /** La cible de la découpe (µs) : `LUMEN_TARGET_SEGMENT_US` sauf essai (étape 3c). */
+  targetUs: number;
   identity: FileIdentity;
   container: "matroska" | "mp4";
   durationUs: number;

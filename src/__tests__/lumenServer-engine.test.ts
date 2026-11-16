@@ -13,8 +13,9 @@ import { FIXTURES, parseFragments } from "./lumenServer-helpers";
 
 function fakeIndex(identity: FileIdentity, segments = 3): LumenIndex {
   return {
-    format: 1,
-    cut: "idr",
+    format: 2,
+    cut: "cra",
+    targetUs: 4_000_000,
     identity,
     container: "matroska",
     durationUs: 1,
@@ -24,7 +25,7 @@ function fakeIndex(identity: FileIdentity, segments = 3): LumenIndex {
     frameUs: 1,
     frameRate: 24,
     segments: Array.from({ length: segments }, (_, i) => ({ startUs: i, endUs: i + 1, keyUs: i, at: i, bytes: 0 })),
-    keys: { cues: 0, verified: 0, rejected: 0, idr: 0, cra: 0, craRasl: 0, leading: 0, cuts: 0 },
+    keys: { cues: 0, verified: 0, rejected: 0, idr: 0, cra: 0, craRasl: 0, leading: 0, cuts: 0, trusted: 0 },
     bandwidth: { peak: 0, average: 0 },
     refusal: null,
     inits: { video: null, audio: {} },

@@ -25,6 +25,8 @@ export interface BuiltSegment {
   waitMs: number;
   /** Attente du disque pendant la construction. */
   diskMs: number;
+  /** Segment vidéo ouvert par une image qui n'est pas une clé (un point d'index qui ment, §158). */
+  falseKey?: boolean;
 }
 
 interface State {
