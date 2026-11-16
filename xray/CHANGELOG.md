@@ -6,6 +6,14 @@ chaque rapport de décision (`service.version`) et dans la ligne de démarrage d
 Les versions des résultats (`RESULT_VERSION`, `VOICE_VERSION`, `ASD_VERSION`) suivent leur propre règle
 (`app/config.py`) : elles ne bougent que quand un résultat ancien devient incomparable.
 
+## 1.6.1
+
+- Dépendances : fastapi 0.163.1, numpy 2.5.5, onnxruntime 1.32.0, annotated-doc 0.0.6 ; pour la
+  quantification INT8, networkx 3.7 et markdown-it-py 4.3.0. Banc avant/après (16/11/2026) : 120 images de
+  trois titres (dont un 4K HDR) et 200 photos de référence, par ONNX Runtime, OpenVINO INT8 sur le processeur et
+  OpenVINO sur l'iGPU — boîtes, scores, tri et empreintes identiques au bit près, et l'IR INT8 refaite par NNCF
+  sur les mêmes images a le même SHA-256. Aucun résultat ne change.
+
 ## 1.6.0
 
 - **Débuts de scène resserrés** (`cutsVersion` 2) : une coupe aux deux signaux est refusée à côté d'une scène de

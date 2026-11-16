@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir --no-deps --prefix=/install "${OPENVINO}"
 # avec les seules dépendances que sa quantification post-entraînement d'OpenVINO importe : ni
 # scikit-learn, ni pydot, ni ninja, ni `openvino-telemetry` (sans lui, la télémétrie de NNCF ne
 # fait rien — rien ne sort de la machine). ~35 Mo.
-ARG NNCF="nncf==3.4.0 networkx==3.6.1 psutil==7.2.2 rich==15.0.0 markdown-it-py==4.2.0 mdurl==0.1.2 pygments==2.21.0 safetensors==0.8.0 tabulate==0.10.0"
+ARG NNCF="nncf==3.4.0 networkx==3.7 psutil==7.2.2 rich==15.0.0 markdown-it-py==4.3.0 mdurl==0.1.2 pygments==2.21.0 safetensors==0.8.0 tabulate==0.10.0"
 RUN pip install --no-cache-dir --no-deps --prefix=/install ${NNCF}
 
 # --- pilote de calcul Intel (OpenCL) pour l'inférence sur l'iGPU, en option -------------------

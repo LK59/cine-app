@@ -1,18 +1,18 @@
 # Versions figées, résolues depuis requirements.in (pip freeze dans python:3.12-slim-bookworm).
 # Monter une version : la changer ici, reconstruire l'image (les tests tournent dans la construction).
-annotated-doc==0.0.5
+annotated-doc==0.0.6
 annotated-types==0.8.0
 anyio==4.16.0
 certifi==2026.10.23
 click==8.5.1
-fastapi==0.162.2
+fastapi==0.163.1
 flatbuffers==25.12.19
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
 idna==3.20
-numpy==2.5.4
-onnxruntime==1.31.1
+numpy==2.5.5
+onnxruntime==1.32.0
 opencv-python-headless==5.0.0.93
 opentelemetry-api==1.45.2
 packaging==26.3
