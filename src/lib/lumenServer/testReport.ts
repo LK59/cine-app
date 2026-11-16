@@ -8,6 +8,12 @@
 // annonce et ce qu'un changement de piste a fait — et, en face, les segments remis, leur construction,
 // leur envoi, et quels segments Safari a demandés après chaque saut (la trace).
 //
+// Depuis l'étape 3c (17/11/2026), une lecture peut aussi être celle du **lecteur actuel** (Lumen dans la page :
+// remux, MediaSource), jouée par la même page sur les mêmes sauts : `player: "actuel"`, sans relevé serveur (son
+// `s` n'est pas une lecture de Lumen serveur), avec ce que le moteur a ouvert (`engine`). Les lignes d'une série
+// portent le lecteur, la passe (`complète`, `courte`) et la graine des positions de saut ; la récapitulative, le
+// tableau comparatif (`comparison`).
+//
 // Le corps vient du navigateur : tout est relu, borné, et ce qui n'a pas la forme attendue tombe. Le
 // compte vient de la session, jamais du corps ; le relevé serveur d'une lecture n'est joint que s'il
 // appartient à ce compte (`lumenPlaybackStats`).
@@ -22,6 +28,11 @@ const MAX_LOG = 150;
 const MAX_FREEZES = 60;
 /** Les essais résumés d'une ligne récapitulative : la série en compte 14. */
 const MAX_TRIALS = 30;
+const PLAYERS = new Set(["serveur", "actuel"]);
+const PASSES = new Set(["complète", "courte"]);
+const cutOf = (v: unknown) => (typeof v === "string" && (LUMEN_CUT_MODES as readonly string[]).includes(v) ? v : null);
+/** Une cible de segment, en secondes : un petit entier. */
+const targetOf = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v > 0 && v <= 30 ? v : null);
 
 const num = (value: unknown, max = 1e9): number | null =>
   typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= max ? Math.round(value * 1000) / 1000 : null;
@@ -76,7 +87,12 @@ function runOf(raw: unknown, user: string): Record<string, unknown> {
   const run = pick(raw, {
     itemId: (v) => (typeof v === "string" && /^[0-9a-f]{32}$/i.test(v) ? v : null),
     title: (v) => text(v, 120),
-    cut: (v) => (typeof v === "string" && (LUMEN_CUT_MODES as readonly string[]).includes(v) ? v : null),
+    player: oneOf(PLAYERS),
+    cut: cutOf,
+    targetS: targetOf,
+    // Le lecteur actuel : ce que son moteur a ouvert (vidéo, piste, son copié ou réencodé), et la piste ouverte.
+    engine: (v) => pick(v, { video: (x) => text(x, 80), audio: (x) => text(x, 80), sound: (x) => text(x, 80) }),
+    openedAudio: (v) => num(v, 1e4),
     audio: (v) => num(v, 1e4),
     s: (v) => (isPlaybackId(v) ? v : null),
     version: (v) => text(v, 40),
@@ -156,15 +172,21 @@ function trialSummaryOf(raw: unknown): Record<string, unknown> {
   const duration = (v: unknown) => num(v, 1e8);
   return pick(raw, {
     trial: trialName,
+    key: trialName,
     rank: (v) => num(v, 1e3),
     title: (v) => text(v, 120),
-    cut: (v) => (typeof v === "string" && (LUMEN_CUT_MODES as readonly string[]).includes(v) ? v : null),
+    player: oneOf(PLAYERS),
+    cut: cutOf,
+    targetS: targetOf,
     status: oneOf(TRIAL_STATUSES),
     reason: (v) => text(v, 120),
     firstFrameMs: duration,
     seeks: count,
     missed: count,
     seekMedianMs: duration,
+    advanceP90Ms: duration,
+    seekedMedianMs: duration,
+    seekedP90Ms: duration,
     freezes: count,
     freezeMs: duration,
     errors: count,
@@ -176,6 +198,24 @@ function trialSummaryOf(raw: unknown): Record<string, unknown> {
     audioSwitches: count,
     audioTrouble: count,
     verdicts: (v) => list(v, 4).map((x) => text(x, 200)).filter((x) => x !== null),
+  });
+}
+
+/** Une colonne du tableau comparatif (`ComparisonCell`, autoSeries.ts). */
+function comparisonCellOf(raw: unknown): Record<string, unknown> {
+  const duration = (v: unknown) => num(v, 1e8);
+  const count = (v: unknown) => num(v, 1e5);
+  return pick(raw, {
+    status: oneOf(TRIAL_STATUSES),
+    firstFrameMs: duration,
+    seekedMedianMs: duration,
+    seekedP90Ms: duration,
+    advanceMedianMs: duration,
+    advanceP90Ms: duration,
+    seeks: count,
+    missed: count,
+    errors: count,
+    freezes: count,
   });
 }
 
@@ -195,12 +235,19 @@ export function lumenTestReport(body: Record<string, unknown>, user: string): Re
           rank: (x) => num(x, 1e3),
           of: (x) => num(x, 1e3),
           status: oneOf(TRIAL_STATUSES),
+          player: oneOf(PLAYERS),
+          pass: oneOf(PASSES),
+          seed: (x) => (typeof x === "number" && Number.isInteger(x) && x >= 0 && x < 2 ** 32 ? x : null),
           summary: bool,
           done: (x) => num(x, 1e3),
           elapsedS: (x) => num(x, 1e6),
           stopped: bool,
         }),
       trials: (v) => list(v, MAX_TRIALS).map(trialSummaryOf),
+      comparison: (v) =>
+        list(v, MAX_TRIALS).map((row) =>
+          pick(row, { key: trialName, title: (x) => text(x, 120), targetS: targetOf, serveur: comparisonCellOf, actuel: comparisonCellOf })
+        ),
       answers: (v) => pick(v, { damaged: oneOf(DAMAGED), damagedTitle: (x) => text(x, 120), audioClean: oneOf(AUDIO_CLEAN) }),
     }),
     build: text(body.build, 40),

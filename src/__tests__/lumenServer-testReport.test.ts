@@ -113,6 +113,45 @@ describe("lumenTestReport", () => {
     expect(Object.keys(lumenTestReport({ runs: [] }, "louis"))).toEqual(["build", "env", "runs", "log"]);
   });
 
+  it("le comparatif (étape 3c) : le lecteur, la passe, la graine, ce que le lecteur actuel a ouvert, le tableau — bornés", () => {
+    const line = lumenTestReport(
+      {
+        auto: { serie: "abc123def456", trial: "ghosted-actuel", rank: 8, of: 9, status: "ok", player: "actuel", pass: "courte", seed: 123456789 },
+        runs: [
+          { itemId: ITEM, player: "actuel", engine: { video: "V_MPEGH/ISO/HEVC 3840×2160", audio: "A_EAC3 6 canaux", sound: "copié tel quel", evil: "x" }, openedAudio: 2, s: "lt0003" },
+          { itemId: ITEM, player: "autre", cut: "cra", targetS: 2.5 },
+          { itemId: ITEM, player: "serveur", cut: "cra", targetS: 2 },
+        ],
+      },
+      "louis"
+    );
+    expect(line.auto).toEqual({ serie: "abc123def456", trial: "ghosted-actuel", rank: 8, of: 9, status: "ok", player: "actuel", pass: "courte", seed: 123456789 });
+    const [current, bad, server] = line.runs as Record<string, unknown>[];
+    expect(current).toMatchObject({ player: "actuel", engine: { video: "V_MPEGH/ISO/HEVC 3840×2160", audio: "A_EAC3 6 canaux", sound: "copié tel quel" }, openedAudio: 2 });
+    expect(current.engine).not.toHaveProperty("evil");
+    // Le `s` du lecteur actuel n'est pas une lecture de Lumen serveur : pas de relevé.
+    expect(current).not.toHaveProperty("srv.req");
+    expect(bad).not.toHaveProperty("player");
+    expect(bad).not.toHaveProperty("targetS");
+    expect(server).toMatchObject({ player: "serveur", cut: "cra", targetS: 2 });
+    expect(lumenTestReport({ auto: { pass: "longue", seed: -1, player: "x" } }, "louis").auto).toBeUndefined();
+
+    const summary = lumenTestReport(
+      {
+        auto: { serie: "abc123def456", summary: true, of: 9, done: 9, pass: "courte", seed: 7 },
+        trials: [{ trial: "ghosted-actuel", key: "ghosted", player: "actuel", status: "ok", seekMedianMs: 450, advanceP90Ms: 700, seekedMedianMs: 300, seekedP90Ms: 500 }],
+        comparison: [
+          { key: "ghosted", title: "Ghosted", targetS: 4, serveur: { status: "ok", firstFrameMs: 900, seekedMedianMs: 620, advanceMedianMs: 1500, x: 1 }, actuel: { status: "ok", advanceMedianMs: 450 }, y: 2 },
+        ],
+      },
+      "louis"
+    );
+    expect(summary.trials).toEqual([{ trial: "ghosted-actuel", key: "ghosted", player: "actuel", status: "ok", seekMedianMs: 450, advanceP90Ms: 700, seekedMedianMs: 300, seekedP90Ms: 500 }]);
+    expect(summary.comparison).toEqual([
+      { key: "ghosted", title: "Ghosted", targetS: 4, serveur: { status: "ok", firstFrameMs: 900, seekedMedianMs: 620, advanceMedianMs: 1500 }, actuel: { status: "ok", advanceMedianMs: 450 } },
+    ]);
+  });
+
   it("joint le relevé serveur de la lecture — segments, son par piste, trace — pour ce compte seulement", () => {
     const stats = playbackOf("lt0002", { user: "louis", itemId: ITEM, version: "1c1-0123456789ab" });
     noteRequest(stats, "segment");

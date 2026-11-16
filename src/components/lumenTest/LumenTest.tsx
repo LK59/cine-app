@@ -5,27 +5,41 @@ import { APP_BUILD } from "@/lib/appBuild";
 import { useWakeLock } from "@/lib/useWakeLock";
 import {
   AUDIO_SWITCH_WATCH_MS,
+  DEFAULT_TARGET_S,
   FIRST_FRAME_TIMEOUT_MS,
   FREEZE_CHECK_MS,
   FreezeWatch,
   PRESETS,
+  QUICK_SERIES,
   SERIES,
+  comparisonRows,
   formatResult,
+  newSeed,
+  planOf,
+  playerLabel,
   qualityDelta,
   resultOf,
   runSeries,
+  seekPositions,
   seriesEstimateS,
   seriesProgress,
   summaryBody,
   trialTag,
+  type ComparisonCell,
+  type ComparisonRow,
   type Cut,
+  type PlayerKind,
   type PreparedVerdict,
   type Quality,
   type SeriesAnswers,
   type SeriesDriver,
+  type SeriesPass,
+  type Trial,
   type TrialMeasures,
   type TrialResult,
 } from "./autoSeries";
+import { currentPlayerInfo, openCurrentPlayer } from "./currentPlayer";
+import type { RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
 
 /**
  * La page de banc de Lumen serveur (`/lumen-test`, étape 3b de docs/remux-serveur/, DECISIONS §157,
@@ -53,6 +67,13 @@ import {
  * seul l'œil voyait jusque-là : les gels (position qui avance sans image présentée, `FreezeWatch`) et les
  * compteurs de décodage de chaque essai. Une image *présentée* mais abîmée reste invisible à la page — d'où les
  * deux questions de fin de série.
+ *
+ * Depuis l'étape 3c (17/11/2026), un **second lecteur** : le lecteur de production d'aujourd'hui (Lumen dans la
+ * page : remux, MediaSource), ouvert par ses API publiques (`currentPlayer.ts`), joué dans le même `<video>` et
+ * mesuré par les mêmes évènements — la page ne distingue les deux qu'à l'ouverture et à la fermeture. « Tout
+ * enchaîner » et « Comparatif rapide » jouent chaque titre par les deux, avec les mêmes sauts (graine commune),
+ * tous les essais serveur d'abord (WebKit refuse un HLS natif après une MediaSource dans une même page), et
+ * finissent sur un tableau côte à côte. Une cible de segment d'essai (2 s) se choisit aussi à la main.
  *
  * Textes en français : la page est pour l'administrateur de la maison, pas pour un rapport.
  */
@@ -101,6 +122,9 @@ interface Verdict {
   cutFacts?: { cut: Cut; targetS?: number; longestS: number; verified: number; craRasl: number; cuts: number; trusted?: number };
 }
 
+/** Les cibles de segment proposées à la main : 4 s la règle, 2 s l'essai de l'étape 3c. */
+const TARGETS = [DEFAULT_TARGET_S, 2] as const;
+
 type SeekKind = "-10" | "+10" | "+60" | "hasard" | "parcours" | "barre" | "depart";
 
 interface SeekMeasure {
@@ -139,7 +163,15 @@ interface AudioSwitch {
 interface Run {
   itemId: string;
   title: string;
+  /** Le lecteur de la lecture : Lumen serveur (HLS natif) ou le lecteur actuel (MediaSource). */
+  player: PlayerKind;
   cut: Cut;
+  /** La cible de segment du serveur (s). */
+  targetS: number;
+  /** Lecteur actuel : ce que le moteur a ouvert (vidéo, piste, son copié ou réencodé). */
+  engine?: Record<string, string | undefined>;
+  /** Lecteur actuel : la piste réellement ouverte. */
+  openedAudio?: number | null;
   audio: number | null;
   s: string;
   version: string;
@@ -214,6 +246,8 @@ const clock = (seconds: number) => `${Math.floor(seconds / 60)} min ${String(Mat
 /** Ce que l'écran montre de la lecture en cours : relu dans les `ref` chaque seconde, jamais pendant le rendu. */
 interface View {
   title: string;
+  /** « serveur », « serveur 2 s », « actuel ». */
+  player: string;
   cut: Cut;
   s: string;
   loadedMetadataMs?: number;
@@ -240,12 +274,15 @@ interface AutoView {
   phase: "en-cours" | "questions" | "envoyé";
   k: number;
   n: number;
+  pass: SeriesPass;
   title: string;
-  cut: Cut;
+  player: string;
   step: string;
   elapsedS: number;
   progress: number;
   results: string[];
+  /** Le tableau côte à côte, une fois la série finie. */
+  comparison: ComparisonRow[];
   stopped: boolean;
   sent: string | null;
 }
@@ -253,6 +290,10 @@ interface AutoView {
 /** L'état de la série, mutable pendant qu'elle dure. */
 interface AutoState {
   serie: string;
+  pass: SeriesPass;
+  plan: Trial[];
+  /** La graine des positions de saut : la même pour les deux lecteurs d'un titre, portée par chaque ligne. */
+  seed: number;
   startedAt: number;
   phase: AutoView["phase"];
   stopped: boolean;
@@ -274,6 +315,7 @@ function viewOf(run: Run | null, video: TestVideo | null): View | null {
   const last = run.audioSwitches.at(-1);
   return {
     title: run.title,
+    player: playerLabel(run),
     cut: run.cut,
     s: run.s,
     loadedMetadataMs: run.loadedMetadataMs,
@@ -299,17 +341,20 @@ function viewOf(run: Run | null, video: TestVideo | null): View | null {
 function autoViewOf(state: AutoState | null): AutoView | null {
   if (!state) return null;
   const now = performance.now();
-  const trial = SERIES[Math.min(state.index, SERIES.length - 1)];
+  const plan = state.plan;
+  const trial = plan[Math.min(state.index, plan.length - 1)];
   return {
     phase: state.phase,
-    k: Math.min(state.index + 1, SERIES.length),
-    n: SERIES.length,
+    k: Math.min(state.index + 1, plan.length),
+    n: plan.length,
+    pass: state.pass,
     title: trial.title,
-    cut: trial.cut,
+    player: playerLabel(trial),
     step: state.step,
     elapsedS: (now - state.startedAt) / 1000,
-    progress: state.phase === "en-cours" ? seriesProgress(SERIES, state.index, (now - state.trialStartedAt) / 1000) : 1,
+    progress: state.phase === "en-cours" ? seriesProgress(plan, state.index, (now - state.trialStartedAt) / 1000) : 1,
     results: state.results.map(formatResult),
+    comparison: state.phase === "en-cours" ? [] : comparisonRows(state.results),
     stopped: state.stopped,
     sent: state.sent,
   };
@@ -364,7 +409,9 @@ function reportOf(run: Run): Record<string, unknown> {
   return {
     itemId: run.itemId,
     title: run.title,
-    cut: run.cut,
+    player: run.player,
+    // La découpe et la cible ne disent quelque chose que du serveur ; le lecteur actuel lit le fichier entier.
+    ...(run.player === "serveur" ? { cut: run.cut, targetS: run.targetS } : { engine: run.engine, openedAudio: run.openedAudio ?? undefined }),
     audio: run.audio,
     s: run.s,
     version: run.version,
@@ -409,10 +456,14 @@ export function LumenTest() {
   // « Touchez pour continuer » : le `play()` refusé attend un geste ; `tapRef` le relâche.
   const tapRef = useRef<(() => void) | null>(null);
   const refusedRef = useRef(false);
+  // Le lecteur actuel ouvert dans la vidéo (sa MediaSource), détruit à la fermeture de la lecture.
+  const engineRef = useRef<RemuxPlayback | null>(null);
 
   const [itemId, setItemId] = useState("");
   const [title, setTitle] = useState("");
   const [cut, setCut] = useState<Cut>("cra");
+  const [player, setPlayer] = useState<PlayerKind>("serveur");
+  const [target, setTarget] = useState<number>(DEFAULT_TARGET_S);
   const [audio, setAudio] = useState<number | null>(null);
   const [startAt, setStartAt] = useState("0");
   const [tourCount, setTourCount] = useState("10");
@@ -636,7 +687,7 @@ export function LumenTest() {
   }, [finishSeek, note, refresh]);
 
   /** Le verdict du serveur pour ce titre, cette piste et cette découpe ; l'index se construit au besoin. */
-  const prepare = async (id = itemId, audioTrack = audio, chosenCut = cut) => {
+  const prepare = async (id = itemId, audioTrack = audio, chosenCut = cut, targetS = target) => {
     if (!/^[0-9a-f]{32}$/i.test(id)) {
       setBusy("Identifiant Jellyfin attendu (32 caractères hexadécimaux).");
       return null;
@@ -646,6 +697,7 @@ export function LumenTest() {
     try {
       for (let attempt = 0; attempt < 12; attempt++) {
         const query = new URLSearchParams({ wait: "25000", cut: chosenCut });
+        if (targetS !== DEFAULT_TARGET_S) query.set("target", String(targetS));
         if (audioTrack !== null) query.set("audio", String(audioTrack));
         const res = await fetch(`/api/lumen/${id}/eligibility?${query}`);
         const body = (await res.json().catch(() => null)) as Verdict | null;
@@ -659,7 +711,7 @@ export function LumenTest() {
         setAudio(body.audioTrack);
         setBusy(null);
         note(
-          `éligibilité ${chosenCut} en ${ms(performance.now() - began)} ms : ${body.ok ? "ok" : `refus ${body.reason}${body.detail ? ` (${body.detail})` : ""}`} · ${body.segments ?? "?"} segments · le plus long ${body.cutFacts?.longestS ?? "?"} s · ${keysLine(body.cutFacts)}`
+          `éligibilité ${chosenCut}${targetS !== DEFAULT_TARGET_S ? ` (cible ${targetS} s)` : ""} en ${ms(performance.now() - began)} ms : ${body.ok ? "ok" : `refus ${body.reason}${body.detail ? ` (${body.detail})` : ""}`} · ${body.segments ?? "?"} segments · le plus long ${body.cutFacts?.longestS ?? "?"} s · ${keysLine(body.cutFacts)}`
         );
         return body;
       }
@@ -681,6 +733,9 @@ export function LumenTest() {
     run.end = end;
     doneRef.current = [...doneRef.current, run].slice(-12);
     runRef.current = null;
+    // Le lecteur actuel : sa MediaSource fermée, l'élément rendu sans source (`destroy`), après le dernier relevé.
+    engineRef.current?.destroy();
+    engineRef.current = null;
   };
 
   /**
@@ -711,22 +766,25 @@ export function LumenTest() {
    * Ouvre une lecture de la liste maître dans la vidéo : la lecture précédente fermée, la nouvelle mesurée.
    * Partagé par « Lire » et la série ; ne lance pas `play()` (chacun le fait à sa façon).
    */
-  const startRun = (params: { itemId: string; title: string; cut: Cut; startAt: number; verdict: Verdict; clickAt: number }): Run | null => {
+  const startRun = (params: { itemId: string; title: string; player: PlayerKind; cut: Cut; targetS: number; startAt: number; verdict: Verdict; clickAt: number }): Run | null => {
     const video = videoRef.current;
     const current = params.verdict;
-    if (!video || !current.version) return null;
+    if (!video || (params.player === "serveur" && !current.version)) return null;
     tourRef.current += 1; // un parcours en cours s'arrête
     closeRun("nouvelle lecture");
     const s = newPlaybackId();
     const master = `/api/lumen/${params.itemId}/${current.version}/${s}/master.m3u8${current.audioTrack !== null ? `?audio=${current.audioTrack}` : ""}`;
-    startAtRef.current = Math.max(0, params.startAt);
+    // Le lecteur actuel s'ouvre à la position demandée (`startSeconds`, comme l'hôte) : pas de saut de départ.
+    startAtRef.current = params.player === "serveur" ? Math.max(0, params.startAt) : 0;
     const run: Run = {
       itemId: params.itemId,
       title: params.title || params.itemId,
+      player: params.player,
       cut: params.cut,
+      targetS: params.targetS,
       audio: current.audioTrack,
       s,
-      version: current.version,
+      version: current.version ?? "",
       verdict: { ok: current.ok, segments: current.segments, longestS: current.cutFacts?.longestS, targetS: current.targetS, craRasl: current.cutFacts?.craRasl, verified: current.cutFacts?.verified, durationS: current.durationS },
       clickAt: params.clickAt,
       seeks: [],
@@ -739,11 +797,47 @@ export function LumenTest() {
       watch: new FreezeWatch(),
     };
     runRef.current = run;
-    note(`lecture ${run.title} · ${params.cut} · piste ${current.audioTrack ?? "—"} · ${s}`);
+    note(`lecture ${run.title} · ${playerLabel(run)}${run.player === "serveur" ? ` · ${params.cut}` : ""} · piste ${current.audioTrack ?? "—"} · ${s}`);
     watchFrames(video, run);
-    video.src = master;
+    if (run.player === "serveur") video.src = master;
     refresh();
     return run;
+  };
+
+  /**
+   * Le lecteur actuel dans la vidéo, pour la lecture `run` (`currentPlayer.ts` : ses API publiques, comme
+   * l'hôte). Rend un motif d'échec, ou null : ouvert — ou l'essai fermé entre-temps. Ses erreurs de moteur
+   * (`onError`) vont dans celles de la lecture : l'hôte replierait vers le lecteur serveur, ici c'est un résultat.
+   */
+  const openCurrent = async (run: Run, startSeconds: number): Promise<string | null> => {
+    const video = videoRef.current;
+    if (!video) return "pas de vidéo";
+    try {
+      const opened = await openCurrentPlayer(video, {
+        itemId: run.itemId,
+        audioTrack: run.audio,
+        startSeconds,
+        onError: (line) => {
+          if (runRef.current !== run) return;
+          run.errors.push(line);
+          if (run.pending) finishSeek(run, { ok: false, error: line });
+          note(`ERREUR ${line}`);
+        },
+        onNote: (line) => runRef.current === run && note(line),
+        cancelled: () => runRef.current !== run,
+      });
+      if (!opened) return "arrêté";
+      engineRef.current = opened.playback;
+      run.engine = opened.facts;
+      run.openedAudio = opened.openedAudio;
+      note(`lecteur actuel ouvert : ${opened.facts.video ?? "?"} · ${opened.facts.audio ?? "?"} · son ${opened.facts.sound ?? "?"} · piste ${opened.openedAudio ?? "—"}`);
+      return null;
+    } catch (error) {
+      const line = `ouverture : ${error instanceof Error ? error.message : String(error)}`.slice(0, 200);
+      if (runRef.current === run) run.errors.push(line);
+      note(`ERREUR ${line}`);
+      return line;
+    }
   };
 
   const play = async () => {
@@ -751,12 +845,16 @@ export function LumenTest() {
     if (!video) return;
     const clickAt = performance.now();
     let current = verdict;
-    if (!current || !current.version || current.cutFacts?.cut !== cut || current.audioTrack !== audio) current = await prepare();
-    if (!current?.ok || !current.version) {
+    if (!current || !current.version || current.cutFacts?.cut !== cut || (current.cutFacts?.targetS ?? DEFAULT_TARGET_S) !== target || current.audioTrack !== audio) current = await prepare();
+    // Le lecteur actuel lit aussi un fichier que le serveur refuse (le son DTS de *Le Prestige*) : le verdict ne
+    // sert alors qu'à connaître la piste.
+    if (!current || (player === "serveur" && (!current.ok || !current.version))) {
       if (current && !current.ok) note(`non servi : ${current.reason}`);
       return;
     }
-    if (!startRun({ itemId, title, cut, startAt: Number(startAt) || 0, verdict: current, clickAt })) return;
+    const run = startRun({ itemId, title, player, cut, targetS: target, startAt: Number(startAt) || 0, verdict: current, clickAt });
+    if (!run) return;
+    if (player === "actuel" && (await openCurrent(run, Number(startAt) || 0))) return;
     try {
       await video.play();
     } catch (error) {
@@ -779,7 +877,7 @@ export function LumenTest() {
   };
 
   /** Un saut mesuré ; la promesse se résout quand il a repris, échoué ou dépassé 20 s. */
-  const seek = (kind: SeekKind, target?: number): Promise<void> => {
+  const seek = (kind: SeekKind, position?: number): Promise<void> => {
     const video = videoRef.current;
     const run = runRef.current;
     if (!video || !run || !Number.isFinite(video.duration)) return Promise.resolve();
@@ -787,7 +885,7 @@ export function LumenTest() {
     const from = video.currentTime;
     const duration = video.duration;
     const to =
-      target ??
+      position ??
       (kind === "-10" ? from - 10 : kind === "+10" ? from + 10 : kind === "+60" ? from + 60 : 30 + Math.random() * Math.max(1, duration - 90));
     const clamped = Math.max(0, Math.min(duration - 5, to));
     run.pending = { kind, from, to: clamped, startedAt: performance.now(), waits: 0 };
@@ -800,13 +898,16 @@ export function LumenTest() {
     return done;
   };
 
-  /** N sauts au hasard, chacun suivi de 4 s de lecture : de quoi mesurer sans geste. Partagé avec la série. */
-  const runTour = async (n: number) => {
+  /**
+   * N sauts, chacun suivi de 4 s de lecture : de quoi mesurer sans geste. Partagé avec la série, qui donne les
+   * positions (`seekPositions` : les mêmes pour les deux lecteurs d'un titre) ; à la main, au hasard.
+   */
+  const runTour = async (n: number, positions?: number[]) => {
     const token = ++tourRef.current;
     setTouring(true);
-    note(`parcours de ${n} sauts`);
+    note(`parcours de ${n} sauts${positions ? ` (positions de la graine : ${positions.join(", ")})` : ""}`);
     for (let i = 0; i < n && tourRef.current === token && runRef.current; i++) {
-      await seek("parcours");
+      await seek("parcours", positions?.[i]);
       await new Promise((resolve) => setTimeout(resolve, 4000));
     }
     if (tourRef.current === token) note("parcours terminé");
@@ -918,6 +1019,7 @@ export function LumenTest() {
     let lastVerdict: Verdict | null = null;
     let logFrom = 0;
     const lineRuns = new Map<number, Record<string, unknown>[]>();
+    const plan = state.plan;
     const verdictLine = (v: Verdict | null) =>
       v ? { ok: v.ok, reason: v.reason, detail: v.detail, segments: v.segments, longestS: v.cutFacts?.longestS, targetS: v.targetS, craRasl: v.cutFacts?.craRasl, verified: v.cutFacts?.verified, durationS: v.durationS } : undefined;
 
@@ -950,29 +1052,48 @@ export function LumenTest() {
         state.index = rank - 1;
         state.trialStartedAt = performance.now();
         logFrom = logCountRef.current;
-        note(`— essai ${rank}/${SERIES.length} : ${t.id}`);
+        note(`— essai ${rank}/${plan.length} : ${t.id}`);
         // Les choix du mode manuel suivent la série : un essai à refaire à la main part de là.
         setItemId(t.itemId);
         setTitle(t.title);
         setCut(t.cut);
+        setPlayer(t.player);
+        setTarget(t.targetS);
         setStartAt(String(t.startAt));
         setStep("Préparation");
       },
       prepare: async (t, chosenCut): Promise<PreparedVerdict | null> => {
-        setStep(`Préparation (${chosenCut})`);
-        const v = await prepare(t.itemId, null, chosenCut);
+        setStep(t.player === "serveur" ? `Préparation (${chosenCut}${t.targetS !== DEFAULT_TARGET_S ? `, ${t.targetS} s` : ""})` : "Préparation (lecteur actuel)");
+        // Les deux lecteurs demandent le verdict du serveur : la piste audio (la même pour les deux) et la durée
+        // d'où les positions des sauts sont tirées. Le lecteur actuel demande en plus la description du fichier
+        // que son hôte lit avant d'ouvrir — hors du temps de la première image, comme le verdict du serveur.
+        const v = await prepare(t.itemId, null, chosenCut, t.targetS);
         lastVerdict = v;
-        return v ? { ok: v.ok, reason: v.reason, detail: v.detail, version: v.version, audioTrack: v.audioTrack, segments: v.segments, longestS: v.cutFacts?.longestS } : null;
+        if (t.player === "serveur") {
+          return v ? { ok: v.ok, reason: v.reason, detail: v.detail, version: v.version, audioTrack: v.audioTrack, segments: v.segments, longestS: v.cutFacts?.longestS, durationS: v.durationS } : null;
+        }
+        try {
+          const info = await currentPlayerInfo(t.itemId);
+          return info.ok ? { ok: true, audioTrack: v?.audioTrack ?? null, durationS: v?.durationS } : { ok: false, reason: info.reason, audioTrack: v?.audioTrack ?? null };
+        } catch (error) {
+          note(`description du fichier : ${error instanceof Error ? error.message : String(error)}`);
+          return null;
+        }
       },
-      start: async (t, rank) => {
+      start: async (t, rank, prepared) => {
         const video = videoRef.current;
         if (!video || !lastVerdict) return { image: false, reason: "pas de vidéo" };
         setStep("Attente de la première image");
-        const run = startRun({ itemId: t.itemId, title: t.title, cut: t.cut, startAt: t.startAt, verdict: lastVerdict, clickAt: performance.now() });
+        const verdict: Verdict = { ...lastVerdict, audioTrack: prepared.audioTrack };
+        const run = startRun({ itemId: t.itemId, title: t.title, player: t.player, cut: t.cut, targetS: t.targetS, startAt: t.startAt, verdict, clickAt: performance.now() });
         if (!run) return { image: false, reason: "lecture impossible" };
         run.trial = t.id;
         run.rank = rank;
         refusedRef.current = false;
+        if (t.player === "actuel") {
+          const failed = await openCurrent(run, t.startAt);
+          if (failed) return { image: false, reason: failed.slice(0, 120) };
+        }
         playOf(video).catch((error: unknown) => {
           if (runRef.current !== run) return;
           if (isNotAllowed(error)) refusedRef.current = true;
@@ -985,9 +1106,12 @@ export function LumenTest() {
         await sleepUnless(duration, stopped);
       },
       tour: async (count, index) => {
-        const t = SERIES[state.index];
+        const t = plan[state.index];
         setStep(`Parcours ${index + 1}/${t.tours.length} (${count} sauts)`);
-        await runTour(count);
+        // Les mêmes positions pour les deux lecteurs du titre : la graine de la série, le titre, le rang du parcours,
+        // la durée du verdict serveur (celle de l'élément si le serveur n'en a pas donné).
+        const duration = lastVerdict?.durationS ?? videoRef.current?.duration ?? 0;
+        await runTour(count, Number.isFinite(duration) && duration > 0 ? seekPositions(state.seed, t.key, index, count, duration) : undefined);
       },
       audioTour: async () => {
         const video = videoRef.current;
@@ -1021,6 +1145,7 @@ export function LumenTest() {
               ...tag,
               itemId: t.itemId,
               title: t.title,
+              player: t.player,
               cut: p.cut,
               audio: p.verdict?.audioTrack ?? undefined,
               verdict: p.verdict ? { ok: p.verdict.ok, reason: p.verdict.reason, detail: p.verdict.detail, segments: p.verdict.segments, longestS: p.verdict.longestS } : undefined,
@@ -1032,7 +1157,7 @@ export function LumenTest() {
         const run = runRef.current?.trial === t.id && runRef.current.rank === rank ? runRef.current : null;
         const end = `série : ${outcome.status}${outcome.reason ? ` (${outcome.reason})` : ""}`.slice(0, 40);
         if (!run) {
-          lineRuns.set(rank, [{ ...tag, itemId: t.itemId, title: t.title, cut: t.cut, verdict: verdictLine(lastVerdict), end }]);
+          lineRuns.set(rank, [{ ...tag, itemId: t.itemId, title: t.title, player: t.player, ...(t.player === "serveur" ? { cut: t.cut, targetS: t.targetS } : {}), verdict: verdictLine(lastVerdict), end }]);
           return resultOf(t, rank, outcome);
         }
         tourRef.current += 1;
@@ -1050,7 +1175,7 @@ export function LumenTest() {
             kind: "lumen-test",
             build: APP_BUILD,
             env: envRef.current,
-            auto: { ...trialTag(state.serie, t, rank, SERIES.length), status: result.status },
+            auto: { ...trialTag(state.serie, t, rank, plan.length, { pass: state.pass, seed: state.seed }), status: result.status },
             runs: lineRuns.get(rank) ?? [],
             log: fresh > 0 ? logRef.current.slice(-fresh) : [],
           },
@@ -1067,7 +1192,7 @@ export function LumenTest() {
    * l'élément vidéo reçoit le droit de jouer avec le son (WebKit le lève sur `load()`/`play()` faits pendant un
    * geste, pour cet élément et ses sources suivantes). Le `play()` sans source est rejeté — sans importance.
    */
-  const runAll = () => {
+  const runAll = (pass: SeriesPass) => {
     const video = videoRef.current;
     if (!video || autoRef.current?.phase === "en-cours") return;
     tourRef.current += 1;
@@ -1076,8 +1201,12 @@ export function LumenTest() {
     video.removeAttribute("src");
     video.load();
     playOf(video).catch(() => {});
+    const plan = planOf(pass);
     const state: AutoState = {
       serie: newPlaybackId().slice(2, 14),
+      pass,
+      plan,
+      seed: newSeed(),
       startedAt: performance.now(),
       phase: "en-cours",
       stopped: false,
@@ -1089,10 +1218,10 @@ export function LumenTest() {
     };
     autoRef.current = state;
     setAnswers({ damaged: null, damagedTitle: "", audioClean: null });
-    note(`série ${state.serie} : ${SERIES.length} essais`);
+    note(`série ${state.serie} (${pass === "courte" ? "comparatif rapide" : "complète"}, graine ${state.seed}) : ${plan.length} essais`);
     video.scrollIntoView?.({ block: "start" });
     refreshAuto();
-    void runSeries(SERIES, makeDriver(state), (result) => {
+    void runSeries(plan, makeDriver(state), (result) => {
       state.results = [...state.results, result];
       refreshAuto();
     }).then(({ stopped }) => {
@@ -1141,7 +1270,7 @@ export function LumenTest() {
     const isSummary = (body: Record<string, unknown>) => (body.auto as { summary?: boolean } | undefined)?.summary === true;
     outboxRef.current = [
       ...outboxRef.current.filter((body) => !isSummary(body)),
-      { kind: "lumen-test", build: APP_BUILD, env: envRef.current, ...summaryBody(state.serie, SERIES.length, state.results, answers, { elapsedS: (performance.now() - state.startedAt) / 1000, stopped: state.stopped }) },
+      { kind: "lumen-test", build: APP_BUILD, env: envRef.current, ...summaryBody(state.serie, state.plan.length, state.results, answers, { elapsedS: (performance.now() - state.startedAt) / 1000, stopped: state.stopped, pass: state.pass, seed: state.seed }) },
     ].slice(-OUTBOX_MAX);
     const ok = await flush();
     state.sent = ok ? "Bilan envoyé. Merci." : `Bilan non envoyé (${outboxRef.current.length} ligne(s) en attente) : réessayer.`;
@@ -1150,13 +1279,14 @@ export function LumenTest() {
   };
 
   const estimateMin = Math.round(seriesEstimateS(SERIES) / 60);
+  const quickMin = Math.round(seriesEstimateS(QUICK_SERIES) / 60);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 text-sm text-white">
       <h1 className="text-xl font-semibold">Banc Lumen serveur</h1>
       <p className="mt-1 text-xs text-white/60">
-        Lecture en HLS natif de la liste de Lumen serveur. Une découpe à la fois : <b>idr</b> est la règle ; <b>cra</b> et <b>cra-leading</b> coupent aussi
-        sur les images CRA suivies de RASL — la question est de savoir si Safari démarre dessus après un saut.
+        Deux lecteurs dans le même élément vidéo : <b>Lumen serveur</b> (la liste HLS lue nativement ; découpe <b>cra</b>, la règle, ou un essai) et le{" "}
+        <b>lecteur actuel</b> (Lumen dans la page : remux et MediaSource), mesurés de la même façon — première image, sauts, attentes, gels, décodage.
       </p>
 
       <section className="mt-4 rounded-xl border border-white/15 p-3 font-mono text-[11px] leading-relaxed text-white/80">
@@ -1173,11 +1303,15 @@ export function LumenTest() {
       <section className="mt-4 rounded-xl border border-white/30 bg-white/5 p-3">
         <h2 className="font-semibold">Série automatique</h2>
         <p className="mt-1 text-xs text-white/60">
-          Le protocole entier de l&apos;étape 3b, d&apos;un seul appui : {SERIES.length} essais, environ {estimateMin} minutes. Chaque essai part au journal dès
-          qu&apos;il est fini. Gardez le son audible et regardez de temps en temps : deux questions à la fin.
+          Chaque titre joué par Lumen serveur puis par le lecteur actuel, avec les mêmes sauts ; tous les essais serveur d&apos;abord. Chaque essai part au
+          journal dès qu&apos;il est fini, et un tableau côte à côte les compare à la fin. Gardez le son audible et regardez de temps en temps : deux
+          questions à la fin.
         </p>
-        <button type="button" className="btn btn-primary mt-3 w-full justify-center py-3 text-base" disabled={auto?.phase === "en-cours"} onClick={runAll}>
-          {auto?.phase === "en-cours" ? "Série en cours…" : "Tout enchaîner"}
+        <button type="button" className="btn btn-primary mt-3 w-full justify-center py-3 text-base" disabled={auto?.phase === "en-cours"} onClick={() => runAll("complète")}>
+          {auto?.phase === "en-cours" ? "Série en cours…" : `Tout enchaîner (${SERIES.length} essais, ~${estimateMin} min)`}
+        </button>
+        <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("courte")}>
+          {`Comparatif rapide (${QUICK_SERIES.length} essais, ~${quickMin} min)`}
         </button>
       </section>
 
@@ -1218,7 +1352,41 @@ export function LumenTest() {
       </section>
 
       <section className="mt-4 rounded-xl border border-white/15 p-3">
-        <h2 className="font-semibold">2. Découpe, piste, départ</h2>
+        <h2 className="font-semibold">2. Lecteur, découpe, piste, départ</h2>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(
+            [
+              ["serveur", "Lumen serveur", "la liste HLS, lue nativement"],
+              ["actuel", "Lecteur actuel", "remux dans la page, MediaSource"],
+            ] as const
+          ).map(([id, label, detail]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setPlayer(id)}
+              className={`rounded-lg border px-2 py-1.5 text-left text-xs ${player === id ? "border-white/60 bg-white/10" : "border-white/15"}`}
+            >
+              <div className="font-semibold">{label}</div>
+              <div className="text-white/60">{detail}</div>
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-white/60">
+          Cible de segment (serveur) :
+          {TARGETS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => {
+                setTarget(s);
+                setVerdict(null);
+              }}
+              className={`rounded-lg border px-2 py-1 ${target === s ? "border-white/60 bg-white/10 text-white" : "border-white/15"}`}
+            >
+              {s} s{s === DEFAULT_TARGET_S ? " (la règle)" : " (essai)"}
+            </button>
+          ))}
+        </div>
         <div className="mt-2 flex flex-wrap gap-2">
           {CUTS.map((c) => (
             <button
@@ -1290,7 +1458,7 @@ export function LumenTest() {
                   </button>
                 </div>
                 <div className="mt-1 text-xs">
-                  {auto.title} · {auto.cut} — {auto.step}
+                  {auto.title} · {auto.player} — {auto.step}
                 </div>
                 <div className="mt-1 text-xs text-white/60">Écoulé : {clock(auto.elapsedS)}</div>
                 <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/15" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(auto.progress * 100)}>
@@ -1302,6 +1470,7 @@ export function LumenTest() {
                 Série {auto.stopped ? "arrêtée" : "terminée"} : {auto.results.length} essai{auto.results.length > 1 ? "s" : ""} en {clock(auto.elapsedS)}
               </div>
             )}
+            {auto.comparison.length > 0 && <ComparisonTable rows={auto.comparison} />}
             {auto.results.length > 0 && (
               <ol className="mt-2 space-y-0.5 font-mono text-[11px] leading-relaxed text-white/80">
                 {auto.results.map((line, i) => (
@@ -1415,7 +1584,7 @@ export function LumenTest() {
           {view ? (
             <>
               <div>
-                {view.title} · {view.cut} · {view.s}
+                {view.title} · {view.player} · {view.cut} · {view.s}
               </div>
               <div>
                 métadonnées {view.loadedMetadataMs ?? "—"} ms · première image {view.firstFrameMs ?? "—"} ms{view.firstFrameVia ? ` (${view.firstFrameVia})` : ""} · t ={" "}
@@ -1457,5 +1626,74 @@ export function LumenTest() {
         </button>
       )}
     </main>
+  );
+}
+
+/** « 612/1050 » : médiane et 90e centile, en ms ; un tiret pour ce qui n'a pas été mesuré. */
+function pair(median: number | undefined, p90: number | undefined): string {
+  return median === undefined ? "—" : `${median}/${p90 ?? "—"}`;
+}
+
+/** Une colonne d'un lecteur : ses trois mesures, ou ce qui l'a empêchée. */
+function Cells({ cell }: { cell: ComparisonCell | undefined }) {
+  if (!cell) return <td colSpan={3} className="px-1.5 py-1 text-white/40">—</td>;
+  if (cell.status !== "ok" && cell.firstFrameMs === undefined) return <td colSpan={3} className="px-1.5 py-1 text-white/60">{cell.status}</td>;
+  const flags = [cell.missed ? `${cell.missed} manqué${cell.missed > 1 ? "s" : ""}` : null, cell.errors ? `${cell.errors} err.` : null, cell.freezes ? `${cell.freezes} gel${cell.freezes > 1 ? "s" : ""}` : null].filter(Boolean);
+  return (
+    <>
+      <td className="px-1.5 py-1 text-right">{cell.firstFrameMs ?? "—"}</td>
+      <td className="px-1.5 py-1 text-right">{pair(cell.seekedMedianMs, cell.seekedP90Ms)}</td>
+      <td className="px-1.5 py-1 text-right">
+        {pair(cell.advanceMedianMs, cell.advanceP90Ms)}
+        {flags.length > 0 && <div className="text-[10px] text-white/60">{flags.join(" · ")}</div>}
+      </td>
+    </>
+  );
+}
+
+/**
+ * L'écran de fin du comparatif : par titre, la première image, puis `seekedMs` (l'image à la bonne position) et
+ * `advanceMs` (la lecture repartie), médiane et p90 en ms, pour Lumen serveur et pour le lecteur actuel. Les
+ * essais de cible 2 s ont leur ligne (serveur seul). Défile de côté dans son cadre sur un téléphone.
+ */
+function ComparisonTable({ rows }: { rows: ComparisonRow[] }) {
+  return (
+    <div className="mt-3 overflow-x-auto">
+      <table className="w-full min-w-[34rem] border-collapse font-mono text-[11px] text-white/85">
+        <thead>
+          <tr className="text-white/60">
+            <th className="px-1.5 py-1 text-left font-normal" rowSpan={2}>
+              Titre
+            </th>
+            <th className="px-1.5 py-1 font-normal" colSpan={3}>
+              Lumen serveur
+            </th>
+            <th className="px-1.5 py-1 font-normal" colSpan={3}>
+              Lecteur actuel
+            </th>
+          </tr>
+          <tr className="text-white/60">
+            {["image", "seeked", "reprise", "image", "seeked", "reprise"].map((h, i) => (
+              <th key={i} className="px-1.5 py-1 text-right font-normal">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={`${row.key}-${row.targetS}`} className="border-t border-white/10 align-top">
+              <td className="px-1.5 py-1">
+                {row.title}
+                {row.targetS !== DEFAULT_TARGET_S ? ` · cible ${row.targetS} s` : ""}
+              </td>
+              <Cells cell={row.serveur} />
+              <Cells cell={row.actuel} />
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[10px] text-white/50">En ms : première image ; puis, par saut, médiane/p90 jusqu&apos;à l&apos;image (seeked) et jusqu&apos;à la reprise de la lecture.</p>
+    </div>
   );
 }

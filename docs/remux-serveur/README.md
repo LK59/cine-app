@@ -372,6 +372,43 @@ mergerfs, `fincore` à 0 —, X-Ray en pause, un vrai fil de calcul, `--cpus 2 -
 Mêmes coupes que la vérification sous `cra` (1 048, 1 639, 445 segments ; plus long 14,3, 14,4, 4,0 s). Le cache
 disque des index (§156) reste utile pour l'essai `idr`, plus guère pour la règle.
 
+**Le comparatif avec le lecteur actuel.** Le banc du 16/11 laissait une question : un saut serveur ne repart
+qu'en 1,5 s médiane, et player.log dit ~0,43 s par saut pour le lecteur actuel — mais pas avec la même mesure.
+La page `/lumen-test` joue désormais un **second lecteur**, celui de production (Lumen dans la page : remux,
+MediaSource), dans le même `<video>`, sur le même titre, la même piste audio (numéro Matroska, le même espace que
+la liste du serveur) et les mêmes sauts, mesuré par le même code : première image, `seekedMs` et `advanceMs`,
+attentes, gels (`requestVideoFrameCallback`), `getVideoPlaybackQuality`, erreurs. Il est ouvert par ses API
+publiques, comme l'hôte natif (`currentPlayer.ts` : `fetchDirectInfo`, `probePlaybackPath`, `probe.start`,
+`openingHold`, `destroy`) ; un saut est `currentTime`, auquel `MseSource` répond seul. Rien du moteur ni des hôtes
+n'a changé, les empreintes non plus. Ce que l'hôte fait et que le banc ne fait pas, exprès : ni cache de reprise
+sur l'appareil (le serveur n'en a pas non plus), ni réserve en mémoire, ni repli vers le lecteur serveur (une
+erreur du moteur est un résultat), ni ligne dans player.log.
+
+- **Les mêmes sauts** : une graine par série (`seed`, portée par chaque ligne), et pour chaque titre et chaque
+  parcours des positions tirées de la graine, du titre, du rang du parcours et de la durée du verdict serveur
+  (`seekPositions`) — demandée par les deux essais.
+- **L'ordre** : tous les essais serveur, puis tous ceux du lecteur actuel. WebKit refuse un HLS natif dans une
+  page qui a servi une MediaSource ; recharger entre les deux permettrait d'alterner, mais ferait perdre à
+  l'élément le droit de jouer avec le son donné par l'appui (un second appui au milieu de la série). Le prix : le
+  lecteur actuel lit des positions que le serveur vient de lire, sur un cache de pages plus chaud — l'avantage
+  est pour lui, borné par le coût disque d'un segment (257 ms au pire au banc du 16/11).
+- **Les lignes** portent `player: "serveur" | "actuel"` (dans `auto` et dans chaque lecture), `pass`
+  (`complète` ou `courte`) et `seed` ; le lecteur actuel y ajoute `engine` (vidéo, piste, son copié ou réencodé)
+  et `openedAudio`, sans relevé serveur. La ligne récapitulative porte le tableau (`comparison`).
+- **L'écran de fin** : un tableau côte à côte, par titre — première image, puis `seekedMs` et `advanceMs`,
+  médiane/p90, pour chaque lecteur.
+
+**Protocole, sur l'iPhone (application installée, puis un onglet Safari ; puis le Mac).**
+- **« Comparatif rapide »** (~10 min, 8 essais) : *À la Maison Blanche* (H.264), *Black Monday* (HEVC 4K à IDR),
+  *Ghosted* (HEVC à GOP ouvert, DV 4K Atmos), *Ted Lasso* (DV 4K, trois Atmos), 10 sauts chacun, sans tour des
+  pistes, par Lumen serveur puis par le lecteur actuel ; lignes marquées `pass: "courte"`. À lancer d'abord.
+- **« Tout enchaîner »** (~21 min, 15 essais) : les titres de l'étape 3b — les quatre ci-dessus, plus *American
+  Housewife*, *Pearl Harbor* et *Alien : Romulus* —, 10 sauts chacun (20 pour *Ghosted* et *Pearl Harbor*), le
+  tour des pistes sur *Ted Lasso* côté serveur, *Le Prestige* préparé seulement (DTS, refusé par le serveur) ;
+  puis le lecteur actuel sur chaque titre lu.
+- Lire une série : `jq 'select(.kind=="lumen-test" and .auto.serie=="…")'` sur `startup.log` ; le tableau est dans
+  la dernière ligne (`.comparison`).
+
 ## Ordre de travail
 
 1. **Preuve sur appareil** : une instance jetable sert la liste et les segments d'un fichier copiable ; on l'ouvre
