@@ -11806,3 +11806,26 @@ l'inverse, signature et charge altérées, la forme de l'adresse), `lumenServer-
 lit, la position est rapportée pour la vidéo seulement ; refus en 401 ; ni éligibilité ni préparation ; un lien de
 partage ou un compte ordinaire avec l'adresse de l'administrateur : 403 ; la garde de la suite), `lumenServer-proxy.test.ts`,
 `LumenServerHost.test.tsx`.
+
+## 187. « Générer des sous-titres » dans Lumen serveur : la génération du lecteur natif, ses lignes par le calque, puis un `<track>` (17/11/2026)
+
+**Règle.** `useLumenSubtitleGeneration` (`src/components/player/lumen/`) branche sur cet hôte l'objet du lecteur natif,
+`SubtitleGeneration` (§70), sans rien y changer : options, demande avec la position, sondage de la piste active, messages
+d'état (« Préparation des sous-titres… »), erreurs dites en passant (`NativeWarning`), bascule finale. Le menu est celui
+du lecteur natif (`generationMenu` : les langues qu'on peut encore demander, les générations à reprendre, les entrées
+temporaires avec leur avancement), avec les fichiers à côté du film de la description Jellyfin (`externalSubtitles`).
+**L'affichage** est la seule différence : pendant la génération il n'y a pas de fichier à donner à Safari, donc les
+lignes reçues sont montrées par le calque de sous-titres de la page (`SubtitleLayer`, celui des deux sous-titres) à
+l'instant de l'élément (`timeupdate`, sauts, chaque sondage), les `<track>` éteints. Quand Jellyfin présente le fichier,
+la liste des sous-titres est relue (`/api/lumen/{id}/pistes`) et la piste générée — index `-1 − id` de la description,
+ou l'adresse du repli du serveur — devient un `<track>` comme les autres, choisie à la place de l'entrée temporaire
+(ligne `subtitle-gen` `piste-finale`). Ni banc, ni scène : la génération n'est pas ouverte, comme dans le lecteur natif.
+
+**Pourquoi le calque plutôt qu'une piste de texte construite en JavaScript** (`addTextTrack` + `VTTCue`) : les lignes
+arrivent par morceaux et dans le désordre (le serveur traduit d'abord autour de la tête) ; les tenir à jour dans une
+piste du navigateur demanderait de rejouer la logique de `GeneratedCues` (lignes retraduites, trous « pas encore
+faits »), et le calque est déjà celui des deux sous-titres. Le plein écran de cet hôte est celui du conteneur
+(`requestFullscreen`), pas celui de l'élément : le calque y reste visible.
+
+**Porteurs.** `useLumenSubtitleGeneration.ts`, `LumenServerHost.tsx` (`refreshSubtitleTracks`, `generationMenuProps`,
+le calque). **Tests.** `LumenServerHost.test.tsx` (le menu, l'entrée choisie, la ligne au calque).

@@ -47,6 +47,11 @@ import { useServerSessionRecord, useServerStopOnLeave } from "@/components/playe
 import { useServerPositionWatch } from "@/components/player/server/useServerPositionWatch";
 import { useServerTimeline } from "@/components/player/server/useServerTimeline";
 import { useCastRoute } from "@/components/player/server/useCastRoute";
+import { NativeWarning } from "@/components/playerNative/NativeOverlays";
+import { isGeneratingTrack } from "@/lib/subtitleGen/generation";
+import type { ExternalSubtitleSource } from "@/lib/webcodecs/externalSubtitles";
+import { languageName } from "@/lib/trackLabel";
+import { useLumenSubtitleGeneration } from "./useLumenSubtitleGeneration";
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
 import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
 import { recordsResume } from "@/components/player/session/habitWatch";
@@ -341,6 +346,10 @@ export function LumenServerHost({
   const subtitleStyle = useSyncExternalStore(subtitleStyleStore.subscribe, subtitleStyleStore.snapshot, subtitleStyleStore.serverSnapshot);
   /** L'image d'avant, figée par-dessus l'élément pendant une réouverture pour changer de piste (§185). */
   const [freezeUrl, setFreezeUrl] = useState<string | null>(null);
+  /** Les fichiers à côté du film (description Jellyfin, `generated` compris) : le menu « Générer » en tient compte (§187). */
+  const [externals, setExternals] = useState<ExternalSubtitleSource[]>([]);
+  /** Un message passager (une génération refusée) : jamais l'écran d'erreur. */
+  const [warning, setWarning] = useState<string | null>(null);
   /**
    * AirPlay (§186) : la route sans fil prise par l'élément — le téléviseur lit lui-même l'adresse munie du laissez-
    * passer. Écoutée par `useCastRoute` (celle du lecteur serveur), sans séance « ouverte pour diffuser » : rien n'est
@@ -650,6 +659,7 @@ export function LumenServerHost({
       const decline = (reason: string, planned: boolean, stage: string) => fallToRef.current("natif", reason, { planned, stage });
       if (info instanceof Error) return decline(`description du fichier indisponible (${info.message.slice(0, 80)})`, false, "description");
       jellyfinAudioRef.current = info.audio;
+      setExternals(info.externalSubtitles ?? []);
       // Position inconnue (Jellyfin muet, §92) : le lecteur actuel a son écran pour cela.
       if (state?.positionUnknown && (session.resumeAt ?? null) === null) return decline("position de reprise inconnue", false, "position");
       if ("failed" in verdict0) return decline(verdict0.failed, verdict0.refused === true, "éligibilité");
@@ -1371,7 +1381,84 @@ export function LumenServerHost({
   const subtitleTrackIds = useMemo(() => externalSubtitleTracks.map((st) => st.index), [externalSubtitleTracks]);
   const primarySubtitleNow = useCallback(() => currentSubtitleRef.current, []);
   const dualSubtitles = useServerDualSubtitles({ videoRef, trackIds: subtitleTrackIds, primaryNow: primarySubtitleNow, primary: currentSubtitleId, second: secondSubtitleId, enabled: true, videoKey });
-  const subtitleTracks = useMemo<Track[]>(() => externalSubtitleTracks.map((st) => ({ id: st.index, label: st.label })), [externalSubtitleTracks]);
+  // « Générer des sous-titres » (§187) : la génération du lecteur natif ; ses lignes, tant qu'il n'y a pas de fichier,
+  // par le calque de sous-titres de la page ; à la fin, la piste générée devient un `<track>`, choisie à sa place.
+  const refreshSubtitleTracks = useCallback(
+    async (wanted: ExternalSubtitleSource) => {
+      const pistes = await fetchPistes(itemId);
+      if (closedRef.current) return;
+      const tracks = serverSubtitleTracks(textSubtitles(pistes.subtitleTracks), locale, t);
+      // Présentée par Jellyfin : un index de la liste (`-1 - index`, la règle des fichiers à côté du film) ; le repli
+      // du serveur (un fichier gardé chez lui) : son adresse, en piste à part.
+      const index = -1 - wanted.id;
+      const final =
+        tracks.find((st) => st.index === index) ??
+        ({ index: wanted.id, url: wanted.url, label: `${languageName(wanted.language, locale) ?? wanted.language ?? "?"} — ${t("player.trackLabel.generated")}`, language: wanted.language, title: null, isDefault: false } as ExternalSubtitleTrack);
+      const next = tracks.some((st) => st.index === final.index) ? tracks : [...tracks, final];
+      setExternalSubtitleTracks(next);
+      currentSubtitleRef.current = final.index;
+      setCurrentSubtitleId(final.index);
+      reportPlayback("subtitle-gen", { ...logContext.current, event: "piste-finale", index: final.index });
+    },
+    [itemId, locale, t]
+  );
+  const subtitleGen = useLumenSubtitleGeneration({
+    itemId,
+    enabled: !bench && !scene.active,
+    videoRef,
+    positionNow,
+    logFields: () => ({ itemId, player: "lumen-serveur", lumenSession }),
+    externals,
+    locale,
+    t,
+    currentId: currentSubtitleId,
+    onFinal: (source) => void refreshSubtitleTracks(source),
+    onFailed: () => {
+      currentSubtitleRef.current = null;
+      setCurrentSubtitleId(null);
+    },
+    onWarning: setWarning,
+  });
+  useEffect(() => {
+    if (!warning) return;
+    const clear = setTimeout(() => setWarning(null), 6000);
+    return () => clearTimeout(clear);
+  }, [warning]);
+  const subtitleTracks = useMemo<Track[]>(
+    () => [
+      ...externalSubtitleTracks.map((st) => ({ id: st.index, label: st.label })),
+      ...subtitleGen.view.entries.map((entry) => ({
+        id: entry.track.number,
+        label: `${languageName(entry.track.language, locale) ?? entry.track.language ?? "?"} — ${t("player.trackLabel.generating")}`,
+        ...(entry.detail ? { detail: entry.detail } : {}),
+      })),
+    ],
+    [externalSubtitleTracks, subtitleGen.view.entries, locale, t]
+  );
+  const generationMenuProps = useMemo(
+    () =>
+      bench || (subtitleGen.view.targets.length === 0 && subtitleGen.view.resumable.length === 0)
+        ? undefined
+        : {
+            targets: subtitleGen.view.targets,
+            busy: subtitleGen.state.requesting !== null,
+            onGenerate: (code: string) =>
+              subtitleGen.request(code, (id) => {
+                // L'entrée temporaire devient la piste choisie : les `<track>` éteints, la ligne par le calque.
+                if (secondSubtitleRef.current !== null) {
+                  secondSubtitleRef.current = null;
+                  setSecondSubtitleId(null);
+                }
+                currentSubtitleRef.current = id;
+                const video = videoRef.current;
+                if (video) for (let i = 0; i < video.textTracks.length; i++) video.textTracks[i].mode = "disabled";
+                setCurrentSubtitleId(id);
+              }),
+            resumable: subtitleGen.view.resumable,
+            onResume: (code: string) => void subtitleGen.generation.resume(code),
+          },
+    [bench, subtitleGen]
+  );
 
   // « Diffuser » (§186) : AirPlay depuis l'élément même — le sélecteur ouvert dans le geste, et l'Apple TV lit l'adresse
   // munie du laissez-passer (`tv.{jeton}`), à la position, sans changer de lecteur. Les sous-titres ne passent pas au
@@ -1494,6 +1581,10 @@ export function LumenServerHost({
         // eslint-disable-next-line @next/next/no-img-element -- une image `data:` de la page, éphémère : rien à optimiser.
         <img src={freezeUrl} alt="" aria-hidden className={`pointer-events-none absolute inset-0 ${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"}`} />
       )}
+      {subtitleGen.line && !dualSubtitles.active && !isMini && !error && isGeneratingTrack(currentSubtitleId) && (
+        <SubtitleLayer primary={subtitleGen.line.text} primaryNotice={subtitleGen.line.notice} style={subtitleStyle} chromeEdges={chromeEdges} />
+      )}
+      {warning && !error && !isMini && <NativeWarning text={warning} />}
       {dualSubtitles.active && !isMini && !error && (
         <SubtitleLayer dual primary={dualSubtitles.primary} second={dualSubtitles.second} style={subtitleStyle} chromeEdges={chromeEdges} />
       )}
@@ -1548,10 +1639,11 @@ export function LumenServerHost({
           onChangeSubtitle={changeSubtitle}
           secondSubtitle={{ currentId: secondSubtitleId, onChange: changeSecondSubtitle }}
           replaySubtitle={replaySubtitle}
+          subtitleGeneration={generationMenuProps}
           hidden={!!error}
           loading={loading}
           openingQuiet={introCovering}
-          onChromeEdges={dualSubtitles.active ? setChromeEdges : undefined}
+          onChromeEdges={dualSubtitles.active || isGeneratingTrack(currentSubtitleId) ? setChromeEdges : undefined}
           introSkip={introSkip}
           recapSkip={recapSkip}
           creditsStart={creditsStart}

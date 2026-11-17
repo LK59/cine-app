@@ -13,7 +13,7 @@ vi.mock("@/lib/reportPlayback", () => ({ reportPlayback: (kind: string, fields: 
 const playback = { mode: "full", close: vi.fn(), minimize: vi.fn(), expand: vi.fn(), advance: vi.fn() };
 vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => playback, PLAYER_RELOAD_INTENT_KEY: "cine:player-reload-intent" }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr" }) }));
-type Controls = { onChangeAudio: (id: number) => void; onClose: () => void; onAdvance: () => void; onCastRequest?: () => void; audioTracks: { id: number; label: string }[]; currentAudioId: number | null; subtitleTracks: { id: number }[]; currentSubtitleId: number | null };
+type Controls = { subtitleGeneration?: { targets: { code: string }[]; onGenerate: (code: string) => void }; onChangeAudio: (id: number) => void; onClose: () => void; onAdvance: () => void; onCastRequest?: () => void; audioTracks: { id: number; label: string }[]; currentAudioId: number | null; subtitleTracks: { id: number }[]; currentSubtitleId: number | null };
 let controls: Controls | null = null;
 vi.mock("@/components/PlayerControls", () => ({
   PlayerControls: (props: Controls) => {
@@ -25,7 +25,8 @@ vi.mock("@/components/MiniPlayer", () => ({ MiniPlayerChrome: () => null, useMin
 vi.mock("@/components/PlaybackInfoPanel", () => ({ PlaybackInfoPanel: () => null }));
 vi.mock("@/components/player/server/ServerPlayerIntro", () => ({ ServerPlayerIntro: () => null }));
 vi.mock("@/components/player/server/ServerPlayerScreens", () => ({ ServerWaitPill: () => null }));
-vi.mock("@/components/player/SubtitleLayer", () => ({ SubtitleLayer: () => null }));
+const subtitleLines: (string | null)[] = [];
+vi.mock("@/components/player/SubtitleLayer", () => ({ SubtitleLayer: (props: { primary: string | null }) => (subtitleLines.push(props.primary), null) }));
 vi.mock("@/lib/playerHistory", () => ({ usePlayerBackClose: () => {} }));
 vi.mock("@/lib/usePlayerFocus", () => ({ usePlayerFocus: () => {} }));
 vi.mock("@/lib/useWakeLock", () => ({ useWakeLock: () => {} }));
@@ -81,6 +82,7 @@ const MASTER = [
   '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud-mp4a",LANGUAGE="en",NAME="EN 2.0",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="2",URI="a4.m3u8"',
 ].join("\n");
 
+let genOptions: object = { enabled: false };
 /** Le serveur : la séquence des verdicts (`eligibility`), la liste des sous-titres, la liste maître. */
 let verdicts: (object | "down")[] = [];
 const fetchMock = vi.fn(async (url: string) => {
@@ -91,6 +93,9 @@ const fetchMock = vi.fn(async (url: string) => {
   }
   if (url.includes("/pistes")) return new Response(JSON.stringify({ mediaSourceId: "g1", subtitleTracks: [] }), { status: 200 });
   if (url.includes("master.m3u8")) return new Response(MASTER, { status: 200 });
+  if (url.includes("/api/subtitle-gen/options")) return new Response(JSON.stringify(genOptions), { status: 200 });
+  if (url.endsWith("/api/subtitle-gen/jobs")) return new Response(JSON.stringify({ jobId: "job1", status: "running" }), { status: 200 });
+  if (url.includes("/api/subtitle-gen/jobs/job1/poll")) return new Response(JSON.stringify({ status: "running", rev: 1, done: 1, total: 10, cues: [{ i: 0, start: 599, end: 606, text: "Bonjour." }] }), { status: 200 });
   return new Response("{}", { status: 200 });
 });
 
@@ -160,6 +165,8 @@ beforeEach(() => {
   controls = null;
   state = { resumeSeconds: 600, preferences: null };
   verdicts = [verdictOf("2-aaaaaaaaaaaa")];
+  genOptions = { enabled: false };
+  subtitleLines.length = 0;
   [playback.close, playback.advance, declineLumen, onFallback, reloadServerPage, stopReporting, fetchMock].forEach((m) => m.mockClear());
   vi.stubGlobal("fetch", fetchMock);
   vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.resolve());
@@ -475,6 +482,28 @@ describe("les pistes son", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(last("start")).toMatchObject({ why: "audio-reload", audioTrack: 4, at: 640 });
+  });
+});
+
+describe("« Générer des sous-titres » (§187)", () => {
+  it("le menu propose la langue ; la génération devient le sous-titre choisi, ses lignes passent par le calque", async () => {
+    genOptions = { enabled: true, targets: ["en"], existing: [], jobs: [], quota: { used: 0, limit: 10 } };
+    await mount();
+    const el = element();
+    act(() => el.picture(600));
+    await flush();
+    expect(controls?.subtitleGeneration?.targets.map((x) => x.code)).toEqual(["en"]);
+    act(() => controls!.subtitleGeneration!.onGenerate("en"));
+    await flush();
+    // L'entrée temporaire : un numéro de génération, choisi, dans la liste des sous-titres.
+    expect(controls?.currentSubtitleId).toBeLessThanOrEqual(-1_000_000);
+    expect(controls?.subtitleTracks.map((x) => x.id)).toContain(controls?.currentSubtitleId);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500);
+    });
+    act(() => el.at(601));
+    await flush();
+    expect(subtitleLines).toContain("Bonjour.");
   });
 });
 
