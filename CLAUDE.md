@@ -673,6 +673,38 @@ hold (the scenes and their people), never server-only data such as named lines o
 `ASK_PERSON_ENABLED`, `SOFAR_ENABLED` are audiences (the last two follow the first when empty); share links
 get no AI feature whatever they say (`aiAudienceAllows`).
 
+**Lumen serveur is the same remuxer run by the server, served as stateless HLS fMP4** (DECISIONS §154–§163, §180,
+§185–§189; `docs/remux-serveur/README.md` is its reference). Behind an administrator's per-device option (Account panel →
+admin group → « Lecteur expérimental : remux serveur », `localStorage["cine:lumen-serveur"]`), a WebKit device with native
+HLS opens a film through `LumenServerHost` where it would have opened the native player (`choosePlayer` → `"lumen"`,
+`lumenWanted`); off, nothing changes and the player fingerprints are identical. Every list, init and segment is rebuilt
+from the file alone (`src/lib/lumenServer/`): the index read from the Cues, the **`cra` cut** (any keyframe, IDR or CRA,
+opens a segment; Apple's native HLS drops the RASL after a seek, MediaSource never did), segments built on demand in
+`worker_threads`, an index cache on disk (`DATA_DIR/lumen-index`). The address carries everything —
+`/api/lumen/{item}/{version}/{s}/{name}`, `{version}` = `LUMEN_FORMAT_VERSION` + the file's fingerprint — and **any served
+address gives the same bytes tomorrow** until that version moves: bump it whenever a list or segment would change for an
+existing file. Copyable audio (AAC, AC-3, E-AC-3, FLAC) is copied and repaired (§159); DTS, TrueHD, Opus, MP2/MP3 are
+**converted to E-AC-3** by a pinned ffmpeg when `LUMEN_AUDIO_CONVERT` allows (§161–§163, off by default; each segment a
+pure function of the file, cached in RAM and `DATA_DIR/lumen-audio`). All audio tracks sit in **one audio group** (format
+5, §185): a track change is `audioTracks[i].enabled`, checked 2 s later, else the list reopened in the page on the same
+element at `#t=` with `prepare` sent first and the last frame frozen on top — never a page reload.
+**Routes and security**: every route re-checks the administrator itself (`lumenAccess`, `assertVisible`), the proxy's
+`ADMIN_ONLY_READS` is only the first gate; an absence answers 410 (a stale version), 409 (not served) or 503, never
+404/400 (CrowdSec). The one cookieless access is an Apple TV's (§186): `…/{s}/tv.{token}/{name}`, a token of its own
+(`tvPass.ts`: its own key, signed `lumen` scope, administrator role, one title, one playback, the session alive, six
+hours), let through by the proxy (`lumenTvPassFor`) and re-verified by the route; a request that also carries a cookie
+must pass the ordinary check too. Relative URIs make every segment inherit the token; video segments fetched without a
+cookie feed `castProgress`. **Fallbacks**: before the first picture (refusal, code 4, 20 s without a picture) the native
+player takes over in the same page (`declineLumen`); after it, the playback recovers **on this path** (`recover`: the
+server re-read for up to 90 s across a deploy, a new version reopened at the position), the server player only when the
+file is no longer served or after three reopenings. « Améliorer les dialogues » hands back to the native player (§188).
+**Logs**: `player: "lumen-serveur"`, `path: "remux-serveur"`, the playback id as `lumenSession`; the log route appends the
+server's tally (`srv.*`) to `stop`, `stall`, `error`, `fallback`, `rebuild`; `audio` lines say `via` (`audioTracks`,
+`réouverture`), `tookMs`, `pictureMs`, `processing`; a pre-picture `fallback` says what Safari fetched (`seen`).
+`docker logs` and `server.log` carry `lumen/*` errors. **The bench page** `/lumen-test` (admin) runs passes against real
+titles on a device — cuts, levers, muxed audio, converted audio, codec switches — and sends one `kind: "lumen-test"`
+line per trial to `startup.log`.
+
 **The player** has its own reference: read `DOC-TECH.md` before touching `src/lib/webcodecs/`,
 and `docs/cycle-de-vie-lecteur.md` before touching `ExperimentalPlayerHost`, `PlayerHost` or the
 session layer — its states, transitions, races and known fragile paths, none of which the code

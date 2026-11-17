@@ -699,7 +699,8 @@ export function describeLine(line: Record<string, unknown>, t: T): string {
         from: strOf(line.fromTrack) ?? String(line.from ?? "?"),
         to: strOf(line.toTrack) ?? String(line.to ?? "?"),
         took: secs(numOf(line.tookMs)),
-        how: strOf(line.processing) ?? "",
+        // Lumen serveur dit aussi comment la piste a changé (`audioTracks`, `réouverture`, §185).
+        how: [strOf(line.processing), strOf(line.via)].filter(Boolean).join(" · "),
       });
     case "stall":
       return t("activity.line.stall", { at: clock(numOf(line.position)), took: secs(numOf(line.stalledMs)) });

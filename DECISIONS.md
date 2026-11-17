@@ -11858,3 +11858,29 @@ mini-lecteur. L'image figée d'une réouverture (§185) est dans le même cadre 
 
 **Porteurs.** `LumenServerHost.tsx` (`frameFitState`, `chooseDialogue`), `lumenServerChoice.ts` (`lumenWanted`,
 `dialogue`). **Tests.** `LumenServerHost.test.tsx`, `lumen-aiguillage.test.ts`.
+
+## 189. Le panneau technique et le journal de Lumen serveur : ce chemin dit comme tel, sans toucher aux autres (17/11/2026)
+
+**Règle.** Le panneau « Infos de lecture » de `LumenServerHost` est décrit par `describeLumenServerPlayback`
+(`src/lib/lumenPanel.ts`, à part de `playbackPanel.ts`, dont les deux fonctions n'ont pas bougé), libellés sous
+`player.info.lumen.*` dans les quatre langues : en tête « Remux serveur (HLS) » ; le fichier ; le son (la piste, son
+codec, sa livraison — `processingOf` : copiée telle quelle ou convertie et vers quoi —, ses réparations §159) ; le remux
+serveur (chemin, **version de format**, **découpe** `cra`, segments et cible, reprise, AirPlay, identifiant de lecture) ;
+**ce que l'appareil a reçu** (segments vidéo et son, débit de réception, par Resource Timing — Safari y expose les
+requêtes d'AVFoundation) ; **le relevé du serveur** pour cette lecture (segments servis, volume, construction moyenne et
+pire, attente en file, son converti : fabriqués / mémoire / disque, 503/410/500), lu par
+`GET /api/lumen/{id}/chrono?s=…&stats=1` (`lumenPlaybackFields`, administrateur, sans chronométrer la lecture) toutes
+les 3 s tant que le panneau est ouvert ; et **les incidents** de la séance en notes (relances avant l'image,
+réouvertures et leur motif, changements de piste et leur méthode, AirPlay établi et fini). Le rapport copiable masque le
+jeton de l'adresse (`tv.…`).
+
+**Le journal**, relu événement par événement : `start` (ouverture, relance), `opening` (première image), `seek` (chaque
+saut, `advanceMs`), `audio` (chaque changement : `via` `audioTracks` / `réouverture` / `refus`, `tookMs`, `pictureMs`,
+`processing`), `cast` et `fallback` `cast: true` (AirPlay), `fallback` (`to`, `planned`, `seen` avant l'image), `rebuild`
+(réouverture), `stall`, `error`, `stop`, `subtitle-gen`. La page d'activité les lisait déjà (`seances.ts` : séance
+`lumen-serveur`, relances, casts, replis prévus) ; elle affiche désormais la méthode d'un changement de piste à côté de
+son traitement (`parts.tsx`, `via` — absent des lignes des autres lecteurs, qui ne changent donc pas).
+
+**Porteurs.** `lumenPanel.ts`, `LumenServerHost.tsx` (`panel`, `events`, `noteEvent`, la relève du relevé), la route
+`chrono` (`stats=1`), `src/locales/*.json` (`player.info.lumen`), `parts.tsx`. **Tests.** `lumen-panneau.test.ts` (chaque
+libellé dans les quatre langues, ce que le panneau dit), `lumenServer-trials.test.ts` (`stats=1`).

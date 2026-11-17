@@ -213,6 +213,17 @@ describe("la route `chrono`", () => {
     expect(v.first!).toBeGreaterThanOrEqual(v.ready!);
   });
 
+  it("`stats=1` : le relevé du serveur pour le panneau du lecteur (§189), sans chronométrer la lecture", async () => {
+    const verdict = await eligibility("?s=lecture-st");
+    await (await get(verdict.master)).text();
+    await (await get(`${baseOf(verdict.master)}v/0.m4s`)).arrayBuffer();
+    const stats = (await (await chrono("?s=lecture-st&stats=1")).json()) as Record<string, number>;
+    expect(stats["srv.segV"]).toBe(1);
+    expect(stats["srv.req"]).toBe(2);
+    const records = (await (await chrono("?s=lecture-st&records=1")).json()) as { entries: unknown[] };
+    expect(records.entries).toEqual([]);
+  });
+
   it("une lecture qui n'a pas demandé la chronologie n'en tient pas", async () => {
     const verdict = await eligibility("?s=lecture-n");
     await (await get(verdict.master)).text();

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { lengthHeader } from "@/lib/responseFraming";
-import { isPlaybackId, lumenChronoOf, markChrono, serverClockMs } from "@/lib/lumenServer/playbackStats";
+import { isPlaybackId, lumenChronoOf, lumenPlaybackFields, markChrono, serverClockMs } from "@/lib/lumenServer/playbackStats";
 import { goneResponse, lumenAccess, NO_STORE } from "@/lib/lumenServer/service";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +46,9 @@ export async function GET(req: NextRequest, { params }: Params) {
     const body = new Uint8Array(randomBytes(n));
     return new NextResponse(body, { headers: { ...NO_STORE, "Content-Type": "application/octet-stream", ...lengthHeader(n) } });
   }
+  // `&stats=1` : le relevé du serveur pour cette lecture et ce compte (`srv.*`), lu par le panneau technique du lecteur
+  // (§189) — sans marquer la lecture comme chronométrée.
+  if (q.get("stats") === "1") return NextResponse.json(lumenPlaybackFields(s, session.u), { headers: NO_STORE });
   if (q.get("records") === "1") {
     return NextResponse.json({ now: serverClockMs(), entries: lumenChronoOf(s, session.u) ?? [] }, { headers: NO_STORE });
   }

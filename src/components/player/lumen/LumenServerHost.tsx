@@ -54,6 +54,8 @@ import { isGeneratingTrack } from "@/lib/subtitleGen/generation";
 import type { ExternalSubtitleSource } from "@/lib/webcodecs/externalSubtitles";
 import { languageName } from "@/lib/trackLabel";
 import { useLumenSubtitleGeneration } from "./useLumenSubtitleGeneration";
+import { describeLumenServerPlayback, receivedOf } from "@/lib/lumenPanel";
+import { formatTime } from "@/lib/playerClock";
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
 import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
 import { recordsResume } from "@/components/player/session/habitWatch";
@@ -106,6 +108,7 @@ import {
   textSubtitles,
   verdictRefusal,
   type AudioTrackLike,
+  type LumenAudioFacts,
   type LumenAudioChoice,
   type LumenVerdict,
   type MasterAudio,
@@ -344,7 +347,28 @@ export function LumenServerHost({
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(session.introArt?.logoUrl ?? null);
   const [playSession, setPlaySession] = useState<{ itemId: string; playSessionId: string; mediaSourceId: string } | null>(null);
-  const [panel, setPanel] = useState<{ video: string; audio: string; master: string; segments: number; targetS: number; version: string; resumeBy: string } | null>(null);
+  /** Ce que le panneau technique montre de l'ouverture (§189) ; le reste est lu à l'ouverture du panneau. */
+  const [panel, setPanel] = useState<{
+    video: { codec: string | null; width: number | null; height: number | null; rangeType: string | null } | null;
+    container: string | null;
+    master: string;
+    segments: number;
+    targetS: number;
+    version: string;
+    resumeBy: string;
+    cut: string | null;
+    /** Les pistes son : faits du serveur, choix, étiquettes — lus au rendu, donc tenus dans l'état. */
+    audioFacts: LumenAudioFacts[];
+    choices: LumenAudioChoice[];
+    labels: Map<number, string>;
+  } | null>(null);
+  /** Les incidents de la séance, en mots, pour le panneau : relances, réouvertures, pistes, AirPlay (§189). */
+  const [events, setEvents] = useState<string[]>([]);
+  const noteEvent = useCallback((text: string) => setEvents((previous) => [...previous.slice(-9), text]), []);
+  const noteEventRef = useRef(noteEvent);
+  const [serverStats, setServerStats] = useState<Record<string, number | string> | null>(null);
+  const [received, setReceived] = useState<ReturnType<typeof receivedOf>>(null);
+
   const subtitleStyle = useSyncExternalStore(subtitleStyleStore.subscribe, subtitleStyleStore.snapshot, subtitleStyleStore.serverSnapshot);
   /** L'image d'avant, figée par-dessus l'élément pendant une réouverture pour changer de piste (§185). */
   const [freezeUrl, setFreezeUrl] = useState<string | null>(null);
@@ -544,7 +568,9 @@ export function LumenServerHost({
       versionRef.current = version;
       if (pictureRef.current) {
         reportPlayback("rebuild", lumenRebuildFields(logContext.current, { reason, at, fromVersion, toVersion: version }, lumenSession, tallyRef.current.backgroundFacts(Date.now())));
+        noteEvent(t("player.info.lumen.eventReopen", { at: formatTime(at), reason }));
       } else {
+        noteEvent(t("player.info.lumen.eventRetry", { reason }));
         restartsRef.current.retry = (restartsRef.current.retry ?? 0) + 1;
         reportPlayback("start", { ...lumenStartFields(logContext.current, { why: "retry", at, audioTrack: currentAudioRef.current, lumenSession, version, fragment: at > 0, negotiateMs: 0 }), trigger: reason.slice(0, 160) });
       }
@@ -555,7 +581,7 @@ export function LumenServerHost({
       setVideoKey((k) => k + 1);
       setSrc(withStartFragment(master, at));
     },
-    [lumenSession]
+    [lumenSession, noteEvent, t]
   );
 
   /** Avant la première image : une relance à la même adresse une seconde plus tard (un segment « occupé »), une fois. */
@@ -736,13 +762,17 @@ export function LumenServerHost({
       const audioFacts = verdict.audio.find((a) => a.number === verdict.audioTrack);
       const resumeBy = fragment ? "fragment" : "début";
       setPanel({
-        video: `${info.video?.codec ?? "?"} ${info.video?.width ?? "?"}×${info.video?.height ?? "?"}${info.video?.rangeType ? ` ${info.video.rangeType}` : ""}`,
-        audio: audioFacts ? `${audioFacts.codec} ${audioFacts.channels} canaux${audioFacts.repairs.length ? ` (${audioFacts.repairs.join(", ")})` : ""}` : "aucun",
+        video: info.video ? { codec: info.video.codec ?? null, width: info.video.width ?? null, height: info.video.height ?? null, rangeType: info.video.rangeType ?? null } : null,
+        container: info.container ?? null,
         master,
         segments: verdict.segments,
         targetS: verdict.targetS,
         version: verdict.version,
         resumeBy,
+        cut: verdict.cutFacts?.cut ?? null,
+        audioFacts: verdict.audio,
+        choices: audio,
+        labels,
       });
       reportPlayback(
         "start",
@@ -920,6 +950,7 @@ export function LumenServerHost({
           lumenSession
         )
       );
+      noteEventRef.current(t("player.info.lumen.eventAudio", { track: done.toTrack, via: "réouverture", ms: Date.now() - done.startedAt0 }));
     };
     // L'horloge repartie après la réouverture : le changement est fini pour le spectateur.
     const onAudioAdvance = () => {
@@ -948,7 +979,7 @@ export function LumenServerHost({
       watchdogRef.current = null;
     };
     // `src` et la clé de l'élément : chaque adresse posée (ouverture, relance) réarme tout.
-  }, [src, videoKey, lumenSession, mountedAt, retryOpening]);
+  }, [src, videoKey, lumenSession, mountedAt, retryOpening, t]);
 
   // ── Les sauts, les attentes, les blocages — le journal et le bilan ──────────────────────────────────
   useEffect(() => {
@@ -1155,6 +1186,16 @@ export function LumenServerHost({
   useServerStopOnLeave({ bench, stopFields, stopAlreadySent, reportStop, logContext, closedRef, handedOverRef, tallyRef });
   useServerTimeline(itemId, videoRef, lastKnownTime, linkMeterRef, logSession);
   useServerPositionWatch(videoRef, videoKey, itemId, bench, castResume, lastKnownTime, tallyRef, isSceneRef);
+  const castWasRef = useRef(false);
+  const setCastActiveNoted = useCallback(
+    (value: boolean | ((previous: boolean) => boolean)) => {
+      const active = typeof value === "function" ? value(castWasRef.current) : value;
+      if (active !== castWasRef.current) noteEvent(t(active ? "player.info.lumen.eventCastOn" : "player.info.lumen.eventCastOff", { at: formatTime(videoRef.current?.currentTime ?? 0) }));
+      castWasRef.current = active;
+      setCastActive(active);
+    },
+    [noteEvent, t]
+  );
   // AirPlay (§186) : la route établie et sa fin au journal (`cast`, `fallback` `cast: true`), l'état pour les commandes.
   useCastRoute({
     videoRef,
@@ -1163,7 +1204,7 @@ export function LumenServerHost({
     castAttempted: castAttemptedRef,
     closingRef: closedRef,
     castActiveRef,
-    setCastActive,
+    setCastActive: setCastActiveNoted,
     logContext,
     watched,
     castResume,
@@ -1311,13 +1352,14 @@ export function LumenServerHost({
         const applied = enabledAudioNumber(now, masterAudioRef.current) === id;
         if (applied) {
           reportPlayback("audio", lumenAudioFields(logContext.current, { from, to: id, fromTrack, toTrack, via: "audioTracks", applied, tookMs: Date.now() - startedAt0, at, processing }, lumenSession));
+          noteEvent(t("player.info.lumen.eventAudio", { track: toTrack, via: "audioTracks", ms: Date.now() - startedAt0 }));
           return;
         }
         reopenForAudio({ from, to: id, at: positionNow(), fromTrack, toTrack, processing, startedAt0, first: "audioTracks sans effet en 2 s" });
       }, AUDIO_SETTLE_MS);
       audioSettleRef.current = settle;
     },
-    [bench, itemId, lumenSession, positionNow, reportPositionNow, reopenForAudio]
+    [bench, itemId, lumenSession, positionNow, reportPositionNow, reopenForAudio, noteEvent, t]
   );
   useEffect(() => () => {
     if (audioSettleRef.current) clearTimeout(audioSettleRef.current);
@@ -1529,32 +1571,55 @@ export function LumenServerHost({
   const resizing = useViewportResizing();
   usePlayerFocus(containerRef, mode === "full");
 
+  // Le panneau ouvert : ce que l'appareil a reçu (Resource Timing) et le relevé du serveur, relus toutes les 3 s (§189).
+  useEffect(() => {
+    if (!showPlaybackInfo) return;
+    let gone = false;
+    const read = () => {
+      setReceived(receivedOf(lumenSession));
+      void fetch(`/api/lumen/${itemId}/chrono?s=${encodeURIComponent(lumenSession)}&stats=1`, { signal: AbortSignal.timeout(5000) })
+        .then((res) => (res.ok ? (res.json() as Promise<Record<string, number | string>>) : null))
+        .then((stats) => {
+          if (!gone && stats) setServerStats(stats);
+        })
+        .catch(() => {});
+    };
+    const first = setTimeout(read, 0);
+    const timer = setInterval(read, 3000);
+    return () => {
+      gone = true;
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, [showPlaybackInfo, itemId, lumenSession]);
+
   const panelData = useMemo<PlaybackPanelData | null>(() => {
     if (!panel) return null;
+    const audioNow = currentAudioId === null ? null : (panel.audioFacts.find((a) => a.number === currentAudioId) ?? null);
+    const choice = currentAudioId === null ? null : (panel.choices.find((a) => a.number === currentAudioId) ?? null);
+    const described = describeLumenServerPlayback(
+      {
+        video: panel.video,
+        container: panel.container,
+        audio: audioNow && choice ? { label: panel.labels.get(audioNow.number) ?? String(audioNow.number), codec: audioNow.codec, processing: processingOf(choice), repairs: audioNow.repairs } : null,
+        version: panel.version,
+        cut: panel.cut,
+        segments: panel.segments,
+        targetS: panel.targetS,
+        resumeBy: panel.resumeBy,
+        lumenSession,
+        received,
+        server: serverStats,
+        events,
+        airplay: castActive,
+      },
+      t
+    );
     return {
-      headline: { name: "Lumen serveur", detail: "remux serveur · HLS natif", tone: "good" },
-      notes: ["Le serveur remultiplexe le fichier ; Safari lit la liste HLS lui-même."],
-      sections: [
-        {
-          title: "Fichier",
-          rows: [
-            { label: "Vidéo", value: panel.video },
-            { label: "Son", value: panel.audio },
-          ],
-        },
-        {
-          title: "Remux serveur",
-          rows: [
-            { label: "Segments", value: `${panel.segments} (cible ${panel.targetS} s)` },
-            { label: "Version", value: panel.version },
-            { label: "Reprise", value: panel.resumeBy },
-            { label: "Lecture", value: lumenSession },
-          ],
-        },
-      ],
-      report: { error: null, elapsedMs: null, title, itemId, file: { master: panel.master, version: panel.version }, pathReason: "Lumen serveur — remux serveur, HLS natif", diagnostics: {}, running: true },
+      ...described,
+      report: { error: null, elapsedMs: null, title, itemId, file: { master: panel.master.replace(/\/tv\.[^/]+\//, "/tv.…/"), version: panel.version }, pathReason: t("player.info.lumen.name"), diagnostics: {}, running: true },
     };
-  }, [panel, title, itemId, lumenSession]);
+  }, [panel, title, itemId, lumenSession, currentAudioId, received, serverStats, events, castActive, t]);
 
   function toggleMiniPlay() {
     const video = videoRef.current;

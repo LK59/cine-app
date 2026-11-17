@@ -3,8 +3,9 @@
 Conception du 16/11/2026. Étapes 1 (signalisation, §154), 2 (le moteur, §155), 3 (routes et sécurité, §156),
 3b (recensement, découpes d'essai et banc Safari, §157), 3c (`cra` la règle et l'index des Cues, §158 ;
 comparatif avec le lecteur actuel ; cibles courtes), 3d (le son copié réparé : SBR implicite, silence, §159), 3e (la
-chronologie, §160) et la **phase 2** (la conversion du son, §161 à §163, option coupée par défaut) faites ; seule la
-page de banc `/lumen-test` les appelle.
+chronologie, §160) et la **phase 2** (la conversion du son, §161 à §163, option coupée par défaut) faites ; l'étape 4
+(le vrai lecteur, §180) et l'étape 4b (piste entre codecs, AirPlay, sous-titres générés, bandes noires, panneau,
+§185 à §189) derrière l'option d'appareil de l'administrateur.
 Les quatre sections jointes détaillent chaque partie, avec références `chemin:ligne` et mesures ; ce document en
 tire les décisions, l'architecture et l'ordre de travail.
 
@@ -900,8 +901,8 @@ position, ligne `rebuild` avec `fromVersion`/`toVersion`.
 **Réglages serveur.** `LUMEN_MUX_AUDIO=1` (environnement du conteneur) : l'essai du son multiplexé dans les segments
 vidéo (`m1`) pour les lectures de l'application. Coupé par défaut, non prouvé.
 
-**Ce qui manque encore**, voulu ou à reprendre : AirPlay (étape 5 ; « Diffuser » passe au lecteur serveur),
-« Améliorer les dialogues », « Générer des sous-titres », l'ajustement aux bandes noires, le plafond HDR, la version
+**Ce qui manque encore**, voulu ou à reprendre (AirPlay, « Générer des sous-titres », les bandes noires et le
+changement de piste entre codecs sont faits à l'étape 4b ; « Améliorer les dialogues » rend la main au lecteur actuel) : le plafond HDR, la version
 allégée sur connexion lente, le cache de reprise sur l'appareil, les pistes que le serveur ne sert pas (conversion du
 son, étape 6 — elles passent au lecteur serveur).
 
@@ -921,6 +922,115 @@ son, étape 6 — elles passent au lecteur serveur).
 9. Un titre que le serveur ne sert pas (*Le Prestige*, DTS) : le lecteur actuel s'ouvre, ligne `fallback`
    `to: natif`, `planned: true`.
 
+## Étape 4b — piste entre codecs, AirPlay, sous-titres générés, bandes noires, dialogues (17/11/2026, DECISIONS §185 à §189)
+
+Sur le vrai lecteur (`LumenServerHost`), toujours derrière l'option d'appareil de l'administrateur. Le lecteur de
+production ne change pas : empreintes identiques, rien pour les comptes sans l'option.
+
+### 1. Le changement de piste entre codecs, sans rechargement (§185)
+
+**Ce que dit Apple.** HLS Authoring Specification for Apple Devices, annexe « Audio rendition groups and variants » :
+« Create one audio group for each pair of codec and channel count. **Each group needs to have every language in
+it.** » ; « Generally speaking, **the player doesn't switch between audio codecs** » (sauf entre variantes AAC, entre
+sans perte et AAC, et vers une sortie Spatial Audio) ; et la variante est répétée par groupe (« you want each codec to
+be associated with every variant »). RFC 8216 §4.3.4.1.1 : des groupes du même type « MUST have the same set of
+members ». rfc8216bis §4.4.6.2 : le `CODECS` d'une variante liste « every media format in any of the renditions » de
+son groupe — un groupe peut donc mêler les codecs.
+
+**Ce qu'on servait** (formats 1 à 4) : un groupe par codec et une variante par groupe — la forme d'Apple sans sa
+condition, puisque nos langues n'existent chacune que dans un codec (VF AC-3, VO E-AC-3). Changer de langue, c'était
+demander au lecteur de changer de variante pour une sélection de piste. Safari annonçait pourtant les pistes des deux
+groupes dans `audioTracks` (*American Housewife*, AC-3 2.0 + E-AC-3 5.1, journal de `/lumen-test` du 16/11).
+
+**Ce qu'on sert** (format 5) : **un seul groupe**, toutes les pistes, une seule variante dont le `CODECS` les liste
+toutes. Un fichier à un seul codec garde sa liste à l'octet près. 15 % des fichiers ont des pistes de plusieurs codecs
+(recensement : AC-3 + E-AC-3 702, AAC + AC-3 260, AC-3 + DTS 222, AAC + E-AC-3 119).
+
+**Dans l'hôte** : `audioTracks[i].enabled` d'abord, la piste allumée relue 2 s après ; sinon **la liste rouverte dans
+la page** : même élément, `?audio=N#t=<position>`, `prepare` lancé juste avant, l'image d'avant figée par-dessus jusqu'à
+la nouvelle. Plus de rechargement de la page. Ligne `audio` : `via` (`audioTracks`, `réouverture`), `tookMs`,
+`pictureMs`, `frozen`, `first`, `processing`.
+
+**Pas de banc WebKit Linux** pour la réouverture : WebKitGTK lit le HLS par GStreamer, pas par AVFoundation.
+
+### 2. AirPlay (§186)
+
+L'élément porte l'adresse munie d'un laissez-passer dans le chemin (`…/{lecture}/tv.{jeton}/master.m3u8`), que le
+bouton AirPlay tend au téléviseur ; les URI relatives des listes en héritent. Jeton à part de `castToken` : sa clé,
+sa portée `lumen`, un administrateur, un titre, une lecture, la session vivante, six heures. Proxy et route posent la
+même question (`lumenTvPassFor` / `verifyLumenTvPass`) ; une requête avec cookie passe en plus le contrôle ordinaire.
+Chaque segment vidéo demandé sans cookie donne sa position au relais (`castProgress`). Avec un sous-titre affiché,
+« Diffuser » passe au lecteur serveur, qui les porte au téléviseur.
+
+### 3. « Générer des sous-titres » (§187)
+
+La génération du lecteur natif (`SubtitleGeneration`, §70), telle quelle : menu, demande avec la position, sondage,
+messages d'état. Ses lignes passent par le calque de sous-titres de la page tant qu'il n'y a pas de fichier ; à la fin,
+la liste des sous-titres est relue et la piste générée devient un `<track>`, choisie à sa place.
+
+### 4. L'ajustement aux bandes noires (§188)
+
+`useFrameFit` posé sur l'élément comme dans le lecteur natif (deux cadres, interrupteur dans les commandes s'il y a un
+agrandissement à défaire, rien en mini-lecteur).
+
+### 5. « Améliorer les dialogues » (§188) : aucune des deux voies maintenant
+
+Web Audio sur l'élément HLS natif : WebKit n'y fait pas passer le son sur iPhone (sonde 8.39.0, §68), et un contexte Web
+Audio est suspendu en arrière-plan — ce que ce chemin est venu régler. Une piste convertie côté serveur avec le
+traitement : le traitement validé est en TypeScript, avec une mémoire de plusieurs secondes, alors qu'un segment doit
+être une fonction du fichier — un pré-roulement et une preuve de jointure à faire, toutes les pistes copiées à convertir.
+Fait à la place : le réglage choisi dans ce lecteur rend la lecture au lecteur actuel à la position, et `lumenWanted`
+décline ce chemin tant que le réglage est allumé sur l'appareil.
+
+### 6. Le panneau technique, le journal (§189)
+
+Le panneau « Infos de lecture » de cet hôte (`describeLumenServerPlayback`, `src/lib/lumenPanel.ts`, quatre langues) :
+« Remux serveur (HLS) », la version de format, la découpe, les segments et la cible, la piste et sa livraison (copiée,
+réparée, convertie et vers quoi), les segments reçus par l'appareil et le débit de réception (Resource Timing), le
+relevé du serveur pour la lecture (`/api/lumen/{id}/chrono?stats=1` : segments servis, volume, construction, file, son
+converti), AirPlay, et les incidents de la séance (relances, réouvertures, changements de piste, AirPlay). Les panneaux
+des autres lecteurs n'ont pas bougé (`playbackPanel.ts` intact). Au journal, chaque geste a sa ligne : `start`,
+`opening`, `seek`, `audio` (`via`, `tookMs`, `pictureMs`), `cast` et `fallback` `cast: true` (AirPlay), `fallback`,
+`rebuild`, `stall`, `error`, `stop` ; l'activité affiche la méthode d'un changement de piste à côté de son traitement.
+
+### Un défaut vu en production le 16/11 au soir : *Mr. Robot* S01E03, « code 4 » avant l'image
+
+Première lecture réelle sur l'iPhone de l'administrateur (10.46.0) : refus de l'élément 336 ms après l'adresse posée,
+repli propre sur le lecteur actuel en 0,6 s. Le journal d'accès du relais montre que Safari a lu la liste maître, la
+liste vidéo, puis la liste maître encore — **sans demander la liste son ni l'init** : le refus vient de ce que disent
+les listes, pas des octets. Rejoué ici depuis le fichier (lecture seule) : rien d'anormal dans les listes (CODECS
+`hvc1.2.4.H120.90,ec-3`, `TARGETDURATION` 14 pour un plus long segment de 14,18 s), sauf **`BANDWIDTH=33881422`**
+(segment 159 : 22 Mo en 5,2 s) pour une moyenne de 2,5 Mb/s — le plus haut débit de crête de tous les titres déjà lus,
+au-dessus du plafond du niveau HEVC annoncé (niveau 4, palier haut : 30 Mb/s). *Pearl Harbor*, même profil et même
+niveau à 18 Mb/s de crête, joue. Hypothèse, non prouvée : AVFoundation écarte une variante dont le débit annoncé dépasse
+ce que le niveau permet, et sans autre variante, refuse la source. **À trancher sur l'iPhone** : `/lumen-test`, mode
+manuel, *Mr. Robot* S01E03 (`d9bff9f6b05cddb47542385563d2a732`), une fois tel quel, une fois avec « débit annoncé moyen »
+(`?bw=moyen`). Si la seconde joue, la règle à écrire est de borner le `BANDWIDTH` annoncé au plafond du niveau (et la
+version de format monte). Depuis 4b, la ligne `fallback` d'un refus d'avant l'image porte `seen` : ce que Safari a
+demandé, dans l'ordre, avec la durée et la taille.
+
+### Protocole, sur l'iPhone puis l'Apple TV (l'option allumée sur l'appareil)
+
+1. **Changement de codec, sans rechargement.** `/lumen-test` → « Changement de codec » (~8 min, son audible) : quatre
+   titres, chacun sous la règle et sous l'ancienne forme. Entendre chaque nouvelle piste. Lire la passe :
+   `jq 'select(.kind=="lumen-test" and .auto.pass=="codecs") | .runs[0] | {trial: .trial, audioSwitches}' startup.log`.
+   Ce qui tranche : la règle (un groupe) appliquée partout (`applied: true`), sans `reloaded`.
+2. **Dans le vrai lecteur.** *The Mandalorian* S01E01 (VF AC-3, VO E-AC-3) : changer de piste en lecture, puis en
+   pause. Attendu : la nouvelle langue en moins de 2 s, sans écran noir ni recharge ; ligne `audio` `via: "audioTracks"`
+   (ou `réouverture` avec `pictureMs` et `first` — dire laquelle).
+3. **AirPlay.** Pendant une lecture, « Diffuser » → choisir l'Apple TV. Attendu : la télévision joue à la position, le
+   téléphone devient télécommande ; ligne `cast` « diffusion établie ». Verrouiller le téléphone 5 minutes : la
+   télévision continue, et la position avance chez Jellyfin (ligne `cast` `serverRelay: true`). Arrêter depuis le centre
+   de contrôle : ligne `fallback` « fin de diffusion ». Avec un sous-titre affiché, « Diffuser » passe au lecteur serveur.
+4. **Générer des sous-titres.** Un titre sans sous-titres anglais : menu sous-titres → « Générer » → anglais. Attendu :
+   « Préparation des sous-titres… », puis les lignes ; à la fin, la piste « généré » choisie, sans coupure.
+5. **Bandes noires.** Un film en 2.39 avec bandes incrustées : l'interrupteur dans les réglages, l'image agrandie.
+6. **Dialogues.** Réglages → « Améliorer les dialogues » → Améliorer : la lecture repasse au lecteur actuel à la
+   position (ligne `fallback` `planned: true`) ; tant que le réglage reste allumé, Lumen serveur ne s'ouvre plus.
+7. **Panneau.** Infos de lecture : « Remux serveur (HLS) », format 5, `cra`, segments reçus qui montent, le relevé du
+   serveur ; après un changement de piste par réouverture ou un AirPlay, la ligne d'incident.
+8. ***Mr. Robot* S01E03** : le test du paragraphe précédent.
+
 ## Ordre de travail
 
 1. **Preuve sur appareil** : une instance jetable sert la liste et les segments d'un fichier copiable ; on l'ouvre
@@ -933,7 +1043,7 @@ son, étape 6 — elles passent au lecteur serveur).
    `lumen` attend l'étape AirPlay, `shareGate` n'a pas d'entrée (lien refusé), les noms restent `.m4s`.
 4. **Client** : option du Compte, route `"lumen"`, `LumenServerHost`, repli, journal, page d'activité. **Fait** (§180),
    derrière l'option d'appareil de l'administrateur.
-5. **AirPlay** : liste signée vers l'Apple TV, `castProgress` par segment.
+5. **AirPlay** : liste signée vers l'Apple TV, `castProgress` par segment. **Fait** (étape 4b, §186), à éprouver sur une Apple TV.
 6. **Son converti** : ffmpeg minimal, grille de segments, cache disque. **Fait** (« Phase 2 », §161 à §163), sauf la
    bascule en cours de lecture (avec l'étape 4).
 7. **Débit adaptatif à la volée** : la liste maître déclare d'emblée des variantes allégées (1080p ~6 Mb/s, 720p

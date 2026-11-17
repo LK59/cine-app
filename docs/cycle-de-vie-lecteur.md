@@ -312,18 +312,32 @@ séance HLS. Le film est remultiplexé par le serveur et lu par `<video src="…
   autre version (les segments répondent 410) : la nouvelle liste à la position (`rebuild`, « version changée ») ; même
   version : rouverte telle quelle ; fichier plus servi, ou plus de trois réouvertures : le lecteur serveur par
   `handOver` (sur WebKit, le rechargement direct de `serverReload.ts`).
-- **Piste audio** : dans le groupe que Safari expose (même codec), `audioTracks[i].enabled` — relié au menu par la
-  liste maître que la page lit (`parseMasterAudio`) ; hors du groupe, la page rechargée avec une intention **sans**
-  `server` (l'aiguillage la renvoie ici, la séance du journal continue par `reloadCarry.continues`) ; une piste non
-  servie (DTS, TrueHD), le lecteur serveur sur cette piste.
+- **Piste audio** (§185, depuis le format 5 toutes les pistes sont dans un seul groupe) : `audioTracks[i].enabled` —
+  relié au menu par la liste maître que la page lit (`parseMasterAudio`) —, la piste allumée relue 2 s après ; absente
+  ou non appliquée, **la réouverture pour changer de piste** (`reopenForAudio`) : le **même élément**, la liste maître
+  `?audio=N#t=<position>`, `prepare` lancé avant, l'image d'avant figée par-dessus (`freezeUrl`) jusqu'à `loadeddata`,
+  la pause gardée ; la ligne `audio` part quand l'horloge repart. Une erreur avant l'image de cette réouverture : la
+  ligne `audio` `applied: false`, puis `recover` (élément neuf, sur la nouvelle piste). Pendant une réouverture
+  (`pendingAudioRef`), un autre changement de piste est ignoré. Une piste non servie : le lecteur serveur sur cette piste.
+- **AirPlay** (§186) : l'élément porte dès l'ouverture l'adresse munie du laissez-passer (`tv.{jeton}`, demandée par
+  `?tv=1`) ; « Diffuser » ouvre le sélecteur de l'élément (avec un sous-titre affiché, le lecteur serveur comme avant).
+  `useCastRoute` (`castSession: false`) écrit `cast` et la fin ; pendant la route (`castActiveRef`), §24 ne met pas le
+  téléviseur en pause au retour du téléphone. La séance reste ici, rien n'est rendu au téléphone à la fin.
+- **« Améliorer les dialogues »** (§188) : choisi ici, le réglage retenu puis `fallback` `to: natif` `planned` et
+  `reopenAt` (le même titre à la position, par `advance`, `declineLumen` posé avant) ; `lumenWanted` décline ce chemin
+  tant que le réglage reste allumé.
+- **Sous-titres générés** (§187) : une entrée temporaire (`isGeneratingTrack`) éteint les `<track>` et montre les lignes
+  de `SubtitleGeneration` par le calque ; la piste finale, relue dans `/pistes`, devient un `<track>` choisi.
 - **Arrière-plan** : §24 s'applique (`BackgroundWatch`), contrairement au lecteur serveur — c'est une lecture.
 
 ### Ce qu'il écrit au journal
 
 `player: "lumen-serveur"`, `path: "remux-serveur"`, `session` = l'identifiant de lecture `s` du serveur
 (`lumenSession`). `start` (`why` : `open`, `retry`, `audio-reload` ; `resumeBy`, `prepared`, `negotiateMs`),
-`opening`, `seek` (avec `advanceMs`), `audio` (`via` : `rendition`, `rechargement`, `refus` ; `applied`), `stall`,
-`rebuild` (réouverture, `fromVersion`/`toVersion`), `fallback` (`to` : `natif` / `serveur`, `planned`), `error`,
+`opening`, `seek` (avec `advanceMs`), `audio` (`via` : `audioTracks`, `réouverture`, `refus` — `rendition` et
+`rechargement` avant le format 5 ; `applied`, `tookMs`, `pictureMs`, `frozen`, `first`, `processing`), `cast` (AirPlay), `subtitle-gen`, `stall`,
+`rebuild` (réouverture, `fromVersion`/`toVersion`), `fallback` (`to` : `natif` / `serveur`, `planned` ; `seen` avant
+l'image : ce que Safari a demandé ; `cast: true` pour la fin d'un AirPlay), `error`,
 `stop` (le bilan de `useServerSessionRecord` + `frames.*`). La route du journal joint `srv.*` (`lumenPlaybackFields`)
 à `stop`, `stall`, `error`, `fallback`, `rebuild`.
 
