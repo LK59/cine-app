@@ -5,6 +5,7 @@ import {
   FreezeWatch,
   LEVER_SERIES,
   SAFARI_WAIT_SERIES,
+  LIGHT_SERIES,
   PRESETS,
   QUICK_SERIES,
   SERIES,
@@ -107,6 +108,16 @@ describe("le plan des séries", () => {
     expect(QUICK_SERIES.filter((t) => t.modes?.early).map((t) => t.modes?.early)).toEqual(["serveur", "serveur"]);
     // Les leviers sont des essais serveur : le lecteur actuel n'en a pas.
     expect(QUICK_SERIES.filter((t) => t.modes).every((t) => t.player === "serveur")).toBe(true);
+  });
+
+  it("la version allégée : chaque échelon seul à côté de l'origine du même titre, une source HDR et une SDR", () => {
+    expect(planOf("allégée")).toBe(LIGHT_SERIES);
+    expect(new Set(LIGHT_SERIES.map((t) => t.id)).size).toBe(LIGHT_SERIES.length);
+    for (const key of ["tron-ares", "meurs-un-autre-jour"]) {
+      expect(LIGHT_SERIES.filter((t) => t.key === key).map((t) => t.modes?.light ?? "origine")).toEqual(["origine", "l1", "l2"]);
+    }
+    expect(modeTag({ light: "l2" })).toBe("l2");
+    for (const t of LIGHT_SERIES) expect(t.id).toMatch(/^[a-z0-9-]{1,40}$/);
   });
 
   it("l'attente de Safari : débit au quart et segments de 2 s, seuls puis ensemble, encadrés par des témoins, sur deux titres", () => {

@@ -47,6 +47,8 @@ import { castVideoFamily, castView, dialogueRendition, dialogueTrackView, withCo
 import { lumenAudio, type FeedReader, type PlaybackMode } from "./audio/conversion";
 import type { DialogueRun } from "./audio/convert";
 import type { LumenDialogueMode } from "./audio/dialogue";
+import { lumenLightContext, withLight } from "./light/view";
+import { LIGHT_AUDIO_ALLOWANCE_BPS } from "./playlists";
 
 // ── Le moteur du processus ───────────────────────────────────────────────────
 
@@ -538,6 +540,11 @@ export type LumenVerdict =
        */
       averageBps?: number;
       /**
+       * Les échelons de la version allégée (`light/`) servis à cette lecture : leur hauteur et leurs débits annoncés
+       * (son compris). Absent : pas de version allégée (option coupée, pas d'encodeur, source trop légère).
+       */
+      light?: { rung: 1 | 2; height: number; averageBps: number; peakBps: number }[];
+      /**
        * « Améliorer les dialogues » demandé (`?dialogue=`, §193) : servi (`master` porte alors `&dialogue=`), ou pourquoi
        * non — la piste n'a pas de rendu traité, ou le serveur n'admet pas une lecture de plus qui convertit. Non servi,
        * `master` est la liste ordinaire : l'hôte rend alors la lecture au lecteur actuel, qui fait le traitement.
@@ -671,6 +678,15 @@ export async function lumenVerdict(
   // (`/lumen-test`) n'en demande pas : pas de jeton là où il ne sert pas.
   const tvToken = options.tv && !options.cast && options.session ? await signLumenTvPass(itemId, options.s, options.session) : null;
   const master = masterAddress(itemId, version, options.s, audioTrack, dialogue?.served ? dialogue.mode : undefined);
+  // La version allégée (`light/`) : ses échelons, pour que la page choisisse lequel mettre en tête (`?lv=`) et lequel
+  // faire préparer quand sa connexion faiblit. Jamais pour un récepteur. Débits annoncés, son compris.
+  const lightContext = options.cast ? null : await lumenLightContext(options.session);
+  const light = (withLight(index, lightContext).light ?? []).map((r) => ({
+    rung: r.rung,
+    height: r.height,
+    averageBps: r.averageBps + LIGHT_AUDIO_ALLOWANCE_BPS,
+    peakBps: r.peakBps + LIGHT_AUDIO_ALLOWANCE_BPS,
+  }));
   return {
     ok: true,
     version,
@@ -687,6 +703,7 @@ export async function lumenVerdict(
     // nouvel appel à `eligibility` quand la page voit une attente (5-conversion-son.md §5.7).
     ...(chosen?.converted ? { conversion: conversionState ?? { state: "ok" as const, leadS: 0 } } : {}),
     ...(dialogue ? { dialogue } : {}),
+    ...(light.length > 0 ? { light } : {}),
   };
 }
 

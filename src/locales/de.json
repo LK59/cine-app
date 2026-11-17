@@ -2263,6 +2263,7 @@
         "audioCacheValue": "{n} Segmente: {built} konvertiert, {ram} aus dem Speicher, {disk} von der Platte",
         "incidents": "Vorfälle",
         "eventReopen": "Neu geöffnet bei {at}: {reason}",
+        "eventQuality": "Bild auf {height}p gewechselt",
         "eventAudio": "Spur „{track}“ über {via} ({ms} ms)",
         "eventDialogue": "Dialoge verbessern: {mode} ({ms} ms)",
         "eventRetry": "Neuer Versuch vor dem Bild: {reason}",
@@ -3565,7 +3566,11 @@
       "LUMEN_AUDIO_MAX_SESSIONS": "Höchstens umwandelnde Wiedergaben",
       "LUMEN_AUDIO_RAM_MB": "Umgewandelter Ton im Arbeitsspeicher (MB)",
       "LUMEN_AUDIO_CACHE_GB": "Umgewandelter Ton auf der Festplatte (GB)",
-      "LUMEN_SERVER_ENABLED": "Lumen Server auf dieser Installation"
+      "LUMEN_SERVER_ENABLED": "Lumen Server auf dieser Installation",
+      "LUMEN_LIGHT": "Leichte Version: auf dem Server ein leichteres Video für langsame Verbindungen neu kodieren",
+      "LUMEN_LIGHT_MAX_JOBS": "Gleichzeitige Videokodierungen höchstens",
+      "LUMEN_LIGHT_RAM_MB": "Leichtes Video im Arbeitsspeicher (MB)",
+      "LUMEN_LIGHT_CACHE_GB": "Leichtes Video auf der Festplatte (GB)"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml unter „environment“:",
@@ -3771,6 +3776,7 @@
       "xrayOn": "eingeschaltete Darsteller im Bild",
       "booksOn": "eingeschaltete Bücher",
       "playerOn": "den integrierten Player",
+      "lumenServerOn": "den eingeschalteten Lumen-Server",
       "missing": "Inaktiv: braucht {need}.",
       "ready": "Braucht {list}: bereit.",
       "fix": {
@@ -3778,7 +3784,8 @@
         "xrayService": "Dienst anbinden (Verbindungen)",
         "xrayOn": "Darsteller im Bild einschalten",
         "booksOn": "Bücher einschalten",
-        "playerOn": "Player einschalten"
+        "playerOn": "Player einschalten",
+        "lumenServerOn": "Lumen-Server einschalten"
       }
     },
     "sceneRestart": {
@@ -3795,6 +3802,14 @@
       "cache": "Gespeichert: {memory} im Arbeitsspeicher (von {memoryCap}), {disk} auf der Festplatte (von {diskCap}).",
       "day": "Letzte 24 h: {segments} umgewandelte Segmente, Median {median} ms, höchstens {max} ms, {fallbacks} an das Gerät zurückgegeben.",
       "prereq": "Lumen Server eingeschaltet; das mit der App gelieferte ffmpeg; keine GPU."
+    },
+    "lumenLight": {
+      "title": "Leichte Version (Lumen-Server)",
+      "why": "Bei einer zu langsamen Verbindung kodiert der Server das Video leichter neu (1080p mit 8 Mb/s, 720p mit 3 Mb/s, HDR bleibt erhalten), auf denselben Segmenten wie das Original, mit dem Grafikchip des Servers. Safari wechselt von selbst ohne Unterbrechung, und leichte Segmente werden vorab vorbereitet, wenn die Verbindung schwächer wird. Der Grafikchip muss dem Container zugewiesen sein; ohne ihn ändert sich nichts.",
+      "detected": "Encoder gefunden: ffmpeg {version}, {driver}",
+      "unavailable": "Leichte Version auf diesem Server nicht verfügbar ({reason}): nur das Originalvideo wird ausgeliefert.",
+      "now": "Seit dem Start: {built} Segmente kodiert, {kept} fertig ausgeliefert, {failed} fehlgeschlagen; {running} laufen, {queued} warten.",
+      "prereq": "Lumen-Server eingeschaltet; eine Intel-GPU für den Container der Anwendung (VAAPI: /dev/dri und group_add der Gruppe render)."
     },
     "prereq": "Voraussetzungen: {text}",
     "lumenSection": "Lumen Server (experimentell)",

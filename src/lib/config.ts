@@ -443,6 +443,30 @@ export const config = {
     get audioCacheDir() {
       return envOnly("LUMEN_AUDIO_CACHE_DIR", "");
     },
+    // La version allégée de Lumen serveur (`lumenServer/light/`) : à qui elle est ouverte (`off` par défaut, `admins`,
+    // `tous`). Coupée, ou sans encodeur VAAPI, la liste maître est celle d'avant à l'octet près.
+    get light() {
+      return parseAudience(optional("LUMEN_LIGHT", "off"));
+    },
+    // Combien d'encodages vidéo à la fois : le iGPU sert aussi Jellyfin et X-Ray. Un encodage tient ~2,5 fois le temps
+    // réel (mesure du 17/11/2026) : deux rattrapent une lecture en retard.
+    get lightMaxJobs() {
+      return clampInt(optional("LUMEN_LIGHT_MAX_JOBS", "2"), 2, 1, 4);
+    },
+    get lightRamMb() {
+      return clampInt(optional("LUMEN_LIGHT_RAM_MB", "256"), 256, 32, 4096);
+    },
+    get lightCacheGb() {
+      return clampInt(optional("LUMEN_LIGHT_CACHE_GB", "10"), 10, 0, 1000);
+    },
+    // Déploiement seulement (§81) : le ffmpeg vidéo (paquet Alpine, VAAPI ; vide = pas de version allégée) et le cache
+    // disque des segments allégés.
+    get videoFfmpegPath() {
+      return envOnly("LUMEN_VIDEO_FFMPEG_PATH", "/usr/bin/ffmpeg");
+    },
+    get lightCacheDir() {
+      return envOnly("LUMEN_LIGHT_CACHE_DIR", "");
+    },
   },
   news: {
     // La nouvelle adresse publique annoncée par la page Nouveautés du renommage (`news/pageLaterna.ts`,

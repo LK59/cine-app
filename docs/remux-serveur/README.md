@@ -1316,3 +1316,29 @@ lecteur de Google préfère la stéréo). Pas de « Améliorer les dialogues » 
 
 Les étapes 2 (fonction de segment) et 6 (jointures du son) sont les plus délicates : une erreur ne se voit qu'à la
 lecture.
+
+## La version allégée (DECISIONS §195)
+
+Pour une connexion plus lente que le film, le serveur réencode la vidéo en un ou deux **échelons** (`l1` ≤ 1080p,
+`l2` ≤ 720p, HEVC, 10 bits et PQ gardés pour une source HDR), segment par segment, sur **les mêmes frontières et les
+mêmes instants** que la vidéo d'origine : Safari passe de l'une à l'autre seul, à une frontière, sans couper.
+
+- **Où** : `src/lib/lumenServer/light/`. L'encodeur est un ffmpeg vidéo avec VAAPI (le paquet Alpine, `/usr/bin/ffmpeg`),
+  distinct du ffmpeg épinglé du son, et le iGPU Intel du serveur, à donner au conteneur :
+  `devices: ["/dev/dri:/dev/dri"]` et `group_add: ["<gid du groupe render>"]`. Sans eux, la détection dit pourquoi
+  (Configuration → Lecture, la carte « Version allégée ») et la liste maître reste celle d'avant à l'octet près.
+- **Quand** : l'option `LUMEN_LIGHT` (audience), une source Matroska HEVC/H.264 qui pèse au moins le double d'un
+  échelon (6 Mb/s pour `l2` en 10 bits, 16 pour `l1`). Une grande partie de la bibliothèque, déjà recompressée sous
+  6 Mb/s, n'en a aucun — c'est voulu : elle passe déjà sur une connexion modeste.
+- **Comment Safari bascule sans attendre** : la liste maître met l'origine d'abord et les échelons ensuite, débits
+  honnêtes ; chaque segment allégé demandé fait encoder les trois suivants ; la page qui mesure sa connexion sous
+  1,3 fois le débit du film fait préparer l'échelon adapté à partir de sa position (`prepare` avec `light`) ; une lecture
+  qui s'ouvre sur une connexion qu'on sait faible démarre sur l'échelon (`?lv=N`).
+- **Le coût** (17/11/2026, UHD 630) : 1,4 à 4,8 s par segment de 4 à 7 s, deux encodages à la fois au plus
+  (`LUMEN_LIGHT_MAX_JOBS`) ; l'init, 0,2 à 0,5 s. Cache en mémoire et sur le disque (`DATA_DIR/lumen-light`).
+- **Le banc** : `lumen-light-bench.spec.ts` (un conteneur jetable avec le iGPU, voir l'en-tête du fichier) encode trois
+  segments par échelon et les compare à l'origine : mêmes pts, décodage sans erreur, une IDR par segment, HDR gardé,
+  `CODECS` exact, images alignées. Sur l'iPhone, la page `/lumen-test`, passe « Version allégée » : chaque échelon seul.
+- **Au journal** : le `stop` porte `quality` (secondes par hauteur d'image) et `qualitySwitches` si Safari a basculé,
+  `lightPrepares` ; le serveur y ajoute `srv.l1`, `srv.l2`, `srv.lightBuilt`, `srv.lightMaxMs`. Le panneau technique dit
+  chaque bascule (« Image passée en 804p »).

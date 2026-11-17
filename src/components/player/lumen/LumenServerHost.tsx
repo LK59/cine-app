@@ -117,7 +117,11 @@ import {
   type LumenVerdict,
   type MasterAudio,
 } from "./lumenOpening";
-import { announcesLowBandwidth, linkMbpsOf, recentLinkMbps, rememberLink, withLowBandwidth } from "./lumenLink";
+import { announcesLowBandwidth, lightRungFor, linkMbpsOf, recentLinkMbps, rememberLink, withLightFirst, withLowBandwidth, type LightRungFacts } from "./lumenLink";
+import { QualityTally } from "./lumenQuality";
+
+/** La préparation d'un échelon allégé par la page, au plus une fois par tant (`prepare` avec `light`). */
+const LIGHT_PREPARE_EVERY_MS = 60_000;
 import {
   audioSegmentArrivalMs,
   bufferedText,
@@ -396,6 +400,9 @@ export function LumenServerHost({
   /** Les incidents de la séance, en mots, pour le panneau : relances, réouvertures, pistes, AirPlay (§189). */
   const [events, setEvents] = useState<string[]>([]);
   const noteEvent = useCallback((text: string) => setEvents((previous) => [...previous.slice(-9), text]), []);
+  /** La version allégée : le temps passé à chaque hauteur d'image (les bascules de Safari) et les préparations demandées. */
+  const qualityTallyRef = useRef(new QualityTally());
+  const lightPreparesRef = useRef(0);
   const noteEventRef = useRef(noteEvent);
   const [serverStats, setServerStats] = useState<Record<string, number | string> | null>(null);
   const [received, setReceived] = useState<ReturnType<typeof receivedOf>>(null);
@@ -552,6 +559,9 @@ export function LumenServerHost({
       return {
         lumenSession,
         ...(quality ? { "frames.total": quality.totalVideoFrames, "frames.dropped": quality.droppedVideoFrames } : {}),
+        // La version allégée : le temps par hauteur d'image si Safari a basculé, et les préparations demandées.
+        ...qualityTallyRef.current.fields(Date.now()),
+        ...(lightPreparesRef.current > 0 ? { lightPrepares: lightPreparesRef.current } : {}),
       };
     }, [lumenSession]),
   });
@@ -701,7 +711,18 @@ export function LumenServerHost({
    */
   /** Le quart du débit annoncé pour cette lecture (décidé à l'ouverture, `lumenLink.ts`). */
   const lowBandwidthRef = useRef(false);
-  const servedMaster = useCallback((master: string) => (lowBandwidthRef.current ? withLowBandwidth(master) : master), []);
+  /**
+   * La version allégée (`lumenServer/light/`) : les échelons que le verdict annonce, le débit moyen du film, et
+   * l'échelon listé d'abord quand la lecture s'ouvre sur une connexion qu'on sait faible (`?lv=`, décidé à l'ouverture).
+   */
+  const lightRungsRef = useRef<LightRungFacts[]>([]);
+  const filmAverageRef = useRef<number | undefined>(undefined);
+  const lightFirstRef = useRef<1 | 2 | null>(null);
+  const servedMaster = useCallback((master: string) => {
+    const first = lightFirstRef.current;
+    const withFirst = first ? withLightFirst(master, first) : master;
+    return lowBandwidthRef.current ? withLowBandwidth(withFirst) : withFirst;
+  }, []);
   const recoveringRef = useRef(false);
   const reopenCountRef = useRef(0);
   const recover = useCallback(
@@ -767,16 +788,42 @@ export function LumenServerHost({
   // Ce que Safari demande, écouté dès le montage : le tampon Resource Timing du cinéma est plein d'affiches, et le
   // `seen` d'un refus avant l'image restait vide (17/11/2026, `watchLumenRequests`).
   useEffect(() => watchLumenRequests(), []);
+  // La hauteur de l'image : Safari passe seul de la vidéo d'origine à un échelon allégé et retour (`resize`). Dit dans
+  // le panneau à chaque bascule, compté pour le bilan (`QualityTally`).
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !src) return;
+    const onResize = () => {
+      if (qualityTallyRef.current.note(video.videoHeight, Date.now())) noteEventRef.current(t("player.info.lumen.eventQuality", { height: video.videoHeight }));
+    };
+    video.addEventListener("resize", onResize);
+    return () => video.removeEventListener("resize", onResize);
+  }, [src, videoKey, t]);
   // La mesure du lien, sur les segments que Safari tire de toute façon : toutes les 10 s, page visible, retenue sur
   // l'appareil pour la prochaine ouverture.
+  // La connexion qui faiblit sous le débit du film, avec une version allégée servie : le serveur prépare l'échelon
+  // adapté à partir de la position, avant que Safari ne bascule (au plus une fois par minute) — quand il bascule, les
+  // segments sont là, et la lecture ne s'arrête pas.
+  const lightPrepareAtRef = useRef(0);
   useEffect(() => {
     const timer = setInterval(() => {
       if (document.visibilityState !== "visible") return;
       const mbps = linkMbpsOf(lumenSession, lumenResourceSamples());
-      if (mbps !== null) rememberLink(mbps);
+      if (mbps === null) return;
+      rememberLink(mbps);
+      const rung = lightRungFor(mbps, filmAverageRef.current, lightRungsRef.current);
+      if (rung === null || Date.now() - lightPrepareAtRef.current < LIGHT_PREPARE_EVERY_MS || closedRef.current || fellRef.current) return;
+      lightPrepareAtRef.current = Date.now();
+      lightPreparesRef.current += 1;
+      void fetch(`/api/lumen/${itemId}/prepare`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audio: currentAudioRef.current, position: positionNow(), s: lumenSession, light: rung }),
+        keepalive: true,
+      }).catch(() => {});
     }, 10_000);
     return () => clearInterval(timer);
-  }, [lumenSession]);
+  }, [itemId, lumenSession, positionNow]);
 
   // ── L'ouverture : description, état du spectateur, verdict, pistes — puis l'adresse ──────────────────
   const preferencesRef = useRef<TrackPreferences | null>(null);
@@ -877,6 +924,11 @@ export function LumenServerHost({
       // gardé pour toute la lecture, réouvertures comprises (`lowBandwidthRef`).
       const linkMbps = recentLinkMbps();
       lowBandwidthRef.current = announcesLowBandwidth(linkMbps, verdict.averageBps);
+      // La version allégée : ses échelons retenus pour la mesure en cours de lecture ; une connexion qu'on sait faible
+      // démarre sur l'échelon adapté (`?lv=`) — Safari prend la première variante listée, et remonte seul ensuite.
+      lightRungsRef.current = verdict.light ?? [];
+      filmAverageRef.current = verdict.averageBps;
+      lightFirstRef.current = lightRungFor(linkMbps, verdict.averageBps, verdict.light);
       const master = servedMaster(verdict.master);
       masterRef.current = master;
       versionRef.current = verdict.version;

@@ -12182,3 +12182,74 @@ partait toujours aux vrais débits.
 (`service.ts`), `/api/config/public`, `PlayerAccountPanel.tsx` (`LumenServerRow`), `lumenLink.ts`, `lumenSheetPrepare.ts`,
 `LumenServerHost.tsx` (`servedMaster`, `lowBandwidthRef`, mesure toutes les 10 s), ligne `start` (`linkMbps`, `bwBas`).
 **Tests.** `config-layout.test.ts`, `lumen-link.test.ts`, `lumen-fiche-preparation.test.ts`, `LumenServerHost.test.tsx`.
+
+## 195. La version allégée de Lumen serveur : des échelons réencodés par le iGPU, sur les mêmes segments, préparés avant que Safari ne bascule (17/11/2026)
+
+**Règle.** Quand l'option `LUMEN_LIGHT` (audience, coupée par défaut) est ouverte au compte et que l'encodeur est là —
+un ffmpeg vidéo avec VAAPI (`LUMEN_VIDEO_FFMPEG_PATH`, le paquet Alpine à `/usr/bin/ffmpeg`, distinct du ffmpeg épinglé
+du son) et le iGPU donné au conteneur (`/dev/dri`, groupe `render`) —, la liste maître d'une source assez lourde annonce,
+après la variante d'origine, un ou deux **échelons** : `l1` (au plus 1920×1080, 8 Mb/s en moyenne, 12 en crête en
+10 bits ; 6/9 en 8 bits) et `l2` (au plus 1280×720, 3/4,5 ; 2,5/3,75). Un échelon n'existe que si la source pèse au moins
+le double de sa moyenne (`RUNG_SOURCE_RATIO`), seulement pour un Matroska en HEVC ou H.264 (ce que le iGPU décode), jamais
+pour un récepteur Chromecast. Safari choisit seul la variante (ABR natif) et passe de l'une à l'autre à une frontière de
+segment, sans couper.
+- **Les mêmes segments** : le segment allégé `n` a exactement les images du segment d'origine `n`, aux mêmes instants
+  (lus dans les `moof` de l'origine, `originTimes`), commence au même `tfdt` et finit là où l'origine finit. L'encodeur
+  décode depuis la clé d'avant (`-ss` précis, `-seek_timestamp`) — les RASL d'une CRA en tête de segment sont décodées
+  puis rendues, là où l'origine les laisse à Safari —, sans image B (l'ordre de décodage est celui de présentation), une
+  seule IDR en tête, `-fps_mode passthrough`, et `-stats_enc_pre` dit l'instant de chaque image reçue : une image
+  répétée, sautée ou décalée est une erreur (`segment-vide`), jamais un segment décalé.
+- **HEVC partout**, `hvc1` : Main10 et PQ/HLG gardés pour une source HDR ou Dolby Vision (couche de base HDR10 ; le RPU ne
+  survit pas au réencodage, ni `SUPPLEMENTAL-CODECS` dans la variante), Main en 8 bits sinon. Profil et niveau imposés
+  (`-level` 123 et 93) : le `CODECS` annoncé est celui que l'init écrit (vérifié au banc). L'init vient d'un encodage
+  d'une image (`hvcCFromParameterSets` depuis ses VPS/SPS/PPS), les paramètres restent aussi en bande à chaque IDR.
+- **Débits honnêtes** : BANDWIDTH/AVERAGE-BANDWIDTH d'un échelon = ce que l'encodeur vise et ne dépasse pas, plus 768 kb/s
+  de son (`LIGHT_AUDIO_ALLOWANCE_BPS`). `bw=bas` (§194) ne divise que la variante d'origine (`withMasterTrials`) : divisés,
+  les échelons ne se distingueraient plus de l'origine.
+- **L'identité** `cid` (règles `LIGHT_RULES_VERSION`, version de ffmpeg, pilote VAAPI, taille, débits, niveau, plage) est
+  dans le nom (`l1x{cid}`) : un autre encodeur est une autre adresse. Pas de montée de `LUMEN_FORMAT_VERSION` : aucune
+  adresse existante ne change d'octets, et sans échelon la liste maître est celle d'avant à l'octet près.
+- **Préparer avant la coupure** : chaque segment allégé demandé fait encoder les 3 suivants (`PREFETCH_AHEAD`) ; la page
+  mesure son lien (`lumenLink.ts`, les segments que Safari tire) et, sous 1,3 fois le débit moyen du film, demande au
+  serveur de préparer l'échelon adapté à partir de sa position (`prepare` avec `light`, une fois par minute au plus) —
+  quand Safari bascule, les segments sont là. Une lecture qui s'ouvre sur une connexion qu'on sait faible (mesure de
+  moins de 10 min) démarre sur l'échelon adapté (`?lv=N`, listé d'abord : Safari prend la première variante), et remonte
+  seule ensuite.
+- **Bornes** : `LUMEN_LIGHT_MAX_JOBS` encodages à la fois (2 ; le iGPU sert aussi Jellyfin et X-Ray), une demande devant
+  l'avance, l'avance en attente plafonnée à 8 (la plus ancienne cède et répond « occupé »), cache en mémoire
+  (`LUMEN_LIGHT_RAM_MB`) et sur le disque (`DATA_DIR/lumen-light`, `LUMEN_LIGHT_CACHE_GB`, le moins récemment lu évincé).
+  Encodeur absent ou en échec : 503 « occupé », jamais 404/400 (CrowdSec) ; un nom d'échelon inconnu : 410.
+
+**Pourquoi.** Lumen serveur sert le fichier tel quel : sur une connexion plus lente que le film, Safari s'arrête, et le
+lecteur actuel a pour ce cas le passage à un transcodage Jellyfin (§78) — une coupure, une autre adresse. Réencoder au
+fil de la lecture par le iGPU, sur les frontières de l'origine, donne à Safari ce qu'il sait faire de lui-même : changer
+de variante sans interruption. **Mesuré le 17/11/2026** (iGPU UHD 630, VAAPI, pilote iHD 26.2.1, FFmpeg 8.1.3, X-Ray en
+marche) : un segment de 4 à 7 s s'encode en 1,4 à 4,8 s (deux à la fois), ~1,3 à 3 fois le temps réel ; l'init en 0,2 à
+0,5 s. Le banc `lumen-light-bench.spec.ts` sur *Ghosted* (4K DV, 6,6 Mb/s → `l2` seul), *Tron : Ares* (4K HDR10,
+25,9 Mb/s → `l1` 1920×804 et `l2` 1280×536 en Main10 PQ) et *Meurs un autre jour* (4K SDR, 16,2 Mb/s → 1920×816 et
+1280×544 en Main) : trois segments consécutifs par échelon, mêmes pts que l'origine, décodés sans une erreur, une IDR par
+segment, HDR gardé, `CODECS` = l'init, luminance moyenne égale à ±0,4, et les variations image à image collent au
+décalage 0 (écart 0,01 à 0,07) bien mieux qu'à ±1 image (0,08 à 1,4). Deux pièges trouvés en route et fermés : sans
+`-fps_mode passthrough`, ffmpeg répétait la première image (96 images pour 96 ms) ; `-stats_enc_pre /dev/stderr` échoue
+sous Node (une socket, ENXIO) — `pipe:2`.
+
+**Ce qui diffère exprès.** Pas de version allégée pour un MP4 (ses listes d'édition décalent les instants que ffmpeg
+reçoit), ni pour l'AV1 ou le VP9 (le iGPU ne les décode pas). La bascule en cours de lecture ne se provoque pas depuis
+la page de banc : la passe « Version allégée » sert chaque échelon seul (`?light=seul1|seul2`) ; la bascule se lit au
+journal des vraies séances (`stop` : `quality`, `qualitySwitches`, `lightPrepares` ; `srv.l1`, `srv.l2`,
+`srv.lightBuilt`, `srv.lightMaxMs`). Un segment demandé avant d'être prêt coûte son encodage (2 à 5 s) : c'est ce que
+l'avance et la préparation par la page évitent.
+
+**Porteurs.** `src/lib/lumenServer/light/` : `rungs.ts` (`lightRungs`, `RUNG_SHAPES`, `LIGHT_RULES_VERSION`),
+`encoder.ts` (`detectLightEncoder`, `encodeArgs`, `runEncoder`), `bitstream.ts` (Annex B, `hvcCFromParameterSets`,
+`originTimes`), `segment.ts` (`lightSegment`, `lightInit`), `service.ts` (cache, file, `prefetch`, `lightSegmentFor`,
+`lightInitFor`), `view.ts` (`withLight`, `lumenLightContext`) ; `format.ts` (rendu `light`, `LumenLightRung`),
+`engine.ts`, `playlists.ts` (`lightVariant`, `MasterOptions.light`), `trials.ts` (`bw=bas` sur l'origine seule),
+`serve.ts` (`lightOrder`, `originOf`), `service.ts` (verdict `light`), `playbackStats.ts` (`noteLight`), la route
+`prepare` (`light`), `/api/admin/lumen-light` ; côté page `lumenLink.ts` (`lightRungFor`, `withLightFirst`),
+`lumenQuality.ts`, `LumenServerHost.tsx` ; `LumenLightStatus.tsx` ; réglages `LUMEN_LIGHT*` (`config.ts`, `schema.ts`,
+`configLayout.ts`) ; `Dockerfile` (`apk add ffmpeg intel-media-driver`). **Déploiement** : `devices: ["/dev/dri:/dev/dri"]`
+et `group_add: ["<gid de render>"]` (993 ici) sur le service de l'application. **Tests.** `lumenServer-light.test.ts`,
+`lumenServer-light-service.test.ts`, `lumenServer-trials.test.ts` (`bw=bas`), `lumen-test-auto.test.ts` (passe),
+`config-layout.test.ts` ; les empreintes du lecteur, inchangées. **Banc.** `lumen-light-bench.spec.ts` (sauté sans
+`LIGHT_FILE` ; un conteneur jetable avec le iGPU).

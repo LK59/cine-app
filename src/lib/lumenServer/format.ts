@@ -419,6 +419,32 @@ export interface LumenIndex {
   inits: { video: Uint8Array | null; audio: Record<number, Uint8Array> };
   /** Ce qu'a coûté la construction de l'index, pour le journal. */
   cost: { ms: number; reads: number; bytes: number };
+  /**
+   * Posé par la vue seulement (`withLight`, `light/view.ts`), jamais par l'index : les échelons de la version allégée
+   * — la vidéo réencodée plus légère, sur les mêmes segments. Absent : pas de version allégée (option coupée, pas
+   * d'encodeur, source qui ne la justifie pas).
+   */
+  light?: LumenLightRung[];
+}
+
+/**
+ * Un échelon de la version allégée (`light/`) : la vidéo du fichier réencodée par le serveur à une taille et un débit
+ * plus bas, segment par segment, sur les MÊMES frontières que la vidéo d'origine — Safari passe de l'une à l'autre à
+ * une frontière sans couper. `cid` : l'identité de ce qui produit ses octets (règles, ffmpeg, pilote, réglages), dans
+ * son nom (`l1x{cid}`) : un autre encodeur est une autre adresse, jamais d'autres octets sous la même.
+ */
+export interface LumenLightRung {
+  rung: 1 | 2;
+  cid: string;
+  width: number;
+  height: number;
+  /** 10 bits (Main10, PQ gardé) pour une source HDR ou Dolby Vision ; 8 bits sinon. */
+  tenBit: boolean;
+  /** Ce que l'encodeur vise (moyenne) et ne dépasse pas (crête), vidéo seule, en b/s. */
+  averageBps: number;
+  peakBps: number;
+  /** CODECS de la variante (vidéo) : profil et niveau imposés à l'encodeur (`hvc1.2.4.L123.B0`). */
+  codecs: string;
 }
 
 // ── Les noms servis ──────────────────────────────────────────────────────────
@@ -434,7 +460,9 @@ export type LumenRendition =
    * `dialogue` (§193) : le rendu « Améliorer les dialogues » de la piste, à cette force — toujours avec `conv`,
    * l'identité de son traitement (`a3d1x{cid}` : `d1` améliorer, `d2` davantage).
    */
-  | { kind: "audio"; track: number; conv?: string; dialogue?: LumenDialogueMode };
+  | { kind: "audio"; track: number; conv?: string; dialogue?: LumenDialogueMode }
+  /** Un échelon de la version allégée (`l1x{cid}`, `l2x{cid}`) : la vidéo réencodée, jamais sans son identité. */
+  | { kind: "light"; rung: 1 | 2; cid: string };
 
 /**
  * Le nom d'un fichier servi, relatif à la liste maître : `v.m3u8`, `init-v.mp4`, `v/12.m4s`, et pour
@@ -443,6 +471,7 @@ export type LumenRendition =
  */
 export function renditionTag(rendition: LumenRendition): string {
   if (rendition.kind === "video") return "v";
+  if (rendition.kind === "light") return `l${rendition.rung}x${rendition.cid}`;
   const dialogue = rendition.dialogue && rendition.conv ? (rendition.dialogue === "strong" ? "d2" : "d1") : "";
   return `a${rendition.track}${dialogue}${rendition.conv ? `x${rendition.conv}` : ""}`;
 }
@@ -474,6 +503,9 @@ export function parseLumenPath(path: string): LumenPath | null {
   if (path === "master.m3u8") return { kind: "master" };
   const tag = (raw: string): LumenRendition | null => {
     if (raw === "v") return { kind: "video" };
+    // `l1x{cid}`, `l2x{cid}` : un échelon de la version allégée, toujours sous son identité.
+    const light = /^l([12])x([0-9a-f]{8})$/.exec(raw);
+    if (light) return { kind: "light", rung: light[1] === "2" ? 2 : 1, cid: light[2] };
     // `a3`, `a3x{cid}` (convertie, §161), `a3d1x{cid}` / `a3d2x{cid}` (dialogues, §193 — jamais sans identité).
     const m = /^a([1-9]\d{0,3})(?:(?:d([12]))?x([0-9a-f]{8}))?$/.exec(raw);
     if (!m) return null;

@@ -15,6 +15,7 @@ import {
   EARLY_DELAY_MS,
   LEVER_SERIES,
   SAFARI_WAIT_SERIES,
+  LIGHT_SERIES,
   MUX_SERIES,
   MUX_SWITCH_WATCH_MS,
   CONVERT_SERIES,
@@ -1230,6 +1231,8 @@ export function LumenTest() {
     if (params.modes?.groups === "codec") query.set("groupes", "codec");
     // Le levier « sous-titres dans la liste » (§191) : la première piste de texte en rendu DEFAULT, comme en AirPlay.
     if (params.modes?.subtitles === "liste") query.set("st", "premier");
+    // La version allégée : un échelon seul dans la liste maître (`?light=seul1|seul2`).
+    if (params.modes?.light) query.set("light", params.modes.light === "l1" ? "seul1" : "seul2");
     const search = query.toString();
     const master = `/api/lumen/${params.itemId}/${current.version}/${s}/master.m3u8${search ? `?${search}` : ""}${startAt > 0 && startMode === "fragment" ? `#t=${startAt}` : ""}`;
     // Le lecteur actuel s'ouvre à la position demandée (`startSeconds`, comme l'hôte) : pas de saut de départ ; Lumen
@@ -1873,7 +1876,7 @@ export function LumenTest() {
     video.removeAttribute("src");
     video.load();
     playOf(video).catch(() => {});
-    const seriesOrder = saved?.order ?? (pass === "leviers" || pass === "attente" || pass === "multiplexé" || pass === "son" || pass === "codecs" ? "serveur" : order);
+    const seriesOrder = saved?.order ?? (pass === "leviers" || pass === "attente" || pass === "allégée" || pass === "multiplexé" || pass === "son" || pass === "codecs" ? "serveur" : order);
     const plan = planOf(pass, seriesOrder);
     const state: AutoState = {
       serie: saved?.serie ?? newPlaybackId().slice(2, 14),
@@ -1898,7 +1901,7 @@ export function LumenTest() {
     } else {
       setAnswers({ damaged: null, damagedTitle: "", audioClean: null, audioChanged: null, lipSync: null });
       const passLabel =
-        pass === "courte" ? "comparatif rapide" : pass === "leviers" ? "leviers de démarrage" : pass === "attente" ? "attente de Safari" : pass === "multiplexé" ? "son multiplexé" : pass === "son" ? "son converti" : pass === "codecs" ? "changement de codec" : "complète";
+        pass === "courte" ? "comparatif rapide" : pass === "leviers" ? "leviers de démarrage" : pass === "attente" ? "attente de Safari" : pass === "allégée" ? "version allégée" : pass === "multiplexé" ? "son multiplexé" : pass === "son" ? "son converti" : pass === "codecs" ? "changement de codec" : "complète";
       note(`série ${state.serie} (${passLabel}, ${seriesOrder === "actuel" ? "lecteur actuel d'abord, rechargement" : "serveur d'abord"}, graine ${state.seed}) : ${plan.length} essais`);
     }
     video.scrollIntoView?.({ block: "start" });
@@ -2045,6 +2048,7 @@ export function LumenTest() {
   const quickMin = Math.round(seriesEstimateS(QUICK_SERIES) / 60);
   const leverMin = Math.round(seriesEstimateS(LEVER_SERIES) / 60);
   const waitMin = Math.round(seriesEstimateS(SAFARI_WAIT_SERIES) / 60);
+  const lightMin = Math.round(seriesEstimateS(LIGHT_SERIES) / 60);
   const muxMin = Math.round(seriesEstimateS(MUX_SERIES) / 60);
   const convertMin = Math.round(seriesEstimateS(CONVERT_SERIES) / 60);
   const codecMin = Math.round(seriesEstimateS(CODEC_SERIES) / 60);
@@ -2086,6 +2090,9 @@ export function LumenTest() {
         </button>
         <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("attente")}>
           {`Attente de Safari (${SAFARI_WAIT_SERIES.length} essais, Lumen serveur seul, ~${waitMin} min)`}
+        </button>
+        <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("allégée")}>
+          {`Version allégée (${LIGHT_SERIES.length} essais, chaque échelon seul, ~${lightMin} min)`}
         </button>
         <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("multiplexé")}>
           {`Son multiplexé (${MUX_SERIES.length} essais, Lumen serveur seul, ~${muxMin} min)`}

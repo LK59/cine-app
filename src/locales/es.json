@@ -2263,6 +2263,7 @@
         "audioCacheValue": "{n} segmentos: {built} convertidos, {ram} en memoria, {disk} en disco",
         "incidents": "Incidencias",
         "eventReopen": "Reapertura en {at}: {reason}",
+        "eventQuality": "Imagen cambiada a {height}p",
         "eventAudio": "Pista «{track}» por {via} ({ms} ms)",
         "eventDialogue": "Mejorar diálogos: {mode} ({ms} ms)",
         "eventRetry": "Reintento antes de la imagen: {reason}",
@@ -3565,7 +3566,11 @@
       "LUMEN_AUDIO_MAX_SESSIONS": "Reproducciones que convierten como máximo",
       "LUMEN_AUDIO_RAM_MB": "Sonido convertido guardado en memoria (MB)",
       "LUMEN_AUDIO_CACHE_GB": "Sonido convertido guardado en disco (GB)",
-      "LUMEN_SERVER_ENABLED": "Lumen servidor en esta instalación"
+      "LUMEN_SERVER_ENABLED": "Lumen servidor en esta instalación",
+      "LUMEN_LIGHT": "Versión ligera: volver a codificar en el servidor un vídeo más ligero para conexiones lentas",
+      "LUMEN_LIGHT_MAX_JOBS": "Codificaciones de vídeo simultáneas como máximo",
+      "LUMEN_LIGHT_RAM_MB": "Vídeo ligero guardado en memoria (MB)",
+      "LUMEN_LIGHT_CACHE_GB": "Vídeo ligero guardado en disco (GB)"
     },
     "deployHint": {
       "TZ": "En docker-compose.yml, bajo «environment»:",
@@ -3771,6 +3776,7 @@
       "xrayOn": "los actores en pantalla activados",
       "booksOn": "los libros activados",
       "playerOn": "el reproductor integrado",
+      "lumenServerOn": "Lumen servidor activado",
       "missing": "Inactiva: requiere {need}.",
       "ready": "Requiere {list}: listo.",
       "fix": {
@@ -3778,7 +3784,8 @@
         "xrayService": "Conectar el servicio (Conexiones)",
         "xrayOn": "Activar los actores en pantalla",
         "booksOn": "Activar los libros",
-        "playerOn": "Activar el reproductor"
+        "playerOn": "Activar el reproductor",
+        "lumenServerOn": "Activar Lumen servidor"
       }
     },
     "sceneRestart": {
@@ -3795,6 +3802,14 @@
       "cache": "Guardado: {memory} en memoria (de {memoryCap}), {disk} en disco (de {diskCap}).",
       "day": "Últimas 24 h: {segments} segmentos convertidos, {median} ms de mediana, {max} ms en el peor caso, {fallbacks} devuelto(s) al dispositivo.",
       "prereq": "Lumen servidor activado; el ffmpeg incluido con la app; sin GPU."
+    },
+    "lumenLight": {
+      "title": "Versión ligera (Lumen servidor)",
+      "why": "Para una conexión demasiado lenta, el servidor vuelve a codificar el vídeo más ligero (1080p a 8 Mb/s, 720p a 3 Mb/s, HDR conservado) sobre los mismos segmentos que el original, con el chip gráfico del servidor. Safari pasa de uno a otro solo, sin cortes, y los segmentos ligeros se preparan de antemano cuando la conexión se debilita. Hay que dar el chip gráfico al contenedor; sin él, nada cambia.",
+      "detected": "Codificador detectado: ffmpeg {version}, {driver}",
+      "unavailable": "Versión ligera no disponible en este servidor ({reason}): solo se sirve el vídeo original.",
+      "now": "Desde el arranque: {built} segmentos codificados, {kept} servidos ya listos, {failed} fallidos; {running} en curso, {queued} en espera.",
+      "prereq": "Lumen servidor activado; una GPU Intel asignada al contenedor de la aplicación (VAAPI: /dev/dri y group_add del grupo render)."
     },
     "prereq": "Requisitos: {text}",
     "lumenSection": "Lumen servidor (experimental)",

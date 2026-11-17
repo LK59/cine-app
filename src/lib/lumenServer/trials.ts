@@ -137,12 +137,22 @@ export function masterTrialOptions(params: URLSearchParams): MasterTrialOptions 
 /** Applique les options d'essai à une liste maître ; sans option, le texte est rendu à l'identique. */
 export function withMasterTrials(master: string, options: MasterTrialOptions): string {
   let text = master;
+  // Les débits ne se touchent que sur la variante d'origine (`v.m3u8`, ou `vm{N}.m3u8` multiplexée) : les échelons de la
+  // version allégée (`l1x…`) gardent leurs débits honnêtes — divisés, Safari croirait l'origine aussi légère qu'eux et ne
+  // choisirait plus juste (17/11/2026).
+  const onOrigin = (rewrite: (line: string) => string) => {
+    const lines = text.split("\n");
+    for (let i = 0; i + 1 < lines.length; i++) {
+      if (lines[i].startsWith("#EXT-X-STREAM-INF:") && /^vm?\d*\.m3u8$/.test(lines[i + 1])) lines[i] = rewrite(lines[i]);
+    }
+    text = lines.join("\n");
+  };
   if (options.averageBandwidth) {
-    text = text.replace(/^(#EXT-X-STREAM-INF:)BANDWIDTH=\d+,AVERAGE-BANDWIDTH=(\d+)/gm, "$1BANDWIDTH=$2,AVERAGE-BANDWIDTH=$2");
+    onOrigin((line) => line.replace(/^(#EXT-X-STREAM-INF:)BANDWIDTH=\d+,AVERAGE-BANDWIDTH=(\d+)/, "$1BANDWIDTH=$2,AVERAGE-BANDWIDTH=$2"));
   }
   if (options.lowBandwidth) {
     const quarter = (v: string) => String(Math.max(1, Math.round(Number(v) / LOW_BANDWIDTH_DIVISOR)));
-    text = text.replace(/^#EXT-X-STREAM-INF:.*$/gm, (line) => line.replace(/\b(BANDWIDTH|AVERAGE-BANDWIDTH)=(\d+)/g, (_m, k: string, v: string) => `${k}=${quarter(v)}`));
+    onOrigin((line) => line.replace(/\b(BANDWIDTH|AVERAGE-BANDWIDTH)=(\d+)/g, (_m, k: string, v: string) => `${k}=${quarter(v)}`));
   }
   if (options.startS !== undefined) {
     // Juste après `#EXTM3U` : une balise de liste maître, une seule fois (RFC 8216 §4.3.5).

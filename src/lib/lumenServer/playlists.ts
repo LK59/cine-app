@@ -39,7 +39,7 @@
 import { labelAudioTracks, type LabelOptions } from "@/lib/trackLabel";
 import { normaliseLanguage } from "@/lib/trackPreferences";
 import { variantCodecs } from "./hlsSignal";
-import { initName, playlistName, segmentName, type LumenAudioTrack, type LumenIndex, type LumenRendition } from "./format";
+import { initName, playlistName, segmentName, type LumenAudioTrack, type LumenIndex, type LumenLightRung, type LumenRendition } from "./format";
 import { audioRendition, dialogueRendition } from "./audio/view";
 import type { LumenDialogueMode } from "./audio/dialogue";
 import { targetDurationOf } from "./plan";
@@ -64,6 +64,13 @@ export interface MasterOptions {
    * celle d'avant, à l'octet près.
    */
   dialogue?: LumenDialogueMode;
+  /**
+   * La version allégée (`light/`) : les échelons de la vue (`withLight`), annoncés après la variante d'origine dans
+   * chaque groupe son. `first` : cet échelon listé avant l'origine (une lecture qui démarre sur une connexion qu'on sait
+   * faible : Safari prend la première variante) ; `only` : cet échelon seul (le banc). Absent ou vide : la liste
+   * d'avant, à l'octet près.
+   */
+  light?: { rungs: LumenLightRung[]; first?: 1 | 2; only?: 1 | 2 };
 }
 
 /** Ce qu'une piste sert dans une liste maître : son rendu ordinaire, ou son rendu « dialogues » (§193). */
@@ -163,10 +170,42 @@ export function masterPlaylist(index: LumenIndex, options: MasterOptions): strin
     if (audioGroup) attributes.push(`AUDIO=${quoted(audioGroup)}`);
     return `#EXT-X-STREAM-INF:${attributes.join(",")}\n${playlistName({ kind: "video" })}`;
   };
-  if (order.length === 0) lines.push(variant(null, []));
-  for (const id of order) lines.push(variant(id, [...new Set(groups.get(id)!.map((a) => a.signal!.codecs))]));
+  // Un échelon de la version allégée : même groupe son, ses propres taille, codec et débits — honnêtes (ce que
+  // l'encodeur vise et ne dépasse pas, plus la part du son), pour que Safari choisisse juste. Ni SUPPLEMENTAL-CODECS
+  // (le Dolby Vision ne survit pas au réencodage) ; le même VIDEO-RANGE en 10 bits (PQ ou HLG gardé), SDR en 8 bits.
+  const lightVariant = (rung: LumenLightRung, audioGroup: string | null, audioCodecs: string[]): string => {
+    const light = { ...signal, codecs: rung.codecs, supplementalCodecs: null, videoRange: rung.tenBit ? signal.videoRange : ("SDR" as const) };
+    const attributes = [
+      `BANDWIDTH=${rung.peakBps + LIGHT_AUDIO_ALLOWANCE_BPS}`,
+      `AVERAGE-BANDWIDTH=${rung.averageBps + LIGHT_AUDIO_ALLOWANCE_BPS}`,
+      `CODECS=${quoted(variantCodecs(light, audioCodecs.map((codecs) => ({ codecs, channels: "" }))))}`,
+      `VIDEO-RANGE=${light.videoRange}`,
+      `RESOLUTION=${rung.width}x${rung.height}`,
+      `FRAME-RATE=${frameRate}`,
+    ];
+    if (audioGroup) attributes.push(`AUDIO=${quoted(audioGroup)}`);
+    return `#EXT-X-STREAM-INF:${attributes.join(",")}\n${playlistName({ kind: "light", rung: rung.rung, cid: rung.cid })}`;
+  };
+  // L'ordre des variantes : Safari démarre sur la première listée. L'origine d'abord (une bonne connexion démarre en
+  // pleine qualité) ; un échelon d'abord quand la page sait sa connexion faible (`first`) ; un échelon seul pour le banc.
+  const rungs = options.light?.rungs ?? [];
+  const only = options.light?.only !== undefined ? rungs.filter((r) => r.rung === options.light!.only) : null;
+  const firstRung = options.light?.first !== undefined ? rungs.find((r) => r.rung === options.light!.first) : undefined;
+  const variantsFor = (id: string | null, codecs: string[]): string[] => {
+    if (only) return only.map((r) => lightVariant(r, id, codecs));
+    const rest = rungs.filter((r) => r !== firstRung).map((r) => lightVariant(r, id, codecs));
+    return firstRung ? [lightVariant(firstRung, id, codecs), variant(id, codecs), ...rest] : [variant(id, codecs), ...rest];
+  };
+  if (order.length === 0) lines.push(...variantsFor(null, []));
+  for (const id of order) lines.push(...variantsFor(id, [...new Set(groups.get(id)!.map((a) => a.signal!.codecs))]));
   return `${lines.join("\n")}\n`;
 }
+
+/**
+ * La part du son dans les débits annoncés d'un échelon allégé : la piste la plus lourde que Lumen serveur sert (E-AC-3
+ * Atmos à 768 kb/s) — un débit annoncé trop bas ferait choisir à Safari un échelon qui ne passe pas.
+ */
+export const LIGHT_AUDIO_ALLOWANCE_BPS = 768_000;
 
 /**
  * La liste maître servie à un récepteur Chromecast (`cc.{jeton}`, DECISIONS.md §192), à part de celle de la page : la

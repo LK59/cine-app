@@ -45,7 +45,9 @@ import type { LabelOptions } from "@/lib/trackLabel";
 import { cuttingOfTag, LUMEN_FORMAT_VERSION, parseLumenPath, segmentName, type LumenPath } from "./format";
 import { lumenEligibility } from "./eligibility";
 import { parseDialogueMode } from "./audio/dialogue";
-import { chronoEntry, isPlaybackId, noteBuilt, noteConvertBusy, noteConverted, noteRefused, noteRequest, noteSent, noteTrace, playbackOf, serverClockMs, type ChronoEntry, type PlaybackStats } from "./playbackStats";
+import { chronoEntry, isPlaybackId, noteBuilt, noteConvertBusy, noteConverted, noteLight, noteRefused, noteRequest, noteSent, noteTrace, playbackOf, serverClockMs, type ChronoEntry, type PlaybackStats } from "./playbackStats";
+import { lightInitFor, lightSegmentFor } from "./light/service";
+import { lightRungOf, lumenLightContext, withLight } from "./light/view";
 import { masterWithSubtitles, serveSubtitleRendition, SUBTITLE_HEADER } from "./subtitleServe";
 import { parseSubtitlePath } from "./subtitles";
 import { masterTrialOptions, muxedInit, muxedMaster, muxedMediaPlaylist, muxedSegment, muxVersion, parseMuxedPath, splitMuxTag, withMasterTrials, type MuxedPath } from "./trials";
@@ -244,7 +246,9 @@ async function serveChecked(
     return lumenErrorResponse(error, context).response;
   }
   if ("refusal" in found) return refusedResponse(found.refusal);
-  const { index } = found;
+  // La version allégée (`light/`) : ses échelons dans la vue, pour ce compte et si l'encodeur est là ; jamais pour un
+  // récepteur Chromecast. Sans elle, l'index tel quel — et la liste maître d'avant à l'octet près.
+  const index = cast ? found.index : withLight(found.index, await lumenLightContext(session));
   const ruled = lumenVersionOf(index);
   // L'adresse d'un essai multiplexé porte la version de la règle plus `m1` : comparée telle quelle.
   const current = mux ? muxVersion(ruled) : ruled;
@@ -296,6 +300,24 @@ async function serveChecked(
     }
     return answer(response);
   }
+}
+
+/**
+ * Les octets du segment vidéo d'origine `n`, par le chemin ordinaire (partagé, préparé) : ce qui dit à la version
+ * allégée les images et les instants de son segment `n`.
+ */
+function originOf(engine: ReturnType<typeof lumenServerEngine>, index: Parameters<typeof lumenVersionOf>[0], version: string): (n: number) => Promise<Uint8Array> {
+  return async (n) => (await lumenSegment(engine, index, version, { kind: "video" }, n)).segment.bytes;
+}
+
+/** `?lv=1|2` : cet échelon en tête de la liste maître ; `?light=seul1|seul2` : cet échelon seul (le banc). */
+export function lightOrder(params: URLSearchParams): { first?: 1 | 2; only?: 1 | 2 } {
+  const lv = params.get("lv");
+  const only = params.get("light");
+  return {
+    ...(lv === "1" || lv === "2" ? { first: lv === "2" ? 2 : 1 } : {}),
+    ...(only === "seul1" || only === "seul2" ? { only: only === "seul2" ? 2 : 1 } : {}),
+  } as { first?: 1 | 2; only?: 1 | 2 };
 }
 
 /** Une piste multiplexée n'existe que pour une piste servie, et un segment que dans l'index. */
@@ -441,7 +463,10 @@ async function serveResolved(
       // une piste mal formée ; une piste sans ce rendu garde le sien (l'hôte le sait par le verdict).
       const dialogue = parseDialogueMode(req.nextUrl.searchParams.get("dialogue"));
       if (dialogue === null) return goneResponse("lumen-inconnu", "Mode « dialogues » inconnu");
-      let text = engine.master(index, { audioTrack, labels: await labelsFor(req), ...(perCodecGroups ? { perCodecGroups } : {}), ...(dialogue ? { dialogue } : {}) });
+      // La version allégée : ses échelons après l'origine ; `?lv=N` met l'échelon N en tête (la page sait sa connexion
+      // faible), `?light=seul1|seul2` ne sert que lui (le banc). Mal formés : ignorés, la liste ordinaire.
+      const light = index.light ? { rungs: index.light, ...lightOrder(req.nextUrl.searchParams) } : undefined;
+      let text = engine.master(index, { audioTrack, labels: await labelsFor(req), ...(perCodecGroups ? { perCodecGroups } : {}), ...(dialogue ? { dialogue } : {}), ...(light ? { light } : {}) });
       // Les essais de la seule liste maître (étape 3e, `trials.ts`) : sans `?start=` ni `?bw=`, le texte de la règle.
       text = withMasterTrials(text, masterTrialOptions(req.nextUrl.searchParams));
       if (r.mux && audioTrack !== null) text = muxedMaster(text, audioTrack);
@@ -459,10 +484,12 @@ async function serveResolved(
       return playlistResponse(req, text, timing({ app: performance.now() - r.receivedAt, idx: r.idxMs }));
     }
     case "init": {
-      const bytes = engine.init(index, path.rendition);
+      const rendition = path.rendition;
+      const rung = rendition.kind === "light" ? lightRungOf(index, rendition.rung, rendition.cid) : null;
+      const bytes = rung ? await lightInitFor(index, rung, originOf(engine, index, r.version)) : engine.init(index, rendition);
       noteReady(r.chrono);
       if (r.chrono) r.chrono.bytes = bytes.length;
-      noteSent(stats, { kind: "init", video: path.rendition.kind === "video", bytes: bytes.length, sendMs: 0, aborted: false });
+      noteSent(stats, { kind: "init", video: path.rendition.kind !== "audio", bytes: bytes.length, sendMs: 0, aborted: false });
       return new NextResponse(new Uint8Array(bytes), {
         headers: {
           "Content-Type": SEGMENT_TYPE,
@@ -474,6 +501,19 @@ async function serveResolved(
     }
     case "segment": {
       noteMediaRead();
+      if (path.rendition.kind === "light") {
+        const rendition = path.rendition;
+        const rung = lightRungOf(index, rendition.rung, rendition.cid);
+        if (!rung) return goneResponse("lumen-inconnu", "Échelon allégé inconnu");
+        const result = await lightSegmentFor({ index, rung, n: path.n, origin: originOf(engine, index, r.version) });
+        const built = result.from === "built";
+        noteBuilt(stats, { video: true, n: path.n, buildMs: result.encodeMs, waitMs: result.waitMs, diskMs: 0, reused: !built });
+        noteLight(stats, { rung: rung.rung, built, encodeMs: result.encodeMs });
+        if (r.television && r.itemId) {
+          castProgressRelay().noteCastPosition({ jfId: r.television.jfId, user: r.television.user, itemId: r.itemId, player: "lumen-serveur" }, index.segments[path.n].startUs / 1e6);
+        }
+        return segmentResponse(r, { bytes: result.bytes, name: segmentName(rendition, path.n), video: true, reused: !built, buildMs: result.encodeMs, waitMs: result.waitMs, diskMs: 0 });
+      }
       const video = path.rendition.kind === "video";
       const { segment, reused } = await lumenSegment(engine, index, r.version, path.rendition, path.n, { session: r.session });
       noteBuilt(stats, { video, n: path.n, buildMs: segment.buildMs, waitMs: segment.waitMs, diskMs: segment.diskMs, reused, falseKey: segment.falseKey });

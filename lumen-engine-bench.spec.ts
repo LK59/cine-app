@@ -28,7 +28,7 @@ import { LumenEngine } from "@/lib/lumenServer/engine";
 import { inlineExecutor, workerExecutor } from "@/lib/lumenServer/pool";
 import { lumenEligibility } from "@/lib/lumenServer/eligibility";
 import { masterPlaylist } from "@/lib/lumenServer/playlists";
-import { initName, playlistName, segmentName, type LumenIndex, type LumenRendition } from "@/lib/lumenServer/format";
+import { initName, playlistName, renditionTag, segmentName, type LumenIndex, type LumenRendition } from "@/lib/lumenServer/format";
 import { parseFragments, endDecode } from "./src/__tests__/lumenServer-helpers";
 
 const FILES = process.env.LUMEN_FILES;
@@ -147,7 +147,7 @@ describe.skipIf(!FILES)("banc du moteur de Lumen serveur", () => {
         const wdir = join(dir, name);
         mkdirSync(wdir, { recursive: true });
         for (const rendition of renditions) {
-          const tag = rendition.kind === "video" ? "v" : `a${rendition.track}`;
+          const tag = renditionTag(rendition);
           mkdirSync(join(wdir, tag), { recursive: true });
           writeFileSync(join(wdir, initName(rendition)), engine.init(index, rendition));
           writeFileSync(join(wdir, playlistName(rendition)), windowPlaylist(index, rendition, window));
@@ -224,7 +224,7 @@ describe.skipIf(!FILES)("banc du moteur de Lumen serveur", () => {
       for (const rendition of renditions) writeFileSync(join(dir, playlistName(rendition)), readFileSync(join(dir, "debut", playlistName(rendition))));
       for (const rendition of renditions) {
         writeFileSync(join(dir, initName(rendition)), engine.init(index, rendition));
-        const tag = rendition.kind === "video" ? "v" : `a${rendition.track}`;
+        const tag = renditionTag(rendition);
         sh("cp", ["-r", join(dir, "debut", tag), dir]);
       }
       const master = sh("ffprobe", ["-v", "error", "-protocol_whitelist", "file", "-allowed_extensions", "ALL", "-show_entries", "stream=codec_name,channels,width,height", "-of", "csv=p=0", join(dir, "master.m3u8")]);

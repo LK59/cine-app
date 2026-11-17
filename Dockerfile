@@ -104,6 +104,12 @@ RUN addgroup -g 1001 cineapp && adduser -u 1001 -G cineapp -s /bin/sh -D cineapp
 # `npm ls sharp` quand `next` change. 0.35.5 depuis next 16.4.1 (14/10/2026) : faille de librsvg
 # (GHSA-wq5f-xc86-pv6w) corrigée dans les libvips qu'il embarque.
 RUN --mount=type=cache,target=/root/.npm apk add --no-cache libstdc++ tzdata && npm install --no-save sharp@0.35.5
+# Le ffmpeg vidéo de la version allégée de Lumen serveur (`src/lib/lumenServer/light/`) : le paquet Alpine (FFmpeg 8.1
+# sur Alpine 3.24, `hevc_vaapi`, `scale_vaapi`) et le pilote VAAPI des iGPU Intel récents (`intel-media-driver`, iHD).
+# À `/usr/bin/ffmpeg`, à côté du ffmpeg épinglé du son (`/usr/local/bin/ffmpeg`) qu'il ne remplace pas : chacun est
+# appelé par son chemin (`LUMEN_VIDEO_FFMPEG_PATH`, `LUMEN_FFMPEG_PATH`). ~180 Mo de plus. Sans `/dev/dri` donné au
+# conteneur (et le groupe `render` en `group_add`), la détection le voit indisponible et rien d'autre ne change.
+RUN apk add --no-cache ffmpeg intel-media-driver
 
 COPY --from=builder --chown=cineapp:cineapp /app/public ./public
 COPY --from=builder --chown=cineapp:cineapp /app/.next/standalone ./

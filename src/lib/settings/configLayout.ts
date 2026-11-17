@@ -22,7 +22,7 @@ import type { SettingGroup, SettingView } from "@/lib/settings/schema";
  */
 
 /** Ce dont une fonction a besoin pour marcher, vérifiable d'après les réglages enregistrés. */
-export type ConfigNeed = "aiKey" | "xrayService" | "xrayOn" | "booksOn" | "playerOn";
+export type ConfigNeed = "aiKey" | "xrayService" | "xrayOn" | "booksOn" | "playerOn" | "lumenServerOn";
 
 /** Où se règle ce qui manque. */
 export const NEED_HREF: Record<ConfigNeed, string> = {
@@ -31,6 +31,7 @@ export const NEED_HREF: Record<ConfigNeed, string> = {
   xrayOn: "/parametres/acteurs",
   booksOn: "/parametres/livres",
   playerOn: "/parametres/lecture",
+  lumenServerOn: "/parametres/lecture#lumen-serveur",
 };
 
 export interface ConfigCard {
@@ -61,7 +62,7 @@ export interface ConfigCard {
    */
   prereqKey?: string;
   /** Ce qui suit la carte : les tâches des sous-titres générés, ou l'état de la conversion du son (§161). */
-  after?: "subtitleJobs" | "lumenAudio";
+  after?: "subtitleJobs" | "lumenAudio" | "lumenLight";
 }
 
 const AI_PROVIDER_KEYS = [
@@ -130,6 +131,19 @@ export const CONFIG_LAYOUT = {
       anchor: "conversion-son",
       lab: true,
       after: "lumenAudio",
+    },
+    // La version allégée (`lumenServer/light/`, §195) : la vidéo réencodée par le iGPU pour les connexions lentes. Son
+    // prérequis est le GPU donné au conteneur ; Lumen serveur coupé, la carte s'estompe (elle n'a plus d'effet).
+    {
+      group: "playback",
+      keys: ["LUMEN_LIGHT", "LUMEN_LIGHT_MAX_JOBS", "LUMEN_LIGHT_RAM_MB", "LUMEN_LIGHT_CACHE_GB"],
+      titleKey: "config.lumenLight.title",
+      whyKey: "config.lumenLight.why",
+      prereqKey: "config.lumenLight.prereq",
+      needs: ["lumenServerOn"],
+      anchor: "version-allegee",
+      lab: true,
+      after: "lumenLight",
     },
   ],
   /** Diffusion et hors-ligne : le Chromecast, puis les téléchargements. */
@@ -228,6 +242,8 @@ export function missingNeeds(needs: readonly ConfigNeed[] | undefined, views: Re
         return views.get("BOOKS_ENABLED")?.value !== "true";
       case "playerOn":
         return views.get("PLAYER_ENABLED")?.value !== "true";
+      case "lumenServerOn":
+        return views.get("LUMEN_SERVER_ENABLED")?.value === "false";
     }
   });
 }

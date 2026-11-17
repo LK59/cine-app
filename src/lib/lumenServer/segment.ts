@@ -109,6 +109,7 @@ export function segmentSpec(index: LumenIndex, rendition: LumenRendition, n: num
     frameUs: index.frameUs,
     ...(index.cut === "cra-leading" ? { markLeading: true } : {}),
   };
+  if (rendition.kind === "light") throw new LumenError("piste-inconnue", "Segment allégé : pas par le remux.");
   if (rendition.kind === "video") {
     if (!index.video) throw new LumenError("piste-inconnue", "Pas de vidéo.");
     return { ...base, video: { number: index.video.number, codecId: index.video.codecId, lengthSize: index.video.lengthSize } };
