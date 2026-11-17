@@ -9,7 +9,7 @@
 //
 // Méthode : (1) le décalage global capture → média par corrélation des enveloppes (10 ms) sur les 12 premières
 // secondes, contre chaque piste, puis affiné sur la forme d'onde (± 20 ms) ; (2) fenêtre par fenêtre (0,5 s), la
-// corrélation normalisée de la forme d'onde avec chaque piste à ce décalage (± 8 ms) : la plus forte nomme la piste
+// corrélation normalisée de la forme d'onde avec chaque piste autour de ce décalage (± 60 ms : la dérive d'horloge) : la plus forte nomme la piste
 // entendue ; « silence » si l'énergie captée est nulle alors que les références ne le sont pas. Les deux doublages
 // partagent souvent la musique et les bruits (le même fond « M&E ») : la marge entre les deux corrélations compte
 // autant que leur valeur, et seules les fenêtres où elle dépasse 0,15 tranchent.
@@ -17,7 +17,8 @@ import fs from "node:fs";
 
 const [capFile, refA, nameA, refB, nameB, refStartS] = process.argv.slice(2);
 const cap = JSON.parse(fs.readFileSync(capFile, "utf8"));
-const rate = cap.rate;
+const rate = 8000;
+const capRate = cap.rate;
 const readF32 = (p) => { const b = fs.readFileSync(p); return new Float32Array(b.buffer, b.byteOffset, Math.floor(b.length / 4)); };
 const refs = [[nameA, readF32(refA)], [nameB, readF32(refB)]];
 const r0 = Number(refStartS);
@@ -25,10 +26,28 @@ const r0 = Number(refStartS);
 // La capture remise bout à bout, chaque échantillon daté (temps média estimé par le ct du morceau).
 const samples = [];
 const times = [];
+// Chaque morceau ramené à 8 kHz (interpolation linéaire) : la capture est à ctxRate / décimation.
+let anchor = cap.chunks[0]?.ct ?? 0;
+let anchorAt = 0;
+const resyncs = [];
 for (const c of cap.chunks) {
+  // Un arrêt (blocage, saut, changement de piste) : le son capté continue (silence) pendant que le média ne bouge
+  // pas. Au-delà de 2 s d écart (un saut, un long blocage) avec le `ct` du morceau, la datation repart de lui.
+  const expected = anchor + (samples.length - anchorAt) / rate;
+  if (Math.abs(c.ct - expected) > 2) { resyncs.push(Math.round(c.ct * 10) / 10); anchor = c.ct; anchorAt = samples.length; }
   const buf = Buffer.from(c.b64, "base64");
-  const f = new Float32Array(buf.buffer, buf.byteOffset, buf.length / 4);
-  for (let i = 0; i < f.length; i++) { samples.push(f[i]); times.push(c.ct + i / rate); }
+  const f = new Float32Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length));
+  const n = Math.floor((f.length * rate) / capRate);
+  for (let i = 0; i < n; i++) {
+    const p = (i * capRate) / rate;
+    const k = Math.floor(p);
+    const v = k + 1 < f.length ? f[k] + (f[k + 1] - f[k]) * (p - k) : f[k];
+    samples.push(v);
+    // Le son capté est continu (ScriptProcessor rend des tampons contigus) : la date d'un échantillon est celle du
+    // premier morceau plus son rang. Le `ct` de chaque morceau, lu au rappel, varie de dizaines de ms — trop pour une
+    // corrélation de forme d'onde ; il sert seulement à dater le changement de piste.
+    times.push(anchor + (samples.length - anchorAt) / rate);
+  }
 }
 const x = Float32Array.from(samples);
 
@@ -70,12 +89,18 @@ for (let i = 0; i + win <= x.length; i += win) {
   let e = 0;
   for (let k = 0; k < win; k++) e += x[i + k] * x[i + k];
   const rms = Math.sqrt(e / win);
+  // Par piste : le décalage grossier sur l enveloppe (± 1 s, pas de 10 ms), puis la forme d'onde (± 15 ms).
+  const exw = env(x.subarray(i, i + win), step);
   const scores = refs.map(([name, ref]) => {
+    let bestE = -2, lagE = 0;
+    const er = env(ref.subarray(Math.max(0, ri - rate), ri + win + rate), step);
+    const off = Math.round(Math.min(rate, ri) / step);
+    for (let l = -100; l <= 100; l++) { const v = ncc(exw, 0, er, off + l, exw.length); if (v > bestE) { bestE = v; lagE = l * step; } }
     let m = -1;
-    for (let d = -Math.round(rate * 0.008); d <= Math.round(rate * 0.008); d++) m = Math.max(m, ncc(x, i, ref, ri + d, win));
-    let er = 0;
-    for (let k = 0; k < win; k++) er += (ref[ri + k] ?? 0) ** 2;
-    return { name, c: Math.round(m * 100) / 100, refRms: Math.sqrt(er / win) };
+    for (let d = lagE - Math.round(rate * 0.015); d <= lagE + Math.round(rate * 0.015); d++) m = Math.max(m, ncc(x, i, ref, ri + d, win));
+    let er2 = 0;
+    for (let k = 0; k < win; k++) er2 += (ref[ri + k] ?? 0) ** 2;
+    return { name, c: Math.round(m * 100) / 100, refRms: Math.sqrt(er2 / win) };
   });
   const [s0, s1] = [...scores].sort((a, b) => b.c - a.c);
   const silent = rms < 1e-4 && Math.max(...scores.map((s) => s.refRms)) > 1e-3;
@@ -83,7 +108,7 @@ for (let i = 0; i + win <= x.length; i += win) {
 }
 
 // Le changement : la première fenêtre après la demande qui nomme la piste visée, et ce qui la précède.
-const report = { lagMs: Math.round((fine / rate) * 1000), lagScore: Math.round(fineScore * 100) / 100, firstTrack: best.ref, switches: [] };
+const report = { resyncs, lagMs: Math.round((fine / rate) * 1000), lagScore: Math.round(fineScore * 100) / 100, firstTrack: best.ref, switches: [] };
 for (const sw of cap.switches ?? []) {
   const after = windows.filter((w) => w.at >= sw.at - 0.5);
   const hit = after.find((w) => w.who === sw.to);
