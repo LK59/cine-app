@@ -690,11 +690,13 @@ pure function of the file, cached in RAM and `DATA_DIR/lumen-audio`). All audio 
 element at `#t=` with `prepare` sent first and the last frame frozen on top — never a page reload.
 **Routes and security**: every route re-checks the administrator itself (`lumenAccess`, `assertVisible`), the proxy's
 `ADMIN_ONLY_READS` is only the first gate; an absence answers 410 (a stale version), 409 (not served) or 503, never
-404/400 (CrowdSec). The one cookieless access is an Apple TV's (§186): `…/{s}/tv.{token}/{name}`, a token of its own
+404/400 (CrowdSec). The cookieless accesses are a television's: an Apple TV's (§186): `…/{s}/tv.{token}/{name}`, a token of its own
 (`tvPass.ts`: its own key, signed `lumen` scope, administrator role, one title, one playback, the session alive, six
 hours), let through by the proxy (`lumenTvPassFor`) and re-verified by the route; a request that also carries a cookie
 must pass the ordinary check too. Relative URIs make every segment inherit the token; video segments fetched without a
-cookie feed `castProgress`. A text subtitle reaches the television in the stream (§191): while casting only, the element
+cookie feed `castProgress`. A Chromecast gets the same shape under its own scope (§192): `…/{s}/cc.{token}/{name}`
+(`lumen-cc`, neither token opens the other's addresses), CORS `*` without credentials on every answer to it, AAC copied or
+converted, chosen by the sending device's option (Chrome) and `eligibility?cast=1`, Jellyfin's stream as the fallback. A text subtitle reaches the television in the stream (§191): while casting only, the element
 reopens `master.m3u8?…&st=<Jellyfin index>`, which adds one WebVTT `SUBTITLES` rendition (DEFAULT=YES) segmented on the
 video grid (`subtitles.ts`, `X-TIMESTAMP-MAP` at the delay D) — without `st` the master is byte-identical. **Fallbacks**: before the first picture (refusal, code 4, 20 s without a picture) the native
 player takes over in the same page (`declineLumen`); after it, the playback recovers **on this path** (`recover`: the
