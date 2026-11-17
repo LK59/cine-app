@@ -191,6 +191,10 @@ export async function masterWithSubtitles(
   const chosen = chosenSubtitle(facts.tracks, wanted);
   if (!chosen) return { text, outcome: "absent" };
   const tag = subtitleRenditionTag(facts.mediaSourceId, chosen);
+  // Le WebVTT demandé à Jellyfin dès la liste maître, sans l'attendre (17/11/2026) : sa première conversion d'une
+  // piste intégrée relit le fichier (8,7 s mesurées au banc), et le premier segment de sous-titres l'attendait seul.
+  // Le segment, venu ensuite, prend la même lecture en cours (`pending`).
+  void lumenSubtitleCues(itemId, facts.mediaSourceId, tag, chosen);
   const name = await subtitleName(req, facts.tracks.filter((t) => t.isText !== false), chosen);
   return { text: withSubtitleRendition(text, { tag, track: chosen, name }), outcome: "rendu" };
 }

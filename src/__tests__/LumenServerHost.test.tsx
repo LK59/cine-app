@@ -56,8 +56,10 @@ const reloadServerPage = vi.fn((_intent: () => unknown, _video: unknown) => true
 vi.mock("@/components/player/server/serverElement", async (orig) => ({
   ...(await orig<typeof import("@/components/player/server/serverElement")>()),
   reloadServerPage: (intent: () => unknown, video: unknown) => reloadServerPage(intent, video),
-  releaseHlsElement: () => {},
+  releaseHlsElement: (video: unknown) => released.push(video),
 }));
+/** Les éléments dont la séance HLS a été coupée (`releaseHlsElement`). */
+const released: unknown[] = [];
 let state: { resumeSeconds: number; preferences: null; positionUnknown?: boolean } = { resumeSeconds: 600, preferences: null };
 vi.mock("@/lib/playbackPrefetch", () => ({ takePrefetchedPlaybackState: () => null, fetchPlaybackState: async () => state, forgetPrefetchedPlaybackState: () => {} }));
 const info = {
@@ -261,6 +263,7 @@ describe("la reprise après une pause", () => {
         return Promise.resolve();
       }
       close() {
+        calls.push("close");
         return Promise.resolve();
       }
     }
@@ -294,6 +297,56 @@ describe("la reprise après une pause", () => {
     expect(calls).toContain("suspend");
     expect(kinds()).not.toContain("seek");
     keepAwakeTrial = false;
+  });
+
+  it("la page cachée pendant la pause : la veille fermée, pas seulement suspendue (l'écran verrouillé disait « à l'arrêt »)", async () => {
+    keepAwakeTrial = true;
+    const calls = fakeAudio();
+    await mount();
+    const el = element();
+    act(() => el.picture(600));
+    act(() => el.video.dispatchEvent(new Event("pause")));
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    try {
+      act(() => document.dispatchEvent(new Event("visibilitychange")));
+    } finally {
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    }
+    expect(calls).toContain("close");
+    calls.length = 0;
+    act(() => el.video.dispatchEvent(new Event("play")));
+    act(() => el.video.dispatchEvent(new Event("pause")));
+    expect(calls).toEqual(["start", "resume"]);
+    keepAwakeTrial = false;
+  });
+});
+
+describe("un élément retiré lâche sa séance HLS (17/11/2026)", () => {
+  it("à la fermeture : la séance coupée — iOS continuait sinon de télécharger le film fermé", async () => {
+    const view = await mount();
+    const el = element();
+    act(() => el.picture(600));
+    expect(el.video.getAttribute("src")).toContain("master.m3u8");
+    released.length = 0;
+    view.unmount();
+    expect(released).toEqual([el.video]);
+  });
+
+  it("à une relance sur un élément neuf : l'ancien est coupé, le nouveau garde son adresse", async () => {
+    await mount();
+    const el = element();
+    act(() => el.picture(600));
+    released.length = 0;
+    verdicts = [verdictOf("3-bbbbbbbbbbbb")];
+    await act(async () => {
+      el.fail(2);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await flush();
+    const next = element();
+    expect(next.video).not.toBe(el.video);
+    expect(released).toEqual([el.video]);
+    expect(next.video.getAttribute("src")).toContain("3-bbbbbbbbbbbb");
   });
 });
 

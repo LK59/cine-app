@@ -118,6 +118,7 @@ import {
   type MasterAudio,
 } from "./lumenOpening";
 import {
+  audioSegmentArrivalMs,
   bufferedText,
   lumenAudioFields,
   lumenCastSubtitleFields,
@@ -459,8 +460,12 @@ export function LumenServerHost({
   useEffect(() => {
     // Arrière-plan ou écran verrouillé pendant une pause : la veille se tait aussitôt, elle ne garderait éveillés que
     // la sortie audio et la page, pour personne.
+    // Fermée, pas seulement suspendue (17/11/2026) : un contexte Web Audio suspendu restait inscrit comme lecteur
+    // auprès d'iOS, et l'écran verrouillé montrait « à l'arrêt » à la place du film. Recréée à la pause suivante.
     const onHidden = () => {
-      if (document.visibilityState === "hidden") keepAwakeRef.current?.stop();
+      if (document.visibilityState !== "hidden") return;
+      keepAwakeRef.current?.dispose();
+      keepAwakeRef.current = null;
     };
     document.addEventListener("visibilitychange", onHidden);
     return () => {
@@ -468,6 +473,31 @@ export function LumenServerHost({
       keepAwakeRef.current?.dispose();
     };
   }, []);
+
+  /**
+   * Un élément retiré (fermeture, relance sur un élément neuf) lâche sa séance HLS (17/11/2026). React le sortait de
+   * la page avec sa source : iOS continuait d'en télécharger les segments, et reprenait au retour au premier plan —
+   * le 17/11, quatre lecteurs fermés depuis deux à huit minutes tiraient ~70 Mo pendant une ouverture, qui a échoué
+   * (« Media failed to decode », trois fois), et trois fermés depuis une demi-heure se sont réveillés à l'ouverture
+   * suivante (10 s jusqu'à l'image, contre 1,2 s au lecteur actuel une minute après). Le passage au lecteur serveur
+   * pour une diffusion garde l'élément : la route AirPlay y tient (`fallTo`, `keepElementRef`).
+   */
+  const keepElementRef = useRef(false);
+  /** L'élément qui porte une adresse, avec sa clé : retenu là où la source est posée (l'élément n'existe pas au montage). */
+  const heldVideoRef = useRef<{ key: number; video: HTMLVideoElement } | null>(null);
+  useEffect(() => {
+    const key = videoKey;
+    return () => {
+      const held = heldVideoRef.current;
+      if (!held || held.key !== key || keepElementRef.current) return;
+      heldVideoRef.current = null;
+      try {
+        releaseHlsElement(held.video);
+      } catch {
+        // Déjà démonté.
+      }
+    };
+  }, [videoKey]);
 
   useEffect(() => {
     errorRef.current = error;
@@ -592,6 +622,7 @@ export function LumenServerHost({
       }
       // L'arrêt de cette séance-ci chez Jellyfin, avant que le lecteur serveur n'annonce la sienne en négociant.
       void stopPlaybackNow();
+      if (opts.cast) keepElementRef.current = true;
       try {
         if (video && !opts.cast) releaseHlsElement(video);
       } catch {
@@ -1075,6 +1106,7 @@ export function LumenServerHost({
     video.addEventListener("timeupdate", onAudioAdvance);
     video.src = src;
     video.load();
+    heldVideoRef.current = { key: videoKey, video };
     playAllowingGesture();
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
@@ -1549,7 +1581,8 @@ export function LumenServerHost({
         const now = Array.from({ length: list?.length ?? 0 }, (_, i) => list![i]);
         const applied = enabledAudioNumber(now, masterAudioRef.current) === id;
         if (applied) {
-          reportPlayback("audio", lumenAudioFields(logContext.current, { from, to: id, fromTrack, toTrack, via: "audioTracks", applied, tookMs: Date.now() - startedAt0, at, processing, dialogue }, lumenSession));
+          const segMs = audioSegmentArrivalMs(lumenSession, id, performance.now() - (Date.now() - startedAt0));
+          reportPlayback("audio", lumenAudioFields(logContext.current, { from, to: id, fromTrack, toTrack, via: "audioTracks", applied, tookMs: Date.now() - startedAt0, at, processing, dialogue, segMs }, lumenSession));
           noteEvent(t("player.info.lumen.eventAudio", { track: toTrack, via: "audioTracks", ms: Date.now() - startedAt0 }));
           return;
         }

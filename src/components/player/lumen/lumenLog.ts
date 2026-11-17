@@ -158,6 +158,12 @@ export function lumenAudioFields(
      * changement de force (même piste, `from` = `to`) et sur un changement de piste pendant que le traitement est servi.
      */
     dialogue?: DialogueMode;
+    /**
+     * Le premier segment de la nouvelle piste reçu par Safari, en ms depuis le geste (`audioSegmentArrivalMs`) — le
+     * son ne peut pas venir avant. `tookMs` d'un changement par `audioTracks` est le délai de la vérification (2 s),
+     * pas l'arrivée du son : le 17/11/2026, tous les changements disaient ~2 000 ms, rapides ou lents à l'oreille.
+     */
+    segMs?: number;
   },
   lumenSession: string
 ): Record<string, unknown> {
@@ -176,6 +182,7 @@ export function lumenAudioFields(
     ...(change.first ? { first: change.first } : {}),
     ...(change.pictureMs !== undefined ? { pictureMs: Math.round(change.pictureMs) } : {}),
     ...(change.frozen !== undefined ? { frozen: change.frozen } : {}),
+    ...(change.segMs !== undefined ? { segMs: Math.round(change.segMs) } : {}),
     lumenSession,
   };
 }
@@ -266,6 +273,30 @@ export function lumenRequestsSeen(lumenSession: string, buffered?: readonly Lume
 }
 
 /** Une requête vue par Resource Timing — ce que `lumenRequestsSeen` en lit. */
+/**
+ * Quand le premier segment d'une piste son est arrivé, en ms après `sinceMs` (horloge `performance.now()`), parmi les
+ * requêtes de cette lecture commencées depuis — `a3/41.m4s`, ou son rendu « dialogues » `a3d1x…/41.m4s` (§193).
+ * `undefined` si Safari ne l'a pas encore reçu ou ne l'expose pas (Resource Timing).
+ */
+export function audioSegmentArrivalMs(lumenSession: string, track: number, sinceMs: number, buffered?: readonly LumenTimedResource[]): number | undefined {
+  try {
+    const marker = `/${lumenSession}/`;
+    const segment = new RegExp(`/a${track}(?:d[12]x[^/]+)?/\\d+\\.m4s$`);
+    const fromBuffer: readonly LumenTimedResource[] = buffered ?? (performance.getEntriesByType("resource") as PerformanceResourceTiming[]);
+    let first: number | undefined;
+    for (const e of [...observed.filter((o): o is LumenResourceLike & LumenTimedResource => typeof (o as Partial<LumenTimedResource>).responseEnd === "number"), ...fromBuffer]) {
+      if (!e.name.includes(marker) || e.startTime < sinceMs) continue;
+      if (!segment.test(e.name.split("#")[0].split("?")[0])) continue;
+      if (first === undefined || e.responseEnd < first) first = e.responseEnd;
+    }
+    return first === undefined ? undefined : Math.max(0, first - sinceMs);
+  } catch {
+    return undefined;
+  }
+}
+
+export type LumenTimedResource = Pick<PerformanceResourceTiming, "name" | "startTime" | "responseEnd">;
+
 export type LumenResourceLike = Pick<PerformanceResourceTiming, "name" | "startTime" | "duration" | "transferSize"> & { responseStatus?: number };
 
 /** Les requêtes de Lumen serveur reçues par l'observateur, les plus récentes au bout. */
