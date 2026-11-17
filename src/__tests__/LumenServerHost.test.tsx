@@ -85,13 +85,15 @@ const MASTER = [
 let genOptions: object = { enabled: false };
 /** Le serveur : la séquence des verdicts (`eligibility`), la liste des sous-titres, la liste maître. */
 let verdicts: (object | "down")[] = [];
+/** Les sous-titres que `pistes` annonce (vides par défaut). */
+let pistesSubtitles: object[] = [];
 const fetchMock = vi.fn(async (url: string) => {
   if (url.includes("/eligibility")) {
     const next = verdicts.length > 1 ? verdicts.shift()! : verdicts[0];
     if (next === "down") throw new TypeError("Load failed");
     return new Response(JSON.stringify(next), { status: 200 });
   }
-  if (url.includes("/pistes")) return new Response(JSON.stringify({ mediaSourceId: "g1", subtitleTracks: [] }), { status: 200 });
+  if (url.includes("/pistes")) return new Response(JSON.stringify({ mediaSourceId: "g1", subtitleTracks: pistesSubtitles }), { status: 200 });
   if (url.includes("master.m3u8")) return new Response(MASTER, { status: 200 });
   if (url.includes("/api/subtitle-gen/options")) return new Response(JSON.stringify(genOptions), { status: 200 });
   if (url.endsWith("/api/subtitle-gen/jobs")) return new Response(JSON.stringify({ jobId: "job1", status: "running" }), { status: 200 });
@@ -167,6 +169,7 @@ beforeEach(() => {
   verdicts = [verdictOf("2-aaaaaaaaaaaa")];
   genOptions = { enabled: false };
   subtitleLines.length = 0;
+  pistesSubtitles = [];
   [playback.close, playback.advance, declineLumen, onFallback, reloadServerPage, stopReporting, fetchMock].forEach((m) => m.mockClear());
   vi.stubGlobal("fetch", fetchMock);
   vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.resolve());
@@ -192,6 +195,16 @@ describe("l'ouverture", () => {
     expect(last("start")).toMatchObject({ player: "lumen-serveur", path: "remux-serveur", why: "open", at: 600, audioTrack: 2, audioStreamIndex: 1, resumeBy: "fragment" });
     expect(controls?.audioTracks.map((t) => t.id)).toEqual([2, 3, 4, 5]);
     expect(controls?.currentAudioId).toBe(2);
+  });
+
+  it("les `<track>` seulement après la première image : posés avec l'adresse HLS, Safari refuse l'élément (code 4)", async () => {
+    pistesSubtitles = [{ index: 7, url: "/api/subtitles/x/7.vtt", language: "fre", codec: "subrip", isForced: false, isDefault: false }];
+    await mount();
+    const el = element();
+    expect(el.video.getAttribute("src") ?? el.video.src).toContain("master.m3u8");
+    expect(el.video.querySelectorAll("track")).toHaveLength(0);
+    act(() => el.picture(600));
+    expect(el.video.querySelectorAll("track")).toHaveLength(1);
   });
 
   it("la première image : la ligne `opening`, aucun saut de secours quand `#t=` a été suivi", async () => {

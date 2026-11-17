@@ -328,6 +328,13 @@ export function LumenServerHost({
   const positionNow = useCallback(() => seeks.intendedPosition(videoRef.current, lastKnownTime.current), [seeks]);
 
   const [videoKey, setVideoKey] = useState(0);
+  /**
+   * L'élément dont la première image est arrivée : ses `<track>` ne sont posés qu'à ce moment. Un `<video>` qui porte
+   * des `<track>` au moment où son adresse HLS est posée est refusé par Safari sur iPhone (code 4 après la liste
+   * maître et la liste vidéo, sans liste son ni segment) : 5 lectures sur 5 dans l'application le 17/11/2026, et la
+   * passe « Comme l'app » de `/lumen-test` l'a isolé — `tracks` seul échoue, tout le reste sans lui passe.
+   */
+  const [tracksFor, setTracksFor] = useState(-1);
   const [src, setSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -876,11 +883,8 @@ export function LumenServerHost({
         safetySeekRef.current = true;
         video.currentTime = wantedAt;
       }
-      // Les sous-titres de l'ouverture, posés sur les `<track>` maintenant que l'élément a ses pistes de texte.
-      if (secondSubtitleRef.current === null) {
-        const position = currentSubtitleRef.current === null ? -1 : externalPositionsRef.current.indexOf(currentSubtitleRef.current);
-        for (let i = 0; i < video.textTracks.length; i++) video.textTracks[i].mode = i === position ? "showing" : "disabled";
-      }
+      // Les `<track>` de cet élément, posés maintenant seulement (voir `tracksFor`) ; leurs modes, dans l'effet qui suit.
+      setTracksFor(videoKey);
       if (first && settled) {
         reportPlayback(
           "opening",
@@ -1370,6 +1374,14 @@ export function LumenServerHost({
     if (audioSettleRef.current) clearTimeout(audioSettleRef.current);
   }, []);
 
+  // Les sous-titres de l'ouverture (ou de la réouverture), posés sur les `<track>` dès qu'ils sont dans l'élément.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || tracksFor !== videoKey || secondSubtitleRef.current !== null) return;
+    const position = currentSubtitleRef.current === null ? -1 : externalPositionsRef.current.indexOf(currentSubtitleRef.current);
+    for (let i = 0; i < video.textTracks.length; i++) video.textTracks[i].mode = i === position ? "showing" : "disabled";
+  }, [tracksFor, videoKey, externalSubtitleTracks]);
+
   // ── Les sous-titres : les modes des `<track>`, comme le lecteur serveur ─────────────────────────────
   const changeSubtitle = useCallback(
     (id: number | null) => {
@@ -1684,7 +1696,7 @@ export function LumenServerHost({
             // AirPlay ouvert (§186) : l'adresse porte le laissez-passer d'une Apple TV, qui n'a pas de cookie.
             {...{ "x-webkit-airplay": "allow" }}
           >
-            {externalSubtitleTracks.map((st) => (
+            {tracksFor === videoKey && externalSubtitleTracks.map((st) => (
               <track key={st.index} kind="subtitles" src={st.url} srcLang={st.language ?? undefined} label={st.label} />
             ))}
           </video>
