@@ -275,13 +275,15 @@ export function lumenRequestsSeen(lumenSession: string, buffered?: readonly Lume
 /** Une requête vue par Resource Timing — ce que `lumenRequestsSeen` en lit. */
 /**
  * Quand le premier segment d'une piste son est arrivé, en ms après `sinceMs` (horloge `performance.now()`), parmi les
- * requêtes de cette lecture commencées depuis — `a3/41.m4s`, ou son rendu « dialogues » `a3d1x…/41.m4s` (§193).
+ * requêtes de cette lecture commencées depuis — `a3/41.m4s`, son rendu converti `a3x…/41.m4s` (§161) ou « dialogues »
+ * `a3d1x…/41.m4s` (§193). Safari demande la nouvelle piste à partir de la position : ce premier segment est celui
+ * qu'on entend (vérifié au journal du proxy le 17/11/2026, *Mr. Robot* à 1 172 s : `a3/156` puis la suite).
  * `undefined` si Safari ne l'a pas encore reçu ou ne l'expose pas (Resource Timing).
  */
 export function audioSegmentArrivalMs(lumenSession: string, track: number, sinceMs: number, buffered?: readonly LumenTimedResource[]): number | undefined {
   try {
     const marker = `/${lumenSession}/`;
-    const segment = new RegExp(`/a${track}(?:d[12]x[^/]+)?/\\d+\\.m4s$`);
+    const segment = new RegExp(`/a${track}(?:d[12])?(?:x[^/]+)?/\\d+\\.m4s$`);
     const fromBuffer: readonly LumenTimedResource[] = buffered ?? (performance.getEntriesByType("resource") as PerformanceResourceTiming[]);
     let first: number | undefined;
     for (const e of [...observed.filter((o): o is LumenResourceLike & LumenTimedResource => typeof (o as Partial<LumenTimedResource>).responseEnd === "number"), ...fromBuffer]) {

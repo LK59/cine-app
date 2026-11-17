@@ -28,6 +28,10 @@ describe("audioSegmentArrivalMs", () => {
     expect(audioSegmentArrivalMs("sess1234", 3, 1000, seen)).toBe(600);
   });
 
+  it("le rendu converti de la piste compte (§161, `a2x…`)", () => {
+    expect(audioSegmentArrivalMs("sess1234", 2, 1000, [entry("a2x83417ea4/0.m4s", 1010, 1450)])).toBe(450);
+  });
+
   it("rien de reçu : undefined", () => {
     expect(audioSegmentArrivalMs("sess1234", 3, 1000, [entry("a2/41.m4s", 1010, 1200)])).toBeUndefined();
     expect(audioSegmentArrivalMs("sess1234", 3, 1000, [entry("a33/41.m4s", 1010, 1200)])).toBeUndefined();

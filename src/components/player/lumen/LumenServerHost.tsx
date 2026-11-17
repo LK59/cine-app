@@ -1583,7 +1583,8 @@ export function LumenServerHost({
         if (applied) {
           const segMs = audioSegmentArrivalMs(lumenSession, id, performance.now() - (Date.now() - startedAt0));
           reportPlayback("audio", lumenAudioFields(logContext.current, { from, to: id, fromTrack, toTrack, via: "audioTracks", applied, tookMs: Date.now() - startedAt0, at, processing, dialogue, segMs }, lumenSession));
-          noteEvent(t("player.info.lumen.eventAudio", { track: toTrack, via: "audioTracks", ms: Date.now() - startedAt0 }));
+          // Le panneau dit l'arrivée du son (le premier segment de la piste) quand Safari l'expose, sinon la vérification.
+          noteEvent(t("player.info.lumen.eventAudio", { track: toTrack, via: "audioTracks", ms: Math.round(segMs ?? Date.now() - startedAt0) }));
           return;
         }
         reopenForAudio({ from, to: id, at: positionNow(), fromTrack, toTrack, processing, startedAt0, first: "audioTracks sans effet en 2 s", dialogue });
