@@ -1,12 +1,13 @@
 // « Générer des sous-titres » dans Lumen serveur (étape 4b, DECISIONS.md §187) : la génération du lecteur natif
 // (`SubtitleGeneration`, §70) branchée sur cet hôte. La demande, le sondage, la position envoyée au serveur, les
 // messages d'état et la bascule finale sont ceux du lecteur natif, sans une ligne de plus ; ce qui diffère est
-// l'affichage. Le lecteur natif dessine ses lignes lui-même ; ici, Safari dessine les `<track>` — mais une génération
-// en cours n'a pas encore de fichier : ses lignes, reçues par morceaux, sont montrées par le calque de sous-titres de
-// la page (`SubtitleLayer`, celui des deux sous-titres), à l'instant de l'élément. À la fin, Jellyfin présente le
+// l'affichage. Une génération en cours n'a pas encore de fichier : ses lignes, reçues par morceaux, sont montrées par le
+// calque de sous-titres de la page (`SubtitleLayer`, celui de toutes les pistes depuis §190), à l'instant de l'élément
+// moins le décalage du menu, comme le lecteur natif. À la fin, Jellyfin présente le
 // fichier : la liste des sous-titres est relue (`/api/lumen/{id}/pistes`) et la piste générée devient un `<track>`
 // comme les autres, choisie à la place de l'entrée temporaire.
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type RefObject } from "react";
+import { cueLookupTime } from "@/lib/subtitleSync";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { isGeneratingTrack, SubtitleGeneration } from "@/lib/subtitleGen/generation";
 import type { ExternalSubtitleSource } from "@/lib/webcodecs/externalSubtitles";
@@ -28,6 +29,7 @@ export function useLumenSubtitleGeneration({
   locale,
   t,
   currentId,
+  offset = 0,
   onFinal,
   onFailed,
   onWarning,
@@ -44,6 +46,8 @@ export function useLumenSubtitleGeneration({
   t: ReturnType<typeof useT>;
   /** Le sous-titre choisi : une entrée temporaire (`isGeneratingTrack`) est une génération qu'on montre. */
   currentId: number | null;
+  /** Le décalage du principal (±0,5 s), tenu par l'hôte (§190) : la ligne cherchée à l'instant moins lui. */
+  offset?: number;
   /** Jellyfin présente le fichier : l'hôte relit la liste et choisit la piste finale. */
   onFinal: (source: ExternalSubtitleSource) => void;
   /** La génération montrée a échoué : l'hôte retire le sous-titre. */
@@ -90,7 +94,8 @@ export function useLumenSubtitleGeneration({
       return () => clearTimeout(clear);
     }
     const draw = () => {
-      const at = video.currentTime;
+      // Une génération est datée comme un fichier à côté du film ; ici l'horloge de l'élément est celle du fichier.
+      const at = cueLookupTime(video.currentTime, 0, offset, 1, true);
       const text = generation.textAt(at);
       if (text) {
         generation.noteShown();
@@ -101,7 +106,7 @@ export function useLumenSubtitleGeneration({
       const noticeLine = notice ? noticeText(notice, t) : null;
       setLine((previous) => (noticeLine === null ? null : previous?.notice && previous.text === noticeLine ? previous : { text: noticeLine, notice: true }));
     };
-    const onSeeking = () => generation.noteSeek(video.currentTime);
+    const onSeeking = () => generation.noteSeek(cueLookupTime(video.currentTime, 0, offset, 1, true));
     // Le premier dessin hors du corps de l'effet (la règle du compilateur React) : au tour suivant.
     const first = setTimeout(draw, 0);
     const unsubscribe = generation.subscribe(draw);
@@ -115,7 +120,7 @@ export function useLumenSubtitleGeneration({
       video.removeEventListener("seeked", draw);
       video.removeEventListener("seeking", onSeeking);
     };
-  }, [generation, currentId, videoRef, t]);
+  }, [generation, currentId, videoRef, t, offset]);
 
   const view = useMemo(() => generationMenu(state, externals, locale, t), [state, externals, locale, t]);
 

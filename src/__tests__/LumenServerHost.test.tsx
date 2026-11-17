@@ -13,7 +13,7 @@ vi.mock("@/lib/reportPlayback", () => ({ reportPlayback: (kind: string, fields: 
 const playback = { mode: "full", close: vi.fn(), minimize: vi.fn(), expand: vi.fn(), advance: vi.fn() };
 vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => playback, PLAYER_RELOAD_INTENT_KEY: "cine:player-reload-intent" }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr" }) }));
-type Controls = { dialogue?: { onChange: (mode: "off" | "on" | "strong") => void }; subtitleGeneration?: { targets: { code: string }[]; onGenerate: (code: string) => void }; onChangeAudio: (id: number) => void; onClose: () => void; onAdvance: () => void; onCastRequest?: () => void; audioTracks: { id: number; label: string }[]; currentAudioId: number | null; subtitleTracks: { id: number }[]; currentSubtitleId: number | null };
+type Controls = { dialogue?: { onChange: (mode: "off" | "on" | "strong") => void }; subtitleGeneration?: { targets: { code: string }[]; onGenerate: (code: string) => void }; onChangeAudio: (id: number) => void; onClose: () => void; onAdvance: () => void; onCastRequest?: () => void; audioTracks: { id: number; label: string }[]; currentAudioId: number | null; subtitleTracks: { id: number }[]; currentSubtitleId: number | null; onChangeSubtitle: (id: number | null) => void; subtitleOffset?: { seconds: number; onShift: (delta: number) => void }; secondSubtitle?: { currentId: number | null; onChange: (id: number | null) => void; offset?: { seconds: number; onShift: (delta: number) => void } }; replaySubtitle?: { track: () => number | null; show: (id: number | null) => void }; onChromeEdges?: (edges: { top: number; bottom: number } | null) => void };
 let controls: Controls | null = null;
 vi.mock("@/components/PlayerControls", () => ({
   PlayerControls: (props: Controls) => {
@@ -26,7 +26,17 @@ vi.mock("@/components/PlaybackInfoPanel", () => ({ PlaybackInfoPanel: () => null
 vi.mock("@/components/player/server/ServerPlayerIntro", () => ({ ServerPlayerIntro: () => null }));
 vi.mock("@/components/player/server/ServerPlayerScreens", () => ({ ServerWaitPill: () => null }));
 const subtitleLines: (string | null)[] = [];
-vi.mock("@/components/player/SubtitleLayer", () => ({ SubtitleLayer: (props: { primary: string | null }) => (subtitleLines.push(props.primary), null) }));
+type LayerProps = { primary: string | null; second?: string | null; dual?: boolean; chromeEdges: { top: number; bottom: number } | null };
+/** Chaque rendu du calque, ses props entières : la ligne, la seconde, la place laissée aux commandes. */
+const layers: LayerProps[] = [];
+vi.mock("@/components/player/SubtitleLayer", () => ({
+  SubtitleLayer: (props: LayerProps) => {
+    subtitleLines.push(props.primary);
+    layers.push(props);
+    // Dans la page : ce qui est à l'écran se lit dans le DOM (un calque retiré n'y est plus).
+    return <p data-subtitle-layer="">{[props.primary, props.second].filter(Boolean).join(" | ")}</p>;
+  },
+}));
 vi.mock("@/lib/playerHistory", () => ({ usePlayerBackClose: () => {} }));
 vi.mock("@/lib/usePlayerFocus", () => ({ usePlayerFocus: () => {} }));
 vi.mock("@/lib/useWakeLock", () => ({ useWakeLock: () => {} }));
@@ -169,6 +179,7 @@ beforeEach(() => {
   verdicts = [verdictOf("2-aaaaaaaaaaaa")];
   genOptions = { enabled: false };
   subtitleLines.length = 0;
+  layers.length = 0;
   pistesSubtitles = [];
   [playback.close, playback.advance, declineLumen, onFallback, reloadServerPage, stopReporting, fetchMock].forEach((m) => m.mockClear());
   vi.stubGlobal("fetch", fetchMock);
@@ -495,6 +506,146 @@ describe("les pistes son", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(last("start")).toMatchObject({ why: "audio-reload", audioTrack: 4, at: 640 });
+  });
+});
+
+/** Des pistes de texte comme Safari les tient : un mode, des répliques, `cuechange`. */
+type FakeTrack = EventTarget & { mode: TextTrackMode; cues: { startTime: number; endTime: number; text: string }[] };
+function fakeTextTracks(video: HTMLVideoElement, ...cueLists: { startTime: number; endTime: number; text: string }[][]): FakeTrack[] {
+  const tracks = cueLists.map((cues) => Object.assign(new EventTarget(), { mode: "disabled" as TextTrackMode, cues }));
+  Object.defineProperty(video, "textTracks", { get: () => tracks, configurable: true });
+  return tracks;
+}
+const lastLayer = () => layers[layers.length - 1];
+/** Ce que le calque montre maintenant, ou `null` s'il n'est pas dans la page. */
+const shown = () => document.querySelector("[data-subtitle-layer]")?.textContent ?? null;
+
+describe("les sous-titres par le calque de la page (§190)", () => {
+  const two = [
+    { index: 7, url: "/api/subtitles/x/7.vtt", language: "fre", codec: "subrip", isForced: false, isDefault: false },
+    { index: 8, url: "/api/subtitles/x/8.vtt", language: "eng", codec: "subrip", isForced: false, isDefault: false },
+  ];
+  const fr = [
+    { startTime: 600, endTime: 603, text: "<i>Bonjour</i> à tous." },
+    { startTime: 603.4, endTime: 606, text: "Deuxième ligne." },
+  ];
+  const en = [{ startTime: 600, endTime: 606, text: "Hello everyone." }];
+  // Deux sous-titres se retiennent sur l'appareil (§87) : un essai ne doit pas ouvrir sur le choix du précédent.
+  beforeEach(() => localStorage.clear());
+
+  it("la piste choisie en `hidden` (Safari ne la dessine pas) ; sa réplique, nettoyée, passe par le calque avec la place des commandes", async () => {
+    pistesSubtitles = two;
+    await mount();
+    const el = element();
+    const tracks = fakeTextTracks(el.video, fr, en);
+    act(() => el.picture(600));
+    act(() => controls!.onChangeSubtitle(7));
+    await flush();
+    expect(tracks.map((t) => t.mode)).toEqual(["hidden", "disabled"]);
+    act(() => el.at(601));
+    expect(lastLayer()).toMatchObject({ primary: "Bonjour à tous." });
+    expect(lastLayer().dual).toBeFalsy();
+    // Les commandes disent où elles sont : la rangée s'en écarte, toujours (pas seulement à deux sous-titres).
+    expect(controls?.onChromeEdges).toBeTypeOf("function");
+    act(() => controls!.onChromeEdges!({ top: 80, bottom: 140 }));
+    expect(lastLayer().chromeEdges).toEqual({ top: 80, bottom: 140 });
+    // Aucun sous-titre : les pistes éteintes, plus rien au calque.
+    act(() => controls!.onChangeSubtitle(null));
+    await flush();
+    expect(tracks.map((t) => t.mode)).toEqual(["disabled", "disabled"]);
+    act(() => el.at(602));
+    expect(shown()).toBeNull();
+  });
+
+  it("le décalage est tenu par l'hôte : la réplique cherchée à l'instant moins lui, les répliques des `<track>` intactes", async () => {
+    pistesSubtitles = two;
+    await mount();
+    const el = element();
+    fakeTextTracks(el.video, fr, en);
+    act(() => el.picture(600));
+    act(() => controls!.onChangeSubtitle(7));
+    await flush();
+    act(() => el.at(603.2));
+    // Entre deux répliques : rien.
+    expect(shown()).toBeNull();
+    expect(controls?.subtitleOffset?.seconds).toBe(0);
+    // +0,5 s : les sous-titres en retard d'une demi-seconde — à 603,2 s on lit 602,7 s, la première réplique.
+    act(() => controls!.subtitleOffset!.onShift(0.5));
+    await flush();
+    expect(controls?.subtitleOffset?.seconds).toBe(0.5);
+    expect(lastLayer()).toMatchObject({ primary: "Bonjour à tous." });
+    expect(fr[0]).toMatchObject({ startTime: 600, endTime: 603 });
+    // −1 s : à 603,2 s on lit 604,2 s, la deuxième.
+    act(() => controls!.subtitleOffset!.onShift(-1));
+    await flush();
+    expect(controls?.subtitleOffset?.seconds).toBe(-0.5);
+    expect(lastLayer()).toMatchObject({ primary: "Deuxième ligne." });
+    // Une autre piste : son décalage repart de zéro.
+    act(() => controls!.onChangeSubtitle(8));
+    await flush();
+    expect(controls?.subtitleOffset?.seconds).toBe(0);
+  });
+
+  it("deux sous-titres : les deux pistes en `hidden`, les deux lignes dans le calque, chacune son décalage", async () => {
+    pistesSubtitles = two;
+    await mount();
+    const el = element();
+    const tracks = fakeTextTracks(el.video, fr, en);
+    act(() => el.picture(600));
+    act(() => controls!.onChangeSubtitle(7));
+    act(() => controls!.secondSubtitle!.onChange(8));
+    await flush();
+    expect(tracks.map((t) => t.mode)).toEqual(["hidden", "hidden"]);
+    act(() => el.at(601));
+    expect(lastLayer()).toMatchObject({ dual: true, primary: "Bonjour à tous.", second: "Hello everyone." });
+    expect(controls?.secondSubtitle?.offset?.seconds).toBe(0);
+    act(() => controls!.secondSubtitle!.offset!.onShift(-5.5));
+    await flush();
+    expect(lastLayer()).toMatchObject({ dual: true, primary: "Bonjour à tous.", second: null });
+  });
+
+  it("le passage rejoué (§150) : l'aide sur la voie du principal, puis l'affichage d'avant", async () => {
+    pistesSubtitles = two;
+    await mount();
+    const el = element();
+    const tracks = fakeTextTracks(el.video, fr, en);
+    act(() => el.picture(600));
+    await flush();
+    act(() => controls!.replaySubtitle!.show(8));
+    await flush();
+    expect(tracks.map((t) => t.mode)).toEqual(["disabled", "hidden"]);
+    act(() => el.at(601));
+    expect(lastLayer()).toMatchObject({ primary: "Hello everyone." });
+    act(() => controls!.replaySubtitle!.show(null));
+    await flush();
+    expect(tracks.map((t) => t.mode)).toEqual(["disabled", "disabled"]);
+    expect(shown()).toBeNull();
+  });
+
+  it("un élément neuf après l'image (version changée) : ses `<track>` reposés après sa propre image, en `hidden`", async () => {
+    pistesSubtitles = two;
+    await mount();
+    const el = element();
+    fakeTextTracks(el.video, fr, en);
+    act(() => el.picture(600));
+    act(() => controls!.onChangeSubtitle(7));
+    await flush();
+    verdicts = [verdictOf("3-bbbbbbbbbbbb")];
+    await act(async () => {
+      el.fail(2);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await flush();
+    const next = element();
+    expect(next.video).not.toBe(el.video);
+    expect(next.video.querySelectorAll("track")).toHaveLength(0);
+    const tracks = fakeTextTracks(next.video, fr, en);
+    act(() => next.picture(601));
+    await flush();
+    expect(next.video.querySelectorAll("track")).toHaveLength(2);
+    expect(tracks.map((t) => t.mode)).toEqual(["hidden", "disabled"]);
+    act(() => next.at(601.5));
+    expect(lastLayer()).toMatchObject({ primary: "Bonjour à tous." });
   });
 });
 

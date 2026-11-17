@@ -13,8 +13,8 @@
  * 60 % de son code (négociation Jellyfin, échelle audio, hls.js, version allégée) ne concerne pas ce chemin. On
  * assemble ici les pièces déjà sorties pour être partagées — le bilan et l'arrêt gardé (`useServerSessionRecord`,
  * `useServerStopOnLeave`), la position (`useServerPositionWatch`), la chronologie (`useServerTimeline`), les
- * étiquettes (`serverTracks`), l'ouverture animée (`ServerPlayerIntro`), les deux sous-titres
- * (`useServerDualSubtitles`), la fermeture (`closePlayerSession`, `advanceTo`), la minuterie, `PlayerControls` tel
+ * étiquettes (`serverTracks`), l'ouverture animée (`ServerPlayerIntro`), les sous-titres dessinés par la page
+ * (`useLumenSubtitleLines`, §190), la fermeture (`closePlayerSession`, `advanceTo`), la minuterie, `PlayerControls` tel
  * quel (Media Session, « À l'écran », questions, « Jusqu'ici », passage rejoué, saga, épisode suivant).
  *
  * **Le repli** (3-client.md §3), un seul point de contrôle (`fallTo`, une fois, jamais pendant la fermeture) :
@@ -54,6 +54,7 @@ import { isGeneratingTrack } from "@/lib/subtitleGen/generation";
 import type { ExternalSubtitleSource } from "@/lib/webcodecs/externalSubtitles";
 import { languageName } from "@/lib/trackLabel";
 import { useLumenSubtitleGeneration } from "./useLumenSubtitleGeneration";
+import { useLumenSubtitleLines } from "./useLumenSubtitleLines";
 import { describeLumenServerPlayback, receivedOf } from "@/lib/lumenPanel";
 import { formatTime } from "@/lib/playerClock";
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
@@ -88,7 +89,6 @@ import { noteSeriesLanguage } from "@/lib/noteSeriesLanguage";
 import { pickReplaySubtitle } from "@/lib/replaySubtitles";
 import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
 import { dualSubtitleMemory, pickRememberedDual, rememberDual } from "@/lib/dualSubtitles";
-import { useServerDualSubtitles } from "@/lib/useServerDualSubtitles";
 import { labelAudioTracks } from "@/lib/trackLabel";
 import { toJellyfinLanguage, trackLanguage, type TrackPreferences } from "@/lib/trackPreferences";
 import { declineLumen } from "@/lib/lumenServerChoice";
@@ -350,6 +350,16 @@ export function LumenServerHost({
   const [externalSubtitleTracks, setExternalSubtitleTracks] = useState<ExternalSubtitleTrack[]>([]);
   const [currentSubtitleId, setCurrentSubtitleId] = useState<number | null>(null);
   const [secondSubtitleId, setSecondSubtitleId] = useState<number | null>(null);
+  /**
+   * Les décalages du menu (±0,5 s), tenus par l'hôte qui dessine (§190), comme le lecteur natif : appliqués à la
+   * recherche de la réplique, jamais aux répliques des `<track>` — un élément neuf (réouverture pour une piste son)
+   * rechargeait les répliques d'origine, et le chiffre du menu ne disait plus ce qu'on voyait. Remis à zéro au
+   * changement de piste (la correction d'une piste recalée, §141, est déjà dans son WebVTT).
+   */
+  const [subtitleOffset, setSubtitleOffset] = useState(0);
+  const [secondOffset, setSecondOffset] = useState(0);
+  /** Le passage rejoué (§150) : la piste que l'aide montre à la place du principal, le temps du passage. */
+  const [replayId, setReplayId] = useState<number | null>(null);
   const [introSkip, setIntroSkip] = useState<{ start: number; end: number } | null>(null);
   const [recapSkip, setRecapSkip] = useState<{ start: number; end: number } | null>(null);
   const [creditsStart, setCreditsStart] = useState<number | null>(null);
@@ -423,12 +433,6 @@ export function LumenServerHost({
   useEffect(() => {
     errorRef.current = error;
   }, [error]);
-
-  /** L'ordre des `<track>` (celui de `video.textTracks`), lu par les écouteurs posés une fois. */
-  const externalPositionsRef = useRef<number[]>([]);
-  useEffect(() => {
-    externalPositionsRef.current = externalSubtitleTracks.map((st) => st.index);
-  }, [externalSubtitleTracks]);
 
   const { stop: stopPlaybackNow, resume: resumePlaybackSession, savePaused, reportNow: reportPositionNow } = usePlaybackSession(
     positionNow,
@@ -1374,15 +1378,9 @@ export function LumenServerHost({
     if (audioSettleRef.current) clearTimeout(audioSettleRef.current);
   }, []);
 
-  // Les sous-titres de l'ouverture (ou de la réouverture), posés sur les `<track>` dès qu'ils sont dans l'élément.
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || tracksFor !== videoKey || secondSubtitleRef.current !== null) return;
-    const position = currentSubtitleRef.current === null ? -1 : externalPositionsRef.current.indexOf(currentSubtitleRef.current);
-    for (let i = 0; i < video.textTracks.length; i++) video.textTracks[i].mode = i === position ? "showing" : "disabled";
-  }, [tracksFor, videoKey, externalSubtitleTracks]);
-
-  // ── Les sous-titres : les modes des `<track>`, comme le lecteur serveur ─────────────────────────────
+  // ── Les sous-titres : les `<track>` en `hidden`, les lignes par le calque de la page (§190) ────────────
+  // Les modes et les lignes sont tenus par `useLumenSubtitleLines`, depuis l'état : l'ouverture, une réouverture (ses
+  // `<track>` reposés après sa première image), un choix, deux sous-titres et le passage rejoué passent tous par là.
   const changeSubtitle = useCallback(
     (id: number | null) => {
       const video = videoRef.current;
@@ -1394,12 +1392,9 @@ export function LumenServerHost({
         secondSubtitleRef.current = null;
         setSecondSubtitleId(null);
       }
+      if (id !== currentSubtitleRef.current) setSubtitleOffset(0);
       currentSubtitleRef.current = id;
-      const position = id === null ? -1 : externalSubtitleTracks.findIndex((st) => st.index === id);
       subtitleSwitchesRef.current += 1;
-      if (secondSubtitleRef.current === null) {
-        for (let i = 0; i < video.textTracks.length; i++) video.textTracks[i].mode = i === position ? "showing" : "disabled";
-      }
       setCurrentSubtitleId(id);
       if (wasDual) rememberDual(subtitleFactsOf(externalSubtitleTracks, id), subtitleFactsOf(externalSubtitleTracks, secondSubtitleRef.current));
     },
@@ -1411,13 +1406,14 @@ export function LumenServerHost({
       if (!secondAllowed(id, primary)) return;
       reportPositionNow();
       subtitleSwitchesRef.current += 1;
+      if (id !== secondSubtitleRef.current) setSecondOffset(0);
       secondSubtitleRef.current = id;
       setSecondSubtitleId(id);
       rememberDual(subtitleFactsOf(externalSubtitleTracks, primary), subtitleFactsOf(externalSubtitleTracks, id));
     },
     [externalSubtitleTracks, reportPositionNow]
   );
-  // Le passage rejoué (§150) : la piste que l'aide montrerait, posée sur les modes des `<track>` sans rien retenir.
+  // Le passage rejoué (§150) : la piste que l'aide montrerait, montrée sur la voie du principal sans rien retenir.
   const replayTrack = useCallback((): number | null => {
     const audio = audioFactsRef.current.find((a) => a.number === currentAudioRef.current) ?? null;
     return pickReplaySubtitle({
@@ -1428,20 +1424,18 @@ export function LumenServerHost({
       accountLanguages: [preferencesRef.current?.subtitleLanguage, locale],
     });
   }, [externalSubtitleTracks, locale]);
-  const showReplay = useCallback(
-    (id: number | null) => {
-      const video = videoRef.current;
-      if (!video) return;
-      const shown = id ?? currentSubtitleRef.current;
-      const position = shown === null ? -1 : externalSubtitleTracks.findIndex((st) => st.index === shown);
-      for (let i = 0; i < video.textTracks.length; i++) video.textTracks[i].mode = i === position ? "showing" : "disabled";
-    },
-    [externalSubtitleTracks]
-  );
+  const showReplay = useCallback((id: number | null) => setReplayId(id), []);
   const replaySubtitle = useMemo(() => ({ track: replayTrack, show: showReplay }), [replayTrack, showReplay]);
   const subtitleTrackIds = useMemo(() => externalSubtitleTracks.map((st) => st.index), [externalSubtitleTracks]);
-  const primarySubtitleNow = useCallback(() => currentSubtitleRef.current, []);
-  const dualSubtitles = useServerDualSubtitles({ videoRef, trackIds: subtitleTrackIds, primaryNow: primarySubtitleNow, primary: currentSubtitleId, second: secondSubtitleId, enabled: true, videoKey });
+  // La voie du principal : l'aide d'un passage rejoué le temps du passage (sans décalage, sauf si c'est la piste
+  // choisie, dont le décalage vaut), sinon la piste choisie. Une génération en cours n'a pas de `<track>` : rien ici.
+  const primaryLane = useMemo(
+    () => (replayId !== null ? { id: replayId, offset: replayId === currentSubtitleId ? subtitleOffset : 0 } : { id: currentSubtitleId, offset: subtitleOffset }),
+    [replayId, currentSubtitleId, subtitleOffset]
+  );
+  const secondLane = useMemo(() => ({ id: secondSubtitleId, offset: secondOffset }), [secondSubtitleId, secondOffset]);
+  const subtitleLines = useLumenSubtitleLines({ videoRef, videoKey, ready: tracksFor === videoKey, trackIds: subtitleTrackIds, primary: primaryLane, second: secondLane });
+  const dualActive = currentSubtitleId !== null && secondSubtitleId !== null;
   // « Générer des sous-titres » (§187) : la génération du lecteur natif ; ses lignes, tant qu'il n'y a pas de fichier,
   // par le calque de sous-titres de la page ; à la fin, la piste générée devient un `<track>`, choisie à sa place.
   const refreshSubtitleTracks = useCallback(
@@ -1473,6 +1467,7 @@ export function LumenServerHost({
     locale,
     t,
     currentId: currentSubtitleId,
+    offset: subtitleOffset,
     onFinal: (source) => void refreshSubtitleTracks(source),
     onFailed: () => {
       currentSubtitleRef.current = null;
@@ -1505,14 +1500,14 @@ export function LumenServerHost({
             busy: subtitleGen.state.requesting !== null,
             onGenerate: (code: string) =>
               subtitleGen.request(code, (id) => {
-                // L'entrée temporaire devient la piste choisie : les `<track>` éteints, la ligne par le calque.
+                // L'entrée temporaire devient la piste choisie : les `<track>` éteints (aucune n'est plus choisie), la
+                // ligne de la génération par le calque.
                 if (secondSubtitleRef.current !== null) {
                   secondSubtitleRef.current = null;
                   setSecondSubtitleId(null);
                 }
+                if (id !== currentSubtitleRef.current) setSubtitleOffset(0);
                 currentSubtitleRef.current = id;
-                const video = videoRef.current;
-                if (video) for (let i = 0; i < video.textTracks.length; i++) video.textTracks[i].mode = "disabled";
                 setCurrentSubtitleId(id);
               }),
             resumable: subtitleGen.view.resumable,
@@ -1707,13 +1702,18 @@ export function LumenServerHost({
           )}
         </div>
       </div>
-      {subtitleGen.line && !dualSubtitles.active && !isMini && !error && isGeneratingTrack(currentSubtitleId) && (
+      {/* Les sous-titres, toujours par le calque de la page (§190) : jamais en mini-lecteur ni sous l'écran d'erreur.
+          Deux sous-titres ; sinon l'aide d'un passage rejoué ; sinon une génération en cours ; sinon la piste choisie. */}
+      {!isMini && !error && dualActive && (
+        <SubtitleLayer dual primary={subtitleLines.primary} second={subtitleLines.second} style={subtitleStyle} chromeEdges={chromeEdges} />
+      )}
+      {!isMini && !error && !dualActive && replayId === null && isGeneratingTrack(currentSubtitleId) && subtitleGen.line && (
         <SubtitleLayer primary={subtitleGen.line.text} primaryNotice={subtitleGen.line.notice} style={subtitleStyle} chromeEdges={chromeEdges} />
       )}
-      {warning && !error && !isMini && <NativeWarning text={warning} />}
-      {dualSubtitles.active && !isMini && !error && (
-        <SubtitleLayer dual primary={dualSubtitles.primary} second={dualSubtitles.second} style={subtitleStyle} chromeEdges={chromeEdges} />
+      {!isMini && !error && !dualActive && (replayId !== null || !isGeneratingTrack(currentSubtitleId)) && subtitleLines.primary && (
+        <SubtitleLayer primary={subtitleLines.primary} style={subtitleStyle} chromeEdges={chromeEdges} />
       )}
+      {warning && !error && !isMini && <NativeWarning text={warning} />}
       {error && !isMini && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 px-6 text-center">
           <div>
@@ -1763,7 +1763,9 @@ export function LumenServerHost({
           subtitleTracks={subtitleTracks}
           currentSubtitleId={currentSubtitleId}
           onChangeSubtitle={changeSubtitle}
-          secondSubtitle={{ currentId: secondSubtitleId, onChange: changeSecondSubtitle }}
+          // Les décalages tenus par l'hôte (§190) : les commandes ne déplacent plus les répliques des `<track>`.
+          subtitleOffset={{ seconds: subtitleOffset, onShift: (delta) => setSubtitleOffset((now) => Math.round((now + delta) * 10) / 10) }}
+          secondSubtitle={{ currentId: secondSubtitleId, onChange: changeSecondSubtitle, offset: { seconds: secondOffset, onShift: (delta) => setSecondOffset((now) => Math.round((now + delta) * 10) / 10) } }}
           replaySubtitle={replaySubtitle}
           subtitleGeneration={generationMenuProps}
           frameFit={frameFitState.available ? { on: frameFitState.on, onChange: frameFitState.setOn } : undefined}
@@ -1771,7 +1773,7 @@ export function LumenServerHost({
           hidden={!!error}
           loading={loading}
           openingQuiet={introCovering}
-          onChromeEdges={dualSubtitles.active || isGeneratingTrack(currentSubtitleId) ? setChromeEdges : undefined}
+          onChromeEdges={setChromeEdges}
           introSkip={introSkip}
           recapSkip={recapSkip}
           creditsStart={creditsStart}

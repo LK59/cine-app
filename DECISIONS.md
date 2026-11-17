@@ -11884,3 +11884,28 @@ son traitement (`parts.tsx`, `via` — absent des lignes des autres lecteurs, qu
 **Porteurs.** `lumenPanel.ts`, `LumenServerHost.tsx` (`panel`, `events`, `noteEvent`, la relève du relevé), la route
 `chrono` (`stats=1`), `src/locales/*.json` (`player.info.lumen`), `parts.tsx`. **Tests.** `lumen-panneau.test.ts` (chaque
 libellé dans les quatre langues, ce que le panneau dit), `lumenServer-trials.test.ts` (`stats=1`).
+
+## 190. Lumen serveur : les sous-titres dessinés par la page, les `<track>` en `hidden`, le décalage tenu par l'hôte (17/11/2026)
+
+**Règle.** Dans `LumenServerHost`, aucun `<track>` n'est plus en `showing` : Safari les dessinait lui-même, collés au
+bas de l'image, dans son style, sous les commandes. Les `<track>` (posés après la première image de l'élément, §180 —
+sinon code 4) ne font que charger les répliques, en `hidden` pour la piste montrée et `disabled` pour les autres ; la
+page lit la réplique et l'écrit dans `SubtitleLayer`, avec `subtitleStyleStore` et `chromeEdges` (la rangée écartée des
+commandes affichées) — exactement le rendu du lecteur natif. Une voie principale (la piste choisie, ou l'aide d'un
+passage rejoué §150 le temps du passage) et une seconde (§87) ; une génération en cours garde sa ligne (§187). Les
+décalages du menu (principal et second) sont tenus par l'hôte (`subtitleOffset`, `secondSubtitle.offset` sur
+`PlayerControls`) et appliqués à la recherche (`cueLookupTime`, horloge de l'élément, échelle 1 : la correction d'une
+piste recalée, §141, est déjà dans le WebVTT par `&sync=`) ; `PlayerControls.shiftCues` ne touche donc plus aux
+répliques de ce chemin. Remis à zéro au changement de piste, comme le lecteur natif. La lecture d'une piste de texte du
+navigateur à un instant donné a sa fonction (`textTrackTextAt` / `textTrackCues`) : nettoyage de `useServerDualSubtitles`
+(`stripSubtitleMarkup` + `trim`) et recherche des sous-titres en mémoire (`cueTextAt`, chevauchements compris) — aucune
+règle de plus ; `activeCues` ne convient pas, il ne connaît que l'instant de l'élément.
+
+**Ce qui diffère exprès.** Le lecteur serveur (`PlayerHost`, `useServerDualSubtitles`) laisse toujours le navigateur
+dessiner un sous-titre seul : ses empreintes ne bougent pas. AirPlay inchangé (§186) : avec un sous-titre choisi,
+« Diffuser » passe au lecteur serveur. Le mini-lecteur ne montre aucun sous-titre (il n'y a plus de dessin de Safari).
+
+**Porteurs.** `useLumenSubtitleLines.ts` (modes, lignes, relecture à la prochaine borne quand le décalage rend
+`cuechange` muet), `src/lib/textTrackCues.ts`, `LumenServerHost.tsx` (`primaryLane`, `secondLane`, décalages, calque),
+`useLumenSubtitleGeneration.ts` (`offset`). **Tests.** `textTrackCues.test.ts`, `LumenServerHost.test.tsx` (« les sous-titres par le calque de la
+page »).

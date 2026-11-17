@@ -993,6 +993,22 @@ des autres lecteurs n'ont pas bougé (`playbackPanel.ts` intact). Au journal, ch
 `opening`, `seek`, `audio` (`via`, `tookMs`, `pictureMs`), `cast` et `fallback` `cast: true` (AirPlay), `fallback`,
 `rebuild`, `stall`, `error`, `stop` ; l'activité affiche la méthode d'un changement de piste à côté de son traitement.
 
+### 7. Les sous-titres dessinés par la page (§190)
+
+Jusqu'ici la piste choisie était un `<track>` en `showing` : Safari la dessinait lui-même, collée au bas de l'image,
+dans son style, sous les commandes. Désormais les `<track>` ne servent plus qu'à charger les répliques — toujours posés
+après la première image de l'élément (un `<track>` présent quand l'adresse HLS est posée fait refuser l'élément, code 4)
+— et sont en `hidden` : le navigateur les charge sans rien dessiner. `useLumenSubtitleLines` lit la réplique à l'instant
+de l'élément moins le décalage du menu (`cueLookupTime`, la règle du lecteur natif) et l'écrit dans `SubtitleLayer`,
+avec le style des sous-titres et la rangée écartée des commandes affichées (`chromeEdges`) — comme le lecteur natif.
+Un seul chemin pour un sous-titre, deux sous-titres et l'aide d'un passage rejoué (§150) ; une génération en cours garde
+sa voie (§187). Les décalages (±0,5 s, principal et second) sont tenus par l'hôte et ne touchent plus aux répliques des
+`<track>` ; la correction d'une piste recalée (§141) est déjà dans le WebVTT (`&sync=`). AirPlay inchangé : avec un
+sous-titre choisi, « Diffuser » passe au lecteur serveur, qui le porte au téléviseur. **À regarder sur l'iPhone** : la
+ligne au-dessus des commandes quand elles sont là, redescendue quand elles partent ; le style du réglage « Sous-titres » ;
+une ligne qui suit bien la parole après ±0,5 s ; deux sous-titres ; un retour −10 s ; une piste son changée (réouverture).
+Le PiP système ne montre pas les sous-titres de ce chemin (comme le lecteur natif : rien n'y est dessiné par Safari).
+
 ### Un défaut vu en production le 16/11 au soir : *Mr. Robot* S01E03, « code 4 » avant l'image
 
 Première lecture réelle sur l'iPhone de l'administrateur (10.46.0) : refus de l'élément 336 ms après l'adresse posée,
