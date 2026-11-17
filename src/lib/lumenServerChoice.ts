@@ -49,10 +49,15 @@ export function lumenServerOn(): boolean {
 }
 
 /** Le panneau Compte, et lui seul. Vaut à la prochaine ouverture d'un film : rien à recharger. */
+/** Les clés d'essais retirés, effacées de l'appareil au prochain réglage de l'option. */
+const RETIRED_KEYS = ["cine:lumen-reprise-saut", "cine:lumen-son-eveille"];
+
 export function setLumenServer(on: boolean): void {
   try {
     if (on) window.localStorage.setItem(LUMEN_SERVER_KEY, "1");
     else window.localStorage.removeItem(LUMEN_SERVER_KEY);
+    // Les essais de la reprise retirés (17/11/2026) : le saut sur place, puis l'option du son éveillé, devenu la règle.
+    for (const key of RETIRED_KEYS) window.localStorage.removeItem(key);
   } catch {
     // Stockage refusé (navigation privée) : l'option reste coupée, comme elle se lit.
   }
@@ -72,33 +77,6 @@ export function lumenChoiceFor(session: object): boolean {
   return on;
 }
 
-/**
- * L'essai « Garder le son éveillé pendant la pause » (17/11/2026), sous l'option, coupé par défaut : un son inaudible
- * joué pendant une pause garde la sortie audio éveillée, pour que le son reparte avec l'image (`audioKeepAwake.ts`).
- * Remplace l'essai du saut sur place, mesuré sans effet (0,48 s de son perdu contre 0,45 s sans). Rangé sur
- * l'appareil ; lu à chaque pause.
- */
-export const LUMEN_KEEP_AWAKE_KEY = "cine:lumen-son-eveille";
-
-export function lumenKeepAwakeOn(): boolean {
-  try {
-    return window.localStorage.getItem(LUMEN_KEEP_AWAKE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-export function setLumenKeepAwake(on: boolean): void {
-  try {
-    if (on) window.localStorage.setItem(LUMEN_KEEP_AWAKE_KEY, "1");
-    else window.localStorage.removeItem(LUMEN_KEEP_AWAKE_KEY);
-    // L'essai précédent, retiré : sa clé ne doit pas rester sur l'appareil.
-    window.localStorage.removeItem("cine:lumen-reprise-saut");
-  } catch {
-    // Stockage refusé : l'essai reste coupé, comme il se lit.
-  }
-  notify();
-}
 
 let mediaSourceServed = false;
 

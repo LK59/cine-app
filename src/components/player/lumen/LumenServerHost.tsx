@@ -93,7 +93,7 @@ import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
 import { dualSubtitleMemory, pickRememberedDual, rememberDual } from "@/lib/dualSubtitles";
 import { labelAudioTracks } from "@/lib/trackLabel";
 import { toJellyfinLanguage, trackLanguage, type TrackPreferences } from "@/lib/trackPreferences";
-import { declineLumen, lumenKeepAwakeOn } from "@/lib/lumenServerChoice";
+import { declineLumen } from "@/lib/lumenServerChoice";
 import { AudioKeepAwake, KEEP_AWAKE_WAKE_MS } from "./audioKeepAwake";
 import { readLumenPrepared } from "@/lib/lumenSheetPrepare";
 import type { StableTakeover } from "@/lib/useStableFallback";
@@ -455,7 +455,7 @@ export function LumenServerHost({
   const srcSetRef = useRef<{ at: number; resumeAt: number; fragment: boolean } | null>(null);
   /** Le saut de secours, quand Safari a ignoré `#t=` : pas un geste du spectateur. */
   const safetySeekRef = useRef(false);
-  /** L'essai « Garder le son éveillé pendant la pause » (`audioKeepAwake.ts`), une veille par hôte, fermée au démontage. */
+  /** Le son éveillé pendant la pause (`audioKeepAwake.ts`), une veille par hôte, fermée au démontage. */
   const keepAwakeRef = useRef<AudioKeepAwake | null>(null);
   useEffect(() => {
     // Arrière-plan ou écran verrouillé pendant une pause : la veille se tait aussitôt, elle ne garderait éveillés que
@@ -1180,15 +1180,15 @@ export function LumenServerHost({
     };
     /**
      * La reprise après une pause : la sortie audio de l'iPhone s'endort pendant la pause et met ~0,45 s à se réveiller,
-     * l'image repartant sans attendre (enregistrement d'écran du 17/11/2026). Sous l'essai de l'appareil « Garder le son
-     * éveillé pendant la pause » (`lumenKeepAwakeOn`, coupé par défaut), un son inaudible la garde éveillée (voir
-     * `audioKeepAwake.ts`) ; coupé, rien : un simple `play()`, comme les autres lecteurs.
+     * l'image repartant sans attendre (enregistrement d'écran du 17/11/2026). Un son inaudible la garde éveillée pendant la
+     * pause (`audioKeepAwake.ts`). Essai d'abord sous une option de l'appareil, il est devenu la règle le même jour, à la
+     * demande de l'administrateur, une fois filmé : son revenu en 0 à 0,03 s contre 0,43 à 0,49 s sans lui.
      */
     const onPlay = () => {
       keepAwakeRef.current?.release();
     };
     /**
-     * La micro-attente (17/11/2026, choisie par l'administrateur) : sous le même essai, une reprise qui trouve la sortie
+     * La micro-attente (17/11/2026, choisie par l'administrateur) : une reprise qui trouve la sortie
      * audio endormie — pause plus longue que la veille (`KEEP_AWAKE_MAX_MS`), retour d'arrière-plan ou de veille, où la
      * veille est fermée — la réveille d'abord, et ne lance l'image que `KEEP_AWAKE_WAKE_MS` plus tard, l'anneau de
      * chargement affiché : l'image attend le son, comme au lecteur actuel, plutôt que de partir sans lui. Posée sur
@@ -1198,7 +1198,7 @@ export function LumenServerHost({
     let waking: Promise<void> | null = null;
     video.play = () => {
       if (waking) return waking;
-      if (!video.paused || video.ended || !pictureRef.current || !lumenKeepAwakeOn()) return nativePlay.call(video);
+      if (!video.paused || video.ended || !pictureRef.current) return nativePlay.call(video);
       const keep = (keepAwakeRef.current ??= new AudioKeepAwake());
       if (keep.awake()) return nativePlay.call(video);
       keep.start();
@@ -1214,7 +1214,7 @@ export function LumenServerHost({
       return started;
     };
     const onPause = () => {
-      if (!video.ended && pictureRef.current && document.visibilityState === "visible" && lumenKeepAwakeOn()) (keepAwakeRef.current ??= new AudioKeepAwake()).start();
+      if (!video.ended && pictureRef.current && document.visibilityState === "visible") (keepAwakeRef.current ??= new AudioKeepAwake()).start();
       tallyRef.current.waitEnded(Date.now());
       background.notePaused(Date.now(), { visible: document.visibilityState === "visible", ended: video.ended });
       if (pendingSeek) flushSeek();

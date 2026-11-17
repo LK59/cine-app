@@ -2524,8 +2524,6 @@
       "lumenServer": "Lecteur expérimental : remux serveur",
       "lumenServerHint": "Sur cet appareil, le film est remultiplexé par le serveur et lu par le HLS de Safari. WebKit seulement ; le lecteur actuel reprend tout ce que ce chemin ne sait pas lire.",
       "lumenServerSafariOnly": "Safari seulement pour lire ici : sur ce navigateur, le lecteur actuel reste en place. Une diffusion vers un Chromecast passe, elle, par le remux du serveur.",
-      "lumenKeepAwake": "Garder le son éveillé pendant la pause",
-      "lumenKeepAwakeHint": "Essai : pendant une pause, un son inaudible garde la sortie audio éveillée, pour que le son reparte en même temps que l'image.",
       "notifReportReply": "Réponse à un signalement",
       "notifReportReplyHint": "Quand un de vos signalements reçoit une réponse ou change d'état.",
       "notifReportNew": "Nouveaux signalements",

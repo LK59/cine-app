@@ -1,5 +1,6 @@
 /**
- * Garder la sortie audio de l'appareil éveillée pendant une pause (Lumen serveur, essai du 17/11/2026).
+ * Garder la sortie audio de l'appareil éveillée pendant une pause (Lumen serveur, 17/11/2026 ; un essai sous option le
+ * matin, la règle le soir).
  *
  * Mesuré sur un enregistrement d'écran d'iPhone (30 reprises, *Mr. Robot* en HLS natif) : la pause coupe le son en
  * ~0,12 s, mais à la reprise l'image repart aussitôt et le son ~0,45 s plus tard (médiane, 0,40 à 3,25 s) — la

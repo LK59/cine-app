@@ -49,9 +49,8 @@ vi.mock("@/lib/resumeRewind", async (orig) => ({ ...(await orig<typeof import("@
 vi.mock("@/lib/noteSeriesLanguage", () => ({ noteSeriesLanguage: vi.fn() }));
 vi.mock("@/lib/lumenSheetPrepare", () => ({ readLumenPrepared: () => null }));
 const declineLumen = vi.fn();
-vi.mock("@/lib/lumenServerChoice", () => ({ declineLumen: (id: string) => declineLumen(id), lumenKeepAwakeOn: () => keepAwakeTrial }));
+vi.mock("@/lib/lumenServerChoice", () => ({ declineLumen: (id: string) => declineLumen(id) }));
 /** L'essai « Garder le son éveillé pendant la pause » du panneau Compte. */
-let keepAwakeTrial = false;
 const reloadServerPage = vi.fn((_intent: () => unknown, _video: unknown) => true);
 vi.mock("@/components/player/server/serverElement", async (orig) => ({
   ...(await orig<typeof import("@/components/player/server/serverElement")>()),
@@ -271,18 +270,7 @@ describe("la reprise après une pause", () => {
     return calls;
   }
 
-  it("coupé par défaut : rien pendant la pause, la reprise est un simple `play()`", async () => {
-    const calls = fakeAudio();
-    await mount();
-    const el = element();
-    act(() => el.picture(600));
-    act(() => el.video.dispatchEvent(new Event("pause")));
-    act(() => el.video.dispatchEvent(new Event("play")));
-    expect(calls).toEqual([]);
-  });
-
-  it("l'essai allumé : un son inaudible pendant la pause, tu une seconde après la reprise, sans ligne `seek`", async () => {
-    keepAwakeTrial = true;
+  it("un son inaudible pendant la pause, tu une seconde après la reprise, sans ligne `seek`", async () => {
     const calls = fakeAudio();
     await mount();
     const el = element();
@@ -296,32 +284,15 @@ describe("la reprise après une pause", () => {
     expect(calls).toContain("stop");
     expect(calls).toContain("suspend");
     expect(kinds()).not.toContain("seek");
-    keepAwakeTrial = false;
   });
 
   it("une reprise pendant la veille : `play()` tout de suite, sans attente", async () => {
-    keepAwakeTrial = true;
     fakeAudio();
     await mount();
     const el = element();
     act(() => el.picture(600));
     el.pause(true);
     act(() => el.video.dispatchEvent(new Event("pause")));
-    const play = vi.mocked(HTMLMediaElement.prototype.play);
-    play.mockClear();
-    void el.video.play();
-    expect(play).toHaveBeenCalledTimes(1);
-    keepAwakeTrial = false;
-  });
-
-  it("coupé : jamais d'attente, même après une longue pause", async () => {
-    fakeAudio();
-    await mount();
-    const el = element();
-    act(() => el.picture(600));
-    el.pause(true);
-    act(() => el.video.dispatchEvent(new Event("pause")));
-    await act(async () => void (await vi.advanceTimersByTimeAsync(10 * 60_000)));
     const play = vi.mocked(HTMLMediaElement.prototype.play);
     play.mockClear();
     void el.video.play();
@@ -329,7 +300,6 @@ describe("la reprise après une pause", () => {
   });
 
   it("la page cachée pendant la pause : la veille fermée, pas seulement suspendue (l'écran verrouillé disait « à l'arrêt »)", async () => {
-    keepAwakeTrial = true;
     const calls = fakeAudio();
     await mount();
     const el = element();
@@ -352,7 +322,6 @@ describe("la reprise après une pause", () => {
     expect(play).not.toHaveBeenCalled();
     await act(async () => void (await vi.advanceTimersByTimeAsync(500)));
     expect(play).toHaveBeenCalledTimes(1);
-    keepAwakeTrial = false;
   });
 });
 
