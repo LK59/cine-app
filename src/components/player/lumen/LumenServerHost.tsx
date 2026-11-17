@@ -26,9 +26,9 @@
  * Une seule relance en place pour une erreur passagère (un 503 « occupé » qu'AVFoundation n'a pas réessayé, une
  * coupure) : un élément neuf à la même position une seconde plus tard, puis le repli.
  *
- * **Ce qui diffère exprès du lecteur serveur** : §24 appliqué (c'est une lecture, pas une diffusion) ; AirPlay
- * coupé sur l'élément (`x-webkit-airplay="deny"`, phase 1 : l'adresse à cookie ne passerait pas au téléviseur) —
- * « Diffuser » passe au lecteur serveur comme depuis le lecteur actuel ; pas d'échelle audio, pas de version allégée.
+ * **Ce qui diffère exprès du lecteur serveur** : §24 appliqué (c'est une lecture, pas une diffusion — sauf pendant
+ * AirPlay) ; AirPlay depuis l'élément même (§186 : l'adresse porte le laissez-passer d'une Apple TV, `tv.{jeton}`),
+ * le lecteur serveur seulement pour diffuser avec des sous-titres ; pas d'échelle audio, pas de version allégée.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -46,6 +46,7 @@ import { serverSubtitleTracks, subtitleFacts, subtitleFactsOf, type ExternalSubt
 import { useServerSessionRecord, useServerStopOnLeave } from "@/components/player/server/useServerSessionRecord";
 import { useServerPositionWatch } from "@/components/player/server/useServerPositionWatch";
 import { useServerTimeline } from "@/components/player/server/useServerTimeline";
+import { useCastRoute } from "@/components/player/server/useCastRoute";
 import { useWatchedClockRun } from "@/components/player/session/useWatchedClockRun";
 import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
 import { recordsResume } from "@/components/player/session/habitWatch";
@@ -142,7 +143,8 @@ const AUDIO_SETTLE_MS = 2000;
 
 /** Une réponse du serveur de Lumen : le verdict, ou pourquoi il n'y en a pas. */
 async function fetchVerdict(itemId: string, s: string, audio: number | null, mux: boolean): Promise<LumenVerdict | { failed: string; refused?: boolean }> {
-  const params = new URLSearchParams({ s, wait: String(VERDICT_WAIT_MS) });
+  // `tv=1` : l'adresse munie du laissez-passer d'une Apple TV (§186) — le bouton AirPlay tend la `src` au téléviseur.
+  const params = new URLSearchParams({ s, wait: String(VERDICT_WAIT_MS), tv: "1" });
   if (audio !== null) params.set("audio", String(audio));
   if (mux) params.set("mux", "1");
   try {
@@ -339,6 +341,15 @@ export function LumenServerHost({
   const subtitleStyle = useSyncExternalStore(subtitleStyleStore.subscribe, subtitleStyleStore.snapshot, subtitleStyleStore.serverSnapshot);
   /** L'image d'avant, figée par-dessus l'élément pendant une réouverture pour changer de piste (§185). */
   const [freezeUrl, setFreezeUrl] = useState<string | null>(null);
+  /**
+   * AirPlay (§186) : la route sans fil prise par l'élément — le téléviseur lit lui-même l'adresse munie du laissez-
+   * passer. Écoutée par `useCastRoute` (celle du lecteur serveur), sans séance « ouverte pour diffuser » : rien n'est
+   * rendu au téléphone à la fin, la lecture continue ici.
+   */
+  const [castActive, setCastActive] = useState(false);
+  const castActiveRef = useRef(false);
+  const castAttemptedRef = useRef(false);
+  const lastPlaybackOptsRef = useRef<{ resumeAt?: number } | undefined>(undefined);
   const pendingAudioRef = useRef<PendingAudio | null>(null);
   const audioSettleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1066,7 +1077,8 @@ export function LumenServerHost({
       const away = hiddenAt === null ? 0 : Date.now() - hiddenAt;
       hiddenAt = null;
       const hold = background.show(Date.now(), away, video);
-      if (video && hold) {
+      // Pendant AirPlay, c'est le téléviseur qui lit : le retour du téléphone au premier plan ne le met pas en pause.
+      if (video && hold && !castActiveRef.current) {
         try {
           video.pause();
           video.currentTime = hold.at;
@@ -1077,7 +1089,7 @@ export function LumenServerHost({
     };
     // La relance de WebKit au déverrouillage, refusée tant qu'aucun geste ne l'a demandée.
     const onPlay = (event: Event) => {
-      if (event.target !== videoRef.current || !background.refusePlay(Date.now())) return;
+      if (event.target !== videoRef.current || castActiveRef.current || !background.refusePlay(Date.now())) return;
       videoRef.current?.pause();
     };
     const onGesture = () => background.noteGesture(Date.now());
@@ -1131,6 +1143,22 @@ export function LumenServerHost({
   useServerStopOnLeave({ bench, stopFields, stopAlreadySent, reportStop, logContext, closedRef, handedOverRef, tallyRef });
   useServerTimeline(itemId, videoRef, lastKnownTime, linkMeterRef, logSession);
   useServerPositionWatch(videoRef, videoKey, itemId, bench, castResume, lastKnownTime, tallyRef, isSceneRef);
+  // AirPlay (§186) : la route établie et sa fin au journal (`cast`, `fallback` `cast: true`), l'état pour les commandes.
+  useCastRoute({
+    videoRef,
+    videoKey,
+    castSession: false,
+    castAttempted: castAttemptedRef,
+    closingRef: closedRef,
+    castActiveRef,
+    setCastActive,
+    logContext,
+    watched,
+    castResume,
+    markHandedOver,
+    lastKnownTime,
+    lastPlaybackOpts: lastPlaybackOptsRef,
+  });
 
   const hasNextEpisode = nextEpisode !== null && mode !== "mini";
   const endStoppedRef = useRef(false);
@@ -1345,10 +1373,23 @@ export function LumenServerHost({
   const dualSubtitles = useServerDualSubtitles({ videoRef, trackIds: subtitleTrackIds, primaryNow: primarySubtitleNow, primary: currentSubtitleId, second: secondSubtitleId, enabled: true, videoKey });
   const subtitleTracks = useMemo<Track[]>(() => externalSubtitleTracks.map((st) => ({ id: st.index, label: st.label })), [externalSubtitleTracks]);
 
-  // « Diffuser » : AirPlay est coupé sur cet élément (phase 1) ; le lecteur serveur prend la main pour diffuser,
-  // comme depuis le lecteur actuel — `cast: true`, un choix et non un échec, le retour passe par `stepBack`.
+  // « Diffuser » (§186) : AirPlay depuis l'élément même — le sélecteur ouvert dans le geste, et l'Apple TV lit l'adresse
+  // munie du laissez-passer (`tv.{jeton}`), à la position, sans changer de lecteur. Les sous-titres ne passent pas au
+  // téléviseur par ce chemin (ce sont des `<track>` de la page, pas des rendus de la liste) : avec un sous-titre
+  // affiché, ou sans sélecteur AirPlay (un autre navigateur), le lecteur serveur prend la main pour diffuser comme
+  // avant — `cast: true`, un choix et non un échec.
   const requestCast = useCallback(() => {
+    const video = videoRef.current as (HTMLVideoElement & { webkitShowPlaybackTargetPicker?: () => void }) | null;
     const subtitle = currentSubtitleRef.current;
+    const tokenized = masterRef.current?.includes("/tv.") === true;
+    if (video && tokenized && subtitle === null && secondSubtitleRef.current === null && typeof video.webkitShowPlaybackTargetPicker === "function") {
+      try {
+        video.webkitShowPlaybackTargetPicker();
+        return;
+      } catch {
+        // Refusé (activation perdue) : le lecteur serveur, comme avant.
+      }
+    }
     const facts = subtitleFactsOf(externalSubtitleTracks, subtitle);
     const castSubtitle = subtitle !== null && facts ? { index: subtitle, language: toJellyfinLanguage(trackLanguage(facts)), forced: facts.isForced } : undefined;
     fallToRef.current("serveur", "diffusion demandée", { planned: true, cast: true, takeover: { ...takeoverNow(), cast: true, ...(castSubtitle ? { castSubtitle } : {}) } });
@@ -1431,8 +1472,7 @@ export function LumenServerHost({
 
   return createPortal(
     <div data-player-frame data-player="lumen-serveur" ref={containerRef} style={style} className={isMini ? "animate-fade-in-scale" : "app-viewport"} {...(isMini ? handlers : {})}>
-      {/* `preload="auto"` (levier 1 : Safari charge listes, init et premiers segments dès l'adresse posée) ;
-          AirPlay coupé sur l'élément en phase 1 — l'adresse à cookie ne passerait pas au téléviseur (3-client.md §2.11). */}
+      {/* `preload="auto"` (levier 1 : Safari charge listes, init et premiers segments dès l'adresse posée). */}
       <video
         // Un élément neuf à chaque adresse reposée (relance, réouverture) : WebKit tient une séance HLS par élément.
         // Clés préfixées : la vidéo et les commandes sont sœurs, une même clé les confondait (deux `<video>` restaient).
@@ -1441,9 +1481,9 @@ export function LumenServerHost({
         playsInline
         autoPlay
         preload="auto"
-        disableRemotePlayback
         className={isMini ? "h-full w-full object-cover" : "h-full w-full"}
-        {...{ "x-webkit-airplay": "deny" }}
+        // AirPlay ouvert (§186) : l'adresse porte le laissez-passer d'une Apple TV, qui n'a pas de cookie.
+        {...{ "x-webkit-airplay": "allow" }}
       >
         {externalSubtitleTracks.map((st) => (
           <track key={st.index} kind="subtitles" src={st.url} srcLang={st.language ?? undefined} label={st.label} />
@@ -1499,6 +1539,7 @@ export function LumenServerHost({
           onMinimize={playback.minimize}
           onTogglePlaybackInfo={() => setShowPlaybackInfo((v) => !v)}
           onCastRequest={requestCast}
+          castActive={castActive}
           audioTracks={audioTracks}
           currentAudioId={currentAudioId}
           onChangeAudio={changeAudio}

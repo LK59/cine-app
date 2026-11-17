@@ -22,6 +22,12 @@ vi.mock("@/lib/castToken", async (importOriginal) => {
   // Un jeton toujours « valable » pour le titre qu'il nomme : seul `castItemOf` décide alors.
   return { ...real, castPassFor: async (req: Parameters<typeof real.castPassFor>[0]) => (real.castItemOf(req.nextUrl.pathname) ? mockCast() : null) };
 });
+const mockTv = vi.fn();
+vi.mock("@/lib/lumenServer/tvPass", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/lumenServer/tvPass")>();
+  // Le jeton est vérifié à part (lumenServer-tvPass.test.ts) : ici, seuls la méthode et la forme de l'adresse décident.
+  return { ...real, lumenTvPassFor: async (req: { method: string; nextUrl: { pathname: string } }) => (req.method === "GET" && real.lumenTvAddressOf(req.nextUrl.pathname) ? mockTv() : null) };
+});
 vi.mock("@/lib/share/store", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/share/store")>();
   const share = {
@@ -66,6 +72,7 @@ function req(method: string, pathname: string, cookie = true): NextRequest {
 beforeEach(async () => {
   vi.clearAllMocks();
   mockCast.mockResolvedValue("louis");
+  mockTv.mockResolvedValue({ user: "louis", role: "admin", jti: "j", jfId: null });
   (await import("@/lib/share/scope")).__testing.reset();
 });
 
@@ -102,5 +109,22 @@ describe("le proxy et /api/lumen", () => {
     const stream = await proxy(req("GET", `/api/jellyfin/stream/${MOVIE}/main.m3u8?castToken=jeton`, false));
     expect(stream.status).toBe(200);
     expect(mockCast).toHaveBeenCalledTimes(1);
+  });
+
+  it("le laissez-passer d'une Apple TV (§186) : sans cookie, seulement sa forme exacte, en GET ; refusé, 401", async () => {
+    mockVerify.mockResolvedValue(null);
+    const { proxy } = await import("@/proxy");
+    const tv = `/api/lumen/${MOVIE}/5-0123456789ab/lecture/tv.aaa.bbb`;
+    for (const name of ["master.m3u8", "v.m3u8", "init-v.mp4", "v/12.m4s", "a2/12.m4s"]) expect((await proxy(req("GET", `${tv}/${name}`, false))).status, name).toBe(200);
+    // Un jeton refusé : la règle ordinaire, 401 sans session.
+    mockTv.mockResolvedValue(null);
+    expect((await proxy(req("GET", `${tv}/v/12.m4s`, false))).status).toBe(401);
+    mockTv.mockResolvedValue({ user: "louis", role: "admin", jti: "j", jfId: null });
+    // Ni une écriture, ni l'éligibilité, ni la préparation, ni une adresse sans jeton dans le chemin.
+    expect((await proxy(req("POST", `${tv}/master.m3u8`, false))).status).toBe(401);
+    for (const path of [`/api/lumen/${MOVIE}/eligibility?tv=aaa.bbb`, `/api/lumen/${MOVIE}/tv.aaa.bbb/master.m3u8`, ...PATHS]) {
+      expect((await proxy(req("GET", path, false))).status, path).toBe(401);
+    }
+    expect((await proxy(req("POST", `/api/lumen/${MOVIE}/prepare`, false))).status).toBe(401);
   });
 });

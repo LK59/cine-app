@@ -11754,3 +11754,55 @@ gênait l'ouverture, le repli d'avant l'image (§180) le dirait (`fallback` `to:
   (même annexe) pour la sélection automatique ; ici, c'est le spectateur qui le demande.
 - **Pas de banc WebKit Linux** pour la réouverture : le HLS de WebKitGTK passe par GStreamer, pas par AVFoundation —
   sa mesure ne dirait rien de Safari ; c'est la passe de `/lumen-test` qui la mesure.
+
+## 186. AirPlay sur Lumen serveur : le laissez-passer d'une Apple TV dans le chemin, sa propre clé, sa portée signée (17/11/2026)
+
+**Règle.** L'élément de `LumenServerHost` porte, dès l'ouverture, l'adresse de la liste maître munie d'un laissez-passer
+dans le chemin — `/api/lumen/{titre}/{version}/{lecture}/tv.{jeton}/master.m3u8?audio=N` — demandée par le lecteur à
+l'éligibilité (`?tv=1` ; le banc `/lumen-test` n'en demande pas). Les listes n'ont que des URI relatives : l'Apple TV
+résout `v.m3u8`, `init-v.mp4`, `v/12.m4s` sous `…/tv.{jeton}/` et reporte le jeton d'elle-même (rfc8216bis §4.1), sans
+une ligne réécrite. `x-webkit-airplay="allow"` ; « Diffuser » ouvre le sélecteur AirPlay de l'élément dans le geste
+(`webkitShowPlaybackTargetPicker`), et `useCastRoute` (celle du lecteur serveur, `castSession: false`) écrit la route
+établie et sa fin (`cast`, `fallback` `cast: true`). Pendant la route, §24 ne met pas le téléviseur en pause au retour
+du téléphone.
+
+**Le jeton** (`src/lib/lumenServer/tvPass.ts`) : les bornes de `castToken` (un titre, la session vivante — il meurt
+avec elle —, six heures) et trois de plus : **sa propre clé** (dérivée de `SESSION_SECRET` avec le préfixe
+`lumen-tv:`, si bien qu'un `castToken` n'ouvre pas Lumen serveur et qu'un laissez-passer Lumen n'ouvre pas le flux
+Jellyfin), **sa portée signée** (`k: "lumen"`) et **le rôle** (`r: "admin"` — signé pour un administrateur seulement,
+revérifié), plus **la lecture** (`s`). Le proxy le pose avant la session (`lumenTvPassFor`, comme `castPassFor` :
+`ADMIN_ONLY_READS` ne le couvre donc pas), en GET et sous la forme exacte `…/{s}/tv.{jeton}/{nom}` seulement ; la route
+le revérifie avec la même fonction **avant** tout accès au fichier. Une requête qui porte un cookie (la page) répond
+**en plus** au contrôle ordinaire (`lumenAccess`, `assertVisible`) : le jeton ne prête jamais ses droits à une autre
+session — un compte ordinaire ou un lien de partage qui aurait recopié l'adresse reste refusé. Refusé : 401, jamais
+403/404/400 (CrowdSec, `http-probing`). `eligibility`, `prepare`, `pistes`, `chrono` n'acceptent aucun jeton.
+
+**La position** : chaque segment **vidéo** servi à une requête sans cookie munie d'un laissez-passer va au relais
+(`castProgressRelay().noteCastPosition`, début du segment lu dans l'index), qui la rapporte à Jellyfin pour ce compte
+quand la page s'est tue (§64 : marge de 30 s, un rapport toutes les 30 s, l'arrêt après 90 s de silence) ; ses lignes
+portent `player: "lumen-serveur"`. `noteCastSegment` (flux Jellyfin) passe désormais par la même méthode, inchangé.
+
+**Pourquoi.** AirPlay depuis une `<video>` ne diffuse pas l'image : Safari tend l'adresse, et l'Apple TV va chercher le
+flux elle-même, sans cookie (castToken.ts). Avant, « Diffuser » passait au lecteur serveur — un transcodage Jellyfin
+quand l'Apple TV lit nativement le remux. Le jeton dans le chemin évite de réécrire chaque liste (2-serveur.md §2.3).
+La portée signée et la clé à part répondent au risque 1 de 2-serveur.md §2.5 : un laissez-passer passe au proxy avant
+le rôle.
+
+**Différent exprès.**
+- **Les sous-titres ne vont pas au téléviseur** par ce chemin (des `<track>` de la page, pas des rendus de la liste
+  maître) : avec un sous-titre affiché, « Diffuser » passe au lecteur serveur comme avant, qui les porte. Une route
+  AirPlay prise depuis le centre de contrôle avec un sous-titre affiché le laisse sur le téléphone seulement.
+- **Le jeton est dans l'adresse de la page aussi** : la même `src` sert l'élément et le téléviseur (le bouton AirPlay
+  tend la `src` courante), comme l'adresse du lecteur serveur porte `castToken`. Il finit dans les journaux d'accès du
+  relais inverse : c'est pour cela qu'il meurt avec la session et ne vaut que pour un titre et une lecture.
+- **Aucun CORS** : AirPlay n'en a pas besoin (Chromecast est sans objet sur WebKit).
+
+**Porteurs.** `tvPass.ts` (`signLumenTvPass`, `verifyLumenTvPass`, `lumenTvAddressOf`, `lumenTvPassFor`,
+`withLumenTvPass`), `service.ts` (`lumenVerdict`, `tv`), la route `eligibility` (`tv=1`, l'essai multiplexé garde le
+jeton), `serve.ts` (`tvSessionOf`, `television`), `src/proxy.ts`, `castProgress.ts` (`noteCastPosition`, `player`),
+`LumenServerHost.tsx` (`requestCast`, `useCastRoute`, `castActive`). **Tests.** `lumenServer-tvPass.test.ts` (autre
+titre, autre lecture, échu, session close, sans portée, autre portée, rôle share, `castToken` contre Lumen et
+l'inverse, signature et charge altérées, la forme de l'adresse), `lumenServer-routes.test.ts` (sans cookie : tout se
+lit, la position est rapportée pour la vidéo seulement ; refus en 401 ; ni éligibilité ni préparation ; un lien de
+partage ou un compte ordinaire avec l'adresse de l'administrateur : 403 ; la garde de la suite), `lumenServer-proxy.test.ts`,
+`LumenServerHost.test.tsx`.

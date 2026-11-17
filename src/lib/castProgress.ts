@@ -90,6 +90,8 @@ interface Entry {
   jfId: string;
   user: string;
   itemId: string;
+  /** Le lecteur des lignes du relais : `serveur` (flux Jellyfin), `lumen-serveur` (§186). */
+  player: string;
   position: number;
   lastSegmentAt: number;
   lastReportAt: number;
@@ -129,15 +131,26 @@ export class CastProgressRelay {
    */
   noteCastSegment(pass: { jfId: string | null; user: string; itemId: string; restPath: string; search: URLSearchParams }, now = Date.now()): void {
     try {
-      if (!pass.jfId) return;
       const start = segmentStartSeconds(pass.restPath, pass.search);
       if (start === null) return;
+      this.noteCastPosition({ jfId: pass.jfId, user: pass.user, itemId: pass.itemId }, start, now);
+    } catch {
+      // Le flux passe avant tout.
+    }
+  }
+
+  /**
+   * La même règle pour un segment dont l'appelant connaît lui-même le début (Lumen serveur, §186 : l'index dit où
+   * commence chaque segment vidéo, l'adresse ne porte pas de `runtimeTicks`). `player` nomme le lecteur des lignes.
+   */
+  noteCastPosition(pass: { jfId: string | null; user: string; itemId: string; player?: string }, start: number, now = Date.now()): void {
+    try {
+      if (!pass.jfId || !Number.isFinite(start)) return;
       const k = key(pass.jfId, pass.itemId);
       const previous = this.entries.get(k);
-      const entry: Entry = previous ?? { jfId: pass.jfId, user: pass.user, itemId: pass.itemId, position: 0, lastSegmentAt: now, lastReportAt: 0, relaying: false };
+      const entry: Entry = previous ?? { jfId: pass.jfId, user: pass.user, itemId: pass.itemId, player: pass.player ?? "serveur", position: 0, lastSegmentAt: now, lastReportAt: 0, relaying: false };
       entry.position = deducedPosition(start);
       entry.lastSegmentAt = now;
-      // Ré-inséré en fin de liste : l'entrée la plus récemment vue part la dernière.
       this.entries.delete(k);
       this.entries.set(k, entry);
       this.trim(this.entries);
@@ -147,7 +160,7 @@ export class CastProgressRelay {
         entry.relaying = true;
         this.deps.log(entry.user, {
           itemId: entry.itemId,
-          player: "serveur",
+          player: entry.player,
           cast: true,
           serverRelay: true,
           reason: "relais du serveur — position déduite des segments",
@@ -168,7 +181,7 @@ export class CastProgressRelay {
         this.entries.delete(k);
         this.deps.log(entry.user, {
           itemId: entry.itemId,
-          player: "serveur",
+          player: entry.player,
           cast: true,
           serverRelay: true,
           reason: "relais du serveur — arrêt",

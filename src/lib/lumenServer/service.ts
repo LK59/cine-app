@@ -20,6 +20,7 @@
 // - 401/403/404 ne viennent que du contrôle d'accès (pas de session, pas administrateur, titre caché),
 //   qu'un client de l'application ne rencontre pas en rafale : il n'a jamais reçu ces adresses.
 
+import { signLumenTvPass, withLumenTvPass } from "./tvPass";
 import { existsSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { join } from "node:path";
@@ -507,7 +508,14 @@ export function masterAddress(itemId: string, version: string, s: string, audioT
  */
 export async function lumenVerdict(
   itemId: string,
-  options: { audio: number | null | undefined; s: string; waitMs: number; session?: Pick<SessionPayload, "role" | "u"> } & Partial<LumenCutting>
+  options: {
+    audio: number | null | undefined;
+    s: string;
+    waitMs: number;
+    session?: Pick<SessionPayload, "role" | "u"> & Partial<Pick<SessionPayload, "jti" | "jfId">>;
+    /** L'adresse munie du laissez-passer d'une Apple TV (§186) : le lecteur la demande (`?tv=1`), le banc non. */
+    tv?: boolean;
+  } & Partial<LumenCutting>
 ): Promise<LumenVerdict> {
   const conversion = await lumenConversionContext(options.session);
   const building = lumenIndexOf(itemId, { cut: options.cut, targetUs: options.targetUs }, conversion);
@@ -551,10 +559,15 @@ export async function lumenVerdict(
     if (!admission.ok) return { ok: false, reason: "son-serveur-occupe", detail: admission.detail, audioTrack, audio, version, cutFacts };
     conversionState = lumenAudio().audioState(key);
   }
+  // Le laissez-passer d'une Apple TV dans le chemin (§186), quand le lecteur le demande : l'élément porte cette adresse
+  // dès l'ouverture, et le bouton AirPlay la tend telle quelle au téléviseur, qui n'a pas de cookie. Le banc
+  // (`/lumen-test`) n'en demande pas : pas de jeton là où il ne sert pas.
+  const tvToken = options.tv && options.session ? await signLumenTvPass(itemId, options.s, options.session) : null;
+  const master = masterAddress(itemId, version, options.s, audioTrack);
   return {
     ok: true,
     version,
-    master: masterAddress(itemId, version, options.s, audioTrack),
+    master: tvToken ? withLumenTvPass(master, tvToken) : master,
     audioTrack,
     audio,
     segments: index.segments.length,

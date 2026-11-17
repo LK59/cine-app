@@ -10,6 +10,7 @@ import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { isPublicPath } from "@/lib/publicPaths";
 import { verifySessionFull } from "@/lib/session";
 import { castPassFor, castPreflightFor } from "@/lib/castToken";
+import { lumenTvPassFor } from "@/lib/lumenServer/tvPass";
 import { selfWarmPassFor } from "@/lib/selfWarm";
 import { fromLoopback } from "@/lib/trustedProxy";
 import { sessionDb } from "@/lib/db";
@@ -306,8 +307,10 @@ const ADMIN_ONLY_READS: RegExp[] = [
   // Lumen serveur, phase de test (DECISIONS.md §156) : listes, segments, éligibilité, préparation — à
   // l'administrateur seul. Les routes le revérifient (`lumenAccess`) : ce motif ne ferme que les requêtes
   // munies d'une session, et un laissez-passer de diffusion passe *avant* lui (`castPassFor`, plus bas) —
-  // il ne s'applique pas ici parce que `castItemOf` ne reconnaît pas `/api/lumen/…`, et la route ne lit
-  // aucun jeton. La préparation (POST) n'est pas dans la liste blanche des écritures : refusée d'office.
+  // il ne s'applique pas ici parce que `castItemOf` ne reconnaît pas `/api/lumen/…`. Le seul jeton que ces
+  // adresses connaissent est celui d'une Apple TV (`lumenTvPassFor`, §186) : sa propre clé, sa portée
+  // `lumen`, un administrateur, un titre et une lecture, la forme `…/tv.{jeton}/{nom}` en GET — revérifié par
+  // la route. La préparation (POST) n'est pas dans la liste blanche des écritures : refusée d'office.
   /^\/api\/lumen(\/|$)/,
 ];
 
@@ -516,6 +519,11 @@ export async function proxy(req: NextRequest) {
    * laissez-passer ne doit jamais pouvoir contourner ce qui précède.
    */
   if (await castPassFor(req)) return NextResponse.next();
+  // Le laissez-passer d'une Apple TV pour Lumen serveur (DECISIONS.md §186) : le même principe, sa propre clé et sa
+  // propre portée signée, un GET sous `/api/lumen/{titre}/{version}/{lecture}/tv.{jeton}/…` seulement — revérifié
+  // par la route avec la même fonction. Avant le rôle, comme `castPassFor` : `ADMIN_ONLY_READS` ne le couvre pas, et
+  // c'est voulu — le jeton n'est signé que pour un administrateur, et la route le redemande.
+  if (await lumenTvPassFor(req)) return NextResponse.next();
   // La question préalable (CORS) d'un récepteur Chromecast, sur la même adresse et avec le même
   // laissez-passer : elle n'emporte jamais de cookie. La route y répond — DECISIONS.md §64.
   if (await castPreflightFor(req)) return NextResponse.next();

@@ -30,6 +30,9 @@
 // des listes tronquées de Safari (relais de flux) — rien n'est annoncé (`Accept-Ranges` absent).
 
 import { NextResponse, type NextRequest } from "next/server";
+import { SESSION_COOKIE, type SessionPayload } from "@/lib/auth";
+import { castProgressRelay } from "@/lib/castProgress";
+import { LUMEN_TV_PREFIX, verifyLumenTvPass, type LumenTvPass } from "./tvPass";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { encodePlaylist } from "@/lib/playlistEncoding";
 import { lengthHeader } from "@/lib/responseFraming";
@@ -52,6 +55,7 @@ import {
   lumenConversionContext,
   lumenServerEngine,
   lumenVersionOf,
+  NO_STORE,
   playbackKey,
   refusedResponse,
 } from "./service";
@@ -130,6 +134,11 @@ export function measuredBody(bytes: Uint8Array, done: (sendMs: number, aborted: 
   );
 }
 
+/** Ce que les routes lisent d'une session, tiré d'un laissez-passer valable : l'administrateur qui l'a demandé. */
+function tvSessionOf(pass: LumenTvPass): SessionPayload {
+  return { u: pass.user, role: "admin", jti: pass.jti, exp: 0, ...(pass.jfId ? { jfId: pass.jfId } : {}) };
+}
+
 /** `?audio=N` : un numéro de piste, ou `undefined` (la piste par défaut du fichier), ou `null` si mal formé. */
 function audioParam(req: NextRequest): number | undefined | null {
   const raw = req.nextUrl.searchParams.get("audio");
@@ -145,16 +154,36 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
   // Une adresse mal formée est une adresse qui ne désigne rien : 410, comme une autre version — un
   // 400 compterait pour CrowdSec (voir `service.ts`).
   if (!isJellyfinId(itemId)) return goneResponse("lumen-inconnu", "Élément inconnu");
-  const session = await lumenAccess(req, itemId);
+  // Le laissez-passer d'une Apple TV, dans le chemin (`…/{s}/tv.{jeton}/{nom}`, §186) : revérifié ici avec la même
+  // fonction que le proxy — ce titre, cette lecture, la session vivante, un administrateur, six heures. Avec lui, le
+  // cookie n'est pas regardé : la même adresse sert la page et le téléviseur. Sans lui, la session administrateur.
+  const tvSegment = params.name[0]?.startsWith(LUMEN_TV_PREFIX) ? params.name[0] : null;
+  let tvPass: LumenTvPass | null = null;
+  if (tvSegment) {
+    tvPass = isPlaybackId(s) ? await verifyLumenTvPass(tvSegment.slice(LUMEN_TV_PREFIX.length), itemId, s) : null;
+    // 401, jamais 403/404/400 : un jeton échu en rafale ne doit pas compter pour CrowdSec (`http-probing`).
+    if (!tvPass) return NextResponse.json({ error: "Laissez-passer refusé", code: "lumen-tv" }, { status: 401, headers: NO_STORE });
+  }
+  // Une requête munie d'un cookie (la page) répond en plus au contrôle d'accès ordinaire : le jeton ne prête jamais
+  // ses droits à une autre session — un compte ordinaire ou un lien de partage qui aurait recopié l'adresse de
+  // l'administrateur reste refusé, et le titre caché à un compte le reste (`assertVisible`). Sans cookie (le
+  // téléviseur), le jeton seul.
+  const cookied = !!req.cookies.get(SESSION_COOKIE)?.value;
+  const session = tvPass && !cookied ? tvSessionOf(tvPass) : await lumenAccess(req, itemId);
   if (session instanceof NextResponse) return session;
   if (!isLumenVersion(version) || !isPlaybackId(s)) return goneResponse("lumen-inconnu", "Adresse inconnue");
+  // Un téléviseur : la requête sans cookie munie d'un laissez-passer — la position de ses segments vidéo est rapportée
+  // pour ce compte quand la page s'est tue (`castProgress.ts`). Le lecteur de la page porte la même adresse, avec
+  // son cookie : il n'en passe jamais par là.
+  const television = tvPass && !cookied ? tvPass : null;
+  const nameParts = tvSegment ? params.name.slice(1) : params.name;
   // La découpe vient de l'adresse : une version d'un autre format (un déploiement qui l'a fait monter, une
   // révision des essais) ne désigne plus rien.
   // L'essai multiplexé (étape 3e, `trials.ts`) se lit dans la version (`2m1-…`) ; sans lui, rien ne change.
   const { base, mux } = splitMuxTag(formatTagOf(version));
   const cutting = cuttingOfTag(base);
   if (!cutting) return goneResponse("lumen-perime", "Autre version du format", { format: LUMEN_FORMAT_VERSION });
-  const name = params.name.join("/");
+  const name = nameParts.join("/");
   const muxed = mux ? parseMuxedPath(name) : null;
   if (!parseLumenPath(name) && !muxed) return goneResponse("lumen-inconnu", "Nom inconnu");
 
@@ -193,7 +222,7 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
   const idxMs = performance.now() - receivedAt;
 
   try {
-    const resolved = { engine, index, version: ruled, stats, receivedAt, idxMs, context, chrono, session: playbackKey(session.u, s) };
+    const resolved = { engine, index, version: ruled, stats, receivedAt, idxMs, context, chrono, session: playbackKey(session.u, s), television, itemId };
     return answer(muxed ? await serveMuxed(req, { ...resolved, path: muxed }) : await serveResolved(req, { ...resolved, path: path as LumenPath, mux }));
   } catch (error) {
     const { response, kind, code } = lumenErrorResponse(error, context);
@@ -321,6 +350,9 @@ async function serveResolved(
     mux: boolean;
     /** La lecture (`playbackKey`), pour l'avance de la conversion du son. */
     session: string;
+    /** Un téléviseur (§186) : la position de ses segments vidéo, rapportée quand la page s'est tue. */
+    television?: LumenTvPass | null;
+    itemId?: string;
   }
 ): Promise<NextResponse> {
   const { engine, index, path, stats } = r;
@@ -367,6 +399,9 @@ async function serveResolved(
       const { segment, reused } = await lumenSegment(engine, index, r.version, path.rendition, path.n, { session: r.session });
       noteBuilt(stats, { video, n: path.n, buildMs: segment.buildMs, waitMs: segment.waitMs, diskMs: segment.diskMs, reused, falseKey: segment.falseKey });
       if (segment.converted) noteConverted(stats, { ...segment.converted, waitMs: segment.waitMs });
+      if (video && r.television && r.itemId) {
+        castProgressRelay().noteCastPosition({ jfId: r.television.jfId, user: r.television.user, itemId: r.itemId, player: "lumen-serveur" }, index.segments[path.n].startUs / 1e6);
+      }
       const track = path.rendition.kind === "audio" ? path.rendition.track : undefined;
       return segmentResponse(r, { bytes: segment.bytes, name: segmentName(path.rendition, path.n), video, track, reused, buildMs: segment.buildMs, waitMs: segment.waitMs, diskMs: segment.diskMs });
     }

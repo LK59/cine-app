@@ -23,6 +23,14 @@ import { FIXTURES, parseFragments } from "./lumenServer-helpers";
 const mockVerify = vi.fn();
 vi.mock("@/lib/session", () => ({ verifySessionFull: (...a: unknown[]) => mockVerify(...a) }));
 vi.mock("@/lib/auth", () => ({ SESSION_COOKIE: "cine_session" }));
+// Les sessions vivantes, pour le laissez-passer d'une Apple TV (§186) : il meurt avec la sienne.
+const liveSessions = new Set(["j-admin"]);
+vi.mock("@/lib/db", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/db")>();
+  return { ...real, sessionDb: { ...real.sessionDb, exists: (jti: string) => liveSessions.has(jti) } };
+});
+const castPositions: { pass: unknown; start: number }[] = [];
+vi.mock("@/lib/castProgress", () => ({ castProgressRelay: () => ({ noteCastPosition: (pass: unknown, start: number) => castPositions.push({ pass, start }) }) }));
 const mockVisible = vi.fn();
 vi.mock("@/lib/itemVisibility", () => ({ assertVisible: (...a: unknown[]) => mockVisible(...a) }));
 const mockLogError = vi.fn();
@@ -42,7 +50,7 @@ const CRA = "2".repeat(32);
 const NOCUES = "3".repeat(32);
 const COPY = "4".repeat(32);
 const MISSING = "5".repeat(32);
-const ADMIN = { u: "admin", role: "admin", jti: "j-admin" };
+const ADMIN = { u: "admin", role: "admin", jti: "j-admin", jfId: "f".repeat(32) };
 
 beforeAll(() => {
   mkdirSync(MEDIA, { recursive: true });
@@ -220,7 +228,8 @@ describe("les refus d'accès", () => {
   it("un laissez-passer de diffusion n'ouvre rien : la route ne lit aucun jeton, le cookie seul compte", async () => {
     const verdict = await okVerdict(H264);
     mockVerify.mockImplementation(async (token: unknown) => (token ? ADMIN : null));
-    const res = await get(`${baseOf(verdict.master)}v/0.m4s?castToken=quelconque`, { cookie: false });
+    const plain = verdict.master.replace(/\/tv\.[^/]+\//, "/");
+    const res = await get(`${baseOf(plain)}v/0.m4s?castToken=quelconque`, { cookie: false });
     expect(res.status).toBe(401);
     const { castItemOf, castPassFor } = await import("@/lib/castToken");
     expect(castItemOf(`/api/lumen/${H264}/${verdict.version}/lect/v/0.m4s`)).toBeNull();
@@ -488,6 +497,93 @@ describe("la découpe, choisie par l'adresse (§157, §158)", () => {
   });
 });
 
+describe("le laissez-passer d'une Apple TV (§186)", () => {
+  /** L'adresse munie du jeton et sa version sans, pour la même lecture. */
+  async function tvVerdict(query = "?s=lecture-tv&tv=1") {
+    const verdict = await okVerdict(H264, query);
+    const token = /\/tv\.([^/]+)\/master\.m3u8/.exec(verdict.master)?.[1];
+    expect(token).toBeTruthy();
+    return { verdict, token: token!, plain: verdict.master.replace(`/tv.${token}`, "") };
+  }
+
+  it("sans `tv=1`, l'adresse d'avant ; avec, l'adresse munie du jeton", async () => {
+    expect((await okVerdict(H264, "?s=lecture-tv")).master).not.toContain("/tv.");
+    expect((await okVerdict(H264, "?s=lecture-tv&tv=1")).master).toContain("/lecture-tv/tv.");
+  });
+
+  it("l'éligibilité rend l'adresse munie du jeton ; sans cookie, le téléviseur lit tout, et sa position est rapportée", async () => {
+    castPositions.length = 0;
+    const { verdict } = await tvVerdict();
+    const master = await get(verdict.master, { cookie: false });
+    expect(master.status).toBe(200);
+    const base = baseOf(verdict.master);
+    // Les URI relatives de la liste héritent du jeton : la liste vidéo, l'init, un segment, une piste son.
+    for (const name of ["v.m3u8", "init-v.mp4", "v/1.m4s", `a${verdict.audioTrack}.m3u8`, `a${verdict.audioTrack}/1.m4s`]) {
+      expect((await get(`${base}${name}`, { cookie: false })).status, name).toBe(200);
+    }
+    // Un segment vidéo demandé sans cookie : sa position part au relais (`castProgress`) ; un segment son, non.
+    expect(castPositions).toHaveLength(1);
+    expect(castPositions[0].pass).toMatchObject({ user: "admin", jfId: ADMIN.jfId, itemId: H264, player: "lumen-serveur" });
+    expect(castPositions[0].start).toBeGreaterThan(0);
+    // La page lit la même adresse avec son cookie : rien n'est rapporté pour elle.
+    await get(`${base}v/2.m4s`);
+    expect(castPositions).toHaveLength(1);
+  });
+
+  it("refusé (401, jamais 403/404/400) : un autre titre, une autre lecture, un jeton échu, une session close, un `castToken`, une signature altérée", async () => {
+    const { verdict, token, plain } = await tvVerdict();
+    const segment = (t: string, item = H264, s = "lecture-tv") => `/api/lumen/${item}/${verdict.version}/${s}/tv.${t}/v/0.m4s`;
+    const { signLumenTvPass } = await import("@/lib/lumenServer/tvPass");
+    const { signCastToken } = await import("@/lib/castToken");
+    FILES[COPY] = "copie.mkv";
+    const cases: [string, string][] = [
+      ["un autre titre", segment(token, COPY)],
+      ["une autre lecture", segment(token, H264, "autre-lecture")],
+      ["échu", segment((await signLumenTvPass(H264, "lecture-tv", ADMIN, Date.now() - 7 * 3600_000))!)],
+      ["un castToken du même titre", segment(await signCastToken(H264, "admin", Date.now(), "j-admin", ADMIN.jfId))],
+      ["signature altérée", segment(`${token.split(".")[0]}.${"A".repeat(43)}`)],
+    ];
+    for (const [why, path] of cases) {
+      const res = await get(path, { cookie: false });
+      expect(res.status, why).toBe(401);
+    }
+    liveSessions.delete("j-admin");
+    try {
+      expect((await get(segment(token), { cookie: false })).status, "session close").toBe(401);
+    } finally {
+      liveSessions.add("j-admin");
+    }
+    // Sans jeton ni cookie : rien.
+    mockVerify.mockImplementation(async (cookie: unknown) => (cookie ? ADMIN : null));
+    expect((await get(`${baseOf(plain)}v/0.m4s`, { cookie: false })).status).toBe(401);
+  });
+
+  it("le jeton n'ouvre que les adresses de lecture : ni l'éligibilité, ni la préparation", async () => {
+    const { token } = await tvVerdict();
+    mockVerify.mockResolvedValue(null);
+    expect((await eligibility(H264, `?s=lecture-tv&tv=${token}`, { cookie: false })).status).toBe(401);
+    expect((await prepare(H264, { s: "lecture-tv" }, { cookie: false })).status).toBe(401);
+  });
+
+  it("un lien de partage ou un compte ordinaire ne reçoit pas de jeton (l'éligibilité leur est fermée), et un jeton qui en porterait le rôle est refusé", async () => {
+    mockVerify.mockResolvedValue({ u: "partage", role: "share", sh: "x", jti: "j-admin" });
+    expect((await eligibility(H264)).status).toBe(403);
+    mockVerify.mockResolvedValue({ u: "compte", role: "user", jti: "j-admin" });
+    expect((await eligibility(H264)).status).toBe(403);
+    const { __testing } = await import("@/lib/lumenServer/tvPass");
+    mockVerify.mockResolvedValue(ADMIN);
+    const { verdict } = await tvVerdict();
+    // L'adresse de l'administrateur, recopiée par un lien de partage ou un compte ordinaire avec leur cookie : refusée.
+    for (const other of [{ u: "partage", role: "share", sh: "x", jti: "j" }, { u: "compte", role: "user", jti: "j" }]) {
+      mockVerify.mockResolvedValue(other);
+      expect((await get(verdict.master)).status, other.role).toBe(403);
+    }
+    mockVerify.mockResolvedValue(ADMIN);
+    const forged = await __testing.signClaims({ k: "lumen", i: H264, s: "lecture-tv", u: "partage", r: "share", t: "j-admin", e: Date.now() + 60_000 });
+    expect((await get(`/api/lumen/${H264}/${verdict.version}/lecture-tv/tv.${forged}/v/0.m4s`, { cookie: false })).status).toBe(401);
+  });
+});
+
 describe("la garde de la suite", () => {
   // Une route de plus sous /api/lumen qui oublierait le contrôle d'accès serait ouverte à tout compte
   // muni d'une session dès que le motif du proxy changerait — et à rien d'autre : chaque route le pose.
@@ -498,13 +594,16 @@ describe("la garde de la suite", () => {
     for (const route of routes) {
       const source = readFileSync(join(dir, route), "utf8");
       expect(source, route).toMatch(/lumenAccess\(req, itemId\)|serveLumenName\(req, /);
-      // Aucun jeton de diffusion lu tant que la portée `lumen` n'existe pas (étape AirPlay).
-      expect(source, route).not.toMatch(/castPass|castToken|verifyCastToken/);
+      // Aucun jeton de diffusion du flux Jellyfin ; le seul jeton de ces routes est celui d'une Apple TV, lu par
+      // `serve.ts` seulement (§186).
+      expect(source, route).not.toMatch(/castPass|castToken|verifyCastToken|verifyLumenTvPass/);
     }
     const serve = readFileSync("src/lib/lumenServer/serve.ts", "utf8");
-    // L'accès est vérifié avant la moindre lecture de fichier ou d'index.
+    // L'accès — le laissez-passer revérifié, sinon la session — est vérifié avant la moindre lecture de fichier ou d'index.
     expect(serve.indexOf("lumenAccess(req, itemId)")).toBeGreaterThan(0);
     expect(serve.indexOf("lumenAccess(req, itemId)")).toBeLessThan(serve.indexOf("lumenIndexOf(itemId"));
+    expect(serve.indexOf("verifyLumenTvPass(")).toBeGreaterThan(0);
+    expect(serve.indexOf("verifyLumenTvPass(")).toBeLessThan(serve.indexOf("lumenAccess(req, itemId)"));
     expect(readFileSync("src/proxy.ts", "utf8")).toContain("/^\\/api\\/lumen(\\/|$)/");
   });
 });

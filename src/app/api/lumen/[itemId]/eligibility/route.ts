@@ -1,3 +1,4 @@
+import { withLumenTvPass } from "@/lib/lumenServer/tvPass";
 import { NextResponse, type NextRequest } from "next/server";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { isPlaybackId } from "@/lib/lumenServer/playbackStats";
@@ -54,11 +55,16 @@ export async function GET(req: NextRequest, { params }: Params) {
       cut,
       targetUs,
       session,
+      // `tv=1` : l'adresse munie du laissez-passer d'une Apple TV (§186) — le lecteur, pour qu'AirPlay marche.
+      tv: q.get("tv") === "1",
     });
     if (q.get("mux") === "1" && verdict.ok && verdict.audioTrack !== null) {
       const s = new URL(verdict.master, "http://x").pathname.split("/")[5];
+      // Le laissez-passer d'une Apple TV (§186), gardé sur l'adresse de l'essai.
+      const tv = /\/tv\.([^/]+)\/master\.m3u8/.exec(verdict.master)?.[1];
       verdict.version = muxVersion(verdict.version);
       verdict.master = masterAddress(itemId, verdict.version, s, verdict.audioTrack);
+      if (tv) verdict.master = withLumenTvPass(verdict.master, tv);
     }
     return NextResponse.json(verdict, { status: "pending" in verdict ? 202 : 200, headers: NO_STORE });
   } catch (error) {

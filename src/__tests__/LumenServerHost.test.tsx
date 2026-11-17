@@ -179,7 +179,9 @@ describe("l'ouverture", () => {
     const { video } = element();
     expect(video.getAttribute("src") ?? video.src).toContain("master.m3u8?audio=2#t=600");
     expect(video.getAttribute("preload")).toBe("auto");
-    expect(video.getAttribute("x-webkit-airplay")).toBe("deny");
+    expect(video.getAttribute("x-webkit-airplay")).toBe("allow");
+    // Le lecteur demande l'adresse munie du laissez-passer d'une Apple TV (§186).
+    expect(String(fetchMock.mock.calls.find(([u]) => String(u).includes("/eligibility"))?.[0])).toContain("tv=1");
     expect(last("start")).toMatchObject({ player: "lumen-serveur", path: "remux-serveur", why: "open", at: 600, audioTrack: 2, audioStreamIndex: 1, resumeBy: "fragment" });
     expect(controls?.audioTracks.map((t) => t.id)).toEqual([2, 3, 4, 5]);
     expect(controls?.currentAudioId).toBe(2);
@@ -497,6 +499,24 @@ describe("la fin et l'épisode suivant", () => {
     act(() => controls!.onAdvance());
     expect(last("stop")).toMatchObject({ why: "next" });
     expect(playback.advance).toHaveBeenCalledWith(expect.objectContaining({ itemId: "g2" }));
+  });
+
+  it("« Diffuser » avec l'adresse munie du laissez-passer : le sélecteur AirPlay de l'élément, sans changer de lecteur (§186)", async () => {
+    const tokenized = (version: string, audio = 2) => ({ ...verdictOf(version, audio), master: `/api/lumen/g1/${version}/S/tv.aaa.bbb/master.m3u8?audio=${audio}` });
+    verdicts = [tokenized("2-aaaaaaaaaaaa")];
+    await mount();
+    const el = element();
+    expect(el.video.getAttribute("src") ?? el.video.src).toContain("/S/tv.aaa.bbb/master.m3u8?audio=2#t=600");
+    const picker = vi.fn();
+    Object.assign(el.video, { webkitShowPlaybackTargetPicker: picker });
+    act(() => el.picture(600));
+    act(() => controls!.onCastRequest!());
+    expect(picker).toHaveBeenCalledTimes(1);
+    expect(onFallback).not.toHaveBeenCalled();
+    // La route établie : la ligne `cast`, et la lecture continue ici (le retour au premier plan ne met pas en pause).
+    Object.assign(el.video, { webkitCurrentPlaybackTargetIsWireless: true });
+    act(() => el.video.dispatchEvent(new Event("webkitcurrentplaybacktargetiswirelesschanged")));
+    expect(last("cast")).toMatchObject({ player: "lumen-serveur", cast: true, path: "remux-serveur" });
   });
 
   it("« Diffuser » : le lecteur serveur pour diffuser, un choix et non un échec", async () => {
