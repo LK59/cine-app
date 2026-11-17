@@ -6,6 +6,9 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="${NUIT_WORK:-$HOME/xbench/lumen-serveur/nuit}"
 MB=d4513bcf59bba90a23656f40ed816c3d
+# Le lecteur actuel sur un son DTS (The Knick S01E01) : ce WebKit sait-il le réencoder (AudioEncoder) ?
+DECODE=sw timeout 240 "$HERE/nav.sh" MODE=conso ITEM=579892073db7f5021e7ba6426cb163e5 PLAYER=actuel DURATION_S=30 WARM_S=5 LABEL=sonde-dts > "$WORK/out/sonde-dts.log" 2>&1
+grep -v '^\[page\]' "$WORK/out/sonde-dts.log" | tail -2 | cut -c1-500
 for pb in 0 1; do
   for player in serveur actuel; do
     extra=""; [ "$pb" = 1 ] && extra="WEBKIT_GST_USE_PLAYBIN3=1"

@@ -9,7 +9,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="${NUIT_WORK:-$HOME/xbench/lumen-serveur/nuit}"
 START="${START_AT:-600}"
-M="$WORK/out/marks.jsonl"
+M="$WORK/out/marks-hote.jsonl"
 REFS="$WORK/out/son-refs"
 mkdir -p "$REFS"
 # titre | identifiant | chemin du fichier (sous /mnt/media/video) | piste A (n° Matroska) | piste B

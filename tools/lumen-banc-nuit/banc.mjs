@@ -54,7 +54,8 @@ await context.addInitScript(() => {
 const page = await context.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e).slice(0, 300)));
-page.on("crash", () => errors.push("page crash"));
+let crashed = false;
+page.on("crash", () => { crashed = true; errors.push("page crash"); });
 
 async function open() {
   await page.goto(`${BASE}/lumen-test`, { waitUntil: "domcontentloaded" });
@@ -325,9 +326,10 @@ async function son() {
     const ctx = new AudioContext();
     const src = ctx.createMediaElementSource(v);
     const sp = ctx.createScriptProcessor(4096, 2, 1);
-    const cap = { rate: 8000, chunks: [], switches: [], ctxRate: ctx.sampleRate };
-    window.__cap = cap;
     const dec = Math.round(ctx.sampleRate / 8000);
+    // Le débit réel de la capture (44 100 / 6 = 7 350 Hz ici) : verif-son.mjs la ramène à 8 kHz.
+    const cap = { rate: ctx.sampleRate / dec, chunks: [], switches: [], ctxRate: ctx.sampleRate };
+    window.__cap = cap;
     sp.onaudioprocess = (e) => {
       const n = e.inputBuffer.length;
       const L = e.inputBuffer.getChannelData(0);
@@ -383,7 +385,19 @@ async function essai() {
   const input = page.locator("button", { hasText: "Lancer le parcours" }).locator("xpath=..").locator("input");
   if (await input.count()) await input.first().fill(String(seeks));
   await page.getByRole("button", { name: "Lancer le parcours" }).click();
-  await page.getByRole("button", { name: "Lancer le parcours" }).waitFor({ timeout: (seeks * 30 + 60) * 1000 }).catch(() => errors.push("parcours non terminé"));
+  // La fin du parcours, ou la page tombée (le processus web tué : la fuite du greffon `va`) — sans attendre pour rien.
+  const until = Date.now() + (seeks * 25 + 30) * 1000;
+  let done = false;
+  while (!done && !crashed && Date.now() < until) {
+    await sleep(1000);
+    done = (await page.getByRole("button", { name: "Lancer le parcours" }).count().catch(() => 0)) > 0;
+  }
+  if (!done) {
+    errors.push(crashed ? "page tombée pendant le parcours" : "parcours non terminé");
+    const facts = await page.evaluate(() => { const v = document.querySelector("video"); return { ct: v?.currentTime, rs: v?.readyState, err: v?.error?.code ?? null }; }).catch(() => null);
+    mark("fin", { item: process.env.ITEM, player, failed: true, crashed, facts, errors: errors.slice(-20) });
+    if (crashed) return;
+  }
   await sleep(2000);
   const lag = await page.evaluate(() => window.__lag).catch(() => null);
   await page.getByRole("button", { name: "Arrêter", exact: true }).last().click().catch(() => {});
