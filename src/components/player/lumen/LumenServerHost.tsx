@@ -94,7 +94,7 @@ import { dualSubtitleMemory, pickRememberedDual, rememberDual } from "@/lib/dual
 import { labelAudioTracks } from "@/lib/trackLabel";
 import { toJellyfinLanguage, trackLanguage, type TrackPreferences } from "@/lib/trackPreferences";
 import { declineLumen, lumenKeepAwakeOn } from "@/lib/lumenServerChoice";
-import { AudioKeepAwake } from "./audioKeepAwake";
+import { AudioKeepAwake, KEEP_AWAKE_WAKE_MS } from "./audioKeepAwake";
 import { readLumenPrepared } from "@/lib/lumenSheetPrepare";
 import type { StableTakeover } from "@/lib/useStableFallback";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
@@ -1187,6 +1187,32 @@ export function LumenServerHost({
     const onPlay = () => {
       keepAwakeRef.current?.release();
     };
+    /**
+     * La micro-attente (17/11/2026, choisie par l'administrateur) : sous le même essai, une reprise qui trouve la sortie
+     * audio endormie — pause plus longue que la veille (`KEEP_AWAKE_MAX_MS`), retour d'arrière-plan ou de veille, où la
+     * veille est fermée — la réveille d'abord, et ne lance l'image que `KEEP_AWAKE_WAKE_MS` plus tard, l'anneau de
+     * chargement affiché : l'image attend le son, comme au lecteur actuel, plutôt que de partir sans lui. Posée sur
+     * l'élément lui-même : les commandes, le mini-lecteur et l'écran verrouillé appellent tous `play()`.
+     */
+    const nativePlay = video.play;
+    let waking: Promise<void> | null = null;
+    video.play = () => {
+      if (waking) return waking;
+      if (!video.paused || video.ended || !pictureRef.current || !lumenKeepAwakeOn()) return nativePlay.call(video);
+      const keep = (keepAwakeRef.current ??= new AudioKeepAwake());
+      if (keep.awake()) return nativePlay.call(video);
+      keep.start();
+      if (!keep.awake()) return nativePlay.call(video);
+      setLoading(true);
+      const started: Promise<void> = new Promise<void>((resolve) => setTimeout(resolve, KEEP_AWAKE_WAKE_MS))
+        .then(() => nativePlay.call(video))
+        .finally(() => {
+          waking = null;
+          setLoading(false);
+        });
+      waking = started;
+      return started;
+    };
     const onPause = () => {
       if (!video.ended && pictureRef.current && document.visibilityState === "visible" && lumenKeepAwakeOn()) (keepAwakeRef.current ??= new AudioKeepAwake()).start();
       tallyRef.current.waitEnded(Date.now());
@@ -1254,6 +1280,8 @@ export function LumenServerHost({
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("play", onPlay);
+      // La méthode du prototype rendue à l'élément (la propre, posée ci-dessus, retirée).
+      delete (video as { play?: unknown }).play;
     };
   }, [src, videoKey, seeks, background, lumenSession, t]);
 

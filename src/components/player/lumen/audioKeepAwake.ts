@@ -9,13 +9,21 @@
  * attend), ce que le HLS natif ne fait pas — et Safari ne dit pas quand le son sort réellement.
  *
  * L'essai : pendant une pause, un son inaudible (−100 dB) joué par Web Audio garde la sortie éveillée ; à la reprise,
- * il s'arrête une seconde après que le film a repris. Borné à une minute de pause (au-delà, la demi-seconde revient,
- * mais une longue pause n'a pas de réplique coupée à défendre). Tout échec (pas de Web Audio, contexte refusé sans
- * geste) laisse le comportement ordinaire : rien ne dépend de ce module.
+ * il s'arrête une seconde après que le film a repris. Validé à l'oreille et filmé le 17/11/2026 : haut-parleur, son
+ * revenu en 0 à 0,03 s sur 9 reprises (0,43 à 0,49 s sur 8 sans lui). Borné à cinq minutes de pause (une minute
+ * jusqu'au même jour : une perte « extrêmement légère » revenait après les longues pauses) ; au-delà, et au retour
+ * d'arrière-plan ou de veille (la veille y est fermée), la reprise réveille d'abord la sortie et lance l'image
+ * `KEEP_AWAKE_WAKE_MS` plus tard (`LumenServerHost`, la micro-attente). Tout échec (pas de Web Audio, contexte refusé
+ * sans geste) laisse le comportement ordinaire : rien ne dépend de ce module.
  */
 
-/** Au-delà, la veille s'arrête : une pause longue n'a pas à garder la sortie audio allumée. */
-export const KEEP_AWAKE_MAX_MS = 60_000;
+/** Au-delà, la veille s'arrête : la sortie reste allumée sans calcul, mais une pause de plusieurs minutes n'a personne. */
+export const KEEP_AWAKE_MAX_MS = 5 * 60_000;
+/**
+ * Le réveil d'une sortie endormie, avant de lancer l'image : le retard du son mesuré sans veille (0,43 à 0,49 s, filmé
+ * le 17/11/2026), arrondi au-dessus.
+ */
+export const KEEP_AWAKE_WAKE_MS = 500;
 /** Après la reprise, la veille dure encore un peu : le son du film prend le relais avant qu'elle se taise. */
 export const KEEP_AWAKE_TAIL_MS = 1_000;
 
@@ -47,6 +55,11 @@ export class AudioKeepAwake {
     } catch {
       // Web Audio absent ou refusé : la reprise ordinaire.
     }
+  }
+
+  /** La veille joue en ce moment : la sortie audio est éveillée, une reprise n'a pas à l'attendre. */
+  awake(): boolean {
+    return this.source !== null;
   }
 
   /** À la reprise : la veille se tait une seconde plus tard, le son du film ayant repris. */

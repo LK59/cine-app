@@ -299,6 +299,35 @@ describe("la reprise après une pause", () => {
     keepAwakeTrial = false;
   });
 
+  it("une reprise pendant la veille : `play()` tout de suite, sans attente", async () => {
+    keepAwakeTrial = true;
+    fakeAudio();
+    await mount();
+    const el = element();
+    act(() => el.picture(600));
+    el.pause(true);
+    act(() => el.video.dispatchEvent(new Event("pause")));
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    play.mockClear();
+    void el.video.play();
+    expect(play).toHaveBeenCalledTimes(1);
+    keepAwakeTrial = false;
+  });
+
+  it("coupé : jamais d'attente, même après une longue pause", async () => {
+    fakeAudio();
+    await mount();
+    const el = element();
+    act(() => el.picture(600));
+    el.pause(true);
+    act(() => el.video.dispatchEvent(new Event("pause")));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(10 * 60_000)));
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    play.mockClear();
+    void el.video.play();
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
   it("la page cachée pendant la pause : la veille fermée, pas seulement suspendue (l'écran verrouillé disait « à l'arrêt »)", async () => {
     keepAwakeTrial = true;
     const calls = fakeAudio();
@@ -313,10 +342,16 @@ describe("la reprise après une pause", () => {
       Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
     }
     expect(calls).toContain("close");
+    // Le retour : la sortie s'est endormie avec la page, la reprise attend son réveil.
     calls.length = 0;
-    act(() => el.video.dispatchEvent(new Event("play")));
-    act(() => el.video.dispatchEvent(new Event("pause")));
+    el.pause(true);
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    play.mockClear();
+    void el.video.play();
     expect(calls).toEqual(["start", "resume"]);
+    expect(play).not.toHaveBeenCalled();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(500)));
+    expect(play).toHaveBeenCalledTimes(1);
     keepAwakeTrial = false;
   });
 });
