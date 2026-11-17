@@ -41,7 +41,7 @@ import { MiniPlayerChrome, useMiniPlayerDrag } from "@/components/MiniPlayer";
 import { SubtitleLayer } from "@/components/player/SubtitleLayer";
 import { ServerPlayerIntro } from "@/components/player/server/ServerPlayerIntro";
 import { ServerWaitPill } from "@/components/player/server/ServerPlayerScreens";
-import { releaseHlsElement, reloadServerPage, withStartFragment } from "@/components/player/server/serverElement";
+import { releaseHlsElement, withStartFragment } from "@/components/player/server/serverElement";
 import { serverSubtitleTracks, subtitleFacts, subtitleFactsOf, type ExternalSubtitleTrack } from "@/components/player/server/serverTracks";
 import { useServerSessionRecord, useServerStopOnLeave } from "@/components/player/server/useServerSessionRecord";
 import { useServerPositionWatch } from "@/components/player/server/useServerPositionWatch";
@@ -52,7 +52,7 @@ import { recordsResume } from "@/components/player/session/habitWatch";
 import { seekElapsed, seekStart, type SeekStart } from "@/components/player/session/seekElapsed";
 import { claimOnce, advanceTo, closePlayerSession } from "@/components/player/playerClose";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
-import { useSceneMode, sceneCarryOf, type SceneSession } from "@/lib/sceneMode";
+import { useSceneMode } from "@/lib/sceneMode";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { reportPlayback } from "@/lib/reportPlayback";
 import { restoreRememberedVolume } from "@/lib/rememberedVolume";
@@ -94,8 +94,10 @@ import {
   openingAudioOf,
   openingSubtitleOf,
   parseMasterAudio,
+  processingOf,
   textSubtitles,
   verdictRefusal,
+  type AudioTrackLike,
   type LumenAudioChoice,
   type LumenVerdict,
   type MasterAudio,
@@ -109,6 +111,7 @@ import {
   lumenRebuildFields,
   lumenOpeningFields,
   lumenReason,
+  lumenRequestsSeen,
   lumenSeekFields,
   lumenStallFields,
   lumenStartFields,
@@ -189,6 +192,51 @@ function audioLabels(audio: readonly LumenAudioChoice[], hlsChannels: Map<number
   );
 }
 
+/** Un changement de piste servi par réouverture, en attente de sa première image (§185). */
+interface PendingAudio {
+  from: number | null;
+  to: number;
+  at: number;
+  fromTrack: string;
+  toTrack: string;
+  processing: string;
+  /** Le geste (le menu), et l'adresse posée. */
+  startedAt0: number;
+  startedAt: number;
+  srcAt: number;
+  /** `audioTracks` essayé d'abord : pourquoi il n'a pas suffi. */
+  first?: string;
+  /** L'image d'avant a pu être figée par-dessus. */
+  frozen: boolean;
+  /** En pause au moment du changement : rouvert en pause. */
+  keepPaused: boolean;
+  /** La première image de la nouvelle séance (ms depuis l'adresse posée). */
+  pictureMs?: number;
+}
+
+/**
+ * L'image affichée, figée dans une image (`blob:`), à poser par-dessus l'élément pendant une réouverture. WebKit
+ * dessine une vidéo HLS native dans un `<canvas>` (même origine) ; `null` si rien n'est dessinable (pas encore
+ * d'image, refus) — la réouverture se fait alors sans, comme avant.
+ */
+function freezeFrame(video: HTMLVideoElement): string | null {
+  try {
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) return null;
+    // Au plus 1280 px de large : une image de transition de moins d'une seconde, pas un instantané.
+    const scale = Math.min(1, 1280 / video.videoWidth);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // `toDataURL` plutôt que `toBlob` : synchrone, l'image est là avant que l'adresse ne change (~10 ms en JPEG).
+    return canvas.toDataURL("image/jpeg", 0.8);
+  } catch {
+    return null;
+  }
+}
+
 export function LumenServerHost({
   session,
   mode,
@@ -217,11 +265,9 @@ export function LumenServerHost({
     }, [])
   );
   const isSceneRef = useRef(scene.isScene);
-  const sceneSessionRef = useRef<SceneSession>(session);
   useEffect(() => {
     isSceneRef.current = scene.isScene;
-    sceneSessionRef.current = session;
-  }, [scene.isScene, session]);
+  }, [scene.isScene]);
 
   // Une séance du journal par hôte — donc par épisode. Un rechargement pour changer de piste poursuit celle
   // d'avant (`reloadCarry.continues`). Son identifiant est aussi celui de la lecture côté serveur (`s` dans
@@ -291,6 +337,10 @@ export function LumenServerHost({
   const [playSession, setPlaySession] = useState<{ itemId: string; playSessionId: string; mediaSourceId: string } | null>(null);
   const [panel, setPanel] = useState<{ video: string; audio: string; master: string; segments: number; targetS: number; version: string; resumeBy: string } | null>(null);
   const subtitleStyle = useSyncExternalStore(subtitleStyleStore.subscribe, subtitleStyleStore.snapshot, subtitleStyleStore.serverSnapshot);
+  /** L'image d'avant, figée par-dessus l'élément pendant une réouverture pour changer de piste (§185). */
+  const [freezeUrl, setFreezeUrl] = useState<string | null>(null);
+  const pendingAudioRef = useRef<PendingAudio | null>(null);
+  const audioSettleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Ce que les écouteurs, posés une fois, lisent de la séance. */
   const currentSubtitleRef = useRef<number | null>(null);
@@ -415,7 +465,18 @@ export function LumenServerHost({
         "fallback",
         lumenFallbackFields(
           logContext.current,
-          { to: target, planned: opts.planned === true, reason: lumenReason(reason), watched: watched.take(now), stage: opts.stage, mediaError: opts.mediaError, takeover, cast: opts.cast },
+          {
+            to: target,
+            planned: opts.planned === true,
+            reason: lumenReason(reason),
+            watched: watched.take(now),
+            stage: opts.stage,
+            mediaError: opts.mediaError,
+            takeover,
+            cast: opts.cast,
+            // Un refus de l'élément ou une image qui ne vient pas : ce que Safari a demandé avant de renoncer.
+            seen: opts.planned ? undefined : lumenRequestsSeen(lumenSession),
+          },
           lumenSession,
           tallyRef.current.backgroundFacts(now)
         )
@@ -735,6 +796,17 @@ export function LumenServerHost({
       firstPictureHere = true;
       if (watchdogRef.current) clearTimeout(watchdogRef.current);
       watchdogRef.current = null;
+      // Une réouverture pour changer de piste (§185) : l'image d'avant s'efface sur la nouvelle, la ligne `audio`
+      // attend que l'horloge reparte (`onAudioAdvance`) — ou part tout de suite si l'on était en pause.
+      const switching = pendingAudioRef.current;
+      if (switching) {
+        switching.pictureMs = Date.now() - switching.srcAt;
+        setFreezeUrl(null);
+        if (switching.keepPaused) {
+          video.pause();
+          finishAudioSwitch(video);
+        }
+      }
       const first = !pictureRef.current;
       pictureRef.current = true;
       sessionPlayedRef.current = true;
@@ -776,12 +848,63 @@ export function LumenServerHost({
         fallToRef.current("natif", `refus de l'élément avant l'image (${mediaError ?? "?"})`, { stage: "élément", mediaError });
         return;
       }
+      // Une réouverture pour changer de piste qui échoue avant son image : dite telle quelle, puis la règle
+      // d'après l'image — un élément neuf, sur la piste voulue (`currentAudioRef`).
+      const switching = pendingAudioRef.current;
+      if (switching && !firstPictureHere) {
+        pendingAudioRef.current = null;
+        setFreezeUrl(null);
+        reportPlayback(
+          "audio",
+          lumenAudioFields(
+            logContext.current,
+            { ...switching, via: "réouverture", applied: false, tookMs: Date.now() - switching.startedAt0, first: `${switching.first ?? ""} ; erreur ${mediaError ?? "?"}`.replace(/^ ; /, "") },
+            lumenSession
+          )
+        );
+      }
       // Après l'image : le serveur relu, puis l'élément rouvert sur ce chemin (redémarrage, version changée — 410) ;
       // le lecteur serveur seulement si le fichier n'est plus servi ou si les réouvertures bouclent (`recover`).
       // Pas de ligne `error` : rien n'est affiché, la ligne `rebuild` de la réouverture dit l'erreur et sa suite.
       void recoverRef.current(`erreur de l'élément (${mediaError ?? "?"})`);
     };
+    const finishAudioSwitch = (element: HTMLVideoElement) => {
+      const done = pendingAudioRef.current;
+      if (!done) return;
+      pendingAudioRef.current = null;
+      const list = (element as HTMLVideoElement & { audioTracks?: ArrayLike<AudioTrackLike> }).audioTracks;
+      const now = list ? Array.from({ length: list.length }, (_, i) => list[i]) : [];
+      const heard = enabledAudioNumber(now, masterAudioRef.current);
+      reportPlayback(
+        "audio",
+        lumenAudioFields(
+          logContext.current,
+          {
+            from: done.from,
+            to: done.to,
+            fromTrack: done.fromTrack,
+            toTrack: done.toTrack,
+            via: "réouverture",
+            // Safari ne dit pas toujours quelle piste joue : sans réponse, la piste DEFAULT de la liste rouverte.
+            applied: heard === null || heard === done.to,
+            tookMs: Date.now() - done.startedAt0,
+            at: done.at,
+            processing: done.processing,
+            first: done.first,
+            pictureMs: done.pictureMs,
+            frozen: done.frozen,
+          },
+          lumenSession
+        )
+      );
+    };
+    // L'horloge repartie après la réouverture : le changement est fini pour le spectateur.
+    const onAudioAdvance = () => {
+      const switching = pendingAudioRef.current;
+      if (switching?.pictureMs !== undefined && video.currentTime - switching.at >= 0.3) finishAudioSwitch(video);
+    };
     const playAllowingGesture = () => {
+      if (pendingAudioRef.current?.keepPaused) return;
       video.play().catch((e: unknown) => {
         // La politique de lecture automatique d'iOS (une page rechargée n'a pas de geste) : pause propre, un appui.
         if (e instanceof DOMException && e.name === "NotAllowedError") setLoading(false);
@@ -789,6 +912,7 @@ export function LumenServerHost({
     };
     video.addEventListener("loadeddata", onLoadedData);
     video.addEventListener("error", onError);
+    video.addEventListener("timeupdate", onAudioAdvance);
     video.src = src;
     video.load();
     playAllowingGesture();
@@ -796,6 +920,7 @@ export function LumenServerHost({
       document.removeEventListener("visibilitychange", onVisibility);
       video.removeEventListener("loadeddata", onLoadedData);
       video.removeEventListener("error", onError);
+      video.removeEventListener("timeupdate", onAudioAdvance);
       if (watchdogRef.current) clearTimeout(watchdogRef.current);
       watchdogRef.current = null;
     };
@@ -1064,76 +1189,99 @@ export function LumenServerHost({
     };
   }, []);
 
-  // ── Les pistes son : `audioTracks` sans renégocier, sinon le rechargement avec intention ───────────────
+  // ── Les pistes son : `audioTracks` d'abord, sinon la liste rouverte dans la page (§185) ─────────────────
+  /**
+   * La réouverture pour changer de piste, sur **le même élément** : l'adresse de la liste maître avec la nouvelle
+   * piste (`?audio=N`, son rendu DEFAULT) à la position exacte (`#t=`), la préparation du serveur lancée avant
+   * (segment son de reprise construit, ou converti, pendant que Safari relit les listes ; les segments vidéo,
+   * `immutable`, reviennent du cache du navigateur), et l'image d'avant figée par-dessus jusqu'à la première
+   * image de la nouvelle séance — ni écran noir, ni commandes remontées, ni sous-titres perdus (les `<track>`
+   * restent sur l'élément, leurs modes reposés à `loadeddata`). Une erreur avant cette image : `recover`, qui
+   * rouvre sur un élément neuf (la règle des réouvertures, §180).
+   */
+  const reopenForAudio = useCallback(
+    (change: Omit<PendingAudio, "startedAt" | "srcAt" | "frozen" | "keepPaused">) => {
+      const video = videoRef.current;
+      const master = masterRef.current;
+      if (!video || !master || closedRef.current || fellRef.current) return;
+      const target = new URL(master, window.location.href);
+      target.searchParams.set("audio", String(change.to));
+      const next = `${target.pathname}${target.search}`;
+      // La préparation d'abord : sans attendre sa réponse, elle construit le segment de reprise de la nouvelle piste.
+      void fetch(`/api/lumen/${itemId}/prepare`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audio: change.to, position: change.at, s: lumenSession }),
+        keepalive: true,
+      }).catch(() => {});
+      const frozen = freezeFrame(video);
+      if (frozen) setFreezeUrl(frozen);
+      pendingAudioRef.current = { ...change, startedAt: change.startedAt0, srcAt: Date.now(), frozen: frozen !== null, keepPaused: video.paused };
+      masterRef.current = next;
+      srcSetRef.current = { at: Date.now(), resumeAt: change.at, fragment: change.at > 0 };
+      lastKnownTime.current = change.at;
+      setSrc(withStartFragment(next, change.at));
+    },
+    [itemId, lumenSession]
+  );
+
   const changeAudio = useCallback(
     (id: number) => {
       const video = videoRef.current;
       const from = currentAudioRef.current;
-      if (!video || id === from) return;
+      if (!video || id === from || pendingAudioRef.current) return;
       const facts = audioFactsRef.current.find((a) => a.number === id);
       if (!facts) return;
       if (!bench) noteSeriesLanguage(itemId, toJellyfinLanguage(trackLanguage(facts)));
       reportPositionNow();
       tallyRef.current.audioSwitched();
-      const startedAt = Date.now();
+      const startedAt0 = Date.now();
       const at = positionNow();
       const fromTrack = from === null ? "" : (audioLabelsRef.current.get(from) ?? String(from));
       const toTrack = audioLabelsRef.current.get(id) ?? String(id);
+      const processing = processingOf(facts);
       const jellyfinIndex = jellyfinIndexOf(audioFactsRef.current, jellyfinAudioRef.current, id);
-      // Une piste que le serveur ne sert pas (DTS, TrueHD — avant la conversion du son) : le lecteur serveur.
+      // Une piste que le serveur ne sert pas (conversion du son coupée, file pleine) : le lecteur serveur.
       if (!facts.servable) {
-        reportPlayback("audio", lumenAudioFields(logContext.current, { from, to: id, fromTrack, toTrack, via: "refus", applied: false, tookMs: 0, at }, lumenSession));
+        reportPlayback("audio", lumenAudioFields(logContext.current, { from, to: id, fromTrack, toTrack, via: "refus", applied: false, tookMs: 0, at, processing: "non servie" }, lumenSession));
         fallToRef.current("serveur", `piste audio non servie (${facts.codec})`, { takeover: { resumeAt: at, audioStreamIndex: jellyfinIndex } });
         return;
       }
-      // (1) Dans le groupe que Safari expose : `enabled`, aucune nouvelle séance HLS (~1,6 à 1,9 s au banc du 16/11).
-      const list = (video as HTMLVideoElement & { audioTracks?: ArrayLike<{ label: string; language: string; enabled: boolean }> & { addEventListener?: unknown } }).audioTracks;
+      currentAudioRef.current = id;
+      setCurrentAudioId(id);
+      // (1) Un rendu du groupe : `enabled`, aucune nouvelle séance HLS (~1,6 à 1,9 s au banc du 16/11). Depuis le
+      // format 5, toutes les pistes sont dans le groupe, codecs différents compris.
+      const list = (video as HTMLVideoElement & { audioTracks?: ArrayLike<AudioTrackLike> }).audioTracks;
       const items = list ? Array.from({ length: list.length }, (_, i) => list[i]) : [];
       const position = items.length ? audioTrackPosition(items, masterAudioRef.current, id) : -1;
-      if (position >= 0) {
-        items[position].enabled = true;
-        items.forEach((track, i) => {
-          if (i !== position && track.enabled) track.enabled = false;
-        });
-        currentAudioRef.current = id;
-        setCurrentAudioId(id);
-        // `applied` : une piste que le navigateur refuse laisse jouer l'autre (CLAUDE.md, ligne `audio`).
-        setTimeout(() => {
-          const now = Array.from({ length: list?.length ?? 0 }, (_, i) => list![i]);
-          const applied = enabledAudioNumber(now, masterAudioRef.current) === id;
-          reportPlayback("audio", lumenAudioFields(logContext.current, { from, to: id, fromTrack, toTrack, via: "rendition", applied, tookMs: Date.now() - startedAt, at }, lumenSession));
-        }, AUDIO_SETTLE_MS);
+      if (position < 0) {
+        reopenForAudio({ from, to: id, at, fromTrack, toTrack, processing, startedAt0, first: list ? "piste absente d'audioTracks" : "audioTracks indisponible" });
         return;
       }
-      // (2) Hors du groupe (autre codec) : la page rechargée sur la piste — la seule seconde séance HLS qui n'a
-      // jamais échoué sur WebKit (`changeAudio` du lecteur serveur). L'aiguillage la renvoie ici (option allumée,
-      // page neuve) ; la séance du journal continue (`continues`), le sous-titre aussi.
-      if (jellyfinIndex === undefined) {
-        reportPlayback("audio", lumenAudioFields(logContext.current, { from, to: id, fromTrack, toTrack, via: "refus", applied: false, tookMs: 0, at }, lumenSession));
-        return;
-      }
-      reportPlayback("audio", lumenAudioFields(logContext.current, { from, to: id, fromTrack, toTrack, via: "rechargement", applied: true, tookMs: 0, at }, lumenSession));
-      const subtitle = currentSubtitleRef.current;
-      const sceneCarry = sceneCarryOf(sceneSessionRef.current);
-      markHandedOver();
-      const reloaded = reloadServerPage(
-        () => ({
-          itemId,
-          title,
-          audioStreamIndex: jellyfinIndex,
-          resumeAt: at,
-          carry: { continues: logSession.current.id, ...(subtitle !== null ? { subtitleStreamIndex: subtitle } : {}), ...(sceneCarry ? { scene: sceneCarry } : {}) },
-        }),
-        video
-      );
-      if (!reloaded) {
-        // Stockage refusé : le lecteur serveur, qui sait changer de piste lui-même.
-        handedOverRef.current = false;
-        fallToRef.current("serveur", "rechargement impossible pour changer de piste", { takeover: { resumeAt: at, audioStreamIndex: jellyfinIndex } });
-      }
+      // Allumer d'abord, éteindre ensuite : jamais un instant sans son.
+      items[position].enabled = true;
+      items.forEach((track, i) => {
+        if (i !== position && track.enabled) track.enabled = false;
+      });
+      // `applied` : une piste que le navigateur refuse laisse jouer l'autre (CLAUDE.md, ligne `audio`) — et iOS 26
+      // revient parfois à la piste DEFAULT (forum Apple 818465). Non appliqué au bout de 2 s : la réouverture.
+      const settle = setTimeout(() => {
+        if (currentAudioRef.current !== id || closedRef.current || fellRef.current) return;
+        const now = Array.from({ length: list?.length ?? 0 }, (_, i) => list![i]);
+        const applied = enabledAudioNumber(now, masterAudioRef.current) === id;
+        if (applied) {
+          reportPlayback("audio", lumenAudioFields(logContext.current, { from, to: id, fromTrack, toTrack, via: "audioTracks", applied, tookMs: Date.now() - startedAt0, at, processing }, lumenSession));
+          return;
+        }
+        reopenForAudio({ from, to: id, at: positionNow(), fromTrack, toTrack, processing, startedAt0, first: "audioTracks sans effet en 2 s" });
+      }, AUDIO_SETTLE_MS);
+      audioSettleRef.current = settle;
     },
-    [bench, itemId, title, lumenSession, positionNow, reportPositionNow, markHandedOver]
+    [bench, itemId, lumenSession, positionNow, reportPositionNow, reopenForAudio]
   );
+  useEffect(() => () => {
+    if (audioSettleRef.current) clearTimeout(audioSettleRef.current);
+  }, []);
 
   // ── Les sous-titres : les modes des `<track>`, comme le lecteur serveur ─────────────────────────────
   const changeSubtitle = useCallback(
@@ -1301,6 +1449,11 @@ export function LumenServerHost({
           <track key={st.index} kind="subtitles" src={st.url} srcLang={st.language ?? undefined} label={st.label} />
         ))}
       </video>
+      {/* L'image d'avant, figée pendant une réouverture pour changer de piste (§185) : ni écran noir ni à-coup. */}
+      {freezeUrl && (
+        // eslint-disable-next-line @next/next/no-img-element -- une image `data:` de la page, éphémère : rien à optimiser.
+        <img src={freezeUrl} alt="" aria-hidden className={`pointer-events-none absolute inset-0 ${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"}`} />
+      )}
       {dualSubtitles.active && !isMini && !error && (
         <SubtitleLayer dual primary={dualSubtitles.primary} second={dualSubtitles.second} style={subtitleStyle} chromeEdges={chromeEdges} />
       )}

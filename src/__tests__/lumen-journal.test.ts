@@ -45,7 +45,8 @@ describe("les lignes de Lumen serveur", () => {
     expect(start).toMatchObject({ player: LUMEN_PLAYER, path: LUMEN_PATH, why: "open", hls: "natif", at: 600, audioTrack: 2, audioStreamIndex: 1, resumeBy: "fragment", lumenSession: "abcd1234", negotiateMs: 120, openedFrom: "serveur" });
     expect(start.reason).toBe("remultiplexé par le serveur");
     expect(lumenSeekFields(CTX, { from: 10, to: 600, buffered: false, ranges: "", tookMs: 612, arrived: true }, "abcd1234")).toMatchObject({ player: LUMEN_PLAYER, path: LUMEN_PATH, from: 10, to: 600, tookMs: 612, arrived: true });
-    expect(lumenAudioFields(CTX, { from: 2, to: 3, fromTrack: "Français", toTrack: "Anglais", via: "rendition", applied: true, tookMs: 1700, at: 50 }, "abcd1234")).toMatchObject({ via: "rendition", applied: true, processing: "copié tel quel" });
+    expect(lumenAudioFields(CTX, { from: 2, to: 3, fromTrack: "Français", toTrack: "Anglais", via: "audioTracks", applied: true, tookMs: 1700, at: 50 }, "abcd1234")).toMatchObject({ via: "audioTracks", applied: true, processing: "copié tel quel" });
+    expect(lumenAudioFields(CTX, { from: 2, to: 4, fromTrack: "Français", toTrack: "Anglais", via: "réouverture", applied: true, tookMs: 900, at: 50, processing: "converti (A_DTS → E-AC-3 5.1)", first: "audioTracks sans effet en 2 s", pictureMs: 640.4, frozen: true }, "abcd1234")).toMatchObject({ via: "réouverture", processing: "converti (A_DTS → E-AC-3 5.1)", first: "audioTracks sans effet en 2 s", pictureMs: 640, frozen: true });
     expect(lumenStallFields(CTX, { position: 61.27, stalledMs: 5000, readyState: 2, networkState: 2, seeking: false, videoBuffered: "0-61", lead: 0, onLine: true }, "abcd1234", {})).toMatchObject({ position: 61.3, stalledMs: 5000, lead: 0 });
   });
 

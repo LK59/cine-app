@@ -28,6 +28,15 @@ export interface LumenAudioChoice {
   channels: number;
   servable: boolean;
   codec: string;
+  /** Servie convertie (§161) : la cible (`eac3-640-51`), sinon null — copiée telle quelle. */
+  converted: string | null;
+}
+
+/** Ce que le serveur livre d'une piste, en mots, pour la ligne `audio` : copiée, ou convertie et vers quoi. */
+export function processingOf(track: Pick<LumenAudioChoice, "codec" | "converted">): string {
+  if (!track.converted) return "copié tel quel";
+  const layout = /-51$/.test(track.converted) ? "5.1" : /-20$/.test(track.converted) ? "2.0" : track.converted;
+  return `converti (${track.codec} → E-AC-3 ${layout})`;
 }
 
 export function audioChoicesOf(audio: readonly LumenAudioFacts[]): LumenAudioChoice[] {
@@ -42,6 +51,7 @@ export function audioChoicesOf(audio: readonly LumenAudioFacts[]): LumenAudioCho
     channels: a.channels,
     servable: a.servable,
     codec: a.codec,
+    converted: a.converted ?? null,
   }));
 }
 

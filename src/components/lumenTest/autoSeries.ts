@@ -48,7 +48,7 @@ export type PlayerKind = "serveur" | "actuel";
  * La passe : la série complète (~28 min), le comparatif rapide (~13 min), les leviers de démarrage (~10 min, étape
  * 3e), le son multiplexé contre la règle (~18 min, étape 3f) ou le son converti (~10 min, phase 2, DECISIONS §161).
  */
-export type SeriesPass = "complète" | "courte" | "leviers" | "multiplexé" | "son";
+export type SeriesPass = "complète" | "courte" | "leviers" | "multiplexé" | "son" | "codecs";
 
 /**
  * L'ordre des lecteurs (étape 3e) : `serveur` — tous les essais serveur, puis ceux du lecteur actuel, dans la même
@@ -81,6 +81,11 @@ export interface TrialModes {
   early?: "serveur" | "élément";
   startMode?: "saut" | "ext-x-start" | "fragment";
   bandwidth?: "moyen";
+  /**
+   * La passe « changement de codec » (§185) : `codec` — la liste maître des formats 1 à 4, un groupe audio et une
+   * variante par codec (`?groupes=codec`), à côté de la règle du format 5 (un seul groupe, tous codecs).
+   */
+  groups?: "codec";
 }
 
 /** Le délai entre Préparer et Lire d'un essai `early` : le temps d'ouvrir une fiche et d'appuyer sur Lire. */
@@ -95,6 +100,7 @@ export function modeTag(modes: TrialModes | undefined): string {
   if (modes.early) parts.push(modes.early === "serveur" ? "prep" : "fiche");
   if (modes.startMode) parts.push(`depart-${modes.startMode === "ext-x-start" ? "xstart" : modes.startMode === "fragment" ? "frag" : "saut"}`);
   if (modes.bandwidth) parts.push("bw");
+  if (modes.groups) parts.push("groupes");
   return parts.join("-");
 }
 
@@ -107,6 +113,7 @@ export function modeLabel(modes: TrialModes | undefined): string {
   if (modes.early) parts.push(modes.early === "serveur" ? "préparé 5 s avant" : "fiche ouverte 5 s avant");
   if (modes.startMode) parts.push(`départ par ${modes.startMode === "ext-x-start" ? "EXT-X-START" : modes.startMode === "fragment" ? "#t=" : "saut"}`);
   if (modes.bandwidth) parts.push("débit annoncé moyen");
+  if (modes.groups) parts.push("un groupe son par codec (formats 1 à 4)");
   return parts.join(", ");
 }
 
@@ -129,6 +136,11 @@ export const PRESETS: { key: string; id: string; title: string; note: string }[]
   { key: "interstellar", id: "660e9a7ac3b39075db4154612c13a5a4", title: "Interstellar (IMAX)", note: "4K, deux DTS-HD MA 5.1 (VF, VO) : converties en E-AC-3 5.1" },
   { key: "braveheart", id: "c5a250fd9279e15775bda57e6ca27718", title: "Braveheart", note: "VF E-AC-3 copiée, VO TrueHD Atmos 7.1 convertie en E-AC-3 5.1 (repliée, sans Atmos)" },
   { key: "jojo", id: "2bbf77e0cc99287266d0580ba578bd77", title: "JoJo's Bizarre Adventure S01E01", note: "Opus 2.0 (japonais, anglais) : converti en E-AC-3 2.0" },
+  // Le changement de piste entre codecs (§185), d'après le recensement du 16/11/2026 : 15 % des fichiers ont des pistes
+  // de plusieurs codecs — AC-3 et E-AC-3 (702), AAC et AC-3 (260), AC-3 et DTS (222), AAC et E-AC-3 (119).
+  { key: "mandalorien", id: "afbc2e45c4e1d5ced3a2e3a050a86ab6", title: "The Mandalorian S01E01", note: "4K HEVC, VF AC-3 5.1, VO E-AC-3 5.1 — le cas le plus courant" },
+  { key: "femme-de-menage", id: "70aceef708933935cfe99a94b2477dda", title: "La Femme de ménage", note: "4K HEVC, AC-3 5.1, deux E-AC-3 5.1 et un AAC 2.0 : trois codecs" },
+  { key: "treize-jours", id: "057b1c6c2bbda0a4e2d6998f67a44caa", title: "13 Jours, 13 Nuits", note: "E-AC-3 5.1 et AAC 2.0, la même langue : le nombre de canaux change aussi" },
 ];
 
 /** La cible de segment par défaut de Lumen serveur, en secondes (`LUMEN_TARGET_SEGMENT_US`). */
@@ -380,13 +392,39 @@ export const CONVERT_SERIES: Trial[] = [
 ];
 
 /**
+ * Le changement de piste entre codecs (§185), ~8 minutes, Lumen serveur seul : quatre titres dont les pistes ont des
+ * codecs différents, chacun **sous la règle** (format 5 : un seul groupe audio, tous codecs) **et sous l'ancienne
+ * forme** (`groupes=codec` : un groupe et une variante par codec), l'ordre alterné d'un titre à l'autre ; dans chaque
+ * essai, le tour de toutes les pistes par `audioTracks` (chaque changement entre codecs, puis le retour) après un
+ * parcours court. Mesuré par changement : la reprise de l'horloge, `applied` (la piste allumée est-elle la piste
+ * demandée ?), le rechargement de l'élément par Safari, les blocages, erreurs et gels. Ce que l'oreille doit juger : le
+ * son de la nouvelle piste, sans silence ni clic.
+ */
+export const CODEC_TITLES = ["american-housewife", "mandalorien", "femme-de-menage", "treize-jours"] as const;
+export const CODEC_SERIES: Trial[] = CODEC_TITLES.flatMap((key, i) => {
+  const rule = trial(key, "serveur", { tours: [3], audioTour: true, playBeforeMs: 5_000, dwellMs: 3_000 });
+  const old = trial(key, "serveur", { tours: [3], audioTour: true, playBeforeMs: 5_000, dwellMs: 3_000, modes: { groups: "codec" } });
+  return i % 2 === 0 ? [rule, old] : [old, rule];
+});
+
+/**
  * Le plan d'une passe dans l'ordre demandé. `actuel` : les essais du lecteur actuel d'abord, puis ceux du serveur, le
  * premier marqué `reloadBefore` — la page se recharge là (WebKit refuse un HLS natif après une MediaSource). Une passe
  * sans lecteur actuel (les leviers) n'a qu'un ordre.
  */
 export function planOf(pass: SeriesPass, order: SeriesOrder = "serveur"): Trial[] {
   const plan =
-    pass === "courte" ? QUICK_SERIES : pass === "leviers" ? LEVER_SERIES : pass === "multiplexé" ? MUX_SERIES : pass === "son" ? CONVERT_SERIES : SERIES;
+    pass === "courte"
+      ? QUICK_SERIES
+      : pass === "leviers"
+        ? LEVER_SERIES
+        : pass === "multiplexé"
+          ? MUX_SERIES
+          : pass === "son"
+            ? CONVERT_SERIES
+            : pass === "codecs"
+              ? CODEC_SERIES
+              : SERIES;
   if (order === "serveur" || !plan.some((t) => t.player === "actuel")) return plan;
   const currentFirst = plan.filter((t) => t.player === "actuel");
   const server = plan.filter((t) => t.player === "serveur");
@@ -629,7 +667,7 @@ export interface TrialMeasures {
   errors: string[];
   waits: number;
   quality?: Quality;
-  audioSwitches: { ms?: number; waited: boolean; errors?: number; freezes?: number; applied?: boolean; segs?: number }[];
+  audioSwitches: { ms?: number; waited: boolean; errors?: number; freezes?: number; applied?: boolean; segs?: number; reloaded?: boolean }[];
   /** La piste entendue au départ contre celle que la liste maître désigne (étape 3f, `muxPass.ts`). */
   audioCheck?: AudioCheck;
   /** Le débit moyen annoncé par la liste maître (AVERAGE-BANDWIDTH de la variante lue, Mb/s). */
@@ -697,6 +735,11 @@ export interface TrialResult {
   /** Le changement de piste de l'essai (le premier), réduit : reprise, blocage, erreurs, gels, appliqué, segments reçus. */
   audioSwitch?: { ms?: number; waited: boolean; errors: number; freezes: number; applied?: boolean; segs?: number };
   streamMbps?: number;
+  /** Le tour des pistes (§185) : la reprise de chaque changement (null : le temps n'a pas repris), et combien ont été appliqués. */
+  switchMs?: (number | null)[];
+  switchApplied?: number;
+  /** Changements après lesquels Safari a rechargé l'élément lui-même (`emptied`/`loadstart`). */
+  switchReloaded?: number;
 }
 
 export function describeVerdict(cut: Cut, verdict: PreparedVerdict | null): string {
@@ -767,6 +810,13 @@ export function resultOf(t: Trial, rank: number, outcome: TrialOutcome, measures
         }
       : {}),
     ...(measures.streamMbps !== undefined ? { streamMbps: measures.streamMbps } : {}),
+    ...(t.audioTour && switches.some((s) => s.applied !== undefined)
+      ? {
+          switchMs: switches.map((s) => (typeof s.ms === "number" ? s.ms : null)),
+          switchApplied: switches.filter((s) => s.applied === true).length,
+          switchReloaded: switches.filter((s) => s.reloaded === true).length,
+        }
+      : {}),
   };
 }
 
@@ -803,6 +853,9 @@ export function formatResult(r: TrialResult): string {
     r.audioSwitches ? `pistes ${r.audioSwitches - (r.audioTrouble ?? 0)}/${r.audioSwitches} nettes` : null,
     r.audioCheck?.ok !== undefined ? `piste au départ ${r.audioCheck.ok ? "la bonne" : `FAUSSE (${r.audioCheck.got ?? "?"} au lieu de ${r.audioCheck.want ?? "?"})`}` : null,
     r.audioSwitch?.applied === false ? "CHANGEMENT DE PISTE NON APPLIQUÉ" : null,
+    r.switchMs
+      ? `changements de piste : reprise méd. ${median(r.switchMs.filter((v): v is number => v !== null)) ?? "—"} ms, ${r.switchApplied ?? 0}/${r.switchMs.length} appliqués${r.switchReloaded ? `, ${r.switchReloaded} élément(s) rechargé(s) par Safari` : ""}`
+      : null,
     r.status !== "ok" ? `${r.status.toUpperCase()}${r.reason ? ` : ${r.reason}` : ""}` : null,
     formatChrono(r),
   ];

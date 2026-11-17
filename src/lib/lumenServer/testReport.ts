@@ -35,7 +35,8 @@ const MAX_FREEZES = 60;
 /** Les essais résumés d'une ligne récapitulative : la série en compte 14, la passe « son multiplexé » 24. */
 const MAX_TRIALS = 30;
 const PLAYERS = new Set(["serveur", "actuel"]);
-const PASSES = new Set(["complète", "courte", "leviers", "multiplexé"]);
+// « son » manquait ici depuis la phase 2 : le champ `pass` de ses lignes était retiré à la réception.
+const PASSES = new Set(["complète", "courte", "leviers", "multiplexé", "son", "codecs"]);
 const ORDERS = new Set(["serveur", "actuel"]);
 /** Les leviers d'un essai (`modeTag`, autoSeries.ts) : `mux`, `prep`, `fiche`, `depart-xstart`, `bw`… */
 const modeOf = (v: unknown) => (typeof v === "string" && /^[a-z-]{1,40}$/.test(v) ? v : null);
@@ -316,6 +317,10 @@ function trialSummaryOf(raw: unknown): Record<string, unknown> {
     audioSwitch: (v) =>
       pick(v, { ms: duration, waited: bool, errors: count, freezes: count, applied: bool, segs: count }),
     streamMbps: (v) => num(v, 1e5),
+    // La passe « changement de codec » (§185) : la reprise de chaque changement, appliqués, éléments rechargés.
+    switchMs: (v) => list(v, 12).map((x) => (x === null ? null : num(x, 1e8))),
+    switchApplied: count,
+    switchReloaded: count,
   });
 }
 

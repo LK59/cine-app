@@ -38,8 +38,15 @@ import type { LumenConvertSource } from "./audio/convertSource";
  * ffmpeg présent, la liste maître gagne ces rendus (`a{N}x{cid}`) et l'éligibilité ne les refuse plus. Un index de
  * la 3 n'a pas ces faits : rien de la 3 ne se relit sous la 4. Option coupée, les adresses changent de version
  * mais pas d'octets.
+ *
+ * **5** (17/11/2026, DECISIONS §185) : la liste maître d'un fichier dont les pistes servies ont plusieurs codecs
+ * (AC-3 et E-AC-3, AAC et AC-3, une piste convertie à côté d'une AC-3 — 15 % de la bibliothèque) met toutes ses
+ * pistes dans **un seul groupe audio**, au lieu d'un groupe et d'une variante par codec : un changement de piste
+ * entre codecs devient un changement de rendu dans le groupe (`audioTracks`), sans rechargement. Aucun segment,
+ * aucun init ne change d'un octet ; la liste maître d'un fichier à un seul codec non plus. La version monte quand
+ * même, parce que la règle de §155 vaut pour toute adresse servie : la même adresse, les mêmes octets.
  */
-export const LUMEN_FORMAT_VERSION = 4;
+export const LUMEN_FORMAT_VERSION = 5;
 
 // ── La règle de découpe ──────────────────────────────────────────────────────
 

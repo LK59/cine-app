@@ -12,6 +12,7 @@ import {
   MUX_SERIES,
   MUX_SWITCH_WATCH_MS,
   CONVERT_SERIES,
+  CODEC_SERIES,
   FIRST_FRAME_TIMEOUT_MS,
   FREEZE_CHECK_MS,
   FreezeWatch,
@@ -1188,6 +1189,8 @@ export function LumenTest() {
     if (current.audioTrack !== null) query.set("audio", String(current.audioTrack));
     if (startAt > 0 && startMode === "ext-x-start") query.set("start", String(startAt));
     if (params.modes?.bandwidth === "moyen") query.set("bw", "moyen");
+    // La passe « changement de codec » (§185) : l'ancienne forme de la liste maître, un groupe et une variante par codec.
+    if (params.modes?.groups === "codec") query.set("groupes", "codec");
     const search = query.toString();
     const master = `/api/lumen/${params.itemId}/${current.version}/${s}/master.m3u8${search ? `?${search}` : ""}${startAt > 0 && startMode === "fragment" ? `#t=${startAt}` : ""}`;
     // Le lecteur actuel s'ouvre à la position demandée (`startSeconds`, comme l'hôte) : pas de saut de départ ; Lumen
@@ -1727,8 +1730,12 @@ export function LumenTest() {
           await sleepUnless(AUDIO_SWITCH_WATCH_MS, stopped);
           sw.errors = run.errors.length - errorsBefore;
           sw.freezes = run.watch.freezes.length - freezesBefore;
+          // La piste demandée est-elle celle qui joue (§185) ? Safari peut garder l'ancienne — entre deux groupes de
+          // codecs, ou par le défaut d'iOS 26 qui revient à la piste DEFAULT.
+          const asked = Number(sw.to.split(":")[0]);
+          sw.applied = Number.isInteger(asked) ? !!tracksOf(video)[asked]?.enabled : undefined;
           note(
-            `piste ${sw.to} : ${sw.ms !== undefined ? `reprise ${sw.ms} ms` : "LE TEMPS N'A PAS REPRIS"}${sw.waited ? " · blocage" : ""}${sw.errors ? ` · ${sw.errors} erreur(s)` : ""}${sw.freezes ? ` · ${sw.freezes} gel(s)` : ""}`
+            `piste ${sw.to} : ${sw.ms !== undefined ? `reprise ${sw.ms} ms` : "LE TEMPS N'A PAS REPRIS"}${sw.waited ? " · blocage" : ""}${sw.errors ? ` · ${sw.errors} erreur(s)` : ""}${sw.freezes ? ` · ${sw.freezes} gel(s)` : ""}${sw.applied === false ? " · NON APPLIQUÉE" : ""}${sw.reloaded ? " · élément rechargé par Safari" : ""}`
           );
         }
       },
@@ -1827,7 +1834,7 @@ export function LumenTest() {
     video.removeAttribute("src");
     video.load();
     playOf(video).catch(() => {});
-    const seriesOrder = saved?.order ?? (pass === "leviers" || pass === "multiplexé" || pass === "son" ? "serveur" : order);
+    const seriesOrder = saved?.order ?? (pass === "leviers" || pass === "multiplexé" || pass === "son" || pass === "codecs" ? "serveur" : order);
     const plan = planOf(pass, seriesOrder);
     const state: AutoState = {
       serie: saved?.serie ?? newPlaybackId().slice(2, 14),
@@ -1852,7 +1859,7 @@ export function LumenTest() {
     } else {
       setAnswers({ damaged: null, damagedTitle: "", audioClean: null, audioChanged: null, lipSync: null });
       const passLabel =
-        pass === "courte" ? "comparatif rapide" : pass === "leviers" ? "leviers de démarrage" : pass === "multiplexé" ? "son multiplexé" : pass === "son" ? "son converti" : "complète";
+        pass === "courte" ? "comparatif rapide" : pass === "leviers" ? "leviers de démarrage" : pass === "multiplexé" ? "son multiplexé" : pass === "son" ? "son converti" : pass === "codecs" ? "changement de codec" : "complète";
       note(`série ${state.serie} (${passLabel}, ${seriesOrder === "actuel" ? "lecteur actuel d'abord, rechargement" : "serveur d'abord"}, graine ${state.seed}) : ${plan.length} essais`);
     }
     video.scrollIntoView?.({ block: "start" });
@@ -1935,6 +1942,7 @@ export function LumenTest() {
   const leverMin = Math.round(seriesEstimateS(LEVER_SERIES) / 60);
   const muxMin = Math.round(seriesEstimateS(MUX_SERIES) / 60);
   const convertMin = Math.round(seriesEstimateS(CONVERT_SERIES) / 60);
+  const codecMin = Math.round(seriesEstimateS(CODEC_SERIES) / 60);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 text-sm text-white">
@@ -1984,6 +1992,14 @@ export function LumenTest() {
         <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("son")}>
           {`Son converti (${CONVERT_SERIES.length} essais, Lumen serveur seul, ~${convertMin} min)`}
         </button>
+        <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("codecs")}>
+          {`Changement de codec (${CODEC_SERIES.length} essais, Lumen serveur seul, ~${codecMin} min)`}
+        </button>
+        <p className="mt-1 text-xs text-white/50">
+          Le changement de piste entre codecs (AC-3, E-AC-3, AAC) : quatre titres, chacun avec la liste maître d&apos;aujourd&apos;hui (un seul
+          groupe son) et l&apos;ancienne (un groupe par codec) ; le tour de toutes les pistes dans chaque essai. Le son audible : la nouvelle
+          piste doit s&apos;entendre, sans silence ni clic.
+        </p>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/60">
           Ordre des lecteurs :
           {(

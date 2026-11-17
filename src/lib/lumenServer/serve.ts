@@ -333,7 +333,9 @@ async function serveResolved(
       if (!verdict.ok) return refusedResponse(verdict);
       // Des octets d'un film vont partir : l'indexation des répliques se tait (DECISIONS.md §88).
       noteMediaRead();
-      let text = engine.master(index, { audioTrack, labels: await labelsFor(req) });
+      // `?groupes=codec` : l'ancienne forme (un groupe par codec), un essai de `/lumen-test` (§185).
+      const perCodecGroups = req.nextUrl.searchParams.get("groupes") === "codec";
+      let text = engine.master(index, { audioTrack, labels: await labelsFor(req), ...(perCodecGroups ? { perCodecGroups } : {}) });
       // Les essais de la seule liste maître (étape 3e, `trials.ts`) : sans `?start=` ni `?bw=`, le texte de la règle.
       text = withMasterTrials(text, masterTrialOptions(req.nextUrl.searchParams));
       if (r.mux && audioTrack !== null) text = muxedMaster(text, audioTrack);

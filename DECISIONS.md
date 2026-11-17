@@ -11690,3 +11690,67 @@ empreintes du lecteur, inchangées.
 - **Absent, à reprendre** : « Améliorer les dialogues » et « Générer des sous-titres » (le son et les sous-titres
   ne passent pas par la page), l'ajustement aux bandes noires et le plafond HDR (natif seulement), Chromecast (sans
   objet sur WebKit). Un compte non administrateur sur l'appareil : 403 → déclin, un aller-retour.
+
+## 185. Lumen serveur : un seul groupe son, tous codecs ; un changement de piste par `audioTracks`, sinon la liste rouverte dans la page (17/11/2026)
+
+**Règle.** La liste maître de Lumen serveur met **toutes les pistes servies dans un seul groupe audio** (`playlists.ts`,
+`LUMEN_FORMAT_VERSION` 5), et donc une seule variante, dont le `CODECS` liste chaque format du groupe
+(`hvc1…,ac-3,ec-3`). Un fichier à un seul codec garde sa liste à l'octet près (un test le compare). Dans l'hôte
+(`LumenServerHost.changeAudio`), un changement de piste se fait dans cet ordre :
+1. **`audioTracks[i].enabled`** sur le rendu (relié au menu par le `NAME` de la liste maître, `audioTrackPosition`),
+   puis, 2 s plus tard, **la piste allumée relue** : appliquée, une ligne `audio` `via: "audioTracks"` ;
+2. sinon — piste absente d'`audioTracks`, ou Safari revenu à l'autre piste — **la liste rouverte dans la page**
+   (`reopenForAudio`, `via: "réouverture"`) : sur **le même élément**, `master.m3u8?audio=N#t=<position>` (le rendu
+   DEFAULT est la nouvelle piste), `prepare` lancé juste avant (le segment son de reprise construit ou converti
+   pendant que Safari relit les listes ; les segments vidéo, `immutable`, reviennent du cache du navigateur), l'image
+   d'avant figée par-dessus (`freezeFrame` : un `<canvas>` → `data:` JPEG, ~1280 px) jusqu'à la première image de la
+   nouvelle séance, la pause gardée si l'on était en pause. Ni commandes remontées (la clé de l'élément ne change pas),
+   ni sous-titres perdus (les `<track>` restent, leurs modes reposés à `loadeddata`). La ligne `audio` part quand
+   l'horloge repart : `tookMs` (du geste), `pictureMs` (adresse → image), `frozen`, `first` (pourquoi `audioTracks`
+   n'a pas suffi), `processing` (copiée, ou convertie et vers quoi) ;
+3. une erreur avant l'image de la réouverture : la ligne `audio` `applied: false`, puis la règle d'après l'image
+   (`recover` : un élément neuf, sur la nouvelle piste ; le lecteur serveur au-delà de trois réouvertures).
+Le rechargement de la page n'est plus employé pour changer de piste ; une piste non servie passe toujours au lecteur
+serveur.
+
+**Pourquoi.** La forme d'avant (formats 1 à 4) suivait les exemples d'Apple — un groupe par codec, une variante par
+groupe — sans ce qui la rend juste : Apple met **chaque langue dans chaque groupe** (« Create one audio group for
+each pair of codec and channel count. Each group needs to have every language in it. », annexe « Audio rendition
+groups and variants » de la HLS Authoring Specification for Apple Devices), et RFC 8216 §4.3.4.1.1 l'exige (« each
+Group of the same TYPE MUST have the same set of members »). Chez nous, la VF était en AC-3 et la VO en E-AC-3 :
+changer de langue, c'était changer de variante, et Apple écrit que son lecteur, en général, ne passe pas d'un codec
+audio à l'autre (« Generally speaking, the player doesn't switch between audio codecs », même annexe). Safari
+annonçait pourtant les pistes des deux groupes dans `audioTracks` (journal de `/lumen-test`, *American Housewife*,
+AC-3 2.0 + E-AC-3 5.1, 16/11) : l'allumer était une question sans réponse documentée. Un groupe unique est conforme
+(rfc8216bis §4.4.6.2 : le `CODECS` d'une variante liste « every media format in any of the renditions specified by
+the AUDIO attribute ») et fait du changement de langue ce qu'il est entre deux pistes du même codec : un changement
+de rendu, mesuré à 1,6–1,9 s (§180). Recensement (16/11/2026) : **15 % des fichiers** ont des pistes de plusieurs
+codecs — AC-3 + E-AC-3 702, AAC + AC-3 260, AC-3 + DTS 222 (le DTS converti en E-AC-3), AAC + E-AC-3 119.
+La réouverture remplace le rechargement de la page : WebKit ouvre bien une seconde séance HLS dans la même page sur
+ce chemin (`recover` et `/lumen-test`, des dizaines d'éléments par page) — la règle du lecteur serveur (CLAUDE.md,
+« The WebKit reload in `changeAudio` ») vaut pour le HLS de Jellyfin. Le même élément plutôt qu'un neuf : rien à
+remonter. La vérification d'`applied` couvre aussi un défaut d'iOS 26 rapporté sur le forum d'Apple (fil 818465 : la
+sélection d'une piste revient à la piste DEFAULT).
+
+**À trancher sur l'iPhone.** La passe « Changement de codec » de `/lumen-test` (`CODEC_SERIES`, ~8 min) joue quatre
+titres à pistes de codecs différents sous la règle et sous l'ancienne forme (`?groupes=codec`, `perCodecGroups`) et
+fait le tour des pistes par `audioTracks` : reprise, `applied`, élément rechargé par Safari. Si un codec refuse de
+s'allumer dans le groupe unique, la réouverture le rattrape (≈ une première image, ~0,5 à 1 s) ; si le groupe unique
+gênait l'ouverture, le repli d'avant l'image (§180) le dirait (`fallback` `to: natif`, `seen`).
+
+**Porteurs.** `src/lib/lumenServer/playlists.ts` (`masterPlaylist`, `perCodecGroups`), `format.ts` (version 5),
+`serve.ts` (`?groupes=codec`), `src/components/player/lumen/LumenServerHost.tsx` (`changeAudio`, `reopenForAudio`,
+`freezeFrame`, `PendingAudio`), `lumenLog.ts` (`LumenAudioVia`, `lumenAudioFields`), `lumenOpening.ts`
+(`processingOf`), `src/components/lumenTest/` (`CODEC_SERIES`, `groups`), `testReport.ts`. **Tests.**
+`lumenServer-playlists.test.ts` (groupe unique, liste identique à un seul codec, l'essai), `LumenServerHost.test.tsx`
+(réouverture sur le même élément, `prepare` avant, `audioTracks` sans effet, échec avant l'image),
+`lumen-journal.test.ts`, `lumenServer-routes.test.ts` et `lumenServer-conversion-routes.test.ts` (format 5).
+
+**Différent exprès.**
+- **Une seule variante** : plus de choix de groupe par le lecteur selon le codec. Tous les appareils visés (iPhone,
+  iPad, Mac, Apple TV) décodent AC-3, E-AC-3, AAC et FLAC ; un codec qu'un appareil ne saurait pas lire ferait refuser
+  la variante entière — le repli d'avant l'image le rattrape.
+- **Le 5.1 et le 2.0 dans le même groupe** : Apple déconseille de changer de nombre de canaux *pendant* la lecture
+  (même annexe) pour la sélection automatique ; ici, c'est le spectateur qui le demande.
+- **Pas de banc WebKit Linux** pour la réouverture : le HLS de WebKitGTK passe par GStreamer, pas par AVFoundation —
+  sa mesure ne dirait rien de Safari ; c'est la passe de `/lumen-test` qui la mesure.

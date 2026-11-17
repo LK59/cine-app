@@ -5,7 +5,7 @@ import { render, cleanup, act } from "@testing-library/react";
 /**
  * L'hôte de Lumen serveur (DECISIONS.md §180), monté avec ses vraies pièces de séance et des doublures pour ce qui
  * n'est pas le sien (commandes, ouverture animée, panneau, rapport à Jellyfin) : l'ouverture par `#t=`, les sauts,
- * le changement de piste par `audioTracks` ou par rechargement, le repli avant et après la première image, le
+ * le changement de piste par `audioTracks` ou par réouverture dans la page (§185), le repli avant et après la première image, le
  * redémarrage du serveur (attente, puis réouverture) et le 410 d'une version changée, la fin, l'épisode suivant.
  */
 const lines: { kind: string; fields: Record<string, unknown> }[] = [];
@@ -383,22 +383,76 @@ describe("les pistes son", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
-    expect(last("audio")).toMatchObject({ from: 2, to: 3, via: "rendition", applied: true });
+    expect(last("audio")).toMatchObject({ from: 2, to: 3, via: "audioTracks", applied: true });
     expect(reloadServerPage).not.toHaveBeenCalled();
   });
 
-  it("hors du groupe (autre codec) : la page rechargée sur la piste, sans `server` — elle revient ici", async () => {
+  it("absente d'`audioTracks` : la liste rouverte dans la page, sur le même élément, à la position, préparée avant", async () => {
+    await mount();
+    const el = element();
+    const tracks = withAudioTracks(el.video);
+    act(() => el.picture(600));
+    act(() => el.at(640));
+    const before = el.video;
+    act(() => controls!.onChangeAudio(4));
+    await flush();
+    const video = document.querySelector("video")!;
+    // Le même élément (les commandes et les `<track>` restent), la nouvelle piste à la position exacte.
+    expect(video).toBe(before);
+    expect(video.getAttribute("src") ?? video.src).toContain("/2-aaaaaaaaaaaa/S/master.m3u8?audio=4#t=640");
+    const prepare = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/api/lumen/g1/prepare"));
+    expect(JSON.parse(String((prepare as unknown as [string, RequestInit])[1].body))).toMatchObject({ audio: 4, position: 640 });
+    expect(reloadServerPage).not.toHaveBeenCalled();
+    expect(controls?.currentAudioId).toBe(4);
+    // La première image de la nouvelle séance (son rendu DEFAULT allumé), puis l'horloge qui repart : la ligne `audio`.
+    tracks[0].enabled = false;
+    tracks.push({ label: "EN 2.0", language: "en", enabled: true });
+    act(() => el.picture(640));
+    act(() => el.at(640.5));
+    expect(last("audio")).toMatchObject({ from: 2, to: 4, via: "réouverture", applied: true, first: "piste absente d'audioTracks" });
+    expect(last("audio")).toHaveProperty("pictureMs");
+    expect(kinds()).not.toContain("fallback");
+  });
+
+  it("`audioTracks` sans effet en 2 s (Safari revient à l'autre piste) : la réouverture", async () => {
+    await mount();
+    const el = element();
+    const tracks = withAudioTracks(el.video);
+    act(() => el.picture(600));
+    act(() => el.at(650));
+    act(() => controls!.onChangeAudio(3));
+    // Safari rallume la piste d'avant.
+    tracks[0].enabled = true;
+    tracks[1].enabled = false;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    await flush();
+    const video = document.querySelector("video")!;
+    expect(video.getAttribute("src") ?? video.src).toContain("master.m3u8?audio=3#t=650");
+    act(() => el.picture(650));
+    act(() => el.at(651));
+    expect(last("audio")).toMatchObject({ to: 3, via: "réouverture", first: "audioTracks sans effet en 2 s" });
+  });
+
+  it("la réouverture échoue avant son image : la ligne `audio` le dit, puis un élément neuf sur la nouvelle piste", async () => {
     await mount();
     const el = element();
     withAudioTracks(el.video);
     act(() => el.picture(600));
     act(() => el.at(640));
     act(() => controls!.onChangeAudio(4));
-    expect(reloadServerPage).toHaveBeenCalledTimes(1);
-    const intent = (reloadServerPage.mock.calls[0][0] as () => Record<string, unknown>)();
-    expect(intent).toMatchObject({ itemId: "g1", audioStreamIndex: 3, resumeAt: 640 });
-    expect(intent).not.toHaveProperty("server");
-    expect(last("audio")).toMatchObject({ via: "rechargement" });
+    await flush();
+    verdicts = [verdictOf("2-aaaaaaaaaaaa", 4)];
+    await act(async () => {
+      el.fail(2);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await flush();
+    expect(lines.find((l) => l.kind === "audio")?.fields).toMatchObject({ to: 4, via: "réouverture", applied: false });
+    expect(last("rebuild")).toBeDefined();
+    const video = document.querySelector("video")!;
+    expect(video.getAttribute("src") ?? video.src).toContain("master.m3u8?audio=4#t=");
   });
 
   it("une piste que le serveur ne sert pas (DTS) : le lecteur serveur sur cette piste", async () => {

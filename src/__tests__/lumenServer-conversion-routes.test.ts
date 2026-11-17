@@ -151,13 +151,16 @@ describe("option en service", () => {
     const master = await (await get(verdict.master)).text();
     const uri = /URI="(a4x[0-9a-f]{8})\.m3u8"/.exec(master)?.[1];
     expect(uri).toBeTruthy();
-    // Le même groupe `ec-3` que la piste E-AC-3 copiée ; deux canaux ; la langue du fichier ; le défaut sur elle.
+    // Le groupe de toutes les pistes (format 5, §185), avec la E-AC-3 copiée ; deux canaux ; la langue du fichier ; le
+    // défaut sur elle.
     const line = master.split("\n").find((l) => l.includes(`${uri}.m3u8`))!;
-    expect(line).toContain('GROUP-ID="aud-ec-3"');
+    const group = /GROUP-ID="([^"]+)"/.exec(line)?.[1];
+    expect(group).toMatch(/^aud-.*ec-3/);
     expect(line).toContain('CHANNELS="2"');
     expect(line).toContain('LANGUAGE="es"');
     expect(line).toContain("DEFAULT=YES");
-    expect(master.split("\n").find((l) => l.includes('URI="a2.m3u8"'))).toContain('GROUP-ID="aud-ec-3"');
+    expect(master.split("\n").find((l) => l.includes('URI="a2.m3u8"'))).toContain(`GROUP-ID="${group}"`);
+    expect(master.split("\n").filter((l) => l.startsWith("#EXT-X-STREAM-INF:"))).toHaveLength(1);
     const base = baseOf(verdict.master);
     const playlist = await (await get(`${base}${uri}.m3u8`)).text();
     expect(playlist).toContain(`#EXT-X-MAP:URI="init-${uri}.mp4"`);

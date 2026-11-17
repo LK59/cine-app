@@ -116,12 +116,36 @@ export function lumenSeekFields(
   };
 }
 
-/** Comment un changement de piste a été servi. */
-export type LumenAudioVia = "rendition" | "rechargement" | "refus";
+/**
+ * Comment un changement de piste a été servi (§185) :
+ * - `audioTracks` : un rendu du groupe allumé par `audioTracks[i].enabled`, sans nouvelle séance HLS (la règle,
+ *   entre codecs compris depuis le format 5) ;
+ * - `réouverture` : la même liste maître rouverte **dans la page**, sur le même élément, à la position et sur la
+ *   piste voulue (`?audio=N#t=`) — quand Safari n'expose pas la piste ou n'a pas appliqué le changement ;
+ * - `rechargement` : la page rechargée (lignes d'avant le format 5 seulement) ;
+ * - `refus` : rien n'a été fait (piste non servie : la ligne `fallback` suit ; piste introuvable).
+ */
+export type LumenAudioVia = "audioTracks" | "réouverture" | "rechargement" | "refus";
 
 export function lumenAudioFields(
   ctx: ServerPlayerContext,
-  change: { from: number | null; to: number; fromTrack: string; toTrack: string; via: LumenAudioVia; applied: boolean; tookMs: number; at: number },
+  change: {
+    from: number | null;
+    to: number;
+    fromTrack: string;
+    toTrack: string;
+    via: LumenAudioVia;
+    applied: boolean;
+    tookMs: number;
+    at: number;
+    /** Ce que le serveur livre de la nouvelle piste : `copié tel quel`, ou `converti (DTS → E-AC-3 5.1)`. */
+    processing?: string;
+    /** `audioTracks` essayé d'abord, sans effet, avant la réouverture : pourquoi. */
+    first?: string;
+    /** Réouverture : l'adresse posée → la première image (ms), et le temps d'image figée montrée à sa place. */
+    pictureMs?: number;
+    frozen?: boolean;
+  },
   lumenSession: string
 ): Record<string, unknown> {
   return {
@@ -131,11 +155,13 @@ export function lumenAudioFields(
     via: change.via,
     fromTrack: change.fromTrack,
     toTrack: change.toTrack,
-    // Phase 1 : le serveur ne sert que des pistes copiées telles quelles (§159 : réparées sans réencoder).
-    processing: "copié tel quel",
+    processing: change.processing ?? "copié tel quel",
     applied: change.applied,
     tookMs: Math.round(change.tookMs),
     at: Math.round(change.at),
+    ...(change.first ? { first: change.first } : {}),
+    ...(change.pictureMs !== undefined ? { pictureMs: Math.round(change.pictureMs) } : {}),
+    ...(change.frozen !== undefined ? { frozen: change.frozen } : {}),
     lumenSession,
   };
 }
@@ -172,7 +198,7 @@ export type LumenFallbackTarget = "natif" | "serveur";
  */
 export function lumenFallbackFields(
   ctx: ServerPlayerContext,
-  fallback: { to: LumenFallbackTarget; planned: boolean; reason: string; watched: number; stage?: string; mediaError?: string | null; cast?: boolean; takeover?: unknown },
+  fallback: { to: LumenFallbackTarget; planned: boolean; reason: string; watched: number; stage?: string; mediaError?: string | null; cast?: boolean; takeover?: unknown; seen?: string },
   lumenSession: string | null,
   background: Record<string, unknown>
 ): Record<string, unknown> {
@@ -184,11 +210,38 @@ export function lumenFallbackFields(
       ...(fallback.mediaError ? { mediaError: fallback.mediaError } : {}),
       ...(fallback.takeover ? { takeover: fallback.takeover } : {}),
       ...(fallback.cast ? { cast: true } : {}),
+      ...(fallback.seen ? { seen: fallback.seen } : {}),
       watched: fallback.watched,
       ...(lumenSession ? { lumenSession } : {}),
       ...background,
     }),
   };
+}
+
+/**
+ * Ce que Safari a demandé au serveur pour cette lecture, vu par la page (Resource Timing : Safari y expose les
+ * requêtes HLS d'AVFoundation, étape 3f) — `master.m3u8 120ms 0.4k | v.m3u8 80ms 1.9k`, dans l'ordre, 16 au plus.
+ * Pour un refus avant la première image (code 4) : le 16/11/2026, *Mr. Robot* S01E03 a été refusé après la liste
+ * maître et la liste vidéo, sans qu'Safari demande la liste son ni l'init — le journal ne disait que « code 4 ».
+ */
+export function lumenRequestsSeen(lumenSession: string): string | undefined {
+  try {
+    const marker = `/${lumenSession}/`;
+    const seen = performance
+      .getEntriesByType("resource")
+      .filter((e) => e.name.includes("/api/lumen/") && e.name.includes(marker))
+      .slice(-16)
+      .map((e) => {
+        const r = e as PerformanceResourceTiming;
+        const name = r.name.slice(r.name.indexOf(marker) + marker.length).replace(/^tv\.[^/]+\//, "").split("#")[0];
+        const kb = r.transferSize > 0 ? ` ${(r.transferSize / 1024).toFixed(1)}k` : "";
+        const status = typeof (r as PerformanceResourceTiming & { responseStatus?: number }).responseStatus === "number" ? ` ${(r as PerformanceResourceTiming & { responseStatus?: number }).responseStatus}` : "";
+        return `${name} ${Math.round(r.duration)}ms${kb}${status}`;
+      });
+    return seen.length ? seen.join(" | ").slice(0, 600) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

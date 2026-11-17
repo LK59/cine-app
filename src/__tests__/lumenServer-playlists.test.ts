@@ -22,7 +22,7 @@ function attributes(line: string): Record<string, string> {
 }
 
 describe("la liste maître", () => {
-  it("une variante par groupe audio, chacune avec CODECS, RESOLUTION, FRAME-RATE, AVERAGE-BANDWIDTH, VIDEO-RANGE (9.1, 9.2, 9.14, 9.15, 9.16)", async () => {
+  it("un seul groupe audio, tous codecs confondus, et une variante dont le CODECS les liste tous (§185 ; 9.1, 9.2, 9.14, 9.15, 9.16)", async () => {
     const { index, source } = await fixtureIndex("hevc-cra.mkv");
     source.close();
     const text = masterPlaylist(index, { audioTrack: index.audio[1].number, labels });
@@ -32,10 +32,11 @@ describe("la liste maître", () => {
     expect(lines).not.toContain("#EXT-X-INDEPENDENT-SEGMENTS");
 
     const media = lines.filter((l) => l.startsWith("#EXT-X-MEDIA:")).map(attributes);
-    // L'Opus n'est pas copiable : absent. Deux codecs, deux groupes.
+    // L'Opus n'est pas copiable : absent. Deux codecs, un seul groupe (RFC 8216 §4.3.4.1.1 : des groupes du même
+    // type auraient dû avoir les mêmes membres — la VF AC-3 et la VO E-AC-3 ne le pouvaient pas).
     expect(media.map((m) => [m["GROUP-ID"], m.URI])).toEqual([
-      ["aud-ac-3", "a3.m3u8"],
-      ["aud-ec-3", "a2.m3u8"],
+      ["aud-ec-3+ac-3", "a2.m3u8"],
+      ["aud-ec-3+ac-3", "a3.m3u8"],
     ]);
     for (const m of media) {
       expect(m.TYPE).toBe("AUDIO");
@@ -44,26 +45,45 @@ describe("la liste maître", () => {
       expect(m.AUTOSELECT).toBe("YES");
       expect(m.CHANNELS).toMatch(/^\d+(\/JOC)?$/);
     }
-    // Un seul DEFAULT=YES par groupe, et c'est la piste demandée dans le sien.
-    expect(media.find((m) => m.URI === "a3.m3u8")!.DEFAULT).toBe("YES");
-    expect(media.filter((m) => m.DEFAULT === "YES")).toHaveLength(2);
+    // Un seul DEFAULT=YES, la piste demandée.
+    expect(media.filter((m) => m.DEFAULT === "YES").map((m) => m.URI)).toEqual(["a3.m3u8"]);
     expect(media.find((m) => m.URI === "a3.m3u8")!.NAME).toBe("Anglais — 5.1");
 
     const variants = lines.filter((l) => l.startsWith("#EXT-X-STREAM-INF:"));
-    expect(variants).toHaveLength(2);
-    // La variante de la piste demandée d'abord (1.32) ; l'URI suit chaque STREAM-INF.
-    const first = attributes(variants[0]);
-    expect(first.AUDIO).toBe("aud-ac-3");
+    expect(variants).toHaveLength(1);
+    const v = attributes(variants[0]);
+    expect(v.AUDIO).toBe("aud-ec-3+ac-3");
     expect(lines[lines.indexOf(variants[0]) + 1]).toBe("v.m3u8");
-    for (const v of variants.map(attributes)) {
-      expect(Number(v.BANDWIDTH)).toBeGreaterThanOrEqual(Number(v["AVERAGE-BANDWIDTH"]));
-      expect(v.CODECS.split(",")[0]).toBe(index.video!.signal!.codecs);
-      expect(v.RESOLUTION).toBe("64x48");
-      // 24 i/s : la durée par défaut du Matroska, pas une durée d’image à la milliseconde (41 ou 42 ms).
-      expect(v["FRAME-RATE"]).toBe("24.000");
-      expect(v["VIDEO-RANGE"]).toBe("SDR");
-    }
-    expect(attributes(variants[1]).CODECS).toBe(`${index.video!.signal!.codecs},ec-3`);
+    expect(Number(v.BANDWIDTH)).toBeGreaterThanOrEqual(Number(v["AVERAGE-BANDWIDTH"]));
+    // rfc8216bis §4.4.6.2 : chaque format de chaque rendu du groupe.
+    expect(v.CODECS).toBe(`${index.video!.signal!.codecs},ec-3,ac-3`);
+    expect(v.RESOLUTION).toBe("64x48");
+    // 24 i/s : la durée par défaut du Matroska, pas une durée d'image à la milliseconde (41 ou 42 ms).
+    expect(v["FRAME-RATE"]).toBe("24.000");
+    expect(v["VIDEO-RANGE"]).toBe("SDR");
+  });
+
+  it("un fichier à un seul codec garde sa liste maître à l'octet près (format 4 → 5)", async () => {
+    const { index, source } = await fixtureIndex("hevc-cra.mkv");
+    source.close();
+    // Une seule piste servie : la liste de la règle et celle de l'ancienne forme sont les mêmes.
+    const single: LumenIndex = { ...index, audio: index.audio.filter((a) => a.number === index.audio[1].number || !!a.refusal) };
+    expect(masterPlaylist(single, { audioTrack: null, labels })).toBe(masterPlaylist(single, { audioTrack: null, labels, perCodecGroups: true }));
+  });
+
+  it("l'essai `groupes=codec` : l'ancienne forme, un groupe et une variante par codec, la piste demandée d'abord", async () => {
+    const { index, source } = await fixtureIndex("hevc-cra.mkv");
+    source.close();
+    const lines = masterPlaylist(index, { audioTrack: index.audio[1].number, labels, perCodecGroups: true }).trim().split("\n");
+    const media = lines.filter((l) => l.startsWith("#EXT-X-MEDIA:")).map(attributes);
+    expect(media.map((m) => [m["GROUP-ID"], m.URI])).toEqual([
+      ["aud-ac-3", "a3.m3u8"],
+      ["aud-ec-3", "a2.m3u8"],
+    ]);
+    expect(media.filter((m) => m.DEFAULT === "YES")).toHaveLength(2);
+    const variants = lines.filter((l) => l.startsWith("#EXT-X-STREAM-INF:")).map(attributes);
+    expect(variants.map((v) => v.AUDIO)).toEqual(["aud-ac-3", "aud-ec-3"]);
+    expect(variants[1].CODECS).toBe(`${index.video!.signal!.codecs},ec-3`);
   });
 
   it("Dolby Vision 8.1 : SUPPLEMENTAL-CODECS et VIDEO-RANGE=PQ, d'après la signalisation de l'étape 1", async () => {

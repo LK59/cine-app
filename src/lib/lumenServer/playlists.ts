@@ -8,8 +8,19 @@
 // démultiplexeur HLS de ffmpeg, qui suit les URI relatives et l'EXT-X-MAP jusqu'au décodage.
 //
 // Liste maître :
-// - une variante par groupe audio (le CODECS d'une variante liste tous les formats des rendus de son
-//   groupe, rfc8216bis §4.4.6.1.1) : un groupe par codec, et la même vidéo pour toutes ;
+// - **un seul groupe audio, tous codecs confondus** (format 5, DECISIONS §185), et donc une seule variante,
+//   dont le CODECS liste tous les formats des rendus du groupe (rfc8216bis §4.4.6.2 : « every media format
+//   in any of the renditions specified by the AUDIO attribute »). Avant (formats 1 à 4), un groupe par codec
+//   et une variante par groupe : la forme des exemples d'Apple, mais Apple la complète en mettant **chaque
+//   langue dans chaque groupe** (« Each group needs to have every language in it », annexe « Audio rendition
+//   groups and variants » de la HLS Authoring Specification), et RFC 8216 §4.3.4.1.1 l'exige (« each Group
+//   of the same TYPE MUST have the same set of members »). Nos groupes, eux, n'avaient pas les mêmes membres
+//   (la VF en AC-3, la VO en E-AC-3) : passer de l'une à l'autre obligeait le lecteur à changer de variante
+//   pour une sélection de piste, ce qu'Apple dit ne pas faire en général (« the player doesn't switch
+//   between audio codecs », même annexe). Un seul groupe fait d'un changement de langue un changement de
+//   rendu dans le groupe, comme entre deux pistes du même codec (mesuré : 1,6 à 1,9 s, §180). Un fichier
+//   à un seul codec garde sa liste à l'octet près. L'ancienne forme reste un essai de `/lumen-test`
+//   (`?groupes=codec`, `perCodecGroups`) ;
 // - CODECS (9.1), RESOLUTION (9.2), AVERAGE-BANDWIDTH (9.14), FRAME-RATE (9.15), VIDEO-RANGE hors SDR
 //   (9.16), SUPPLEMENTAL-CODECS pour un Dolby Vision 8.x — tirés de `hlsSignal.ts`, donc de l'init ;
 // - LANGUAGE sur chaque rendu (8.10), NAME par `trackLabel.ts` (l'étiquette des deux lecteurs),
@@ -37,6 +48,11 @@ export interface MasterOptions {
   audioTrack: number | null;
   /** Les traductions et la langue de l'étiquette (`trackLabel.ts`). */
   labels: LabelOptions;
+  /**
+   * L'essai `?groupes=codec` de `/lumen-test` : la forme des formats 1 à 4 — un groupe par codec, une variante
+   * par groupe —, gardée pour mesurer contre la règle le changement de piste entre codecs (§185).
+   */
+  perCodecGroups?: boolean;
 }
 
 /** Une chaîne entre guillemets HLS : ni guillemet, ni retour à la ligne (rfc8216bis §4.2). */
@@ -77,11 +93,14 @@ export function masterPlaylist(index: LumenIndex, options: MasterOptions): strin
     ).map((l) => [l.number, l.label])
   );
 
-  // Un groupe par codec, dans l'ordre d'apparition ; le groupe de la piste choisie d'abord, pour que sa
-  // variante soit la première listée — celle qu'un lecteur prend par défaut (1.32).
+  // Un seul groupe, nommé d'après ses codecs (`aud-ec-3`, `aud-ac-3+ec-3`) : un fichier à un seul codec garde le
+  // nom et la liste d'avant. L'essai `perCodecGroups` : un groupe par codec, dans l'ordre d'apparition ; le
+  // groupe de la piste choisie d'abord, pour que sa variante soit la première listée — celle qu'un lecteur prend
+  // par défaut (1.32).
   const groups = new Map<string, LumenAudioTrack[]>();
+  const allCodecs = [...new Set(audio.map((a) => a.signal!.codecs))];
   for (const a of audio) {
-    const id = groupIdOf(a.signal!.codecs);
+    const id = options.perCodecGroups ? groupIdOf(a.signal!.codecs) : groupIdOf(allCodecs.join("+"));
     groups.set(id, [...(groups.get(id) ?? []), a]);
   }
   const chosen = audio.find((a) => a.number === options.audioTrack) ?? audio.find((a) => a.isDefault) ?? audio[0];
