@@ -12186,7 +12186,8 @@ partait toujours aux vrais débits.
 ## 195. La version allégée de Lumen serveur : des échelons réencodés par le iGPU, sur les mêmes segments, préparés avant que Safari ne bascule (17/11/2026)
 
 **Règle.** Quand l'option `LUMEN_LIGHT` (audience, coupée par défaut) est ouverte au compte et que l'encodeur est là —
-un ffmpeg vidéo avec VAAPI (`LUMEN_VIDEO_FFMPEG_PATH`, le paquet Alpine à `/usr/bin/ffmpeg`, distinct du ffmpeg épinglé
+un ffmpeg vidéo avec VAAPI (`LUMEN_VIDEO_FFMPEG_PATH`, le ffmpeg vidéo minimal épinglé à `/usr/local/bin/ffmpeg-video` —
+voir le complément « ffmpeg vidéo minimal » en fin de paragraphe —, distinct du ffmpeg épinglé
 du son) et le iGPU donné au conteneur (`/dev/dri`, groupe `render`) —, la liste maître d'une source assez lourde annonce,
 après la variante d'origine, un ou deux **échelons** : `l1` (au plus 1920×1080, 8 Mb/s en moyenne, 12 en crête en
 10 bits ; 6/9 en 8 bits) et `l2` (au plus 1280×720, 3/4,5 ; 2,5/3,75). Un échelon n'existe que si la source pèse au moins
@@ -12261,3 +12262,24 @@ lecteur elle s'applique (« Seulement pour Lumen serveur »), ce qu'elle fait, c
 Lumen client de son côté — il convertit le son sur l'appareil, améliore les dialogues sur l'appareil et passe par
 Jellyfin sur une connexion lente ; il n'utilise aucune de ces options. Les intitulés des réglages commencent par
 « Lumen serveur : », l'option du Compte s'appelle « Lecteur expérimental : Lumen serveur ».
+
+**Complément au §195 (17/11/2026, soir) — un ffmpeg vidéo minimal épinglé.** Le paquet Alpine `ffmpeg` (8.1.3) qui
+avait servi à prouver la version allégée tirait tous les codecs et leurs bibliothèques (x264, x265, dav1d, aom,
+svt-av1, libplacebo, vulkan, mesa…) : l'image passait de 631 à 870 Mo pour quatre fonctions. Il est remplacé par
+`tools/ffmpeg-video/build.sh` (étape `ffmpeg-video` du Dockerfile), construit comme le ffmpeg du son : la même FFmpeg
+7.1.5 épinglée (même archive, même SHA-256), `--disable-everything --disable-autodetect`, puis seulement VAAPI
+(accélérateurs `hevc_vaapi`/`h264_vaapi`, encodeur `hevc_vaapi`, `scale_vaapi`, `hwupload`), le démultiplexeur
+Matroska, le muxeur `hevc`, et pour la mire de la détection l'indev `lavfi` (`testsrc2`, `wrapped_avframe`), `format`
+et swscale. LGPL, offre de source dans `/usr/local/share/ffmpeg-video/`. Lié dynamiquement à libva (pas de libva
+statique sur Alpine) : l'image n'installe plus que `libva libdrm intel-media-driver`. Binaire de ~5 Mo à
+`/usr/local/bin/ffmpeg-video` (défaut de `LUMEN_VIDEO_FFMPEG_PATH`) ; **image 703 Mo** au lieu de 870. Il annonce
+`7.1.5-lumen-video-1` (`--extra-version`), et cette version entre dans `cid` : les segments allégés d'avant (8.1.3)
+changent d'adresse, jamais de mélange — à monter à chaque changement du script qui peut changer des octets. **Prouvé**
+(`lumen-light-bench.spec.ts`, vrai iGPU, X-Ray en pause, chaque binaire tour à tour sur les mêmes trois segments) :
+*Tron : Ares* (l1 1920×804, l2 1280×536, Main10 PQ), *Meurs un autre jour* (l1 1920×816, l2 1280×544, Main),
+*Ghosted* (l2 1280×692) — mêmes instants et même nombre d'images que l'origine, une IDR par segment, décodage sans
+erreur, HDR gardé, codec annoncé = init, et des mesures d'image identiques à celles du paquet (écart des variations
+0,01 à 0,06, luminance à la décimale près) ; temps d'encodage du même ordre (segment de 4 à 7 s en 1,4 à 5,7 s, init
+0,4 à 1 s), détection en 0,1 s au lieu de 0,4. Porteurs : `tools/ffmpeg-video/`, `Dockerfile`, `config.ts`
+(`videoFfmpegPath`), `light/encoder.ts` (commentaire). **Test** : `lumen-ffmpeg-video.test.ts` (étape, chemin, plus
+de paquet `ffmpeg`, même épinglage que le son, rien de GPL, les composants que l'encodeur demande).

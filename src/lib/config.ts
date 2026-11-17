@@ -459,10 +459,10 @@ export const config = {
     get lightCacheGb() {
       return clampInt(optional("LUMEN_LIGHT_CACHE_GB", "10"), 10, 0, 1000);
     },
-    // Déploiement seulement (§81) : le ffmpeg vidéo (paquet Alpine, VAAPI ; vide = pas de version allégée) et le cache
-    // disque des segments allégés.
+    // Déploiement seulement (§81) : le ffmpeg vidéo (épinglé, VAAPI, `tools/ffmpeg-video` ; vide = pas de version
+    // allégée) et le cache disque des segments allégés.
     get videoFfmpegPath() {
-      return envOnly("LUMEN_VIDEO_FFMPEG_PATH", "/usr/bin/ffmpeg");
+      return envOnly("LUMEN_VIDEO_FFMPEG_PATH", "/usr/local/bin/ffmpeg-video");
     },
     get lightCacheDir() {
       return envOnly("LUMEN_LIGHT_CACHE_DIR", "");

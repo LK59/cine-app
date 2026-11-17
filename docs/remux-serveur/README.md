@@ -1323,7 +1323,8 @@ Pour une connexion plus lente que le film, le serveur réencode la vidéo en un 
 `l2` ≤ 720p, HEVC, 10 bits et PQ gardés pour une source HDR), segment par segment, sur **les mêmes frontières et les
 mêmes instants** que la vidéo d'origine : Safari passe de l'une à l'autre seul, à une frontière, sans couper.
 
-- **Où** : `src/lib/lumenServer/light/`. L'encodeur est un ffmpeg vidéo avec VAAPI (le paquet Alpine, `/usr/bin/ffmpeg`),
+- **Où** : `src/lib/lumenServer/light/`. L'encodeur est un ffmpeg vidéo minimal épinglé avec VAAPI (FFmpeg 7.1.5,
+  `tools/ffmpeg-video/`, `/usr/local/bin/ffmpeg-video` ; le paquet Alpine jusqu'au 17/11/2026 au soir),
   distinct du ffmpeg épinglé du son, et le iGPU Intel du serveur, à donner au conteneur :
   `devices: ["/dev/dri:/dev/dri"]` et `group_add: ["<gid du groupe render>"]`. Sans eux, la détection dit pourquoi
   (Configuration → Lecture, la carte « Version allégée ») et la liste maître reste celle d'avant à l'octet près.

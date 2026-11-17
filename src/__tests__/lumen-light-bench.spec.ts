@@ -1,11 +1,14 @@
 // Le banc de la version allégée (`lumenServer/light/`) : sur un vrai fichier, avec le vrai encodeur VAAPI, encode
 // trois segments consécutifs de chaque échelon et les compare à la vidéo d'origine, image par image.
 //
-// Sauté sans `LIGHT_FILE`. À lancer dans un conteneur jetable qui a le iGPU et le ffmpeg vidéo (Alpine `ffmpeg` +
-// `intel-media-driver`), les médias en lecture seule, un DATA_DIR jetable :
+// Sauté sans `LIGHT_FILE`. À lancer dans un conteneur jetable qui a le iGPU et le ffmpeg vidéo épinglé (le binaire de
+// l'étape `ffmpeg-video`, `tools/ffmpeg-video`, tiré de l'image : `docker create` puis `docker cp
+// …:/usr/local/bin/ffmpeg-video`), les médias en lecture seule, un DATA_DIR jetable. Le paquet Alpine `ffmpeg` n'y
+// sert qu'à la vérification (ffprobe, décodage complet), jamais à l'encodage :
 //   docker run --rm --name lumen-light-banc --device /dev/dri --group-add 993 -v "$PWD":/app -w /app \
+//     -v /chemin/ffmpeg-video:/ffv:ro -e LUMEN_VIDEO_FFMPEG_PATH=/ffv \
 //     -v /mnt/media/video:/mnt/media/video:ro -e DATA_DIR=/tmp/d -e LIGHT_FILE="/mnt/media/video/…mkv" \
-//     -e LIGHT_AT=600 node:26-alpine sh -c 'apk add --no-cache ffmpeg intel-media-driver >/dev/null && npx vitest run src/__tests__/lumen-light-bench.spec.ts'
+//     -e LIGHT_AT=600 node:26-alpine sh -c 'apk add --no-cache ffmpeg libva intel-media-driver >/dev/null && npx vitest run src/__tests__/lumen-light-bench.spec.ts'
 // Ce qu'il prouve, par ffprobe/ffmpeg sur init + segments concaténés de chaque échelon :
 // - chaque segment a exactement les images du segment d'origine, aux mêmes instants (même liste de pts) ;
 // - les instants sont contigus d'un segment à l'autre (la fin de l'un est le début du suivant) ;
