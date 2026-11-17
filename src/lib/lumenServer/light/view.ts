@@ -16,6 +16,9 @@ import { lightRungs, type EncoderFacts } from "./rungs";
  * fois). Null : Lumen serveur se comporte exactement comme sans la version allégée.
  */
 export async function lumenLightContext(session: Pick<SessionPayload, "role"> | null | undefined): Promise<EncoderFacts | null> {
+  // Lumen serveur coupé sur l'installation (§194) : la version allégée disparaît avec lui — y compris pour une requête
+  // munie d'un laissez-passer de téléviseur, qui ne passe pas par `lumenAccess`.
+  if (!config.lumen.serverEnabled) return null;
   if (!session || session.role === "share" || !audienceAllows(config.lumen.light, session)) return null;
   const detection = await detectLightEncoder();
   return detection.available ? { version: detection.version, driver: detection.driver } : null;

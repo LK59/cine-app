@@ -412,6 +412,10 @@ function LumenServerRow() {
   const t = useT();
   const on = useSyncExternalStore(subscribeLumenServer, lumenServerOn, () => false);
   const webkit = useSyncExternalStore(noSubscribe, () => playsHlsNatively(), () => true);
+  // Coupé par l'exploitant (Configuration → Lecture, §194) : l'option de l'appareil n'a rien à allumer. Caché seulement
+  // sur un « non » explicite — une configuration pas encore lue garde la ligne d'avant.
+  const { data: pub } = useSWR<{ lumenServerAvailable?: boolean }>("/api/config/public", fetcher);
+  if (pub?.lumenServerAvailable === false) return null;
   return (
     <Row icon={Server} title={t("player.account.lumenServer")} hint={webkit ? t("player.account.lumenServerHint") : t("player.account.lumenServerSafariOnly")}>
       <Toggle checked={on} ariaLabel={t("player.account.lumenServer")} onChange={(next) => setLumenServer(next)} />

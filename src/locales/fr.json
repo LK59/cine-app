@@ -3566,6 +3566,7 @@
       "LUMEN_AUDIO_MAX_SESSIONS": "Lectures qui convertissent au plus",
       "LUMEN_AUDIO_RAM_MB": "Son converti gardé en mémoire (Mo)",
       "LUMEN_AUDIO_CACHE_GB": "Son converti gardé sur le disque (Go)",
+      "LUMEN_SERVER_ENABLED": "Lumen serveur sur cette installation",
       "LUMEN_LIGHT": "Version allégée : réencoder au serveur une vidéo plus légère pour les connexions lentes",
       "LUMEN_LIGHT_MAX_JOBS": "Encodages vidéo simultanés au plus",
       "LUMEN_LIGHT_RAM_MB": "Vidéo allégée gardée en mémoire (Mo)",
@@ -3775,6 +3776,7 @@
       "xrayOn": "les acteurs à l'écran allumés",
       "booksOn": "les livres allumés",
       "playerOn": "le lecteur intégré",
+      "lumenServerOn": "Lumen serveur allumé",
       "missing": "Inactive : nécessite {need}.",
       "ready": "Nécessite {list} : prêt.",
       "fix": {
@@ -3782,7 +3784,8 @@
         "xrayService": "Brancher le service (Connexions)",
         "xrayOn": "Allumer les acteurs à l'écran",
         "booksOn": "Allumer les livres",
-        "playerOn": "Allumer le lecteur"
+        "playerOn": "Allumer le lecteur",
+        "lumenServerOn": "Allumer Lumen serveur"
       }
     },
     "sceneRestart": {
@@ -3797,14 +3800,62 @@
       "unavailable": "Conversion indisponible sur ce serveur ({reason}) : le son est converti par l'appareil.",
       "now": "Maintenant : lectures qui convertissent : {sessions} ; conversions en cours : {running} ; en attente : {queued}.",
       "cache": "Gardé : {memory} en mémoire (sur {memoryCap}), {disk} sur le disque (sur {diskCap}).",
-      "day": "Dernières 24 h : {segments} segments convertis, {median} ms en médiane, {max} ms au pire ; renvois vers l'appareil : {fallbacks}."
+      "day": "Dernières 24 h : {segments} segments convertis, {median} ms en médiane, {max} ms au pire ; renvois vers l'appareil : {fallbacks}.",
+      "prereq": "Lumen serveur allumé ; le ffmpeg fourni avec l'application ; aucun GPU."
     },
     "lumenLight": {
       "title": "Version allégée (Lumen serveur)",
       "why": "Pour une connexion trop lente, le serveur réencode la vidéo plus légère (1080p à 8 Mb/s, 720p à 3 Mb/s, HDR gardé) sur les mêmes segments que l'original, avec la puce graphique du serveur. Safari passe de l'une à l'autre tout seul, sans couper, et les segments allégés sont préparés d'avance quand la connexion faiblit. Il faut donner la puce graphique au conteneur ; sans elle, rien ne change.",
       "detected": "Encodeur détecté : ffmpeg {version}, {driver}",
       "unavailable": "Version allégée indisponible sur ce serveur ({reason}) : la vidéo d'origine seule est servie.",
-      "now": "Depuis le démarrage : {built} segments encodés, {kept} servis déjà prêts, {failed} en échec ; {running} en cours, {queued} en attente."
+      "now": "Depuis le démarrage : {built} segments encodés, {kept} servis déjà prêts, {failed} en échec ; {running} en cours, {queued} en attente.",
+      "prereq": "Lumen serveur allumé ; un GPU Intel donné au conteneur de l'application (VAAPI : /dev/dri et group_add du groupe render)."
+    },
+    "prereq": "Prérequis : {text}",
+    "lumenSection": "Lumen serveur (expérimental)",
+    "lumenServer": {
+      "title": "Lumen serveur",
+      "why": "Allumé, chaque administrateur peut choisir ce lecteur sur ses appareils Apple (Compte → Lecteur expérimental). Coupé, il disparaît du Compte, avec la conversion du son et la version allégée.",
+      "prereq": "les médias montés en lecture seule dans le conteneur de l'application (LUMEN_PATH_MAP) ; aucun matériel particulier, le processeur suffit."
+    },
+    "players": {
+      "title": "Les lecteurs de Laterna",
+      "intro": "Chaque film est ouvert par l'un de ces lecteurs, selon l'appareil, le fichier et ce que le serveur sait faire.",
+      "current": {
+        "name": "Lecteur actuel (Lumen)",
+        "what": "l'appareil remultiplexe le fichier lui-même, sans le recompresser ; tous les navigateurs récents.",
+        "needs": "aucun : le serveur ne fait que relayer le fichier."
+      },
+      "server": {
+        "name": "Lecteur serveur (Jellyfin)",
+        "what": "Jellyfin recompresse le film quand l'appareil ne sait pas le lire : c'est le repli.",
+        "needs": "Jellyfin ; un GPU donné à Jellyfin accélère la recompression."
+      },
+      "lumen": {
+        "name": "Lumen serveur (expérimental)",
+        "what": "le serveur remultiplexe le film sans le recompresser, et Safari le lit en HLS natif (iPhone, iPad, Mac, AirPlay) ; réservé aux administrateurs.",
+        "needs": "les médias montés dans le conteneur de l'application ; le processeur suffit."
+      },
+      "lumenAudio": {
+        "name": "Lumen serveur : conversion du son",
+        "what": "les pistes DTS, TrueHD, Opus et MP2/MP3 converties en Dolby Digital Plus par le serveur.",
+        "needs": "Lumen serveur ; le ffmpeg fourni avec l'application ; aucun GPU."
+      },
+      "lumenLight": {
+        "name": "Lumen serveur : version allégée",
+        "what": "une ou deux versions plus légères du film, que Safari prend de lui-même, sans coupure, quand la connexion faiblit.",
+        "needs": "Lumen serveur ; un GPU Intel donné au conteneur de l'application (VAAPI)."
+      },
+      "offline": {
+        "name": "Hors ligne",
+        "what": "une version légère préparée par Jellyfin et gardée sur l'appareil.",
+        "needs": "Jellyfin."
+      },
+      "cast": {
+        "name": "Chromecast et AirPlay",
+        "what": "le film part vers le téléviseur, par Lumen serveur quand il est allumé, sinon par Jellyfin.",
+        "needs": "rien de plus que le lecteur utilisé."
+      }
     }
   },
   "xrayScan": {

@@ -175,7 +175,8 @@ async function fetchVerdict(itemId: string, s: string, audio: number | null, mux
   try {
     const res = await fetch(`/api/lumen/${itemId}/eligibility?${params}`, { signal: AbortSignal.timeout(VERDICT_WAIT_MS + 6000) });
     // 403 : un compte qui n'est pas administrateur sur un appareil où l'option est allumée — un refus attendu.
-    if (res.status !== 200 && res.status !== 202) return { failed: `éligibilité : HTTP ${res.status}`, refused: res.status === 403 };
+    // 409 : Lumen serveur coupé par l'exploitant (§194) — un refus prévu aussi.
+    if (res.status !== 200 && res.status !== 202) return { failed: `éligibilité : HTTP ${res.status}`, refused: res.status === 403 || res.status === 409 };
     return (await res.json()) as LumenVerdict;
   } catch (error) {
     return { failed: `éligibilité : ${error instanceof Error ? error.message : "réseau"}`.slice(0, 160) };

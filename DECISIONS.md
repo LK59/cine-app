@@ -12152,6 +12152,37 @@ AC-3 mono ; 6 segments par piste, les deux forces) :
 `lumen-aiguillage.test.ts` ; les empreintes du lecteur, inchangées. **Banc.** `lumen-dialogue-bench.spec.ts` (sauté
 sans `LUMEN_DIALOGUE_FILES` ni ffmpeg).
 
+## 194. Les lecteurs et les options de Lumen serveur rangés dans Configuration → Lecture, chacune avec ses prérequis ; le débit annoncé au quart quand la connexion le permet (17/11/2026)
+
+**Règle.** Configuration → Lecture dit d'abord **qui est qui** (`PlayerRanges.tsx`, texte fixe) : le lecteur actuel
+(remultiplexage sur l'appareil), le lecteur serveur (Jellyfin, le repli), Lumen serveur, sa conversion du son, sa version
+allégée, le hors-ligne, la diffusion — et pour chacun ce qu'il demande au serveur (processeur seul, ffmpeg de l'image, GPU
+Intel donné au conteneur, Jellyfin). Puis la carte du lecteur intégré, puis une section « Lumen serveur (expérimental) »
+(`CONFIG_LAYOUT.lumenServer`) : **une carte par option déployable à part**, chacune avec son `prereqKey` (« Prérequis :
+… », `SettingsGroupCard`) — l'interrupteur de l'installation `LUMEN_SERVER_ENABLED` (allumé par défaut : le comportement
+d'avant), la conversion du son (§161), la version allégée (§195). Coupé, `lumenAccess` répond 409 `lumen-coupe` à toute
+route `/api/lumen` (jamais 404, CrowdSec), l'hôte le prend pour un refus prévu et rend la lecture au lecteur actuel, et
+l'option de l'appareil disparaît du Compte (`lumenServerAvailable` de `/api/config/public`, cachée seulement sur un
+« non » explicite).
+
+**Le débit annoncé au quart** (`?bw=bas`, `trials.ts`) devient la règle **quand la connexion le permet** (`lumenLink.ts`) :
+le lien mesuré (Mb/s, segments de la lecture ou échantillon de 3 Mo tiré par la fiche, gardé dix minutes sur l'appareil)
+vaut au moins 1,5 fois le débit moyen du film (`averageBps` du verdict). Sinon les vrais débits : la prudence de Safari
+protège une connexion juste, et la version allégée a besoin de débits honnêtes pour que Safari choisisse la bonne.
+
+**Pourquoi.** Louis (17/11/2026) : « segmenter les déploiements possibles, une catégorie d'option claire dans Lecture… pour
+chacune bien définir les prérequis, GPU nécessaire ou pas, et bien définir les gammes de nos lecteurs » — une autre
+installation doit savoir quoi allumer selon son matériel. Pour le débit : le banc « Attente de Safari » du même jour —
+après un saut, image → lecture repartie de 4,1 à 1,2 s (*Ghosted*) et de 2,2 à 1,0 s (*Ted Lasso*) ; les segments de 2 s
+n'apportaient rien seuls. Et la fiche mesure elle-même : sans elle, la première lecture d'une soirée — souvent la seule —
+partait toujours aux vrais débits.
+
+**Porteurs.** `configLayout.ts` (`lumenServer`, `prereqKey`), `SettingsGroupCard.tsx`, `ConfigurationSection.tsx`,
+`PlayerRanges.tsx`, la page `parametres/lecture`, `schema.ts` + `config.ts` (`lumen.serverEnabled`), `lumenAccess`
+(`service.ts`), `/api/config/public`, `PlayerAccountPanel.tsx` (`LumenServerRow`), `lumenLink.ts`, `lumenSheetPrepare.ts`,
+`LumenServerHost.tsx` (`servedMaster`, `lowBandwidthRef`, mesure toutes les 10 s), ligne `start` (`linkMbps`, `bwBas`).
+**Tests.** `config-layout.test.ts`, `lumen-link.test.ts`, `lumen-fiche-preparation.test.ts`, `LumenServerHost.test.tsx`.
+
 ## 195. La version allégée de Lumen serveur : des échelons réencodés par le iGPU, sur les mêmes segments, préparés avant que Safari ne bascule (17/11/2026)
 
 **Règle.** Quand l'option `LUMEN_LIGHT` (audience, coupée par défaut) est ouverte au compte et que l'encodeur est là —

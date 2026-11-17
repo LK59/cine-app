@@ -109,6 +109,9 @@ export async function lumenAccess(req: NextRequest, itemId: string): Promise<Ses
   if (session.role === "share" || session.role !== "admin") {
     return NextResponse.json({ error: "Réservé à l'administrateur", code: "lumen-admin" }, { status: 403, headers: NO_STORE });
   }
+  // Coupé par l'exploitant (§194) : 409, « pas servi ici » — jamais 404 (CrowdSec). L'hôte rend la lecture au lecteur
+  // actuel, comme pour un refus prévu.
+  if (!config.lumen.serverEnabled) return NextResponse.json({ error: "Lumen serveur coupé sur cette installation", code: "lumen-coupe" }, { status: 409, headers: NO_STORE });
   const refused = await assertVisible(session, itemId);
   if (refused) return refused;
   return session;

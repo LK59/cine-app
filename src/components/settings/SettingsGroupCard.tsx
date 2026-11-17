@@ -43,6 +43,7 @@ export function SettingsGroupCard({
   choices,
   notes,
   lab = false,
+  prereq,
 }: {
   group: SettingGroup;
   /**
@@ -74,6 +75,8 @@ export function SettingsGroupCard({
   whyKey?: string;
   /** Une fonction de laboratoire, pas encore fiable : l'étiquette « Lab bêta » à côté de l'intitulé. */
   lab?: boolean;
+  /** Ce que la fonction demande à l'installation (matériel, binaire, option), une phrase — « Prérequis : … » (§194). */
+  prereq?: string;
   /** Seulement ces réglages du groupe (l'assistant montre le relais du lecteur à part, avec Jellyfin). */
   keys?: readonly string[];
   views: Map<string, SettingView>;
@@ -109,8 +112,9 @@ export function SettingsGroupCard({
         )}
       </header>
       {status}
-      <p className={`${help || needs ? "mb-1" : "mb-4"} text-sm text-muted`}>{t(whyKey ?? `setup.groups.${group}.why`)}</p>
-      {help && <p className={`${needs ? "mb-1" : "mb-4"} text-xs text-subtle`}>{help}</p>}
+      <p className={`${help || needs || prereq ? "mb-1" : "mb-4"} text-sm text-muted`}>{t(whyKey ?? `setup.groups.${group}.why`)}</p>
+      {help && <p className={`${needs || prereq ? "mb-1" : "mb-4"} text-xs text-subtle`}>{help}</p>}
+      {prereq && <p className={`${needs ? "mb-1" : "mb-4"} text-xs text-subtle`}>{t("config.prereq", { text: prereq })}</p>}
       {needs && <div className="mb-4">{needs}</div>}
       {(group === "xray" || group === "salons") && testable && (
         // Les services qui se déploient à part : leur guide est sur le dépôt public (§138, §146).
