@@ -128,6 +128,7 @@ export const CONFIG_LAYOUT = {
       titleKey: "config.lumenAudio.title",
       whyKey: "config.lumenAudio.why",
       prereqKey: "config.lumenAudio.prereq",
+      needs: ["lumenServerOn"],
       anchor: "conversion-son",
       lab: true,
       after: "lumenAudio",
