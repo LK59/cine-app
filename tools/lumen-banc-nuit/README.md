@@ -42,7 +42,12 @@ jouée sur l'appareil.
 | `sampler.py` | relevé sur l'hôte, toutes les 2 s : cgroups (navigateur, instance, Jellyfin, production), processus du navigateur, charge |
 | `nuit.sh` | déroule un plan (`plan.exemple.txt`), lots de moins de deux heures, sessions Jellyfin et charge notées avant chaque étape |
 | `redemarrage.sh` | redémarre l'instance pendant une lecture (tampon plein, tampon vide), puis la remplace par une image d'un autre format (410) |
+| `panne.sh` | arrête l'instance juste avant un saut (le vrai cas « tampon vide »), la rend 10 s plus tard |
+| `son.sh`, `verif-son.mjs` | le son réellement joué (Web Audio dans la page) comparé par corrélation au son de chaque piste du fichier (ffmpeg) : quelle piste joue, quand elle change, les trous |
+| `sondes.sh` | sondes courtes : pistes annoncées, Web Audio sur HLS (playbin2/playbin3), son DTS du lecteur actuel, un redémarrage |
+| `fils.py` | le temps processeur de chaque fil du processus web sur une fenêtre (décodeur, rendu, fil JavaScript…) |
 | `analyse.py` | dépouillement : `essais.jsonl`, `sauts.jsonl`, `conso.jsonl`, `tableaux.md` |
+| `ecarts.py`, `conso-resume.py` | l'écart serveur − actuel avec intervalle (rééchantillonnage), le résumé de consommation par titre |
 | `sessions.sh` | les lectures en cours sur le Jellyfin de production (lecture seule, sans secret) |
 | `faisabilite.mjs` | ce que le WebKit sait lire, sur des médias de synthèse |
 
@@ -86,7 +91,20 @@ Le compte Jellyfin est **le compte de test**, jamais celui d'une personne ni l'a
 - **L'iGPU** : `intel_gpu_top` (conteneur privilégié, compteurs seulement), global à la machine — Jellyfin peut
   transcoder en même temps (`sessions.sh` le dit avant chaque mesure).
 
-## Limites connues
+## Limites connues (nuit du 16-17/11/2026)
+
+- **Le greffon `va` de GStreamer 1.24 fuit dans ce WebKit** : 20 à 100 Mo/s de `shmem` (objets GEM de l'i915) en 4K,
+  pour les deux lecteurs ; le conteneur est tué vers sa limite mémoire en une à trois minutes. D'où `MODE=essai` (un
+  navigateur par essai) et `NAV_MEM=8g`. Ni `WEBKIT_GST_DMABUF_SINK_DISABLED=1`, ni `gstreamer-vaapi` (`DECODE=vaapi` :
+  WebKit l'écarte, retour au logiciel), ni le WebKit de Playwright 1.55 n'y changent rien. En VA-API, le compositeur sans
+  écran ne présente que 8 à 13 images/s.
+- **Le décodage logiciel ne tient pas la 4K** (1 à 1,5 image/s sur 4 cœurs) ; il tient le 1080p à cadence pleine.
+- **Le lecteur actuel ne joue pas un son DTS dans ce WebKit** (aucune image en 90 s).
+- **Le HLS de GStreamer fige la page** (fil principal bloqué) quand une liste ou un segment échoue — serveur arrêté
+  pendant un saut, ou adresse en 410 après un changement de format ; le pilote borne chaque passage (`timeout`).
+- **Un changement de piste `audioTracks` en HLS de GStreamer** joue la nouvelle langue décalée de ~15 s (vu par
+  `verif-son.mjs`) ; la plupart des listes n'annoncent d'ailleurs qu'une piste.
+- `intel_gpu_top` lit l'iGPU entier : sans valeur pour un lecteur quand d'autres s'en servent.
 
 - Le HLS de GStreamer n'expose **qu'une piste son** dans `video.audioTracks` (les rendus `EXT-X-MEDIA` ne sont pas
   proposés au choix) : le tour des pistes et le changement de piste de la passe « son multiplexé » ne se jouent pas

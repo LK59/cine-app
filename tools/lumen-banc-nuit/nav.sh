@@ -30,7 +30,7 @@ for kv in "$@" ${NAV_EXTRA_ENV:-}; do envs+=(-e "$kv"); done
 mkdir -p "$WORK/out"
 docker rm -f lumen-nuit-nav >/dev/null 2>&1 || true
 exec docker run --rm --name lumen-nuit-nav --network container:lumen-nuit-netns --ipc private --shm-size 1g \
-  --cpus "${NAV_CPUS:-4}" --memory "${NAV_MEM:-4g}" "${DEV[@]}" \
+  --cpus "${NAV_CPUS:-4}" --memory "${NAV_MEM:-8g}" "${DEV[@]}" \
   -e WEBKIT_GST_ENABLE_HLS_SUPPORT=1 -e GST_PLUGIN_FEATURE_RANK="$RANK" -e DECODE="$DECODE" -e HEADED="${HEADED:-}" "${envs[@]}" \
   -v "$WORK/${NAV_PW:-pw}/node_modules:/w/node_modules:ro" -v "$HERE:/tool:ro" -v "$WORK/secrets/cookie:/secrets/cookie:ro" -v "$WORK/out:/out" \
   -w /w "${NAV_IMAGE:-lumen-nuit-webkit:1}" sh -c 'cp /tool/banc.mjs /w/ && if [ "${HEADED:-}" = 1 ]; then exec xvfb-run -a -s "-screen 0 1920x1080x24" node /w/banc.mjs; else exec node /w/banc.mjs; fi'
