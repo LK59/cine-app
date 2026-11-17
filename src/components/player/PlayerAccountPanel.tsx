@@ -402,7 +402,7 @@ function DisplayRows() {
 }
 
 /**
- * « Lecteur expérimental : remux serveur » (Lumen serveur, DECISIONS.md §180) — rangé sur l'appareil, comme le
+ * « Lecteur expérimental : Lumen serveur » (Lumen serveur, DECISIONS.md §180) — rangé sur l'appareil, comme le
  * simulateur d'iPad : l'administrateur l'allume sur l'iPhone ou le Mac qu'il veut éprouver. Vaut à la prochaine
  * ouverture d'un film, sans recharger. Hors WebKit, la ligne le dit (« Safari seulement ») : un administrateur sur
  * Chrome croirait tester, alors que le lecteur actuel reste en place. L'interface ne protège rien : les routes

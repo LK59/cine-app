@@ -12253,3 +12253,11 @@ et `group_add: ["<gid de render>"]` (993 ici) sur le service de l'application. *
 `lumenServer-light-service.test.ts`, `lumenServer-trials.test.ts` (`bw=bas`), `lumen-test-auto.test.ts` (passe),
 `config-layout.test.ts` ; les empreintes du lecteur, inchangées. **Banc.** `lumen-light-bench.spec.ts` (sauté sans
 `LIGHT_FILE` ; un conteneur jetable avec le iGPU).
+
+**Complément du 17/11/2026 (soir) — des options sans ambiguïté avec Lumen client.** Louis : « les options doivent être
+claires sur leurs usages et leurs prérequis, sinon c'est ambigu avec les capacités côté client ». Le lecteur actuel
+s'appelle désormais **Lumen client** dans la Configuration, et chaque carte de la section dit, dans cet ordre : à quel
+lecteur elle s'applique (« Seulement pour Lumen serveur »), ce qu'elle fait, ce qui se passe coupée, et ce que fait
+Lumen client de son côté — il convertit le son sur l'appareil, améliore les dialogues sur l'appareil et passe par
+Jellyfin sur une connexion lente ; il n'utilise aucune de ces options. Les intitulés des réglages commencent par
+« Lumen serveur : », l'option du Compte s'appelle « Lecteur expérimental : Lumen serveur ».

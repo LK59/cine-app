@@ -5,7 +5,7 @@
  * d'Edge (ordinateur, Android, `chromecastSenderEligible`), où Lumen serveur n'existe pas dans la page : il passe par le
  * HLS natif de WebKit (`lumenWanted`, §180). Une lecture « Lumen » ne peut donc jamais être celle qui passe la main au
  * Chromecast. Mais le récepteur, lui, n'a que faire du lecteur de la page : il reçoit une adresse et lit le flux
- * lui-même. Ce qui décide est donc **l'option de l'appareil émetteur** (« Lecteur expérimental : remux serveur »,
+ * lui-même. Ce qui décide est donc **l'option de l'appareil émetteur** (« Lecteur expérimental : Lumen serveur »,
  * `lumenChoiceFor`, la même clé, lue une fois par séance) et **le verdict du serveur pour un récepteur** (`?cast=1` :
  * la vidéo telle quelle, le son en AAC, `castView`) — jamais le moteur du navigateur.
  *
