@@ -1009,6 +1009,49 @@ manuel, *Mr. Robot* S01E03 (`d9bff9f6b05cddb47542385563d2a732`), une fois tel qu
 version de format monte). Depuis 4b, la ligne `fallback` d'un refus d'avant l'image porte `seen` : ce que Safari a
 demandé, dans l'ordre, avec la durée et la taille.
 
+### Le refus code 4 dans l'app (17/11/2026)
+
+**Ce qu'on sait.** Sur l'iPhone de l'administrateur (application installée, iOS 27.3, 10.47.0), **toutes** les lectures
+réelles par Lumen serveur sont refusées par l'élément avant l'image : code 4, message vide, 0,2 à 0,5 s après l'adresse
+posée — cinq titres sur cinq (*Mr. Robot* S01E03, *Ted Lasso* S01E08, *L'Odyssée*, *Bridget Jones*…), au début comme en
+reprise, dans une page fraîchement ouverte où aucune MediaSource n'a servi. Le repli vers le lecteur actuel est propre.
+Au même moment, `/lumen-test` sur le même iPhone lit les mêmes listes (format 5) sans faute, au début comme à 1 116 s,
+avec deux changements de piste par `audioTracks`. Le relais inverse dit la différence : l'application fait lire
+`master.m3u8` deux fois, puis `v.m3u8`, puis `master.m3u8` encore — **ni liste son, ni init, ni segment** ; le banc lit
+`master.m3u8` une fois, puis `v.m3u8`, `a2.m3u8`, les init et les segments. Les listes elles-mêmes sont saines et de
+même taille (691 octets pour les deux *Ted Lasso*), le `BANDWIDTH` n'y est pour rien, le laissez-passer `tv.{jeton}` non
+plus (même schéma en 10.46.0, avant lui). Toutes les requêtes portent l'agent de Safari et l'origine de la page : le
+chargeur d'AVFoundation passe par celui de WebKit (c'est pour cela que Resource Timing les voit), le relais ne sépare
+donc pas la lecture de la page de celle de l'élément.
+
+**Ce que l'hôte fait de plus que le banc**, relu dans le code : la page lit la liste maître elle-même (`fetch`, le lien
+menu ↔ `audioTracks`) juste avant le rendu qui pose l'adresse ; `preload="auto"` ; `autoplay`, `x-webkit-airplay`,
+`load()` après `src =` ; des `<track>` de sous-titres ; l'adresse munie du laissez-passer. L'effet qui pose l'adresse ne
+rejoue pas sur le même élément (ses dépendances sont stables, la clé de l'élément ne change qu'à une relance, et un code 4
+n'en déclenche pas) ; `PlayerHost` ne remonte pas l'hôte (une seule `eligibility` par lecture au relais). Le lecteur
+serveur (`ActivePlayer`) a, lui, `autoplay`, `x-webkit-airplay`, `load()` et les `<track>` sur un HLS natif qui marche :
+ce qui n'appartient qu'à l'hôte Lumen, c'est la lecture de la liste par la page et `preload="auto"` — les deux premiers
+suspects, sans preuve. Aucune cause n'est assez sûre pour corriger à l'aveugle.
+
+**La passe « Comme l'app »** (`/lumen-test`, `appLikePass.ts`) tranche sur l'appareil. Sur un titre (le champ du titre,
+sinon *Ted Lasso* S01E08), au début, piste par défaut, un élément neuf par variante, 15 s au plus chacune (verdict : la
+première image par `requestVideoFrameCallback` ou `loadeddata`, ou le code et le message de l'erreur, ou rien) :
+le témoin (ce que fait le banc), chaque levier seul (`fetch`, `preload`, `attrs`, `tracks`, `tv`), tous ensemble (ce que
+fait l'hôte), tous sauf un, puis le témoin de nouveau (s'il échoue alors, la page a changé en cours de passe). Le son
+reste allumé ; si iOS refuse `play()` sans geste, l'élément passe muet (`play: "muet"`). Une ligne `kind: "lumen-test"`
+par variante (`appLike` : variante, leviers, verdict, ms, code, message, et `seen` — ce que Safari a demandé), puis un
+bilan (`appLike.summary`) dont `cause` nomme le levier fautif, la combinaison nécessaire, ou « tout passe » — alors ce
+n'est aucun geste de l'hôte, mais le document du cinéma. Environ une minute.
+
+**Le `seen` de la ligne `fallback`** était toujours vide dans l'application : le tampon Resource Timing de la page garde
+250 entrées, et celui du cinéma est plein d'affiches bien avant le film. Depuis, l'hôte écoute dès son montage
+(`watchLumenRequests`, un `PerformanceObserver` limité à `/api/lumen/`, et le tampon porté à 1 500) ; `MediaError.message`
+part dans `mediaError` quand Safari en donne un (il était vide sur les cinq refus).
+
+**Sur l'iPhone** : `/lumen-test` → « Comme l'app » → attendre la ligne en gras. Lire :
+`jq -c 'select(.kind=="lumen-test" and .appLike) | .appLike | {variant, levers, outcome, ms, code, play, seen, cause}' startup.log`.
+Puis une lecture réelle dans l'application : la ligne `fallback` porte désormais `seen`.
+
 ### Protocole, sur l'iPhone puis l'Apple TV (l'option allumée sur l'appareil)
 
 1. **Changement de codec, sans rechargement.** `/lumen-test` → « Changement de codec » (~8 min, son audible) : quatre

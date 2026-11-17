@@ -127,6 +127,7 @@ import {
   lumenStallFields,
   lumenStartFields,
   mediaErrorText,
+  watchLumenRequests,
   type LumenFallbackTarget,
   type LumenStartWhy,
 } from "./lumenLog";
@@ -668,6 +669,10 @@ export function LumenServerHost({
   useEffect(() => {
     recoverRef.current = recover;
   }, [recover]);
+
+  // Ce que Safari demande, écouté dès le montage : le tampon Resource Timing du cinéma est plein d'affiches, et le
+  // `seen` d'un refus avant l'image restait vide (17/11/2026, `watchLumenRequests`).
+  useEffect(() => watchLumenRequests(), []);
 
   // ── L'ouverture : description, état du spectateur, verdict, pistes — puis l'adresse ──────────────────
   const preferencesRef = useRef<TrackPreferences | null>(null);

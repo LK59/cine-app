@@ -416,6 +416,40 @@ function comparisonCellOf(raw: unknown): Record<string, unknown> {
  * lignes), l'essai et son rang, ou `summary` pour la ligne récapitulative —, et celle-ci `trials` (chaque essai
  * résumé) et `answers` (les deux questions de fin : ce que la page ne voit pas).
  */
+/**
+ * La passe « Comme l'app » (17/11/2026, `appLikePass.ts`) : une ligne par variante — les gestes de l'hôte rejoués
+ * autour d'un élément neuf, et ce que l'élément en a fait — puis un bilan (`summary`) qui nomme la cause.
+ */
+const APP_LIKE_OUTCOMES = new Set(["image", "erreur", "délai", "refusé", "arrêté"]);
+const appLikeVariantName = (v: unknown) => (typeof v === "string" && /^[a-zé+-]{1,24}$/.test(v) ? v : null);
+function appLikeOf(v: unknown): Record<string, unknown> {
+  return pick(v, {
+    summary: bool,
+    itemId: (x) => (typeof x === "string" && /^[0-9a-f]{32}$/i.test(x) ? x : null),
+    title: (x) => text(x, 120),
+    rank: (x) => num(x, 100),
+    of: (x) => num(x, 100),
+    variant: appLikeVariantName,
+    levers: (x) => (typeof x === "string" && /^[a-zé,]{1,60}$/.test(x) ? x : null),
+    outcome: oneOf(APP_LIKE_OUTCOMES),
+    ms: (x) => num(x, 1e6),
+    via: oneOf(new Set(["rvfc", "loadeddata"])),
+    code: (x) => num(x, 100),
+    message: (x) => text(x, 200),
+    play: (x) => text(x, 40),
+    readyState: (x) => num(x, 10),
+    networkState: (x) => num(x, 10),
+    seen: (x) => text(x, 600),
+    tracks: (x) => num(x, 100),
+    s: (x) => (isPlaybackId(x) ? x : null),
+    cause: (x) => text(x, 240),
+    stopped: bool,
+    elapsedS: (x) => num(x, 1e5),
+    results: (x) =>
+      list(x, 20).map((r) => pick(r, { variant: appLikeVariantName, outcome: oneOf(APP_LIKE_OUTCOMES), ms: (y) => num(y, 1e6), code: (y) => num(y, 100) })),
+  });
+}
+
 export function lumenTestReport(body: Record<string, unknown>, user: string): Record<string, unknown> {
   return {
     ...pick(body, {
@@ -445,6 +479,7 @@ export function lumenTestReport(body: Record<string, unknown>, user: string): Re
       answers: (v) =>
         pick(v, { damaged: oneOf(DAMAGED), damagedTitle: (x) => text(x, 120), audioClean: oneOf(AUDIO_CLEAN), audioChanged: oneOf(AUDIO_CHANGED), lipSync: oneOf(LIP_SYNC) }),
       mux: muxAnalysisOf,
+      appLike: appLikeOf,
     }),
     build: text(body.build, 40),
     env: pick(body.env, {

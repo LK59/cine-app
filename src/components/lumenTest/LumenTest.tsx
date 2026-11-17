@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { APP_BUILD } from "@/lib/appBuild";
 import { useWakeLock } from "@/lib/useWakeLock";
+import { useLocale, useT } from "@/components/TranslationProvider";
+import { serverSubtitleTracks, type ExternalSubtitleTrack } from "@/components/player/server/serverTracks";
+import { textSubtitles } from "@/components/player/lumen/lumenOpening";
+import { watchLumenRequests } from "@/components/player/lumen/lumenLog";
+import { APP_LIKE_DEFAULT, APP_LIKE_PAUSE_MS, appLikeCause, appLikeLine, appLikeVariants, runAppLikeVariant, type AppLikeResult, type AppLikeSubtitle } from "./appLikePass";
 import {
   AUDIO_SWITCH_WATCH_MS,
   DEFAULT_TARGET_S,
@@ -779,6 +784,12 @@ export function LumenTest() {
   const [modes, setModes] = useState<TrialModes>({});
   const [resume, setResume] = useState<SavedSeries | null>(() => readSavedSeries());
   const [cascadeView, setCascadeView] = useState<{ title: string; lines: string[] } | null>(null);
+  // La passe « Comme l'app » (`appLikePass.ts`) : ses éléments neufs vivent dans `appLikeHostRef`, hors de la vidéo du banc.
+  const appLikeHostRef = useRef<HTMLDivElement | null>(null);
+  const appLikeStopRef = useRef(false);
+  const [appLike, setAppLike] = useState<{ running: boolean; step: string; cause?: string } | null>(null);
+  const t = useT();
+  const { locale } = useLocale();
 
   // Un écran qui s'éteint au milieu de la série met la page en arrière-plan et Safari en pause : le verrou est
   // demandé pendant toute la série, et redemandé au retour au premier plan (`useWakeLock`, partagé avec les
@@ -1937,6 +1948,71 @@ export function LumenTest() {
     refreshAuto();
   };
 
+  /**
+   * « Comme l'app » : les gestes de `LumenServerHost` autour de l'élément, rejoués un à un sur un titre (le champ du
+   * titre s'il est rempli, sinon *Ted Lasso* S01E08), une ligne `lumen-test` par variante et un bilan qui nomme la
+   * cause (`appLikeCause`). La vidéo du banc est rendue d'abord : une seule séance HLS à la fois dans la page.
+   */
+  const runAppLike = async () => {
+    const host = appLikeHostRef.current;
+    if (!host || appLike?.running) return;
+    stop();
+    appLikeStopRef.current = false;
+    const target = /^[0-9a-f]{32}$/i.test(itemId) ? { itemId, title: title || itemId } : { ...APP_LIKE_DEFAULT };
+    const startedAt = performance.now();
+    const release = watchLumenRequests();
+    try {
+      setAppLike({ running: true, step: "pistes…" });
+      // Les sous-titres tels que l'hôte les pose : texte seulement, étiquetés par `serverTracks`.
+      let subtitles: AppLikeSubtitle[] = [];
+      try {
+        const res = await fetch(`/api/lumen/${target.itemId}/pistes`, { signal: AbortSignal.timeout(8000) });
+        if (res.ok) {
+          const pistes = (await res.json()) as { subtitleTracks?: Omit<ExternalSubtitleTrack, "label">[] };
+          subtitles = serverSubtitleTracks(textSubtitles(pistes.subtitleTracks ?? []), locale, t);
+        }
+      } catch {
+        // Sans la liste, la variante `tracks` se joue sans piste : elle le dira (`tracks: 0`).
+      }
+      note(`comme l'app · ${target.title} · ${subtitles.length} sous-titre(s) texte`);
+      const variants = appLikeVariants();
+      const results: AppLikeResult[] = [];
+      for (const [i, variant] of variants.entries()) {
+        if (appLikeStopRef.current) break;
+        setAppLike({ running: true, step: `${i + 1}/${variants.length} · ${variant.name}` });
+        const r = await runAppLikeVariant({ itemId: target.itemId, variant, host, subtitles, stopped: () => appLikeStopRef.current });
+        results.push(r);
+        note(appLikeLine(r));
+        outboxRef.current = [...outboxRef.current, { kind: "lumen-test", build: APP_BUILD, env: envRef.current, appLike: { itemId: target.itemId, title: target.title, rank: i + 1, of: variants.length, ...r } }].slice(-OUTBOX_MAX);
+        await flush();
+        await new Promise((resolve) => setTimeout(resolve, APP_LIKE_PAUSE_MS));
+      }
+      const cause = appLikeCause(results);
+      note(`comme l'app · bilan : ${cause}`);
+      outboxRef.current = [
+        ...outboxRef.current,
+        {
+          kind: "lumen-test",
+          build: APP_BUILD,
+          env: envRef.current,
+          appLike: {
+            summary: true,
+            itemId: target.itemId,
+            title: target.title,
+            cause,
+            stopped: appLikeStopRef.current,
+            elapsedS: Math.round((performance.now() - startedAt) / 1000),
+            results: results.map((r) => ({ variant: r.variant, outcome: r.outcome, ms: r.ms, code: r.code })),
+          },
+        },
+      ].slice(-OUTBOX_MAX);
+      const sentOk = await flush();
+      setAppLike({ running: false, step: sentOk ? "fini, envoyé" : `fini, ${outboxRef.current.length} ligne(s) en attente`, cause });
+    } finally {
+      release();
+    }
+  };
+
   const estimateMin = Math.round(seriesEstimateS(SERIES) / 60);
   const quickMin = Math.round(seriesEstimateS(QUICK_SERIES) / 60);
   const leverMin = Math.round(seriesEstimateS(LEVER_SERIES) / 60);
@@ -2000,6 +2076,23 @@ export function LumenTest() {
           groupe son) et l&apos;ancienne (un groupe par codec) ; le tour de toutes les pistes dans chaque essai. Le son audible : la nouvelle
           piste doit s&apos;entendre, sans silence ni clic.
         </p>
+        <button
+          type="button"
+          className="btn btn-ghost mt-2 w-full justify-center py-2.5"
+          disabled={auto?.phase === "en-cours"}
+          onClick={() => {
+            if (appLike?.running) appLikeStopRef.current = true;
+            else void runAppLike();
+          }}
+        >
+          {appLike?.running ? `Comme l'app : ${appLike.step} (toucher pour arrêter)` : `Comme l'app (${appLikeVariants().length} variantes, ~1 min)`}
+        </button>
+        <p className="mt-1 text-xs text-white/50">
+          Le refus code 4 de l&apos;application : sur un titre (celui du champ plus bas, sinon <i>Ted Lasso</i> S01E08), au début, un élément neuf par
+          variante — ce que fait cette page, puis chaque geste du lecteur de l&apos;application seul, tous ensemble, tous sauf un.
+          {appLike?.cause ? <b className="mt-1 block text-white/80">{appLike.cause}</b> : null}
+        </p>
+        <div ref={appLikeHostRef} className="mt-2 w-1/2" />
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/60">
           Ordre des lecteurs :
           {(

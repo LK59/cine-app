@@ -224,24 +224,86 @@ export function lumenFallbackFields(
  * Pour un refus avant la première image (code 4) : le 16/11/2026, *Mr. Robot* S01E03 a été refusé après la liste
  * maître et la liste vidéo, sans qu'Safari demande la liste son ni l'init — le journal ne disait que « code 4 ».
  */
-export function lumenRequestsSeen(lumenSession: string): string | undefined {
+export function lumenRequestsSeen(lumenSession: string, buffered?: readonly LumenResourceLike[]): string | undefined {
   try {
     const marker = `/${lumenSession}/`;
-    const seen = performance
-      .getEntriesByType("resource")
+    const fromBuffer: readonly LumenResourceLike[] = buffered ?? (performance.getEntriesByType("resource") as PerformanceResourceTiming[]);
+    // Ce que l'observateur a reçu et ce que le tampon garde encore : les mêmes requêtes souvent, une fois chacune.
+    const keys = new Set<string>();
+    const all = [...observed, ...fromBuffer]
       .filter((e) => e.name.includes("/api/lumen/") && e.name.includes(marker))
-      .slice(-16)
-      .map((e) => {
-        const r = e as PerformanceResourceTiming;
-        const name = r.name.slice(r.name.indexOf(marker) + marker.length).replace(/^tv\.[^/]+\//, "").split("#")[0];
-        const kb = r.transferSize > 0 ? ` ${(r.transferSize / 1024).toFixed(1)}k` : "";
-        const status = typeof (r as PerformanceResourceTiming & { responseStatus?: number }).responseStatus === "number" ? ` ${(r as PerformanceResourceTiming & { responseStatus?: number }).responseStatus}` : "";
-        return `${name} ${Math.round(r.duration)}ms${kb}${status}`;
-      });
+      .filter((e) => {
+        const key = `${e.name}@${e.startTime}`;
+        if (keys.has(key)) return false;
+        keys.add(key);
+        return true;
+      })
+      .sort((a, b) => a.startTime - b.startTime);
+    const seen = all.slice(-16).map((r) => {
+      const name = r.name.slice(r.name.indexOf(marker) + marker.length).replace(/^tv\.[^/]+\//, "").split("#")[0];
+      const kb = r.transferSize > 0 ? ` ${(r.transferSize / 1024).toFixed(1)}k` : "";
+      const status = typeof r.responseStatus === "number" && r.responseStatus > 0 ? ` ${r.responseStatus}` : "";
+      return `${name} ${Math.round(r.duration)}ms${kb}${status}`;
+    });
     return seen.length ? seen.join(" | ").slice(0, 600) : undefined;
   } catch {
     return undefined;
   }
+}
+
+/** Une requête vue par Resource Timing — ce que `lumenRequestsSeen` en lit. */
+export type LumenResourceLike = Pick<PerformanceResourceTiming, "name" | "startTime" | "duration" | "transferSize"> & { responseStatus?: number };
+
+/** Les requêtes de Lumen serveur reçues par l'observateur, les plus récentes au bout. */
+const OBSERVED_MAX = 64;
+let observed: LumenResourceLike[] = [];
+let observer: PerformanceObserver | null = null;
+let watchers = 0;
+
+/**
+ * Écouter les requêtes de Lumen serveur **dès le montage de l'hôte** (17/11/2026). Le tampon Resource Timing de la
+ * page garde 250 entrées par défaut, et celui du cinéma est plein d'affiches bien avant qu'on lance un film : les
+ * requêtes HLS de Safari n'y entraient plus, et le `seen` de chaque refus code 4 de l'iPhone était vide. Un
+ * `PerformanceObserver` reçoit chaque entrée, tampon plein ou non ; on n'en garde que `/api/lumen/`, 64 au plus.
+ * Le tampon de la page est aussi agrandi (1 500), pour le panneau technique qui le relit. Compté : deux hôtes qui se
+ * chevauchent partagent l'écoute, le dernier parti l'arrête. Rend sa fin.
+ */
+export function watchLumenRequests(): () => void {
+  watchers += 1;
+  if (watchers === 1) {
+    try {
+      performance.setResourceTimingBufferSize?.(1500);
+    } catch {
+      // Sans la méthode : l'observateur suffit.
+    }
+    try {
+      observer = new PerformanceObserver((list) => {
+        const fresh = list.getEntries().filter((e) => e.name.includes("/api/lumen/")) as PerformanceResourceTiming[];
+        if (fresh.length) observed = [...observed, ...fresh].slice(-OBSERVED_MAX);
+      });
+      observer.observe({ type: "resource", buffered: false });
+    } catch {
+      observer = null;
+    }
+  }
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    watchers -= 1;
+    if (watchers > 0) return;
+    observer?.disconnect();
+    observer = null;
+    observed = [];
+  };
+}
+
+/** Pour les tests : l'écoute remise à zéro. */
+export function resetLumenRequestWatch(): void {
+  observer?.disconnect();
+  observer = null;
+  observed = [];
+  watchers = 0;
 }
 
 /**
