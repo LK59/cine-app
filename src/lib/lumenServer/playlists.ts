@@ -40,7 +40,8 @@ import { labelAudioTracks, type LabelOptions } from "@/lib/trackLabel";
 import { normaliseLanguage } from "@/lib/trackPreferences";
 import { variantCodecs } from "./hlsSignal";
 import { initName, playlistName, segmentName, type LumenAudioTrack, type LumenIndex, type LumenRendition } from "./format";
-import { audioRendition } from "./audio/view";
+import { audioRendition, dialogueRendition } from "./audio/view";
+import type { LumenDialogueMode } from "./audio/dialogue";
 import { targetDurationOf } from "./plan";
 
 export interface MasterOptions {
@@ -53,6 +54,25 @@ export interface MasterOptions {
    * par groupe —, gardée pour mesurer contre la règle le changement de piste entre codecs (§185).
    */
   perCodecGroups?: boolean;
+  /**
+   * « Améliorer les dialogues » (§193, `?dialogue=on|strong`) : chaque piste qui a un rendu « dialogues » est servie
+   * par lui **à la place** de son rendu ordinaire — même rang, même groupe, même nombre de rendus, l'URI, le `CODECS`
+   * et les `CHANNELS` de ce qui est servi. Une piste sans ce rendu (AAC, FLAC…) garde le sien : l'hôte le sait par le
+   * verdict (`dialogue` de chaque piste) et rend la lecture au lecteur actuel s'il la choisit.
+   * Pas de rendus ajoutés à côté des autres : le menu de Safari (AirPlay, Lecture en cours) montrerait chaque piste
+   * deux fois, et `audioTracks` ne se relierait plus au menu de la page par le rang. Sans `dialogue`, la liste est
+   * celle d'avant, à l'octet près.
+   */
+  dialogue?: LumenDialogueMode;
+}
+
+/** Ce qu'une piste sert dans une liste maître : son rendu ordinaire, ou son rendu « dialogues » (§193). */
+function servedAs(a: LumenAudioTrack, dialogue: LumenDialogueMode | undefined): { track: LumenAudioTrack; rendition: LumenRendition } {
+  const processed = dialogue && a.dialogue ? dialogueRendition(a, dialogue) : null;
+  if (!processed || !a.dialogue) return { track: a, rendition: audioRendition(a) };
+  // Ce qui est servi : de l'E-AC-3 aux canaux de la cible — l'étiquette et la signalisation le disent, comme pour
+  // une piste convertie (jamais « Atmos » : le JOC ne survit pas au décodage).
+  return { track: { ...a, signal: a.dialogue.signal, converted: { target: a.dialogue.target, cid: a.dialogue.cids[dialogue!], channels: a.dialogue.channels } }, rendition: processed };
 }
 
 /** Une chaîne entre guillemets HLS : ni guillemet, ni retour à la ligne (rfc8216bis §4.2). */
@@ -72,7 +92,9 @@ export function servedAudio(index: LumenIndex): LumenAudioTrack[] {
 export function masterPlaylist(index: LumenIndex, options: MasterOptions): string {
   if (!index.video?.signal || index.segments.length === 0) throw new Error("Index sans vidéo servable.");
   const signal = index.video.signal;
-  const audio = servedAudio(index);
+  const served = new Map(servedAudio(index).map((a) => [a, servedAs(a, options.dialogue)] as const));
+  const audio = [...served.values()].map((s) => s.track);
+  const renditionOf = new Map([...served.values()].map((s) => [s.track, s.rendition] as const));
   const labels = new Map(
     labelAudioTracks(
       // L'Atmos se nomme d'après ce que le `dec3` écrit (« 16/JOC »), comme Jellyfin le nomme dans son
@@ -121,7 +143,7 @@ export function masterPlaylist(index: LumenIndex, options: MasterOptions): strin
         `DEFAULT=${a === lead ? "YES" : "NO"}`,
         "AUTOSELECT=YES",
         `CHANNELS=${quoted(a.signal!.channels)}`,
-        `URI=${quoted(playlistName(audioRendition(a)))}`,
+        `URI=${quoted(playlistName(renditionOf.get(a) ?? audioRendition(a)))}`,
       ];
       lines.push(`#EXT-X-MEDIA:${attributes.join(",")}`);
     }

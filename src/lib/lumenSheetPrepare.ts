@@ -22,6 +22,7 @@
  * celui que le serveur choisirait par défaut ; une piste différente choisie à la lecture garde la vidéo préparée.
  */
 import { lumenChoiceFor, lumenWanted } from "@/lib/lumenServerChoice";
+import { readDialogueMode } from "@/lib/dialoguePreference";
 import { peekPrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 import { openingPosition } from "@/lib/resumeRewind";
 
@@ -99,10 +100,12 @@ export async function prepareLumen(itemId: string, controller: AbortController, 
     if (controller.signal.aborted) return;
     const resume = state && !state.positionUnknown ? state.resumeSeconds : 0;
     const position = openingPosition(itemId, resume, null);
+    const dialogue = readDialogueMode();
     const res = await fetch(`/api/lumen/${itemId}/prepare`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ position }),
+      // « Améliorer les dialogues » allumé sur l'appareil (§193) : le segment de reprise du rendu traité par le serveur.
+      body: JSON.stringify(dialogue === "off" ? { position } : { position, dialogue }),
       signal: controller.signal,
     });
     const body = (await res.json().catch(() => null)) as { ok?: boolean; pending?: boolean } | null;

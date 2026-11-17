@@ -43,8 +43,10 @@ import { targetDurationOf } from "./plan";
 import { config } from "@/lib/config";
 import { audienceAllows } from "@/lib/featureAudience";
 import { detectLumenFfmpeg } from "./audio/ffmpeg";
-import { castVideoFamily, castView, withConversion, type ConversionContext } from "./audio/view";
+import { castVideoFamily, castView, dialogueRendition, dialogueTrackView, withConversion, withDialogue, type ConversionContext } from "./audio/view";
 import { lumenAudio, type FeedReader, type PlaybackMode } from "./audio/conversion";
+import type { DialogueRun } from "./audio/convert";
+import type { LumenDialogueMode } from "./audio/dialogue";
 
 // ── Le moteur du processus ───────────────────────────────────────────────────
 
@@ -188,7 +190,7 @@ export async function lumenConversionContext(session: Pick<SessionPayload, "role
   if (!session || session.role === "share" || !audienceAllows(config.lumen.audioConvert, session)) return null;
   const detection = await detectLumenFfmpeg();
   if (!detection.available) return null;
-  return { ffmpegVersion: detection.version, ffmpegSha256: detection.sha256, reference: detection.reference };
+  return { ffmpegVersion: detection.version, ffmpegSha256: detection.sha256, reference: detection.reference, ...(detection.dolby ? { dolby: true } : {}) };
 }
 
 const FEED_EXECUTOR = Symbol.for("cine-app.lumenServer.feedExecutor");
@@ -216,6 +218,36 @@ export function lumenFeedReader(engine: LumenEngine): FeedReader {
     const result = await feedExecutor(engine).run({ type: "audio-feed", spec });
     if (result.type !== "audio-feed") throw new Error("Réponse inattendue du fil de calcul.");
     return { feed: result.feed, diskMs: result.cost.diskMs, ms: Math.round(performance.now() - began) };
+  };
+}
+
+const DIALOGUE_EXECUTOR = Symbol.for("cine-app.lumenServer.dialogueExecutor");
+/** Les fils du traitement « dialogues » : à eux, ni ceux du remux ni ceux de la lecture des blocs. */
+export const LUMEN_DIALOGUE_THREADS = 2;
+
+/**
+ * Les fils de calcul de « Améliorer les dialogues » (§193, travail `dialogue`), créés au premier segment traité : une
+ * tâche d'avance de 30 s, chaque segment avec ses 6 s de pré-roulement, c'est ~1,5 s de calcul (18 ms par seconde de
+ * son, mesuré) — ni la lecture des blocs d'une autre conversion ni un segment vidéo n'ont à l'attendre. Deux fils :
+ * la file de la conversion borne déjà les tâches simultanées (`LUMEN_AUDIO_MAX_JOBS`, 2).
+ */
+function dialogueExecutor(engine: LumenEngine): LumenExecutor {
+  const g = globalThis as unknown as Record<symbol, LumenExecutor | undefined>;
+  if (engine.executor.kind === "inline") return engine.executor;
+  const script = lumenWorkerScript();
+  return (g[DIALOGUE_EXECUTOR] ??= script ? workerExecutor(pathToFileURL(script), LUMEN_DIALOGUE_THREADS) : engine.executor);
+}
+
+/** Le traitement « dialogues » d'une tâche, à cette force, par un fil de calcul. */
+export function lumenDialogueRun(engine: LumenEngine, mode: LumenDialogueMode): DialogueRun {
+  return {
+    mode,
+    enhance: async (work) => {
+      const began = performance.now();
+      const result = await dialogueExecutor(engine).run({ type: "dialogue", work });
+      if (result.type !== "dialogue") throw new Error("Réponse inattendue du fil de calcul.");
+      return { segments: result.segments, ms: Math.round(performance.now() - began) };
+    },
   };
 }
 
@@ -259,8 +291,9 @@ export async function lumenIndexOf(
     try {
       const raw = await engine.index(file.path, targetUs, cut);
       if (view === "cast") return { index: castView(raw, conversion) };
-      // La vue de la conversion (§161) : l'index lui-même quand elle n'est pas permise à cette requête.
-      return { index: withConversion(raw, conversion) };
+      // La vue de la conversion (§161), puis celle des rendus « dialogues » (§193) : l'index lui-même quand elles ne
+      // sont pas permises à cette requête.
+      return { index: withDialogue(withConversion(raw, conversion), conversion) };
     } catch (error) {
       if (attempt === 0 && (error as NodeJS.ErrnoException)?.code === "ENOENT") {
         file = await lumenFileOf(itemId, { fresh: true });
@@ -382,6 +415,19 @@ export async function lumenSegment(
   n: number,
   options: { keep?: boolean; session?: string } = {}
 ): Promise<{ segment: BuiltSegment; reused: boolean }> {
+  // Un rendu « dialogues » (§193) : une conversion comme une autre (cache, file, avance), sous l'identité de son
+  // traitement, avec `DialogueEnhancer` entre le décodeur et l'encodeur.
+  if (rendition.kind === "audio" && rendition.dialogue) {
+    const mode = rendition.dialogue;
+    const held = index.audio.find((a) => a.number === rendition.track && a.dialogue?.cids[mode] === rendition.conv);
+    const track = held ? dialogueTrackView(held, mode) : null;
+    if (!track) throw new LumenError("piste-inconnue", "Rendu « dialogues » non servi.");
+    const r = await lumenAudio().segment({ index, version, track, n, readFeed: lumenFeedReader(engine), session: options.session, dialogue: lumenDialogueRun(engine, mode) });
+    return {
+      segment: { bytes: r.bytes, buildMs: r.convMs + r.feedMs, waitMs: r.waitMs, diskMs: 0, converted: { from: r.from, convMs: r.convMs, feedMs: r.feedMs } },
+      reused: r.from !== "built",
+    };
+  }
   const converted = rendition.kind === "audio" ? index.audio.find((a) => a.number === rendition.track && a.converted) : undefined;
   if (converted) {
     const r = await lumenAudio().segment({ index, version, track: converted, n, readFeed: lumenFeedReader(engine), session: options.session });
@@ -446,6 +492,11 @@ export interface LumenAudioFacts {
   converted: string | null;
   convertible: boolean;
   convertRefusal: string | null;
+  /**
+   * La piste a ses rendus « Améliorer les dialogues » (§193) : la cible (`eac3-640-51`, `eac3-256-20`) ; null sinon
+   * (option coupée, ffmpeg absent, AAC, FLAC…). Absent des réponses d'avant : null.
+   */
+  dialogue?: string | null;
 }
 
 /** Ce que la découpe a donné : la page `/lumen-test` le montre, pour juger les découpes sur pièce. */
@@ -478,6 +529,12 @@ export type LumenVerdict =
       conversion?: { state: "ok" | "tension"; leadS: number };
       /** L'adresse d'un récepteur (§192) : la famille de la vidéo servie, pour que l'émetteur retienne un refus du HEVC. */
       castVideo?: "h264" | "hevc";
+      /**
+       * « Améliorer les dialogues » demandé (`?dialogue=`, §193) : servi (`master` porte alors `&dialogue=`), ou pourquoi
+       * non — la piste n'a pas de rendu traité, ou le serveur n'admet pas une lecture de plus qui convertit. Non servi,
+       * `master` est la liste ordinaire : l'hôte rend alors la lecture au lecteur actuel, qui fait le traitement.
+       */
+      dialogue?: { mode: LumenDialogueMode; served: true } | { mode: LumenDialogueMode; served: false; reason: string; detail?: string };
     }
   | { ok: false; reason: string; detail?: string; audioTrack: number | null; audio: LumenAudioFacts[]; version?: string; cutFacts?: LumenCutFacts }
   /** L'index se construit encore (2 à 25 s à froid) : redemander, la construction continue sans attendre. */
@@ -502,14 +559,17 @@ function audioFacts(index: LumenIndex): LumenAudioFacts[] {
     converted: a.converted?.target ?? null,
     convertible: !!a.convert,
     convertRefusal: a.convertRefusal ?? null,
+    // Seulement quand il y a quelque chose à dire : sans l'option, le verdict garde la forme d'avant.
+    ...(a.dialogue ? { dialogue: a.dialogue.target } : {}),
   }));
 }
 
 export { defaultAudioTrack };
 
 /** L'adresse de la liste maître d'une lecture. `s` dans le chemin : les URI relatives des listes en héritent. */
-export function masterAddress(itemId: string, version: string, s: string, audioTrack: number | null): string {
-  return `/api/lumen/${itemId}/${version}/${s}/master.m3u8${audioTrack !== null ? `?audio=${audioTrack}` : ""}`;
+export function masterAddress(itemId: string, version: string, s: string, audioTrack: number | null, dialogue?: LumenDialogueMode): string {
+  const query = [...(audioTrack !== null ? [`audio=${audioTrack}`] : []), ...(dialogue ? [`dialogue=${dialogue}`] : [])];
+  return `/api/lumen/${itemId}/${version}/${s}/master.m3u8${query.length ? `?${query.join("&")}` : ""}`;
 }
 
 /**
@@ -532,6 +592,8 @@ export async function lumenVerdict(
      * (un premier essai échoué) — le fichier HEVC est alors refusé ici et le récepteur garde le flux de Jellyfin.
      */
     cast?: { hevc: boolean };
+    /** « Améliorer les dialogues » demandé (§193) : la liste maître de ses rendus, si la piste choisie en a un. */
+    dialogue?: LumenDialogueMode;
   } & Partial<LumenCutting>
 ): Promise<LumenVerdict> {
   const conversion = await lumenConversionContext(options.session);
@@ -584,11 +646,23 @@ export async function lumenVerdict(
     if (!admission.ok) return { ok: false, reason: "son-serveur-occupe", detail: admission.detail, audioTrack, audio, version, cutFacts };
     conversionState = lumenAudio().audioState(key);
   }
+  // « Améliorer les dialogues » (§193) : servi si la piste choisie a son rendu et que le serveur admet une lecture de
+  // plus qui convertit (la même admission que §163 — un rendu « dialogues » est une conversion). Sinon le verdict reste
+  // `ok` pour la liste ordinaire, et dit pourquoi : la lecture elle-même reste possible, c'est le traitement qui ne
+  // l'est pas ici — l'hôte la rend alors au lecteur actuel.
+  let dialogue: Extract<LumenVerdict, { ok: true }>["dialogue"] | undefined;
+  if (options.dialogue) {
+    if (!chosen?.dialogue) dialogue = { mode: options.dialogue, served: false, reason: "dialogues-piste", detail: chosen ? chosen.codecId : "aucune piste" };
+    else if (options.session && !chosen.converted) {
+      const admission = lumenAudio().admit(playbackKey(options.session.u, options.s));
+      dialogue = admission.ok ? { mode: options.dialogue, served: true } : { mode: options.dialogue, served: false, reason: "son-serveur-occupe", detail: admission.detail };
+    } else dialogue = { mode: options.dialogue, served: true };
+  }
   // Le laissez-passer d'une Apple TV dans le chemin (§186), quand le lecteur le demande : l'élément porte cette adresse
   // dès l'ouverture, et le bouton AirPlay la tend telle quelle au téléviseur, qui n'a pas de cookie. Le banc
   // (`/lumen-test`) n'en demande pas : pas de jeton là où il ne sert pas.
   const tvToken = options.tv && !options.cast && options.session ? await signLumenTvPass(itemId, options.s, options.session) : null;
-  const master = masterAddress(itemId, version, options.s, audioTrack);
+  const master = masterAddress(itemId, version, options.s, audioTrack, dialogue?.served ? dialogue.mode : undefined);
   return {
     ok: true,
     version,
@@ -603,6 +677,7 @@ export async function lumenVerdict(
     // Pour la bascule en cours de lecture (étape 4) : l'avance convertie et l'état de cette lecture, relus par un
     // nouvel appel à `eligibility` quand la page voit une attente (5-conversion-son.md §5.7).
     ...(chosen?.converted ? { conversion: conversionState ?? { state: "ok" as const, leadS: 0 } } : {}),
+    ...(dialogue ? { dialogue } : {}),
   };
 }
 

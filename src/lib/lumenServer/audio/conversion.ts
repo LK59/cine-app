@@ -25,7 +25,7 @@ import { join } from "node:path";
 import { config } from "@/lib/config";
 import { DATA_DIR } from "@/lib/dataDir";
 import { LumenError, type LumenAudioTrack, type LumenIndex } from "../format";
-import { convertRange, type ConvertFacts } from "./convert";
+import { convertRange, type ConvertFacts, type DialogueRun } from "./convert";
 import { DiskTier, keyString, MemoryTier, relativePathOf, type ConvertKey } from "./convertCache";
 import { targetTag } from "./convertGrid";
 import type { AudioFeed, AudioFeedSpec } from "./feed";
@@ -50,6 +50,11 @@ export interface PlaybackMode {
 /** L'avance de conversion sur la tête de lecture, et la taille d'une tâche d'avance (5-conversion-son.md §5.5). */
 export const LEAD_US = 120_000_000;
 export const LEAD_TASK_US = 60_000_000;
+/**
+ * Une tâche d'avance « dialogues » (§193) : 30 s. Son PCM décodé passe par Node (≈ 1,2 Mo par seconde en 5.1), et
+ * chaque segment est traité depuis ses 6 s de pré-roulement : 30 s tiennent ~45 Mo et ~1,5 s de calcul.
+ */
+export const DIALOGUE_LEAD_TASK_US = 30_000_000;
 /** Une lecture sans requête depuis deux minutes ne convertit plus rien d'avance, et ne compte plus à l'admission. */
 export const SESSION_IDLE_MS = 2 * 60_000;
 /** Au-delà, une demande répond « occupé » (503) : le lecteur réessaie, la conversion continue. */
@@ -192,6 +197,8 @@ interface Session {
   lastAt: number;
   leading: boolean;
   readFeed: FeedReader;
+  /** Un rendu « dialogues » (§193) : son traitement, que l'avance refait pour chaque tâche. */
+  dialogue?: DialogueRun;
 }
 
 export type FeedReader = (spec: AudioFeedSpec) => Promise<{ feed: AudioFeed | null; diskMs: number; ms: number }>;
@@ -206,6 +213,11 @@ export interface ConvertRequest {
   readFeed: FeedReader;
   /** La lecture (`compte\0s`) : pour l'avance et l'admission ; sans elle (préparation anonyme), ni l'une ni l'autre. */
   session?: string;
+  /**
+   * Un rendu « dialogues » (§193) : `track` est la vue `dialogueTrackView` (convertie sous l'identité du traitement),
+   * et la conversion passe le PCM par `DialogueEnhancer` (`convertDialogueRange`). Jamais par le pool.
+   */
+  dialogue?: DialogueRun;
 }
 
 interface Recent {
@@ -288,7 +300,7 @@ export class LumenAudio {
     const work = this.run("demand", req.index, req.version, req.track.number, source, conv.target, conv.cid, req.n, req.n + 1, req.readFeed, (f, s) => {
       facts = f;
       startedAt = s;
-    }, "", this.usePool(req.session));
+    }, "", this.usePool(req.session), req.dialogue);
     const bytes = await withBudget(work.get(req.n) as Promise<Uint8Array>).catch((error) => {
       if (error instanceof LumenError && error.code === "occupe") this.totals.busy += 1;
       throw error;
@@ -329,7 +341,8 @@ export class LumenAudio {
     readFeed: FeedReader,
     onFacts?: (facts: ConvertFacts, startedAt: number) => void,
     label = "",
-    pooled = POOL_DEFAULT
+    pooled = POOL_DEFAULT,
+    dialogue?: DialogueRun
   ): Map<number, Promise<Uint8Array>> {
     const target = targetById(targetId);
     const out = new Map<number, Promise<Uint8Array>>();
@@ -368,7 +381,7 @@ export class LumenAudio {
             niceness: priority === "demand" ? 10 : 15,
             timeoutMs: priority === "demand" ? DEMAND_TIMEOUT_MS : LEAD_TIMEOUT_MS,
             signal,
-            ...(pooled ? { pool: ffmpegPool(() => config.lumen.ffmpegPath) } : {}),
+            ...(dialogue ? { dialogue } : pooled ? { pool: ffmpegPool(() => config.lumen.ffmpegPath) } : {}),
           });
           onFacts?.(result.facts, startedAt);
           this.noteRecent({ at: began, ms: Math.round(performance.now() - startedAt), segments: n1 - n0, priority });
@@ -417,6 +430,7 @@ export class LumenAudio {
       lastAt: now,
       leading: held?.leading ?? false,
       readFeed: req.readFeed,
+      ...(req.dialogue ? { dialogue: req.dialogue } : {}),
     });
     this.sweepSessions(now);
     // Après la réponse : l'avance ne doit pas retarder le segment demandé.
@@ -434,8 +448,9 @@ export class LumenAudio {
   }
 
   /** Les segments à convertir d'avance pour une lecture : la première suite manquante, 60 s au plus. */
-  leadPlan(s: Pick<Session, "index" | "version" | "track" | "target" | "cid" | "lastN">): [number, number] | null {
+  leadPlan(s: Pick<Session, "index" | "version" | "track" | "target" | "cid" | "lastN"> & Partial<Pick<Session, "dialogue">>): [number, number] | null {
     const segs = s.index.segments;
+    const taskUs = s.dialogue ? DIALOGUE_LEAD_TASK_US : LEAD_TASK_US;
     const horizon = segs[s.lastN].startUs + LEAD_US;
     // L'AAC d'un récepteur Chromecast (§192) : un segment par tâche — ses octets dépendent de la fenêtre convertie
     // (`AAC_GRID`), et un segment doit rester le même qu'il vienne de l'avance ou d'une demande après un saut.
@@ -451,11 +466,11 @@ export class LumenAudio {
         if (!have && single) return [n, n + 1];
         continue;
       }
-      if (have || segs[n].startUs - segs[n0].startUs >= LEAD_TASK_US) return [n0, n];
+      if (have || segs[n].startUs - segs[n0].startUs >= taskUs) return [n0, n];
     }
     if (n0 < 0) return null;
     let n1 = n0 + 1;
-    while (n1 < segs.length && segs[n1].startUs < horizon && segs[n1].startUs - segs[n0].startUs < LEAD_TASK_US) n1++;
+    while (n1 < segs.length && segs[n1].startUs < horizon && segs[n1].startUs - segs[n0].startUs < taskUs) n1++;
     return [n0, n1];
   }
 
@@ -468,7 +483,7 @@ export class LumenAudio {
       const plan = this.leadPlan(s);
       if (!plan) continue;
       s.leading = true;
-      const parts = this.run("lead", s.index, s.version, s.track, s.source, s.target, s.cid, plan[0], plan[1], s.readFeed, undefined, s.key, this.usePool(s.key));
+      const parts = this.run("lead", s.index, s.version, s.track, s.source, s.target, s.cid, plan[0], plan[1], s.readFeed, undefined, s.key, this.usePool(s.key), s.dialogue);
       void Promise.allSettled([...parts.values()]).then(() => {
         const held = this.sessions.get(s.key);
         if (held) held.leading = false;

@@ -2264,6 +2264,7 @@
         "incidents": "Incidents",
         "eventReopen": "Reopened at {at}: {reason}",
         "eventAudio": "Track “{track}” via {via} ({ms} ms)",
+        "eventDialogue": "Enhance dialogue: {mode} ({ms} ms)",
         "eventRetry": "Retried before the picture: {reason}",
         "eventCastOn": "AirPlay to a TV at {at}",
         "eventCastOff": "AirPlay ended at {at}"

@@ -97,6 +97,12 @@ export class LumenEngine {
   }
 
   init(index: LumenIndex, rendition: LumenRendition): Uint8Array {
+    // Un rendu « dialogues » (§193) : l'init de sa cible, posée par la vue (`withDialogue`).
+    if (rendition.kind === "audio" && rendition.dialogue) {
+      const d = index.audio.find((a) => a.number === rendition.track)?.dialogue;
+      if (!d || d.cids[rendition.dialogue] !== rendition.conv) throw new LumenError("piste-inconnue", "Pas d'init pour ce rendu.");
+      return d.init;
+    }
     const init = rendition.kind === "video" ? index.inits.video : index.inits.audio[rendition.track];
     if (!init) throw new LumenError("piste-inconnue", "Pas d'init pour cette piste.");
     return init;
@@ -104,6 +110,9 @@ export class LumenEngine {
 
   /** Les octets du segment `n`, construits par la file. */
   async segment(index: LumenIndex, rendition: LumenRendition, n: number): Promise<SegmentResult & { cost: ReadCost }> {
+    // Un rendu « dialogues » ne se construit pas ici (`lumenSegment` le donne à la conversion, §193) : jamais les
+    // octets de la copie sous son nom.
+    if (rendition.kind === "audio" && rendition.dialogue) throw new LumenError("piste-inconnue", "Rendu « dialogues » : pas par le remux.");
     const spec = segmentSpec(index, rendition, n);
     // Deux fois le poids : ce qui est lu et ce qui est produit coexistent (2-serveur.md §2.4).
     const cost = rendition.kind === "video" ? Math.max(AUDIO_SEGMENT_COST, 2 * spec.segment.bytes) : AUDIO_SEGMENT_COST;
@@ -123,6 +132,12 @@ export class LumenEngine {
 
   private served(index: LumenIndex, rendition: LumenRendition): boolean {
     if (rendition.kind === "video") return !!index.video && index.segments.length > 0;
+    // Un rendu « dialogues » (§193) : sous l'identité actuelle de son traitement seulement — une autre (autre ffmpeg,
+    // autre règle, autre moteur JavaScript) ne désigne plus rien (410).
+    if (rendition.dialogue) {
+      const mode = rendition.dialogue;
+      return index.audio.some((a) => a.number === rendition.track && !a.refusal && a.dialogue?.cids[mode] === rendition.conv);
+    }
     // Une piste convertie (§161, la vue `withConversion`) ne se sert que sous le nom de sa conversion actuelle, et
     // une piste copiée que sous son nom simple : une adresse d'une autre conversion ne désigne plus rien (410).
     return index.audio.some((a) => a.number === rendition.track && !a.refusal && !!index.inits.audio[a.number] && (a.converted?.cid ?? undefined) === (rendition.conv ?? undefined));

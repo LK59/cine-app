@@ -32,6 +32,7 @@ import type { AudioFeed, AudioFeedSpec } from "./feed";
 import { setPriority } from "node:os";
 import { checkTargetFrame, encoderArgs, runFfmpeg, splitTargetFrames, type RunResult } from "./ffmpeg";
 import type { FfmpegPool } from "./ffmpegPool";
+import { DIALOGUE_PREROLL, type DialogueWork, type LumenDialogueMode } from "./dialogue";
 
 /** La fenêtre d'une conversion, en échantillons absolus, et ses trames. */
 export interface ConvertWindow {
@@ -146,6 +147,17 @@ export interface ConvertJob {
    * lancés (décodeur, encodeur) et la fenêtre est posée par Node (`windowPcm`). Absent : un processus lancé pour elle.
    */
   pool?: FfmpegPool;
+  /**
+   * « Améliorer les dialogues » (§193) : le traitement entre le décodeur et l'encodeur, chaque segment à part
+   * (`convertDialogueRange`). Jamais par le pool.
+   */
+  dialogue?: DialogueRun;
+}
+
+/** Ce qu'une conversion « dialogues » reçoit : la force, et qui exécute le traitement (un fil de calcul). */
+export interface DialogueRun {
+  mode: LumenDialogueMode;
+  enhance: (work: DialogueWork) => Promise<{ segments: Float32Array[]; ms: number }>;
 }
 
 export interface ConvertFacts {
@@ -168,6 +180,7 @@ export interface ConvertFacts {
 
 /** Les segments [n0, n1) d'une piste, convertis par un seul processus. */
 export async function convertRange(job: ConvertJob): Promise<{ segments: Map<number, Uint8Array>; facts: ConvertFacts }> {
+  if (job.dialogue) return convertDialogueRange(job, job.dialogue);
   const { index, source, target } = job;
   const grid = gridOf(target);
   // L'AAC n'a pas d'octets indépendants de sa fenêtre (`AAC_GRID`) : un segment par conversion, toujours — `conversion.ts`
@@ -222,6 +235,112 @@ export async function convertRange(job: ConvertJob): Promise<{ segments: Map<num
     segments.set(n, convertedSegment(frames, w.a, a, b, n, index.delayUs, grid));
   }
   return { segments, facts: { feedMs, diskMs, ffmpegMs: run.ms, inputBytes, frames: w.b - w.a, silent: !feed, firstByteMs: run.firstByteMs, pooled: !!job.pool } };
+}
+
+// ── « Améliorer les dialogues » (§193) ───────────────────────────────────────
+
+/**
+ * Un décodage partagé par les segments d'une tâche donne-t-il, à chaque segment, le PCM qu'il aurait seul ? Oui quand
+ * le décodeur est exact au bit au-delà de son pré-roulement (DTS, TrueHD, Opus, MPEG en flottants : §161). **Non pour
+ * l'AC-3/E-AC-3** : le décodeur de FFmpeg tire un tramage pseudo-aléatoire (`dithflag`, un générateur `av_lfg` semé à
+ * l'ouverture) pour les mantisses sans bits, dont l'état dépend de tout ce qu'il a décodé depuis son départ. Mesuré
+ * au banc du 17/11/2026 (*Braveheart*, VF E-AC-3) : 1 segment sur 6 identique entre l'avance et le segment seul avec
+ * un décodage partagé — chacun le sien, et 6 sur 6.
+ */
+export function decodeSharedAcrossSegments(codec: LumenConvertSource["codec"]): boolean {
+  return codec !== "dolby";
+}
+
+/**
+ * Les segments [n0, n1) d'une piste, traités par `DialogueEnhancer` puis encodés — **chaque segment à part** :
+ * 1. le flux de la fenêtre élargie du pré-roulement du traitement (`DIALOGUE_PREROLL`) : lu une fois pour la tâche,
+ *    ou une fois par segment pour un décodeur qui ne le permet pas (`decodeSharedAcrossSegments`) ;
+ * 2. un ffmpeg décode et replie (`decoderStageArgs`, le `pan` de `panFor`) : le PCM de x, placé à l'échantillon
+ *    (`feed.startSample`) ;
+ * 3. le fil de calcul traite chaque segment depuis son propre pré-roulement, avec un `DialogueEnhancer` neuf
+ *    (`enhanceWindow`), et rend sa fenêtre d'encodeur ;
+ * 4. un ffmpeg par segment l'encode (`encoderStageArgs`, la fenêtre de la conversion : P trames devant, T derrière),
+ *    les trames P … P + (b − a) − 1 gardées.
+ * Un seul ffmpeg à la fois dans la tâche : elle tient une place de la file, comme toute conversion. Les octets d'un
+ * segment ne dépendent que de x sur [début − pré-roulements, fin) et du mode : identiques seul ou dans l'avance.
+ */
+export async function convertDialogueRange(job: ConvertJob, dialogue: DialogueRun): Promise<{ segments: Map<number, Uint8Array>; facts: ConvertFacts }> {
+  const { index, source, target } = job;
+  const whole = windowOf(index, job.n0, job.n1);
+  const segs: { n: number; a: number; b: number; w: { start: number; end: number } }[] = [];
+  for (let n = job.n0; n < job.n1; n++) {
+    const [a, b] = segmentFrames(index, n, n + 1);
+    segs.push({ n, a, b, w: inputWindow(a, b) });
+  }
+  const groups = decodeSharedAcrossSegments(source.codec) ? [segs] : segs.map((s) => [s]);
+  const facts: ConvertFacts = { feedMs: 0, diskMs: 0, ffmpegMs: 0, inputBytes: 0, frames: whole.b - whole.a, silent: true, firstByteMs: null, pooled: false };
+  const segments = new Map<number, Uint8Array>();
+  for (const group of groups) {
+    // La fenêtre lue et décodée : celle du groupe, avec le pré-roulement du traitement devant.
+    const read: ConvertWindow = { a: group[0].a, b: group[group.length - 1].b, start: group[0].w.start - DIALOGUE_PREROLL, end: group[group.length - 1].w.end };
+    let feed: AudioFeed | null = null;
+    if (!windowIsSilent(source, read)) {
+      const got = await job.readFeed(feedSpecOf(index, job.track, source, read));
+      feed = got.feed;
+      facts.feedMs += got.ms;
+      facts.diskMs += got.diskMs;
+    }
+    if (job.signal?.aborted) throw new LumenError("occupe", "Conversion arrêtée.");
+    let pcm: Float32Array = new Float32Array(0);
+    if (feed) {
+      facts.silent = false;
+      facts.inputBytes += feed.bytes.length;
+      // Le décodé couvre [startSample, endSample) aux canaux de la cible : la sortie bornée à ce qu'il doit faire, large.
+      const maxOutputBytes = Math.max(1 << 20, Math.ceil((feed.endSample - feed.startSample + CONVERT_RATE) * target.channels * 4 * 1.05));
+      const decoded = await runFfmpeg(job.ffmpegPath, decoderStageArgs(feed, source.channels, target), feed.bytes, {
+        timeoutMs: job.timeoutMs,
+        niceness: job.niceness,
+        signal: job.signal,
+        maxOutputBytes,
+      });
+      facts.ffmpegMs += decoded.ms;
+      facts.firstByteMs ??= decoded.firstByteMs;
+      const out = decoded.stdout;
+      // Le tampon de ffmpeg tel quel quand il est aligné (il est alors transféré au fil, pas copié), sinon une copie.
+      pcm = out.byteOffset % 4 === 0 ? new Float32Array(out.buffer, out.byteOffset, Math.floor(out.byteLength / 4)) : new Float32Array(out.slice().buffer, 0, Math.floor(out.byteLength / 4));
+    }
+    const enhanced = await dialogue.enhance({
+      pcm,
+      pcmStart: feed?.startSample ?? 0,
+      channels: target.channels,
+      mono: source.channels === 1,
+      mode: dialogue.mode,
+      windows: group.map((s) => s.w),
+      preroll: DIALOGUE_PREROLL,
+    });
+    if (enhanced.segments.length !== group.length) throw new Error("Dialogues : traitement incomplet.");
+    facts.feedMs += enhanced.ms;
+    for (let i = 0; i < group.length; i++) {
+      if (job.signal?.aborted) throw new LumenError("occupe", "Conversion arrêtée.");
+      const { n, a, b } = group[i];
+      const samples = enhanced.segments[i];
+      const input = new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength);
+      facts.inputBytes += input.length;
+      const run = await runFfmpeg(job.ffmpegPath, encoderStageArgs(target), input, {
+        timeoutMs: job.timeoutMs,
+        niceness: job.niceness,
+        signal: job.signal,
+        maxOutputBytes: Math.max(1 << 20, (b - a + 16) * 8192),
+      });
+      facts.ffmpegMs += run.ms;
+      facts.firstByteMs ??= run.firstByteMs;
+      const frames = splitTargetFrames(run.stdout, target);
+      const needed = gridOf(target).preroll + (b - a);
+      if (frames.length < needed) throw new Error(`Dialogues : ${frames.length} trames pour ${needed} attendues.`);
+      for (let k = gridOf(target).preroll; k < needed; k++) {
+        const why = checkTargetFrame(frames[k], target);
+        if (why) throw new Error(`Dialogues : trame ${k} non conforme (${why}).`);
+      }
+      // La conversion de ce segment a commencé à sa propre trame `a` : le rang de la trame k y est k − a + P.
+      segments.set(n, convertedSegment(frames, a, a, b, n, index.delayUs));
+    }
+  }
+  return { segments, facts };
 }
 
 // ── La voie du pool : deux processus génériques ──────────────────────────────

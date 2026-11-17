@@ -12,7 +12,7 @@
 // Sans lui, `inlineExecutor` fait le même travail sur le fil principal.
 
 import { parentPort, workerData } from "node:worker_threads";
-import { runLumenJob, type LumenJob, type LumenJobResult } from "./jobs";
+import { ownBuffer, runLumenJob, type LumenJob, type LumenJobResult } from "./jobs";
 import { LumenError } from "./format";
 
 export interface WorkerRequest {
@@ -26,6 +26,7 @@ export type WorkerResponse =
 
 /** Les tampons d'une réponse, transférés plutôt que copiés : un segment 4K pèse des dizaines de Mo. */
 export function transferablesOf(result: LumenJobResult): ArrayBuffer[] {
+  if (result.type === "dialogue") return result.segments.map(ownBuffer).filter((b): b is ArrayBuffer => b !== null);
   const bytes = result.type === "segment" ? result.result.bytes : result.type === "audio-feed" ? (result.feed?.bytes ?? null) : null;
   if (!bytes) return [];
   const buffer = bytes.buffer;

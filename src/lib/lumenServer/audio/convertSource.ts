@@ -52,8 +52,10 @@ import { readDolbyHeader } from "./dolbySilence";
  * Les familles de codecs que Lumen serveur sait convertir, par le `CodecID` Matroska. `dolby` (AC-3/E-AC-3) n'est
  * jamais converti pour la page ni pour une Apple TV — ces pistes se copient — : il sert au banc, qui fait passer une
  * piste copiable par la chaîne de conversion pour comparer son décodage à celui de la copie (la synchronisation
- * image-son, à l'échantillon) et pour éprouver le silence devant une piste qui commence tard ; et, depuis le 17/11/2026,
- * à l'adresse d'un récepteur Chromecast, qui ne lit que l'AAC (`castView`, DECISIONS.md §192).
+ * image-son, à l'échantillon) et pour éprouver le silence devant une piste qui commence tard ; à l'adresse d'un
+ * récepteur Chromecast, qui ne lit que l'AAC (`castView`, DECISIONS.md §192) ; et aux rendus « Améliorer les
+ * dialogues » d'une piste Dolby copiée (§193, `dialogueSourceOf`) : décodée, traitée, réencodée — la copie, elle,
+ * reste servie telle quelle.
  */
 export type ConvertCodec = "dts" | "truehd" | "opus" | "mpeg" | "dolby";
 

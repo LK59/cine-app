@@ -47,6 +47,11 @@ export type FfmpegDetection =
       encoders: string[];
       /** La trame de référence de chaque cible (`TARGET_51.id` → octets), pour le `dec3` de l'init. */
       reference: Record<string, Uint8Array>;
+      /**
+       * Décode-t-il l'AC-3 et l'E-AC-3 (`ac3`, `eac3`, démultiplexeur `eac3`) ? Pour les rendus « dialogues » des
+       * pistes Dolby copiées seulement (§193) : pas une condition de la conversion. Absent : non.
+       */
+      dolby?: boolean;
       detectedAt: number;
       ms: number;
     }
@@ -136,6 +141,7 @@ async function detect(path: string): Promise<FfmpegDetection> {
       sha256,
       encoders: ["eac3", "ac3", "aac", "flac"].filter((e) => lists.encoders.has(e)),
       reference,
+      dolby: ["ac3", "eac3"].every((d) => lists.decoders.has(d)) && lists.demuxers.has("eac3"),
       detectedAt: at,
       ms: Math.round(performance.now() - began),
     };

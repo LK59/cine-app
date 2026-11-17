@@ -14,6 +14,8 @@
  * `error` et `fallback` — la page ne voit rien des requêtes HLS de Safari, le serveur voit tout.
  */
 import { serverFailureFields, serverLineFields, serverStartFields, type ServerPlayerContext, type ServerStartWhy } from "@/lib/serverPlayerLog";
+import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
+import type { LumenDialogueMode } from "@/lib/lumenServer/audio/dialogue";
 
 export const LUMEN_PLAYER = "lumen-serveur" as const;
 export const LUMEN_PATH = "remux-serveur" as const;
@@ -52,6 +54,11 @@ export interface LumenStartFacts {
   negotiateMs: number;
   /** Le son multiplexé dans les segments vidéo (essai `m1`, réglage serveur). */
   muxed?: boolean;
+  /**
+   * « Améliorer les dialogues » servi par le serveur (§193) : la force (`on` / `strong`), à la place du champ
+   * `dialogue` de la ligne `start` du lecteur actuel (§68) — absent quand le traitement n'est pas servi.
+   */
+  dialogue?: LumenDialogueMode | null;
 }
 
 export function lumenStartFields(ctx: ServerPlayerContext, facts: LumenStartFacts): Record<string, unknown> {
@@ -75,6 +82,7 @@ export function lumenStartFields(ctx: ServerPlayerContext, facts: LumenStartFact
     ...(facts.prepared ? { prepared: facts.prepared.status, preparedAgoMs: facts.prepared.agoMs } : {}),
     negotiateMs: Math.round(facts.negotiateMs),
     ...(facts.muxed ? { muxed: true } : {}),
+    ...(facts.dialogue ? { dialogue: facts.dialogue, dialogueBy: "serveur" } : {}),
   };
 }
 
@@ -145,11 +153,17 @@ export function lumenAudioFields(
     /** Réouverture : l'adresse posée → la première image (ms), et le temps d'image figée montrée à sa place. */
     pictureMs?: number;
     frozen?: boolean;
+    /**
+     * « Améliorer les dialogues » (§193) : la force servie après ce changement (`on`, `strong`, `off`). Posé sur un
+     * changement de force (même piste, `from` = `to`) et sur un changement de piste pendant que le traitement est servi.
+     */
+    dialogue?: DialogueMode;
   },
   lumenSession: string
 ): Record<string, unknown> {
   return {
     ...serverLineFields(ctx),
+    ...(change.dialogue ? { dialogue: change.dialogue } : {}),
     from: change.from ?? -1,
     to: change.to,
     via: change.via,

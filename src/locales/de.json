@@ -2264,6 +2264,7 @@
         "incidents": "Vorfälle",
         "eventReopen": "Neu geöffnet bei {at}: {reason}",
         "eventAudio": "Spur „{track}“ über {via} ({ms} ms)",
+        "eventDialogue": "Dialoge verbessern: {mode} ({ms} ms)",
         "eventRetry": "Neuer Versuch vor dem Bild: {reason}",
         "eventCastOn": "AirPlay an einen Fernseher bei {at}",
         "eventCastOff": "AirPlay beendet bei {at}"

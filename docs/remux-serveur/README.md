@@ -980,7 +980,39 @@ Audio est suspendu en arrière-plan — ce que ce chemin est venu régler. Une p
 traitement : le traitement validé est en TypeScript, avec une mémoire de plusieurs secondes, alors qu'un segment doit
 être une fonction du fichier — un pré-roulement et une preuve de jointure à faire, toutes les pistes copiées à convertir.
 Fait à la place : le réglage choisi dans ce lecteur rend la lecture au lecteur actuel à la position, et `lumenWanted`
-décline ce chemin tant que le réglage est allumé sur l'appareil.
+décline ce chemin tant que le réglage est allumé sur l'appareil. **Remplacé le même jour par la voie serveur**, ci-dessous
+(« Améliorer les dialogues par le serveur », §193) ; le retour au lecteur actuel ne reste que quand le serveur ne peut pas.
+
+### « Améliorer les dialogues » par le serveur (17/11/2026, DECISIONS §193)
+
+**Ce qui est fait.** Le traitement n'est pas traduit en filtres ffmpeg : c'est `DialogueEnhancer` lui-même (le code du
+lecteur actuel, §68 v2), exécuté par un fil de calcul sur le PCM que le ffmpeg de l'image décode et replie (`panFor`),
+puis réencodé en E-AC-3 vers la cible de la conversion. Le binaire n'a que 31 filtres (ni égaliseur ni compresseur), et
+trois étapes — le détecteur de parole qui pilote le retrait du fond, le fond plafonné relativement à la voix mise en
+forme, le niveleur qui ne fait que remonter — n'ont pas d'équivalent filtre : une traduction aurait été un autre son.
+
+| Étape du lecteur actuel | Ici |
+|---|---|
+| décodage | ffmpeg, le décodeur de la conversion (§161) ; l'AC-3/E-AC-3 copiée par la voie `dolby` |
+| repli 7.1 → 5.1, 3/4/5/7 canaux → L R C (`fold`) | `pan` de `panFor` (la même règle) |
+| égalisation, gains, niveleur, plafond, détecteur, retrait, fond relatif, compresseur du fond, deux limiteurs | `DialogueEnhancer` tel quel, `DIALOGUE_TUNING` tel quel ; un mono traité en mono |
+| encodeur AAC/Opus de la page | E-AC-3 640 kb/s 5.1 / 256 kb/s 2.0 (§161) |
+
+**La jointure.** Chaque segment est traité par un `DialogueEnhancer` neuf depuis **6 s avant sa fenêtre**, le
+pré-roulement jeté, puis encodé seul : il ne dépend que du fichier, quelle que soit la tâche qui l'a fait. Le banc
+(`lumen-dialogue-bench.spec.ts`) le vérifie sur huit fichiers réels, 16 pistes, les deux forces : segments de l'avance et
+segments seuls identiques à l'octet (6/6 partout, après avoir décodé l'AC-3/E-AC-3 par segment — son décodeur tire un
+tramage qui dépend de son départ) ; écart au traitement continu, avant l'encodeur, ≤ −100 dBFS à 6 s (≤ −144 en 5.1 ;
+−19 à −150 à 2 s, −62 à −131 à 4 s) ; après l'encodeur, même rapport signal/écart qu'un seul encodage continu ; aucun
+clic aux jointures (rapport 0,99 à 1,24 contre l'encodage continu) ; niveaux par canal (`astats`) égaux à ceux de la
+chaîne du lecteur actuel à ±0,01 dB.
+
+**Comment c'est servi.** Une seconde liste maître, `master.m3u8?audio=N&dialogue=on|strong`, sert chaque piste par son
+rendu traité (`a{N}d1x{cid}`, `a{N}d2x{cid}`) à la place du sien ; la liste ordinaire et toutes les adresses d'avant
+sont inchangées à l'octet (pas de nouvelle version de format). Un segment traité est une conversion comme une autre :
+même file (2 processus), même cache, même avance (tâches de 30 s), même admission. L'hôte demande la force de
+l'appareil au verdict ; il change de force par la réouverture d'un changement de piste (§185) ; sans rendu traité ou
+serveur occupé, il rend la main au lecteur actuel (§188).
 
 ### 6. Le panneau technique, le journal (§189)
 
@@ -1135,8 +1167,11 @@ Puis une lecture réelle dans l'application : la ligne `fallback` porte désorma
 4. **Générer des sous-titres.** Un titre sans sous-titres anglais : menu sous-titres → « Générer » → anglais. Attendu :
    « Préparation des sous-titres… », puis les lignes ; à la fin, la piste « généré » choisie, sans coupure.
 5. **Bandes noires.** Un film en 2.39 avec bandes incrustées : l'interrupteur dans les réglages, l'image agrandie.
-6. **Dialogues.** Réglages → « Améliorer les dialogues » → Améliorer : la lecture repasse au lecteur actuel à la
-   position (ligne `fallback` `planned: true`) ; tant que le réglage reste allumé, Lumen serveur ne s'ouvre plus.
+6. **Dialogues** (§193, `LUMEN_AUDIO_CONVERT` ouvert). Réglages → « Améliorer les dialogues » → Améliorer, puis
+   davantage, puis Désactivé, en lecture : la même image figée ~1 s qu'un changement de piste, la position gardée, une
+   ligne `audio` `dialogue` (`from` = `to`). Au casque, *Interstellar* 2:08:50 et *Tenet* 2:00:20 contre le lecteur
+   actuel au même endroit : le même son attendu ; aucune coupure ni clic toutes les ~4 s. Rouvrir le film avec le
+   réglage allumé : ligne `start` `dialogue`, `dialogueBy: "serveur"`. Une piste AAC (*Bref*) : le lecteur actuel.
 7. **Panneau.** Infos de lecture : « Remux serveur (HLS) », format 5, `cra`, segments reçus qui montent, le relevé du
    serveur ; après un changement de piste par réouverture ou un AirPlay, la ligne d'incident.
 8. ***Mr. Robot* S01E03** : le test du paragraphe précédent.

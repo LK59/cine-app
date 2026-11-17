@@ -14,8 +14,14 @@ import { identityKey, LumenError, type LumenCutMode, type LumenIndex } from "./f
 import { buildLumenIndex } from "./lumenIndex";
 import { buildSegment, type SegmentResult, type SegmentSpec } from "./segment";
 import { readAudioFeed, type AudioFeed, type AudioFeedSpec } from "./audio/feed";
+import { enhanceWindows, type DialogueWork } from "./audio/dialogue";
 
-export type LumenJob = { type: "index"; path: string; targetUs?: number; cut?: LumenCutMode } | { type: "segment"; spec: SegmentSpec } | { type: "audio-feed"; spec: AudioFeedSpec };
+export type LumenJob =
+  | { type: "index"; path: string; targetUs?: number; cut?: LumenCutMode }
+  | { type: "segment"; spec: SegmentSpec }
+  | { type: "audio-feed"; spec: AudioFeedSpec }
+  /** « Améliorer les dialogues » (§193) : `DialogueEnhancer` sur chaque segment d'une tâche — du calcul, aucun fichier. */
+  | { type: "dialogue"; work: DialogueWork };
 
 export interface ReadCost {
   reads: number;
@@ -30,7 +36,9 @@ export type LumenJobResult =
   | { type: "index"; index: LumenIndex; cost: ReadCost }
   | { type: "segment"; result: SegmentResult; cost: ReadCost }
   /** Le flux élémentaire d'une fenêtre de son à convertir (`audio/feed.ts`), ou null : la fenêtre est dans le silence. */
-  | { type: "audio-feed"; feed: AudioFeed | null; cost: ReadCost };
+  | { type: "audio-feed"; feed: AudioFeed | null; cost: ReadCost }
+  /** Les fenêtres d'encodeur de chaque segment, traitées (f32 entrelacé, une par segment, dans l'ordre). */
+  | { type: "dialogue"; segments: Float32Array[]; cost: ReadCost };
 
 /** Un index lit par petits morceaux (en-têtes de grappe en grappe) ; un segment lit tout, dans l'ordre. */
 const INDEX_SOURCE = { chunkSize: 16 * 1024, chunks: 64 };
@@ -44,6 +52,10 @@ const AUDIO_SEGMENT_SOURCE = { chunkSize: 4 * 1024, chunks: 64 };
 
 export async function runLumenJob(job: LumenJob): Promise<LumenJobResult> {
   const began = performance.now();
+  if (job.type === "dialogue") {
+    const segments = enhanceWindows(job.work);
+    return { type: "dialogue", segments, cost: { reads: 0, bytes: 0, diskMs: 0, ms: Math.round(performance.now() - began) } };
+  }
   if (job.type === "index") {
     const source = await FileByteSource.open(job.path, INDEX_SOURCE);
     try {
@@ -79,6 +91,22 @@ export async function runLumenJob(job: LumenJob): Promise<LumenJobResult> {
   } finally {
     source.close();
   }
+}
+
+/** Le tampon entier d'une vue qui l'occupe seule (transférable sans rien emporter d'autre), sinon null. */
+export function ownBuffer(view: ArrayBufferView): ArrayBuffer | null {
+  const buffer = view.buffer;
+  return buffer instanceof ArrayBuffer && view.byteOffset === 0 && view.byteLength === buffer.byteLength ? buffer : null;
+}
+
+/**
+ * Les tampons d'une demande, transférés plutôt que copiés : le PCM d'une tâche « dialogues » (§193), des dizaines de
+ * Mo décodés par ffmpeg, n'a plus d'usage sur le fil principal une fois donné.
+ */
+export function requestTransferablesOf(job: LumenJob): ArrayBuffer[] {
+  if (job.type !== "dialogue") return [];
+  const buffer = ownBuffer(job.work.pcm);
+  return buffer ? [buffer] : [];
 }
 
 function costOf(source: FileByteSource, began: number): ReadCost {

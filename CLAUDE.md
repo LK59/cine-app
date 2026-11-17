@@ -701,10 +701,19 @@ reopens `master.m3u8?…&st=<Jellyfin index>`, which adds one WebVTT `SUBTITLES`
 video grid (`subtitles.ts`, `X-TIMESTAMP-MAP` at the delay D) — without `st` the master is byte-identical. **Fallbacks**: before the first picture (refusal, code 4, 20 s without a picture) the native
 player takes over in the same page (`declineLumen`); after it, the playback recovers **on this path** (`recover`: the
 server re-read for up to 90 s across a deploy, a new version reopened at the position), the server player only when the
-file is no longer served or after three reopenings. « Améliorer les dialogues » hands back to the native player (§188).
+file is no longer served or after three reopenings. **« Améliorer les dialogues » is done by the server** (§193) when
+`LUMEN_AUDIO_CONVERT` allows: `DialogueEnhancer` itself (not an ffmpeg port — the pinned binary has no EQ/compressor,
+and three stages have no filter equivalent) runs in a worker on ffmpeg's decoded PCM, each segment from its own 6 s
+pre-roll with a fresh enhancer, then one E-AC-3 encode per segment — still a pure function of the file; AC-3/E-AC-3 are
+decoded once per segment (FFmpeg's Dolby decoder dithers from a seeded generator). A second master list
+(`?dialogue=on|strong`) serves each track's processed rendition (`a{N}d1x{cid}`, `a{N}d2x{cid}`) in place of its own;
+the plain list and every existing address are unchanged (no format bump; `cid` carries the rules, ffmpeg and V8).
+Changing the mode is a same-element reopen (§185). AAC, FLAC, a busy server or the option off: hand back to the native
+player (§188). Bump `LUMEN_DIALOGUE_VERSION` when `dialogueEnhance.ts` changes (a test holds its SHA-256).
 **Logs**: `player: "lumen-serveur"`, `path: "remux-serveur"`, the playback id as `lumenSession`; the log route appends the
 server's tally (`srv.*`) to `stop`, `stall`, `error`, `fallback`, `rebuild`; `audio` lines say `via` (`audioTracks`,
-`réouverture`), `tookMs`, `pictureMs`, `processing`; a pre-picture `fallback` says what Safari fetched (`seen`).
+`réouverture`), `tookMs`, `pictureMs`, `processing`, `dialogue` (the mode served; `start` carries it with
+`dialogueBy: "serveur"`); a pre-picture `fallback` says what Safari fetched (`seen`).
 `docker logs` and `server.log` carry `lumen/*` errors. **The bench page** `/lumen-test` (admin) runs passes against real
 titles on a device — cuts, levers, muxed audio, converted audio, codec switches — and sends one `kind: "lumen-test"`
 line per trial to `startup.log`.
