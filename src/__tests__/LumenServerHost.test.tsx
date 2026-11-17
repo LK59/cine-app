@@ -49,7 +49,9 @@ vi.mock("@/lib/resumeRewind", async (orig) => ({ ...(await orig<typeof import("@
 vi.mock("@/lib/noteSeriesLanguage", () => ({ noteSeriesLanguage: vi.fn() }));
 vi.mock("@/lib/lumenSheetPrepare", () => ({ readLumenPrepared: () => null }));
 const declineLumen = vi.fn();
-vi.mock("@/lib/lumenServerChoice", () => ({ declineLumen: (id: string) => declineLumen(id) }));
+vi.mock("@/lib/lumenServerChoice", () => ({ declineLumen: (id: string) => declineLumen(id), lumenResumeSeekOn: () => resumeSeekTrial }));
+/** L'essai « Reprise par un saut sur place » du panneau Compte. */
+let resumeSeekTrial = false;
 const reloadServerPage = vi.fn((_intent: () => unknown, _video: unknown) => true);
 vi.mock("@/components/player/server/serverElement", async (orig) => ({
   ...(await orig<typeof import("@/components/player/server/serverElement")>()),
@@ -254,7 +256,7 @@ describe("la reprise après une pause", () => {
   });
 
   it("l'essai allumé : un saut sur place avant de repartir, même après une pause brève, sans ligne `seek`", async () => {
-    localStorage.setItem("cine:lumen-reprise-saut", "1");
+    resumeSeekTrial = true;
     await mount();
     const el = element();
     act(() => el.picture(600));
@@ -274,7 +276,7 @@ describe("la reprise après une pause", () => {
     await act(async () => void (await vi.advanceTimersByTimeAsync(100)));
     act(() => el.video.dispatchEvent(new Event("play")));
     expect(writes).toEqual([600, 600]);
-    localStorage.removeItem("cine:lumen-reprise-saut");
+    resumeSeekTrial = false;
   });
 });
 
