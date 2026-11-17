@@ -39,6 +39,8 @@ import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useViewportResizing } from "@/lib/useViewportResizing";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
+import { AudioKeepAwake } from "@/components/player/lumen/audioKeepAwake";
+import { isAppleTouchDevice } from "@/lib/iosInstall";
 import { NATIVE_PATH } from "@/lib/webcodecs/pathSelector";
 import { trace, traceKeepAcrossReset, traceRecent } from "@/lib/webcodecs/trace";
 import {
@@ -299,6 +301,22 @@ export function ExperimentalPlayerHost({
   const [startHeld, setStartHeld] = useState(false);
   // Lu par la mesure des reprises, dans un rappel de la source posé une fois.
   const readyRef = useRef(false);
+
+  /** Le son éveillé pendant la pause (`audioKeepAwake.ts`) : une veille par lecteur, fermée page cachée et au démontage. */
+  const keepAwakeRef = useRef<AudioKeepAwake | null>(null);
+  useEffect(() => {
+    const onHidden = () => {
+      if (document.visibilityState !== "hidden") return;
+      keepAwakeRef.current?.dispose();
+      keepAwakeRef.current = null;
+    };
+    document.addEventListener("visibilitychange", onHidden);
+    return () => {
+      document.removeEventListener("visibilitychange", onHidden);
+      keepAwakeRef.current?.dispose();
+      keepAwakeRef.current = null;
+    };
+  }, []);
   useEffect(() => {
     readyRef.current = ready;
   }, [ready]);
@@ -2137,6 +2155,7 @@ export function ExperimentalPlayerHost({
         // Pas après la fin — c'est « Revoir », ou un épisode relancé —, ni pendant un saut.
         habits.play(element);
         background.notePlaying();
+        keepAwakeRef.current?.release();
         setPlaying(true);
         setEnded(false);
         showWarning(null);
@@ -2150,6 +2169,12 @@ export function ExperimentalPlayerHost({
         // Un saut posé en pause a son image : il n'attend plus rien (§78).
         if (element.paused && !element.seeking) runner.seekDone();
         habits.pause(element);
+        // Le son éveillé pendant la pause (`audioKeepAwake.ts`, 17/11/2026) : sur iPhone et iPad, la sortie audio
+        // s'endort pendant une pause et met ~0,45 s à se réveiller ; la reprise de ce lecteur attend le son (l'horloge le
+        // suit), c'est l'anneau du bouton Lecture — 356 ms en médiane sur 533 séances avant ce changement. Un son
+        // inaudible la garde éveillée cinq minutes au plus, fermé dès que la page se cache. Seulement sur iPhone et iPad :
+        // ailleurs, le gain n'est pas mesuré et un onglet d'ordinateur afficherait « son en cours » pendant la pause.
+        if (readyRef.current && !element.ended && document.visibilityState === "visible" && isAppleTouchDevice()) (keepAwakeRef.current ??= new AudioKeepAwake()).start();
       };
       /**
        * Les attentes en pleine lecture — voir `SessionTally`. Ni celles d'un saut, qui a sa ligne,

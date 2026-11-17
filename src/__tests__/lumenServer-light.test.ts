@@ -46,7 +46,9 @@ describe("les échelons", () => {
     expect(rungs.every((r) => /^[0-9a-f]{8}$/.test(r.cid))).toBe(true);
     // Entre 5 et 12 Mb/s : l2 seul (l1 voudrait le double de ses 6 Mb/s).
     expect(lightRungs(heavy({ bandwidth: { peak: 12e6, average: 8e6 } }), encoder).map((r) => r.rung)).toEqual([2]);
-    expect(lightRungs(heavy({ bandwidth: { peak: 6e6, average: 4e6 } }), encoder)).toEqual([]);
+    // l2 dès 1,5 fois sa moyenne (17/11/2026) : 3,75 Mb/s en 8 bits ; en dessous, aucun échelon.
+    expect(lightRungs(heavy({ bandwidth: { peak: 6e6, average: 4e6 } }), encoder).map((r) => r.rung)).toEqual([2]);
+    expect(lightRungs(heavy({ bandwidth: { peak: 5e6, average: 3.7e6 } }), encoder)).toEqual([]);
     expect(lightRungs(heavy({ container: "mp4" }), encoder)).toEqual([]);
     expect(lightRungs(heavy({ video: { ...index.video!, codecId: "V_AV1" } }), encoder)).toEqual([]);
   });

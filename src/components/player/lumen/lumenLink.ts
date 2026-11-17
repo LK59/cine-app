@@ -155,3 +155,12 @@ export async function probeLink(itemId: string, signal?: AbortSignal, fetchImpl:
     return null;
   }
 }
+
+/**
+ * Le débit le plus bas que ce film peut servir (b/s) : son échelon allégé le plus léger, sinon son débit moyen ; null
+ * sans rien de connu. En dessous, la connexion est « trop faible » pour lire sans attendre (`LumenServerHost`).
+ */
+export function lowestServedBps(rungs: readonly { averageBps: number }[] | undefined, filmAverageBps: number | undefined): number | null {
+  const candidates = [...(rungs ?? []).map((r) => r.averageBps), ...(filmAverageBps ? [filmAverageBps] : [])].filter((v) => v > 0);
+  return candidates.length ? Math.min(...candidates) : null;
+}

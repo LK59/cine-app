@@ -2764,6 +2764,62 @@ describe("reprendre quelques secondes avant", () => {
 });
 
 
+describe("le son éveillé pendant la pause (17/11/2026)", () => {
+  function fakeAudio() {
+    const calls: string[] = [];
+    class FakeContext {
+      destination = {};
+      createOscillator() {
+        return { connect: (g: { connect: () => unknown }) => g, start: () => calls.push("start"), stop: () => calls.push("stop"), disconnect: () => {} };
+      }
+      createGain() {
+        return { gain: { value: 1 }, connect: () => ({}) };
+      }
+      resume() {
+        return Promise.resolve();
+      }
+      suspend() {
+        return Promise.resolve();
+      }
+      close() {
+        calls.push("close");
+        return Promise.resolve();
+      }
+    }
+    vi.stubGlobal("AudioContext", FakeContext);
+    return calls;
+  }
+  const asDevice = (ua: string) => Object.defineProperty(navigator, "userAgent", { value: ua, configurable: true });
+  const realUa = navigator.userAgent;
+  afterEach(() => asDevice(realUa));
+
+  it("sur iPhone : un son inaudible pendant la pause, fermé quand la page se cache", async () => {
+    asDevice("Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.3 Mobile/15E148 Safari/604.1");
+    const calls = fakeAudio();
+    mount({ resumeAt: 1200 });
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    const element = videoElement(1300);
+    await act(async () => void fireEvent(element, new Event("pause")));
+    expect(calls).toEqual(["start"]);
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    try {
+      await act(async () => void document.dispatchEvent(new Event("visibilitychange")));
+    } finally {
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    }
+    expect(calls).toContain("close");
+  });
+
+  it("ailleurs (ordinateur, Android) : rien — un onglet afficherait « son en cours » pendant la pause", async () => {
+    asDevice("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36");
+    const calls = fakeAudio();
+    mount({ resumeAt: 1200 });
+    await waitFor(() => expect(screen.getByTestId("controls").dataset.loading).toBe("false"));
+    await act(async () => void fireEvent(videoElement(1300), new Event("pause")));
+    expect(calls).toEqual([]);
+  });
+});
+
 // Relus le 24/09/2026 au soir.
 describe("une reconstruction et ce qu'elle doit garder", () => {
   const playerLines = (kind: string) =>

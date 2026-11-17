@@ -1413,6 +1413,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.54.0",
+    page: "10.43",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Sur iPhone et iPad, le film repart plus vite après une courte pause : le son ne met plus un instant à revenir.",
+        en: "On iPhone and iPad, the film resumes faster after a short pause: the sound no longer takes a moment to come back.",
+        es: "En iPhone y iPad, la película se reanuda más rápido tras una pausa corta: el sonido ya no tarda un instante en volver.",
+        de: "Auf iPhone und iPad läuft der Film nach einer kurzen Pause schneller weiter: Der Ton braucht keinen Moment mehr, um zurückzukommen.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

@@ -211,6 +211,27 @@ describe("l'ouverture", () => {
     expect(controls?.currentAudioId).toBe(2);
   });
 
+  it("« connexion trop faible » : la lecture continue, la pilule dit le lien sous le débit du film après des attentes ; elle s'éteint quand il remonte", async () => {
+    await mount();
+    const el = element();
+    act(() => el.picture(600));
+    // Le film à 20 Mb/s (verdict) ; des segments de 1 Mo reçus en 1 s : 8 Mb/s.
+    let rate = 1000;
+    vi.spyOn(performance, "getEntriesByType").mockImplementation(() =>
+      [1, 2, 3, 4].map((n) => ({ name: `https://x/api/lumen/g1/2-aaaaaaaaaaaa/${String(last("start")?.lumenSession)}/v/${n}.m4s`, startTime: n * 2000, responseEnd: n * 2000 + rate, transferSize: 1_000_000 })) as never
+    );
+    act(() => el.video.dispatchEvent(new Event("waiting")));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(10_000)));
+    expect(document.querySelector("[data-lumen-too-weak]")).toBeNull();
+    act(() => el.video.dispatchEvent(new Event("waiting")));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(10_000)));
+    expect(document.querySelector("[data-lumen-too-weak]")).not.toBeNull();
+    // Le lien remonte (1 Mo en 200 ms : 40 Mb/s, plus de 1,2 fois le film) : la pilule s'éteint.
+    rate = 200;
+    await act(async () => void (await vi.advanceTimersByTimeAsync(10_000)));
+    expect(document.querySelector("[data-lumen-too-weak]")).toBeNull();
+  });
+
   it("le débit annoncé au quart (`bw=bas`) seulement avec une mesure récente du lien, nettement au-dessus du film", async () => {
     // 40 Mb/s mesurés il y a une minute pour un film à 20 Mb/s : le quart.
     localStorage.setItem("cine:lumen-debit", JSON.stringify({ mbps: 40, at: Date.now() - 60_000 }));
@@ -331,6 +352,22 @@ describe("la reprise après une pause", () => {
     play.mockClear();
     void el.video.play();
     expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  it("la reprise mesurée comme Lumen client : de l'appui sur Lecture à l'horloge qui repart (`resumes` du bilan)", async () => {
+    fakeAudio();
+    const view = await mount();
+    const el = element();
+    act(() => el.picture(600));
+    el.pause(true);
+    act(() => el.video.dispatchEvent(new Event("pause")));
+    void el.video.play();
+    el.pause(false);
+    await act(async () => void (await vi.advanceTimersByTimeAsync(300)));
+    act(() => el.at(600.4));
+    view.unmount();
+    expect(last("stop")).toMatchObject({ resumes: 1 });
+    expect(Number(last("stop")?.resumeWaitMs)).toBeGreaterThanOrEqual(300);
   });
 
   it("la page cachée pendant la pause : la veille fermée, pas seulement suspendue (l'écran verrouillé disait « à l'arrêt »)", async () => {

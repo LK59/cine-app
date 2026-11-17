@@ -2131,7 +2131,8 @@
       "unstable": "Conexión perdida o inestable…",
       "subtitlesGenerating": "Subtítulos en generación: no disponibles en la versión ligera. Lo estarán cuando termine la generación.",
       "switched": "Cambio a vídeo ligero por una conexión lenta.",
-      "tapToResume": "Versión aligerada lista. Toca Reproducir para continuar."
+      "tapToResume": "Versión aligerada lista. Toca Reproducir para continuar.",
+      "tooWeak": "Conexión demasiado débil para una reproducción sin cortes."
     },
     "unsupportedBrowser": "Este navegador no puede reproducir este flujo.",
     "playbackInterruptedCheckConnection": "La reproducción se interrumpió. Comprueba tu conexión e inténtalo de nuevo.",

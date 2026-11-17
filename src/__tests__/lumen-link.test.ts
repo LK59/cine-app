@@ -43,3 +43,12 @@ describe("lumenLink", () => {
     expect(withLowBandwidth("/m.m3u8?audio=2&bw=bas")).toBe("/m.m3u8?audio=2&bw=bas");
   });
 });
+
+describe("lowestServedBps", () => {
+  it("l'échelon le plus léger, sinon le film ; rien sans rien", async () => {
+    const { lowestServedBps } = await import("@/components/player/lumen/lumenLink");
+    expect(lowestServedBps([{ averageBps: 8e6 }, { averageBps: 3e6 }], 20e6)).toBe(3e6);
+    expect(lowestServedBps([], 5.6e6)).toBe(5.6e6);
+    expect(lowestServedBps(undefined, undefined)).toBeNull();
+  });
+});

@@ -2131,7 +2131,8 @@
       "unstable": "Verbindung verloren oder instabil…",
       "subtitlesGenerating": "Untertitel werden noch erstellt: in der leichteren Version nicht verfügbar. Sie sind es, sobald die Erstellung abgeschlossen ist.",
       "switched": "Wechsel zu einem leichteren Video wegen einer langsamen Verbindung.",
-      "tapToResume": "Leichtere Version bereit. Tippen Sie auf Wiedergabe, um fortzufahren."
+      "tapToResume": "Leichtere Version bereit. Tippen Sie auf Wiedergabe, um fortzufahren.",
+      "tooWeak": "Verbindung zu schwach für eine Wiedergabe ohne Unterbrechungen."
     },
     "unsupportedBrowser": "Dieser Browser kann diesen Stream nicht abspielen.",
     "playbackInterruptedCheckConnection": "Die Wiedergabe wurde unterbrochen. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",

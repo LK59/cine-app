@@ -7,8 +7,11 @@
 // rester devant la lecture et rattraper un retard, à deux encodages au plus (le iGPU sert aussi Jellyfin et X-Ray).
 // - **l1** : au plus 1920×1080, 8 Mb/s en moyenne, 12 en crête (10 bits) — 6 et 9 en 8 bits ;
 // - **l2** : au plus 1280×720, 3 Mb/s, 4,5 en crête (10 bits) — 2,5 et 3,75 en 8 bits.
-// Un échelon n'existe que si la source pèse au moins le double de sa moyenne : en dessous, il ne soulagerait pas assez
-// une connexion pour valoir un réencodage (une source 1080p à 10 Mb/s n'a que l2).
+// Un échelon n'existe que si la source pèse assez plus que lui (`sourceRatio`) : le double pour l1 (une source 1080p à
+// 10 Mb/s n'a que l2) ; 1,5 fois pour l2 depuis le 17/11/2026 (Louis : « autoriser plus bas, des trucs à 4,5 Mb/s ») —
+// une série à ~5,6 Mb/s comme *Ted Lasso* gagne une 720p à 3 Mb/s, qui tient sur une 4G faible ou un Wi-Fi d'hôtel où
+// l'original s'arrête. En dessous de 720p, pas d'échelon : une connexion qui ne tient pas 3 Mb/s reçoit le message
+// « connexion trop faible » de la page (`LumenServerHost`), pas une image floue.
 // HEVC partout : tout appareil qui lit Lumen serveur (WebKit avec HLS natif) le décode, et le Chromecast n'y passe
 // pas (sa vue `castView` n'a pas d'échelon). 10 bits et PQ gardés pour une source HDR ou Dolby Vision (la couche de
 // base HDR10 d'un DV 8.1 : le RPU ne survit pas au réencodage), 8 bits sinon. Pas d'image B (`-bf 0`) : l'ordre de
@@ -32,15 +35,14 @@ export interface RungShape {
   peak8: number;
   /** `general_level_idc` imposé à l'encodeur (`-level`) : 123 = 4.1, 93 = 3.1. */
   level: number;
+  /** L'échelon n'existe que si la source pèse au moins tant de fois sa moyenne. */
+  sourceRatio: number;
 }
 
 export const RUNG_SHAPES: readonly RungShape[] = [
-  { rung: 1, maxWidth: 1920, maxHeight: 1080, average10: 8_000_000, peak10: 12_000_000, average8: 6_000_000, peak8: 9_000_000, level: 123 },
-  { rung: 2, maxWidth: 1280, maxHeight: 720, average10: 3_000_000, peak10: 4_500_000, average8: 2_500_000, peak8: 3_750_000, level: 93 },
+  { rung: 1, maxWidth: 1920, maxHeight: 1080, average10: 8_000_000, peak10: 12_000_000, average8: 6_000_000, peak8: 9_000_000, level: 123, sourceRatio: 2 },
+  { rung: 2, maxWidth: 1280, maxHeight: 720, average10: 3_000_000, peak10: 4_500_000, average8: 2_500_000, peak8: 3_750_000, level: 93, sourceRatio: 1.5 },
 ];
-
-/** Une source vaut un échelon si elle pèse au moins tant de fois sa moyenne. */
-export const RUNG_SOURCE_RATIO = 2;
 
 /** Les codecs vidéo que le iGPU sait décoder ici (VAAPI, UHD 630) : HEVC et H.264. Ni AV1 ni VP9. */
 const DECODABLE = new Set(["V_MPEGH/ISO/HEVC", "V_MPEG4/ISO/AVC"]);
@@ -81,7 +83,7 @@ export function lightRungs(index: Pick<LumenIndex, "video" | "container" | "band
   for (const shape of RUNG_SHAPES) {
     const average = tenBit ? shape.average10 : shape.average8;
     const peak = tenBit ? shape.peak10 : shape.peak8;
-    if (index.bandwidth.average < RUNG_SOURCE_RATIO * average) continue;
+    if (index.bandwidth.average < shape.sourceRatio * average) continue;
     const size = rungSize(video.width, video.height, shape);
     const cid = createHash("sha256")
       .update(JSON.stringify({ rules: LIGHT_RULES_VERSION, ffmpeg: encoder.version, driver: encoder.driver, rung: shape.rung, size, tenBit, average, peak, level: shape.level, range: video.signal.videoRange }))

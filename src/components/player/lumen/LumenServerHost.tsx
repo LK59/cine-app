@@ -117,7 +117,7 @@ import {
   type LumenVerdict,
   type MasterAudio,
 } from "./lumenOpening";
-import { announcesLowBandwidth, lightRungFor, linkMbpsOf, recentLinkMbps, rememberLink, withLightFirst, withLowBandwidth, type LightRungFacts } from "./lumenLink";
+import { announcesLowBandwidth, lightRungFor, lowestServedBps, linkMbpsOf, recentLinkMbps, rememberLink, withLightFirst, withLowBandwidth, type LightRungFacts } from "./lumenLink";
 import { QualityTally } from "./lumenQuality";
 
 /** La préparation d'un échelon allégé par la page, au plus une fois par tant (`prepare` avec `light`). */
@@ -562,6 +562,7 @@ export function LumenServerHost({
         // La version allégée : le temps par hauteur d'image si Safari a basculé, et les préparations demandées.
         ...qualityTallyRef.current.fields(Date.now()),
         ...(lightPreparesRef.current > 0 ? { lightPrepares: lightPreparesRef.current } : {}),
+        ...(tooWeakRef.current.shown > 0 ? { tooWeak: tooWeakRef.current.shown } : {}),
       };
     }, [lumenSession]),
   });
@@ -805,10 +806,46 @@ export function LumenServerHost({
   // adapté à partir de la position, avant que Safari ne bascule (au plus une fois par minute) — quand il bascule, les
   // segments sont là, et la lecture ne s'arrête pas.
   const lightPrepareAtRef = useRef(0);
+  /**
+   * « Connexion trop faible » (17/11/2026, Louis : plutôt qu'un 480p, lire la version la plus basse possible et le
+   * dire) : la lecture continue, une pilule le dit tant que la connexion mesurée reste sous le débit le plus bas que ce
+   * film peut servir (son échelon allégé le plus léger, sinon l'original) **et** que la lecture vient d'attendre. Deux
+   * mesures de suite (~20 s) pour l'allumer, une mesure nettement au-dessus ou une minute sans attente pour l'éteindre :
+   * un creux de quelques secondes ne l'allume pas. Le bilan compte combien de fois elle est apparue (`tooWeak`).
+   */
+  const [tooWeak, setTooWeak] = useState(false);
+  const tooWeakRef = useRef({ streak: 0, shown: 0, on: false });
+  const lastWaitAtRef = useRef(0);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !src) return;
+    const onWaiting = () => {
+      if (pictureRef.current && !video.seeking) lastWaitAtRef.current = Date.now();
+    };
+    video.addEventListener("waiting", onWaiting);
+    return () => video.removeEventListener("waiting", onWaiting);
+  }, [src, videoKey]);
   useEffect(() => {
     const timer = setInterval(() => {
       if (document.visibilityState !== "visible") return;
       const mbps = linkMbpsOf(lumenSession, lumenResourceSamples());
+      const weak = tooWeakRef.current;
+      const lowest = lowestServedBps(lightRungsRef.current, filmAverageRef.current);
+      const waitedLately = Date.now() - lastWaitAtRef.current < 60_000;
+      if (lowest !== null && (!waitedLately || (mbps !== null && mbps * 1e6 >= 1.2 * lowest))) {
+        weak.streak = 0;
+        if (weak.on) {
+          weak.on = false;
+          setTooWeak(false);
+        }
+      } else if (lowest !== null && mbps !== null && mbps * 1e6 < lowest && waitedLately) {
+        weak.streak += 1;
+        if (weak.streak >= 2 && !weak.on) {
+          weak.on = true;
+          weak.shown += 1;
+          setTooWeak(true);
+        }
+      }
       if (mbps === null) return;
       rememberLink(mbps);
       const rung = lightRungFor(mbps, filmAverageRef.current, lightRungsRef.current);
@@ -1240,9 +1277,24 @@ export function LumenServerHost({
       };
       if (video.paused) flushSeek();
     };
+    /**
+     * La reprise après une pause, mesurée comme Lumen client (`SessionTally.resumeStarted/Ended`, 17/11/2026) : de
+     * l'appui sur Lecture — avant la micro-attente, qui en fait partie — à l'horloge qui repart. Les deux lecteurs se
+     * comparent ainsi sur la même mesure (`resumes`, `resumeWaitMs`, `longestResumeMs` du bilan).
+     */
+    let resume: { at: number; from: number } | null = null;
+    const resumePressed = () => {
+      if (resume || !pictureRef.current || !video.paused || video.ended) return;
+      resume = { at: Date.now(), from: video.currentTime };
+      tallyRef.current.resumeStarted(resume.at);
+    };
     const onTimeUpdate = () => {
       if (pendingSeek && (video.currentTime - pendingSeek.landed >= 0.3 || Date.now() - pendingSeek.at > 10_000)) {
         flushSeek(video.currentTime - pendingSeek.landed >= 0.3 ? Date.now() - pendingSeek.startedAt : undefined);
+      }
+      if (resume && !video.paused && (video.currentTime > resume.from + 0.01 || video.seeking)) {
+        resume = null;
+        tallyRef.current.resumeEnded(Date.now());
       }
     };
     const onWaiting = () => {
@@ -1271,6 +1323,7 @@ export function LumenServerHost({
     const nativePlay = video.play;
     let waking: Promise<void> | null = null;
     video.play = () => {
+      resumePressed();
       if (waking) return waking;
       if (!video.paused || video.ended || !pictureRef.current) return nativePlay.call(video);
       const keep = (keepAwakeRef.current ??= new AudioKeepAwake());
@@ -1288,6 +1341,11 @@ export function LumenServerHost({
       return started;
     };
     const onPause = () => {
+      // Une reprise interrompue par une nouvelle pause s'arrête là (`resumeEnded`, comme Lumen client).
+      if (resume) {
+        resume = null;
+        tallyRef.current.resumeEnded(Date.now());
+      }
       if (!video.ended && pictureRef.current && document.visibilityState === "visible") (keepAwakeRef.current ??= new AudioKeepAwake()).start();
       tallyRef.current.waitEnded(Date.now());
       background.notePaused(Date.now(), { visible: document.visibilityState === "visible", ended: video.ended });
@@ -2117,6 +2175,11 @@ export function LumenServerHost({
       )}
       {!error && !isMini && !introCovering && (isOffline || (loading && loadingLong)) && (
         <ServerWaitPill isOffline={isOffline} seekHint={undefined} compatPrep={false} castSubtitlePrep={false} loadingLong={loadingLong} hlsJs={false} />
+      )}
+      {!error && !isMini && !introCovering && !isOffline && !(loading && loadingLong) && tooWeak && (
+        <div className="pointer-events-none absolute inset-x-0 z-30 flex justify-center px-6" style={{ top: "calc(50% + 2.5rem)" }} data-lumen-too-weak="">
+          <div className="rounded-full bg-black/80 px-4 py-1.5 text-center text-xs text-white shadow-lg ring-1 ring-white/10">{t("player.slowLink.tooWeak")}</div>
+        </div>
       )}
       <ServerPlayerIntro
         key={`${session.openId ?? 0}:${itemId}`}

@@ -2131,7 +2131,8 @@
       "unstable": "Connexion perdue ou instable…",
       "subtitlesGenerating": "Sous-titres en cours de génération : indisponibles dans la version allégée. Ils le seront une fois la génération terminée.",
       "switched": "Passage en vidéo allégée en raison d'une connexion lente.",
-      "tapToResume": "Version allégée prête. Touchez Lecture pour reprendre."
+      "tapToResume": "Version allégée prête. Touchez Lecture pour reprendre.",
+      "tooWeak": "Connexion trop faible pour une lecture sans coupure."
     },
     "unsupportedBrowser": "Ce navigateur ne peut pas lire ce flux.",
     "playbackInterruptedCheckConnection": "La lecture a été interrompue. Vérifiez votre connexion et réessayez.",
