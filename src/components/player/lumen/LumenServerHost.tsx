@@ -147,6 +147,8 @@ export const LUMEN_MAX_REOPENS = 3;
 const STALL_LINE_EVERY_MS = 60_000;
 /** Le délai de la relance en place après une erreur passagère (un 503 « occupé », une coupure brève). */
 export const LUMEN_RETRY_DELAY_MS = 1000;
+/** Une pause plus courte ne fait pas reprendre par un saut sur place (un double appui, un geste hésitant). */
+export const LUMEN_RESUME_PREROLL_MIN_PAUSE_MS = 400;
 /** Ce qu'on accorde au verdict du serveur : un index à froid se construit en ~0,2 s depuis les Cues (§158). */
 const VERDICT_WAIT_MS = 8000;
 /** Après un changement de piste par `audioTracks`, le temps laissé à Safari avant de juger `applied`. */
@@ -429,6 +431,8 @@ export function LumenServerHost({
   const srcSetRef = useRef<{ at: number; resumeAt: number; fragment: boolean } | null>(null);
   /** Le saut de secours, quand Safari a ignoré `#t=` : pas un geste du spectateur. */
   const safetySeekRef = useRef(false);
+  /** Quand la lecture a été mise en pause (la reprise par un saut sur place) : dans une ref, l'effet des sauts se repose à chaque rendu. */
+  const pausedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     errorRef.current = error;
@@ -1053,7 +1057,23 @@ export function LumenServerHost({
       tallyRef.current.waitEnded(Date.now());
       background.notePlaying();
     };
+    /**
+     * La reprise après une pause, par un saut sur place. Sur iPhone, AVFoundation repart avec l'image tout de suite et le
+     * son environ une seconde plus tard — la sortie audio se réveille, la seconde de son est perdue (relevé à l'oreille
+     * le 17/11/2026). Reposer la position exacte avant de repartir lui fait préparer le son et l'image ensemble : un
+     * très court temps d'attente, comme la reprise du lecteur actuel, plutôt qu'une seconde muette. Pas après une pause
+     * brève (un double appui), ni pendant un saut, une fin ou un changement de piste.
+     */
+    const onPlay = () => {
+      const since = pausedAtRef.current;
+      pausedAtRef.current = null;
+      if (since === null || Date.now() - since < LUMEN_RESUME_PREROLL_MIN_PAUSE_MS) return;
+      if (!pictureRef.current || video.seeking || video.ended || pendingAudioRef.current) return;
+      safetySeekRef.current = true;
+      video.currentTime = video.currentTime;
+    };
     const onPause = () => {
+      if (!video.ended && !video.seeking) pausedAtRef.current = Date.now();
       tallyRef.current.waitEnded(Date.now());
       background.notePaused(Date.now(), { visible: document.visibilityState === "visible", ended: video.ended });
       if (pendingSeek) flushSeek();
@@ -1108,6 +1128,7 @@ export function LumenServerHost({
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("playing", onPlaying);
     video.addEventListener("pause", onPause);
+    video.addEventListener("play", onPlay);
     return () => {
       clearInterval(stallTimer);
       flushSeek();
@@ -1117,6 +1138,7 @@ export function LumenServerHost({
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("pause", onPause);
+      video.removeEventListener("play", onPlay);
     };
   }, [src, videoKey, seeks, background, lumenSession, t]);
 

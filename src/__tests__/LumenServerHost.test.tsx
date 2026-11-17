@@ -239,6 +239,31 @@ describe("l'ouverture", () => {
   });
 });
 
+describe("la reprise après une pause", () => {
+  it("après une vraie pause, un saut sur place avant de repartir (son et image préparés ensemble), sans ligne `seek`", async () => {
+    await mount();
+    const el = element();
+    act(() => el.picture(600));
+    let now = 600;
+    const writes: number[] = [];
+    Object.defineProperty(el.video, "currentTime", { get: () => now, set: (v: number) => (writes.push(v), (now = v)), configurable: true });
+    act(() => el.video.dispatchEvent(new Event("pause")));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(2000)));
+    act(() => el.video.dispatchEvent(new Event("play")));
+    expect(writes).toEqual([600]);
+    act(() => {
+      el.video.dispatchEvent(new Event("seeking"));
+      el.video.dispatchEvent(new Event("seeked"));
+    });
+    expect(kinds()).not.toContain("seek");
+    // Une pause brève (un double appui) : aucun saut.
+    act(() => el.video.dispatchEvent(new Event("pause")));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(100)));
+    act(() => el.video.dispatchEvent(new Event("play")));
+    expect(writes).toEqual([600]);
+  });
+});
+
 describe("le repli avant la première image : le lecteur actuel", () => {
   it("le serveur refuse le fichier : déclin prévu, sans adresse posée", async () => {
     verdicts = [{ ok: false, reason: "index-troue", audioTrack: 2, audio: [] }];
