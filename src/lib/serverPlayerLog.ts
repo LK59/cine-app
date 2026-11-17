@@ -131,6 +131,12 @@ export interface ServerPlayerContext {
    */
   player?: "lumen-serveur";
   path?: "remux-serveur";
+  /**
+   * L'identifiant de lecture de Lumen serveur (`s` de l'adresse), quand ce contexte le porte : un Chromecast qui lit
+   * Lumen serveur (§192). La route du journal y joint alors le relevé du serveur (`srv.*`), comme pour `LumenServerHost`
+   * (qui le pose lui-même sur ses lignes). Absent : rien de plus sur la ligne.
+   */
+  lumenSession?: string;
 }
 
 /** Le lecteur serveur a obtenu son flux et le pose sur l'élément. */
@@ -299,5 +305,6 @@ function base(ctx: ServerPlayerContext): Record<string, unknown> {
     ...(ctx.session ? { session: ctx.session } : {}),
     ...(ctx.agent ? { agent: ctx.agent } : {}),
     ...(ctx.target ? { target: ctx.target } : {}),
+    ...(ctx.lumenSession ? { lumenSession: ctx.lumenSession } : {}),
   };
 }

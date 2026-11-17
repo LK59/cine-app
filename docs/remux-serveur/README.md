@@ -1141,6 +1141,108 @@ Puis une lecture réelle dans l'application : la ligne `fallback` porte désorma
    serveur ; après un changement de piste par réouverture ou un AirPlay, la ligne d'incident.
 8. ***Mr. Robot* S01E03** : le test du paragraphe précédent.
 
+## Étape 4c — Chromecast (17/11/2026, DECISIONS §192)
+
+**Ce qui change.** Avec l'option « Lecteur expérimental : remux serveur » allumée **sur l'appareil qui émet**, une
+diffusion vers un Chromecast charge sur le récepteur l'adresse Lumen serveur du titre au lieu du flux de Jellyfin :
+la vidéo remultiplexée telle quelle (mêmes init et segments que la page), le son en AAC. Sans l'option, rien ne change :
+pas une requête de plus, le récepteur reçoit le flux de Jellyfin.
+
+**Pourquoi l'émetteur décide seul.** Le Chromecast ne s'émet que de Chrome ou d'Edge (ordinateur, Android), où Lumen
+serveur n'existe pas dans la page (HLS natif de WebKit, §180) : aucune lecture Lumen ne passe jamais la main à un
+Chromecast. Le récepteur, lui, lit une adresse — le lecteur de la page n'y est pour rien. L'aiguillage est donc
+`lumenCastWanted` (l'option, lue une fois par séance par `lumenChoiceFor` ; ni banc, ni extrait, ni hors ligne) puis le
+verdict du serveur pour un récepteur (`eligibility?cast=1`). Le panneau Compte le dit sur Chrome (« Une diffusion vers
+un Chromecast passe, elle, par le remux du serveur »).
+
+**Ce qu'un récepteur lit** (documentation de Google, « Supported Media » et « Streaming protocols », lue le 17/11/2026) :
+
+| Modèle | Vidéo | Son par Lumen serveur |
+|---|---|---|
+| Chromecast 1re et 2e gén. | H.264 High ≤ 4.1 (1080p30) | AAC |
+| Chromecast 3e gén. | H.264 High ≤ 4.2 (1080p60) | AAC |
+| Chromecast Ultra | H.264 ≤ 4.2, HEVC Main/Main10 ≤ 5.1 (4K60), HDR10, Dolby Vision | AAC |
+| Chromecast avec Google TV | H.264 ≤ 5.1, HEVC Main/Main10 ≤ 5.1 (4K60), HDR10 | AAC |
+| Google TV Streamer | H.264 ≤ 5.2, HEVC Main/Main10 ≤ 5.1, AV1 | AAC |
+
+- **Le son, toujours en AAC.** Le récepteur lit le HLS par MediaSource ; Google ne cite l'AC-3/E-AC-3 qu'en
+  « passthrough » vers un ampli, et le récepteur de Jellyfin n'annonce que `aac` pour du HLS fMP4 (« MSE rejects …
+  AC-3/E-AC-3 there », `codecSupportHelper.ts`) — c'est aussi ce que §122 a vu (un E-AC-3 copié accepté sans jamais
+  lire). Un AAC du fichier est **copié** (`a{N}`, mêmes octets que pour la page) ; tout le reste — DTS, TrueHD, Opus,
+  MP2/MP3 **et** AC-3/E-AC-3 — est **converti en AAC-LC stéréo 192 kb/s** (`TARGET_CAST_AAC`), sous l'option de
+  conversion existante (`LUMEN_AUDIO_CONVERT`, coupée par défaut). Coupée : seuls les titres dont la piste choisie est
+  en AAC passent par Lumen serveur, les autres gardent le flux de Jellyfin (`son-codec`, « chromecast : … »). Le repli
+  en stéréo suit la règle de `fold` (G = L + C·√½ + Ls·√½ (+ Lrs·½), le LFE laissé de côté), comme l'échelle de §122.
+- **La vidéo, telle quelle.** H.264 Baseline/Main/High ; High 10, 4:2:2 et 4:4:4 refusés (`castVideoRefusal`). Le
+  HEVC est tenté : un récepteur qui ne le lit pas (1re à 3e gén.) refuse le chargement ou reste sans image, l'émetteur
+  repasse au flux de Jellyfin (H.264 transcodé) et retient ce récepteur pour la page (`hevc=0` aux titres suivants). Un
+  Dolby Vision 8 garde son `dvvC` dans l'init : le récepteur lit la couche de base (HDR10 ou SDR) ; une entrée `dvh1`
+  est refusée. Le kit de l'émetteur ne dit pas le modèle : c'est l'essai, une fois par récepteur et par page, qui le
+  dit.
+
+**L'adresse et le jeton.** `/api/lumen/{titre}/{version}/{lecture}/cc.{jeton}/master.m3u8?audio=N` — la forme du
+`tv.{jeton}` d'AirPlay (§186), sous **sa propre portée** (`k: "lumen-cc"`, `signLumenCastPass`) : les bornes d'AirPlay
+(un titre, une lecture, la session vivante, un administrateur, six heures, la clé `lumen-tv:`), et un jeton d'une
+portée n'ouvre pas l'adresse de l'autre. Le proxy laisse passer le GET (`lumenCastPassFor`) et la question préalable
+`OPTIONS` (`lumenCastPreflightFor`) ; la route revérifie avec les mêmes fonctions. Toute réponse à une requête sans
+cookie munie de ce jeton porte le CORS de §64 (`*`, jamais d'identifiants), erreurs comprises ; l'`OPTIONS` répond 204
+(`castPreflightResponse`), un jeton refusé 401 sans CORS. Les segments vidéo servis au récepteur nourrissent
+`castProgress` (`player: "lumen-serveur"`), comme AirPlay.
+
+**La liste maître du récepteur** (`castMasterPlaylist`, à part de `masterPlaylist`, dont les octets ne bougent pas) :
+la vue `castView` (le son AAC), **une seule piste son** — celle demandée — et pas de `SUPPLEMENTAL-CODECS`. Le lecteur
+de Google choisit son rendu par `DEFAULT` (« AUTOSELECT n'est pas utilisé ») ; une seule piste ne laisse aucun doute et
+aucune autre conversion à payer. Un changement de piste est un nouveau chargement depuis la télécommande, comme avec
+Jellyfin. Aucune adresse ni aucun octet de la page ne change : `LUMEN_FORMAT_VERSION` ne bouge pas (la vue se calcule à
+la requête depuis l'index ; l'AAC a ses propres noms `a{N}x{cid}` et ses propres clés de cache).
+
+**La grille de l'AAC** (encodeur natif de FFmpeg 7.1.5, mesuré le 17/11/2026 avec le binaire de l'image, signal
+synthétique) : trame de 1 024, délai de 1 024 (la trame j sortie couvre l'instant (j − 1)·1 024, décodée à 1 024
+échantillons près), une trame de plus en sortie qu'en entrée — la règle de §161 avec N = 1 024, d = 1 024. Mais
+**l'encodeur a un état** (psychoacoustique, régulation du débit) : deux fenêtres qui se recouvrent ne donnent **aucune**
+trame identique (0 sur 16), là où l'E-AC-3 les donnait toutes. D'où : **un segment AAC se convertit toujours seul**, sur
+sa propre fenêtre (3 trames de pré-roulement, 3 de queue) — ses octets restent une fonction du fichier, qu'il vienne de
+l'avance (une tâche par segment) ou d'une demande après un saut ; `convertRange` refuse une plage plus large. La
+jointure entre deux segments faits séparément, décodée, s'écarte d'un encodage continu de −26 à −30 dB (−17 à −20 dB
+avec deux trames de pré-roulement) — l'ordre de l'écart entre deux encodages du même son au milieu d'un segment (−25 à
+−32 dB) : pas de clic mesurable. Échelle de temps 48 000 dans l'init et les segments (1 024 échantillons ne tombent pas
+sur la µs) ; `tfdt` = k·1 024 + D arrondi à l'échantillon.
+
+**L'émetteur** (`ChromecastPlayer`, `src/lib/chromecast/lumenCast.ts`). La négociation Jellyfin a toujours lieu (les
+pistes, les sous-titres signés `castToken`, la séance où la reprise est rapportée, et l'adresse du repli). Puis, sous
+l'option : `eligibility?cast=1` (l'index Jellyfin → numéro Matroska par le rang, `matroskaNumberOf`), et le récepteur
+charge l'adresse `cc.` absolue (`application/x-mpegurl`, BUFFERED, `hlsSegmentFormat`/`hlsVideoSegmentFormat` FMP4, la
+position, les sous-titres texte de Jellyfin en WebVTT à côté, comme avant). Un sous-titre en images garde le flux de
+Jellyfin (il l'incruste). **Repli** : un chargement refusé, aucune image en 25 s, ou une erreur du récepteur →
+ligne `fallback` (`target: "chromecast"`, `player: "lumen-serveur"`, `path: "remux-serveur"`, `to: "jellyfin"`, le
+`code` Cast, `picture`), puis le flux de Jellyfin à la même position (`start` `why: "ladder"`), pour le reste du titre.
+**Journal** : les lignes du Chromecast sur Lumen serveur portent `player: "lumen-serveur"`, `path: "remux-serveur"` et
+`lumenSession` (la route du journal y joint le relevé `srv.*`) ; `start` dit `lumenAudio` (« copié », « aac converti ») et
+`lumenVideo`, ou `lumenDeclined` (la raison du serveur) quand l'option est allumée et que le titre reste à Jellyfin.
+
+**Les limites, dites.** Les sous-titres sont ceux de Jellyfin (WebVTT, à l'instant du fichier) : Lumen serveur décale
+tout de D (§155, 3 images + le réordonnancement, ~0,1 à 0,2 s) ; si le lecteur de Google ne recale pas la ligne de temps
+sur le premier segment, sous-titres et position sont décalés d'autant — à vérifier sur appareil. Pas d'AAC 5.1 (le
+lecteur de Google préfère la stéréo). Pas de « Améliorer les dialogues » sur le récepteur (pas plus qu'avant).
+
+### Protocole, sur un Chromecast (l'option allumée dans Chrome)
+
+1. **Chrome sur ordinateur**, panneau Compte → groupe administrateur → « Lecteur expérimental : remux serveur » allumé
+   (et, pour les titres sans AAC, Configuration → « Conversion du son » ouverte aux administrateurs).
+2. **Un titre H.264 à piste AAC** (un épisode de série 1080p) : Lire, puis le bouton Chromecast → le récepteur. Attendu :
+   l'image en quelques secondes, à la position ; `jq 'select(.target=="chromecast") | {kind, player, path, lumenAudio, lumenVideo, lumenDeclined}' player.log`
+   dit `lumen-serveur` / `remux-serveur` / « copié ». Saut, pause, volume depuis la télécommande.
+3. **Un titre E-AC-3 ou DTS** (conversion ouverte) : `lumenAudio: "aac converti"` ; le son juste, synchrone, sans clic
+   toutes les quatre secondes (jointures).
+4. **Un titre HEVC 4K** : sur un Chromecast avec Google TV, l'image ; sur un Chromecast 3e gén., une ligne `fallback`
+   `to: "jellyfin"` puis le flux de Jellyfin — et le titre HEVC suivant ne tente plus Lumen (`lumenDeclined` « HEVC
+   refusé par ce récepteur »).
+5. **Un sous-titre texte** allumé depuis la télécommande : vérifier qu'il tombe juste (le décalage D).
+6. **Changer de piste son** depuis la télécommande : un nouveau chargement, la nouvelle langue.
+7. **Verrouiller / fermer l'onglet** 5 minutes : la télévision continue, la position avance chez Jellyfin (ligne `cast`
+   `serverRelay: true`, `player: "lumen-serveur"`).
+8. **Couper l'option** : la diffusion suivante reprend le flux de Jellyfin, sans requête à `/api/lumen`.
+
 ## Ordre de travail
 
 1. **Preuve sur appareil** : une instance jetable sert la liste et les segments d'un fichier copiable ; on l'ouvre
@@ -1154,6 +1256,8 @@ Puis une lecture réelle dans l'application : la ligne `fallback` porte désorma
 4. **Client** : option du Compte, route `"lumen"`, `LumenServerHost`, repli, journal, page d'activité. **Fait** (§180),
    derrière l'option d'appareil de l'administrateur.
 5. **AirPlay** : liste signée vers l'Apple TV, `castProgress` par segment. **Fait** (étape 4b, §186), à éprouver sur une Apple TV.
+   **Chromecast** : la même adresse sous sa propre portée (`cc.{jeton}`), CORS, le son en AAC. **Fait** (étape 4c, §192),
+   à éprouver sur un récepteur.
 6. **Son converti** : ffmpeg minimal, grille de segments, cache disque. **Fait** (« Phase 2 », §161 à §163), sauf la
    bascule en cours de lecture (avec l'étape 4).
 7. **Débit adaptatif à la volée** : la liste maître déclare d'emblée des variantes allégées (1080p ~6 Mb/s, 720p

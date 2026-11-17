@@ -2522,7 +2522,7 @@
       "openLumenTest": "Lumen server bench",
       "lumenServer": "Experimental player: server remux",
       "lumenServerHint": "On this device, the film is remuxed by the server and played by Safari’s HLS. WebKit only; the current player takes over anything this path cannot play.",
-      "lumenServerSafariOnly": "Safari only: on this browser, the current player stays in place.",
+      "lumenServerSafariOnly": "Safari only for playing here: on this browser, the current player stays in place. Casting to a Chromecast goes through the server remux.",
       "lumenKeepAwake": "Keep sound awake while paused",
       "lumenKeepAwakeHint": "Trial: during a pause, an inaudible sound keeps the audio output awake, so sound resumes together with the picture.",
       "notifReportReply": "Reply to a report",

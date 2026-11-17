@@ -85,7 +85,8 @@ export function masterPlaylist(index: LumenIndex, options: MasterOptions): strin
         name: a.name,
         isDefault: a.isDefault,
         isForced: a.isForced,
-        codecId: a.converted ? "A_EAC3" : a.codecId,
+        // L'AAC d'un récepteur Chromecast (§192) se nomme en AAC ; l'E-AC-3 de §161 comme avant.
+        codecId: a.converted ? (a.converted.target.startsWith("aac") ? "A_AAC" : "A_EAC3") : a.codecId,
         channels: a.converted ? a.converted.channels : a.channels,
         profile: a.signal?.channels.endsWith("/JOC") ? "Dolby Digital Plus + Dolby Atmos" : null,
       })),
@@ -143,6 +144,25 @@ export function masterPlaylist(index: LumenIndex, options: MasterOptions): strin
   if (order.length === 0) lines.push(variant(null, []));
   for (const id of order) lines.push(variant(id, [...new Set(groups.get(id)!.map((a) => a.signal!.codecs))]));
   return `${lines.join("\n")}\n`;
+}
+
+/**
+ * La liste maître servie à un récepteur Chromecast (`cc.{jeton}`, DECISIONS.md §192), à part de celle de la page : la
+ * même forme, sur la vue `castView` (le son en AAC), avec **une seule piste son** — celle demandée (`?audio=N`) — et
+ * sans `SUPPLEMENTAL-CODECS`.
+ * - Une piste : le lecteur de Google choisit son rendu par `DEFAULT` (« AUTOSELECT n'est pas utilisé »), mais une
+ *   seule piste ne laisse aucun doute, et chaque autre piste convertie qu'il irait chercher coûterait une conversion.
+ *   Un changement de piste est un nouveau chargement depuis la page (la télécommande, §64), comme avec Jellyfin.
+ * - Pas de `SUPPLEMENTAL-CODECS` : un Dolby Vision 8 se lit par sa couche de base (`hvc1`), et un attribut que le
+ *   lecteur du récepteur ne connaît pas n'a rien à y gagner.
+ * La liste de la page (`masterPlaylist`) n'est pas touchée : ses octets restent ceux de §185.
+ */
+export function castMasterPlaylist(index: LumenIndex, options: Pick<MasterOptions, "audioTrack" | "labels">): string {
+  const served = servedAudio(index);
+  const chosen = served.find((a) => a.number === options.audioTrack) ?? served.find((a) => a.isDefault) ?? served[0];
+  const video = index.video?.signal ? { ...index.video, signal: { ...index.video.signal, supplementalCodecs: null } } : index.video;
+  const only: LumenIndex = { ...index, video, audio: chosen ? [chosen] : [] };
+  return masterPlaylist(only, { audioTrack: chosen?.number ?? null, labels: options.labels });
 }
 
 /**

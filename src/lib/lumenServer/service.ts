@@ -20,7 +20,7 @@
 // - 401/403/404 ne viennent que du contrôle d'accès (pas de session, pas administrateur, titre caché),
 //   qu'un client de l'application ne rencontre pas en rafale : il n'a jamais reçu ces adresses.
 
-import { signLumenTvPass, withLumenTvPass } from "./tvPass";
+import { signLumenCastPass, signLumenTvPass, withLumenCastPass, withLumenTvPass } from "./tvPass";
 import { existsSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { join } from "node:path";
@@ -43,7 +43,7 @@ import { targetDurationOf } from "./plan";
 import { config } from "@/lib/config";
 import { audienceAllows } from "@/lib/featureAudience";
 import { detectLumenFfmpeg } from "./audio/ffmpeg";
-import { withConversion, type ConversionContext } from "./audio/view";
+import { castVideoFamily, castView, withConversion, type ConversionContext } from "./audio/view";
 import { lumenAudio, type FeedReader, type PlaybackMode } from "./audio/conversion";
 
 // ── Le moteur du processus ───────────────────────────────────────────────────
@@ -242,16 +242,25 @@ export function playbackKey(user: string, s: string): string {
  * L'index de l'élément : son fichier, puis l'index gardé ou construit. Un fichier disparu (renommé
  * par Radarr/Sonarr : `ENOENT` sur l'ancien chemin) fait relire Jellyfin une fois. `cutting` : la découpe
  * et sa cible (`cra` et 4 s sauf essai de la page `/lumen-test`, §157, §158) — un index à part par découpe.
+ * `view` : `"cast"` pour l'adresse d'un récepteur Chromecast (`castView`, §192 — le son en AAC, depuis l'index brut) ;
+ * absent, la vue de la page et d'AirPlay (§161), inchangée.
  */
-export async function lumenIndexOf(itemId: string, cutting: Partial<LumenCutting> = {}, conversion: ConversionContext | null = null): Promise<{ index: LumenIndex } | { refusal: LumenRefusal }> {
+export async function lumenIndexOf(
+  itemId: string,
+  cutting: Partial<LumenCutting> = {},
+  conversion: ConversionContext | null = null,
+  view: "page" | "cast" = "page"
+): Promise<{ index: LumenIndex } | { refusal: LumenRefusal }> {
   const { cut, targetUs } = cuttingOf(cutting.cut, cutting.targetUs);
   const engine = lumenServerEngine();
   let file = await lumenFileOf(itemId);
   for (let attempt = 0; ; attempt++) {
     if ("refusal" in file) return file;
     try {
+      const raw = await engine.index(file.path, targetUs, cut);
+      if (view === "cast") return { index: castView(raw, conversion) };
       // La vue de la conversion (§161) : l'index lui-même quand elle n'est pas permise à cette requête.
-      return { index: withConversion(await engine.index(file.path, targetUs, cut), conversion) };
+      return { index: withConversion(raw, conversion) };
     } catch (error) {
       if (attempt === 0 && (error as NodeJS.ErrnoException)?.code === "ENOENT") {
         file = await lumenFileOf(itemId, { fresh: true });
@@ -467,6 +476,8 @@ export type LumenVerdict =
       cutFacts: LumenCutFacts;
       /** La piste choisie est convertie (§161) : l'état de la conversion de cette lecture. */
       conversion?: { state: "ok" | "tension"; leadS: number };
+      /** L'adresse d'un récepteur (§192) : la famille de la vidéo servie, pour que l'émetteur retienne un refus du HEVC. */
+      castVideo?: "h264" | "hevc";
     }
   | { ok: false; reason: string; detail?: string; audioTrack: number | null; audio: LumenAudioFacts[]; version?: string; cutFacts?: LumenCutFacts }
   /** L'index se construit encore (2 à 25 s à froid) : redemander, la construction continue sans attendre. */
@@ -515,10 +526,16 @@ export async function lumenVerdict(
     session?: Pick<SessionPayload, "role" | "u"> & Partial<Pick<SessionPayload, "jti" | "jfId">>;
     /** L'adresse munie du laissez-passer d'une Apple TV (§186) : le lecteur la demande (`?tv=1`), le banc non. */
     tv?: boolean;
+    /**
+     * L'adresse d'un récepteur Chromecast (§192, `?cast=1`) : la vue `castView` (son AAC), la liste maître du
+     * récepteur, le laissez-passer `cc.{jeton}`. `hevc: false` : l'émetteur sait que ce récepteur a refusé le HEVC
+     * (un premier essai échoué) — le fichier HEVC est alors refusé ici et le récepteur garde le flux de Jellyfin.
+     */
+    cast?: { hevc: boolean };
   } & Partial<LumenCutting>
 ): Promise<LumenVerdict> {
   const conversion = await lumenConversionContext(options.session);
-  const building = lumenIndexOf(itemId, { cut: options.cut, targetUs: options.targetUs }, conversion);
+  const building = lumenIndexOf(itemId, { cut: options.cut, targetUs: options.targetUs }, conversion, options.cast ? "cast" : "page");
   const PENDING = Symbol("pending");
   let timer: ReturnType<typeof setTimeout> | undefined;
   const raced = await Promise.race([
@@ -549,6 +566,14 @@ export async function lumenVerdict(
     trusted: index.keys.trusted ?? 0,
   };
   if (!verdict.ok) return { ok: false, reason: verdict.reason, ...(verdict.detail ? { detail: verdict.detail } : {}), audioTrack, audio, version, cutFacts };
+  const castVideo = options.cast ? castVideoFamily(index) : null;
+  if (options.cast && castVideo === "hevc" && !options.cast.hevc) {
+    return { ok: false, reason: "video-codec", detail: "chromecast : HEVC refusé par ce récepteur", audioTrack, audio, version, cutFacts };
+  }
+  // Le laissez-passer d'un récepteur (§192) : sans lui, l'adresse ne servirait à rien — un compte qui n'en reçoit pas
+  // (pas administrateur, session sans identifiant) garde le flux de Jellyfin.
+  const castToken = options.cast && options.session ? await signLumenCastPass(itemId, options.s, options.session) : null;
+  if (options.cast && !castToken) return { ok: false, reason: "lecture-impossible", detail: "chromecast : pas de laissez-passer", audioTrack, audio, version, cutFacts };
   // L'admission (§163) : une lecture qui aurait à convertir ne commence que si le serveur peut la servir sans
   // dégrader les lectures en cours ; sinon le lecteur actuel prend le titre et convertit dans la page.
   const chosen = index.audio.find((a) => a.number === audioTrack);
@@ -562,12 +587,13 @@ export async function lumenVerdict(
   // Le laissez-passer d'une Apple TV dans le chemin (§186), quand le lecteur le demande : l'élément porte cette adresse
   // dès l'ouverture, et le bouton AirPlay la tend telle quelle au téléviseur, qui n'a pas de cookie. Le banc
   // (`/lumen-test`) n'en demande pas : pas de jeton là où il ne sert pas.
-  const tvToken = options.tv && options.session ? await signLumenTvPass(itemId, options.s, options.session) : null;
+  const tvToken = options.tv && !options.cast && options.session ? await signLumenTvPass(itemId, options.s, options.session) : null;
   const master = masterAddress(itemId, version, options.s, audioTrack);
   return {
     ok: true,
     version,
-    master: tvToken ? withLumenTvPass(master, tvToken) : master,
+    master: castToken ? withLumenCastPass(master, castToken) : tvToken ? withLumenTvPass(master, tvToken) : master,
+    ...(castVideo ? { castVideo } : {}),
     audioTrack,
     audio,
     segments: index.segments.length,

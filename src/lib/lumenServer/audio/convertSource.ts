@@ -50,9 +50,10 @@ import { readDolbyHeader } from "./dolbySilence";
 
 /**
  * Les familles de codecs que Lumen serveur sait convertir, par le `CodecID` Matroska. `dolby` (AC-3/E-AC-3) n'est
- * jamais converti en service — ces pistes se copient — : il sert au banc, qui fait passer une piste copiable par la
- * chaîne de conversion pour comparer son décodage à celui de la copie (la synchronisation image-son, à
- * l'échantillon) et pour éprouver le silence devant une piste qui commence tard.
+ * jamais converti pour la page ni pour une Apple TV — ces pistes se copient — : il sert au banc, qui fait passer une
+ * piste copiable par la chaîne de conversion pour comparer son décodage à celui de la copie (la synchronisation
+ * image-son, à l'échantillon) et pour éprouver le silence devant une piste qui commence tard ; et, depuis le 17/11/2026,
+ * à l'adresse d'un récepteur Chromecast, qui ne lit que l'AAC (`castView`, DECISIONS.md §192).
  */
 export type ConvertCodec = "dts" | "truehd" | "opus" | "mpeg" | "dolby";
 
@@ -217,10 +218,14 @@ export function convertSourceOf(
   track: { codecId: string; codecPrivate: Uint8Array | null; channels: number; sampleRate: number },
   facts: { firstUs: number | null; firstFrame: Uint8Array | null; lastBlockUs: number | null },
   container: "matroska" | "mp4",
-  /** Le banc seul : accepter une piste AC-3/E-AC-3 (voir `ConvertCodec`). */
-  options: { bench?: boolean } = {}
+  /**
+   * Accepter une piste AC-3/E-AC-3 (voir `ConvertCodec`) : le banc, et la vue d'un récepteur Chromecast (`castView`,
+   * DECISIONS.md §192), qui convertit en AAC ce que la page et une Apple TV reçoivent copié.
+   */
+  options: { bench?: boolean; cast?: boolean } = {}
 ): ConvertVerdict {
-  const codec: ConvertCodec | undefined = CONVERT_CODECS[track.codecId] ?? (options.bench && (track.codecId === "A_EAC3" || track.codecId === "A_AC3") ? "dolby" : undefined);
+  const dolby = (options.bench || options.cast) && (track.codecId === "A_EAC3" || track.codecId === "A_AC3");
+  const codec: ConvertCodec | undefined = CONVERT_CODECS[track.codecId] ?? (dolby ? "dolby" : undefined);
   if (!codec) return { ok: false, detail: `codec ${track.codecId}` };
   // Le placement par blocs suppose les Cues et les grappes du Matroska (99,8 % de la bibliothèque) : un MP4 a ses
   // instants exacts mais rien ici ne les lit encore.

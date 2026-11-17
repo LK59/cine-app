@@ -192,6 +192,9 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 /** Un repli qui est une diffusion : le champ posé depuis le 24/09/2026, ou, avant, la phrase. */
 function isCast(r: LogRecord, reason: string): boolean {
   const takeover = r.takeover as { cast?: unknown } | undefined;
+  // Un Chromecast qui n'a pas lu Lumen serveur et repasse au flux de Jellyfin (§192) : la ligne porte `cast: true` (c'est
+  // une diffusion), mais c'est un repli raté, pas une diffusion de plus.
+  if (r.path === "remux-serveur" && r.to === "jellyfin") return false;
   // « fin de diffusion » : la ligne l'écrivait sans champ `cast` avant le 24/09/2026, et chaque
   // diffusion terminée comptait comme un repli raté.
   return (

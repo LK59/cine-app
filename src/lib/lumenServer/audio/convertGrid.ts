@@ -63,20 +63,34 @@ export const LUMEN_AUDIO_VERSION = 1;
  * découpage de trames et son entrée d'échantillon ; rien ailleurs ne suppose l'E-AC-3 sans passer par ce type.
  */
 export interface ConvertTarget {
-  id: "eac3-640-51" | "eac3-256-20";
-  codec: "eac3";
+  id: "eac3-640-51" | "eac3-256-20" | "aac-192-20";
+  codec: "eac3" | "aac";
   bitrate: number;
   channels: 6 | 2;
   /** La disposition donnée à l'encodeur (et au `pan` qui la produit). */
   layout: "5.1(side)" | "stereo";
-  /** `acmod` et `lfeon` attendus dans chaque trame produite. */
+  /** `acmod` et `lfeon` attendus dans chaque trame produite (E-AC-3 ; 0 pour l'AAC, qui ne les a pas). */
   acmod: number;
   lfeon: number;
 }
 
 export const TARGET_51: ConvertTarget = { id: "eac3-640-51", codec: "eac3", bitrate: 640_000, channels: 6, layout: "5.1(side)", acmod: 7, lfeon: 1 };
 export const TARGET_20: ConvertTarget = { id: "eac3-256-20", codec: "eac3", bitrate: 256_000, channels: 2, layout: "stereo", acmod: 2, lfeon: 0 };
+/** Les cibles du lecteur de la page et d'AirPlay (§161) : la détection de ffmpeg les exige toutes deux. */
 export const CONVERT_TARGETS: readonly ConvertTarget[] = [TARGET_51, TARGET_20];
+
+/**
+ * La cible d'un récepteur Chromecast (DECISIONS.md §192) : **AAC-LC stéréo, 192 kb/s**, pour toute source — DTS,
+ * TrueHD, Opus, MP2/MP3 comme AC-3 et E-AC-3. Le récepteur lit le HLS par MediaSource, qui refuse l'AC-3 et l'E-AC-3 en
+ * fMP4 (le récepteur de Jellyfin n'annonce que `aac` pour du HLS fMP4, `codecSupportHelper.ts`, et §122 : un récepteur
+ * qui a accepté un E-AC-3 copié sans jamais lire) ; l'AAC est le seul son que tous les modèles décodent. Stéréo plutôt
+ * que 5.1 : le lecteur de Google préfère deux canaux, et la relance de §122 était déjà « AAC stéréo ». Jamais servie
+ * à la page ni à une Apple TV : seulement sous l'adresse `cc.{jeton}` (`castView`).
+ */
+export const TARGET_CAST_AAC: ConvertTarget = { id: "aac-192-20", codec: "aac", bitrate: 192_000, channels: 2, layout: "stereo", acmod: 0, lfeon: 0 };
+export const CAST_TARGETS: readonly ConvertTarget[] = [TARGET_CAST_AAC];
+/** Toutes les cibles connues (une adresse, une clé de cache se relisent par leur identifiant). */
+export const ALL_TARGETS: readonly ConvertTarget[] = [...CONVERT_TARGETS, ...CAST_TARGETS];
 
 /** La cible d'une source : multicanal (trois canaux ou plus) en 5.1, le reste en 2.0. */
 export function targetFor(sourceChannels: number): ConvertTarget {
@@ -84,13 +98,45 @@ export function targetFor(sourceChannels: number): ConvertTarget {
 }
 
 /**
+ * La grille d'une cible : sa trame, le délai de son encodeur, ses trames de pré-roulement et de queue, et l'échelle de
+ * temps de ses segments.
+ *
+ * **E-AC-3** : la grille de §161, à l'identique (trame de 1 536, délai 256, 2 + 3 trames, la microseconde — 32 000 µs
+ * exactes par trame).
+ *
+ * **AAC** (encodeur natif de FFmpeg 7.1.5, mesuré le 17/11/2026 avec le binaire de l'image) : une trame de 1 024
+ * échantillons, un délai de 1 024 (la trame j sortie couvre l'instant (j − 1)·1 024 de l'entrée, décodé à 1 024
+ * échantillons près), une trame de plus en sortie qu'en entrée. **L'encodeur a un état** (modèle psychoacoustique,
+ * régulation du débit) : deux fenêtres différentes ne donnent **aucune** trame identique (0 sur 16), contrairement à
+ * l'E-AC-3. D'où la règle de `conversion.ts` : un segment AAC se convertit **toujours seul**, sur sa propre fenêtre — ses
+ * octets restent une fonction du fichier (la même fenêtre donne les mêmes octets), et l'avance en fait une tâche par
+ * segment. La jointure entre deux segments faits séparément, décodée, s'écarte d'un encodage continu de −26 à −30 dB
+ * (trois pré-roulements ; −17 à −20 dB avec deux) — l'ordre de l'écart entre deux encodages du même son (−25 à −32 dB
+ * au milieu d'un segment), sans clic. L'échelle de temps est 48 000 : 1 024 échantillons ne tombent pas sur la µs.
+ */
+export interface TargetGrid {
+  frame: number;
+  delay: number;
+  preroll: number;
+  tail: number;
+  timescale: number;
+}
+
+export const EAC3_GRID: TargetGrid = { frame: 1536, delay: 256, preroll: 2, tail: 3, timescale: 1_000_000 };
+export const AAC_GRID: TargetGrid = { frame: 1024, delay: 1024, preroll: 3, tail: 3, timescale: CONVERT_RATE };
+
+export function gridOf(target: Pick<ConvertTarget, "codec"> | null | undefined): TargetGrid {
+  return target?.codec === "aac" ? AAC_GRID : EAC3_GRID;
+}
+
+/**
  * Ce qui fixe les octets d'une cible, en clair : le cache et le nom des rendus le portent.
- * `eac3-640-51-p2`.
+ * `eac3-640-51-p2`, `aac-192-20-p3`.
  */
 export function targetTag(target: ConvertTarget): string {
   // Le pré-roulement du décodeur dépend du codec source (`decoderPrerollOf`) : il est une règle de
   // `LUMEN_AUDIO_VERSION`, pas un réglage de la cible.
-  return `${target.id}-p${ENCODER_PREROLL}`;
+  return `${target.id}-p${gridOf(target).preroll}`;
 }
 
 const HALF_POWER = "0.7071067811865476"; // Math.SQRT1_2, écrit exactement comme `fold`
@@ -114,7 +160,9 @@ const HALF_POWER = "0.7071067811865476"; // Math.SQRT1_2, écrit exactement comm
 export function panFor(sourceChannels: number, target: ConvertTarget): string {
   if (target.channels === 2) {
     if (sourceChannels === 1) return "pan=stereo|c0=c0|c1=c0";
-    // Une source multicanal n'est jamais repliée en stéréo ici (`targetFor`) : ce cas ne sert qu'à la stéréo.
+    // Une source multicanal n'est repliée en stéréo que pour un récepteur Chromecast (`TARGET_CAST_AAC`, §192) : jamais
+    // pour l'E-AC-3 (`targetFor` ne donne la cible 2.0 qu'à la stéréo et au mono).
+    if (sourceChannels >= 3) return stereoFold(sourceChannels);
     return "pan=stereo|c0=c0|c1=c1";
   }
   if (sourceChannels === 8) {
@@ -125,37 +173,65 @@ export function panFor(sourceChannels: number, target: ConvertTarget): string {
   return "pan=5.1(side)|c0=c0|c1=c1|c2=c2";
 }
 
+/**
+ * Le repli en stéréo d'une source multicanal, **la règle de `fold`** vers deux canaux (`audioTranscode.ts`) :
+ * G = L + C·√½ + Ls·√½ (+ Lrs·½ pour un 7.1), D = R + C·√½ + Rs·√½ (+ Rrs·½) ; 3, 4, 5 et 7 canaux gardent leurs trois
+ * premiers rangs (`frontOnly`), soit G = L + C·√½, D = R + C·√½. Le LFE n'entre pas, comme dans `fold`.
+ */
+function stereoFold(sourceChannels: number): string {
+  const h = HALF_POWER;
+  if (sourceChannels === 6) return `pan=stereo|c0=c0+${h}*c2+${h}*c4|c1=c1+${h}*c2+${h}*c5`;
+  if (sourceChannels === 8) return `pan=stereo|c0=c0+${h}*c2+${h}*c4+0.5*c6|c1=c1+${h}*c2+${h}*c5+0.5*c7`;
+  return `pan=stereo|c0=c0+${h}*c2|c1=c1+${h}*c2`;
+}
+
 // ── Les trames d'un segment ──────────────────────────────────────────────────
+//
+// Chaque fonction prend la grille de la cible (`gridOf`), l'E-AC-3 par défaut : les appels de §161 sont inchangés, à
+// l'opération près.
 
 /** La première trame cible dont l'instant est à `us` ou après. */
-export function frameAtOrAfter(us: number): number {
-  return Math.max(0, Math.ceil(us / EAC3_FRAME_US));
+export function frameAtOrAfter(us: number, grid: TargetGrid = EAC3_GRID): number {
+  if (grid.frame === EAC3_FRAME) return Math.max(0, Math.ceil(us / EAC3_FRAME_US));
+  // Deux entiers exacts (< 2⁵³) : la division est correctement arrondie, un multiple exact tombe juste.
+  return Math.max(0, Math.ceil((us * CONVERT_RATE) / (grid.frame * 1_000_000)));
 }
 
 /**
  * Les trames cibles [a, b) des segments [n0, n1) : celles dont l'instant tombe dans [Sₙ₀, Sₙ₁). Le premier
  * segment commence à la trame 0 (aucune trame d'avant l'origine, §155) ; le dernier finit à la fin de l'image.
  */
-export function segmentFrames(index: Pick<LumenIndex, "segments" | "durationUs">, n0: number, n1: number = n0 + 1): [number, number] {
+export function segmentFrames(index: Pick<LumenIndex, "segments" | "durationUs">, n0: number, n1: number = n0 + 1, grid: TargetGrid = EAC3_GRID): [number, number] {
   const segs = index.segments;
-  const a = n0 === 0 ? 0 : frameAtOrAfter(segs[n0].startUs);
-  const b = n1 < segs.length ? frameAtOrAfter(segs[n1].startUs) : frameAtOrAfter(index.durationUs);
+  const a = n0 === 0 ? 0 : frameAtOrAfter(segs[n0].startUs, grid);
+  const b = n1 < segs.length ? frameAtOrAfter(segs[n1].startUs, grid) : frameAtOrAfter(index.durationUs, grid);
   return [a, Math.max(a, b)];
 }
 
 /** La fenêtre d'entrée de l'encodeur pour les trames [a, b), en échantillons absolus (48 kHz, origine 0). */
-export function inputWindow(a: number, b: number): { start: number; end: number } {
-  return { start: (a - ENCODER_PREROLL) * EAC3_FRAME + ENCODER_DELAY, end: (b + ENCODER_TAIL) * EAC3_FRAME + ENCODER_DELAY };
+export function inputWindow(a: number, b: number, grid: TargetGrid = EAC3_GRID): { start: number; end: number } {
+  if (grid === EAC3_GRID) return { start: (a - ENCODER_PREROLL) * EAC3_FRAME + ENCODER_DELAY, end: (b + ENCODER_TAIL) * EAC3_FRAME + ENCODER_DELAY };
+  return { start: (a - grid.preroll) * grid.frame + grid.delay, end: (b + grid.tail) * grid.frame + grid.delay };
 }
 
 /** Le rang, dans la sortie de l'encodeur, de la trame cible `k` d'une conversion qui a commencé à la trame `a`. */
-export function outputRank(k: number, a: number): number {
-  return k - a + ENCODER_PREROLL;
+export function outputRank(k: number, a: number, grid: TargetGrid = EAC3_GRID): number {
+  return k - a + grid.preroll;
 }
 
 /** L'instant de décodage (`tfdt`, µs) de la trame cible `k`. */
 export function frameDecodeUs(k: number, delayUs: number): number {
   return k * EAC3_FRAME_US + delayUs;
+}
+
+/**
+ * L'instant de décodage de la trame `k` et sa durée, dans l'échelle de temps de la grille : la µs pour l'E-AC-3
+ * (`frameDecodeUs`, inchangé), 48 000 pour l'AAC — le délai de présentation commun D (§155) arrondi à l'échantillon
+ * (un écart d'au plus 10 µs avec la vidéo).
+ */
+export function frameTiming(k: number, delayUs: number, grid: TargetGrid = EAC3_GRID): { decodeTime: number; duration: number } {
+  if (grid === EAC3_GRID) return { decodeTime: frameDecodeUs(k, delayUs), duration: EAC3_FRAME_US };
+  return { decodeTime: k * grid.frame + Math.round((delayUs * grid.timescale) / 1e6), duration: grid.frame };
 }
 
 /** Échantillons ↔ µs à 48 kHz. */

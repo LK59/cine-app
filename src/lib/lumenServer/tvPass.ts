@@ -34,9 +34,16 @@ export const LUMEN_TV_LIFETIME_MS = 6 * 60 * 60 * 1000;
 /** Le préfixe du segment de chemin qui porte le jeton : `tv.{jeton}`. */
 export const LUMEN_TV_PREFIX = "tv.";
 
+/**
+ * La portée signée : `lumen` pour une Apple TV (AirPlay, `tv.{jeton}`), `lumen-cc` pour un récepteur Chromecast
+ * (`cc.{jeton}`, DECISIONS.md §192). Un jeton d'une portée n'ouvre jamais l'adresse de l'autre : l'adresse Chromecast
+ * sert une autre liste maître (son AAC, `castView`) et répond en CORS, ce qu'une Apple TV n'a pas à recevoir.
+ */
+type LumenPassScope = "lumen" | "lumen-cc";
+
 interface LumenTvClaims {
-  /** La portée : `lumen`, et rien d'autre. */
-  k: "lumen";
+  /** La portée : `lumen` ou `lumen-cc`, et rien d'autre. */
+  k: LumenPassScope;
   /** Le titre. */
   i: string;
   /** La lecture (`s` de l'adresse). */
@@ -80,17 +87,18 @@ async function getKey(): Promise<CryptoKey> {
   return crypto.subtle.importKey("raw", material, { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
 }
 
+type PassSession = { u: string; role: string; jti?: string | null; jfId?: string | null };
+
 /** Le jeton d'une lecture de ce titre pour cette session ; `null` pour tout autre rôle qu'administrateur. */
-export async function signLumenTvPass(
-  itemId: string,
-  s: string,
-  session: { u: string; role: string; jti?: string | null; jfId?: string | null },
-  now = Date.now()
-): Promise<string | null> {
+export async function signLumenTvPass(itemId: string, s: string, session: PassSession, now = Date.now()): Promise<string | null> {
+  return signScoped("lumen", itemId, s, session, now);
+}
+
+async function signScoped(scope: LumenPassScope, itemId: string, s: string, session: PassSession, now: number): Promise<string | null> {
   // Un lien de partage, un compte ordinaire, une session sans identifiant : pas de laissez-passer — Lumen serveur ne
   // leur est pas ouvert, et un jeton qu'aucune session ne tient ne pourrait pas mourir avec elle.
   if (session.role !== "admin" || !session.jti) return null;
-  const claims: LumenTvClaims = { k: "lumen", i: itemId, s, u: session.u, r: session.role, t: session.jti, ...(session.jfId ? { j: session.jfId } : {}), e: now + LUMEN_TV_LIFETIME_MS };
+  const claims: LumenTvClaims = { k: scope, i: itemId, s, u: session.u, r: session.role, t: session.jti, ...(session.jfId ? { j: session.jfId } : {}), e: now + LUMEN_TV_LIFETIME_MS };
   const payload = base64url(new TextEncoder().encode(JSON.stringify(claims)));
   const signature = base64url(await crypto.subtle.sign("HMAC", await getKey(), new TextEncoder().encode(payload)));
   return `${payload}.${signature}`;
@@ -107,6 +115,17 @@ export async function verifyLumenTvPass(
   now = Date.now(),
   sessionAlive: (jti: string) => boolean = (jti) => sessionDb.exists(jti)
 ): Promise<LumenTvPass | null> {
+  return verifyScoped("lumen", token, itemId, s, now, sessionAlive);
+}
+
+async function verifyScoped(
+  scope: LumenPassScope,
+  token: string | null | undefined,
+  itemId: string,
+  s: string,
+  now: number,
+  sessionAlive: (jti: string) => boolean
+): Promise<LumenTvPass | null> {
   if (!token || token.length > 2048) return null;
   try {
     const [payload, signature, extra] = token.split(".");
@@ -119,7 +138,7 @@ export async function verifyLumenTvPass(
     for (let i = 0; i < expected.length; i++) diff |= expected[i] ^ given[i];
     if (diff !== 0) return null;
     const claims = JSON.parse(new TextDecoder().decode(fromBase64url(payload))) as Partial<LumenTvClaims>;
-    if (claims.k !== "lumen") return null;
+    if (claims.k !== scope) return null;
     if (typeof claims.i !== "string" || claims.i !== itemId) return null;
     if (typeof claims.s !== "string" || claims.s !== s) return null;
     if (typeof claims.e !== "number" || claims.e <= now) return null;
@@ -167,6 +186,63 @@ export async function lumenTvPassFor(req: { method: string; nextUrl: { pathname:
 /** L'adresse de la liste maître munie du jeton : `…/{s}/tv.{jeton}/master.m3u8?audio=N`. */
 export function withLumenTvPass(master: string, token: string): string {
   return master.replace(/\/master\.m3u8(\?|$)/, `/${LUMEN_TV_PREFIX}${token}/master.m3u8$1`);
+}
+
+// ── Le récepteur Chromecast (DECISIONS.md §192) ─────────────────────────────
+
+/** Le préfixe du segment de chemin qui porte le jeton d'un récepteur Chromecast : `cc.{jeton}`. */
+export const LUMEN_CC_PREFIX = "cc.";
+
+/**
+ * Le jeton d'un récepteur Chromecast pour une lecture de ce titre : les bornes du jeton d'une Apple TV (un titre, une
+ * lecture, la session vivante, un administrateur, six heures, la même clé dérivée), sous la portée `lumen-cc`. Un
+ * jeton AirPlay n'ouvre pas l'adresse Chromecast, ni l'inverse (`verifyScoped` compare la portée).
+ */
+export async function signLumenCastPass(itemId: string, s: string, session: PassSession, now = Date.now()): Promise<string | null> {
+  return signScoped("lumen-cc", itemId, s, session, now);
+}
+
+export async function verifyLumenCastPass(
+  token: string | null | undefined,
+  itemId: string,
+  s: string,
+  now = Date.now(),
+  sessionAlive: (jti: string) => boolean = (jti) => sessionDb.exists(jti)
+): Promise<LumenTvPass | null> {
+  return verifyScoped("lumen-cc", token, itemId, s, now, sessionAlive);
+}
+
+/** `/api/lumen/{itemId}/{version}/{s}/cc.{jeton}/{nom…}` → ses parties ; `null` pour toute autre forme (la règle de `tv.`). */
+export function lumenCastAddressOf(pathname: string): LumenTvAddress | null {
+  const m = /^\/api\/lumen\/([^/]+)\/([^/]+)\/([^/]+)\/cc\.([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\/(.+)$/.exec(pathname);
+  if (!m || !isJellyfinId(m[1])) return null;
+  const rest = m[5].split("/");
+  if (rest.some((part) => !part || part === "." || part === "..")) return null;
+  return { itemId: m[1], version: m[2], s: m[3], token: m[4], rest };
+}
+
+/** Un GET d'un récepteur muni d'un laissez-passer Chromecast valable — posé par le proxy, revérifié par la route. */
+export async function lumenCastPassFor(req: { method: string; nextUrl: { pathname: string } }): Promise<LumenTvPass | null> {
+  if (req.method !== "GET") return null;
+  const address = lumenCastAddressOf(req.nextUrl.pathname);
+  if (!address) return null;
+  return verifyLumenCastPass(address.token, address.itemId, address.s);
+}
+
+/**
+ * La question préalable (CORS) d'un récepteur sur la même adresse, avec le même jeton — la règle de `castPreflightFor`
+ * (§64) : un `OPTIONS` n'emporte jamais de cookie, ne lit ni n'écrit rien ; la route y répond, jamais le proxy.
+ */
+export async function lumenCastPreflightFor(req: { method: string; nextUrl: { pathname: string } }): Promise<LumenTvPass | null> {
+  if (req.method !== "OPTIONS") return null;
+  const address = lumenCastAddressOf(req.nextUrl.pathname);
+  if (!address) return null;
+  return verifyLumenCastPass(address.token, address.itemId, address.s);
+}
+
+/** L'adresse de la liste maître munie du jeton d'un récepteur : `…/{s}/cc.{jeton}/master.m3u8?audio=N`. */
+export function withLumenCastPass(master: string, token: string): string {
+  return master.replace(/\/master\.m3u8(\?|$)/, `/${LUMEN_CC_PREFIX}${token}/master.m3u8$1`);
 }
 
 /** Pour les tests : signer des revendications quelconques avec la vraie clé (un jeton forgé de l'intérieur). */

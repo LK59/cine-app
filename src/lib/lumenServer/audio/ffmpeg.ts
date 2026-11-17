@@ -23,7 +23,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { setPriority } from "node:os";
 import { config } from "@/lib/config";
 import { readDolbyHeader } from "./dolbySilence";
-import { CONVERT_RATE, CONVERT_TARGETS, type ConvertTarget } from "./convertGrid";
+import { CONVERT_RATE, CONVERT_TARGETS, TARGET_CAST_AAC, type ConvertTarget } from "./convertGrid";
 
 /** La version de FFmpeg mesurée (prototype et banc du 17/11/2026), celle que `tools/ffmpeg-lumen` construit. */
 export const EXPECTED_FFMPEG_VERSION = "7.1.5";
@@ -121,6 +121,13 @@ async function detect(path: string): Promise<FfmpegDetection> {
       if (why || !frame) return no(`trame de référence ${target.id} : ${why}`, version);
       reference[target.id] = frame;
     }
+    // La cible d'un récepteur Chromecast (§192), en plus : son absence ne retire rien à la conversion E-AC-3 — un binaire
+    // sans encodeur AAC (ou sans décodeur AC-3/E-AC-3, dont l'AAC d'un Chromecast part pour la plupart des pistes) est
+    // simplement sans Chromecast par Lumen serveur, et le récepteur garde le flux de Jellyfin.
+    if (lists.encoders.has("aac") && lists.decoders.has("ac3") && lists.decoders.has("eac3") && lists.demuxers.has("eac3")) {
+      const frames = await referenceFrame(path, TARGET_CAST_AAC).catch(() => null);
+      if (frames) reference[TARGET_CAST_AAC.id] = AAC_LC_STEREO_48K;
+    }
     const sha256 = createHash("sha256").update(readFileSync(/* turbopackIgnore: true */ path)).digest("hex");
     return {
       available: true,
@@ -161,6 +168,8 @@ export function parseFfmpegList(text: string, kind: "codec" | "format" | "filter
 /** Une trame produite pour `target` est-elle conforme ? null si oui, sinon la raison. */
 export function checkTargetFrame(frame: Uint8Array | null | undefined, target: ConvertTarget): string | null {
   if (!frame) return "aucune trame";
+  // L'AAC est vérifié en-tête par en-tête au découpage (`splitAdtsFrames`) : la trame brute n'a plus d'en-tête.
+  if (target.codec === "aac") return frame.length > 0 ? null : "trame vide";
   const head = readDolbyHeader(frame);
   if (!head) return "en-tête illisible";
   if (head.kind !== "eac3" || head.bsid !== 16) return `bsid ${head.bsid}`;
@@ -186,8 +195,47 @@ export function splitEac3Frames(bytes: Uint8Array): Uint8Array[] {
   return frames;
 }
 
+/**
+ * La configuration (AudioSpecificConfig, ISO/IEC 14496-3 §1.6.2.1) de la cible AAC d'un récepteur Chromecast : AAC-LC
+ * (type 2), 48 kHz (indice 3), stéréo (configuration 2), trames de 1 024 — `0x11 0x90`. Constante : ce que l'encodeur
+ * natif de FFmpeg écrit pour ces réglages, et ce que `splitAdtsFrames` vérifie sur chaque trame produite.
+ */
+export const AAC_LC_STEREO_48K = new Uint8Array([0x11, 0x90]);
+
+/**
+ * Les trames brutes d'un flux AAC en ADTS (ISO/IEC 13818-7 §6.2), sans leurs en-têtes : ce que le MP4 porte. Chaque
+ * en-tête est vérifié — AAC-LC, 48 kHz, la configuration de canaux de la cible, un seul bloc par trame. Lève si le flux
+ * ne se découpe pas exactement, comme `splitEac3Frames`.
+ */
+export function splitAdtsFrames(bytes: Uint8Array, channels = 2): Uint8Array[] {
+  const frames: Uint8Array[] = [];
+  for (let at = 0; at < bytes.length; ) {
+    if (at + 7 > bytes.length) throw new Error(`ADTS : ${bytes.length - at} octets restants`);
+    if (bytes[at] !== 0xff || (bytes[at + 1] & 0xf6) !== 0xf0) throw new Error(`ADTS : synchronisation perdue à ${at}`);
+    const protectionAbsent = bytes[at + 1] & 0x01;
+    const profile = bytes[at + 2] >> 6; // type d'objet − 1 : 1 = AAC-LC
+    const frequency = (bytes[at + 2] >> 2) & 0x0f;
+    const config = ((bytes[at + 2] & 0x01) << 2) | (bytes[at + 3] >> 6);
+    const size = ((bytes[at + 3] & 0x03) << 11) | (bytes[at + 4] << 3) | (bytes[at + 5] >> 5);
+    const blocks = (bytes[at + 6] & 0x03) + 1;
+    const header = protectionAbsent ? 7 : 9;
+    if (profile !== 1 || frequency !== 3 || config !== channels || blocks !== 1) throw new Error(`ADTS : trame ${frames.length} hors cible (profil ${profile}, fréquence ${frequency}, canaux ${config}, blocs ${blocks})`);
+    if (size <= header || at + size > bytes.length) throw new Error(`ADTS : trame tronquée à ${at}`);
+    frames.push(bytes.subarray(at + header, at + size));
+    at += size;
+  }
+  return frames;
+}
+
+/** Les trames d'une sortie de l'encodeur, selon la cible. */
+export function splitTargetFrames(bytes: Uint8Array, target: ConvertTarget): Uint8Array[] {
+  return target.codec === "aac" ? splitAdtsFrames(bytes, target.channels) : splitEac3Frames(bytes);
+}
+
 /** Les arguments de l'encodeur pour une cible : les mêmes partout (détection, conversion, banc). */
 export function encoderArgs(target: ConvertTarget): string[] {
+  // L'AAC sort en ADTS : un flux qui se découpe trame par trame sans conteneur (`splitAdtsFrames`).
+  if (target.codec === "aac") return ["-threads", "1", "-c:a", "aac", "-b:a", String(target.bitrate), "-f", "adts", "pipe:1"];
   return ["-threads", "1", "-c:a", "eac3", "-b:a", String(target.bitrate), "-f", "eac3", "pipe:1"];
 }
 
@@ -200,7 +248,7 @@ async function referenceFrame(path: string, target: ConvertTarget): Promise<Uint
     input,
     { timeoutMs: 10_000 }
   );
-  return splitEac3Frames(stdout)[0] ?? null;
+  return splitTargetFrames(stdout, target)[0] ?? null;
 }
 
 // ── Le lancement ─────────────────────────────────────────────────────────────

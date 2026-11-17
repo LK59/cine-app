@@ -32,7 +32,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, type SessionPayload } from "@/lib/auth";
 import { castProgressRelay } from "@/lib/castProgress";
-import { LUMEN_TV_PREFIX, verifyLumenTvPass, type LumenTvPass } from "./tvPass";
+import { LUMEN_CC_PREFIX, LUMEN_TV_PREFIX, verifyLumenCastPass, verifyLumenTvPass, type LumenTvPass } from "./tvPass";
+import { castPreflightResponse, withCastCors } from "@/lib/castCors";
+import { castMasterPlaylist } from "./playlists";
 import { isJellyfinId } from "@/lib/jellyfinPath";
 import { encodePlaylist } from "@/lib/playlistEncoding";
 import { lengthHeader } from "@/lib/responseFraming";
@@ -159,10 +161,16 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
   // Le laissez-passer d'une Apple TV, dans le chemin (`…/{s}/tv.{jeton}/{nom}`, §186) : revérifié ici avec la même
   // fonction que le proxy — ce titre, cette lecture, la session vivante, un administrateur, six heures. Avec lui, le
   // cookie n'est pas regardé : la même adresse sert la page et le téléviseur. Sans lui, la session administrateur.
-  const tvSegment = params.name[0]?.startsWith(LUMEN_TV_PREFIX) ? params.name[0] : null;
+  // Le laissez-passer d'un récepteur Chromecast (`…/{s}/cc.{jeton}/{nom}`, §192) : même vérification sous sa propre
+  // portée (`lumen-cc`), et il change ce qui est servi — la vue `castView` (le son en AAC), la liste maître du
+  // récepteur, des réponses en CORS.
+  const first = params.name[0] ?? "";
+  const cast = first.startsWith(LUMEN_CC_PREFIX);
+  const tvSegment = first.startsWith(LUMEN_TV_PREFIX) || cast ? first : null;
   let tvPass: LumenTvPass | null = null;
   if (tvSegment) {
-    tvPass = isPlaybackId(s) ? await verifyLumenTvPass(tvSegment.slice(LUMEN_TV_PREFIX.length), itemId, s) : null;
+    const token = tvSegment.slice(cast ? LUMEN_CC_PREFIX.length : LUMEN_TV_PREFIX.length);
+    tvPass = isPlaybackId(s) ? await (cast ? verifyLumenCastPass(token, itemId, s) : verifyLumenTvPass(token, itemId, s)) : null;
     // 401, jamais 403/404/400 : un jeton échu en rafale ne doit pas compter pour CrowdSec (`http-probing`).
     if (!tvPass) return NextResponse.json({ error: "Laissez-passer refusé", code: "lumen-tv" }, { status: 401, headers: NO_STORE });
   }
@@ -171,6 +179,35 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
   // l'administrateur reste refusé, et le titre caché à un compte le reste (`assertVisible`). Sans cookie (le
   // téléviseur), le jeton seul.
   const cookied = !!req.cookies.get(SESSION_COOKIE)?.value;
+  // Le récepteur lit depuis le domaine de Google : chaque réponse à un laissez-passer valable, sans cookie, porte le CORS
+  // de §64 (`*`, jamais d'identifiants) — erreurs comprises, pour que le lecteur du récepteur en lise le statut.
+  const checked = { tvPass, cookied, cast, tvSegment, receivedAt, arrivedAt };
+  if (cast && tvPass && !cookied) return withCastCors(await serveChecked(req, params, checked));
+  return serveChecked(req, params, checked);
+}
+
+/**
+ * La question préalable (CORS) d'un récepteur Chromecast sur une adresse `cc.{jeton}` (§192) : 204 avec les en-têtes de
+ * §64 pour un jeton valable (le proxy l'a laissée passer avec la même fonction, `lumenCastPreflightFor`), 401 sans CORS
+ * sinon — jamais 403/404 (CrowdSec). Aucune autre adresse de Lumen serveur ne répond à `OPTIONS` : la page, une Apple
+ * TV, le banc lisent sans question préalable.
+ */
+export async function serveLumenPreflight(params: LumenNameParams): Promise<Response> {
+  const first = params.name[0] ?? "";
+  const token = first.startsWith(LUMEN_CC_PREFIX) ? first.slice(LUMEN_CC_PREFIX.length) : null;
+  const pass = token && isJellyfinId(params.itemId) && isPlaybackId(params.s) ? await verifyLumenCastPass(token, params.itemId, params.s) : null;
+  if (!pass) return NextResponse.json({ error: "Laissez-passer refusé", code: "lumen-tv" }, { status: 401, headers: NO_STORE });
+  return castPreflightResponse();
+}
+
+/** La suite de `serveLumenName`, une fois le laissez-passer éventuel vérifié. */
+async function serveChecked(
+  req: NextRequest,
+  params: LumenNameParams,
+  checked: { tvPass: LumenTvPass | null; cookied: boolean; cast: boolean; tvSegment: string | null; receivedAt: number; arrivedAt: number }
+): Promise<NextResponse> {
+  const { itemId, version, s } = params;
+  const { tvPass, cookied, cast, tvSegment, receivedAt, arrivedAt } = checked;
   const session = tvPass && !cookied ? tvSessionOf(tvPass) : await lumenAccess(req, itemId);
   if (session instanceof NextResponse) return session;
   if (!isLumenVersion(version) || !isPlaybackId(s)) return goneResponse("lumen-inconnu", "Adresse inconnue");
@@ -186,6 +223,8 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
   const cutting = cuttingOfTag(base);
   if (!cutting) return goneResponse("lumen-perime", "Autre version du format", { format: LUMEN_FORMAT_VERSION });
   const name = nameParts.join("/");
+  // L'essai multiplexé n'existe pas pour un récepteur : son adresse ne désigne rien.
+  if (cast && mux) return goneResponse("lumen-inconnu", "Essai multiplexé hors Chromecast");
   const muxed = mux ? parseMuxedPath(name) : null;
   // Les rendus de sous-titres (§191, `subtitles.ts`) : des noms à part, jamais vus du moteur.
   const subtitle = parseSubtitlePath(name);
@@ -195,7 +234,8 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
   let found: Awaited<ReturnType<typeof lumenIndexOf>>;
   try {
     // La vue de la conversion du son (§161) : l'index lui-même sans l'option, sans ffmpeg, ou pour un autre compte.
-    found = await lumenIndexOf(itemId, cutting, await lumenConversionContext(session));
+    // Un récepteur Chromecast : la vue `castView` (§192), depuis l'index brut, avec le même contexte de conversion.
+    found = await lumenIndexOf(itemId, cutting, await lumenConversionContext(session), cast ? "cast" : "page");
   } catch (error) {
     return lumenErrorResponse(error, context).response;
   }
@@ -239,7 +279,7 @@ export async function serveLumenName(req: NextRequest, params: LumenNameParams):
 
   try {
     const resolved = { engine, index, version: ruled, stats, receivedAt, idxMs, context, chrono, session: playbackKey(session.u, s), account: session, television, itemId };
-    return answer(muxed ? await serveMuxed(req, { ...resolved, path: muxed }) : await serveResolved(req, { ...resolved, path: path as LumenPath, mux }));
+    return answer(muxed ? await serveMuxed(req, { ...resolved, path: muxed }) : await serveResolved(req, { ...resolved, path: path as LumenPath, mux, cast }));
   } catch (error) {
     const { response, kind, code } = lumenErrorResponse(error, context);
     noteRefused(stats, kind, code);
@@ -371,6 +411,8 @@ async function serveResolved(
     itemId?: string;
     /** Le compte (la session, ou l'administrateur du laissez-passer) : Jellyfin lu pour lui, pour `?st=` (§191). */
     account?: Pick<SessionPayload, "jfId">;
+    /** L'adresse d'un récepteur Chromecast (§192) : la liste maître du récepteur (`castMasterPlaylist`). */
+    cast?: boolean;
   }
 ): Promise<NextResponse> {
   const { engine, index, path, stats } = r;
@@ -383,6 +425,12 @@ async function serveResolved(
       if (!verdict.ok) return refusedResponse(verdict);
       // Des octets d'un film vont partir : l'indexation des répliques se tait (DECISIONS.md §88).
       noteMediaRead();
+      if (r.cast) {
+        // Le récepteur (§192) : sa propre liste, une seule piste son, ni essai ni groupe par codec.
+        const text = castMasterPlaylist(index, { audioTrack, labels: await labelsFor(req) });
+        noteReady(r.chrono);
+        return playlistResponse(req, text, timing({ app: performance.now() - r.receivedAt, idx: r.idxMs }));
+      }
       // `?groupes=codec` : l'ancienne forme (un groupe par codec), un essai de `/lumen-test` (§185).
       const perCodecGroups = req.nextUrl.searchParams.get("groupes") === "codec";
       let text = engine.master(index, { audioTrack, labels: await labelsFor(req), ...(perCodecGroups ? { perCodecGroups } : {}) });

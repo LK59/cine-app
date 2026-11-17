@@ -57,8 +57,11 @@ export async function GET(req: NextRequest, { params }: Params) {
       session,
       // `tv=1` : l'adresse munie du laissez-passer d'une Apple TV (§186) — le lecteur, pour qu'AirPlay marche.
       tv: q.get("tv") === "1",
+      // `cast=1` : l'adresse d'un récepteur Chromecast (§192) — le son en AAC, le laissez-passer `cc.{jeton}`, CORS.
+      // `hevc=0` : ce récepteur a déjà refusé le HEVC (l'émetteur s'en souvient pour la page).
+      ...(q.get("cast") === "1" ? { cast: { hevc: q.get("hevc") !== "0" } } : {}),
     });
-    if (q.get("mux") === "1" && verdict.ok && verdict.audioTrack !== null) {
+    if (q.get("mux") === "1" && q.get("cast") !== "1" && verdict.ok && verdict.audioTrack !== null) {
       const s = new URL(verdict.master, "http://x").pathname.split("/")[5];
       // Le laissez-passer d'une Apple TV (§186), gardé sur l'adresse de l'essai.
       const tv = /\/tv\.([^/]+)\/master\.m3u8/.exec(verdict.master)?.[1];

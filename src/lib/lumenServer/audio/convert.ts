@@ -16,20 +16,21 @@ import { mediaSegment, type MuxSample, type MuxTrackInfo } from "../../webcodecs
 import { AUDIO_TRACK_ID, LUMEN_TIMESCALE, LumenError, SEQUENCE_STRIDE, type LumenIndex } from "../format";
 import {
   CONVERT_RATE,
-  EAC3_FRAME_US,
-  ENCODER_PREROLL,
-  frameDecodeUs,
+  EAC3_GRID,
+  frameTiming,
+  gridOf,
   inputWindow,
   outputRank,
   panFor,
   samplesToUs,
   segmentFrames,
   type ConvertTarget,
+  type TargetGrid,
 } from "./convertGrid";
 import { decoderPrerollOf, type LumenConvertSource } from "./convertSource";
 import type { AudioFeed, AudioFeedSpec } from "./feed";
 import { setPriority } from "node:os";
-import { checkTargetFrame, encoderArgs, runFfmpeg, splitEac3Frames, type RunResult } from "./ffmpeg";
+import { checkTargetFrame, encoderArgs, runFfmpeg, splitTargetFrames, type RunResult } from "./ffmpeg";
 import type { FfmpegPool } from "./ffmpegPool";
 
 /** La fenêtre d'une conversion, en échantillons absolus, et ses trames. */
@@ -40,9 +41,10 @@ export interface ConvertWindow {
   end: number;
 }
 
-export function windowOf(index: Pick<LumenIndex, "segments" | "durationUs">, n0: number, n1: number): ConvertWindow {
-  const [a, b] = segmentFrames(index, n0, n1);
-  return { a, b, ...inputWindow(a, b) };
+/** La fenêtre des segments [n0, n1) sur la grille d'une cible (l'E-AC-3 de §161 par défaut). */
+export function windowOf(index: Pick<LumenIndex, "segments" | "durationUs">, n0: number, n1: number, grid: TargetGrid = EAC3_GRID): ConvertWindow {
+  const [a, b] = segmentFrames(index, n0, n1, grid);
+  return { a, b, ...inputWindow(a, b, grid) };
 }
 
 /** La fenêtre est-elle entièrement dans le silence de la piste (avant son premier son, après sa fin sûre) ? */
@@ -111,15 +113,18 @@ export function conversionArgs(feed: Pick<AudioFeed, "format" | "startSample" | 
 }
 
 /** Un segment son converti : les trames [aₙ, bₙ) de la conversion, datées sur la grille. */
-export function convertedSegment(frames: readonly Uint8Array[], conversionA: number, a: number, b: number, n: number, delayUs: number): Uint8Array {
+export function convertedSegment(frames: readonly Uint8Array[], conversionA: number, a: number, b: number, n: number, delayUs: number, grid: TargetGrid = EAC3_GRID): Uint8Array {
   if (b <= a) throw new LumenError("segment-vide", `Segment son converti ${n} sans trame.`);
   const samples: MuxSample[] = [];
   for (let k = a; k < b; k++) {
-    const data = frames[outputRank(k, conversionA)];
+    const data = frames[outputRank(k, conversionA, grid)];
     if (!data) throw new LumenError("segment-vide", `Trame ${k} absente de la conversion.`);
-    samples.push({ data, decodeTime: frameDecodeUs(k, delayUs), duration: EAC3_FRAME_US, compositionOffset: 0, isKeyframe: true });
+    const { decodeTime, duration } = frameTiming(k, delayUs, grid);
+    samples.push({ data, decodeTime, duration, compositionOffset: 0, isKeyframe: true });
   }
-  const info: MuxTrackInfo = { id: AUDIO_TRACK_ID, kind: "audio", timescale: LUMEN_TIMESCALE, sampleEntry: new Uint8Array(0), width: 0, height: 0, language: "und" };
+  // L'E-AC-3 à la µs (l'échelle de tout le reste de Lumen serveur) ; l'AAC à 48 000, celle de son init (`view.ts`).
+  const timescale = grid === EAC3_GRID ? LUMEN_TIMESCALE : grid.timescale;
+  const info: MuxTrackInfo = { id: AUDIO_TRACK_ID, kind: "audio", timescale, sampleEntry: new Uint8Array(0), width: 0, height: 0, language: "und" };
   return mediaSegment(info, n * SEQUENCE_STRIDE + 1, samples);
 }
 
@@ -164,7 +169,11 @@ export interface ConvertFacts {
 /** Les segments [n0, n1) d'une piste, convertis par un seul processus. */
 export async function convertRange(job: ConvertJob): Promise<{ segments: Map<number, Uint8Array>; facts: ConvertFacts }> {
   const { index, source, target } = job;
-  const w = windowOf(index, job.n0, job.n1);
+  const grid = gridOf(target);
+  // L'AAC n'a pas d'octets indépendants de sa fenêtre (`AAC_GRID`) : un segment par conversion, toujours — `conversion.ts`
+  // n'en demande jamais plus ; une plage plus large ici serait un défaut de l'appelant, qui ferait d'autres octets.
+  if (grid !== EAC3_GRID && job.n1 - job.n0 !== 1) throw new Error(`Conversion ${target.id} : un segment à la fois (${job.n0}…${job.n1}).`);
+  const w = windowOf(index, job.n0, job.n1, grid);
   let feed: AudioFeed | null = null;
   let feedMs = 0;
   let diskMs = 0;
@@ -200,17 +209,17 @@ export async function convertRange(job: ConvertJob): Promise<{ segments: Map<num
     inputBytes = input.length;
     run = await runFfmpeg(job.ffmpegPath, conversionArgs(feed, w, source.channels, target), input, { timeoutMs: job.timeoutMs, niceness: job.niceness, signal: job.signal, maxOutputBytes });
   }
-  const frames = splitEac3Frames(run.stdout);
-  const needed = ENCODER_PREROLL + (w.b - w.a);
+  const frames = splitTargetFrames(run.stdout, target);
+  const needed = grid.preroll + (w.b - w.a);
   if (frames.length < needed) throw new Error(`Conversion : ${frames.length} trames pour ${needed} attendues.`);
-  for (let i = ENCODER_PREROLL; i < needed; i++) {
+  for (let i = grid.preroll; i < needed; i++) {
     const why = checkTargetFrame(frames[i], target);
     if (why) throw new Error(`Conversion : trame ${i} non conforme (${why}).`);
   }
   const segments = new Map<number, Uint8Array>();
   for (let n = job.n0; n < job.n1; n++) {
-    const [a, b] = segmentFrames(index, n, n + 1);
-    segments.set(n, convertedSegment(frames, w.a, a, b, n, index.delayUs));
+    const [a, b] = segmentFrames(index, n, n + 1, grid);
+    segments.set(n, convertedSegment(frames, w.a, a, b, n, index.delayUs, grid));
   }
   return { segments, facts: { feedMs, diskMs, ffmpegMs: run.ms, inputBytes, frames: w.b - w.a, silent: !feed, firstByteMs: run.firstByteMs, pooled: !!job.pool } };
 }

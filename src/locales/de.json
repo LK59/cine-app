@@ -2522,7 +2522,7 @@
       "openLumenTest": "Lumen-Server-Prüfstand",
       "lumenServer": "Experimenteller Player: Server-Remux",
       "lumenServerHint": "Auf diesem Gerät remuxt der Server den Film, Safaris HLS spielt ihn ab. Nur WebKit; der aktuelle Player übernimmt alles, was dieser Weg nicht abspielen kann.",
-      "lumenServerSafariOnly": "Nur Safari: In diesem Browser bleibt der aktuelle Player.",
+      "lumenServerSafariOnly": "Nur Safari für die Wiedergabe hier: In diesem Browser bleibt der aktuelle Player. Das Streamen auf einen Chromecast läuft über den Server-Remux.",
       "lumenKeepAwake": "Ton während der Pause wach halten",
       "lumenKeepAwakeHint": "Test: Während einer Pause hält ein unhörbarer Ton die Audioausgabe wach, damit der Ton gleichzeitig mit dem Bild weiterläuft.",
       "notifReportReply": "Antwort auf eine Meldung",

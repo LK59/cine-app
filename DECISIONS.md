@@ -11984,3 +11984,65 @@ pistes du flux restent éteintes, et une réouverture suivante (piste son) la ga
 levier du banc). **Tests.** `lumenServer-subtitles.test.ts`, `lumen-cast-subtitles.test.ts`,
 `lumenServer-routes.test.ts` (« les sous-titres dans la liste maître »), `LumenServerHost.test.tsx` (« le sous-titre
 au téléviseur »).
+
+## 192. Lumen serveur vers un Chromecast : l'émetteur décide par son option, le récepteur reçoit `cc.{jeton}` et du son en AAC (17/11/2026)
+
+**Règle.** Avec l'option d'appareil « Lecteur expérimental : remux serveur » allumée sur l'appareil **qui émet**, une
+diffusion Chromecast (§64) charge sur le récepteur l'adresse Lumen serveur du titre au lieu du flux de Jellyfin, quel
+que soit le lecteur de la page — Lumen serveur n'existe pas dans une page Chrome (§180), et le récepteur lit une adresse,
+pas la page. Sans l'option, rien ne change (aucune requête de plus, aucun champ de plus au journal).
+- **L'émetteur** (`ChromecastPlayer.start`) négocie toujours avec Jellyfin (pistes, sous-titres signés, séance de la
+  reprise, adresse du repli), puis, si `lumenCastWanted` (l'option par `lumenChoiceFor`, ni banc, ni extrait, ni hors
+  ligne), un sous-titre qui n'est pas en images et aucun échec sur ce titre, demande `eligibility?cast=1` (la piste par
+  son rang, `matroskaNumberOf`) et charge l'adresse absolue rendue. Un refus du serveur garde le flux de Jellyfin
+  (`lumenDeclined` sur `start`). Un chargement refusé, 25 s sans image ou une erreur du récepteur : ligne `fallback`
+  (`target: "chromecast"`, `player: "lumen-serveur"`, `path: "remux-serveur"`, `to: "jellyfin"`, `code`, `picture`),
+  puis le flux de Jellyfin à la même position (`why: "ladder"`), pour le reste du titre ; un HEVC refusé avant l'image
+  note le récepteur (`noteReceiverRefusedHevc`, en mémoire de la page) et les titres HEVC suivants demandent `hevc=0`.
+- **Le jeton** (`tvPass.ts`) : la forme et les bornes de celui d'une Apple TV (§186), sous la portée signée `lumen-cc`
+  et le préfixe `cc.` — un jeton AirPlay n'ouvre pas l'adresse Chromecast, ni l'inverse. Le proxy laisse passer le GET
+  (`lumenCastPassFor`) et l'`OPTIONS` (`lumenCastPreflightFor`) ; la route revérifie (`serveLumenName`,
+  `serveLumenPreflight`). Toute réponse sans cookie à ce jeton porte le CORS de §64 (`withCastCors`), erreurs comprises ;
+  un jeton refusé : 401 sans CORS.
+- **Ce qui est servi** (`castView`, `castMasterPlaylist`) : la vidéo telle quelle (H.264 Baseline à High, HEVC, DV 8 par
+  sa base ; High 10/4:2:2/4:4:4 et `dvh1` refusés) ; le son **en AAC** — un AAC copié (`a{N}`, les octets de la page),
+  le reste (DTS, TrueHD, Opus, MP2/MP3, **AC-3, E-AC-3**) converti en **AAC-LC stéréo 192 kb/s** (`TARGET_CAST_AAC`) sous
+  `LUMEN_AUDIO_CONVERT`, refusé sans elle ; une liste maître à **une seule piste son**, sans `SUPPLEMENTAL-CODECS`.
+- **La grille de l'AAC** (`AAC_GRID`) : trame 1 024, délai 1 024, 3 + 3 trames, échelle 48 000. **Un segment par
+  conversion**, toujours (`leadPlan`, garde dans `convertRange`) : l'encodeur AAC de FFmpeg a un état, deux fenêtres ne
+  donnent aucune trame identique.
+
+**Pourquoi.** Google ne cite l'AC-3/E-AC-3 qu'en « passthrough » ; le récepteur de Jellyfin n'annonce que `aac` pour du
+HLS fMP4 (MediaSource les refuse) ; §122 a vu un E-AC-3 copié accepté sans jamais lire. L'AAC est le seul son que tous
+les modèles décodent. La vidéo, elle, est remultiplexée sans perte au lieu d'un H.264 1080p transcodé par Jellyfin
+(§64 : 8 bits, SDR, 1080p) — un 4K HEVC HDR va tel quel à un récepteur qui le lit. L'essai HEVC plutôt qu'une liste de
+modèles : le kit ne dit pas le modèle, et le repli d'avant l'image ne coûte qu'un chargement.
+
+**Mesuré** (17/11/2026, le ffmpeg de l'image, signal synthétique) : délai de l'encodeur AAC 1 024 ; 0 trame identique
+sur 16 entre deux fenêtres décalées ; jointure de deux segments faits séparément à −26/−30 dB d'un encodage continu avec
+trois pré-roulements (−17/−20 dB avec deux), l'ordre de l'écart entre deux encodages du même son ; l'AC-3 se décode par
+l'entrée `eac3` de la chaîne (`dolby`). Rien sur un vrai récepteur : le protocole est dans `docs/remux-serveur/README.md`,
+« Étape 4c ».
+
+**Différent exprès.**
+- **`LUMEN_FORMAT_VERSION` inchangé** : aucune adresse ni aucun octet de la page ou d'AirPlay ne bouge ; la vue du
+  récepteur se calcule à la requête depuis l'index (les faits `dolby` d'une AC-3/E-AC-3 depuis sa première trame
+  gardée) ; l'AAC a ses propres noms (`a{N}x{cid}`, un autre `cid` que l'E-AC-3) et ses propres clés de cache.
+- **Jamais d'AAC pour la page ni pour une Apple TV** : la décision « E-AC-3 partout » de §161 tient ; l'AAC n'existe que
+  sous `cc.`.
+- **Stéréo seulement** : le lecteur de Google préfère deux canaux ; l'échelle de §122 était déjà « AAC stéréo ». Le repli
+  suit `fold`.
+- **Les sous-titres restent ceux de Jellyfin** (WebVTT à côté, `castToken`) : non recalés du délai D de §155 — à vérifier
+  sur un récepteur.
+- **Le refus d'un fichier Chromecast compte comme un repli** au panneau Activité (`isCast` l'exclut : `path:
+  "remux-serveur"` + `to: "jellyfin"`), alors que la ligne porte `cast: true`.
+
+**Porteurs.** `src/lib/chromecast/lumenCast.ts`, `ChromecastPlayer.tsx` (`lumenFallback`, `withLumen`), `tvPass.ts`,
+`serve.ts`, la route `[...name]` (`OPTIONS`), `eligibility` (`cast`, `hevc`), `service.ts` (`lumenIndexOf` `view`,
+`lumenVerdict` `cast`, `castVideo`), `audio/view.ts` (`castView`, `castVideoRefusal`, `castVideoFamily`),
+`audio/convertGrid.ts` (`TARGET_CAST_AAC`, `AAC_GRID`, `gridOf`, `frameTiming`, le repli stéréo), `audio/ffmpeg.ts`
+(`splitAdtsFrames`, `encoderArgs`, `AAC_LC_STEREO_48K`, la détection), `audio/convert.ts`, `audio/conversion.ts`
+(`leadPlan`), `audio/convertSource.ts` (`cast`), `playlists.ts` (`castMasterPlaylist`), `proxy.ts`, `serverPlayerLog.ts`
+(`lumenSession`), `activity/seances.ts`, `src/locales/*.json` (`lumenServerSafariOnly`). **Tests.**
+`lumenServer-chromecast.test.ts`, `ChromecastPlayer-lumen.test.tsx`, `activity-lumen-chromecast.test.ts` ; les
+empreintes du lecteur, inchangées.

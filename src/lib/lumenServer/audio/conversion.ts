@@ -437,6 +437,9 @@ export class LumenAudio {
   leadPlan(s: Pick<Session, "index" | "version" | "track" | "target" | "cid" | "lastN">): [number, number] | null {
     const segs = s.index.segments;
     const horizon = segs[s.lastN].startUs + LEAD_US;
+    // L'AAC d'un récepteur Chromecast (§192) : un segment par tâche — ses octets dépendent de la fenêtre convertie
+    // (`AAC_GRID`), et un segment doit rester le même qu'il vienne de l'avance ou d'une demande après un saut.
+    const single = targetById(s.target)?.codec === "aac";
     let n0 = -1;
     for (let n = s.lastN + 1; n < segs.length && segs[n].startUs < horizon; n++) {
       const key = this.keyOf(s.version, s.track, s.target, s.cid, n);
@@ -445,6 +448,7 @@ export class LumenAudio {
       const have = this.memory.has(ks) || this.inflight.has(ks) || (rel !== null && this.disk.has(rel));
       if (n0 < 0) {
         if (!have) n0 = n;
+        if (!have && single) return [n, n + 1];
         continue;
       }
       if (have || segs[n].startUs - segs[n0].startUs >= LEAD_TASK_US) return [n0, n];

@@ -10,7 +10,7 @@ import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { isPublicPath } from "@/lib/publicPaths";
 import { verifySessionFull } from "@/lib/session";
 import { castPassFor, castPreflightFor } from "@/lib/castToken";
-import { lumenTvPassFor } from "@/lib/lumenServer/tvPass";
+import { lumenCastPassFor, lumenCastPreflightFor, lumenTvPassFor } from "@/lib/lumenServer/tvPass";
 import { selfWarmPassFor } from "@/lib/selfWarm";
 import { fromLoopback } from "@/lib/trustedProxy";
 import { sessionDb } from "@/lib/db";
@@ -524,6 +524,10 @@ export async function proxy(req: NextRequest) {
   // par la route avec la même fonction. Avant le rôle, comme `castPassFor` : `ADMIN_ONLY_READS` ne le couvre pas, et
   // c'est voulu — le jeton n'est signé que pour un administrateur, et la route le redemande.
   if (await lumenTvPassFor(req)) return NextResponse.next();
+  // Le laissez-passer d'un récepteur Chromecast pour Lumen serveur (DECISIONS.md §192) : la même règle sous sa propre
+  // portée (`lumen-cc`), sous `…/{lecture}/cc.{jeton}/…` — en GET, et la question préalable CORS (`OPTIONS`) de la même
+  // adresse, à laquelle la route répond. Revérifié par la route avec les mêmes fonctions.
+  if ((await lumenCastPassFor(req)) || (await lumenCastPreflightFor(req))) return NextResponse.next();
   // La question préalable (CORS) d'un récepteur Chromecast, sur la même adresse et avec le même
   // laissez-passer : elle n'emporte jamais de cookie. La route y répond — DECISIONS.md §64.
   if (await castPreflightFor(req)) return NextResponse.next();
