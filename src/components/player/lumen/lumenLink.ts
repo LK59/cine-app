@@ -76,6 +76,43 @@ export function announcesLowBandwidth(linkMbps: number | null, averageBps: numbe
   return linkMbps * 1e6 >= LOW_BANDWIDTH_LINK_RATIO * averageBps;
 }
 
+/**
+ * La version allégée (`lumenServer/light/`) : en dessous de tant de fois le débit moyen du film, la connexion est
+ * faible — la page fait préparer l'échelon adapté d'avance, et une lecture qui s'ouvre sur une connexion qu'on sait
+ * faible démarre sur lui (`?lv=`).
+ */
+export const WEAK_LINK_RATIO = 1.3;
+/** Un échelon tient si la connexion vaut au moins tant de fois sa crête annoncée. */
+export const RUNG_HEADROOM = 1.2;
+
+export interface LightRungFacts {
+  rung: 1 | 2;
+  height: number;
+  averageBps: number;
+  peakBps: number;
+}
+
+/**
+ * L'échelon adapté à une connexion faible, ou null : pas de mesure, pas d'échelon, ou une connexion qui porte le film.
+ * Le meilleur échelon dont la crête passe avec de la marge ; aucun ne passe : le plus léger.
+ */
+export function lightRungFor(linkMbps: number | null, averageBps: number | undefined, rungs: readonly LightRungFacts[] | undefined): 1 | 2 | null {
+  if (linkMbps === null || !averageBps || !rungs?.length) return null;
+  const link = linkMbps * 1e6;
+  if (link >= WEAK_LINK_RATIO * averageBps) return null;
+  const byQuality = [...rungs].sort((a, b) => b.height - a.height);
+  return (byQuality.find((r) => link >= RUNG_HEADROOM * r.peakBps) ?? byQuality[byQuality.length - 1]).rung;
+}
+
+/** L'adresse de la liste maître avec `lv=N` (cet échelon listé d'abord : Safari démarre sur lui). */
+export function withLightFirst(master: string, rung: 1 | 2): string {
+  const hash = master.indexOf("#");
+  const base = hash < 0 ? master : master.slice(0, hash);
+  const tail = hash < 0 ? "" : master.slice(hash);
+  if (/[?&]lv=/.test(base)) return master;
+  return `${base}${base.includes("?") ? "&" : "?"}lv=${rung}${tail}`;
+}
+
 /** L'adresse de la liste maître avec `bw=bas` (le fragment `#t=` éventuel gardé à sa place). */
 export function withLowBandwidth(master: string): string {
   const hash = master.indexOf("#");

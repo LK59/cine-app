@@ -194,6 +194,16 @@ export async function register() {
           taskLog("lumen", d.available ? `ffmpeg ${d.version} détecté pour la conversion du son` : `conversion du son indisponible : ${d.reason}`);
         })
         .catch(() => {});
+      // L'encodeur de la version allégée (`lumenServer/light/encoder.ts`), seulement l'option ouverte : sa détection
+      // encode deux images d'une mire sur le iGPU — rien à y faire quand personne ne s'en servira.
+      import("./lib/config")
+        .then(async ({ config: c }) => {
+          if (c.lumen.light === "off") return;
+          const { detectLightEncoder } = await import("./lib/lumenServer/light/encoder");
+          const d = await detectLightEncoder();
+          taskLog("lumen", d.available ? `ffmpeg ${d.version} (VAAPI, ${d.driver}) détecté pour la version allégée` : `version allégée indisponible : ${d.reason}`);
+        })
+        .catch(() => {});
     }, 5_000);
 
     // Les journaux de l'Activité et leurs séances, prêts avant qu'un administrateur l'ouvre : la

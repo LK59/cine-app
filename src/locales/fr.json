@@ -2263,6 +2263,7 @@
         "audioCacheValue": "{n} segments : {built} convertis, {ram} en mémoire, {disk} sur disque",
         "incidents": "Incidents",
         "eventReopen": "Réouverture à {at} : {reason}",
+        "eventQuality": "Image passée en {height}p",
         "eventAudio": "Piste « {track} » par {via} ({ms} ms)",
         "eventDialogue": "Améliorer les dialogues : {mode} ({ms} ms)",
         "eventRetry": "Relance avant l'image : {reason}",
@@ -3564,7 +3565,11 @@
       "LUMEN_AUDIO_MAX_JOBS": "Conversions simultanées au plus",
       "LUMEN_AUDIO_MAX_SESSIONS": "Lectures qui convertissent au plus",
       "LUMEN_AUDIO_RAM_MB": "Son converti gardé en mémoire (Mo)",
-      "LUMEN_AUDIO_CACHE_GB": "Son converti gardé sur le disque (Go)"
+      "LUMEN_AUDIO_CACHE_GB": "Son converti gardé sur le disque (Go)",
+      "LUMEN_LIGHT": "Version allégée : réencoder au serveur une vidéo plus légère pour les connexions lentes",
+      "LUMEN_LIGHT_MAX_JOBS": "Encodages vidéo simultanés au plus",
+      "LUMEN_LIGHT_RAM_MB": "Vidéo allégée gardée en mémoire (Mo)",
+      "LUMEN_LIGHT_CACHE_GB": "Vidéo allégée gardée sur le disque (Go)"
     },
     "deployHint": {
       "TZ": "Dans docker-compose.yml, sous « environment » :",
@@ -3793,6 +3798,10 @@
       "now": "Maintenant : lectures qui convertissent : {sessions} ; conversions en cours : {running} ; en attente : {queued}.",
       "cache": "Gardé : {memory} en mémoire (sur {memoryCap}), {disk} sur le disque (sur {diskCap}).",
       "day": "Dernières 24 h : {segments} segments convertis, {median} ms en médiane, {max} ms au pire ; renvois vers l'appareil : {fallbacks}."
+    },
+    "lumenLight": {
+      "title": "Version allégée (Lumen serveur)",
+      "why": "Pour une connexion trop lente, le serveur réencode la vidéo plus légère (1080p à 8 Mb/s, 720p à 3 Mb/s, HDR gardé) sur les mêmes segments que l'original, avec la puce graphique du serveur. Safari passe de l'une à l'autre tout seul, sans couper, et les segments allégés sont préparés d'avance quand la connexion faiblit. Il faut donner la puce graphique au conteneur ; sans elle, rien ne change."
     }
   },
   "xrayScan": {

@@ -90,6 +90,12 @@ export interface PlaybackStats {
    */
   conv: ConvStats | null;
   /**
+   * La version allégée (`light/`) : les segments servis par échelon (`l1`, `l2`), ceux qu'il a fallu encoder à la
+   * demande (pas d'avance prête) et le pire encodage — ce que dit, au journal, une lecture que Safari a fait basculer.
+   * Absent tant qu'aucun segment allégé n'a été demandé.
+   */
+  light?: { l1: number; l2: number; built: number; encodeMaxMs: number };
+  /**
    * Les derniers segments remis, du plus ancien au plus récent : `+12.3s v/41 b23 w0 e45`
    * (depuis la première requête, nom, construction, attente dans la file, envoi), `p` s'il était
    * préparé ou partagé, `x` si l'envoi a été coupé. Voir `TRACE_ENTRIES`.
@@ -242,6 +248,17 @@ function convOf(p: PlaybackStats): ConvStats {
 }
 
 /** Un segment son converti remis (§161) : d'où il vient, et ce qu'il a coûté. */
+/** Un segment allégé servi : son échelon, et s'il a fallu l'encoder à la demande. */
+export function noteLight(p: PlaybackStats, facts: { rung: 1 | 2; built: boolean; encodeMs: number }): void {
+  p.light ??= { l1: 0, l2: 0, built: 0, encodeMaxMs: 0 };
+  if (facts.rung === 1) p.light.l1 += 1;
+  else p.light.l2 += 1;
+  if (facts.built) {
+    p.light.built += 1;
+    p.light.encodeMaxMs = Math.max(p.light.encodeMaxMs, Math.round(facts.encodeMs));
+  }
+}
+
 export function noteConverted(p: PlaybackStats, facts: { from: "ram" | "disk" | "built" | "shared"; convMs: number; feedMs: number; waitMs: number }): void {
   const c = convOf(p);
   c.segments += 1;
@@ -353,6 +370,13 @@ export function lumenPlaybackFields(s: string, user: string, now = Date.now()): 
     fields["srv.convMaxMs"] = p.conv.convMaxMs;
     fields["srv.convWaitMaxMs"] = p.conv.waitMaxMs;
     if (p.conv.busy) fields["srv.convBusy"] = p.conv.busy;
+  }
+  // La version allégée, seulement si Safari en a demandé : segments par échelon, encodés à la demande, pire encodage.
+  if (p.light) {
+    if (p.light.l1) fields["srv.l1"] = p.light.l1;
+    if (p.light.l2) fields["srv.l2"] = p.light.l2;
+    if (p.light.built) fields["srv.lightBuilt"] = p.light.built;
+    if (p.light.encodeMaxMs) fields["srv.lightMaxMs"] = p.light.encodeMaxMs;
   }
   return fields;
 }

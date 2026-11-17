@@ -116,6 +116,15 @@ export const CONFIG_LAYOUT = {
       lab: true,
       after: "lumenAudio",
     },
+    // La version allégée (`lumenServer/light/`) : la vidéo réencodée par le iGPU pour les connexions lentes.
+    {
+      group: "playback",
+      keys: ["LUMEN_LIGHT", "LUMEN_LIGHT_MAX_JOBS", "LUMEN_LIGHT_RAM_MB", "LUMEN_LIGHT_CACHE_GB"],
+      titleKey: "config.lumenLight.title",
+      whyKey: "config.lumenLight.why",
+      anchor: "version-allegee",
+      lab: true,
+    },
   ],
   /** Diffusion et hors-ligne : le Chromecast, puis les téléchargements. */
   diffusion: [

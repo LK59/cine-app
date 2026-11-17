@@ -54,7 +54,19 @@ describe("une place par réglage", () => {
   it("Lecture : le lecteur seulement ; le reste a sa page", () => {
     expect(CONFIG_LAYOUT.playback.flatMap(keysOf)).toEqual(["PLAYER_ENABLED", "PLAYER_SERVER_FALLBACK"]);
     // La conversion du son de Lumen serveur (§161) : sa carte à elle, sous le lecteur, « Lab bêta », son état serveur.
-    expect(CONFIG_LAYOUT.lumenAudio.flatMap(keysOf)).toEqual(["LUMEN_AUDIO_CONVERT", "LUMEN_AUDIO_MAX_JOBS", "LUMEN_AUDIO_MAX_SESSIONS", "LUMEN_AUDIO_RAM_MB", "LUMEN_AUDIO_CACHE_GB"]);
+    // Et la version allégée (`lumenServer/light/`), sa carte à elle juste après, « Lab bêta » aussi.
+    expect(CONFIG_LAYOUT.lumenAudio.flatMap(keysOf)).toEqual([
+      "LUMEN_AUDIO_CONVERT",
+      "LUMEN_AUDIO_MAX_JOBS",
+      "LUMEN_AUDIO_MAX_SESSIONS",
+      "LUMEN_AUDIO_RAM_MB",
+      "LUMEN_AUDIO_CACHE_GB",
+      "LUMEN_LIGHT",
+      "LUMEN_LIGHT_MAX_JOBS",
+      "LUMEN_LIGHT_RAM_MB",
+      "LUMEN_LIGHT_CACHE_GB",
+    ]);
+    expect(CONFIG_LAYOUT.lumenAudio[1]).toMatchObject({ lab: true, titleKey: "config.lumenLight.title" });
     expect(CONFIG_LAYOUT.lumenAudio[0]).toMatchObject({ lab: true, after: "lumenAudio" });
     expect(SETTINGS_BY_KEY.get("LUMEN_AUDIO_CONVERT")).toMatchObject({ kind: "audience", fallback: "off" });
     expect(CONFIG_LAYOUT.diffusion.flatMap(keysOf).sort()).toEqual(
