@@ -73,6 +73,31 @@ export function lumenChoiceFor(session: object): boolean {
   return on;
 }
 
+/**
+ * L'essai « Reprise par un saut sur place » (17/11/2026), sous l'option, coupé par défaut : la lecture reprise après une
+ * pause en reposant la position exacte avant `play()`, pour qu'AVFoundation prépare son et image ensemble. Coupé, la
+ * reprise est un simple `play()`, comme tous les lecteurs du marché. Rangé sur l'appareil ; lu à chaque reprise.
+ */
+export const LUMEN_RESUME_SEEK_KEY = "cine:lumen-reprise-saut";
+
+export function lumenResumeSeekOn(): boolean {
+  try {
+    return window.localStorage.getItem(LUMEN_RESUME_SEEK_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setLumenResumeSeek(on: boolean): void {
+  try {
+    if (on) window.localStorage.setItem(LUMEN_RESUME_SEEK_KEY, "1");
+    else window.localStorage.removeItem(LUMEN_RESUME_SEEK_KEY);
+  } catch {
+    // Stockage refusé : l'essai reste coupé, comme il se lit.
+  }
+  notify();
+}
+
 let mediaSourceServed = false;
 
 /** Le lecteur actuel attache une MediaSource dans cette page : plus de HLS natif possible ici. */

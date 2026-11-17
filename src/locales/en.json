@@ -2521,6 +2521,8 @@
       "lumenServer": "Experimental player: server remux",
       "lumenServerHint": "On this device, the film is remuxed by the server and played by Safari’s HLS. WebKit only; the current player takes over anything this path cannot play.",
       "lumenServerSafariOnly": "Safari only: on this browser, the current player stays in place.",
+      "lumenResumeSeek": "Resume with an in-place seek",
+      "lumenResumeSeekHint": "Trial: after a pause, the position is set again before playing, so the sound starts with the picture. Off: plain resume, like other players.",
       "notifReportReply": "Reply to a report",
       "notifReportReplyHint": "When one of your reports gets a reply or changes status.",
       "notifReportNew": "New reports",

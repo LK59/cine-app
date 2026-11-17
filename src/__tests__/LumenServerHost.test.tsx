@@ -240,7 +240,21 @@ describe("l'ouverture", () => {
 });
 
 describe("la reprise après une pause", () => {
-  it("après une vraie pause, un saut sur place avant de repartir (son et image préparés ensemble), sans ligne `seek`", async () => {
+  it("coupé par défaut : la reprise est un simple `play()`, sans saut", async () => {
+    await mount();
+    const el = element();
+    act(() => el.picture(600));
+    let now = 600;
+    const writes: number[] = [];
+    Object.defineProperty(el.video, "currentTime", { get: () => now, set: (v: number) => (writes.push(v), (now = v)), configurable: true });
+    act(() => el.video.dispatchEvent(new Event("pause")));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(2000)));
+    act(() => el.video.dispatchEvent(new Event("play")));
+    expect(writes).toEqual([]);
+  });
+
+  it("l'essai allumé : un saut sur place avant de repartir, même après une pause brève, sans ligne `seek`", async () => {
+    localStorage.setItem("cine:lumen-reprise-saut", "1");
     await mount();
     const el = element();
     act(() => el.picture(600));
@@ -256,11 +270,11 @@ describe("la reprise après une pause", () => {
       el.video.dispatchEvent(new Event("seeked"));
     });
     expect(kinds()).not.toContain("seek");
-    // Une pause brève (un double appui) : aucun saut.
     act(() => el.video.dispatchEvent(new Event("pause")));
     await act(async () => void (await vi.advanceTimersByTimeAsync(100)));
     act(() => el.video.dispatchEvent(new Event("play")));
-    expect(writes).toEqual([600]);
+    expect(writes).toEqual([600, 600]);
+    localStorage.removeItem("cine:lumen-reprise-saut");
   });
 });
 

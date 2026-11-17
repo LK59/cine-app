@@ -2521,6 +2521,8 @@
       "lumenServer": "Experimenteller Player: Server-Remux",
       "lumenServerHint": "Auf diesem Gerät remuxt der Server den Film, Safaris HLS spielt ihn ab. Nur WebKit; der aktuelle Player übernimmt alles, was dieser Weg nicht abspielen kann.",
       "lumenServerSafariOnly": "Nur Safari: In diesem Browser bleibt der aktuelle Player.",
+      "lumenResumeSeek": "Fortsetzen mit Sprung an Ort und Stelle",
+      "lumenResumeSeekHint": "Test: Nach einer Pause wird die Position vor dem Fortsetzen neu gesetzt, damit der Ton mit dem Bild startet. Aus: einfaches Fortsetzen wie bei anderen Playern.",
       "notifReportReply": "Antwort auf eine Meldung",
       "notifReportReplyHint": "Wenn eine Ihrer Meldungen eine Antwort bekommt oder ihren Status ändert.",
       "notifReportNew": "Neue Meldungen",

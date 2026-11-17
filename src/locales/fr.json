@@ -2521,6 +2521,8 @@
       "lumenServer": "Lecteur expérimental : remux serveur",
       "lumenServerHint": "Sur cet appareil, le film est remultiplexé par le serveur et lu par le HLS de Safari. WebKit seulement ; le lecteur actuel reprend tout ce que ce chemin ne sait pas lire.",
       "lumenServerSafariOnly": "Safari seulement : sur ce navigateur, le lecteur actuel reste en place.",
+      "lumenResumeSeek": "Reprise par un saut sur place",
+      "lumenResumeSeekHint": "Essai : après une pause, la position est reposée avant de repartir, pour que le son reparte avec l'image. Coupé : reprise simple, comme les autres lecteurs.",
       "notifReportReply": "Réponse à un signalement",
       "notifReportReplyHint": "Quand un de vos signalements reçoit une réponse ou change d'état.",
       "notifReportNew": "Nouveaux signalements",

@@ -19,7 +19,7 @@ import { useReportBadge } from "@/lib/useReportBadge";
 import { cinemaNavigate } from "@/lib/cinemaRoute";
 import { BenchSection } from "./BenchSection";
 import { setIpadSimulator } from "@/lib/ipadSimulator";
-import { lumenServerOn, setLumenServer, subscribeLumenServer } from "@/lib/lumenServerChoice";
+import { lumenResumeSeekOn, lumenServerOn, setLumenResumeSeek, setLumenServer, subscribeLumenServer } from "@/lib/lumenServerChoice";
 import { playsHlsNatively } from "@/lib/webkitEngine";
 import { useIpadSimulator } from "./IpadSimulatorBadge";
 import { LanguageSelect, SubtitleModeSelect, NotificationChoices, NotificationTest } from "./accountControls";
@@ -411,11 +411,20 @@ function DisplayRows() {
 function LumenServerRow() {
   const t = useT();
   const on = useSyncExternalStore(subscribeLumenServer, lumenServerOn, () => false);
+  const resumeSeek = useSyncExternalStore(subscribeLumenServer, lumenResumeSeekOn, () => false);
   const webkit = useSyncExternalStore(noSubscribe, () => playsHlsNatively(), () => true);
   return (
-    <Row icon={Server} title={t("player.account.lumenServer")} hint={webkit ? t("player.account.lumenServerHint") : t("player.account.lumenServerSafariOnly")}>
-      <Toggle checked={on} ariaLabel={t("player.account.lumenServer")} onChange={(next) => setLumenServer(next)} />
-    </Row>
+    <>
+      <Row icon={Server} title={t("player.account.lumenServer")} hint={webkit ? t("player.account.lumenServerHint") : t("player.account.lumenServerSafariOnly")}>
+        <Toggle checked={on} ariaLabel={t("player.account.lumenServer")} onChange={(next) => setLumenServer(next)} />
+      </Row>
+      {/* L'essai de la reprise (17/11/2026) : visible seulement l'option allumée, à comparer à l'oreille avec et sans. */}
+      {on && (
+        <Row icon={Server} title={t("player.account.lumenResumeSeek")} hint={t("player.account.lumenResumeSeekHint")}>
+          <Toggle checked={resumeSeek} ariaLabel={t("player.account.lumenResumeSeek")} onChange={(next) => setLumenResumeSeek(next)} />
+        </Row>
+      )}
+    </>
   );
 }
 

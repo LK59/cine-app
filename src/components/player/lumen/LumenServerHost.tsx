@@ -91,7 +91,7 @@ import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
 import { dualSubtitleMemory, pickRememberedDual, rememberDual } from "@/lib/dualSubtitles";
 import { labelAudioTracks } from "@/lib/trackLabel";
 import { toJellyfinLanguage, trackLanguage, type TrackPreferences } from "@/lib/trackPreferences";
-import { declineLumen } from "@/lib/lumenServerChoice";
+import { declineLumen, lumenResumeSeekOn } from "@/lib/lumenServerChoice";
 import { readLumenPrepared } from "@/lib/lumenSheetPrepare";
 import type { StableTakeover } from "@/lib/useStableFallback";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
@@ -147,8 +147,6 @@ export const LUMEN_MAX_REOPENS = 3;
 const STALL_LINE_EVERY_MS = 60_000;
 /** Le délai de la relance en place après une erreur passagère (un 503 « occupé », une coupure brève). */
 export const LUMEN_RETRY_DELAY_MS = 1000;
-/** Une pause plus courte ne fait pas reprendre par un saut sur place (un double appui, un geste hésitant). */
-export const LUMEN_RESUME_PREROLL_MIN_PAUSE_MS = 400;
 /** Ce qu'on accorde au verdict du serveur : un index à froid se construit en ~0,2 s depuis les Cues (§158). */
 const VERDICT_WAIT_MS = 8000;
 /** Après un changement de piste par `audioTracks`, le temps laissé à Safari avant de juger `applied`. */
@@ -1060,14 +1058,15 @@ export function LumenServerHost({
     /**
      * La reprise après une pause, par un saut sur place. Sur iPhone, AVFoundation repart avec l'image tout de suite et le
      * son environ une seconde plus tard — la sortie audio se réveille, la seconde de son est perdue (relevé à l'oreille
-     * le 17/11/2026). Reposer la position exacte avant de repartir lui fait préparer le son et l'image ensemble : un
-     * très court temps d'attente, comme la reprise du lecteur actuel, plutôt qu'une seconde muette. Pas après une pause
-     * brève (un double appui), ni pendant un saut, une fin ou un changement de piste.
+     * le 17/11/2026). Reposer la position exacte avant de repartir lui fait peut-être préparer le son et l'image
+     * ensemble. Un ESSAI, sous l'option de l'appareil « Reprise par un saut sur place » (`lumenResumeSeekOn`), coupé par
+     * défaut : coupé, un simple `play()` comme tous les lecteurs du marché. Jamais pendant un saut, une fin ou un
+     * changement de piste.
      */
     const onPlay = () => {
       const since = pausedAtRef.current;
       pausedAtRef.current = null;
-      if (since === null || Date.now() - since < LUMEN_RESUME_PREROLL_MIN_PAUSE_MS) return;
+      if (since === null || !lumenResumeSeekOn()) return;
       if (!pictureRef.current || video.seeking || video.ended || pendingAudioRef.current) return;
       safetySeekRef.current = true;
       video.currentTime = video.currentTime;
