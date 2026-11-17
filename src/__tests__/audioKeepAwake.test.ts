@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AudioKeepAwake, KEEP_AWAKE_MAX_MS, KEEP_AWAKE_TAIL_MS, KEEP_AWAKE_WAKE_MS } from "@/components/player/lumen/audioKeepAwake";
+import { AudioKeepAwake, KEEP_AWAKE_MAX_MS, KEEP_AWAKE_TAIL_MS, KEEP_AWAKE_WAKE_MS } from "@/components/player/audioKeepAwake";
 
 // La veille de la sortie audio pendant une pause (Lumen serveur, 17/11/2026) : cinq minutes, puis la reprise attend
 // le réveil de la sortie (`awake()` faux) — la micro-attente du lecteur.

@@ -10,7 +10,6 @@ import { SESSION_EXPIRED_HEADER } from "@/lib/sessionExpired";
 import { isPublicPath } from "@/lib/publicPaths";
 import { verifySessionFull } from "@/lib/session";
 import { castPassFor, castPreflightFor } from "@/lib/castToken";
-import { lumenCastPassFor, lumenCastPreflightFor, lumenTvPassFor } from "@/lib/lumenServer/tvPass";
 import { selfWarmPassFor } from "@/lib/selfWarm";
 import { fromLoopback } from "@/lib/trustedProxy";
 import { sessionDb } from "@/lib/db";
@@ -301,20 +300,6 @@ const ADMIN_ONLY_READS: RegExp[] = [
   // compris. La route le vérifie aussi (`adminOnly`) ; ses écritures (scan, décision) ne sont pas dans la
   // liste blanche des comptes.
   /^\/api\/admin\/subsync(\/|$)/,
-  // La conversion du son de Lumen serveur (§161) vue de la Configuration : ffmpeg détecté, la file, le cache. La
-  // route le vérifie aussi (`adminOnly`) ; son geste (refaire la détection, POST) n'est pas dans la liste blanche.
-  /^\/api\/admin\/lumen-audio(\/|$)/,
-  // La version allégée de Lumen serveur vue de la Configuration : l'encodeur et le iGPU détectés, ce qu'il a encodé.
-  // La route le vérifie aussi (`adminOnly`) ; son geste (refaire la détection, POST) n'est pas dans la liste blanche.
-  /^\/api\/admin\/lumen-light(\/|$)/,
-  // Lumen serveur, phase de test (DECISIONS.md §156) : listes, segments, éligibilité, préparation — à
-  // l'administrateur seul. Les routes le revérifient (`lumenAccess`) : ce motif ne ferme que les requêtes
-  // munies d'une session, et un laissez-passer de diffusion passe *avant* lui (`castPassFor`, plus bas) —
-  // il ne s'applique pas ici parce que `castItemOf` ne reconnaît pas `/api/lumen/…`. Le seul jeton que ces
-  // adresses connaissent est celui d'une Apple TV (`lumenTvPassFor`, §186) : sa propre clé, sa portée
-  // `lumen`, un administrateur, un titre et une lecture, la forme `…/tv.{jeton}/{nom}` en GET — revérifié par
-  // la route. La préparation (POST) n'est pas dans la liste blanche des écritures : refusée d'office.
-  /^\/api\/lumen(\/|$)/,
 ];
 
 function isAdminOnlyRead(pathname: string): boolean {
@@ -522,15 +507,6 @@ export async function proxy(req: NextRequest) {
    * laissez-passer ne doit jamais pouvoir contourner ce qui précède.
    */
   if (await castPassFor(req)) return NextResponse.next();
-  // Le laissez-passer d'une Apple TV pour Lumen serveur (DECISIONS.md §186) : le même principe, sa propre clé et sa
-  // propre portée signée, un GET sous `/api/lumen/{titre}/{version}/{lecture}/tv.{jeton}/…` seulement — revérifié
-  // par la route avec la même fonction. Avant le rôle, comme `castPassFor` : `ADMIN_ONLY_READS` ne le couvre pas, et
-  // c'est voulu — le jeton n'est signé que pour un administrateur, et la route le redemande.
-  if (await lumenTvPassFor(req)) return NextResponse.next();
-  // Le laissez-passer d'un récepteur Chromecast pour Lumen serveur (DECISIONS.md §192) : la même règle sous sa propre
-  // portée (`lumen-cc`), sous `…/{lecture}/cc.{jeton}/…` — en GET, et la question préalable CORS (`OPTIONS`) de la même
-  // adresse, à laquelle la route répond. Revérifié par la route avec les mêmes fonctions.
-  if ((await lumenCastPassFor(req)) || (await lumenCastPreflightFor(req))) return NextResponse.next();
   // La question préalable (CORS) d'un récepteur Chromecast, sur la même adresse et avec le même
   // laissez-passer : elle n'emporte jamais de cookie. La route y répond — DECISIONS.md §64.
   if (await castPreflightFor(req)) return NextResponse.next();

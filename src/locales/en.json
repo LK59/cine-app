@@ -2131,8 +2131,7 @@
       "unstable": "Connection lost or unstable…",
       "subtitlesGenerating": "Subtitles are still being generated: not available in the lighter version. They will be once generation is finished.",
       "switched": "Switching to a lighter video because the connection is slow.",
-      "tapToResume": "Lighter version ready. Tap Play to resume.",
-      "tooWeak": "Connection too weak for uninterrupted playback."
+      "tapToResume": "Lighter version ready. Tap Play to resume."
     },
     "unsupportedBrowser": "This browser can't play this stream.",
     "playbackInterruptedCheckConnection": "Playback was interrupted. Check your connection and try again.",
@@ -2229,48 +2228,7 @@
       "describeLighter": "Slow connection: the server re-encodes the video at {rate} so playback can continue.",
       "lighterSwitchedAt": "Automatic switch (slow connection) at {position}",
       "lighterSwitched": "Automatic switch (slow connection)",
-      "lighterInherited": "Lighter version carried over from the previous playback (less than 2 min earlier)",
-      "lumen": {
-        "name": "Server remux (HLS)",
-        "detail": "the server remuxes, the device plays native HLS",
-        "note": "Lumen server: each segment is remuxed on demand from the file; the picture is never transcoded.",
-        "delivery": "Delivery",
-        "repairs": "Repaired",
-        "sectionRemux": "Server remux",
-        "path": "Path",
-        "format": "Format version",
-        "cut": "Segmentation",
-        "segments": "Segments",
-        "segmentsValue": "{n} (target {s} s)",
-        "resume": "Resume",
-        "airplay": "AirPlay",
-        "airplayOn": "to a TV",
-        "airplayOff": "no",
-        "airplaySubtitles": "Subtitles on the TV",
-        "airplaySubtitlesNone": "none",
-        "session": "Playback",
-        "sectionReceived": "Received by the device",
-        "received": "Segments",
-        "receivedValue": "{v} video · {a} audio",
-        "recvRate": "Receive rate",
-        "sectionServer": "The server",
-        "served": "Segments served",
-        "volume": "Data served",
-        "volumeValue": "{n} MB",
-        "build": "Build time",
-        "buildValue": "{avg} ms average, {max} ms worst",
-        "queue": "Queue wait",
-        "audioCache": "Converted audio",
-        "audioCacheValue": "{n} segments: {built} converted, {ram} from memory, {disk} from disk",
-        "incidents": "Incidents",
-        "eventReopen": "Reopened at {at}: {reason}",
-        "eventQuality": "Picture switched to {height}p",
-        "eventAudio": "Track “{track}” via {via} ({ms} ms)",
-        "eventDialogue": "Enhance dialogue: {mode} ({ms} ms)",
-        "eventRetry": "Retried before the picture: {reason}",
-        "eventCastOn": "AirPlay to a TV at {at}",
-        "eventCastOff": "AirPlay ended at {at}"
-      }
+      "lighterInherited": "Lighter version carried over from the previous playback (less than 2 min earlier)"
     },
     "experimental": {
       "title": "The experimental player could not play this file",
@@ -2522,10 +2480,6 @@
       "ipadSim": "iPad simulator",
       "ipadSimQuit": "Leave iPad simulator",
       "openPipTest": "Picture in Picture test",
-      "openLumenTest": "Lumen server bench",
-      "lumenServer": "Experimental player: Lumen server",
-      "lumenServerHint": "On this device, the film is remuxed by the server and played by Safari’s HLS. WebKit only; the current player takes over anything this path cannot play.",
-      "lumenServerSafariOnly": "Safari only for playing here: on this browser, the current player stays in place. Casting to a Chromecast goes through the server remux.",
       "notifReportReply": "Reply to a report",
       "notifReportReplyHint": "When one of your reports gets a reply or changes status.",
       "notifReportNew": "New reports",
@@ -3561,17 +3515,7 @@
       "REPLIQUES_NIGHT_END": "Night window end",
       "REPLIQUES_LANGUAGES": "Dialogue languages",
       "ASK_PERSON_ENABLED": "Questions about a person: in the panel of an “On screen” actor, up to two suggested questions “How is X connected to Y?” with the other characters in the scene (no free input)",
-      "SOFAR_ENABLED": "“So far”: in the panel of an “On screen” actor, two sentences on what their character has done so far",
-      "LUMEN_AUDIO_CONVERT": "Lumen server: convert on the server the sound Safari can't play (DTS, TrueHD, Opus, MP2/MP3 → E-AC-3)",
-      "LUMEN_AUDIO_MAX_JOBS": "Maximum simultaneous conversions",
-      "LUMEN_AUDIO_MAX_SESSIONS": "Maximum playbacks converting at once",
-      "LUMEN_AUDIO_RAM_MB": "Converted sound kept in memory (MB)",
-      "LUMEN_AUDIO_CACHE_GB": "Converted sound kept on disk (GB)",
-      "LUMEN_SERVER_ENABLED": "Lumen server on this installation (administrators, device by device)",
-      "LUMEN_LIGHT": "Lumen server: lighter versions re-encoded by the server's GPU",
-      "LUMEN_LIGHT_MAX_JOBS": "Video encodes at once, at most",
-      "LUMEN_LIGHT_RAM_MB": "Lighter video kept in memory (MB)",
-      "LUMEN_LIGHT_CACHE_GB": "Lighter video kept on disk (GB)"
+      "SOFAR_ENABLED": "“So far”: in the panel of an “On screen” actor, two sentences on what their character has done so far"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml, under “environment”:",
@@ -3777,7 +3721,6 @@
       "xrayOn": "actors on screen turned on",
       "booksOn": "books turned on",
       "playerOn": "the built-in player",
-      "lumenServerOn": "Lumen server turned on",
       "missing": "Inactive: needs {need}.",
       "ready": "Needs {list}: ready.",
       "fix": {
@@ -3785,79 +3728,14 @@
         "xrayService": "Connect the service (Connections)",
         "xrayOn": "Turn on actors on screen",
         "booksOn": "Turn on books",
-        "playerOn": "Turn on the player",
-        "lumenServerOn": "Turn on Lumen server"
+        "playerOn": "Turn on the player"
       }
     },
     "sceneRestart": {
       "title": "Back to the start of the scene",
       "why": "When resuming a title after a few hours, would offer for a few seconds to go back to the start of the current scene. Experimental: scene starts are not reliable enough yet, keep it off."
     },
-    "labBeta": "Lab beta",
-    "lumenAudio": {
-      "title": "Lumen server: sound conversion",
-      "why": "Lumen server only. Safari can't play DTS, TrueHD, Opus or MP2/MP3: the server converts them to Dolby Digital Plus during playback (5.1 at 640 kb/s, stereo at 256 kb/s; 7.1 is folded to 5.1, without TrueHD's Atmos). It also carries “Enhance dialogue” in Lumen server. When off, or when the server is too busy, the film opens in Lumen client, which converts the sound on the device as always — Lumen client never uses this option.",
-      "detected": "ffmpeg {version} found: {encoders}",
-      "unavailable": "Conversion unavailable on this server ({reason}): the device converts the sound.",
-      "now": "Now: {sessions} playback(s) converting, {running} conversion(s) running, {queued} waiting.",
-      "cache": "Kept: {memory} in memory (of {memoryCap}), {disk} on disk (of {diskCap}).",
-      "day": "Last 24 h: {segments} segments converted, {median} ms median, {max} ms worst, {fallbacks} handed back to the device.",
-      "prereq": "Lumen server on; the ffmpeg shipped with the app; the processor is enough, no GPU."
-    },
-    "lumenLight": {
-      "title": "Lumen server: lighter version",
-      "why": "Lumen server only. The server re-encodes the film into lighter versions (1080p at 8 Mb/s, 720p at 3 Mb/s, HDR kept), cut exactly like the original: Safari switches between them on its own, without a break, when the connection weakens, and they are prepared in advance. Only for heavy enough films (at least twice the lighter version). When off, Lumen server serves the original only. Lumen client doesn't use it: on a connection that is too slow, it switches to a lighter version re-encoded by Jellyfin.",
-      "detected": "Encoder found: ffmpeg {version}, {driver}",
-      "unavailable": "Lighter version unavailable on this server ({reason}): only the original video is served.",
-      "now": "Since startup: {built} segments encoded, {kept} served ready-made, {failed} failed; {running} running, {queued} waiting.",
-      "prereq": "Lumen server on; the server's Intel GPU given to the app's container (VAAPI: /dev/dri and the render group)."
-    },
-    "prereq": "Requires: {text}",
-    "lumenSection": "Lumen server (experimental) — Safari only",
-    "lumenServer": {
-      "title": "Lumen server",
-      "why": "A second player, for administrators only: the server prepares the film without re-encoding it and Safari plays it itself (iPhone, iPad, Mac, AirPlay). Each administrator turns it on for their own device (Account → Experimental player). Other accounts and other browsers keep Lumen client, which depends on none of the options in this section. When off, the option disappears from Account, and the next two options with it.",
-      "prereq": "the films readable by the app (mounted read-only, LUMEN_PATH_MAP); the processor is enough, no GPU."
-    },
-    "players": {
-      "title": "Laterna's players",
-      "intro": "Every film is opened by one of these players, depending on the device, the file and what the server can do. The options in the “Lumen server” section only concern that player.",
-      "current": {
-        "name": "Lumen client (everyone’s player)",
-        "what": "the device prepares the file itself, without re-encoding it, in all recent browsers. It converts sound the browser can't play itself, enhances dialogue on the device and, on a connection that is too slow, switches to a lighter version re-encoded by Jellyfin.",
-        "needs": "nothing: the server only relays the file."
-      },
-      "server": {
-        "name": "Server player (Jellyfin)",
-        "what": "Jellyfin re-encodes the film when the device can't play it: this is the fallback, for Lumen client and Lumen server alike.",
-        "needs": "Jellyfin; a GPU given to Jellyfin speeds up re-encoding."
-      },
-      "lumen": {
-        "name": "Lumen server (experimental)",
-        "what": "the server prepares the film without re-encoding it, and Safari plays it itself (iPhone, iPad, Mac, AirPlay); administrators only, device by device.",
-        "needs": "the media mounted in the app's container; the processor is enough."
-      },
-      "lumenAudio": {
-        "name": "Lumen server: sound conversion",
-        "what": "Lumen server only: DTS, TrueHD, Opus and MP2/MP3 converted to Dolby Digital Plus by the server (Lumen client converts on the device).",
-        "needs": "Lumen server; the ffmpeg shipped with the app; no GPU."
-      },
-      "lumenLight": {
-        "name": "Lumen server: lighter version",
-        "what": "Lumen server only: one or two lighter versions of the film, which Safari switches to on its own, without a break, when the connection weakens (Lumen client goes through Jellyfin).",
-        "needs": "Lumen server; an Intel GPU given to the app's container (VAAPI)."
-      },
-      "offline": {
-        "name": "Offline",
-        "what": "a light version prepared by Jellyfin and kept on the device.",
-        "needs": "Jellyfin."
-      },
-      "cast": {
-        "name": "Chromecast and AirPlay",
-        "what": "the film goes to the TV, through Lumen server when it is on, otherwise through Jellyfin.",
-        "needs": "nothing beyond the player in use."
-      }
-    }
+    "labBeta": "Lab beta"
   },
   "xrayScan": {
     "nav": "On-screen cast",

@@ -4,7 +4,6 @@ import { verifySessionFull } from "@/lib/session";
 import { requestDeviceLabel } from "@/lib/deviceLabel";
 import { logViewportDiag } from "@/lib/eventLogs";
 import { viewportDiagAllowed } from "@/lib/writeLimits";
-import { lumenTestReport } from "@/lib/lumenServer/testReport";
 
 /**
  * Le relevé de hauteur de l'application installée sur iPhone et iPad — voir `viewportWatch.ts` —, et
@@ -182,14 +181,6 @@ export async function POST(req: NextRequest) {
       },
       "pip-test",
     );
-    return new NextResponse(null, { status: 204 });
-  }
-  // La page de banc de Lumen serveur (`/lumen-test`, étape 3b, DECISIONS §157, administrateur seul) : chaque
-  // lecture qu'elle a faite (première image, sauts, blocages, erreurs, pistes audio), et le relevé que le
-  // serveur a tenu des mêmes lectures — joint ici, par identifiant de lecture et pour ce compte seulement.
-  if (body.kind === "lumen-test") {
-    if (session.role !== "admin") return new NextResponse(null, { status: 403 });
-    logViewportDiag({ user: session.jfUser ?? session.u, device: requestDeviceLabel(req), ...lumenTestReport(body, session.u) }, "lumen-test");
     return new NextResponse(null, { status: 204 });
   }
   if (body.kind === "immersion-bench") {

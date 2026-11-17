@@ -22,7 +22,7 @@ import type { SettingGroup, SettingView } from "@/lib/settings/schema";
  */
 
 /** Ce dont une fonction a besoin pour marcher, vérifiable d'après les réglages enregistrés. */
-export type ConfigNeed = "aiKey" | "xrayService" | "xrayOn" | "booksOn" | "playerOn" | "lumenServerOn";
+export type ConfigNeed = "aiKey" | "xrayService" | "xrayOn" | "booksOn" | "playerOn";
 
 /** Où se règle ce qui manque. */
 export const NEED_HREF: Record<ConfigNeed, string> = {
@@ -31,7 +31,6 @@ export const NEED_HREF: Record<ConfigNeed, string> = {
   xrayOn: "/parametres/acteurs",
   booksOn: "/parametres/livres",
   playerOn: "/parametres/lecture",
-  lumenServerOn: "/parametres/lecture#lumen-serveur",
 };
 
 export interface ConfigCard {
@@ -56,13 +55,8 @@ export interface ConfigCard {
   feature?: AiFeatureId;
   /** Une carte au contenu propre : le fournisseur d'IA (modèle prérempli, dépense, tableau). */
   special?: "aiProvider";
-  /**
-   * Ce que la fonction demande à l'installation, affiché « Prérequis : … » sous l'explication (§194) : du matériel
-   * (un GPU donné au conteneur), un binaire de l'image, une autre option. Une clé i18n.
-   */
-  prereqKey?: string;
-  /** Ce qui suit la carte : les tâches des sous-titres générés, ou l'état de la conversion du son (§161). */
-  after?: "subtitleJobs" | "lumenAudio" | "lumenLight";
+  /** Ce qui suit la carte : les tâches des sous-titres générés. */
+  after?: "subtitleJobs";
 }
 
 const AI_PROVIDER_KEYS = [
@@ -107,46 +101,6 @@ export const CONFIG_LAYOUT = {
   ],
   /** Lecture : le lecteur intégré et son relais vers Jellyfin, rien d'autre. */
   playback: [{ group: "playback", keys: ["PLAYER_ENABLED", "PLAYER_SERVER_FALLBACK"] }],
-  /**
-   * Lumen serveur, expérimental (§194) : une carte par option déployable à part, chacune avec ses prérequis —
-   * l'interrupteur de l'installation, puis la conversion du son (§161 à §163 : à qui elle est ouverte, ses plafonds, son
-   * cache ; l'état de ffmpeg suit la carte, `after: "lumenAudio"`), puis la version allégée (son GPU). « Lab bêta ».
-   */
-  lumenServer: [
-    {
-      group: "playback",
-      keys: ["LUMEN_SERVER_ENABLED"],
-      titleKey: "config.lumenServer.title",
-      whyKey: "config.lumenServer.why",
-      prereqKey: "config.lumenServer.prereq",
-      anchor: "lumen-serveur",
-      lab: true,
-    },
-    {
-      group: "playback",
-      keys: ["LUMEN_AUDIO_CONVERT", "LUMEN_AUDIO_MAX_JOBS", "LUMEN_AUDIO_MAX_SESSIONS", "LUMEN_AUDIO_RAM_MB", "LUMEN_AUDIO_CACHE_GB"],
-      titleKey: "config.lumenAudio.title",
-      whyKey: "config.lumenAudio.why",
-      prereqKey: "config.lumenAudio.prereq",
-      needs: ["lumenServerOn"],
-      anchor: "conversion-son",
-      lab: true,
-      after: "lumenAudio",
-    },
-    // La version allégée (`lumenServer/light/`, §195) : la vidéo réencodée par le iGPU pour les connexions lentes. Son
-    // prérequis est le GPU donné au conteneur ; Lumen serveur coupé, la carte s'estompe (elle n'a plus d'effet).
-    {
-      group: "playback",
-      keys: ["LUMEN_LIGHT", "LUMEN_LIGHT_MAX_JOBS", "LUMEN_LIGHT_RAM_MB", "LUMEN_LIGHT_CACHE_GB"],
-      titleKey: "config.lumenLight.title",
-      whyKey: "config.lumenLight.why",
-      prereqKey: "config.lumenLight.prereq",
-      needs: ["lumenServerOn"],
-      anchor: "version-allegee",
-      lab: true,
-      after: "lumenLight",
-    },
-  ],
   /** Diffusion et hors-ligne : le Chromecast, puis les téléchargements. */
   diffusion: [
     { group: "playback", keys: ["CHROMECAST_FOR_EVERYONE", "CAST_RECEIVER_APP_ID"], titleKey: "config.cast.title", whyKey: "config.cast.why" },
@@ -243,8 +197,6 @@ export function missingNeeds(needs: readonly ConfigNeed[] | undefined, views: Re
         return views.get("BOOKS_ENABLED")?.value !== "true";
       case "playerOn":
         return views.get("PLAYER_ENABLED")?.value !== "true";
-      case "lumenServerOn":
-        return views.get("LUMEN_SERVER_ENABLED")?.value === "false";
     }
   });
 }

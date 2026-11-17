@@ -429,11 +429,7 @@ describe("une seule règle de reprise, une seule d'épisode suivant, une seule c
   // Le lecteur canevas avait sa propre ouverture, gardée alignée par un test ici ; retiré le
   // 24/09/2026, il ne reste que celle du chemin natif — la même fonction que l'écran.
   it("le chemin natif ouvre sur la piste que l'écran choisira, par la même règle", () => {
-    // La règle d'ouverture vit dans `preferredOpeningTrack` depuis le 17/11/2026 (DECISIONS.md §180) : le lecteur
-    // actuel et Lumen serveur l'appellent tous deux, et elle passe par `chooseAudioTrack`, la fonction de l'écran.
-    expect(codeOnly("src/lib/openingAudioChoice.ts")).toMatch(/chooseAudioTrack\(/);
-    expect(codeOnly("src/lib/webcodecs/remuxPlayback.ts")).toMatch(/preferredOpeningTrack\(/);
-    expect(codeOnly("src/components/player/lumen/lumenOpening.ts")).toMatch(/preferredOpeningTrack\(/);
+    expect(codeOnly("src/lib/webcodecs/remuxPlayback.ts")).toMatch(/chooseAudioTrack\(/);
   });
 });
 

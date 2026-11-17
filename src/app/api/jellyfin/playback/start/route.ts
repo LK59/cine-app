@@ -25,7 +25,6 @@ import { forwardedFor } from "@/lib/clientAddress";
 import { transcodeTargetBps } from "@/lib/slowLink";
 import { castSubtitleStream, parseCastSubtitle } from "@/lib/castSubtitle";
 import { subtitleSyncByIndex } from "@/lib/subtitleSync/store";
-import { subtitleTrackFacts } from "@/lib/subtitleTrackFacts";
 
 // Both "no Jellyfin identity in session" and "Jellyfin rejected our stored
 // token" boil down to the same user-facing action: log back in with Jellyfin
@@ -391,10 +390,29 @@ export async function POST(req: NextRequest) {
      * incrustés dans l'image, que rien ici ne réécrit. Absent sans correction : la réponse d'avant.
      */
     const syncByIndex = forCast || burnIndex !== undefined ? undefined : subtitleSyncByIndex(itemId, source.ETag, source.MediaStreams ?? []);
-    // Sortie telle quelle dans `subtitleTrackFacts` (DECISIONS.md §180) : Lumen serveur pose les mêmes `<track>`.
-    // Pour un Chromecast, une piste texte s'allume sur le récepteur sans relancer le flux, une piste en images doit
-    // être incrustée par le serveur — voir `ChromecastPlayer` ; ailleurs, `isText: false` seulement (§150).
-    const subtitleTracks = subtitleTrackFacts(itemId, source, { syncByIndex, castPass, castTarget: !!castTarget });
+    const subtitleTracks = (source.MediaStreams ?? [])
+      .filter((s) => s.Type === "Subtitle")
+      .map((s) => ({
+        index: s.Index,
+        language: s.Language ?? null,
+        title: s.Title ?? null,
+        isDefault: s.IsDefault ?? false,
+        isForced: s.IsForced ?? false,
+        isHearingImpaired: s.IsHearingImpaired ?? false,
+        isExternal: s.IsExternal ?? false,
+        // Pour un Chromecast : une piste texte s'allume sur le récepteur sans relancer le flux, une piste
+        // en images doit être incrustée par le serveur — voir `ChromecastPlayer`. Ailleurs, seulement
+        // `false` (13/11/2026) : l'aide d'un passage rejoué (§150) ne prend jamais une piste en images.
+        // Une piste texte reste sans le champ, la réponse d'avant.
+        ...(castTarget ? { isText: s.IsTextSubtitleStream ?? null } : s.IsTextSubtitleStream === false ? { isText: false } : {}),
+        url:
+          `/api/jellyfin/stream/subtitle/${itemId}?mediaSourceId=${source.Id}&index=${s.Index}` +
+          (syncByIndex?.[String(s.Index)] ? `&sync=${syncByIndex[String(s.Index)].version}` : "") +
+          (castPass ? `&${CAST_TOKEN_PARAM}=${encodeURIComponent(castPass)}` : ""),
+        ...(syncByIndex?.[String(s.Index)]
+          ? { sync: { offset: syncByIndex[String(s.Index)].offset, scale: syncByIndex[String(s.Index)].scale } }
+          : {}),
+      }));
 
     const audioTracks = (source.MediaStreams ?? [])
       .filter((s) => s.Type === "Audio")

@@ -183,29 +183,6 @@ export async function register() {
         "listes de la bibliothèque relues avant d'expirer · hors ligne, sous-titres générés, répliques et intégrité selon leur file"
     );
 
-    // ffmpeg pour la conversion du son de Lumen serveur (DECISIONS.md §161) : présent, à la version attendue, avec ce
-    // qu'il faut ? Une détection locale, en lecture (sept lancements de quelques millisecondes, aucun service
-    // appelé), faite même sous `CINE_BACKGROUND_JOBS=off` : la Configuration la montre, et la conversion n'est
-    // jamais lancée par elle — seulement par une requête de lecture, l'option en service.
-    setTimeout(() => {
-      import("./lib/lumenServer/audio/ffmpeg")
-        .then(async ({ detectLumenFfmpeg }) => {
-          const d = await detectLumenFfmpeg();
-          taskLog("lumen", d.available ? `ffmpeg ${d.version} détecté pour la conversion du son` : `conversion du son indisponible : ${d.reason}`);
-        })
-        .catch(() => {});
-      // L'encodeur de la version allégée (`lumenServer/light/encoder.ts`), seulement l'option ouverte : sa détection
-      // encode deux images d'une mire sur le iGPU — rien à y faire quand personne ne s'en servira.
-      import("./lib/config")
-        .then(async ({ config: c }) => {
-          if (c.lumen.light === "off") return;
-          const { detectLightEncoder } = await import("./lib/lumenServer/light/encoder");
-          const d = await detectLightEncoder();
-          taskLog("lumen", d.available ? `ffmpeg ${d.version} (VAAPI, ${d.driver}) détecté pour la version allégée` : `version allégée indisponible : ${d.reason}`);
-        })
-        .catch(() => {});
-    }, 5_000);
-
     // Les journaux de l'Activité et leurs séances, prêts avant qu'un administrateur l'ouvre : la
     // première vue d'ensemble après un déploiement attendait ~260 ms d'analyse (07/11/2026).
     setTimeout(() => {

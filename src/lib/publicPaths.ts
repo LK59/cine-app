@@ -52,6 +52,9 @@ export const PUBLIC_PATHS = [
   // en cours et leurs affiches. Un oubli de vérification dans une nouvelle route l'ouvrirait à tous :
   // `streamdeck-routes.test.ts` les parcourt toutes.
   "/api/streamdeck",
+  // Lumen serveur archivé (DECISIONS.md §196) : une seule route, qui répond 410 à tout et ne lit rien. Sans session
+  // pour qu'un téléviseur (jamais de cookie) ou un onglet déconnecté reçoive ce 410, et non un 401 à chaque adresse.
+  "/api/lumen",
 ] as const;
 
 /** Vrai pour une de ces adresses, et pour tout ce qu'elle contient. */

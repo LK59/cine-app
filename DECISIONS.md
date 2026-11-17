@@ -11006,6 +11006,8 @@ par jour : le jour relevé est retenu en mémoire, puis lu dans la base, et l'in
 
 ## 154. La signalisation HLS de Lumen serveur : la liste dit ce que l'init segment contient, MSE n'en sait rien (16/11/2026)
 
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
+
 **Règle.** Le chemin HLS de Lumen serveur (`docs/remux-serveur/`) écrit ses entrées d'échantillon avec
 `signalling: "hls"` (`SampleEntryOptions`, `RemuxOptions.signalling`) ; tout autre appelant — le lecteur actuel
 entier — ne passe rien, et chaque entrée reste celle d'avant **à l'octet près**. Sous cette option :
@@ -11051,6 +11053,8 @@ de vrais fichiers, avec deux contre-épreuves lues dans le flux (forme du `dec3`
 - **L'EMDF n'est lu que par le banc** : `addbsi` est la signalisation que la norme et Dolby désignent pour le `dec3`.
 
 ## 155. Le moteur de Lumen serveur : une découpe déterministe, jamais sur une clé dont on ne repart pas seul (16/11/2026)
+
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
 
 **Règle.** Le moteur (`src/lib/lumenServer/`, étape 2 de `docs/remux-serveur/`) sert un fichier en HLS fMP4 sans
 état : chaque liste, init ou segment se reconstruit depuis le fichier seul, et **toute adresse servie donne demain
@@ -11112,6 +11116,8 @@ générés par `src/__tests__/fixtures/lumen/generate.sh`. **Banc.** `lumen-engi
 `LUMEN_FILES`) : ffmpeg décode les fenêtres recollées et lit les listes par son démultiplexeur HLS.
 
 ## 156. Les routes de Lumen serveur : l'administrateur seul, revérifié par la route ; une absence répond 410, jamais 404 (16/11/2026)
+
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
 
 **Règle.** Lumen serveur se sert sous `/api/lumen/` (étape 3 de `docs/remux-serveur/`) :
 `GET /api/lumen/{itemId}/{version}/{s}/{nom}` — `master.m3u8?audio=N`, `v.m3u8`, `a{N}.m3u8`, `init-v.mp4`,
@@ -11175,6 +11181,8 @@ redémarrage, et une garde : chaque route sous `/api/lumen` passe par `lumenAcce
 - **Pas de compte des liens de partage** (§112) : un lien n'a pas accès à ces routes.
 
 ## 157. La découpe expérimentale `cra` de Lumen serveur : choisie par l'adresse, jamais mélangée à la règle (16/11/2026)
+
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
 
 **Règle.** Lumen serveur a trois découpes (`LumenCutMode`, `format.ts`), et **une seule sert sans qu'on la
 demande** : `idr` (§155), la règle. `cra` et `cra-leading` sont des essais, étape 3b de `docs/remux-serveur/` :
@@ -11250,6 +11258,8 @@ segments du remuxeur MediaSource par fichier (début, sauts à 30 et 60 %), à c
 
 ## 158. La découpe `cra` devient la règle de Lumen serveur, et son index se lit dans les Cues seules (17/11/2026)
 
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
+
 **Règle.** Depuis `LUMEN_FORMAT_VERSION` 2 (`format.ts`), un appelant qui ne demande rien reçoit la découpe
 `cra` (`LUMEN_DEFAULT_CUT`) : **toute image clé de l'index ouvre un segment** au moins 4 s après la précédente,
 et les RASL d'une CRA restent dans le segment qu'elle ouvre. `idr` (l'ancienne règle, §155) et `cra-leading`
@@ -11324,6 +11334,8 @@ défaut, mêmes frontières que `idr` sur un fichier à IDR seules, cible 2 s, c
   banc dit « N coupes, M prises des Cues sans lecture » sous la règle.
 
 ## 159. Le son copié de Lumen serveur réparé : le SBR implicite rendu explicite, le silence aux paramètres de la piste (17/11/2026)
+
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
 
 **Règle.** Lumen serveur (`docs/remux-serveur/`, README « Étape 3d ») ne refuse plus une piste copiable pour
 trois défauts qu'il sait réparer **sans réencoder une seule trame** — les trames du fichier restent copiées à
@@ -11424,6 +11436,8 @@ servables (piste par défaut, extrapolé), 24 gagnés, aucun perdu ; restent `so
 `index-troue` (0,2 %).
 ## 160. La chronologie de Lumen serveur, et ses leviers de démarrage en modes d'essai (17/11/2026)
 
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
+
 **Règle.** La page de banc `/lumen-test` mesure **d'où vient le temps** d'un démarrage et d'un saut (étape 3e de
 `docs/remux-serveur/`), et les leviers de démarrage sont des **modes d'essai** : sans eux, Lumen serveur sert les mêmes
 listes, les mêmes segments et les mêmes adresses qu'avant, et le lecteur de production ne change pas d'un octet.
@@ -11478,6 +11492,8 @@ reprise de bout en bout), `lumenServer-testReport.test.ts`.
 - **La chronologie n'entre pas dans player.log** : elle sert la question du banc ; l'étape 4 gardera `srv.*`.
 
 ## 161. La conversion du son de Lumen serveur : E-AC-3 partout, placé par le nombre d'échantillons, une fonction du fichier (17/11/2026)
+
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
 
 **Règle.** Une piste que Lumen serveur ne copie pas — DTS (cœur, DTS-HD MA, HRA), TrueHD, Opus, MP2, MP3 — est
 **convertie en E-AC-3** par un ffmpeg minimal de l'image (FFmpeg 7.1.5, `tools/ffmpeg-lumen/`), quand l'option
@@ -11562,6 +11578,8 @@ init, segments, cache, relevé, autre conversion = 410, admission), `lumenServer
 
 ## 162. Le cache du son converti : deux étages, une clé qui porte tout (17/11/2026)
 
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
+
 **Règle** (`convertCache.ts`, décision de Louis du 16/11/2026).
 - **En mémoire** (`MemoryTier`, `LUMEN_AUDIO_RAM_MB`, 512 Mo par défaut) : la fenêtre des séances actives — ce que la
   tête vient de quitter, l'avance convertie devant. Le moins récemment lu part le premier.
@@ -11579,6 +11597,8 @@ init, segments, cache, relevé, autre conversion = 410, admission), `lumenServer
 **Porteurs.** `convertCache.ts`, `conversion.ts` (`LumenAudio`). **Tests.** `lumenServer-conversion.test.ts`.
 
 ## 163. La file, l'avance et l'admission de la conversion, mesurées (17/11/2026)
+
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
 
 **Règle** (`conversion.ts`).
 - **La file** : `LUMEN_AUDIO_MAX_JOBS` processus au plus (2 par défaut, mesuré ci-dessous) ; la **demande** (un segment que
@@ -11634,6 +11654,8 @@ bêta »), `proxy.ts` (`ADMIN_ONLY_READS`), `instrumentation.ts` (la détection 
   pas encore quel appareil lit ; à reprendre avec l'hôte client, qui le saura.
 
 ## 180. Lumen serveur dans le lecteur : une route `"lumen"`, un hôte à part, le lecteur actuel avant l'image, ce chemin après (17/11/2026)
+
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
 
 **Règle.** Derrière l'option d'appareil « Lecteur expérimental : remux serveur » (panneau Compte, groupe administrateur,
 `localStorage["cine:lumen-serveur"]`), une lecture en ligne peut passer par Lumen serveur (étape 4 de
@@ -11692,6 +11714,8 @@ empreintes du lecteur, inchangées.
   objet sur WebKit). Un compte non administrateur sur l'appareil : 403 → déclin, un aller-retour.
 
 ## 185. Lumen serveur : un seul groupe son, tous codecs ; un changement de piste par `audioTracks`, sinon la liste rouverte dans la page (17/11/2026)
+
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
 
 **Règle.** La liste maître de Lumen serveur met **toutes les pistes servies dans un seul groupe audio** (`playlists.ts`,
 `LUMEN_FORMAT_VERSION` 5), et donc une seule variante, dont le `CODECS` liste chaque format du groupe
@@ -11757,6 +11781,8 @@ gênait l'ouverture, le repli d'avant l'image (§180) le dirait (`fallback` `to:
 
 ## 186. AirPlay sur Lumen serveur : le laissez-passer d'une Apple TV dans le chemin, sa propre clé, sa portée signée (17/11/2026)
 
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
+
 **Règle.** L'élément de `LumenServerHost` porte, dès l'ouverture, l'adresse de la liste maître munie d'un laissez-passer
 dans le chemin — `/api/lumen/{titre}/{version}/{lecture}/tv.{jeton}/master.m3u8?audio=N` — demandée par le lecteur à
 l'éligibilité (`?tv=1` ; le banc `/lumen-test` n'en demande pas). Les listes n'ont que des URI relatives : l'Apple TV
@@ -11810,6 +11836,8 @@ partage ou un compte ordinaire avec l'adresse de l'administrateur : 403 ; la gar
 
 ## 187. « Générer des sous-titres » dans Lumen serveur : la génération du lecteur natif, ses lignes par le calque, puis un `<track>` (17/11/2026)
 
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
+
 **Règle.** `useLumenSubtitleGeneration` (`src/components/player/lumen/`) branche sur cet hôte l'objet du lecteur natif,
 `SubtitleGeneration` (§70), sans rien y changer : options, demande avec la position, sondage de la piste active, messages
 d'état (« Préparation des sous-titres… »), erreurs dites en passant (`NativeWarning`), bascule finale. Le menu est celui
@@ -11832,6 +11860,8 @@ faits »), et le calque est déjà celui des deux sous-titres. Le plein écran d
 le calque). **Tests.** `LumenServerHost.test.tsx` (le menu, l'entrée choisie, la ligne au calque).
 
 ## 188. Lumen serveur : l'ajustement aux bandes noires sur l'élément ; « Améliorer les dialogues » rendu au lecteur actuel (17/11/2026)
+
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
 
 **Bandes noires.** `useFrameFit` (§59, la mesure par trickplay du lecteur natif) est posé sur l'élément de
 `LumenServerHost` exactement comme dans le lecteur natif : deux cadres autour de l'image (l'extérieur coupe, l'intérieur
@@ -11865,6 +11895,8 @@ mini-lecteur. L'image figée d'une réouverture (§185) est dans le même cadre 
 
 ## 189. Le panneau technique et le journal de Lumen serveur : ce chemin dit comme tel, sans toucher aux autres (17/11/2026)
 
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
+
 **Règle.** Le panneau « Infos de lecture » de `LumenServerHost` est décrit par `describeLumenServerPlayback`
 (`src/lib/lumenPanel.ts`, à part de `playbackPanel.ts`, dont les deux fonctions n'ont pas bougé), libellés sous
 `player.info.lumen.*` dans les quatre langues : en tête « Remux serveur (HLS) » ; le fichier ; le son (la piste, son
@@ -11891,6 +11923,8 @@ libellé dans les quatre langues, ce que le panneau dit), `lumenServer-trials.te
 
 ## 190. Lumen serveur : les sous-titres dessinés par la page, les `<track>` en `hidden`, le décalage tenu par l'hôte (17/11/2026)
 
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
+
 **Règle.** Dans `LumenServerHost`, aucun `<track>` n'est plus en `showing` : Safari les dessinait lui-même, collés au
 bas de l'image, dans son style, sous les commandes. Les `<track>` (posés après la première image de l'élément, §180 —
 sinon code 4) ne font que charger les répliques, en `hidden` pour la piste montrée et `disabled` pour les autres ; la
@@ -11915,6 +11949,8 @@ dessiner un sous-titre seul : ses empreintes ne bougent pas. AirPlay inchangé (
 page »).
 
 ## 191. AirPlay sur Lumen serveur avec sous-titres : un rendu WebVTT dans la liste maître, demandé par `?st=` pendant la diffusion seulement (17/11/2026)
+
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
 
 **Règle.** Le sous-titre choisi sur le téléphone va au téléviseur **dans le flux HLS** : la liste maître demandée avec
 `?st=<index Jellyfin>` gagne **un seul** rendu `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs"` — LANGUAGE, NAME
@@ -11990,6 +12026,8 @@ au téléviseur »).
 
 ## 192. Lumen serveur vers un Chromecast : l'émetteur décide par son option, le récepteur reçoit `cc.{jeton}` et du son en AAC (17/11/2026)
 
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
+
 **Règle.** Avec l'option d'appareil « Lecteur expérimental : remux serveur » allumée sur l'appareil **qui émet**, une
 diffusion Chromecast (§64) charge sur le récepteur l'adresse Lumen serveur du titre au lieu du flux de Jellyfin, quel
 que soit le lecteur de la page — Lumen serveur n'existe pas dans une page Chrome (§180), et le récepteur lit une adresse,
@@ -12051,6 +12089,8 @@ l'entrée `eac3` de la chaîne (`dolby`). Rien sur un vrai récepteur : le proto
 empreintes du lecteur, inchangées.
 
 ## 193. « Améliorer les dialogues » dans Lumen serveur : `DialogueEnhancer` lui-même, côté serveur, segment par segment depuis son pré-roulement (17/11/2026)
+
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
 
 **Règle.** Quand la conversion du son est permise à la requête (`LUMEN_AUDIO_CONVERT`, ffmpeg conforme — le contexte
 de §161), chaque piste servie qui se décode ici a deux rendus de plus, « Améliorer » (`a{N}d1x{cid}`) et « Améliorer
@@ -12154,6 +12194,8 @@ sans `LUMEN_DIALOGUE_FILES` ni ffmpeg).
 
 ## 194. Les lecteurs et les options de Lumen serveur rangés dans Configuration → Lecture, chacune avec ses prérequis ; le débit annoncé au quart quand la connexion le permet (17/11/2026)
 
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
+
 **Règle.** Configuration → Lecture dit d'abord **qui est qui** (`PlayerRanges.tsx`, texte fixe) : le lecteur actuel
 (remultiplexage sur l'appareil), le lecteur serveur (Jellyfin, le repli), Lumen serveur, sa conversion du son, sa version
 allégée, le hors-ligne, la diffusion — et pour chacun ce qu'il demande au serveur (processeur seul, ffmpeg de l'image, GPU
@@ -12184,6 +12226,8 @@ partait toujours aux vrais débits.
 **Tests.** `config-layout.test.ts`, `lumen-link.test.ts`, `lumen-fiche-preparation.test.ts`, `LumenServerHost.test.tsx`.
 
 ## 195. La version allégée de Lumen serveur : des échelons réencodés par le iGPU, sur les mêmes segments, préparés avant que Safari ne bascule (17/11/2026)
+
+> Archivé le 17/11/2026 avec Lumen serveur — voir §196.
 
 **Règle.** Quand l'option `LUMEN_LIGHT` (audience, coupée par défaut) est ouverte au compte et que l'encodeur est là —
 un ffmpeg vidéo avec VAAPI (`LUMEN_VIDEO_FFMPEG_PATH`, le ffmpeg vidéo minimal épinglé à `/usr/local/bin/ffmpeg-video` —
@@ -12283,3 +12327,60 @@ erreur, HDR gardé, codec annoncé = init, et des mesures d'image identiques à 
 0,4 à 1 s), détection en 0,1 s au lieu de 0,4. Porteurs : `tools/ffmpeg-video/`, `Dockerfile`, `config.ts`
 (`videoFfmpegPath`), `light/encoder.ts` (commentaire). **Test** : `lumen-ffmpeg-video.test.ts` (étape, chemin, plus
 de paquet `ffmpeg`, même épinglage que le son, rien de GPL, les composants que l'encodeur demande).
+
+---
+
+## 196. Lumen serveur archivé : MediaSource partout, la diffusion par le lecteur serveur de Jellyfin (17/11/2026)
+
+**Règle.** Laterna n'a plus de lecteur HLS remultiplexé par son propre serveur. Chaque fichier se lit par **Lumen
+client** — le remux dans la page, MediaSource sur tous les moteurs, iPhone, iPad et Mac compris —, et le lecteur
+serveur de Jellyfin reste le repli et le chemin des diffusions (AirPlay, Chromecast) : pour AirPlay, il copie déjà
+le HEVC tel quel quand l'appareil le décode. Ce que décrivaient §154 à §163, §180 et §185 à §195 n'existe plus dans le
+code ; ces sections restent pour l'histoire et les mesures. Le dernier état est l'étiquette
+`lumen-serveur-final-2026-11-17` (commit `d2d7f5a3`) ; la conception, les étapes et les bancs restent dans
+`docs/remux-serveur/`.
+
+**Pourquoi — mesuré le 17/11/2026.**
+- **Safari choisit l'échelon lui-même.** Avec les versions allégées dans la liste maître (§195), un film 4K sur un lien
+  à 44 Mb/s a joué 10 s en 536p, 5 s en 804p et 0 s dans l'original — pourtant listé en premier. Rien ne permet de
+  contraindre son débit adaptatif ni son attente au démarrage.
+- **Les sauts à froid sur un échelon coûtent 4 à 16 s** : l'encodage VAAPI 4K → 1080p prend jusqu'à 5 s par segment
+  de 8 s.
+- **Sans la version allégée, il n'apportait rien que Lumen client n'ait déjà** sur iPhone, iPad et Mac — pause et
+  reprise, Dolby Vision, Atmos y sont —, et restait en retard sur les sous-titres (dessinés par la page au prix d'un
+  second mécanisme, §190–§191) et sur les connexions lentes (Lumen client passe à la version allégée de Jellyfin, §78).
+
+**Ce qui a survécu, dans Lumen client.**
+- **Le son éveillé pendant la pause** sur iPhone et iPad (`src/components/player/audioKeepAwake.ts`, déplacé tel quel
+  de `player/lumen/`, appelé par `ExperimentalPlayerHost` sous `isAppleTouchDevice`) : un son inaudible garde la sortie
+  audio éveillée cinq minutes au plus (`KEEP_AWAKE_MAX_MS`), pour que le son reparte avec l'image.
+- **La réouverture à l'image clé suivante** après une perte répétée au même endroit (`lifecycle.sourceLost(…,
+  nextKeyframe)`, `MseSource.nextKeyframeAfter`, `RemuxPlayback.nextKeyframeAfter`), plutôt que 12 s plus loin.
+
+**Les anciennes adresses répondent 410.** Une seule route, `src/app/api/lumen/[...path]/route.ts`, répond **410**
+`{ error: "lumen-archive" }` à GET, HEAD, POST et OPTIONS, sans session (`/api/lumen` dans `PUBLIC_PATHS` : elle ne
+lit rien). Un onglet resté sur l'ancien code ou un téléviseur qui relit une liste (`tv.{jeton}`, `cc.{jeton}`)
+enchaînerait des dizaines d'adresses distinctes : en 404 — ou en 401 sans cookie —, le pare-feu en amont bannirait
+l'adresse pour des heures (« Known pitfalls », CLAUDE.md). Les laissez-passer `lumen` / `lumen-cc` ne sont plus
+vérifiés nulle part : la route ne sert rien.
+
+**Ce qui a été retiré avec lui.** Le moteur (`src/lib/lumenServer/`, conversion du son, dialogues côté serveur, version
+allégée, sous-titres, laissez-passer), l'hôte (`LumenServerHost`), la route `"lumen"` de `choosePlayer` et
+`lumenWanted`, le chargement Lumen d'un Chromecast (`lumenCast.ts` : le récepteur reprend le flux de Jellyfin), la
+préparation à l'ouverture d'une fiche, le relais `castProgress` par les segments Lumen, le relevé `srv.*` joint par la
+route du journal, les lignes `kind: "lumen-test"` et la page `/lumen-test`, l'option du panneau Compte, les réglages
+`LUMEN_*` et leurs cartes de Configuration → Lecture, les deux ffmpeg épinglés de l'image (`tools/ffmpeg-lumen/`,
+`tools/ffmpeg-video/`) avec `libva`/`intel-media-driver`, et le fil de calcul empaqueté (`tools/lumen-worker/`). Les
+options d'écriture ajoutées au muxeur et au remuxeur pour lui (`signalling: "hls"`, `isLeading`) sont retirées : le
+chemin MediaSource écrit les mêmes octets qu'avant elles.
+
+**Effacé de l'appareil.** `cine:lumen-serveur`, `cine:lumen-debit`, `cine:lumen-test-serie` et les deux essais déjà
+retirés sont effacés à chaque lancement (`clearRetiredDeviceKeys`, `src/lib/retiredDeviceKeys.ts`, appelé par
+`ServiceWorkerRegistration`).
+
+**Voulu.** La page Activité lit toujours les anciennes lignes `player: "lumen-serveur"` (`seances.ts`, `parts.tsx`,
+l'étiquette « Remux serveur ») : le journal garde des semaines d'historique.
+
+**Tests.** `lumen-archive.test.ts` (la route et le proxy), `ServiceWorkerRegistration-clear.test.tsx` (les clés),
+`activity-lumen-chromecast.test.ts` (les anciennes lignes à l'Activité) ; les empreintes du lecteur natif, du lecteur
+serveur et de `MseSource` inchangées.

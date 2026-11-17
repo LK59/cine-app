@@ -111,16 +111,6 @@ export function takePrefetchedPlaybackState(itemId: string): Promise<PlaybackSta
 }
 
 /**
- * Ce que la fiche a demandé, **lu sans être pris** — pour la préparation de Lumen serveur (`lumenSheetPrepare.ts`,
- * DECISIONS.md §180), qui a besoin de la position de reprise mais ne doit pas priver la lecture de la réponse.
- */
-export function peekPrefetchedPlaybackState(itemId: string): Promise<PlaybackState | null> | null {
-  const entry = prefetched.get(itemId);
-  if (!entry || Date.now() - entry.at >= PLAYBACK_STATE_FRESH_MS) return null;
-  return entry.state;
-}
-
-/**
  * Tout oublier : une lecture vient de finir, ou « vu » vient d'être coché.
  *
  * Les deux changent la position qu'une réponse gardée prétend connaître. Une demande encore en

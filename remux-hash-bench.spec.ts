@@ -1,8 +1,8 @@
 // Banc d'identité du chemin MediaSource — sauté sans REMUX_FILES.
 //
-// Le lecteur de production remuxe dans la page (`Remuxer`, `mp4Muxer.ts`) ; Lumen serveur partage le muxer
-// et y ajoute des options (`signalling: "hls"` à l'étape 1, `isLeading` à l'étape 3b, DECISIONS §154, §157)
-// qui doivent laisser **chaque octet** du chemin MediaSource tel qu'il était. Ce banc ouvre le remuxeur
+// Le lecteur de production remuxe dans la page (`Remuxer`, `mp4Muxer.ts`). Né pour Lumen serveur, qui partageait le
+// muxer et y ajoutait des options (DECISIONS §154, §157 ; archivé, §196) : tout changement du muxer ou du remuxeur doit
+// laisser **chaque octet** du chemin MediaSource tel qu'il était, sauf intention. Ce banc ouvre le remuxeur
 // exactement comme le lecteur (par piste, sans option), et écrit l'empreinte SHA-256 des init segments et de
 // chaque segment produit — douze depuis le début, puis douze après chacun de deux sauts (à 30 et 60 % du
 // film : un départ sur une CRA y écarte ses RASL, le chemin de §RASL). Lancé sur le code d'avant et sur

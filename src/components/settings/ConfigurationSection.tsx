@@ -11,8 +11,6 @@ import { SettingsGroupCard, type Draft } from "@/components/settings/SettingsGro
 import { AiProviderCard, SubtitleJobs, useAiAdmin } from "@/components/settings/SubtitleGenCard";
 import { featureStateLine } from "@/components/settings/AiFeaturesBlock";
 import { FeatureNeeds } from "@/components/settings/FeatureNeeds";
-import { LumenAudioStatus } from "@/components/settings/LumenAudioStatus";
-import { LumenLightStatus } from "@/components/settings/LumenLightStatus";
 import { missingNeeds, type ConfigCard } from "@/lib/settings/configLayout";
 import { SETTINGS_BY_KEY, type SettingView } from "@/lib/settings/schema";
 import type { AiFeatureId } from "@/lib/aiFeatureTable";
@@ -151,7 +149,6 @@ export function ConfigurationSection({ cards, showMissing = false }: { cards: re
               needs={card.needs?.length ? <FeatureNeeds needs={card.needs} missing={missing} /> : undefined}
               dimmed={missing.length > 0}
               lab={card.lab}
-              prereq={card.prereqKey ? t(card.prereqKey) : undefined}
               views={views}
               draft={draft}
               errors={errors}
@@ -160,8 +157,6 @@ export function ConfigurationSection({ cards, showMissing = false }: { cards: re
               footer={footer}
             />
             {card.after === "subtitleJobs" && <SubtitleJobs />}
-            {card.after === "lumenAudio" && <LumenAudioStatus />}
-            {card.after === "lumenLight" && <LumenLightStatus />}
           </div>
         );
       })}

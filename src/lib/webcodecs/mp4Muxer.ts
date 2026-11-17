@@ -38,15 +38,6 @@ export interface MuxSample {
    */
   compositionOffset: number;
   isKeyframe: boolean;
-  /**
-   * `is_leading` of the sample flags (ISO/IEC 14496-12 §8.8.3.1, two bits): 1 = a leading picture that
-   * depends on pictures before its key, undecodable after a random access (an HEVC RASL); 2 = not a
-   * leading picture; 3 = a leading picture decodable after a random access (an HEVC RADL). Written
-   * only by Lumen serveur's experimental `cra-leading` cut (DECISIONS.md §157). **Absent, the field
-   * stays 0 ("unknown") and the flags are byte-identical to what every other caller wrote** — the
-   * MediaSource player never sets it, and a test plus a hash bench on real files hold that.
-   */
-  isLeading?: 1 | 2 | 3;
 }
 
 /** Three letters at five bits each, biased so that 'a' is 1. */
@@ -154,9 +145,7 @@ export function initSegment(track: MuxTrackInfo, durationSeconds: number): Uint8
  * uses them to decide what it may discard when seeking, so getting the sync flag wrong turns a
  * seek into a block of corrupt frames.
  */
-function sampleFlags(isKeyframe: boolean, isLeading?: 1 | 2 | 3): Uint8Array {
-  // is_leading sits in bits 27–26, above sample_depends_on: 0x04000000 × value.
-  if (isLeading !== undefined) return u32((isLeading << 26) | (isKeyframe ? 0x02000000 : 0x01010000));
+function sampleFlags(isKeyframe: boolean): Uint8Array {
   return isKeyframe
     ? u32(0x02000000) // depends on nothing, is a sync sample
     : u32(0x01010000); // depends on others, is not a sync sample
@@ -192,7 +181,7 @@ export function mediaSegment(
       return [
         u32(duration),
         u32(sample.data.length),
-        sampleFlags(sample.isKeyframe, sample.isLeading),
+        sampleFlags(sample.isKeyframe),
         i32(sample.compositionOffset),
       ];
     })

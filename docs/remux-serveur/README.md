@@ -1,5 +1,9 @@
 # Lumen serveur — le remux côté serveur, servi en HLS
 
+> **Archivé le 17/11/2026.** Lumen serveur a été retiré du code ; son dernier état est l'étiquette
+> `lumen-serveur-final-2026-11-17`. Ce dossier reste pour la conception et les mesures. Pourquoi, et ce qui a survécu
+> dans Lumen client : DECISIONS.md §196. Les chemins de fichiers cités ici ne valent que pour cette étiquette.
+
 Conception du 16/11/2026. Étapes 1 (signalisation, §154), 2 (le moteur, §155), 3 (routes et sécurité, §156),
 3b (recensement, découpes d'essai et banc Safari, §157), 3c (`cra` la règle et l'index des Cues, §158 ;
 comparatif avec le lecteur actuel ; cibles courtes), 3d (le son copié réparé : SBR implicite, silence, §159), 3e (la

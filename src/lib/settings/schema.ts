@@ -146,26 +146,6 @@ export const SETTINGS: readonly SettingDef[] = [
   { key: "BOOKS_GOOGLE_ENRICH", group: "playback", kind: "boolean", need: "optional", fallback: "false", inApp: true },
   { key: "GOOGLE_BOOKS_API_KEY", group: "playback", kind: "secret", need: "optional", fallback: "", inApp: true },
   { key: "PLAYER_AUTO_FRAME", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
-  // Lumen serveur sur cette installation (DECISIONS.md §194, 17/11/2026) : l'interrupteur de l'exploitant, allumé par
-  // défaut (le comportement d'avant — réservé aux administrateurs, appareil par appareil). Coupé, toutes les routes
-  // `/api/lumen` répondent 409 et l'option disparaît du Compte ; la conversion du son et la version allégée avec.
-  { key: "LUMEN_SERVER_ENABLED", group: "playback", kind: "boolean", need: "optional", fallback: "true", inApp: true },
-  // La conversion du son de Lumen serveur (DECISIONS.md §161 à §163) : DTS, TrueHD, Opus, MP2/MP3 convertis en
-  // E-AC-3 par le ffmpeg de l'image. Coupée par défaut ; « Lab bêta » dans la Configuration. Les plafonds viennent de
-  // la mesure de mise à l'échelle (§163) ; le cache, en mémoire (Mo) et sur le disque (Go, `DATA_DIR/lumen-audio`).
-  // L'emplacement du cache (`LUMEN_AUDIO_CACHE_DIR`) et le binaire (`LUMEN_FFMPEG_PATH`) sont du déploiement seul.
-  { key: "LUMEN_AUDIO_CONVERT", group: "playback", kind: "audience", need: "optional", fallback: "off", inApp: true },
-  { key: "LUMEN_AUDIO_MAX_JOBS", group: "playback", kind: "number", need: "optional", fallback: "2", inApp: true, placeholder: "2" },
-  { key: "LUMEN_AUDIO_MAX_SESSIONS", group: "playback", kind: "number", need: "optional", fallback: "6", inApp: true, placeholder: "6" },
-  { key: "LUMEN_AUDIO_RAM_MB", group: "playback", kind: "number", need: "optional", fallback: "512", inApp: true, placeholder: "512" },
-  { key: "LUMEN_AUDIO_CACHE_GB", group: "playback", kind: "number", need: "optional", fallback: "10", inApp: true, placeholder: "10" },
-  // La version allégée de Lumen serveur (`lumenServer/light/`) : la vidéo réencodée par le iGPU pour les connexions
-  // lentes. Coupée par défaut ; « Lab bêta ». Le binaire (`LUMEN_VIDEO_FFMPEG_PATH`) et l'emplacement du cache
-  // (`LUMEN_LIGHT_CACHE_DIR`) sont du déploiement seul, comme le périphérique `/dev/dri` à donner au conteneur.
-  { key: "LUMEN_LIGHT", group: "playback", kind: "audience", need: "optional", fallback: "off", inApp: true },
-  { key: "LUMEN_LIGHT_MAX_JOBS", group: "playback", kind: "number", need: "optional", fallback: "2", inApp: true, placeholder: "2" },
-  { key: "LUMEN_LIGHT_RAM_MB", group: "playback", kind: "number", need: "optional", fallback: "256", inApp: true, placeholder: "256" },
-  { key: "LUMEN_LIGHT_CACHE_GB", group: "playback", kind: "number", need: "optional", fallback: "10", inApp: true, placeholder: "10" },
   // L'application que le Chromecast ouvre (DECISIONS.md §64) : vide, le récepteur public de Google.
   // Pas un secret — l'identifiant d'un récepteur qu'une installation a enregistré elle-même.
   { key: "CAST_RECEIVER_APP_ID", group: "playback", kind: "text", need: "optional", fallback: "", inApp: true, placeholder: "CC1AD845" },

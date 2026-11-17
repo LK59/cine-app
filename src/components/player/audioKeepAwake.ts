@@ -1,6 +1,7 @@
 /**
  * Garder la sortie audio de l'appareil éveillée pendant une pause (Lumen serveur, 17/11/2026 ; un essai sous option le
- * matin, la règle le soir).
+ * matin, la règle le soir). Lumen serveur archivé (DECISIONS.md §196), le module reste : `ExperimentalPlayerHost`
+ * s'en sert sur iPhone et iPad.
  *
  * Mesuré sur un enregistrement d'écran d'iPhone (30 reprises, *Mr. Robot* en HLS natif) : la pause coupe le son en
  * ~0,12 s, mais à la reprise l'image repart aussitôt et le son ~0,45 s plus tard (médiane, 0,40 à 3,25 s) — la
@@ -14,7 +15,7 @@
  * revenu en 0 à 0,03 s sur 9 reprises (0,43 à 0,49 s sur 8 sans lui). Borné à cinq minutes de pause (une minute
  * jusqu'au même jour : une perte « extrêmement légère » revenait après les longues pauses) ; au-delà, et au retour
  * d'arrière-plan ou de veille (la veille y est fermée), la reprise réveille d'abord la sortie et lance l'image
- * `KEEP_AWAKE_WAKE_MS` plus tard (`LumenServerHost`, la micro-attente). Tout échec (pas de Web Audio, contexte refusé
+ * `KEEP_AWAKE_WAKE_MS` plus tard (la micro-attente de feu `LumenServerHost`). Tout échec (pas de Web Audio, contexte refusé
  * sans geste) laisse le comportement ordinaire : rien ne dépend de ce module.
  */
 

@@ -124,19 +124,6 @@ export interface ServerPlayerContext {
    * nommer le téléviseur.
    */
   target?: "chromecast";
-  /**
-   * Lumen serveur (DECISIONS.md §180) : `player: "lumen-serveur"`, `path: "remux-serveur"` — les lignes du même
-   * format, sous un autre nom de lecteur. Absents, `"serveur"` aux deux places, **à la même position** dans
-   * la ligne : les lignes du lecteur serveur et ses empreintes restent identiques à l'octet.
-   */
-  player?: "lumen-serveur";
-  path?: "remux-serveur";
-  /**
-   * L'identifiant de lecture de Lumen serveur (`s` de l'adresse), quand ce contexte le porte : un Chromecast qui lit
-   * Lumen serveur (§192). La route du journal y joint alors le relevé du serveur (`srv.*`), comme pour `LumenServerHost`
-   * (qui le pose lui-même sur ses lignes). Absent : rien de plus sur la ligne.
-   */
-  lumenSession?: string;
 }
 
 /** Le lecteur serveur a obtenu son flux et le pose sur l'élément. */
@@ -152,7 +139,7 @@ export function serverStartFields(
     ...(cause?.trigger ? { trigger: cause.trigger } : {}),
     // Le même nom de champ que le lecteur natif (`remux`, `webcodecs`) : une seule question,
     // « par où cette séance est-elle passée », une seule colonne pour y répondre.
-    path: ctx.path ?? "serveur",
+    path: "serveur",
     reason: stream.directPlay ? "fichier servi tel quel" : "transcodé par le serveur",
     hls: stream.directPlay ? "aucun" : stream.nativeHls ? "natif" : "hls.js",
     at: stream.resumeAt ?? 0,
@@ -162,7 +149,7 @@ export function serverStartFields(
 
 /** Le lecteur serveur n'a pas pu démarrer, ou s'est arrêté sur une erreur affichée. */
 export function serverFailureFields(ctx: ServerPlayerContext, reason: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
-  return { ...base(ctx), path: ctx.path ?? "serveur", reason, ...extra };
+  return { ...base(ctx), path: "serveur", reason, ...extra };
 }
 
 /** Le téléviseur a pris la route : la diffusion est établie, et non seulement demandée. */
@@ -173,7 +160,7 @@ export function castEstablishedFields(ctx: ServerPlayerContext, at: number, resu
   return {
     ...base(ctx),
     cast: true,
-    path: ctx.path ?? "serveur",
+    path: "serveur",
     reason: "diffusion établie",
     at: Math.round(at),
     ...(resumeAt != null ? { resumeAt: Math.round(resumeAt) } : {}),
@@ -182,7 +169,7 @@ export function castEstablishedFields(ctx: ServerPlayerContext, at: number, resu
 
 /** La reprise reposée sur le téléviseur, qui était reparti d'ailleurs — voir `CastResume`. */
 export function castResumeFields(ctx: ServerPlayerContext, from: number, resumeAt: number): Record<string, unknown> {
-  return { ...base(ctx), cast: true, path: ctx.path ?? "serveur", reason: "reprise reposée sur le téléviseur", at: Math.round(from), resumeAt: Math.round(resumeAt) };
+  return { ...base(ctx), cast: true, path: "serveur", reason: "reprise reposée sur le téléviseur", at: Math.round(from), resumeAt: Math.round(resumeAt) };
 }
 
 /**
@@ -194,7 +181,7 @@ export function castResumeFields(ctx: ServerPlayerContext, from: number, resumeA
  * reconstituée et comptait comme un échec sur la page Activité (relu le 24/09/2026).
  */
 export function castEndedFields(ctx: ServerPlayerContext, source: string, at: number, watched?: number): Record<string, unknown> {
-  return { ...base(ctx), cast: true, path: ctx.path ?? "serveur", reason: `fin de diffusion (${source})`, at: Math.round(at), ...(watched !== undefined ? { watched } : {}) };
+  return { ...base(ctx), cast: true, path: "serveur", reason: `fin de diffusion (${source})`, at: Math.round(at), ...(watched !== undefined ? { watched } : {}) };
 }
 
 /** Pourquoi la séance du lecteur serveur se termine — le `why` de sa ligne `stop`. */
@@ -261,7 +248,7 @@ export function serverStopFields(
   const duration = facts.duration;
   return {
     ...base(ctx),
-    path: ctx.path ?? "serveur",
+    path: "serveur",
     why,
     at: Math.round(at),
     watched,
@@ -282,29 +269,19 @@ export function serverStopFields(
  * se lisait comme un spectateur parti sans prévenir.
  */
 export function serverSleepFields(ctx: ServerPlayerContext, mode: SleepMode, at: number): Record<string, unknown> {
-  return { ...base(ctx), path: ctx.path ?? "serveur", why: "veille", sleepTimer: mode, at: Math.round(at) };
-}
-
-/**
- * Le début commun d'une ligne, chemin compris — pour les lignes que seul Lumen serveur écrit (`seek`, `audio`,
- * `stall`, `opening`, DECISIONS.md §180), qui n'ont pas de fonction à elles ici. Les lignes du lecteur serveur
- * n'en passent pas par là : elles restent écrites par leurs fonctions, à l'identique.
- */
-export function serverLineFields(ctx: ServerPlayerContext): Record<string, unknown> {
-  return { ...base(ctx), path: ctx.path ?? "serveur" };
+  return { ...base(ctx), path: "serveur", why: "veille", sleepTimer: mode, at: Math.round(at) };
 }
 
 function base(ctx: ServerPlayerContext): Record<string, unknown> {
   return {
     itemId: ctx.itemId,
     ...(ctx.title ? { title: ctx.title } : {}),
-    player: ctx.player ?? "serveur",
+    player: "serveur",
     cast: ctx.cast,
     ...(ctx.bench ? { bench: ctx.bench } : {}),
     ...(ctx.scene?.() ?? {}),
     ...(ctx.session ? { session: ctx.session } : {}),
     ...(ctx.agent ? { agent: ctx.agent } : {}),
     ...(ctx.target ? { target: ctx.target } : {}),
-    ...(ctx.lumenSession ? { lumenSession: ctx.lumenSession } : {}),
   };
 }

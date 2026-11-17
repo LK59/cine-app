@@ -53,25 +53,6 @@ describe("une place par réglage", () => {
 
   it("Lecture : le lecteur seulement ; le reste a sa page", () => {
     expect(CONFIG_LAYOUT.playback.flatMap(keysOf)).toEqual(["PLAYER_ENABLED", "PLAYER_SERVER_FALLBACK"]);
-    // La conversion du son de Lumen serveur (§161) : sa carte à elle, sous le lecteur, « Lab bêta », son état serveur.
-    // Lumen serveur, puis la conversion du son, puis la version allégée (§195), chacune avec ses prérequis.
-    expect(CONFIG_LAYOUT.lumenServer.flatMap(keysOf)).toEqual([
-      "LUMEN_SERVER_ENABLED",
-      "LUMEN_AUDIO_CONVERT",
-      "LUMEN_AUDIO_MAX_JOBS",
-      "LUMEN_AUDIO_MAX_SESSIONS",
-      "LUMEN_AUDIO_RAM_MB",
-      "LUMEN_AUDIO_CACHE_GB",
-      "LUMEN_LIGHT",
-      "LUMEN_LIGHT_MAX_JOBS",
-      "LUMEN_LIGHT_RAM_MB",
-      "LUMEN_LIGHT_CACHE_GB",
-    ]);
-    expect(CONFIG_LAYOUT.lumenServer[1]).toMatchObject({ lab: true, after: "lumenAudio" });
-    expect(CONFIG_LAYOUT.lumenServer[2]).toMatchObject({ lab: true, after: "lumenLight", titleKey: "config.lumenLight.title", prereqKey: "config.lumenLight.prereq", needs: ["lumenServerOn"] });
-    // Chaque option de Lumen serveur dit ce qu'elle demande à l'installation (§194).
-    expect(CONFIG_LAYOUT.lumenServer.every((c) => typeof c.prereqKey === "string")).toBe(true);
-    expect(SETTINGS_BY_KEY.get("LUMEN_AUDIO_CONVERT")).toMatchObject({ kind: "audience", fallback: "off" });
     expect(CONFIG_LAYOUT.diffusion.flatMap(keysOf).sort()).toEqual(
       ["CAST_RECEIVER_APP_ID", "CHROMECAST_FOR_EVERYONE", "OFFLINE_DOWNLOADS", "OFFLINE_DOWNLOADS_FOR_EVERYONE", "OFFLINE_SERVER_QUOTA_GB"].sort(),
     );
@@ -155,9 +136,6 @@ describe("ce qui manque", () => {
     );
     expect(missingNeeds(all, ready)).toEqual([]);
     expect(missingNeeds(["playerOn"], views(view("PLAYER_ENABLED", { value: "false" })))).toEqual(["playerOn"]);
-    // Lumen serveur coupé : la version allégée n'a plus d'effet (§195) ; allumé ou laissé à son défaut, rien ne manque.
-    expect(missingNeeds(["lumenServerOn"], views(view("LUMEN_SERVER_ENABLED", { value: "false" })))).toEqual(["lumenServerOn"]);
-    expect(missingNeeds(["lumenServerOn"], views(view("LUMEN_SERVER_ENABLED", { value: "true" })))).toEqual([]);
   });
 
   it("ne dit rien tant que les réglages ne sont pas arrivés", () => {

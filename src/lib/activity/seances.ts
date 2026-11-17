@@ -43,6 +43,7 @@ export interface Seance {
    * négocié comme celui du lecteur serveur, son en stéréo, image parfois convertie en SDR.
    * « lumen-serveur » : le fichier remultiplexé par le serveur de Laterna, lu en HLS natif (DECISIONS.md §180) —
    * un témoin du fichier, comme le lecteur natif ; une séance relayée ensuite au lecteur serveur devient « serveur ».
+   * Archivé le 17/11/2026 (§196) : plus rien ne l'écrit, mais les lignes d'avant restent lisibles ici.
    */
   player: "natif" | "serveur" | "hors-ligne" | "immersion" | "lumen-serveur";
   /**

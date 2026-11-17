@@ -63,8 +63,6 @@ describe("GET /api/config/public", () => {
       playerEnabled: true,
       // Lu avant que le moindre lecteur soit monté : c'est lui qui dit lequel des deux existe.
       playerServerFallback: false,
-      // Lumen serveur (§194) : un compte ordinaire, jamais.
-      lumenServerAvailable: false,
       homeContinueHero: false,
       // L'option « Livres » (§127) : absente de cette configuration, donc coupée.
       booksEnabled: false,

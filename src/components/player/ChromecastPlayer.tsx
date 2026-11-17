@@ -36,24 +36,6 @@ import {
 } from "@/lib/chromecast/framework";
 import { chromecastErrorReason, chromecastMediaSpec, idleOutcome, isSideLoadable, subtitleTrackId, toLoadRequest, type ChromecastSubtitleFacts } from "@/lib/chromecast/media";
 import { usePlayerBackClose } from "@/lib/playerHistory";
-import { lumenCastWanted, newLumenCastPlaybackId, noteReceiverRefusedHevc, receiverRefusedHevc, requestLumenCast, type LumenCastAnswer } from "@/lib/chromecast/lumenCast";
-
-/** Le chargement en cours passe par Lumen serveur (§192) : ce qu'il faut pour le journal et pour le repli. */
-type LumenLoad = Extract<LumenCastAnswer, { ok: true }>;
-
-/** Les champs de contexte d'une ligne pendant un chargement Lumen serveur ; rien sinon (les lignes d'avant, à l'octet). */
-function lumenContext(lumen: LumenLoad | null): Pick<ServerPlayerContext, "player" | "path" | "lumenSession"> {
-  return lumen ? { player: "lumen-serveur", path: "remux-serveur", lumenSession: lumen.s } : {};
-}
-
-/** Le contexte du journal pour ce chargement : celui de Lumen serveur, ou la forme d'avant sans aucune de ses clés. */
-function withLumen(ctx: ServerPlayerContext, lumen: LumenLoad | null): ServerPlayerContext {
-  const next = { ...ctx };
-  delete next.player;
-  delete next.path;
-  delete next.lumenSession;
-  return { ...next, ...lumenContext(lumen) };
-}
 
 /**
  * Le plafond de débit demandé à Jellyfin pour un Chromecast.
@@ -189,13 +171,6 @@ export function ChromecastPlayer({
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** `start` lui-même, pour la relance que décide son propre délai. */
   const startRef = useRef<(opts: StartOptions) => Promise<void>>(async () => {});
-  /**
-   * Le média chargé sur le récepteur vient de Lumen serveur (§192) : l'adresse `cc.{jeton}`, son identifiant de lecture,
-   * la famille de sa vidéo. Null : le flux de Jellyfin, comme avant.
-   */
-  const lumenRef = useRef<LumenLoad | null>(null);
-  /** Lumen serveur a échoué sur ce récepteur pour ce titre : le reste de la diffusion du titre passe par Jellyfin. */
-  const lumenOffRef = useRef(false);
 
   // Le journal : une séance par titre, la même que celle du lecteur natif qui a passé la main.
   const agent = typeof navigator === "undefined" ? undefined : navigator.userAgent;
@@ -213,10 +188,8 @@ export function ChromecastPlayer({
       restartsRef.current = {};
       subtitleSwitchesRef.current = 0;
       establishedRef.current = false;
-      // Un autre titre (l'épisode suivant) : Lumen serveur se retente — un autre fichier, peut-être un autre codec.
-      lumenOffRef.current = false;
     }
-    logContext.current = { itemId, title, cast: true, target: "chromecast", bench, session: logSession.current.id, agent, ...lumenContext(lumenRef.current) };
+    logContext.current = { itemId, title, cast: true, target: "chromecast", bench, session: logSession.current.id, agent };
   }, [itemId, title, bench, agent]);
 
   const playing = phase === "playing" && !remote.paused && !remote.waiting;
@@ -254,41 +227,6 @@ export function ChromecastPlayer({
       onCastEnded(at, paused);
     },
     [onCastEnded, watched, itemId, bench]
-  );
-
-  /**
-   * Lumen serveur n'a pas pris sur ce récepteur (§192) — chargement refusé, aucune image, erreur du récepteur — : le
-   * flux de Jellyfin, à la dernière position connue, pour le reste de ce titre. Une ligne `fallback` (`target:
-   * "chromecast"`, `path: "remux-serveur"`, `to: "jellyfin"`, le `code` Cast d'un refus), puis la relance ordinaire
-   * (`why: "ladder"`). Un fichier HEVC refusé avant toute image : ce récepteur est noté comme ne lisant pas le HEVC
-   * (`noteReceiverRefusedHevc`), pour ne pas refaire l'essai à chaque titre. Faux : rien à faire (pas sur Lumen serveur).
-   */
-  const lumenFallbackRef = useRef<(source: string, code?: string) => boolean>(() => false);
-  const lumenFallback = useCallback(
-    (source: string, code?: string): boolean => {
-      const lumen = lumenRef.current;
-      if (!lumen || closedRef.current || handedBackRef.current) return false;
-      if (lumen.video === "hevc" && !pictureRef.current) noteReceiverRefusedHevc(device);
-      if (watchdogRef.current) clearTimeout(watchdogRef.current);
-      watchdogRef.current = null;
-      reportPlayback("fallback", {
-        ...serverFailureFields(logContext.current, `chromecast : remux serveur — ${source}`, { to: "jellyfin", at: Math.round(lastKnownTime.current), picture: pictureRef.current }),
-        ...(code ? { code } : {}),
-        ...(device ? { device } : {}),
-      });
-      lumenOffRef.current = true;
-      lumenRef.current = null;
-      logContext.current = withLumen(logContext.current, null);
-      void startRef.current({
-        resumeAt: lastKnownTime.current,
-        ...(currentAudioRef.current !== null ? { audioStreamIndex: currentAudioRef.current } : {}),
-        textSubtitle: currentSubtitleRef.current,
-        why: "ladder",
-        trigger: `remux serveur : ${source}`,
-      });
-      return true;
-    },
-    [device]
   );
 
   /**
@@ -424,32 +362,7 @@ export function ChromecastPlayer({
       currentSubtitleRef.current = subtitle;
       setCurrentSubtitle(subtitle);
 
-      // Lumen serveur pour le récepteur (§192), sous l'option de l'appareil seulement : le fichier remultiplexé par le
-      // serveur, le son en AAC. Pas pour un sous-titre en images (Lumen serveur n'incruste rien : Jellyfin le fait), ni
-      // après un échec sur ce titre. Un refus du serveur garde le flux que Jellyfin vient de négocier, sans autre détour.
-      let lumen: LumenLoad | null = null;
-      let lumenDeclined: string | null = null;
-      if (!isDirectPlay && opts.burnedSubtitle === undefined && !lumenOffRef.current && lumenCastWanted(session)) {
-        const answer = await requestLumenCast({
-          itemId,
-          audioStreamIndex: audio ?? undefined,
-          jellyfinAudio: audioFacts,
-          s: newLumenCastPlaybackId(),
-          hevc: !receiverRefusedHevc(device),
-          origin: window.location.origin,
-        });
-        if (mine !== generation.current || closedRef.current || handedBackRef.current) {
-          void stopOrphanSession({ ...negotiated, client: PLAYBACK_CLIENTS.stable }, opts.resumeAt);
-          return;
-        }
-        if (answer.ok) lumen = answer;
-        else lumenDeclined = answer.reason;
-      }
-      lumenRef.current = lumen;
-      logContext.current = withLumen(logContext.current, lumen);
-
-      // La reprise rapportée à Jellyfin sous la séance négociée ; le flux, lui, vient de Lumen serveur sans transcodage.
-      setPlaySession(lumen ? { ...negotiated, playMethod: "DirectStream" } : negotiated);
+      setPlaySession(negotiated);
       const cast = currentChromecastSession();
       const globals = chromecastGlobals();
       reportPlayback("start", {
@@ -460,9 +373,6 @@ export function ChromecastPlayer({
         ),
         hls: isDirectPlay ? "aucun" : "récepteur",
         ...(device ? { device } : {}),
-        // Ce que Lumen serveur sert au récepteur, ou pourquoi il ne le sert pas (l'option allumée seulement).
-        ...(lumen ? { reason: "remux serveur", lumenAudio: lumen.converted ? "aac converti" : "copié", ...(lumen.video ? { lumenVideo: lumen.video } : {}) } : {}),
-        ...(lumenDeclined ? { lumenDeclined } : {}),
       });
       if (!castUrl || !cast || !globals) {
         // Plus de session : le téléviseur s'est éteint ou la liste a été fermée entre-temps.
@@ -475,7 +385,7 @@ export function ChromecastPlayer({
       pictureRef.current = false;
       if (watchdogRef.current) clearTimeout(watchdogRef.current);
       const spec = chromecastMediaSpec({
-        castUrl: lumen ? lumen.url : castUrl,
+        castUrl,
         isDirectPlay,
         title: typeof data.title === "string" ? data.title : session.title,
         startSeconds: opts.resumeAt,
@@ -490,8 +400,6 @@ export function ChromecastPlayer({
         loadingRef.current = false;
         if (mine !== generation.current) return;
         const code = errorCode(e);
-        // Lumen serveur refusé par le récepteur : le flux de Jellyfin, à la même position, sans écran d'erreur.
-        if (lumen && lumenFallback(`chargement refusé (${chromecastErrorReason(code)})`, code)) return;
         reportPlayback("error", serverFailureFields(logContext.current, `chromecast : ${chromecastErrorReason(code)}`, { code, ...(device ? { device } : {}) }));
         setError(chromecastErrorReason(code));
         setPhase("error");
@@ -505,8 +413,6 @@ export function ChromecastPlayer({
       watchdogRef.current = setTimeout(() => {
         watchdogRef.current = null;
         if (mine !== generation.current || closedRef.current || handedBackRef.current || pictureRef.current) return;
-        // Lumen serveur sert déjà de l'AAC : un récepteur muet sur lui repasse au flux de Jellyfin (et son échelle).
-        if (lumen && lumenFallback(`aucune image en ${CAST_NO_PICTURE_MS / 1000} s`)) return;
         if (!aacAudioRef.current && !isDirectPlay) {
           aacAudioRef.current = true;
           void startRef.current({ ...opts, why: "ladder", trigger: `aucune image en ${CAST_NO_PICTURE_MS / 1000} s → son en AAC` });
@@ -521,14 +427,11 @@ export function ChromecastPlayer({
         reportPlayback("cast", { ...castEstablishedFields(logContext.current, opts.resumeAt), ...(device ? { device } : {}) });
       }
     },
-    [itemId, bench, locale, t, session, device, handBack, lumenFallback]
+    [itemId, bench, locale, t, session.title, device, handBack]
   );
   useEffect(() => {
     startRef.current = start;
   }, [start]);
-  useEffect(() => {
-    lumenFallbackRef.current = lumenFallback;
-  }, [lumenFallback]);
 
   // L'ouverture, puis chaque épisode suivant (le même composant, un autre `itemId`).
   const takeoverRef = useRef(takeover);
@@ -585,8 +488,6 @@ export function ChromecastPlayer({
       if (player.playerState !== "IDLE" || loadingRef.current) return;
       const outcome = idleOutcome(currentChromecastSession()?.getMediaSession()?.idleReason);
       if (outcome === "finished") finishRef.current();
-      // Le récepteur s'est arrêté sur une erreur en lisant Lumen serveur : le flux de Jellyfin, à la même position.
-      else if (outcome === "error" && lumenFallbackRef.current("erreur du récepteur")) return;
       else if (outcome === "error") {
         reportPlayback("error", serverFailureFields(logContext.current, "chromecast : le récepteur a interrompu la lecture sur une erreur"));
         setError("le récepteur a interrompu la lecture sur une erreur");

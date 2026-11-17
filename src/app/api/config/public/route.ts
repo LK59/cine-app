@@ -48,9 +48,6 @@ export async function GET(req: NextRequest) {
     // Le téléchargement hors ligne (bêta) : le bouton des fiches et le gestionnaire n'existent qu'avec lui.
     // Et pour ce compte-ci : administrateurs seulement tant que l'installation ne l'a pas ouvert à tous.
     offlineDownloads: config.player.offlineDownloads && (config.player.offlineDownloadsForEveryone || session?.role === "admin"),
-    // Lumen serveur (§194) : l'interrupteur de l'installation, pour un administrateur — l'option de l'appareil
-    // (Compte) n'est montrée qu'avec lui. Les routes refusent d'elles-mêmes.
-    lumenServerAvailable: (config.lumen?.serverEnabled ?? true) && session?.role === "admin",
     // L'option « Livres » (DECISIONS.md §127) : la catégorie Livres de la bascule, la section de la
     // recherche et tout le code des livres n'existent qu'avec `booksEnabled` — l'option ET le choix du compte.
     booksEnabled: booksShown,

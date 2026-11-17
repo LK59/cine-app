@@ -673,61 +673,13 @@ hold (the scenes and their people), never server-only data such as named lines o
 `ASK_PERSON_ENABLED`, `SOFAR_ENABLED` are audiences (the last two follow the first when empty); share links
 get no AI feature whatever they say (`aiAudienceAllows`).
 
-**Lumen serveur is the same remuxer run by the server, served as stateless HLS fMP4** (DECISIONS §154–§163, §180,
-§185–§189; `docs/remux-serveur/README.md` is its reference). Behind an administrator's per-device option (Account panel →
-admin group → « Lecteur expérimental : remux serveur », `localStorage["cine:lumen-serveur"]`), a WebKit device with native
-HLS opens a film through `LumenServerHost` where it would have opened the native player (`choosePlayer` → `"lumen"`,
-`lumenWanted`); off, nothing changes and the player fingerprints are identical. Every list, init and segment is rebuilt
-from the file alone (`src/lib/lumenServer/`): the index read from the Cues, the **`cra` cut** (any keyframe, IDR or CRA,
-opens a segment; Apple's native HLS drops the RASL after a seek, MediaSource never did), segments built on demand in
-`worker_threads`, an index cache on disk (`DATA_DIR/lumen-index`). The address carries everything —
-`/api/lumen/{item}/{version}/{s}/{name}`, `{version}` = `LUMEN_FORMAT_VERSION` + the file's fingerprint — and **any served
-address gives the same bytes tomorrow** until that version moves: bump it whenever a list or segment would change for an
-existing file. Copyable audio (AAC, AC-3, E-AC-3, FLAC) is copied and repaired (§159); DTS, TrueHD, Opus, MP2/MP3 are
-**converted to E-AC-3** by a pinned ffmpeg when `LUMEN_AUDIO_CONVERT` allows (§161–§163, off by default; each segment a
-pure function of the file, cached in RAM and `DATA_DIR/lumen-audio`). All audio tracks sit in **one audio group** (format
-5, §185): a track change is `audioTracks[i].enabled`, checked 2 s later, else the list reopened in the page on the same
-element at `#t=` with `prepare` sent first and the last frame frozen on top — never a page reload.
-**Routes and security**: every route re-checks the administrator itself (`lumenAccess`, `assertVisible`), the proxy's
-`ADMIN_ONLY_READS` is only the first gate; an absence answers 410 (a stale version), 409 (not served) or 503, never
-404/400 (CrowdSec). The cookieless accesses are a television's: an Apple TV's (§186): `…/{s}/tv.{token}/{name}`, a token of its own
-(`tvPass.ts`: its own key, signed `lumen` scope, administrator role, one title, one playback, the session alive, six
-hours), let through by the proxy (`lumenTvPassFor`) and re-verified by the route; a request that also carries a cookie
-must pass the ordinary check too. Relative URIs make every segment inherit the token; video segments fetched without a
-cookie feed `castProgress`. A Chromecast gets the same shape under its own scope (§192): `…/{s}/cc.{token}/{name}`
-(`lumen-cc`, neither token opens the other's addresses), CORS `*` without credentials on every answer to it, AAC copied or
-converted, chosen by the sending device's option (Chrome) and `eligibility?cast=1`, Jellyfin's stream as the fallback. A text subtitle reaches the television in the stream (§191): while casting only, the element
-reopens `master.m3u8?…&st=<Jellyfin index>`, which adds one WebVTT `SUBTITLES` rendition (DEFAULT=YES) segmented on the
-video grid (`subtitles.ts`, `X-TIMESTAMP-MAP` at the delay D) — without `st` the master is byte-identical. **Fallbacks**: before the first picture (refusal, code 4, 20 s without a picture) the native
-player takes over in the same page (`declineLumen`); after it, the playback recovers **on this path** (`recover`: the
-server re-read for up to 90 s across a deploy, a new version reopened at the position), the server player only when the
-file is no longer served or after three reopenings. **« Améliorer les dialogues » is done by the server** (§193) when
-`LUMEN_AUDIO_CONVERT` allows: `DialogueEnhancer` itself (not an ffmpeg port — the pinned binary has no EQ/compressor,
-and three stages have no filter equivalent) runs in a worker on ffmpeg's decoded PCM, each segment from its own 6 s
-pre-roll with a fresh enhancer, then one E-AC-3 encode per segment — still a pure function of the file; AC-3/E-AC-3 are
-decoded once per segment (FFmpeg's Dolby decoder dithers from a seeded generator). A second master list
-(`?dialogue=on|strong`) serves each track's processed rendition (`a{N}d1x{cid}`, `a{N}d2x{cid}`) in place of its own;
-the plain list and every existing address are unchanged (no format bump; `cid` carries the rules, ffmpeg and V8).
-Changing the mode is a same-element reopen (§185). AAC, FLAC, a busy server or the option off: hand back to the native
-player (§188). Bump `LUMEN_DIALOGUE_VERSION` when `dialogueEnhance.ts` changes (a test holds its SHA-256).
-**The lighter version** (§195, `src/lib/lumenServer/light/`, `LUMEN_LIGHT`, off by default) re-encodes the video through the
-server's Intel iGPU (VAAPI, a second pinned minimal ffmpeg at `/usr/local/bin/ffmpeg-video`, `tools/ffmpeg-video/`, `/dev/dri` given to the container) into one or two
-HEVC rungs (`l1x{cid}` ≤ 1080p, `l2x{cid}` ≤ 720p) on **the same segments, frame for frame** as the original — times read
-from the original's `moof`s, no B-frames, `-fps_mode passthrough`, every frame's instant checked — so Safari's own ABR
-switches without a cut; each requested segment prefetches the next three, and the page asks for the right rung
-(`prepare` with `light`) when its measured link drops under 1.3× the film's bitrate. Bump `LIGHT_RULES_VERSION` when an
-encoding rule changes; `bw=bas` only ever divides the original variant.
-**Logs**: `player: "lumen-serveur"`, `path: "remux-serveur"`, the playback id as `lumenSession`; the log route appends the
-server's tally (`srv.*`) to `stop`, `stall`, `error`, `fallback`, `rebuild`; `audio` lines say `via` (`audioTracks`,
-`réouverture`), `tookMs`, `pictureMs`, `processing`, `dialogue` (the mode served; `start` carries it with
-`dialogueBy: "serveur"`); a pre-picture `fallback` says what Safari fetched (`seen`).
-`docker logs` and `server.log` carry `lumen/*` errors. **Each Lumen option is deployed on its own** (§194): Configuration →
-Lecture lists the players and what each needs from the server, then one card per option with its prerequisites —
-`LUMEN_SERVER_ENABLED` (on by default; off, every `/api/lumen` route answers 409 `lumen-coupe`), sound conversion (the
-image's ffmpeg, no GPU), the lighter version (an Intel GPU given to the container). Safari is told a quarter of the film's
-bitrate (`bw=bas`) only when the measured link allows it (`lumenLink.ts`). **The bench page** `/lumen-test` (admin) runs passes against real
-titles on a device — cuts, levers, muxed audio, converted audio, codec switches — and sends one `kind: "lumen-test"`
-line per trial to `startup.log`.
+**Lumen serveur — the same remuxer run by the server and served as HLS to Safari — is archived** (17/11/2026,
+DECISIONS §196; its last state is the tag `lumen-serveur-final-2026-11-17`, its design and measurements stay in
+`docs/remux-serveur/`). Every file plays through Lumen client (MediaSource) on every engine, and casting stays on
+the Jellyfin server player. Its two surviving gestures live in Lumen client: the audio output kept awake during a
+pause on iPhone/iPad (`audioKeepAwake.ts`) and the reopen at the next keyframe after a repeated loss. Every old
+`/api/lumen/*` address answers **410** `lumen-archive` from one catch-all route, without a session — never a burst of
+404s from a stale tab or a television.
 
 **The player** has its own reference: read `DOC-TECH.md` before touching `src/lib/webcodecs/`,
 and `docs/cycle-de-vie-lecteur.md` before touching `ExperimentalPlayerHost`, `PlayerHost` or the

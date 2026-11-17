@@ -37,23 +37,6 @@ COPY src/lib/codecSupport.ts src/lib/webkitEngine.ts src/lib/networkBitrate.ts s
 COPY salons/src/protocol.ts salons/src/quiz.ts salons/src/tv.ts /build/salons/src/
 RUN npm run build
 
-# Le ffmpeg minimal de Lumen serveur (conversion du son, DECISIONS.md §161, docs/remux-serveur/5-conversion-son.md) :
-# FFmpeg 7.1.5 épinglé (archive vérifiée par SHA-256), lié statiquement, LGPL — `tools/ffmpeg-lumen/build.sh` et
-# son README disent tout. Une étape à part, sur la même Alpine que `node:26-alpine` : gardée en cache tant que le
-# script ne change pas (~2 min sans cache, en CI). Toujours dans l'image (4 Mo), jamais appelé tant que l'option
-# « conversion du son » est coupée (défaut) ; sa présence et sa version sont détectées au démarrage.
-FROM alpine:3.24 AS ffmpeg-lumen
-COPY tools/ffmpeg-lumen/build.sh /build.sh
-RUN JOBS=4 sh /build.sh
-
-# Le ffmpeg vidéo minimal de la version allégée de Lumen serveur (DECISIONS.md §195) : la même FFmpeg 7.1.5 épinglée,
-# avec seulement VAAPI (décodage HEVC/H.264, `scale_vaapi`, encodeur `hevc_vaapi`), le Matroska en entrée et un flux
-# HEVC brut en sortie — `tools/ffmpeg-video/build.sh` et son README disent tout. Lié dynamiquement à libva (pas de
-# libva statique sur Alpine). ~5 Mo, à la place du paquet Alpine `ffmpeg` et de ses ~180 Mo de bibliothèques.
-FROM alpine:3.24 AS ffmpeg-video
-COPY tools/ffmpeg-video/build.sh /build.sh
-RUN JOBS=4 sh /build.sh
-
 FROM node:26-alpine AS builder
 # Le repère du build, repris tel quel dans les réglages. `.git` n'entre pas dans le contexte de
 # build (voir .dockerignore), donc le hash ne peut venir que d'ici :
@@ -79,12 +62,6 @@ RUN if [ "$SKIP_TESTS" = "1" ]; then echo "tests déjà passés sur ce commit (S
 # `next build` both passed. The cache saved four seconds (2.9 s against 6.6 s compiled cold).
 # The image cache the server writes at runtime lives in a volume (docker-compose.yml), not here.
 RUN npm run build
-# Le fil de calcul de Lumen serveur (DECISIONS.md §155, §156) : Next n'émet pas d'entrée pour un
-# `worker_threads` côté serveur, et le code du moteur (TypeScript, alias `@/…`) ne se charge pas tel
-# quel dans Node. rolldown (installé avec vitest) l'empaquette en un module ESM autonome, posé dans
-# `server-boot/` — copié plus bas avec le point d'entrée ; `lumenWorkerScript()` le cherche là. Sans
-# lui, le même calcul se ferait sur la boucle d'événements, celle qui sert tout le reste.
-RUN node tools/lumen-worker/build.mjs server-boot/lumen-worker.mjs
 
 FROM node:26-alpine AS runner
 WORKDIR /app
@@ -112,28 +89,15 @@ RUN addgroup -g 1001 cineapp && adduser -u 1001 -G cineapp -s /bin/sh -D cineapp
 # `npm ls sharp` quand `next` change. 0.35.5 depuis next 16.4.1 (14/10/2026) : faille de librsvg
 # (GHSA-wq5f-xc86-pv6w) corrigée dans les libvips qu'il embarque.
 RUN --mount=type=cache,target=/root/.npm apk add --no-cache libstdc++ tzdata && npm install --no-save sharp@0.35.5
-# Ce que le ffmpeg vidéo de la version allégée (étape `ffmpeg-video`) charge à l'exécution : libva (libva-drm, libdrm)
-# et le pilote VAAPI des iGPU Intel récents (`intel-media-driver`, iHD) — indispensable. Sans `/dev/dri` donné au
-# conteneur (et le groupe `render` en `group_add`), la détection le voit indisponible et rien d'autre ne change.
-RUN apk add --no-cache libva libdrm intel-media-driver
 
 COPY --from=builder --chown=cineapp:cineapp /app/public ./public
 COPY --from=builder --chown=cineapp:cineapp /app/.next/standalone ./
 COPY --from=builder --chown=cineapp:cineapp /app/.next/static ./.next/static
 # Le point d'entrée : il remet les fichiers statiques des builds précédents avant de lancer le
-# serveur (voir server-boot/staticCarryover.mjs). Avec lui, le fil de calcul de Lumen serveur empaqueté
-# à l'étape précédente (`server-boot/lumen-worker.mjs`).
+# serveur (voir server-boot/staticCarryover.mjs).
 COPY --from=builder --chown=cineapp:cineapp /app/server-boot ./server-boot
 # Le build du mode « Immersion », servi par deux routes (voir l'étape `immersion`).
 COPY --from=immersion --chown=cineapp:cineapp /build/immersion/dist ./immersion-dist
-# ffmpeg pour la conversion du son de Lumen serveur (étape `ffmpeg-lumen`) et son offre de source (LGPL).
-# `LUMEN_FFMPEG_PATH` le cherche ici par défaut ; vide, la conversion est vue comme indisponible.
-COPY --from=ffmpeg-lumen /opt/ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
-COPY --from=ffmpeg-lumen /opt/ffmpeg/share/ffmpeg-lumen /usr/local/share/ffmpeg-lumen
-# Le ffmpeg vidéo de la version allégée (étape `ffmpeg-video`) et son offre de source (LGPL), à un chemin à lui :
-# `LUMEN_VIDEO_FFMPEG_PATH` le cherche ici par défaut. Il ne remplace pas celui du son, chacun appelé par son chemin.
-COPY --from=ffmpeg-video /opt/ffmpeg-video/bin/ffmpeg /usr/local/bin/ffmpeg-video
-COPY --from=ffmpeg-video /opt/ffmpeg-video/share/ffmpeg-video /usr/local/share/ffmpeg-video
 # Copy compiled better-sqlite3 native module (compiled for Alpine in deps stage)
 COPY --from=deps --chown=cineapp:cineapp /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=deps --chown=cineapp:cineapp /app/node_modules/web-push ./node_modules/web-push

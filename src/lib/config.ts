@@ -29,13 +29,6 @@ function envOnly(name: string, fallback = ""): string {
   return process.env[name] ?? fallback;
 }
 
-/** Un entier borné ; une valeur mal formée prend le défaut, une valeur hors bornes la borne. */
-function clampInt(value: string, fallback: number, min: number, max: number): number {
-  const n = Number(value.trim());
-  if (!Number.isFinite(n) || value.trim() === "") return fallback;
-  return Math.min(max, Math.max(min, Math.round(n)));
-}
-
 /** Une heure de 0 à 23 ; une valeur mal formée prend le défaut. */
 function hourOf(value: string, fallback: number): number {
   const n = Number(value);
@@ -394,78 +387,6 @@ export const config = {
     /** Le tag posé dans Jellyfin et bloqué sur ce compte seul. */
     get tag() {
       return envOnly("REQUEST_HIDE_TAG", "masque-demandes").trim() || "masque-demandes";
-    },
-  },
-  lumen: {
-    // Lumen serveur (docs/remux-serveur/, DECISIONS.md §155) : comment un chemin de fichier vu par
-    // Jellyfin se lit dans ce conteneur — `racineJellyfin=racineConteneur`, plusieurs paires séparées
-    // par `;` (ici `/media=/mnt/media/video`). Vide, coupé : les routes `/api/lumen/…` répondent que le
-    // fichier n'est pas lisible ici (`lecture-impossible`) — le relais Jellyfin en repli n'est pas encore
-    // écrit. Déploiement seulement (§81) : il dit où sont montés les médias, ce que seul le compose sait.
-    // Relu à chaque appel (`lumenServer/paths.ts`), lu par `lumenFileOf` (§156).
-    get pathMap() {
-      return envOnly("LUMEN_PATH_MAP", "");
-    },
-    // Lumen serveur sur cette installation (§194) : l'interrupteur de l'exploitant, allumé par défaut. Coupé,
-    // `lumenAccess` refuse tout (409) et la page publique le dit (`lumenServerAvailable`).
-    get serverEnabled() {
-      return optional("LUMEN_SERVER_ENABLED", "true") !== "false";
-    },
-    // La conversion du son au serveur (phase 2, DECISIONS.md §161) : à qui elle est ouverte (`off` par défaut,
-    // `admins`, `tous`, `featureAudience.ts`). Coupée, ou sans ffmpeg, Lumen serveur refuse une piste DTS,
-    // TrueHD, Opus ou MP2/MP3 comme avant (`son-codec`) et le lecteur actuel la convertit dans la page.
-    get audioConvert() {
-      return parseAudience(optional("LUMEN_AUDIO_CONVERT", "off"));
-    },
-    // Combien de processus ffmpeg à la fois, et combien de lectures admises à la conversion : les défauts
-    // viennent de la mesure de mise à l'échelle du 17/11/2026 (DECISIONS §163) — deux conversions gardent un segment
-    // à ~0,4 s, quatre le portent à 0,56 s (p95 1,6 s), huit à 1,3 s (p95 2,4 s) pour à peine plus de débit ; six
-    // lectures en continu en prennent ~30 %. Bornés ici : une valeur aberrante ne lance pas cinquante processus.
-    get audioMaxJobs() {
-      return clampInt(optional("LUMEN_AUDIO_MAX_JOBS", "2"), 2, 1, 8);
-    },
-    get audioMaxSessions() {
-      return clampInt(optional("LUMEN_AUDIO_MAX_SESSIONS", "6"), 6, 1, 32);
-    },
-    // Le cache des segments convertis : en mémoire (Mo) pour la fenêtre des séances actives, sur le disque (Go,
-    // le moins récemment lu évincé). Relus à chaque appel ; une baisse s'applique au balayage suivant.
-    get audioRamMb() {
-      return clampInt(optional("LUMEN_AUDIO_RAM_MB", "512"), 512, 32, 4096);
-    },
-    get audioCacheGb() {
-      return clampInt(optional("LUMEN_AUDIO_CACHE_GB", "10"), 10, 0, 1000);
-    },
-    // Déploiement seulement (§81) : où est ffmpeg (vide = pas de conversion) et où va le cache disque (un volume
-    // que le compose doit monter s'il n'est pas sous `data/`).
-    get ffmpegPath() {
-      return envOnly("LUMEN_FFMPEG_PATH", "/usr/local/bin/ffmpeg");
-    },
-    get audioCacheDir() {
-      return envOnly("LUMEN_AUDIO_CACHE_DIR", "");
-    },
-    // La version allégée de Lumen serveur (`lumenServer/light/`) : à qui elle est ouverte (`off` par défaut, `admins`,
-    // `tous`). Coupée, ou sans encodeur VAAPI, la liste maître est celle d'avant à l'octet près.
-    get light() {
-      return parseAudience(optional("LUMEN_LIGHT", "off"));
-    },
-    // Combien d'encodages vidéo à la fois : le iGPU sert aussi Jellyfin et X-Ray. Un encodage tient ~2,5 fois le temps
-    // réel (mesure du 17/11/2026) : deux rattrapent une lecture en retard.
-    get lightMaxJobs() {
-      return clampInt(optional("LUMEN_LIGHT_MAX_JOBS", "2"), 2, 1, 4);
-    },
-    get lightRamMb() {
-      return clampInt(optional("LUMEN_LIGHT_RAM_MB", "256"), 256, 32, 4096);
-    },
-    get lightCacheGb() {
-      return clampInt(optional("LUMEN_LIGHT_CACHE_GB", "10"), 10, 0, 1000);
-    },
-    // Déploiement seulement (§81) : le ffmpeg vidéo (épinglé, VAAPI, `tools/ffmpeg-video` ; vide = pas de version
-    // allégée) et le cache disque des segments allégés.
-    get videoFfmpegPath() {
-      return envOnly("LUMEN_VIDEO_FFMPEG_PATH", "/usr/local/bin/ffmpeg-video");
-    },
-    get lightCacheDir() {
-      return envOnly("LUMEN_LIGHT_CACHE_DIR", "");
     },
   },
   news: {

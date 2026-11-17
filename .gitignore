@@ -42,5 +42,3 @@ RUNBOOK.private.md
 AUDIT_Prompt.md
 AUDIT.md
 
-# Le fil de calcul de Lumen serveur, empaqueté par tools/lumen-worker/build.mjs (jamais versionné)
-server-boot/lumen-worker.mjs

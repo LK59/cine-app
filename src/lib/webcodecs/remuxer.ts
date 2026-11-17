@@ -20,7 +20,7 @@ import { clusterOffsetForTime, cueTimeAfter, cueTimeAtOrBefore } from "./matrosk
 import { isNetworkFailure, isReadAbandoned, type NetworkWindow } from "./byteSource";
 import { audioLeadGapSeconds, rememberLeadGap, rememberedLeadGap, type AudioLeadGap } from "./audioLeadGap";
 import { initSegment, mediaSegment, type MuxSample, type MuxTrackInfo } from "./mp4Muxer";
-import { audioSampleEntryFor, hlsDolbyVisionEntry, isOpusHead, videoSampleEntry } from "./mp4SampleEntries";
+import { audioSampleEntryFor, isOpusHead, videoSampleEntry } from "./mp4SampleEntries";
 // `opusCopyConsidered` (DECISIONS.md §66) et `geckoEngine` : écrits ici jusqu'au 22/10/2026.
 import { geckoEngine, opusCopyConsidered } from "./browserEngine";
 import {
@@ -332,13 +332,6 @@ export interface RemuxOptions {
    * traitement des voix ait les échantillons entre les mains.
    */
   dialogue?: DialogueMode;
-  /**
-   * Pour qui les entrées d'échantillon sont écrites — absent pour MediaSource, c'est-à-dire tout le
-   * lecteur actuel, et alors rien ne change à l'octet près. `"hls"` n'est passé que par Lumen
-   * serveur (`src/lib/lumenServer/`) : `dec3` complet (7.1, Atmos) et Dolby Vision 8.x en `hvc1` +
-   * boîte DV (`SampleEntryOptions`, `mp4SampleEntries.ts`).
-   */
-  signalling?: "hls";
 }
 
 /** Ce que les fonctions de plan lisent des options : la livraison, et le traitement des voix. */
@@ -634,9 +627,7 @@ async function describeAudio(
    */
   preferred: number = start,
   /** Ce que la sonde de `Remuxer.open` a déjà lu depuis `preferred` : pas relu une seconde fois. */
-  firstPass: TrackStart | null = null,
-  /** `RemuxOptions.signalling`, transmis tel quel. */
-  signalling?: "hls"
+  firstPass: TrackStart | null = null
 ): Promise<MuxTrackInfo> {
   let firstFrame: Uint8Array | null = null;
   if (track.codecId === "A_AC3" || track.codecId === "A_EAC3") {
@@ -660,7 +651,7 @@ async function describeAudio(
       channels: track.audio?.channels ?? 2,
       sampleRate: track.audio?.sampleRate ?? 48000,
       firstFrame,
-    }, signalling ? { signalling } : {}),
+    }),
     width: 0,
     height: 0,
     language: track.language ?? "und",
@@ -959,7 +950,7 @@ export class Remuxer {
     const audioInfo = audioTrack
       ? transcoder
         ? transcodedAudioInfo(transcoder, audioTrack)
-        : await describeAudio(source, file, start, audioTrack, preferred, firstPass, options.signalling)
+        : await describeAudio(source, file, start, audioTrack, preferred, firstPass)
       : null;
     // Le seul lecteur strict (§93) : une zone illisible y lève `UnreadableZone`, que `MseSource`
     // passe à l'hôte sans reprise. La sonde du son (`describeAudio`) et les transcodeurs gardent
@@ -976,8 +967,7 @@ export class Remuxer {
         dimensions.width,
         dimensions.height,
         dolbyVision,
-        cappedColour(videoTrack.video?.colour, settings.lightCapNits),
-        options.signalling ? { signalling: options.signalling } : {}
+        cappedColour(videoTrack.video?.colour, settings.lightCapNits)
       ),
       width: dimensions.width,
       height: dimensions.height,
@@ -993,11 +983,7 @@ export class Remuxer {
       reader,
       source,
       transcoder,
-      // En HLS, seule l'entrée `dvh1` (profil 5) se déclare `dvh1` ; un 8.x en `hvc1` + boîte DV se
-      // déclare `hvc1…`, le Dolby Vision passant par SUPPLEMENTAL-CODECS (`lumenServer/hlsSignal.ts`).
-      dolbyVision && (options.signalling !== "hls" || hlsDolbyVisionEntry(dolbyVision.record) === "dvh1")
-        ? dolbyVisionCodecString(dolbyVision.record)
-        : null,
+      dolbyVision ? dolbyVisionCodecString(dolbyVision.record) : null,
       settings
     );
     remuxer.leadGap = leadGap;

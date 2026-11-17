@@ -14,8 +14,6 @@ import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useStableFallback, takeoverFor, castCarriedTo, returningFor, returnsPaused, castHandBackPosition, type StableTakeover } from "@/lib/useStableFallback";
 import { ChromecastPlayer } from "@/components/player/ChromecastPlayer";
 import { choosePlayer } from "@/lib/playerRoute";
-import { lumenChoiceFor, lumenDeclinedVersion, lumenWanted, subscribeLumenServer } from "@/lib/lumenServerChoice";
-import { LumenServerHost } from "@/components/player/lumen/LumenServerHost";
 import { publishHandedOver } from "@/lib/playerBench/bridge";
 import { PlayerControls, type Track } from "@/components/PlayerControls";
 import { restoreRememberedVolume } from "@/lib/rememberedVolume";
@@ -258,10 +256,6 @@ export function PlayerHost() {
     [itemId, session, stepBack]
   );
 
-  // Lumen serveur (DECISIONS.md §180) : un titre rendu au lecteur actuel redessine l'aiguillage. Un nombre lu, rien
-  // d'écrit : l'option coupée, ce nombre ne bouge jamais et rien ne change.
-  useSyncExternalStore(subscribeLumenServer, lumenDeclinedVersion, lumenDeclinedVersion);
-
   if (!session) return null;
   // Un fichier téléchargé (bêta) : son propre lecteur, lu depuis l'appareil, sans attendre la
   // configuration du serveur ni passer par l'aiguillage — rien de la lecture en ligne n'est en jeu.
@@ -290,22 +284,7 @@ export function PlayerHost() {
 
   const carried = castCarriedTo(takeover, session);
   // Natif, Chromecast ou serveur : la règle vit dans `choosePlayer` (`playerRoute.ts`).
-  // Lumen serveur, derrière l'option d'appareil de l'administrateur (§180) : `lumen` n'est posé que s'il est vrai —
-  // l'option coupée, l'appel est exactement celui d'avant.
-  const lumen = lumenWanted(session, { option: lumenChoiceFor(session) });
-  const route = choosePlayer(session, { serverFallback, handedOver, carried, takeover, ...(lumen ? { lumen: true } : {}) });
-  if (route === "lumen") {
-    return (
-      <LumenServerHost
-        // Un épisode, une ouverture = un hôte, un élément, une séance HLS (fait 3 de 3-client.md).
-        key={`lumen:${session.itemId}:${session.openId ?? 0}`}
-        session={playing}
-        mode={mode === "mini" ? "mini" : "full"}
-        serverFallback={serverFallback}
-        onFallback={handOver}
-      />
-    );
-  }
+  const route = choosePlayer(session, { serverFallback, handedOver, carried, takeover });
   if (route === "native") {
     return (
       <ExperimentalPlayerHost

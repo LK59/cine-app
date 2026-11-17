@@ -11,7 +11,6 @@ import { watchFirstStreamRequest, type StreamRequestWatch } from "@/lib/streamRe
 import { decodingFields } from "@/lib/webcodecs/decodingInfo";
 import { advanceTo, closePlayerSession } from "@/components/player/playerClose";
 import { directInfoForOpening } from "@/lib/directInfo";
-import { noteMediaSourceServed } from "@/lib/lumenServerChoice";
 import { labSampleByFile, labSampleInfo } from "@/lib/labSamples";
 import { directInfoKey, fetchPlaybackState, takePrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 import { errorMessage, isUpstreamUnreachable } from "@/lib/upstreamError";
@@ -39,7 +38,7 @@ import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
 import { useViewportResizing } from "@/lib/useViewportResizing";
 import { useT, useLocale } from "@/components/TranslationProvider";
 import { probePlaybackPath, type RemuxPlayback } from "@/lib/webcodecs/remuxPlayback";
-import { AudioKeepAwake } from "@/components/player/lumen/audioKeepAwake";
+import { AudioKeepAwake } from "@/components/player/audioKeepAwake";
 import { isAppleTouchDevice } from "@/lib/iosInstall";
 import { NATIVE_PATH } from "@/lib/webcodecs/pathSelector";
 import { trace, traceKeepAcrossReset, traceRecent } from "@/lib/webcodecs/trace";
@@ -2015,9 +2014,6 @@ export function ExperimentalPlayerHost({
     // decoder is better on every axis when the codecs allow it, and decoding it ourselves is the
     // fallback for when they do not. Whichever loses says why, in the technical panel.
     const startRemux = async (element: HTMLVideoElement, begin: (video: HTMLVideoElement) => Promise<RemuxPlayback>) => {
-      // La page sert désormais une MediaSource : WebKit y refusera tout HLS natif (code 4), donc Lumen serveur
-      // n'y sera plus tenté (`lumenServerChoice.ts`, DECISIONS.md §180). Une écriture de module, rien d'autre.
-      noteMediaSourceServed();
       const playback = await begin(element);
       if (cancelled) return playback.destroy();
       // Arrivé après que le lecteur a passé la main, ou pendant sa fermeture : il ne sert plus. Sans

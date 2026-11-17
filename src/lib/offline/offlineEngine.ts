@@ -1,4 +1,3 @@
-import { noteMediaSourceServed } from "@/lib/lumenServerChoice";
 import { Fmp4Reader, fragmentIndexAt, parseInit, scanFragments, type Fmp4Fragment, type Fmp4Init } from "./fmp4";
 
 /**
@@ -136,8 +135,6 @@ export class OfflineEngine {
     this.stage = "ouverture de MediaSource";
     const mediaSource = createMediaSource();
     this.mediaSource = mediaSource;
-    // WebKit refusera ensuite tout HLS natif dans cette page : Lumen serveur n'y sera plus tenté (§180).
-    noteMediaSourceServed();
     // ManagedMediaSource exige que la lecture à distance soit coupée pour s'attacher.
     this.video.disableRemotePlayback = true;
     await within(

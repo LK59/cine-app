@@ -2131,8 +2131,7 @@
       "unstable": "Conexión perdida o inestable…",
       "subtitlesGenerating": "Subtítulos en generación: no disponibles en la versión ligera. Lo estarán cuando termine la generación.",
       "switched": "Cambio a vídeo ligero por una conexión lenta.",
-      "tapToResume": "Versión aligerada lista. Toca Reproducir para continuar.",
-      "tooWeak": "Conexión demasiado débil para una reproducción sin cortes."
+      "tapToResume": "Versión aligerada lista. Toca Reproducir para continuar."
     },
     "unsupportedBrowser": "Este navegador no puede reproducir este flujo.",
     "playbackInterruptedCheckConnection": "La reproducción se interrumpió. Comprueba tu conexión e inténtalo de nuevo.",
@@ -2229,48 +2228,7 @@
       "describeLighter": "Conexión lenta: el servidor recodifica el vídeo a {rate} para que la reproducción continúe.",
       "lighterSwitchedAt": "Cambio automático (conexión lenta) en {position}",
       "lighterSwitched": "Cambio automático (conexión lenta)",
-      "lighterInherited": "Versión aligerada heredada de la reproducción anterior (hace menos de 2 min)",
-      "lumen": {
-        "name": "Remux en el servidor (HLS)",
-        "detail": "el servidor remultiplexa, el dispositivo reproduce HLS nativo",
-        "note": "Lumen servidor: cada segmento se remultiplexa a petición desde el archivo, sin transcodificar la imagen.",
-        "delivery": "Entrega",
-        "repairs": "Reparado",
-        "sectionRemux": "Remux en el servidor",
-        "path": "Ruta",
-        "format": "Versión del formato",
-        "cut": "Segmentación",
-        "segments": "Segmentos",
-        "segmentsValue": "{n} (objetivo {s} s)",
-        "resume": "Reanudación",
-        "airplay": "AirPlay",
-        "airplayOn": "a un televisor",
-        "airplayOff": "no",
-        "airplaySubtitles": "Subtítulos en el televisor",
-        "airplaySubtitlesNone": "ninguno",
-        "session": "Reproducción",
-        "sectionReceived": "Recibido por el dispositivo",
-        "received": "Segmentos",
-        "receivedValue": "{v} vídeo · {a} audio",
-        "recvRate": "Velocidad de recepción",
-        "sectionServer": "El servidor",
-        "served": "Segmentos servidos",
-        "volume": "Datos servidos",
-        "volumeValue": "{n} MB",
-        "build": "Construcción",
-        "buildValue": "{avg} ms de media, {max} ms como máximo",
-        "queue": "Espera en cola",
-        "audioCache": "Audio convertido",
-        "audioCacheValue": "{n} segmentos: {built} convertidos, {ram} en memoria, {disk} en disco",
-        "incidents": "Incidencias",
-        "eventReopen": "Reapertura en {at}: {reason}",
-        "eventQuality": "Imagen cambiada a {height}p",
-        "eventAudio": "Pista «{track}» por {via} ({ms} ms)",
-        "eventDialogue": "Mejorar diálogos: {mode} ({ms} ms)",
-        "eventRetry": "Reintento antes de la imagen: {reason}",
-        "eventCastOn": "AirPlay a un televisor en {at}",
-        "eventCastOff": "Fin de AirPlay en {at}"
-      }
+      "lighterInherited": "Versión aligerada heredada de la reproducción anterior (hace menos de 2 min)"
     },
     "experimental": {
       "title": "El reproductor experimental no pudo reproducir este archivo",
@@ -2522,10 +2480,6 @@
       "ipadSim": "Simulador de iPad",
       "ipadSimQuit": "Salir del simulador de iPad",
       "openPipTest": "Prueba de imagen en imagen",
-      "openLumenTest": "Banco de Lumen servidor",
-      "lumenServer": "Reproductor experimental: Lumen servidor",
-      "lumenServerHint": "En este dispositivo, el servidor remultiplexa la película y la reproduce el HLS de Safari. Solo WebKit; el reproductor actual se encarga de todo lo que esta vía no sabe leer.",
-      "lumenServerSafariOnly": "Solo Safari para reproducir aquí: en este navegador se mantiene el reproductor actual. La transmisión a un Chromecast pasa por el remux del servidor.",
       "notifReportReply": "Respuesta a un reporte",
       "notifReportReplyHint": "Cuando uno de tus reportes recibe una respuesta o cambia de estado.",
       "notifReportNew": "Nuevos reportes",
@@ -3561,17 +3515,7 @@
       "REPLIQUES_NIGHT_END": "Fin de la franja nocturna",
       "REPLIQUES_LANGUAGES": "Idiomas de los diálogos",
       "ASK_PERSON_ENABLED": "Preguntas sobre una persona: en el panel de un actor de «En pantalla», hasta dos preguntas propuestas «¿Qué relación tiene X con Y?» con los demás personajes de la escena (sin campo libre)",
-      "SOFAR_ENABLED": "«Hasta ahora»: en el panel de un actor de «En pantalla», dos frases sobre lo que su personaje ha hecho hasta ahora",
-      "LUMEN_AUDIO_CONVERT": "Lumen servidor: convertir en el servidor el sonido que Safari no lee (DTS, TrueHD, Opus, MP2/MP3 → E-AC-3)",
-      "LUMEN_AUDIO_MAX_JOBS": "Conversiones simultáneas como máximo",
-      "LUMEN_AUDIO_MAX_SESSIONS": "Reproducciones que convierten como máximo",
-      "LUMEN_AUDIO_RAM_MB": "Sonido convertido guardado en memoria (MB)",
-      "LUMEN_AUDIO_CACHE_GB": "Sonido convertido guardado en disco (GB)",
-      "LUMEN_SERVER_ENABLED": "Lumen servidor en esta instalación (administradores, dispositivo por dispositivo)",
-      "LUMEN_LIGHT": "Lumen servidor: versiones ligeras recomprimidas por la GPU del servidor",
-      "LUMEN_LIGHT_MAX_JOBS": "Codificaciones de vídeo simultáneas como máximo",
-      "LUMEN_LIGHT_RAM_MB": "Vídeo ligero guardado en memoria (MB)",
-      "LUMEN_LIGHT_CACHE_GB": "Vídeo ligero guardado en disco (GB)"
+      "SOFAR_ENABLED": "«Hasta ahora»: en el panel de un actor de «En pantalla», dos frases sobre lo que su personaje ha hecho hasta ahora"
     },
     "deployHint": {
       "TZ": "En docker-compose.yml, bajo «environment»:",
@@ -3777,7 +3721,6 @@
       "xrayOn": "los actores en pantalla activados",
       "booksOn": "los libros activados",
       "playerOn": "el reproductor integrado",
-      "lumenServerOn": "Lumen servidor activado",
       "missing": "Inactiva: requiere {need}.",
       "ready": "Requiere {list}: listo.",
       "fix": {
@@ -3785,79 +3728,14 @@
         "xrayService": "Conectar el servicio (Conexiones)",
         "xrayOn": "Activar los actores en pantalla",
         "booksOn": "Activar los libros",
-        "playerOn": "Activar el reproductor",
-        "lumenServerOn": "Activar Lumen servidor"
+        "playerOn": "Activar el reproductor"
       }
     },
     "sceneRestart": {
       "title": "Volver al inicio de la escena",
       "why": "Al reanudar un título tras unas horas, propondría durante unos segundos volver al inicio de la escena actual. Experimental: los inicios de escena aún no son lo bastante fiables, déjelo desactivado."
     },
-    "labBeta": "Lab beta",
-    "lumenAudio": {
-      "title": "Lumen servidor: conversión del sonido",
-      "why": "Solo para Lumen servidor. Safari no lee DTS, TrueHD, Opus ni MP2/MP3: el servidor los convierte a Dolby Digital Plus durante la reproducción (5.1 a 640 kb/s, estéreo a 256 kb/s; un 7.1 se reduce a 5.1, sin el Atmos del TrueHD). También lleva «Mejorar los diálogos» en Lumen servidor. Desactivada, o con el servidor demasiado ocupado: la película se abre en Lumen cliente, que convierte el sonido en el dispositivo como siempre — Lumen cliente nunca usa esta opción.",
-      "detected": "ffmpeg {version} detectado: {encoders}",
-      "unavailable": "Conversión no disponible en este servidor ({reason}): el sonido lo convierte el dispositivo.",
-      "now": "Ahora: {sessions} reproducción(es) convirtiendo, {running} conversión(es) en curso, {queued} en espera.",
-      "cache": "Guardado: {memory} en memoria (de {memoryCap}), {disk} en disco (de {diskCap}).",
-      "day": "Últimas 24 h: {segments} segmentos convertidos, {median} ms de mediana, {max} ms en el peor caso, {fallbacks} devuelto(s) al dispositivo.",
-      "prereq": "Lumen servidor activado; el ffmpeg incluido con la app; basta con el procesador, sin GPU."
-    },
-    "lumenLight": {
-      "title": "Lumen servidor: versión ligera",
-      "why": "Solo para Lumen servidor. El servidor recomprime la película en versiones más ligeras (1080p a 8 Mb/s, 720p a 3 Mb/s, HDR conservado), cortadas exactamente como el original: Safari pasa de una a otra él solo, sin cortes, cuando la conexión se debilita, y se preparan de antemano. Solo para películas lo bastante pesadas (al menos el doble de la versión ligera). Desactivada: Lumen servidor solo sirve el original. Lumen cliente no la usa: con una conexión demasiado lenta, pasa a una versión ligera recomprimida por Jellyfin.",
-      "detected": "Codificador detectado: ffmpeg {version}, {driver}",
-      "unavailable": "Versión ligera no disponible en este servidor ({reason}): solo se sirve el vídeo original.",
-      "now": "Desde el arranque: {built} segmentos codificados, {kept} servidos ya listos, {failed} fallidos; {running} en curso, {queued} en espera.",
-      "prereq": "Lumen servidor activado; la GPU Intel del servidor asignada al contenedor de la app (VAAPI: /dev/dri y el grupo render)."
-    },
-    "prereq": "Requisitos: {text}",
-    "lumenSection": "Lumen servidor (experimental) — solo Safari",
-    "lumenServer": {
-      "title": "Lumen servidor",
-      "why": "Un segundo reproductor, solo para administradores: el servidor prepara la película sin recomprimirla y Safari la lee él mismo (iPhone, iPad, Mac, AirPlay). Cada administrador lo activa en su dispositivo (Cuenta → Reproductor experimental). Las demás cuentas y los demás navegadores siguen con Lumen cliente, que no depende de ninguna opción de esta sección. Desactivado: la opción desaparece de Cuenta, y las dos opciones siguientes con él.",
-      "prereq": "las películas legibles por la app (montadas en solo lectura, LUMEN_PATH_MAP); basta con el procesador, sin GPU."
-    },
-    "players": {
-      "title": "Los reproductores de Laterna",
-      "intro": "Cada película se abre con uno de estos reproductores, según el dispositivo, el archivo y lo que sabe hacer el servidor. Las opciones de la sección «Lumen servidor» solo afectan a ese reproductor.",
-      "current": {
-        "name": "Lumen cliente (el reproductor de todos)",
-        "what": "el dispositivo prepara el archivo él mismo, sin recomprimirlo, en todos los navegadores recientes. Convierte él mismo el sonido que el navegador no lee, mejora los diálogos en el dispositivo y, con una conexión demasiado lenta, pasa a una versión ligera recomprimida por Jellyfin.",
-        "needs": "ninguno: el servidor solo retransmite el archivo."
-      },
-      "server": {
-        "name": "Reproductor del servidor (Jellyfin)",
-        "what": "Jellyfin recomprime la película cuando el dispositivo no puede leerla: es el respaldo, tanto para Lumen cliente como para Lumen servidor.",
-        "needs": "Jellyfin; una GPU asignada a Jellyfin acelera la recompresión."
-      },
-      "lumen": {
-        "name": "Lumen servidor (experimental)",
-        "what": "el servidor prepara la película sin recomprimirla y Safari la lee él mismo (iPhone, iPad, Mac, AirPlay); solo administradores, dispositivo por dispositivo.",
-        "needs": "los medios montados en el contenedor de la app; basta con el procesador."
-      },
-      "lumenAudio": {
-        "name": "Lumen servidor: conversión del sonido",
-        "what": "solo para Lumen servidor: DTS, TrueHD, Opus y MP2/MP3 convertidos a Dolby Digital Plus por el servidor (Lumen cliente convierte en el dispositivo).",
-        "needs": "Lumen servidor; el ffmpeg incluido con la app; sin GPU."
-      },
-      "lumenLight": {
-        "name": "Lumen servidor: versión ligera",
-        "what": "solo para Lumen servidor: una o dos versiones más ligeras de la película, que Safari toma por sí mismo, sin cortes, cuando la conexión se debilita (Lumen cliente pasa por Jellyfin).",
-        "needs": "Lumen servidor; una GPU Intel asignada al contenedor de la app (VAAPI)."
-      },
-      "offline": {
-        "name": "Sin conexión",
-        "what": "una versión ligera preparada por Jellyfin y guardada en el dispositivo.",
-        "needs": "Jellyfin."
-      },
-      "cast": {
-        "name": "Chromecast y AirPlay",
-        "what": "la película va al televisor, por Lumen servidor cuando está activado, si no por Jellyfin.",
-        "needs": "nada más que el reproductor usado."
-      }
-    }
+    "labBeta": "Lab beta"
   },
   "xrayScan": {
     "nav": "Actores en pantalla",

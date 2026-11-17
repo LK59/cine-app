@@ -441,7 +441,7 @@ function cappedSei(nal: Uint8Array, capNits: number): Uint8Array | null {
 }
 
 /** Retire les octets d'échappement (0x00 0x00 0x03 → 0x00 0x00). Toujours une copie. */
-export function unescapeRbsp(bytes: Uint8Array): Uint8Array {
+function unescapeRbsp(bytes: Uint8Array): Uint8Array {
   const out = new Uint8Array(bytes.length);
   let n = 0;
   let zeros = 0;

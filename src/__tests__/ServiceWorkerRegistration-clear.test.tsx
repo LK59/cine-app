@@ -28,3 +28,14 @@ describe("les notifications lues à l'ouverture (23/09/2026)", () => {
     expect(clear).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("les clés d'options retirées effacées au lancement (Lumen serveur archivé, DECISIONS.md §196)", () => {
+  it("l'option, le débit retenu et les essais retirés disparaissent ; le reste de l'appareil est intact", () => {
+    const retired = ["cine:lumen-serveur", "cine:lumen-debit", "cine:lumen-test-serie", "cine:lumen-reprise-saut", "cine:lumen-son-eveille"];
+    for (const key of [...retired, "cine:ipad-simulator"]) localStorage.setItem(key, "1");
+    render(<ServiceWorkerRegistration />);
+    for (const key of retired) expect(localStorage.getItem(key)).toBeNull();
+    expect(localStorage.getItem("cine:ipad-simulator")).toBe("1");
+    localStorage.clear();
+  });
+});

@@ -6,7 +6,6 @@ import { clearFileMissing, isFileMissing, markFileMissing } from "@/lib/missingF
 import { usePlayerEnabled } from "@/lib/usePlayerEnabled";
 import { prefetchPlaybackState } from "@/lib/playbackPrefetch";
 import { scheduleSheetHeaderWarmup } from "@/lib/sheetHeaderWarmup";
-import { scheduleLumenPrepare } from "@/lib/lumenSheetPrepare";
 import { usePlaybackMode } from "@/components/PlaybackProvider";
 
 /**
@@ -54,12 +53,5 @@ export function usePlaybackPrefetch(itemId: string | null | undefined): void {
   useEffect(() => {
     if (!enabled || !itemId || filmOpen) return;
     return scheduleSheetHeaderWarmup(itemId);
-  }, [enabled, itemId, filmOpen]);
-
-  // Lumen serveur (DECISIONS.md §180) : la fiche fait préparer le fichier au serveur — seulement sur un appareil
-  // où l'option est allumée et que Lumen serveur lirait (WebKit) ; ailleurs, `scheduleLumenPrepare` ne fait rien.
-  useEffect(() => {
-    if (!enabled || !itemId || filmOpen) return;
-    return scheduleLumenPrepare(itemId);
   }, [enabled, itemId, filmOpen]);
 }

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { forgetChunkReload } from "@/lib/chunkError";
 import { APP_BUILD } from "@/lib/appBuild";
 import { clearDeliveredNotifications } from "@/lib/clearDeliveredNotifications";
+import { clearRetiredDeviceKeys } from "@/lib/retiredDeviceKeys";
 
 export function ServiceWorkerRegistration() {
   useEffect(() => {
@@ -11,6 +12,8 @@ export function ServiceWorkerRegistration() {
     // rechargement après un morceau de code manquant a fini son travail. Le laisser en place
     // priverait le prochain onglet périmé de son unique tentative — voir `chunkError.ts`.
     forgetChunkReload();
+    // Les clés d'options retirées (Lumen serveur, DECISIONS.md §196) : effacées de l'appareil à chaque lancement.
+    clearRetiredDeviceKeys();
     if ("serviceWorker" in navigator) {
       // Le numéro du build dans l'adresse : chaque déploiement installe son propre worker, qui
       // range le code dans un cache à son nom et fait le ménage de l'avant-dernier. Voir sw.js.
