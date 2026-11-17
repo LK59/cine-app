@@ -13,6 +13,11 @@
  * durée de la requête entière — attente du premier octet comprise, et deux pistes qui se partagent le lien —, donc
  * une mesure prudente. Gardée sur l'appareil dix minutes : le choix se fait à l'ouverture, avant le premier segment de
  * la lecture, et une mesure plus vieille peut venir d'une autre connexion (le Wi-Fi de la maison, puis la 5G).
+ *
+ * Et la fiche du film mesure elle-même quand l'appareil n'a rien de récent (`probeLink`, 17/11/2026) : sans elle, la
+ * première lecture d'une soirée partait toujours aux vrais débits — et la plupart des séances sont une seule lecture,
+ * lancée puis regardée jusqu'au bout. Un échantillon de 3 Mo, au plus une fois par dix minutes, après la préparation
+ * de la fiche (`lumenSheetPrepare.ts`), par la sonde déjà servie à la page de banc (`chrono?bytes=`).
  */
 
 export const LUMEN_LINK_KEY = "cine:lumen-debit";
@@ -83,4 +88,33 @@ export function withLowBandwidth(master: string): string {
   const tail = hash < 0 ? "" : master.slice(hash);
   if (/[?&]bw=/.test(base)) return master;
   return `${base}${base.includes("?") ? "&" : "?"}bw=bas${tail}`;
+}
+
+/** La taille de l'échantillon de la fiche : assez pour sortir du démarrage lent de TCP, sans coûter une rafale. */
+export const LINK_PROBE_BYTES = 3 * 1024 * 1024;
+
+/**
+ * Mesure le lien par un échantillon de `LINK_PROBE_BYTES` octets aléatoires (`GET /api/lumen/{id}/chrono?bytes=`),
+ * retient le résultat et le rend (Mb/s), ou null. Rien si une mesure récente existe déjà. Ne lève jamais.
+ */
+export async function probeLink(itemId: string, signal?: AbortSignal, fetchImpl: typeof fetch = fetch): Promise<number | null> {
+  if (recentLinkMbps() !== null) return null;
+  try {
+    const url = `/api/lumen/${itemId}/chrono?s=fiche-sonde&bytes=${LINK_PROBE_BYTES}&t=${Math.round(performance.now())}`;
+    const started = performance.now();
+    const res = await fetchImpl(url, { cache: "no-store", signal });
+    if (!res.ok) return null;
+    const head = performance.now();
+    const body = await res.arrayBuffer();
+    const end = performance.now();
+    // Resource Timing quand le navigateur le donne (le transfert seul) ; sinon de la réponse à la fin de la lecture.
+    const entry = (performance.getEntriesByType?.("resource") as PerformanceResourceTiming[] | undefined)?.filter((e) => e.name.includes(url)).at(-1);
+    const ms = entry && entry.responseEnd > entry.responseStart && entry.responseStart > 0 ? entry.responseEnd - entry.responseStart : end - (head > started ? head : started);
+    if (!(ms > 0) || body.byteLength < LINK_MIN_BYTES) return null;
+    const mbps = Math.round(((body.byteLength * 8) / (ms * 1000)) * 10) / 10;
+    rememberLink(mbps);
+    return mbps;
+  } catch {
+    return null;
+  }
 }

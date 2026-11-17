@@ -714,7 +714,11 @@ player (§188). Bump `LUMEN_DIALOGUE_VERSION` when `dialogueEnhance.ts` changes 
 server's tally (`srv.*`) to `stop`, `stall`, `error`, `fallback`, `rebuild`; `audio` lines say `via` (`audioTracks`,
 `réouverture`), `tookMs`, `pictureMs`, `processing`, `dialogue` (the mode served; `start` carries it with
 `dialogueBy: "serveur"`); a pre-picture `fallback` says what Safari fetched (`seen`).
-`docker logs` and `server.log` carry `lumen/*` errors. **The bench page** `/lumen-test` (admin) runs passes against real
+`docker logs` and `server.log` carry `lumen/*` errors. **Each Lumen option is deployed on its own** (§194): Configuration →
+Lecture lists the players and what each needs from the server, then one card per option with its prerequisites —
+`LUMEN_SERVER_ENABLED` (on by default; off, every `/api/lumen` route answers 409 `lumen-coupe`), sound conversion (the
+image's ffmpeg, no GPU), the lighter version (an Intel GPU given to the container). Safari is told a quarter of the film's
+bitrate (`bw=bas`) only when the measured link allows it (`lumenLink.ts`). **The bench page** `/lumen-test` (admin) runs passes against real
 titles on a device — cuts, levers, muxed audio, converted audio, codec switches — and sends one `kind: "lumen-test"`
 line per trial to `startup.log`.
 

@@ -25,6 +25,7 @@ import { lumenChoiceFor, lumenWanted } from "@/lib/lumenServerChoice";
 import { readDialogueMode } from "@/lib/dialoguePreference";
 import { peekPrefetchedPlaybackState } from "@/lib/playbackPrefetch";
 import { openingPosition } from "@/lib/resumeRewind";
+import { probeLink } from "@/components/player/lumen/lumenLink";
 
 export const LUMEN_PREPARE_DELAY_MS = 500;
 /** La garde du segment préparé au serveur (`segmentCache.ts`) : au-delà, préparer de nouveau a un sens. */
@@ -110,6 +111,9 @@ export async function prepareLumen(itemId: string, controller: AbortController, 
     });
     const body = (await res.json().catch(() => null)) as { ok?: boolean; pending?: boolean } | null;
     entry.status = res.status === 202 || body?.pending ? "pending" : res.ok && body?.ok ? "ok" : res.ok ? "refus" : `http ${res.status}`;
+    // Le lien mesuré pour la lecture qui vient (`lumenLink.ts`) — après la préparation, pour ne pas lui disputer le
+    // réseau, et seulement sans mesure récente sur l'appareil.
+    if (!controller.signal.aborted && res.ok) await probeLink(itemId, controller.signal);
   } catch {
     // Coupée (fiche fermée, une autre ouverte) ou réseau : la lecture préparera elle-même.
     entry.status = controller.signal.aborted ? "coupée" : "erreur";

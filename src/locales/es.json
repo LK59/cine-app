@@ -3564,7 +3564,8 @@
       "LUMEN_AUDIO_MAX_JOBS": "Conversiones simultáneas como máximo",
       "LUMEN_AUDIO_MAX_SESSIONS": "Reproducciones que convierten como máximo",
       "LUMEN_AUDIO_RAM_MB": "Sonido convertido guardado en memoria (MB)",
-      "LUMEN_AUDIO_CACHE_GB": "Sonido convertido guardado en disco (GB)"
+      "LUMEN_AUDIO_CACHE_GB": "Sonido convertido guardado en disco (GB)",
+      "LUMEN_SERVER_ENABLED": "Lumen servidor en esta instalación"
     },
     "deployHint": {
       "TZ": "En docker-compose.yml, bajo «environment»:",
@@ -3792,7 +3793,54 @@
       "unavailable": "Conversión no disponible en este servidor ({reason}): el sonido lo convierte el dispositivo.",
       "now": "Ahora: {sessions} reproducción(es) convirtiendo, {running} conversión(es) en curso, {queued} en espera.",
       "cache": "Guardado: {memory} en memoria (de {memoryCap}), {disk} en disco (de {diskCap}).",
-      "day": "Últimas 24 h: {segments} segmentos convertidos, {median} ms de mediana, {max} ms en el peor caso, {fallbacks} devuelto(s) al dispositivo."
+      "day": "Últimas 24 h: {segments} segmentos convertidos, {median} ms de mediana, {max} ms en el peor caso, {fallbacks} devuelto(s) al dispositivo.",
+      "prereq": "Lumen servidor activado; el ffmpeg incluido con la app; sin GPU."
+    },
+    "prereq": "Requisitos: {text}",
+    "lumenSection": "Lumen servidor (experimental)",
+    "lumenServer": {
+      "title": "Lumen servidor",
+      "why": "Activado, cada administrador puede elegir este reproductor en sus dispositivos Apple (Cuenta → Reproductor experimental). Desactivado, desaparece de Cuenta, junto con la conversión del sonido y la versión ligera.",
+      "prereq": "los medios montados en solo lectura en el contenedor de la app (LUMEN_PATH_MAP); ningún hardware especial, basta con el procesador."
+    },
+    "players": {
+      "title": "Los reproductores de Laterna",
+      "intro": "Cada película se abre con uno de estos reproductores, según el dispositivo, el archivo y lo que sabe hacer el servidor.",
+      "current": {
+        "name": "Reproductor actual (Lumen)",
+        "what": "el dispositivo remultiplexa el archivo él mismo, sin recomprimirlo; todos los navegadores recientes.",
+        "needs": "ninguno: el servidor solo retransmite el archivo."
+      },
+      "server": {
+        "name": "Reproductor del servidor (Jellyfin)",
+        "what": "Jellyfin recomprime la película cuando el dispositivo no puede leerla: es el respaldo.",
+        "needs": "Jellyfin; una GPU asignada a Jellyfin acelera la recompresión."
+      },
+      "lumen": {
+        "name": "Lumen servidor (experimental)",
+        "what": "el servidor remultiplexa la película sin recomprimirla y Safari la lee en HLS nativo (iPhone, iPad, Mac, AirPlay); solo para administradores.",
+        "needs": "los medios montados en el contenedor de la app; basta con el procesador."
+      },
+      "lumenAudio": {
+        "name": "Lumen servidor: conversión del sonido",
+        "what": "las pistas DTS, TrueHD, Opus y MP2/MP3 convertidas a Dolby Digital Plus por el servidor.",
+        "needs": "Lumen servidor; el ffmpeg incluido con la app; sin GPU."
+      },
+      "lumenLight": {
+        "name": "Lumen servidor: versión ligera",
+        "what": "una o dos versiones más ligeras de la película, que Safari toma por sí mismo, sin cortes, cuando la conexión se debilita.",
+        "needs": "Lumen servidor; una GPU Intel asignada al contenedor de la app (VAAPI)."
+      },
+      "offline": {
+        "name": "Sin conexión",
+        "what": "una versión ligera preparada por Jellyfin y guardada en el dispositivo.",
+        "needs": "Jellyfin."
+      },
+      "cast": {
+        "name": "Chromecast y AirPlay",
+        "what": "la película va al televisor, por Lumen servidor cuando está activado, si no por Jellyfin.",
+        "needs": "nada más que el reproductor usado."
+      }
     }
   },
   "xrayScan": {

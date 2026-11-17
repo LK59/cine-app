@@ -3564,7 +3564,8 @@
       "LUMEN_AUDIO_MAX_JOBS": "Maximum simultaneous conversions",
       "LUMEN_AUDIO_MAX_SESSIONS": "Maximum playbacks converting at once",
       "LUMEN_AUDIO_RAM_MB": "Converted sound kept in memory (MB)",
-      "LUMEN_AUDIO_CACHE_GB": "Converted sound kept on disk (GB)"
+      "LUMEN_AUDIO_CACHE_GB": "Converted sound kept on disk (GB)",
+      "LUMEN_SERVER_ENABLED": "Lumen server on this installation"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml, under “environment”:",
@@ -3792,7 +3793,54 @@
       "unavailable": "Conversion unavailable on this server ({reason}): the device converts the sound.",
       "now": "Now: {sessions} playback(s) converting, {running} conversion(s) running, {queued} waiting.",
       "cache": "Kept: {memory} in memory (of {memoryCap}), {disk} on disk (of {diskCap}).",
-      "day": "Last 24 h: {segments} segments converted, {median} ms median, {max} ms worst, {fallbacks} handed back to the device."
+      "day": "Last 24 h: {segments} segments converted, {median} ms median, {max} ms worst, {fallbacks} handed back to the device.",
+      "prereq": "Lumen server on; the ffmpeg shipped with the app; no GPU."
+    },
+    "prereq": "Requires: {text}",
+    "lumenSection": "Lumen server (experimental)",
+    "lumenServer": {
+      "title": "Lumen server",
+      "why": "When on, each administrator can choose this player on their Apple devices (Account → Experimental player). When off, it disappears from Account, along with sound conversion and the lighter version.",
+      "prereq": "the media mounted read-only in the app's container (LUMEN_PATH_MAP); no special hardware, the processor is enough."
+    },
+    "players": {
+      "title": "Laterna's players",
+      "intro": "Every film is opened by one of these players, depending on the device, the file and what the server can do.",
+      "current": {
+        "name": "Current player (Lumen)",
+        "what": "the device remuxes the file itself, without re-encoding it; all recent browsers.",
+        "needs": "nothing: the server only relays the file."
+      },
+      "server": {
+        "name": "Server player (Jellyfin)",
+        "what": "Jellyfin re-encodes the film when the device can't play it: this is the fallback.",
+        "needs": "Jellyfin; a GPU given to Jellyfin speeds up re-encoding."
+      },
+      "lumen": {
+        "name": "Lumen server (experimental)",
+        "what": "the server remuxes the film without re-encoding it, and Safari plays it as native HLS (iPhone, iPad, Mac, AirPlay); administrators only.",
+        "needs": "the media mounted in the app's container; the processor is enough."
+      },
+      "lumenAudio": {
+        "name": "Lumen server: sound conversion",
+        "what": "DTS, TrueHD, Opus and MP2/MP3 tracks converted to Dolby Digital Plus by the server.",
+        "needs": "Lumen server; the ffmpeg shipped with the app; no GPU."
+      },
+      "lumenLight": {
+        "name": "Lumen server: lighter version",
+        "what": "one or two lighter versions of the film, which Safari switches to on its own, without a break, when the connection weakens.",
+        "needs": "Lumen server; an Intel GPU given to the app's container (VAAPI)."
+      },
+      "offline": {
+        "name": "Offline",
+        "what": "a light version prepared by Jellyfin and kept on the device.",
+        "needs": "Jellyfin."
+      },
+      "cast": {
+        "name": "Chromecast and AirPlay",
+        "what": "the film goes to the TV, through Lumen server when it is on, otherwise through Jellyfin.",
+        "needs": "nothing beyond the player in use."
+      }
     }
   },
   "xrayScan": {

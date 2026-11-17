@@ -27,16 +27,44 @@ beforeEach(() => {
   forgetLumenPrepares();
   fetchMock.mockClear();
   vi.stubGlobal("fetch", fetchMock);
+  // Une mesure du lien récente : ces essais-ci ne parlent que de la préparation (la sonde a le sien, plus bas).
+  localStorage.setItem("cine:lumen-debit", JSON.stringify({ mbps: 50, at: Date.now() }));
 });
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  localStorage.clear();
 });
 
 const settle = async () => {
   await vi.advanceTimersByTimeAsync(LUMEN_PREPARE_DELAY_MS);
   await vi.advanceTimersByTimeAsync(0);
 };
+
+describe("la mesure du lien depuis la fiche (17/11/2026)", () => {
+  it("sans mesure récente : un échantillon de 3 Mo après la préparation, retenu pour la lecture ; une seule fois", async () => {
+    localStorage.clear();
+    // L'horloge de la page avance de 100 ms à chaque lecture : 3 Mo en 100 ms, ~252 Mb/s.
+    let clock = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => (clock += 100));
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes("/chrono?") ? new Response(new Uint8Array(3 * 1024 * 1024), { status: 200 }) : new Response(JSON.stringify({ ok: true }), { status: 200 })
+    );
+    scheduleLumenPrepare("abc", yes);
+    await settle();
+    await vi.advanceTimersByTimeAsync(0);
+    const urls = fetchMock.mock.calls.map(([u]) => String(u));
+    expect(urls[0]).toBe("/api/lumen/abc/prepare");
+    expect(urls[1]).toMatch(/^\/api\/lumen\/abc\/chrono\?s=fiche-sonde&bytes=3145728&t=/);
+    expect(JSON.parse(localStorage.getItem("cine:lumen-debit") ?? "{}").mbps).toBeGreaterThan(200);
+    scheduleLumenPrepare("def", yes);
+    await settle();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).includes("/chrono?"))).toHaveLength(1);
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.restoreAllMocks();
+  });
+});
 
 describe("la préparation à l'ouverture d'une fiche", () => {
   it("après le délai : un POST prepare, à la position de reprise, et son verdict retenu pour la ligne `start`", async () => {

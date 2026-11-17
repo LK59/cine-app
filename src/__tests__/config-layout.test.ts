@@ -54,8 +54,10 @@ describe("une place par réglage", () => {
   it("Lecture : le lecteur seulement ; le reste a sa page", () => {
     expect(CONFIG_LAYOUT.playback.flatMap(keysOf)).toEqual(["PLAYER_ENABLED", "PLAYER_SERVER_FALLBACK"]);
     // La conversion du son de Lumen serveur (§161) : sa carte à elle, sous le lecteur, « Lab bêta », son état serveur.
-    expect(CONFIG_LAYOUT.lumenAudio.flatMap(keysOf)).toEqual(["LUMEN_AUDIO_CONVERT", "LUMEN_AUDIO_MAX_JOBS", "LUMEN_AUDIO_MAX_SESSIONS", "LUMEN_AUDIO_RAM_MB", "LUMEN_AUDIO_CACHE_GB"]);
-    expect(CONFIG_LAYOUT.lumenAudio[0]).toMatchObject({ lab: true, after: "lumenAudio" });
+    expect(CONFIG_LAYOUT.lumenServer.flatMap(keysOf)).toEqual(["LUMEN_SERVER_ENABLED", "LUMEN_AUDIO_CONVERT", "LUMEN_AUDIO_MAX_JOBS", "LUMEN_AUDIO_MAX_SESSIONS", "LUMEN_AUDIO_RAM_MB", "LUMEN_AUDIO_CACHE_GB"]);
+    expect(CONFIG_LAYOUT.lumenServer[1]).toMatchObject({ lab: true, after: "lumenAudio" });
+    // Chaque option de Lumen serveur dit ce qu'elle demande à l'installation (§194).
+    expect(CONFIG_LAYOUT.lumenServer.every((c) => typeof c.prereqKey === "string")).toBe(true);
     expect(SETTINGS_BY_KEY.get("LUMEN_AUDIO_CONVERT")).toMatchObject({ kind: "audience", fallback: "off" });
     expect(CONFIG_LAYOUT.diffusion.flatMap(keysOf).sort()).toEqual(
       ["CAST_RECEIVER_APP_ID", "CHROMECAST_FOR_EVERYONE", "OFFLINE_DOWNLOADS", "OFFLINE_DOWNLOADS_FOR_EVERYONE", "OFFLINE_SERVER_QUOTA_GB"].sort(),

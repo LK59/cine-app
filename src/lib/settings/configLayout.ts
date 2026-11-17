@@ -55,6 +55,11 @@ export interface ConfigCard {
   feature?: AiFeatureId;
   /** Une carte au contenu propre : le fournisseur d'IA (modèle prérempli, dépense, tableau). */
   special?: "aiProvider";
+  /**
+   * Ce que la fonction demande à l'installation, affiché « Prérequis : … » sous l'explication (§194) : du matériel
+   * (un GPU donné au conteneur), un binaire de l'image, une autre option. Une clé i18n.
+   */
+  prereqKey?: string;
   /** Ce qui suit la carte : les tâches des sous-titres générés, ou l'état de la conversion du son (§161). */
   after?: "subtitleJobs" | "lumenAudio";
 }
@@ -102,16 +107,26 @@ export const CONFIG_LAYOUT = {
   /** Lecture : le lecteur intégré et son relais vers Jellyfin, rien d'autre. */
   playback: [{ group: "playback", keys: ["PLAYER_ENABLED", "PLAYER_SERVER_FALLBACK"] }],
   /**
-   * La conversion du son de Lumen serveur (§161 à §163), sous la carte du lecteur : à qui elle est ouverte, ses
-   * plafonds, son cache. « Lab bêta » : Lumen serveur n'est encore lu que par la page de banc. L'état de ffmpeg
-   * (détecté, version) et du cache suit la carte (`after: "lumenAudio"`, lu du serveur).
+   * Lumen serveur, expérimental (§194) : une carte par option déployable à part, chacune avec ses prérequis —
+   * l'interrupteur de l'installation, puis la conversion du son (§161 à §163 : à qui elle est ouverte, ses plafonds, son
+   * cache ; l'état de ffmpeg suit la carte, `after: "lumenAudio"`), puis la version allégée (son GPU). « Lab bêta ».
    */
-  lumenAudio: [
+  lumenServer: [
+    {
+      group: "playback",
+      keys: ["LUMEN_SERVER_ENABLED"],
+      titleKey: "config.lumenServer.title",
+      whyKey: "config.lumenServer.why",
+      prereqKey: "config.lumenServer.prereq",
+      anchor: "lumen-serveur",
+      lab: true,
+    },
     {
       group: "playback",
       keys: ["LUMEN_AUDIO_CONVERT", "LUMEN_AUDIO_MAX_JOBS", "LUMEN_AUDIO_MAX_SESSIONS", "LUMEN_AUDIO_RAM_MB", "LUMEN_AUDIO_CACHE_GB"],
       titleKey: "config.lumenAudio.title",
       whyKey: "config.lumenAudio.why",
+      prereqKey: "config.lumenAudio.prereq",
       anchor: "conversion-son",
       lab: true,
       after: "lumenAudio",

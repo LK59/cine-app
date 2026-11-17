@@ -150,6 +150,7 @@ export function ConfigurationSection({ cards, showMissing = false }: { cards: re
               needs={card.needs?.length ? <FeatureNeeds needs={card.needs} missing={missing} /> : undefined}
               dimmed={missing.length > 0}
               lab={card.lab}
+              prereq={card.prereqKey ? t(card.prereqKey) : undefined}
               views={views}
               draft={draft}
               errors={errors}

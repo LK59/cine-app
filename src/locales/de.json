@@ -3564,7 +3564,8 @@
       "LUMEN_AUDIO_MAX_JOBS": "Höchstens gleichzeitige Umwandlungen",
       "LUMEN_AUDIO_MAX_SESSIONS": "Höchstens umwandelnde Wiedergaben",
       "LUMEN_AUDIO_RAM_MB": "Umgewandelter Ton im Arbeitsspeicher (MB)",
-      "LUMEN_AUDIO_CACHE_GB": "Umgewandelter Ton auf der Festplatte (GB)"
+      "LUMEN_AUDIO_CACHE_GB": "Umgewandelter Ton auf der Festplatte (GB)",
+      "LUMEN_SERVER_ENABLED": "Lumen Server auf dieser Installation"
     },
     "deployHint": {
       "TZ": "In docker-compose.yml unter „environment“:",
@@ -3792,7 +3793,54 @@
       "unavailable": "Umwandlung auf diesem Server nicht verfügbar ({reason}): das Gerät wandelt den Ton um.",
       "now": "Jetzt: {sessions} umwandelnde Wiedergabe(n), {running} laufende Umwandlung(en), {queued} wartend.",
       "cache": "Gespeichert: {memory} im Arbeitsspeicher (von {memoryCap}), {disk} auf der Festplatte (von {diskCap}).",
-      "day": "Letzte 24 h: {segments} umgewandelte Segmente, Median {median} ms, höchstens {max} ms, {fallbacks} an das Gerät zurückgegeben."
+      "day": "Letzte 24 h: {segments} umgewandelte Segmente, Median {median} ms, höchstens {max} ms, {fallbacks} an das Gerät zurückgegeben.",
+      "prereq": "Lumen Server eingeschaltet; das mit der App gelieferte ffmpeg; keine GPU."
+    },
+    "prereq": "Voraussetzungen: {text}",
+    "lumenSection": "Lumen Server (experimentell)",
+    "lumenServer": {
+      "title": "Lumen Server",
+      "why": "Eingeschaltet kann jeder Administrator diesen Player auf seinen Apple-Geräten wählen (Konto → Experimenteller Player). Ausgeschaltet verschwindet er aus dem Konto, zusammen mit der Tonumwandlung und der leichteren Version.",
+      "prereq": "die Medien schreibgeschützt im Container der App eingebunden (LUMEN_PATH_MAP); keine besondere Hardware, der Prozessor genügt."
+    },
+    "players": {
+      "title": "Die Player von Laterna",
+      "intro": "Jeder Film wird von einem dieser Player geöffnet – je nach Gerät, Datei und dem, was der Server kann.",
+      "current": {
+        "name": "Aktueller Player (Lumen)",
+        "what": "das Gerät remuxt die Datei selbst, ohne sie neu zu kodieren; alle aktuellen Browser.",
+        "needs": "keine: der Server leitet die Datei nur weiter."
+      },
+      "server": {
+        "name": "Server-Player (Jellyfin)",
+        "what": "Jellyfin kodiert den Film neu, wenn das Gerät ihn nicht abspielen kann: das ist die Ausweichlösung.",
+        "needs": "Jellyfin; eine Jellyfin zugewiesene GPU beschleunigt das Neukodieren."
+      },
+      "lumen": {
+        "name": "Lumen Server (experimentell)",
+        "what": "der Server remuxt den Film ohne Neukodierung, und Safari spielt ihn als natives HLS ab (iPhone, iPad, Mac, AirPlay); nur für Administratoren.",
+        "needs": "die Medien im Container der App eingebunden; der Prozessor genügt."
+      },
+      "lumenAudio": {
+        "name": "Lumen Server: Tonumwandlung",
+        "what": "DTS-, TrueHD-, Opus- und MP2/MP3-Spuren werden vom Server in Dolby Digital Plus umgewandelt.",
+        "needs": "Lumen Server; das mit der App gelieferte ffmpeg; keine GPU."
+      },
+      "lumenLight": {
+        "name": "Lumen Server: leichtere Version",
+        "what": "eine oder zwei leichtere Versionen des Films, auf die Safari von selbst und ohne Unterbrechung wechselt, wenn die Verbindung schwächer wird.",
+        "needs": "Lumen Server; eine Intel-GPU, die dem Container der App zugewiesen ist (VAAPI)."
+      },
+      "offline": {
+        "name": "Offline",
+        "what": "eine leichte Version, von Jellyfin vorbereitet und auf dem Gerät gespeichert.",
+        "needs": "Jellyfin."
+      },
+      "cast": {
+        "name": "Chromecast und AirPlay",
+        "what": "der Film geht an den Fernseher, über Lumen Server, wenn er eingeschaltet ist, sonst über Jellyfin.",
+        "needs": "nichts außer dem verwendeten Player."
+      }
     }
   },
   "xrayScan": {

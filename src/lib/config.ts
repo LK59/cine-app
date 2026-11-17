@@ -406,6 +406,11 @@ export const config = {
     get pathMap() {
       return envOnly("LUMEN_PATH_MAP", "");
     },
+    // Lumen serveur sur cette installation (§194) : l'interrupteur de l'exploitant, allumé par défaut. Coupé,
+    // `lumenAccess` refuse tout (409) et la page publique le dit (`lumenServerAvailable`).
+    get serverEnabled() {
+      return optional("LUMEN_SERVER_ENABLED", "true") !== "false";
+    },
     // La conversion du son au serveur (phase 2, DECISIONS.md §161) : à qui elle est ouverte (`off` par défaut,
     // `admins`, `tous`, `featureAudience.ts`). Coupée, ou sans ffmpeg, Lumen serveur refuse une piste DTS,
     // TrueHD, Opus ou MP2/MP3 comme avant (`son-codec`) et le lecteur actuel la convertit dans la page.
