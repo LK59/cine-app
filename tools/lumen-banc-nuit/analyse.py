@@ -128,7 +128,8 @@ for line in startup:
         rec = {
             "t": line["timestamp"], "label": ctx["label"], "pass": a.get("pass"), "order": a.get("order"), "decode": ctx["decode"], "net": ctx["net"],
             "serie": a.get("serie"), "trial": a.get("trial"), "status": a.get("status"), "player": r.get("player"), "title": NAMES.get(r.get("itemId"), r.get("title") or r.get("itemId")),
-            "modes": r.get("modes"), "targetS": r.get("targetS"), "firstFrameMs": r.get("firstFrameMs"), "targetFrameMs": r.get("targetFrameMs"),
+            # Le mode manuel ne porte pas `modes` dans sa ligne : le multiplexage se lit dans la version (`3m1-…`).
+            "modes": r.get("modes") or ({"mux": True} if ctx.get("mux") or "m1-" in str(r.get("version", "")) else None), "targetS": r.get("targetS"), "firstFrameMs": r.get("firstFrameMs"), "targetFrameMs": r.get("targetFrameMs"),
             "waits": waits.get("count"), "waitMs": waits.get("totalMs"), "errors": r.get("errors") or [], "freezes": r.get("freezes") or [],
             "quality": r.get("qualityDelta"), "framesPresented": r.get("framesPresented"), "end": r.get("end"),
             "chrono": (r.get("chrono") or {}).get("summary"), "srvBuildMaxMs": r.get("srv.buildMaxMs"), "srvMB": r.get("srv.MB"),
@@ -189,6 +190,15 @@ hdr_tail = ["lecteur", "essais", "1res images", "1re image méd. ms", "p90", "sa
 table("Par lecteur, profil réseau et décodage (essais de la règle, passes courte et complète)", ["réseau", "décodage"] + hdr_tail, group_table("", lambda r: (r["net"], r["decode"])))
 table("Par titre (tous profils confondus)", ["titre"] + hdr_tail, group_table("", lambda r: (r["title"],)))
 table("Par ordre des lecteurs (réseau « aucun »)", ["ordre", "réseau"] + hdr_tail, [row for row in group_table("", lambda r: (r["order"], r["net"])) if row[1] == "aucun"])
+
+# La chronologie (étape 3e) : médianes des résumés par essai.
+ck = ["firstReqMs", "firstVideoReadyMs", "firstVideoRecvMs", "seekedToAdvanceMs", "readyMaxMs", "videoAdvance", "recvAdvance", "aheadSeekedS", "aheadAdvanceS"]
+cg = defaultdict(list)
+for r in trials:
+    if r.get("chrono") and is_rule(r):
+        cg[(r["net"], r["decode"], r["player"])].append(r["chrono"])
+table("Chronologie (médiane des résumés d'essai)", ["réseau", "décodage", "lecteur", "essais"] + ck,
+      [list(k) + [len(v)] + [fmt(pct([c.get(f) for c in v], .5), 1) if any(c.get(f) is not None for c in v) else "—" for f in ck] for k, v in sorted(cg.items())])
 
 # Les leviers et le son multiplexé : chaque essai de levier contre le témoin du même titre dans la même passe.
 lever_rows = defaultdict(lambda: {"ff": [], "tf": [], "adv": [], "n": 0})
@@ -289,16 +299,17 @@ for d, f in windows:
     # L'iGPU : moyenne de l'occupation de chaque moteur pendant la fenêtre (intel_gpu_top, global à la machine).
     gpu_file = os.path.join(WORK, "out", d["label"] + ".gpu.json")
     if os.path.exists(gpu_file):
-        txt = open(gpu_file).read().strip().rstrip(",")
-        try:
-            arr = json.loads(txt if txt.endswith("]") else txt + "]")
-            eng = defaultdict(list)
-            for e in arr:
-                for name, v in (e.get("engines") or {}).items():
-                    eng[name].append(v.get("busy", 0))
-            rec["gpuBusy"] = {k: round(statistics.mean(v), 1) for k, v in eng.items()}
-        except Exception as e:
-            rec["gpuBusy"] = f"illisible : {e}"
+        txt = open(gpu_file).read()
+        # intel_gpu_top -J écrit des objets à la suite, et `docker logs` coupe son flux par blocs de 16 Ko : on lit les
+        # occupations moteur par moteur (`"Video/0": { "busy": x`), sans relire le JSON entier.
+        import re
+        eng = defaultdict(list)
+        for name, busy in re.findall(r'"([A-Za-z/0-9]+)":\s*\{\s*"busy":\s*([0-9.]+)', txt):
+            eng[name].append(float(busy))
+        pw = [float(x) for x in re.findall(r'"Package":\s*([0-9.]+)', txt)]
+        rec["gpuBusy"] = {k: round(statistics.mean(v[1:] or v), 1) for k, v in eng.items()}
+        if pw:
+            rec["packageW"] = round(statistics.mean(pw[1:] or pw), 1)
     conso.append(rec)
 
 with open(os.path.join(OUT, "conso.jsonl"), "w") as f:
@@ -315,3 +326,27 @@ table("Consommation, une ligne par lecture continue", ["titre", "lecteur", "déc
 
 open(os.path.join(OUT, "tableaux.md"), "w").write("\n".join(md) + "\n")
 print(f"{len(trials)} lectures d'essai, {len(seeks)} sauts, {len(conso)} mesures de consommation → {OUT}")
+
+# --- Redémarrage du serveur et son capté (essais à part) ---------------------------------------------------------
+hote = jl(os.path.join(WORK, "out/marks-hote.jsonl"))
+obs = [m for m in marks if str(m.get("phase", "")).startswith("obs-")]
+rows = []
+for m in obs:
+    case = m["phase"][4:]
+    srv = next((h for h in hote if h["label"] == m["label"] and h["phase"] == f"serveur-{case}"), None)
+    down = srv["downMs"] if srv else None
+    ev = " ".join(f"{e[1]}" for e in (m.get("events") or [])[:12])
+    rows.append([m["label"], m.get("player"), case, down, m.get("stallMs"), m.get("endCt"), m.get("endErr") or "—", ev, " / ".join((m.get("logTail") or [])[-3:])[:200]])
+if rows:
+    md.append("")
+    table("Redémarrage du serveur pendant la lecture", ["passage", "lecteur", "cas", "serveur rendu en ms", "arrêt de l'horloge ms", "position finale", "erreur finale", "évènements", "fin du journal de la page"], rows)
+son_rows = []
+for f in sorted(glob.glob(os.path.join(WORK, "out", "son-*.verdict.json"))):
+    try:
+        v = json.loads(open(f).read())
+    except Exception:
+        continue
+    son_rows.append([os.path.basename(f)[4:-13], v.get("firstTrack"), json.dumps(v.get("summary"), ensure_ascii=False), v.get("decidedShare"), v.get("lagMs"), v.get("lagScore"), json.dumps(v.get("switches"), ensure_ascii=False)[:200]])
+if son_rows:
+    table("Son réellement joué (capté par Web Audio, comparé aux pistes du fichier)", ["capture", "piste reconnue", "fenêtres de 0,5 s", "part tranchée", "décalage ms", "score", "changements"], son_rows)
+open(os.path.join(OUT, "tableaux.md"), "w").write("\n".join(md) + "\n")

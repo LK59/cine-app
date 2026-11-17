@@ -248,6 +248,14 @@ async function coupure() {
     } else if (c === "faible") {
       const to = await page.evaluate(() => { const v = document.querySelector("video"); const to = Math.min(v.duration - 300, v.currentTime + 1500); v.currentTime = to; return to; });
       mark("go-faible", { player, to });
+    } else if (c === "panne") {
+      // Le serveur arrêté AVANT le saut (un redéploiement pendant qu'on cherche une scène) : le cas « tampon vide »
+      // vrai — sur la boucle locale, un saut fait juste avant l'arrêt a déjà tout reçu.
+      await sleep(20_000);
+      mark("go-panne", { player });
+      await sleep(2500);
+      const to = await page.evaluate(() => { const v = document.querySelector("video"); const to = Math.min(v.duration - 300, v.currentTime + 1200); v.currentTime = to; return to; }).catch(() => null);
+      mark("saut-panne", { player, to });
     } else if (c === "version") {
       await sleep(30_000);
       mark("go-version", { player });
