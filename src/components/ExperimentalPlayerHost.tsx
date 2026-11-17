@@ -2423,7 +2423,9 @@ export function ExperimentalPlayerHost({
         // Le même endroit deux fois, c'est ce que la plateforme ne peut pas prendre : la décision
         // (budget, saut au-delà du passage) est dans `lifecycle.sourceLost`.
         // Avant la première image de la lecture, pas de saut au-delà : voir `sourceLost`.
-        const lost = remuxRef.current?.lost ? lifecycle.sourceLost(remuxRef.current.position || positionRef.current, Date.now(), pictureSeenRef.current) : null;
+        const lost = remuxRef.current?.lost
+          ? lifecycle.sourceLost(remuxRef.current.position || positionRef.current, Date.now(), pictureSeenRef.current, (where) => remuxRef.current?.nextKeyframeAfter(where) ?? null)
+          : null;
         if (lost?.kind === "ignore") return;
         if (lost?.kind === "rebuild") {
           const { at, from: where, skipped: again, attempt } = lost;

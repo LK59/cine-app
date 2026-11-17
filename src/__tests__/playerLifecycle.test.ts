@@ -26,6 +26,29 @@ describe("une source perdue", () => {
     expect(lifecycle.sourceLost(101, 1)).toEqual({ kind: "rebuild", at: 101 + REBUILD_STEP_SECONDS, from: 101, skipped: true, attempt: 2 });
   });
 
+  it("au-delà d'un passage qui échoue deux fois : l'image clé suivante, pas 12 s plus loin (GoT S05E10, 17/11/2026)", () => {
+    const lifecycle = new PlayerLifecycle();
+    const next = (where: number) => (where >= 1600 && where < 1607.189 ? 1607.289 : null);
+    expect(lifecycle.sourceLost(1605.4, 0, true, next)).toEqual({ kind: "rebuild", at: 1605.4, from: 1605.4, skipped: false, attempt: 1 });
+    expect(lifecycle.sourceLost(1605.41, 1, true, next)).toEqual({ kind: "rebuild", at: 1607.289, from: 1605.41, skipped: true, attempt: 2 });
+  });
+
+  it("une image clé absente, derrière la tête, au-delà des 12 s, ou une recherche qui lève : le saut d'avant", () => {
+    const at = (key: (w: number) => number | null) => {
+      const lifecycle = new PlayerLifecycle();
+      lifecycle.sourceLost(100, 0, true, key);
+      return lifecycle.sourceLost(100, 1, true, key);
+    };
+    expect(at(() => null)).toMatchObject({ at: 100 + REBUILD_STEP_SECONDS, skipped: true });
+    expect(at(() => 99)).toMatchObject({ at: 100 + REBUILD_STEP_SECONDS });
+    expect(at(() => 100 + REBUILD_STEP_SECONDS + 5)).toMatchObject({ at: 100 + REBUILD_STEP_SECONDS });
+    expect(
+      at(() => {
+        throw new Error("index illisible");
+      })
+    ).toMatchObject({ at: 100 + REBUILD_STEP_SECONDS });
+  });
+
   it("avant la première image, le même endroit qui échoue encore est rouvert sur place — pas 12 s plus loin (Eras Tour, iPad, 20/10/2026)", () => {
     const lifecycle = new PlayerLifecycle();
     // Deux fermetures à 0,41 s, sans une image décodée : le concert repartait à 0:12.

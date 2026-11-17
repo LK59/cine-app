@@ -40,6 +40,17 @@ export const REBUILD_WINDOW_MS = 180_000;
  */
 export const REBUILD_STEP_SECONDS = 12;
 
+/** Où rouvrir au-delà d'un passage fautif : l'image clé suivante si elle tombe dans le saut d'avant, sinon le saut. */
+function stepPast(where: number, nextKeyframe?: (where: number) => number | null): number {
+  let key: number | null = null;
+  try {
+    key = nextKeyframe?.(where) ?? null;
+  } catch {
+    key = null;
+  }
+  return key !== null && Number.isFinite(key) && key > where && key <= where + REBUILD_STEP_SECONDS ? key : where + REBUILD_STEP_SECONDS;
+}
+
 /** Deux positions de reconstruction aussi proches sont le même endroit. */
 export const SAME_PLACE_SECONDS = 3;
 
@@ -250,13 +261,19 @@ export class PlayerLifecycle {
    * 0:12. On rouvre au même endroit ; si ça échoue encore, le budget passe le film au lecteur
    * serveur, comme pour toute perte qui se répète. Le saut reste pour les pertes en cours de film,
    * celles pour lesquelles il existe (trois reconstructions mortes sur le même segment de 5,5 Mo).
+   *
+   * Le saut va à l'image clé suivante quand le fichier la nomme (`nextKeyframe`, 17/11/2026), et de
+   * `REBUILD_STEP_SECONDS` sinon : une image abîmée dans le fichier (*Game of Thrones* S05E10, S01E01 — ffmpeg
+   * l'avoue, `cu_qp_delta` hors bornes, et la masque ; le décodeur d'Apple la refuse à chaque passage) coûtait
+   * 12 s de film quand le groupe suivant commençait 1,7 et 2,9 s plus loin. Une clé au-delà des 12 s, ou derrière la
+   * tête, garde l'ancien saut.
    */
-  sourceLost(where: number, now: number, sawPicture = true): LossDecision {
+  sourceLost(where: number, now: number, sawPicture = true, nextKeyframe?: (where: number) => number | null): LossDecision {
     if (this.isOver()) return { kind: "ignore" };
     if (!this.spendRebuild(now)) return { kind: "giveUp" };
     const again = sawPicture && this.lastLossAt !== null && Math.abs(where - this.lastLossAt) < SAME_PLACE_SECONDS;
     this.lastLossAt = where;
-    return { kind: "rebuild", at: again ? where + REBUILD_STEP_SECONDS : where, from: where, skipped: again, attempt: this.rebuilds };
+    return { kind: "rebuild", at: again ? stepPast(where, nextKeyframe) : where, from: where, skipped: again, attempt: this.rebuilds };
   }
 
   /**

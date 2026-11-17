@@ -1400,6 +1400,19 @@ export const FIXES_LEDGER: FixLedgerEntry[] = [
       },
     ],
   },
+  {
+    version: "10.50.5",
+    page: "10.43",
+    group: { fr: "Lecture", en: "Playback", es: "Reproducción", de: "Wiedergabe" },
+    items: [
+      {
+        fr: "Quand une image abîmée dans un fichier interrompt la lecture, le film reprend juste après elle au lieu de sauter 12 secondes.",
+        en: "When a damaged picture in a file interrupts playback, the film now resumes right after it instead of skipping 12 seconds.",
+        es: "Cuando una imagen dañada en un archivo interrumpe la reproducción, la película se reanuda justo después en lugar de saltar 12 segundos.",
+        de: "Wenn ein beschädigtes Bild in einer Datei die Wiedergabe unterbricht, läuft der Film direkt danach weiter, statt 12 Sekunden zu überspringen.",
+      },
+    ],
+  },
 ];
 
 /** « 8.64.1 » > « 8.64 » : comparées nombre par nombre, une partie absente valant 0. */

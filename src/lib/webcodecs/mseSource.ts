@@ -25,7 +25,7 @@ import {
   RUNAWAY_REPORT_SECONDS, STALL_TRACE_MS, MAX_APPEND_FAILURES, NETWORK_KEEP_LEAD_SECONDS, NETWORK_RETRY_DELAYS_MS, ONE_FRAME_S,
   NETWORK_TRIM_MARGIN_SECONDS, NETWORK_OUTAGE_GIVE_UP_MS, OUTAGE_STARVED_LEAD_SECONDS, STALL_TIMEOUT_MS, WATCHDOG_MS,
   EVICTION_REFILLS_PER_MINUTE, SOURCE_OPEN_TIMEOUT_MS, MISPLACED_SECONDS, FRUITLESS_APPENDS, PRE_ROLL_SECONDS,
-  TRACED_APPENDS, TRACED_APPENDS_PER_SEEK, KEEP_BEHIND_SECONDS, TRIM_SLACK_SECONDS, KEYFRAME_TRIM_MARGIN,
+  TRACED_APPENDS, TRACED_APPENDS_PER_SEEK, KEEP_BEHIND_SECONDS, TRIM_SLACK_SECONDS, KEYFRAME_TRIM_MARGIN, NEXT_KEYFRAME_MARGIN,
 } from "./mseTuning";
 import { frameQuality, playableSpans, spansAll, spansNear } from "./mseSpans";
 import { LossRecord, type SentFragment } from "./mseLossRecord";
@@ -573,6 +573,25 @@ export class MseSource {
 
   private noteLoss(): void {
     this.loss.noteLoss();
+  }
+
+  /**
+   * L'image clé indexée qui suit cet instant (au moins une demi-seconde après), sur l'horloge du lecteur, juste dans
+   * son groupe (`NEXT_KEYFRAME_MARGIN`), ou null — sans index, ou trop près de la fin. Où rouvrir après une perte
+   * répétée au même endroit (`PlayerLifecycle.sourceLost`) : une image abîmée dans le fichier (enquête du 17/11/2026,
+   * *Game of Thrones* S05E10 et S01E01) se décode mal à chaque passage, et le groupe suivant n'en dépend pas. Le même
+   * calcul que l'échelle de reprise (`RecoveryLadder.nextKeyframeAfter`). Ne lève jamais : sur le chemin d'une panne.
+   */
+  nextKeyframeAfter(playerSeconds: number): number | null {
+    try {
+      if (!this.remuxer.seekable) return null;
+      const fileSeconds = this.remuxer.keyframeAfter(this.toFileClock(playerSeconds) + 0.5);
+      if (fileSeconds === null) return null;
+      const next = fileSeconds + this.delaySeconds + NEXT_KEYFRAME_MARGIN;
+      return next < this.playerEnd - 1 ? next : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Voir `LossRecord.lossReport`. */

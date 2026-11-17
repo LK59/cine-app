@@ -587,6 +587,11 @@ export class RemuxPlayback {
     return this.mse?.lost ?? false;
   }
 
+  /** Voir `MseSource.nextKeyframeAfter` : où rouvrir au-delà d'un passage qui a tué la source deux fois. */
+  nextKeyframeAfter(playerSeconds: number): number | null {
+    return this.mse?.nextKeyframeAfter(playerSeconds) ?? null;
+  }
+
   /** Voir `MseSource.lossReport` : ce que la ligne `rebuild` dit de la perte. */
   lossReport(): Record<string, unknown> {
     return this.mse?.lossReport() ?? {};
