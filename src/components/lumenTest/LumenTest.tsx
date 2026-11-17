@@ -14,6 +14,7 @@ import {
   DWELL_AFTER_SEEK_MS,
   EARLY_DELAY_MS,
   LEVER_SERIES,
+  SAFARI_WAIT_SERIES,
   MUX_SERIES,
   MUX_SWITCH_WATCH_MS,
   CONVERT_SERIES,
@@ -1220,11 +1221,11 @@ export function LumenTest() {
     const s = params.s;
     const startAt = Math.max(0, params.startAt);
     const startMode = params.modes?.startMode ?? "saut";
-    // Les essais de la seule liste maître (étape 3e) : `?start=` (EXT-X-START), `?bw=moyen` ; `#t=` sur l'adresse.
+    // Les essais de la seule liste maître (étape 3e) : `?start=` (EXT-X-START), `?bw=moyen|bas` ; `#t=` sur l'adresse.
     const query = new URLSearchParams();
     if (current.audioTrack !== null) query.set("audio", String(current.audioTrack));
     if (startAt > 0 && startMode === "ext-x-start") query.set("start", String(startAt));
-    if (params.modes?.bandwidth === "moyen") query.set("bw", "moyen");
+    if (params.modes?.bandwidth) query.set("bw", params.modes.bandwidth);
     // La passe « changement de codec » (§185) : l'ancienne forme de la liste maître, un groupe et une variante par codec.
     if (params.modes?.groups === "codec") query.set("groupes", "codec");
     // Le levier « sous-titres dans la liste » (§191) : la première piste de texte en rendu DEFAULT, comme en AirPlay.
@@ -1872,7 +1873,7 @@ export function LumenTest() {
     video.removeAttribute("src");
     video.load();
     playOf(video).catch(() => {});
-    const seriesOrder = saved?.order ?? (pass === "leviers" || pass === "multiplexé" || pass === "son" || pass === "codecs" ? "serveur" : order);
+    const seriesOrder = saved?.order ?? (pass === "leviers" || pass === "attente" || pass === "multiplexé" || pass === "son" || pass === "codecs" ? "serveur" : order);
     const plan = planOf(pass, seriesOrder);
     const state: AutoState = {
       serie: saved?.serie ?? newPlaybackId().slice(2, 14),
@@ -1897,7 +1898,7 @@ export function LumenTest() {
     } else {
       setAnswers({ damaged: null, damagedTitle: "", audioClean: null, audioChanged: null, lipSync: null });
       const passLabel =
-        pass === "courte" ? "comparatif rapide" : pass === "leviers" ? "leviers de démarrage" : pass === "multiplexé" ? "son multiplexé" : pass === "son" ? "son converti" : pass === "codecs" ? "changement de codec" : "complète";
+        pass === "courte" ? "comparatif rapide" : pass === "leviers" ? "leviers de démarrage" : pass === "attente" ? "attente de Safari" : pass === "multiplexé" ? "son multiplexé" : pass === "son" ? "son converti" : pass === "codecs" ? "changement de codec" : "complète";
       note(`série ${state.serie} (${passLabel}, ${seriesOrder === "actuel" ? "lecteur actuel d'abord, rechargement" : "serveur d'abord"}, graine ${state.seed}) : ${plan.length} essais`);
     }
     video.scrollIntoView?.({ block: "start" });
@@ -2043,6 +2044,7 @@ export function LumenTest() {
   const estimateMin = Math.round(seriesEstimateS(SERIES) / 60);
   const quickMin = Math.round(seriesEstimateS(QUICK_SERIES) / 60);
   const leverMin = Math.round(seriesEstimateS(LEVER_SERIES) / 60);
+  const waitMin = Math.round(seriesEstimateS(SAFARI_WAIT_SERIES) / 60);
   const muxMin = Math.round(seriesEstimateS(MUX_SERIES) / 60);
   const convertMin = Math.round(seriesEstimateS(CONVERT_SERIES) / 60);
   const codecMin = Math.round(seriesEstimateS(CODEC_SERIES) / 60);
@@ -2081,6 +2083,9 @@ export function LumenTest() {
         </button>
         <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("leviers")}>
           {`Leviers de démarrage (${LEVER_SERIES.length} essais, Lumen serveur seul, ~${leverMin} min)`}
+        </button>
+        <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("attente")}>
+          {`Attente de Safari (${SAFARI_WAIT_SERIES.length} essais, Lumen serveur seul, ~${waitMin} min)`}
         </button>
         <button type="button" className="btn btn-ghost mt-2 w-full justify-center py-2.5" disabled={auto?.phase === "en-cours"} onClick={() => runAll("multiplexé")}>
           {`Son multiplexé (${MUX_SERIES.length} essais, Lumen serveur seul, ~${muxMin} min)`}

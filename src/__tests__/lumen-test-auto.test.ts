@@ -4,6 +4,7 @@ import {
   EARLY_DELAY_MS,
   FreezeWatch,
   LEVER_SERIES,
+  SAFARI_WAIT_SERIES,
   PRESETS,
   QUICK_SERIES,
   SERIES,
@@ -106,6 +107,22 @@ describe("le plan des séries", () => {
     expect(QUICK_SERIES.filter((t) => t.modes?.early).map((t) => t.modes?.early)).toEqual(["serveur", "serveur"]);
     // Les leviers sont des essais serveur : le lecteur actuel n'en a pas.
     expect(QUICK_SERIES.filter((t) => t.modes).every((t) => t.player === "serveur")).toBe(true);
+  });
+
+  it("l'attente de Safari : débit au quart et segments de 2 s, seuls puis ensemble, encadrés par des témoins, sur deux titres", () => {
+    expect(planOf("attente")).toBe(SAFARI_WAIT_SERIES);
+    expect(planOf("attente", "actuel")).toBe(SAFARI_WAIT_SERIES);
+    expect(SAFARI_WAIT_SERIES.every((t) => t.player === "serveur" && t.tours.join() === "5")).toBe(true);
+    expect(new Set(SAFARI_WAIT_SERIES.map((t) => t.id)).size).toBe(SAFARI_WAIT_SERIES.length);
+    for (const key of ["ghosted", "ted-lasso"]) {
+      const kinds = SAFARI_WAIT_SERIES.filter((t) => t.key === key).map((t) => `${t.targetS}${t.modes?.bandwidth === "bas" ? "-bas" : ""}`);
+      expect(new Set(kinds)).toEqual(new Set(["4", "4-bas", "2", "2-bas"]));
+      // Le premier et le dernier essai d'un titre sont le même : la dérive du réseau se lit entre eux.
+      expect(kinds[0]).toBe(kinds[kinds.length - 1]);
+    }
+    expect(modeTag({ bandwidth: "bas" })).toBe("bwbas");
+    for (const t of SAFARI_WAIT_SERIES) expect(t.id).toMatch(/^[a-z0-9-]{1,40}$/);
+    expect(seriesEstimateS(SAFARI_WAIT_SERIES)).toBeLessThan(15 * 60);
   });
 
   it("les leviers de démarrage : chaque levier à côté d'un témoin du même titre ; le départ à 600 s par les trois chemins", () => {

@@ -112,14 +112,25 @@ export interface MasterTrialOptions {
   startS?: number;
   /** `?bw=moyen` : BANDWIDTH annoncé au débit moyen plutôt qu'à la crête (levier d). */
   averageBandwidth?: boolean;
+  /**
+   * `?bw=bas` : BANDWIDTH et AVERAGE-BANDWIDTH annoncés au quart (passe « Attente de Safari », 17/11/2026). Un
+   * mensonge assumé, d'essai seulement : Safari attend jusqu'à ~12 s d'avance avant de lancer l'image après un saut
+   * (0,9 à 4 s, contre 0,7 s au lecteur actuel) ; s'il pèse le débit annoncé contre le débit mesuré, il se croira en
+   * avance plus tôt. `moyen` n'avait rien montré de net (16/11).
+   */
+  lowBandwidth?: boolean;
 }
 
-/** `?start=` et `?bw=` ; une valeur mal formée est ignorée (la liste de la règle), jamais une erreur. */
+/** Le facteur du débit annoncé sous `?bw=bas`. */
+export const LOW_BANDWIDTH_DIVISOR = 4;
+
+/** `?start=` et `?bw=` (`moyen`, `bas`) ; une valeur mal formée est ignorée (la liste de la règle), jamais une erreur. */
 export function masterTrialOptions(params: URLSearchParams): MasterTrialOptions {
   const out: MasterTrialOptions = {};
   const start = params.get("start");
   if (start && /^\d{1,6}(\.\d{1,3})?$/.test(start) && Number(start) > 0) out.startS = Number(start);
   if (params.get("bw") === "moyen") out.averageBandwidth = true;
+  if (params.get("bw") === "bas") out.lowBandwidth = true;
   return out;
 }
 
@@ -128,6 +139,10 @@ export function withMasterTrials(master: string, options: MasterTrialOptions): s
   let text = master;
   if (options.averageBandwidth) {
     text = text.replace(/^(#EXT-X-STREAM-INF:)BANDWIDTH=\d+,AVERAGE-BANDWIDTH=(\d+)/gm, "$1BANDWIDTH=$2,AVERAGE-BANDWIDTH=$2");
+  }
+  if (options.lowBandwidth) {
+    const quarter = (v: string) => String(Math.max(1, Math.round(Number(v) / LOW_BANDWIDTH_DIVISOR)));
+    text = text.replace(/^#EXT-X-STREAM-INF:.*$/gm, (line) => line.replace(/\b(BANDWIDTH|AVERAGE-BANDWIDTH)=(\d+)/g, (_m, k: string, v: string) => `${k}=${quarter(v)}`));
   }
   if (options.startS !== undefined) {
     // Juste après `#EXTM3U` : une balise de liste maître, une seule fois (RFC 8216 §4.3.5).

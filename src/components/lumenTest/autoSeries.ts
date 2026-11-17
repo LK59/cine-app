@@ -48,7 +48,7 @@ export type PlayerKind = "serveur" | "actuel";
  * La passe : la série complète (~28 min), le comparatif rapide (~13 min), les leviers de démarrage (~10 min, étape
  * 3e), le son multiplexé contre la règle (~18 min, étape 3f) ou le son converti (~10 min, phase 2, DECISIONS §161).
  */
-export type SeriesPass = "complète" | "courte" | "leviers" | "multiplexé" | "son" | "codecs";
+export type SeriesPass = "complète" | "courte" | "leviers" | "attente" | "multiplexé" | "son" | "codecs";
 
 /**
  * L'ordre des lecteurs (étape 3e) : `serveur` — tous les essais serveur, puis ceux du lecteur actuel, dans la même
@@ -80,7 +80,7 @@ export interface TrialModes {
   mux?: boolean;
   early?: "serveur" | "élément";
   startMode?: "saut" | "ext-x-start" | "fragment";
-  bandwidth?: "moyen";
+  bandwidth?: "moyen" | "bas";
   /**
    * La passe « changement de codec » (§185) : `codec` — la liste maître des formats 1 à 4, un groupe audio et une
    * variante par codec (`?groupes=codec`), à côté de la règle du format 5 (un seul groupe, tous codecs).
@@ -106,7 +106,7 @@ export function modeTag(modes: TrialModes | undefined): string {
   if (modes.mux) parts.push("mux");
   if (modes.early) parts.push(modes.early === "serveur" ? "prep" : "fiche");
   if (modes.startMode) parts.push(`depart-${modes.startMode === "ext-x-start" ? "xstart" : modes.startMode === "fragment" ? "frag" : "saut"}`);
-  if (modes.bandwidth) parts.push("bw");
+  if (modes.bandwidth) parts.push(modes.bandwidth === "bas" ? "bwbas" : "bw");
   if (modes.groups) parts.push("groupes");
   if (modes.subtitles) parts.push("st");
   return parts.join("-");
@@ -120,7 +120,7 @@ export function modeLabel(modes: TrialModes | undefined): string {
   if (modes.mux) parts.push("son multiplexé");
   if (modes.early) parts.push(modes.early === "serveur" ? "préparé 5 s avant" : "fiche ouverte 5 s avant");
   if (modes.startMode) parts.push(`départ par ${modes.startMode === "ext-x-start" ? "EXT-X-START" : modes.startMode === "fragment" ? "#t=" : "saut"}`);
-  if (modes.bandwidth) parts.push("débit annoncé moyen");
+  if (modes.bandwidth) parts.push(modes.bandwidth === "bas" ? "débit annoncé au quart" : "débit annoncé moyen");
   if (modes.groups) parts.push("un groupe son par codec (formats 1 à 4)");
   if (modes.subtitles) parts.push("sous-titres dans la liste");
   return parts.join(", ");
@@ -323,6 +323,30 @@ export const LEVER_SERIES: Trial[] = [
 ];
 
 /**
+ * La passe « Attente de Safari » (17/11/2026) : après un saut, l'image de Lumen serveur arrive aussi vite que celle du
+ * lecteur actuel, mais Safari ne relance la lecture que 0,9 à 4 s plus tard (0,7 s au lecteur actuel), avec ~12 s
+ * d'avance sur *Ghosted* et *Ted Lasso* — à peu près trois segments de 4 s (deux comparatifs dans les deux ordres, même
+ * jour). Deux façons de le faire partir plus tôt, chacune seule puis ensemble :
+ * - **le débit annoncé au quart** (`bw=bas`) : s'il pèse le débit annoncé contre le débit mesuré ;
+ * - **des segments de 2 s** (`t2`) : s'il compte en segments plutôt qu'en secondes.
+ * Les deux titres les plus lents, Lumen serveur seul, cinq sauts par essai, en A-B-C-D-A (le témoin au début et à la
+ * fin encadre la dérive du réseau), le second titre en miroir. Ce qui se lit : `seekMedianMs` − `seekedMedianMs`
+ * (image → lecture repartie) et `aheadAdvanceS` de la chronologie, contre les témoins.
+ */
+export const SAFARI_WAIT_SERIES: Trial[] = [
+  trial("ghosted", "serveur", { tours: [5] }),
+  trial("ghosted", "serveur", { modes: { bandwidth: "bas" }, tours: [5] }),
+  trial("ghosted", "serveur", { targetS: 2, tours: [5] }),
+  trial("ghosted", "serveur", { targetS: 2, modes: { bandwidth: "bas" }, tours: [5] }),
+  trial("ghosted", "serveur", { tours: [5], rep: 2 }),
+  trial("ted-lasso", "serveur", { targetS: 2, modes: { bandwidth: "bas" }, tours: [5] }),
+  trial("ted-lasso", "serveur", { targetS: 2, tours: [5] }),
+  trial("ted-lasso", "serveur", { tours: [5] }),
+  trial("ted-lasso", "serveur", { modes: { bandwidth: "bas" }, tours: [5] }),
+  trial("ted-lasso", "serveur", { targetS: 2, modes: { bandwidth: "bas" }, tours: [5], rep: 2 }),
+];
+
+/**
  * La passe « son multiplexé » (étape 3f) : quatre titres variés, chacun joué **trois fois sans et trois fois avec** le
  * son par défaut multiplexé dans les segments vidéo (`mux`, levier a de l'étape 3e), en alternance A-B-B-A-A-B.
  *
@@ -427,6 +451,8 @@ export function planOf(pass: SeriesPass, order: SeriesOrder = "serveur"): Trial[
       ? QUICK_SERIES
       : pass === "leviers"
         ? LEVER_SERIES
+        : pass === "attente"
+          ? SAFARI_WAIT_SERIES
         : pass === "multiplexé"
           ? MUX_SERIES
           : pass === "son"
