@@ -49,9 +49,9 @@ vi.mock("@/lib/resumeRewind", async (orig) => ({ ...(await orig<typeof import("@
 vi.mock("@/lib/noteSeriesLanguage", () => ({ noteSeriesLanguage: vi.fn() }));
 vi.mock("@/lib/lumenSheetPrepare", () => ({ readLumenPrepared: () => null }));
 const declineLumen = vi.fn();
-vi.mock("@/lib/lumenServerChoice", () => ({ declineLumen: (id: string) => declineLumen(id), lumenResumeSeekOn: () => resumeSeekTrial }));
-/** L'essai « Reprise par un saut sur place » du panneau Compte. */
-let resumeSeekTrial = false;
+vi.mock("@/lib/lumenServerChoice", () => ({ declineLumen: (id: string) => declineLumen(id), lumenKeepAwakeOn: () => keepAwakeTrial }));
+/** L'essai « Garder le son éveillé pendant la pause » du panneau Compte. */
+let keepAwakeTrial = false;
 const reloadServerPage = vi.fn((_intent: () => unknown, _video: unknown) => true);
 vi.mock("@/components/player/server/serverElement", async (orig) => ({
   ...(await orig<typeof import("@/components/player/server/serverElement")>()),
@@ -242,41 +242,58 @@ describe("l'ouverture", () => {
 });
 
 describe("la reprise après une pause", () => {
-  it("coupé par défaut : la reprise est un simple `play()`, sans saut", async () => {
+  function fakeAudio() {
+    const calls: string[] = [];
+    class FakeContext {
+      destination = {};
+      createOscillator() {
+        return { connect: (g: { connect: () => unknown }) => g, start: () => calls.push("start"), stop: () => calls.push("stop"), disconnect: () => {} };
+      }
+      createGain() {
+        return { gain: { value: 1 }, connect: () => ({}) };
+      }
+      resume() {
+        calls.push("resume");
+        return Promise.resolve();
+      }
+      suspend() {
+        calls.push("suspend");
+        return Promise.resolve();
+      }
+      close() {
+        return Promise.resolve();
+      }
+    }
+    vi.stubGlobal("AudioContext", FakeContext);
+    return calls;
+  }
+
+  it("coupé par défaut : rien pendant la pause, la reprise est un simple `play()`", async () => {
+    const calls = fakeAudio();
     await mount();
     const el = element();
     act(() => el.picture(600));
-    let now = 600;
-    const writes: number[] = [];
-    Object.defineProperty(el.video, "currentTime", { get: () => now, set: (v: number) => (writes.push(v), (now = v)), configurable: true });
     act(() => el.video.dispatchEvent(new Event("pause")));
-    await act(async () => void (await vi.advanceTimersByTimeAsync(2000)));
     act(() => el.video.dispatchEvent(new Event("play")));
-    expect(writes).toEqual([]);
+    expect(calls).toEqual([]);
   });
 
-  it("l'essai allumé : un saut sur place avant de repartir, même après une pause brève, sans ligne `seek`", async () => {
-    resumeSeekTrial = true;
+  it("l'essai allumé : un son inaudible pendant la pause, tu une seconde après la reprise, sans ligne `seek`", async () => {
+    keepAwakeTrial = true;
+    const calls = fakeAudio();
     await mount();
     const el = element();
     act(() => el.picture(600));
-    let now = 600;
-    const writes: number[] = [];
-    Object.defineProperty(el.video, "currentTime", { get: () => now, set: (v: number) => (writes.push(v), (now = v)), configurable: true });
     act(() => el.video.dispatchEvent(new Event("pause")));
-    await act(async () => void (await vi.advanceTimersByTimeAsync(2000)));
+    expect(calls).toEqual(["start", "resume"]);
     act(() => el.video.dispatchEvent(new Event("play")));
-    expect(writes).toEqual([600]);
-    act(() => {
-      el.video.dispatchEvent(new Event("seeking"));
-      el.video.dispatchEvent(new Event("seeked"));
-    });
+    await act(async () => void (await vi.advanceTimersByTimeAsync(500)));
+    expect(calls).not.toContain("stop");
+    await act(async () => void (await vi.advanceTimersByTimeAsync(600)));
+    expect(calls).toContain("stop");
+    expect(calls).toContain("suspend");
     expect(kinds()).not.toContain("seek");
-    act(() => el.video.dispatchEvent(new Event("pause")));
-    await act(async () => void (await vi.advanceTimersByTimeAsync(100)));
-    act(() => el.video.dispatchEvent(new Event("play")));
-    expect(writes).toEqual([600, 600]);
-    resumeSeekTrial = false;
+    keepAwakeTrial = false;
   });
 });
 

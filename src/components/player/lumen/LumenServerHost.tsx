@@ -91,7 +91,8 @@ import { subtitleStyleStore, type ChromeEdges } from "@/lib/subtitleStyle";
 import { dualSubtitleMemory, pickRememberedDual, rememberDual } from "@/lib/dualSubtitles";
 import { labelAudioTracks } from "@/lib/trackLabel";
 import { toJellyfinLanguage, trackLanguage, type TrackPreferences } from "@/lib/trackPreferences";
-import { declineLumen, lumenResumeSeekOn } from "@/lib/lumenServerChoice";
+import { declineLumen, lumenKeepAwakeOn } from "@/lib/lumenServerChoice";
+import { AudioKeepAwake } from "./audioKeepAwake";
 import { readLumenPrepared } from "@/lib/lumenSheetPrepare";
 import type { StableTakeover } from "@/lib/useStableFallback";
 import type { DirectPlayInfo } from "@/app/api/jellyfin/direct/[itemId]/route";
@@ -429,8 +430,9 @@ export function LumenServerHost({
   const srcSetRef = useRef<{ at: number; resumeAt: number; fragment: boolean } | null>(null);
   /** Le saut de secours, quand Safari a ignoré `#t=` : pas un geste du spectateur. */
   const safetySeekRef = useRef(false);
-  /** Quand la lecture a été mise en pause (la reprise par un saut sur place) : dans une ref, l'effet des sauts se repose à chaque rendu. */
-  const pausedAtRef = useRef<number | null>(null);
+  /** L'essai « Garder le son éveillé pendant la pause » (`audioKeepAwake.ts`), une veille par hôte, fermée au démontage. */
+  const keepAwakeRef = useRef<AudioKeepAwake | null>(null);
+  useEffect(() => () => keepAwakeRef.current?.dispose(), []);
 
   useEffect(() => {
     errorRef.current = error;
@@ -1056,23 +1058,16 @@ export function LumenServerHost({
       background.notePlaying();
     };
     /**
-     * La reprise après une pause, par un saut sur place. Sur iPhone, AVFoundation repart avec l'image tout de suite et le
-     * son environ une seconde plus tard — la sortie audio se réveille, la seconde de son est perdue (relevé à l'oreille
-     * le 17/11/2026). Reposer la position exacte avant de repartir lui fait peut-être préparer le son et l'image
-     * ensemble. Un ESSAI, sous l'option de l'appareil « Reprise par un saut sur place » (`lumenResumeSeekOn`), coupé par
-     * défaut : coupé, un simple `play()` comme tous les lecteurs du marché. Jamais pendant un saut, une fin ou un
-     * changement de piste.
+     * La reprise après une pause : la sortie audio de l'iPhone s'endort pendant la pause et met ~0,45 s à se réveiller,
+     * l'image repartant sans attendre (enregistrement d'écran du 17/11/2026). Sous l'essai de l'appareil « Garder le son
+     * éveillé pendant la pause » (`lumenKeepAwakeOn`, coupé par défaut), un son inaudible la garde éveillée (voir
+     * `audioKeepAwake.ts`) ; coupé, rien : un simple `play()`, comme les autres lecteurs.
      */
     const onPlay = () => {
-      const since = pausedAtRef.current;
-      pausedAtRef.current = null;
-      if (since === null || !lumenResumeSeekOn()) return;
-      if (!pictureRef.current || video.seeking || video.ended || pendingAudioRef.current) return;
-      safetySeekRef.current = true;
-      video.currentTime = video.currentTime;
+      keepAwakeRef.current?.release();
     };
     const onPause = () => {
-      if (!video.ended && !video.seeking) pausedAtRef.current = Date.now();
+      if (!video.ended && pictureRef.current && lumenKeepAwakeOn()) (keepAwakeRef.current ??= new AudioKeepAwake()).start();
       tallyRef.current.waitEnded(Date.now());
       background.notePaused(Date.now(), { visible: document.visibilityState === "visible", ended: video.ended });
       if (pendingSeek) flushSeek();

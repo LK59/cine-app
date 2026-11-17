@@ -19,7 +19,7 @@ import { useReportBadge } from "@/lib/useReportBadge";
 import { cinemaNavigate } from "@/lib/cinemaRoute";
 import { BenchSection } from "./BenchSection";
 import { setIpadSimulator } from "@/lib/ipadSimulator";
-import { lumenResumeSeekOn, lumenServerOn, setLumenResumeSeek, setLumenServer, subscribeLumenServer } from "@/lib/lumenServerChoice";
+import { lumenKeepAwakeOn, lumenServerOn, setLumenKeepAwake, setLumenServer, subscribeLumenServer } from "@/lib/lumenServerChoice";
 import { playsHlsNatively } from "@/lib/webkitEngine";
 import { useIpadSimulator } from "./IpadSimulatorBadge";
 import { LanguageSelect, SubtitleModeSelect, NotificationChoices, NotificationTest } from "./accountControls";
@@ -411,7 +411,7 @@ function DisplayRows() {
 function LumenServerRow() {
   const t = useT();
   const on = useSyncExternalStore(subscribeLumenServer, lumenServerOn, () => false);
-  const resumeSeek = useSyncExternalStore(subscribeLumenServer, lumenResumeSeekOn, () => false);
+  const keepAwake = useSyncExternalStore(subscribeLumenServer, lumenKeepAwakeOn, () => false);
   const webkit = useSyncExternalStore(noSubscribe, () => playsHlsNatively(), () => true);
   return (
     <>
@@ -420,8 +420,8 @@ function LumenServerRow() {
       </Row>
       {/* L'essai de la reprise (17/11/2026) : visible seulement l'option allumée, à comparer à l'oreille avec et sans. */}
       {on && (
-        <Row icon={Server} title={t("player.account.lumenResumeSeek")} hint={t("player.account.lumenResumeSeekHint")}>
-          <Toggle checked={resumeSeek} ariaLabel={t("player.account.lumenResumeSeek")} onChange={(next) => setLumenResumeSeek(next)} />
+        <Row icon={Server} title={t("player.account.lumenKeepAwake")} hint={t("player.account.lumenKeepAwakeHint")}>
+          <Toggle checked={keepAwake} ariaLabel={t("player.account.lumenKeepAwake")} onChange={(next) => setLumenKeepAwake(next)} />
         </Row>
       )}
     </>

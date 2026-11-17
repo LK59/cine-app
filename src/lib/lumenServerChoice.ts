@@ -74,24 +74,27 @@ export function lumenChoiceFor(session: object): boolean {
 }
 
 /**
- * L'essai « Reprise par un saut sur place » (17/11/2026), sous l'option, coupé par défaut : la lecture reprise après une
- * pause en reposant la position exacte avant `play()`, pour qu'AVFoundation prépare son et image ensemble. Coupé, la
- * reprise est un simple `play()`, comme tous les lecteurs du marché. Rangé sur l'appareil ; lu à chaque reprise.
+ * L'essai « Garder le son éveillé pendant la pause » (17/11/2026), sous l'option, coupé par défaut : un son inaudible
+ * joué pendant une pause garde la sortie audio éveillée, pour que le son reparte avec l'image (`audioKeepAwake.ts`).
+ * Remplace l'essai du saut sur place, mesuré sans effet (0,48 s de son perdu contre 0,45 s sans). Rangé sur
+ * l'appareil ; lu à chaque pause.
  */
-export const LUMEN_RESUME_SEEK_KEY = "cine:lumen-reprise-saut";
+export const LUMEN_KEEP_AWAKE_KEY = "cine:lumen-son-eveille";
 
-export function lumenResumeSeekOn(): boolean {
+export function lumenKeepAwakeOn(): boolean {
   try {
-    return window.localStorage.getItem(LUMEN_RESUME_SEEK_KEY) === "1";
+    return window.localStorage.getItem(LUMEN_KEEP_AWAKE_KEY) === "1";
   } catch {
     return false;
   }
 }
 
-export function setLumenResumeSeek(on: boolean): void {
+export function setLumenKeepAwake(on: boolean): void {
   try {
-    if (on) window.localStorage.setItem(LUMEN_RESUME_SEEK_KEY, "1");
-    else window.localStorage.removeItem(LUMEN_RESUME_SEEK_KEY);
+    if (on) window.localStorage.setItem(LUMEN_KEEP_AWAKE_KEY, "1");
+    else window.localStorage.removeItem(LUMEN_KEEP_AWAKE_KEY);
+    // L'essai précédent, retiré : sa clé ne doit pas rester sur l'appareil.
+    window.localStorage.removeItem("cine:lumen-reprise-saut");
   } catch {
     // Stockage refusé : l'essai reste coupé, comme il se lit.
   }
