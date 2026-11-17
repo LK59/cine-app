@@ -1,7 +1,9 @@
-// L'encodeur de la version allégée : un ffmpeg avec VAAPI (le paquet Alpine `ffmpeg`, chemin `LUMEN_VIDEO_FFMPEG_PATH`,
-// `/usr/bin/ffmpeg` par défaut) et le iGPU du serveur (`/dev/dri/renderD128`, à donner au conteneur). Distinct du
-// ffmpeg épinglé de la conversion du son (`/usr/local/bin/ffmpeg`, §161), qui n'a aucun codec vidéo : rien de ce qui
-// est mesuré pour le son ne dépend de celui-ci.
+// L'encodeur de la version allégée : un ffmpeg vidéo minimal épinglé avec VAAPI (FFmpeg 7.1.5, `tools/ffmpeg-video`,
+// chemin `LUMEN_VIDEO_FFMPEG_PATH`, `/usr/local/bin/ffmpeg-video` par défaut) et le iGPU du serveur
+// (`/dev/dri/renderD128`, à donner au conteneur). Distinct du ffmpeg épinglé de la conversion du son
+// (`/usr/local/bin/ffmpeg`, §161), qui n'a aucun codec vidéo : rien de ce qui est mesuré pour le son ne dépend de
+// celui-ci. Jusqu'au 17/11/2026 au soir : le paquet Alpine `ffmpeg` (8.1.3) — 240 Mo d'image pour quatre fonctions.
+// Sa version (« 7.1.5-lumen-video-1 ») entre dans l'identité des échelons (`cid`) : changer de binaire change d'adresses.
 //
 // **La détection** (`detectLightEncoder`, une fois par chemin, gardée sur `globalThis`) : le binaire répond, il a
 // `hevc_vaapi` et `scale_vaapi`, le périphérique est lisible, et un encodage de deux images d'une mire 10 bits rend

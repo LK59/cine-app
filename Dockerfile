@@ -46,6 +46,14 @@ FROM alpine:3.24 AS ffmpeg-lumen
 COPY tools/ffmpeg-lumen/build.sh /build.sh
 RUN JOBS=4 sh /build.sh
 
+# Le ffmpeg vidéo minimal de la version allégée de Lumen serveur (DECISIONS.md §195) : la même FFmpeg 7.1.5 épinglée,
+# avec seulement VAAPI (décodage HEVC/H.264, `scale_vaapi`, encodeur `hevc_vaapi`), le Matroska en entrée et un flux
+# HEVC brut en sortie — `tools/ffmpeg-video/build.sh` et son README disent tout. Lié dynamiquement à libva (pas de
+# libva statique sur Alpine). ~5 Mo, à la place du paquet Alpine `ffmpeg` et de ses ~180 Mo de bibliothèques.
+FROM alpine:3.24 AS ffmpeg-video
+COPY tools/ffmpeg-video/build.sh /build.sh
+RUN JOBS=4 sh /build.sh
+
 FROM node:26-alpine AS builder
 # Le repère du build, repris tel quel dans les réglages. `.git` n'entre pas dans le contexte de
 # build (voir .dockerignore), donc le hash ne peut venir que d'ici :
@@ -104,12 +112,10 @@ RUN addgroup -g 1001 cineapp && adduser -u 1001 -G cineapp -s /bin/sh -D cineapp
 # `npm ls sharp` quand `next` change. 0.35.5 depuis next 16.4.1 (14/10/2026) : faille de librsvg
 # (GHSA-wq5f-xc86-pv6w) corrigée dans les libvips qu'il embarque.
 RUN --mount=type=cache,target=/root/.npm apk add --no-cache libstdc++ tzdata && npm install --no-save sharp@0.35.5
-# Le ffmpeg vidéo de la version allégée de Lumen serveur (`src/lib/lumenServer/light/`) : le paquet Alpine (FFmpeg 8.1
-# sur Alpine 3.24, `hevc_vaapi`, `scale_vaapi`) et le pilote VAAPI des iGPU Intel récents (`intel-media-driver`, iHD).
-# À `/usr/bin/ffmpeg`, à côté du ffmpeg épinglé du son (`/usr/local/bin/ffmpeg`) qu'il ne remplace pas : chacun est
-# appelé par son chemin (`LUMEN_VIDEO_FFMPEG_PATH`, `LUMEN_FFMPEG_PATH`). ~180 Mo de plus. Sans `/dev/dri` donné au
+# Ce que le ffmpeg vidéo de la version allégée (étape `ffmpeg-video`) charge à l'exécution : libva (libva-drm, libdrm)
+# et le pilote VAAPI des iGPU Intel récents (`intel-media-driver`, iHD) — indispensable. Sans `/dev/dri` donné au
 # conteneur (et le groupe `render` en `group_add`), la détection le voit indisponible et rien d'autre ne change.
-RUN apk add --no-cache ffmpeg intel-media-driver
+RUN apk add --no-cache libva libdrm intel-media-driver
 
 COPY --from=builder --chown=cineapp:cineapp /app/public ./public
 COPY --from=builder --chown=cineapp:cineapp /app/.next/standalone ./
@@ -124,6 +130,10 @@ COPY --from=immersion --chown=cineapp:cineapp /build/immersion/dist ./immersion-
 # `LUMEN_FFMPEG_PATH` le cherche ici par défaut ; vide, la conversion est vue comme indisponible.
 COPY --from=ffmpeg-lumen /opt/ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=ffmpeg-lumen /opt/ffmpeg/share/ffmpeg-lumen /usr/local/share/ffmpeg-lumen
+# Le ffmpeg vidéo de la version allégée (étape `ffmpeg-video`) et son offre de source (LGPL), à un chemin à lui :
+# `LUMEN_VIDEO_FFMPEG_PATH` le cherche ici par défaut. Il ne remplace pas celui du son, chacun appelé par son chemin.
+COPY --from=ffmpeg-video /opt/ffmpeg-video/bin/ffmpeg /usr/local/bin/ffmpeg-video
+COPY --from=ffmpeg-video /opt/ffmpeg-video/share/ffmpeg-video /usr/local/share/ffmpeg-video
 # Copy compiled better-sqlite3 native module (compiled for Alpine in deps stage)
 COPY --from=deps --chown=cineapp:cineapp /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 COPY --from=deps --chown=cineapp:cineapp /app/node_modules/web-push ./node_modules/web-push

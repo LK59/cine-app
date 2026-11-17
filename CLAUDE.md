@@ -711,7 +711,7 @@ the plain list and every existing address are unchanged (no format bump; `cid` c
 Changing the mode is a same-element reopen (§185). AAC, FLAC, a busy server or the option off: hand back to the native
 player (§188). Bump `LUMEN_DIALOGUE_VERSION` when `dialogueEnhance.ts` changes (a test holds its SHA-256).
 **The lighter version** (§195, `src/lib/lumenServer/light/`, `LUMEN_LIGHT`, off by default) re-encodes the video through the
-server's Intel iGPU (VAAPI, a second ffmpeg at `/usr/bin/ffmpeg`, `/dev/dri` given to the container) into one or two
+server's Intel iGPU (VAAPI, a second pinned minimal ffmpeg at `/usr/local/bin/ffmpeg-video`, `tools/ffmpeg-video/`, `/dev/dri` given to the container) into one or two
 HEVC rungs (`l1x{cid}` ≤ 1080p, `l2x{cid}` ≤ 720p) on **the same segments, frame for frame** as the original — times read
 from the original's `moof`s, no B-frames, `-fps_mode passthrough`, every frame's instant checked — so Safari's own ABR
 switches without a cut; each requested segment prefetches the next three, and the page asks for the right rung
