@@ -327,6 +327,31 @@ export function lumenRebuildFields(
   };
 }
 
+/**
+ * Le sous-titre porté au téléviseur pendant AirPlay (§191) : une ligne `cast` par changement — mis, changé, retiré —,
+ * écrite quand la liste rouverte avec `?st=` a donné son image (ou a échoué, `error`). `subtitles` : l'étiquette du
+ * menu, ou `"aucun"`. `cast: true` quoi que dise le contexte, comme la ligne « diffusion établie ».
+ */
+export function lumenCastSubtitleFields(
+  ctx: ServerPlayerContext,
+  facts: { subtitles: string | null; st: number | null; fromSt: number | null; at: number; tookMs: number; pictureMs?: number; error?: string | null },
+  lumenSession: string
+): Record<string, unknown> {
+  return {
+    ...serverLineFields(ctx),
+    cast: true,
+    reason: "sous-titres au téléviseur",
+    subtitles: facts.subtitles ?? "aucun",
+    st: facts.st,
+    ...(facts.fromSt !== null ? { fromSt: facts.fromSt } : {}),
+    at: Math.round(facts.at),
+    tookMs: Math.round(facts.tookMs),
+    ...(facts.pictureMs !== undefined ? { pictureMs: Math.round(facts.pictureMs) } : {}),
+    ...(facts.error ? { error: facts.error.slice(0, 160) } : {}),
+    lumenSession,
+  };
+}
+
 /** Une erreur affichée ou une relance après une erreur de l'élément : `error`, avec ce que l'élément en dit. */
 export function lumenErrorFields(ctx: ServerPlayerContext, reason: string, extra: Record<string, unknown>): Record<string, unknown> {
   return serverFailureFields(ctx, reason, extra);

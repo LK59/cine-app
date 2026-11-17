@@ -37,9 +37,28 @@ const mockLogError = vi.fn();
 vi.mock("@/lib/logger", () => ({ logError: (...a: unknown[]) => mockLogError(...a) }));
 vi.mock("@/lib/repliques/playbackActivity", () => ({ noteMediaRead: () => {} }));
 const FILES: Record<string, string> = {};
+/** Les sous-titres que Jellyfin décrit pour un titre (§191) ; `"panne"` : Jellyfin injoignable. */
+let subtitleStreams: Record<string, unknown>[] | "panne" = [];
+/** Le WebVTT que Jellyfin rend pour un index, ou un statut. */
+const vttByIndex: Record<number, string | number> = {};
+const mediaSourceCalls: string[] = [];
 vi.mock("@/lib/clients/jellyfin", () => ({
   jellyfin: {
     getItemForAnalysis: async (id: string) => (FILES[id] ? { Id: id, Type: "Movie", MediaSources: [{ Path: `/media/${FILES[id]}` }] } : null),
+    getItemMediaSources: async (userId: string, id: string) => {
+      mediaSourceCalls.push(userId);
+      if (subtitleStreams === "panne") throw new Error("Jellyfin muet");
+      return { MediaSources: [{ Id: id, ETag: "etag-1", MediaStreams: subtitleStreams }] };
+    },
+  },
+}));
+vi.mock("@/lib/jellyfinBreaker", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/jellyfinBreaker")>()),
+  passJellyfinFetch: async (url: string) => {
+    const m = /\/Subtitles\/(\d+)\/Stream\.vtt$/.exec(url);
+    const found = m ? vttByIndex[Number(m[1])] : undefined;
+    if (found === undefined) return new Response("", { status: 404 });
+    return typeof found === "number" ? new Response("", { status: found }) : new Response(found, { status: 200 });
   },
 }));
 
@@ -118,7 +137,7 @@ describe("l'administrateur lit un titre", () => {
   it("éligibilité, liste maître, listes média, init et segments : types, cache, contenu", async () => {
     const verdict = await okVerdict(H264, "?s=lecture-1");
     expect(verdict.master).toBe(`/api/lumen/${H264}/${verdict.version}/lecture-1/master.m3u8?audio=${verdict.audioTrack}`);
-    expect(verdict.version).toMatch(/^5-[0-9a-f]{12}$/);
+    expect(verdict.version).toMatch(/^6-[0-9a-f]{12}$/);
     const base = baseOf(verdict.master);
 
     const master = await get(verdict.master);
@@ -249,13 +268,13 @@ describe("les refus d'accès", () => {
 describe("des adresses qui ne désignent plus rien : 410, jamais 404 ni 400", () => {
   it("une autre version du fichier ou du format", async () => {
     const verdict = await okVerdict(H264);
-    const stale = await get(`/api/lumen/${H264}/5-000000000000/lect/v/0.m4s`);
+    const stale = await get(`/api/lumen/${H264}/6-000000000000/lect/v/0.m4s`);
     expect(stale.status).toBe(410);
     expect(await stale.json()).toMatchObject({ code: "lumen-perime", version: verdict.version });
-    // Une adresse du format 4 (d'avant le groupe son unique, §185) : le même fichier, plus rien.
-    const format = await get(`/api/lumen/${H264}/${verdict.version.replace(/^5-/, "4-")}/lect/v/0.m4s`);
+    // Une adresse du format 5 (d'avant les sous-titres dans la liste, §191) : le même fichier, plus rien.
+    const format = await get(`/api/lumen/${H264}/${verdict.version.replace(/^6-/, "5-")}/lect/v/0.m4s`);
     expect(format.status).toBe(410);
-    expect(await format.json()).toMatchObject({ code: "lumen-perime", format: 5 });
+    expect(await format.json()).toMatchObject({ code: "lumen-perime", format: 6 });
   });
 
   it("un fichier remplacé en cours de lecture : l'ancienne adresse répond 410 avec la nouvelle version", async () => {
@@ -384,7 +403,7 @@ describe("le relevé d'une lecture", () => {
     await (await get(`${base}init-v.mp4`)).arrayBuffer();
     const v0 = await (await get(`${base}v/0.m4s`)).arrayBuffer();
     const a0 = await (await get(`${base}a${verdict.audioTrack}/0.m4s`)).arrayBuffer();
-    await get(`/api/lumen/${H264}/5-000000000000/lecture-r/v/1.m4s`);
+    await get(`/api/lumen/${H264}/6-000000000000/lecture-r/v/1.m4s`);
     const { lumenPlaybackFields, lumenPlaybackStats } = await import("@/lib/lumenServer/playbackStats");
     const stats = lumenPlaybackStats("lecture-r", "admin")!;
     expect(stats.requests).toEqual({ master: 1, playlist: 1, init: 1, segment: 3 });
@@ -437,8 +456,8 @@ describe("la découpe, choisie par l'adresse (§157, §158)", () => {
   it("la règle `cra` sans rien demander ; `?cut=idr` : sa propre version (`5i1-`), ses propres segments", async () => {
     const idr = (await okVerdict(CRA, "?s=lecture-idr&cut=idr")) as Awaited<ReturnType<typeof okVerdict>> & { cutFacts: { cut: string; craRasl: number; trusted: number } };
     const cra = (await okVerdict(CRA, "?s=lecture-cra")) as Awaited<ReturnType<typeof okVerdict>> & { cutFacts: { cut: string; craRasl: number; trusted: number; longestS: number } };
-    expect(idr.version).toMatch(/^5i1-[0-9a-f]{12}$/);
-    expect(cra.version).toMatch(/^5-[0-9a-f]{12}$/);
+    expect(idr.version).toMatch(/^6i1-[0-9a-f]{12}$/);
+    expect(cra.version).toMatch(/^6-[0-9a-f]{12}$/);
     // La même empreinte de fichier : seule la découpe les sépare.
     expect(idr.version.slice(4)).toBe(cra.version.slice(2));
     expect(cra.cutFacts.cut).toBe("cra");
@@ -467,7 +486,7 @@ describe("la découpe, choisie par l'adresse (§157, §158)", () => {
     const res = await prepare(CRA, { s: "lecture-prep", cut: "cra-leading" });
     expect([200, 202]).toContain(res.status);
     const again = await okVerdict(CRA, "?s=lecture-prep&cut=cra-leading");
-    expect(again.version).toMatch(/^5l1-/);
+    expect(again.version).toMatch(/^6l1-/);
     expect((await eligibility(CRA, "?cut=tout")).status).toBe(410);
     expect((await prepare(CRA, { cut: "tout" })).status).toBe(410);
     expect((await prepare(CRA, { cut: 3 })).status).toBe(410);
@@ -476,7 +495,7 @@ describe("la découpe, choisie par l'adresse (§157, §158)", () => {
   it("`target` : une cible d'essai dans la version (`5t2-`), une autre répond 410, jamais 400", async () => {
     const two = await okVerdict(H264, "?s=lecture-t2&target=2");
     const four = await okVerdict(H264, "?s=lecture-t4");
-    expect(two.version).toMatch(/^5t2-[0-9a-f]{12}$/);
+    expect(two.version).toMatch(/^6t2-[0-9a-f]{12}$/);
     expect(two.version.slice(4)).toBe(four.version.slice(2));
     expect(two.segments).toBeGreaterThan(four.segments);
     expect((await get(two.master)).status).toBe(200);
@@ -581,6 +600,173 @@ describe("le laissez-passer d'une Apple TV (§186)", () => {
     mockVerify.mockResolvedValue(ADMIN);
     const forged = await __testing.signClaims({ k: "lumen", i: H264, s: "lecture-tv", u: "partage", r: "share", t: "j-admin", e: Date.now() + 60_000 });
     expect((await get(`/api/lumen/${H264}/${verdict.version}/lecture-tv/tv.${forged}/v/0.m4s`, { cookie: false })).status).toBe(401);
+  });
+});
+
+describe("les sous-titres dans la liste maître, pour AirPlay (§191)", () => {
+  const FR_VTT = ["WEBVTT", "", "1", "00:00:00.500 --> 00:00:01.500", "Bonjour.", "", "2", "00:00:03.000 --> 00:00:05.000", "Au revoir."].join("\n");
+  beforeEach(async () => {
+    (await import("@/lib/lumenServer/subtitleServe")).__testing.reset();
+    mediaSourceCalls.length = 0;
+    subtitleStreams = [
+      { Type: "Subtitle", Index: 3, Language: "fre", Codec: "subrip", IsTextSubtitleStream: true, IsForced: false },
+      { Type: "Subtitle", Index: 4, Language: "eng", Codec: "PGSSUB", IsTextSubtitleStream: false },
+      { Type: "Subtitle", Index: 5, Language: "fre", Title: "Forcés", Codec: "ass", IsTextSubtitleStream: true, IsForced: true },
+    ];
+    for (const k of Object.keys(vttByIndex)) delete vttByIndex[Number(k)];
+    vttByIndex[3] = FR_VTT;
+    vttByIndex[5] = ["WEBVTT", "", "00:00:02.000 --> 00:00:02.500", "[forcé]"].join("\n");
+  });
+
+  /** Le rendu de sous-titres que la liste maître annonce : sa ligne et son URI. */
+  function subtitleLine(master: string) {
+    const line = master.split("\n").find((l) => l.startsWith("#EXT-X-MEDIA:TYPE=SUBTITLES"));
+    return { line, uri: line ? /URI="([^"]+)"/.exec(line)?.[1] : undefined };
+  }
+
+  it("sans `st`, la liste maître d'avant à l'octet près, sans un appel à Jellyfin", async () => {
+    const verdict = await okVerdict(H264, "?s=lecture-st");
+    const plain = await (await get(verdict.master)).text();
+    expect(plain).not.toContain("SUBTITLES");
+    expect(mediaSourceCalls).toEqual([]);
+  });
+
+  it("`st=3` : un seul rendu, DEFAULT, son URI relative ; la variante le nomme ; le reste de la liste inchangé", async () => {
+    const verdict = await okVerdict(H264, "?s=lecture-st");
+    const plain = await (await get(verdict.master)).text();
+    const res = await get(`${verdict.master}&st=3`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-lumen-sous-titres")).toBe("rendu");
+    const text = await res.text();
+    const { line, uri } = subtitleLine(text);
+    expect(line).toContain('GROUP-ID="subs"');
+    expect(line).toContain('LANGUAGE="fr"');
+    expect(line).toContain("DEFAULT=YES,AUTOSELECT=YES");
+    expect(line).not.toContain("FORCED");
+    expect(uri).toMatch(/^s3h[0-9a-f]{8}\.m3u8$/);
+    expect(text.match(/#EXT-X-STREAM-INF:[^\n]*/g)!.every((l) => l.endsWith(',SUBTITLES="subs"'))).toBe(true);
+    // Retirés la ligne du rendu et l'attribut de la variante : la liste de la règle, octet pour octet.
+    expect(text.replace(`${line}\n`, "").replaceAll(',SUBTITLES="subs"', "")).toBe(plain);
+    // Le compte de la session lit Jellyfin : un titre caché le reste.
+    expect(mediaSourceCalls).toEqual([ADMIN.jfId]);
+  });
+
+  it("un forcé : FORCED=YES ; une piste en images ou un index inconnu : la liste sans rendu, et l'en-tête le dit", async () => {
+    const verdict = await okVerdict(H264, "?s=lecture-st");
+    expect(subtitleLine(await (await get(`${verdict.master}&st=5`)).text()).line).toContain("FORCED=YES");
+    for (const st of ["4", "9"]) {
+      const res = await get(`${verdict.master}&st=${st}`);
+      expect(res.status, st).toBe(200);
+      expect(res.headers.get("x-lumen-sous-titres"), st).toBe("absent");
+      expect(await res.text()).not.toContain("SUBTITLES");
+    }
+    // `premier` (le banc) : la première piste de texte.
+    expect(subtitleLine(await (await get(`${verdict.master}&st=premier`)).text()).uri).toMatch(/^s3h/);
+  });
+
+  it("Jellyfin injoignable : la liste part sans rendu (un film sans sous-titres plutôt qu'un film qui ne démarre pas)", async () => {
+    const verdict = await okVerdict(H264, "?s=lecture-st");
+    subtitleStreams = "panne";
+    const res = await get(`${verdict.master}&st=3`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-lumen-sous-titres")).toBe("indisponible");
+    expect(await res.text()).not.toContain("SUBTITLES");
+  });
+
+  it("la liste du rendu : les EXTINF de la vidéo ; ses segments WebVTT, `X-TIMESTAMP-MAP` au délai D de l'index", async () => {
+    const verdict = await okVerdict(H264, "?s=lecture-st");
+    const base = baseOf(verdict.master);
+    const { uri } = subtitleLine(await (await get(`${verdict.master}&st=3`)).text());
+    const list = await get(`${base}${uri}`);
+    expect(list.status).toBe(200);
+    expect(list.headers.get("content-type")).toBe("application/vnd.apple.mpegurl");
+    const text = await list.text();
+    const video = await (await get(`${base}v.m3u8`)).text();
+    const extinf = (t: string) => t.split("\n").filter((l) => l.startsWith("#EXTINF") || l.startsWith("#EXT-X-TARGETDURATION"));
+    expect(extinf(text)).toEqual(extinf(video));
+    const tag = uri!.replace(/\.m3u8$/, "");
+    expect(text).toContain(`\n${tag}/0.vtt\n`);
+    expect(text).not.toContain("EXT-X-MAP");
+
+    const seg = await get(`${base}${tag}/0.vtt`);
+    expect(seg.status).toBe(200);
+    expect(seg.headers.get("content-type")).toBe("text/vtt; charset=utf-8");
+    const body = await seg.text();
+    expect(body).toMatch(/^WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:\d+,LOCAL:00:00:00\.000\n/);
+    const mpegts = Number(/MPEGTS:(\d+)/.exec(body)![1]);
+    // D est de quelques images : entre 0 et une seconde, en 90 kHz.
+    expect(mpegts).toBeGreaterThan(0);
+    expect(mpegts).toBeLessThan(90_000);
+    expect(body).toContain("00:00:00.500 --> 00:00:01.500\nBonjour.");
+  });
+
+  it("le téléviseur sans cookie : la liste munie de `st`, le rendu et ses segments héritent du laissez-passer", async () => {
+    const verdict = await okVerdict(H264, "?s=lecture-st&tv=1");
+    expect(verdict.master).toContain("/tv.");
+    const res = await get(`${verdict.master}&st=3`, { cookie: false });
+    expect(res.status).toBe(200);
+    const { uri } = subtitleLine(await res.text());
+    const base = baseOf(verdict.master);
+    expect(base).toContain("/tv.");
+    const tag = uri!.replace(/\.m3u8$/, "");
+    expect((await get(`${base}${uri}`, { cookie: false })).status).toBe(200);
+    expect((await get(`${base}${tag}/1.vtt`, { cookie: false })).status).toBe(200);
+    // Jellyfin lu pour l'administrateur du laissez-passer.
+    expect(mediaSourceCalls.every((u) => u === ADMIN.jfId)).toBe(true);
+    // Un jeton altéré : 401, avant tout.
+    const forged = `${base.replace(/tv\.[^/]+\//, "tv.aaa.bbb/")}${tag}/1.vtt`;
+    expect((await get(forged, { cookie: false })).status).toBe(401);
+  });
+
+  it("refusés comme le reste : un compte ordinaire, un lien de partage, sans session", async () => {
+    const verdict = await okVerdict(H264, "?s=lecture-st");
+    const { uri } = subtitleLine(await (await get(`${verdict.master}&st=3`)).text());
+    const base = baseOf(verdict.master);
+    for (const [who, session, status] of [
+      ["compte ordinaire", { u: "bob", role: "user", jti: "j-bob", jfId: "e".repeat(32) }, 403],
+      ["lien de partage", { u: "share", role: "share", jti: "j-sh", sh: "x" }, 403],
+      ["sans session", null, 401],
+    ] as const) {
+      mockVerify.mockResolvedValueOnce(session);
+      expect((await get(`${base}${uri}`)).status, who).toBe(status);
+    }
+  });
+
+  it("des noms qui ne désignent plus rien : 410 ; Jellyfin muet : 503 — jamais 404 ni 400", async () => {
+    const verdict = await okVerdict(H264, "?s=lecture-st");
+    const base = baseOf(verdict.master);
+    const { uri } = subtitleLine(await (await get(`${verdict.master}&st=3`)).text());
+    const tag = uri!.replace(/\.m3u8$/, "");
+    // Une autre empreinte (la piste a changé chez Jellyfin, une synchro refaite) ; un index inconnu ; une image.
+    for (const name of [`s3h00000000.m3u8`, `s9h${tag.slice(-8)}/0.vtt`, `s4h${tag.slice(-8)}.m3u8`, `${tag}/999999.vtt`]) {
+      expect((await get(`${base}${name}`)).status, name).toBe(410);
+    }
+    // Un nom mal formé : 410 comme tout nom inconnu.
+    for (const name of ["s03h12345678.m3u8", "s3h1234567.m3u8", `${tag}/01.vtt`, `${tag}/0.webvtt`]) {
+      expect((await get(`${base}${name}`)).status, name).toBe(410);
+    }
+    expect((await get(`${verdict.master}&st=abc`)).status).toBe(410);
+    // La piste disparue de chez Jellyfin (le fichier à côté supprimé) : 410.
+    (await import("@/lib/lumenServer/subtitleServe")).__testing.reset();
+    vttByIndex[3] = 404;
+    expect((await get(`${base}${tag}/0.vtt`)).status).toBe(410);
+    // Jellyfin muet pour le WebVTT, puis pour les pistes : 503.
+    (await import("@/lib/lumenServer/subtitleServe")).__testing.reset();
+    vttByIndex[3] = 500;
+    expect((await get(`${base}${tag}/0.vtt`)).status).toBe(503);
+    (await import("@/lib/lumenServer/subtitleServe")).__testing.reset();
+    subtitleStreams = "panne";
+    expect((await get(`${base}${uri}`)).status).toBe(503);
+  });
+
+  it("les requêtes de sous-titres ne comptent pas au relevé de la lecture (image et son seulement)", async () => {
+    const verdict = await okVerdict(H264, "?s=lecture-stats");
+    const base = baseOf(verdict.master);
+    const { uri } = subtitleLine(await (await get(`${verdict.master}&st=3`)).text());
+    await get(`${base}${uri}`);
+    await get(`${base}${uri!.replace(/\.m3u8$/, "")}/0.vtt`);
+    const { lumenPlaybackStats } = await import("@/lib/lumenServer/playbackStats");
+    expect(lumenPlaybackStats("lecture-stats", "admin")!.requests).toEqual({ master: 1, playlist: 0, init: 0, segment: 0 });
   });
 });
 

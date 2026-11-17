@@ -252,6 +252,12 @@ interface Run {
   waitingSince: number | null;
   errors: string[];
   audioTracks: string[];
+  /**
+   * `video.textTracks` à `loadedmetadata` puis à la première image (`genre:langue:étiquette:mode`) : avec le levier
+   * « sous-titres dans la liste » (§191), le rendu du flux que Safari expose et ce qu'il en fait — `showing` voudrait
+   * dire qu'il le dessine de lui-même sous le calque de l'hôte.
+   */
+  textTracks?: string[];
   audioSwitches: AudioSwitch[];
   quality?: Quality;
   /** Les compteurs de décodage à la première image : la ligne envoie la différence avec la fin (`qualityDelta`). */
@@ -642,6 +648,15 @@ function tracksOf(video: TestVideo | null): AudioTrackLike[] {
   return out;
 }
 
+/** Les pistes de texte de l'élément (§191) : `genre:langue:étiquette:mode`, au plus huit. */
+function describeTextTracks(video: HTMLVideoElement | null): string[] {
+  const list = video?.textTracks;
+  if (!list || typeof list.length !== "number") return [];
+  const out: string[] = [];
+  for (let i = 0; i < Math.min(list.length, 8); i++) out.push(`${list[i].kind || "?"}:${list[i].language || "?"}:${(list[i].label || "?").slice(0, 60)}:${list[i].mode}`);
+  return out;
+}
+
 function describeTrack(track: AudioTrackLike | undefined, index: number): string {
   return track ? `${index}:${track.language || "?"}:${track.label || "?"}:${track.enabled ? "on" : "off"}` : `${index}:—`;
 }
@@ -702,6 +717,7 @@ function reportOf(run: Run): Record<string, unknown> {
     framesPresented: run.watch.presented || undefined,
     freezes: run.watch.freezes.map(({ at, ms: took, afterSeek, until }) => ({ at, ms: took, afterSeek, until })),
     audioTracks: run.audioTracks,
+    ...(run.textTracks ? { textTracks: run.textTracks } : {}),
     audioSwitches: run.audioSwitches.map(({ from, to, ms: took, reloaded, changeEvent, waited, heard, errors, freezes, target, applied, segs }) => ({
       from,
       to,
@@ -905,6 +921,10 @@ export function LumenTest() {
         run.loadedMetadataMs ??= ms(now() - run.clickAt);
         run.audioTracks = tracksOf(video).map(describeTrack);
         note(`loadedmetadata à ${run.loadedMetadataMs} ms · durée ${video.duration.toFixed(1)} s · ${run.audioTracks.length} piste(s) audio`);
+        if (run.modes?.subtitles) {
+          run.textTracks = describeTextTracks(video as unknown as HTMLVideoElement);
+          note(`textTracks : ${run.textTracks.length ? run.textTracks.join(" · ") : "aucune"}`);
+        }
         if (startAtRef.current > 0) {
           // Un départ en milieu de film est un saut comme un autre : sur un segment qui s'ouvre sur une CRA
           // sous `cra`, c'est exactement le cas à éprouver.
@@ -1145,6 +1165,11 @@ export function LumenTest() {
           run.qualityStart = qualityOf(video);
           pushEvent(run, video, "image");
           note(`première image (requestVideoFrameCallback) : ${run.firstFrameMs} ms à ${video.currentTime.toFixed(1)} s`);
+          // Le levier « sous-titres dans la liste » (§191) : les modes une fois l'image là — c'est l'état qui compte.
+          if (run.modes?.subtitles) {
+            run.textTracks = describeTextTracks(video as unknown as HTMLVideoElement);
+            note(`textTracks à l'image : ${run.textTracks.length ? run.textTracks.join(" · ") : "aucune"}`);
+          }
           refresh();
         }
         // La première image à la position demandée : la mesure d'un départ en milieu de film (levier c).
@@ -1202,6 +1227,8 @@ export function LumenTest() {
     if (params.modes?.bandwidth === "moyen") query.set("bw", "moyen");
     // La passe « changement de codec » (§185) : l'ancienne forme de la liste maître, un groupe et une variante par codec.
     if (params.modes?.groups === "codec") query.set("groupes", "codec");
+    // Le levier « sous-titres dans la liste » (§191) : la première piste de texte en rendu DEFAULT, comme en AirPlay.
+    if (params.modes?.subtitles === "liste") query.set("st", "premier");
     const search = query.toString();
     const master = `/api/lumen/${params.itemId}/${current.version}/${s}/master.m3u8${search ? `?${search}` : ""}${startAt > 0 && startMode === "fragment" ? `#t=${startAt}` : ""}`;
     // Le lecteur actuel s'ouvre à la position demandée (`startSeconds`, comme l'hôte) : pas de saut de départ ; Lumen
@@ -2199,9 +2226,23 @@ export function LumenTest() {
               ["xstart", "départ par EXT-X-START", { startMode: modes.startMode === "ext-x-start" ? undefined : "ext-x-start" }],
               ["frag", "départ par #t=", { startMode: modes.startMode === "fragment" ? undefined : "fragment" }],
               ["bw", "débit annoncé moyen", { bandwidth: modes.bandwidth ? undefined : "moyen" }],
+              ["st", "sous-titres dans la liste", { subtitles: modes.subtitles ? undefined : "liste" }],
             ] as const
           ).map(([id, label, change]) => {
-            const on = id === "mux" ? !!modes.mux : id === "prep" ? modes.early === "serveur" : id === "fiche" ? modes.early === "élément" : id === "xstart" ? modes.startMode === "ext-x-start" : id === "frag" ? modes.startMode === "fragment" : !!modes.bandwidth;
+            const on =
+              id === "mux"
+                ? !!modes.mux
+                : id === "prep"
+                  ? modes.early === "serveur"
+                  : id === "fiche"
+                    ? modes.early === "élément"
+                    : id === "xstart"
+                      ? modes.startMode === "ext-x-start"
+                      : id === "frag"
+                        ? modes.startMode === "fragment"
+                        : id === "st"
+                          ? !!modes.subtitles
+                          : !!modes.bandwidth;
             return (
               <button
                 key={id}

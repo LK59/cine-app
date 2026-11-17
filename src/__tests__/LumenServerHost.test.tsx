@@ -785,6 +785,93 @@ describe("la fin et l'épisode suivant", () => {
     expect(last("cast")).toMatchObject({ player: "lumen-serveur", cast: true, path: "remux-serveur" });
   });
 
+  describe("le sous-titre au téléviseur, dans le flux (§191)", () => {
+    const tokenized = (version: string, audio = 2) => ({ ...verdictOf(version, audio), master: `/api/lumen/g1/${version}/S/tv.aaa.bbb/master.m3u8?audio=${audio}` });
+    const subs = [
+      { index: 7, url: "/api/subtitles/x/7.vtt", language: "fre", codec: "subrip", isForced: false, isDefault: false },
+      { index: 9, url: "/api/subtitles/x/9.vtt", language: "eng", codec: "PGSSUB", isForced: false, isDefault: false, isText: false },
+    ];
+    /**
+     * Les pistes de l'élément : le `<track>` (la piste en images n'est pas au menu de ce chemin, `textSubtitles`), puis
+     * le rendu du flux (que WebKit range après).
+     */
+    function tracksWithInband(video: HTMLVideoElement) {
+      const ours = fakeTextTracks(video, [{ startTime: 600, endTime: 603, text: "Bonjour." }]);
+      const inband = Object.assign(new EventTarget(), { mode: "disabled" as TextTrackMode, kind: "subtitles", cues: [] });
+      const all = [...ours, inband];
+      Object.defineProperty(video, "textTracks", { get: () => all, configurable: true });
+      return { ours, inband };
+    }
+    const srcOf = (video: HTMLVideoElement) => video.getAttribute("src") ?? video.src;
+    const wireless = (video: HTMLVideoElement, on: boolean) => {
+      Object.assign(video, { webkitCurrentPlaybackTargetIsWireless: on });
+      video.dispatchEvent(new Event("webkitcurrentplaybacktargetiswirelesschanged"));
+    };
+    beforeEach(() => localStorage.clear());
+
+    it("un sous-titre de texte affiché : « Diffuser » reste sur ce chemin ; la route établie, la liste rouverte avec `st` sur le même élément", async () => {
+      verdicts = [tokenized("2-aaaaaaaaaaaa")];
+      pistesSubtitles = subs;
+      await mount();
+      const el = element();
+      const { inband } = tracksWithInband(el.video);
+      const picker = vi.fn();
+      Object.assign(el.video, { webkitShowPlaybackTargetPicker: picker });
+      act(() => el.picture(600));
+      act(() => controls!.onChangeSubtitle(7));
+      await flush();
+      expect(el.video.querySelectorAll("track")).toHaveLength(1);
+      act(() => controls!.onCastRequest!());
+      expect(picker).toHaveBeenCalledTimes(1);
+      expect(onFallback).not.toHaveBeenCalled();
+      expect(srcOf(el.video)).not.toContain("st=");
+
+      // La route établie : la liste rouverte sur le même élément, à la position, munie du jeton et de `st=7` ; les
+      // `<track>` de la page retirés avant l'adresse (code 4), rendus à l'image.
+      act(() => wireless(el.video, true));
+      await flush();
+      expect(document.querySelector("video")).toBe(el.video);
+      expect(srcOf(el.video)).toContain("/S/tv.aaa.bbb/master.m3u8?audio=2&st=7#t=600");
+      expect(el.video.querySelectorAll("track")).toHaveLength(0);
+      act(() => el.picture(600));
+      await flush();
+      expect(el.video.querySelectorAll("track")).toHaveLength(1);
+      expect(last("cast")).toMatchObject({ reason: "sous-titres au téléviseur", st: 7, cast: true, player: "lumen-serveur" });
+      expect(last("cast")!.subtitles).not.toBe("aucun");
+      // Le rendu du flux est la sélection que la route porte au téléviseur ; le calque de la page se tait.
+      expect(inband.mode).toBe("showing");
+      act(() => el.at(601));
+      expect(shown()).toBeNull();
+      expect(kinds()).not.toContain("fallback");
+
+      // Retiré pendant la diffusion : la liste rouverte sans `st`, la ligne le dit.
+      act(() => controls!.onChangeSubtitle(null));
+      await flush();
+      expect(srcOf(el.video)).not.toContain("st=");
+      act(() => el.picture(601));
+      await flush();
+      expect(last("cast")).toMatchObject({ subtitles: "aucun", st: null, fromSt: 7 });
+      expect(inband.mode).toBe("disabled");
+    });
+
+    it("hors diffusion, un rendu du flux reste éteint : Safari ne dessine rien sous le calque (§190)", async () => {
+      verdicts = [tokenized("2-aaaaaaaaaaaa")];
+      pistesSubtitles = subs;
+      await mount();
+      const el = element();
+      const { ours, inband } = tracksWithInband(el.video);
+      inband.mode = "showing";
+      act(() => el.picture(600));
+      act(() => controls!.onChangeSubtitle(7));
+      await flush();
+      act(() => el.video.dispatchEvent(new Event("loadeddata")));
+      expect(inband.mode).toBe("disabled");
+      expect(ours[0].mode).toBe("hidden");
+      act(() => el.at(601));
+      expect(shown()).toBe("Bonjour.");
+    });
+  });
+
   it("« Diffuser » : le lecteur serveur pour diffuser, un choix et non un échec", async () => {
     await mount();
     const el = element();

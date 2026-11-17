@@ -11792,6 +11792,7 @@ le rôle.
 - **Les sous-titres ne vont pas au téléviseur** par ce chemin (des `<track>` de la page, pas des rendus de la liste
   maître) : avec un sous-titre affiché, « Diffuser » passe au lecteur serveur comme avant, qui les porte. Une route
   AirPlay prise depuis le centre de contrôle avec un sous-titre affiché le laisse sur le téléphone seulement.
+  **Remplacé par §191** pour un sous-titre de texte : il va au téléviseur dans le flux (`?st=`), sans changer de lecteur.
 - **Le jeton est dans l'adresse de la page aussi** : la même `src` sert l'élément et le téléviseur (le bouton AirPlay
   tend la `src` courante), comme l'adresse du lecteur serveur porte `castToken`. Il finit dans les journaux d'accès du
   relais inverse : c'est pour cela qu'il meurt avec la session et ne vaut que pour un titre et une lecture.
@@ -11903,9 +11904,83 @@ règle de plus ; `activeCues` ne convient pas, il ne connaît que l'instant de l
 
 **Ce qui diffère exprès.** Le lecteur serveur (`PlayerHost`, `useServerDualSubtitles`) laisse toujours le navigateur
 dessiner un sous-titre seul : ses empreintes ne bougent pas. AirPlay inchangé (§186) : avec un sous-titre choisi,
-« Diffuser » passe au lecteur serveur. Le mini-lecteur ne montre aucun sous-titre (il n'y a plus de dessin de Safari).
+« Diffuser » passe au lecteur serveur (depuis §191, un sous-titre de texte va au téléviseur dans le flux). Le mini-lecteur ne montre aucun sous-titre (il n'y a plus de dessin de Safari).
 
 **Porteurs.** `useLumenSubtitleLines.ts` (modes, lignes, relecture à la prochaine borne quand le décalage rend
 `cuechange` muet), `src/lib/textTrackCues.ts`, `LumenServerHost.tsx` (`primaryLane`, `secondLane`, décalages, calque),
 `useLumenSubtitleGeneration.ts` (`offset`). **Tests.** `textTrackCues.test.ts`, `LumenServerHost.test.tsx` (« les sous-titres par le calque de la
 page »).
+
+## 191. AirPlay sur Lumen serveur avec sous-titres : un rendu WebVTT dans la liste maître, demandé par `?st=` pendant la diffusion seulement (17/11/2026)
+
+**Règle.** Le sous-titre choisi sur le téléphone va au téléviseur **dans le flux HLS** : la liste maître demandée avec
+`?st=<index Jellyfin>` gagne **un seul** rendu `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs"` — LANGUAGE, NAME
+(`trackLabel.ts`, l'étiquette des menus), DEFAULT=YES, AUTOSELECT=YES, FORCED=YES pour un forcé, les CHARACTERISTICS
+d'Apple pour des sous-titres pour malentendants, URI relative — et `SUBTITLES="subs"` sur chaque variante ; le reste
+de la liste est celui de la règle, octet pour octet (`withSubtitleRendition`, une transformation de texte à part de
+`masterPlaylist`). Sa liste média (`s{index}h{empreinte}.m3u8`) a les EXTINF et la durée cible de la vidéo ; chaque
+segment `s{index}h{empreinte}/{n}.vtt` est un WebVTT : `X-TIMESTAMP-MAP=MPEGTS:round(D × 90 000),LOCAL:00:00:00.000`,
+puis chaque réplique qui recoupe le segment, entière et avec ses instants d'origine — une réplique à cheval est dans
+les deux segments, à l'identique. Les répliques viennent du WebVTT que Jellyfin tire de la piste (la conversion de la
+route des sous-titres), synchro §141 appliquée par `rewriteVttTimes`. Texte seulement (SRT, ASS, WebVTT, mov_text) :
+une piste en images n'est jamais un rendu.
+
+**Dans l'hôte** (`LumenServerHost`, `castSubtitles.ts`) : « Diffuser » avec un sous-titre de texte reste sur ce chemin
+(le sélecteur AirPlay, comme sans sous-titre) ; dès la route établie (bouton ou centre de contrôle), la liste est
+rouverte **sur le même élément**, à la position, avec `?st=<index>` (`reopenForCastSubtitle`) ; les `<track>` de la
+page sont retirés avant que l'adresse ne soit posée et reviennent à l'image ; changer de sous-titre pendant la
+diffusion rouvre avec le nouveau `st`, le retirer rouvre sans. Les pistes du flux sont en `showing` pendant une
+diffusion qui en porte une (la sélection du lecteur de WebKit, qu'AirPlay transmet), `disabled` partout ailleurs
+(`applyInbandModes`) ; le calque de la page se tait pendant que le téléviseur dessine. Une génération en cours (sans
+fichier) ou un navigateur sans sélecteur AirPlay : le lecteur serveur, comme avant (§186). Deux sous-titres : le
+téléviseur montre le principal.
+
+**Pourquoi `?st=` pendant la diffusion seulement**, et pas un groupe de sous-titres toujours dans la liste : dans la
+page, sur l'iPhone, rien n'a encore prouvé qu'un rendu de sous-titres ne fait pas refuser l'élément (code 4) comme les
+`<track>` posés avec l'adresse (b8e3682d, §190), ni que Safari ne le dessine pas de lui-même sous notre calque
+(DEFAULT=YES, ou un forcé qu'AVFoundation montre d'office). Sans `st`, la liste maître est celle du format 5 à
+l'octet près : la lecture sur le téléphone ne change pas. Le banc `/lumen-test` a un levier « sous-titres dans la
+liste » (`?st=premier`) qui l'essaie dans la page et écrit `textTracks` (genre, langue, étiquette, mode) au journal.
+**Pourquoi un seul rendu, DEFAULT=YES** : un récepteur AirPlay de téléviseur d'une autre marque n'a souvent pas de
+menu de pistes (`castSubtitle.ts`) ; le téléviseur n'a rien à choisir, et dans la page la seule piste du flux est la
+bonne, sans deviner un ordre. **Pourquoi les deux leviers** (DEFAULT=YES et `showing`) : AirPlay depuis une `<video>`
+transmet l'adresse et la sélection du lecteur de WebKit ; lequel des deux l'Apple TV suit n'est pas documenté — l'un ou
+l'autre suffit, l'appareil dira lequel.
+
+**`X-TIMESTAMP-MAP`.** Les segments fMP4 présentent chaque échantillon à son instant du fichier plus le délai D
+(`segment.ts` : `compositionOffset + delayUs`, `timestamp + delayUs` ; pas d'`elst` dans l'init), et les répliques de
+Jellyfin sont datées sur le temps du fichier. Sans la balise, rfc8216bis dit que 0 des répliques vaut 0 du flux :
+chaque réplique arriverait D (100 à 200 ms) trop tôt. La correspondance relie deux instants du flux, elle ne dépend
+pas de l'horloge que le lecteur affiche.
+
+**Sans état** (§155). Le nom d'un rendu porte l'index Jellyfin et une empreinte (FNV-1a) de la source, de la piste
+(codec, langue, titre, drapeaux, chemin d'un fichier à côté), de la version de sa synchro et de
+`LUMEN_SUBTITLE_REVISION` : une piste changée chez Jellyfin ou une synchro refaite est une autre adresse, l'ancienne
+répond 410. `LUMEN_FORMAT_VERSION` passe à 6 (la liste maître sait une forme de plus) ; une règle de découpe des
+sous-titres qui change fait monter `LUMEN_SUBTITLE_REVISION`, pas le format. Les segments WebVTT sont gardés une heure
+(`private, max-age=3600`) et non `immutable` : leurs octets viennent de la conversion de Jellyfin.
+
+**Accès et absences.** Rien ne change aux contrôles : le laissez-passer d'une Apple TV (§186, URI relatives : le jeton
+s'hérite) ou la session de l'administrateur (`lumenAccess`, `assertVisible`), revérifiés par `serveLumenName` avant
+tout. Jellyfin est lu avec le compte de la session (ou de l'administrateur du laissez-passer), comme
+`/api/lumen/{id}/pistes`. Un nom qui ne désigne plus rien : 410 ; Jellyfin muet : 503 ; jamais 404 ni 400 (CrowdSec).
+La liste maître ne refuse jamais pour les sous-titres : Jellyfin muet ou piste inconnue, elle part sans rendu et le dit
+(`X-Lumen-Sous-Titres` : `rendu`, `absent`, `indisponible`). Les requêtes de sous-titres ne comptent pas au relevé de la
+lecture (`requests`, image et son).
+
+**Journal et panneau.** Une ligne `cast` par changement (`reason: "sous-titres au téléviseur"`, `subtitles` —
+l'étiquette ou `"aucun"` —, `st`, `fromSt`, `tookMs`, `pictureMs`, `error` si la réouverture a échoué), en plus de
+« diffusion établie » ; le panneau technique dit « Sous-titres au téléviseur » pendant AirPlay.
+
+**Différent exprès.** Le lecteur serveur garde son incrustation (`castSubtitle.ts`) ; le lecteur natif et ses
+empreintes ne bougent pas. Une adresse qui porte encore `st` après la fin d'une diffusion n'est pas rouverte : ses
+pistes du flux restent éteintes, et une réouverture suivante (piste son) la garde.
+
+**Porteurs.** `src/lib/lumenServer/subtitles.ts` (noms, ligne, liste, WebVTT, découpe, `timestampMap`),
+`subtitleServe.ts` (Jellyfin, caches sur `globalThis`, réponses), `serve.ts` (aiguillage, `?st=` sur la liste maître),
+`format.ts` (version 6), `playlists.ts` (`extinfSeconds` partagé), `castSubtitles.ts` et `LumenServerHost.tsx`
+(`reopenForCastSubtitle`, `applyInbandModes`, `requestCast`), `useLumenSubtitleLines.ts` (modes des seuls `<track>`),
+`lumenLog.ts` (`lumenCastSubtitleFields`), `lumenPanel.ts`, `LumenTest.tsx` / `autoSeries.ts` / `testReport.ts` (le
+levier du banc). **Tests.** `lumenServer-subtitles.test.ts`, `lumen-cast-subtitles.test.ts`,
+`lumenServer-routes.test.ts` (« les sous-titres dans la liste maître »), `LumenServerHost.test.tsx` (« le sous-titre
+au téléviseur »).

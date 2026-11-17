@@ -34,6 +34,11 @@ export interface LumenPanelInput {
   /** Les incidents de la séance, dans l'ordre, déjà en mots. */
   events: string[];
   airplay: boolean;
+  /**
+   * Pendant AirPlay, le sous-titre que le téléviseur dessine depuis le flux (§191) : son étiquette, ou null (aucun).
+   * Absent : rien n'est dit (hors diffusion, ou un appelant d'avant).
+   */
+  airplaySubtitles?: string | null;
 }
 
 function section(title: string, rows: { label: string; value: string | null | undefined }[]): PanelSection {
@@ -100,6 +105,10 @@ export function describeLumenServerPlayback(input: LumenPanelInput, t: Translate
         { label: t("player.info.lumen.segments"), value: t("player.info.lumen.segmentsValue", { n: input.segments, s: input.targetS }) },
         { label: t("player.info.lumen.resume"), value: input.resumeBy },
         { label: t("player.info.lumen.airplay"), value: input.airplay ? t("player.info.lumen.airplayOn") : t("player.info.lumen.airplayOff") },
+        {
+          label: t("player.info.lumen.airplaySubtitles"),
+          value: input.airplay && input.airplaySubtitles !== undefined ? (input.airplaySubtitles ?? t("player.info.lumen.airplaySubtitlesNone")) : null,
+        },
         { label: t("player.info.lumen.session"), value: input.lumenSession },
       ]),
       section(t("player.info.lumen.sectionReceived"), [

@@ -2245,6 +2245,8 @@
         "airplay": "AirPlay",
         "airplayOn": "a un televisor",
         "airplayOff": "no",
+        "airplaySubtitles": "Subtítulos en el televisor",
+        "airplaySubtitlesNone": "ninguno",
         "session": "Reproducción",
         "sectionReceived": "Recibido por el dispositivo",
         "received": "Segmentos",

@@ -58,9 +58,11 @@ export function useLumenSubtitleLines({
     const tracks = video.textTracks;
     const primaryAt = primaryId === null ? -1 : trackIds.indexOf(primaryId);
     const secondAt = secondId === null ? -1 : trackIds.indexOf(secondId);
-    // `hidden` : chargée, tenue à jour, jamais dessinée par le navigateur ; les autres éteintes.
+    // `hidden` : chargée, tenue à jour, jamais dessinée par le navigateur ; les autres éteintes. Seulement celles des
+    // `<track>` (les premières de la liste, HTML : éléments, puis `addTextTrack`, puis le flux) : les pistes du flux —
+    // le rendu de sous-titres d'une diffusion, §191 — ont leurs modes tenus par l'hôte (`applyInbandModes`).
     const modes = () => {
-      for (let i = 0; i < tracks.length; i++) {
+      for (let i = 0; i < Math.min(tracks.length, trackIds.length); i++) {
         const wanted = i === primaryAt || i === secondAt ? "hidden" : "disabled";
         if (tracks[i].mode !== wanted) tracks[i].mode = wanted;
       }

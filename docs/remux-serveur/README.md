@@ -960,7 +960,7 @@ bouton AirPlay tend au téléviseur ; les URI relatives des listes en héritent.
 sa portée `lumen`, un administrateur, un titre, une lecture, la session vivante, six heures. Proxy et route posent la
 même question (`lumenTvPassFor` / `verifyLumenTvPass`) ; une requête avec cookie passe en plus le contrôle ordinaire.
 Chaque segment vidéo demandé sans cookie donne sa position au relais (`castProgress`). Avec un sous-titre affiché,
-« Diffuser » passe au lecteur serveur, qui les porte au téléviseur.
+« Diffuser » passait au lecteur serveur ; depuis §191, un sous-titre de texte va au téléviseur dans le flux (section 8).
 
 ### 3. « Générer des sous-titres » (§187)
 
@@ -1008,6 +1008,57 @@ sous-titre choisi, « Diffuser » passe au lecteur serveur, qui le porte au tél
 ligne au-dessus des commandes quand elles sont là, redescendue quand elles partent ; le style du réglage « Sous-titres » ;
 une ligne qui suit bien la parole après ±0,5 s ; deux sous-titres ; un retour −10 s ; une piste son changée (réouverture).
 Le PiP système ne montre pas les sous-titres de ce chemin (comme le lecteur natif : rien n'y est dessiné par Safari).
+
+### 8. AirPlay avec sous-titres : un rendu WebVTT dans la liste maître (§191)
+
+**Ce qui manquait.** L'Apple TV (comme un téléviseur AirPlay d'une autre marque) ne reçoit que l'adresse de la liste
+maître et lit le flux elle-même : les sous-titres de ce chemin, dessinés par la page (section 7), n'y allaient pas, et
+« Diffuser » avec un sous-titre affiché passait au lecteur serveur (un transcodage Jellyfin, sous-titre incrusté).
+
+**Ce qu'on sert.** `master.m3u8?st=<index Jellyfin>` : la liste de la règle, plus **un** rendu
+`TYPE=SUBTITLES,GROUP-ID="subs"` (DEFAULT=YES, AUTOSELECT=YES, FORCED=YES pour un forcé, NAME de `trackLabel.ts`, URI
+relative — le jeton `tv.…` s'hérite) et `SUBTITLES="subs"` sur la variante. Sa liste `s{index}h{empreinte}.m3u8` a les
+EXTINF de la vidéo ; chaque segment `s{index}h{empreinte}/{n}.vtt` porte
+`X-TIMESTAMP-MAP=MPEGTS:round(D × 90 000),LOCAL:00:00:00.000` (les segments fMP4 présentent l'instant du fichier plus
+D) et les répliques qui le recoupent, entières — une réplique à cheval est dans les deux segments. Le texte est le
+WebVTT que Jellyfin tire de la piste, synchro §141 appliquée. Texte seulement ; sans `st`, la liste du format 5 à
+l'octet près. Format **6**.
+
+**Dans l'hôte.** « Diffuser » avec un sous-titre de texte reste sur Lumen serveur ; dès la route établie, la liste est
+rouverte sur le même élément, à la position, avec `?st=` (les `<track>` retirés avant l'adresse, rendus à l'image) ;
+changer de sous-titre pendant la diffusion rouvre avec le nouveau, le retirer rouvre sans. La piste du flux est mise
+en `showing` pendant la diffusion (la sélection que WebKit passe au téléviseur), `disabled` partout ailleurs ; le calque
+de la page se tait pendant que le téléviseur dessine. Ligne `cast` `reason: "sous-titres au téléviseur"`, `subtitles`,
+`st`, `tookMs`, `pictureMs` ; panneau : « Sous-titres au téléviseur ».
+
+**Pourquoi seulement pendant la diffusion.** Dans la page, rien n'a prouvé qu'un rendu de sous-titres ne fait pas
+refuser l'élément (code 4, comme les `<track>` posés avec l'adresse) ni que Safari ne le dessine pas sous le calque.
+Le banc le dit avant qu'on s'y fie : `/lumen-test` → levier « sous-titres dans la liste » (`?st=premier`, la première
+piste de texte du titre).
+
+**À éprouver, dans cet ordre** (option Lumen serveur allumée sur l'iPhone) :
+1. **Le banc, sur l'iPhone, sans AirPlay.** `/lumen-test`, mode manuel, un titre avec des sous-titres de texte (*Ted
+   Lasso* S01E08), levier « sous-titres dans la liste » allumé, Lire. Attendu : l'image comme sans le levier (pas de
+   code 4), et au journal `textTracks` avec une piste `subtitles` du flux. « Envoyer les résultats », puis lire :
+   `jq -c 'select(.kind=="lumen-test") | .runs[]? | select(.mode=="st") | {firstFrameMs, errors, textTracks}' startup.log`.
+   Si la piste est `showing` et que Safari dessine des sous-titres sur l'image : noter, c'est sans conséquence pour
+   l'application (elle ne pose `st` qu'en diffusion et éteint la piste), mais à dire.
+2. **Apple TV, un sous-titre complet.** Lecture dans l'application, sous-titre français choisi, « Diffuser » → l'Apple
+   TV. Attendu : la télévision joue à la position **avec** le sous-titre, calé sur la parole (une réplique ni en avance
+   ni en retard — c'est `X-TIMESTAMP-MAP` qui est éprouvé) ; le téléphone reste sur Lumen serveur (aucune ligne
+   `fallback`). Journal : `cast` « diffusion établie », puis `cast` « sous-titres au téléviseur » avec `subtitles` et
+   `pictureMs`.
+3. **Changer pendant la diffusion.** Depuis le téléphone : un autre sous-titre (anglais), puis aucun. Attendu : la
+   télévision suit en quelques secondes, à la position, sans sortir d'AirPlay ; une ligne `cast` par changement. Si la
+   route AirPlay tombe à la réouverture (`fallback` « fin de diffusion » juste après), le dire : c'est le risque
+   principal de ce choix.
+4. **Un forcé.** Un film en VO avec forcés français (le choix automatique les prend) : les forcés sur la télévision.
+5. **Le centre de contrôle.** Route AirPlay prise depuis le centre de contrôle avec un sous-titre affiché : même
+   résultat qu'au point 2.
+6. **Un téléviseur AirPlay d'une autre marque**, s'il y en a un sous la main : le sous-titre s'affiche-t-il ? (Ces
+   récepteurs n'ont souvent pas de menu de pistes ; DEFAULT=YES est leur seule indication.)
+7. **Fin de diffusion.** Arrêter AirPlay : la lecture continue sur le téléphone, sous-titres par le calque de la page,
+   rien dessiné par Safari en dessous.
 
 ### Un défaut vu en production le 16/11 au soir : *Mr. Robot* S01E03, « code 4 » avant l'image
 
@@ -1080,7 +1131,7 @@ Puis une lecture réelle dans l'application : la ligne `fallback` porte désorma
 3. **AirPlay.** Pendant une lecture, « Diffuser » → choisir l'Apple TV. Attendu : la télévision joue à la position, le
    téléphone devient télécommande ; ligne `cast` « diffusion établie ». Verrouiller le téléphone 5 minutes : la
    télévision continue, et la position avance chez Jellyfin (ligne `cast` `serverRelay: true`). Arrêter depuis le centre
-   de contrôle : ligne `fallback` « fin de diffusion ». Avec un sous-titre affiché, « Diffuser » passe au lecteur serveur.
+   de contrôle : ligne `fallback` « fin de diffusion ». Avec un sous-titre affiché : la section 8 (§191).
 4. **Générer des sous-titres.** Un titre sans sous-titres anglais : menu sous-titres → « Générer » → anglais. Attendu :
    « Préparation des sous-titres… », puis les lignes ; à la fin, la piste « généré » choisie, sans coupure.
 5. **Bandes noires.** Un film en 2.39 avec bandes incrustées : l'interrupteur dans les réglages, l'image agrandie.

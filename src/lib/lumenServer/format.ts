@@ -45,8 +45,14 @@ import type { LumenConvertSource } from "./audio/convertSource";
  * entre codecs devient un changement de rendu dans le groupe (`audioTracks`), sans rechargement. Aucun segment,
  * aucun init ne change d'un octet ; la liste maître d'un fichier à un seul codec non plus. La version monte quand
  * même, parce que la règle de §155 vaut pour toute adresse servie : la même adresse, les mêmes octets.
+ *
+ * **6** (17/11/2026, DECISIONS §191) : la liste maître sait porter un rendu de sous-titres WebVTT (`?st=N`, pour
+ * AirPlay), avec ses listes et segments `s{N}h{empreinte}` (`subtitles.ts`). Sans `st`, la liste maître, les listes
+ * média, les init et les segments sont ceux de la 5 à l'octet près ; la version monte pour que la nouvelle forme de
+ * liste maître et les nouveaux noms ne vivent que sous une version qui les connaît. La découpe des sous-titres a sa
+ * propre révision (`LUMEN_SUBTITLE_REVISION`), dans l'empreinte de leurs noms : elle ne fait pas monter celle-ci.
  */
-export const LUMEN_FORMAT_VERSION = 5;
+export const LUMEN_FORMAT_VERSION = 6;
 
 // ── La règle de découpe ──────────────────────────────────────────────────────
 
