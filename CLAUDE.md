@@ -710,6 +710,13 @@ decoded once per segment (FFmpeg's Dolby decoder dithers from a seeded generator
 the plain list and every existing address are unchanged (no format bump; `cid` carries the rules, ffmpeg and V8).
 Changing the mode is a same-element reopen (§185). AAC, FLAC, a busy server or the option off: hand back to the native
 player (§188). Bump `LUMEN_DIALOGUE_VERSION` when `dialogueEnhance.ts` changes (a test holds its SHA-256).
+**The lighter version** (§195, `src/lib/lumenServer/light/`, `LUMEN_LIGHT`, off by default) re-encodes the video through the
+server's Intel iGPU (VAAPI, a second ffmpeg at `/usr/bin/ffmpeg`, `/dev/dri` given to the container) into one or two
+HEVC rungs (`l1x{cid}` ≤ 1080p, `l2x{cid}` ≤ 720p) on **the same segments, frame for frame** as the original — times read
+from the original's `moof`s, no B-frames, `-fps_mode passthrough`, every frame's instant checked — so Safari's own ABR
+switches without a cut; each requested segment prefetches the next three, and the page asks for the right rung
+(`prepare` with `light`) when its measured link drops under 1.3× the film's bitrate. Bump `LIGHT_RULES_VERSION` when an
+encoding rule changes; `bw=bas` only ever divides the original variant.
 **Logs**: `player: "lumen-serveur"`, `path: "remux-serveur"`, the playback id as `lumenSession`; the log route appends the
 server's tally (`srv.*`) to `stop`, `stall`, `error`, `fallback`, `rebuild`; `audio` lines say `via` (`audioTracks`,
 `réouverture`), `tookMs`, `pictureMs`, `processing`, `dialogue` (the mode served; `start` carries it with

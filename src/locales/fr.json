@@ -3801,7 +3801,10 @@
     },
     "lumenLight": {
       "title": "Version allégée (Lumen serveur)",
-      "why": "Pour une connexion trop lente, le serveur réencode la vidéo plus légère (1080p à 8 Mb/s, 720p à 3 Mb/s, HDR gardé) sur les mêmes segments que l'original, avec la puce graphique du serveur. Safari passe de l'une à l'autre tout seul, sans couper, et les segments allégés sont préparés d'avance quand la connexion faiblit. Il faut donner la puce graphique au conteneur ; sans elle, rien ne change."
+      "why": "Pour une connexion trop lente, le serveur réencode la vidéo plus légère (1080p à 8 Mb/s, 720p à 3 Mb/s, HDR gardé) sur les mêmes segments que l'original, avec la puce graphique du serveur. Safari passe de l'une à l'autre tout seul, sans couper, et les segments allégés sont préparés d'avance quand la connexion faiblit. Il faut donner la puce graphique au conteneur ; sans elle, rien ne change.",
+      "detected": "Encodeur détecté : ffmpeg {version}, {driver}",
+      "unavailable": "Version allégée indisponible sur ce serveur ({reason}) : la vidéo d'origine seule est servie.",
+      "now": "Depuis le démarrage : {built} segments encodés, {kept} servis déjà prêts, {failed} en échec ; {running} en cours, {queued} en attente."
     }
   },
   "xrayScan": {

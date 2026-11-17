@@ -136,12 +136,12 @@ describe("les noms et les versions de l'essai multiplexé", () => {
     expect(masterTrialOptions(new URLSearchParams("start=abc"))).toEqual({});
   });
 
-  it("`?bw=bas` : BANDWIDTH et AVERAGE-BANDWIDTH annoncés au quart, sur chaque variante, rien d'autre", () => {
+  it("`?bw=bas` : BANDWIDTH et AVERAGE-BANDWIDTH annoncés au quart, sur la variante d'origine seule — un échelon allégé (`l1x…`) garde les siens", () => {
     const master =
-      '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="fr",URI="a2.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=9000000,AVERAGE-BANDWIDTH=5000000,CODECS="x",AUDIO="a"\nv.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=400,CODECS="y"\nw.m3u8\n';
+      '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="fr",URI="a2.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=9000000,AVERAGE-BANDWIDTH=5000000,CODECS="x",AUDIO="a"\nv.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=400,CODECS="y"\nl1x0123abcd.m3u8\n';
     expect(masterTrialOptions(new URLSearchParams("bw=bas"))).toEqual({ lowBandwidth: true });
     expect(withMasterTrials(master, { lowBandwidth: true })).toBe(
-      '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="fr",URI="a2.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=2250000,AVERAGE-BANDWIDTH=1250000,CODECS="x",AUDIO="a"\nv.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=100,CODECS="y"\nw.m3u8\n'
+      '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="fr",URI="a2.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=2250000,AVERAGE-BANDWIDTH=1250000,CODECS="x",AUDIO="a"\nv.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=400,CODECS="y"\nl1x0123abcd.m3u8\n'
     );
   });
 });

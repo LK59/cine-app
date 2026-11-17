@@ -3801,7 +3801,10 @@
     },
     "lumenLight": {
       "title": "Versión ligera (Lumen servidor)",
-      "why": "Para una conexión demasiado lenta, el servidor vuelve a codificar el vídeo más ligero (1080p a 8 Mb/s, 720p a 3 Mb/s, HDR conservado) sobre los mismos segmentos que el original, con el chip gráfico del servidor. Safari pasa de uno a otro solo, sin cortes, y los segmentos ligeros se preparan de antemano cuando la conexión se debilita. Hay que dar el chip gráfico al contenedor; sin él, nada cambia."
+      "why": "Para una conexión demasiado lenta, el servidor vuelve a codificar el vídeo más ligero (1080p a 8 Mb/s, 720p a 3 Mb/s, HDR conservado) sobre los mismos segmentos que el original, con el chip gráfico del servidor. Safari pasa de uno a otro solo, sin cortes, y los segmentos ligeros se preparan de antemano cuando la conexión se debilita. Hay que dar el chip gráfico al contenedor; sin él, nada cambia.",
+      "detected": "Codificador detectado: ffmpeg {version}, {driver}",
+      "unavailable": "Versión ligera no disponible en este servidor ({reason}): solo se sirve el vídeo original.",
+      "now": "Desde el arranque: {built} segmentos codificados, {kept} servidos ya listos, {failed} fallidos; {running} en curso, {queued} en espera."
     }
   },
   "xrayScan": {

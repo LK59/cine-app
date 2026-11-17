@@ -56,7 +56,7 @@ export interface ConfigCard {
   /** Une carte au contenu propre : le fournisseur d'IA (modèle prérempli, dépense, tableau). */
   special?: "aiProvider";
   /** Ce qui suit la carte : les tâches des sous-titres générés, ou l'état de la conversion du son (§161). */
-  after?: "subtitleJobs" | "lumenAudio";
+  after?: "subtitleJobs" | "lumenAudio" | "lumenLight";
 }
 
 const AI_PROVIDER_KEYS = [
@@ -124,6 +124,7 @@ export const CONFIG_LAYOUT = {
       whyKey: "config.lumenLight.why",
       anchor: "version-allegee",
       lab: true,
+      after: "lumenLight",
     },
   ],
   /** Diffusion et hors-ligne : le Chromecast, puis les téléchargements. */

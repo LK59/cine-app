@@ -3801,7 +3801,10 @@
     },
     "lumenLight": {
       "title": "Lighter version (Lumen server)",
-      "why": "For a connection that is too slow, the server re-encodes the video lighter (1080p at 8 Mb/s, 720p at 3 Mb/s, HDR kept) on the same segments as the original, using the server's graphics chip. Safari switches between them on its own, without a cut, and lighter segments are prepared ahead when the connection weakens. The graphics chip must be given to the container; without it, nothing changes."
+      "why": "For a connection that is too slow, the server re-encodes the video lighter (1080p at 8 Mb/s, 720p at 3 Mb/s, HDR kept) on the same segments as the original, using the server's graphics chip. Safari switches between them on its own, without a cut, and lighter segments are prepared ahead when the connection weakens. The graphics chip must be given to the container; without it, nothing changes.",
+      "detected": "Encoder found: ffmpeg {version}, {driver}",
+      "unavailable": "Lighter version unavailable on this server ({reason}): only the original video is served.",
+      "now": "Since startup: {built} segments encoded, {kept} served ready-made, {failed} failed; {running} running, {queued} waiting."
     }
   },
   "xrayScan": {

@@ -36,7 +36,7 @@ const MAX_FREEZES = 60;
 const MAX_TRIALS = 30;
 const PLAYERS = new Set(["serveur", "actuel"]);
 // « son » manquait ici depuis la phase 2 : le champ `pass` de ses lignes était retiré à la réception.
-const PASSES = new Set(["complète", "courte", "leviers", "attente", "multiplexé", "son", "codecs"]);
+const PASSES = new Set(["complète", "courte", "leviers", "attente", "allégée", "multiplexé", "son", "codecs"]);
 const ORDERS = new Set(["serveur", "actuel"]);
 /** Les leviers d'un essai (`modeTag`, autoSeries.ts) : `mux`, `prep`, `fiche`, `depart-xstart`, `bw`… */
 const modeOf = (v: unknown) => (typeof v === "string" && /^[a-z-]{1,40}$/.test(v) ? v : null);

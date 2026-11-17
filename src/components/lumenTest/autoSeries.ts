@@ -48,7 +48,7 @@ export type PlayerKind = "serveur" | "actuel";
  * La passe : la série complète (~28 min), le comparatif rapide (~13 min), les leviers de démarrage (~10 min, étape
  * 3e), le son multiplexé contre la règle (~18 min, étape 3f) ou le son converti (~10 min, phase 2, DECISIONS §161).
  */
-export type SeriesPass = "complète" | "courte" | "leviers" | "attente" | "multiplexé" | "son" | "codecs";
+export type SeriesPass = "complète" | "courte" | "leviers" | "attente" | "allégée" | "multiplexé" | "son" | "codecs";
 
 /**
  * L'ordre des lecteurs (étape 3e) : `serveur` — tous les essais serveur, puis ceux du lecteur actuel, dans la même
@@ -93,6 +93,12 @@ export interface TrialModes {
    * que Safari en fait (`textTracks` au journal : la piste du flux, son genre, son mode).
    */
   subtitles?: "liste";
+  /**
+   * La version allégée (`lumenServer/light/`) : un échelon seul dans la liste maître (`?light=seul1|seul2`), pour voir
+   * sur l'appareil qu'il se lit — image, HDR, synchro du son, sauts. Il faut l'option ouverte à l'administrateur
+   * (`LUMEN_LIGHT`) et le iGPU au serveur ; sinon la liste est l'ordinaire et l'essai joue l'origine (dit au journal).
+   */
+  light?: "l1" | "l2";
 }
 
 /** Le délai entre Préparer et Lire d'un essai `early` : le temps d'ouvrir une fiche et d'appuyer sur Lire. */
@@ -109,6 +115,7 @@ export function modeTag(modes: TrialModes | undefined): string {
   if (modes.bandwidth) parts.push(modes.bandwidth === "bas" ? "bwbas" : "bw");
   if (modes.groups) parts.push("groupes");
   if (modes.subtitles) parts.push("st");
+  if (modes.light) parts.push(modes.light);
   return parts.join("-");
 }
 
@@ -123,6 +130,7 @@ export function modeLabel(modes: TrialModes | undefined): string {
   if (modes.bandwidth) parts.push(modes.bandwidth === "bas" ? "débit annoncé au quart" : "débit annoncé moyen");
   if (modes.groups) parts.push("un groupe son par codec (formats 1 à 4)");
   if (modes.subtitles) parts.push("sous-titres dans la liste");
+  if (modes.light) parts.push(`version allégée seule (${modes.light === "l1" ? "1080p" : "720p"})`);
   return parts.join(", ");
 }
 
@@ -150,6 +158,9 @@ export const PRESETS: { key: string; id: string; title: string; note: string }[]
   { key: "mandalorien", id: "afbc2e45c4e1d5ced3a2e3a050a86ab6", title: "The Mandalorian S01E01", note: "4K HEVC, VF AC-3 5.1, VO E-AC-3 5.1 — le cas le plus courant" },
   { key: "femme-de-menage", id: "70aceef708933935cfe99a94b2477dda", title: "La Femme de ménage", note: "4K HEVC, AC-3 5.1, deux E-AC-3 5.1 et un AAC 2.0 : trois codecs" },
   { key: "treize-jours", id: "057b1c6c2bbda0a4e2d6998f67a44caa", title: "13 Jours, 13 Nuits", note: "E-AC-3 5.1 et AAC 2.0, la même langue : le nombre de canaux change aussi" },
+  // La version allégée (`lumenServer/light/`) : deux sources assez lourdes pour ses deux échelons (17/11/2026).
+  { key: "tron-ares", id: "e50ebec885f8977db4163da053b2b0ad", title: "Tron : Ares", note: "4K HEVC HDR10, 25,9 Mb/s : échelons 1920×804 et 1280×536 en 10 bits PQ" },
+  { key: "meurs-un-autre-jour", id: "915961fc7c0938cc55d4bebd1ec88a03", title: "Meurs un autre jour", note: "4K HEVC SDR, 16,2 Mb/s : échelons 1920×816 et 1280×544 en 8 bits" },
 ];
 
 /** La cible de segment par défaut de Lumen serveur, en secondes (`LUMEN_TARGET_SEGMENT_US`). */
@@ -333,6 +344,23 @@ export const LEVER_SERIES: Trial[] = [
  * fin encadre la dérive du réseau), le second titre en miroir. Ce qui se lit : `seekMedianMs` − `seekedMedianMs`
  * (image → lecture repartie) et `aheadAdvanceS` de la chronologie, contre les témoins.
  */
+/**
+ * La passe « version allégée » (17/11/2026) : chaque échelon seul dans la liste (`?light=seul1|seul2`), à côté de
+ * l'origine du même titre, cinq sauts chacun — l'image s'ouvre, le HDR reste HDR, le son reste calé, les sauts
+ * tombent juste. Le premier essai d'un échelon le fait encoder par le serveur (~2 à 5 s par segment au premier
+ * passage) : sa première image dit ce que coûte un échelon que rien n'a préparé ; la bascule en cours de lecture, elle,
+ * ne se provoque pas honnêtement depuis la page (Safari choisit seul, sur son débit mesuré) — elle se lit au journal
+ * des vraies séances (`quality`, `srv.l1`/`srv.l2`).
+ */
+export const LIGHT_SERIES: Trial[] = [
+  trial("tron-ares", "serveur", { tours: [5] }),
+  trial("tron-ares", "serveur", { modes: { light: "l1" }, tours: [5] }),
+  trial("tron-ares", "serveur", { modes: { light: "l2" }, tours: [5] }),
+  trial("meurs-un-autre-jour", "serveur", { tours: [5] }),
+  trial("meurs-un-autre-jour", "serveur", { modes: { light: "l1" }, tours: [5] }),
+  trial("meurs-un-autre-jour", "serveur", { modes: { light: "l2" }, tours: [5] }),
+];
+
 export const SAFARI_WAIT_SERIES: Trial[] = [
   trial("ghosted", "serveur", { tours: [5] }),
   trial("ghosted", "serveur", { modes: { bandwidth: "bas" }, tours: [5] }),
@@ -453,6 +481,8 @@ export function planOf(pass: SeriesPass, order: SeriesOrder = "serveur"): Trial[
         ? LEVER_SERIES
         : pass === "attente"
           ? SAFARI_WAIT_SERIES
+        : pass === "allégée"
+          ? LIGHT_SERIES
         : pass === "multiplexé"
           ? MUX_SERIES
           : pass === "son"

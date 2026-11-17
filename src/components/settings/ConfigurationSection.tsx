@@ -12,6 +12,7 @@ import { AiProviderCard, SubtitleJobs, useAiAdmin } from "@/components/settings/
 import { featureStateLine } from "@/components/settings/AiFeaturesBlock";
 import { FeatureNeeds } from "@/components/settings/FeatureNeeds";
 import { LumenAudioStatus } from "@/components/settings/LumenAudioStatus";
+import { LumenLightStatus } from "@/components/settings/LumenLightStatus";
 import { missingNeeds, type ConfigCard } from "@/lib/settings/configLayout";
 import { SETTINGS_BY_KEY, type SettingView } from "@/lib/settings/schema";
 import type { AiFeatureId } from "@/lib/aiFeatureTable";
@@ -159,6 +160,7 @@ export function ConfigurationSection({ cards, showMissing = false }: { cards: re
             />
             {card.after === "subtitleJobs" && <SubtitleJobs />}
             {card.after === "lumenAudio" && <LumenAudioStatus />}
+            {card.after === "lumenLight" && <LumenLightStatus />}
           </div>
         );
       })}
