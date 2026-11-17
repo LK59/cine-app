@@ -54,6 +54,9 @@ export interface LumenStartFacts {
   negotiateMs: number;
   /** Le son multiplexé dans les segments vidéo (essai `m1`, réglage serveur). */
   muxed?: boolean;
+  /** La dernière mesure du lien (Mb/s, `lumenLink.ts`), absente sans mesure récente ; et si le quart a été annoncé. */
+  linkMbps?: number;
+  lowBandwidth?: boolean;
   /**
    * « Améliorer les dialogues » servi par le serveur (§193) : la force (`on` / `strong`), à la place du champ
    * `dialogue` de la ligne `start` du lecteur actuel (§68) — absent quand le traitement n'est pas servi.
@@ -82,6 +85,8 @@ export function lumenStartFields(ctx: ServerPlayerContext, facts: LumenStartFact
     ...(facts.prepared ? { prepared: facts.prepared.status, preparedAgoMs: facts.prepared.agoMs } : {}),
     negotiateMs: Math.round(facts.negotiateMs),
     ...(facts.muxed ? { muxed: true } : {}),
+    ...(facts.linkMbps !== undefined ? { linkMbps: facts.linkMbps } : {}),
+    ...(facts.lowBandwidth !== undefined ? { bwBas: facts.lowBandwidth } : {}),
     ...(facts.dialogue ? { dialogue: facts.dialogue, dialogueBy: "serveur" } : {}),
   };
 }
@@ -294,6 +299,25 @@ export function audioSegmentArrivalMs(lumenSession: string, track: number, since
     return first === undefined ? undefined : Math.max(0, first - sinceMs);
   } catch {
     return undefined;
+  }
+}
+
+/** Les requêtes vues de cette page (observateur et tampon), pour la mesure du débit (`lumenLink.ts`). */
+export function lumenResourceSamples(): { name: string; startTime: number; responseEnd: number; transferSize: number }[] {
+  try {
+    const fromBuffer = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
+    const seen = new Set<string>();
+    const out: { name: string; startTime: number; responseEnd: number; transferSize: number }[] = [];
+    for (const e of [...observed, ...fromBuffer] as Partial<PerformanceResourceTiming>[]) {
+      if (typeof e.name !== "string" || !e.name.includes("/api/lumen/") || typeof e.responseEnd !== "number" || typeof e.startTime !== "number") continue;
+      const key = `${e.name}@${e.startTime}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ name: e.name, startTime: e.startTime, responseEnd: e.responseEnd, transferSize: e.transferSize ?? 0 });
+    }
+    return out;
+  } catch {
+    return [];
   }
 }
 

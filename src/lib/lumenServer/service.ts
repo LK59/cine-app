@@ -530,6 +530,11 @@ export type LumenVerdict =
       /** L'adresse d'un récepteur (§192) : la famille de la vidéo servie, pour que l'émetteur retienne un refus du HEVC. */
       castVideo?: "h264" | "hevc";
       /**
+       * Le débit moyen annoncé par la liste (AVERAGE-BANDWIDTH, b/s) : ce que l'hôte compare au débit mesuré de la
+       * connexion avant d'annoncer le quart (`?bw=bas`, 17/11/2026, `lumenLink.ts`).
+       */
+      averageBps?: number;
+      /**
        * « Améliorer les dialogues » demandé (`?dialogue=`, §193) : servi (`master` porte alors `&dialogue=`), ou pourquoi
        * non — la piste n'a pas de rendu traité, ou le serveur n'admet pas une lecture de plus qui convertit. Non servi,
        * `master` est la liste ordinaire : l'hôte rend alors la lecture au lecteur actuel, qui fait le traitement.
@@ -673,6 +678,7 @@ export async function lumenVerdict(
     segments: index.segments.length,
     durationS: Math.round(index.durationUs / 1000) / 1000,
     targetS: targetDurationOf(index.segments),
+    averageBps: Math.max(index.bandwidth.average, 1),
     cutFacts,
     // Pour la bascule en cours de lecture (étape 4) : l'avance convertie et l'état de cette lecture, relus par un
     // nouvel appel à `eligibility` quand la page voit une attente (5-conversion-son.md §5.7).

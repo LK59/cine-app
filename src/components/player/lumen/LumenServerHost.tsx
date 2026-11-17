@@ -117,10 +117,12 @@ import {
   type LumenVerdict,
   type MasterAudio,
 } from "./lumenOpening";
+import { announcesLowBandwidth, linkMbpsOf, recentLinkMbps, rememberLink, withLowBandwidth } from "./lumenLink";
 import {
   audioSegmentArrivalMs,
   bufferedText,
   lumenAudioFields,
+  lumenResourceSamples,
   lumenCastSubtitleFields,
   lumenContext,
   lumenErrorFields,
@@ -696,6 +698,9 @@ export function LumenServerHost({
    * Au bout de la borne, l'écran « interrompue » et son « Réessayer » ; au-delà de trois réouvertures dans la
    * séance, le lecteur serveur — un chemin qui se rouvre en boucle ne se répare pas en se rouvrant encore.
    */
+  /** Le quart du débit annoncé pour cette lecture (décidé à l'ouverture, `lumenLink.ts`). */
+  const lowBandwidthRef = useRef(false);
+  const servedMaster = useCallback((master: string) => (lowBandwidthRef.current ? withLowBandwidth(master) : master), []);
   const recoveringRef = useRef(false);
   const reopenCountRef = useRef(0);
   const recover = useCallback(
@@ -744,14 +749,14 @@ export function LumenServerHost({
             fallToRef.current("serveur", `${cause} (${LUMEN_MAX_REOPENS} réouvertures déjà)`, { stage: "lecture" });
             return;
           }
-          reopen(verdict.master, positionNow(), changed ? `version changée (${versionRef.current} → ${verdict.version}) après ${cause}` : cause, verdict.version);
+          reopen(servedMaster(verdict.master), positionNow(), changed ? `version changée (${versionRef.current} → ${verdict.version}) après ${cause}` : cause, verdict.version);
           return;
         }
       } finally {
         recoveringRef.current = false;
       }
     },
-    [itemId, lumenSession, positionNow, reopen, t]
+    [itemId, lumenSession, positionNow, reopen, servedMaster, t]
   );
   const recoverRef = useRef(recover);
   useEffect(() => {
@@ -761,6 +766,16 @@ export function LumenServerHost({
   // Ce que Safari demande, écouté dès le montage : le tampon Resource Timing du cinéma est plein d'affiches, et le
   // `seen` d'un refus avant l'image restait vide (17/11/2026, `watchLumenRequests`).
   useEffect(() => watchLumenRequests(), []);
+  // La mesure du lien, sur les segments que Safari tire de toute façon : toutes les 10 s, page visible, retenue sur
+  // l'appareil pour la prochaine ouverture.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      const mbps = linkMbpsOf(lumenSession, lumenResourceSamples());
+      if (mbps !== null) rememberLink(mbps);
+    }, 10_000);
+    return () => clearInterval(timer);
+  }, [lumenSession]);
 
   // ── L'ouverture : description, état du spectateur, verdict, pistes — puis l'adresse ──────────────────
   const preferencesRef = useRef<TrackPreferences | null>(null);
@@ -857,7 +872,11 @@ export function LumenServerHost({
 
       // L'adresse, la position en `#t=` (levier 2 : l'image directement à la reprise, 0,72 s au banc). Un saut
       // après chargement ou `EXT-X-START` coûtent plus et montrent d'abord une autre image : jamais en premier.
-      const master = verdict.master;
+      // Le débit annoncé au quart (`bw=bas`) quand la dernière mesure de la connexion le permet (`lumenLink.ts`) ;
+      // gardé pour toute la lecture, réouvertures comprises (`lowBandwidthRef`).
+      const linkMbps = recentLinkMbps();
+      lowBandwidthRef.current = announcesLowBandwidth(linkMbps, verdict.averageBps);
+      const master = servedMaster(verdict.master);
       masterRef.current = master;
       versionRef.current = verdict.version;
       muxRef.current = mux;
@@ -900,6 +919,8 @@ export function LumenServerHost({
           prepared,
           negotiateMs,
           muxed: mux,
+          ...(linkMbps !== null ? { linkMbps } : {}),
+          lowBandwidth: lowBandwidthRef.current,
           dialogue: wantDialogue ?? null,
         })
       );
@@ -1867,13 +1888,13 @@ export function LumenServerHost({
           }
           servedDialogueRef.current = next;
           setServedDialogue(next);
-          reopenForAudio({ from: id, to: id, at: positionNow(), fromTrack: label, toTrack: label, processing: processingOf(facts, next), startedAt0, first: `dialogues ${next}`, dialogue: next }, { master: verdict.master });
+          reopenForAudio({ from: id, to: id, at: positionNow(), fromTrack: label, toTrack: label, processing: processingOf(facts, next), startedAt0, first: `dialogues ${next}`, dialogue: next }, { master: servedMaster(verdict.master) });
         } finally {
           dialogueSwitchingRef.current = false;
         }
       })();
     },
-    [handBackForDialogue, itemId, lumenSession, positionNow, reopenForAudio]
+    [handBackForDialogue, itemId, lumenSession, positionNow, reopenForAudio, servedMaster]
   );
 
   // « Réessayer » sur l'écran d'erreur : un élément neuf à la position connue (`retry`), même si la relance

@@ -87,7 +87,7 @@ const audioFacts = [
   { number: 4, codec: "A_AAC", language: "eng", name: null, channels: 2, hlsChannels: "2", isDefault: false, servable: true, refusal: null, repairs: [] },
   { number: 5, codec: "A_DTS", language: "eng", name: null, channels: 6, hlsChannels: null, isDefault: false, servable: false, refusal: "son-codec", repairs: [] },
 ];
-const verdictOf = (version: string, audio = 2) => ({ ok: true, version, master: `/api/lumen/g1/${version}/S/master.m3u8?audio=${audio}`, audioTrack: audio, audio: audioFacts, segments: 400, durationS: 6000, targetS: 5 });
+const verdictOf = (version: string, audio = 2) => ({ ok: true, version, master: `/api/lumen/g1/${version}/S/master.m3u8?audio=${audio}`, audioTrack: audio, audio: audioFacts, segments: 400, durationS: 6000, targetS: 5, averageBps: 20_000_000 });
 const MASTER = [
   "#EXTM3U",
   '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud-ec-3",LANGUAGE="fr",NAME="FR",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="6",URI="a2.m3u8"',
@@ -209,6 +209,40 @@ describe("l'ouverture", () => {
     expect(last("start")).toMatchObject({ player: "lumen-serveur", path: "remux-serveur", why: "open", at: 600, audioTrack: 2, audioStreamIndex: 1, resumeBy: "fragment" });
     expect(controls?.audioTracks.map((t) => t.id)).toEqual([2, 3, 4, 5]);
     expect(controls?.currentAudioId).toBe(2);
+  });
+
+  it("le débit annoncé au quart (`bw=bas`) seulement avec une mesure récente du lien, nettement au-dessus du film", async () => {
+    // 40 Mb/s mesurés il y a une minute pour un film à 20 Mb/s : le quart.
+    localStorage.setItem("cine:lumen-debit", JSON.stringify({ mbps: 40, at: Date.now() - 60_000 }));
+    try {
+      await mount();
+      expect(element().video.getAttribute("src")).toContain("master.m3u8?audio=2&bw=bas#t=600");
+      expect(last("start")).toMatchObject({ linkMbps: 40, bwBas: true });
+    } finally {
+      localStorage.removeItem("cine:lumen-debit");
+    }
+  });
+
+  it("une mesure trop juste ou trop vieille : les vrais débits", async () => {
+    localStorage.setItem("cine:lumen-debit", JSON.stringify({ mbps: 25, at: Date.now() - 60_000 }));
+    try {
+      await mount();
+      expect(element().video.getAttribute("src")).not.toContain("bw=");
+      expect(last("start")).toMatchObject({ linkMbps: 25, bwBas: false });
+    } finally {
+      localStorage.removeItem("cine:lumen-debit");
+    }
+    cleanup();
+    lines.length = 0;
+    localStorage.setItem("cine:lumen-debit", JSON.stringify({ mbps: 400, at: Date.now() - 11 * 60_000 }));
+    try {
+      await mount();
+      expect(element().video.getAttribute("src")).not.toContain("bw=");
+      expect(last("start")).toMatchObject({ bwBas: false });
+      expect(last("start")).not.toHaveProperty("linkMbps");
+    } finally {
+      localStorage.removeItem("cine:lumen-debit");
+    }
   });
 
   it("les `<track>` seulement après la première image : posés avec l'adresse HLS, Safari refuse l'élément (code 4)", async () => {
