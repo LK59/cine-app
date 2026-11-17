@@ -25,6 +25,7 @@
  */
 
 import { playsHlsNatively } from "@/lib/webkitEngine";
+import { readDialogueMode } from "@/lib/dialoguePreference";
 
 export const LUMEN_SERVER_KEY = "cine:lumen-serveur";
 
@@ -112,10 +113,13 @@ export function lumenDeclinedVersion(): number {
  */
 export function lumenWanted(
   session: { itemId: string; bench?: string; labSample?: unknown; offline?: unknown },
-  probe: { option: boolean; nativeHls?: () => boolean; mediaSourceServed?: () => boolean; declined?: (itemId: string) => boolean } = { option: false }
+  probe: { option: boolean; nativeHls?: () => boolean; mediaSourceServed?: () => boolean; declined?: (itemId: string) => boolean; dialogue?: () => boolean } = { option: false }
 ): boolean {
   if (!probe.option) return false;
   if (session.bench || session.labSample || session.offline) return false;
+  // « Améliorer les dialogues » allumé sur l'appareil (§188) : le traitement vit dans la chaîne audio du lecteur actuel
+  // (§68), et le son de Lumen serveur ne passe pas par la page — le lecteur actuel, qui le fait.
+  if ((probe.dialogue ?? (() => readDialogueMode() !== "off"))()) return false;
   if ((probe.declined ?? lumenDeclined)(session.itemId)) return false;
   if ((probe.mediaSourceServed ?? pageServedMediaSource)()) return false;
   return (probe.nativeHls ?? (() => playsHlsNatively()))();

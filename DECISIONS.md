@@ -11829,3 +11829,32 @@ faits »), et le calque est déjà celui des deux sous-titres. Le plein écran d
 
 **Porteurs.** `useLumenSubtitleGeneration.ts`, `LumenServerHost.tsx` (`refreshSubtitleTracks`, `generationMenuProps`,
 le calque). **Tests.** `LumenServerHost.test.tsx` (le menu, l'entrée choisie, la ligne au calque).
+
+## 188. Lumen serveur : l'ajustement aux bandes noires sur l'élément ; « Améliorer les dialogues » rendu au lecteur actuel (17/11/2026)
+
+**Bandes noires.** `useFrameFit` (§59, la mesure par trickplay du lecteur natif) est posé sur l'élément de
+`LumenServerHost` exactement comme dans le lecteur natif : deux cadres autour de l'image (l'extérieur coupe, l'intérieur
+porte la transformation), l'interrupteur dans les commandes seulement s'il y a un agrandissement à défaire, rien dans le
+mini-lecteur. L'image figée d'une réouverture (§185) est dans le même cadre : elle suit l'agrandissement.
+
+**« Améliorer les dialogues » : aucune des deux voies n'est faite, et le réglage rend la lecture au lecteur actuel.**
+- **Côté client, Web Audio sur l'élément HLS natif** : écarté. La sonde 8.39.0 (§68) a montré que WebKit ne fait pas
+  passer le son d'un élément ManagedMediaSource dans `createMediaElementSource` sur iPhone (contexte `running`, niveaux
+  à −∞) ; pour une source HLS native, WebKit route le son par AVPlayer, hors de la page, et les rapports publics vont
+  dans le même sens (silence sur iOS). Même là où cela marcherait, le son passerait par un contexte Web Audio que
+  Safari suspend en arrière-plan et à l'écran verrouillé — précisément ce que Lumen serveur est venu régler — et
+  AirPlay enverrait le son brut au téléviseur. Rien à gagner qui vaille ces risques.
+- **Côté serveur, une piste convertie avec le traitement** : possible, pas maintenant. Le traitement validé à l'oreille
+  est `DialogueEnhancer` (TypeScript, v2), pas un filtre ffmpeg : il faudrait soit le récrire en filtres ffmpeg (un
+  autre son que celui validé), soit un aller-retour ffmpeg → Node → ffmpeg par segment ; il faudrait aussi convertir
+  toutes les pistes copiées (95 % des lectures), et surtout ses niveleurs et détecteurs ont une mémoire de plusieurs
+  secondes, alors qu'un segment de Lumen serveur doit être une fonction du fichier (§161 : les mêmes octets seul ou en
+  continu) — un pré-roulement assez long pour que l'état converge, et la preuve octet par octet de chaque jointure,
+  restent à faire. Coût réel : une semaine et un banc d'écoute ; gain : une fonction bêta.
+- **Ce qui est fait, le plus simple et le plus sûr** : le menu de cet hôte propose « Améliorer les dialogues » comme le
+  lecteur actuel ; le choisir retient le réglage de l'appareil (`writeDialogueMode`, le même) et rend la lecture au
+  lecteur actuel à la position (`fallback` `to: natif`, `planned: true`, motif « améliorer les dialogues demandé »),
+  qui applique le traitement ; et `lumenWanted` décline Lumen serveur tant que le réglage est allumé sur l'appareil.
+
+**Porteurs.** `LumenServerHost.tsx` (`frameFitState`, `chooseDialogue`), `lumenServerChoice.ts` (`lumenWanted`,
+`dialogue`). **Tests.** `LumenServerHost.test.tsx`, `lumen-aiguillage.test.ts`.

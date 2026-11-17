@@ -13,7 +13,7 @@ vi.mock("@/lib/reportPlayback", () => ({ reportPlayback: (kind: string, fields: 
 const playback = { mode: "full", close: vi.fn(), minimize: vi.fn(), expand: vi.fn(), advance: vi.fn() };
 vi.mock("@/components/PlaybackProvider", () => ({ usePlayback: () => playback, PLAYER_RELOAD_INTENT_KEY: "cine:player-reload-intent" }));
 vi.mock("@/components/TranslationProvider", () => ({ useT: () => (k: string) => k, useLocale: () => ({ locale: "fr" }) }));
-type Controls = { subtitleGeneration?: { targets: { code: string }[]; onGenerate: (code: string) => void }; onChangeAudio: (id: number) => void; onClose: () => void; onAdvance: () => void; onCastRequest?: () => void; audioTracks: { id: number; label: string }[]; currentAudioId: number | null; subtitleTracks: { id: number }[]; currentSubtitleId: number | null };
+type Controls = { dialogue?: { onChange: (mode: "off" | "on" | "strong") => void }; subtitleGeneration?: { targets: { code: string }[]; onGenerate: (code: string) => void }; onChangeAudio: (id: number) => void; onClose: () => void; onAdvance: () => void; onCastRequest?: () => void; audioTracks: { id: number; label: string }[]; currentAudioId: number | null; subtitleTracks: { id: number }[]; currentSubtitleId: number | null };
 let controls: Controls | null = null;
 vi.mock("@/components/PlayerControls", () => ({
   PlayerControls: (props: Controls) => {
@@ -504,6 +504,21 @@ describe("« Générer des sous-titres » (§187)", () => {
     act(() => el.at(601));
     await flush();
     expect(subtitleLines).toContain("Bonjour.");
+  });
+});
+
+describe("« Améliorer les dialogues » (§188)", () => {
+  it("choisi ici : le réglage retenu, puis le lecteur actuel à la position — un repli prévu", async () => {
+    await mount();
+    const el = element();
+    act(() => el.picture(600));
+    act(() => el.at(812));
+    act(() => controls!.dialogue!.onChange("on"));
+    expect(localStorage.getItem("cine-dialogue")).toBe("on");
+    expect(declineLumen).toHaveBeenCalledWith("g1");
+    expect(playback.advance).toHaveBeenCalledWith(expect.objectContaining({ itemId: "g1", resumeAt: 812 }));
+    expect(last("fallback")).toMatchObject({ to: "natif", planned: true, stage: "lecture" });
+    localStorage.removeItem("cine-dialogue");
   });
 });
 

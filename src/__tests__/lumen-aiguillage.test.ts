@@ -64,6 +64,10 @@ describe("lumenWanted — chaque condition", () => {
     expect(lumenWanted({ itemId: "a" }, { ...on, declined: (id) => id === "a" })).toBe(false);
     expect(lumenWanted({ itemId: "b" }, { ...on, declined: (id) => id === "a" })).toBe(true);
   });
+  it("« Améliorer les dialogues » allumé sur l'appareil (§188) : le lecteur actuel, qui fait le traitement", () => {
+    expect(lumenWanted({ itemId: "a" }, { ...on, dialogue: () => true })).toBe(false);
+    expect(lumenWanted({ itemId: "a" }, { ...on, dialogue: () => false })).toBe(true);
+  });
   it("ni banc d'essai, ni extrait de test, ni fichier hors ligne", () => {
     expect(lumenWanted({ itemId: "a", bench: "x" }, on)).toBe(false);
     expect(lumenWanted({ itemId: "a", labSample: {} }, on)).toBe(false);

@@ -113,3 +113,13 @@ export function advanceTo(target: AdvanceTarget | null, steps: AdvanceSteps): bo
   steps.playback.advance(target);
   return true;
 }
+
+/**
+ * Le même titre rouvert à la position par un autre lecteur, dans la même séance (Lumen serveur → lecteur actuel quand
+ * « Améliorer les dialogues » est demandé, DECISIONS.md §188). L'hôte a déjà dit sa ligne (`fallback`) et rendu sa
+ * séance ; l'aiguillage choisit le lecteur à la place (`declineLumen` posé avant). Par `advance`, comme l'épisode
+ * suivant : c'est ce module seul qui l'appelle (§114).
+ */
+export function reopenAt(playback: { advance: AdvanceSteps["playback"]["advance"] }, target: { itemId: string; title: string; resumeAt: number }): void {
+  playback.advance(target);
+}

@@ -47,6 +47,8 @@ import { useServerSessionRecord, useServerStopOnLeave } from "@/components/playe
 import { useServerPositionWatch } from "@/components/player/server/useServerPositionWatch";
 import { useServerTimeline } from "@/components/player/server/useServerTimeline";
 import { useCastRoute } from "@/components/player/server/useCastRoute";
+import { useFrameFit } from "@/lib/frameFit";
+import { writeDialogueMode } from "@/lib/dialoguePreference";
 import { NativeWarning } from "@/components/playerNative/NativeOverlays";
 import { isGeneratingTrack } from "@/lib/subtitleGen/generation";
 import type { ExternalSubtitleSource } from "@/lib/webcodecs/externalSubtitles";
@@ -56,7 +58,7 @@ import { useWatchedClockRun } from "@/components/player/session/useWatchedClockR
 import { secondAllowed, secondSurvives } from "@/components/player/session/dualSubtitleRules";
 import { recordsResume } from "@/components/player/session/habitWatch";
 import { seekElapsed, seekStart, type SeekStart } from "@/components/player/session/seekElapsed";
-import { claimOnce, advanceTo, closePlayerSession } from "@/components/player/playerClose";
+import { claimOnce, advanceTo, closePlayerSession, reopenAt } from "@/components/player/playerClose";
 import { usePlaybackSession } from "@/lib/usePlaybackSession";
 import { useSceneMode } from "@/lib/sceneMode";
 import { PLAYBACK_CLIENTS } from "@/lib/playbackClients";
@@ -1482,6 +1484,38 @@ export function LumenServerHost({
     fallToRef.current("serveur", "diffusion demandée", { planned: true, cast: true, takeover: { ...takeoverNow(), cast: true, ...(castSubtitle ? { castSubtitle } : {}) } });
   }, [externalSubtitleTracks, takeoverNow]);
 
+  // « Améliorer les dialogues » (§188) : le traitement vit dans la chaîne audio du lecteur actuel (§68) ; ce chemin n'en
+  // a pas (le son ne passe pas par la page). Le choisir ici retient le réglage de l'appareil, puis rend la lecture au
+  // lecteur actuel, à la position, qui l'applique — `lumenWanted` décline ensuite ce chemin tant qu'il est allumé.
+  const chooseDialogue = useCallback(
+    (dialogueMode: "off" | "on" | "strong") => {
+      writeDialogueMode(dialogueMode);
+      if (dialogueMode === "off" || closedRef.current || fellRef.current) return;
+      const at = positionNow();
+      fellRef.current = true;
+      clearTimers();
+      reportPlayback(
+        "fallback",
+        lumenFallbackFields(
+          logContext.current,
+          { to: "natif", planned: true, reason: lumenReason("améliorer les dialogues demandé"), watched: watched.take(Date.now()), stage: "lecture" },
+          lumenSession,
+          tallyRef.current.backgroundFacts(Date.now())
+        )
+      );
+      markHandedOver();
+      void stopPlaybackNow();
+      try {
+        if (videoRef.current) releaseHlsElement(videoRef.current);
+      } catch {
+        // Déjà démonté.
+      }
+      declineLumen(itemId);
+      reopenAt(playback, { itemId, title, resumeAt: at });
+    },
+    [positionNow, clearTimers, watched, lumenSession, markHandedOver, stopPlaybackNow, itemId, playback, title]
+  );
+
   // « Réessayer » sur l'écran d'erreur : un élément neuf à la position connue (`retry`), même si la relance
   // automatique a déjà servi — c'est un geste du spectateur.
   const handleRetry = useCallback(() => {
@@ -1529,6 +1563,10 @@ export function LumenServerHost({
     else video.pause();
   }
 
+  // Les bandes noires incrustées dans le fichier (§188) : l'image agrandie jusqu'au bord le plus proche, sans rien couper —
+  // la mesure par trickplay du lecteur natif (`useFrameFit`), posée sur le cadre de l'élément. Pas dans le mini-lecteur.
+  const frameFitState = useFrameFit(itemId, mode !== "mini", containerRef, videoRef);
+
   if (typeof document === "undefined") return null;
   const isMini = mode === "mini";
   const style: React.CSSProperties = isMini
@@ -1560,27 +1598,33 @@ export function LumenServerHost({
   return createPortal(
     <div data-player-frame data-player="lumen-serveur" ref={containerRef} style={style} className={isMini ? "animate-fade-in-scale" : "app-viewport"} {...(isMini ? handlers : {})}>
       {/* `preload="auto"` (levier 1 : Safari charge listes, init et premiers segments dès l'adresse posée). */}
-      <video
-        // Un élément neuf à chaque adresse reposée (relance, réouverture) : WebKit tient une séance HLS par élément.
-        // Clés préfixées : la vidéo et les commandes sont sœurs, une même clé les confondait (deux `<video>` restaient).
-        key={`video-${videoKey}`}
-        ref={videoRef}
-        playsInline
-        autoPlay
-        preload="auto"
-        className={isMini ? "h-full w-full object-cover" : "h-full w-full"}
-        // AirPlay ouvert (§186) : l'adresse porte le laissez-passer d'une Apple TV, qui n'a pas de cookie.
-        {...{ "x-webkit-airplay": "allow" }}
-      >
-        {externalSubtitleTracks.map((st) => (
-          <track key={st.index} kind="subtitles" src={st.url} srcLang={st.language ?? undefined} label={st.label} />
-        ))}
-      </video>
-      {/* L'image d'avant, figée pendant une réouverture pour changer de piste (§185) : ni écran noir ni à-coup. */}
-      {freezeUrl && (
-        // eslint-disable-next-line @next/next/no-img-element -- une image `data:` de la page, éphémère : rien à optimiser.
-        <img src={freezeUrl} alt="" aria-hidden className={`pointer-events-none absolute inset-0 ${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"}`} />
-      )}
+      {/* Deux cadres autour de l'image, comme le lecteur natif : l'extérieur coupe ce qui déborde, l'intérieur porte
+          l'agrandissement des bandes noires (§188) — l'image figée d'une réouverture le suit. */}
+      <div data-player-picture className="relative h-full w-full overflow-hidden">
+        <div className="relative h-full w-full" style={frameFitState.style}>
+          <video
+            // Un élément neuf à chaque adresse reposée (relance, réouverture) : WebKit tient une séance HLS par élément.
+            // Clés préfixées : la vidéo et les commandes sont sœurs, une même clé les confondait (deux `<video>` restaient).
+            key={`video-${videoKey}`}
+            ref={videoRef}
+            playsInline
+            autoPlay
+            preload="auto"
+            className={isMini ? "h-full w-full object-cover" : "h-full w-full"}
+            // AirPlay ouvert (§186) : l'adresse porte le laissez-passer d'une Apple TV, qui n'a pas de cookie.
+            {...{ "x-webkit-airplay": "allow" }}
+          >
+            {externalSubtitleTracks.map((st) => (
+              <track key={st.index} kind="subtitles" src={st.url} srcLang={st.language ?? undefined} label={st.label} />
+            ))}
+          </video>
+          {/* L'image d'avant, figée pendant une réouverture pour changer de piste (§185) : ni écran noir ni à-coup. */}
+          {freezeUrl && (
+            // eslint-disable-next-line @next/next/no-img-element -- une image `data:` de la page, éphémère : rien à optimiser.
+            <img src={freezeUrl} alt="" aria-hidden className={`pointer-events-none absolute inset-0 ${isMini ? "h-full w-full object-cover" : "h-full w-full object-contain"}`} />
+          )}
+        </div>
+      </div>
       {subtitleGen.line && !dualSubtitles.active && !isMini && !error && isGeneratingTrack(currentSubtitleId) && (
         <SubtitleLayer primary={subtitleGen.line.text} primaryNotice={subtitleGen.line.notice} style={subtitleStyle} chromeEdges={chromeEdges} />
       )}
@@ -1640,6 +1684,8 @@ export function LumenServerHost({
           secondSubtitle={{ currentId: secondSubtitleId, onChange: changeSecondSubtitle }}
           replaySubtitle={replaySubtitle}
           subtitleGeneration={generationMenuProps}
+          frameFit={frameFitState.available ? { on: frameFitState.on, onChange: frameFitState.setOn } : undefined}
+          dialogue={bench ? undefined : { mode: "off", applies: true, onChange: chooseDialogue }}
           hidden={!!error}
           loading={loading}
           openingQuiet={introCovering}
