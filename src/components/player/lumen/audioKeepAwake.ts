@@ -54,6 +54,13 @@ export class AudioKeepAwake {
     if (this.context) this.arm(KEEP_AWAKE_TAIL_MS);
   }
 
+  /** Page cachée (arrière-plan, écran verrouillé) : la veille se tait tout de suite — rien à défendre sans spectateur. */
+  stop(): void {
+    if (this.stopTimer) clearTimeout(this.stopTimer);
+    this.stopTimer = null;
+    this.halt();
+  }
+
   /** À la fermeture du lecteur. */
   dispose(): void {
     if (this.stopTimer) clearTimeout(this.stopTimer);

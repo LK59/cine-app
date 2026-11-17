@@ -432,7 +432,18 @@ export function LumenServerHost({
   const safetySeekRef = useRef(false);
   /** L'essai « Garder le son éveillé pendant la pause » (`audioKeepAwake.ts`), une veille par hôte, fermée au démontage. */
   const keepAwakeRef = useRef<AudioKeepAwake | null>(null);
-  useEffect(() => () => keepAwakeRef.current?.dispose(), []);
+  useEffect(() => {
+    // Arrière-plan ou écran verrouillé pendant une pause : la veille se tait aussitôt, elle ne garderait éveillés que
+    // la sortie audio et la page, pour personne.
+    const onHidden = () => {
+      if (document.visibilityState === "hidden") keepAwakeRef.current?.stop();
+    };
+    document.addEventListener("visibilitychange", onHidden);
+    return () => {
+      document.removeEventListener("visibilitychange", onHidden);
+      keepAwakeRef.current?.dispose();
+    };
+  }, []);
 
   useEffect(() => {
     errorRef.current = error;
@@ -1067,7 +1078,7 @@ export function LumenServerHost({
       keepAwakeRef.current?.release();
     };
     const onPause = () => {
-      if (!video.ended && pictureRef.current && lumenKeepAwakeOn()) (keepAwakeRef.current ??= new AudioKeepAwake()).start();
+      if (!video.ended && pictureRef.current && document.visibilityState === "visible" && lumenKeepAwakeOn()) (keepAwakeRef.current ??= new AudioKeepAwake()).start();
       tallyRef.current.waitEnded(Date.now());
       background.notePaused(Date.now(), { visible: document.visibilityState === "visible", ended: video.ended });
       if (pendingSeek) flushSeek();
