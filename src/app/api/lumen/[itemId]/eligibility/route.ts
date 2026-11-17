@@ -6,6 +6,7 @@ import { parseCutMode, parseTargetSeconds } from "@/lib/lumenServer/format";
 import { conversionModeOf, goneResponse, lumenAccess, lumenErrorResponse, lumenVerdict, masterAddress, newPlaybackId, NO_STORE, playbackKey } from "@/lib/lumenServer/service";
 import { lumenAudio } from "@/lib/lumenServer/audio/conversion";
 import { muxVersion } from "@/lib/lumenServer/trials";
+import { parseDialogueMode } from "@/lib/lumenServer/audio/dialogue";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,9 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (cut === null) return goneResponse("lumen-inconnu", "Découpe inconnue");
   const targetUs = parseTargetSeconds(q.get("target"));
   if (targetUs === null) return goneResponse("lumen-inconnu", "Cible inconnue");
+  // `dialogue=on|strong` (§191) : la liste maître des rendus « Améliorer les dialogues », si la piste en a un.
+  const dialogue = parseDialogueMode(q.get("dialogue"));
+  if (dialogue === null) return goneResponse("lumen-inconnu", "Mode « dialogues » inconnu");
   const wait = Number(q.get("wait") ?? DEFAULT_WAIT_MS);
   const s = rawS ?? newPlaybackId();
   // Les modes d'essai de la conversion du son (§163, page `/lumen-test`) : le pool de ffmpeg pré-lancés (`convPool=1`
@@ -57,8 +61,10 @@ export async function GET(req: NextRequest, { params }: Params) {
       session,
       // `tv=1` : l'adresse munie du laissez-passer d'une Apple TV (§186) — le lecteur, pour qu'AirPlay marche.
       tv: q.get("tv") === "1",
+      ...(dialogue ? { dialogue } : {}),
     });
-    if (q.get("mux") === "1" && verdict.ok && verdict.audioTrack !== null) {
+    // L'essai multiplexé ne porte que le son copié : jamais avec les rendus « dialogues ».
+    if (q.get("mux") === "1" && !dialogue && verdict.ok && verdict.audioTrack !== null) {
       const s = new URL(verdict.master, "http://x").pathname.split("/")[5];
       // Le laissez-passer d'une Apple TV (§186), gardé sur l'adresse de l'essai.
       const tv = /\/tv\.([^/]+)\/master\.m3u8/.exec(verdict.master)?.[1];

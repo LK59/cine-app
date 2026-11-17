@@ -48,7 +48,8 @@ import { useServerPositionWatch } from "@/components/player/server/useServerPosi
 import { useServerTimeline } from "@/components/player/server/useServerTimeline";
 import { useCastRoute } from "@/components/player/server/useCastRoute";
 import { useFrameFit } from "@/lib/frameFit";
-import { writeDialogueMode } from "@/lib/dialoguePreference";
+import { readDialogueMode, writeDialogueMode } from "@/lib/dialoguePreference";
+import type { DialogueMode } from "@/lib/webcodecs/dialogueEnhance";
 import { NativeWarning } from "@/components/playerNative/NativeOverlays";
 import { isGeneratingTrack } from "@/lib/subtitleGen/generation";
 import type { ExternalSubtitleSource } from "@/lib/webcodecs/externalSubtitles";
@@ -111,6 +112,7 @@ import {
   type AudioTrackLike,
   type LumenAudioFacts,
   type LumenAudioChoice,
+  type LumenDialogueMode,
   type LumenVerdict,
   type MasterAudio,
 } from "./lumenOpening";
@@ -154,11 +156,13 @@ const VERDICT_WAIT_MS = 8000;
 const AUDIO_SETTLE_MS = 2000;
 
 /** Une réponse du serveur de Lumen : le verdict, ou pourquoi il n'y en a pas. */
-async function fetchVerdict(itemId: string, s: string, audio: number | null, mux: boolean): Promise<LumenVerdict | { failed: string; refused?: boolean }> {
+async function fetchVerdict(itemId: string, s: string, audio: number | null, mux: boolean, dialogue?: LumenDialogueMode | null): Promise<LumenVerdict | { failed: string; refused?: boolean }> {
   // `tv=1` : l'adresse munie du laissez-passer d'une Apple TV (§186) — le bouton AirPlay tend la `src` au téléviseur.
   const params = new URLSearchParams({ s, wait: String(VERDICT_WAIT_MS), tv: "1" });
   if (audio !== null) params.set("audio", String(audio));
   if (mux) params.set("mux", "1");
+  // « Améliorer les dialogues » (§191) : la liste maître des rendus traités par le serveur, s'il peut.
+  if (dialogue) params.set("dialogue", dialogue);
   try {
     const res = await fetch(`/api/lumen/${itemId}/eligibility?${params}`, { signal: AbortSignal.timeout(VERDICT_WAIT_MS + 6000) });
     // 403 : un compte qui n'est pas administrateur sur un appareil où l'option est allumée — un refus attendu.
@@ -226,6 +230,8 @@ interface PendingAudio {
   keepPaused: boolean;
   /** La première image de la nouvelle séance (ms depuis l'adresse posée). */
   pictureMs?: number;
+  /** « Améliorer les dialogues » (§191) : la force servie par la liste rouverte, pour la ligne `audio`. */
+  dialogue?: DialogueMode;
 }
 
 /**
@@ -406,6 +412,17 @@ export function LumenServerHost({
   const lastPlaybackOptsRef = useRef<{ resumeAt?: number } | undefined>(undefined);
   const pendingAudioRef = useRef<PendingAudio | null>(null);
   const audioSettleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * « Améliorer les dialogues » (§191). `dialogueMode` : le réglage de l'appareil, lu une fois à l'ouverture (un banc
+   * mesure le chemin sans traitement), puis tenu par le menu. `servedDialogue` : ce que la liste posée sur l'élément
+   * sert vraiment — la liste maître des rendus traités par le serveur à cette force (`?dialogue=`), ou null : la liste
+   * ordinaire. Les deux diffèrent quand la piste choisie n'a pas de rendu traité (le menu dit alors « Sans effet »).
+   */
+  const [dialogueMode, setDialogueMode] = useState<DialogueMode>(() => (bench ? "off" : readDialogueMode()));
+  const dialogueModeRef = useRef<DialogueMode>(dialogueMode);
+  const [servedDialogue, setServedDialogue] = useState<LumenDialogueMode | null>(null);
+  const servedDialogueRef = useRef<LumenDialogueMode | null>(null);
+  const dialogueSwitchingRef = useRef(false);
 
   /** Ce que les écouteurs, posés une fois, lisent de la séance. */
   const currentSubtitleRef = useRef<number | null>(null);
@@ -656,7 +673,7 @@ export function LumenServerHost({
             setLoading(false);
             return;
           }
-          const verdict = navigator.onLine ? await fetchVerdict(itemId, lumenSession, currentAudioRef.current, muxRef.current) : { failed: "hors ligne" };
+          const verdict = navigator.onLine ? await fetchVerdict(itemId, lumenSession, currentAudioRef.current, muxRef.current, servedDialogueRef.current) : { failed: "hors ligne" };
           if (closedRef.current || fellRef.current) return;
           if (opts.stalled && !opts.stalled()) {
             setLoading(false);
@@ -677,6 +694,13 @@ export function LumenServerHost({
             return;
           }
           const changed = verdict.version !== versionRef.current;
+          // Le traitement « dialogues » que le serveur ne sert plus (option coupée par un déploiement, serveur saturé) :
+          // la liste ordinaire rouverte, dite dans le panneau — la lecture d'abord, comme toute réouverture.
+          if (servedDialogueRef.current && verdict.dialogue && !verdict.dialogue.served) {
+            servedDialogueRef.current = null;
+            setServedDialogue(null);
+            noteEventRef.current(t("player.info.lumen.eventDialogue", { mode: t("player.dialogue.off"), ms: 0 }));
+          }
           reopenCountRef.current += 1;
           if (reopenCountRef.current > LUMEN_MAX_REOPENS && !opts.force) {
             fallToRef.current("serveur", `${cause} (${LUMEN_MAX_REOPENS} réouvertures déjà)`, { stage: "lecture" });
@@ -708,10 +732,13 @@ export function LumenServerHost({
     restoreRememberedVolume(videoRef.current);
     const open = async () => {
       const prepared = readLumenPrepared(itemId);
+      // « Améliorer les dialogues » allumé sur l'appareil (§191) : la liste des rendus traités par le serveur, demandée
+      // dès le premier verdict ; s'il ne peut pas les servir pour la piste d'ouverture, le lecteur actuel, qui le fait.
+      const wantDialogue: LumenDialogueMode | undefined = dialogueModeRef.current === "off" ? undefined : dialogueModeRef.current;
       const [info, state, verdict0, pistes] = await Promise.all([
         directInfoForOpening(itemId).catch((cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause)))),
         takePrefetchedPlaybackState(itemId) ?? fetchPlaybackState(itemId),
-        fetchVerdict(itemId, lumenSession, null, false),
+        fetchVerdict(itemId, lumenSession, null, false, wantDialogue),
         fetchPistes(itemId),
       ]);
       if (abandoned) return;
@@ -733,13 +760,23 @@ export function LumenServerHost({
       if (opening.kind === "refus") return decline(opening.reason, true, "piste");
       // La vidéo refusée (découpe, conteneur, lecture impossible) : rien à chercher du côté du son.
       if (!verdict0.ok && audio.length === 0) return decline(verdictRefusal(verdict0) ?? "refus", true, "éligibilité");
+      // L'essai du son multiplexé ne porte que le son copié : jamais avec le traitement « dialogues ».
+      const mux = pistes.mux === true && !wantDialogue;
       let verdict: LumenVerdict | { failed: string } = verdict0;
-      if (!verdict0.ok || opening.number !== verdict0.audioTrack || pistes.mux === true) {
-        verdict = await fetchVerdict(itemId, lumenSession, opening.number, pistes.mux === true);
+      if (!verdict0.ok || opening.number !== verdict0.audioTrack || mux) {
+        verdict = await fetchVerdict(itemId, lumenSession, opening.number, mux, wantDialogue);
         if (abandoned) return;
         if ("failed" in verdict) return decline(verdict.failed, false, "éligibilité");
       }
       if (!verdict.ok) return decline(verdictRefusal(verdict) ?? "refus", true, "éligibilité");
+      // Le serveur ne sert pas le traitement pour cette piste (AAC, FLAC, option coupée, serveur saturé) : le lecteur
+      // actuel, qui le fait dans la page — la règle d'avant §191, un déclin prévu.
+      if (wantDialogue && !verdict.dialogue?.served) {
+        const why = verdict.dialogue && !verdict.dialogue.served ? `${verdict.dialogue.reason}${verdict.dialogue.detail ? ` : ${verdict.dialogue.detail}` : ""}` : "non servi";
+        return decline(`améliorer les dialogues : ${why}`, true, "dialogues");
+      }
+      servedDialogueRef.current = wantDialogue ?? null;
+      setServedDialogue(wantDialogue ?? null);
       const negotiateMs = performance.now() - began;
 
       // La position : affirmée par la séance (zéro compris), sinon celle du serveur ; recul d'ouverture (§28)
@@ -785,7 +822,7 @@ export function LumenServerHost({
       const master = verdict.master;
       masterRef.current = master;
       versionRef.current = verdict.version;
-      muxRef.current = pistes.mux === true;
+      muxRef.current = mux;
       const fragment = withStartFragment(master, at) !== master;
       srcSetRef.current = { at: Date.now(), resumeAt: at, fragment };
       lastKnownTime.current = at;
@@ -824,7 +861,8 @@ export function LumenServerHost({
           fragment,
           prepared,
           negotiateMs,
-          muxed: pistes.mux === true,
+          muxed: mux,
+          dialogue: wantDialogue ?? null,
         })
       );
       setSrc(withStartFragment(master, at));
@@ -974,11 +1012,16 @@ export function LumenServerHost({
             first: done.first,
             pictureMs: done.pictureMs,
             frozen: done.frozen,
+            dialogue: done.dialogue,
           },
           lumenSession
         )
       );
-      noteEventRef.current(t("player.info.lumen.eventAudio", { track: done.toTrack, via: "réouverture", ms: Date.now() - done.startedAt0 }));
+      // Un changement de force (« Améliorer les dialogues », §191) garde la piste : dit comme tel dans le panneau.
+      if (done.from === done.to && done.dialogue) {
+        const name = done.dialogue === "strong" ? "player.dialogue.further" : done.dialogue === "on" ? "player.dialogue.enhance" : "player.dialogue.off";
+        noteEventRef.current(t("player.info.lumen.eventDialogue", { mode: t(name), ms: Date.now() - done.startedAt0 }));
+      } else noteEventRef.current(t("player.info.lumen.eventAudio", { track: done.toTrack, via: "réouverture", ms: Date.now() - done.startedAt0 }));
     };
     // L'horloge repartie après la réouverture : le changement est fini pour le spectateur.
     const onAudioAdvance = () => {
@@ -1321,18 +1364,21 @@ export function LumenServerHost({
    * rouvre sur un élément neuf (la règle des réouvertures, §180).
    */
   const reopenForAudio = useCallback(
-    (change: Omit<PendingAudio, "startedAt" | "srcAt" | "frozen" | "keepPaused">) => {
+    (change: Omit<PendingAudio, "startedAt" | "srcAt" | "frozen" | "keepPaused">, opts: { master?: string } = {}) => {
       const video = videoRef.current;
-      const master = masterRef.current;
+      // `master` : une autre liste maître (« Améliorer les dialogues » allumé ou coupé, §191) ; sinon celle posée.
+      const master = opts.master ?? masterRef.current;
       if (!video || !master || closedRef.current || fellRef.current) return;
       const target = new URL(master, window.location.href);
       target.searchParams.set("audio", String(change.to));
       const next = `${target.pathname}${target.search}`;
-      // La préparation d'abord : sans attendre sa réponse, elle construit le segment de reprise de la nouvelle piste.
+      // La préparation d'abord : sans attendre sa réponse, elle construit le segment de reprise de la nouvelle piste —
+      // traité par le serveur quand la liste sert les rendus « dialogues ».
+      const dialogue = target.searchParams.get("dialogue");
       void fetch(`/api/lumen/${itemId}/prepare`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audio: change.to, position: change.at, s: lumenSession }),
+        body: JSON.stringify({ audio: change.to, position: change.at, s: lumenSession, ...(dialogue ? { dialogue } : {}) }),
         keepalive: true,
       }).catch(() => {});
       const frozen = freezeFrame(video);
@@ -1342,6 +1388,16 @@ export function LumenServerHost({
       srcSetRef.current = { at: Date.now(), resumeAt: change.at, fragment: change.at > 0 };
       lastKnownTime.current = change.at;
       setSrc(withStartFragment(next, change.at));
+      // Une autre liste maître : ses rendus ont d'autres URI (et parfois d'autres `NAME`) — relue, comme à l'ouverture,
+      // pour relier encore le menu à `audioTracks`.
+      if (opts.master) {
+        void fetch(next, { signal: AbortSignal.timeout(10_000) })
+          .then((res) => (res.ok ? res.text() : ""))
+          .then((text) => {
+            if (text && masterRef.current === next) masterAudioRef.current = parseMasterAudio(text);
+          })
+          .catch(() => {});
+      }
     },
     [itemId, lumenSession]
   );
@@ -1360,7 +1416,11 @@ export function LumenServerHost({
       const at = positionNow();
       const fromTrack = from === null ? "" : (audioLabelsRef.current.get(from) ?? String(from));
       const toTrack = audioLabelsRef.current.get(id) ?? String(id);
-      const processing = processingOf(facts);
+      const served = servedDialogueRef.current;
+      // Sous « Améliorer les dialogues » servi (§191), la nouvelle piste passe traitée si elle a son rendu, sinon telle
+      // quelle — la liste maître la sert ainsi, et le menu dit « Sans effet sur cette piste audio ».
+      const processing = processingOf(facts, served);
+      const dialogue = served ?? undefined;
       const jellyfinIndex = jellyfinIndexOf(audioFactsRef.current, jellyfinAudioRef.current, id);
       // Une piste que le serveur ne sert pas (conversion du son coupée, file pleine) : le lecteur serveur.
       if (!facts.servable) {
@@ -1376,7 +1436,7 @@ export function LumenServerHost({
       const items = list ? Array.from({ length: list.length }, (_, i) => list[i]) : [];
       const position = items.length ? audioTrackPosition(items, masterAudioRef.current, id) : -1;
       if (position < 0) {
-        reopenForAudio({ from, to: id, at, fromTrack, toTrack, processing, startedAt0, first: list ? "piste absente d'audioTracks" : "audioTracks indisponible" });
+        reopenForAudio({ from, to: id, at, fromTrack, toTrack, processing, startedAt0, first: list ? "piste absente d'audioTracks" : "audioTracks indisponible", dialogue });
         return;
       }
       // Allumer d'abord, éteindre ensuite : jamais un instant sans son.
@@ -1391,11 +1451,11 @@ export function LumenServerHost({
         const now = Array.from({ length: list?.length ?? 0 }, (_, i) => list![i]);
         const applied = enabledAudioNumber(now, masterAudioRef.current) === id;
         if (applied) {
-          reportPlayback("audio", lumenAudioFields(logContext.current, { from, to: id, fromTrack, toTrack, via: "audioTracks", applied, tookMs: Date.now() - startedAt0, at, processing }, lumenSession));
+          reportPlayback("audio", lumenAudioFields(logContext.current, { from, to: id, fromTrack, toTrack, via: "audioTracks", applied, tookMs: Date.now() - startedAt0, at, processing, dialogue }, lumenSession));
           noteEvent(t("player.info.lumen.eventAudio", { track: toTrack, via: "audioTracks", ms: Date.now() - startedAt0 }));
           return;
         }
-        reopenForAudio({ from, to: id, at: positionNow(), fromTrack, toTrack, processing, startedAt0, first: "audioTracks sans effet en 2 s" });
+        reopenForAudio({ from, to: id, at: positionNow(), fromTrack, toTrack, processing, startedAt0, first: "audioTracks sans effet en 2 s", dialogue });
       }, AUDIO_SETTLE_MS);
       audioSettleRef.current = settle;
     },
@@ -1565,13 +1625,12 @@ export function LumenServerHost({
     fallToRef.current("serveur", "diffusion demandée", { planned: true, cast: true, takeover: { ...takeoverNow(), cast: true, ...(castSubtitle ? { castSubtitle } : {}) } });
   }, [externalSubtitleTracks, takeoverNow]);
 
-  // « Améliorer les dialogues » (§188) : le traitement vit dans la chaîne audio du lecteur actuel (§68) ; ce chemin n'en
-  // a pas (le son ne passe pas par la page). Le choisir ici retient le réglage de l'appareil, puis rend la lecture au
-  // lecteur actuel, à la position, qui l'applique — `lumenWanted` décline ensuite ce chemin tant qu'il est allumé.
-  const chooseDialogue = useCallback(
-    (dialogueMode: "off" | "on" | "strong") => {
-      writeDialogueMode(dialogueMode);
-      if (dialogueMode === "off" || closedRef.current || fellRef.current) return;
+  // « Améliorer les dialogues » quand le serveur ne peut pas le servir (§188) : le réglage est retenu, et la lecture est
+  // rendue au lecteur actuel, à la position, qui fait le traitement dans la page — `declineLumen` tient ce titre à
+  // l'écart de ce chemin pour le reste de la page.
+  const handBackForDialogue = useCallback(
+    (why: string) => {
+      if (closedRef.current || fellRef.current) return;
       const at = positionNow();
       fellRef.current = true;
       clearTimers();
@@ -1579,7 +1638,7 @@ export function LumenServerHost({
         "fallback",
         lumenFallbackFields(
           logContext.current,
-          { to: "natif", planned: true, reason: lumenReason("améliorer les dialogues demandé"), watched: watched.take(Date.now()), stage: "lecture" },
+          { to: "natif", planned: true, reason: lumenReason(`améliorer les dialogues demandé (${why})`), watched: watched.take(Date.now()), stage: "lecture" },
           lumenSession,
           tallyRef.current.backgroundFacts(Date.now())
         )
@@ -1595,6 +1654,64 @@ export function LumenServerHost({
       reopenAt(playback, { itemId, title, resumeAt: at });
     },
     [positionNow, clearTimers, watched, lumenSession, markHandedOver, stopPlaybackNow, itemId, playback, title]
+  );
+
+  /**
+   * « Améliorer les dialogues » (§191) : le serveur traite le son (`DialogueEnhancer` sur son PCM, encodé en E-AC-3) et
+   * sert ses rendus par une autre liste maître (`?dialogue=on|strong`). Changer de force, c'est changer de liste — la
+   * réouverture d'un changement de piste (§185) : même élément, image d'avant figée, `prepare` lancé avant, une ligne
+   * `audio` (`dialogue`, `processing`). Allumer demande d'abord le verdict (la piste a-t-elle son rendu, le serveur
+   * admet-il une lecture de plus qui convertit) ; sans, la règle d'avant : la lecture rendue au lecteur actuel.
+   * Couper ne demande rien au serveur : la liste ordinaire, celle d'à côté. Le réglage de l'appareil est écrit
+   * d'abord, quoi qu'il arrive : c'est lui que les deux lecteurs relisent.
+   */
+  const chooseDialogue = useCallback(
+    (next: DialogueMode) => {
+      writeDialogueMode(next);
+      dialogueModeRef.current = next;
+      setDialogueMode(next);
+      if (closedRef.current || fellRef.current) return;
+      const served = servedDialogueRef.current;
+      if ((served ?? "off") === next || dialogueSwitchingRef.current || pendingAudioRef.current) return;
+      const id = currentAudioRef.current;
+      const facts = audioFactsRef.current.find((a) => a.number === id);
+      const label = id === null ? "" : (audioLabelsRef.current.get(id) ?? String(id));
+      const startedAt0 = Date.now();
+      if (next === "off") {
+        // Couper : la liste ordinaire (sans `dialogue`), à la même piste.
+        const master = masterRef.current;
+        if (!served || !master || id === null || !facts) return;
+        const plain = new URL(master, window.location.href);
+        plain.searchParams.delete("dialogue");
+        servedDialogueRef.current = null;
+        setServedDialogue(null);
+        reopenForAudio({ from: id, to: id, at: positionNow(), fromTrack: label, toTrack: label, processing: processingOf(facts, null), startedAt0, first: "dialogues coupés", dialogue: "off" }, { master: `${plain.pathname}${plain.search}` });
+        return;
+      }
+      // La piste n'a pas de rendu traité (AAC, FLAC…, ou l'option coupée sur le serveur) : le lecteur actuel.
+      if (id === null || !facts?.dialogue) {
+        handBackForDialogue(facts ? `${facts.codec} sans rendu serveur` : "aucune piste");
+        return;
+      }
+      dialogueSwitchingRef.current = true;
+      void (async () => {
+        try {
+          const verdict = await fetchVerdict(itemId, lumenSession, id, false, next);
+          if (closedRef.current || fellRef.current || currentAudioRef.current !== id || dialogueModeRef.current !== next) return;
+          if ("failed" in verdict || !verdict.ok || !verdict.dialogue?.served) {
+            const why = "failed" in verdict ? verdict.failed : !verdict.ok ? (verdictRefusal(verdict) ?? "refus") : verdict.dialogue && !verdict.dialogue.served ? verdict.dialogue.reason : "non servi";
+            handBackForDialogue(why);
+            return;
+          }
+          servedDialogueRef.current = next;
+          setServedDialogue(next);
+          reopenForAudio({ from: id, to: id, at: positionNow(), fromTrack: label, toTrack: label, processing: processingOf(facts, next), startedAt0, first: `dialogues ${next}`, dialogue: next }, { master: verdict.master });
+        } finally {
+          dialogueSwitchingRef.current = false;
+        }
+      })();
+    },
+    [handBackForDialogue, itemId, lumenSession, positionNow, reopenForAudio]
   );
 
   // « Réessayer » sur l'écran d'erreur : un élément neuf à la position connue (`retry`), même si la relance
@@ -1632,6 +1749,10 @@ export function LumenServerHost({
     };
   }, [showPlaybackInfo, itemId, lumenSession]);
 
+  // Le traitement s'applique-t-il à ce qu'on entend ? Coupé, la question ne se pose pas ; allumé, seulement si la liste
+  // posée sert les rendus traités et que la piste choisie en a un (§191).
+  const dialogueApplies = dialogueMode === "off" || (servedDialogue !== null && !!panel?.choices.find((a) => a.number === currentAudioId)?.dialogue);
+
   const panelData = useMemo<PlaybackPanelData | null>(() => {
     if (!panel) return null;
     const audioNow = currentAudioId === null ? null : (panel.audioFacts.find((a) => a.number === currentAudioId) ?? null);
@@ -1640,7 +1761,7 @@ export function LumenServerHost({
       {
         video: panel.video,
         container: panel.container,
-        audio: audioNow && choice ? { label: panel.labels.get(audioNow.number) ?? String(audioNow.number), codec: audioNow.codec, processing: processingOf(choice), repairs: audioNow.repairs } : null,
+        audio: audioNow && choice ? { label: panel.labels.get(audioNow.number) ?? String(audioNow.number), codec: audioNow.codec, processing: processingOf(choice, servedDialogue), repairs: audioNow.repairs } : null,
         version: panel.version,
         cut: panel.cut,
         segments: panel.segments,
@@ -1658,7 +1779,7 @@ export function LumenServerHost({
       ...described,
       report: { error: null, elapsedMs: null, title, itemId, file: { master: panel.master.replace(/\/tv\.[^/]+\//, "/tv.…/"), version: panel.version }, pathReason: t("player.info.lumen.name"), diagnostics: {}, running: true },
     };
-  }, [panel, title, itemId, lumenSession, currentAudioId, received, serverStats, events, castActive, t]);
+  }, [panel, title, itemId, lumenSession, currentAudioId, servedDialogue, received, serverStats, events, castActive, t]);
 
   function toggleMiniPlay() {
     const video = videoRef.current;
@@ -1796,7 +1917,9 @@ export function LumenServerHost({
           replaySubtitle={replaySubtitle}
           subtitleGeneration={generationMenuProps}
           frameFit={frameFitState.available ? { on: frameFitState.on, onChange: frameFitState.setOn } : undefined}
-          dialogue={bench ? undefined : { mode: "off", applies: true, onChange: chooseDialogue }}
+          // « Améliorer les dialogues » (§191) : la force de l'appareil ; « Sans effet » quand la liste sert le traitement mais que
+          // la piste choisie n'a pas de rendu traité (elle est servie telle quelle).
+          dialogue={bench ? undefined : { mode: dialogueMode, applies: dialogueApplies, onChange: chooseDialogue }}
           hidden={!!error}
           loading={loading}
           openingQuiet={introCovering}

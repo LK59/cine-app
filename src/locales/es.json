@@ -2262,6 +2262,7 @@
         "incidents": "Incidencias",
         "eventReopen": "Reapertura en {at}: {reason}",
         "eventAudio": "Pista «{track}» por {via} ({ms} ms)",
+        "eventDialogue": "Mejorar diálogos: {mode} ({ms} ms)",
         "eventRetry": "Reintento antes de la imagen: {reason}",
         "eventCastOn": "AirPlay a un televisor en {at}",
         "eventCastOff": "Fin de AirPlay en {at}"

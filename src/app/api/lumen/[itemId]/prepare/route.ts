@@ -21,7 +21,8 @@ import {
   segmentAt,
 } from "@/lib/lumenServer/service";
 import { lumenEligibility } from "@/lib/lumenServer/eligibility";
-import type { ConversionContext } from "@/lib/lumenServer/audio/view";
+import { dialogueRendition, type ConversionContext } from "@/lib/lumenServer/audio/view";
+import { parseDialogueMode, type LumenDialogueMode } from "@/lib/lumenServer/audio/dialogue";
 import { lumenAudio } from "@/lib/lumenServer/audio/conversion";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +48,10 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!isJellyfinId(itemId)) return goneResponse("lumen-inconnu", "Élément inconnu");
   const session = await lumenAccess(req, itemId);
   if (session instanceof NextResponse) return session;
-  const body = (await req.json().catch(() => null)) as { audio?: unknown; position?: unknown; s?: unknown; cut?: unknown; target?: unknown; convPool?: unknown; convCold?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { audio?: unknown; position?: unknown; s?: unknown; cut?: unknown; target?: unknown; convPool?: unknown; convCold?: unknown; dialogue?: unknown } | null;
+  // `dialogue: "on" | "strong"` (§191) : le segment de reprise du rendu « dialogues » de la piste, traité d'avance.
+  const dialogue = parseDialogueMode(typeof body?.dialogue === "string" ? body.dialogue : body?.dialogue === undefined || body?.dialogue === null ? undefined : "?");
+  if (dialogue === null) return goneResponse("lumen-inconnu", "Mode « dialogues » inconnu");
   const audio = body?.audio;
   if (audio !== undefined && audio !== null && !(typeof audio === "number" && Number.isInteger(audio) && audio > 0 && audio < 10_000)) {
     return goneResponse("lumen-inconnu", "Piste audio mal formée");
@@ -65,9 +69,9 @@ export async function POST(req: NextRequest, { params }: Params) {
   const mode = conversionModeOf(new URLSearchParams(Object.entries({ convPool: body?.convPool, convCold: body?.convCold }).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])));
   if (mode) lumenAudio().setPlaybackMode(playbackKey(session.u, s), mode);
   const conversion = await lumenConversionContext(session);
-  void warm(itemId, typeof audio === "number" ? audio : undefined, position, cutting, conversion, playbackKey(session.u, s));
+  void warm(itemId, typeof audio === "number" ? audio : undefined, position, cutting, conversion, playbackKey(session.u, s), dialogue);
   try {
-    const verdict = await lumenVerdict(itemId, { audio: typeof audio === "number" ? audio : undefined, s, waitMs: VERDICT_WAIT_MS, session, ...cutting });
+    const verdict = await lumenVerdict(itemId, { audio: typeof audio === "number" ? audio : undefined, s, waitMs: VERDICT_WAIT_MS, session, ...cutting, ...(dialogue ? { dialogue } : {}) });
     return NextResponse.json(verdict, { status: "pending" in verdict ? 202 : 200, headers: NO_STORE });
   } catch (error) {
     return lumenErrorResponse(error, { itemId, route: "prepare" }).response;
@@ -79,7 +83,15 @@ export async function POST(req: NextRequest, { params }: Params) {
  * pendant audio, gardés pour la première requête. Une file pleine n'est pas une erreur : la requête de
  * Safari construira le segment elle-même.
  */
-async function warm(itemId: string, audio: number | undefined, position: number, cutting: Partial<LumenCutting>, conversion: ConversionContext | null, session: string): Promise<void> {
+async function warm(
+  itemId: string,
+  audio: number | undefined,
+  position: number,
+  cutting: Partial<LumenCutting>,
+  conversion: ConversionContext | null,
+  session: string,
+  dialogue?: LumenDialogueMode
+): Promise<void> {
   try {
     // Avec la conversion permise (§161), le segment de reprise d'une piste convertie est converti ici, en priorité
     // de demande — avant toute avance — et gardé dans le cache de la conversion.
@@ -91,9 +103,12 @@ async function warm(itemId: string, audio: number | undefined, position: number,
     const engine = lumenServerEngine();
     const version = lumenVersionOf(index);
     const n = segmentAt(index, position);
+    // Le rendu que la liste maître désignera : « dialogues » quand il est demandé et que la piste en a un (§191).
+    const track = audioTrack !== null ? index.audio.find((a) => a.number === audioTrack) : undefined;
+    const processed = dialogue && track ? dialogueRendition(track, dialogue) : null;
     await Promise.all([
       lumenSegment(engine, index, version, { kind: "video" }, n, { keep: true }),
-      ...(audioTrack !== null ? [lumenSegment(engine, index, version, { kind: "audio", track: audioTrack }, n, { keep: true, session })] : []),
+      ...(audioTrack !== null ? [lumenSegment(engine, index, version, processed ?? { kind: "audio", track: audioTrack }, n, { keep: true, session })] : []),
     ]);
   } catch (error) {
     if (error instanceof LumenError && error.code === "occupe") return;

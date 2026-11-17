@@ -14,6 +14,7 @@ import type { HlsAudioSignal, HlsVideoSignal } from "./hlsSignal";
 import type { TrackColour } from "../webcodecs/matroska";
 import type { LumenSilence } from "./audio/silence";
 import type { LumenConvertSource } from "./audio/convertSource";
+import type { LumenDialogueMode } from "./audio/dialogue";
 
 /**
  * La version du format produit. À monter quand change : la règle de découpe (cible, points de coupe
@@ -45,6 +46,11 @@ import type { LumenConvertSource } from "./audio/convertSource";
  * entre codecs devient un changement de rendu dans le groupe (`audioTracks`), sans rechargement. Aucun segment,
  * aucun init ne change d'un octet ; la liste maître d'un fichier à un seul codec non plus. La version monte quand
  * même, parce que la règle de §155 vaut pour toute adresse servie : la même adresse, les mêmes octets.
+ *
+ * **« Améliorer les dialogues » (§191) ne la fait pas monter.** Il n'ajoute que des adresses neuves (`a3d1x{cid}`,
+ * `a3d2x{cid}`, leurs inits et segments, et la liste maître `?dialogue=on|strong`), dont l'identité `cid` porte
+ * tout ce qui en fixe les octets (règles du traitement, cible, ffmpeg, moteur JavaScript) ; aucune adresse servie
+ * avant ne change d'un octet — la liste maître sans `?dialogue=` comprise (un test le compare).
  */
 export const LUMEN_FORMAT_VERSION = 5;
 
@@ -326,9 +332,29 @@ export interface LumenAudioTrack {
    * identité de conversion (`cid`, dans le nom de ses rendus), avec ces canaux.
    */
   converted?: { target: string; cid: string; channels: number };
+  /**
+   * Posé par la vue seulement (`withDialogue`, §191) : les rendus « Améliorer les dialogues » de la piste — le
+   * traitement du lecteur actuel fait par le serveur, encodé vers la cible de la conversion. Absent : la piste n'en a
+   * pas (option coupée, ffmpeg absent, AAC, FLAC, PCM, MP4…).
+   */
+  dialogue?: LumenDialogueRenditions;
   signal: HlsAudioSignal | null;
   /** Pourquoi cette piste ne peut pas être servie, ou null. */
   refusal: LumenRefusal | null;
+}
+
+/** Les deux rendus « dialogues » d'une piste (§191) : une cible, une init, une identité par force. */
+export interface LumenDialogueRenditions {
+  /** La cible (`eac3-640-51`, `eac3-256-20`) et ses canaux. */
+  target: string;
+  channels: number;
+  /** La signalisation de ce qui est servi (E-AC-3, la trame de référence de la cible). */
+  signal: HlsAudioSignal;
+  /** Ce qu'il faut pour décoder la piste (la conversion de §161, ou une AC-3/E-AC-3 copiée lue comme telle). */
+  source: LumenConvertSource;
+  /** L'identité de chaque force, dans le nom de son rendu (`a3d1x{cid}`). */
+  cids: Record<LumenDialogueMode, string>;
+  init: Uint8Array;
 }
 
 export interface LumenKeyStats {
@@ -396,7 +422,13 @@ export interface LumenIndex {
  * conversion d'une piste convertie (§161) — dans le nom, pour qu'une autre conversion (autre ffmpeg, autre règle)
  * soit une autre adresse et jamais d'autres octets sous la même.
  */
-export type LumenRendition = { kind: "video" } | { kind: "audio"; track: number; conv?: string };
+export type LumenRendition =
+  | { kind: "video" }
+  /**
+   * `dialogue` (§191) : le rendu « Améliorer les dialogues » de la piste, à cette force — toujours avec `conv`,
+   * l'identité de son traitement (`a3d1x{cid}` : `d1` améliorer, `d2` davantage).
+   */
+  | { kind: "audio"; track: number; conv?: string; dialogue?: LumenDialogueMode };
 
 /**
  * Le nom d'un fichier servi, relatif à la liste maître : `v.m3u8`, `init-v.mp4`, `v/12.m4s`, et pour
@@ -404,7 +436,9 @@ export type LumenRendition = { kind: "video" } | { kind: "audio"; track: number;
  * sans détour pour CrowdSec : décision du 16/11/2026, contre la décision 4 de la conception.
  */
 export function renditionTag(rendition: LumenRendition): string {
-  return rendition.kind === "video" ? "v" : `a${rendition.track}${rendition.conv ? `x${rendition.conv}` : ""}`;
+  if (rendition.kind === "video") return "v";
+  const dialogue = rendition.dialogue && rendition.conv ? (rendition.dialogue === "strong" ? "d2" : "d1") : "";
+  return `a${rendition.track}${dialogue}${rendition.conv ? `x${rendition.conv}` : ""}`;
 }
 
 export function playlistName(rendition: LumenRendition): string {
@@ -434,8 +468,11 @@ export function parseLumenPath(path: string): LumenPath | null {
   if (path === "master.m3u8") return { kind: "master" };
   const tag = (raw: string): LumenRendition | null => {
     if (raw === "v") return { kind: "video" };
-    const m = /^a([1-9]\d{0,3})(?:x([0-9a-f]{8}))?$/.exec(raw);
-    return m ? (m[2] ? { kind: "audio", track: Number(m[1]), conv: m[2] } : { kind: "audio", track: Number(m[1]) }) : null;
+    // `a3`, `a3x{cid}` (convertie, §161), `a3d1x{cid}` / `a3d2x{cid}` (dialogues, §191 — jamais sans identité).
+    const m = /^a([1-9]\d{0,3})(?:(?:d([12]))?x([0-9a-f]{8}))?$/.exec(raw);
+    if (!m) return null;
+    if (!m[3]) return { kind: "audio", track: Number(m[1]) };
+    return m[2] ? { kind: "audio", track: Number(m[1]), conv: m[3], dialogue: m[2] === "2" ? "strong" : "on" } : { kind: "audio", track: Number(m[1]), conv: m[3] };
   };
   let m = /^([a-z0-9]+)\.m3u8$/.exec(path);
   if (m) {

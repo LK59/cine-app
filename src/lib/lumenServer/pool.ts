@@ -18,7 +18,7 @@
 
 import { Worker } from "node:worker_threads";
 import { LumenError } from "./format";
-import { runLumenJob, type LumenJob, type LumenJobResult } from "./jobs";
+import { requestTransferablesOf, runLumenJob, type LumenJob, type LumenJobResult } from "./jobs";
 import type { WorkerRequest, WorkerResponse } from "./worker";
 
 export interface LumenExecutor {
@@ -81,7 +81,7 @@ export function workerExecutor(script: string | URL, threads: number): LumenExec
       const id = nextId++;
       slot.busy = { id, resolve: next.resolve, reject: next.reject };
       const request: WorkerRequest = { id, job: next.job };
-      slot.worker.postMessage(request);
+      slot.worker.postMessage(request, requestTransferablesOf(next.job));
     }
   };
 

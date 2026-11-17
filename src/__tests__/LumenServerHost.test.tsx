@@ -729,8 +729,109 @@ describe("« Générer des sous-titres » (§187)", () => {
   });
 });
 
-describe("« Améliorer les dialogues » (§188)", () => {
-  it("choisi ici : le réglage retenu, puis le lecteur actuel à la position — un repli prévu", async () => {
+describe("« Améliorer les dialogues » (§188, §191)", () => {
+  /** Les pistes E-AC-3 ont leurs rendus traités par le serveur ; l'AAC non. */
+  const withDialogueFacts = audioFacts.map((a) => (a.codec === "A_EAC3" ? { ...a, dialogue: "eac3-640-51" } : a));
+  const dialogueVerdict = (mode: "on" | "strong" | null, served = true, audio = 2) => ({
+    ...verdictOf("2-aaaaaaaaaaaa", audio),
+    audio: withDialogueFacts,
+    ...(mode && served ? { master: `/api/lumen/g1/2-aaaaaaaaaaaa/S/master.m3u8?audio=${audio}&dialogue=${mode}` } : {}),
+    ...(mode ? { dialogue: served ? { mode, served: true } : { mode, served: false, reason: "son-serveur-occupe", detail: "6 lectures convertissent" } } : {}),
+  });
+  afterEach(() => localStorage.removeItem("cine-dialogue"));
+  function withTracks(video: HTMLVideoElement) {
+    const tracks = [
+      { label: "FR", language: "fr", enabled: true },
+      { label: "EN", language: "en", enabled: false },
+    ];
+    Object.defineProperty(video, "audioTracks", { get: () => Object.assign([...tracks], { addEventListener() {} }), configurable: true });
+    return tracks;
+  }
+
+  it("allumé sur l'appareil, servi par le serveur : la liste des rendus traités, la ligne `start` le dit, le menu s'applique", async () => {
+    localStorage.setItem("cine-dialogue", "on");
+    verdicts = [dialogueVerdict("on")];
+    await mount();
+    const { video } = element();
+    expect(String(fetchMock.mock.calls.find(([u]) => String(u).includes("/eligibility"))?.[0])).toContain("dialogue=on");
+    expect(video.getAttribute("src") ?? video.src).toContain("master.m3u8?audio=2&dialogue=on#t=600");
+    expect(last("start")).toMatchObject({ why: "open", dialogue: "on", dialogueBy: "serveur" });
+    expect(declineLumen).not.toHaveBeenCalled();
+    expect(controls?.dialogue).toMatchObject({ mode: "on", applies: true });
+  });
+
+  it("allumé, mais le serveur ne le sert pas (occupé, piste sans rendu) : le lecteur actuel avant l'image, un déclin prévu", async () => {
+    localStorage.setItem("cine-dialogue", "strong");
+    verdicts = [dialogueVerdict("strong", false)];
+    await mount();
+    expect(declineLumen).toHaveBeenCalledWith("g1");
+    expect(last("fallback")).toMatchObject({ to: "natif", planned: true, stage: "dialogues" });
+    expect(String(last("fallback")?.reason)).toContain("son-serveur-occupe");
+  });
+
+  it("allumé pendant la lecture : la liste traitée rouverte sur le même élément, à la position, une ligne `audio` sur la même piste", async () => {
+    verdicts = [dialogueVerdict(null)];
+    await mount();
+    const el = element();
+    withTracks(el.video);
+    act(() => el.picture(600));
+    act(() => el.at(812));
+    const before = el.video;
+    verdicts = [dialogueVerdict("strong")];
+    act(() => controls!.dialogue!.onChange("strong"));
+    await flush();
+    expect(localStorage.getItem("cine-dialogue")).toBe("strong");
+    const video = document.querySelector("video")!;
+    expect(video).toBe(before);
+    expect(video.getAttribute("src") ?? video.src).toContain("/master.m3u8?audio=2&dialogue=strong#t=812");
+    const prepare = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/api/lumen/g1/prepare"));
+    expect(JSON.parse(String((prepare as unknown as [string, RequestInit])[1].body))).toMatchObject({ audio: 2, position: 812, dialogue: "strong" });
+    act(() => el.picture(812));
+    act(() => el.at(812.5));
+    expect(last("audio")).toMatchObject({ from: 2, to: 2, via: "réouverture", dialogue: "strong" });
+    expect(String(last("audio")?.processing)).toContain("dialogues davantage par le serveur");
+    expect(declineLumen).not.toHaveBeenCalled();
+    expect(kinds()).not.toContain("fallback");
+    expect(controls?.dialogue).toMatchObject({ mode: "strong", applies: true });
+  });
+
+  it("coupé pendant la lecture : la liste ordinaire, sans rien demander au serveur", async () => {
+    localStorage.setItem("cine-dialogue", "on");
+    verdicts = [dialogueVerdict("on")];
+    await mount();
+    const el = element();
+    withTracks(el.video);
+    act(() => el.picture(600));
+    act(() => el.at(700));
+    const asked = fetchMock.mock.calls.filter(([u]) => String(u).includes("/eligibility")).length;
+    act(() => controls!.dialogue!.onChange("off"));
+    await flush();
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).includes("/eligibility")).length).toBe(asked);
+    const video = document.querySelector("video")!;
+    expect(video.getAttribute("src") ?? video.src).toMatch(/master\.m3u8\?audio=2#t=700$/);
+    expect(localStorage.getItem("cine-dialogue")).toBeNull();
+    act(() => el.picture(700));
+    act(() => el.at(700.5));
+    expect(last("audio")).toMatchObject({ from: 2, to: 2, dialogue: "off", processing: "copié tel quel" });
+  });
+
+  it("une piste sans rendu traité pendant que le traitement est servi : servie telle quelle, le menu dit « Sans effet »", async () => {
+    localStorage.setItem("cine-dialogue", "on");
+    verdicts = [dialogueVerdict("on")];
+    await mount();
+    const el = element();
+    withTracks(el.video);
+    act(() => el.picture(600));
+    act(() => controls!.onChangeAudio(4));
+    await flush();
+    const video = document.querySelector("video")!;
+    // La liste traitée, rouverte sur l'AAC : la liste maître la sert telle quelle.
+    expect(video.getAttribute("src") ?? video.src).toContain("master.m3u8?audio=4&dialogue=on");
+    expect(controls?.dialogue).toMatchObject({ mode: "on", applies: false });
+    expect(declineLumen).not.toHaveBeenCalled();
+  });
+
+  it("choisi sur une piste que le serveur ne traite pas (§188) : le réglage retenu, puis le lecteur actuel à la position", async () => {
     await mount();
     const el = element();
     act(() => el.picture(600));
@@ -740,7 +841,20 @@ describe("« Améliorer les dialogues » (§188)", () => {
     expect(declineLumen).toHaveBeenCalledWith("g1");
     expect(playback.advance).toHaveBeenCalledWith(expect.objectContaining({ itemId: "g1", resumeAt: 812 }));
     expect(last("fallback")).toMatchObject({ to: "natif", planned: true, stage: "lecture" });
-    localStorage.removeItem("cine-dialogue");
+  });
+
+  it("allumé pendant la lecture, mais le serveur refuse (occupé) : le lecteur actuel, comme avant", async () => {
+    verdicts = [dialogueVerdict(null)];
+    await mount();
+    const el = element();
+    act(() => el.picture(600));
+    act(() => el.at(900));
+    verdicts = [dialogueVerdict("on", false)];
+    act(() => controls!.dialogue!.onChange("on"));
+    await flush();
+    expect(declineLumen).toHaveBeenCalledWith("g1");
+    expect(playback.advance).toHaveBeenCalledWith(expect.objectContaining({ itemId: "g1", resumeAt: 900 }));
+    expect(String(last("fallback")?.reason)).toContain("son-serveur-occupe");
   });
 });
 

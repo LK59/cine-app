@@ -41,6 +41,7 @@ import { createT, loadLocaleDict, localeOf } from "@/lib/i18n";
 import type { LabelOptions } from "@/lib/trackLabel";
 import { cuttingOfTag, LUMEN_FORMAT_VERSION, parseLumenPath, segmentName, type LumenPath } from "./format";
 import { lumenEligibility } from "./eligibility";
+import { parseDialogueMode } from "./audio/dialogue";
 import { chronoEntry, isPlaybackId, noteBuilt, noteConvertBusy, noteConverted, noteRefused, noteRequest, noteSent, noteTrace, playbackOf, serverClockMs, type ChronoEntry, type PlaybackStats } from "./playbackStats";
 import { masterTrialOptions, muxedInit, muxedMaster, muxedMediaPlaylist, muxedSegment, muxVersion, parseMuxedPath, splitMuxTag, withMasterTrials, type MuxedPath } from "./trials";
 import {
@@ -367,7 +368,11 @@ async function serveResolved(
       noteMediaRead();
       // `?groupes=codec` : l'ancienne forme (un groupe par codec), un essai de `/lumen-test` (§185).
       const perCodecGroups = req.nextUrl.searchParams.get("groupes") === "codec";
-      let text = engine.master(index, { audioTrack, labels: await labelsFor(req), ...(perCodecGroups ? { perCodecGroups } : {}) });
+      // `?dialogue=on|strong` (§191) : les rendus « dialogues » à la place des rendus ordinaires. Mal formé : 410, comme
+      // une piste mal formée ; une piste sans ce rendu garde le sien (l'hôte le sait par le verdict).
+      const dialogue = parseDialogueMode(req.nextUrl.searchParams.get("dialogue"));
+      if (dialogue === null) return goneResponse("lumen-inconnu", "Mode « dialogues » inconnu");
+      let text = engine.master(index, { audioTrack, labels: await labelsFor(req), ...(perCodecGroups ? { perCodecGroups } : {}), ...(dialogue ? { dialogue } : {}) });
       // Les essais de la seule liste maître (étape 3e, `trials.ts`) : sans `?start=` ni `?bw=`, le texte de la règle.
       text = withMasterTrials(text, masterTrialOptions(req.nextUrl.searchParams));
       if (r.mux && audioTrack !== null) text = muxedMaster(text, audioTrack);

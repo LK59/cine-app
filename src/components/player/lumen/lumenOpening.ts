@@ -17,6 +17,8 @@ import { preferredOpeningTrack } from "@/lib/openingAudioChoice";
 import type { ExternalSubtitleTrack } from "@/components/player/server/serverTracks";
 
 export type { LumenAudioFacts, LumenVerdict };
+import type { LumenDialogueMode } from "@/lib/lumenServer/audio/dialogue";
+export type { LumenDialogueMode };
 
 /** Une piste son du verdict, dans les termes du choix des pistes (`trackPreferences`). */
 export interface LumenAudioChoice {
@@ -30,13 +32,21 @@ export interface LumenAudioChoice {
   codec: string;
   /** Servie convertie (§161) : la cible (`eac3-640-51`), sinon null — copiée telle quelle. */
   converted: string | null;
+  /** A ses rendus « Améliorer les dialogues » (§191) : leur cible, sinon null — le serveur ne la traite pas. */
+  dialogue: string | null;
 }
 
-/** Ce que le serveur livre d'une piste, en mots, pour la ligne `audio` : copiée, ou convertie et vers quoi. */
-export function processingOf(track: Pick<LumenAudioChoice, "codec" | "converted">): string {
-  if (!track.converted) return "copié tel quel";
-  const layout = /-51$/.test(track.converted) ? "5.1" : /-20$/.test(track.converted) ? "2.0" : track.converted;
-  return `converti (${track.codec} → E-AC-3 ${layout})`;
+const layoutOf = (target: string) => (/-51$/.test(target) ? "5.1" : /-20$/.test(target) ? "2.0" : target);
+
+/**
+ * Ce que le serveur livre d'une piste, en mots, pour la ligne `audio` et le panneau : copiée, ou convertie et vers
+ * quoi ; sous « Améliorer les dialogues » (§191), traitée par le serveur à cette force — ou copiée/convertie sans
+ * traitement quand la piste n'a pas de rendu traité (la liste maître la sert alors telle quelle).
+ */
+export function processingOf(track: Pick<LumenAudioChoice, "codec" | "converted"> & Partial<Pick<LumenAudioChoice, "dialogue">>, dialogue?: LumenDialogueMode | null): string {
+  if (dialogue && track.dialogue) return `dialogues ${dialogue === "strong" ? "davantage" : "améliorés"} par le serveur (${track.codec} → E-AC-3 ${layoutOf(track.dialogue)})`;
+  const plain = track.converted ? `converti (${track.codec} → E-AC-3 ${layoutOf(track.converted)})` : "copié tel quel";
+  return dialogue ? `${plain}, sans rendu « dialogues »` : plain;
 }
 
 export function audioChoicesOf(audio: readonly LumenAudioFacts[]): LumenAudioChoice[] {
@@ -52,6 +62,7 @@ export function audioChoicesOf(audio: readonly LumenAudioFacts[]): LumenAudioCho
     servable: a.servable,
     codec: a.codec,
     converted: a.converted ?? null,
+    dialogue: a.dialogue ?? null,
   }));
 }
 
@@ -171,9 +182,10 @@ export function parseMasterAudio(text: string): MasterAudio[] {
     const a = attributes(line.slice("#EXT-X-MEDIA:".length));
     if (a.get("TYPE") !== "AUDIO") continue;
     const uri = a.get("URI") ?? "";
-    // `a12.m3u8` ; l'essai du son multiplexé (`vm12.m3u8`) n'a pas d'URI pour sa piste par défaut : sans
-    // numéro lisible, la piste n'est pas reliable — le changement passera par le rechargement.
-    const number = /(?:^|\/)a(\d+)\.m3u8$/.exec(uri)?.[1];
+    // `a12.m3u8`, convertie `a12x{cid}.m3u8` (§161), traitée `a12d1x{cid}.m3u8` (§191) ; l'essai du son multiplexé
+    // (`vm12.m3u8`) n'a pas d'URI pour sa piste par défaut : sans numéro lisible, la piste n'est pas reliable — le
+    // changement passera par la réouverture.
+    const number = /(?:^|\/)a(\d+)(?:d[12])?(?:x[0-9a-f]{8})?\.m3u8$/.exec(uri)?.[1];
     if (!number) continue;
     const language = a.get("LANGUAGE") ?? null;
     out.push({ number: Number(number), name: a.get("NAME") ?? "", language: language && language !== "und" ? language : null, group: a.get("GROUP-ID") ?? "", isDefault: a.get("DEFAULT") === "YES" });

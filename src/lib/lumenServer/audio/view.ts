@@ -17,12 +17,20 @@ import type { MatroskaTrack } from "../../webcodecs/matroska";
 import { hlsAudioSignal } from "../hlsSignal";
 import { AUDIO_TRACK_ID, LUMEN_TIMESCALE, type LumenAudioTrack, type LumenIndex, type LumenRendition } from "../format";
 import { CONVERT_RATE, CONVERT_TARGETS, LUMEN_AUDIO_VERSION, targetFor, targetTag, type ConvertTarget } from "./convertGrid";
+import { convertSourceOf, type LumenConvertSource } from "./convertSource";
+import { readDolbyHeader } from "./dolbySilence";
+import { LUMEN_DIALOGUE_VERSION, type LumenDialogueMode } from "./dialogue";
 
 /** Ce qu'une requête apporte pour convertir : l'identité du binaire et une trame de référence par cible. */
 export interface ConversionContext {
   ffmpegVersion: string;
   ffmpegSha256: string;
   reference: Readonly<Record<string, Uint8Array>>;
+  /**
+   * Le binaire décode-t-il l'AC-3 et l'E-AC-3 (décodeurs `ac3`/`eac3`, démultiplexeur `eac3`) ? Il le faut pour les
+   * rendus « dialogues » des pistes Dolby copiées (§191) ; la conversion de §161 n'en a pas besoin. Absent : non.
+   */
+  dolby?: boolean;
 }
 
 /**
@@ -95,4 +103,95 @@ export function withConversion(index: LumenIndex, ctx: ConversionContext | null)
 /** Le rendu d'une piste tel que la liste le nomme : avec l'identité de sa conversion quand elle est convertie. */
 export function audioRendition(track: Pick<LumenAudioTrack, "number" | "converted">): LumenRendition {
   return track.converted ? { kind: "audio", track: track.number, conv: track.converted.cid } : { kind: "audio", track: track.number };
+}
+
+// ── « Améliorer les dialogues » (§191) ───────────────────────────────────────
+
+/**
+ * L'identité d'un rendu « dialogues », huit chiffres hexadécimaux : la conversion (`conversionId` : règles, cible,
+ * ffmpeg), la version des règles du traitement (`LUMEN_DIALOGUE_VERSION`), la force, et **le moteur JavaScript**
+ * (`process.versions.v8`) — le traitement est du calcul en flottants de V8 (`Math.exp`, `Math.pow`, `Math.log10`) :
+ * un autre moteur pourrait changer un bit, donc une autre adresse, jamais d'autres octets sous la même.
+ */
+export function dialogueConversionId(ctx: Pick<ConversionContext, "ffmpegVersion" | "ffmpegSha256">, target: ConvertTarget, mode: LumenDialogueMode, engine: string = process.versions.v8): string {
+  return createHash("sha256").update(`dialogues|${LUMEN_DIALOGUE_VERSION}|${mode}|${conversionId(ctx, target)}|${engine}`).digest("hex").slice(0, 8);
+}
+
+const DOLBY = new Set(["A_AC3", "A_EAC3"]);
+
+/**
+ * Ce qu'il faut pour décoder une piste servie et la traiter : les faits de conversion de l'index pour une piste
+ * convertie (§161) ; pour une AC-3/E-AC-3 copiée, les mêmes faits tirés de ce que l'index garde déjà (premier bloc,
+ * sa trame, la fin d'une piste plus courte), placés sur sa trame de 1 536 échantillons — la voie que le banc de la
+ * conversion a mesurée à 0 échantillon de la copie (§161, « synchro image-son »). Null : pas de rendu « dialogues »
+ * (AAC, FLAC, PCM, MP4, autre fréquence) — le lecteur actuel le fait dans la page.
+ */
+export function dialogueSourceOf(index: Pick<LumenIndex, "container">, track: LumenAudioTrack, dolby: boolean): LumenConvertSource | null {
+  if (track.refusal) return null;
+  if (track.converted) return track.convert ?? null;
+  if (!dolby || !DOLBY.has(track.codecId) || track.configuration || !track.firstFrame) return null;
+  // Une E-AC-3 à sous-flux dépendant (un 7.1 : la trame indépendante suivie d'une dépendante dans le même bloc) :
+  // la disposition décodée ne serait pas sûrement celle que dit le conteneur, et le repli lit les rangs par leur
+  // nombre — pas de rendu plutôt qu'un canal perdu.
+  const head = readDolbyHeader(track.firstFrame);
+  if (!head || head.frameSize < track.firstFrame.length) return null;
+  const verdict = convertSourceOf(
+    { codecId: track.codecId, codecPrivate: track.codecPrivate, channels: track.channels, sampleRate: track.sampleRate },
+    { firstUs: track.firstUs, firstFrame: track.firstFrame, lastBlockUs: track.silence?.tailFromUs ?? null },
+    index.container,
+    { bench: true }
+  );
+  return verdict.ok ? verdict.source : null;
+}
+
+/**
+ * L'index tel que le sert une requête, avec les rendus « dialogues » de chaque piste qui en a (`dialogue`). Calculée
+ * à chaque requête comme `withConversion` (après elle : une piste convertie y a déjà son `converted`) ; sans `ctx`,
+ * l'index lui-même — rien ne change pour une instance sans l'option ou sans ffmpeg. Les listes, inits et segments
+ * des autres rendus ne changent jamais : seule la liste maître demandée avec `?dialogue=` désigne ces rendus.
+ */
+export function withDialogue(index: LumenIndex, ctx: ConversionContext | null): LumenIndex {
+  if (!ctx || index.refusal) return index;
+  let any = false;
+  const audio = index.audio.map((a): LumenAudioTrack => {
+    const source = dialogueSourceOf(index, a, ctx.dolby === true);
+    if (!source) return a;
+    const target = targetFor(source.channels);
+    const reference = ctx.reference[target.id];
+    if (!reference) return a;
+    const fake = { codecId: "A_EAC3", codecPrivate: null, audio: { channels: target.channels, sampleRate: CONVERT_RATE } } as unknown as MatroskaTrack;
+    const signal = hlsAudioSignal(fake, reference);
+    if (!signal) return a;
+    any = true;
+    // L'init ne dépend que de la cible, de la langue et de la durée : celle de la conversion, partagée.
+    const init = convertedInit(index, a, target, reference, conversionId(ctx, target));
+    return {
+      ...a,
+      dialogue: {
+        target: target.id,
+        channels: target.channels,
+        signal,
+        source,
+        cids: { on: dialogueConversionId(ctx, target, "on"), strong: dialogueConversionId(ctx, target, "strong") },
+        init,
+      },
+    };
+  });
+  return any ? { ...index, audio } : index;
+}
+
+/** Le rendu « dialogues » d'une piste à cette force, ou null si elle n'en a pas. */
+export function dialogueRendition(track: Pick<LumenAudioTrack, "number" | "dialogue">, mode: LumenDialogueMode): LumenRendition | null {
+  return track.dialogue ? { kind: "audio", track: track.number, conv: track.dialogue.cids[mode], dialogue: mode } : null;
+}
+
+/**
+ * La piste telle que la conversion la reçoit pour un rendu « dialogues » : convertie vers la cible du traitement,
+ * sous son identité, depuis sa source. Le cache, la file et l'avance de la conversion (`conversion.ts`) n'en
+ * savent pas plus : un segment « dialogues » est une conversion comme une autre, sous une autre identité.
+ */
+export function dialogueTrackView(track: LumenAudioTrack, mode: LumenDialogueMode): LumenAudioTrack | null {
+  const d = track.dialogue;
+  if (!d) return null;
+  return { ...track, converted: { target: d.target, cid: d.cids[mode], channels: d.channels }, convert: d.source };
 }
